@@ -1,16 +1,3 @@
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: ata.c
- * Description: IR0 kernel source/header file
- */
-
 // SPDX-License-Identifier: GPL-3.0-only
 /**
  * IR0 Kernel — Core system software
@@ -277,8 +264,6 @@ bool ata_get_device_info(uint8_t drive, ata_device_info_t *out)
     *out = ata_devices[drive];
     return true;
 }
-
-// Port I/O: inw/outw from <ir0/cpu.h>
 
 // Get port base for drive
 static uint16_t ata_get_port_base(uint8_t drive) 
@@ -678,19 +663,54 @@ static bool ata_read_one_sector_pio(uint8_t drive, uint32_t lba, void *buffer,
 	return false;
 }
 
+static bool ata_read_multi_pio(uint8_t drive, uint32_t lba, uint8_t num_sectors,
+			       void *buffer)
+{
+	uint16_t drive_head_port = ata_get_drive_head_port(drive);
+	uint16_t sector_count_port = ata_get_sector_count_port(drive);
+	uint16_t lba_low_port = ata_get_lba_low_port(drive);
+	uint16_t lba_mid_port = ata_get_lba_mid_port(drive);
+	uint16_t lba_high_port = ata_get_lba_high_port(drive);
+	uint16_t command_port = ata_get_command_port(drive);
+	uint16_t data_port = ata_get_port_base(drive);
+	uint8_t drive_select =
+		(drive % 2 == 0) ? ATA_DRIVE_MASTER : ATA_DRIVE_SLAVE;
+	uint16_t *buffer16 = (uint16_t *)buffer;
+	int sector;
+
+	outb(drive_head_port, drive_select | 0x40);
+	if (!ata_wait_ready(drive))
+		return false;
+
+	outb(sector_count_port, num_sectors);
+	outb(lba_low_port, lba & 0xFF);
+	outb(lba_mid_port, (lba >> 8) & 0xFF);
+	outb(lba_high_port, (lba >> 16) & 0xFF);
+	outb(drive_head_port, drive_select | 0x40 | ((lba >> 24) & 0x0F));
+	outb(command_port, ATA_CMD_READ_SECTORS);
+
+	for (sector = 0; sector < num_sectors; sector++)
+	{
+		int i;
+
+		if (!ata_wait_drq(drive))
+			return false;
+		for (i = 0; i < 256; i++)
+			buffer16[sector * 256 + i] = inw(data_port);
+	}
+
+	return ata_wait_ready(drive);
+}
+
 bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void *buffer)
 {
 	uint8_t s;
 	int need_bounce;
+	unsigned long irq_flags;
+	int failed = 0;
 
 	if (!ata_drives_present[drive] || !buffer || num_sectors == 0)
 		return false;
-
-	if (!ata_single_sector_announced)
-	{
-		ata_single_sector_announced = 1;
-		ata_emit_classify("ATA_SINGLE_SECTOR_MODE_FIXED");
-	}
 
 	need_bounce = (((uintptr_t)buffer & 0x1U) != 0U);
 	if (need_bounce && !ata_buffer_align_warned)
@@ -699,48 +719,54 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void *bu
 		ata_emit_classify("ATA_BUFFER_ALIGNMENT_SUSPECT");
 	}
 
-	if (num_sectors > 1 && !ata_multi_sector_warned)
-	{
-		ata_multi_sector_warned = 1;
-		ata_emit_classify("ATA_MULTI_SECTOR_UNSAFE");
-	}
-
 	/*
 	 * PIO command/data is not reentrant. Concurrent exec of the same
 	 * BusyBox inode (hexdump | head) preempted mid-DRQ and tore the ELF.
 	 */
+	irq_flags = irq_save();
+
+	if (!need_bounce && num_sectors > 1)
 	{
-		unsigned long irq_flags = irq_save();
-		int failed = 0;
-
-		for (s = 0; s < num_sectors; s++)
+		if (!ata_multi_sector_warned)
 		{
-			uint32_t sector_lba = lba + (uint32_t)s;
-			uint8_t *dest = (uint8_t *)buffer + (size_t)s * ATA_SECTOR_SIZE;
+			ata_multi_sector_warned = 1;
+			ata_emit_classify("ATA_MULTI_SECTOR_PIO");
+		}
+		failed = !ata_read_multi_pio(drive, lba, num_sectors, buffer);
+		irq_restore(irq_flags);
+		return !failed;
+	}
 
-			if (need_bounce)
-			{
-				uint8_t bounce[ATA_SECTOR_SIZE] __attribute__((aligned(2)));
+	if (!ata_single_sector_announced)
+	{
+		ata_single_sector_announced = 1;
+		ata_emit_classify("ATA_SINGLE_SECTOR_MODE_FIXED");
+	}
 
-				if (!ata_read_one_sector_pio(drive, sector_lba, bounce, s, 1))
-				{
-					failed = 1;
-					break;
-				}
-				memcpy(dest, bounce, ATA_SECTOR_SIZE);
-			}
-			else if (!ata_read_one_sector_pio(drive, sector_lba, dest, s, 1))
+	for (s = 0; s < num_sectors; s++)
+	{
+		uint32_t sector_lba = lba + (uint32_t)s;
+		uint8_t *dest = (uint8_t *)buffer + (size_t)s * ATA_SECTOR_SIZE;
+
+		if (need_bounce)
+		{
+			uint8_t bounce[ATA_SECTOR_SIZE] __attribute__((aligned(2)));
+
+			if (!ata_read_one_sector_pio(drive, sector_lba, bounce, s, 1))
 			{
 				failed = 1;
 				break;
 			}
+			memcpy(dest, bounce, ATA_SECTOR_SIZE);
 		}
-		irq_restore(irq_flags);
-		if (failed)
-			return false;
+		else if (!ata_read_one_sector_pio(drive, sector_lba, dest, s, 1))
+		{
+			failed = 1;
+			break;
+		}
 	}
-
-	return true;
+	irq_restore(irq_flags);
+	return !failed;
 }
 
 static bool ata_write_one_sector_pio(uint8_t drive, uint32_t lba, const void *buffer)
@@ -797,7 +823,7 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
 	if (num_sectors > 1 && !ata_multi_sector_warned)
 	{
 		ata_multi_sector_warned = 1;
-		ata_emit_classify("ATA_MULTI_SECTOR_UNSAFE");
+		ata_emit_classify("ATA_MULTI_SECTOR_PIO");
 	}
 
 	irq_flags = irq_save();

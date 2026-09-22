@@ -62,7 +62,7 @@ void ata_block_register(void)
 		dev.ctx = (void *)(uintptr_t)i;
 		dev.ops = &ata_block_ops;
 		dev.info.sector_size = ATA_SECTOR_SIZE;
-		dev.info.max_sectors_per_io = 1;
+		dev.info.max_sectors_per_io = 16;
 		dev.info.sector_count = ata_get_size((uint8_t)i);
 		dev.info.flags = IR0_BLOCK_FLAG_PIO_ONLY;
 		n = 0;
