@@ -1,7 +1,7 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-09-02
-> **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md)
+> **Last verified:** 2026-09-22
+> **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
@@ -21,6 +21,25 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 - Stress: `setup/pid1/net_command_stress.c` → `NET_STRESS_PASS` / `NC_ONLY_PASS`.
 
 ## [Unreleased]
+
+### Session + cred + fcntl ABI (2026-09-22)
+
+- Session leader exit flushes TTY waiters and resets cooked echo before
+  clearing the controlling session (relogin getty).
+- `access(2)` uses real uid/gid/groups; `faccessat` uses effective IDs only
+  with `AT_EACCESS` ([access(2)](https://man7.org/linux/man-pages/man2/access.2.html)).
+- `fcntl` contract VERIFIED: F_GETFD/F_SETFD/F_GETFL, F_DUPFD, F_DUPFD_CLOEXEC
+  (`1030`). Gate: `linux-abi-audit-fcntl`.
+- Console smokes ignore ash DSR CSI (`ESC[6n`) on the prompt line.
+
+### Linux-shaped names + harness map (2026-09-22)
+
+- C is FASE-free: semantic serial tags (`HEAP_SMOKE`, `KTM_DOOMGENERIC_OK`, …).
+- `arch_cpu.h` is a compatibility umbrella; domain headers own the API.
+- Usercopy callers use `copy_*_user_mm`; `*_region_in_directory` is the walk
+  primitive. Docs: [`LINUX_SHAPED.md`](LINUX_SHAPED.md), [`uaccess.md`](uaccess.md).
+- Make vars/targets use semantic names; `smoke-fase*` / `build-*-fase*` remain
+  aliases. ISD still reads `FASE50_BUSYBOX_BIN`. Map: [`HARNESS_MAP.md`](HARNESS_MAP.md).
 
 ### Pipes + stack Linux-strict (2026-09-02)
 

@@ -10,7 +10,7 @@
 | ID | Area | Result |
 |----|------|--------|
 | **P0-2 / C1-A** | Pseudo-fd routing | **DONE** — policy in `pseudo_fs.h`; `sys_close` prefers `fd_table` is_pseudo; legacy `open_path`/`find_by_fd` documented; host test acquire path |
-| **P1-2 / C1-B** | Log hygiene | **DONE** — wait/exec already `IR0_DEBUG_WAIT` / `CONFIG_DEBUG_FASE50`; `SIGNAL_DELIVER_LOG` default **0** |
+| **P1-2 / C1-B** | Log hygiene | **DONE** — wait/exec already `IR0_DEBUG_WAIT` / `IR0_DEBUG_PROC`; `SIGNAL_DELIVER_LOG` default **0** |
 | **P1-1 / C1-C** | Lifecycle pipe/fd | **AUDITED** — `sys_pipe_install` rolls back on EMFILE/`copy_to_user` fail; `pipe_acquire_end`/`close_end` balanced; no code fix required |
 | **P0-3 / P1-3 / C1-D** | F8 honesty + hostshare | **DONE** — mandoc/STABLE; [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md); VBox not canónico; E1000 BLOCKED |
 

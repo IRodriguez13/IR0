@@ -319,10 +319,13 @@ python3 scripts/inject_init_minix.py disk.img LOCAL_FILE path/on/disk
 BusyBox is **not** shipped as a committed binary; build from vendored sources:
 
 ```bash
-make build-busybox-fase50-min
+make build-busybox-min
+# alias: make build-busybox-fase50-min
 ```
 
-Output: `setup/pid1/fase50_busybox_real` (static musl ELF). Configuration fragment: `setup/busybox/fase58_busybox.config`.
+Output: `setup/pid1/busybox_real` (static musl ELF). ISD config fragment:
+`$(IR0_USERSPACE_ROOT)/packages/busybox/fase58_busybox.config` (filename kept
+for the ISD sibling). See [`Documentation/HARNESS_MAP.md`](Documentation/HARNESS_MAP.md).
 
 Build the canonical PID1 (runit):
 
@@ -338,8 +341,8 @@ Example rootfs layout for interactive `ash` (or use `make load-userspace-runit`)
 DISK=disk.img
 python3 scripts/inject_init_minix.py --format-large "$DISK"
 python3 scripts/inject_init_minix.py "$DISK" setup/runit/bin/runit-init sbin/init
-python3 scripts/inject_init_minix.py "$DISK" setup/pid1/fase50_busybox_real bin/busybox
-python3 scripts/inject_init_minix.py "$DISK" setup/pid1/fase50_busybox_real bin/sh
+python3 scripts/inject_init_minix.py "$DISK" setup/pid1/busybox_real bin/busybox
+python3 scripts/inject_init_minix.py "$DISK" setup/pid1/busybox_real bin/sh
 python3 scripts/verify_minix_rootfs.py "$DISK" /sbin/init /bin/sh /bin/busybox
 ```
 

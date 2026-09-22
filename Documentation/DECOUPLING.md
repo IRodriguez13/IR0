@@ -1,8 +1,8 @@
 # Kernel Decoupling Map
 
-> **Last verified:** 2026-09-02  
+> **Last verified:** 2026-09-22  
 > **Source of truth:** `includes/ir0/*`, `scripts/architecture_guard.py`, `ktm/include/klog.h`,
-> [`uaccess.md`](uaccess.md)
+> [`uaccess.md`](uaccess.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
 This document maps how IR0 separates subsystems, where stable interfaces live, and where
 coupling still exists. It complements `DRIVERS.md`, `MAKEFILE.md`, `TOOLING.md`, and the CTR checklist in
@@ -30,15 +30,15 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | Area | Mechanism |
 |------|-----------|
 | Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `interrupt/arch/idt.h`. |
-| Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); portable code uses [`includes/ir0/arch_cpu.h`](../../includes/ir0/arch_cpu.h) only. |
+| Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** / **`prepare_task_user_iretq`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); new portable code includes the domain header ([`context.h`](../../includes/ir0/context.h)). [`arch_cpu.h`](../../includes/ir0/arch_cpu.h) is a compatibility umbrella only (does **not** include `cpu.h`). |
 | Context switch | **`switch_to(prev, next)`** → **`arch_switch_to`** ([`includes/ir0/context.h`](../../includes/ir0/context.h), [`arch_switch.h`](../../includes/ir0/arch_switch.h)); first entry **`first_switch_to`**. ISA bodies in `arch/*/sources/arch_switch.c`. |
 | IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/arch_irq_init.c`. Portable trees must not `#include <interrupt/arch/...>`. |
 | Signals / sigcontext | ISA layouts in [`sigcontext_x86_64.h`](../../includes/ir0/sigcontext_x86_64.h) / [`sigcontext_arm64.h`](../../includes/ir0/sigcontext_arm64.h); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
 | Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
 | User VA window | **`mm_user_va_ok(addr, size)`** ([`mm.h`](../../includes/ir0/mm.h)); ISA bodies in `arch/*/sources/arch_mm.c`. |
-| Usercopy | **`copy_to/from_user` / `clear_user` / region helpers** ([`copy_user.h`](../../includes/ir0/copy_user.h)); never CR3+`memcpy` to user VA. Full contract: [`uaccess.md`](uaccess.md). |
-| IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`cpu_relax`**, **`smp_mb`**, **`timer_read`** ([`includes/ir0/cpu.h`](../../includes/ir0/cpu.h) + `arch_cpu.h`). No `arch_` prefix on new hot-path facades. |
+| Usercopy | **`copy_to/from_user` / `clear_user`** (current mm); **`copy_*_user_mm` / `zero_user_mm`** (explicit pgd); `*_region_in_directory` is the walk primitive ([`copy_user.h`](../../includes/ir0/copy_user.h)). Never CR3+`memcpy` to user VA. Full contract: [`uaccess.md`](uaccess.md). |
+| IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`cpu_relax`**, **`smp_mb`**, **`timer_read`** ([`cpu.h`](../../includes/ir0/cpu.h), [`irq.h`](../../includes/ir0/irq.h), [`arch_mm.h`](../../includes/ir0/arch_mm.h)). No `arch_` prefix on new hot-path facades. |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
 
 ### Architecture guard rules (`scripts/architecture_guard.py`)

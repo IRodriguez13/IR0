@@ -30,7 +30,7 @@
 | Kernel relative includes hygiene | `<kernel/…>` in syscalls/process; arch-guard `[kernel-include]` |
 | KTM typed `PIPE_*` events | `KTM_EVENT_PIPE_{CREATE,EOF,EPIPE,WAKE}` in `pipe.c` |
 | POSIX-2 setsid/setpgid + SIGHUP/TTY | `smoke-posix-setsid`, `smoke-posix-sighup-tty` |
-| Real fork COW A–F (HOST) | `make smoke-mm-cow-lazy` (FASE40 A–F) — verified 2026-07-11 |
+| Real fork COW A–F (HOST) | `make smoke-mm-cow-lazy` — verified 2026-07-11 |
 | GPT / EXT2 RO / AHCI detect+read + multi | `smoke-gpt-partition`, `smoke-ext2-mount`, `smoke-ahci-read`, `smoke-ahci-multi` |
 | FAT16 write + vfs-write audit | `linux-abi-audit-vfs-write-fat` VERIFIED |
 | PTY multi + `TIOCSWINSZ` | `smoke-pty-winsz` |
@@ -113,7 +113,7 @@
 | `crypt(3)` shadow hashes | Login hardening | Plain/`empty` passwords for bring-up; BusyBox login/PAM later |
 | Kernel root RO → fsck → remount RW | Storage path | `fsck.ir0` tags honest SKIP/OK/FAIL; remount pipeline TBD |
 | Interactive sendkey password path | TTY | Username echoes; password stage stalls in QEMU — lab uses `/etc/ir0-autologin`; GUI: `IR0_NO_AUTOLOGIN=1` |
-| `smoke-runit-ash-interactive` echo OK | Flaky post-login | LOGIN/welcome OK; `ASH_COMMAND_ECHO_OK` after sendkey still pending |
+| `smoke-runit-ash-interactive` echo OK | **Closed 2026-09-22** | PASS 14.5s (`SYS_READ_RETURN_OK` + `ASH_COMMAND_ECHO_OK`) |
 | Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` + weak `sched_context_switch_to`/`klog_info` in `rr_early_stubs.c` unblock `smoke-arm64-boot`; re-extract musl.cc for libc programs |
 | virtiofs + FUSE | Future host-share | Guest FUSE; 9p remains ship path |
 | Migrate remaining drains/storms stub PID1 → runit+9p | Lab depth | **Mostly closed** — `smoke-ktm-drains-runit`; `init-exit-drain` stays stub (PID1 SUT) |

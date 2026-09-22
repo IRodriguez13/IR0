@@ -1,11 +1,11 @@
-# FASE → KTM parity map
+# Wave-era → KTM parity map
 
-> **Última verificación:** 2026-07-12  
-> **Fuente de verdad:** `includes/ir0/ktm/*`, `ktm/`, `make ktm-run`, `make ktm-userdev-*`,  
-> smokes `setup/pid1/init_fase*`, Makefile targets.  
-> **Inventario de targets:** [`KTM_FASE_INVENTORY.md`](KTM_FASE_INVENTORY.md).  
-> **Política:** el kernel ya no emite `[FASE` (arch-guard). Este documento coteja
-> **intención de cada oleada FASE** con el análogo KTM — no renombra binarios históricos.
+> **Last verified:** 2026-09-22
+> **Canonical names:** [`HARNESS_MAP.md`](HARNESS_MAP.md)
+> **Source of truth:** `includes/ir0/ktm/*`, `ktm/`, `make ktm-run`, `make ktm-userdev-*`.
+> **Inventory:** [`KTM_FASE_INVENTORY.md`](KTM_FASE_INVENTORY.md) (historical).
+> **Policy:** kernel C must not print `[FASE` (arch-guard). This file maps
+> **wave intent** to the KTM analogue. Prefer semantic Make targets.
 
 ## Leyenda de estado
 

@@ -1,9 +1,10 @@
 # Kernel ↔ userspace copy frontier (uaccess)
 
-> **Last verified:** 2026-09-02  
+> **Last verified:** 2026-09-22  
 > **Source of truth:** `includes/ir0/copy_user.h`, `kernel/lib/copy_user.c`,  
 > `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/arch_mm.c`,  
-> `mm/paging.c` (`copy_*_region_in_directory`, `zero_user_region_in_directory`),  
+> `mm/paging.c` (`copy_*_region_in_directory`, `zero_user_region_in_directory`),
+> [`LINUX_SHAPED.md`](LINUX_SHAPED.md),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
 > (`check_usercopy_no_raw_user_touch`), `tests/host/test_usercopy_contract.c`,  
 > `scripts/smoke_session_soak.py` (FATAL includes `KERNEL_UACCESS_FAULT`)
@@ -38,7 +39,7 @@ flowchart TB
     Sys[syscalls / signals / VFS helpers]
   end
   subgraph facade [ISA-agnostic facade]
-    CU["includes/ir0/copy_user.h<br/>copy_to/from_user clear_user<br/>get_user put_user access_ok"]
+    CU["includes/ir0/copy_user.h<br/>copy_to/from_user clear_user<br/>copy_*_user_mm<br/>get_user put_user access_ok"]
   end
   subgraph isa [Per-ISA VA window]
     VA["mm_user_va_ok()<br/>arch/*/sources/arch_mm.c"]
@@ -56,9 +57,10 @@ flowchart TB
    userspace pointer from kernel code on a production userspace path.
 2. **Always** use:
    - `copy_to_user` / `copy_from_user` / `clear_user` for the **current** mm, or
-   - `copy_to_user_region_in_directory` / `copy_from_user_region_in_directory` /
-     `zero_user_region_in_directory` when the target pgd is known (signals,
-     other process, CR3 may differ).
+   - `copy_to_user_mm` / `copy_from_user_mm` / `zero_user_mm` when the target
+     pgd is known (signals, other process, CR3 may differ). Those names wrap
+     `copy_*_user_region_in_directory` / `zero_user_region_in_directory`
+     (walk primitive — prefer the `_mm` aliases at call sites).
 3. **Never** `load_page_directory(user_pgd)` + raw `memcpy((void *)user_va, …)`.
    That pattern caused the post-login ash kill: write to a present RO / COW PTE
    under kernel `cs=8` → `KERNEL_UACCESS_FAULT`.
@@ -76,9 +78,10 @@ Header contract comment: [`includes/ir0/copy_user.h`](../includes/ir0/copy_user.
 | `access_ok(addr, n)` | Alias of `is_user_address` (Linux-shaped name) |
 | `is_user_address` / `_checked` | VA window (+ optional mapped walk) |
 | `copy_to_user` / `copy_from_user` | Current process; routes to region helpers |
-| `clear_user` | Zero user range via `zero_user_region_in_directory` |
+| `clear_user` | Zero user range via `zero_user_mm` |
 | `get_user` / `put_user` | Scalar macros over `copy_*_user` |
-| `copy_*_region_in_directory` | Explicit pgd (declared in `copy_user.h` so syscalls need not include `mm/paging.h` for the contract alone) |
+| `copy_to_user_mm` / `copy_from_user_mm` / `zero_user_mm` | Explicit pgd (callers; Linux `access_process_vm` analogue) |
+| `copy_*_region_in_directory` | Walk primitive behind `_mm`; declared in `copy_user.h` so syscalls need not include `mm/paging.h` |
 
 Region implementations live in [`mm/paging.c`](../mm/paging.c) and perform
 COW-aware page walks. That is the **only** supported way to break COW on a

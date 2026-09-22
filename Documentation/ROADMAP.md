@@ -15,7 +15,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 | **Facades first** | Portable subsystems talk via `includes/ir0/*`; no `#include <drivers/...>` in `fs/`/`net/`/`mm/`. |
 | **One tier at a time** | Vertical slices with runnable proof (ktest, host test, QEMU smoke). |
 | **KTM = dev ally** | Kernel Test Module (`ktm/`, `CONFIG_KTM`) is for **developer** regression/debug only — not a userspace security subsystem (that comes later). Must stay low overhead. |
-| **Log hygiene** | After a feature is stable, trim debug serial storms (`FASE*`, audit tags) or gate behind Kconfig. |
+| **Log hygiene** | After a feature is stable, trim debug serial storms (semantic tags, audit) or gate behind Kconfig (`IR0_DEBUG_PROC`). |
 | **Makefile = tooling** | Historical phase smokes live in `setup/make/legacy-smokes.mk` (`IR0_LEGACY_SMOKE=1`). Default CTR stays lean: `smoke-tier1`, `roadmap-phase*`, `ktm-*`. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
 | **Don't break userspace** | Syscall ABI stable unless versioned break documented in `Documentation/mandocs/`. Public UAPI is exported with `make headers_install`. |
 | **Kernel ≠ product** | If PID 1 can replace it without recompiling the kernel, it lives in `ISD` (BusyBox, runit, login, doas, `/etc`), not here. |

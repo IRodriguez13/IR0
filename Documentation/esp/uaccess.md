@@ -1,6 +1,8 @@
 # Frontera kernel ↔ userspace (uaccess)
 
-> **Última verificación:** 2026-09-02  
+> **Última verificación:** 2026-09-22  
+> Capas `copy_*_user_mm`: ver [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
+
 > **Fuente de verdad:** `includes/ir0/copy_user.h`, `kernel/lib/copy_user.c`,  
 > `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/arch_mm.c`,  
 > `mm/paging.c` (`copy_*_region_in_directory`, `zero_user_region_in_directory`),  
@@ -54,9 +56,8 @@ flowchart TB
    userspace en un path de producción.
 2. **Siempre** usar:
    - `copy_to_user` / `copy_from_user` / `clear_user` para el mm **actual**, o
-   - `copy_to_user_region_in_directory` / `copy_from_user_region_in_directory` /
-     `zero_user_region_in_directory` cuando el pgd es explícito (señales, otro
-     proceso, CR3 distinto).
+   - `copy_to_user_mm` / `copy_from_user_mm` / `zero_user_mm` cuando el pgd es
+     explícito. Esas envuelven `*_region_in_directory` (primitiva de walk).
 3. **Nunca** `load_page_directory(user_pgd)` + `memcpy((void *)user_va, …)`.
    Ese patrón mató ash post-login: write a PTE presente RO / COW con `cs=8` →
    `KERNEL_UACCESS_FAULT`.
@@ -74,9 +75,10 @@ Comentario de contrato: [`includes/ir0/copy_user.h`](../../includes/ir0/copy_use
 | `access_ok(addr, n)` | Alias de `is_user_address` (nombre estilo Linux) |
 | `is_user_address` / `_checked` | Ventana VA (+ walk mapped opcional) |
 | `copy_to_user` / `copy_from_user` | Proceso actual → region helpers |
-| `clear_user` | Cero vía `zero_user_region_in_directory` |
+| `clear_user` | Cero vía `zero_user_mm` |
 | `get_user` / `put_user` | Macros escalares sobre `copy_*_user` |
-| `copy_*_region_in_directory` | pgd explícito (declarado en `copy_user.h`) |
+| `copy_*_user_mm` / `zero_user_mm` | pgd explícito (callers) |
+| `copy_*_region_in_directory` | primitiva de walk detrás de `_mm` |
 
 Implementación con COW: [`mm/paging.c`](../../mm/paging.c). Es la **única**
 vía soportada para romper COW en un write iniciado por el kernel.

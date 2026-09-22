@@ -1,8 +1,12 @@
-# FASE58E — BusyBox ash interactivo en `/dev/console` (QEMU GTK)
+# BusyBox ash interactivo en `/dev/console` (QEMU GTK)
+
+> **Última verificación:** 2026-09-22
+> **Fuente de verdad:** `smoke-ash-interactive` (alias `smoke-fase58e-ash-interactive`),
+> [`HARNESS_MAP.md`](HARNESS_MAP.md).
 
 **Estado:** Hecho (2026-05-25)  
 **Tier:** T1 (userspace POSIX mínimo) — vertical slice  
-**Depende de:** handoff de consola FASE58A, binding devfs de fd, irinit stdio
+**Depende de:** handoff de consola, binding devfs de fd, irinit stdio
 
 ## Resumen
 

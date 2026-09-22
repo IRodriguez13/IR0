@@ -1,6 +1,7 @@
 # IR0 Kernel — Changelog (español)
 
-> **Última verificación:** 2026-09-02  
+> **Última verificación:** 2026-09-22  
+
 > **Fuente de verdad:** historial git, smokes del `Makefile`, [`../STABLE.md`](../STABLE.md), [`../KTM.md`](../KTM.md)
 
 Versión en inglés (canónica): [`../CHANGELOG.md`](../CHANGELOG.md).
@@ -11,6 +12,19 @@ Tag **`v0.0.1-rc4`**. Tras este tag: **solo bugfixing y estabilización** hasta 
 Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ## [Sin publicar]
+
+### Sesión + credenciales + fcntl ABI (2026-09-22)
+
+- Exit del session leader: flush TTY + reset cooked echo antes de soltar ctty.
+- `access(2)` con uid/gid reales; `AT_EACCESS` usa efectivos.
+- Contrato `fcntl` VERIFIED (`linux-abi-audit-fcntl`). CSI `ESC[6n` de ash no
+  falla los guards de prompt.
+
+### Nombres Linux-shaped + mapa de harness (2026-09-22)
+
+- C sin FASE; tags semánticos. `arch_cpu.h` es paraguas.
+- Usercopy: `copy_*_user_mm` para callers. Docs: [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md),
+  [`../HARNESS_MAP.md`](../HARNESS_MAP.md).
 
 ### Pipes + stack Linux-strict (2026-09-02)
 

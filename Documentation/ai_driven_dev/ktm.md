@@ -1,9 +1,10 @@
 # KTM — Kernel Test / Trace Module (agent index)
 
-> **Last verified:** 2026-07-21  
+> **Last verified:** 2026-09-22  
 > **Full guide:** [`../KTM.md`](../KTM.md) (internals + **klog layers** + kernel/user API)  
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/` (incl. `klog.c`), `tests/ktm/`, `make ktm-run`,  
-> `make ktm-userdev-*`, [`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)
+> `make ktm-userdev-*`, [`../HARNESS_MAP.md`](../HARNESS_MAP.md),
+> [`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md) (historical)
 
 KTM is IR0's **sole kernel-side test and diagnostic source of truth**: typed events,
 checkpoints, snapshots/probes, scenarios, `/dev/ktm` control plane, and host runners.
@@ -11,8 +12,9 @@ Human serial logging is **klog** (`<ir0/ktm/klog.h>`), not raw `serial_print`.
 Legacy kernel `[FASE` serial is **retired** (arch-guard enforced).
 
 **Agent policy:** prefer KTM scenarios / `libktm-user` / `KTM_CHECKPOINT` / `klog_*`
-over new ad-hoc serial dialects. See the parity map before claiming a FASE oleada is
-“covered”. For how to author scenarios or userdev pilots, read **[`KTM.md`](../KTM.md)** first.
+over new ad-hoc serial dialects. See [`HARNESS_MAP.md`](../HARNESS_MAP.md)
+before claiming a wave-era case is covered. For how to author scenarios or
+userdev pilots, read **[`KTM.md`](../KTM.md)** first.
 
 ---
 
@@ -55,10 +57,10 @@ make -s ktm-run              # boot suite: lifecycle, pipe, cow_fork, exec, fork
 make -s ktm-userdev-run      # fork_wait_signal via /dev/ktm
 make -s ktm-userdev-fork-storm-run  # real fork depth (≥ wait_drain/reclaim boot)
 make -s ktm-userdev-fork-storm-virtfs-run  # same + virtio-9p artifact on host
-make -s ktm-userdev-exec-drain-virtfs-run  # FASE44 exec-drain + 9p (f41true inject)
-make -s ktm-userdev-reap-drain-virtfs-run  # FASE44 reap-drain + 9p
-make -s ktm-userdev-posix-pseudofs-virtfs-run  # FASE53B
-make -s ktm-userdev-input-det-virtfs-run       # FASE54C
+make -s ktm-userdev-exec-drain-virtfs-run  # exec-drain + 9p (f41true inject)
+make -s ktm-userdev-reap-drain-virtfs-run  # reap-drain + 9p
+make -s ktm-userdev-posix-pseudofs-virtfs-run
+make -s ktm-userdev-input-det-virtfs-run
 make -s smoke-nic-reach                        # F8-1 NIC + 9p
 make -s smoke-hostshare-9p   # virtio-9p MVP (/mnt/host)
 make -s arch-guard           # forbids [FASE in kernel trees
@@ -69,11 +71,11 @@ KTM cases may write result files there (`ktm_fork_storm.txt`, `ktm_exec_drain.tx
 `ktm_reap_drain.txt`); the host runner checks the file without scraping serial alone.
 Not virtiofs/FUSE.
 **`mm.cow_fork` scenario:** process/frame bookkeeping after fork (bounded frame growth).
-Deep COW data-plane (FASE40 A–F) remains `make smoke-mm-cow-lazy` — see
+Deep COW data-plane remains `make smoke-mm-cow-lazy` — see
 [`mandocs/en/mm.md`](../mandocs/en/mm.md).
 
-FASE oleada → KTM coverage: **[`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)**;
-target inventory: **[`KTM_FASE_INVENTORY.md`](../KTM_FASE_INVENTORY.md)**.
+Names and aliases: **[`HARNESS_MAP.md`](../HARNESS_MAP.md)**.
+Historical wave → KTM map: **[`KTM_FASE_PARITY.md`](../KTM_FASE_PARITY.md)**.
 
 ---
 

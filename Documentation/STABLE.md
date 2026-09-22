@@ -1,6 +1,6 @@
 # IR0 — Stable baseline (release 0.0.1)
 
-> **Last verified:** 2026-09-07
+> **Last verified:** 2026-09-22
 > **Source of truth:** `make release-0.0.1` / CTR gates, `Makefile` smoke targets,  
 > hostshare-exec + F8 **honest MVP** (`smoke-f8-net`) + FAT secondary ship note,  
 > runit PID1 + hybrid 9p payload (`runit_hostshare_payload_run`) for desktop X smoke,  
@@ -44,7 +44,7 @@ Do **not** treat any `rc*` tag as “0.0.1 done”. Final git tag `v0.0.1` waits
 ```bash
 # Critical hybrid KTM battery (must PASS) — do not merge to master if any red
 make -s ktm-userdev-busybox-manifest-run     # BUSY-2; alias: smoke-busybox-manifest
-make -s IR0_LEGACY_SMOKE=1 ktm-userdev-doom-55d-run   # or smoke-fase55d-doomgeneric
+make -s IR0_LEGACY_SMOKE=1 ktm-userdev-doom-55d-run   # or smoke-doomgeneric (alias smoke-fase55d-doomgeneric)
 make -s ktm-userdev-tcc-power-halt-run       # or smoke-tcc-power-halt; requires POWER_TCC_KTM_OK
 make -s smoke-runit-boot                     # product PID1 (not userdev)
 
@@ -56,10 +56,10 @@ make smoke-release-0.0.1
 ```
 
 Default IWAD: `REAL_WAD_PATH` → `/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD`
-(file must exist on the merge host). Stub `smoke-fase55b-doom-stub` remains a fast regression
-aid, **not** the merge blocker.
+(file must exist on the merge host). Stub `smoke-doom-stub` (alias `smoke-fase55b-doom-stub`)
+remains a fast regression aid, **not** the merge blocker.
 
-If TCC (`POWER_TCC_KTM_OK`), Doom+WAD (`KTM_DOOM_55D_OK` / frame loop), BusyBox manifest,
+If TCC (`POWER_TCC_KTM_OK`), Doom+WAD (`KTM_DOOMGENERIC_OK` / frame loop), BusyBox manifest,
 or `smoke-runit-boot` is red, **do not merge to `master`** even if release/CTR are green.
 Status honesty: TCC may still hang at static link in some QEMU runs — treat a red TCC smoke as
 a merge blocker, not as “optional WARN”.

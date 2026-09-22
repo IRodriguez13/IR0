@@ -1,8 +1,12 @@
-# FASE58E — Interactive BusyBox ash on `/dev/console` (QEMU GTK)
+# Interactive BusyBox ash on `/dev/console` (QEMU GTK)
+
+> **Last verified:** 2026-09-22
+> **Source of truth:** `setup/make/legacy-smokes.mk` (`smoke-ash-interactive`;
+> alias `smoke-fase58e-ash-interactive`), [`HARNESS_MAP.md`](HARNESS_MAP.md).
 
 **Status:** Done (2026-05-25)  
 **Tier:** T1 (minimal POSIX userspace) — vertical slice  
-**Depends on:** FASE58A console handoff, devfs fd binding, irinit stdio attach
+**Depends on:** console handoff, devfs fd binding, irinit stdio attach
 
 ## Summary
 
@@ -21,7 +25,7 @@ patching BusyBox for userspace echo.
 4. Enter runs the command; stdout/stderr render on the same FB console
 
 Commands such as `ps` may print `not found` if they are not linked into the
-fase50 minimal BusyBox config — that is expected and unrelated to console I/O.
+minimal BusyBox config — that is expected and unrelated to console I/O.
 
 ## Root causes fixed
 
@@ -102,8 +106,8 @@ PROCESS_BLOCKED → sched_schedule_next()
 | devfs console | `fs/devfs.c` | `/dev/console`, `/dev/tty`, termios ioctl |
 | PID 1 | `setup/pid1/irinit.c` | Attach stdio to `/dev/console`, spawn `ash -i` |
 | BusyBox config | `ISD/packages/busybox/fase50_minimal.config` | `FEATURE_EDITING=n`, `ASH_JOB_CONTROL=n` |
-| Smoke tags | `includes/ir0/ash_smoke.c` | Compact serial tags after BusyBox banner (FASE58K) |
-| Next BusyBox | `ISD/packages/busybox/fase58_busybox.config` | More coreutils; build with `make build-busybox-fase58-plus` |
+| Smoke tags | `includes/ir0/ash_smoke.c` | Compact serial tags after BusyBox banner |
+| Next BusyBox | `ISD/packages/busybox/fase58_busybox.config` | More coreutils; build with `make build-busybox-plus` |
 
 ## BusyBox configuration (intentional)
 
@@ -116,20 +120,21 @@ CONFIG_FEATURE_EDITING=n
 
 Ash uses blocking `read(0)` in cooked mode; the **kernel** provides echo and
 canonical line editing. Re-enabling `FEATURE_EDITING` requires a working
-`poll` + raw TTY path and is out of scope for FASE58E.
+`poll` + raw TTY path and is out of scope for this slice.
 
 ## Build and run
 
 ```bash
 make kernel-x64.bin
-make kernel-x64-userspace.iso build-irinit build-busybox-fase50-min
-make run-fase58e-ash-gui
+make kernel-x64-userspace.iso build-irinit build-busybox-min
+make smoke-ash-interactive
 ```
 
 Optional SDL display:
 
 ```bash
-make run-fase58e-ash-gui FASE58E_DISPLAY=sdl
+make run-ash-gui ASH_GUI_DISPLAY=sdl
+# alias: make run-fase58e-ash-gui
 ```
 
 **Important:** Click the QEMU window to give it keyboard focus before typing.
@@ -137,8 +142,8 @@ make run-fase58e-ash-gui FASE58E_DISPLAY=sdl
 Serial log (default):
 
 ```text
-/tmp/fase58e-ash-gui.log
-make check-fase58e-logs
+/tmp/ash-gui.log
+make check-ash-logs
 ```
 
 Rebuild the **ISO** after kernel changes; QEMU loads the ISO, not a bare
@@ -149,7 +154,7 @@ Rebuild the **ISO** after kernel changes; QEMU loads the ISO, not a bare
 ```bash
 make -s kernel-x64.bin
 python3 scripts/architecture_guard.py
-make -s kernel-x64-userspace.iso build-irinit build-busybox-fase50-min
+make -s kernel-x64-userspace.iso build-irinit build-busybox-min
 ```
 
 Manual pass criteria:
@@ -162,19 +167,19 @@ Manual pass criteria:
 Automated smoke (headless + QEMU monitor `sendkey`):
 
 ```bash
-make smoke-fase58e-ash-interactive
-make check-fase58e-logs   # also greps /tmp/fase58e-ash-smoke.log when present
+make smoke-ash-interactive
+make check-ash-logs   # also greps /tmp/ash-gui-smoke.log when present
 ```
 
 If monitor key injection fails on your host, use GUI manual smoke:
 
 ```bash
-make run-fase58e-ash-gui
+make run-ash-gui
 # type: echo hi, pwd, ls
-make check-fase58e-logs
+make check-ash-logs
 ```
 
-## Serial diagnostic tags (FASE58K — compact)
+## Serial diagnostic tags (compact)
 
 Only these tags are emitted after the BusyBox banner (no per-character spam):
 
@@ -197,12 +202,13 @@ not receiving keys (QEMU focus or host input), not an echo bug.
 - Minimal BusyBox: only applets enabled in `fase50_minimal.config` exist.
 - `stderr` prompt (`# `) uses the same FB console as stdout; color `0x0F`.
 - Doom autostart is disabled in irinit production path (`DOOM_AUTOSTART_DISABLED`).
-- FASE58K removed verbose FASE58G/I/J post-banner tracing; use compact tags above.
+- Verbose per-character post-banner traces are gone; use the compact tags above.
 
 ## Related documentation
 
-- [FASE57 reintegration plan](fase57-reintegration-plan.md) — Step 58A console
-  visibility and devfs fd binding
+- [FASE57 reintegration plan](fase57-reintegration-plan.md) — historical console
+  handoff notes
+- [`HARNESS_MAP.md`](HARNESS_MAP.md) — smoke/GUI target names
 - [Virtual filesystems](VIRTUAL_FILESYSTEMS.md) — `/dev/console`, devfs
 - [Interrupts](INTERRUPTS.md) — IRQ1 / PS/2 (high level)
 

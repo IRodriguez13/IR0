@@ -48,7 +48,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 |------|--------|----------|
 | Supplementary groups | `ir0_access_from_stat_groups()` + wiring | `ktest_cred_access_contract` |
 | ARCH-3 lifecycle | devfs FD release, fork rollback | `kernel-tests` |
-| ARCH-4 log hygiene | exit/destroy/exec gated `CONFIG_DEBUG_FASE50` | boot log |
+| ARCH-4 log hygiene | exit/destroy/exec gated `IR0_DEBUG_PROC` (was `CONFIG_DEBUG_FASE50`) | boot log |
 | ktest open ABI | `KTEST_O_*` Linux flags | mount ktests |
 | ATA sector count | `ata_get_size()` + IDENTIFY `.size` | `block_hda_read_contract` |
 | **ARCH-1 syscall split** | `syscalls.c` **86 lines** (glue only) | submodules: `fs_path_syscalls`, `validate_user`, mm/process/io extended |
@@ -69,7 +69,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 |------|--------|----------|
 | Supplementary groups | `ir0_access_from_stat_groups()`; wired in `fs/permissions.c`, `kernel/credentials.c`, `includes/ir0/path_routed.c`, `kernel/syscalls.c` (`access`, `faccessat`, `chdir`) | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
 | ARCH-3 lifecycle | `process_release_fds()` → `devfs_close_node()`; `fork_rollback()` releases child FDs | Code review + `kernel-tests` |
-| ARCH-4 log hygiene | Serial storms in `process_exit` / `process_destroy` / exec fail gated with `CONFIG_DEBUG_FASE50` | Boot log on `smoke-tier1` |
+| ARCH-4 log hygiene | Serial storms in `process_exit` / `process_destroy` / exec fail gated with `IR0_DEBUG_PROC` | Boot log on `smoke-tier1` |
 | ktest open ABI | Direct `sys_open()` from ktest must use **Linux** open bits (`KTEST_O_*` in `kernel/test/ktest_harness.h`), not `includes/ir0/fcntl.h` `O_*` (IR0 internal) | `mount_*` ktests green |
 | Block layer | `ata_identify` fills `ata_devices[].size`; `ata_get_size()` falls back to `capacity_bytes / 512` | `ktest_block_hda_read_contract` |
 | devfs read | `sys_read` on bound devfs FDs uses `fd_table[fd].offset` | Sequential `/dev/hda` reads |

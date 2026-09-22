@@ -1,5 +1,8 @@
 # Documentacion IR0 en Espanol
 
+> **Última verificación:** 2026-09-22
+> **Fuente de verdad:** espejos listados abajo; canónico en `Documentation/`.
+
 Este directorio contiene traducciones de la documentacion tecnica principal.
 
 ## Politica
@@ -21,7 +24,9 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `DRIVERS.md`
 - `INTERRUPTS.md`
 - `MEMORY.md`
-- `uaccess.md` — frontera `copy_*_user` multi-ISA y clasificación de fallos
+- `LINUX_SHAPED.md` — nombres/ABI Linux sin clonar el árbol
+- `HARNESS_MAP.md` — tags y targets semánticos (`smoke-fase*` = alias)
+- `uaccess.md` — frontera `copy_*_user` / `copy_*_user_mm` multi-ISA
 - `PROCESSES.md`
 - `SCHEDULING.md`
 - `UNIX_DIFFERENCES.md`

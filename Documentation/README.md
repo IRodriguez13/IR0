@@ -1,5 +1,9 @@
 # IR0 Kernel Documentation
 
+> **Last verified:** 2026-09-22
+> **Source of truth:** files listed in the map below; code under `includes/ir0/`,
+> `kernel/`, `setup/make/legacy-smokes.mk`.
+
 This directory describes the current architecture and operational state of IR0.
 The goal is to document implemented behavior first, then known gaps.
 
@@ -22,14 +26,18 @@ The goal is to document implemented behavior first, then known gaps.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.
 - `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
+- `LINUX_SHAPED.md`: **Linux names/ABI without cloning the Linux tree** —
+  facades, usercopy layers, what not to copy (Spanish: `esp/LINUX_SHAPED.md`).
+- `HARNESS_MAP.md`: **semantic smoke/KTM tags and Make names**; `smoke-fase*`
+  aliases (Spanish: `esp/HARNESS_MAP.md`).
 - `KTM.md`: **canonical KTM guide** — internals, **klog layers**, kernel API, `/dev/ktm`, gates (Spanish: `esp/KTM.md`).
 - `USERSPACE.md`: **kernel ↔ ISD coupling** — `make first-boot`, BusyBox
   path, no-init panic contract (Spanish: `esp/USERSPACE.md`).
 - `virtio.md`: **virtio-9p hostshare + virtio-net** — QEMU flags, guest mount,
   `smoke-session-chaos` / `smoke-hostshare-*` (Spanish: `esp/virtio.md`).
 - `KLOG.md`: **structured event core** — `klog_record`, phases, early clock, sinks, `/proc/kmsg`, product boot via runit/ash (Spanish: `esp/KLOG.md`).
-- `KTM_FASE_PARITY.md`: FASE oleada → KTM analogue map (COVERED/PARTIAL/GAP/SUB).
-- `KTM_FASE_INVENTORY.md`: legacy `smoke-fase*` class A/B/C and canonical KTM gates.
+- `KTM_FASE_PARITY.md`: historical wave → KTM analogue map (see `HARNESS_MAP.md`).
+- `KTM_FASE_INVENTORY.md`: historical `smoke-fase*` class table (redirect).
 - `CHANGELOG.md`: iteration notes (Unreleased + 0.0.1).
 - `ai_driven_dev/ktm.md`: short agent-facing KTM index (points to `KTM.md`).
 - `ai_driven_dev/rules/ir0-version-stamp.mdc`: lockstep `version.h` / Makefile with upstream tags.
@@ -37,15 +45,15 @@ The goal is to document implemented behavior first, then known gaps.
 - `DRIVERS.md`: driver registry, bootstrap flow, config-gated initialization, **SB16 QEMU smoke**.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
 - `MEMORY.md`: PMM, allocator, paging, real fork COW + lazy alloc limits.
-- `uaccess.md`: **kernel↔userspace copy frontier** — `copy_*_user` contract,
-  multi-ISA `mm_user_va_ok`, COW-safe region helpers, arch-guard tags,
-  `KERNEL_UACCESS_FAULT` diagnosis (Spanish: `esp/uaccess.md`).
+- `uaccess.md`: **kernel↔userspace copy frontier** — `copy_*_user`,
+  `copy_*_user_mm`, `*_region_in_directory`, multi-ISA `mm_user_va_ok`,
+  arch-guard tags, `KERNEL_UACCESS_FAULT` (Spanish: `esp/uaccess.md`).
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
 - `SCHEDULING.md`: scheduler selection, blocked poll/pause yield, Class B.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
 - `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
-  (QEMU GTK), keyboard poll + TTY echo path, build/run and serial tags.
+  (QEMU GTK); target `smoke-ash-interactive` (alias `smoke-fase58e-ash-interactive`).
 - `input/ps2-routing.md`: i8042 demux (AUXDATA), set-1 modifiers, mouse packets
   (Spanish: `esp/input/ps2-routing.md`).
 - `filesystems/virtual-file-semantics.md`: snapshot / bounce / ring / stream read
