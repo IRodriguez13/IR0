@@ -408,6 +408,26 @@ static void tty_waiter_remove(process_t *p)
 	}
 }
 
+static int tty_waiter_evict_stale(void)
+{
+	int i;
+	int n = 0;
+
+	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
+	{
+		process_t *p = tty_read_waiters[i];
+
+		if (!p)
+			continue;
+		if (p->state != PROCESS_BLOCKED && p->state != PROCESS_READY)
+		{
+			tty_read_waiters[i] = NULL;
+			n++;
+		}
+	}
+	return n;
+}
+
 static int tty_waiter_register(process_t *p)
 {
 	int i;
@@ -424,6 +444,18 @@ static int tty_waiter_register(process_t *p)
 		{
 			tty_read_waiters[i] = p;
 			return 1;
+		}
+	}
+
+	if (tty_waiter_evict_stale() > 0)
+	{
+		for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
+		{
+			if (tty_read_waiters[i] == NULL)
+			{
+				tty_read_waiters[i] = p;
+				return 1;
+			}
 		}
 	}
 

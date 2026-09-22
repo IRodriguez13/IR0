@@ -14,6 +14,11 @@ PROMPT_LINE_RE = re.compile(
 )
 ASH_CMD_ERR_RE = re.compile(r"^-sh:\s*(.+?):\s*(not found|Invalid argument)")
 NONASCII_RUN_RE = re.compile(r"[^\x20-\x7e]+")
+# ash FEATURE_EDITING / terminfo write CSI on the same serial line as the prompt
+# (DSR ESC[6n, cursor report ESC[n;mR, DEC private). Not keyboard garbage.
+TTY_CONTROL_SEQ_RE = re.compile(
+    r"\x1b(?:\[[0-9;?]*[A-Za-z]|][^\x07\x1b]*(?:\x07|\x1b\\)|\([AB0])"
+)
 # Stuck-key / QEMU double-fire (hheexxdduummpp), not intentional typos (llss).
 DOUBLED_PAIR_RUN_RE = re.compile(r"(?:([a-zA-Z])\1){3,}")
 # run supervisor must not get musl SIGCHLD handler delivery during wait4.
@@ -39,6 +44,11 @@ def sanitize(s: str) -> str:
         c if (32 <= ord(c) < 127 or c in "\n\t") else f"\\x{ord(c):02x}"
         for c in s
     )
+
+
+def strip_tty_control_seqs(s: str) -> str:
+    """Drop CSI/OSC/charset sequences so prompt-line guards see typed text only."""
+    return TTY_CONTROL_SEQ_RE.sub("", s)
 
 
 def find_nonascii_runs(line: str, min_run: int = 1) -> list[str]:
@@ -131,7 +141,7 @@ def check_typing_garbage(text: str, *, mark: int = 0, min_run: int = 1) -> list[
     for ln in window.splitlines():
         m = PROMPT_LINE_RE.match(ln.strip())
         if m:
-            tail = m.group(1)
+            tail = strip_tty_control_seqs(m.group(1))
             for run in find_nonascii_runs(tail, min_run):
                 errors.append(
                     f"non-ASCII on prompt input line: {sanitize(ln)!r} run={sanitize(run)!r}"
@@ -139,7 +149,7 @@ def check_typing_garbage(text: str, *, mark: int = 0, min_run: int = 1) -> list[
 
         em = ASH_CMD_ERR_RE.match(ln.strip())
         if em:
-            cmd = em.group(1)
+            cmd = strip_tty_control_seqs(em.group(1))
             reason = em.group(2)
             bad = find_nonascii_runs(cmd, 1)
             if bad:
@@ -164,3 +174,16 @@ def report_guard_failures(errors: Iterable[str], log_tail: str = "") -> int:
         print("--- serial tail ---", file=sys.stderr)
         print(log_tail[-4000:], file=sys.stderr)
     return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    sample = "labuser@unix:~$ \x1b[6nalias llh"
+    errs = check_typing_garbage(sample)
+    if errs:
+        print("FAIL: DSR CSI treated as typing garbage", errs, file=sys.stderr)
+        sys.exit(1)
+    garbage = "labuser@unix:~$ \xea" + "llss"
+    if not check_typing_garbage(garbage):
+        print("FAIL: real non-ASCII should still fail", file=sys.stderr)
+        sys.exit(1)
+    print("✓ smoke_tty_guards CSI strip self-test")

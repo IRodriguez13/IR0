@@ -94,7 +94,19 @@ void process_pre_zombie_teardown(process_t *dying)
 		ir0_console_clear_fg_pgid((int32_t)dying->pgid,
 					 (int32_t)dying->task.pid);
 	if ((pid_t)dying->task.pid == dying->sid)
+	{
+		/*
+		 * Next getty must see a clean cooked tty. Purge waiters above
+		 * drop the dying reader; without a session flush the new
+		 * username read sits blocked (prompt printed, keys ignored).
+		 */
+		if (ir0_console_has_ctty_for_sid((int32_t)dying->sid))
+		{
+			ir0_console_flush_input_session();
+			ir0_console_reset_cooked_echo();
+		}
 		ir0_console_clear_ctty_session((int32_t)dying->sid);
+	}
 
 	process_release_fds(dying, "EXIT_CLOSE");
 }
