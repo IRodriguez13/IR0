@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: cred_transition.h
- * Description: Linux saved-ID transition helper for setreuid/setregid
+ * Description: Linux credential transitions (setreuid/setregid/setresuid).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -60,5 +60,49 @@ static inline int ir0_cred_setreid(ir0_cred_id_triplet_t *ids,
 	     requested_effective != old.real))
 		ids->saved = ids->effective;
 
+	return 0;
+}
+
+static inline int ir0_cred_id_known(const ir0_cred_id_triplet_t *ids,
+				    uint32_t want)
+{
+	if (!ids)
+		return 0;
+	return want == ids->real || want == ids->effective ||
+	       want == ids->saved;
+}
+
+/*
+ * Linux kernel/sys.c __sys_setresuid()/__sys_setresgid(): each requested
+ * slot is independent. Unlike setreuid, saved is not rewritten implicitly.
+ */
+static inline int ir0_cred_setresid(ir0_cred_id_triplet_t *ids,
+				    uint32_t requested_real,
+				    uint32_t requested_effective,
+				    uint32_t requested_saved,
+				    int privileged)
+{
+	ir0_cred_id_triplet_t old;
+
+	if (!ids)
+		return -EINVAL;
+
+	old = *ids;
+	if (requested_real != UINT32_MAX && !privileged &&
+	    !ir0_cred_id_known(&old, requested_real))
+		return -EPERM;
+	if (requested_effective != UINT32_MAX && !privileged &&
+	    !ir0_cred_id_known(&old, requested_effective))
+		return -EPERM;
+	if (requested_saved != UINT32_MAX && !privileged &&
+	    !ir0_cred_id_known(&old, requested_saved))
+		return -EPERM;
+
+	if (requested_real != UINT32_MAX)
+		ids->real = requested_real;
+	if (requested_effective != UINT32_MAX)
+		ids->effective = requested_effective;
+	if (requested_saved != UINT32_MAX)
+		ids->saved = requested_saved;
 	return 0;
 }

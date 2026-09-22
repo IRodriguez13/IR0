@@ -102,4 +102,41 @@ int copy_from_user_region_in_directory(uint64_t *pml4, uintptr_t src,
 				       void *dst, size_t n);
 int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n);
 
+/*
+ * Copy against a specific mm. @current_as != 0 uses the active process
+ * (copy_to/from_user). Otherwise walk @pml4. Rejects non-user VAs first.
+ */
+static inline int copy_to_user_in_mm(uint64_t *pml4, int current_as,
+				     void *udst, const void *ksrc, size_t n)
+{
+	if (n == 0)
+		return 0;
+	if (!udst || !ksrc)
+		return -EFAULT;
+	if (!is_user_address(udst, n))
+		return -EFAULT;
+	if (current_as)
+		return copy_to_user(udst, ksrc, n);
+	if (!pml4)
+		return -EFAULT;
+	return copy_to_user_region_in_directory(pml4, (uintptr_t)udst, ksrc, n);
+}
+
+static inline int copy_from_user_in_mm(uint64_t *pml4, int current_as,
+				       void *kdst, const void *usrc, size_t n)
+{
+	if (n == 0)
+		return 0;
+	if (!kdst || !usrc)
+		return -EFAULT;
+	if (!is_user_address(usrc, n))
+		return -EFAULT;
+	if (current_as)
+		return copy_from_user(kdst, usrc, n);
+	if (!pml4)
+		return -EFAULT;
+	return copy_from_user_region_in_directory(pml4, (uintptr_t)usrc, kdst,
+						  n);
+}
+
 #endif /* _IR0_COPY_USER_H */

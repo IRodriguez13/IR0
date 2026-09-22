@@ -167,14 +167,15 @@ int64_t sys_setgroups(size_t size, const gid_t *list)
 	return 0;
 }
 
-/*
- * Unprivileged setres*id: every requested value must already be one of the
- * caller's real, effective or saved ID (Linux setresuid(2)).
- */
-static int cred_id_allowed(uint32_t want, uint32_t real, uint32_t eff,
-			   uint32_t saved)
+static int cred_copy_out_u32(void *uptr, uint32_t value)
 {
-	return want == real || want == eff || want == saved;
+	if (!uptr)
+		return 0;
+	if (validate_userspace_buffer(uptr, sizeof(value)) != 0)
+		return -EFAULT;
+	if (copy_to_user(uptr, &value, sizeof(value)) != 0)
+		return -EFAULT;
+	return 0;
 }
 
 int64_t sys_setreuid(uid_t ruid, uid_t euid)
@@ -224,35 +225,24 @@ int64_t sys_setregid(gid_t rgid, gid_t egid)
 
 int64_t sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 {
-	int priv;
+	ir0_cred_id_triplet_t ids;
+	int ret;
 
 	if (!current_process)
 		return -ESRCH;
 
-	priv = current_process->euid == ROOT_UID;
+	ids.real = current_process->uid;
+	ids.effective = current_process->euid;
+	ids.saved = current_process->suid;
+	ret = ir0_cred_setresid(&ids, (uint32_t)ruid, (uint32_t)euid,
+				(uint32_t)suid,
+				current_process->euid == ROOT_UID);
+	if (ret < 0)
+		return ret;
 
-	if (!priv)
-	{
-		if ((int)ruid != (int)-1 &&
-		    !cred_id_allowed((uint32_t)ruid, current_process->uid,
-				     current_process->euid, current_process->suid))
-			return -EPERM;
-		if ((int)euid != (int)-1 &&
-		    !cred_id_allowed((uint32_t)euid, current_process->uid,
-				     current_process->euid, current_process->suid))
-			return -EPERM;
-		if ((int)suid != (int)-1 &&
-		    !cred_id_allowed((uint32_t)suid, current_process->uid,
-				     current_process->euid, current_process->suid))
-			return -EPERM;
-	}
-
-	if ((int)ruid != (int)-1)
-		current_process->uid = (uint32_t)ruid;
-	if ((int)euid != (int)-1)
-		current_process->euid = (uint32_t)euid;
-	if ((int)suid != (int)-1)
-		current_process->suid = (uint32_t)suid;
+	current_process->uid = ids.real;
+	current_process->euid = ids.effective;
+	current_process->suid = ids.saved;
 	return 0;
 }
 
@@ -261,6 +251,7 @@ int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 	uid_t u;
 	uid_t eu;
 	uid_t su;
+	int ret;
 
 	if (!current_process)
 		return -ESRCH;
@@ -269,61 +260,35 @@ int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid)
 	eu = (uid_t)current_process->euid;
 	su = (uid_t)current_process->suid;
 
-	if (ruid)
-	{
-		if (validate_userspace_buffer(ruid, sizeof(uid_t)) != 0)
-			return -EFAULT;
-		if (copy_to_user(ruid, &u, sizeof(u)) != 0)
-			return -EFAULT;
-	}
-	if (euid)
-	{
-		if (validate_userspace_buffer(euid, sizeof(uid_t)) != 0)
-			return -EFAULT;
-		if (copy_to_user(euid, &eu, sizeof(eu)) != 0)
-			return -EFAULT;
-	}
-	if (suid)
-	{
-		if (validate_userspace_buffer(suid, sizeof(uid_t)) != 0)
-			return -EFAULT;
-		if (copy_to_user(suid, &su, sizeof(su)) != 0)
-			return -EFAULT;
-	}
-	return 0;
+	ret = cred_copy_out_u32(ruid, u);
+	if (ret < 0)
+		return ret;
+	ret = cred_copy_out_u32(euid, eu);
+	if (ret < 0)
+		return ret;
+	return cred_copy_out_u32(suid, su);
 }
 
 int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 {
-	int priv;
+	ir0_cred_id_triplet_t ids;
+	int ret;
 
 	if (!current_process)
 		return -ESRCH;
 
-	priv = current_process->euid == ROOT_UID;
+	ids.real = current_process->gid;
+	ids.effective = current_process->egid;
+	ids.saved = current_process->sgid;
+	ret = ir0_cred_setresid(&ids, (uint32_t)rgid, (uint32_t)egid,
+				(uint32_t)sgid,
+				current_process->euid == ROOT_UID);
+	if (ret < 0)
+		return ret;
 
-	if (!priv)
-	{
-		if ((int)rgid != (int)-1 &&
-		    !cred_id_allowed((uint32_t)rgid, current_process->gid,
-				     current_process->egid, current_process->sgid))
-			return -EPERM;
-		if ((int)egid != (int)-1 &&
-		    !cred_id_allowed((uint32_t)egid, current_process->gid,
-				     current_process->egid, current_process->sgid))
-			return -EPERM;
-		if ((int)sgid != (int)-1 &&
-		    !cred_id_allowed((uint32_t)sgid, current_process->gid,
-				     current_process->egid, current_process->sgid))
-			return -EPERM;
-	}
-
-	if ((int)rgid != (int)-1)
-		current_process->gid = (uint32_t)rgid;
-	if ((int)egid != (int)-1)
-		current_process->egid = (uint32_t)egid;
-	if ((int)sgid != (int)-1)
-		current_process->sgid = (uint32_t)sgid;
+	current_process->gid = ids.real;
+	current_process->egid = ids.effective;
+	current_process->sgid = ids.saved;
 	process_cred_init_groups(current_process);
 	return 0;
 }
@@ -333,6 +298,7 @@ int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 	gid_t g;
 	gid_t eg;
 	gid_t sg;
+	int ret;
 
 	if (!current_process)
 		return -ESRCH;
@@ -341,28 +307,13 @@ int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 	eg = (gid_t)current_process->egid;
 	sg = (gid_t)current_process->sgid;
 
-	if (rgid)
-	{
-		if (validate_userspace_buffer(rgid, sizeof(gid_t)) != 0)
-			return -EFAULT;
-		if (copy_to_user(rgid, &g, sizeof(g)) != 0)
-			return -EFAULT;
-	}
-	if (egid)
-	{
-		if (validate_userspace_buffer(egid, sizeof(gid_t)) != 0)
-			return -EFAULT;
-		if (copy_to_user(egid, &eg, sizeof(eg)) != 0)
-			return -EFAULT;
-	}
-	if (sgid)
-	{
-		if (validate_userspace_buffer(sgid, sizeof(gid_t)) != 0)
-			return -EFAULT;
-		if (copy_to_user(sgid, &sg, sizeof(sg)) != 0)
-			return -EFAULT;
-	}
-	return 0;
+	ret = cred_copy_out_u32(rgid, g);
+	if (ret < 0)
+		return ret;
+	ret = cred_copy_out_u32(egid, eg);
+	if (ret < 0)
+		return ret;
+	return cred_copy_out_u32(sgid, sg);
 }
 
 static uint32_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigsetsize)
@@ -733,19 +684,10 @@ void process_exit_robust_list(process_t *p)
 
 	if (p->mode == USER_MODE)
 	{
-		if (!is_user_address(p->robust_list, sizeof(kh)))
-		{
-			p->robust_list = NULL;
-			return;
-		}
-		if (p == current_process)
-			copy_ret = copy_from_user(&kh, p->robust_list, sizeof(kh));
-		else if (process_pgd(p))
-			copy_ret = copy_from_user_region_in_directory(
-				process_pgd(p), (uintptr_t)p->robust_list,
-				&kh, sizeof(kh));
-		else
-			copy_ret = -EFAULT;
+		copy_ret = copy_from_user_in_mm(process_pgd(p),
+						p == current_process,
+						&kh, p->robust_list,
+						sizeof(kh));
 		if (copy_ret != 0)
 		{
 			p->robust_list = NULL;

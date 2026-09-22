@@ -102,9 +102,22 @@ def profile_userland(isd: Path, profile: str) -> str:
     return profile_conf(isd, profile).get("USERLAND_BASE", "busybox")
 
 
+SUPPORTED_INIT_SYSTEMS = frozenset({"runit", "sysvinit", "openrc"})
+
+
+class UnsupportedInitSystem(ValueError):
+    """Profile asked for an init the ISD/IR0 adapter does not implement."""
+
+
 def profile_init_system(isd: Path, profile: str) -> str:
-    init = profile_conf(isd, profile).get("INIT_SYSTEM", "runit")
-    return init if init in ("runit", "sysvinit", "openrc") else "runit"
+    init = profile_conf(isd, profile).get("INIT_SYSTEM", "").strip()
+    if not init:
+        raise UnsupportedInitSystem(f"profile {profile}: missing INIT_SYSTEM")
+    if init not in SUPPORTED_INIT_SYSTEMS:
+        raise UnsupportedInitSystem(
+            f"profile {profile}: unsupported INIT_SYSTEM={init}"
+        )
+    return init
 
 
 def isdconfig_path(isd: Path, profile: str) -> Path:
@@ -209,8 +222,11 @@ def staged_ready(isd: Path, profile: str, arch: str) -> bool:
 
 
 def build_summary_lines(isd: Path, profile: str, arch: str) -> list[str]:
-    ver = cmd_version(isd, profile, arch)
-    land = cmd_userland(isd, profile)
+    try:
+        ver = cmd_version(isd, profile, arch)
+        land = cmd_userland(isd, profile)
+    except UnsupportedInitSystem as exc:
+        return [str(exc), "configuration invalid — fix INIT_SYSTEM"]
     pkg = cmd_packages(isd, profile)
     admin = profile_admin_elevation(isd, profile)
     lines = [
@@ -282,7 +298,10 @@ def tui_draw_summary(
             break
         marker = ">" if name == active else " "
         attr = curses.A_REVERSE if index == selected else 0
-        init = profile_init_system(isd, name)
+        try:
+            init = profile_init_system(isd, name)
+        except UnsupportedInitSystem:
+            init = "INVALID"
         label = f"{marker} {name:<20} init={init}"
         screen.addstr(y, 2, label[: max(0, width - 4)], attr)
 
@@ -847,4 +866,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except UnsupportedInitSystem as exc:
+        print(f"usmang: {exc}", file=sys.stderr)
+        raise SystemExit(2)

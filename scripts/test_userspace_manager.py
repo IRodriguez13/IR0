@@ -139,6 +139,27 @@ class UserspaceManagerTest(unittest.TestCase):
             names = module.list_profiles(isd)
             self.assertIn("minimal-sysvinit", names)
             self.assertEqual(module.profile_init_system(isd, "minimal-sysvinit"), "sysvinit")
+            self.assertEqual(module.profile_init_system(isd, "minimal"), "runit")
+
+    def test_profile_init_system_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            isd = Path(directory)
+            prof = isd / "profiles" / "broken"
+            prof.mkdir(parents=True)
+            (prof / "profile.conf").write_text(
+                "PROFILE_NAME=broken\nUSERLAND_BASE=busybox\nINIT_SYSTEM=foobar\n"
+            )
+            spec = importlib.util.spec_from_file_location("userspace_manager", MANAGER)
+            assert spec and spec.loader
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            with self.assertRaises(module.UnsupportedInitSystem):
+                module.profile_init_system(isd, "broken")
+            empty = isd / "profiles" / "empty"
+            empty.mkdir(parents=True)
+            (empty / "profile.conf").write_text("PROFILE_NAME=empty\n")
+            with self.assertRaises(module.UnsupportedInitSystem):
+                module.profile_init_system(isd, "empty")
 
     def test_tui_help_lines_cover_verify(self) -> None:
         spec = importlib.util.spec_from_file_location("userspace_manager", MANAGER)

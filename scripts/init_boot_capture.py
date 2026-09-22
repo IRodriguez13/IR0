@@ -72,7 +72,7 @@ def profile_init_system(isd: Path, profile: str) -> str:
         line = raw.strip()
         if line.startswith("INIT_SYSTEM="):
             return line.split("=", 1)[1].strip()
-    return "runit"
+    return "missing"
 
 
 def staged_rootfs(isd: Path, profile: str, arch: str) -> Path:

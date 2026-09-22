@@ -19,6 +19,7 @@
 #include <sched/task.h>
 #include <arch/common/arch_portable.h>
 #include <ir0/process.h>
+#include <ir0/tlb.h>
 
 #define USER_CANON_MIN 0x00400000ULL
 #define USER_CANON_MAX 0x00007FFFFFFFFFFFULL
@@ -76,6 +77,13 @@ void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
     uint64_t fsbase = current_process ? process_tls_get(current_process) : 0;
 
     /*
+     * exec/vfork may have rebound mm after the last context switch.
+     * first_switch_to() already activates; this path must too.
+     */
+    if (current_process && process_mm_root(current_process))
+	    mm_activate((uintptr_t)process_mm_root(current_process));
+
+    /*
      * iretq to user code with user DS/ES; RFLAGS_IF set so device IRQs work.
      *
      * Do NOT load FS/GS with USER_DATA_SEL: on x86-64 that reloads the
@@ -128,6 +136,9 @@ void switch_to_user_task(const task_t *task)
 
     if (current_process && &current_process->task == task)
         arch_prepare_task_user_iretq(current_process);
+
+    if (current_process && process_mm_root(current_process))
+	    mm_activate((uintptr_t)process_mm_root(current_process));
 
     arch_audit_iret_frame(task);
     switch_to_user_task_asm(task);

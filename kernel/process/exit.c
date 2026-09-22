@@ -70,13 +70,11 @@ static void process_exit_clear_child_tid_hook(process_t *dying)
 
 	tidptr = dying->set_tid_ptr;
 	dying->set_tid_ptr = NULL;
-	if (dying->mode == USER_MODE && dying != current_process)
+	if (dying->mode == USER_MODE)
 	{
-		uint64_t *pml4 = process_pgd(dying);
-
-		if (pml4 && is_user_address(tidptr, sizeof(zero)) &&
-		    copy_to_user_region_in_directory(pml4, (uintptr_t)tidptr,
-						     &zero, sizeof(zero)) == 0)
+		if (copy_to_user_in_mm(process_pgd(dying),
+				       dying == current_process, tidptr, &zero,
+				       sizeof(zero)) == 0)
 			(void)ir0_futex_wake(tidptr, 1);
 	}
 	else if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)

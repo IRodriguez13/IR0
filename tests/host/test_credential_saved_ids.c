@@ -50,6 +50,28 @@ static int temporary_drop_preserves_saved_root(void)
 	return 0;
 }
 
+static int setresid_does_not_rewrite_saved(void)
+{
+	ir0_cred_id_triplet_t ids;
+
+	ids.real = 0;
+	ids.effective = 0;
+	ids.saved = 0;
+	if (ir0_cred_setresid(&ids, 1000, 1000, UINT32_MAX, 1) != 0)
+		return 1;
+	if (ids.real != 1000 || ids.effective != 1000 || ids.saved != 0)
+		return 2;
+	if (ir0_cred_setresid(&ids, UINT32_MAX, UINT32_MAX, 0, 0) != 0)
+		return 3;
+	if (ids.saved != 0)
+		return 4;
+	if (ir0_cred_setresid(&ids, UINT32_MAX, UINT32_MAX, 2000, 0) != -EPERM)
+		return 5;
+	if (ids.saved != 0)
+		return 6;
+	return 0;
+}
+
 static int unprivileged_real_id_rejects_saved_id(void)
 {
 	ir0_cred_id_triplet_t ids;
@@ -80,6 +102,9 @@ void test_credential_saved_ids(void)
 	ASSERT(ret == 0);
 
 	ret = unprivileged_real_id_rejects_saved_id();
+	ASSERT(ret == 0);
+
+	ret = setresid_does_not_rewrite_saved();
 	ASSERT(ret == 0);
 	TEST_END();
 }
