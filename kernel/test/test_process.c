@@ -360,5 +360,9 @@ void ktest_vfork_complete_clears_link(void)
 	KASSERT_EQ(process_vfork_parent_blocked(parent), 1);
 	process_vfork_complete(&dummy);
 	KASSERT_EQ(process_vfork_parent_blocked(parent), 0);
+
+	KASSERT_EQ(process_vfork_link(parent, &dummy), 0);
+	process_mm_release_on_exit(&dummy);
+	KASSERT_EQ(process_vfork_parent_blocked(parent), 0);
 	KTEST_END();
 }

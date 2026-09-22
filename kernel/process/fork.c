@@ -415,11 +415,11 @@ void process_vfork_complete(process_t *child)
 	parent = link->parent;
 	link->parent = NULL;
 	link->child = NULL;
-	if (parent)
+	if (parent && parent->lifecycle == PROCESS_LIFECYCLE_ALIVE &&
+	    parent->state == PROCESS_BLOCKED)
 	{
-		was_blocked = (parent->state == PROCESS_BLOCKED);
-		if (was_blocked)
-			process_set_sched_state(parent, PROCESS_READY);
+		was_blocked = 1;
+		process_set_sched_state(parent, PROCESS_READY);
 	}
 	process_irq_restore(irq_flags);
 

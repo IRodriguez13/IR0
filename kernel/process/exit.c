@@ -285,8 +285,8 @@ __attribute__((noreturn)) void process_exit(int code)
 
 /*
  * process_destroy - Release per-process resources before freeing a zombie struct.
- * Closes VFS and pipe handles, clears the FD table, and tears down user mappings
- * in this process's page directory (not necessarily the active CR3).
+ * Closes VFS and pipe handles, clears the FD table, and tears down user
+ * mappings in this process's page directory (not the active hardware root).
  */
 void process_destroy(process_t *p)
 {
@@ -296,6 +296,12 @@ void process_destroy(process_t *p)
 
 	if (!p)
 		return;
+
+	/*
+	 * Spawn-fail and reap-without-exit must drop vfork slots too.
+	 * process_exit already ran this; a second call is a no-op.
+	 */
+	process_mm_release_on_exit(p);
 
 	ir0_console_purge_waiters_for_process(p);
 	pipe_purge_waiters_for_process(p);
