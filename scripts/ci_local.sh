@@ -6,16 +6,16 @@
 # Taxonomy (frozen):
 #   FAST  — tooling-check (~1 min): unit, arch-guard, contracts, truth
 #   BOOT  — FAST + release-check-boot on host tree: ISO, kmang, QEMU, guest
-#   CLEAN — Docker E2E on WIP tree + incremental/idempotence (bind mount)
-#   RC    — fresh git clone + BOOT + incremental (post-push / third-party sim)
+#   CLEAN — Docker first-time pack of THIS tree (copy IR0+ISD, strip out/)
+#   RC    — Docker git clone from GitHub (published trees only)
 #   all   — FAST + CLEAN (recommended pre-push)
 #
 # Usage:
 #   make ci-local              # all = FAST + CLEAN
 #   make ci-local-fast         # FAST
 #   make ci-local-boot         # FAST + BOOT
-#   make ci-local-docker       # CLEAN
-#   make ci-local-rc           # RC
+#   make ci-local-docker       # CLEAN (new machine of the working tree)
+#   make ci-local-rc           # RC (new machine of origin/dev)
 #
 # Env:
 #   CI_LOCAL_STAGE   fast|boot|docker|rc|all
@@ -51,7 +51,7 @@ boot)
 	run_stage FAST make -s tooling-check PROFILE="$PROFILE"
 	run_stage BOOT make -s release-check-boot PROFILE="$PROFILE"
 	;;
-docker)
+docker|docker-wip)
 	run_stage CLEAN make -s release-check-boot-container-local PROFILE="$PROFILE"
 	;;
 rc)

@@ -55,7 +55,7 @@ copy_repo_tree() {
 	local dest="$2"
 	local label="$3"
 
-	echo "  copy ${label} from ${src} → ${dest} (working tree; not a release gate)"
+	echo "  copy ${label} from ${src} → ${dest} (WIP first-time pack; out/ stripped)"
 	mkdir -p "$dest"
 	tar -C "$src" \
 		--exclude='./out' \

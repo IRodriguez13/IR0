@@ -29,9 +29,10 @@ got=$(MAKEFLAGS= PROFILE=desktop-console IR0_PRODUCT_PROFILE= make -s -pn 2>/dev
 [ "$got" = desktop-console ] && ok "A PROFILE=desktop-console → ISD_PROFILE=desktop-console" \
 	|| bad "A PROFILE=desktop-console got ISD_PROFILE=${got:-empty}"
 grep -q 'ensure-machine-desktop-sync' $MK_ALL \
-	&& grep -E '^poweron:.*ensure-machine-desktop-sync' $MK_ALL >/dev/null \
-	&& ok "D poweron syncs desktop userspace when stale" \
-	|| bad "D poweron desktop sync wiring"
+	&& grep -q '^machine-update-userspace:' $MK_PRODUCT \
+	&& ! grep -E '^poweron:.*ensure-machine-desktop-sync' $MK_ALL >/dev/null \
+	&& ok "D userspace refresh is explicit (not poweron)" \
+	|| bad "D poweron must not auto-sync desktop userspace"
 grep -q 'kmang has installed kernels' $MK_ALL \
 	&& ! grep -q 'kmanag has installed kernels' $MK_ALL \
 	&& ok "D poweron kmang typo fixed" || bad "D kmang message typo"
@@ -78,7 +79,7 @@ grep -q 'IR0_USERSPACE_ROOT := \$(IR0_ISD_ROOT)' "$MK_BRIDGE" \
 	&& ok "D USERSPACE_ROOT aliases ISD" || bad "D no USERSPACE alias"
 grep -q 'IR0_LEGACY_USERSPACE' Makefile && ok "legacy gate" || bad "legacy"
 grep -q 'IR0_DEPS_SELFTEST' scripts/ensure-host-deps.sh && ok "F SELFTEST hook" || bad "F SELFTEST"
-if grep -E '^poweron:.*ensure-isd-disk' $MK_ALL >/dev/null; then
+if grep -E '^poweron:.*(ensure-isd-disk|ensure-isd-root-disk|ensure-isd-home|ensure-isd-ext2-disk|image-root)' $MK_ALL >/dev/null; then
 	bad "D poweron may repack persistent state"
 else
 	ok "D poweron does not invoke ISD image packing"
@@ -169,6 +170,17 @@ grep -q '^isd-plan:' "$MK_BRIDGE" \
 	&& ok "D isd-plan delegates to ISD" || bad "D isd-plan missing"
 grep -q 'isd-contracts' scripts/make/testing.mk \
 	&& ok "D test-fast runs isd-contracts" || bad "D test-fast isd-contracts"
+# CLEAN first-packs a copy of the WIP trees (out/ stripped). GitHub clone is rc.
+if grep -A3 '^docker|' scripts/ci_local.sh | grep -q 'release-check-boot-container-local'; then
+	ok "D ci-local-docker first-packs WIP copy (empty out/)"
+else
+	bad "D ci-local-docker is not the local first-pack path"
+fi
+if grep -A3 '^rc)' scripts/ci_local.sh | grep -q 'fresh-clone-check'; then
+	ok "D ci-local-rc clones IR0+ISD from GitHub"
+else
+	bad "D ci-local-rc is not a fresh clone"
+fi
 
 echo "-- H naming coherence --"
 grep -q 'IR0_ISD_ROOT' userspace/README.md \

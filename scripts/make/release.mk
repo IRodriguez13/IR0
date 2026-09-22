@@ -13,7 +13,8 @@
 #   release-check-boot* — Tier 1.5 ISO + QEMU + guest probes
 #   fresh-clone-check   — maintainer CI: git clone IR0+ISD in Docker (simulates third party)
 #   ci-local*           — staged pre-push gates on your machine (see ci_local.sh)
-#   *-container-local — opt-in bind mounts for uncommitted WIP only
+#   ci-local-docker     — Docker first-time pack of the working tree (out/ stripped)
+#   ci-local-rc         — Docker git clone from GitHub (published trees)
 
 ifndef _IR0_RELEASE_MK
 _IR0_RELEASE_MK := 1
@@ -25,7 +26,8 @@ RELEASE_CHECK_ISD_REF ?= dev
 RELEASE_CHECK_DOUBLE ?= 0
 
 .PHONY: truth-tests tooling-check fresh-clone-check \
-	ci ci-fast ci-docker ci-local ci-local-fast ci-local-boot ci-local-docker ci-local-rc \
+	ci ci-fast ci-docker ci-local ci-local-fast ci-local-boot \
+	ci-local-docker ci-local-docker-wip ci-local-rc \
 	tui-k tui-u \
 	release-check release-check-clean \
 	release-check-container release-check-container-local \
@@ -61,20 +63,25 @@ ci-local-boot:
 ci-local-docker:
 	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
+		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh \
+		scripts/release_check_tui.sh
 	@CI_LOCAL_STAGE=docker PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
+
+# Alias of ci-local-docker (same first-pack CLEAN path).
+ci-local-docker-wip: ci-local-docker
 
 ci-local-rc:
 	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py
+		scripts/release_check_guest_probes.py scripts/release_check_tui.sh
 	@CI_LOCAL_STAGE=rc PROFILE="$(ISD_PROFILE)" ISD_ARCH="$(ISD_ARCH)" scripts/ci_local.sh
 
-# Recommended before push: fast checks + Docker E2E on your working tree.
+# Recommended before push: fast checks + Docker first-time pack of this tree.
 ci-local:
 	@chmod +x scripts/ci_local.sh scripts/ci/release-check-fresh.sh \
 		scripts/release_check_boot.sh scripts/release_check_kmang.sh \
-		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
+		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh \
+		scripts/release_check_tui.sh
 	@CI_LOCAL_STAGE=all PROFILE="$(ISD_PROFILE)" scripts/ci_local.sh
 
 ci: ci-local
@@ -149,6 +156,7 @@ fresh-clone-check:
 		scripts/release_check_guest_probes.py scripts/release_check_incremental.sh
 	@$(RELEASE_CHECK_DOCKER_BUILD)
 	@$(call RELEASE_CHECK_DOCKER_RUN,1,1,$(RELEASE_CHECK_DOUBLE),1)
+
 
 # --- Docker: local WIP only (bind mounts working tree; not a release gate) ---
 

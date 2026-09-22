@@ -73,6 +73,14 @@ run_step "kmang CI pipeline" \
 	env KMANG_DIR="$KMANG_DIR" PROFILE="$PROFILE" ISD_ARCH="$ARCH" \
 		scripts/release_check_kmang.sh
 
+run_step "kmang/usmang TUI (PTY)" \
+	env IR0_ISD_ROOT="$ISD_ROOT" scripts/release_check_tui.sh
+
+run_step "machine-create (empty IR0-machines)" \
+	env IR0_MACHINE_ROOT="$(mktemp -d /tmp/ir0-machines-ci.XXXXXX)" \
+		IR0_DEPS_INSTALL=never \
+		make -s machine-create PROFILE="$PROFILE" ARCH="$ARCH" ISD_ARCH="$ARCH"
+
 run_step "smoke-runit-boot" \
 	make -s smoke-runit-boot-isd PROFILE="$PROFILE" ARCH="$ARCH" ISD_ARCH="$ARCH"
 
