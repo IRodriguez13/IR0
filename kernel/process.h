@@ -120,9 +120,10 @@ typedef struct process
 	};
 	pid_t ppid;
 	/*
-	 * Address space: process->mm is the sole owner of page_directory,
-	 * mmap_list, heap/stack cursors (see mm_struct). Use process_pgd(),
-	 * process_heap_*, process_mmap_list(), process_mm_owns_tables().
+	 * Address space: process->mm owns page_directory (SoT) plus
+	 * mmap/heap/stack. process_mm_root()/process_pgd() read that root.
+	 * task_mm_root() is the hardware snapshot used at switch; bind
+	 * keeps it aligned (ISA register lives only in arch_task).
 	 */
 	struct mm_struct *mm;
 	struct files_struct *files;
@@ -401,7 +402,11 @@ static inline const process_t *task_to_process_const(const task_t *task)
 
 static inline uint64_t process_mm_root(const process_t *p)
 {
-	return p ? task_mm_root(&p->task) : 0;
+	if (!p)
+		return 0;
+	if (p->mm && p->mm->page_directory)
+		return (uint64_t)(uintptr_t)p->mm->page_directory;
+	return task_mm_root(&p->task);
 }
 
 static inline uint64_t *process_pgd(const process_t *p)
@@ -416,6 +421,7 @@ static inline void process_set_pgd(process_t *p, uint64_t *pgd)
 	p->mm->page_directory = pgd;
 	if (!pgd)
 		p->mm->owns_tables = 0;
+	task_set_mm_root(&p->task, (uint64_t)(uintptr_t)pgd);
 }
 
 static inline struct mmap_region *process_mmap_list(const process_t *p)
@@ -482,8 +488,11 @@ static inline void process_set_stack_layout(process_t *p, uint64_t start,
 
 static inline void process_set_mm_root(process_t *p, uint64_t root)
 {
-	if (p)
-		task_set_mm_root(&p->task, root);
+	if (!p)
+		return;
+	task_set_mm_root(&p->task, root);
+	if (p->mm)
+		p->mm->page_directory = (uint64_t *)(uintptr_t)root;
 }
 
 static inline pid_t process_pid(const process_t *p)

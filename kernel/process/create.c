@@ -94,7 +94,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			mm->owns_tables = 0;
 			process_mm_bind(proc, mm);
 			process_set_mm_root(proc, kcr3);
-			klog_debug("KERN", "SERIAL: spawn: kernel CR3 shared (idle)\n");
+			klog_debug("KERN", "SERIAL: spawn: kernel mm root shared (idle)\n");
 		}
 		else
 		{

@@ -19,6 +19,7 @@
 #include <sched/task.h>
 #include <arch/common/arch_portable.h>
 #include <ir0/process.h>
+#include <ir0/paging.h>
 #include <ir0/tlb.h>
 
 #define USER_CANON_MIN 0x00400000ULL
@@ -81,7 +82,8 @@ void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
      * first_switch_to() already activates; this path must too.
      */
     if (current_process && process_mm_root(current_process))
-	    mm_activate((uintptr_t)process_mm_root(current_process));
+	    paging_activate_address_space(
+		    (uintptr_t)process_mm_root(current_process));
 
     /*
      * iretq to user code with user DS/ES; RFLAGS_IF set so device IRQs work.
@@ -138,7 +140,8 @@ void switch_to_user_task(const task_t *task)
         arch_prepare_task_user_iretq(current_process);
 
     if (current_process && process_mm_root(current_process))
-	    mm_activate((uintptr_t)process_mm_root(current_process));
+	    paging_activate_address_space(
+		    (uintptr_t)process_mm_root(current_process));
 
     arch_audit_iret_frame(task);
     switch_to_user_task_asm(task);
@@ -162,7 +165,7 @@ void first_switch_to(struct process *next)
 		uint64_t kds = KERNEL_DATA_SEL;
 		uint64_t kcs = KERNEL_CODE_SEL;
 
-		mm_activate((uintptr_t)process_mm_root(p));
+		paging_activate_address_space((uintptr_t)process_mm_root(p));
 		__asm__ volatile(
 			"cli\n"
 			"mov %w[ds], %%ds\n"
@@ -186,7 +189,7 @@ void first_switch_to(struct process *next)
 	}
 	else
 	{
-		mm_activate((uintptr_t)process_mm_root(p));
+		paging_activate_address_space((uintptr_t)process_mm_root(p));
 		switch_to_user((arch_addr_t)p->task.arch.rip,
 				    (arch_addr_t)p->task.arch.rsp);
 	}

@@ -376,8 +376,8 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	{
 		/*
 		 * Blocked via process_arm_kernel_syscall_sleep: keep kernel CS/SS so
-		 * switch_context_x64 resumes with kernel_ret into process_wait, not
-		 * user iretq with stale task.arch.rax (placeholder 0 at block time).
+		 * switch_to resumes with kernel_ret into process_wait, not
+		 * user iret with stale task retval (placeholder 0 at block time).
 		 */
 		process_set_sched_state(parent, PROCESS_READY);
 		sched_add_process(parent);
@@ -390,13 +390,30 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	if (!status_ptr)
 		status_ptr = (int *)(uintptr_t)process_syscall_arg(parent, 1);
 
-	if (status_ptr && process_pgd(parent) &&
-	    process_validate_userspace_buffer(status_ptr, sizeof(int)) == 0)
+	if (status_ptr)
 	{
-		(void)copy_to_user_region_in_directory(process_pgd(parent),
-						       (uintptr_t)status_ptr,
-						       &status_val,
-						       sizeof(int));
+		int copy_ok = 0;
+
+		if (parent->mode == KERNEL_MODE)
+		{
+			*status_ptr = status_val;
+			copy_ok = 1;
+		}
+		else if (copy_to_user_in_mm(process_pgd(parent), 0, status_ptr,
+					    &status_val, sizeof(int)) == 0)
+		{
+			copy_ok = 1;
+		}
+
+		if (!copy_ok)
+		{
+			process_wait_resume_child_pid_set(parent, 0);
+			parent->syscall_resume_rax = (uint64_t)(int64_t)(-EFAULT);
+			process_set_sched_state(parent, PROCESS_READY);
+			sched_add_process(parent);
+			sched_promote_process(parent);
+			return;
+		}
 	}
 
 #if IR0_DEBUG_PROC
@@ -522,7 +539,7 @@ int process_wait(pid_t pid, int *status, int options)
 			pid_t reaped_pid;
 			process_fase50_trace_proc("process_wait-found-zombie", zombie);
 
-			if (status &&
+			if (status && current_process->mode == USER_MODE &&
 			    process_validate_userspace_buffer(status, sizeof(int)) != 0)
 			{
 				process_irq_restore(irq_flags);

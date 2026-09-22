@@ -110,6 +110,9 @@ void process_mm_bind(process_t *p, mm_struct_t *mm)
 	if (!p)
 		return;
 	p->mm = mm;
+	if (mm && mm->page_directory)
+		task_set_mm_root(&p->task,
+				 (uint64_t)(uintptr_t)mm->page_directory);
 }
 
 int process_mm_share(process_t *child, process_t *parent)
@@ -155,9 +158,9 @@ int exec_detach_shared_mm(process_t *proc)
 	old = proc->mm;
 	/*
 	 * Linux exec_mmap: bind + activate the private mm, then
-	 * complete_vfork_done, then mmput(old). switch_to_user() does
-	 * not load CR3, so a vfork child that stays on the shared root
-	 * I-fetches the new image against the parent's tables.
+	 * complete_vfork_done, then mmput(old). switch_to_user() must
+	 * load the new root so a vfork child does not fetch the new
+	 * image against the parent's tables.
 	 */
 	process_mm_bind(proc, fresh);
 	process_set_mm_root(proc, (uint64_t)(uintptr_t)pml4);

@@ -204,7 +204,7 @@ int process_validate_userspace_buffer(const void *buf, size_t size)
 			return 0;
 		if (is_user_address(buf, size))
 			return 0;
-		return 0;
+		return -EFAULT;
 	}
 
 	if (!is_user_address(buf, size))

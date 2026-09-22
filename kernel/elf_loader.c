@@ -1702,8 +1702,8 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
 
     exec_commit_emit("before-userswitch", 0, proc, "EXEC_COMMIT_OK");
     /*
-     * switch_to_user() does not load CR3. After vfork detach the active
-     * root can still be the shared parent mm unless exec_mmap activated.
+     * Belt: switch_to_user() activates the current mm root. After vfork
+     * detach, keep the hardware root aligned before the first user entry.
      */
     if (proc == current_process && process_mm_root(proc))
 	    paging_activate_address_space((uintptr_t)process_mm_root(proc));
