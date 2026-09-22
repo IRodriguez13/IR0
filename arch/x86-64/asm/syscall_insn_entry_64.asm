@@ -10,7 +10,7 @@
 ;        ALL OTHER GPR (rbx, rbp, rdi, rsi, rdx, r10, r8, r9, r12-r15)
 ;        must be preserved across the syscall.
 ;
-; Stack discipline (FASE 24):
+; Stack discipline:
 ;   The syscall instruction does NOT switch RSP automatically (unlike int 0x80,
 ;   which uses TSS.RSP0). Linux/BSD use SWAPGS + per-CPU; IR0 single-CPU uses a
 ;   global dedicated syscall kernel stack to avoid running the kernel on the
@@ -24,7 +24,6 @@
 global syscall_insn_entry_asm
 extern syscall_dispatch
 extern process_capture_syscall_frame_at_entry
-extern fase24_log_stack_once
 extern restore_user_fs_base
 
 section .bss
@@ -34,49 +33,7 @@ kernel_syscall_stack_base:
 kernel_syscall_stack_end:
 
 global user_rsp_save
-global fase24_user_rsp_snap
-global fase24_kernel_rsp_snap
-global fase24_rsp_pre_sysret
-global fase25_user_rsp_saved
-global fase25_rsp_before_restore
-global fase25_rsp_after_restore
-global fase25_rcx_before_sysret
-global fase25_r11_before_sysret
-global fase27_rax_before_sysret
-global fase27_rsp_before_sysret
-global fase27_rcx_before_sysret
-global fase27_r11_before_sysret
-global fase27_rdx_before_sysret
-global fase27_rsi_before_sysret
-global fase27_rdi_before_sysret
-global fase27_r8_before_sysret
-global fase27_r9_before_sysret
-global fase27_r10_before_sysret
-global fase29_entry_rip
-global fase29_entry_rsp
-global fase30_entry_user_rsp
 user_rsp_save:           resq 1
-fase24_user_rsp_snap:    resq 1
-fase24_kernel_rsp_snap:  resq 1
-fase24_rsp_pre_sysret:   resq 1
-fase25_user_rsp_saved:   resq 1
-fase25_rsp_before_restore: resq 1
-fase25_rsp_after_restore:  resq 1
-fase25_rcx_before_sysret:  resq 1
-fase25_r11_before_sysret:  resq 1
-fase27_rax_before_sysret:  resq 1
-fase27_rsp_before_sysret:  resq 1
-fase27_rcx_before_sysret:  resq 1
-fase27_r11_before_sysret:  resq 1
-fase27_rdx_before_sysret:  resq 1
-fase27_rsi_before_sysret:  resq 1
-fase27_rdi_before_sysret:  resq 1
-fase27_r8_before_sysret:   resq 1
-fase27_r9_before_sysret:   resq 1
-fase27_r10_before_sysret:  resq 1
-fase29_entry_rip:          resq 1
-fase29_entry_rsp:          resq 1
-fase30_entry_user_rsp:     resq 1
 
 section .data
 global kernel_syscall_stack_top
@@ -86,20 +43,10 @@ kernel_syscall_stack_top:
 section .text
 
 syscall_insn_entry_asm:
-    ; ---- FASE 24: stack switch ------------------------------------------
     ; Save user RSP and load the dedicated syscall kernel stack BEFORE
     ; touching memory off RSP. Single-CPU, no SWAPGS, no per-CPU.
-    mov [rel fase30_entry_user_rsp], rsp
     mov [rel user_rsp_save], rsp
     mov rsp, [rel kernel_syscall_stack_top]
-
-    ; ---- FASE 24: snapshot for the one-shot log (overwritten on every
-    ; syscall; the C helper only emits the first time it's called). ------
-    mov [rel fase24_kernel_rsp_snap], rsp
-    push rax
-    mov rax, [rel user_rsp_save]
-    mov [rel fase25_user_rsp_saved], rax
-    pop rax
 
     ; ---- Stage 1: snapshot callee-saved + RIP/RFLAGS first ----
     ;
@@ -115,8 +62,6 @@ syscall_insn_entry_asm:
     push r12
     push rbp
     push rbx
-    mov rbx, [rel user_rsp_save]
-    mov [rel fase24_user_rsp_snap], rbx
 
     ; ---- Stage 2: PRESERVE Linux-ABI args BEFORE any C call ----
     ;
@@ -138,7 +83,6 @@ syscall_insn_entry_asm:
     ;   [+104]=rflags [+112]=rip [+120]=user_rsp
 
     ; ---- Stage 3: capture user frame (rdi = &rbx in stack) ----
-    mov qword [rel fase29_entry_rip], 0
     lea rdi, [rsp + 56]
     call process_capture_syscall_frame_at_entry
 
@@ -194,35 +138,9 @@ syscall_insn_entry_asm:
     mov es, ax
     pop rax
 
-    ; ---- FASE 24: one-shot stack switch log ------------------------------
-    ; Snapshot kernel RSP just before swap-back; this should equal
-    ; fase24_kernel_rsp_snap if every push/pop balanced. The C helper
-    ; emits to serial only the first time it's called.
-    mov [rel fase24_rsp_pre_sysret], rsp
-    mov [rel fase25_rsp_before_restore], rsp
-    mov [rel fase25_rcx_before_sysret], rcx
-    mov [rel fase25_r11_before_sysret], r11
-    mov [rel fase27_rax_before_sysret], rax
-    mov [rel fase27_rcx_before_sysret], rcx
-    mov [rel fase27_r11_before_sysret], r11
-    mov [rel fase27_rdx_before_sysret], rdx
-    mov [rel fase27_rsi_before_sysret], rsi
-    mov [rel fase27_rdi_before_sysret], rdi
-    mov [rel fase27_r8_before_sysret], r8
-    mov [rel fase27_r9_before_sysret], r9
-    mov [rel fase27_r10_before_sysret], r10
-    mov [rel fase29_entry_rip], rcx
-    push rax
-    mov rax, [rel user_rsp_save]
-    mov [rel fase25_rsp_after_restore], rax
-    mov [rel fase27_rsp_before_sysret], rax
-    mov [rel fase29_entry_rsp], rax
-    pop rax
-    ;
-    ; C helpers below clobber SysV volatiles. Linux syscall ABI must preserve
+    ; C helper clobbers SysV volatiles. Linux syscall ABI must preserve
     ; all GPR except rax (retval), rcx, and r11 — musl _Fork keeps the TLS
     ; pointer in %rdx across gettid after fork returns 0. Save the full set.
-    ;
     push rax
     push rcx
     push r11
@@ -233,7 +151,6 @@ syscall_insn_entry_asm:
     push r9
     push r10
     sub rsp, 8                  ; 10 pushes = 80 bytes; keep 16-byte align
-    call fase24_log_stack_once
     call restore_user_fs_base
     add rsp, 8
     pop r10
@@ -246,7 +163,6 @@ syscall_insn_entry_asm:
     pop rcx
     pop rax
 
-    ; ---- FASE 24: restore user RSP before sysret -------------------------
     mov rsp, [rel user_rsp_save]
 
     ; Force IF in R11. Shared syscall stack / cli save can leave IF=0 and

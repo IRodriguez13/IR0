@@ -68,7 +68,7 @@ int vdso_map(struct process *proc)
 	if (map_user_region_in_directory(pml4, base_aligned, map_size, flags) != 0)
 		return -ENOMEM;
 
-	if (copy_to_user_region_in_directory(pml4, base, blob, blob_size) != 0)
+	if (copy_to_user_mm(pml4, base, blob, blob_size) != 0)
 		return -EFAULT;
 
 	return 0;

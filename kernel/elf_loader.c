@@ -517,7 +517,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 
             if (phdr[i].p_filesz > 0)
             {
-                if (copy_to_user_region_in_directory(pml4, vaddr,
+                if (copy_to_user_mm(pml4, vaddr,
                         file_data + phdr[i].p_offset,
                         (size_t)phdr[i].p_filesz) != 0)
                 {
@@ -529,7 +529,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 
             if (phdr[i].p_memsz > phdr[i].p_filesz)
             {
-                if (zero_user_region_in_directory(pml4,
+                if (zero_user_mm(pml4,
                         vaddr + phdr[i].p_filesz,
                         (size_t)(phdr[i].p_memsz - phdr[i].p_filesz)) != 0)
                 {
@@ -777,7 +777,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             size_t len = strlen(argv[i]) + 1;
 
-            if (copy_to_user_region_in_directory(pml4, current_string_ptr,
+            if (copy_to_user_mm(pml4, current_string_ptr,
                                                  argv[i], len) != 0)
             {
                 kfree(argv_ptrs);
@@ -795,7 +795,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             size_t len = strlen(envp[i]) + 1;
 
-            if (copy_to_user_region_in_directory(pml4, current_string_ptr,
+            if (copy_to_user_mm(pml4, current_string_ptr,
                                                  envp[i], len) != 0)
             {
                 kfree(argv_ptrs);
@@ -810,7 +810,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     /* argc at [RSP+0] per SysV ABI process entry stack contract. */
     {
         uint64_t argc_q = (uint64_t)argc;
-        if (copy_to_user_region_in_directory(pml4, argc_slot, &argc_q, sizeof(uint64_t)) != 0)
+        if (copy_to_user_mm(pml4, argc_slot, &argc_q, sizeof(uint64_t)) != 0)
         {
             kfree(argv_ptrs);
             kfree(envp_ptrs);
@@ -823,7 +823,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t ptr = argv_ptrs[i];
 
-        if (copy_to_user_region_in_directory(pml4,
+        if (copy_to_user_mm(pml4,
                 argv_array + (size_t)i * sizeof(uint64_t),
                 &ptr, sizeof(uint64_t)) != 0)
         {
@@ -836,7 +836,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t zero = 0;
 
-        if (copy_to_user_region_in_directory(pml4,
+        if (copy_to_user_mm(pml4,
                 argv_array + (size_t)argc * sizeof(uint64_t),
                 &zero, sizeof(uint64_t)) != 0)
         {
@@ -851,7 +851,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t ptr = envp_ptrs[i];
 
-        if (copy_to_user_region_in_directory(pml4,
+        if (copy_to_user_mm(pml4,
                 envp_array + (size_t)i * sizeof(uint64_t),
                 &ptr, sizeof(uint64_t)) != 0)
         {
@@ -864,7 +864,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t zero = 0;
 
-        if (copy_to_user_region_in_directory(pml4,
+        if (copy_to_user_mm(pml4,
                 envp_array + (size_t)envc * sizeof(uint64_t),
                 &zero, sizeof(uint64_t)) != 0)
         {
@@ -879,7 +879,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         uint8_t random_seed[ELF_AT_RANDOM_BYTES];
 
         elf_fill_random_bytes(random_seed, sizeof(random_seed));
-        if (copy_to_user_region_in_directory(pml4, random_base, random_seed,
+        if (copy_to_user_mm(pml4, random_base, random_seed,
                                              sizeof(random_seed)) != 0)
         {
             kfree(argv_ptrs);
@@ -921,9 +921,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             uint64_t off = i * 2 * sizeof(uint64_t);
 
-            if (copy_to_user_region_in_directory(pml4, auxv_base + off,
+            if (copy_to_user_mm(pml4, auxv_base + off,
                     &auxv[i].a_type, sizeof(uint64_t)) != 0 ||
-                copy_to_user_region_in_directory(pml4,
+                copy_to_user_mm(pml4,
                     auxv_base + off + sizeof(uint64_t),
                     &auxv[i].a_val, sizeof(uint64_t)) != 0)
             {
@@ -1368,8 +1368,6 @@ static void exec_fail_kill(process_t *proc, int code, const char *point)
 	exec_commit_ctx.fail_point = point;
 	exec_commit_emit(point ? point : "exec_fail_kill", (int64_t)code, proc,
 	                 "EXEC_LOADER_FAIL");
-	process_fase43_proc_audit("exec-fail-kill");
-	paging_fase43_oom_audit("exec-fail-kill");
 	process_exit(code);
 }
 
@@ -1409,7 +1407,6 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     exec_commit_ctx.active_cr3_entry = paging_current_address_space();
 
     paging_ir0_mm_checkpoint("exec-before", (int32_t)proc->task.pid);
-    process_fase44_list_checkpoint("exec-before");
     pmm_stats(&total_frames_before, &used_frames_before, NULL);
 
     klog_debug_fmt("ELF", "SERIAL: ELF: exec_replace_current: %s", path);
@@ -1663,7 +1660,6 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     kfree(file_data);
     pmm_stats(&total_frames_after, &used_frames_after, NULL);
     paging_ir0_mm_checkpoint("exec-after", (int32_t)proc->task.pid);
-    process_fase44_list_checkpoint("exec-after");
 
     klog_debug_fmt("ELF", "SERIAL: ELF: exec_replace success PID %x", (unsigned)((uint32_t)proc->task.pid));
     klog_debug_fmt("ELF", "SERIAL: ELF: exec CR3 active=%llx task_cr3=%llx mm_cr3=%llx", (unsigned long long)paging_current_address_space(), (unsigned long long)(process_mm_root(proc)), (unsigned long long)((uint64_t)(uintptr_t)process_pgd(proc)));

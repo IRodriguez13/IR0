@@ -111,15 +111,6 @@ int process_validate_userspace_buffer(const void *buf, size_t size);
 void process_pre_zombie_teardown(process_t *dying);
 void process_notify_parent_of_exit(process_t *dying);
 
-/* exit.c audit (only linked when FASE40_D_AUDIT) */
-#if FASE40_D_AUDIT
-void fase40_d_audit_reap_line(const char *stage, process_t *child,
-			      pid_t parent_pid, int removed, const char *tag);
-void fase40_d_audit_destroy_done(process_t *p,
-				 const process_reclaim_stats_t *stats,
-				 uint64_t orphan_frames);
-#endif
-
 /* signals.c */
 int process_signal_is_default_fatal(process_t *p, int sig);
 

@@ -125,7 +125,7 @@ static void arch_repair_user_gprs_from_syscall_frame(process_t *proc,
 	process_apply_syscall_frame_to_task(task, &proc->syscall_frame, rax);
 }
 
-void arch_prepare_task_user_iretq(process_t *proc)
+void prepare_task_user_iretq(process_t *proc)
 {
 	if (!proc || proc->mode != USER_MODE)
 		return;

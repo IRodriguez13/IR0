@@ -96,16 +96,12 @@
 #define DEBUG_FORK 0
 #endif
 
-/* mmap/VMA audit serial noise ([MMAP_AUDIT]/[FASE39] tags) */
+/* mmap/VMA audit serial noise ([MMAP_AUDIT] tags) */
 #if defined(CONFIG_DEBUG_MMAP_AUDIT) && CONFIG_DEBUG_MMAP_AUDIT
 #define DEBUG_MMAP_AUDIT 1
 #else
 #define DEBUG_MMAP_AUDIT 0
 #endif
-
-/* Legacy FASE49/50 Kconfig symbols removed — always off. */
-#define DEBUG_FASE50 0
-#define DEBUG_FASE49 0
 
 /* Trap Flag / #DB — off by default; enable only for deliberate tracing. */
 #ifndef IR0_ENABLE_SINGLE_STEP

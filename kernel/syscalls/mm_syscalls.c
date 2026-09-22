@@ -52,7 +52,6 @@
 #define SYSCALL_PTR_ERR(err) ((void *)(intptr_t)(-(err)))
 #define MMAP_AUDIT_FAILED ((void *)(intptr_t)-1)
 
-static void fase39_dump_current_vmas(const char *tag);
 
 static void mm_prepare_map_fixed(uintptr_t start, size_t length)
 {
@@ -308,7 +307,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 		}
 		if ((size_t)nread < chunk)
 			memset(page_buf + nread, 0, chunk - (size_t)nread);
-		if (copy_to_user_region_in_directory(process_pgd(proc),
+		if (copy_to_user_mm(process_pgd(proc),
 						     virt_addr + copied,
 						     page_buf, chunk) != 0)
 		{
@@ -464,7 +463,6 @@ int64_t sys_brk(void *addr)
 	}
 
 	process_set_heap_end(current_process, new_brk);
-	fase39_dump_current_vmas("brk");
 	return (int64_t)new_brk;
 }
 
@@ -629,33 +627,6 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
         klog_debug("MMAP", "CLASSIFY MMAP_PTE_PERMISSION_BAD reason=missing_PAGE_RW");
       }
     }
-  }
-}
-
-/*
- * FASE39 diagnostics: dump current process VMAs after brk/mmap/munmap.
- * Pure observability helper (no policy changes).
- */
-static void fase39_dump_current_vmas(const char *tag)
-{
-  struct mmap_region *r;
-
-  (void)tag;
-
-  if (!DEBUG_MMAP_AUDIT)
-    return;
-  if (!current_process)
-    return;
-
-
-
-
-  for (r = process_mmap_list(current_process); r; r = r->next)
-  {
-    if ((r->flags & MAP_ANONYMOUS) != 0)
-      klog_debug("KERN", "anonymous");
-    else
-      klog_debug("KERN", "fd-backed-or-device");
   }
 }
 
@@ -852,7 +823,6 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         region->next = process_mmap_list(current_process);
         process_mm_set_mmap_list(current_process, region);
         KTM_CHECKPOINT(KTM_CP_MM_MAP);
-        fase39_dump_current_vmas("mmap-fb");
         {
           static int s_fb_mmap_devfs_tag;
           static int s_fb_mmap_ok_tag;
@@ -1169,7 +1139,6 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   vma_inserted = 1;
   virt_addr_out = virt_addr;
   KTM_CHECKPOINT(KTM_CP_MM_MAP);
-  fase39_dump_current_vmas("mmap");
 
   ret = (void *)virt_addr;
   mmap_audit_log_return("ok", ret, virt_addr_out, aligned_len, vma_inserted,
@@ -1224,7 +1193,6 @@ int sys_munmap(void *addr, size_t length)
       kfree(current);
       KTM_CHECKPOINT(KTM_CP_MM_UNMAP);
       paging_ir0_mm_checkpoint("munmap-after", (int32_t)current_process->task.pid);
-      fase39_dump_current_vmas("munmap");
       return 0;
     }
     prev = current;
@@ -1304,7 +1272,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
         pmm_free_frame(phys);
         return -ENOMEM;
       }
-      if (zero_user_region_in_directory(pml4, page, PAGE_SIZE_4KB) != 0)
+      if (zero_user_mm(pml4, page, PAGE_SIZE_4KB) != 0)
       {
         (void)unmap_page_in_directory(pml4, page);
         return -EFAULT;

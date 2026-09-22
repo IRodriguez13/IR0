@@ -10,8 +10,8 @@
 
 #include <ktm_internal.h>
 
-extern void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
-					     uint64_t mm_created, uint64_t mm_destroyed);
+extern void paging_steady_state_audit(const char *tag, uint64_t frames_baseline,
+				     uint64_t mm_created, uint64_t mm_destroyed);
 
 static int scenario_mm_steady_state_run(ktm_context_t *ctx)
 {
@@ -23,7 +23,7 @@ static int scenario_mm_steady_state_run(ktm_context_t *ctx)
 	KTM_REQUIRE(ktm_snapshot_take(&before) == 0);
 	frames_baseline = before.used_frames;
 
-	paging_fase47_steady_state_audit("ktm.mm.steady_state", frames_baseline, 0, 0);
+	paging_steady_state_audit("ktm.mm.steady_state", frames_baseline, 0, 0);
 
 	KTM_REQUIRE(ktm_snapshot_take(&after) == 0);
 	/* Audit must not explode frame accounting (±64). */

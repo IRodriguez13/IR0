@@ -361,7 +361,6 @@ KERNEL_OBJS = \
     kernel/process/mm.o \
     kernel/process/signals.o \
     kernel/vdso.o \
-    kernel/debug/fase_audit.o \
     kernel/clock_wait.o \
     kernel/credentials.o \
     kernel/power/power_manag.o \

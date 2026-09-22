@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <config.h>
+#include <ir0/copy_user.h>
 #include <mm/paging.h>
 
 /* Exception frame captured before panicex (CPU fault site, not reporter). */
@@ -140,14 +141,14 @@ void ir0_log_user_fault_frame(unsigned vector, unsigned long long cr2,
 	if ((vector == 13 || vector == 14) && cur && process_pgd(cur))
 	{
 		if (vector == 13 &&
-		    copy_from_user_region_in_directory(process_pgd(cur),
+		    copy_from_user_mm(process_pgd(cur),
 						      (uintptr_t)rip, &opc, 1) == 0)
 		{
 			have_opc = 1;
 			if (opc == 0xf4)
 				classify = "USER_ABORT_HLT";
 		}
-		if (copy_from_user_region_in_directory(process_pgd(cur),
+		if (copy_from_user_mm(process_pgd(cur),
 						       (uintptr_t)rsp, &retaddr,
 						       sizeof(retaddr)) == 0)
 			have_ret = 1;

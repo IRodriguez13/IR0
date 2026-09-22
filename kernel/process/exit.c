@@ -32,28 +32,6 @@ void tcp_wire_on_process_exit(uint32_t pid);
  *     reclaim page tables, free mmap_list, saved_context, kernel stack, PML4
  *   - caller frees process_t after remove-from-list
  */
-#if FASE40_D_AUDIT
-void fase40_d_audit_reap_line(const char *stage, process_t *child,
-				     pid_t parent_pid, int removed,
-				     const char *tag)
-{
-	if (!child)
-		return;
-
-}
-
-void fase40_d_audit_destroy_done(process_t *p,
-					const process_reclaim_stats_t *stats,
-					uint64_t orphan_frames)
-{
-	size_t used_frames = 0;
-
-	if (!p || !stats)
-		return;
-
-	pmm_stats(NULL, &used_frames, NULL);
-}
-#endif
 
 static void process_exit_robust_list_hook(process_t *dying)
 {
@@ -171,33 +149,15 @@ void process_notify_parent_of_exit(process_t *dying)
 __attribute__((noreturn)) void process_exit(int code)
 {
 	process_t *dying = current_process;
-	size_t total_frames = 0;
-	size_t used_frames = 0;
-	uint64_t vmas = 0;
 
 	if (!dying)
 	{
 		for (;;)
 			cpu_idle();
 	}
-	process_fase50_trace_proc("process_exit-entry", dying);
 	process_pre_zombie_teardown(dying);
 	if (IR0_DEBUG_WAIT)
 		klog_debug("WAIT", "CLASSIFY ZOMBIE_IRQ_SAVED_CLEARED");
-
-#if IR0_DEBUG_PROC
-	process_fase46_proc_log(dying, (int64_t)(uint32_t)code, "EXIT");
-	process_fase44_list_checkpoint("exit-before");
-	{
-		fase_proc_audit_t *fa = fase_audit_get(dying, 0);
-
-		if (fa)
-			fa->fase44_audit_state = FASE44_PROC_EXITING;
-	}
-	fase_audit_trace_pid(dying->task.pid, "EXIT");
-	fase_audit_ref_emit(dying, "exit");
-	process_fase43_proc_audit("exit-before");
-#endif
 
 	/* Mark as zombie */
 	process_mark_zombie(dying);
@@ -211,37 +171,7 @@ __attribute__((noreturn)) void process_exit(int code)
 	{
 		klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] process_exit pid=%x exit_signal=%x wait_status=%x", (unsigned)((uint32_t)dying->task.pid), (unsigned)((uint32_t)dying->exit_signal), (unsigned)((uint32_t)process_child_wait_status_word(dying)));
 	}
-#endif
-#if IR0_DEBUG_PROC
-	{
-		fase_proc_audit_t *fa = fase_audit_get(dying, 0);
-
-		if (fa)
-			fa->fase44_audit_state = FASE44_PROC_ZOMBIE;
-	}
-	fase_audit_trace_pid(dying->task.pid, "ZOMBIE");
-#endif
-	fase_audit_note_proc_exited();
-	fase_audit_note_proc_zombie();
-#if IR0_DEBUG_PROC
 	paging_ir0_mm_checkpoint("exit-before", (int32_t)dying->task.pid);
-#endif
-	for (struct mmap_region *r = process_mmap_list(dying); r; r = r->next)
-		vmas++;
-	pmm_stats(&total_frames, &used_frames, NULL);
-	if (IR0_DEBUG_PROC)
-	{
-	}
-
-	process_fase43_proc_audit("exit-after");
-#if IR0_DEBUG_PROC
-	if (dying->task.pid == 1)
-	{
-		process_fase44_drain_zombie_children(1);
-		process_fase43_live_proc_dump();
-		process_fase44_live_summary("init-exit");
-	}
-	process_fase44_list_checkpoint("exit-after");
 #endif
 
 	process_notify_parent_of_exit(dying);
@@ -251,7 +181,6 @@ __attribute__((noreturn)) void process_exit(int code)
 	 * by the parent (via wait()), but it will not consume CPU time.
 	 */
 	sched_remove_process(dying);
-	process_fase50_trace_proc("process_exit-before-schedule", dying);
 
 	/*
 	 * kmain keeps the kernel idle task off the RR queue while PID 1 runs;
@@ -307,12 +236,6 @@ void process_destroy(process_t *p)
 	pipe_purge_waiters_for_process(p);
 	ir0_clock_wait_disarm(p);
 
-	process_fase46_proc_log(p, -1, "DESTROY");
-	fase_audit_ref_emit(p, "destroy");
-	fase_audit_note_proc_destroyed();
-	process_fase43_proc_audit("destroy-before");
-
-
 	process_release_fds(p, "DESTROY");
 
 	if (p->files)
@@ -337,7 +260,6 @@ void process_destroy(process_t *p)
 		{
 			mm_put(p->mm);
 			p->mm = NULL;
-			process_fase43_note_mm_destroyed();
 		}
 
 		if (p->mode == KERNEL_MODE && kstack &&
@@ -350,15 +272,5 @@ void process_destroy(process_t *p)
 	process_saved_cmdline_clear(p);
 
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
-#if IR0_DEBUG_PMM
-#endif
 	paging_ir0_mm_checkpoint("destroy-after", (int32_t)p->task.pid);
-	{
-		fase_proc_audit_t *fa = fase_audit_get(p, 0);
-
-		if (fa)
-			fa->fase44_audit_state = FASE44_PROC_DESTROYED;
-	}
-	fase_audit_unbind(p);
-	process_fase43_proc_audit("destroy-after");
 }

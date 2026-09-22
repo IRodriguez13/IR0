@@ -795,10 +795,6 @@ uint64_t process_count_resident_user_pages(const process_t *p);
 /* Page-table walk; @mm must be held alive (mm_get) for the duration of the call. */
 uint64_t mm_count_resident_user_pages(const mm_struct_t *mm);
 
-void process_fase50_trace_proc(const char *stage, process_t *p);
-
-#include "debug/fase_audit.h"
-
 int64_t process_close_fd(process_t *proc, int fd);
 void process_exec_close_cloexec(process_t *p);
 bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t length);

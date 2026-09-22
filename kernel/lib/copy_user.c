@@ -92,8 +92,8 @@ int copy_to_user(void *dst, const void *src, size_t n)
 	 */
 	if (current && process_pgd(current))
 	{
-		if (copy_to_user_region_in_directory(process_pgd(current),
-						     (uintptr_t)dst, src, n) != 0)
+		if (copy_to_user_mm(process_pgd(current), (uintptr_t)dst, src,
+				    n) != 0)
 			return -EFAULT;
 		return 0;
 	}
@@ -119,9 +119,8 @@ int copy_from_user(void *dst, const void *src, size_t n)
 
 	if (current && process_pgd(current))
 	{
-		if (copy_from_user_region_in_directory(process_pgd(current),
-						       (uintptr_t)src, dst,
-						       n) != 0)
+		if (copy_from_user_mm(process_pgd(current), (uintptr_t)src, dst,
+				      n) != 0)
 			return -EFAULT;
 		return 0;
 	}
@@ -148,8 +147,7 @@ int clear_user(void *dst, size_t n)
 	if (!current || !process_pgd(current))
 		return -EFAULT;
 
-	if (zero_user_region_in_directory(process_pgd(current), (uintptr_t)dst,
-					  n) != 0)
+	if (zero_user_mm(process_pgd(current), (uintptr_t)dst, n) != 0)
 		return -EFAULT;
 	return 0;
 }
@@ -185,9 +183,8 @@ int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src)
 	{
 		char c;
 
-		if (copy_from_user_region_in_directory(process_pgd(current),
-						       (uintptr_t)src + i, &c,
-						       1) != 0)
+		if (copy_from_user_mm(process_pgd(current),
+				      (uintptr_t)src + i, &c, 1) != 0)
 			return -EFAULT;
 		dst[i] = c;
 		if (c == '\0')

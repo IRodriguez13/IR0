@@ -52,7 +52,7 @@ void ktm_user_canary_install(uint64_t *pml4, uint64_t stack_top, uint32_t pid)
 	words[0] = ktm_canary_word();
 	words[1] = ~words[0];
 
-	(void)copy_to_user_region_in_directory(pml4,
+	(void)copy_to_user_mm(pml4,
 					       (uintptr_t)(stack_top - KTM_CANARY_BYTES),
 					       words, sizeof(words));
 }
@@ -66,7 +66,7 @@ int ktm_user_canary_check(uint64_t *pml4, uint64_t stack_top, uint32_t pid,
 	if (!pml4 || stack_top < KTM_CANARY_BYTES)
 		return 0;
 
-	if (copy_from_user_region_in_directory(pml4,
+	if (copy_from_user_mm(pml4,
 					       (uintptr_t)(stack_top - KTM_CANARY_BYTES),
 					       words, sizeof(words)) != 0)
 		return 0; /* Not mapped: nothing proven either way. */

@@ -263,9 +263,9 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		}
 
 		memset(uctx_zero, 0, sizeof(uctx_zero));
-		if (copy_to_user_region_in_directory(process_pgd(p), info_addr,
+		if (copy_to_user_mm(process_pgd(p), info_addr,
 						     &info, sizeof(info)) != 0 ||
-		    copy_to_user_region_in_directory(process_pgd(p), uctx_addr,
+		    copy_to_user_mm(process_pgd(p), uctx_addr,
 						     uctx_zero,
 						     sizeof(uctx_zero)) != 0)
 		{
@@ -1139,10 +1139,10 @@ void handle_signals(void)
                         frame.ctx = *ctx;
                         frame.oldmask = (uint64_t)current->signal_mask;
 
-                        if (copy_to_user_region_in_directory(
+                        if (copy_to_user_mm(
 				    process_pgd(current), frame_addr, &frame,
 				    sizeof(struct sigframe)) != 0 ||
-			    copy_to_user_region_in_directory(
+			    copy_to_user_mm(
 				    process_pgd(current), user_sp, &restorer,
 				    sizeof(restorer)) != 0)
                         {

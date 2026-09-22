@@ -320,7 +320,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 		 * set, which does not exist yet.
 		 */
 		if (info && info->sp &&
-		    copy_from_user_region_in_directory(process_pgd(p),
+		    copy_from_user_mm(process_pgd(p),
 						       (uintptr_t)info->sp,
 						       sp_words,
 						       sizeof(sp_words)) == 0)

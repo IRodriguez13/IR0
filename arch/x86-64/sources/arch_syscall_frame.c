@@ -19,8 +19,6 @@
 #include <kernel/process.h>
 #include <config.h>
 
-extern uint64_t fase29_entry_rip;
-
 void syscall_capture_frame_at_entry(struct process *p,
 						 uint64_t *frame_base,
 						 uint64_t rip_hw)
@@ -31,11 +29,7 @@ void syscall_capture_frame_at_entry(struct process *p,
 		return;
 
 	sf = &p->syscall_frame;
-	/*
-	 * frame_base[7] is the user RIP (rcx) at syscall entry
-	 * (syscall_insn_entry_64.asm). fase29_entry_rip is from a prior sysret.
-	 */
-	(void)fase29_entry_rip;
+	/* frame_base[7] is the user RIP (rcx) at syscall entry. */
 	sf->rip = frame_base[7];
 	if (!sf->rip && rip_hw)
 		sf->rip = rip_hw;

@@ -43,16 +43,11 @@
 #include <ir0/memfd.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
-
-#include <ir0/devfs.h>
-#include <ir0/pseudo_fs.h>
 #include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
 #include <ir0/sock_icmp.h>
 #include <ir0/sock_inet_ioctl.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/copy_user.h>
-#include <ir0/paging.h>
 #include <ir0/fd_get.h>
 #include <ir0/pipe.h>
 #include <ir0/pipe_fd.h>
@@ -814,7 +809,7 @@ void syscall_poll_finish_blocked_resume(process_t *proc)
 
 	if (w->user_fds && process_pgd(proc))
 	{
-		if (copy_to_user_region_in_directory(process_pgd(proc),
+		if (copy_to_user_mm(process_pgd(proc),
 						     (uintptr_t)w->user_fds,
 						     w->kfds,
 						     w->nfds * sizeof(struct pollfd)) != 0)
@@ -936,65 +931,32 @@ static int pipe_writer_ready(const pipe_t *pipe, size_t need)
 }
 
 static struct pipe_waiter pipe_waiters[MAX_PIPE_WAITERS];
-static uint64_t fase48_fd_created;
-static uint64_t fase48_fd_destroyed;
-static uint64_t fase48_blocked_readers;
-static uint64_t fase48_blocked_writers;
+static uint64_t fd_slot_created;
+static uint64_t fd_slot_destroyed;
+static uint64_t fd_slot_blocked_readers;
+static uint64_t fd_slot_blocked_writers;
 
-#if CONFIG_DEBUG_FASE50
-static int fase50b_peek_user(uint64_t *pml4, uintptr_t user_addr,
-			     uint8_t *scratch, size_t n)
-{
-	size_t i;
-
-	if (!pml4 || !scratch || n == 0)
-		return -1;
-
-	for (i = 0; i < n; i++)
-	{
-		uintptr_t page = user_addr & (uintptr_t)PAGE_FRAME_MASK;
-		uint64_t *pte = paging_get_pte(pml4, page);
-		uintptr_t phys;
-		uint8_t byte;
-
-		if (!pte || !(*pte & PAGE_PRESENT))
-			return -1;
-
-		phys = (uintptr_t)(*pte & PAGE_PTE_PFN_MASK);
-		byte = *(const uint8_t *)(phys + (user_addr & 0xFFFU));
-		scratch[i] = byte;
-		user_addr++;
-	}
-	return 0;
-}
-#else
-/* Staged pipe wake removed; peek helper only used under DEBUG_FASE50. */
-#endif
 void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
 		       uint64_t *blocked_readers, uint64_t *blocked_writers)
 {
 	if (created)
-		*created = fase48_fd_created;
+		*created = fd_slot_created;
 	if (destroyed)
-		*destroyed = fase48_fd_destroyed;
+		*destroyed = fd_slot_destroyed;
 	if (blocked_readers)
-		*blocked_readers = fase48_blocked_readers;
+		*blocked_readers = fd_slot_blocked_readers;
 	if (blocked_writers)
-		*blocked_writers = fase48_blocked_writers;
+		*blocked_writers = fd_slot_blocked_writers;
 }
 
 void fd_slot_note_created(void)
 {
-#if CONFIG_DEBUG_FASE50
-	fase48_fd_created++;
-#endif
+	fd_slot_created++;
 }
 
 void fd_slot_note_destroyed(void)
 {
-#if CONFIG_DEBUG_FASE50
-	fase48_fd_destroyed++;
-#endif
+	fd_slot_destroyed++;
 }
 
 int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need)
@@ -1042,15 +1004,11 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 	pipe_waiters[slot].waiting_read = waiting_read;
 	pipe_waiters[slot].write_need = waiting_read ? 0 : write_need;
 	if (waiting_read)
-		fase48_blocked_readers++;
+		fd_slot_blocked_readers++;
 	else
-		fase48_blocked_writers++;
+		fd_slot_blocked_writers++;
 	if (waiting_read)
 		pipe_ktm_note_read_sleep(pipe);
-#if CONFIG_DEBUG_FASE50
-	if (proc->mode == USER_MODE && waiting_read)
-		klog_debug_fmt("PIPE", "[IR0DBG50B][READ_BLOCK] pid=%x fd=%llx rsi=%llx rdx=%llx pipe_id=%llx", (unsigned)((uint32_t)proc->task.pid), (unsigned long long)(process_syscall_arg(proc, 0)), (unsigned long long)(process_syscall_arg(proc, 1)), (unsigned long long)(process_syscall_arg(proc, 2)), (unsigned long long)(pipe ? pipe->pipe_id : 0));
-#endif
 
 	/*
 	 * Portable in-syscall sleep (same contract as tty/poll):
@@ -1273,11 +1231,11 @@ void pipe_purge_waiters_for_process(process_t *proc)
 			continue;
 		if (w->waiting_read)
 		{
-			if (fase48_blocked_readers > 0)
-				fase48_blocked_readers--;
+			if (fd_slot_blocked_readers > 0)
+				fd_slot_blocked_readers--;
 		}
-		else if (fase48_blocked_writers > 0)
-			fase48_blocked_writers--;
+		else if (fd_slot_blocked_writers > 0)
+			fd_slot_blocked_writers--;
 		w->proc = NULL;
 		w->pipe = NULL;
 		w->waiting_read = 0;
@@ -2127,9 +2085,6 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
   }
   if (flags & O_CLOEXEC)
     cloexec = FD_CLOEXEC;
-
-  if (current_process->task.pid == 1)
-    process_fase48_capture_fd_baseline(current_process);
 
   pipe = pipe_create();
   if (!pipe)

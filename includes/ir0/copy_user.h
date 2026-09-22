@@ -12,8 +12,8 @@
  *
  * Contract: never memcpy/memset/strncpy or direct dereference of a userspace
  * pointer. Always copy_to_user / copy_from_user / clear_user (or
- * *_region_in_directory for a non-current mm). KERNEL_MODE bypass is only for
- * dbgshell/ktest.
+ * copy_*_user_mm / *_region_in_directory for a non-current mm). KERNEL_MODE
+ * bypass is only for dbgshell/ktest.
  */
 
 #ifndef _IR0_COPY_USER_H
@@ -92,15 +92,36 @@ static inline int access_ok(const void *addr, size_t size)
 	})
 
 /*
- * Cross-mm / explicit-root copies. Prefer these over address-space switching +
- * memcpy. Implemented in mm/paging.c; declared here so syscalls need not
+ * Cross-mm copies (Linux access_remote_vm / access_process_vm analogue).
+ * Walk @pml4 instead of switching address-space root + memcpy.
+ * Implemented in mm/paging.c; declared here so syscalls need not
  * include <mm/paging.h> for the uaccess contract alone.
+ *
+ * Prefer copy_to_user_mm / copy_from_user_mm / zero_user_mm.
+ * *_region_in_directory remain as the implementation names.
  */
 int copy_to_user_region_in_directory(uint64_t *pml4, uintptr_t dst,
 				     const void *src, size_t n);
 int copy_from_user_region_in_directory(uint64_t *pml4, uintptr_t src,
 				       void *dst, size_t n);
 int zero_user_region_in_directory(uint64_t *pml4, uintptr_t dst, size_t n);
+
+static inline int copy_to_user_mm(uint64_t *pml4, uintptr_t dst,
+				  const void *src, size_t n)
+{
+	return copy_to_user_region_in_directory(pml4, dst, src, n);
+}
+
+static inline int copy_from_user_mm(uint64_t *pml4, uintptr_t src, void *dst,
+				    size_t n)
+{
+	return copy_from_user_region_in_directory(pml4, src, dst, n);
+}
+
+static inline int zero_user_mm(uint64_t *pml4, uintptr_t dst, size_t n)
+{
+	return zero_user_region_in_directory(pml4, dst, n);
+}
 
 /*
  * Copy against a specific mm. @current_as != 0 uses the active process
@@ -119,7 +140,7 @@ static inline int copy_to_user_in_mm(uint64_t *pml4, int current_as,
 		return copy_to_user(udst, ksrc, n);
 	if (!pml4)
 		return -EFAULT;
-	return copy_to_user_region_in_directory(pml4, (uintptr_t)udst, ksrc, n);
+	return copy_to_user_mm(pml4, (uintptr_t)udst, ksrc, n);
 }
 
 static inline int copy_from_user_in_mm(uint64_t *pml4, int current_as,
@@ -135,8 +156,7 @@ static inline int copy_from_user_in_mm(uint64_t *pml4, int current_as,
 		return copy_from_user(kdst, usrc, n);
 	if (!pml4)
 		return -EFAULT;
-	return copy_from_user_region_in_directory(pml4, (uintptr_t)usrc, kdst,
-						  n);
+	return copy_from_user_mm(pml4, (uintptr_t)usrc, kdst, n);
 }
 
 #endif /* _IR0_COPY_USER_H */

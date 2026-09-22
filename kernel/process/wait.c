@@ -221,10 +221,7 @@ void process_reparent_children(process_t *dying_parent)
 		for (child = process_list; child; child = child->next)
 		{
 			if (child->ppid == dying_parent->task.pid && child != dying_parent)
-			{
 				child->ppid = 0;
-				fase_audit_note_reparent();
-			}
 		}
 		return;
 	}
@@ -234,20 +231,13 @@ void process_reparent_children(process_t *dying_parent)
 	{
 		if (child->ppid == dying_parent->task.pid)
 		{
-			fase_proc_audit_t *fa = fase_audit_get(child, 0);
-			uint8_t audit_st = fa ? fa->fase44_audit_state : 0;
-
 			child->ppid = 1;
-			fase_audit_note_reparent();
-			fase_audit_destroy_audit(child, dying_parent->task.pid,
-					     audit_st, audit_st, 0, "reparent");
 #if DEBUG_PROCESS
 			klog_debug_fmt("KERN", "[PROCESS] Reparented child PID %x to init (PID 1)\n", (unsigned)((uint32_t)child->task.pid));
 #endif
 		}
 		child = child->next;
 	}
-	process_fase44_list_checkpoint("reparent-after");
 }
 
 void process_reap_zombie_child(process_t *child)
@@ -294,14 +284,11 @@ void process_reap_zombies(process_t *parent)
 #if DEBUG_PROCESS
 			klog_debug_fmt("KERN", "[PROCESS] Auto-reaping zombie child PID %x", (unsigned)((uint32_t)child->task.pid));
 #endif
-			fase_audit_note_reap_event();
-			process_fase43_proc_audit("reap-zombie");
-			fase_audit_reap_zombie(child, parent->task.pid, "reap-zombie");
+			process_reap_zombie_child(child);
 		}
 		
 		child = next;
 	}
-	process_fase44_list_checkpoint("reap-zombie-after");
 }
 
 static int process_wait_pid_matches_child(pid_t wait_pid,
@@ -447,11 +434,8 @@ void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
 
 
 	pmm_stats(NULL, &used_frames_before, NULL);
-	process_fase43_proc_audit("wait-resume-before-reap");
-	fase_audit_reap_zombie(child, parent->task.pid, "wait-resume");
+	process_reap_zombie_child(child);
 	pmm_stats(NULL, &used_frames_after, NULL);
-	process_fase44_list_checkpoint("wait-resume-after");
-	process_fase43_proc_audit("wait-resume-after-reap");
 	if (IR0_DEBUG_PROC)
 	{
 		if (used_frames_after >= used_frames_before)
@@ -489,9 +473,6 @@ int process_wait(pid_t pid, int *status, int options)
 	int found_child;
 	process_t *zombie;
 	uint64_t irq_flags;
-	process_fase50_trace_proc("process_wait-entry", current_process);
-	process_fase43_proc_audit("wait-before");
-	process_fase44_list_checkpoint("wait-before");
 	/*
 	 * wait4 contract (D1.17 / Linux waitpid):
 	 *   pid > 0  — that child.
@@ -537,7 +518,6 @@ int process_wait(pid_t pid, int *status, int options)
 		if (zombie) {
 			int status_val;
 			pid_t reaped_pid;
-			process_fase50_trace_proc("process_wait-found-zombie", zombie);
 
 			if (status && current_process->mode == USER_MODE &&
 			    process_validate_userspace_buffer(status, sizeof(int)) != 0)
@@ -550,11 +530,8 @@ int process_wait(pid_t pid, int *status, int options)
 			reaped_pid = zombie->task.pid;
 			process_irq_restore(irq_flags);
 
-			fase_audit_reap_zombie(zombie, current_process->task.pid, "wait");
-			process_fase50_trace_proc("process_wait-after-reap", current_process);
+			process_reap_zombie_child(zombie);
 			wait_exit_audit_process_wait_reap(reaped_pid, status_val, status);
-			process_fase44_list_checkpoint("wait-after");
-			process_fase43_proc_audit("wait-reap");
 
 			if (status)
 			{
@@ -576,11 +553,6 @@ int process_wait(pid_t pid, int *status, int options)
 			if (!wait_find_matching_zombie(current_process, (pid_t)-1))
 				current_process->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
 
-			if (IR0_DEBUG_PROC)
-			{
-			}
-
-
 			return reaped_pid;
 		}
 
@@ -590,9 +562,6 @@ int process_wait(pid_t pid, int *status, int options)
 			if (IR0_DEBUG_WAIT)
 			{
 				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=echild parent=%x target=%x ret=ECHILD\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
-			}
-			if (IR0_DEBUG_PROC)
-			{
 			}
 			process_reset_blocked_syscall_state(current_process);
 			return -ECHILD;
@@ -604,9 +573,6 @@ int process_wait(pid_t pid, int *status, int options)
 			if (IR0_DEBUG_WAIT)
 			{
 				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=%x target=%x ret=0 status_write=no\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
-			}
-			if (IR0_DEBUG_PROC)
-			{
 			}
 			process_reset_blocked_syscall_state(current_process);
 			return 0;

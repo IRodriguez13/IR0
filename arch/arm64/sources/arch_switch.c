@@ -84,6 +84,11 @@ void arch_switch_to(task_t *prev, task_t *next)
 	switch_context_arm64(prev, next);
 }
 
+void prepare_task_user_iretq(struct process *proc)
+{
+	(void)proc;
+}
+
 void set_fs_base(uint64_t base)
 {
 	__asm__ volatile("msr tpidr_el0, %0" :: "r"(base) : "memory");

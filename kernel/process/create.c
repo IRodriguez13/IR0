@@ -255,15 +255,6 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		process_irq_restore(irq_flags);
 	}
 
-	fase_audit_note_proc_created();
-#if IR0_DEBUG_PROC
-	process_fase43_proc_audit("spawn-after");
-	fase_audit_spawn_init(proc);
-	fase_audit_trace_pid(proc->task.pid, "CREATED");
-	fase_audit_ref_emit(proc, "spawn");
-	process_fase44_list_checkpoint("spawn-after");
-#endif
-
 	/* Add to scheduler */
 	sched_add_process(proc);
 

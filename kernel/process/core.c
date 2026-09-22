@@ -78,12 +78,6 @@ uint64_t process_list_count_user(void)
 	return n;
 }
 
-void process_fase50_trace_proc(const char *stage, process_t *p)
-{
-	(void)stage;
-	(void)p;
-}
-
 process_t *current_process = NULL;
 process_t *process_list = NULL;
 

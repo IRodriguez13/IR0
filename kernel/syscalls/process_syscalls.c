@@ -15,50 +15,43 @@
 #include "process_syscalls.h"
 #include "syscalls_glue.h"
 #include <kernel/syscalls.h>
-#include <ir0/copy_user.h>
-#include <ir0/utimens.h>
-#include <ir0/errno.h>
-#include <ir0/process.h>
-#include <ir0/signals.h>
-#include <ir0/sched.h>
-#include <ir0/permissions.h>
-#include <ir0/clock_wait.h>
-#include <ir0/clock.h>
-#include <ir0/debug_runtime.h>
-#include <ir0/ktm/klog.h>
-#include <ir0/task_ops.h>
-#include <ir0/signal_irq.h>
-#include <ir0/signal_syscall_resume.h>
-#include <ir0/console.h>
+#include <config.h>
 #include <string.h>
-
-#include <ir0/oops.h>
-#include <ir0/kernel.h>
+#include <ktm_probe_diag.h>
+#include <ir0/acpi_pm.h>
+#include <ir0/arch_cpu.h>
+#include <ir0/arch_port.h>
+#include <ir0/clock.h>
+#include <ir0/clock_wait.h>
+#include <ir0/clone.h>
+#include <ir0/console.h>
+#include <ir0/copy_user.h>
+#include <ir0/cred_transition.h>
+#include <ir0/credentials.h>
+#include <ir0/debug_runtime.h>
 #include <ir0/elf_loader.h>
+#include <ir0/errno.h>
+#include <ir0/futex.h>
+#include <ir0/kernel.h>
+#include <ir0/kexec.h>
+#include <ir0/kmem.h>
+#include <ir0/ktm/checkpoint.h>
+#include <ir0/ktm/klog.h>
+#include <ir0/mm_port.h>
+#include <ir0/oops.h>
 #include <ir0/path.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
-#include <ir0/ktm/klog.h>
-#include <ir0/kmem.h>
-#include <ir0/validation.h>
-#include <ir0/debug_runtime.h>
-#include <ir0/sched.h>
-#include <ktm_probe_diag.h>
-#include <ir0/ktm/checkpoint.h>
-#include <config.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_cpu.h>
-#include <ir0/time.h>
-#include <ir0/clock.h>
-#include <ir0/credentials.h>
-#include <ir0/cred_transition.h>
-#include <ir0/clone.h>
 #include <ir0/power_manag.h>
-#include <ir0/futex.h>
-#include <ir0/kexec.h>
-#include <ir0/acpi_pm.h>
-#include <ir0/mm_port.h>
-#include <ir0/console.h>
+#include <ir0/process.h>
+#include <ir0/sched.h>
+#include <ir0/signal_irq.h>
+#include <ir0/signal_syscall_resume.h>
+#include <ir0/signals.h>
+#include <ir0/task_ops.h>
+#include <ir0/time.h>
+#include <ir0/utimens.h>
+#include <ir0/validation.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -72,6 +65,8 @@
 
 
 #define IR0_ROBUST_LIST_SIZE 24
+
+/* Credentials, supplementary groups, and Linux setreuid/setresuid ABI. */
 
 void process_cred_init_groups(process_t *p)
 {
@@ -178,6 +173,34 @@ static int cred_copy_out_u32(void *uptr, uint32_t value)
 	return 0;
 }
 
+static void process_cred_load_uid(const process_t *p, ir0_cred_id_triplet_t *ids)
+{
+	ids->real = p->uid;
+	ids->effective = p->euid;
+	ids->saved = p->suid;
+}
+
+static void process_cred_store_uid(process_t *p, const ir0_cred_id_triplet_t *ids)
+{
+	p->uid = ids->real;
+	p->euid = ids->effective;
+	p->suid = ids->saved;
+}
+
+static void process_cred_load_gid(const process_t *p, ir0_cred_id_triplet_t *ids)
+{
+	ids->real = p->gid;
+	ids->effective = p->egid;
+	ids->saved = p->sgid;
+}
+
+static void process_cred_store_gid(process_t *p, const ir0_cred_id_triplet_t *ids)
+{
+	p->gid = ids->real;
+	p->egid = ids->effective;
+	p->sgid = ids->saved;
+}
+
 int64_t sys_setreuid(uid_t ruid, uid_t euid)
 {
 	ir0_cred_id_triplet_t ids;
@@ -186,17 +209,12 @@ int64_t sys_setreuid(uid_t ruid, uid_t euid)
 	if (!current_process)
 		return -ESRCH;
 
-	ids.real = current_process->uid;
-	ids.effective = current_process->euid;
-	ids.saved = current_process->suid;
+	process_cred_load_uid(current_process, &ids);
 	ret = ir0_cred_setreid(&ids, (uint32_t)ruid, (uint32_t)euid,
 			       current_process->euid == ROOT_UID);
 	if (ret < 0)
 		return ret;
-
-	current_process->uid = ids.real;
-	current_process->euid = ids.effective;
-	current_process->suid = ids.saved;
+	process_cred_store_uid(current_process, &ids);
 	return 0;
 }
 
@@ -208,17 +226,12 @@ int64_t sys_setregid(gid_t rgid, gid_t egid)
 	if (!current_process)
 		return -ESRCH;
 
-	ids.real = current_process->gid;
-	ids.effective = current_process->egid;
-	ids.saved = current_process->sgid;
+	process_cred_load_gid(current_process, &ids);
 	ret = ir0_cred_setreid(&ids, (uint32_t)rgid, (uint32_t)egid,
 			       current_process->euid == ROOT_UID);
 	if (ret < 0)
 		return ret;
-
-	current_process->gid = ids.real;
-	current_process->egid = ids.effective;
-	current_process->sgid = ids.saved;
+	process_cred_store_gid(current_process, &ids);
 	process_cred_init_groups(current_process);
 	return 0;
 }
@@ -231,18 +244,13 @@ int64_t sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 	if (!current_process)
 		return -ESRCH;
 
-	ids.real = current_process->uid;
-	ids.effective = current_process->euid;
-	ids.saved = current_process->suid;
+	process_cred_load_uid(current_process, &ids);
 	ret = ir0_cred_setresid(&ids, (uint32_t)ruid, (uint32_t)euid,
 				(uint32_t)suid,
 				current_process->euid == ROOT_UID);
 	if (ret < 0)
 		return ret;
-
-	current_process->uid = ids.real;
-	current_process->euid = ids.effective;
-	current_process->suid = ids.saved;
+	process_cred_store_uid(current_process, &ids);
 	return 0;
 }
 
@@ -277,18 +285,13 @@ int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 	if (!current_process)
 		return -ESRCH;
 
-	ids.real = current_process->gid;
-	ids.effective = current_process->egid;
-	ids.saved = current_process->sgid;
+	process_cred_load_gid(current_process, &ids);
 	ret = ir0_cred_setresid(&ids, (uint32_t)rgid, (uint32_t)egid,
 				(uint32_t)sgid,
 				current_process->euid == ROOT_UID);
 	if (ret < 0)
 		return ret;
-
-	current_process->gid = ids.real;
-	current_process->egid = ids.effective;
-	current_process->sgid = ids.saved;
+	process_cred_store_gid(current_process, &ids);
 	process_cred_init_groups(current_process);
 	return 0;
 }
@@ -315,6 +318,8 @@ int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 		return ret;
 	return cred_copy_out_u32(sgid, sg);
 }
+
+/* rt_sigaction / rt_sigprocmask / rt_sigsuspend / tkill. */
 
 static uint32_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigsetsize)
 {
@@ -625,6 +630,8 @@ struct robust_list_head
 	void *list_op_pending;
 };
 
+/* Robust futex list (set_robust_list / get_robust_list / exit walk). */
+
 int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
 {
 	if (!current_process)
@@ -709,6 +716,8 @@ void process_exit_robust_list(process_t *p)
 	p->robust_list = NULL;
 	klog_smoke("ROBUST_LIST_EXIT_OK");
 }
+
+/* Session, process group, personality, and nice. */
 
 int64_t sys_setsid(void)
 {
@@ -930,11 +939,8 @@ int64_t sys_setpgid(pid_t pid, pid_t pgid)
 	return 0;
 }
 
-static void fase50_trace_syscall_proc(const char *stage, process_t *p)
-{
-	(void)stage;
-	(void)p;
-}
+/* Exit, reboot, and identity getters/setters. */
+
 int64_t sys_exit(int exit_code)
 {
   if (!current_process)
@@ -1208,15 +1214,12 @@ static int exec_env_clone_from_saved(process_t *proc, char *kernel_envp[256],
 	return 0;
 }
 
+/* execve / execveat. */
+
 int64_t sys_exec(const char *pathname,
                  char *const argv[],
                  char *const envp[])
 {
-#if CONFIG_DEBUG_FASE50
-  klog_debug("KERN", "SERIAL: sys_exec called\n");
-#endif
-  fase50_trace_syscall_proc("sys_exec-entry", current_process);
-
   if (!current_process || !pathname)
   {
     return -EFAULT;
@@ -1403,7 +1406,6 @@ int64_t sys_exec(const char *pathname,
   if (current_process->mode == USER_MODE)
   {
     ktm_probe_diag_execve(current_process, path_to_use);
-    fase50_trace_syscall_proc("sys_exec-before-exec_replace_current", current_process);
     KTM_CHECKPOINT(KTM_CP_PROCESS_EXEC);
     result = exec_replace_current(path_to_use,
                                   argv ? (char *const *)kernel_argv : NULL,
@@ -1452,7 +1454,6 @@ int64_t sys_exec(const char *pathname,
                     (unsigned)heap_total);
   }
 
-  fase50_trace_syscall_proc("sys_exec-return", current_process);
   return result;
 }
 
@@ -1485,6 +1486,8 @@ int64_t sys_execveat(int dirfd, const char *pathname, char *const argv[],
     return -EBADF;
   return sys_exec(fd_table[dirfd].path, argv, envp);
 }
+
+/* fork / vfork / clone / wait. */
 
 int64_t sys_fork(void)
 {
@@ -1569,10 +1572,6 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
     klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][sys_wait4] entry parent_pid=%x wait_pid=%x status_ptr=%llx options=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid), (unsigned long long)((uint64_t)(uintptr_t)status), (unsigned long long)((uint64_t)(unsigned int)options));
   }
 
-  fase50_trace_syscall_proc("sys_wait4-entry", current_process);
-#if IR0_DEBUG_PROC
-  process_fase46_note_wait(current_process);
-#endif
   {
     int64_t ret = process_wait(pid, status, options);
 
@@ -1584,7 +1583,6 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
       klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] wait_return parent=%x ret=%llx wait_resume_child_pid=%x syscall_resume_rax=%llx status_write=%s", (unsigned)((uint32_t)current_process->task.pid), (unsigned long long)((uint64_t)ret), (unsigned)((uint32_t)process_wait_resume_child_pid(current_process)), (unsigned long long)(current_process->syscall_resume_rax), ret > 0 ? "yes" : "no");
       klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][sys_wait4] return parent_pid=%x ret=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned long long)((uint64_t)ret));
     }
-    fase50_trace_syscall_proc("sys_wait4-return", current_process);
     return ret;
   }
 }
@@ -1601,6 +1599,8 @@ int64_t sys_waitpid(pid_t pid, int *status, int options)
  *
  * Returns: 0 on success, -1 on error
  */
+/* kill / legacy sigaction. */
+
 int64_t sys_kill(pid_t pid, int signal)
 {
   process_t *target;
@@ -1718,6 +1718,8 @@ int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction 
  * PR_SET_NO_NEW_PRIVS is one-way: once set it cannot be cleared, and it makes
  * every later execve ignore set-user-ID / set-group-ID bits.
  */
+/* prctl, futex, rlimit, getrandom. */
+
 int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
                   unsigned long arg4, unsigned long arg5)
 {

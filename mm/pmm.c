@@ -526,7 +526,7 @@ void pmm_owner_audit(uint64_t *orphan_frames, uint64_t *double_free,
 	pmm_unlock(irq_flags);
 }
 
-int pmm_fase47_frame_is_used(size_t frame_index)
+int pmm_frame_is_used(size_t frame_index)
 {
 	unsigned long irq_flags;
 	int used = 0;
@@ -540,23 +540,7 @@ int pmm_fase47_frame_is_used(size_t frame_index)
 	return used;
 }
 
-pmm_owner_class_t pmm_fase47_frame_owner_class(size_t frame_index)
-{
-	unsigned long irq_flags;
-	pmm_owner_class_t cls = PMM_OWNER_NONE;
-
-	if (!pmm.initialized || frame_index >= pmm.total_frames ||
-	    !pmm_owner_class_tab)
-		return PMM_OWNER_NONE;
-
-	irq_flags = pmm_lock();
-	if (bitmap_test(frame_index))
-		cls = (pmm_owner_class_t)pmm_owner_class_tab[frame_index];
-	pmm_unlock(irq_flags);
-	return cls;
-}
-
-int32_t pmm_fase47_frame_owner(size_t frame_index)
+int32_t pmm_frame_owner(size_t frame_index)
 {
 	unsigned long irq_flags;
 	int32_t owner = -1;
@@ -578,14 +562,14 @@ int32_t pmm_fase47_frame_owner(size_t frame_index)
 	return owner;
 }
 
-uintptr_t pmm_fase47_frame_phys(size_t frame_index)
+uintptr_t pmm_frame_phys(size_t frame_index)
 {
 	if (!pmm.initialized || frame_index >= pmm.total_frames)
 		return 0;
 	return pmm.mem_start + (uintptr_t)(frame_index * PMM_FRAME_SIZE);
 }
 
-size_t pmm_fase47_total_frames(void)
+size_t pmm_total_frames(void)
 {
 	if (!pmm.initialized)
 		return 0;

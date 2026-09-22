@@ -228,9 +228,9 @@ void process_unmap_user_address_space(process_t *p)
 
 	process_unmap_user_pages_all(process_pgd(p), &stats);
 	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
-	if (IR0_DEBUG_PROC)
-	{
-	}
+	(void)orphan_frames;
+	(void)double_free;
+	(void)alive_owner_missing;
 }
 
 
@@ -278,7 +278,6 @@ void process_fork_destroy_child_mm(process_t *child)
 	{
 		mm_put(child->mm);
 		child->mm = NULL;
-		process_fase43_note_mm_destroyed();
 	}
 }
 
@@ -310,8 +309,8 @@ uint64_t create_process_page_directory(void)
 	pml4 = kmalloc_aligned_try(4096, 4096);
 	if (!pml4)
 	{
-		paging_fase43_note_oom("create_process_page_directory",
-				       paging_fase43_classify_current());
+		paging_oom_note("create_process_page_directory",
+				paging_oom_classify_current());
 		return 0;
 	}
 
@@ -401,6 +400,5 @@ uint64_t create_process_page_directory(void)
 #endif
 
 	paging_ir0_mm_note_root_created((uintptr_t)pml4);
-	process_fase43_note_mm_created();
 	return (uint64_t)pml4;
 }

@@ -137,7 +137,7 @@ void switch_to_user_task(const task_t *task)
         panic("switch_to_user_task: null task");
 
     if (current_process && &current_process->task == task)
-        arch_prepare_task_user_iretq(current_process);
+        prepare_task_user_iretq(current_process);
 
     if (current_process && process_mm_root(current_process))
 	    paging_activate_address_space(
@@ -241,9 +241,3 @@ void restore_user_fs_base(void)
 {
 }
 
-#if !MINGW_BUILD
-void fase24_log_stack_once(void)
-{
-    /* Temporary trace hook intentionally left as no-op. */
-}
-#endif

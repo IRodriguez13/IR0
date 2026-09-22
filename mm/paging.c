@@ -44,8 +44,6 @@ void paging_pin_kernel_address_space(uintptr_t root)
 }
 #include <ir0/arch_cpu.h>
 
-static uint32_t fase40_copy_diag_events;
-
 typedef enum
 {
     IR0_MM_FRAME_UNKNOWN = 0,
@@ -78,45 +76,44 @@ static size_t ir0_mm_frame_type_map_frames;
 static uint32_t ir0_mm_frame_log_events;
 #endif
 
-static uint64_t fase43_oom_boot_fatal;
-static uint64_t fase43_oom_kernel_fatal;
-static uint64_t fase43_oom_user_recoverable;
+static uint64_t paging_oom_boot_fatal;
+static uint64_t paging_oom_kernel_fatal;
+static uint64_t paging_oom_user_recoverable;
 
-static fase43_oom_class_t paging_classify_oom(void)
+static paging_oom_class_t paging_classify_oom(void)
 {
     if (current_process && current_process->mode == USER_MODE)
-        return FASE43_OOM_USER_RECOVERABLE;
+        return PAGING_OOM_USER_RECOVERABLE;
     if (!current_process)
-        return FASE43_OOM_BOOT_FATAL;
-    return FASE43_OOM_KERNEL_FATAL;
+        return PAGING_OOM_BOOT_FATAL;
+    return PAGING_OOM_KERNEL_FATAL;
 }
 
-void paging_fase43_note_oom(const char *site, fase43_oom_class_t cls)
+void paging_oom_note(const char *site, paging_oom_class_t cls)
 {
     (void)site;
     switch (cls)
     {
-    case FASE43_OOM_BOOT_FATAL:
-        fase43_oom_boot_fatal++;
+    case PAGING_OOM_BOOT_FATAL:
+        paging_oom_boot_fatal++;
         break;
-    case FASE43_OOM_KERNEL_FATAL:
-        fase43_oom_kernel_fatal++;
+    case PAGING_OOM_KERNEL_FATAL:
+        paging_oom_kernel_fatal++;
         break;
-    case FASE43_OOM_USER_RECOVERABLE:
-        fase43_oom_user_recoverable++;
+    case PAGING_OOM_USER_RECOVERABLE:
+        paging_oom_user_recoverable++;
         break;
     default:
         break;
     }
-
 }
 
-void paging_fase43_oom_audit(const char *tag)
+void paging_oom_audit(const char *tag)
 {
     (void)tag;
 }
 
-fase43_oom_class_t paging_fase43_classify_current(void)
+paging_oom_class_t paging_oom_classify_current(void)
 {
     return paging_classify_oom();
 }
@@ -474,16 +471,6 @@ uint64_t *paging_get_pte(uint64_t *root, uintptr_t vaddr)
  * access (same as paging_copy_phys_page / paging_zero_phys_page).
  */
 
-/*
- * FASE 23: snapshot of the last copy_to_user_region_in_directory attempt.
- *   [0] dst (initial)        [4] last page being processed
- *   [1] n   (initial)        [5] last pte present (0/1)
- *   [2] dst + n              [6] last phys frame address
- *   [3] root                 [7] call sequence number
- */
-uint64_t fase23_copy_region_probe[8];
-static uint64_t fase23_copy_region_seq;
-
 /**
  * Kernel writes via PA identity must not touch RO+COW shared frames (that
  * bypasses hardware WP and corrupts the sibling mm). Break COW like #PF.
@@ -533,14 +520,6 @@ int copy_to_user_region_in_directory(uint64_t *root, uintptr_t dst,
                                      const void *src, size_t n)
 {
     const uint8_t *s = src;
-    uintptr_t dst0 = dst;
-    size_t n0 = n;
-
-    fase23_copy_region_probe[0] = (uint64_t)dst0;
-    fase23_copy_region_probe[1] = (uint64_t)n0;
-    fase23_copy_region_probe[2] = (uint64_t)(dst0 + n0);
-    fase23_copy_region_probe[3] = (uint64_t)(uintptr_t)root;
-    fase23_copy_region_probe[7] = ++fase23_copy_region_seq;
 
     if (!root || !src)
         return -1;
@@ -552,9 +531,6 @@ int copy_to_user_region_in_directory(uint64_t *root, uintptr_t dst,
         uintptr_t phys;
         size_t off;
         size_t chunk;
-
-        fase23_copy_region_probe[4] = (uint64_t)page;
-        fase23_copy_region_probe[5] = (pte && mm_pte_present(*pte)) ? 1ULL : 0ULL;
 
         if (!pte || !mm_pte_present(*pte))
             return -1;
@@ -569,7 +545,6 @@ int copy_to_user_region_in_directory(uint64_t *root, uintptr_t dst,
 	}
 
         phys = paging_entry_pfn(*pte);
-        fase23_copy_region_probe[6] = (uint64_t)phys;
         off = dst & 0xFFFU;
         chunk = (size_t)(0x1000U - off);
         if (chunk > n)
@@ -701,12 +676,12 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
 static uint64_t alloc_page_table(int level)
 {
     void *page = kmalloc_aligned_try(4096, 4096);
-    fase43_oom_class_t oom_cls;
+    paging_oom_class_t oom_cls;
 
     if (!page)
     {
         oom_cls = paging_classify_oom();
-        paging_fase43_note_oom("alloc_page_table", oom_cls);
+        paging_oom_note("alloc_page_table", oom_cls);
         return 0;
     }
     
@@ -1210,9 +1185,6 @@ int copy_process_memory(struct process *parent, struct process *child)
                     }
 
                     pmm_frame_get(parent_phys);
-
-                    if (DEBUG_FORK && fase40_copy_diag_events < 256U)
-                        fase40_copy_diag_events++;
                 }
             }
         }
@@ -1518,13 +1490,13 @@ void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
         *kernel_free = ir0_mm_frame_kernel_free;
 }
 
-static ir0_mm_frame_type_t paging_fase47_frame_type(uintptr_t phys)
+static ir0_mm_frame_type_t paging_frame_type(uintptr_t phys)
 {
     return ir0_mm_get_frame_type((uint64_t)phys);
 }
 
-void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
-                                      uint64_t mm_created, uint64_t mm_destroyed)
+void paging_steady_state_audit(const char *tag, uint64_t frames_baseline,
+                              uint64_t mm_created, uint64_t mm_destroyed)
 {
     size_t total_frames = 0;
     size_t used_frames = 0;
@@ -1552,7 +1524,7 @@ void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
     const char *memory_class;
 
     pmm_stats(&total_frames, &used_frames, NULL);
-    nframes = pmm_fase47_total_frames();
+    nframes = pmm_total_frames();
 
     for (i = 0; i < nframes; i++)
     {
@@ -1560,12 +1532,12 @@ void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
         int32_t owner;
         uintptr_t phys;
 
-        if (!pmm_fase47_frame_is_used(i))
+        if (!pmm_frame_is_used(i))
             continue;
 
-        phys = pmm_fase47_frame_phys(i);
-        ft = paging_fase47_frame_type(phys);
-        owner = pmm_fase47_frame_owner(i);
+        phys = pmm_frame_phys(i);
+        ft = paging_frame_type(phys);
+        owner = pmm_frame_owner(i);
 
         if (ft == IR0_MM_FRAME_USER)
             alive_user_leaf++;

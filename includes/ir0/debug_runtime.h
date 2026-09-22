@@ -26,20 +26,6 @@
 #define IR0_DEBUG_PROC 0
 #endif
 
-/*
- * D1.17 FASE40_D diagnostic only — wait/reap/destroy/unmap/PMM trail.
- * Remove or set to 0 after root-cause is confirmed.
- */
-#ifndef FASE40_D_AUDIT
-#define FASE40_D_AUDIT 0
-#endif
-
-#if FASE40_D_AUDIT
-#define FASE40_D_AUDIT_LOG(stmt) do { stmt; } while (0)
-#else
-#define FASE40_D_AUDIT_LOG(stmt) ((void)0)
-#endif
-
 #if IR0_DEBUG_PMM
 #define IR0_DBG_PMM(stmt) do { stmt; } while (0)
 #else

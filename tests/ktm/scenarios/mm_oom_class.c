@@ -10,7 +10,7 @@
 
 #include <ktm_internal.h>
 
-extern void paging_fase43_oom_audit(const char *tag);
+extern void paging_oom_audit(const char *tag);
 
 static int scenario_mm_oom_class_run(ktm_context_t *ctx)
 {
@@ -19,7 +19,7 @@ static int scenario_mm_oom_class_run(ktm_context_t *ctx)
 
 	(void)ctx;
 	KTM_REQUIRE(ktm_snapshot_take(&before) == 0);
-	paging_fase43_oom_audit("ktm.mm.oom_class");
+	paging_oom_audit("ktm.mm.oom_class");
 	KTM_REQUIRE(ktm_snapshot_take(&after) == 0);
 	KTM_V1_ASSERT_TRUE(after.used_frames <= before.used_frames + 64);
 	KTM_ASSERT_NO_PROCESS_LEAK(&before, &after);

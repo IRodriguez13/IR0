@@ -205,16 +205,16 @@ void paging_ir0_mm_checkpoint(const char *tag, int32_t pid);
 void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
                                   uint64_t *pt_alloc, uint64_t *pt_free,
                                   uint64_t *kernel_alloc, uint64_t *kernel_free);
-void paging_fase47_steady_state_audit(const char *tag, uint64_t frames_baseline,
-                                      uint64_t mm_created, uint64_t mm_destroyed);
+void paging_steady_state_audit(const char *tag, uint64_t frames_baseline,
+                              uint64_t mm_created, uint64_t mm_destroyed);
 
 typedef enum
 {
-    FASE43_OOM_BOOT_FATAL = 0,
-    FASE43_OOM_KERNEL_FATAL = 1,
-    FASE43_OOM_USER_RECOVERABLE = 2
-} fase43_oom_class_t;
+    PAGING_OOM_BOOT_FATAL = 0,
+    PAGING_OOM_KERNEL_FATAL = 1,
+    PAGING_OOM_USER_RECOVERABLE = 2
+} paging_oom_class_t;
 
-void paging_fase43_note_oom(const char *site, fase43_oom_class_t cls);
-void paging_fase43_oom_audit(const char *tag);
-fase43_oom_class_t paging_fase43_classify_current(void);
+void paging_oom_note(const char *site, paging_oom_class_t cls);
+void paging_oom_audit(const char *tag);
+paging_oom_class_t paging_oom_classify_current(void);

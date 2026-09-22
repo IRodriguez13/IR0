@@ -323,13 +323,6 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
   return named_symlink_create(link_resolved, target_copy);
 }
 
-static void fase50c_log_open_result(const char *path, int64_t ret, int stage)
-{
-  (void)path;
-  (void)ret;
-  (void)stage;
-}
-
 static void ash_smoke_read_trace(int fd, int64_t ret)
 {
   if (fd == STDIN_FILENO)
@@ -624,12 +617,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 	  done += n;
 	}
       }
-      if (current_process->task.pid == 1 && copy_size >= 10 &&
-	  kernel_buf[0] == 'F' && !memcmp(kernel_buf, "FASE48_IPC", 10))
-	process_fase48_ipc_summary("fase48-final");
-      if (current_process->task.pid == 1 && copy_size >= 11 &&
-	  kernel_buf[0] == 'F' && !memcmp(kernel_buf, "FASE49_PIPE", 11))
-	pipe_ipc_lifecycle_audit();
       return (int64_t)copy_size;
     }
     return -EBADF;
@@ -1333,14 +1320,12 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     if (path_rc != 0)
       return path_rc;
     open_ret = open_named_fifo_fd(path_to_use, ir0_flags);
-    fase50c_log_open_result(path_to_use, open_ret, 13);
     return open_ret;
   }
 
   if (posix_shm_path_is(path_to_use))
   {
     open_ret = posix_shm_try_open(path_to_use, ir0_flags, 0600);
-    fase50c_log_open_result(path_to_use, open_ret, 14);
     return open_ret;
   }
 
@@ -1384,7 +1369,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
     {
-      fase50c_log_open_result(path_to_use, -EACCES, 12);
       return -EACCES;
     }
   }
@@ -1405,12 +1389,10 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
        */
       if (vfs_stat(parent, &pst) != 0)
       {
-        fase50c_log_open_result(path_to_use, -ENOENT, 9);
         return -ENOENT;
       }
       if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
       {
-        fase50c_log_open_result(path_to_use, -EACCES, 9);
         return -EACCES;
       }
     }
@@ -1426,7 +1408,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       if (access_mode &&
           !check_file_access(path_to_use, access_mode, current_process))
       {
-        fase50c_log_open_result(path_to_use, -EACCES, 10);
         return -EACCES;
       }
     }
@@ -1448,7 +1429,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     if (access_mode && vfs_stat(path_to_use, &st) == 0 &&
         !check_file_access(path_to_use, access_mode, current_process))
     {
-      fase50c_log_open_result(path_to_use, -EACCES, 11);
       return -EACCES;
     }
   }
@@ -1459,7 +1439,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
 
   if (fd == -1)
   {
-    fase50c_log_open_result(path_to_use, -EMFILE, 6);
     return -EMFILE;
   }
 
@@ -1467,7 +1446,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   ret = vfs_open(path_to_use, flags, mode, &vfs_file);
   if (ret != 0)
   {
-    fase50c_log_open_result(path_to_use, (int64_t)ret, 7);
     return ret;
   }
 
@@ -1507,7 +1485,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   fd_table[fd].pipe_end = -1;
   fd_slot_note_created();
 
-  fase50c_log_open_result(path_to_use, (int64_t)fd, 8);
   return fd;
 }
 
@@ -1563,7 +1540,6 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   fd_table[fd].is_pseudo = false;
   fd_table[fd].pipe_end = -1;
   fd_slot_note_created();
-  fase50c_log_open_result(path, (int64_t)fd, 5);
   return fd;
 }
 
@@ -1628,7 +1604,6 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
   fd_table[fd].is_pseudo = true;
   fd_table[fd].pipe_end = -1;
   fd_slot_note_created();
-  fase50c_log_open_result(path, (int64_t)fd, 1);
   return fd;
 }
 
@@ -1642,7 +1617,6 @@ static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
   node = devfs_find_node(path);
   if (!node)
   {
-    fase50c_log_open_result(path, -ENOENT, 3);
     return -ENOENT;
   }
   drc = ir0_open_access_path_routed(path, ir0_flags,
@@ -1650,13 +1624,11 @@ static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
                                     (gid_t)current_process->egid);
   if (drc != 0)
   {
-    fase50c_log_open_result(path, drc, 4);
     return drc;
   }
   drc = devfs_open_node(node, ir0_flags);
   if (drc < 0)
   {
-    fase50c_log_open_result(path, drc, 4);
     return drc;
   }
   open_ret = devfs_bind_fd_slot(path, node, ir0_flags);
@@ -1664,10 +1636,8 @@ static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
   {
     devfs_pty_abort_pending_master();
     devfs_close_node(node);
-    fase50c_log_open_result(path, open_ret, 5);
     return open_ret;
   }
-  fase50c_log_open_result(path, open_ret, 5);
   return open_ret;
 }
 
@@ -1691,7 +1661,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
       return pseudo_bind_dir_fd(resolved, ir0_flags);
     }
     open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    fase50c_log_open_result(resolved, open_ret, 1);
     return open_ret;
   }
 
@@ -1705,7 +1674,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
       return pseudo_bind_dir_fd(resolved, ir0_flags);
     }
     open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    fase50c_log_open_result(resolved, open_ret, 2);
     return open_ret;
   }
 
@@ -1723,11 +1691,9 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
     if (heart_alias_canonical(resolved, canon, sizeof(canon)))
     {
       open_ret = pseudo_bind_file_fd(canon, ir0_flags);
-      fase50c_log_open_result(resolved, open_ret, 6);
       return open_ret;
     }
     open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    fase50c_log_open_result(resolved, open_ret, 6);
     return open_ret;
   }
 
@@ -1736,7 +1702,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
     if (posix_shm_path_is(resolved))
     {
       open_ret = posix_shm_try_open(resolved, ir0_flags, mode);
-      fase50c_log_open_result(resolved, open_ret, 14);
       return open_ret;
     }
     if (strcmp(resolved, "/dev") == 0 || strcmp(resolved, "/dev/") == 0 ||
@@ -1792,7 +1757,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   ir0_open_flags_log_translation(flags, ir0_flags);
   if (!ir0_open_flags_ok_for_vfs(ir0_flags))
   {
-    fase50c_log_open_result(path_copy, -EINVAL, 0);
     return -EINVAL;
   }
 
@@ -1861,7 +1825,6 @@ int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
   ir0_open_flags_log_translation(flags, ir0_flags);
   if (!ir0_open_flags_ok_for_vfs(ir0_flags))
   {
-    fase50c_log_open_result(path_copy, -EINVAL, 0);
     return -EINVAL;
   }
 

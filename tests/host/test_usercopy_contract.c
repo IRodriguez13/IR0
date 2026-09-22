@@ -102,7 +102,7 @@ void test_usercopy_no_raw_user_touch(void)
 
 	ASSERT_EQ(read_file("../../kernel/lib/signals.c", &sig, &sig_len), 0);
 	ASSERT(strstr(sig, "memcpy((void *)") == NULL);
-	ASSERT(strstr(sig, "copy_to_user_region_in_directory") != NULL);
+	ASSERT(strstr(sig, "copy_to_user_mm") != NULL);
 
 	ASSERT_EQ(read_file("../../kernel/syscalls/fs_path_syscalls.c", &uname,
 			    &uname_len),

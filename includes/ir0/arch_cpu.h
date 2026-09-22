@@ -228,7 +228,7 @@ void switch_to_user_task(const struct task *task);
 
 /* Reapply syscall_frame GPRs before ring-3 iretq when task.arch has kstack residue. */
 struct process;
-void arch_prepare_task_user_iretq(struct process *proc);
+void prepare_task_user_iretq(struct process *proc);
 
 /*
  * first_switch_to - First transfer from idle/boot into @next.

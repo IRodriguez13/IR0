@@ -507,9 +507,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                          uint64_t arg6)
 {
   int64_t r;
-  static int fase10_count = 0;
-  pid_t cur_pid = current_process ? current_process->task.pid : 0;
-  int do_trace = (fase10_count < 5 && cur_pid >= 2);
 
   if (current_process)
     process_capture_syscall_frame(current_process);
@@ -563,10 +560,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   if (current_process && current_process->mode == USER_MODE &&
       syscall_num == __NR_read)
     d1_12_read_diag_syscall_post(current_process, r);
-
-  if (do_trace) {
-    fase10_count++;
-  }
 
   /*
    * Publish the completed return value before signal delivery.  A signal
