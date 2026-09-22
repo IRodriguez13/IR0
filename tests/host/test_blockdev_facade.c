@@ -99,6 +99,16 @@ void test_blockdev_facade_contract(void)
 	ASSERT_EQ(buf[1], 0xAA);
 	ASSERT_EQ(g_mock_reads, 1);
 
+	{
+		uint8_t big[3 * MOCK_SEC_SIZE];
+
+		g_mock_reads = 0;
+		rc = ir0_block_read(id, 0, 3, big);
+		ASSERT_EQ(rc, 0);
+		ASSERT_EQ(g_mock_reads, 2);
+		ASSERT_EQ(big[0], 0x55);
+	}
+
 	memset(buf, 0xAB, sizeof(buf));
 	rc = ir0_block_write(id, 1, 1, buf);
 	ASSERT_EQ(rc, 0);

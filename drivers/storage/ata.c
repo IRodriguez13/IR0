@@ -820,12 +820,6 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
 		ata_emit_classify("ATA_BUFFER_ALIGNMENT_SUSPECT");
 	}
 
-	if (num_sectors > 1 && !ata_multi_sector_warned)
-	{
-		ata_multi_sector_warned = 1;
-		ata_emit_classify("ATA_MULTI_SECTOR_PIO");
-	}
-
 	irq_flags = irq_save();
 
 	/*
@@ -846,6 +840,12 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
 		}
 		ok = true;
 		goto out;
+	}
+
+	if (num_sectors > 1 && !ata_multi_sector_warned)
+	{
+		ata_multi_sector_warned = 1;
+		ata_emit_classify("ATA_MULTI_SECTOR_PIO");
 	}
 
 	{

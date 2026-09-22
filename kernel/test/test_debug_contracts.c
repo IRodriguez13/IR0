@@ -475,6 +475,23 @@ void ktest_block_hda_read_contract(void)
 	if (n == 512)
 		KASSERT_EQ(n, 512);
 
+	{
+		char one_a[512] __attribute__((aligned(4)));
+		char one_b[512] __attribute__((aligned(4)));
+		char two[1024] __attribute__((aligned(4)));
+
+		memset(one_a, 0, sizeof(one_a));
+		memset(one_b, 0, sizeof(one_b));
+		memset(two, 0, sizeof(two));
+		if (ir0_block_read_by_name("hda", 0, 1, one_a) == 0 &&
+		    ir0_block_read_by_name("hda", 1, 1, one_b) == 0 &&
+		    ir0_block_read_by_name("hda", 0, 2, two) == 0)
+		{
+			KASSERT_EQ(memcmp(two, one_a, 512), 0);
+			KASSERT_EQ(memcmp(two + 512, one_b, 512), 0);
+		}
+	}
+
 	KTEST_END();
 }
 
