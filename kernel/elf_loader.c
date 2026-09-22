@@ -45,6 +45,7 @@
 #include <config.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/vdso.h>
+#include <ir0/abi/elf_reloc_contract.h>
 #include <ir0/errno.h>
 #include <errno.h>
 
@@ -97,6 +98,40 @@ typedef struct
 #define ET_EXEC 2
 #define ET_DYN  3
 #define PT_LOAD 1
+#define PT_DYNAMIC 2
+
+#define DT_NULL     0
+#define DT_PLTRELSZ 2
+#define DT_SYMTAB   6
+#define DT_RELA     7
+#define DT_RELASZ   8
+#define DT_SYMENT   11
+#define DT_JMPREL   23
+
+#define ELF_MAX_RELOCS 1024U
+
+typedef struct
+{
+    int64_t d_tag;
+    uint64_t d_un;
+} elf64_dyn_t;
+
+typedef struct
+{
+    uint64_t r_offset;
+    uint64_t r_info;
+    int64_t r_addend;
+} elf64_rela_t;
+
+typedef struct
+{
+    uint32_t st_name;
+    uint8_t st_info;
+    uint8_t st_other;
+    uint16_t st_shndx;
+    uint64_t st_value;
+    uint64_t st_size;
+} elf64_sym_t;
 
 /* Maximum program headers processed per executable (bounds cost and table size) */
 #define ELF_MAX_PHNUM 64
@@ -422,6 +457,172 @@ static void elf_fill_random_bytes(uint8_t *buf, size_t len)
     }
 }
 
+static int elf_file_off_for_vaddr(const elf64_phdr_t *phdr, uint16_t phnum,
+                                  uint64_t vaddr, size_t file_size,
+                                  uint64_t *off, uint64_t *avail)
+{
+    uint16_t i;
+
+    if (!phdr || !off || !avail)
+        return -1;
+
+    for (i = 0; i < phnum; i++)
+    {
+        uint64_t start;
+        uint64_t end;
+
+        if (phdr[i].p_type != PT_LOAD || phdr[i].p_filesz == 0)
+            continue;
+        start = phdr[i].p_vaddr;
+        end = start + phdr[i].p_filesz;
+        if (vaddr < start || vaddr >= end)
+            continue;
+        *off = phdr[i].p_offset + (vaddr - start);
+        *avail = end - vaddr;
+        if (*off >= (uint64_t)file_size)
+            return -1;
+        if (*avail > (uint64_t)file_size - *off)
+            *avail = (uint64_t)file_size - *off;
+        return 0;
+    }
+    return -1;
+}
+
+/*
+ * tcc ET_EXEC still emits DT_RELA (GLOB_DAT for __environ/main). Linux ld.so
+ * applies those; IR0 does not run PT_INTERP yet. Apply local relocs so
+ * `cc hello.c && ./hello` does not write through a NULL GOT slot.
+ */
+static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
+                                  size_t file_size, uint64_t *pml4)
+{
+    uint16_t phnum;
+    elf64_phdr_t *phdr;
+    uint64_t rela_va = 0;
+    uint64_t rela_sz = 0;
+    uint64_t jmprel_va = 0;
+    uint64_t pltrel_sz = 0;
+    uint64_t symtab_va = 0;
+    uint64_t syment = sizeof(elf64_sym_t);
+    uint64_t dyn_off = 0;
+    uint64_t dyn_avail = 0;
+    size_t di;
+    unsigned applied = 0;
+
+    if (!header || !file_data || !pml4)
+        return 0;
+    if (header->e_type != ET_EXEC)
+        return 0;
+
+    phnum = header->e_phnum;
+    if (phnum > ELF_MAX_PHNUM)
+        phnum = ELF_MAX_PHNUM;
+    phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
+
+    for (di = 0; di < phnum; di++)
+    {
+        if (phdr[di].p_type != PT_DYNAMIC)
+            continue;
+        if (phdr[di].p_offset >= file_size ||
+            phdr[di].p_filesz > (uint64_t)file_size - phdr[di].p_offset)
+            return -1;
+        dyn_off = phdr[di].p_offset;
+        dyn_avail = phdr[di].p_filesz;
+        break;
+    }
+    if (dyn_avail < sizeof(elf64_dyn_t))
+        return 0;
+
+    for (di = 0; (di + 1) * sizeof(elf64_dyn_t) <= dyn_avail; di++)
+    {
+        elf64_dyn_t *d = (elf64_dyn_t *)(file_data + dyn_off + di * sizeof(elf64_dyn_t));
+
+        if (d->d_tag == DT_NULL)
+            break;
+        if (d->d_tag == DT_RELA)
+            rela_va = d->d_un;
+        else if (d->d_tag == DT_RELASZ)
+            rela_sz = d->d_un;
+        else if (d->d_tag == DT_JMPREL)
+            jmprel_va = d->d_un;
+        else if (d->d_tag == DT_PLTRELSZ)
+            pltrel_sz = d->d_un;
+        else if (d->d_tag == DT_SYMTAB)
+            symtab_va = d->d_un;
+        else if (d->d_tag == DT_SYMENT && d->d_un != 0)
+            syment = d->d_un;
+    }
+
+    if (syment < sizeof(elf64_sym_t))
+        return -1;
+
+    {
+        uint64_t tables[2][2] = {
+            { rela_va, rela_sz },
+            { jmprel_va, pltrel_sz },
+        };
+        size_t t;
+
+        for (t = 0; t < 2; t++)
+        {
+            uint64_t va = tables[t][0];
+            uint64_t sz = tables[t][1];
+            uint64_t off = 0;
+            uint64_t avail = 0;
+            uint64_t n;
+            uint64_t i;
+
+            if (va == 0 || sz < sizeof(elf64_rela_t))
+                continue;
+            if (elf_file_off_for_vaddr(phdr, phnum, va, file_size, &off, &avail) != 0)
+                return -1;
+            if (sz > avail)
+                sz = avail;
+            n = sz / sizeof(elf64_rela_t);
+            if (n > ELF_MAX_RELOCS)
+                n = ELF_MAX_RELOCS;
+            for (i = 0; i < n; i++)
+            {
+                elf64_rela_t *r = (elf64_rela_t *)(file_data + off + i * sizeof(elf64_rela_t));
+                uint32_t type = (uint32_t)(r->r_info & 0xffffffffULL);
+                uint32_t symi = (uint32_t)(r->r_info >> 32);
+                uint64_t sym_value = 0;
+                uint64_t value = 0;
+
+                if (type != IR0_R_X86_64_RELATIVE)
+                {
+                    uint64_t sym_va;
+                    uint64_t sym_off = 0;
+                    uint64_t sym_avail = 0;
+                    elf64_sym_t *sym;
+
+                    if (symtab_va == 0)
+                        continue;
+                    sym_va = symtab_va + (uint64_t)symi * syment;
+                    if (elf_file_off_for_vaddr(phdr, phnum, sym_va, file_size,
+                                               &sym_off, &sym_avail) != 0)
+                        return -1;
+                    if (sym_avail < sizeof(elf64_sym_t))
+                        return -1;
+                    sym = (elf64_sym_t *)(file_data + sym_off);
+                    sym_value = sym->st_value;
+                }
+                if (ir0_elf64_local_reloc_value(type, 0, sym_value, r->r_addend,
+                                                &value) != 0)
+                    continue;
+                if (copy_to_user_mm(pml4, (uintptr_t)r->r_offset, &value,
+                                    sizeof(value)) != 0)
+                    return -1;
+                applied++;
+            }
+        }
+    }
+
+    if (applied > 0)
+        klog_debug_fmt("ELF", "SERIAL: ELF: applied %x local relocs\n", applied);
+    return 0;
+}
+
 /* Load ELF segments into memory at correct virtual addresses */
 static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,
                              process_t *process)
@@ -539,6 +740,12 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
                 klog_debug("ELF", "SERIAL: ELF: Zeroed BSS section\n");
             }
         }
+    }
+
+    if (elf_apply_local_relocs(header, file_data, file_size, pml4) != 0)
+    {
+        klog_debug("ELF", "SERIAL: ELF: local reloc apply failed\n");
+        return -1;
     }
 
     return 0;
