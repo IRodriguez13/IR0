@@ -367,7 +367,7 @@ static const char *vfs_exec_audit_path;
 
 void vfs_exec_audit_begin(const char *path)
 {
-    /* Legacy FASE50 exec ATA dump retired; KTM covers validation. */
+    /* Exec ATA dump retired; KTM covers validation. */
     (void)path;
     vfs_exec_audit_active = 0;
     vfs_exec_audit_path = NULL;

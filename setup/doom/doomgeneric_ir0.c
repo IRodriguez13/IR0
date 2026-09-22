@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE55D - Real doomgeneric userspace backend for IR0.
+ * Real doomgeneric userspace backend for IR0.
  */
 
 #include <errno.h>
@@ -76,10 +76,10 @@ struct audio_format
 int use_libsamplerate;
 float libsamplerate_scale = 0.65f;
 
-#define FASE55D_MAX_FRAMES 240
+#define DOOMGENERIC_MAX_FRAMES 240
 #define KEY_QUEUE_SIZE 64
 
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
 #define DOOM_CFG_PATH "/etc/doom-frames"
 #define DOOM_CFG_PATH_HOSTSHARE "/mnt/host/doom-frames"
 #endif
@@ -182,7 +182,7 @@ static int g_mouse_event_tagged;
 static int g_audio_ok_tagged;
 static int g_audio_write_tagged;
 static boolean g_use_sfx_prefix;
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
 static volatile int g_quit_requested;
 static unsigned int g_frame_dump_every;
 static int g_frame_dump_tagged;
@@ -201,7 +201,7 @@ static void write_str(const char *s)
 
 static void write_fail(const char *step, const char *class_tag)
 {
-    write_str("[FASE55D][FAIL] step=");
+    write_str("[KTM_DOOMGENERIC][FAIL] step=");
     write_str(step ? step : "unknown");
     write_str("\n");
     if (class_tag && class_tag[0] != '\0')
@@ -330,7 +330,7 @@ static void pump_input_events(void)
         {
             unsigned char key = convert_to_doom_key(ev.code);
 
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
             if (ev.code == IR0_KEY_ESC && ev.value == 1)
             {
                 g_quit_requested = 1;
@@ -913,7 +913,7 @@ static int check_required_wad(const char *path)
     return 0;
 }
 
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
 static unsigned int read_cfg_line(FILE *f, unsigned int default_val)
 {
     char buf[32];
@@ -1041,7 +1041,7 @@ int main(int argc, char **argv)
     int dg_argc;
 
     write_str("DOOMGENERIC_BUILD_OK\n");
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
     write_str("DOOMGENERIC_BUILD_MODE=interactive\n");
 #else
     write_str("DOOMGENERIC_BUILD_MODE=smoke\n");
@@ -1062,7 +1062,7 @@ int main(int argc, char **argv)
     doomgeneric_Create(dg_argc, dg_argv);
     write_str("DOOMGENERIC_INIT_OK\n");
 
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
     {
         unsigned int frame_limit;
         unsigned int dump_every;
@@ -1077,7 +1077,7 @@ int main(int argc, char **argv)
         uint32_t end_ms;
 
         start_ms = DG_GetTicksMs();
-        while (g_frame_count < FASE55D_MAX_FRAMES)
+        while (g_frame_count < DOOMGENERIC_MAX_FRAMES)
         {
             doomgeneric_Tick();
         }
@@ -1088,7 +1088,7 @@ int main(int argc, char **argv)
 		{
 			write_str("LONG_RUNNING_BUT_STABLE\n");
 		}
-		write_str("FASE55D_DOOMGENERIC_OK\n");
+		write_str("KTM_DOOMGENERIC_OK\n");
 		/* Optional KTM product case (inline ioctl — avoid kernel -Iincludes). */
 		{
 			int kfd = open("/dev/ktm", O_RDWR);
@@ -1105,17 +1105,17 @@ int main(int argc, char **argv)
 				memset(&ev, 0, sizeof(ev));
 				ev.type = 21u;
 				ev.subsystem = 7u;
-				memcpy(ev.name, "doomgeneric_55d", 16);
+				memcpy(ev.name, "doomgeneric", 12);
 				(void)ioctl(kfd, 0x4B07u, &ev);
 				ev.type = 22u;
 				ev.arg0 = 0;
 				(void)ioctl(kfd, 0x4B07u, &ev);
 				(void)close(kfd);
-				write_str("KTM_DOOM_55D_OK\n");
+				write_str("KTM_DOOMGENERIC_CASE_OK\n");
 				write_str("KTM_USERDEV_OK\n");
 			}
 			else
-				write_str("KTM_DOOM_55D_SKIP\n");
+				write_str("KTM_DOOMGENERIC_CASE_SKIP\n");
 		}
 	}
 #endif
@@ -1137,7 +1137,7 @@ int main(int argc, char **argv)
         g_fd_fb = -1;
     }
 
-#ifdef FASE55E_INTERACTIVE
+#ifdef DOOM_INTERACTIVE
     /*
      * Drop leftover cooked-TTY bytes that arrived before events0 divert
      * (or if divert was unavailable). TCFLSH = 0x540B, TCIFLUSH = 0.

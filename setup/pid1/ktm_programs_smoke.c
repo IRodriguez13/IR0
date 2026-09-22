@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE50D — run real minimum programs and report observable contract.
+ * run real minimum programs and report observable contract.
  */
 
 #include <unistd.h>

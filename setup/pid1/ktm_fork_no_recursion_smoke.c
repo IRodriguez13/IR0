@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE46 fork-no-recursion
+ * fork-no-recursion
  * Each child must run fork branch exactly once (child_counter == 1).
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE46_FORK_LOOPS 512
+#define FORK_NO_RECURSE_N 512
 
 static void write_str(const char *s)
 {
@@ -60,7 +60,7 @@ int main(void)
 	int wait_fail = 0;
 	int child_recurse = 0;
 
-	for (int i = 0; i < FASE46_FORK_LOOPS; i++)
+	for (int i = 0; i < FORK_NO_RECURSE_N; i++)
 	{
 		pid_t pid = fork();
 
@@ -75,7 +75,7 @@ int main(void)
 
 			child_counter++;
 			if (child_counter != 1)
-				write_str("FASE46_CHILD_RECURSE\n");
+				write_str("FORK_CHILD_RECURSE\n");
 			_exit(0);
 		}
 
@@ -86,7 +86,7 @@ int main(void)
 
 	drain_children();
 
-	write_str("FASE46_FORK_NO_RECURSE fork_ok=");
+	write_str("FORK_NO_RECURSE fork_ok=");
 	write_dec_u64((uint64_t)fork_ok);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE53B — POSIX/pseudo-fs routed path robustness harness.
+ * POSIX/pseudo-fs routed path robustness harness.
  */
 
 #include <unistd.h>

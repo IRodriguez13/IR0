@@ -1,5 +1,5 @@
 /**
- * IR0 userspace — KTM reap-drain case (FASE44 init-exit drain analogue)
+ * IR0 userspace — KTM reap-drain case (init-exit drain analogue)
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_reap_drain_case.c

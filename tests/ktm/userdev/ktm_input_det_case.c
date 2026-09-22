@@ -1,5 +1,5 @@
 /**
- * IR0 userspace — KTM input deterministic case (FASE54C analogue)
+ * IR0 userspace — KTM input deterministic case (analogue)
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_input_det_case.c

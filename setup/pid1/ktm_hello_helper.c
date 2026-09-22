@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * Minimal hello-world program for FASE50D.
+ * Minimal hello-world program for userspace program smokes.
  */
 
 #include <unistd.h>

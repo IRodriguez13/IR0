@@ -169,7 +169,7 @@ smoke-userspace-heap: build-init-heap-smoke kernel-x64-userspace.iso
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE39_HEAP" $(HEAP_SMOKE_LOG) && \
+	@if grep -q "HEAP_SMOKE" $(HEAP_SMOKE_LOG) && \
 	    grep -q "page_present=1" $(HEAP_SMOKE_LOG); then \
 		echo "✓ smoke-userspace-heap passed"; \
 	else \
@@ -186,12 +186,12 @@ smoke-userspace-mmap: build-init-mmap-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(MMAP_SMOKE_LOG) --timeout 90 --done FASE39_MMAP mapped=1 -- \
+	$(SMOKE_QEMU_RUN) --log $(MMAP_SMOKE_LOG) --timeout 90 --done MMAP_SMOKE mapped=1 -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE39_MMAP mapped=1" $(MMAP_SMOKE_LOG) && \
+	@if grep -q "MMAP_SMOKE mapped=1" $(MMAP_SMOKE_LOG) && \
 	    grep -q "\\[PF\\] userspace segv pid=" $(MMAP_SMOKE_LOG); then \
 		echo "✓ smoke-userspace-mmap passed"; \
 	else \
@@ -213,7 +213,7 @@ smoke-userspace-stack-heap-iso: build-init-stack-heap-iso-smoke kernel-x64-users
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 128M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE39_ISO" $(ISO_SMOKE_LOG) && \
+	@if grep -q "STACK_HEAP_ISO" $(ISO_SMOKE_LOG) && \
 	    grep -q "overlap=0" $(ISO_SMOKE_LOG); then \
 		echo "✓ smoke-userspace-stack-heap-iso passed"; \
 	else \
@@ -230,12 +230,12 @@ smoke-userspace-fork-mem: build-init-fork-mem-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FORK_MEM_SMOKE_LOG) --timeout 120 --done FASE40_SUMMARY -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_MEM_SMOKE_LOG) --timeout 120 --done MM_COW_SUMMARY -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE40_SUMMARY" $(FORK_MEM_SMOKE_LOG); then \
+	@if grep -q "MM_COW_SUMMARY" $(FORK_MEM_SMOKE_LOG); then \
 		echo "✓ smoke-userspace-fork-mem finished"; \
 	else \
 		echo "✗ smoke-userspace-fork-mem FAILED"; \
@@ -253,12 +253,12 @@ smoke-userspace-fase41-reclaim: build-ktm-reclaim-exit-smoke build-ktm-true-help
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_TRUE_HELPER_BIN) bin/f41true; \
-	$(SMOKE_QEMU_RUN) --log $(FASE41_RECLAIM_LOG) --timeout 120 --done FASE41_SUMMARY -- \
+	$(SMOKE_QEMU_RUN) --log $(FASE41_RECLAIM_LOG) --timeout 120 --done RECLAIM_SUMMARY -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE41_SUMMARY" $(FASE41_RECLAIM_LOG); then \
+	@if grep -q "RECLAIM_SUMMARY" $(FASE41_RECLAIM_LOG); then \
 		echo "✓ smoke-userspace-fase41-reclaim finished"; \
 	else \
 		echo "✗ smoke-userspace-fase41-reclaim FAILED"; \
@@ -275,12 +275,12 @@ smoke-page-table-reclaim: build-ktm-pt-reclaim-smoke build-ktm-true-helper kerne
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_TRUE_HELPER_BIN) bin/f41true; \
-	$(SMOKE_QEMU_RUN) --log $(FASE42_PT_RECLAIM_LOG) --timeout 180 --done FASE42_PT_RECLAIM -- \
+	$(SMOKE_QEMU_RUN) --log $(IR0_MM_PT_RECLAIM_LOG) --timeout 180 --done IR0_MM_PT_RECLAIM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE42_PT_RECLAIM" $(FASE42_PT_RECLAIM_LOG); then \
+	@if grep -q "IR0_MM_PT_RECLAIM" $(IR0_MM_PT_RECLAIM_LOG); then \
 		echo "✓ smoke-page-table-reclaim finished"; \
 	else \
 		echo "✗ smoke-page-table-reclaim FAILED"; \
@@ -297,12 +297,12 @@ smoke-exec-storm: build-ktm-exec-storm-smoke build-ktm-true-helper kernel-x64-us
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_TRUE_HELPER_BIN) bin/f41true; \
-	$(SMOKE_QEMU_RUN) --log $(FASE42_EXEC_STORM_LOG) --timeout 200 --done FASE42_EXEC_STORM -- \
+	$(SMOKE_QEMU_RUN) --log $(IR0_MM_EXEC_STORM_LOG) --timeout 200 --done IR0_MM_EXEC_STORM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE42_EXEC_STORM" $(FASE42_EXEC_STORM_LOG); then \
+	@if grep -q "IR0_MM_EXEC_STORM" $(IR0_MM_EXEC_STORM_LOG); then \
 		echo "✓ smoke-exec-storm finished"; \
 	else \
 		echo "✗ smoke-exec-storm FAILED"; \
@@ -319,12 +319,12 @@ smoke-fork-exit-storm: build-ktm-fork-exit-storm-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE42_FORK_EXIT_STORM_LOG) --timeout 150 --done FASE42_FORK_EXIT_STORM -- \
+	$(SMOKE_QEMU_RUN) --log $(IR0_MM_FORK_EXIT_STORM_LOG) --timeout 150 --done IR0_MM_FORK_EXIT_STORM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE42_FORK_EXIT_STORM" $(FASE42_FORK_EXIT_STORM_LOG); then \
+	@if grep -q "IR0_MM_FORK_EXIT_STORM" $(IR0_MM_FORK_EXIT_STORM_LOG); then \
 		echo "✓ smoke-fork-exit-storm finished"; \
 	else \
 		echo "✗ smoke-fork-exit-storm FAILED"; \
@@ -340,12 +340,12 @@ smoke-fase43-fork-exit-storm: build-ktm-fork-exit-storm-deep-smoke kernel-x64-us
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE43_FORK_EXIT_STORM_LOG) --timeout 180 --done FASE43_FORK_EXIT_STORM -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_EXIT_STORM_LOG) --timeout 180 --done FORK_EXIT_STORM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE43_FORK_EXIT_STORM" $(FASE43_FORK_EXIT_STORM_LOG); then \
+	@if grep -q "FORK_EXIT_STORM" $(FORK_EXIT_STORM_LOG); then \
 		echo "✓ smoke-fase43-fork-exit-storm finished"; \
 	else \
 		echo "✗ smoke-fase43-fork-exit-storm FAILED"; \
@@ -361,12 +361,12 @@ smoke-fase43-fork-wait-storm: build-ktm-fork-wait-storm-smoke kernel-x64-userspa
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE43_FORK_WAIT_STORM_LOG) --timeout 180 --done FASE43_FORK_WAIT_STORM -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_WAIT_STORM_LOG) --timeout 180 --done FORK_WAIT_STORM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE43_FORK_WAIT_STORM" $(FASE43_FORK_WAIT_STORM_LOG); then \
+	@if grep -q "FORK_WAIT_STORM" $(FORK_WAIT_STORM_LOG); then \
 		echo "✓ smoke-fase43-fork-wait-storm finished"; \
 	else \
 		echo "✗ smoke-fase43-fork-wait-storm FAILED"; \
@@ -383,12 +383,12 @@ smoke-fase43-exec-loop: build-ktm-exec-loop-smoke build-ktm-true-helper kernel-x
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_TRUE_HELPER_BIN) bin/f41true; \
-	$(SMOKE_QEMU_RUN) --log $(FASE43_EXEC_LOOP_LOG) --timeout 240 --done FASE43_EXEC_LOOP -- \
+	$(SMOKE_QEMU_RUN) --log $(EXEC_LOOP_LOG) --timeout 240 --done EXEC_LOOP -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE43_EXEC_LOOP" $(FASE43_EXEC_LOOP_LOG); then \
+	@if grep -q "EXEC_LOOP" $(EXEC_LOOP_LOG); then \
 		echo "✓ smoke-fase43-exec-loop finished"; \
 	else \
 		echo "✗ smoke-fase43-exec-loop FAILED"; \
@@ -405,12 +405,12 @@ smoke-fase44-fork-wait-drain: build-ktm-fork-wait-drain-smoke kernel-x64-userspa
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE44_FORK_WAIT_DRAIN_LOG) --timeout 180 --done FASE44_FORK_WAIT_DRAIN -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_WAIT_DRAIN_LOG) --timeout 180 --done FORK_WAIT_DRAIN -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE44_FORK_WAIT_DRAIN" $(FASE44_FORK_WAIT_DRAIN_LOG); then \
+	@if grep -q "FORK_WAIT_DRAIN" $(FORK_WAIT_DRAIN_LOG); then \
 		echo "✓ smoke-fase44-fork-wait-drain finished"; \
 	else \
 		echo "✗ smoke-fase44-fork-wait-drain FAILED"; \
@@ -428,12 +428,12 @@ smoke-fase44-exec-drain: build-ktm-exec-drain-smoke build-ktm-true-helper kernel
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_TRUE_HELPER_BIN) bin/f41true; \
-	$(SMOKE_QEMU_RUN) --log $(FASE44_EXEC_DRAIN_LOG) --timeout 300 --done FASE44_EXEC_DRAIN -- \
+	$(SMOKE_QEMU_RUN) --log $(EXEC_DRAIN_LOG) --timeout 300 --done EXEC_DRAIN -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE44_EXEC_DRAIN" $(FASE44_EXEC_DRAIN_LOG); then \
+	@if grep -q "EXEC_DRAIN" $(EXEC_DRAIN_LOG); then \
 		echo "✓ smoke-fase44-exec-drain finished"; \
 	else \
 		echo "✗ smoke-fase44-exec-drain FAILED"; \
@@ -450,12 +450,12 @@ smoke-fase44-init-exit-drain: build-ktm-init-exit-drain-smoke kernel-x64-userspa
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE44_INIT_EXIT_DRAIN_LOG) --timeout 180 --done FASE44_INIT_EXIT_DRAIN -- \
+	$(SMOKE_QEMU_RUN) --log $(INIT_EXIT_DRAIN_LOG) --timeout 180 --done INIT_EXIT_DRAIN -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE44_INIT_EXIT_DRAIN" $(FASE44_INIT_EXIT_DRAIN_LOG); then \
+	@if grep -q "INIT_EXIT_DRAIN" $(INIT_EXIT_DRAIN_LOG); then \
 		echo "✓ smoke-fase44-init-exit-drain finished"; \
 	else \
 		echo "✗ smoke-fase44-init-exit-drain FAILED"; \
@@ -471,12 +471,12 @@ smoke-fase45-fork-rollback-storm: build-ktm-fork-rollback-smoke kernel-x64-users
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_ROLLBACK_STORM_LOG) --timeout 180 --done FASE45_FORK_ROLLBACK_STORM -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_ROLLBACK_STORM_LOG) --timeout 180 --done FORK_ROLLBACK_STORM -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE45_FORK_ROLLBACK_STORM" $(FASE45_FORK_ROLLBACK_STORM_LOG); then \
+	@if grep -q "FORK_ROLLBACK_STORM" $(FORK_ROLLBACK_STORM_LOG); then \
 		echo "✓ smoke-fase45-fork-rollback-storm finished"; \
 	else \
 		echo "✗ smoke-fase45-fork-rollback-storm FAILED"; \
@@ -492,12 +492,12 @@ smoke-fase45-fork-mem-touch: build-ktm-fork-mem-touch-smoke kernel-x64-userspace
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE45_FORK_MEM_TOUCH_LOG) --timeout 180 --done FASE45_FORK_MEM_TOUCH -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_MEM_TOUCH_LOG) --timeout 180 --done FORK_MEM_TOUCH -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE45_FORK_MEM_TOUCH" $(FASE45_FORK_MEM_TOUCH_LOG); then \
+	@if grep -q "FORK_MEM_TOUCH" $(FORK_MEM_TOUCH_LOG); then \
 		echo "✓ smoke-fase45-fork-mem-touch finished"; \
 	else \
 		echo "✗ smoke-fase45-fork-mem-touch FAILED"; \
@@ -513,12 +513,12 @@ smoke-fase46-fork-no-recursion: build-ktm-fork-no-recursion-smoke kernel-x64-use
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_NO_RECURSE_LOG) --timeout 180 --done FASE46_FORK_NO_RECURSE -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_NO_RECURSE_LOG) --timeout 180 --done FORK_NO_RECURSE -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE46_FORK_NO_RECURSE" $(FASE46_FORK_NO_RECURSE_LOG); then \
+	@if grep -q "FORK_NO_RECURSE" $(FORK_NO_RECURSE_LOG); then \
 		echo "✓ smoke-fase46-fork-no-recursion finished"; \
 	else \
 		echo "✗ smoke-fase46-fork-no-recursion FAILED"; \
@@ -534,12 +534,12 @@ smoke-fase46-fork-heap: build-ktm-fork-heap-smoke kernel-x64-userspace.iso
 	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(FASE46_FORK_HEAP_LOG) --timeout 180 --done FASE46_FORK_HEAP -- \
+	$(SMOKE_QEMU_RUN) --log $(FORK_HEAP_LOG) --timeout 180 --done FORK_HEAP -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE46_FORK_HEAP" $(FASE46_FORK_HEAP_LOG); then \
+	@if grep -q "FORK_HEAP" $(FORK_HEAP_LOG); then \
 		echo "✓ smoke-fase46-fork-heap finished"; \
 	else \
 		echo "✗ smoke-fase46-fork-heap FAILED"; \
@@ -563,11 +563,11 @@ smoke-fase48-ipc: build-ktm-ipc-smoke build-ktm-ipc-helpers kernel-x64-userspace
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE48_IPC" $(FASE48_IPC_LOG) && \
+	@if grep -q "IPC_SMOKE" $(FASE48_IPC_LOG) && \
 	    grep -q "pingpong=OK" $(FASE48_IPC_LOG) && \
 	    grep -q "pipe_exec=OK" $(FASE48_IPC_LOG) && \
 	    grep -q "pipeline=OK" $(FASE48_IPC_LOG) && \
-	    grep -q "FASE48_BUSYBOX_PROBE_OK" $(FASE48_IPC_LOG) && \
+	    grep -q "IPC_BUSYBOX_PROBE_OK" $(FASE48_IPC_LOG) && \
 	    grep -q "ipc_class=IPC_READY" $(FASE48_IPC_LOG); then \
 		echo "✓ smoke-fase48-ipc finished"; \
 	else \
@@ -591,7 +591,7 @@ smoke-fase49-pipe: build-ktm-pipe-smoke build-ktm-ipc-helpers kernel-x64-userspa
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK;
-	@if grep -q "FASE49_PIPE" $(FASE49_PIPE_LOG) && \
+	@if grep -q "PIPE_SMOKE" $(FASE49_PIPE_LOG) && \
 	    grep -q "check1=OK" $(FASE49_PIPE_LOG) && \
 	    grep -q "check2=OK" $(FASE49_PIPE_LOG) && \
 	    grep -q "check3=OK" $(FASE49_PIPE_LOG) && \
@@ -1051,8 +1051,8 @@ smoke-fase55b-doom-stub: build-ktm-doom-stub build-busybox-fase50-min kernel-x64
 		if grep -q "KTM_DOOM_STUB_FAIL_REASON" $(KTM_DOOM_STUB_LOG); then \
 			grep "KTM_DOOM_STUB_FAIL_REASON" $(KTM_DOOM_STUB_LOG); \
 		fi; \
-		if grep -q "\[FASE55B\]\[FAIL\]" $(KTM_DOOM_STUB_LOG); then \
-			grep "\[FASE55B\]\[FAIL\]" $(KTM_DOOM_STUB_LOG); \
+		if grep -q "\[KTM_DOOM_STUB\]\[FAIL\]" $(KTM_DOOM_STUB_LOG); then \
+			grep "\[KTM_DOOM_STUB\]\[FAIL\]" $(KTM_DOOM_STUB_LOG); \
 		fi; \
 		exit 1; \
 	fi
@@ -1084,8 +1084,8 @@ smoke-fase55c-timing-input: build-ktm-doom-timing-stub build-busybox-fase50-min 
 		if grep -q "KTM_DOOM_STUB_FAIL_REASON" $(KTM_DOOM_TIMING_STUB_LOG); then \
 			grep "KTM_DOOM_STUB_FAIL_REASON" $(KTM_DOOM_TIMING_STUB_LOG); \
 		fi; \
-		if grep -q "\[FASE55B\]\[FAIL\]" $(KTM_DOOM_TIMING_STUB_LOG); then \
-			grep "\[FASE55B\]\[FAIL\]" $(KTM_DOOM_TIMING_STUB_LOG); \
+		if grep -q "\[KTM_DOOM_STUB\]\[FAIL\]" $(KTM_DOOM_TIMING_STUB_LOG); then \
+			grep "\[KTM_DOOM_STUB\]\[FAIL\]" $(KTM_DOOM_TIMING_STUB_LOG); \
 		fi; \
 		exit 1; \
 	fi
@@ -1128,7 +1128,7 @@ smoke-fase55d-doomgeneric: build-runit build-ktm-doomgeneric-smoke kernel-x64-us
 	    grep -q "DOOMGENERIC_FIRST_FRAME_OK" $(KTM_DOOMGENERIC_LOG) && \
 	    grep -q "DOOMGENERIC_FRAME_LOOP_OK" $(KTM_DOOMGENERIC_LOG) && \
 	    grep -q "KTM_DOOMGENERIC_OK" $(KTM_DOOMGENERIC_LOG) && \
-	    grep -q "KTM_DOOM_55D_OK" $(KTM_DOOMGENERIC_LOG) && \
+	    grep -q "KTM_DOOMGENERIC_CASE_OK" $(KTM_DOOMGENERIC_LOG) && \
 	    grep -q "KTM_USERDEV_OK" $(KTM_DOOMGENERIC_LOG); then \
 		echo "LONG_RUNNING_BUT_STABLE"; \
 		echo "KTM_DOOMGENERIC_DOOMGENERIC_REAL_WAD_OK"; \
@@ -1139,8 +1139,8 @@ smoke-fase55d-doomgeneric: build-runit build-ktm-doomgeneric-smoke kernel-x64-us
 			echo "LONG_RUNNING_BUT_STABLE"; \
 		fi; \
 		echo "✗ smoke-fase55d-doomgeneric FAILED"; \
-		if grep -q "\[FASE55D\]\[FAIL\]" $(KTM_DOOMGENERIC_LOG); then \
-			grep "\[FASE55D\]\[FAIL\]" $(KTM_DOOMGENERIC_LOG); \
+		if grep -q "\[KTM_DOOMGENERIC\]\[FAIL\]" $(KTM_DOOMGENERIC_LOG); then \
+			grep "\[KTM_DOOMGENERIC\]\[FAIL\]" $(KTM_DOOMGENERIC_LOG); \
 		fi; \
 		exit 1; \
 	fi

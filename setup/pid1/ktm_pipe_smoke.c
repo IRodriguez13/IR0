@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE49 — Pipeline closure (EOF + FD lifetime) smokes:
+ * Pipeline closure (EOF + FD lifetime) smokes:
  *   1) echo hello | cat
  *   2) echo hello | cat | cat
  *   3) cat < /dev/null  (immediate EOF)
@@ -327,7 +327,7 @@ int main(void)
 	int ok5 = 0;
 	int ok6 = 0;
 
-	write_str("FASE49_START\n");
+	write_str("PIPE_SMOKE_START\n");
 	reap_all_children();
 	fd_before = count_open_fds();
 
@@ -346,7 +346,7 @@ int main(void)
 
 	fd_after = count_open_fds();
 
-	write_str("FASE49_PIPE fd_before=");
+	write_str("PIPE_SMOKE fd_before=");
 	write_dec_u64((uint64_t)fd_before);
 	write_str(" fd_after=");
 	write_dec_u64((uint64_t)fd_after);

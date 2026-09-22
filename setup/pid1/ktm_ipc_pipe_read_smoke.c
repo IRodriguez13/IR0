@@ -29,7 +29,7 @@ int main(void)
 	(void)write(pc[1], "X", 1);
 	close(pc[1]);
 	(void)waitpid(pid, NULL, 0);
-	write_str("FASE48_PIPE_READ_OK\n");
+	write_str("IPC_PIPE_READ_OK\n");
 	for (;;)
 		(void)pause();
 	return 0;

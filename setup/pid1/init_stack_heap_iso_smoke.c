@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE39 stack/heap isolation smoke.
+ * stack/heap isolation smoke.
  *
  * Performs deep recursion + heap growth and reports whether virtual ranges
  * overlap for this process.
@@ -106,7 +106,7 @@ int main(void)
 		brk_target = base + 8192U;
 		if ((uintptr_t)syscall(SYS_brk, (void *)brk_target) != brk_target)
 		{
-			write_str("FASE39_ISO FAIL sbrk_and_brk\n");
+			write_str("STACK_HEAP_ISO FAIL sbrk_and_brk\n");
 			return 2;
 		}
 	}
@@ -125,7 +125,7 @@ int main(void)
 			 : 0;
 	overlap = !((brk_after <= stack_low) || (stack_high <= heap_start));
 
-	write_str("FASE39_ISO stack_pages=");
+	write_str("STACK_HEAP_ISO stack_pages=");
 	write_dec_u64(stack_pages);
 	write_str(" heap_pages=");
 	write_dec_u64(heap_pages);

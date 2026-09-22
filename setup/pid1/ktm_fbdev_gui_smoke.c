@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE58C — Minimal /dev/fb0 draw probe (no Doom).
+ * Minimal /dev/fb0 draw probe (no Doom).
  * Paints RGB horizontal bands via mmap; tag DEVFB0_DRAW_OK.
  */
 

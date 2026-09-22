@@ -859,7 +859,7 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors,
 
 		/*
 		 * Do not FLUSH_CACHE after every PIO write — that serializes bulk
-		 * MINIX zone growth (FASE52D ~500KB) into multi-minute hangs.
+		 * MINIX zone growth (~500KB) into multi-minute hangs.
 		 * Callers that need durability should use ir0_block_flush / fsync.
 		 */
 		ok = ata_wait_ready(drive);

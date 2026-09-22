@@ -16,7 +16,7 @@ int main(void)
 	if (pid > 0)
 	{
 		(void)waitpid(pid, NULL, 0);
-		write_str("FASE48_FORK_OK\n");
+		write_str("IPC_FORK_OK\n");
 	}
 	for (;;)
 		(void)pause();

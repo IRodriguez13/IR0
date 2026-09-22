@@ -126,18 +126,18 @@ FASE41_RECLAIM_LOG = /tmp/userspace-fase41-reclaim.log
 FASE42_PT_RECLAIM_LOG = /tmp/userspace-fase42-pt-reclaim.log
 FASE42_EXEC_STORM_LOG = /tmp/userspace-fase42-exec-storm.log
 FASE42_FORK_EXIT_STORM_LOG = /tmp/userspace-fase42-fork-exit-storm.log
-FASE43_FORK_EXIT_STORM_LOG = /tmp/userspace-fase43-fork-exit-storm.log
-FASE43_FORK_WAIT_STORM_LOG = /tmp/userspace-fase43-fork-wait-storm.log
-FASE43_EXEC_LOOP_LOG = /tmp/userspace-fase43-exec-loop.log
-FASE44_FORK_WAIT_DRAIN_LOG = /tmp/userspace-fase44-fork-wait-drain.log
-FASE44_EXEC_DRAIN_LOG = /tmp/userspace-fase44-exec-drain.log
-FASE44_INIT_EXIT_DRAIN_LOG = /tmp/userspace-fase44-init-exit-drain.log
-FASE45_FORK_ROLLBACK_STORM_LOG = /tmp/userspace-fase45-fork-rollback-storm.log
-FASE45_FORK_MEM_TOUCH_LOG = /tmp/userspace-fase45-fork-mem-touch.log
-FASE46_FORK_NO_RECURSE_LOG = /tmp/userspace-fase46-fork-no-recursion.log
-FASE46_FORK_HEAP_LOG = /tmp/userspace-fase46-fork-heap.log
-FASE48_IPC_LOG = /tmp/userspace-fase48-ipc.log
-FASE49_PIPE_LOG = /tmp/userspace-fase49-pipe.log
+FORK_EXIT_STORM_LOG = /tmp/userspace-fase43-fork-exit-storm.log
+FORK_WAIT_STORM_LOG = /tmp/userspace-fase43-fork-wait-storm.log
+EXEC_LOOP_LOG = /tmp/userspace-fase43-exec-loop.log
+FORK_WAIT_DRAIN_LOG = /tmp/userspace-fase44-fork-wait-drain.log
+EXEC_DRAIN_LOG = /tmp/userspace-fase44-exec-drain.log
+INIT_EXIT_DRAIN_LOG = /tmp/userspace-fase44-init-exit-drain.log
+FORK_ROLLBACK_STORM_LOG = /tmp/userspace-fase45-fork-rollback-storm.log
+FORK_MEM_TOUCH_LOG = /tmp/userspace-fase45-fork-mem-touch.log
+FORK_NO_RECURSE_LOG = /tmp/userspace-fase46-fork-no-recursion.log
+FORK_HEAP_LOG = /tmp/userspace-fase46-fork-heap.log
+IPC_SMOKE_LOG = /tmp/userspace-fase48-ipc.log
+PIPE_SMOKE_LOG = /tmp/userspace-fase49-pipe.log
 FASE50_BUSYBOX_LOG = /tmp/userspace-fase50-busybox.log
 FASE50_KTM_EXEC_ONLY_LOG = /tmp/userspace-fase50-exec-only.log
 KTM_SHELL_SHELL_LOG = /tmp/userspace-fase51-shell.log
@@ -1647,13 +1647,13 @@ smoke-tcc-power-halt: build-runit build-init-tcc-power-halt build-tcc-fase52 $(K
 ktm-userdev-tcc-power-halt-run: smoke-tcc-power-halt
 	@echo "✓ ktm-userdev-tcc-power-halt-run (hybrid runit)"
 
-# MM vertical slice: lazy alloc (brk + anon mmap) + fork COW (FASE40 A–F).
+# MM vertical slice: lazy alloc (brk + anon mmap) + fork COW (A–F).
 smoke-mm-cow-lazy: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
 		$(MAKE) -s create-disk; \
 	fi
-	@echo "  SMOKE   MM lazy alloc + fork COW (heap + mmap + FASE40, lazy kernel)..."
+	@echo "  SMOKE   MM lazy alloc + fork COW (heap + mmap, lazy kernel)..."
 	@$(MAKE) -s build-init-heap-smoke
 	@DISK=$$(mktemp /tmp/ir0-mm-cow-lazy.XXXXXX.img); \
 	truncate -s 200M $$DISK; \
@@ -1665,7 +1665,7 @@ smoke-mm-cow-lazy: kernel-x64-userspace.iso
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	HEAP_OK=0; \
-	grep -q "FASE39_HEAP" $(HEAP_SMOKE_LOG) && grep -q "page_present=1" $(HEAP_SMOKE_LOG) && HEAP_OK=1; \
+	grep -q "HEAP_SMOKE" $(HEAP_SMOKE_LOG) && grep -q "page_present=1" $(HEAP_SMOKE_LOG) && HEAP_OK=1; \
 	$(MAKE) -s build-init-mmap-smoke; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(MMAP_SMOKE_LOG); \
@@ -1675,29 +1675,29 @@ smoke-mm-cow-lazy: kernel-x64-userspace.iso
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	MMAP_OK=0; \
-	grep -q "FASE39_MMAP mapped=1" $(MMAP_SMOKE_LOG) && \
-	grep -q "FASE39_MMAP.*verify=1" $(MMAP_SMOKE_LOG) && \
+	grep -q "MMAP_SMOKE mapped=1" $(MMAP_SMOKE_LOG) && \
+	grep -q "MMAP_SMOKE.*verify=1" $(MMAP_SMOKE_LOG) && \
 	grep -q "\\[PF\\] userspace segv pid=" $(MMAP_SMOKE_LOG) && MMAP_OK=1; \
 	$(MAKE) -s build-init-fork-mem-smoke; \
-	printf 'PARENT-FILE-OK!' > /tmp/ir0-fase40.dat; \
-	python3 scripts/inject_init_minix.py $$DISK /tmp/ir0-fase40.dat etc/f40.dat; \
+	printf 'PARENT-FILE-OK!' > /tmp/ir0-mm-cow.dat; \
+	python3 scripts/inject_init_minix.py $$DISK /tmp/ir0-mm-cow.dat etc/f40.dat; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(FORK_MEM_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(FORK_MEM_SMOKE_LOG) --timeout 180 \
-		--done 'FASE40_SUMMARY A=0 B=0 C=0 D=0' -- \
+		--done 'MM_COW_SUMMARY A=0 B=0 C=0 D=0' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK; \
 	FORK_OK=0; \
-	grep -q "FASE40_SUMMARY A=0 B=0 C=0 D=0" $(FORK_MEM_SMOKE_LOG) && FORK_OK=1; \
+	grep -q "MM_COW_SUMMARY A=0 B=0 C=0 D=0" $(FORK_MEM_SMOKE_LOG) && FORK_OK=1; \
 	if [ "$$HEAP_OK" != 1 ]; then echo "✗ smoke-mm-cow-lazy FAILED (heap/lazy brk)"; exit 1; fi; \
 	if [ "$$MMAP_OK" != 1 ]; then echo "✗ smoke-mm-cow-lazy FAILED (lazy mmap)"; exit 1; fi; \
 	if [ "$$FORK_OK" != 1 ]; then \
-		echo "✗ smoke-mm-cow-lazy FAILED (fork COW / FASE40)"; \
-		grep "FASE40" $(FORK_MEM_SMOKE_LOG) | tail -15; exit 1; \
+		echo "✗ smoke-mm-cow-lazy FAILED (fork COW)"; \
+		grep "MM_COW" $(FORK_MEM_SMOKE_LOG) | tail -15; exit 1; \
 	fi; \
-	echo "✓ smoke-mm-cow-lazy passed (lazy brk + lazy mmap + fork COW FASE40 A–F)"
+	echo "✓ smoke-mm-cow-lazy passed (lazy brk + lazy mmap + fork COW A–F)"
 
 .PHONY: build/fat16_smoke.img smoke-fat16-mount
 
@@ -3681,7 +3681,7 @@ build-ktm-doom-prereq-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE55A doom prereq smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building doom prereq smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_DOOM_PREREQ_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-doom-prereq-smoke OK"
@@ -3691,7 +3691,7 @@ build-ktm-doom-stub:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE55B doom stub ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building doom stub ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_DOOM_STUB_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-doom-stub OK"
@@ -3701,7 +3701,7 @@ build-ktm-doom-timing-stub:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  INIT    Building FASE55C timing+input smoke ($(INIT_SMOKE_BIN))"
+	@echo "  INIT    Building doom timing+input smoke ($(INIT_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_DOOM_TIMING_STUB_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-doom-timing-stub OK"
@@ -3711,7 +3711,7 @@ build-ktm-doomgeneric-smoke:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  HARNESS Building FASE55D real doomgeneric ($(KTM_DOOMGENERIC_SMOKE_BIN))"
+	@echo "  HARNESS Building real doomgeneric ($(KTM_DOOMGENERIC_SMOKE_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
 		-DIR0_DOOM_PORT -DFEATURE_SOUND \
@@ -3727,10 +3727,10 @@ build-ktm-doom-interactive:
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
 		exit 1; \
 	fi
-	@echo "  DOOM    Building FASE55E interactive doomgeneric ($(KTM_DOOM_INTERACTIVE_BIN))"
+	@echo "  DOOM    Building interactive doomgeneric ($(KTM_DOOM_INTERACTIVE_BIN))"
 	@$(MUSL_CC) -static -Os -s -ffunction-sections -fdata-sections \
 		-Wl,--gc-sections -Wl,--strip-all -std=gnu99 \
-		-DFASE55E_INTERACTIVE=1 -DIR0_DOOM_PORT -DFEATURE_SOUND \
+		-DDOOM_INTERACTIVE=1 -DIR0_DOOM_PORT -DFEATURE_SOUND \
 		-Isetup/doom/upstream/doomgeneric \
 		$(KTM_DOOMGENERIC_SRC) \
 		setup/doom/upstream/doomgeneric/*.c \
@@ -4872,7 +4872,7 @@ ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case build-init-hosts
 		--done KTM_INIT_EXIT_DRAIN_OK \
 		--require 'TEST_END|init_exit_drain|PASS' \
 		--require KTM_INIT_EXIT_DRAIN_OK \
-		--require FASE44_INIT_EXIT_DRAIN
+		--require INIT_EXIT_DRAIN
 	@echo "✓ ktm-userdev-init-exit-drain-run (FASE44 PID1 _exit → KTM)"
 
 ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case build-init-hostshare-exec kernel-x64-userspace.iso
@@ -4883,7 +4883,7 @@ ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case build-ini
 		--done KTM_INIT_EXIT_DRAIN_OK \
 		--require 'TEST_END|init_exit_drain|PASS' \
 		--require KTM_INIT_EXIT_DRAIN_OK \
-		--require FASE44_INIT_EXIT_DRAIN \
+		--require INIT_EXIT_DRAIN \
 		--require KTM_HOSTSHARE_REPORT_OK \
 		--host-file ktm_init_exit_drain.txt \
 		--host-grep KTM_INIT_EXIT_DRAIN_OK

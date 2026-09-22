@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE55A — doomgeneric prerequisite loop (fb + input + wad read).
+ * doomgeneric prerequisite loop (fb + input + wad read).
  */
 
 #include <unistd.h>

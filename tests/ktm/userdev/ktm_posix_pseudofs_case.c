@@ -1,5 +1,5 @@
 /**
- * IR0 userspace — KTM posix/pseudofs case (FASE53B analogue)
+ * IR0 userspace — KTM posix/pseudofs case (analogue)
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_posix_pseudofs_case.c

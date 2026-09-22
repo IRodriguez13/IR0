@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE58K — compact ash interactive smoke tags (serial, capped).
+ * Compact ash interactive smoke tags (serial, capped).
  *
  * Armed when BusyBox banner appears on stdout after init. Tags are one-shot
  * or lightly capped; no per-character spam.

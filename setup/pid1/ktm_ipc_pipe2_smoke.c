@@ -16,12 +16,12 @@ int main(void)
 
 	if (pipe2(p, 0) < 0)
 	{
-		write_str("FASE48_PIPE2_FAIL\n");
+		write_str("IPC_PIPE2_FAIL\n");
 		return 1;
 	}
 	close(p[0]);
 	close(p[1]);
-	write_str("FASE48_PIPE2_OK\n");
+	write_str("IPC_PIPE2_OK\n");
 	for (;;)
 		(void)pause();
 	return 0;

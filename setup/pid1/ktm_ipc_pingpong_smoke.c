@@ -40,7 +40,7 @@ int main(void)
 	}
 	close(cp[0]);
 	close(cp[1]);
-	write_str("FASE48_PINGPONG_OK\n");
+	write_str("IPC_PINGPONG_OK\n");
 	for (;;)
 		(void)pause();
 	return 0;

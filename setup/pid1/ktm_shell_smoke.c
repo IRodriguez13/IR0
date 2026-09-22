@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE51 — BusyBox ash shell scripts smoke (pipes, redirect, loops, &&/||).
+ * BusyBox ash shell scripts smoke (pipes, redirect, loops, &&/||).
  */
 
 #include <unistd.h>

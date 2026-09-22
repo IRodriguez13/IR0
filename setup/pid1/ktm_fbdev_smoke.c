@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE54A — Minimal /dev/fb0 framebuffer harness.
+ * Minimal /dev/fb0 framebuffer harness.
  */
 
 #include <unistd.h>

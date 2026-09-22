@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE54C — deterministic input path smoke for CI.
+ * deterministic input path smoke for CI.
  */
 
 #include <unistd.h>

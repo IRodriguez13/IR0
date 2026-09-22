@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE46 fork + heap (sbrk only, no malloc)
+ * fork + heap (sbrk only, no malloc)
  * fork → sbrk(4096) → touch → exit → waitpid
  */
 
@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE46_HEAP_LOOPS 256
+#define FORK_HEAP_N 256
 
 static void write_str(const char *s)
 {
@@ -104,7 +104,7 @@ int main(void)
 	int fork_fail = 0;
 	int wait_fail = 0;
 
-	for (int i = 0; i < FASE46_HEAP_LOOPS; i++)
+	for (int i = 0; i < FORK_HEAP_N; i++)
 	{
 		pid_t pid = fork();
 
@@ -130,7 +130,7 @@ int main(void)
 	drain_children();
 	frames_after = read_used_kb();
 
-	write_str("FASE46_FORK_HEAP fork_ok=");
+	write_str("FORK_HEAP fork_ok=");
 	write_dec_u64((uint64_t)fork_ok);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);

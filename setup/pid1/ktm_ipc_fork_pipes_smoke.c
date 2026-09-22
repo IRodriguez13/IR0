@@ -21,7 +21,7 @@ int main(void)
 		_exit(0);
 	(void)waitpid(pid, NULL, 0);
 	close(p1[0]); close(p1[1]); close(p2[0]); close(p2[1]);
-	write_str("FASE48_FORK_PIPES_OPEN_OK\n");
+	write_str("IPC_FORK_PIPES_OPEN_OK\n");
 	for (;;)
 		(void)pause();
 	return 0;

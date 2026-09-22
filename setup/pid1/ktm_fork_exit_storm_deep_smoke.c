@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE43 fork-exit-storm
+ * fork-exit-storm
  * 256 children, sequential fork + wait until each child exits.
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE43_FORK_EXIT 256
+#define FORK_EXIT_STORM_N 256
 
 static void write_str(const char *s)
 {
@@ -88,7 +88,7 @@ int main(void)
 	long used_before = read_used_kb();
 	long used_after;
 
-	for (int i = 0; i < FASE43_FORK_EXIT; i++)
+	for (int i = 0; i < FORK_EXIT_STORM_N; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -104,7 +104,7 @@ int main(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE43_FORK_EXIT_STORM children=");
+	write_str("FORK_EXIT_STORM children=");
 	write_dec_u64((uint64_t)started);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);

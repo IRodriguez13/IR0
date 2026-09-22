@@ -1,5 +1,5 @@
 /**
- * IR0 userspace — KTM exec-drain case (FASE44 exec-drain analogue)
+ * IR0 userspace — KTM exec-drain case (exec-drain analogue)
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_exec_drain_case.c

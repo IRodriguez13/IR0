@@ -41,11 +41,11 @@ int main(void)
 		return 1;
 	if (read(outpipe[0], buf, sizeof(buf) - 1) < 2)
 	{
-		write_str("FASE48_PIPE_EXEC_READ_FAIL\n");
+		write_str("IPC_PIPE_EXEC_READ_FAIL\n");
 		return 1;
 	}
 	close(outpipe[0]);
-	write_str("FASE48_PIPE_EXEC_OK\n");
+	write_str("IPC_PIPE_EXEC_OK\n");
 	for (;;)
 		(void)pause();
 	return 0;

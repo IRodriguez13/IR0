@@ -129,7 +129,7 @@ SYSCALL_LINE_RES: list[str] = [
     r"SERIAL: mmap: entering syscall",
     r"\[MMAP_AUDIT\].*stage=",
     r"CLASSIFY.*stage=",
-    r"\[FASE50\]\[EXEC_ARGV\].*stage=sys_exec",
+    r"\[KTM\]\[EXEC_ARGV\].*stage=sys_exec",
 ]
 
 TAG_LINE_RES: list[str] = [

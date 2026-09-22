@@ -19,10 +19,10 @@
 #include <fcntl.h>
 #include <string.h>
 
-#define FASE40_HEAP_HINT ((void *)0x09000000UL)
-#define FASE40_MMAP_HINT ((void *)0x09010000UL)
-#define FASE40_STORM_CHILDREN 8
-#define FASE40_CHILD_ALLOC (64 * 1024)
+#define MM_COW_HEAP_HINT ((void *)0x09000000UL)
+#define MM_COW_MMAP_HINT ((void *)0x09010000UL)
+#define MM_COW_STORM_CHILDREN 8
+#define MM_COW_CHILD_ALLOC (64 * 1024)
 
 static void write_str(const char *s)
 {
@@ -113,7 +113,7 @@ static long read_used_kb(void)
 
 static int test_heap_isolation(void)
 {
-	char *p = (char *)mmap(FASE40_HEAP_HINT, 4096, PROT_READ | PROT_WRITE,
+	char *p = (char *)mmap(MM_COW_HEAP_HINT, 4096, PROT_READ | PROT_WRITE,
 			       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	pid_t pid;
 	int status = 0;
@@ -123,7 +123,7 @@ static int test_heap_isolation(void)
 
 	if (p == MAP_FAILED)
 	{
-		write_str("FASE40_A FAIL mmap\n");
+		write_str("MM_COW_A FAIL mmap\n");
 		return 2;
 	}
 
@@ -132,14 +132,14 @@ static int test_heap_isolation(void)
 	if (pid == 0)
 	{
 		strcpy(p, "child");
-		write_str("FASE40_A child_va=");
+		write_str("MM_COW_A child_va=");
 		write_hex_u64((uint64_t)(uintptr_t)p);
 		write_str("\n");
 		_exit(memcmp(p, "child", 5) == 0 ? 0 : 1);
 	}
 	if (pid < 0)
 	{
-		write_str("FASE40_A FAIL fork\n");
+		write_str("MM_COW_A FAIL fork\n");
 		(void)munmap(p, 4096);
 		return 3;
 	}
@@ -148,7 +148,7 @@ static int test_heap_isolation(void)
 	child_exit = (wr < 0) ? 255 : ((status >> 8) & 0xFF);
 	parent_ok = (memcmp(p, "parent", 6) == 0);
 
-	write_str("FASE40_A parent_va=");
+	write_str("MM_COW_A parent_va=");
 	write_hex_u64((uint64_t)(uintptr_t)p);
 	write_str(" child_status=");
 	write_dec_u64((uint64_t)child_exit);
@@ -174,7 +174,7 @@ static int test_stack_isolation(void)
 	if (pid == 0)
 	{
 		x = 20;
-		write_str("FASE40_B child_stack_va=");
+		write_str("MM_COW_B child_stack_va=");
 		write_hex_u64((uint64_t)(uintptr_t)&x);
 		write_str(" child_x=");
 		write_dec_u64((uint64_t)x);
@@ -183,14 +183,14 @@ static int test_stack_isolation(void)
 	}
 	if (pid < 0)
 	{
-		write_str("FASE40_B FAIL fork\n");
+		write_str("MM_COW_B FAIL fork\n");
 		return 2;
 	}
 
 	wr = wait4(pid, &status, 0, 0);
 	parent_ok = (x == 10);
 
-	write_str("FASE40_B parent_stack_va=");
+	write_str("MM_COW_B parent_stack_va=");
 	write_hex_u64((uint64_t)(uintptr_t)&x);
 	write_str(" parent_x=");
 	write_dec_u64((uint64_t)x);
@@ -205,7 +205,7 @@ static int test_stack_isolation(void)
 
 static int test_mmap_fork_semantics(void)
 {
-	char *p = (char *)mmap(FASE40_MMAP_HINT, 4096, PROT_READ | PROT_WRITE,
+	char *p = (char *)mmap(MM_COW_MMAP_HINT, 4096, PROT_READ | PROT_WRITE,
 			       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	pid_t pid;
 	int status = 0;
@@ -215,7 +215,7 @@ static int test_mmap_fork_semantics(void)
 
 	if (p == MAP_FAILED)
 	{
-		write_str("FASE40_C FAIL mmap\n");
+		write_str("MM_COW_C FAIL mmap\n");
 		return 2;
 	}
 
@@ -228,7 +228,7 @@ static int test_mmap_fork_semantics(void)
 	}
 	if (pid < 0)
 	{
-		write_str("FASE40_C FAIL fork\n");
+		write_str("MM_COW_C FAIL fork\n");
 		(void)munmap(p, 4096);
 		return 3;
 	}
@@ -240,7 +240,7 @@ static int test_mmap_fork_semantics(void)
 	else if (memcmp(p, "child-c", 7) == 0)
 		klass = "SHARED";
 
-	write_str("FASE40_C va=");
+	write_str("MM_COW_C va=");
 	write_hex_u64((uint64_t)(uintptr_t)p);
 	write_str(" class=");
 	write_str(klass);
@@ -261,23 +261,23 @@ static int test_memory_growth(void)
 	long used_before_kb = read_used_kb();
 	long used_peak_kb;
 	long used_after_kb;
-	pid_t kids[FASE40_STORM_CHILDREN];
+	pid_t kids[MM_COW_STORM_CHILDREN];
 	int started = 0;
 
-	for (int i = 0; i < FASE40_STORM_CHILDREN; i++)
+	for (int i = 0; i < MM_COW_STORM_CHILDREN; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
 		{
 			volatile unsigned char *m;
 
-			m = (volatile unsigned char *)mmap(NULL, FASE40_CHILD_ALLOC,
+			m = (volatile unsigned char *)mmap(NULL, MM_COW_CHILD_ALLOC,
 						      PROT_READ | PROT_WRITE,
 						      MAP_PRIVATE | MAP_ANONYMOUS,
 						      -1, 0);
 			if (m != MAP_FAILED)
 			{
-				for (size_t o = 0; o < FASE40_CHILD_ALLOC; o += 4096)
+				for (size_t o = 0; o < MM_COW_CHILD_ALLOC; o += 4096)
 					m[o] = (unsigned char)(o >> 12);
 			}
 			_exit(0);
@@ -301,7 +301,7 @@ static int test_memory_growth(void)
 		uint64_t pages_freed = (pages_peak > pages_after) ? (pages_peak - pages_after) : 0;
 		uint64_t leaks = (pages_after > pages_before) ? (pages_after - pages_before) : 0;
 
-		write_str("FASE40_D pages_before=");
+		write_str("MM_COW_D pages_before=");
 		write_dec_u64(pages_before);
 		write_str(" pages_after=");
 		write_dec_u64(pages_after);
@@ -329,7 +329,7 @@ int main(void)
 	rc = test_mmap_fork_semantics();
 	rd = test_memory_growth();
 
-	write_str("FASE40_SUMMARY A=");
+	write_str("MM_COW_SUMMARY A=");
 	write_dec_u64((uint64_t)ra);
 	write_str(" B=");
 	write_dec_u64((uint64_t)rb);

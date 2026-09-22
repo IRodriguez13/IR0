@@ -6,8 +6,8 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: host_fase48_stub.c
- * Description: No-op fase48 FD stats + KTM emit stubs for host-linked pipe.c
+ * File: host_pipe_fd_stub.c
+ * Description: No-op FD stats + KTM emit stubs for host-linked pipe.c
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

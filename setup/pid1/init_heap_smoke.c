@@ -67,7 +67,7 @@ int main(void)
 		brk_target = base + 4096U;
 		if ((uintptr_t)syscall(SYS_brk, (void *)brk_target) != brk_target)
 		{
-			write_str("FASE39_HEAP FAIL sbrk_and_brk\n");
+			write_str("HEAP_SMOKE FAIL sbrk_and_brk\n");
 			return 2;
 		}
 	}
@@ -79,7 +79,7 @@ int main(void)
 	brk_after = (uintptr_t)syscall(SYS_brk, 0);
 	heap_start = (uintptr_t)p;
 
-	write_str("FASE39_HEAP heap_start=");
+	write_str("HEAP_SMOKE heap_start=");
 	write_hex_u64((uint64_t)heap_start);
 	write_str(" heap_end=");
 	write_hex_u64((uint64_t)brk_after);

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE44 fork-wait-drain
+ * fork-wait-drain
  * 512 sequential fork+wait4; drain stragglers; exit init for kernel summary.
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE44_FORK_WAIT 512
+#define FORK_WAIT_DRAIN_N 512
 
 static void write_str(const char *s)
 {
@@ -59,7 +59,7 @@ int main(void)
 	int fork_fail = 0;
 	int wait_fail = 0;
 
-	for (int i = 0; i < FASE44_FORK_WAIT; i++)
+	for (int i = 0; i < FORK_WAIT_DRAIN_N; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -76,7 +76,7 @@ int main(void)
 
 	drain_children();
 
-	write_str("FASE44_FORK_WAIT_DRAIN children=");
+	write_str("FORK_WAIT_DRAIN children=");
 	write_dec_u64((uint64_t)started);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);

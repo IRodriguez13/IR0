@@ -1,5 +1,5 @@
 /**
- * IR0 userspace — KTM depth case (FASE42/44 storm analogue)
+ * IR0 userspace — KTM depth case (storm analogue)
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_fork_storm_case.c

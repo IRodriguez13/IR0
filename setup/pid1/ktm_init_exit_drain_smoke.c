@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE44 init-exit-drain
+ * init-exit-drain
  * Drain all children, then exit PID1; kernel reports remaining processes.
  */
 
@@ -46,6 +46,6 @@ int main(void)
 
 	drain_children();
 
-	write_str("FASE44_INIT_EXIT_DRAIN\n");
+	write_str("INIT_EXIT_DRAIN\n");
 	_exit(0);
 }

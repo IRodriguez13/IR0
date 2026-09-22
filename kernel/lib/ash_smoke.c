@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE58K — compact ash interactive smoke tags.
+ * Compact ash interactive smoke tags.
  */
 
 #include <ir0/ash_smoke.h>

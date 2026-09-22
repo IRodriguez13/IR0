@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE45 fork rollback storm
+ * fork rollback storm
  * 2048x fork/wait; many forks fail under memory pressure — rollback must leave
  * no visible child residue.
  */
@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE45_FORK_STORM 2048
+#define FORK_ROLLBACK_N 2048
 
 static void write_str(const char *s)
 {
@@ -104,7 +104,7 @@ int main(void)
 	int fork_fail = 0;
 	int wait_fail = 0;
 
-	for (int i = 0; i < FASE45_FORK_STORM; i++)
+	for (int i = 0; i < FORK_ROLLBACK_N; i++)
 	{
 		pid_t pid = fork();
 
@@ -124,8 +124,8 @@ int main(void)
 	drain_children();
 	frames_after = read_used_kb();
 
-	write_str("FASE45_FORK_ROLLBACK_STORM loops=");
-	write_dec_u64((uint64_t)FASE45_FORK_STORM);
+	write_str("FORK_ROLLBACK_STORM loops=");
+	write_dec_u64((uint64_t)FORK_ROLLBACK_N);
 	write_str(" fork_ok=");
 	write_dec_u64((uint64_t)fork_ok);
 	write_str(" fork_fail=");

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE48 IPC + shell readiness smokes:
+ * IPC + shell readiness smokes:
  *   A) pipe_pingpong
  *   B) pipe_exec (fork + dup2 + exec cat)
  *   C) pipeline (echo | cat | cat)
@@ -275,21 +275,21 @@ int main(void)
 	int ok_c = 0;
 	int ok_d = 0;
 
-	write_str("FASE48_START\n");
+	write_str("IPC_START\n");
 	reap_all_children();
 	ok_a = (test_pipe_pingpong() == 0);
 	reap_all_children();
 	ok_b = (test_pipe_exec() == 0);
 	reap_all_children();
 	ok_c = (test_pipeline() == 0);
-	write_str("FASE48_PIPELINE_DONE\n");
+	write_str("IPC_PIPELINE_DONE\n");
 	reap_all_children();
 	ok_d = (test_busybox_probe() == 0);
 
 	drain_sentinel();
 	fd_after = count_open_fds();
 
-	write_str("FASE48_IPC fd_before=3 fd_after=");
+	write_str("IPC_SMOKE fd_before=3 fd_after=");
 	write_dec_u64((uint64_t)fd_after);
 	write_str(" pingpong=");
 	write_str(ok_a ? "OK" : "FAIL");
@@ -302,7 +302,7 @@ int main(void)
 	write_str("\n");
 
 	if (ok_d)
-		write_str("FASE48_BUSYBOX_PROBE_OK\n");
+		write_str("IPC_BUSYBOX_PROBE_OK\n");
 
 	for (;;)
 		(void)pause();

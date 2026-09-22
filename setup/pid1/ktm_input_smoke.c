@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE54B — Minimal fbdev + input interaction harness.
+ * Minimal fbdev + input interaction harness.
  */
 
 #include <unistd.h>

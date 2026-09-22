@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE52 — TinyCC bootstrap: static link, generated exec, stdio, medium C programs.
+ * TinyCC bootstrap: static link, generated exec, stdio, medium C programs.
  */
 
 #include <unistd.h>

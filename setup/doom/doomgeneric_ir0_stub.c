@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE55B — doomgeneric-style userspace stub over generic IR0 devices.
+ * doomgeneric-style userspace stub over generic IR0 devices.
  */
 
 #include <unistd.h>
@@ -127,10 +127,10 @@ static void write_str(const char *s)
 
 static void fail_step(const char *step)
 {
-    write_str("[FASE55B][FAIL] step=");
+    write_str("[KTM_DOOM_STUB][FAIL] step=");
     write_str(step ? step : "(null)");
     write_str("\n");
-    write_str("FASE55B_FAIL_REASON=");
+    write_str("KTM_DOOM_STUB_FAIL_REASON=");
     write_str(step ? step : "unknown");
     write_str("\n");
 }
@@ -242,8 +242,8 @@ int main(void)
     int64_t t0;
     int64_t t1;
 
-    write_str("FASE55B_START\n");
-    write_str("FASE55B_DOOM_STUB_HARNESS_ID=doomgeneric_ir0_stub.c\n");
+    write_str("KTM_DOOM_STUB_START\n");
+    write_str("KTM_DOOM_STUB_HARNESS_ID=doomgeneric_ir0_stub.c\n");
     write_str("DOOM_STUB_BUILD_MODE=external-musl-staged\n");
 
     fd_fb = open("/dev/fb0", O_RDWR);
@@ -366,10 +366,11 @@ int main(void)
 
     write_str("DOOM_STUB_FRAME_LOOP_OK\n");
     write_str("DOOM_STUB_TIMED_LOOP_OK\n");
-    write_str("FASE55B_DOOM_STUB_OK\n");
+    write_str("KTM_DOOM_STUB_OK\n");
+    write_str("KTM_DOOM_STUB_DOOM_STUB_OK\n");
     if (caps_ok && injected_ok)
     {
-        write_str("FASE55C_OK\n");
+        write_str("KTM_DOOM_TIMING_OK\n");
     }
 
     close(fd_in);

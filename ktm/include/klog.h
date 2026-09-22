@@ -16,7 +16,7 @@
  *     (COMP BOOT) after serial_init; VGA/FB also gets a console_puts copy.
  *   - KTM = testing protocol (TEST, ASSERT, INVARIANT, KTM| transport).
  *     Consumes the same serial sink; not the name of the human logger.
- *   - Userspace smoke tags (runit stages, FASE harnesses): bare tokens via
+ *   - Userspace smoke tags (runit stages, KTM harnesses): bare tokens via
  *     ir0_smoke_tag() / write(1) — same role as klog_smoke() for autokill.
  *   - QEMU host chatter: kept out of the guest serial log (sibling
  *     *.qemu-stderr from scripts/smoke_autokill.py).

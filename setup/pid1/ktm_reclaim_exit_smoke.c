@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE41 reclaim smoke:
+ * reclaim smoke:
  * A) exit reclaim loop with mmap/touch/exit
  * B) exec reclaim loop (fork + mmap + exec /bin/f41true)
  */
@@ -11,8 +11,8 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE41_ITERS 64
-#define FASE41_ALLOC (64 * 1024)
+#define RECLAIM_ITERS 64
+#define RECLAIM_ALLOC (64 * 1024)
 
 static void write_str(const char *s)
 {
@@ -91,20 +91,20 @@ static int run_exit_reclaim(void)
 	long used_after;
 	uint64_t wait_fail = 0;
 
-	for (int i = 0; i < FASE41_ITERS; i++)
+	for (int i = 0; i < RECLAIM_ITERS; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
 		{
 			volatile unsigned char *m;
 
-			m = (volatile unsigned char *)mmap(NULL, FASE41_ALLOC,
+			m = (volatile unsigned char *)mmap(NULL, RECLAIM_ALLOC,
 						      PROT_READ | PROT_WRITE,
 						      MAP_PRIVATE | MAP_ANONYMOUS,
 						      -1, 0);
 			if (m != MAP_FAILED)
 			{
-				for (size_t o = 0; o < FASE41_ALLOC; o += 4096)
+				for (size_t o = 0; o < RECLAIM_ALLOC; o += 4096)
 					m[o] = (unsigned char)(o >> 12);
 			}
 			_exit(0);
@@ -126,7 +126,7 @@ static int run_exit_reclaim(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE41_A frames_before=");
+	write_str("RECLAIM_A frames_before=");
 	write_dec_u64((used_before > 0) ? (uint64_t)(used_before / 4) : 0);
 	write_str(" frames_peak=");
 	write_dec_u64((used_peak > 0) ? (uint64_t)(used_peak / 4) : 0);
@@ -151,20 +151,20 @@ static int run_exec_reclaim(void)
 	uint64_t wait_fail = 0;
 	char *argv[] = { "/bin/f41true", NULL };
 
-	for (int i = 0; i < FASE41_ITERS; i++)
+	for (int i = 0; i < RECLAIM_ITERS; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
 		{
 			volatile unsigned char *m;
 
-			m = (volatile unsigned char *)mmap(NULL, FASE41_ALLOC,
+			m = (volatile unsigned char *)mmap(NULL, RECLAIM_ALLOC,
 						      PROT_READ | PROT_WRITE,
 						      MAP_PRIVATE | MAP_ANONYMOUS,
 						      -1, 0);
 			if (m != MAP_FAILED)
 			{
-				for (size_t o = 0; o < FASE41_ALLOC; o += 4096)
+				for (size_t o = 0; o < RECLAIM_ALLOC; o += 4096)
 					m[o] = 0xA5;
 			}
 			execve("/bin/f41true", argv, NULL);
@@ -177,7 +177,7 @@ static int run_exec_reclaim(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE41_B vmas_before=-1 vmas_after=-1 pages_before=");
+	write_str("RECLAIM_B vmas_before=-1 vmas_after=-1 pages_before=");
 	write_dec_u64((used_before > 0) ? (uint64_t)(used_before / 4) : 0);
 	write_str(" pages_after=");
 	write_dec_u64((used_after > 0) ? (uint64_t)(used_after / 4) : 0);
@@ -193,7 +193,7 @@ int main(void)
 	int ra = run_exit_reclaim();
 	int rb = run_exec_reclaim();
 
-	write_str("FASE41_SUMMARY A=");
+	write_str("RECLAIM_SUMMARY A=");
 	write_dec_u64((uint64_t)ra);
 	write_str(" B=");
 	write_dec_u64((uint64_t)rb);

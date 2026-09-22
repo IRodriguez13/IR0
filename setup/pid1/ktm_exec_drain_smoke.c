@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE44 exec-drain
+ * exec-drain
  * 1024x: fork -> exec("/bin/f41true") -> wait; exit init for kernel summary.
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE44_EXEC_LOOPS 1024
+#define EXEC_DRAIN_LOOPS 1024
 
 static void write_str(const char *s)
 {
@@ -59,7 +59,7 @@ int main(void)
 	int fork_fail = 0;
 	char *argv[] = { "/bin/f41true", NULL };
 
-	for (int i = 0; i < FASE44_EXEC_LOOPS; i++)
+	for (int i = 0; i < EXEC_DRAIN_LOOPS; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -78,8 +78,8 @@ int main(void)
 
 	drain_children();
 
-	write_str("FASE44_EXEC_DRAIN loops=");
-	write_dec_u64((uint64_t)FASE44_EXEC_LOOPS);
+	write_str("EXEC_DRAIN loops=");
+	write_dec_u64((uint64_t)EXEC_DRAIN_LOOPS);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);
 	write_str(" wait_fail=");

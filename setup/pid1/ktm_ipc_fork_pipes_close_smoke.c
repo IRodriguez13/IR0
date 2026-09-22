@@ -31,7 +31,7 @@ int main(void)
 	close(pc[1]);
 	close(cp[0]);
 	(void)waitpid(pid, NULL, 0);
-	write_str("FASE48_FORK_PIPES_CLOSE_OK\n");
+	write_str("IPC_FORK_PIPES_CLOSE_OK\n");
 	for (;;)
 		(void)pause();
 	return 0;

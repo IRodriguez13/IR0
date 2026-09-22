@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE50B — BusyBox minimal real smoke.
+ * BusyBox minimal real smoke.
  */
 
 #include <unistd.h>

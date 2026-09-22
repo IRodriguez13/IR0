@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE45 fork without exec
+ * fork without exec
  * fork → touch stack + heap → exit → wait (512 iterations).
  */
 
@@ -11,7 +11,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE45_FORK_TOUCH 512
+#define FORK_MEM_TOUCH_N 512
 
 static void write_str(const char *s)
 {
@@ -105,7 +105,7 @@ int main(void)
 	int fork_fail = 0;
 	int wait_fail = 0;
 
-	for (int i = 0; i < FASE45_FORK_TOUCH; i++)
+	for (int i = 0; i < FORK_MEM_TOUCH_N; i++)
 	{
 		pid_t pid = fork();
 
@@ -138,8 +138,8 @@ int main(void)
 	drain_children();
 	frames_after = read_used_kb();
 
-	write_str("FASE45_FORK_MEM_TOUCH loops=");
-	write_dec_u64((uint64_t)FASE45_FORK_TOUCH);
+	write_str("FORK_MEM_TOUCH loops=");
+	write_dec_u64((uint64_t)FORK_MEM_TOUCH_N);
 	write_str(" fork_ok=");
 	write_dec_u64((uint64_t)fork_ok);
 	write_str(" fork_fail=");

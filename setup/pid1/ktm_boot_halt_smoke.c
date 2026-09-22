@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE58C — Hold after kernel boot direct draw (no userspace FB writes).
+ * Hold after kernel boot direct draw (no userspace FB writes).
  */
 
 #include <unistd.h>

@@ -4,7 +4,7 @@
  * Copyright (C) 2025  Iván Rodriguez
  *
  * File: console.c
- * Description: Unified VGA text + VBE framebuffer console (FASE59B aesthetics).
+ * Description: Unified VGA text + VBE framebuffer console.
  */
 
 #include "console.h"

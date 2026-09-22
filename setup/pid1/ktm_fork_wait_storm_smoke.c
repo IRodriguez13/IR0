@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE43 fork-wait-storm
+ * fork-wait-storm
  * 256 iterations: fork child that sleeps briefly, parent wait4.
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE43_FORK_WAIT 256
+#define FORK_WAIT_STORM_N 256
 
 static void write_str(const char *s)
 {
@@ -45,7 +45,7 @@ int main(void)
 	int fork_fail = 0;
 	int wait_fail = 0;
 
-	for (int i = 0; i < FASE43_FORK_WAIT; i++)
+	for (int i = 0; i < FORK_WAIT_STORM_N; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -60,7 +60,7 @@ int main(void)
 			wait_fail++;
 	}
 
-	write_str("FASE43_FORK_WAIT_STORM children=");
+	write_str("FORK_WAIT_STORM children=");
 	write_dec_u64((uint64_t)started);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);

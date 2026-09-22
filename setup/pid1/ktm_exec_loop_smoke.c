@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE43 exec-loop
+ * exec-loop
  * 1024x: fork -> exec("/bin/f41true") -> wait
  */
 
@@ -9,7 +9,7 @@
 #include <sys/wait.h>
 #include <fcntl.h>
 
-#define FASE43_EXEC_LOOPS 1024
+#define EXEC_LOOP_N 1024
 
 static void write_str(const char *s)
 {
@@ -88,7 +88,7 @@ int main(void)
 	int fork_fail = 0;
 	char *argv[] = { "/bin/f41true", NULL };
 
-	for (int i = 0; i < FASE43_EXEC_LOOPS; i++)
+	for (int i = 0; i < EXEC_LOOP_N; i++)
 	{
 		pid_t pid = fork();
 		if (pid == 0)
@@ -106,8 +106,8 @@ int main(void)
 	}
 
 	used_after = read_used_kb();
-	write_str("FASE43_EXEC_LOOP loops=");
-	write_dec_u64((uint64_t)FASE43_EXEC_LOOPS);
+	write_str("EXEC_LOOP loops=");
+	write_dec_u64((uint64_t)EXEC_LOOP_N);
 	write_str(" fork_fail=");
 	write_dec_u64((uint64_t)fork_fail);
 	write_str(" wait_fail=");

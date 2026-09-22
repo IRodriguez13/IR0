@@ -46,7 +46,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_mount_prefix_boundary.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
-	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_fase48_stub.o \
+	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
 	host_open_flags.o \
 	host_sysfs_net_stub.o host_sysfs_honesty_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
@@ -80,7 +80,7 @@ host_serial_stub.o: host_serial_stub.c
 host_klog_stub.o: host_klog_stub.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-host_fase48_stub.o: host_fase48_stub.c
+host_pipe_fd_stub.o: host_pipe_fd_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 host_sysfs_honesty_stub.o: host_sysfs_honesty_stub.c
@@ -90,7 +90,7 @@ host_sysfs_net_stub.o: host_sysfs_net_stub.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_named_fifo.o: $(KERNEL_ROOT)/kernel/lib/named_fifo.c
-	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DCONFIG_DEBUG_FASE50=0 -c -o $@ $<
+	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DIR0_DEBUG_PROC=0 -c -o $@ $<
 
 test_credential_saved_ids.o: test_credential_saved_ids.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
@@ -102,7 +102,7 @@ host_mount_prefix.o: $(KERNEL_ROOT)/kernel/lib/mount_prefix.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
-	$(CC) $(KERNEL_CFLAGS) -DCONFIG_DEBUG_FASE50=0 -c -o $@ $<
+	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PROC=0 -c -o $@ $<
 
 host_blockdev.o: $(KERNEL_ROOT)/kernel/lib/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<

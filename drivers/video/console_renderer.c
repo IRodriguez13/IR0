@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * IR0 unified text console renderer — single cursor_pos for /dev/console,
- * TTY echo, and shell write. Classic 80x25 VT; FB cells scaled (FASE59B).
+ * TTY echo, and shell write. Classic 80x25 VT; FB cells scaled.
  */
 
 #include "console_renderer.h"

@@ -1,5 +1,5 @@
 /**
- * IR0 userspace — KTM init-exit drain case (FASE44 PID1 _exit)
+ * IR0 userspace — KTM init-exit drain case (PID1 _exit)
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: ktm_init_exit_drain_case.c
@@ -137,7 +137,7 @@ int main(void)
 
 	if (fails == 0)
 	{
-		say("FASE44_INIT_EXIT_DRAIN\n");
+		say("INIT_EXIT_DRAIN\n");
 		say("KTM_INIT_EXIT_DRAIN_OK\n");
 		_exit(0);
 	}

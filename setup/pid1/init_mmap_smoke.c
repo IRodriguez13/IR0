@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * FASE39 mmap smoke - validate mmap/munmap baseline behavior in ring 3.
+ * mmap smoke - validate mmap/munmap baseline behavior in ring 3.
  *
  * Sequence:
  * 1) mmap 16 KiB anonymous/private
@@ -50,7 +50,7 @@ int main(void)
 				    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (m == MAP_FAILED)
 	{
-		write_str("FASE39_MMAP FAIL mmap\n");
+		write_str("MMAP_SMOKE FAIL mmap\n");
 		return 2;
 	}
 	mapped = 1;
@@ -71,7 +71,7 @@ int main(void)
 	else
 		ok = 0;
 
-	write_str("FASE39_MMAP mapped=");
+	write_str("MMAP_SMOKE mapped=");
 	write_str(mapped ? "1" : "0");
 	write_str(" unmapped=");
 	write_str(unmapped ? "1" : "0");
@@ -81,7 +81,7 @@ int main(void)
 	write_hex_u64((uint64_t)(uintptr_t)m);
 	write_str("\n");
 
-	write_str("FASE39_MMAP touch_after_unmap=1 expected_segv=1\n");
+	write_str("MMAP_SMOKE touch_after_unmap=1 expected_segv=1\n");
 
 	/*
 	 * Must fault after munmap. If execution continues, munmap invalidation
@@ -89,6 +89,6 @@ int main(void)
 	 */
 	((volatile unsigned char *)m)[0] = 0xA5;
 
-	write_str("FASE39_MMAP FAIL no_segv_after_unmap\n");
+	write_str("MMAP_SMOKE FAIL no_segv_after_unmap\n");
 	return 3;
 }
