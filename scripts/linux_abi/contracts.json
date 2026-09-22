@@ -157,6 +157,8 @@
       "enabled": true,
       "title": "ioctl(2) console TTY",
       "status_doc": "VERIFIED",
+      "done_tag": "IOCTLTTYOK",
+      "linux_ref": "drivers/tty/tty_ioctl.c; musl src/termios/tcgetattr.c; man7 ioctl_tty(2)",
       "smokes": [
         "smoke-runit-ash-interactive",
         "smoke-ctrl-c-spam"

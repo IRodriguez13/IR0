@@ -149,6 +149,8 @@
 #define __NR_epoll_pwait   281
 #define __NR_epoll_create1 291
 #define __NR_pselect6      270
+#define __NR_ppoll         271
+#define __NR_dup3          292
 #define __NR_statfs       137
 #define __NR_fstatfs      138
 #define __NR_mount        165
@@ -166,6 +168,7 @@
 #define __NR_get_robust_list 274
 #define __NR_getrandom       318
 #define __NR_memfd_create    319
+#define __NR_execveat        322
 #define __NR_timerfd_create  283
 #define __NR_timerfd_settime 286
 #define __NR_timerfd_gettime 287

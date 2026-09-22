@@ -28,6 +28,8 @@ struct vfs_dirent;
 typedef struct {
     const char *name;
     uint32_t mode;        // File permissions
+    uid_t uid;            // Runtime node owner (devpts grantpt/chown)
+    gid_t gid;            // Runtime node group
     uint32_t device_id;   // Device identifier
     /*
      * Linux (major,minor) for nodes that have a canonical upstream number,
@@ -104,6 +106,7 @@ devfs_node_t *devfs_find_node_by_id(uint32_t device_id);
 devfs_node_t *devfs_find_node_by_rdev(uint32_t rdev);
 int devfs_register_node(devfs_node_t *node);
 int devfs_register_device(const char *name, const devfs_ops_t *ops, uint32_t mode);
+int devfs_chown_path(const char *path, uid_t owner, gid_t group);
 int devfs_unregister_device(const char *name);
 int devfs_fd_can_read(uint32_t device_id, pid_t pid);
 int devfs_fd_can_write(uint32_t device_id, pid_t pid);

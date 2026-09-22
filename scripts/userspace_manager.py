@@ -54,6 +54,7 @@ USMANG_HELP_LINES = (
     "              Optional: --packages pkg[,pkg...] checks only those entries;",
     "              logs each failure and continues (does not abort mid-run)",
     "  boot-contract  Staged init audit + expected QEMU serial tags (read-only)",
+    "  admin       Show ADMIN_ELEVATION (doas|sudo) for profile",
     "  help        This legend",
     "  tui         Interactive curses inspector (default when make usmang on a TTY)",
     "",
@@ -106,6 +107,86 @@ def profile_init_system(isd: Path, profile: str) -> str:
     return init if init in ("runit", "sysvinit", "openrc") else "runit"
 
 
+def isdconfig_path(isd: Path, profile: str) -> Path:
+    env = os.environ.get("ISD_CONFIG")
+    if env:
+        return Path(env)
+    return isd / ".isdconfig.d" / profile
+
+
+def profile_admin_elevation(isd: Path, profile: str) -> str:
+    """Effective admin tool: profile.conf default, .isdconfig.d override."""
+    tool = profile_conf(isd, profile).get("ADMIN_ELEVATION", "doas")
+    cfg = parse_kv(read_text(isdconfig_path(isd, profile)))
+    override = cfg.get("ADMIN_ELEVATION", "").strip().lower()
+    if override in ("doas", "sudo"):
+        tool = override
+    pkg_sudo = cfg.get("CONFIG_PKG_SUDO", "n").lower() in ("y", "yes", "1")
+    pkg_doas = cfg.get("CONFIG_PKG_OPENDOAS", "n").lower() in ("y", "yes", "1")
+    if pkg_sudo:
+        tool = "sudo"
+    elif pkg_doas and override != "sudo":
+        tool = "doas"
+    return tool if tool in ("doas", "sudo") else "doas"
+
+
+def admin_package_for(tool: str) -> str:
+    return "sudo" if tool == "sudo" else "opendoas"
+
+
+def profile_wants_admin(isd: Path, profile: str) -> bool:
+    packages = profile_packages(isd, profile)
+    if "opendoas" in packages or "sudo" in packages:
+        return True
+    conf = profile_conf(isd, profile)
+    if conf.get("ADMIN_ELEVATION", "").lower() in ("doas", "sudo"):
+        return True
+    if conf.get("LOGIN_POLICY") == "firstboot":
+        return True
+    cfg = parse_kv(read_text(isdconfig_path(isd, profile)))
+    for key in ("CONFIG_PKG_OPENDOAS", "CONFIG_PKG_SUDO"):
+        if cfg.get(key, "n").lower() in ("y", "yes", "1"):
+            return True
+    return False
+
+
+def write_admin_elevation(isd: Path, profile: str, tool: str) -> Path:
+    """Persist ADMIN_ELEVATION to profile-local .isdconfig.d (gitignored)."""
+    if tool not in ("doas", "sudo"):
+        raise ValueError(f"invalid admin tool: {tool!r}")
+    cfg_path = isdconfig_path(isd, profile)
+    cfg_path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    if cfg_path.is_file():
+        for raw in read_text(cfg_path).splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                lines.append(raw)
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key in ("ADMIN_ELEVATION", "CONFIG_PKG_OPENDOAS", "CONFIG_PKG_SUDO"):
+                continue
+            lines.append(raw)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and lines[-1].strip():
+        lines.append("")
+    lines.append(f"ADMIN_ELEVATION={tool}")
+    pkg = "SUDO" if tool == "sudo" else "OPENDOAS"
+    other = "OPENDOAS" if tool == "sudo" else "SUDO"
+    if profile_wants_admin(isd, profile):
+        lines.append(f"CONFIG_PKG_{pkg}=y")
+        lines.append(f"CONFIG_PKG_{other}=n")
+    cfg_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return cfg_path
+
+
+def toggle_admin_elevation(isd: Path, profile: str) -> tuple[str, Path]:
+    current = profile_admin_elevation(isd, profile)
+    new_tool = "sudo" if current == "doas" else "doas"
+    return new_tool, write_admin_elevation(isd, profile, new_tool)
+
+
 def list_profiles(isd: Path) -> list[str]:
     root = isd / "profiles"
     if not root.is_dir():
@@ -131,9 +212,11 @@ def build_summary_lines(isd: Path, profile: str, arch: str) -> list[str]:
     ver = cmd_version(isd, profile, arch)
     land = cmd_userland(isd, profile)
     pkg = cmd_packages(isd, profile)
+    admin = profile_admin_elevation(isd, profile)
     lines = [
         f"ISD {ver.get('isd_version_file')}  profile={profile}  arch={arch}",
         f"userland={land['userland_base']}  init={land['init_system']}",
+        f"admin={admin}  pkg={admin_package_for(admin)}",
         f"packages={pkg['count']} "
         f"(first={pkg['first_party']}, third={pkg['third_party']})",
     ]
@@ -158,6 +241,7 @@ def tui_help_lines() -> list[str]:
         "  Enter            set active profile",
         "  v                verify staged rootfs (ISD script)",
         "  c                boot-contract audit (init + expected serial tags)",
+        "  a                toggle admin tool (doas ↔ sudo)",
         "  s                refresh summary",
         "  h / ?            toggle this help",
         "  q                quit",
@@ -230,7 +314,7 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
         return 2
     selected = profiles.index(profile) if profile in profiles else 0
     active = profiles[selected]
-    message = "h/? help  v verify  c boot-contract  Enter apply  q quit"
+    message = "h/? help  a admin  v verify  c boot-contract  Enter apply  q quit"
     show_help = False
     help_scroll = 0
     while True:
@@ -262,6 +346,17 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
             continue
         if key == ord("s"):
             message = "summary refreshed"
+            continue
+        if key == ord("a"):
+            try:
+                new_tool, cfg_path = toggle_admin_elevation(isd, active)
+            except ValueError as exc:
+                message = str(exc)[: width_msg(screen)]
+                continue
+            message = (
+                f"admin → {new_tool} ({admin_package_for(new_tool)}); "
+                f"wrote {cfg_path.name}; rebuild ISD rootfs"
+            )
             continue
         if key == ord("v"):
             payload, code = cmd_verify(isd, active, arch, None)
@@ -344,14 +439,33 @@ def cmd_packages(isd: Path, profile: str) -> dict:
 def cmd_userland(isd: Path, profile: str) -> dict:
     base = profile_userland(isd, profile)
     init = profile_init_system(isd, profile)
+    admin = profile_admin_elevation(isd, profile)
     return {
         "userland_base": base,
         "init_system": init,
+        "admin_elevation": admin,
+        "admin_package": admin_package_for(admin),
         "init_implemented": init in ("runit", "sysvinit", "openrc"),
         "implemented": base == "busybox",
         "coreutils": "reserved — IR0 must grow Linux surface before selecting it",
         "busybox_matrix": str(isd / "packages/busybox/bb_status.tsv"),
         "note": "Userspace shapes IR0: do not patch BusyBox/coreutils to hide ABI gaps",
+    }
+
+
+def cmd_admin(isd: Path, profile: str) -> dict:
+    tool = profile_admin_elevation(isd, profile)
+    cfg = isdconfig_path(isd, profile)
+    return {
+        "profile": profile,
+        "admin_elevation": tool,
+        "admin_package": admin_package_for(tool),
+        "profile_wants_admin": profile_wants_admin(isd, profile),
+        "isdconfig": str(cfg),
+        "persist": (
+            "Toggle in usmang TUI (a) writes ADMIN_ELEVATION to .isdconfig.d/<profile>; "
+            "rebuild ISD rootfs to apply."
+        ),
     }
 
 
@@ -604,7 +718,10 @@ def main() -> int:
     parser.add_argument("--arch", default=os.environ.get("ISD_ARCH", "x86_64"))
     parser.add_argument("--json", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("version", "packages", "userland", "desktop", "summary", "help", "boot-contract"):
+    for name in (
+        "version", "packages", "userland", "desktop", "summary", "help",
+        "boot-contract", "admin",
+    ):
         sub.add_parser(name)
     sub.add_parser("tui")
     verify_parser = sub.add_parser("verify")
@@ -651,6 +768,8 @@ def main() -> int:
         return curses.wrapper(tui, isd, args.profile, args.arch)
     elif args.command == "packages":
         payload = cmd_packages(isd, args.profile)
+    elif args.command == "admin":
+        payload = cmd_admin(isd, args.profile)
     elif args.command == "userland":
         payload = cmd_userland(isd, args.profile)
     elif args.command == "desktop":
@@ -699,6 +818,10 @@ def main() -> int:
             print(f"ISD {ver.get('isd_version_file')}  profile={args.profile}")
             print(f"  userland: {payload['userland']['userland_base']}")
             print(f"  init: {payload['userland']['init_system']}")
+            print(
+                f"  admin: {payload['userland']['admin_elevation']} "
+                f"({payload['userland']['admin_package']})"
+            )
             print(
                 f"  packages: {payload['packages']['count']} "
                 f"(first-party={payload['packages']['first_party']}, "

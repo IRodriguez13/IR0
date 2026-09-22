@@ -46,6 +46,7 @@
 #include <ir0/arch_cpu.h>
 #include <fs/vfs.h>
 #include <ir0/validation.h>
+#include <ir0/copy_user.h>
 #include <ir0/resource_registry.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/fd_types.h>
@@ -1452,12 +1453,69 @@ int proc_pid_exe_link_target_read(char *buf, size_t count, pid_t pid)
 	return len;
 }
 
+#define PROC_ENVIRON_VARS_MAX 256
+#define PROC_ENVIRON_ENTRY_MAX 4096
+
+/*
+ * Linux /proc/pid/environ reflects the process entry envp[] (live user memory),
+ * not only the exec-time snapshot. OpenRC's proc mount test compares md5sum of
+ * /proc/self/environ with VAR=a vs VAR=b — they must differ.
+ */
+static int proc_environ_read_live(const process_t *proc, char *buf, size_t count)
+{
+	uint64_t envp_array;
+	size_t pos = 0;
+	int i;
+
+	if (!proc || proc->mode != USER_MODE || proc != current_process)
+		return 0;
+
+	envp_array = proc->exec_envp_user;
+	if (!envp_array ||
+	    !is_user_address((const void *)(uintptr_t)envp_array, sizeof(uint64_t)))
+		return 0;
+
+	for (i = 0; i < PROC_ENVIRON_VARS_MAX; i++)
+	{
+		uint64_t str_ptr = 0;
+		char entry[PROC_ENVIRON_ENTRY_MAX];
+		const void *slot = (const void *)(uintptr_t)(envp_array +
+							     (uint64_t)i *
+							     sizeof(uint64_t));
+		size_t len;
+
+		if (!is_user_address_checked(slot, sizeof(uint64_t), 1))
+			break;
+		if (copy_from_user(&str_ptr, slot, sizeof(str_ptr)) != 0)
+			break;
+		if (str_ptr == 0)
+			break;
+		if (!is_user_address_checked((const void *)(uintptr_t)str_ptr, 1, 1))
+			break;
+		if (copy_from_user_cstring(entry, sizeof(entry),
+					   (const char *)(uintptr_t)str_ptr) != 0)
+			break;
+
+		len = strlen(entry) + 1;
+		if (pos + len > count)
+		{
+			memcpy(buf + pos, entry, count - pos);
+			return (int)count;
+		}
+		memcpy(buf + pos, entry, len);
+		pos += len;
+	}
+
+	return (int)pos;
+}
+
 int proc_pid_environ_read(char *buf, size_t count, pid_t pid)
 {
 	process_t *proc;
 	char *blob;
 	size_t blob_len;
 	unsigned long irqf;
+	int live_len;
 
 	if (VALIDATE_BUFFER(buf, count) != 0)
 		return -1;
@@ -1474,7 +1532,22 @@ int proc_pid_environ_read(char *buf, size_t count, pid_t pid)
 			proc = proc->next;
 	}
 
-	if (!proc || !proc->saved_environ || proc->saved_environ_len == 0)
+	if (!proc)
+	{
+		irq_restore(irqf);
+		return 0;
+	}
+
+	if (proc == current_process && proc->mode == USER_MODE)
+	{
+		irq_restore(irqf);
+		live_len = proc_environ_read_live(proc, buf, count);
+		if (live_len > 0)
+			return live_len;
+		irqf = irq_save();
+	}
+
+	if (!proc->saved_environ || proc->saved_environ_len == 0)
 	{
 		irq_restore(irqf);
 		return 0;

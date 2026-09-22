@@ -33,6 +33,7 @@
 #include <ir0/arch_cpu.h>
 #include <ir0/clock.h>
 #include <ir0/pipe.h>
+#include <ir0/pipe_fd.h>
 #include <ir0/vfs.h>
 #include <ir0/memfd.h>
 #include <ir0/named_socket.h>
@@ -958,7 +959,7 @@ static void scm_rights_dtor(void *entry, size_t sz)
 	if (!e || !e->in_use)
 		return;
 	if (e->is_pipe && e->vfs_file)
-		pipe_close_end((pipe_t *)e->vfs_file, e->pipe_end);
+		pipe_fd_entry_release_refs((pipe_t *)e->vfs_file, e);
 	else if (e->is_socket && e->vfs_file)
 	{
 		if (sock_stream_is(e->vfs_file))
@@ -973,6 +974,12 @@ static void scm_rights_dtor(void *entry, size_t sz)
 		devfs_node_t *node = fd_entry_devfs_node(e);
 
 		if (e->vfs_file &&
+		    devfs_is_ptmx_device(e->dev_device_id))
+		{
+			devfs_pty_master_release_vfs(e->vfs_file);
+			e->vfs_file = NULL;
+		}
+		else if (e->vfs_file &&
 		    devfs_node_wants_text_snap(e->dev_device_id))
 		{
 			devfs_text_snap_release((devfs_text_snap_t *)e->vfs_file);
@@ -1008,7 +1015,7 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 	*dst = tab[srcfd];
 	dst->fd_flags = 0;
 	if (dst->is_pipe && dst->vfs_file)
-		pipe_acquire_end((pipe_t *)dst->vfs_file, dst->pipe_end);
+		pipe_fd_entry_acquire_refs(dst);
 	else if (dst->is_socket && dst->vfs_file)
 	{
 		if (sock_stream_is(dst->vfs_file))
@@ -1025,6 +1032,11 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 		if (node)
 			node->ref_count++;
 		if (dst->vfs_file &&
+		    devfs_is_ptmx_device(dst->dev_device_id))
+			devfs_pty_master_dup_vfs(dst->vfs_file);
+		else if (devfs_is_pts_device(dst->dev_device_id))
+			devfs_pty_slave_dup_device(dst->dev_device_id);
+		else if (dst->vfs_file &&
 		    devfs_node_wants_text_snap(dst->dev_device_id))
 			devfs_text_snap_acquire((devfs_text_snap_t *)dst->vfs_file);
 	}

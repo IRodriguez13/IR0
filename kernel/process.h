@@ -182,6 +182,8 @@ typedef struct process
 	 */
 	char *saved_environ;
 	size_t saved_environ_len;
+	/* User VA of envp[] built on the stack at last exec (rdx at entry). */
+	uint64_t exec_envp_user;
 	/* NUL-separated argv blob for /proc/<pid>/cmdline (set at exec). */
 	char *saved_cmdline;
 	size_t saved_cmdline_len;

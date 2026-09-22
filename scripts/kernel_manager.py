@@ -59,6 +59,7 @@ class KernelStore:
         isd_root: Path | None = None,
         isd_disk: Path | None = None,
         machine_disk: Path | None = None,
+        root_fs: str = "minix",
     ) -> None:
         self.machine_dir = machine_dir.resolve()
         self.arch = arch
@@ -68,6 +69,7 @@ class KernelStore:
         self.isd_root = isd_root.resolve() if isd_root else None
         self.isd_disk = isd_disk.resolve() if isd_disk else None
         self.machine_disk = machine_disk.resolve() if machine_disk else None
+        self.root_fs = root_fs if root_fs in ("minix", "ext2") else "minix"
         self.kernels = self.machine_dir / "kernels"
         self.current = self.machine_dir / "kernel-current.iso"
         self.fallback = self.machine_dir / "kernel-fallback.iso"
@@ -108,9 +110,10 @@ class KernelStore:
         if session not in (IR0_LOGIN_SESSION_TERMINAL, IR0_LOGIN_SESSION_X):
             raise ValueError(f"unsupported login session: {session}")
         disk = self.persistent_disk
-        if not disk.is_file():
+        if not disk.is_file() or disk.stat().st_size == 0:
             raise ValueError(
-                f"machine disk missing: {disk} (provision with make first-boot/poweron)"
+                f"machine disk missing or empty: {disk}\n"
+                + "\n".join(f"  {line}" for line in self.poweron_recipe_lines())
             )
         if self.kernel_root is None:
             raise ValueError("kernel root is not configured for login-session inject")
@@ -302,11 +305,66 @@ class KernelStore:
             if path is None:
                 continue
             if path.is_file():
-                size_m = path.stat().st_size // (1024 * 1024)
-                bits.append(f"{label}={size_m}M")
+                size = path.stat().st_size
+                if size == 0:
+                    bits.append(f"{label}=EMPTY")
+                else:
+                    bits.append(f"{label}={size // (1024 * 1024)}M")
             else:
                 bits.append(f"{label}=missing")
         return ", ".join(bits) if bits else "disks not configured"
+
+    def expected_kernel_iso_name(self) -> str:
+        if self.root_fs == "ext2":
+            return "kernel-x64-ext2-root.iso"
+        return "kernel-x64-userspace.iso"
+
+    def machine_disk_health(self) -> tuple[str, str]:
+        """Return (level, message) with level in ok|warn|bad."""
+        machine = self.persistent_disk
+        if not machine.is_file() or machine.stat().st_size == 0:
+            return (
+                "bad",
+                "machine disk missing or empty (kexecve /sbin/init → ENOSYS)",
+            )
+        base = self.isd_disk
+        machine_size = machine.stat().st_size
+        if base is None or not base.is_file():
+            return ("warn", f"machine disk {machine_size // (1024 * 1024)}M")
+        base_size = base.stat().st_size
+        if base_size > 0 and machine_size < base_size:
+            return (
+                "bad",
+                f"machine disk too small ({machine_size} < base {base_size} bytes)",
+            )
+        return ("ok", f"machine disk {machine_size // (1024 * 1024)}M")
+
+    def poweron_recipe_lines(self) -> list[str]:
+        profile = self.profile
+        root_fs = self.root_fs
+        iso = self.expected_kernel_iso_name()
+        lines: list[str] = []
+        if self.machine_disk_health()[0] != "ok":
+            lines.append(
+                f"make machine-reset PROFILE={profile} ROOT_FS={root_fs} "
+                "CONFIRM_RESET=yes"
+            )
+        lines.append(f"make poweron PROFILE={profile} ROOT_FS={root_fs}")
+        lines.append(f"  KERNEL …/{iso}")
+        lines.append("  serial: [VFS] vfs_mount OK before exec /sbin/init")
+        return lines
+
+    def poweron_recipe_compact(self, max_width: int = 76) -> str:
+        return _clip(
+            f"make poweron PROFILE={self.profile} ROOT_FS={self.root_fs}",
+            max_width,
+        )
+
+    def assert_boot_ready(self) -> None:
+        level, detail = self.machine_disk_health()
+        if level == "bad":
+            recipe = "\n".join(f"  {line}" for line in self.poweron_recipe_lines())
+            raise ValueError(f"{detail}\n{recipe}")
 
     def _iso_has_bootable_kernel(self, image: Path) -> bool:
         """True when xorriso can extract a supported /boot/kernel*.bin payload."""
@@ -762,6 +820,35 @@ KMANG_HELP_SECTIONS: tuple[HelpSection, ...] = (
         ),
     ),
     HelpSection(
+        "Product boot (run from IR0/)",
+        (
+            HelpEntry(
+                "",
+                "Persistent machine = PROFILE + ROOT_FS + IR0-machines/…/disk.img.",
+            ),
+            HelpEntry(
+                "",
+                "Empty disk.img → no root mount → kexecve /sbin/init ret=-38 (ENOSYS).",
+            ),
+            HelpEntry(
+                "",
+                "Reset: make machine-reset PROFILE=<p> ROOT_FS=<fs> CONFIRM_RESET=yes",
+            ),
+            HelpEntry(
+                "",
+                "Boot:  make poweron PROFILE=<p> ROOT_FS=<fs>",
+            ),
+            HelpEntry(
+                "",
+                "EXT2: ROOT_FS=ext2 + kernel-x64-ext2-root.iso (not userspace.iso).",
+            ),
+            HelpEntry(
+                "",
+                "Serial OK: [VFS] vfs_mount OK before exec /sbin/init.",
+            ),
+        ),
+    ),
+    HelpSection(
         "General",
         (
             HelpEntry("h / ? / F1", "Show this key legend"),
@@ -800,7 +887,7 @@ def format_help_compact(max_width: int = 76) -> str:
     return _clip(legend, max_width)
 
 
-def help_overlay_lines() -> list[tuple[bool, str]]:
+def help_overlay_lines(store: KernelStore | None = None) -> list[tuple[bool, str]]:
     rows: list[tuple[bool, str]] = [(True, "kmang — key legend")]
     rows.append((False, ""))
     for section in KMANG_HELP_SECTIONS:
@@ -810,6 +897,11 @@ def help_overlay_lines() -> list[tuple[bool, str]]:
                 rows.append((False, f"  {entry.keys:<14} {entry.description}"))
             else:
                 rows.append((False, f"  {entry.description}"))
+        rows.append((False, ""))
+    if store is not None:
+        rows.append((True, f"This machine ({store.profile}, ROOT_FS={store.root_fs})"))
+        for line in store.poweron_recipe_lines():
+            rows.append((False, f"  {line}"))
         rows.append((False, ""))
     while rows and rows[-1] == (False, ""):
         rows.pop()
@@ -923,6 +1015,7 @@ def tui_arm_prune(state: TuiConfirmState) -> tuple[TuiConfirmState, str, bool]:
 
 def _maybe_boot_after_select(store: KernelStore, screen: curses.window,
                             kernel_id: str) -> int | None:
+    store.assert_boot_ready()
     if not store.boot_session_prompt_capable():
         return None
     choice = _prompt_boot_session(screen, kernel_id)
@@ -967,7 +1060,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
             refresh_status = False
         selected = min(selected, max(0, len(entries) - 1))
         height, width = screen.getmaxyx()
-        list_top = 9
+        list_top = 10
         list_bottom = max(list_top, height - 4)
         visible = max(1, list_bottom - list_top)
         if selected < scroll:
@@ -988,7 +1081,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
 
         screen.erase()
         if show_help:
-            overlay = help_overlay_lines()
+            overlay = help_overlay_lines(store)
             height, width = screen.getmaxyx()
             body_rows = max(1, height - 2)
             max_scroll = max(0, len(overlay) - body_rows)
@@ -1053,8 +1146,20 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
             sync_line = "Default matches Workspace (same id and SHA-256)"
             sync_attr = 0
         screen.addstr(7, 2, _clip(sync_line, width - 4), sync_attr)
-        screen.addstr(8, 2, "Installed:", curses.A_BOLD)
+        disk_level, disk_detail = store.machine_disk_health()
+        if disk_level == "bad":
+            disk_line = f"! {disk_detail} — h/? → Product boot"
+            disk_attr = curses.A_BOLD
+        elif disk_level == "warn":
+            disk_line = f"Disk: {disk_detail}"
+            disk_attr = 0
+        else:
+            disk_line = f"Boot: {store.poweron_recipe_compact(width - 8)}"
+            disk_attr = 0
+        screen.addstr(8, 2, _clip(disk_line, width - 4), disk_attr)
+        screen.addstr(9, 2, "Installed:", curses.A_BOLD)
 
+        list_top = 10
         if not entries:
             screen.addstr(list_top, 2, _clip("(empty — press i or r)", width - 4))
         for row, kernel_id in enumerate(entries[scroll: scroll + visible]):
@@ -1173,6 +1278,12 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                 refresh_status = True
                 confirm = tui_confirm_reset()
             elif key == ord("b"):
+                try:
+                    store.assert_boot_ready()
+                except ValueError as error:
+                    message = str(error).replace("\n", " | ")
+                    confirm = tui_confirm_reset()
+                    continue
                 store.resolve()
                 kernel_id = store.current_id() or "Default"
                 boot_rc = _maybe_boot_after_select(store, screen, kernel_id)
@@ -1199,6 +1310,7 @@ def main() -> int:
     parser.add_argument("--isd-root", type=Path)
     parser.add_argument("--isd-disk", type=Path)
     parser.add_argument("--machine-disk", type=Path)
+    parser.add_argument("--root-fs", default="minix", choices=("minix", "ext2"))
     parser.add_argument("--make-arg", action="append", default=[])
     parser.add_argument("--source", type=Path)
     parser.add_argument("--version")
@@ -1234,6 +1346,7 @@ def main() -> int:
         isd_root=args.isd_root,
         isd_disk=args.isd_disk,
         machine_disk=args.machine_disk,
+        root_fs=args.root_fs,
     )
     store.machine_dir.mkdir(parents=True, exist_ok=True)
     lock_stream = store.lock_path.open("a+")

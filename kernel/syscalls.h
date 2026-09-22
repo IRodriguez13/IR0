@@ -79,6 +79,9 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
 int64_t sys_umount(const char *target, int flags);
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags);
 int64_t sys_poll(struct pollfd *fds, unsigned int nfds, int timeout_ms);
+int64_t sys_ppoll(struct pollfd *fds, unsigned int nfds,
+		  const struct timespec *timeout, const sigset_t *sigmask,
+		  size_t sigsetsize);
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem);
 int64_t sys_gettimeofday(struct timeval *tv, void *tz);
 

@@ -96,7 +96,7 @@ else
 	bad "D machine-update-kernel contract"
 fi
 if grep -q '^kmang: check-isd' $MK_ALL \
-	&& grep -A12 '^poweron:' $MK_ALL | grep -q 'kernel_manager.py' \
+	&& grep -A25 '^poweron:' $MK_ALL | grep -q 'kernel_manager.py' \
 	&& grep -q 'KMANG_PY' "$MK_BRIDGE" \
 	&& grep -q -- '--kernel-root' "$MK_BRIDGE"; then
 	ok "D kmang selects the persistent-machine boot kernel"

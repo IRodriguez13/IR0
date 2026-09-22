@@ -41,6 +41,7 @@
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
 #include <ir0/pipe.h>
+#include <ir0/pipe_fd.h>
 #include <ir0/sock_stream.h>
 #include <ir0/signals.h>
 #include <ir0/procfs.h>
@@ -337,6 +338,41 @@ static void ash_smoke_write_trace(int fd, const void *data, size_t count)
   ir0_ash_smoke_scan_stdout((const char *)data, count);
 }
 
+static int named_fifo_open_wait_peer(pipe_t *pipe, int end, int ir0_flags)
+{
+  int nonblock = (ir0_flags & IR0_O_NONBLOCK) != 0;
+
+  if (!pipe || !pipe->named)
+    return 0;
+
+  for (;;)
+  {
+    if (pipe_named_peer_is_open(pipe, end))
+      return 0;
+
+    if (nonblock)
+    {
+      /*
+       * Linux fifo(7): O_WRONLY|O_NONBLOCK with no reader → ENXIO.
+       * O_RDONLY|O_NONBLOCK opens immediately (EOF on read until writer).
+       */
+      if (end == 1)
+        return -ENXIO;
+      return 0;
+    }
+
+    if (signals_pause_should_interrupt(current_process))
+      return -EINTR;
+
+    {
+      int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+      if (sleep_ret < 0)
+        return (int)sleep_ret;
+    }
+  }
+}
+
 static int open_named_fifo_fd(const char *path, int ir0_flags)
 {
   pipe_t *pipe;
@@ -344,6 +380,7 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
   int accmode;
   int end;
   int fd = -1;
+  int wait_rc;
 
   pipe = named_fifo_lookup(path);
   if (!pipe)
@@ -377,7 +414,17 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
   fd_table[fd].is_devfs = false;
   fd_table[fd].is_socket = false;
 
-  pipe_acquire_end(pipe, end);
+  pipe_fd_entry_acquire_refs(&fd_table[fd]);
+  wait_rc = named_fifo_open_wait_peer(pipe, end, ir0_flags);
+  if (wait_rc != 0)
+  {
+    pipe_fd_entry_release_refs(pipe, &fd_table[fd]);
+    fd_table[fd].in_use = false;
+    fd_table[fd].vfs_file = NULL;
+    fd_table[fd].is_pipe = false;
+    return wait_rc;
+  }
+
   fd_slot_note_created();
   return fd;
 }
@@ -434,6 +481,7 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
   if (fd < 0)
     return -EMFILE;
 
+  memset(&fd_table[fd], 0, sizeof(fd_table[fd]));
   fd_table[fd].in_use = true;
   fd_entry_devfs_bind(&fd_table[fd], node);
   fd_table[fd].is_pipe = false;
@@ -636,7 +684,8 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     if (!pipe)
       return -EBADF;
 
-    if (fd_table[fd].pipe_end != 1)
+    if (fd_table[fd].pipe_end != 1 &&
+	(fd_table[fd].flags & O_ACCMODE) != O_RDWR)
       return -EBADF;
 
     /*
@@ -1171,7 +1220,27 @@ int64_t sys_fstat(int fd, stat_t *buf)
   if (!fd_table[fd].in_use)
     return -EBADF;
 
-  if (fd <= 2)
+  if (fd_table[fd].is_pipe)
+  {
+    /*
+     * Linux: fstat(2) on pipe/fifo fds reports S_IFIFO. Must run before the
+     * fd<=2 stdio fallback — PID1 may open /run/initctl as fd 0 when stdio
+     * is not installed yet (sysvinit check_init_fifo).
+     */
+    rc = ir0_stat_path_routed(fd_table[fd].path, &kst);
+    if (rc != 0 || !S_ISFIFO(kst.st_mode))
+    {
+      mode_t perm = 0600;
+
+      if (rc == 0)
+        perm = kst.st_mode & 07777;
+      memset(&kst, 0, sizeof(kst));
+      kst.st_mode = S_IFIFO | perm;
+      kst.st_nlink = 1;
+      rc = 0;
+    }
+  }
+  else if (fd <= 2)
   {
     memset(&kst, 0, sizeof(kst));
     kst.st_dev = 0;
@@ -1228,6 +1297,23 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
 
     if (prep_rc != 0)
       return prep_rc;
+  }
+
+  if (named_fifo_path_must_be_fifo(path_to_use))
+  {
+    stat_t vst;
+    char prep[256];
+
+    if (vfs_stat(path_to_use, &vst) == 0 && S_ISREG(vst.st_mode))
+      vfs_clear_stale_for_regular_file(path_to_use);
+    if (!named_fifo_lookup(path_to_use))
+    {
+      strncpy(prep, path_to_use, sizeof(prep) - 1);
+      prep[sizeof(prep) - 1] = '\0';
+      if (mknod_prepare_fifo_path(prep, sizeof(prep)) == 0 &&
+          named_fifo_create(prep, 0600) == 0)
+        mknod_purge_vfs_shadow(prep);
+    }
   }
 
   if (named_fifo_lookup(path_to_use))
@@ -1995,7 +2081,7 @@ int64_t sys_fchown(int fd, uid_t owner, gid_t group)
   if (current_process->euid != ROOT_UID)
     return -EPERM;
 
-  return vfs_chown(resolved, owner, group);
+  return ir0_chown_path_routed(resolved, owner, group);
 }
 
 int64_t sys_fchmodat(int dirfd, const char *pathname, mode_t mode, int flags)
@@ -2037,7 +2123,7 @@ int64_t sys_fchownat(int dirfd, const char *pathname, uid_t owner, gid_t group,
   if (current_process->euid != ROOT_UID)
     return -EPERM;
 
-  return vfs_chown(resolved, owner, group);
+  return ir0_chown_path_routed(resolved, owner, group);
 }
 
 /*

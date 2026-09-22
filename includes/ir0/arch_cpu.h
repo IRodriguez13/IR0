@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
+ * Copyright (C) 2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
@@ -10,12 +10,6 @@
  * File: arch_cpu.h
  * Description: Portable CPU/TLS/MM activate facades (x86 FS / ARM TPIDR, CR3/TTBR).
  */
-
-// ===============================================================================
-// IR0 KERNEL PORTABLE ARCHITECTURE INTERFACE
-// ===============================================================================
-// This file provides a portable interface for all supported architectures
-// All architecture-specific code should go through this interface
 
 #pragma once
 

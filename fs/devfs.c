@@ -2508,6 +2508,7 @@ struct pty_pair
 	int master_open;
 	int master_refs;
 	int slave_open;
+	int slave_refs;
 	int locked;
 	int ctty_set;
 	pid_t fg_pgid;
@@ -2551,7 +2552,7 @@ static int pty_alloc_master(void)
 
 	for (i = 0; i < DEVFS_PTY_MAX; i++)
 	{
-		if (!g_ptys[i].master_open)
+		if (!g_ptys[i].master_open && g_ptys[i].slave_refs == 0)
 			return i;
 	}
 	return -1;
@@ -2621,7 +2622,7 @@ void devfs_pty_master_release_vfs(const void *vfs_file)
 	pty_hangup_fg(p);
 	p->master_open = 0;
 	p->locked = 0;
-	p->slave_open = 0;
+	p->slave_open = p->slave_refs > 0;
 }
 
 void devfs_pty_master_dup_vfs(const void *vfs_file)
@@ -2635,6 +2636,19 @@ void devfs_pty_master_dup_vfs(const void *vfs_file)
 	if (!p || p->master_refs <= 0)
 		return;
 	p->master_refs++;
+}
+
+void devfs_pty_slave_dup_device(uint32_t device_id)
+{
+	struct pty_pair *p;
+
+	if (!devfs_is_pts_device(device_id))
+		return;
+	p = pty_slot((int)(device_id - DEVFS_PTS0_DEVICE_ID));
+	if (!p || p->slave_refs <= 0)
+		return;
+	p->slave_refs++;
+	p->slave_open = 1;
 }
 
 static void pty_termios_ensure(struct pty_pair *p)
@@ -3014,8 +3028,12 @@ static int64_t dev_ptmx_open(devfs_entry_t *entry, int flags)
 	p->master_refs = 1;
 	p->locked = 1;
 	p->slave_open = 0;
+	p->slave_refs = 0;
 	p->m2s.head = p->m2s.tail = p->m2s.count = 0;
 	p->s2m.head = p->s2m.tail = p->s2m.count = 0;
+	dev_pts_nodes[slot].entry.uid = 0;
+	dev_pts_nodes[slot].entry.gid = 0;
+	dev_pts_nodes[slot].entry.mode = 0620;
 	pty_termios_ensure(p);
 	g_ptmx_pending_slot = slot;
 	g_ptmx_pending_pid = devfs_current_pid();
@@ -3033,9 +3051,8 @@ static int64_t dev_pts_open(devfs_entry_t *entry, int flags)
 		return -EIO;
 	if (!p->master_open)
 		return -EIO;
-	if (p->slave_open)
-		return -EBUSY;
 	p->slave_open = 1;
+	p->slave_refs++;
 	return 0;
 }
 
@@ -3051,7 +3068,9 @@ static int64_t dev_pts_close(devfs_entry_t *entry)
 
 	if (!p)
 		return 0;
-	p->slave_open = 0;
+	if (p->slave_refs > 0)
+		p->slave_refs--;
+	p->slave_open = p->slave_refs > 0;
 	return 0;
 }
 
@@ -3183,6 +3202,111 @@ static const devfs_ops_t pts_ops = {
 	.close = dev_pts_close,
 	.can_read = dev_pts_can_read,
 	.can_write = dev_pts_can_write,
+};
+
+/*
+ * /dev/tty is the controlling terminal of the calling session, not an alias
+ * for /dev/console.  Linux resolves it dynamically (drivers/tty/tty_io.c);
+ * do the same so unmodified readpassphrase/sudo/OpenDoas reach their PTY.
+ */
+static struct pty_pair *dev_tty_current_pty(int *slot_out)
+{
+	int i;
+
+	if (!current_process)
+		return NULL;
+	for (i = 0; i < DEVFS_PTY_MAX; i++)
+	{
+		if (g_ptys[i].ctty_set &&
+		    g_ptys[i].session_sid == current_process->sid)
+		{
+			if (slot_out)
+				*slot_out = i;
+			return &g_ptys[i];
+		}
+	}
+	return NULL;
+}
+
+static int dev_tty_uses_console(void)
+{
+	return current_process &&
+	       ir0_console_has_ctty_for_sid((int32_t)current_process->sid);
+}
+
+static int64_t dev_tty_read(devfs_entry_t *entry, void *buf, size_t count,
+			    off_t offset)
+{
+	struct pty_pair *p = dev_tty_current_pty(NULL);
+
+	if (p)
+		return pty_ring_pop(&p->m2s, (char *)buf, count);
+	if (dev_tty_uses_console())
+		return dev_console_read(entry, buf, count, offset);
+	return -ENXIO;
+}
+
+static int64_t dev_tty_write(devfs_entry_t *entry, const void *buf,
+			     size_t count, off_t offset)
+{
+	int slot = -1;
+
+	if (dev_tty_current_pty(&slot))
+		return dev_pts_write(&dev_pts_nodes[slot].entry, buf, count, offset);
+	if (dev_tty_uses_console())
+		return dev_console_write(entry, buf, count, offset);
+	return -ENXIO;
+}
+
+static int64_t dev_tty_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+{
+	struct pty_pair *p;
+	int slot = -1;
+
+	p = dev_tty_current_pty(&slot);
+	if (p)
+		return pty_master_ioctl_pair(p, slot, request, arg);
+	if (dev_tty_uses_console())
+		return dev_console_ioctl(entry, request, arg);
+	return -ENXIO;
+}
+
+static int64_t dev_tty_open(devfs_entry_t *entry, int flags)
+{
+	(void)entry;
+	(void)flags;
+	return dev_tty_current_pty(NULL) || dev_tty_uses_console() ? 0 : -ENXIO;
+}
+
+static int dev_tty_can_read(devfs_entry_t *entry, pid_t pid)
+{
+	struct pty_pair *p = dev_tty_current_pty(NULL);
+
+	(void)entry;
+	(void)pid;
+	if (p)
+		return (p->m2s.count > 0 || !p->master_open) ? 1 : 0;
+	return dev_tty_uses_console() ? devfs_console_can_read(entry, pid) : 0;
+}
+
+static int dev_tty_can_write(devfs_entry_t *entry, pid_t pid)
+{
+	struct pty_pair *p = dev_tty_current_pty(NULL);
+
+	(void)entry;
+	(void)pid;
+	if (p)
+		return p->s2m.count < PTY_BUF_SIZE ? 1 : 0;
+	return dev_tty_uses_console() ? 1 : 0;
+}
+
+static const devfs_ops_t tty_ops = {
+	.read = dev_tty_read,
+	.write = dev_tty_write,
+	.ioctl = dev_tty_ioctl,
+	.open = dev_tty_open,
+	.can_read = dev_tty_can_read,
+	.can_write = dev_tty_can_write,
 };
 
 static devfs_node_t dev_ptmx = {
@@ -3386,7 +3510,7 @@ devfs_node_t dev_console = {
 
 devfs_node_t dev_tty = {
     .entry = { .name = "tty", .mode = 0620, .device_id = 4, .rdev = IR0_MKDEV(5, 0) },
-    .ops = &console_ops,
+    .ops = &tty_ops,
     .ref_count = 0
 };
 
@@ -3769,9 +3893,25 @@ int devfs_stat_path(const char *path, stat_t *buf)
     buf->st_mode = S_IFCHR | (node->entry.mode & 0777);
     buf->st_rdev = node->entry.device_id;
     buf->st_nlink = 1;
-    buf->st_uid = 0;
-    buf->st_gid = 0;
+    buf->st_uid = node->entry.uid;
+    buf->st_gid = node->entry.gid;
     buf->st_blksize = 512;
+    return 0;
+}
+
+int devfs_chown_path(const char *path, uid_t owner, gid_t group)
+{
+    devfs_node_t *node;
+
+    if (!path)
+        return -EINVAL;
+    node = devfs_find_node(path);
+    if (!node)
+        return -ENOENT;
+    if (owner != (uid_t)-1)
+        node->entry.uid = owner;
+    if (group != (gid_t)-1)
+        node->entry.gid = group;
     return 0;
 }
 

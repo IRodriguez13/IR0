@@ -41,6 +41,7 @@
 #include <ir0/chmod.h>
 #include <ir0/credentials.h>
 #include <ir0/permissions.h>
+#include <ir0/path_routed.h>
 #include <config.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/vdso.h>
@@ -948,6 +949,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     task_set_arg0(&process->task, (uint64_t)argc);
     task_set_arg1(&process->task, argv_array);
     task_set_arg2(&process->task, envp_array);
+    process->exec_envp_user = envp_array;
 
     kfree(argv_ptrs);
     kfree(envp_ptrs);
@@ -1296,7 +1298,7 @@ static void exec_setid_collect(const process_t *proc, const char *path,
 
 	if (!proc || !path)
 		return;
-	if (vfs_stat(path, &st) != 0)
+	if (ir0_stat_path_routed(path, &st) != 0)
 		return;
 	if (!S_ISREG(st.st_mode))
 		return;
@@ -1313,7 +1315,8 @@ static void exec_setid_collect(const process_t *proc, const char *path,
 	if (!vfs_path_allows_setid(path))
 	{
 		klog_notice_fmt("EXEC",
-				"nosuid mount: ignoring set-id bits on %s", path);
+				"nosuid mount: ignoring set-id bits on %s (mode=0%o)",
+				path, (unsigned)(st.st_mode & 07777));
 		return;
 	}
 
@@ -1326,6 +1329,14 @@ static void exec_setid_collect(const process_t *proc, const char *path,
 	{
 		out->raise_gid = 1;
 		out->new_egid = (uint32_t)st.st_gid;
+	}
+
+	if ((st.st_mode & S_ISUID) && out->raise_uid && out->new_euid != ROOT_UID)
+	{
+		klog_notice_fmt("EXEC",
+				"setuid on %s owner uid=%u (mode=0%o)",
+				path, (unsigned)st.st_uid,
+				(unsigned)(st.st_mode & 07777));
 	}
 }
 

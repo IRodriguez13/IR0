@@ -15,6 +15,10 @@
 #include "test_harness_ir0.h"
 #include <ir0/named_fifo.h>
 #include <ir0/path.h>
+#include <ir0/pipe.h>
+#include <ir0/pipe_fd.h>
+#include <ir0/fcntl.h>
+#include <ir0/errno.h>
 #include <ir0/stat.h>
 #include <ir0/types.h>
 #include <string.h>
@@ -60,6 +64,9 @@ void test_named_fifo_supervise(void)
 		"/etc/runit/sv/console/supervise/pid"));
 	ASSERT(!named_fifo_is_runsv_supervise_path(
 		"/etc/runit/sv/console/supervise/lock"));
+	ASSERT(named_fifo_path_must_be_fifo("/run/initctl"));
+	ASSERT(named_fifo_path_must_be_fifo("/run/openrc/init.ctl"));
+	ASSERT(!named_fifo_path_must_be_fifo("/run/.keep"));
 	TEST_END();
 
 	reset_named_fifo_table();
@@ -75,6 +82,13 @@ void test_named_fifo_supervise(void)
 
 	pipe = named_fifo_lookup("/etc/runit/sv/console/supervise/control");
 	ASSERT(pipe != NULL);
+	ASSERT(!pipe_named_peer_is_open(pipe, 0));
+	pipe_acquire_end(pipe, 0);
+	ASSERT(!pipe_named_peer_is_open(pipe, 0));
+	pipe_acquire_end(pipe, 1);
+	ASSERT(pipe_named_peer_is_open(pipe, 0));
+	pipe_close_end(pipe, 1);
+	pipe_close_end(pipe, 0);
 	TEST_END();
 
 	TEST_BEGIN("named_fifo_supervise_idempotent");
@@ -145,6 +159,39 @@ void test_named_fifo_supervise(void)
 		pipe_stats_get(&created1, &destroyed1);
 		ASSERT_EQ(destroyed1, destroyed0 + 1);
 		ASSERT_EQ(created1, created0 + 1);
+	}
+	TEST_END();
+
+	reset_named_fifo_table();
+
+	TEST_BEGIN("named_fifo_rdwr_empty_not_eof");
+	{
+		pipe_t *p;
+		fd_entry_t e;
+		int rd;
+
+		rc = named_fifo_create("/run/initctl", 0600);
+		ASSERT_EQ(rc, 0);
+		p = named_fifo_lookup("/run/initctl");
+		ASSERT(p != NULL);
+
+		memset(&e, 0, sizeof(e));
+		e.is_pipe = true;
+		e.pipe_end = 0;
+		e.vfs_file = p;
+		e.flags = O_RDWR | O_NONBLOCK;
+
+		pipe_fd_entry_acquire_refs(&e);
+		ASSERT(pipe_named_peer_is_open(p, 0));
+		ASSERT_EQ(p->writers, 1U);
+		ASSERT_EQ(p->readers, 1U);
+
+		rd = pipe_read(p, (void *)&rc, sizeof(rc));
+		ASSERT_EQ(rd, -EAGAIN);
+		ASSERT_EQ(fd_entry_pipe_can_read(&e), 0);
+		ASSERT_EQ(fd_entry_pipe_can_write(&e), 1);
+
+		pipe_fd_entry_release_refs(p, &e);
 	}
 	TEST_END();
 

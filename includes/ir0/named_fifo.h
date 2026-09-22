@@ -20,6 +20,7 @@
 
 int named_fifo_is_runsv_supervise_path(const char *path);
 int named_fifo_is_runsv_supervise_regular_path(const char *path);
+int named_fifo_path_must_be_fifo(const char *path);
 int named_fifo_create(const char *path, mode_t mode);
 int named_fifo_stat(const char *path, stat_t *buf);
 int named_fifo_unlink(const char *path);

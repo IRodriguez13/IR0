@@ -100,7 +100,7 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 				klog_debug_fmt("KERN", "%x fd=%llx refs_before=%llx end=%llx", (unsigned)((uint32_t)p->task.pid), (unsigned long long)((uint64_t)i), (unsigned long long)((uint64_t)refs_before), (unsigned long long)((uint64_t)e->pipe_end));
 			}
 			/* pipe_close_end wakes waiters then frees on last ref. */
-			pipe_close_end(pip, e->pipe_end);
+			pipe_fd_entry_release_refs(pip, e);
 			e->vfs_file = NULL;
 		}
 		else if (e->is_socket && e->vfs_file)

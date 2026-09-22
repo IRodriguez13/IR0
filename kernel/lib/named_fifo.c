@@ -116,6 +116,17 @@ int named_fifo_is_runsv_supervise_path(const char *path)
     return 0;
 }
 
+int named_fifo_path_must_be_fifo(const char *path)
+{
+    if (!path)
+        return 0;
+    if (strcmp(path, "/run/initctl") == 0)
+        return 1;
+    if (strcmp(path, "/run/openrc/init.ctl") == 0)
+        return 1;
+    return named_fifo_is_runsv_supervise_path(path);
+}
+
 static struct named_fifo_entry *named_fifo_find(const char *path)
 {
     char norm[256];

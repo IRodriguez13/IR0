@@ -836,7 +836,18 @@ int vfs_init_root(void)
 
     if (can_use_block_dev && !ir0_block_name_is_present(root_blk)) {
         VFS_ERR("No block device configured for root available");
+#if CONFIG_ENABLE_FS_TMPFS
+        VFS_MSG("falling back to tmpfs root (block device missing)");
+        ret = vfs_mount("none", "/", "tmpfs");
+        if (ret != 0) {
+            VFS_ERR("tmpfs fallback also failed");
+            return ret;
+        }
+        VFS_MSG("tmpfs root mounted (fallback, no block device)");
+        return 0;
+#else
         return -ENODEV;
+#endif
     }
 
     VFS_MSG("Mounting root filesystem...");

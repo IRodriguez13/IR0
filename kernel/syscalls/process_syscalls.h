@@ -68,6 +68,8 @@ int64_t sys_setuid(uid_t uid);
 int64_t sys_setgid(gid_t gid);
 int64_t sys_umask(mode_t mask);
 int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
+int64_t sys_execveat(int dirfd, const char *pathname, char *const argv[],
+		     char *const envp[], int flags);
 int64_t sys_fork(void);
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 		  int *child_tid, unsigned long tls);

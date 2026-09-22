@@ -11,11 +11,11 @@
  * Description: IR0 kernel source/header file
  */
 
+#include "process.h"
 #include <ir0/oops.h>
 #include <ir0/vga.h>
 #include <ir0/console_backend.h>
 #include <ir0/ktm/klog.h>
-#include "process.h"
 #include <ir0/arch_task.h>
 #include <stdint.h>
 #include <ir0/cpu.h>

@@ -86,6 +86,32 @@ void pipe_acquire_end(pipe_t *pipe, int end)
 			pipe->pipe_id, (uint64_t)(uint32_t)end,
 			(uint64_t)(uint32_t)pipe->readers,
 			(uint64_t)(uint32_t)pipe->writers);
+
+	if (pipe->named)
+	{
+		extern void pipe_wake_all(pipe_t *p);
+
+		pipe_wake_all(pipe);
+	}
+}
+
+int pipe_named_peer_is_open(pipe_t *pipe, int end)
+{
+	ir0_spinlock_t lock;
+	int peer;
+
+	if (!pipe || !pipe->named)
+		return 1;
+	if (end != 0 && end != 1)
+		return 0;
+
+	ir0_spin_lock(&lock);
+	if (end == 0)
+		peer = (pipe->writers > 0);
+	else
+		peer = (pipe->readers > 0);
+	ir0_spin_unlock(&lock);
+	return peer;
 }
 
 void pipe_acquire(pipe_t *pipe)

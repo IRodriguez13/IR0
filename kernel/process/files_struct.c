@@ -127,7 +127,7 @@ static int process_files_acquire_entries(files_struct_t *f)
 		if (!e->in_use)
 			continue;
 		if (e->is_pipe && e->vfs_file)
-			pipe_acquire_end((pipe_t *)e->vfs_file, e->pipe_end);
+			pipe_fd_entry_acquire_refs(e);
 		else if (e->is_socket && e->vfs_file)
 		{
 			if (sock_stream_is(e->vfs_file))
@@ -146,6 +146,8 @@ static int process_files_acquire_entries(files_struct_t *f)
 			if (e->vfs_file &&
 			    devfs_is_ptmx_device(e->dev_device_id))
 				devfs_pty_master_dup_vfs(e->vfs_file);
+			else if (devfs_is_pts_device(e->dev_device_id))
+				devfs_pty_slave_dup_device(e->dev_device_id);
 			else if (e->vfs_file &&
 			    devfs_node_wants_text_snap(e->dev_device_id))
 				devfs_text_snap_acquire(

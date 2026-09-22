@@ -51,6 +51,7 @@ void *devfs_pty_vfs_mark(int slot);
 int devfs_pty_vfs_slot(const void *vfs_file);
 void devfs_pty_master_release_vfs(const void *vfs_file);
 void devfs_pty_master_dup_vfs(const void *vfs_file);
+void devfs_pty_slave_dup_device(uint32_t device_id);
 int64_t devfs_pty_master_read(const void *vfs_file, void *buf, size_t count);
 int64_t devfs_pty_master_write(const void *vfs_file, const void *buf,
 			       size_t count);

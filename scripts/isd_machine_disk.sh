@@ -13,11 +13,30 @@ if [ "$BASE_DISK" = "$MACHINE_DISK" ]; then
 	exit 2
 fi
 
+machine_disk_usable() {
+	local base_size machine_size
+
+	[ -f "$MACHINE_DISK" ] || return 1
+	machine_size=$(stat -c%s "$MACHINE_DISK" 2>/dev/null || echo 0)
+	[ "$machine_size" -gt 0 ] || return 1
+	if [ ! -f "$BASE_DISK" ]; then
+		return 0
+	fi
+	base_size=$(stat -c%s "$BASE_DISK" 2>/dev/null || echo 0)
+	[ "$base_size" -gt 0 ] || return 0
+	[ "$machine_size" -ge "$base_size" ] || return 1
+	return 0
+}
+
 case "$ACTION" in
 create)
-	if [ -f "$MACHINE_DISK" ]; then
+	if machine_disk_usable; then
 		echo "  MACHINE  preserving existing $MACHINE_DISK"
 		exit 0
+	fi
+	if [ -f "$MACHINE_DISK" ]; then
+		echo "  MACHINE  replacing invalid disk (empty or smaller than base): $MACHINE_DISK"
+		rm -f "$MACHINE_DISK"
 	fi
 	if [ ! -f "$BASE_DISK" ]; then
 		echo "✗ missing base image: $BASE_DISK" >&2

@@ -150,7 +150,9 @@ WRAP1(sys_sysinfo, void *)
 WRAP2(sys_access, const char *, int)
 WRAP4(sys_faccessat, int, const char *, int, int)
 WRAP1(sys_dup, int)
+WRAP3(sys_dup3, int, int, int)
 WRAP3(sys_exec, const char *, char *const *, char *const *)
+WRAP5(sys_execveat, int, const char *, char *const *, char *const *, int)
 WRAP1(sys_chdir, const char *)
 WRAP1(sys_chroot, const char *)
 WRAP1(sys_fchdir, int)
@@ -215,6 +217,8 @@ WRAP3(sys_syslog, int, char *, int)
 WRAP3(sys_getdents, int, void *, size_t)
 WRAP3(sys_getdents64, int, void *, size_t)
 WRAP3(sys_poll, struct pollfd *, unsigned int, int)
+WRAP5(sys_ppoll, struct pollfd *, unsigned int, const struct timespec *,
+      const sigset_t *, size_t)
 WRAP5(sys_select, int, fd_set *, fd_set *, fd_set *, struct timeval *)
 WRAP1(sys_epoll_create1, int)
 WRAP4(sys_epoll_ctl, int, int, int, struct epoll_event *)
@@ -319,6 +323,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_statfs]         = wrap_sys_statfs;
   syscall_table_rw[__NR_fstatfs]        = wrap_sys_fstatfs;
   syscall_table_rw[__NR_poll]           = wrap_sys_poll;
+  syscall_table_rw[__NR_ppoll]          = wrap_sys_ppoll;
   syscall_table_rw[__NR_select]         = wrap_sys_select;
   syscall_table_rw[__NR_lseek]          = wrap_sys_lseek;
   syscall_table_rw[__NR_mmap]           = wrap_sys_mmap;
@@ -396,6 +401,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_access]         = wrap_sys_access;
   syscall_table_rw[__NR_faccessat]      = wrap_sys_faccessat;
   syscall_table_rw[__NR_dup]            = wrap_sys_dup;
+  syscall_table_rw[__NR_dup3]           = wrap_sys_dup3;
   syscall_table_rw[__NR_chmod]         = wrap_sys_chmod;
   syscall_table_rw[__NR_fchmod]        = wrap_sys_fchmod;
   syscall_table_rw[__NR_chown]          = wrap_sys_chown;
@@ -419,6 +425,7 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_set_robust_list] = wrap_sys_set_robust_list;
   syscall_table_rw[__NR_get_robust_list] = wrap_sys_get_robust_list;
   syscall_table_rw[__NR_getrandom]      = wrap_sys_getrandom;
+  syscall_table_rw[__NR_execveat]       = wrap_sys_execveat;
   syscall_table_rw[__NR_prlimit64]      = wrap_sys_prlimit64;
   syscall_table_rw[__NR_getrlimit]      = wrap_sys_getrlimit;
   syscall_table_rw[__NR_epoll_create1]  = wrap_sys_epoll_create1;

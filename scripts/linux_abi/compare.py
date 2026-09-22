@@ -1765,7 +1765,15 @@ def compare_pty_multiplex(linux: dict, ir0: dict) -> CompareResult:
 
 def compare_ioctl(linux: dict, ir0: dict) -> CompareResult:
     res = CompareResult(contract="ioctl", ok=True)
-    required = ("tcgets", "tiocgwinsz", "tiocgpgrp")
+    required = (
+        "tcgets",
+        "tcgets_tail_untouched",
+        "tcsetattr_noecho",
+        "tcgetattr_verify",
+        "tcsetattr_restore",
+        "tiocgwinsz",
+        "tiocgpgrp",
+    )
 
     for op in required:
         l_s = _find_step(linux.get("audit_steps") or [], op)
@@ -1788,7 +1796,9 @@ def compare_ioctl(linux: dict, ir0: dict) -> CompareResult:
                 f"{op} ret mismatch linux={l_s.get('ret')} ir0={i_s.get('ret')}"
             )
 
-    res.notes.append("console TTY ioctl(TCGETS/TIOCGWINSZ/TIOCGPGRP) on fd 0")
+    res.notes.append(
+        "musl/Linux x86-64 TCGETS 36-byte prefix, echo roundtrip, winsize and pgrp"
+    )
     return res
 
 

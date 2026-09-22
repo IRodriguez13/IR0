@@ -16,6 +16,7 @@
 #include "syscalls_glue.h"
 #include <kernel/syscalls.h>
 #include <ir0/copy_user.h>
+#include <ir0/utimens.h>
 #include <ir0/errno.h>
 #include <ir0/process.h>
 #include <ir0/signals.h>
@@ -1167,7 +1168,51 @@ static int exec_path_is_proc_self_exe(const char *path)
 	if (strncmp(p, "/exe", 4) != 0 || p[4] != '\0')
 		return 0;
 
-	return current_process && pid == current_process->task.pid;
+  return current_process && pid == current_process->task.pid;
+}
+
+/*
+ * Linux execve(2): envp == NULL → inherit the caller's environment.
+ * IR0 stores the post-exec blob in saved_environ; rebuild a kernel vector.
+ */
+static int exec_env_clone_from_saved(process_t *proc, char *kernel_envp[256],
+				     int *envc_out)
+{
+	const char *walk;
+	size_t rem;
+	int i;
+
+	if (!proc || !envc_out)
+		return -EINVAL;
+
+	*envc_out = 0;
+	if (!proc->saved_environ || proc->saved_environ_len == 0)
+		return 0;
+
+	walk = proc->saved_environ;
+	rem = proc->saved_environ_len;
+	for (i = 0; i < 255 && rem > 0; i++)
+	{
+		size_t len = 0;
+		char *copy;
+
+		while (len < rem && walk[len] != '\0')
+			len++;
+		if (len >= rem)
+			break;
+
+		copy = (char *)kmalloc_try(len + 1);
+		if (!copy)
+			return -ENOMEM;
+
+		memcpy(copy, walk, len + 1);
+		kernel_envp[i] = copy;
+		walk += len + 1;
+		rem -= len + 1;
+	}
+
+	*envc_out = i;
+	return 0;
 }
 
 int64_t sys_exec(const char *pathname,
@@ -1223,6 +1268,7 @@ int64_t sys_exec(const char *pathname,
   /* Copy argv and envp from userspace if provided */
   char *kernel_argv[256] = {NULL};
   char *kernel_envp[256] = {NULL};
+  char *const *envp_for_exec = NULL;
   int argc_kept = 0;
   int envc_kept = 0;
   int rc_vec = 0;
@@ -1344,6 +1390,19 @@ int64_t sys_exec(const char *pathname,
         kfree(kernel_envp[j]);
       return -E2BIG;
     }
+    envp_for_exec = (char *const *)kernel_envp;
+  }
+  else if (current_process)
+  {
+    rc_vec = exec_env_clone_from_saved(current_process, kernel_envp, &envc_kept);
+    if (rc_vec < 0)
+    {
+      for (int j = 0; j < argc_kept; j++)
+        kfree(kernel_argv[j]);
+      return rc_vec;
+    }
+    if (envc_kept > 0)
+      envp_for_exec = (char *const *)kernel_envp;
   }
 
   int64_t result;
@@ -1355,13 +1414,13 @@ int64_t sys_exec(const char *pathname,
     KTM_CHECKPOINT(KTM_CP_PROCESS_EXEC);
     result = exec_replace_current(path_to_use,
                                   argv ? (char *const *)kernel_argv : NULL,
-                                  envp ? (char *const *)kernel_envp : NULL);
+                                  envp_for_exec);
   }
   else
   {
     result = kexecve(path_to_use,
                      argv ? (char *const *)kernel_argv : NULL,
-                     envp ? (char *const *)kernel_envp : NULL);
+                     envp_for_exec);
   }
 
   /* Clean up copied strings */
@@ -1403,6 +1462,37 @@ int64_t sys_exec(const char *pathname,
   fase50_trace_syscall_proc("sys_exec-return", current_process);
   return result;
 }
+
+int64_t sys_execveat(int dirfd, const char *pathname, char *const argv[],
+		     char *const envp[], int flags)
+{
+  fd_entry_t *fd_table;
+  char first;
+
+  if (!current_process || !pathname)
+    return -EFAULT;
+  if (flags & ~IR0_AT_EMPTY_PATH)
+    return -EINVAL;
+  if (copy_from_user(&first, pathname, sizeof(first)) != 0)
+    return -EFAULT;
+
+  if (first != '\0')
+  {
+    if (dirfd != IR0_AT_FDCWD)
+      return -EOPNOTSUPP;
+    return sys_exec(pathname, argv, envp);
+  }
+  if (!(flags & IR0_AT_EMPTY_PATH))
+    return -ENOENT;
+  if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+    return -EBADF;
+  fd_table = get_process_fd_table();
+  if (!fd_table || !fd_table[dirfd].in_use ||
+      fd_table[dirfd].path[0] == '\0')
+    return -EBADF;
+  return sys_exec(fd_table[dirfd].path, argv, envp);
+}
+
 int64_t sys_fork(void)
 {
   int64_t r;

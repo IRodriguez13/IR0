@@ -25,6 +25,7 @@
 #include <ir0/time.h>
 #include <ir0/console.h>
 #include <ir0/devfs.h>
+#include <ir0/pty_devfs.h>
 #include <ir0/sched.h>
 #include <ir0/ktm.h>
 #include <ir0/fcntl.h>
@@ -53,6 +54,8 @@
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
 #include <ir0/fd_get.h>
+#include <ir0/pipe.h>
+#include <ir0/pipe_fd.h>
 #include <string.h>
 
 static int devfs_initialized;
@@ -189,14 +192,15 @@ int fd_can_read_for(process_t *proc, int fd)
   }
   if (e->is_devfs)
   {
-    ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
+    if (devfs_is_ptmx_device(e->dev_device_id) && e->vfs_file)
+      ready = devfs_pty_master_can_read(e->vfs_file);
+    else
+      ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
     goto out;
   }
   if (e->is_pipe && e->pipe_end == 0)
   {
-    pipe_t *pipe = (pipe_t *)e->vfs_file;
-
-    ready = (pipe && (pipe->count > 0 || pipe->writers <= 0)) ? 1 : 0;
+    ready = fd_entry_pipe_can_read(e);
     goto out;
   }
   if (e->is_socket && e->vfs_file && sock_stream_is(e->vfs_file))
@@ -244,12 +248,13 @@ static int fd_can_write_entry(const fd_entry_t *e, int fd)
     return 1;
   if (e->is_pseudo)
     return (e->flags & (O_WRONLY | O_RDWR)) ? 1 : 0;
-  if (e->is_pipe && e->pipe_end == 1)
+  if (e->is_devfs)
   {
-    pipe_t *pipe = (pipe_t *)e->vfs_file;
-
-    return (pipe && pipe->readers > 0 && pipe->count < PIPE_SIZE) ? 1 : 0;
+    if (devfs_is_ptmx_device(e->dev_device_id) && e->vfs_file)
+      return devfs_pty_master_can_write(e->vfs_file);
   }
+  if (e->is_pipe && (e->pipe_end == 1 || fd_entry_pipe_is_rdwr(e)))
+    return fd_entry_pipe_can_write(e);
   if (e->is_socket && e->vfs_file && sock_stream_is(e->vfs_file))
     return sock_stream_poll_writable((struct sock_stream *)e->vfs_file);
   if (e->is_eventfd && e->vfs_file)
@@ -434,6 +439,63 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
     w->ready_count = 0;
   }
   return (int64_t)ready;
+}
+
+int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
+		  const struct timespec *timeout, const sigset_t *sigmask,
+		  size_t sigsetsize)
+{
+  struct timespec ts;
+  sigset_t kset;
+  uint64_t legacy64;
+  uint32_t saved_mask = 0;
+  int timeout_ms = -1;
+  int mask_changed = 0;
+  int64_t ret;
+
+  if (!current_process)
+    return -ESRCH;
+  if (timeout)
+  {
+    if (copy_from_user(&ts, timeout, sizeof(ts)) != 0)
+      return -EFAULT;
+    if (ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= 1000000000L)
+      return -EINVAL;
+    if (ts.tv_sec > 2147483)
+      timeout_ms = 2147483647;
+    else
+      timeout_ms = (int)(ts.tv_sec * 1000 +
+			 (ts.tv_nsec + 999999L) / 1000000L);
+  }
+
+  if (sigmask)
+  {
+    uint32_t new_mask;
+
+    if (sigsetsize == sizeof(uint64_t))
+    {
+      if (copy_from_user(&legacy64, sigmask, sizeof(legacy64)) != 0)
+	return -EFAULT;
+      new_mask = (uint32_t)legacy64;
+    }
+    else if (sigsetsize == sizeof(sigset_t))
+    {
+      if (copy_from_user(&kset, sigmask, sizeof(kset)) != 0)
+	return -EFAULT;
+      new_mask = ir0_sigset_low32(&kset);
+    }
+    else
+      return -EINVAL;
+
+    saved_mask = current_process->signal_mask;
+    current_process->signal_mask = new_mask;
+    mask_changed = 1;
+  }
+
+  ret = sys_poll(user_fds, nfds, timeout_ms);
+  if (mask_changed)
+    current_process->signal_mask = saved_mask;
+  return ret;
 }
 
 /**
@@ -1511,7 +1573,7 @@ int64_t sys_close(int fd)
   {
     pipe_t *pipe = (pipe_t *)e->vfs_file;
 
-    pipe_close_end(pipe, e->pipe_end);
+    pipe_fd_entry_release_refs(pipe, e);
     e->vfs_file = NULL;
   }
   else if (e->is_socket && e->vfs_file)
@@ -1623,6 +1685,12 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     goto out;
   }
 
+  if (e->is_devfs && devfs_is_ptmx_device(e->dev_device_id))
+  {
+    ret = -ESPIPE;
+    goto out;
+  }
+
   if (fd <= 2)
   {
     if (whence == SEEK_SET)
@@ -1721,7 +1789,7 @@ int64_t sys_dup2(int oldfd, int newfd)
     {
       pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
 
-      pipe_close_end(p, fd_table[newfd].pipe_end);
+      pipe_fd_entry_release_refs(p, &fd_table[newfd]);
       fd_table[newfd].vfs_file = NULL;
     }
     else if (fd_table[newfd].is_devfs)
@@ -1729,6 +1797,12 @@ int64_t sys_dup2(int oldfd, int newfd)
       devfs_node_t *node = fd_entry_devfs_node(&fd_table[newfd]);
 
       if (fd_table[newfd].vfs_file &&
+	  devfs_is_ptmx_device(fd_table[newfd].dev_device_id))
+      {
+	devfs_pty_master_release_vfs(fd_table[newfd].vfs_file);
+	fd_table[newfd].vfs_file = NULL;
+      }
+      else if (fd_table[newfd].vfs_file &&
 	  devfs_node_wants_text_snap(fd_table[newfd].dev_device_id))
       {
 	devfs_text_snap_release((devfs_text_snap_t *)fd_table[newfd].vfs_file);
@@ -1843,12 +1917,17 @@ int64_t sys_dup2(int oldfd, int newfd)
       fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
       devfs_pty_master_dup_vfs(fd_table[oldfd].vfs_file);
     }
+    else if (devfs_is_pts_device(fd_table[oldfd].dev_device_id))
+    {
+      devfs_pty_slave_dup_device(fd_table[oldfd].dev_device_id);
+      fd_table[newfd].vfs_file = NULL;
+    }
     else
       fd_table[newfd].vfs_file = NULL;
   }
   else if (fd_table[oldfd].is_pipe)
   {
-    pipe_acquire_end((pipe_t *)fd_table[oldfd].vfs_file, fd_table[oldfd].pipe_end);
+    pipe_fd_entry_acquire_refs(&fd_table[oldfd]);
     fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
   }
   else if (fd_table[oldfd].is_pseudo && fd_table[oldfd].vfs_file)
@@ -1907,6 +1986,27 @@ int64_t sys_dup2(int oldfd, int newfd)
   fd_slot_note_created();
   return newfd;
 }
+
+int64_t sys_dup3(int oldfd, int newfd, int flags)
+{
+  fd_entry_t *fd_table;
+  int64_t ret;
+
+  if (oldfd == newfd)
+    return -EINVAL;
+  if (flags & ~O_CLOEXEC)
+    return -EINVAL;
+
+  ret = sys_dup2(oldfd, newfd);
+  if (ret < 0)
+    return ret;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
+  fd_table[newfd].fd_flags = (flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
+  return ret;
+}
+
 int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
 {
   ir0_fd_t h;

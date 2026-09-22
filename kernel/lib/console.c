@@ -33,7 +33,7 @@
 #include <ir0/clock_wait.h>
 #include <string.h>
 
-/* TCGETS/TCSETS ABI must stay Linux kernel termios (36 bytes, NCCS=19). */
+/* TCGETS/TCSETS use the Linux x86-64 kernel termios prefix (NCCS=19). */
 _Static_assert(sizeof(struct ir0_termios) == 36,
 	       "ir0_termios must match Linux uapi termios for TCGETS");
 
@@ -158,6 +158,11 @@ void ir0_console_clear_ctty_session(int32_t sid)
 {
 	if (sid > 0 && console_ctty_sid == (pid_t)sid)
 		console_ctty_sid = 0;
+}
+
+int ir0_console_has_ctty_for_sid(int32_t sid)
+{
+	return sid > 0 && console_ctty_sid == (pid_t)sid;
 }
 
 int ir0_console_ioctl_set_ctty(void)

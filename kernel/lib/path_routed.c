@@ -89,7 +89,17 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
     if (rc != -ENOENT)
         return rc;
 
-    return vfs_stat(path, st);
+    rc = vfs_stat(path, st);
+    if (rc == 0 && S_ISREG(st->st_mode) &&
+        named_fifo_path_must_be_fifo(path))
+    {
+        /*
+         * Stale regular file on disk (ext2 cannot store IFIFO) blocked
+         * sysvinit mkfifo(/run/initctl) and runsv supervise paths.
+         */
+        return -ENOENT;
+    }
+    return rc;
 }
 
 int ir0_stat_path_routed_follow(const char *path, stat_t *st)
@@ -107,6 +117,18 @@ int ir0_stat_path_routed_follow(const char *path, stat_t *st)
     if (rc < 0)
         return rc;
     return ir0_stat_path_routed(resolved, st);
+}
+
+int ir0_chown_path_routed(const char *path, uid_t owner, gid_t group)
+{
+    if (!path)
+        return -EINVAL;
+    if (ir0_is_dev_path(path))
+    {
+        ensure_devfs_init();
+        return devfs_chown_path(path, owner, group);
+    }
+    return vfs_chown(path, owner, group);
 }
 
 int64_t ir0_access_path_routed(const char *resolved_path, int mode,

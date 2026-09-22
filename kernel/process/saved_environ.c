@@ -82,6 +82,7 @@ void process_saved_environ_clear(process_t *p)
 		p->saved_environ = NULL;
 	}
 	p->saved_environ_len = 0;
+	p->exec_envp_user = 0;
 }
 
 int process_saved_environ_set(process_t *p, char *const envp[])
@@ -110,6 +111,7 @@ int process_saved_environ_clone(process_t *dst, const process_t *src)
 
 	memcpy(dst->saved_environ, src->saved_environ, src->saved_environ_len);
 	dst->saved_environ_len = src->saved_environ_len;
+	dst->exec_envp_user = src->exec_envp_user;
 	return 0;
 }
 

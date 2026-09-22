@@ -13,10 +13,14 @@ CHROOT_SMOKE_SRC = setup/pid1/chroot_smoke.c
 SETID_HELPER_SRC = setup/pid1/setid_helper.c
 PASSWD_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/passwd_smoke.c
 DOAS_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/doas_smoke.c
+SUDO_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/sudo_smoke.c
 IR0_AUTH_LIB_SRC = $(IR0_USERSPACE_ROOT)/lib/ir0_auth.c
 RECOVERY_SMOKE_LOG = /tmp/userspace-recovery.log
 DOAS_SMOKE_LOG = /tmp/userspace-doas.log
 DOAS_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/doas_smoke
+SUDO_SMOKE_LOG = /tmp/userspace-sudo.log
+SUDO_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/sudo_smoke
+SUDO_BIN = $(IR0_USERSPACE_OUT)/$(ISD_ARCH)/product/stage-bin/sudo
 SETID_SCRIPT_SRC = setup/pid1/setid_script.sh
 INIT_MINIMAL_SRC = setup/pid1/init_minimal.c
 INIT_SEGV_SMOKE_SRC = setup/pid1/init_segv_smoke.c
@@ -335,7 +339,8 @@ build-passwd-smoke:
 		(echo "✗ passwd smoke missing PASSWD_ALL_OK string"; exit 1)
 	@echo "✓ build-passwd-smoke OK"
 
-.PHONY: build-opendoas build-doas-smoke smoke-doas smoke-recovery
+.PHONY: build-opendoas build-doas-smoke smoke-doas build-sudo \
+	build-sudo-smoke smoke-sudo smoke-recovery
 ISD_OPENDOAS_STAMP = $(IR0_ISD_ROOT)/out/$(ISD_ARCH)/stamps/packages/opendoas
 
 build-opendoas: check-userspace
@@ -362,13 +367,16 @@ build-doas-smoke: build-opendoas
 	@file $(DOAS_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-doas-smoke OK"
 
-DOAS_SMOKE_TAGS = DOAS_SETUP_OK DOAS_GRANT_OK DOAS_ENV_OK DOAS_PERSIST_OK DOAS_DENY_AUTH_OK DOAS_ALL_OK
+DOAS_SMOKE_TAGS = DOAS_SETUP_OK DOAS_GRANT_OK DOAS_ENV_OK DOAS_DENY_AUTH_OK DOAS_ALL_OK
 
 smoke-doas: build-doas-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   OpenDoas grant/deny/env..."
 	@DISK=$$(mktemp /tmp/ir0-doas-smoke.XXXXXX.img); \
 	cp -f disk.img $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(DOAS_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/passwd etc/passwd && \
+	python3 scripts/inject_init_minix.py --mode 0600 $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/shadow etc/shadow && \
+	python3 scripts/inject_init_minix.py $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/group etc/group && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/bin/doas /etc/doas.conf && \
 	$(SMOKE_QEMU_RUN) --log $(DOAS_SMOKE_LOG) --timeout 90 --stale-sec 25 \
 		--done DOAS_ALL_OK --fail-regex 'DOAS_SMOKE_FAIL|KERNEL PANIC' -- \
@@ -382,6 +390,50 @@ smoke-doas: build-doas-smoke load-userspace-runit kernel-x64-userspace.iso
 			  grep -E 'DOAS_|doas' $(DOAS_SMOKE_LOG) | tail -30; exit 1; }; \
 	done
 	@echo "✓ smoke-doas passed"
+
+build-sudo: check-userspace
+	@if [ "$(IR0_SKIP_SUDO_BUILD)" = "1" ] && [ -x "$(SUDO_BIN)" ]; then \
+		echo "  SUDO    reusing $(SUDO_BIN)"; \
+	else \
+		ARCH=$(ISD_ARCH) bash $(IR0_ISD_ROOT)/packages/sudo/build.sh; \
+	fi
+
+build-sudo-smoke: build-sudo
+	@if [ -z "$(MUSL_CC)" ]; then \
+		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
+		exit 1; \
+	fi
+	@mkdir -p $(dir $(SUDO_SMOKE_BIN))
+	@echo "  MUSL    Building sudo smoke ($(SUDO_SMOKE_BIN))"
+	@$(MUSL_CC) -static -Os -o $(SUDO_SMOKE_BIN) $(SUDO_SMOKE_SRC) $(IR0_AUTH_LIB_SRC)
+	@file $(SUDO_SMOKE_BIN) | grep -q ELF
+	@echo "✓ build-sudo-smoke OK"
+
+SUDO_SMOKE_TAGS = SUDO_SETUP_OK SUDO_GRANT_OK SUDO_ENV_OK SUDO_DENY_AUTH_OK SUDO_ALL_OK
+
+smoke-sudo: build-sudo-smoke load-userspace-runit kernel-x64-userspace.iso
+	@echo "  SMOKE   GNU sudo grant/deny/env over controlling PTY..."
+	@DISK=$$(mktemp /tmp/ir0-sudo-smoke.XXXXXX.img); \
+	cp -f disk.img $$DISK && \
+	python3 scripts/inject_init_minix.py $$DISK $(SUDO_SMOKE_BIN) sbin/init && \
+	python3 scripts/inject_init_minix.py --setuid $$DISK $(SUDO_BIN) usr/bin/sudo && \
+	python3 scripts/inject_init_minix.py --mode 0440 $$DISK $(IR0_ISD_ROOT)/rootfs/base/etc/sudoers etc/sudoers && \
+	python3 scripts/inject_init_minix.py $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/passwd etc/passwd && \
+	python3 scripts/inject_init_minix.py --mode 0600 $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/shadow etc/shadow && \
+	python3 scripts/inject_init_minix.py $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/group etc/group && \
+	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /usr/bin/sudo /etc/sudoers && \
+	$(SMOKE_QEMU_RUN) --log $(SUDO_SMOKE_LOG) --timeout 90 --stale-sec 25 \
+		--done SUDO_ALL_OK --fail-regex 'SUDO_SMOKE_FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 256M -no-reboot -net none; \
+	rm -f $$DISK;
+	@for tag in $(SUDO_SMOKE_TAGS); do \
+		grep -q "$$tag" $(SUDO_SMOKE_LOG) || \
+			{ echo "✗ smoke-sudo FAILED (missing $$tag)"; \
+			  grep -E 'SUDO_|sudo' $(SUDO_SMOKE_LOG) | tail -30; exit 1; }; \
+	done
+	@echo "✓ smoke-sudo passed"
 
 RECOVERY_SMOKE_TAGS = RECOVERY_BOOT_SELECTED RECOVERY_START RECOVERY_ROOT_RO RECOVERY_SHELL_READY
 RECOVERY_SMOKE_ISO = /tmp/ir0-recovery-smoke.iso

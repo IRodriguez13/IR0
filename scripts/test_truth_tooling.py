@@ -23,6 +23,12 @@ RESOLVER = ROOT / "scripts/resolve_isd_root.sh"
 ISD_CHECK = ROOT.parent / "ISD" / "scripts" / "check-ir0-interface.sh"
 
 
+def isd_check_env() -> dict[str, str]:
+    """Offline UAPI env makes check-ir0-interface.sh SKIP; tests need the real gate."""
+    drop = {"IR0_UAPI_TARBALL", "IR0_UAPI_SYSROOT"}
+    return {k: v for k, v in os.environ.items() if k not in drop}
+
+
 def load_module(path: Path, name: str):
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -174,6 +180,7 @@ class TruthToolingTest(unittest.TestCase):
             capture_output=True,
             check=False,
             cwd=str(ISD_CHECK.parent.parent),
+            env=isd_check_env(),
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("IR0_ISD_INTERFACE", result.stderr + result.stdout)
@@ -210,6 +217,7 @@ class TruthToolingTest(unittest.TestCase):
             capture_output=True,
             check=False,
             cwd=str(ISD_CHECK.parent.parent),
+            env=isd_check_env(),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 

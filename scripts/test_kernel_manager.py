@@ -289,6 +289,65 @@ class KernelManagerTest(unittest.TestCase):
         titles = [section.title for section in KM.KMANG_HELP_SECTIONS]
         self.assertEqual(len(titles), len(set(titles)))
 
+    def test_help_includes_product_boot_section(self) -> None:
+        text = KM.format_help_text()
+        self.assertIn("Product boot (run from IR0/)", text)
+        self.assertIn("machine-reset", text)
+        self.assertIn("ROOT_FS=ext2", text)
+
+    def test_machine_disk_health_bad_when_empty(self) -> None:
+        disk = self.machine / "disk.img"
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        disk.touch()
+        base = self.root / "base.ext2.img"
+        base.write_bytes(b"x" * 4096)
+        store = KM.KernelStore(
+            self.machine,
+            profile="minimal-openrc",
+            root_fs="ext2",
+            isd_disk=base,
+            machine_disk=disk,
+        )
+        level, _ = store.machine_disk_health()
+        self.assertEqual(level, "bad")
+        self.assertIn("EMPTY", store.disk_status())
+
+    def test_poweron_recipe_includes_reset_when_disk_bad(self) -> None:
+        disk = self.machine / "disk.img"
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        disk.touch()
+        store = KM.KernelStore(
+            self.machine,
+            profile="minimal-openrc",
+            root_fs="ext2",
+            machine_disk=disk,
+        )
+        lines = store.poweron_recipe_lines()
+        self.assertTrue(any("machine-reset" in line for line in lines))
+        self.assertTrue(any("poweron PROFILE=minimal-openrc ROOT_FS=ext2" in line for line in lines))
+        self.assertTrue(any("kernel-x64-ext2-root.iso" in line for line in lines))
+
+    def test_assert_boot_ready_raises_on_empty_disk(self) -> None:
+        disk = self.machine / "disk.img"
+        disk.parent.mkdir(parents=True, exist_ok=True)
+        disk.touch()
+        store = KM.KernelStore(self.machine, machine_disk=disk)
+        with self.assertRaises(ValueError) as ctx:
+            store.assert_boot_ready()
+        self.assertIn("machine-reset", str(ctx.exception))
+
+    def test_help_overlay_includes_store_recipe(self) -> None:
+        store = KM.KernelStore(
+            self.machine,
+            profile="minimal-openrc",
+            root_fs="ext2",
+        )
+        rows = KM.help_overlay_lines(store)
+        text = "\n".join(line for _, line in rows)
+        self.assertIn("minimal-openrc", text)
+        self.assertIn("ROOT_FS=ext2", text)
+        self.assertIn("make poweron", text)
+
     def test_resolve_fails_without_enrolled_kernels(self) -> None:
         result = self.run_manager("resolve", success=False)
         self.assertEqual(result.returncode, 2)

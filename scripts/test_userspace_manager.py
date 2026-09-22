@@ -30,6 +30,14 @@ class UserspaceManagerTest(unittest.TestCase):
         return result
 
     @unittest.skipUnless(ISD.is_dir(), "ISD sibling tree not present")
+    def test_desktop_admin_defaults_to_doas(self) -> None:
+        spec = importlib.util.spec_from_file_location("userspace_manager", MANAGER)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        self.assertEqual(module.profile_admin_elevation(ISD, "desktop"), "doas")
+
+    @unittest.skipUnless(ISD.is_dir(), "ISD sibling tree not present")
     def test_minimal_summary_does_not_claim_desktop_clients(self) -> None:
         result = self.run_manager(
             "--isd-root", str(ISD), "--profile", "minimal", "summary",
@@ -139,7 +147,31 @@ class UserspaceManagerTest(unittest.TestCase):
         spec.loader.exec_module(module)
         text = "\n".join(module.tui_help_lines())
         self.assertIn("verify", text)
+        self.assertIn("admin", text)
         self.assertIn("quit", text)
+
+    def test_admin_elevation_toggle_persists_to_isdconfig(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            isd = Path(directory)
+            prof = isd / "profiles" / "desktop"
+            prof.mkdir(parents=True)
+            (prof / "profile.conf").write_text(
+                "PROFILE_NAME=desktop\nADMIN_ELEVATION=doas\nUSERLAND_BASE=busybox\n"
+            )
+            (prof / "packages.txt").write_text("busybox\nrunit\nopendoas\n")
+            spec = importlib.util.spec_from_file_location("userspace_manager", MANAGER)
+            assert spec and spec.loader
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            self.assertEqual(module.profile_admin_elevation(isd, "desktop"), "doas")
+            new_tool, cfg_path = module.toggle_admin_elevation(isd, "desktop")
+            self.assertEqual(new_tool, "sudo")
+            self.assertTrue(cfg_path.is_file())
+            text = cfg_path.read_text()
+            self.assertIn("ADMIN_ELEVATION=sudo", text)
+            self.assertIn("CONFIG_PKG_SUDO=y", text)
+            self.assertIn("CONFIG_PKG_OPENDOAS=n", text)
+            self.assertEqual(module.profile_admin_elevation(isd, "desktop"), "sudo")
 
     def test_tui_requires_tty(self) -> None:
         result = subprocess.run(

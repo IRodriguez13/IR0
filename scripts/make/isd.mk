@@ -126,6 +126,9 @@ IR0_KERNEL_BUILD_ID = $(IR0_VERSION_STRING)-build$(IR0_BUILD_NUMBER)
 # product build PROFILE variables cannot silently redirect its history.
 KMANG_ARCH ?= x86_64
 KMANG_PROFILE ?= desktop
+ifeq ($(origin PROFILE),command line)
+  KMANG_PROFILE := $(ISD_PROFILE)
+endif
 KMANG_MACHINE ?= default
 KMANG_MACHINE_DIR = $(IR0_MACHINE_ROOT)/$(KMANG_ARCH)/$(KMANG_PROFILE)/$(KMANG_MACHINE)
 
@@ -305,8 +308,9 @@ KMANG_PY = python3 scripts/kernel_manager.py \
 	--machine "$(KMANG_MACHINE)" \
 	--kernel-root "$(KERNEL_ROOT)" \
 	--isd-root "$(IR0_ISD_ROOT)" \
-	--isd-disk "$(KMANG_ISD_DISK)" \
+	--isd-disk "$(IR0_ISD_ROOT_DISK)" \
 	--machine-disk "$(KMANG_MACHINE_DIR)/disk.img" \
+	--root-fs "$(ISD_ROOT_FS)" \
 	--source "$(KERNEL_ROOT)/kernel-x64-userspace.iso" \
 	--version "$(IR0_VERSION_STRING)"
 

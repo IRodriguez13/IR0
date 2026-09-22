@@ -23,6 +23,9 @@
 #include <stddef.h>
 
 int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms);
+int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
+		  const struct timespec *timeout, const sigset_t *sigmask,
+		  size_t sigsetsize);
 int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
 		   struct timeval *user_tv);
 int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
@@ -41,6 +44,7 @@ int64_t sys_close(int fd);
 int64_t sys_lseek(int fd, off_t offset, int whence);
 int64_t sys_dup(int oldfd);
 int64_t sys_dup2(int oldfd, int newfd);
+int64_t sys_dup3(int oldfd, int newfd, int flags);
 int64_t sys_ioctl(int fd, uint64_t request, void *arg);
 int64_t sys_fcntl(int fd, int cmd, unsigned long arg);
 int64_t sys_pipe(int pipefd[2]);

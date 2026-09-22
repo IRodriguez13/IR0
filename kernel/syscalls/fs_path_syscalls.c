@@ -379,7 +379,7 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
   if (current_process->euid != ROOT_UID)
     return -EPERM;
 
-  return vfs_chown(resolved, owner, group);
+  return ir0_chown_path_routed(resolved, owner, group);
 }
 
 int64_t sys_link(const char *oldpath, const char *newpath)

@@ -90,10 +90,10 @@ kernel-manager-list:
 
 kmang: check-isd
 	@chmod +x scripts/kernel_manager.py
-	@$(KMANG_PY) --make-arg "PROFILE=$(KMANG_PROFILE)" tui; \
+	@$(KMANG_PY) --make-arg "PROFILE=$(KMANG_PROFILE)" --make-arg "ROOT_FS=$(ISD_ROOT_FS)" tui; \
 	rc=$$?; \
 	if [ $$rc -eq 10 ]; then \
-		$(MAKE) poweron PROFILE=$(KMANG_PROFILE) IR0_MACHINE=$(KMANG_MACHINE); \
+		$(MAKE) poweron PROFILE=$(KMANG_PROFILE) ROOT_FS=$(ISD_ROOT_FS) IR0_MACHINE=$(KMANG_MACHINE); \
 	elif [ $$rc -ne 0 ]; then \
 		exit $$rc; \
 	fi
@@ -187,7 +187,7 @@ image-vmware:
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" export-vmdk
 	@echo "  Attach $(KERNEL_ROOT)/kernel-x64-userspace.iso as the boot CD."
 
-poweron: check-isd ensure-machine-desktop-sync
+poweron: check-isd ensure-isd-root-disk ensure-machine-desktop-sync
 	@test -f "$(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)" || { \
 		echo "✗ missing $(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)"; \
 		echo "  Run make first-boot PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) first."; \
@@ -197,8 +197,13 @@ poweron: check-isd ensure-machine-desktop-sync
 	@IR0_MACHINE_BASE_DISK="$(IR0_ISD_ROOT_DISK)" \
 		IR0_MACHINE_DISK="$(IR0_MACHINE_DISK)" \
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" create
+	@test -s "$(IR0_MACHINE_DISK)" || { \
+		echo "✗ machine disk missing or empty: $(IR0_MACHINE_DISK)"; \
+		echo "  Run: make machine-reset PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) CONFIRM_RESET=yes"; \
+		exit 2; \
+	}
 	@echo "Running persistent IR0 + ISD machine ($(IR0_MACHINE)) ROOT_FS=$(ISD_ROOT_FS)"
-	@echo "  DISK     $(IR0_MACHINE_DISK)"
+	@echo "  DISK     $(IR0_MACHINE_DISK) ($$(stat -c%s '$(IR0_MACHINE_DISK)' | numfmt --to=iec 2>/dev/null || stat -c%s '$(IR0_MACHINE_DISK)'))"
 	@KERNEL_ISO="$$(python3 scripts/kernel_manager.py --machine-dir \
 		"$(IR0_MACHINE_DIR)" --arch "$(ISD_ARCH)" \
 		--profile "$(ISD_PROFILE)" --machine "$(IR0_MACHINE)" \

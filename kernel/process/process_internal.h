@@ -28,6 +28,7 @@
 #include <ir0/sched.h>
 #include <ir0/kmem.h>
 #include <ir0/pipe.h>
+#include <ir0/pipe_fd.h>
 #include <ir0/paging.h>
 #include <ir0/vfs.h>
 #include <ir0/ktm/klog.h>
