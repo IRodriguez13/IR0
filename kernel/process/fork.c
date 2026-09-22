@@ -22,6 +22,7 @@
 #include <ir0/files_struct.h>
 #include <ir0/ktm/checkpoint.h>
 #include <ir0/ktm/fault.h>
+#include <ir0/syscall_frame.h>
 #include <string.h>
 
 /*
@@ -214,10 +215,35 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 }
 
 /*
+ * Linux copy_thread: if clone() passed a child stack, the child resumes with
+ * that RSP. musl __clone stores the fn argument at stack-8 and the child
+ * path is `pop %rdi; call *fn`. Ignoring the stack makes posix_spawn's child
+ * pop the parent's return address and #SS on attr->__flags (SS:%rbp).
+ */
+static void fork_child_set_user_stack(process_t *child, void *stack)
+{
+	uint64_t sp;
+
+	if (!child || !stack)
+		return;
+
+	sp = (uint64_t)(uintptr_t)stack;
+	syscall_frame_set_sp(&child->syscall_frame, sp);
+	child->saved_user_rsp = sp;
+	task_set_sp(&child->task, sp);
+	task_clear_frame_pointer(&child->task);
+}
+
+/*
  * fork() — clone address space (COW), files, and arrange parent/child returns
  * via arch_fork_* hooks. Child is not runnable until process_fork_wake_pending.
  */
 pid_t fork(void)
+{
+	return fork_with_stack(NULL);
+}
+
+pid_t fork_with_stack(void *child_stack)
 {
 	process_t *parent = current_process;
 	process_t *child;
@@ -307,6 +333,8 @@ pid_t fork(void)
 			fork_rollback(child, child_pid, 0);
 			return ret;
 		}
+		child->syscall_frame = parent->syscall_frame;
+		fork_child_set_user_stack(child, child_stack);
 	}
 
 	if (fork_attach_pending_child(child, parent) != 0)
@@ -455,7 +483,7 @@ void process_mm_release_on_exit(process_t *dying)
  * vfork() — share mm, run the child immediately, block the parent until the
  * child calls process_vfork_complete() from exec or _exit.
  */
-pid_t vfork_process(void)
+pid_t vfork_process(void *child_stack)
 {
 	process_t *parent = current_process;
 	process_t *child;
@@ -501,6 +529,8 @@ pid_t vfork_process(void)
 			fork_rollback(child, child_pid, 0);
 			return ret;
 		}
+		child->syscall_frame = parent->syscall_frame;
+		fork_child_set_user_stack(child, child_stack);
 		ret = fork_prepare_parent_return(parent, child_pid);
 		if (ret < 0)
 		{
@@ -606,8 +636,6 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 
 	child_sp = (uintptr_t)stack;
 	child->task.pid = child_pid;
-	task_set_sp(&child->task, (uint64_t)child_sp);
-	task_clear_frame_pointer(&child->task);
 
 	if (parent->mode == USER_MODE)
 	{
@@ -624,6 +652,13 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 			fork_rollback(child, child_pid, 0);
 			return cret;
 		}
+		child->syscall_frame = parent->syscall_frame;
+		fork_child_set_user_stack(child, (void *)child_sp);
+	}
+	else
+	{
+		task_set_sp(&child->task, (uint64_t)child_sp);
+		task_clear_frame_pointer(&child->task);
 	}
 
 	if (flags & CLONE_PARENT_SETTID && parent_tid)

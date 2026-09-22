@@ -112,6 +112,8 @@ void ir0_log_user_fault_frame(unsigned vector, unsigned long long cr2,
 	 */
 	if (vector == 13)
 		classify = "USER_GENERAL_PROTECTION";
+	else if (vector == 12)
+		classify = "USER_STACK_SEGMENT";
 	else if (vector == 6)
 		classify = "USER_INVALID_OPCODE";
 	else if (vector == 0 || vector == 4 || vector == 19)

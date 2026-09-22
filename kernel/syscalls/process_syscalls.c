@@ -1508,7 +1508,7 @@ int64_t sys_vfork(void)
 {
 	if (!current_process)
 		return -ESRCH;
-	return (int64_t)vfork_process();
+	return (int64_t)vfork_process(NULL);
 }
 
 /*
@@ -1516,6 +1516,8 @@ int64_t sys_vfork(void)
  * CLONE_VFORK|CLONE_VM: vfork semantics (no CLONE_THREAD).
  * CLONE_THREAD|CLONE_VM: lightweight thread sharing the caller's mm.
  * Otherwise duplicates the address space like fork().
+ * stack is the child user RSP (musl __clone / posix_spawn); NULL keeps the
+ * parent's stack (classic vfork).
  */
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
                   int *child_tid, unsigned long tls)
@@ -1527,17 +1529,16 @@ int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 	{
 		if ((flags & CLONE_THREAD) || !(flags & CLONE_VM))
 			return -EINVAL;
-		return (int64_t)vfork_process();
+		return (int64_t)vfork_process(stack);
 	}
 
 	if (flags & CLONE_THREAD)
 		return (int64_t)clone_thread(flags, stack, parent_tid, child_tid, tls);
 
-	(void)stack;
 	(void)parent_tid;
 	(void)child_tid;
 	(void)tls;
-	return fork();
+	return fork_with_stack(stack);
 }
 
 
