@@ -1524,7 +1524,7 @@ def audit_select(report_dir: Path, cfg: dict) -> CompareResult:
         "select",
         "select_probe",
         "SELECTOK",
-        "select,pipe,write,read,close",
+        "select,pselect6,pipe,write,read,close,rt_sigaction,rt_sigprocmask",
         linux_dir,
         ir0_dir,
     ):

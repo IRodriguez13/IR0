@@ -436,17 +436,59 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   return (int64_t)ready;
 }
 
+int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
+			  int *applied, uint32_t *saved_mask)
+{
+  sigset_t kset;
+  uint64_t legacy64;
+  uint32_t new_mask;
+
+  if (!applied || !saved_mask)
+    return -EINVAL;
+  *applied = 0;
+  *saved_mask = 0;
+  if (!user_sigmask)
+    return 0;
+  if (!current_process)
+    return -ESRCH;
+
+  if (sigsetsize == sizeof(uint64_t))
+  {
+    if (copy_from_user(&legacy64, user_sigmask, sizeof(legacy64)) != 0)
+      return -EFAULT;
+    new_mask = linux_sigword_to_ir0((uint32_t)legacy64);
+  }
+  else if (sigsetsize == sizeof(sigset_t))
+  {
+    if (copy_from_user(&kset, user_sigmask, sizeof(kset)) != 0)
+      return -EFAULT;
+    new_mask = ir0_sigset_low32(&kset);
+  }
+  else
+    return -EINVAL;
+
+  *saved_mask = current_process->signal_mask;
+  current_process->signal_mask = new_mask;
+  *applied = 1;
+  return 0;
+}
+
+void io_temp_sigmask_end(int applied, uint32_t saved_mask)
+{
+  if (applied && current_process)
+    current_process->signal_mask = saved_mask;
+}
+
 int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
 		  const struct timespec *timeout, const sigset_t *sigmask,
 		  size_t sigsetsize)
 {
   struct timespec ts;
-  sigset_t kset;
-  uint64_t legacy64;
   uint32_t saved_mask = 0;
   int timeout_ms = -1;
-  int mask_changed = 0;
+  int mask_applied = 0;
   int64_t ret;
+  int rc;
 
   if (!current_process)
     return -ESRCH;
@@ -463,34 +505,20 @@ int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
 			 (ts.tv_nsec + 999999L) / 1000000L);
   }
 
-  if (sigmask)
-  {
-    uint32_t new_mask;
-
-    if (sigsetsize == sizeof(uint64_t))
-    {
-      if (copy_from_user(&legacy64, sigmask, sizeof(legacy64)) != 0)
-	return -EFAULT;
-      new_mask = (uint32_t)legacy64;
-    }
-    else if (sigsetsize == sizeof(sigset_t))
-    {
-      if (copy_from_user(&kset, sigmask, sizeof(kset)) != 0)
-	return -EFAULT;
-      new_mask = ir0_sigset_low32(&kset);
-    }
-    else
-      return -EINVAL;
-
-    saved_mask = current_process->signal_mask;
-    current_process->signal_mask = new_mask;
-    mask_changed = 1;
-  }
+  rc = io_temp_sigmask_begin(sigmask, sigsetsize, &mask_applied, &saved_mask);
+  if (rc < 0)
+    return rc;
 
   ret = sys_poll(user_fds, nfds, timeout_ms);
-  if (mask_changed)
-    current_process->signal_mask = saved_mask;
+  io_temp_sigmask_end(mask_applied, saved_mask);
   return ret;
+}
+
+static int io_signal_deliverable(void)
+{
+  if (!current_process)
+    return 0;
+  return (current_process->signal_pending & ~current_process->signal_mask) != 0;
 }
 
 /**
@@ -513,6 +541,8 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
   if (!current_process)
     return -ESRCH;
+  if (io_signal_deliverable())
+    return -EINTR;
   /*
    * nfds is max_fd+1 (Linux/X11 often MaxClients=256), not the count of
    * interesting fds. Cap to IR0_FD_SETSIZE; compact interest into pfds[].
@@ -564,11 +594,19 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
         if (ret < 0)
           return ret;
-        if (current_process->signal_pending != 0)
+        if (io_signal_deliverable())
           return -EINTR;
       }
     }
-    return syscall_sleep_ms_locked((uint64_t)timeout_ms);
+    {
+      int64_t slept = syscall_sleep_ms_locked((uint64_t)timeout_ms);
+
+      if (slept < 0)
+        return slept;
+      if (io_signal_deliverable())
+        return -EINTR;
+      return 0;
+    }
   }
 
   for (fd = 0; fd < nfds; fd++)
@@ -604,11 +642,19 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
         if (ret < 0)
           return ret;
-        if (current_process->signal_pending != 0)
+        if (io_signal_deliverable())
           return -EINTR;
       }
     }
-    return syscall_sleep_ms_locked((uint64_t)timeout_ms);
+    {
+      int64_t slept = syscall_sleep_ms_locked((uint64_t)timeout_ms);
+
+      if (slept < 0)
+        return slept;
+      if (io_signal_deliverable())
+        return -EINTR;
+      return 0;
+    }
   }
 
   expire = (timeout_ms < 0) ? (uint64_t)-1
@@ -622,7 +668,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
     if (timeout_ms >= 0 && expire != (uint64_t)-1 &&
         clock_get_uptime_milliseconds() >= expire)
       break;
-    if (current_process->signal_pending != 0)
+    if (io_signal_deliverable())
       return -EINTR;
 
 	ready = poll_wait_kernel(pfds, npoll, expire);
@@ -665,6 +711,8 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
   struct timeval tv;
   int timeout_ms = -1;
   int has_timeout = 0;
+  uint64_t start_ms = 0;
+  int64_t ret;
 
   if (user_tv)
   {
@@ -676,10 +724,25 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
       return -EINVAL;
     timeout_ms = (int)(tv.tv_sec * 1000 + tv.tv_usec / 1000);
     has_timeout = 1;
+    start_ms = clock_get_uptime_milliseconds();
   }
 
-  return io_select_timeout_ms(nfds, user_r, user_w, user_e, timeout_ms,
-			      has_timeout);
+  ret = io_select_timeout_ms(nfds, user_r, user_w, user_e, timeout_ms,
+			     has_timeout);
+  if (has_timeout && user_tv)
+  {
+    uint64_t now = clock_get_uptime_milliseconds();
+    uint64_t elapsed = (now > start_ms) ? now - start_ms : 0;
+    uint64_t remain = 0;
+
+    if (timeout_ms > 0 && elapsed < (uint64_t)timeout_ms)
+      remain = (uint64_t)timeout_ms - elapsed;
+    tv.tv_sec = (time_t)(remain / 1000);
+    tv.tv_usec = (suseconds_t)((remain % 1000) * 1000);
+    if (copy_to_user(user_tv, &tv, sizeof(tv)) != 0 && ret >= 0)
+      return -EFAULT;
+  }
+  return ret;
 }
 
 static int poll_wake_do(void)
@@ -2006,6 +2069,12 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
       e->flags = keep | settable;
     }
     ret = 0;
+    break;
+  case F_GETLK:
+  case F_SETLK:
+  case F_SETLKW:
+    /* Byte-range locks are not implemented; flock(2) is whole-file only. */
+    ret = -EINVAL;
     break;
   case F_GETOWN:
     ret = e->async_owner;

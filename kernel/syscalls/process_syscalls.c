@@ -330,7 +330,7 @@ static uint32_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigset
 		if (!set)
 			return 0;
 		memcpy(&legacy64, set, sizeof(legacy64));
-		return (uint32_t)legacy64;
+		return linux_sigword_to_ir0((uint32_t)legacy64);
 	}
 	return ir0_sigset_low32(set);
 }
@@ -344,7 +344,7 @@ static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint32
 
 	if (sigsetsize == sizeof(uint64_t))
 	{
-		legacy64 = (uint64_t)mask;
+		legacy64 = (uint64_t)ir0_sigword_to_linux(mask);
 		memcpy(set, &legacy64, sizeof(legacy64));
 		return;
 	}
@@ -435,7 +435,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 		{
 			if (validate_userspace_buffer(oldset, sizeof(uint64_t)) != 0)
 				return -EFAULT;
-			legacy64 = (uint64_t)current_process->signal_mask;
+			legacy64 = (uint64_t)ir0_sigword_to_linux(current_process->signal_mask);
 			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
 				return -EFAULT;
 		}
@@ -458,7 +458,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 			return -EFAULT;
 		if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
 			return -EFAULT;
-		newmask = (uint32_t)legacy64;
+		newmask = linux_sigword_to_ir0((uint32_t)legacy64);
 	}
 	else
 	{

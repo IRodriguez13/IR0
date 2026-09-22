@@ -251,11 +251,25 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
  */
 void signal_note_syscall_return(process_t *p, int64_t ret);
 
+/*
+ * Linux/musl place signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.
+ * Convert at the ABI boundary only; keep kernel-internal bits unchanged.
+ */
+static inline uint32_t linux_sigword_to_ir0(uint32_t linux_low)
+{
+	return linux_low << 1;
+}
+
+static inline uint32_t ir0_sigword_to_linux(uint32_t ir0_mask)
+{
+	return ir0_mask >> 1;
+}
+
 static inline uint32_t ir0_sigset_low32(const sigset_t *set)
 {
 	if (!set)
 		return 0;
-	return (uint32_t)(set->__val[0] & 0xFFFFFFFFUL);
+	return linux_sigword_to_ir0((uint32_t)(set->__val[0] & 0xFFFFFFFFUL));
 }
 
 static inline void ir0_sigset_set_low32(sigset_t *set, uint32_t mask)
@@ -267,7 +281,7 @@ static inline void ir0_sigset_set_low32(sigset_t *set, uint32_t mask)
 
 	for (i = 0; i < _IR0_SIGSET_WORDS; i++)
 		set->__val[i] = 0;
-	set->__val[0] = (unsigned long)mask;
+	set->__val[0] = (unsigned long)ir0_sigword_to_linux(mask);
 }
 
 #endif /* _IR0_SIGNALS_H */

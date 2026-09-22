@@ -142,10 +142,10 @@
     {
       "id": "select",
       "enabled": true,
-      "title": "select(2)",
+      "title": "select(2) / pselect6 sigmask",
       "status_doc": "VERIFIED",
       "done_tag": "SELECTOK",
-      "linux_ref": "fs/select.c; man2 select(2)",
+      "linux_ref": "fs/select.c sigset_argpack; man2 pselect(2)",
       "smokes": [
         "linux-abi-audit-select"
       ]
@@ -180,7 +180,7 @@
       "title": "fcntl(2) F_GETFD/F_SETFD/F_GETFL/F_SETFL/F_DUPFD/F_DUPFD_CLOEXEC",
       "status_doc": "VERIFIED",
       "done_tag": "FCNTLOK",
-      "linux_ref": "fs/fcntl.c; include/uapi/linux/fcntl.h F_DUPFD_CLOEXEC=1030; man2 fcntl(2)",
+      "linux_ref": "fs/fcntl.c; include/uapi/linux/fcntl.h F_DUPFD_CLOEXEC=1030 F_GETOWN=9; man2 fcntl(2)",
       "smokes": [
         "linux-abi-audit-fcntl"
       ]

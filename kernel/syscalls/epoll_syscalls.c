@@ -414,31 +414,88 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 int64_t sys_epoll_pwait(int epfd, struct epoll_event *events, int maxevents,
 			int timeout, const void *sigmask, size_t sigsetsize)
 {
-	(void)sigmask;
-	(void)sigsetsize;
-	return sys_epoll_wait(epfd, events, maxevents, timeout);
+	uint32_t saved_mask = 0;
+	int applied = 0;
+	int64_t ret;
+	int rc;
+
+	rc = io_temp_sigmask_begin(sigmask, sigsetsize, &applied, &saved_mask);
+	if (rc < 0)
+		return rc;
+	ret = sys_epoll_wait(epfd, events, maxevents, timeout);
+	io_temp_sigmask_end(applied, saved_mask);
+	return ret;
 }
 
 int64_t sys_pselect6(int nfds, fd_set *readfds, fd_set *writefds,
 		     fd_set *exceptfds, const struct timespec *timeout,
 		     const void *sigmask)
 {
-	(void)sigmask;
+	struct
+	{
+		const void *ss;
+		size_t ss_len;
+	} pack;
+	struct timespec ts;
+	uint32_t saved_mask = 0;
+	int timeout_ms = -1;
+	int has_timeout = 0;
+	int applied = 0;
+	uint64_t start_ms = 0;
+	int64_t ret;
+	int rc;
+
+	/* Linux pselect6 6th arg is { sigset_t *ss; size_t ss_len }. */
+	if (sigmask)
+	{
+		if (validate_userspace_buffer((void *)sigmask, sizeof(pack)) != 0)
+			return -EFAULT;
+		if (copy_from_user(&pack, sigmask, sizeof(pack)) != 0)
+			return -EFAULT;
+		rc = io_temp_sigmask_begin(pack.ss, pack.ss_len, &applied,
+					   &saved_mask);
+		if (rc < 0)
+			return rc;
+	}
 
 	if (timeout)
 	{
-		struct timespec ts;
-		int timeout_ms;
-
 		if (validate_userspace_buffer((void *)timeout, sizeof(ts)) != 0)
+		{
+			io_temp_sigmask_end(applied, saved_mask);
 			return -EFAULT;
+		}
 		if (copy_from_user(&ts, timeout, sizeof(ts)) != 0)
+		{
+			io_temp_sigmask_end(applied, saved_mask);
 			return -EFAULT;
+		}
 		if (ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= 1000000000L)
+		{
+			io_temp_sigmask_end(applied, saved_mask);
 			return -EINVAL;
+		}
 		timeout_ms = (int)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
-		return io_select_timeout_ms(nfds, readfds, writefds, exceptfds,
-					    timeout_ms, 1);
+		has_timeout = 1;
+		start_ms = clock_get_uptime_milliseconds();
 	}
-	return io_select_timeout_ms(nfds, readfds, writefds, exceptfds, -1, 0);
+
+	ret = io_select_timeout_ms(nfds, readfds, writefds, exceptfds,
+				   timeout_ms, has_timeout);
+	if (has_timeout && timeout)
+	{
+		uint64_t now = clock_get_uptime_milliseconds();
+		uint64_t elapsed = (now > start_ms) ? now - start_ms : 0;
+		uint64_t remain = 0;
+
+		if (timeout_ms > 0 && elapsed < (uint64_t)timeout_ms)
+			remain = (uint64_t)timeout_ms - elapsed;
+		ts.tv_sec = (time_t)(remain / 1000);
+		ts.tv_nsec = (long)((remain % 1000) * 1000000L);
+		if (copy_to_user((void *)timeout, &ts, sizeof(ts)) != 0 &&
+		    ret >= 0)
+			ret = -EFAULT;
+	}
+	io_temp_sigmask_end(applied, saved_mask);
+	return ret;
 }

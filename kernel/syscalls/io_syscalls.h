@@ -30,6 +30,9 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
 		   struct timeval *user_tv);
 int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 			     fd_set *user_e, int timeout_ms, int has_timeout);
+int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
+			  int *applied, uint32_t *saved_mask);
+void io_temp_sigmask_end(int applied, uint32_t saved_mask);
 int64_t syscall_sleep_ms_locked(uint64_t ms);
 int fd_can_read_for(process_t *proc, int fd);
 int fd_can_write_for(process_t *proc, int fd);

@@ -107,6 +107,9 @@ ASCII:
    Restart applies to syscalls that snap a blocked frame (`sigreturn_blocked_syscall`).
    `select` / `poll` / `pselect6` / `rt_sigsuspend` do not restart (Linux).
 5. `act->sa_mask` overwrites entire process mask on sigaction.
+6. Linux/musl `sigset_t` places signal N in bit (N-1). The syscall ABI
+   converts with `linux_sigword_to_ir0` / `ir0_sigword_to_linux` so
+   `sigprocmask`/`pselect6` match `SIGNAL_MASK(N)`.
 
 ## 9. Debugging tips
 

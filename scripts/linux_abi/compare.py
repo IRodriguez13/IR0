@@ -1980,6 +1980,9 @@ def compare_select(linux: dict, ir0: dict) -> CompareResult:
         ("select_pipe", 1, None),
         ("select_timeout0", 0, None),
         ("select_nfds_neg", -1, 22),
+        ("select_tv_remaining", 0, None),
+        ("pselect_mask_hold", 0, None),
+        ("pselect_mask_deliver", -1, 4),
     )
 
     for op, exp_ret, exp_errno in required:
@@ -2005,7 +2008,7 @@ def compare_select(linux: dict, ir0: dict) -> CompareResult:
                 )
 
     res.notes.append(
-        "select pipe POLLIN, zero timeout, nfds<0 EINVAL; pselect6 sigmask not in contract"
+        "select pipe POLLIN, timeout 0 + timeval remaining, nfds<0 EINVAL; pselect6 sigmask hold/EINTR"
     )
     return res
 

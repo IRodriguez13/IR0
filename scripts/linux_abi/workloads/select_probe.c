@@ -8,10 +8,21 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#define _GNU_SOURCE
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <sys/select.h>
+#include <time.h>
 #include <unistd.h>
+
+static volatile sig_atomic_t g_usr1;
+
+static void on_usr1(int sig)
+{
+	(void)sig;
+	g_usr1 = 1;
+}
 
 static void audit_sel(unsigned step, const char *op, long ret, int err)
 {
@@ -81,6 +92,75 @@ int main(void)
 		close(fds[0]);
 		close(fds[1]);
 		return 1;
+	}
+
+	audit_sel(3, "select_tv_remaining", tv.tv_sec, 0);
+	if (tv.tv_sec != 0)
+	{
+		close(fds[0]);
+		close(fds[1]);
+		return 1;
+	}
+
+	{
+		sigset_t block;
+		sigset_t empty;
+		sigset_t old;
+		struct timespec ts;
+		struct sigaction sa;
+
+		g_usr1 = 0;
+		sa.sa_handler = on_usr1;
+		sigemptyset(&sa.sa_mask);
+		sa.sa_flags = 0;
+		if (sigaction(SIGUSR1, &sa, NULL) != 0)
+		{
+			close(fds[0]);
+			close(fds[1]);
+			return 1;
+		}
+		sigemptyset(&block);
+		sigaddset(&block, SIGUSR1);
+		sigemptyset(&empty);
+		if (sigprocmask(SIG_BLOCK, &block, &old) != 0)
+		{
+			close(fds[0]);
+			close(fds[1]);
+			return 1;
+		}
+		if (raise(SIGUSR1) != 0)
+		{
+			(void)sigprocmask(SIG_SETMASK, &old, NULL);
+			close(fds[0]);
+			close(fds[1]);
+			return 1;
+		}
+
+		ts.tv_sec = 0;
+		ts.tv_nsec = 0;
+		pr = pselect(0, NULL, NULL, NULL, &ts, &block);
+		audit_sel(4, "pselect_mask_hold", (long)pr, pr < 0 ? errno : 0);
+		if (pr != 0)
+		{
+			(void)sigprocmask(SIG_SETMASK, &old, NULL);
+			close(fds[0]);
+			close(fds[1]);
+			return 1;
+		}
+
+		ts.tv_sec = 0;
+		ts.tv_nsec = 50 * 1000 * 1000;
+		pr = pselect(0, NULL, NULL, NULL, &ts, &empty);
+		audit_sel(5, "pselect_mask_deliver", (long)pr,
+			  pr < 0 ? errno : 0);
+		if (pr >= 0 || errno != EINTR)
+		{
+			(void)sigprocmask(SIG_SETMASK, &old, NULL);
+			close(fds[0]);
+			close(fds[1]);
+			return 1;
+		}
+		(void)sigprocmask(SIG_SETMASK, &old, NULL);
 	}
 
 	close(fds[0]);
