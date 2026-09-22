@@ -52,6 +52,7 @@
 #include <ir0/clock.h>
 #include <ir0/credentials.h>
 #include <ir0/cred_transition.h>
+#include <ir0/clone.h>
 #include <ir0/power_manag.h>
 #include <ir0/futex.h>
 #include <ir0/kexec.h>
@@ -1554,40 +1555,44 @@ int64_t sys_fork(void)
 }
 
 /*
- * vfork(2) as a plain fork.
- *
- * POSIX allows vfork() to be implemented as fork(), and 4.4BSD did exactly
- * that; what callers lose is the guarantee that the parent stays suspended
- * and that the child's writes are visible to it. BusyBox is written for this
- * case (libbb/vfork_daemon_rexec.c: "vfork() can be equivalent to fork()"),
- * so the honest cost is that a failed exec in the child is not reported back
- * through shared memory. Sharing the address space needs the parent to block
- * until execve or _exit, which IR0's exec path cannot yet unwind.
+ * vfork(2) — Linux kernel_clone(CLONE_VFORK|CLONE_VM): parent remains blocked
+ * until the child execs or _exits, and child writes are visible in the shared
+ * mm. See kernel/fork.c wait_for_vfork_done / complete_vfork_done.
  */
 int64_t sys_vfork(void)
 {
-  return sys_fork();
+	if (!current_process)
+		return -ESRCH;
+	return (int64_t)vfork_process();
 }
 
 /*
  * sys_clone — Linux __NR_clone (56).
+ * CLONE_VFORK|CLONE_VM: vfork semantics (no CLONE_THREAD).
  * CLONE_THREAD|CLONE_VM: lightweight thread sharing the caller's mm.
  * Otherwise duplicates the address space like fork().
  */
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
                   int *child_tid, unsigned long tls)
 {
-  if (!current_process)
-    return -ESRCH;
+	if (!current_process)
+		return -ESRCH;
 
-  if (flags & 0x00010000UL) /* CLONE_THREAD */
-    return (int64_t)clone_thread(flags, stack, parent_tid, child_tid, tls);
+	if (flags & CLONE_VFORK)
+	{
+		if ((flags & CLONE_THREAD) || !(flags & CLONE_VM))
+			return -EINVAL;
+		return (int64_t)vfork_process();
+	}
 
-  (void)stack;
-  (void)parent_tid;
-  (void)child_tid;
-  (void)tls;
-  return fork();
+	if (flags & CLONE_THREAD)
+		return (int64_t)clone_thread(flags, stack, parent_tid, child_tid, tls);
+
+	(void)stack;
+	(void)parent_tid;
+	(void)child_tid;
+	(void)tls;
+	return fork();
 }
 
 

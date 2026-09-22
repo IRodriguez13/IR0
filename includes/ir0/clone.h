@@ -18,6 +18,7 @@
 #define CLONE_FS              0x00000200UL
 #define CLONE_FILES           0x00000400UL
 #define CLONE_SIGHAND         0x00000800UL
+#define CLONE_VFORK           0x00004000UL
 #define CLONE_THREAD          0x00010000UL
 #define CLONE_SETTLS          0x00080000UL
 #define CLONE_PARENT_SETTID   0x00100000UL

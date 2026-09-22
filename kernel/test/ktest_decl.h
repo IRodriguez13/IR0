@@ -41,6 +41,7 @@ void ktest_wait4_wnohang_specific(void);
 void ktest_wait4_wnohang_echild_after_reap(void);
 void ktest_wait4_pgrp(void);
 void ktest_arch_prctl_set_fs_rejects_nonuser(void);
+void ktest_vfork_complete_clears_link(void);
 void ktest_kill_sigterm_wait_status(void);
 void ktest_proc_blockdevices_contract(void);
 void ktest_proc_cpuinfo_contract(void);

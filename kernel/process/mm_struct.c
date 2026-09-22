@@ -15,6 +15,7 @@
 #include "process_internal.h"
 #include <ir0/mm_struct.h>
 #include <ir0/errno.h>
+#include <ir0/tlb.h>
 #include <string.h>
 
 mm_struct_t *mm_create(void)
@@ -124,6 +125,46 @@ int process_mm_share(process_t *child, process_t *parent)
 
 	(void)mm_get(mm);
 	process_mm_bind(child, mm);
+	return 0;
+}
+
+int exec_detach_shared_mm(process_t *proc)
+{
+	mm_struct_t *old;
+	mm_struct_t *fresh;
+	uint64_t *pml4;
+
+	if (!proc || !proc->mm)
+		return -EINVAL;
+	if (mm_users(proc->mm) <= 1)
+		return 0;
+
+	fresh = mm_create();
+	if (!fresh)
+		return -ENOMEM;
+
+	pml4 = (uint64_t *)create_process_page_directory();
+	if (!pml4)
+	{
+		mm_put(fresh);
+		return -ENOMEM;
+	}
+
+	fresh->page_directory = pml4;
+	fresh->owns_tables = 1;
+	old = proc->mm;
+	/*
+	 * Linux exec_mmap: bind + activate the private mm, then
+	 * complete_vfork_done, then mmput(old). switch_to_user() does
+	 * not load CR3, so a vfork child that stays on the shared root
+	 * I-fetches the new image against the parent's tables.
+	 */
+	process_mm_bind(proc, fresh);
+	process_set_mm_root(proc, (uint64_t)(uintptr_t)pml4);
+	if (proc == current_process)
+		mm_activate((uintptr_t)pml4);
+	process_vfork_complete(proc);
+	mm_put(old);
 	return 0;
 }
 

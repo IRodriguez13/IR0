@@ -3051,6 +3051,36 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 		grep -E 'SETSID|SETPGID|POSIX_|panic' $(POSIX_SETSID_LOG) | tail -30; exit 1; \
 	fi
 
+.PHONY: smoke-vfork build-init-vfork
+VFORK_SMOKE_LOG = /tmp/vfork-smoke.log
+build-init-vfork:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
+	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_vfork_smoke.c
+	@echo "✓ build-init-vfork OK"
+
+smoke-vfork: kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@echo "  SMOKE   vfork shared-mm + exec..."
+	@$(MAKE) -s build-init-vfork
+	@DISK=$$(mktemp /tmp/ir0-vfork.XXXXXX.img); \
+	cp -f disk.img $$DISK; \
+	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
+	rm -f $(VFORK_SMOKE_LOG); \
+	$(SMOKE_QEMU_RUN) --log $(VFORK_SMOKE_LOG) --timeout 90 --stale-sec 25 \
+		--done VFORK_ALL_OK --fail-regex 'VFORK_.*FAIL|KERNEL PANIC' -- \
+		$(QEMU) -cdrom kernel-x64-userspace.iso \
+		-drive file=$$DISK,format=raw,if=ide,index=0 \
+		-serial stdio -display none -m 128M -no-reboot -net none; \
+	rm -f $$DISK; \
+	if grep -q "VFORK_SHARE_OK" $(VFORK_SMOKE_LOG) && \
+	    grep -q "VFORK_EXEC_OK" $(VFORK_SMOKE_LOG) && \
+	    grep -q "VFORK_ALL_OK" $(VFORK_SMOKE_LOG); then \
+		echo "✓ smoke-vfork passed"; \
+	else \
+		echo "✗ smoke-vfork FAILED"; \
+		grep -E 'VFORK_|panic|EXEC_MM' $(VFORK_SMOKE_LOG) | tail -40; exit 1; \
+	fi
+
 .PHONY: smoke-posix-sighup-tty build-init-posix-sighup-tty
 POSIX_SIGHUP_LOG = /tmp/posix-sighup-tty-smoke.log
 build-init-posix-sighup-tty:

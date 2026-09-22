@@ -585,16 +585,18 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     current_process->syscall_resume_rax = 0;
   }
 
-  if (syscall_num == __NR_fork || syscall_num == __NR_clone ||
-      syscall_num == __NR_vfork)
+  if ((syscall_num == __NR_fork || syscall_num == __NR_clone) &&
+      current_process && current_process->fork_pending_child)
   {
     /*
      * Mark ring-0 before waking the child so a timer-deferred schedule
      * resumes via kernel_ret (syscall stack), not user iretq with a stale rip.
      * IRQs off first: otherwise arm leaves KERNEL_CS+user RIP while the timer
      * can still preempt and schedule the parent as next (desk #UD class).
+     * vfork does not use this path: the child already ran while the parent
+     * was blocked inside vfork_process().
      */
-    if (current_process && current_process->mode == USER_MODE)
+    if (current_process->mode == USER_MODE)
     {
       disable_interrupts();
       process_arm_kernel_syscall_sleep(current_process);
@@ -604,15 +606,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
      * Linux-style fork exit: wake child after parent retval is in rax, then
      * keep IF=0 until sysret so the timer cannot run the child first (UP).
      */
-    if (current_process && current_process->fork_pending_child)
-    {
-      /*
-       * Disable IRQs before enqueueing the child: sched_add can otherwise
-       * run the child on timer tick before parent sysret (UP race).
-       */
-      disable_interrupts();
-      process_fork_wake_pending(current_process);
-    }
+    disable_interrupts();
+    process_fork_wake_pending(current_process);
   }
   else
   {

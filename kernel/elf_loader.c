@@ -1552,10 +1552,15 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
 
     if (proc->mm && mm_users(proc->mm) > 1)
     {
-        kfree(file_data);
-        exec_commit_emit("return-shared-mm", -EBUSY, proc,
-                         "EXEC_MM_SHARED");
-        return -EBUSY;
+        int detach_rc = exec_detach_shared_mm(proc);
+
+        if (detach_rc < 0)
+        {
+            kfree(file_data);
+            exec_commit_emit("return-shared-mm", detach_rc, proc,
+                             "EXEC_MM_SHARED");
+            return detach_rc;
+        }
     }
 
     process_exec_close_cloexec(proc);
@@ -1696,6 +1701,12 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     exec_release_string_vector(envp);
 
     exec_commit_emit("before-userswitch", 0, proc, "EXEC_COMMIT_OK");
+    /*
+     * switch_to_user() does not load CR3. After vfork detach the active
+     * root can still be the shared parent mm unless exec_mmap activated.
+     */
+    if (proc == current_process && process_mm_root(proc))
+	    paging_activate_address_space((uintptr_t)process_mm_root(proc));
     switch_to_user((arch_addr_t)task_get_ip(&proc->task), (arch_addr_t)task_get_sp(&proc->task));
     exec_commit_emit("return-after-userswitch", -1, proc, "EXEC_COMMIT_RETURNED");
     return -1;

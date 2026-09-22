@@ -329,6 +329,215 @@ pid_t fork(void)
 	return child_pid;
 }
 
+#define VFORK_LINK_MAX 16
+
+struct vfork_link
+{
+	process_t *parent;
+	process_t *child;
+};
+
+static struct vfork_link vfork_links[VFORK_LINK_MAX];
+
+static struct vfork_link *vfork_link_find_child(const process_t *child)
+{
+	int i;
+
+	if (!child)
+		return NULL;
+	for (i = 0; i < VFORK_LINK_MAX; i++)
+	{
+		if (vfork_links[i].child == child)
+			return &vfork_links[i];
+	}
+	return NULL;
+}
+
+static struct vfork_link *vfork_link_find_parent(const process_t *parent)
+{
+	int i;
+
+	if (!parent)
+		return NULL;
+	for (i = 0; i < VFORK_LINK_MAX; i++)
+	{
+		if (vfork_links[i].parent == parent)
+			return &vfork_links[i];
+	}
+	return NULL;
+}
+
+int process_vfork_link(process_t *parent, process_t *child)
+{
+	int i;
+	uint64_t irq_flags;
+
+	if (!parent || !child)
+		return -EINVAL;
+
+	irq_flags = process_irq_save();
+	for (i = 0; i < VFORK_LINK_MAX; i++)
+	{
+		if (!vfork_links[i].parent && !vfork_links[i].child)
+		{
+			vfork_links[i].parent = parent;
+			vfork_links[i].child = child;
+			process_irq_restore(irq_flags);
+			return 0;
+		}
+	}
+	process_irq_restore(irq_flags);
+	return -EAGAIN;
+}
+
+int process_vfork_parent_blocked(const process_t *parent)
+{
+	return vfork_link_find_parent(parent) ? 1 : 0;
+}
+
+void process_vfork_complete(process_t *child)
+{
+	struct vfork_link *link;
+	process_t *parent;
+	int was_blocked = 0;
+	uint64_t irq_flags;
+
+	if (!child)
+		return;
+
+	irq_flags = process_irq_save();
+	link = vfork_link_find_child(child);
+	if (!link)
+	{
+		process_irq_restore(irq_flags);
+		return;
+	}
+	parent = link->parent;
+	link->parent = NULL;
+	link->child = NULL;
+	if (parent)
+	{
+		was_blocked = (parent->state == PROCESS_BLOCKED);
+		if (was_blocked)
+			process_set_sched_state(parent, PROCESS_READY);
+	}
+	process_irq_restore(irq_flags);
+
+	if (parent && was_blocked)
+	{
+		sched_add_process(parent);
+		sched_promote_process(parent);
+	}
+}
+
+void process_mm_release_on_exit(process_t *dying)
+{
+	struct vfork_link *link;
+	uint64_t irq_flags;
+
+	if (!dying)
+		return;
+
+	if (vfork_link_find_child(dying))
+		process_vfork_complete(dying);
+
+	irq_flags = process_irq_save();
+	link = vfork_link_find_parent(dying);
+	if (link)
+	{
+		link->parent = NULL;
+		link->child = NULL;
+	}
+	process_irq_restore(irq_flags);
+}
+
+/*
+ * vfork() — share mm, run the child immediately, block the parent until the
+ * child calls process_vfork_complete() from exec or _exit.
+ */
+pid_t vfork_process(void)
+{
+	process_t *parent = current_process;
+	process_t *child;
+	pid_t child_pid;
+	int ret;
+
+	if (!parent)
+		return -ESRCH;
+	if (!parent->mm)
+		return -ENOMEM;
+
+	child = fork_process_create(parent, &child_pid);
+	if (!child)
+		return -ENOMEM;
+
+	if (process_mm_share(child, parent) < 0)
+	{
+		fork_rollback(child, child_pid, 0);
+		return -ENOMEM;
+	}
+	process_set_mm_root(child, process_mm_root(parent));
+
+	if (process_kernel_stack_alloc(child) != 0)
+	{
+		fork_rollback(child, child_pid, 0);
+		return -ENOMEM;
+	}
+
+	if (process_files_clone(child, parent) != 0)
+	{
+		fork_rollback(child, child_pid, 0);
+		return -ENOMEM;
+	}
+
+	child->task.pid = child_pid;
+	process_tls_set(child, process_tls_get(parent));
+
+	if (parent->mode == USER_MODE)
+	{
+		ret = fork_prepare_child_return(child, parent);
+		if (ret < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return ret;
+		}
+		ret = fork_prepare_parent_return(parent, child_pid);
+		if (ret < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return ret;
+		}
+	}
+
+	{
+		uint64_t irq_flags;
+
+		irq_flags = process_irq_save();
+		child->next = process_list;
+		process_list = child;
+		process_irq_restore(irq_flags);
+	}
+
+	if (process_vfork_link(parent, child) != 0)
+	{
+		fork_rollback(child, child_pid, 1);
+		return -EAGAIN;
+	}
+
+	process_set_sched_state(child, PROCESS_READY);
+	sched_add_process(child);
+	process_set_sched_state(parent, PROCESS_BLOCKED);
+	if (parent->mode == USER_MODE)
+		process_arm_kernel_syscall_sleep(parent);
+
+	while (process_vfork_parent_blocked(parent) &&
+	       parent->state == PROCESS_BLOCKED)
+		sched_schedule_next();
+
+	KTM_CHECKPOINT(KTM_CP_PROCESS_FORK);
+	return child_pid;
+}
+
 /*
  * clone_thread — CLONE_VM|CLONE_THREAD (+ optional CLONE_FILES / SETTLS / tid).
  */

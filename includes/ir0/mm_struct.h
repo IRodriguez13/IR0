@@ -58,6 +58,13 @@ void process_mm_bind(struct process *p, mm_struct_t *mm);
 /* Share parent's mm with child (CLONE_VM). Returns 0 or -errno. */
 int process_mm_share(struct process *child, struct process *parent);
 
+/*
+ * Replace a shared mm with a private empty address space (Linux exec_mmap).
+ * Binds and activates the new mm, then wakes a vfork parent, then mmput(old)
+ * so later unmap cannot tear down the parent's tables. Returns 0 or -errno.
+ */
+int exec_detach_shared_mm(struct process *proc);
+
 /* Set mmap_list head on process->mm. */
 void process_mm_set_mmap_list(struct process *p, struct mmap_region *list);
 

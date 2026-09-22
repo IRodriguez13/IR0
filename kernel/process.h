@@ -726,6 +726,11 @@ pid_t spawn_kernel(void (*entry)(void), const char *name);
 
 /* POSIX fork/clone: kernel/process/fork.c (not spawn internally). */
 pid_t fork(void);
+pid_t vfork_process(void);
+int process_vfork_link(process_t *parent, process_t *child);
+int process_vfork_parent_blocked(const process_t *parent);
+void process_vfork_complete(process_t *child);
+void process_mm_release_on_exit(process_t *dying);
 pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		   int *child_tid, unsigned long tls);
 

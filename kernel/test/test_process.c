@@ -20,6 +20,8 @@
 #include <ir0/sched.h>
 #include <ir0/signals.h>
 #include <ir0/wait.h>
+#include <ir0/clone.h>
+#include <string.h>
 
 #define KTEST_ARCH_SET_FS 0x1002
 
@@ -341,5 +343,22 @@ void ktest_arch_prctl_set_fs_rejects_nonuser(void)
 
 	process_tls_set(current_process, saved);
 	set_tls(saved);
+	KTEST_END();
+}
+
+void ktest_vfork_complete_clears_link(void)
+{
+	process_t dummy;
+	process_t *parent = current_process;
+
+	KTEST_BEGIN("vfork_complete_clears_link");
+	KASSERT(parent != NULL);
+	KASSERT_EQ(CLONE_VFORK, 0x00004000UL);
+
+	memset(&dummy, 0, sizeof(dummy));
+	KASSERT_EQ(process_vfork_link(parent, &dummy), 0);
+	KASSERT_EQ(process_vfork_parent_blocked(parent), 1);
+	process_vfork_complete(&dummy);
+	KASSERT_EQ(process_vfork_parent_blocked(parent), 0);
 	KTEST_END();
 }

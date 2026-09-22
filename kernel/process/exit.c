@@ -113,6 +113,7 @@ void process_pre_zombie_teardown(process_t *dying)
 	ipc_purge_waiters_for_process(dying);
 	if (dying->fork_pending_child)
 		process_fork_abort_pending_on_exit(dying);
+	process_mm_release_on_exit(dying);
 	if (dying->pgid > 1)
 		ir0_console_clear_fg_pgid((int32_t)dying->pgid,
 					 (int32_t)dying->task.pid);
