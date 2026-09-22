@@ -18,10 +18,25 @@
 
 #pragma once
 
+#include <ir0/arch_types.h>
+
 /*
  * Install CPU exception / IRQ vector table (x86: IDT; arm64: VBAR/GIC path).
  */
 void irq_tables_init(void);
+
+void interrupt_init(void);
+void irq_init(void);
+void boot_irq_unmask(void);
+
+int register_irq(arch_irq_t irq, void (*handler)(void));
+int unregister_irq(arch_irq_t irq);
+void irq_eoi(arch_irq_t irq);
+
+unsigned long irq_save(void);
+void irq_restore(unsigned long flags);
+void enable_interrupts(void);
+void disable_interrupts(void);
 
 /*
  * Program the interrupt controller (x86: 8259 PIC; arm64: GIC bring-up hook).

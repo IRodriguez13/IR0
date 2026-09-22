@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 void set_fs_base(uint64_t base);
+uint64_t get_fs_base(void);
 void restore_user_fs_base(void);
 
 static inline void set_tls(uint64_t base)

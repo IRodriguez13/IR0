@@ -31,3 +31,12 @@ void switch_to(task_t *prev, task_t *next);
 void switch_to_user_task(const struct task *task);
 
 void switch_to_user(uintptr_t entry, uintptr_t stack);
+
+/* Reapply syscall_frame GPRs before ring-3 iretq when task.arch has kstack residue. */
+void prepare_task_user_iretq(struct process *proc);
+
+/*
+ * First transfer from idle/boot into @next. Does not return on success.
+ * ISA details live in arch backends; portable sched must not embed iretq.
+ */
+void first_switch_to(struct process *next);

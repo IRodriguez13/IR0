@@ -19,6 +19,9 @@
 /*
  * Portable names — no arch_ prefix. ISA asm lives in arch backends.
  * Prefer these over legacy arch_* from new/portable call sites.
+ *
+ * Do not include this from arch_cpu.h: backends declare a local cpuid()
+ * with a subleaf argument that conflicts with the portable prototype.
  */
 
 void cpu_relax(void);

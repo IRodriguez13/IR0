@@ -42,3 +42,7 @@ int page_fault_decode(struct page_fault_info *out, uint64_t errcode,
  * irq_frame is ISA-specific; required for signal delivery on x86-64.
  */
 void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame);
+
+uintptr_t get_fault_address(void);
+uint32_t get_fault_type(void);
+uint32_t get_fault_error(void);
