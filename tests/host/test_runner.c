@@ -39,6 +39,7 @@ extern void test_signal_rt_sigaction_abi(void);
 extern void test_sigreturn_sleep_eintr_frame_abi(void);
 extern void test_elf_initial_brk_abi(void);
 extern void test_musl_cred_abi(void);
+extern void test_credential_saved_ids(void);
 extern void test_blockdev_facade_contract(void);
 extern void test_blockdev_readonly_allows_read(void);
 extern void test_arch_irq_facade_nested(void);
@@ -94,6 +95,7 @@ static void (*test_functions[])(void) = {
 	test_sigreturn_sleep_eintr_frame_abi,
 	test_elf_initial_brk_abi,
 	test_musl_cred_abi,
+	test_credential_saved_ids,
 	test_blockdev_facade_contract,
 	test_blockdev_readonly_allows_read,
 	test_arch_irq_facade_nested,

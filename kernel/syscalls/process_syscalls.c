@@ -51,6 +51,7 @@
 #include <ir0/time.h>
 #include <ir0/clock.h>
 #include <ir0/credentials.h>
+#include <ir0/cred_transition.h>
 #include <ir0/power_manag.h>
 #include <ir0/futex.h>
 #include <ir0/kexec.h>
@@ -177,7 +178,47 @@ static int cred_id_allowed(uint32_t want, uint32_t real, uint32_t eff,
 
 int64_t sys_setreuid(uid_t ruid, uid_t euid)
 {
-	return sys_setresuid(ruid, euid, (uid_t)-1);
+	ir0_cred_id_triplet_t ids;
+	int ret;
+
+	if (!current_process)
+		return -ESRCH;
+
+	ids.real = current_process->uid;
+	ids.effective = current_process->euid;
+	ids.saved = current_process->suid;
+	ret = ir0_cred_setreid(&ids, (uint32_t)ruid, (uint32_t)euid,
+			       current_process->euid == ROOT_UID);
+	if (ret < 0)
+		return ret;
+
+	current_process->uid = ids.real;
+	current_process->euid = ids.effective;
+	current_process->suid = ids.saved;
+	return 0;
+}
+
+int64_t sys_setregid(gid_t rgid, gid_t egid)
+{
+	ir0_cred_id_triplet_t ids;
+	int ret;
+
+	if (!current_process)
+		return -ESRCH;
+
+	ids.real = current_process->gid;
+	ids.effective = current_process->egid;
+	ids.saved = current_process->sgid;
+	ret = ir0_cred_setreid(&ids, (uint32_t)rgid, (uint32_t)egid,
+			       current_process->euid == ROOT_UID);
+	if (ret < 0)
+		return ret;
+
+	current_process->gid = ids.real;
+	current_process->egid = ids.effective;
+	current_process->sgid = ids.saved;
+	process_cred_init_groups(current_process);
+	return 0;
 }
 
 int64_t sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)

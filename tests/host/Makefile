@@ -23,7 +23,8 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
 	test_path_chroot.c \
-	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c test_musl_mmap_contract.c \
+	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c \
+	test_credential_saved_ids.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_sigreturn_sleep_eintr_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
@@ -90,6 +91,9 @@ host_sysfs_net_stub.o: host_sysfs_net_stub.c
 
 host_named_fifo.o: $(KERNEL_ROOT)/kernel/lib/named_fifo.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DCONFIG_DEBUG_FASE50=0 -c -o $@ $<
+
+test_credential_saved_ids.o: test_credential_saved_ids.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_path.o: $(KERNEL_ROOT)/fs/path.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<

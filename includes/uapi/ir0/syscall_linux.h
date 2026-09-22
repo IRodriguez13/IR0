@@ -80,7 +80,6 @@
 #define __NR_clone         56
 #define __NR_fork          57
 #define __NR_vfork         58
-#define __NR_vfork         58
 #define __NR_execve        59
 #define __NR_exit          60
 #define __NR_wait4         61
@@ -139,6 +138,7 @@
 #define __NR_getsid       124
 #define __NR_setgroups    116
 #define __NR_setreuid      113
+#define __NR_setregid      114
 #define __NR_setresuid    117
 #define __NR_getresuid    118
 #define __NR_setresgid    119
