@@ -57,6 +57,10 @@ ISD_PROFILE := minimal
 ifdef IR0_PRODUCT_PROFILE
   ISD_PROFILE := $(IR0_PRODUCT_PROFILE)
 endif
+# Prefer ISD's on-disk catalog so a new profile is not silently dropped.
+ifneq ($(wildcard $(IR0_ISD_ROOT)/profiles/$(PROFILE)/profile.conf),)
+  ISD_PROFILE := $(PROFILE)
+endif
 ifneq ($(filter minimal minimal-sysvinit minimal-openrc development desktop desktop-console appliance,$(PROFILE)),)
   ISD_PROFILE := $(PROFILE)
 endif
@@ -143,7 +147,7 @@ endif
 IR0_USERSPACE_OUT = $(IR0_ISD_ROOT)/out
 IR0_USERSPACE_MAKE = $(MAKE) -s -C $(IR0_ISD_ROOT) IR0_ROOT=$(KERNEL_ROOT) ARCH=$(ISD_ARCH)
 
-.PHONY: check-isd clone-isd isd-defconfig isdconfig isd isd-rootfs isd-image \
+.PHONY: check-isd clone-isd isd-defconfig isdconfig isd-plan isd isd-rootfs isd-image \
 	isd-image-ext2 isd-clean check-userspace warn-userspace-deprecated ensure-isd-disk \
 	ensure-isd-ext2-disk ensure-isd-root-disk verify-ext2-rootfs ensure-isd-home isd-contracts
 
@@ -200,6 +204,10 @@ isd-defconfig: check-isd
 # '+' forwards the jobserver; keep the caller's TTY for the interactive menu.
 isdconfig: check-isd
 	+@$(IR0_ISD_MAKE) isdconfig
+
+# Resolver-only. ISD owns the plan; IR0 must not invent a catalog.
+isd-plan: check-isd
+	+@$(IR0_ISD_MAKE) plan
 
 isd: check-isd
 	+@$(IR0_ISD_MAKE) build

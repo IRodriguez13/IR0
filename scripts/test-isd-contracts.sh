@@ -164,6 +164,9 @@ grep -q 'IR0_ISD_DISK_EXT2' "$MK_BRIDGE" \
 grep -q '^isd-contracts:' "$MK_BRIDGE" \
 	&& grep -q 'test-isd-contracts.sh' "$MK_BRIDGE" \
 	&& ok "D isd-contracts make target" || bad "D isd-contracts target"
+grep -q '^isd-plan:' "$MK_BRIDGE" \
+	&& grep -q 'IR0_ISD_MAKE) plan' "$MK_BRIDGE" \
+	&& ok "D isd-plan delegates to ISD" || bad "D isd-plan missing"
 grep -q 'isd-contracts' scripts/make/testing.mk \
 	&& ok "D test-fast runs isd-contracts" || bad "D test-fast isd-contracts"
 
