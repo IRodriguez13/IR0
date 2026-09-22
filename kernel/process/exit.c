@@ -55,20 +55,42 @@ void fase40_d_audit_destroy_done(process_t *p,
 }
 #endif
 
-__attribute__((noreturn)) void process_exit(int code)
+static void process_exit_robust_list_hook(process_t *dying)
 {
-	process_t *dying = current_process;
-	process_t *parent;
-	size_t total_frames = 0;
-	size_t used_frames = 0;
-	uint64_t vmas = 0;
+	process_exit_robust_list(dying);
+}
 
-	if (!dying)
+static void process_exit_clear_child_tid_hook(process_t *dying)
+{
+	int zero = 0;
+	int *tidptr;
+
+	if (!dying->set_tid_ptr)
+		return;
+
+	tidptr = dying->set_tid_ptr;
+	dying->set_tid_ptr = NULL;
+	if (dying->mode == USER_MODE && dying != current_process)
 	{
-		for (;;)
-			cpu_idle();
+		uint64_t *pml4 = process_pgd(dying);
+
+		if (pml4 && is_user_address(tidptr, sizeof(zero)) &&
+		    copy_to_user_region_in_directory(pml4, (uintptr_t)tidptr,
+						     &zero, sizeof(zero)) == 0)
+			(void)ir0_futex_wake(tidptr, 1);
 	}
-	process_fase50_trace_proc("process_exit-entry", dying);
+	else if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)
+	{
+		(void)copy_to_user(tidptr, &zero, sizeof(zero));
+		(void)ir0_futex_wake(tidptr, 1);
+	}
+}
+
+void process_pre_zombie_teardown(process_t *dying)
+{
+	if (!dying)
+		return;
+
 	dying->irq_frame_saved = 0;
 	process_signal_defer_catchable_clear(dying);
 	process_signal_last_delivered_clear(dying);
@@ -76,39 +98,15 @@ __attribute__((noreturn)) void process_exit(int code)
 #if CONFIG_ENABLE_NETWORKING
 	tcp_wire_on_process_exit((uint32_t)dying->task.pid);
 #endif
-	process_exit_robust_list(dying);
-	if (IR0_DEBUG_WAIT)
-		klog_debug("WAIT", "CLASSIFY ZOMBIE_IRQ_SAVED_CLEARED");
+	process_exit_robust_list_hook(dying);
+	process_exit_clear_child_tid_hook(dying);
 
-	/*
-	 * CLONE_CHILD_CLEARTID / set_tid_address: zero the tid word and wake
-	 * joiners (musl pthread_join futex).
-	 */
-	if (dying->set_tid_ptr)
-	{
-		int zero = 0;
-		int *tidptr = dying->set_tid_ptr;
-
-		dying->set_tid_ptr = NULL;
-		if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)
-		{
-			(void)copy_to_user(tidptr, &zero, sizeof(zero));
-			(void)ir0_futex_wake(tidptr, 1);
-		}
-	}
-
-	/* Before becoming a zombie:
-	 * 1. Reparent all children to init (PID 1) to avoid orphaned processes
-	 * 2. Clean up any zombie children we were waiting for
-	 */
 	process_reap_zombies(dying);
 	process_reparent_children(dying);
 
 	/*
-	 * Release the TTY read-waiter slot now, not at process_destroy(): a
-	 * task killed while blocked in tty_read_kernel would otherwise hold
-	 * the slot for the whole zombie window, with the wake path walking a
-	 * process that is on its way out.
+	 * Drop wait registrations before zombification so wake paths cannot
+	 * retain or reschedule a process whose resources are being released.
 	 */
 	ir0_console_purge_waiters_for_process(dying);
 	pipe_purge_waiters_for_process(dying);
@@ -122,6 +120,71 @@ __attribute__((noreturn)) void process_exit(int code)
 		ir0_console_clear_ctty_session((int32_t)dying->sid);
 
 	process_release_fds(dying, "EXIT_CLOSE");
+}
+
+void process_notify_parent_of_exit(process_t *dying)
+{
+	process_t *parent = NULL;
+	int parent_state_before = -1;
+
+	if (!dying)
+		return;
+
+	if (dying->ppid > 0)
+	{
+		parent = process_find_by_pid(dying->ppid);
+		if (parent)
+			parent_state_before = parent->state;
+		if (parent && parent->state != PROCESS_ZOMBIE)
+		{
+			send_signal(parent->task.pid, SIGCHLD);
+			if (parent->state == PROCESS_BLOCKED ||
+			    process_wait_blocked(parent))
+				process_wait_wake_blocked_parent(parent, dying);
+		}
+		else
+		{
+			/*
+			 * A dead or missing parent cannot reap this zombie. Move the
+			 * relationship to init before publishing SIGCHLD.
+			 */
+			dying->ppid = 1;
+			parent = process_find_by_pid(1);
+			if (parent)
+			{
+				if (parent_state_before == -1)
+					parent_state_before = parent->state;
+				send_signal(parent->task.pid, SIGCHLD);
+				if (parent->state == PROCESS_BLOCKED ||
+				    process_wait_blocked(parent))
+					process_wait_wake_blocked_parent(parent, dying);
+			}
+			else
+			{
+				dying->ppid = 0;
+			}
+		}
+	}
+
+	wait_exit_audit_process_exit(dying, parent, parent_state_before);
+}
+
+__attribute__((noreturn)) void process_exit(int code)
+{
+	process_t *dying = current_process;
+	size_t total_frames = 0;
+	size_t used_frames = 0;
+	uint64_t vmas = 0;
+
+	if (!dying)
+	{
+		for (;;)
+			cpu_idle();
+	}
+	process_fase50_trace_proc("process_exit-entry", dying);
+	process_pre_zombie_teardown(dying);
+	if (IR0_DEBUG_WAIT)
+		klog_debug("WAIT", "CLASSIFY ZOMBIE_IRQ_SAVED_CLEARED");
 
 #if IR0_DEBUG_PROC
 	process_fase46_proc_log(dying, (int64_t)(uint32_t)code, "EXIT");
@@ -182,41 +245,7 @@ __attribute__((noreturn)) void process_exit(int code)
 	process_fase44_list_checkpoint("exit-after");
 #endif
 
-	/* Send SIGCHLD to parent process if it exists */
-	if (dying->ppid > 0)
-	{
-		int parent_state_before = -1;
-
-		parent = process_find_by_pid(dying->ppid);
-		if (parent)
-			parent_state_before = parent->state;
-		if (parent && parent->state != PROCESS_ZOMBIE)
-		{
-			send_signal(parent->task.pid, SIGCHLD);
-			if (parent->state == PROCESS_BLOCKED ||
-			    process_wait_blocked(parent))
-				process_wait_wake_blocked_parent(parent, dying);
-		}
-		else if (!parent || parent->state == PROCESS_ZOMBIE)
-		{
-			/* Parent is dead or zombie - reparent to init and send SIGCHLD to init */
-			dying->ppid = 1;
-			parent = process_find_by_pid(1);
-			if (parent)
-			{
-				if (parent_state_before == -1)
-					parent_state_before = parent->state;
-				send_signal(parent->task.pid, SIGCHLD);
-				if (parent->state == PROCESS_BLOCKED)
-					process_wait_wake_blocked_parent(parent, dying);
-			}
-		}
-		wait_exit_audit_process_exit(dying, parent, parent_state_before);
-	}
-	else
-	{
-		wait_exit_audit_process_exit(dying, NULL, -1);
-	}
+	process_notify_parent_of_exit(dying);
 
 	/* Remove process from scheduler - it should no longer be scheduled.
 	 * The process structure remains in memory as a zombie until reaped

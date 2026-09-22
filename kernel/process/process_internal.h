@@ -107,7 +107,11 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child);
 /* core.c — shared with wait status copy */
 int process_validate_userspace_buffer(const void *buf, size_t size);
 
-/* exit.c / audit (only linked when FASE40_D_AUDIT) */
+/* exit.c */
+void process_pre_zombie_teardown(process_t *dying);
+void process_notify_parent_of_exit(process_t *dying);
+
+/* exit.c audit (only linked when FASE40_D_AUDIT) */
 #if FASE40_D_AUDIT
 void fase40_d_audit_reap_line(const char *stage, process_t *child,
 			      pid_t parent_pid, int removed, const char *tag);

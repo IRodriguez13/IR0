@@ -48,9 +48,6 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 
 int process_signal_default_kill(process_t *dying, int sig)
 {
-	process_t *parent;
-	int parent_state_before = -1;
-
 	if (!dying || dying->state == PROCESS_ZOMBIE)
 		return 0;
 	if (!process_signal_is_default_fatal(dying, sig))
@@ -67,10 +64,7 @@ int process_signal_default_kill(process_t *dying, int sig)
 		process_exit(0);
 	}
 
-	dying->irq_frame_saved = 0;
-	process_reap_zombies(dying);
-	process_reparent_children(dying);
-	process_release_fds(dying, "EXIT_CLOSE");
+	process_pre_zombie_teardown(dying);
 
 	dying->signal_pending &= ~SIGNAL_MASK(sig);
 	dying->exit_signal = sig;
@@ -82,24 +76,7 @@ int process_signal_default_kill(process_t *dying, int sig)
 	klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] process_signal_default_kill pid=%x sig=%x wait_status=%x", (unsigned)((uint32_t)dying->task.pid), (unsigned)((uint32_t)sig), (unsigned)((uint32_t)process_child_wait_status_word(dying)));
 #endif
 
-	if (dying->ppid > 0)
-	{
-		parent = process_find_by_pid(dying->ppid);
-		if (parent)
-			parent_state_before = parent->state;
-		if (parent && parent->state != PROCESS_ZOMBIE)
-		{
-			send_signal(parent->task.pid, SIGCHLD);
-			if (parent->state == PROCESS_BLOCKED ||
-			    process_wait_blocked(parent))
-				process_wait_wake_blocked_parent(parent, dying);
-		}
-		wait_exit_audit_process_exit(dying, parent, parent_state_before);
-	}
-	else
-	{
-		wait_exit_audit_process_exit(dying, NULL, -1);
-	}
+	process_notify_parent_of_exit(dying);
 
 	return 1;
 }

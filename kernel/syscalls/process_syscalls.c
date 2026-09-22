@@ -725,18 +725,27 @@ void process_exit_robust_list(process_t *p)
 {
 	struct robust_list_head kh;
 	int *uaddr;
+	int copy_ret;
 
 	if (!p || !p->robust_list)
 		return;
 
 	if (p->mode == USER_MODE)
 	{
-		if (validate_userspace_buffer(p->robust_list, sizeof(kh)) != 0)
+		if (!is_user_address(p->robust_list, sizeof(kh)))
 		{
 			p->robust_list = NULL;
 			return;
 		}
-		if (copy_from_user(&kh, p->robust_list, sizeof(kh)) != 0)
+		if (p == current_process)
+			copy_ret = copy_from_user(&kh, p->robust_list, sizeof(kh));
+		else if (process_pgd(p))
+			copy_ret = copy_from_user_region_in_directory(
+				process_pgd(p), (uintptr_t)p->robust_list,
+				&kh, sizeof(kh));
+		else
+			copy_ret = -EFAULT;
+		if (copy_ret != 0)
 		{
 			p->robust_list = NULL;
 			return;
@@ -751,7 +760,7 @@ void process_exit_robust_list(process_t *p)
 	if (!uaddr)
 		uaddr = (int *)kh.list;
 	if (uaddr && p->mode == USER_MODE &&
-	    validate_userspace_buffer(uaddr, sizeof(int)) == 0)
+	    is_user_address(uaddr, sizeof(int)))
 		(void)ir0_futex_wake(uaddr, 1);
 
 	p->robust_list = NULL;
