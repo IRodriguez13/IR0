@@ -187,7 +187,10 @@ image-vmware:
 		"$(KERNEL_ROOT)/scripts/isd_machine_disk.sh" export-vmdk
 	@echo "  Attach $(KERNEL_ROOT)/kernel-x64-userspace.iso as the boot CD."
 
-poweron: check-isd ensure-isd-root-disk ensure-machine-desktop-sync
+# Boot the installed machine only. Packing / userspace refresh belong to
+# first-boot, machine-reset, and machine-update-userspace. A UAPI stamp
+# change flips ISD VARIANT_ID and would otherwise rebuild libx11 on poweron.
+poweron: check-isd
 	@test -f "$(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)" || { \
 		echo "✗ missing $(KERNEL_ROOT)/$(IR0_KERNEL_ROOT_ISO)"; \
 		echo "  Run make first-boot PROFILE=$(ISD_PROFILE) ROOT_FS=$(ISD_ROOT_FS) first."; \
