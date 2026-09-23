@@ -1073,6 +1073,83 @@ static int scm_install_fd_entry(const fd_entry_t *src)
 	return fd;
 }
 
+static void scm_close_installed_fds(int *fds, size_t count)
+{
+	while (count > 0)
+	{
+		count--;
+		(void)sys_close(fds[count]);
+	}
+}
+
+static void scm_discard_staged(fd_entry_t *entries, size_t count)
+{
+	while (count > 0)
+	{
+		count--;
+		scm_rights_dtor(&entries[count], sizeof(entries[count]));
+	}
+}
+
+static int scm_stage_rights(struct sock_stream *peer, const uint8_t *ctrl,
+			    size_t ctrl_len, fd_entry_t *entries,
+			    size_t *entry_count)
+{
+	size_t off = 0;
+	size_t count = 0;
+
+	while (off + sizeof(struct cmsghdr) <= ctrl_len)
+	{
+		const struct cmsghdr *cmsg = (const struct cmsghdr *)(ctrl + off);
+		size_t payload;
+		const int *fds;
+		size_t nfd;
+		size_t fi;
+
+		if (cmsg->cmsg_len < IR0_CMSG_ALIGN(sizeof(struct cmsghdr)) ||
+		    cmsg->cmsg_len > ctrl_len - off)
+			goto invalid;
+		if (cmsg->cmsg_level == SOL_SOCKET)
+		{
+			if (cmsg->cmsg_type != SCM_RIGHTS)
+				goto invalid;
+			payload = cmsg->cmsg_len -
+				  IR0_CMSG_ALIGN(sizeof(struct cmsghdr));
+			if (payload == 0 || payload % sizeof(int) != 0)
+				goto invalid;
+			nfd = payload / sizeof(int);
+			if (nfd > SOCK_STREAM_RIGHTS_MAX - count)
+				goto invalid;
+			fds = (const int *)IR0_CMSG_DATA(cmsg);
+			for (fi = 0; fi < nfd; fi++)
+			{
+				int ret = scm_clone_fd_entry(&entries[count], fds[fi]);
+
+				if (ret < 0)
+				{
+					scm_discard_staged(entries, count);
+					return ret;
+				}
+				count++;
+			}
+		}
+		off += IR0_CMSG_ALIGN(cmsg->cmsg_len);
+	}
+	/* Linux accepts CMSG_LEN() without trailing CMSG_SPACE() padding. */
+	if (count > (size_t)(SOCK_STREAM_RIGHTS_MAX -
+			     sock_stream_rights_count(peer)))
+		goto no_buffer;
+	*entry_count = count;
+	return 0;
+
+invalid:
+	scm_discard_staged(entries, count);
+	return -EINVAL;
+no_buffer:
+	scm_discard_staged(entries, count);
+	return -ENOBUFS;
+}
+
 ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 {
 	struct msghdr msg;
@@ -1080,6 +1157,9 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 	struct sock_stream *peer;
 	uint8_t ctrl[256];
 	struct iovec iov_stack[8];
+	fd_entry_t staged_rights[SOCK_STREAM_RIGHTS_MAX];
+	size_t staged_count = 0;
+	int rights_published = 0;
 	size_t iovlen;
 	size_t i;
 	ssize_t total = 0;
@@ -1113,52 +1193,27 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 		    copy_from_user(iov_stack, msg.msg_iov, iovlen * sizeof(struct iovec)) != 0)
 			return -EFAULT;
 	}
+	for (i = 0; i < iovlen; i++)
+	{
+		if (iov_stack[i].iov_len != 0 &&
+		    (!iov_stack[i].iov_base ||
+		     validate_userspace_buffer(iov_stack[i].iov_base,
+					       iov_stack[i].iov_len) != 0))
+			return -EFAULT;
+	}
 	if (msg.msg_controllen > 0)
 	{
-		struct cmsghdr *cmsg;
-		size_t off = 0;
+		int ret;
 
 		if (msg.msg_controllen > sizeof(ctrl) || !msg.msg_control)
 			return -ENOBUFS;
 		if (copy_from_user(ctrl, msg.msg_control, msg.msg_controllen) != 0)
 			return -EFAULT;
-		while (off + sizeof(struct cmsghdr) <= msg.msg_controllen)
-		{
-			size_t payload;
-			int *fds;
-			size_t nfd;
-			size_t fi;
-
-			cmsg = (struct cmsghdr *)(ctrl + off);
-			if (cmsg->cmsg_len < sizeof(struct cmsghdr) ||
-			    cmsg->cmsg_len > msg.msg_controllen - off)
-				break;
-			if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
-			{
-				payload = cmsg->cmsg_len - IR0_CMSG_ALIGN(sizeof(struct cmsghdr));
-				fds = (int *)IR0_CMSG_DATA(cmsg);
-				nfd = payload / sizeof(int);
-				if (nfd == 0 || nfd > SOCK_STREAM_RIGHTS_MAX)
-					return -EINVAL;
-				for (fi = 0; fi < nfd; fi++)
-				{
-					fd_entry_t ent;
-					int ret;
-
-					memset(&ent, 0, sizeof(ent));
-					ret = scm_clone_fd_entry(&ent, fds[fi]);
-					if (ret < 0)
-						return ret;
-					ret = sock_stream_rights_push(peer, &ent, sizeof(ent));
-					if (ret < 0)
-					{
-						scm_rights_dtor(&ent, sizeof(ent));
-						return ret;
-					}
-				}
-			}
-			off += IR0_CMSG_ALIGN(cmsg->cmsg_len);
-		}
+		memset(staged_rights, 0, sizeof(staged_rights));
+		ret = scm_stage_rights(peer, ctrl, msg.msg_controllen,
+				       staged_rights, &staged_count);
+		if (ret < 0)
+			return ret;
 	}
 	for (i = 0; i < iovlen; i++)
 	{
@@ -1167,26 +1222,54 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 
 		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
 			continue;
-		if (validate_userspace_buffer(iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
-			return -EFAULT;
 		kbuf = kmalloc(iov_stack[i].iov_len);
 		if (!kbuf)
+		{
+			scm_discard_staged(staged_rights, staged_count);
 			return -ENOMEM;
+		}
 		if (copy_from_user(kbuf, iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
 		{
 			kfree(kbuf);
+			scm_discard_staged(staged_rights, staged_count);
 			return -EFAULT;
 		}
 		n = sock_stream_send(ss, kbuf, iov_stack[i].iov_len);
 		kfree(kbuf);
 		if (n < 0)
+		{
+			scm_discard_staged(staged_rights, staged_count);
 			return n;
+		}
+		if (n > 0 && staged_count > 0 && !rights_published)
+		{
+			int ret = sock_stream_rights_push_batch(peer, staged_rights,
+							staged_count,
+							sizeof(staged_rights[0]));
+
+			if (ret < 0)
+			{
+				scm_discard_staged(staged_rights, staged_count);
+				return ret;
+			}
+			rights_published = 1;
+		}
 		total += n;
 		if ((size_t)n < iov_stack[i].iov_len)
 			break;
 	}
-	if (total == 0 && msg.msg_controllen > 0)
-		return 0;
+	if (staged_count > 0 && !rights_published)
+	{
+		int ret = sock_stream_rights_push_batch(peer, staged_rights,
+							staged_count,
+							sizeof(staged_rights[0]));
+
+		if (ret < 0)
+		{
+			scm_discard_staged(staged_rights, staged_count);
+			return ret;
+		}
+	}
 	return total;
 }
 
@@ -1201,6 +1284,8 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	uint8_t ctrl[256];
 	size_t ctrl_used = 0;
 	int got_rights = 0;
+	int installed_fds[SOCK_STREAM_RIGHTS_MAX];
+	size_t installed_fd_count = 0;
 	int nonblock;
 
 #if !CONFIG_ENABLE_NETWORKING
@@ -1229,10 +1314,17 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 		    copy_from_user(iov_stack, msg.msg_iov, iovlen * sizeof(struct iovec)) != 0)
 			return -EFAULT;
 	}
+	for (i = 0; i < iovlen; i++)
+	{
+		if (iov_stack[i].iov_len != 0 &&
+		    (!iov_stack[i].iov_base ||
+		     validate_userspace_buffer(iov_stack[i].iov_base,
+					       iov_stack[i].iov_len) != 0))
+			return -EFAULT;
+	}
 	if (sock_stream_rights_count(ss) > 0 && msg.msg_control && msg.msg_controllen > 0)
 	{
 		fd_entry_t ents[SOCK_STREAM_RIGHTS_MAX];
-		int newfds[SOCK_STREAM_RIGHTS_MAX];
 		size_t n_pop = 0;
 		size_t pending = (size_t)sock_stream_rights_count(ss);
 		size_t max_fit;
@@ -1259,19 +1351,17 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 			memset(&ents[fi], 0, sizeof(ents[fi]));
 			if (sock_stream_rights_pop(ss, &ents[fi], sizeof(ents[fi])) != 0)
 				break;
-			newfds[fi] = scm_install_fd_entry(&ents[fi]);
-			if (newfds[fi] < 0)
+			installed_fds[fi] = scm_install_fd_entry(&ents[fi]);
+			if (installed_fds[fi] < 0)
 			{
-				int err = newfds[fi];
+				int err = installed_fds[fi];
 
 				scm_rights_dtor(&ents[fi], sizeof(ents[fi]));
-				while (fi > 0)
-				{
-					fi--;
-					(void)sys_close(newfds[fi]);
-				}
+				scm_close_installed_fds(installed_fds,
+							installed_fd_count);
 				return err;
 			}
+			installed_fd_count++;
 			n_pop++;
 		}
 		if (n_pop == 0)
@@ -1283,7 +1373,7 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 			while (n_pop > 0)
 			{
 				n_pop--;
-				(void)sys_close(newfds[n_pop]);
+				(void)sys_close(installed_fds[n_pop]);
 			}
 			return -ENOBUFS;
 		}
@@ -1294,7 +1384,7 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 		cmsg->cmsg_type = SCM_RIGHTS;
 		fdp = (int *)IR0_CMSG_DATA(cmsg);
 		for (fi = 0; fi < n_pop; fi++)
-			fdp[fi] = newfds[fi];
+			fdp[fi] = installed_fds[fi];
 		ctrl_used = need;
 		got_rights = 1;
 	}
@@ -1306,11 +1396,13 @@ recv_payload:
 
 		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
 			continue;
-		if (validate_userspace_buffer(iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
-			return -EFAULT;
 		kbuf = kmalloc(iov_stack[i].iov_len);
 		if (!kbuf)
+		{
+			scm_close_installed_fds(installed_fds,
+						installed_fd_count);
 			return -ENOMEM;
+		}
 		for (;;)
 		{
 			n = sock_stream_recv_flags(ss, kbuf,
@@ -1323,6 +1415,8 @@ recv_payload:
 			if (signals_pause_should_interrupt(current_process))
 			{
 				kfree(kbuf);
+				scm_close_installed_fds(installed_fds,
+							installed_fd_count);
 				return -EINTR;
 			}
 			{
@@ -1331,6 +1425,8 @@ recv_payload:
 				if (sleep_ret < 0)
 				{
 					kfree(kbuf);
+					scm_close_installed_fds(installed_fds,
+							installed_fd_count);
 					return sleep_ret;
 				}
 			}
@@ -1338,18 +1434,26 @@ recv_payload:
 			if (!ss)
 			{
 				kfree(kbuf);
+				scm_close_installed_fds(installed_fds,
+							installed_fd_count);
 				return -EBADF;
 			}
 		}
 		if (n < 0)
 		{
 			kfree(kbuf);
-			return total > 0 ? total : n;
+			if (total > 0 || got_rights)
+				break;
+			scm_close_installed_fds(installed_fds,
+						installed_fd_count);
+			return n;
 		}
 		if (n > 0 &&
 		    copy_to_user(iov_stack[i].iov_base, kbuf, (size_t)n) != 0)
 		{
 			kfree(kbuf);
+			scm_close_installed_fds(installed_fds,
+						installed_fd_count);
 			return -EFAULT;
 		}
 		kfree(kbuf);
@@ -1360,11 +1464,19 @@ recv_payload:
 	if (got_rights && msg.msg_control)
 	{
 		if (copy_to_user(msg.msg_control, ctrl, ctrl_used) != 0)
+		{
+			scm_close_installed_fds(installed_fds,
+						installed_fd_count);
 			return -EFAULT;
+		}
 		msg.msg_controllen = ctrl_used;
 		msg.msg_flags = 0;
 		if (copy_to_user(umsg, &msg, sizeof(msg)) != 0)
+		{
+			scm_close_installed_fds(installed_fds,
+						installed_fd_count);
 			return -EFAULT;
+		}
 	}
 	else if (msg.msg_control)
 	{

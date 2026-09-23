@@ -123,6 +123,31 @@ int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, si
 	return 0;
 }
 
+int sock_stream_rights_push_batch(struct sock_stream *recv_side,
+				  const void *entries, size_t count,
+				  size_t entry_sz)
+{
+	const uint8_t *src = (const uint8_t *)entries;
+	size_t i;
+
+	if (!recv_side || (!entries && count != 0) ||
+	    entry_sz == 0 || entry_sz > SOCK_STREAM_RIGHTS_ENTRY_SIZE)
+		return -EINVAL;
+	if (count > (size_t)(SOCK_STREAM_RIGHTS_MAX - recv_side->rights_n))
+		return -ENOBUFS;
+	for (i = 0; i < count; i++)
+	{
+		uint8_t *dst = recv_side->rights[recv_side->rights_n + i];
+
+		memset(dst, 0, SOCK_STREAM_RIGHTS_ENTRY_SIZE);
+		memcpy(dst, src + i * entry_sz, entry_sz);
+	}
+	recv_side->rights_n += (uint8_t)count;
+	if (count != 0)
+		poll_wake_check();
+	return 0;
+}
+
 int sock_stream_rights_pop(struct sock_stream *s, void *entry, size_t sz)
 {
 	if (!s || !entry || sz == 0 || sz > SOCK_STREAM_RIGHTS_ENTRY_SIZE)

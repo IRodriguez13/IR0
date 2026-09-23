@@ -52,6 +52,9 @@ void sock_stream_acquire(struct sock_stream *s);
 int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out);
 
 int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, size_t sz);
+int sock_stream_rights_push_batch(struct sock_stream *recv_side,
+				  const void *entries, size_t count,
+				  size_t entry_sz);
 int sock_stream_rights_pop(struct sock_stream *s, void *entry, size_t sz);
 int sock_stream_rights_count(const struct sock_stream *s);
 void sock_stream_set_rights_dtor(void (*dtor)(void *entry, size_t sz));

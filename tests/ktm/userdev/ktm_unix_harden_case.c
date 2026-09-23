@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stddef.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
@@ -169,6 +170,119 @@ fail_sv:
 	return -1;
 }
 
+static int test_scm_failed_send_is_atomic(void)
+{
+	int sv[2], p[2];
+	char control[CMSG_SPACE(sizeof(int) * 2)];
+	char byte = 'X';
+	struct iovec iov = { &byte, 1 };
+	struct msghdr msg;
+	struct cmsghdr *cmsg;
+	int *fds;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0)
+		return -1;
+	if (pipe(p) != 0)
+		goto fail_sv;
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = control;
+	msg.msg_controllen = sizeof(control);
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int) * 2);
+	fds = (int *)CMSG_DATA(cmsg);
+	fds[0] = p[0];
+	fds[1] = -1;
+	msg.msg_controllen = cmsg->cmsg_len;
+	if (sendmsg(sv[0], &msg, 0) >= 0)
+		goto fail_pipe;
+	fds[1] = p[0];
+	iov.iov_base = (void *)1;
+	if (sendmsg(sv[0], &msg, 0) >= 0)
+		goto fail_pipe;
+	if (fcntl(sv[1], F_SETFL, O_NONBLOCK) != 0)
+		goto fail_pipe;
+	memset(&msg, 0, sizeof(msg));
+	iov.iov_base = &byte;
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = control;
+	msg.msg_controllen = sizeof(control);
+	if (recvmsg(sv[1], &msg, 0) >= 0)
+		goto fail_pipe;
+	close(p[0]);
+	close(p[1]);
+	close(sv[0]);
+	close(sv[1]);
+	return 0;
+fail_pipe:
+	close(p[0]);
+	close(p[1]);
+fail_sv:
+	close(sv[0]);
+	close(sv[1]);
+	return -1;
+}
+
+static int test_scm_failed_receive_rolls_back(void)
+{
+	int sv[2], p[2];
+	char control[CMSG_SPACE(sizeof(int))];
+	char byte = 'R';
+	struct iovec iov = { &byte, 1 };
+	struct msghdr msg;
+	struct cmsghdr *cmsg;
+	int expected_fd, actual_fd;
+
+	if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0)
+		return -1;
+	if (pipe(p) != 0)
+		goto fail_sv;
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = control;
+	msg.msg_controllen = sizeof(control);
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+	*(int *)CMSG_DATA(cmsg) = p[0];
+	msg.msg_controllen = cmsg->cmsg_len;
+	if (sendmsg(sv[0], &msg, 0) != 1)
+		goto fail_pipe;
+	expected_fd = dup(p[0]);
+	if (expected_fd < 0)
+		goto fail_pipe;
+	close(expected_fd);
+	memset(&msg, 0, sizeof(msg));
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = (void *)1;
+	msg.msg_controllen = sizeof(control);
+	if (recvmsg(sv[1], &msg, 0) >= 0)
+		goto fail_pipe;
+	actual_fd = dup(p[0]);
+	if (actual_fd < 0 || actual_fd != expected_fd)
+		goto fail_pipe;
+	close(actual_fd);
+	close(p[0]);
+	close(p[1]);
+	close(sv[0]);
+	close(sv[1]);
+	return 0;
+fail_pipe:
+	close(p[0]);
+	close(p[1]);
+fail_sv:
+	close(sv[0]);
+	close(sv[1]);
+	return -1;
+}
+
 int main(void)
 {
 	int kfd;
@@ -213,6 +327,26 @@ int main(void)
 	{
 		(void)ktm_assert_true(kfd, "scm_multi", 1);
 		say("SCM_MULTI_OK\n");
+	}
+	if (test_scm_failed_send_is_atomic() != 0)
+	{
+		(void)ktm_assert_true(kfd, "scm_failed_send_atomic", 0);
+		fails++;
+	}
+	else
+	{
+		(void)ktm_assert_true(kfd, "scm_failed_send_atomic", 1);
+		say("SCM_FAILED_SEND_ATOMIC_OK\n");
+	}
+	if (test_scm_failed_receive_rolls_back() != 0)
+	{
+		(void)ktm_assert_true(kfd, "scm_failed_recv_rollback", 0);
+		fails++;
+	}
+	else
+	{
+		(void)ktm_assert_true(kfd, "scm_failed_recv_rollback", 1);
+		say("SCM_FAILED_RECV_ROLLBACK_OK\n");
 	}
 	if (fails == 0)
 		say("KTM_UNIX_HARDEN_OK\n");
