@@ -26,7 +26,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c \
 	test_credential_saved_ids.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_sigreturn_sleep_eintr_abi.c test_mmap_null_placement.c \
-	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_blockdev_facade.c \
+	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_elf_interp_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
 	test_open_flags_abi.c test_fcntl_abi.c test_ktm_panic_inventory.c test_ktm_facade_contract.c \
 	test_ps2_set1_modifiers.c \
@@ -222,6 +222,9 @@ test_elf_initial_brk_abi.o: test_elf_initial_brk_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_elf_local_reloc_abi.o: test_elf_local_reloc_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_elf_interp_abi.o: test_elf_interp_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_arch_task_contract.o: test_arch_task_contract.c
