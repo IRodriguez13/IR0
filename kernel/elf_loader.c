@@ -46,6 +46,7 @@
 #include <ir0/ktm/fault.h>
 #include <ir0/vdso.h>
 #include <ir0/abi/elf_reloc_contract.h>
+#include <ir0/abi/elf_interp_contract.h>
 #include <ir0/errno.h>
 #include <errno.h>
 
@@ -99,6 +100,7 @@ typedef struct
 #define ET_DYN  3
 #define PT_LOAD 1
 #define PT_DYNAMIC 2
+#define PT_INTERP IR0_PT_INTERP
 
 #define DT_NULL     0
 #define DT_PLTRELSZ 2
@@ -490,7 +492,8 @@ static int elf_file_off_for_vaddr(const elf64_phdr_t *phdr, uint16_t phnum,
 
 /*
  * tcc ET_EXEC still emits DT_RELA (GLOB_DAT for __environ/main). Linux ld.so
- * applies those; IR0 does not run PT_INTERP yet. Apply local relocs so
+ * applies those when PT_INTERP is present. If the interpreter file is missing
+ * (MINIX NAME_LEN cannot store ld-linux-x86-64.so.2), apply local relocs so
  * `cc hello.c && ./hello` does not write through a NULL GOT slot.
  */
 static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
@@ -625,7 +628,7 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
 
 /* Load ELF segments into memory at correct virtual addresses */
 static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,
-                             process_t *process)
+                             process_t *process, uint64_t load_bias, int apply_local_relocs)
 {
     uint16_t phnum = header->e_phnum;
     if (phnum > ELF_MAX_PHNUM)
@@ -683,11 +686,11 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
             }
         }
 
-        klog_debug_fmt("ELF", "SERIAL: ELF: Mapping segment %x at vaddr 0x%x size 0x%x", (unsigned)(i), (unsigned)((uint32_t)phdr[i].p_vaddr), (unsigned)((uint32_t)phdr[i].p_memsz));
+        klog_debug_fmt("ELF", "SERIAL: ELF: Mapping segment %x at vaddr 0x%x size 0x%x", (unsigned)(i), (unsigned)((uint32_t)(phdr[i].p_vaddr + load_bias)), (unsigned)((uint32_t)phdr[i].p_memsz));
 
         {
             uint64_t memsz = phdr[i].p_memsz;
-            uintptr_t vaddr = phdr[i].p_vaddr;
+            uintptr_t vaddr = phdr[i].p_vaddr + load_bias;
             uintptr_t vaddr_aligned = vaddr & ~0xFFF;
             size_t size_aligned = ((vaddr + memsz + 0xFFF) & ~0xFFF) - vaddr_aligned;
             uint64_t flags = PAGE_USER;
@@ -714,7 +717,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
             continue;
 
         {
-            uintptr_t vaddr = phdr[i].p_vaddr;
+            uintptr_t vaddr = phdr[i].p_vaddr + load_bias;
 
             if (phdr[i].p_filesz > 0)
             {
@@ -742,12 +745,105 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
         }
     }
 
-    if (elf_apply_local_relocs(header, file_data, file_size, pml4) != 0)
+    if (apply_local_relocs &&
+        elf_apply_local_relocs(header, file_data, file_size, pml4) != 0)
     {
         klog_debug("ELF", "SERIAL: ELF: local reloc apply failed\n");
         return -1;
     }
 
+    return 0;
+}
+
+static int elf_try_load_interp(process_t *process, const char *path,
+                               uint64_t *at_base, uint64_t *interp_entry)
+{
+    void *idata = NULL;
+    size_t isize = 0;
+    elf64_header_t *ih;
+    uint64_t min_vaddr;
+    uint64_t load_bias;
+    int rc;
+
+    if (!process || !path || !path[0] || !at_base || !interp_entry)
+        return 1;
+
+    rc = vfs_read_file(path, &idata, &isize);
+    if (rc != 0 || !idata)
+        return 1;
+
+    if (!validate_elf_header((elf64_header_t *)idata))
+    {
+        kfree(idata);
+        return -ENOEXEC;
+    }
+
+    ih = (elf64_header_t *)idata;
+    load_bias = (ih->e_type == ET_DYN) ? IR0_ELF_INTERP_BASE : 0ULL;
+    if (elf_load_segments(ih, (uint8_t *)idata, isize, process, load_bias, 0) != 0)
+    {
+        kfree(idata);
+        return -ENOEXEC;
+    }
+
+    min_vaddr = elf_compute_load_base(ih, (uint8_t *)idata);
+    (void)ir0_elf64_interp_at_base(min_vaddr, load_bias, at_base);
+    (void)ir0_elf64_interp_entry(ih->e_type, ih->e_entry, load_bias, interp_entry);
+    klog_debug_fmt("ELF", "SERIAL: ELF: PT_INTERP loaded %s at_base=0x%x entry=0x%x\n",
+                   path, (unsigned)(uint32_t)*at_base,
+                   (unsigned)(uint32_t)*interp_entry);
+    kfree(idata);
+    return 0;
+}
+
+/*
+ * Map the main image, then PT_INTERP when the interpreter file exists.
+ * *at_base starts as the main load VA and becomes the interp load address.
+ * *user_ip is the first user RIP (interp entry, or main e_entry).
+ * AT_ENTRY stays the main e_entry: set task IP to that before elf_setup_stack.
+ */
+static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
+                                     size_t file_size, process_t *process,
+                                     uint64_t *at_base, uint64_t *user_ip)
+{
+    char ipath[IR0_ELF_INTERP_PATH_MAX + 1];
+    int pr;
+    int have_interp_file = 0;
+    uint64_t interp_entry = 0;
+    int irc;
+
+    if (!header || !file_data || !process || !at_base || !user_ip)
+        return -1;
+
+    *user_ip = header->e_entry;
+    memset(ipath, 0, sizeof(ipath));
+    pr = ir0_elf64_read_interp_path(file_data, file_size, ipath, sizeof(ipath));
+    if (pr < 0)
+        return -1;
+    if (pr == 0)
+    {
+        stat_t st;
+
+        if (vfs_stat(ipath, &st) == 0)
+            have_interp_file = 1;
+    }
+
+    if (elf_load_segments(header, file_data, file_size, process, 0,
+                          have_interp_file ? 0 : 1) != 0)
+        return -1;
+
+    if (!have_interp_file)
+    {
+        if (pr == 0)
+            klog_debug_fmt("ELF", "SERIAL: ELF: PT_INTERP fallback %s\n", ipath);
+        return 0;
+    }
+
+    irc = elf_try_load_interp(process, ipath, at_base, &interp_entry);
+    if (irc != 0)
+        return -1;
+    *user_ip = interp_entry;
+    klog_debug("ELF", "SERIAL: ELF: PT_INTERP_OK\n");
     return 0;
 }
 
@@ -1218,6 +1314,7 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     elf64_header_t *header;
     uint64_t at_phdr;
     uint64_t at_base;
+    uint64_t user_ip;
     result = vfs_read_file(path, &file_data, &file_size);
     if (result != 0 || !file_data)
     {
@@ -1280,8 +1377,12 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
         return -1;
     }
 
-    /* Step 4: Load segments into memory */
-    if (elf_load_segments(header, (uint8_t *)file_data, file_size, process) != 0)
+    /* Step 4: Load segments (+ PT_INTERP when the interpreter file exists) */
+    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
+    at_base = elf_compute_load_base(header, (uint8_t *)file_data);
+    user_ip = header->e_entry;
+    if (elf_load_image_and_interp(header, (uint8_t *)file_data, file_size,
+                                 process, &at_base, &user_ip) != 0)
     {
         klog_debug("ELF", "SERIAL: ELF: ERROR - Failed to load segments\n");
         /*
@@ -1296,15 +1397,17 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
         return -1;
     }
 
+    /* AT_ENTRY is the main e_entry; RIP becomes interp after auxv is written. */
+    task_set_ip(&process->task, header->e_entry);
+
     /* Step 5: Set up stack with argc/argv/envp */
-    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
-    at_base = elf_compute_load_base(header, (uint8_t *)file_data);
     if (elf_setup_stack(process, argv, envp, header, at_phdr, at_base,
                         "kexecve", path) != 0)
     {
         klog_debug("ELF", "SERIAL: ELF: WARNING - Failed to set up stack arguments, continuing anyway\n");
         /* Continue even if stack setup fails - some binaries don't need args */
     }
+    task_set_ip(&process->task, user_ip);
 
     sched_add_process(process);
 
@@ -1595,6 +1698,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     elf64_header_t *header;
     uint64_t at_phdr;
     uint64_t at_base;
+    uint64_t user_ip;
     size_t total_frames_before = 0;
     size_t used_frames_before = 0;
     size_t total_frames_after = 0;
@@ -1818,7 +1922,9 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
         exec_fail_kill(proc, 127, "map_stack_fail");
     }
 
-    if (elf_load_segments(header, (uint8_t *)file_data, file_size, proc) != 0)
+    user_ip = header->e_entry;
+    if (elf_load_image_and_interp(header, (uint8_t *)file_data, file_size, proc,
+                                 &at_base, &user_ip) != 0)
     {
         kfree(file_data);
         exec_fail_kill(proc, 127, "elf_load_segments_fail");
@@ -1859,6 +1965,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
         kfree(file_data);
         exec_fail_kill(proc, 127, "elf_setup_stack_fail");
     }
+    task_set_ip(&proc->task, user_ip);
     exec_commit_ctx.stack_ready = 1;
     exec_commit_ctx.task_rip_final = task_get_ip(&proc->task);
     exec_commit_ctx.task_rsp_final = task_get_sp(&proc->task);

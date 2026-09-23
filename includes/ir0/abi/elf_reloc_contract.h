@@ -27,8 +27,8 @@
  * image. load_bias is 0 for ET_EXEC. Returns 0 and writes *out, or -1 if the
  * type is not a local reloc (caller skips).
  *
- * Linux applies these in ld.so. IR0 has no PT_INTERP yet; tcc still emits
- * R_X86_64_GLOB_DAT for __environ / main / _init in a self-contained binary.
+ * Linux applies these in ld.so. When PT_INTERP is missing, IR0 applies the
+ * same local types so tcc `cc hello.c && ./hello` does not NULL-GOT crash.
  */
 static inline int ir0_elf64_local_reloc_value(uint32_t type, uint64_t load_bias,
 					      uint64_t sym_value, int64_t addend,
