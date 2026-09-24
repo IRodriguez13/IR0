@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
+#include <ir0/syscall_id.h>
 
 #define EBADF  9
 #define EFAULT 14
@@ -31,47 +32,6 @@
 
 #define WRITE_MAX 256UL
 #define NS_PER_SEC 1000000000ULL
-
-/* Extra Linux aarch64 numbers used by musl / BusyBox static CRT. */
-#define ARM64_SYS_GETTID           178UL
-#define ARM64_SYS_SET_TID_ADDRESS   96UL
-#define ARM64_SYS_IOCTL             29UL
-#define ARM64_SYS_OPENAT            56UL
-#define ARM64_SYS_PPOLL             73UL
-#define ARM64_SYS_EXIT_GROUP        94UL
-#define ARM64_SYS_RT_SIGACTION     134UL
-#define ARM64_SYS_RT_SIGPROCMASK   135UL
-#define ARM64_SYS_PRCTL            167UL
-#define ARM64_SYS_PRLIMIT64        261UL
-#define ARM64_SYS_RSEQ             293UL
-#define ARM64_SYS_GETRANDOM        278UL
-#define ARM64_SYS_BRK              214UL
-#define ARM64_SYS_MUNMAP           215UL
-#define ARM64_SYS_MMAP             222UL
-#define ARM64_SYS_MPROTECT         226UL
-#define ARM64_SYS_GETUID           174UL
-#define ARM64_SYS_GETEUID          175UL
-#define ARM64_SYS_GETGID           176UL
-#define ARM64_SYS_GETEGID          177UL
-#define ARM64_SYS_GETPPID          173UL
-#define ARM64_SYS_FCNTL             25UL
-#define ARM64_SYS_READ              63UL
-#define ARM64_SYS_CLOSE             57UL
-#define ARM64_SYS_NEWFSTATAT        79UL
-#define ARM64_SYS_FSTAT             80UL
-#define ARM64_SYS_GETDENTS64        61UL
-#define ARM64_SYS_DUP               23UL
-#define ARM64_SYS_DUP3              24UL
-#define ARM64_SYS_PIPE2             59UL
-#define ARM64_SYS_CLONE            220UL
-#define ARM64_SYS_EXECVE           221UL
-#define ARM64_SYS_WAIT4            260UL
-#define ARM64_SYS_UNAME            160UL
-#define ARM64_SYS_GETCWD            17UL
-#define ARM64_SYS_CHDIR             49UL
-#define ARM64_SYS_FACCESSAT         48UL
-#define ARM64_SYS_SET_ROBUST_LIST  273UL
-#define ARM64_SYS_CLOCK_GETRES     114UL
 
 #define ENOTTY 25
 
@@ -365,6 +325,8 @@ static int64_t sys_gettimeofday(uint64_t tv, uint64_t tz)
 int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			    uint64_t a3, uint64_t a4, uint64_t a5, int *leave_el0)
 {
+	enum ir0_syscall_id syscall_id;
+
 	(void)a4;
 	(void)a5;
 
@@ -373,37 +335,38 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		*leave_el0 = 0;
 	}
 
-	switch (nr)
+	syscall_id = syscall_decode_number(nr);
+	switch (syscall_id)
 	{
-	case ARM64_SYS_GETPID:
+	case IR0_SYSCALL_GETPID:
 		return sys_getpid();
-	case ARM64_SYS_GETTID:
+	case IR0_SYSCALL_GETTID:
 		return 1;
-	case ARM64_SYS_NANOSLEEP:
+	case IR0_SYSCALL_NANOSLEEP:
 		return sys_nanosleep(a0, a1);
-	case ARM64_SYS_CLOCK_GETTIME:
+	case IR0_SYSCALL_CLOCK_GETTIME:
 		return sys_clock_gettime(a0, a1);
-	case ARM64_SYS_CLOCK_NANOSLEEP:
+	case IR0_SYSCALL_CLOCK_NANOSLEEP:
 		return sys_clock_nanosleep(a0, a1, a2, a3);
-	case ARM64_SYS_GETTIMEOFDAY:
+	case IR0_SYSCALL_GETTIMEOFDAY:
 		return sys_gettimeofday(a0, a1);
-	case ARM64_SYS_WRITE:
+	case IR0_SYSCALL_WRITE:
 		return sys_write(a0, a1, a2);
-	case ARM64_SYS_SET_TID_ADDRESS:
+	case IR0_SYSCALL_SET_TID_ADDRESS:
 		return 1;
-	case ARM64_SYS_GETUID:
-	case ARM64_SYS_GETEUID:
-	case ARM64_SYS_GETGID:
-	case ARM64_SYS_GETEGID:
+	case IR0_SYSCALL_GETUID:
+	case IR0_SYSCALL_GETEUID:
+	case IR0_SYSCALL_GETGID:
+	case IR0_SYSCALL_GETEGID:
 		return 0;
-	case ARM64_SYS_GETPPID:
+	case IR0_SYSCALL_GETPPID:
 		return 1;
-	case ARM64_SYS_IOCTL:
+	case IR0_SYSCALL_IOCTL:
 		/* isatty / TCGETS → not a tty */
 		return -ENOTTY;
-	case ARM64_SYS_FCNTL:
+	case IR0_SYSCALL_FCNTL:
 		return 0;
-	case ARM64_SYS_READ:
+	case IR0_SYSCALL_READ:
 	{
 		int64_t rr = arm64_rootfs_read((int)a0, a1, a2);
 
@@ -411,7 +374,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return rr;
 		return 0;
 	}
-	case ARM64_SYS_CLOSE:
+	case IR0_SYSCALL_CLOSE:
 	{
 		int64_t cr = arm64_rootfs_close((int)a0);
 
@@ -419,7 +382,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return cr;
 		return 0;
 	}
-	case ARM64_SYS_OPENAT:
+	case IR0_SYSCALL_OPENAT:
 	{
 		int64_t or = arm64_rootfs_openat((int)a0, a1, (int)a2);
 
@@ -427,7 +390,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return or;
 		return -ENOENT;
 	}
-	case ARM64_SYS_FACCESSAT:
+	case IR0_SYSCALL_FACCESSAT:
 	{
 		int64_t ar = arm64_rootfs_faccessat((int)a0, a1, (int)a2);
 
@@ -435,7 +398,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return ar;
 		return -ENOENT;
 	}
-	case ARM64_SYS_NEWFSTATAT:
+	case IR0_SYSCALL_NEWFSTATAT:
 	{
 		int64_t sr = arm64_rootfs_newfstatat((int)a0, a1, a2, (int)a3);
 
@@ -443,7 +406,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return sr;
 		return -ENOENT;
 	}
-	case ARM64_SYS_FSTAT:
+	case IR0_SYSCALL_FSTAT:
 	{
 		int64_t fr = arm64_rootfs_fstat((int)a0, a1);
 
@@ -451,18 +414,18 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return fr;
 		return -ENOENT;
 	}
-	case ARM64_SYS_GETDENTS64:
+	case IR0_SYSCALL_GETDENTS64:
 		return -ENOSYS;
-	case ARM64_SYS_DUP:
+	case IR0_SYSCALL_DUP:
 		return (int64_t)a0;
-	case ARM64_SYS_DUP3:
+	case IR0_SYSCALL_DUP3:
 		return (int64_t)a1;
-	case ARM64_SYS_PIPE2:
-	case ARM64_SYS_CLONE:
-	case ARM64_SYS_EXECVE:
-	case ARM64_SYS_WAIT4:
+	case IR0_SYSCALL_PIPE2:
+	case IR0_SYSCALL_CLONE:
+	case IR0_SYSCALL_EXECVE:
+	case IR0_SYSCALL_WAIT4:
 		return -ENOSYS;
-	case ARM64_SYS_UNAME:
+	case IR0_SYSCALL_UNAME:
 		if (arm64_mmu_user_buf_ok(a0, 390))
 		{
 			char *u = (char *)(uintptr_t)a0;
@@ -477,7 +440,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return 0;
 		}
 		return -EFAULT;
-	case ARM64_SYS_GETCWD:
+	case IR0_SYSCALL_GETCWD:
 		if (a1 >= 2 && arm64_mmu_user_buf_ok(a0, a1))
 		{
 			char *p = (char *)(uintptr_t)a0;
@@ -487,19 +450,19 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return 2;
 		}
 		return -EFAULT;
-	case ARM64_SYS_CHDIR:
+	case IR0_SYSCALL_CHDIR:
 		return -ENOENT;
-	case ARM64_SYS_SET_ROBUST_LIST:
-	case ARM64_SYS_CLOCK_GETRES:
+	case IR0_SYSCALL_SET_ROBUST_LIST:
+	case IR0_SYSCALL_CLOCK_GETRES:
 		return 0;
-	case ARM64_SYS_PPOLL:
+	case IR0_SYSCALL_PPOLL:
 		return 0;
-	case ARM64_SYS_RT_SIGACTION:
-	case ARM64_SYS_RT_SIGPROCMASK:
+	case IR0_SYSCALL_RT_SIGACTION:
+	case IR0_SYSCALL_RT_SIGPROCMASK:
 		return 0;
-	case ARM64_SYS_PRCTL:
+	case IR0_SYSCALL_PRCTL:
 		return 0;
-	case ARM64_SYS_PRLIMIT64:
+	case IR0_SYSCALL_PRLIMIT64:
 		/* Fill old_rlim with RLIM_INFINITY so musl malloc isn't capped at 0. */
 		if (a3 != 0 && arm64_mmu_user_buf_ok(a3, 16))
 		{
@@ -509,9 +472,9 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			rlim[1] = ~0ULL;
 		}
 		return 0;
-	case ARM64_SYS_RSEQ:
+	case IR0_SYSCALL_RSEQ:
 		return 0;
-	case ARM64_SYS_GETRANDOM:
+	case IR0_SYSCALL_GETRANDOM:
 		if (a1 > 0 && arm64_mmu_user_buf_ok(a0, a1 > 64 ? 64 : a1))
 		{
 			uint8_t *p = (uint8_t *)(uintptr_t)a0;
@@ -523,7 +486,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return (int64_t)n;
 		}
 		return -EFAULT;
-	case ARM64_SYS_BRK:
+	case IR0_SYSCALL_BRK:
 	{
 		uint64_t req = a0;
 		uint64_t *brk;
@@ -558,7 +521,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		*brk = req;
 		return (int64_t)*brk;
 	}
-	case ARM64_SYS_MMAP:
+	case IR0_SYSCALL_MMAP:
 	{
 		uint64_t addr = a0;
 		uint64_t len = a1;
@@ -613,11 +576,11 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		*bump = base + len;
 		return (int64_t)base;
 	}
-	case ARM64_SYS_MUNMAP:
-	case ARM64_SYS_MPROTECT:
+	case IR0_SYSCALL_MUNMAP:
+	case IR0_SYSCALL_MPROTECT:
 		return 0;
-	case ARM64_SYS_EXIT:
-	case ARM64_SYS_EXIT_GROUP:
+	case IR0_SYSCALL_EXIT:
+	case IR0_SYSCALL_EXIT_GROUP:
 		if (leave_el0)
 		{
 			*leave_el0 = 1;
@@ -633,7 +596,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			ir0_boot_smoke("ARM64_SYSCALL_FAIL");
 		}
 		return a0;
-	default:
+	case IR0_SYSCALL_UNKNOWN:
 		if (arm64_busybox_mode())
 		{
 			pl011_puts("ARM64_BB_ENOSYS_");

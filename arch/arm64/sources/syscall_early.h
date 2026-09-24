@@ -16,15 +16,6 @@
 
 #include <stdint.h>
 
-/* Linux aarch64 syscall numbers used by F7c–F7e EL0 workload. */
-#define ARM64_SYS_WRITE           64UL
-#define ARM64_SYS_EXIT            93UL
-#define ARM64_SYS_NANOSLEEP      101UL
-#define ARM64_SYS_CLOCK_GETTIME  113UL
-#define ARM64_SYS_CLOCK_NANOSLEEP 115UL
-#define ARM64_SYS_GETTIMEOFDAY   169UL
-#define ARM64_SYS_GETPID         172UL
-
 #define ARM64_CLOCK_MONOTONIC      1UL
 
 /**

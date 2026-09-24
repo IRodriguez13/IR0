@@ -2168,6 +2168,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/pl011.h arch/arm64/sources/serial_io_arm64.c \
 		arch/arm64/sources/timer.c arch/arm64/sources/timer.h \
 		arch/arm64/sources/gic_v2.c arch/arm64/sources/gic_v2.h \
+		arch/arm64/sources/syscall_decode.c includes/ir0/syscall_id.h \
 		arch/arm64/sources/syscall_early.c arch/arm64/sources/syscall_early.h \
 		arch/arm64/sources/mm_ops.c arch/arm64/sources/vectors.S \
 		arch/arm64/sources/switch_early.c arch/arm64/sources/switch_early.h \
@@ -2228,6 +2229,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/syscall_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/syscall_early.c -o arch/arm64/sources/syscall_early.o
+	@echo "  CC      arch/arm64/sources/syscall_decode.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/syscall_decode.c -o arch/arm64/sources/syscall_decode.o
 	@echo "  CC      arch/arm64/sources/mm_ops.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/mm_ops.c -o arch/arm64/sources/mm_ops.o
@@ -2316,7 +2320,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
+		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
@@ -2392,7 +2397,8 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
+		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
@@ -2471,7 +2477,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
+		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
