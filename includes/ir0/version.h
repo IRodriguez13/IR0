@@ -45,8 +45,8 @@
 #define IR0_VERSION_MAJOR 0
 #define IR0_VERSION_MINOR 0
 #define IR0_VERSION_PATCH 1
-#define IR0_VERSION_SUFFIX "-rc6"
-#define IR0_VERSION_STRING "0.0.1-rc6"
+#define IR0_VERSION_SUFFIX ""
+#define IR0_VERSION_STRING "0.0.1"
 
 /* Build information macros */
 /* If passed from Makefile, use those (real data), otherwise use compiler defaults */

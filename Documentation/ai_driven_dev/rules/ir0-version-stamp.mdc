@@ -44,7 +44,7 @@ Banner, `/proc/version`, `uname`, boot `klog` use `IR0_VERSION_STRING`.
 
 ## Current baseline (verify with git, do not treat as eternal)
 
-- Latest upstream tag: **`v0.0.1-rc2`**
-- In-tree on `dev` toward next: **`0.0.1-pre-rc3`** (`SUFFIX=-pre-rc3`)
+- Release being shipped: **`v0.0.1`**
+- In-tree release string: **`0.0.1`** (`SUFFIX` empty)
 
 When `v0.0.1-rc3` (or `v0.0.1`) lands on origin, update this baseline in the rule comment and the two SoT files in the same change.
