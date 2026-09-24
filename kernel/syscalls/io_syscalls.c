@@ -1138,8 +1138,12 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 		if (signals_pause_should_interrupt(proc))
 		{
 			process_set_sched_state(proc, PROCESS_READY);
-			if (proc->mode == USER_MODE)
-				process_restore_user_task_segments(proc);
+			/*
+			 * Preserve kernel_syscall_sleep until signal delivery snapshots
+			 * the blocked entry frame. Clearing it here makes rt_sigreturn
+			 * restore rax=0 (false EOF) instead of applying EINTR/SA_RESTART.
+			 * The signal-return path owns the eventual cleanup.
+			 */
 			if (pipe_waiters[slot].proc == proc)
 			{
 				pipe_waiters[slot].proc = NULL;

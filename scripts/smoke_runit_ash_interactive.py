@@ -372,7 +372,15 @@ def run_once(args: argparse.Namespace) -> int:
             if (
                 not login_sent
                 and "GETTY_READY" in text
-                and ("FIRSTBOOT_OK" in text or "login:" in text.lower())
+                # GETTY_READY is emitted before the console session performs
+                # its keyboard-state resync.  Injecting at that point races
+                # the flush and can silently discard the first characters of
+                # the username (for example, "labuser" became "er").  The
+                # visible prompt is emitted only after that resync boundary.
+                and (
+                    "Enter your Unix username:" in text
+                    or "login:" in text.lower()
+                )
                 and "LOGIN_OK" not in text
             ):
                 if inject_login():

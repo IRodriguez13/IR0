@@ -5,7 +5,8 @@
 
 KERNEL_ROOT ?= ../..
 CC         = gcc
-CFLAGS    := -Wall -Wextra -g -I. -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT)
+CFLAGS    := -Wall -Wextra -g -I. -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT) \
+	-idirafter $(KERNEL_ROOT)/includes
 LDFLAGS   =
 
 KERNEL_SRC = $(KERNEL_ROOT)/kernel/resource_registry.c
