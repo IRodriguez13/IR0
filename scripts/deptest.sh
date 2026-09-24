@@ -73,7 +73,7 @@ userspace)
 	;;
 # ISD product profiles share the userspace host-deps set. Keep PROFILE=desktop
 # as the kernel desktop image profile (not remapped).
-minimal|development|appliance)
+minimal|minimal-sysvinit|minimal-openrc|development|desktop-console|appliance|custom)
 	PROFILE=userspace
 	PROFILE_DISPLAY="userspace (ISD ${PROFILE_RAW})"
 	;;
@@ -93,7 +93,7 @@ all)
 	;;
 *)
 	echo "[deptest] Unknown PROFILE=${PROFILE_RAW}"
-	echo "Valid: desktop | desktop-x86_64 | userspace | minimal | development | appliance | hub | hub-rpi4 | watch | watch-rpi5-stub | all"
+	echo "Valid: desktop | desktop-x86_64 | userspace | minimal | minimal-sysvinit | minimal-openrc | development | desktop-console | appliance | custom | hub | hub-rpi4 | watch | watch-rpi5-stub | all"
 	exit 2
 	;;
 esac
@@ -455,6 +455,11 @@ need_userspace() {
 	require_cmd "patch" patch "patch" "patch" "patch" --version || true
 	require_cmd "tar" tar "tar" "tar" "tar" --version || true
 	require_cmd "file" file "file" "file" "file" --version || true
+	require_cmd "pkg-config" pkg-config "pkg-config" "pkgconf" "pkgconf-pkg-config" --version || true
+	require_cmd "xgettext" xgettext "gettext" "gettext" "gettext" --version || true
+	require_cmd "autoreconf" autoreconf "autoconf" "autoconf" "autoconf" --version || true
+	require_cmd "aclocal" aclocal "automake" "automake" "automake" --version || true
+	require_cmd "libtoolize" libtoolize "libtool" "libtool" "libtool" --version || true
 	if command -v sha256sum >/dev/null 2>&1; then
 		ok_line "sha256sum"
 	elif command -v shasum >/dev/null 2>&1; then

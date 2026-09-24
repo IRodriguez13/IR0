@@ -70,8 +70,12 @@ rc=$?
 set -e
 echo "$out" | grep -q 'Unknown PROFILE' && bad "D deptest rejects PROFILE=minimal" \
 	|| ok "D deptest PROFILE=minimal accepted (rc=$rc)"
-grep -q 'minimal|development|appliance' scripts/deptest.sh \
-	&& ok "D deptest maps ISD profiles" || bad "D no ISD profile map"
+set +e
+out=$(PROFILE=custom ./scripts/deptest.sh 2>&1)
+rc=$?
+set -e
+echo "$out" | grep -q 'Unknown PROFILE' && bad "D deptest rejects PROFILE=custom" \
+	|| ok "D deptest PROFILE=custom accepted (rc=$rc)"
 # Bugbot: env IR0_USERSPACE_ROOT syncs into IR0_ISD_ROOT
 grep -q 'origin IR0_USERSPACE_ROOT),environment' "$MK_BRIDGE" \
 	&& ok "D isd.mk syncs env USERSPACE_ROOT" || bad "D no env sync"
@@ -111,6 +115,22 @@ grep -q 'machine-local' scripts/kernel_manager.py \
 	&& ok "D kmang treats build numbers as machine-local" \
 	|| bad "D kmang provenance contract"
 ISD_ROOT="$ROOT/../ISD"
+grep -q 'pkg-config' scripts/ci/Dockerfile.release-check \
+	&& grep -q 'require_cmd "pkg-config"' scripts/deptest.sh \
+	&& ok "D isolated ISD/X builds declare pkg-config" \
+	|| bad "D isolated ISD/X pkg-config dependency"
+grep -q 'gettext' scripts/ci/Dockerfile.release-check \
+	&& grep -q 'require_cmd "xgettext"' scripts/deptest.sh \
+	&& ok "D isolated libXpm build declares xgettext" \
+	|| bad "D isolated libXpm xgettext dependency"
+grep -q 'autoconf' scripts/ci/Dockerfile.release-check \
+	&& grep -q 'automake' scripts/ci/Dockerfile.release-check \
+	&& grep -q 'libtool' scripts/ci/Dockerfile.release-check \
+	&& grep -q 'require_cmd "autoreconf"' scripts/deptest.sh \
+	&& grep -q 'require_cmd "aclocal"' scripts/deptest.sh \
+	&& grep -q 'require_cmd "libtoolize"' scripts/deptest.sh \
+	&& ok "D isolated TinyX build declares autotools generators" \
+	|| bad "D isolated TinyX autotools dependencies"
 grep -q 'write_login_session' scripts/kernel_manager.py \
 	&& grep -q 'etc/ir0-session' scripts/kernel_manager.py \
 	&& grep -q 'KMANG_BOOT_PROMPT' scripts/kernel_manager.py \
@@ -170,11 +190,19 @@ grep -q '^isd-plan:' "$MK_BRIDGE" \
 	&& ok "D isd-plan delegates to ISD" || bad "D isd-plan missing"
 grep -q 'isd-contracts' scripts/make/testing.mk \
 	&& ok "D test-fast runs isd-contracts" || bad "D test-fast isd-contracts"
-# CLEAN first-packs a copy of the WIP trees (out/ stripped). GitHub clone is rc.
+# CLEAN first-packs a copy of WIP trees with generated outputs and local
+# distribution selections stripped. GitHub clone is rc.
 if grep -A3 '^docker|' scripts/ci_local.sh | grep -q 'release-check-boot-container-local'; then
 	ok "D ci-local-docker first-packs WIP copy (empty out/)"
 else
 	bad "D ci-local-docker is not the local first-pack path"
+fi
+
+if grep -q -- "--exclude='./.isdconfig.d'" scripts/ci/release-check-fresh.sh &&
+   grep -q -- "--exclude='./.isdconfig'" scripts/ci/release-check-fresh.sh; then
+	ok "D Docker WIP copy cannot inherit host ISD selections"
+else
+	bad "D Docker WIP copy leaks host ISD selections"
 fi
 if grep -A3 '^rc)' scripts/ci_local.sh | grep -q 'fresh-clone-check'; then
 	ok "D ci-local-rc clones IR0+ISD from GitHub"

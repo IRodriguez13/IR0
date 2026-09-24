@@ -31,6 +31,48 @@
     }
   },
   "profiles": {
+    "appliance": {
+      "init_system": "runit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/runit",
+      "autokill_success": ["RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY"],
+      "required_serial_tags": ["RUNIT_STAGE1_OK", "RUNIT_STAGE2_OK", "RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY", "DRIVER_SUMMARY_OK"],
+      "optional_serial_tags": ["FSCK_OK", "FSCK_SKIPPED", "FIRSTBOOT_SKIP", "FIRSTBOOT_OK", "FIRSTBOOT_PENDING"],
+      "boot_window_start": "RUNIT_STAGE1_OK",
+      "boot_window_end": "GETTY_READY"
+    },
+    "custom": {
+      "init_system": "runit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/runit",
+      "autokill_success": ["RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY"],
+      "required_serial_tags": ["RUNIT_STAGE1_OK", "RUNIT_STAGE2_OK", "RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY", "DRIVER_SUMMARY_OK"],
+      "optional_serial_tags": ["FSCK_OK", "FSCK_SKIPPED", "FIRSTBOOT_SKIP", "FIRSTBOOT_OK", "FIRSTBOOT_PENDING"],
+      "boot_window_start": "RUNIT_STAGE1_OK",
+      "boot_window_end": "GETTY_READY"
+    },
+    "desktop": {
+      "init_system": "runit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/runit",
+      "autokill_success": ["RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY"],
+      "required_serial_tags": ["RUNIT_STAGE1_OK", "RUNIT_STAGE2_OK", "RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY", "DRIVER_SUMMARY_OK", "EXT2_HOME_MOUNT_OK"],
+      "optional_serial_tags": ["FSCK_OK", "FSCK_SKIPPED", "FIRSTBOOT_SKIP", "FIRSTBOOT_OK", "FIRSTBOOT_PENDING"],
+      "boot_window_start": "RUNIT_STAGE1_OK",
+      "boot_window_end": "GETTY_READY",
+      "forbidden_serial_patterns": ["EXT2_HOME_MOUNT_FAIL"]
+    },
+    "desktop-console": {
+      "init_system": "runit",
+      "staged_init_path": "sbin/init",
+      "staged_init_impl": "sbin/runit",
+      "autokill_success": ["RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY"],
+      "required_serial_tags": ["RUNIT_STAGE1_OK", "RUNIT_STAGE2_OK", "RUNSV_CONSOLE_START", "RUNSV_LOGGER_START", "GETTY_READY", "DRIVER_SUMMARY_OK", "EXT2_HOME_MOUNT_OK"],
+      "optional_serial_tags": ["FSCK_OK", "FSCK_SKIPPED", "FIRSTBOOT_SKIP", "FIRSTBOOT_OK", "FIRSTBOOT_PENDING"],
+      "boot_window_start": "RUNIT_STAGE1_OK",
+      "boot_window_end": "GETTY_READY",
+      "forbidden_serial_patterns": ["EXT2_HOME_MOUNT_FAIL"]
+    },
     "minimal": {
       "init_system": "runit",
       "staged_init_path": "sbin/init",
@@ -135,6 +177,10 @@
       ],
       "boot_window_start": "OPENRC_EARLY_OK",
       "boot_window_end": "GETTY_READY",
+      "forbidden_serial_patterns": [
+        "not a valid runlevel",
+        "/etc/fstab does not exist"
+      ],
       "notes": "openrc-init supervises etc/init.d/*; ir0-boot runs early parity with runit stage1."
     }
   }

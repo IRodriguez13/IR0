@@ -12,17 +12,31 @@ python3 - "$ROOT" <<'PY'
 import os
 import pty
 import select
+import struct
 import sys
+import tempfile
 import time
+import fcntl
+import termios
 
 root = sys.argv[1]
 
 
-def run_tui(argv: list[str], expect: str, timeout: float = 8.0) -> None:
+def run_tui(
+    argv: list[str], expect: str, timeout: float = 8.0,
+    *, cwd: str | None = None, env: dict[str, str] | None = None,
+) -> None:
     pid, fd = pty.fork()
     if pid == 0:
-        os.environ.setdefault("TERM", "xterm")
+        os.environ["TERM"] = "xterm-256color"
+        if env:
+            os.environ.update(env)
+        if cwd:
+            os.chdir(cwd)
         os.execvp(argv[0], argv)
+    # CI PTYs otherwise frequently report 0x0 or 24x80.  Exercise the layout
+    # users actually get while retaining a deterministic headless smoke.
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 32, 120, 0, 0))
     buf = b""
     deadline = time.time() + timeout
     sent_q = False
@@ -87,5 +101,23 @@ run_tui(
     ],
     "IR0 Userspace Manager",
 )
+run_tui(
+    ["python3", f"{root}/scripts/kconfig/menuconfig.py"],
+    "IR0 Kernel Configuration",
+    cwd=root,
+)
+with tempfile.TemporaryDirectory(prefix="isdconfig-tui-") as temp:
+    config = os.path.join(temp, "custom.isdconfig")
+    run_tui(
+        [
+            "python3", f"{isd}/scripts/isdconfig.py",
+            "--profile", "custom", "--config", config, "menu",
+        ],
+        "ISD Distribution Configuration",
+        cwd=isd,
+        env={"ISD_CONFIG": config},
+    )
+    if os.path.exists(config):
+        raise SystemExit("✗ isdconfig discard unexpectedly wrote the config")
 print("✓ release-check-tui OK")
 PY

@@ -3892,7 +3892,11 @@ smoke-tier1: kernel-x64.bin arch-guard
 
 # Release 0.0.1 gate — deterministic regression bundle (D1.20).
 # Does NOT include smoke-desk-* (optional sibling IR0-desktop; see TREE_CONTRACT).
-.PHONY: smoke-release-session-0.0.1 smoke-release-0.0.1 release-0.0.1
+.PHONY: smoke-release-session-0.0.1 smoke-release-0.0.1 release-0.0.1 \
+	isa-security-guard
+
+isa-security-guard:
+	@python3 scripts/isa_security_guard.py
 
 smoke-release-session-0.0.1:
 	@echo "  RELEASE 0.0.1 session/persistence gate"
@@ -3914,7 +3918,8 @@ smoke-release-0.0.1:
 	@echo "✓ smoke-release-0.0.1 passed"
 
 release-0.0.1: kernel-text-budget smoke-release-0.0.1
-	@echo "✓ release-0.0.1 gate passed (kernel-text-budget + smoke-release-0.0.1)"
+	@$(MAKE) -s release-product-gate
+	@echo "✓ release-0.0.1 gate passed (security + every shipped profile + TUI truth)"
 
 .PHONY: release-0.0.1-capabilities
 release-0.0.1-capabilities: kernel-x64.bin kernel-x64-userspace.iso

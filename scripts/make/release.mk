@@ -20,7 +20,7 @@ ifndef _IR0_RELEASE_MK
 _IR0_RELEASE_MK := 1
 
 RELEASE_CHECK_IMAGE ?= ir0-release-check
-RELEASE_CHECK_SCRIPT_REV ?= 12
+RELEASE_CHECK_SCRIPT_REV ?= 13
 RELEASE_CHECK_IR0_REF ?= dev
 RELEASE_CHECK_ISD_REF ?= dev
 RELEASE_CHECK_DOUBLE ?= 0
@@ -33,7 +33,25 @@ RELEASE_CHECK_DOUBLE ?= 0
 	release-check-container release-check-container-local \
 	release-check-boot release-check-boot-clean \
 	release-check-boot-container release-check-boot-container-local \
-	release-check-guest-probes
+	release-check-guest-probes release-product-gate release-product-gate-container-local
+
+release-product-gate:
+	@chmod +x scripts/release_product_gate.sh scripts/release_check_tui.sh
+	@ISD_ARCH="$(ISD_ARCH)" scripts/release_product_gate.sh
+
+release-product-gate-container-local:
+	@chmod +x scripts/ci/release-check-fresh.sh scripts/release_product_gate.sh \
+		scripts/release_check_tui.sh scripts/resolve_isd_root.sh
+	@ISD_ROOT="$$(scripts/resolve_isd_root.sh "$(KERNEL_ROOT)")"; \
+	$(RELEASE_CHECK_DOCKER_BUILD); \
+	docker run --rm \
+		-v "$(KERNEL_ROOT):/src/IR0:ro" \
+		-v "$$ISD_ROOT:/src/ISD:ro" \
+		-e RELEASE_CHECK_LOCAL=1 \
+		-e PROFILE="$(ISD_PROFILE)" \
+		-e ISD_ARCH="$(ISD_ARCH)" \
+		-e RELEASE_CHECK_PRODUCT=1 \
+		$(RELEASE_CHECK_IMAGE)
 
 truth-tests:
 	@python3 scripts/test_truth_tooling.py
@@ -43,6 +61,7 @@ tooling-check:
 	@chmod +x scripts/release_check.sh scripts/resolve_isd_root.sh
 	@make -s repo-hygiene-guard
 	@make -s arch-guard
+	@make -s isa-security-guard
 	@make -s -C tests/host run
 	@python3 scripts/test_kernel_manager.py
 	@python3 scripts/test_truth_tooling.py

@@ -47,6 +47,33 @@ def load_contract() -> dict[str, Any]:
     return json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
 
 
+def available_isd_profiles(isd: Path) -> list[str]:
+    profiles_dir = isd / "profiles"
+    if not profiles_dir.is_dir():
+        raise InitBootError(f"ISD profiles directory is missing: {profiles_dir}")
+    return sorted(
+        entry.name
+        for entry in profiles_dir.iterdir()
+        if entry.is_dir() and (entry / "profile.conf").is_file()
+    )
+
+
+def validate_profile_catalog(contract: dict[str, Any], isd: Path) -> list[str]:
+    """Make omission impossible: every shipped profile must have a boot contract."""
+    available = available_isd_profiles(isd)
+    contracted = sorted(contract.get("profiles", {}))
+    missing = sorted(set(available) - set(contracted))
+    stale = sorted(set(contracted) - set(available))
+    if missing or stale:
+        details = []
+        if missing:
+            details.append("profiles without boot contracts: " + ", ".join(missing))
+        if stale:
+            details.append("contracts without profiles: " + ", ".join(stale))
+        raise InitBootError("; ".join(details))
+    return available
+
+
 def resolve_isd_root() -> Path:
     env = os.environ.get("IR0_ISD_ROOT")
     if env:
@@ -91,6 +118,32 @@ def profile_root_fs(isd: Path, profile: str) -> str:
         elif line.startswith("ROOTFS_PACK=") and root_fs == "minix":
             root_fs = line.split("=", 1)[1].strip()
     return root_fs if root_fs in ("minix", "ext2") else "minix"
+
+
+def profile_requires_home_disk(isd: Path, profile: str) -> bool:
+    conf = isd / "profiles" / profile / "profile.conf"
+    if not conf.is_file():
+        return False
+    return any(
+        raw.strip() == "REQUIRES_HOME_DISK=1"
+        for raw in conf.read_text(encoding="utf-8", errors="replace").splitlines()
+    )
+
+
+def ensure_home_disk(isd: Path, profile: str, arch: str) -> Path:
+    image = isd / "out" / arch / "images" / profile / "home.ext2.img"
+    if image.is_file():
+        return image
+    env = {**os.environ, "IR0_ISD_ROOT": str(isd)}
+    subprocess.run(
+        ["make", "-s", "-C", str(ROOT), "ensure-isd-home",
+         f"PROFILE={profile}", f"ARCH={arch}"],
+        check=True,
+        env=env,
+    )
+    if not image.is_file():
+        raise InitBootError(f"missing required home disk: {image}")
+    return image
 
 
 def disk_image(isd: Path, profile: str, arch: str, root_fs: str) -> Path:
@@ -304,7 +357,12 @@ def run_capture(
     log_path = out_dir / "serial.log" if not smoke_only else Path(tempfile.mktemp(suffix=".log"))
 
     tmp_disk = Path(tempfile.mktemp(suffix=".img"))
+    tmp_home: Path | None = None
     shutil.copy2(disk_src, tmp_disk)
+    if profile_requires_home_disk(isd, profile):
+        home_src = ensure_home_disk(isd, profile, arch)
+        tmp_home = Path(tempfile.mktemp(suffix=".home.ext2.img"))
+        shutil.copy2(home_src, tmp_home)
     try:
         success_tags = spec["autokill_success"]
         cmd = [
@@ -322,6 +380,11 @@ def run_capture(
         cmd.append(arch_cfg["qemu"])
         cmd.extend(["-cdrom", str(iso)])
         cmd.extend(arch_cfg["disk_drive"].format(disk=str(tmp_disk)).split())
+        if tmp_home is not None:
+            if arch == "x86_64":
+                cmd.extend(["-drive", f"file={tmp_home},format=raw,if=ide,index=1"])
+            else:
+                cmd.extend(["-drive", f"file={tmp_home},format=raw,if=virtio,index=1"])
         cmd.extend(arch_cfg["qemu_args"])
 
         print(f"  SMOKE   init boot PROFILE={profile} ROOT_FS={root_fs} ARCH={arch}", flush=True)
@@ -329,6 +392,8 @@ def run_capture(
         serial = log_path.read_text(encoding="utf-8", errors="replace") if log_path.is_file() else ""
     finally:
         tmp_disk.unlink(missing_ok=True)
+        if tmp_home is not None:
+            tmp_home.unlink(missing_ok=True)
 
     required = spec["required_serial_tags"]
     optional = spec.get("optional_serial_tags", [])
@@ -338,11 +403,16 @@ def run_capture(
         spec.get("boot_window_start", required[0]),
         spec.get("boot_window_end", "GETTY_READY"),
     )
+    forbidden = [
+        pattern for pattern in spec.get("forbidden_serial_patterns", [])
+        if pattern in serial
+    ]
 
     passed = (
         result.returncode == 0
         and audit.get("ok", False)
         and not tags["missing_required"]
+        and not forbidden
         and "KERNEL PANIC" not in serial
     )
 
@@ -355,6 +425,7 @@ def run_capture(
         "smoke_exit_code": result.returncode,
         "staged_audit": audit,
         "tags": tags,
+        "forbidden_serial_matches": forbidden,
         "iso": str(iso),
         "disk": str(disk_src),
         "serial_log": str(log_path),
@@ -387,6 +458,8 @@ def run_capture(
                     print(f"  staged: {item}", file=sys.stderr)
         if result.returncode != 0:
             print(f"  smoke exit={result.returncode}", file=sys.stderr)
+        if forbidden:
+            print(f"  forbidden serial: {', '.join(forbidden)}", file=sys.stderr)
 
     return manifest
 
@@ -406,11 +479,17 @@ def main() -> int:
     parser.add_argument("--out-root", type=Path, default=None)
     args = parser.parse_args()
 
-    profiles = list(load_contract()["profiles"]) if args.matrix else [args.profile]
+    contract = load_contract()
+    isd = resolve_isd_root()
+    try:
+        catalog_profiles = validate_profile_catalog(contract, isd)
+    except InitBootError as exc:
+        print(f"✗ boot contract catalog: {exc}", file=sys.stderr)
+        return 1
+    profiles = catalog_profiles if args.matrix else [args.profile]
     failures = 0
     skipped = 0
     runs = 0
-    isd = resolve_isd_root()
     for profile in profiles:
         if args.root_fs_matrix:
             fs_iter = ["minix", "ext2"]

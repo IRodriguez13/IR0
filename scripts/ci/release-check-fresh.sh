@@ -34,6 +34,7 @@ RELEASE_CHECK_DOUBLE="${RELEASE_CHECK_DOUBLE:-0}"
 RELEASE_CHECK_INCREMENTAL="${RELEASE_CHECK_INCREMENTAL:-0}"
 RELEASE_CHECK_LOCAL="${RELEASE_CHECK_LOCAL:-0}"
 RELEASE_CHECK_DEPS_INSTALL="${RELEASE_CHECK_DEPS_INSTALL:-0}"
+RELEASE_CHECK_PRODUCT="${RELEASE_CHECK_PRODUCT:-0}"
 
 # Drop host leakage: only documented vars below are exported to the build.
 unset IR0_ISD_ROOT IR0_DEPS_INSTALL IR0_PRODUCT_PROFILE IR0_MACHINE \
@@ -55,10 +56,15 @@ copy_repo_tree() {
 	local dest="$2"
 	local label="$3"
 
-	echo "  copy ${label} from ${src} → ${dest} (WIP first-time pack; out/ stripped)"
+	echo "  copy ${label} from ${src} → ${dest} (WIP clean pack; generated trees stripped)"
 	mkdir -p "$dest"
 	tar -C "$src" \
 		--exclude='./out' \
+		--exclude='./sysroot' \
+		--exclude='./.isdconfig' \
+		--exclude='./.isdconfig.d' \
+		--exclude='./packages/*/src' \
+		--exclude='./packages/*/prefix' \
 		--exclude='./kernel-x64-userspace.iso' \
 		--exclude='./disk.img' \
 		--exclude='./disk.img.runit.stamp' \
@@ -121,6 +127,11 @@ run_once() {
 	if [ "$RELEASE_CHECK_INCREMENTAL" = "1" ]; then
 		chmod +x scripts/release_check_incremental.sh
 		scripts/release_check_incremental.sh "$work/IR0" "$work/ISD"
+	fi
+
+	if [ "$RELEASE_CHECK_PRODUCT" = "1" ]; then
+		chmod +x scripts/release_product_gate.sh scripts/release_check_tui.sh
+		ISD_ARCH="$ISD_ARCH" scripts/release_product_gate.sh
 	fi
 }
 
