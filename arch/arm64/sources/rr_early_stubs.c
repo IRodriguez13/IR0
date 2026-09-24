@@ -129,14 +129,13 @@ void __attribute__((weak)) switch_to(task_t *prev, task_t *next)
  */
 void __attribute__((weak)) sched_context_switch_to(process_t *next)
 {
-	static int first = 1;
 	process_t *prev;
 
 	if (!next)
 		return;
 
 	prev = current_process;
-	if (!first && prev == next)
+	if (prev == next)
 		return;
 
 	if (prev && prev->state == PROCESS_RUNNING)
@@ -145,9 +144,8 @@ void __attribute__((weak)) sched_context_switch_to(process_t *next)
 	process_set_sched_state(next, PROCESS_RUNNING);
 	current_process = next;
 
-	if (first)
+	if (!prev)
 	{
-		first = 0;
 		set_current_kernel_stack(next);
 		first_switch_to(next);
 		panic("Returned from first context switch");
