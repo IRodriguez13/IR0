@@ -2082,7 +2082,8 @@ ARM64_PORTABLE_OBJS = \
 	kernel-arm64-el0.bin kernel-arm64-slice.bin kernel-arm64-port.bin \
 	kernel-arm64-gic.bin kernel-arm64-syscall.bin \
 	arm64-slice-compile arm64-portable-compile arm64-all-objs-probe \
-	smoke-arm64-boot smoke-arm64-mmu smoke-arm64-vbar smoke-arm64-el0 \
+	smoke-arm64-boot smoke-arm64-el2-normalize smoke-arm64-mmu \
+	smoke-arm64-vbar smoke-arm64-el0 \
 	smoke-arm64-slice smoke-arm64-port smoke-arm64-gic smoke-arm64-syscall \
 	smoke-arm64-nanosleep smoke-arm64
 arm64-slice-compile:
@@ -2532,6 +2533,18 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 		head -30 /tmp/arm64-boot-smoke.log; exit 1; \
 	fi
 
+smoke-arm64-el2-normalize: kernel-arm64-boot.bin
+	@echo "  SMOKE   ARM64 QEMU EL2 firmware entry normalization..."
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-el2-normalize.log \
+		--timeout 20 --stale-sec 8 --done ARM64_EL0_RET_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE),virtualization=on \
+		-cpu cortex-a53 -m 128M -kernel kernel-arm64-boot.bin \
+		-nographic -serial mon:stdio -display none -no-reboot 2>/dev/null
+	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-el2-normalize.log
+	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-el2-normalize.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-el2-normalize.log
+	@echo "✓ smoke-arm64-el2-normalize passed (EL2 → EL1h → EL0)"
+
 smoke-arm64-mmu: kernel-arm64-mmu.bin
 	@echo "  SMOKE   ARM64 QEMU virt early MMU tag..."
 	@rm -f /tmp/arm64-mmu-smoke.log
@@ -2723,9 +2736,10 @@ smoke-arm64-ttbr: smoke-arm64-syscall
 	@echo "✓ smoke-arm64-ttbr (alias — F7i TTBR tags in smoke-arm64-syscall)"
 
 .PHONY: smoke-arm64
-smoke-arm64: smoke-arm64-boot smoke-arm64-mmu smoke-arm64-slice smoke-arm64-port \
+smoke-arm64: smoke-arm64-boot smoke-arm64-el2-normalize smoke-arm64-mmu \
+	smoke-arm64-slice smoke-arm64-port \
 	smoke-arm64-gic smoke-arm64-syscall smoke-arm64-vbar smoke-arm64-el0
-	@echo "✓ smoke-arm64 (boot+mmu+slice+port+gic+syscall+vbar+el0) passed"
+	@echo "✓ smoke-arm64 (boot+el2+mmu+slice+port+gic+syscall+vbar+el0) passed"
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
 .PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke
