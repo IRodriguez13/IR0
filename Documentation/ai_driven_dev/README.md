@@ -65,6 +65,7 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-ktm-instrumentation.md` | on demand | KTM tags and panic metadata |
 | `ir0-linux-fork-debug-reference.md` | on demand | `$LINUX_TREE` fork debug workflow |
 | `ir0-workspace.md` | always | Tier map and CTR gates (installed locally) |
+| `ir0-arm64-rpi5-x86-regression-gate.md` | always | ARM64/RPi5 work must preserve facades and keep x86_64 green |
 | `oss-kernel-reference.md` | on demand | Cross-check MM/exec/syscall invariants |
 | `ir0-tier-t0-os-functional.md` | tier T0 | OS + ktest/contracts scope |
 | `ir0-tier-t1-userspace-posix.md` | tier T1 | init + musl + syscalls |
