@@ -2070,6 +2070,7 @@ ARM64_QEMU_MACHINE = virt,gic-version=2
 ARM64_SLICE_OBJS = \
 	arch/arm64/sources/slice_hello.o \
 	arch/arm64/sources/board.o \
+	arch/arm64/sources/boot_info.o \
 	arch/arm64/sources/pl011.o \
 	arch/arm64/sources/serial_io_arm64.o
 ARM64_PORTABLE_OBJS = \
@@ -2160,6 +2161,7 @@ arm64-all-objs-probe: arm64-portable-compile
 	fi
 
 kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_early.c \
+		arch/arm64/sources/boot_entry.S arch/arm64/sources/boot_info.c \
 		arch/arm64/sources/mmu_early.h arch/arm64/sources/exc_early.c \
 		arch/arm64/sources/exc_early.h arch/arm64/sources/slice_hello.c \
 		arch/arm64/sources/slice_hello.h arch/arm64/sources/pl011.c \
@@ -2202,6 +2204,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/board.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/board.c -o arch/arm64/sources/board.o
+	@echo "  CC      arch/arm64/sources/boot_info.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/boot_info.c -o arch/arm64/sources/boot_info.o
 	@echo "  CC      arch/arm64/sources/platform.c (board power ops)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/platform.c -o arch/arm64/sources/platform.o
@@ -2291,6 +2296,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  AS      arch/arm64/sources/vectors.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/vectors.S -o arch/arm64/sources/vectors.o
+	@echo "  AS      arch/arm64/sources/boot_entry.S"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
+		arch/arm64/sources/boot_entry.S -o arch/arm64/sources/boot_entry.o
 	@echo "  AS      arch/arm64/sources/switch_early.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/switch_early.S -o arch/arm64/sources/switch_early_asm.o
@@ -2299,9 +2307,11 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/common/boot_log.c -o build/arm64-boot/boot_log.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
-		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
+		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
+		arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
-		arch/arm64/sources/board.o arch/arm64/sources/platform.o \
+		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
+		arch/arm64/sources/platform.o \
 		arch/arm64/sources/freestanding_stubs.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \
@@ -2377,7 +2387,8 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/min_link_stubs.c -o build/arm64-min/min_link_stubs.o
 	@echo "  LD      $@ (boot + MEMORY sample — not ALL_OBJS)"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
-		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
+		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
+		arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
@@ -2454,7 +2465,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
-		arch/arm64/sources/board.o arch/arm64/sources/platform.o \
+		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
+		arch/arm64/sources/platform.o \
 		arch/arm64/sources/freestanding_stubs.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \

@@ -25,6 +25,14 @@ struct arm64_board_desc
 	const char *arch_line;	  /* for ir0_boot_arch() */
 	const char *uart_mmio_line; /* optional second ARCH line; may be NULL */
 	const struct ir0_platform_ops *platform_ops;
+	int (*boot_info_init)(uintptr_t fdt_pa);
+};
+
+struct arm64_board_boot_info
+{
+	uintptr_t fdt_pa;
+	uint32_t fdt_size;
+	int fdt_valid;
 };
 
 extern const struct ir0_platform_ops arm64_virt_platform_ops;
@@ -34,6 +42,13 @@ const struct arm64_board_desc *arm64_board_get(void);
 
 /* Select platform_ops from the active board (call once early). */
 void arm64_board_apply_platform(void);
+
+/* Capture firmware x0 through the board-selected boot information backend. */
+int arm64_board_capture_boot_info(uintptr_t fdt_pa);
+const struct arm64_board_boot_info *arm64_board_boot_info(void);
+
+/* Shared ARM64 FDT backend used by DT-described boards. */
+int arm64_fdt_boot_info_init(uintptr_t fdt_pa);
 
 /* Emit ARCH lines (and WARN if uart_mmio == 0). */
 void arm64_board_log_arch(void);

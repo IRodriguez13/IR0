@@ -25,6 +25,9 @@ uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
 
 void boot_main(void)
 {
+	extern uintptr_t arm64_firmware_fdt;
+
+	(void)arm64_board_capture_boot_info(arm64_firmware_fdt);
 	arm64_board_apply_platform();
 	pl011_init();
 	ir0_boot_serial_ready();
@@ -35,17 +38,4 @@ void boot_main(void)
 	{
 		__asm__ volatile("wfi" ::: "memory");
 	}
-}
-
-void __attribute__((section(".text.boot"), noreturn)) _start(void)
-{
-	__asm__ volatile(
-		"adrp	x0, boot_stack\n"
-		"add	x0, x0, :lo12:boot_stack\n"
-		"add	sp, x0, %[sz]\n"
-		"b	boot_main\n"
-		:
-		: [sz] "i"(BOOT_STACK_SIZE)
-		: "x0", "memory");
-	__builtin_unreachable();
 }

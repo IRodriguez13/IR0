@@ -18,7 +18,7 @@ endif
 # $1 = out dir, $2 = extra -D board flag
 define ARM64_BOARD_MIN_BUILD
 	@mkdir -p $(1)
-	@for src in board_boot_min.c board.c pl011.c serial_io_arm64.c \
+	@for src in board_boot_min.c board.c boot_info.c pl011.c serial_io_arm64.c \
 		platform.c freestanding_stubs.c; do \
 		echo "  CC      arch/arm64/sources/$$src → $(1)/"; \
 		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) $(2) \
@@ -26,9 +26,12 @@ define ARM64_BOARD_MIN_BUILD
 	done
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) $(2) -c \
 		arch/common/boot_log.c -o $(1)/boot_log.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
+		arch/arm64/sources/boot_entry.S -o $(1)/boot_entry.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ \
-		$(1)/board_boot_min.o $(1)/board.o $(1)/pl011.o \
+		$(1)/boot_entry.o $(1)/board_boot_min.o $(1)/board.o \
+		$(1)/boot_info.o $(1)/pl011.o \
 		$(1)/serial_io_arm64.o $(1)/platform.o $(1)/freestanding_stubs.o \
 		$(1)/boot_log.o
 	@echo "✓ $@"
@@ -52,8 +55,9 @@ arm64-rpi4-compile: kernel-arm64-rpi4-min.bin
 
 arm64-rpi5-compile: kernel-arm64-rpi5-min.bin
 	@if aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'board=rpi5' && \
+	   aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'dtb=firmware-x0' && \
 	   aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'ARM64_BOARD_RPI5_STUB'; then \
-		echo "✓ arm64-rpi5-compile (board=rpi5 + ARM64_BOARD_RPI5_STUB in image)"; \
+		echo "✓ arm64-rpi5-compile (firmware DTB contract + honest board stub)"; \
 	else \
 		echo "✗ arm64-rpi5-compile: missing rpi5 stub strings"; exit 1; \
 	fi

@@ -25,6 +25,7 @@ static const struct arm64_board_desc g_board = {
 	.arch_line = "isa=arm64 board=rpi5 uart=none",
 	.uart_mmio_line = NULL,
 	.platform_ops = &arm64_rpi_platform_ops,
+	.boot_info_init = arm64_fdt_boot_info_init,
 };
 #elif defined(IR0_ARM64_BOARD_RPI4)
 static const struct arm64_board_desc g_board = {
@@ -34,6 +35,7 @@ static const struct arm64_board_desc g_board = {
 	.arch_line = "isa=arm64 board=rpi4 uart=pl011",
 	.uart_mmio_line = "uart_mmio=0xfe201000",
 	.platform_ops = &arm64_rpi_platform_ops,
+	.boot_info_init = arm64_fdt_boot_info_init,
 };
 #else
 /* Default: QEMU virt PL011 @ 0x09000000 */
@@ -44,12 +46,24 @@ static const struct arm64_board_desc g_board = {
 	.arch_line = "isa=arm64 board=qemu-virt uart=pl011",
 	.uart_mmio_line = "uart_mmio=0x09000000",
 	.platform_ops = &arm64_virt_platform_ops,
+	.boot_info_init = arm64_fdt_boot_info_init,
 };
 #endif
 
 const struct arm64_board_desc *arm64_board_get(void)
 {
 	return &g_board;
+}
+
+int arm64_board_capture_boot_info(uintptr_t fdt_pa)
+{
+	const struct arm64_board_desc *b = arm64_board_get();
+
+	if (!b || !b->boot_info_init)
+	{
+		return -1;
+	}
+	return b->boot_info_init(fdt_pa);
 }
 
 void arm64_board_apply_platform(void)
@@ -80,5 +94,15 @@ void arm64_board_log_arch(void)
 	{
 		ir0_boot_warn("ARCH", "uart=none board=rpi5");
 		ir0_boot_smoke("ARM64_BOARD_RPI5_STUB");
+	}
+	if (arm64_board_boot_info()->fdt_valid)
+	{
+		ir0_boot_arch("dtb=firmware-x0");
+		ir0_boot_smoke("ARM64_DTB_OK");
+	}
+	else
+	{
+		ir0_boot_warn("ARCH", "firmware DTB missing or invalid");
+		ir0_boot_smoke("ARM64_DTB_FAIL");
 	}
 }
