@@ -27,7 +27,7 @@ int arm64_mmu_map_device_block(uint64_t pa);
 
 /**
  * After MMU on: map one 4 KiB Normal page at @pa with EL0 RW (AP=01), UXN.
- * Splits the DRAM 1 GiB block into L2/L3 as needed. Does not use EL0 on 1 GiB.
+ * Splits the firmware-described DRAM L2 block into L3 as needed.
  * Returns 0 on success, negative on error.
  */
 int arm64_mmu_map_user_page(uint64_t pa);

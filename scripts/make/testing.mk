@@ -2568,11 +2568,14 @@ smoke-arm64-dtb: kernel-arm64-Image
 		-display none -no-reboot 2>/dev/null
 	@grep -q 'ARM64_DTB_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_MEMORY_OK' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_CPU_OK' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_MMU_WINDOW_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_ram_base=0x0000000040000000' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_ram_size=0x0000000008000000' /tmp/arm64-dtb-smoke.log
+	@grep -q 'dtb_cpu_count=0x0000000000000001' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-dtb-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-dtb-smoke.log
-	@echo "✓ smoke-arm64-dtb passed (x0 DTB + 128 MiB RAM resource)"
+	@echo "✓ smoke-arm64-dtb passed (x0 DTB + CPU topology + bounded 128 MiB RAM)"
 
 smoke-arm64-el2-normalize: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU EL2 firmware entry normalization..."

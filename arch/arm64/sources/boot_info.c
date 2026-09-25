@@ -43,19 +43,69 @@ static uint64_t read_cells(const volatile uint8_t *p, uint32_t cells)
 	return value;
 }
 
-static int node_is_memory(const volatile uint8_t *name, uint32_t available)
+static int node_name_is(const volatile uint8_t *name, uint32_t available,
+			const char *wanted)
 {
-	static const char prefix[] = "memory@";
-	uint32_t i;
+	uint32_t i = 0;
 
-	if (available < sizeof(prefix) - 1U)
-		return 0;
-	for (i = 0; i < sizeof(prefix) - 1U; i++)
+	while (wanted[i] && i < available)
 	{
-		if (name[i] != (uint8_t)prefix[i])
+		if (name[i] != (uint8_t)wanted[i])
 			return 0;
+		i++;
+	}
+	return wanted[i] == '\0' && i == available;
+}
+
+static int node_has_prefix(const volatile uint8_t *name, uint32_t available,
+			   const char *prefix)
+{
+	uint32_t i = 0;
+
+	while (prefix[i])
+	{
+		if (i >= available || name[i] != (uint8_t)prefix[i])
+			return 0;
+		i++;
 	}
 	return 1;
+}
+
+static int node_is_memory(const volatile uint8_t *name, uint32_t available)
+{
+	return node_name_is(name, available, "memory") ||
+	       node_has_prefix(name, available, "memory@");
+}
+
+static void append_range(struct ir0_phys_range *ranges, uint32_t *count,
+			 uint32_t maximum, uint64_t base, uint64_t size)
+{
+	if (size == 0 || *count >= maximum || base + size < base)
+		return;
+	ranges[*count].base = base;
+	ranges[*count].size = size;
+	(*count)++;
+}
+
+static int parse_reservation_map(const volatile uint8_t *fdt, uint32_t total)
+{
+	uint32_t off = read_be32(fdt + 16);
+
+	if (off < FDT_HEADER_SIZE || off > total)
+		return -1;
+	while (off + 16U <= total)
+	{
+		uint64_t base = read_cells(fdt + off, 2U);
+		uint64_t size = read_cells(fdt + off + 8U, 2U);
+
+		off += 16U;
+		if (base == 0 && size == 0)
+			return 0;
+		append_range(g_boot_info.reserved,
+			     &g_boot_info.reserved_range_count,
+			     ARM64_BOOT_RESERVED_RANGES_MAX, base, size);
+	}
+	return -1;
 }
 
 static int prop_name_is(const volatile uint8_t *strings, uint32_t strings_size,
@@ -75,7 +125,7 @@ static int prop_name_is(const volatile uint8_t *strings, uint32_t strings_size,
 	       strings[nameoff + i] == '\0';
 }
 
-static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
+static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 {
 	const volatile uint8_t *structure;
 	const volatile uint8_t *strings;
@@ -85,13 +135,19 @@ static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
 	uint32_t struct_size = read_be32(fdt + 36);
 	uint32_t address_cells = 2;
 	uint32_t size_cells = 1;
+	uint32_t reserved_address_cells = 2;
+	uint32_t reserved_size_cells = 1;
 	uint32_t off = 0;
 	uint32_t depth = 0;
 	uint32_t memory_depth = 0;
+	uint32_t cpus_depth = 0;
+	uint32_t reserved_depth = 0;
+	uint32_t reserved_child_depth = 0;
 
-	if (struct_off > total || struct_size > total - struct_off ||
+	if (struct_off < FDT_HEADER_SIZE || strings_off < FDT_HEADER_SIZE ||
+	    struct_off > total || struct_size > total - struct_off ||
 	    strings_off > total || strings_size > total - strings_off)
-		return;
+		return -1;
 	structure = fdt + struct_off;
 	strings = fdt + strings_off;
 
@@ -107,19 +163,38 @@ static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
 			while (off < struct_size && structure[off] != 0)
 				off++;
 			if (off >= struct_size)
-				return;
+				return -1;
 			depth++;
 			if (depth == 2U &&
 			    node_is_memory(structure + name_start, off - name_start))
 				memory_depth = depth;
+			if (depth == 2U &&
+			    node_name_is(structure + name_start, off - name_start, "cpus"))
+				cpus_depth = depth;
+			else if (cpus_depth != 0U && depth == cpus_depth + 1U &&
+				 node_has_prefix(structure + name_start, off - name_start,
+						 "cpu@"))
+				g_boot_info.cpu_count++;
+			if (depth == 2U &&
+			    node_name_is(structure + name_start, off - name_start,
+					 "reserved-memory"))
+				reserved_depth = depth;
+			else if (reserved_depth != 0U && depth == reserved_depth + 1U)
+				reserved_child_depth = depth;
 			off = (off + 4U) & ~3U;
 		}
 		else if (token == FDT_END_NODE)
 		{
 			if (memory_depth == depth)
 				memory_depth = 0;
+			if (reserved_child_depth == depth)
+				reserved_child_depth = 0;
+			if (cpus_depth == depth)
+				cpus_depth = 0;
+			if (reserved_depth == depth)
+				reserved_depth = 0;
 			if (depth == 0)
-				return;
+				return -1;
 			depth--;
 		}
 		else if (token == FDT_PROP)
@@ -130,12 +205,12 @@ static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
 			uint32_t tuple_cells;
 
 			if (off + 8U > struct_size)
-				return;
+				return -1;
 			len = read_be32(structure + off);
 			nameoff = read_be32(structure + off + 4U);
 			off += 8U;
 			if (len > struct_size - off)
-				return;
+				return -1;
 			value = structure + off;
 			if (depth == 1U && len >= 4U &&
 			    prop_name_is(strings, strings_size, nameoff, "#address-cells"))
@@ -143,6 +218,12 @@ static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
 			else if (depth == 1U && len >= 4U &&
 				 prop_name_is(strings, strings_size, nameoff, "#size-cells"))
 				size_cells = read_be32(value);
+			else if (reserved_depth == depth && len >= 4U &&
+				 prop_name_is(strings, strings_size, nameoff, "#address-cells"))
+				reserved_address_cells = read_be32(value);
+			else if (reserved_depth == depth && len >= 4U &&
+				 prop_name_is(strings, strings_size, nameoff, "#size-cells"))
+				reserved_size_cells = read_be32(value);
 			else if (memory_depth == depth &&
 				 prop_name_is(strings, strings_size, nameoff, "reg") &&
 				 address_cells > 0U && address_cells <= 2U &&
@@ -152,14 +233,30 @@ static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
 				while (len >= tuple_cells * 4U &&
 				       g_boot_info.memory_range_count < ARM64_BOOT_MEMORY_RANGES_MAX)
 				{
-					struct ir0_phys_range *range =
-						&g_boot_info.memory[g_boot_info.memory_range_count];
-
-					range->base = read_cells(value, address_cells);
-					range->size = read_cells(value + address_cells * 4U,
-							       size_cells);
-					if (range->size != 0)
-						g_boot_info.memory_range_count++;
+					append_range(g_boot_info.memory,
+						     &g_boot_info.memory_range_count,
+						     ARM64_BOOT_MEMORY_RANGES_MAX,
+						     read_cells(value, address_cells),
+						     read_cells(value + address_cells * 4U,
+								size_cells));
+					value += tuple_cells * 4U;
+					len -= tuple_cells * 4U;
+				}
+			}
+			else if (reserved_child_depth == depth &&
+				 prop_name_is(strings, strings_size, nameoff, "reg") &&
+				 reserved_address_cells > 0U && reserved_address_cells <= 2U &&
+				 reserved_size_cells > 0U && reserved_size_cells <= 2U)
+			{
+				tuple_cells = reserved_address_cells + reserved_size_cells;
+				while (len >= tuple_cells * 4U)
+				{
+					append_range(g_boot_info.reserved,
+						     &g_boot_info.reserved_range_count,
+						     ARM64_BOOT_RESERVED_RANGES_MAX,
+						     read_cells(value, reserved_address_cells),
+						     read_cells(value + reserved_address_cells * 4U,
+								reserved_size_cells));
 					value += tuple_cells * 4U;
 					len -= tuple_cells * 4U;
 				}
@@ -172,13 +269,14 @@ static void parse_memory_ranges(const volatile uint8_t *fdt, uint32_t total)
 		}
 		else if (token == FDT_END)
 		{
-			return;
+			return depth == 0U ? 0 : -1;
 		}
 		else
 		{
-			return;
+			return -1;
 		}
 	}
+	return -1;
 }
 
 int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
@@ -190,7 +288,9 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.fdt_size = 0;
 	g_boot_info.fdt_magic = 0;
 	g_boot_info.fdt_valid = 0;
+	g_boot_info.cpu_count = 0;
 	g_boot_info.memory_range_count = 0;
+	g_boot_info.reserved_range_count = 0;
 
 	/* Linux arm64 boot protocol requires an 8-byte-aligned DTB in RAM. */
 	if (!fdt_pa || (fdt_pa & 7U) != 0)
@@ -211,8 +311,10 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 		return -1;
 	}
 
+	if (parse_reservation_map(header, size) != 0 ||
+	    parse_platform_tree(header, size) != 0)
+		return -1;
 	g_boot_info.fdt_valid = 1;
-	parse_memory_ranges(header, size);
 	return 0;
 }
 

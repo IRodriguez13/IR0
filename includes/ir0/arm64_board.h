@@ -19,6 +19,7 @@
 #include <stdint.h>
 
 #define ARM64_BOOT_MEMORY_RANGES_MAX 8U
+#define ARM64_BOOT_RESERVED_RANGES_MAX 16U
 
 struct arm64_board_desc
 {
@@ -37,8 +38,11 @@ struct arm64_board_boot_info
 	uint32_t fdt_size;
 	uint32_t fdt_magic;
 	int fdt_valid;
+	uint32_t cpu_count;
 	uint32_t memory_range_count;
 	struct ir0_phys_range memory[ARM64_BOOT_MEMORY_RANGES_MAX];
+	uint32_t reserved_range_count;
+	struct ir0_phys_range reserved[ARM64_BOOT_RESERVED_RANGES_MAX];
 };
 
 extern const struct ir0_platform_ops arm64_virt_platform_ops;

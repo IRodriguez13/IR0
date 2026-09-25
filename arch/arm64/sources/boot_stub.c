@@ -103,6 +103,7 @@ static void arm64_irq_oneshot_demo(void)
 void boot_main(void)
 {
 	extern uintptr_t arm64_firmware_fdt;
+	const struct arm64_board_boot_info *boot_info;
 
 	(void)arm64_board_capture_boot_info(arm64_firmware_fdt);
 	arm64_board_apply_platform();
@@ -152,6 +153,18 @@ void boot_main(void)
 	else
 	{
 		ir0_boot_smoke("ARM64_EL0_PAGE_FAIL");
+	}
+
+	boot_info = arm64_board_boot_info();
+	if (boot_info->fdt_valid && boot_info->memory_range_count > 0U)
+	{
+		uint64_t first_byte_past_ram = boot_info->memory[0].base +
+					       boot_info->memory[0].size;
+
+		if (arm64_mmu_map_user_page(first_byte_past_ram) != 0)
+			ir0_boot_smoke("ARM64_DTB_MMU_WINDOW_OK");
+		else
+			ir0_boot_smoke("ARM64_DTB_MMU_WINDOW_FAIL");
 	}
 
 	arm64_slice_after_mmu();

@@ -41,14 +41,19 @@ static size_t append_prop_u32(uint8_t *p, size_t off, uint32_t nameoff,
 	return append_be32(p, off, value);
 }
 
-static size_t build_memory_fdt(uint8_t *fdt, size_t capacity)
+static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 {
 	static const char strings[] = "#address-cells\0#size-cells\0reg\0";
-	const size_t struct_off = 56U;
+	const size_t struct_off = 72U;
 	size_t off = struct_off;
 	size_t strings_off;
 
 	memset(fdt, 0, capacity);
+	/* One firmware reservation followed by the mandatory zero terminator. */
+	put_be32(fdt + 40, 0U);
+	put_be32(fdt + 44, 0x41000000U);
+	put_be32(fdt + 48, 0U);
+	put_be32(fdt + 52, 0x1000U);
 	off = append_be32(fdt, off, 1U);
 	off = append_name(fdt, off, "");
 	off = append_prop_u32(fdt, off, 0U, 2U);
@@ -62,6 +67,32 @@ static size_t build_memory_fdt(uint8_t *fdt, size_t capacity)
 	off = append_be32(fdt, off, 0x40000000U);
 	off = append_be32(fdt, off, 0U);
 	off = append_be32(fdt, off, 0x08000000U);
+	off = append_be32(fdt, off, 2U);
+	/* /cpus/cpu@{0,1} */
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "cpus");
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "cpu@0");
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "cpu@1");
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 2U);
+	/* /reserved-memory/framebuffer@42000000 */
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "reserved-memory");
+	off = append_prop_u32(fdt, off, 0U, 2U);
+	off = append_prop_u32(fdt, off, 15U, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "framebuffer@42000000");
+	off = append_be32(fdt, off, 3U);
+	off = append_be32(fdt, off, 16U);
+	off = append_be32(fdt, off, 27U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x42000000U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x200000U);
+	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 9U);
@@ -82,27 +113,33 @@ static size_t build_memory_fdt(uint8_t *fdt, size_t capacity)
 void test_arm64_boot_info_fdt_contract(void)
 {
 	uint8_t fdt[64] __attribute__((aligned(8)));
-	uint8_t memory_fdt[256] __attribute__((aligned(8)));
+	uint8_t platform_fdt[512] __attribute__((aligned(8)));
 	const struct arm64_board_boot_info *info;
-	size_t memory_fdt_size;
+	size_t platform_fdt_size;
 
 	memset(fdt, 0, sizeof(fdt));
 	put_be32(fdt, 0xd00dfeedU);
 	put_be32(fdt + 4, sizeof(fdt));
 
 	TEST_BEGIN("arm64 firmware x0 FDT contract");
-	ASSERT(arm64_fdt_boot_info_init((uintptr_t)fdt) == 0);
+	/* A correct header without reservation/tree terminators is not a DTB. */
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)fdt) != 0);
+	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
+	platform_fdt_size = build_platform_fdt(platform_fdt, sizeof(platform_fdt));
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)platform_fdt) == 0);
 	info = arm64_board_boot_info();
 	ASSERT(info->fdt_valid == 1);
-	ASSERT(info->fdt_pa == (uintptr_t)fdt);
-	ASSERT(info->fdt_size == sizeof(fdt));
-	memory_fdt_size = build_memory_fdt(memory_fdt, sizeof(memory_fdt));
-	ASSERT(arm64_fdt_boot_info_init((uintptr_t)memory_fdt) == 0);
-	info = arm64_board_boot_info();
-	ASSERT(info->fdt_size == memory_fdt_size);
+	ASSERT(info->fdt_pa == (uintptr_t)platform_fdt);
+	ASSERT(info->fdt_size == platform_fdt_size);
 	ASSERT(info->memory_range_count == 1U);
 	ASSERT(info->memory[0].base == 0x40000000ULL);
 	ASSERT(info->memory[0].size == 0x08000000ULL);
+	ASSERT(info->cpu_count == 2U);
+	ASSERT(info->reserved_range_count == 2U);
+	ASSERT(info->reserved[0].base == 0x41000000ULL);
+	ASSERT(info->reserved[0].size == 0x1000ULL);
+	ASSERT(info->reserved[1].base == 0x42000000ULL);
+	ASSERT(info->reserved[1].size == 0x200000ULL);
 	ASSERT(arm64_fdt_boot_info_init((uintptr_t)(fdt + 1)) != 0);
 	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
 	TEST_END();

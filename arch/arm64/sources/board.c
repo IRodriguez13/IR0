@@ -114,6 +114,13 @@ void arm64_board_log_arch(void)
 			ir0_boot_warn("ARCH", "DTB has no usable memory range");
 			ir0_boot_smoke("ARM64_DTB_MEMORY_FAIL");
 		}
+		ir0_boot_info_hex64("ARCH", "dtb_cpu_count", boot->cpu_count);
+		if (boot->cpu_count > 0U)
+			ir0_boot_smoke("ARM64_DTB_CPU_OK");
+		else
+			ir0_boot_smoke("ARM64_DTB_CPU_FAIL");
+		ir0_boot_info_hex64("ARCH", "dtb_reserved_count",
+				    boot->reserved_range_count);
 	}
 	else
 	{

@@ -18,6 +18,7 @@
 #include "mmu_early.h"
 
 #include <arch/common/arch_portable.h>
+#include <ir0/arm64_board.h>
 #include <stdint.h>
 
 #define EINVAL 22
@@ -45,8 +46,8 @@
 #define ATTR_NORMAL      1
 
 #define VIRT_UART_BASE   0x09000000UL
-#define VIRT_DRAM_BASE   0x40000000UL
-#define VIRT_DRAM_END    (VIRT_DRAM_BASE + 0x40000000UL)
+#define VIRT_DRAM_FALLBACK_BASE 0x40000000UL
+#define VIRT_DRAM_FALLBACK_SIZE 0x40000000UL
 
 #define L1_INDEX(va)     (((va) >> 30) & 0x1FFUL)
 #define L2_INDEX(va)     (((va) >> 21) & 0x1FFUL)
@@ -64,6 +65,8 @@ static uint64_t l3_pool[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SI
 static int l3_pool_l2[L3_POOL_MAX]; /* L2 index owning this L3, or -1 */
 static int g_mmu_on;
 static int g_dram_split;
+static uint64_t g_dram_base = VIRT_DRAM_FALLBACK_BASE;
+static uint64_t g_dram_end = VIRT_DRAM_FALLBACK_BASE + VIRT_DRAM_FALLBACK_SIZE;
 #define USER_PAGE_MAX 2048
 static uint64_t g_user_pages[USER_PAGE_MAX];
 static unsigned g_user_page_count;
@@ -132,12 +135,38 @@ static void tlb_invalidate(void)
 	__asm__ volatile("isb" ::: "memory");
 }
 
+static void select_dram_window(void)
+{
+	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
+	uint64_t base;
+	uint64_t size;
+	uint64_t end;
+
+	/*
+	 * The early mapper owns one L2 table (one 1 GiB L1 slot). Accept firmware
+	 * data only when the complete range fits that representable window. The
+	 * explicit fallback preserves legacy ELF test boots that have no DTB.
+	 */
+	g_dram_base = VIRT_DRAM_FALLBACK_BASE;
+	g_dram_end = VIRT_DRAM_FALLBACK_BASE + VIRT_DRAM_FALLBACK_SIZE;
+	if (!boot || !boot->fdt_valid || boot->memory_range_count == 0U)
+		return;
+	base = boot->memory[0].base;
+	size = boot->memory[0].size;
+	end = base + size;
+	if (size < BLOCK_2M || end < base || (base & (BLOCK_2M - 1U)) != 0 ||
+	    L1_INDEX(base) != L1_INDEX(end - 1U))
+		return;
+	g_dram_base = base;
+	g_dram_end = end;
+}
+
 static void build_idmap(void)
 {
 	uint64_t l2_mmio_pa = (uint64_t)(uintptr_t)l2_mmio;
 	uint64_t l2_dram_pa = (uint64_t)(uintptr_t)l2_dram;
 	uint64_t uart_block = VIRT_UART_BASE & ~0x1FFFFFUL;
-	unsigned i;
+	uint64_t block;
 
 	zero_table(l1_table);
 	zero_table(l2_mmio);
@@ -153,19 +182,23 @@ static void build_idmap(void)
 	}
 	g_dram_split = 1;
 	g_user_page_count = 0;
+	select_dram_window();
 
 	l1_table[L1_INDEX(VIRT_UART_BASE)] = pte_table(l2_mmio_pa);
 	l2_mmio[L2_INDEX(VIRT_UART_BASE)] = pte_block_2m_device(uart_block);
 
 	/*
-	 * DRAM as 512×2 MiB EL1 (UXN clear). Never install EL0 on a 1 GiB block
-	 * (hangs QEMU). arm64_mmu_map_user_page installs one 4K EL0 page via L3.
+	 * Map only complete 2 MiB blocks reported by firmware as EL1 (UXN clear).
+	 * Never install EL0 on a 1 GiB block (hangs QEMU). User mappings replace
+	 * the relevant block with an L3 table one 4 KiB page at a time.
 	 */
-	for (i = 0; i < PTE_ENTRIES; i++)
+	for (block = g_dram_base; block < g_dram_end; block += BLOCK_2M)
 	{
-		l2_dram[i] = pte_block_2m_dram_el1(VIRT_DRAM_BASE + (uint64_t)i * BLOCK_2M);
+		if (g_dram_end - block < BLOCK_2M)
+			break;
+		l2_dram[L2_INDEX(block)] = pte_block_2m_dram_el1(block);
 	}
-	l1_table[L1_INDEX(VIRT_DRAM_BASE)] = pte_table(l2_dram_pa);
+	l1_table[L1_INDEX(g_dram_base)] = pte_table(l2_dram_pa);
 }
 
 static void mmu_configure_and_enable(uint64_t ttbr0)
@@ -263,7 +296,7 @@ int arm64_mmu_ttbr_dual_smoke(void)
 		return -EINVAL;
 
 	/* Touch DRAM under the new TTBR0 (identity map still valid). */
-	probe = (volatile uint32_t *)(uintptr_t)VIRT_DRAM_BASE;
+	probe = (volatile uint32_t *)(uintptr_t)g_dram_base;
 	(void)*probe;
 
 	mm_activate((uintptr_t)root_a);
@@ -368,7 +401,7 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 
 	if (!g_mmu_on)
 		return -ENODEV;
-	if (page < VIRT_DRAM_BASE || page >= VIRT_DRAM_END)
+	if (page < g_dram_base || page >= g_dram_end)
 		return -EINVAL;
 	if (dram_ensure_l2() != 0)
 		return -EINVAL;
