@@ -14,7 +14,7 @@
 
 #include "exc_early.h"
 #include "pl011.h"
-#include "gic_v2.h"
+#include "irq_backend.h"
 #include "timer.h"
 #include "syscall_early.h"
 #include "elf_load_early.h"
@@ -123,12 +123,12 @@ void arm64_exc_sync_el1(void)
 
 void arm64_exc_irq_el1(void)
 {
-	uint32_t iar = arm64_gic_v2_ack();
+	uint32_t iar = arm64_irq_backend_ack();
 	uint32_t irq = iar & 0x3ffU;
 
 	arch_timer_oneshot_disarm();
 
-	if (irq == ARM64_GIC_PPI_PHYS_TIMER)
+	if (irq == ARM64_IRQ_PHYS_TIMER)
 	{
 		if (!g_timer_irq_seen)
 		{
@@ -149,7 +149,7 @@ void arm64_exc_irq_el1(void)
 
 	if (irq < 1020U)
 	{
-		arm64_gic_v2_eoi(iar);
+		arm64_irq_backend_eoi(iar);
 	}
 }
 

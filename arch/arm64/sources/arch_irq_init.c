@@ -16,7 +16,7 @@
 #include <stdint.h>
 
 #include "exc_early.h"
-#include "gic_v2.h"
+#include "irq_backend.h"
 
 void irq_tables_init(void)
 {
@@ -25,7 +25,7 @@ void irq_tables_init(void)
 
 void irq_controller_init(void)
 {
-	(void)arm64_gic_v2_init();
+	(void)arm64_irq_backend_init();
 }
 
 void irq_keyboard_init(void)
@@ -35,7 +35,7 @@ void irq_keyboard_init(void)
 
 void irq_unmask_line(unsigned irq)
 {
-	(void)arm64_gic_v2_enable((uint32_t)irq);
+	(void)arm64_irq_backend_enable((uint32_t)irq);
 }
 
 void irq_keyboard_poll_ps2(void)

@@ -8,7 +8,7 @@
  */
 
 #include "rr_early.h"
-#include "gic_v2.h"
+#include "irq_backend.h"
 #include "mmu_early.h"
 #include "pl011.h"
 #include "timer.h"
@@ -104,7 +104,7 @@ static void rr_tick_task_a(void)
 	unsigned long irqf;
 
 	g_rr_tick_active = 1;
-	if (arm64_gic_v2_enable(ARM64_GIC_PPI_PHYS_TIMER) != 0)
+	if (arm64_irq_backend_enable(ARM64_IRQ_PHYS_TIMER) != 0)
 	{
 		g_rr_fail = 1;
 		g_rr_tick_active = 0;

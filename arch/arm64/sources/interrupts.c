@@ -13,12 +13,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/irq.h>
-#include "gic_v2.h"
+#include "irq_backend.h"
 
 void interrupt_init_arm64(void)
 {
 	irq_tables_init();
 	irq_controller_init();
 	/* Default freestanding timer PPI — same as early boot path. */
-	(void)irq_unmask_line(ARM64_GIC_PPI_PHYS_TIMER);
+	(void)irq_unmask_line(ARM64_IRQ_PHYS_TIMER);
 }
