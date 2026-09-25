@@ -72,10 +72,27 @@ static size_t append_prop_reg2(uint8_t *p, size_t off, uint32_t nameoff,
 	return off;
 }
 
+static size_t append_prop_range(uint8_t *p, size_t off, uint32_t nameoff,
+				uint64_t child, uint64_t parent, uint64_t size)
+{
+	uint64_t values[3] = {child, parent, size};
+	uint32_t i;
+
+	off = append_be32(p, off, 3U);
+	off = append_be32(p, off, 24U);
+	off = append_be32(p, off, nameoff);
+	for (i = 0; i < 3U; i++)
+	{
+		off = append_be32(p, off, (uint32_t)(values[i] >> 32));
+		off = append_be32(p, off, (uint32_t)values[i]);
+	}
+	return off;
+}
+
 static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 {
 	static const char strings[] =
-		"#address-cells\0#size-cells\0reg\0compatible\0method\0";
+		"#address-cells\0#size-cells\0reg\0compatible\0method\0ranges\0";
 	static const char gic_compat[] = "arm,gic-400\0arm,cortex-a15-gic";
 	static const char timer_compat[] = "arm,armv8-timer";
 	static const char psci_compat[] = "arm,psci-1.0";
@@ -131,6 +148,13 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 	off = append_be32(fdt, off, 0x200000U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
+	/* Exercise child-bus to CPU-physical address translation. */
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "soc");
+	off = append_prop_u32(fdt, off, 0U, 2U);
+	off = append_prop_u32(fdt, off, 15U, 2U);
+	off = append_prop_range(fdt, off, 49U, 0x08000000U,
+				0x108000000ULL, 0x20000U);
 	/* Driver-selection resources are described by compatible strings. */
 	off = append_be32(fdt, off, 1U);
 	off = append_name(fdt, off, "intc@8000000");
@@ -138,6 +162,7 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 				(uint32_t)sizeof(gic_compat));
 	off = append_prop_reg2(fdt, off, 27U, 0x08000000U, 0x10000U,
 			       0x08010000U, 0x10000U);
+	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 1U);
 	off = append_name(fdt, off, "timer");
@@ -199,9 +224,9 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(info->cpu_count == 2U);
 	ASSERT(info->irq_controller == ARM64_IRQ_CONTROLLER_GIC_V2);
 	ASSERT(info->irq_range_count == 2U);
-	ASSERT(info->irq_mmio[0].base == 0x08000000ULL);
+	ASSERT(info->irq_mmio[0].base == 0x108000000ULL);
 	ASSERT(info->irq_mmio[0].size == 0x10000ULL);
-	ASSERT(info->irq_mmio[1].base == 0x08010000ULL);
+	ASSERT(info->irq_mmio[1].base == 0x108010000ULL);
 	ASSERT(info->irq_mmio[1].size == 0x10000ULL);
 	ASSERT(info->psci_conduit == ARM64_PSCI_CONDUIT_SMC);
 	ASSERT(info->architected_timer == 1);

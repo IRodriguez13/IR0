@@ -488,9 +488,79 @@ struct fdt_irq_node
 	enum arm64_irq_controller_model model;
 	const volatile uint8_t *reg_value;
 	uint32_t reg_len;
+	const volatile uint8_t *ranges_value;
+	uint32_t ranges_len;
+	int ranges_present;
 	uint32_t range_count;
 	struct ir0_phys_range range[2];
 };
+
+static int translate_irq_address(const struct fdt_irq_node *nodes,
+				 uint32_t node_index, uint64_t *address,
+				 uint64_t size)
+{
+	uint32_t bus_index = node_index;
+	uint64_t current = *address;
+
+	while (bus_index > 0U)
+	{
+		const struct fdt_irq_node *bus = &nodes[bus_index - 1U];
+		const volatile uint8_t *value = bus->ranges_value;
+		uint32_t len = bus->ranges_len;
+		uint32_t tuple_cells;
+		int matched = 0;
+
+		/* The root already uses CPU physical addresses. */
+		if (bus_index == 1U)
+			break;
+		if (!bus->ranges_present)
+			return -1;
+		if (len == 0U)
+		{
+			bus_index--;
+			continue;
+		}
+		if (bus->child_address_cells == 0U || bus->child_address_cells > 2U ||
+		    bus->reg_address_cells == 0U || bus->reg_address_cells > 2U ||
+		    bus->child_size_cells == 0U || bus->child_size_cells > 2U)
+			return -1;
+		tuple_cells = bus->child_address_cells + bus->reg_address_cells +
+			      bus->child_size_cells;
+		if (tuple_cells > UINT32_MAX / 4U ||
+		    (len % (tuple_cells * 4U)) != 0U)
+			return -1;
+		while (len >= tuple_cells * 4U)
+		{
+			uint64_t child = read_cells(value, bus->child_address_cells);
+			uint64_t parent = read_cells(
+				value + bus->child_address_cells * 4U,
+				bus->reg_address_cells);
+			uint64_t span = read_cells(
+				value + (bus->child_address_cells +
+					 bus->reg_address_cells) * 4U,
+				bus->child_size_cells);
+
+			if (span != 0U && current >= child && current - child < span &&
+			    size <= span - (current - child))
+			{
+				uint64_t offset = current - child;
+
+				if (parent > UINT64_MAX - offset)
+					return -1;
+				current = parent + offset;
+				matched = 1;
+				break;
+			}
+			value += tuple_cells * 4U;
+			len -= tuple_cells * 4U;
+		}
+		if (!matched)
+			return -1;
+		bus_index--;
+	}
+	*address = current;
+	return 0;
+}
 
 static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 {
@@ -537,6 +607,9 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 			node->model = ARM64_IRQ_CONTROLLER_UNKNOWN;
 			node->reg_value = NULL;
 			node->reg_len = 0U;
+			node->ranges_value = NULL;
+			node->ranges_len = 0U;
+			node->ranges_present = 0;
 			node->range_count = 0U;
 			while (off < struct_size && structure[off] != 0)
 				off++;
@@ -575,6 +648,9 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 						value + node->reg_address_cells * 4U,
 						node->reg_size_cells);
 					if (range->size == 0U || range->base + range->size < range->base)
+						return -1;
+					if (translate_irq_address(nodes, depth - 1U, &range->base,
+								  range->size) != 0)
 						return -1;
 					value += tuple_cells * 4U;
 					len -= tuple_cells * 4U;
@@ -625,6 +701,12 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 			{
 				node->reg_value = value;
 				node->reg_len = len;
+			}
+			else if (prop_name_is(strings, strings_size, nameoff, "ranges"))
+			{
+				node->ranges_value = value;
+				node->ranges_len = len;
+				node->ranges_present = 1;
 			}
 			off = (off + read_be32(structure + off - 8U) + 3U) & ~3U;
 		}
