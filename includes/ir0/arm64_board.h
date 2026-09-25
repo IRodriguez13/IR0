@@ -37,6 +37,12 @@ enum arm64_psci_conduit
 	ARM64_PSCI_CONDUIT_SMC,
 };
 
+enum arm64_uart_model
+{
+	ARM64_UART_UNKNOWN = 0,
+	ARM64_UART_PL011,
+};
+
 struct arm64_board_desc
 {
 	const char *name;	 /* qemu-virt | rpi4 | rpi5 */
@@ -61,6 +67,8 @@ struct arm64_board_boot_info
 	enum arm64_psci_conduit psci_conduit;
 	int architected_timer;
 	int rp1_present;
+	enum arm64_uart_model console_uart;
+	struct ir0_phys_range console_mmio;
 	uint32_t memory_range_count;
 	struct ir0_phys_range memory[ARM64_BOOT_MEMORY_RANGES_MAX];
 	uint32_t reserved_range_count;

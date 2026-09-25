@@ -20,9 +20,9 @@
 #if defined(IR0_ARM64_BOARD_RPI5)
 static const struct arm64_board_desc g_board = {
 	.name = "rpi5",
-	.uart = "none",
+	.uart = "firmware-pl011",
 	.uart_mmio = 0,
-	.arch_line = "isa=arm64 board=rpi5 uart=none",
+	.arch_line = "isa=arm64 board=rpi5 uart=firmware-pl011",
 	.uart_mmio_line = NULL,
 	.platform_ops = &arm64_rpi_platform_ops,
 	.boot_info_init = arm64_fdt_boot_info_init,
@@ -92,9 +92,10 @@ void arm64_board_log_arch(void)
 	{
 		ir0_boot_arch(b->uart_mmio_line);
 	}
-	if (b->uart_mmio == 0)
+	if (b->uart_mmio == 0 &&
+	    (!boot->fdt_valid || boot->console_uart != ARM64_UART_PL011))
 	{
-		ir0_boot_warn("ARCH", "uart=none board=rpi5");
+		ir0_boot_warn("ARCH", "firmware console unavailable board=rpi5");
 		ir0_boot_smoke("ARM64_BOARD_RPI5_STUB");
 	}
 	if (boot->fdt_valid)
@@ -131,6 +132,12 @@ void arm64_board_log_arch(void)
 		}
 		else
 			ir0_boot_smoke("ARM64_DTB_GIC_MMIO_FAIL");
+		if (boot->console_uart == ARM64_UART_PL011)
+		{
+			ir0_boot_info_hex64("ARCH", "console_uart_base",
+					    boot->console_mmio.base);
+			ir0_boot_smoke("ARM64_DTB_CONSOLE_OK");
+		}
 		ir0_boot_info_hex64("ARCH", "dtb_psci_conduit",
 				    boot->psci_conduit);
 		if (boot->architected_timer)

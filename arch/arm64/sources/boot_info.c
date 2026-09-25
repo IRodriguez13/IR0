@@ -491,6 +491,8 @@ struct fdt_irq_node
 	const volatile uint8_t *ranges_value;
 	uint32_t ranges_len;
 	int ranges_present;
+	int pl011;
+	int disabled;
 	uint32_t range_count;
 	struct ir0_phys_range range[2];
 };
@@ -610,6 +612,8 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 			node->ranges_value = NULL;
 			node->ranges_len = 0U;
 			node->ranges_present = 0;
+			node->pl011 = 0;
+			node->disabled = 0;
 			node->range_count = 0U;
 			while (off < struct_size && structure[off] != 0)
 				off++;
@@ -624,6 +628,27 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 			if (depth == 0U)
 				return -1;
 			node = &nodes[depth - 1U];
+			if (node->pl011 && !node->disabled &&
+			    g_boot_info.console_uart == ARM64_UART_UNKNOWN)
+			{
+				uint32_t tuple_cells = node->reg_address_cells +
+						       node->reg_size_cells;
+				if (!node->reg_value || node->reg_address_cells == 0U ||
+				    node->reg_address_cells > 2U || node->reg_size_cells == 0U ||
+				    node->reg_size_cells > 2U || node->reg_len < tuple_cells * 4U)
+					return -1;
+				g_boot_info.console_mmio.base =
+					read_cells(node->reg_value, node->reg_address_cells);
+				g_boot_info.console_mmio.size = read_cells(
+					node->reg_value + node->reg_address_cells * 4U,
+					node->reg_size_cells);
+				if (g_boot_info.console_mmio.size == 0U ||
+				    translate_irq_address(nodes, depth - 1U,
+					&g_boot_info.console_mmio.base,
+					g_boot_info.console_mmio.size) != 0)
+					return -1;
+				g_boot_info.console_uart = ARM64_UART_PL011;
+			}
 			if (node->model != ARM64_IRQ_CONTROLLER_UNKNOWN)
 			{
 				uint32_t i;
@@ -696,7 +721,12 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 				else if (string_list_has(value, len, "arm,gic-400") ||
 					 string_list_has(value, len, "arm,cortex-a15-gic"))
 					node->model = ARM64_IRQ_CONTROLLER_GIC_V2;
+				if (string_list_has(value, len, "arm,pl011"))
+					node->pl011 = 1;
 			}
+			else if (prop_name_is(strings, strings_size, nameoff, "status") &&
+				 string_list_has(value, len, "disabled"))
+				node->disabled = 1;
 			else if (prop_name_is(strings, strings_size, nameoff, "reg"))
 			{
 				node->reg_value = value;
@@ -735,6 +765,9 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.psci_conduit = ARM64_PSCI_CONDUIT_UNKNOWN;
 	g_boot_info.architected_timer = 0;
 	g_boot_info.rp1_present = 0;
+	g_boot_info.console_uart = ARM64_UART_UNKNOWN;
+	g_boot_info.console_mmio.base = 0U;
+	g_boot_info.console_mmio.size = 0U;
 	g_boot_info.memory_range_count = 0;
 	g_boot_info.reserved_range_count = 0;
 	g_boot_info.usable_range_count = 0;

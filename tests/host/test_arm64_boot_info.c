@@ -98,6 +98,7 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 	static const char psci_compat[] = "arm,psci-1.0";
 	static const char psci_method[] = "smc";
 	static const char rp1_compat[] = "raspberrypi,rp1-clocks";
+	static const char uart_compat[] = "arm,pl011";
 	const size_t struct_off = 72U;
 	size_t off = struct_off;
 	size_t strings_off;
@@ -165,6 +166,18 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "serial@9000000");
+	off = append_prop_bytes(fdt, off, 31U, uart_compat,
+				(uint32_t)sizeof(uart_compat));
+	off = append_be32(fdt, off, 3U);
+	off = append_be32(fdt, off, 16U);
+	off = append_be32(fdt, off, 27U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x09000000U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x1000U);
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 1U);
 	off = append_name(fdt, off, "timer");
 	off = append_prop_bytes(fdt, off, 31U, timer_compat,
 				(uint32_t)sizeof(timer_compat));
@@ -228,6 +241,9 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(info->irq_mmio[0].size == 0x10000ULL);
 	ASSERT(info->irq_mmio[1].base == 0x108010000ULL);
 	ASSERT(info->irq_mmio[1].size == 0x10000ULL);
+	ASSERT(info->console_uart == ARM64_UART_PL011);
+	ASSERT(info->console_mmio.base == 0x09000000ULL);
+	ASSERT(info->console_mmio.size == 0x1000ULL);
 	ASSERT(info->psci_conduit == ARM64_PSCI_CONDUIT_SMC);
 	ASSERT(info->architected_timer == 1);
 	ASSERT(info->rp1_present == 1);

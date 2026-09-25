@@ -42,7 +42,7 @@ kernel-arm64-rpi4-min.bin:
 	$(call ARM64_BOARD_MIN_BUILD,build/arm64-rpi4,-UIR0_ARM64_BOARD_QEMU_VIRT -UIR0_ARM64_BOARD_RPI5 -DIR0_ARM64_BOARD_RPI4=1)
 
 kernel-arm64-rpi5-min.bin:
-	@echo "  CC      ARM64 board=rpi5 min stub (uart=none)"
+	@echo "  CC      ARM64 board=rpi5 min (firmware PL011 discovery)"
 	$(call ARM64_BOARD_MIN_BUILD,build/arm64-rpi5,-UIR0_ARM64_BOARD_QEMU_VIRT -UIR0_ARM64_BOARD_RPI4 -DIR0_ARM64_BOARD_RPI5=1)
 
 arm64-rpi4-compile: kernel-arm64-rpi4-min.bin
@@ -56,8 +56,9 @@ arm64-rpi4-compile: kernel-arm64-rpi4-min.bin
 arm64-rpi5-compile: kernel-arm64-rpi5-min.bin
 	@if aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'board=rpi5' && \
 	   aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'dtb=firmware-x0' && \
-	   aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'ARM64_BOARD_RPI5_STUB'; then \
-		echo "✓ arm64-rpi5-compile (firmware DTB contract + honest board stub)"; \
+	   aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'uart=firmware-pl011' && \
+	   aarch64-linux-gnu-strings kernel-arm64-rpi5-min.bin | grep -q 'ARM64_DTB_CONSOLE_OK'; then \
+		echo "✓ arm64-rpi5-compile (firmware DTB + translated PL011 contract)"; \
 	else \
 		echo "✗ arm64-rpi5-compile: missing rpi5 stub strings"; exit 1; \
 	fi

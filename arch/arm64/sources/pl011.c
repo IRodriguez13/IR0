@@ -51,8 +51,12 @@ void pl011_init_at(uintptr_t base)
 void pl011_init(void)
 {
 	const struct arm64_board_desc *b = arm64_board_get();
+	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
+	uintptr_t base = b ? b->uart_mmio : 0x09000000UL;
 
-	pl011_init_at(b ? b->uart_mmio : 0x09000000UL);
+	if (boot && boot->fdt_valid && boot->console_uart == ARM64_UART_PL011)
+		base = (uintptr_t)boot->console_mmio.base;
+	pl011_init_at(base);
 }
 
 void pl011_putc(char c)
