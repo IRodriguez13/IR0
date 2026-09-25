@@ -8,6 +8,7 @@
 *.d
 *.patch
 *.bin
+kernel-arm64-Image
 *.log
 *.iso
 *.elf

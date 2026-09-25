@@ -15,7 +15,10 @@
 #pragma once
 
 #include <ir0/platform_ops.h>
+#include <ir0/platform_resource.h>
 #include <stdint.h>
+
+#define ARM64_BOOT_MEMORY_RANGES_MAX 8U
 
 struct arm64_board_desc
 {
@@ -32,7 +35,10 @@ struct arm64_board_boot_info
 {
 	uintptr_t fdt_pa;
 	uint32_t fdt_size;
+	uint32_t fdt_magic;
 	int fdt_valid;
+	uint32_t memory_range_count;
+	struct ir0_phys_range memory[ARM64_BOOT_MEMORY_RANGES_MAX];
 };
 
 extern const struct ir0_platform_ops arm64_virt_platform_ops;

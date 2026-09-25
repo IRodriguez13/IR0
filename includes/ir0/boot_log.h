@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,6 +35,10 @@ void ir0_boot_serial_ready(void);
 void ir0_boot_info(const char *component, const char *message);
 void ir0_boot_notice(const char *component, const char *message);
 void ir0_boot_warn(const char *component, const char *message);
+
+/* Structured early diagnostic without bypassing the boot logging hub. */
+void ir0_boot_info_hex64(const char *component, const char *label,
+			 uint64_t value);
 
 /* ISA/board detail under COMP ARCH (does not replace the BOOT banner). */
 void ir0_boot_arch(const char *message);

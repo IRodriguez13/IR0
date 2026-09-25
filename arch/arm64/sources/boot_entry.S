@@ -6,10 +6,24 @@
  */
 
 	.section .text.boot, "ax"
-	.align  2
+	.align  3
 	.global _start
 	.type   _start, %function
 _start:
+	/* Linux arm64 Image header: executable branch plus 4 KiB LE contract. */
+	b	.Lprimary_entry
+	.long	0
+	.quad	0x80000
+	/* Zero is valid and keeps the header usable by minimal board linkers. */
+	.quad	0
+	.quad	0x2
+	.quad	0
+	.quad	0
+	.quad	0
+	.long	0x644d5241
+	.long	0
+
+.Lprimary_entry:
 	adrp	x1, arm64_firmware_fdt
 	add	x1, x1, :lo12:arm64_firmware_fdt
 	str	x0, [x1]

@@ -117,6 +117,30 @@ void ir0_boot_warn(const char *component, const char *message)
 #endif
 }
 
+void ir0_boot_info_hex64(const char *component, const char *label,
+			 uint64_t value)
+{
+	static const char hex[] = "0123456789ABCDEF";
+	char message[96];
+	size_t off = 0;
+	int shift;
+
+	if (!label)
+		label = "value";
+	while (label[off] && off + 20U < sizeof(message))
+	{
+		message[off] = label[off];
+		off++;
+	}
+	message[off++] = '=';
+	message[off++] = '0';
+	message[off++] = 'x';
+	for (shift = 60; shift >= 0; shift -= 4)
+		message[off++] = hex[(value >> shift) & 0xfU];
+	message[off] = '\0';
+	ir0_boot_info(component, message);
+}
+
 void ir0_boot_arch(const char *message)
 {
 	ir0_boot_info("ARCH", message);

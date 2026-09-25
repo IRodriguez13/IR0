@@ -2353,6 +2353,11 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/vectors.o
 	@echo "✓ $@"
 
+.PHONY: kernel-arm64-Image
+kernel-arm64-Image: kernel-arm64-boot.bin
+	@aarch64-linux-gnu-objcopy -O binary kernel-arm64-boot.bin $@
+	@echo "✓ $@ (Linux arm64 Image header)"
+
 # Alias: same image; smoke looks for post-MMU / VBAR / EL0 / slice / port tags.
 kernel-arm64-mmu.bin: kernel-arm64-boot.bin
 	@cp -f kernel-arm64-boot.bin $@
@@ -2552,6 +2557,22 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 		echo "✗ smoke-arm64-boot FAILED (need BOOT banner then ARM64_BOOT_OK)"; \
 		head -30 /tmp/arm64-boot-smoke.log; exit 1; \
 	fi
+
+.PHONY: smoke-arm64-dtb
+smoke-arm64-dtb: kernel-arm64-Image
+	@echo "  SMOKE   ARM64 Linux Image + firmware DTB resources..."
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-dtb-smoke.log \
+		--timeout 20 --stale-sec 8 --done ARM64_EL0_RET_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-Image -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null
+	@grep -q 'ARM64_DTB_OK' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_MEMORY_OK' /tmp/arm64-dtb-smoke.log
+	@grep -q 'dtb_ram_base=0x0000000040000000' /tmp/arm64-dtb-smoke.log
+	@grep -q 'dtb_ram_size=0x0000000008000000' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-dtb-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-dtb-smoke.log
+	@echo "✓ smoke-arm64-dtb passed (x0 DTB + 128 MiB RAM resource)"
 
 smoke-arm64-el2-normalize: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU EL2 firmware entry normalization..."
@@ -2756,10 +2777,10 @@ smoke-arm64-ttbr: smoke-arm64-syscall
 	@echo "✓ smoke-arm64-ttbr (alias — F7i TTBR tags in smoke-arm64-syscall)"
 
 .PHONY: smoke-arm64
-smoke-arm64: smoke-arm64-boot smoke-arm64-el2-normalize smoke-arm64-mmu \
+smoke-arm64: smoke-arm64-boot smoke-arm64-dtb smoke-arm64-el2-normalize smoke-arm64-mmu \
 	smoke-arm64-slice smoke-arm64-port \
 	smoke-arm64-gic smoke-arm64-syscall smoke-arm64-vbar smoke-arm64-el0
-	@echo "✓ smoke-arm64 (boot+el2+mmu+slice+port+gic+syscall+vbar+el0) passed"
+	@echo "✓ smoke-arm64 (boot+dtb+el2+mmu+slice+port+gic+syscall+vbar+el0) passed"
 
 .PHONY: smoke-stream-sock build-init-stream-sock-smoke
 .PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke

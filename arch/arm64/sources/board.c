@@ -79,11 +79,13 @@ void arm64_board_apply_platform(void)
 void arm64_board_log_arch(void)
 {
 	const struct arm64_board_desc *b = arm64_board_get();
+	const struct arm64_board_boot_info *boot;
 
 	if (!b)
 	{
 		return;
 	}
+	boot = arm64_board_boot_info();
 
 	ir0_boot_arch(b->arch_line);
 	if (b->uart_mmio_line)
@@ -95,14 +97,30 @@ void arm64_board_log_arch(void)
 		ir0_boot_warn("ARCH", "uart=none board=rpi5");
 		ir0_boot_smoke("ARM64_BOARD_RPI5_STUB");
 	}
-	if (arm64_board_boot_info()->fdt_valid)
+	if (boot->fdt_valid)
 	{
 		ir0_boot_arch("dtb=firmware-x0");
 		ir0_boot_smoke("ARM64_DTB_OK");
+		if (boot->memory_range_count > 0)
+		{
+			ir0_boot_info_hex64("ARCH", "dtb_ram_base",
+					    boot->memory[0].base);
+			ir0_boot_info_hex64("ARCH", "dtb_ram_size",
+					    boot->memory[0].size);
+			ir0_boot_smoke("ARM64_DTB_MEMORY_OK");
+		}
+		else
+		{
+			ir0_boot_warn("ARCH", "DTB has no usable memory range");
+			ir0_boot_smoke("ARM64_DTB_MEMORY_FAIL");
+		}
 	}
 	else
 	{
 		ir0_boot_warn("ARCH", "firmware DTB missing or invalid");
+		ir0_boot_info_hex64("ARCH", "dtb_x0", (uint64_t)boot->fdt_pa);
+		ir0_boot_info_hex64("ARCH", "dtb_magic", boot->fdt_magic);
+		ir0_boot_info_hex64("ARCH", "dtb_size", boot->fdt_size);
 		ir0_boot_smoke("ARM64_DTB_FAIL");
 	}
 }
