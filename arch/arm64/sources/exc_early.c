@@ -21,7 +21,7 @@
 #include "rr_early.h"
 
 #include <ir0/process.h>
-#include <sched/rr_sched.h>
+#include <ir0/sched.h>
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
@@ -140,7 +140,7 @@ void arm64_exc_irq_el1(void)
 		{
 			process_t *before = current_process;
 
-			rr_schedule_next();
+			sched_schedule_next();
 			/* Re-arm only when the IRQ handler resumes (no context switch). */
 			if (current_process == before)
 				arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);

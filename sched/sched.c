@@ -21,7 +21,7 @@
  * Policy 1: CFS name only — still RR ops (honest alias; no cfs_sched.c / no rr include).
  * Policy 2: priority-band ops.
  */
-#if CONFIG_SCHEDULER_POLICY == 2
+#if CONFIG_SCHEDULER_POLICY == 2 && !defined(IR0_SCHED_EARLY_RR)
 static const struct ir0_sched_ops *const g_sched_ops = &ir0_priority_sched_ops;
 #else
 static const struct ir0_sched_ops *const g_sched_ops = &ir0_rr_sched_ops;
@@ -54,7 +54,9 @@ void sched_promote_process(process_t *proc)
 
 const char *sched_active_policy_name(void)
 {
-#if CONFIG_SCHEDULER_POLICY == 1
+#if defined(IR0_SCHED_EARLY_RR)
+	return "round_robin";
+#elif CONFIG_SCHEDULER_POLICY == 1
 	return "cfs";
 #elif CONFIG_SCHEDULER_POLICY == 2
 	return "priority";

@@ -26,7 +26,8 @@ void arm64_exc_trigger_svc(void);
 void arm64_exc_sync_el1(void);
 
 /** C IRQ handler (Current EL SPx); EOI + timer disarm; ARM64_TIMER_IRQ_OK once.
- *  When RR tick smoke is active, calls rr_schedule_next and re-arms oneshot timer.
+ *  When the scheduling smoke is active, uses the portable scheduler facade and
+ *  re-arms the oneshot timer.
  */
 void arm64_exc_irq_el1(void);
 

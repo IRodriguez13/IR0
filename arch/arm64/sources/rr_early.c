@@ -4,11 +4,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: rr_early.c
- * Description: Freestanding RR queue smoke via rr_add_process + switch_arm64.
- *
- * Bring-up exception (not production): may call rr_add_process and
- * switch_context_arm64 directly. Production backends must use
- * <ir0/sched.h> / sched_context_switch_to → switch_to() only.
+ * Description: Freestanding scheduler smoke via the portable scheduler facade.
  */
 
 #include "rr_early.h"
@@ -19,7 +15,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <ir0/process.h>
-#include <sched/rr_sched.h>
+#include <ir0/sched.h>
 #include <sched/task.h>
 #include <stdint.h>
 #include <ir0/boot_log.h>
@@ -85,7 +81,7 @@ static void rr_task_b(void)
 static void rr_tick_task_b(void)
 {
 	/*
-	 * Reached only after timer IRQ calls rr_schedule_next() from task A.
+	 * Reached only after timer IRQ schedules through the facade from task A.
 	 * IRQ handler does not resume after a real context switch.
 	 */
 	if (!g_rr_tick_seen)
@@ -157,7 +153,7 @@ static int arm64_rr_tick_smoke(void)
 	g_rr_pa.state = PROCESS_READY;
 	g_rr_pb.state = PROCESS_READY;
 
-	rr_promote_process(&g_rr_pa);
+	sched_promote_process(&g_rr_pa);
 	current_process = &g_rr_pa;
 	g_rr_pa.state = PROCESS_RUNNING;
 
@@ -199,9 +195,9 @@ int arm64_rr_sched_smoke(void)
 	g_rr_pb.task.arch.sp_el0 = sp_b;
 	g_rr_pb.task.arch.x30 = (uint64_t)(uintptr_t)rr_task_b;
 
-	rr_add_process(&g_rr_pa);
-	rr_add_process(&g_rr_pb);
-	n = rr_count_runnable();
+	sched_add_process(&g_rr_pa);
+	sched_add_process(&g_rr_pb);
+	n = sched_count_runnable();
 	if (n < 2)
 	{
 		ir0_boot_smoke("ARM64_RR_SCHED_FAIL");

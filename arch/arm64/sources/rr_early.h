@@ -9,8 +9,8 @@
 
 #pragma once
 
-/** Queue two process_t via rr_add_process and switch → ARM64_RR_SCHED_OK. */
+/** Queue two process_t via the scheduler facade and switch successfully. */
 int arm64_rr_sched_smoke(void);
 
-/** Nonzero while timer IRQ should call rr_schedule_next (WS-D tick smoke). */
+/** Nonzero while timer IRQ should call the scheduler facade (WS-D smoke). */
 int arm64_rr_tick_sched_active(void);
