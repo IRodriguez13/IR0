@@ -25,6 +25,12 @@ const char *sched_active_policy_name(void);
 int sched_count_runnable(void);
 void sched_promote_process(process_t *proc);
 
+/*
+ * Adopt a context that firmware or an early harness is already executing.
+ * Passing NULL restores the normal first-switch contract.
+ */
+void sched_adopt_running_context(process_t *running);
+
 void sched_try_preempt_blocked(void);
 int sched_user_return_take_switch(void);
 void sched_need_resched_user_return(void);

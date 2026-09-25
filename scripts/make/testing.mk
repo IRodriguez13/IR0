@@ -2186,7 +2186,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
 		kernel/lib/blockdev.c includes/ir0/blockdev.h \
-		sched/sched.c sched/rr_sched.c sched/switch/switch_arm64.c sched/task.h \
+		sched/sched.c sched/sched_switch.c sched/rr_sched.c \
+		sched/switch/switch_arm64.c sched/task.h \
 		$(MUSL_AARCH64_HELLO) build/busybox_aarch64 arch/arm64/linker.ld
 	@$(MAKE) -s musl-aarch64-hello
 	@$(MAKE) -s busybox-aarch64-min
@@ -2252,6 +2253,12 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c sched/sched.c -o build/arm64-boot/sched.o
+	@echo "  CC      sched/sched_switch.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c sched/sched_switch.c -o build/arm64-boot/sched_switch.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
@@ -2332,7 +2339,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/sched.o build/arm64-boot/rr_sched.o \
+		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
+		build/arm64-boot/rr_sched.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
@@ -2410,7 +2418,8 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/sched.o build/arm64-boot/rr_sched.o \
+		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
+		build/arm64-boot/rr_sched.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
@@ -2491,7 +2500,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/sched.o build/arm64-boot/rr_sched.o \
+		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
+		build/arm64-boot/rr_sched.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \

@@ -154,8 +154,7 @@ static int arm64_rr_tick_smoke(void)
 	g_rr_pb.state = PROCESS_READY;
 
 	sched_promote_process(&g_rr_pa);
-	current_process = &g_rr_pa;
-	g_rr_pa.state = PROCESS_RUNNING;
+	sched_adopt_running_context(&g_rr_pa);
 
 	switch_context_arm64(&g_rr_smoke_ctx, &g_rr_pa.task);
 
@@ -179,7 +178,7 @@ int arm64_rr_sched_smoke(void)
 	g_rr_ran = 0;
 	g_rr_tick_seen = 0;
 	g_rr_tick_active = 0;
-	current_process = NULL;
+	sched_adopt_running_context(NULL);
 
 	zero_proc(&g_rr_pa);
 	zero_proc(&g_rr_pb);
@@ -204,8 +203,7 @@ int arm64_rr_sched_smoke(void)
 		return -1;
 	}
 
-	current_process = &g_rr_pa;
-	g_rr_pa.state = PROCESS_RUNNING;
+	sched_adopt_running_context(&g_rr_pa);
 	switch_context_arm64(&g_rr_pa.task, &g_rr_pb.task);
 
 	if (g_rr_fail || !g_rr_ran)

@@ -71,6 +71,10 @@ void __attribute__((weak)) set_current_kernel_stack(process_t *p)
 	(void)p;
 }
 
+void __attribute__((weak)) clock_note_context_switch(void)
+{
+}
+
 void __attribute__((weak)) process_sched_state_trace(const process_t *p,
 					      process_state_t prev,
 					      process_state_t next,
@@ -121,40 +125,6 @@ void __attribute__((weak)) switch_to(task_t *prev, task_t *next)
 	extern void switch_context_arm64(task_t *a, task_t *b);
 
 	switch_context_arm64(prev, next);
-}
-
-/*
- * rr_sched.c calls sched_context_switch_to(); full sched_switch.c is not linked
- * into freestanding ARM64 boot. Mirror the first/second switch contract only.
- */
-void __attribute__((weak)) sched_context_switch_to(process_t *next)
-{
-	process_t *prev;
-
-	if (!next)
-		return;
-
-	prev = current_process;
-	if (prev == next)
-		return;
-
-	if (prev && prev->state == PROCESS_RUNNING)
-		process_set_sched_state(prev, PROCESS_READY);
-
-	process_set_sched_state(next, PROCESS_RUNNING);
-	current_process = next;
-
-	if (!prev)
-	{
-		set_current_kernel_stack(next);
-		first_switch_to(next);
-		panic("Returned from first context switch");
-	}
-
-	if (prev)
-		switch_to(&prev->task, &next->task);
-	else
-		switch_to(NULL, &next->task);
 }
 
 /* Portable blockdev.c CLASSIFY lines; full ktm/klog.c is not in early boot. */

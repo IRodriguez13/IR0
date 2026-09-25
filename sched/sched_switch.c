@@ -22,6 +22,8 @@
 #include <ir0/sched.h>
 #include <stdint.h>
 
+static int sched_has_running_context;
+
 static inline uint64_t sched_switch_irq_save(void)
 {
 	return (uint64_t)irq_save();
@@ -34,7 +36,6 @@ static inline void sched_switch_irq_restore(uint64_t flags)
 
 void sched_context_switch_to(process_t *next)
 {
-	static int first = 1;
 	process_t *prev;
 	uint64_t irq_flags;
 
@@ -44,7 +45,7 @@ void sched_context_switch_to(process_t *next)
 	irq_flags = sched_switch_irq_save();
 	prev = current_process;
 
-	if (!first && prev == next)
+	if (sched_has_running_context && prev == next)
 	{
 		sched_switch_irq_restore(irq_flags);
 		return;
@@ -56,9 +57,9 @@ void sched_context_switch_to(process_t *next)
 	process_set_sched_state(next, PROCESS_RUNNING);
 	current_process = next;
 
-	if (first)
+	if (!sched_has_running_context)
 	{
-		first = 0;
+		sched_has_running_context = 1;
 		set_current_kernel_stack(next);
 		first_switch_to(next);
 		panic("Returned from first context switch");
@@ -70,5 +71,17 @@ void sched_context_switch_to(process_t *next)
 		switch_to(&prev->task, &next->task);
 	}
 
+	sched_switch_irq_restore(irq_flags);
+}
+
+void sched_adopt_running_context(process_t *running)
+{
+	uint64_t irq_flags;
+
+	irq_flags = sched_switch_irq_save();
+	current_process = running;
+	sched_has_running_context = running != NULL;
+	if (running)
+		process_set_sched_state(running, PROCESS_RUNNING);
 	sched_switch_irq_restore(irq_flags);
 }
