@@ -103,9 +103,13 @@ static void arm64_irq_oneshot_demo(void)
 void boot_main(void)
 {
 	extern uintptr_t arm64_firmware_fdt;
+	extern char _start[];
+	extern char _end[];
 	const struct arm64_board_boot_info *boot_info;
 
 	(void)arm64_board_capture_boot_info(arm64_firmware_fdt);
+	(void)arm64_board_finalize_memory((uintptr_t)_start,
+					  (size_t)(_end - _start));
 	arm64_board_apply_platform();
 	pl011_init();
 	/*

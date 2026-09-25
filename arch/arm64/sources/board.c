@@ -121,6 +121,18 @@ void arm64_board_log_arch(void)
 			ir0_boot_smoke("ARM64_DTB_CPU_FAIL");
 		ir0_boot_info_hex64("ARCH", "dtb_reserved_count",
 				    boot->reserved_range_count);
+		ir0_boot_info_hex64("ARCH", "dtb_usable_count",
+				    boot->usable_range_count);
+		if (boot->usable_range_count > 0U)
+		{
+			ir0_boot_info_hex64("ARCH", "usable_ram_base",
+					    boot->usable[0].base);
+			ir0_boot_info_hex64("ARCH", "usable_ram_size",
+					    boot->usable[0].size);
+			ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_OK");
+		}
+		else
+			ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_FAIL");
 	}
 	else
 	{

@@ -21,11 +21,23 @@
 #define FDT_PROP         3U
 #define FDT_NOP          4U
 #define FDT_END          9U
+#define ARM64_FRAME_SIZE 4096U
 
 /* Written by the stackless entry assembly before x0 is reused. */
 uintptr_t arm64_firmware_fdt;
 
 static struct arm64_board_boot_info g_boot_info;
+static int g_memory_finalized;
+
+static uint64_t min_u64(uint64_t a, uint64_t b)
+{
+	return a < b ? a : b;
+}
+
+static uint64_t max_u64(uint64_t a, uint64_t b)
+{
+	return a > b ? a : b;
+}
 
 static uint32_t read_be32(const volatile uint8_t *p)
 {
@@ -77,14 +89,130 @@ static int node_is_memory(const volatile uint8_t *name, uint32_t available)
 	       node_has_prefix(name, available, "memory@");
 }
 
-static void append_range(struct ir0_phys_range *ranges, uint32_t *count,
-			 uint32_t maximum, uint64_t base, uint64_t size)
+static int append_range(struct ir0_phys_range *ranges, uint32_t *count,
+			uint32_t maximum, uint64_t base, uint64_t size)
 {
-	if (size == 0 || *count >= maximum || base + size < base)
-		return;
+	if (size == 0 || base + size < base)
+		return 0;
+	if (*count >= maximum)
+		return -1;
 	ranges[*count].base = base;
 	ranges[*count].size = size;
 	(*count)++;
+	return 0;
+}
+
+static int ranges_overlap(const struct ir0_phys_range *a,
+			  const struct ir0_phys_range *b)
+{
+	return a->base < b->base + b->size && b->base < a->base + a->size;
+}
+
+static int append_usable(uint64_t base, uint64_t end)
+{
+	struct ir0_phys_range *range;
+
+	if (end <= base)
+		return 0;
+	if (g_boot_info.usable_range_count >= ARM64_BOOT_USABLE_RANGES_MAX)
+		return -1;
+	range = &g_boot_info.usable[g_boot_info.usable_range_count++];
+	range->base = base;
+	range->size = end - base;
+	return 0;
+}
+
+static int build_usable_ranges(void)
+{
+	uint32_t memory_index;
+
+	g_boot_info.usable_range_count = 0;
+	g_memory_finalized = 0;
+	for (memory_index = 0; memory_index < g_boot_info.memory_range_count;
+	     memory_index++)
+	{
+		struct ir0_phys_range current[ARM64_BOOT_USABLE_RANGES_MAX];
+		struct ir0_phys_range next[ARM64_BOOT_USABLE_RANGES_MAX];
+		uint32_t current_count = 1;
+		uint32_t reserved_index;
+		uint64_t memory_start = g_boot_info.memory[memory_index].base;
+		uint64_t memory_end = memory_start +
+				      g_boot_info.memory[memory_index].size;
+
+		if (memory_start > UINT64_MAX - (ARM64_FRAME_SIZE - 1U))
+			continue;
+		memory_start = (memory_start + ARM64_FRAME_SIZE - 1U) &
+			       ~(uint64_t)(ARM64_FRAME_SIZE - 1U);
+		memory_end &= ~(uint64_t)(ARM64_FRAME_SIZE - 1U);
+		if (memory_end <= memory_start)
+			continue;
+		current[0].base = memory_start;
+		current[0].size = memory_end - memory_start;
+
+		for (reserved_index = 0;
+		     reserved_index < g_boot_info.reserved_range_count;
+		     reserved_index++)
+		{
+			uint32_t i;
+			uint32_t next_count = 0;
+			uint64_t reserved_start = g_boot_info.reserved[reserved_index].base;
+			uint64_t reserved_end = reserved_start +
+						g_boot_info.reserved[reserved_index].size;
+
+			reserved_start &= ~(uint64_t)(ARM64_FRAME_SIZE - 1U);
+			if ((reserved_end & (ARM64_FRAME_SIZE - 1U)) != 0U)
+			{
+				if (reserved_end > UINT64_MAX - (ARM64_FRAME_SIZE - 1U))
+					reserved_end = UINT64_MAX;
+				else
+					reserved_end = (reserved_end + ARM64_FRAME_SIZE - 1U) &
+						       ~(uint64_t)(ARM64_FRAME_SIZE - 1U);
+			}
+
+			for (i = 0; i < current_count; i++)
+			{
+				uint64_t start = current[i].base;
+				uint64_t end = start + current[i].size;
+				uint64_t cut_start = max_u64(start, reserved_start);
+				uint64_t cut_end = min_u64(end, reserved_end);
+
+				if (cut_start >= cut_end)
+				{
+					if (next_count >= ARM64_BOOT_USABLE_RANGES_MAX)
+						return -1;
+					next[next_count++] = current[i];
+					continue;
+				}
+				if (start < cut_start)
+				{
+					if (next_count >= ARM64_BOOT_USABLE_RANGES_MAX)
+						return -1;
+					next[next_count].base = start;
+					next[next_count++].size = cut_start - start;
+				}
+				if (cut_end < end)
+				{
+					if (next_count >= ARM64_BOOT_USABLE_RANGES_MAX)
+						return -1;
+					next[next_count].base = cut_end;
+					next[next_count++].size = end - cut_end;
+				}
+			}
+			current_count = next_count;
+			for (i = 0; i < current_count; i++)
+				current[i] = next[i];
+		}
+
+		for (reserved_index = 0; reserved_index < current_count;
+		     reserved_index++)
+		{
+			if (append_usable(current[reserved_index].base,
+					  current[reserved_index].base +
+					  current[reserved_index].size) != 0)
+				return -1;
+		}
+	}
+	return 0;
 }
 
 static int parse_reservation_map(const volatile uint8_t *fdt, uint32_t total)
@@ -101,9 +229,10 @@ static int parse_reservation_map(const volatile uint8_t *fdt, uint32_t total)
 		off += 16U;
 		if (base == 0 && size == 0)
 			return 0;
-		append_range(g_boot_info.reserved,
-			     &g_boot_info.reserved_range_count,
-			     ARM64_BOOT_RESERVED_RANGES_MAX, base, size);
+		if (append_range(g_boot_info.reserved,
+				 &g_boot_info.reserved_range_count,
+				 ARM64_BOOT_RESERVED_RANGES_MAX, base, size) != 0)
+			return -1;
 	}
 	return -1;
 }
@@ -230,15 +359,17 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 				 size_cells > 0U && size_cells <= 2U)
 			{
 				tuple_cells = address_cells + size_cells;
-				while (len >= tuple_cells * 4U &&
-				       g_boot_info.memory_range_count < ARM64_BOOT_MEMORY_RANGES_MAX)
+				if ((len % (tuple_cells * 4U)) != 0U)
+					return -1;
+				while (len >= tuple_cells * 4U)
 				{
-					append_range(g_boot_info.memory,
-						     &g_boot_info.memory_range_count,
-						     ARM64_BOOT_MEMORY_RANGES_MAX,
-						     read_cells(value, address_cells),
-						     read_cells(value + address_cells * 4U,
-								size_cells));
+					if (append_range(g_boot_info.memory,
+							 &g_boot_info.memory_range_count,
+							 ARM64_BOOT_MEMORY_RANGES_MAX,
+							 read_cells(value, address_cells),
+							 read_cells(value + address_cells * 4U,
+								    size_cells)) != 0)
+						return -1;
 					value += tuple_cells * 4U;
 					len -= tuple_cells * 4U;
 				}
@@ -249,14 +380,17 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 				 reserved_size_cells > 0U && reserved_size_cells <= 2U)
 			{
 				tuple_cells = reserved_address_cells + reserved_size_cells;
+				if ((len % (tuple_cells * 4U)) != 0U)
+					return -1;
 				while (len >= tuple_cells * 4U)
 				{
-					append_range(g_boot_info.reserved,
-						     &g_boot_info.reserved_range_count,
-						     ARM64_BOOT_RESERVED_RANGES_MAX,
-						     read_cells(value, reserved_address_cells),
-						     read_cells(value + reserved_address_cells * 4U,
-								reserved_size_cells));
+					if (append_range(g_boot_info.reserved,
+							 &g_boot_info.reserved_range_count,
+							 ARM64_BOOT_RESERVED_RANGES_MAX,
+							 read_cells(value, reserved_address_cells),
+							 read_cells(value + reserved_address_cells * 4U,
+								    reserved_size_cells)) != 0)
+						return -1;
 					value += tuple_cells * 4U;
 					len -= tuple_cells * 4U;
 				}
@@ -291,6 +425,7 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.cpu_count = 0;
 	g_boot_info.memory_range_count = 0;
 	g_boot_info.reserved_range_count = 0;
+	g_boot_info.usable_range_count = 0;
 
 	/* Linux arm64 boot protocol requires an 8-byte-aligned DTB in RAM. */
 	if (!fdt_pa || (fdt_pa & 7U) != 0)
@@ -321,4 +456,42 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 const struct arm64_board_boot_info *arm64_board_boot_info(void)
 {
 	return &g_boot_info;
+}
+
+int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size)
+{
+	uint32_t i;
+	struct ir0_phys_range kernel;
+
+	if (!g_boot_info.fdt_valid || kernel_size == 0U ||
+	    (uint64_t)kernel_base + (uint64_t)kernel_size < (uint64_t)kernel_base)
+		return -1;
+	if (g_memory_finalized)
+		return 0;
+	if (g_boot_info.reserved_range_count > ARM64_BOOT_RESERVED_RANGES_MAX - 2U)
+		return -1;
+
+	kernel.base = (uint64_t)kernel_base;
+	kernel.size = (uint64_t)kernel_size;
+	for (i = 0; i < g_boot_info.memory_range_count; i++)
+	{
+		uint32_t j;
+
+		for (j = i + 1U; j < g_boot_info.memory_range_count; j++)
+		{
+			if (ranges_overlap(&g_boot_info.memory[i], &g_boot_info.memory[j]))
+				return -1;
+		}
+	}
+	if (append_range(g_boot_info.reserved, &g_boot_info.reserved_range_count,
+			 ARM64_BOOT_RESERVED_RANGES_MAX, g_boot_info.fdt_pa,
+			 g_boot_info.fdt_size) != 0 ||
+	    append_range(g_boot_info.reserved, &g_boot_info.reserved_range_count,
+			 ARM64_BOOT_RESERVED_RANGES_MAX, kernel.base,
+			 kernel.size) != 0)
+		return -1;
+	if (build_usable_ranges() != 0)
+		return -1;
+	g_memory_finalized = 1;
+	return 0;
 }

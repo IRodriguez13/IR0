@@ -16,10 +16,12 @@
 
 #include <ir0/platform_ops.h>
 #include <ir0/platform_resource.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define ARM64_BOOT_MEMORY_RANGES_MAX 8U
 #define ARM64_BOOT_RESERVED_RANGES_MAX 16U
+#define ARM64_BOOT_USABLE_RANGES_MAX 32U
 
 struct arm64_board_desc
 {
@@ -43,6 +45,8 @@ struct arm64_board_boot_info
 	struct ir0_phys_range memory[ARM64_BOOT_MEMORY_RANGES_MAX];
 	uint32_t reserved_range_count;
 	struct ir0_phys_range reserved[ARM64_BOOT_RESERVED_RANGES_MAX];
+	uint32_t usable_range_count;
+	struct ir0_phys_range usable[ARM64_BOOT_USABLE_RANGES_MAX];
 };
 
 extern const struct ir0_platform_ops arm64_virt_platform_ops;
@@ -59,6 +63,9 @@ const struct arm64_board_boot_info *arm64_board_boot_info(void);
 
 /* Shared ARM64 FDT backend used by DT-described boards. */
 int arm64_fdt_boot_info_init(uintptr_t fdt_pa);
+
+/* Subtract kernel, DTB and firmware reservations from discovered RAM. */
+int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size);
 
 /* Emit ARCH lines (and WARN if uart_mmio == 0). */
 void arm64_board_log_arch(void);

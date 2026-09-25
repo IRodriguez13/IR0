@@ -26,8 +26,12 @@ uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
 void boot_main(void)
 {
 	extern uintptr_t arm64_firmware_fdt;
+	extern char _start[];
+	extern char _end[];
 
 	(void)arm64_board_capture_boot_info(arm64_firmware_fdt);
+	(void)arm64_board_finalize_memory((uintptr_t)_start,
+					  (size_t)(_end - _start));
 	arm64_board_apply_platform();
 	pl011_init();
 	ir0_boot_serial_ready();
