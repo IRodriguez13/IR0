@@ -12,6 +12,7 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(93) == IR0_SYSCALL_EXIT);
 	ASSERT(syscall_decode_number(172) == IR0_SYSCALL_GETPID);
 	ASSERT(syscall_decode_number(220) == IR0_SYSCALL_CLONE);
+	ASSERT(syscall_decode_number(139) == IR0_SYSCALL_RT_SIGRETURN);
 	ASSERT(syscall_decode_number(222) == IR0_SYSCALL_MMAP);
 	ASSERT(syscall_decode_number(293) == IR0_SYSCALL_RSEQ);
 	ASSERT(syscall_decode_number(0) == IR0_SYSCALL_UNKNOWN);

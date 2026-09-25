@@ -26,6 +26,7 @@
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
 #include <ir0/syscall_linux.h>
+#include <ir0/syscall_id.h>
 #include <ir0/kexec.h>
 #include <ir0/signals.h>
 #include <ir0/futex.h>
@@ -507,6 +508,9 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                          uint64_t arg6)
 {
   int64_t r;
+  enum ir0_syscall_id syscall_id;
+
+  syscall_id = syscall_decode_number(syscall_num);
 
   if (current_process)
     process_capture_syscall_frame(current_process);
@@ -519,7 +523,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
    * sigframe bookkeeping when user SP has left the handler stack.
    */
   if (current_process && current_process->mode == USER_MODE &&
-      syscall_num != __NR_rt_sigreturn)
+      syscall_id != IR0_SYSCALL_RT_SIGRETURN)
     signals_try_abandon_sigframe(current_process);
 
   if (current_process && current_process->mode == USER_MODE)
@@ -538,7 +542,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   {
     ktm_probe_diag_syscall_pre(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6,
 			       process_syscall_ip(current_process));
-    if (syscall_num == __NR_read)
+    if (syscall_id == IR0_SYSCALL_READ)
     {
       d1_12_read_diag_syscall_pre(current_process, (int)arg1,
 				  (uintptr_t)arg2, (size_t)arg3,
@@ -558,7 +562,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 			 (uint32_t)current_process->task.pid);
   ktm_probe_diag_syscall_post(syscall_num, r);
   if (current_process && current_process->mode == USER_MODE &&
-      syscall_num == __NR_read)
+      syscall_id == IR0_SYSCALL_READ)
     d1_12_read_diag_syscall_post(current_process, r);
 
   /*
@@ -578,7 +582,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     current_process->syscall_resume_rax = 0;
   }
 
-  if ((syscall_num == __NR_fork || syscall_num == __NR_clone) &&
+  if ((syscall_id == IR0_SYSCALL_FORK || syscall_id == IR0_SYSCALL_CLONE) &&
       current_process && current_process->fork_pending_child)
   {
     /*

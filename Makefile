@@ -940,6 +940,7 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/fork_asm_hooks.o \
     arch/x86-64/sources/arch_task_ops.o \
     arch/x86-64/sources/task_stack.o \
+    arch/x86-64/sources/syscall_decode.o \
     arch/x86-64/sources/arch_syscall_frame.o \
     arch/x86-64/sources/arch_signal.o \
     arch/x86-64/sources/arch_switch.o \

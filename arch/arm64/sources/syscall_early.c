@@ -460,6 +460,9 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 	case IR0_SYSCALL_RT_SIGACTION:
 	case IR0_SYSCALL_RT_SIGPROCMASK:
 		return 0;
+	case IR0_SYSCALL_RT_SIGRETURN:
+	case IR0_SYSCALL_FORK:
+		return -ENOSYS;
 	case IR0_SYSCALL_PRCTL:
 		return 0;
 	case IR0_SYSCALL_PRLIMIT64:

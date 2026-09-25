@@ -39,6 +39,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 115: return IR0_SYSCALL_CLOCK_NANOSLEEP;
 	case 134: return IR0_SYSCALL_RT_SIGACTION;
 	case 135: return IR0_SYSCALL_RT_SIGPROCMASK;
+	case 139: return IR0_SYSCALL_RT_SIGRETURN;
 	case 160: return IR0_SYSCALL_UNAME;
 	case 167: return IR0_SYSCALL_PRCTL;
 	case 169: return IR0_SYSCALL_GETTIMEOFDAY;

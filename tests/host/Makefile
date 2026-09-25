@@ -45,7 +45,8 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_matrix_capture.c \
 	test_mount_prefix_boundary.c
 # ARM64 firmware contract is pure C and host-testable.
-TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c
+TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
+	test_x86_syscall_decode.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -55,7 +56,8 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
-KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o
+KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
+	host_x86_syscall_decode.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -110,10 +112,17 @@ host_arm64_boot_info.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info.c
 host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
+host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c
+	$(CC) $(KERNEL_CFLAGS) \
+		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
+
 test_arm64_boot_info.o: test_arm64_boot_info.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_arm64_syscall_decode.o: test_arm64_syscall_decode.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_x86_syscall_decode.o: test_x86_syscall_decode.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
