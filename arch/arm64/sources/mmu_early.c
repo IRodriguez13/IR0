@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mmu_early.c
- * Description: Early ARM64 identity map (TTBR0) + Device/user page map for QEMU virt.
+ * Description: Early ARM64 identity map (TTBR0) + bounded Device/user mappings.
  *
  * Reference: Linux arm64 head.S idmap/TTBR0 path (simplified — no TTBR1 high map).
  * QEMU virt: DRAM @ 0x40000000, PL011 @ 0x09000000, GIC @ 0x08000000.
@@ -58,7 +58,10 @@
 
 static uint64_t l1_table[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t l1_table_b[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static uint64_t l2_mmio[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+#define MMIO_L2_POOL_MAX 8
+static uint64_t l2_mmio_pool[MMIO_L2_POOL_MAX][PTE_ENTRIES]
+	__attribute__((aligned(PAGE_SIZE)));
+static int l2_mmio_l1[MMIO_L2_POOL_MAX];
 static uint64_t l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 #define L3_POOL_MAX 32
 static uint64_t l3_pool[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
@@ -161,19 +164,60 @@ static void select_dram_window(void)
 	g_dram_end = end;
 }
 
+static uint64_t *mmio_l2_for_l1(uint64_t l1_idx)
+{
+	unsigned i;
+	int free_slot = -1;
+
+	for (i = 0; i < MMIO_L2_POOL_MAX; i++)
+	{
+		if (l2_mmio_l1[i] == (int)l1_idx)
+			return l2_mmio_pool[i];
+		if (free_slot < 0 && l2_mmio_l1[i] < 0)
+			free_slot = (int)i;
+	}
+	if (free_slot < 0)
+		return NULL;
+	l2_mmio_l1[free_slot] = (int)l1_idx;
+	zero_table(l2_mmio_pool[free_slot]);
+	return l2_mmio_pool[free_slot];
+}
+
+static int install_device_block(uint64_t block)
+{
+	uint64_t l1_idx = L1_INDEX(block);
+	uint64_t *l2 = mmio_l2_for_l1(l1_idx);
+	uint64_t l2_pa;
+
+	if (!l2)
+		return -EINVAL;
+	l2_pa = (uint64_t)(uintptr_t)l2;
+	if (l1_table[l1_idx] != 0U &&
+	    ((l1_table[l1_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE ||
+	     (l1_table[l1_idx] & 0x0000FFFFFFFFF000UL) !=
+		(l2_pa & 0x0000FFFFFFFFF000UL)))
+		return -EINVAL;
+	l1_table[l1_idx] = pte_table(l2_pa);
+	l2[L2_INDEX(block)] = pte_block_2m_device(block);
+	return 0;
+}
+
 static void build_idmap(void)
 {
-	uint64_t l2_mmio_pa = (uint64_t)(uintptr_t)l2_mmio;
 	uint64_t l2_dram_pa = (uint64_t)(uintptr_t)l2_dram;
 	uint64_t uart_block = VIRT_UART_BASE & ~0x1FFFFFUL;
 	uint64_t block;
 
 	zero_table(l1_table);
-	zero_table(l2_mmio);
 	zero_table(l2_dram);
 	{
 		unsigned p;
 
+		for (p = 0; p < MMIO_L2_POOL_MAX; p++)
+		{
+			zero_table(l2_mmio_pool[p]);
+			l2_mmio_l1[p] = -1;
+		}
 		for (p = 0; p < L3_POOL_MAX; p++)
 		{
 			zero_table(l3_pool[p]);
@@ -184,8 +228,7 @@ static void build_idmap(void)
 	g_user_page_count = 0;
 	select_dram_window();
 
-	l1_table[L1_INDEX(VIRT_UART_BASE)] = pte_table(l2_mmio_pa);
-	l2_mmio[L2_INDEX(VIRT_UART_BASE)] = pte_block_2m_device(uart_block);
+	(void)install_device_block(uart_block);
 
 	/*
 	 * Map only complete 2 MiB blocks reported by firmware as EL1 (UXN clear).
@@ -328,25 +371,36 @@ uint64_t arm64_mmu_root_b(void)
 int arm64_mmu_map_device_block(uint64_t pa)
 {
 	uint64_t block = pa & ~0x1FFFFFUL;
-	uint64_t l1_idx = L1_INDEX(block);
-	uint64_t l2_idx = L2_INDEX(block);
-	uint64_t l2_pa = (uint64_t)(uintptr_t)l2_mmio;
 
 	if (!g_mmu_on)
-	{
 		return -ENODEV;
-	}
-
-	if (l1_idx != L1_INDEX(VIRT_UART_BASE))
-	{
+	if (install_device_block(block) != 0)
 		return -EINVAL;
-	}
-	if ((l1_table[l1_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE)
-	{
-		l1_table[l1_idx] = pte_table(l2_pa);
-	}
+	tlb_invalidate();
+	return 0;
+}
 
-	l2_mmio[l2_idx] = pte_block_2m_device(block);
+int arm64_mmu_map_device_range(uint64_t pa, uint64_t size)
+{
+	uint64_t block;
+	uint64_t last;
+
+	if (!g_mmu_on)
+		return -ENODEV;
+	if (size == 0U || pa + size - 1U < pa)
+		return -EINVAL;
+	block = pa & ~(BLOCK_2M - 1U);
+	last = (pa + size - 1U) & ~(BLOCK_2M - 1U);
+	for (;;)
+	{
+		if (install_device_block(block) != 0)
+			return -EINVAL;
+		if (block == last)
+			break;
+		if (block > UINT64_MAX - BLOCK_2M)
+			return -EINVAL;
+		block += BLOCK_2M;
+	}
 	tlb_invalidate();
 	return 0;
 }

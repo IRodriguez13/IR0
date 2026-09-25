@@ -141,12 +141,18 @@ void boot_main(void)
 	{
 		ir0_boot_smoke("ARM64_PAGING_FAIL");
 	}
+	/* Exercise a non-QEMU L1 window and a 2 MiB boundary without touching it. */
+	if (arm64_mmu_map_device_range(0x1001ff000UL, 0x3000UL) == 0)
+		ir0_boot_smoke("ARM64_MMIO_HIGH_OK");
+	else
+		ir0_boot_smoke("ARM64_MMIO_HIGH_FAIL");
 
 	boot_info = arm64_board_boot_info();
 	if ((!boot_info->fdt_valid &&
 	     arm64_gic_v2_configure(VIRT_GIC_DIST, VIRT_GIC_SIZE,
 				    VIRT_GIC_CPU, VIRT_GIC_SIZE) == 0 &&
-	     arm64_mmu_map_device_block(VIRT_GIC_DIST) == 0) ||
+	     arm64_mmu_map_device_range(VIRT_GIC_DIST, VIRT_GIC_SIZE) == 0 &&
+	     arm64_mmu_map_device_range(VIRT_GIC_CPU, VIRT_GIC_SIZE) == 0) ||
 	    (boot_info->fdt_valid &&
 	     boot_info->irq_controller == ARM64_IRQ_CONTROLLER_GIC_V2 &&
 	     boot_info->irq_range_count >= 2U &&
@@ -154,8 +160,10 @@ void boot_main(void)
 				    boot_info->irq_mmio[0].size,
 				    boot_info->irq_mmio[1].base,
 				    boot_info->irq_mmio[1].size) == 0 &&
-	     arm64_mmu_map_device_block(boot_info->irq_mmio[0].base) == 0 &&
-	     arm64_mmu_map_device_block(boot_info->irq_mmio[1].base) == 0))
+	     arm64_mmu_map_device_range(boot_info->irq_mmio[0].base,
+				      boot_info->irq_mmio[0].size) == 0 &&
+	     arm64_mmu_map_device_range(boot_info->irq_mmio[1].base,
+				      boot_info->irq_mmio[1].size) == 0))
 	{
 		ir0_boot_smoke("ARM64_GIC_MAP_OK");
 	}

@@ -25,6 +25,9 @@ int arm64_mmu_early_enable(void);
  */
 int arm64_mmu_map_device_block(uint64_t pa);
 
+/** Map every 2 MiB Device block intersecting a validated physical range. */
+int arm64_mmu_map_device_range(uint64_t pa, uint64_t size);
+
 /**
  * After MMU on: map one 4 KiB Normal page at @pa with EL0 RW (AP=01), UXN.
  * Splits the firmware-described DRAM L2 block into L3 as needed.

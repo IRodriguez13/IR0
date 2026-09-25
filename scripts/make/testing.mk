@@ -2571,6 +2571,7 @@ smoke-arm64-dtb: kernel-arm64-Image
 	@grep -q 'ARM64_DTB_CPU_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_TIMER_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_GIC_MMIO_OK' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_MMIO_HIGH_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_MMU_WINDOW_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_ram_base=0x0000000040000000' /tmp/arm64-dtb-smoke.log
