@@ -41,9 +41,28 @@ static size_t append_prop_u32(uint8_t *p, size_t off, uint32_t nameoff,
 	return append_be32(p, off, value);
 }
 
+static size_t append_prop_bytes(uint8_t *p, size_t off, uint32_t nameoff,
+				const void *value, uint32_t len)
+{
+	off = append_be32(p, off, 3U);
+	off = append_be32(p, off, len);
+	off = append_be32(p, off, nameoff);
+	memcpy(p + off, value, len);
+	off += len;
+	while ((off & 3U) != 0U)
+		p[off++] = 0;
+	return off;
+}
+
 static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 {
-	static const char strings[] = "#address-cells\0#size-cells\0reg\0";
+	static const char strings[] =
+		"#address-cells\0#size-cells\0reg\0compatible\0method\0";
+	static const char gic_compat[] = "arm,gic-400\0arm,cortex-a15-gic";
+	static const char timer_compat[] = "arm,armv8-timer";
+	static const char psci_compat[] = "arm,psci-1.0";
+	static const char psci_method[] = "smc";
+	static const char rp1_compat[] = "raspberrypi,rp1-clocks";
 	const size_t struct_off = 72U;
 	size_t off = struct_off;
 	size_t strings_off;
@@ -94,6 +113,29 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 	off = append_be32(fdt, off, 0x200000U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
+	/* Driver-selection resources are described by compatible strings. */
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "intc@8000000");
+	off = append_prop_bytes(fdt, off, 31U, gic_compat,
+				(uint32_t)sizeof(gic_compat));
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "timer");
+	off = append_prop_bytes(fdt, off, 31U, timer_compat,
+				(uint32_t)sizeof(timer_compat));
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "psci");
+	off = append_prop_bytes(fdt, off, 31U, psci_compat,
+				(uint32_t)sizeof(psci_compat));
+	off = append_prop_bytes(fdt, off, 42U, psci_method,
+				(uint32_t)sizeof(psci_method));
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "clocks@40018000");
+	off = append_prop_bytes(fdt, off, 31U, rp1_compat,
+				(uint32_t)sizeof(rp1_compat));
+	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 9U);
 	strings_off = off;
@@ -113,7 +155,7 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 void test_arm64_boot_info_fdt_contract(void)
 {
 	uint8_t fdt[64] __attribute__((aligned(8)));
-	uint8_t platform_fdt[512] __attribute__((aligned(8)));
+	uint8_t platform_fdt[1024] __attribute__((aligned(8)));
 	const struct arm64_board_boot_info *info;
 	size_t platform_fdt_size;
 
@@ -135,6 +177,10 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(info->memory[0].base == 0x40000000ULL);
 	ASSERT(info->memory[0].size == 0x08000000ULL);
 	ASSERT(info->cpu_count == 2U);
+	ASSERT(info->irq_controller == ARM64_IRQ_CONTROLLER_GIC_V2);
+	ASSERT(info->psci_conduit == ARM64_PSCI_CONDUIT_SMC);
+	ASSERT(info->architected_timer == 1);
+	ASSERT(info->rp1_present == 1);
 	ASSERT(info->reserved_range_count == 2U);
 	ASSERT(info->reserved[0].base == 0x41000000ULL);
 	ASSERT(info->reserved[0].size == 0x1000ULL);

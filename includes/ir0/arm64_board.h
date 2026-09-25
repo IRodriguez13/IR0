@@ -23,6 +23,20 @@
 #define ARM64_BOOT_RESERVED_RANGES_MAX 16U
 #define ARM64_BOOT_USABLE_RANGES_MAX 32U
 
+enum arm64_irq_controller_model
+{
+	ARM64_IRQ_CONTROLLER_UNKNOWN = 0,
+	ARM64_IRQ_CONTROLLER_GIC_V2,
+	ARM64_IRQ_CONTROLLER_GIC_V3,
+};
+
+enum arm64_psci_conduit
+{
+	ARM64_PSCI_CONDUIT_UNKNOWN = 0,
+	ARM64_PSCI_CONDUIT_HVC,
+	ARM64_PSCI_CONDUIT_SMC,
+};
+
 struct arm64_board_desc
 {
 	const char *name;	 /* qemu-virt | rpi4 | rpi5 */
@@ -41,6 +55,10 @@ struct arm64_board_boot_info
 	uint32_t fdt_magic;
 	int fdt_valid;
 	uint32_t cpu_count;
+	enum arm64_irq_controller_model irq_controller;
+	enum arm64_psci_conduit psci_conduit;
+	int architected_timer;
+	int rp1_present;
 	uint32_t memory_range_count;
 	struct ir0_phys_range memory[ARM64_BOOT_MEMORY_RANGES_MAX];
 	uint32_t reserved_range_count;

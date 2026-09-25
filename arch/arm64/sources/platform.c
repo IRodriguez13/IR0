@@ -10,6 +10,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <arch/common/arch_interface.h>
+#include <ir0/arm64_board.h>
 #include <ir0/platform_ops.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -91,11 +92,21 @@ static void __attribute__((noreturn)) arm64_halt_loop(void)
 		cpu_wait();
 }
 
-static void arm64_psci_hvc(uint64_t fn)
+static int arm64_psci_call(uint64_t fn,
+			   enum arm64_psci_conduit fallback_conduit)
 {
 	register uint64_t x0 __asm__("x0") = fn;
+	enum arm64_psci_conduit conduit = arm64_board_boot_info()->psci_conduit;
 
-	__asm__ volatile("hvc #0" : "+r"(x0) :: "memory", "x1", "x2", "x3");
+	if (conduit == ARM64_PSCI_CONDUIT_UNKNOWN)
+		conduit = fallback_conduit;
+	if (conduit == ARM64_PSCI_CONDUIT_HVC)
+		__asm__ volatile("hvc #0" : "+r"(x0) :: "memory", "x1", "x2", "x3");
+	else if (conduit == ARM64_PSCI_CONDUIT_SMC)
+		__asm__ volatile("smc #0" : "+r"(x0) :: "memory", "x1", "x2", "x3");
+	else
+		return -1;
+	return 0;
 }
 
 static void arm64_virt_halt(void)
@@ -106,14 +117,14 @@ static void arm64_virt_halt(void)
 static void arm64_virt_reboot(void)
 {
 	/* PSCI 0.2 SYSTEM_RESET — QEMU virt HVC conduit. */
-	arm64_psci_hvc(0x84000009UL);
+	(void)arm64_psci_call(0x84000009UL, ARM64_PSCI_CONDUIT_HVC);
 	arm64_halt_loop();
 }
 
 static void arm64_virt_poweroff(void)
 {
 	/* PSCI 0.2 SYSTEM_OFF — QEMU virt HVC conduit. */
-	arm64_psci_hvc(0x84000008UL);
+	(void)arm64_psci_call(0x84000008UL, ARM64_PSCI_CONDUIT_HVC);
 	arm64_halt_loop();
 }
 
@@ -135,11 +146,13 @@ static void arm64_rpi_halt(void)
 
 static void arm64_rpi_reboot(void)
 {
+	(void)arm64_psci_call(0x84000009UL, ARM64_PSCI_CONDUIT_UNKNOWN);
 	arm64_halt_loop();
 }
 
 static void arm64_rpi_poweroff(void)
 {
+	(void)arm64_psci_call(0x84000008UL, ARM64_PSCI_CONDUIT_UNKNOWN);
 	arm64_halt_loop();
 }
 

@@ -254,6 +254,46 @@ static int prop_name_is(const volatile uint8_t *strings, uint32_t strings_size,
 	       strings[nameoff + i] == '\0';
 }
 
+static int string_list_has(const volatile uint8_t *value, uint32_t len,
+			   const char *wanted)
+{
+	uint32_t off = 0;
+
+	while (off < len)
+	{
+		uint32_t item_len = 0;
+
+		while (off + item_len < len && value[off + item_len] != 0)
+			item_len++;
+		if (off + item_len >= len)
+			return 0;
+		if (node_name_is(value + off, item_len, wanted))
+			return 1;
+		off += item_len + 1U;
+	}
+	return 0;
+}
+
+static int string_list_has_prefix(const volatile uint8_t *value, uint32_t len,
+				  const char *wanted)
+{
+	uint32_t off = 0;
+
+	while (off < len)
+	{
+		uint32_t item_len = 0;
+
+		while (off + item_len < len && value[off + item_len] != 0)
+			item_len++;
+		if (off + item_len >= len)
+			return 0;
+		if (node_has_prefix(value + off, item_len, wanted))
+			return 1;
+		off += item_len + 1U;
+	}
+	return 0;
+}
+
 static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 {
 	const volatile uint8_t *structure;
@@ -270,6 +310,7 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 	uint32_t depth = 0;
 	uint32_t memory_depth = 0;
 	uint32_t cpus_depth = 0;
+	uint32_t psci_depth = 0;
 	uint32_t reserved_depth = 0;
 	uint32_t reserved_child_depth = 0;
 
@@ -304,6 +345,8 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 				 node_has_prefix(structure + name_start, off - name_start,
 						 "cpu@"))
 				g_boot_info.cpu_count++;
+			if (node_name_is(structure + name_start, off - name_start, "psci"))
+				psci_depth = depth;
 			if (depth == 2U &&
 			    node_name_is(structure + name_start, off - name_start,
 					 "reserved-memory"))
@@ -320,6 +363,8 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 				reserved_child_depth = 0;
 			if (cpus_depth == depth)
 				cpus_depth = 0;
+			if (psci_depth == depth)
+				psci_depth = 0;
 			if (reserved_depth == depth)
 				reserved_depth = 0;
 			if (depth == 0)
@@ -395,6 +440,26 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 					len -= tuple_cells * 4U;
 				}
 			}
+			else if (prop_name_is(strings, strings_size, nameoff, "compatible"))
+			{
+				if (string_list_has(value, len, "arm,gic-v3"))
+					g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_GIC_V3;
+				else if (string_list_has(value, len, "arm,gic-400") ||
+					 string_list_has(value, len, "arm,cortex-a15-gic"))
+					g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_GIC_V2;
+				if (string_list_has(value, len, "arm,armv8-timer"))
+					g_boot_info.architected_timer = 1;
+				if (string_list_has_prefix(value, len, "raspberrypi,rp1-"))
+					g_boot_info.rp1_present = 1;
+			}
+			else if (psci_depth == depth &&
+				 prop_name_is(strings, strings_size, nameoff, "method"))
+			{
+				if (string_list_has(value, len, "hvc"))
+					g_boot_info.psci_conduit = ARM64_PSCI_CONDUIT_HVC;
+				else if (string_list_has(value, len, "smc"))
+					g_boot_info.psci_conduit = ARM64_PSCI_CONDUIT_SMC;
+			}
 			off = (off + read_be32(structure + off - 8U) + 3U) & ~3U;
 		}
 		else if (token == FDT_NOP)
@@ -423,6 +488,10 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.fdt_magic = 0;
 	g_boot_info.fdt_valid = 0;
 	g_boot_info.cpu_count = 0;
+	g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_UNKNOWN;
+	g_boot_info.psci_conduit = ARM64_PSCI_CONDUIT_UNKNOWN;
+	g_boot_info.architected_timer = 0;
+	g_boot_info.rp1_present = 0;
 	g_boot_info.memory_range_count = 0;
 	g_boot_info.reserved_range_count = 0;
 	g_boot_info.usable_range_count = 0;
