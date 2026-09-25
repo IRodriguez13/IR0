@@ -2570,12 +2570,15 @@ smoke-arm64-dtb: kernel-arm64-Image
 	@grep -q 'ARM64_DTB_MEMORY_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_CPU_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_TIMER_OK' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_GIC_MMIO_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_MMU_WINDOW_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_ram_base=0x0000000040000000' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_ram_size=0x0000000008000000' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_cpu_count=0x0000000000000001' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_irq_controller=0x0000000000000001' /tmp/arm64-dtb-smoke.log
+	@grep -q 'gic_dist_base=0x0000000008000000' /tmp/arm64-dtb-smoke.log
+	@grep -q 'gic_cpu_base=0x0000000008010000' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_psci_conduit=0x0000000000000001' /tmp/arm64-dtb-smoke.log
 	@grep -q 'dtb_usable_count=0x0000000000000003' /tmp/arm64-dtb-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-dtb-smoke.log

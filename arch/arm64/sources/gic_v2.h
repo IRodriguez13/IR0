@@ -19,6 +19,10 @@
 /** EL1 physical timer PPI (ARM Generic Timer). */
 #define ARM64_GIC_PPI_PHYS_TIMER 30U
 
+/** Configure validated distributor and CPU-interface MMIO resources. */
+int arm64_gic_v2_configure(uint64_t distributor_base, uint64_t distributor_size,
+			   uint64_t cpu_base, uint64_t cpu_size);
+
 /**
  * Enable Dist+CPU and PMR once. Safe to call repeatedly (idempotent).
  * Returns 0 on success.

@@ -22,6 +22,7 @@
 #define FDT_NOP          4U
 #define FDT_END          9U
 #define ARM64_FRAME_SIZE 4096U
+#define FDT_NODE_DEPTH_MAX 32U
 
 /* Written by the stackless entry assembly before x0 is reused. */
 uintptr_t arm64_firmware_fdt;
@@ -478,6 +479,165 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 	return -1;
 }
 
+struct fdt_irq_node
+{
+	uint32_t child_address_cells;
+	uint32_t child_size_cells;
+	uint32_t reg_address_cells;
+	uint32_t reg_size_cells;
+	enum arm64_irq_controller_model model;
+	const volatile uint8_t *reg_value;
+	uint32_t reg_len;
+	uint32_t range_count;
+	struct ir0_phys_range range[2];
+};
+
+static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
+{
+	const volatile uint8_t *structure;
+	const volatile uint8_t *strings;
+	struct fdt_irq_node nodes[FDT_NODE_DEPTH_MAX];
+	uint32_t struct_off = read_be32(fdt + 8);
+	uint32_t strings_off = read_be32(fdt + 12);
+	uint32_t strings_size = read_be32(fdt + 32);
+	uint32_t struct_size = read_be32(fdt + 36);
+	uint32_t depth = 0;
+	uint32_t off = 0;
+
+	if (struct_off < FDT_HEADER_SIZE || strings_off < FDT_HEADER_SIZE ||
+	    struct_off > total || struct_size > total - struct_off ||
+	    strings_off > total || strings_size > total - strings_off)
+		return -1;
+	structure = fdt + struct_off;
+	strings = fdt + strings_off;
+
+	while (off + 4U <= struct_size)
+	{
+		uint32_t token = read_be32(structure + off);
+
+		off += 4U;
+		if (token == FDT_BEGIN_NODE)
+		{
+			struct fdt_irq_node *node;
+			uint32_t parent_address_cells = 2U;
+			uint32_t parent_size_cells = 1U;
+
+			if (depth >= FDT_NODE_DEPTH_MAX)
+				return -1;
+			if (depth > 0U)
+			{
+				parent_address_cells = nodes[depth - 1U].child_address_cells;
+				parent_size_cells = nodes[depth - 1U].child_size_cells;
+			}
+			node = &nodes[depth++];
+			node->child_address_cells = parent_address_cells;
+			node->child_size_cells = parent_size_cells;
+			node->reg_address_cells = parent_address_cells;
+			node->reg_size_cells = parent_size_cells;
+			node->model = ARM64_IRQ_CONTROLLER_UNKNOWN;
+			node->reg_value = NULL;
+			node->reg_len = 0U;
+			node->range_count = 0U;
+			while (off < struct_size && structure[off] != 0)
+				off++;
+			if (off >= struct_size)
+				return -1;
+			off = (off + 4U) & ~3U;
+		}
+		else if (token == FDT_END_NODE)
+		{
+			struct fdt_irq_node *node;
+
+			if (depth == 0U)
+				return -1;
+			node = &nodes[depth - 1U];
+			if (node->model != ARM64_IRQ_CONTROLLER_UNKNOWN)
+			{
+				uint32_t i;
+				uint32_t tuple_cells = node->reg_address_cells +
+						       node->reg_size_cells;
+				uint32_t len = node->reg_len;
+				const volatile uint8_t *value = node->reg_value;
+
+				if (!value || node->reg_address_cells == 0U ||
+				    node->reg_address_cells > 2U ||
+				    node->reg_size_cells == 0U ||
+				    node->reg_size_cells > 2U || tuple_cells > UINT32_MAX / 4U ||
+				    (len % (tuple_cells * 4U)) != 0U)
+					return -1;
+				while (len >= tuple_cells * 4U && node->range_count < 2U)
+				{
+					struct ir0_phys_range *range =
+						&node->range[node->range_count++];
+
+					range->base = read_cells(value, node->reg_address_cells);
+					range->size = read_cells(
+						value + node->reg_address_cells * 4U,
+						node->reg_size_cells);
+					if (range->size == 0U || range->base + range->size < range->base)
+						return -1;
+					value += tuple_cells * 4U;
+					len -= tuple_cells * 4U;
+				}
+
+				if (node->range_count < 2U ||
+				    (g_boot_info.irq_controller != ARM64_IRQ_CONTROLLER_UNKNOWN &&
+				     g_boot_info.irq_controller != node->model))
+					return -1;
+				g_boot_info.irq_controller = node->model;
+				g_boot_info.irq_range_count = node->range_count;
+				for (i = 0; i < node->range_count; i++)
+					g_boot_info.irq_mmio[i] = node->range[i];
+			}
+			depth--;
+		}
+		else if (token == FDT_PROP)
+		{
+			struct fdt_irq_node *node;
+			const volatile uint8_t *value;
+			uint32_t len;
+			uint32_t nameoff;
+
+			if (depth == 0U || off + 8U > struct_size)
+				return -1;
+			len = read_be32(structure + off);
+			nameoff = read_be32(structure + off + 4U);
+			off += 8U;
+			if (len > struct_size - off)
+				return -1;
+			value = structure + off;
+			node = &nodes[depth - 1U];
+			if (len >= 4U &&
+			    prop_name_is(strings, strings_size, nameoff, "#address-cells"))
+				node->child_address_cells = read_be32(value);
+			else if (len >= 4U &&
+				 prop_name_is(strings, strings_size, nameoff, "#size-cells"))
+				node->child_size_cells = read_be32(value);
+			else if (prop_name_is(strings, strings_size, nameoff, "compatible"))
+			{
+				if (string_list_has(value, len, "arm,gic-v3"))
+					node->model = ARM64_IRQ_CONTROLLER_GIC_V3;
+				else if (string_list_has(value, len, "arm,gic-400") ||
+					 string_list_has(value, len, "arm,cortex-a15-gic"))
+					node->model = ARM64_IRQ_CONTROLLER_GIC_V2;
+			}
+			else if (prop_name_is(strings, strings_size, nameoff, "reg"))
+			{
+				node->reg_value = value;
+				node->reg_len = len;
+			}
+			off = (off + read_be32(structure + off - 8U) + 3U) & ~3U;
+		}
+		else if (token == FDT_NOP)
+			continue;
+		else if (token == FDT_END)
+			return depth == 0U ? 0 : -1;
+		else
+			return -1;
+	}
+	return -1;
+}
+
 int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 {
 	const volatile uint8_t *header;
@@ -489,6 +649,7 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.fdt_valid = 0;
 	g_boot_info.cpu_count = 0;
 	g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_UNKNOWN;
+	g_boot_info.irq_range_count = 0U;
 	g_boot_info.psci_conduit = ARM64_PSCI_CONDUIT_UNKNOWN;
 	g_boot_info.architected_timer = 0;
 	g_boot_info.rp1_present = 0;
@@ -516,7 +677,8 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	}
 
 	if (parse_reservation_map(header, size) != 0 ||
-	    parse_platform_tree(header, size) != 0)
+	    parse_platform_tree(header, size) != 0 ||
+	    parse_irq_resources(header, size) != 0)
 		return -1;
 	g_boot_info.fdt_valid = 1;
 	return 0;

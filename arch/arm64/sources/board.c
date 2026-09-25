@@ -121,6 +121,16 @@ void arm64_board_log_arch(void)
 			ir0_boot_smoke("ARM64_DTB_CPU_FAIL");
 		ir0_boot_info_hex64("ARCH", "dtb_irq_controller",
 				    boot->irq_controller);
+		if (boot->irq_range_count >= 2U)
+		{
+			ir0_boot_info_hex64("ARCH", "gic_dist_base",
+					    boot->irq_mmio[0].base);
+			ir0_boot_info_hex64("ARCH", "gic_cpu_base",
+					    boot->irq_mmio[1].base);
+			ir0_boot_smoke("ARM64_DTB_GIC_MMIO_OK");
+		}
+		else
+			ir0_boot_smoke("ARM64_DTB_GIC_MMIO_FAIL");
 		ir0_boot_info_hex64("ARCH", "dtb_psci_conduit",
 				    boot->psci_conduit);
 		if (boot->architected_timer)

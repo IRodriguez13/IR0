@@ -56,6 +56,8 @@ struct arm64_board_boot_info
 	int fdt_valid;
 	uint32_t cpu_count;
 	enum arm64_irq_controller_model irq_controller;
+	uint32_t irq_range_count;
+	struct ir0_phys_range irq_mmio[2];
 	enum arm64_psci_conduit psci_conduit;
 	int architected_timer;
 	int rp1_present;

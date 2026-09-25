@@ -37,6 +37,8 @@ void __attribute__((weak)) arm64_all_objs_mark(void)
 
 #define BOOT_STACK_SIZE 4096
 #define VIRT_GIC_DIST   0x08000000UL
+#define VIRT_GIC_CPU    0x08010000UL
+#define VIRT_GIC_SIZE   0x00010000UL
 #define USER_PAGE_SIZE  4096
 /* Dedicated DRAM page (32 MiB into RAM) — avoids L3-split of kernel text 2 MiB. */
 #define ARM64_EL0_USER_PAGE_PA 0x42000000UL
@@ -140,7 +142,20 @@ void boot_main(void)
 		ir0_boot_smoke("ARM64_PAGING_FAIL");
 	}
 
-	if (arm64_mmu_map_device_block(VIRT_GIC_DIST) == 0)
+	boot_info = arm64_board_boot_info();
+	if ((!boot_info->fdt_valid &&
+	     arm64_gic_v2_configure(VIRT_GIC_DIST, VIRT_GIC_SIZE,
+				    VIRT_GIC_CPU, VIRT_GIC_SIZE) == 0 &&
+	     arm64_mmu_map_device_block(VIRT_GIC_DIST) == 0) ||
+	    (boot_info->fdt_valid &&
+	     boot_info->irq_controller == ARM64_IRQ_CONTROLLER_GIC_V2 &&
+	     boot_info->irq_range_count >= 2U &&
+	     arm64_gic_v2_configure(boot_info->irq_mmio[0].base,
+				    boot_info->irq_mmio[0].size,
+				    boot_info->irq_mmio[1].base,
+				    boot_info->irq_mmio[1].size) == 0 &&
+	     arm64_mmu_map_device_block(boot_info->irq_mmio[0].base) == 0 &&
+	     arm64_mmu_map_device_block(boot_info->irq_mmio[1].base) == 0))
 	{
 		ir0_boot_smoke("ARM64_GIC_MAP_OK");
 	}

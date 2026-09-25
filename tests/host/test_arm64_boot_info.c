@@ -54,6 +54,24 @@ static size_t append_prop_bytes(uint8_t *p, size_t off, uint32_t nameoff,
 	return off;
 }
 
+static size_t append_prop_reg2(uint8_t *p, size_t off, uint32_t nameoff,
+			       uint64_t base0, uint64_t size0,
+			       uint64_t base1, uint64_t size1)
+{
+	uint64_t values[4] = {base0, size0, base1, size1};
+	uint32_t i;
+
+	off = append_be32(p, off, 3U);
+	off = append_be32(p, off, 32U);
+	off = append_be32(p, off, nameoff);
+	for (i = 0; i < 4U; i++)
+	{
+		off = append_be32(p, off, (uint32_t)(values[i] >> 32));
+		off = append_be32(p, off, (uint32_t)values[i]);
+	}
+	return off;
+}
+
 static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 {
 	static const char strings[] =
@@ -118,6 +136,8 @@ static size_t build_platform_fdt(uint8_t *fdt, size_t capacity)
 	off = append_name(fdt, off, "intc@8000000");
 	off = append_prop_bytes(fdt, off, 31U, gic_compat,
 				(uint32_t)sizeof(gic_compat));
+	off = append_prop_reg2(fdt, off, 27U, 0x08000000U, 0x10000U,
+			       0x08010000U, 0x10000U);
 	off = append_be32(fdt, off, 2U);
 	off = append_be32(fdt, off, 1U);
 	off = append_name(fdt, off, "timer");
@@ -178,6 +198,11 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(info->memory[0].size == 0x08000000ULL);
 	ASSERT(info->cpu_count == 2U);
 	ASSERT(info->irq_controller == ARM64_IRQ_CONTROLLER_GIC_V2);
+	ASSERT(info->irq_range_count == 2U);
+	ASSERT(info->irq_mmio[0].base == 0x08000000ULL);
+	ASSERT(info->irq_mmio[0].size == 0x10000ULL);
+	ASSERT(info->irq_mmio[1].base == 0x08010000ULL);
+	ASSERT(info->irq_mmio[1].size == 0x10000ULL);
 	ASSERT(info->psci_conduit == ARM64_PSCI_CONDUIT_SMC);
 	ASSERT(info->architected_timer == 1);
 	ASSERT(info->rp1_present == 1);
