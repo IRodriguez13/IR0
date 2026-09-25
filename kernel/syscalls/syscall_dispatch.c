@@ -304,13 +304,29 @@ static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a
   return input_kbd_get_layout();
 }
 
-/* Syscall table: Linux x86-64 numbers -> handlers */
+/* Raw Linux x86-64 ABI table plus the incrementally shared semantic table. */
 static syscall_handler_t syscall_table_rw[__NR_syscall_max];
+static syscall_handler_t syscall_semantic_table[IR0_SYSCALL_COUNT];
+
+static syscall_handler_t syscall_handler_lookup(uint64_t abi_number,
+                                                enum ir0_syscall_id syscall_id)
+{
+  if (syscall_id > IR0_SYSCALL_UNKNOWN && syscall_id < IR0_SYSCALL_COUNT &&
+      syscall_semantic_table[syscall_id])
+    return syscall_semantic_table[syscall_id];
+
+  if (abi_number >= __NR_syscall_max)
+    return sys_nosys;
+
+  return syscall_table_rw[abi_number];
+}
 
 void syscall_table_init(void)
 {
   for (size_t i = 0; i < __NR_syscall_max; i++)
     syscall_table_rw[i] = sys_nosys;
+  for (size_t i = 0; i < IR0_SYSCALL_COUNT; i++)
+    syscall_semantic_table[i] = NULL;
 
   /* Implemented syscalls - Linux numbers */
   syscall_table_rw[__NR_read]           = wrap_sys_read;
@@ -494,6 +510,17 @@ void syscall_table_init(void)
   syscall_table_rw[__NR_timerfd_settime] = wrap_sys_timerfd_settime;
   syscall_table_rw[__NR_timerfd_gettime] = wrap_sys_timerfd_gettime;
   syscall_table_rw[__NR_exit_group]     = wrap_sys_exit_group;
+
+  /* First architecture-neutral behavior family. */
+  syscall_semantic_table[IR0_SYSCALL_WRITE] = wrap_sys_write;
+  syscall_semantic_table[IR0_SYSCALL_GETPID] = wrap_sys_getpid;
+  syscall_semantic_table[IR0_SYSCALL_GETTID] = wrap_sys_gettid;
+  syscall_semantic_table[IR0_SYSCALL_GETUID] = wrap_sys_getuid;
+  syscall_semantic_table[IR0_SYSCALL_GETEUID] = wrap_sys_geteuid;
+  syscall_semantic_table[IR0_SYSCALL_GETGID] = wrap_sys_getgid;
+  syscall_semantic_table[IR0_SYSCALL_GETEGID] = wrap_sys_getegid;
+  syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME] = wrap_sys_clock_gettime;
+  syscall_semantic_table[IR0_SYSCALL_GETTIMEOFDAY] = wrap_sys_gettimeofday;
 }
 
 /**
@@ -533,10 +560,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                                  process_syscall_sp(current_process));
   }
 
-  if (syscall_num >= __NR_syscall_max)
+  if (syscall_id == IR0_SYSCALL_UNKNOWN && syscall_num >= __NR_syscall_max)
     return -ENOSYS;
 
-  syscall_handler_t handler = syscall_table_rw[syscall_num];
+  syscall_handler_t handler = syscall_handler_lookup(syscall_num, syscall_id);
   KTM_TRACE_SYSCALL_ENTER((uint32_t)syscall_num);
   if (current_process && current_process->mode == USER_MODE)
   {

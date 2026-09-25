@@ -62,7 +62,8 @@ enum ir0_syscall_id
 	IR0_SYSCALL_PPOLL,
 	IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_GETRANDOM,
-	IR0_SYSCALL_RSEQ
+	IR0_SYSCALL_RSEQ,
+	IR0_SYSCALL_COUNT
 };
 
 /** Translate the active userspace ABI number into an IR0 semantic identity. */
