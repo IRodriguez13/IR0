@@ -186,9 +186,19 @@ static uint64_t *mmio_l2_for_l1(uint64_t l1_idx)
 static int install_device_block(uint64_t block)
 {
 	uint64_t l1_idx = L1_INDEX(block);
-	uint64_t *l2 = mmio_l2_for_l1(l1_idx);
+	uint64_t *l2;
 	uint64_t l2_pa;
 
+	/* Raspberry boards place peripheral MMIO in the same 1 GiB L1 window as
+	 * RAM. Reuse the DRAM L2 only outside the firmware RAM extent. */
+	if (l1_idx == L1_INDEX(g_dram_base))
+	{
+		if (block < g_dram_end && block + BLOCK_2M > g_dram_base)
+			return -EINVAL;
+		l2 = l2_dram;
+	}
+	else
+		l2 = mmio_l2_for_l1(l1_idx);
 	if (!l2)
 		return -EINVAL;
 	l2_pa = (uint64_t)(uintptr_t)l2;
@@ -228,8 +238,6 @@ static void build_idmap(void)
 	g_user_page_count = 0;
 	select_dram_window();
 
-	(void)install_device_block(uart_block);
-
 	/*
 	 * Map only complete 2 MiB blocks reported by firmware as EL1 (UXN clear).
 	 * Never install EL0 on a 1 GiB block (hangs QEMU). User mappings replace
@@ -242,6 +250,7 @@ static void build_idmap(void)
 		l2_dram[L2_INDEX(block)] = pte_block_2m_dram_el1(block);
 	}
 	l1_table[L1_INDEX(g_dram_base)] = pte_table(l2_dram_pa);
+	(void)install_device_block(uart_block);
 }
 
 static void mmu_configure_and_enable(uint64_t ttbr0)
