@@ -27,6 +27,16 @@ static const struct arm64_board_desc g_board = {
 	.platform_ops = &arm64_rpi_platform_ops,
 	.boot_info_init = arm64_fdt_boot_info_init,
 };
+#elif defined(IR0_ARM64_BOARD_RPI3)
+static const struct arm64_board_desc g_board = {
+	.name = "rpi3",
+	.uart = "pl011",
+	.uart_mmio = 0x3f201000UL,
+	.arch_line = "isa=arm64 board=rpi3 uart=pl011",
+	.uart_mmio_line = "uart_mmio=0x3f201000",
+	.platform_ops = &arm64_rpi_platform_ops,
+	.boot_info_init = arm64_fdt_boot_info_init,
+};
 #elif defined(IR0_ARM64_BOARD_RPI4)
 static const struct arm64_board_desc g_board = {
 	.name = "rpi4",

@@ -1,9 +1,11 @@
-# ARM64 multi-board (qemu-virt | rpi4 | rpi5) — freestanding early boot.
+# ARM64 multi-board (qemu-virt | rpi3 | rpi4 | rpi5) — freestanding early boot.
 # Override: make ARM64_BOARD=rpi4 …  (daily virt smokes keep default qemu-virt)
 
 ARM64_BOARD ?= qemu-virt
 
-ifeq ($(ARM64_BOARD),rpi4)
+ifeq ($(ARM64_BOARD),rpi3)
+ARM64_BOARD_CFLAGS := -DIR0_ARM64_BOARD_RPI3=1
+else ifeq ($(ARM64_BOARD),rpi4)
 ARM64_BOARD_CFLAGS := -DIR0_ARM64_BOARD_RPI4=1
 else ifeq ($(ARM64_BOARD),rpi5)
 ARM64_BOARD_CFLAGS := -DIR0_ARM64_BOARD_RPI5=1
@@ -12,8 +14,9 @@ ARM64_BOARD_CFLAGS := -DIR0_ARM64_BOARD_QEMU_VIRT=1
 ARM64_BOARD := qemu-virt
 endif
 
-.PHONY: kernel-arm64-rpi4-min.bin kernel-arm64-rpi5-min.bin \
-	smoke-arm64-rpi4-boot arm64-rpi4-compile arm64-rpi5-compile
+.PHONY: kernel-arm64-rpi3-min.bin kernel-arm64-rpi4-min.bin kernel-arm64-rpi5-min.bin \
+	smoke-arm64-rpi3-boot smoke-arm64-rpi4-boot arm64-rpi3-compile \
+	arm64-rpi4-compile arm64-rpi5-compile
 
 # $1 = out dir, $2 = extra -D board flag
 define ARM64_BOARD_MIN_BUILD
@@ -36,6 +39,29 @@ define ARM64_BOARD_MIN_BUILD
 		$(1)/boot_log.o
 	@echo "✓ $@"
 endef
+
+kernel-arm64-rpi3-min.bin:
+	@echo "  CC      ARM64 board=rpi3 min (load @ 0x80000)"
+	$(call ARM64_BOARD_MIN_BUILD,build/arm64-rpi3,-UIR0_ARM64_BOARD_QEMU_VIRT -UIR0_ARM64_BOARD_RPI4 -UIR0_ARM64_BOARD_RPI5 -DIR0_ARM64_BOARD_RPI3=1)
+
+arm64-rpi3-compile: kernel-arm64-rpi3-min.bin
+	@aarch64-linux-gnu-strings $< | grep -q 'board=rpi3' && \
+	 aarch64-linux-gnu-strings $< | grep -q '0x3f201000'
+	@echo "✓ arm64-rpi3-compile (board + PL011 contract)"
+
+smoke-arm64-rpi3-boot: kernel-arm64-rpi3-min.bin
+	@echo "  SMOKE   ARM64 QEMU raspi3b board boot..."
+	@aarch64-linux-gnu-objcopy -O binary $< build/arm64-rpi3/kernel8.img
+	@rm -f /tmp/arm64-rpi3-boot-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi3-boot-smoke.log --timeout 20 \
+		--stale-sec 8 --done ARM64_BOOT_OK -- \
+		qemu-system-aarch64 -M raspi3b \
+		-kernel build/arm64-rpi3/kernel8.img -nographic \
+		-serial mon:stdio -display none -no-reboot 2>/dev/null
+	@grep -q 'board=rpi3' /tmp/arm64-rpi3-boot-smoke.log
+	@grep -q 'ARM64_BOOT_OK' /tmp/arm64-rpi3-boot-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-boot-smoke.log
+	@echo "✓ smoke-arm64-rpi3-boot passed (real QEMU Raspberry model)"
 
 kernel-arm64-rpi4-min.bin:
 	@echo "  CC      ARM64 board=rpi4 min (load @ 0x80000)"
