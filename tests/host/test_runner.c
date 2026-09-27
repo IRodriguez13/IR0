@@ -72,6 +72,7 @@ extern void test_netdev_contract(void);
 extern void test_sched_backend_contract(void);
 extern void test_block_backend_contract(void);
 extern void test_usercopy_no_raw_user_touch(void);
+extern void test_elf64_image_contract(void);
 extern void test_procfs_linux_abi(void);
 extern void test_pseudo_fs_honesty(void);
 extern void test_matrix_capture_suite(void);
@@ -134,6 +135,7 @@ static void (*test_functions[])(void) = {
 	test_sched_backend_contract,
 	test_block_backend_contract,
 	test_usercopy_no_raw_user_touch,
+	test_elf64_image_contract,
 	test_procfs_linux_abi,
 	test_pseudo_fs_honesty,
 	test_matrix_capture_suite,

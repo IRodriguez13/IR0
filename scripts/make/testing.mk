@@ -2341,6 +2341,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-c arch/arm64/sources/rr_early_stubs.c -o arch/arm64/sources/rr_early_stubs.o
 	@echo "  CC      arch/arm64/sources/elf_load_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		kernel/lib/elf64_image.c -o build/arm64-boot/elf64_image.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/elf_image_early.c -o arch/arm64/sources/elf_image_early.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/elf_load_early.c -o arch/arm64/sources/elf_load_early.o
 	@echo "  CC      arch/arm64/sources/busybox_load_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
@@ -2408,6 +2412,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/rr_sched.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
+		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
 		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
@@ -2462,7 +2467,8 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
-		arch/arm64/sources/rr_early_stubs.o build/arm64-rpi3-early/elf_load_early.o \
+		arch/arm64/sources/rr_early_stubs.o build/arm64-boot/elf64_image.o \
+		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
 		build/arm64-rpi3-early/hello_embed.o \
 		build/arm64-rpi3-early/busybox_load_early.o \
 		arch/arm64/sources/rootfs_early.o arch/arm64/sources/init_handoff_early.o \
@@ -2576,6 +2582,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-boot/rr_sched.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
+		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
 		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
@@ -2660,6 +2667,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-boot/rr_sched.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
+		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
 		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \

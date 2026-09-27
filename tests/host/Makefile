@@ -40,6 +40,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_sched_backend_contract.c \
 	test_block_backend_contract.c \
 	test_usercopy_contract.c \
+	test_elf64_image.c \
 	test_procfs_linux_abi.c \
 	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c \
@@ -56,6 +57,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
+KERNEL_HOST_OBJS += host_elf64_image.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
@@ -130,6 +132,9 @@ host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
 
 host_blockdev.o: $(KERNEL_ROOT)/kernel/lib/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
+
+host_elf64_image.o: $(KERNEL_ROOT)/kernel/lib/elf64_image.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_arch_irq_stub.o: host_arch_irq_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
@@ -249,6 +254,9 @@ test_elf_local_reloc_abi.o: test_elf_local_reloc_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_elf_interp_abi.o: test_elf_interp_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_elf64_image.o: test_elf64_image.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_arch_task_contract.o: test_arch_task_contract.c
