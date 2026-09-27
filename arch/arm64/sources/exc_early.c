@@ -32,6 +32,9 @@
 #define ESR_EC_SHIFT 26
 #define ESR_EC_MASK  0x3FUL
 #define ESR_EC_SVC64 0x15UL
+#define ESR_EC_IABT_LOWER 0x20UL
+#define ESR_EC_DABT_LOWER 0x24UL
+#define ESR_EC_BRK64 0x3CUL
 
 /* SPSR_EL1: DAIF masked + mode. */
 #define SPSR_DAIF_MASKED 0x3C0UL
@@ -55,6 +58,15 @@ static int g_el0_svc_tagged;
 extern process_t *current_process;
 
 #define RR_TICK_ONESHOT_TICKS 10000U
+
+static void exc_put_hex64(uint64_t value)
+{
+	static const char digits[] = "0123456789abcdef";
+	int shift;
+
+	for (shift = 60; shift >= 0; shift -= 4)
+		pl011_putc(digits[(value >> (unsigned)shift) & 0xfU]);
+}
 
 int arm64_timer_irq_seen(void)
 {
@@ -162,7 +174,21 @@ void arm64_exc_sync_lower(uint64_t *frame)
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) != ESR_EC_SVC64)
 	{
-		ir0_boot_smoke("ARM64_EL0_SYNC_OTHER");
+		uint64_t ec = (esr >> ESR_EC_SHIFT) & ESR_EC_MASK;
+
+		if (ec == ESR_EC_IABT_LOWER)
+			ir0_boot_smoke("ARM64_EL0_INSN_ABORT");
+		else if (ec == ESR_EC_DABT_LOWER)
+			ir0_boot_smoke("ARM64_EL0_DATA_ABORT");
+		else if (ec == ESR_EC_BRK64)
+			ir0_boot_smoke("ARM64_EL0_BREAKPOINT");
+		else
+		{
+			ir0_boot_smoke("ARM64_EL0_SYNC_OTHER");
+			pl011_puts("ARM64_EL0_ESR_");
+			exc_put_hex64(esr);
+			pl011_puts("\n");
+		}
 		leave = 1;
 	}
 	else

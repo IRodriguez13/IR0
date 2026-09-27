@@ -148,6 +148,18 @@ static int store_user_bytes(uint64_t uaddr, const void *src, uint64_t n)
 	return 1;
 }
 
+static int strings_equal(const char *left, const char *right)
+{
+	if (!left || !right)
+		return 0;
+	while (*left && *left == *right)
+	{
+		left++;
+		right++;
+	}
+	return *left == *right;
+}
+
 static enum rootfs_node path_to_node(const char *path)
 {
 	if (!path)
@@ -324,6 +336,29 @@ int64_t arm64_rootfs_close(int fd)
 	g_slots[idx].node = ROOTFS_NODE_NONE;
 	g_slots[idx].pos = 0;
 	return 0;
+}
+
+int64_t arm64_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buf,
+				uint64_t bufsiz)
+{
+	static const char proc_self_exe[] = "/proc/self/exe";
+	static const char init_target[] = "/init";
+	char pbuf[32];
+	uint64_t n = sizeof(init_target) - 1U;
+
+	if (!g_rootfs_ready)
+		return -ENOENT;
+	if (dirfd != AT_FDCWD && slot_from_fd(dirfd) < 0)
+		return -ENOENT;
+	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	if (!strings_equal(pbuf, proc_self_exe))
+		return -ENOENT;
+	if (bufsiz < n)
+		n = bufsiz;
+	if (n > 0 && !store_user_bytes(buf, (const uint8_t *)init_target, n))
+		return -EFAULT;
+	return (int64_t)n;
 }
 
 int64_t arm64_rootfs_faccessat(int dirfd, uint64_t path, int flags)

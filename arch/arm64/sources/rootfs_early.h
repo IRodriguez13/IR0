@@ -28,6 +28,8 @@ int64_t arm64_rootfs_faccessat(int dirfd, uint64_t path, int flags);
 int64_t arm64_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 				int flags);
 int64_t arm64_rootfs_fstat(int fd, uint64_t statbuf);
+int64_t arm64_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buf,
+				uint64_t bufsiz);
 
 /** EL1 smoke: open/read/fstat /init via fake FS. Returns 0 on OK. */
 int arm64_rootfs_smoke_init(void);

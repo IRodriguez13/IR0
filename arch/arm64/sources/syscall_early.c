@@ -430,6 +430,8 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			return fr;
 		return -ENOENT;
 	}
+	case IR0_SYSCALL_READLINKAT:
+		return arm64_rootfs_readlinkat((int)a0, a1, a2, a3);
 	case IR0_SYSCALL_GETDENTS64:
 		return -ENOSYS;
 	case IR0_SYSCALL_DUP:

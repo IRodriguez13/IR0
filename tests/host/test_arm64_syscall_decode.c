@@ -9,6 +9,7 @@ void test_arm64_syscall_decode_contract(void)
 	TEST_BEGIN("arm64 syscall ABI decoder contract");
 	ASSERT(syscall_decode_number(63) == IR0_SYSCALL_READ);
 	ASSERT(syscall_decode_number(64) == IR0_SYSCALL_WRITE);
+	ASSERT(syscall_decode_number(78) == IR0_SYSCALL_READLINKAT);
 	ASSERT(syscall_decode_number(93) == IR0_SYSCALL_EXIT);
 	ASSERT(syscall_decode_number(172) == IR0_SYSCALL_GETPID);
 	ASSERT(syscall_decode_number(220) == IR0_SYSCALL_CLONE);
