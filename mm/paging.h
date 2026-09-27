@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <ir0/mm.h>
 
 
 #define PAGE_PRESENT 0x1
@@ -52,9 +53,6 @@
 #define PAGE_PTE_PFN_MASK   0x000FFFFFFFFFF000ULL
 /* Nine-bit index into each translation-table level (512 entries). */
 #define PAGE_INDEX_MASK     0x1FF
-
-typedef uint64_t *address_space_root_t;
-
 
 /**
  * Enable paging (sets CR0.PG bit)

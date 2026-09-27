@@ -24,6 +24,8 @@
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>
 #include <ir0/mm_struct.h>
+#include <ir0/mm.h>
+#include <ir0/arch_mm.h>
 #include <ir0/files_struct.h>
 #include <ir0/sched.h>
 #include <ir0/kmem.h>
@@ -65,14 +67,14 @@ typedef struct
 	uint64_t mapped_pages;
 	uint64_t freed_pages;
 	uint64_t missing_pages;
-	uint64_t pdpt_present;
-	uint64_t pd_present;
-	uint64_t pt_present;
+	uint64_t level1_present;
+	uint64_t level2_present;
+	uint64_t level3_present;
 	uint64_t leaf_present;
-	uint64_t pml4_freed;
-	uint64_t pdpt_freed;
-	uint64_t pd_freed;
-	uint64_t pt_freed;
+	uint64_t root_freed;
+	uint64_t level1_freed;
+	uint64_t level2_freed;
+	uint64_t level3_freed;
 	uint64_t leaf_freed;
 } process_reclaim_stats_t;
 
@@ -91,7 +93,8 @@ void process_release_fds(process_t *p, const char *pipe_trace_op);
 int process_duplicate_fd_table(process_t *parent, process_t *child);
 
 /* mm.c */
-void process_unmap_user_pages_all(uint64_t *pml4, process_reclaim_stats_t *stats);
+void process_unmap_user_pages_all(address_space_root_t root,
+				  process_reclaim_stats_t *stats);
 struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_list);
 void process_fork_destroy_child_mm(process_t *child);
 void process_fork_free_mmap_list(process_t *child);

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mm.c
- * Description: Process MM: user unmap, PML4 create, VA overlap, mmap list clone/free.
+ * Description: Process MM: user unmap, address-space creation, VA overlap, mmap lifecycle.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -58,11 +58,11 @@ bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t leng
 
 uint64_t *process_pt_child(uint64_t *table, size_t index)
 {
-	if (!(table[index] & PAGE_PRESENT))
+	if (!mm_pte_present(table[index]))
 		return NULL;
-	if (table[index] & PAGE_SIZE_2MB_FLAG)
+	if (mm_pte_large(table[index]))
 		return NULL;
-	return (uint64_t *)(table[index] & PAGE_FRAME_MASK);
+	return (uint64_t *)mm_pte_phys(table[index]);
 }
 
 uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
@@ -72,55 +72,55 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 	size_t i2;
 	size_t i1;
 	uint64_t count = 0;
-	uint64_t *pml4;
+	address_space_root_t root;
 
 	if (!mm || !mm->page_directory)
 		return 0;
 
-	pml4 = mm->page_directory;
+	root = mm->page_directory;
 	for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
 	{
-		uint64_t *pdpt = process_pt_child(pml4, i4);
+		uint64_t *level1 = process_pt_child(root, i4);
 
-		if (!pdpt)
+		if (!level1)
 			continue;
 
 		for (i3 = 0; i3 < 512; i3++)
 		{
-			uint64_t *pd = process_pt_child(pdpt, i3);
-			uint64_t pdpt_ent;
+			uint64_t *level2 = process_pt_child(level1, i3);
+			uint64_t level1_entry;
 
-			if (!pd)
+			if (!level2)
 			{
-				pdpt_ent = pdpt[i3];
-				if ((pdpt_ent & PAGE_PRESENT) && (pdpt_ent & PAGE_USER) &&
-				    (pdpt_ent & PAGE_SIZE_2MB_FLAG))
+				level1_entry = level1[i3];
+				if (mm_pte_present(level1_entry) &&
+				    (level1_entry & PAGE_USER) && mm_pte_large(level1_entry))
 					count += 512;
 				continue;
 			}
 
 			for (i2 = 0; i2 < 512; i2++)
 			{
-				uint64_t pd_ent = pd[i2];
-				uint64_t *pt;
+				uint64_t level2_entry = level2[i2];
+				uint64_t *level3;
 
-				if (!(pd_ent & PAGE_PRESENT))
+				if (!mm_pte_present(level2_entry))
 					continue;
-				if ((pd_ent & PAGE_USER) && (pd_ent & PAGE_SIZE_2MB_FLAG))
+				if ((level2_entry & PAGE_USER) && mm_pte_large(level2_entry))
 				{
 					count += 512;
 					continue;
 				}
 
-				pt = process_pt_child(pd, i2);
-				if (!pt)
+				level3 = process_pt_child(level2, i2);
+				if (!level3)
 					continue;
 
 				for (i1 = 0; i1 < 512; i1++)
 				{
-					uint64_t ent = pt[i1];
+					uint64_t ent = level3[i1];
 
-					if ((ent & PAGE_PRESENT) && (ent & PAGE_USER))
+					if (mm_pte_present(ent) && (ent & PAGE_USER))
 						count++;
 				}
 			}
@@ -139,11 +139,11 @@ uint64_t process_count_resident_user_pages(const process_t *p)
 }
 
 /*
- * Drop every present PAGE_USER mapping under PML4 indices 0..255 so PMM
+ * Drop every present user mapping below the architecture's user-root slots so PMM
  * frames are returned and the address space can be discarded safely while
- * another process is active (CR3 unrelated).
+ * another process is active (its address-space root may be unrelated).
  */
-void process_unmap_user_pages_all(uint64_t *pml4,
+void process_unmap_user_pages_all(address_space_root_t root,
 					 process_reclaim_stats_t *stats)
 {
 	size_t i4;
@@ -151,42 +151,42 @@ void process_unmap_user_pages_all(uint64_t *pml4,
 	size_t i2;
 	size_t i1;
 
-	if (!pml4)
+	if (!root)
 		return;
 
 	for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
 	{
-		uint64_t *pdpt = process_pt_child(pml4, i4);
+		uint64_t *level1 = process_pt_child(root, i4);
 
-		if (!pdpt)
+		if (!level1)
 			continue;
 		if (stats)
-			stats->pdpt_present++;
+			stats->level1_present++;
 
 		for (i3 = 0; i3 < 512; i3++)
 		{
-			uint64_t *pd = process_pt_child(pdpt, i3);
+			uint64_t *level2 = process_pt_child(level1, i3);
 
-			if (!pd)
+			if (!level2)
 				continue;
 			if (stats)
-				stats->pd_present++;
+				stats->level2_present++;
 
 			for (i2 = 0; i2 < 512; i2++)
 			{
-				uint64_t *pt = process_pt_child(pd, i2);
+				uint64_t *level3 = process_pt_child(level2, i2);
 
-				if (!pt)
+				if (!level3)
 					continue;
 				if (stats)
-					stats->pt_present++;
+					stats->level3_present++;
 
 				for (i1 = 0; i1 < 512; i1++)
 				{
-					uint64_t ent = pt[i1];
+					uint64_t ent = level3[i1];
 					uintptr_t virt;
 
-					if (!(ent & PAGE_PRESENT) || !(ent & PAGE_USER))
+					if (!mm_pte_present(ent) || !(ent & PAGE_USER))
 						continue;
 					if (stats)
 					{
@@ -196,7 +196,7 @@ void process_unmap_user_pages_all(uint64_t *pml4,
 
 					virt = ((uintptr_t)i4 << 39) | ((uintptr_t)i3 << 30) |
 					       ((uintptr_t)i2 << 21) | ((uintptr_t)i1 << 12);
-					if (unmap_page_in_directory(pml4, virt) == 0)
+					if (unmap_page_in_directory(root, virt) == 0)
 					{
 						if (stats)
 						{
@@ -301,38 +301,38 @@ void process_fork_free_mmap_list(process_t *child)
 
 uint64_t create_process_page_directory(void)
 {
-	uint64_t *pml4;
-	uint64_t kernel_cr3;
-	uint64_t *kernel_pml4;
+	address_space_root_t root;
+	uintptr_t kernel_root_phys;
+	address_space_root_t kernel_root;
 
-	/* Allocate page-aligned memory for PML4 */
-	pml4 = kmalloc_aligned_try(4096, 4096);
-	if (!pml4)
+	/* Allocate one page-aligned top-level translation table. */
+	root = kmalloc_aligned_try(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+	if (!root)
 	{
 		paging_oom_note("create_process_page_directory",
 				paging_oom_classify_current());
 		return 0;
 	}
 
-	memset(pml4, 0, 4096);
+	memset(root, 0, PAGE_SIZE_4KB);
 	/*
-	 * Kernel half must come from the pinned boot PML4, not current CR3.
-	 * Fork under a user mm must still share kstack / high kernel PTEs
-	 * (switch loads next CR3 while RSP is still on the previous kstack).
+	 * Kernel mappings must come from the pinned boot root, not the active
+	 * process root. A context switch still runs on the previous kernel stack
+	 * while activating the next address space.
 	 */
-	kernel_cr3 = paging_kernel_address_space();
-	if (!kernel_cr3)
+	kernel_root_phys = paging_kernel_address_space();
+	if (!kernel_root_phys)
 	{
-		kernel_cr3 = paging_current_address_space();
-		paging_pin_kernel_address_space(kernel_cr3);
+		kernel_root_phys = paging_current_address_space();
+		paging_pin_kernel_address_space(kernel_root_phys);
 	}
-	kernel_pml4 = (uint64_t *)(uintptr_t)kernel_cr3;
+	kernel_root = (address_space_root_t)kernel_root_phys;
 
 	/*
 	 * Copy kernel half of the root table only (user half stays empty).
 	 * Slot counts are ISA-private (mm_copy_kernel_half).
 	 */
-	mm_copy_kernel_half(pml4, kernel_pml4);
+	mm_copy_kernel_half(root, kernel_root);
 
 	/*
 	 * Map kernel low memory with 4 KiB supervisor pages so timer IRQ (TSS
@@ -352,21 +352,21 @@ uint64_t create_process_page_directory(void)
 		 */
 		const uint64_t supervisor_kbd_end = 0x00600000UL;
 
-		if (map_supervisor_identity_low(pml4, 0, 0x00400000UL) != 0)
+		if (map_supervisor_identity_low(root, 0, 0x00400000UL) != 0)
 		{
-			kfree_aligned(pml4);
+			kfree_aligned(root);
 			return 0;
 		}
-		if (map_supervisor_identity_low(pml4, KEYBOARD_BUFFER_ADDR,
+		if (map_supervisor_identity_low(root, KEYBOARD_BUFFER_ADDR,
 						supervisor_kbd_end) != 0)
 		{
-			kfree_aligned(pml4);
+			kfree_aligned(root);
 			return 0;
 		}
-		if (map_supervisor_identity_2mb(pml4, supervisor_kbd_end,
+		if (map_supervisor_identity_2mb(root, supervisor_kbd_end,
 						PMM_PHYS_BASE) != 0)
 		{
-			kfree_aligned(pml4);
+			kfree_aligned(root);
 			return 0;
 		}
 	}
@@ -392,13 +392,13 @@ uint64_t create_process_page_directory(void)
 		for (uint32_t off = 0; off < fb_size; off += 4096)
 		{
 			uint64_t p = fb_phys + off;
-			if (map_page_in_directory(pml4, p, p, PAGE_PRESENT | PAGE_RW) != 0)
+			if (map_page_in_directory(root, p, p, PAGE_PRESENT | PAGE_RW) != 0)
 				break;
 		}
 #endif
 	}
 #endif
 
-	paging_ir0_mm_note_root_created((uintptr_t)pml4);
-	return (uint64_t)pml4;
+	paging_ir0_mm_note_root_created((uintptr_t)root);
+	return (uint64_t)(uintptr_t)root;
 }

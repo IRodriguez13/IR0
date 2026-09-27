@@ -17,6 +17,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Opaque-by-contract root of a process translation-table hierarchy. */
+typedef uint64_t *address_space_root_t;
+
 /* Number of root-table slots for the user half (x86-64: PML4[0..255]). */
 unsigned mm_user_root_slots(void);
 
@@ -27,7 +30,8 @@ unsigned mm_root_slots(void);
  * Copy present kernel-half entries from @src_root into @dst_root.
  * User half of @dst_root is left untouched by this helper.
  */
-void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root);
+void mm_copy_kernel_half(address_space_root_t dst_root,
+			 const uint64_t *src_root);
 
 /*
  * ISA userspace VA window for access_ok / is_user_address (no page walk).
