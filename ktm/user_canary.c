@@ -41,32 +41,34 @@ static uint64_t ktm_canary_word(void)
 	return KTM_CANARY_MAGIC;
 }
 
-void ktm_user_canary_install(uint64_t *pml4, uint64_t stack_top, uint32_t pid)
+void ktm_user_canary_install(address_space_root_t root, uint64_t stack_top,
+			     uint32_t pid)
 {
 	uint64_t words[2];
 
-	if (!pml4 || stack_top < KTM_CANARY_BYTES)
+	if (!root || stack_top < KTM_CANARY_BYTES)
 		return;
 
 	(void)pid;
 	words[0] = ktm_canary_word();
 	words[1] = ~words[0];
 
-	(void)copy_to_user_mm(pml4,
+	(void)copy_to_user_mm(root,
 					       (uintptr_t)(stack_top - KTM_CANARY_BYTES),
 					       words, sizeof(words));
 }
 
-int ktm_user_canary_check(uint64_t *pml4, uint64_t stack_top, uint32_t pid,
+int ktm_user_canary_check(address_space_root_t root, uint64_t stack_top,
+			  uint32_t pid,
 			  const char *where)
 {
 	uint64_t words[2];
 	uint64_t expect;
 
-	if (!pml4 || stack_top < KTM_CANARY_BYTES)
+	if (!root || stack_top < KTM_CANARY_BYTES)
 		return 0;
 
-	if (copy_from_user_mm(pml4,
+	if (copy_from_user_mm(root,
 					       (uintptr_t)(stack_top - KTM_CANARY_BYTES),
 					       words, sizeof(words)) != 0)
 		return 0; /* Not mapped: nothing proven either way. */
@@ -100,10 +102,11 @@ int ktm_user_canary_check(uint64_t *pml4, uint64_t stack_top, uint32_t pid,
 	return -1;
 }
 
-void ktm_user_canary_poll(uint64_t *pml4, uint64_t stack_top, uint32_t pid)
+void ktm_user_canary_poll(address_space_root_t root, uint64_t stack_top,
+			  uint32_t pid)
 {
 	if (++ktm_canary_poll_tick % KTM_CANARY_POLL_PERIOD)
 		return;
 
-	(void)ktm_user_canary_check(pml4, stack_top, pid, "syscall");
+	(void)ktm_user_canary_check(root, stack_top, pid, "syscall");
 }

@@ -506,7 +506,7 @@ static int elf_file_off_for_vaddr(const elf64_phdr_t *phdr, uint16_t phnum,
  * `cc hello.c && ./hello` does not write through a NULL GOT slot.
  */
 static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
-                                  size_t file_size, uint64_t *pml4)
+                                  size_t file_size, address_space_root_t root)
 {
     uint16_t phnum;
     elf64_phdr_t *phdr;
@@ -521,7 +521,7 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
     size_t di;
     unsigned applied = 0;
 
-    if (!header || !file_data || !pml4)
+    if (!header || !file_data || !root)
         return 0;
     if (header->e_type != ET_EXEC)
         return 0;
@@ -622,7 +622,7 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
                 if (ir0_elf64_local_reloc_value(type, 0, sym_value, r->r_addend,
                                                 &value) != 0)
                     continue;
-                if (copy_to_user_mm(pml4, (uintptr_t)r->r_offset, &value,
+                if (copy_to_user_mm(root, (uintptr_t)r->r_offset, &value,
                                     sizeof(value)) != 0)
                     return -1;
                 applied++;
@@ -638,7 +638,7 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
 /* Load ELF segments into memory at correct virtual addresses */
 struct elf_process_load_context
 {
-	uint64_t *address_space_root;
+	address_space_root_t address_space_root;
 	uint64_t load_bias;
 };
 
@@ -1024,7 +1024,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     uint64_t random_base;
     uint64_t strings_base;
     uint64_t current_string_ptr;
-    uint64_t *pml4 = process_pgd(process);
+    address_space_root_t root = process_pgd(process);
 
     stack_base &= ~0xFULL;
 
@@ -1044,7 +1044,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             size_t len = strlen(argv[i]) + 1;
 
-            if (copy_to_user_mm(pml4, current_string_ptr,
+            if (copy_to_user_mm(root, current_string_ptr,
                                                  argv[i], len) != 0)
             {
                 kfree(argv_ptrs);
@@ -1062,7 +1062,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             size_t len = strlen(envp[i]) + 1;
 
-            if (copy_to_user_mm(pml4, current_string_ptr,
+            if (copy_to_user_mm(root, current_string_ptr,
                                                  envp[i], len) != 0)
             {
                 kfree(argv_ptrs);
@@ -1077,7 +1077,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     /* argc at [RSP+0] per SysV ABI process entry stack contract. */
     {
         uint64_t argc_q = (uint64_t)argc;
-        if (copy_to_user_mm(pml4, argc_slot, &argc_q, sizeof(uint64_t)) != 0)
+        if (copy_to_user_mm(root, argc_slot, &argc_q, sizeof(uint64_t)) != 0)
         {
             kfree(argv_ptrs);
             kfree(envp_ptrs);
@@ -1090,7 +1090,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t ptr = argv_ptrs[i];
 
-        if (copy_to_user_mm(pml4,
+        if (copy_to_user_mm(root,
                 argv_array + (size_t)i * sizeof(uint64_t),
                 &ptr, sizeof(uint64_t)) != 0)
         {
@@ -1103,7 +1103,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t zero = 0;
 
-        if (copy_to_user_mm(pml4,
+        if (copy_to_user_mm(root,
                 argv_array + (size_t)argc * sizeof(uint64_t),
                 &zero, sizeof(uint64_t)) != 0)
         {
@@ -1118,7 +1118,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t ptr = envp_ptrs[i];
 
-        if (copy_to_user_mm(pml4,
+        if (copy_to_user_mm(root,
                 envp_array + (size_t)i * sizeof(uint64_t),
                 &ptr, sizeof(uint64_t)) != 0)
         {
@@ -1131,7 +1131,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         uint64_t zero = 0;
 
-        if (copy_to_user_mm(pml4,
+        if (copy_to_user_mm(root,
                 envp_array + (size_t)envc * sizeof(uint64_t),
                 &zero, sizeof(uint64_t)) != 0)
         {
@@ -1146,7 +1146,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         uint8_t random_seed[ELF_AT_RANDOM_BYTES];
 
         elf_fill_random_bytes(random_seed, sizeof(random_seed));
-        if (copy_to_user_mm(pml4, random_base, random_seed,
+        if (copy_to_user_mm(root, random_base, random_seed,
                                              sizeof(random_seed)) != 0)
         {
             kfree(argv_ptrs);
@@ -1188,9 +1188,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         {
             uint64_t off = i * 2 * sizeof(uint64_t);
 
-            if (copy_to_user_mm(pml4, auxv_base + off,
+            if (copy_to_user_mm(root, auxv_base + off,
                     &auxv[i].a_type, sizeof(uint64_t)) != 0 ||
-                copy_to_user_mm(pml4,
+                copy_to_user_mm(root,
                     auxv_base + off + sizeof(uint64_t),
                     &auxv[i].a_val, sizeof(uint64_t)) != 0)
             {
@@ -1207,7 +1207,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
      * stack_base adds). Stamp it so an overwrite is caught where it happens
      * instead of surfacing later as a bad length or a stale pointer.
      */
-    ktm_user_canary_install(pml4, stack_top, (uint32_t)process->task.pid);
+    ktm_user_canary_install(root, stack_top, (uint32_t)process->task.pid);
 
     task_set_sp(&process->task, argc_slot);
     task_set_frame_pointer(&process->task, argc_slot);

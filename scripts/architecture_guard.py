@@ -1663,6 +1663,33 @@ def check_common_paging_uses_neutral_roots():
     return errors
 
 
+def check_common_address_space_contracts():
+    """Prevent x86 page-table names from leaking back into common MM users."""
+    errors = []
+    legacy = re.compile(r"\b(?:CR3|cr3|PML4|pml4|PDPT|pdpt)\b")
+    contracts = (
+        "includes/ir0/memfd.h",
+        "includes/ir0/ktm/user_canary.h",
+        "kernel/memfd.c",
+        "kernel/sysv_shm.c",
+        "kernel/vdso.c",
+        "kernel/process/mm_struct.c",
+        "ktm/user_canary.c",
+    )
+
+    for relative in contracts:
+        fpath = ROOT / relative
+        for idx, line in enumerate(
+            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+        ):
+            if legacy.search(line):
+                errors.append(
+                    f"[address-space-neutral] {relative}:{idx}: use address-space "
+                    f"root/translation-table vocabulary: {line.strip()}"
+                )
+    return errors
+
+
 def _parse_devfs_pty_id_block():
     """Return (pts0, pty_max) from includes/ir0/pty_devfs.h."""
     pty_h = ROOT / "includes" / "ir0" / "pty_devfs.h"
@@ -1911,6 +1938,7 @@ def main():
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_common_paging_uses_neutral_roots())
+    errors.extend(check_common_address_space_contracts())
 
     if errors:
         print("[arch-guard] FAILED")

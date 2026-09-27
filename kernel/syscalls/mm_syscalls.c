@@ -91,32 +91,33 @@ static void mm_prepare_map_fixed(uintptr_t start, size_t length)
 	}
 }
 
-static int mm_mmap_verify_ptes(uint64_t *pml4, uintptr_t virt_addr, size_t len)
+static int mm_mmap_verify_ptes(address_space_root_t root, uintptr_t virt_addr,
+			       size_t len)
 {
 	size_t i;
 
-	if (!pml4 || len == 0)
+	if (!root || len == 0)
 		return -EINVAL;
 
 	for (i = 0; i < len; i += PAGE_SIZE_4KB)
 	{
-		if (is_page_mapped_in_directory(pml4, virt_addr + i, NULL) != 1)
+		if (is_page_mapped_in_directory(root, virt_addr + i, NULL) != 1)
 			return -ENOMEM;
 	}
 	return 0;
 }
 
-static bool mm_va_range_all_unmapped(uint64_t *pml4, uintptr_t start,
+static bool mm_va_range_all_unmapped(address_space_root_t root, uintptr_t start,
 				     size_t length)
 {
 	uintptr_t check;
 
-	if (!pml4 || length == 0)
+	if (!root || length == 0)
 		return false;
 
 	for (check = start; check < start + length; check += PAGE_SIZE_4KB)
 	{
-		if (is_page_mapped_in_directory(pml4, check, NULL) == 1)
+		if (is_page_mapped_in_directory(root, check, NULL) == 1)
 			return false;
 	}
 	return true;
@@ -158,7 +159,7 @@ static uintptr_t mm_mmap_search_end(process_t *proc)
  * Linux-like top-down placement for mmap(NULL) and non-fixed hints.
  * Updates process_mmap_base(proc) to the chosen start for the next call.
  */
-static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
+static uintptr_t mm_pick_free_va_topdown(process_t *proc, address_space_root_t root,
 					 size_t length)
 {
 	uintptr_t search_end;
@@ -166,7 +167,7 @@ static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 	uintptr_t top;
 	uintptr_t start;
 
-	if (!proc || !pml4 || length == 0)
+	if (!proc || !root || length == 0)
 		return 0;
 
 	if (length > (size_t)(USER_MMAP_END - USER_MMAP_START))
@@ -192,7 +193,7 @@ static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 				continue;
 			if (process_user_va_range_overlaps(proc, start, length))
 				continue;
-			if (!mm_va_range_all_unmapped(pml4, start, length))
+			if (!mm_va_range_all_unmapped(root, start, length))
 				continue;
 
 			process_set_mmap_base(proc, start);
@@ -202,7 +203,8 @@ static uintptr_t mm_pick_free_va_topdown(process_t *proc, uint64_t *pml4,
 	return 0;
 }
 
-static uintptr_t mm_find_free_va(uint64_t *pml4, process_t *proc, uintptr_t hint,
+static uintptr_t mm_find_free_va(address_space_root_t root, process_t *proc,
+				 uintptr_t hint,
 				 size_t length)
 {
 	if (hint != 0)
@@ -216,12 +218,12 @@ static uintptr_t mm_find_free_va(uint64_t *pml4, process_t *proc, uintptr_t hint
 			return 0;
 		if (proc && process_user_va_range_overlaps(proc, hint, length))
 			return 0;
-		if (is_page_mapped_in_directory(pml4, hint, NULL) == 1)
+		if (is_page_mapped_in_directory(root, hint, NULL) == 1)
 			return 0;
 		return hint;
 	}
 
-	return mm_pick_free_va_topdown(proc, pml4, length);
+	return mm_pick_free_va_topdown(proc, root, length);
 }
 
 void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
@@ -482,7 +484,8 @@ static int mmap_audit_errno_from_ret(void *ret)
   return -(int)(intptr_t)ret;
 }
 
-static void mmap_audit_log_pte(const char *tag, uint64_t *pml4, uintptr_t va)
+static void mmap_audit_log_pte(const char *tag, address_space_root_t root,
+                               uintptr_t va)
 {
   uint64_t pte_flags = 0;
   uint64_t *pte;
@@ -490,11 +493,11 @@ static void mmap_audit_log_pte(const char *tag, uint64_t *pml4, uintptr_t va)
 
   if (!DEBUG_MMAP_AUDIT)
     return;
-  if (!pml4)
+  if (!root)
     return;
 
-  mapped = is_page_mapped_in_directory(pml4, va, &pte_flags);
-  pte = paging_get_pte(pml4, va);
+  mapped = is_page_mapped_in_directory(root, va, &pte_flags);
+  pte = paging_get_pte(root, va);
 
   if (pte && (*pte & PAGE_PRESENT))
   {
@@ -567,7 +570,8 @@ static void mmap_audit_log_args(void *addr, size_t length, int prot, int flags,
 }
 
 static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_addr,
-                                  size_t length, int vma_inserted, uint64_t *pml4)
+                                  size_t length, int vma_inserted,
+                                  address_space_root_t root)
 {
   size_t pages = (length + PAGE_SIZE_4KB - 1) / PAGE_SIZE_4KB;
   size_t mapped_pages = 0;
@@ -587,13 +591,13 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
   }
   klog_debug_fmt("KERN", " vma_inserted=%llx", (unsigned long long)((uint64_t)(unsigned int)vma_inserted));
 
-  if (mmap_audit_ptr_err(ret) || !pml4 || virt_addr == 0 || length == 0)
+  if (mmap_audit_ptr_err(ret) || !root || virt_addr == 0 || length == 0)
     return;
 
   for (i = 0; i < pages; i++)
   {
     uintptr_t va = virt_addr + i * PAGE_SIZE_4KB;
-    if (is_page_mapped_in_directory(pml4, va, NULL) == 1)
+    if (is_page_mapped_in_directory(root, va, NULL) == 1)
       mapped_pages++;
   }
 
@@ -608,15 +612,15 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
     klog_debug("MMAP", "CLASSIFY MMAP_RET_UNMAPPED_RANGE");
   }
 
-  mmap_audit_log_pte("first", pml4, virt_addr);
+  mmap_audit_log_pte("first", root, virt_addr);
   if (pages > 1)
-    mmap_audit_log_pte("last", pml4, virt_addr + (pages - 1) * PAGE_SIZE_4KB);
+    mmap_audit_log_pte("last", root, virt_addr + (pages - 1) * PAGE_SIZE_4KB);
 
-  if (pml4)
+  if (root)
   {
     uint64_t flags_low = 0;
 
-    if (is_page_mapped_in_directory(pml4, virt_addr, &flags_low) == 1)
+    if (is_page_mapped_in_directory(root, virt_addr, &flags_low) == 1)
     {
       if (!(flags_low & PAGE_USER))
       {
@@ -1208,7 +1212,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
   struct mmap_region *matched = NULL;
   uintptr_t range_start;
   uintptr_t range_end;
-  uint64_t *pml4;
+  address_space_root_t root;
   uint64_t map_flags;
   int saw_present = 0;
 
@@ -1245,7 +1249,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
   range_start = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
   range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) & (uintptr_t)PAGE_FRAME_MASK;
-  pml4 = process_pgd(current_process);
+  root = process_pgd(current_process);
 
   map_flags = PAGE_USER;
   if (prot & PROT_WRITE)
@@ -1258,7 +1262,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
     uint64_t *pte;
     uint64_t phys;
 
-    pte = paging_get_pte(pml4, page);
+    pte = paging_get_pte(root, page);
     if (!pte || !(*pte & PAGE_PRESENT))
     {
       /* Gaps only OK when covering a known mmap region (lazy anon). */
@@ -1267,14 +1271,14 @@ int sys_mprotect(void *addr, size_t len, int prot)
       phys = pmm_alloc_frame();
       if (phys == 0)
         return -ENOMEM;
-      if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
+      if (map_page_in_directory(root, page, phys, map_flags) != 0)
       {
         pmm_free_frame(phys);
         return -ENOMEM;
       }
-      if (zero_user_mm(pml4, page, PAGE_SIZE_4KB) != 0)
+      if (zero_user_mm(root, page, PAGE_SIZE_4KB) != 0)
       {
-        (void)unmap_page_in_directory(pml4, page);
+        (void)unmap_page_in_directory(root, page);
         return -EFAULT;
       }
       tlb_invalidate_page((uintptr_t)page);
@@ -1284,7 +1288,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
     saw_present = 1;
     phys = *pte & PAGE_FRAME_MASK;
-    if (map_page_in_directory(pml4, page, phys, map_flags) != 0)
+    if (map_page_in_directory(root, page, phys, map_flags) != 0)
       return -ENOMEM;
     tlb_invalidate_page((uintptr_t)page);
   }

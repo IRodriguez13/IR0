@@ -25,8 +25,8 @@ int mm_translation_enabled(void);
 int mm_translation_ready(void);
 
 /*
- * 4-level VA indices (9 bits each) for 4 KiB granules — x86-64 and aarch64.
- * idx[0]=L0/PML4, idx[1]=L1/PDPT, idx[2]=L2/PD, idx[3]=L3/PT.
+ * Translation-table indices from the root level to the leaf-table level.
+ * The selected ISA backend defines how the virtual address is decomposed.
  */
 void mm_va_indices(uintptr_t va, size_t idx[4]);
 

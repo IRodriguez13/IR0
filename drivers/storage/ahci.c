@@ -520,11 +520,11 @@ static void ahci_register_block(struct ahci_slot *slot)
 	}
 }
 
-void ahci_map_mmio_in_directory(uint64_t *pml4)
+void ahci_map_mmio_in_directory(address_space_root_t root)
 {
 	uint32_t off;
 
-	if (!pml4 || ahci_abar_phys == 0)
+	if (!root || ahci_abar_phys == 0)
 		return;
 
 	for (off = 0; off < AHCI_ABAR_MAP_PAGES * PAGE_SIZE_4KB;
@@ -532,7 +532,7 @@ void ahci_map_mmio_in_directory(uint64_t *pml4)
 	{
 		uint64_t p = (uint64_t)ahci_abar_phys + off;
 
-		(void)map_page_in_directory(pml4, p, p,
+		(void)map_page_in_directory(root, p, p,
 					    PAGE_PRESENT | PAGE_RW |
 						    PAGE_CACHE_DISABLE);
 	}

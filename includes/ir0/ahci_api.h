@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: ahci_api.h
- * Description: AHCI facade for MM (process CR3) without drivers/ includes.
+ * Description: AHCI facade for mapping controller MMIO in an address space.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,8 +15,8 @@
 #ifndef _IR0_AHCI_API_H
 #define _IR0_AHCI_API_H
 
-#include <stdint.h>
+#include <ir0/mm.h>
 
-void ahci_map_mmio_in_directory(uint64_t *pml4);
+void ahci_map_mmio_in_directory(address_space_root_t root);
 
 #endif /* _IR0_AHCI_API_H */

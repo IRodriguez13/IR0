@@ -20,7 +20,7 @@
 /* Opaque-by-contract root of a process translation-table hierarchy. */
 typedef uint64_t *address_space_root_t;
 
-/* Number of root-table slots for the user half (x86-64: PML4[0..255]). */
+/* Number of root translation-table slots assigned to user mappings. */
 unsigned mm_user_root_slots(void);
 
 /* Total root-table slots (x86-64: 512). */

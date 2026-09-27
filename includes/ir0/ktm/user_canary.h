@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <ir0/mm.h>
 #include <stdint.h>
 
 /*
@@ -23,14 +24,17 @@
  * crash further downstream cannot tell us: a memcpy faulting one page past
  * the stack top only proves the length was already wrong.
  */
-void ktm_user_canary_install(uint64_t *pml4, uint64_t stack_top, uint32_t pid);
+void ktm_user_canary_install(address_space_root_t root, uint64_t stack_top,
+			     uint32_t pid);
 
 /*
  * Returns 0 when intact or unreadable, -1 when the pattern was overwritten.
  * Emits a KTM event and dumps the ring on the first breakage seen per task.
  */
-int ktm_user_canary_check(uint64_t *pml4, uint64_t stack_top, uint32_t pid,
+int ktm_user_canary_check(address_space_root_t root, uint64_t stack_top,
+			  uint32_t pid,
 			  const char *where);
 
 /* Rate-limited watchdog for the syscall boundary; cheap to call often. */
-void ktm_user_canary_poll(uint64_t *pml4, uint64_t stack_top, uint32_t pid);
+void ktm_user_canary_poll(address_space_root_t root, uint64_t stack_top,
+			  uint32_t pid);

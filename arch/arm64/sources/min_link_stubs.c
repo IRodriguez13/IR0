@@ -12,6 +12,7 @@
 #include <stdint.h>
 
 #include <arch/common/arch_portable.h>
+#include <ir0/mm.h>
 #include <ir0/oops.h>
 
 /* From freestanding_stubs / serial when linked with boot image. */
@@ -92,12 +93,9 @@ uint64_t __attribute__((weak)) video_backend_get_fb_size(void)
 	return 0;
 }
 
-int __attribute__((weak)) ahci_map_mmio_in_directory(void *dir, uint64_t pa, uint64_t size)
+void __attribute__((weak)) ahci_map_mmio_in_directory(address_space_root_t root)
 {
-	(void)dir;
-	(void)pa;
-	(void)size;
-	return -1;
+	(void)root;
 }
 
 void *__attribute__((weak)) alloc(size_t n)

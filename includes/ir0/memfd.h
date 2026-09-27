@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include <ir0/mm.h>
 #include <ir0/types.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -23,7 +24,7 @@ struct ir0_memfd *ir0_memfd_alloc(void);
 int ir0_memfd_install_fd(struct ir0_memfd *m, int open_flags, int cloexec);
 int ir0_memfd_is(const void *ptr);
 int ir0_memfd_ftruncate(struct ir0_memfd *m, size_t length);
-int ir0_memfd_mmap(struct ir0_memfd *m, uint64_t *pml4, uintptr_t va,
+int ir0_memfd_mmap(struct ir0_memfd *m, address_space_root_t root, uintptr_t va,
 		   size_t length, off_t offset, uint64_t page_flags);
 void ir0_memfd_acquire(struct ir0_memfd *m);
 void ir0_memfd_release(struct ir0_memfd *m);

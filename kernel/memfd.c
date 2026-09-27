@@ -168,7 +168,7 @@ int ir0_memfd_ftruncate(struct ir0_memfd *m, size_t length)
 	return 0;
 }
 
-int ir0_memfd_mmap(struct ir0_memfd *m, uint64_t *pml4, uintptr_t va,
+int ir0_memfd_mmap(struct ir0_memfd *m, address_space_root_t root, uintptr_t va,
 		   size_t length, off_t offset, uint64_t page_flags)
 {
 	size_t off_u;
@@ -176,7 +176,7 @@ int ir0_memfd_mmap(struct ir0_memfd *m, uint64_t *pml4, uintptr_t va,
 	size_t p;
 	size_t start_page;
 
-	if (!m || !ir0_memfd_is(m) || !pml4)
+	if (!m || !ir0_memfd_is(m) || !root)
 		return -EINVAL;
 	if (offset < 0 || (size_t)offset >= m->size)
 		return -EINVAL;
@@ -197,14 +197,14 @@ int ir0_memfd_mmap(struct ir0_memfd *m, uint64_t *pml4, uintptr_t va,
 		if (idx >= m->npages || !m->frames[idx])
 			return -EINVAL;
 		pmm_frame_get(m->frames[idx]);
-		if (map_page_in_directory(pml4, va + p * PAGE_SZ, m->frames[idx],
+		if (map_page_in_directory(root, va + p * PAGE_SZ, m->frames[idx],
 					  page_flags) != 0)
 		{
 			pmm_frame_put(m->frames[idx]);
 			while (p > 0)
 			{
 				p--;
-				unmap_page_in_directory(pml4, va + p * PAGE_SZ);
+				unmap_page_in_directory(root, va + p * PAGE_SZ);
 			}
 			return -ENOMEM;
 		}

@@ -149,7 +149,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	uintptr_t va;
 	size_t p;
 	int ai;
-	uint64_t *pml4;
+	address_space_root_t root;
 	size_t len;
 
 	(void)shmflg;
@@ -161,21 +161,21 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	if (!s || !s->frames)
 		return -EINVAL;
 
-	pml4 = process_pgd(current_process);
+	root = process_pgd(current_process);
 	len = s->npages * PAGE_SZ;
 	va = 0x70000000UL + (uintptr_t)((unsigned)shmid * 0x01000000UL) +
 	     (uintptr_t)((unsigned)s->nattch * 0x00100000UL);
 	for (p = 0; p < s->npages; p++)
 	{
 		pmm_frame_get(s->frames[p]);
-		if (map_page_in_directory(pml4, va + p * PAGE_SZ, s->frames[p],
+		if (map_page_in_directory(root, va + p * PAGE_SZ, s->frames[p],
 					  PAGE_USER | PAGE_RW) != 0)
 		{
 			pmm_frame_put(s->frames[p]);
 			while (p > 0)
 			{
 				p--;
-				unmap_page_in_directory(pml4, va + p * PAGE_SZ);
+				unmap_page_in_directory(root, va + p * PAGE_SZ);
 			}
 			return -ENOMEM;
 		}
@@ -193,7 +193,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 		}
 	}
 	for (p = 0; p < s->npages; p++)
-		unmap_page_in_directory(pml4, va + p * PAGE_SZ);
+		unmap_page_in_directory(root, va + p * PAGE_SZ);
 	return -ENOSPC;
 }
 

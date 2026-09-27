@@ -135,7 +135,7 @@ int exec_detach_shared_mm(process_t *proc)
 {
 	mm_struct_t *old;
 	mm_struct_t *fresh;
-	uint64_t *pml4;
+	address_space_root_t root;
 
 	if (!proc || !proc->mm)
 		return -EINVAL;
@@ -146,14 +146,14 @@ int exec_detach_shared_mm(process_t *proc)
 	if (!fresh)
 		return -ENOMEM;
 
-	pml4 = (uint64_t *)create_process_page_directory();
-	if (!pml4)
+	root = (address_space_root_t)create_process_page_directory();
+	if (!root)
 	{
 		mm_put(fresh);
 		return -ENOMEM;
 	}
 
-	fresh->page_directory = pml4;
+	fresh->page_directory = root;
 	fresh->owns_tables = 1;
 	old = proc->mm;
 	/*
@@ -163,9 +163,9 @@ int exec_detach_shared_mm(process_t *proc)
 	 * image against the parent's tables.
 	 */
 	process_mm_bind(proc, fresh);
-	process_set_mm_root(proc, (uint64_t)(uintptr_t)pml4);
+	process_set_mm_root(proc, (uint64_t)(uintptr_t)root);
 	if (proc == current_process)
-		mm_activate((uintptr_t)pml4);
+		mm_activate((uintptr_t)root);
 	process_vfork_complete(proc);
 	mm_put(old);
 	return 0;

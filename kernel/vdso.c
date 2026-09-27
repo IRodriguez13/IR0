@@ -40,7 +40,7 @@ int vdso_map(struct process *proc)
 	uintptr_t base;
 	uintptr_t base_aligned;
 	size_t map_size;
-	uint64_t *pml4;
+	address_space_root_t root;
 	uint64_t flags;
 	struct ir0_elf64_image image;
 	static const struct ir0_elf64_image_ops inspect_ops = {
@@ -54,8 +54,8 @@ int vdso_map(struct process *proc)
 	if (!proc || proc->mode != USER_MODE)
 		return -EINVAL;
 
-	pml4 = process_pgd(proc);
-	if (!pml4)
+	root = process_pgd(proc);
+	if (!root)
 		return -EINVAL;
 
 	blob = vdso_blob_start();
@@ -83,10 +83,10 @@ int vdso_map(struct process *proc)
 	map_size = (size_t)(((base + blob_size + 0xFFF) & ~0xFFFULL) - base_aligned);
 	flags = PAGE_USER | PAGE_EXEC;
 
-	if (map_user_region_in_directory(pml4, base_aligned, map_size, flags) != 0)
+	if (map_user_region_in_directory(root, base_aligned, map_size, flags) != 0)
 		return -ENOMEM;
 
-	if (copy_to_user_mm(pml4, base, blob, blob_size) != 0)
+	if (copy_to_user_mm(root, base, blob, blob_size) != 0)
 		return -EFAULT;
 
 	return 0;
