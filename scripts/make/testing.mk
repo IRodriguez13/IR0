@@ -2076,6 +2076,7 @@ ARM64_SLICE_OBJS = \
 ARM64_PORTABLE_OBJS = \
 	$(ARM64_SLICE_OBJS) \
 	arch/arm64/sources/gic_v2.o \
+	arch/arm64/sources/bcm2836_irq.o \
 	arch/arm64/sources/irq_backend.o \
 	arch/arm64/sources/arch_irq_init.o \
 	arch/arm64/sources/interrupts.o \
@@ -2172,6 +2173,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/pl011.h arch/arm64/sources/serial_io_arm64.c \
 		arch/arm64/sources/timer.c arch/arm64/sources/timer.h \
 		arch/arm64/sources/gic_v2.c arch/arm64/sources/gic_v2.h \
+		arch/arm64/sources/bcm2836_irq.c arch/arm64/sources/bcm2836_irq.h \
 		arch/arm64/sources/irq_backend.c arch/arm64/sources/irq_backend.h \
 		arch/arm64/sources/syscall_decode.c includes/ir0/syscall_id.h \
 		arch/arm64/sources/syscall_early.c arch/arm64/sources/syscall_early.h \
@@ -2232,6 +2234,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/gic_v2.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/gic_v2.c -o arch/arm64/sources/gic_v2.o
+	@echo "  CC      arch/arm64/sources/bcm2836_irq.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/bcm2836_irq.c -o arch/arm64/sources/bcm2836_irq.o
 	@echo "  CC      arch/arm64/sources/irq_backend.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/irq_backend.c -o arch/arm64/sources/irq_backend.o
@@ -2342,6 +2347,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
+		arch/arm64/sources/bcm2836_irq.o \
 		arch/arm64/sources/irq_backend.o \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/mm_ops.o \
@@ -2360,6 +2366,62 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o
 	@echo "✓ $@"
+
+.PHONY: kernel-arm64-rpi3-early.bin smoke-arm64-rpi3-timer
+kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arch/arm64/linker_rpi.ld
+	@mkdir -p build/arm64-rpi3-early
+	@echo "  CC      arch/arm64/sources/board.c (rpi3 full early image)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DIR0_ARM64_BOARD_RPI3=1 -c \
+		arch/arm64/sources/board.c -o build/arm64-rpi3-early/board.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000UL -c \
+		arch/arm64/sources/boot_stub.c -o build/arm64-rpi3-early/boot_stub.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000 -c \
+		arch/arm64/sources/vectors.S -o build/arm64-rpi3-early/vectors.o
+	@echo "  LD      $@ (load @ 0x80000)"
+	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ \
+		arch/arm64/sources/boot_entry.o build/arm64-rpi3-early/boot_stub.o \
+		arch/arm64/sources/mmu_early.o \
+		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
+		build/arm64-rpi3-early/board.o arch/arm64/sources/boot_info.o \
+		arch/arm64/sources/platform.o arch/arm64/sources/freestanding_stubs.o \
+		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
+		build/arm64-boot/boot_log.o arch/arm64/sources/timer.o \
+		arch/arm64/sources/gic_v2.o arch/arm64/sources/bcm2836_irq.o \
+		arch/arm64/sources/irq_backend.o arch/arm64/sources/syscall_decode.o \
+		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
+		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
+		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
+		arch/arm64/sources/rr_early_stubs.o arch/arm64/sources/elf_load_early.o \
+		arch/arm64/sources/hello_embed.o arch/arm64/sources/busybox_load_early.o \
+		arch/arm64/sources/rootfs_early.o arch/arm64/sources/busybox_embed.o \
+		drivers/virtio/virtio_mmio.o build/arm64-boot/blockdev.o \
+		arch/arm64/sources/virtio_blk_early.o \
+		arch/arm64/sources/virtio_net_early.o build/arm64-rpi3-early/vectors.o
+	@aarch64-linux-gnu-objcopy -O binary $@ build/arm64-rpi3-early/kernel8.img
+	@python3 tests/arm64/make_rpi3_contract_dtb.py build/arm64-rpi3-early/ir0-rpi3.dtb
+	@echo "✓ $@"
+
+smoke-arm64-rpi3-timer: kernel-arm64-rpi3-early.bin
+	@echo "  SMOKE   ARM64 raspi3b firmware DTB + BCM2836 timer IRQ..."
+	@rm -f /tmp/arm64-rpi3-timer-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi3-timer-smoke.log --timeout 20 \
+		--stale-sec 8 --done ARM64_TIMER_IRQ_OK -- \
+		qemu-system-aarch64 -M raspi3b \
+		-kernel build/arm64-rpi3-early/kernel8.img \
+		-dtb build/arm64-rpi3-early/ir0-rpi3.dtb \
+		-nographic -serial mon:stdio -display none -no-reboot 2>/dev/null
+	@grep -q 'ARM64_DTB_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'dtb_irq_controller=0x0000000000000003' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_IRQ_MAP_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BCM2836_IRQ_MAP_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BCM2836_IRQ_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_EL0_PAGE_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_SYSCALL_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-timer-smoke.log
+	@echo "✓ smoke-arm64-rpi3-timer passed"
 
 .PHONY: kernel-arm64-Image
 kernel-arm64-Image: kernel-arm64-boot.bin
@@ -2427,6 +2489,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
+		arch/arm64/sources/bcm2836_irq.o \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
@@ -2509,6 +2572,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
+		arch/arm64/sources/bcm2836_irq.o \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \

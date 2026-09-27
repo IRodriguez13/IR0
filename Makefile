@@ -969,6 +969,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/pl011.o \
     arch/arm64/sources/serial_io_arm64.o \
     arch/arm64/sources/gic_v2.o \
+    arch/arm64/sources/bcm2836_irq.o \
     arch/arm64/sources/syscall_decode.o \
     arch/arm64/sources/syscall_early.o \
     arch/arm64/sources/boot_stub.o \

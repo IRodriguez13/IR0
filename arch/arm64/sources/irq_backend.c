@@ -3,6 +3,7 @@
 
 #include "irq_backend.h"
 #include "gic_v2.h"
+#include "bcm2836_irq.h"
 
 struct arm64_irq_ops
 {
@@ -18,19 +19,38 @@ static const struct arm64_irq_ops g_gic_v2_ops = {
 	arm64_gic_v2_ack,
 	arm64_gic_v2_eoi,
 };
+static const struct arm64_irq_ops g_bcm2836_ops = {
+	arm64_bcm2836_irq_init,
+	arm64_bcm2836_irq_enable,
+	arm64_bcm2836_irq_ack,
+	arm64_bcm2836_irq_eoi,
+};
 static const struct arm64_irq_ops *g_ops;
 
 int arm64_irq_backend_select(enum arm64_irq_controller_model model,
 			     const struct ir0_phys_range *ranges,
 			     uint32_t range_count)
 {
-	if (model != ARM64_IRQ_CONTROLLER_GIC_V2 || !ranges || range_count < 2U)
+	if (!ranges)
 		return -1;
-	if (arm64_gic_v2_configure(ranges[0].base, ranges[0].size,
-				   ranges[1].base, ranges[1].size) != 0)
-		return -1;
-	g_ops = &g_gic_v2_ops;
-	return 0;
+
+	if (model == ARM64_IRQ_CONTROLLER_GIC_V2 && range_count >= 2U)
+	{
+		if (arm64_gic_v2_configure(ranges[0].base, ranges[0].size,
+					   ranges[1].base, ranges[1].size) != 0)
+			return -1;
+		g_ops = &g_gic_v2_ops;
+		return 0;
+	}
+	if (model == ARM64_IRQ_CONTROLLER_BCM2836_LOCAL && range_count >= 1U)
+	{
+		if (arm64_bcm2836_irq_configure(ranges[0].base,
+						ranges[0].size) != 0)
+			return -1;
+		g_ops = &g_bcm2836_ops;
+		return 0;
+	}
+	return -1;
 }
 
 int arm64_irq_backend_init(void)

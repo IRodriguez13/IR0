@@ -42,7 +42,9 @@ void __attribute__((weak)) arm64_all_objs_mark(void)
 #define VIRT_GIC_SIZE   0x00010000UL
 #define USER_PAGE_SIZE  4096
 /* Dedicated DRAM page (32 MiB into RAM) — avoids L3-split of kernel text 2 MiB. */
+#ifndef ARM64_EL0_USER_PAGE_PA
 #define ARM64_EL0_USER_PAGE_PA 0x42000000UL
+#endif
 
 /* Global: referenced from _start asm (must be linker-visible). */
 uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
@@ -72,14 +74,20 @@ static void fill_user_page(void)
 
 static void arm64_irq_oneshot_demo(void)
 {
+	const struct arm64_board_boot_info *boot_info = arm64_board_boot_info();
 	unsigned spins;
 
 	if (arm64_irq_backend_enable(ARM64_IRQ_PHYS_TIMER) != 0)
 	{
-		ir0_boot_smoke("ARM64_GIC_FAIL");
+		ir0_boot_smoke("ARM64_IRQ_BACKEND_FAIL");
 		return;
 	}
-	ir0_boot_smoke("ARM64_GIC_OK");
+	ir0_boot_smoke("ARM64_IRQ_BACKEND_OK");
+	if (boot_info &&
+	    boot_info->irq_controller == ARM64_IRQ_CONTROLLER_BCM2836_LOCAL)
+		ir0_boot_smoke("ARM64_BCM2836_IRQ_OK");
+	else
+		ir0_boot_smoke("ARM64_GIC_OK");
 
 	{
 		unsigned long irqf = irq_save();
@@ -101,6 +109,24 @@ static void arm64_irq_oneshot_demo(void)
 	{
 		ir0_boot_smoke("ARM64_TIMER_IRQ_FAIL");
 	}
+}
+
+static int arm64_irq_select_and_map(const struct arm64_board_boot_info *boot_info)
+{
+	uint32_t i;
+
+	if (!boot_info || boot_info->irq_controller == ARM64_IRQ_CONTROLLER_UNKNOWN ||
+	    boot_info->irq_range_count == 0U)
+		return -1;
+	for (i = 0; i < boot_info->irq_range_count; i++)
+	{
+		if (arm64_mmu_map_device_range(boot_info->irq_mmio[i].base,
+					       boot_info->irq_mmio[i].size) != 0)
+			return -1;
+	}
+	return arm64_irq_backend_select(boot_info->irq_controller,
+					boot_info->irq_mmio,
+					boot_info->irq_range_count);
 }
 
 void boot_main(void)
@@ -155,22 +181,18 @@ void boot_main(void)
 					      {VIRT_GIC_CPU, VIRT_GIC_SIZE}}, 2U) == 0 &&
 	     arm64_mmu_map_device_range(VIRT_GIC_DIST, VIRT_GIC_SIZE) == 0 &&
 	     arm64_mmu_map_device_range(VIRT_GIC_CPU, VIRT_GIC_SIZE) == 0) ||
-	    (boot_info->fdt_valid &&
-	     boot_info->irq_controller == ARM64_IRQ_CONTROLLER_GIC_V2 &&
-	     boot_info->irq_range_count >= 2U &&
-	     arm64_irq_backend_select(boot_info->irq_controller,
-				      boot_info->irq_mmio,
-				      boot_info->irq_range_count) == 0 &&
-	     arm64_mmu_map_device_range(boot_info->irq_mmio[0].base,
-				      boot_info->irq_mmio[0].size) == 0 &&
-	     arm64_mmu_map_device_range(boot_info->irq_mmio[1].base,
-				      boot_info->irq_mmio[1].size) == 0))
+	    (boot_info->fdt_valid && arm64_irq_select_and_map(boot_info) == 0))
 	{
-		ir0_boot_smoke("ARM64_GIC_MAP_OK");
+		ir0_boot_smoke("ARM64_IRQ_MAP_OK");
+		if (boot_info->fdt_valid &&
+		    boot_info->irq_controller == ARM64_IRQ_CONTROLLER_BCM2836_LOCAL)
+			ir0_boot_smoke("ARM64_BCM2836_IRQ_MAP_OK");
+		else
+			ir0_boot_smoke("ARM64_GIC_MAP_OK");
 	}
 	else
 	{
-		ir0_boot_smoke("ARM64_GIC_MAP_FAIL");
+		ir0_boot_smoke("ARM64_IRQ_MAP_FAIL");
 	}
 
 	if (arm64_mmu_map_user_page(ARM64_EL0_USER_PAGE_PA) == 0)

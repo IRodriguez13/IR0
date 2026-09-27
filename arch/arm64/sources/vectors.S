@@ -15,6 +15,10 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#ifndef ARM64_EL0_USER_PAGE_PA
+#define ARM64_EL0_USER_PAGE_PA 0x42000000
+#endif
+
 	.macro	exc_entry, c_handler
 	sub	sp, sp, #256
 	stp	x0, x1, [sp, #0]
@@ -173,22 +177,22 @@ el0_entry:
 	svc	#0
 
 	/* nanosleep({0, 1000000}, NULL) — timespec64 at user page +0x40 */
-	movz	x0, #0x0040
-	movk	x0, #0x4200, lsl #16
+	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x40) & 0xffff)
+	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x40) >> 16) & 0xffff), lsl #16
 	mov	x1, xzr			/* rem = NULL */
 	mov	x8, #101
 	svc	#0
 
 	/* clock_gettime(CLOCK_MONOTONIC, user_page+0x50) */
 	mov	x0, #1			/* CLOCK_MONOTONIC */
-	movz	x1, #0x0050
-	movk	x1, #0x4200, lsl #16
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x50) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x50) >> 16) & 0xffff), lsl #16
 	mov	x8, #113
 	svc	#0
 
 	/* gettimeofday(user_page+0x60, NULL) */
-	movz	x0, #0x0060
-	movk	x0, #0x4200, lsl #16
+	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x60) & 0xffff)
+	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x60) >> 16) & 0xffff), lsl #16
 	mov	x1, xzr
 	mov	x8, #169
 	svc	#0
@@ -196,16 +200,16 @@ el0_entry:
 	/* clock_nanosleep(MONOTONIC, 0, timespec@+0x40, NULL) */
 	mov	x0, #1
 	mov	x1, xzr
-	movz	x2, #0x0040
-	movk	x2, #0x4200, lsl #16
+	movz	x2, #((ARM64_EL0_USER_PAGE_PA + 0x40) & 0xffff)
+	movk	x2, #(((ARM64_EL0_USER_PAGE_PA + 0x40) >> 16) & 0xffff), lsl #16
 	mov	x3, xzr
 	mov	x8, #115
 	svc	#0
 
-	/* write(1, 0x42000000, 15) — "ARM64_WRITE_OK\n" filled by boot */
+	/* write(1, user probe page, 15) — "ARM64_WRITE_OK\n" filled by boot */
 	mov	x0, #1
-	movz	x1, #0x0000
-	movk	x1, #0x4200, lsl #16
+	movz	x1, #(ARM64_EL0_USER_PAGE_PA & 0xffff)
+	movk	x1, #((ARM64_EL0_USER_PAGE_PA >> 16) & 0xffff), lsl #16
 	mov	x2, #15
 	mov	x8, #64
 	svc	#0

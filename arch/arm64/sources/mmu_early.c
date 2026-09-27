@@ -214,6 +214,7 @@ static int install_device_block(uint64_t block)
 
 static void build_idmap(void)
 {
+	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
 	uint64_t l2_dram_pa = (uint64_t)(uintptr_t)l2_dram;
 	uint64_t uart_block = VIRT_UART_BASE & ~0x1FFFFFUL;
 	uint64_t block;
@@ -237,6 +238,9 @@ static void build_idmap(void)
 	g_dram_split = 1;
 	g_user_page_count = 0;
 	select_dram_window();
+	if (boot && boot->fdt_valid && boot->console_uart == ARM64_UART_PL011 &&
+	    boot->console_mmio.size != 0U)
+		uart_block = boot->console_mmio.base & ~(BLOCK_2M - 1U);
 
 	/*
 	 * Map only complete 2 MiB blocks reported by firmware as EL1 (UXN clear).

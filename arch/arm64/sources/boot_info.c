@@ -448,6 +448,8 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 				else if (string_list_has(value, len, "arm,gic-400") ||
 					 string_list_has(value, len, "arm,cortex-a15-gic"))
 					g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_GIC_V2;
+				else if (string_list_has(value, len, "brcm,bcm2836-l1-intc"))
+					g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_BCM2836_LOCAL;
 				if (string_list_has(value, len, "arm,armv8-timer"))
 					g_boot_info.architected_timer = 1;
 				if (string_list_has_prefix(value, len, "raspberrypi,rp1-"))
@@ -681,7 +683,9 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 					len -= tuple_cells * 4U;
 				}
 
-				if (node->range_count < 2U ||
+				if (node->range_count == 0U ||
+				    (node->model != ARM64_IRQ_CONTROLLER_BCM2836_LOCAL &&
+				     node->range_count < 2U) ||
 				    (g_boot_info.irq_controller != ARM64_IRQ_CONTROLLER_UNKNOWN &&
 				     g_boot_info.irq_controller != node->model))
 					return -1;
@@ -721,6 +725,8 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 				else if (string_list_has(value, len, "arm,gic-400") ||
 					 string_list_has(value, len, "arm,cortex-a15-gic"))
 					node->model = ARM64_IRQ_CONTROLLER_GIC_V2;
+				else if (string_list_has(value, len, "brcm,bcm2836-l1-intc"))
+					node->model = ARM64_IRQ_CONTROLLER_BCM2836_LOCAL;
 				if (string_list_has(value, len, "arm,pl011"))
 					node->pl011 = 1;
 			}
