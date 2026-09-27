@@ -13,12 +13,25 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/vdso.h>
-#include <ir0/elf64_layout.h>
+#include <ir0/arch_elf.h>
+#include <ir0/elf64_image.h>
 #include <kernel/process.h>
 #include <mm/paging.h>
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
+
+static int vdso_machine_supported(void *context, uint16_t machine)
+{
+	(void)context;
+	return elf_machine_supported(machine);
+}
+
+static int vdso_type_supported(void *context, uint16_t type)
+{
+	(void)context;
+	return type == IR0_ELF64_ET_DYN;
+}
 
 int vdso_map(struct process *proc)
 {
@@ -29,6 +42,11 @@ int vdso_map(struct process *proc)
 	size_t map_size;
 	uint64_t *pml4;
 	uint64_t flags;
+	struct ir0_elf64_image image;
+	static const struct ir0_elf64_image_ops inspect_ops = {
+		.machine_supported = vdso_machine_supported,
+		.type_supported = vdso_type_supported,
+	};
 
 	if (!vdso_have())
 		return -ENOSYS;
@@ -45,7 +63,7 @@ int vdso_map(struct process *proc)
 	if (!blob || blob_size == 0)
 		return -ENOEXEC;
 
-	if (!elf64_image_valid(blob, blob_size))
+	if (ir0_elf64_image_inspect(blob, blob_size, &inspect_ops, NULL, &image) != 0)
 	{
 		klog_info_fmt("VDSO", "vDSO blob invalid (size=%u magic=%02x%02x%02x%02x)",
 			(unsigned)blob_size,

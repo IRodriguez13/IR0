@@ -25,6 +25,7 @@ struct load_context
 {
 	unsigned char memory[128];
 	uint32_t flags;
+	int mapped;
 };
 
 static int supported(void *context, uint16_t machine)
@@ -38,6 +39,7 @@ static int map_segment(void *opaque, uint64_t va, uint64_t size, uint32_t flags)
 	struct load_context *context = opaque;
 
 	context->flags = flags;
+	context->mapped = 1;
 	return va >= 0x1000 && va + size <= 0x1000 + sizeof(context->memory) ? 0 : -1;
 }
 
@@ -45,6 +47,8 @@ static int copy_segment(void *opaque, uint64_t va, const void *source, uint64_t 
 {
 	struct load_context *context = opaque;
 
+	if (!context->mapped)
+		return -1;
 	memcpy(context->memory + va - 0x1000, source, (size_t)size);
 	return 0;
 }
@@ -55,6 +59,12 @@ static int zero_segment(void *opaque, uint64_t va, uint64_t size)
 
 	memset(context->memory + va - 0x1000, 0, (size_t)size);
 	return 0;
+}
+
+static int exec_or_dyn(void *context, uint16_t type)
+{
+	(void)context;
+	return type == IR0_ELF64_ET_EXEC || type == IR0_ELF64_ET_DYN;
 }
 
 static void make_image(unsigned char *blob, size_t length)
@@ -103,8 +113,11 @@ void test_elf64_image_contract(void)
 	TEST_BEGIN("elf64_image_contract");
 	make_image(blob, sizeof(blob));
 	memset(&context, 0xcc, sizeof(context));
+	context.mapped = 0;
 	ASSERT_EQ(ir0_elf64_image_load(blob, sizeof(blob), &ops, &context, &image), 0);
 	ASSERT_EQ(image.entry, 0x1040);
+	ASSERT_EQ(image.type, IR0_ELF64_ET_EXEC);
+	ASSERT_EQ(image.machine, 183);
 	ASSERT_EQ(image.phdr, 0x1000 + sizeof(struct test_ehdr));
 	ASSERT_EQ(context.flags, IR0_ELF64_PF_R | IR0_ELF64_PF_X);
 	ASSERT_EQ(context.memory[sizeof(struct test_ehdr) + sizeof(struct test_phdr)], 0xaa);
@@ -127,5 +140,18 @@ void test_elf64_image_contract(void)
 	phdr->vaddr = UINT64_MAX - 2;
 	phdr->memsz = 16;
 	ASSERT_NE(ir0_elf64_image_load(blob, sizeof(blob), &ops, &context, &image), 0);
+
+	make_image(blob, sizeof(blob));
+	ehdr = (struct test_ehdr *)blob;
+	ehdr->type = IR0_ELF64_ET_DYN;
+	ASSERT_NE(ir0_elf64_image_inspect(blob, sizeof(blob), &ops, &context, &image), 0);
+	{
+		struct ir0_elf64_image_ops dyn_ops = ops;
+
+		dyn_ops.type_supported = exec_or_dyn;
+		ASSERT_EQ(ir0_elf64_image_inspect(blob, sizeof(blob), &dyn_ops,
+					     &context, &image), 0);
+		ASSERT_EQ(image.type, IR0_ELF64_ET_DYN);
+	}
 	TEST_END();
 }

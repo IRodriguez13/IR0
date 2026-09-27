@@ -69,5 +69,7 @@ int arm64_elf_image_load_early(const void *blob, size_t blob_length,
 		.zero_segment = zero_segment,
 	};
 
-	return ir0_elf64_image_load(blob, blob_length, &ops, 0, image);
+	if (ir0_elf64_image_load(blob, blob_length, &ops, 0, image) != 0)
+		return -1;
+	return image->phdr != 0 ? 0 : -1;
 }

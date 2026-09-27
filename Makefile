@@ -518,6 +518,7 @@ LIB_OBJS = \
     kernel/lib/exec_read_trace.o \
     kernel/lib/mount_prefix.o \
     kernel/lib/blockdev.o \
+    kernel/lib/elf64_image.o \
     kernel/lib/mm_port.o \
     kernel/lib/process_introspect.o \
     kernel/lib/rtc_calendar.o \

@@ -48,6 +48,7 @@
 #include <ir0/abi/elf_reloc_contract.h>
 #include <ir0/abi/elf_interp_contract.h>
 #include <ir0/errno.h>
+#include <ir0/elf64_image.h>
 #include <errno.h>
 
 #define EXEC_SHEBANG_MAX_DEPTH 4
@@ -184,19 +185,27 @@ static void elf_trace_entry_stack_layout(process_t *proc, const elf64_header_t *
     return;
 }
 
-static int validate_elf_header(const elf64_header_t *header)
+static int elf_image_machine_supported(void *context, uint16_t machine)
 {
-    if (header->e_ident[0] != ELF_MAGIC_0 ||
-        header->e_ident[1] != ELF_MAGIC_1 ||
-        header->e_ident[2] != ELF_MAGIC_2 ||
-        header->e_ident[3] != ELF_MAGIC_3)
-        return 0;
-    if (header->e_ident[4] != ELFCLASS64 ||
-        !elf_machine_supported(header->e_machine))
-        return 0;
-    if (header->e_type != ET_EXEC && header->e_type != ET_DYN)
-        return 0;
-    return 1;
+	(void)context;
+	return elf_machine_supported(machine);
+}
+
+static int elf_image_type_supported(void *context, uint16_t type)
+{
+	(void)context;
+	return type == IR0_ELF64_ET_EXEC || type == IR0_ELF64_ET_DYN;
+}
+
+static int validate_elf_header(const elf64_header_t *header, size_t file_size)
+{
+	struct ir0_elf64_image image;
+	static const struct ir0_elf64_image_ops ops = {
+		.machine_supported = elf_image_machine_supported,
+		.type_supported = elf_image_type_supported,
+	};
+
+	return ir0_elf64_image_inspect(header, file_size, &ops, NULL, &image) == 0;
 }
 
 static int exec_buffer_is_elf(const void *data, size_t size)
@@ -627,126 +636,81 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
 }
 
 /* Load ELF segments into memory at correct virtual addresses */
-static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,
-                             process_t *process, uint64_t load_bias, int apply_local_relocs)
+struct elf_process_load_context
 {
-    uint16_t phnum = header->e_phnum;
-    if (phnum > ELF_MAX_PHNUM)
-        phnum = ELF_MAX_PHNUM;
+	uint64_t *address_space_root;
+	uint64_t load_bias;
+};
 
-    if (header->e_phoff > file_size)
-    {
-        klog_debug("ELF", "SERIAL: ELF: Program header table offset out of bounds\n");
-        return -1;
-    }
+static int elf_process_map_segment(void *opaque, uint64_t vaddr, uint64_t memsz,
+				   uint32_t segment_flags)
+{
+	struct elf_process_load_context *context = opaque;
+	uintptr_t biased = vaddr + context->load_bias;
+	uintptr_t aligned;
+	size_t size;
+	uint64_t page_flags = PAGE_USER;
 
-    {
-        uint64_t ph_bytes = (uint64_t)phnum * sizeof(elf64_phdr_t);
-        if (ph_bytes > (uint64_t)file_size - header->e_phoff)
-        {
-            klog_debug("ELF", "SERIAL: ELF: Program header table extends past file\n");
-            return -1;
-        }
-    }
+	if (biased < vaddr || biased + memsz < biased || biased + memsz + 0xFFF < biased)
+		return -1;
+	aligned = biased & ~0xFFFULL;
+	size = (size_t)(((biased + memsz + 0xFFFULL) & ~0xFFFULL) - aligned);
+	if (segment_flags & IR0_ELF64_PF_W)
+		page_flags |= PAGE_RW;
+	if (segment_flags & IR0_ELF64_PF_X)
+		page_flags |= PAGE_EXEC;
+	return map_user_region_in_directory(context->address_space_root, aligned, size,
+					    page_flags);
+}
 
-    elf64_phdr_t *phdr = (elf64_phdr_t *)(file_data + header->e_phoff);
+static int elf_process_copy_segment(void *opaque, uint64_t vaddr,
+				    const void *source, uint64_t length)
+{
+	struct elf_process_load_context *context = opaque;
+	uint64_t biased = vaddr + context->load_bias;
 
-    klog_debug_fmt("ELF", "SERIAL: ELF: Loading %x program segments\n", (unsigned)(phnum));
+	if (biased < vaddr || length > (uint64_t)(size_t)-1)
+		return -1;
+	return copy_to_user_mm(context->address_space_root, biased, source,
+			       (size_t)length);
+}
 
-    /* Get process page directory */
-    uint64_t *pml4 = process_pgd(process);
-    if (!pml4)
-    {
-        klog_debug("ELF", "SERIAL: ELF: Process has no page directory\n");
-        return -1;
-    }
+static int elf_process_zero_segment(void *opaque, uint64_t vaddr, uint64_t length)
+{
+	struct elf_process_load_context *context = opaque;
+	uint64_t biased = vaddr + context->load_bias;
 
-    /*
-     * Phase 1 — map all PT_LOAD regions under kernel CR3.  Page-table
-     * allocation uses the kernel heap and must not run with child CR3 active.
-     */
-    for (int i = 0; i < (int)phnum; i++)
-    {
-        if (phdr[i].p_type != PT_LOAD)
-            continue;
+	if (biased < vaddr || length > (uint64_t)(size_t)-1)
+		return -1;
+	return zero_user_mm(context->address_space_root, biased, (size_t)length);
+}
 
-        if (phdr[i].p_memsz < phdr[i].p_filesz)
-        {
-            klog_debug("ELF", "SERIAL: ELF: PT_LOAD p_memsz < p_filesz\n");
-            return -1;
-        }
+static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,
+			     process_t *process, uint64_t load_bias, int apply_local_relocs)
+{
+	struct elf_process_load_context context = {
+		.address_space_root = process_pgd(process),
+		.load_bias = load_bias,
+	};
+	struct ir0_elf64_image image;
+	static const struct ir0_elf64_image_ops ops = {
+		.machine_supported = elf_image_machine_supported,
+		.type_supported = elf_image_type_supported,
+		.map_segment = elf_process_map_segment,
+		.copy_segment = elf_process_copy_segment,
+		.zero_segment = elf_process_zero_segment,
+	};
 
-        if (phdr[i].p_filesz > 0)
-        {
-            if (phdr[i].p_offset > file_size ||
-                phdr[i].p_filesz > (uint64_t)file_size - phdr[i].p_offset)
-            {
-                klog_debug("ELF", "SERIAL: ELF: PT_LOAD segment file range out of bounds\n");
-                return -1;
-            }
-        }
+	if (!context.address_space_root ||
+	    ir0_elf64_image_load(file_data, file_size, &ops, &context, &image) != 0)
+	{
+		klog_debug("ELF", "SERIAL: ELF: common image load failed\n");
+		return -1;
+	}
 
-        klog_debug_fmt("ELF", "SERIAL: ELF: Mapping segment %x at vaddr 0x%x size 0x%x", (unsigned)(i), (unsigned)((uint32_t)(phdr[i].p_vaddr + load_bias)), (unsigned)((uint32_t)phdr[i].p_memsz));
-
-        {
-            uint64_t memsz = phdr[i].p_memsz;
-            uintptr_t vaddr = phdr[i].p_vaddr + load_bias;
-            uintptr_t vaddr_aligned = vaddr & ~0xFFF;
-            size_t size_aligned = ((vaddr + memsz + 0xFFF) & ~0xFFF) - vaddr_aligned;
-            uint64_t flags = PAGE_USER;
-
-            if (phdr[i].p_flags & 2)
-                flags |= PAGE_RW;
-            if (phdr[i].p_flags & 1)
-                flags |= PAGE_EXEC;
-
-            if (map_user_region_in_directory(pml4, vaddr_aligned, size_aligned, flags) != 0)
-            {
-                klog_debug("ELF", "SERIAL: ELF: Failed to map user memory region\n");
-                return -1;
-            }
-        }
-    }
-
-    /*
-     * Phase 2 — copy segment bytes via physical frames (kernel CR3).
-     */
-    for (int i = 0; i < (int)phnum; i++)
-    {
-        if (phdr[i].p_type != PT_LOAD)
-            continue;
-
-        {
-            uintptr_t vaddr = phdr[i].p_vaddr + load_bias;
-
-            if (phdr[i].p_filesz > 0)
-            {
-                if (copy_to_user_mm(pml4, vaddr,
-                        file_data + phdr[i].p_offset,
-                        (size_t)phdr[i].p_filesz) != 0)
-                {
-                    klog_debug("ELF", "SERIAL: ELF: Failed to copy segment data\n");
-                    return -1;
-                }
-                klog_debug_fmt("ELF", "SERIAL: ELF: Copied %x bytes from file to vaddr 0x%x", (unsigned)((uint32_t)phdr[i].p_filesz), (unsigned)((uint32_t)vaddr));
-            }
-
-            if (phdr[i].p_memsz > phdr[i].p_filesz)
-            {
-                if (zero_user_mm(pml4,
-                        vaddr + phdr[i].p_filesz,
-                        (size_t)(phdr[i].p_memsz - phdr[i].p_filesz)) != 0)
-                {
-                    klog_debug("ELF", "SERIAL: ELF: Failed to zero BSS\n");
-                    return -1;
-                }
-                klog_debug("ELF", "SERIAL: ELF: Zeroed BSS section\n");
-            }
-        }
-    }
-
-    if (apply_local_relocs &&
-        elf_apply_local_relocs(header, file_data, file_size, pml4) != 0)
+	if (apply_local_relocs &&
+	    elf_apply_local_relocs(header, file_data, file_size,
+				  context.address_space_root) != 0)
     {
         klog_debug("ELF", "SERIAL: ELF: local reloc apply failed\n");
         return -1;
@@ -772,7 +736,7 @@ static int elf_try_load_interp(process_t *process, const char *path,
     if (rc != 0 || !idata)
         return 1;
 
-    if (!validate_elf_header((elf64_header_t *)idata))
+    if (!validate_elf_header((elf64_header_t *)idata, isize))
     {
         kfree(idata);
         return -ENOEXEC;
@@ -1358,7 +1322,7 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     }
 
     /* Step 2: Validate ELF header */
-    if (!validate_elf_header((elf64_header_t *)file_data))
+    if (!validate_elf_header((elf64_header_t *)file_data, file_size))
     {
         klog_debug("ELF", "SERIAL: ELF: ERROR - Invalid ELF header\n");
         kfree(file_data);
@@ -1843,7 +1807,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
         }
     }
 
-    if (!validate_elf_header((elf64_header_t *)file_data))
+    if (!validate_elf_header((elf64_header_t *)file_data, file_size))
     {
         kfree(file_data);
         exec_commit_emit("return-validate_elf_fail", -ENOEXEC, proc,
