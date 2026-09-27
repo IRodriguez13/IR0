@@ -221,6 +221,9 @@ musl-aarch64-hello: setup-musl-aarch64
 .PHONY: busybox-aarch64-min
 BUSYBOX_AARCH64 = $(KERNEL_ROOT)/build/busybox_aarch64
 BUSYBOX_AARCH64_BUILD = $(KERNEL_ROOT)/build/busybox-arm64-src
+BUSYBOX_AARCH64_RPI3 = $(KERNEL_ROOT)/build/busybox_aarch64_rpi3
+BUSYBOX_AARCH64_RPI3_BUILD = $(KERNEL_ROOT)/build/busybox-arm64-rpi3-src
+MUSL_AARCH64_HELLO_RPI3 = $(KERNEL_ROOT)/build/hello_aarch64_rpi3
 MUSL_CROSS_AARCH64 = $(patsubst %gcc,%,$(MUSL_CC_AARCH64))
 busybox-aarch64-min: setup-musl-aarch64
 	@mkdir -p $(KERNEL_ROOT)/build
@@ -258,6 +261,49 @@ busybox-aarch64-min: setup-musl-aarch64
 	@! file -b $(BUSYBOX_AARCH64) | grep -qi pie
 	@readelf -h $(BUSYBOX_AARCH64) | grep -q 'Entry point address:.*0x44'
 	@echo "✓ busybox-aarch64-min → $(BUSYBOX_AARCH64)"
+
+.PHONY: arm64-rpi3-userspace-layout arm64-rpi3-userspace-layout-build
+arm64-rpi3-userspace-layout:
+	@if [ -x "$(MUSL_AARCH64_HELLO_RPI3)" ] && \
+	   [ -x "$(BUSYBOX_AARCH64_RPI3)" ] && \
+	   [ "$(BUSYBOX_AARCH64_RPI3)" -nt "$(BUSYBOX_SRC)/.config" ]; then \
+		echo "✓ arm64-rpi3-userspace-layout cached"; \
+	else \
+		$(MAKE) -s arm64-rpi3-userspace-layout-build; \
+	fi
+
+arm64-rpi3-userspace-layout-build: setup-musl-aarch64
+	@mkdir -p $(KERNEL_ROOT)/build
+	@echo "  CC      hello_aarch64_rpi3 @ 0x03000000"
+	@aarch64-linux-gnu-gcc -nostdlib -static -fno-pie -no-pie -Os \
+		-Wl,-Ttext-segment=0x03000000 -Wl,-e,_start \
+		-o $(MUSL_AARCH64_HELLO_RPI3) \
+		$(KERNEL_ROOT)/setup/pid1/hello_aarch64_freestanding.c
+	@set -e; \
+	if [ ! -f "$(BUSYBOX_AARCH64_RPI3_BUILD)/Makefile" ]; then \
+		cp -a "$(BUSYBOX_SRC)" "$(BUSYBOX_AARCH64_RPI3_BUILD)"; \
+	fi; \
+	$(MAKE) -s -C "$(BUSYBOX_AARCH64_RPI3_BUILD)" mrproper; \
+	cp -f "$(BUSYBOX_SRC)/.config" "$(BUSYBOX_AARCH64_RPI3_BUILD)/.config"; \
+	iv -r "$(BUSYBOX_AARCH64_RPI3_BUILD)/.config" \
+		-m 'CONFIG_EXTRA_CFLAGS' 'CONFIG_EXTRA_CFLAGS="-fno-pie"' -q; \
+	iv -r "$(BUSYBOX_AARCH64_RPI3_BUILD)/.config" \
+		-m 'CONFIG_EXTRA_LDFLAGS' \
+		'CONFIG_EXTRA_LDFLAGS="-no-pie -Wl,-Ttext-segment=0x04000000"' -q; \
+	iv -r "$(BUSYBOX_AARCH64_RPI3_BUILD)/.config" \
+		-m 'CONFIG_ECHO' 'CONFIG_ECHO=y' -q; \
+	$(MAKE) -s -C "$(BUSYBOX_AARCH64_RPI3_BUILD)" \
+		ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+		CC=aarch64-linux-gnu-gcc oldconfig </dev/null; \
+	$(MAKE) -s -C "$(BUSYBOX_AARCH64_RPI3_BUILD)" \
+		ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+		CC=aarch64-linux-gnu-gcc -j$${IR0_JOBS:-2}; \
+	cp -f "$(BUSYBOX_AARCH64_RPI3_BUILD)/busybox_unstripped" \
+		"$(BUSYBOX_AARCH64_RPI3)"; \
+	aarch64-linux-gnu-strip "$(BUSYBOX_AARCH64_RPI3)"
+	@readelf -h $(MUSL_AARCH64_HELLO_RPI3) | grep -q 'Entry point address:.*0x300'
+	@readelf -h $(BUSYBOX_AARCH64_RPI3) | grep -q 'Entry point address:.*0x400'
+	@echo "✓ arm64-rpi3-userspace-layout"
 
 smoke-musl-aarch64-toolchain: musl-aarch64-hello
 	@file $(MUSL_AARCH64_HELLO) | grep -qi 'ELF'
@@ -2368,7 +2414,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "✓ $@"
 
 .PHONY: kernel-arm64-rpi3-early.bin smoke-arm64-rpi3-timer
-kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arch/arm64/linker_rpi.ld
+kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
+		arch/arm64/linker_rpi.ld
 	@mkdir -p build/arm64-rpi3-early
 	@echo "  CC      arch/arm64/sources/board.c (rpi3 full early image)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DIR0_ARM64_BOARD_RPI3=1 -c \
@@ -2377,6 +2424,22 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arch/arm64/linker_rpi.ld
 		arch/arm64/sources/boot_stub.c -o build/arm64-rpi3-early/boot_stub.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000 -c \
 		arch/arm64/sources/vectors.S -o build/arm64-rpi3-early/vectors.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_MUSL_STACK_TOP=0x03180000UL -c \
+		arch/arm64/sources/elf_load_early.c -o build/arm64-rpi3-early/elf_load_early.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_BB_STACK_TOP=0x041a0000UL \
+		-DARM64_BUSYBOX_SKIP_INIT_HARNESS=1 -c \
+		arch/arm64/sources/busybox_load_early.c -o build/arm64-rpi3-early/busybox_load_early.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
+		-DARM64_MUSL_MMAP_BASE=0x031a0000UL -DARM64_MUSL_MMAP_END=0x03200000UL \
+		-DARM64_BB_BRK_START=0x04030000UL -DARM64_BB_MMAP_BASE=0x04200000UL \
+		-DARM64_BB_MMAP_END=0x04800000UL -c arch/arm64/sources/syscall_early.c \
+		-o build/arm64-rpi3-early/syscall_early.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
+		-DARM64_HELLO_BLOB_PATH='"build/hello_aarch64_rpi3"' -c \
+		arch/arm64/sources/hello_embed.S -o build/arm64-rpi3-early/hello_embed.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
+		-DARM64_BUSYBOX_BLOB_PATH='"build/busybox_aarch64_rpi3"' -c \
+		arch/arm64/sources/busybox_embed.S -o build/arm64-rpi3-early/busybox_embed.o
 	@echo "  LD      $@ (load @ 0x80000)"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ \
 		arch/arm64/sources/boot_entry.o build/arm64-rpi3-early/boot_stub.o \
@@ -2388,14 +2451,15 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arch/arm64/linker_rpi.ld
 		build/arm64-boot/boot_log.o arch/arm64/sources/timer.o \
 		arch/arm64/sources/gic_v2.o arch/arm64/sources/bcm2836_irq.o \
 		arch/arm64/sources/irq_backend.o arch/arm64/sources/syscall_decode.o \
-		arch/arm64/sources/syscall_early.o arch/arm64/sources/mm_ops.o \
+		build/arm64-rpi3-early/syscall_early.o arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
-		arch/arm64/sources/rr_early_stubs.o arch/arm64/sources/elf_load_early.o \
-		arch/arm64/sources/hello_embed.o arch/arm64/sources/busybox_load_early.o \
-		arch/arm64/sources/rootfs_early.o arch/arm64/sources/busybox_embed.o \
+		arch/arm64/sources/rr_early_stubs.o build/arm64-rpi3-early/elf_load_early.o \
+		build/arm64-rpi3-early/hello_embed.o \
+		build/arm64-rpi3-early/busybox_load_early.o \
+		arch/arm64/sources/rootfs_early.o build/arm64-rpi3-early/busybox_embed.o \
 		drivers/virtio/virtio_mmio.o build/arm64-boot/blockdev.o \
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o build/arm64-rpi3-early/vectors.o
@@ -2420,6 +2484,9 @@ smoke-arm64-rpi3-timer: kernel-arm64-rpi3-early.bin
 	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_EL0_PAGE_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_SYSCALL_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_MUSL_HELLO_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BUSYBOX_EL0_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BUSYBOX_INIT_DEFERRED' /tmp/arm64-rpi3-timer-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-timer-smoke.log
 	@echo "✓ smoke-arm64-rpi3-timer passed"
 

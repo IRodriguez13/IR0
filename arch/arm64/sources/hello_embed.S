@@ -11,6 +11,9 @@
 	.align 3
 	.global hello_aarch64_blob
 	.global hello_aarch64_blob_end
+#ifndef ARM64_HELLO_BLOB_PATH
+#define ARM64_HELLO_BLOB_PATH "build/hello_aarch64"
+#endif
 hello_aarch64_blob:
-	.incbin "build/hello_aarch64"
+	.incbin ARM64_HELLO_BLOB_PATH
 hello_aarch64_blob_end:

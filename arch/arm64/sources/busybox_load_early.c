@@ -23,7 +23,9 @@
 #define PF_X 1
 #define PAGE_SIZE 4096UL
 
-#define BB_STACK_TOP 0x441a0000UL
+#ifndef ARM64_BB_STACK_TOP
+#define ARM64_BB_STACK_TOP 0x441a0000UL
+#endif
 #define BB_STACK_PAGES 4U
 #define SPSR_DAIF_MASKED 0x3c0UL
 #define SPSR_MODE_EL0T 0x0UL
@@ -249,10 +251,16 @@ void arm64_after_busybox(void)
 			ir0_boot_smoke("ARM64_BUSYBOX_EL0_OK");
 		else
 			ir0_boot_smoke("ARM64_BUSYBOX_EL0_FAIL");
+#ifdef ARM64_BUSYBOX_SKIP_INIT_HARNESS
+		ir0_boot_smoke("ARM64_BUSYBOX_INIT_DEFERRED");
+		arm64_enter_el0();
+		return;
+#else
 		g_bb_stage = 1;
 		if (arm64_busybox_init_el0() != 0)
 			arm64_enter_el0();
 		return;
+#endif
 	}
 
 	if (g_bb_init_wrote)
@@ -269,7 +277,7 @@ static void enter_busybox_el0(uint64_t entry, int init_stage)
 	enable_fp_simd();
 	arm64_syscall_reset_busybox_heap();
 	g_bb_mode = 1;
-	setup_busybox_argv_stack(BB_STACK_TOP, init_stage);
+	setup_busybox_argv_stack(ARM64_BB_STACK_TOP, init_stage);
 	if (init_stage)
 		ir0_boot_smoke("ARM64_BUSYBOX_INIT_EL0_DROP");
 	else
@@ -315,7 +323,7 @@ int arm64_busybox_el0(void)
 
 	for (i = 0; i < BB_STACK_PAGES; i++)
 	{
-		uint64_t page = BB_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
+		uint64_t page = ARM64_BB_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
 
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
 		{

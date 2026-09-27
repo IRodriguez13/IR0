@@ -35,15 +35,31 @@
 
 #define ENOTTY 25
 
-#define MUSL_MMAP_BASE 0x431a0000UL
-#define MUSL_MMAP_END  0x43200000UL
+#ifndef ARM64_MUSL_MMAP_BASE
+#define ARM64_MUSL_MMAP_BASE 0x431a0000UL
+#endif
+#ifndef ARM64_MUSL_MMAP_END
+#define ARM64_MUSL_MMAP_END 0x43200000UL
+#endif
 /*
  * BusyBox data LOAD ends ~0x44157b60; heap brk starts at next page.
  * Anonymous mmap bump shares the same high window up to BB_MMAP_END.
  */
-#define BB_BRK_START   0x44158000UL
-#define BB_MMAP_BASE   0x44200000UL
-#define BB_MMAP_END    0x44800000UL
+#ifndef ARM64_BB_BRK_START
+#define ARM64_BB_BRK_START 0x44158000UL
+#endif
+#ifndef ARM64_BB_MMAP_BASE
+#define ARM64_BB_MMAP_BASE 0x44200000UL
+#endif
+#ifndef ARM64_BB_MMAP_END
+#define ARM64_BB_MMAP_END 0x44800000UL
+#endif
+
+#define MUSL_MMAP_BASE ARM64_MUSL_MMAP_BASE
+#define MUSL_MMAP_END  ARM64_MUSL_MMAP_END
+#define BB_BRK_START   ARM64_BB_BRK_START
+#define BB_MMAP_BASE   ARM64_BB_MMAP_BASE
+#define BB_MMAP_END    ARM64_BB_MMAP_END
 
 static uint64_t g_musl_brk = MUSL_MMAP_BASE;
 static uint64_t g_musl_mmap_bump = MUSL_MMAP_BASE;

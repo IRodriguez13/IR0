@@ -11,6 +11,9 @@
 	.align 3
 	.global busybox_aarch64_blob
 	.global busybox_aarch64_blob_end
+#ifndef ARM64_BUSYBOX_BLOB_PATH
+#define ARM64_BUSYBOX_BLOB_PATH "build/busybox_aarch64"
+#endif
 busybox_aarch64_blob:
-	.incbin "build/busybox_aarch64"
+	.incbin ARM64_BUSYBOX_BLOB_PATH
 busybox_aarch64_blob_end:

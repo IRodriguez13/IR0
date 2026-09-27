@@ -21,7 +21,9 @@
 #define PF_X 1
 #define PAGE_SIZE 4096UL
 
-#define MUSL_STACK_TOP 0x43180000UL
+#ifndef ARM64_MUSL_STACK_TOP
+#define ARM64_MUSL_STACK_TOP 0x43180000UL
+#endif
 #define MUSL_STACK_PAGES 2U
 #define SPSR_DAIF_MASKED 0x3c0UL
 #define SPSR_MODE_EL0T 0x0UL
@@ -209,7 +211,7 @@ static void enter_musl_el0(uint64_t entry)
 
 	enable_fp_simd();
 	g_musl_mode = 1;
-	setup_auxv_stack(MUSL_STACK_TOP);
+	setup_auxv_stack(ARM64_MUSL_STACK_TOP);
 	ir0_boot_smoke("ARM64_MUSL_EL0_DROP");
 
 	__asm__ volatile(
@@ -235,7 +237,7 @@ int arm64_musl_hello_el0(void)
 
 	for (i = 0; i < MUSL_STACK_PAGES; i++)
 	{
-		uint64_t page = MUSL_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
+		uint64_t page = ARM64_MUSL_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
 
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
 		{
