@@ -41,6 +41,7 @@
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
 #include <ir0/boot_log.h>
+#include <ir0/init_handoff.h>
 #include <ir0/vfs.h>
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
@@ -321,31 +322,81 @@ void boot_diagnostics(void)
 #endif
 }
 
+static int handoff_prepare_rootfs(void *context)
+{
+	(void)context;
+	ir0_rootfs_prepare_userspace_base();
+	return 0;
+}
+
+static int handoff_prepare_init_task(void *context)
+{
+	(void)context;
+	process_prepare_pid1_for_init();
+	return 0;
+}
+
+static long handoff_load_init(void *context, const char *path,
+			      char *const argv[])
+{
+	(void)context;
+	return kexecve(path, argv, NULL);
+}
+
+static int handoff_spawn_idle(void *context)
+{
+	int result;
+
+	(void)context;
+	result = spawn_kernel(kernel_idle_loop, "idle") < 0 ? -1 : 0;
+	if (result != 0)
+		klog_notice("BOOT",
+			    "idle task spawn failed; UP idle heuristic only");
+	return result;
+}
+
+static void handoff_init_loaded(void *context, long init_pid)
+{
+	(void)context;
+	klog_info_fmt("INIT", "/sbin/init loaded (PID %d), scheduling",
+		      (int)init_pid);
+}
+
+static void handoff_attach_console(void *context)
+{
+	(void)context;
+	ir0_console_on_userspace_attach();
+}
+
+static void handoff_schedule(void *context)
+{
+	(void)context;
+	sched_schedule_next();
+}
+
 void boot_enter_userspace(void)
 {
-	pid_t init_pid;
+	long init_pid;
 	char *argv_init[] = { "/sbin/init", NULL };
+	static const struct ir0_init_handoff_ops ops = {
+		.prepare_rootfs = handoff_prepare_rootfs,
+		.prepare_init_task = handoff_prepare_init_task,
+		.load_init = handoff_load_init,
+		.init_loaded = handoff_init_loaded,
+		.spawn_idle = handoff_spawn_idle,
+		.attach_console = handoff_attach_console,
+		.schedule = handoff_schedule,
+	};
 
 	klog_set_boot_phase(KLOG_BOOT_USERSPACE);
 	klog_notice("BOOT", "system ready for userspace");
 	klog_event(KLOG_EVENT_USERSPACE_HANDOFF, 0, KLOG_LEVEL_INFO, "INIT",
 		   "exec /sbin/init");
-	ir0_rootfs_prepare_userspace_base();
-	process_prepare_pid1_for_init();
-	init_pid = kexecve("/sbin/init", argv_init, NULL);
+	init_pid = ir0_init_handoff_run(&ops, NULL, "/sbin/init", argv_init);
 	if (init_pid < 0)
 	{
 		log_error("BOOT", "FAILED to load /sbin/init");
 		panic("Failed to load /sbin/init");
 	}
-	klog_info_fmt("INIT", "/sbin/init loaded (PID %d), scheduling",
-		      init_pid);
-
-	if (spawn_kernel(kernel_idle_loop, "idle") < 0)
-		klog_notice("BOOT",
-			    "idle task spawn failed; UP idle heuristic only");
-
-	ir0_console_on_userspace_attach();
-	sched_schedule_next();
 	panic("sched_schedule_next returned after userspace init");
 }

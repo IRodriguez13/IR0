@@ -185,8 +185,8 @@ void arm64_after_musl(void)
 		ir0_boot_smoke("ARM64_MUSL_HELLO_OK");
 	else
 		ir0_boot_smoke("ARM64_MUSL_HELLO_FAIL");
-	/* BusyBox echo applet, then F7c EL0 syscall smoke. */
-	if (arm64_busybox_el0() != 0)
+	/* Common init handoff contract, backed by the early ARM64 provider. */
+	if (arm64_init_handoff_early() != 0)
 	{
 		extern void arm64_enter_el0(void);
 

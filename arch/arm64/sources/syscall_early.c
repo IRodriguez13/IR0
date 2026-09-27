@@ -606,7 +606,12 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		{
 			*leave_el0 = 1;
 		}
-		if (arm64_musl_mode() || arm64_busybox_mode())
+		if (arm64_busybox_mode())
+		{
+			ir0_boot_smoke("ARM64_BUSYBOX_EXIT_OK");
+			return a0;
+		}
+		if (arm64_musl_mode())
 			return a0;
 		if (arm64_syscall_smoke_ok())
 		{

@@ -341,6 +341,7 @@ QEMU_64_FLAGS = -cdrom
 KERNEL_OBJS = \
 	kernel/main.o \
 	kernel/boot_init.o \
+	kernel/init_handoff.o \
     kernel/cmdline.o \
     kernel/rootfs_base.o \
     kernel/process/core.o \
@@ -997,6 +998,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/elf_load_early.o \
     arch/arm64/sources/hello_embed.o \
     arch/arm64/sources/busybox_load_early.o \
+    arch/arm64/sources/init_handoff_early.o \
     arch/arm64/sources/rootfs_early.o \
     arch/arm64/sources/busybox_embed.o \
     arch/arm64/sources/rr_early.o \

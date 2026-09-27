@@ -68,6 +68,9 @@ static int g_bb_wrote;
 static int g_bb_init_wrote;
 static int g_bb_stage;
 static uint64_t g_bb_entry;
+static uint64_t g_bb_phdr;
+static uint64_t g_bb_phent;
+static uint64_t g_bb_phnum;
 
 int arm64_busybox_mode(void)
 {
@@ -146,6 +149,7 @@ static int map_range(uint64_t va, uint64_t memsz, int exec)
 static int load_elf(const uint8_t *blob, uint64_t blob_len, uint64_t *entry_out)
 {
 	const struct elf64_ehdr *ehdr;
+	uint64_t phdr_va = 0;
 	uint16_t i;
 
 	if (blob_len < sizeof(*ehdr))
@@ -179,6 +183,10 @@ static int load_elf(const uint8_t *blob, uint64_t blob_len, uint64_t *entry_out)
 		exec = (ph->p_flags & PF_X) ? 1 : 0;
 		if (map_range(va, memsz, exec) != 0)
 			return -1;
+		if (ehdr->e_phoff >= ph->p_offset &&
+		    ehdr->e_phoff + (uint64_t)ehdr->e_phnum * ehdr->e_phentsize <=
+			    ph->p_offset + ph->p_filesz)
+			phdr_va = ph->p_vaddr + (ehdr->e_phoff - ph->p_offset);
 		copy_bytes((void *)(uintptr_t)va, blob + ph->p_offset, ph->p_filesz);
 		if (memsz > ph->p_filesz)
 			zero_bytes((void *)(uintptr_t)(va + ph->p_filesz),
@@ -186,6 +194,11 @@ static int load_elf(const uint8_t *blob, uint64_t blob_len, uint64_t *entry_out)
 	}
 
 	*entry_out = ehdr->e_entry;
+	g_bb_phdr = phdr_va;
+	g_bb_phent = ehdr->e_phentsize;
+	g_bb_phnum = ehdr->e_phnum;
+	if (g_bb_phdr == 0)
+		return -1;
 	return 0;
 }
 
@@ -214,19 +227,33 @@ static void setup_busybox_argv_stack(uint64_t sp_top, int init_stage)
 	randp[0] = 0x72706e646f6d3149ULL;
 	randp[1] = 0x495231302e302e31ULL;
 
-	sp = (uint64_t *)(uintptr_t)(sp_top - 256UL - 16UL - 8UL * 16UL);
+	sp = (uint64_t *)(uintptr_t)(sp_top - 640UL);
 	sp[0] = 2;
 	sp[1] = (uint64_t)(uintptr_t)str_area;
 	sp[2] = (uint64_t)(uintptr_t)(str_area + 5);
 	sp[3] = 0;
 	sp[4] = 0;
 	aux = &sp[5];
-	aux[0] = 6;
-	aux[1] = 4096UL;
-	aux[2] = 25;
-	aux[3] = (uint64_t)(uintptr_t)randp;
-	aux[4] = 0;
-	aux[5] = 0;
+#define AUXV_PAIR(index, type, value) do { \
+	aux[(index) * 2] = (type); \
+	aux[(index) * 2 + 1] = (value); \
+} while (0)
+	AUXV_PAIR(0, 3, g_bb_phdr);             /* AT_PHDR */
+	AUXV_PAIR(1, 4, g_bb_phent);            /* AT_PHENT */
+	AUXV_PAIR(2, 5, g_bb_phnum);            /* AT_PHNUM */
+	AUXV_PAIR(3, 6, PAGE_SIZE);              /* AT_PAGESZ */
+	AUXV_PAIR(4, 7, 0);                      /* AT_BASE */
+	AUXV_PAIR(5, 8, 0);                      /* AT_FLAGS */
+	AUXV_PAIR(6, 9, g_bb_entry);             /* AT_ENTRY */
+	AUXV_PAIR(7, 11, 0);                     /* AT_UID */
+	AUXV_PAIR(8, 12, 0);                     /* AT_EUID */
+	AUXV_PAIR(9, 13, 0);                     /* AT_GID */
+	AUXV_PAIR(10, 14, 0);                    /* AT_EGID */
+	AUXV_PAIR(11, 23, 0);                    /* AT_SECURE */
+	AUXV_PAIR(12, 25, (uint64_t)(uintptr_t)randp); /* AT_RANDOM */
+	AUXV_PAIR(13, 31, (uint64_t)(uintptr_t)str_area); /* AT_EXECFN */
+	AUXV_PAIR(14, 0, 0);                     /* AT_NULL */
+#undef AUXV_PAIR
 	__asm__ volatile("msr sp_el0, %0" :: "r"(sp) : "memory");
 }
 
@@ -286,11 +313,13 @@ static void enter_busybox_el0(uint64_t entry, int init_stage)
 	__asm__ volatile(
 		"msr	elr_el1, %0\n"
 		"msr	spsr_el1, %1\n"
+		/* Static ELF: Linux defines x0 (rtld_fini) as NULL at entry. */
+		"mov\tx0, xzr\n"
 		"isb\n"
 		"eret\n"
 		:
 		: "r"(entry), "r"(spsr)
-		: "memory");
+		: "x0", "memory");
 	__builtin_unreachable();
 }
 
@@ -308,7 +337,7 @@ int arm64_busybox_init_el0(void)
 	return 0;
 }
 
-int arm64_busybox_el0(void)
+int arm64_busybox_prepare(void)
 {
 	const uint8_t *blob = busybox_aarch64_blob;
 	uint64_t blob_len = (uint64_t)(busybox_aarch64_blob_end - busybox_aarch64_blob);
@@ -341,6 +370,19 @@ int arm64_busybox_el0(void)
 
 	ir0_boot_smoke("ARM64_BUSYBOX_LOAD_OK");
 	g_bb_entry = entry;
-	enter_busybox_el0(entry, 0);
 	return 0;
+}
+
+void arm64_busybox_enter(void)
+{
+	if (g_bb_entry != 0)
+		enter_busybox_el0(g_bb_entry, 0);
+}
+
+int arm64_busybox_el0(void)
+{
+	if (arm64_busybox_prepare() != 0)
+		return -1;
+	arm64_busybox_enter();
+	return -1;
 }

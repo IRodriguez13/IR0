@@ -2345,6 +2345,11 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/busybox_load_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/busybox_load_early.c -o arch/arm64/sources/busybox_load_early.o
+	@echo "  CC      common init handoff + ARM64 provider"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		kernel/init_handoff.c -o build/arm64-boot/init_handoff.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+		arch/arm64/sources/init_handoff_early.c -o arch/arm64/sources/init_handoff_early.o
 	@echo "  CC      arch/arm64/sources/rootfs_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/rootfs_early.c -o arch/arm64/sources/rootfs_early.o
@@ -2405,6 +2410,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/rr_early_stubs.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
 		arch/arm64/sources/busybox_embed.o \
 		drivers/virtio/virtio_mmio.o \
 		build/arm64-boot/blockdev.o \
@@ -2459,7 +2465,8 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/rr_early_stubs.o build/arm64-rpi3-early/elf_load_early.o \
 		build/arm64-rpi3-early/hello_embed.o \
 		build/arm64-rpi3-early/busybox_load_early.o \
-		arch/arm64/sources/rootfs_early.o build/arm64-rpi3-early/busybox_embed.o \
+		arch/arm64/sources/rootfs_early.o arch/arm64/sources/init_handoff_early.o \
+		build/arm64-boot/init_handoff.o build/arm64-rpi3-early/busybox_embed.o \
 		drivers/virtio/virtio_mmio.o build/arm64-boot/blockdev.o \
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o build/arm64-rpi3-early/vectors.o
@@ -2485,7 +2492,11 @@ smoke-arm64-rpi3-timer: kernel-arm64-rpi3-early.bin
 	@grep -q 'ARM64_EL0_PAGE_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_SYSCALL_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_MUSL_HELLO_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_PID1_LOAD_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_INIT_HANDOFF_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_BUSYBOX_EL0_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BUSYBOX_EXIT_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@! grep -q 'ARM64_EL0_SYNC_OTHER' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_DEFERRED' /tmp/arm64-rpi3-timer-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-timer-smoke.log
 	@echo "✓ smoke-arm64-rpi3-timer passed"
@@ -2567,6 +2578,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/rr_early_stubs.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
 		arch/arm64/sources/busybox_embed.o \
 		drivers/virtio/virtio_mmio.o \
 		build/arm64-boot/blockdev.o \
@@ -2650,6 +2662,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/rr_early_stubs.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
 		arch/arm64/sources/busybox_embed.o \
 		drivers/virtio/virtio_mmio.o \
 		build/arm64-boot/blockdev.o \
