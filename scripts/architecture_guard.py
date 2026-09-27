@@ -1786,6 +1786,83 @@ def check_devfs_no_find_by_id_outside_devfs():
     return errors
 
 
+def check_ktm_mock_boundaries():
+    """Keep fake hardware test-only and outside production driver trees."""
+    errors = []
+    mock_root = ROOT / "ktm" / "mocks"
+    product_configs = [
+        ROOT / "setup" / "defconfig",
+        ROOT / "setup" / "configs" / "userspace-ext2-root.defconfig",
+    ]
+    forbidden_roots = [
+        ROOT / "arch",
+        ROOT / "drivers",
+        ROOT / "fs",
+        ROOT / "kernel",
+        ROOT / "mm",
+        ROOT / "net",
+        ROOT / "sched",
+    ]
+
+    legacy = ROOT / "ktm" / "backends"
+    if legacy.exists() and any(iter_c_files(legacy)):
+        errors.append("[ktm-mock-layout] ktm/backends must not contain test doubles")
+
+    for cfg in product_configs:
+        if not cfg.exists():
+            continue
+        for line_no, line in enumerate(cfg.read_text(errors="replace").splitlines(), 1):
+            if re.match(r"CONFIG_KTM_.*(?:FAKE|MOCK).*=y$", line.strip()):
+                rel = cfg.relative_to(ROOT)
+                errors.append(
+                    f"[ktm-mock-product-config] {rel}:{line_no}: {line.strip()}"
+                )
+
+    mock_include = re.compile(r'^\s*#\s*include\s*[<\"]ktm_mock_')
+    for base in forbidden_roots:
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                if mock_include.search(line):
+                    rel = path.relative_to(ROOT)
+                    errors.append(
+                        f"[ktm-mock-production-include] {rel}:{line_no}: {line.strip()}"
+                    )
+
+    if mock_root.exists():
+        for path in iter_c_files(mock_root):
+            text = path.read_text(errors="replace")
+            if "ir0_boot_smoke" in text or "klog_smoke" in text:
+                rel = path.relative_to(ROOT)
+                errors.append(
+                    f"[ktm-mock-self-report] {rel}: harness must observe facade results"
+                )
+    return errors
+
+
+def check_hardware_backends_do_not_self_test_log():
+    """Hardware backends return status; boot/KTM harnesses own test markers."""
+    errors = []
+    paths = [
+        ROOT / "drivers" / "virtio" / "virtio_mmio.c",
+        ROOT / "arch" / "arm64" / "sources" / "virtio_blk_early.c",
+        ROOT / "arch" / "arm64" / "sources" / "virtio_net_early.c",
+    ]
+    forbidden = ("ir0_boot_smoke", "klog_smoke", "pl011_puts")
+
+    for path in paths:
+        if not path.exists():
+            continue
+        for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if any(token in line for token in forbidden):
+                rel = path.relative_to(ROOT)
+                errors.append(
+                    f"[hardware-self-test-log] {rel}:{line_no}: {line.strip()}"
+                )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -1807,6 +1884,8 @@ def main():
     errors.extend(check_devfs_usercopy_contract())
     errors.extend(check_devfs_unique_device_ids())
     errors.extend(check_devfs_no_find_by_id_outside_devfs())
+    errors.extend(check_ktm_mock_boundaries())
+    errors.extend(check_hardware_backends_do_not_self_test_log())
     errors.extend(check_usercopy_no_raw_user_touch())
     errors.extend(check_ktm_core_no_fase())
     errors.extend(check_ktm_no_fase_serial())

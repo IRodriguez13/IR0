@@ -15,7 +15,7 @@
 #include <ktm_internal.h>
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
-#include <ir0/ktm/block_fake.h>
+#include <ktm_mock_block.h>
 
 static int scenario_block_read_eio_setup(ktm_context_t *ctx)
 {

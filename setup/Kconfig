@@ -566,10 +566,11 @@ menu "Debugging"
     config KTM_BLOCK_FAKE
         bool "KTM in-kernel fake block device (scenario tests)"
         depends on KTM && KTM_TEST
-        default y
+        default n
         help
           Registers a temporary block backend for KTM scenarios such as
           block.read_eio_once. Uses ir0_block_register; no VFS bypass.
+          This mock is test-only and must never be linked into product images.
 
     config KTM_SERIAL_VERBOSE
         bool "KTM verbose serial (CHECKPOINT/PROBE/EV/LOG protocol)"

@@ -4,13 +4,13 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: virtio_blk_early.h
- * Description: Virtio-blk early bring-up + ir0_block facade smoke (ARM64).
+ * Description: Virtio-blk early bring-up behind the portable block facade.
  */
 
 #pragma once
 
-/**
- * Probe virtio-blk, register as ir0_block device "vda", then R/W only via
- * ir0_block_read/write. Tags: ARM64_VIRTIO_BLK_OK, ARM64_BLOCKDEV_FACADE_OK.
- */
-int arm64_virtio_blk_smoke(void);
+/** Probe virtio-blk and register it as the portable block device "vda". */
+int arm64_virtio_blk_init(void);
+
+/** Exercise registered block I/O through ir0_block_* only. */
+int arm64_virtio_blk_facade_probe(void);

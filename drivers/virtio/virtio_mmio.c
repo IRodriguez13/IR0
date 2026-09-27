@@ -14,12 +14,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Freestanding ARM boot uses pl011 from arch; weak so x64 can ignore. */
-void __attribute__((weak)) pl011_puts(const char *s)
-{
-	(void)s;
-}
-
 int __attribute__((weak)) arm64_mmu_map_device_block(uint64_t pa)
 {
 	(void)pa;
@@ -70,10 +64,7 @@ int arm64_virtio_mmio_probe(void)
 
 	/* One 2 MiB Device block covers the whole virtio-mmio bank. */
 	if (arm64_mmu_map_device_block(VIRTIO_MMIO_BASE) != 0)
-	{
-		pl011_puts("ARM64_VIRTIO_MMIO_FAIL\n");
 		return -1;
-	}
 
 	for (i = 0; i < VIRTIO_MMIO_MAX_SLOTS; i++)
 	{
@@ -106,11 +97,7 @@ int arm64_virtio_mmio_probe(void)
 	}
 
 	if (g_ndevs == 0)
-	{
-		pl011_puts("ARM64_VIRTIO_MMIO_FAIL\n");
 		return -1;
-	}
 
-	pl011_puts("ARM64_VIRTIO_MMIO_OK\n");
 	return 0;
 }

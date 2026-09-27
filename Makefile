@@ -439,7 +439,7 @@ KERNEL_OBJS += \
     $(KTM_D1_DIAG_OBJS)
 ifeq ($(CONFIG_KTM_BLOCK_FAKE),y)
 KERNEL_OBJS += \
-    ktm/backends/ktm_block_fake.o \
+    ktm/mocks/block/ktm_block_fake.o \
     tests/ktm/scenarios/block_read_eio.o
 endif
 endif

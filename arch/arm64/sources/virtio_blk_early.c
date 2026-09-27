@@ -4,12 +4,10 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: virtio_blk_early.c
- * Description: Virtio-blk modern MMIO backend for portable ir0_block facade.
+ * Description: Virtio-blk modern MMIO backend for the portable block facade.
  */
 
 #include "virtio_blk_early.h"
-#include "pl011.h"
-
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/virtio_mmio.h>
@@ -17,7 +15,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
-#include <ir0/boot_log.h>
 
 #define VIRTQ_DESC_F_NEXT  1U
 #define VIRTQ_DESC_F_WRITE 2U
@@ -280,10 +277,7 @@ static int virtio_blk_bringup(struct virtio_mmio_dev *d)
 		return -1;
 
 	if (blk_setup_queue(d) != 0)
-	{
-		ir0_boot_smoke("ARM64_VIRTIO_BLK_CAP_OK");
 		return -1;
-	}
 
 	virtio_mmio_set_status(d,
 			       VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER |
@@ -296,28 +290,18 @@ static int virtio_blk_bringup(struct virtio_mmio_dev *d)
 	return 0;
 }
 
-int arm64_virtio_blk_smoke(void)
+int arm64_virtio_blk_init(void)
 {
 	struct virtio_mmio_dev *d;
 	struct ir0_block_device bdev;
-	dev_t id;
-	uint8_t wbuf[BLK_SECTOR] __attribute__((aligned(16)));
-	uint8_t rbuf[BLK_SECTOR] __attribute__((aligned(16)));
-	unsigned i;
 	int rc;
 
 	d = arm64_virtio_mmio_find(VIRTIO_ID_BLOCK);
 	if (!d)
-	{
-		ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
 		return -1;
-	}
 
 	if (virtio_blk_bringup(d) != 0)
-	{
-		ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
 		return -1;
-	}
 
 	zero_bytes(&bdev, sizeof(bdev));
 	bdev.ctx = d;
@@ -334,19 +318,21 @@ int arm64_virtio_blk_smoke(void)
 
 	rc = ir0_block_register(&bdev);
 	if (rc != 0)
-	{
-		ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
-		return -1;
-	}
+		return rc;
+	return 0;
+}
 
-	ir0_boot_smoke("ARM64_VIRTIO_BLK_OK");
+int arm64_virtio_blk_facade_probe(void)
+{
+	dev_t id;
+	uint8_t wbuf[BLK_SECTOR] __attribute__((aligned(16)));
+	uint8_t rbuf[BLK_SECTOR] __attribute__((aligned(16)));
+	unsigned i;
+
 
 	id = ir0_block_lookup_by_name("vda");
 	if (id == 0 || !ir0_block_is_present(id))
-	{
-		ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 		return -1;
-	}
 
 	for (i = 0; i < BLK_SECTOR; i++)
 		wbuf[i] = (uint8_t)(0xA5 ^ (uint8_t)i);
@@ -354,25 +340,15 @@ int arm64_virtio_blk_smoke(void)
 
 	/* Architecture proof: I/O only through portable ir0_block_*. */
 	if (ir0_block_write(id, 0, 1, wbuf) != 0)
-	{
-		ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 		return -1;
-	}
 	if (ir0_block_read(id, 0, 1, rbuf) != 0)
-	{
-		ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 		return -1;
-	}
 
 	for (i = 0; i < BLK_SECTOR; i++)
 	{
 		if (rbuf[i] != wbuf[i])
-		{
-			ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
 			return -1;
-		}
 	}
 
-	ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_OK");
 	return 0;
 }

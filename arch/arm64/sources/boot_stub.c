@@ -238,8 +238,28 @@ void boot_main(void)
 	/* Virtio-mmio (QEMU -device virtio-*-device); tags fail soft if absent. */
 	if (arm64_virtio_mmio_probe() == 0)
 	{
-		(void)arm64_virtio_blk_smoke();
-		(void)arm64_virtio_net_smoke();
+		ir0_boot_smoke("ARM64_VIRTIO_MMIO_OK");
+		if (arm64_virtio_blk_init() == 0)
+		{
+			ir0_boot_smoke("ARM64_VIRTIO_BLK_OK");
+			if (arm64_virtio_blk_facade_probe() == 0)
+				ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_OK");
+			else
+				ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");
+		}
+		else
+		{
+			ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
+		}
+
+		if (arm64_virtio_net_init() == 0)
+			ir0_boot_smoke("ARM64_VIRTIO_NET_OK");
+		else
+			ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
+	}
+	else
+	{
+		ir0_boot_smoke("ARM64_VIRTIO_MMIO_FAIL");
 	}
 
 	/* Musl hello EL0 (noreturn on success via eret → after_musl → enter_el0). */

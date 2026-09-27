@@ -4,18 +4,15 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: virtio_net_early.c
- * Description: Freestanding virtio-net: bring-up + MAC read (no full TCP stack).
+ * Description: Freestanding virtio-net bring-up (no full TCP stack).
  */
 
 #include "virtio_net_early.h"
-#include "pl011.h"
-
 #include <ir0/virtio_mmio.h>
 
 #include <stdint.h>
-#include <ir0/boot_log.h>
 
-int arm64_virtio_net_smoke(void)
+int arm64_virtio_net_init(void)
 {
 	struct virtio_mmio_dev *d;
 	uint32_t status;
@@ -24,10 +21,7 @@ int arm64_virtio_net_smoke(void)
 
 	d = arm64_virtio_mmio_find(VIRTIO_ID_NET);
 	if (!d)
-	{
-		ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
 		return -1;
-	}
 
 	virtio_mmio_set_status(d, 0);
 	virtio_mmio_set_status(d, VIRTIO_STATUS_ACKNOWLEDGE);
@@ -53,10 +47,7 @@ int arm64_virtio_net_smoke(void)
 			virtio_mmio_write(d, VIRTIO_MMIO_REG_DRIVER_FEATURES, 0);
 			virtio_mmio_set_status(d, status);
 			if ((virtio_mmio_get_status(d) & VIRTIO_STATUS_FEATURES_OK) == 0)
-			{
-				ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
 				return -1;
-			}
 		}
 	}
 
@@ -74,12 +65,8 @@ int arm64_virtio_net_smoke(void)
 
 	/* Non-zero MAC or zeros both OK if DRIVER_OK stuck. */
 	if ((virtio_mmio_get_status(d) & VIRTIO_STATUS_DRIVER_OK) == 0)
-	{
-		ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
 		return -1;
-	}
 
 	(void)mac;
-	ir0_boot_smoke("ARM64_VIRTIO_NET_OK");
 	return 0;
 }

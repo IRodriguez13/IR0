@@ -4,10 +4,10 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: virtio_net_early.h
- * Description: Minimal virtio-net freestanding smoke (features + DRIVER_OK).
+ * Description: Minimal freestanding virtio-net device initialization.
  */
 
 #pragma once
 
-/** Probe virtio-net, print ARM64_VIRTIO_NET_OK on success. */
-int arm64_virtio_net_smoke(void);
+/** Negotiate the device and transition it to DRIVER_OK. */
+int arm64_virtio_net_init(void);
