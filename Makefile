@@ -943,6 +943,7 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/arch_task_ops.o \
     arch/x86-64/sources/task_stack.o \
     arch/x86-64/sources/syscall_decode.o \
+    arch/x86-64/sources/elf_policy.o \
     arch/x86-64/sources/arch_syscall_frame.o \
     arch/x86-64/sources/arch_signal.o \
     arch/x86-64/sources/arch_switch.o \
@@ -973,6 +974,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/gic_v2.o \
     arch/arm64/sources/bcm2836_irq.o \
     arch/arm64/sources/syscall_decode.o \
+    arch/arm64/sources/elf_policy.o \
     arch/arm64/sources/syscall_early.o \
     arch/arm64/sources/boot_stub.o \
     arch/arm64/sources/mmu_early.o \

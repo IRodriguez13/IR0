@@ -7,14 +7,24 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_elf_local_reloc_abi.c
- * Description: Host checks for tcc ET_EXEC GLOB_DAT local reloc values
+ * Description: Host checks for ISA-selected ELF machine and relocation policy.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test_harness.h"
-#include <ir0/abi/elf_reloc_contract.h>
 #include <stdint.h>
+
+int x86_test_elf_machine_supported(uint16_t machine);
+int x86_test_elf_reloc_is_relative(uint32_t type);
+int x86_test_elf_local_reloc_value(uint32_t type, uint64_t load_bias,
+				   uint64_t sym_value, int64_t addend,
+				   uint64_t *out);
+int arm64_test_elf_machine_supported(uint16_t machine);
+int arm64_test_elf_reloc_is_relative(uint32_t type);
+int arm64_test_elf_local_reloc_value(uint32_t type, uint64_t load_bias,
+				     uint64_t sym_value, int64_t addend,
+				     uint64_t *out);
 
 void test_elf_local_reloc_abi(void)
 {
@@ -23,15 +33,26 @@ void test_elf_local_reloc_abi(void)
 	TEST_BEGIN("elf_local_reloc_abi");
 
 	/* Guest hello: R_X86_64_GLOB_DAT __environ @ 0x406210 → 0x407828 */
-	ASSERT_EQ(ir0_elf64_local_reloc_value(IR0_R_X86_64_GLOB_DAT, 0,
-					      0x407828ULL, 0, &out), 0);
+	ASSERT(x86_test_elf_machine_supported(62));
+	ASSERT(!x86_test_elf_machine_supported(183));
+	ASSERT(x86_test_elf_reloc_is_relative(8));
+	ASSERT_EQ(x86_test_elf_local_reloc_value(6, 0, 0x407828ULL, 0, &out), 0);
 	ASSERT_EQ(out, 0x407828ULL);
 
-	ASSERT_EQ(ir0_elf64_local_reloc_value(IR0_R_X86_64_RELATIVE, 0,
-					      0, 0x401000, &out), 0);
+	ASSERT_EQ(x86_test_elf_local_reloc_value(8, 0, 0, 0x401000, &out), 0);
 	ASSERT_EQ(out, 0x401000ULL);
 
-	ASSERT_EQ(ir0_elf64_local_reloc_value(99U, 0, 1, 0, &out), -1);
+	ASSERT_EQ(x86_test_elf_local_reloc_value(99U, 0, 1, 0, &out), -1);
+
+	ASSERT(arm64_test_elf_machine_supported(183));
+	ASSERT(!arm64_test_elf_machine_supported(62));
+	ASSERT(arm64_test_elf_reloc_is_relative(1027));
+	ASSERT_EQ(arm64_test_elf_local_reloc_value(1025, 0x400000ULL,
+						   0x2800ULL, 4, &out), 0);
+	ASSERT_EQ(out, 0x402804ULL);
+	ASSERT_EQ(arm64_test_elf_local_reloc_value(1027, 0x400000ULL,
+						   0, 0x1000, &out), 0);
+	ASSERT_EQ(out, 0x401000ULL);
 
 	TEST_END();
 }

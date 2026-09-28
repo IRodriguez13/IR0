@@ -59,7 +59,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_matrix_capture.o host_mount_prefix.o
 KERNEL_HOST_OBJS += host_elf64_image.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
-	host_x86_syscall_decode.o
+	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -117,6 +117,20 @@ host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c
 host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
+
+host_arm64_elf_policy.o: $(KERNEL_ROOT)/arch/arm64/sources/elf_policy.c
+	$(CC) $(KERNEL_CFLAGS) \
+		-Delf_machine_supported=arm64_test_elf_machine_supported \
+		-Delf_reloc_is_relative=arm64_test_elf_reloc_is_relative \
+		-Delf_local_reloc_value=arm64_test_elf_local_reloc_value \
+		-c -o $@ $<
+
+host_x86_elf_policy.o: $(KERNEL_ROOT)/arch/x86-64/sources/elf_policy.c
+	$(CC) $(KERNEL_CFLAGS) \
+		-Delf_machine_supported=x86_test_elf_machine_supported \
+		-Delf_reloc_is_relative=x86_test_elf_reloc_is_relative \
+		-Delf_local_reloc_value=x86_test_elf_local_reloc_value \
+		-c -o $@ $<
 
 test_arm64_boot_info.o: test_arm64_boot_info.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<

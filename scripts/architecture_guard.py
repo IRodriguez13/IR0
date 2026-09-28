@@ -1693,6 +1693,26 @@ def check_common_address_space_contracts():
     return errors
 
 
+def check_common_elf_uses_isa_policy():
+    """Keep ELF machine and relocation numbers in build-selected backends."""
+    errors = []
+    forbidden = re.compile(
+        r"\b(?:ARCH_ELF_MACHINE|IR0_R_X86_64_[A-Z0-9_]+|R_X86_64_[A-Z0-9_]+|"
+        r"R_AARCH64_[A-Z0-9_]+)\b"
+    )
+    paths = [ROOT / "kernel", ROOT / "mm", ROOT / "fs", ROOT / "net", ROOT / "sched"]
+
+    for base in paths:
+        for path in iter_c_files(base):
+            for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                if forbidden.search(line):
+                    rel = path.relative_to(ROOT)
+                    errors.append(
+                        f"[elf-isa-policy] {rel}:{line_no}: use arch_elf facade"
+                    )
+    return errors
+
+
 def _parse_devfs_pty_id_block():
     """Return (pts0, pty_max) from includes/ir0/pty_devfs.h."""
     pty_h = ROOT / "includes" / "ir0" / "pty_devfs.h"
@@ -1942,6 +1962,7 @@ def main():
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_common_paging_uses_neutral_roots())
     errors.extend(check_common_address_space_contracts())
+    errors.extend(check_common_elf_uses_isa_policy())
 
     if errors:
         print("[arch-guard] FAILED")

@@ -45,7 +45,6 @@
 #include <config.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/vdso.h>
-#include <ir0/abi/elf_reloc_contract.h>
 #include <ir0/abi/elf_interp_contract.h>
 #include <ir0/errno.h>
 #include <ir0/elf64_image.h>
@@ -601,7 +600,7 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
                 uint64_t sym_value = 0;
                 uint64_t value = 0;
 
-                if (type != IR0_R_X86_64_RELATIVE)
+                if (!elf_reloc_is_relative(type))
                 {
                     uint64_t sym_va;
                     uint64_t sym_off = 0;
@@ -619,8 +618,8 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
                     sym = (elf64_sym_t *)(file_data + sym_off);
                     sym_value = sym->st_value;
                 }
-                if (ir0_elf64_local_reloc_value(type, 0, sym_value, r->r_addend,
-                                                &value) != 0)
+                if (elf_local_reloc_value(type, 0, sym_value, r->r_addend,
+                                          &value) != 0)
                     continue;
                 if (copy_to_user_mm(root, (uintptr_t)r->r_offset, &value,
                                     sizeof(value)) != 0)

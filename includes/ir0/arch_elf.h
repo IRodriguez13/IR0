@@ -16,17 +16,13 @@
 
 #include <stdint.h>
 
-/* ELF e_machine values (System V ABI). */
-#define ELF_EM_X86_64  62
-#define ELF_EM_AARCH64 183
+/** Return non-zero when @machine belongs to the selected ISA backend. */
+int elf_machine_supported(uint16_t machine);
 
-#if defined(ARCH_ARM64) || defined(__aarch64__)
-#define ARCH_ELF_MACHINE ELF_EM_AARCH64
-#else
-#define ARCH_ELF_MACHINE ELF_EM_X86_64
-#endif
+/** Return non-zero when @type is the backend's base-relative relocation. */
+int elf_reloc_is_relative(uint32_t type);
 
-static inline int elf_machine_supported(uint16_t machine)
-{
-	return machine == (uint16_t)ARCH_ELF_MACHINE;
-}
+/** Resolve a local ELF64 relocation according to the selected ISA ABI. */
+int elf_local_reloc_value(uint32_t type, uint64_t load_bias,
+			  uint64_t sym_value, int64_t addend,
+			  uint64_t *out);
