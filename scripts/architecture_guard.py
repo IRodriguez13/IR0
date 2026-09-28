@@ -785,6 +785,7 @@ PORTABLE_ISA_ASM_RE = re.compile(
     re.IGNORECASE,
 )
 PORTABLE_ISA_TREES = (
+    ROOT / "arch" / "common",
     ROOT / "kernel",
     ROOT / "net",
     ROOT / "includes" / "ir0",

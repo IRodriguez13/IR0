@@ -25,6 +25,7 @@
 #include <mm/paging.h>
 #include <init.h>
 #include <ir0/arch_port.h>
+#include <ir0/arch_info.h>
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/driver.h>
@@ -99,15 +100,7 @@ void boot_memory_serial(uint32_t multiboot_info)
 
 	klog_set_boot_phase(KLOG_BOOT_EARLY_ARCH);
 	ir0_boot_serial_ready();
-	ir0_boot_arch(
-#if defined(__x86_64__)
-		"x86_64 bootstrap entry"
-#elif defined(__aarch64__)
-		"aarch64 bootstrap entry"
-#else
-		"bootstrap entry"
-#endif
-	);
+	ir0_boot_arch(boot_entry_name());
 	ir0_boot_info("SMP", "UP (1 CPU online)");
 
 	klog_set_boot_phase(KLOG_BOOT_MEMORY);

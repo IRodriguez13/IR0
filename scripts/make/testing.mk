@@ -2650,7 +2650,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/string_aliases.c -o build/arm64-all/string_aliases.o
 	@echo "  LD      $@ (portable ALL — no x86 drivers)"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
-		arch/arm64/sources/boot_stub.o arch/arm64/sources/mmu_early.o \
+		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
+		arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
 		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
 		arch/arm64/sources/platform.o \
@@ -2658,7 +2659,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/bcm2836_irq.o \
+		arch/arm64/sources/bcm2836_irq.o arch/arm64/sources/irq_backend.o \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
@@ -4025,7 +4026,7 @@ build-ktm-programs-smoke:
 # Default: lazy anon mmap + brk (defconfig LAZY_*=y). Bisect: make kernel-x64-userspace-eager.bin
 kernel-x64-userspace.bin:
 	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
-		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
+		mm/paging.o arch/x86-64/sources/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1
 	@cp kernel-x64.bin $@
@@ -4041,7 +4042,7 @@ kernel-x64-ext2-root.bin:
 	cp setup/configs/userspace-ext2-root.defconfig .config; \
 	python3 scripts/kconfig/menuconfig.py --sync >/dev/null; \
 	rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
-		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
+		mm/paging.o arch/x86-64/sources/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o; \
 	$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1; \
 	cp kernel-x64.bin $@; \
@@ -4063,7 +4064,7 @@ kernel-x64-ext2-root.iso: kernel-x64-ext2-root.bin arch/x86-64/grub.cfg
 
 kernel-x64-userspace-eager.bin:
 	@rm -f kernel/main.o kernel/process/*.o kernel/elf_loader.o \
-		mm/paging.o arch/common/arch_interface.o kernel/console_backend.o \
+		mm/paging.o arch/x86-64/sources/arch_interface.o kernel/console_backend.o \
 		drivers/video/console.o sched/rr_sched.o
 	@$(MAKE) kernel-x64.bin USERSPACE_INIT_BUILD=1 USERSPACE_EAGER_MM=1
 	@cp kernel-x64.bin $@

@@ -11,7 +11,7 @@
  * Description: IR0 kernel source/header file
  */
 
-#include <arch/common/idt.h>
+#include <arch/x86-64/include/idt_legacy.h>
 #include <arch/common/arch_portable.h>
 
 extern idt_entry_t idt[256];

@@ -8,7 +8,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: arch_interface.c
- * Description: IR0 kernel source/header file
+ * Description: x86-64 implementation of the portable architecture interface.
  */
 
 #include "arch_interface.h"
@@ -143,6 +143,11 @@ const char *get_arch_uname_machine(void)
 #endif
 }
 
+const char *boot_entry_name(void)
+{
+	return "x86_64 bootstrap entry";
+}
+
 int early_clock_available(void)
 {
 #if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
@@ -188,6 +193,11 @@ void outb(uint16_t port, uint8_t value)
     (void)port;
     (void)value;
 #endif
+}
+
+void io_wait(void)
+{
+	outb(0x80, 0);
 }
 
 uint16_t inw(uint16_t port)

@@ -7,11 +7,10 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_interface.h
- * Description: IR0 kernel source/header file
+ * File: arch_io.h
+ * Description: Portable CPU, interrupt, port-I/O and MMIO interface.
  */
 
-// arch/common/arch_interface.h
 #pragma once
 
 #include <stdint.h>
@@ -32,13 +31,8 @@ void mmio_write16(arch_addr_t addr, uint16_t value);
 uint32_t mmio_read32(arch_addr_t addr);
 void mmio_write32(arch_addr_t addr, uint32_t value);
 
-/* Short I/O delay (x86 port 0x80); no-op on architectures without port I/O. */
-static inline void io_wait(void)
-{
-#if defined(__x86_64__) || defined(__amd64__) || defined(__i386__)
-	outb(0x80, 0);
-#endif
-}
+/* Short platform I/O delay; a no-op on architectures without port I/O. */
+void io_wait(void);
 
 /* Wider port I/O — also declared in <ir0/cpu.h>; one impl in arch_interface.c */
 uint16_t inw(uint16_t port);
@@ -60,23 +54,3 @@ void system_halt(void) __attribute__((noreturn));
 void system_reboot(void) __attribute__((noreturn));
 void system_poweroff(void) __attribute__((noreturn));
 void set_boot_params(void *params);
-
-
-
-#ifndef ARCH_X86_64
-#if defined(__x86_64__) || defined(__amd64__)
-#define ARCH_X86_64
-#elif defined(__i386__) || defined(__i486__) || defined(__i586__) || defined(__i686__)
-#define ARCH_X86_32
-#elif defined(__aarch64__)
-#ifndef ARCH_ARM64
-#define ARCH_ARM64
-#endif
-#elif defined(__arm__)
-#ifndef ARCH_ARM32
-#define ARCH_ARM32
-#endif
-#else
-#error "Arquitectura no soportada en arch_interface.h"
-#endif
-#endif /* ARCH_X86_64 */

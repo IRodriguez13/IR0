@@ -7,11 +7,10 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: idt.h
- * Description: IR0 kernel source/header file
+ * File: idt_legacy.h
+ * Description: Legacy x86-64 IDT layout used by the compatibility backend.
  */
 
-// arch/common/idt.h - REFACTORIZADO (detección automática)
 #pragma once
 #include <stdint.h>
 
@@ -20,12 +19,6 @@
 #define IDT_INTERRUPT_GATE_USER 0xEE
 #define IDT_TRAP_GATE_KERNEL 0x8F
 
-// ===============================================================================
-// DETECCIÓN AUTOMÁTICA DE ARQUITECTURA Y DEFINICIONES ESPECÍFICAS
-// ===============================================================================
-
-#if defined(__x86_64__) || defined(__amd64__)
-// ===== ARQUITECTURA 64-BIT =====
 typedef struct
 {
     uint16_t offset_low;  // Bits 0-15 del offset
@@ -46,14 +39,6 @@ typedef struct
 // Función específica para 64-bit
 void idt_arch_set_gate_64(int n, uintptr_t handler, uint8_t flags);
 #define idt_set_gate(n, handler, flags) idt_arch_set_gate_64(n, handler, flags)
-
-#else
-#error "Arquitectura no soportada para IDT"
-#endif
-
-// ===============================================================================
-// FUNCIONES COMUNES (independientes de arquitectura)
-// ===============================================================================
 
 void idt_init();
 

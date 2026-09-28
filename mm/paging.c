@@ -1178,7 +1178,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                                               parent_phys, flags) != 0)
                     {
                         extern void process_unmap_user_pages_all(
-                            uint64_t *address_space_root, void *reclaim_stats);
+                            address_space_root_t root, void *reclaim_stats);
 
                         process_unmap_user_pages_all(child_root, NULL);
                         return -1;

@@ -12,7 +12,7 @@
  */
 
 // arch/x86-64/sources/idt_arch_x64.c - ACTUALIZADO
-#include <arch/common/idt.h>  // Solo incluir el header común
+#include <arch/x86-64/include/idt_legacy.h>
 #include <arch/common/arch_portable.h>
 
 // Array externo del IDT (definido en idt.c)

@@ -14,6 +14,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+void io_wait(void)
+{
+}
+
 void disable_interrupts(void)
 {
 	unsigned long daif;

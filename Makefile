@@ -928,10 +928,10 @@ endif
 endif
 
 ARCH_OBJS_COMMON = \
-    arch/common/arch_interface.o \
     arch/common/boot_log.o
 
 ARCH_OBJS_X86_64 = \
+    arch/x86-64/sources/arch_interface.o \
     arch/x86-64/sources/arch_x64.o \
     arch/x86-64/sources/platform.o \
     arch/x86-64/sources/gdt.o \

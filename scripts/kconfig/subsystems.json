@@ -82,7 +82,7 @@
           "arch/x86-64/sources/fault.c",
           "arch/x86-64/asm/boot_x64.asm",
           "arch/x86-64/asm/syscall_entry_64.asm",
-          "arch/common/arch_interface.c",
+          "arch/x86-64/sources/arch_interface.c",
           "sched/switch/switch_x64.asm"
         ],
         "arm32": []

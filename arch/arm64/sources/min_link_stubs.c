@@ -98,6 +98,13 @@ void __attribute__((weak)) ahci_map_mmio_in_directory(address_space_root_t root)
 	(void)root;
 }
 
+void __attribute__((weak)) process_unmap_user_pages_all(address_space_root_t root,
+						 void *reclaim_stats)
+{
+	(void)root;
+	(void)reclaim_stats;
+}
+
 void *__attribute__((weak)) alloc(size_t n)
 {
 	(void)n;
