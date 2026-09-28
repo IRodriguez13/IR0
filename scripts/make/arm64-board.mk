@@ -37,6 +37,10 @@ define ARM64_BOARD_MIN_BUILD
 		$(1)/boot_info.o $(1)/pl011.o \
 		$(1)/serial_io_arm64.o $(1)/platform.o $(1)/freestanding_stubs.o \
 		$(1)/boot_log.o
+	@aarch64-linux-gnu-readelf -lW $@ > $(1)/program-headers.log
+	@! grep -Eq 'LOAD[[:space:]].*RWE' $(1)/program-headers.log
+	@grep -Eq 'LOAD[[:space:]].*R E' $(1)/program-headers.log
+	@grep -Eq 'LOAD[[:space:]].*RW[[:space:]]' $(1)/program-headers.log
 	@echo "✓ $@"
 endef
 

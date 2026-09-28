@@ -2690,6 +2690,11 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 
 smoke-arm64-all: kernel-arm64-all.bin
 	@echo "  SMOKE   ARM64 common MM objects linked into boot..."
+	@aarch64-linux-gnu-readelf -lW kernel-arm64-all.bin > /tmp/ir0-arm64-all-phdrs.log
+	@! grep -Eq 'LOAD[[:space:]].*RWE' /tmp/ir0-arm64-all-phdrs.log
+	@grep -Eq 'LOAD[[:space:]].*R E' /tmp/ir0-arm64-all-phdrs.log
+	@grep -Eq 'LOAD[[:space:]].*RW[[:space:]]' /tmp/ir0-arm64-all-phdrs.log
+	@echo "✓ ARM64 ELF W^X program headers"
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
