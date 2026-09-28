@@ -60,7 +60,14 @@ struct virtio_mmio_dev
 	int slot;
 };
 
-/** Map virtio-mmio window and scan transports; prints ARM64_VIRTIO_MMIO_OK. */
+enum virtio_mmio_probe_result
+{
+	VIRTIO_MMIO_PROBE_OK = 0,
+	VIRTIO_MMIO_PROBE_ABSENT = 1,
+	VIRTIO_MMIO_PROBE_ERROR = -1,
+};
+
+/** Map the virtio-mmio window and distinguish absence from probe failure. */
 int arm64_virtio_mmio_probe(void);
 
 /** First discovered device of @device_id, or NULL. */

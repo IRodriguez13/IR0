@@ -64,7 +64,7 @@ int arm64_virtio_mmio_probe(void)
 
 	/* One 2 MiB Device block covers the whole virtio-mmio bank. */
 	if (arm64_mmu_map_device_block(VIRTIO_MMIO_BASE) != 0)
-		return -1;
+		return VIRTIO_MMIO_PROBE_ERROR;
 
 	for (i = 0; i < VIRTIO_MMIO_MAX_SLOTS; i++)
 	{
@@ -97,7 +97,7 @@ int arm64_virtio_mmio_probe(void)
 	}
 
 	if (g_ndevs == 0)
-		return -1;
+		return VIRTIO_MMIO_PROBE_ABSENT;
 
-	return 0;
+	return VIRTIO_MMIO_PROBE_OK;
 }
