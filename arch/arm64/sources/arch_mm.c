@@ -30,6 +30,11 @@ size_t mm_kernel_heap_size(void)
 	return 0x01800000UL;
 }
 
+int mm_large_identity_supported(void)
+{
+	return 0;
+}
+
 unsigned mm_user_root_slots(void)
 {
 	/* Entire TTBR0 L0 is process-owned for walk/COW (no TTBR1 split). */

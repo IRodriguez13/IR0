@@ -24,7 +24,10 @@
 #define A64_PTE_TABLE     0x2ULL
 #define A64_PTE_AF        (1ULL << 10)
 #define A64_PTE_AP_EL0    (1ULL << 6) /* AP[1]=1 → EL0 access when AP[2]=0 */
+#define A64_PTE_AP_RO     (1ULL << 7)
+#define A64_PTE_NG        (1ULL << 11)
 #define A64_PTE_UXN       (1ULL << 54)
+#define A64_PTE_SW_COW    (1ULL << 55)
 #define A64_PTE_PFN_MASK  0x0000FFFFFFFFF000ULL
 #define A64_INDEX_MASK    0x1FFUL
 #define A64_SCTLR_M       (1ULL << 0)
@@ -130,9 +133,39 @@ int mm_pte_large(uint64_t e)
 	return mm_pte_present(e) && ((e & A64_PTE_TABLE) == 0);
 }
 
+int mm_pte_executable(uint64_t e)
+{
+	return (e & A64_PTE_UXN) == 0;
+}
+
 uintptr_t mm_pte_phys(uint64_t e)
 {
 	return (uintptr_t)(e & A64_PTE_PFN_MASK);
+}
+
+uint64_t mm_pte_mapping_flags(uint64_t e)
+{
+	uint64_t flags = 0;
+
+	if (mm_pte_present(e))
+		flags |= IR0_MM_MAP_PRESENT;
+	if (!(e & A64_PTE_AP_RO))
+		flags |= IR0_MM_MAP_WRITE;
+	if (e & A64_PTE_AP_EL0)
+		flags |= IR0_MM_MAP_USER;
+	if (!(e & A64_PTE_NG))
+		flags |= IR0_MM_MAP_GLOBAL;
+	if (e & A64_PTE_SW_COW)
+		flags |= IR0_MM_MAP_COW;
+	if (mm_pte_executable(e))
+		flags |= IR0_MM_MAP_EXEC;
+	return flags;
+}
+
+void mm_pte_mark_cow(uint64_t *e)
+{
+	if (e)
+		*e |= A64_PTE_AP_RO | A64_PTE_SW_COW | A64_PTE_NG;
 }
 
 uint64_t mm_make_table_pte(uintptr_t phys, int user)
@@ -147,7 +180,12 @@ uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 {
 	uint64_t e = ((uint64_t)phys & A64_PTE_PFN_MASK) | A64_PTE_VALID | A64_PTE_AF;
 
-	(void)flags12;
+	if (flags12 & IR0_MM_MAP_USER)
+		e |= A64_PTE_AP_EL0 | A64_PTE_NG;
+	if (!(flags12 & IR0_MM_MAP_WRITE))
+		e |= A64_PTE_AP_RO;
+	if (flags12 & IR0_MM_MAP_COW)
+		e |= A64_PTE_SW_COW | A64_PTE_AP_RO;
 	if (!exec)
 		e |= A64_PTE_UXN;
 	return e;
@@ -155,6 +193,6 @@ uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 
 void mm_pte_set_user(uint64_t *e)
 {
-	if (e)
-		*e |= A64_PTE_AP_EL0;
+	(void)e;
+	/* ARM table descriptors default to no hierarchical AP restriction. */
 }

@@ -1649,7 +1649,9 @@ def check_process_lifecycle_no_isa_conditionals():
 def check_common_paging_uses_neutral_roots():
     """Keep ISA register/table vocabulary out of the common paging contract."""
     errors = []
-    legacy = re.compile(r"\b(?:CR3|cr3|PML4|pml4|PDPT|pdpt)\b")
+    legacy = re.compile(
+        r"\b(?:CR3|cr3|PML4|pml4|PDPT|pdpt|PAGE_NX|CONFIG_ARCH_X86_64)\b"
+    )
 
     for relative in ("mm/paging.c", "mm/paging.h"):
         fpath = ROOT / relative

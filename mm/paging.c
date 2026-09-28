@@ -378,7 +378,8 @@ int is_paging_enabled(void)
  * @flags_out: Optional output for page flags (can be NULL)
  * Returns: 1 if mapped, 0 if not mapped, -1 on error
  */
-int is_page_mapped_in_directory(uint64_t *root, uint64_t virt_addr, uint64_t *flags_out)
+int is_page_mapped_in_directory(address_space_root_t root, uint64_t virt_addr,
+				uint64_t *flags_out)
 {
 	size_t idx[4];
 	uint64_t *level1_table;
@@ -395,7 +396,7 @@ int is_page_mapped_in_directory(uint64_t *root, uint64_t virt_addr, uint64_t *fl
 	if (paging_entry_large(root[idx[0]]))
 	{
 		if (flags_out)
-			*flags_out = root[idx[0]] & 0xFFFu;
+			*flags_out = mm_pte_mapping_flags(root[idx[0]]);
 		return 1;
 	}
 
@@ -405,7 +406,7 @@ int is_page_mapped_in_directory(uint64_t *root, uint64_t virt_addr, uint64_t *fl
 	if (paging_entry_large(level1_table[idx[1]]))
 	{
 		if (flags_out)
-			*flags_out = level1_table[idx[1]] & 0xFFFu;
+			*flags_out = mm_pte_mapping_flags(level1_table[idx[1]]);
 		return 1;
 	}
 
@@ -416,7 +417,7 @@ int is_page_mapped_in_directory(uint64_t *root, uint64_t virt_addr, uint64_t *fl
 	{
 		/* Linux pmd_present && pmd_large: a 2 MiB leaf is mapped. */
 		if (flags_out)
-			*flags_out = level2_table[idx[2]] & 0xFFFu;
+			*flags_out = mm_pte_mapping_flags(level2_table[idx[2]]);
 		return 1;
 	}
 
@@ -425,12 +426,12 @@ int is_page_mapped_in_directory(uint64_t *root, uint64_t virt_addr, uint64_t *fl
 		return 0;
 
 	if (flags_out)
-		*flags_out = level3_table[idx[3]] & 0xFFF;
+		*flags_out = mm_pte_mapping_flags(level3_table[idx[3]]);
 
 	return 1;
 }
 
-uint64_t *paging_get_pte(uint64_t *root, uintptr_t vaddr)
+uint64_t *paging_get_pte(address_space_root_t root, uintptr_t vaddr)
 {
 	size_t idx[4];
 	uint64_t *level1_table;
@@ -475,7 +476,8 @@ uint64_t *paging_get_pte(uint64_t *root, uintptr_t vaddr)
  * Kernel writes via PA identity must not touch RO+COW shared frames (that
  * bypasses hardware WP and corrupts the sibling mm). Break COW like #PF.
  */
-static int paging_cow_break_leaf(uint64_t *root, uint64_t *pte, uintptr_t vaddr)
+static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
+				 uintptr_t vaddr)
 {
 	uint64_t entry;
 	uintptr_t old_phys;
@@ -492,7 +494,7 @@ static int paging_cow_break_leaf(uint64_t *root, uint64_t *pte, uintptr_t vaddr)
 
 	irq_flags = irq_save();
 	entry = *pte;
-	old_phys = (uintptr_t)(entry & PAGE_PTE_PFN_MASK);
+	old_phys = mm_pte_phys(entry);
 	new_phys = pmm_alloc_frame();
 	if (!new_phys)
 	{
@@ -500,9 +502,9 @@ static int paging_cow_break_leaf(uint64_t *root, uint64_t *pte, uintptr_t vaddr)
 		return -1;
 	}
 	paging_copy_phys_page(new_phys, old_phys);
-	map_flags = (entry & 0xFFF) | PAGE_USER | PAGE_RW;
+	map_flags = mm_pte_mapping_flags(entry) | PAGE_USER | PAGE_RW;
 	map_flags &= ~(PAGE_COW | PAGE_GLOBAL);
-	if (!(entry & PAGE_NX))
+	if (mm_pte_executable(entry))
 		map_flags |= PAGE_EXEC;
 	if (map_page_in_directory(root, vaddr & ~0xFFFUL, new_phys, map_flags) != 0)
 	{
@@ -516,7 +518,7 @@ static int paging_cow_break_leaf(uint64_t *root, uint64_t *pte, uintptr_t vaddr)
 	return 0;
 }
 
-int copy_to_user_region_in_directory(uint64_t *root, uintptr_t dst,
+int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
                                      const void *src, size_t n)
 {
     const uint8_t *s = src;
@@ -565,7 +567,7 @@ int copy_to_user_region_in_directory(uint64_t *root, uintptr_t dst,
     return 0;
 }
 
-int copy_from_user_region_in_directory(uint64_t *root, uintptr_t src,
+int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
                                        void *dst, size_t n)
 {
     uint8_t *d = dst;
@@ -609,7 +611,8 @@ int copy_from_user_region_in_directory(uint64_t *root, uintptr_t src,
     return 0;
 }
 
-int zero_user_region_in_directory(uint64_t *root, uintptr_t dst, size_t n)
+int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
+				  size_t n)
 {
     if (!root)
         return -1;
@@ -739,10 +742,7 @@ static int paging_split_large_level2_leaf(uint64_t *level2_table, size_t index)
 	level3_table = (uint64_t *)(uintptr_t)pt_phys;
 	phys_base = paging_entry_pfn(level2_entry);
 	leaf_flags = PAGE_RW;
-	if (level2_entry & PAGE_NX)
-		exec = 0;
-	else
-		exec = 1;
+	exec = mm_pte_executable(level2_entry);
 
 	for (i = 0; i < 512; i++)
 	{
@@ -764,7 +764,7 @@ static int paging_split_large_level2_leaf(uint64_t *level2_table, size_t index)
  * needed). Does not allocate a missing leaf or change an existing 4KiB PTE.
  * Returns 0 if paging_get_pte can proceed, -1 on failure.
  */
-int paging_ensure_4k_leaf(uint64_t *root, uintptr_t vaddr)
+int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr)
 {
 	size_t idx[4];
 	uint64_t *level1_table;
@@ -849,7 +849,8 @@ static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
  * @flags: Page flags (PAGE_USER, PAGE_RW, etc.)
  * Returns: 0 on success, -1 on failure
  */
-int map_page_in_directory(uint64_t *root, uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
+int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
+			  uint64_t phys_addr, uint64_t flags)
 {
 	size_t idx[4];
 	uint64_t *level1_table;
@@ -929,7 +930,7 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
  * Unmap a single 4KB page in the page directory rooted at @root.
  * Safe when address-space root points at a different address space than @root.
  */
-int unmap_page_in_directory(uint64_t *root, uintptr_t virt_addr)
+int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 {
 	size_t idx[4];
 	uint64_t *level1_table;
@@ -1050,7 +1051,9 @@ int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
 }
 
 /* Map user memory region in a specific page directory */
-int map_user_region_in_directory(uint64_t *root, uintptr_t virtual_start, size_t size, uint64_t flags)
+int map_user_region_in_directory(address_space_root_t root,
+				 uintptr_t virtual_start, size_t size,
+				 uint64_t flags)
 {
     if (!root)
         return -1;
@@ -1163,7 +1166,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                                 ((uintptr_t)i1 << 12);
 
                     was_writable = (page_entry & PAGE_RW) != 0;
-                    flags = page_entry & 0xFFF;
+					flags = mm_pte_mapping_flags(page_entry);
                     flags &= ~PAGE_GLOBAL;
                     flags |= PAGE_USER;
                     if (was_writable || (page_entry & PAGE_COW))
@@ -1171,7 +1174,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                         flags &= ~PAGE_RW;
                         flags |= PAGE_COW;
                     }
-                    if (!(page_entry & PAGE_NX))
+                    if (mm_pte_executable(page_entry))
                         flags |= PAGE_EXEC;
 
                     if (map_page_in_directory(child_root, virt_addr,
@@ -1220,7 +1223,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                         !(page_entry & PAGE_RW))
                         continue;
 
-                    level3_table[i1] = (page_entry & ~(PAGE_RW | PAGE_GLOBAL)) | PAGE_COW;
+					mm_pte_mark_cow(&level3_table[i1]);
                 }
             }
         }
@@ -1251,7 +1254,7 @@ int copy_process_memory(struct process *parent, struct process *child)
  * Syscalls run ring 0 with process address-space root; /dev/console FB writes need this
  * mapping in every process page table (not userspace mmap).
  */
-static void map_supervisor_framebuffer_mmio(uint64_t *root)
+static void map_supervisor_framebuffer_mmio(address_space_root_t root)
 {
     uint32_t fb_phys;
     uint32_t fb_size;
@@ -1276,7 +1279,7 @@ static void map_supervisor_framebuffer_mmio(uint64_t *root)
     }
 }
 #else
-static void map_supervisor_framebuffer_mmio(uint64_t *root)
+static void map_supervisor_framebuffer_mmio(address_space_root_t root)
 {
     (void)root;
 }
@@ -1290,7 +1293,8 @@ static void map_supervisor_framebuffer_mmio(uint64_t *root)
  * for the low identity range so timer IRQ (TSS RSP0) and syscall entry can
  * run with process address-space root loaded (Linux/BSD: kernel always reachable from user mm).
  */
-int map_supervisor_identity_low(uint64_t *root, uint64_t start, uint64_t end)
+int map_supervisor_identity_low(address_space_root_t root, uint64_t start,
+				uint64_t end)
 {
     uint64_t va;
 
@@ -1327,13 +1331,14 @@ int map_supervisor_identity_low(uint64_t *root, uint64_t start, uint64_t end)
  * Cheaper than 4 KiB walks for the kernel heap and PMM frame pool. Callers must
  * not overlap [0x400000, 0x600000): a 2 MiB slot there would block user ELF.
  */
-int map_supervisor_identity_2mb(uint64_t *root, uint64_t start, uint64_t end)
+int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start,
+				uint64_t end)
 {
     uint64_t va;
 
-#if !CONFIG_ARCH_X86_64
-    return map_supervisor_identity_low(root, start, end);
-#else
+    if (!mm_large_identity_supported())
+        return map_supervisor_identity_low(root, start, end);
+
     if (!root || end <= start)
         return -1;
 
@@ -1373,7 +1378,6 @@ int map_supervisor_identity_2mb(uint64_t *root, uint64_t start, uint64_t end)
     }
 
     return 0;
-#endif
 }
 
 void paging_reclaim_user_tables(address_space_root_t root)

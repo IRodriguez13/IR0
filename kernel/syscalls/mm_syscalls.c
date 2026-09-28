@@ -32,6 +32,7 @@
 #include <ir0/clock.h>
 #include <mm/allocator.h>
 #include <ir0/arch_port.h>
+#include <ir0/arch_mm.h>
 #include <ir0/ktm/checkpoint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -508,8 +509,8 @@ static void mmap_audit_log_pte(const char *tag, address_space_root_t root,
                    (unsigned long long)((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_USER ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_RW ? 1 : 0)),
-                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_NX) ? 1 : 0)),
-                   (unsigned long long)((uint64_t)(*pte & PAGE_PTE_PFN_MASK)));
+                   (unsigned long long)((uint64_t)(pte && !mm_pte_executable(*pte) ? 1 : 0)),
+                   (unsigned long long)((uint64_t)mm_pte_phys(*pte)));
   }
   else
   {
@@ -520,7 +521,7 @@ static void mmap_audit_log_pte(const char *tag, address_space_root_t root,
                    (unsigned long long)((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_USER ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_RW ? 1 : 0)),
-                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_NX) ? 1 : 0)));
+                   (unsigned long long)((uint64_t)(pte && !mm_pte_executable(*pte) ? 1 : 0)));
   }
 }
 

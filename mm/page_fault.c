@@ -33,6 +33,7 @@
 #include <ir0/ktm/user_canary.h>
 #include <ir0/page_fault.h>
 #include <ir0/arch_pf_debug.h>
+#include <ir0/arch_mm.h>
 #include <mm/paging.h>
 #include <ir0/abi/mmap_contract.h>
 #include <ktm.h>
@@ -232,7 +233,7 @@ static void pf_audit_classify(uint64_t *stack,
 
 	klog_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
-	klog_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_mmap_region_for(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && (*pte & PAGE_PRESENT)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && (*pte & PAGE_NX) ? 1 : 0));
+	klog_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_mmap_region_for(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
 
 	if (!info->user && in_userspace_range)
 		klog_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR addr_in_userspace=1");
@@ -642,7 +643,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		}
 
 		entry = *pte;
-		old_phys = (uintptr_t)(entry & PAGE_PTE_PFN_MASK);
+		old_phys = mm_pte_phys(entry);
 		if (pmm_frame_refcount(old_phys) > 0)
 		{
 			pmm_frame_get(old_phys);
@@ -681,9 +682,9 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 
 		paging_copy_phys_page(new_phys, old_phys);
 
-		map_flags = (entry & 0xFFF) | PAGE_USER | PAGE_RW;
+		map_flags = mm_pte_mapping_flags(entry) | PAGE_USER | PAGE_RW;
 		map_flags &= ~(PAGE_COW | PAGE_GLOBAL);
-		if (!(entry & PAGE_NX))
+		if (mm_pte_executable(entry))
 			map_flags |= PAGE_EXEC;
 
 		if (map_page_in_directory(process_pgd(current), vaddr_aligned,

@@ -145,9 +145,30 @@ int mm_pte_large(uint64_t e)
 	return mm_pte_present(e) && ((e & X86_PTE_LARGE) != 0);
 }
 
+int mm_pte_executable(uint64_t e)
+{
+	return (e & X86_PTE_NX) == 0;
+}
+
 uintptr_t mm_pte_phys(uint64_t e)
 {
 	return (uintptr_t)(e & X86_PTE_PFN_MASK);
+}
+
+uint64_t mm_pte_mapping_flags(uint64_t e)
+{
+	uint64_t flags = e & 0x3FFULL;
+
+	if (mm_pte_executable(e))
+		flags |= IR0_MM_MAP_EXEC;
+	return flags;
+}
+
+void mm_pte_mark_cow(uint64_t *e)
+{
+	if (e)
+		*e = (*e & ~(IR0_MM_MAP_WRITE | IR0_MM_MAP_GLOBAL)) |
+		     IR0_MM_MAP_COW;
 }
 
 uint64_t mm_make_table_pte(uintptr_t phys, int user)

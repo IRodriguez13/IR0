@@ -2701,6 +2701,8 @@ smoke-arm64-all: kernel-arm64-all.bin
 		-kernel kernel-arm64-all.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
+	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log

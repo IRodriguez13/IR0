@@ -16,43 +16,34 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <ir0/mm.h>
+#include <ir0/arch_mm.h>
 
 
-#define PAGE_PRESENT 0x1
-#define PAGE_RW 0x2
-#define PAGE_USER 0x4
-#define PAGE_WRITETHROUGH 0x8
-#define PAGE_CACHE_DISABLE 0x10
-#define PAGE_ACCESSED 0x20
-#define PAGE_DIRTY 0x40
-#define PAGE_SIZE_2MB_FLAG 0x80
-#define PAGE_GLOBAL 0x100
+#define PAGE_PRESENT IR0_MM_MAP_PRESENT
+#define PAGE_RW IR0_MM_MAP_WRITE
+#define PAGE_USER IR0_MM_MAP_USER
+#define PAGE_WRITETHROUGH IR0_MM_MAP_WRITETHROUGH
+#define PAGE_CACHE_DISABLE IR0_MM_MAP_NOCACHE
+#define PAGE_ACCESSED IR0_MM_MAP_ACCESSED
+#define PAGE_DIRTY IR0_MM_MAP_DIRTY
+#define PAGE_SIZE_2MB_FLAG IR0_MM_MAP_LARGE
+#define PAGE_GLOBAL IR0_MM_MAP_GLOBAL
 /*
  * Software-available PTE bit 9 (ignored by hardware). Marks a present user
  * page that was shared read-only at fork and must break on write.
  */
-#define PAGE_COW 0x200
+#define PAGE_COW IR0_MM_MAP_COW
 
-/* PTE bit 63: no-execute when IA32_EFER.NXE is set (not stored in low 12 bits of API flags) */
-#define PAGE_NX (1ULL << 63)
-/* Software flag for map_page*: page must remain executable (omit PAGE_NX in PTE) */
-#define PAGE_EXEC (1ULL << 52)
+/* Semantic mapping request; the ISA backend chooses its executable encoding. */
+#define PAGE_EXEC IR0_MM_MAP_EXEC
 
 
 #define PAGE_SIZE_4KB (4 * 1024)
 #define PAGE_SIZE_2MB (2 * 1024 * 1024)
 #define PAGE_SIZE_1GB (1024 * 1024 * 1024)
 
-/* Physical frame: align/strip low 12 bits from an address */
+/* Physical frame: align/strip low page-offset bits from an address. */
 #define PAGE_FRAME_MASK     (~0xFFFULL)
-/*
- * x86-64 PTE/PMD/PUD/PGD PFN field (Linux PTE_PFN_MASK): bits 51:12 only.
- * Do NOT use PAGE_FRAME_MASK on table entries — NX (bit 63) would leak into
- * pointers when walking page tables (see Linux pud_page()/pte_pfn()).
- */
-#define PAGE_PTE_PFN_MASK   0x000FFFFFFFFFF000ULL
-/* Nine-bit index into each translation-table level (512 entries). */
-#define PAGE_INDEX_MASK     0x1FF
 
 /**
  * Enable paging (sets CR0.PG bit)

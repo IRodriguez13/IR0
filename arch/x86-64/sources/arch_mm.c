@@ -25,6 +25,11 @@ size_t mm_kernel_heap_size(void)
 	return 0x01800000UL;
 }
 
+int mm_large_identity_supported(void)
+{
+	return 1;
+}
+
 unsigned mm_user_root_slots(void)
 {
 	return 256;
