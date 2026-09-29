@@ -25,6 +25,16 @@ size_t mm_kernel_heap_size(void)
 	return 0x01800000UL;
 }
 
+uintptr_t mm_user_va_start(void)
+{
+	return 0x00400000UL;
+}
+
+uintptr_t mm_user_va_end(void)
+{
+	return 0x00007FFFFFFFFFFFUL;
+}
+
 int mm_large_identity_supported(void)
 {
 	return 1;
@@ -63,8 +73,8 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 	uintptr_t end;
 
 	/* ELF load floor … canonical low half (matches historical copy_user). */
-	const uintptr_t user_lo = 0x00400000UL;
-	const uintptr_t user_hi = 0x00007FFFFFFFFFFFUL;
+	const uintptr_t user_lo = mm_user_va_start();
+	const uintptr_t user_hi = mm_user_va_end();
 
 	if (addr == 0)
 		return 0;

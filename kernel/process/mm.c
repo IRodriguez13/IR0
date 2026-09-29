@@ -337,14 +337,14 @@ uint64_t create_process_page_directory(void)
 	/*
 	 * Map kernel low memory with 4 KiB supervisor pages so timer IRQ (TSS
 	 * RSP0), syscall handlers, and kernel text/data are reachable under
-	 * process CR3.  Do not cover the user ELF load window (0x400000+): table
+	 * process address space. Do not cover the user ELF load window: table
 	 * entries without PAGE_USER there block user code fetch (Linux requires
 	 * PAGE_USER on every level for user mappings).
 	 */
 	{
 		/*
 		 * Supervisor identity under process CR3:
-		 *  - [0, 4MiB) + kbd…6MiB: kernel image / IRQ
+		 *  - below the ISA user floor + kbd…6MiB: kernel image / IRQ
 		 *  - [6MiB, 32MiB): kmalloc heap (still low identity)
 		 * Kstacks are at IR0_KSTACK_VA_BASE (high). Do NOT map PMM
 		 * [32MiB, 512MiB) — user brk/mmap + frames use demand-zero /
@@ -352,7 +352,7 @@ uint64_t create_process_page_directory(void)
 		 */
 		const uint64_t supervisor_kbd_end = 0x00600000UL;
 
-		if (map_supervisor_identity_low(root, 0, 0x00400000UL) != 0)
+		if (map_supervisor_identity_low(root, 0, mm_user_va_start()) != 0)
 		{
 			kfree_aligned(root);
 			return 0;

@@ -33,6 +33,10 @@
 uintptr_t mm_kernel_heap_start(void);
 size_t mm_kernel_heap_size(void);
 
+/* Inclusive userspace virtual-address window for the selected ISA policy. */
+uintptr_t mm_user_va_start(void);
+uintptr_t mm_user_va_end(void);
+
 void mm_enable_translation(void);
 int mm_translation_enabled(void);
 int mm_translation_ready(void);

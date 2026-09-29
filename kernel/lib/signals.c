@@ -29,6 +29,7 @@
 #include <ir0/paging.h>
 #include <ir0/tls.h>
 #include <ir0/arch_task.h>
+#include <ir0/arch_mm.h>
 #include <ir0/errno.h>
 #include <config.h>
 #include <kernel/process.h>
@@ -1047,8 +1048,7 @@ void handle_signals(void)
                          * its kernel continuation, returns to a real user
                          * frame, and delivery retries there.
                          */
-                        if (ctx->rip < 0x00400000ULL ||
-                            ctx->rip > 0x00007FFFFFFFFFFFULL)
+                        if (!mm_user_va_ok((uintptr_t)ctx->rip, 1))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_DEFER sig=%d "
@@ -1059,8 +1059,7 @@ void handle_signals(void)
                             continue;
                         }
 
-                        if (ctx->rsp < 0x00400000ULL ||
-                            ctx->rsp > 0x00007FFFFFFFFFFFULL)
+                        if (!mm_user_va_ok((uintptr_t)ctx->rsp, 1))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_DEFER sig=%d "

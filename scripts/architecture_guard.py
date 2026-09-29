@@ -1713,6 +1713,22 @@ def check_common_elf_uses_isa_policy():
     return errors
 
 
+def check_common_mm_uses_user_va_policy():
+    """Keep ISA canonical user-VA bounds in MM backends."""
+    errors = []
+    forbidden = re.compile(r"0x(?:00400000|00007FFFFFFFFFFF)(?:ULL|UL|LL|L)?\b")
+
+    for base in (ROOT / "kernel", ROOT / "mm"):
+        for path in iter_c_files(base):
+            for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                if forbidden.search(line):
+                    rel = path.relative_to(ROOT)
+                    errors.append(
+                        f"[user-va-policy] {rel}:{line_no}: use arch_mm facade"
+                    )
+    return errors
+
+
 def _parse_devfs_pty_id_block():
     """Return (pts0, pty_max) from includes/ir0/pty_devfs.h."""
     pty_h = ROOT / "includes" / "ir0" / "pty_devfs.h"
@@ -1963,6 +1979,7 @@ def main():
     errors.extend(check_common_paging_uses_neutral_roots())
     errors.extend(check_common_address_space_contracts())
     errors.extend(check_common_elf_uses_isa_policy())
+    errors.extend(check_common_mm_uses_user_va_policy())
 
     if errors:
         print("[arch-guard] FAILED")

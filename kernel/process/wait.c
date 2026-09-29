@@ -37,11 +37,11 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 
 	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx rax=%llx cr3=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)((uint64_t)cs), (unsigned long long)((uint64_t)ss), (unsigned long long)(task_get_flags(&p->task)), (unsigned long long)(task_get_retval(&p->task)), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
 
-	if (rip < 0x00400000ULL || rip > 0x00007FFFFFFFFFFFULL)
+	if (!mm_user_va_ok((uintptr_t)rip, 1))
 	{
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
 	}
-	if (rsp < 0x00400000ULL || rsp > 0x00007FFFFFFFFFFFULL)
+	if (!mm_user_va_ok((uintptr_t)rsp, 1))
 	{
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
 	}
@@ -665,6 +665,5 @@ int process_wait(pid_t pid, int *status, int options)
 		 */
 	}
 }
-
 
 

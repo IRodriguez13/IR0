@@ -30,6 +30,17 @@ size_t mm_kernel_heap_size(void)
 	return 0x01800000UL;
 }
 
+uintptr_t mm_user_va_start(void)
+{
+	return 0x00400000UL;
+}
+
+uintptr_t mm_user_va_end(void)
+{
+	/* Current 48-bit TTBR0 policy; the backend owns future VA-size changes. */
+	return 0x0000FFFFFFFFFFFFUL;
+}
+
 int mm_large_identity_supported(void)
 {
 	return 0;
@@ -65,8 +76,8 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 	 * TTBR0/TTBR1 split lands. Early EL0 probes still use
 	 * arm64_mmu_user_buf_ok behind their own wrappers.
 	 */
-	const uintptr_t user_lo = 0x00400000UL;
-	const uintptr_t user_hi = 0x00007FFFFFFFFFFFUL;
+	const uintptr_t user_lo = mm_user_va_start();
+	const uintptr_t user_hi = mm_user_va_end();
 
 	if (addr == 0)
 		return 0;

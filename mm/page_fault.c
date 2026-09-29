@@ -39,8 +39,6 @@
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 
-#define PF_USER_SPACE_START 0x00400000UL
-#define PF_USER_SPACE_END   0x00007FFFFFFFFFFFUL
 /* Supervisor 2MiB identity under process CR3 (create_process_page_directory). */
 #define PF_IDENTITY_USER_FLOOR 0x00600000UL
 
@@ -62,7 +60,7 @@ static int pf_addr_in_heap(process_t *p, uint64_t fa)
 	 * promote (write-fault no-COW pte=…063 !USER at ~0x9fb000).
 	 */
 	if (heap_lo == 0)
-		heap_lo = PF_USER_SPACE_START;
+		heap_lo = mm_user_va_start();
 
 	return (fa >= heap_lo && fa < heap_hi);
 }
@@ -228,8 +226,7 @@ static void pf_audit_classify(uint64_t *stack,
 	in_vma = pf_addr_in_heap(current, fault_addr) ||
 		 pf_addr_in_stack(current, fault_addr) ||
 		 (pf_mmap_region_for(current, fault_addr) != NULL);
-	in_userspace_range = (fault_addr >= PF_USER_SPACE_START &&
-			      fault_addr <= PF_USER_SPACE_END);
+	in_userspace_range = mm_user_va_ok((uintptr_t)fault_addr, 1);
 
 	klog_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
@@ -480,7 +477,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 
 	if (user && not_present)
 	{
-		if (fault_addr < PF_USER_SPACE_START || fault_addr > PF_USER_SPACE_END)
+		if (!mm_user_va_ok((uintptr_t)fault_addr, 1))
 		{
 			current = process_get_current();
 			if (current)
@@ -773,7 +770,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		return;
 	}
 
-	if (fault_addr >= PF_USER_SPACE_START && fault_addr <= PF_USER_SPACE_END)
+	if (mm_user_va_ok((uintptr_t)fault_addr, 1))
 	{
 		current = process_get_current();
 
