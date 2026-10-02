@@ -88,6 +88,51 @@ static int g_clock_nanosleep_ok;
 static struct syscall_handler_table g_early_syscall_handlers;
 static int g_early_syscall_handlers_ready;
 
+static const enum ir0_syscall_id g_early_supported_syscalls[] = {
+	IR0_SYSCALL_GETPID,
+	IR0_SYSCALL_GETTID,
+	IR0_SYSCALL_NANOSLEEP,
+	IR0_SYSCALL_CLOCK_GETTIME,
+	IR0_SYSCALL_CLOCK_NANOSLEEP,
+	IR0_SYSCALL_GETTIMEOFDAY,
+	IR0_SYSCALL_WRITE,
+	IR0_SYSCALL_SET_TID_ADDRESS,
+	IR0_SYSCALL_GETUID,
+	IR0_SYSCALL_GETEUID,
+	IR0_SYSCALL_GETGID,
+	IR0_SYSCALL_GETEGID,
+	IR0_SYSCALL_GETPPID,
+	IR0_SYSCALL_IOCTL,
+	IR0_SYSCALL_FCNTL,
+	IR0_SYSCALL_READ,
+	IR0_SYSCALL_CLOSE,
+	IR0_SYSCALL_OPENAT,
+	IR0_SYSCALL_FACCESSAT,
+	IR0_SYSCALL_NEWFSTATAT,
+	IR0_SYSCALL_FSTAT,
+	IR0_SYSCALL_READLINKAT,
+	IR0_SYSCALL_DUP,
+	IR0_SYSCALL_DUP3,
+	IR0_SYSCALL_UNAME,
+	IR0_SYSCALL_GETCWD,
+	IR0_SYSCALL_CHDIR,
+	IR0_SYSCALL_SET_ROBUST_LIST,
+	IR0_SYSCALL_CLOCK_GETRES,
+	IR0_SYSCALL_PPOLL,
+	IR0_SYSCALL_RT_SIGACTION,
+	IR0_SYSCALL_RT_SIGPROCMASK,
+	IR0_SYSCALL_PRCTL,
+	IR0_SYSCALL_PRLIMIT64,
+	IR0_SYSCALL_RSEQ,
+	IR0_SYSCALL_GETRANDOM,
+	IR0_SYSCALL_BRK,
+	IR0_SYSCALL_MMAP,
+	IR0_SYSCALL_MUNMAP,
+	IR0_SYSCALL_MPROTECT,
+	IR0_SYSCALL_EXIT,
+	IR0_SYSCALL_EXIT_GROUP,
+};
+
 struct early_syscall_context
 {
 	uint64_t native_number;
@@ -641,13 +686,15 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 
 static void arm64_syscall_early_handlers_init(void)
 {
-	enum ir0_syscall_id id;
+	unsigned int i;
 
 	if (g_early_syscall_handlers_ready)
 		return;
 	syscall_handlers_init(&g_early_syscall_handlers);
-	for (id = IR0_SYSCALL_UNKNOWN + 1; id < IR0_SYSCALL_LINUX_COUNT; id++)
-		(void)syscall_context_handler_set(&g_early_syscall_handlers, id,
+	for (i = 0; i < sizeof(g_early_supported_syscalls) /
+			 sizeof(g_early_supported_syscalls[0]); i++)
+		(void)syscall_context_handler_set(&g_early_syscall_handlers,
+						  g_early_supported_syscalls[i],
 						  arm64_syscall_early_handle);
 	g_early_syscall_handlers_ready = 1;
 }
