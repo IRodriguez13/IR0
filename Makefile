@@ -497,6 +497,7 @@ LIB_OBJS = \
     kernel/lib/pipe.o \
     kernel/lib/copy_user.o \
     kernel/lib/open_flags.o \
+    kernel/lib/syscall_table.o \
     kernel/lib/stat_user.o \
     kernel/lib/named_fifo.o \
     kernel/lib/named_socket.o \

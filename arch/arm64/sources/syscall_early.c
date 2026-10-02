@@ -22,6 +22,7 @@
 #include <stdint.h>
 #include <ir0/boot_log.h>
 #include <ir0/syscall_id.h>
+#include <ir0/syscall_table.h>
 
 #define EBADF  9
 #define EFAULT 14
@@ -84,6 +85,14 @@ static int g_nanosleep_ok;
 static int g_clock_gettime_ok;
 static int g_gettimeofday_ok;
 static int g_clock_nanosleep_ok;
+static struct syscall_handler_table g_early_syscall_handlers;
+static int g_early_syscall_handlers_ready;
+
+struct early_syscall_context
+{
+	uint64_t native_number;
+	int *leave_el0;
+};
 
 static void copy_uname_field(char *dst, const char *src)
 {
@@ -338,20 +347,17 @@ static int64_t sys_gettimeofday(uint64_t tv, uint64_t tz)
 	return 0;
 }
 
-int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
-			    uint64_t a3, uint64_t a4, uint64_t a5, int *leave_el0)
+static int64_t arm64_syscall_early_handle(void *opaque,
+					 enum ir0_syscall_id syscall_id,
+					 uint64_t a0, uint64_t a1, uint64_t a2,
+					 uint64_t a3, uint64_t a4, uint64_t a5)
 {
-	enum ir0_syscall_id syscall_id;
+	struct early_syscall_context *context = opaque;
+	uint64_t nr = context ? context->native_number : 0;
+	int *leave_el0 = context ? context->leave_el0 : 0;
 
 	(void)a4;
 	(void)a5;
-
-	if (leave_el0)
-	{
-		*leave_el0 = 0;
-	}
-
-	syscall_id = syscall_decode_number(nr);
 	switch (syscall_id)
 	{
 	case IR0_SYSCALL_GETPID:
@@ -631,4 +637,44 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		}
 		return -ENOSYS;
 	}
+}
+
+static void arm64_syscall_early_handlers_init(void)
+{
+	enum ir0_syscall_id id;
+
+	if (g_early_syscall_handlers_ready)
+		return;
+	syscall_handlers_init(&g_early_syscall_handlers);
+	for (id = IR0_SYSCALL_UNKNOWN + 1; id < IR0_SYSCALL_LINUX_COUNT; id++)
+		(void)syscall_context_handler_set(&g_early_syscall_handlers, id,
+						  arm64_syscall_early_handle);
+	g_early_syscall_handlers_ready = 1;
+}
+
+int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
+			    uint64_t a3, uint64_t a4, uint64_t a5, int *leave_el0)
+{
+	struct early_syscall_context context;
+	enum ir0_syscall_id syscall_id;
+
+	if (leave_el0)
+		*leave_el0 = 0;
+	syscall_id = syscall_decode_number(nr);
+	if (syscall_id == IR0_SYSCALL_UNKNOWN)
+	{
+		if (arm64_busybox_mode())
+		{
+			pl011_puts("ARM64_BB_ENOSYS_");
+			pl011_put_hex64(nr);
+			pl011_puts("\n");
+		}
+		return -ENOSYS;
+	}
+
+	arm64_syscall_early_handlers_init();
+	context.native_number = nr;
+	context.leave_el0 = leave_el0;
+	return syscall_handler_invoke(&g_early_syscall_handlers, &context,
+				      syscall_id, a0, a1, a2, a3, a4, a5);
 }

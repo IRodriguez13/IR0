@@ -26,6 +26,7 @@
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
 #include <ir0/syscall_id.h>
+#include <ir0/syscall_table.h>
 #include <ir0/kexec.h>
 #include <ir0/signals.h>
 #include <ir0/futex.h>
@@ -53,18 +54,6 @@
 #include <config.h>
 #include <stddef.h>
 #include <stdint.h>
-
-/* Stub for unimplemented syscalls (musl ABI compatibility) */
-static int64_t sys_nosys(uint64_t a1, uint64_t a2, uint64_t a3,
-                         uint64_t a4, uint64_t a5, uint64_t a6)
-{
-  (void)a1; (void)a2; (void)a3; (void)a4; (void)a5; (void)a6;
-  return -ENOSYS;
-}
-
-/* Syscall handler type: 6 args for Linux ABI (arg6 for mmap, etc.) */
-typedef int64_t (*syscall_handler_t)(uint64_t, uint64_t, uint64_t,
-                                     uint64_t, uint64_t, uint64_t);
 
 /* Wrappers to adapt IR0 handlers to uniform 6-arg signature */
 #define WRAP0(h) \
@@ -303,22 +292,13 @@ static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a
   return input_kbd_get_layout();
 }
 
-/* Semantic handler table; ABI numbers never index common kernel state. */
-static syscall_handler_t syscall_semantic_table[IR0_SYSCALL_COUNT];
-
-static syscall_handler_t syscall_handler_lookup(enum ir0_syscall_id syscall_id)
-{
-  if (syscall_id <= IR0_SYSCALL_UNKNOWN || syscall_id >= IR0_SYSCALL_COUNT)
-    return sys_nosys;
-  return syscall_semantic_table[syscall_id];
-}
+/* ABI numbers never index common kernel state. */
+static struct syscall_handler_table native_syscall_handlers;
+#define syscall_semantic_table native_syscall_handlers.handlers
 
 void syscall_table_init(void)
 {
-  size_t i;
-
-  for (i = 0; i < IR0_SYSCALL_COUNT; i++)
-    syscall_semantic_table[i] = sys_nosys;
+  syscall_handlers_init(&native_syscall_handlers);
 
   syscall_semantic_table[IR0_SYSCALL_ACCESS] = wrap_sys_access;
   syscall_semantic_table[IR0_SYSCALL_ALARM] = wrap_sys_alarm;
@@ -527,7 +507,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   if (syscall_id == IR0_SYSCALL_UNKNOWN)
     return -ENOSYS;
 
-  syscall_handler_t handler = syscall_handler_lookup(syscall_id);
   KTM_TRACE_SYSCALL_ENTER((uint32_t)syscall_num);
   if (current_process && current_process->mode == USER_MODE)
   {
@@ -540,7 +519,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 				  process_syscall_ip(current_process));
     }
   }
-  r = handler(arg1, arg2, arg3, arg4, arg5, arg6);
+  r = syscall_handler_invoke(&native_syscall_handlers, NULL, syscall_id,
+			     arg1, arg2, arg3, arg4, arg5, arg6);
   KTM_TRACE_SYSCALL_RET((uint32_t)syscall_num, (uint32_t)r);
   /*
    * Watchdog on the way out: rate-limited internally, so this bounds how
