@@ -16,8 +16,8 @@
 
 #include <stdint.h>
 #include <ir0/errno.h>
+#include <ir0/syscall_id.h>
 #include <ir0/syscall_frame.h>
-#include <uapi/ir0/syscall_linux.h>
 
 /* A captured negative read descriptor is never a valid restart argument. */
 static inline int signal_syscall_read_fd_suspicious(uint64_t val)
@@ -46,7 +46,7 @@ static inline void signal_blocked_syscall_frame_sanitize(arch_syscall_frame_t *s
 	if (!sf)
 		return;
 
-	if (block_nr != 0u)
+	if (syscall_decode_number(block_nr) != IR0_SYSCALL_READ)
 		return;
 
 	if (signal_syscall_read_fd_suspicious(syscall_frame_arg(sf, 0)))
@@ -113,7 +113,7 @@ static inline void signal_resume_blocked_syscall_frame(
 static inline int signal_blocked_syscall_is_console_read(uint32_t block_nr,
 							 int64_t arg0_fd)
 {
-	return block_nr == 0u && arg0_fd == 0;
+	return syscall_decode_number(block_nr) == IR0_SYSCALL_READ && arg0_fd == 0;
 }
 
 /*
@@ -124,12 +124,12 @@ static inline int signal_blocked_syscall_is_console_read(uint32_t block_nr,
  */
 static inline int signal_blocked_syscall_may_restart(uint32_t block_nr)
 {
-	switch (block_nr)
+	switch (syscall_decode_number(block_nr))
 	{
-	case __NR_poll:
-	case __NR_select:
-	case __NR_rt_sigsuspend:
-	case __NR_pselect6:
+	case IR0_SYSCALL_POLL:
+	case IR0_SYSCALL_SELECT:
+	case IR0_SYSCALL_RT_SIGSUSPEND:
+	case IR0_SYSCALL_PSELECT6:
 		return 0;
 	default:
 		return 1;

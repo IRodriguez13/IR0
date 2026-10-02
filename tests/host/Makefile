@@ -111,10 +111,13 @@ host_mount_prefix.o: $(KERNEL_ROOT)/kernel/lib/mount_prefix.c
 host_arm64_boot_info.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c
+host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c \
+	$(KERNEL_ROOT)/includes/ir0/syscall_id.h
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c
+host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
+	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
+	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
 
@@ -135,10 +138,13 @@ host_x86_elf_policy.o: $(KERNEL_ROOT)/arch/x86-64/sources/elf_policy.c
 test_arm64_boot_info.o: test_arm64_boot_info.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-test_arm64_syscall_decode.o: test_arm64_syscall_decode.c
+test_arm64_syscall_decode.o: test_arm64_syscall_decode.c \
+	$(KERNEL_ROOT)/includes/ir0/syscall_id.h
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
-test_x86_syscall_decode.o: test_x86_syscall_decode.c
+test_x86_syscall_decode.o: test_x86_syscall_decode.c \
+	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
+	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c

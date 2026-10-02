@@ -29,6 +29,7 @@
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/mm_port.h>
+#include <ir0/mman.h>
 #include <ir0/clock.h>
 #include <mm/allocator.h>
 #include <ir0/arch_port.h>
@@ -42,14 +43,6 @@
 #include <ir0/validation.h>
 #include <stdint.h>
 
-#define MAP_SHARED    0x01
-#define MAP_PRIVATE   0x02
-#define MAP_FIXED     0x10
-#define MAP_ANONYMOUS 0x20
-#define PROT_READ   0x1
-#define PROT_WRITE  0x2
-#define PROT_EXEC   0x4
-#define PROT_NONE   0x0
 #define SYSCALL_PTR_ERR(err) ((void *)(intptr_t)(-(err)))
 #define MMAP_AUDIT_FAILED ((void *)(intptr_t)-1)
 

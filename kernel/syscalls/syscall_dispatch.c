@@ -25,7 +25,6 @@
 #include "io_syscalls.h"
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
-#include <ir0/syscall_linux.h>
 #include <ir0/syscall_id.h>
 #include <ir0/kexec.h>
 #include <ir0/signals.h>
@@ -304,229 +303,194 @@ static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a
   return input_kbd_get_layout();
 }
 
-/* Raw Linux x86-64 ABI table plus the incrementally shared semantic table. */
-static syscall_handler_t syscall_table_rw[__NR_syscall_max];
+/* Semantic handler table; ABI numbers never index common kernel state. */
 static syscall_handler_t syscall_semantic_table[IR0_SYSCALL_COUNT];
 
-static syscall_handler_t syscall_handler_lookup(uint64_t abi_number,
-                                                enum ir0_syscall_id syscall_id)
+static syscall_handler_t syscall_handler_lookup(enum ir0_syscall_id syscall_id)
 {
-  if (syscall_id > IR0_SYSCALL_UNKNOWN && syscall_id < IR0_SYSCALL_COUNT &&
-      syscall_semantic_table[syscall_id])
-    return syscall_semantic_table[syscall_id];
-
-  if (abi_number >= __NR_syscall_max)
+  if (syscall_id <= IR0_SYSCALL_UNKNOWN || syscall_id >= IR0_SYSCALL_COUNT)
     return sys_nosys;
-
-  return syscall_table_rw[abi_number];
+  return syscall_semantic_table[syscall_id];
 }
 
 void syscall_table_init(void)
 {
-  for (size_t i = 0; i < __NR_syscall_max; i++)
-    syscall_table_rw[i] = sys_nosys;
-  for (size_t i = 0; i < IR0_SYSCALL_COUNT; i++)
-    syscall_semantic_table[i] = NULL;
+  size_t i;
 
-  /* Implemented syscalls - Linux numbers */
-  syscall_table_rw[__NR_read]           = wrap_sys_read;
-  syscall_table_rw[__NR_readv]          = wrap_sys_readv;
-  syscall_table_rw[__NR_write]          = wrap_sys_write;
-  syscall_table_rw[__NR_writev]         = wrap_sys_writev;
-  syscall_table_rw[__NR_open]           = wrap_sys_open;
-  syscall_table_rw[__NR_close]          = wrap_sys_close;
-  syscall_table_rw[__NR_stat]           = wrap_sys_stat;
-  syscall_table_rw[__NR_lstat]          = wrap_sys_stat;
-  syscall_table_rw[__NR_fstat]          = wrap_sys_fstat;
-  syscall_table_rw[__NR_statfs]         = wrap_sys_statfs;
-  syscall_table_rw[__NR_fstatfs]        = wrap_sys_fstatfs;
-  syscall_table_rw[__NR_poll]           = wrap_sys_poll;
-  syscall_table_rw[__NR_ppoll]          = wrap_sys_ppoll;
-  syscall_table_rw[__NR_select]         = wrap_sys_select;
-  syscall_table_rw[__NR_lseek]          = wrap_sys_lseek;
-  syscall_table_rw[__NR_mmap]           = wrap_sys_mmap;
-  syscall_table_rw[__NR_mprotect]       = wrap_sys_mprotect;
-  syscall_table_rw[__NR_munmap]         = wrap_sys_munmap;
-  syscall_table_rw[__NR_brk]            = wrap_sys_brk;
-  syscall_table_rw[__NR_rt_sigaction]   = wrap_sys_rt_sigaction;
-  syscall_table_rw[__NR_rt_sigprocmask] = wrap_sys_rt_sigprocmask;
-  syscall_table_rw[__NR_rt_sigsuspend]   = wrap_sys_rt_sigsuspend;
-  syscall_table_rw[__NR_rt_sigreturn]   = wrap_sys_sigreturn;
-  syscall_table_rw[__NR_fcntl]            = wrap_sys_fcntl;
-  syscall_table_rw[__NR_flock]            = wrap_sys_flock;
-  syscall_table_rw[__NR_mknodat]          = wrap_sys_mknodat;
-  syscall_table_rw[__NR_mknod]            = wrap_sys_mknod;
-  syscall_table_rw[__NR_ioctl]          = wrap_sys_ioctl;
-  syscall_table_rw[__NR_pipe]           = wrap_sys_pipe;
-  syscall_table_rw[__NR_pipe2]          = wrap_sys_pipe2;
-  syscall_table_rw[__NR_dup2]           = wrap_sys_dup2;
-  syscall_table_rw[__NR_nanosleep]      = wrap_sys_nanosleep;
-  syscall_table_rw[__NR_getitimer]      = wrap_sys_getitimer;
-  syscall_table_rw[__NR_alarm]          = wrap_sys_alarm;
-  syscall_table_rw[__NR_setitimer]      = wrap_sys_setitimer;
-  syscall_table_rw[__NR_pause]          = wrap_sys_pause;
-  syscall_table_rw[__NR_getpid]         = wrap_sys_getpid;
-  syscall_table_rw[__NR_gettid]         = wrap_sys_gettid;
-  syscall_table_rw[__NR_getuid]         = wrap_sys_getuid;
-  syscall_table_rw[__NR_syslog]         = wrap_sys_syslog;
-  syscall_table_rw[__NR_geteuid]        = wrap_sys_geteuid;
-  syscall_table_rw[__NR_getgid]         = wrap_sys_getgid;
-  syscall_table_rw[__NR_getegid]        = wrap_sys_getegid;
-  syscall_table_rw[__NR_setuid]         = wrap_sys_setuid;
-  syscall_table_rw[__NR_setgid]         = wrap_sys_setgid;
-  syscall_table_rw[__NR_getgroups]      = wrap_sys_getgroups;
-  syscall_table_rw[__NR_setgroups]      = wrap_sys_setgroups;
-  syscall_table_rw[__NR_setreuid]       = wrap_sys_setreuid;
-  syscall_table_rw[__NR_setregid]       = wrap_sys_setregid;
-  syscall_table_rw[__NR_setresuid]      = wrap_sys_setresuid;
-  syscall_table_rw[__NR_getresuid]      = wrap_sys_getresuid;
-  syscall_table_rw[__NR_setresgid]      = wrap_sys_setresgid;
-  syscall_table_rw[__NR_getresgid]      = wrap_sys_getresgid;
-  syscall_table_rw[__NR_umask]          = wrap_sys_umask;
-  syscall_table_rw[__NR_prctl]          = wrap_sys_prctl;
-  syscall_table_rw[__NR_clone]           = wrap_sys_clone;
-  syscall_table_rw[__NR_fork]          = wrap_sys_fork;
-  syscall_table_rw[__NR_vfork]         = wrap_sys_vfork;
-  syscall_table_rw[__NR_execve]        = wrap_sys_exec;
-  syscall_table_rw[__NR_exit]           = wrap_sys_exit;
-  syscall_table_rw[__NR_wait4]          = wrap_sys_waitpid;
-  syscall_table_rw[__NR_kill]           = wrap_sys_kill;
-  syscall_table_rw[__NR_reboot]         = wrap_sys_reboot;
-  syscall_table_rw[__NR_kexec_load]     = wrap_sys_kexec_load;
-  syscall_table_rw[__NR_tkill]          = wrap_sys_tkill;
-  syscall_table_rw[__NR_tgkill]         = wrap_sys_tgkill;
-  syscall_table_rw[__NR_getdents]       = wrap_sys_getdents;
-  syscall_table_rw[__NR_getcwd]         = wrap_sys_getcwd;
-  syscall_table_rw[__NR_utimensat]      = wrap_sys_utimensat;
-  syscall_table_rw[__NR_chdir]          = wrap_sys_chdir;
-  syscall_table_rw[__NR_chroot]         = wrap_sys_chroot;
-  syscall_table_rw[__NR_fchdir]         = wrap_sys_fchdir;
-  syscall_table_rw[__NR_mkdir]          = wrap_sys_mkdir;
-  syscall_table_rw[__NR_mkdirat]        = wrap_sys_mkdirat;
-  syscall_table_rw[__NR_rmdir]          = wrap_sys_rmdir;
-  syscall_table_rw[__NR_link]           = wrap_sys_link;
-  syscall_table_rw[__NR_readlink]       = wrap_sys_readlink;
-  syscall_table_rw[__NR_symlink]        = wrap_sys_symlink;
-  syscall_table_rw[__NR_symlinkat]      = wrap_sys_symlinkat;
-  syscall_table_rw[__NR_readlinkat]     = wrap_sys_readlinkat;
-  syscall_table_rw[__NR_rename]         = wrap_sys_rename;
-  syscall_table_rw[__NR_unlink]         = wrap_sys_unlink;
-  syscall_table_rw[__NR_truncate]       = wrap_sys_truncate;
-  syscall_table_rw[__NR_ftruncate]      = wrap_sys_ftruncate;
-  syscall_table_rw[__NR_unlinkat]       = wrap_sys_unlinkat;
-  syscall_table_rw[__NR_renameat]       = wrap_sys_renameat;
-  syscall_table_rw[__NR_uname]          = wrap_sys_uname;
-  syscall_table_rw[__NR_sysinfo]        = wrap_sys_sysinfo;
-  syscall_table_rw[__NR_access]         = wrap_sys_access;
-  syscall_table_rw[__NR_faccessat]      = wrap_sys_faccessat;
-  syscall_table_rw[__NR_dup]            = wrap_sys_dup;
-  syscall_table_rw[__NR_dup3]           = wrap_sys_dup3;
-  syscall_table_rw[__NR_chmod]         = wrap_sys_chmod;
-  syscall_table_rw[__NR_fchmod]        = wrap_sys_fchmod;
-  syscall_table_rw[__NR_chown]          = wrap_sys_chown;
-  syscall_table_rw[__NR_fchown]        = wrap_sys_fchown;
-  syscall_table_rw[__NR_fchmodat]       = wrap_sys_fchmodat;
-  syscall_table_rw[__NR_fchownat]       = wrap_sys_fchownat;
-  syscall_table_rw[__NR_gettimeofday]   = wrap_sys_gettimeofday;
-  syscall_table_rw[__NR_getppid]        = wrap_sys_getppid;
-  syscall_table_rw[__NR_setsid]         = wrap_sys_setsid;
-  syscall_table_rw[__NR_getsid]         = wrap_sys_getsid;
-  syscall_table_rw[__NR_getpgid]        = wrap_sys_getpgid;
-  syscall_table_rw[__NR_setpgid]        = wrap_sys_setpgid;
-  syscall_table_rw[__NR_arch_prctl]     = wrap_sys_arch_prctl;
-  syscall_table_rw[__NR_set_tid_address] = wrap_sys_set_tid_address;
-  syscall_table_rw[__NR_openat]         = wrap_sys_openat;
-  syscall_table_rw[__NR_getdents64]     = wrap_sys_getdents64;
-  syscall_table_rw[__NR_newfstatat]     = wrap_sys_newfstatat;
-  syscall_table_rw[__NR_futex]          = wrap_sys_futex;
-  syscall_table_rw[__NR_clock_gettime]  = wrap_sys_clock_gettime;
-  syscall_table_rw[__NR_clock_gettime64] = wrap_sys_clock_gettime;
-  syscall_table_rw[__NR_set_robust_list] = wrap_sys_set_robust_list;
-  syscall_table_rw[__NR_get_robust_list] = wrap_sys_get_robust_list;
-  syscall_table_rw[__NR_getrandom]      = wrap_sys_getrandom;
-  syscall_table_rw[__NR_execveat]       = wrap_sys_execveat;
-  syscall_table_rw[__NR_prlimit64]      = wrap_sys_prlimit64;
-  syscall_table_rw[__NR_getrlimit]      = wrap_sys_getrlimit;
-  syscall_table_rw[__NR_epoll_create1]  = wrap_sys_epoll_create1;
-  syscall_table_rw[__NR_epoll_create]   = wrap_sys_epoll_create1;
-  syscall_table_rw[__NR_epoll_ctl]      = wrap_sys_epoll_ctl;
-  syscall_table_rw[__NR_epoll_wait]     = wrap_sys_epoll_wait;
-  syscall_table_rw[__NR_epoll_pwait]    = wrap_sys_epoll_pwait;
-  syscall_table_rw[__NR_pselect6]       = wrap_sys_pselect6;
-  syscall_table_rw[__NR_mount]          = wrap_sys_mount;
-  syscall_table_rw[__NR_umount2]        = wrap_sys_umount;
-  syscall_table_rw[__NR_sync]           = wrap_sys_sync;
-  syscall_table_rw[__NR_personality]    = wrap_sys_personality;
-  syscall_table_rw[__NR_getpriority]    = wrap_sys_getpriority;
-  syscall_table_rw[__NR_setpriority]    = wrap_sys_setpriority;
-  syscall_table_rw[__NR_fsync]          = wrap_sys_fsync;
-  syscall_table_rw[__NR_fdatasync]      = wrap_sys_fdatasync;
-  syscall_table_rw[__NR_console_scroll]  = wrap_console_scroll;
-  syscall_table_rw[__NR_console_clear]   = wrap_console_clear;
-  syscall_table_rw[__NR_keymap_set]      = wrap_keymap_set;
-  syscall_table_rw[__NR_keymap_get]      = wrap_keymap_get;
+  for (i = 0; i < IR0_SYSCALL_COUNT; i++)
+    syscall_semantic_table[i] = sys_nosys;
 
-  /*
-   * Socket API: AF_UNIX stream + TCP loopback + socketpair/msg/SCM_RIGHTS.
-   */
-#if CONFIG_ENABLE_NETWORKING
-  syscall_table_rw[__NR_socket]      = wrap_sys_socket;
-  syscall_table_rw[__NR_bind]        = wrap_sys_bind;
-  syscall_table_rw[__NR_connect]     = wrap_sys_connect;
-  syscall_table_rw[__NR_listen]      = wrap_sys_listen;
-  syscall_table_rw[__NR_accept]      = wrap_sys_accept;
-  syscall_table_rw[__NR_accept4]     = wrap_sys_accept4;
-  syscall_table_rw[__NR_socketpair]  = wrap_sys_socketpair;
-  syscall_table_rw[__NR_sendto]      = wrap_sys_sendto;
-  syscall_table_rw[__NR_recvfrom]    = wrap_sys_recvfrom;
-  syscall_table_rw[__NR_sendmsg]     = wrap_sys_sendmsg;
-  syscall_table_rw[__NR_recvmsg]     = wrap_sys_recvmsg;
-  syscall_table_rw[__NR_shutdown]    = wrap_sys_shutdown;
-  syscall_table_rw[__NR_getsockname] = wrap_sys_getsockname;
-  syscall_table_rw[__NR_getpeername] = wrap_sys_getpeername;
-  syscall_table_rw[__NR_setsockopt]  = wrap_sys_setsockopt;
-  syscall_table_rw[__NR_getsockopt]  = wrap_sys_getsockopt;
-  syscall_table_rw[__NR_shmget]      = wrap_sys_shmget;
-  syscall_table_rw[__NR_shmat]       = wrap_sys_shmat;
-  syscall_table_rw[__NR_shmdt]       = wrap_sys_shmdt;
-  syscall_table_rw[__NR_shmctl]      = wrap_sys_shmctl;
-#else
-  {
-    static const unsigned socket_nosys_nrs[] = {
-      __NR_socket, __NR_bind, __NR_connect, __NR_listen, __NR_accept,
-      __NR_accept4, __NR_socketpair, __NR_sendto, __NR_recvfrom, __NR_sendmsg, __NR_recvmsg,
-      __NR_shutdown, __NR_getsockname, __NR_getpeername, __NR_setsockopt,
-      __NR_getsockopt,
-    };
-    size_t si;
-
-    for (si = 0; si < sizeof(socket_nosys_nrs) / sizeof(socket_nosys_nrs[0]); si++)
-      syscall_table_rw[socket_nosys_nrs[si]] = sys_nosys;
-  }
-#endif
-  syscall_table_rw[__NR_memfd_create] = wrap_sys_memfd_create;
-  syscall_table_rw[__NR_eventfd2] = wrap_sys_eventfd2;
-  syscall_table_rw[__NR_timerfd_create] = wrap_sys_timerfd_create;
-  syscall_table_rw[__NR_timerfd_settime] = wrap_sys_timerfd_settime;
-  syscall_table_rw[__NR_timerfd_gettime] = wrap_sys_timerfd_gettime;
-  syscall_table_rw[__NR_exit_group]     = wrap_sys_exit_group;
-
-  /* First architecture-neutral behavior family. */
-  syscall_semantic_table[IR0_SYSCALL_WRITE] = wrap_sys_write;
-  syscall_semantic_table[IR0_SYSCALL_GETPID] = wrap_sys_getpid;
-  syscall_semantic_table[IR0_SYSCALL_GETTID] = wrap_sys_gettid;
-  syscall_semantic_table[IR0_SYSCALL_GETUID] = wrap_sys_getuid;
+  syscall_semantic_table[IR0_SYSCALL_ACCESS] = wrap_sys_access;
+  syscall_semantic_table[IR0_SYSCALL_ALARM] = wrap_sys_alarm;
+  syscall_semantic_table[IR0_SYSCALL_ARCH_PRCTL] = wrap_sys_arch_prctl;
+  syscall_semantic_table[IR0_SYSCALL_BRK] = wrap_sys_brk;
+  syscall_semantic_table[IR0_SYSCALL_CHDIR] = wrap_sys_chdir;
+  syscall_semantic_table[IR0_SYSCALL_CHMOD] = wrap_sys_chmod;
+  syscall_semantic_table[IR0_SYSCALL_CHOWN] = wrap_sys_chown;
+  syscall_semantic_table[IR0_SYSCALL_CHROOT] = wrap_sys_chroot;
+  syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME] = wrap_sys_clock_gettime;
+  syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME64] = wrap_sys_clock_gettime;
+  syscall_semantic_table[IR0_SYSCALL_CLONE] = wrap_sys_clone;
+  syscall_semantic_table[IR0_SYSCALL_CLOSE] = wrap_sys_close;
+  syscall_semantic_table[IR0_SYSCALL_EXTENSION_CONSOLE_CLEAR] = wrap_console_clear;
+  syscall_semantic_table[IR0_SYSCALL_EXTENSION_CONSOLE_SCROLL] = wrap_console_scroll;
+  syscall_semantic_table[IR0_SYSCALL_DUP] = wrap_sys_dup;
+  syscall_semantic_table[IR0_SYSCALL_DUP2] = wrap_sys_dup2;
+  syscall_semantic_table[IR0_SYSCALL_DUP3] = wrap_sys_dup3;
+  syscall_semantic_table[IR0_SYSCALL_EPOLL_CREATE] = wrap_sys_epoll_create1;
+  syscall_semantic_table[IR0_SYSCALL_EPOLL_CREATE1] = wrap_sys_epoll_create1;
+  syscall_semantic_table[IR0_SYSCALL_EPOLL_CTL] = wrap_sys_epoll_ctl;
+  syscall_semantic_table[IR0_SYSCALL_EPOLL_PWAIT] = wrap_sys_epoll_pwait;
+  syscall_semantic_table[IR0_SYSCALL_EPOLL_WAIT] = wrap_sys_epoll_wait;
+  syscall_semantic_table[IR0_SYSCALL_EVENTFD2] = wrap_sys_eventfd2;
+  syscall_semantic_table[IR0_SYSCALL_EXECVE] = wrap_sys_exec;
+  syscall_semantic_table[IR0_SYSCALL_EXECVEAT] = wrap_sys_execveat;
+  syscall_semantic_table[IR0_SYSCALL_EXIT] = wrap_sys_exit;
+  syscall_semantic_table[IR0_SYSCALL_EXIT_GROUP] = wrap_sys_exit_group;
+  syscall_semantic_table[IR0_SYSCALL_FACCESSAT] = wrap_sys_faccessat;
+  syscall_semantic_table[IR0_SYSCALL_FCHDIR] = wrap_sys_fchdir;
+  syscall_semantic_table[IR0_SYSCALL_FCHMOD] = wrap_sys_fchmod;
+  syscall_semantic_table[IR0_SYSCALL_FCHMODAT] = wrap_sys_fchmodat;
+  syscall_semantic_table[IR0_SYSCALL_FCHOWN] = wrap_sys_fchown;
+  syscall_semantic_table[IR0_SYSCALL_FCHOWNAT] = wrap_sys_fchownat;
+  syscall_semantic_table[IR0_SYSCALL_FCNTL] = wrap_sys_fcntl;
+  syscall_semantic_table[IR0_SYSCALL_FDATASYNC] = wrap_sys_fdatasync;
+  syscall_semantic_table[IR0_SYSCALL_FLOCK] = wrap_sys_flock;
+  syscall_semantic_table[IR0_SYSCALL_FORK] = wrap_sys_fork;
+  syscall_semantic_table[IR0_SYSCALL_FSTAT] = wrap_sys_fstat;
+  syscall_semantic_table[IR0_SYSCALL_FSTATFS] = wrap_sys_fstatfs;
+  syscall_semantic_table[IR0_SYSCALL_FSYNC] = wrap_sys_fsync;
+  syscall_semantic_table[IR0_SYSCALL_FTRUNCATE] = wrap_sys_ftruncate;
+  syscall_semantic_table[IR0_SYSCALL_FUTEX] = wrap_sys_futex;
+  syscall_semantic_table[IR0_SYSCALL_GET_ROBUST_LIST] = wrap_sys_get_robust_list;
+  syscall_semantic_table[IR0_SYSCALL_GETCWD] = wrap_sys_getcwd;
+  syscall_semantic_table[IR0_SYSCALL_GETDENTS] = wrap_sys_getdents;
+  syscall_semantic_table[IR0_SYSCALL_GETDENTS64] = wrap_sys_getdents64;
+  syscall_semantic_table[IR0_SYSCALL_GETEGID] = wrap_sys_getegid;
   syscall_semantic_table[IR0_SYSCALL_GETEUID] = wrap_sys_geteuid;
   syscall_semantic_table[IR0_SYSCALL_GETGID] = wrap_sys_getgid;
-  syscall_semantic_table[IR0_SYSCALL_GETEGID] = wrap_sys_getegid;
-  syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME] = wrap_sys_clock_gettime;
+  syscall_semantic_table[IR0_SYSCALL_GETGROUPS] = wrap_sys_getgroups;
+  syscall_semantic_table[IR0_SYSCALL_GETITIMER] = wrap_sys_getitimer;
+  syscall_semantic_table[IR0_SYSCALL_GETPGID] = wrap_sys_getpgid;
+  syscall_semantic_table[IR0_SYSCALL_GETPID] = wrap_sys_getpid;
+  syscall_semantic_table[IR0_SYSCALL_GETPPID] = wrap_sys_getppid;
+  syscall_semantic_table[IR0_SYSCALL_GETPRIORITY] = wrap_sys_getpriority;
+  syscall_semantic_table[IR0_SYSCALL_GETRANDOM] = wrap_sys_getrandom;
+  syscall_semantic_table[IR0_SYSCALL_GETRESGID] = wrap_sys_getresgid;
+  syscall_semantic_table[IR0_SYSCALL_GETRESUID] = wrap_sys_getresuid;
+  syscall_semantic_table[IR0_SYSCALL_GETRLIMIT] = wrap_sys_getrlimit;
+  syscall_semantic_table[IR0_SYSCALL_GETSID] = wrap_sys_getsid;
+  syscall_semantic_table[IR0_SYSCALL_GETTID] = wrap_sys_gettid;
   syscall_semantic_table[IR0_SYSCALL_GETTIMEOFDAY] = wrap_sys_gettimeofday;
+  syscall_semantic_table[IR0_SYSCALL_GETUID] = wrap_sys_getuid;
+  syscall_semantic_table[IR0_SYSCALL_IOCTL] = wrap_sys_ioctl;
+  syscall_semantic_table[IR0_SYSCALL_KEXEC_LOAD] = wrap_sys_kexec_load;
+  syscall_semantic_table[IR0_SYSCALL_EXTENSION_KEYMAP_GET] = wrap_keymap_get;
+  syscall_semantic_table[IR0_SYSCALL_EXTENSION_KEYMAP_SET] = wrap_keymap_set;
+  syscall_semantic_table[IR0_SYSCALL_KILL] = wrap_sys_kill;
+  syscall_semantic_table[IR0_SYSCALL_LINK] = wrap_sys_link;
+  syscall_semantic_table[IR0_SYSCALL_LSEEK] = wrap_sys_lseek;
+  syscall_semantic_table[IR0_SYSCALL_LSTAT] = wrap_sys_stat;
+  syscall_semantic_table[IR0_SYSCALL_MEMFD_CREATE] = wrap_sys_memfd_create;
+  syscall_semantic_table[IR0_SYSCALL_MKDIR] = wrap_sys_mkdir;
+  syscall_semantic_table[IR0_SYSCALL_MKDIRAT] = wrap_sys_mkdirat;
+  syscall_semantic_table[IR0_SYSCALL_MKNOD] = wrap_sys_mknod;
+  syscall_semantic_table[IR0_SYSCALL_MKNODAT] = wrap_sys_mknodat;
+  syscall_semantic_table[IR0_SYSCALL_MMAP] = wrap_sys_mmap;
+  syscall_semantic_table[IR0_SYSCALL_MOUNT] = wrap_sys_mount;
+  syscall_semantic_table[IR0_SYSCALL_MPROTECT] = wrap_sys_mprotect;
+  syscall_semantic_table[IR0_SYSCALL_MUNMAP] = wrap_sys_munmap;
+  syscall_semantic_table[IR0_SYSCALL_NANOSLEEP] = wrap_sys_nanosleep;
+  syscall_semantic_table[IR0_SYSCALL_NEWFSTATAT] = wrap_sys_newfstatat;
+  syscall_semantic_table[IR0_SYSCALL_OPEN] = wrap_sys_open;
+  syscall_semantic_table[IR0_SYSCALL_OPENAT] = wrap_sys_openat;
+  syscall_semantic_table[IR0_SYSCALL_PAUSE] = wrap_sys_pause;
+  syscall_semantic_table[IR0_SYSCALL_PERSONALITY] = wrap_sys_personality;
+  syscall_semantic_table[IR0_SYSCALL_PIPE] = wrap_sys_pipe;
+  syscall_semantic_table[IR0_SYSCALL_PIPE2] = wrap_sys_pipe2;
+  syscall_semantic_table[IR0_SYSCALL_POLL] = wrap_sys_poll;
+  syscall_semantic_table[IR0_SYSCALL_PPOLL] = wrap_sys_ppoll;
+  syscall_semantic_table[IR0_SYSCALL_PRCTL] = wrap_sys_prctl;
+  syscall_semantic_table[IR0_SYSCALL_PRLIMIT64] = wrap_sys_prlimit64;
+  syscall_semantic_table[IR0_SYSCALL_PSELECT6] = wrap_sys_pselect6;
+  syscall_semantic_table[IR0_SYSCALL_READ] = wrap_sys_read;
+  syscall_semantic_table[IR0_SYSCALL_READLINK] = wrap_sys_readlink;
+  syscall_semantic_table[IR0_SYSCALL_READLINKAT] = wrap_sys_readlinkat;
+  syscall_semantic_table[IR0_SYSCALL_READV] = wrap_sys_readv;
+  syscall_semantic_table[IR0_SYSCALL_REBOOT] = wrap_sys_reboot;
+  syscall_semantic_table[IR0_SYSCALL_RENAME] = wrap_sys_rename;
+  syscall_semantic_table[IR0_SYSCALL_RENAMEAT] = wrap_sys_renameat;
+  syscall_semantic_table[IR0_SYSCALL_RMDIR] = wrap_sys_rmdir;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGACTION] = wrap_sys_rt_sigaction;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGPROCMASK] = wrap_sys_rt_sigprocmask;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGRETURN] = wrap_sys_sigreturn;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGSUSPEND] = wrap_sys_rt_sigsuspend;
+  syscall_semantic_table[IR0_SYSCALL_SELECT] = wrap_sys_select;
+  syscall_semantic_table[IR0_SYSCALL_SET_ROBUST_LIST] = wrap_sys_set_robust_list;
+  syscall_semantic_table[IR0_SYSCALL_SET_TID_ADDRESS] = wrap_sys_set_tid_address;
+  syscall_semantic_table[IR0_SYSCALL_SETGID] = wrap_sys_setgid;
+  syscall_semantic_table[IR0_SYSCALL_SETGROUPS] = wrap_sys_setgroups;
+  syscall_semantic_table[IR0_SYSCALL_SETITIMER] = wrap_sys_setitimer;
+  syscall_semantic_table[IR0_SYSCALL_SETPGID] = wrap_sys_setpgid;
+  syscall_semantic_table[IR0_SYSCALL_SETPRIORITY] = wrap_sys_setpriority;
+  syscall_semantic_table[IR0_SYSCALL_SETREGID] = wrap_sys_setregid;
+  syscall_semantic_table[IR0_SYSCALL_SETRESGID] = wrap_sys_setresgid;
+  syscall_semantic_table[IR0_SYSCALL_SETRESUID] = wrap_sys_setresuid;
+  syscall_semantic_table[IR0_SYSCALL_SETREUID] = wrap_sys_setreuid;
+  syscall_semantic_table[IR0_SYSCALL_SETSID] = wrap_sys_setsid;
+  syscall_semantic_table[IR0_SYSCALL_SETUID] = wrap_sys_setuid;
+  syscall_semantic_table[IR0_SYSCALL_STAT] = wrap_sys_stat;
+  syscall_semantic_table[IR0_SYSCALL_STATFS] = wrap_sys_statfs;
+  syscall_semantic_table[IR0_SYSCALL_SYMLINK] = wrap_sys_symlink;
+  syscall_semantic_table[IR0_SYSCALL_SYMLINKAT] = wrap_sys_symlinkat;
+  syscall_semantic_table[IR0_SYSCALL_SYNC] = wrap_sys_sync;
+  syscall_semantic_table[IR0_SYSCALL_SYSINFO] = wrap_sys_sysinfo;
+  syscall_semantic_table[IR0_SYSCALL_SYSLOG] = wrap_sys_syslog;
+  syscall_semantic_table[IR0_SYSCALL_TGKILL] = wrap_sys_tgkill;
+  syscall_semantic_table[IR0_SYSCALL_TIMERFD_CREATE] = wrap_sys_timerfd_create;
+  syscall_semantic_table[IR0_SYSCALL_TIMERFD_GETTIME] = wrap_sys_timerfd_gettime;
+  syscall_semantic_table[IR0_SYSCALL_TIMERFD_SETTIME] = wrap_sys_timerfd_settime;
+  syscall_semantic_table[IR0_SYSCALL_TKILL] = wrap_sys_tkill;
+  syscall_semantic_table[IR0_SYSCALL_TRUNCATE] = wrap_sys_truncate;
+  syscall_semantic_table[IR0_SYSCALL_UMASK] = wrap_sys_umask;
+  syscall_semantic_table[IR0_SYSCALL_UMOUNT2] = wrap_sys_umount;
+  syscall_semantic_table[IR0_SYSCALL_UNAME] = wrap_sys_uname;
+  syscall_semantic_table[IR0_SYSCALL_UNLINK] = wrap_sys_unlink;
+  syscall_semantic_table[IR0_SYSCALL_UNLINKAT] = wrap_sys_unlinkat;
+  syscall_semantic_table[IR0_SYSCALL_UTIMENSAT] = wrap_sys_utimensat;
+  syscall_semantic_table[IR0_SYSCALL_VFORK] = wrap_sys_vfork;
+  syscall_semantic_table[IR0_SYSCALL_WAIT4] = wrap_sys_waitpid;
+  syscall_semantic_table[IR0_SYSCALL_WRITE] = wrap_sys_write;
+  syscall_semantic_table[IR0_SYSCALL_WRITEV] = wrap_sys_writev;
+
+#if CONFIG_ENABLE_NETWORKING
+  syscall_semantic_table[IR0_SYSCALL_ACCEPT] = wrap_sys_accept;
+  syscall_semantic_table[IR0_SYSCALL_ACCEPT4] = wrap_sys_accept4;
+  syscall_semantic_table[IR0_SYSCALL_BIND] = wrap_sys_bind;
+  syscall_semantic_table[IR0_SYSCALL_CONNECT] = wrap_sys_connect;
+  syscall_semantic_table[IR0_SYSCALL_GETPEERNAME] = wrap_sys_getpeername;
+  syscall_semantic_table[IR0_SYSCALL_GETSOCKNAME] = wrap_sys_getsockname;
+  syscall_semantic_table[IR0_SYSCALL_GETSOCKOPT] = wrap_sys_getsockopt;
+  syscall_semantic_table[IR0_SYSCALL_LISTEN] = wrap_sys_listen;
+  syscall_semantic_table[IR0_SYSCALL_RECVFROM] = wrap_sys_recvfrom;
+  syscall_semantic_table[IR0_SYSCALL_RECVMSG] = wrap_sys_recvmsg;
+  syscall_semantic_table[IR0_SYSCALL_SENDMSG] = wrap_sys_sendmsg;
+  syscall_semantic_table[IR0_SYSCALL_SENDTO] = wrap_sys_sendto;
+  syscall_semantic_table[IR0_SYSCALL_SETSOCKOPT] = wrap_sys_setsockopt;
+  syscall_semantic_table[IR0_SYSCALL_SHMAT] = wrap_sys_shmat;
+  syscall_semantic_table[IR0_SYSCALL_SHMCTL] = wrap_sys_shmctl;
+  syscall_semantic_table[IR0_SYSCALL_SHMDT] = wrap_sys_shmdt;
+  syscall_semantic_table[IR0_SYSCALL_SHMGET] = wrap_sys_shmget;
+  syscall_semantic_table[IR0_SYSCALL_SHUTDOWN] = wrap_sys_shutdown;
+  syscall_semantic_table[IR0_SYSCALL_SOCKET] = wrap_sys_socket;
+  syscall_semantic_table[IR0_SYSCALL_SOCKETPAIR] = wrap_sys_socketpair;
+#endif
 }
 
 /**
  * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
- * @syscall_num: Linux x86-64 syscall number
- * @arg1-arg6: System call arguments (arg6 on stack per AMD64 SysV ABI)
+ * @syscall_num: Native Linux ABI syscall number for the active ISA
+ * @arg1-arg6: System call arguments captured by the ISA entry backend
  *
  * Returns: System call return value, or -ENOSYS for unknown/unimplemented
  */
@@ -560,10 +524,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
                                  process_syscall_sp(current_process));
   }
 
-  if (syscall_id == IR0_SYSCALL_UNKNOWN && syscall_num >= __NR_syscall_max)
+  if (syscall_id == IR0_SYSCALL_UNKNOWN)
     return -ENOSYS;
 
-  syscall_handler_t handler = syscall_handler_lookup(syscall_num, syscall_id);
+  syscall_handler_t handler = syscall_handler_lookup(syscall_id);
   KTM_TRACE_SYSCALL_ENTER((uint32_t)syscall_num);
   if (current_process && current_process->mode == USER_MODE)
   {

@@ -23,6 +23,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/poll.h>
 #include <ir0/time.h>
+#include <ir0/mman.h>
 #include <string.h>
 
 /**
@@ -133,18 +134,6 @@ typedef int syscall_num_t;
 /* Access modes for permission checking - use definitions from permissions.h */
 #include <ir0/permissions.h>
 #define ACCESS_EXECUTE ACCESS_EXEC
-
-/* Memory protection flags for mmap */
-#define PROT_READ     0x1
-#define PROT_WRITE    0x2
-#define PROT_EXEC     0x4
-#define PROT_NONE     0x0
-
-/* Mapping flags for mmap */
-#define MAP_SHARED    0x01
-#define MAP_PRIVATE   0x02
-#define MAP_ANONYMOUS 0x20
-
 
 /* Low-level syscall interface (architecture-specific ABI wrappers). */
 #if defined(__aarch64__)

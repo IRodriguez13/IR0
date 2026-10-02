@@ -1729,6 +1729,25 @@ def check_common_mm_uses_user_va_policy():
     return errors
 
 
+def check_common_syscall_policy_uses_semantic_ids():
+    """Keep native syscall numbers inside the build-selected ISA decoders."""
+    errors = []
+    targets = (
+        ROOT / "kernel" / "syscalls" / "syscall_dispatch.c",
+        ROOT / "includes" / "ir0" / "signal_syscall_resume.h",
+    )
+    forbidden = re.compile(r"\b__NR_[A-Za-z0-9_]+|syscall_linux\.h")
+
+    for path in targets:
+        for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if forbidden.search(line):
+                rel = path.relative_to(ROOT)
+                errors.append(
+                    f"[syscall-semantic-id] {rel}:{line_no}: use syscall_id facade"
+                )
+    return errors
+
+
 def _parse_devfs_pty_id_block():
     """Return (pts0, pty_max) from includes/ir0/pty_devfs.h."""
     pty_h = ROOT / "includes" / "ir0" / "pty_devfs.h"
@@ -1980,6 +1999,7 @@ def main():
     errors.extend(check_common_address_space_contracts())
     errors.extend(check_common_elf_uses_isa_policy())
     errors.extend(check_common_mm_uses_user_va_policy())
+    errors.extend(check_common_syscall_policy_uses_semantic_ids())
 
     if errors:
         print("[arch-guard] FAILED")

@@ -25,6 +25,8 @@
 #include <ir0/fcntl.h>
 #include <ir0/kmem.h>
 #include <ir0/mm_port.h>
+#include <ir0/mman.h>
+#include <ir0/permissions.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <ir0/net.h>
@@ -33,7 +35,6 @@
 #include <ir0/ktm/stack_watch.h>
 #include <ir0/process.h>
 #include <ir0/mm_struct.h>
-#include <ir0/syscall.h>
 #include <ir0/credentials.h>
 #include <config.h>
 #include <ir0/version.h>
