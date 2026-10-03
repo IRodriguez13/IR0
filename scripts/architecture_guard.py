@@ -1646,6 +1646,26 @@ def check_process_lifecycle_no_isa_conditionals():
     return errors
 
 
+def check_process_lifecycle_uses_semantic_return_state():
+    """Keep x86 segment-state inspection out of common process lifecycle code."""
+    errors = []
+    forbidden = re.compile(
+        r"\btask_(?:get|set)_(?:cs|ss)\s*\(|process_ctx_invariant\.h"
+    )
+    process_tree = ROOT / "kernel" / "process"
+
+    for fpath in process_tree.glob("*.c"):
+        for idx, line in enumerate(
+            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+        ):
+            if forbidden.search(line) and not line.lstrip().startswith("/*"):
+                errors.append(
+                    f"[process-return-state-neutral] {fpath.relative_to(ROOT)}:"
+                    f"{idx}: use task return-state/MM facades: {line.strip()}"
+                )
+    return errors
+
+
 def check_common_paging_uses_neutral_roots():
     """Keep ISA register/table vocabulary out of the common paging contract."""
     errors = []
@@ -1995,6 +2015,7 @@ def main():
     errors.extend(check_portable_no_arch_switch_include())
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
+    errors.extend(check_process_lifecycle_uses_semantic_return_state())
     errors.extend(check_common_paging_uses_neutral_roots())
     errors.extend(check_common_address_space_contracts())
     errors.extend(check_common_elf_uses_isa_policy())

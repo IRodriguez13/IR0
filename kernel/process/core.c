@@ -160,7 +160,7 @@ void process_save_user_exception_frame(void *frame)
 	task_save_user_exception_frame(&p->task, frame);
 
 #if CONFIG_DEBUG_ISRABI
-	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] task_rip=%llx task_rsp=%llx task_cs=%llx task_ss=%llx task_rflags=%llx", (unsigned long long)(task_get_ip(&p->task)), (unsigned long long)(task_get_sp(&p->task)), (unsigned long long)((uint64_t)task_get_cs(&p->task)), (unsigned long long)((uint64_t)task_get_ss(&p->task)), (unsigned long long)(task_get_flags(&p->task)));
+	klog_debug_fmt("ISR", "[ISRABI][IRQ_SAVE] task_ip=%llx task_sp=%llx return_user=%llx task_status=%llx", (unsigned long long)(task_get_ip(&p->task)), (unsigned long long)(task_get_sp(&p->task)), (unsigned long long)task_return_state_is_user(&p->task), (unsigned long long)(task_get_flags(&p->task)));
 #endif
 }
 

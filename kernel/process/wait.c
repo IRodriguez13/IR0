@@ -24,18 +24,13 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 #else
 	uint64_t rip;
 	uint64_t rsp;
-	uint16_t cs;
-	uint16_t ss;
 
 	if (!p)
 		return;
 
 	rip = task_get_ip(&p->task);
 	rsp = task_get_sp(&p->task);
-	cs = task_get_cs(&p->task);
-	ss = task_get_ss(&p->task);
-
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s rip=%llx rsp=%llx cs=%llx ss=%llx rflags=%llx rax=%llx cr3=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)((uint64_t)cs), (unsigned long long)((uint64_t)ss), (unsigned long long)(task_get_flags(&p->task)), (unsigned long long)(task_get_retval(&p->task)), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s ip=%llx sp=%llx return_user=%llx status=%llx retval=%llx address_space=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)task_return_state_is_user(&p->task), (unsigned long long)(task_get_flags(&p->task)), (unsigned long long)(task_get_retval(&p->task)), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
 
 	if (!mm_user_va_ok((uintptr_t)rip, 1))
 	{
@@ -45,9 +40,9 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	{
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
 	}
-	if (!task_cs_is_user(&p->task) || (ss & 3u) != 3u)
+	if (!task_return_state_is_user(&p->task))
 	{
-		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_CS_SS");
+		klog_debug("WAIT", "CLASSIFY PARENT_RETURN_STATE_NOT_USER");
 	}
 #endif
 }
@@ -665,5 +660,4 @@ int process_wait(pid_t pid, int *status, int options)
 		 */
 	}
 }
-
 
