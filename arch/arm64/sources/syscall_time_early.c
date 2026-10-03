@@ -11,22 +11,13 @@
 #include "timer.h"
 
 #include <ir0/boot_log.h>
+#include <ir0/time.h>
 
 #define EFAULT 14
 #define EINVAL 22
 #define ENOSYS 38
 #define CLOCK_MONOTONIC 1UL
 #define NS_PER_SEC 1000000000ULL
-
-struct linux_timespec64 {
-	int64_t tv_sec;
-	int64_t tv_nsec;
-};
-
-struct linux_timeval {
-	int64_t tv_sec;
-	int64_t tv_usec;
-};
 
 static int g_nanosleep_ok;
 static int g_clock_gettime_ok;
@@ -63,7 +54,7 @@ static int copy_to_user(uint64_t destination, const void *source, uint64_t size)
 
 static int64_t sleep_timespec_user(uint64_t request)
 {
-	struct linux_timespec64 value;
+	struct timespec value;
 	uint64_t frequency;
 	uint64_t delta;
 	uint64_t deadline;
@@ -90,7 +81,7 @@ static int64_t sleep_timespec_user(uint64_t request)
 
 static int64_t early_clock_gettime(uint64_t clock_id, uint64_t output)
 {
-	struct linux_timespec64 value;
+	struct timespec value;
 	uint64_t frequency;
 	uint64_t counter;
 
@@ -111,7 +102,7 @@ static int64_t early_clock_gettime(uint64_t clock_id, uint64_t output)
 
 static int64_t early_gettimeofday(uint64_t output)
 {
-	struct linux_timeval value;
+	struct timeval value;
 	uint64_t frequency = timer_get_frequency();
 	uint64_t counter;
 

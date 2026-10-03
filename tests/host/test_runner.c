@@ -81,6 +81,7 @@ extern void test_arm64_boot_info_fdt_contract(void);
 extern void test_arm64_syscall_decode_contract(void);
 extern void test_x86_syscall_decode_contract(void);
 extern void test_syscall_handler_table_contract(void);
+extern void test_utsname_linux_abi(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -145,6 +146,7 @@ static void (*test_functions[])(void) = {
 	test_arm64_syscall_decode_contract,
 	test_x86_syscall_decode_contract,
 	test_syscall_handler_table_contract,
+	test_utsname_linux_abi,
 	NULL
 };
 

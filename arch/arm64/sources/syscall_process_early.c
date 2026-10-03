@@ -12,36 +12,25 @@
 #include "mmu_early.h"
 
 #include <ir0/boot_log.h>
+#include <ir0/utsname.h>
 
 #define EFAULT 14
 #define ENOSYS 38
 
 static int g_getpid_ok;
 
-static void copy_uname_field(char *destination, const char *source)
-{
-	unsigned int index;
-
-	for (index = 0; index < 64 && source[index]; index++)
-		destination[index] = source[index];
-	for (; index < 65; index++)
-		destination[index] = 0;
-}
-
 static int64_t early_uname(uint64_t output)
 {
-	char *value;
+	struct utsname value;
+	volatile uint8_t *destination;
 	unsigned int index;
 
-	if (!arm64_mmu_user_buf_ok(output, 390))
+	if (!arm64_mmu_user_buf_ok(output, sizeof(value)))
 		return -EFAULT;
-	value = (char *)(uintptr_t)output;
-	for (index = 0; index < 390; index++)
-		value[index] = 0;
-	copy_uname_field(value + 0, "Linux");
-	copy_uname_field(value + 65, "ir0");
-	copy_uname_field(value + 130, "0.0.1");
-	copy_uname_field(value + 260, "aarch64");
+	ir0_utsname_init(&value, "IR0", "ir0", "0.0.1", "early", "aarch64");
+	destination = (volatile uint8_t *)(uintptr_t)output;
+	for (index = 0; index < sizeof(value); index++)
+		destination[index] = ((const uint8_t *)&value)[index];
 	return 0;
 }
 

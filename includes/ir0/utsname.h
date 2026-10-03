@@ -28,6 +28,41 @@ struct utsname {
     char release[_UTSNAME_LENGTH];
     char version[_UTSNAME_LENGTH];
     char machine[_UTSNAME_LENGTH];
+    char domainname[_UTSNAME_LENGTH];
 };
+
+static inline void ir0_utsname_copy_field(char *destination,
+					  const char *source)
+{
+	unsigned int index = 0;
+
+	if (source)
+		while (index + 1 < _UTSNAME_LENGTH && source[index]) {
+			destination[index] = source[index];
+			index++;
+		}
+	while (index < _UTSNAME_LENGTH)
+		destination[index++] = '\0';
+}
+
+static inline void ir0_utsname_init(struct utsname *value,
+				    const char *sysname,
+				    const char *nodename,
+				    const char *release,
+				    const char *version,
+				    const char *machine)
+{
+	if (!value)
+		return;
+	ir0_utsname_copy_field(value->sysname, sysname);
+	ir0_utsname_copy_field(value->nodename, nodename);
+	ir0_utsname_copy_field(value->release, release);
+	ir0_utsname_copy_field(value->version, version);
+	ir0_utsname_copy_field(value->machine, machine);
+	ir0_utsname_copy_field(value->domainname, "");
+}
+
+_Static_assert(sizeof(struct utsname) == 390,
+	       "Linux new_utsname ABI must contain six 65-byte fields");
 
 #endif /* _IR0_UTSNAME_H */

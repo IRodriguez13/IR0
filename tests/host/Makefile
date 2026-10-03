@@ -49,6 +49,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
 	test_x86_syscall_decode.c
 TEST_SRCS += test_syscall_table.c
+TEST_SRCS += test_utsname_abi.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -155,6 +156,10 @@ test_x86_syscall_decode.o: test_x86_syscall_decode.c \
 
 test_syscall_table.o: test_syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_utsname_abi.o: test_utsname_abi.c \
+	$(KERNEL_ROOT)/includes/ir0/utsname.h
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
