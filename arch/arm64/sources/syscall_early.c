@@ -14,8 +14,8 @@
 
 #include "syscall_early.h"
 #include "elf_load_early.h"
-#include "rootfs_early.h"
 #include "syscall_mm_early.h"
+#include "syscall_vfs_early.h"
 #include "mmu_early.h"
 #include "pl011.h"
 #include "timer.h"
@@ -29,7 +29,6 @@
 #define EFAULT 14
 #define EINVAL 22
 #define ENOSYS 38
-#define ENOENT 2
 
 #define WRITE_MAX 256UL
 #define NS_PER_SEC 1000000000ULL
@@ -72,18 +71,9 @@ static const enum ir0_syscall_id g_early_supported_syscalls[] = {
 	IR0_SYSCALL_GETPPID,
 	IR0_SYSCALL_IOCTL,
 	IR0_SYSCALL_FCNTL,
-	IR0_SYSCALL_READ,
-	IR0_SYSCALL_CLOSE,
-	IR0_SYSCALL_OPENAT,
-	IR0_SYSCALL_FACCESSAT,
-	IR0_SYSCALL_NEWFSTATAT,
-	IR0_SYSCALL_FSTAT,
-	IR0_SYSCALL_READLINKAT,
 	IR0_SYSCALL_DUP,
 	IR0_SYSCALL_DUP3,
 	IR0_SYSCALL_UNAME,
-	IR0_SYSCALL_GETCWD,
-	IR0_SYSCALL_CHDIR,
 	IR0_SYSCALL_SET_ROBUST_LIST,
 	IR0_SYSCALL_CLOCK_GETRES,
 	IR0_SYSCALL_PPOLL,
@@ -389,56 +379,6 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 		return -ENOTTY;
 	case IR0_SYSCALL_FCNTL:
 		return 0;
-	case IR0_SYSCALL_READ:
-	{
-		int64_t rr = arm64_rootfs_read((int)a0, a1, a2);
-
-		if (rr != -EBADF)
-			return rr;
-		return 0;
-	}
-	case IR0_SYSCALL_CLOSE:
-	{
-		int64_t cr = arm64_rootfs_close((int)a0);
-
-		if (cr != -EBADF)
-			return cr;
-		return 0;
-	}
-	case IR0_SYSCALL_OPENAT:
-	{
-		int64_t or = arm64_rootfs_openat((int)a0, a1, (int)a2);
-
-		if (or != -ENOENT)
-			return or;
-		return -ENOENT;
-	}
-	case IR0_SYSCALL_FACCESSAT:
-	{
-		int64_t ar = arm64_rootfs_faccessat((int)a0, a1, (int)a2);
-
-		if (ar != -ENOENT)
-			return ar;
-		return -ENOENT;
-	}
-	case IR0_SYSCALL_NEWFSTATAT:
-	{
-		int64_t sr = arm64_rootfs_newfstatat((int)a0, a1, a2, (int)a3);
-
-		if (sr != -ENOENT)
-			return sr;
-		return -ENOENT;
-	}
-	case IR0_SYSCALL_FSTAT:
-	{
-		int64_t fr = arm64_rootfs_fstat((int)a0, a1);
-
-		if (fr != -EBADF)
-			return fr;
-		return -ENOENT;
-	}
-	case IR0_SYSCALL_READLINKAT:
-		return arm64_rootfs_readlinkat((int)a0, a1, a2, a3);
 	case IR0_SYSCALL_GETDENTS64:
 		return -ENOSYS;
 	case IR0_SYSCALL_DUP:
@@ -465,18 +405,6 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 			return 0;
 		}
 		return -EFAULT;
-	case IR0_SYSCALL_GETCWD:
-		if (a1 >= 2 && arm64_mmu_user_buf_ok(a0, a1))
-		{
-			char *p = (char *)(uintptr_t)a0;
-
-			p[0] = '/';
-			p[1] = 0;
-			return 2;
-		}
-		return -EFAULT;
-	case IR0_SYSCALL_CHDIR:
-		return -ENOENT;
 	case IR0_SYSCALL_SET_ROBUST_LIST:
 	case IR0_SYSCALL_CLOCK_GETRES:
 		return 0;
@@ -567,6 +495,24 @@ static void arm64_syscall_early_handlers_init(void)
 					  IR0_SYSCALL_MUNMAP, arm64_early_mm_syscall);
 	(void)syscall_context_handler_set(&g_early_syscall_handlers,
 					  IR0_SYSCALL_MPROTECT, arm64_early_mm_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_READ, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_CLOSE, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_OPENAT, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_FACCESSAT, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_NEWFSTATAT, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_FSTAT, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_READLINKAT, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_GETCWD, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_CHDIR, arm64_early_vfs_syscall);
 	g_early_syscall_handlers_ready = 1;
 }
 
