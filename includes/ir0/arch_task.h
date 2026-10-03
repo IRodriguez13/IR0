@@ -231,6 +231,12 @@ static inline int task_cs_is_user(const task_t *t)
 	return 1;
 }
 
+static inline int task_return_state_is_user(const task_t *t)
+{
+	/* AArch64 SPSR.M[3:0] == 0 identifies an EL0t return. */
+	return t && (t->arch.spsr_el1 & 0xfu) == 0u;
+}
+
 static inline void task_set_kernel_segments(task_t *t)
 {
 	(void)t;
@@ -444,6 +450,11 @@ static inline void task_set_user_segments(task_t *t)
 static inline int task_cs_is_user(const task_t *t)
 {
 	return (task_get_cs(t) & 3u) != 0u;
+}
+
+static inline int task_return_state_is_user(const task_t *t)
+{
+	return task_cs_is_user(t);
 }
 
 static inline void task_set_kernel_segments(task_t *t)

@@ -13,10 +13,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
-#include <ir0/process_ctx_invariant.h>
 #include <ir0/task_ops.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/ktm/event.h>
+#include <ir0/mm.h>
 
 static pid_t next_pid = 2;
 
@@ -52,7 +52,8 @@ int process_task_kernel_ret_rip_bad(const task_t *t)
 {
 	if (!t)
 		return 0;
-	return process_cs_rip_kernel_ret_bad((uint64_t)task_get_cs(t), task_get_ip(t));
+	return !task_return_state_is_user(t) &&
+	       mm_user_va_ok((uintptr_t)task_get_ip(t), 1);
 }
 
 uint64_t process_list_count(void)
@@ -393,7 +394,7 @@ void process_arm_kernel_syscall_sleep(process_t *p)
 		p->syscall_block_nr = 0;
 	}
 
-	if (process_rip_in_user_range(task_get_ip(&p->task)))
+	if (mm_user_va_ok((uintptr_t)task_get_ip(&p->task), 1))
 	{
 		p->want_kernel_ret = 1;
 		return;
@@ -421,7 +422,7 @@ void process_after_task_save(task_t *prev)
 	if (!p || p->mode != USER_MODE || !p->want_kernel_ret)
 		return;
 
-	if (process_rip_in_user_range(task_get_ip(prev)))
+	if (mm_user_va_ok((uintptr_t)task_get_ip(prev), 1))
 		return;
 
 	process_apply_kernel_ret_segments(p);

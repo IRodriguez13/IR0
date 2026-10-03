@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: process_ctx_invariant.h
- * Description: Class B invariant — KERNEL CS + userspace RIP (pure, host-safe)
+ * Description: x86 Class B invariant helpers for host tests and x86 resume.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -16,7 +16,7 @@
 
 #include <stdint.h>
 
-/* Canonical user VA range used by desk/exec ELF loads (x86-64). */
+/* x86-64 canonical user VA range used by the legacy Class B diagnostic. */
 #define IR0_USER_RIP_LO 0x00400000ULL
 #define IR0_USER_RIP_HI 0x00007FFFFFFFFFFFULL
 
