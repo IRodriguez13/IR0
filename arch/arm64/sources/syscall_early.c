@@ -15,10 +15,10 @@
 #include "syscall_early.h"
 #include "elf_load_early.h"
 #include "syscall_mm_early.h"
+#include "syscall_time_early.h"
 #include "syscall_vfs_early.h"
 #include "mmu_early.h"
 #include "pl011.h"
-#include "timer.h"
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
@@ -27,11 +27,9 @@
 
 #define EBADF  9
 #define EFAULT 14
-#define EINVAL 22
 #define ENOSYS 38
 
 #define WRITE_MAX 256UL
-#define NS_PER_SEC 1000000000ULL
 
 #define ENOTTY 25
 
@@ -40,28 +38,14 @@ void arm64_syscall_reset_busybox_heap(void)
 	arm64_early_mm_reset_busybox_heap();
 }
 
-struct linux_timespec64
-{
-	int64_t tv_sec;
-	int64_t tv_nsec;
-};
-
 static int g_getpid_ok;
 static int g_write_ok;
-static int g_nanosleep_ok;
-static int g_clock_gettime_ok;
-static int g_gettimeofday_ok;
-static int g_clock_nanosleep_ok;
 static struct syscall_handler_table g_early_syscall_handlers;
 static int g_early_syscall_handlers_ready;
 
 static const enum ir0_syscall_id g_early_supported_syscalls[] = {
 	IR0_SYSCALL_GETPID,
 	IR0_SYSCALL_GETTID,
-	IR0_SYSCALL_NANOSLEEP,
-	IR0_SYSCALL_CLOCK_GETTIME,
-	IR0_SYSCALL_CLOCK_NANOSLEEP,
-	IR0_SYSCALL_GETTIMEOFDAY,
 	IR0_SYSCALL_WRITE,
 	IR0_SYSCALL_SET_TID_ADDRESS,
 	IR0_SYSCALL_GETUID,
@@ -75,7 +59,6 @@ static const enum ir0_syscall_id g_early_supported_syscalls[] = {
 	IR0_SYSCALL_DUP3,
 	IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST,
-	IR0_SYSCALL_CLOCK_GETRES,
 	IR0_SYSCALL_PPOLL,
 	IR0_SYSCALL_RT_SIGACTION,
 	IR0_SYSCALL_RT_SIGPROCMASK,
@@ -121,8 +104,7 @@ static void pl011_put_hex64(uint64_t v)
 
 int arm64_syscall_smoke_ok(void)
 {
-	return g_getpid_ok && g_write_ok && g_nanosleep_ok && g_clock_gettime_ok &&
-	       g_gettimeofday_ok && g_clock_nanosleep_ok;
+	return g_getpid_ok && g_write_ok && arm64_early_time_smoke_ok();
 }
 
 static int64_t sys_getpid(void)
@@ -170,174 +152,6 @@ static int64_t sys_write(uint64_t fd, uint64_t buf, uint64_t len)
 	return (int64_t)n;
 }
 
-/**
- * Busy-wait on CNTPCT for a userspace timespec64 (rem ignored).
- */
-static int64_t sleep_timespec_user(uint64_t req, uint64_t rem)
-{
-	struct linux_timespec64 ts;
-	uint64_t frq;
-	uint64_t delta;
-	uint64_t deadline;
-	const volatile uint8_t *src;
-	unsigned i;
-
-	(void)rem;
-
-	if (!arm64_mmu_user_buf_ok(req, sizeof(ts)))
-	{
-		return -EFAULT;
-	}
-
-	src = (const volatile uint8_t *)(uintptr_t)req;
-	for (i = 0; i < sizeof(ts); i++)
-	{
-		((uint8_t *)&ts)[i] = src[i];
-	}
-
-	if (ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= (int64_t)NS_PER_SEC)
-	{
-		return -EINVAL;
-	}
-
-	frq = timer_get_frequency();
-	if (frq == 0)
-	{
-		return -EINVAL;
-	}
-
-	delta = (uint64_t)ts.tv_sec * frq;
-	delta += ((uint64_t)ts.tv_nsec * frq) / NS_PER_SEC;
-	if (delta == 0)
-	{
-		delta = 1;
-	}
-
-	deadline = timer_read() + delta;
-	while (timer_read() < deadline)
-	{
-		__asm__ volatile("yield" ::: "memory");
-	}
-	return 0;
-}
-
-static int64_t sys_nanosleep(uint64_t req, uint64_t rem)
-{
-	int64_t ret = sleep_timespec_user(req, rem);
-
-	if (ret == 0)
-	{
-		g_nanosleep_ok = 1;
-		ir0_boot_smoke("ARM64_NANOSLEEP_OK");
-	}
-	return ret;
-}
-
-static int64_t sys_clock_nanosleep(uint64_t clk_id, uint64_t flags, uint64_t req,
-				   uint64_t rem)
-{
-	int64_t ret;
-
-	(void)flags;
-	if (clk_id != ARM64_CLOCK_MONOTONIC)
-	{
-		return -EINVAL;
-	}
-	ret = sleep_timespec_user(req, rem);
-	if (ret == 0)
-	{
-		g_clock_nanosleep_ok = 1;
-		ir0_boot_smoke("ARM64_CLOCK_NANOSLEEP_OK");
-	}
-	return ret;
-}
-
-/**
- * Freestanding clock_gettime(CLOCK_MONOTONIC): CNTPCT → timespec64 in userspace.
- */
-static int64_t sys_clock_gettime(uint64_t clk_id, uint64_t tp)
-{
-	struct linux_timespec64 ts;
-	uint64_t frq;
-	uint64_t pct;
-	volatile uint8_t *dst;
-	unsigned i;
-
-	if (clk_id != ARM64_CLOCK_MONOTONIC)
-	{
-		return -EINVAL;
-	}
-	if (!arm64_mmu_user_buf_ok(tp, sizeof(ts)))
-	{
-		return -EFAULT;
-	}
-
-	frq = timer_get_frequency();
-	if (frq == 0)
-	{
-		return -EINVAL;
-	}
-
-	pct = timer_read();
-	ts.tv_sec = (int64_t)(pct / frq);
-	ts.tv_nsec = (int64_t)(((pct % frq) * NS_PER_SEC) / frq);
-
-	dst = (volatile uint8_t *)(uintptr_t)tp;
-	for (i = 0; i < sizeof(ts); i++)
-	{
-		dst[i] = ((uint8_t *)&ts)[i];
-	}
-
-	g_clock_gettime_ok = 1;
-	ir0_boot_smoke("ARM64_CLOCK_GETTIME_OK");
-	return 0;
-}
-
-struct linux_timeval
-{
-	int64_t tv_sec;
-	int64_t tv_usec;
-};
-
-/**
- * Freestanding gettimeofday(tv, tz): tz ignored; CNTPCT → timeval in userspace.
- */
-static int64_t sys_gettimeofday(uint64_t tv, uint64_t tz)
-{
-	struct linux_timeval out;
-	uint64_t frq;
-	uint64_t pct;
-	volatile uint8_t *dst;
-	unsigned i;
-
-	(void)tz;
-
-	if (!arm64_mmu_user_buf_ok(tv, sizeof(out)))
-	{
-		return -EFAULT;
-	}
-
-	frq = timer_get_frequency();
-	if (frq == 0)
-	{
-		return -EINVAL;
-	}
-
-	pct = timer_read();
-	out.tv_sec = (int64_t)(pct / frq);
-	out.tv_usec = (int64_t)(((pct % frq) * 1000000ULL) / frq);
-
-	dst = (volatile uint8_t *)(uintptr_t)tv;
-	for (i = 0; i < sizeof(out); i++)
-	{
-		dst[i] = ((uint8_t *)&out)[i];
-	}
-
-	g_gettimeofday_ok = 1;
-	ir0_boot_smoke("ARM64_GETTIMEOFDAY_OK");
-	return 0;
-}
-
 static int64_t arm64_syscall_early_handle(void *opaque,
 					 enum ir0_syscall_id syscall_id,
 					 uint64_t a0, uint64_t a1, uint64_t a2,
@@ -355,14 +169,6 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 		return sys_getpid();
 	case IR0_SYSCALL_GETTID:
 		return 1;
-	case IR0_SYSCALL_NANOSLEEP:
-		return sys_nanosleep(a0, a1);
-	case IR0_SYSCALL_CLOCK_GETTIME:
-		return sys_clock_gettime(a0, a1);
-	case IR0_SYSCALL_CLOCK_NANOSLEEP:
-		return sys_clock_nanosleep(a0, a1, a2, a3);
-	case IR0_SYSCALL_GETTIMEOFDAY:
-		return sys_gettimeofday(a0, a1);
 	case IR0_SYSCALL_WRITE:
 		return sys_write(a0, a1, a2);
 	case IR0_SYSCALL_SET_TID_ADDRESS:
@@ -406,8 +212,6 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 		}
 		return -EFAULT;
 	case IR0_SYSCALL_SET_ROBUST_LIST:
-	case IR0_SYSCALL_CLOCK_GETRES:
-		return 0;
 	case IR0_SYSCALL_PPOLL:
 		return 0;
 	case IR0_SYSCALL_RT_SIGACTION:
@@ -513,6 +317,16 @@ static void arm64_syscall_early_handlers_init(void)
 					  IR0_SYSCALL_GETCWD, arm64_early_vfs_syscall);
 	(void)syscall_context_handler_set(&g_early_syscall_handlers,
 					  IR0_SYSCALL_CHDIR, arm64_early_vfs_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_NANOSLEEP, arm64_early_time_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_CLOCK_GETTIME, arm64_early_time_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_CLOCK_NANOSLEEP, arm64_early_time_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_GETTIMEOFDAY, arm64_early_time_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_CLOCK_GETRES, arm64_early_time_syscall);
 	g_early_syscall_handlers_ready = 1;
 }
 
