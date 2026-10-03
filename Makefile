@@ -980,6 +980,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/syscall_mm_early.o \
     arch/arm64/sources/syscall_vfs_early.o \
     arch/arm64/sources/syscall_time_early.o \
+    arch/arm64/sources/syscall_signal_early.o \
     arch/arm64/sources/boot_stub.o \
     arch/arm64/sources/mmu_early.o \
     arch/arm64/sources/exc_early.o \

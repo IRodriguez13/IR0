@@ -16,6 +16,7 @@
 #include "elf_load_early.h"
 #include "syscall_mm_early.h"
 #include "syscall_time_early.h"
+#include "syscall_signal_early.h"
 #include "syscall_vfs_early.h"
 #include "mmu_early.h"
 #include "pl011.h"
@@ -60,8 +61,6 @@ static const enum ir0_syscall_id g_early_supported_syscalls[] = {
 	IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST,
 	IR0_SYSCALL_PPOLL,
-	IR0_SYSCALL_RT_SIGACTION,
-	IR0_SYSCALL_RT_SIGPROCMASK,
 	IR0_SYSCALL_PRCTL,
 	IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ,
@@ -214,9 +213,6 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 	case IR0_SYSCALL_SET_ROBUST_LIST:
 	case IR0_SYSCALL_PPOLL:
 		return 0;
-	case IR0_SYSCALL_RT_SIGACTION:
-	case IR0_SYSCALL_RT_SIGPROCMASK:
-		return 0;
 	case IR0_SYSCALL_RT_SIGRETURN:
 	case IR0_SYSCALL_FORK:
 		return -ENOSYS;
@@ -327,6 +323,10 @@ static void arm64_syscall_early_handlers_init(void)
 					  IR0_SYSCALL_GETTIMEOFDAY, arm64_early_time_syscall);
 	(void)syscall_context_handler_set(&g_early_syscall_handlers,
 					  IR0_SYSCALL_CLOCK_GETRES, arm64_early_time_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_RT_SIGACTION, arm64_early_signal_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_RT_SIGPROCMASK, arm64_early_signal_syscall);
 	g_early_syscall_handlers_ready = 1;
 }
 
