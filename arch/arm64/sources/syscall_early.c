@@ -44,7 +44,7 @@ static int g_write_ok;
 static struct syscall_handler_table g_early_syscall_handlers;
 static int g_early_syscall_handlers_ready;
 
-static const enum ir0_syscall_id g_early_supported_syscalls[] = {
+static const enum ir0_syscall_id g_early_core_syscalls[] = {
 	IR0_SYSCALL_GETPID,
 	IR0_SYSCALL_GETTID,
 	IR0_SYSCALL_WRITE,
@@ -73,6 +73,25 @@ struct early_syscall_context
 {
 	uint64_t native_number;
 	int *leave_el0;
+};
+
+static int64_t arm64_syscall_early_handle(void *opaque,
+					 enum ir0_syscall_id syscall_id,
+					 uint64_t a0, uint64_t a1, uint64_t a2,
+					 uint64_t a3, uint64_t a4, uint64_t a5);
+
+static const struct syscall_context_provider g_early_core_provider = {
+	.ids = g_early_core_syscalls,
+	.count = sizeof(g_early_core_syscalls) / sizeof(g_early_core_syscalls[0]),
+	.handler = arm64_syscall_early_handle,
+};
+
+static const struct syscall_context_provider *const g_early_providers[] = {
+	&g_early_core_provider,
+	&arm64_early_mm_provider,
+	&arm64_early_vfs_provider,
+	&arm64_early_time_provider,
+	&arm64_early_signal_provider,
 };
 
 static void copy_uname_field(char *dst, const char *src)
@@ -282,51 +301,9 @@ static void arm64_syscall_early_handlers_init(void)
 	if (g_early_syscall_handlers_ready)
 		return;
 	syscall_handlers_init(&g_early_syscall_handlers);
-	for (i = 0; i < sizeof(g_early_supported_syscalls) /
-			 sizeof(g_early_supported_syscalls[0]); i++)
-		(void)syscall_context_handler_set(&g_early_syscall_handlers,
-						  g_early_supported_syscalls[i],
-						  arm64_syscall_early_handle);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_BRK, arm64_early_mm_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_MMAP, arm64_early_mm_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_MUNMAP, arm64_early_mm_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_MPROTECT, arm64_early_mm_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_READ, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_CLOSE, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_OPENAT, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_FACCESSAT, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_NEWFSTATAT, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_FSTAT, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_READLINKAT, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_GETCWD, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_CHDIR, arm64_early_vfs_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_NANOSLEEP, arm64_early_time_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_CLOCK_GETTIME, arm64_early_time_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_CLOCK_NANOSLEEP, arm64_early_time_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_GETTIMEOFDAY, arm64_early_time_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_CLOCK_GETRES, arm64_early_time_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_RT_SIGACTION, arm64_early_signal_syscall);
-	(void)syscall_context_handler_set(&g_early_syscall_handlers,
-					  IR0_SYSCALL_RT_SIGPROCMASK, arm64_early_signal_syscall);
+	for (i = 0; i < sizeof(g_early_providers) / sizeof(g_early_providers[0]); i++)
+		(void)syscall_context_provider_register(&g_early_syscall_handlers,
+						g_early_providers[i]);
 	g_early_syscall_handlers_ready = 1;
 }
 

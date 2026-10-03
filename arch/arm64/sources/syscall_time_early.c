@@ -127,9 +127,9 @@ static int64_t early_gettimeofday(uint64_t output)
 	return 0;
 }
 
-int64_t arm64_early_time_syscall(void *context, enum ir0_syscall_id id,
-				 uint64_t a0, uint64_t a1, uint64_t a2,
-				 uint64_t a3, uint64_t a4, uint64_t a5)
+static int64_t early_time_syscall(void *context, enum ir0_syscall_id id,
+				  uint64_t a0, uint64_t a1, uint64_t a2,
+				  uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	int64_t result;
 
@@ -172,3 +172,17 @@ int arm64_early_time_smoke_ok(void)
 	return g_nanosleep_ok && g_clock_gettime_ok && g_gettimeofday_ok &&
 	       g_clock_nanosleep_ok;
 }
+
+static const enum ir0_syscall_id g_time_syscalls[] = {
+	IR0_SYSCALL_NANOSLEEP,
+	IR0_SYSCALL_CLOCK_GETTIME,
+	IR0_SYSCALL_CLOCK_NANOSLEEP,
+	IR0_SYSCALL_GETTIMEOFDAY,
+	IR0_SYSCALL_CLOCK_GETRES,
+};
+
+const struct syscall_context_provider arm64_early_time_provider = {
+	.ids = g_time_syscalls,
+	.count = sizeof(g_time_syscalls) / sizeof(g_time_syscalls[0]),
+	.handler = early_time_syscall,
+};

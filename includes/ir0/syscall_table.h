@@ -24,12 +24,21 @@ struct syscall_handler_table
 	syscall_context_handler_t context_handlers[IR0_SYSCALL_COUNT];
 };
 
+struct syscall_context_provider
+{
+	const enum ir0_syscall_id *ids;
+	unsigned int count;
+	syscall_context_handler_t handler;
+};
+
 void syscall_handlers_init(struct syscall_handler_table *table);
 int syscall_handler_set(struct syscall_handler_table *table,
 			enum ir0_syscall_id id, syscall_handler_t handler);
 int syscall_context_handler_set(struct syscall_handler_table *table,
 				enum ir0_syscall_id id,
 				syscall_context_handler_t handler);
+int syscall_context_provider_register(struct syscall_handler_table *table,
+				      const struct syscall_context_provider *provider);
 int64_t syscall_handler_invoke(const struct syscall_handler_table *table,
 			       void *context, enum ir0_syscall_id id, uint64_t arg1,
 			       uint64_t arg2, uint64_t arg3, uint64_t arg4,

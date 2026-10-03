@@ -129,9 +129,9 @@ static int64_t early_mmap(uint64_t address, uint64_t length)
 	return (int64_t)base;
 }
 
-int64_t arm64_early_mm_syscall(void *context, enum ir0_syscall_id id,
-			       uint64_t a0, uint64_t a1, uint64_t a2,
-			       uint64_t a3, uint64_t a4, uint64_t a5)
+static int64_t early_mm_syscall(void *context, enum ir0_syscall_id id,
+				uint64_t a0, uint64_t a1, uint64_t a2,
+				uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	(void)context;
 	(void)a2;
@@ -152,3 +152,16 @@ int64_t arm64_early_mm_syscall(void *context, enum ir0_syscall_id id,
 		return -ENOSYS;
 	}
 }
+
+static const enum ir0_syscall_id g_mm_syscalls[] = {
+	IR0_SYSCALL_BRK,
+	IR0_SYSCALL_MMAP,
+	IR0_SYSCALL_MUNMAP,
+	IR0_SYSCALL_MPROTECT,
+};
+
+const struct syscall_context_provider arm64_early_mm_provider = {
+	.ids = g_mm_syscalls,
+	.count = sizeof(g_mm_syscalls) / sizeof(g_mm_syscalls[0]),
+	.handler = early_mm_syscall,
+};

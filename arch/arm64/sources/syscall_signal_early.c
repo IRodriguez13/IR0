@@ -10,9 +10,9 @@
 
 #define ENOSYS 38
 
-int64_t arm64_early_signal_syscall(void *context, enum ir0_syscall_id id,
-				   uint64_t a0, uint64_t a1, uint64_t a2,
-				   uint64_t a3, uint64_t a4, uint64_t a5)
+static int64_t early_signal_syscall(void *context, enum ir0_syscall_id id,
+				    uint64_t a0, uint64_t a1, uint64_t a2,
+				    uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	(void)context;
 	(void)a0;
@@ -30,3 +30,14 @@ int64_t arm64_early_signal_syscall(void *context, enum ir0_syscall_id id,
 		return -ENOSYS;
 	}
 }
+
+static const enum ir0_syscall_id g_signal_syscalls[] = {
+	IR0_SYSCALL_RT_SIGACTION,
+	IR0_SYSCALL_RT_SIGPROCMASK,
+};
+
+const struct syscall_context_provider arm64_early_signal_provider = {
+	.ids = g_signal_syscalls,
+	.count = sizeof(g_signal_syscalls) / sizeof(g_signal_syscalls[0]),
+	.handler = early_signal_syscall,
+};

@@ -46,6 +46,29 @@ int syscall_context_handler_set(struct syscall_handler_table *table,
 	return 0;
 }
 
+int syscall_context_provider_register(struct syscall_handler_table *table,
+				      const struct syscall_context_provider *provider)
+{
+	unsigned int index;
+
+	if (!table || !provider || !provider->handler || !provider->ids ||
+	    provider->count == 0)
+		return -EINVAL;
+	/* Validate the complete descriptor before mutating the table. */
+	for (index = 0; index < provider->count; index++)
+	{
+		if (provider->ids[index] <= IR0_SYSCALL_UNKNOWN ||
+		    provider->ids[index] >= IR0_SYSCALL_COUNT)
+			return -EINVAL;
+	}
+	for (index = 0; index < provider->count; index++)
+	{
+		table->handlers[provider->ids[index]] = 0;
+		table->context_handlers[provider->ids[index]] = provider->handler;
+	}
+	return 0;
+}
+
 int64_t syscall_handler_invoke(const struct syscall_handler_table *table,
 			       void *context, enum ir0_syscall_id id, uint64_t arg1,
 			       uint64_t arg2, uint64_t arg3, uint64_t arg4,

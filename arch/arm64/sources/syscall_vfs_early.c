@@ -28,9 +28,9 @@ static int64_t early_getcwd(uint64_t buffer, uint64_t size)
 	return 2;
 }
 
-int64_t arm64_early_vfs_syscall(void *context, enum ir0_syscall_id id,
-				uint64_t a0, uint64_t a1, uint64_t a2,
-				uint64_t a3, uint64_t a4, uint64_t a5)
+static int64_t early_vfs_syscall(void *context, enum ir0_syscall_id id,
+				 uint64_t a0, uint64_t a1, uint64_t a2,
+				 uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	int64_t result;
 
@@ -65,3 +65,21 @@ int64_t arm64_early_vfs_syscall(void *context, enum ir0_syscall_id id,
 		return -ENOSYS;
 	}
 }
+
+static const enum ir0_syscall_id g_vfs_syscalls[] = {
+	IR0_SYSCALL_READ,
+	IR0_SYSCALL_CLOSE,
+	IR0_SYSCALL_OPENAT,
+	IR0_SYSCALL_FACCESSAT,
+	IR0_SYSCALL_NEWFSTATAT,
+	IR0_SYSCALL_FSTAT,
+	IR0_SYSCALL_READLINKAT,
+	IR0_SYSCALL_GETCWD,
+	IR0_SYSCALL_CHDIR,
+};
+
+const struct syscall_context_provider arm64_early_vfs_provider = {
+	.ids = g_vfs_syscalls,
+	.count = sizeof(g_vfs_syscalls) / sizeof(g_vfs_syscalls[0]),
+	.handler = early_vfs_syscall,
+};
