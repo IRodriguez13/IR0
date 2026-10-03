@@ -15,6 +15,7 @@
 #include "syscall_early.h"
 #include "elf_load_early.h"
 #include "rootfs_early.h"
+#include "syscall_mm_early.h"
 #include "mmu_early.h"
 #include "pl011.h"
 #include "timer.h"
@@ -28,7 +29,6 @@
 #define EFAULT 14
 #define EINVAL 22
 #define ENOSYS 38
-#define ENOMEM 12
 #define ENOENT 2
 
 #define WRITE_MAX 256UL
@@ -36,41 +36,9 @@
 
 #define ENOTTY 25
 
-#ifndef ARM64_MUSL_MMAP_BASE
-#define ARM64_MUSL_MMAP_BASE 0x431a0000UL
-#endif
-#ifndef ARM64_MUSL_MMAP_END
-#define ARM64_MUSL_MMAP_END 0x43200000UL
-#endif
-/*
- * BusyBox data LOAD ends ~0x44157b60; heap brk starts at next page.
- * Anonymous mmap bump shares the same high window up to BB_MMAP_END.
- */
-#ifndef ARM64_BB_BRK_START
-#define ARM64_BB_BRK_START 0x44158000UL
-#endif
-#ifndef ARM64_BB_MMAP_BASE
-#define ARM64_BB_MMAP_BASE 0x44200000UL
-#endif
-#ifndef ARM64_BB_MMAP_END
-#define ARM64_BB_MMAP_END 0x44800000UL
-#endif
-
-#define MUSL_MMAP_BASE ARM64_MUSL_MMAP_BASE
-#define MUSL_MMAP_END  ARM64_MUSL_MMAP_END
-#define BB_BRK_START   ARM64_BB_BRK_START
-#define BB_MMAP_BASE   ARM64_BB_MMAP_BASE
-#define BB_MMAP_END    ARM64_BB_MMAP_END
-
-static uint64_t g_musl_brk = MUSL_MMAP_BASE;
-static uint64_t g_musl_mmap_bump = MUSL_MMAP_BASE;
-static uint64_t g_bb_brk = BB_BRK_START;
-static uint64_t g_bb_mmap_bump = BB_MMAP_BASE;
-
 void arm64_syscall_reset_busybox_heap(void)
 {
-	g_bb_brk = BB_BRK_START;
-	g_bb_mmap_bump = BB_MMAP_BASE;
+	arm64_early_mm_reset_busybox_heap();
 }
 
 struct linux_timespec64
@@ -125,10 +93,6 @@ static const enum ir0_syscall_id g_early_supported_syscalls[] = {
 	IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ,
 	IR0_SYSCALL_GETRANDOM,
-	IR0_SYSCALL_BRK,
-	IR0_SYSCALL_MMAP,
-	IR0_SYSCALL_MUNMAP,
-	IR0_SYSCALL_MPROTECT,
 	IR0_SYSCALL_EXIT,
 	IR0_SYSCALL_EXIT_GROUP,
 };
@@ -164,14 +128,6 @@ static void pl011_put_hex64(uint64_t v)
 	pl011_puts(buf);
 }
 
-static void zero_page(uint64_t page)
-{
-	volatile uint8_t *p = (volatile uint8_t *)(uintptr_t)page;
-	uint64_t i;
-
-	for (i = 0; i < 4096UL; i++)
-		p[i] = 0;
-}
 
 int arm64_syscall_smoke_ok(void)
 {
@@ -558,99 +514,6 @@ static int64_t arm64_syscall_early_handle(void *opaque,
 			return (int64_t)n;
 		}
 		return -EFAULT;
-	case IR0_SYSCALL_BRK:
-	{
-		uint64_t req = a0;
-		uint64_t *brk;
-		uint64_t base;
-		uint64_t end;
-
-		if (arm64_busybox_mode())
-		{
-			brk = &g_bb_brk;
-			base = BB_BRK_START;
-			end = BB_MMAP_END;
-		}
-		else
-		{
-			brk = &g_musl_brk;
-			base = MUSL_MMAP_BASE;
-			end = MUSL_MMAP_END;
-		}
-		if (req == 0)
-			return (int64_t)*brk;
-		if (req < base || req > end)
-			return (int64_t)*brk;
-		while (*brk < req)
-		{
-			uint64_t page = *brk & ~(4096UL - 1UL);
-
-			if (arm64_mmu_map_user_page_flags(page, 0) != 0)
-				return (int64_t)*brk;
-			zero_page(page);
-			*brk += 4096UL;
-		}
-		*brk = req;
-		return (int64_t)*brk;
-	}
-	case IR0_SYSCALL_MMAP:
-	{
-		uint64_t addr = a0;
-		uint64_t len = a1;
-		uint64_t page;
-		uint64_t base;
-		uint64_t *bump;
-		uint64_t mend;
-		uint64_t map_end;
-
-		if (len == 0)
-		{
-			/* musl mallocng can issue mmap(0,0) if page_size was 0; give 2 pages. */
-			len = 8192UL;
-		}
-		len = (len + 4095UL) & ~4095UL;
-		if (arm64_busybox_mode())
-		{
-			bump = &g_bb_mmap_bump;
-			mend = BB_MMAP_END;
-		}
-		else
-		{
-			bump = &g_musl_mmap_bump;
-			mend = MUSL_MMAP_END;
-		}
-		/* MAP_FIXED / hint: honour non-zero addr. */
-		if (addr != 0)
-		{
-			base = addr & ~(4096UL - 1UL);
-			map_end = base + len;
-			if (map_end < base)
-				return -ENOMEM;
-			for (page = base; page < map_end; page += 4096UL)
-			{
-				if (arm64_mmu_map_user_page_flags(page, 0) != 0)
-					return -ENOMEM;
-				zero_page(page);
-			}
-			if (map_end > *bump && map_end <= mend)
-				*bump = map_end;
-			return (int64_t)base;
-		}
-		if (*bump + len > mend)
-			return -ENOMEM;
-		base = *bump;
-		for (page = base; page < base + len; page += 4096UL)
-		{
-			if (arm64_mmu_map_user_page_flags(page, 0) != 0)
-				return -ENOMEM;
-			zero_page(page);
-		}
-		*bump = base + len;
-		return (int64_t)base;
-	}
-	case IR0_SYSCALL_MUNMAP:
-	case IR0_SYSCALL_MPROTECT:
-		return 0;
 	case IR0_SYSCALL_EXIT:
 	case IR0_SYSCALL_EXIT_GROUP:
 		if (leave_el0)
@@ -696,6 +559,14 @@ static void arm64_syscall_early_handlers_init(void)
 		(void)syscall_context_handler_set(&g_early_syscall_handlers,
 						  g_early_supported_syscalls[i],
 						  arm64_syscall_early_handle);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_BRK, arm64_early_mm_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_MMAP, arm64_early_mm_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_MUNMAP, arm64_early_mm_syscall);
+	(void)syscall_context_handler_set(&g_early_syscall_handlers,
+					  IR0_SYSCALL_MPROTECT, arm64_early_mm_syscall);
 	g_early_syscall_handlers_ready = 1;
 }
 
