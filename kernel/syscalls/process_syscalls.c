@@ -2060,7 +2060,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
     process_signal_enter_pending_clear(current_process);
     process_signal_last_delivered_clear(current_process);
     task_apply_user_segments(&current_process->task);
-    restore_user_fs_base();
+    tls_restore_current();
     switch_to_user_task(&current_process->task);
     return 0;
   }
@@ -2092,7 +2092,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
   if (from_user && user_frame.signum > 0 && user_frame.signum < _NSIG)
     ir0_console_after_tty_read_signal(user_frame.signum);
   process_signal_last_delivered_clear(current_process);
-  restore_user_fs_base();
+  tls_restore_current();
   switch_to_user_task(&current_process->task);
   return 0;
 }

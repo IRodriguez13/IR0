@@ -139,6 +139,9 @@ KERNEL_ARCH_PORTABLE_DIRECT_RE = re.compile(
 )
 
 FS_MM_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]mm/')
+LEGACY_TLS_CONTRACT_RE = re.compile(
+    r"\b(?:set_fs_base|get_fs_base|restore_user_fs_base)\b"
+)
 
 DEVFS_USERCOPY_RE = re.compile(r"\bcopy_(to|from)_user\s*\(")
 DEVFS_USERCOPY_WHITELIST = {
@@ -217,6 +220,19 @@ def check_facades():
         if not facade.exists():
             rel = facade.relative_to(ROOT)
             errors.append(f"[missing-facade] {rel}")
+    return errors
+
+
+def check_semantic_tls_contract():
+    errors = []
+    for fpath in (ROOT / "includes" / "ir0").glob("*.h"):
+        for idx, line in enumerate(
+            fpath.read_text(encoding="utf-8", errors="replace").splitlines(),
+            start=1,
+        ):
+            if LEGACY_TLS_CONTRACT_RE.search(line):
+                rel = fpath.relative_to(ROOT)
+                errors.append(f"[legacy-tls-contract] {rel}:{idx}: {line.strip()}")
     return errors
 
 
@@ -1975,6 +1991,7 @@ def main():
     errors = []
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
+    errors.extend(check_semantic_tls_contract())
     errors.extend(check_facade_no_drivers_include())
     errors.extend(check_facade_no_kernel_include())
     errors.extend(check_arm64_scaffold())

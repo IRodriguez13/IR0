@@ -88,22 +88,3 @@ void prepare_task_user_iretq(struct process *proc)
 {
 	(void)proc;
 }
-
-void set_fs_base(uint64_t base)
-{
-	__asm__ volatile("msr tpidr_el0, %0" :: "r"(base) : "memory");
-}
-
-uint64_t get_fs_base(void)
-{
-	uint64_t base;
-
-	__asm__ volatile("mrs %0, tpidr_el0" : "=r"(base));
-	return base;
-}
-
-void restore_user_fs_base(void)
-{
-	if (current_process)
-		set_fs_base(process_tls_get(current_process));
-}

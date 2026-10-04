@@ -996,6 +996,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/arch_fork.o \
     arch/arm64/sources/fork_asm_hooks.o \
     arch/arm64/sources/arch_task_ops.o \
+    arch/arm64/sources/arch_tls.o \
     arch/arm64/sources/task_stack.o \
     arch/arm64/sources/arch_syscall_frame.o \
     arch/arm64/sources/arch_signal.o \

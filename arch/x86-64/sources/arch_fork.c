@@ -31,7 +31,7 @@ int fork_prepare_parent_return(struct process *parent, pid_t child_pid)
 		process_apply_syscall_frame_to_task(&parent->task,
 						    &parent->syscall_frame,
 						    (uint64_t)(uint32_t)child_pid);
-		set_fs_base(process_tls_get(parent));
+		tls_set_base(process_tls_get(parent));
 	}
 	else
 		task_set_retval(&parent->task, (uint64_t)(uint32_t)child_pid);
@@ -61,6 +61,6 @@ int process_set_tls(struct process *proc, uint64_t tls)
 		return -EINVAL;
 	process_tls_set(proc, tls);
 	if (proc == current_process)
-		set_fs_base(tls);
+		tls_set_base(tls);
 	return 0;
 }

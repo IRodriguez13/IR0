@@ -1206,7 +1206,7 @@ void handle_signals(void)
                          * interrupted context.
                          */
                         current->syscall_frame_fresh = 0;
-                        restore_user_fs_base();
+                        tls_restore_current();
                         signals_apply_handler_mask(
                             current, sig, current->signal_sa_flags[sig]);
                         process_signal_enter_pending_set(current);

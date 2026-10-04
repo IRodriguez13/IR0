@@ -106,7 +106,7 @@ void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
         : [udsel] "i"(USER_DATA_SEL)
         : "rax", "memory");
     /* WRMSR after selector load — loading FS/GS zeros the hidden base. */
-    set_fs_base(fsbase);
+    tls_set_base(fsbase);
     __asm__ volatile(
         "pushq %[udsel64]\n"
         "pushq %0\n"
@@ -199,7 +199,7 @@ void first_switch_to(struct process *next)
 
 #define MSR_IA32_FS_BASE 0xC0000100U
 
-void set_fs_base(uint64_t base)
+void tls_set_base(uint64_t base)
 {
 #if MINGW_BUILD
     (void)base;
@@ -211,7 +211,7 @@ void set_fs_base(uint64_t base)
 #endif
 }
 
-uint64_t get_fs_base(void)
+uint64_t tls_get_base(void)
 {
 #if MINGW_BUILD
     return 0;
@@ -225,19 +225,18 @@ uint64_t get_fs_base(void)
 }
 
 /*
- * restore_user_fs_base - Re-install TLS FS base before returning to ring 3.
+ * tls_restore_current - Re-install the current task TLS base before ring 3.
  *
  * Sysret/ISR paths historically only reloaded DS/ES. Anything that clobbers
  * IA32_FS_BASE (or a context switch that restored fs_base=0) left glibc with
  * FS=0 → __ctype_b_loc returns -0x48 → SEGV. Always reload from process_t.
  */
-void restore_user_fs_base(void)
+void tls_restore_current(void)
 {
 	if (current_process)
-		set_fs_base(process_tls_get(current_process));
+		tls_set_base(process_tls_get(current_process));
 }
 
 [[maybe_unused]]void syscall_handler_c(void)
 {
 }
-

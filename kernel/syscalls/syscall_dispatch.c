@@ -593,7 +593,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
       current_process->irq_frame_saved = 0;
       current_process->coop_resched_resume = 0;
       current_process->want_kernel_ret = 0;
-      restore_user_fs_base();
+      tls_restore_current();
       switch_to_user_task(&current_process->task);
     }
 

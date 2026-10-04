@@ -310,7 +310,7 @@ void arch_switch_to(task_t *prev, task_t *next)
     /*
      * IA32_FS_BASE is per-CPU. Child execve / ARCH_SET_FS writes the MSR
      * while current==child; wait4/pipe kernel_ret and some user-iret
-     * resumes never hit syscall sysret's restore_user_fs_base.
+     * resumes never hit the syscall return path's tls_restore_current().
      * Parent ash then ran with FS=0 and the next TLS store #PF'd at
      * 0xffffffffffffffe2 (TP + negative TCB offset). Match ARM64:
      * always install next's saved base before the context switch.
