@@ -90,23 +90,24 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			uintptr_t kcr3 = paging_current_address_space();
 
 			proc->sched_prio = 0;
-			mm->page_directory = (uint64_t *)kcr3;
-			mm->owns_tables = 0;
+			mm_init_root(mm, (uint64_t *)kcr3, 0);
 			process_mm_bind(proc, mm);
 			process_set_mm_root(proc, kcr3);
 			klog_debug("KERN", "SERIAL: spawn: kernel mm root shared (idle)\n");
 		}
 		else
 		{
-			mm->page_directory = (uint64_t *)create_process_page_directory();
-			if (!mm->page_directory)
+			address_space_root_t root =
+				(address_space_root_t)create_process_page_directory();
+
+			if (!root)
 			{
 				mm_put(mm);
 				klog_debug("KERN", "[ERROR] Failed to create page directory for process\n");
 				kfree(proc);
 				return -ENOMEM;
 			}
-			mm->owns_tables = 1;
+			mm_init_root(mm, root, 1);
 			process_mm_bind(proc, mm);
 			klog_debug("KERN", "SERIAL: spawn: page directory OK\n");
 			process_set_mm_root(proc, (uint64_t)(uintptr_t)process_pgd(proc));

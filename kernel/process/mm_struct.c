@@ -105,6 +105,14 @@ int mm_users(const mm_struct_t *mm)
 	return n;
 }
 
+void mm_init_root(mm_struct_t *mm, uint64_t *root, int owns_tables)
+{
+	if (!mm)
+		return;
+	mm->page_directory = root;
+	mm->owns_tables = owns_tables ? 1 : 0;
+}
+
 void process_mm_bind(process_t *p, mm_struct_t *mm)
 {
 	if (!p)
@@ -128,46 +136,6 @@ int process_mm_share(process_t *child, process_t *parent)
 
 	(void)mm_get(mm);
 	process_mm_bind(child, mm);
-	return 0;
-}
-
-int exec_detach_shared_mm(process_t *proc)
-{
-	mm_struct_t *old;
-	mm_struct_t *fresh;
-	address_space_root_t root;
-
-	if (!proc || !proc->mm)
-		return -EINVAL;
-	if (mm_users(proc->mm) <= 1)
-		return 0;
-
-	fresh = mm_create();
-	if (!fresh)
-		return -ENOMEM;
-
-	root = (address_space_root_t)create_process_page_directory();
-	if (!root)
-	{
-		mm_put(fresh);
-		return -ENOMEM;
-	}
-
-	fresh->page_directory = root;
-	fresh->owns_tables = 1;
-	old = proc->mm;
-	/*
-	 * Linux exec_mmap: bind + activate the private mm, then
-	 * complete_vfork_done, then mmput(old). switch_to_user() must
-	 * load the new root so a vfork child does not fetch the new
-	 * image against the parent's tables.
-	 */
-	process_mm_bind(proc, fresh);
-	process_set_mm_root(proc, (uint64_t)(uintptr_t)root);
-	if (proc == current_process)
-		mm_activate((uintptr_t)root);
-	process_vfork_complete(proc);
-	mm_put(old);
 	return 0;
 }
 

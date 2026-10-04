@@ -96,14 +96,17 @@ static int fork_child_mm_create(process_t *child, process_t *parent)
 	if (!mm)
 		return -ENOMEM;
 
-	mm->page_directory = (uint64_t *)create_process_page_directory();
-	if (!mm->page_directory)
 	{
-		mm_put(mm);
-		return -ENOMEM;
-	}
+		address_space_root_t root =
+			(address_space_root_t)create_process_page_directory();
 
-	mm->owns_tables = 1;
+		if (!root)
+		{
+			mm_put(mm);
+			return -ENOMEM;
+		}
+		mm_init_root(mm, root, 1);
+	}
 	if (parent->mm)
 	{
 		mm->mmap_base = parent->mm->mmap_base;

@@ -52,6 +52,9 @@ void mm_put(mm_struct_t *mm);
 /* Live mm_struct users (CLONE_VM shares). */
 int mm_users(const mm_struct_t *mm);
 
+/* Initialize an empty mm with its translation root and ownership contract. */
+void mm_init_root(mm_struct_t *mm, uint64_t *root, int owns_tables);
+
 /* Attach @mm to process (sole address-space pointer on process_t). */
 void process_mm_bind(struct process *p, mm_struct_t *mm);
 
