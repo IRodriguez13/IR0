@@ -179,6 +179,24 @@ process_t *get_process_list(void)
 	return process_list;
 }
 
+process_t *process_find_by_pid(pid_t pid)
+{
+	process_t *proc;
+	uint64_t irq_flags = process_irq_save();
+
+	for (proc = process_list; proc; proc = proc->next)
+	{
+		if (proc->task.pid == pid)
+		{
+			process_irq_restore(irq_flags);
+			return proc;
+		}
+	}
+
+	process_irq_restore(irq_flags);
+	return NULL;
+}
+
 
 
 int process_validate_userspace_buffer(const void *buf, size_t size)

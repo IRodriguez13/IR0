@@ -125,27 +125,6 @@ void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *st
 #endif
 }
 
-process_t *process_find_by_pid(pid_t pid)
-{
-	process_t *proc;
-	uint64_t irq_flags = process_irq_save();
-
-	proc = process_list;
-	
-	while (proc)
-	{
-		if (proc->task.pid == pid)
-		{
-			process_irq_restore(irq_flags);
-			return proc;
-		}
-		proc = proc->next;
-	}
-	
-	process_irq_restore(irq_flags);
-	return NULL; /* Not found */
-}
-
 int process_remove_from_list(process_t *target)
 {
 	process_t *scan;
@@ -660,4 +639,3 @@ int process_wait(pid_t pid, int *status, int options)
 		 */
 	}
 }
-

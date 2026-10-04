@@ -2683,8 +2683,45 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		--defsym ARM64_MIN_LINK_MARKER=1
 	@echo "✓ $@ (MEMORY+KERNEL sample+ARCH freestanding linked; drivers ALL_OBJS still BLOCKED)"
 
-# ALL_OBJS_ARM64: MEMORY + portable KERNEL sample + LIB strings + mark (no x86 drivers).
-# FS/NET/logging/futex full link remains probe-only / BLOCKED (pulls snprintf/sched).
+# The aggregate boot image is still an early-runtime composition.  Keep its
+# historical filename for automation compatibility, but do not confuse it with
+# the product KERNEL_OBJS graph.  The compile contract below covers the entire
+# common process subsystem independently of that early link boundary.
+ARM64_COMMON_PROCESS_SRCS = \
+	kernel/process/core.c \
+	kernel/process/create.c \
+	kernel/process/domains.c \
+	kernel/process/mm_struct.c \
+	kernel/process/files_struct.c \
+	kernel/process/fork.c \
+	kernel/process/exec.c \
+	kernel/process/exit.c \
+	kernel/process/wait.c \
+	kernel/process/wait_state.c \
+	kernel/process/saved_context.c \
+	kernel/process/saved_environ.c \
+	kernel/process/signal_enter.c \
+	kernel/process/fdtable.c \
+	kernel/process/pseudo_fd_bind.c \
+	kernel/process/mm.c \
+	kernel/process/signals.c
+
+.PHONY: arm64-common-process-compile
+arm64-common-process-compile:
+	@echo "  CC      ARM64 common process subsystem"
+	@mkdir -p build/arm64-common-process
+	@set -e; for src in $(ARM64_COMMON_PROCESS_SRCS); do \
+		obj=build/arm64-common-process/$$(basename $$src .c).o; \
+		echo "  CC      $$src"; \
+		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+			-I$(KERNEL_ROOT)/arch/common \
+			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
+			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
+			-c $$src -o $$obj; \
+	done
+	@echo "✓ ARM64 common process subsystem compile contract"
+
 .PHONY: kernel-arm64-all.bin smoke-arm64-all
 kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
@@ -2778,10 +2815,10 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/portable_string.o \
 		build/arm64-all/string_aliases.o \
 		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
-	@echo "✓ $@ (ALL_OBJS_ARM64 portable link; ATA/RTL/VBE/ISA still BLOCKED)"
+	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
-smoke-arm64-all: kernel-arm64-all.bin
-	@echo "  SMOKE   ARM64 common MM objects linked into boot..."
+smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
+	@echo "  SMOKE   ARM64 early aggregate boot + common process compile contract..."
 	@aarch64-linux-gnu-readelf -lW kernel-arm64-all.bin > /tmp/ir0-arm64-all-phdrs.log
 	@! grep -Eq 'LOAD[[:space:]].*RWE' /tmp/ir0-arm64-all-phdrs.log
 	@grep -Eq 'LOAD[[:space:]].*R E' /tmp/ir0-arm64-all-phdrs.log
@@ -2798,7 +2835,7 @@ smoke-arm64-all: kernel-arm64-all.bin
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log
-	@echo "✓ smoke-arm64-all passed (common MM link + BusyBox EL0)"
+	@echo "✓ smoke-arm64-all passed (early aggregate boot + BusyBox EL0)"
 
 smoke-arm64-boot: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU virt boot tag..."
