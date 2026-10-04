@@ -560,7 +560,7 @@ void process_capture_syscall_frame(process_t *p);
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw);
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
                                          uint64_t rax);
-/* Soft pt_regs→task mirror; no-op if KERNEL CS or want_kernel_ret (Class B). */
+/* Soft syscall-frame→task mirror; no-op while a kernel return is armed. */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
@@ -572,11 +572,11 @@ void process_reset_blocked_syscall_state(process_t *p);
 /* "arm" = prepare/enable a resume path (English verb), not ARM64. */
 void process_arm_kernel_syscall_sleep(process_t *p);
 void process_kernel_sleep_capture_syscall_frame(process_t *p);
-/* After switch_context saved prev: honour want_kernel_ret (Class B close). */
+/* After the ISA switch saved prev, honour the pending kernel return. */
 void process_after_task_save(task_t *prev);
 
-/* Class B: KERNEL CS + userspace RIP unsafe for kernel_ret (see process_ctx_invariant.h). */
-int process_task_kernel_ret_rip_bad(const task_t *t);
+/* Reject a kernel-mode return state whose instruction pointer is user-owned. */
+int process_task_kernel_return_state_bad(const task_t *t);
 void fork_ret_emit_pre_return(void);
 void fork_restore_emit_pre_iretq(void);
 void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw);

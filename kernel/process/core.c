@@ -49,7 +49,7 @@ static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
 	*out = *sf;
 }
 
-int process_task_kernel_ret_rip_bad(const task_t *t)
+int process_task_kernel_return_state_bad(const task_t *t)
 {
 	if (!t)
 		return 0;

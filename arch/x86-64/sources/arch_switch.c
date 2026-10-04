@@ -609,7 +609,7 @@ void arch_switch_to(task_t *prev, task_t *next)
      * hit Class B while wait_blocked=1, and the old exclusion let it panic.
      */
     if (next && next_proc && next_proc->mode == USER_MODE &&
-        process_task_kernel_ret_rip_bad(next) &&
+        process_task_kernel_return_state_bad(next) &&
         !next_proc->coop_resched_resume)
     {
         const syscall_user_frame_t *sf = &next_proc->syscall_frame;
