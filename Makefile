@@ -932,6 +932,7 @@ ARCH_OBJS_COMMON = \
     arch/common/boot_log.o
 
 ARCH_OBJS_X86_64 = \
+    arch/x86-64/sources/arch_debug.o \
     arch/x86-64/sources/arch_interface.o \
     arch/x86-64/sources/arch_x64.o \
     arch/x86-64/sources/platform.o \
@@ -965,6 +966,7 @@ ARCH_OBJS_X86_64 = \
 
 ARCH_OBJS_ARM64 = \
     arch/common/boot_log.o \
+    arch/arm64/sources/arch_debug.o \
     arch/arm64/sources/arch_arm64.o \
     arch/arm64/sources/arch_early.o \
     arch/arm64/sources/interrupts.o \

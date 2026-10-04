@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/arch_debug.h>
 #include <ir0/task_ops.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/ktm/event.h>
@@ -87,7 +88,7 @@ void process_init(void)
 {
 	current_process = NULL;
 	process_list = NULL;
-	ir0_debug_trap_init();
+	debug_state_init();
 	/* First spawned process is /sbin/init (PID 1). */
 	next_pid = 1;
 }

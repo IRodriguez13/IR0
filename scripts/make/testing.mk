@@ -2720,6 +2720,10 @@ arm64-common-process-compile:
 			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
 			-c $$src -o $$obj; \
 	done
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-c arch/arm64/sources/arch_debug.c \
+		-o build/arm64-common-process/arch_debug.o
 	@echo "✓ ARM64 common process subsystem compile contract"
 
 .PHONY: kernel-arm64-all.bin smoke-arm64-all
