@@ -2747,10 +2747,16 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		kernel/errno.c \
 		kernel/lib/open_flags.c \
 		kernel/process/core.c \
+		kernel/process/domains.c \
+		kernel/process/saved_context.c \
+		kernel/process/saved_environ.c \
+		kernel/process/pseudo_fd_bind.c \
 		kernel/process/signal_enter.c \
 		kernel/process/wait_state.c \
 		arch/arm64/sources/arch_debug.c \
+		arch/arm64/sources/arch_fork.c \
 		arch/arm64/sources/arch_task_ops.c \
+		arch/arm64/sources/arch_tls.c \
 		arch/arm64/sources/arch_syscall_frame.c \
 		arch/arm64/sources/arch_mm.c \
 		arch/arm64/sources/portable_string.c; do \
@@ -2834,10 +2840,16 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/errno.o \
 		build/arm64-all/open_flags.o \
 		build/arm64-all/core.o \
+		build/arm64-all/domains.o \
+		build/arm64-all/saved_context.o \
+		build/arm64-all/saved_environ.o \
+		build/arm64-all/pseudo_fd_bind.o \
 		build/arm64-all/signal_enter.o \
 		build/arm64-all/wait_state.o \
 		build/arm64-all/arch_debug.o \
+		build/arm64-all/arch_fork.o \
 		build/arm64-all/arch_task_ops.o \
+		build/arm64-all/arch_tls.o \
 		build/arm64-all/arch_syscall_frame.o \
 		build/arm64-all/arch_mm.o \
 		build/arm64-all/portable_string.o \
@@ -2857,6 +2869,12 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		awk '$$3 == "process_get_pid" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_find_by_pid" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "fork_prepare_child_return" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_saved_environ_clone" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_set_tls" { ok = ($$2 == "T") } END { exit !ok }'
 	@echo "✓ ARM64 common process registry/core symbols are strong"
 	@echo "✓ ARM64 ELF W^X program headers"
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \

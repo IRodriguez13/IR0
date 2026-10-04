@@ -28,6 +28,8 @@ the existing x86 and ARM runtime gates remain green.
   error propagation, while the current ARM early provider supplies mechanisms.
 - Debug state: `includes/ir0/arch_debug.h`; common process code calls the
   semantic `debug_state_init()` operation.
+- Thread-local storage: `includes/ir0/tls.h`; common process and syscall code
+  use semantic TLS operations, while each ISA owns its thread-pointer register.
 
 ## File manifest
 
@@ -99,9 +101,11 @@ pure-move pass.
 ## Ordered convergence
 
 1. Link common process core with ARM task/frame/debug providers. **Done for the
-   aggregate ARM boot:** registry, core, signal-enter and wait-state are strong
-   symbols and the smoke rejects fallback process stubs.
-2. Close create/fork/exec/exit/wait dependencies without adding fallback stubs.
+   aggregate ARM boot:** registry, core, signal-enter, wait-state, domain state,
+   saved context/environment, pseudo-FD binding and fork/TLS preparation are
+   strong symbols; the smoke rejects fallback process stubs.
+2. Close MM lifecycle and create dependencies, then fd/VFS dependencies needed
+   by exec/exit/wait, without adding fallback stubs.
 3. Replace early process and syscall providers one subsystem at a time.
 4. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
 5. Only then perform pure directory moves for boot, MM, IRQ and platform code.
