@@ -14,6 +14,7 @@
 #include <arch/common/arch_portable.h>
 #include <ir0/mm.h>
 #include <ir0/oops.h>
+#include <ir0/video_backend.h>
 
 /* From freestanding_stubs / serial when linked with boot image. */
 extern void serial_print(const char *s);
@@ -80,17 +81,17 @@ int __attribute__((weak)) ktm_fault_should_fail(void)
 	return 0;
 }
 
-int __attribute__((weak)) video_backend_is_available(void)
+bool __attribute__((weak)) video_backend_is_available(void)
+{
+	return false;
+}
+
+uint32_t __attribute__((weak)) video_backend_get_fb_phys(void)
 {
 	return 0;
 }
 
-uint64_t __attribute__((weak)) video_backend_get_fb_phys(void)
-{
-	return 0;
-}
-
-uint64_t __attribute__((weak)) video_backend_get_fb_size(void)
+uint32_t __attribute__((weak)) video_backend_get_fb_size(void)
 {
 	return 0;
 }

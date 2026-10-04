@@ -104,8 +104,10 @@ pure-move pass.
    aggregate ARM boot:** registry, core, signal-enter, wait-state, domain state,
    saved context/environment, pseudo-FD binding and fork/TLS preparation are
    strong symbols; the smoke rejects fallback process stubs.
-2. Close MM lifecycle and create dependencies, then fd/VFS dependencies needed
-   by exec/exit/wait, without adding fallback stubs.
+2. Link the common MM lifecycle. **Done for the aggregate ARM boot:** common
+   address-space creation, refcount, table reclaim and VMA lifecycle are strong
+   symbols. Close create, then fd/VFS dependencies needed by exec/exit/wait,
+   without adding fallback stubs.
 3. Replace early process and syscall providers one subsystem at a time.
 4. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
 5. Only then perform pure directory moves for boot, MM, IRQ and platform code.

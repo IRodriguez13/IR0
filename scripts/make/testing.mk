@@ -2747,6 +2747,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		kernel/errno.c \
 		kernel/lib/open_flags.c \
 		kernel/process/core.c \
+		kernel/process/mm_struct.c \
+		kernel/process/mm.c \
 		kernel/process/domains.c \
 		kernel/process/saved_context.c \
 		kernel/process/saved_environ.c \
@@ -2840,6 +2842,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/errno.o \
 		build/arm64-all/open_flags.o \
 		build/arm64-all/core.o \
+		build/arm64-all/mm_struct.o \
+		build/arm64-all/mm.o \
 		build/arm64-all/domains.o \
 		build/arm64-all/saved_context.o \
 		build/arm64-all/saved_environ.o \
@@ -2875,6 +2879,10 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		awk '$$3 == "process_saved_environ_clone" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_set_tls" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "mm_create" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "create_process_page_directory" { ok = ($$2 == "T") } END { exit !ok }'
 	@echo "✓ ARM64 common process registry/core symbols are strong"
 	@echo "✓ ARM64 ELF W^X program headers"
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
