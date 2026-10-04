@@ -27,7 +27,7 @@
 #include <ir0/devfs.h>
 #include <ir0/pty_devfs.h>
 #include <ir0/sched.h>
-#include <ir0/ktm.h>
+#include <ktm.h>
 #include <ir0/fcntl.h>
 #include <ir0/fd_dispatch.h>
 #include <ir0/io_async.h>
