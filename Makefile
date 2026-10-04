@@ -346,8 +346,10 @@ KERNEL_OBJS = \
     kernel/process/registry.o \
     kernel/process/core.o \
     kernel/process/create.o \
+    kernel/process/cred_groups.o \
     kernel/process/domains.o \
     kernel/process/mm_struct.o \
+    kernel/process/files_lifecycle.o \
     kernel/process/files_struct.o \
     kernel/process/fork.o \
     kernel/process/exec.o \
@@ -357,6 +359,7 @@ KERNEL_OBJS = \
     kernel/process/saved_context.o \
     kernel/process/saved_environ.o \
     kernel/process/signal_enter.o \
+    kernel/process/fdtable_init.o \
     kernel/process/fdtable.o \
     kernel/process/pseudo_fd_bind.o \
     kernel/process/mm.o \

@@ -68,17 +68,6 @@
 
 /* Credentials, supplementary groups, and Linux setreuid/setresuid ABI. */
 
-void process_cred_init_groups(process_t *p)
-{
-	if (!p)
-		return;
-	if (p->ngroups == 0)
-	{
-		p->groups[0] = (gid_t)p->gid;
-		p->ngroups = 1;
-	}
-}
-
 int process_cred_in_group(const process_t *p, gid_t gid)
 {
 	uint8_t i;
