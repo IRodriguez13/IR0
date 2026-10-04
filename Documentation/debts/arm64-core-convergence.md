@@ -98,7 +98,9 @@ pure-move pass.
 
 ## Ordered convergence
 
-1. Link common process core with ARM task/frame/debug providers.
+1. Link common process core with ARM task/frame/debug providers. **Done for the
+   aggregate ARM boot:** registry, core, signal-enter and wait-state are strong
+   symbols and the smoke rejects fallback process stubs.
 2. Close create/fork/exec/exit/wait dependencies without adding fallback stubs.
 3. Replace early process and syscall providers one subsystem at a time.
 4. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.

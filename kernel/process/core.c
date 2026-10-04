@@ -80,10 +80,6 @@ uint64_t process_list_count_user(void)
 	return n;
 }
 
-process_t *current_process = NULL;
-process_t *process_list = NULL;
-
-
 void process_init(void)
 {
 	current_process = NULL;
@@ -216,12 +212,12 @@ int process_validate_userspace_buffer(const void *buf, size_t size)
 		    addr >= process_heap_start(current_process) &&
 		    addr + size <= process_heap_end(current_process))
 			return 0;
-		if (is_user_address(buf, size))
+		if (mm_user_va_ok((uintptr_t)buf, size))
 			return 0;
 		return -EFAULT;
 	}
 
-	if (!is_user_address(buf, size))
+	if (!mm_user_va_ok((uintptr_t)buf, size))
 		return -EFAULT;
 
 	return 0;

@@ -2344,6 +2344,12 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-c arch/arm64/sources/process_early.c -o arch/arm64/sources/process_early.o
 	@echo "  CC      sched/rr_sched.c"
 	@mkdir -p build/arm64-boot
+	@echo "  CC      kernel/process/registry.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c kernel/process/registry.c -o build/arm64-boot/process_registry.o
 	@echo "  CC      sched/sched.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-DIR0_SCHED_EARLY_RR=1 \
@@ -2458,6 +2464,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
+		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
@@ -2542,7 +2549,8 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
-		build/arm64-boot/rr_sched.o arch/arm64/sources/rr_early.o \
+		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
+		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o build/arm64-boot/elf64_image.o \
 		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
 		build/arm64-rpi3-early/hello_embed.o \
@@ -2664,6 +2672,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
+		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
@@ -2688,6 +2697,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 # the product KERNEL_OBJS graph.  The compile contract below covers the entire
 # common process subsystem independently of that early link boundary.
 ARM64_COMMON_PROCESS_SRCS = \
+	kernel/process/registry.c \
 	kernel/process/core.c \
 	kernel/process/create.c \
 	kernel/process/domains.c \
@@ -2736,6 +2746,12 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c \
 		kernel/errno.c \
 		kernel/lib/open_flags.c \
+		kernel/process/core.c \
+		kernel/process/signal_enter.c \
+		kernel/process/wait_state.c \
+		arch/arm64/sources/arch_debug.c \
+		arch/arm64/sources/arch_task_ops.c \
+		arch/arm64/sources/arch_syscall_frame.c \
 		arch/arm64/sources/arch_mm.c \
 		arch/arm64/sources/portable_string.c; do \
 		base=$$(basename $$src .c); \
@@ -2750,7 +2766,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		fi; \
 	done
 	@echo "  CC      arch/arm64/sources/min_link_stubs.c (all)"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
+		-DIR0_ARM64_COMMON_PROCESS_LINK=1 -c \
 		arch/arm64/sources/min_link_stubs.c -o build/arm64-all/min_link_stubs.o
 	@echo "  CC      arch/arm64/sources/all_objs_mark.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
@@ -2799,6 +2816,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
+		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
 		arch/arm64/sources/rr_early_stubs.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
@@ -2815,6 +2833,12 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/pmm.o build/arm64-all/kmem.o \
 		build/arm64-all/errno.o \
 		build/arm64-all/open_flags.o \
+		build/arm64-all/core.o \
+		build/arm64-all/signal_enter.o \
+		build/arm64-all/wait_state.o \
+		build/arm64-all/arch_debug.o \
+		build/arm64-all/arch_task_ops.o \
+		build/arm64-all/arch_syscall_frame.o \
 		build/arm64-all/arch_mm.o \
 		build/arm64-all/portable_string.o \
 		build/arm64-all/string_aliases.o \
@@ -2827,6 +2851,13 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@! grep -Eq 'LOAD[[:space:]].*RWE' /tmp/ir0-arm64-all-phdrs.log
 	@grep -Eq 'LOAD[[:space:]].*R E' /tmp/ir0-arm64-all-phdrs.log
 	@grep -Eq 'LOAD[[:space:]].*RW[[:space:]]' /tmp/ir0-arm64-all-phdrs.log
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "current_process" { ok = ($$2 == "B") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_get_pid" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_find_by_pid" { ok = ($$2 == "T") } END { exit !ok }'
+	@echo "✓ ARM64 common process registry/core symbols are strong"
 	@echo "✓ ARM64 ELF W^X program headers"
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \

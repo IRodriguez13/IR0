@@ -60,6 +60,7 @@ void __attribute__((weak)) klog_trace_fmt(const char *component,
 	(void)format;
 }
 
+#if !defined(IR0_ARM64_COMMON_PROCESS_LINK)
 void *__attribute__((weak)) current_process;
 
 void *__attribute__((weak)) process_find_by_pid(int pid)
@@ -72,6 +73,7 @@ int __attribute__((weak)) process_get_pid(void)
 {
 	return 1;
 }
+#endif
 
 int __attribute__((weak)) ktm_fault_should_fail(void)
 {

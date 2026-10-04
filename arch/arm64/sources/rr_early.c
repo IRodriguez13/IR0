@@ -38,8 +38,6 @@ static int g_rr_ran;
 static volatile int g_rr_tick_active;
 static volatile int g_rr_tick_seen;
 
-process_t *current_process;
-
 int arm64_rr_tick_sched_active(void)
 {
 	return g_rr_tick_active != 0;
