@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_page_fault.h>
+#include <ir0/page_fault.h>
 #include <ir0/errno.h>
 
 int page_fault_decode(struct page_fault_info *out, uint64_t errcode,

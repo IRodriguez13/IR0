@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_task_ops.h>
+#include <ir0/task_ops.h>
 #include <ir0/arch_task.h>
 #include <ir0/signals.h>
 #include <string.h>

@@ -72,9 +72,12 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "irq.h",
     ROOT / "includes" / "ir0" / "arch_switch.h",
     ROOT / "includes" / "ir0" / "arch_mm.h",
-    ROOT / "includes" / "ir0" / "arch_signal.h",
+    ROOT / "includes" / "ir0" / "task_ops.h",
+    ROOT / "includes" / "ir0" / "fork.h",
+    ROOT / "includes" / "ir0" / "page_fault.h",
+    ROOT / "includes" / "ir0" / "signal_irq.h",
     ROOT / "includes" / "ir0" / "arch_elf.h",
-    ROOT / "includes" / "ir0" / "arch_syscall_frame.h",
+    ROOT / "includes" / "ir0" / "syscall_frame.h",
 ]
 
 REQUIRED_ARM64_SCAFFOLD = [

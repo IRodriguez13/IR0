@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
-#include <ir0/arch_fork.h>
+#include <ir0/fork.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/errno.h>
 

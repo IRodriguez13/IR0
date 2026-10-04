@@ -12,9 +12,9 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_syscall_frame.h>
+#include <ir0/syscall_frame.h>
 #include <ir0/arch_task.h>
-#include <ir0/arch_task_ops.h>
+#include <ir0/task_ops.h>
 #include <ir0/errno.h>
 #include <kernel/process.h>
 #include <config.h>

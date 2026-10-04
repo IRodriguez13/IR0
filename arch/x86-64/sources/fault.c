@@ -19,7 +19,7 @@
 #include <ir0/cpu.h>
 #include <ir0/process.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/arch_page_fault.h>
+#include <ir0/page_fault.h>
 #include <ktm.h>
 
 void page_fault_handler_x64(uint64_t *stack)
