@@ -2747,8 +2747,12 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		kernel/errno.c \
 		kernel/lib/open_flags.c \
 		kernel/process/core.c \
+		kernel/process/create.c \
+		kernel/process/cred_groups.c \
 		kernel/process/mm_struct.c \
 		kernel/process/mm.c \
+		kernel/process/files_lifecycle.c \
+		kernel/process/fdtable_init.c \
 		kernel/process/domains.c \
 		kernel/process/saved_context.c \
 		kernel/process/saved_environ.c \
@@ -2759,6 +2763,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/arch_fork.c \
 		arch/arm64/sources/arch_task_ops.c \
 		arch/arm64/sources/arch_tls.c \
+		arch/arm64/sources/task_stack.c \
 		arch/arm64/sources/arch_syscall_frame.c \
 		arch/arm64/sources/arch_mm.c \
 		arch/arm64/sources/portable_string.c; do \
@@ -2842,8 +2847,12 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/errno.o \
 		build/arm64-all/open_flags.o \
 		build/arm64-all/core.o \
+		build/arm64-all/create.o \
+		build/arm64-all/cred_groups.o \
 		build/arm64-all/mm_struct.o \
 		build/arm64-all/mm.o \
+		build/arm64-all/files_lifecycle.o \
+		build/arm64-all/fdtable_init.o \
 		build/arm64-all/domains.o \
 		build/arm64-all/saved_context.o \
 		build/arm64-all/saved_environ.o \
@@ -2854,6 +2863,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/arch_fork.o \
 		build/arm64-all/arch_task_ops.o \
 		build/arm64-all/arch_tls.o \
+		build/arm64-all/task_stack.o \
 		build/arm64-all/arch_syscall_frame.o \
 		build/arm64-all/arch_mm.o \
 		build/arm64-all/portable_string.o \
@@ -2883,7 +2893,11 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		awk '$$3 == "mm_create" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "create_process_page_directory" { ok = ($$2 == "T") } END { exit !ok }'
-	@echo "✓ ARM64 common process registry/core symbols are strong"
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "spawn" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_init_fd_table" { ok = ($$2 == "T") } END { exit !ok }'
+	@echo "✓ ARM64 common process/MM/create symbols are strong"
 	@echo "✓ ARM64 ELF W^X program headers"
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \

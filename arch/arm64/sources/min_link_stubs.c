@@ -61,6 +61,20 @@ void __attribute__((weak)) klog_trace_fmt(const char *component,
 	(void)format;
 }
 
+void __attribute__((weak)) klog_debug(const char *component,
+				      const char *message)
+{
+	(void)component;
+	(void)message;
+}
+
+void __attribute__((weak)) klog_debug_fmt(const char *component,
+					  const char *format, ...)
+{
+	(void)component;
+	(void)format;
+}
+
 #if !defined(IR0_ARM64_COMMON_PROCESS_LINK)
 void *__attribute__((weak)) current_process;
 

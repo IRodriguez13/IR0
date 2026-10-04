@@ -13,6 +13,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stdint.h>
+#include <config.h>
+#include "timer.h"
 
 static uint64_t g_cntfrq;
 static uint32_t g_hz;
@@ -32,6 +34,17 @@ uint64_t timer_read(void)
 
 	__asm__ volatile("mrs %0, cntpct_el0" : "=r"(pct));
 	return pct;
+}
+
+uint64_t clock_get_tick_count(void)
+{
+	uint64_t counter = timer_read();
+	uint64_t frequency = timer_get_frequency();
+
+	if (frequency == 0)
+		return 0;
+	return (counter / frequency) * CONFIG_TICK_RATE_HZ +
+	       ((counter % frequency) * CONFIG_TICK_RATE_HZ) / frequency;
 }
 
 void timer_set_frequency(uint32_t hz)

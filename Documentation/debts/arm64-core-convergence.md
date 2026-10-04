@@ -106,11 +106,14 @@ pure-move pass.
    strong symbols; the smoke rejects fallback process stubs.
 2. Link the common MM lifecycle. **Done for the aggregate ARM boot:** common
    address-space creation, refcount, table reclaim and VMA lifecycle are strong
-   symbols. Close create, then fd/VFS dependencies needed by exec/exit/wait,
-   without adding fallback stubs.
-3. Replace early process and syscall providers one subsystem at a time.
-4. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
-5. Only then perform pure directory moves for boot, MM, IRQ and platform code.
+   symbols.
+3. Link common process creation. **Done for the aggregate ARM boot:** `spawn`,
+   credentials/group initialization, files lifecycle, initial fd table and the
+   ARM task-stack provider are linked as strong symbols. Close fd/VFS
+   dependencies needed by fork/exec/exit/wait without adding fallback stubs.
+4. Replace early process and syscall providers one subsystem at a time.
+5. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
+6. Only then perform pure directory moves for boot, MM, IRQ and platform code.
 
 The acceptance condition is stronger than compilation: x86 production boot,
 ARM QEMU BusyBox/init EL0, Raspberry Pi 3 userspace, Raspberry Pi 5 compile,
