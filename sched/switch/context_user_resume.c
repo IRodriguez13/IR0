@@ -53,6 +53,32 @@ enum context_resume_route context_prepare_resume_route(task_t *next)
 }
 
 /*
+ * The backend may have repaired its saved frame before this point.  Re-arm
+ * generic kernel continuation only after that validation, without inspecting
+ * an ISA return frame or segment representation.
+ */
+void context_finalize_kernel_resume(task_t *next)
+{
+	process_t *proc;
+
+	if (!next)
+		return;
+	proc = task_to_process(next);
+	if (!proc)
+		return;
+
+	if (process_wait_target_pid(proc) != 0 &&
+	    process_wait_resume_child_pid(proc) <= 0 &&
+	    !proc->coop_resched_resume &&
+	    !mm_user_va_ok((uintptr_t)task_get_ip(next), 1))
+		process_arm_kernel_syscall_sleep(proc);
+
+	if (proc->want_kernel_ret &&
+	    !mm_user_va_ok((uintptr_t)task_get_ip(next), 1))
+		process_arm_kernel_syscall_sleep(proc);
+}
+
+/*
  * No ISA state is inspected or synthesized here: the frame is applied through
  * the task facade, while the backend remains responsible for validating it
  * and performing the eventual privilege return.

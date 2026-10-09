@@ -392,31 +392,9 @@ void arch_switch_to(task_t *prev, task_t *next)
         return;
     }
 
-    /*
-     * wait4 blocked in process_wait: re-assert ring-0 before switch_context
-     * only when rip is already in-kernel (post-save). User RIP + kernel CS is
-     * the desk-session #UD class; leave user CS so iretq is used instead.
-     */
-    if (next_proc && next_proc->wait_target_pid != 0 &&
-        next_proc->wait_resume_child_pid <= 0 && !next_proc->coop_resched_resume)
-    {
-        uint64_t nrip = task_get_ip(&next_proc->task);
-
-        if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
-            process_arm_kernel_syscall_sleep(next_proc);
-    }
-
     arch_fixup_user_task_for_iretq(next_proc);
 
-    /*
-     * Finish deferred arm: save already put kernel RIP on this task, or we are
-     * switching to a waiter whose rip is kernel .text — apply KERNEL CS now.
-     */
-    if (next && next_proc && next_proc->want_kernel_ret &&
-        !process_rip_in_user_range(task_get_ip(next)))
-    {
-        process_arm_kernel_syscall_sleep(next_proc);
-    }
+    context_finalize_kernel_resume(next);
 
     /*
      * KTM: force Class B on *next* (KERNEL CS + user RIP) before sanitize.
