@@ -67,6 +67,25 @@ enum context_resume_route context_prepare_resume_route(task_t *next)
 }
 
 /*
+ * Route selection belongs to the portable dispatcher.  The backend can
+ * observe the transition for ISA-specific diagnostics, but it cannot change
+ * the decision or inspect portable process-state policy.
+ */
+int context_try_resume_user_frame(task_t *prev, task_t *next)
+{
+	process_t *proc;
+	process_t *prev_proc;
+
+	if (context_prepare_resume_route(next) != CONTEXT_RESUME_USER_FRAME)
+		return 0;
+
+	proc = next ? task_to_process(next) : NULL;
+	prev_proc = prev ? task_to_process(prev) : NULL;
+	context_backend_trace_user_frame_resume(prev_proc, proc, next);
+	return context_resume_user_frame(prev, next);
+}
+
+/*
  * The backend may have repaired its saved frame before this point.  Re-arm
  * generic kernel continuation only after that validation, without inspecting
  * an ISA return frame or segment representation.

@@ -99,3 +99,12 @@ uint64_t context_backend_user_return_value(const struct process *proc,
 	(void)task;
 	return resume_proc ? resume_proc->syscall_resume_rax : 0;
 }
+
+void context_backend_trace_user_frame_resume(struct process *prev,
+						     struct process *next,
+						     task_t *task)
+{
+	(void)prev;
+	(void)next;
+	(void)task;
+}

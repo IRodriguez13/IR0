@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/arch_switch.h>
+#include <ir0/context.h>
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
@@ -54,5 +55,11 @@ void switch_to(task_t *prev, task_t *next)
 	if (prev)
 		switch_save_user_rsp(task_to_process(prev));
 	context_prepare_next(next);
+#if !defined(IR0_FREESTANDING_BOOT)
+	if (context_try_resume_user_frame(prev, next))
+		return;
+#else
+	/* The staged boot image deliberately omits the process-resume state machine. */
+#endif
 	arch_switch_to(prev, next);
 }

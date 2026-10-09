@@ -22,3 +22,6 @@ int context_backend_checkpoint(task_t *prev);
 void context_backend_prepare_user_frame(struct process *proc, task_t *task);
 uint64_t context_backend_user_return_value(const struct process *proc,
                                            const task_t *task);
+void context_backend_trace_user_frame_resume(struct process *prev,
+                                             struct process *next,
+                                             task_t *task);

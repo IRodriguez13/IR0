@@ -157,6 +157,21 @@ uint64_t context_backend_user_return_value(const struct process *proc,
 	return rax;
 }
 
+void context_backend_trace_user_frame_resume(struct process *prev,
+						     struct process *next,
+						     task_t *task)
+{
+	process_t *prev_proc = (process_t *)prev;
+	process_t *next_proc = (process_t *)next;
+
+	switch_audit_user_frame_resume(prev_proc, next_proc, task);
+#if IR0_DEBUG_WAIT
+	klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
+	klog_debug("WAIT", "CTX resume_path=switch_to_user_task");
+#endif
+	switch_trace_user_frame_resume(prev_proc, next_proc, task);
+}
+
 void set_current_kernel_stack(struct process *p)
 {
 	process_t *proc = (process_t *)p;
@@ -225,30 +240,7 @@ void arch_switch_to(task_t *prev, task_t *next)
      * and kernel_ret vs user-iret. Do not simplify these gates without
      * wait4 + blocked-syscall coverage.
      */
-    process_t *prev_proc;
-    process_t *next_proc = NULL;
-    enum context_resume_route resume_route;
-
-    if (next)
-        next_proc = task_to_process(next);
-
-    prev_proc = prev ? task_to_process(prev) : NULL;
-    resume_route = context_prepare_resume_route(next);
-
-    if (resume_route == CONTEXT_RESUME_USER_FRAME)
-    {
-		switch_audit_user_frame_resume(prev_proc, next_proc, next);
-#if IR0_DEBUG_WAIT
-        klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
-        klog_debug("WAIT", "CTX resume_path=switch_to_user_task");
-#endif
-        if (next)
-        {
-			switch_trace_user_frame_resume(prev_proc, next_proc, next);
-			(void)context_resume_user_frame(prev, next);
-        }
-        return;
-    }
+    process_t *next_proc = next ? task_to_process(next) : NULL;
 
     arch_fixup_user_task_for_iretq(next_proc);
 
