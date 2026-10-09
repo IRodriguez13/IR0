@@ -1481,6 +1481,12 @@ ARCH_SWITCH_INCLUDE_ALLOW = {
     "arch/arm64/sources/arch_switch.c",
 }
 
+CONTEXT_BACKEND_INCLUDE_ALLOW = {
+    "sched/switch/context_user_resume.c",
+    "arch/x86-64/sources/arch_switch.c",
+    "arch/arm64/sources/arch_switch.c",
+}
+
 PORTABLE_NO_ARCH_CALL_TREES = [
     ROOT / "mm",
     ROOT / "kernel",
@@ -1527,6 +1533,10 @@ ARCH_SWITCH_INCLUDE_RE = re.compile(
     r'#\s*include\s*[<"]ir0/arch_switch\.h[>"]'
 )
 
+CONTEXT_BACKEND_INCLUDE_RE = re.compile(
+    r'#\s*include\s*[<"]ir0/context_backend\.h[>"]'
+)
+
 
 def check_portable_no_arch_switch_include():
     """arch_switch.h is ISA-private; portable code uses context.h / switch_to()."""
@@ -1555,6 +1565,32 @@ def check_portable_no_arch_switch_include():
                         f"[portable-no-arch-switch-include] {rel_s}:{idx}: "
                         f"use <ir0/context.h> / switch_to(), not arch_switch.h"
                     )
+    return errors
+
+
+def check_context_backend_include_boundary():
+    """The context backend hooks are internal to the switch state machine."""
+    errors = []
+    for fpath in iter_c_files(ROOT):
+        try:
+            rel_s = str(fpath.relative_to(ROOT)).replace("\\", "/")
+        except ValueError:
+            continue
+        if rel_s in CONTEXT_BACKEND_INCLUDE_ALLOW:
+            continue
+        try:
+            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        for idx, line in enumerate(lines, 1):
+            if _line_is_comment_only(line):
+                continue
+            if CONTEXT_BACKEND_INCLUDE_RE.search(line):
+                errors.append(
+                    f"[context-backend-boundary] {rel_s}:{idx}: "
+                    "only sched/switch/context_user_resume.c or an ISA backend may include context_backend.h"
+                )
     return errors
 
 
@@ -2051,6 +2087,7 @@ def main():
     errors.extend(check_portable_port1_no_legacy_arch_mm())
     errors.extend(check_portable_no_arch_prefix_calls())
     errors.extend(check_portable_no_arch_switch_include())
+    errors.extend(check_context_backend_include_boundary())
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_process_lifecycle_uses_semantic_return_state())
