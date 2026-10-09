@@ -18,6 +18,7 @@
 #include <stdint.h>
 
 struct devfs_node;
+struct fd_resource_ops;
 
 #define MAX_FDS_PER_PROCESS 64
 
@@ -41,4 +42,5 @@ typedef struct fd_entry
 	bool is_memfd;  /* vfs_file points at ir0_memfd */
 	bool is_eventfd;
 	bool is_timerfd;
+	const struct fd_resource_ops *resource_ops;
 } fd_entry_t;

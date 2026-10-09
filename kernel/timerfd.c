@@ -20,7 +20,7 @@
 #include <string.h>
 
 extern fd_entry_t *get_process_fd_table(void);
-extern void fd_slot_note_created(void);
+extern void fd_slot_note_created(fd_entry_t *entry);
 extern void poll_wake_check(void);
 
 #define TFD_MAX 16
@@ -185,7 +185,7 @@ int64_t sys_timerfd_create(int clockid, int flags)
 		tab[fd].flags |= O_NONBLOCK;
 	if (flags & IR0_TFD_CLOEXEC)
 		tab[fd].fd_flags = FD_CLOEXEC;
-	fd_slot_note_created();
+	fd_slot_note_created(&tab[fd]);
 	return fd;
 }
 

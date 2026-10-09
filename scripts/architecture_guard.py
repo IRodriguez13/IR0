@@ -142,6 +142,9 @@ FS_MM_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]mm/')
 LEGACY_TLS_CONTRACT_RE = re.compile(
     r"\b(?:set_fs_base|get_fs_base|restore_user_fs_base)\b"
 )
+FD_LIFECYCLE_SUBTYPE_RE = re.compile(
+    r"\bis_(?:pipe|socket|devfs|pseudo|epoll|memfd|eventfd|timerfd)\b"
+)
 
 DEVFS_USERCOPY_RE = re.compile(r"\bcopy_(to|from)_user\s*\(")
 DEVFS_USERCOPY_WHITELIST = {
@@ -233,6 +236,19 @@ def check_semantic_tls_contract():
             if LEGACY_TLS_CONTRACT_RE.search(line):
                 rel = fpath.relative_to(ROOT)
                 errors.append(f"[legacy-tls-contract] {rel}:{idx}: {line.strip()}")
+    return errors
+
+
+def check_process_fd_lifecycle_boundary():
+    errors = []
+    for rel in ("kernel/process/files_struct.c", "kernel/process/fdtable.c"):
+        fpath = ROOT / rel
+        for idx, line in enumerate(
+            fpath.read_text(encoding="utf-8", errors="replace").splitlines(),
+            start=1,
+        ):
+            if FD_LIFECYCLE_SUBTYPE_RE.search(line):
+                errors.append(f"[fd-lifecycle-coupling] {rel}:{idx}: {line.strip()}")
     return errors
 
 
@@ -1992,6 +2008,7 @@ def main():
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
     errors.extend(check_semantic_tls_contract())
+    errors.extend(check_process_fd_lifecycle_boundary())
     errors.extend(check_facade_no_drivers_include())
     errors.extend(check_facade_no_kernel_include())
     errors.extend(check_arm64_scaffold())

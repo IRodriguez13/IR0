@@ -344,6 +344,7 @@ KERNEL_OBJS = \
     kernel/cmdline.o \
     kernel/rootfs_base.o \
     kernel/process/registry.o \
+    kernel/process/limits.o \
     kernel/process/core.o \
     kernel/process/create.o \
     kernel/process/cred_groups.o \
@@ -396,6 +397,8 @@ KERNEL_OBJS = \
     kernel/ipc.o \
     kernel/futex.o \
     kernel/net_compat.o \
+    kernel/fd_resource.o \
+    kernel/fd_resource_legacy.o \
     ktm/klog.o \
     ktm/d1_13_malloc_pf_diag.o \
     sched/sched.o \

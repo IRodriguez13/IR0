@@ -15,7 +15,7 @@
 #include "process_internal.h"
 #include <ir0/clone.h>
 #include <ir0/fork.h>
-#include <ir0/sysfs.h>
+#include <ir0/process_limits.h>
 #include <ir0/arch_task.h>
 #include <ir0/process_domains.h>
 #include <ir0/mm_struct.h>
@@ -40,8 +40,7 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	if (KTM_FAULT_HIT("process.fork_alloc"))
 		return NULL;
 
-	if ((uint32_t)sys_kernel_process_live_count() >=
-	    sys_kernel_max_processes_limit())
+	if ((uint32_t)process_live_count() >= process_limit_get())
 		return NULL;
 
 	child = kmalloc_try(sizeof(process_t));

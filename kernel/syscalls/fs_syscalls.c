@@ -425,7 +425,7 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
     return wait_rc;
   }
 
-  fd_slot_note_created();
+  fd_slot_note_created(&fd_table[fd]);
   return fd;
 }
 
@@ -518,6 +518,11 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
     klog_debug_fmt("VFS", "[VFS][OPEN] path=%s fd=%llx dev_id=%x", path, (unsigned long long)((uint64_t)fd), (unsigned)(node->entry.device_id));
   }
 
+  /*
+   * devfs is a resource provider just like VFS, pipes and sockets.  Register
+   * its lifecycle before the descriptor becomes observable by fork/dup/exit.
+   */
+  fd_slot_note_created(&fd_table[fd]);
   return fd;
 }
 
@@ -1483,7 +1488,7 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   fd_table[fd].is_pseudo = false;
   fd_table[fd].is_epoll = false;
   fd_table[fd].pipe_end = -1;
-  fd_slot_note_created();
+  fd_slot_note_created(&fd_table[fd]);
 
   return fd;
 }
@@ -1539,7 +1544,7 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   fd_entry_devfs_unbind(&fd_table[fd]);
   fd_table[fd].is_pseudo = false;
   fd_table[fd].pipe_end = -1;
-  fd_slot_note_created();
+  fd_slot_note_created(&fd_table[fd]);
   return fd;
 }
 
@@ -1603,7 +1608,7 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
   fd_entry_devfs_unbind(&fd_table[fd]);
   fd_table[fd].is_pseudo = true;
   fd_table[fd].pipe_end = -1;
-  fd_slot_note_created();
+  fd_slot_note_created(&fd_table[fd]);
   return fd;
 }
 

@@ -63,5 +63,5 @@ void pipe_wake_all(pipe_t *pipe);
 void pipe_purge_waiters_for_process(process_t *proc);
 void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
 		       uint64_t *blocked_readers, uint64_t *blocked_writers);
-void fd_slot_note_created(void);
+void fd_slot_note_created(fd_entry_t *entry);
 void fd_slot_note_destroyed(void);

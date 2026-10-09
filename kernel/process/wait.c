@@ -125,39 +125,6 @@ void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *st
 #endif
 }
 
-int process_remove_from_list(process_t *target)
-{
-	process_t *scan;
-	process_t *prev;
-	uint64_t irq_flags;
-
-	if (!target)
-		return -EINVAL;
-
-	irq_flags = process_irq_save();
-	prev = NULL;
-	scan = process_list;
-
-	while (scan)
-	{
-		if (scan == target)
-		{
-			if (prev)
-				prev->next = scan->next;
-			else
-				process_list = scan->next;
-			scan->next = NULL;
-			process_irq_restore(irq_flags);
-			return 0;
-		}
-		prev = scan;
-		scan = scan->next;
-	}
-
-	process_irq_restore(irq_flags);
-	return -ENOENT;
-}
-
 /**
  * process_reparent_children - Reparent all children to init (PID 1)
  * @dying_parent: Process that is about to exit

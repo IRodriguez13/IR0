@@ -45,6 +45,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c \
 	test_mount_prefix_boundary.c
+TEST_SRCS += test_fd_resource_contract.c
 # ARM64 firmware contract is pure C and host-testable.
 TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
 	test_x86_syscall_decode.c
@@ -63,6 +64,7 @@ KERNEL_HOST_OBJS += host_elf64_image.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
 KERNEL_HOST_OBJS += host_syscall_table.o
+KERNEL_HOST_OBJS += host_fd_resource.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -126,6 +128,9 @@ host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 
 host_syscall_table.o: $(KERNEL_ROOT)/kernel/lib/syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_fd_resource.o: $(KERNEL_ROOT)/kernel/fd_resource.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_arm64_elf_policy.o: $(KERNEL_ROOT)/arch/arm64/sources/elf_policy.c

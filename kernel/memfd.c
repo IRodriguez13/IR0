@@ -21,7 +21,7 @@
 #include <string.h>
 
 extern fd_entry_t *get_process_fd_table(void);
-extern void fd_slot_note_created(void);
+extern void fd_slot_note_created(fd_entry_t *entry);
 
 #define MEMFD_MAX 16
 #define MEMFD_MAX_PAGES 1024
@@ -254,7 +254,7 @@ int ir0_memfd_install_fd(struct ir0_memfd *m, int open_flags, int cloexec)
 	tab[fd].flags = open_flags;
 	if (cloexec)
 		tab[fd].fd_flags = FD_CLOEXEC;
-	fd_slot_note_created();
+	fd_slot_note_created(&tab[fd]);
 	return fd;
 }
 

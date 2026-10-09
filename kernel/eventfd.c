@@ -19,7 +19,7 @@
 #include <string.h>
 
 extern fd_entry_t *get_process_fd_table(void);
-extern void fd_slot_note_created(void);
+extern void fd_slot_note_created(fd_entry_t *entry);
 extern void poll_wake_check(void);
 
 #define EFD_MAX 32
@@ -180,6 +180,6 @@ int64_t sys_eventfd2(unsigned int count, int flags)
 		tab[fd].flags |= O_NONBLOCK;
 	if (flags & IR0_EFD_CLOEXEC)
 		tab[fd].fd_flags = FD_CLOEXEC;
-	fd_slot_note_created();
+	fd_slot_note_created(&tab[fd]);
 	return fd;
 }

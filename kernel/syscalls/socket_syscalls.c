@@ -127,7 +127,7 @@ static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 		fd_table[fd].fd_flags = FD_CLOEXEC;
 	if (type_flags & SOCK_NONBLOCK)
 		fd_table[fd].flags = O_NONBLOCK;
-	fd_slot_note_created();
+	fd_slot_note_created(&fd_table[fd]);
 	return fd;
 }
 
@@ -1069,7 +1069,7 @@ static int scm_install_fd_entry(const fd_entry_t *src)
 		return -EMFILE;
 	tab[fd] = *src;
 	tab[fd].in_use = true;
-	fd_slot_note_created();
+	fd_slot_note_created(&tab[fd]);
 	return fd;
 }
 

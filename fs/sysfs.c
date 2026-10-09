@@ -35,6 +35,7 @@
 #include "procfs.h"
 #include <ir0/sysfs.h>
 #include <ir0/process.h>
+#include <ir0/process_limits.h>
 #include <ir0/stat.h>
 #include <ir0/kmem.h>
 #include <ir0/version.h>
@@ -209,8 +210,6 @@ int sys_kernel_panic_write_reg(const char *buf, size_t count)
  * 
  * Default value is 1024. Can be modified via /sys/kernel/max_processes
  */
-static uint32_t sys_max_processes = 1024;
-
 /**
  * sys_kernel_max_processes_read - Read maximum processes from /sys/kernel/max_processes
  * @buf: Buffer to write value
@@ -225,7 +224,7 @@ int sys_kernel_max_processes_read_reg(char *buf, size_t count)
     
     memset(buf, 0, count);
     
-    int len = snprintf(buf, count, "%u\n", (unsigned)sys_max_processes);
+    int len = snprintf(buf, count, "%u\n", (unsigned)process_limit_get());
     
     if (len < 0)
         return -1;
@@ -240,17 +239,12 @@ int sys_kernel_max_processes_read_reg(char *buf, size_t count)
 
 uint32_t sys_kernel_max_processes_limit(void)
 {
-    return sys_max_processes;
+    return process_limit_get();
 }
 
 int sys_kernel_process_live_count(void)
 {
-    process_t *p;
-    int n = 0;
-
-    for (p = process_list; p; p = p->next)
-        n++;
-    return n;
+    return process_live_count();
 }
 
 /**
@@ -293,14 +287,8 @@ int sys_kernel_max_processes_write_reg(const char *buf, size_t count)
         }
     }
     
-    /* Validate range */
-    if (new_value < 1 || new_value > 65535)
+    if (process_limit_set(new_value) != 0)
         return -EINVAL;
-
-    if (new_value < (uint32_t)sys_kernel_process_live_count())
-        return -EINVAL;
-    
-    sys_max_processes = new_value;
     return (int)count;
 }
 

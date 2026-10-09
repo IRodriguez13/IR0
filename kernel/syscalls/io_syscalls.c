@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "io_syscalls.h"
+#include <ir0/fd_resource.h>
 #include "syscalls_glue.h"
 #include "epoll_syscalls.h"
 #include <kernel/syscalls.h>
@@ -1012,8 +1013,12 @@ void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
 		*blocked_writers = fd_slot_blocked_writers;
 }
 
-void fd_slot_note_created(void)
+void fd_slot_note_created(fd_entry_t *entry)
 {
+	/* A native provider keeps its explicit lifecycle; legacy descriptors bind
+	 * once here while their owners are being migrated. */
+	if (entry && !entry->resource_ops)
+		(void)fd_resource_bind_legacy(entry);
 	fd_slot_created++;
 }
 
@@ -1535,8 +1540,6 @@ int64_t sys_close(int fd)
   ir0_fd_t h;
   fd_entry_t *e;
   int ret;
-  int was_pipe;
-  int was_devfs;
 
   if (!current_process)
     return -ESRCH;
@@ -1546,32 +1549,11 @@ int64_t sys_close(int fd)
     return ret;
   e = h.entry;
 
-  if (e->is_pseudo && e->vfs_file)
-  {
-    pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)e->vfs_file;
-
-    if (pseudo_fd_bind_release(bind))
-    {
-      (void)pseudo_fs_release_ops((const pseudo_fs_ops_t *)bind->ops,
-				  bind->ctx, bind->dynamic);
-      kfree(bind);
-    }
-    e->vfs_file = NULL;
-    e->in_use = false;
-    e->is_pseudo = false;
-    e->path[0] = '\0';
-    ir0_fd_put(&h);
-    return 0;
-  }
-
-  was_pipe = e->is_pipe ? 1 : 0;
-  was_devfs = e->is_devfs ? 1 : 0;
-
   /*
    * Linux allows close(0/1/2) on the console slots. BusyBox wget -O -
    * ends with xclose(1); refusing with EBADF prints "close failed".
    */
-  if (fd <= 2 && !was_pipe && !was_devfs && !e->vfs_file)
+  if (fd <= 2 && !e->resource_ops && !e->vfs_file)
   {
     e->in_use = false;
     e->flags = 0;
@@ -1579,81 +1561,15 @@ int64_t sys_close(int fd)
     return 0;
   }
 
-  if (was_devfs)
+  ret = fd_resource_release(e);
+  if (ret != 0)
   {
-    devfs_node_t *node = fd_entry_devfs_node(e);
-
-    if (devfs_is_ptmx_device(e->dev_device_id))
-      devfs_pty_master_release_vfs(e->vfs_file);
-    if (e->vfs_file &&
-	devfs_node_wants_text_snap(e->dev_device_id))
-    {
-      devfs_text_snap_release((devfs_text_snap_t *)e->vfs_file);
-      e->vfs_file = NULL;
-    }
-    if (node)
-      devfs_close_node(node);
-  }
-  else if (e->is_pipe && e->vfs_file)
-  {
-    pipe_t *pipe = (pipe_t *)e->vfs_file;
-
-    pipe_fd_entry_release_refs(pipe, e);
-    e->vfs_file = NULL;
-  }
-  else if (e->is_socket && e->vfs_file)
-  {
-    if (sock_stream_is(e->vfs_file))
-      sock_stream_release((struct sock_stream *)e->vfs_file);
-    else if (sock_icmp_is(e->vfs_file))
-      sock_icmp_release((struct sock_icmp *)e->vfs_file);
-    else if (!sock_stream_is_slot(e->vfs_file))
-      sock_udp_release((struct sock_udp *)e->vfs_file);
-    e->vfs_file = NULL;
-  }
-  else if (e->is_epoll && e->vfs_file)
-  {
-    epoll_release(e->vfs_file);
-    e->vfs_file = NULL;
-    e->is_epoll = false;
-  }
-  else if (e->is_memfd && e->vfs_file)
-  {
-    ir0_memfd_release((struct ir0_memfd *)e->vfs_file);
-    e->vfs_file = NULL;
-  }
-  else if (e->is_eventfd && e->vfs_file)
-  {
-    ir0_eventfd_release((struct ir0_eventfd *)e->vfs_file);
-    e->vfs_file = NULL;
-  }
-  else if (e->is_timerfd && e->vfs_file)
-  {
-    ir0_timerfd_release((struct ir0_timerfd *)e->vfs_file);
-    e->vfs_file = NULL;
-  }
-  else if (e->vfs_file)
-  {
-    struct vfs_file *vfs_file = (struct vfs_file *)e->vfs_file;
-
-    vfs_close(vfs_file);
-    e->vfs_file = NULL;
+    ir0_fd_put(&h);
+    return ret;
   }
 
-  e->in_use = false;
-  e->is_pipe = false;
-  e->is_socket = false;
-  e->is_epoll = false;
-  e->is_memfd = false;
-  e->is_eventfd = false;
-  e->is_timerfd = false;
+  memset(e, 0, sizeof(*e));
   e->pipe_end = -1;
-  e->is_pseudo = false;
-  fd_entry_devfs_unbind(e);
-  e->path[0] = '\0';
-  e->flags = 0;
-  e->fd_flags = 0;
-  e->offset = 0;
   fd_slot_note_destroyed();
   ir0_fd_put(&h);
   return 0;
@@ -1803,212 +1719,31 @@ int64_t sys_dup2(int oldfd, int newfd)
   if (!fd_table || !fd_table[oldfd].in_use)
     return -EBADF;
 
-  if (fd_table[newfd].in_use && newfd != oldfd)
+  if (fd_table[newfd].in_use)
   {
-    /*
-     * Each fd slot owns at most one kernel object (pipe or vfs_file). POSIX
-     * dup2 closes the previous occupant of newfd before reassigning; skipping
-     * that leaks struct vfs_file and breaks refcounting.
-     */
-    if (fd_table[newfd].is_pipe && fd_table[newfd].vfs_file)
-    {
-      pipe_t *p = (pipe_t *)fd_table[newfd].vfs_file;
-
-      pipe_fd_entry_release_refs(p, &fd_table[newfd]);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else if (fd_table[newfd].is_devfs)
-    {
-      devfs_node_t *node = fd_entry_devfs_node(&fd_table[newfd]);
-
-      if (fd_table[newfd].vfs_file &&
-	  devfs_is_ptmx_device(fd_table[newfd].dev_device_id))
-      {
-	devfs_pty_master_release_vfs(fd_table[newfd].vfs_file);
-	fd_table[newfd].vfs_file = NULL;
-      }
-      else if (fd_table[newfd].vfs_file &&
-	  devfs_node_wants_text_snap(fd_table[newfd].dev_device_id))
-      {
-	devfs_text_snap_release((devfs_text_snap_t *)fd_table[newfd].vfs_file);
-	fd_table[newfd].vfs_file = NULL;
-      }
-      if (node)
-        devfs_close_node(node);
-    }
-    else if (fd_table[newfd].is_pseudo && fd_table[newfd].vfs_file)
-    {
-      pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[newfd].vfs_file;
-
-      if (pseudo_fd_bind_release(bind))
-      {
-	(void)pseudo_fs_release_ops((const pseudo_fs_ops_t *)bind->ops,
-				    bind->ctx, bind->dynamic);
-	kfree(bind);
-      }
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else if (fd_table[newfd].is_memfd && fd_table[newfd].vfs_file)
-    {
-      ir0_memfd_release((struct ir0_memfd *)fd_table[newfd].vfs_file);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else if (fd_table[newfd].is_eventfd && fd_table[newfd].vfs_file)
-    {
-      ir0_eventfd_release((struct ir0_eventfd *)fd_table[newfd].vfs_file);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else if (fd_table[newfd].is_timerfd && fd_table[newfd].vfs_file)
-    {
-      ir0_timerfd_release((struct ir0_timerfd *)fd_table[newfd].vfs_file);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else if (fd_table[newfd].is_socket && fd_table[newfd].vfs_file)
-    {
-      if (sock_stream_is(fd_table[newfd].vfs_file))
-	sock_stream_release((struct sock_stream *)fd_table[newfd].vfs_file);
-      else if (sock_icmp_is(fd_table[newfd].vfs_file))
-	sock_icmp_release((struct sock_icmp *)fd_table[newfd].vfs_file);
-      else if (!sock_stream_is_slot(fd_table[newfd].vfs_file))
-	sock_udp_release((struct sock_udp *)fd_table[newfd].vfs_file);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else if (fd_table[newfd].vfs_file)
-    {
-      vfs_close((struct vfs_file *)fd_table[newfd].vfs_file);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    fd_table[newfd].in_use = false;
-    fd_table[newfd].path[0] = '\0';
-    fd_table[newfd].flags = 0;
-    fd_table[newfd].fd_flags = 0;
-    fd_table[newfd].offset = 0;
-    fd_table[newfd].is_pipe = false;
+    if (fd_resource_release(&fd_table[newfd]) != 0)
+      return -EINVAL;
+    memset(&fd_table[newfd], 0, sizeof(fd_table[newfd]));
     fd_table[newfd].pipe_end = -1;
-    fd_table[newfd].is_devfs = false;
-    fd_entry_devfs_unbind(&fd_table[newfd]);
-    fd_table[newfd].is_pseudo = false;
-    fd_table[newfd].is_socket = false;
-    fd_table[newfd].is_memfd = false;
-    fd_table[newfd].is_eventfd = false;
-    fd_table[newfd].is_timerfd = false;
-    fd_table[newfd].is_epoll = false;
-    fd_entry_devfs_unbind(&fd_table[newfd]);
     fd_slot_note_destroyed();
   }
 
-  fd_table[newfd].in_use = true;
-  strncpy(fd_table[newfd].path, fd_table[oldfd].path, sizeof(fd_table[newfd].path) - 1);
-  fd_table[newfd].path[sizeof(fd_table[newfd].path) - 1] = '\0';
-  fd_table[newfd].flags = fd_table[oldfd].flags;
+  /* Copy the open-file-description metadata first, then let its provider
+   * acquire the corresponding reference.  This is the sole duplication
+   * protocol for pipes, devices, sockets and regular files. */
+  memcpy(&fd_table[newfd], &fd_table[oldfd], sizeof(fd_table[newfd]));
   /*
    * Linux dup(2)/dup2(2): the close-on-exec flag for the duplicate is always
    * cleared (man 2 dup). dup3() is the path that can set O_CLOEXEC atomically.
    */
   fd_table[newfd].fd_flags = 0;
-  fd_table[newfd].offset = fd_table[oldfd].offset;
-  fd_table[newfd].is_pipe = fd_table[oldfd].is_pipe;
-  fd_table[newfd].pipe_end = fd_table[oldfd].pipe_end;
-  fd_table[newfd].is_devfs = fd_table[oldfd].is_devfs;
-  fd_table[newfd].dev_device_id = fd_table[oldfd].dev_device_id;
-  fd_table[newfd].dev_node = fd_table[oldfd].dev_node;
-  fd_table[newfd].is_pseudo = fd_table[oldfd].is_pseudo;
-  fd_table[newfd].is_socket = fd_table[oldfd].is_socket;
-  fd_table[newfd].is_memfd = fd_table[oldfd].is_memfd;
-  fd_table[newfd].is_eventfd = fd_table[oldfd].is_eventfd;
-  fd_table[newfd].is_timerfd = fd_table[oldfd].is_timerfd;
-  fd_table[newfd].is_epoll = fd_table[oldfd].is_epoll;
-
-  /*
-   * Regular files now share one open file description (vfs_file with refcount),
-   * matching Unix dup/dup2 offset-sharing semantics.
-   * Pipes share one pipe_t and keep per-end counts.
-   */
-  if (fd_table[oldfd].is_devfs)
+  if (fd_resource_acquire(&fd_table[newfd]) != 0)
   {
-    devfs_node_t *node = fd_entry_devfs_node(&fd_table[oldfd]);
-
-    if (node)
-      node->ref_count++;
-    if (fd_table[oldfd].vfs_file &&
-	devfs_node_wants_text_snap(fd_table[oldfd].dev_device_id))
-    {
-      devfs_text_snap_acquire((devfs_text_snap_t *)fd_table[oldfd].vfs_file);
-      fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-    }
-    else if (devfs_is_ptmx_device(fd_table[oldfd].dev_device_id) &&
-	     fd_table[oldfd].vfs_file)
-    {
-      fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-      devfs_pty_master_dup_vfs(fd_table[oldfd].vfs_file);
-    }
-    else if (devfs_is_pts_device(fd_table[oldfd].dev_device_id))
-    {
-      devfs_pty_slave_dup_device(fd_table[oldfd].dev_device_id);
-      fd_table[newfd].vfs_file = NULL;
-    }
-    else
-      fd_table[newfd].vfs_file = NULL;
+    memset(&fd_table[newfd], 0, sizeof(fd_table[newfd]));
+    fd_table[newfd].pipe_end = -1;
+    return -EINVAL;
   }
-  else if (fd_table[oldfd].is_pipe)
-  {
-    pipe_fd_entry_acquire_refs(&fd_table[oldfd]);
-    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-  }
-  else if (fd_table[oldfd].is_pseudo && fd_table[oldfd].vfs_file)
-  {
-    pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fd_table[oldfd].vfs_file;
-
-    pseudo_fd_bind_acquire(bind);
-    fd_table[newfd].vfs_file = bind;
-  }
-  else if (fd_table[oldfd].is_memfd && fd_table[oldfd].vfs_file)
-  {
-    ir0_memfd_acquire((struct ir0_memfd *)fd_table[oldfd].vfs_file);
-    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-  }
-  else if (fd_table[oldfd].is_eventfd && fd_table[oldfd].vfs_file)
-  {
-    ir0_eventfd_acquire((struct ir0_eventfd *)fd_table[oldfd].vfs_file);
-    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-  }
-  else if (fd_table[oldfd].is_epoll && fd_table[oldfd].vfs_file)
-  {
-    epoll_acquire(fd_table[oldfd].vfs_file);
-    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-  }
-  else if (fd_table[oldfd].is_timerfd && fd_table[oldfd].vfs_file)
-  {
-    ir0_timerfd_acquire((struct ir0_timerfd *)fd_table[oldfd].vfs_file);
-    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-  }
-  else if (fd_table[oldfd].is_socket && fd_table[oldfd].vfs_file)
-  {
-    /*
-     * BusyBox ping does xmove_fd(raw_sock, 0). Must not vfs_file_acquire the
-     * sock_* object — that corrupts magic and sendto falls through as UDP.
-     */
-    if (sock_stream_is(fd_table[oldfd].vfs_file))
-      sock_stream_acquire((struct sock_stream *)fd_table[oldfd].vfs_file);
-    else if (sock_icmp_is(fd_table[oldfd].vfs_file))
-      sock_icmp_acquire((struct sock_icmp *)fd_table[oldfd].vfs_file);
-    else if (!sock_stream_is_slot(fd_table[oldfd].vfs_file))
-      sock_udp_acquire((struct sock_udp *)fd_table[oldfd].vfs_file);
-    fd_table[newfd].vfs_file = fd_table[oldfd].vfs_file;
-  }
-  else if (fd_table[oldfd].vfs_file)
-  {
-    struct vfs_file *shared = (struct vfs_file *)fd_table[oldfd].vfs_file;
-
-    vfs_file_acquire(shared);
-    fd_table[newfd].vfs_file = shared;
-  }
-  else
-  {
-    fd_table[newfd].vfs_file = NULL;
-  }
-
-  fd_slot_note_created();
+  fd_slot_note_created(&fd_table[newfd]);
   return newfd;
 }
 
@@ -2213,8 +1948,8 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
   pipe_acquire_end(pipe, 0);
   pipe_acquire_end(pipe, 1);
 
-  fd_slot_note_created();
-  fd_slot_note_created();
+  fd_slot_note_created(&fd_table[read_fd]);
+  fd_slot_note_created(&fd_table[write_fd]);
 
   {
     int kfd[2];
