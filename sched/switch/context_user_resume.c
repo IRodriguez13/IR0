@@ -10,6 +10,7 @@
 
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
+#include <ir0/ktm/deferred.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
 
@@ -87,6 +88,17 @@ int context_resume_user_frame(task_t *prev, task_t *next)
 	if (proc->coop_resched_resume && prev &&
 	    context_backend_checkpoint(prev) != 0)
 		return 1;
+
+	/*
+	 * Record only the transfer that will actually reach userspace.  A resumed
+	 * cooperative checkpoint unwinds above and must not produce a second gate
+	 * event for the old switch invocation.
+	 */
+	ktm_deferred_record(KTM_DEFERRED_RESUME_GATE, (uint32_t)next->pid,
+			    (uint64_t)proc->kernel_syscall_sleep,
+			    (uint64_t)process_wait_blocked(proc) |
+				    ((uint64_t)(uint32_t)process_wait_resume_child_pid(proc) << 8),
+			    proc->syscall_resume_rax);
 
 	context_prepare_user_frame_resume(next);
 	context_backend_prepare_user_frame(proc, next);

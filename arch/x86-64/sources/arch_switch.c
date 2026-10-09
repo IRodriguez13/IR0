@@ -381,19 +381,6 @@ void arch_switch_to(task_t *prev, task_t *next)
         syscall_user_frame_t *frame = &next_proc->syscall_frame;
 		(void)frame;
 
-        /*
-         * Why this task went back to ring 3 instead of continuing its
-         * syscall in the kernel. Recorded, not emitted: an inline
-         * ktm_event_emit4 here perturbs the switch badly enough to create
-         * its own failures (see ir0/ktm/deferred.h).
-         */
-        ktm_deferred_record(KTM_DEFERRED_RESUME_GATE,
-                            (uint32_t)next_proc->task.pid,
-                            (uint64_t)next_proc->kernel_syscall_sleep,
-                            (uint64_t)next_proc->wait_blocked |
-                                ((uint64_t)(uint32_t)next_proc->wait_resume_child_pid << 8),
-                            next_proc->syscall_resume_rax);
-
         wait_exit_audit_ctx_resume(prev_proc, next_proc, next);
 #if IR0_DEBUG_WAIT
         klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
