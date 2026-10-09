@@ -88,6 +88,13 @@ static void context_prepare_next(task_t *next)
 	set_tls(process_tls_get(next_proc));
 }
 
+void context_prepare_first(struct process *next)
+{
+	if (!next)
+		return;
+	context_prepare_next(&next->task);
+}
+
 void switch_to(task_t *prev, task_t *next)
 {
 	/* Preserve the outgoing user-stack shadow before selecting @next's stack. */

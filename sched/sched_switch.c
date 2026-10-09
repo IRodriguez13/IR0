@@ -60,7 +60,7 @@ void sched_context_switch_to(process_t *next)
 	if (!sched_has_running_context)
 	{
 		sched_has_running_context = 1;
-		set_current_kernel_stack(next);
+		context_prepare_first(next);
 		first_switch_to(next);
 		panic("Returned from first context switch");
 	}

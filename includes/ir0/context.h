@@ -25,6 +25,12 @@ struct process;
 void switch_to(task_t *prev, task_t *next);
 
 /*
+ * Prepare the portable per-task state before the initial ISA transfer from
+ * boot/idle. The ISA owns address-space activation and the non-returning jump.
+ */
+void context_prepare_first(struct process *next);
+
+/*
  * Enter userspace with full task register state (fork/signal/syscall-block resume).
  * ISA backend performs iretq / EL drop; portable code names the contract only.
  */
