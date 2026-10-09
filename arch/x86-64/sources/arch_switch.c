@@ -294,90 +294,16 @@ void arch_switch_to(task_t *prev, task_t *next)
      */
     process_t *prev_proc;
     process_t *next_proc = NULL;
+    enum context_resume_route resume_route;
 
     if (next)
         next_proc = task_to_process(next);
 
     prev_proc = prev ? task_to_process(prev) : NULL;
+    resume_route = context_prepare_resume_route(next);
 
-    /*
-     * Per-process kernel stack handoff. Snapshot the outgoing task's live user
-     * RSP shadow, then point the kernel entry stacks (+ user RSP shadow) at the
-     * incoming task. Covers all resume paths below (switch_to_user_task,
-     * kernel_ret, user iretq) since every one funnels through here.
-     */
-    /*
-     * wait4 in progress without a staged child pid: force kernel resume.
-     * Preserve irq_frame_saved when wait_blocked (syscall_frame sleep) so
-     * child-exit wake can stage wait_resume_child_pid before user iret.
-     * Do not arm ring-0 CS when task.rip is still userspace — that creates
-     * KERNEL_CS+user RIP and a later iretq with stale GPRs hangs the desk.
-     */
-    if (next_proc && next_proc->mode == USER_MODE &&
-        process_context_waits_for_child(next_proc))
+    if (resume_route == CONTEXT_RESUME_USER_FRAME)
     {
-        uint64_t nrip = task_get_ip(&next_proc->task);
-
-        if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
-            process_arm_kernel_syscall_sleep(next_proc);
-        if (!next_proc->wait_blocked)
-        {
-            next_proc->irq_frame_saved = 0;
-            next_proc->coop_resched_resume = 0;
-        }
-    }
-
-
-    /*
-     * Syscall-block resume (wait4): resume the task we are switching TO when
-     * it blocked with a saved user frame.  Never key off prev->irq_frame_saved
-     * (stale timer IRQ flags on exiting/zombie tasks misroute resume).
-     */
-    if (next_proc && next_proc->irq_frame_saved)
-    {
-        const enum context_resume_route resume_route =
-            process_context_resume_route(next_proc);
-        const int wait_sleep_no_child =
-            resume_route == CONTEXT_RESUME_KERNEL &&
-            process_context_waits_for_child(next_proc);
-
-        /*
-         * wait4 blocked with no reaped child yet — kernel_ret into process_wait,
-         * never user-iret with placeholder syscall_resume_rax=0. Keep
-         * irq_frame_saved when wait_blocked so wake can stage the child pid.
-         */
-        if (wait_sleep_no_child)
-        {
-            uint64_t nrip = task_get_ip(&next_proc->task);
-
-            if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
-                process_arm_kernel_syscall_sleep(next_proc);
-        }
-        else if (resume_route == CONTEXT_RESUME_KERNEL)
-        {
-            /*
-             * Stale syscall-frame resume (wait4 placeholder rax=0). Continue
-             * in kernel instead of iretq with rax=0.
-             *
-             * Pipe/TTY/poll must NOT arm blocked_resume(rax=0); they use
-             * process_arm_kernel_syscall_sleep only (portable kernel_ret),
-             * which is what kernel_syscall_sleep records. Keying solely on
-             * syscall_resume_rax == 0 read leftover state from the previous
-             * blocking syscall: a non-zero residue routed a woken pipe
-             * reader through the user-iret branch below, so it left the read
-             * without retrying and reported a short read with bytes still
-             * buffered (KTM ring: PIPE_WRITE then no further PIPE_READ).
-             *
-             * Skip when coop_resched_resume is set: that path armed a real
-             * syscall return (possibly after a TTY block that still had
-             * sticky kernel_syscall_sleep until clear_in_thread). Disarming
-             * it forced iretq with mid-syscall GPRs.
-             */
-            next_proc->irq_frame_saved = 0;
-            next_proc->coop_resched_resume = 0;
-        }
-        else
-        {
         syscall_user_frame_t *frame = &next_proc->syscall_frame;
 		(void)frame;
 
@@ -464,7 +390,6 @@ void arch_switch_to(task_t *prev, task_t *next)
 			(void)context_resume_user_frame(prev, next);
         }
         return;
-        }
     }
 
     /*

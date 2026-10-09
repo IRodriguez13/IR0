@@ -11,8 +11,46 @@
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
 #include <ir0/ktm/deferred.h>
+#include <ir0/mm.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
+
+/*
+ * Reconcile only process and scheduler state.  Whether a raw saved frame is
+ * safe, and how it becomes a hardware return, remain ISA backend work.
+ */
+enum context_resume_route context_prepare_resume_route(task_t *next)
+{
+	process_t *proc;
+	enum context_resume_route route;
+
+	if (!next)
+		return CONTEXT_RESUME_SWITCH;
+	proc = task_to_process(next);
+	if (!proc || proc->mode != USER_MODE)
+		return CONTEXT_RESUME_SWITCH;
+
+	if (process_context_waits_for_child(proc))
+	{
+		if (!mm_user_va_ok((uintptr_t)task_get_ip(next), 1))
+			process_arm_kernel_syscall_sleep(proc);
+		if (!process_wait_blocked(proc))
+		{
+			proc->irq_frame_saved = 0;
+			proc->coop_resched_resume = 0;
+		}
+		return CONTEXT_RESUME_KERNEL;
+	}
+
+	route = process_context_resume_route(proc);
+	if (!proc->irq_frame_saved || route != CONTEXT_RESUME_KERNEL)
+		return route;
+
+	/* A stale frame must continue in the kernel, never be returned to EL0/ring 3. */
+	proc->irq_frame_saved = 0;
+	proc->coop_resched_resume = 0;
+	return CONTEXT_RESUME_KERNEL;
+}
 
 /*
  * No ISA state is inspected or synthesized here: the frame is applied through

@@ -35,6 +35,9 @@ enum context_resume_route {
 int process_context_waits_for_child(const struct process *proc);
 enum context_resume_route process_context_resume_route(const struct process *proc);
 
+/* Reconcile portable blocked-syscall state before an ISA context transfer. */
+enum context_resume_route context_prepare_resume_route(task_t *next);
+
 /* Prepare/finish portable process state around a backend user-frame return. */
 void context_prepare_user_frame_resume(task_t *next);
 void context_finish_user_frame_resume(struct process *proc);
