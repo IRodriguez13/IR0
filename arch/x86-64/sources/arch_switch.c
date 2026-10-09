@@ -366,6 +366,7 @@ void arch_switch_to(task_t *prev, task_t *next)
         else
         {
         syscall_user_frame_t *frame = &next_proc->syscall_frame;
+		(void)frame;
 
         /*
          * Direct user transfer does not return through switch_context_x64, so
@@ -395,48 +396,9 @@ void arch_switch_to(task_t *prev, task_t *next)
         klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
         klog_debug("WAIT", "CTX resume_path=switch_to_user_task");
 #endif
-        /*
-         * Tear down the zombie child mm only after switching CR3 to the
-         * waiting parent.  Reaping while the exiting child's CR3 is still
-         * active unmaps the running page tables and faults mid-destroy.
-         */
-        if (next && task_mm_root(next))
-            paging_activate_address_space(task_mm_root(next));
-        /*
-         * Cooperative reschedule resume carries a syscall retval in
-         * syscall_resume_rax, not a child pid — skip the wait4 zombie reap so
-         * a retval that happens to match a zombie pid cannot reap it.
-         */
-        if (!next_proc->coop_resched_resume)
-        {
-            pid_t resume_child = next_proc->wait_resume_child_pid;
-
-            if (resume_child <= 0)
-                resume_child = (pid_t)next_proc->syscall_resume_rax;
-
-
-            process_reap_zombie_on_wait_resume(next_proc, resume_child);
-        }
-        {
-            uint64_t resume_rax = next_proc->syscall_resume_rax;
-
-            if (!next_proc->coop_resched_resume && next_proc->wait_blocked &&
-                next_proc->wait_resume_child_pid > 0)
-                resume_rax = (uint64_t)next_proc->wait_resume_child_pid;
-
-            process_apply_syscall_frame_to_task(&next_proc->task, frame,
-                                                resume_rax);
-        }
+        context_prepare_user_frame_resume(next);
         arch_repair_user_gprs_from_syscall_frame(next_proc, next);
-        next_proc->wait_status_ptr = NULL;
-        next_proc->wait_blocked = 0;
-        next_proc->wait_target_pid = 0;
-        next_proc->wait_options = 0;
-        next_proc->wait_resume_child_pid = 0;
-        next_proc->irq_frame_saved = 0;
-        next_proc->coop_resched_resume = 0;
-        next_proc->kernel_syscall_sleep = 0;
-        process_kernel_sleep_interrupted_clear(next_proc);
+        context_finish_user_frame_resume(next_proc);
         if (next)
         {
 #if IR0_DEBUG_WAIT

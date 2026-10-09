@@ -35,6 +35,10 @@ enum context_resume_route {
 int process_context_waits_for_child(const struct process *proc);
 enum context_resume_route process_context_resume_route(const struct process *proc);
 
+/* Prepare/finish portable process state around a backend user-frame return. */
+void context_prepare_user_frame_resume(task_t *next);
+void context_finish_user_frame_resume(struct process *proc);
+
 void switch_to(task_t *prev, task_t *next);
 
 /*

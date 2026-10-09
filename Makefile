@@ -405,6 +405,7 @@ KERNEL_OBJS = \
     sched/sched_switch.o \
     sched/sched_resched.o \
     sched/switch/arch_context_switch.o \
+    sched/switch/context_user_resume.o \
     kernel/console_backend.o
 
 ifeq ($(CONFIG_KTM),y)
