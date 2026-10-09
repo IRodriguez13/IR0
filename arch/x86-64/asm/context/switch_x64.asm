@@ -1,3 +1,7 @@
+; SPDX-License-Identifier: GPL-3.0-only
+;
+; Raw x86-64 context mechanics. Portable resume policy lives in sched/switch.
+
 global switch_context_x64
 global iretq_checkpoint_buf
 extern fork_ret_emit_pre_return

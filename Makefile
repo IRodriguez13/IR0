@@ -967,10 +967,10 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/mm_ops.o \
     arch/x86-64/vdso/blob.o \
     arch/x86-64/vdso/vdso_blob_embed.o \
-    arch/x86-64/asm/boot_x64.o \
-    arch/x86-64/asm/syscall_entry_64.o \
-    arch/x86-64/asm/syscall_insn_entry_64.o \
-    sched/switch/switch_x64.o
+    arch/x86-64/asm/boot/boot_x64.o \
+    arch/x86-64/asm/entry/syscall_int80.o \
+    arch/x86-64/asm/entry/syscall_64.o \
+    arch/x86-64/asm/context/switch_x64.o
 
 ARCH_OBJS_ARM64 = \
     arch/common/boot_log.o \
@@ -998,7 +998,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/exc_early.o \
     arch/arm64/sources/slice_hello.o \
     arch/arm64/sources/portable_string.o \
-    arch/arm64/sources/vectors.o \
+    arch/arm64/asm/entry/vectors.o \
     arch/arm64/sources/syscall_stub.o \
     arch/arm64/sources/platform.o \
     arch/arm64/sources/arch_fork.o \
@@ -1013,7 +1013,7 @@ ARCH_OBJS_ARM64 = \
     arch/arm64/sources/arch_irq_init.o \
     arch/arm64/sources/arch_page_fault.o \
     arch/arm64/sources/freestanding_stubs.o \
-    arch/arm64/sources/switch_early_asm.o \
+    arch/arm64/asm/context/switch_early.o \
     arch/arm64/sources/switch_early.o \
     arch/arm64/sources/process_early.o \
     arch/arm64/sources/elf_load_early.o \
@@ -1169,13 +1169,13 @@ ifeq ($(ARCH),arm64)
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-# switch_early.S → switch_early_asm.o (avoid clash with switch_early.c)
+# Keep the image blobs separate from their C loaders.
 arch/arm64/sources/hello_embed.o: arch/arm64/sources/hello_embed.S $(MUSL_AARCH64_HELLO)
 	@$(MAKE) -s musl-aarch64-hello
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c arch/arm64/sources/hello_embed.S -o $@
 
-arch/arm64/sources/switch_early_asm.o: arch/arm64/sources/switch_early.S
+arch/arm64/asm/context/switch_early.o: arch/arm64/asm/context/switch_early.S
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 endif

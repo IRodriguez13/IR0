@@ -1,4 +1,5 @@
 ; SPDX-License-Identifier: GPL-3.0-only
+; x86-64 early boot mechanics; layout policy is selected by the build.
 ;/**
 ; * IR0 Kernel — Core system software
 ; * Copyright (C) 2025  Iván Rodriguez

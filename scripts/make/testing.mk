@@ -2212,7 +2212,7 @@ arm64-all-objs-probe: arm64-portable-compile
 	fi
 
 kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_early.c \
-		arch/arm64/sources/boot_entry.S arch/arm64/sources/boot_info.c \
+		arch/arm64/asm/boot/entry.S arch/arm64/sources/boot_info.c \
 		arch/arm64/sources/mmu_early.h arch/arm64/sources/exc_early.c \
 		arch/arm64/sources/exc_early.h arch/arm64/sources/slice_hello.c \
 		arch/arm64/sources/slice_hello.h arch/arm64/sources/pl011.c \
@@ -2232,9 +2232,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/syscall_process_early.c arch/arm64/sources/syscall_process_early.h \
 		arch/arm64/sources/syscall_context_early.h \
 		arch/arm64/sources/syscall_io_early.c arch/arm64/sources/syscall_io_early.h \
-		arch/arm64/sources/mm_ops.c arch/arm64/sources/vectors.S \
+		arch/arm64/sources/mm_ops.c arch/arm64/asm/entry/vectors.S \
 		arch/arm64/sources/switch_early.c arch/arm64/sources/switch_early.h \
-		arch/arm64/sources/switch_early.S \
+		arch/arm64/asm/context/switch_early.S \
 		arch/arm64/sources/process_early.c arch/arm64/sources/process_early.h \
 		arch/arm64/sources/elf_load_early.c arch/arm64/sources/elf_load_early.h \
 		arch/arm64/sources/hello_embed.S \
@@ -2442,15 +2442,15 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  AS      arch/arm64/sources/busybox_embed.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/busybox_embed.S -o arch/arm64/sources/busybox_embed.o
-	@echo "  AS      arch/arm64/sources/vectors.S"
+	@echo "  AS      arch/arm64/asm/entry/vectors.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
-		arch/arm64/sources/vectors.S -o arch/arm64/sources/vectors.o
-	@echo "  AS      arch/arm64/sources/boot_entry.S"
+		arch/arm64/asm/entry/vectors.S -o arch/arm64/sources/vectors.o
+	@echo "  AS      arch/arm64/asm/boot/entry.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
-		arch/arm64/sources/boot_entry.S -o arch/arm64/sources/boot_entry.o
-	@echo "  AS      arch/arm64/sources/switch_early.S"
+		arch/arm64/asm/boot/entry.S -o arch/arm64/sources/boot_entry.o
+	@echo "  AS      arch/arm64/asm/context/switch_early.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
-		arch/arm64/sources/switch_early.S -o arch/arm64/sources/switch_early_asm.o
+		arch/arm64/asm/context/switch_early.S -o arch/arm64/sources/switch_early_asm.o
 	@echo "  CC      arch/common/boot_log.c (freestanding)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/common/boot_log.c -o build/arm64-boot/boot_log.o
@@ -2508,7 +2508,7 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000UL -c \
 		arch/arm64/sources/boot_stub.c -o build/arm64-rpi3-early/boot_stub.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000 -c \
-		arch/arm64/sources/vectors.S -o build/arm64-rpi3-early/vectors.o
+		arch/arm64/asm/entry/vectors.S -o build/arm64-rpi3-early/vectors.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_MUSL_STACK_TOP=0x03180000UL -c \
 		arch/arm64/sources/elf_load_early.c -o build/arm64-rpi3-early/elf_load_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_BB_STACK_TOP=0x041a0000UL \

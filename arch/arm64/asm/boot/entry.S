@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+/* ARM64 early boot mechanics; C owns the portable boot policy. */
 /*
  * ARM64 firmware entry. Preserve the Linux arm64 boot-protocol x0 DTB pointer,
  * normalize an EL2 firmware entry to EL1h, then establish the C stack. No

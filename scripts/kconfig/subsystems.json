@@ -80,10 +80,10 @@
           "arch/x86-64/sources/user_mode.c",
           "arch/x86-64/sources/idt_arch_x64.c",
           "arch/x86-64/sources/fault.c",
-          "arch/x86-64/asm/boot_x64.asm",
-          "arch/x86-64/asm/syscall_entry_64.asm",
+          "arch/x86-64/asm/boot/boot_x64.asm",
+          "arch/x86-64/asm/entry/syscall_int80.asm",
           "arch/x86-64/sources/arch_interface.c",
-          "sched/switch/switch_x64.asm"
+          "arch/x86-64/asm/context/switch_x64.asm"
         ],
         "arm32": []
       },
@@ -116,7 +116,7 @@
       "files": {
         "x86-64": [
           "sched/rr_sched.c",
-          "sched/switch/switch_x64.asm"
+          "arch/x86-64/asm/context/switch_x64.asm"
         ],
         "arm32": []
       },

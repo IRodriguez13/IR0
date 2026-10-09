@@ -1,3 +1,4 @@
+; SPDX-License-Identifier: GPL-3.0-only
 ; Linux x86-64 syscall instruction entry (MSR LSTAR)
 ;
 ; ABI contract (Linux x86-64 syscall):

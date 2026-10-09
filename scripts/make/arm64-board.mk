@@ -30,7 +30,7 @@ define ARM64_BOARD_MIN_BUILD
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) $(2) -c \
 		arch/common/boot_log.c -o $(1)/boot_log.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
-		arch/arm64/sources/boot_entry.S -o $(1)/boot_entry.o
+		arch/arm64/asm/boot/entry.S -o $(1)/boot_entry.o
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ \
 		$(1)/boot_entry.o $(1)/board_boot_min.o $(1)/board.o \

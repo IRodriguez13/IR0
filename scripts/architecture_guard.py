@@ -94,7 +94,7 @@ REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "sources" / "syscall_early.c",
     ROOT / "arch" / "arm64" / "sources" / "timer.c",
     ROOT / "arch" / "arm64" / "sources" / "portable_string.c",
-    ROOT / "arch" / "arm64" / "sources" / "vectors.S",
+    ROOT / "arch" / "arm64" / "asm" / "entry" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "arch_early.c",
     ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
     ROOT / "arch" / "arm64" / "sources" / "syscall_stub.c",

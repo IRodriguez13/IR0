@@ -1,4 +1,5 @@
-; System call entry point for int 0x80
+; SPDX-License-Identifier: GPL-3.0-only
+; System call entry point for int 0x80.
 [BITS 64]
 
 global syscall_entry_asm
