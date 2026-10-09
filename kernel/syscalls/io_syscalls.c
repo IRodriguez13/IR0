@@ -1537,55 +1537,14 @@ out:
 
 int64_t sys_close(int fd)
 {
-  ir0_fd_t h;
-  fd_entry_t *e;
   int ret;
 
   if (!current_process)
     return -ESRCH;
 
-  ret = ir0_fd_get(current_process, fd, &h);
-  if (ret != 0)
-    return ret;
-  e = h.entry;
-
-  /*
-   * Linux allows close(0/1/2) on the console slots. BusyBox wget -O -
-   * ends with xclose(1); refusing with EBADF prints "close failed".
-   */
-  if (fd <= 2 && !e->resource_ops && !e->vfs_file)
-  {
-    e->in_use = false;
-    e->flags = 0;
-    ir0_fd_put(&h);
-    return 0;
-  }
-
-  ret = fd_resource_release(e);
-  if (ret != 0)
-  {
-    ir0_fd_put(&h);
-    return ret;
-  }
-
-  memset(e, 0, sizeof(*e));
-  e->pipe_end = -1;
-  fd_slot_note_destroyed();
-  ir0_fd_put(&h);
-  return 0;
-}
-
-int64_t process_close_fd(process_t *proc, int fd)
-{
-  process_t *saved = current_process;
-  int64_t ret;
-
-  if (!proc)
-    return -ESRCH;
-
-  current_process = proc;
-  ret = sys_close(fd);
-  current_process = saved;
+  ret = (int)process_close_fd(current_process, fd);
+  if (ret == 0)
+    fd_slot_note_destroyed();
   return ret;
 }
 

@@ -116,7 +116,9 @@ pure-move pass.
    ARM task-stack provider are linked as strong symbols. Common `fork` now uses
    the provider-neutral descriptor-resource lifecycle and deterministic partial
    rollback. Close the remaining VFS dependencies needed by common
-   `exec`/`exit`/`wait` without adding fallback subsystem stubs.
+   `exec` without adding fallback subsystem stubs. Close the remaining
+   scheduler, signal, IPC and console dependencies required by common
+   `exit`/`wait` next.
 4. Replace early process and syscall providers one subsystem at a time.
 5. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
 6. Only then perform pure directory moves for boot, MM, IRQ and platform code.

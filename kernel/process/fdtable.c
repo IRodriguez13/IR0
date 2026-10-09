@@ -62,6 +62,41 @@ void ir0_fd_put(ir0_fd_t *h)
 	h->fd = -1;
 }
 
+/*
+ * Close one descriptor owned by @proc without depending on the syscall
+ * dispatcher.  exec uses this for FD_CLOEXEC; sys_close adds only the
+ * userspace accounting around the same lifecycle operation.
+ */
+int64_t process_close_fd(process_t *proc, int fd)
+{
+	ir0_fd_t h;
+	fd_entry_t *entry;
+	int ret;
+
+	ret = ir0_fd_get(proc, fd, &h);
+	if (ret != 0)
+		return ret;
+	entry = h.entry;
+
+	/* Bare console stdio has no backing resource to release. */
+	if (fd <= 2 && !entry->resource_ops && !entry->vfs_file)
+	{
+		memset(entry, 0, sizeof(*entry));
+		entry->pipe_end = -1;
+		ir0_fd_put(&h);
+		return 0;
+	}
+
+	ret = fd_resource_release(entry);
+	if (ret == 0)
+	{
+		memset(entry, 0, sizeof(*entry));
+		entry->pipe_end = -1;
+	}
+	ir0_fd_put(&h);
+	return ret;
+}
+
 void process_release_fds(process_t *p, const char *pipe_trace_op)
 {
 	fd_entry_t *table;
