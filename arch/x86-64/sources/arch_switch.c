@@ -141,6 +141,20 @@ void context_backend_prepare_user_frame(struct process *proc, task_t *task)
 	arch_repair_user_gprs_from_syscall_frame((process_t *)proc, task);
 }
 
+uint64_t context_backend_user_return_value(const struct process *proc,
+					       const task_t *task)
+{
+	const process_t *resume_proc = (const process_t *)proc;
+	uint64_t rax;
+
+	if (!resume_proc)
+		return 0;
+	rax = resume_proc->syscall_resume_rax;
+	if (rax == 0 && task && !arch_va_kernel_ptr_leak(task_get_retval(task)))
+		rax = task_get_retval(task);
+	return rax;
+}
+
 void set_current_kernel_stack(struct process *p)
 {
 	process_t *proc = (process_t *)p;
@@ -421,70 +435,7 @@ void arch_switch_to(task_t *prev, task_t *next)
      * Repair only when syscall_frame has usable user RIP/RSP.
      */
 #if IR0_CLASS_B_REPAIR
-    /*
-     * Do not skip waiters: ash wait4 + blocking child (hexdump/stdin) used to
-     * hit Class B while wait_blocked=1, and the old exclusion let it panic.
-     */
-    if (next && next_proc && next_proc->mode == USER_MODE &&
-        process_task_kernel_return_state_bad(next) &&
-        !next_proc->coop_resched_resume)
-    {
-        const syscall_user_frame_t *sf = &next_proc->syscall_frame;
-        const int wait_no_child = process_context_waits_for_child(next_proc);
-
-        if (wait_no_child)
-        {
-            /*
-             * Cannot safely apply syscall_frame (placeholder rax=0). Demote
-             * to USER CS so kernel_ret does not jmp to a user VA. Prefer
-             * surviving over panic; formation is fixed in process_wait arm.
-             * Still reapply entry GPRs when the frame is fresh — demote alone
-             * left mid-syscall heap pointers in RAX/RBP.
-             */
-            klog_info("CTX", "CLASSIFY KERNEL_CS_USER_RIP_WAIT_DEMOTE");
-            next_proc->irq_frame_saved = 0;
-            process_restore_user_task_segments(next_proc);
-            if (next_proc->syscall_frame_fresh &&
-                process_rip_in_user_range(process_syscall_ip(next_proc)) &&
-                process_rip_in_user_range(process_syscall_sp(next_proc)))
-            {
-                process_apply_syscall_frame_to_task(&next_proc->task, sf,
-                                                    next_proc->syscall_resume_rax);
-            }
-        }
-        else if (process_rip_in_user_range(process_syscall_ip(next_proc)) &&
-                 process_rip_in_user_range(process_syscall_sp(next_proc)) &&
-                 !process_rip_in_user_stack(process_syscall_ip(next_proc)))
-        {
-            uint64_t rax = next_proc->syscall_resume_rax;
-
-            if (rax == 0 && !arch_va_kernel_ptr_leak(task_get_retval(&next_proc->task)))
-                rax = task_get_retval(&next_proc->task);
-            klog_info("CTX", "CLASSIFY KERNEL_CS_USER_RIP_REPAIR");
-			process_apply_syscall_frame_to_task(&next_proc->task, sf, rax);
-            if (process_signal_enter_pending(next_proc) &&
-                process_saved_context_present(next_proc))
-                process_signal_enter_pending_clear(next_proc);
-        }
-        else
-        {
-            /*
-             * Cannot repair: falling through used to panic as
-             * KERNEL_RET_BAD_RIP (ash banner → silent #DF in dump).
-             * Demote to user segments so iretq path runs instead.
-             */
-            klog_info("CTX", "CLASSIFY KERNEL_CS_USER_RIP_UNREPAIRED_DEMOTE");
-            next_proc->irq_frame_saved = 0;
-            process_restore_user_task_segments(next_proc);
-            if (next_proc->syscall_frame_fresh &&
-                process_rip_in_user_range(process_syscall_ip(next_proc)) &&
-                process_rip_in_user_range(process_syscall_sp(next_proc)))
-            {
-                process_apply_syscall_frame_to_task(&next_proc->task, sf,
-                                                    next_proc->syscall_resume_rax);
-            }
-        }
-    }
+	context_repair_kernel_return_state(next);
 #endif
 
     /*

@@ -11,9 +11,23 @@
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
 #include <ir0/ktm/deferred.h>
+#include <ir0/klog.h>
 #include <ir0/mm.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
+
+static int context_ip_is_in_user_stack(const process_t *proc, uint64_t ip)
+{
+	uint64_t stack_start;
+	uint64_t stack_size;
+
+	if (!proc)
+		return 0;
+	stack_start = process_stack_start(proc);
+	stack_size = process_stack_size(proc);
+	return stack_size != 0 && ip >= stack_start &&
+	       ip - stack_start < stack_size;
+}
 
 /*
  * Reconcile only process and scheduler state.  Whether a raw saved frame is
@@ -76,6 +90,60 @@ void context_finalize_kernel_resume(task_t *next)
 	if (proc->want_kernel_ret &&
 	    !mm_user_va_ok((uintptr_t)task_get_ip(next), 1))
 		process_arm_kernel_syscall_sleep(proc);
+}
+
+/*
+ * A task with a kernel return state and a user instruction pointer cannot be
+ * resumed directly.  This is process-state recovery; segment/register layout
+ * remains hidden behind the task and backend facades.
+ */
+void context_repair_kernel_return_state(task_t *next)
+{
+	process_t *proc;
+	const syscall_user_frame_t *frame;
+	int frame_addresses_valid;
+
+	if (!next)
+		return;
+	proc = task_to_process(next);
+	if (!proc || proc->mode != USER_MODE || proc->coop_resched_resume ||
+	    !process_task_kernel_return_state_bad(next))
+		return;
+
+	frame = &proc->syscall_frame;
+	frame_addresses_valid =
+		mm_user_va_ok((uintptr_t)process_syscall_ip(proc), 1) &&
+		mm_user_va_ok((uintptr_t)process_syscall_sp(proc), 1);
+
+	if (process_context_waits_for_child(proc))
+	{
+		klog_info("CTX", "CLASSIFY KERNEL_RETURN_WAIT_DEMOTE");
+		proc->irq_frame_saved = 0;
+		process_restore_user_task_segments(proc);
+		if (proc->syscall_frame_fresh && frame_addresses_valid)
+			process_apply_syscall_frame_to_task(next, frame,
+						    proc->syscall_resume_rax);
+		return;
+	}
+
+	if (frame_addresses_valid &&
+	    !context_ip_is_in_user_stack(proc, process_syscall_ip(proc)))
+	{
+		klog_info("CTX", "CLASSIFY KERNEL_RETURN_FRAME_REPAIR");
+		process_apply_syscall_frame_to_task(next, frame,
+					    context_backend_user_return_value(proc, next));
+		if (process_signal_enter_pending(proc) &&
+		    process_saved_context_present(proc))
+			process_signal_enter_pending_clear(proc);
+		return;
+	}
+
+	klog_info("CTX", "CLASSIFY KERNEL_RETURN_UNREPAIRED_DEMOTE");
+	proc->irq_frame_saved = 0;
+	process_restore_user_task_segments(proc);
+	if (proc->syscall_frame_fresh && frame_addresses_valid)
+		process_apply_syscall_frame_to_task(next, frame,
+					    proc->syscall_resume_rax);
 }
 
 /*

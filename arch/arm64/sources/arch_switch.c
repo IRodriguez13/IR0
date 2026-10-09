@@ -90,3 +90,12 @@ void context_backend_prepare_user_frame(struct process *proc, task_t *task)
 	(void)proc;
 	(void)task;
 }
+
+uint64_t context_backend_user_return_value(const struct process *proc,
+					       const task_t *task)
+{
+	const process_t *resume_proc = (const process_t *)proc;
+
+	(void)task;
+	return resume_proc ? resume_proc->syscall_resume_rax : 0;
+}
