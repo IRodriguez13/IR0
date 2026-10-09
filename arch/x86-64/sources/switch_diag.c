@@ -92,6 +92,88 @@ void switch_audit_user_frame_resume(process_t *prev_proc,
 #endif
 }
 
+void switch_trace_user_frame_resume(process_t *prev_proc,
+                                    process_t *next_proc,
+                                    task_t *next)
+{
+#if !IR0_DEBUG_WAIT
+	(void)prev_proc;
+	(void)next_proc;
+	(void)next;
+#else
+	syscall_user_frame_t *frame = next_proc ? &next_proc->syscall_frame : NULL;
+	uintptr_t active_cr3_before = paging_current_address_space();
+	uint64_t active_cr3_after_expected = next ? task_mm_root(next) : 0;
+	uint64_t next_task_cr3 = next ? task_mm_root(next) : 0;
+	uint64_t current_before = (uint64_t)(uintptr_t)current_process;
+	uint64_t frame_addr = (uint64_t)(uintptr_t)frame;
+	uint64_t next_proc_addr = (uint64_t)(uintptr_t)next_proc;
+	uint64_t next_proc_end = next_proc_addr + sizeof(process_t);
+	int frame_in_next_proc = frame_addr >= next_proc_addr &&
+	                         frame_addr < next_proc_end;
+	int frame_in_kernel = frame_addr < 0x00400000ULL ||
+	                      frame_addr > 0x00007FFFFFFFFFFFULL;
+
+	klog_print("CTX RESUME prev_pid=");
+	klog_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
+	klog_print(" next_pid=");
+	klog_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
+	klog_print(" current=");
+	klog_hex64(current_before);
+	klog_print(" active_cr3_before=");
+	klog_hex64(active_cr3_before);
+	klog_print(" active_cr3_pre_iret=");
+	klog_hex64(paging_current_address_space());
+	klog_print(" active_cr3_after_expected=");
+	klog_hex64(active_cr3_after_expected);
+	klog_print(" next_task_cr3=");
+	klog_hex64(next_task_cr3);
+	klog_print(" frame=");
+	klog_hex64(frame_addr);
+	klog_print(" frame_in_kernel=");
+	klog_print(frame_in_kernel ? "1" : "0");
+	klog_print(" frame_in_next_proc=");
+	klog_print(frame_in_next_proc ? "1" : "0");
+	klog_print(" frame_rip=");
+	klog_hex64(frame ? frame->rip : 0);
+	klog_print(" frame_rsp=");
+	klog_hex64(frame ? frame->rsp : 0);
+	klog_print(" frame_cs=");
+	klog_hex64(next_proc ? task_get_cs(&next_proc->task) : 0);
+	klog_print(" frame_ss=");
+	klog_hex64(next_proc ? task_get_ss(&next_proc->task) : 0);
+	klog_print(" frame_rflags=");
+	klog_hex64(frame ? frame->rflags : 0);
+	klog_print("\n");
+
+	klog_print("CTX RESUME_FRAME rbx=");
+	klog_hex64(frame ? frame->rbx : 0);
+	klog_print(" rbp=");
+	klog_hex64(frame ? frame->rbp : 0);
+	klog_print(" r12=");
+	klog_hex64(frame ? frame->r12 : 0);
+	klog_print(" r13=");
+	klog_hex64(frame ? frame->r13 : 0);
+	klog_print(" r14=");
+	klog_hex64(frame ? frame->r14 : 0);
+	klog_print(" r15=");
+	klog_hex64(frame ? frame->r15 : 0);
+	klog_print(" rdi=");
+	klog_hex64(frame ? frame->rdi : 0);
+	klog_print(" rsi=");
+	klog_hex64(frame ? frame->rsi : 0);
+	klog_print(" rdx=");
+	klog_hex64(frame ? frame->rdx : 0);
+	klog_print(" r10=");
+	klog_hex64(frame ? frame->r10 : 0);
+	klog_print(" r8=");
+	klog_hex64(frame ? frame->r8 : 0);
+	klog_print(" r9=");
+	klog_hex64(frame ? frame->r9 : 0);
+	klog_print("\n");
+#endif
+}
+
 /* Called from switch_x64.asm when kernel_ret RIP is outside kernel .text. */
 void switch_report_bad_ret(uint64_t rip, task_t *task)
 {

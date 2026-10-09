@@ -9,3 +9,6 @@ struct process;
 void switch_audit_user_frame_resume(struct process *prev,
                                     struct process *next,
                                     task_t *task);
+void switch_trace_user_frame_resume(struct process *prev,
+                                    struct process *next,
+                                    task_t *task);
