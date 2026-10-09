@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/arch_switch.h>
+#include <ir0/context.h>
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
@@ -300,9 +301,7 @@ void arch_switch_to(task_t *prev, task_t *next)
      * KERNEL_CS+user RIP and a later iretq with stale GPRs hangs the desk.
      */
     if (next_proc && next_proc->mode == USER_MODE &&
-        next_proc->wait_resume_child_pid <= 0 &&
-        (next_proc->wait_blocked || next_proc->wait_target_pid != 0) &&
-        !next_proc->coop_resched_resume)
+        process_context_waits_for_child(next_proc))
     {
         uint64_t nrip = task_get_ip(&next_proc->task);
 
@@ -323,10 +322,11 @@ void arch_switch_to(task_t *prev, task_t *next)
      */
     if (next_proc && next_proc->irq_frame_saved)
     {
+        const enum context_resume_route resume_route =
+            process_context_resume_route(next_proc);
         const int wait_sleep_no_child =
-            (next_proc->wait_blocked || next_proc->wait_target_pid != 0) &&
-            next_proc->wait_resume_child_pid <= 0 &&
-            !next_proc->coop_resched_resume;
+            resume_route == CONTEXT_RESUME_KERNEL &&
+            process_context_waits_for_child(next_proc);
 
         /*
          * wait4 blocked with no reaped child yet — kernel_ret into process_wait,
@@ -340,11 +340,7 @@ void arch_switch_to(task_t *prev, task_t *next)
             if (nrip < 0x00400000ULL || nrip > 0x00007FFFFFFFFFFFULL)
                 process_arm_kernel_syscall_sleep(next_proc);
         }
-        else if (!next_proc->coop_resched_resume &&
-                 (next_proc->kernel_syscall_sleep ||
-                  next_proc->syscall_resume_rax == 0) &&
-                 !(next_proc->wait_blocked &&
-                   next_proc->wait_resume_child_pid > 0))
+        else if (resume_route == CONTEXT_RESUME_KERNEL)
         {
             /*
              * Stale syscall-frame resume (wait4 placeholder rax=0). Continue
@@ -587,9 +583,7 @@ void arch_switch_to(task_t *prev, task_t *next)
         !next_proc->coop_resched_resume)
     {
         const syscall_user_frame_t *sf = &next_proc->syscall_frame;
-        const int wait_no_child =
-            (next_proc->wait_blocked || next_proc->wait_target_pid != 0) &&
-            next_proc->wait_resume_child_pid <= 0;
+        const int wait_no_child = process_context_waits_for_child(next_proc);
 
         if (wait_no_child)
         {

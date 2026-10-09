@@ -22,6 +22,19 @@
 
 struct process;
 
+/*
+ * Semantic route selected from generic process state.  It does not describe
+ * an ISA return instruction or a register layout; those remain backend work.
+ */
+enum context_resume_route {
+	CONTEXT_RESUME_SWITCH = 0,
+	CONTEXT_RESUME_KERNEL,
+	CONTEXT_RESUME_USER_FRAME,
+};
+
+int process_context_waits_for_child(const struct process *proc);
+enum context_resume_route process_context_resume_route(const struct process *proc);
+
 void switch_to(task_t *prev, task_t *next);
 
 /*

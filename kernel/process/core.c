@@ -14,6 +14,7 @@
 
 #include "process_internal.h"
 #include <ir0/arch_debug.h>
+#include <ir0/context.h>
 #include <ir0/task_ops.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/ktm/event.h>
@@ -80,6 +81,46 @@ int process_context_user_resume_eligible(const process_t *p)
 		return 0;
 
 	return 1;
+}
+
+/*
+ * A wait has not produced the child that completes it yet.  This is process
+ * state, not an x86 kernel-return condition; ISAs consume the classification
+ * through process_context_resume_route().
+ */
+int process_context_waits_for_child(const process_t *p)
+{
+	if (!p)
+		return 0;
+
+	return (process_wait_blocked(p) || process_wait_target_pid(p) != 0) &&
+	       process_wait_resume_child_pid(p) <= 0 &&
+	       !p->coop_resched_resume;
+}
+
+/*
+ * Decide the next logical continuation from generic task state.  The result
+ * intentionally does not validate a saved frame and does not activate an
+ * address space: those operations are ISA/backend responsibilities.
+ */
+enum context_resume_route process_context_resume_route(const process_t *p)
+{
+	if (!p || p->mode != USER_MODE)
+		return CONTEXT_RESUME_SWITCH;
+
+	if (process_context_waits_for_child(p))
+		return CONTEXT_RESUME_KERNEL;
+
+	if (!p->irq_frame_saved)
+		return CONTEXT_RESUME_SWITCH;
+
+	if (!p->coop_resched_resume &&
+	    (p->kernel_syscall_sleep || p->syscall_resume_rax == 0) &&
+	    !(process_wait_blocked(p) &&
+	      process_wait_resume_child_pid(p) > 0))
+		return CONTEXT_RESUME_KERNEL;
+
+	return CONTEXT_RESUME_USER_FRAME;
 }
 
 uint64_t process_list_count(void)
