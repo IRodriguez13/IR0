@@ -14,6 +14,7 @@
 
 #include <ir0/arch_switch.h>
 #include <ir0/context.h>
+#include <ir0/context_backend.h>
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
@@ -126,6 +127,18 @@ void prepare_task_user_iretq(process_t *proc)
 	if (proc->kernel_syscall_sleep || proc->want_kernel_ret)
 		return;
 	arch_repair_user_gprs_from_syscall_frame(proc, &proc->task);
+}
+
+int context_backend_checkpoint(task_t *prev)
+{
+	if (!prev)
+		return 0;
+	return switch_context_x64(prev, NULL);
+}
+
+void context_backend_prepare_user_frame(struct process *proc, task_t *task)
+{
+	arch_repair_user_gprs_from_syscall_frame((process_t *)proc, task);
 }
 
 void set_current_kernel_stack(struct process *p)
@@ -369,16 +382,6 @@ void arch_switch_to(task_t *prev, task_t *next)
 		(void)frame;
 
         /*
-         * Direct user transfer does not return through switch_context_x64, so
-         * preserve a live cooperative caller first. On its later kernel
-         * resume the helper returns non-zero and we unwind this old switch
-         * invocation instead of transferring to @next a second time.
-         */
-        if (next_proc->coop_resched_resume && prev &&
-            switch_context_x64(prev, NULL) != 0)
-            return;
-
-        /*
          * Why this task went back to ring 3 instead of continuing its
          * syscall in the kernel. Recorded, not emitted: an inline
          * ktm_event_emit4 here perturbs the switch badly enough to create
@@ -396,9 +399,6 @@ void arch_switch_to(task_t *prev, task_t *next)
         klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
         klog_debug("WAIT", "CTX resume_path=switch_to_user_task");
 #endif
-        context_prepare_user_frame_resume(next);
-        arch_repair_user_gprs_from_syscall_frame(next_proc, next);
-        context_finish_user_frame_resume(next_proc);
         if (next)
         {
 #if IR0_DEBUG_WAIT
@@ -474,12 +474,7 @@ void arch_switch_to(task_t *prev, task_t *next)
                 klog_print("\n");
             }
 #endif
-            switch_to_user_task(next);
-#if IR0_DEBUG_WAIT
-            klog_print("CTX RESUME unexpected_return active_cr3_after=");
-            klog_hex64(paging_current_address_space());
-            klog_print("\n");
-#endif
+			(void)context_resume_user_frame(prev, next);
         }
         return;
         }

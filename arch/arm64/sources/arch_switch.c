@@ -15,6 +15,7 @@
 #include <ir0/arch_switch.h>
 #include <ir0/arch_task.h>
 #include <ir0/arch_cpu.h>
+#include <ir0/context_backend.h>
 #include <ir0/process.h>
 #include <stdint.h>
 
@@ -76,4 +77,16 @@ void arch_switch_to(task_t *prev, task_t *next)
 void prepare_task_user_iretq(struct process *proc)
 {
 	(void)proc;
+}
+
+int context_backend_checkpoint(task_t *prev)
+{
+	(void)prev;
+	return 0;
+}
+
+void context_backend_prepare_user_frame(struct process *proc, task_t *task)
+{
+	(void)proc;
+	(void)task;
 }

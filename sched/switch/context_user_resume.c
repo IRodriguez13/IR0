@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/context.h>
+#include <ir0/context_backend.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
 
@@ -65,4 +66,31 @@ void context_finish_user_frame_resume(struct process *proc)
 	resume_proc->coop_resched_resume = 0;
 	resume_proc->kernel_syscall_sleep = 0;
 	process_kernel_sleep_interrupted_clear(resume_proc);
+}
+
+/*
+ * The scheduler owns the order of a direct user-frame return.  Backends only
+ * save raw execution state, repair their own frame representation and perform
+ * the non-returning privilege transition through switch_to_user_task().
+ */
+int context_resume_user_frame(task_t *prev, task_t *next)
+{
+	process_t *proc;
+
+	if (!next)
+		return 1;
+	proc = task_to_process(next);
+	if (!proc)
+		return 1;
+
+	/* A resumed cooperative caller must unwind its old switch invocation. */
+	if (proc->coop_resched_resume && prev &&
+	    context_backend_checkpoint(prev) != 0)
+		return 1;
+
+	context_prepare_user_frame_resume(next);
+	context_backend_prepare_user_frame(proc, next);
+	context_finish_user_frame_resume(proc);
+	switch_to_user_task(next);
+	return 1;
 }

@@ -39,6 +39,9 @@ enum context_resume_route process_context_resume_route(const struct process *pro
 void context_prepare_user_frame_resume(task_t *next);
 void context_finish_user_frame_resume(struct process *proc);
 
+/* Complete the portable user-frame resume route; returns only after a checkpoint. */
+int context_resume_user_frame(task_t *prev, task_t *next);
+
 void switch_to(task_t *prev, task_t *next);
 
 /*

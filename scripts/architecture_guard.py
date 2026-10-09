@@ -71,6 +71,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
     ROOT / "includes" / "ir0" / "irq.h",
     ROOT / "includes" / "ir0" / "arch_switch.h",
+    ROOT / "includes" / "ir0" / "context_backend.h",
     ROOT / "includes" / "ir0" / "arch_mm.h",
     ROOT / "includes" / "ir0" / "task_ops.h",
     ROOT / "includes" / "ir0" / "fork.h",
