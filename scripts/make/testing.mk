@@ -2373,6 +2373,23 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
 		-I$(KERNEL_ROOT)/arch/common \
 		-c sched/switch/switch_arm64.c -o build/arm64-boot/switch_arm64.o
+	@echo "  CC      sched/switch/arch_context_switch.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c sched/switch/arch_context_switch.c -o build/arm64-boot/arch_context_switch.o
+	@echo "  CC      ARM64 context providers"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c arch/arm64/sources/arch_switch.c -o build/arm64-boot/arch_switch.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c arch/arm64/sources/arch_tls.c -o build/arm64-boot/arch_tls.o
 	@echo "  CC      arch/arm64/sources/rr_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
@@ -2462,6 +2479,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/arch_context_switch.o \
+		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
@@ -2548,6 +2567,8 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/syscall_table.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/arch_context_switch.o \
+		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
@@ -2670,6 +2691,8 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/arch_context_switch.o \
+		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
@@ -2834,6 +2857,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
+		build/arm64-boot/arch_context_switch.o \
+		build/arm64-boot/arch_switch.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \

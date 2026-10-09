@@ -11,7 +11,6 @@
 #include <stdint.h>
 
 #include <ir0/process.h>
-#include <ir0/context.h>
 #include <ir0/boot_log.h>
 #include <ir0/oops.h>
 #include <sched/task.h>
@@ -67,21 +66,6 @@ int __attribute__((weak)) signals_should_handle_on_run(process_t *p)
 	return 0;
 }
 
-void __attribute__((weak)) set_current_kernel_stack(process_t *p)
-{
-	(void)p;
-}
-
-/*
- * The early RR harness links sched_switch without the production dispatcher.
- * Preserve its former first-switch behavior behind the same portable facade;
- * the strong dispatcher replaces this once the full context layer is linked.
- */
-void __attribute__((weak)) context_prepare_first(struct process *next)
-{
-	set_current_kernel_stack(next);
-}
-
 void __attribute__((weak)) clock_note_context_switch(void)
 {
 }
@@ -129,13 +113,6 @@ int __attribute__((weak)) strncmp(const char *a, const char *b, size_t n)
 	if (!n)
 		return 0;
 	return (unsigned char)*a - (unsigned char)*b;
-}
-
-void __attribute__((weak)) switch_to(task_t *prev, task_t *next)
-{
-	extern void switch_context_arm64(task_t *a, task_t *b);
-
-	switch_context_arm64(prev, next);
 }
 
 /* Portable blockdev.c CLASSIFY lines; full ktm/klog.c is not in early boot. */

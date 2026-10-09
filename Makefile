@@ -955,6 +955,7 @@ ARCH_OBJS_X86_64 = \
     arch/x86-64/sources/arch_syscall_frame.o \
     arch/x86-64/sources/arch_signal.o \
     arch/x86-64/sources/arch_switch.o \
+    arch/x86-64/sources/switch_diag.o \
     arch/x86-64/sources/arch_mm.o \
     arch/x86-64/sources/arch_irq_init.o \
     arch/x86-64/sources/arch_page_fault.o \
