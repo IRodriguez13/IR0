@@ -13,7 +13,84 @@
 #include <ir0/task.h>
 #include <ir0/klog.h>
 #include <ir0/oops.h>
+#include <ir0/paging.h>
 #include <ir0/vga.h>
+#include <config.h>
+
+#include "switch_diag.h"
+
+void switch_audit_user_frame_resume(process_t *prev_proc,
+                                    process_t *next_proc,
+                                    task_t *next)
+{
+#if !IR0_DEBUG_WAIT
+	(void)prev_proc;
+	(void)next_proc;
+	(void)next;
+#else
+	klog_print("WAIT CTX prev_pid=");
+	klog_hex32(prev_proc ? (uint32_t)prev_proc->task.pid : 0);
+	klog_print(" prev_state=");
+	klog_hex64(prev_proc ? (uint64_t)prev_proc->state : 0);
+	klog_print(" prev_irq_saved=");
+	klog_hex64(prev_proc ? (uint64_t)prev_proc->irq_frame_saved : 0);
+	klog_print(" next_pid=");
+	klog_hex32(next_proc ? (uint32_t)next_proc->task.pid : 0);
+	klog_print(" next_state=");
+	klog_hex64(next_proc ? (uint64_t)next_proc->state : 0);
+	klog_print(" next_irq_saved=");
+	klog_hex64(next_proc ? (uint64_t)next_proc->irq_frame_saved : 0);
+	klog_print(" next_cr3=");
+	klog_hex64(next ? task_mm_root(next) : 0);
+	klog_print(" active_cr3=");
+	klog_hex64(paging_current_address_space());
+	klog_print("\n");
+
+	if (prev_proc && prev_proc->state == PROCESS_ZOMBIE)
+		klog_info("WAIT", "CLASSIFY SCHED_SELECTED_ZOMBIE note=prev_is_zombie_on_switch");
+	if (prev_proc && prev_proc->irq_frame_saved &&
+	    (!next_proc || next_proc->state != PROCESS_BLOCKED))
+	{
+		klog_info("WAIT", "CLASSIFY WAITPID_PARENT_CONTEXT_CORRUPT reason=prev_irq_saved_but_next_not_blocked");
+	}
+	if (prev_proc && prev_proc->irq_frame_saved && next_proc &&
+	    next_proc->irq_frame_saved == 0)
+	{
+		klog_info("WAIT", "CLASSIFY WAITPID_PARENT_CONTEXT_CORRUPT reason=resume_triggered_by_prev_irq_not_next");
+	}
+
+	if (next_proc)
+	{
+		uint64_t rip = task_get_ip(&next_proc->task);
+		uint64_t rsp = task_get_sp(&next_proc->task);
+		uint16_t cs = task_get_cs(&next_proc->task);
+		uint16_t ss = task_get_ss(&next_proc->task);
+
+		klog_print("WAIT CTX next_user_frame rip=");
+		klog_hex64(rip);
+		klog_print(" rsp=");
+		klog_hex64(rsp);
+		klog_print(" cs=");
+		klog_hex64((uint64_t)cs);
+		klog_print(" ss=");
+		klog_hex64((uint64_t)ss);
+		klog_print(" rflags=");
+		klog_hex64(task_get_flags(&next_proc->task));
+		klog_print(" rax=");
+		klog_hex64(task_get_retval(&next_proc->task));
+		klog_print("\n");
+
+		if (task_mm_root(next) == 0 && process_pgd(next_proc))
+			klog_info("WAIT", "CLASSIFY PARENT_CR3_BAD reason=task_cr3_zero");
+		if (rip < 0x00400000ULL || rip > 0x00007FFFFFFFFFFFULL)
+			klog_info("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
+		if (rsp < 0x00400000ULL || rsp > 0x00007FFFFFFFFFFFULL)
+			klog_info("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
+		if (!task_cs_is_user(&next_proc->task) || (ss & 3u) != 3u)
+			klog_info("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_CS_SS");
+	}
+#endif
+}
 
 /* Called from switch_x64.asm when kernel_ret RIP is outside kernel .text. */
 void switch_report_bad_ret(uint64_t rip, task_t *task)
