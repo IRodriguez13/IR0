@@ -75,7 +75,7 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	child->kstack_top = 0;
 	child->saved_user_rsp = 0;
 
-	/* Kstack mapped after fork_child_mm_create (needs child PML4). */
+	/* Kstack mapping follows child address-space-root creation. */
 
 	*child_pid_out = child_pid;
 	return child;

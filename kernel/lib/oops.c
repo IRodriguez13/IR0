@@ -373,7 +373,8 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 
     /*
      * Do not activate the kernel address space here while RSP may still sit on a
-     * per-task kstack: if that slot is missing from kernel CR3, the next
+     * per-task kstack: if that slot is missing from the kernel address-space
+     * root, the next
      * stack access becomes #PF → #DF and the FAULT FRAME blames the dump.
      */
 

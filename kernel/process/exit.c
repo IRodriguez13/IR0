@@ -29,7 +29,7 @@ void tcp_wire_on_process_exit(uint32_t pid);
  *   - does NOT free page tables, kernel stack, or process_t
  * process_destroy() (reaper only):
  *   - release FDs again (idempotent clears), unmap user pages if owns_pml4,
- *     reclaim page tables, free mmap_list, saved_context, kernel stack, PML4
+ *     reclaim translation tables, free mmap_list, saved_context, kernel stack
  *   - caller frees process_t after remove-from-list
  */
 
@@ -258,7 +258,8 @@ void process_destroy(process_t *p)
 
 	/*
 	 * Address space teardown via mm refcount. Unmap the private kstack
-	 * while the process PML4 is still alive (high VA pages live there).
+	 * while the process address-space root is still alive (high VA pages live
+	 * there).
 	 */
 	{
 		uint64_t kstack = 0;

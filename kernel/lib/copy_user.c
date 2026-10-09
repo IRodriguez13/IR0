@@ -88,7 +88,8 @@ int copy_to_user(void *dst, const void *src, size_t n)
 
 	/*
 	 * Walk target process page tables via MM facade — safe under any active
-	 * CR3 and fails cleanly on guard/unmapped pages (no kernel #PF panic).
+	 * active address-space root and fails cleanly on guard/unmapped pages (no
+	 * kernel page-fault panic).
 	 */
 	if (current && process_pgd(current))
 	{

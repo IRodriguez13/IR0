@@ -57,6 +57,31 @@ int process_task_kernel_return_state_bad(const task_t *t)
 	       mm_user_va_ok((uintptr_t)task_get_ip(t), 1);
 }
 
+/*
+ * process_context_user_resume_eligible - Common policy for a task which may
+ * leave the kernel on its next context activation.
+ *
+ * The scheduler and process layer own this decision.  Architecture backends
+ * own the machine frame validation and the actual privilege transition.  In
+ * particular, a positive result does not authorize an ISA to fabricate a
+ * return frame: it merely says that no generic blocked-syscall state requires
+ * execution to continue in the kernel.
+ */
+int process_context_user_resume_eligible(const process_t *p)
+{
+	if (!p || p->mode != USER_MODE)
+		return 0;
+
+	if (p->kernel_syscall_sleep || p->want_kernel_ret || p->irq_frame_saved)
+		return 0;
+
+	if ((process_wait_blocked(p) || process_wait_target_pid(p) != 0) &&
+	    process_wait_resume_child_pid(p) <= 0 && !p->coop_resched_resume)
+		return 0;
+
+	return 1;
+}
+
 uint64_t process_list_count(void)
 {
 	process_t *p;

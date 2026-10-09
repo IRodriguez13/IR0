@@ -851,7 +851,7 @@ void syscall_wake_blocked_on_child(process_t *parent)
 
 /*
  * syscall_poll_finish_blocked_resume - Copy poll revents and set syscall retval.
- * Called from switch_to irq resume with parent CR3 loaded.
+ * Called from switch_to IRQ resume with the parent's address-space root active.
  */
 void syscall_poll_finish_blocked_resume(process_t *proc)
 {

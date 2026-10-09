@@ -39,7 +39,7 @@
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 
-/* Supervisor 2MiB identity under process CR3 (create_process_page_directory). */
+/* Supervisor 2 MiB identity under each process address-space root. */
 #define PF_IDENTITY_USER_FLOOR 0x00600000UL
 
 static int pf_addr_in_heap(process_t *p, uint64_t fa)
@@ -159,7 +159,8 @@ static void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
 }
 
 /*
- * IR0 artifact: process CR3 keeps supervisor 2MiB identity for PMM access.
+ * IR0 artifact: the process address-space root keeps a supervisor 2 MiB
+ * identity map for PMM access.
  * After fork, heap/stack holes remain present+!USER (Linux would be pte_none).
  * Treat as do_anonymous_page — never memcpy identity (PMM garbage → musl abort).
  * Refs: Linux do_anonymous_page; Gorman ch.4 demand paging.

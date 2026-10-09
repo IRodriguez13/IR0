@@ -565,6 +565,13 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
 
+/*
+ * Portable resume-policy predicate.  It answers only whether process state
+ * permits a return to userspace; an ISA backend must still validate and
+ * restore its own saved frame before performing that return.
+ */
+int process_context_user_resume_eligible(const process_t *p);
+
 void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax);
 void process_arm_coop_resched_resume(process_t *p, uint64_t rax);
 void process_clear_in_thread_syscall_block(process_t *p);

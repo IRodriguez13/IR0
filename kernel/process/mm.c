@@ -343,12 +343,12 @@ uint64_t create_process_page_directory(void)
 	 */
 	{
 		/*
-		 * Supervisor identity under process CR3:
+		 * Supervisor identity under the process address-space root:
 		 *  - below the ISA user floor + kbd…6MiB: kernel image / IRQ
 		 *  - [6MiB, 32MiB): kmalloc heap (still low identity)
 		 * Kstacks are at IR0_KSTACK_VA_BASE (high). Do NOT map PMM
 		 * [32MiB, 512MiB) — user brk/mmap + frames use demand-zero /
-		 * boot-CR3 phys access (Linux direct-map split).
+		 * boot-root physical access (Linux direct-map split).
 		 */
 		const uint64_t supervisor_kbd_end = 0x00600000UL;
 

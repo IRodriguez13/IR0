@@ -48,26 +48,16 @@ void switch_save_user_rsp(struct process *prev)
 
 void arch_switch_to(task_t *prev, task_t *next)
 {
-	process_t *prev_proc;
 	process_t *next_proc;
 
 	if (!next)
 		return;
 
-	prev_proc = prev ? task_to_process(prev) : NULL;
 	next_proc = task_to_process(next);
-
-	if (prev_proc)
-		switch_save_user_rsp(prev_proc);
 
 	if (next_proc)
 	{
-		if (task_mm_root(next) == 0 && process_pgd(next_proc))
-			task_set_mm_root(next,
-					 (uint64_t)(uintptr_t)process_pgd(next_proc));
-		set_current_kernel_stack(next_proc);
-		/*
-		 * Always program SP_EL0 — skipping when saved_user_rsp==0 left
+		/* Always program SP_EL0 — skipping when saved_user_rsp==0 left
 		 * a stale value from the previous task (Bugbot).
 		 */
 		{
@@ -78,7 +68,6 @@ void arch_switch_to(task_t *prev, task_t *next)
 			__asm__ volatile("msr sp_el0, %0" :: "r"(sp_el0)
 					 : "memory");
 		}
-		set_tls(process_tls_get(next_proc));
 	}
 
 	switch_context_arm64(prev, next);

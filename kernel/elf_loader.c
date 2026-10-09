@@ -1939,7 +1939,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     paging_ir0_mm_checkpoint("exec-after", (int32_t)proc->task.pid);
 
     klog_debug_fmt("ELF", "SERIAL: ELF: exec_replace success PID %x", (unsigned)((uint32_t)proc->task.pid));
-    klog_debug_fmt("ELF", "SERIAL: ELF: exec CR3 active=%llx task_cr3=%llx mm_cr3=%llx", (unsigned long long)paging_current_address_space(), (unsigned long long)(process_mm_root(proc)), (unsigned long long)((uint64_t)(uintptr_t)process_pgd(proc)));
+    klog_debug_fmt("ELF", "SERIAL: ELF: exec root active=%llx task_root=%llx mm_root=%llx", (unsigned long long)paging_current_address_space(), (unsigned long long)(process_mm_root(proc)), (unsigned long long)((uint64_t)(uintptr_t)process_pgd(proc)));
     /*
      * Linux clears pending catchable signals across execve. IR0 had
      * signals_reset_on_exec() but never called it — fork PF leftovers

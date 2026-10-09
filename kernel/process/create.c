@@ -71,7 +71,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	proc->mode = mode;
 
 	/*
-	 * Kernel idle reuses active kernel CR3 (boot/kmain tables).  Avoids
+	 * Kernel idle reuses the active kernel address-space root (boot/kmain
+	 * tables). Avoids
 	 * remapping ~48MB of supervisor pages on every idle spawn (slow + PMM).
 	 * Lowest sched band so priority pick never starves userspace (IRQ
 	 * preempt is ring-3-only today).
@@ -168,8 +169,9 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 					 USER_STACK_SIZE);
 
 		/*
-		 * Map under kernel CR3: map_user_region_in_directory() allocates page
-		 * tables from the kernel heap and must not run with child CR3 active.
+		 * Map under the kernel address-space root: map_user_region_in_directory()
+		 * allocates translation tables from the kernel heap and must not run with
+		 * the child root active.
 		 */
 		if (map_user_region_in_directory(process_pgd(proc), process_stack_start(proc), process_stack_size(proc), PAGE_RW) != 0)
 		{

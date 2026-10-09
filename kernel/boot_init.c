@@ -87,7 +87,8 @@ void boot_memory_serial(uint32_t multiboot_info)
 	pmm_init(PMM_PHYS_BASE, PMM_PHYS_SIZE);
 
 	/*
-	 * Pin boot CR3 while still on the identity map from asm bootstrap.
+	 * Pin the boot address-space root while still on the identity map from the
+	 * assembly bootstrap.
 	 * COW/clear_highpage switch here after process tables use pte_none
 	 * holes (Linux kmap / copy_user_highpage analogue).
 	 */

@@ -88,14 +88,7 @@ static int arch_task_user_gprs_leak(const task_t *t)
  */
 static int arch_will_resume_user_iretq(const process_t *proc, const task_t *task)
 {
-	if (!proc || !task || proc->mode != USER_MODE)
-		return 0;
-	if (proc->kernel_syscall_sleep || proc->want_kernel_ret)
-		return 0;
-	if (proc->irq_frame_saved)
-		return 0;
-	if ((proc->wait_blocked || proc->wait_target_pid != 0) &&
-	    proc->wait_resume_child_pid <= 0 && !proc->coop_resched_resume)
+	if (!task || !process_context_user_resume_eligible(proc))
 		return 0;
 	if (!task_cs_is_user(task))
 		return 0;
@@ -289,11 +282,7 @@ void arch_switch_to(task_t *prev, task_t *next)
     process_t *next_proc = NULL;
 
     if (next)
-    {
         next_proc = task_to_process(next);
-        if (task_mm_root(next) == 0 && process_pgd(next_proc))
-            task_set_mm_root(next, (uint64_t)(uintptr_t)process_pgd(next_proc));
-    }
 
     prev_proc = prev ? task_to_process(prev) : NULL;
 
@@ -303,21 +292,6 @@ void arch_switch_to(task_t *prev, task_t *next)
      * incoming task. Covers all resume paths below (switch_to_user_task,
      * kernel_ret, user iretq) since every one funnels through here.
      */
-    if (prev_proc)
-        prev_proc->saved_user_rsp = user_rsp_save;
-    set_current_kernel_stack(next_proc);
-
-    /*
-     * IA32_FS_BASE is per-CPU. Child execve / ARCH_SET_FS writes the MSR
-     * while current==child; wait4/pipe kernel_ret and some user-iret
-     * resumes never hit the syscall return path's tls_restore_current().
-     * Parent ash then ran with FS=0 and the next TLS store #PF'd at
-     * 0xffffffffffffffe2 (TP + negative TCB offset). Match ARM64:
-     * always install next's saved base before the context switch.
-     */
-    if (next_proc)
-        set_tls(process_tls_get(next_proc));
-
     /*
      * wait4 in progress without a staged child pid: force kernel resume.
      * Preserve irq_frame_saved when wait_blocked (syscall_frame sleep) so
