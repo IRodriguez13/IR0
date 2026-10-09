@@ -30,6 +30,10 @@ the existing x86 and ARM runtime gates remain green.
   semantic `debug_state_init()` operation.
 - Thread-local storage: `includes/ir0/tls.h`; common process and syscall code
   use semantic TLS operations, while each ISA owns its thread-pointer register.
+- Descriptor resources: `includes/ir0/fd_resource.h`; common process code owns
+  descriptor-table policy and rollback, while each provider owns acquire and
+  release semantics. The current legacy adapter is a migration boundary and
+  must shrink as providers publish their operations directly.
 
 ## File manifest
 
@@ -107,10 +111,12 @@ pure-move pass.
 2. Link the common MM lifecycle. **Done for the aggregate ARM boot:** common
    address-space creation, refcount, table reclaim and VMA lifecycle are strong
    symbols.
-3. Link common process creation. **Done for the aggregate ARM boot:** `spawn`,
+3. Link common process creation and fork. **Done for the aggregate ARM boot:** `spawn`,
    credentials/group initialization, files lifecycle, initial fd table and the
-   ARM task-stack provider are linked as strong symbols. Close fd/VFS
-   dependencies needed by fork/exec/exit/wait without adding fallback stubs.
+   ARM task-stack provider are linked as strong symbols. Common `fork` now uses
+   the provider-neutral descriptor-resource lifecycle and deterministic partial
+   rollback. Close the remaining VFS dependencies needed by common
+   `exec`/`exit`/`wait` without adding fallback subsystem stubs.
 4. Replace early process and syscall providers one subsystem at a time.
 5. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
 6. Only then perform pure directory moves for boot, MM, IRQ and platform code.

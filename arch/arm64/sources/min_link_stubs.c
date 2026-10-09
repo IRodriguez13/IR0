@@ -15,6 +15,7 @@
 #include <ir0/mm.h>
 #include <ir0/oops.h>
 #include <ir0/video_backend.h>
+#include <ir0/ktm/checkpoint.h>
 
 /* From freestanding_stubs / serial when linked with boot image. */
 extern void serial_print(const char *s);
@@ -75,6 +76,13 @@ void __attribute__((weak)) klog_debug_fmt(const char *component,
 	(void)format;
 }
 
+void __attribute__((weak)) klog_error_fmt(const char *component,
+					  const char *format, ...)
+{
+	(void)component;
+	(void)format;
+}
+
 #if !defined(IR0_ARM64_COMMON_PROCESS_LINK)
 void *__attribute__((weak)) current_process;
 
@@ -93,6 +101,15 @@ int __attribute__((weak)) process_get_pid(void)
 int __attribute__((weak)) ktm_fault_should_fail(void)
 {
 	return 0;
+}
+
+void __attribute__((weak)) ktm_checkpoint_emit(ktm_checkpoint_t checkpoint,
+						const char *file,
+						unsigned line)
+{
+	(void)checkpoint;
+	(void)file;
+	(void)line;
 }
 
 bool __attribute__((weak)) video_backend_is_available(void)
