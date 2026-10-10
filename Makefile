@@ -1652,6 +1652,16 @@ compile-commands:
 	echo "]" >> compile_commands.json; \
 	echo "✓ compile_commands.json generated ($$count entries)"
 
+.PHONY: print-build-objects build-graph-audit
+
+# Machine-readable expansion for build tooling. Keep this free of formatting.
+print-build-objects:
+	@printf '%s\n' "$(ALL_OBJS)"
+
+# Detect list drift before refactoring Makefile source sets or architecture wiring.
+build-graph-audit:
+	@$(PYTHON) scripts/build_graph_audit.py --root "$(KERNEL_ROOT)" --make "$(MAKE)"
+
 disasm: kernel-x64.bin
 	@echo "  OBJDUMP kernel-x64.disasm ..."
 	@objdump -d -S kernel-x64.bin > kernel-x64.disasm
