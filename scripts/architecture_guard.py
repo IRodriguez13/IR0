@@ -30,6 +30,7 @@ Checks:
 19) kernel/lib I1–I2: selected syscall/MM/IPC helpers must not remain as .c under includes/ir0/.
 20) Portable task setup must not construct x86 RFLAGS directly; use task_ops.
 21) Process lifecycle C must not select an ISA with compiler predefines.
+22) ISA assembly may call only its reviewed C boundary callbacks.
 """
 
 from pathlib import Path
@@ -2040,6 +2041,46 @@ def check_hardware_backends_do_not_self_test_log():
     return errors
 
 
+# Assembly is a raw mechanism boundary.  Keep its C dependencies deliberately
+# small: a new extern here needs an explicit architecture review instead of
+# silently pulling process/MM/scheduler policy into an ISA implementation.
+ASM_C_EXTERN_ALLOW = {
+    "arch/x86-64/asm/boot/boot_x64.asm": {"kmain"},
+    "arch/x86-64/asm/entry/syscall_64.asm": {
+        "syscall_dispatch",
+        "process_capture_syscall_frame_at_entry",
+        "tls_restore_current",
+    },
+    "arch/x86-64/asm/entry/syscall_int80.asm": {"syscall_dispatch"},
+    "arch/x86-64/asm/context/switch_x64.asm": {
+        "fork_ret_emit_pre_return",
+        "fork_ret_pre_regs",
+        "fork_flow_set_tf",
+        "fork_restore_audit",
+        "_etext",
+        "switch_report_bad_ret",
+        "process_after_task_save",
+    },
+}
+ASM_EXTERN_RE = re.compile(r"^\s*extern\s+([A-Za-z_][A-Za-z0-9_]*)\b", re.M)
+
+
+def check_asm_c_boundary():
+    """Reject unreviewed C entry points from the x86 assembly boundary."""
+    errors = []
+    for rel, allowed in ASM_C_EXTERN_ALLOW.items():
+        path = ROOT / rel
+        if not path.is_file():
+            errors.append(f"[asm-c-boundary] missing reviewed assembly file: {rel}")
+            continue
+        for symbol in ASM_EXTERN_RE.findall(path.read_text(errors="replace")):
+            if symbol not in allowed:
+                errors.append(
+                    f"[asm-c-boundary] {rel}: unreviewed C boundary symbol '{symbol}'"
+                )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -2065,6 +2106,8 @@ def main():
     errors.extend(check_devfs_no_find_by_id_outside_devfs())
     errors.extend(check_ktm_mock_boundaries())
     errors.extend(check_hardware_backends_do_not_self_test_log())
+    # Keep assembly limited to reviewed, narrow C mechanism callbacks.
+    errors.extend(check_asm_c_boundary())
     errors.extend(check_usercopy_no_raw_user_touch())
     errors.extend(check_ktm_core_no_fase())
     errors.extend(check_ktm_no_fase_serial())
