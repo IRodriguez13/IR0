@@ -37,6 +37,7 @@ int syscall_handler_set(struct syscall_handler_table *table,
 int syscall_context_handler_set(struct syscall_handler_table *table,
 				enum ir0_syscall_id id,
 				syscall_context_handler_t handler);
+/* Registration is transactional and refuses duplicate or occupied syscall IDs. */
 int syscall_context_provider_register(struct syscall_handler_table *table,
 				      const struct syscall_context_provider *provider);
 int64_t syscall_handler_invoke(const struct syscall_handler_table *table,

@@ -57,9 +57,18 @@ int syscall_context_provider_register(struct syscall_handler_table *table,
 	/* Validate the complete descriptor before mutating the table. */
 	for (index = 0; index < provider->count; index++)
 	{
-		if (provider->ids[index] <= IR0_SYSCALL_UNKNOWN ||
-		    provider->ids[index] >= IR0_SYSCALL_COUNT)
+		unsigned int prior;
+		enum ir0_syscall_id id = provider->ids[index];
+
+		if (id <= IR0_SYSCALL_UNKNOWN || id >= IR0_SYSCALL_COUNT)
 			return -EINVAL;
+		if (table->handlers[id] || table->context_handlers[id])
+			return -EEXIST;
+		for (prior = 0; prior < index; prior++)
+		{
+			if (provider->ids[prior] == id)
+				return -EEXIST;
+		}
 	}
 	for (index = 0; index < provider->count; index++)
 	{

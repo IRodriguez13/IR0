@@ -35,11 +35,23 @@ void test_syscall_handler_table_contract(void)
 	static const enum ir0_syscall_id invalid_ids[] = {
 		IR0_SYSCALL_READ, IR0_SYSCALL_COUNT,
 	};
+	static const enum ir0_syscall_id conflicting_ids[] = {
+		IR0_SYSCALL_OPENAT, IR0_SYSCALL_GETPID,
+	};
+	static const enum ir0_syscall_id duplicate_ids[] = {
+		IR0_SYSCALL_GETPPID, IR0_SYSCALL_GETPPID,
+	};
 	const struct syscall_context_provider provider = {
 		.ids = provider_ids, .count = 2, .handler = context_handler,
 	};
 	const struct syscall_context_provider invalid_provider = {
 		.ids = invalid_ids, .count = 2, .handler = context_handler,
+	};
+	const struct syscall_context_provider conflicting_provider = {
+		.ids = conflicting_ids, .count = 2, .handler = context_handler,
+	};
+	const struct syscall_context_provider duplicate_provider = {
+		.ids = duplicate_ids, .count = 2, .handler = context_handler,
 	};
 
 	TEST_BEGIN("semantic syscall handler table contract");
@@ -62,9 +74,16 @@ void test_syscall_handler_table_contract(void)
 	       (int64_t)(101 + IR0_SYSCALL_OPENAT));
 	ASSERT(syscall_context_provider_register(&table, &invalid_provider) ==
 	       -EINVAL);
+	ASSERT(syscall_context_provider_register(&table, &conflicting_provider) ==
+	       -EEXIST);
+	ASSERT(syscall_context_provider_register(&table, &duplicate_provider) ==
+	       -EEXIST);
 	/* Invalid batch registration is transactional: READ remains direct. */
 	ASSERT(syscall_handler_invoke(&table, 0, IR0_SYSCALL_READ,
 				      1, 2, 3, 4, 5, 6) == 21);
+	/* Conflicting batches must not install their otherwise-valid trailing IDs. */
+	ASSERT(syscall_handler_invoke(&table, 0, IR0_SYSCALL_GETPID,
+				      0, 0, 0, 0, 0, 0) == -ENOSYS);
 	ASSERT(syscall_handler_invoke(&table, 0, IR0_SYSCALL_COUNT,
 				      0, 0, 0, 0, 0, 0) == -ENOSYS);
 	TEST_END();
