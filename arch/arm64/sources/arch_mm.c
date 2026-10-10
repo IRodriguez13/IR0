@@ -18,6 +18,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/arch_mm.h>
+#include <ir0/mm_range.h>
 
 uintptr_t mm_kernel_heap_start(void)
 {
@@ -69,22 +70,11 @@ void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root)
 
 int mm_user_va_ok(uintptr_t addr, size_t size)
 {
-	uintptr_t end;
-
 	/*
 	 * Portable mm path: same canonical low-half window as x86-64 until
 	 * TTBR0/TTBR1 split lands. Early EL0 probes still use
 	 * arm64_mmu_user_buf_ok behind their own wrappers.
 	 */
-	const uintptr_t user_lo = mm_user_va_start();
-	const uintptr_t user_hi = mm_user_va_end();
-
-	if (addr == 0)
-		return 0;
-	end = addr + size;
-	if (end < addr)
-		return 0;
-	if (addr < user_lo || end > user_hi)
-		return 0;
-	return 1;
+	return mm_user_range_ok(addr, size, mm_user_va_start(),
+				mm_user_va_end());
 }
