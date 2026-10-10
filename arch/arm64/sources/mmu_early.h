@@ -41,6 +41,14 @@ int arm64_mmu_map_user_page(uint64_t pa);
  */
 int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0);
 
+/**
+ * Apply the staged EL0 permission subset to an already mapped user range.
+ * @writable selects EL0 RW versus RO; @exec_el0 clears UXN when non-zero.
+ * The range must be page-aligned and fully mapped through the user-page API.
+ */
+int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
+				 int writable, int exec_el0);
+
 /** True if @va..@va+@len-1 lies entirely in mapped EL0 user pages. */
 int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len);
 

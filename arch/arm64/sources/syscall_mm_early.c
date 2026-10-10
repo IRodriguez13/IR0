@@ -13,6 +13,11 @@
 
 #define ENOSYS 38
 #define ENOMEM 12
+#define EINVAL 22
+
+#define PROT_READ  0x1UL
+#define PROT_WRITE 0x2UL
+#define PROT_EXEC  0x4UL
 
 #ifndef ARM64_MUSL_MMAP_BASE
 #define ARM64_MUSL_MMAP_BASE 0x431a0000UL
@@ -142,12 +147,24 @@ static int64_t early_mmap(uint64_t address, uint64_t length)
 	return (int64_t)base;
 }
 
+static int64_t early_mprotect(uint64_t address, uint64_t length,
+			      uint64_t protection)
+{
+	if (protection == 0 ||
+	    (protection & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
+		return -ENOSYS;
+	if (arm64_mmu_protect_user_range(address, length,
+					 protection & PROT_WRITE,
+					 protection & PROT_EXEC) != 0)
+		return -EINVAL;
+	return 0;
+}
+
 static int64_t early_mm_syscall(void *context, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	(void)context;
-	(void)a2;
 	(void)a3;
 	(void)a4;
 	(void)a5;
@@ -159,9 +176,9 @@ static int64_t early_mm_syscall(void *context, enum ir0_syscall_id id,
 	case IR0_SYSCALL_MMAP:
 		return early_mmap(a0, a1);
 	case IR0_SYSCALL_MUNMAP:
-	case IR0_SYSCALL_MPROTECT:
-		/* No VMA or permission update exists in this staged provider. */
 		return -ENOSYS;
+	case IR0_SYSCALL_MPROTECT:
+		return early_mprotect(a0, a1, a2);
 	default:
 		return -ENOSYS;
 	}

@@ -39,6 +39,7 @@
 #define PTE_SH_INNER     (3UL << 8)
 #define PTE_AP_RW_EL1    (0UL << 6)
 #define PTE_AP_RW_EL0    (1UL << 6)
+#define PTE_AP_RO_EL0    (3UL << 6)
 #define PTE_UXN          (1UL << 54)
 #define PTE_PXN          (1UL << 53)
 
@@ -497,6 +498,40 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 int arm64_mmu_map_user_page(uint64_t pa)
 {
 	return arm64_mmu_map_user_page_flags(pa, 0);
+}
+
+int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
+				 int writable, int exec_el0)
+{
+	uint64_t end;
+	uint64_t page;
+
+	if (!g_mmu_on || length == 0 || (address & (PAGE_SIZE - 1UL)) != 0)
+		return -EINVAL;
+	if (length > UINT64_MAX - (PAGE_SIZE - 1UL))
+		return -EINVAL;
+	length = (length + PAGE_SIZE - 1UL) & ~(PAGE_SIZE - 1UL);
+	if (address > UINT64_MAX - length)
+		return -EINVAL;
+	end = address + length;
+	if (!arm64_mmu_user_buf_ok(address, length))
+		return -EINVAL;
+
+	for (page = address; page < end; page += PAGE_SIZE)
+	{
+		uint64_t l2_idx = L2_INDEX(page);
+		uint64_t l3_idx = L3_INDEX(page);
+		uint64_t *l3;
+
+		l3 = l3_table_for_l2(l2_idx);
+		if (!l3 || (l3[l3_idx] & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
+			return -EINVAL;
+		l3[l3_idx] = pte_page_4k(page,
+					writable ? PTE_AP_RW_EL0 : PTE_AP_RO_EL0,
+					exec_el0 ? 0 : 1, 1);
+	}
+	tlb_invalidate();
+	return 0;
 }
 
 int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
