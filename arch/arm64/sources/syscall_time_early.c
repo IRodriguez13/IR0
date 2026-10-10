@@ -56,8 +56,10 @@ static int64_t sleep_timespec_user(uint64_t request)
 {
 	struct timespec value;
 	uint64_t frequency;
+	uint64_t seconds_ticks;
+	uint64_t nanosecond_ticks;
 	uint64_t delta;
-	uint64_t deadline;
+	uint64_t start;
 
 	if (copy_from_user(&value, request, sizeof(value)) != 0)
 		return -EFAULT;
@@ -69,12 +71,22 @@ static int64_t sleep_timespec_user(uint64_t request)
 		return -EINVAL;
 	if ((uint64_t)value.tv_sec > UINT64_MAX / frequency)
 		return -EINVAL;
-	delta = (uint64_t)value.tv_sec * frequency;
-	delta += ((uint64_t)value.tv_nsec * frequency) / NS_PER_SEC;
+	seconds_ticks = (uint64_t)value.tv_sec * frequency;
+	nanosecond_ticks = ((uint64_t)value.tv_nsec * frequency) / NS_PER_SEC;
+	if (nanosecond_ticks > UINT64_MAX - seconds_ticks)
+		return -EINVAL;
+	delta = seconds_ticks + nanosecond_ticks;
+	/*
+	 * The unsigned elapsed-counter comparison below is unambiguous for
+	 * intervals shorter than half a counter cycle.  Reject larger requests
+	 * instead of turning a malformed timeout into an early return or a hang.
+	 */
+	if (delta > UINT64_MAX / 2)
+		return -EINVAL;
 	if (delta == 0)
 		delta = 1;
-	deadline = timer_read() + delta;
-	while (timer_read() < deadline)
+	start = timer_read();
+	while (timer_read() - start < delta)
 		__asm__ volatile("yield" ::: "memory");
 	return 0;
 }
