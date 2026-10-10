@@ -11,7 +11,6 @@
 #include "rootfs_early.h"
 #include "mmu_early.h"
 
-#define EBADF 9
 #define EFAULT 14
 #define ENOENT 2
 #define ENOSYS 38
@@ -32,8 +31,6 @@ static int64_t early_vfs_syscall(void *context, enum ir0_syscall_id id,
 				 uint64_t a0, uint64_t a1, uint64_t a2,
 				 uint64_t a3, uint64_t a4, uint64_t a5)
 {
-	int64_t result;
-
 	(void)context;
 	(void)a4;
 	(void)a5;
@@ -41,11 +38,9 @@ static int64_t early_vfs_syscall(void *context, enum ir0_syscall_id id,
 	switch (id)
 	{
 	case IR0_SYSCALL_READ:
-		result = arm64_rootfs_read((int)a0, a1, a2);
-		return result == -EBADF ? 0 : result;
+		return arm64_rootfs_read((int)a0, a1, a2);
 	case IR0_SYSCALL_CLOSE:
-		result = arm64_rootfs_close((int)a0);
-		return result == -EBADF ? 0 : result;
+		return arm64_rootfs_close((int)a0);
 	case IR0_SYSCALL_OPENAT:
 		return arm64_rootfs_openat((int)a0, a1, (int)a2);
 	case IR0_SYSCALL_FACCESSAT:
@@ -53,8 +48,7 @@ static int64_t early_vfs_syscall(void *context, enum ir0_syscall_id id,
 	case IR0_SYSCALL_NEWFSTATAT:
 		return arm64_rootfs_newfstatat((int)a0, a1, a2, (int)a3);
 	case IR0_SYSCALL_FSTAT:
-		result = arm64_rootfs_fstat((int)a0, a1);
-		return result == -EBADF ? -ENOENT : result;
+		return arm64_rootfs_fstat((int)a0, a1);
 	case IR0_SYSCALL_READLINKAT:
 		return arm64_rootfs_readlinkat((int)a0, a1, a2, a3);
 	case IR0_SYSCALL_GETCWD:
