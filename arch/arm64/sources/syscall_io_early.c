@@ -62,11 +62,11 @@ static int64_t early_io_syscall(void *context, enum ir0_syscall_id id,
 		return -ENOTTY;
 	case IR0_SYSCALL_FCNTL:
 	case IR0_SYSCALL_PPOLL:
-		return 0;
 	case IR0_SYSCALL_DUP:
-		return (int64_t)a0;
 	case IR0_SYSCALL_DUP3:
-		return (int64_t)a1;
+		/* These need a descriptor table and wait queues, neither of which
+		 * belongs in the freestanding console scaffold. */
+		return -ENOSYS;
 	default:
 		return -ENOSYS;
 	}

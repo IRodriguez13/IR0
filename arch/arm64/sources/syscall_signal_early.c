@@ -15,6 +15,7 @@ static int64_t early_signal_syscall(void *context, enum ir0_syscall_id id,
 				    uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	(void)context;
+	(void)id;
 	(void)a0;
 	(void)a1;
 	(void)a2;
@@ -22,13 +23,8 @@ static int64_t early_signal_syscall(void *context, enum ir0_syscall_id id,
 	(void)a4;
 	(void)a5;
 
-	switch (id) {
-	case IR0_SYSCALL_RT_SIGACTION:
-	case IR0_SYSCALL_RT_SIGPROCMASK:
-		return 0;
-	default:
-		return -ENOSYS;
-	}
+	/* Signal state belongs to the common process runtime, not this scaffold. */
+	return -ENOSYS;
 }
 
 static const enum ir0_syscall_id g_signal_syscalls[] = {
