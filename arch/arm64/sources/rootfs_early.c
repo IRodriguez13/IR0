@@ -100,12 +100,13 @@ static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 
 	if (!buf || bufsz == 0)
 		return 0;
-	if (!arm64_mmu_user_buf_ok(upath, 1))
-		return 0;
-
 	src = (const volatile uint8_t *)(uintptr_t)upath;
 	for (i = 0; i < bufsz - 1; i++)
 	{
+		if (upath > UINT64_MAX - i)
+			return 0;
+		if (!arm64_mmu_user_buf_ok(upath + i, 1))
+			return 0;
 		buf[i] = (char)src[i];
 		if (src[i] == 0)
 			return 1;
@@ -275,7 +276,7 @@ int64_t arm64_rootfs_openat(int dirfd, uint64_t path, int flags)
 	if (!g_rootfs_ready)
 		return -ENOENT;
 	if (dirfd != AT_FDCWD && slot_from_fd(dirfd) < 0)
-		return -ENOENT;
+		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
 
@@ -349,7 +350,7 @@ int64_t arm64_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buf,
 	if (!g_rootfs_ready)
 		return -ENOENT;
 	if (dirfd != AT_FDCWD && slot_from_fd(dirfd) < 0)
-		return -ENOENT;
+		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
 	if (!strings_equal(pbuf, proc_self_exe))
@@ -370,6 +371,8 @@ int64_t arm64_rootfs_faccessat(int dirfd, uint64_t path, int flags)
 
 	if (!g_rootfs_ready)
 		return -ENOENT;
+	if (dirfd != AT_FDCWD && slot_from_fd(dirfd) < 0)
+		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
 	if (path_to_node(pbuf) == ROOTFS_NODE_NONE)
@@ -389,6 +392,8 @@ int64_t arm64_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 
 	if (!g_rootfs_ready)
 		return -ENOENT;
+	if (dirfd != AT_FDCWD && slot_from_fd(dirfd) < 0)
+		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
 

@@ -31,8 +31,10 @@
 #endif
 
 static uint64_t g_musl_brk = ARM64_MUSL_MMAP_BASE;
+static uint64_t g_musl_brk_mapped_end = ARM64_MUSL_MMAP_BASE;
 static uint64_t g_musl_mmap_bump = ARM64_MUSL_MMAP_BASE;
 static uint64_t g_bb_brk = ARM64_BB_BRK_START;
+static uint64_t g_bb_brk_mapped_end = ARM64_BB_BRK_START;
 static uint64_t g_bb_mmap_bump = ARM64_BB_MMAP_BASE;
 
 static void zero_page(uint64_t page)
@@ -47,37 +49,47 @@ static void zero_page(uint64_t page)
 void arm64_early_mm_reset_busybox_heap(void)
 {
 	g_bb_brk = ARM64_BB_BRK_START;
+	g_bb_brk_mapped_end = ARM64_BB_BRK_START;
 	g_bb_mmap_bump = ARM64_BB_MMAP_BASE;
 }
 
 static int64_t early_brk(uint64_t request)
 {
 	uint64_t *current;
+	uint64_t *mapped_end;
 	uint64_t base;
 	uint64_t end;
+	uint64_t target_end;
 
 	if (arm64_busybox_mode())
 	{
 		current = &g_bb_brk;
+		mapped_end = &g_bb_brk_mapped_end;
 		base = ARM64_BB_BRK_START;
 		end = ARM64_BB_MMAP_END;
 	}
 	else
 	{
 		current = &g_musl_brk;
+		mapped_end = &g_musl_brk_mapped_end;
 		base = ARM64_MUSL_MMAP_BASE;
 		end = ARM64_MUSL_MMAP_END;
 	}
 	if (request == 0 || request < base || request > end)
 		return (int64_t)*current;
-	while (*current < request)
+	if (request > UINT64_MAX - 4095UL)
+		return (int64_t)*current;
+	target_end = (request + 4095UL) & ~4095UL;
+	if (target_end > end)
+		return (int64_t)*current;
+	while (*mapped_end < target_end)
 	{
-		uint64_t page = *current & ~(4096UL - 1UL);
+		uint64_t page = *mapped_end;
 
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
 			return (int64_t)*current;
 		zero_page(page);
-		*current += 4096UL;
+		*mapped_end += 4096UL;
 	}
 	*current = request;
 	return (int64_t)*current;
@@ -148,7 +160,8 @@ static int64_t early_mm_syscall(void *context, enum ir0_syscall_id id,
 		return early_mmap(a0, a1);
 	case IR0_SYSCALL_MUNMAP:
 	case IR0_SYSCALL_MPROTECT:
-		return 0;
+		/* No VMA or permission update exists in this staged provider. */
+		return -ENOSYS;
 	default:
 		return -ENOSYS;
 	}
