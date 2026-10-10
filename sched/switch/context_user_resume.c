@@ -15,6 +15,7 @@
 #include <ir0/mm.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
+#include <config.h>
 
 static int context_ip_is_in_user_stack(const process_t *proc, uint64_t ip)
 {
@@ -86,6 +87,21 @@ int context_try_resume_user_frame(task_t *prev, task_t *next)
 }
 
 /*
+ * The dispatcher fixes the order of normal kernel continuation.  Backends
+ * may repair their raw return representation or provide a KTM-only fault,
+ * but generic state transitions remain here.
+ */
+void context_prepare_kernel_resume(task_t *next)
+{
+	context_backend_prepare_kernel_resume(next);
+	context_finalize_kernel_resume(next);
+	context_backend_inject_kernel_return_fault(next);
+#if IR0_CLASS_B_REPAIR
+	context_repair_kernel_return_state(next);
+#endif
+}
+
+/*
  * The backend may have repaired its saved frame before this point.  Re-arm
  * generic kernel continuation only after that validation, without inspecting
  * an ISA return frame or segment representation.
@@ -125,7 +141,7 @@ void context_repair_kernel_return_state(task_t *next)
 	if (!next)
 		return;
 	proc = task_to_process(next);
-	if (!proc || proc->mode != USER_MODE || proc->coop_resched_resume ||
+	if (!proc || proc->mode != USER_MODE ||
 	    !process_task_kernel_return_state_bad(next))
 		return;
 

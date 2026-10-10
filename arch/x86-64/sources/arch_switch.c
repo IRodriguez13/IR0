@@ -40,6 +40,7 @@ extern uint64_t kernel_syscall_stack_top;
 extern uint64_t user_rsp_save;
 extern void tss_set_rsp0(uint64_t rsp0);
 
+static void arch_fixup_user_task_for_iretq(process_t *proc);
 
 static int arch_va_in_kstack_window(uint64_t v)
 {
@@ -172,6 +173,30 @@ void context_backend_trace_user_frame_resume(struct process *prev,
 	switch_trace_user_frame_resume(prev_proc, next_proc, task);
 }
 
+void context_backend_prepare_kernel_resume(task_t *task)
+{
+	arch_fixup_user_task_for_iretq(task ? task_to_process(task) : NULL);
+}
+
+void context_backend_inject_kernel_return_fault(task_t *task)
+{
+	process_t *proc = task ? task_to_process(task) : NULL;
+
+	if (!task || !proc || proc->mode != USER_MODE ||
+	    !KTM_FAULT_HIT("sched.class_b_arm_window"))
+		return;
+
+	/* KTM creates the ISA-specific Class-B frame for generic recovery tests. */
+	task_set_kernel_segments(task);
+	task_set_ip(task, IR0_USER_RIP_LO + 0x1000ULL);
+	if (!process_rip_in_user_range(task_get_sp(task)))
+		task_set_sp(task, 0x00007FFFFFF0ULL);
+	process_syscall_set_ip(proc, task_get_ip(task));
+	process_syscall_set_sp(proc, task_get_sp(task));
+	process_syscall_set_flags(proc, task_get_flags(task) | 2ULL);
+	klog_info("CTX", "CLASSIFY CLASS_B_FAULT_INJECT");
+}
+
 void set_current_kernel_stack(struct process *p)
 {
 	process_t *proc = (process_t *)p;
@@ -241,38 +266,6 @@ void arch_switch_to(task_t *prev, task_t *next)
      * wait4 + blocked-syscall coverage.
      */
     process_t *next_proc = next ? task_to_process(next) : NULL;
-
-    arch_fixup_user_task_for_iretq(next_proc);
-
-    context_finalize_kernel_resume(next);
-
-    /*
-     * KTM: force Class B on *next* (KERNEL CS + user RIP) before sanitize.
-     * Seed syscall_frame so REPAIR can apply a coherent user iretq frame.
-     * With IR0_CLASS_B_REPAIR=0 → KERNEL_RET_BAD_RIP.
-     */
-    if (next && next_proc && next_proc->mode == USER_MODE &&
-        KTM_FAULT_HIT("sched.class_b_arm_window"))
-    {
-		task_set_kernel_segments(next);
-		task_set_ip(next, IR0_USER_RIP_LO + 0x1000ULL);
-        if (!process_rip_in_user_range(task_get_sp(next)))
-            task_set_sp(next, 0x00007FFFFFF0ULL);
-        process_syscall_set_ip(next_proc, task_get_ip(next));
-        process_syscall_set_sp(next_proc, task_get_sp(next));
-        process_syscall_set_flags(next_proc, task_get_flags(next) | 2ULL);
-        klog_info("CTX", "CLASSIFY CLASS_B_FAULT_INJECT");
-    }
-
-    /*
-     * Linux-like Class B safety net (IR0_CLASS_B_REPAIR): KERNEL_CS + user RIP
-     * must not reach kernel_ret. Natural paths should not create this after
-     * pt_regs-only capture + want_kernel_ret; KTM inject still exercises it.
-     * Repair only when syscall_frame has usable user RIP/RSP.
-     */
-#if IR0_CLASS_B_REPAIR
-	context_repair_kernel_return_state(next);
-#endif
 
     /*
      * switch_context_x64 loads next CR3 while still on prev's RSP. Keep

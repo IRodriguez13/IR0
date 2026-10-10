@@ -38,7 +38,7 @@ ktm-userdev-fault-class-b-run: build-ktm-fault-class-b-case build-init-hostshare
 		--log /tmp/ktm-userdev-fault-class-b.log --timeout 90 \
 		--done KTM_CLASS_B_OK \
 		--require CLASS_B_FAULT_INJECT \
-		--require KERNEL_CS_USER_RIP_REPAIR \
+		--require KERNEL_RETURN_FRAME_REPAIR \
 		--require KTM_CLASS_B_MITIGATED_OK \
 		--require KTM_CLASS_B_OK \
 		--require KTM_USERDEV_OK

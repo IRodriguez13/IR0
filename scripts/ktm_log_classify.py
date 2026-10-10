@@ -92,11 +92,14 @@ def classify(text: str) -> list[tuple[str, str, str]]:
                 "KTM sched.class_b_arm_window hit with IR0_CLASS_B_REPAIR=0 — "
                 "expected KERNEL_RET_BAD_RIP.",
             ))
-        elif "CLASSIFY KERNEL_CS_USER_RIP_REPAIR" in text or "[CTX][CLASSIFY] KERNEL_CS_USER_RIP_REPAIR" in text:
+        elif ("CLASSIFY KERNEL_RETURN_FRAME_REPAIR" in text or
+              "[CTX][CLASSIFY] KERNEL_RETURN_FRAME_REPAIR" in text or
+              "CLASSIFY KERNEL_CS_USER_RIP_REPAIR" in text or
+              "[CTX][CLASSIFY] KERNEL_CS_USER_RIP_REPAIR" in text):
             hits.append((
                 "CLASS_B_INJECT_MITIGATED",
                 "info",
-                "KTM Class B inject sanitized by KERNEL_CS_USER_RIP_REPAIR.",
+                "KTM Class B inject sanitized by the kernel-return repair path.",
             ))
 
     if "RUNIT_STAGE1_OK" in text and "RUNIT_STAGE2_OK" not in text:

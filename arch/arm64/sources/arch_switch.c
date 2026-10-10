@@ -108,3 +108,13 @@ void context_backend_trace_user_frame_resume(struct process *prev,
 	(void)next;
 	(void)task;
 }
+
+void context_backend_prepare_kernel_resume(task_t *task)
+{
+	(void)task;
+}
+
+void context_backend_inject_kernel_return_fault(task_t *task)
+{
+	(void)task;
+}

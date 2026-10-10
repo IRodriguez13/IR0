@@ -113,7 +113,7 @@ possible. Gates:
 
 | Target | Expect |
 |--------|--------|
-| `make smoke-class-b-mitigated` | inject + `KERNEL_CS_USER_RIP_REPAIR` + `KTM_CLASS_B_OK` |
+| `make smoke-class-b-mitigated` | inject + `KERNEL_RETURN_FRAME_REPAIR` + `KTM_CLASS_B_OK` |
 | `make smoke-class-b-repro` | rebuild with `IR0_CLASS_B_REPAIR=0` → `KERNEL_RET_BAD_RIP` |
 | `make -C tests/host run` | `test_class_b_ctx_invariant` |
 

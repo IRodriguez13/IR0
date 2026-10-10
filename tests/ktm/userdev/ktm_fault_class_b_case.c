@@ -6,7 +6,7 @@
  * Description: Arm sched.class_b_arm_window ONCE; fork so switch_to sees *next*.
  *
  * Product kernel (IR0_CLASS_B_REPAIR=1): CLASS_B_FAULT_INJECT +
- * KERNEL_CS_USER_RIP_REPAIR, then KTM_CLASS_B_MITIGATED_OK / KTM_CLASS_B_OK.
+ * KERNEL_RETURN_FRAME_REPAIR, then KTM_CLASS_B_MITIGATED_OK / KTM_CLASS_B_OK.
  *
  * Repro kernel (IR0_CLASS_B_REPAIR=0): KERNEL_RET_BAD_RIP (runner --done).
  */

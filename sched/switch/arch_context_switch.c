@@ -58,6 +58,7 @@ void switch_to(task_t *prev, task_t *next)
 #if !defined(IR0_FREESTANDING_BOOT)
 	if (context_try_resume_user_frame(prev, next))
 		return;
+	context_prepare_kernel_resume(next);
 #else
 	/* The staged boot image deliberately omits the process-resume state machine. */
 #endif

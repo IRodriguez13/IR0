@@ -469,6 +469,14 @@ static inline void task_set_kernel_segments(task_t *t)
 	t->arch.es = (uint16_t)KERNEL_DATA_SEL;
 	t->arch.fs = (uint16_t)KERNEL_DATA_SEL;
 	t->arch.gs = (uint16_t)KERNEL_DATA_SEL;
+#else
+	/* Canonical x86-64 kernel selectors when config.h is not included first. */
+	task_set_cs(t, 0x08);
+	task_set_ss(t, 0x10);
+	t->arch.ds = 0x10;
+	t->arch.es = 0x10;
+	t->arch.fs = 0x10;
+	t->arch.gs = 0x10;
 #endif
 }
 
