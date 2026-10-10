@@ -16,7 +16,7 @@
 #include <sched/task.h>
 
 static uint8_t g_heap[8192] __attribute__((aligned(16)));
-static unsigned g_heap_off;
+static size_t g_heap_off;
 
 void __attribute__((weak)) panicex(const char *message, panic_level_t level,
 				   const char *file, int line,
@@ -34,16 +34,16 @@ void __attribute__((weak)) panicex(const char *message, panic_level_t level,
 void *__attribute__((weak)) __kmalloc_checked(size_t n, const char *file, int line,
 					      const char *caller)
 {
-	unsigned align = 16;
-	unsigned off;
+	size_t align = 16;
+	size_t off;
 
 	(void)file;
 	(void)line;
 	(void)caller;
 	off = (g_heap_off + align - 1U) & ~(align - 1U);
-	if (off + n > sizeof(g_heap))
+	if (off > sizeof(g_heap) || n > sizeof(g_heap) - off)
 		return NULL;
-	g_heap_off = off + (unsigned)n;
+	g_heap_off = off + n;
 	return &g_heap[off];
 }
 
