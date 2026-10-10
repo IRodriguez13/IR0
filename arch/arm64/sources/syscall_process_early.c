@@ -14,6 +14,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/utsname.h>
 
+#define EAGAIN 11
 #define EFAULT 14
 #define ENOSYS 38
 
@@ -48,20 +49,16 @@ static int64_t early_prlimit64(uint64_t old_limit)
 	return 0;
 }
 
-static int64_t early_getrandom(uint64_t output, uint64_t length)
+static int64_t early_getrandom(uint64_t length)
 {
-	uint8_t *bytes;
-	uint64_t count = length > 64 ? 64 : length;
-	uint64_t index;
-
-	if (count == 0)
+	if (length == 0)
 		return 0;
-	if (!arm64_mmu_user_buf_ok(output, count))
-		return -EFAULT;
-	bytes = (uint8_t *)(uintptr_t)output;
-	for (index = 0; index < count; index++)
-		bytes[index] = (uint8_t)(index + 1);
-	return (int64_t)count;
+	/*
+	 * Never claim deterministic bring-up data is random.  The production
+	 * provider must wait for a real entropy source; the freestanding image has
+	 * none, so callers can use their normal EAGAIN fallback instead.
+	 */
+	return -EAGAIN;
 }
 
 static int64_t early_exit(struct arm64_early_syscall_context *context,
@@ -113,7 +110,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_PRLIMIT64:
 		return early_prlimit64(a3);
 	case IR0_SYSCALL_GETRANDOM:
-		return early_getrandom(a0, a1);
+		return early_getrandom(a1);
 	case IR0_SYSCALL_EXIT:
 	case IR0_SYSCALL_EXIT_GROUP:
 		return early_exit(context, a0);
