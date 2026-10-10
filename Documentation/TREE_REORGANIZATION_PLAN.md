@@ -69,13 +69,13 @@ This document does **not** authorize moves yet. Execute after:
 | `Makefile` (committed at `b4bdeee`) | ~2900+ | OBJ lists, arch, kernel link, **partial** split |
 | `Makefile` (working tree) | ~1656 | **−1708** lines moved to includes; adds ktm/futex/sock_udp |
 | `scripts/make/run.mk` | 63 | Daily: `run`, `run-dbgshell`, `run-pid1` (uncommitted) |
-| `scripts/make/legacy-run.mk` | 78 | Gate `IR0_LEGACY_SMOKE` (uncommitted) |
+| `scripts/make/legacy-run.mk` | retired | Removed after audit: it was not included by any active build path. |
 | `scripts/make/qa.mk` | 1564 | QA, linux-abi-audit, tier smokes include |
 | `setup/make/legacy-smokes.mk` | 1394 | **46+** `smoke-fase*` / `smoke-userspace-*` (uncommitted) |
 
-**Partial migration already in working tree** (not on `dev` at B/G commits): main Makefile
-`include`s `run.mk` / `legacy-run.mk` / `qa.mk` behind `IR0_INCLUDE_QA` and
-`IR0_LEGACY_SMOKE`. Committed history still monolithic for many clones.
+The active Makefile includes focused build fragments. Historical phase smokes
+remain explicitly gated by `IR0_LEGACY_SMOKE`; obsolete duplicate run recipes
+do not remain as an unreferenced include.
 
 ### 2.3 QA / test surfaces
 
@@ -218,7 +218,7 @@ include qa/make/daily.mk           # run, run-pid1, create-disk
 
 | Action | Risk | Notes |
 |--------|------|-------|
-| Commit Makefile split (`run.mk`, `legacy-run.mk`) | Low | Already drafted in working tree; **without** ktm/futex hunks |
+| Keep daily run recipes in `run.mk` | Low | Retire duplicate legacy run recipes after consumer audit. |
 | Commit `setup/make/legacy-smokes.mk` + qa include | Low | Behind `IR0_LEGACY_SMOKE` |
 | Fix `qa:` default to **not** include kill-sigterm | Low | One line |
 | Triage/working tree into bisectable commits | Medium | Per prior triage map |
