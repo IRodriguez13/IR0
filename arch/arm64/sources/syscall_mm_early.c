@@ -88,6 +88,7 @@ static int64_t early_mmap(uint64_t address, uint64_t length)
 	uint64_t page;
 	uint64_t base;
 	uint64_t *bump;
+	uint64_t map_base;
 	uint64_t map_limit;
 	uint64_t map_end;
 
@@ -99,25 +100,25 @@ static int64_t early_mmap(uint64_t address, uint64_t length)
 	if (arm64_busybox_mode())
 	{
 		bump = &g_bb_mmap_bump;
+		map_base = ARM64_BB_MMAP_BASE;
 		map_limit = ARM64_BB_MMAP_END;
 	}
 	else
 	{
 		bump = &g_musl_mmap_bump;
+		map_base = ARM64_MUSL_MMAP_BASE;
 		map_limit = ARM64_MUSL_MMAP_END;
 	}
 	base = address ? address & ~(4096UL - 1UL) : *bump;
+	if (base < map_base || base > map_limit || length > map_limit - base)
+		return -ENOMEM;
 	map_end = base + length;
-	if (map_end < base)
-		return -ENOMEM;
 	/*
-	 * Linux treats a non-zero address as a hint unless MAP_FIXED requires it.
-	 * The early provider does not decode flags yet, so retain the established
-	 * bring-up contract: constrain allocator-chosen mappings to its arena, but
-	 * allow an explicit userspace address anywhere the MMU facade accepts it.
+	 * This staged provider has no VMA ownership model or MAP_FIXED decoding.
+	 * Constrain both allocator-selected and explicit mappings to the active
+	 * userspace arena; accepting an arbitrary identity-mapped DRAM address
+	 * would let EL0 remap kernel memory as user accessible.
 	 */
-	if (address == 0 && map_end > map_limit)
-		return -ENOMEM;
 	for (page = base; page < map_end; page += 4096UL)
 	{
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
