@@ -487,9 +487,9 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 		l2_dram[l2_idx] = pte_table(l3_pa);
 	}
 
-	l3[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, uxn, 1);
 	if (user_page_note(page) != 0)
 		return -EINVAL;
+	l3[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, uxn, 1);
 	tlb_invalidate();
 	return 0;
 }
