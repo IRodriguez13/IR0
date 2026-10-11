@@ -528,42 +528,58 @@ static int dram_ensure_l2(void)
 	return g_dram_split ? 0 : -EINVAL;
 }
 
-static uint64_t *l3_table_for_l2(uint64_t l2_idx)
+static struct arm64_mmu_root *root_from_ttbr(uint64_t root_ttbr)
+{
+	unsigned i;
+
+	for (i = 0; i < ARM64_ROOT_POOL_MAX; i++)
+	{
+		if (g_roots[i].in_use &&
+		    (uint64_t)(uintptr_t)g_roots[i].table_l1 == root_ttbr)
+			return &g_roots[i];
+	}
+	return NULL;
+}
+
+static uint64_t *l3_table_for_l2(struct arm64_mmu_root *root,
+				 uint64_t l2_idx)
 {
 	unsigned i;
 	int free_slot = -1;
 
 	for (i = 0; i < L3_POOL_MAX; i++)
 	{
-		if (l3_pool_l2[i] == (int)l2_idx)
-			return l3_pool[i];
-		if (free_slot < 0 && l3_pool_l2[i] < 0)
+		if (root->table_l3_pool_l2[i] == (int)l2_idx)
+			return root->table_l3_pool[i];
+		if (free_slot < 0 && root->table_l3_pool_l2[i] < 0)
 			free_slot = (int)i;
 	}
 	if (free_slot < 0)
 		return NULL;
-	l3_pool_l2[free_slot] = (int)l2_idx;
-	zero_table(l3_pool[free_slot]);
-	return l3_pool[free_slot];
+	root->table_l3_pool_l2[free_slot] = (int)l2_idx;
+	zero_table(root->table_l3_pool[free_slot]);
+	return root->table_l3_pool[free_slot];
 }
 
-static int user_page_note(uint64_t page)
+static int user_page_note(struct arm64_mmu_root *root, uint64_t page)
 {
 	unsigned i;
 
-	for (i = 0; i < g_user_page_count; i++)
+	for (i = 0; i < root->user_page_count; i++)
 	{
-		if (g_user_pages[i] == page)
+		if (root->user_pages[i] == page)
 			return 0;
 	}
-	if (g_user_page_count >= USER_PAGE_MAX)
+	if (root->user_page_count >= USER_PAGE_MAX)
 		return -EINVAL;
-	g_user_pages[g_user_page_count++] = page;
+	root->user_pages[root->user_page_count++] = page;
 	return 0;
 }
 
-int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
+int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
+					  int exec_el0)
 {
+	struct arm64_mmu_root *root;
 	uint64_t page = pa & ~(PAGE_SIZE - 1UL);
 	uint64_t l2_idx;
 	uint64_t l3_idx;
@@ -573,6 +589,9 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 
 	if (!g_mmu_on)
 		return -ENODEV;
+	root = root_from_ttbr(root_ttbr);
+	if (!root)
+		return -EINVAL;
 	if (page < g_dram_base || page >= g_dram_end)
 		return -EINVAL;
 	if (dram_ensure_l2() != 0)
@@ -580,23 +599,30 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 
 	l2_idx = L2_INDEX(page);
 	l3_idx = L3_INDEX(page);
-	l3 = l3_table_for_l2(l2_idx);
+	l3 = l3_table_for_l2(root, l2_idx);
 	if (!l3)
 		return -EINVAL;
 
 	l3_pa = (uint64_t)(uintptr_t)l3;
 	/* First split of this 2 MiB block: install L3 table. */
-	if ((l2_dram[l2_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE ||
-	    (l2_dram[l2_idx] & 0x0000FFFFFFFFF000UL) != (l3_pa & 0x0000FFFFFFFFF000UL))
+	if ((root->table_l2_dram[l2_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE ||
+	    (root->table_l2_dram[l2_idx] & 0x0000FFFFFFFFF000UL) !=
+		(l3_pa & 0x0000FFFFFFFFF000UL))
 	{
-		l2_dram[l2_idx] = pte_table(l3_pa);
+		root->table_l2_dram[l2_idx] = pte_table(l3_pa);
 	}
 
-	if (user_page_note(page) != 0)
+	if (user_page_note(root, page) != 0)
 		return -EINVAL;
 	l3[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, uxn, 1);
 	tlb_invalidate();
 	return 0;
+}
+
+int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
+{
+	return arm64_mmu_map_user_page_flags_in_root(arm64_mmu_root_a(), pa,
+					       exec_el0);
 }
 
 int arm64_mmu_map_user_page(uint64_t pa)
@@ -627,7 +653,7 @@ int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
 		uint64_t l3_idx = L3_INDEX(page);
 		uint64_t *l3;
 
-		l3 = l3_table_for_l2(l2_idx);
+		l3 = l3_table_for_l2(&g_roots[ARM64_BOOT_ROOT], l2_idx);
 		if (!l3 || (l3[l3_idx] & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
 			return -EINVAL;
 		l3[l3_idx] = pte_page_4k(page,

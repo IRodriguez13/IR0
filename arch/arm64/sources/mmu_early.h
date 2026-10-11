@@ -41,6 +41,10 @@ int arm64_mmu_map_user_page(uint64_t pa);
  */
 int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0);
 
+/* Map one EL0 page in an explicit owned TTBR0 root. */
+int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
+					  int exec_el0);
+
 /**
  * Apply the staged EL0 permission subset to an already mapped user range.
  * @writable selects EL0 RW versus RO; @exec_el0 clears UXN when non-zero.
