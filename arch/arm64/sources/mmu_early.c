@@ -57,25 +57,48 @@
 #define MAIR_ATTR_DEVICE 0x00UL
 #define MAIR_ATTR_NORMAL 0xffUL
 
-static uint64_t l1_table[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static uint64_t l1_table_b[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 #define MMIO_L2_POOL_MAX 8
 static uint64_t l2_mmio_pool[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
 static int l2_mmio_l1[MMIO_L2_POOL_MAX];
-static uint64_t l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static uint64_t l2_dram_b[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 #define L3_POOL_MAX 32
-static uint64_t l3_pool[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static uint64_t l3_pool_b[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static int l3_pool_l2[L3_POOL_MAX]; /* L2 index owning this L3, or -1 */
+#define USER_PAGE_MAX 2048
+#define ARM64_ROOT_POOL_MAX 2
+#define ARM64_BOOT_ROOT 0U
+#define ARM64_SMOKE_ROOT 1U
+
+/*
+ * A root owns every mutable user-translation level and its mapping inventory.
+ * The secondary entry is still a smoke fixture, but uses the same ownership
+ * representation as a future allocator instead of a parallel set of arrays.
+ */
+struct __attribute__((aligned(PAGE_SIZE))) arm64_mmu_root
+{
+	uint64_t table_l1[PTE_ENTRIES];
+	uint64_t table_l2_dram[PTE_ENTRIES];
+	uint64_t table_l3_pool[L3_POOL_MAX][PTE_ENTRIES];
+	int table_l3_pool_l2[L3_POOL_MAX];
+	uint64_t user_pages[USER_PAGE_MAX];
+	unsigned user_page_count;
+};
+
+static struct arm64_mmu_root g_roots[ARM64_ROOT_POOL_MAX]
+	__attribute__((aligned(PAGE_SIZE)));
+
+#define l1_table (g_roots[ARM64_BOOT_ROOT].table_l1)
+#define l1_table_b (g_roots[ARM64_SMOKE_ROOT].table_l1)
+#define l2_dram (g_roots[ARM64_BOOT_ROOT].table_l2_dram)
+#define l2_dram_b (g_roots[ARM64_SMOKE_ROOT].table_l2_dram)
+#define l3_pool (g_roots[ARM64_BOOT_ROOT].table_l3_pool)
+#define l3_pool_b (g_roots[ARM64_SMOKE_ROOT].table_l3_pool)
+#define l3_pool_l2 (g_roots[ARM64_BOOT_ROOT].table_l3_pool_l2)
+#define g_user_pages (g_roots[ARM64_BOOT_ROOT].user_pages)
+#define g_user_page_count (g_roots[ARM64_BOOT_ROOT].user_page_count)
+
 static int g_mmu_on;
 static int g_dram_split;
 static uint64_t g_dram_base = VIRT_DRAM_FALLBACK_BASE;
 static uint64_t g_dram_end = VIRT_DRAM_FALLBACK_BASE + VIRT_DRAM_FALLBACK_SIZE;
-#define USER_PAGE_MAX 2048
-static uint64_t g_user_pages[USER_PAGE_MAX];
-static unsigned g_user_page_count;
 
 static uint64_t pte_block_2m_device(uint64_t pa)
 {
@@ -415,12 +438,16 @@ void arm64_mmu_clone_root_b(void)
 	{
 		int l2_idx = l3_pool_l2[i];
 
+		g_roots[ARM64_SMOKE_ROOT].table_l3_pool_l2[i] = l2_idx;
 		if (l2_idx < 0)
 			continue;
 		copy_table(l3_pool_b[i], l3_pool[i]);
 		l2_dram_b[(unsigned)l2_idx] =
 			pte_table((uint64_t)(uintptr_t)l3_pool_b[i]);
 	}
+	for (i = 0; i < g_user_page_count; i++)
+		g_roots[ARM64_SMOKE_ROOT].user_pages[i] = g_user_pages[i];
+	g_roots[ARM64_SMOKE_ROOT].user_page_count = g_user_page_count;
 }
 
 uint64_t arm64_mmu_root_a(void)
