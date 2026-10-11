@@ -23,6 +23,9 @@ static bool process_va_ranges_overlap(uintptr_t a_start, size_t a_len,
 
 	if (a_len == 0 || b_len == 0)
 		return false;
+	/* An unrepresentable half-open range must never become a free hole. */
+	if (a_len > UINTPTR_MAX - a_start || b_len > UINTPTR_MAX - b_start)
+		return true;
 
 	a_end = a_start + a_len;
 	b_end = b_start + b_len;
