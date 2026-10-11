@@ -25,16 +25,18 @@ static int machine_supported(void *context, uint16_t machine)
 static int map_segment(void *context, uint64_t vaddr, uint64_t memsz,
 		       uint32_t flags)
 {
+	uint64_t root_ttbr = (uint64_t)(uintptr_t)context;
 	uint64_t page;
 	uint64_t end = vaddr + memsz;
 
-	(void)context;
+	if (!root_ttbr)
+		return -1;
 	if (end < vaddr)
 		return -1;
 	for (page = vaddr & ~(PAGE_SIZE - 1UL); page < end; page += PAGE_SIZE)
 	{
-		if (arm64_mmu_map_user_page_flags(page,
-						 (flags & IR0_ELF64_PF_X) != 0) != 0)
+		if (arm64_mmu_map_user_page_flags_in_root(root_ttbr, page,
+							 (flags & IR0_ELF64_PF_X) != 0) != 0)
 			return -1;
 	}
 	return 0;
@@ -62,6 +64,14 @@ static int zero_segment(void *context, uint64_t vaddr, uint64_t length)
 int arm64_elf_image_load_early(const void *blob, size_t blob_length,
 			       struct ir0_elf64_image *image)
 {
+	return arm64_elf_image_load_early_in_root(blob, blob_length,
+					     arm64_mmu_root_a(), image);
+}
+
+int arm64_elf_image_load_early_in_root(const void *blob, size_t blob_length,
+				       uint64_t root_ttbr,
+				       struct ir0_elf64_image *image)
+{
 	static const struct ir0_elf64_image_ops ops = {
 		.machine_supported = machine_supported,
 		.map_segment = map_segment,
@@ -69,7 +79,9 @@ int arm64_elf_image_load_early(const void *blob, size_t blob_length,
 		.zero_segment = zero_segment,
 	};
 
-	if (ir0_elf64_image_load(blob, blob_length, &ops, 0, image) != 0)
+	if (!root_ttbr ||
+	    ir0_elf64_image_load(blob, blob_length, &ops,
+				 (void *)(uintptr_t)root_ttbr, image) != 0)
 		return -1;
 	return image->phdr != 0 ? 0 : -1;
 }
