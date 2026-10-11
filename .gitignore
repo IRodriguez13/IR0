@@ -126,3 +126,4 @@ setup/pid1/pipeline_stress_smoke
 setup/pid1/cmd_stress_smoke
 setup/pid1/tty_raw_probe
 .cache/
+/ir0
