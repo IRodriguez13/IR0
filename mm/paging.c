@@ -28,6 +28,7 @@
 #include <ir0/validation.h>
 #include <ir0/ahci_api.h>
 #include <ir0/arch_port.h>
+#include <ir0/errno.h>
 
 /*
  * Boot/kernel address-space root with full PMM identity. Pinned once before
@@ -863,6 +864,14 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 
 	if (!root)
 		return -1;
+	if (flags & PAGE_USER)
+	{
+		int backend_result = mm_backend_map_user_page(root, virt_addr,
+							      phys_addr, flags);
+
+		if (backend_result != -EOPNOTSUPP)
+			return backend_result;
+	}
 
 	/*
 	 * USER maps over the supervisor identity window are allowed: brk growth

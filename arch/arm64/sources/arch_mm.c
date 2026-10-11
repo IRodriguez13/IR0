@@ -20,6 +20,8 @@
 #include <ir0/arch_mm.h>
 #include <ir0/mm_range.h>
 #include <ir0/oops.h>
+#include <ir0/errno.h>
+#include "mmu_early.h"
 
 uintptr_t mm_kernel_heap_start(void)
 {
@@ -101,4 +103,14 @@ void mm_prepare_root_activation(address_space_root_t root)
 {
 	(void)root;
 	/* The staged TTBR0 maps are self-contained until root pooling lands. */
+}
+
+int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
+			     uintptr_t pa, uint64_t flags)
+{
+	if (!root || !(flags & IR0_MM_MAP_USER))
+		return -EOPNOTSUPP;
+	return arm64_mmu_map_user_page_at_in_root((uint64_t)(uintptr_t)root,
+						     va, pa,
+						     !!(flags & IR0_MM_MAP_EXEC));
 }

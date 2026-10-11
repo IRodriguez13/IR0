@@ -82,3 +82,10 @@ void mm_destroy_user_root(address_space_root_t root);
 
 /* Prepare ISA-private shared mappings before a root becomes current. */
 void mm_prepare_root_activation(address_space_root_t root);
+
+/*
+ * Optional backend-owned user mapping. Return -EOPNOTSUPP when @root belongs
+ * to the generic walker; otherwise return 0 or a negative errno.
+ */
+int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
+			     uintptr_t pa, uint64_t flags);

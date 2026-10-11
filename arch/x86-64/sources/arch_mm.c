@@ -15,6 +15,7 @@
 #include <ir0/arch_mm.h>
 #include <ir0/mm_range.h>
 #include <ir0/kmem.h>
+#include <ir0/errno.h>
 #include <ir0/pmm.h>
 #include <ir0/video_backend.h>
 #include <config.h>
@@ -156,4 +157,14 @@ void mm_prepare_root_activation(address_space_root_t root)
 {
 	if (root)
 		paging_sync_kernel_mappings(root);
+}
+
+int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
+			     uintptr_t pa, uint64_t flags)
+{
+	(void)root;
+	(void)va;
+	(void)pa;
+	(void)flags;
+	return -EOPNOTSUPP;
 }
