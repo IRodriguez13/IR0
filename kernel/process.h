@@ -23,6 +23,7 @@
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
 #include <ir0/types.h>
+#include <ir0/mm.h>
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
 
@@ -773,7 +774,7 @@ process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 
 
 
-uint64_t create_process_page_directory(void);
+address_space_root_t process_mm_create_root(void);
 void process_init_fd_table(process_t *process);
 
 /* Process lifecycle management */

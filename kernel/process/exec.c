@@ -29,7 +29,7 @@ int exec_detach_shared_mm(process_t *proc)
 	if (!fresh)
 		return -ENOMEM;
 
-	root = (address_space_root_t)create_process_page_directory();
+	root = process_mm_create_root();
 	if (!root)
 	{
 		mm_put(fresh);

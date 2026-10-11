@@ -314,9 +314,7 @@ void process_fork_free_mmap_list(process_t *child)
 	process_mm_set_mmap_list(child, NULL);
 }
 
-uint64_t create_process_page_directory(void)
+address_space_root_t process_mm_create_root(void)
 {
-	address_space_root_t root = mm_create_user_root();
-
-	return (uint64_t)(uintptr_t)root;
+	return mm_create_user_root();
 }

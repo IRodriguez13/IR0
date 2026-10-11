@@ -173,12 +173,6 @@ int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst, size
 struct process;
 
 /**
- * Create a new page directory for a user process
- * Returns the physical address of the new address-space root.
- */
-uint64_t create_process_page_directory(void);
-
-/**
  * Copy memory from parent process to child process
  * Used for fork() implementation
  */

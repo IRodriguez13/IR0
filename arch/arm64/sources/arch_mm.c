@@ -11,7 +11,7 @@
  *
  * IR0 arm64 uses a single TTBR0 root (mmu_early / mm_activate) — no TTBR1
  * high-half kernel yet. Kernel/shared identity is installed by
- * create_process_page_directory() via map_supervisor_identity_low(), not by
+ * process_mm_create_root() via map_supervisor_identity_low(), not by
  * copying a PML4-style kernel half. COW/unmap walks the full 512-slot root.
  */
 
@@ -64,7 +64,7 @@ void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root)
 	(void)src_root;
 	/*
 	 * No root-slot kernel half: TTBR1 not wired. Caller maps supervisor
-	 * identity separately (see create_process_page_directory).
+	 * identity separately (see process_mm_create_root()).
 	 */
 }
 

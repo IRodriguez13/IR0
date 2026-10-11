@@ -96,8 +96,7 @@ static int fork_child_mm_create(process_t *child, process_t *parent)
 		return -ENOMEM;
 
 	{
-		address_space_root_t root =
-			(address_space_root_t)create_process_page_directory();
+		address_space_root_t root = process_mm_create_root();
 
 		if (!root)
 		{

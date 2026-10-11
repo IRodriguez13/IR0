@@ -98,8 +98,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		}
 		else
 		{
-			address_space_root_t root =
-				(address_space_root_t)create_process_page_directory();
+			address_space_root_t root = process_mm_create_root();
 
 			if (!root)
 			{
