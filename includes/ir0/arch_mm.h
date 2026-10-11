@@ -76,3 +76,6 @@ void mm_pte_set_user(uint64_t *e);
  * Callers treat that as allocation failure rather than reusing a global root.
  */
 address_space_root_t mm_create_user_root(void);
+
+/* Retire a root returned by mm_create_user_root() after common unmap work. */
+void mm_destroy_user_root(address_space_root_t root);

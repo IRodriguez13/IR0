@@ -142,3 +142,12 @@ address_space_root_t mm_create_user_root(void)
 	paging_ir0_mm_note_root_created((uintptr_t)root);
 	return root;
 }
+
+void mm_destroy_user_root(address_space_root_t root)
+{
+	if (!root)
+		return;
+	paging_reclaim_user_tables(root);
+	paging_ir0_mm_note_root_freed((uintptr_t)root);
+	kfree_aligned(root);
+}

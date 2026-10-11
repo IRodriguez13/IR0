@@ -19,6 +19,7 @@
 
 #include <ir0/arch_mm.h>
 #include <ir0/mm_range.h>
+#include <ir0/oops.h>
 
 uintptr_t mm_kernel_heap_start(void)
 {
@@ -88,4 +89,10 @@ address_space_root_t mm_create_user_root(void)
 	 * silently defeat process isolation after exec or fork.
 	 */
 	return NULL;
+}
+
+void mm_destroy_user_root(address_space_root_t root)
+{
+	if (root)
+		panic("arm64: unsupported private root release");
 }

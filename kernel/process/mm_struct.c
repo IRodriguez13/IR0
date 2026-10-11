@@ -70,9 +70,7 @@ void mm_put(mm_struct_t *mm)
 	if (mm->page_directory && mm->owns_tables)
 	{
 		process_unmap_user_pages_all(mm->page_directory, NULL);
-		paging_reclaim_user_tables(mm->page_directory);
-		paging_ir0_mm_note_root_freed((uintptr_t)mm->page_directory);
-		kfree_aligned(mm->page_directory);
+		mm_destroy_user_root(mm->page_directory);
 		mm->page_directory = NULL;
 	}
 
