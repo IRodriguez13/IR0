@@ -110,9 +110,9 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 {
 	if (!root || !(flags & IR0_MM_MAP_USER))
 		return -EOPNOTSUPP;
-	return arm64_mmu_map_user_page_at_in_root((uint64_t)(uintptr_t)root,
-						     va, pa,
-						     !!(flags & IR0_MM_MAP_EXEC));
+	return arm64_mmu_map_user_page_at_flags_in_root(
+		(uint64_t)(uintptr_t)root, va, pa,
+		!!(flags & IR0_MM_MAP_WRITE), !!(flags & IR0_MM_MAP_EXEC));
 }
 
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)

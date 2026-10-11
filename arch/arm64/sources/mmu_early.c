@@ -40,6 +40,7 @@
 #define PTE_AP_RW_EL1    (0UL << 6)
 #define PTE_AP_RW_EL0    (1UL << 6)
 #define PTE_AP_RO_EL0    (3UL << 6)
+#define PTE_AP_MASK      (3UL << 6)
 #define PTE_UXN          (1UL << 54)
 #define PTE_PXN          (1UL << 53)
 #define PTE_ADDR_MASK    0x0000FFFFFFFFF000UL
@@ -102,7 +103,8 @@ static int g_dram_split;
 static uint64_t g_dram_base = VIRT_DRAM_FALLBACK_BASE;
 static uint64_t g_dram_end = VIRT_DRAM_FALLBACK_BASE + VIRT_DRAM_FALLBACK_SIZE;
 
-static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa);
+static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa,
+			     uint64_t ap);
 
 static uint64_t pte_block_2m_device(uint64_t pa)
 {
@@ -474,14 +476,16 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	transient_va = g_dram_base + ((g_dram_end - g_dram_base) / 2U);
 	transient_va &= ~(PAGE_SIZE - 1UL);
 	if (!transient_root ||
-	    arm64_mmu_map_user_page_at_in_root(transient_root, transient_va,
-		g_dram_end - PAGE_SIZE, 0) != 0 ||
+	    arm64_mmu_map_user_page_at_flags_in_root(transient_root,
+		transient_va, g_dram_end - PAGE_SIZE, 1, 0) != 0 ||
+	    !user_page_maps_pa(transient_root, transient_va,
+		g_dram_end - PAGE_SIZE, PTE_AP_RW_EL0) ||
 	    !arm64_mmu_user_buf_ok_in_root(transient_root,
 		transient_va, PAGE_SIZE) ||
 	    arm64_mmu_protect_user_range_in_root(transient_root,
 		transient_va, PAGE_SIZE, 0, 0) != 0 ||
 	    !user_page_maps_pa(transient_root, transient_va,
-		g_dram_end - PAGE_SIZE) ||
+		g_dram_end - PAGE_SIZE, PTE_AP_RO_EL0) ||
 	    arm64_mmu_unmap_user_page_in_root(transient_root, transient_va) != 0 ||
 	    arm64_mmu_user_buf_ok_in_root(transient_root,
 		transient_va, PAGE_SIZE) ||
@@ -635,7 +639,8 @@ static uint64_t *l3_table_find_for_l2(struct arm64_mmu_root *root,
 	return NULL;
 }
 
-static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa)
+static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa,
+			     uint64_t ap)
 {
 	struct arm64_mmu_root *root = root_from_ttbr(root_ttbr);
 	uint64_t *l3;
@@ -648,7 +653,8 @@ static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa)
 		return 0;
 	entry = l3[L3_INDEX(va)];
 	return (entry & PTE_TYPE_PAGE) == PTE_TYPE_PAGE &&
-		(entry & PTE_ADDR_MASK) == (pa & PTE_ADDR_MASK);
+		(entry & PTE_ADDR_MASK) == (pa & PTE_ADDR_MASK) &&
+		(entry & PTE_AP_MASK) == ap;
 }
 
 static int user_page_note(struct arm64_mmu_root *root, uint64_t page)
@@ -666,8 +672,9 @@ static int user_page_note(struct arm64_mmu_root *root, uint64_t page)
 	return 0;
 }
 
-int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
-					       uint64_t pa, int exec_el0)
+int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
+					       uint64_t va, uint64_t pa,
+					       int writable, int exec_el0)
 {
 	struct arm64_mmu_root *root;
 	uint64_t va_page = va & ~(PAGE_SIZE - 1UL);
@@ -705,9 +712,17 @@ int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
 
 	if (user_page_note(root, va_page) != 0)
 		return -EINVAL;
-	l3[l3_idx] = pte_page_4k(pa_page, PTE_AP_RW_EL0, uxn, 1);
+	l3[l3_idx] = pte_page_4k(pa_page,
+		writable ? PTE_AP_RW_EL0 : PTE_AP_RO_EL0, uxn, 1);
 	tlb_invalidate();
 	return 0;
+}
+
+int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
+					       uint64_t pa, int exec_el0)
+{
+	return arm64_mmu_map_user_page_at_flags_in_root(root_ttbr, va, pa, 1,
+						      exec_el0);
 }
 
 int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,

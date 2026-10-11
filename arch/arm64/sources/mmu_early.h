@@ -44,6 +44,9 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0);
 /* Map one EL0 page in an explicit owned TTBR0 root. */
 int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
 					  int exec_el0);
+int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
+					       uint64_t va, uint64_t pa,
+					       int writable, int exec_el0);
 int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
 					       uint64_t pa, int exec_el0);
 int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va);
