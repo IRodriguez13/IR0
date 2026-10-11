@@ -418,6 +418,7 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	uint64_t root_a = (uint64_t)(uintptr_t)l1_table;
 	uint64_t root_b = (uint64_t)(uintptr_t)l1_table_b;
 	uint64_t transient_root;
+	uint64_t transient_va;
 	volatile uint32_t *probe;
 
 	if (!g_mmu_on)
@@ -467,13 +468,15 @@ int arm64_mmu_ttbr_dual_smoke(void)
 		return -EINVAL;
 
 	transient_root = arm64_mmu_root_alloc_clone();
+	transient_va = g_dram_base + ((g_dram_end - g_dram_base) / 2U);
+	transient_va &= ~(PAGE_SIZE - 1UL);
 	if (!transient_root ||
-	    arm64_mmu_map_user_page_flags_in_root(transient_root,
+	    arm64_mmu_map_user_page_at_in_root(transient_root, transient_va,
 		g_dram_end - PAGE_SIZE, 0) != 0 ||
 	    !arm64_mmu_user_buf_ok_in_root(transient_root,
-		g_dram_end - PAGE_SIZE, PAGE_SIZE) ||
+		transient_va, PAGE_SIZE) ||
 	    arm64_mmu_protect_user_range_in_root(transient_root,
-		g_dram_end - PAGE_SIZE, PAGE_SIZE, 0, 0) != 0 ||
+		transient_va, PAGE_SIZE, 0, 0) != 0 ||
 	    arm64_mmu_root_release(transient_root) != 0)
 		return -EINVAL;
 
@@ -639,11 +642,12 @@ static int user_page_note(struct arm64_mmu_root *root, uint64_t page)
 	return 0;
 }
 
-int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
-					  int exec_el0)
+int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
+					       uint64_t pa, int exec_el0)
 {
 	struct arm64_mmu_root *root;
-	uint64_t page = pa & ~(PAGE_SIZE - 1UL);
+	uint64_t va_page = va & ~(PAGE_SIZE - 1UL);
+	uint64_t pa_page = pa & ~(PAGE_SIZE - 1UL);
 	uint64_t l2_idx;
 	uint64_t l3_idx;
 	uint64_t *l3;
@@ -655,13 +659,13 @@ int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
 	root = root_from_ttbr(root_ttbr);
 	if (!root)
 		return -EINVAL;
-	if (page < g_dram_base || page >= g_dram_end)
+	if (pa_page < g_dram_base || pa_page >= g_dram_end)
 		return -EINVAL;
 	if (dram_ensure_l2() != 0)
 		return -EINVAL;
 
-	l2_idx = L2_INDEX(page);
-	l3_idx = L3_INDEX(page);
+	l2_idx = L2_INDEX(va_page);
+	l3_idx = L3_INDEX(va_page);
 	l3 = l3_table_for_l2(root, l2_idx);
 	if (!l3)
 		return -EINVAL;
@@ -675,11 +679,17 @@ int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
 		root->table_l2_dram[l2_idx] = pte_table(l3_pa);
 	}
 
-	if (user_page_note(root, page) != 0)
+	if (user_page_note(root, va_page) != 0)
 		return -EINVAL;
-	l3[l3_idx] = pte_page_4k(page, PTE_AP_RW_EL0, uxn, 1);
+	l3[l3_idx] = pte_page_4k(pa_page, PTE_AP_RW_EL0, uxn, 1);
 	tlb_invalidate();
 	return 0;
+}
+
+int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
+					  int exec_el0)
+{
+	return arm64_mmu_map_user_page_at_in_root(root_ttbr, pa, pa, exec_el0);
 }
 
 int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
