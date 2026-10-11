@@ -408,12 +408,16 @@ int arm64_mmu_early_verify(void)
 	return 0;
 }
 
+uint64_t arm64_mmu_root_alloc_clone(void);
+int arm64_mmu_root_release(uint64_t root_ttbr);
+
 int arm64_mmu_ttbr_dual_smoke(void)
 {
 	unsigned i;
 	uint64_t ttbr;
 	uint64_t root_a = (uint64_t)(uintptr_t)l1_table;
 	uint64_t root_b = (uint64_t)(uintptr_t)l1_table_b;
+	uint64_t transient_root;
 	volatile uint32_t *probe;
 
 	if (!g_mmu_on)
@@ -462,6 +466,13 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	if ((ttbr & ~0x1UL) != (root_a & ~0x1UL))
 		return -EINVAL;
 
+	transient_root = arm64_mmu_root_alloc_clone();
+	if (!transient_root ||
+	    arm64_mmu_map_user_page_flags_in_root(transient_root,
+		g_dram_end - PAGE_SIZE, 0) != 0 ||
+	    arm64_mmu_root_release(transient_root) != 0)
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -479,6 +490,41 @@ uint64_t arm64_mmu_root_a(void)
 uint64_t arm64_mmu_root_b(void)
 {
 	return (uint64_t)(uintptr_t)l1_table_b;
+}
+
+uint64_t arm64_mmu_root_alloc_clone(void)
+{
+	unsigned i;
+
+	if (!g_mmu_on)
+		return 0;
+	for (i = ARM64_SMOKE_ROOT + 1U; i < ARM64_ROOT_POOL_MAX; i++)
+	{
+		if (!g_roots[i].in_use)
+		{
+			root_clone(&g_roots[i], &g_roots[ARM64_BOOT_ROOT]);
+			return (uint64_t)(uintptr_t)g_roots[i].table_l1;
+		}
+	}
+	return 0;
+}
+
+int arm64_mmu_root_release(uint64_t root_ttbr)
+{
+	unsigned i;
+
+	if (mm_current_root() == root_ttbr)
+		return -EINVAL;
+	for (i = ARM64_SMOKE_ROOT + 1U; i < ARM64_ROOT_POOL_MAX; i++)
+	{
+		if (g_roots[i].in_use &&
+		    (uint64_t)(uintptr_t)g_roots[i].table_l1 == root_ttbr)
+		{
+			root_reset(&g_roots[i]);
+			return 0;
+		}
+	}
+	return -EINVAL;
 }
 
 void arm64_mmu_activate_root_a(void)

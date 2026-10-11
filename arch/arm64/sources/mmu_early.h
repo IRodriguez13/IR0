@@ -72,6 +72,9 @@ int arm64_mmu_ttbr_dual_smoke(void);
 uint64_t arm64_mmu_root_a(void);
 uint64_t arm64_mmu_root_b(void);
 
+uint64_t arm64_mmu_root_alloc_clone(void);
+int arm64_mmu_root_release(uint64_t root_ttbr);
+
 /** Restore the bootstrap address-space root after a TTBR smoke transition. */
 void arm64_mmu_activate_root_a(void);
 
