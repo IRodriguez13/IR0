@@ -73,11 +73,15 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 	size_t i1;
 	uint64_t count = 0;
 	address_space_root_t root;
+	size_t entries;
 
 	if (!mm || !mm->page_directory)
 		return 0;
 
 	root = mm->page_directory;
+	entries = mm_table_entries();
+	if (entries == 0)
+		return 0;
 	for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
 	{
 		uint64_t *level1 = process_pt_child(root, i4);
@@ -85,7 +89,7 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 		if (!level1)
 			continue;
 
-		for (i3 = 0; i3 < 512; i3++)
+		for (i3 = 0; i3 < entries; i3++)
 		{
 			uint64_t *level2 = process_pt_child(level1, i3);
 			uint64_t level1_entry;
@@ -95,11 +99,11 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 				level1_entry = level1[i3];
 				if (mm_pte_present(level1_entry) &&
 				    (level1_entry & PAGE_USER) && mm_pte_large(level1_entry))
-					count += 512;
+					count += mm_large_leaf_pages(1);
 				continue;
 			}
 
-			for (i2 = 0; i2 < 512; i2++)
+			for (i2 = 0; i2 < entries; i2++)
 			{
 				uint64_t level2_entry = level2[i2];
 				uint64_t *level3;
@@ -108,7 +112,7 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 					continue;
 				if ((level2_entry & PAGE_USER) && mm_pte_large(level2_entry))
 				{
-					count += 512;
+					count += mm_large_leaf_pages(2);
 					continue;
 				}
 
@@ -116,7 +120,7 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 				if (!level3)
 					continue;
 
-				for (i1 = 0; i1 < 512; i1++)
+				for (i1 = 0; i1 < entries; i1++)
 				{
 					uint64_t ent = level3[i1];
 
@@ -150,8 +154,12 @@ void process_unmap_user_pages_all(address_space_root_t root,
 	size_t i3;
 	size_t i2;
 	size_t i1;
+	size_t entries;
 
 	if (!root)
+		return;
+	entries = mm_table_entries();
+	if (entries == 0)
 		return;
 
 	for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
@@ -163,7 +171,7 @@ void process_unmap_user_pages_all(address_space_root_t root,
 		if (stats)
 			stats->level1_present++;
 
-		for (i3 = 0; i3 < 512; i3++)
+		for (i3 = 0; i3 < entries; i3++)
 		{
 			uint64_t *level2 = process_pt_child(level1, i3);
 
@@ -172,7 +180,7 @@ void process_unmap_user_pages_all(address_space_root_t root,
 			if (stats)
 				stats->level2_present++;
 
-			for (i2 = 0; i2 < 512; i2++)
+			for (i2 = 0; i2 < entries; i2++)
 			{
 				uint64_t *level3 = process_pt_child(level2, i2);
 
@@ -181,10 +189,11 @@ void process_unmap_user_pages_all(address_space_root_t root,
 				if (stats)
 					stats->level3_present++;
 
-				for (i1 = 0; i1 < 512; i1++)
+				for (i1 = 0; i1 < entries; i1++)
 				{
 					uint64_t ent = level3[i1];
 					uintptr_t virt;
+					size_t idx[4];
 
 					if (!mm_pte_present(ent) || !(ent & PAGE_USER))
 						continue;
@@ -194,8 +203,11 @@ void process_unmap_user_pages_all(address_space_root_t root,
 						stats->leaf_present++;
 					}
 
-					virt = ((uintptr_t)i4 << 39) | ((uintptr_t)i3 << 30) |
-					       ((uintptr_t)i2 << 21) | ((uintptr_t)i1 << 12);
+					idx[0] = i4;
+					idx[1] = i3;
+					idx[2] = i2;
+					idx[3] = i1;
+					virt = mm_va_from_indices(idx);
 					if (unmap_page_in_directory(root, virt) == 0)
 					{
 						if (stats)

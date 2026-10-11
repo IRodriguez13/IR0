@@ -50,6 +50,11 @@ int mm_large_identity_supported(void);
  */
 void mm_va_indices(uintptr_t va, size_t idx[4]);
 
+/* Translation-table geometry used by common walkers. */
+size_t mm_table_entries(void);
+uint64_t mm_large_leaf_pages(unsigned int level);
+uintptr_t mm_va_from_indices(const size_t idx[4]);
+
 int mm_pte_present(uint64_t e);
 int mm_pte_large(uint64_t e);
 int mm_pte_executable(uint64_t e);

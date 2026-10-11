@@ -122,6 +122,26 @@ void mm_va_indices(uintptr_t va, size_t idx[4])
 	idx[3] = ((uint64_t)va >> 12) & A64_INDEX_MASK;
 }
 
+size_t mm_table_entries(void)
+{
+	return 512;
+}
+
+uint64_t mm_large_leaf_pages(unsigned int level)
+{
+	if (level == 1U)
+		return 512ULL * 512ULL;
+	return 512;
+}
+
+uintptr_t mm_va_from_indices(const size_t idx[4])
+{
+	if (!idx)
+		return 0;
+	return ((uintptr_t)idx[0] << 39) | ((uintptr_t)idx[1] << 30) |
+	       ((uintptr_t)idx[2] << 21) | ((uintptr_t)idx[3] << 12);
+}
+
 int mm_pte_present(uint64_t e)
 {
 	return (e & A64_PTE_VALID) != 0;
