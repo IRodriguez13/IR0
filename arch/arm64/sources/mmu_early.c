@@ -63,7 +63,7 @@ static uint64_t l2_mmio_pool[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 static int l2_mmio_l1[MMIO_L2_POOL_MAX];
 #define L3_POOL_MAX 32
 #define USER_PAGE_MAX 2048
-#define ARM64_ROOT_POOL_MAX 2
+#define ARM64_ROOT_POOL_MAX 4
 #define ARM64_BOOT_ROOT 0U
 #define ARM64_SMOKE_ROOT 1U
 
@@ -80,6 +80,7 @@ struct __attribute__((aligned(PAGE_SIZE))) arm64_mmu_root
 	int table_l3_pool_l2[L3_POOL_MAX];
 	uint64_t user_pages[USER_PAGE_MAX];
 	unsigned user_page_count;
+	int in_use;
 };
 
 static struct arm64_mmu_root g_roots[ARM64_ROOT_POOL_MAX]
@@ -163,6 +164,50 @@ static void copy_table(uint64_t *dst, const uint64_t *src)
 
 	for (i = 0; i < PTE_ENTRIES; i++)
 		dst[i] = src[i];
+}
+
+static void root_reset(struct arm64_mmu_root *root)
+{
+	unsigned i;
+
+	zero_table(root->table_l1);
+	zero_table(root->table_l2_dram);
+	for (i = 0; i < L3_POOL_MAX; i++)
+	{
+		zero_table(root->table_l3_pool[i]);
+		root->table_l3_pool_l2[i] = -1;
+	}
+	root->user_page_count = 0;
+	root->in_use = 0;
+}
+
+static void root_clone(struct arm64_mmu_root *dst,
+		       const struct arm64_mmu_root *src)
+{
+	unsigned i;
+	uint64_t dram_l1_idx = L1_INDEX(g_dram_base);
+
+	copy_table(dst->table_l1, src->table_l1);
+	copy_table(dst->table_l2_dram, src->table_l2_dram);
+	dst->table_l1[dram_l1_idx] =
+		pte_table((uint64_t)(uintptr_t)dst->table_l2_dram);
+
+	for (i = 0; i < L3_POOL_MAX; i++)
+	{
+		int l2_idx = src->table_l3_pool_l2[i];
+
+		copy_table(dst->table_l3_pool[i], src->table_l3_pool[i]);
+		dst->table_l3_pool_l2[i] = l2_idx;
+		if (l2_idx >= 0)
+		{
+			dst->table_l2_dram[(unsigned)l2_idx] =
+				pte_table((uint64_t)(uintptr_t)dst->table_l3_pool[i]);
+		}
+	}
+	for (i = 0; i < src->user_page_count; i++)
+		dst->user_pages[i] = src->user_pages[i];
+	dst->user_page_count = src->user_page_count;
+	dst->in_use = 1;
 }
 
 static void tlb_invalidate(void)
@@ -253,8 +298,8 @@ static void build_idmap(void)
 	uint64_t uart_block = VIRT_UART_BASE & ~0x1FFFFFUL;
 	uint64_t block;
 
-	zero_table(l1_table);
-	zero_table(l2_dram);
+	root_reset(&g_roots[ARM64_BOOT_ROOT]);
+	root_reset(&g_roots[ARM64_SMOKE_ROOT]);
 	{
 		unsigned p;
 
@@ -263,12 +308,8 @@ static void build_idmap(void)
 			zero_table(l2_mmio_pool[p]);
 			l2_mmio_l1[p] = -1;
 		}
-		for (p = 0; p < L3_POOL_MAX; p++)
-		{
-			zero_table(l3_pool[p]);
-			l3_pool_l2[p] = -1;
-		}
 	}
+	g_roots[ARM64_BOOT_ROOT].in_use = 1;
 	g_dram_split = 1;
 	g_user_page_count = 0;
 	select_dram_window();
@@ -426,28 +467,8 @@ int arm64_mmu_ttbr_dual_smoke(void)
 
 void arm64_mmu_clone_root_b(void)
 {
-	unsigned i;
-	uint64_t dram_l1_idx;
-
-	copy_table(l1_table_b, l1_table);
-	copy_table(l2_dram_b, l2_dram);
-	dram_l1_idx = L1_INDEX(g_dram_base);
-	l1_table_b[dram_l1_idx] = pte_table((uint64_t)(uintptr_t)l2_dram_b);
-
-	for (i = 0; i < L3_POOL_MAX; i++)
-	{
-		int l2_idx = l3_pool_l2[i];
-
-		g_roots[ARM64_SMOKE_ROOT].table_l3_pool_l2[i] = l2_idx;
-		if (l2_idx < 0)
-			continue;
-		copy_table(l3_pool_b[i], l3_pool[i]);
-		l2_dram_b[(unsigned)l2_idx] =
-			pte_table((uint64_t)(uintptr_t)l3_pool_b[i]);
-	}
-	for (i = 0; i < g_user_page_count; i++)
-		g_roots[ARM64_SMOKE_ROOT].user_pages[i] = g_user_pages[i];
-	g_roots[ARM64_SMOKE_ROOT].user_page_count = g_user_page_count;
+	root_clone(&g_roots[ARM64_SMOKE_ROOT],
+		   &g_roots[ARM64_BOOT_ROOT]);
 }
 
 uint64_t arm64_mmu_root_a(void)
