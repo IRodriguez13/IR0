@@ -68,5 +68,8 @@ int arm64_mmu_ttbr_dual_smoke(void);
 uint64_t arm64_mmu_root_a(void);
 uint64_t arm64_mmu_root_b(void);
 
+/** Restore the bootstrap address-space root after a TTBR smoke transition. */
+void arm64_mmu_activate_root_a(void);
+
 /** Ensure l1_table_b is a clone of l1_table (idempotent). */
 void arm64_mmu_clone_root_b(void);

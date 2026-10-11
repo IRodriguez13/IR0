@@ -246,6 +246,7 @@ void boot_main(void)
 	{
 		ir0_boot_smoke("ARM64_TTBR_B_OK");
 		ir0_boot_smoke("ARM64_TTBR_SWITCH_OK");
+		ir0_boot_smoke("ARM64_TTBR_PRIVATE_OK");
 	}
 	else
 	{
@@ -256,6 +257,8 @@ void boot_main(void)
 	(void)arm64_fork_exec_smoke();
 	(void)arm64_process_t_switch_smoke();
 	(void)arm64_rr_sched_smoke();
+	/* Smoke contexts may finish on their private root; loader owns root A. */
+	arm64_mmu_activate_root_a();
 
 	/* Virtio-mmio is optional unless the QEMU command supplies a device. */
 	{

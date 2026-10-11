@@ -2931,7 +2931,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "mm_create" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
-		awk '$$3 == "create_process_page_directory" { ok = ($$2 == "T") } END { exit !ok }'
+		awk '$$3 == "process_mm_create_root" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "spawn" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
@@ -2953,6 +2953,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log
 	@echo "✓ smoke-arm64-all passed (early aggregate boot + BusyBox EL0)"

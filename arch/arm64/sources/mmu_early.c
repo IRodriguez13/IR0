@@ -64,8 +64,10 @@ static uint64_t l2_mmio_pool[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
 static int l2_mmio_l1[MMIO_L2_POOL_MAX];
 static uint64_t l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static uint64_t l2_dram_b[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 #define L3_POOL_MAX 32
 static uint64_t l3_pool[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static uint64_t l3_pool_b[L3_POOL_MAX][PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static int l3_pool_l2[L3_POOL_MAX]; /* L2 index owning this L3, or -1 */
 static int g_mmu_on;
 static int g_dram_split;
@@ -130,6 +132,14 @@ static void zero_table(uint64_t *tbl)
 	{
 		tbl[i] = 0;
 	}
+}
+
+static void copy_table(uint64_t *dst, const uint64_t *src)
+{
+	unsigned i;
+
+	for (i = 0; i < PTE_ENTRIES; i++)
+		dst[i] = src[i];
 }
 
 static void tlb_invalidate(void)
@@ -356,6 +366,33 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	probe = (volatile uint32_t *)(uintptr_t)g_dram_base;
 	(void)*probe;
 
+	/* A cloned root must own its user leaf tables, not merely its L1. */
+	if (g_user_page_count != 0U)
+	{
+		uint64_t page = g_user_pages[0];
+		uint64_t l2_idx = L2_INDEX(page);
+		uint64_t l3_idx = L3_INDEX(page);
+		int pool_idx = -1;
+		uint64_t original;
+
+		for (i = 0; i < L3_POOL_MAX; i++)
+		{
+			if (l3_pool_l2[i] == (int)l2_idx)
+			{
+				pool_idx = (int)i;
+				break;
+			}
+		}
+		if (pool_idx < 0)
+			return -EINVAL;
+		original = l3_pool[pool_idx][l3_idx];
+		l3_pool_b[pool_idx][l3_idx] = pte_page_4k(page,
+								   PTE_AP_RO_EL0, 1, 1);
+		if (l3_pool[pool_idx][l3_idx] != original ||
+		    l3_pool_b[pool_idx][l3_idx] == original)
+			return -EINVAL;
+	}
+
 	mm_activate((uintptr_t)root_a);
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr));
 	if ((ttbr & ~0x1UL) != (root_a & ~0x1UL))
@@ -367,9 +404,23 @@ int arm64_mmu_ttbr_dual_smoke(void)
 void arm64_mmu_clone_root_b(void)
 {
 	unsigned i;
+	uint64_t dram_l1_idx;
 
-	for (i = 0; i < PTE_ENTRIES; i++)
-		l1_table_b[i] = l1_table[i];
+	copy_table(l1_table_b, l1_table);
+	copy_table(l2_dram_b, l2_dram);
+	dram_l1_idx = L1_INDEX(g_dram_base);
+	l1_table_b[dram_l1_idx] = pte_table((uint64_t)(uintptr_t)l2_dram_b);
+
+	for (i = 0; i < L3_POOL_MAX; i++)
+	{
+		int l2_idx = l3_pool_l2[i];
+
+		if (l2_idx < 0)
+			continue;
+		copy_table(l3_pool_b[i], l3_pool[i]);
+		l2_dram_b[(unsigned)l2_idx] =
+			pte_table((uint64_t)(uintptr_t)l3_pool_b[i]);
+	}
 }
 
 uint64_t arm64_mmu_root_a(void)
@@ -380,6 +431,11 @@ uint64_t arm64_mmu_root_a(void)
 uint64_t arm64_mmu_root_b(void)
 {
 	return (uint64_t)(uintptr_t)l1_table_b;
+}
+
+void arm64_mmu_activate_root_a(void)
+{
+	mm_activate((uintptr_t)l1_table);
 }
 
 int arm64_mmu_map_device_block(uint64_t pa)
