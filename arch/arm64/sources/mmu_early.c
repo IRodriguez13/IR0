@@ -477,6 +477,9 @@ int arm64_mmu_ttbr_dual_smoke(void)
 		transient_va, PAGE_SIZE) ||
 	    arm64_mmu_protect_user_range_in_root(transient_root,
 		transient_va, PAGE_SIZE, 0, 0) != 0 ||
+	    arm64_mmu_unmap_user_page_in_root(transient_root, transient_va) != 0 ||
+	    arm64_mmu_user_buf_ok_in_root(transient_root,
+		transient_va, PAGE_SIZE) ||
 	    arm64_mmu_root_release(transient_root) != 0)
 		return -EINVAL;
 
@@ -701,6 +704,33 @@ int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 int arm64_mmu_map_user_page(uint64_t pa)
 {
 	return arm64_mmu_map_user_page_flags(pa, 0);
+}
+
+int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va)
+{
+	struct arm64_mmu_root *root = root_from_ttbr(root_ttbr);
+	uint64_t page = va & ~(PAGE_SIZE - 1UL);
+	uint64_t *l3;
+	unsigned i;
+
+	if (!root)
+		return -EINVAL;
+	l3 = l3_table_find_for_l2(root, L2_INDEX(page));
+	if (!l3 || (l3[L3_INDEX(page)] & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
+		return -EINVAL;
+	l3[L3_INDEX(page)] = 0;
+	for (i = 0; i < root->user_page_count; i++)
+	{
+		if (root->user_pages[i] == page)
+		{
+			root->user_pages[i] =
+				root->user_pages[root->user_page_count - 1U];
+			root->user_page_count--;
+			tlb_invalidate();
+			return 0;
+		}
+	}
+	return -EINVAL;
 }
 
 int arm64_mmu_protect_user_range_in_root(uint64_t root_ttbr,

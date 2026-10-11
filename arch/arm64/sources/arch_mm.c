@@ -114,3 +114,10 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 						     va, pa,
 						     !!(flags & IR0_MM_MAP_EXEC));
 }
+
+int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
+{
+	if (!root)
+		return -EOPNOTSUPP;
+	return arm64_mmu_unmap_user_page_in_root((uint64_t)(uintptr_t)root, va);
+}

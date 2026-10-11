@@ -957,6 +957,12 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 
 	if (!root)
 		return -1;
+	{
+		int backend_result = mm_backend_unmap_user_page(root, virt_addr);
+
+		if (backend_result != -EOPNOTSUPP)
+			return backend_result;
+	}
 
 	mm_va_indices(virt_addr, idx);
 

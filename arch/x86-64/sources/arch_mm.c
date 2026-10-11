@@ -168,3 +168,10 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 	(void)flags;
 	return -EOPNOTSUPP;
 }
+
+int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
+{
+	(void)root;
+	(void)va;
+	return -EOPNOTSUPP;
+}
