@@ -14,7 +14,12 @@
 
 #include <ir0/arch_mm.h>
 #include <ir0/mm_range.h>
+#include <ir0/kmem.h>
+#include <ir0/pmm.h>
+#include <ir0/video_backend.h>
+#include <config.h>
 #include <mm/paging.h>
+#include <string.h>
 
 uintptr_t mm_kernel_heap_start(void)
 {
@@ -74,4 +79,66 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 	/* ELF load floor … canonical low half (matches historical copy_user). */
 	return mm_user_range_ok(addr, size, mm_user_va_start(),
 				mm_user_va_end());
+}
+
+address_space_root_t mm_create_user_root(void)
+{
+	address_space_root_t root;
+	uintptr_t kernel_root_phys;
+	address_space_root_t kernel_root;
+	const uint64_t supervisor_kbd_end = 0x00600000UL;
+
+	root = kmalloc_aligned_try(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+	if (!root)
+	{
+		paging_oom_note("mm_create_user_root", paging_oom_classify_current());
+		return NULL;
+	}
+	memset(root, 0, PAGE_SIZE_4KB);
+
+	/* Use the pinned boot root: a switch runs briefly on the old stack. */
+	kernel_root_phys = paging_kernel_address_space();
+	if (!kernel_root_phys)
+	{
+		kernel_root_phys = paging_current_address_space();
+		paging_pin_kernel_address_space(kernel_root_phys);
+	}
+	kernel_root = (address_space_root_t)kernel_root_phys;
+	mm_copy_kernel_half(root, kernel_root);
+
+	/* The x86 backend owns its required supervisor identity coverage. */
+	if (map_supervisor_identity_low(root, 0, mm_user_va_start()) != 0 ||
+	    map_supervisor_identity_low(root, KEYBOARD_BUFFER_ADDR,
+					supervisor_kbd_end) != 0 ||
+	    map_supervisor_identity_2mb(root, supervisor_kbd_end,
+					PMM_PHYS_BASE) != 0)
+	{
+		kfree_aligned(root);
+		return NULL;
+	}
+
+#if CONFIG_ENABLE_VBE
+#if !defined(IR0_USERSPACE_INIT_BOOT) || !IR0_USERSPACE_INIT_BOOT
+	if (video_backend_is_available() && video_backend_get_fb_phys() != 0)
+	{
+		uint32_t fb_phys = video_backend_get_fb_phys();
+		uint32_t fb_size = video_backend_get_fb_size();
+		uint32_t off;
+
+		if (fb_size > (4U * 1024U * 1024U))
+			fb_size = 4U * 1024U * 1024U;
+		for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
+		{
+			uint64_t p = fb_phys + off;
+
+			if (map_page_in_directory(root, p, p,
+						  PAGE_PRESENT | PAGE_RW) != 0)
+				break;
+		}
+	}
+#endif
+#endif
+
+	paging_ir0_mm_note_root_created((uintptr_t)root);
+	return root;
 }

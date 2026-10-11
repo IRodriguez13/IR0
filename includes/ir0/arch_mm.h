@@ -60,3 +60,14 @@ void mm_pte_mark_cow(uint64_t *e);
 uint64_t mm_make_table_pte(uintptr_t phys, int user);
 uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec);
 void mm_pte_set_user(uint64_t *e);
+
+/*
+ * Create an empty process translation root with the supervisor mappings that
+ * the selected ISA requires while a task is running on that root.  The common
+ * process lifecycle owns the resulting root; descriptor layout and bootstrap
+ * mappings remain an ISA backend responsibility.
+ *
+ * A backend that cannot yet provide isolated process roots must return NULL.
+ * Callers treat that as allocation failure rather than reusing a global root.
+ */
+address_space_root_t mm_create_user_root(void);

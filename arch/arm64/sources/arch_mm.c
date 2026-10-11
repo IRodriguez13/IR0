@@ -78,3 +78,14 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 	return mm_user_range_ok(addr, size, mm_user_va_start(),
 				mm_user_va_end());
 }
+
+address_space_root_t mm_create_user_root(void)
+{
+	/*
+	 * The staged ARM64 image has one explicitly-owned TTBR0 root.  Returning
+	 * NULL is intentional until the common process lifecycle can allocate,
+	 * populate and retire an independent root; reusing that global root would
+	 * silently defeat process isolation after exec or fork.
+	 */
+	return NULL;
+}
