@@ -754,11 +754,11 @@ int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va)
 	l3 = l3_table_find_for_l2(root, L2_INDEX(page));
 	if (!l3 || (l3[L3_INDEX(page)] & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
 		return -EINVAL;
-	l3[L3_INDEX(page)] = 0;
 	for (i = 0; i < root->user_page_count; i++)
 	{
 		if (root->user_pages[i] == page)
 		{
+			l3[L3_INDEX(page)] = 0;
 			root->user_pages[i] =
 				root->user_pages[root->user_page_count - 1U];
 			root->user_page_count--;
