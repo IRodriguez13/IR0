@@ -523,6 +523,44 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 	return 0;
 }
 
+static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
+				     int write, uintptr_t *phys_out)
+{
+	uint64_t *pte;
+	uint64_t backend_flags;
+	uintptr_t backend_phys;
+	int backend_result;
+
+	if (!root || !phys_out)
+		return -1;
+	backend_result = mm_backend_lookup_user_page(root, page, &backend_phys,
+						     &backend_flags);
+	if (backend_result != -EOPNOTSUPP)
+	{
+		if (backend_result != 0 ||
+		    !(backend_flags & IR0_MM_MAP_PRESENT) ||
+		    !(backend_flags & IR0_MM_MAP_USER) ||
+		    (write && !(backend_flags & IR0_MM_MAP_WRITE)))
+			return -1;
+		*phys_out = backend_phys;
+		return 0;
+	}
+
+	pte = paging_get_pte(root, page);
+	if (!pte || !mm_pte_present(*pte))
+		return -1;
+	if (write && !(*pte & PAGE_RW) && (*pte & PAGE_COW))
+	{
+		if (paging_cow_break_leaf(root, pte, page) != 0)
+			return -1;
+		pte = paging_get_pte(root, page);
+		if (!pte || !mm_pte_present(*pte) || !(*pte & PAGE_RW))
+			return -1;
+	}
+	*phys_out = paging_entry_pfn(*pte);
+	return 0;
+}
+
 int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
                                      const void *src, size_t n)
 {
@@ -534,24 +572,12 @@ int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
     while (n > 0)
     {
         uintptr_t page = dst & (uintptr_t)PAGE_FRAME_MASK;
-        uint64_t *pte = paging_get_pte(root, page);
         uintptr_t phys;
         size_t off;
         size_t chunk;
 
-        if (!pte || !mm_pte_present(*pte))
+        if (paging_resolve_user_page(root, page, 1, &phys) != 0)
             return -1;
-
-	if (!(*pte & PAGE_RW) && (*pte & PAGE_COW))
-	{
-		if (paging_cow_break_leaf(root, pte, page) != 0)
-			return -1;
-		pte = paging_get_pte(root, page);
-		if (!pte || !mm_pte_present(*pte) || !(*pte & PAGE_RW))
-			return -1;
-	}
-
-        phys = paging_entry_pfn(*pte);
         off = dst & 0xFFFU;
         chunk = (size_t)(0x1000U - off);
         if (chunk > n)
@@ -585,15 +611,12 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
     while (n > 0)
     {
         uintptr_t page = src & (uintptr_t)PAGE_FRAME_MASK;
-        uint64_t *pte = paging_get_pte(root, page);
         uintptr_t phys;
         size_t off;
         size_t chunk;
 
-        if (!pte || !mm_pte_present(*pte))
+        if (paging_resolve_user_page(root, page, 0, &phys) != 0)
             return -1;
-
-        phys = paging_entry_pfn(*pte);
         off = src & 0xFFFU;
         chunk = (size_t)(0x1000U - off);
         if (chunk > n)
@@ -625,24 +648,12 @@ int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
     while (n > 0)
     {
         uintptr_t page = dst & (uintptr_t)PAGE_FRAME_MASK;
-        uint64_t *pte = paging_get_pte(root, page);
         uintptr_t phys;
         size_t off;
         size_t chunk;
 
-        if (!pte || !mm_pte_present(*pte))
+        if (paging_resolve_user_page(root, page, 1, &phys) != 0)
             return -1;
-
-	if (!(*pte & PAGE_RW) && (*pte & PAGE_COW))
-	{
-		if (paging_cow_break_leaf(root, pte, page) != 0)
-			return -1;
-		pte = paging_get_pte(root, page);
-		if (!pte || !mm_pte_present(*pte) || !(*pte & PAGE_RW))
-			return -1;
-	}
-
-        phys = paging_entry_pfn(*pte);
         off = dst & 0xFFFU;
         chunk = (size_t)(0x1000U - off);
         if (chunk > n)

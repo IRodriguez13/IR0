@@ -50,6 +50,8 @@ int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
 int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
 					       uint64_t pa, int exec_el0);
 int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va);
+int arm64_mmu_user_page_info_in_root(uint64_t root_ttbr, uint64_t va,
+					 uint64_t *pa, uint64_t *flags);
 
 /**
  * Apply the staged EL0 permission subset to an already mapped user range.

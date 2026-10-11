@@ -121,3 +121,21 @@ int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
 		return -EOPNOTSUPP;
 	return arm64_mmu_unmap_user_page_in_root((uint64_t)(uintptr_t)root, va);
 }
+
+int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
+				uintptr_t *phys, uint64_t *flags)
+{
+	uint64_t arm64_phys;
+	int ret;
+
+	if (!root)
+		return -EOPNOTSUPP;
+	ret = arm64_mmu_user_page_info_in_root((uint64_t)(uintptr_t)root, va,
+						   &arm64_phys, flags);
+	if (ret != 0)
+		return ret;
+	if (!phys)
+		return -EINVAL;
+	*phys = (uintptr_t)arm64_phys;
+	return 0;
+}

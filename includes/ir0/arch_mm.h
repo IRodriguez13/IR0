@@ -90,3 +90,10 @@ void mm_prepare_root_activation(address_space_root_t root);
 int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 			     uintptr_t pa, uint64_t flags);
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va);
+
+/*
+ * Resolve an owned user leaf without exposing translation-table layout to the
+ * generic uaccess path. Return -EOPNOTSUPP for generic-walker roots.
+ */
+int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
+				uintptr_t *phys, uint64_t *flags);

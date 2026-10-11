@@ -18,6 +18,7 @@
 #include "mmu_early.h"
 
 #include <arch/common/arch_portable.h>
+#include <ir0/arch_mm.h>
 #include <ir0/arm64_board.h>
 #include <stdint.h>
 
@@ -424,6 +425,8 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	uint64_t root_b = (uint64_t)(uintptr_t)l1_table_b;
 	uint64_t transient_root;
 	uint64_t transient_va;
+	uint64_t transient_pa;
+	uint64_t transient_flags;
 	volatile uint32_t *probe;
 
 	if (!g_mmu_on)
@@ -478,12 +481,20 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	if (!transient_root ||
 	    arm64_mmu_map_user_page_at_flags_in_root(transient_root,
 		transient_va, g_dram_end - PAGE_SIZE, 1, 0) != 0 ||
+	    arm64_mmu_user_page_info_in_root(transient_root, transient_va,
+		&transient_pa, &transient_flags) != 0 ||
+	    transient_pa != g_dram_end - PAGE_SIZE ||
+	    !(transient_flags & IR0_MM_MAP_WRITE) ||
 	    !user_page_maps_pa(transient_root, transient_va,
 		g_dram_end - PAGE_SIZE, PTE_AP_RW_EL0) ||
 	    !arm64_mmu_user_buf_ok_in_root(transient_root,
 		transient_va, PAGE_SIZE) ||
 	    arm64_mmu_protect_user_range_in_root(transient_root,
 		transient_va, PAGE_SIZE, 0, 0) != 0 ||
+	    arm64_mmu_user_page_info_in_root(transient_root, transient_va,
+		&transient_pa, &transient_flags) != 0 ||
+	    transient_pa != g_dram_end - PAGE_SIZE ||
+	    (transient_flags & IR0_MM_MAP_WRITE) ||
 	    !user_page_maps_pa(transient_root, transient_va,
 		g_dram_end - PAGE_SIZE, PTE_AP_RO_EL0) ||
 	    arm64_mmu_unmap_user_page_in_root(transient_root, transient_va) != 0 ||
@@ -767,6 +778,30 @@ int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va)
 		}
 	}
 	return -EINVAL;
+}
+
+int arm64_mmu_user_page_info_in_root(uint64_t root_ttbr, uint64_t va,
+					 uint64_t *pa, uint64_t *flags)
+{
+	struct arm64_mmu_root *root = root_from_ttbr(root_ttbr);
+	uint64_t *l3;
+	uint64_t entry;
+
+	if (!root || !pa || !flags)
+		return -EINVAL;
+	l3 = l3_table_find_for_l2(root, L2_INDEX(va));
+	if (!l3)
+		return -EINVAL;
+	entry = l3[L3_INDEX(va)];
+	if ((entry & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
+		return -EINVAL;
+	*pa = entry & PTE_ADDR_MASK;
+	*flags = IR0_MM_MAP_PRESENT | IR0_MM_MAP_USER;
+	if ((entry & PTE_AP_MASK) != PTE_AP_RO_EL0)
+		*flags |= IR0_MM_MAP_WRITE;
+	if ((entry & PTE_UXN) == 0)
+		*flags |= IR0_MM_MAP_EXEC;
+	return 0;
 }
 
 int arm64_mmu_protect_user_range_in_root(uint64_t root_ttbr,

@@ -175,3 +175,13 @@ int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
 	(void)va;
 	return -EOPNOTSUPP;
 }
+
+int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
+				uintptr_t *phys, uint64_t *flags)
+{
+	(void)root;
+	(void)va;
+	(void)phys;
+	(void)flags;
+	return -EOPNOTSUPP;
+}
