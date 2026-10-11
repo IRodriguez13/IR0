@@ -139,3 +139,13 @@ int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
 	*phys = (uintptr_t)arm64_phys;
 	return 0;
 }
+
+int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
+				  size_t length, uint64_t flags)
+{
+	if (!root || !(flags & IR0_MM_MAP_USER))
+		return -EOPNOTSUPP;
+	return arm64_mmu_protect_user_range_in_root(
+		(uint64_t)(uintptr_t)root, start, length,
+		!!(flags & IR0_MM_MAP_WRITE), !!(flags & IR0_MM_MAP_EXEC));
+}

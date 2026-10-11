@@ -97,3 +97,7 @@ int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va);
  */
 int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
 				uintptr_t *phys, uint64_t *flags);
+
+/* Apply final user permissions to backend-owned leaves. */
+int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
+				  size_t length, uint64_t flags);

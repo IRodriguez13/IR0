@@ -185,3 +185,13 @@ int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
 	(void)flags;
 	return -EOPNOTSUPP;
 }
+
+int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
+				  size_t length, uint64_t flags)
+{
+	(void)root;
+	(void)start;
+	(void)length;
+	(void)flags;
+	return -EOPNOTSUPP;
+}

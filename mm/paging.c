@@ -950,6 +950,47 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
     return map_page_in_directory(root, virt_addr, phys_addr, flags);
 }
 
+int protect_user_region_in_directory(address_space_root_t root,
+				     uintptr_t start, size_t length, uint64_t flags)
+{
+	uintptr_t end;
+	uintptr_t page;
+	int backend_result;
+
+	if (!root || length == 0 || (start & (PAGE_SIZE_4KB - 1U)) != 0)
+		return -1;
+	if (length > UINTPTR_MAX - (PAGE_SIZE_4KB - 1U))
+		return -1;
+	length = (length + PAGE_SIZE_4KB - 1U) & ~(PAGE_SIZE_4KB - 1U);
+	if (start > UINTPTR_MAX - length)
+		return -1;
+	end = start + length;
+	flags |= PAGE_USER;
+
+	backend_result = mm_backend_protect_user_range(root, start, length, flags);
+	if (backend_result != -EOPNOTSUPP)
+		return backend_result;
+
+	for (page = start; page < end; page += PAGE_SIZE_4KB)
+	{
+		uint64_t *pte = paging_get_pte(root, page);
+		uint64_t page_flags = flags;
+
+		if (!pte || !mm_pte_present(*pte))
+			return -1;
+		/* A shared COW frame must remain hardware read-only until its write fault. */
+		if ((*pte & PAGE_COW) && (page_flags & PAGE_RW))
+		{
+			page_flags &= ~PAGE_RW;
+			page_flags |= PAGE_COW;
+		}
+		*pte = mm_make_leaf_pte(mm_pte_phys(*pte), page_flags,
+					!!(page_flags & PAGE_EXEC));
+		tlb_invalidate_page(page);
+	}
+	return 0;
+}
+
 /**
  * Unmap a single 4KB page in the page directory rooted at @root.
  * Safe when address-space root points at a different address space than @root.

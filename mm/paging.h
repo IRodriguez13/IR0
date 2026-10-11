@@ -170,6 +170,10 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
                                        void *dst, size_t n);
 int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst, size_t n);
 
+/* Change final permissions of already mapped user pages without remapping. */
+int protect_user_region_in_directory(address_space_root_t root, uintptr_t start,
+				     size_t length, uint64_t flags);
+
 struct process;
 
 /**
