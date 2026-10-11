@@ -52,9 +52,14 @@ int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
  */
 int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
 				 int writable, int exec_el0);
+int arm64_mmu_protect_user_range_in_root(uint64_t root_ttbr,
+					 uint64_t address, uint64_t length,
+					 int writable, int exec_el0);
 
 /** True if @va..@va+@len-1 lies entirely in mapped EL0 user pages. */
 int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len);
+int arm64_mmu_user_buf_ok_in_root(uint64_t root_ttbr, uint64_t va,
+				  uint64_t len);
 
 /**
  * Verify TTBR0 points at early L1 and SCTLR_EL1.M is set.

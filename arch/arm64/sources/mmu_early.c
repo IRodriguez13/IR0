@@ -470,6 +470,10 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	if (!transient_root ||
 	    arm64_mmu_map_user_page_flags_in_root(transient_root,
 		g_dram_end - PAGE_SIZE, 0) != 0 ||
+	    !arm64_mmu_user_buf_ok_in_root(transient_root,
+		g_dram_end - PAGE_SIZE, PAGE_SIZE) ||
+	    arm64_mmu_protect_user_range_in_root(transient_root,
+		g_dram_end - PAGE_SIZE, PAGE_SIZE, 0, 0) != 0 ||
 	    arm64_mmu_root_release(transient_root) != 0)
 		return -EINVAL;
 
@@ -607,6 +611,19 @@ static uint64_t *l3_table_for_l2(struct arm64_mmu_root *root,
 	return root->table_l3_pool[free_slot];
 }
 
+static uint64_t *l3_table_find_for_l2(struct arm64_mmu_root *root,
+				      uint64_t l2_idx)
+{
+	unsigned i;
+
+	for (i = 0; i < L3_POOL_MAX; i++)
+	{
+		if (root->table_l3_pool_l2[i] == (int)l2_idx)
+			return root->table_l3_pool[i];
+	}
+	return NULL;
+}
+
 static int user_page_note(struct arm64_mmu_root *root, uint64_t page)
 {
 	unsigned i;
@@ -676,13 +693,18 @@ int arm64_mmu_map_user_page(uint64_t pa)
 	return arm64_mmu_map_user_page_flags(pa, 0);
 }
 
-int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
-				 int writable, int exec_el0)
+int arm64_mmu_protect_user_range_in_root(uint64_t root_ttbr,
+					 uint64_t address, uint64_t length,
+					 int writable, int exec_el0)
 {
+	struct arm64_mmu_root *root;
 	uint64_t end;
 	uint64_t page;
 
 	if (!g_mmu_on || length == 0 || (address & (PAGE_SIZE - 1UL)) != 0)
+		return -EINVAL;
+	root = root_from_ttbr(root_ttbr);
+	if (!root)
 		return -EINVAL;
 	if (length > UINT64_MAX - (PAGE_SIZE - 1UL))
 		return -EINVAL;
@@ -690,7 +712,7 @@ int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
 	if (address > UINT64_MAX - length)
 		return -EINVAL;
 	end = address + length;
-	if (!arm64_mmu_user_buf_ok(address, length))
+	if (!arm64_mmu_user_buf_ok_in_root(root_ttbr, address, length))
 		return -EINVAL;
 
 	for (page = address; page < end; page += PAGE_SIZE)
@@ -699,7 +721,7 @@ int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
 		uint64_t l3_idx = L3_INDEX(page);
 		uint64_t *l3;
 
-		l3 = l3_table_for_l2(&g_roots[ARM64_BOOT_ROOT], l2_idx);
+		l3 = l3_table_find_for_l2(root, l2_idx);
 		if (!l3 || (l3[l3_idx] & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
 			return -EINVAL;
 		l3[l3_idx] = pte_page_4k(page,
@@ -710,14 +732,24 @@ int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
 	return 0;
 }
 
-int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
+int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
+				 int writable, int exec_el0)
 {
+	return arm64_mmu_protect_user_range_in_root(arm64_mmu_root_a(),
+						     address, length, writable, exec_el0);
+}
+
+int arm64_mmu_user_buf_ok_in_root(uint64_t root_ttbr, uint64_t va,
+				  uint64_t len)
+{
+	struct arm64_mmu_root *root;
 	uint64_t end;
 	uint64_t page;
 	unsigned i;
 	int found;
 
-	if (g_user_page_count == 0 || len == 0)
+	root = root_from_ttbr(root_ttbr);
+	if (!root || root->user_page_count == 0 || len == 0)
 		return 0;
 	if (va + len < va)
 		return 0;
@@ -725,9 +757,9 @@ int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
 	for (page = va & ~(PAGE_SIZE - 1UL); page < end; page += PAGE_SIZE)
 	{
 		found = 0;
-		for (i = 0; i < g_user_page_count; i++)
+		for (i = 0; i < root->user_page_count; i++)
 		{
-			if (g_user_pages[i] == page)
+			if (root->user_pages[i] == page)
 			{
 				found = 1;
 				break;
@@ -737,4 +769,9 @@ int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
 			return 0;
 	}
 	return 1;
+}
+
+int arm64_mmu_user_buf_ok(uint64_t va, uint64_t len)
+{
+	return arm64_mmu_user_buf_ok_in_root(arm64_mmu_root_a(), va, len);
 }
