@@ -301,7 +301,7 @@ void paging_activate_address_space(uintptr_t root)
 	 * links the ISA-defined shared translation subtree (new kstack slots).
 	 */
 	if (root)
-		paging_sync_kernel_mappings((address_space_root_t)root);
+		mm_prepare_root_activation((address_space_root_t)root);
 	mm_activate(root);
 }
 
@@ -1249,10 +1249,10 @@ int copy_process_memory(struct process *parent, struct process *child)
         uintptr_t saved_root = mm_current_root();
 
         if (parent_root != 0 && saved_root != parent_root)
-            mm_activate(parent_root);
+            paging_activate_address_space(parent_root);
         tlb_invalidate_all();
         if (parent_root != 0 && saved_root != parent_root)
-            mm_activate(saved_root);
+            paging_activate_address_space(saved_root);
     }
     return 0;
 }

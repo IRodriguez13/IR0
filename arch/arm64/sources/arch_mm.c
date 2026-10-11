@@ -96,3 +96,9 @@ void mm_destroy_user_root(address_space_root_t root)
 	if (root)
 		panic("arm64: unsupported private root release");
 }
+
+void mm_prepare_root_activation(address_space_root_t root)
+{
+	(void)root;
+	/* The staged TTBR0 maps are self-contained until root pooling lands. */
+}

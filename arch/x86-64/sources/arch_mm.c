@@ -151,3 +151,9 @@ void mm_destroy_user_root(address_space_root_t root)
 	paging_ir0_mm_note_root_freed((uintptr_t)root);
 	kfree_aligned(root);
 }
+
+void mm_prepare_root_activation(address_space_root_t root)
+{
+	if (root)
+		paging_sync_kernel_mappings(root);
+}

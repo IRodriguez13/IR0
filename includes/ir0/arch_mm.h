@@ -79,3 +79,6 @@ address_space_root_t mm_create_user_root(void);
 
 /* Retire a root returned by mm_create_user_root() after common unmap work. */
 void mm_destroy_user_root(address_space_root_t root);
+
+/* Prepare ISA-private shared mappings before a root becomes current. */
+void mm_prepare_root_activation(address_space_root_t root);

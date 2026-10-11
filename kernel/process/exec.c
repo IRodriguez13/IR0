@@ -47,7 +47,7 @@ int exec_detach_shared_mm(process_t *proc)
 	process_mm_bind(proc, fresh);
 	process_set_mm_root(proc, (uint64_t)(uintptr_t)root);
 	if (proc == current_process)
-		mm_activate((uintptr_t)root);
+		paging_activate_address_space((uintptr_t)root);
 	process_vfork_complete(proc);
 	mm_put(old);
 	return 0;
