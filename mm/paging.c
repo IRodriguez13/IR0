@@ -206,7 +206,11 @@ static void ir0_mm_log_frame_type(const char *kind, uint64_t frame, ir0_mm_frame
 
 static int page_table_is_empty(const uint64_t *table)
 {
-    for (size_t i = 0; i < 512; i++)
+    size_t entries = mm_table_entries();
+
+    if (!table || entries == 0)
+        return 1;
+    for (size_t i = 0; i < entries; i++)
     {
         if (mm_pte_present(table[i]))
             return 0;
@@ -744,7 +748,7 @@ static int paging_split_large_level2_leaf(uint64_t *level2_table, size_t index)
 	leaf_flags = PAGE_RW;
 	exec = mm_pte_executable(level2_entry);
 
-	for (i = 0; i < 512; i++)
+	for (i = 0; i < mm_table_entries(); i++)
 	{
 		uintptr_t pa = phys_base + (i * PAGE_SIZE_4KB);
 
@@ -1116,6 +1120,7 @@ int copy_process_memory(struct process *parent, struct process *child)
     size_t i1;
     uint64_t *parent_root;
     uint64_t *child_root;
+    size_t entries;
 
     if (!parent || !child)
         return -1;
@@ -1125,6 +1130,9 @@ int copy_process_memory(struct process *parent, struct process *child)
 
     parent_root = process_pgd(parent);
     child_root = process_pgd(child);
+	entries = mm_table_entries();
+	if (entries == 0)
+		return -1;
 
     for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
     {
@@ -1133,26 +1141,27 @@ int copy_process_memory(struct process *parent, struct process *child)
         if (!level1_table)
             continue;
 
-        for (i3 = 0; i3 < 512; i3++)
+		for (i3 = 0; i3 < entries; i3++)
         {
             uint64_t *level2_table = get_existing_table(level1_table, i3);
 
             if (!level2_table)
                 continue;
 
-            for (i2 = 0; i2 < 512; i2++)
+			for (i2 = 0; i2 < entries; i2++)
             {
                 uint64_t *level3_table = get_existing_table(level2_table, i2);
 
                 if (!level3_table)
                     continue;
 
-                for (i1 = 0; i1 < 512; i1++)
+				for (i1 = 0; i1 < entries; i1++)
                 {
                     uint64_t page_entry = level3_table[i1];
                     uint64_t parent_phys;
                     uint64_t flags;
                     uintptr_t virt_addr;
+					size_t idx[4];
                     int was_writable;
 
                     if (!mm_pte_present(page_entry) ||
@@ -1160,10 +1169,11 @@ int copy_process_memory(struct process *parent, struct process *child)
                         continue;
 
                     parent_phys = paging_entry_pfn(page_entry);
-                    virt_addr = ((uintptr_t)i4 << 39) |
-                                ((uintptr_t)i3 << 30) |
-                                ((uintptr_t)i2 << 21) |
-                                ((uintptr_t)i1 << 12);
+					idx[0] = i4;
+					idx[1] = i3;
+					idx[2] = i2;
+					idx[3] = i1;
+					virt_addr = mm_va_from_indices(idx);
 
                     was_writable = (page_entry & PAGE_RW) != 0;
 					flags = mm_pte_mapping_flags(page_entry);
@@ -1200,21 +1210,21 @@ int copy_process_memory(struct process *parent, struct process *child)
         if (!level1_table)
             continue;
 
-        for (i3 = 0; i3 < 512; i3++)
+		for (i3 = 0; i3 < entries; i3++)
         {
             uint64_t *level2_table = get_existing_table(level1_table, i3);
 
             if (!level2_table)
                 continue;
 
-            for (i2 = 0; i2 < 512; i2++)
+			for (i2 = 0; i2 < entries; i2++)
             {
                 uint64_t *level3_table = get_existing_table(level2_table, i2);
 
                 if (!level3_table)
                     continue;
 
-                for (i1 = 0; i1 < 512; i1++)
+				for (i1 = 0; i1 < entries; i1++)
                 {
                     uint64_t page_entry = level3_table[i1];
 
@@ -1383,8 +1393,12 @@ int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start,
 void paging_reclaim_user_tables(address_space_root_t root)
 {
     size_t i4;
+    size_t entries;
 
     if (!root)
+        return;
+    entries = mm_table_entries();
+    if (entries == 0)
         return;
 
     for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
@@ -1400,7 +1414,7 @@ void paging_reclaim_user_tables(address_space_root_t root)
         if (!level1_table)
             continue;
 
-        for (i3 = 0; i3 < 512; i3++)
+		for (i3 = 0; i3 < entries; i3++)
         {
             uint64_t level1_entry = level1_table[i3];
             uint64_t *level2_table;
@@ -1413,7 +1427,7 @@ void paging_reclaim_user_tables(address_space_root_t root)
             if (!level2_table)
                 continue;
 
-            for (i2 = 0; i2 < 512; i2++)
+			for (i2 = 0; i2 < entries; i2++)
             {
                 uint64_t level2_entry = level2_table[i2];
                 uint64_t *level3_table;
@@ -1433,7 +1447,7 @@ void paging_reclaim_user_tables(address_space_root_t root)
                 if (!level3_table)
                     continue;
 
-                for (i1 = 0; i1 < 512; i1++)
+				for (i1 = 0; i1 < entries; i1++)
                     level3_table[i1] = 0;
 
                 level2_table[i2] = 0;
