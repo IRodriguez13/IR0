@@ -33,7 +33,7 @@ void test_syscall_handler_table_contract(void)
 		IR0_SYSCALL_OPENAT, IR0_SYSCALL_CLOSE,
 	};
 	static const enum ir0_syscall_id invalid_ids[] = {
-		IR0_SYSCALL_READ, IR0_SYSCALL_COUNT,
+		IR0_SYSCALL_GETPID, IR0_SYSCALL_COUNT,
 	};
 	static const enum ir0_syscall_id conflicting_ids[] = {
 		IR0_SYSCALL_OPENAT, IR0_SYSCALL_GETPID,

@@ -14,11 +14,15 @@
 
 #include "test_harness_ir0.h"
 #include <ir0/errno.h>
+#define syscall_decode_number x86_test_syscall_decode_number
 #include <ir0/signal_syscall_resume.h>
+#undef syscall_decode_number
 #include <ir0/syscall_frame.h>
 #include <uapi/ir0/syscall_linux.h>
 #include <stdint.h>
 #include <string.h>
+
+extern enum ir0_syscall_id x86_test_syscall_decode_number(uint64_t abi_number);
 
 void test_sigreturn_sleep_eintr_frame_abi(void)
 {
@@ -35,20 +39,20 @@ void test_sigreturn_sleep_eintr_frame_abi(void)
 	block.rdx = 0ULL;
 	block.rip = 0x4017b2ULL;
 
-	signal_resume_blocked_syscall_frame(&out, &rax, &block, 0, 0);
+	signal_resume_blocked_syscall_frame(&out, &rax, &block, 0, __NR_read);
 	ASSERT_EQ((int64_t)rax, (int64_t)(-EINTR));
 	ASSERT_EQ(out.rdi, block.rdi);
 	ASSERT_EQ(out.rsi, block.rsi);
 	ASSERT_NE(out.rdi, handler_rdi);
 
-	signal_resume_blocked_syscall_frame(&out, &rax, &block, 1, 0u);
+	signal_resume_blocked_syscall_frame(&out, &rax, &block, 1, __NR_read);
 	ASSERT_EQ(rax, 0u);
 	ASSERT_EQ(out.rip, block.rip - 2);
 	ASSERT_EQ(out.rdi, block.rdi);
 
-	ASSERT(signal_blocked_syscall_is_console_read(0u, 0));
-	ASSERT(!signal_blocked_syscall_is_console_read(0u, 1));
-	ASSERT(!signal_blocked_syscall_is_console_read(1u, 0));
+	ASSERT(signal_blocked_syscall_is_console_read(__NR_read, 0));
+	ASSERT(!signal_blocked_syscall_is_console_read(__NR_read, 1));
+	ASSERT(!signal_blocked_syscall_is_console_read(__NR_write, 0));
 	ASSERT(!signal_blocked_syscall_may_restart(__NR_poll));
 	ASSERT(!signal_blocked_syscall_may_restart(__NR_select));
 	ASSERT(!signal_blocked_syscall_may_restart(__NR_rt_sigsuspend));
@@ -59,11 +63,11 @@ void test_sigreturn_sleep_eintr_frame_abi(void)
 	block.rdi = (uint64_t)(int64_t)(-1);
 	block.rsi = 1000ULL;
 	block.rip = 0x4017c2ULL;
-	signal_blocked_syscall_frame_sanitize(&block, 0u);
+	signal_blocked_syscall_frame_sanitize(&block, __NR_read);
 	ASSERT_EQ(block.rdi, 0ULL);
 	ASSERT_EQ(block.rsi, 1000ULL);
 
-	signal_resume_blocked_syscall_frame(&out, &rax, &block, 1, 0u);
+	signal_resume_blocked_syscall_frame(&out, &rax, &block, 1, __NR_read);
 	ASSERT_EQ(out.rdi, 0ULL);
 	ASSERT(!signal_syscall_read_fd_suspicious(out.rdi));
 
