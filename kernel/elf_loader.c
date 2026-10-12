@@ -635,11 +635,76 @@ static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
 }
 
 /* Load ELF segments into memory at correct virtual addresses */
+#define ELF_LOAD_PLAN_MAX ELF_MAX_PHNUM
+
+struct elf_load_segment
+{
+	uintptr_t start;
+	uintptr_t end;
+	uint32_t flags;
+};
+
+struct elf_load_plan
+{
+	address_space_root_t root;
+	unsigned count;
+	struct elf_load_segment segments[ELF_LOAD_PLAN_MAX];
+};
+
 struct elf_process_load_context
 {
 	address_space_root_t address_space_root;
 	uint64_t load_bias;
+	struct elf_load_plan *plan;
 };
+
+static int elf_load_plan_add(struct elf_load_plan *plan, uintptr_t start,
+			     size_t length, uint32_t flags)
+{
+	if (!plan || length == 0 || plan->count >= ELF_LOAD_PLAN_MAX ||
+	    start > UINTPTR_MAX - length)
+		return -1;
+	plan->segments[plan->count].start = start;
+	plan->segments[plan->count].end = start + length;
+	plan->segments[plan->count].flags = flags;
+	plan->count++;
+	return 0;
+}
+
+static int elf_load_plan_seal(const struct elf_load_plan *plan)
+{
+	unsigned i;
+
+	if (!plan || !plan->root)
+		return -1;
+	for (i = 0; i < plan->count; i++)
+	{
+		uintptr_t page;
+
+		for (page = plan->segments[i].start;
+		     page < plan->segments[i].end; page += PAGE_SIZE_4KB)
+		{
+			uint64_t final_flags = PAGE_USER;
+			unsigned j;
+
+			for (j = 0; j < plan->count; j++)
+			{
+				if (page < plan->segments[j].start ||
+				    page >= plan->segments[j].end)
+					continue;
+				if (plan->segments[j].flags & IR0_ELF64_PF_W)
+					final_flags |= PAGE_RW;
+				if (plan->segments[j].flags & IR0_ELF64_PF_X)
+					final_flags |= PAGE_EXEC;
+			}
+			if (protect_user_region_in_directory(plan->root, page,
+							     PAGE_SIZE_4KB,
+							     final_flags) != 0)
+				return -1;
+		}
+	}
+	return 0;
+}
 
 static int elf_process_map_segment(void *opaque, uint64_t vaddr, uint64_t memsz,
 				   uint32_t segment_flags)
@@ -648,18 +713,18 @@ static int elf_process_map_segment(void *opaque, uint64_t vaddr, uint64_t memsz,
 	uintptr_t biased = vaddr + context->load_bias;
 	uintptr_t aligned;
 	size_t size;
-	uint64_t page_flags = PAGE_USER;
+	uint64_t page_flags = PAGE_USER | PAGE_RW;
 
 	if (biased < vaddr || biased + memsz < biased || biased + memsz + 0xFFF < biased)
 		return -1;
+	if (memsz == 0)
+		return 0;
 	aligned = biased & ~0xFFFULL;
 	size = (size_t)(((biased + memsz + 0xFFFULL) & ~0xFFFULL) - aligned);
-	if (segment_flags & IR0_ELF64_PF_W)
-		page_flags |= PAGE_RW;
-	if (segment_flags & IR0_ELF64_PF_X)
-		page_flags |= PAGE_EXEC;
+	if (elf_load_plan_add(context->plan, aligned, size, segment_flags) != 0)
+		return -1;
 	return map_user_region_in_directory(context->address_space_root, aligned, size,
-					    page_flags);
+				    page_flags);
 }
 
 static int elf_process_copy_segment(void *opaque, uint64_t vaddr,
@@ -685,11 +750,13 @@ static int elf_process_zero_segment(void *opaque, uint64_t vaddr, uint64_t lengt
 }
 
 static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,
-			     process_t *process, uint64_t load_bias, int apply_local_relocs)
+			     process_t *process, uint64_t load_bias, int apply_local_relocs,
+			     struct elf_load_plan *plan)
 {
 	struct elf_process_load_context context = {
 		.address_space_root = process_pgd(process),
 		.load_bias = load_bias,
+		.plan = plan,
 	};
 	struct ir0_elf64_image image;
 	static const struct ir0_elf64_image_ops ops = {
@@ -700,7 +767,7 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 		.zero_segment = elf_process_zero_segment,
 	};
 
-	if (!context.address_space_root ||
+	if (!context.address_space_root || !plan ||
 	    ir0_elf64_image_load(file_data, file_size, &ops, &context, &image) != 0)
 	{
 		klog_debug("ELF", "SERIAL: ELF: common image load failed\n");
@@ -710,16 +777,17 @@ static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t 
 	if (apply_local_relocs &&
 	    elf_apply_local_relocs(header, file_data, file_size,
 				  context.address_space_root) != 0)
-    {
-        klog_debug("ELF", "SERIAL: ELF: local reloc apply failed\n");
-        return -1;
-    }
+	{
+		klog_debug("ELF", "SERIAL: ELF: local reloc apply failed\n");
+		return -1;
+	}
 
-    return 0;
+	return 0;
 }
 
 static int elf_try_load_interp(process_t *process, const char *path,
-                               uint64_t *at_base, uint64_t *interp_entry)
+                               uint64_t *at_base, uint64_t *interp_entry,
+			       struct elf_load_plan *plan)
 {
     void *idata = NULL;
     size_t isize = 0;
@@ -728,7 +796,7 @@ static int elf_try_load_interp(process_t *process, const char *path,
     uint64_t load_bias;
     int rc;
 
-    if (!process || !path || !path[0] || !at_base || !interp_entry)
+    if (!process || !path || !path[0] || !at_base || !interp_entry || !plan)
         return 1;
 
     rc = vfs_read_file(path, &idata, &isize);
@@ -743,7 +811,10 @@ static int elf_try_load_interp(process_t *process, const char *path,
 
     ih = (elf64_header_t *)idata;
     load_bias = (ih->e_type == ET_DYN) ? IR0_ELF_INTERP_BASE : 0ULL;
-    if (elf_load_segments(ih, (uint8_t *)idata, isize, process, load_bias, 0) != 0)
+    memset(plan, 0, sizeof(*plan));
+    plan->root = process_pgd(process);
+    if (elf_load_segments(ih, (uint8_t *)idata, isize, process, load_bias, 0,
+			  plan) != 0)
     {
         kfree(idata);
         return -ENOEXEC;
@@ -774,6 +845,8 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
     int have_interp_file = 0;
     uint64_t interp_entry = 0;
     int irc;
+	struct elf_load_plan main_plan;
+	struct elf_load_plan interp_plan;
 
     if (!header || !file_data || !process || !at_base || !user_ip)
         return -1;
@@ -791,23 +864,29 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
             have_interp_file = 1;
     }
 
+    memset(&main_plan, 0, sizeof(main_plan));
+    main_plan.root = process_pgd(process);
     if (elf_load_segments(header, file_data, file_size, process, 0,
-                          have_interp_file ? 0 : 1) != 0)
+                          have_interp_file ? 0 : 1, &main_plan) != 0)
         return -1;
 
     if (!have_interp_file)
     {
         if (pr == 0)
             klog_debug_fmt("ELF", "SERIAL: ELF: PT_INTERP fallback %s\n", ipath);
-        return 0;
+        return elf_load_plan_seal(&main_plan);
     }
 
-    irc = elf_try_load_interp(process, ipath, at_base, &interp_entry);
-    if (irc != 0)
-        return -1;
-    *user_ip = interp_entry;
-    klog_debug("ELF", "SERIAL: ELF: PT_INTERP_OK\n");
-    return 0;
+	irc = elf_try_load_interp(process, ipath, at_base, &interp_entry,
+				    &interp_plan);
+	if (irc != 0)
+		return -1;
+	if (elf_load_plan_seal(&main_plan) != 0 ||
+	    elf_load_plan_seal(&interp_plan) != 0)
+		return -1;
+	*user_ip = interp_entry;
+	klog_debug("ELF", "SERIAL: ELF: PT_INTERP_OK\n");
+	return 0;
 }
 
 /* Dummy entry: spawn() needs a function pointer; ELF overwrites the IP. */
