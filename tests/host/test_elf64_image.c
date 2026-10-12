@@ -26,6 +26,7 @@ struct load_context
 	unsigned char memory[128];
 	uint32_t flags;
 	int mapped;
+	int sealed;
 };
 
 static int supported(void *context, uint16_t machine)
@@ -58,6 +59,17 @@ static int zero_segment(void *opaque, uint64_t va, uint64_t size)
 	struct load_context *context = opaque;
 
 	memset(context->memory + va - 0x1000, 0, (size_t)size);
+	return 0;
+}
+
+static int seal_image(void *opaque)
+{
+	struct load_context *context = opaque;
+
+	if (!context->mapped || context->memory[sizeof(struct test_ehdr) +
+		sizeof(struct test_phdr)] != 0xaa)
+		return -1;
+	context->sealed = 1;
 	return 0;
 }
 
@@ -108,6 +120,7 @@ void test_elf64_image_contract(void)
 		.map_segment = map_segment,
 		.copy_segment = copy_segment,
 		.zero_segment = zero_segment,
+		.seal_image = seal_image,
 	};
 
 	TEST_BEGIN("elf64_image_contract");
@@ -121,6 +134,7 @@ void test_elf64_image_contract(void)
 	ASSERT_EQ(image.phdr, 0x1000 + sizeof(struct test_ehdr));
 	ASSERT_EQ(context.flags, IR0_ELF64_PF_R | IR0_ELF64_PF_X);
 	ASSERT_EQ(context.memory[sizeof(struct test_ehdr) + sizeof(struct test_phdr)], 0xaa);
+	ASSERT_EQ(context.sealed, 1);
 	phdr = (struct test_phdr *)(blob + sizeof(struct test_ehdr));
 	ASSERT_EQ(context.memory[phdr->filesz], 0);
 
