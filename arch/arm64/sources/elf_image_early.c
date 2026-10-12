@@ -96,6 +96,8 @@ static int seal_image(void *context)
 				page, PAGE_SIZE, (flags & IR0_ELF64_PF_W) != 0,
 				(flags & IR0_ELF64_PF_X) != 0) != 0)
 				return -1;
+			if (page > UINT64_MAX - PAGE_SIZE)
+				return -1;
 		}
 	}
 	return 0;

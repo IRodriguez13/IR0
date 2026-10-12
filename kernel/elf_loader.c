@@ -701,6 +701,8 @@ static int elf_load_plan_seal(const struct elf_load_plan *plan)
 							     PAGE_SIZE_4KB,
 							     final_flags) != 0)
 				return -1;
+			if (page > UINTPTR_MAX - PAGE_SIZE_4KB)
+				return -1;
 		}
 	}
 	return 0;
