@@ -1126,18 +1126,26 @@ int map_user_region_in_directory(address_space_root_t root,
 				 uintptr_t virtual_start, size_t size,
 				 uint64_t flags)
 {
-    if (!root)
-        return -1;
-    
+	if (!root)
+		return -1;
+	if (size == 0)
+		return 0;
+	if (size > SIZE_MAX - (PAGE_SIZE_4KB - 1U))
+		return -1;
+
     /* Align to 4KB */
     virtual_start &= (uintptr_t)PAGE_FRAME_MASK;
-    size = (size + 0xFFF) & (size_t)PAGE_FRAME_MASK;
+	if (virtual_start > UINTPTR_MAX - size)
+		return -1;
+    size = (size + (PAGE_SIZE_4KB - 1U)) & (size_t)PAGE_FRAME_MASK;
+	if (size == 0 || virtual_start > UINTPTR_MAX - size)
+		return -1;
 
     /* Add user flag */
     flags |= PAGE_USER;
 
     /* Map each page; on failure, rollback all mappings we made */
-    for (size_t offset = 0; offset < size; offset += 0x1000)
+    for (size_t offset = 0; offset < size; offset += PAGE_SIZE_4KB)
     {
         uintptr_t virt_addr = virtual_start + offset;
 
@@ -1145,7 +1153,7 @@ int map_user_region_in_directory(address_space_root_t root,
         if (phys_addr == 0)
         {
             /* Rollback: unmap everything we mapped so far */
-            for (size_t rb = 0; rb < offset; rb += 0x1000)
+            for (size_t rb = 0; rb < offset; rb += PAGE_SIZE_4KB)
                 unmap_page_in_directory(root, virtual_start + rb);
             return -1;
         }
@@ -1156,7 +1164,7 @@ int map_user_region_in_directory(address_space_root_t root,
         if (map_page_in_directory(root, virt_addr, phys_addr, flags) != 0)
         {
             pmm_free_frame(phys_addr);
-            for (size_t rb = 0; rb < offset; rb += 0x1000)
+            for (size_t rb = 0; rb < offset; rb += PAGE_SIZE_4KB)
                 unmap_page_in_directory(root, virtual_start + rb);
             return -1;
         }
