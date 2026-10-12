@@ -27,6 +27,7 @@ struct load_context
 	uint32_t flags;
 	int mapped;
 	int sealed;
+	int seal_result;
 };
 
 static int supported(void *context, uint16_t machine)
@@ -70,7 +71,7 @@ static int seal_image(void *opaque)
 		sizeof(struct test_phdr)] != 0xaa)
 		return -1;
 	context->sealed = 1;
-	return 0;
+	return context->seal_result;
 }
 
 static int exec_or_dyn(void *context, uint16_t type)
@@ -127,6 +128,7 @@ void test_elf64_image_contract(void)
 	make_image(blob, sizeof(blob));
 	memset(&context, 0xcc, sizeof(context));
 	context.mapped = 0;
+	context.seal_result = 0;
 	ASSERT_EQ(ir0_elf64_image_load(blob, sizeof(blob), &ops, &context, &image), 0);
 	ASSERT_EQ(image.entry, 0x1040);
 	ASSERT_EQ(image.type, IR0_ELF64_ET_EXEC);
@@ -134,6 +136,12 @@ void test_elf64_image_contract(void)
 	ASSERT_EQ(image.phdr, 0x1000 + sizeof(struct test_ehdr));
 	ASSERT_EQ(context.flags, IR0_ELF64_PF_R | IR0_ELF64_PF_X);
 	ASSERT_EQ(context.memory[sizeof(struct test_ehdr) + sizeof(struct test_phdr)], 0xaa);
+	ASSERT_EQ(context.sealed, 1);
+
+	make_image(blob, sizeof(blob));
+	memset(&context, 0, sizeof(context));
+	context.seal_result = -1;
+	ASSERT_NE(ir0_elf64_image_load(blob, sizeof(blob), &ops, &context, &image), 0);
 	ASSERT_EQ(context.sealed, 1);
 	phdr = (struct test_phdr *)(blob + sizeof(struct test_ehdr));
 	ASSERT_EQ(context.memory[phdr->filesz], 0);
