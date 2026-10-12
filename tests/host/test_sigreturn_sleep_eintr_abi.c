@@ -16,6 +16,7 @@
 #include <ir0/errno.h>
 #include <ir0/signal_syscall_resume.h>
 #include <ir0/syscall_frame.h>
+#include <uapi/ir0/syscall_linux.h>
 #include <stdint.h>
 #include <string.h>
 

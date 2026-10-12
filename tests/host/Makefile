@@ -299,6 +299,9 @@ test_elf_interp_abi.o: test_elf_interp_abi.c
 test_elf64_image.o: test_elf64_image.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
+test_fd_resource_contract.o: test_fd_resource_contract.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
 test_arch_task_contract.o: test_arch_task_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
