@@ -20,6 +20,8 @@ struct ir0_elf64_image_ops
 	int (*copy_segment)(void *context, uint64_t vaddr, const void *source,
 			    uint64_t length);
 	int (*zero_segment)(void *context, uint64_t vaddr, uint64_t length);
+	/* Optional post-population hook for backend-owned permission sealing. */
+	int (*seal_image)(void *context);
 };
 
 struct ir0_elf64_image

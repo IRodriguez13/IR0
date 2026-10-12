@@ -153,5 +153,7 @@ int ir0_elf64_image_load(const void *blob_ptr, size_t blob_length,
 				       ph->p_memsz - ph->p_filesz) != 0))
 			return -1;
 	}
+	if (ops->seal_image && ops->seal_image(context) != 0)
+		return -1;
 	return 0;
 }
