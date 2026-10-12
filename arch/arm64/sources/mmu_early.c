@@ -105,6 +105,8 @@ static uint64_t g_dram_base = VIRT_DRAM_FALLBACK_BASE;
 static uint64_t g_dram_end = VIRT_DRAM_FALLBACK_BASE + VIRT_DRAM_FALLBACK_SIZE;
 
 static struct arm64_mmu_root *root_from_ttbr(uint64_t root_ttbr);
+static uint64_t *l3_table_find_for_l2(struct arm64_mmu_root *root,
+					      uint64_t l2_idx);
 static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa,
 			     uint64_t ap);
 
@@ -215,6 +217,26 @@ static void root_clone(struct arm64_mmu_root *dst,
 		dst->user_pages[i] = src->user_pages[i];
 	dst->user_page_count = src->user_page_count;
 	dst->in_use = 1;
+}
+
+/*
+ * A process root inherits the supervisor identity map but never the bootstrap
+ * root's EL0 mappings.  Keeping those mappings would make a fresh process
+ * appear isolated while still exposing the staged loader's address space.
+ */
+static void root_clear_user_mappings(struct arm64_mmu_root *root)
+{
+	unsigned i;
+
+	for (i = 0; i < root->user_page_count; i++)
+	{
+		uint64_t page = root->user_pages[i];
+		uint64_t *l3 = l3_table_find_for_l2(root, L2_INDEX(page));
+
+		if (l3)
+			l3[L3_INDEX(page)] = 0;
+	}
+	root->user_page_count = 0;
 }
 
 static void tlb_invalidate(void)
@@ -415,7 +437,7 @@ int arm64_mmu_early_verify(void)
 	return 0;
 }
 
-uint64_t arm64_mmu_root_alloc_clone(void);
+uint64_t arm64_mmu_root_alloc_clean(void);
 int arm64_mmu_root_release(uint64_t root_ttbr);
 
 int arm64_mmu_ttbr_dual_smoke(void)
@@ -476,10 +498,12 @@ int arm64_mmu_ttbr_dual_smoke(void)
 	if ((ttbr & ~0x1UL) != (root_a & ~0x1UL))
 		return -EINVAL;
 
-	transient_root = arm64_mmu_root_alloc_clone();
+	transient_root = arm64_mmu_root_alloc_clean();
 	transient_va = g_dram_base + ((g_dram_end - g_dram_base) / 2U);
 	transient_va &= ~(PAGE_SIZE - 1UL);
 	if (!transient_root ||
+	    (g_user_page_count != 0U && arm64_mmu_user_buf_ok_in_root(
+		transient_root, g_user_pages[0], PAGE_SIZE)) ||
 	    arm64_mmu_map_user_page_at_flags_in_root(transient_root,
 		transient_va, g_dram_end - PAGE_SIZE, 1, 0) != 0 ||
 	    arm64_mmu_user_page_info_in_root(transient_root, transient_va,
@@ -523,7 +547,7 @@ uint64_t arm64_mmu_root_b(void)
 	return (uint64_t)(uintptr_t)l1_table_b;
 }
 
-uint64_t arm64_mmu_root_alloc_clone(void)
+static uint64_t root_alloc_clone(void)
 {
 	unsigned i;
 
@@ -538,6 +562,21 @@ uint64_t arm64_mmu_root_alloc_clone(void)
 		}
 	}
 	return 0;
+}
+
+uint64_t arm64_mmu_root_alloc_clean(void)
+{
+	uint64_t root_ttbr = root_alloc_clone();
+	struct arm64_mmu_root *root;
+
+	if (!root_ttbr)
+		return 0;
+	root = root_from_ttbr(root_ttbr);
+	if (!root)
+		return 0;
+	root_clear_user_mappings(root);
+	tlb_invalidate();
+	return root_ttbr;
 }
 
 int arm64_mmu_root_release(uint64_t root_ttbr)
