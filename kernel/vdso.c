@@ -81,12 +81,16 @@ int vdso_map(struct process *proc)
 	base = (uintptr_t)vdso_user_base();
 	base_aligned = base & ~(uintptr_t)0xFFF;
 	map_size = (size_t)(((base + blob_size + 0xFFF) & ~0xFFFULL) - base_aligned);
-	flags = PAGE_USER | PAGE_EXEC;
+	/* Populate through RW/NX, then expose the final RX image. */
+	flags = PAGE_USER | PAGE_RW;
 
 	if (map_user_region_in_directory(root, base_aligned, map_size, flags) != 0)
 		return -ENOMEM;
 
 	if (copy_to_user_mm(root, base, blob, blob_size) != 0)
+		return -EFAULT;
+	if (protect_user_region_in_directory(root, base_aligned, map_size,
+					     PAGE_USER | PAGE_EXEC) != 0)
 		return -EFAULT;
 
 	return 0;
