@@ -104,6 +104,7 @@ static int g_dram_split;
 static uint64_t g_dram_base = VIRT_DRAM_FALLBACK_BASE;
 static uint64_t g_dram_end = VIRT_DRAM_FALLBACK_BASE + VIRT_DRAM_FALLBACK_SIZE;
 
+static struct arm64_mmu_root *root_from_ttbr(uint64_t root_ttbr);
 static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa,
 			     uint64_t ap);
 
@@ -555,6 +556,11 @@ int arm64_mmu_root_release(uint64_t root_ttbr)
 		}
 	}
 	return -EINVAL;
+}
+
+int arm64_mmu_root_owned(uint64_t root_ttbr)
+{
+	return root_from_ttbr(root_ttbr) != NULL;
 }
 
 void arm64_mmu_activate_root_a(void)

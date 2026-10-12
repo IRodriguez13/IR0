@@ -108,7 +108,8 @@ void mm_prepare_root_activation(address_space_root_t root)
 int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 			     uintptr_t pa, uint64_t flags)
 {
-	if (!root || !(flags & IR0_MM_MAP_USER))
+	if (!root || !(flags & IR0_MM_MAP_USER) ||
+	    !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
 		return -EOPNOTSUPP;
 	return arm64_mmu_map_user_page_at_flags_in_root(
 		(uint64_t)(uintptr_t)root, va, pa,
@@ -117,7 +118,7 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
 {
-	if (!root)
+	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
 		return -EOPNOTSUPP;
 	return arm64_mmu_unmap_user_page_in_root((uint64_t)(uintptr_t)root, va);
 }
@@ -128,7 +129,7 @@ int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
 	uint64_t arm64_phys;
 	int ret;
 
-	if (!root)
+	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
 		return -EOPNOTSUPP;
 	ret = arm64_mmu_user_page_info_in_root((uint64_t)(uintptr_t)root, va,
 						   &arm64_phys, flags);
@@ -143,7 +144,8 @@ int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
 int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
 				  size_t length, uint64_t flags)
 {
-	if (!root || !(flags & IR0_MM_MAP_USER))
+	if (!root || !(flags & IR0_MM_MAP_USER) ||
+	    !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
 		return -EOPNOTSUPP;
 	return arm64_mmu_protect_user_range_in_root(
 		(uint64_t)(uintptr_t)root, start, length,
