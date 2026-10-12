@@ -36,6 +36,11 @@ void __attribute__((weak)) arm64_all_objs_mark(void)
 {
 }
 
+int __attribute__((weak)) arm64_common_root_smoke(void)
+{
+	return -1;
+}
+
 #define BOOT_STACK_SIZE 4096
 #define VIRT_GIC_DIST   0x08000000UL
 #define VIRT_GIC_CPU    0x08010000UL
@@ -163,6 +168,10 @@ void boot_main(void)
 	if (arm64_mmu_early_verify() == 0)
 	{
 		ir0_boot_smoke("ARM64_PAGING_OK");
+		if (arm64_common_root_smoke() == 0)
+			ir0_boot_smoke("ARM64_COMMON_ROOT_OK");
+		else
+			ir0_boot_smoke("ARM64_COMMON_ROOT_UNAVAILABLE");
 	}
 	else
 	{

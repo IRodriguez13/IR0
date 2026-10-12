@@ -40,6 +40,16 @@ static int arm64_mm_descriptor_contract(void)
 	return 0;
 }
 
+int arm64_common_root_smoke(void)
+{
+	address_space_root_t root = mm_create_user_root();
+
+	if (!root)
+		return -1;
+	mm_destroy_user_root(root);
+	return 0;
+}
+
 void arm64_all_objs_mark(void)
 {
 	ir0_boot_smoke("ARM64_ALL_OBJS_LINK_OK");
