@@ -21,6 +21,7 @@
 #include <ir0/mm_range.h>
 #include <ir0/oops.h>
 #include <ir0/errno.h>
+#include <ir0/pmm.h>
 #include "mmu_early.h"
 
 uintptr_t mm_kernel_heap_start(void)
@@ -84,19 +85,13 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 
 address_space_root_t mm_create_user_root(void)
 {
-	/*
-	 * The staged ARM64 image has one explicitly-owned TTBR0 root.  Returning
-	 * NULL is intentional until the common process lifecycle can allocate,
-	 * populate and retire an independent root; reusing that global root would
-	 * silently defeat process isolation after exec or fork.
-	 */
-	return NULL;
+	return (address_space_root_t)(uintptr_t)arm64_mmu_root_alloc_clean();
 }
 
 void mm_destroy_user_root(address_space_root_t root)
 {
-	if (root)
-		panic("arm64: unsupported private root release");
+	if (root && arm64_mmu_root_release((uint64_t)(uintptr_t)root) != 0)
+		panic("arm64: invalid private root release");
 }
 
 void mm_prepare_root_activation(address_space_root_t root)
@@ -111,9 +106,31 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 	if (!root || !(flags & IR0_MM_MAP_USER) ||
 	    !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
 		return -EOPNOTSUPP;
-	return arm64_mmu_map_user_page_at_flags_in_root(
+	return arm64_mmu_map_user_frame_in_root(
 		(uint64_t)(uintptr_t)root, va, pa,
 		!!(flags & IR0_MM_MAP_WRITE), !!(flags & IR0_MM_MAP_EXEC));
+}
+
+int mm_backend_reclaim_user_frames(address_space_root_t root,
+				   uint64_t *reclaimed_pages)
+{
+	uint64_t reclaimed = 0;
+	uint64_t phys;
+	int ret;
+
+	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
+		return -EOPNOTSUPP;
+	while ((ret = arm64_mmu_take_owned_user_frame(
+		(uint64_t)(uintptr_t)root, &phys)) == 0)
+	{
+		pmm_free_frame((uintptr_t)phys);
+		reclaimed++;
+	}
+	if (ret != -EINVAL)
+		return ret;
+	if (reclaimed_pages)
+		*reclaimed_pages = reclaimed;
+	return 0;
 }
 
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)

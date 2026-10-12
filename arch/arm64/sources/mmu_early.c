@@ -82,6 +82,7 @@ struct __attribute__((aligned(PAGE_SIZE))) arm64_mmu_root
 	uint64_t table_l3_pool[L3_POOL_MAX][PTE_ENTRIES];
 	int table_l3_pool_l2[L3_POOL_MAX];
 	uint64_t user_pages[USER_PAGE_MAX];
+	unsigned char user_page_pmm_owned[USER_PAGE_MAX];
 	unsigned user_page_count;
 	int in_use;
 };
@@ -214,7 +215,10 @@ static void root_clone(struct arm64_mmu_root *dst,
 		}
 	}
 	for (i = 0; i < src->user_page_count; i++)
+	{
 		dst->user_pages[i] = src->user_pages[i];
+		dst->user_page_pmm_owned[i] = src->user_page_pmm_owned[i];
+	}
 	dst->user_page_count = src->user_page_count;
 	dst->in_use = 1;
 }
@@ -713,24 +717,33 @@ static int user_page_maps_pa(uint64_t root_ttbr, uint64_t va, uint64_t pa,
 		(entry & PTE_AP_MASK) == ap;
 }
 
-static int user_page_note(struct arm64_mmu_root *root, uint64_t page)
+static int user_page_note(struct arm64_mmu_root *root, uint64_t page,
+			  int pmm_owned)
 {
 	unsigned i;
 
 	for (i = 0; i < root->user_page_count; i++)
 	{
 		if (root->user_pages[i] == page)
+		{
+			if (pmm_owned)
+				root->user_page_pmm_owned[i] = 1;
 			return 0;
+		}
 	}
 	if (root->user_page_count >= USER_PAGE_MAX)
 		return -EINVAL;
-	root->user_pages[root->user_page_count++] = page;
+	root->user_pages[root->user_page_count] = page;
+	root->user_page_pmm_owned[root->user_page_count] =
+		pmm_owned ? 1U : 0U;
+	root->user_page_count++;
 	return 0;
 }
 
-int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
-					       uint64_t va, uint64_t pa,
-					       int writable, int exec_el0)
+static int arm64_mmu_map_user_page_at_flags_owned_in_root(uint64_t root_ttbr,
+							    uint64_t va, uint64_t pa,
+							    int writable, int exec_el0,
+							    int pmm_owned)
 {
 	struct arm64_mmu_root *root;
 	uint64_t va_page = va & ~(PAGE_SIZE - 1UL);
@@ -766,12 +779,27 @@ int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
 		root->table_l2_dram[l2_idx] = pte_table(l3_pa);
 	}
 
-	if (user_page_note(root, va_page) != 0)
+	if (user_page_note(root, va_page, pmm_owned) != 0)
 		return -EINVAL;
 	l3[l3_idx] = pte_page_4k(pa_page,
 		writable ? PTE_AP_RW_EL0 : PTE_AP_RO_EL0, uxn, 1);
 	tlb_invalidate();
 	return 0;
+}
+
+int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
+					       uint64_t va, uint64_t pa,
+					       int writable, int exec_el0)
+{
+	return arm64_mmu_map_user_page_at_flags_owned_in_root(root_ttbr, va, pa,
+								 writable, exec_el0, 0);
+}
+
+int arm64_mmu_map_user_frame_in_root(uint64_t root_ttbr, uint64_t va,
+					 uint64_t pa, int writable, int exec_el0)
+{
+	return arm64_mmu_map_user_page_at_flags_owned_in_root(root_ttbr, va, pa,
+								 writable, exec_el0, 1);
 }
 
 int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
@@ -817,10 +845,45 @@ int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va)
 			l3[L3_INDEX(page)] = 0;
 			root->user_pages[i] =
 				root->user_pages[root->user_page_count - 1U];
+			root->user_page_pmm_owned[i] =
+				root->user_page_pmm_owned[root->user_page_count - 1U];
 			root->user_page_count--;
 			tlb_invalidate();
 			return 0;
 		}
+	}
+	return -EINVAL;
+}
+
+int arm64_mmu_take_owned_user_frame(uint64_t root_ttbr, uint64_t *phys)
+{
+	struct arm64_mmu_root *root = root_from_ttbr(root_ttbr);
+	unsigned i = 0;
+
+	if (!root || !phys)
+		return -EINVAL;
+	while (i < root->user_page_count)
+	{
+		uint64_t page = root->user_pages[i];
+		uint64_t *l3 = l3_table_find_for_l2(root, L2_INDEX(page));
+		uint64_t entry;
+
+		if (!root->user_page_pmm_owned[i])
+		{
+			i++;
+			continue;
+		}
+		if (!l3 || (l3[L3_INDEX(page)] & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
+			return -EINVAL;
+		entry = l3[L3_INDEX(page)];
+		l3[L3_INDEX(page)] = 0;
+		root->user_pages[i] = root->user_pages[root->user_page_count - 1U];
+		root->user_page_pmm_owned[i] =
+			root->user_page_pmm_owned[root->user_page_count - 1U];
+		root->user_page_count--;
+		*phys = entry & PTE_ADDR_MASK;
+		tlb_invalidate();
+		return 0;
 	}
 	return -EINVAL;
 }

@@ -195,3 +195,11 @@ int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
 	(void)flags;
 	return -EOPNOTSUPP;
 }
+
+int mm_backend_reclaim_user_frames(address_space_root_t root,
+				   uint64_t *reclaimed_pages)
+{
+	(void)root;
+	(void)reclaimed_pages;
+	return -EOPNOTSUPP;
+}

@@ -161,6 +161,23 @@ void process_unmap_user_pages_all(address_space_root_t root,
 
 	if (!root)
 		return;
+	{
+		uint64_t reclaimed = 0;
+		int backend_result = mm_backend_reclaim_user_frames(root,
+								     &reclaimed);
+
+		if (backend_result != -EOPNOTSUPP)
+		{
+			if (backend_result == 0 && stats)
+			{
+				stats->mapped_pages += reclaimed;
+				stats->leaf_present += reclaimed;
+				stats->freed_pages += reclaimed;
+				stats->leaf_freed += reclaimed;
+			}
+			return;
+		}
+	}
 	entries = mm_table_entries();
 	if (entries == 0)
 		return;

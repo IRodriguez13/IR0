@@ -47,6 +47,8 @@ int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
 int arm64_mmu_map_user_page_at_flags_in_root(uint64_t root_ttbr,
 					       uint64_t va, uint64_t pa,
 					       int writable, int exec_el0);
+int arm64_mmu_map_user_frame_in_root(uint64_t root_ttbr, uint64_t va,
+					 uint64_t pa, int writable, int exec_el0);
 int arm64_mmu_map_user_page_at_in_root(uint64_t root_ttbr, uint64_t va,
 					       uint64_t pa, int exec_el0);
 int arm64_mmu_unmap_user_page_in_root(uint64_t root_ttbr, uint64_t va);
@@ -88,6 +90,7 @@ uint64_t arm64_mmu_root_b(void);
 uint64_t arm64_mmu_root_alloc_clean(void);
 int arm64_mmu_root_release(uint64_t root_ttbr);
 int arm64_mmu_root_owned(uint64_t root_ttbr);
+int arm64_mmu_take_owned_user_frame(uint64_t root_ttbr, uint64_t *phys);
 
 /** Restore the bootstrap address-space root after a TTBR smoke transition. */
 void arm64_mmu_activate_root_a(void);

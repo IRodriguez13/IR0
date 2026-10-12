@@ -101,3 +101,10 @@ int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
 /* Apply final user permissions to backend-owned leaves. */
 int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
 				  size_t length, uint64_t flags);
+
+/*
+ * Retire user frames owned by an ISA-private translation root.  Backends must
+ * return -EOPNOTSUPP for roots handled by the common table walker.
+ */
+int mm_backend_reclaim_user_frames(address_space_root_t root,
+				   uint64_t *reclaimed_pages);
