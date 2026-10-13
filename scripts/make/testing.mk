@@ -2729,6 +2729,7 @@ ARM64_COMMON_PROCESS_SRCS = \
 	kernel/process/fork.c \
 	kernel/process/exec.c \
 	kernel/process/lifecycle.c \
+	kernel/process/parent.c \
 	kernel/process/resources.c \
 	kernel/process/exit.c \
 	kernel/process/wait.c \

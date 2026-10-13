@@ -41,53 +41,6 @@ void process_pre_zombie_teardown(process_t *dying)
 	process_resources_release_on_exit(dying);
 }
 
-void process_notify_parent_of_exit(process_t *dying)
-{
-	process_t *parent = NULL;
-	int parent_state_before = -1;
-
-	if (!dying)
-		return;
-
-	if (dying->ppid > 0)
-	{
-		parent = process_find_by_pid(dying->ppid);
-		if (parent)
-			parent_state_before = parent->state;
-		if (parent && parent->state != PROCESS_ZOMBIE)
-		{
-			send_signal(parent->task.pid, SIGCHLD);
-			if (parent->state == PROCESS_BLOCKED ||
-			    process_wait_blocked(parent))
-				process_wait_wake_blocked_parent(parent, dying);
-		}
-		else
-		{
-			/*
-			 * A dead or missing parent cannot reap this zombie. Move the
-			 * relationship to init before publishing SIGCHLD.
-			 */
-			dying->ppid = 1;
-			parent = process_find_by_pid(1);
-			if (parent)
-			{
-				if (parent_state_before == -1)
-					parent_state_before = parent->state;
-				send_signal(parent->task.pid, SIGCHLD);
-				if (parent->state == PROCESS_BLOCKED ||
-				    process_wait_blocked(parent))
-					process_wait_wake_blocked_parent(parent, dying);
-			}
-			else
-			{
-				dying->ppid = 0;
-			}
-		}
-	}
-
-	wait_exit_audit_process_exit(dying, parent, parent_state_before);
-}
-
 __attribute__((noreturn)) void process_exit(int code)
 {
 	process_t *dying = current_process;

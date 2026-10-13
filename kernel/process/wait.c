@@ -125,28 +125,6 @@ void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *st
 #endif
 }
 
-/**
- * process_reparent_children - Reparent all children to init (PID 1)
- * @dying_parent: Process that is about to exit
- *
- * When a parent process dies, all its children become orphans.
- * This function reparents them to init (PID 1) so they don't become zombies.
- */
-void process_reparent_children(process_t *dying_parent)
-{
-	process_t *init;
-
-	if (!dying_parent)
-		return;
-
-	init = process_find_by_pid(1);
-	if (!init || init == dying_parent)
-		init = NULL;
-
-	/* No suitable init (including PID 1 exit): detach instead. */
-	(void)process_lifecycle_reparent(process_list, dying_parent, init);
-}
-
 void process_reap_zombie_child(process_t *child)
 {
 	int removed;

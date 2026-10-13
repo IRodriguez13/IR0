@@ -355,6 +355,7 @@ KERNEL_OBJS = \
     kernel/process/fork.o \
     kernel/process/exec.o \
     kernel/process/lifecycle.o \
+    kernel/process/parent.o \
     kernel/process/resources.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
