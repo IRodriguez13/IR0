@@ -10,6 +10,7 @@
 #include "pl011.h"
 #include <ir0/arch_mm.h>
 #include <ir0/boot_log.h>
+#include <ir0/errno.h>
 
 static int arm64_mm_descriptor_contract(void)
 {
@@ -50,6 +51,22 @@ int arm64_common_root_smoke(void)
 	return 0;
 }
 
+static int arm64_pmm_range_contract(void)
+{
+	uintptr_t base;
+	size_t size;
+
+	int ret = mm_boot_pmm_range(&base, &size);
+
+	if (ret != 0)
+		return ret;
+	if ((base & 0xFFFU) != 0U || (size & 0xFFFU) != 0U || size == 0U)
+		return -1;
+	if (base > UINTPTR_MAX - size)
+		return -1;
+	return 0;
+}
+
 void arm64_all_objs_mark(void)
 {
 	ir0_boot_smoke("ARM64_ALL_OBJS_LINK_OK");
@@ -57,4 +74,14 @@ void arm64_all_objs_mark(void)
 		ir0_boot_smoke("ARM64_MM_DESCRIPTOR_CONTRACT_OK");
 	else
 		ir0_boot_smoke("ARM64_MM_DESCRIPTOR_CONTRACT_FAIL");
+	{
+		int pmm_range = arm64_pmm_range_contract();
+
+		if (pmm_range == 0)
+		ir0_boot_smoke("ARM64_PMM_RANGE_OK");
+		else if (pmm_range == -ENODEV)
+			ir0_boot_smoke("ARM64_PMM_RANGE_UNAVAILABLE");
+		else
+		ir0_boot_smoke("ARM64_PMM_RANGE_FAIL");
+	}
 }

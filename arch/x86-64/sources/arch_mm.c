@@ -32,6 +32,15 @@ size_t mm_kernel_heap_size(void)
 	return 0x01800000UL;
 }
 
+int mm_boot_pmm_range(uintptr_t *base, size_t *size)
+{
+	if (!base || !size)
+		return -EINVAL;
+	*base = PMM_PHYS_BASE;
+	*size = PMM_PHYS_SIZE;
+	return 0;
+}
+
 uintptr_t mm_user_va_start(void)
 {
 	return 0x00400000UL;

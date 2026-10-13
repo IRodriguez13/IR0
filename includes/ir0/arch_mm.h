@@ -33,6 +33,9 @@
 uintptr_t mm_kernel_heap_start(void);
 size_t mm_kernel_heap_size(void);
 
+/* Select one reserved-free physical interval for the current PMM bootstrap. */
+int mm_boot_pmm_range(uintptr_t *base, size_t *size);
+
 /* Inclusive userspace virtual-address window for the selected ISA policy. */
 uintptr_t mm_user_va_start(void);
 uintptr_t mm_user_va_end(void);
