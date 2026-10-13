@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "pmm.h"
+#include <ir0/arch_mm.h>
 #include <ir0/kmem.h>
 #include <ir0/klog.h>
 #include <ir0/process.h>
@@ -24,14 +25,23 @@
 
 /* INTERNAL STATE                                                            */
 
+struct pmm_bank
+{
+	uintptr_t base;
+	size_t frames;
+	size_t first_frame;
+};
+
 static struct
 {
-	uintptr_t mem_start;      /* Start of physical memory region */
-	uintptr_t mem_end;        /* End of physical memory region */
+	uintptr_t mem_start;      /* Lowest managed physical address */
+	uintptr_t mem_end;        /* Exclusive high envelope of managed RAM */
 	size_t total_frames;      /* Total number of 4KB frames */
 	uint8_t *bitmap;          /* Bitmap: 1 bit per frame (1=used, 0=free) */
 	size_t used_frames;       /* Number of allocated frames */
 	int initialized;          /* Initialization flag */
+	struct pmm_bank banks[PMM_MAX_MEMORY_BANKS];
+	size_t bank_count;
 } pmm = {0};
 
 /*
@@ -62,14 +72,40 @@ static void pmm_panic_mem(const char *msg)
 
 static int pmm_frame_index(uintptr_t phys_addr, size_t *out_index)
 {
+	size_t bank_index;
+
 	if (!pmm.initialized)
 		return -1;
-	if (phys_addr < pmm.mem_start || phys_addr >= pmm.mem_end)
-		return -1;
 	phys_addr &= ~(PMM_FRAME_SIZE - 1);
-	*out_index = (phys_addr - pmm.mem_start) / PMM_FRAME_SIZE;
-	if (*out_index >= pmm.total_frames)
-		return -1;
+	for (bank_index = 0; bank_index < pmm.bank_count; bank_index++)
+	{
+		uintptr_t bank_base = pmm.banks[bank_index].base;
+		uintptr_t bank_end = bank_base +
+			(uintptr_t)(pmm.banks[bank_index].frames * PMM_FRAME_SIZE);
+
+		if (phys_addr >= bank_base && phys_addr < bank_end)
+		{
+			*out_index = pmm.banks[bank_index].first_frame +
+				(phys_addr - bank_base) / PMM_FRAME_SIZE;
+			return 0;
+		}
+	}
+	return -1;
+}
+
+static uintptr_t pmm_frame_phys_locked(size_t frame_index)
+{
+	size_t bank_index;
+
+	for (bank_index = 0; bank_index < pmm.bank_count; bank_index++)
+	{
+		size_t first = pmm.banks[bank_index].first_frame;
+		size_t frames = pmm.banks[bank_index].frames;
+
+		if (frame_index >= first && frame_index - first < frames)
+			return pmm.banks[bank_index].base +
+				(uintptr_t)((frame_index - first) * PMM_FRAME_SIZE);
+	}
 	return 0;
 }
 
@@ -169,19 +205,76 @@ static void pmm_owner_set_locked(size_t frame_index, pmm_owner_class_t cls,
 	}
 }
 
-void pmm_init(uintptr_t mem_start, size_t mem_size)
+int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count)
 {
 	size_t i;
+	size_t accepted = 0;
+	size_t total_frames = 0;
 
-	if (pmm.initialized)
-		return;
+	if (pmm.initialized || !ranges || count == 0 ||
+	    count > PMM_MAX_MEMORY_BANKS)
+		return -1;
 
-	/* Align to frame boundaries */
-	pmm.mem_start = (mem_start + PMM_FRAME_SIZE - 1) & ~(PMM_FRAME_SIZE - 1);
-	pmm.mem_end = (mem_start + mem_size) & ~(PMM_FRAME_SIZE - 1);
+	for (i = 0; i < count; i++)
+	{
+		uintptr_t base = ranges[i].base;
+		uintptr_t end;
+		size_t frames;
 
-	/* Calculate total frames */
-	pmm.total_frames = (pmm.mem_end - pmm.mem_start) / PMM_FRAME_SIZE;
+		if (ranges[i].size == 0 || base > UINTPTR_MAX - ranges[i].size)
+			continue;
+		end = base + ranges[i].size;
+		if (base > UINTPTR_MAX - (PMM_FRAME_SIZE - 1))
+			continue;
+		base = (base + PMM_FRAME_SIZE - 1) & ~(PMM_FRAME_SIZE - 1);
+		end &= ~(uintptr_t)(PMM_FRAME_SIZE - 1);
+		if (end <= base)
+			continue;
+		frames = (end - base) / PMM_FRAME_SIZE;
+		if (frames > SIZE_MAX - total_frames)
+			return -1;
+		pmm.banks[accepted].base = base;
+		pmm.banks[accepted].frames = frames;
+		pmm.banks[accepted].first_frame = total_frames;
+		total_frames += frames;
+		accepted++;
+	}
+	if (accepted == 0 || total_frames == 0)
+		return -1;
+	/* Canonicalize bank order and reject aliases before assigning frame IDs. */
+	for (i = 1; i < accepted; i++)
+	{
+		size_t j = i;
+		struct pmm_bank bank = pmm.banks[i];
+
+		while (j > 0 && pmm.banks[j - 1].base > bank.base)
+		{
+			pmm.banks[j] = pmm.banks[j - 1];
+			j--;
+		}
+		pmm.banks[j] = bank;
+	}
+	total_frames = 0;
+	for (i = 0; i < accepted; i++)
+	{
+		uintptr_t end = pmm.banks[i].base +
+			(uintptr_t)(pmm.banks[i].frames * PMM_FRAME_SIZE);
+
+		if (i > 0 && pmm.banks[i].base < pmm.banks[i - 1].base +
+			(uintptr_t)(pmm.banks[i - 1].frames * PMM_FRAME_SIZE))
+			return -1;
+		pmm.banks[i].first_frame = total_frames;
+		if (pmm.banks[i].frames > SIZE_MAX - total_frames ||
+		    end < pmm.banks[i].base)
+			return -1;
+		total_frames += pmm.banks[i].frames;
+	}
+
+	pmm.bank_count = accepted;
+	pmm.total_frames = total_frames;
+	pmm.mem_start = pmm.banks[0].base;
+	pmm.mem_end = pmm.banks[accepted - 1].base +
+		(uintptr_t)(pmm.banks[accepted - 1].frames * PMM_FRAME_SIZE);
 
 	/* Allocate bitmap (1 bit per frame) */
 	{
@@ -194,7 +287,7 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
 #if DEBUG_PMM
 			klog_print("[PMM] CRITICAL: Failed to allocate bitmap\n");
 #endif
-			return;
+			return -1;
 		}
 
 		/* Initialize all frames as free (bitmap = 0) */
@@ -232,6 +325,33 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
 #if DEBUG_PMM
 	klog_print("[PMM] Initialized\n");
 #endif
+	return 0;
+}
+
+void pmm_init(uintptr_t mem_start, size_t mem_size)
+{
+	const struct ir0_phys_range range = {
+		.base = mem_start,
+		.size = mem_size,
+	};
+
+	(void)pmm_init_ranges(&range, 1);
+}
+
+int pmm_init_from_arch(void)
+{
+	struct ir0_phys_range ranges[PMM_MAX_MEMORY_BANKS];
+	size_t count = mm_boot_usable_range_count();
+	size_t i;
+
+	if (count == 0 || count > PMM_MAX_MEMORY_BANKS)
+		return -1;
+	for (i = 0; i < count; i++)
+	{
+		if (mm_boot_usable_range(i, &ranges[i]) != 0)
+			return -1;
+	}
+	return pmm_init_ranges(ranges, count);
 }
 
 uintptr_t pmm_alloc_frame(void)
@@ -271,7 +391,7 @@ uintptr_t pmm_alloc_frame(void)
 					if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
 						pmm_diag_events++;
 
-					ret = pmm.mem_start + (i * PMM_FRAME_SIZE);
+					ret = pmm_frame_phys_locked(i);
 					break;
 				}
 			}
@@ -566,7 +686,7 @@ uintptr_t pmm_frame_phys(size_t frame_index)
 {
 	if (!pmm.initialized || frame_index >= pmm.total_frames)
 		return 0;
-	return pmm.mem_start + (uintptr_t)(frame_index * PMM_FRAME_SIZE);
+	return pmm_frame_phys_locked(frame_index);
 }
 
 size_t pmm_total_frames(void)

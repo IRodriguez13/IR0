@@ -23,12 +23,14 @@
 
 #pragma once
 
+#include <ir0/platform_resource.h>
 #include <stdint.h>
 #include <stddef.h>
 
 
 /* Physical frame size (4KB pages) */
 #define PMM_FRAME_SIZE 4096
+#define PMM_MAX_MEMORY_BANKS 32U
 
 /*
  * PMM frame ownership class — not a single PID when COW-shared.
@@ -53,6 +55,16 @@ typedef enum
  * The bitmap itself is allocated from kernel heap via kmalloc.
  */
 void pmm_init(uintptr_t mem_start, size_t mem_size);
+
+/*
+ * Initialize from reserved-free physical RAM banks.  Frames are indexed
+ * densely in metadata, but their physical addresses need not be contiguous.
+ * Returns zero only when at least one page-aligned bank was accepted.
+ */
+int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count);
+
+/* Enumerate the current ISA/board boot-memory facade and initialize PMM. */
+int pmm_init_from_arch(void);
 
 /**
  * pmm_alloc_frame - Allocate a physical frame
@@ -99,8 +111,8 @@ void pmm_frame_set_owner_class(uintptr_t phys_addr, pmm_owner_class_t cls,
 pmm_owner_class_t pmm_frame_owner_class(uintptr_t phys_addr);
 
 /*
- * Physical bounds of the region covered by the PMM bitmap (RAM frames only).
- * Addresses outside [start, end) are not owned by the allocator (e.g. MMIO).
+ * Physical envelope of the banks covered by the PMM bitmap. Holes inside this
+ * envelope are not owned by the allocator (nor are MMIO ranges).
  */
 uintptr_t pmm_get_start(void);
 uintptr_t pmm_get_end(void);

@@ -81,10 +81,12 @@ void boot_early(uint32_t multiboot_info)
 void boot_memory_serial(uint32_t multiboot_info)
 {
 	/*
-	 * Physical Memory Manager: frames in [32MB, 512MB).
-	 * Heap occupies [8MB, 32MB); PMM must stay disjoint.
+	 * The architecture facade supplies reserved-free RAM banks. x86 currently
+	 * reports the historical [32 MiB, 512 MiB) interval; fragmented targets
+	 * use the same generic PMM path without a special allocator.
 	 */
-	pmm_init(PMM_PHYS_BASE, PMM_PHYS_SIZE);
+	if (pmm_init_from_arch() != 0)
+		panic("PMM: architecture boot-memory inventory unavailable");
 
 	/*
 	 * Pin the boot address-space root while still on the identity map from the

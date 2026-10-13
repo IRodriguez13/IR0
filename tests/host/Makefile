@@ -45,6 +45,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c \
 	test_mount_prefix_boundary.c
+TEST_SRCS += test_pmm_banks.c
 TEST_SRCS += test_fd_resource_contract.c
 # ARM64 firmware contract is pure C and host-testable.
 TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
@@ -60,6 +61,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
+KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o
 KERNEL_HOST_OBJS += host_elf64_image.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
@@ -85,6 +87,15 @@ host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 
 host_kmem_stub.o: host_kmem_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/mm/pmm.h
+	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<
+
+host_pmm_stubs.o: host_pmm_stubs.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_pmm_banks.o: test_pmm_banks.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_serial_stub.o: host_serial_stub.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
