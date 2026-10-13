@@ -78,6 +78,8 @@ static int arm64_common_lifecycle_contract(void)
 {
 	static process_t parent;
 	static process_t child;
+	static process_t orphan;
+	static process_t init;
 	uint8_t *bytes;
 	size_t i;
 
@@ -86,6 +88,12 @@ static int arm64_common_lifecycle_contract(void)
 		bytes[i] = 0;
 	bytes = (uint8_t *)&child;
 	for (i = 0; i < sizeof(child); i++)
+		bytes[i] = 0;
+	bytes = (uint8_t *)&orphan;
+	for (i = 0; i < sizeof(orphan); i++)
+		bytes[i] = 0;
+	bytes = (uint8_t *)&init;
+	for (i = 0; i < sizeof(init); i++)
 		bytes[i] = 0;
 
 	parent.task.pid = 1;
@@ -101,7 +109,17 @@ static int arm64_common_lifecycle_contract(void)
 	    process_lifecycle_wait_status(&child) != (42 << 8))
 		return -1;
 	process_lifecycle_publish_reaped(&child);
-	return child.lifecycle == PROCESS_LIFECYCLE_DEAD ? 0 : -1;
+	if (child.lifecycle != PROCESS_LIFECYCLE_DEAD)
+		return -1;
+
+	init.task.pid = 1;
+	parent.task.pid = 7;
+	orphan.ppid = parent.task.pid;
+	parent.next = &orphan;
+	if (process_lifecycle_reparent(&parent, &parent, &init) != 1 ||
+	    orphan.ppid != init.task.pid)
+		return -1;
+	return 0;
 }
 
 void arm64_all_objs_mark(void)

@@ -38,3 +38,25 @@ void process_lifecycle_publish_reaped(process_t *process)
 {
 	process_mark_dead(process);
 }
+
+size_t process_lifecycle_reparent(process_t *head, process_t *dying,
+				  process_t *adopter)
+{
+	process_t *child;
+	size_t reparented = 0;
+	pid_t new_parent;
+
+	if (!dying)
+		return 0;
+	if (adopter == dying)
+		adopter = NULL;
+	new_parent = adopter ? adopter->task.pid : 0;
+
+	for (child = head; child; child = child->next) {
+		if (child == dying || child->ppid != dying->task.pid)
+			continue;
+		child->ppid = new_parent;
+		reparented++;
+	}
+	return reparented;
+}

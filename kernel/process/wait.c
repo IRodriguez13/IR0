@@ -134,51 +134,17 @@ void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *st
  */
 void process_reparent_children(process_t *dying_parent)
 {
-	process_t *child;
 	process_t *init;
-	int has_child = 0;
 
 	if (!dying_parent)
 		return;
 
-	for (child = process_list; child; child = child->next)
-	{
-		if (child->ppid == dying_parent->task.pid && child != dying_parent)
-		{
-			has_child = 1;
-			break;
-		}
-	}
-	if (!has_child)
-		return;
-
 	init = process_find_by_pid(1);
 	if (!init || init == dying_parent)
-	{
-		/*
-		 * No suitable init (early boot, or PID 1 itself exiting).
-		 * Detach orphans rather than CRITICAL-spam; KTM can assert later.
-		 */
-		for (child = process_list; child; child = child->next)
-		{
-			if (child->ppid == dying_parent->task.pid && child != dying_parent)
-				child->ppid = 0;
-		}
-		return;
-	}
+		init = NULL;
 
-	child = process_list;
-	while (child)
-	{
-		if (child->ppid == dying_parent->task.pid)
-		{
-			child->ppid = 1;
-#if DEBUG_PROCESS
-			klog_debug_fmt("KERN", "[PROCESS] Reparented child PID %x to init (PID 1)\n", (unsigned)((uint32_t)child->task.pid));
-#endif
-		}
-		child = child->next;
-	}
+	/* No suitable init (including PID 1 exit): detach instead. */
+	(void)process_lifecycle_reparent(process_list, dying_parent, init);
 }
 
 void process_reap_zombie_child(process_t *child)
