@@ -2760,7 +2760,7 @@ arm64-common-process-compile:
 	@echo "✓ ARM64 common process subsystem compile contract"
 
 .PHONY: kernel-arm64-all.bin kernel-arm64-all-Image smoke-arm64-all \
-	smoke-arm64-all-dtb
+	smoke-arm64-all-dtb smoke-arm64-harness
 kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
 	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
@@ -2961,6 +2961,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_PMM_RANGE_UNAVAILABLE' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_USABLE_RANGES_UNAVAILABLE' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
@@ -2984,6 +2986,12 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-dtb-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-dtb-smoke.log
 	@echo "✓ smoke-arm64-all-dtb passed (aggregate core + firmware RAM inventory)"
+
+# Full ARM contract: raw payload must decline absent firmware honestly, while
+# the Linux Image variant proves the same aggregate against QEMU-provided DTB.
+smoke-arm64-harness: smoke-arm64 smoke-arm64-rpi3-timer smoke-arm64-all \
+	smoke-arm64-all-dtb
+	@echo "✓ smoke-arm64-harness passed (raw contingency + Linux DTB + RPi3 + core)"
 
 smoke-arm64-boot: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU virt boot tag..."
