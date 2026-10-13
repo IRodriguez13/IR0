@@ -80,6 +80,7 @@ static int arm64_common_lifecycle_contract(void)
 	static process_t child;
 	static process_t orphan;
 	static process_t init;
+	process_t *saved_process_list;
 	uint8_t *bytes;
 	size_t i;
 
@@ -115,9 +116,14 @@ static int arm64_common_lifecycle_contract(void)
 	init.task.pid = 1;
 	parent.task.pid = 7;
 	orphan.ppid = parent.task.pid;
+	init.next = &parent;
 	parent.next = &orphan;
-	if (process_lifecycle_reparent(&parent, &parent, &init) != 1 ||
-	    orphan.ppid != init.task.pid)
+	orphan.next = NULL;
+	saved_process_list = process_list;
+	process_list = &init;
+	process_reparent_children(&parent);
+	process_list = saved_process_list;
+	if (orphan.ppid != init.task.pid)
 		return -1;
 	return 0;
 }

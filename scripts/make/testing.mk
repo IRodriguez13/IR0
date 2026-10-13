@@ -2109,6 +2109,22 @@ smoke-robust-list: kernel-x64-userspace.iso
 ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
 	-DIR0_FREESTANDING_BOOT=1 $(ARM64_BOARD_CFLAGS) \
 	-I. -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0
+ARM64_ALL_CFLAGS = $(ARM64_BOOT_CFLAGS) -ffunction-sections -fdata-sections
+ARM64_ALL_KEEP_SYMBOLS = \
+	--undefined=current_process \
+	--undefined=process_get_pid \
+	--undefined=process_find_by_pid \
+	--undefined=process_reparent_children \
+	--undefined=fork_prepare_child_return \
+	--undefined=process_saved_environ_clone \
+	--undefined=process_set_tls \
+	--undefined=mm_create \
+	--undefined=process_mm_create_root \
+	--undefined=spawn \
+	--undefined=process_init_fd_table \
+	--undefined=fork \
+	--undefined=exec_detach_shared_mm \
+	--undefined=fd_resource_acquire
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
@@ -2789,6 +2805,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		kernel/process/fork.c \
 		kernel/process/exec.c \
 		kernel/process/lifecycle.c \
+		kernel/process/parent.c \
 		kernel/process/domains.c \
 		kernel/process/saved_context.c \
 		kernel/process/saved_environ.c \
@@ -2805,7 +2822,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/portable_string.c; do \
 		base=$$(basename $$src .c); \
 		echo "  CC      $$src (all)"; \
-		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		if ! aarch64-linux-gnu-gcc $(ARM64_ALL_CFLAGS) -DARCH_ARM64=1 \
 			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
 			-I$(KERNEL_ROOT)/arch/common \
 			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
@@ -2840,7 +2857,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		build/arm64-all/string_aliases.c -o build/arm64-all/string_aliases.o
 	@echo "  LD      $@ (portable ALL — no x86 drivers)"
-	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
+	@aarch64-linux-gnu-ld --gc-sections $(ARM64_ALL_KEEP_SYMBOLS) \
+		-T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
 		arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
@@ -2900,6 +2918,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/fork.o \
 		build/arm64-all/exec.o \
 		build/arm64-all/lifecycle.o \
+		build/arm64-all/parent.o \
 		build/arm64-all/domains.o \
 		build/arm64-all/saved_context.o \
 		build/arm64-all/saved_environ.o \
@@ -2938,6 +2957,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		awk '$$3 == "process_get_pid" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_find_by_pid" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_reparent_children" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "fork_prepare_child_return" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
