@@ -116,11 +116,17 @@ static int arm64_common_lifecycle_contract(void)
 	init.task.pid = 1;
 	parent.task.pid = 7;
 	orphan.ppid = parent.task.pid;
+	orphan.lifecycle = PROCESS_LIFECYCLE_ZOMBIE;
+	orphan.state = PROCESS_ZOMBIE;
 	init.next = &parent;
 	parent.next = &orphan;
 	orphan.next = NULL;
 	saved_process_list = process_list;
 	process_list = &init;
+	if (!process_has_zombie_child(&parent)) {
+		process_list = saved_process_list;
+		return -1;
+	}
 	process_reparent_children(&parent);
 	process_list = saved_process_list;
 	if (orphan.ppid != init.task.pid)

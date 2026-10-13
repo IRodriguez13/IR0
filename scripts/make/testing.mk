@@ -2115,6 +2115,7 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_get_pid \
 	--undefined=process_find_by_pid \
 	--undefined=process_reparent_children \
+	--undefined=process_has_zombie_child \
 	--undefined=fork_prepare_child_return \
 	--undefined=process_saved_environ_clone \
 	--undefined=process_set_tls \
@@ -2806,6 +2807,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		kernel/process/exec.c \
 		kernel/process/lifecycle.c \
 		kernel/process/parent.c \
+		kernel/process/wait.c \
 		kernel/process/domains.c \
 		kernel/process/saved_context.c \
 		kernel/process/saved_environ.c \
@@ -2919,6 +2921,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/exec.o \
 		build/arm64-all/lifecycle.o \
 		build/arm64-all/parent.o \
+		build/arm64-all/wait.o \
 		build/arm64-all/domains.o \
 		build/arm64-all/saved_context.o \
 		build/arm64-all/saved_environ.o \
@@ -2959,6 +2962,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		awk '$$3 == "process_find_by_pid" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_reparent_children" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_has_zombie_child" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "fork_prepare_child_return" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
