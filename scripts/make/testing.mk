@@ -2759,7 +2759,8 @@ arm64-common-process-compile:
 		-o build/arm64-common-process/arch_debug.o
 	@echo "✓ ARM64 common process subsystem compile contract"
 
-.PHONY: kernel-arm64-all.bin smoke-arm64-all
+.PHONY: kernel-arm64-all.bin kernel-arm64-all-Image smoke-arm64-all \
+	smoke-arm64-all-dtb
 kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
 	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
@@ -2910,6 +2911,14 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
+# Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
+# supplies x0 only when the payload is an Image, not when it loads the raw ELF
+# test binary.  This is intentionally a second test product: it does not
+# alter the production firmware handoff or synthesize a DTB address.
+kernel-arm64-all-Image: kernel-arm64-all.bin
+	@aarch64-linux-gnu-objcopy -O binary kernel-arm64-all.bin $@
+	@echo "✓ $@ (Linux arm64 Image header; aggregate harness)"
+
 smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@echo "  SMOKE   ARM64 early aggregate boot + common process compile contract..."
 	@aarch64-linux-gnu-readelf -lW kernel-arm64-all.bin > /tmp/ir0-arm64-all-phdrs.log
@@ -2957,6 +2966,24 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log
 	@echo "✓ smoke-arm64-all passed (early aggregate boot + BusyBox EL0)"
+
+smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
+	@echo "  SMOKE   ARM64 aggregate Linux Image + firmware DTB memory inventory..."
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-dtb-smoke.log --timeout 20 --stale-sec 8 \
+		--done ARM64_EL0_RET_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-all-Image -nographic -serial mon:stdio \
+		-display none -no-reboot 2>/dev/null
+	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_DTB_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PMM_RANGE_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_USABLE_RANGES_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-dtb-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-dtb-smoke.log
+	@echo "✓ smoke-arm64-all-dtb passed (aggregate core + firmware RAM inventory)"
 
 smoke-arm64-boot: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU virt boot tag..."

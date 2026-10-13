@@ -9,6 +9,7 @@
 *.patch
 *.bin
 kernel-arm64-Image
+kernel-arm64-all-Image
 *.log
 *.iso
 *.elf
