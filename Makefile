@@ -490,6 +490,8 @@ endif
 
 MEMORY_OBJS = \
 	mm/allocator.o \
+	mm/boot_memory.o \
+	mm/no_mmu.o \
 	mm/paging.o \
 	mm/pmm.o \
 	mm/kmem.o \

@@ -9,6 +9,7 @@
 
 #include "pl011.h"
 #include <ir0/arch_mm.h>
+#include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
 
@@ -51,34 +52,24 @@ int arm64_common_root_smoke(void)
 	return 0;
 }
 
-static int arm64_pmm_range_contract(void)
+static int arm64_boot_memory_contract(void)
 {
-	uintptr_t base;
-	size_t size;
+	struct ir0_phys_range ranges[IR0_BOOT_MEMORY_MAX_BANKS];
+	size_t count;
+	size_t i;
 
-	int ret = mm_boot_pmm_range(&base, &size);
+	int ret = boot_memory_get_usable_ranges(ranges,
+						 IR0_BOOT_MEMORY_MAX_BANKS, &count);
 
 	if (ret != 0)
 		return ret;
-	if ((base & 0xFFFU) != 0U || (size & 0xFFFU) != 0U || size == 0U)
-		return -1;
-	if (base > UINTPTR_MAX - size)
-		return -1;
-	return 0;
-}
-
-static int arm64_usable_range_inventory_contract(void)
-{
-	struct ir0_phys_range range;
-	size_t count = mm_boot_usable_range_count();
-
-	if (count == 0)
-		return -ENODEV;
-	if (mm_boot_usable_range(0, &range) != 0)
-		return -1;
-	if ((range.base & 0xFFFU) != 0U || (range.size & 0xFFFU) != 0U ||
-	    range.size == 0U || range.base > UINT64_MAX - range.size)
-		return -1;
+	for (i = 0; i < count; i++)
+	{
+		if ((ranges[i].base & 0xFFFU) != 0U ||
+		    (ranges[i].size & 0xFFFU) != 0U || ranges[i].size == 0U ||
+		    ranges[i].base > UINT64_MAX - ranges[i].size)
+			return -1;
+	}
 	return 0;
 }
 
@@ -90,23 +81,13 @@ void arm64_all_objs_mark(void)
 	else
 		ir0_boot_smoke("ARM64_MM_DESCRIPTOR_CONTRACT_FAIL");
 	{
-		int pmm_range = arm64_pmm_range_contract();
-
-		if (pmm_range == 0)
-		ir0_boot_smoke("ARM64_PMM_RANGE_OK");
-		else if (pmm_range == -ENODEV)
-			ir0_boot_smoke("ARM64_PMM_RANGE_UNAVAILABLE");
-		else
-			ir0_boot_smoke("ARM64_PMM_RANGE_FAIL");
-	}
-	{
-		int inventory = arm64_usable_range_inventory_contract();
+		int inventory = arm64_boot_memory_contract();
 
 		if (inventory == 0)
-			ir0_boot_smoke("ARM64_USABLE_RANGES_OK");
+			ir0_boot_smoke("ARM64_BOOT_MEMORY_OK");
 		else if (inventory == -ENODEV)
-			ir0_boot_smoke("ARM64_USABLE_RANGES_UNAVAILABLE");
+			ir0_boot_smoke("ARM64_BOOT_MEMORY_UNAVAILABLE");
 		else
-			ir0_boot_smoke("ARM64_USABLE_RANGES_FAIL");
+			ir0_boot_smoke("ARM64_BOOT_MEMORY_FAIL");
 	}
 }

@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "pmm.h"
-#include <ir0/arch_mm.h>
+#include <ir0/boot_memory.h>
 #include <ir0/kmem.h>
 #include <ir0/klog.h>
 #include <ir0/process.h>
@@ -207,69 +207,33 @@ static void pmm_owner_set_locked(size_t frame_index, pmm_owner_class_t cls,
 
 int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count)
 {
+	struct ir0_phys_range normalized[PMM_MAX_MEMORY_BANKS];
 	size_t i;
-	size_t accepted = 0;
+	size_t accepted;
 	size_t total_frames = 0;
 
 	if (pmm.initialized || !ranges || count == 0 ||
 	    count > PMM_MAX_MEMORY_BANKS)
 		return -1;
+	if (boot_memory_normalize_ranges(ranges, count, normalized,
+					 PMM_MAX_MEMORY_BANKS, &accepted) != 0)
+		return -1;
 
-	for (i = 0; i < count; i++)
+	for (i = 0; i < accepted; i++)
 	{
-		uintptr_t base = ranges[i].base;
-		uintptr_t end;
+		uintptr_t base = normalized[i].base;
 		size_t frames;
 
-		if (ranges[i].size == 0 || base > UINTPTR_MAX - ranges[i].size)
-			continue;
-		end = base + ranges[i].size;
-		if (base > UINTPTR_MAX - (PMM_FRAME_SIZE - 1))
-			continue;
-		base = (base + PMM_FRAME_SIZE - 1) & ~(PMM_FRAME_SIZE - 1);
-		end &= ~(uintptr_t)(PMM_FRAME_SIZE - 1);
-		if (end <= base)
-			continue;
-		frames = (end - base) / PMM_FRAME_SIZE;
+		frames = normalized[i].size / PMM_FRAME_SIZE;
 		if (frames > SIZE_MAX - total_frames)
 			return -1;
-		pmm.banks[accepted].base = base;
-		pmm.banks[accepted].frames = frames;
-		pmm.banks[accepted].first_frame = total_frames;
+		pmm.banks[i].base = base;
+		pmm.banks[i].frames = frames;
+		pmm.banks[i].first_frame = total_frames;
 		total_frames += frames;
-		accepted++;
 	}
 	if (accepted == 0 || total_frames == 0)
 		return -1;
-	/* Canonicalize bank order and reject aliases before assigning frame IDs. */
-	for (i = 1; i < accepted; i++)
-	{
-		size_t j = i;
-		struct pmm_bank bank = pmm.banks[i];
-
-		while (j > 0 && pmm.banks[j - 1].base > bank.base)
-		{
-			pmm.banks[j] = pmm.banks[j - 1];
-			j--;
-		}
-		pmm.banks[j] = bank;
-	}
-	total_frames = 0;
-	for (i = 0; i < accepted; i++)
-	{
-		uintptr_t end = pmm.banks[i].base +
-			(uintptr_t)(pmm.banks[i].frames * PMM_FRAME_SIZE);
-
-		if (i > 0 && pmm.banks[i].base < pmm.banks[i - 1].base +
-			(uintptr_t)(pmm.banks[i - 1].frames * PMM_FRAME_SIZE))
-			return -1;
-		pmm.banks[i].first_frame = total_frames;
-		if (pmm.banks[i].frames > SIZE_MAX - total_frames ||
-		    end < pmm.banks[i].base)
-			return -1;
-		total_frames += pmm.banks[i].frames;
-	}
-
 	pmm.bank_count = accepted;
 	pmm.total_frames = total_frames;
 	pmm.mem_start = pmm.banks[0].base;
@@ -338,21 +302,6 @@ void pmm_init(uintptr_t mem_start, size_t mem_size)
 	(void)pmm_init_ranges(&range, 1);
 }
 
-int pmm_init_from_arch(void)
-{
-	struct ir0_phys_range ranges[PMM_MAX_MEMORY_BANKS];
-	size_t count = mm_boot_usable_range_count();
-	size_t i;
-
-	if (count == 0 || count > PMM_MAX_MEMORY_BANKS)
-		return -1;
-	for (i = 0; i < count; i++)
-	{
-		if (mm_boot_usable_range(i, &ranges[i]) != 0)
-			return -1;
-	}
-	return pmm_init_ranges(ranges, count);
-}
 
 uintptr_t pmm_alloc_frame(void)
 {

@@ -42,6 +42,7 @@
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
 #include <ir0/boot_log.h>
+#include <ir0/boot_memory.h>
 #include <ir0/init_handoff.h>
 #include <ir0/vfs.h>
 #include <ir0/open_flags.h>
@@ -85,7 +86,7 @@ void boot_memory_serial(uint32_t multiboot_info)
 	 * reports the historical [32 MiB, 512 MiB) interval; fragmented targets
 	 * use the same generic PMM path without a special allocator.
 	 */
-	if (pmm_init_from_arch() != 0)
+	if (boot_memory_init_pmm() != 0)
 		panic("PMM: architecture boot-memory inventory unavailable");
 
 	/*

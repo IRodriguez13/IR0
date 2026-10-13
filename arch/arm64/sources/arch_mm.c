@@ -36,45 +36,6 @@ size_t mm_kernel_heap_size(void)
 	return 0x01800000UL;
 }
 
-int mm_boot_pmm_range(uintptr_t *base, size_t *size)
-{
-	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
-	uint64_t best_base = 0;
-	uint64_t best_size = 0;
-	uint32_t i;
-
-	if (!base || !size)
-		return -EINVAL;
-	if (!boot || !boot->fdt_valid)
-		return -ENODEV;
-	for (i = 0; i < boot->usable_range_count; i++)
-	{
-		uint64_t range_base = boot->usable[i].base;
-		uint64_t range_end = range_base + boot->usable[i].size;
-		uint64_t candidate_base;
-		uint64_t candidate_size;
-
-		if (range_end < range_base || boot->usable[i].size < 0x200000U)
-			continue;
-		/* Use the upper half: low RAM contains image, DTB and early EL0 data. */
-		candidate_base = (range_base + (boot->usable[i].size / 2U) +
-				  0xFFFU) & ~0xFFFULL;
-		if (candidate_base >= range_end)
-			continue;
-		candidate_size = (range_end - candidate_base) & ~0xFFFULL;
-		if (candidate_size > best_size)
-		{
-			best_base = candidate_base;
-			best_size = candidate_size;
-		}
-	}
-	if (best_size < 0x200000U)
-		return -EINVAL;
-	*base = (uintptr_t)best_base;
-	*size = (size_t)best_size;
-	return 0;
-}
-
 size_t mm_boot_usable_range_count(void)
 {
 	const struct arm64_board_boot_info *boot = arm64_board_boot_info();

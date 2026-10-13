@@ -2168,7 +2168,7 @@ arm64-all-objs-probe: arm64-portable-compile
 	@echo "INTERRUPT_OBJS wall: cleared (irq_portable_stubs replaces lidt/isr_stubs_64)" \
 		> /tmp/ir0-arm64-all-objs-probe.log
 	@fail=0; \
-	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c; do \
+	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c; do \
 		echo "  CC      $$src (probe)"; \
 		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 			-c $$src -o /tmp/ir0-arm64-probe-$$$$.o >> /tmp/ir0-arm64-all-objs-probe.log 2>&1; then \
@@ -2654,7 +2654,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 	@echo "  CC      ARM64_MIN MEMORY+KERNEL sample"
 	@mkdir -p build/arm64-min
 	@fail=0; \
-	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c \
+	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c \
 		kernel/errno.c kernel/lib/open_flags.c; do \
 		base=$$(basename $$src .c); \
 		echo "  CC      $$src (min)"; \
@@ -2767,7 +2767,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 	@mkdir -p build/arm64-all
 	@rm -f /tmp/ir0-arm64-all-link.log
 	@fail=0; \
-	for src in mm/allocator.c mm/paging.c mm/pmm.c mm/kmem.c \
+	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c \
 		kernel/errno.c \
 		kernel/lib/open_flags.c \
 		kernel/lib/copy_user.c \
@@ -2875,7 +2875,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o \
-		build/arm64-all/allocator.o build/arm64-all/paging.o \
+		build/arm64-all/allocator.o build/arm64-all/boot_memory.o \
+		build/arm64-all/no_mmu.o build/arm64-all/paging.o \
 		build/arm64-all/pmm.o build/arm64-all/kmem.o \
 		build/arm64-all/errno.o \
 		build/arm64-all/open_flags.o \
@@ -2961,8 +2962,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PMM_RANGE_UNAVAILABLE' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_USABLE_RANGES_UNAVAILABLE' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
@@ -2979,8 +2979,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_DTB_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_PMM_RANGE_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_USABLE_RANGES_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-dtb-smoke.log

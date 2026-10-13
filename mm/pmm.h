@@ -63,9 +63,6 @@ void pmm_init(uintptr_t mem_start, size_t mem_size);
  */
 int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count);
 
-/* Enumerate the current ISA/board boot-memory facade and initialize PMM. */
-int pmm_init_from_arch(void);
-
 /**
  * pmm_alloc_frame - Allocate a physical frame
  *

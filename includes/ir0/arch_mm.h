@@ -34,14 +34,7 @@
 uintptr_t mm_kernel_heap_start(void);
 size_t mm_kernel_heap_size(void);
 
-/* Select one reserved-free physical interval for the current PMM bootstrap. */
-int mm_boot_pmm_range(uintptr_t *base, size_t *size);
-
-/*
- * Linux memblock-style input: enumerate reserved-free physical RAM banks.
- * The current PMM still consumes one range through mm_boot_pmm_range(); new
- * multi-bank allocators must consume this inventory directly.
- */
+/* Firmware-reserved-free physical RAM banks for the generic boot inventory. */
 size_t mm_boot_usable_range_count(void);
 int mm_boot_usable_range(size_t index, struct ir0_phys_range *range);
 
