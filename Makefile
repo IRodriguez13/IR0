@@ -359,6 +359,7 @@ KERNEL_OBJS = \
     kernel/process/resources.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
+    kernel/process/wait_audit.o \
     kernel/process/wait_state.o \
     kernel/process/saved_context.o \
     kernel/process/saved_environ.o \

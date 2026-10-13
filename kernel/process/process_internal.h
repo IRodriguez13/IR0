@@ -103,6 +103,7 @@ void process_fork_free_mmap_list(process_t *child);
 void process_reparent_children(process_t *dying_parent);
 void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 				  int parent_state_before);
+void wait_exit_audit_classify_user_frame(const char *tag, process_t *p);
 void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status);
 void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *status);
 void process_wait_wake_blocked_parent(process_t *parent, process_t *child);

@@ -7,123 +7,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: wait.c
- * Description: wait4/reap/reparent and wait-exit audit; zombie until process_destroy.
+ * Description: wait4, zombie reaping and parent blocking policy.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
 #include <ir0/ktm/checkpoint.h>
-
-void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
-{
-#if !IR0_DEBUG_WAIT
-	(void)tag;
-	(void)p;
-	return;
-#else
-	uint64_t rip;
-	uint64_t rsp;
-
-	if (!p)
-		return;
-
-	rip = task_get_ip(&p->task);
-	rsp = task_get_sp(&p->task);
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s ip=%llx sp=%llx return_user=%llx status=%llx retval=%llx address_space=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)(rip), (unsigned long long)(rsp), (unsigned long long)task_return_state_is_user(&p->task), (unsigned long long)(task_get_flags(&p->task)), (unsigned long long)(task_get_retval(&p->task)), (unsigned long long)(process_mm_root(p)), (unsigned long long)((uint64_t)p->irq_frame_saved));
-
-	if (!mm_user_va_ok((uintptr_t)rip, 1))
-	{
-		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
-	}
-	if (!mm_user_va_ok((uintptr_t)rsp, 1))
-	{
-		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
-	}
-	if (!task_return_state_is_user(&p->task))
-	{
-		klog_debug("WAIT", "CLASSIFY PARENT_RETURN_STATE_NOT_USER");
-	}
-#endif
-}
-
-void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
-                                         int parent_state_before)
-{
-#if !IR0_DEBUG_WAIT
-	(void)dying;
-	(void)parent;
-	(void)parent_state_before;
-	return;
-#else
-	klog_debug_fmt("WAIT",
-		       "[WAIT_EXIT_AUDIT][process_exit] child_pid=%x "
-		       "child_state_before=RUNNING child_state_after=ZOMBIE "
-		       "parent_pid=%x parent_state_before=%llx parent_state_after=%llx "
-		       "parent_woken=%llx",
-		       (unsigned)((uint32_t)dying->task.pid),
-		       (unsigned)(parent ? (uint32_t)parent->task.pid : 0),
-		       (unsigned long long)((uint64_t)(unsigned int)parent_state_before),
-		       (unsigned long long)(parent ? (uint64_t)(unsigned int)parent->state : 0),
-		       (unsigned long long)((uint64_t)(parent &&
-							parent_state_before == PROCESS_BLOCKED &&
-							parent->state == PROCESS_READY
-								? 1
-								: 0)));
-
-	klog_debug("WAIT",
-		   "[WAIT_EXIT_AUDIT][process_exit] child_frees address_space=0 "
-		   "page_directory=0 task_struct=0 kernel_stack=0 (zombie until reap)");
-	klog_debug("WAIT",
-		   "[WAIT_EXIT_AUDIT][process_exit] child_closes fd_table=1 cwd=0 vfs_mm=0");
-
-	if (parent)
-	{
-		klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_exit] parent_mm=%llx parent_cr3=%llx parent_files=%llx parent_irq_saved=%llx", (unsigned long long)((uint64_t)(uintptr_t)process_pgd(parent)), (unsigned long long)(process_mm_root(parent)), (unsigned long long)((uint64_t)(uintptr_t)parent->files), (unsigned long long)((uint64_t)parent->irq_frame_saved));
-		wait_exit_audit_classify_user_frame("parent-at-child-exit", parent);
-	}
-
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_exit] child_irq_saved=%llx", (unsigned long long)((uint64_t)dying->irq_frame_saved));
-	if (dying->irq_frame_saved)
-	{
-		klog_debug("WAIT",
-			   "CLASSIFY EXIT_FREED_PARENT_RESOURCE "
-			   "note=child_irq_saved_stale_may_misroute_resume");
-	}
-#endif
-}
-
-void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status)
-{
-#if !IR0_DEBUG_WAIT
-	(void)wait_pid;
-	(void)status;
-	return;
-#else
-	if (!current_process)
-		return;
-
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] action=block parent_pid=%x wait_pid=%x status_ptr=%llx expected_rax_after_wake=child_pid\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)wait_pid), (unsigned long long)((uint64_t)(uintptr_t)status));
-	wait_exit_audit_classify_user_frame("parent-before-wait-sleep", current_process);
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] syscall_frame rip=%llx rsp=%llx", (unsigned long long)(process_syscall_ip(current_process)), (unsigned long long)(process_syscall_sp(current_process)));
-#endif
-}
-
-void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *status)
-{
-#if !IR0_DEBUG_WAIT
-	(void)reaped_pid;
-	(void)status_val;
-	(void)status;
-	return;
-#else
-	if (!current_process)
-		return;
-
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][process_wait] action=reap parent_pid=%x reaped_pid=%x status_val=%llx status_ptr=%llx return_rax=%llx", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)reaped_pid), (unsigned long long)((uint64_t)(unsigned int)status_val), (unsigned long long)((uint64_t)(uintptr_t)status), (unsigned long long)((uint64_t)(unsigned int)reaped_pid));
-	wait_exit_audit_classify_user_frame("parent-after-reap", current_process);
-#endif
-}
 
 void process_reap_zombie_child(process_t *child)
 {

@@ -2733,6 +2733,7 @@ ARM64_COMMON_PROCESS_SRCS = \
 	kernel/process/resources.c \
 	kernel/process/exit.c \
 	kernel/process/wait.c \
+	kernel/process/wait_audit.c \
 	kernel/process/wait_state.c \
 	kernel/process/saved_context.c \
 	kernel/process/saved_environ.c \
