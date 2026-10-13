@@ -41,6 +41,13 @@ void cpu_wait(void)
 	__asm__ volatile("wfi" ::: "memory");
 }
 
+void cpu_idle(void)
+{
+	/* A runnable interrupt must be able to wake the scheduler's idle path. */
+	enable_interrupts();
+	cpu_wait();
+}
+
 void panicex(const char *message, panic_level_t level, const char *file,
 	     int line, const char *caller)
 {
