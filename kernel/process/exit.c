@@ -7,19 +7,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: exit.c
- * Description: process_exit (to zombie) and process_destroy (reaper teardown policy).
+ * Description: process exit policy and zombie publication.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
-#include <ir0/futex.h>
-#include <ir0/copy_user.h>
 #include <ir0/ktm/checkpoint.h>
-
-#if CONFIG_ENABLE_NETWORKING
-void tcp_wire_on_process_exit(uint32_t pid);
-#endif
 
 /*
  * Teardown ownership policy
@@ -33,35 +27,6 @@ void tcp_wire_on_process_exit(uint32_t pid);
  *   - caller frees process_t after remove-from-list
  */
 
-static void process_exit_robust_list_hook(process_t *dying)
-{
-	process_exit_robust_list(dying);
-}
-
-static void process_exit_clear_child_tid_hook(process_t *dying)
-{
-	int zero = 0;
-	int *tidptr;
-
-	if (!dying->set_tid_ptr)
-		return;
-
-	tidptr = dying->set_tid_ptr;
-	dying->set_tid_ptr = NULL;
-	if (dying->mode == USER_MODE)
-	{
-		if (copy_to_user_in_mm(process_pgd(dying),
-				       dying == current_process, tidptr, &zero,
-				       sizeof(zero)) == 0)
-			(void)ir0_futex_wake(tidptr, 1);
-	}
-	else if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)
-	{
-		(void)copy_to_user(tidptr, &zero, sizeof(zero));
-		(void)ir0_futex_wake(tidptr, 1);
-	}
-}
-
 void process_pre_zombie_teardown(process_t *dying)
 {
 	if (!dying)
@@ -71,44 +36,9 @@ void process_pre_zombie_teardown(process_t *dying)
 	process_signal_defer_catchable_clear(dying);
 	process_signal_last_delivered_clear(dying);
 	process_kernel_sleep_interrupted_clear(dying);
-#if CONFIG_ENABLE_NETWORKING
-	tcp_wire_on_process_exit((uint32_t)dying->task.pid);
-#endif
-	process_exit_robust_list_hook(dying);
-	process_exit_clear_child_tid_hook(dying);
-
 	process_reap_zombies(dying);
 	process_reparent_children(dying);
-
-	/*
-	 * Drop wait registrations before zombification so wake paths cannot
-	 * retain or reschedule a process whose resources are being released.
-	 */
-	ir0_console_purge_waiters_for_process(dying);
-	pipe_purge_waiters_for_process(dying);
-	ipc_purge_waiters_for_process(dying);
-	if (dying->fork_pending_child)
-		process_fork_abort_pending_on_exit(dying);
-	process_mm_release_on_exit(dying);
-	if (dying->pgid > 1)
-		ir0_console_clear_fg_pgid((int32_t)dying->pgid,
-					 (int32_t)dying->task.pid);
-	if ((pid_t)dying->task.pid == dying->sid)
-	{
-		/*
-		 * Next getty must see a clean cooked tty. Purge waiters above
-		 * drop the dying reader; without a session flush the new
-		 * username read sits blocked (prompt printed, keys ignored).
-		 */
-		if (ir0_console_has_ctty_for_sid((int32_t)dying->sid))
-		{
-			ir0_console_flush_input_session();
-			ir0_console_reset_cooked_echo();
-		}
-		ir0_console_clear_ctty_session((int32_t)dying->sid);
-	}
-
-	process_release_fds(dying, "EXIT_CLOSE");
+	process_resources_release_on_exit(dying);
 }
 
 void process_notify_parent_of_exit(process_t *dying)
@@ -217,69 +147,4 @@ __attribute__((noreturn)) void process_exit(int code)
 	/* No runnable task: halt forever (must not sysret to exited user context). */
 	for (;;)
 		cpu_idle();
-}
-
-
-/*
- * process_destroy - Release per-process resources before freeing a zombie struct.
- * Closes VFS and pipe handles, clears the FD table, and tears down user
- * mappings in this process's page directory (not the active hardware root).
- */
-void process_destroy(process_t *p)
-{
-	uint64_t orphan_frames = 0;
-	uint64_t double_free = 0;
-	uint64_t alive_owner_missing = 0;
-
-	if (!p)
-		return;
-
-	/*
-	 * Spawn-fail and reap-without-exit must drop vfork slots too.
-	 * process_exit already ran this; a second call is a no-op.
-	 */
-	process_mm_release_on_exit(p);
-
-	ir0_console_purge_waiters_for_process(p);
-	pipe_purge_waiters_for_process(p);
-	ir0_clock_wait_disarm(p);
-
-	process_release_fds(p, "DESTROY");
-
-	if (p->files)
-	{
-		files_put(p->files);
-		p->files = NULL;
-	}
-
-	/*
-	 * Address space teardown via mm refcount. Unmap the private kstack
-	 * while the process address-space root is still alive (high VA pages live
-	 * there).
-	 */
-	{
-		uint64_t kstack = 0;
-
-		if (p->mode == KERNEL_MODE)
-			kstack = process_stack_start(p);
-
-		process_kernel_stack_free(p);
-
-		if (p->mm)
-		{
-			mm_put(p->mm);
-			p->mm = NULL;
-		}
-
-		if (p->mode == KERNEL_MODE && kstack &&
-		    kstack != INIT_DEBUG_STACK_BASE)
-			kfree((void *)(uintptr_t)kstack);
-	}
-
-	process_saved_context_clear(p);
-	process_saved_environ_clear(p);
-	process_saved_cmdline_clear(p);
-
-	pmm_owner_audit(&orphan_frames, &double_free, &alive_owner_missing);
-	paging_ir0_mm_checkpoint("destroy-after", (int32_t)p->task.pid);
 }

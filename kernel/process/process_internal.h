@@ -114,6 +114,9 @@ int process_validate_userspace_buffer(const void *buf, size_t size);
 void process_pre_zombie_teardown(process_t *dying);
 void process_notify_parent_of_exit(process_t *dying);
 
+/* resources.c */
+void process_resources_release_on_exit(process_t *dying);
+
 /* signals.c */
 int process_signal_is_default_fatal(process_t *p, int sig);
 
