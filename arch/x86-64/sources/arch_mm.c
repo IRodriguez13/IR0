@@ -41,6 +41,20 @@ int mm_boot_pmm_range(uintptr_t *base, size_t *size)
 	return 0;
 }
 
+size_t mm_boot_usable_range_count(void)
+{
+	return 1;
+}
+
+int mm_boot_usable_range(size_t index, struct ir0_phys_range *range)
+{
+	if (!range || index != 0)
+		return -EINVAL;
+	range->base = PMM_PHYS_BASE;
+	range->size = PMM_PHYS_SIZE;
+	return 0;
+}
+
 uintptr_t mm_user_va_start(void)
 {
 	return 0x00400000UL;

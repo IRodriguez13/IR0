@@ -67,6 +67,21 @@ static int arm64_pmm_range_contract(void)
 	return 0;
 }
 
+static int arm64_usable_range_inventory_contract(void)
+{
+	struct ir0_phys_range range;
+	size_t count = mm_boot_usable_range_count();
+
+	if (count == 0)
+		return -ENODEV;
+	if (mm_boot_usable_range(0, &range) != 0)
+		return -1;
+	if ((range.base & 0xFFFU) != 0U || (range.size & 0xFFFU) != 0U ||
+	    range.size == 0U || range.base > UINT64_MAX - range.size)
+		return -1;
+	return 0;
+}
+
 void arm64_all_objs_mark(void)
 {
 	ir0_boot_smoke("ARM64_ALL_OBJS_LINK_OK");
@@ -82,6 +97,16 @@ void arm64_all_objs_mark(void)
 		else if (pmm_range == -ENODEV)
 			ir0_boot_smoke("ARM64_PMM_RANGE_UNAVAILABLE");
 		else
-		ir0_boot_smoke("ARM64_PMM_RANGE_FAIL");
+			ir0_boot_smoke("ARM64_PMM_RANGE_FAIL");
+	}
+	{
+		int inventory = arm64_usable_range_inventory_contract();
+
+		if (inventory == 0)
+			ir0_boot_smoke("ARM64_USABLE_RANGES_OK");
+		else if (inventory == -ENODEV)
+			ir0_boot_smoke("ARM64_USABLE_RANGES_UNAVAILABLE");
+		else
+			ir0_boot_smoke("ARM64_USABLE_RANGES_FAIL");
 	}
 }

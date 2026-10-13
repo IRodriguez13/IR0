@@ -75,6 +75,29 @@ int mm_boot_pmm_range(uintptr_t *base, size_t *size)
 	return 0;
 }
 
+size_t mm_boot_usable_range_count(void)
+{
+	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
+
+	if (!boot || !boot->fdt_valid)
+		return 0;
+	return boot->usable_range_count;
+}
+
+int mm_boot_usable_range(size_t index, struct ir0_phys_range *range)
+{
+	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
+
+	if (!range)
+		return -EINVAL;
+	if (!boot || !boot->fdt_valid)
+		return -ENODEV;
+	if (index >= boot->usable_range_count)
+		return -EINVAL;
+	*range = boot->usable[index];
+	return 0;
+}
+
 uintptr_t mm_user_va_start(void)
 {
 	return 0x00400000UL;
