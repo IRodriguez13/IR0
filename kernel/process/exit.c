@@ -172,12 +172,8 @@ __attribute__((noreturn)) void process_exit(int code)
 		klog_debug("WAIT", "CLASSIFY ZOMBIE_IRQ_SAVED_CLEARED");
 
 	/* Mark as zombie */
-	process_mark_zombie(dying);
+	process_lifecycle_publish_exit(dying, code);
 	KTM_CHECKPOINT(KTM_CP_PROCESS_EXIT);
-	if (dying->exit_signal == 0)
-		dying->exit_code = code;
-	else
-		dying->exit_code = 0;
 #if IR0_DEBUG_PROC
 	if (dying->exit_signal > 0)
 	{

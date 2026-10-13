@@ -194,6 +194,7 @@ void process_reap_zombie_child(process_t *child)
 	{
 		return;
 	}
+	process_lifecycle_publish_reaped(child);
 	process_destroy(child);
 	kfree(child);
 }
@@ -236,15 +237,7 @@ static int process_wait_pid_matches_child(pid_t wait_pid,
 					  const process_t *parent,
 					  const process_t *child)
 {
-	if (!parent || !child)
-		return 0;
-	if (wait_pid == (pid_t)-1)
-		return 1;
-	if (wait_pid > 0)
-		return child->task.pid == wait_pid;
-	if (wait_pid == 0)
-		return child->pgid == parent->pgid;
-	return child->pgid == (pid_t)(-wait_pid);
+	return process_lifecycle_child_matches(parent, child, wait_pid);
 }
 
 int process_has_zombie_child(const process_t *parent)
@@ -279,11 +272,7 @@ int process_wait_child_matches_blocked_target(const process_t *parent,
 
 int process_child_wait_status_word(const process_t *child)
 {
-	if (!child)
-		return 0;
-	if (child->exit_signal > 0)
-		return child->exit_signal & 0x7f;
-	return (child->exit_code & 0xff) << 8;
+	return process_lifecycle_wait_status(child);
 }
 
 void process_wait_wake_blocked_parent(process_t *parent, process_t *child)

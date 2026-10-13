@@ -12,6 +12,7 @@
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
+#include <kernel/process.h>
 
 static int arm64_mm_descriptor_contract(void)
 {
@@ -73,6 +74,36 @@ static int arm64_boot_memory_contract(void)
 	return 0;
 }
 
+static int arm64_common_lifecycle_contract(void)
+{
+	static process_t parent;
+	static process_t child;
+	uint8_t *bytes;
+	size_t i;
+
+	bytes = (uint8_t *)&parent;
+	for (i = 0; i < sizeof(parent); i++)
+		bytes[i] = 0;
+	bytes = (uint8_t *)&child;
+	for (i = 0; i < sizeof(child); i++)
+		bytes[i] = 0;
+
+	parent.task.pid = 1;
+	parent.pgid = 1;
+	child.task.pid = 2;
+	child.ppid = 1;
+	child.pgid = 1;
+	child.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+	child.state = PROCESS_RUNNING;
+	process_lifecycle_publish_exit(&child, 42);
+	if (!process_is_zombie(&child) ||
+	    !process_lifecycle_child_matches(&parent, &child, (pid_t)-1) ||
+	    process_lifecycle_wait_status(&child) != (42 << 8))
+		return -1;
+	process_lifecycle_publish_reaped(&child);
+	return child.lifecycle == PROCESS_LIFECYCLE_DEAD ? 0 : -1;
+}
+
 void arm64_all_objs_mark(void)
 {
 	ir0_boot_smoke("ARM64_ALL_OBJS_LINK_OK");
@@ -80,6 +111,10 @@ void arm64_all_objs_mark(void)
 		ir0_boot_smoke("ARM64_MM_DESCRIPTOR_CONTRACT_OK");
 	else
 		ir0_boot_smoke("ARM64_MM_DESCRIPTOR_CONTRACT_FAIL");
+	if (arm64_common_lifecycle_contract() == 0)
+		ir0_boot_smoke("ARM64_COMMON_LIFECYCLE_OK");
+	else
+		ir0_boot_smoke("ARM64_COMMON_LIFECYCLE_FAIL");
 	{
 		int inventory = arm64_boot_memory_contract();
 

@@ -675,6 +675,11 @@ int process_wait_child_matches_blocked_target(const process_t *parent,
 
 /* Linux wait status word for a zombie (exit << 8 or WTERMSIG). */
 int process_child_wait_status_word(const process_t *child);
+void process_lifecycle_publish_exit(process_t *process, int code);
+int process_lifecycle_wait_status(const process_t *child);
+int process_lifecycle_child_matches(const process_t *parent,
+				    const process_t *child, pid_t wait_pid);
+void process_lifecycle_publish_reaped(process_t *process);
 
 /*
  * Fatal default action for kill(2): SIGKILL always; SIGTERM/SIGHUP when not

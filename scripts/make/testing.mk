@@ -2728,6 +2728,7 @@ ARM64_COMMON_PROCESS_SRCS = \
 	kernel/process/files_struct.c \
 	kernel/process/fork.c \
 	kernel/process/exec.c \
+	kernel/process/lifecycle.c \
 	kernel/process/exit.c \
 	kernel/process/wait.c \
 	kernel/process/wait_state.c \
@@ -2784,6 +2785,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		kernel/process/fdtable.c \
 		kernel/process/fork.c \
 		kernel/process/exec.c \
+		kernel/process/lifecycle.c \
 		kernel/process/domains.c \
 		kernel/process/saved_context.c \
 		kernel/process/saved_environ.c \
@@ -2894,6 +2896,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		build/arm64-all/fdtable.o \
 		build/arm64-all/fork.o \
 		build/arm64-all/exec.o \
+		build/arm64-all/lifecycle.o \
 		build/arm64-all/domains.o \
 		build/arm64-all/saved_context.o \
 		build/arm64-all/saved_environ.o \
@@ -2961,6 +2964,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		-display none -no-reboot 2>/dev/null || true
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
@@ -2979,6 +2983,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_DTB_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-dtb-smoke.log
