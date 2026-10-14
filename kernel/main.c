@@ -96,7 +96,7 @@ void kernel_idle_loop(void)
 		enable_interrupts();
 		kernel_idle_poll();
 		/*
-		 * IRQ preempt only returns to ring 3 today. Idle must yield
+		 * IRQ preemption only returns to userspace today. Idle must yield
 		 * explicitly when a higher-priority task is runnable.
 		 */
 		if (sched_count_runnable() > 1)

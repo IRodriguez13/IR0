@@ -558,7 +558,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   {
     /*
      * Mark ring-0 before waking the child so a timer-deferred schedule
-     * resumes via kernel_ret (syscall stack), not user iretq with a stale rip.
+     * resumes via the kernel continuation, not a userspace return with stale IP.
      * IRQs off first: otherwise arm leaves KERNEL_CS+user RIP while the timer
      * can still preempt and schedule the parent as next (desk #UD class).
      * vfork does not use this path: the child already ran while the parent
@@ -572,7 +572,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
     /*
      * Linux-style fork exit: wake child after parent retval is in rax, then
-     * keep IF=0 until sysret so the timer cannot run the child first (UP).
+     * keep interrupts disabled through the ISA return so the timer cannot run
+     * the child first (UP).
      */
     disable_interrupts();
     process_fork_wake_pending(current_process);
@@ -581,8 +582,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   {
     /*
      * Signal handler armed during this syscall (e.g. SIGALRM in recvfrom):
-     * sysret would ignore task.RIP and return to the insn after the syscall.
-     * Iretq into the handler instead (restorer → rt_sigreturn later).
+     * A fast syscall return would ignore the staged task IP and resume after
+     * the syscall. Use the full saved-frame route into the signal handler.
      */
     if (current_process && current_process->mode == USER_MODE &&
         process_saved_context_present(current_process) &&
@@ -602,7 +603,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     {
       /*
        * Cooperative in-syscall reschedule for syscall-insn (musl) tasks.
-       * Resume THIS task from its saved syscall_frame via a fresh iretq, never
+       * Resume THIS task from its saved syscall frame through the full
+       * userspace-return route, never
        * via kernel_ret on the single shared global syscall stack / user_rsp_save
        * scratch: a peer task's syscall resets that stack to the top and would
        * clobber our saved pt_regs, corrupting user registers on resume.
@@ -633,7 +635,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 
   /*
    * Restore user segments in task_t only after any in-syscall schedule
-   * completes; asm sysret reloads DS/ES independently.
+   * completes; the ISA exit path restores any required segment state.
    */
   if (current_process && current_process->mode == USER_MODE)
     process_restore_user_task_segments(current_process);

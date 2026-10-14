@@ -239,7 +239,8 @@ void signals_try_abandon_sigframe(process_t *p);
 
 /*
  * Deliver @sig synchronously from a user #PF IRQ @frame (isr_common_stub layout).
- * @fault_addr is CR2 (stored in siginfo for SA_SIGINFO).
+ * @fault_addr is the ISA-decoded faulting virtual address (stored in siginfo
+ * for SA_SIGINFO).
  * Returns 1 if redirected to handler; 0 if caller should terminate/default.
  */
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,

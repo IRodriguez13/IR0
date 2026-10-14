@@ -2026,7 +2026,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
      * (SIGSEGV pending) then made accept/poll return -EINTR immediately.
      */
     signals_reset_on_exec(proc);
-    /* Password read may leave kernel-return state; clear it before iretq. */
+    /* Password read may leave kernel-return state; clear it before userspace. */
     proc->want_kernel_ret = 0;
     proc->irq_frame_saved = 0;
 	/*

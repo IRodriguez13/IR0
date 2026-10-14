@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: arch_pf_debug.h
- * Description: Arch-specific page-fault forensics (x86 register frame layout).
+ * Description: Optional ISA page-fault forensic hooks.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -18,10 +18,11 @@
 #include <ir0/page_fault.h>
 #include <ir0/process.h>
 
-void pf_debug_stack_adjacent(uint64_t *frame, uint64_t fault_addr,
+/* @arch_frame is opaque to common MM code and decoded only by the backend. */
+void pf_debug_stack_adjacent(uint64_t *arch_frame, uint64_t fault_addr,
 			     const struct page_fault_info *info,
 			     process_t *p);
 
-void pf_debug_memmove_fault(uint64_t *frame, uint64_t fault_addr,
+void pf_debug_memmove_fault(uint64_t *arch_frame, uint64_t fault_addr,
 			    const struct page_fault_info *info,
 			    process_t *p);

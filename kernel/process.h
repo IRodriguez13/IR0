@@ -281,7 +281,8 @@ typedef struct process
 
 	/*
 	 * Child blocked off runqueue until parent completes fork syscall return
-	 * (process_fork_wake_pending at syscall exit; IRQs off until sysret).
+	 * (process_fork_wake_pending at syscall exit; IRQs remain disabled until
+	 * the ISA completes its userspace return).
 	 */
 	struct process *fork_pending_child;
 	/*
@@ -297,7 +298,7 @@ typedef struct process
 	 *   i.e. the `syscall` insn path; int 0x80 tasks leave it 0).
 	 * coop_resched_resume: the pending resume was armed by a cooperative
 	 *   reschedule (not wait4), so the resume path must skip the zombie reap.
-	 * Both let a time-sliced task resume via its syscall_frame (fresh iretq)
+	 * Both let a time-sliced task resume via a fresh saved syscall frame
 	 * instead of kernel_ret on the single shared global syscall stack, whose
 	 * frame a peer task's syscall would clobber from the top.
 	 */
@@ -316,7 +317,7 @@ typedef struct process
 	 * its operation (pipe, tty, poll). The resume gate used to infer this
 	 * from syscall_resume_rax == 0, but that field is leftover state from
 	 * whatever blocking syscall ran last: a non-zero residue sent a woken
-	 * pipe reader back to ring 3 through its stale entry frame, so the
+	 * pipe reader back to userspace through its stale entry frame, so the
 	 * read was never retried and userspace saw a short read while bytes
 	 * sat in the pipe. Cleared when the task returns to user segments.
 	 */

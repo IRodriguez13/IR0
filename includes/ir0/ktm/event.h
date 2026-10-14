@@ -65,7 +65,7 @@ enum ktm_event_type
 	 */
 	KTM_EVENT_PIPE_READ,
 	KTM_EVENT_PIPE_WRITE,
-	/* Resume gate returned to ring 3 instead of continuing the syscall. */
+	/* Resume gate returned to userspace instead of continuing the syscall. */
 	KTM_EVENT_CTX_USER_IRET,
 	/* Kernel stack headroom record low: a0=bytes left, a1=slot, a2=rsp. */
 	KTM_EVENT_STACK_LOW

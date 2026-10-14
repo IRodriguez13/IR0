@@ -18,8 +18,8 @@
 
 /*
  * Some paths cannot afford ktm_event_emit4. The context switch is the case
- * that forced this: emitting from the resume gate (interrupts off, mid CR3
- * change, kernel stack in flux) took smoke-pipeline-stress from one failure
+ * that forced this: emitting from the resume gate (interrupts off, during an
+ * address-space change, kernel stack in flux) took smoke-pipeline-stress from one failure
  * in six to two in four and introduced SIGSEGVs that were not there before —
  * the instrumentation was changing the very ordering it was meant to observe.
  *

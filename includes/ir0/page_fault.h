@@ -30,7 +30,8 @@ struct page_fault_info
 };
 
 /*
- * Decode fault from arch entry context (CR2/FAR, error code, IRQ frame).
+ * Decode a fault from the opaque ISA entry context (fault address, access
+ * classification and saved exception frame).
  * x86-64: errcode is #PF error code; frame is ISR stack (rip at [2], rsp at [5]).
  * Returns 0 or -errno (-EINVAL, -EOPNOTSUPP on stub ISAs).
  */
