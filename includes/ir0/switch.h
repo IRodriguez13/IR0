@@ -18,7 +18,7 @@ void set_current_kernel_stack(struct process *p);
 void switch_save_user_rsp(struct process *prev);
 
 /*
- * switch_report_bad_ret — kernel return RIP outside .text (Class B / bad iret).
- * Called from ISA switch asm only; portable sched uses switch_to(), not this.
+ * switch_report_bad_ret — invalid kernel continuation outside executable text.
+ * Called from ISA switch assembly only; portable sched uses switch_to().
  */
 void switch_report_bad_ret(uint64_t rip, task_t *task);

@@ -300,7 +300,8 @@ void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_h
 }
 
 /*
- * Soft mirror of syscall_frame → task while CS is still user (Class B safe).
+ * Soft-mirror the saved syscall frame while the task still has a valid
+ * userspace-return state.
  */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 {
@@ -353,8 +354,8 @@ void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax)
 
 /*
  * process_arm_coop_resched_resume - Arm a cooperative in-syscall reschedule to
- * resume via the saved syscall_frame (fresh iretq) instead of kernel_ret on the
- * shared global syscall stack. Unlike wait4, there is no zombie child to reap,
+ * resume via the saved syscall frame instead of the kernel continuation on the
+ * shared syscall stack. Unlike wait4, there is no zombie child to reap,
  * so coop_resched_resume tells switch_to to skip the reap step.
  * Only valid for syscall-insn tasks (syscall_frame_fresh).
  */
@@ -433,15 +434,16 @@ void process_kernel_sleep_capture_syscall_frame(process_t *p)
 
 /*
  * process_arm_kernel_syscall_sleep - Prepare a blocked syscall for
- * kernel_ret resume after switch_context save (not via user RIP).
+ * kernel-continuation resume after the context save, rather than via a stale
+ * userspace instruction pointer.
  *
  * Name: "arm" is the English verb (prepare/enable), not the ARM ISA.
  *
- * User regs live in syscall_frame (pt_regs). If task.arch.rip still looks like
- * userspace (stale from a prior iretq), only set want_kernel_ret — never pair
- * KERNEL_CS with that RIP. Outgoing save stores kernel [rsp] + CPU CS;
- * process_after_task_save clears the flag. If rip is already kernel .text,
- * apply KERNEL CS immediately.
+ * User registers live in syscall_frame (pt_regs). If the saved task IP still
+ * names userspace, only request the kernel continuation; never combine a
+ * kernel return classification with that stale IP. The ISA save hook records
+ * its current continuation state, then process_after_task_save clears the
+ * request. If the IP is already kernel text, apply the kernel return state now.
  */
 void process_arm_kernel_syscall_sleep(process_t *p)
 {
@@ -451,7 +453,8 @@ void process_arm_kernel_syscall_sleep(process_t *p)
 	/*
 	 * Outlives want_kernel_ret, which process_after_task_save clears once
 	 * the segments are applied. The resume gate runs later still and needs
-	 * to know this task must re-enter its syscall rather than iretq.
+	 * to know this task must re-enter its syscall rather than return directly
+	 * to userspace.
 	 */
 	p->kernel_syscall_sleep = 1;
 
@@ -488,9 +491,9 @@ void process_arm_kernel_syscall_sleep(process_t *p)
 /*
  * process_after_task_save - Linux-like post-switch save epilogue.
  *
- * Called from switch_context_x64 after prev GPRs/RIP/CS were written from the
- * CPU (kernel return address + ring-0 CS). Honour want_kernel_ret so the next
- * resume takes kernel_ret, not user iretq with a stale frame.
+ * Called by an ISA save hook after the outgoing task context is captured.
+ * Honour want_kernel_ret so the next resume takes the kernel continuation,
+ * not a userspace-return path with a stale frame.
  */
 void process_after_task_save(task_t *prev)
 {

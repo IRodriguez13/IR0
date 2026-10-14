@@ -1739,6 +1739,28 @@ def check_process_lifecycle_uses_semantic_return_state():
     return errors
 
 
+def check_portable_task_api_has_no_x86_register_aliases():
+    """Keep public task accessors semantic instead of naming x86 registers."""
+    errors = []
+    forbidden = re.compile(r"\btask_(?:get|set)_(?:rdi|rsi|rdx)\s*\(")
+    roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
+             ROOT / "net", ROOT / "sched")
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for fpath in iter_c_files(root):
+            for idx, line in enumerate(
+                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            ):
+                if forbidden.search(line):
+                    errors.append(
+                        f"[task-api-semantic-registers] {fpath.relative_to(ROOT)}:"
+                        f"{idx}: use task arg/retval/IP/SP accessors: {line.strip()}"
+                    )
+    return errors
+
+
 def check_common_paging_uses_neutral_roots():
     """Keep ISA register/table vocabulary out of the common paging contract."""
     errors = []
@@ -2134,6 +2156,7 @@ def main():
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_process_lifecycle_uses_semantic_return_state())
+    errors.extend(check_portable_task_api_has_no_x86_register_aliases())
     errors.extend(check_common_paging_uses_neutral_roots())
     errors.extend(check_common_address_space_contracts())
     errors.extend(check_common_elf_uses_isa_policy())

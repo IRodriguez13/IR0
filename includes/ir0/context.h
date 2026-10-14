@@ -59,7 +59,8 @@ void context_prepare_first(struct process *next);
 
 /*
  * Enter userspace with full task register state (fork/signal/syscall-block resume).
- * ISA backend performs iretq / EL drop; portable code names the contract only.
+ * The ISA backend performs the privilege return; portable code names only the
+ * semantic transfer contract.
  */
 void switch_to_user_task(const struct task *task);
 
@@ -67,6 +68,7 @@ void switch_to_user(uintptr_t entry, uintptr_t stack);
 
 /*
  * First transfer from idle/boot into @next. Does not return on success.
- * ISA details live in arch backends; portable sched must not embed iretq.
+ * ISA details live in arch backends; portable scheduling code must not embed a
+ * privilege-return mechanism.
  */
 void first_switch_to(struct process *next);

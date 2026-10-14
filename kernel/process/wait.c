@@ -141,9 +141,9 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	if (!parent->irq_frame_saved)
 	{
 		/*
-		 * Blocked via process_arm_kernel_syscall_sleep: keep kernel CS/SS so
-		 * switch_to resumes with kernel_ret into process_wait, not
-		 * user iret with stale task retval (placeholder 0 at block time).
+		 * Blocked via process_arm_kernel_syscall_sleep: retain the kernel
+		 * continuation so switch_to resumes inside process_wait, rather than
+		 * returning to userspace with the block-time placeholder result.
 		 */
 		process_set_sched_state(parent, PROCESS_READY);
 		sched_add_process(parent);
@@ -368,12 +368,11 @@ int process_wait(pid_t pid, int *status, int options)
 			current_process->syscall_resume_rax = 0;
 			task_set_retval(&current_process->task, 0);
 			/*
-			 * Same contract as pipe/TTY/poll: kernel_ret only.
+			 * Same contract as pipe/TTY/poll: kernel continuation only.
 			 * Do NOT call process_arm_blocked_syscall_resume() —
-			 * that stages USER CS+RIP with irq_frame_saved and,
-			 * combined with deferred want_kernel_ret / skip-save,
-			 * yields Class B (KERNEL CS + user RIP) →
-			 * "kernel_ret RIP not in .text" while a child blocks
+			 * that stages a userspace return with irq_frame_saved and,
+			 * combined with deferred want_kernel_ret / skip-save, creates
+			 * an invalid mixed return state while a child blocks
 			 * on stdin (desk: ash wait4 + hexdump).
 			 */
 			current_process->irq_frame_saved = 0;
@@ -436,10 +435,9 @@ int process_wait(pid_t pid, int *status, int options)
 				break;
 		}
 		/*
-		 * Stay on kernel CS until process_wait returns; syscall_dispatch
-		 * restores user segments at sysret. Restoring here while still
-		 * inside process_wait lets switch_context user-iret with the
-		 * block-time rax=0 placeholder (wait4_block_reap flake).
+		 * Keep the kernel continuation until process_wait returns; the syscall
+		 * exit path restores userspace state. Restoring it here could return
+		 * with the block-time zero placeholder (wait4_block_reap flake).
 		 */
 	}
 }

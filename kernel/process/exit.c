@@ -97,7 +97,7 @@ __attribute__((noreturn)) void process_exit(int code)
 	 */
 	sched_schedule_next();
 
-	/* No runnable task: halt forever (must not sysret to exited user context). */
+	/* No runnable task: halt forever; never resume an exited user context. */
 	for (;;)
 		cpu_idle();
 }

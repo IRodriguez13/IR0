@@ -61,7 +61,7 @@ enum context_resume_route context_prepare_resume_route(task_t *next)
 	if (!proc->irq_frame_saved || route != CONTEXT_RESUME_KERNEL)
 		return route;
 
-	/* A stale frame must continue in the kernel, never be returned to EL0/ring 3. */
+	/* A stale frame must continue in the kernel, never return to userspace. */
 	proc->irq_frame_saved = 0;
 	proc->coop_resched_resume = 0;
 	return CONTEXT_RESUME_KERNEL;

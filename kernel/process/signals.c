@@ -54,8 +54,8 @@ int process_signal_default_kill(process_t *dying, int sig)
 		return 0;
 
 	/*
-	 * Self-terminate must use process_exit(): zombieize + schedule away.
-	 * Returning to ring 3 after marking current PROCESS_ZOMBIE yields #UD.
+	 * Self-terminate must use process_exit(): publish the zombie and schedule
+	 * away. A dead task must never reach an ISA userspace-return path.
 	 */
 	if (dying == current_process)
 	{
