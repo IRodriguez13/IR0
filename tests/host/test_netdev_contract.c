@@ -43,4 +43,16 @@ void test_netdev_contract(void)
 	ASSERT(dev.get_byte_stats == NULL);
 	ASSERT(dev.handle_irq == NULL);
 	TEST_END();
+
+	TEST_BEGIN("network_byte_order_contract");
+	ASSERT_EQ(ntohs(htons(0x1234U)), 0x1234U);
+	ASSERT_EQ(ntohl(htonl(0x12345678U)), 0x12345678U);
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	ASSERT_EQ(htons(0x1234U), 0x3412U);
+	ASSERT_EQ(htonl(0x12345678U), 0x78563412U);
+#else
+	ASSERT_EQ(htons(0x1234U), 0x1234U);
+	ASSERT_EQ(htonl(0x12345678U), 0x12345678U);
+#endif
+	TEST_END();
 }

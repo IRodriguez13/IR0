@@ -17,17 +17,29 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-/* Byte order conversion macros (Big Endian <-> Little Endian) */
-/* IR0 is x86-64 (Little Endian) */
+/* Network order is big-endian; host order belongs to the selected ISA. */
+static inline uint16_t ir0_host_to_be16(uint16_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return __builtin_bswap16(value);
+#else
+	return value;
+#endif
+}
 
-#define htons(n) (((((uint16_t)(n) & 0xFF)) << 8) | (((uint16_t)(n) & 0xFF00) >> 8))
-#define ntohs(n) htons(n)
+static inline uint32_t ir0_host_to_be32(uint32_t value)
+{
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+	return __builtin_bswap32(value);
+#else
+	return value;
+#endif
+}
 
-#define htonl(n) (((((uint32_t)(n) & 0x000000FF)) << 24) | \
-                  ((((uint32_t)(n) & 0x0000FF00)) << 8) |  \
-                  ((((uint32_t)(n) & 0x00FF0000)) >> 8) |  \
-                  ((((uint32_t)(n) & 0xFF000000)) >> 24))
-#define ntohl(n) htonl(n)
+#define htons(n) ir0_host_to_be16((uint16_t)(n))
+#define ntohs(n) ir0_host_to_be16((uint16_t)(n))
+#define htonl(n) ir0_host_to_be32((uint32_t)(n))
+#define ntohl(n) ir0_host_to_be32((uint32_t)(n))
 
 /* Common Ethernet Types */
 #define ETHERTYPE_IP 0x0800
