@@ -21,6 +21,8 @@ void process_reap_zombie_child(process_t *child)
 
 	if (!child)
 		return;
+	if (process_lifecycle_prepare_reap(child) != 0)
+		return;
 
 	removed = process_remove_from_list(child);
 	KTM_CHECKPOINT(KTM_CP_PROCESS_REAP);

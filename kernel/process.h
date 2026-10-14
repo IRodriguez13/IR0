@@ -683,6 +683,7 @@ int process_lifecycle_wait_status(const process_t *child);
 int process_lifecycle_child_matches(const process_t *parent,
 				    const process_t *child, pid_t wait_pid);
 void process_lifecycle_publish_reaped(process_t *process);
+int process_lifecycle_prepare_reap(const process_t *process);
 size_t process_lifecycle_reparent(process_t *head, process_t *dying,
 				  process_t *adopter);
 void process_reparent_children(process_t *dying_parent);

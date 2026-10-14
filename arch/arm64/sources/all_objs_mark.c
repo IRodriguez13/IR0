@@ -107,10 +107,13 @@ static int arm64_common_lifecycle_contract(void)
 	child.pgid = 1;
 	child.lifecycle = PROCESS_LIFECYCLE_ALIVE;
 	child.state = PROCESS_RUNNING;
+	if (process_lifecycle_prepare_reap(&child) != -EBUSY)
+		return -1;
 	process_lifecycle_publish_exit(&child, 42);
 	if (!process_is_zombie(&child) ||
 	    !process_lifecycle_child_matches(&parent, &child, (pid_t)-1) ||
-	    process_child_wait_status_word(&child) != (42 << 8))
+	    process_child_wait_status_word(&child) != (42 << 8) ||
+	    process_lifecycle_prepare_reap(&child) != 0)
 		return -1;
 	child.exit_signal = SIGKILL;
 	process_lifecycle_publish_exit(&child, 99);
@@ -118,7 +121,8 @@ static int arm64_common_lifecycle_contract(void)
 	    process_child_wait_status_word(&child) != SIGKILL)
 		return -1;
 	process_lifecycle_publish_reaped(&child);
-	if (child.lifecycle != PROCESS_LIFECYCLE_DEAD)
+	if (child.lifecycle != PROCESS_LIFECYCLE_DEAD ||
+	    process_lifecycle_prepare_reap(&child) != -EALREADY)
 		return -1;
 
 	init.task.pid = 1;

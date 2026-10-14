@@ -2,6 +2,7 @@
 /** IR0 Kernel — ISA-neutral process lifecycle transitions. */
 
 #include <kernel/process.h>
+#include <ir0/errno.h>
 
 void process_lifecycle_publish_exit(process_t *process, int code)
 {
@@ -37,6 +38,17 @@ int process_lifecycle_child_matches(const process_t *parent,
 void process_lifecycle_publish_reaped(process_t *process)
 {
 	process_mark_dead(process);
+}
+
+int process_lifecycle_prepare_reap(const process_t *process)
+{
+	if (!process)
+		return -EINVAL;
+	if (process->lifecycle == PROCESS_LIFECYCLE_DEAD)
+		return -EALREADY;
+	if (!process_is_zombie(process))
+		return -EBUSY;
+	return 0;
 }
 
 size_t process_lifecycle_reparent(process_t *head, process_t *dying,
