@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/rtc.h>
+#include <string.h>
 
 uint8_t rtc_bcd_to_binary(uint8_t bcd)
 {
@@ -114,4 +115,54 @@ void rtc_apply_cmos_format(rtc_time_t *time, uint8_t status_b)
 			time->hour = 0;
 		}
 	}
+}
+
+void rtc_get_time_string(char *buffer, size_t buffer_size)
+{
+	rtc_time_t time;
+
+	if (!buffer || buffer_size < 9U)
+		return;
+	if (rtc_read_time(&time) != 0)
+	{
+		memcpy(buffer, "00:00:00", 9);
+		return;
+	}
+
+	buffer[0] = (char)('0' + (time.hour / 10));
+	buffer[1] = (char)('0' + (time.hour % 10));
+	buffer[2] = ':';
+	buffer[3] = (char)('0' + (time.minute / 10));
+	buffer[4] = (char)('0' + (time.minute % 10));
+	buffer[5] = ':';
+	buffer[6] = (char)('0' + (time.second / 10));
+	buffer[7] = (char)('0' + (time.second % 10));
+	buffer[8] = '\0';
+}
+
+void rtc_get_date_string(char *buffer, size_t buffer_size)
+{
+	rtc_time_t time;
+	uint16_t full_year;
+
+	if (!buffer || buffer_size < 11U)
+		return;
+	if (rtc_read_time(&time) != 0)
+	{
+		memcpy(buffer, "01/01/1970", 11);
+		return;
+	}
+
+	full_year = rtc_civil_year(&time);
+	buffer[0] = (char)('0' + (time.day / 10));
+	buffer[1] = (char)('0' + (time.day % 10));
+	buffer[2] = '/';
+	buffer[3] = (char)('0' + (time.month / 10));
+	buffer[4] = (char)('0' + (time.month % 10));
+	buffer[5] = '/';
+	buffer[6] = (char)('0' + (full_year / 1000));
+	buffer[7] = (char)('0' + ((full_year / 100) % 10));
+	buffer[8] = (char)('0' + ((full_year / 10) % 10));
+	buffer[9] = (char)('0' + (full_year % 10));
+	buffer[10] = '\0';
 }

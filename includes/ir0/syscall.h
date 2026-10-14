@@ -136,11 +136,7 @@ typedef int syscall_num_t;
 #define ACCESS_EXECUTE ACCESS_EXEC
 
 /* Low-level syscall interface (architecture-specific ABI wrappers). */
-#if defined(__aarch64__)
-#include <ir0/syscall_arm64.h>
-#else
-#include <ir0/syscall_x86_64.h>
-#endif
+#include <asm/syscall_user.h>
 
 /* Generic syscall */
 static inline int64_t syscall(int64_t num, int64_t arg1, int64_t arg2, int64_t arg3)

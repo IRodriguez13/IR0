@@ -1719,6 +1719,34 @@ def check_process_lifecycle_no_isa_conditionals():
     return errors
 
 
+def check_common_c_has_no_isa_conditionals():
+    """Select ISA implementations by objects/facades, never inside common C."""
+    errors = []
+    isa_conditional = re.compile(
+        r"^\s*#\s*(?:if|ifdef|ifndef|elif).*"
+        r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|ARCH_X86|"
+        r"ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
+    )
+    roots = (ROOT / "drivers", ROOT / "fs", ROOT / "interrupt",
+             ROOT / "kernel", ROOT / "ktm", ROOT / "mm", ROOT / "net",
+             ROOT / "sched")
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for fpath in root.rglob("*.c"):
+            for idx, line in enumerate(
+                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            ):
+                if isa_conditional.search(line):
+                    errors.append(
+                        f"[common-c-no-isa-conditional] "
+                        f"{fpath.relative_to(ROOT)}:{idx}: select an object or "
+                        f"facade backend: {line.strip()}"
+                    )
+    return errors
+
+
 def check_process_lifecycle_uses_semantic_return_state():
     """Keep x86 segment-state inspection out of common process lifecycle code."""
     errors = []
@@ -1762,9 +1790,15 @@ def check_portable_task_api_has_no_x86_register_aliases():
 
 
 def check_portable_code_has_no_private_asm_headers():
-    """Reserve <asm/...> headers for the selected ISA and its IRQ backend."""
+    """Allow only reviewed layout-selection gateways into private asm headers."""
     errors = []
     private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
+    selection_gateways = {
+        "includes/ir0/task.h": "#include <asm/task_context.h>",
+        "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
+        "includes/ir0/signals.h": "#include <asm/sigcontext.h>",
+        "includes/ir0/syscall.h": "#include <asm/syscall_user.h>",
+    }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
              ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers")
 
@@ -1776,9 +1810,12 @@ def check_portable_code_has_no_private_asm_headers():
                 fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
             ):
                 if private_include.search(line):
+                    rel = str(fpath.relative_to(ROOT))
+                    if selection_gateways.get(rel) == line.strip():
+                        continue
                     errors.append(
                         f"[portable-no-private-asm-header] "
-                        f"{fpath.relative_to(ROOT)}:{idx}: use an ir0 facade: "
+                        f"{rel}:{idx}: use an ir0 facade: "
                         f"{line.strip()}"
                     )
     return errors
@@ -2178,6 +2215,7 @@ def main():
     errors.extend(check_context_backend_include_boundary())
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
+    errors.extend(check_common_c_has_no_isa_conditionals())
     errors.extend(check_process_lifecycle_uses_semantic_return_state())
     errors.extend(check_portable_task_api_has_no_x86_register_aliases())
     errors.extend(check_portable_code_has_no_private_asm_headers())

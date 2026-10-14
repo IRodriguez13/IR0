@@ -2108,7 +2108,7 @@ smoke-robust-list: kernel-x64-userspace.iso
 # Board: ARM64_BOARD=qemu-virt|rpi4|rpi5 (see scripts/make/arm64-board.mk).
 ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
 	-DIR0_FREESTANDING_BOOT=1 $(ARM64_BOARD_CFLAGS) \
-	-I. -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0
+	-I. -Iarch/arm64/include -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0
 ARM64_ALL_CFLAGS = $(ARM64_BOOT_CFLAGS) -ffunction-sections -fdata-sections
 ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=current_process \

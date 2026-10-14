@@ -21,11 +21,7 @@
 #include <stddef.h>
 #include <ir0/task.h>
 
-#if defined(ARCH_ARM64) || defined(__aarch64__)
-#include <ir0/arch_syscall_frame_arm64.h>
-#else
-#include <ir0/arch_syscall_frame_x86_64.h>
-#endif
+#include <asm/syscall_frame.h>
 
 /* Legacy alias — same type; do not invent a second frame layout. */
 typedef arch_syscall_frame_t syscall_user_frame_t;

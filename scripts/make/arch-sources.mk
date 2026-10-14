@@ -47,6 +47,7 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/arch_early.o \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
+	arch/arm64/sources/rtc.o \
 	arch/arm64/sources/mm_ops.o \
 	arch/arm64/sources/pl011.o \
 	arch/arm64/sources/serial_io_arm64.o \

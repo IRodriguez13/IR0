@@ -123,11 +123,7 @@ struct sigaction {
  * ISA-specific sigcontext (Linux uapi: x86-64 and aarch64).
  * Portable code: arch_task_load/store_sigcontext / arch_signal_* only.
  */
-#if defined(ARCH_ARM64) || defined(__aarch64__)
-#include <ir0/sigcontext_arm64.h>
-#else
-#include <ir0/sigcontext_x86_64.h>
-#endif
+#include <asm/sigcontext.h>
 
 /**
  * struct sigframe - Signal frame on userspace stack

@@ -42,10 +42,6 @@ static void rtc_read_raw(rtc_time_t *time)
 
 int rtc_init(void)
 {
-#if !defined(__x86_64__) && !defined(__i386__)
-	/* No PC CMOS on this ISA — wall clock unavailable. */
-	return -1;
-#else
 	uint8_t status_b;
 
 	rtc_wait_uip_clear();
@@ -53,7 +49,6 @@ int rtc_init(void)
 	if (status_b == 0xFF)
 		return -1;
 	return 0;
-#endif
 }
 
 int rtc_read_time(rtc_time_t *time)
@@ -65,10 +60,6 @@ int rtc_read_time(rtc_time_t *time)
 
 	if (!time)
 		return -1;
-
-#if !defined(__x86_64__) && !defined(__i386__)
-	return -1;
-#endif
 
 	/*
 	 * Read twice after UIP clear; retry while the pair disagrees so we
@@ -102,65 +93,4 @@ void rtc_write_register(uint8_t reg, uint8_t value)
 {
 	outb(RTC_ADDRESS_REG, reg);
 	outb(RTC_DATA_REG, value);
-}
-
-void rtc_get_time_string(char *buffer, size_t buffer_size)
-{
-	rtc_time_t time;
-
-	if (!buffer || buffer_size < 9U)
-		return;
-
-	if (rtc_read_time(&time) != 0)
-	{
-		buffer[0] = '0';
-		buffer[1] = '0';
-		buffer[2] = ':';
-		buffer[3] = '0';
-		buffer[4] = '0';
-		buffer[5] = ':';
-		buffer[6] = '0';
-		buffer[7] = '0';
-		buffer[8] = '\0';
-		return;
-	}
-
-	buffer[0] = (char)('0' + (time.hour / 10));
-	buffer[1] = (char)('0' + (time.hour % 10));
-	buffer[2] = ':';
-	buffer[3] = (char)('0' + (time.minute / 10));
-	buffer[4] = (char)('0' + (time.minute % 10));
-	buffer[5] = ':';
-	buffer[6] = (char)('0' + (time.second / 10));
-	buffer[7] = (char)('0' + (time.second % 10));
-	buffer[8] = '\0';
-}
-
-void rtc_get_date_string(char *buffer, size_t buffer_size)
-{
-	rtc_time_t time;
-	uint16_t full_year;
-
-	if (!buffer || buffer_size < 11U)
-		return;
-
-	if (rtc_read_time(&time) != 0)
-	{
-		memcpy(buffer, "01/01/1970", 10);
-		buffer[10] = '\0';
-		return;
-	}
-
-	full_year = rtc_civil_year(&time);
-	buffer[0] = (char)('0' + (time.day / 10));
-	buffer[1] = (char)('0' + (time.day % 10));
-	buffer[2] = '/';
-	buffer[3] = (char)('0' + (time.month / 10));
-	buffer[4] = (char)('0' + (time.month % 10));
-	buffer[5] = '/';
-	buffer[6] = (char)('0' + (full_year / 1000));
-	buffer[7] = (char)('0' + ((full_year / 100) % 10));
-	buffer[8] = (char)('0' + ((full_year / 10) % 10));
-	buffer[9] = (char)('0' + (full_year % 10));
-	buffer[10] = '\0';
 }

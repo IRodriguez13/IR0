@@ -8,6 +8,13 @@
 #include <ir0/rtc.h>
 #include <string.h>
 
+/* Host provider: calendar tests deliberately have no hardware RTC. */
+int rtc_read_time(rtc_time_t *time)
+{
+	(void)time;
+	return -1;
+}
+
 void test_rtc_calendar(void)
 {
 	rtc_time_t t;

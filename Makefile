@@ -192,6 +192,8 @@ CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
 ifeq ($(ARCH),x86-64)
 CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
+else ifeq ($(ARCH),arm64)
+CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/include
 endif
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64
 CFLAGS += -I$(KERNEL_ROOT)/kernel
@@ -567,7 +569,6 @@ DRIVER_OBJS = \
     drivers/IO/ps2.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
-    drivers/timer/rtc/rtc.o \
     drivers/timer/hpet/hpet.o \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/acpi/acpi_pm.o \
@@ -586,6 +587,7 @@ DRIVER_OBJS = \
 # COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial_io_arm64.c (PL011).
 ifneq ($(ARCH),arm64)
 DRIVER_OBJS += drivers/serial/serial.o
+DRIVER_OBJS += drivers/timer/rtc/rtc.o
 endif
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h

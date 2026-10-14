@@ -1934,10 +1934,7 @@ int proc_cpuinfo_read(char *buf, size_t count)
     if (clflush_sz == 0)
         clflush_sz = 64;
 
-    uint32_t arch_bits = 64;
-#if defined(__i386__)
-    arch_bits = 32;
-#endif
+    uint32_t arch_bits = (uint32_t)(sizeof(uintptr_t) * 8U);
 
     /* Raw: one line per field, key\tvalue */
     size_t off = 0;

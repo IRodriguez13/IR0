@@ -18,11 +18,7 @@
 #include <stdint.h>
 #include <ir0/types.h>
 
-#if defined(ARCH_ARM64) || defined(__aarch64__)
-#include <ir0/arch_task_context_arm64.h>
-#else
-#include <ir0/arch_task_context_x86_64.h>
-#endif
+#include <asm/task_context.h>
 
 /*
  * Scheduler-facing task state (canonical). Numeric values for READY/RUNNING/
