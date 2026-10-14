@@ -26,9 +26,7 @@ static inline uint64_t vdso_ehdr(void)
 	return vdso_user_base();
 }
 
-#if VDSO_HAVE
 const uint8_t *vdso_blob_start(void);
 size_t vdso_blob_size(void);
-#endif
 
 int vdso_map(struct process *proc);

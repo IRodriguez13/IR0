@@ -16,7 +16,6 @@
 #pragma once
 
 #include <ir0/arch_types.h>
-#include <ir0/arch_config.h>
 #include <ir0/early_clock.h>
 #include <ir0/multiboot.h>
 #include <ir0/tlb.h>

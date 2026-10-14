@@ -19,7 +19,6 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <ir0/arch_config.h>
 
 typedef struct process process_t;
 
