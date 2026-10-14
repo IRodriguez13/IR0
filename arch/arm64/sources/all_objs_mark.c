@@ -170,9 +170,14 @@ static int arm64_common_lifecycle_contract(void)
 		return -1;
 	}
 	process_reparent_children(&parent);
-	process_list = saved_process_list;
-	if (orphan.ppid != init.task.pid)
+	if (orphan.ppid != init.task.pid ||
+	    process_reap_detach_zombie(&orphan) != 0 ||
+	    process_find_by_pid(orphan.task.pid) != NULL ||
+	    orphan.lifecycle != PROCESS_LIFECYCLE_DEAD) {
+		process_list = saved_process_list;
 		return -1;
+	}
+	process_list = saved_process_list;
 	return 0;
 }
 

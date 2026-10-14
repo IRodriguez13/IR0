@@ -15,22 +15,27 @@
 #include "process_internal.h"
 #include <ir0/ktm/checkpoint.h>
 
-void process_reap_zombie_child(process_t *child)
+int process_reap_detach_zombie(process_t *child)
 {
 	int removed;
 
-	if (!child)
-		return;
-	if (process_lifecycle_prepare_reap(child) != 0)
-		return;
+	removed = process_lifecycle_prepare_reap(child);
+	if (removed != 0)
+		return removed;
 
 	removed = process_remove_from_list(child);
-	KTM_CHECKPOINT(KTM_CP_PROCESS_REAP);
 	if (removed != 0)
-	{
-		return;
-	}
+		return removed;
 	process_lifecycle_publish_reaped(child);
+	return 0;
+}
+
+void process_reap_zombie_child(process_t *child)
+{
+	if (process_reap_detach_zombie(child) != 0)
+		return;
+
+	KTM_CHECKPOINT(KTM_CP_PROCESS_REAP);
 	process_destroy(child);
 	kfree(child);
 }

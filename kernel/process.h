@@ -792,6 +792,7 @@ void process_init_fd_table(process_t *process);
 /* Process lifecycle management */
 void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
 int process_has_zombie_child(const process_t *parent);
+int process_reap_detach_zombie(process_t *child);
 void process_reap_zombie_child(process_t *child);
 void process_destroy(process_t *p);
 
