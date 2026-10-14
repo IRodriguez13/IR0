@@ -672,6 +672,8 @@ static inline int process_is_alive(const process_t *p)
  */
 int process_wait_child_matches_blocked_target(const process_t *parent,
 					      pid_t child_pid);
+int process_wait_prepare_child_wake(const process_t *parent,
+				    const process_t *child, int *status_word);
 
 /* Linux wait status word for a zombie (exit << 8 or WTERMSIG). */
 int process_child_wait_status_word(const process_t *child);

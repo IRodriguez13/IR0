@@ -81,6 +81,7 @@ static int arm64_common_lifecycle_contract(void)
 	static process_t orphan;
 	static process_t init;
 	process_t *saved_process_list;
+	int wait_status;
 	uint8_t *bytes;
 	size_t i;
 
@@ -121,6 +122,7 @@ static int arm64_common_lifecycle_contract(void)
 	orphan.ppid = parent.task.pid;
 	orphan.lifecycle = PROCESS_LIFECYCLE_ZOMBIE;
 	orphan.state = PROCESS_ZOMBIE;
+	orphan.exit_code = 7;
 	init.next = &parent;
 	parent.next = &orphan;
 	orphan.next = NULL;
@@ -132,6 +134,11 @@ static int arm64_common_lifecycle_contract(void)
 	}
 	process_wait_state_arm(&parent, orphan.task.pid, 0, NULL);
 	if (!process_wait_child_matches_blocked_target(&parent, orphan.task.pid)) {
+		process_list = saved_process_list;
+		return -1;
+	}
+	if (process_wait_prepare_child_wake(&parent, &orphan, &wait_status) != 0 ||
+	    wait_status != (7 << 8)) {
 		process_list = saved_process_list;
 		return -1;
 	}

@@ -109,18 +109,26 @@ int process_child_wait_status_word(const process_t *child)
 	return process_lifecycle_wait_status(child);
 }
 
+int process_wait_prepare_child_wake(const process_t *parent,
+				    const process_t *child, int *status_word)
+{
+	if (!parent || !child || !status_word)
+		return -EINVAL;
+	if (!process_wait_child_matches_blocked_target(parent, child->task.pid))
+		return -ECHILD;
+	if (!process_is_zombie(child))
+		return -EAGAIN;
+	*status_word = process_child_wait_status_word(child);
+	return 0;
+}
+
 void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 {
 	int status_val;
 	int *status_ptr;
 
-	if (!parent || !child || !process_wait_blocked(parent))
+	if (process_wait_prepare_child_wake(parent, child, &status_val) != 0)
 		return;
-
-	if (!process_wait_child_matches_blocked_target(parent, child->task.pid))
-	{
-		return;
-	}
 
 
 	if (!parent->irq_frame_saved)
@@ -136,7 +144,6 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 		return;
 	}
 
-	status_val = process_child_wait_status_word(child);
 	status_ptr = process_wait_status_ptr_peek(parent);
 	if (!status_ptr)
 		status_ptr = (int *)(uintptr_t)process_syscall_arg(parent, 1);
