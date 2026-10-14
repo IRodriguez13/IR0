@@ -28,7 +28,6 @@
 #include <ir0/oops.h>
 #include <ir0/ktm/fault.h>
 #include <config.h>
-#include <ir0/arch_mm.h>
 #include <pmm.h>
 #include <mm/allocator.h>
 
@@ -266,18 +265,6 @@ void arch_switch_to(task_t *prev, task_t *next)
      * wait4 + blocked-syscall coverage.
      */
     process_t *next_proc = next ? task_to_process(next) : NULL;
-
-    /*
-     * switch_context_x64 loads next CR3 while still on prev's RSP. Keep
-	 * shared mappings fresh — asm bypasses paging_activate_address_space().
-     */
-    if (next)
-    {
-	uint64_t next_root = task_mm_root(next);
-
-	if (next_root)
-		mm_prepare_root_activation((address_space_root_t)next_root);
-    }
 
     if (next_proc && next && arch_will_resume_user_iretq(next_proc, next))
         arch_repair_user_gprs_from_syscall_frame(next_proc, next);

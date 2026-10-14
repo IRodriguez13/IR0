@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/arch_switch.h>
+#include <ir0/arch_mm.h>
 #include <ir0/context.h>
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
@@ -38,6 +39,12 @@ static void context_prepare_next(task_t *next)
 
 	if (task_mm_root(next) == 0 && process_pgd(next_proc))
 		task_set_mm_root(next, (uint64_t)(uintptr_t)process_pgd(next_proc));
+	/* The freestanding bring-up image owns its temporary TTBR roots. */
+#if !defined(IR0_FREESTANDING_BOOT)
+	if (task_mm_root(next))
+		mm_prepare_root_activation(
+			(address_space_root_t)task_mm_root(next));
+#endif
 	set_current_kernel_stack(next_proc);
 	set_tls(process_tls_get(next_proc));
 }
