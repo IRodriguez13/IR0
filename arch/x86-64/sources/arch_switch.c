@@ -19,6 +19,7 @@
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
 #include <asm/process_ctx_invariant.h>
+#include <asm/context.h>
 #include <ir0/arch_port.h>
 #include <ir0/ktm/deferred.h>
 #include <ir0/arch_cpu.h>
@@ -122,7 +123,7 @@ static void arch_repair_user_gprs_from_syscall_frame(process_t *proc,
 	process_apply_syscall_frame_to_task(task, &proc->syscall_frame, rax);
 }
 
-void prepare_task_user_iretq(process_t *proc)
+void x86_prepare_task_user_return(process_t *proc)
 {
 	if (!proc || proc->mode != USER_MODE)
 		return;

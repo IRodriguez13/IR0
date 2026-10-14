@@ -21,6 +21,7 @@
 #include <ir0/process.h>
 #include <ir0/paging.h>
 #include <ir0/tlb.h>
+#include <asm/context.h>
 
 #define USER_CANON_MIN 0x00400000ULL
 #define USER_CANON_MAX 0x00007FFFFFFFFFFFULL
@@ -137,7 +138,7 @@ void switch_to_user_task(const task_t *task)
         panic("switch_to_user_task: null task");
 
     if (current_process && &current_process->task == task)
-        prepare_task_user_iretq(current_process);
+        x86_prepare_task_user_return(current_process);
 
     if (current_process && process_mm_root(current_process))
 	    paging_activate_address_space(

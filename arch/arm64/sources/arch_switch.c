@@ -74,11 +74,6 @@ void arch_switch_to(task_t *prev, task_t *next)
 	switch_context_arm64(prev, next);
 }
 
-void prepare_task_user_iretq(struct process *proc)
-{
-	(void)proc;
-}
-
 int context_backend_checkpoint(task_t *prev)
 {
 	(void)prev;

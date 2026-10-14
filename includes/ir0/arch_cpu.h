@@ -37,5 +37,4 @@ struct process;
 
 void switch_to_user(arch_addr_t entry, arch_addr_t stack);
 void switch_to_user_task(const struct task *task);
-void prepare_task_user_iretq(struct process *proc);
 void first_switch_to(struct process *next);

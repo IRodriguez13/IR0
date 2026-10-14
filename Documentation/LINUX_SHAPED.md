@@ -45,14 +45,14 @@ the domain header, not the umbrella.
 | MM / paging activate | `arch_mm.h` | `mm_activate`, `arch_mm_copy_kernel_half` |
 | Page fault classify | `page_fault.h` | portable classify helpers |
 | TLS | `tls.h` | `set_tls` |
-| Context switch | `context.h` | `switch_to`, `switch_to_user`, `prepare_task_user_iretq` |
+| Context switch | `context.h` | `switch_to`, `switch_to_user`, `switch_to_user_task` |
 | Types / early clock / multiboot / TLB | `arch_types.h`, `early_clock.h`, `multiboot.h`, `tlb.h` | as named |
 
 The umbrella **must not** include `cpu.h`: backend `cpuid()` signatures
 conflict with the portable `void cpuid(...)` facade.
 
-Ring-3 first entry uses the simple name `prepare_task_user_iretq` (not
-`arch_prepare_*`). ISA bodies stay under `arch/<isa>/`.
+Direct user-return repair is ISA-private. The x86 implementation lives behind
+`<asm/context.h>`; portable code only requests `switch_to_user_task`.
 
 ## Usercopy stack (Linux-shaped layers)
 

@@ -36,7 +36,7 @@ Canónico en inglés: [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 header de dominio (`cpu.h`, `irq.h`, `arch_mm.h`, `context.h`, …).
 El paraguas **no** incluye `cpu.h` (conflicto de `cpuid()`).
 
-Entrada a ring 3: `prepare_task_user_iretq` (nombre simple).
+La reparación previa a `iretq` es privada de x86; el core usa `switch_to_user_task`.
 
 ## Usercopy
 
