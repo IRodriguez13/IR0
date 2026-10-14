@@ -190,6 +190,9 @@ CFLAGS += -I$(KERNEL_ROOT)/ktm/include
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
+ifeq ($(ARCH),x86-64)
+CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
+endif
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64
 CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/sched

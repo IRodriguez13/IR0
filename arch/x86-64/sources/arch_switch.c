@@ -18,7 +18,7 @@
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
-#include <ir0/process_ctx_invariant.h>
+#include <asm/process_ctx_invariant.h>
 #include <ir0/arch_port.h>
 #include <ir0/ktm/deferred.h>
 #include <ir0/arch_cpu.h>

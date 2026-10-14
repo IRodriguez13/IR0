@@ -13,8 +13,8 @@
  * receive user RIP via sync at syscall entry. Class B is the illegal pairing
  * KERNEL_CS + user RIP on task_t (kernel_ret would jmp to user VA).
  *
- * Mirrors switch_to KTM fault "sched.class_b_arm_window" and
- * process_ctx_invariant.h. Include via -Itests/mocks → <sched/class_b.h>
+ * Mirrors the x86 switch validator without importing an ISA-private header.
+ * Include via -Itests/mocks → <sched/class_b.h>.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -22,7 +22,20 @@
 #pragma once
 
 #include <stdint.h>
-#include <ir0/process_ctx_invariant.h>
+
+#define IR0_USER_RIP_LO 0x00400000ULL
+#define IR0_USER_RIP_HI 0x00007FFFFFFFFFFFULL
+
+static inline int process_cs_rip_kernel_ret_bad(uint64_t cs, uint64_t rip)
+{
+	return (cs & 3u) == 0u && rip >= IR0_USER_RIP_LO &&
+	       rip <= IR0_USER_RIP_HI;
+}
+
+static inline int process_rip_in_user_range(uint64_t rip)
+{
+	return rip >= IR0_USER_RIP_LO && rip <= IR0_USER_RIP_HI;
+}
 
 /* Match config.h without pulling the full kernel config into host tests. */
 #define IR0_MOCK_KERNEL_CODE_SEL 0x08u
