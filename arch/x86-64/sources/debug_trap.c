@@ -1,9 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 Trap Flag / #DB hygiene implementation.
+ * x86 Trap Flag / #DB hygiene implementation.
  */
 
-#include <ir0/debug_trap.h>
+#include <asm/debug_trap.h>
 #include <ir0/oops.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/cpu.h>

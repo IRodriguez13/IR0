@@ -16,7 +16,7 @@
 #include <ir0/arch_task.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
-#include <ir0/debug_trap.h>
+#include <asm/debug_trap.h>
 #include <config.h>
 #include <string.h>
 

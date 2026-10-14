@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/task_ops.h>
-#include <ir0/debug_trap.h>
+#include <asm/debug_trap.h>
 #include <config.h>
 
 uint64_t task_initial_user_status(void)

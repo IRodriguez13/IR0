@@ -15,7 +15,6 @@
 #pragma once
 
 #include <ir0/console.h>
-#include <ir0/debug_trap.h>
 #include <ir0/debug_runtime.h>
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>

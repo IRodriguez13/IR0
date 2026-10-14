@@ -1761,6 +1761,29 @@ def check_portable_task_api_has_no_x86_register_aliases():
     return errors
 
 
+def check_portable_code_has_no_private_asm_headers():
+    """Reserve <asm/...> headers for the selected ISA and its IRQ backend."""
+    errors = []
+    private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
+    roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
+             ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers")
+
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for fpath in iter_c_files(root):
+            for idx, line in enumerate(
+                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            ):
+                if private_include.search(line):
+                    errors.append(
+                        f"[portable-no-private-asm-header] "
+                        f"{fpath.relative_to(ROOT)}:{idx}: use an ir0 facade: "
+                        f"{line.strip()}"
+                    )
+    return errors
+
+
 def check_common_paging_uses_neutral_roots():
     """Keep ISA register/table vocabulary out of the common paging contract."""
     errors = []
@@ -2157,6 +2180,7 @@ def main():
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_process_lifecycle_uses_semantic_return_state())
     errors.extend(check_portable_task_api_has_no_x86_register_aliases())
+    errors.extend(check_portable_code_has_no_private_asm_headers())
     errors.extend(check_common_paging_uses_neutral_roots())
     errors.extend(check_common_address_space_contracts())
     errors.extend(check_common_elf_uses_isa_policy())

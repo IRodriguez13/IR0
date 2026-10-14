@@ -19,7 +19,7 @@
 #include <ir0/oops.h>
 #include <ir0/ktm/stack_watch.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/debug_trap.h>
+#include <asm/debug_trap.h>
 #include <kernel/process.h>
 #include <ir0/cpu.h>
 #include <ir0/clock.h>

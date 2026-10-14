@@ -27,7 +27,6 @@
 #include <mm/paging.h>
 #include <mm/pmm.h>
 #include <ir0/copy_user.h>
-#include <ir0/debug_trap.h>
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
 #include <ir0/arch_port.h>

@@ -2,7 +2,7 @@
 /* x86 debug-state lifecycle facade. */
 
 #include <ir0/arch_debug.h>
-#include <ir0/debug_trap.h>
+#include <asm/debug_trap.h>
 
 void debug_state_init(void)
 {

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 Trap Flag / #DB hygiene — gated single-step and safe debug handling.
+ * x86 Trap Flag / #DB hygiene — gated single-step and safe debug handling.
  */
 
 #pragma once

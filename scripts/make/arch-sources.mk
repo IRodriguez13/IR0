@@ -6,6 +6,7 @@ ARCH_OBJS_COMMON = \
 
 ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/arch_debug.o \
+	arch/x86-64/sources/debug_trap.o \
 	arch/x86-64/sources/arch_interface.o \
 	arch/x86-64/sources/arch_x64.o \
 	arch/x86-64/sources/platform.o \

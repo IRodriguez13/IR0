@@ -528,7 +528,6 @@ LIB_OBJS = \
     kernel/lib/ps2_set1.o \
     kernel/lib/ps2_mouse_pkt.o \
     kernel/lib/ash_smoke.o \
-    kernel/lib/debug_trap.o \
     kernel/lib/fb.o \
     kernel/lib/input.o \
     kernel/lib/utimens.o \
