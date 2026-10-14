@@ -110,6 +110,11 @@ static int arm64_common_lifecycle_contract(void)
 	    !process_lifecycle_child_matches(&parent, &child, (pid_t)-1) ||
 	    process_child_wait_status_word(&child) != (42 << 8))
 		return -1;
+	child.exit_signal = SIGKILL;
+	process_lifecycle_publish_exit(&child, 99);
+	if (child.exit_code != 0 ||
+	    process_child_wait_status_word(&child) != SIGKILL)
+		return -1;
 	process_lifecycle_publish_reaped(&child);
 	if (child.lifecycle != PROCESS_LIFECYCLE_DEAD)
 		return -1;
@@ -133,6 +138,10 @@ static int arm64_common_lifecycle_contract(void)
 		return -1;
 	}
 	process_wait_state_arm(&parent, orphan.task.pid, 0, NULL);
+	if (process_wait_prepare_child_wake(&parent, &init, &wait_status) != -ECHILD) {
+		process_list = saved_process_list;
+		return -1;
+	}
 	if (!process_wait_child_matches_blocked_target(&parent, orphan.task.pid)) {
 		process_list = saved_process_list;
 		return -1;
