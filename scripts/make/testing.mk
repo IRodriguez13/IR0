@@ -2119,6 +2119,7 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_child_wait_status_word \
 	--undefined=process_wait_child_matches_blocked_target \
 	--undefined=process_wait_prepare_child_wake \
+	--undefined=process_wait_wake_blocked_parent \
 	--undefined=process_wait_state_arm \
 	--undefined=fork_prepare_child_return \
 	--undefined=process_saved_environ_clone \
@@ -2975,9 +2976,11 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_wait_prepare_child_wake" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_wait_wake_blocked_parent" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_wait_state_arm" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
-		awk '$$3 ~ /^(process_reparent_children|process_has_zombie_child|process_child_wait_status_word|process_wait_child_matches_blocked_target|process_wait_prepare_child_wake|process_wait_state_arm)$$/ && $$2 ~ /^[WV]$$/ { bad = 1 } END { exit bad }'
+		awk '$$3 ~ /^(process_reparent_children|process_has_zombie_child|process_child_wait_status_word|process_wait_child_matches_blocked_target|process_wait_prepare_child_wake|process_wait_wake_blocked_parent|process_wait_state_arm)$$/ && $$2 ~ /^[WV]$$/ { bad = 1 } END { exit bad }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "fork_prepare_child_return" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \

@@ -12,6 +12,7 @@
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
+#include <ir0/sched.h>
 #include <kernel/process.h>
 
 static int arm64_mm_descriptor_contract(void)
@@ -81,6 +82,7 @@ static int arm64_common_lifecycle_contract(void)
 	static process_t orphan;
 	static process_t init;
 	process_t *saved_process_list;
+	int runnable_before;
 	int wait_status;
 	uint8_t *bytes;
 	size_t i;
@@ -148,6 +150,18 @@ static int arm64_common_lifecycle_contract(void)
 	}
 	if (process_wait_prepare_child_wake(&parent, &orphan, &wait_status) != 0 ||
 	    wait_status != (7 << 8)) {
+		process_list = saved_process_list;
+		return -1;
+	}
+	runnable_before = sched_count_runnable();
+	process_wait_wake_blocked_parent(&parent, &orphan);
+	if (parent.state != PROCESS_READY ||
+	    sched_count_runnable() != runnable_before + 1) {
+		process_list = saved_process_list;
+		return -1;
+	}
+	sched_remove_process(&parent);
+	if (sched_count_runnable() != runnable_before) {
 		process_list = saved_process_list;
 		return -1;
 	}
