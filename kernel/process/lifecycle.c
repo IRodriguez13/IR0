@@ -53,7 +53,8 @@ size_t process_lifecycle_reparent(process_t *head, process_t *dying,
 	new_parent = adopter ? adopter->task.pid : 0;
 
 	for (child = head; child; child = child->next) {
-		if (child == dying || child->ppid != dying->task.pid)
+		if (child == dying || child == adopter ||
+		    child->ppid != dying->task.pid)
 			continue;
 		child->ppid = new_parent;
 		reparented++;

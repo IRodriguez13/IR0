@@ -2116,6 +2116,9 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_find_by_pid \
 	--undefined=process_reparent_children \
 	--undefined=process_has_zombie_child \
+	--undefined=process_child_wait_status_word \
+	--undefined=process_wait_child_matches_blocked_target \
+	--undefined=process_wait_state_arm \
 	--undefined=fork_prepare_child_return \
 	--undefined=process_saved_environ_clone \
 	--undefined=process_set_tls \
@@ -2965,6 +2968,14 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_has_zombie_child" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_child_wait_status_word" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_wait_child_matches_blocked_target" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_wait_state_arm" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 ~ /^(process_reparent_children|process_has_zombie_child|process_child_wait_status_word|process_wait_child_matches_blocked_target|process_wait_state_arm)$$/ && $$2 ~ /^[WV]$$/ { bad = 1 } END { exit bad }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "fork_prepare_child_return" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "process_saved_environ_clone" { ok = ($$2 == "T") } END { exit !ok }'
@@ -2994,6 +3005,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
@@ -3013,6 +3025,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_DTB_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-dtb-smoke.log

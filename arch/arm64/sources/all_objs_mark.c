@@ -107,14 +107,17 @@ static int arm64_common_lifecycle_contract(void)
 	process_lifecycle_publish_exit(&child, 42);
 	if (!process_is_zombie(&child) ||
 	    !process_lifecycle_child_matches(&parent, &child, (pid_t)-1) ||
-	    process_lifecycle_wait_status(&child) != (42 << 8))
+	    process_child_wait_status_word(&child) != (42 << 8))
 		return -1;
 	process_lifecycle_publish_reaped(&child);
 	if (child.lifecycle != PROCESS_LIFECYCLE_DEAD)
 		return -1;
 
 	init.task.pid = 1;
+	init.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+	init.state = PROCESS_RUNNING;
 	parent.task.pid = 7;
+	orphan.task.pid = 8;
 	orphan.ppid = parent.task.pid;
 	orphan.lifecycle = PROCESS_LIFECYCLE_ZOMBIE;
 	orphan.state = PROCESS_ZOMBIE;
@@ -124,6 +127,11 @@ static int arm64_common_lifecycle_contract(void)
 	saved_process_list = process_list;
 	process_list = &init;
 	if (!process_has_zombie_child(&parent)) {
+		process_list = saved_process_list;
+		return -1;
+	}
+	process_wait_state_arm(&parent, orphan.task.pid, 0, NULL);
+	if (!process_wait_child_matches_blocked_target(&parent, orphan.task.pid)) {
 		process_list = saved_process_list;
 		return -1;
 	}
@@ -142,9 +150,15 @@ void arm64_all_objs_mark(void)
 	else
 		ir0_boot_smoke("ARM64_MM_DESCRIPTOR_CONTRACT_FAIL");
 	if (arm64_common_lifecycle_contract() == 0)
+	{
 		ir0_boot_smoke("ARM64_COMMON_LIFECYCLE_OK");
+		ir0_boot_smoke("ARM64_COMMON_WAIT_OK");
+	}
 	else
+	{
 		ir0_boot_smoke("ARM64_COMMON_LIFECYCLE_FAIL");
+		ir0_boot_smoke("ARM64_COMMON_WAIT_FAIL");
+	}
 	{
 		int inventory = arm64_boot_memory_contract();
 

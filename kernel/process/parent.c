@@ -17,7 +17,7 @@ void process_reparent_children(process_t *dying_parent)
 		return;
 
 	init = process_find_by_pid(1);
-	if (!init || init == dying_parent)
+	if (!init || init == dying_parent || !process_is_alive(init))
 		init = NULL;
 
 	/* No suitable init (including PID 1 exit): detach instead. */
