@@ -11,7 +11,7 @@
  * Description: Serial port driver for debugging output (x86 COM1 16550).
  *
  * ARCH=arm64 does not link this TU (see Makefile DRIVER_OBJS); PL011 lives in
- * arch/arm64/sources/serial_io_arm64.c. Guarding body avoids accidental COM1.
+ * arch/arm64/sources/serial_io_arm64.c. Object selection is the ISA boundary.
  */
 
 #include <stdint.h>
@@ -21,8 +21,6 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <string.h>
-
-#if defined(__x86_64__) || defined(ARCH_X86_64)
 
 /* Compiler optimization hints */
 #define likely(x)	__builtin_expect(!!(x), 1)
@@ -199,41 +197,3 @@ char serial_read_char(void)
 
     return (char)ch;
 }
-
-#else /* !x86_64 — COM1 not applicable; use arch serial_io (PL011 on arm64). */
-
-void serial_init(void)
-{
-}
-
-void serial_putchar(char c)
-{
-	(void)c;
-}
-
-void serial_print(const char *str)
-{
-	(void)str;
-}
-
-void serial_print_hex32(uint32_t val)
-{
-	(void)val;
-}
-
-void serial_print_hex64(uint64_t val)
-{
-	(void)val;
-}
-
-int serial_try_read_char(void)
-{
-	return -1;
-}
-
-char serial_read_char(void)
-{
-	return 0;
-}
-
-#endif /* __x86_64__ || ARCH_X86_64 */

@@ -38,8 +38,6 @@
 /* Declaraciones externas para el nuevo driver de teclado */
 extern void keyboard_handler64(void);
 extern void increment_pit_ticks(void);
-#ifdef __x86_64__
-
 extern void page_fault_handler_x64(uint64_t *stack);
 extern void gpf_audit_from_isr(uint64_t *stack);
 extern uintptr_t paging_current_address_space(void);
@@ -215,7 +213,6 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 
 static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 {
-#if defined(__x86_64__) || defined(__amd64__)
     if (interrupt_number == 1 && stack)
     {
         if (is_user_exception_frame(stack))
@@ -229,8 +226,6 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
             return;
         }
     }
-#endif
-
     if (interrupt_number < 32 && stack)
         isr_contract_single_check(interrupt_number, stack);
 
@@ -541,5 +536,3 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
     }
 
 }
-
-#endif

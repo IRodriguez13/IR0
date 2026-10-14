@@ -213,8 +213,6 @@ static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len)
 		keyboard_buffer_add((char)data[i]);
 }
 
-#ifdef __x86_64__
-
 char keyboard_buffer_get(void)
 {
 	char c;
@@ -252,8 +250,6 @@ void keyboard_buffer_clear(void)
 		keyboard_buffer_tail =
 			(keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
 }
-#endif
-
 void keyboard_poll_ps2(void)
 {
 	static int kbd_poll_tag;
