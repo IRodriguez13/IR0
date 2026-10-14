@@ -1025,13 +1025,13 @@ void handle_signals(void)
 
                             ctx->rdi = signal_repair_sigcontext_read_fd(
                                 ctx->rdi, snap_rdi,
-                                task_get_rdi(&current->task));
+                                task_get_arg0(&current->task));
                             if (current->syscall_block_nr == 0u ||
                                 current->syscall_entry_nr == 0u)
                             {
                                 ctx->rsi = signal_repair_sigcontext_syscall_arg(
                                     ctx->rsi, snap_rsi,
-                                    task_get_rsi(&current->task));
+                                    task_get_arg1(&current->task));
                             }
                         }
 

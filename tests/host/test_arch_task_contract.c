@@ -23,7 +23,4 @@ void test_arch_task_contract(void)
 	ASSERT_EQ(task_get_arg1(&t), 0x2222ULL);
 	ASSERT_EQ(task_get_arg2(&t), 0x3333ULL);
 	/* Deprecated x86-named wrappers must stay aliases. */
-	ASSERT_EQ(task_get_rdi(&t), task_get_arg0(&t));
-	ASSERT_EQ(task_get_rsi(&t), task_get_arg1(&t));
-	ASSERT_EQ(task_get_rdx(&t), task_get_arg2(&t));
 }

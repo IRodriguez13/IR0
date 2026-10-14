@@ -156,68 +156,37 @@ static inline void task_set_frame_pointer(task_t *t, uint64_t fp)
 		t->arch.x29 = fp;
 }
 
-static inline uint64_t task_get_rdi(const task_t *t)
+static inline uint64_t task_get_arg0(const task_t *t)
 {
 	return t ? t->arch.x0 : 0;
 }
 
-static inline void task_set_rdi(task_t *t, uint64_t val)
+static inline void task_set_arg0(task_t *t, uint64_t val)
 {
 	if (t)
 		t->arch.x0 = val;
 }
 
-static inline uint64_t task_get_rsi(const task_t *t)
+static inline uint64_t task_get_arg1(const task_t *t)
 {
 	return t ? t->arch.x1 : 0;
 }
 
-static inline void task_set_rsi(task_t *t, uint64_t val)
+static inline void task_set_arg1(task_t *t, uint64_t val)
 {
 	if (t)
 		t->arch.x1 = val;
 }
 
-static inline uint64_t task_get_rdx(const task_t *t)
+static inline uint64_t task_get_arg2(const task_t *t)
 {
 	return t ? t->arch.x2 : 0;
 }
 
-static inline void task_set_rdx(task_t *t, uint64_t val)
+static inline void task_set_arg2(task_t *t, uint64_t val)
 {
 	if (t)
 		t->arch.x2 = val;
-}
-
-/* Portable syscall/arg accessors (§3) — prefer these over rdi/rsi/rdx names. */
-static inline uint64_t task_get_arg0(const task_t *t)
-{
-	return task_get_rdi(t);
-}
-
-static inline void task_set_arg0(task_t *t, uint64_t val)
-{
-	task_set_rdi(t, val);
-}
-
-static inline uint64_t task_get_arg1(const task_t *t)
-{
-	return task_get_rsi(t);
-}
-
-static inline void task_set_arg1(task_t *t, uint64_t val)
-{
-	task_set_rsi(t, val);
-}
-
-static inline uint64_t task_get_arg2(const task_t *t)
-{
-	return task_get_rdx(t);
-}
-
-static inline void task_set_arg2(task_t *t, uint64_t val)
-{
-	task_set_rdx(t, val);
 }
 
 static inline void task_set_user_segments(task_t *t)
@@ -361,68 +330,37 @@ static inline void task_set_frame_pointer(task_t *t, uint64_t fp)
 		t->arch.rbp = fp;
 }
 
-static inline uint64_t task_get_rdi(const task_t *t)
+static inline uint64_t task_get_arg0(const task_t *t)
 {
 	return t ? t->arch.rdi : 0;
 }
 
-static inline void task_set_rdi(task_t *t, uint64_t val)
+static inline void task_set_arg0(task_t *t, uint64_t val)
 {
 	if (t)
 		t->arch.rdi = val;
 }
 
-static inline uint64_t task_get_rsi(const task_t *t)
+static inline uint64_t task_get_arg1(const task_t *t)
 {
 	return t ? t->arch.rsi : 0;
 }
 
-static inline void task_set_rsi(task_t *t, uint64_t val)
+static inline void task_set_arg1(task_t *t, uint64_t val)
 {
 	if (t)
 		t->arch.rsi = val;
 }
 
-static inline uint64_t task_get_rdx(const task_t *t)
+static inline uint64_t task_get_arg2(const task_t *t)
 {
 	return t ? t->arch.rdx : 0;
 }
 
-static inline void task_set_rdx(task_t *t, uint64_t val)
+static inline void task_set_arg2(task_t *t, uint64_t val)
 {
 	if (t)
 		t->arch.rdx = val;
-}
-
-/* Portable syscall/arg accessors (§3) — prefer these over rdi/rsi/rdx names. */
-static inline uint64_t task_get_arg0(const task_t *t)
-{
-	return task_get_rdi(t);
-}
-
-static inline void task_set_arg0(task_t *t, uint64_t val)
-{
-	task_set_rdi(t, val);
-}
-
-static inline uint64_t task_get_arg1(const task_t *t)
-{
-	return task_get_rsi(t);
-}
-
-static inline void task_set_arg1(task_t *t, uint64_t val)
-{
-	task_set_rsi(t, val);
-}
-
-static inline uint64_t task_get_arg2(const task_t *t)
-{
-	return task_get_rdx(t);
-}
-
-static inline void task_set_arg2(task_t *t, uint64_t val)
-{
-	task_set_rdx(t, val);
 }
 
 static inline void task_set_user_segments(task_t *t)

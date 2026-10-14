@@ -169,8 +169,8 @@ void ir0_log_user_fault_frame(unsigned vector, unsigned long long cr2,
 	if (cur)
 		klog_info_fmt("FAULT",
 			      "USER_FAULT_FRAME rdi=%llx rsi=%llx",
-			      (unsigned long long)task_get_rdi(&cur->task),
-			      (unsigned long long)task_get_rsi(&cur->task));
+			      (unsigned long long)task_get_arg0(&cur->task),
+			      (unsigned long long)task_get_arg1(&cur->task));
 	klog_info_fmt("FAULT",
 		      "USER_FAULT_FRAME pid=%x comm=%s present=%x write=%x "
 		      "exec=%x CLASSIFY %s",
