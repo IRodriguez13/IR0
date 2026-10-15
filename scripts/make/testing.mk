@@ -2808,7 +2808,34 @@ arm64-common-process-compile:
 	@echo "✓ ARM64 common process subsystem compile contract"
 
 .PHONY: kernel-arm64-all.bin kernel-arm64-all-Image smoke-arm64-all \
-	smoke-arm64-all-dtb smoke-arm64-harness
+	smoke-arm64-all-dtb smoke-arm64-harness arm64-common-core-compile
+
+# Compile every architecture-neutral kernel/MM/library/VFS translation unit in
+# an ARM64-only object namespace.  This is deliberately broader than the early
+# aggregate link below and prevents a previous x86 build from satisfying an ARM
+# prerequisite with an incompatible in-tree object.  Drivers remain outside
+# this set until the driver core can select them by bus/platform capabilities.
+ARM64_COMMON_CORE_INPUT_OBJS = \
+	$(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(FS_OBJS)
+ARM64_COMMON_CORE_C_OBJS = $(filter %.o,$(filter-out \
+	arch/% tests/% ktm/%,$(ARM64_COMMON_CORE_INPUT_OBJS)))
+ARM64_COMMON_CORE_SRCS = $(ARM64_COMMON_CORE_C_OBJS:.o=.c)
+ARM64_COMMON_CORE_BUILD_OBJS = $(addprefix build/arm64-common-core/,$(ARM64_COMMON_CORE_C_OBJS))
+
+build/arm64-common-core/%.o: %.c
+	@mkdir -p $(@D)
+	@echo "  CC      $< (ARM64 common core)"
+	@aarch64-linux-gnu-gcc $(ARM64_ALL_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-I$(KERNEL_ROOT)/arch/common -I$(KERNEL_ROOT)/fs \
+		-I$(KERNEL_ROOT)/net -I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
+		-c $< -o $@
+
+arm64-common-core-compile: $(ARM64_COMMON_CORE_BUILD_OBJS)
+	@test $(words $(ARM64_COMMON_CORE_SRCS)) -gt 80 || \
+		{ echo "✗ ARM64 common-core inventory unexpectedly small"; exit 1; }
+	@! printf '%s\n' $(ARM64_COMMON_CORE_SRCS) | grep -Eq '^arch/|^ktm/'
+	@echo "✓ ARM64 common core compile contract ($$(printf '%s\n' $(ARM64_COMMON_CORE_SRCS) | wc -l) C units)"
 
 # One inventory owns both compilation and linkage of the portable aggregate.
 # Object basenames are intentionally unique; keep the assertion below so a new

@@ -1,8 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Architecture-specific object inventories and freestanding ARM64 exceptions.
 
+ARCH_COMMON_BOOT_LOG_OBJ = build/$(ARCH)/arch/common/boot_log.o
+
 ARCH_OBJS_COMMON = \
-	arch/common/boot_log.o
+	$(ARCH_COMMON_BOOT_LOG_OBJ)
 
 ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/arch_debug.o \
@@ -41,7 +43,7 @@ ARCH_OBJS_X86_64 = \
 
 # ARM64 backend providers used by both the normal and freestanding paths.
 ARM64_BACKEND_OBJS = \
-	arch/common/boot_log.o \
+	$(ARCH_COMMON_BOOT_LOG_OBJ) \
 	arch/arm64/sources/arch_debug.o \
 	arch/arm64/sources/arch_arm64.o \
 	arch/arm64/sources/arch_early.o \
@@ -126,6 +128,11 @@ ARM64_FIRST_SWITCH_OBJS = \
 # kernel-arm64-min.bin and kernel-arm64-all.bin link-probe targets in testing.mk.
 ARM64_LINK_PROBE_ONLY_OBJS = \
 	ktm/mocks/arm64/min_link_stubs.o
+
+$(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
+	@mkdir -p $(@D)
+	@echo "  CC      $< ($(ARCH) namespace)"
+	@$(CC) $(CFLAGS) -c $< -o $@
 
 ARCH_OBJS_ARM64 = \
 	$(ARM64_BACKEND_OBJS) \

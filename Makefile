@@ -1092,10 +1092,15 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 		echo "1" > .build_number; \
 	fi
 
-kernel-arm64.bin: $(ARCH_OBJS) arch/arm64/linker.ld
-	@echo "  LD      $@"
-	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ARCH_OBJS)
-	@echo "✓ Kernel linked: $@"
+# ARM64 has a target-local freestanding graph in testing.mk.  Do not reuse the
+# in-tree %.o files here: they may have been produced by an x86 build and are
+# therefore not a hermetic input.  The common C core is compiled independently
+# by arm64-common-core-compile until its complete runtime provider graph replaces
+# the staged boot composition.
+kernel-arm64.bin: kernel-arm64-boot.bin arm64-common-core-compile
+	@echo "  COPY    $@ (staged ARM64 integration image)"
+	@cp kernel-arm64-boot.bin $@
+	@echo "✓ Kernel linked: $@ (common core compile contract passed; early providers remain)"
 
 # Create ISO
 kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
