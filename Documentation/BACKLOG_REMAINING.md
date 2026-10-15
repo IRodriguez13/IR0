@@ -114,7 +114,7 @@
 | Kernel root RO → fsck → remount RW | TBD product path | `fsck.ir0` is magic-check only; no boot-time `MS_RDONLY` root |
 | Interactive sendkey password path | TTY | Username echoes; password stage stalls in QEMU — lab uses `/etc/ir0-autologin`; GUI: `IR0_NO_AUTOLOGIN=1` |
 | `smoke-runit-ash-interactive` echo OK | **Closed 2026-09-22** | PASS 14.5s (`SYS_READ_RETURN_OK` + `ASH_COMMAND_ECHO_OK`) |
-| Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` + weak `sched_context_switch_to`/`klog_info` in `rr_early_stubs.c` unblock `smoke-arm64-boot`; re-extract musl.cc for libc programs |
+| Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` plus the explicit `ktm/mocks/arm64/scheduler_stubs.c` harness providers unblock `smoke-arm64-boot`; re-extract musl.cc for libc programs |
 | virtiofs + FUSE | Future host-share | Guest FUSE; 9p remains ship path |
 | Migrate remaining drains/storms stub PID1 → runit+9p | Lab depth | **Mostly closed** — `smoke-ktm-drains-runit`; `init-exit-drain` stays stub (PID1 SUT) |
 

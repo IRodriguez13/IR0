@@ -3,8 +3,8 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: rr_early_stubs.c
- * Description: Weak stubs so sched/rr_sched.c links into freestanding ARM64.
+ * File: scheduler_stubs.c
+ * Description: Test-only providers for the freestanding ARM64 scheduler harness.
  */
 
 #include <stddef.h>

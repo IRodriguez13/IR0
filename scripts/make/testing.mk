@@ -2266,7 +2266,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/busybox_load_early.c \
 		arch/arm64/sources/rootfs_early.c arch/arm64/sources/rootfs_early.h \
 		arch/arm64/sources/rr_early.c arch/arm64/sources/rr_early.h \
-		arch/arm64/sources/rr_early_stubs.c \
+		ktm/mocks/arm64/scheduler_stubs.c \
 		arch/arm64/sources/virtio_blk_early.c arch/arm64/sources/virtio_blk_early.h \
 		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
@@ -2428,12 +2428,13 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c arch/arm64/sources/rr_early.c -o arch/arm64/sources/rr_early.o
-	@echo "  CC      arch/arm64/sources/rr_early_stubs.c"
+	@echo "  CC      ktm/mocks/arm64/scheduler_stubs.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
-		-c arch/arm64/sources/rr_early_stubs.c -o arch/arm64/sources/rr_early_stubs.o
+		-c ktm/mocks/arm64/scheduler_stubs.c \
+		-o build/arm64-boot/scheduler_stubs.o
 	@echo "  CC      arch/arm64/sources/elf_load_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		kernel/lib/elf64_image.c -o build/arm64-boot/elf64_image.o
@@ -2519,7 +2520,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		arch/arm64/sources/rr_early_stubs.o \
+		build/arm64-boot/scheduler_stubs.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
@@ -2608,7 +2609,7 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		arch/arm64/sources/rr_early_stubs.o build/arm64-boot/elf64_image.o \
+		build/arm64-boot/scheduler_stubs.o build/arm64-boot/elf64_image.o \
 		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
 		build/arm64-rpi3-early/hello_embed.o \
 		build/arm64-rpi3-early/busybox_load_early.o \
@@ -2738,7 +2739,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		arch/arm64/sources/rr_early_stubs.o \
+		build/arm64-boot/scheduler_stubs.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
@@ -2912,7 +2913,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		arch/arm64/sources/rr_early_stubs.o \
+		build/arm64-boot/scheduler_stubs.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \

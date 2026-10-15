@@ -110,8 +110,7 @@ ARM64_EARLY_USERSPACE_OBJS = \
 # The round-robin scheduler is compiled with the freestanding ARM flags until
 # the full scheduler/provider graph is available on this architecture.
 ARM64_EARLY_SCHEDULER_OBJS = \
-	arch/arm64/sources/rr_early.o \
-	arch/arm64/sources/rr_early_stubs.o
+	arch/arm64/sources/rr_early.o
 
 # QEMU virtio block support is part of the early usable-machine path.
 ARM64_EARLY_STORAGE_OBJS = \
