@@ -2017,7 +2017,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
           current_process->syscall_block_nr);
       if (signal_blocked_syscall_is_console_read(
               current_process->syscall_block_nr,
-              (int64_t)block_sf->rdi) &&
+              (int64_t)syscall_frame_arg(block_sf, 0)) &&
           delivered > 0)
 	ir0_console_after_tty_read_signal(delivered);
     }
@@ -2031,7 +2031,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
           &current_process->syscall_frame, &resume_rax, block_sf, 0, 0);
       if (signal_blocked_syscall_is_console_read(
               current_process->syscall_block_nr,
-              (int64_t)block_sf->rdi) &&
+              (int64_t)syscall_frame_arg(block_sf, 0)) &&
           delivered > 0)
 	ir0_console_after_tty_read_signal(delivered);
     }
@@ -2071,7 +2071,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
                                             restore_ctx);
   process_apply_syscall_frame_to_task(&current_process->task,
                                       &current_process->syscall_frame,
-                                      restore_ctx->rax);
+                                      signal_sigcontext_return_value(restore_ctx));
   process_restore_user_task_segments(current_process);
   current_process->irq_frame_saved = 0;
   current_process->coop_resched_resume = 0;

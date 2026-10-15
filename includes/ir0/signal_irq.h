@@ -24,6 +24,8 @@ typedef struct arch_syscall_frame arch_syscall_frame_t;
 /* Instruction pointer / stack from an ISA-specific sigcontext (rip/pc, rsp/sp). */
 uint64_t sigcontext_ip(const struct sigcontext *ctx);
 uint64_t sigcontext_sp(const struct sigcontext *ctx);
+uint64_t sigcontext_arg(const struct sigcontext *ctx, unsigned index);
+void sigcontext_set_arg(struct sigcontext *ctx, unsigned index, uint64_t value);
 
 /* Validate a userspace-controlled rt_sigreturn context and mask privileged state. */
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx);
@@ -38,6 +40,9 @@ void signal_fill_sigcontext_from_syscall_frame(struct sigcontext *ctx,
 
 void signal_fill_syscall_frame_from_sigcontext(arch_syscall_frame_t *sf,
 						    const struct sigcontext *ctx);
+
+/* Read the Linux ABI return register without exposing its ISA name. */
+uint64_t signal_sigcontext_return_value(const struct sigcontext *ctx);
 
 void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 						const uint64_t *frame);

@@ -197,7 +197,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		return 0;
 
 	signal_fill_sigcontext_from_irq_frame(ctx, frame);
-	if (signal_rip_is_registered_handler(p, ctx->rip))
+	if (signal_rip_is_registered_handler(p, sigcontext_ip(ctx)))
 	{
 		kfree(ctx);
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
@@ -1023,15 +1023,18 @@ void handle_signals(void)
                                     &current->syscall_frame, 1);
                             }
 
-                            ctx->rdi = signal_repair_sigcontext_read_fd(
-                                ctx->rdi, snap_rdi,
-                                task_get_arg0(&current->task));
+                            sigcontext_set_arg(
+                                ctx, 0, signal_repair_sigcontext_read_fd(
+                                    sigcontext_arg(ctx, 0), snap_rdi,
+                                    task_get_arg0(&current->task)));
                             if (current->syscall_block_nr == 0u ||
                                 current->syscall_entry_nr == 0u)
                             {
-                                ctx->rsi = signal_repair_sigcontext_syscall_arg(
-                                    ctx->rsi, snap_rsi,
-                                    task_get_arg1(&current->task));
+                                sigcontext_set_arg(
+                                    ctx, 1,
+                                    signal_repair_sigcontext_syscall_arg(
+                                        sigcontext_arg(ctx, 1), snap_rsi,
+                                        task_get_arg1(&current->task)));
                             }
                         }
 
@@ -1048,36 +1051,36 @@ void handle_signals(void)
                          * its kernel continuation, returns to a real user
                          * frame, and delivery retries there.
                          */
-                        if (!mm_user_va_ok((uintptr_t)ctx->rip, 1))
+                        if (!mm_user_va_ok((uintptr_t)sigcontext_ip(ctx), 1))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_DEFER sig=%d "
                                           "reason=nonuser_site rip=%llx",
                                           (unsigned)sig,
-                                          (unsigned long long)ctx->rip);
+                                          (unsigned long long)sigcontext_ip(ctx));
                             kfree(ctx);
                             continue;
                         }
 
-                        if (!mm_user_va_ok((uintptr_t)ctx->rsp, 1))
+                        if (!mm_user_va_ok((uintptr_t)sigcontext_sp(ctx), 1))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_DEFER sig=%d "
                                           "reason=nonuser_rsp rsp=%llx",
                                           (unsigned)sig,
-                                          (unsigned long long)ctx->rsp);
+                                          (unsigned long long)sigcontext_sp(ctx));
                             kfree(ctx);
                             continue;
                         }
 
                         if (signal_rip_is_registered_handler(current,
-                                                             ctx->rip))
+                                                             sigcontext_ip(ctx)))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%x "
                                           "reason=handler_as_site rip=%llx",
                                           (unsigned)sig,
-                                          (unsigned long long)ctx->rip);
+                                          (unsigned long long)sigcontext_ip(ctx));
                             kfree(ctx);
                             if (sig == SIGSEGV || sig == SIGBUS ||
                                 sig == SIGILL || sig == SIGFPE)
@@ -1160,13 +1163,13 @@ void handle_signals(void)
 
                         if (sig != SIGALRM && sig != SIGIO)
                             klog_info_fmt("SIGNAL",
-                                          "DELIVER_CTX sig=%d saved_rip=%llx "
-                                          "saved_rdi=%llx saved_rsp=%llx "
+                                          "DELIVER_CTX sig=%d saved_ip=%llx "
+                                          "saved_arg0=%llx saved_sp=%llx "
                                           "handler=%llx",
                                           sig,
-                                          (unsigned long long)ctx->rip,
-                                          (unsigned long long)ctx->rdi,
-                                          (unsigned long long)ctx->rsp,
+                                          (unsigned long long)sigcontext_ip(ctx),
+                                          (unsigned long long)sigcontext_arg(ctx, 0),
+                                          (unsigned long long)sigcontext_sp(ctx),
                                           (unsigned long long)(uintptr_t)handler);
 
                         /*

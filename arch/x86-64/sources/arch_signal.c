@@ -30,6 +30,36 @@ uint64_t sigcontext_sp(const struct sigcontext *ctx)
 	return ctx ? ctx->rsp : 0;
 }
 
+uint64_t sigcontext_arg(const struct sigcontext *ctx, unsigned index)
+{
+	if (!ctx)
+		return 0;
+	switch (index) {
+	case 0: return ctx->rdi;
+	case 1: return ctx->rsi;
+	case 2: return ctx->rdx;
+	case 3: return ctx->r10;
+	case 4: return ctx->r8;
+	case 5: return ctx->r9;
+	default: return 0;
+	}
+}
+
+void sigcontext_set_arg(struct sigcontext *ctx, unsigned index, uint64_t value)
+{
+	if (!ctx)
+		return;
+	switch (index) {
+	case 0: ctx->rdi = value; break;
+	case 1: ctx->rsi = value; break;
+	case 2: ctx->rdx = value; break;
+	case 3: ctx->r10 = value; break;
+	case 4: ctx->r8 = value; break;
+	case 5: ctx->r9 = value; break;
+	default: break;
+	}
+}
+
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx)
 {
     if (!ctx || ctx->rip < 0x00400000ULL ||
@@ -96,6 +126,11 @@ void signal_fill_syscall_frame_from_sigcontext(struct arch_syscall_frame *sf,
 	sf->r13 = ctx->r13;
 	sf->r14 = ctx->r14;
 	sf->r15 = ctx->r15;
+}
+
+uint64_t signal_sigcontext_return_value(const struct sigcontext *ctx)
+{
+	return ctx ? ctx->rax : 0;
 }
 
 void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,

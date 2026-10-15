@@ -31,6 +31,17 @@ uint64_t sigcontext_sp(const struct sigcontext *ctx)
 	return ctx ? ctx->sp : 0;
 }
 
+uint64_t sigcontext_arg(const struct sigcontext *ctx, unsigned index)
+{
+	return (ctx && index < 6) ? ctx->regs[index] : 0;
+}
+
+void sigcontext_set_arg(struct sigcontext *ctx, unsigned index, uint64_t value)
+{
+	if (ctx && index < 6)
+		ctx->regs[index] = value;
+}
+
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx)
 {
     if (!ctx || ctx->pc < 0x00400000ULL ||
@@ -86,6 +97,29 @@ void signal_fill_sigcontext_from_syscall_frame(struct sigcontext *ctx,
 	ctx->sp = sf->sp;
 	ctx->pc = sf->elr;
 	ctx->pstate = sf->spsr;
+}
+
+void signal_fill_syscall_frame_from_sigcontext(struct arch_syscall_frame *sf,
+						    const struct sigcontext *ctx)
+{
+	uint64_t *regs;
+	unsigned i;
+
+	if (!sf || !ctx)
+		return;
+
+	/* x0..x30 are the leading, contiguous fields of the ARM64 frame. */
+	regs = &sf->x0;
+	for (i = 0; i < 31; i++)
+		regs[i] = ctx->regs[i];
+	sf->sp = ctx->sp;
+	sf->elr = ctx->pc;
+	sf->spsr = ctx->pstate;
+}
+
+uint64_t signal_sigcontext_return_value(const struct sigcontext *ctx)
+{
+	return ctx ? ctx->regs[0] : 0;
 }
 
 void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
