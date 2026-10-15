@@ -2789,46 +2789,61 @@ arm64-common-process-compile:
 
 .PHONY: kernel-arm64-all.bin kernel-arm64-all-Image smoke-arm64-all \
 	smoke-arm64-all-dtb smoke-arm64-harness
+
+# One inventory owns both compilation and linkage of the portable aggregate.
+# Object basenames are intentionally unique; keep the assertion below so a new
+# provider cannot silently overwrite another object in build/arm64-all.
+ARM64_ALL_PORTABLE_SRCS = \
+	mm/allocator.c \
+	mm/boot_memory.c \
+	mm/no_mmu.c \
+	mm/paging.c \
+	mm/pmm.c \
+	mm/kmem.c \
+	kernel/errno.c \
+	kernel/lib/open_flags.c \
+	kernel/lib/copy_user.c \
+	kernel/fd_resource.c \
+	kernel/process/core.c \
+	kernel/process/create.c \
+	kernel/process/cred_groups.c \
+	kernel/process/limits.c \
+	kernel/process/mm_struct.c \
+	kernel/process/mm.c \
+	kernel/process/files_lifecycle.c \
+	kernel/process/files_struct.c \
+	kernel/process/fdtable_init.c \
+	kernel/process/fdtable.c \
+	kernel/process/fork.c \
+	kernel/process/exec.c \
+	kernel/process/lifecycle.c \
+	kernel/process/parent.c \
+	kernel/process/wait.c \
+	kernel/process/domains.c \
+	kernel/process/saved_context.c \
+	kernel/process/saved_environ.c \
+	kernel/process/pseudo_fd_bind.c \
+	kernel/process/signal_enter.c \
+	kernel/process/wait_state.c \
+	arch/arm64/sources/arch_debug.c \
+	arch/arm64/sources/arch_fork.c \
+	arch/arm64/sources/arch_task_ops.c \
+	arch/arm64/sources/arch_tls.c \
+	arch/arm64/sources/task_stack.c \
+	arch/arm64/sources/arch_syscall_frame.c \
+	arch/arm64/sources/arch_mm.c \
+	arch/arm64/sources/portable_string.c
+ARM64_ALL_PORTABLE_OBJS = $(addprefix build/arm64-all/,$(notdir $(ARM64_ALL_PORTABLE_SRCS:.c=.o)))
+
 kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
 	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
 	@mkdir -p build/arm64-all
 	@rm -f /tmp/ir0-arm64-all-link.log
+	@test $(words $(ARM64_ALL_PORTABLE_SRCS)) -eq $(words $(sort $(notdir $(ARM64_ALL_PORTABLE_SRCS)))) || \
+		{ echo "✗ duplicate ARM64 aggregate object basename"; exit 1; }
 	@fail=0; \
-	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c \
-		kernel/errno.c \
-		kernel/lib/open_flags.c \
-		kernel/lib/copy_user.c \
-		kernel/fd_resource.c \
-		kernel/process/core.c \
-		kernel/process/create.c \
-		kernel/process/cred_groups.c \
-		kernel/process/limits.c \
-		kernel/process/mm_struct.c \
-		kernel/process/mm.c \
-		kernel/process/files_lifecycle.c \
-		kernel/process/files_struct.c \
-		kernel/process/fdtable_init.c \
-		kernel/process/fdtable.c \
-		kernel/process/fork.c \
-		kernel/process/exec.c \
-		kernel/process/lifecycle.c \
-		kernel/process/parent.c \
-		kernel/process/wait.c \
-		kernel/process/domains.c \
-		kernel/process/saved_context.c \
-		kernel/process/saved_environ.c \
-		kernel/process/pseudo_fd_bind.c \
-		kernel/process/signal_enter.c \
-		kernel/process/wait_state.c \
-		arch/arm64/sources/arch_debug.c \
-		arch/arm64/sources/arch_fork.c \
-		arch/arm64/sources/arch_task_ops.c \
-		arch/arm64/sources/arch_tls.c \
-		arch/arm64/sources/task_stack.c \
-		arch/arm64/sources/arch_syscall_frame.c \
-		arch/arm64/sources/arch_mm.c \
-		arch/arm64/sources/portable_string.c; do \
+	for src in $(ARM64_ALL_PORTABLE_SRCS); do \
 		base=$$(basename $$src .c); \
 		echo "  CC      $$src (all)"; \
 		if ! aarch64-linux-gnu-gcc $(ARM64_ALL_CFLAGS) -DARCH_ARM64=1 \
@@ -2907,42 +2922,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o \
-		build/arm64-all/allocator.o build/arm64-all/boot_memory.o \
-		build/arm64-all/no_mmu.o build/arm64-all/paging.o \
-		build/arm64-all/pmm.o build/arm64-all/kmem.o \
-		build/arm64-all/errno.o \
-		build/arm64-all/open_flags.o \
-		build/arm64-all/copy_user.o \
-		build/arm64-all/fd_resource.o \
-		build/arm64-all/core.o \
-		build/arm64-all/create.o \
-		build/arm64-all/cred_groups.o \
-		build/arm64-all/limits.o \
-		build/arm64-all/mm_struct.o \
-		build/arm64-all/mm.o \
-		build/arm64-all/files_lifecycle.o \
-		build/arm64-all/files_struct.o \
-		build/arm64-all/fdtable_init.o \
-		build/arm64-all/fdtable.o \
-		build/arm64-all/fork.o \
-		build/arm64-all/exec.o \
-		build/arm64-all/lifecycle.o \
-		build/arm64-all/parent.o \
-		build/arm64-all/wait.o \
-		build/arm64-all/domains.o \
-		build/arm64-all/saved_context.o \
-		build/arm64-all/saved_environ.o \
-		build/arm64-all/pseudo_fd_bind.o \
-		build/arm64-all/signal_enter.o \
-		build/arm64-all/wait_state.o \
-		build/arm64-all/arch_debug.o \
-		build/arm64-all/arch_fork.o \
-		build/arm64-all/arch_task_ops.o \
-		build/arm64-all/arch_tls.o \
-		build/arm64-all/task_stack.o \
-		build/arm64-all/arch_syscall_frame.o \
-		build/arm64-all/arch_mm.o \
-		build/arm64-all/portable_string.o \
+		$(ARM64_ALL_PORTABLE_OBJS) \
 		build/arm64-all/string_aliases.o \
 		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
