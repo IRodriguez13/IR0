@@ -2673,13 +2673,14 @@ kernel-arm64-syscall.bin: kernel-arm64-boot.bin
 # Honest min link: MEMORY_OBJS + KERNEL sample + freestanding ARCH (+ stubs).
 # Does NOT claim product ALL_OBJS (x86 ATA/RTL8139/VBE remain excluded).
 .PHONY: kernel-arm64-min.bin
-kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
+kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/freestanding_stubs.c
 	@echo "  CC      ARM64_MIN MEMORY+KERNEL sample"
 	@mkdir -p build/arm64-min
 	@fail=0; \
 	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c \
-		kernel/errno.c kernel/lib/open_flags.c; do \
+		kernel/errno.c kernel/lib/open_flags.c \
+		arch/arm64/sources/arch_mm.c arch/arm64/sources/portable_string.c; do \
 		base=$$(basename $$src .c); \
 		echo "  CC      $$src (min)"; \
 		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
@@ -2692,17 +2693,20 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		fi; \
 	done; \
 	if [ $$fail -ne 0 ]; then exit 1; fi
-	@echo "  CC      arch/arm64/sources/min_link_stubs.c"
+	@echo "  CC      ktm/mocks/arm64/min_link_stubs.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		arch/arm64/sources/min_link_stubs.c -o build/arm64-min/min_link_stubs.o
+		ktm/mocks/arm64/min_link_stubs.c -o build/arm64-min/min_link_stubs.o
 	@echo "  LD      $@ (boot + MEMORY sample — not ALL_OBJS)"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
 		arch/arm64/sources/mmu_early.o \
 		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
+		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
+		arch/arm64/sources/platform.o arch/arm64/sources/freestanding_stubs.o \
+		build/arm64-boot/boot_log.o \
 		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
 		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/bcm2836_irq.o \
+		arch/arm64/sources/bcm2836_irq.o arch/arm64/sources/irq_backend.o \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/elf_policy.o \
 		arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/syscall_mm_early.o \
@@ -2712,7 +2716,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/syscall_process_early.o \
 		arch/arm64/sources/syscall_io_early.o \
 		build/arm64-boot/syscall_table.o \
-		arch/arm64/sources/mm_ops.o \
+		arch/arm64/sources/mm_ops.o build/arm64-min/arch_mm.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/arch_context_switch.o \
@@ -2732,7 +2736,9 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o \
-		build/arm64-min/allocator.o build/arm64-min/paging.o \
+		build/arm64-min/portable_string.o \
+		build/arm64-min/allocator.o build/arm64-min/boot_memory.o \
+		build/arm64-min/no_mmu.o build/arm64-min/paging.o \
 		build/arm64-min/pmm.o build/arm64-min/kmem.o \
 		build/arm64-min/errno.o build/arm64-min/open_flags.o \
 		build/arm64-min/min_link_stubs.o \
@@ -2835,7 +2841,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	arch/arm64/sources/portable_string.c
 ARM64_ALL_PORTABLE_OBJS = $(addprefix build/arm64-all/,$(notdir $(ARM64_ALL_PORTABLE_SRCS:.c=.o)))
 
-kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c \
+kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
 	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
 	@mkdir -p build/arm64-all
@@ -2855,10 +2861,10 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 			echo "✗ compile $$src"; cat /tmp/ir0-arm64-all-link.log | tail -20; exit 1; \
 		fi; \
 	done
-	@echo "  CC      arch/arm64/sources/min_link_stubs.c (all)"
+	@echo "  CC      ktm/mocks/arm64/min_link_stubs.c (all)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
 		-DIR0_ARM64_COMMON_PROCESS_LINK=1 -c \
-		arch/arm64/sources/min_link_stubs.c -o build/arm64-all/min_link_stubs.o
+		ktm/mocks/arm64/min_link_stubs.c -o build/arm64-all/min_link_stubs.o
 	@echo "  CC      arch/arm64/sources/all_objs_mark.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/all_objs_mark.c -o build/arm64-all/all_objs_mark.o

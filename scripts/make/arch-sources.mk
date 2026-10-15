@@ -126,7 +126,7 @@ ARM64_FIRST_SWITCH_OBJS = \
 # Deliberately excluded from the real ARM64 boot image. They are only used by
 # kernel-arm64-min.bin and kernel-arm64-all.bin link-probe targets in testing.mk.
 ARM64_LINK_PROBE_ONLY_OBJS = \
-	arch/arm64/sources/min_link_stubs.o
+	ktm/mocks/arm64/min_link_stubs.o
 
 ARCH_OBJS_ARM64 = \
 	$(ARM64_BACKEND_OBJS) \

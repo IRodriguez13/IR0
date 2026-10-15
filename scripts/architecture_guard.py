@@ -710,7 +710,7 @@ def check_klog_serial_print_allowlist():
         "drivers/serial/serial.h",
         "includes/ir0/serial_io.h",
         "arch/arm64/sources/serial_io_arm64.c",
-        "arch/arm64/sources/min_link_stubs.c",
+        "ktm/mocks/arm64/min_link_stubs.c",
         "tests/host/host_serial_stub.c",
         # Freestanding early boot (IR0_FREESTANDING_BOOT) before klog hub exists.
         "arch/common/boot_log.c",

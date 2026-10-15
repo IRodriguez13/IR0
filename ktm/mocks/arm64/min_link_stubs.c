@@ -4,8 +4,8 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: min_link_stubs.c
- * Description: Weak stubs so MEMORY_OBJS (+ sample) can link into kernel-arm64-min.bin.
- *              Not product ALL_OBJS — x86 drivers remain excluded.
+ * Description: Test-only doubles for the ARM64 minimum-link probes.
+ *              Never part of the product architecture object graph.
  */
 
 #include <stddef.h>
