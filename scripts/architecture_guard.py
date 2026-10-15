@@ -1773,6 +1773,29 @@ def check_common_headers_have_only_data_model_isa_conditionals():
     return errors
 
 
+def check_arch_sources_need_no_compiler_isa_selection():
+    """An arch/<isa> object is already selected; its C must not select again."""
+    errors = []
+    isa_conditional = re.compile(
+        r"^\s*#\s*(?:if|ifdef|ifndef|elif).*"
+        r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|__arm__|"
+        r"_M_X64|_M_IX86|_M_ARM)"
+    )
+    arch_tree = ROOT / "arch"
+
+    for fpath in arch_tree.rglob("*.c"):
+        for idx, line in enumerate(
+            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+        ):
+            if isa_conditional.search(line):
+                errors.append(
+                    f"[arch-source-no-compiler-isa-conditional] "
+                    f"{fpath.relative_to(ROOT)}:{idx}: the build already "
+                    f"selected this ISA object: {line.strip()}"
+                )
+    return errors
+
+
 def check_process_lifecycle_uses_semantic_return_state():
     """Keep x86 segment-state inspection out of common process lifecycle code."""
     errors = []
@@ -2245,6 +2268,7 @@ def main():
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_common_c_has_no_isa_conditionals())
     errors.extend(check_common_headers_have_only_data_model_isa_conditionals())
+    errors.extend(check_arch_sources_need_no_compiler_isa_selection())
     errors.extend(check_process_lifecycle_uses_semantic_return_state())
     errors.extend(check_portable_task_api_has_no_x86_register_aliases())
     errors.extend(check_portable_code_has_no_private_asm_headers())

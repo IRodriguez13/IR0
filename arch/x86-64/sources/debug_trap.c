@@ -108,13 +108,11 @@ int ir0_debug_handle_user_db(uint64_t *stack)
 	if (!stack)
 		return 0;
 
-#if defined(__x86_64__) || defined(__amd64__)
 	if (ir0_debug_fork_singlestep_active())
 	{
 		if (fork_flow_note_debug_exception(stack))
 			return 1;
 	}
-#endif
 
 	if (ir0_debug_single_step_active())
 		return 0;

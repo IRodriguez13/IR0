@@ -19,7 +19,6 @@
 
 void dump_registers(void)
 {
-#ifdef __x86_64__
 	uint64_t rax, rbx, rcx, rdx, rsi, rdi, rsp, rbp;
 	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
 	uint64_t rflags, rip;
@@ -91,33 +90,6 @@ void dump_registers(void)
 	print_hex64(rsp);
 	print("\n");
 
-#else
-	uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp;
-	uint32_t eflags;
-
-	__asm__ volatile(
-		"movl %%eax, %0\n"
-		"movl %%ebx, %1\n"
-		"movl %%ecx, %2\n"
-		"movl %%edx, %3\n"
-		"movl %%esi, %4\n"
-		"movl %%edi, %5\n"
-		"movl %%esp, %6\n"
-		"movl %%ebp, %7\n"
-		"pushfl\n"
-		"popl %8\n"
-		: "=m"(eax), "=m"(ebx), "=m"(ecx), "=m"(edx),
-		  "=m"(esi), "=m"(edi), "=m"(esp), "=m"(ebp), "=m"(eflags)
-		:
-		: "memory");
-
-	print_colored("--- REGISTER DUMP (32-bit) ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-	print("EAX: ");
-	print_hex_compact(eax);
-	print("  EBX: ");
-	print_hex_compact(ebx);
-	print("\n");
-#endif
 }
 
 /**

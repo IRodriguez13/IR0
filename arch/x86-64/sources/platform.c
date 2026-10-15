@@ -40,7 +40,6 @@ static inline void cpuid(uint32_t leaf, uint32_t subleaf,
                          uint32_t *eax, uint32_t *ebx,
                          uint32_t *ecx, uint32_t *edx)
 {
-#if defined(__x86_64__) || defined(__i386__)
     #if MINGW_BUILD
         __asm__ __volatile__("cpuid"
                             : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
@@ -51,13 +50,6 @@ static inline void cpuid(uint32_t leaf, uint32_t subleaf,
                     : "=a"(*eax), "=b"(*ebx), "=c"(*ecx), "=d"(*edx)
                     : "a"(leaf), "c"(subleaf));
     #endif
-#else
-    /* Non-x86 architectures */
-    if (eax) *eax = 0;
-    if (ebx) *ebx = 0;
-    if (ecx) *ecx = 0;
-    if (edx) *edx = 0;
-#endif
 }
 
 /**
@@ -66,7 +58,6 @@ static inline void cpuid(uint32_t leaf, uint32_t subleaf,
  */
 uint32_t get_cpu_id(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     
     /* Check if CPUID supports leaf 0x1 (basic info) */
@@ -77,7 +68,6 @@ uint32_t get_cpu_id(void)
         cpuid(1, 0, &eax, &ebx, &ecx, &edx);
         return (ebx >> 24) & 0xFF;
     }
-#endif
     /* Default to 0 if CPUID not available or not x86 */
     return 0;
 }
@@ -89,7 +79,6 @@ uint32_t get_cpu_id(void)
  */
 uint32_t get_cpu_count(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     
     /* Check if CPUID supports leaf 0x1 */
@@ -122,7 +111,6 @@ uint32_t get_cpu_count(void)
             return ebx & 0xFFFF;
         }
     }
-#endif
     /* Default to 1 for single-core or non-x86 */
     return 1;
 }
@@ -134,7 +122,6 @@ uint32_t get_cpu_count(void)
  */
 int get_cpu_vendor(char *vendor_buf)
 {
-#if defined(__x86_64__) || defined(__i386__)
     if (!vendor_buf)
         return -1;
     
@@ -148,11 +135,6 @@ int get_cpu_vendor(char *vendor_buf)
     vendor_buf[12] = '\0';
     
     return 0;
-#else
-    /* Non-x86: return generic vendor */
-    strncpy(vendor_buf, "Unknown", 8);
-    return -1;
-#endif
 }
 
 /**
@@ -164,7 +146,6 @@ int get_cpu_vendor(char *vendor_buf)
  */
 int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
 {
-#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     
     /* Check if CPUID supports leaf 0x1 */
@@ -198,7 +179,6 @@ int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
         
         return 0;
     }
-#endif
     /* Fallback values */
     if (family) *family = 0;
     if (model) *model = 0;
@@ -213,17 +193,11 @@ int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
  */
 int get_cpuid_max_leaf(uint32_t *max_leaf)
 {
-#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     cpuid(0, 0, &eax, &ebx, &ecx, &edx);
     if (max_leaf)
         *max_leaf = eax;
     return 0;
-#else
-    if (max_leaf)
-        *max_leaf = 0;
-    return -1;
-#endif
 }
 
 /**
@@ -234,7 +208,6 @@ int get_cpuid_max_leaf(uint32_t *max_leaf)
  */
 int get_cpu_brand_string(char *buf, size_t size)
 {
-#if defined(__x86_64__) || defined(__i386__)
     if (!buf || size < 49)
         return -1;
     uint32_t eax, ebx, ecx, edx;
@@ -250,11 +223,6 @@ int get_cpu_brand_string(char *buf, size_t size)
     for (int i = 47; i >= 0 && (buf[i] == ' ' || buf[i] == '\0'); i--)
         buf[i] = '\0';
     return 0;
-#else
-    (void)buf;
-    (void)size;
-    return -1;
-#endif
 }
 
 /**
@@ -265,7 +233,6 @@ int get_cpu_brand_string(char *buf, size_t size)
  */
 int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
 {
-#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     cpuid(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax < 1)
@@ -276,11 +243,6 @@ int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
     if (out_ecx)
         *out_ecx = ecx;
     return 0;
-#else
-    if (out_edx) *out_edx = 0;
-    if (out_ecx) *out_ecx = 0;
-    return -1;
-#endif
 }
 
 /**
@@ -289,21 +251,16 @@ int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
  */
 uint32_t get_cpu_clflush_size(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
     uint32_t eax, ebx, ecx, edx;
     cpuid(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax < 1)
         return 0;
     cpuid(1, 0, &eax, &ebx, &ecx, &edx);
     return ((ebx >> 8) & 0xFF) * 8;
-#else
-    return 0;
-#endif
 }
 
 int hypervisor_present(void)
 {
-#if defined(__x86_64__) || defined(__i386__)
 	static int cached;
 	static int present;
 	uint32_t eax, ebx, ecx, edx;
@@ -322,14 +279,10 @@ int hypervisor_present(void)
 	present = (ecx & (1u << 31)) ? 1 : 0;
 	cached = 1;
 	return present;
-#else
-	return 0;
-#endif
 }
 
 int hypervisor_vendor(char *buf, size_t n)
 {
-#if defined(__x86_64__) || defined(__i386__)
 	uint32_t eax, ebx, ecx, edx;
 	char vendor[13];
 
@@ -347,11 +300,6 @@ int hypervisor_vendor(char *buf, size_t n)
 	vendor[12] = '\0';
 	memcpy(buf, vendor, 13);
 	return 0;
-#else
-	if (buf && n)
-		buf[0] = '\0';
-	return -1;
-#endif
 }
 
 
