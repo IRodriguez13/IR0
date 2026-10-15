@@ -71,13 +71,9 @@
 /**
  * Calling conventions
  */
-#if defined(__x86_64__) || defined(_M_X64)
-    #define IR0_FASTCALL  __attribute__((fastcall))
-    #define IR0_STDCALL   __attribute__((stdcall))
-#else
-    #define IR0_FASTCALL
-    #define IR0_STDCALL
-#endif
+/* IR0's supported 64-bit ABIs use their native C calling convention. */
+#define IR0_FASTCALL
+#define IR0_STDCALL
 
 /**
  * Alignment

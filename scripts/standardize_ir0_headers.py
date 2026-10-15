@@ -30,7 +30,6 @@ INCLUDE_FILES = (
     "config.h",
     "setup/kconfig_build.c",
     "setup/kernel_config.h",
-    "setup/subsystem_config.h",
 )
 
 INCLUDE_GLOBS = (

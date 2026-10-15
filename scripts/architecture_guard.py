@@ -1747,6 +1747,32 @@ def check_common_c_has_no_isa_conditionals():
     return errors
 
 
+def check_common_headers_have_only_data_model_isa_conditionals():
+    """Only freestanding stdint/stddef may inspect compiler ISA width."""
+    errors = []
+    isa_conditional = re.compile(
+        r"^\s*#\s*(?:if|ifdef|ifndef|elif).*"
+        r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|__arm__|"
+        r"ARCH_X86|ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
+    )
+    allowed = {"includes/stdint.h", "includes/stddef.h"}
+
+    for root in (ROOT / "includes", ROOT / "setup"):
+        if not root.is_dir():
+            continue
+        for fpath in root.rglob("*.h"):
+            rel = str(fpath.relative_to(ROOT))
+            for idx, line in enumerate(
+                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            ):
+                if isa_conditional.search(line) and rel not in allowed:
+                    errors.append(
+                        f"[common-header-no-isa-conditional] {rel}:{idx}: "
+                        f"use a selected asm gateway: {line.strip()}"
+                    )
+    return errors
+
+
 def check_process_lifecycle_uses_semantic_return_state():
     """Keep x86 segment-state inspection out of common process lifecycle code."""
     errors = []
@@ -2218,6 +2244,7 @@ def main():
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_common_c_has_no_isa_conditionals())
+    errors.extend(check_common_headers_have_only_data_model_isa_conditionals())
     errors.extend(check_process_lifecycle_uses_semantic_return_state())
     errors.extend(check_portable_task_api_has_no_x86_register_aliases())
     errors.extend(check_portable_code_has_no_private_asm_headers())

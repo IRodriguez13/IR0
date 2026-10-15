@@ -338,13 +338,6 @@
 #ifndef CONFIG_DRV_NIC_VIRTIO_NET
 #define CONFIG_DRV_NIC_VIRTIO_NET 0
 #endif
-#ifndef CONFIG_ARCH_X86_64
-#define CONFIG_ARCH_X86_64 1
-#endif
-#ifndef CONFIG_ARCH_ARM64
-#define CONFIG_ARCH_ARM64 0
-#endif
-
 #ifndef CONFIG_ENABLE_SOUND
 #define CONFIG_ENABLE_SOUND 1
 #endif
