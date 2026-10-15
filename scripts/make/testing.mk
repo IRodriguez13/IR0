@@ -2414,6 +2414,14 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c arch/arm64/sources/arch_tls.c -o build/arm64-boot/arch_tls.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c arch/arm64/sources/first_switch.c -o build/arm64-boot/first_switch.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
+		-c arch/arm64/sources/portable_string.c \
+		-o build/arm64-boot/portable_string.o
 	@echo "  CC      arch/arm64/sources/rr_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
@@ -2505,6 +2513,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/arch_context_switch.o \
 		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
+		build/arm64-boot/first_switch.o \
+		build/arm64-boot/portable_string.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
@@ -2593,6 +2603,8 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/arch_context_switch.o \
 		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
+		build/arm64-boot/first_switch.o \
+		build/arm64-boot/portable_string.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
@@ -2721,6 +2733,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/arch_context_switch.o \
 		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
+		build/arm64-boot/first_switch.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
@@ -2894,7 +2907,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/arch_context_switch.o \
-		build/arm64-boot/arch_switch.o \
+		build/arm64-boot/arch_switch.o build/arm64-boot/first_switch.o \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
@@ -3020,6 +3033,10 @@ smoke-arm64-harness: smoke-arm64 smoke-arm64-rpi3-timer smoke-arm64-all \
 
 smoke-arm64-boot: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU virt boot tag..."
+	@aarch64-linux-gnu-nm kernel-arm64-boot.bin | \
+		awk '$$3 == "first_switch_to" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-boot.bin | \
+		awk '$$3 == "strncmp" { ok = ($$2 == "T") } END { exit !ok }'
 	@rm -f /tmp/arm64-boot-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-boot-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_BOOT_OK -- \
