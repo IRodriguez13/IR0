@@ -7,14 +7,14 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: portable_string.c
- * Description: Freestanding strlen/memcpy for ARM64 portable slice (no oops.h).
+ * Description: Freestanding string primitives for the ARM64 bring-up image.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stddef.h>
 
-size_t arm64_portable_strlen(const char *s)
+size_t strlen(const char *s)
 {
 	size_t n = 0;
 
@@ -29,7 +29,7 @@ size_t arm64_portable_strlen(const char *s)
 	return n;
 }
 
-void *arm64_portable_memcpy(void *dst, const void *src, size_t n)
+void *memcpy(void *dst, const void *src, size_t n)
 {
 	unsigned char *d = (unsigned char *)dst;
 	const unsigned char *s = (const unsigned char *)src;
@@ -39,4 +39,40 @@ void *arm64_portable_memcpy(void *dst, const void *src, size_t n)
 		*d++ = *s++;
 	}
 	return dst;
+}
+
+void *memset(void *dst, int value, size_t n)
+{
+	unsigned char *d = (unsigned char *)dst;
+
+	while (n--)
+	{
+		*d++ = (unsigned char)value;
+	}
+	return dst;
+}
+
+int strcmp(const char *a, const char *b)
+{
+	while (*a && *a == *b)
+	{
+		a++;
+		b++;
+	}
+	return (unsigned char)*a - (unsigned char)*b;
+}
+
+int strncmp(const char *a, const char *b, size_t n)
+{
+	while (n && *a && *a == *b)
+	{
+		a++;
+		b++;
+		n--;
+	}
+	if (!n)
+	{
+		return 0;
+	}
+	return (unsigned char)*a - (unsigned char)*b;
 }

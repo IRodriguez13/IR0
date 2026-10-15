@@ -2862,24 +2862,6 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 	@echo "  CC      arch/arm64/sources/all_objs_mark.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/all_objs_mark.c -o build/arm64-all/all_objs_mark.o
-	@# Provide libc string aliases used by portable kernel TUs
-	@echo "  CC      build/arm64-all/string_aliases.c"
-	@printf '%s\n' \
-		'#include <stddef.h>' \
-		'size_t arm64_portable_strlen(const char *s);' \
-		'void *arm64_portable_memcpy(void *d, const void *s, size_t n);' \
-		'size_t strlen(const char *s) { return arm64_portable_strlen(s); }' \
-		'int strcmp(const char *a, const char *b) {' \
-		'  while (*a && *a == *b) { a++; b++; } return (unsigned char)*a - (unsigned char)*b; }' \
-		'int strncmp(const char *a, const char *b, size_t n) {' \
-		'  while (n && *a && *a == *b) { a++; b++; n--; }' \
-		'  if (!n) return 0; return (unsigned char)*a - (unsigned char)*b; }' \
-		'void *memcpy(void *d, const void *s, size_t n) { return arm64_portable_memcpy(d, s, n); }' \
-		'void *memset(void *d, int c, size_t n) {' \
-		'  unsigned char *p = d; while (n--) *p++ = (unsigned char)c; return d; }' \
-		> build/arm64-all/string_aliases.c
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		build/arm64-all/string_aliases.c -o build/arm64-all/string_aliases.o
 	@echo "  LD      $@ (portable ALL — no x86 drivers)"
 	@aarch64-linux-gnu-ld --gc-sections $(ARM64_ALL_KEEP_SYMBOLS) \
 		-T arch/arm64/linker.ld -o $@ \
@@ -2923,7 +2905,6 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin arch/arm64/sources/min_link_stubs.c 
 		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o \
 		$(ARM64_ALL_PORTABLE_OBJS) \
-		build/arm64-all/string_aliases.o \
 		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
