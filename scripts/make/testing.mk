@@ -3069,7 +3069,7 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 		head -30 /tmp/arm64-boot-smoke.log; exit 1; \
 	fi
 
-.PHONY: smoke-arm64-dtb
+.PHONY: smoke-arm64-dtb smoke-arm64-rpi5-contract
 smoke-arm64-dtb: kernel-arm64-Image
 	@echo "  SMOKE   ARM64 Linux Image + firmware DTB resources..."
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-dtb-smoke.log \
@@ -3096,6 +3096,27 @@ smoke-arm64-dtb: kernel-arm64-Image
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-dtb-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-dtb-smoke.log
 	@echo "✓ smoke-arm64-dtb passed (x0 DTB + CPU topology + bounded 128 MiB RAM)"
+
+smoke-arm64-rpi5-contract: kernel-arm64-Image
+	@mkdir -p build/arm64-rpi5-contract
+	@python3 tests/arm64/make_rpi5_contract_dtb.py \
+		build/arm64-rpi5-contract/bcm2712-virt-contract.dtb
+	@echo "  SMOKE   BCM2712-shaped firmware contract on QEMU virt..."
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi5-contract.log \
+		--timeout 20 --stale-sec 8 --done ARM64_EL0_RET_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a76 -smp 4 -m 128M \
+		-kernel kernel-arm64-Image \
+		-dtb build/arm64-rpi5-contract/bcm2712-virt-contract.dtb \
+		-nographic -serial mon:stdio -display none -no-reboot 2>/dev/null
+	@grep -q 'dtb_cpu_count=0x0000000000000004' /tmp/arm64-rpi5-contract.log
+	@grep -q 'ARM64_DTB_CONSOLE_OK' /tmp/arm64-rpi5-contract.log
+	@grep -q 'console_uart_base=0x0000000009000000' /tmp/arm64-rpi5-contract.log
+	@grep -q 'ARM64_DTB_GIC_MMIO_OK' /tmp/arm64-rpi5-contract.log
+	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi5-contract.log
+	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-rpi5-contract.log
+	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-rpi5-contract.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi5-contract.log
+	@echo "✓ smoke-arm64-rpi5-contract passed (4 CPU DTB + translated console/GIC + EL0)"
 
 smoke-arm64-el2-normalize: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU EL2 firmware entry normalization..."
