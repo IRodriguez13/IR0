@@ -802,26 +802,30 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
     if (!is_proc_path(path))
         return NULL;
 
-    const char *walk = path;
-    char self_resolved[512];
-
-    /*
-     * Map /proc/self/<rest> to /proc/<current_pid>/<rest> so the rest of the
-     * parser sees a normal numeric PID path.
-     */
+    /* Resolve /proc/self without manufacturing a temporary path. */
     if (strncmp(path, "/proc/self/", 11) == 0)
     {
+        const char *rest = path + 11;
+
         if (!current_process)
             return NULL;
-        int n = snprintf(self_resolved, sizeof(self_resolved), "/proc/%d/%s",
-                         (int)current_process->task.pid, path + 11);
-        if (n < 0 || (size_t)n >= sizeof(self_resolved))
-            return NULL;
-        walk = self_resolved;
+        *pid_out = current_process->task.pid;
+        if (strcmp(rest, "status") == 0) return "status";
+        if (strcmp(rest, "cmdline") == 0) return "cmdline";
+        if (strcmp(rest, "maps") == 0) return "maps";
+        if (strcmp(rest, "statm") == 0) return "statm";
+        if (strcmp(rest, "environ") == 0) return "environ";
+        if (strcmp(rest, "exe") == 0) return "exe_link";
+        if (strcmp(rest, "stat") == 0) return "stat";
+        if (strcmp(rest, "fd") == 0) return "fd_dir";
+        if (strncmp(rest, "fd/", 3) == 0 &&
+            rest[3] >= '0' && rest[3] <= '9')
+            return "fd_link";
+        return NULL;
     }
 
     /* Skip "/proc/" prefix */
-    const char *after_proc = walk + 6;
+    const char *after_proc = path + 6;
 
     /* /proc/self — Linux symlink to /proc/<current-pid> (bare path). */
     if (strcmp(after_proc, "self") == 0)
@@ -943,6 +947,7 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
 
     /* Regular /proc files */
     *pid_out = -1;
+
     return after_proc;
 }
 
