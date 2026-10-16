@@ -73,6 +73,14 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_DT_REG 8
 #define IR0_EARLY_DT_FIFO 1
 
+/* Linux poll.h bits used by staged ppoll/pselect6. */
+#define IR0_EARLY_POLLIN  0x001
+#define IR0_EARLY_POLLPRI 0x002
+#define IR0_EARLY_POLLOUT 0x004
+#define IR0_EARLY_POLLERR 0x008
+#define IR0_EARLY_POLLHUP 0x010
+#define IR0_EARLY_POLLNVAL 0x020
+
 struct ir0_early_dirent_spec
 {
 	const char *name;
@@ -331,3 +339,6 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 int64_t early_rootfs_fstat(int fd, uint64_t statbuf);
 int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 				uint64_t size);
+int early_rootfs_poll_revents(int fd, int events);
+int64_t early_rootfs_statfs(uint64_t path, uint64_t buf);
+int64_t early_rootfs_fstatfs(int fd, uint64_t buf);

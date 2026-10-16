@@ -31,6 +31,10 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return 0;
 	if (id == IR0_SYSCALL_FSYNC || id == IR0_SYSCALL_FDATASYNC)
 		return early_rootfs_fsync((int)a0);
+	if (id == IR0_SYSCALL_STATFS)
+		return early_rootfs_statfs(a0, a1);
+	if (id == IR0_SYSCALL_FSTATFS)
+		return early_rootfs_fstatfs((int)a0, a1);
 	if (!ops)
 		return -ENOSYS;
 	switch (id) {
@@ -59,6 +63,7 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_READLINKAT, IR0_SYSCALL_GETCWD, IR0_SYSCALL_CHDIR,
 	IR0_SYSCALL_GETDENTS64, IR0_SYSCALL_LSEEK, IR0_SYSCALL_FCHDIR,
 	IR0_SYSCALL_SYNC, IR0_SYSCALL_FSYNC, IR0_SYSCALL_FDATASYNC,
+	IR0_SYSCALL_STATFS, IR0_SYSCALL_FSTATFS,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

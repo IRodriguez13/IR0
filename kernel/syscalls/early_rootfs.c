@@ -16,6 +16,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/fcntl.h>
+#include <ir0/statfs.h>
 
 #define EBADF  9
 #define EACCES 13
@@ -657,7 +658,15 @@ int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
 	if (!strings_equal(pbuf, proc_self_exe))
+	{
+		/*
+		 * Linux readlinkat(2): ENOENT if the path is missing,
+		 * EINVAL if the named file exists and is not a symlink.
+		 */
+		if (ir0_early_rootfs_path_node(pbuf) != IR0_EARLY_ROOTFS_NONE)
+			return -EINVAL;
 		return -ENOENT;
+	}
 	if (size < n)
 		n = size;
 	if (n > 0 && (!g_user || !g_user->copy_to_user ||
@@ -1157,6 +1166,115 @@ int64_t early_rootfs_pipe2(uint64_t fds, int flags)
 		close_fd(wfd);
 		return -EFAULT;
 	}
+	return 0;
+}
+
+int early_rootfs_poll_revents(int fd, int events)
+{
+	enum ir0_early_rootfs_node node;
+	int pipe_id;
+	int ready = 0;
+
+	if (fd < 0)
+		return 0;
+	if (!fd_is_open(fd))
+		return IR0_EARLY_POLLNVAL;
+	node = node_of_fd(fd);
+	pipe_id = pipe_id_of_fd(fd);
+	if (node == IR0_EARLY_ROOTFS_PIPE_R)
+	{
+		struct early_pipe *p = (pipe_id >= 0) ? &g_pipes[pipe_id] : 0;
+
+		if (!p || !p->used)
+			return IR0_EARLY_POLLNVAL;
+		if (p->len > 0)
+			ready |= IR0_EARLY_POLLIN;
+		if (p->writers == 0)
+			ready |= IR0_EARLY_POLLHUP;
+		return ready & (events | IR0_EARLY_POLLHUP | IR0_EARLY_POLLERR);
+	}
+	if (node == IR0_EARLY_ROOTFS_PIPE_W)
+	{
+		struct early_pipe *p = (pipe_id >= 0) ? &g_pipes[pipe_id] : 0;
+
+		if (!p || !p->used)
+			return IR0_EARLY_POLLNVAL;
+		if (p->len < PIPE_BUF)
+			ready |= IR0_EARLY_POLLOUT;
+		if (p->readers == 0)
+			ready |= IR0_EARLY_POLLERR;
+		return ready & (events | IR0_EARLY_POLLHUP | IR0_EARLY_POLLERR);
+	}
+	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY)
+		ready = IR0_EARLY_POLLOUT;
+	else if (node == IR0_EARLY_ROOTFS_NULL || node == IR0_EARLY_ROOTFS_ZERO ||
+		 node == IR0_EARLY_ROOTFS_VDA || node == IR0_EARLY_ROOTFS_INIT)
+		ready = IR0_EARLY_POLLIN | IR0_EARLY_POLLOUT;
+	else if (node == IR0_EARLY_ROOTFS_ROOT || node == IR0_EARLY_ROOTFS_DEV)
+		ready = IR0_EARLY_POLLIN;
+	return ready & (events | IR0_EARLY_POLLERR | IR0_EARLY_POLLHUP);
+}
+
+static void fill_statfs(struct ir0_statfs *st)
+{
+	unsigned i;
+
+	for (i = 0; i < sizeof(*st); i++)
+		((unsigned char *)st)[i] = 0;
+	st->f_type = IR0_TMPFS_MAGIC;
+	st->f_bsize = 4096;
+	st->f_frsize = 4096;
+	st->f_namelen = 255;
+	if (vda_present())
+	{
+		st->f_blocks = ir0_block_sector_count_by_name("vda") / 8ULL;
+		st->f_bfree = st->f_blocks;
+		st->f_bavail = st->f_blocks;
+	}
+	else
+	{
+		st->f_blocks = 1;
+		st->f_bfree = 1;
+		st->f_bavail = 1;
+	}
+	st->f_files = 16;
+	st->f_ffree = 8;
+}
+
+int64_t early_rootfs_statfs(uint64_t path, uint64_t buf)
+{
+	char pbuf[32];
+	enum ir0_early_rootfs_node node;
+	struct ir0_statfs st;
+
+	if (!g_ready)
+		return -ENOENT;
+	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	node = ir0_early_rootfs_path_node(pbuf);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
+		return -ENOENT;
+	fill_statfs(&st);
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(buf, &st, sizeof(st)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t early_rootfs_fstatfs(int fd, uint64_t buf)
+{
+	struct ir0_statfs st;
+
+	if (!g_ready)
+		return -EBADF;
+	if (!fd_is_open(fd))
+		return -EBADF;
+	fill_statfs(&st);
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(buf, &st, sizeof(st)) != 0)
+		return -EFAULT;
 	return 0;
 }
 
