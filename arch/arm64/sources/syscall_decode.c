@@ -66,6 +66,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 92: return IR0_SYSCALL_PERSONALITY;
 	case 93: return IR0_SYSCALL_EXIT;
 	case 94: return IR0_SYSCALL_EXIT_GROUP;
+	case 95: return IR0_SYSCALL_WAITID;
 	case 96: return IR0_SYSCALL_SET_TID_ADDRESS;
 	case 98: return IR0_SYSCALL_FUTEX;
 	case 99: return IR0_SYSCALL_SET_ROBUST_LIST;

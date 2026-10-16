@@ -46,6 +46,7 @@ void test_arm64_syscall_decode_contract(void)
 		decoded++;
 	}
 	/* Linux asm-generic calls backed by existing IR0 common handlers. */
-	ASSERT(decoded == 138);
+	ASSERT(syscall_decode_number(95) == IR0_SYSCALL_WAITID);
+	ASSERT(decoded == 139);
 	TEST_END();
 }
