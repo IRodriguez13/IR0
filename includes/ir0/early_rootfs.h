@@ -342,3 +342,8 @@ int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 int early_rootfs_poll_revents(int fd, int events);
 int64_t early_rootfs_statfs(uint64_t path, uint64_t buf);
 int64_t early_rootfs_fstatfs(int fd, uint64_t buf);
+int64_t early_rootfs_fchmod(int fd, uint64_t mode);
+int64_t early_rootfs_fchmodat(int dirfd, uint64_t path, uint64_t mode);
+int64_t early_rootfs_fchown(int fd, uint64_t uid, uint64_t gid);
+int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
+			      uint64_t gid);

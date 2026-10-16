@@ -35,6 +35,14 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_statfs(a0, a1);
 	if (id == IR0_SYSCALL_FSTATFS)
 		return early_rootfs_fstatfs((int)a0, a1);
+	if (id == IR0_SYSCALL_FCHMOD)
+		return early_rootfs_fchmod((int)a0, a1);
+	if (id == IR0_SYSCALL_FCHMODAT)
+		return early_rootfs_fchmodat((int)a0, a1, a2);
+	if (id == IR0_SYSCALL_FCHOWN)
+		return early_rootfs_fchown((int)a0, a1, a2);
+	if (id == IR0_SYSCALL_FCHOWNAT)
+		return early_rootfs_fchownat((int)a0, a1, a2, a3);
 	if (!ops)
 		return -ENOSYS;
 	switch (id) {
@@ -63,7 +71,8 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_READLINKAT, IR0_SYSCALL_GETCWD, IR0_SYSCALL_CHDIR,
 	IR0_SYSCALL_GETDENTS64, IR0_SYSCALL_LSEEK, IR0_SYSCALL_FCHDIR,
 	IR0_SYSCALL_SYNC, IR0_SYSCALL_FSYNC, IR0_SYSCALL_FDATASYNC,
-	IR0_SYSCALL_STATFS, IR0_SYSCALL_FSTATFS,
+	IR0_SYSCALL_STATFS, IR0_SYSCALL_FSTATFS, IR0_SYSCALL_FCHMOD,
+	IR0_SYSCALL_FCHMODAT, IR0_SYSCALL_FCHOWN, IR0_SYSCALL_FCHOWNAT,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

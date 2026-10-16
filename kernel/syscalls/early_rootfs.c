@@ -1278,6 +1278,49 @@ int64_t early_rootfs_fstatfs(int fd, uint64_t buf)
 	return 0;
 }
 
+int64_t early_rootfs_fchmod(int fd, uint64_t mode)
+{
+	(void)mode;
+	if (!g_ready || !fd_is_open(fd))
+		return -EBADF;
+	return 0;
+}
+
+int64_t early_rootfs_fchmodat(int dirfd, uint64_t path, uint64_t mode)
+{
+	char pbuf[32];
+	enum ir0_early_rootfs_node node;
+
+	(void)mode;
+	if (!g_ready)
+		return -ENOENT;
+	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0)
+		return -EBADF;
+	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	node = ir0_early_rootfs_path_node(pbuf);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
+		return -ENOENT;
+	return 0;
+}
+
+int64_t early_rootfs_fchown(int fd, uint64_t uid, uint64_t gid)
+{
+	(void)uid;
+	(void)gid;
+	return early_rootfs_fchmod(fd, 0);
+}
+
+int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
+			      uint64_t gid)
+{
+	(void)uid;
+	(void)gid;
+	return early_rootfs_fchmodat(dirfd, path, 0);
+}
+
 int early_rootfs_smoke_init(void)
 {
 	int fd;
