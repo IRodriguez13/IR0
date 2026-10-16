@@ -12,9 +12,19 @@ void test_arm64_syscall_decode_contract(void)
 	bool seen[IR0_SYSCALL_LINUX_COUNT] = { false };
 
 	TEST_BEGIN("arm64 syscall ABI decoder contract");
+	ASSERT(syscall_decode_number(43) == IR0_SYSCALL_STATFS);
+	ASSERT(syscall_decode_number(44) == IR0_SYSCALL_FSTATFS);
 	ASSERT(syscall_decode_number(62) == IR0_SYSCALL_LSEEK);
 	ASSERT(syscall_decode_number(63) == IR0_SYSCALL_READ);
 	ASSERT(syscall_decode_number(64) == IR0_SYSCALL_WRITE);
+	ASSERT(syscall_decode_number(73) == IR0_SYSCALL_PPOLL);
+	ASSERT(syscall_decode_number(98) == IR0_SYSCALL_FUTEX);
+	ASSERT(syscall_decode_number(124) == IR0_SYSCALL_SCHED_YIELD);
+	ASSERT(syscall_decode_number(129) == IR0_SYSCALL_KILL);
+	ASSERT(syscall_decode_number(132) == IR0_SYSCALL_SIGALTSTACK);
+	ASSERT(syscall_decode_number(165) == IR0_SYSCALL_GETRUSAGE);
+	ASSERT(syscall_decode_number(179) == IR0_SYSCALL_SYSINFO);
+	ASSERT(syscall_decode_number(233) == IR0_SYSCALL_MADVISE);
 	ASSERT(syscall_decode_number(78) == IR0_SYSCALL_READLINKAT);
 	ASSERT(syscall_decode_number(93) == IR0_SYSCALL_EXIT);
 	ASSERT(syscall_decode_number(172) == IR0_SYSCALL_GETPID);
@@ -36,6 +46,6 @@ void test_arm64_syscall_decode_contract(void)
 		decoded++;
 	}
 	/* Linux asm-generic calls backed by existing IR0 common handlers. */
-	ASSERT(decoded == 130);
+	ASSERT(decoded == 138);
 	TEST_END();
 }

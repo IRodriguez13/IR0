@@ -30,6 +30,10 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 38: return IR0_SYSCALL_RENAMEAT;
 	case 39: return IR0_SYSCALL_UMOUNT2;
 	case 40: return IR0_SYSCALL_MOUNT;
+	case 43: return IR0_SYSCALL_STATFS;
+	case 44: return IR0_SYSCALL_FSTATFS;
+	case 45: return IR0_SYSCALL_TRUNCATE;
+	case 46: return IR0_SYSCALL_FTRUNCATE;
 	case 48: return IR0_SYSCALL_FACCESSAT;
 	case 49: return IR0_SYSCALL_CHDIR;
 	case 50: return IR0_SYSCALL_FCHDIR;
@@ -74,9 +78,11 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 114: return IR0_SYSCALL_CLOCK_GETRES;
 	case 115: return IR0_SYSCALL_CLOCK_NANOSLEEP;
 	case 116: return IR0_SYSCALL_SYSLOG;
+	case 124: return IR0_SYSCALL_SCHED_YIELD;
 	case 129: return IR0_SYSCALL_KILL;
 	case 130: return IR0_SYSCALL_TKILL;
 	case 131: return IR0_SYSCALL_TGKILL;
+	case 132: return IR0_SYSCALL_SIGALTSTACK;
 	case 133: return IR0_SYSCALL_RT_SIGSUSPEND;
 	case 134: return IR0_SYSCALL_RT_SIGACTION;
 	case 135: return IR0_SYSCALL_RT_SIGPROCMASK;
@@ -100,6 +106,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 159: return IR0_SYSCALL_SETGROUPS;
 	case 160: return IR0_SYSCALL_UNAME;
 	case 163: return IR0_SYSCALL_GETRLIMIT;
+	case 165: return IR0_SYSCALL_GETRUSAGE;
 	case 166: return IR0_SYSCALL_UMASK;
 	case 167: return IR0_SYSCALL_PRCTL;
 	case 169: return IR0_SYSCALL_GETTIMEOFDAY;
@@ -136,6 +143,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 221: return IR0_SYSCALL_EXECVE;
 	case 222: return IR0_SYSCALL_MMAP;
 	case 226: return IR0_SYSCALL_MPROTECT;
+	case 233: return IR0_SYSCALL_MADVISE;
 	case 242: return IR0_SYSCALL_ACCEPT4;
 	case 260: return IR0_SYSCALL_WAIT4;
 	case 261: return IR0_SYSCALL_PRLIMIT64;
