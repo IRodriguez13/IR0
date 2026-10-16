@@ -47,7 +47,7 @@
 #include <ir0/vfs.h>
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
-#include "ipc.h"
+#include <ir0/ipc.h>
 #include "syscalls.h"
 #include <ir0/sched.h>
 #include "process.h"

@@ -176,6 +176,7 @@ PORTABLE_DIRS_NO_KERNEL_HEADERS = [
     ROOT / "net",
     ROOT / "mm",
     ROOT / "drivers",
+    ROOT / "ipc",
 ]
 
 PORTABLE_DIRS_MM_NET_NO_ARCH = [
@@ -191,6 +192,7 @@ PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "net",
     ROOT / "drivers",
     ROOT / "sched",
+    ROOT / "ipc",
 ]
 
 
@@ -678,6 +680,7 @@ def check_ktm_no_fase_serial():
         ROOT / "ktm",
         ROOT / "arch",
         ROOT / "sched",
+        ROOT / "ipc",
     ]
     for base in scan_roots:
         if not base.exists():
@@ -726,6 +729,7 @@ def check_klog_serial_print_allowlist():
         ROOT / "arch",
         ROOT / "sched",
         ROOT / "interrupt",
+        ROOT / "ipc",
     ]
     for base in scan_roots:
         if not base.exists():
@@ -830,6 +834,7 @@ PORTABLE_ISA_TREES = (
     ROOT / "sched",
     ROOT / "drivers",
     ROOT / "fs",
+    ROOT / "ipc",
 )
 PORTABLE_ISA_ALLOWLIST = {
     ROOT / "includes" / "ir0" / "syscall_x86_64.h",
@@ -1495,6 +1500,7 @@ PORTABLE_NO_ARCH_CALL_TREES = [
     ROOT / "net",
     ROOT / "sched",
     ROOT / "interrupt",
+    ROOT / "ipc",
 ]
 
 
@@ -1625,6 +1631,7 @@ PORTABLE_PORT1_TREES = [
     ROOT / "fs",
     ROOT / "net",
     ROOT / "sched",
+    ROOT / "ipc",
 ]
 
 
@@ -1729,7 +1736,7 @@ def check_common_c_has_no_isa_conditionals():
     )
     roots = (ROOT / "drivers", ROOT / "fs", ROOT / "interrupt",
              ROOT / "kernel", ROOT / "ktm", ROOT / "mm", ROOT / "net",
-             ROOT / "sched")
+             ROOT / "sched", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -1821,7 +1828,7 @@ def check_portable_task_api_has_no_x86_register_aliases():
     errors = []
     forbidden = re.compile(r"\btask_(?:get|set)_(?:rdi|rsi|rdx)\s*\(")
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched")
+             ROOT / "net", ROOT / "sched", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -1851,7 +1858,8 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/abi/vdso_contract.h": "#include <asm/vdso_contract.h>",
     }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers")
+             ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers",
+             ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -1926,7 +1934,8 @@ def check_common_elf_uses_isa_policy():
         r"\b(?:ARCH_ELF_MACHINE|IR0_R_X86_64_[A-Z0-9_]+|R_X86_64_[A-Z0-9_]+|"
         r"R_AARCH64_[A-Z0-9_]+)\b"
     )
-    paths = [ROOT / "kernel", ROOT / "mm", ROOT / "fs", ROOT / "net", ROOT / "sched"]
+    paths = [ROOT / "kernel", ROOT / "mm", ROOT / "fs", ROOT / "net", ROOT / "sched",
+             ROOT / "ipc"]
 
     for base in paths:
         for path in iter_c_files(base):
@@ -2113,6 +2122,7 @@ def check_ktm_mock_boundaries():
         ROOT / "mm",
         ROOT / "net",
         ROOT / "sched",
+        ROOT / "ipc",
     ]
 
     legacy = ROOT / "ktm" / "backends"

@@ -417,7 +417,7 @@ KERNEL_OBJS = \
     kernel/elf_loader.o \
     kernel/driver_registry.o \
     kernel/resource_registry.o \
-    kernel/ipc.o \
+    ipc/ipc.o \
     kernel/futex.o \
     kernel/net_compat.o \
     kernel/fd_resource.o \

@@ -4,7 +4,7 @@
  * Copyright (C) 2026 Iván Rodriguez
  *
  * File: ipc.h
- * Description: Kernel-tree alias for includes/ir0/ipc.h
+ * Description: Kernel-tree alias; implementation lives in ipc/ipc.c.
  */
 
 #ifndef _KERNEL_IPC_H

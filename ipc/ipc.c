@@ -8,7 +8,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: ipc.c
- * Description: IR0 kernel source/header file
+ * Description: Portable IPC channels, wait queues, and ring buffers.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -17,8 +17,8 @@
  * Copyright (C) 2025 Iván Rodriguez
  */
 
-#include "ipc.h"
-#include "process.h"
+#include <ir0/ipc.h>
+#include <ir0/process.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <ir0/logging.h>
