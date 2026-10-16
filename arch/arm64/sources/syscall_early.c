@@ -14,15 +14,18 @@
 
 #include "syscall_early.h"
 #include "elf_load_early.h"
+#include "mmu_early.h"
 #include "syscall_mm_early.h"
-#include "syscall_time_early.h"
 #include "syscall_process_early.h"
 #include "syscall_vfs_early.h"
 #include "syscall_io_early.h"
 #include "pl011.h"
+#include "timer.h"
 
 #include <stdint.h>
+#include <ir0/boot_log.h>
 #include <ir0/early_syscall.h>
+#include <ir0/early_time.h>
 #include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
 
@@ -39,8 +42,70 @@ static const struct syscall_context_provider *const g_early_providers[] = {
 	&arm64_early_io_provider,
 	&arm64_early_mm_provider,
 	&arm64_early_vfs_provider,
-	&arm64_early_time_provider,
+	&early_time_provider,
 	&arm64_early_process_provider,
+};
+
+static int arm64_early_copy_from_user(void *destination, uint64_t source,
+				      uint64_t size)
+{
+	uint8_t *dst = destination;
+	const volatile uint8_t *src;
+	uint64_t index;
+
+	if (!arm64_mmu_user_buf_ok(source, size))
+		return -1;
+	src = (const volatile uint8_t *)(uintptr_t)source;
+	for (index = 0; index < size; index++)
+		dst[index] = src[index];
+	return 0;
+}
+
+static int arm64_early_copy_to_user(uint64_t destination, const void *source,
+				    uint64_t size)
+{
+	volatile uint8_t *dst;
+	const uint8_t *src = source;
+	uint64_t index;
+
+	if (!arm64_mmu_user_buf_ok(destination, size))
+		return -1;
+	dst = (volatile uint8_t *)(uintptr_t)destination;
+	for (index = 0; index < size; index++)
+		dst[index] = src[index];
+	return 0;
+}
+
+static uint64_t arm64_early_counter_frequency(void)
+{
+	return timer_get_frequency();
+}
+
+static void arm64_early_cpu_relax(void)
+{
+	__asm__ volatile("yield" ::: "memory");
+}
+
+static void arm64_early_time_note(enum early_syscall_event event)
+{
+	static const char *const tags[] = {
+		[EARLY_SYSCALL_NANOSLEEP_OK] = "ARM64_NANOSLEEP_OK",
+		[EARLY_SYSCALL_CLOCK_GETTIME_OK] = "ARM64_CLOCK_GETTIME_OK",
+		[EARLY_SYSCALL_GETTIMEOFDAY_OK] = "ARM64_GETTIMEOFDAY_OK",
+		[EARLY_SYSCALL_CLOCK_NANOSLEEP_OK] = "ARM64_CLOCK_NANOSLEEP_OK",
+	};
+
+	if ((unsigned int)event < sizeof(tags) / sizeof(tags[0]) && tags[event])
+		ir0_boot_smoke(tags[event]);
+}
+
+static const struct early_syscall_services g_arm64_early_services = {
+	.copy_from_user = arm64_early_copy_from_user,
+	.copy_to_user = arm64_early_copy_to_user,
+	.counter_read = timer_read,
+	.counter_frequency = arm64_early_counter_frequency,
+	.cpu_relax = arm64_early_cpu_relax,
+	.note = arm64_early_time_note,
 };
 
 static void pl011_put_hex64(uint64_t v)
@@ -62,7 +127,7 @@ static void pl011_put_hex64(uint64_t v)
 int arm64_syscall_smoke_ok(void)
 {
 	return arm64_early_process_smoke_ok() && arm64_early_io_smoke_ok() &&
-	       arm64_early_time_smoke_ok();
+	       early_time_smoke_ok();
 }
 
 int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
@@ -87,6 +152,7 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 
 	context.leave_usermode = leave_el0;
 	context.smoke_ok = arm64_syscall_smoke_ok;
+	context.services = &g_arm64_early_services;
 	return early_syscall_dispatch_invoke(
 		&g_early_syscall_dispatch, &context, g_early_providers,
 		sizeof(g_early_providers) / sizeof(g_early_providers[0]),
