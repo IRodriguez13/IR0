@@ -2897,7 +2897,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	arch/arm64/sources/portable_string.c
 ARM64_ALL_PORTABLE_OBJS = $(addprefix build/arm64-all/,$(notdir $(ARM64_ALL_PORTABLE_SRCS:.c=.o)))
 
-kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
+kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
 	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
 	@mkdir -p build/arm64-all
@@ -2909,6 +2909,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		base=$$(basename $$src .c); \
 		echo "  CC      $$src (all)"; \
 		if ! aarch64-linux-gnu-gcc $(ARM64_ALL_CFLAGS) -DARCH_ARM64=1 \
+			-DIR0_KLOG_COMPILE_OUT=1 \
 			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
 			-I$(KERNEL_ROOT)/arch/common \
 			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
@@ -2917,10 +2918,6 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 			echo "✗ compile $$src"; cat /tmp/ir0-arm64-all-link.log | tail -20; exit 1; \
 		fi; \
 	done
-	@echo "  CC      ktm/mocks/arm64/min_link_stubs.c (all)"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
-		-DIR0_ARM64_COMMON_PROCESS_LINK=1 -c \
-		ktm/mocks/arm64/min_link_stubs.c -o build/arm64-all/min_link_stubs.o
 	@echo "  CC      arch/arm64/sources/all_objs_mark.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/all_objs_mark.c -o build/arm64-all/all_objs_mark.o
@@ -2967,24 +2964,22 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o \
 		arch/arm64/sources/vectors.o \
-		$(ARM64_ALL_PORTABLE_OBJS) \
-		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
+		$(ARM64_ALL_PORTABLE_OBJS) build/arm64-all/all_objs_mark.o
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
 arm64-provider-audit: kernel-arm64-all.bin
 	@! grep -q 'allocator_stubs.o' build/arm64-all/kernel.map || \
 		{ echo "✗ ARM64 aggregate linked the harness allocator"; exit 1; }
-	@unexpected=$$(aarch64-linux-gnu-nm kernel-arm64-all.bin | \
-		awk '$$2 ~ /^[WwVv]$$/ { print $$3 }' | \
-		grep -Ev '^(ahci_map_mmio_in_directory|arm64_all_objs_mark|arm64_common_root_smoke|klog_(debug|debug_fmt|error_fmt|print|trace|trace_enabled|trace_fmt)|ktm_checkpoint_emit|ktm_fault_should_fail|video_backend_(get_fb_phys|get_fb_size|is_available))$$' || true); \
-	if [ -n "$$unexpected" ]; then \
-		echo "✗ unexpected weak ARM64 aggregate providers:"; \
-		printf '%s\n' "$$unexpected"; exit 1; \
+	@weak=$$(aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$2 ~ /^[WwVv]$$/ { print $$3 }'); \
+	if [ -n "$$weak" ]; then \
+		echo "✗ weak ARM64 aggregate providers are forbidden:"; \
+		printf '%s\n' "$$weak"; exit 1; \
 	fi
 	@! aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		grep -Eq '[[:space:]](handle_signals|signals_should_handle_on_run|klog_info)$$' || \
 		{ echo "✗ unused runtime harness provider leaked into ARM64 aggregate"; exit 1; }
-	@echo "✓ ARM64 provider audit (real allocator/accounting/trace; weak budget contained)"
+	@echo "✓ ARM64 provider audit (no runtime/link mocks; zero weak symbols)"
 
 # Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
 # supplies x0 only when the payload is an Image, not when it loads the raw ELF
