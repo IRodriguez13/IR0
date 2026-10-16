@@ -32,34 +32,6 @@
 
 #define ENOSYS 38
 
-#ifndef ARM64_MUSL_MMAP_BASE
-#define ARM64_MUSL_MMAP_BASE 0x431a0000UL
-#endif
-#ifndef ARM64_MUSL_MMAP_END
-#define ARM64_MUSL_MMAP_END 0x43200000UL
-#endif
-#ifndef ARM64_BB_BRK_START
-#define ARM64_BB_BRK_START 0x44158000UL
-#endif
-#ifndef ARM64_BB_MMAP_BASE
-#define ARM64_BB_MMAP_BASE 0x44200000UL
-#endif
-#ifndef ARM64_BB_MMAP_END
-#define ARM64_BB_MMAP_END 0x44800000UL
-#endif
-
-static const struct early_mm_layout g_arm64_early_mm_layout = {
-	.primary_heap_base = ARM64_MUSL_MMAP_BASE,
-	.primary_map_limit = ARM64_MUSL_MMAP_END,
-	.secondary_heap_base = ARM64_BB_BRK_START,
-	.secondary_map_base = ARM64_BB_MMAP_BASE,
-	.secondary_map_limit = ARM64_BB_MMAP_END,
-};
-
-void arm64_syscall_reset_busybox_heap(void)
-{
-	early_mm_reset_secondary_heap(&g_arm64_early_mm_layout);
-}
 
 static struct early_syscall_dispatch g_early_syscall_dispatch;
 
@@ -183,8 +155,6 @@ static const struct early_process_services g_arm64_early_process = {
 };
 
 static const struct early_mm_services g_arm64_early_mm = {
-	.mm_layout = &g_arm64_early_mm_layout,
-	.userspace_secondary_mode = arm64_busybox_mode,
 	.map_user_page = arm64_mmu_map_user_page_flags,
 	.zero_user_page = arm64_early_zero_user_page,
 	.protect_user_range = arm64_mmu_protect_user_range,

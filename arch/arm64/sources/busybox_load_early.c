@@ -12,16 +12,22 @@
 #include "mmu_early.h"
 #include "pl011.h"
 #include "rootfs_early.h"
-#include "syscall_early.h"
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
 #include <ir0/early_elf_stack.h>
+#include <ir0/early_mm.h>
 
 #define PAGE_SIZE 4096UL
 
 #ifndef ARM64_BB_STACK_TOP
 #define ARM64_BB_STACK_TOP 0x441a0000UL
+#endif
+#ifndef ARM64_BB_MMAP_BASE
+#define ARM64_BB_MMAP_BASE 0x44200000UL
+#endif
+#ifndef ARM64_BB_MMAP_END
+#define ARM64_BB_MMAP_END 0x44800000UL
 #endif
 #define BB_STACK_PAGES 4U
 
@@ -33,6 +39,7 @@ static int g_bb_wrote;
 static int g_bb_init_wrote;
 static int g_bb_stage;
 static uint64_t g_bb_entry;
+static uint64_t g_bb_heap;
 static struct ir0_early_elf_auxv g_bb_aux;
 
 int arm64_busybox_mode(void)
@@ -111,9 +118,16 @@ void arm64_busybox_enter(char *const argv[])
 {
 	int init_stage = g_bb_stage != 0;
 
-	if (g_bb_entry == 0)
+	if (g_bb_entry == 0 || g_bb_heap == 0)
 		return;
-	arm64_syscall_reset_busybox_heap();
+	{
+		struct early_mm_layout mm;
+
+		mm.heap_base = g_bb_heap;
+		mm.map_base = ARM64_BB_MMAP_BASE;
+		mm.map_limit = ARM64_BB_MMAP_END;
+		early_mm_activate(&mm);
+	}
 	g_bb_mode = 1;
 	if (init_stage)
 		ir0_boot_smoke("ARM64_BUSYBOX_INIT_EL0_DROP");
@@ -156,6 +170,7 @@ int arm64_busybox_prepare(void)
 	g_bb_init_wrote = 0;
 	g_bb_stage = 0;
 	g_bb_mode = 0;
+	g_bb_heap = 0;
 	arm64_rootfs_early_init();
 
 	for (i = 0; i < BB_STACK_PAGES; i++)
@@ -170,7 +185,8 @@ int arm64_busybox_prepare(void)
 		arm64_elf_zero_early(page, PAGE_SIZE);
 	}
 
-	if (arm64_elf_image_load_early(blob, blob_len, &image) != 0)
+	if (arm64_elf_image_load_early(blob, blob_len, &image) != 0 ||
+	    image.initial_brk == 0)
 	{
 		ir0_boot_smoke("ARM64_BUSYBOX_LOAD_FAIL");
 		return -1;
@@ -178,6 +194,7 @@ int arm64_busybox_prepare(void)
 
 	ir0_boot_smoke("ARM64_BUSYBOX_LOAD_OK");
 	g_bb_entry = image.entry;
+	g_bb_heap = image.initial_brk;
 	g_bb_aux.phdr = image.phdr;
 	g_bb_aux.phent = image.phent;
 	g_bb_aux.phnum = image.phnum;

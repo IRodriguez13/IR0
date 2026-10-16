@@ -2565,15 +2565,14 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/boot_stub.c -o build/arm64-rpi3-early/boot_stub.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000 -c \
 		arch/arm64/asm/entry/vectors.S -o build/arm64-rpi3-early/vectors.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_MUSL_STACK_TOP=0x03180000UL -c \
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_MUSL_STACK_TOP=0x03180000UL \
+		-DARM64_MUSL_MMAP_BASE=0x031a0000UL -DARM64_MUSL_MMAP_END=0x03200000UL -c \
 		arch/arm64/sources/elf_load_early.c -o build/arm64-rpi3-early/elf_load_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_BB_STACK_TOP=0x041a0000UL \
+		-DARM64_BB_MMAP_BASE=0x04200000UL -DARM64_BB_MMAP_END=0x04800000UL \
 		-DARM64_BUSYBOX_SKIP_INIT_HARNESS=1 -c \
 		arch/arm64/sources/busybox_load_early.c -o build/arm64-rpi3-early/busybox_load_early.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
-		-DARM64_MUSL_MMAP_BASE=0x031a0000UL -DARM64_MUSL_MMAP_END=0x03200000UL \
-		-DARM64_BB_BRK_START=0x04030000UL -DARM64_BB_MMAP_BASE=0x04200000UL \
-		-DARM64_BB_MMAP_END=0x04800000UL -c arch/arm64/sources/syscall_early.c \
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c arch/arm64/sources/syscall_early.c \
 		-o build/arm64-rpi3-early/syscall_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
 		-DARM64_HELLO_BLOB_PATH='"build/hello_aarch64_rpi3"' -c \

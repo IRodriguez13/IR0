@@ -15,12 +15,19 @@
 #include <stdint.h>
 #include <ir0/boot_log.h>
 #include <ir0/early_elf_stack.h>
+#include <ir0/early_mm.h>
 #include <ir0/early_syscall.h>
 
 #define PAGE_SIZE 4096UL
 
 #ifndef ARM64_MUSL_STACK_TOP
 #define ARM64_MUSL_STACK_TOP 0x43180000UL
+#endif
+#ifndef ARM64_MUSL_MMAP_BASE
+#define ARM64_MUSL_MMAP_BASE 0x431a0000UL
+#endif
+#ifndef ARM64_MUSL_MMAP_END
+#define ARM64_MUSL_MMAP_END 0x43200000UL
 #endif
 #define MUSL_STACK_PAGES 2U
 #define SPSR_DAIF_MASKED 0x3c0UL
@@ -201,6 +208,20 @@ int arm64_musl_hello_el0(void)
 	aux.secure = 0;
 	aux.random = 0;
 	aux.execfn = argv[0];
+
+	if (image.initial_brk == 0)
+	{
+		ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
+		return -1;
+	}
+	{
+		struct early_mm_layout mm;
+
+		mm.heap_base = image.initial_brk;
+		mm.map_base = ARM64_MUSL_MMAP_BASE;
+		mm.map_limit = ARM64_MUSL_MMAP_END;
+		early_mm_activate(&mm);
+	}
 
 	ir0_boot_smoke("ARM64_MUSL_LOAD_OK");
 	g_musl_mode = 1;

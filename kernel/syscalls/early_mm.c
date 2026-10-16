@@ -1,5 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/** Architecture-neutral bounded MM policy for staged userspace. */
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026 Iván Rodriguez
+ *
+ * Architecture-neutral bounded MM for staged userspace. The current arena
+ * is the loaded image's Linux initial brk plus a caller-supplied anonymous
+ * mmap window. The policy does not name or special-case any program.
+ */
 
 #include <stdint.h>
 #include <ir0/early_mm.h>
@@ -20,53 +27,24 @@ struct early_mm_arena
 	uint64_t map_bump;
 };
 
-static struct early_mm_arena g_primary;
-static struct early_mm_arena g_secondary;
-static const struct early_mm_layout *g_layout;
+static struct early_mm_layout g_layout;
+static struct early_mm_arena g_arena;
+static int g_active;
 
-static void early_mm_configure(const struct early_mm_layout *layout)
+void early_mm_activate(const struct early_mm_layout *layout)
 {
-	if (!layout || g_layout == layout)
+	if (!layout || layout->heap_base == 0 ||
+	    layout->map_limit <= layout->map_base ||
+	    layout->heap_base >= layout->map_limit)
+	{
+		g_active = 0;
 		return;
-	g_layout = layout;
-	g_primary.brk = layout->primary_heap_base;
-	g_primary.mapped_end = layout->primary_heap_base;
-	g_primary.map_bump = layout->primary_heap_base;
-	g_secondary.brk = layout->secondary_heap_base;
-	g_secondary.mapped_end = layout->secondary_heap_base;
-	g_secondary.map_bump = layout->secondary_map_base;
-}
-
-void early_mm_reset_secondary_heap(const struct early_mm_layout *layout)
-{
-	early_mm_configure(layout);
-	if (!layout)
-		return;
-	g_secondary.brk = layout->secondary_heap_base;
-	g_secondary.mapped_end = layout->secondary_heap_base;
-	g_secondary.map_bump = layout->secondary_map_base;
-}
-
-static int select_arena(struct early_syscall_context *context,
-			struct early_mm_arena **arena, uint64_t *heap_base,
-			uint64_t *map_base, uint64_t *limit)
-{
-	const struct early_mm_services *ops = context && context->services ?
-		context->services->mm : 0;
-	int secondary;
-
-	if (!ops || !ops->mm_layout || !ops->userspace_secondary_mode)
-		return -ENOSYS;
-	early_mm_configure(ops->mm_layout);
-	secondary = ops->userspace_secondary_mode();
-	*arena = secondary ? &g_secondary : &g_primary;
-	*heap_base = secondary ? ops->mm_layout->secondary_heap_base :
-				       ops->mm_layout->primary_heap_base;
-	*map_base = secondary ? ops->mm_layout->secondary_map_base :
-				      ops->mm_layout->primary_heap_base;
-	*limit = secondary ? ops->mm_layout->secondary_map_limit :
-			   ops->mm_layout->primary_map_limit;
-	return 0;
+	}
+	g_layout = *layout;
+	g_arena.brk = layout->heap_base;
+	g_arena.mapped_end = layout->heap_base;
+	g_arena.map_bump = layout->map_base;
+	g_active = 1;
 }
 
 static int map_zero_page(const struct early_mm_services *ops, uint64_t page)
@@ -81,53 +59,54 @@ static int map_zero_page(const struct early_mm_services *ops, uint64_t page)
 
 static int64_t early_brk(struct early_syscall_context *context, uint64_t request)
 {
-	struct early_mm_arena *arena;
-	uint64_t base, map_base, limit, target_end;
+	uint64_t target_end;
 	const struct early_mm_services *ops = context->services->mm;
 
-	if (select_arena(context, &arena, &base, &map_base, &limit) != 0)
+	if (!g_active)
 		return -ENOSYS;
-	(void)map_base;
-	if (!request || request < base || request > limit)
-		return (int64_t)arena->brk;
+	if (!request || request < g_layout.heap_base ||
+	    request > g_layout.map_limit)
+		return (int64_t)g_arena.brk;
 	if (request > UINT64_MAX - (PAGE_SIZE - 1))
-		return (int64_t)arena->brk;
+		return (int64_t)g_arena.brk;
 	target_end = (request + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	if (target_end > limit)
-		return (int64_t)arena->brk;
-	while (arena->mapped_end < target_end) {
-		if (map_zero_page(ops, arena->mapped_end) != 0)
-			return (int64_t)arena->brk;
-		arena->mapped_end += PAGE_SIZE;
+	if (target_end > g_layout.map_limit)
+		return (int64_t)g_arena.brk;
+	while (g_arena.mapped_end < target_end)
+	{
+		if (map_zero_page(ops, g_arena.mapped_end) != 0)
+			return (int64_t)g_arena.brk;
+		g_arena.mapped_end += PAGE_SIZE;
 	}
-	arena->brk = request;
+	g_arena.brk = request;
 	return (int64_t)request;
 }
 
 static int64_t early_mmap(struct early_syscall_context *context,
 			  uint64_t address, uint64_t length)
 {
-	struct early_mm_arena *arena;
-	uint64_t heap_base, map_base, limit, base, end, page;
+	uint64_t base, end, page;
 	const struct early_mm_services *ops = context->services->mm;
 
-	if (select_arena(context, &arena, &heap_base, &map_base, &limit) != 0)
+	if (!g_active)
 		return -ENOSYS;
-	(void)heap_base;
 	if (!length)
 		length = 2 * PAGE_SIZE;
 	if (length > UINT64_MAX - (PAGE_SIZE - 1))
 		return -ENOMEM;
 	length = (length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-	base = address ? address & ~(PAGE_SIZE - 1) : arena->map_bump;
-	if (base < map_base || base > limit || length > limit - base)
+	base = address ? address & ~(PAGE_SIZE - 1) : g_arena.map_bump;
+	if (base < g_layout.map_base || base > g_layout.map_limit ||
+	    length > g_layout.map_limit - base)
 		return -ENOMEM;
 	end = base + length;
 	for (page = base; page < end; page += PAGE_SIZE)
+	{
 		if (map_zero_page(ops, page) != 0)
 			return -ENOMEM;
-	if (end > arena->map_bump)
-		arena->map_bump = end;
+	}
+	if (end > g_arena.map_bump)
+		g_arena.map_bump = end;
 	return (int64_t)base;
 }
 
@@ -152,15 +131,22 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 {
 	struct early_syscall_context *context = opaque;
 
-	(void)a3; (void)a4; (void)a5;
+	(void)a3;
+	(void)a4;
+	(void)a5;
 	if (!context || !context->services || !context->services->mm)
 		return -ENOSYS;
-	switch (id) {
-	case IR0_SYSCALL_BRK: return early_brk(context, a0);
-	case IR0_SYSCALL_MMAP: return early_mmap(context, a0, a1);
-	case IR0_SYSCALL_MPROTECT: return early_mprotect(context, a0, a1, a2);
+	switch (id)
+	{
+	case IR0_SYSCALL_BRK:
+		return early_brk(context, a0);
+	case IR0_SYSCALL_MMAP:
+		return early_mmap(context, a0, a1);
+	case IR0_SYSCALL_MPROTECT:
+		return early_mprotect(context, a0, a1, a2);
 	case IR0_SYSCALL_MUNMAP:
-	default: return -ENOSYS;
+	default:
+		return -ENOSYS;
 	}
 }
 

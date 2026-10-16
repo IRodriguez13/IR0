@@ -27,7 +27,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c \
 	test_credential_saved_ids.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_sigreturn_sleep_eintr_abi.c test_mmap_null_placement.c \
-	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_elf_interp_abi.c test_early_rootfs_abi.c test_early_elf_stack_abi.c test_blockdev_facade.c \
+	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_elf_interp_abi.c test_early_rootfs_abi.c test_early_elf_stack_abi.c test_early_mm_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
 	test_open_flags_abi.c test_fcntl_abi.c test_ktm_panic_inventory.c test_ktm_facade_contract.c \
 	test_ps2_set1_modifiers.c \
@@ -63,7 +63,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
 KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o host_no_mmu.o
-KERNEL_HOST_OBJS += host_elf64_image.o host_early_elf_stack.o
+KERNEL_HOST_OBJS += host_elf64_image.o host_early_elf_stack.o host_early_mm.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
 KERNEL_HOST_OBJS += host_syscall_table.o
@@ -203,7 +203,13 @@ host_elf64_image.o: $(KERNEL_ROOT)/kernel/lib/elf64_image.c
 host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/lib/early_elf_stack.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
+host_early_mm.o: $(KERNEL_ROOT)/kernel/syscalls/early_mm.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
 test_early_elf_stack_abi.o: test_early_elf_stack_abi.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_early_mm_abi.o: test_early_mm_abi.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_arch_irq_stub.o: host_arch_irq_stub.c
