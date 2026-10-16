@@ -9,6 +9,7 @@
 
 #include "pl011.h"
 #include "exc_early.h"
+#include "mmu_early.h"
 #include "syscall_early.h"
 #include <ir0/cpu_info.h>
 #include <ir0/copy_user.h>
@@ -203,7 +204,6 @@ static int arm64_common_lifecycle_contract(void)
 static process_t g_guest;
 static process_t g_child;
 static process_t g_idle;
-static mm_struct_t g_guest_mm;
 static uint8_t g_idle_stack[4096] __attribute__((aligned(16)));
 static int g_product_usercopy_observed;
 
@@ -240,6 +240,34 @@ static const struct early_user_services g_product_usercopy = {
 	.copy_to_user = arm64_product_copy_to_user,
 };
 
+static int arm64_owned_mm_retire_contract(void)
+{
+	process_t probe;
+	mm_struct_t *mm;
+	address_space_root_t root;
+	uint8_t *bytes = (uint8_t *)&probe;
+	size_t i;
+
+	for (i = 0; i < sizeof(probe); i++)
+		bytes[i] = 0;
+	root = mm_create_user_root();
+	if (!root)
+		return -1;
+	mm = mm_create();
+	if (!mm)
+	{
+		mm_destroy_user_root(root);
+		return -1;
+	}
+	mm_init_root(mm, root, 1);
+	process_mm_bind(&probe, mm);
+	if (!process_mm_owns_tables(&probe))
+		return -1;
+	mm_put(mm);
+	probe.mm = NULL;
+	return arm64_mmu_root_owned((uint64_t)(uintptr_t)root) ? -1 : 0;
+}
+
 static void arm64_idle_quiescent(void)
 {
 	process_t *init = process_find_by_pid(1);
@@ -256,14 +284,19 @@ static void arm64_idle_quiescent(void)
 
 void arm64_common_prepare_final_el0(void)
 {
-	if (process_mm_adopt_active(&g_guest, &g_guest_mm) != 0 ||
+	if (process_mm_adopt_active(&g_guest, 0) != 0 ||
 	    !process_pgd(&g_guest) ||
-	    (uintptr_t)process_pgd(&g_guest) != mm_current_root())
+	    (uintptr_t)process_pgd(&g_guest) != mm_current_root() ||
+	    !g_guest.mm)
 	{
 		ir0_boot_smoke("ARM64_PROCESS_PGD_FAIL");
 		panic("arm64: EL0 process failed to adopt active address space");
 	}
 	ir0_boot_smoke("ARM64_PROCESS_PGD_OK");
+	ir0_boot_smoke("ARM64_PROCESS_MM_HEAP_OK");
+	if (arm64_owned_mm_retire_contract() != 0)
+		panic("arm64: owned mm retirement contract failed");
+	ir0_boot_smoke("ARM64_PROCESS_MM_RETIRE_OK");
 	arm64_syscall_usercopy_bind(&g_product_usercopy);
 	sched_reset();
 	process_guest_rearm(&g_guest);

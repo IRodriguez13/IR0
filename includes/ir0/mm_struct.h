@@ -58,8 +58,12 @@ void mm_init_root(mm_struct_t *mm, uint64_t *root, int owns_tables);
 /* Attach @mm to process (sole address-space pointer on process_t). */
 void process_mm_bind(struct process *p, mm_struct_t *mm);
 
-/* Attach the currently active, externally owned translation root to @p. */
-int process_mm_adopt_active(struct process *p, mm_struct_t *mm);
+/*
+ * Allocate an mm and attach the currently active translation root to @p.
+ * Pass owns_tables=0 when that root is the live TTBR (mm_put must not
+ * destroy it). Idempotent if @p already holds the same root.
+ */
+int process_mm_adopt_active(struct process *p, int owns_tables);
 
 /* Share parent's mm with child (CLONE_VM). Returns 0 or -errno. */
 int process_mm_share(struct process *child, struct process *parent);
