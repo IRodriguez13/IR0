@@ -64,11 +64,11 @@ ARM64_BACKEND_OBJS = \
 ARM64_EARLY_SYSCALL_OBJS = \
 	kernel/syscalls/early_dispatch.o \
 	kernel/syscalls/early_time.o \
+	kernel/syscalls/early_io.o \
+	kernel/syscalls/early_vfs.o \
 	arch/arm64/sources/syscall_early.o \
 	arch/arm64/sources/syscall_mm_early.o \
-	arch/arm64/sources/syscall_vfs_early.o \
 	arch/arm64/sources/syscall_process_early.o \
-	arch/arm64/sources/syscall_io_early.o \
 	arch/arm64/sources/boot_stub.o \
 	arch/arm64/sources/mmu_early.o \
 	arch/arm64/sources/exc_early.o \

@@ -2249,12 +2249,12 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/lib/syscall_table.c includes/ir0/syscall_table.h \
 		kernel/syscalls/early_dispatch.c includes/ir0/early_syscall.h \
 		kernel/syscalls/early_time.c includes/ir0/early_time.h \
+		kernel/syscalls/early_io.c includes/ir0/early_io.h \
+		kernel/syscalls/early_vfs.c includes/ir0/early_vfs.h \
 		arch/arm64/sources/elf_policy.c includes/ir0/arch_elf.h \
 		arch/arm64/sources/syscall_early.c arch/arm64/sources/syscall_early.h \
 		arch/arm64/sources/syscall_mm_early.c arch/arm64/sources/syscall_mm_early.h \
-		arch/arm64/sources/syscall_vfs_early.c arch/arm64/sources/syscall_vfs_early.h \
 		arch/arm64/sources/syscall_process_early.c arch/arm64/sources/syscall_process_early.h \
-		arch/arm64/sources/syscall_io_early.c arch/arm64/sources/syscall_io_early.h \
 		arch/arm64/sources/mm_ops.c arch/arm64/asm/entry/vectors.S \
 		arch/arm64/sources/switch_early.c arch/arm64/sources/switch_early.h \
 		arch/arm64/asm/context/switch_early.S \
@@ -2326,18 +2326,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/syscall_mm_early.c \
 		-o arch/arm64/sources/syscall_mm_early.o
-	@echo "  CC      arch/arm64/sources/syscall_vfs_early.c"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		arch/arm64/sources/syscall_vfs_early.c \
-		-o arch/arm64/sources/syscall_vfs_early.o
 	@echo "  CC      arch/arm64/sources/syscall_process_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/syscall_process_early.c \
 		-o arch/arm64/sources/syscall_process_early.o
-	@echo "  CC      arch/arm64/sources/syscall_io_early.c"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		arch/arm64/sources/syscall_io_early.c \
-		-o arch/arm64/sources/syscall_io_early.o
 	@echo "  CC      arch/arm64/sources/syscall_decode.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/syscall_decode.c -o arch/arm64/sources/syscall_decode.o
@@ -2353,6 +2345,14 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_time.c \
 		-o build/arm64-boot/early_time.o
+	@echo "  CC      kernel/syscalls/early_io.c (staged descriptor semantics)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_io.c \
+		-o build/arm64-boot/early_io.o
+	@echo "  CC      kernel/syscalls/early_vfs.c (staged VFS routing)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_vfs.c \
+		-o build/arm64-boot/early_vfs.o
 	@echo "  CC      arch/arm64/sources/elf_policy.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/elf_policy.c -o arch/arm64/sources/elf_policy.o
@@ -2513,11 +2513,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/syscall_table.o \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
+		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/syscall_mm_early.o \
-		arch/arm64/sources/syscall_vfs_early.o \
 		arch/arm64/sources/syscall_process_early.o \
-		arch/arm64/sources/syscall_io_early.o \
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
@@ -2570,14 +2569,8 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		-DARM64_BB_MMAP_END=0x04800000UL -c arch/arm64/sources/syscall_mm_early.c \
 		-o build/arm64-rpi3-early/syscall_mm_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
-		-c arch/arm64/sources/syscall_vfs_early.c \
-		-o build/arm64-rpi3-early/syscall_vfs_early.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
 		-c arch/arm64/sources/syscall_process_early.c \
 		-o build/arm64-rpi3-early/syscall_process_early.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
-		-c arch/arm64/sources/syscall_io_early.c \
-		-o build/arm64-rpi3-early/syscall_io_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
 		-DARM64_HELLO_BLOB_PATH='"build/hello_aarch64_rpi3"' -c \
 		arch/arm64/sources/hello_embed.S -o build/arm64-rpi3-early/hello_embed.o
@@ -2598,12 +2591,11 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/elf_policy.o \
 		build/arm64-rpi3-early/syscall_early.o \
 		build/arm64-rpi3-early/syscall_mm_early.o arch/arm64/sources/mm_ops.o \
-		build/arm64-rpi3-early/syscall_vfs_early.o \
 		build/arm64-rpi3-early/syscall_process_early.o \
-		build/arm64-rpi3-early/syscall_io_early.o \
 		build/arm64-boot/syscall_table.o \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
+		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
 		build/arm64-boot/arch_context_switch.o \
@@ -2729,12 +2721,11 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/elf_policy.o \
 		arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/syscall_mm_early.o \
-		arch/arm64/sources/syscall_vfs_early.o \
 		arch/arm64/sources/syscall_process_early.o \
-		arch/arm64/sources/syscall_io_early.o \
 		build/arm64-boot/syscall_table.o \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
+		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		arch/arm64/sources/mm_ops.o build/arm64-min/arch_mm.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
@@ -2931,12 +2922,11 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		arch/arm64/sources/syscall_decode.o arch/arm64/sources/elf_policy.o \
 		arch/arm64/sources/syscall_early.o \
 		arch/arm64/sources/syscall_mm_early.o \
-		arch/arm64/sources/syscall_vfs_early.o \
 		arch/arm64/sources/syscall_process_early.o \
-		arch/arm64/sources/syscall_io_early.o \
 		build/arm64-boot/syscall_table.o \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
+		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		arch/arm64/sources/mm_ops.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
 		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \

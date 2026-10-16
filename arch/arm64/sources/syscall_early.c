@@ -15,17 +15,18 @@
 #include "syscall_early.h"
 #include "elf_load_early.h"
 #include "mmu_early.h"
+#include "rootfs_early.h"
 #include "syscall_mm_early.h"
 #include "syscall_process_early.h"
-#include "syscall_vfs_early.h"
-#include "syscall_io_early.h"
 #include "pl011.h"
 #include "timer.h"
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
 #include <ir0/early_syscall.h>
+#include <ir0/early_io.h>
 #include <ir0/early_time.h>
+#include <ir0/early_vfs.h>
 #include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
 
@@ -39,9 +40,9 @@ void arm64_syscall_reset_busybox_heap(void)
 static struct early_syscall_dispatch g_early_syscall_dispatch;
 
 static const struct syscall_context_provider *const g_early_providers[] = {
-	&arm64_early_io_provider,
+	&early_io_provider,
 	&arm64_early_mm_provider,
-	&arm64_early_vfs_provider,
+	&early_vfs_provider,
 	&early_time_provider,
 	&arm64_early_process_provider,
 };
@@ -99,6 +100,14 @@ static void arm64_early_time_note(enum early_syscall_event event)
 		ir0_boot_smoke(tags[event]);
 }
 
+static void arm64_early_console_write_observed(const char *bytes, uint64_t size)
+{
+	if (arm64_musl_mode())
+		arm64_musl_note_write(bytes, size);
+	if (arm64_busybox_mode())
+		arm64_busybox_note_write(bytes, size);
+}
+
 static const struct early_syscall_services g_arm64_early_services = {
 	.copy_from_user = arm64_early_copy_from_user,
 	.copy_to_user = arm64_early_copy_to_user,
@@ -106,6 +115,15 @@ static const struct early_syscall_services g_arm64_early_services = {
 	.counter_frequency = arm64_early_counter_frequency,
 	.cpu_relax = arm64_early_cpu_relax,
 	.note = arm64_early_time_note,
+	.console_putc = pl011_putc,
+	.console_write_observed = arm64_early_console_write_observed,
+	.vfs_read = arm64_rootfs_read,
+	.vfs_close = arm64_rootfs_close,
+	.vfs_openat = arm64_rootfs_openat,
+	.vfs_faccessat = arm64_rootfs_faccessat,
+	.vfs_newfstatat = arm64_rootfs_newfstatat,
+	.vfs_fstat = arm64_rootfs_fstat,
+	.vfs_readlinkat = arm64_rootfs_readlinkat,
 };
 
 static void pl011_put_hex64(uint64_t v)
@@ -126,7 +144,7 @@ static void pl011_put_hex64(uint64_t v)
 
 int arm64_syscall_smoke_ok(void)
 {
-	return arm64_early_process_smoke_ok() && arm64_early_io_smoke_ok() &&
+	return arm64_early_process_smoke_ok() && early_io_smoke_ok() &&
 	       early_time_smoke_ok();
 }
 

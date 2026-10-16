@@ -20,6 +20,17 @@ struct early_syscall_services
 	uint64_t (*counter_frequency)(void);
 	void (*cpu_relax)(void);
 	void (*note)(enum early_syscall_event event);
+	void (*console_putc)(char value);
+	void (*console_write_observed)(const char *bytes, uint64_t size);
+	int64_t (*vfs_read)(int fd, uint64_t buffer, uint64_t count);
+	int64_t (*vfs_close)(int fd);
+	int64_t (*vfs_openat)(int dirfd, uint64_t path, int flags);
+	int64_t (*vfs_faccessat)(int dirfd, uint64_t path, int flags);
+	int64_t (*vfs_newfstatat)(int dirfd, uint64_t path, uint64_t statbuf,
+				 int flags);
+	int64_t (*vfs_fstat)(int fd, uint64_t statbuf);
+	int64_t (*vfs_readlinkat)(int dirfd, uint64_t path, uint64_t buffer,
+				 uint64_t size);
 };
 
 /* Architecture-neutral state passed to staged syscall providers. */
