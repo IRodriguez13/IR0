@@ -13,7 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <stddef.h>
 #include <ir0/fd_get.h>
+#include <ir0/fd_install.h>
 #include <ir0/fd_resource.h>
 
 int ir0_fd_get(process_t *proc, int fd, ir0_fd_t *out)
@@ -137,4 +139,102 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 int process_duplicate_fd_table(process_t *parent, process_t *child)
 {
 	return process_files_clone(child, parent);
+}
+
+static void fd_copy_path(char *dst, size_t dst_size, const char *src)
+{
+	size_t i;
+
+	if (!dst || dst_size == 0)
+		return;
+	if (!src)
+	{
+		dst[0] = '\0';
+		return;
+	}
+	for (i = 0; src[i] != '\0' && i + 1 < dst_size; i++)
+		dst[i] = src[i];
+	dst[i] = '\0';
+}
+
+static int fd_install_current(int fd, const char *path, int flags)
+{
+	fd_entry_t *e;
+
+	if (!current_process || !files_struct_live(current_process->files))
+		return -ESRCH;
+	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+		return -EBADF;
+	e = &current_process->files->fd_table[fd];
+	memset(e, 0, sizeof(*e));
+	e->in_use = true;
+	e->flags = flags;
+	e->pipe_end = -1;
+	fd_copy_path(e->path, sizeof(e->path), path);
+	return 0;
+}
+
+static int fd_check_current(int fd)
+{
+	ir0_fd_t h;
+	int ret;
+
+	ret = ir0_fd_get(current_process, fd, &h);
+	if (ret != 0)
+		return ret;
+	ir0_fd_put(&h);
+	return 0;
+}
+
+static int fd_close_current(int fd)
+{
+	return (int)process_close_fd(current_process, fd);
+}
+
+static int fd_replace_child_files(int64_t child_pid, int share)
+{
+	process_t *child;
+	files_struct_t *old;
+	int ret;
+
+	child = process_find_by_pid((pid_t)child_pid);
+	if (!child || !current_process)
+		return -ESRCH;
+	old = child->files;
+	child->files = NULL;
+	if (share)
+		ret = process_files_share(child, current_process);
+	else
+		ret = process_files_clone(child, current_process);
+	if (ret < 0)
+	{
+		child->files = old;
+		return ret;
+	}
+	if (old && old != child->files)
+		files_put(old);
+	return 0;
+}
+
+static int fd_clone_files(int64_t child_pid)
+{
+	return fd_replace_child_files(child_pid, 0);
+}
+
+static int fd_share_files(int64_t child_pid)
+{
+	return fd_replace_child_files(child_pid, 1);
+}
+
+static const struct ir0_fd_install_ops g_fd_install_ops = {
+	.install = fd_install_current,
+	.check = fd_check_current,
+	.close = fd_close_current,
+	.clone_files = fd_clone_files,
+	.share_files = fd_share_files,
+};
+
+const struct ir0_fd_install_ops *ir0_fd_install_product(void)
+{
+	return &g_fd_install_ops;
 }

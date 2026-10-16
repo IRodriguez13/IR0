@@ -16,6 +16,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/cwd.h>
 #include <ir0/early_cpio.h>
+#include <ir0/fd_install.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/fcntl.h>
@@ -131,6 +132,11 @@ static enum ir0_early_rootfs_node g_cwd;
 static enum ir0_early_rootfs_node g_chroot;
 static const struct ir0_cwd_ops *g_cwd_ops;
 static int g_cwd_used;
+static const struct ir0_fd_install_ops *g_fd_ops;
+static int g_fd_used;
+
+static void early_publish_fd(int fd, enum ir0_early_rootfs_node node);
+static int early_fdtable_ok(int fd);
 static uint64_t g_init_vis;
 static int g_init_from_block;
 static int g_exec_pending;
@@ -973,6 +979,8 @@ static int close_fd(int fd)
 		g_stdio_pos[fd] = 0;
 		g_stdio_flags[fd] = 0;
 		g_stdio_cloexec[fd] = 0;
+		if (g_fd_ops && g_fd_ops->close)
+			(void)g_fd_ops->close(fd);
 		return 0;
 	}
 	idx = slot_from_fd(fd);
@@ -1095,6 +1103,8 @@ static int close_fd(int fd)
 	g_slots[idx].flags = 0;
 	g_slots[idx].cloexec = 0;
 	g_slots[idx].pipe_id = -1;
+	if (g_fd_ops && g_fd_ops->close)
+		(void)g_fd_ops->close(fd);
 	return 0;
 }
 
@@ -1109,6 +1119,7 @@ static int install_fd(int fd, enum ir0_early_rootfs_node node)
 		g_stdio_pos[fd] = 0;
 		g_stdio_flags[fd] = O_RDWR;
 		g_stdio_cloexec[fd] = 0;
+		early_publish_fd(fd, node);
 		return fd;
 	}
 	if (fd < ROOTFS_FD_BASE || fd >= ROOTFS_FD_LIMIT)
@@ -1120,6 +1131,7 @@ static int install_fd(int fd, enum ir0_early_rootfs_node node)
 	g_slots[idx].flags = O_RDWR;
 	g_slots[idx].cloexec = 0;
 	g_slots[idx].pipe_id = -1;
+	early_publish_fd(fd, node);
 	return fd;
 }
 
@@ -1149,7 +1161,12 @@ static int alloc_fd(enum ir0_early_rootfs_node node)
 			g_slots[i].flags = O_RDWR;
 			g_slots[i].cloexec = 0;
 			g_slots[i].pipe_id = -1;
-			return (int)(ROOTFS_FD_BASE + i);
+			{
+				int fd = (int)(ROOTFS_FD_BASE + i);
+
+				early_publish_fd(fd, node);
+				return fd;
+			}
 		}
 	}
 	return -EMFILE;
@@ -1639,6 +1656,8 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 
 	node = node_of_fd(fd);
 	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	if (!early_fdtable_ok(fd))
 		return -EBADF;
 	if (count == 0)
 		return 0;
@@ -2325,6 +2344,51 @@ void early_rootfs_bind_cwd(const struct ir0_cwd_ops *ops)
 int early_rootfs_cwd_used(void)
 {
 	return g_cwd_used;
+}
+
+static const char *early_node_path(enum ir0_early_rootfs_node node)
+{
+	if (node == IR0_EARLY_ROOTFS_ROOT)
+		return "/";
+	if (node == IR0_EARLY_ROOTFS_DEV)
+		return "/dev";
+	if (node == IR0_EARLY_ROOTFS_TMP)
+		return "/tmp";
+	if (node == IR0_EARLY_ROOTFS_CONSOLE)
+		return "/dev/console";
+	if (node == IR0_EARLY_ROOTFS_NULL)
+		return "/dev/null";
+	if (node == IR0_EARLY_ROOTFS_ZERO)
+		return "/dev/zero";
+	if (node == IR0_EARLY_ROOTFS_TTY)
+		return "/dev/tty";
+	return "";
+}
+
+static void early_publish_fd(int fd, enum ir0_early_rootfs_node node)
+{
+	if (fd < 0 || !g_fd_ops || !g_fd_ops->install)
+		return;
+	if (g_fd_ops->install(fd, early_node_path(node), 0) == 0)
+		g_fd_used = 1;
+}
+
+void early_rootfs_bind_fdtable(const struct ir0_fd_install_ops *ops)
+{
+	g_fd_ops = ops;
+	g_fd_used = 0;
+}
+
+int early_rootfs_fdtable_used(void)
+{
+	return g_fd_used;
+}
+
+static int early_fdtable_ok(int fd)
+{
+	if (!g_fd_ops || !g_fd_ops->check)
+		return 1;
+	return g_fd_ops->check(fd) == 0;
 }
 
 int64_t early_rootfs_chdir(uint64_t path)

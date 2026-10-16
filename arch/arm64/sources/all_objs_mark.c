@@ -21,6 +21,7 @@
 #include <ir0/idle.h>
 #include <ir0/process_exit.h>
 #include <ir0/cwd.h>
+#include <ir0/fd_install.h>
 #include <ir0/syscall_identity.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
@@ -217,6 +218,20 @@ void arm64_common_prepare_final_el0(void)
 	process_guest_rearm(&g_guest);
 	sched_adopt_running_context(&g_guest);
 	early_process_arm_schedule_exit();
+}
+
+void arm64_common_prepare_fdtable(void)
+{
+	const struct ir0_fd_install_ops *ops = ir0_fd_install_product();
+
+	process_init_fd_table(&g_guest);
+	process_init_fd_table(&g_child);
+	if (!files_struct_live(g_guest.files) ||
+	    !files_struct_live(g_child.files) || !ops)
+		return;
+	early_rootfs_bind_fdtable(ops);
+	early_process_bind_files(ops);
+	ir0_boot_smoke("ARM64_COMMON_FDTABLE_OK");
 }
 
 static int arm64_exit_notify_signal(int pid, int sig)

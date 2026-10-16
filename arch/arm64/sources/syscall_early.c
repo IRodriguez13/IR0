@@ -249,6 +249,9 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		if (syscall_id == IR0_SYSCALL_GETCWD && ret > 0 &&
 		    early_rootfs_cwd_used())
 			ir0_boot_smoke("ARM64_COMMON_GETCWD_OK");
+		if (syscall_id == IR0_SYSCALL_OPENAT && ret >= 0 &&
+		    early_rootfs_fdtable_used())
+			ir0_boot_smoke("ARM64_COMMON_OPEN_OK");
 		return ret;
 	}
 }

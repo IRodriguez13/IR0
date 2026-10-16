@@ -40,6 +40,10 @@ void __attribute__((weak)) arm64_common_prepare_final_el0(void)
 {
 }
 
+void __attribute__((weak)) arm64_common_prepare_fdtable(void)
+{
+}
+
 int __attribute__((weak)) arm64_common_root_smoke(void)
 {
 	return -1;
@@ -270,6 +274,7 @@ void boot_main(void)
 	(void)arm64_fork_exec_smoke();
 	(void)arm64_process_t_switch_smoke();
 	(void)arm64_rr_sched_smoke();
+	arm64_common_prepare_fdtable();
 	/* Smoke contexts may finish on their private root; loader owns root A. */
 	arm64_mmu_activate_root_a();
 

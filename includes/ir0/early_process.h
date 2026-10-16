@@ -231,3 +231,5 @@ void early_process_arm_schedule_exit(void);
 int early_process_common_exit_published(void);
 void early_process_bind_identity(const struct ir0_syscall_identity_ops *ops);
 int early_process_identity_used(void);
+struct ir0_fd_install_ops;
+void early_process_bind_files(const struct ir0_fd_install_ops *ops);

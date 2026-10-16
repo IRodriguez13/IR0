@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <ir0/clone.h>
 #include <ir0/early_process.h>
+#include <ir0/fd_install.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
 #include <ir0/signals.h>
@@ -57,6 +58,7 @@ static int g_schedule_exit_armed;
 static int g_common_task_exit_published;
 static const struct ir0_syscall_identity_ops *g_identity;
 static int g_identity_used;
+static const struct ir0_fd_install_ops *g_files;
 static int g_child_state;
 static int g_enter_child;
 static int g_resume_parent;
@@ -645,6 +647,22 @@ static int64_t early_clone(struct early_syscall_context *context, uint64_t flags
 		{
 			(void)early_rootfs_close(fd);
 			ret = -EFAULT;
+			goto fail;
+		}
+	}
+	if (g_files)
+	{
+		int files_ret;
+
+		if (flags & CLONE_FILES)
+			files_ret = g_files->share_files ?
+				    g_files->share_files(EARLY_CHILD_PID) : -ENOSYS;
+		else
+			files_ret = g_files->clone_files ?
+				    g_files->clone_files(EARLY_CHILD_PID) : -ENOSYS;
+		if (files_ret < 0)
+		{
+			ret = files_ret;
 			goto fail;
 		}
 	}
@@ -2185,4 +2203,9 @@ void early_process_bind_identity(const struct ir0_syscall_identity_ops *ops)
 int early_process_identity_used(void)
 {
 	return g_identity_used;
+}
+
+void early_process_bind_files(const struct ir0_fd_install_ops *ops)
+{
+	g_files = ops;
 }
