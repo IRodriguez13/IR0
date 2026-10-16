@@ -42,6 +42,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 57: return IR0_SYSCALL_CLOSE;
 	case 59: return IR0_SYSCALL_PIPE2;
 	case 61: return IR0_SYSCALL_GETDENTS64;
+	case 62: return IR0_SYSCALL_LSEEK;
 	case 63: return IR0_SYSCALL_READ;
 	case 64: return IR0_SYSCALL_WRITE;
 	case 65: return IR0_SYSCALL_READV;

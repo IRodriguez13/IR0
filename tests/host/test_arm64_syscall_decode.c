@@ -12,6 +12,7 @@ void test_arm64_syscall_decode_contract(void)
 	bool seen[IR0_SYSCALL_LINUX_COUNT] = { false };
 
 	TEST_BEGIN("arm64 syscall ABI decoder contract");
+	ASSERT(syscall_decode_number(62) == IR0_SYSCALL_LSEEK);
 	ASSERT(syscall_decode_number(63) == IR0_SYSCALL_READ);
 	ASSERT(syscall_decode_number(64) == IR0_SYSCALL_WRITE);
 	ASSERT(syscall_decode_number(78) == IR0_SYSCALL_READLINKAT);
@@ -35,6 +36,6 @@ void test_arm64_syscall_decode_contract(void)
 		decoded++;
 	}
 	/* Linux asm-generic calls backed by existing IR0 common handlers. */
-	ASSERT(decoded == 129);
+	ASSERT(decoded == 130);
 	TEST_END();
 }
