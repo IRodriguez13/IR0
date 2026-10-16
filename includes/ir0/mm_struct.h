@@ -60,8 +60,9 @@ void process_mm_bind(struct process *p, mm_struct_t *mm);
 
 /*
  * Allocate an mm and attach the currently active translation root to @p.
- * Pass owns_tables=0 when that root is the live TTBR (mm_put must not
- * destroy it). Idempotent if @p already holds the same root.
+ * owns_tables=1 is honest only when a distinct kernel root is pinned so
+ * process_mm_release_on_exit() can switch away before mm_put. Idempotent
+ * if @p already holds the same root.
  */
 int process_mm_adopt_active(struct process *p, int owns_tables);
 

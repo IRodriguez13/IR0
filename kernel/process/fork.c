@@ -463,6 +463,9 @@ void process_mm_release_on_exit(process_t *dying)
 {
 	struct vfork_link *link;
 	uint64_t irq_flags;
+	mm_struct_t *mm;
+	uintptr_t user_root;
+	uintptr_t kernel_root;
 
 	if (!dying)
 		return;
@@ -478,6 +481,27 @@ void process_mm_release_on_exit(process_t *dying)
 		link->child = NULL;
 	}
 	process_irq_restore(irq_flags);
+
+	/*
+	 * Linux kernel/exit.c exit_mm(): drop current->mm before mmput, and
+	 * stop walking those tables first. IR0 is UP, so activate the pinned
+	 * kernel root instead of enter_lazy_tlb(). If that root is missing
+	 * or is the user root itself, keep the mm for a later reap — mm_put
+	 * must not destroy the live TTBR/CR3.
+	 */
+	mm = dying->mm;
+	if (!mm)
+		return;
+	user_root = mm->page_directory ? (uintptr_t)mm->page_directory : 0;
+	if (user_root && paging_current_address_space() == user_root)
+	{
+		kernel_root = paging_kernel_address_space();
+		if (!kernel_root || kernel_root == user_root)
+			return;
+		paging_activate_address_space(kernel_root);
+	}
+	dying->mm = NULL;
+	mm_put(mm);
 }
 
 /*

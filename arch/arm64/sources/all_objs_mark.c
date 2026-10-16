@@ -31,6 +31,7 @@
 #include <ir0/vfs_file.h>
 #include <ir0/syscall_identity.h>
 #include <ir0/tlb.h>
+#include <ir0/paging.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
 #include <kernel/process.h>
@@ -240,6 +241,8 @@ static const struct early_user_services g_product_usercopy = {
 	.copy_to_user = arm64_product_copy_to_user,
 };
 
+static uintptr_t g_owned_user_root;
+
 static int arm64_owned_mm_retire_contract(void)
 {
 	process_t probe;
@@ -274,6 +277,10 @@ static void arm64_idle_quiescent(void)
 
 	if (init && process_is_zombie(init))
 	{
+		if (!g_guest.mm && g_owned_user_root &&
+		    mm_current_root() == paging_kernel_address_space() &&
+		    !arm64_mmu_root_owned(g_owned_user_root))
+			ir0_boot_smoke("ARM64_PROCESS_MM_EXIT_OK");
 		ir0_boot_smoke("ARM64_COMMON_IDLE_OK");
 		ir0_boot_smoke("ARM64_SYSCALL_OK");
 		ir0_boot_smoke("ARM64_EL0_RET_OK");
@@ -284,16 +291,25 @@ static void arm64_idle_quiescent(void)
 
 void arm64_common_prepare_final_el0(void)
 {
-	if (process_mm_adopt_active(&g_guest, 0) != 0 ||
+	paging_pin_kernel_address_space((uintptr_t)arm64_mmu_root_a());
+	if (!paging_kernel_address_space() ||
+	    paging_kernel_address_space() == mm_current_root())
+	{
+		ir0_boot_smoke("ARM64_PROCESS_PGD_FAIL");
+		panic("arm64: kernel root is missing or is the live user root");
+	}
+	if (process_mm_adopt_active(&g_guest, 1) != 0 ||
 	    !process_pgd(&g_guest) ||
 	    (uintptr_t)process_pgd(&g_guest) != mm_current_root() ||
-	    !g_guest.mm)
+	    !process_mm_owns_tables(&g_guest))
 	{
 		ir0_boot_smoke("ARM64_PROCESS_PGD_FAIL");
 		panic("arm64: EL0 process failed to adopt active address space");
 	}
+	g_owned_user_root = (uintptr_t)process_pgd(&g_guest);
 	ir0_boot_smoke("ARM64_PROCESS_PGD_OK");
 	ir0_boot_smoke("ARM64_PROCESS_MM_HEAP_OK");
+	ir0_boot_smoke("ARM64_PROCESS_MM_OWNED_OK");
 	if (arm64_owned_mm_retire_contract() != 0)
 		panic("arm64: owned mm retirement contract failed");
 	ir0_boot_smoke("ARM64_PROCESS_MM_RETIRE_OK");

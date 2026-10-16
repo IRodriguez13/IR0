@@ -767,6 +767,7 @@ pid_t vfork_process(void *child_stack);
 int process_vfork_link(process_t *parent, process_t *child);
 int process_vfork_parent_blocked(const process_t *parent);
 void process_vfork_complete(process_t *child);
+/* Linux exit_mm: switch off the user root, then drop the mm. */
 void process_mm_release_on_exit(process_t *dying);
 pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 		   int *child_tid, unsigned long tls);
