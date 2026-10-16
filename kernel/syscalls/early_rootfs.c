@@ -17,6 +17,7 @@
 #include <ir0/early_cpio.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/fcntl.h>
+#include <ir0/types.h>
 #include <ir0/statfs.h>
 
 #define EBADF  9
@@ -95,6 +96,8 @@ struct rootfs_slot
 #define ENXIO 6
 #define EOPNOTSUPP 95
 #define EFBIG 27
+#define ELOOP 40
+#define ENOPROTOOPT 92
 #define NS_PER_SEC 1000000000ULL
 
 struct early_pipe
@@ -170,6 +173,9 @@ static struct early_sockpair
 	int used;
 	int refs[2];
 	int dgram;
+	int shut[2];
+	int reuseaddr;
+	int so_error;
 	struct
 	{
 		unsigned rpos;
@@ -194,6 +200,7 @@ struct early_fs_ent
 	const uint8_t *data;
 	int fifo_pipe;
 	int writable;
+	int link_to;
 	uint8_t own[FS_FILE_CAP];
 };
 
@@ -209,6 +216,10 @@ static struct early_unix
 	int pending_pair;
 	int pending_end;
 	int peer_fs;
+	int reuseaddr;
+	int so_error;
+	int shut_rd;
+	int shut_wr;
 	char bound_path[FS_NAME];
 	unsigned rpos;
 	unsigned len;
@@ -563,6 +574,62 @@ static int fs_find(const char *path)
 	return -1;
 }
 
+static int fs_body(int idx)
+{
+	int dest;
+
+	if (idx < 0 || idx >= FS_MAX || !g_fs[idx].used)
+		return -1;
+	dest = g_fs[idx].link_to;
+	if (dest >= 0 && dest < FS_MAX && dest != idx && g_fs[dest].used)
+		return dest;
+	return idx;
+}
+
+static void fs_rehome(int fsid)
+{
+	int i;
+	int neu = -1;
+
+	if (fsid < 0 || fsid >= FS_MAX)
+		return;
+	for (i = 0; i < FS_MAX; i++)
+	{
+		if (i != fsid && g_fs[i].used && g_fs[i].link_to == fsid)
+		{
+			neu = i;
+			break;
+		}
+	}
+	if (neu < 0)
+		return;
+	g_fs[neu].size = g_fs[fsid].size;
+	g_fs[neu].writable = g_fs[fsid].writable;
+	g_fs[neu].fifo_pipe = g_fs[fsid].fifo_pipe;
+	g_fs[neu].mode = g_fs[fsid].mode;
+	if (g_fs[fsid].data == g_fs[fsid].own || g_fs[fsid].writable)
+	{
+		unsigned n;
+
+		for (n = 0; n < FS_FILE_CAP; n++)
+			g_fs[neu].own[n] = g_fs[fsid].own[n];
+		g_fs[neu].data = g_fs[neu].own;
+	}
+	else
+		g_fs[neu].data = g_fs[fsid].data;
+	g_fs[neu].link_to = -1;
+	for (i = 0; i < FS_MAX; i++)
+	{
+		if (g_fs[i].used && g_fs[i].link_to == fsid)
+			g_fs[i].link_to = neu;
+	}
+	for (i = 0; i < UNIX_MAX; i++)
+	{
+		if (g_unix[i].used && g_unix[i].bound_fs == fsid)
+			g_unix[i].bound_fs = neu;
+	}
+}
+
 static int fs_add(const char *path, uint32_t mode, uint32_t size,
 		  const uint8_t *data, int writable)
 {
@@ -580,6 +647,7 @@ static int fs_add(const char *path, uint32_t mode, uint32_t size,
 		g_fs[idx].size = size;
 		g_fs[idx].writable = 0;
 		g_fs[idx].data = data;
+		g_fs[idx].link_to = -1;
 		return idx;
 	}
 	for (i = 0; i < FS_MAX; i++)
@@ -598,6 +666,7 @@ static int fs_add(const char *path, uint32_t mode, uint32_t size,
 		g_fs[i].mode = mode;
 		g_fs[i].size = size;
 		g_fs[i].fifo_pipe = -1;
+		g_fs[i].link_to = -1;
 		g_fs[i].writable = writable;
 		if (writable)
 		{
@@ -629,6 +698,8 @@ static enum ir0_early_rootfs_node fs_node_kind(uint32_t mode)
 		return IR0_EARLY_ROOTFS_FIFO;
 	if (type == S_IFSOCK)
 		return IR0_EARLY_ROOTFS_UNIX;
+	if (type == S_IFLNK)
+		return IR0_EARLY_ROOTFS_SYMLINK;
 	return IR0_EARLY_ROOTFS_FILE;
 }
 
@@ -679,6 +750,8 @@ static int fs_child_at(const char *dir, int which, struct ir0_early_dirent_spec 
 				spec->type = IR0_EARLY_DT_FIFO;
 			else if (type == S_IFSOCK)
 				spec->type = IR0_EARLY_DT_SOCK;
+			else if (type == S_IFLNK)
+				spec->type = IR0_EARLY_DT_LNK;
 			else
 				spec->type = IR0_EARLY_DT_REG;
 			return 1;
@@ -915,6 +988,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_fs[i].used = 0;
 		g_fs[i].fifo_pipe = -1;
 		g_fs[i].writable = 0;
+		g_fs[i].link_to = -1;
 		g_fs[i].data = 0;
 		g_fs[i].size = 0;
 	}
@@ -1178,6 +1252,69 @@ static enum ir0_early_rootfs_node lookup_user_path(char *pbuf)
 	return fs_node_kind(g_fs[idx].mode);
 }
 
+static int follow_path(char *pbuf, unsigned cap)
+{
+	int hops;
+
+	if (!pbuf || cap < 2)
+		return 0;
+	for (hops = 0; hops < 8; hops++)
+	{
+		int idx = fs_find(pbuf);
+		char tgt[FS_NAME];
+		char parent[FS_NAME];
+		unsigned n;
+		unsigned i;
+
+		if (idx < 0)
+			return 1;
+		if ((g_fs[idx].mode & S_IFMT) != S_IFLNK)
+			return 1;
+		n = g_fs[idx].size;
+		if (n == 0 || n >= sizeof(tgt))
+			return 0;
+		for (i = 0; i < n; i++)
+			tgt[i] = (char)(g_fs[idx].data ? g_fs[idx].data[i] :
+							 g_fs[idx].own[i]);
+		tgt[n] = '\0';
+		if (tgt[0] == '/')
+		{
+			for (i = 0; tgt[i] != '\0' && i + 1 < cap; i++)
+				pbuf[i] = tgt[i];
+			pbuf[i] = '\0';
+		}
+		else
+		{
+			if (!fs_parent(g_fs[idx].path, parent, sizeof(parent)))
+				return 0;
+			i = 0;
+			while (parent[i] != '\0' && i + 1 < cap)
+			{
+				pbuf[i] = parent[i];
+				i++;
+			}
+			if (i == 0 || pbuf[i - 1] != '/')
+			{
+				if (i + 1 >= cap)
+					return 0;
+				pbuf[i++] = '/';
+			}
+			n = 0;
+			while (tgt[n] != '\0' && i + 1 < cap)
+			{
+				pbuf[i] = tgt[n];
+				i++;
+				n++;
+			}
+			pbuf[i] = '\0';
+			if (tgt[n] != '\0')
+				return 0;
+		}
+		apply_chroot(pbuf, cap);
+	}
+	return -1;
+}
+
 int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 {
 	char pbuf[32];
@@ -1190,13 +1327,30 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
+	if (!join_under_cwd(pbuf, sizeof(pbuf)))
+		return -ENAMETOOLONG;
 	node = lookup_user_path(pbuf);
+	if (node == IR0_EARLY_ROOTFS_SYMLINK)
+	{
+		int walked;
+
+		if (flags & LINUX_O_NOFOLLOW)
+			return -ELOOP;
+		walked = follow_path(pbuf, sizeof(pbuf));
+		if (walked < 0)
+			return -ELOOP;
+		if (!walked)
+			return -ENOENT;
+		node = lookup_user_path(pbuf);
+	}
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_UNIX)
 		return -ENXIO;
+	if (node == IR0_EARLY_ROOTFS_SYMLINK)
+		return -ELOOP;
 	if ((flags & LINUX_O_DIRECTORY) && !node_is_dir(node))
 		return -ENOTDIR;
 	fd = alloc_fd(node);
@@ -1456,8 +1610,13 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (pair < 0 || pair >= SOCKPAIR_MAX || !g_sock[pair].used)
 			return -EBADF;
 		src = 1 - end;
+		if (g_sock[pair].shut[end] & 1)
+			return 0;
 		if (g_sock[pair].dir[src].len == 0)
-			return g_sock[pair].refs[src] ? -EAGAIN : 0;
+			return (g_sock[pair].refs[src] &&
+				!(g_sock[pair].shut[src] & 2)) ?
+				       -EAGAIN :
+				       0;
 		if (g_sock[pair].dgram)
 		{
 			uint16_t mlen;
@@ -1515,7 +1674,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		return -EINVAL;
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = pipe_id_of_fd(fd);
+		int fsid = fs_body(pipe_id_of_fd(fd));
 		uint64_t *pos = pos_of_fd(fd);
 		uint64_t remain;
 
@@ -1706,13 +1865,30 @@ int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
+	if (!join_under_cwd(pbuf, sizeof(pbuf)))
+		return -ENAMETOOLONG;
+	apply_chroot(pbuf, sizeof(pbuf));
 	if (!strings_equal(pbuf, proc_self_exe))
 	{
-		/*
-		 * Linux readlinkat(2): ENOENT if the path is missing,
-		 * EINVAL if the named file exists and is not a symlink.
-		 */
-		if (lookup_user_path(pbuf) != IR0_EARLY_ROOTFS_NONE)
+		int fsid = fs_find(pbuf);
+		enum ir0_early_rootfs_node node = lookup_user_path(pbuf);
+
+		if (node == IR0_EARLY_ROOTFS_SYMLINK && fsid >= 0)
+		{
+			uint64_t have = g_fs[fsid].size;
+
+			if (have > size)
+				have = size;
+			if (have > 0 && (!g_user || !g_user->copy_to_user ||
+					 g_user->copy_to_user(buffer,
+							      g_fs[fsid].data ?
+								      g_fs[fsid].data :
+								      g_fs[fsid].own,
+							      have) != 0))
+				return -EFAULT;
+			return (int64_t)have;
+		}
+		if (node != IR0_EARLY_ROOTFS_NONE)
 			return -EINVAL;
 		return -ENOENT;
 	}
@@ -1751,14 +1927,26 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 	enum ir0_early_rootfs_node node;
 	struct ir0_early_stat64 st;
 
-	(void)flags;
 	if (!g_ready)
 		return -ENOENT;
 	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0)
 		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
+	if (!join_under_cwd(pbuf, sizeof(pbuf)))
+		return -ENAMETOOLONG;
 	node = lookup_user_path(pbuf);
+	if (node == IR0_EARLY_ROOTFS_SYMLINK &&
+	    !(flags & IR0_EARLY_AT_SYMLINK_NOFOLLOW))
+	{
+		int walked = follow_path(pbuf, sizeof(pbuf));
+
+		if (walked < 0)
+			return -ELOOP;
+		if (!walked)
+			return -ENOENT;
+		node = lookup_user_path(pbuf);
+	}
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
@@ -1773,9 +1961,14 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 			size = g_init_vis;
 		else if (node == IR0_EARLY_ROOTFS_FILE)
 		{
-			fsid = fs_find(pbuf);
+			fsid = fs_body(fs_find(pbuf));
 			size = (fsid >= 0 && g_fs[fsid].used) ? g_fs[fsid].size :
 								0;
+		}
+		else if (node == IR0_EARLY_ROOTFS_SYMLINK)
+		{
+			fsid = fs_find(pbuf);
+			size = (fsid >= 0) ? g_fs[fsid].size : 0;
 		}
 		else if (node == IR0_EARLY_ROOTFS_UNIX ||
 			 node == IR0_EARLY_ROOTFS_FIFO ||
@@ -1812,7 +2005,7 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 	}
 	else if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		mid = pipe_id_of_fd(fd);
+		mid = fs_body(pipe_id_of_fd(fd));
 		size = (mid >= 0 && mid < FS_MAX && g_fs[mid].used) ?
 			       g_fs[mid].size :
 			       0;
@@ -2045,7 +2238,7 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 	}
 	else if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = pipe_id_of_fd(fd);
+		int fsid = fs_body(pipe_id_of_fd(fd));
 
 		limit = (fsid >= 0 && fsid < FS_MAX && g_fs[fsid].used) ?
 				g_fs[fsid].size :
@@ -2812,6 +3005,7 @@ int64_t early_rootfs_file_write(int fd, uint64_t buffer, uint64_t count)
 		return -EBADF;
 	if ((flags_of_fd(fd) & LINUX_O_ACCMODE) == 0)
 		return -EBADF;
+	fsid = fs_body(fsid);
 	if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used || !pos)
 		return -EBADF;
 	if (!g_fs[fsid].writable)
@@ -2937,6 +3131,10 @@ int64_t early_rootfs_socket(int domain, int type, int protocol)
 	g_unix[uid].pending_pair = -1;
 	g_unix[uid].pending_end = 0;
 	g_unix[uid].peer_fs = -1;
+	g_unix[uid].reuseaddr = 0;
+	g_unix[uid].so_error = 0;
+	g_unix[uid].shut_rd = 0;
+	g_unix[uid].shut_wr = 0;
 	g_unix[uid].bound_path[0] = '\0';
 	g_unix[uid].rpos = 0;
 	g_unix[uid].len = 0;
@@ -3054,6 +3252,10 @@ int64_t early_rootfs_sock_connect(int fd, uint64_t addr, uint64_t addrlen)
 	g_sock[pair].used = 1;
 	g_sock[pair].refs[0] = 1;
 	g_sock[pair].refs[1] = 1;
+	g_sock[pair].shut[0] = 0;
+	g_sock[pair].shut[1] = 0;
+	g_sock[pair].reuseaddr = 0;
+	g_sock[pair].so_error = 0;
 	g_sock[pair].dgram = 0;
 	g_sock[pair].dir[0].rpos = 0;
 	g_sock[pair].dir[0].len = 0;
@@ -3192,6 +3394,214 @@ int64_t early_rootfs_recvfrom(int fd, uint64_t buffer, uint64_t count)
 	return early_rootfs_read(fd, buffer, count);
 }
 
+int64_t early_rootfs_shutdown(int fd, int how)
+{
+	int uid = unix_id_of_fd(fd);
+	int pair = sock_pair_of_fd(fd);
+	int end = pipe_id_of_fd(fd) & 1;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK)
+		return -ENOTSOCK;
+	if (how != IR0_EARLY_SHUT_RD && how != IR0_EARLY_SHUT_WR &&
+	    how != IR0_EARLY_SHUT_RDWR)
+		return -EINVAL;
+	if (uid >= 0)
+	{
+		if (!g_unix[uid].used)
+			return -EBADF;
+		if (g_unix[uid].stream && g_unix[uid].listening)
+			return -ENOTCONN;
+		if (g_unix[uid].stream)
+			return -ENOTCONN;
+		if (how != IR0_EARLY_SHUT_WR && how != IR0_EARLY_SHUT_RDWR)
+			g_unix[uid].shut_rd = 1;
+		if (how != IR0_EARLY_SHUT_RD)
+			g_unix[uid].shut_wr = 1;
+		return 0;
+	}
+	if (pair < 0 || pair >= SOCKPAIR_MAX || !g_sock[pair].used)
+		return -ENOTCONN;
+	if (how != IR0_EARLY_SHUT_WR)
+		g_sock[pair].shut[end] |= 1;
+	if (how != IR0_EARLY_SHUT_RD)
+		g_sock[pair].shut[end] |= 2;
+	return 0;
+}
+
+int64_t early_rootfs_setsockopt(int fd, int level, int optname, uint64_t optval,
+				uint64_t optlen)
+{
+	int uid = unix_id_of_fd(fd);
+	int pair = sock_pair_of_fd(fd);
+	int value = 0;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK)
+		return -ENOTSOCK;
+	if (level != IR0_EARLY_SOL_SOCKET)
+		return -ENOPROTOOPT;
+	if (optname != IR0_EARLY_SO_REUSEADDR)
+		return -ENOPROTOOPT;
+	if (optlen < 4 || !optval)
+		return -EINVAL;
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(&value, optval, 4) != 0)
+		return -EFAULT;
+	if (uid >= 0 && g_unix[uid].used)
+		g_unix[uid].reuseaddr = value ? 1 : 0;
+	else if (pair >= 0 && pair < SOCKPAIR_MAX && g_sock[pair].used)
+		g_sock[pair].reuseaddr = value ? 1 : 0;
+	else
+		return -EBADF;
+	return 0;
+}
+
+int64_t early_rootfs_getsockopt(int fd, int level, int optname, uint64_t optval,
+				uint64_t optlen)
+{
+	int uid = unix_id_of_fd(fd);
+	int pair = sock_pair_of_fd(fd);
+	int value = 0;
+	uint32_t len = 4;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK)
+		return -ENOTSOCK;
+	if (level != IR0_EARLY_SOL_SOCKET)
+		return -ENOPROTOOPT;
+	if (!optlen || !g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(&len, optlen, 4) != 0)
+		return -EFAULT;
+	if (len < 4 || !optval)
+		return -EINVAL;
+	if (uid >= 0 && g_unix[uid].used)
+	{
+		if (optname == IR0_EARLY_SO_TYPE)
+			value = g_unix[uid].stream ? IR0_EARLY_SOCK_STREAM :
+						     IR0_EARLY_SOCK_DGRAM;
+		else if (optname == IR0_EARLY_SO_ERROR)
+		{
+			value = g_unix[uid].so_error;
+			g_unix[uid].so_error = 0;
+		}
+		else if (optname == IR0_EARLY_SO_REUSEADDR)
+			value = g_unix[uid].reuseaddr;
+		else
+			return -ENOPROTOOPT;
+	}
+	else if (pair >= 0 && pair < SOCKPAIR_MAX && g_sock[pair].used)
+	{
+		if (optname == IR0_EARLY_SO_TYPE)
+			value = g_sock[pair].dgram ? IR0_EARLY_SOCK_DGRAM :
+						     IR0_EARLY_SOCK_STREAM;
+		else if (optname == IR0_EARLY_SO_ERROR)
+		{
+			value = g_sock[pair].so_error;
+			g_sock[pair].so_error = 0;
+		}
+		else if (optname == IR0_EARLY_SO_REUSEADDR)
+			value = g_sock[pair].reuseaddr;
+		else
+			return -ENOPROTOOPT;
+	}
+	else
+		return -EBADF;
+	len = 4;
+	if (g_user->copy_to_user(optval, &value, 4) != 0 ||
+	    g_user->copy_to_user(optlen, &len, 4) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath)
+{
+	char tbuf[FS_NAME];
+	char pbuf[FS_NAME];
+	int ret;
+	unsigned n;
+
+	if (!g_ready)
+		return -ENOENT;
+	if (newdirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(newdirfd) < 0 &&
+	    !(newdirfd >= 0 && newdirfd <= 2))
+		return -EBADF;
+	if (!copy_user_cstr(target, tbuf, sizeof(tbuf)))
+		return -EFAULT;
+	if (!copy_user_cstr(linkpath, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	if (!join_under_cwd(pbuf, sizeof(pbuf)))
+		return -ENAMETOOLONG;
+	apply_chroot(pbuf, sizeof(pbuf));
+	if (ir0_early_rootfs_path_node(pbuf) != IR0_EARLY_ROOTFS_NONE ||
+	    fs_find(pbuf) >= 0)
+		return -EEXIST;
+	if (!parent_exists(pbuf))
+		return -ENOENT;
+	n = 0;
+	while (tbuf[n] != '\0')
+		n++;
+	ret = fs_add(pbuf, S_IFLNK | 0777U, n, (const uint8_t *)tbuf, 1);
+	return ret < 0 ? ret : 0;
+}
+
+int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
+			    uint64_t newpath, int flags)
+{
+	char oldbuf[FS_NAME];
+	char newbuf[FS_NAME];
+	enum ir0_early_rootfs_node node;
+	int src;
+	int dest;
+	int body;
+
+	if (!g_ready)
+		return -ENOENT;
+	if (olddirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(olddirfd) < 0)
+		return -EBADF;
+	if (newdirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(newdirfd) < 0 &&
+	    newdirfd != olddirfd)
+		return -EBADF;
+	if (flags & ~(IR0_EARLY_AT_SYMLINK_FOLLOW))
+		return -EINVAL;
+	if (!copy_user_cstr(oldpath, oldbuf, sizeof(oldbuf)))
+		return -EFAULT;
+	if (!copy_user_cstr(newpath, newbuf, sizeof(newbuf)))
+		return -EFAULT;
+	if (!join_under_cwd(oldbuf, sizeof(oldbuf)) ||
+	    !join_under_cwd(newbuf, sizeof(newbuf)))
+		return -ENAMETOOLONG;
+	apply_chroot(oldbuf, sizeof(oldbuf));
+	apply_chroot(newbuf, sizeof(newbuf));
+	node = lookup_user_path(oldbuf);
+	if (node == IR0_EARLY_ROOTFS_SYMLINK &&
+	    (flags & IR0_EARLY_AT_SYMLINK_FOLLOW))
+	{
+		if (follow_path(oldbuf, sizeof(oldbuf)) < 0)
+			return -ELOOP;
+		node = lookup_user_path(oldbuf);
+	}
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node == IR0_EARLY_ROOTFS_USERDIR || node_is_dir(node))
+		return -EPERM;
+	src = fs_find(oldbuf);
+	if (src < 0)
+		return -EPERM;
+	if (ir0_early_rootfs_path_node(newbuf) != IR0_EARLY_ROOTFS_NONE ||
+	    fs_find(newbuf) >= 0)
+		return -EEXIST;
+	if (!parent_exists(newbuf))
+		return -ENOENT;
+	body = fs_body(src);
+	dest = fs_add(newbuf, g_fs[body].mode, g_fs[body].size, g_fs[body].data,
+		      0);
+	if (dest < 0)
+		return dest;
+	g_fs[dest].link_to = body;
+	g_fs[dest].writable = 0;
+	g_fs[dest].data = 0;
+	g_fs[dest].size = 0;
+	return 0;
+}
+
 int early_rootfs_fd_is_fifo(int fd)
 {
 	return node_of_fd(fd) == IR0_EARLY_ROOTFS_FIFO;
@@ -3199,7 +3609,7 @@ int early_rootfs_fd_is_fifo(int fd)
 
 int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count)
 {
-	int fsid = pipe_id_of_fd(fd);
+	int fsid = fs_body(pipe_id_of_fd(fd));
 	int pipe_id;
 	struct early_pipe *p;
 	uint8_t tmp[256];
@@ -3294,6 +3704,10 @@ int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv)
 	g_sock[pair].used = 1;
 	g_sock[pair].refs[0] = 1;
 	g_sock[pair].refs[1] = 1;
+	g_sock[pair].shut[0] = 0;
+	g_sock[pair].shut[1] = 0;
+	g_sock[pair].reuseaddr = 0;
+	g_sock[pair].so_error = 0;
 	g_sock[pair].dgram = (kind == IR0_EARLY_SOCK_DGRAM);
 	g_sock[pair].dir[0].rpos = 0;
 	g_sock[pair].dir[0].len = 0;
@@ -3355,9 +3769,10 @@ static int unix_find_bound(const char *path, int stream)
 	fsid = fs_find(path);
 	if (fsid < 0 || fs_node_kind(g_fs[fsid].mode) != IR0_EARLY_ROOTFS_UNIX)
 		return -1;
+	fsid = fs_body(fsid);
 	for (i = 0; i < UNIX_MAX; i++)
 	{
-		if (g_unix[i].used && g_unix[i].bound_fs == fsid &&
+		if (g_unix[i].used && fs_body(g_unix[i].bound_fs) == fsid &&
 		    g_unix[i].stream == stream)
 			return i;
 	}
@@ -3385,6 +3800,8 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 			return -EBADF;
 		if (g_unix[uid].stream)
 			return -ENOTCONN;
+		if (g_unix[uid].shut_wr)
+			return -EPIPE;
 		if (g_unix[uid].peer_fs < 0 ||
 		    g_unix[uid].peer_fs >= FS_MAX ||
 		    !g_fs[g_unix[uid].peer_fs].used)
@@ -3407,7 +3824,9 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 	}
 	if (pair < 0 || pair >= SOCKPAIR_MAX || !g_sock[pair].used)
 		return -EBADF;
-	if (g_sock[pair].refs[1 - end] == 0)
+	if (g_sock[pair].shut[end] & 2)
+		return -EPIPE;
+	if (g_sock[pair].refs[1 - end] == 0 || (g_sock[pair].shut[1 - end] & 1))
 		return -EPIPE;
 	if (count == 0)
 		return 0;
@@ -4007,8 +4426,10 @@ int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags)
 		return -ENOTDIR;
 	if (fsid < 0)
 		return -EPERM;
+	fs_rehome(fsid);
 	g_fs[fsid].used = 0;
 	g_fs[fsid].fifo_pipe = -1;
+	g_fs[fsid].link_to = -1;
 	return 0;
 }
 

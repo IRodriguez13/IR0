@@ -110,6 +110,23 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_SOCK);
 	ASSERT_EQ(IR0_EARLY_DT_SOCK, 12);
 
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_SYMLINK, 4, &st);
+	ASSERT_EQ(st.st_ino, 20);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_LNK);
+	ASSERT_EQ(st.st_size, 4);
+	ASSERT_EQ(IR0_EARLY_DT_LNK, 10);
+	ASSERT_EQ(IR0_EARLY_MSGHDR_BYTES, 56);
+	{
+		uint8_t hdr[IR0_EARLY_MSGHDR_BYTES];
+		unsigned i;
+
+		for (i = 0; i < sizeof(hdr); i++)
+			hdr[i] = 0;
+		ASSERT(!ir0_early_msghdr_has_cmsg(hdr, sizeof(hdr)));
+		hdr[32] = 1;
+		ASSERT(ir0_early_msghdr_has_cmsg(hdr, sizeof(hdr)));
+	}
+
 	ASSERT(ir0_early_timerfd_clock_ok(IR0_EARLY_CLOCK_MONOTONIC));
 	ASSERT(ir0_early_timerfd_clock_ok(IR0_EARLY_CLOCK_REALTIME));
 	ASSERT(!ir0_early_timerfd_clock_ok(2));

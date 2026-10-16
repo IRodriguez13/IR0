@@ -43,6 +43,7 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_FIFO,
 	IR0_EARLY_ROOTFS_USERDIR,
 	IR0_EARLY_ROOTFS_UNIX,
+	IR0_EARLY_ROOTFS_SYMLINK,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -52,6 +53,7 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_ROOTFS_S_IFBLK 0060000U
 #define IR0_EARLY_ROOTFS_S_IFIFO 0010000U
 #define IR0_EARLY_ROOTFS_S_IFSOCK 0140000U
+#define IR0_EARLY_ROOTFS_S_IFLNK 0120000U
 #define IR0_EARLY_ROOTFS_MODE_DIR \
 	(IR0_EARLY_ROOTFS_S_IFDIR | 0755U)
 #define IR0_EARLY_ROOTFS_MODE_REG \
@@ -64,6 +66,8 @@ enum ir0_early_rootfs_node
 	(IR0_EARLY_ROOTFS_S_IFIFO | 0600U)
 #define IR0_EARLY_ROOTFS_MODE_SOCK \
 	(IR0_EARLY_ROOTFS_S_IFSOCK | 0666U)
+#define IR0_EARLY_ROOTFS_MODE_LNK \
+	(IR0_EARLY_ROOTFS_S_IFLNK | 0777U)
 
 /*
  * Linux uapi (eventfd/timerfd/epoll/memfd/socket):
@@ -121,7 +125,18 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_DT_REG 8
 #define IR0_EARLY_DT_FIFO 1
 #define IR0_EARLY_DT_SOCK 12
+#define IR0_EARLY_DT_LNK 10
 #define IR0_EARLY_SUN_PATH 108
+#define IR0_EARLY_MSGHDR_BYTES 56U
+#define IR0_EARLY_SOL_SOCKET 1
+#define IR0_EARLY_SO_REUSEADDR 2
+#define IR0_EARLY_SO_TYPE 3
+#define IR0_EARLY_SO_ERROR 4
+#define IR0_EARLY_SHUT_RD 0
+#define IR0_EARLY_SHUT_WR 1
+#define IR0_EARLY_SHUT_RDWR 2
+#define IR0_EARLY_AT_SYMLINK_NOFOLLOW 0x100
+#define IR0_EARLY_AT_SYMLINK_FOLLOW 0x400
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -422,6 +437,14 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = 0;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_SYMLINK)
+	{
+		st->st_ino = 20;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_LNK;
+		st->st_size = (int64_t)blob_len;
+		st->st_blocks = 0;
+		return;
+	}
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
 		st->st_ino = 16;
@@ -502,6 +525,24 @@ static inline int ir0_early_socket_args_ok(int domain, int type, int protocol)
  * Pathname AF_UNIX only (unix(7)). Abstract names (sun_path[0] == 0)
  * are not implemented — callers must treat a 0 return as EINVAL.
  */
+static inline int ir0_early_msghdr_has_cmsg(const uint8_t *hdr, unsigned n)
+{
+	uint64_t control;
+	uint64_t controllen;
+
+	if (!hdr || n < IR0_EARLY_MSGHDR_BYTES)
+		return 1;
+	control = (uint64_t)hdr[32] | ((uint64_t)hdr[33] << 8) |
+		  ((uint64_t)hdr[34] << 16) | ((uint64_t)hdr[35] << 24) |
+		  ((uint64_t)hdr[36] << 32) | ((uint64_t)hdr[37] << 40) |
+		  ((uint64_t)hdr[38] << 48) | ((uint64_t)hdr[39] << 56);
+	controllen = (uint64_t)hdr[40] | ((uint64_t)hdr[41] << 8) |
+		     ((uint64_t)hdr[42] << 16) | ((uint64_t)hdr[43] << 24) |
+		     ((uint64_t)hdr[44] << 32) | ((uint64_t)hdr[45] << 40) |
+		     ((uint64_t)hdr[46] << 48) | ((uint64_t)hdr[47] << 56);
+	return control != 0 || controllen != 0;
+}
+
 static inline int ir0_early_sockaddr_un_path(const uint8_t *addr,
 					    unsigned addrlen, char *out,
 					    unsigned cap)
@@ -672,6 +713,14 @@ int64_t early_rootfs_getpeername(int fd, uint64_t addr, uint64_t addrlen);
 int64_t early_rootfs_sendto(int fd, uint64_t buffer, uint64_t count,
 			    uint64_t dest, uint64_t destlen);
 int64_t early_rootfs_recvfrom(int fd, uint64_t buffer, uint64_t count);
+int64_t early_rootfs_shutdown(int fd, int how);
+int64_t early_rootfs_setsockopt(int fd, int level, int optname, uint64_t optval,
+				uint64_t optlen);
+int64_t early_rootfs_getsockopt(int fd, int level, int optname, uint64_t optval,
+				uint64_t optlen);
+int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath);
+int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
+			    uint64_t newpath, int flags);
 int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_sock(int fd);
 int early_rootfs_fd_is_file(int fd);

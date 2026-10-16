@@ -15,6 +15,7 @@
 #define ENOSYS 38
 #define ENOTTY 25
 #define ENOTSOCK 88
+#define EOPNOTSUPP 95
 #define WRITE_MAX 256UL
 
 static int g_write_ok;
@@ -501,6 +502,91 @@ static int64_t early_epoll_pwait(struct early_syscall_context *context,
 					(int)timeout);
 }
 
+static int64_t early_sendmsg(struct early_syscall_context *context,
+			     uint64_t fd, uint64_t msg)
+{
+	const struct early_user_services *user;
+	uint8_t hdr[IR0_EARLY_MSGHDR_BYTES];
+	uint64_t name;
+	uint64_t namelen;
+	uint64_t iov;
+	uint64_t iovlen;
+	uint64_t i;
+	int64_t total = 0;
+
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user)
+		return -ENOSYS;
+	if (user->copy_from_user(hdr, msg, sizeof(hdr)) != 0)
+		return -EFAULT;
+	if (ir0_early_msghdr_has_cmsg(hdr, sizeof(hdr)))
+		return -EOPNOTSUPP;
+	name = ir0_early_le64(hdr);
+	namelen = ir0_early_le32(hdr + 8);
+	iov = ir0_early_le64(hdr + 16);
+	iovlen = ir0_early_le64(hdr + 24);
+	if (iovlen > 8)
+		return -EINVAL;
+	for (i = 0; i < iovlen; i++)
+	{
+		uint64_t vec[2];
+		int64_t n;
+
+		if (user->copy_from_user(vec, iov + i * 16UL, sizeof(vec)) != 0)
+			return total ? total : -EFAULT;
+		if (vec[1] == 0)
+			continue;
+		n = early_rootfs_sendto((int)fd, vec[0], vec[1],
+					namelen ? name : 0, namelen);
+		if (n < 0)
+			return total ? total : n;
+		total += n;
+		if ((uint64_t)n < vec[1])
+			break;
+	}
+	return total;
+}
+
+static int64_t early_recvmsg(struct early_syscall_context *context,
+			     uint64_t fd, uint64_t msg)
+{
+	const struct early_user_services *user;
+	uint8_t hdr[IR0_EARLY_MSGHDR_BYTES];
+	uint64_t iov;
+	uint64_t iovlen;
+	uint64_t i;
+	int64_t total = 0;
+
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user)
+		return -ENOSYS;
+	if (user->copy_from_user(hdr, msg, sizeof(hdr)) != 0)
+		return -EFAULT;
+	if (ir0_early_msghdr_has_cmsg(hdr, sizeof(hdr)))
+		return -EOPNOTSUPP;
+	iov = ir0_early_le64(hdr + 16);
+	iovlen = ir0_early_le64(hdr + 24);
+	if (iovlen > 8)
+		return -EINVAL;
+	for (i = 0; i < iovlen; i++)
+	{
+		uint64_t vec[2];
+		int64_t n;
+
+		if (user->copy_from_user(vec, iov + i * 16UL, sizeof(vec)) != 0)
+			return total ? total : -EFAULT;
+		if (vec[1] == 0)
+			continue;
+		n = early_rootfs_recvfrom((int)fd, vec[0], vec[1]);
+		if (n < 0)
+			return total ? total : n;
+		total += n;
+		if ((uint64_t)n < vec[1])
+			break;
+	}
+	return total;
+}
+
 static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
@@ -562,6 +648,16 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_sendto((int)a0, a1, a2, a4, a5);
 	case IR0_SYSCALL_RECVFROM:
 		return early_rootfs_recvfrom((int)a0, a1, a2);
+	case IR0_SYSCALL_SENDMSG:
+		return early_sendmsg(opaque, a0, a1);
+	case IR0_SYSCALL_RECVMSG:
+		return early_recvmsg(opaque, a0, a1);
+	case IR0_SYSCALL_SHUTDOWN:
+		return early_rootfs_shutdown((int)a0, (int)a1);
+	case IR0_SYSCALL_SETSOCKOPT:
+		return early_rootfs_setsockopt((int)a0, (int)a1, (int)a2, a3, a4);
+	case IR0_SYSCALL_GETSOCKOPT:
+		return early_rootfs_getsockopt((int)a0, (int)a1, (int)a2, a3, a4);
 	case IR0_SYSCALL_PPOLL:
 		(void)a3;
 		(void)a4;
@@ -584,7 +680,8 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_SOCKETPAIR, IR0_SYSCALL_BIND, IR0_SYSCALL_LISTEN,
 	IR0_SYSCALL_CONNECT, IR0_SYSCALL_ACCEPT, IR0_SYSCALL_ACCEPT4,
 	IR0_SYSCALL_GETSOCKNAME, IR0_SYSCALL_GETPEERNAME, IR0_SYSCALL_SENDTO,
-	IR0_SYSCALL_RECVFROM,
+	IR0_SYSCALL_RECVFROM, IR0_SYSCALL_SENDMSG, IR0_SYSCALL_RECVMSG,
+	IR0_SYSCALL_SHUTDOWN, IR0_SYSCALL_SETSOCKOPT, IR0_SYSCALL_GETSOCKOPT,
 };
 
 const struct syscall_context_provider early_io_provider = {

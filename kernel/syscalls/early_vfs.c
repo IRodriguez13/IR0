@@ -8,7 +8,6 @@
 #include <ir0/early_vfs.h>
 
 #define ENOSYS 38
-#define EPERM  1
 
 static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 				 uint64_t a0, uint64_t a1, uint64_t a2,
@@ -20,7 +19,7 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 	const struct early_time_services *time_ops = context && context->services ?
 		context->services->time : 0;
 
-	(void)a4; (void)a5;
+	(void)a5;
 	if (time_ops && time_ops->counter_read && time_ops->counter_frequency)
 		early_rootfs_note_clock(time_ops->counter_read(),
 					time_ops->counter_frequency(),
@@ -69,9 +68,13 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_unlinkat((int)a0, a1, (int)a2);
 	if (id == IR0_SYSCALL_RENAMEAT)
 		return early_rootfs_renameat((int)a0, a1, (int)a2, a3);
-	if (id == IR0_SYSCALL_SYMLINKAT || id == IR0_SYSCALL_LINK ||
-	    id == IR0_SYSCALL_LINKAT)
-		return -EPERM;
+	if (id == IR0_SYSCALL_SYMLINKAT)
+		return early_rootfs_symlinkat(a0, (int)a1, a2);
+	if (id == IR0_SYSCALL_LINK)
+		return early_rootfs_linkat(IR0_EARLY_ROOTFS_AT_FDCWD, a0,
+					   IR0_EARLY_ROOTFS_AT_FDCWD, a1, 0);
+	if (id == IR0_SYSCALL_LINKAT)
+		return early_rootfs_linkat((int)a0, a1, (int)a2, a3, (int)a4);
 	if (!ops)
 		return -ENOSYS;
 	switch (id) {
