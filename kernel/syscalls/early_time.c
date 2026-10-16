@@ -257,6 +257,11 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 	}
 }
 
+int64_t early_time_realtime_offset(void)
+{
+	return g_realtime_off;
+}
+
 int early_time_smoke_ok(void)
 {
 	return g_nanosleep_ok && g_clock_gettime_ok && g_gettimeofday_ok &&

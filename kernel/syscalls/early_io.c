@@ -6,6 +6,7 @@
 #include <ir0/early_io.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
+#include <ir0/early_time.h>
 #include <ir0/time.h>
 
 #define EBADF 9
@@ -13,6 +14,7 @@
 #define EINVAL 22
 #define ENOSYS 38
 #define ENOTTY 25
+#define ENOTSOCK 88
 #define WRITE_MAX 256UL
 
 static int g_write_ok;
@@ -79,6 +81,10 @@ static int64_t early_write(struct early_syscall_context *context,
 		return early_rootfs_pipe_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_is_eventfd((int)descriptor))
 		return early_rootfs_eventfd_write((int)descriptor, buffer, length);
+	if (early_rootfs_fd_is_memfd((int)descriptor))
+		return early_rootfs_memfd_write((int)descriptor, buffer, length);
+	if (early_rootfs_fd_is_sock((int)descriptor))
+		return early_rootfs_sock_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_is_block((int)descriptor))
 		return early_rootfs_block_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_discards_write((int)descriptor))
@@ -439,11 +445,64 @@ static int64_t early_pselect6(struct early_syscall_context *context,
 	return 0;
 }
 
+static void early_io_note_clock(struct early_syscall_context *context)
+{
+	const struct early_syscall_services *all;
+	const struct early_time_services *ops;
+
+	if (!context || !(all = context->services) || !(ops = all->time) ||
+	    !ops->counter_read || !ops->counter_frequency)
+		return;
+	early_rootfs_note_clock(ops->counter_read(), ops->counter_frequency(),
+				early_time_realtime_offset());
+}
+
+static void early_io_sleep_ms(struct early_syscall_context *context, int ms)
+{
+	const struct early_syscall_services *all;
+	const struct early_time_services *ops;
+	uint64_t hz;
+	uint64_t start;
+	uint64_t delta;
+
+	if (ms <= 0 || !context || !(all = context->services) ||
+	    !(ops = all->time) || !ops->counter_read || !ops->counter_frequency ||
+	    !ops->cpu_relax)
+		return;
+	hz = ops->counter_frequency();
+	if (!hz)
+		return;
+	delta = ((uint64_t)ms * hz) / 1000ULL;
+	if (!delta)
+		delta = 1;
+	start = ops->counter_read();
+	while (ops->counter_read() - start < delta)
+		ops->cpu_relax();
+}
+
+static int64_t early_epoll_pwait(struct early_syscall_context *context,
+				 uint64_t epfd, uint64_t events, uint64_t maxevents,
+				 uint64_t timeout)
+{
+	int64_t ready;
+
+	early_io_note_clock(context);
+	ready = early_rootfs_epoll_pwait((int)epfd, events, (int)maxevents,
+					 (int)timeout);
+	if (ready != 0 || (int)timeout <= 0)
+		return ready;
+	early_io_sleep_ms(context, (int)timeout);
+	early_io_note_clock(context);
+	return early_rootfs_epoll_pwait((int)epfd, events, (int)maxevents,
+					(int)timeout);
+}
+
 static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
 {
-	(void)a3; (void)a4; (void)a5;
+	(void)a5;
+	early_io_note_clock(opaque);
 	switch (id) {
 	case IR0_SYSCALL_WRITE:
 		return early_write(opaque, a0, a1, a2);
@@ -463,6 +522,31 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_pipe2(a0, (int)a1);
 	case IR0_SYSCALL_EVENTFD2:
 		return early_rootfs_eventfd2(a0, (int)a1);
+	case IR0_SYSCALL_MEMFD_CREATE:
+		return early_rootfs_memfd_create(a0, (unsigned)a1);
+	case IR0_SYSCALL_TIMERFD_CREATE:
+		return early_rootfs_timerfd_create((int)a0, (int)a1);
+	case IR0_SYSCALL_TIMERFD_SETTIME:
+		return early_rootfs_timerfd_settime((int)a0, (int)a1, a2, a3);
+	case IR0_SYSCALL_TIMERFD_GETTIME:
+		return early_rootfs_timerfd_gettime((int)a0, a1);
+	case IR0_SYSCALL_EPOLL_CREATE1:
+		return early_rootfs_epoll_create1((int)a0);
+	case IR0_SYSCALL_EPOLL_CTL:
+		return early_rootfs_epoll_ctl((int)a0, (int)a1, (int)a2, a3);
+	case IR0_SYSCALL_EPOLL_PWAIT:
+		(void)a4;
+		return early_epoll_pwait(opaque, a0, a1, a2, a3);
+	case IR0_SYSCALL_SOCKETPAIR:
+		return early_rootfs_socketpair((int)a0, (int)a1, (int)a2, a3);
+	case IR0_SYSCALL_SENDTO:
+		if (!early_rootfs_fd_is_sock((int)a0))
+			return -ENOTSOCK;
+		return early_rootfs_sock_write((int)a0, a1, a2);
+	case IR0_SYSCALL_RECVFROM:
+		if (!early_rootfs_fd_is_sock((int)a0))
+			return -ENOTSOCK;
+		return early_rootfs_read((int)a0, a1, a2);
 	case IR0_SYSCALL_PPOLL:
 		(void)a3;
 		(void)a4;
@@ -478,7 +562,11 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_WRITE, IR0_SYSCALL_WRITEV, IR0_SYSCALL_READV,
 	IR0_SYSCALL_IOCTL, IR0_SYSCALL_FCNTL, IR0_SYSCALL_PIPE2,
 	IR0_SYSCALL_DUP, IR0_SYSCALL_DUP3, IR0_SYSCALL_PPOLL,
-	IR0_SYSCALL_PSELECT6, IR0_SYSCALL_EVENTFD2,
+	IR0_SYSCALL_PSELECT6, IR0_SYSCALL_EVENTFD2, IR0_SYSCALL_MEMFD_CREATE,
+	IR0_SYSCALL_TIMERFD_CREATE, IR0_SYSCALL_TIMERFD_SETTIME,
+	IR0_SYSCALL_TIMERFD_GETTIME, IR0_SYSCALL_EPOLL_CREATE1,
+	IR0_SYSCALL_EPOLL_CTL, IR0_SYSCALL_EPOLL_PWAIT, IR0_SYSCALL_SOCKETPAIR,
+	IR0_SYSCALL_SENDTO, IR0_SYSCALL_RECVFROM,
 };
 
 const struct syscall_context_provider early_io_provider = {

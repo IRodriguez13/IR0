@@ -49,6 +49,16 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(95) == IR0_SYSCALL_WAITID);
 	ASSERT(syscall_decode_number(37) == IR0_SYSCALL_LINKAT);
 	ASSERT(syscall_decode_number(112) == IR0_SYSCALL_CLOCK_SETTIME);
+	ASSERT(syscall_decode_number(20) == IR0_SYSCALL_EPOLL_CREATE1);
+	ASSERT(syscall_decode_number(21) == IR0_SYSCALL_EPOLL_CTL);
+	ASSERT(syscall_decode_number(22) == IR0_SYSCALL_EPOLL_PWAIT);
+	ASSERT(syscall_decode_number(85) == IR0_SYSCALL_TIMERFD_CREATE);
+	ASSERT(syscall_decode_number(86) == IR0_SYSCALL_TIMERFD_SETTIME);
+	ASSERT(syscall_decode_number(87) == IR0_SYSCALL_TIMERFD_GETTIME);
+	ASSERT(syscall_decode_number(199) == IR0_SYSCALL_SOCKETPAIR);
+	ASSERT(syscall_decode_number(206) == IR0_SYSCALL_SENDTO);
+	ASSERT(syscall_decode_number(207) == IR0_SYSCALL_RECVFROM);
+	ASSERT(syscall_decode_number(279) == IR0_SYSCALL_MEMFD_CREATE);
 	ASSERT(decoded == 141);
 	TEST_END();
 }

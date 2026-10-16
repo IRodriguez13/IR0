@@ -84,6 +84,50 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_ino, 10);
 	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_REG);
 
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_PIPE_R, 0, &st);
+	ASSERT_EQ(st.st_ino, 11);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_FIFO);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_MEMFD, 64, &st);
+	ASSERT_EQ(st.st_ino, 12);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_REG);
+	ASSERT_EQ(st.st_size, 64);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_TIMERFD, 0, &st);
+	ASSERT_EQ(st.st_ino, 13);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_REG);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_EPOLL, 0, &st);
+	ASSERT_EQ(st.st_ino, 14);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_REG);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_SOCK, 0, &st);
+	ASSERT_EQ(st.st_ino, 15);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_SOCK);
+
+	ASSERT(ir0_early_timerfd_clock_ok(IR0_EARLY_CLOCK_MONOTONIC));
+	ASSERT(ir0_early_timerfd_clock_ok(IR0_EARLY_CLOCK_REALTIME));
+	ASSERT(!ir0_early_timerfd_clock_ok(2));
+	ASSERT(ir0_early_timerfd_create_flags_ok(IR0_EARLY_TFD_CLOEXEC |
+						IR0_EARLY_TFD_NONBLOCK));
+	ASSERT(!ir0_early_timerfd_create_flags_ok(0x10));
+	ASSERT(ir0_early_memfd_flags_ok(IR0_EARLY_MFD_CLOEXEC |
+				       IR0_EARLY_MFD_ALLOW_SEALING));
+	ASSERT(!ir0_early_memfd_flags_ok(IR0_EARLY_MFD_HUGETLB));
+	ASSERT(ir0_early_epoll_create_flags_ok(IR0_EARLY_EPOLL_CLOEXEC));
+	ASSERT(!ir0_early_epoll_create_flags_ok(2));
+	ASSERT(ir0_early_socketpair_args_ok(IR0_EARLY_AF_UNIX,
+					   IR0_EARLY_SOCK_STREAM, 0));
+	ASSERT(ir0_early_socketpair_args_ok(IR0_EARLY_AF_UNIX,
+					   IR0_EARLY_SOCK_DGRAM |
+						   IR0_EARLY_SOCK_CLOEXEC,
+					   0));
+	ASSERT(!ir0_early_socketpair_args_ok(2, IR0_EARLY_SOCK_STREAM, 0));
+	ASSERT_EQ(IR0_EARLY_EPOLL_EVENT_BYTES, 16);
+	ASSERT_EQ(IR0_EARLY_ITIMERSPEC_BYTES, 32);
+	ASSERT_EQ(ir0_early_timespec_to_ticks(1, 0, 1000), 1000);
+	ASSERT_EQ(ir0_early_timespec_to_ticks(0, 500000000, 1000), 500);
+
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT), 5);
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_TMP), 2);
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_DEV), 6);

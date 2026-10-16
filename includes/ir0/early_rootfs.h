@@ -35,6 +35,10 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_PIPE_R,
 	IR0_EARLY_ROOTFS_PIPE_W,
 	IR0_EARLY_ROOTFS_EVENTFD,
+	IR0_EARLY_ROOTFS_MEMFD,
+	IR0_EARLY_ROOTFS_TIMERFD,
+	IR0_EARLY_ROOTFS_EPOLL,
+	IR0_EARLY_ROOTFS_SOCK,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -42,6 +46,8 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_ROOTFS_S_IFDIR 0040000U
 #define IR0_EARLY_ROOTFS_S_IFCHR 0020000U
 #define IR0_EARLY_ROOTFS_S_IFBLK 0060000U
+#define IR0_EARLY_ROOTFS_S_IFIFO 0010000U
+#define IR0_EARLY_ROOTFS_S_IFSOCK 0140000U
 #define IR0_EARLY_ROOTFS_MODE_DIR \
 	(IR0_EARLY_ROOTFS_S_IFDIR | 0755U)
 #define IR0_EARLY_ROOTFS_MODE_REG \
@@ -50,6 +56,42 @@ enum ir0_early_rootfs_node
 	(IR0_EARLY_ROOTFS_S_IFCHR | 0622U)
 #define IR0_EARLY_ROOTFS_MODE_BLK \
 	(IR0_EARLY_ROOTFS_S_IFBLK | 0660U)
+#define IR0_EARLY_ROOTFS_MODE_FIFO \
+	(IR0_EARLY_ROOTFS_S_IFIFO | 0600U)
+#define IR0_EARLY_ROOTFS_MODE_SOCK \
+	(IR0_EARLY_ROOTFS_S_IFSOCK | 0666U)
+
+/*
+ * Linux uapi (eventfd/timerfd/epoll/memfd/socket):
+ *   TFD_CLOEXEC / EPOLL_CLOEXEC / SOCK_CLOEXEC = O_CLOEXEC = 02000000
+ *   TFD_NONBLOCK / SOCK_NONBLOCK = O_NONBLOCK = 00004000
+ *   TFD_TIMER_ABSTIME = 1
+ *   MFD_CLOEXEC = 1, MFD_ALLOW_SEALING = 2 (linux/memfd.h)
+ *   EPOLL_CTL_ADD/DEL/MOD = 1/2/3
+ *   AF_UNIX = 1, SOCK_STREAM = 1, SOCK_DGRAM = 2
+ * AArch64 epoll_event is 16 bytes (events u32 + pad + data u64).
+ * itimerspec is two timespecs (32 bytes on LP64).
+ */
+#define IR0_EARLY_TFD_CLOEXEC 02000000
+#define IR0_EARLY_TFD_NONBLOCK 00004000
+#define IR0_EARLY_TFD_TIMER_ABSTIME 1
+#define IR0_EARLY_MFD_CLOEXEC 1U
+#define IR0_EARLY_MFD_ALLOW_SEALING 2U
+#define IR0_EARLY_MFD_HUGETLB 4U
+#define IR0_EARLY_EPOLL_CLOEXEC 02000000
+#define IR0_EARLY_EPOLL_CTL_ADD 1
+#define IR0_EARLY_EPOLL_CTL_DEL 2
+#define IR0_EARLY_EPOLL_CTL_MOD 3
+#define IR0_EARLY_SOCK_CLOEXEC 02000000
+#define IR0_EARLY_SOCK_NONBLOCK 00004000
+#define IR0_EARLY_AF_UNIX 1
+#define IR0_EARLY_SOCK_STREAM 1
+#define IR0_EARLY_SOCK_DGRAM 2
+#define IR0_EARLY_CLOCK_REALTIME 0UL
+#define IR0_EARLY_CLOCK_MONOTONIC 1UL
+#define IR0_EARLY_CLOCK_BOOTTIME 7UL
+#define IR0_EARLY_ITIMERSPEC_BYTES 32U
+#define IR0_EARLY_EPOLL_EVENT_BYTES 16U
 /*
  * Linux devices.txt (docs.kernel.org/admin-guide/devices.html):
  *   /dev/null    char 1:3
@@ -326,11 +368,104 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = 0;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W)
+	{
+		st->st_ino = 11;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_FIFO;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_MEMFD)
+	{
+		st->st_ino = 12;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_REG;
+		st->st_size = (int64_t)blob_len;
+		st->st_blocks = (int64_t)((blob_len + 511UL) / 512UL);
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_TIMERFD)
+	{
+		st->st_ino = 13;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_REG;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_EPOLL)
+	{
+		st->st_ino = 14;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_REG;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_SOCK)
+	{
+		st->st_ino = 15;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_SOCK;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
 
 	st->st_ino = 1;
 	st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
 	st->st_size = 0;
 	st->st_blocks = 0;
+}
+
+static inline int ir0_early_timerfd_clock_ok(uint64_t clock_id)
+{
+	return clock_id == IR0_EARLY_CLOCK_REALTIME ||
+	       clock_id == IR0_EARLY_CLOCK_MONOTONIC ||
+	       clock_id == IR0_EARLY_CLOCK_BOOTTIME;
+}
+
+static inline int ir0_early_timerfd_create_flags_ok(int flags)
+{
+	return (flags & ~(IR0_EARLY_TFD_CLOEXEC | IR0_EARLY_TFD_NONBLOCK)) == 0;
+}
+
+static inline int ir0_early_memfd_flags_ok(unsigned flags)
+{
+	if (flags & IR0_EARLY_MFD_HUGETLB)
+		return 0;
+	return (flags & ~(IR0_EARLY_MFD_CLOEXEC | IR0_EARLY_MFD_ALLOW_SEALING)) ==
+	       0;
+}
+
+static inline int ir0_early_epoll_create_flags_ok(int flags)
+{
+	return (flags & ~IR0_EARLY_EPOLL_CLOEXEC) == 0;
+}
+
+static inline int ir0_early_socketpair_args_ok(int domain, int type, int protocol)
+{
+	int kind = type & 0xf;
+
+	if (domain != IR0_EARLY_AF_UNIX)
+		return 0;
+	if (protocol != 0)
+		return 0;
+	if (kind != IR0_EARLY_SOCK_STREAM && kind != IR0_EARLY_SOCK_DGRAM)
+		return 0;
+	if (type & ~(0xf | IR0_EARLY_SOCK_CLOEXEC | IR0_EARLY_SOCK_NONBLOCK))
+		return 0;
+	return 1;
+}
+
+static inline uint64_t ir0_early_timespec_to_ticks(int64_t sec, int64_t nsec,
+						   uint64_t hz)
+{
+	uint64_t seconds_ticks;
+	uint64_t nanosecond_ticks;
+
+	if (sec < 0 || nsec < 0 || nsec >= 1000000000LL || !hz)
+		return 0;
+	seconds_ticks = (uint64_t)sec * hz;
+	nanosecond_ticks = ((uint64_t)nsec * hz) / 1000000000ULL;
+	return seconds_ticks + nanosecond_ticks;
 }
 
 static inline uint16_t ir0_early_le16(const uint8_t *bytes)
@@ -438,6 +573,22 @@ int64_t early_rootfs_pipe2(uint64_t fds, int flags);
 int64_t early_rootfs_eventfd2(uint64_t initval, int flags);
 int64_t early_rootfs_eventfd_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_eventfd(int fd);
+void early_rootfs_note_clock(uint64_t mono_ticks, uint64_t hz,
+			     int64_t realtime_off);
+int64_t early_rootfs_memfd_create(uint64_t name, unsigned flags);
+int64_t early_rootfs_memfd_write(int fd, uint64_t buffer, uint64_t count);
+int early_rootfs_fd_is_memfd(int fd);
+int64_t early_rootfs_timerfd_create(int clockid, int flags);
+int64_t early_rootfs_timerfd_settime(int fd, int flags, uint64_t new_value,
+				     uint64_t old_value);
+int64_t early_rootfs_timerfd_gettime(int fd, uint64_t curr);
+int64_t early_rootfs_epoll_create1(int flags);
+int64_t early_rootfs_epoll_ctl(int epfd, int op, int fd, uint64_t event);
+int64_t early_rootfs_epoll_pwait(int epfd, uint64_t events, int maxevents,
+				 int timeout);
+int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv);
+int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count);
+int early_rootfs_fd_is_sock(int fd);
 int64_t early_rootfs_blkgetsize64(int fd, uint64_t dest);
 int64_t early_rootfs_dup(int oldfd);
 int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);

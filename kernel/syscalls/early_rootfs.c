@@ -46,7 +46,7 @@
 #define LOCK_NB 4
 #define LOCK_UN 8
 
-#define ROOTFS_MAX_OPEN 8U
+#define ROOTFS_MAX_OPEN 16U
 #define ROOTFS_FD_BASE  3
 #define ROOTFS_FD_LIMIT ((int)(ROOTFS_FD_BASE + ROOTFS_MAX_OPEN))
 #define LINUX_O_ACCMODE  IR0_O_ACCMODE
@@ -71,6 +71,18 @@ struct rootfs_slot
 #define EFD_NONBLOCK 00004000
 #define EFD_SEMAPHORE 1
 #define EFD_COUNT_MAX 0xfffffffffffffffeULL
+#define MEMFD_MAX 2
+#define MEMFD_CAP 4096
+#define TIMERFD_MAX 2
+#define EPOLL_MAX 2
+#define EPOLL_SLOTS 8
+#define SOCKPAIR_MAX 2
+#define EAFNOSUPPORT 97
+#define ESOCKTNOSUPPORT 94
+#define EPROTONOSUPPORT 93
+#define ENOSPC 28
+#define EMSGSIZE 90
+#define NS_PER_SEC 1000000000ULL
 
 struct early_pipe
 {
@@ -107,6 +119,55 @@ static struct early_eventfd
 	int nonblock;
 	int semaphore;
 } g_eventfd[EFD_MAX];
+
+static struct early_memfd
+{
+	int used;
+	int refs;
+	uint32_t len;
+	uint8_t data[MEMFD_CAP];
+} g_memfd[MEMFD_MAX];
+
+static struct early_timerfd
+{
+	int used;
+	int refs;
+	int clock;
+	int armed;
+	uint64_t expire;
+	uint64_t interval;
+	uint64_t ticks;
+} g_timerfd[TIMERFD_MAX];
+
+static struct early_epoll
+{
+	int used;
+	int refs;
+	struct
+	{
+		int used;
+		int fd;
+		uint32_t events;
+		uint64_t data;
+	} slot[EPOLL_SLOTS];
+} g_epoll[EPOLL_MAX];
+
+static struct early_sockpair
+{
+	int used;
+	int refs[2];
+	int dgram;
+	struct
+	{
+		unsigned rpos;
+		unsigned len;
+		uint8_t buf[PIPE_BUF];
+	} dir[2];
+} g_sock[SOCKPAIR_MAX];
+
+static uint64_t g_clock_mono;
+static uint64_t g_clock_hz;
+static int64_t g_clock_realtime_off;
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -279,6 +340,85 @@ static int pipe_id_of_fd(int fd)
 	return g_slots[idx].pipe_id;
 }
 
+static void attach_object(int oldfd, int newfd)
+{
+	int pipe_id = pipe_id_of_fd(oldfd);
+	int nidx = slot_from_fd(newfd);
+	enum ir0_early_rootfs_node node = node_of_fd(oldfd);
+
+	if (nidx >= 0)
+		g_slots[nidx].pipe_id = pipe_id;
+	if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
+	{
+		if (node == IR0_EARLY_ROOTFS_PIPE_R)
+			g_pipes[pipe_id].readers++;
+		if (node == IR0_EARLY_ROOTFS_PIPE_W)
+			g_pipes[pipe_id].writers++;
+	}
+	if (node == IR0_EARLY_ROOTFS_MEMFD &&
+	    pipe_id >= 0 && pipe_id < MEMFD_MAX && g_memfd[pipe_id].used)
+		g_memfd[pipe_id].refs++;
+	if (node == IR0_EARLY_ROOTFS_TIMERFD &&
+	    pipe_id >= 0 && pipe_id < TIMERFD_MAX && g_timerfd[pipe_id].used)
+		g_timerfd[pipe_id].refs++;
+	if (node == IR0_EARLY_ROOTFS_EPOLL &&
+	    pipe_id >= 0 && pipe_id < EPOLL_MAX && g_epoll[pipe_id].used)
+		g_epoll[pipe_id].refs++;
+	if (node == IR0_EARLY_ROOTFS_SOCK)
+	{
+		int pair = pipe_id >> 1;
+		int end = pipe_id & 1;
+
+		if (pair >= 0 && pair < SOCKPAIR_MAX && g_sock[pair].used)
+			g_sock[pair].refs[end]++;
+	}
+}
+
+static uint64_t clock_now_ticks(int clock)
+{
+	uint64_t now = g_clock_mono;
+
+	if (clock == IR0_EARLY_CLOCK_REALTIME && g_clock_hz)
+		now += (uint64_t)g_clock_realtime_off * g_clock_hz;
+	return now;
+}
+
+static void timerfd_advance_one(struct early_timerfd *t)
+{
+	uint64_t now;
+
+	if (!t || !t->used || !t->armed || !g_clock_hz)
+		return;
+	now = clock_now_ticks(t->clock);
+	while (t->armed && now >= t->expire)
+	{
+		t->ticks++;
+		if (t->interval == 0)
+		{
+			t->armed = 0;
+			break;
+		}
+		t->expire += t->interval;
+	}
+}
+
+static void timerfd_advance_all(void)
+{
+	unsigned i;
+
+	for (i = 0; i < TIMERFD_MAX; i++)
+		timerfd_advance_one(&g_timerfd[i]);
+}
+
+void early_rootfs_note_clock(uint64_t mono_ticks, uint64_t hz,
+			     int64_t realtime_off)
+{
+	g_clock_mono = mono_ticks;
+	g_clock_hz = hz;
+	g_clock_realtime_off = realtime_off;
+	timerfd_advance_all();
+}
+
 static int close_fd(int fd)
 {
 	int idx;
@@ -299,22 +439,63 @@ static int close_fd(int fd)
 		return -EBADF;
 	{
 		int pipe_id = g_slots[idx].pipe_id;
+		enum ir0_early_rootfs_node node = g_slots[idx].node;
 
 		if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
 		{
-			if (g_slots[idx].node == IR0_EARLY_ROOTFS_PIPE_R &&
+			if (node == IR0_EARLY_ROOTFS_PIPE_R &&
 			    g_pipes[pipe_id].readers > 0)
 				g_pipes[pipe_id].readers--;
-			if (g_slots[idx].node == IR0_EARLY_ROOTFS_PIPE_W &&
+			if (node == IR0_EARLY_ROOTFS_PIPE_W &&
 			    g_pipes[pipe_id].writers > 0)
 				g_pipes[pipe_id].writers--;
 			if (g_pipes[pipe_id].readers == 0 &&
 			    g_pipes[pipe_id].writers == 0)
 				g_pipes[pipe_id].used = 0;
 		}
-		if (g_slots[idx].node == IR0_EARLY_ROOTFS_EVENTFD &&
+		if (node == IR0_EARLY_ROOTFS_EVENTFD &&
 		    pipe_id >= 0 && pipe_id < EFD_MAX)
 			g_eventfd[pipe_id].used = 0;
+		if (node == IR0_EARLY_ROOTFS_MEMFD &&
+		    pipe_id >= 0 && pipe_id < MEMFD_MAX && g_memfd[pipe_id].used)
+		{
+			if (g_memfd[pipe_id].refs > 0)
+				g_memfd[pipe_id].refs--;
+			if (g_memfd[pipe_id].refs == 0)
+				g_memfd[pipe_id].used = 0;
+		}
+		if (node == IR0_EARLY_ROOTFS_TIMERFD &&
+		    pipe_id >= 0 && pipe_id < TIMERFD_MAX &&
+		    g_timerfd[pipe_id].used)
+		{
+			if (g_timerfd[pipe_id].refs > 0)
+				g_timerfd[pipe_id].refs--;
+			if (g_timerfd[pipe_id].refs == 0)
+				g_timerfd[pipe_id].used = 0;
+		}
+		if (node == IR0_EARLY_ROOTFS_EPOLL &&
+		    pipe_id >= 0 && pipe_id < EPOLL_MAX && g_epoll[pipe_id].used)
+		{
+			if (g_epoll[pipe_id].refs > 0)
+				g_epoll[pipe_id].refs--;
+			if (g_epoll[pipe_id].refs == 0)
+				g_epoll[pipe_id].used = 0;
+		}
+		if (node == IR0_EARLY_ROOTFS_SOCK)
+		{
+			int pair = pipe_id >> 1;
+			int end = pipe_id & 1;
+
+			if (pair >= 0 && pair < SOCKPAIR_MAX &&
+			    g_sock[pair].used && end >= 0 && end <= 1)
+			{
+				if (g_sock[pair].refs[end] > 0)
+					g_sock[pair].refs[end]--;
+				if (g_sock[pair].refs[0] == 0 &&
+				    g_sock[pair].refs[1] == 0)
+					g_sock[pair].used = 0;
+			}
+		}
 	}
 	g_slots[idx].used = 0;
 	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
@@ -404,6 +585,17 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_pipes[i].used = 0;
 	for (i = 0; i < EFD_MAX; i++)
 		g_eventfd[i].used = 0;
+	for (i = 0; i < MEMFD_MAX; i++)
+		g_memfd[i].used = 0;
+	for (i = 0; i < TIMERFD_MAX; i++)
+		g_timerfd[i].used = 0;
+	for (i = 0; i < EPOLL_MAX; i++)
+		g_epoll[i].used = 0;
+	for (i = 0; i < SOCKPAIR_MAX; i++)
+		g_sock[i].used = 0;
+	g_clock_mono = 0;
+	g_clock_hz = 0;
+	g_clock_realtime_off = 0;
 	reset_stdio();
 	g_exec_pending = 0;
 	g_init_from_block = 0;
@@ -724,6 +916,115 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 			return -EFAULT;
 		return 8;
 	}
+	if (node == IR0_EARLY_ROOTFS_MEMFD)
+	{
+		int mid = pipe_id_of_fd(fd);
+		uint64_t *pos = pos_of_fd(fd);
+		uint64_t remain;
+
+		if (mid < 0 || mid >= MEMFD_MAX || !g_memfd[mid].used || !pos)
+			return -EBADF;
+		if (*pos >= g_memfd[mid].len)
+			return 0;
+		remain = g_memfd[mid].len - *pos;
+		n = count > remain ? remain : count;
+		if (n > sizeof(tmp))
+			n = sizeof(tmp);
+		for (i = 0; i < n; i++)
+			tmp[i] = g_memfd[mid].data[*pos + i];
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, tmp, n) != 0)
+			return -EFAULT;
+		*pos += n;
+		return (int64_t)n;
+	}
+	if (node == IR0_EARLY_ROOTFS_TIMERFD)
+	{
+		int tid = pipe_id_of_fd(fd);
+		uint64_t value;
+
+		if (tid < 0 || tid >= TIMERFD_MAX || !g_timerfd[tid].used)
+			return -EBADF;
+		if (count < 8)
+			return -EINVAL;
+		timerfd_advance_one(&g_timerfd[tid]);
+		if (g_timerfd[tid].ticks == 0)
+			return -EAGAIN;
+		value = g_timerfd[tid].ticks;
+		g_timerfd[tid].ticks = 0;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, &value, 8) != 0)
+			return -EFAULT;
+		return 8;
+	}
+	if (node == IR0_EARLY_ROOTFS_SOCK)
+	{
+		int pair = pipe_id_of_fd(fd) >> 1;
+		int end = pipe_id_of_fd(fd) & 1;
+		int src;
+		unsigned take;
+		unsigned i2;
+
+		if (pair < 0 || pair >= SOCKPAIR_MAX || !g_sock[pair].used)
+			return -EBADF;
+		src = 1 - end;
+		if (g_sock[pair].dir[src].len == 0)
+			return g_sock[pair].refs[src] ? -EAGAIN : 0;
+		if (g_sock[pair].dgram)
+		{
+			uint16_t mlen;
+			unsigned hdr = g_sock[pair].dir[src].rpos;
+
+			if (g_sock[pair].dir[src].len < 2)
+				return -EIO;
+			mlen = (uint16_t)g_sock[pair].dir[src].buf[hdr];
+			mlen |= (uint16_t)g_sock[pair].dir[src].buf[(hdr + 1U) %
+								    PIPE_BUF]
+				 << 8;
+			if (g_sock[pair].dir[src].len < 2U + mlen)
+				return -EIO;
+			g_sock[pair].dir[src].rpos = (hdr + 2U) % PIPE_BUF;
+			g_sock[pair].dir[src].len -= 2U;
+			take = mlen;
+			if (take > sizeof(tmp))
+				take = (unsigned)sizeof(tmp);
+			if ((uint64_t)take > count)
+				take = (unsigned)count;
+			for (i2 = 0; i2 < mlen; i2++)
+			{
+				uint8_t b = g_sock[pair].dir[src].buf[g_sock[pair].dir[src].rpos];
+
+				g_sock[pair].dir[src].rpos =
+					(g_sock[pair].dir[src].rpos + 1U) %
+					PIPE_BUF;
+				if (i2 < take)
+					tmp[i2] = b;
+			}
+			g_sock[pair].dir[src].len -= mlen;
+			if (!g_user || !g_user->copy_to_user ||
+			    g_user->copy_to_user(buffer, tmp, take) != 0)
+				return -EFAULT;
+			return (int64_t)take;
+		}
+		take = g_sock[pair].dir[src].len;
+		if (take > sizeof(tmp))
+			take = (unsigned)sizeof(tmp);
+		if ((uint64_t)take > count)
+			take = (unsigned)count;
+		for (i2 = 0; i2 < take; i2++)
+		{
+			tmp[i2] = g_sock[pair].dir[src].buf[g_sock[pair].dir[src].rpos];
+			g_sock[pair].dir[src].rpos =
+				(g_sock[pair].dir[src].rpos + 1U) % PIPE_BUF;
+		}
+		g_sock[pair].dir[src].len -= take;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, tmp, take) != 0)
+			return -EFAULT;
+		return (int64_t)take;
+	}
+	if (node == IR0_EARLY_ROOTFS_EPOLL)
+		return -EINVAL;
 	idx = slot_from_fd(fd);
 	if (idx < 0)
 		return -EBADF;
@@ -822,20 +1123,7 @@ int64_t early_rootfs_dup(int oldfd)
 		return -EBADF;
 	set_flags_of_fd(newfd, flags_of_fd(oldfd));
 	set_cloexec_of_fd(newfd, cloexec_of_fd(oldfd));
-	{
-		int pipe_id = pipe_id_of_fd(oldfd);
-		int nidx = slot_from_fd(newfd);
-
-		if (nidx >= 0)
-			g_slots[nidx].pipe_id = pipe_id;
-		if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
-		{
-			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_R)
-				g_pipes[pipe_id].readers++;
-			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_W)
-				g_pipes[pipe_id].writers++;
-		}
-	}
+	attach_object(oldfd, newfd);
 	return newfd;
 }
 
@@ -855,20 +1143,7 @@ int64_t early_rootfs_dup3(int oldfd, int newfd, int flags)
 		return -EBADF;
 	set_flags_of_fd(newfd, flags_of_fd(oldfd));
 	set_cloexec_of_fd(newfd, (flags & LINUX_O_CLOEXEC) != 0);
-	{
-		int pipe_id = pipe_id_of_fd(oldfd);
-		int nidx = slot_from_fd(newfd);
-
-		if (nidx >= 0)
-			g_slots[nidx].pipe_id = pipe_id;
-		if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
-		{
-			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_R)
-				g_pipes[pipe_id].readers++;
-			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_W)
-				g_pipes[pipe_id].writers++;
-		}
-	}
+	attach_object(oldfd, newfd);
 	return newfd;
 }
 
@@ -958,15 +1233,26 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 {
 	enum ir0_early_rootfs_node node;
 	struct ir0_early_stat64 st;
+	uint64_t size;
+	int mid;
 
 	node = node_of_fd(fd);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
-	ir0_early_rootfs_fill_stat(node,
-				   node == IR0_EARLY_ROOTFS_VDA ? vda_bytes() :
-				   node == IR0_EARLY_ROOTFS_INIT ? g_init_vis :
-								  g_blob_len,
-				   &st);
+	if (node == IR0_EARLY_ROOTFS_VDA)
+		size = vda_bytes();
+	else if (node == IR0_EARLY_ROOTFS_INIT)
+		size = g_init_vis;
+	else if (node == IR0_EARLY_ROOTFS_MEMFD)
+	{
+		mid = pipe_id_of_fd(fd);
+		size = (mid >= 0 && mid < MEMFD_MAX && g_memfd[mid].used) ?
+			       g_memfd[mid].len :
+			       0;
+	}
+	else
+		size = g_blob_len;
+	ir0_early_rootfs_fill_stat(node, size, &st);
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
 		return -EFAULT;
@@ -1120,7 +1406,9 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
 	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY ||
-	    node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W)
+	    node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W ||
+	    node == IR0_EARLY_ROOTFS_EVENTFD || node == IR0_EARLY_ROOTFS_TIMERFD ||
+	    node == IR0_EARLY_ROOTFS_EPOLL || node == IR0_EARLY_ROOTFS_SOCK)
 		return -ESPIPE;
 	pos = pos_of_fd(fd);
 	if (!pos)
@@ -1129,6 +1417,14 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 		limit = g_init_vis;
 	else if (node == IR0_EARLY_ROOTFS_VDA)
 		limit = vda_bytes();
+	else if (node == IR0_EARLY_ROOTFS_MEMFD)
+	{
+		int mid = pipe_id_of_fd(fd);
+
+		limit = (mid >= 0 && mid < MEMFD_MAX && g_memfd[mid].used) ?
+				g_memfd[mid].len :
+				0;
+	}
 	else if (node_is_dir(node))
 		limit = ir0_early_rootfs_dir_count(node);
 	else
@@ -1183,6 +1479,7 @@ int64_t early_rootfs_fcntl(int fd, int cmd, uint64_t arg)
 				return -EBADF;
 			set_flags_of_fd(newfd, flags_of_fd(fd));
 			set_cloexec_of_fd(newfd, cmd == F_DUPFD_CLOEXEC);
+			attach_object(fd, newfd);
 			return newfd;
 		}
 		return -EMFILE;
@@ -1471,6 +1768,510 @@ int64_t early_rootfs_eventfd_write(int fd, uint64_t buffer, uint64_t count)
 	return 8;
 }
 
+int early_rootfs_fd_is_memfd(int fd)
+{
+	return node_of_fd(fd) == IR0_EARLY_ROOTFS_MEMFD;
+}
+
+int64_t early_rootfs_memfd_create(uint64_t name, unsigned flags)
+{
+	char discard[32];
+	int mid;
+	int fd;
+	int idx;
+
+	if (!g_ready)
+		return -ENOSYS;
+	if (!ir0_early_memfd_flags_ok(flags))
+		return -EINVAL;
+	if (!name || !copy_user_cstr(name, discard, sizeof(discard)))
+		return -EFAULT;
+	for (mid = 0; mid < MEMFD_MAX; mid++)
+	{
+		if (!g_memfd[mid].used)
+			break;
+	}
+	if (mid >= MEMFD_MAX)
+		return -EMFILE;
+	fd = alloc_fd(IR0_EARLY_ROOTFS_MEMFD);
+	if (fd < 0)
+		return fd;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+	{
+		close_fd(fd);
+		return -EBADF;
+	}
+	g_memfd[mid].used = 1;
+	g_memfd[mid].refs = 1;
+	g_memfd[mid].len = 0;
+	g_slots[idx].pipe_id = mid;
+	set_flags_of_fd(fd, IR0_O_RDWR);
+	set_cloexec_of_fd(fd, (flags & IR0_EARLY_MFD_CLOEXEC) != 0);
+	return fd;
+}
+
+int64_t early_rootfs_memfd_write(int fd, uint64_t buffer, uint64_t count)
+{
+	int mid = pipe_id_of_fd(fd);
+	uint64_t *pos = pos_of_fd(fd);
+	uint8_t tmp[256];
+	uint64_t n;
+	uint64_t i;
+	uint64_t off;
+
+	if (mid < 0 || mid >= MEMFD_MAX || !g_memfd[mid].used || !pos)
+		return -EBADF;
+	off = *pos;
+	if (off >= MEMFD_CAP)
+		return -EINVAL;
+	n = count;
+	if (n > sizeof(tmp))
+		n = sizeof(tmp);
+	if (off + n > MEMFD_CAP)
+		n = MEMFD_CAP - off;
+	if (n == 0)
+		return -EINVAL;
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(tmp, buffer, n) != 0)
+		return -EFAULT;
+	for (i = 0; i < n; i++)
+		g_memfd[mid].data[off + i] = tmp[i];
+	if (off + n > g_memfd[mid].len)
+		g_memfd[mid].len = (uint32_t)(off + n);
+	*pos = off + n;
+	return (int64_t)n;
+}
+
+int64_t early_rootfs_timerfd_create(int clockid, int flags)
+{
+	int tid;
+	int fd;
+	int idx;
+
+	if (!g_ready)
+		return -ENOSYS;
+	if (!ir0_early_timerfd_clock_ok((uint64_t)clockid) ||
+	    !ir0_early_timerfd_create_flags_ok(flags))
+		return -EINVAL;
+	for (tid = 0; tid < TIMERFD_MAX; tid++)
+	{
+		if (!g_timerfd[tid].used)
+			break;
+	}
+	if (tid >= TIMERFD_MAX)
+		return -EMFILE;
+	fd = alloc_fd(IR0_EARLY_ROOTFS_TIMERFD);
+	if (fd < 0)
+		return fd;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+	{
+		close_fd(fd);
+		return -EBADF;
+	}
+	g_timerfd[tid].used = 1;
+	g_timerfd[tid].refs = 1;
+	g_timerfd[tid].clock = clockid;
+	g_timerfd[tid].armed = 0;
+	g_timerfd[tid].expire = 0;
+	g_timerfd[tid].interval = 0;
+	g_timerfd[tid].ticks = 0;
+	g_slots[idx].pipe_id = tid;
+	set_flags_of_fd(fd, IR0_O_RDWR |
+			    ((flags & IR0_EARLY_TFD_NONBLOCK) ? LINUX_O_NONBLOCK :
+							       0));
+	set_cloexec_of_fd(fd, (flags & IR0_EARLY_TFD_CLOEXEC) != 0);
+	return fd;
+}
+
+static int copy_itimerspec(uint64_t src, int64_t *fields)
+{
+	if (!fields || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	return g_user->copy_from_user(fields, src, 32) == 0 ? 0 : -EFAULT;
+}
+
+int64_t early_rootfs_timerfd_settime(int fd, int flags, uint64_t new_value,
+				     uint64_t old_value)
+{
+	int tid = pipe_id_of_fd(fd);
+	int64_t spec[4];
+	int64_t old[4];
+	uint64_t now;
+	uint64_t value_ticks;
+	uint64_t interval_ticks;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_TIMERFD || tid < 0 ||
+	    tid >= TIMERFD_MAX || !g_timerfd[tid].used)
+		return -EBADF;
+	if (flags & ~IR0_EARLY_TFD_TIMER_ABSTIME)
+		return -EINVAL;
+	if (!new_value)
+		return -EFAULT;
+	timerfd_advance_one(&g_timerfd[tid]);
+	if (old_value)
+	{
+		uint64_t remain = 0;
+
+		if (g_timerfd[tid].armed && g_clock_hz)
+		{
+			now = clock_now_ticks(g_timerfd[tid].clock);
+			remain = (g_timerfd[tid].expire > now) ?
+					 g_timerfd[tid].expire - now :
+					 0;
+		}
+		old[0] = g_clock_hz ? (int64_t)(g_timerfd[tid].interval / g_clock_hz) : 0;
+		old[1] = g_clock_hz ?
+				 (int64_t)((g_timerfd[tid].interval % g_clock_hz) *
+					   NS_PER_SEC / g_clock_hz) :
+				 0;
+		old[2] = g_clock_hz ? (int64_t)(remain / g_clock_hz) : 0;
+		old[3] = g_clock_hz ?
+				 (int64_t)((remain % g_clock_hz) * NS_PER_SEC /
+					   g_clock_hz) :
+				 0;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(old_value, old, 32) != 0)
+			return -EFAULT;
+	}
+	if (copy_itimerspec(new_value, spec) < 0)
+		return -EFAULT;
+	if (spec[0] < 0 || spec[1] < 0 || spec[1] >= (int64_t)NS_PER_SEC ||
+	    spec[2] < 0 || spec[3] < 0 || spec[3] >= (int64_t)NS_PER_SEC)
+		return -EINVAL;
+	interval_ticks = ir0_early_timespec_to_ticks(spec[0], spec[1], g_clock_hz);
+	value_ticks = ir0_early_timespec_to_ticks(spec[2], spec[3], g_clock_hz);
+	g_timerfd[tid].ticks = 0;
+	g_timerfd[tid].interval = interval_ticks;
+	if (spec[2] == 0 && spec[3] == 0)
+	{
+		g_timerfd[tid].armed = 0;
+		g_timerfd[tid].expire = 0;
+		return 0;
+	}
+	now = clock_now_ticks(g_timerfd[tid].clock);
+	if (flags & IR0_EARLY_TFD_TIMER_ABSTIME)
+		g_timerfd[tid].expire = value_ticks;
+	else
+		g_timerfd[tid].expire = now + (value_ticks ? value_ticks : 1);
+	g_timerfd[tid].armed = 1;
+	timerfd_advance_one(&g_timerfd[tid]);
+	return 0;
+}
+
+int64_t early_rootfs_timerfd_gettime(int fd, uint64_t curr)
+{
+	int tid = pipe_id_of_fd(fd);
+	int64_t out[4];
+	uint64_t remain = 0;
+	uint64_t now;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_TIMERFD || tid < 0 ||
+	    tid >= TIMERFD_MAX || !g_timerfd[tid].used)
+		return -EBADF;
+	if (!curr)
+		return -EFAULT;
+	timerfd_advance_one(&g_timerfd[tid]);
+	if (g_timerfd[tid].armed && g_clock_hz)
+	{
+		now = clock_now_ticks(g_timerfd[tid].clock);
+		remain = (g_timerfd[tid].expire > now) ?
+				 g_timerfd[tid].expire - now :
+				 0;
+	}
+	out[0] = g_clock_hz ? (int64_t)(g_timerfd[tid].interval / g_clock_hz) : 0;
+	out[1] = g_clock_hz ?
+			 (int64_t)((g_timerfd[tid].interval % g_clock_hz) *
+				   NS_PER_SEC / g_clock_hz) :
+			 0;
+	out[2] = g_clock_hz ? (int64_t)(remain / g_clock_hz) : 0;
+	out[3] = g_clock_hz ?
+			 (int64_t)((remain % g_clock_hz) * NS_PER_SEC / g_clock_hz) :
+			 0;
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(curr, out, 32) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t early_rootfs_epoll_create1(int flags)
+{
+	int eid;
+	int fd;
+	int idx;
+	unsigned s;
+
+	if (!g_ready)
+		return -ENOSYS;
+	if (!ir0_early_epoll_create_flags_ok(flags))
+		return -EINVAL;
+	for (eid = 0; eid < EPOLL_MAX; eid++)
+	{
+		if (!g_epoll[eid].used)
+			break;
+	}
+	if (eid >= EPOLL_MAX)
+		return -EMFILE;
+	fd = alloc_fd(IR0_EARLY_ROOTFS_EPOLL);
+	if (fd < 0)
+		return fd;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+	{
+		close_fd(fd);
+		return -EBADF;
+	}
+	g_epoll[eid].used = 1;
+	g_epoll[eid].refs = 1;
+	for (s = 0; s < EPOLL_SLOTS; s++)
+		g_epoll[eid].slot[s].used = 0;
+	g_slots[idx].pipe_id = eid;
+	set_flags_of_fd(fd, IR0_O_RDWR);
+	set_cloexec_of_fd(fd, (flags & IR0_EARLY_EPOLL_CLOEXEC) != 0);
+	return fd;
+}
+
+int64_t early_rootfs_epoll_ctl(int epfd, int op, int fd, uint64_t event)
+{
+	int eid = pipe_id_of_fd(epfd);
+	unsigned s;
+	int found = -1;
+	int empty = -1;
+	uint32_t ev;
+	uint64_t data;
+
+	if (node_of_fd(epfd) != IR0_EARLY_ROOTFS_EPOLL || eid < 0 ||
+	    eid >= EPOLL_MAX || !g_epoll[eid].used)
+		return -EBADF;
+	if (!fd_is_open(fd))
+		return -EBADF;
+	if (node_of_fd(fd) == IR0_EARLY_ROOTFS_EPOLL)
+		return -EINVAL;
+	if (op != IR0_EARLY_EPOLL_CTL_ADD && op != IR0_EARLY_EPOLL_CTL_DEL &&
+	    op != IR0_EARLY_EPOLL_CTL_MOD)
+		return -EINVAL;
+	for (s = 0; s < EPOLL_SLOTS; s++)
+	{
+		if (g_epoll[eid].slot[s].used && g_epoll[eid].slot[s].fd == fd)
+			found = (int)s;
+		if (!g_epoll[eid].slot[s].used && empty < 0)
+			empty = (int)s;
+	}
+	if (op == IR0_EARLY_EPOLL_CTL_DEL)
+	{
+		if (found < 0)
+			return -ENOENT;
+		g_epoll[eid].slot[found].used = 0;
+		return 0;
+	}
+	if (op == IR0_EARLY_EPOLL_CTL_ADD && found >= 0)
+		return -EEXIST;
+	if (op == IR0_EARLY_EPOLL_CTL_MOD && found < 0)
+		return -ENOENT;
+	if (op == IR0_EARLY_EPOLL_CTL_ADD && empty < 0)
+		return -ENOSPC;
+	if (!event || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(&ev, event, 4) != 0 ||
+	    g_user->copy_from_user(&data, event + 8, 8) != 0)
+		return -EFAULT;
+	s = (unsigned)(op == IR0_EARLY_EPOLL_CTL_ADD ? empty : found);
+	g_epoll[eid].slot[s].used = 1;
+	g_epoll[eid].slot[s].fd = fd;
+	g_epoll[eid].slot[s].events = ev;
+	g_epoll[eid].slot[s].data = data;
+	return 0;
+}
+
+int64_t early_rootfs_epoll_pwait(int epfd, uint64_t events, int maxevents,
+				 int timeout)
+{
+	int eid = pipe_id_of_fd(epfd);
+	unsigned s;
+	int ready = 0;
+
+	(void)timeout;
+	if (node_of_fd(epfd) != IR0_EARLY_ROOTFS_EPOLL || eid < 0 ||
+	    eid >= EPOLL_MAX || !g_epoll[eid].used)
+		return -EBADF;
+	if (maxevents < 1)
+		return -EINVAL;
+	if (!events)
+		return -EFAULT;
+	timerfd_advance_all();
+	for (s = 0; s < EPOLL_SLOTS && ready < maxevents; s++)
+	{
+		int revents;
+		uint32_t out_ev;
+		uint32_t pad = 0;
+		uint64_t data;
+		uint64_t dest;
+
+		if (!g_epoll[eid].slot[s].used)
+			continue;
+		if (node_of_fd(g_epoll[eid].slot[s].fd) == IR0_EARLY_ROOTFS_EPOLL)
+			continue;
+		revents = early_rootfs_poll_revents(g_epoll[eid].slot[s].fd,
+						    (int)g_epoll[eid].slot[s].events);
+		if (!revents)
+			continue;
+		out_ev = (uint32_t)revents;
+		data = g_epoll[eid].slot[s].data;
+		dest = events + (uint64_t)ready * IR0_EARLY_EPOLL_EVENT_BYTES;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(dest, &out_ev, 4) != 0 ||
+		    g_user->copy_to_user(dest + 4, &pad, 4) != 0 ||
+		    g_user->copy_to_user(dest + 8, &data, 8) != 0)
+			return -EFAULT;
+		ready++;
+	}
+	return ready;
+}
+
+int early_rootfs_fd_is_sock(int fd)
+{
+	return node_of_fd(fd) == IR0_EARLY_ROOTFS_SOCK;
+}
+
+int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv)
+{
+	int pair;
+	int a;
+	int b;
+	int aidx;
+	int bidx;
+	int fds[2];
+	int kind = type & 0xf;
+
+	if (!g_ready)
+		return -ENOSYS;
+	if (domain != IR0_EARLY_AF_UNIX)
+		return -EAFNOSUPPORT;
+	if (protocol != 0)
+		return -EPROTONOSUPPORT;
+	if (kind != IR0_EARLY_SOCK_STREAM && kind != IR0_EARLY_SOCK_DGRAM)
+		return -ESOCKTNOSUPPORT;
+	if (type & ~(0xf | IR0_EARLY_SOCK_CLOEXEC | IR0_EARLY_SOCK_NONBLOCK))
+		return -EINVAL;
+	if (!sv || !g_user || !g_user->copy_to_user)
+		return -EFAULT;
+	for (pair = 0; pair < SOCKPAIR_MAX; pair++)
+	{
+		if (!g_sock[pair].used)
+			break;
+	}
+	if (pair >= SOCKPAIR_MAX)
+		return -EMFILE;
+	a = alloc_fd(IR0_EARLY_ROOTFS_SOCK);
+	if (a < 0)
+		return a;
+	b = alloc_fd(IR0_EARLY_ROOTFS_SOCK);
+	if (b < 0)
+	{
+		close_fd(a);
+		return b;
+	}
+	aidx = slot_from_fd(a);
+	bidx = slot_from_fd(b);
+	if (aidx < 0 || bidx < 0)
+	{
+		close_fd(a);
+		close_fd(b);
+		return -EBADF;
+	}
+	g_sock[pair].used = 1;
+	g_sock[pair].refs[0] = 1;
+	g_sock[pair].refs[1] = 1;
+	g_sock[pair].dgram = (kind == IR0_EARLY_SOCK_DGRAM);
+	g_sock[pair].dir[0].rpos = 0;
+	g_sock[pair].dir[0].len = 0;
+	g_sock[pair].dir[1].rpos = 0;
+	g_sock[pair].dir[1].len = 0;
+	g_slots[aidx].pipe_id = pair << 1;
+	g_slots[bidx].pipe_id = (pair << 1) | 1;
+	set_flags_of_fd(a, IR0_O_RDWR |
+			   ((type & IR0_EARLY_SOCK_NONBLOCK) ? LINUX_O_NONBLOCK :
+							      0));
+	set_flags_of_fd(b, IR0_O_RDWR |
+			   ((type & IR0_EARLY_SOCK_NONBLOCK) ? LINUX_O_NONBLOCK :
+							      0));
+	set_cloexec_of_fd(a, (type & IR0_EARLY_SOCK_CLOEXEC) != 0);
+	set_cloexec_of_fd(b, (type & IR0_EARLY_SOCK_CLOEXEC) != 0);
+	fds[0] = a;
+	fds[1] = b;
+	if (g_user->copy_to_user(sv, fds, sizeof(fds)) != 0)
+	{
+		close_fd(a);
+		close_fd(b);
+		return -EFAULT;
+	}
+	return 0;
+}
+
+int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
+{
+	int encoded = pipe_id_of_fd(fd);
+	int pair = encoded >> 1;
+	int end = encoded & 1;
+	int dst = end;
+	uint8_t tmp[256];
+	unsigned room;
+	unsigned put;
+	unsigned i;
+	unsigned wpos;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK || pair < 0 ||
+	    pair >= SOCKPAIR_MAX || !g_sock[pair].used)
+		return -EBADF;
+	if (g_sock[pair].refs[1 - end] == 0)
+		return -EPIPE;
+	if (count == 0)
+		return 0;
+	room = PIPE_BUF - g_sock[pair].dir[dst].len;
+	if (g_sock[pair].dgram)
+	{
+		if (count > 250)
+			return -EMSGSIZE;
+		if (room < count + 2)
+			return -EAGAIN;
+		if (!g_user || !g_user->copy_from_user ||
+		    g_user->copy_from_user(tmp, buffer, count) != 0)
+			return -EFAULT;
+		wpos = (g_sock[pair].dir[dst].rpos + g_sock[pair].dir[dst].len) %
+		       PIPE_BUF;
+		g_sock[pair].dir[dst].buf[wpos] = (uint8_t)(count & 0xffU);
+		wpos = (wpos + 1U) % PIPE_BUF;
+		g_sock[pair].dir[dst].buf[wpos] = (uint8_t)((count >> 8) & 0xffU);
+		wpos = (wpos + 1U) % PIPE_BUF;
+		for (i = 0; i < count; i++)
+		{
+			g_sock[pair].dir[dst].buf[wpos] = tmp[i];
+			wpos = (wpos + 1U) % PIPE_BUF;
+		}
+		g_sock[pair].dir[dst].len += (unsigned)count + 2U;
+		return (int64_t)count;
+	}
+	if (room == 0)
+		return -EAGAIN;
+	put = room;
+	if (put > sizeof(tmp))
+		put = (unsigned)sizeof(tmp);
+	if ((uint64_t)put > count)
+		put = (unsigned)count;
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(tmp, buffer, put) != 0)
+		return -EFAULT;
+	wpos = (g_sock[pair].dir[dst].rpos + g_sock[pair].dir[dst].len) % PIPE_BUF;
+	for (i = 0; i < put; i++)
+	{
+		g_sock[pair].dir[dst].buf[wpos] = tmp[i];
+		wpos = (wpos + 1U) % PIPE_BUF;
+	}
+	g_sock[pair].dir[dst].len += put;
+	return (int64_t)put;
+}
+
 int64_t early_rootfs_blkgetsize64(int fd, uint64_t dest)
 {
 	uint64_t bytes;
@@ -1530,6 +2331,58 @@ int early_rootfs_poll_revents(int fd, int events)
 			ready |= IR0_EARLY_POLLIN;
 		if (g_eventfd[efd].count < EFD_COUNT_MAX)
 			ready |= IR0_EARLY_POLLOUT;
+		return ready & events;
+	}
+	if (node == IR0_EARLY_ROOTFS_TIMERFD)
+	{
+		int tid = pipe_id_of_fd(fd);
+
+		if (tid < 0 || tid >= TIMERFD_MAX || !g_timerfd[tid].used)
+			return IR0_EARLY_POLLNVAL;
+		timerfd_advance_one(&g_timerfd[tid]);
+		if (g_timerfd[tid].ticks > 0)
+			ready |= IR0_EARLY_POLLIN;
+		return ready & events;
+	}
+	if (node == IR0_EARLY_ROOTFS_MEMFD)
+		ready = IR0_EARLY_POLLIN | IR0_EARLY_POLLOUT;
+	else if (node == IR0_EARLY_ROOTFS_SOCK)
+	{
+		int pair = pipe_id >> 1;
+		int end = pipe_id & 1;
+		int src = 1 - end;
+
+		if (pair < 0 || pair >= SOCKPAIR_MAX || !g_sock[pair].used)
+			return IR0_EARLY_POLLNVAL;
+		if (g_sock[pair].dir[src].len > 0)
+			ready |= IR0_EARLY_POLLIN;
+		if (g_sock[pair].dir[end].len < PIPE_BUF)
+			ready |= IR0_EARLY_POLLOUT;
+		if (g_sock[pair].refs[src] == 0)
+			ready |= IR0_EARLY_POLLHUP;
+		return ready & (events | IR0_EARLY_POLLHUP | IR0_EARLY_POLLERR);
+	}
+	else if (node == IR0_EARLY_ROOTFS_EPOLL)
+	{
+		int eid = pipe_id;
+		unsigned s;
+
+		if (eid < 0 || eid >= EPOLL_MAX || !g_epoll[eid].used)
+			return IR0_EARLY_POLLNVAL;
+		for (s = 0; s < EPOLL_SLOTS; s++)
+		{
+			if (!g_epoll[eid].slot[s].used)
+				continue;
+			if (node_of_fd(g_epoll[eid].slot[s].fd) ==
+			    IR0_EARLY_ROOTFS_EPOLL)
+				continue;
+			if (early_rootfs_poll_revents(g_epoll[eid].slot[s].fd,
+						      (int)g_epoll[eid].slot[s].events))
+			{
+				ready |= IR0_EARLY_POLLIN;
+				break;
+			}
+		}
 		return ready & events;
 	}
 	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY)
@@ -1694,8 +2547,29 @@ int64_t early_rootfs_ftruncate(int fd, uint64_t length)
 		return -EBADF;
 	if (node_is_dir(node))
 		return -EISDIR;
-	if (node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W)
+	if (node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W ||
+	    node == IR0_EARLY_ROOTFS_SOCK || node == IR0_EARLY_ROOTFS_EVENTFD ||
+	    node == IR0_EARLY_ROOTFS_TIMERFD || node == IR0_EARLY_ROOTFS_EPOLL)
 		return -ESPIPE;
+	if (node == IR0_EARLY_ROOTFS_MEMFD)
+	{
+		int mid = pipe_id_of_fd(fd);
+		uint32_t n;
+		uint32_t i;
+
+		if (mid < 0 || mid >= MEMFD_MAX || !g_memfd[mid].used)
+			return -EBADF;
+		if (length > MEMFD_CAP)
+			return -EINVAL;
+		n = (uint32_t)length;
+		if (n > g_memfd[mid].len)
+		{
+			for (i = g_memfd[mid].len; i < n; i++)
+				g_memfd[mid].data[i] = 0;
+		}
+		g_memfd[mid].len = n;
+		return 0;
+	}
 	if (node != IR0_EARLY_ROOTFS_INIT)
 		return -EINVAL;
 	g_init_vis = length < g_blob_len ? length : g_blob_len;

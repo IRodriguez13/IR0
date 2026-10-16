@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
+#include <ir0/early_time.h>
 #include <ir0/early_vfs.h>
 
 #define ENOSYS 38
@@ -16,8 +17,14 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 	struct early_syscall_context *context = opaque;
 	const struct early_vfs_services *ops = context && context->services ?
 		context->services->vfs : 0;
+	const struct early_time_services *time_ops = context && context->services ?
+		context->services->time : 0;
 
 	(void)a4; (void)a5;
+	if (time_ops && time_ops->counter_read && time_ops->counter_frequency)
+		early_rootfs_note_clock(time_ops->counter_read(),
+					time_ops->counter_frequency(),
+					early_time_realtime_offset());
 	if (id == IR0_SYSCALL_GETCWD)
 		return early_rootfs_getcwd(a0, a1);
 	if (id == IR0_SYSCALL_CHDIR)
