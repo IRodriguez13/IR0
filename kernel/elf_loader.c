@@ -1531,11 +1531,7 @@ static const char *exec_audit_classify_vfs(int vfs_ret, size_t file_size,
 		return "EXEC_PATH_COPY_BAD";
 
 	if (vfs_ret == -ENOENT || vfs_ret == -ENOSYS)
-	{
-		if (strcmp(path, "/bin/busybox") == 0)
-			return "EXEC_BUSYBOX_FILE_MISSING_OR_TRUNCATED";
 		return "EXEC_LOOKUP_FAIL";
-	}
 
 	if (vfs_ret == -EINVAL)
 		return "EXEC_OPEN_FAIL";
@@ -1544,11 +1540,7 @@ static const char *exec_audit_classify_vfs(int vfs_ret, size_t file_size,
 		return "EXEC_VFS_READ_ERR";
 
 	if (file_size == 0 || !file_data)
-	{
-		if (path && strcmp(path, "/bin/busybox") == 0)
-			return "EXEC_BUSYBOX_FILE_MISSING_OR_TRUNCATED";
 		return "EXEC_VFS_READ_ZERO";
-	}
 
 	return NULL;
 }
