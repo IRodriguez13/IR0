@@ -5,7 +5,6 @@
 
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
-#include <ir0/ktm/klog.h>
 #include <string.h>
 
 #define IR0_BLOCKDEV_MAX 8
@@ -20,7 +19,6 @@ struct ir0_block_slot
 static struct ir0_block_slot ir0_block_slots[IR0_BLOCKDEV_MAX];
 static int ir0_block_slot_count;
 static dev_t ir0_block_next_id = IR0_BLOCKDEV_ID_BASE;
-static int ir0_block_facade_classified;
 
 static struct ir0_block_device *ir0_block_find(dev_t id)
 {
@@ -32,15 +30,6 @@ static struct ir0_block_device *ir0_block_find(dev_t id)
 			return &ir0_block_slots[i].dev;
 	}
 	return NULL;
-}
-
-static void ir0_block_emit_facade_ok(void)
-{
-	if (ir0_block_facade_classified)
-		return;
-	ir0_block_facade_classified = 1;
-	klog_info("BLOCKDEV", "CLASSIFY BLOCKDEV_FACADE_OK");
-	klog_info("BLOCKDEV", "CLASSIFY DEVICE_POLICY_NOT_IN_VFS");
 }
 
 int ir0_block_register(struct ir0_block_device *dev)
@@ -77,7 +66,6 @@ int ir0_block_register(struct ir0_block_device *dev)
 	slot->used = 1;
 	if (i >= ir0_block_slot_count)
 		ir0_block_slot_count = i + 1;
-	ir0_block_emit_facade_ok();
 	return 0;
 }
 

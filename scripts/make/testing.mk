@@ -2267,7 +2267,6 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/rootfs_early.c arch/arm64/sources/rootfs_early.h \
 		arch/arm64/sources/rr_early.c arch/arm64/sources/rr_early.h \
 		ktm/mocks/arm64/allocator_stubs.c \
-		ktm/mocks/arm64/runtime_stubs.c \
 		kernel/clock_accounting.c kernel/process/sched_trace.c \
 		arch/arm64/sources/virtio_blk_early.c arch/arm64/sources/virtio_blk_early.h \
 		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
@@ -2430,19 +2429,13 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c arch/arm64/sources/rr_early.c -o arch/arm64/sources/rr_early.o
-	@echo "  CC      ARM64 staged runtime providers"
+	@echo "  CC      ARM64 staged allocator provider"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c ktm/mocks/arm64/allocator_stubs.c \
 		-o build/arm64-boot/allocator_stubs.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
-		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
-		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
-		-I$(KERNEL_ROOT) \
-		-c ktm/mocks/arm64/runtime_stubs.c \
-		-o build/arm64-boot/runtime_stubs.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
 		-c kernel/clock_accounting.c \
@@ -2538,7 +2531,6 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
 		build/arm64-boot/allocator_stubs.o \
-		build/arm64-boot/runtime_stubs.o \
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
@@ -2628,7 +2620,7 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/allocator_stubs.o build/arm64-boot/runtime_stubs.o \
+		build/arm64-boot/allocator_stubs.o \
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o \
 		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
@@ -2760,7 +2752,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/allocator_stubs.o build/arm64-boot/runtime_stubs.o \
+		build/arm64-boot/allocator_stubs.o \
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
@@ -2964,7 +2956,6 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/runtime_stubs.o \
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
@@ -2991,8 +2982,8 @@ arm64-provider-audit: kernel-arm64-all.bin
 		printf '%s\n' "$$unexpected"; exit 1; \
 	fi
 	@! aarch64-linux-gnu-nm kernel-arm64-all.bin | \
-		grep -Eq '[[:space:]](handle_signals|signals_should_handle_on_run)$$' || \
-		{ echo "✗ unused signal harness provider leaked into ARM64 aggregate"; exit 1; }
+		grep -Eq '[[:space:]](handle_signals|signals_should_handle_on_run|klog_info)$$' || \
+		{ echo "✗ unused runtime harness provider leaked into ARM64 aggregate"; exit 1; }
 	@echo "✓ ARM64 provider audit (real allocator/accounting/trace; weak budget contained)"
 
 # Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
@@ -3338,7 +3329,6 @@ smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-blk-smoke.log && \
 	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "\\[BLOCKDEV\\].*CLASSIFY BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log && \
 	   grep -q "ARM64_BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log; then \
 		echo "✓ smoke-arm64-virtio-blk passed (virtio + portable ir0_block facade)"; \
 	else \
