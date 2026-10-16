@@ -17,29 +17,9 @@
 #include <ir0/context.h>
 #include <ir0/task_ops.h>
 #include <ir0/syscall_frame.h>
-#include <ir0/ktm/event.h>
 #include <ir0/mm.h>
 
 static pid_t next_pid = 2;
-
-void process_sched_state_trace(const process_t *p, process_state_t prev,
-			       process_state_t next, void *caller)
-{
-	if (!p)
-		return;
-
-	/*
-	 * The event's own pid field records who is running (the waker); arg0
-	 * records who is affected (the sleeper). A lost wakeup is exactly the
-	 * case where those differ and the WAKE lands before the BLOCK.
-	 */
-	ktm_event_emit4(next == PROCESS_BLOCKED ? KTM_EVENT_BLOCK
-						: KTM_EVENT_WAKE,
-			KTM_SUBSYS_SCHED,
-			(uint64_t)(uint32_t)p->task.pid,
-			(uint64_t)prev, (uint64_t)next,
-			(uint64_t)(uintptr_t)caller);
-}
 
 static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
 				  arch_task_syscall_frame_t *out)

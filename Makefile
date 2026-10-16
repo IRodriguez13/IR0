@@ -351,6 +351,7 @@ KERNEL_OBJS = \
     kernel/process/registry.o \
     kernel/process/limits.o \
     kernel/process/core.o \
+    kernel/process/sched_trace.o \
     kernel/process/create.o \
     kernel/process/cred_groups.o \
     kernel/process/domains.o \
@@ -375,7 +376,8 @@ KERNEL_OBJS = \
     kernel/process/mm.o \
     kernel/process/signals.o \
     kernel/vdso.o \
-    kernel/clock_wait.o \
+	kernel/clock_wait.o \
+	kernel/clock_accounting.o \
     kernel/credentials.o \
     kernel/power/power_manag.o \
     kernel/kexec.o \
