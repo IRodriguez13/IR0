@@ -10,6 +10,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <ir0/early_elf_stack.h>
 
 /**
  * Parse embedded hello_aarch64, map EL0 pages, enter musl _start (noreturn on OK).
@@ -29,13 +30,21 @@ void arm64_musl_note_write(const char *buf, uint64_t len);
 /** EL1 continuation after musl exit_group/exit. */
 void arm64_after_musl(void);
 
-/** Load embedded BusyBox and run echo applet (noreturn on OK). */
+/**
+ * Map-ready EL0 enter: SysV stack from caller argv, then eret.
+ * Does not invent program names; argv/execfn come from the caller.
+ */
+int arm64_early_elf_enter(uint64_t entry, uint64_t stack_top, uint64_t stack_size,
+			  const struct ir0_early_elf_auxv *aux,
+			  char *const argv[]);
+
+/** Load the embedded PID1 ELF blob (harness image, not a BusyBox policy). */
 int arm64_busybox_el0(void);
 int arm64_busybox_prepare(void);
-void arm64_busybox_enter(void);
+void arm64_busybox_enter(char *const argv[]);
 int arm64_init_handoff_early(void);
 
-/** Second drop after echo: fake /init smoke + echo ARM64_BUSYBOX_INIT_OK. */
+/** Second harness drop after the first EL0 guest exits. */
 int arm64_busybox_init_el0(void);
 
 int arm64_busybox_mode(void);

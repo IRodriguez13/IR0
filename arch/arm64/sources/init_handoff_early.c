@@ -6,6 +6,8 @@
 #include <ir0/early_rootfs.h>
 #include <ir0/init_handoff.h>
 
+static char *const *g_init_argv;
+
 static int prepare_rootfs(void *context)
 {
 	(void)context;
@@ -22,11 +24,11 @@ static int prepare_init_task(void *context)
 static long load_init(void *context, const char *path, char *const argv[])
 {
 	(void)context;
-	(void)argv;
 	if (ir0_early_rootfs_path_node(path) != IR0_EARLY_ROOTFS_INIT)
 		return -1;
 	if (arm64_busybox_prepare() != 0)
 		return -1;
+	g_init_argv = argv;
 	return 1;
 }
 
@@ -46,12 +48,17 @@ static void attach_console(void *context)
 static void schedule_init(void *context)
 {
 	(void)context;
-	arm64_busybox_enter();
+	arm64_busybox_enter(g_init_argv);
 }
 
 int arm64_init_handoff_early(void)
 {
-	char *argv[] = { "/init", "echo", "ARM64_BUSYBOX_EL0_OK", 0 };
+	/*
+	 * Harness argv: path is /init (VFS node). argv[0] selects the
+	 * embedded image's applet until a real PID1 can clone/exec.
+	 * The loader applies this vector; it does not invent program names.
+	 */
+	char *argv[] = { "echo", "ARM64_BUSYBOX_EL0_OK", 0 };
 	static const struct ir0_init_handoff_ops ops = {
 		.prepare_rootfs = prepare_rootfs,
 		.prepare_init_task = prepare_init_task,
