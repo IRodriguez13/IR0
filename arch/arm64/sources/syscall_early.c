@@ -98,6 +98,7 @@ static void arm64_early_time_note(enum early_syscall_event event)
 		[EARLY_SYSCALL_PIDFD_OK] = "ARM64_PIDFD_OK",
 		[EARLY_SYSCALL_CLONE3_OK] = "ARM64_CLONE3_OK",
 		[EARLY_SYSCALL_CACHESTAT_OK] = "ARM64_CACHESTAT_OK",
+		[EARLY_SYSCALL_LANDLOCK_OK] = "ARM64_LANDLOCK_OK",
 	};
 
 	if ((unsigned int)event < sizeof(tags) / sizeof(tags[0]) && tags[event])

@@ -18,6 +18,7 @@ enum early_syscall_event
 	EARLY_SYSCALL_PIDFD_OK,
 	EARLY_SYSCALL_CLONE3_OK,
 	EARLY_SYSCALL_CACHESTAT_OK,
+	EARLY_SYSCALL_LANDLOCK_OK,
 };
 
 struct early_user_services

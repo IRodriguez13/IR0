@@ -1031,6 +1031,88 @@ el0_entry:
 	mov	x8, #469
 	svc	#0
 
+	/*
+	 * landlock ABI 3 + statmount/listmount + lsm_list. Linux aarch64
+	 * 444/445/446/457/458/461. Restrict "/" so later write(1) stays open.
+	 */
+	mov	x0, xzr
+	mov	x1, xzr
+	mov	x2, #1
+	mov	x8, #444
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x100) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x100) >> 16) & 0xffff), lsl #16
+	mov	x12, #0xe
+	str	x12, [x9]
+	mov	x0, x9
+	mov	x1, #8
+	mov	x2, xzr
+	mov	x8, #444
+	svc	#0
+	mov	x21, x0
+	movz	x13, #((ARM64_EL0_USER_PAGE_PA + 0x3d0) & 0xffff)
+	movk	x13, #(((ARM64_EL0_USER_PAGE_PA + 0x3d0) >> 16) & 0xffff), lsl #16
+	mov	w12, #'/'
+	strb	w12, [x13]
+	strb	wzr, [x13, #1]
+	mov	x0, #-100
+	mov	x1, x13
+	mov	x2, xzr
+	mov	x8, #56
+	svc	#0
+	mov	x22, x0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x140) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x140) >> 16) & 0xffff), lsl #16
+	mov	x12, #0xe
+	str	x12, [x9]
+	str	w22, [x9, #8]
+	mov	x0, x21
+	mov	x1, #1
+	mov	x2, x9
+	mov	x3, xzr
+	mov	x8, #445
+	svc	#0
+	mov	x0, x21
+	mov	x1, xzr
+	mov	x8, #446
+	svc	#0
+	movz	x14, #((ARM64_EL0_USER_PAGE_PA + 0x1c0) & 0xffff)
+	movk	x14, #(((ARM64_EL0_USER_PAGE_PA + 0x1c0) >> 16) & 0xffff), lsl #16
+	mov	w12, #24
+	str	w12, [x14]
+	str	wzr, [x14, #4]
+	mov	x12, #-1
+	str	x12, [x14, #8]
+	str	xzr, [x14, #16]
+	movz	x15, #((ARM64_EL0_USER_PAGE_PA + 0x1e0) & 0xffff)
+	movk	x15, #(((ARM64_EL0_USER_PAGE_PA + 0x1e0) >> 16) & 0xffff), lsl #16
+	mov	x0, x14
+	mov	x1, x15
+	mov	x2, #1
+	mov	x3, xzr
+	mov	x8, #458
+	svc	#0
+	movz	x12, #0x0001
+	movk	x12, #0x8000, lsl #16
+	str	x12, [x14, #8]
+	movz	x16, #((ARM64_EL0_USER_PAGE_PA + 0x200) & 0xffff)
+	movk	x16, #(((ARM64_EL0_USER_PAGE_PA + 0x200) >> 16) & 0xffff), lsl #16
+	mov	x0, x14
+	mov	x1, x16
+	mov	x2, #522
+	mov	x3, xzr
+	mov	x8, #457
+	svc	#0
+	movz	x17, #((ARM64_EL0_USER_PAGE_PA + 0x50) & 0xffff)
+	movk	x17, #(((ARM64_EL0_USER_PAGE_PA + 0x50) >> 16) & 0xffff), lsl #16
+	mov	w12, #8
+	str	w12, [x17]
+	mov	x0, x15
+	mov	x1, x17
+	mov	x2, xzr
+	mov	x8, #461
+	svc	#0
+
 	/* write(1, user probe page, 15) — "ARM64_WRITE_OK\n" filled by boot */
 	mov	x0, #1
 	movz	x1, #(ARM64_EL0_USER_PAGE_PA & 0xffff)

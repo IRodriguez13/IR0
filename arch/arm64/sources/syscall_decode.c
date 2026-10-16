@@ -244,6 +244,14 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 466: return IR0_SYSCALL_REMOVEXATTRAT;
 	case 468: return IR0_SYSCALL_FILE_GETATTR;
 	case 469: return IR0_SYSCALL_FILE_SETATTR;
+	case 444: return IR0_SYSCALL_LANDLOCK_CREATE_RULESET;
+	case 445: return IR0_SYSCALL_LANDLOCK_ADD_RULE;
+	case 446: return IR0_SYSCALL_LANDLOCK_RESTRICT_SELF;
+	case 457: return IR0_SYSCALL_STATMOUNT;
+	case 458: return IR0_SYSCALL_LISTMOUNT;
+	case 459: return IR0_SYSCALL_LSM_GET_SELF_ATTR;
+	case 460: return IR0_SYSCALL_LSM_SET_SELF_ATTR;
+	case 461: return IR0_SYSCALL_LSM_LIST_MODULES;
 	default: return IR0_SYSCALL_UNKNOWN;
 	}
 }

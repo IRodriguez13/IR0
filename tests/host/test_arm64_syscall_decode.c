@@ -124,6 +124,14 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(466) == IR0_SYSCALL_REMOVEXATTRAT);
 	ASSERT(syscall_decode_number(468) == IR0_SYSCALL_FILE_GETATTR);
 	ASSERT(syscall_decode_number(469) == IR0_SYSCALL_FILE_SETATTR);
-	ASSERT(decoded == 231);
+	ASSERT(syscall_decode_number(444) == IR0_SYSCALL_LANDLOCK_CREATE_RULESET);
+	ASSERT(syscall_decode_number(445) == IR0_SYSCALL_LANDLOCK_ADD_RULE);
+	ASSERT(syscall_decode_number(446) == IR0_SYSCALL_LANDLOCK_RESTRICT_SELF);
+	ASSERT(syscall_decode_number(457) == IR0_SYSCALL_STATMOUNT);
+	ASSERT(syscall_decode_number(458) == IR0_SYSCALL_LISTMOUNT);
+	ASSERT(syscall_decode_number(459) == IR0_SYSCALL_LSM_GET_SELF_ATTR);
+	ASSERT(syscall_decode_number(460) == IR0_SYSCALL_LSM_SET_SELF_ATTR);
+	ASSERT(syscall_decode_number(461) == IR0_SYSCALL_LSM_LIST_MODULES);
+	ASSERT(decoded == 239);
 	TEST_END();
 }

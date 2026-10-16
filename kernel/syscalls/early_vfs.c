@@ -141,6 +141,24 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 	if (id == IR0_SYSCALL_FILE_SETATTR)
 		return early_rootfs_file_setattr((int)a0, a1, a2, a3,
 						 (unsigned)a4);
+	if (id == IR0_SYSCALL_LANDLOCK_CREATE_RULESET)
+		return early_rootfs_landlock_create(a0, a1, (unsigned)a2);
+	if (id == IR0_SYSCALL_LANDLOCK_ADD_RULE)
+		return early_rootfs_landlock_add((int)a0, (int)a1, a2,
+						 (unsigned)a3);
+	if (id == IR0_SYSCALL_LANDLOCK_RESTRICT_SELF)
+	{
+		int64_t ret = early_rootfs_landlock_restrict((int)a0,
+							     (unsigned)a1);
+
+		if (ret == 0 && time_ops && time_ops->note)
+			time_ops->note(EARLY_SYSCALL_LANDLOCK_OK);
+		return ret;
+	}
+	if (id == IR0_SYSCALL_STATMOUNT)
+		return early_rootfs_statmount(a0, a1, a2, (unsigned)a3);
+	if (id == IR0_SYSCALL_LISTMOUNT)
+		return early_rootfs_listmount(a0, a1, a2, (unsigned)a3);
 	if (id == IR0_SYSCALL_SYMLINKAT)
 		return early_rootfs_symlinkat(a0, (int)a1, a2);
 	if (id == IR0_SYSCALL_LINK)
@@ -206,6 +224,9 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_GETXATTRAT, IR0_SYSCALL_LISTXATTRAT,
 	IR0_SYSCALL_REMOVEXATTRAT, IR0_SYSCALL_CACHESTAT,
 	IR0_SYSCALL_FILE_GETATTR, IR0_SYSCALL_FILE_SETATTR,
+	IR0_SYSCALL_LANDLOCK_CREATE_RULESET, IR0_SYSCALL_LANDLOCK_ADD_RULE,
+	IR0_SYSCALL_LANDLOCK_RESTRICT_SELF, IR0_SYSCALL_STATMOUNT,
+	IR0_SYSCALL_LISTMOUNT,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

@@ -23,6 +23,8 @@
 
 #define EBADF  9
 #define EACCES 13
+#define ENOMSG 42
+#define EBADFD 77
 #define EFAULT 14
 #define EINVAL 22
 #define EISDIR 21
@@ -232,6 +234,35 @@ static struct early_xattr
 	uint32_t vlen;
 	uint8_t value[IR0_EARLY_XATTR_VALUE_MAX];
 } g_xattr[XA_MAX];
+
+#define RULESET_MAX 2
+#define LL_RULE_MAX 4
+
+static struct early_ruleset
+{
+	int used;
+	int refs;
+	uint64_t handled;
+	int nrules;
+	struct
+	{
+		uint64_t allowed;
+		char path[FS_NAME];
+	} rules[LL_RULE_MAX];
+} g_ruleset[RULESET_MAX];
+
+static int g_ll_on;
+static uint64_t g_ll_handled;
+static int g_ll_n;
+static struct
+{
+	uint64_t allowed;
+	char path[FS_NAME];
+} g_ll_rules[LL_RULE_MAX];
+
+static int landlock_allow(const char *path, uint64_t need);
+static int landlock_open_need(const char *path, int flags);
+static int path_of_fd(int fd, char *out, unsigned cap);
 
 static struct early_unix
 {
@@ -1008,6 +1039,14 @@ static int close_fd(int fd)
 				}
 			}
 		}
+		if (node == IR0_EARLY_ROOTFS_RULESET && pipe_id >= 0 &&
+		    pipe_id < RULESET_MAX && g_ruleset[pipe_id].used)
+		{
+			if (g_ruleset[pipe_id].refs > 0)
+				g_ruleset[pipe_id].refs--;
+			if (g_ruleset[pipe_id].refs == 0)
+				g_ruleset[pipe_id].used = 0;
+		}
 		if (node == IR0_EARLY_ROOTFS_SOCK)
 		{
 			int uid = unix_id_of_fd(fd);
@@ -1162,6 +1201,15 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 	}
 	for (i = 0; i < XA_MAX; i++)
 		g_xattr[i].used = 0;
+	for (i = 0; i < RULESET_MAX; i++)
+	{
+		g_ruleset[i].used = 0;
+		g_ruleset[i].refs = 0;
+		g_ruleset[i].nrules = 0;
+	}
+	g_ll_on = 0;
+	g_ll_handled = 0;
+	g_ll_n = 0;
 	g_cpio_ready = 0;
 	g_cwd_path[0] = '/';
 	g_cwd_path[1] = '\0';
@@ -1525,6 +1573,12 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 		return -ELOOP;
 	if ((flags & LINUX_O_DIRECTORY) && !node_is_dir(node))
 		return -ENOTDIR;
+	{
+		int denied = landlock_open_need(pbuf, flags);
+
+		if (denied < 0)
+			return denied;
+	}
 	fd = alloc_fd(node);
 	if (fd < 0)
 		return fd;
@@ -2092,6 +2146,22 @@ int64_t early_rootfs_faccessat(int dirfd, uint64_t path, int flags)
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
+	{
+		uint64_t need = 0;
+		int denied;
+
+		if (flags & 4)
+			need |= node_is_dir(node) ?
+				IR0_EARLY_LANDLOCK_FS_READ_DIR :
+				IR0_EARLY_LANDLOCK_FS_READ_FILE;
+		if (flags & 2)
+			need |= IR0_EARLY_LANDLOCK_FS_WRITE_FILE;
+		if (flags & 1)
+			need |= IR0_EARLY_LANDLOCK_FS_EXECUTE;
+		denied = landlock_allow(pbuf, need);
+		if (denied < 0)
+			return denied;
+	}
 	return 0;
 }
 
@@ -2247,6 +2317,18 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 		return -EBADF;
 	if (!node_is_dir(node))
 		return -ENOTDIR;
+	{
+		char dirpath[FS_NAME];
+		int denied;
+
+		if (path_of_fd(fd, dirpath, sizeof(dirpath)) == 0)
+		{
+			denied = landlock_allow(dirpath,
+						IR0_EARLY_LANDLOCK_FS_READ_DIR);
+			if (denied < 0)
+				return denied;
+		}
+	}
 	{
 		const char *dirpath = "/";
 		unsigned base;
@@ -2599,6 +2681,12 @@ int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp)
 		return -ENOENT;
 	if (node != IR0_EARLY_ROOTFS_INIT)
 		return -EACCES;
+	{
+		int denied = landlock_allow(pbuf, IR0_EARLY_LANDLOCK_FS_EXECUTE);
+
+		if (denied < 0)
+			return denied;
+	}
 	ret = walk_user_vector(envp, 0);
 	if (ret < 0)
 		return ret;
@@ -3923,6 +4011,12 @@ int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath)
 		return -EEXIST;
 	if (!parent_exists(pbuf))
 		return -ENOENT;
+	{
+		int denied = landlock_allow(pbuf, IR0_EARLY_LANDLOCK_FS_MAKE_SYM);
+
+		if (denied < 0)
+			return denied;
+	}
 	n = 0;
 	while (tbuf[n] != '\0')
 		n++;
@@ -3978,6 +4072,13 @@ int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
 		return -EEXIST;
 	if (!parent_exists(newbuf))
 		return -ENOENT;
+	{
+		int denied = landlock_allow(newbuf,
+					    IR0_EARLY_LANDLOCK_FS_MAKE_REG);
+
+		if (denied < 0)
+			return denied;
+	}
 	body = fs_body(src);
 	dest = fs_add(newbuf, g_fs[body].mode, g_fs[body].size, g_fs[body].data,
 		      0);
@@ -4893,7 +4994,7 @@ int64_t early_rootfs_open_by_handle_at(int mount_fd, uint64_t handle, int flags)
 	    g_user->copy_from_user(&gen, handle + 12, sizeof(gen)) != 0)
 		return -EFAULT;
 	node = (enum ir0_early_rootfs_node)ino;
-	if (node <= IR0_EARLY_ROOTFS_NONE || node > IR0_EARLY_ROOTFS_PIDFD)
+	if (node <= IR0_EARLY_ROOTFS_NONE || node > IR0_EARLY_ROOTFS_RULESET)
 		return -ESTALE;
 	id = (gen & 0x80000000U) ? (int)(gen & 0x7fffffffU) : -1;
 	fd = alloc_fd(node);
@@ -5157,6 +5258,432 @@ int64_t early_rootfs_file_setattr(int dirfd, uint64_t path, uint64_t attr,
 	return 0;
 }
 
+static void copy_kstr(char *dst, unsigned cap, const char *src)
+{
+	unsigned i;
+
+	if (!dst || !cap)
+		return;
+	if (!src)
+	{
+		dst[0] = '\0';
+		return;
+	}
+	for (i = 0; src[i] != '\0' && i + 1 < cap; i++)
+		dst[i] = src[i];
+	dst[i] = '\0';
+}
+
+static int path_of_node(enum ir0_early_rootfs_node node, int id, char *out,
+			unsigned cap)
+{
+	if (!out || !cap)
+		return -EINVAL;
+	switch (node)
+	{
+	case IR0_EARLY_ROOTFS_ROOT:
+		copy_kstr(out, cap, "/");
+		return 0;
+	case IR0_EARLY_ROOTFS_INIT:
+		copy_kstr(out, cap, "/init");
+		return 0;
+	case IR0_EARLY_ROOTFS_DEV:
+		copy_kstr(out, cap, "/dev");
+		return 0;
+	case IR0_EARLY_ROOTFS_CONSOLE:
+		copy_kstr(out, cap, "/dev/console");
+		return 0;
+	case IR0_EARLY_ROOTFS_NULL:
+		copy_kstr(out, cap, "/dev/null");
+		return 0;
+	case IR0_EARLY_ROOTFS_ZERO:
+		copy_kstr(out, cap, "/dev/zero");
+		return 0;
+	case IR0_EARLY_ROOTFS_TTY:
+		copy_kstr(out, cap, "/dev/tty");
+		return 0;
+	case IR0_EARLY_ROOTFS_VDA:
+		copy_kstr(out, cap, "/dev/vda");
+		return 0;
+	case IR0_EARLY_ROOTFS_TMP:
+		copy_kstr(out, cap, "/tmp");
+		return 0;
+	case IR0_EARLY_ROOTFS_FILE:
+	case IR0_EARLY_ROOTFS_USERDIR:
+	case IR0_EARLY_ROOTFS_FIFO:
+	case IR0_EARLY_ROOTFS_UNIX:
+	case IR0_EARLY_ROOTFS_SYMLINK:
+		if (id < 0 || id >= FS_MAX || !g_fs[id].used)
+			return -EBADFD;
+		copy_kstr(out, cap, g_fs[id].path);
+		return 0;
+	default:
+		return -EBADFD;
+	}
+}
+
+static int path_of_fd(int fd, char *out, unsigned cap)
+{
+	return path_of_node(node_of_fd(fd), pipe_id_of_fd(fd), out, cap);
+}
+
+static int path_is_beneath(const char *path, const char *parent)
+{
+	unsigned i = 0;
+
+	if (!path || !parent || parent[0] == '\0' || path[0] != '/')
+		return 0;
+	if (parent[0] == '/' && parent[1] == '\0')
+		return 1;
+	while (parent[i] && path[i] == parent[i])
+		i++;
+	if (parent[i] != '\0')
+		return 0;
+	return path[i] == '\0' || path[i] == '/';
+}
+
+static int landlock_allow(const char *path, uint64_t need)
+{
+	uint64_t want;
+	uint64_t got = 0;
+	int i;
+
+	if (!g_ll_on || !need || !path)
+		return 0;
+	want = need & g_ll_handled;
+	if (!want)
+		return 0;
+	for (i = 0; i < g_ll_n; i++)
+	{
+		if (path_is_beneath(path, g_ll_rules[i].path))
+			got |= g_ll_rules[i].allowed;
+	}
+	if ((got & want) == want)
+		return 0;
+	return -EACCES;
+}
+
+static int landlock_open_need(const char *path, int flags)
+{
+	char look[FS_NAME];
+	enum ir0_early_rootfs_node node;
+	uint64_t need = 0;
+	int acc = flags & LINUX_O_ACCMODE;
+
+	copy_kstr(look, sizeof(look), path);
+	node = lookup_user_path(look);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return 0;
+	if (node_is_dir(node) || (flags & LINUX_O_DIRECTORY))
+		need |= IR0_EARLY_LANDLOCK_FS_READ_DIR;
+	else
+	{
+		if (acc != 1)
+			need |= IR0_EARLY_LANDLOCK_FS_READ_FILE;
+		if (acc != 0)
+			need |= IR0_EARLY_LANDLOCK_FS_WRITE_FILE;
+	}
+	if (flags & LINUX_O_TRUNC)
+		need |= IR0_EARLY_LANDLOCK_FS_TRUNCATE;
+	return landlock_allow(path, need);
+}
+
+int64_t early_rootfs_landlock_create(uint64_t attr, uint64_t size,
+				     unsigned flags)
+{
+	uint64_t handled = 0;
+	int slot;
+	int fd;
+	int idx;
+
+	if (flags)
+	{
+		if (attr || size)
+			return -EINVAL;
+		if (flags == IR0_EARLY_LANDLOCK_CREATE_VERSION)
+			return IR0_EARLY_LANDLOCK_ABI;
+		if (flags == IR0_EARLY_LANDLOCK_CREATE_ERRATA)
+			return 0;
+		return -EINVAL;
+	}
+	if (size < 8)
+		return -EINVAL;
+	if (size > 4096)
+		return -E2BIG;
+	if (!attr || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(&handled, attr, 8) != 0)
+		return -EFAULT;
+	if (size > 8)
+	{
+		uint64_t extra;
+		uint64_t off;
+
+		for (off = 8; off + 8 <= size && off < 48; off += 8)
+		{
+			if (g_user->copy_from_user(&extra, attr + off, 8) != 0)
+				return -EFAULT;
+			if (extra)
+				return -EINVAL;
+		}
+		for (; off < size; off++)
+		{
+			uint8_t byte;
+
+			if (g_user->copy_from_user(&byte, attr + off, 1) != 0)
+				return -EFAULT;
+			if (byte)
+				return -E2BIG;
+		}
+	}
+	if ((handled | IR0_EARLY_LANDLOCK_FS_MASK) != IR0_EARLY_LANDLOCK_FS_MASK)
+		return -EINVAL;
+	if (!handled)
+		return -ENOMSG;
+	for (slot = 0; slot < RULESET_MAX; slot++)
+	{
+		if (!g_ruleset[slot].used)
+			break;
+	}
+	if (slot >= RULESET_MAX)
+		return -EMFILE;
+	g_ruleset[slot].used = 1;
+	g_ruleset[slot].refs = 1;
+	g_ruleset[slot].handled = handled;
+	g_ruleset[slot].nrules = 0;
+	fd = alloc_fd(IR0_EARLY_ROOTFS_RULESET);
+	if (fd < 0)
+	{
+		g_ruleset[slot].used = 0;
+		return fd;
+	}
+	idx = slot_from_fd(fd);
+	if (idx >= 0)
+		g_slots[idx].pipe_id = slot;
+	set_cloexec_of_fd(fd, 1);
+	return fd;
+}
+
+int64_t early_rootfs_landlock_add(int fd, int type, uint64_t rule,
+				  unsigned flags)
+{
+	int id;
+	uint64_t allowed = 0;
+	int32_t parent = 0;
+	char pbuf[FS_NAME];
+	int ret;
+
+	if (flags & ~IR0_EARLY_LANDLOCK_ADD_QUIET)
+		return -EINVAL;
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_RULESET)
+		return node_of_fd(fd) == IR0_EARLY_ROOTFS_NONE ? -EBADF : -EBADFD;
+	id = pipe_id_of_fd(fd);
+	if (id < 0 || id >= RULESET_MAX || !g_ruleset[id].used)
+		return -EBADFD;
+	if (type == IR0_EARLY_LANDLOCK_RULE_NET_PORT)
+		return -EAFNOSUPPORT;
+	if (type != IR0_EARLY_LANDLOCK_RULE_PATH_BENEATH)
+		return -EINVAL;
+	if (!rule || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(&allowed, rule, 8) != 0 ||
+	    g_user->copy_from_user(&parent, rule + 8, 4) != 0)
+		return -EFAULT;
+	if (!flags && !allowed)
+		return -ENOMSG;
+	if ((allowed | g_ruleset[id].handled) != g_ruleset[id].handled)
+		return -EINVAL;
+	if ((flags & IR0_EARLY_LANDLOCK_ADD_QUIET) && !g_ruleset[id].handled)
+		return -EINVAL;
+	ret = path_of_fd(parent, pbuf, sizeof(pbuf));
+	if (ret < 0)
+		return ret;
+	if (g_ruleset[id].nrules >= LL_RULE_MAX)
+		return -E2BIG;
+	copy_kstr(g_ruleset[id].rules[g_ruleset[id].nrules].path,
+		  sizeof(g_ruleset[id].rules[0].path), pbuf);
+	g_ruleset[id].rules[g_ruleset[id].nrules].allowed = allowed;
+	g_ruleset[id].nrules++;
+	return 0;
+}
+
+int64_t early_rootfs_landlock_restrict(int fd, unsigned flags)
+{
+	int id;
+	int i;
+
+	if ((flags | IR0_EARLY_LANDLOCK_RESTRICT_MASK) !=
+	    IR0_EARLY_LANDLOCK_RESTRICT_MASK)
+		return -EINVAL;
+	if (!early_process_is_root())
+		return -EPERM;
+	if (g_ll_on)
+		return -E2BIG;
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_RULESET)
+		return node_of_fd(fd) == IR0_EARLY_ROOTFS_NONE ? -EBADF : -EBADFD;
+	id = pipe_id_of_fd(fd);
+	if (id < 0 || id >= RULESET_MAX || !g_ruleset[id].used)
+		return -EBADFD;
+	g_ll_handled = g_ruleset[id].handled;
+	g_ll_n = g_ruleset[id].nrules;
+	for (i = 0; i < g_ll_n; i++)
+	{
+		g_ll_rules[i].allowed = g_ruleset[id].rules[i].allowed;
+		copy_kstr(g_ll_rules[i].path, sizeof(g_ll_rules[i].path),
+			  g_ruleset[id].rules[i].path);
+	}
+	g_ll_on = 1;
+	return 0;
+}
+
+static int copy_mnt_req(uint64_t req, uint64_t *mnt_id, uint32_t *mnt_fd,
+			uint64_t *param, unsigned flags)
+{
+	uint32_t size = 0;
+	uint32_t spare = 0;
+	uint64_t id = 0;
+	uint64_t prm = 0;
+
+	if (!req || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(&size, req, 4) != 0)
+		return -EFAULT;
+	if (size > 4096)
+		return -E2BIG;
+	if (size < IR0_EARLY_MNT_ID_REQ_VER0)
+		return -EINVAL;
+	if (g_user->copy_from_user(&spare, req + 4, 4) != 0 ||
+	    g_user->copy_from_user(&id, req + 8, 8) != 0 ||
+	    g_user->copy_from_user(&prm, req + 16, 8) != 0)
+		return -EFAULT;
+	if (size > IR0_EARLY_MNT_ID_REQ_VER0)
+	{
+		uint64_t off;
+		uint8_t byte;
+
+		for (off = IR0_EARLY_MNT_ID_REQ_VER0; off < size; off++)
+		{
+			if (g_user->copy_from_user(&byte, req + off, 1) != 0)
+				return -EFAULT;
+			if (byte)
+				return -E2BIG;
+		}
+	}
+	if (flags & IR0_EARLY_STATMOUNT_BY_FD)
+	{
+		if (id)
+			return -EINVAL;
+	}
+	else if (id != IR0_EARLY_LSMT_ROOT && id <= 0x80000000ULL)
+		return -EINVAL;
+	*mnt_id = id;
+	*mnt_fd = spare;
+	*param = prm;
+	return 0;
+}
+
+int64_t early_rootfs_statmount(uint64_t req, uint64_t buf, uint64_t bufsize,
+			       unsigned flags)
+{
+	uint64_t mnt_id = 0;
+	uint32_t mnt_fd = 0;
+	uint64_t mask = 0;
+	uint8_t out[IR0_EARLY_STATMOUNT_FIXED + 16];
+	uint32_t size;
+	uint64_t written;
+	unsigned i;
+	int ret;
+
+	if (flags & ~IR0_EARLY_STATMOUNT_BY_FD)
+		return -EINVAL;
+	ret = copy_mnt_req(req, &mnt_id, &mnt_fd, &mask, flags);
+	if (ret < 0)
+		return ret;
+	if (flags & IR0_EARLY_STATMOUNT_BY_FD)
+	{
+		if (node_of_fd((int)mnt_fd) == IR0_EARLY_ROOTFS_NONE)
+			return -EBADF;
+	}
+	else if (mnt_id != IR0_EARLY_MNT_ID && mnt_id != IR0_EARLY_LSMT_ROOT)
+		return -ENOENT;
+	if (!buf)
+		return -EFAULT;
+	if (bufsize < IR0_EARLY_STATMOUNT_FIXED + 10)
+		return -EOVERFLOW;
+	for (i = 0; i < sizeof(out); i++)
+		out[i] = 0;
+	written = IR0_EARLY_STATMOUNT_SB_BASIC | IR0_EARLY_STATMOUNT_MNT_BASIC |
+		  IR0_EARLY_STATMOUNT_MNT_ROOT | IR0_EARLY_STATMOUNT_MNT_POINT |
+		  IR0_EARLY_STATMOUNT_FS_TYPE;
+	if (mask)
+		written &= mask;
+	size = (uint32_t)(IR0_EARLY_STATMOUNT_FIXED + 10);
+	out[0] = (uint8_t)size;
+	out[1] = (uint8_t)(size >> 8);
+	{
+		uint64_t magic = IR0_TMPFS_MAGIC;
+		uint64_t mid = IR0_EARLY_MNT_ID;
+
+		out[8] = (uint8_t)written;
+		out[9] = (uint8_t)(written >> 8);
+		out[20] = 1;
+		for (i = 0; i < 8; i++)
+			out[24 + i] = (uint8_t)(magic >> (8 * i));
+		for (i = 0; i < 8; i++)
+			out[40 + i] = (uint8_t)(mid >> (8 * i));
+		for (i = 0; i < 8; i++)
+			out[48 + i] = (uint8_t)(mid >> (8 * i));
+		out[36] = (uint8_t)IR0_EARLY_STATMOUNT_FIXED;
+		out[37] = (uint8_t)(IR0_EARLY_STATMOUNT_FIXED >> 8);
+		out[104] = (uint8_t)(IR0_EARLY_STATMOUNT_FIXED + 6);
+		out[108] = (uint8_t)(IR0_EARLY_STATMOUNT_FIXED + 8);
+	}
+	out[IR0_EARLY_STATMOUNT_FIXED + 0] = 't';
+	out[IR0_EARLY_STATMOUNT_FIXED + 1] = 'm';
+	out[IR0_EARLY_STATMOUNT_FIXED + 2] = 'p';
+	out[IR0_EARLY_STATMOUNT_FIXED + 3] = 'f';
+	out[IR0_EARLY_STATMOUNT_FIXED + 4] = 's';
+	out[IR0_EARLY_STATMOUNT_FIXED + 5] = 0;
+	out[IR0_EARLY_STATMOUNT_FIXED + 6] = '/';
+	out[IR0_EARLY_STATMOUNT_FIXED + 7] = 0;
+	out[IR0_EARLY_STATMOUNT_FIXED + 8] = '/';
+	out[IR0_EARLY_STATMOUNT_FIXED + 9] = 0;
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(buf, out, size) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t early_rootfs_listmount(uint64_t req, uint64_t ids, uint64_t nr,
+			       unsigned flags)
+{
+	uint64_t mnt_id = 0;
+	uint32_t spare = 0;
+	uint64_t last = 0;
+	uint64_t one = IR0_EARLY_MNT_ID;
+	int ret;
+
+	if (flags & ~IR0_EARLY_LISTMOUNT_REVERSE)
+		return -EINVAL;
+	if (nr > 1000000)
+		return -EOVERFLOW;
+	ret = copy_mnt_req(req, &mnt_id, &spare, &last, 0);
+	if (ret < 0)
+		return ret;
+	if (mnt_id != IR0_EARLY_LSMT_ROOT && mnt_id != IR0_EARLY_MNT_ID)
+		return -ENOENT;
+	if (last != 0 && last != IR0_EARLY_MNT_ID)
+		return 0;
+	if (last == IR0_EARLY_MNT_ID)
+		return 0;
+	if (!nr)
+		return 0;
+	if (!ids || !g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(ids, &one, 8) != 0)
+		return -EFAULT;
+	return 1;
+}
+
 int64_t early_rootfs_chroot(uint64_t path)
 {
 	char pbuf[32];
@@ -5194,6 +5721,12 @@ int64_t early_rootfs_truncate(uint64_t path, uint64_t length)
 	node = lookup_user_path(pbuf);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
+	{
+		int denied = landlock_allow(pbuf, IR0_EARLY_LANDLOCK_FS_TRUNCATE);
+
+		if (denied < 0)
+			return denied;
+	}
 	if (node_is_dir(node))
 		return -EISDIR;
 	if (node == IR0_EARLY_ROOTFS_FILE)
@@ -5229,6 +5762,18 @@ int64_t early_rootfs_ftruncate(int fd, uint64_t length)
 
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
+	{
+		char pbuf[FS_NAME];
+		int denied;
+
+		if (path_of_fd(fd, pbuf, sizeof(pbuf)) == 0)
+		{
+			denied = landlock_allow(pbuf,
+						IR0_EARLY_LANDLOCK_FS_TRUNCATE);
+			if (denied < 0)
+				return denied;
+		}
+	}
 	if (node_is_dir(node))
 		return -EISDIR;
 	if (node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W ||
@@ -5376,6 +5921,12 @@ int64_t early_rootfs_mkdirat(int dirfd, uint64_t path)
 		return -EEXIST;
 	if (!parent_exists(pbuf))
 		return -ENOENT;
+	{
+		int denied = landlock_allow(pbuf, IR0_EARLY_LANDLOCK_FS_MAKE_DIR);
+
+		if (denied < 0)
+			return denied;
+	}
 	ret = fs_add(pbuf, S_IFDIR | 0755U, 0, 0, 0);
 	return ret < 0 ? ret : 0;
 }
@@ -5404,6 +5955,20 @@ int64_t early_rootfs_mknodat(int dirfd, uint64_t path, uint64_t mode)
 		return -EEXIST;
 	if (!parent_exists(pbuf))
 		return -ENOENT;
+	{
+		uint64_t need = IR0_EARLY_LANDLOCK_FS_MAKE_REG;
+		int denied;
+
+		if (type == S_IFDIR)
+			need = IR0_EARLY_LANDLOCK_FS_MAKE_DIR;
+		else if (type == S_IFIFO)
+			need = IR0_EARLY_LANDLOCK_FS_MAKE_FIFO;
+		else if (type == S_IFSOCK)
+			need = IR0_EARLY_LANDLOCK_FS_MAKE_SOCK;
+		denied = landlock_allow(pbuf, need);
+		if (denied < 0)
+			return denied;
+	}
 	ret = fs_add(pbuf, (uint32_t)mode, 0, 0,
 		     ((uint32_t)mode & S_IFMT) == S_IFREG);
 	return ret < 0 ? ret : 0;
@@ -5427,6 +5992,15 @@ int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags)
 	node = lookup_user_path(pbuf);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
+	{
+		int denied = landlock_allow(pbuf,
+					    node_is_dir(node) ?
+					    IR0_EARLY_LANDLOCK_FS_REMOVE_DIR :
+					    IR0_EARLY_LANDLOCK_FS_REMOVE_FILE);
+
+		if (denied < 0)
+			return denied;
+	}
 	fsid = fs_find(pbuf);
 	if (node_is_dir(node))
 	{
@@ -5517,6 +6091,16 @@ int64_t early_rootfs_renameat2(int olddirfd, uint64_t oldpath, int newdirfd,
 	node = lookup_user_path(oldbuf);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
+	{
+		int denied = landlock_allow(oldbuf,
+					    IR0_EARLY_LANDLOCK_FS_REFER);
+
+		if (denied < 0)
+			return denied;
+		denied = landlock_allow(newbuf, IR0_EARLY_LANDLOCK_FS_REFER);
+		if (denied < 0)
+			return denied;
+	}
 	fsid = fs_find(oldbuf);
 	if (fsid < 0)
 		return -EACCES;

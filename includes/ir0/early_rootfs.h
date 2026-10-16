@@ -45,6 +45,7 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_UNIX,
 	IR0_EARLY_ROOTFS_SYMLINK,
 	IR0_EARLY_ROOTFS_PIDFD,
+	IR0_EARLY_ROOTFS_RULESET,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -203,6 +204,54 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_FILE_ATTR_BYTES 24U
 #define IR0_EARLY_CACHESTAT_RANGE_BYTES 16U
 #define IR0_EARLY_CACHESTAT_BYTES 40U
+#define IR0_EARLY_LANDLOCK_ABI 3
+#define IR0_EARLY_LANDLOCK_CREATE_VERSION 1U
+#define IR0_EARLY_LANDLOCK_CREATE_ERRATA 2U
+#define IR0_EARLY_LANDLOCK_RULE_PATH_BENEATH 1
+#define IR0_EARLY_LANDLOCK_RULE_NET_PORT 2
+#define IR0_EARLY_LANDLOCK_ADD_QUIET 1U
+#define IR0_EARLY_LANDLOCK_RESTRICT_LOG_SAME_OFF 1U
+#define IR0_EARLY_LANDLOCK_RESTRICT_LOG_NEW_ON 2U
+#define IR0_EARLY_LANDLOCK_RESTRICT_LOG_SUB_OFF 4U
+#define IR0_EARLY_LANDLOCK_RESTRICT_MASK 7U
+#define IR0_EARLY_LANDLOCK_FS_EXECUTE (1ULL << 0)
+#define IR0_EARLY_LANDLOCK_FS_WRITE_FILE (1ULL << 1)
+#define IR0_EARLY_LANDLOCK_FS_READ_FILE (1ULL << 2)
+#define IR0_EARLY_LANDLOCK_FS_READ_DIR (1ULL << 3)
+#define IR0_EARLY_LANDLOCK_FS_REMOVE_DIR (1ULL << 4)
+#define IR0_EARLY_LANDLOCK_FS_REMOVE_FILE (1ULL << 5)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_CHAR (1ULL << 6)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_DIR (1ULL << 7)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_REG (1ULL << 8)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_SOCK (1ULL << 9)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_FIFO (1ULL << 10)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_BLOCK (1ULL << 11)
+#define IR0_EARLY_LANDLOCK_FS_MAKE_SYM (1ULL << 12)
+#define IR0_EARLY_LANDLOCK_FS_REFER (1ULL << 13)
+#define IR0_EARLY_LANDLOCK_FS_TRUNCATE (1ULL << 14)
+#define IR0_EARLY_LANDLOCK_FS_MASK \
+	(IR0_EARLY_LANDLOCK_FS_EXECUTE | IR0_EARLY_LANDLOCK_FS_WRITE_FILE | \
+	 IR0_EARLY_LANDLOCK_FS_READ_FILE | IR0_EARLY_LANDLOCK_FS_READ_DIR | \
+	 IR0_EARLY_LANDLOCK_FS_REMOVE_DIR | IR0_EARLY_LANDLOCK_FS_REMOVE_FILE | \
+	 IR0_EARLY_LANDLOCK_FS_MAKE_CHAR | IR0_EARLY_LANDLOCK_FS_MAKE_DIR | \
+	 IR0_EARLY_LANDLOCK_FS_MAKE_REG | IR0_EARLY_LANDLOCK_FS_MAKE_SOCK | \
+	 IR0_EARLY_LANDLOCK_FS_MAKE_FIFO | IR0_EARLY_LANDLOCK_FS_MAKE_BLOCK | \
+	 IR0_EARLY_LANDLOCK_FS_MAKE_SYM | IR0_EARLY_LANDLOCK_FS_REFER | \
+	 IR0_EARLY_LANDLOCK_FS_TRUNCATE)
+#define IR0_EARLY_LANDLOCK_PATH_BENEATH_BYTES 12U
+#define IR0_EARLY_MNT_ID_REQ_VER0 24U
+#define IR0_EARLY_MNT_ID 0x80000001ULL
+#define IR0_EARLY_LSMT_ROOT 0xffffffffffffffffULL
+#define IR0_EARLY_STATMOUNT_FIXED 512U
+#define IR0_EARLY_STATMOUNT_SB_BASIC 0x1U
+#define IR0_EARLY_STATMOUNT_MNT_BASIC 0x2U
+#define IR0_EARLY_STATMOUNT_MNT_ROOT 0x8U
+#define IR0_EARLY_STATMOUNT_MNT_POINT 0x10U
+#define IR0_EARLY_STATMOUNT_FS_TYPE 0x20U
+#define IR0_EARLY_LISTMOUNT_REVERSE 1U
+#define IR0_EARLY_STATMOUNT_BY_FD 1U
+#define IR0_EARLY_LSM_ID_LANDLOCK 110ULL
+#define IR0_EARLY_LSM_FLAG_SINGLE 1U
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -966,6 +1015,15 @@ int64_t early_rootfs_file_getattr(int dirfd, uint64_t path, uint64_t attr,
 				  uint64_t usize, unsigned flags);
 int64_t early_rootfs_file_setattr(int dirfd, uint64_t path, uint64_t attr,
 				  uint64_t usize, unsigned flags);
+int64_t early_rootfs_landlock_create(uint64_t attr, uint64_t size,
+				     unsigned flags);
+int64_t early_rootfs_landlock_add(int fd, int type, uint64_t rule,
+				  unsigned flags);
+int64_t early_rootfs_landlock_restrict(int fd, unsigned flags);
+int64_t early_rootfs_statmount(uint64_t req, uint64_t buf, uint64_t bufsize,
+			       unsigned flags);
+int64_t early_rootfs_listmount(uint64_t req, uint64_t ids, uint64_t nr,
+			       unsigned flags);
 int64_t early_rootfs_fchown(int fd, uint64_t uid, uint64_t gid);
 int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
 			      uint64_t gid);

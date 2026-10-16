@@ -1801,6 +1801,37 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_FUTEX_REQUEUE:
 		return early_futex_requeue(context, a0, (unsigned)a1, (int)a2,
 					   (int)a3);
+	case IR0_SYSCALL_LSM_GET_SELF_ATTR:
+	case IR0_SYSCALL_LSM_SET_SELF_ATTR:
+		if (a3 & ~(uint64_t)IR0_EARLY_LSM_FLAG_SINGLE)
+			return -EINVAL;
+		return -EOPNOTSUPP;
+	case IR0_SYSCALL_LSM_LIST_MODULES:
+	{
+		const struct early_user_services *user =
+			context && context->services ? context->services->user : 0;
+		uint32_t need = 8;
+		uint32_t have = 0;
+		uint64_t id = IR0_EARLY_LSM_ID_LANDLOCK;
+
+		if (a2)
+			return -EINVAL;
+		if (!a1 || !user || !user->copy_from_user || !user->copy_to_user)
+			return -EFAULT;
+		if (user->copy_from_user(&have, a1, 4) != 0)
+			return -EFAULT;
+		if (have < need)
+		{
+			if (user->copy_to_user(a1, &need, 4) != 0)
+				return -EFAULT;
+			return -E2BIG;
+		}
+		if (!a0 || user->copy_to_user(a0, &id, 8) != 0)
+			return -EFAULT;
+		if (user->copy_to_user(a1, &need, 4) != 0)
+			return -EFAULT;
+		return 1;
+	}
 	case IR0_SYSCALL_EXECVE:
 	{
 		int64_t ret = early_rootfs_execve(a0, a1, a2);
@@ -1850,6 +1881,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX,
 	IR0_SYSCALL_FUTEX_WAITV, IR0_SYSCALL_FUTEX_WAKE,
 	IR0_SYSCALL_FUTEX_WAIT, IR0_SYSCALL_FUTEX_REQUEUE,
+	IR0_SYSCALL_LSM_GET_SELF_ATTR, IR0_SYSCALL_LSM_SET_SELF_ATTR,
+	IR0_SYSCALL_LSM_LIST_MODULES,
 	IR0_SYSCALL_SETUID,
 	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETFSUID, IR0_SYSCALL_SETFSGID,
 	IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
