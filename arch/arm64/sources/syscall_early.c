@@ -17,7 +17,6 @@
 #include "mmu_early.h"
 #include "rootfs_early.h"
 #include "syscall_mm_early.h"
-#include "syscall_process_early.h"
 #include "pl011.h"
 #include "timer.h"
 
@@ -25,6 +24,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/early_syscall.h>
 #include <ir0/early_io.h>
+#include <ir0/early_process.h>
 #include <ir0/early_time.h>
 #include <ir0/early_vfs.h>
 #include <ir0/syscall_id.h>
@@ -44,7 +44,7 @@ static const struct syscall_context_provider *const g_early_providers[] = {
 	&arm64_early_mm_provider,
 	&early_vfs_provider,
 	&early_time_provider,
-	&arm64_early_process_provider,
+	&early_process_provider,
 };
 
 static int arm64_early_copy_from_user(void *destination, uint64_t source,
@@ -108,6 +108,15 @@ static void arm64_early_console_write_observed(const char *bytes, uint64_t size)
 		arm64_busybox_note_write(bytes, size);
 }
 
+static void arm64_early_process_exit_observed(int overall_smoke_ok)
+{
+	if (arm64_busybox_mode())
+		ir0_boot_smoke("ARM64_BUSYBOX_EXIT_OK");
+	else if (!arm64_musl_mode())
+		ir0_boot_smoke(overall_smoke_ok ? "ARM64_SYSCALL_OK" :
+						 "ARM64_SYSCALL_FAIL");
+}
+
 static const struct early_syscall_services g_arm64_early_services = {
 	.copy_from_user = arm64_early_copy_from_user,
 	.copy_to_user = arm64_early_copy_to_user,
@@ -124,6 +133,8 @@ static const struct early_syscall_services g_arm64_early_services = {
 	.vfs_newfstatat = arm64_rootfs_newfstatat,
 	.vfs_fstat = arm64_rootfs_fstat,
 	.vfs_readlinkat = arm64_rootfs_readlinkat,
+	.uts_machine = "aarch64",
+	.process_exit_observed = arm64_early_process_exit_observed,
 };
 
 static void pl011_put_hex64(uint64_t v)
@@ -144,7 +155,7 @@ static void pl011_put_hex64(uint64_t v)
 
 int arm64_syscall_smoke_ok(void)
 {
-	return arm64_early_process_smoke_ok() && early_io_smoke_ok() &&
+	return early_process_smoke_ok() && early_io_smoke_ok() &&
 	       early_time_smoke_ok();
 }
 

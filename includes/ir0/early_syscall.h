@@ -31,6 +31,8 @@ struct early_syscall_services
 	int64_t (*vfs_fstat)(int fd, uint64_t statbuf);
 	int64_t (*vfs_readlinkat)(int dirfd, uint64_t path, uint64_t buffer,
 				 uint64_t size);
+	const char *uts_machine;
+	void (*process_exit_observed)(int overall_smoke_ok);
 };
 
 /* Architecture-neutral state passed to staged syscall providers. */
