@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: rootfs_early.h
- * Description: Freestanding fake root for "/" and "/init" (no vfs_init_root).
+ * Description: ARM64 adapter for common early_rootfs ("/" + "/init" harness).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

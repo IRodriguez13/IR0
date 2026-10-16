@@ -66,6 +66,7 @@ ARM64_EARLY_SYSCALL_OBJS = \
 	kernel/syscalls/early_time.o \
 	kernel/syscalls/early_io.o \
 	kernel/syscalls/early_vfs.o \
+	kernel/syscalls/early_rootfs.o \
 	kernel/syscalls/early_process.o \
 	kernel/syscalls/early_mm.o \
 	arch/arm64/sources/syscall_early.o \

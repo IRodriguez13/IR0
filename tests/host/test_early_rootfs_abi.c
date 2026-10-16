@@ -1,0 +1,41 @@
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: test_early_rootfs_abi.c
+ * Description: Host checks for staged "/" and "/init" path/stat contract
+ */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#include "test_harness.h"
+#include <ir0/early_rootfs.h>
+#include <stdint.h>
+
+void test_early_rootfs_abi(void)
+{
+	struct ir0_early_stat64 st;
+
+	TEST_BEGIN("early_rootfs_abi");
+
+	ASSERT_EQ(ir0_early_rootfs_path_node("/"), IR0_EARLY_ROOTFS_ROOT);
+	ASSERT_EQ(ir0_early_rootfs_path_node("/init"), IR0_EARLY_ROOTFS_INIT);
+	ASSERT_EQ(ir0_early_rootfs_path_node("/bin/sh"), IR0_EARLY_ROOTFS_NONE);
+	ASSERT_EQ(ir0_early_rootfs_path_node(0), IR0_EARLY_ROOTFS_NONE);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_INIT, 4096, &st);
+	ASSERT_EQ(st.st_ino, 2);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_REG);
+	ASSERT_EQ(st.st_size, 4096);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_ROOT, 4096, &st);
+	ASSERT_EQ(st.st_ino, 1);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_DIR);
+	ASSERT_EQ(st.st_size, 0);
+
+	TEST_END();
+}

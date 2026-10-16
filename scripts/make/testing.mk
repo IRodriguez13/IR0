@@ -231,7 +231,7 @@ busybox-aarch64-min: setup-musl-aarch64
 	if [ -x "$(BUSYBOX_AARCH64)" ] && \
 	   file -b "$(BUSYBOX_AARCH64)" | grep -qi aarch64 && \
 	   ! file -b "$(BUSYBOX_AARCH64)" | grep -qi pie && \
-	   readelf -h "$(BUSYBOX_AARCH64)" | grep -q 'Entry point address:.*0x44'; then \
+	   LC_ALL=C readelf -h "$(BUSYBOX_AARCH64)" | grep -q 'Entry point address:.*0x44'; then \
 		echo "✓ busybox-aarch64-min already present: $(BUSYBOX_AARCH64)"; \
 	elif [ -f "$(BUSYBOX_SRC)/Makefile" ] && [ -n "$(MUSL_CC_AARCH64)" ]; then \
 		if [ ! -f "$(BUSYBOX_AARCH64_BUILD)/Makefile" ]; then \
@@ -259,7 +259,7 @@ busybox-aarch64-min: setup-musl-aarch64
 	fi
 	@file -b $(BUSYBOX_AARCH64) | grep -qi aarch64
 	@! file -b $(BUSYBOX_AARCH64) | grep -qi pie
-	@readelf -h $(BUSYBOX_AARCH64) | grep -q 'Entry point address:.*0x44'
+	@LC_ALL=C readelf -h $(BUSYBOX_AARCH64) | grep -q 'Entry point address:.*0x44'
 	@echo "✓ busybox-aarch64-min → $(BUSYBOX_AARCH64)"
 
 .PHONY: arm64-rpi3-userspace-layout arm64-rpi3-userspace-layout-build
@@ -301,8 +301,8 @@ arm64-rpi3-userspace-layout-build: setup-musl-aarch64
 	cp -f "$(BUSYBOX_AARCH64_RPI3_BUILD)/busybox_unstripped" \
 		"$(BUSYBOX_AARCH64_RPI3)"; \
 	aarch64-linux-gnu-strip "$(BUSYBOX_AARCH64_RPI3)"
-	@readelf -h $(MUSL_AARCH64_HELLO_RPI3) | grep -q 'Entry point address:.*0x300'
-	@readelf -h $(BUSYBOX_AARCH64_RPI3) | grep -q 'Entry point address:.*0x400'
+	@LC_ALL=C readelf -h $(MUSL_AARCH64_HELLO_RPI3) | grep -q 'Entry point address:.*0x300'
+	@LC_ALL=C readelf -h $(BUSYBOX_AARCH64_RPI3) | grep -q 'Entry point address:.*0x400'
 	@echo "✓ arm64-rpi3-userspace-layout"
 
 smoke-musl-aarch64-toolchain: musl-aarch64-hello
@@ -2251,6 +2251,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/syscalls/early_time.c includes/ir0/early_time.h \
 		kernel/syscalls/early_io.c includes/ir0/early_io.h \
 		kernel/syscalls/early_vfs.c includes/ir0/early_vfs.h \
+		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
 		kernel/syscalls/early_mm.c includes/ir0/early_mm.h \
 		arch/arm64/sources/elf_policy.c includes/ir0/arch_elf.h \
@@ -2345,6 +2346,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_vfs.c \
 		-o build/arm64-boot/early_vfs.o
+	@echo "  CC      kernel/syscalls/early_rootfs.c (staged / and /init)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs.c \
+		-o build/arm64-boot/early_rootfs.o
 	@echo "  CC      kernel/syscalls/early_process.c (staged Linux process ABI)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_process.c \
@@ -2514,6 +2519,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
+		build/arm64-boot/early_rootfs.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/syscall_early.o \
@@ -2587,6 +2593,7 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
+		build/arm64-boot/early_rootfs.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
@@ -2717,6 +2724,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
+		build/arm64-boot/early_rootfs.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/mm_ops.o build/arm64-min/arch_mm.o \
@@ -2918,6 +2926,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		build/arm64-boot/early_dispatch.o \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
+		build/arm64-boot/early_rootfs.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/mm_ops.o \

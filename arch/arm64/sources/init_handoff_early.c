@@ -3,6 +3,7 @@
 #include "rootfs_early.h"
 
 #include <ir0/boot_log.h>
+#include <ir0/early_rootfs.h>
 #include <ir0/init_handoff.h>
 
 static int prepare_rootfs(void *context)
@@ -22,8 +23,7 @@ static long load_init(void *context, const char *path, char *const argv[])
 {
 	(void)context;
 	(void)argv;
-	if (!path || path[0] != '/' || path[1] != 'i' || path[2] != 'n' ||
-	    path[3] != 'i' || path[4] != 't' || path[5] != '\0')
+	if (ir0_early_rootfs_path_node(path) != IR0_EARLY_ROOTFS_INIT)
 		return -1;
 	if (arm64_busybox_prepare() != 0)
 		return -1;
