@@ -17,8 +17,10 @@
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
 #include <ir0/early_process.h>
+#include <ir0/early_rootfs.h>
 #include <ir0/idle.h>
 #include <ir0/process_exit.h>
+#include <ir0/cwd.h>
 #include <ir0/syscall_identity.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
@@ -344,6 +346,10 @@ void arm64_all_objs_mark(void)
 		g_guest.comm[2] = 'i';
 		g_guest.comm[3] = 't';
 		g_guest.comm[4] = 0;
+		g_guest.cwd[0] = '/';
+		g_guest.cwd[1] = 0;
+		g_guest.root[0] = '/';
+		g_guest.root[1] = 0;
 		g_child.task.pid = 2;
 		g_child.ppid = 1;
 		g_child.lifecycle = PROCESS_LIFECYCLE_ALIVE;
@@ -355,6 +361,10 @@ void arm64_all_objs_mark(void)
 		g_child.comm[3] = 'n';
 		g_child.comm[4] = 'e';
 		g_child.comm[5] = 0;
+		g_child.cwd[0] = '/';
+		g_child.cwd[1] = 0;
+		g_child.root[0] = '/';
+		g_child.root[1] = 0;
 		g_idle.task.pid = 0;
 		g_idle.lifecycle = PROCESS_LIFECYCLE_ALIVE;
 		g_idle.state = PROCESS_READY;
@@ -378,6 +388,7 @@ void arm64_all_objs_mark(void)
 		early_process_bind_common_exit(process_exit_guest);
 		early_process_bind_schedule_exit(process_exit);
 		early_process_bind_identity(ir0_syscall_identity_product());
+		early_rootfs_bind_cwd(ir0_cwd_product());
 		ir0_boot_smoke("ARM64_COMMON_GUEST_OK");
 		ir0_boot_smoke("ARM64_COMMON_IDLE_READY");
 	}

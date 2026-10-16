@@ -25,6 +25,7 @@
 #include <ir0/early_io.h>
 #include <ir0/early_mm.h>
 #include <ir0/early_process.h>
+#include <ir0/early_rootfs.h>
 #include <ir0/early_time.h>
 #include <ir0/early_vfs.h>
 #include <ir0/syscall_id.h>
@@ -245,6 +246,9 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			else if (ret == 2)
 				ir0_boot_smoke("ARM64_COMMON_CLONE_GETPID_OK");
 		}
+		if (syscall_id == IR0_SYSCALL_GETCWD && ret > 0 &&
+		    early_rootfs_cwd_used())
+			ir0_boot_smoke("ARM64_COMMON_GETCWD_OK");
 		return ret;
 	}
 }

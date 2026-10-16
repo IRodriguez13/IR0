@@ -177,6 +177,13 @@ el0_entry:
 	mov	x8, #172
 	svc	#0
 
+	/* getcwd(2) — Linux aarch64 syscall 17 */
+	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x300) & 0xffff)
+	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x300) >> 16) & 0xffff), lsl #16
+	mov	x1, #256
+	mov	x8, #17
+	svc	#0
+
 	/*
 	 * clone(CLONE_VM|CLONE_VFORK|SIGCHLD, stack=NULL) — Linux aarch64
 	 * syscall 220. Child getpid/exit; parent wait4.

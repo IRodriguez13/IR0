@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 #include <ir0/blockdev.h>
+#include <ir0/cwd.h>
 #include <ir0/early_cpio.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
@@ -128,6 +129,8 @@ static int g_stdio_flags[3];
 static int g_stdio_cloexec[3];
 static enum ir0_early_rootfs_node g_cwd;
 static enum ir0_early_rootfs_node g_chroot;
+static const struct ir0_cwd_ops *g_cwd_ops;
+static int g_cwd_used;
 static uint64_t g_init_vis;
 static int g_init_from_block;
 static int g_exec_pending;
@@ -2277,6 +2280,53 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 	return 0;
 }
 
+static const char *early_cwd_string(void)
+{
+	if (g_cwd == IR0_EARLY_ROOTFS_DEV)
+		return (g_chroot == IR0_EARLY_ROOTFS_DEV) ? "/" : "/dev";
+	if (g_cwd == IR0_EARLY_ROOTFS_TMP)
+		return (g_chroot == IR0_EARLY_ROOTFS_TMP) ? "/" : "/tmp";
+	if (g_cwd == IR0_EARLY_ROOTFS_USERDIR)
+		return g_cwd_path[0] ? g_cwd_path : "/";
+	return "/";
+}
+
+static const char *early_root_string(void)
+{
+	if (g_chroot == IR0_EARLY_ROOTFS_DEV)
+		return "/dev";
+	if (g_chroot == IR0_EARLY_ROOTFS_TMP)
+		return "/tmp";
+	if (g_chroot_path[0])
+		return g_chroot_path;
+	return "/";
+}
+
+static void early_publish_cwd(void)
+{
+	if (g_cwd_ops && g_cwd_ops->set)
+		g_cwd_ops->set(early_cwd_string());
+}
+
+static void early_publish_root(void)
+{
+	if (g_cwd_ops && g_cwd_ops->set_root)
+		g_cwd_ops->set_root(early_root_string());
+}
+
+void early_rootfs_bind_cwd(const struct ir0_cwd_ops *ops)
+{
+	g_cwd_ops = ops;
+	g_cwd_used = 0;
+	early_publish_cwd();
+	early_publish_root();
+}
+
+int early_rootfs_cwd_used(void)
+{
+	return g_cwd_used;
+}
+
 int64_t early_rootfs_chdir(uint64_t path)
 {
 	char pbuf[32];
@@ -2299,6 +2349,7 @@ int64_t early_rootfs_chdir(uint64_t path)
 			g_cwd_path[i] = pbuf[i];
 		g_cwd_path[i] = '\0';
 	}
+	early_publish_cwd();
 	return 0;
 }
 
@@ -2450,18 +2501,29 @@ int early_rootfs_dents_ready(void)
 int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size)
 {
 	const char *cwd;
+	char task_cwd[256];
 	uint64_t n;
+	int got;
 
 	if (!g_ready)
 		return -ENOENT;
-	if (g_cwd == IR0_EARLY_ROOTFS_DEV)
-		cwd = (g_chroot == IR0_EARLY_ROOTFS_DEV) ? "/" : "/dev";
-	else if (g_cwd == IR0_EARLY_ROOTFS_TMP)
-		cwd = (g_chroot == IR0_EARLY_ROOTFS_TMP) ? "/" : "/tmp";
-	else if (g_cwd == IR0_EARLY_ROOTFS_USERDIR)
-		cwd = g_cwd_path[0] ? g_cwd_path : "/";
-	else
-		cwd = "/";
+	if (g_cwd_ops && g_cwd_ops->get)
+	{
+		got = g_cwd_ops->get(task_cwd, sizeof(task_cwd));
+		if (got > 0)
+		{
+			cwd = task_cwd;
+			n = (uint64_t)got;
+			if (size < n)
+				return -ERANGE;
+			if (!g_user || !g_user->copy_to_user ||
+			    g_user->copy_to_user(buffer, cwd, n) != 0)
+				return -EFAULT;
+			g_cwd_used = 1;
+			return (int64_t)n;
+		}
+	}
+	cwd = early_cwd_string();
 	n = 0;
 	while (cwd[n] != '\0')
 		n++;
@@ -2621,6 +2683,7 @@ int64_t early_rootfs_fchdir(int fd)
 		g_cwd_path[0] = '/';
 		g_cwd_path[1] = '\0';
 	}
+	early_publish_cwd();
 	return 0;
 }
 
@@ -5706,6 +5769,7 @@ int64_t early_rootfs_chroot(uint64_t path)
 			g_chroot_path[i] = pbuf[i];
 		g_chroot_path[i] = '\0';
 	}
+	early_publish_root();
 	return 0;
 }
 

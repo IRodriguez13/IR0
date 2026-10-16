@@ -2854,6 +2854,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/process/exit.c \
 	kernel/process/idle.c \
 	kernel/syscalls/syscall_identity.c \
+	kernel/process/cwd.c \
 	kernel/process/wait.c \
 	kernel/process/wait_audit.c \
 	kernel/process/signals.c \
@@ -2999,6 +3000,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "ir0_syscall_identity_product" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "ir0_cwd_product" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 ~ /^(__kmalloc_checked|__kfree_checked|clock_note_context_switch|process_sched_state_trace)$$/ { if ($$2 != "T") bad = 1; seen++ } END { exit bad || seen != 4 }'
 	@echo "✓ ARM64 common process/MM/create symbols are strong"
 	@echo "✓ ARM64 allocator/accounting/scheduler trace providers are strong"
@@ -3019,6 +3022,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
@@ -3047,6 +3051,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-dtb-smoke.log
