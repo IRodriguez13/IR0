@@ -87,6 +87,8 @@ static int64_t early_write(struct early_syscall_context *context,
 		return early_rootfs_sock_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_is_fifo((int)descriptor))
 		return early_rootfs_fifo_write((int)descriptor, buffer, length);
+	if (early_rootfs_fd_is_file((int)descriptor))
+		return early_rootfs_file_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_is_block((int)descriptor))
 		return early_rootfs_block_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_discards_write((int)descriptor))
@@ -503,7 +505,6 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
 {
-	(void)a5;
 	early_io_note_clock(opaque);
 	switch (id) {
 	case IR0_SYSCALL_WRITE:
@@ -539,16 +540,28 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_EPOLL_PWAIT:
 		(void)a4;
 		return early_epoll_pwait(opaque, a0, a1, a2, a3);
+	case IR0_SYSCALL_SOCKET:
+		return early_rootfs_socket((int)a0, (int)a1, (int)a2);
 	case IR0_SYSCALL_SOCKETPAIR:
 		return early_rootfs_socketpair((int)a0, (int)a1, (int)a2, a3);
+	case IR0_SYSCALL_BIND:
+		return early_rootfs_sock_bind((int)a0, a1, a2);
+	case IR0_SYSCALL_LISTEN:
+		return early_rootfs_sock_listen((int)a0, (int)a1);
+	case IR0_SYSCALL_CONNECT:
+		return early_rootfs_sock_connect((int)a0, a1, a2);
+	case IR0_SYSCALL_ACCEPT:
+		return early_rootfs_sock_accept4((int)a0, a1, a2, 0);
+	case IR0_SYSCALL_ACCEPT4:
+		return early_rootfs_sock_accept4((int)a0, a1, a2, (int)a3);
+	case IR0_SYSCALL_GETSOCKNAME:
+		return early_rootfs_getsockname((int)a0, a1, a2);
+	case IR0_SYSCALL_GETPEERNAME:
+		return early_rootfs_getpeername((int)a0, a1, a2);
 	case IR0_SYSCALL_SENDTO:
-		if (!early_rootfs_fd_is_sock((int)a0))
-			return -ENOTSOCK;
-		return early_rootfs_sock_write((int)a0, a1, a2);
+		return early_rootfs_sendto((int)a0, a1, a2, a4, a5);
 	case IR0_SYSCALL_RECVFROM:
-		if (!early_rootfs_fd_is_sock((int)a0))
-			return -ENOTSOCK;
-		return early_rootfs_read((int)a0, a1, a2);
+		return early_rootfs_recvfrom((int)a0, a1, a2);
 	case IR0_SYSCALL_PPOLL:
 		(void)a3;
 		(void)a4;
@@ -567,8 +580,11 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_PSELECT6, IR0_SYSCALL_EVENTFD2, IR0_SYSCALL_MEMFD_CREATE,
 	IR0_SYSCALL_TIMERFD_CREATE, IR0_SYSCALL_TIMERFD_SETTIME,
 	IR0_SYSCALL_TIMERFD_GETTIME, IR0_SYSCALL_EPOLL_CREATE1,
-	IR0_SYSCALL_EPOLL_CTL, IR0_SYSCALL_EPOLL_PWAIT, IR0_SYSCALL_SOCKETPAIR,
-	IR0_SYSCALL_SENDTO, IR0_SYSCALL_RECVFROM,
+	IR0_SYSCALL_EPOLL_CTL, IR0_SYSCALL_EPOLL_PWAIT, IR0_SYSCALL_SOCKET,
+	IR0_SYSCALL_SOCKETPAIR, IR0_SYSCALL_BIND, IR0_SYSCALL_LISTEN,
+	IR0_SYSCALL_CONNECT, IR0_SYSCALL_ACCEPT, IR0_SYSCALL_ACCEPT4,
+	IR0_SYSCALL_GETSOCKNAME, IR0_SYSCALL_GETPEERNAME, IR0_SYSCALL_SENDTO,
+	IR0_SYSCALL_RECVFROM,
 };
 
 const struct syscall_context_provider early_io_provider = {

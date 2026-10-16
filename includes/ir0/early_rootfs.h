@@ -42,6 +42,7 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_FILE,
 	IR0_EARLY_ROOTFS_FIFO,
 	IR0_EARLY_ROOTFS_USERDIR,
+	IR0_EARLY_ROOTFS_UNIX,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -119,6 +120,8 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_DT_BLK 6
 #define IR0_EARLY_DT_REG 8
 #define IR0_EARLY_DT_FIFO 1
+#define IR0_EARLY_DT_SOCK 12
+#define IR0_EARLY_SUN_PATH 108
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -411,6 +414,14 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = 0;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_UNIX)
+	{
+		st->st_ino = 19;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_SOCK;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
 		st->st_ino = 16;
@@ -480,6 +491,41 @@ static inline int ir0_early_socketpair_args_ok(int domain, int type, int protoco
 	if (type & ~(0xf | IR0_EARLY_SOCK_CLOEXEC | IR0_EARLY_SOCK_NONBLOCK))
 		return 0;
 	return 1;
+}
+
+static inline int ir0_early_socket_args_ok(int domain, int type, int protocol)
+{
+	return ir0_early_socketpair_args_ok(domain, type, protocol);
+}
+
+/*
+ * Pathname AF_UNIX only (unix(7)). Abstract names (sun_path[0] == 0)
+ * are not implemented — callers must treat a 0 return as EINVAL.
+ */
+static inline int ir0_early_sockaddr_un_path(const uint8_t *addr,
+					    unsigned addrlen, char *out,
+					    unsigned cap)
+{
+	unsigned n;
+	unsigned i;
+
+	if (!addr || !out || cap < 2 || addrlen < 3)
+		return 0;
+	if (addr[0] != (uint8_t)IR0_EARLY_AF_UNIX || addr[1] != 0)
+		return 0;
+	if (addr[2] == 0)
+		return 0;
+	n = addrlen - 2U;
+	if (n > IR0_EARLY_SUN_PATH)
+		n = IR0_EARLY_SUN_PATH;
+	if (n >= cap)
+		n = cap - 1U;
+	for (i = 0; i < n; i++)
+		out[i] = (char)addr[2U + i];
+	out[n] = '\0';
+	for (i = 0; out[i] != '\0'; i++)
+		;
+	return i > 0;
 }
 
 static inline uint64_t ir0_early_timespec_to_ticks(int64_t sec, int64_t nsec,
@@ -615,8 +661,21 @@ int64_t early_rootfs_epoll_ctl(int epfd, int op, int fd, uint64_t event);
 int64_t early_rootfs_epoll_pwait(int epfd, uint64_t events, int maxevents,
 				 int timeout);
 int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv);
+int64_t early_rootfs_socket(int domain, int type, int protocol);
+int64_t early_rootfs_sock_bind(int fd, uint64_t addr, uint64_t addrlen);
+int64_t early_rootfs_sock_listen(int fd, int backlog);
+int64_t early_rootfs_sock_connect(int fd, uint64_t addr, uint64_t addrlen);
+int64_t early_rootfs_sock_accept4(int fd, uint64_t addr, uint64_t addrlen,
+				  int flags);
+int64_t early_rootfs_getsockname(int fd, uint64_t addr, uint64_t addrlen);
+int64_t early_rootfs_getpeername(int fd, uint64_t addr, uint64_t addrlen);
+int64_t early_rootfs_sendto(int fd, uint64_t buffer, uint64_t count,
+			    uint64_t dest, uint64_t destlen);
+int64_t early_rootfs_recvfrom(int fd, uint64_t buffer, uint64_t count);
 int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_sock(int fd);
+int early_rootfs_fd_is_file(int fd);
+int64_t early_rootfs_file_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_fifo(int fd);
 int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count);
 int64_t early_rootfs_blkgetsize64(int fd, uint64_t dest);

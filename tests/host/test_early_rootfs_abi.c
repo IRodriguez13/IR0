@@ -105,6 +105,11 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_ino, 15);
 	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_SOCK);
 
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_UNIX, 0, &st);
+	ASSERT_EQ(st.st_ino, 19);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_SOCK);
+	ASSERT_EQ(IR0_EARLY_DT_SOCK, 12);
+
 	ASSERT(ir0_early_timerfd_clock_ok(IR0_EARLY_CLOCK_MONOTONIC));
 	ASSERT(ir0_early_timerfd_clock_ok(IR0_EARLY_CLOCK_REALTIME));
 	ASSERT(!ir0_early_timerfd_clock_ok(2));
@@ -123,6 +128,31 @@ void test_early_rootfs_abi(void)
 						   IR0_EARLY_SOCK_CLOEXEC,
 					   0));
 	ASSERT(!ir0_early_socketpair_args_ok(2, IR0_EARLY_SOCK_STREAM, 0));
+	ASSERT(ir0_early_socket_args_ok(IR0_EARLY_AF_UNIX, IR0_EARLY_SOCK_STREAM,
+				       0));
+	ASSERT(!ir0_early_socket_args_ok(2, IR0_EARLY_SOCK_STREAM, 0));
+	{
+		uint8_t sun[16];
+		char path[16];
+		unsigned i;
+
+		for (i = 0; i < sizeof(sun); i++)
+			sun[i] = 0;
+		sun[0] = IR0_EARLY_AF_UNIX;
+		sun[2] = '/';
+		sun[3] = 't';
+		sun[4] = 'm';
+		sun[5] = 'p';
+		sun[6] = '/';
+		sun[7] = 's';
+		ASSERT(ir0_early_sockaddr_un_path(sun, 8, path, sizeof(path)));
+		ASSERT_STR_EQ(path, "/tmp/s");
+		sun[2] = 0;
+		ASSERT(!ir0_early_sockaddr_un_path(sun, 8, path, sizeof(path)));
+		sun[0] = 2;
+		sun[2] = '/';
+		ASSERT(!ir0_early_sockaddr_un_path(sun, 8, path, sizeof(path)));
+	}
 	ASSERT_EQ(IR0_EARLY_EPOLL_EVENT_BYTES, 16);
 	ASSERT_EQ(IR0_EARLY_ITIMERSPEC_BYTES, 32);
 	ASSERT_EQ(ir0_early_timespec_to_ticks(1, 0, 1000), 1000);
