@@ -74,6 +74,10 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(436) == IR0_SYSCALL_CLOSE_RANGE);
 	ASSERT(syscall_decode_number(285) == IR0_SYSCALL_COPY_FILE_RANGE);
 	ASSERT(syscall_decode_number(223) == IR0_SYSCALL_FADVISE64);
-	ASSERT(decoded == 155);
+	ASSERT(syscall_decode_number(75) == IR0_SYSCALL_VMSPLICE);
+	ASSERT(syscall_decode_number(84) == IR0_SYSCALL_SYNC_FILE_RANGE);
+	ASSERT(syscall_decode_number(269) == IR0_SYSCALL_SENDMMSG);
+	ASSERT(syscall_decode_number(243) == IR0_SYSCALL_RECVMMSG);
+	ASSERT(decoded == 159);
 	TEST_END();
 }

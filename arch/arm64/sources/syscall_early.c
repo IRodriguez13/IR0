@@ -93,6 +93,7 @@ static void arm64_early_time_note(enum early_syscall_event event)
 		[EARLY_SYSCALL_STATX_OK] = "ARM64_STATX_OK",
 		[EARLY_SYSCALL_SCM_RIGHTS_OK] = "ARM64_SCM_RIGHTS_OK",
 		[EARLY_SYSCALL_SPLICE_OK] = "ARM64_SPLICE_OK",
+		[EARLY_SYSCALL_ABSTRACT_OK] = "ARM64_ABSTRACT_OK",
 	};
 
 	if ((unsigned int)event < sizeof(tags) / sizeof(tags[0]) && tags[event])

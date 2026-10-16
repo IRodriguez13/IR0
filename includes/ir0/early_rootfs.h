@@ -132,6 +132,17 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_SO_REUSEADDR 2
 #define IR0_EARLY_SO_TYPE 3
 #define IR0_EARLY_SO_ERROR 4
+#define IR0_EARLY_SO_PASSCRED 16
+#define IR0_EARLY_SCM_CREDENTIALS 2
+#define IR0_EARLY_UCRED_BYTES 12U
+#define IR0_EARLY_MMSGHDR_BYTES 64U
+#define IR0_EARLY_SYNC_FILE_RANGE_WAIT_BEFORE 1U
+#define IR0_EARLY_SYNC_FILE_RANGE_WRITE 2U
+#define IR0_EARLY_SYNC_FILE_RANGE_WAIT_AFTER 4U
+#define IR0_EARLY_SYNC_FILE_RANGE_KNOWN \
+	(IR0_EARLY_SYNC_FILE_RANGE_WAIT_BEFORE | \
+	 IR0_EARLY_SYNC_FILE_RANGE_WRITE | \
+	 IR0_EARLY_SYNC_FILE_RANGE_WAIT_AFTER)
 #define IR0_EARLY_SHUT_RD 0
 #define IR0_EARLY_SHUT_WR 1
 #define IR0_EARLY_SHUT_RDWR 2
@@ -658,6 +669,24 @@ static inline int ir0_early_fadvise_ok(int advice)
 	return advice >= 0 && advice <= IR0_EARLY_POSIX_FADV_NOREUSE;
 }
 
+static inline int ir0_early_sync_file_range_flags_ok(unsigned flags)
+{
+	return (flags & ~IR0_EARLY_SYNC_FILE_RANGE_KNOWN) == 0;
+}
+
+static inline int ir0_early_sockaddr_un_is_abstract(const uint8_t *addr,
+						   unsigned addrlen)
+{
+	return addr && addrlen >= 3 &&
+	       addr[0] == (uint8_t)IR0_EARLY_AF_UNIX && addr[1] == 0 &&
+	       addr[2] == 0;
+}
+
+static inline unsigned ir0_early_sockaddr_un_abs_len(unsigned addrlen)
+{
+	return addrlen > 2 ? addrlen - 2U : 0;
+}
+
 static inline int ir0_early_sockaddr_un_path(const uint8_t *addr,
 					    unsigned addrlen, char *out,
 					    unsigned cap)
@@ -854,6 +883,7 @@ int64_t early_rootfs_fchdir(int fd);
 int64_t early_rootfs_fsync(int fd);
 int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp);
 int early_rootfs_exec_pending(void);
+int early_rootfs_abstract_observed(void);
 char *const *early_rootfs_exec_argv(void);
 void early_rootfs_exec_clear(void);
 
@@ -907,3 +937,10 @@ int64_t early_rootfs_copy_file_range(int fd_in, uint64_t off_in, int fd_out,
 				     unsigned flags);
 int64_t early_rootfs_fadvise64(int fd, int64_t offset, uint64_t len,
 			       int advice);
+int64_t early_rootfs_vmsplice(int fd, uint64_t iov, uint64_t iovcnt,
+			      unsigned flags);
+int64_t early_rootfs_sync_file_range(int fd, int64_t offset, int64_t nbytes,
+				     unsigned flags);
+int early_rootfs_want_creds(int fd);
+int early_rootfs_take_creds(int fd, int32_t *pid, int32_t *uid, int32_t *gid);
+int64_t early_rootfs_send_creds(int fd, int32_t pid, int32_t uid, int32_t gid);

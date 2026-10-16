@@ -11,6 +11,7 @@
 #include <ir0/time.h>
 
 #define EBADF 9
+#define EAGAIN 11
 #define EFAULT 14
 #define EINVAL 22
 #define ENOSYS 38
@@ -582,13 +583,15 @@ static int64_t early_epoll_pwait(struct early_syscall_context *context,
 
 static int64_t parse_scm_rights(const struct early_user_services *user,
 				uint64_t control, uint64_t controllen,
-				int *fds, int *nfds)
+				int *fds, int *nfds, int32_t *cred, int *has_cred)
 {
 	uint8_t raw[CMSG_CAP];
 	unsigned off = 0;
 	int got = 0;
 
 	*nfds = 0;
+	if (has_cred)
+		*has_cred = 0;
 	if (!control || !controllen)
 		return 0;
 	if (controllen > sizeof(raw))
@@ -609,7 +612,26 @@ static int64_t parse_scm_rights(const struct early_user_services *user,
 			return -EINVAL;
 		level = (int32_t)ir0_early_le32(raw + off + 8);
 		type = (int32_t)ir0_early_le32(raw + off + 12);
-		if (level != IR0_EARLY_SOL_SOCKET || type != IR0_EARLY_SCM_RIGHTS)
+		if (level != IR0_EARLY_SOL_SOCKET)
+			return -EOPNOTSUPP;
+		if (type == IR0_EARLY_SCM_CREDENTIALS)
+		{
+			if (clen < CMSG_HDR + IR0_EARLY_UCRED_BYTES)
+				return -EINVAL;
+			if (cred && has_cred)
+			{
+				cred[0] = (int32_t)ir0_early_le32(raw + off +
+								  CMSG_HDR);
+				cred[1] = (int32_t)ir0_early_le32(raw + off +
+								  CMSG_HDR + 4);
+				cred[2] = (int32_t)ir0_early_le32(raw + off +
+								  CMSG_HDR + 8);
+				*has_cred = 1;
+			}
+			off += ir0_early_cmsg_align((unsigned)clen);
+			continue;
+		}
+		if (type != IR0_EARLY_SCM_RIGHTS)
 			return -EOPNOTSUPP;
 		data = (unsigned)(clen - CMSG_HDR);
 		if (data % 4U)
@@ -640,6 +662,8 @@ static int64_t early_sendmsg(struct early_syscall_context *context,
 	uint64_t controllen;
 	int rights[IR0_EARLY_RIGHTS_MAX];
 	int nrights = 0;
+	int32_t cred[3];
+	int has_cred = 0;
 	uint64_t i;
 	int64_t total = 0;
 	int64_t parsed;
@@ -657,9 +681,18 @@ static int64_t early_sendmsg(struct early_syscall_context *context,
 	controllen = ir0_early_le64(hdr + 40);
 	if (iovlen > 8)
 		return -EINVAL;
-	parsed = parse_scm_rights(user, control, controllen, rights, &nrights);
+	parsed = parse_scm_rights(user, control, controllen, rights, &nrights,
+				  cred, &has_cred);
 	if (parsed < 0)
 		return parsed;
+	if (has_cred)
+	{
+		int64_t queued = early_rootfs_send_creds((int)fd, cred[0],
+							 cred[1], cred[2]);
+
+		if (queued < 0)
+			return queued;
+	}
 	if (nrights)
 	{
 		int64_t queued = early_rootfs_send_rights((int)fd, rights, nrights);
@@ -734,14 +767,21 @@ static int64_t early_recvmsg(struct early_syscall_context *context,
 						IR0_EARLY_RIGHTS_MAX);
 	if (nrights < 0)
 		return total ? total : nrights;
-	if (nrights > 0)
 	{
-		unsigned need = ir0_early_cmsg_align(CMSG_HDR +
-						     (unsigned)nrights * 4U);
+		int32_t cred[3];
+		int has_cred = early_rootfs_take_creds((int)fd, &cred[0],
+						       &cred[1], &cred[2]);
+		unsigned need = 0;
 		uint8_t cmsg[CMSG_CAP];
 		unsigned k;
 
-		if (!control || controllen < need)
+		if (nrights > 0)
+			need += ir0_early_cmsg_align(CMSG_HDR +
+						     (unsigned)nrights * 4U);
+		if (has_cred)
+			need += ir0_early_cmsg_align(CMSG_HDR +
+						     IR0_EARLY_UCRED_BYTES);
+		if (need && (!control || controllen < need))
 		{
 			int drop;
 
@@ -750,31 +790,56 @@ static int64_t early_recvmsg(struct early_syscall_context *context,
 			flags |= IR0_EARLY_MSG_CTRUNC;
 			need = 0;
 		}
-		else
+		else if (need)
 		{
+			unsigned off = 0;
+
 			for (k = 0; k < sizeof(cmsg); k++)
 				cmsg[k] = 0;
-			ir0_early_put_le64(cmsg, CMSG_HDR + (unsigned)nrights * 4U);
-			ir0_early_put_le32(cmsg + 8, IR0_EARLY_SOL_SOCKET);
-			ir0_early_put_le32(cmsg + 12, IR0_EARLY_SCM_RIGHTS);
-			for (k = 0; k < (unsigned)nrights; k++)
-				ir0_early_put_le32(cmsg + CMSG_HDR + k * 4U,
-						   (uint32_t)rights[k]);
+			if (nrights > 0)
+			{
+				unsigned clen = CMSG_HDR + (unsigned)nrights * 4U;
+
+				ir0_early_put_le64(cmsg + off, clen);
+				ir0_early_put_le32(cmsg + off + 8,
+						   IR0_EARLY_SOL_SOCKET);
+				ir0_early_put_le32(cmsg + off + 12,
+						   IR0_EARLY_SCM_RIGHTS);
+				for (k = 0; k < (unsigned)nrights; k++)
+					ir0_early_put_le32(cmsg + off + CMSG_HDR +
+							   k * 4U,
+							   (uint32_t)rights[k]);
+				off += ir0_early_cmsg_align(clen);
+				if (context->services->time &&
+				    context->services->time->note)
+					context->services->time->note(
+						EARLY_SYSCALL_SCM_RIGHTS_OK);
+			}
+			if (has_cred)
+			{
+				unsigned clen = CMSG_HDR + IR0_EARLY_UCRED_BYTES;
+
+				ir0_early_put_le64(cmsg + off, clen);
+				ir0_early_put_le32(cmsg + off + 8,
+						   IR0_EARLY_SOL_SOCKET);
+				ir0_early_put_le32(cmsg + off + 12,
+						   IR0_EARLY_SCM_CREDENTIALS);
+				ir0_early_put_le32(cmsg + off + CMSG_HDR,
+						   (uint32_t)cred[0]);
+				ir0_early_put_le32(cmsg + off + CMSG_HDR + 4,
+						   (uint32_t)cred[1]);
+				ir0_early_put_le32(cmsg + off + CMSG_HDR + 8,
+						   (uint32_t)cred[2]);
+			}
 			if (user->copy_to_user(control, cmsg, need) != 0)
 				return -EFAULT;
-			if (context->services->time && context->services->time->note)
-				context->services->time->note(
-					EARLY_SYSCALL_SCM_RIGHTS_OK);
 		}
-		ir0_early_put_le64(hdr + 40, need);
-		if (user->copy_to_user(msg + 40, hdr + 40, 8) != 0)
-			return -EFAULT;
-	}
-	else if (control)
-	{
-		ir0_early_put_le64(hdr + 40, 0);
-		if (user->copy_to_user(msg + 40, hdr + 40, 8) != 0)
-			return -EFAULT;
+		if (control)
+		{
+			ir0_early_put_le64(hdr + 40, need);
+			if (user->copy_to_user(msg + 40, hdr + 40, 8) != 0)
+				return -EFAULT;
+		}
 	}
 	if (flags)
 	{
@@ -783,6 +848,71 @@ static int64_t early_recvmsg(struct early_syscall_context *context,
 			return -EFAULT;
 	}
 	return total;
+}
+
+static int64_t early_sendmmsg(struct early_syscall_context *context,
+			      uint64_t fd, uint64_t msgvec, uint64_t vlen)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	uint32_t wrote;
+
+	if (!vlen)
+		return 0;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_to_user)
+		return -ENOSYS;
+	if (vlen > 8)
+		vlen = 8;
+	for (i = 0; i < vlen; i++)
+	{
+		int64_t n = early_sendmsg(context, fd,
+					  msgvec + i * IR0_EARLY_MMSGHDR_BYTES);
+
+		if (n < 0)
+			return i ? (int64_t)i : n;
+		wrote = (uint32_t)n;
+		if (user->copy_to_user(msgvec + i * IR0_EARLY_MMSGHDR_BYTES + 56,
+				       &wrote, 4) != 0)
+			return i ? (int64_t)i : -EFAULT;
+	}
+	return (int64_t)vlen;
+}
+
+static int64_t early_recvmmsg(struct early_syscall_context *context,
+			      uint64_t fd, uint64_t msgvec, uint64_t vlen,
+			      uint64_t timeout)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	uint32_t got;
+
+	if (!vlen)
+		return 0;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_to_user)
+		return -ENOSYS;
+	if (vlen > 8)
+		vlen = 8;
+	for (i = 0; i < vlen; i++)
+	{
+		int64_t n = early_recvmsg(context, fd,
+					  msgvec + i * IR0_EARLY_MMSGHDR_BYTES);
+
+		if (n < 0)
+		{
+			if (i)
+				return (int64_t)i;
+			if (n == -EAGAIN && timeout)
+				return 0;
+			return n;
+		}
+		got = (uint32_t)n;
+		if (user->copy_to_user(msgvec + i * IR0_EARLY_MMSGHDR_BYTES + 56,
+				       &got, 4) != 0)
+			return i ? (int64_t)i : -EFAULT;
+	}
+	return (int64_t)vlen;
 }
 
 static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
@@ -843,7 +973,16 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_GETPEERNAME:
 		return early_rootfs_getpeername((int)a0, a1, a2);
 	case IR0_SYSCALL_SENDTO:
-		return early_rootfs_sendto((int)a0, a1, a2, a4, a5);
+	{
+		int64_t ret = early_rootfs_sendto((int)a0, a1, a2, a4, a5);
+		struct early_syscall_context *context = opaque;
+
+		if (ret >= 0 && early_rootfs_abstract_observed() && context &&
+		    context->services && context->services->time &&
+		    context->services->time->note)
+			context->services->time->note(EARLY_SYSCALL_ABSTRACT_OK);
+		return ret;
+	}
 	case IR0_SYSCALL_RECVFROM:
 		return early_rootfs_recvfrom((int)a0, a1, a2);
 	case IR0_SYSCALL_SENDMSG:
@@ -893,6 +1032,16 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 						    (unsigned)a5);
 	case IR0_SYSCALL_FADVISE64:
 		return early_rootfs_fadvise64((int)a0, (int64_t)a1, a2, (int)a3);
+	case IR0_SYSCALL_VMSPLICE:
+		return early_rootfs_vmsplice((int)a0, a1, a2, (unsigned)a3);
+	case IR0_SYSCALL_SYNC_FILE_RANGE:
+		return early_rootfs_sync_file_range((int)a0, (int64_t)a1,
+						    (int64_t)a2, (unsigned)a3);
+	case IR0_SYSCALL_SENDMMSG:
+		return early_sendmmsg(opaque, a0, a1, a2);
+	case IR0_SYSCALL_RECVMMSG:
+		(void)a3;
+		return early_recvmmsg(opaque, a0, a1, a2, a4);
 	default:
 		return -ENOSYS;
 	}
@@ -914,7 +1063,8 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_PREAD64, IR0_SYSCALL_PWRITE64, IR0_SYSCALL_SENDFILE,
 	IR0_SYSCALL_PREADV, IR0_SYSCALL_PWRITEV, IR0_SYSCALL_SPLICE,
 	IR0_SYSCALL_TEE, IR0_SYSCALL_CLOSE_RANGE, IR0_SYSCALL_COPY_FILE_RANGE,
-	IR0_SYSCALL_FADVISE64,
+	IR0_SYSCALL_FADVISE64, IR0_SYSCALL_VMSPLICE, IR0_SYSCALL_SYNC_FILE_RANGE,
+	IR0_SYSCALL_SENDMMSG, IR0_SYSCALL_RECVMMSG,
 };
 
 const struct syscall_context_provider early_io_provider = {

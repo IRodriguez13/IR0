@@ -60,6 +60,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 71: return IR0_SYSCALL_SENDFILE;
 	case 72: return IR0_SYSCALL_PSELECT6;
 	case 73: return IR0_SYSCALL_PPOLL;
+	case 75: return IR0_SYSCALL_VMSPLICE;
 	case 76: return IR0_SYSCALL_SPLICE;
 	case 77: return IR0_SYSCALL_TEE;
 	case 78: return IR0_SYSCALL_READLINKAT;
@@ -68,6 +69,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 81: return IR0_SYSCALL_SYNC;
 	case 82: return IR0_SYSCALL_FSYNC;
 	case 83: return IR0_SYSCALL_FDATASYNC;
+	case 84: return IR0_SYSCALL_SYNC_FILE_RANGE;
 	case 85: return IR0_SYSCALL_TIMERFD_CREATE;
 	case 86: return IR0_SYSCALL_TIMERFD_SETTIME;
 	case 87: return IR0_SYSCALL_TIMERFD_GETTIME;
@@ -158,8 +160,10 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 227: return IR0_SYSCALL_MSYNC;
 	case 233: return IR0_SYSCALL_MADVISE;
 	case 242: return IR0_SYSCALL_ACCEPT4;
+	case 243: return IR0_SYSCALL_RECVMMSG;
 	case 260: return IR0_SYSCALL_WAIT4;
 	case 261: return IR0_SYSCALL_PRLIMIT64;
+	case 269: return IR0_SYSCALL_SENDMMSG;
 	case 276: return IR0_SYSCALL_RENAMEAT2;
 	case 278: return IR0_SYSCALL_GETRANDOM;
 	case 285: return IR0_SYSCALL_COPY_FILE_RANGE;

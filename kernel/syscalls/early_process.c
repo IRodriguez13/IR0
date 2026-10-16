@@ -1001,6 +1001,16 @@ int64_t early_process_current_pid(void)
 	return g_current_pid;
 }
 
+void early_process_current_ucred(int32_t *pid, int32_t *uid, int32_t *gid)
+{
+	if (pid)
+		*pid = (int32_t)g_current_pid;
+	if (uid)
+		*uid = (int32_t)g_uid;
+	if (gid)
+		*gid = (int32_t)g_gid;
+}
+
 int early_process_smoke_ok(void)
 {
 	return g_getpid_ok;

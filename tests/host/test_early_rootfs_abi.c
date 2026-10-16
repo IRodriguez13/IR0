@@ -191,6 +191,28 @@ void test_early_rootfs_abi(void)
 	ASSERT(ir0_early_fadvise_ok(0));
 	ASSERT(ir0_early_fadvise_ok(IR0_EARLY_POSIX_FADV_NOREUSE));
 	ASSERT(!ir0_early_fadvise_ok(6));
+	ASSERT(ir0_early_sync_file_range_flags_ok(0));
+	ASSERT(ir0_early_sync_file_range_flags_ok(
+		IR0_EARLY_SYNC_FILE_RANGE_WRITE |
+		IR0_EARLY_SYNC_FILE_RANGE_WAIT_AFTER));
+	ASSERT(!ir0_early_sync_file_range_flags_ok(8));
+	{
+		uint8_t sun[4];
+		char abs_path[8];
+
+		sun[0] = IR0_EARLY_AF_UNIX;
+		sun[1] = 0;
+		sun[2] = 0;
+		sun[3] = 'A';
+		ASSERT(ir0_early_sockaddr_un_is_abstract(sun, 4));
+		ASSERT_EQ(ir0_early_sockaddr_un_abs_len(4), 2);
+		ASSERT(!ir0_early_sockaddr_un_path(sun, 4, abs_path,
+						  sizeof(abs_path)));
+	}
+	ASSERT_EQ(IR0_EARLY_MMSGHDR_BYTES, 64);
+	ASSERT_EQ(IR0_EARLY_UCRED_BYTES, 12);
+	ASSERT_EQ(IR0_EARLY_SO_PASSCRED, 16);
+	ASSERT_EQ(IR0_EARLY_SCM_CREDENTIALS, 2);
 	ASSERT_EQ(IR0_EARLY_STATX_BYTES, 256);
 	ASSERT_EQ(IR0_EARLY_STATX_BASIC, 0x7ff);
 	{
