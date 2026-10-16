@@ -6,6 +6,7 @@
 #include <ir0/early_io.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
+#include <ir0/time.h>
 
 #define EBADF 9
 #define EFAULT 14
@@ -240,6 +241,198 @@ static int64_t early_readv(struct early_syscall_context *context,
 	return total;
 }
 
+#define PPOLL_MAX 16
+#define PSELECT_FD_BYTES 16
+#define NS_PER_SEC 1000000000ULL
+
+static int64_t early_sleep_timeout(struct early_syscall_context *context,
+				   uint64_t timeout)
+{
+	const struct early_syscall_services *services_all;
+	const struct early_user_services *user;
+	const struct early_time_services *ops;
+	struct timespec value;
+	uint64_t frequency, seconds_ticks, nanosecond_ticks, delta, start;
+
+	if (!timeout)
+		return 0;
+	if (!context || !(services_all = context->services) ||
+	    !(user = services_all->user) || !user->copy_from_user ||
+	    !(ops = services_all->time) || !ops->counter_read ||
+	    !ops->counter_frequency || !ops->cpu_relax)
+		return 0;
+	if (user->copy_from_user(&value, timeout, sizeof(value)) != 0)
+		return -EFAULT;
+	if (value.tv_sec < 0 || value.tv_nsec < 0 ||
+	    value.tv_nsec >= (int64_t)NS_PER_SEC)
+		return -EINVAL;
+	frequency = ops->counter_frequency();
+	if (!frequency)
+		return 0;
+	seconds_ticks = (uint64_t)value.tv_sec * frequency;
+	nanosecond_ticks = ((uint64_t)value.tv_nsec * frequency) / NS_PER_SEC;
+	delta = seconds_ticks + nanosecond_ticks;
+	if (!delta)
+		return 0;
+	start = ops->counter_read();
+	while (ops->counter_read() - start < delta)
+		ops->cpu_relax();
+	return 0;
+}
+
+static int64_t early_ppoll(struct early_syscall_context *context,
+			   uint64_t fds, uint64_t nfds, uint64_t timeout)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	int ready = 0;
+	int64_t sleep_ret;
+
+	if (nfds > PPOLL_MAX)
+		return -EINVAL;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user ||
+	    !user->copy_to_user)
+		return -ENOSYS;
+	for (i = 0; i < nfds; i++)
+	{
+		int32_t fd;
+		int16_t ev[2];
+		int revents;
+
+		if (user->copy_from_user(&fd, fds + i * 8UL, sizeof(fd)) != 0 ||
+		    user->copy_from_user(ev, fds + i * 8UL + 4UL, sizeof(ev)) != 0)
+			return -EFAULT;
+		revents = early_rootfs_poll_revents(fd, ev[0]);
+		ev[1] = (int16_t)revents;
+		if (user->copy_to_user(fds + i * 8UL + 6UL, &ev[1],
+				       sizeof(ev[1])) != 0)
+			return -EFAULT;
+		if (revents)
+			ready++;
+	}
+	if (ready)
+		return ready;
+	/*
+	 * Linux ppoll NULL timeout waits forever. Staged EL0 has no waiter
+	 * wake (no clone, no console input queue), so that would hang.
+	 * A zero or missing timeout returns 0; a positive timeout sleeps
+	 * then returns 0 if still idle.
+	 */
+	if (!timeout)
+		return 0;
+	sleep_ret = early_sleep_timeout(context, timeout);
+	if (sleep_ret < 0)
+		return sleep_ret;
+	return 0;
+}
+
+static int fdset_bit(const uint8_t *set, unsigned fd)
+{
+	return (set[fd / 8] >> (fd % 8)) & 1;
+}
+
+static void fdset_set(uint8_t *set, unsigned fd)
+{
+	set[fd / 8] |= (uint8_t)(1U << (fd % 8));
+}
+
+static int64_t early_pselect6(struct early_syscall_context *context,
+			      uint64_t nfds, uint64_t readfds, uint64_t writefds,
+			      uint64_t exceptfds, uint64_t timeout)
+{
+	const struct early_user_services *user;
+	uint8_t rin[PSELECT_FD_BYTES];
+	uint8_t win[PSELECT_FD_BYTES];
+	uint8_t ein[PSELECT_FD_BYTES];
+	uint8_t rout[PSELECT_FD_BYTES];
+	uint8_t wout[PSELECT_FD_BYTES];
+	uint8_t eout[PSELECT_FD_BYTES];
+	unsigned i;
+	int ready = 0;
+	int64_t sleep_ret;
+	unsigned copy_n;
+
+	if (nfds > 64)
+		return -EINVAL;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user ||
+	    !user->copy_to_user)
+		return -ENOSYS;
+	for (i = 0; i < PSELECT_FD_BYTES; i++)
+	{
+		rin[i] = win[i] = ein[i] = 0;
+		rout[i] = wout[i] = eout[i] = 0;
+	}
+	copy_n = (unsigned)((nfds + 7) / 8);
+	if (copy_n > PSELECT_FD_BYTES)
+		copy_n = PSELECT_FD_BYTES;
+	if (readfds && user->copy_from_user(rin, readfds, copy_n) != 0)
+		return -EFAULT;
+	if (writefds && user->copy_from_user(win, writefds, copy_n) != 0)
+		return -EFAULT;
+	if (exceptfds && user->copy_from_user(ein, exceptfds, copy_n) != 0)
+		return -EFAULT;
+	for (i = 0; i < (unsigned)nfds; i++)
+	{
+		int events = 0;
+		int revents;
+
+		if (readfds && fdset_bit(rin, i))
+			events |= IR0_EARLY_POLLIN;
+		if (writefds && fdset_bit(win, i))
+			events |= IR0_EARLY_POLLOUT;
+		if (exceptfds && fdset_bit(ein, i))
+			events |= IR0_EARLY_POLLPRI;
+		if (!events)
+			continue;
+		revents = early_rootfs_poll_revents((int)i, events);
+		if ((revents & IR0_EARLY_POLLIN) && readfds && fdset_bit(rin, i))
+		{
+			fdset_set(rout, i);
+			ready++;
+		}
+		if ((revents & IR0_EARLY_POLLOUT) && writefds &&
+		    fdset_bit(win, i))
+		{
+			fdset_set(wout, i);
+			ready++;
+		}
+		if ((revents & (IR0_EARLY_POLLERR | IR0_EARLY_POLLPRI)) &&
+		    exceptfds && fdset_bit(ein, i))
+		{
+			fdset_set(eout, i);
+			ready++;
+		}
+	}
+	if (ready)
+	{
+		if (readfds &&
+		    user->copy_to_user(readfds, rout, copy_n) != 0)
+			return -EFAULT;
+		if (writefds &&
+		    user->copy_to_user(writefds, wout, copy_n) != 0)
+			return -EFAULT;
+		if (exceptfds &&
+		    user->copy_to_user(exceptfds, eout, copy_n) != 0)
+			return -EFAULT;
+		return ready;
+	}
+	if (timeout)
+	{
+		sleep_ret = early_sleep_timeout(context, timeout);
+		if (sleep_ret < 0)
+			return sleep_ret;
+	}
+	if (readfds && user->copy_to_user(readfds, rout, copy_n) != 0)
+		return -EFAULT;
+	if (writefds && user->copy_to_user(writefds, wout, copy_n) != 0)
+		return -EFAULT;
+	if (exceptfds && user->copy_to_user(exceptfds, eout, copy_n) != 0)
+		return -EFAULT;
+	return 0;
+}
+
 static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
@@ -263,6 +456,11 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_PIPE2:
 		return early_rootfs_pipe2(a0, (int)a1);
 	case IR0_SYSCALL_PPOLL:
+		(void)a3;
+		(void)a4;
+		return early_ppoll(opaque, a0, a1, a2);
+	case IR0_SYSCALL_PSELECT6:
+		return early_pselect6(opaque, a0, a1, a2, a3, a4);
 	default:
 		return -ENOSYS;
 	}
@@ -272,6 +470,7 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_WRITE, IR0_SYSCALL_WRITEV, IR0_SYSCALL_READV,
 	IR0_SYSCALL_IOCTL, IR0_SYSCALL_FCNTL, IR0_SYSCALL_PIPE2,
 	IR0_SYSCALL_DUP, IR0_SYSCALL_DUP3, IR0_SYSCALL_PPOLL,
+	IR0_SYSCALL_PSELECT6,
 };
 
 const struct syscall_context_provider early_io_provider = {
