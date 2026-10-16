@@ -21,6 +21,7 @@
 #include <ir0/errno.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
+#include <ir0/product_path.h>
 #include <ir0/idle.h>
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
@@ -323,6 +324,16 @@ void arm64_common_prepare_final_el0(void)
 	early_process_arm_schedule_exit();
 }
 
+static int arm64_product_read(struct vfs_file *f, void *buf, size_t n)
+{
+	return vfs_read(f, (char *)buf, n);
+}
+
+static int arm64_product_write(struct vfs_file *f, const void *buf, size_t n)
+{
+	return vfs_write(f, (const char *)buf, n);
+}
+
 void arm64_common_prepare_fdtable(void)
 {
 	const struct ir0_fd_install_ops *ops = ir0_fd_install_product();
@@ -371,6 +382,25 @@ void arm64_common_prepare_fdtable(void)
 			ir0_boot_smoke("ARM64_PRODUCT_VFS_OK");
 		if (f)
 			(void)vfs_file_put(f);
+		{
+			static const struct ir0_product_path_ops path_ops = {
+				.stat = vfs_stat,
+				.open = vfs_open,
+				.read = arm64_product_read,
+				.write = arm64_product_write,
+				.lseek = vfs_lseek,
+				.put = vfs_file_put,
+				.mkdir = vfs_mkdir,
+				.unlink = vfs_unlink,
+				.rmdir = vfs_rmdir,
+				.truncate = vfs_truncate,
+			};
+
+			early_rootfs_bind_product_path(&path_ops);
+			if (vfs_mkdir("/tmp/fold", 0755) == 0 &&
+			    ir0_product_path_is_tmp("/tmp/fold"))
+				ir0_boot_smoke("ARM64_EARLY_PATH_FOLD_OK");
+		}
 	}
 }
 

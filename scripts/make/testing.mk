@@ -2196,6 +2196,7 @@ ARM64_BOOT_LINK_OBJS = \
 	build/arm64-boot/early_io.o \
 	build/arm64-boot/early_vfs.o \
 	build/arm64-boot/early_rootfs.o \
+	build/arm64-boot/ramtab.o \
 	build/arm64-boot/vfs_dispatch.o \
 	build/arm64-boot/early_elf_stack.o \
 	build/arm64-boot/early_process.o \
@@ -2364,6 +2365,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/syscalls/early_io.c includes/ir0/early_io.h \
 		kernel/syscalls/early_vfs.c includes/ir0/early_vfs.h \
 		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
+		fs/ramtab.c includes/ir0/ramtab.h includes/ir0/product_path.h \
 		fs/vfs_dispatch.c includes/ir0/vfs_dispatch.h \
 		kernel/lib/early_elf_stack.c includes/ir0/early_elf_stack.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
@@ -2465,6 +2467,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs.c \
 		-o build/arm64-boot/early_rootfs.o
+	@echo "  CC      fs/ramtab.c (path table for staged names)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c fs/ramtab.c \
+		-o build/arm64-boot/ramtab.o
 	@echo "  CC      fs/vfs_dispatch.c (portable vfs_ops dispatch)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c fs/vfs_dispatch.c \
@@ -3067,6 +3073,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_VFS_OPS_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_VFS_OPS_READ_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_PRODUCT_VFS_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_EARLY_PATH_FOLD_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log

@@ -21,6 +21,8 @@
 #include <ir0/early_rootfs.h>
 #include <ir0/vfs_file.h>
 #include <ir0/vfs_dispatch.h>
+#include <ir0/ramtab.h>
+#include <ir0/product_path.h>
 #include <ir0/stat.h>
 #include <ir0/fcntl.h>
 #include <ir0/types.h>
@@ -73,6 +75,7 @@ struct rootfs_slot
 	int flags;
 	int cloexec;
 	int pipe_id;
+	struct vfs_file *vf;
 };
 
 #define PIPE_MAX 2
@@ -90,7 +93,6 @@ struct rootfs_slot
 #define SOCKPAIR_MAX 4
 #define UNIX_MAX 4
 #define UNIX_ID_BASE 32
-#define FS_FILE_CAP 512
 #define EAFNOSUPPORT 97
 #define ESOCKTNOSUPPORT 94
 #define EPROTONOSUPPORT 93
@@ -140,6 +142,8 @@ static const struct ir0_fd_install_ops *g_fd_ops;
 static int g_vfs_file_used;
 static int g_vfs_ops_used;
 static int g_fd_used;
+static const struct ir0_product_path_ops *g_product_path;
+static int g_product_path_used;
 
 static void early_publish_fd(int fd, enum ir0_early_rootfs_node node);
 static int early_fdtable_ok(int fd);
@@ -220,24 +224,6 @@ static uint64_t g_clock_mono;
 static uint64_t g_clock_hz;
 static int64_t g_clock_realtime_off;
 
-#define FS_MAX 24
-#define FS_NAME 40
-
-struct early_fs_ent
-{
-	int used;
-	char path[FS_NAME];
-	uint32_t mode;
-	uint32_t size;
-	const uint8_t *data;
-	int fifo_pipe;
-	int writable;
-	int link_to;
-	uint8_t own[FS_FILE_CAP];
-};
-
-static struct early_fs_ent g_fs[FS_MAX];
-
 #define XA_MAX 16
 
 static struct early_xattr
@@ -262,7 +248,7 @@ static struct early_ruleset
 	struct
 	{
 		uint64_t allowed;
-		char path[FS_NAME];
+		char path[RAMTAB_NAME];
 	} rules[LL_RULE_MAX];
 } g_ruleset[RULESET_MAX];
 
@@ -272,7 +258,7 @@ static int g_ll_n;
 static struct
 {
 	uint64_t allowed;
-	char path[FS_NAME];
+	char path[RAMTAB_NAME];
 } g_ll_rules[LL_RULE_MAX];
 
 static int landlock_allow(const char *path, uint64_t need);
@@ -305,14 +291,14 @@ static struct early_unix
 	int32_t cred_pid;
 	int32_t cred_uid;
 	int32_t cred_gid;
-	char bound_path[FS_NAME];
+	char bound_path[RAMTAB_NAME];
 	unsigned rpos;
 	unsigned len;
 	uint8_t buf[PIPE_BUF];
 } g_unix[UNIX_MAX];
 static int g_cpio_ready;
-static char g_cwd_path[FS_NAME];
-static char g_chroot_path[FS_NAME];
+static char g_cwd_path[RAMTAB_NAME];
+static char g_chroot_path[RAMTAB_NAME];
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -522,9 +508,9 @@ static struct early_pipe *pipe_of_fd(int fd)
 		int fsid = pipe_id_of_fd(fd);
 		int fifo;
 
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 			return 0;
-		fifo = g_fs[fsid].fifo_pipe;
+		fifo = ramtab_table()[fsid].fifo_pipe;
 		if (fifo < 0 || fifo >= PIPE_MAX || !g_pipes[fifo].used)
 			return 0;
 		return &g_pipes[fifo];
@@ -723,262 +709,6 @@ void early_rootfs_note_clock(uint64_t mono_ticks, uint64_t hz,
 	timerfd_advance_all();
 }
 
-static int fs_path_eq(const char *left, const char *right)
-{
-	return strings_equal(left, right);
-}
-
-static int fs_parent(const char *path, char *parent, unsigned cap)
-{
-	unsigned n = 0;
-	unsigned last = 0;
-	unsigned i;
-
-	if (!path || !parent || cap < 2 || path[0] != '/')
-		return 0;
-	while (path[n] != '\0')
-	{
-		if (path[n] == '/' && n > 0)
-			last = n;
-		n++;
-	}
-	if (n <= 1)
-	{
-		parent[0] = '/';
-		parent[1] = '\0';
-		return 1;
-	}
-	if (last == 0)
-	{
-		parent[0] = '/';
-		parent[1] = '\0';
-		return 1;
-	}
-	if (last + 1 >= cap)
-		return 0;
-	for (i = 0; i < last; i++)
-		parent[i] = path[i];
-	parent[last] = '\0';
-	return 1;
-}
-
-static const char *fs_basename(const char *path)
-{
-	unsigned i = 0;
-	unsigned last = 0;
-
-	if (!path || path[0] == '\0')
-		return path;
-	while (path[i] != '\0')
-	{
-		if (path[i] == '/' && path[i + 1] != '\0')
-			last = i + 1;
-		i++;
-	}
-	return path + last;
-}
-
-static int fs_find(const char *path)
-{
-	unsigned i;
-
-	if (!path)
-		return -1;
-	for (i = 0; i < FS_MAX; i++)
-	{
-		if (g_fs[i].used && fs_path_eq(g_fs[i].path, path))
-			return (int)i;
-	}
-	return -1;
-}
-
-static int fs_body(int idx)
-{
-	int dest;
-
-	if (idx < 0 || idx >= FS_MAX || !g_fs[idx].used)
-		return -1;
-	dest = g_fs[idx].link_to;
-	if (dest >= 0 && dest < FS_MAX && dest != idx && g_fs[dest].used)
-		return dest;
-	return idx;
-}
-
-static void fs_rehome(int fsid)
-{
-	int i;
-	int neu = -1;
-
-	if (fsid < 0 || fsid >= FS_MAX)
-		return;
-	for (i = 0; i < FS_MAX; i++)
-	{
-		if (i != fsid && g_fs[i].used && g_fs[i].link_to == fsid)
-		{
-			neu = i;
-			break;
-		}
-	}
-	if (neu < 0)
-		return;
-	g_fs[neu].size = g_fs[fsid].size;
-	g_fs[neu].writable = g_fs[fsid].writable;
-	g_fs[neu].fifo_pipe = g_fs[fsid].fifo_pipe;
-	g_fs[neu].mode = g_fs[fsid].mode;
-	if (g_fs[fsid].data == g_fs[fsid].own || g_fs[fsid].writable)
-	{
-		unsigned n;
-
-		for (n = 0; n < FS_FILE_CAP; n++)
-			g_fs[neu].own[n] = g_fs[fsid].own[n];
-		g_fs[neu].data = g_fs[neu].own;
-	}
-	else
-		g_fs[neu].data = g_fs[fsid].data;
-	g_fs[neu].link_to = -1;
-	for (i = 0; i < FS_MAX; i++)
-	{
-		if (g_fs[i].used && g_fs[i].link_to == fsid)
-			g_fs[i].link_to = neu;
-	}
-	for (i = 0; i < UNIX_MAX; i++)
-	{
-		if (g_unix[i].used && g_unix[i].bound_fs == fsid)
-			g_unix[i].bound_fs = neu;
-	}
-}
-
-static int fs_add(const char *path, uint32_t mode, uint32_t size,
-		  const uint8_t *data, int writable)
-{
-	int idx;
-	unsigned i;
-
-	if (!path || path[0] != '/')
-		return -EINVAL;
-	if (writable && size > FS_FILE_CAP)
-		return -EFBIG;
-	idx = fs_find(path);
-	if (idx >= 0)
-	{
-		g_fs[idx].mode = mode;
-		g_fs[idx].size = size;
-		g_fs[idx].writable = 0;
-		g_fs[idx].data = data;
-		g_fs[idx].link_to = -1;
-		return idx;
-	}
-	for (i = 0; i < FS_MAX; i++)
-	{
-		if (g_fs[i].used)
-			continue;
-		g_fs[i].used = 1;
-		for (idx = 0; path[idx] != '\0' && idx + 1 < FS_NAME; idx++)
-			g_fs[i].path[idx] = path[idx];
-		if (path[idx] != '\0')
-		{
-			g_fs[i].used = 0;
-			return -ENAMETOOLONG;
-		}
-		g_fs[i].path[idx] = '\0';
-		g_fs[i].mode = mode;
-		g_fs[i].size = size;
-		g_fs[i].fifo_pipe = -1;
-		g_fs[i].link_to = -1;
-		g_fs[i].writable = writable;
-		if (writable)
-		{
-			unsigned n;
-
-			g_fs[i].data = g_fs[i].own;
-			for (n = 0; n < FS_FILE_CAP; n++)
-				g_fs[i].own[n] = 0;
-			if (data && size)
-			{
-				for (n = 0; n < size; n++)
-					g_fs[i].own[n] = data[n];
-			}
-		}
-		else
-			g_fs[i].data = data;
-		return (int)i;
-	}
-	return -ENOSPC;
-}
-
-static enum ir0_early_rootfs_node fs_node_kind(uint32_t mode)
-{
-	uint32_t type = mode & S_IFMT;
-
-	if (type == S_IFDIR)
-		return IR0_EARLY_ROOTFS_USERDIR;
-	if (type == S_IFIFO)
-		return IR0_EARLY_ROOTFS_FIFO;
-	if (type == S_IFSOCK)
-		return IR0_EARLY_ROOTFS_UNIX;
-	if (type == S_IFLNK)
-		return IR0_EARLY_ROOTFS_SYMLINK;
-	return IR0_EARLY_ROOTFS_FILE;
-}
-
-static int fs_child_count(const char *dir)
-{
-	char parent[FS_NAME];
-	unsigned i;
-	int n = 0;
-
-	for (i = 0; i < FS_MAX; i++)
-	{
-		if (!g_fs[i].used)
-			continue;
-		if (!fs_parent(g_fs[i].path, parent, sizeof(parent)))
-			continue;
-		if (fs_path_eq(parent, dir) && !fs_path_eq(g_fs[i].path, dir))
-			n++;
-	}
-	return n;
-}
-
-static int fs_child_at(const char *dir, int which, struct ir0_early_dirent_spec *spec)
-{
-	char parent[FS_NAME];
-	unsigned i;
-	int n = 0;
-
-	if (!spec)
-		return 0;
-	for (i = 0; i < FS_MAX; i++)
-	{
-		uint32_t type;
-
-		if (!g_fs[i].used)
-			continue;
-		if (!fs_parent(g_fs[i].path, parent, sizeof(parent)))
-			continue;
-		if (!fs_path_eq(parent, dir) || fs_path_eq(g_fs[i].path, dir))
-			continue;
-		if (n == which)
-		{
-			type = g_fs[i].mode & S_IFMT;
-			spec->name = fs_basename(g_fs[i].path);
-			spec->ino = 16 + i;
-			if (type == S_IFDIR)
-				spec->type = IR0_EARLY_DT_DIR;
-			else if (type == S_IFIFO)
-				spec->type = IR0_EARLY_DT_FIFO;
-			else if (type == S_IFSOCK)
-				spec->type = IR0_EARLY_DT_SOCK;
-			else if (type == S_IFLNK)
-				spec->type = IR0_EARLY_DT_LNK;
-			else
-				spec->type = IR0_EARLY_DT_REG;
-			return 1;
-		}
-		n++;
-	}
-	return 0;
-}
-
 static int close_fd(int fd)
 {
 	int idx;
@@ -1044,9 +774,9 @@ static int close_fd(int fd)
 				g_epoll[pipe_id].used = 0;
 		}
 		if (node == IR0_EARLY_ROOTFS_FIFO && pipe_id >= 0 &&
-		    pipe_id < FS_MAX && g_fs[pipe_id].used)
+		    pipe_id < RAMTAB_MAX && ramtab_table()[pipe_id].used)
 		{
-			int fifo = g_fs[pipe_id].fifo_pipe;
+			int fifo = ramtab_table()[pipe_id].fifo_pipe;
 			int acc = g_slots[idx].flags & LINUX_O_ACCMODE;
 
 			if (fifo >= 0 && fifo < PIPE_MAX && g_pipes[fifo].used)
@@ -1059,7 +789,7 @@ static int close_fd(int fd)
 				    g_pipes[fifo].writers == 0)
 				{
 					g_pipes[fifo].used = 0;
-					g_fs[pipe_id].fifo_pipe = -1;
+					ramtab_table()[pipe_id].fifo_pipe = -1;
 				}
 			}
 		}
@@ -1110,6 +840,9 @@ static int close_fd(int fd)
 			}
 		}
 	}
+	if (g_slots[idx].vf && g_product_path && g_product_path->put)
+		(void)g_product_path->put(g_slots[idx].vf);
+	g_slots[idx].vf = 0;
 	g_slots[idx].used = 0;
 	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
 	g_slots[idx].pos = 0;
@@ -1174,6 +907,7 @@ static int alloc_fd(enum ir0_early_rootfs_node node)
 			g_slots[i].flags = O_RDWR;
 			g_slots[i].cloexec = 0;
 			g_slots[i].pipe_id = -1;
+			g_slots[i].vf = 0;
 			{
 				int fd = (int)(ROOTFS_FD_BASE + i);
 
@@ -1183,6 +917,132 @@ static int alloc_fd(enum ir0_early_rootfs_node node)
 		}
 	}
 	return -EMFILE;
+}
+
+static void early_unix_rehome(int old_id, int new_id)
+{
+	int i;
+
+	for (i = 0; i < UNIX_MAX; i++)
+	{
+		if (g_unix[i].used && g_unix[i].bound_fs == old_id)
+			g_unix[i].bound_fs = new_id;
+	}
+}
+
+int ir0_product_path_is_tmp(const char *path)
+{
+	unsigned i;
+
+	if (!path)
+		return 0;
+	for (i = 0; IR0_PRODUCT_PATH_TMP_PREF[i] != '\0'; i++)
+	{
+		if (path[i] != IR0_PRODUCT_PATH_TMP_PREF[i])
+			return 0;
+	}
+	return path[i] != '\0';
+}
+
+void early_rootfs_bind_product_path(const struct ir0_product_path_ops *ops)
+{
+	g_product_path = ops;
+	g_product_path_used = 0;
+}
+
+int early_rootfs_product_path_used(void)
+{
+	return g_product_path_used;
+}
+
+static int product_path_live(void)
+{
+	stat_t st;
+
+	if (!g_product_path || !g_product_path->stat)
+		return 0;
+	return g_product_path->stat("/tmp", &st) == 0;
+}
+
+static enum ir0_early_rootfs_node product_lookup(const char *path)
+{
+	stat_t st;
+
+	if (!product_path_live() || !ir0_product_path_is_tmp(path))
+		return IR0_EARLY_ROOTFS_NONE;
+	if (g_product_path->stat(path, &st) != 0)
+		return IR0_EARLY_ROOTFS_NONE;
+	g_product_path_used = 1;
+	if ((st.st_mode & S_IFMT) == S_IFDIR)
+		return IR0_EARLY_ROOTFS_USERDIR;
+	return IR0_EARLY_ROOTFS_FILE;
+}
+
+static int64_t product_attach_open(int fd, const char *path, int flags)
+{
+	struct vfs_file *vf = 0;
+	int sidx;
+	int rc;
+
+	if (!g_product_path || !g_product_path->open)
+		return -ENODEV;
+	rc = g_product_path->open(path, flags, 0644, &vf);
+	if (rc < 0)
+		return rc;
+	sidx = slot_from_fd(fd);
+	if (sidx < 0)
+	{
+		if (g_product_path->put && vf)
+			(void)g_product_path->put(vf);
+		return -EBADF;
+	}
+	g_slots[sidx].vf = vf;
+	g_product_path_used = 1;
+	return 0;
+}
+
+static struct vfs_file *vf_of_fd(int fd)
+{
+	int idx = slot_from_fd(fd);
+
+	if (idx < 0)
+		return 0;
+	return g_slots[idx].vf;
+}
+
+static int64_t product_xfer(int fd, uint64_t buffer, uint64_t count, int write)
+{
+	struct vfs_file *vf = vf_of_fd(fd);
+	uint8_t tmp[256];
+	int n;
+
+	if (!vf || !g_product_path)
+		return -ENODEV;
+	if (count == 0)
+		return 0;
+	n = (int)(count > sizeof(tmp) ? sizeof(tmp) : count);
+	if (write)
+	{
+		if (!g_product_path->write)
+			return -ENODEV;
+		if (!g_user || !g_user->copy_from_user ||
+		    g_user->copy_from_user(tmp, buffer, (uint64_t)n) != 0)
+			return -EFAULT;
+		n = g_product_path->write(vf, tmp, (size_t)n);
+	}
+	else
+	{
+		if (!g_product_path->read)
+			return -ENODEV;
+		n = g_product_path->read(vf, tmp, (size_t)n);
+		if (n > 0 && (!g_user || !g_user->copy_to_user ||
+			      g_user->copy_to_user(buffer, tmp, (uint64_t)n) != 0))
+			return -EFAULT;
+	}
+	if (n < 0)
+		return n;
+	g_product_path_used = 1;
+	return n;
 }
 
 void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
@@ -1202,6 +1062,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_slots[i].flags = 0;
 		g_slots[i].cloexec = 0;
 		g_slots[i].pipe_id = -1;
+		g_slots[i].vf = 0;
 	}
 	for (i = 0; i < PIPE_MAX; i++)
 		g_pipes[i].used = 0;
@@ -1223,15 +1084,8 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 	g_clock_mono = 0;
 	g_clock_hz = 0;
 	g_clock_realtime_off = 0;
-	for (i = 0; i < FS_MAX; i++)
-	{
-		g_fs[i].used = 0;
-		g_fs[i].fifo_pipe = -1;
-		g_fs[i].writable = 0;
-		g_fs[i].link_to = -1;
-		g_fs[i].data = 0;
-		g_fs[i].size = 0;
-	}
+	ramtab_reset();
+	ramtab_set_rehome_observer(early_unix_rehome);
 	for (i = 0; i < XA_MAX; i++)
 		g_xattr[i].used = 0;
 	for (i = 0; i < RULESET_MAX; i++)
@@ -1314,7 +1168,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 		while (1)
 		{
 			struct ir0_early_cpio_member mem;
-			char norm[FS_NAME];
+			char norm[RAMTAB_NAME];
 			int ret;
 
 			ret = ir0_early_cpio_next(buffer, bytes, off, &mem);
@@ -1340,7 +1194,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 		while (1)
 		{
 			struct ir0_early_cpio_member mem;
-			char norm[FS_NAME];
+			char norm[RAMTAB_NAME];
 			int ret;
 
 			ret = ir0_early_cpio_next(buffer, bytes, off, &mem);
@@ -1349,7 +1203,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 			off = mem.next;
 			if (!ir0_early_cpio_normalize(mem.name, norm, sizeof(norm)))
 				continue;
-			fs_add(norm, mem.mode, mem.filesize, mem.data, 0);
+			ramtab_add(norm, mem.mode, mem.filesize, mem.data, 0);
 		}
 		g_cpio_ready = saw_file;
 		return 0;
@@ -1499,10 +1353,13 @@ static enum ir0_early_rootfs_node lookup_user_path(char *pbuf)
 	node = ir0_early_rootfs_path_node(pbuf);
 	if (node != IR0_EARLY_ROOTFS_NONE)
 		return node;
-	idx = fs_find(pbuf);
+	node = product_lookup(pbuf);
+	if (node != IR0_EARLY_ROOTFS_NONE)
+		return node;
+	idx = ramtab_find(pbuf);
 	if (idx < 0)
 		return IR0_EARLY_ROOTFS_NONE;
-	return fs_node_kind(g_fs[idx].mode);
+	return ramtab_node_kind(ramtab_table()[idx].mode);
 }
 
 static int follow_path(char *pbuf, unsigned cap)
@@ -1513,22 +1370,22 @@ static int follow_path(char *pbuf, unsigned cap)
 		return 0;
 	for (hops = 0; hops < 8; hops++)
 	{
-		int idx = fs_find(pbuf);
-		char tgt[FS_NAME];
-		char parent[FS_NAME];
+		int idx = ramtab_find(pbuf);
+		char tgt[RAMTAB_NAME];
+		char parent[RAMTAB_NAME];
 		unsigned n;
 		unsigned i;
 
 		if (idx < 0)
 			return 1;
-		if ((g_fs[idx].mode & S_IFMT) != S_IFLNK)
+		if ((ramtab_table()[idx].mode & S_IFMT) != S_IFLNK)
 			return 1;
-		n = g_fs[idx].size;
+		n = ramtab_table()[idx].size;
 		if (n == 0 || n >= sizeof(tgt))
 			return 0;
 		for (i = 0; i < n; i++)
-			tgt[i] = (char)(g_fs[idx].data ? g_fs[idx].data[i] :
-							 g_fs[idx].own[i]);
+			tgt[i] = (char)(ramtab_table()[idx].data ? ramtab_table()[idx].data[i] :
+							 ramtab_table()[idx].own[i]);
 		tgt[n] = '\0';
 		if (tgt[0] == '/')
 		{
@@ -1538,7 +1395,7 @@ static int follow_path(char *pbuf, unsigned cap)
 		}
 		else
 		{
-			if (!fs_parent(g_fs[idx].path, parent, sizeof(parent)))
+			if (!ramtab_parent(ramtab_table()[idx].path, parent, sizeof(parent)))
 				return 0;
 			i = 0;
 			while (parent[i] != '\0' && i + 1 < cap)
@@ -1596,9 +1453,15 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 			return -ENOENT;
 		node = lookup_user_path(pbuf);
 	}
-	if (node == IR0_EARLY_ROOTFS_NONE)
-		return -ENOENT;
-	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
+		if (node == IR0_EARLY_ROOTFS_NONE)
+	{
+		if (product_path_live() && ir0_product_path_is_tmp(pbuf) &&
+		    (flags & O_CREAT))
+			node = IR0_EARLY_ROOTFS_FILE;
+		else
+			return -ENOENT;
+	}
+if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_UNIX)
 		return -ENXIO;
@@ -1617,17 +1480,29 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 		return fd;
 	set_flags_of_fd(fd, status_flags(flags));
 	set_cloexec_of_fd(fd, (flags & LINUX_O_CLOEXEC) != 0);
+	if (product_path_live() && ir0_product_path_is_tmp(pbuf) &&
+	    (node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_USERDIR))
+	{
+		int64_t prc = product_attach_open(fd, pbuf, flags);
+
+		if (prc < 0)
+		{
+			close_fd(fd);
+			return prc;
+		}
+		return fd;
+	}
 	if (node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_FIFO ||
 	    node == IR0_EARLY_ROOTFS_USERDIR)
 	{
-		int fsid = fs_find(pbuf);
+		int fsid = ramtab_find(pbuf);
 		int sidx = slot_from_fd(fd);
 
 		if (fsid >= 0 && sidx >= 0)
 			g_slots[sidx].pipe_id = fsid;
 		if (node == IR0_EARLY_ROOTFS_FIFO && fsid >= 0)
 		{
-			int pipe_id = g_fs[fsid].fifo_pipe;
+			int pipe_id = ramtab_table()[fsid].fifo_pipe;
 
 			if (pipe_id < 0)
 			{
@@ -1646,7 +1521,7 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 				g_pipes[pipe_id].len = 0;
 				g_pipes[pipe_id].readers = 0;
 				g_pipes[pipe_id].writers = 0;
-				g_fs[fsid].fifo_pipe = pipe_id;
+				ramtab_table()[fsid].fifo_pipe = pipe_id;
 			}
 			if ((flags & LINUX_O_ACCMODE) != 1)
 				g_pipes[pipe_id].readers++;
@@ -1694,19 +1569,19 @@ static int early_vfs_ops_stat(const char *path, stat_t *st)
 		st->st_ctime = raw.st_ctime_sec;
 		return 0;
 	}
-	fsid = fs_find(path);
+	fsid = ramtab_find(path);
 	if (fsid < 0)
 		return -ENOENT;
 	st->st_dev = 1;
 	st->st_ino = (ino_t)(16 + fsid);
-	st->st_mode = g_fs[fsid].mode;
+	st->st_mode = ramtab_table()[fsid].mode;
 	st->st_nlink = 1;
 	st->st_uid = 0;
 	st->st_gid = 0;
 	st->st_rdev = 0;
-	st->st_size = (off_t)g_fs[fsid].size;
+	st->st_size = (off_t)ramtab_table()[fsid].size;
 	st->st_blksize = 4096;
-	st->st_blocks = (blkcnt_t)((g_fs[fsid].size + 511U) / 512U);
+	st->st_blocks = (blkcnt_t)((ramtab_table()[fsid].size + 511U) / 512U);
 	st->st_atime = 0;
 	st->st_mtime = 0;
 	st->st_ctime = 0;
@@ -1764,19 +1639,19 @@ static int early_vfs_ops_read(const char *path, void *buf, size_t count,
 		*bytes_read = n;
 		return 0;
 	}
-	fsid = fs_find(path);
+	fsid = ramtab_find(path);
 	if (fsid < 0)
 		return -ENOENT;
-	if ((g_fs[fsid].mode & IR0_EARLY_ROOTFS_S_IFMT) ==
+	if ((ramtab_table()[fsid].mode & IR0_EARLY_ROOTFS_S_IFMT) ==
 	    IR0_EARLY_ROOTFS_S_IFDIR)
 		return -EISDIR;
-	if ((uint64_t)offset >= g_fs[fsid].size)
+	if ((uint64_t)offset >= ramtab_table()[fsid].size)
 		return 0;
-	n = (size_t)(g_fs[fsid].size - (uint64_t)offset);
+	n = (size_t)(ramtab_table()[fsid].size - (uint64_t)offset);
 	if (n > count)
 		n = count;
 	for (i = 0; i < n; i++)
-		dst[i] = g_fs[fsid].data ? g_fs[fsid].data[(uint64_t)offset + i] :
+		dst[i] = ramtab_table()[fsid].data ? ramtab_table()[fsid].data[(uint64_t)offset + i] :
 					   0;
 	*bytes_read = n;
 	return 0;
@@ -1846,6 +1721,8 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		return -EBADF;
 	if (count == 0)
 		return 0;
+	if (vf_of_fd(fd))
+		return product_xfer(fd, buffer, count, 0);
 	{
 		int64_t via = early_try_vfs_ops_read(fd, node, buffer, count);
 
@@ -2116,20 +1993,20 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		return -EINVAL;
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = fs_body(pipe_id_of_fd(fd));
+		int fsid = ramtab_body(pipe_id_of_fd(fd));
 		uint64_t *pos = pos_of_fd(fd);
 		uint64_t remain;
 
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used || !pos)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used || !pos)
 			return -EBADF;
-		if (*pos >= g_fs[fsid].size)
+		if (*pos >= ramtab_table()[fsid].size)
 			return 0;
-		remain = g_fs[fsid].size - *pos;
+		remain = ramtab_table()[fsid].size - *pos;
 		n = count > remain ? remain : count;
 		if (n > sizeof(tmp))
 			n = sizeof(tmp);
 		for (i = 0; i < n; i++)
-			tmp[i] = g_fs[fsid].data ? g_fs[fsid].data[*pos + i] : 0;
+			tmp[i] = ramtab_table()[fsid].data ? ramtab_table()[fsid].data[*pos + i] : 0;
 		if (!g_user || !g_user->copy_to_user ||
 		    g_user->copy_to_user(buffer, tmp, n) != 0)
 			return -EFAULT;
@@ -2145,9 +2022,9 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 
 		if ((flags_of_fd(fd) & LINUX_O_ACCMODE) == 1)
 			return -EBADF;
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 			return -EBADF;
-		pipe_id = g_fs[fsid].fifo_pipe;
+		pipe_id = ramtab_table()[fsid].fifo_pipe;
 		if (pipe_id < 0 || pipe_id >= PIPE_MAX)
 			return -EBADF;
 		p = &g_pipes[pipe_id];
@@ -2312,20 +2189,20 @@ int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 	apply_chroot(pbuf, sizeof(pbuf));
 	if (!strings_equal(pbuf, proc_self_exe))
 	{
-		int fsid = fs_find(pbuf);
+		int fsid = ramtab_find(pbuf);
 		enum ir0_early_rootfs_node node = lookup_user_path(pbuf);
 
 		if (node == IR0_EARLY_ROOTFS_SYMLINK && fsid >= 0)
 		{
-			uint64_t have = g_fs[fsid].size;
+			uint64_t have = ramtab_table()[fsid].size;
 
 			if (have > size)
 				have = size;
 			if (have > 0 && (!g_user || !g_user->copy_to_user ||
 					 g_user->copy_to_user(buffer,
-							      g_fs[fsid].data ?
-								      g_fs[fsid].data :
-								      g_fs[fsid].own,
+							      ramtab_table()[fsid].data ?
+								      ramtab_table()[fsid].data :
+								      ramtab_table()[fsid].own,
 							      have) != 0))
 				return -EFAULT;
 			return (int64_t)have;
@@ -2419,23 +2296,23 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 			size = g_init_vis;
 		else if (node == IR0_EARLY_ROOTFS_FILE)
 		{
-			fsid = fs_body(fs_find(pbuf));
-			size = (fsid >= 0 && g_fs[fsid].used) ? g_fs[fsid].size :
+			fsid = ramtab_body(ramtab_find(pbuf));
+			size = (fsid >= 0 && ramtab_table()[fsid].used) ? ramtab_table()[fsid].size :
 								0;
 		}
 		else if (node == IR0_EARLY_ROOTFS_SYMLINK)
 		{
-			fsid = fs_find(pbuf);
-			size = (fsid >= 0) ? g_fs[fsid].size : 0;
+			fsid = ramtab_find(pbuf);
+			size = (fsid >= 0) ? ramtab_table()[fsid].size : 0;
 		}
 		else if (node == IR0_EARLY_ROOTFS_UNIX ||
 			 node == IR0_EARLY_ROOTFS_FIFO ||
 			 node == IR0_EARLY_ROOTFS_USERDIR)
 			size = 0;
 		ir0_early_rootfs_fill_stat(node, size, &st);
-		fsid = fs_body(fs_find(pbuf));
-		if (fsid >= 0 && g_fs[fsid].used)
-			st.st_mode = g_fs[fsid].mode;
+		fsid = ramtab_body(ramtab_find(pbuf));
+		if (fsid >= 0 && ramtab_table()[fsid].used)
+			st.st_mode = ramtab_table()[fsid].mode;
 	}
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
@@ -2466,9 +2343,9 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 	}
 	else if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		mid = fs_body(pipe_id_of_fd(fd));
-		size = (mid >= 0 && mid < FS_MAX && g_fs[mid].used) ?
-			       g_fs[mid].size :
+		mid = ramtab_body(pipe_id_of_fd(fd));
+		size = (mid >= 0 && mid < RAMTAB_MAX && ramtab_table()[mid].used) ?
+			       ramtab_table()[mid].size :
 			       0;
 	}
 	else
@@ -2480,9 +2357,9 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 	if (node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_FIFO ||
 	    node == IR0_EARLY_ROOTFS_USERDIR)
 	{
-		mid = fs_body(pipe_id_of_fd(fd));
-		if (mid >= 0 && mid < FS_MAX && g_fs[mid].used)
-			st.st_mode = g_fs[mid].mode;
+		mid = ramtab_body(pipe_id_of_fd(fd));
+		if (mid >= 0 && mid < RAMTAB_MAX && ramtab_table()[mid].used)
+			st.st_mode = ramtab_table()[mid].mode;
 	}
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
@@ -2656,7 +2533,7 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 	if (!node_is_dir(node))
 		return -ENOTDIR;
 	{
-		char dirpath[FS_NAME];
+		char dirpath[RAMTAB_NAME];
 		int denied;
 
 		if (path_of_fd(fd, dirpath, sizeof(dirpath)) == 0)
@@ -2677,14 +2554,14 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 		else if (node == IR0_EARLY_ROOTFS_TMP)
 			dirpath = "/tmp";
 		else if (node == IR0_EARLY_ROOTFS_USERDIR && fsid >= 0 &&
-			 fsid < FS_MAX && g_fs[fsid].used)
-			dirpath = g_fs[fsid].path;
+			 fsid < RAMTAB_MAX && ramtab_table()[fsid].used)
+			dirpath = ramtab_table()[fsid].path;
 		base = ir0_early_rootfs_dir_count(node);
 		if (node == IR0_EARLY_ROOTFS_USERDIR && base == 0)
 			base = 2;
 		if (node == IR0_EARLY_ROOTFS_DEV && vda_present())
 			base++;
-		total = base + (unsigned)fs_child_count(dirpath);
+		total = base + (unsigned)ramtab_child_count(dirpath);
 		idx = slot_from_fd(fd);
 		if (idx < 0)
 			return -EBADF;
@@ -2730,7 +2607,7 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 
 				if (node == IR0_EARLY_ROOTFS_DEV && vda_present())
 					skip++;
-				if (!fs_child_at(dirpath,
+				if (!ramtab_child_at(dirpath,
 						 (int)(*dpos - skip),
 						 &spec))
 					break;
@@ -2837,6 +2714,16 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 	int64_t next;
 	uint64_t limit;
 
+	if (vf_of_fd(fd) && g_product_path && g_product_path->lseek)
+	{
+		off_t got;
+
+		got = g_product_path->lseek(vf_of_fd(fd), (off_t)offset, whence);
+		if (got < 0)
+			return (int64_t)got;
+		g_product_path_used = 1;
+		return (int64_t)got;
+	}
 	node = node_of_fd(fd);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
@@ -2863,10 +2750,10 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 	}
 	else if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = fs_body(pipe_id_of_fd(fd));
+		int fsid = ramtab_body(pipe_id_of_fd(fd));
 
-		limit = (fsid >= 0 && fsid < FS_MAX && g_fs[fsid].used) ?
-				g_fs[fsid].size :
+		limit = (fsid >= 0 && fsid < RAMTAB_MAX && ramtab_table()[fsid].used) ?
+				ramtab_table()[fsid].size :
 				0;
 	}
 	else if (node_is_dir(node))
@@ -2947,11 +2834,11 @@ int64_t early_rootfs_fchdir(int fd)
 		int fsid = pipe_id_of_fd(fd);
 		unsigned i;
 
-		if (fsid >= 0 && fsid < FS_MAX && g_fs[fsid].used)
+		if (fsid >= 0 && fsid < RAMTAB_MAX && ramtab_table()[fsid].used)
 		{
-			for (i = 0; g_fs[fsid].path[i] != '\0' &&
+			for (i = 0; ramtab_table()[fsid].path[i] != '\0' &&
 				    i + 1 < sizeof(g_cwd_path); i++)
-				g_cwd_path[i] = g_fs[fsid].path[i];
+				g_cwd_path[i] = ramtab_table()[fsid].path[i];
 			g_cwd_path[i] = '\0';
 		}
 	}
@@ -3642,34 +3529,36 @@ int64_t early_rootfs_file_write(int fd, uint64_t buffer, uint64_t count)
 	uint64_t i;
 	uint64_t start;
 
+	if (vf_of_fd(fd))
+		return product_xfer(fd, buffer, count, 1);
 	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_FILE)
 		return -EBADF;
 	if ((flags_of_fd(fd) & LINUX_O_ACCMODE) == 0)
 		return -EBADF;
-	fsid = fs_body(fsid);
-	if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used || !pos)
+	fsid = ramtab_body(fsid);
+	if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used || !pos)
 		return -EBADF;
-	if (!g_fs[fsid].writable)
+	if (!ramtab_table()[fsid].writable)
 		return -EROFS;
 	if (count == 0)
 		return 0;
 	start = *pos;
-	if (start >= FS_FILE_CAP)
+	if (start >= RAMTAB_FILE_CAP)
 		return -EFBIG;
 	n = count;
-	if (start + n > FS_FILE_CAP)
-		n = FS_FILE_CAP - start;
+	if (start + n > RAMTAB_FILE_CAP)
+		n = RAMTAB_FILE_CAP - start;
 	if (n > sizeof(tmp))
 		n = sizeof(tmp);
 	if (!g_user || !g_user->copy_from_user ||
 	    g_user->copy_from_user(tmp, buffer, n) != 0)
 		return -EFAULT;
 	for (i = 0; i < n; i++)
-		g_fs[fsid].own[start + i] = tmp[i];
+		ramtab_table()[fsid].own[start + i] = tmp[i];
 	*pos = start + n;
-	if (*pos > g_fs[fsid].size)
-		g_fs[fsid].size = (uint32_t)*pos;
-	g_fs[fsid].data = g_fs[fsid].own;
+	if (*pos > ramtab_table()[fsid].size)
+		ramtab_table()[fsid].size = (uint32_t)*pos;
+	ramtab_table()[fsid].data = ramtab_table()[fsid].own;
 	return (int64_t)n;
 }
 
@@ -3890,7 +3779,7 @@ int64_t early_rootfs_socket(int domain, int type, int protocol)
 
 int64_t early_rootfs_sock_bind(int fd, uint64_t addr, uint64_t addrlen)
 {
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	uint8_t abs[IR0_EARLY_SUN_PATH];
 	unsigned alen = 0;
 	int uid = unix_id_of_fd(fd);
@@ -3923,11 +3812,11 @@ int64_t early_rootfs_sock_bind(int fd, uint64_t addr, uint64_t addrlen)
 		return -ENAMETOOLONG;
 	apply_chroot(pbuf, sizeof(pbuf));
 	if (ir0_early_rootfs_path_node(pbuf) != IR0_EARLY_ROOTFS_NONE ||
-	    fs_find(pbuf) >= 0)
+	    ramtab_find(pbuf) >= 0)
 		return -EADDRINUSE;
 	if (!parent_exists(pbuf))
 		return -ENOENT;
-	ret = fs_add(pbuf, S_IFSOCK | 0666U, 0, 0, 0);
+	ret = ramtab_add(pbuf, S_IFSOCK | 0666U, 0, 0, 0);
 	if (ret < 0)
 		return ret;
 	g_unix[uid].bound_fs = ret;
@@ -3961,7 +3850,7 @@ int64_t early_rootfs_sock_listen(int fd, int backlog)
 
 int64_t early_rootfs_sock_connect(int fd, uint64_t addr, uint64_t addrlen)
 {
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	int uid = unix_id_of_fd(fd);
 	int dest;
 	int pair;
@@ -4001,10 +3890,10 @@ int64_t early_rootfs_sock_connect(int fd, uint64_t addr, uint64_t addrlen)
 			apply_chroot(pbuf, sizeof(pbuf));
 			if (!g_unix[uid].stream)
 			{
-				int fsid = fs_find(pbuf);
+				int fsid = ramtab_find(pbuf);
 
 				if (fsid < 0 ||
-				    fs_node_kind(g_fs[fsid].mode) !=
+				    ramtab_node_kind(ramtab_table()[fsid].mode) !=
 					    IR0_EARLY_ROOTFS_UNIX)
 					return -ECONNREFUSED;
 				g_unix[uid].peer_fs = fsid;
@@ -4133,11 +4022,11 @@ int64_t early_rootfs_getpeername(int fd, uint64_t addr, uint64_t addrlen)
 			return -EBADF;
 		if (g_unix[uid].stream || g_unix[uid].peer_fs < 0)
 			return -ENOTCONN;
-		if (g_unix[uid].peer_fs >= FS_MAX ||
-		    !g_fs[g_unix[uid].peer_fs].used)
+		if (g_unix[uid].peer_fs >= RAMTAB_MAX ||
+		    !ramtab_table()[g_unix[uid].peer_fs].used)
 			return -ENOTCONN;
 		return write_sun_name(addr, addrlen,
-				      g_fs[g_unix[uid].peer_fs].path);
+				      ramtab_table()[g_unix[uid].peer_fs].path);
 	}
 	if (sock_pair_of_fd(fd) < 0)
 		return -ENOTCONN;
@@ -4148,7 +4037,7 @@ int64_t early_rootfs_sendto(int fd, uint64_t buffer, uint64_t count,
 			    uint64_t dest, uint64_t destlen)
 {
 	int uid = unix_id_of_fd(fd);
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	uint8_t tmp[256];
 	int dest_uid;
 
@@ -4345,8 +4234,8 @@ int64_t early_rootfs_getsockopt(int fd, int level, int optname, uint64_t optval,
 
 int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath)
 {
-	char tbuf[FS_NAME];
-	char pbuf[FS_NAME];
+	char tbuf[RAMTAB_NAME];
+	char pbuf[RAMTAB_NAME];
 	int ret;
 	unsigned n;
 
@@ -4363,7 +4252,7 @@ int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath)
 		return -ENAMETOOLONG;
 	apply_chroot(pbuf, sizeof(pbuf));
 	if (ir0_early_rootfs_path_node(pbuf) != IR0_EARLY_ROOTFS_NONE ||
-	    fs_find(pbuf) >= 0)
+	    ramtab_find(pbuf) >= 0)
 		return -EEXIST;
 	if (!parent_exists(pbuf))
 		return -ENOENT;
@@ -4376,15 +4265,15 @@ int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath)
 	n = 0;
 	while (tbuf[n] != '\0')
 		n++;
-	ret = fs_add(pbuf, S_IFLNK | 0777U, n, (const uint8_t *)tbuf, 1);
+	ret = ramtab_add(pbuf, S_IFLNK | 0777U, n, (const uint8_t *)tbuf, 1);
 	return ret < 0 ? ret : 0;
 }
 
 int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
 			    uint64_t newpath, int flags)
 {
-	char oldbuf[FS_NAME];
-	char newbuf[FS_NAME];
+	char oldbuf[RAMTAB_NAME];
+	char newbuf[RAMTAB_NAME];
 	enum ir0_early_rootfs_node node;
 	int src;
 	int dest;
@@ -4420,11 +4309,11 @@ int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_USERDIR || node_is_dir(node))
 		return -EPERM;
-	src = fs_find(oldbuf);
+	src = ramtab_find(oldbuf);
 	if (src < 0)
 		return -EPERM;
 	if (ir0_early_rootfs_path_node(newbuf) != IR0_EARLY_ROOTFS_NONE ||
-	    fs_find(newbuf) >= 0)
+	    ramtab_find(newbuf) >= 0)
 		return -EEXIST;
 	if (!parent_exists(newbuf))
 		return -ENOENT;
@@ -4435,15 +4324,15 @@ int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
 		if (denied < 0)
 			return denied;
 	}
-	body = fs_body(src);
-	dest = fs_add(newbuf, g_fs[body].mode, g_fs[body].size, g_fs[body].data,
+	body = ramtab_body(src);
+	dest = ramtab_add(newbuf, ramtab_table()[body].mode, ramtab_table()[body].size, ramtab_table()[body].data,
 		      0);
 	if (dest < 0)
 		return dest;
-	g_fs[dest].link_to = body;
-	g_fs[dest].writable = 0;
-	g_fs[dest].data = 0;
-	g_fs[dest].size = 0;
+	ramtab_table()[dest].link_to = body;
+	ramtab_table()[dest].writable = 0;
+	ramtab_table()[dest].data = 0;
+	ramtab_table()[dest].size = 0;
 	return 0;
 }
 
@@ -4454,7 +4343,7 @@ int early_rootfs_fd_is_fifo(int fd)
 
 int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count)
 {
-	int fsid = fs_body(pipe_id_of_fd(fd));
+	int fsid = ramtab_body(pipe_id_of_fd(fd));
 	int pipe_id;
 	struct early_pipe *p;
 	uint8_t tmp[256];
@@ -4467,9 +4356,9 @@ int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count)
 		return -EBADF;
 	if ((flags_of_fd(fd) & LINUX_O_ACCMODE) == 0)
 		return -EBADF;
-	if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+	if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 		return -EBADF;
-	pipe_id = g_fs[fsid].fifo_pipe;
+	pipe_id = ramtab_table()[fsid].fifo_pipe;
 	if (pipe_id < 0 || pipe_id >= PIPE_MAX)
 		return -EBADF;
 	p = &g_pipes[pipe_id];
@@ -4620,13 +4509,13 @@ static int unix_find_bound(const char *path, int stream)
 	int fsid;
 	int i;
 
-	fsid = fs_find(path);
-	if (fsid < 0 || fs_node_kind(g_fs[fsid].mode) != IR0_EARLY_ROOTFS_UNIX)
+	fsid = ramtab_find(path);
+	if (fsid < 0 || ramtab_node_kind(ramtab_table()[fsid].mode) != IR0_EARLY_ROOTFS_UNIX)
 		return -1;
-	fsid = fs_body(fsid);
+	fsid = ramtab_body(fsid);
 	for (i = 0; i < UNIX_MAX; i++)
 	{
-		if (g_unix[i].used && fs_body(g_unix[i].bound_fs) == fsid &&
+		if (g_unix[i].used && ramtab_body(g_unix[i].bound_fs) == fsid &&
 		    g_unix[i].stream == stream)
 			return i;
 	}
@@ -4662,10 +4551,10 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 			if (dest < 0)
 			{
 				if (g_unix[uid].peer_fs < 0 ||
-				    g_unix[uid].peer_fs >= FS_MAX ||
-				    !g_fs[g_unix[uid].peer_fs].used)
+				    g_unix[uid].peer_fs >= RAMTAB_MAX ||
+				    !ramtab_table()[g_unix[uid].peer_fs].used)
 					return -ENOTCONN;
-				dest = unix_find_bound(g_fs[g_unix[uid].peer_fs].path,
+				dest = unix_find_bound(ramtab_table()[g_unix[uid].peer_fs].path,
 						       0);
 			}
 			if (dest < 0)
@@ -4876,9 +4765,9 @@ int early_rootfs_poll_revents(int fd, int events)
 		int fsid = pipe_id;
 		int fifo;
 
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 			return IR0_EARLY_POLLNVAL;
-		fifo = g_fs[fsid].fifo_pipe;
+		fifo = ramtab_table()[fsid].fifo_pipe;
 		if (fifo < 0 || fifo >= PIPE_MAX || !g_pipes[fifo].used)
 			return 0;
 		if (g_pipes[fifo].len > 0)
@@ -4966,10 +4855,10 @@ static void apply_stored_mode(enum ir0_early_rootfs_node node, int id,
 	    node == IR0_EARLY_ROOTFS_USERDIR ||
 	    node == IR0_EARLY_ROOTFS_SYMLINK)
 	{
-		int fsid = fs_body(id);
+		int fsid = ramtab_body(id);
 
-		if (fsid >= 0 && fsid < FS_MAX && g_fs[fsid].used)
-			g_fs[fsid].mode = (g_fs[fsid].mode & S_IFMT) | perm;
+		if (fsid >= 0 && fsid < RAMTAB_MAX && ramtab_table()[fsid].used)
+			ramtab_table()[fsid].mode = (ramtab_table()[fsid].mode & S_IFMT) | perm;
 	}
 	if (node == IR0_EARLY_ROOTFS_MEMFD && id >= 0 && id < MEMFD_MAX &&
 	    g_memfd[id].used)
@@ -5037,7 +4926,7 @@ int64_t early_rootfs_fchmodat2(int dirfd, uint64_t path, uint64_t mode,
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
-	fsid = fs_find(pbuf);
+	fsid = ramtab_find(pbuf);
 	apply_stored_mode(node, fsid, mode);
 	return 0;
 }
@@ -5116,7 +5005,7 @@ static int resolve_xattr_target(int dirfd, uint64_t path, int fd, int nofollow,
 	}
 	if (*node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
-	*id = fs_find(pbuf);
+	*id = ramtab_find(pbuf);
 	return 0;
 }
 
@@ -5366,7 +5255,7 @@ int64_t early_rootfs_open_by_handle_at(int mount_fd, uint64_t handle, int flags)
 		g_memfd[id].refs++;
 	if ((node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_FIFO ||
 	     node == IR0_EARLY_ROOTFS_USERDIR) &&
-	    (id < 0 || id >= FS_MAX || !g_fs[id].used))
+	    (id < 0 || id >= RAMTAB_MAX || !ramtab_table()[id].used))
 	{
 		close_fd(fd);
 		return -ESTALE;
@@ -5522,9 +5411,9 @@ int64_t early_rootfs_cachestat(int fd, uint64_t range, uint64_t out,
 	{
 		int fsid = pipe_id_of_fd(fd);
 
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 			return -EBADF;
-		filesz = g_fs[fsid].size;
+		filesz = ramtab_table()[fsid].size;
 	}
 	for (i = 0; i < 5; i++)
 		cs[i] = 0;
@@ -5669,9 +5558,9 @@ static int path_of_node(enum ir0_early_rootfs_node node, int id, char *out,
 	case IR0_EARLY_ROOTFS_FIFO:
 	case IR0_EARLY_ROOTFS_UNIX:
 	case IR0_EARLY_ROOTFS_SYMLINK:
-		if (id < 0 || id >= FS_MAX || !g_fs[id].used)
+		if (id < 0 || id >= RAMTAB_MAX || !ramtab_table()[id].used)
 			return -EBADFD;
-		copy_kstr(out, cap, g_fs[id].path);
+		copy_kstr(out, cap, ramtab_table()[id].path);
 		return 0;
 	default:
 		return -EBADFD;
@@ -5721,7 +5610,7 @@ static int landlock_allow(const char *path, uint64_t need)
 
 static int landlock_open_need(const char *path, int flags)
 {
-	char look[FS_NAME];
+	char look[RAMTAB_NAME];
 	enum ir0_early_rootfs_node node;
 	uint64_t need = 0;
 	int acc = flags & LINUX_O_ACCMODE;
@@ -5826,7 +5715,7 @@ int64_t early_rootfs_landlock_add(int fd, int type, uint64_t rule,
 	int id;
 	uint64_t allowed = 0;
 	int32_t parent = 0;
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	int ret;
 
 	if (flags & ~IR0_EARLY_LANDLOCK_ADD_QUIET)
@@ -6088,23 +5977,23 @@ int64_t early_rootfs_truncate(uint64_t path, uint64_t length)
 		return -EISDIR;
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = fs_find(pbuf);
+		int fsid = ramtab_find(pbuf);
 
 		if (fsid < 0)
 			return -ENOENT;
-		if (!g_fs[fsid].writable)
+		if (!ramtab_table()[fsid].writable)
 			return -EROFS;
-		if (length > FS_FILE_CAP)
+		if (length > RAMTAB_FILE_CAP)
 			return -EFBIG;
-		if ((uint32_t)length > g_fs[fsid].size)
+		if ((uint32_t)length > ramtab_table()[fsid].size)
 		{
 			uint32_t i;
 
-			for (i = g_fs[fsid].size; i < (uint32_t)length; i++)
-				g_fs[fsid].own[i] = 0;
+			for (i = ramtab_table()[fsid].size; i < (uint32_t)length; i++)
+				ramtab_table()[fsid].own[i] = 0;
 		}
-		g_fs[fsid].size = (uint32_t)length;
-		g_fs[fsid].data = g_fs[fsid].own;
+		ramtab_table()[fsid].size = (uint32_t)length;
+		ramtab_table()[fsid].data = ramtab_table()[fsid].own;
 		return 0;
 	}
 	if (node != IR0_EARLY_ROOTFS_INIT)
@@ -6120,7 +6009,7 @@ int64_t early_rootfs_ftruncate(int fd, uint64_t length)
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
 	{
-		char pbuf[FS_NAME];
+		char pbuf[RAMTAB_NAME];
 		int denied;
 
 		if (path_of_fd(fd, pbuf, sizeof(pbuf)) == 0)
@@ -6162,20 +6051,20 @@ int64_t early_rootfs_ftruncate(int fd, uint64_t length)
 		uint32_t n;
 		uint32_t i;
 
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 			return -EBADF;
-		if (!g_fs[fsid].writable)
+		if (!ramtab_table()[fsid].writable)
 			return -EROFS;
-		if (length > FS_FILE_CAP)
+		if (length > RAMTAB_FILE_CAP)
 			return -EFBIG;
 		n = (uint32_t)length;
-		if (n > g_fs[fsid].size)
+		if (n > ramtab_table()[fsid].size)
 		{
-			for (i = g_fs[fsid].size; i < n; i++)
-				g_fs[fsid].own[i] = 0;
+			for (i = ramtab_table()[fsid].size; i < n; i++)
+				ramtab_table()[fsid].own[i] = 0;
 		}
-		g_fs[fsid].size = n;
-		g_fs[fsid].data = g_fs[fsid].own;
+		ramtab_table()[fsid].size = n;
+		ramtab_table()[fsid].data = ramtab_table()[fsid].own;
 		return 0;
 	}
 	if (node != IR0_EARLY_ROOTFS_INIT)
@@ -6218,18 +6107,18 @@ int64_t early_rootfs_utimensat(int dirfd, uint64_t path)
 
 static int parent_exists(const char *path)
 {
-	char parent[FS_NAME];
+	char parent[RAMTAB_NAME];
 
-	if (!fs_parent(path, parent, sizeof(parent)))
+	if (!ramtab_parent(path, parent, sizeof(parent)))
 		return 0;
 	if (ir0_early_rootfs_path_node(parent) != IR0_EARLY_ROOTFS_NONE)
 		return 1;
-	return fs_find(parent) >= 0;
+	return ramtab_find(parent) >= 0;
 }
 
 static int join_under_cwd(char *pbuf, unsigned cap)
 {
-	char joined[FS_NAME];
+	char joined[RAMTAB_NAME];
 	const char *cwd = g_cwd_path[0] ? g_cwd_path : "/";
 	unsigned i = 0;
 	unsigned j = 0;
@@ -6260,7 +6149,7 @@ static int join_under_cwd(char *pbuf, unsigned cap)
 
 int64_t early_rootfs_mkdirat(int dirfd, uint64_t path)
 {
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	int ret;
 
 	if (!g_ready)
@@ -6274,9 +6163,10 @@ int64_t early_rootfs_mkdirat(int dirfd, uint64_t path)
 		return -ENAMETOOLONG;
 	apply_chroot(pbuf, sizeof(pbuf));
 	if (ir0_early_rootfs_path_node(pbuf) != IR0_EARLY_ROOTFS_NONE ||
-	    fs_find(pbuf) >= 0)
+	    ramtab_find(pbuf) >= 0)
 		return -EEXIST;
-	if (!parent_exists(pbuf))
+	if (!parent_exists(pbuf) &&
+	    !(product_path_live() && ir0_product_path_is_tmp(pbuf)))
 		return -ENOENT;
 	{
 		int denied = landlock_allow(pbuf, IR0_EARLY_LANDLOCK_FS_MAKE_DIR);
@@ -6284,13 +6174,21 @@ int64_t early_rootfs_mkdirat(int dirfd, uint64_t path)
 		if (denied < 0)
 			return denied;
 	}
-	ret = fs_add(pbuf, S_IFDIR | 0755U, 0, 0, 0);
+	if (product_path_live() && ir0_product_path_is_tmp(pbuf) &&
+	    g_product_path->mkdir)
+	{
+		ret = g_product_path->mkdir(pbuf, 0755);
+		if (ret == 0)
+			g_product_path_used = 1;
+		return ret;
+	}
+	ret = ramtab_add(pbuf, S_IFDIR | 0755U, 0, 0, 0);
 	return ret < 0 ? ret : 0;
 }
 
 int64_t early_rootfs_mknodat(int dirfd, uint64_t path, uint64_t mode)
 {
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	uint32_t type = (uint32_t)mode & S_IFMT;
 	int ret;
 
@@ -6308,7 +6206,7 @@ int64_t early_rootfs_mknodat(int dirfd, uint64_t path, uint64_t mode)
 		return -ENAMETOOLONG;
 	apply_chroot(pbuf, sizeof(pbuf));
 	if (ir0_early_rootfs_path_node(pbuf) != IR0_EARLY_ROOTFS_NONE ||
-	    fs_find(pbuf) >= 0)
+	    ramtab_find(pbuf) >= 0)
 		return -EEXIST;
 	if (!parent_exists(pbuf))
 		return -ENOENT;
@@ -6326,14 +6224,14 @@ int64_t early_rootfs_mknodat(int dirfd, uint64_t path, uint64_t mode)
 		if (denied < 0)
 			return denied;
 	}
-	ret = fs_add(pbuf, (uint32_t)mode, 0, 0,
+	ret = ramtab_add(pbuf, (uint32_t)mode, 0, 0,
 		     ((uint32_t)mode & S_IFMT) == S_IFREG);
 	return ret < 0 ? ret : 0;
 }
 
 int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags)
 {
-	char pbuf[FS_NAME];
+	char pbuf[RAMTAB_NAME];
 	enum ir0_early_rootfs_node node;
 	int fsid;
 
@@ -6358,26 +6256,26 @@ int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags)
 		if (denied < 0)
 			return denied;
 	}
-	fsid = fs_find(pbuf);
+	fsid = ramtab_find(pbuf);
 	if (node_is_dir(node))
 	{
 		if (!(flags & AT_REMOVEDIR))
 			return -EISDIR;
 		if (fsid < 0)
 			return -EBUSY;
-		if (fs_child_count(pbuf) > 0)
+		if (ramtab_child_count(pbuf) > 0)
 			return -ENOTEMPTY;
-		g_fs[fsid].used = 0;
+		ramtab_table()[fsid].used = 0;
 		return 0;
 	}
 	if (flags & AT_REMOVEDIR)
 		return -ENOTDIR;
 	if (fsid < 0)
 		return -EPERM;
-	fs_rehome(fsid);
-	g_fs[fsid].used = 0;
-	g_fs[fsid].fifo_pipe = -1;
-	g_fs[fsid].link_to = -1;
+	ramtab_rehome(fsid);
+	ramtab_table()[fsid].used = 0;
+	ramtab_table()[fsid].fifo_pipe = -1;
+	ramtab_table()[fsid].link_to = -1;
 	return 0;
 }
 
@@ -6391,9 +6289,9 @@ static void fs_set_path(int fsid, const char *path)
 {
 	unsigned i;
 
-	for (i = 0; path[i] != '\0' && i + 1 < FS_NAME; i++)
-		g_fs[fsid].path[i] = path[i];
-	g_fs[fsid].path[i] = '\0';
+	for (i = 0; path[i] != '\0' && i + 1 < RAMTAB_NAME; i++)
+		ramtab_table()[fsid].path[i] = path[i];
+	ramtab_table()[fsid].path[i] = '\0';
 }
 
 static void unix_rebind_path(int fsid, const char *path)
@@ -6417,9 +6315,9 @@ static void unix_rebind_path(int fsid, const char *path)
 int64_t early_rootfs_renameat2(int olddirfd, uint64_t oldpath, int newdirfd,
 			       uint64_t newpath, unsigned flags)
 {
-	char oldbuf[FS_NAME];
-	char newbuf[FS_NAME];
-	char saved[FS_NAME];
+	char oldbuf[RAMTAB_NAME];
+	char newbuf[RAMTAB_NAME];
+	char saved[RAMTAB_NAME];
 	enum ir0_early_rootfs_node node;
 	int fsid;
 	int dest;
@@ -6458,36 +6356,36 @@ int64_t early_rootfs_renameat2(int olddirfd, uint64_t oldpath, int newdirfd,
 		if (denied < 0)
 			return denied;
 	}
-	fsid = fs_find(oldbuf);
+	fsid = ramtab_find(oldbuf);
 	if (fsid < 0)
 		return -EACCES;
 	if (ir0_early_rootfs_path_node(newbuf) != IR0_EARLY_ROOTFS_NONE)
 		return -EACCES;
 	if (!parent_exists(newbuf))
 		return -ENOENT;
-	dest = fs_find(newbuf);
+	dest = ramtab_find(newbuf);
 	if (flags & IR0_EARLY_RENAME_EXCHANGE)
 	{
 		if (dest < 0)
 			return -ENOENT;
-		for (i = 0; g_fs[fsid].path[i] != '\0' && i + 1 < FS_NAME; i++)
-			saved[i] = g_fs[fsid].path[i];
+		for (i = 0; ramtab_table()[fsid].path[i] != '\0' && i + 1 < RAMTAB_NAME; i++)
+			saved[i] = ramtab_table()[fsid].path[i];
 		saved[i] = '\0';
-		fs_set_path(fsid, g_fs[dest].path);
+		fs_set_path(fsid, ramtab_table()[dest].path);
 		fs_set_path(dest, saved);
-		unix_rebind_path(fsid, g_fs[fsid].path);
-		unix_rebind_path(dest, g_fs[dest].path);
+		unix_rebind_path(fsid, ramtab_table()[fsid].path);
+		unix_rebind_path(dest, ramtab_table()[dest].path);
 		return 0;
 	}
 	if (dest >= 0 && (flags & IR0_EARLY_RENAME_NOREPLACE))
 		return -EEXIST;
 	if (dest >= 0)
 	{
-		if (fs_node_kind(g_fs[dest].mode) == IR0_EARLY_ROOTFS_USERDIR)
+		if (ramtab_node_kind(ramtab_table()[dest].mode) == IR0_EARLY_ROOTFS_USERDIR)
 			return -EISDIR;
-		g_fs[dest].used = 0;
+		ramtab_table()[dest].used = 0;
 	}
-	for (i = 0; newbuf[i] != '\0' && i + 1 < FS_NAME; i++)
+	for (i = 0; newbuf[i] != '\0' && i + 1 < RAMTAB_NAME; i++)
 		;
 	if (newbuf[i] != '\0')
 		return -ENAMETOOLONG;
@@ -6528,7 +6426,7 @@ int64_t early_rootfs_send_rights(int fd, const int *fds, int n)
 		int peer = unix_find_bound(g_unix[uid].bound_path, 0);
 
 		if (g_unix[uid].peer_fs >= 0)
-			peer = unix_find_bound(g_fs[g_unix[uid].peer_fs].path, 0);
+			peer = unix_find_bound(ramtab_table()[g_unix[uid].peer_fs].path, 0);
 		if (peer < 0)
 			peer = uid;
 		if (g_unix[peer].rights_n)
@@ -6635,19 +6533,19 @@ static int64_t kread_at(int fd, uint64_t off, uint8_t *tmp, uint64_t count)
 	}
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = fs_body(pipe_id_of_fd(fd));
+		int fsid = ramtab_body(pipe_id_of_fd(fd));
 
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used)
 			return -EBADF;
-		if (off >= g_fs[fsid].size)
+		if (off >= ramtab_table()[fsid].size)
 			return 0;
-		n = g_fs[fsid].size - off;
+		n = ramtab_table()[fsid].size - off;
 		if (n > count)
 			n = count;
 		if (n > 256)
 			n = 256;
 		for (i = 0; i < n; i++)
-			tmp[i] = g_fs[fsid].data ? g_fs[fsid].data[off + i] : 0;
+			tmp[i] = ramtab_table()[fsid].data ? ramtab_table()[fsid].data[off + i] : 0;
 		return (int64_t)n;
 	}
 	if (node == IR0_EARLY_ROOTFS_MEMFD)
@@ -6741,27 +6639,27 @@ static int64_t kwrite_buf(int fd, const uint8_t *tmp, uint64_t count)
 	}
 	if (node == IR0_EARLY_ROOTFS_FILE)
 	{
-		int fsid = fs_body(pipe_id_of_fd(fd));
+		int fsid = ramtab_body(pipe_id_of_fd(fd));
 
 		pos = pos_of_fd(fd);
-		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used || !pos)
+		if (fsid < 0 || fsid >= RAMTAB_MAX || !ramtab_table()[fsid].used || !pos)
 			return -EBADF;
-		if (!g_fs[fsid].writable)
+		if (!ramtab_table()[fsid].writable)
 			return -EROFS;
 		start = *pos;
-		if (start >= FS_FILE_CAP)
+		if (start >= RAMTAB_FILE_CAP)
 			return -EFBIG;
 		n = count;
-		if (start + n > FS_FILE_CAP)
-			n = FS_FILE_CAP - start;
+		if (start + n > RAMTAB_FILE_CAP)
+			n = RAMTAB_FILE_CAP - start;
 		if (n > 256)
 			n = 256;
 		for (i = 0; i < n; i++)
-			g_fs[fsid].own[start + i] = tmp[i];
+			ramtab_table()[fsid].own[start + i] = tmp[i];
 		*pos = start + n;
-		if (*pos > g_fs[fsid].size)
-			g_fs[fsid].size = (uint32_t)*pos;
-		g_fs[fsid].data = g_fs[fsid].own;
+		if (*pos > ramtab_table()[fsid].size)
+			ramtab_table()[fsid].size = (uint32_t)*pos;
+		ramtab_table()[fsid].data = ramtab_table()[fsid].own;
 		return (int64_t)n;
 	}
 	if (node == IR0_EARLY_ROOTFS_MEMFD)
@@ -7523,11 +7421,11 @@ int64_t early_rootfs_statx(int dirfd, uint64_t path, int flags, uint32_t mask,
 			}
 			else if (node == IR0_EARLY_ROOTFS_FILE)
 			{
-				int mid = fs_body(pipe_id_of_fd(dirfd));
+				int mid = ramtab_body(pipe_id_of_fd(dirfd));
 
-				size = (mid >= 0 && mid < FS_MAX &&
-					g_fs[mid].used) ?
-					       g_fs[mid].size :
+				size = (mid >= 0 && mid < RAMTAB_MAX &&
+					ramtab_table()[mid].used) ?
+					       ramtab_table()[mid].size :
 					       0;
 			}
 			ir0_early_rootfs_fill_stat(node, size, &st);
@@ -7565,17 +7463,17 @@ int64_t early_rootfs_statx(int dirfd, uint64_t path, int flags, uint32_t mask,
 				size = g_init_vis;
 			else if (node == IR0_EARLY_ROOTFS_FILE)
 			{
-				int fsid = fs_body(fs_find(pbuf));
+				int fsid = ramtab_body(ramtab_find(pbuf));
 
-				size = (fsid >= 0 && g_fs[fsid].used) ?
-					       g_fs[fsid].size :
+				size = (fsid >= 0 && ramtab_table()[fsid].used) ?
+					       ramtab_table()[fsid].size :
 					       0;
 			}
 			else if (node == IR0_EARLY_ROOTFS_SYMLINK)
 			{
-				int fsid = fs_find(pbuf);
+				int fsid = ramtab_find(pbuf);
 
-				size = (fsid >= 0) ? g_fs[fsid].size : 0;
+				size = (fsid >= 0) ? ramtab_table()[fsid].size : 0;
 			}
 			else if (node == IR0_EARLY_ROOTFS_UNIX ||
 				 node == IR0_EARLY_ROOTFS_FIFO ||
