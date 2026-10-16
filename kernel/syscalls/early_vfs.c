@@ -15,9 +15,10 @@ static int64_t early_getcwd(struct early_syscall_context *context,
 	static const char root[] = "/";
 
 	if (size < sizeof(root) || !context || !context->services ||
-	    !context->services->copy_to_user)
+	    !context->services->user ||
+	    !context->services->user->copy_to_user)
 		return -EFAULT;
-	if (context->services->copy_to_user(buffer, root, sizeof(root)) != 0)
+	if (context->services->user->copy_to_user(buffer, root, sizeof(root)) != 0)
 		return -EFAULT;
 	return sizeof(root);
 }
@@ -27,7 +28,8 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 				 uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	struct early_syscall_context *context = opaque;
-	const struct early_syscall_services *ops = context ? context->services : 0;
+	const struct early_vfs_services *ops = context && context->services ?
+		context->services->vfs : 0;
 
 	(void)a4; (void)a5;
 	if (id == IR0_SYSCALL_GETCWD)

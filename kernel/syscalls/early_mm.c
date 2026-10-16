@@ -51,7 +51,8 @@ static int select_arena(struct early_syscall_context *context,
 			struct early_mm_arena **arena, uint64_t *heap_base,
 			uint64_t *map_base, uint64_t *limit)
 {
-	const struct early_syscall_services *ops = context ? context->services : 0;
+	const struct early_mm_services *ops = context && context->services ?
+		context->services->mm : 0;
 	int secondary;
 
 	if (!ops || !ops->mm_layout || !ops->userspace_secondary_mode)
@@ -68,7 +69,7 @@ static int select_arena(struct early_syscall_context *context,
 	return 0;
 }
 
-static int map_zero_page(const struct early_syscall_services *ops, uint64_t page)
+static int map_zero_page(const struct early_mm_services *ops, uint64_t page)
 {
 	if (!ops->map_user_page || !ops->zero_user_page)
 		return -ENOSYS;
@@ -82,7 +83,7 @@ static int64_t early_brk(struct early_syscall_context *context, uint64_t request
 {
 	struct early_mm_arena *arena;
 	uint64_t base, map_base, limit, target_end;
-	const struct early_syscall_services *ops = context->services;
+	const struct early_mm_services *ops = context->services->mm;
 
 	if (select_arena(context, &arena, &base, &map_base, &limit) != 0)
 		return -ENOSYS;
@@ -108,7 +109,7 @@ static int64_t early_mmap(struct early_syscall_context *context,
 {
 	struct early_mm_arena *arena;
 	uint64_t heap_base, map_base, limit, base, end, page;
-	const struct early_syscall_services *ops = context->services;
+	const struct early_mm_services *ops = context->services->mm;
 
 	if (select_arena(context, &arena, &heap_base, &map_base, &limit) != 0)
 		return -ENOSYS;
@@ -134,7 +135,7 @@ static int64_t early_mprotect(struct early_syscall_context *context,
 			      uint64_t address, uint64_t length,
 			      uint64_t protection)
 {
-	const struct early_syscall_services *ops = context->services;
+	const struct early_mm_services *ops = context->services->mm;
 
 	if (!protection || (protection & ~(PROT_READ | PROT_WRITE | PROT_EXEC)))
 		return -ENOSYS;
@@ -152,7 +153,7 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 	struct early_syscall_context *context = opaque;
 
 	(void)a3; (void)a4; (void)a5;
-	if (!context || !context->services)
+	if (!context || !context->services || !context->services->mm)
 		return -ENOSYS;
 	switch (id) {
 	case IR0_SYSCALL_BRK: return early_brk(context, a0);

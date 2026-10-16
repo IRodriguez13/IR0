@@ -16,26 +16,30 @@ static int64_t early_uname(struct early_syscall_context *context,
 			   uint64_t output)
 {
 	struct utsname value;
-	const struct early_syscall_services *ops = context ? context->services : 0;
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	const struct early_process_services *process =
+		context && context->services ? context->services->process : 0;
 
-	if (!ops || !ops->copy_to_user || !ops->uts_machine)
+	if (!user || !user->copy_to_user || !process || !process->uts_machine)
 		return -ENOSYS;
 	ir0_utsname_init(&value, "IR0", "ir0", "0.0.1", "early",
-			 ops->uts_machine);
-	return ops->copy_to_user(output, &value, sizeof(value)) == 0 ? 0 : -EFAULT;
+			 process->uts_machine);
+	return user->copy_to_user(output, &value, sizeof(value)) == 0 ? 0 : -EFAULT;
 }
 
 static int64_t early_prlimit64(struct early_syscall_context *context,
 			       uint64_t old_limit)
 {
 	uint64_t limit[2] = { UINT64_MAX, UINT64_MAX };
-	const struct early_syscall_services *ops = context ? context->services : 0;
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
 
 	if (!old_limit)
 		return 0;
-	if (!ops || !ops->copy_to_user)
+	if (!user || !user->copy_to_user)
 		return -ENOSYS;
-	return ops->copy_to_user(old_limit, limit, sizeof(limit)) == 0 ? 0 : -EFAULT;
+	return user->copy_to_user(old_limit, limit, sizeof(limit)) == 0 ? 0 : -EFAULT;
 }
 
 static int64_t early_exit(struct early_syscall_context *context,
@@ -45,9 +49,9 @@ static int64_t early_exit(struct early_syscall_context *context,
 
 	if (context && context->leave_usermode)
 		*context->leave_usermode = 1;
-	if (context && context->services &&
-	    context->services->process_exit_observed)
-		context->services->process_exit_observed(smoke_ok);
+	if (context && context->services && context->services->process &&
+	    context->services->process->process_exit_observed)
+		context->services->process->process_exit_observed(smoke_ok);
 	return (int64_t)status;
 }
 

@@ -26,14 +26,16 @@ static const struct early_syscall_services *services(void *opaque)
 
 static int64_t sleep_timespec_user(void *opaque, uint64_t request)
 {
-	const struct early_syscall_services *ops = services(opaque);
+	const struct early_syscall_services *services_all = services(opaque);
+	const struct early_user_services *user = services_all ? services_all->user : 0;
+	const struct early_time_services *ops = services_all ? services_all->time : 0;
 	struct timespec value;
 	uint64_t frequency, seconds_ticks, nanosecond_ticks, delta, start;
 
-	if (!ops || !ops->copy_from_user || !ops->counter_read ||
+	if (!user || !user->copy_from_user || !ops || !ops->counter_read ||
 	    !ops->counter_frequency || !ops->cpu_relax)
 		return -ENOSYS;
-	if (ops->copy_from_user(&value, request, sizeof(value)) != 0)
+	if (user->copy_from_user(&value, request, sizeof(value)) != 0)
 		return -EFAULT;
 	if (value.tv_sec < 0 || value.tv_nsec < 0 ||
 	    value.tv_nsec >= (int64_t)NS_PER_SEC)
@@ -59,13 +61,15 @@ static int64_t sleep_timespec_user(void *opaque, uint64_t request)
 static int64_t early_clock_gettime(void *opaque, uint64_t clock_id,
 				   uint64_t output)
 {
-	const struct early_syscall_services *ops = services(opaque);
+	const struct early_syscall_services *services_all = services(opaque);
+	const struct early_user_services *user = services_all ? services_all->user : 0;
+	const struct early_time_services *ops = services_all ? services_all->time : 0;
 	struct timespec value;
 	uint64_t frequency, counter;
 
 	if (clock_id != CLOCK_MONOTONIC)
 		return -EINVAL;
-	if (!ops || !ops->copy_to_user || !ops->counter_read ||
+	if (!user || !user->copy_to_user || !ops || !ops->counter_read ||
 	    !ops->counter_frequency)
 		return -ENOSYS;
 	frequency = ops->counter_frequency();
@@ -74,7 +78,7 @@ static int64_t early_clock_gettime(void *opaque, uint64_t clock_id,
 	counter = ops->counter_read();
 	value.tv_sec = (int64_t)(counter / frequency);
 	value.tv_nsec = (int64_t)(((counter % frequency) * NS_PER_SEC) / frequency);
-	if (ops->copy_to_user(output, &value, sizeof(value)) != 0)
+	if (user->copy_to_user(output, &value, sizeof(value)) != 0)
 		return -EFAULT;
 	g_clock_gettime_ok = 1;
 	if (ops->note)
@@ -84,11 +88,13 @@ static int64_t early_clock_gettime(void *opaque, uint64_t clock_id,
 
 static int64_t early_gettimeofday(void *opaque, uint64_t output)
 {
-	const struct early_syscall_services *ops = services(opaque);
+	const struct early_syscall_services *services_all = services(opaque);
+	const struct early_user_services *user = services_all ? services_all->user : 0;
+	const struct early_time_services *ops = services_all ? services_all->time : 0;
 	struct timeval value;
 	uint64_t frequency, counter;
 
-	if (!ops || !ops->copy_to_user || !ops->counter_read ||
+	if (!user || !user->copy_to_user || !ops || !ops->counter_read ||
 	    !ops->counter_frequency)
 		return -ENOSYS;
 	frequency = ops->counter_frequency();
@@ -97,7 +103,7 @@ static int64_t early_gettimeofday(void *opaque, uint64_t output)
 	counter = ops->counter_read();
 	value.tv_sec = (int64_t)(counter / frequency);
 	value.tv_usec = (int64_t)(((counter % frequency) * 1000000ULL) / frequency);
-	if (ops->copy_to_user(output, &value, sizeof(value)) != 0)
+	if (user->copy_to_user(output, &value, sizeof(value)) != 0)
 		return -EFAULT;
 	g_gettimeofday_ok = 1;
 	if (ops->note)
@@ -109,7 +115,8 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 				  uint64_t a0, uint64_t a1, uint64_t a2,
 				  uint64_t a3, uint64_t a4, uint64_t a5)
 {
-	const struct early_syscall_services *ops = services(opaque);
+	const struct early_syscall_services *services_all = services(opaque);
+	const struct early_time_services *ops = services_all ? services_all->time : 0;
 	int64_t result;
 
 	(void)a4; (void)a5;

@@ -150,15 +150,24 @@ static void arm64_early_zero_user_page(uint64_t page)
 		bytes[index] = 0;
 }
 
-static const struct early_syscall_services g_arm64_early_services = {
+static const struct early_user_services g_arm64_early_user = {
 	.copy_from_user = arm64_early_copy_from_user,
 	.copy_to_user = arm64_early_copy_to_user,
+};
+
+static const struct early_time_services g_arm64_early_time = {
 	.counter_read = timer_read,
 	.counter_frequency = arm64_early_counter_frequency,
 	.cpu_relax = arm64_early_cpu_relax,
 	.note = arm64_early_time_note,
+};
+
+static const struct early_console_services g_arm64_early_console = {
 	.console_putc = pl011_putc,
 	.console_write_observed = arm64_early_console_write_observed,
+};
+
+static const struct early_vfs_services g_arm64_early_vfs = {
 	.vfs_read = arm64_rootfs_read,
 	.vfs_close = arm64_rootfs_close,
 	.vfs_openat = arm64_rootfs_openat,
@@ -166,13 +175,28 @@ static const struct early_syscall_services g_arm64_early_services = {
 	.vfs_newfstatat = arm64_rootfs_newfstatat,
 	.vfs_fstat = arm64_rootfs_fstat,
 	.vfs_readlinkat = arm64_rootfs_readlinkat,
+};
+
+static const struct early_process_services g_arm64_early_process = {
 	.uts_machine = "aarch64",
 	.process_exit_observed = arm64_early_process_exit_observed,
+};
+
+static const struct early_mm_services g_arm64_early_mm = {
 	.mm_layout = &g_arm64_early_mm_layout,
 	.userspace_secondary_mode = arm64_busybox_mode,
 	.map_user_page = arm64_mmu_map_user_page_flags,
 	.zero_user_page = arm64_early_zero_user_page,
 	.protect_user_range = arm64_mmu_protect_user_range,
+};
+
+static const struct early_syscall_services g_arm64_early_services = {
+	.user = &g_arm64_early_user,
+	.time = &g_arm64_early_time,
+	.console = &g_arm64_early_console,
+	.vfs = &g_arm64_early_vfs,
+	.process = &g_arm64_early_process,
+	.mm = &g_arm64_early_mm,
 };
 
 static void pl011_put_hex64(uint64_t v)

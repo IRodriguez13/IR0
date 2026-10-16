@@ -16,7 +16,8 @@ static int g_write_ok;
 static int64_t early_write(struct early_syscall_context *context,
 			   uint64_t descriptor, uint64_t buffer, uint64_t length)
 {
-	const struct early_syscall_services *ops;
+	const struct early_user_services *user;
+	const struct early_console_services *console;
 	char bytes[WRITE_MAX];
 	uint64_t count, index;
 
@@ -24,19 +25,21 @@ static int64_t early_write(struct early_syscall_context *context,
 		return -EBADF;
 	if (!length)
 		return 0;
-	if (!context || !(ops = context->services) || !ops->copy_from_user ||
-	    !ops->console_putc)
+	if (!context || !context->services ||
+	    !(user = context->services->user) ||
+	    !(console = context->services->console) ||
+	    !user->copy_from_user || !console->console_putc)
 		return -ENOSYS;
 	count = length > WRITE_MAX ? WRITE_MAX : length;
-	if (ops->copy_from_user(bytes, buffer, count) != 0)
+	if (user->copy_from_user(bytes, buffer, count) != 0)
 		return -EFAULT;
 	for (index = 0; index < count; index++) {
 		if (bytes[index] == '\n')
-			ops->console_putc('\r');
-		ops->console_putc(bytes[index]);
+			console->console_putc('\r');
+		console->console_putc(bytes[index]);
 	}
-	if (ops->console_write_observed)
-		ops->console_write_observed(bytes, count);
+	if (console->console_write_observed)
+		console->console_write_observed(bytes, count);
 	g_write_ok = 1;
 	return (int64_t)count;
 }

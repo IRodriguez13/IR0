@@ -14,16 +14,28 @@ enum early_syscall_event
 	EARLY_SYSCALL_CLOCK_NANOSLEEP_OK,
 };
 
-struct early_syscall_services
+struct early_user_services
 {
 	int (*copy_from_user)(void *destination, uint64_t source, uint64_t size);
 	int (*copy_to_user)(uint64_t destination, const void *source, uint64_t size);
+};
+
+struct early_time_services
+{
 	uint64_t (*counter_read)(void);
 	uint64_t (*counter_frequency)(void);
 	void (*cpu_relax)(void);
 	void (*note)(enum early_syscall_event event);
+};
+
+struct early_console_services
+{
 	void (*console_putc)(char value);
 	void (*console_write_observed)(const char *bytes, uint64_t size);
+};
+
+struct early_vfs_services
+{
 	int64_t (*vfs_read)(int fd, uint64_t buffer, uint64_t count);
 	int64_t (*vfs_close)(int fd);
 	int64_t (*vfs_openat)(int dirfd, uint64_t path, int flags);
@@ -33,14 +45,32 @@ struct early_syscall_services
 	int64_t (*vfs_fstat)(int fd, uint64_t statbuf);
 	int64_t (*vfs_readlinkat)(int dirfd, uint64_t path, uint64_t buffer,
 				 uint64_t size);
+};
+
+struct early_process_services
+{
 	const char *uts_machine;
 	void (*process_exit_observed)(int overall_smoke_ok);
+};
+
+struct early_mm_services
+{
 	const struct early_mm_layout *mm_layout;
 	int (*userspace_secondary_mode)(void);
 	int (*map_user_page)(uint64_t page, int executable);
 	void (*zero_user_page)(uint64_t page);
 	int (*protect_user_range)(uint64_t address, uint64_t length,
 				  int writable, int executable);
+};
+
+struct early_syscall_services
+{
+	const struct early_user_services *user;
+	const struct early_time_services *time;
+	const struct early_console_services *console;
+	const struct early_vfs_services *vfs;
+	const struct early_process_services *process;
+	const struct early_mm_services *mm;
 };
 
 /* Architecture-neutral state passed to staged syscall providers. */
