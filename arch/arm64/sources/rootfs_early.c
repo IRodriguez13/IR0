@@ -23,6 +23,10 @@
 extern const uint8_t embedded_elf_blob[];
 extern const uint8_t embedded_elf_blob_end[];
 
+#define DISK_INIT_MAX (128UL * 1024UL)
+
+static uint8_t g_disk_init[DISK_INIT_MAX];
+
 static int arm64_rootfs_copy_from_user(void *destination, uint64_t source,
 				       uint64_t size)
 {
@@ -68,7 +72,11 @@ void arm64_rootfs_early_init(void)
 
 	if (early_rootfs_ready())
 		return;
-	early_rootfs_bind(embedded_elf_blob, len, &g_arm64_rootfs_user);
+	if (early_rootfs_try_bind_block("vda", g_disk_init, sizeof(g_disk_init),
+					&g_arm64_rootfs_user) == 0)
+		ir0_boot_smoke("ARM64_DISK_INIT_OK");
+	else
+		early_rootfs_bind(embedded_elf_blob, len, &g_arm64_rootfs_user);
 	if (early_rootfs_ready())
 		ir0_boot_smoke("ARM64_ROOTFS_OK");
 	if (early_rootfs_console_ready())

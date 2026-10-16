@@ -325,6 +325,8 @@ int arm64_virtio_blk_init(void)
 int arm64_virtio_blk_facade_probe(void)
 {
 	dev_t id;
+	struct ir0_block_info info;
+	uint64_t probe_lba;
 	uint8_t wbuf[BLK_SECTOR] __attribute__((aligned(16)));
 	uint8_t rbuf[BLK_SECTOR] __attribute__((aligned(16)));
 	unsigned i;
@@ -333,15 +335,23 @@ int arm64_virtio_blk_facade_probe(void)
 	id = ir0_block_lookup_by_name("vda");
 	if (id == 0 || !ir0_block_is_present(id))
 		return -1;
+	if (ir0_block_get_info(id, &info) != 0 || info.sector_count == 0)
+		return -1;
 
 	for (i = 0; i < BLK_SECTOR; i++)
 		wbuf[i] = (uint8_t)(0xA5 ^ (uint8_t)i);
 	zero_bytes(rbuf, BLK_SECTOR);
 
+	/*
+	 * Use the last sector so a boot ELF at LBA 0 stays intact
+	 * (Linux virtio_blk still addresses 512-byte sectors).
+	 */
+	probe_lba = info.sector_count - 1ULL;
+
 	/* Architecture proof: I/O only through portable ir0_block_*. */
-	if (ir0_block_write(id, 0, 1, wbuf) != 0)
+	if (ir0_block_write(id, probe_lba, 1, wbuf) != 0)
 		return -1;
-	if (ir0_block_read(id, 0, 1, rbuf) != 0)
+	if (ir0_block_read(id, probe_lba, 1, rbuf) != 0)
 		return -1;
 
 	for (i = 0; i < BLK_SECTOR; i++)

@@ -3245,6 +3245,9 @@ ARM64_VIRTIO_DISK ?= /tmp/ir0-arm64-virtio-blk.img
 smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 	@echo "  SMOKE   ARM64 virtio-mmio + virtio-blk..."
 	@dd if=/dev/zero of=$(ARM64_VIRTIO_DISK) bs=1M count=4 status=none
+	@if [ -f build/hello_aarch64 ]; then \
+		dd if=build/hello_aarch64 of=$(ARM64_VIRTIO_DISK) conv=notrunc status=none; \
+	fi
 	@rm -f /tmp/arm64-virtio-blk-smoke.log
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-virtio-blk-smoke.log --timeout 25 --stale-sec 10 \
 		--done ARM64_BLOCKDEV_FACADE_OK -- \
@@ -3257,8 +3260,9 @@ smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-blk-smoke.log && \
 	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-virtio-blk-smoke.log && \
 	   grep -q "ARM64_BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "ARM64_VDA_OK" /tmp/arm64-virtio-blk-smoke.log; then \
-		echo "✓ smoke-arm64-virtio-blk passed (virtio + portable ir0_block facade)"; \
+	   grep -q "ARM64_VDA_OK" /tmp/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_DISK_INIT_OK" /tmp/arm64-virtio-blk-smoke.log; then \
+		echo "✓ smoke-arm64-virtio-blk passed (virtio + disk /init ELF + ir0_block)"; \
 	else \
 		echo "✗ smoke-arm64-virtio-blk FAILED"; \
 		tail -80 /tmp/arm64-virtio-blk-smoke.log; exit 1; \

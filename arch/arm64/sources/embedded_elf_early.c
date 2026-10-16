@@ -17,6 +17,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/early_elf_stack.h>
 #include <ir0/early_mm.h>
+#include <ir0/early_rootfs.h>
 
 #define PAGE_SIZE 4096UL
 
@@ -30,9 +31,6 @@
 #define ARM64_GUEST1_MMAP_END 0x44800000UL
 #endif
 #define GUEST1_STACK_PAGES 4U
-
-extern const uint8_t embedded_elf_blob[];
-extern const uint8_t embedded_elf_blob_end[];
 
 static int g_stage;
 static uint64_t g_entry;
@@ -107,8 +105,8 @@ int arm64_embedded_init_el0(void)
 
 int arm64_embedded_elf_prepare(void)
 {
-	const uint8_t *blob = embedded_elf_blob;
-	uint64_t blob_len = (uint64_t)(embedded_elf_blob_end - embedded_elf_blob);
+	const uint8_t *blob;
+	uint64_t blob_len = 0;
 	struct ir0_elf64_image image;
 	unsigned i;
 
@@ -116,6 +114,12 @@ int arm64_embedded_elf_prepare(void)
 	g_entry = 0;
 	g_heap = 0;
 	arm64_rootfs_early_init();
+	blob = early_rootfs_init_blob(&blob_len);
+	if (!blob || blob_len == 0)
+	{
+		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
+		return -1;
+	}
 
 	for (i = 0; i < GUEST1_STACK_PAGES; i++)
 	{

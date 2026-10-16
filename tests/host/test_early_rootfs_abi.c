@@ -102,5 +102,27 @@ void test_early_rootfs_abi(void)
 		ASSERT_EQ(spec.type, IR0_EARLY_DT_CHR);
 	}
 
+	{
+		uint8_t elf[128];
+		unsigned i;
+
+		for (i = 0; i < sizeof(elf); i++)
+			elf[i] = 0;
+		ASSERT_EQ(ir0_early_elf64_image_bytes(elf, sizeof(elf)), 0);
+		elf[0] = 0x7f;
+		elf[1] = 'E';
+		elf[2] = 'L';
+		elf[3] = 'F';
+		elf[4] = 2;
+		elf[5] = 1;
+		elf[32] = 64;
+		elf[54] = 56;
+		elf[56] = 1;
+		elf[64] = 1; /* PT_LOAD */
+		elf[64 + 8] = 0;
+		elf[64 + 32] = 120;
+		ASSERT_EQ(ir0_early_elf64_image_bytes(elf, sizeof(elf)), 120);
+	}
+
 	TEST_END();
 }

@@ -324,9 +324,98 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 	st->st_blocks = 0;
 }
 
+static inline uint16_t ir0_early_le16(const uint8_t *bytes)
+{
+	return (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
+}
+
+static inline uint32_t ir0_early_le32(const uint8_t *bytes)
+{
+	return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) |
+	       ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+}
+
+static inline uint64_t ir0_early_le64(const uint8_t *bytes)
+{
+	return (uint64_t)ir0_early_le32(bytes) |
+	       ((uint64_t)ir0_early_le32(bytes + 4) << 32);
+}
+
+/*
+ * Bytes covered by an ELF64 ET_EXEC/ET_DYN image (Ehdr + PT_LOAD file
+ * ranges + optional section table). 0 if the buffer is not a little-endian
+ * ELF64 or the headers do not fit in @cap.
+ */
+static inline uint64_t ir0_early_elf64_image_bytes(const uint8_t *hdr,
+						   uint64_t cap)
+{
+	uint64_t phoff;
+	uint64_t shoff;
+	uint64_t size = 64;
+	uint16_t phnum;
+	uint16_t phentsize;
+	uint16_t shnum;
+	uint16_t shentsize;
+	unsigned i;
+
+	if (!hdr || cap < 64)
+		return 0;
+	if (hdr[0] != 0x7f || hdr[1] != 'E' || hdr[2] != 'L' || hdr[3] != 'F')
+		return 0;
+	if (hdr[4] != 2 || hdr[5] != 1)
+		return 0;
+	phoff = ir0_early_le64(hdr + 32);
+	shoff = ir0_early_le64(hdr + 40);
+	phentsize = ir0_early_le16(hdr + 54);
+	phnum = ir0_early_le16(hdr + 56);
+	shentsize = ir0_early_le16(hdr + 58);
+	shnum = ir0_early_le16(hdr + 60);
+	if (phoff && phentsize >= 40 && phnum)
+	{
+		uint64_t phend = phoff + (uint64_t)phnum * phentsize;
+
+		if (phend > size)
+			size = phend;
+		for (i = 0; i < phnum; i++)
+		{
+			uint64_t poff = phoff + (uint64_t)i * phentsize;
+			uint32_t type;
+			uint64_t offset;
+			uint64_t filesz;
+
+			if (poff + 40 > cap)
+				return 0;
+			type = ir0_early_le32(hdr + poff);
+			if (type != 1)
+				continue;
+			offset = ir0_early_le64(hdr + poff + 8);
+			filesz = ir0_early_le64(hdr + poff + 32);
+			if (offset + filesz > size)
+				size = offset + filesz;
+		}
+	}
+	if (shoff && shentsize && shnum)
+	{
+		uint64_t shend = shoff + (uint64_t)shnum * shentsize;
+
+		if (shend > size)
+			size = shend;
+	}
+	if (size == 0 || size > cap)
+		return 0;
+	return size;
+}
+
 void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		       const struct early_user_services *user);
+int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
+				uint64_t buffer_len,
+				const struct early_user_services *user);
+const uint8_t *early_rootfs_init_blob(uint64_t *length);
+int early_rootfs_init_from_block(void);
 int early_rootfs_ready(void);
+int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
+int early_rootfs_fd_is_block(int fd);
 int early_rootfs_console_ready(void);
 int early_rootfs_memdev_ready(void);
 int early_rootfs_dents_ready(void);

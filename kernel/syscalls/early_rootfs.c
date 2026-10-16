@@ -38,6 +38,7 @@
 #define EBUSY  16
 #define EROFS  30
 #define ENOTEMPTY 39
+#define ENOEXEC 8
 #define AT_REMOVEDIR 0x200
 #define LOCK_SH 1
 #define LOCK_EX 2
@@ -88,6 +89,7 @@ static int g_stdio_cloexec[3];
 static enum ir0_early_rootfs_node g_cwd;
 static enum ir0_early_rootfs_node g_chroot;
 static uint64_t g_init_vis;
+static int g_init_from_block;
 static int g_exec_pending;
 static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
 static char *g_exec_argv[EXEC_ARGC_MAX + 1];
@@ -386,8 +388,118 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_pipes[i].used = 0;
 	reset_stdio();
 	g_exec_pending = 0;
+	g_init_from_block = 0;
 	g_ready = (init_blob != 0 && init_len > 0 && user &&
 		   user->copy_from_user && user->copy_to_user);
+}
+
+const uint8_t *early_rootfs_init_blob(uint64_t *length)
+{
+	if (length)
+		*length = g_blob_len;
+	return g_blob;
+}
+
+int early_rootfs_init_from_block(void)
+{
+	return g_init_from_block;
+}
+
+int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
+				uint64_t buffer_len,
+				const struct early_user_services *user)
+{
+	uint8_t sector[512];
+	uint64_t phoff;
+	uint16_t phnum;
+	uint16_t phentsize;
+	uint64_t header_bytes;
+	uint64_t image_bytes;
+	uint64_t sectors;
+	uint64_t i;
+
+	if (!name || !buffer || buffer_len < 512 || !user)
+		return -EINVAL;
+	if (!ir0_block_name_is_present(name))
+		return -ENOENT;
+	if (ir0_block_read_by_name(name, 0, 1, sector) != 0)
+		return -EIO;
+	if (sector[0] != 0x7f || sector[1] != 'E' || sector[2] != 'L' ||
+	    sector[3] != 'F' || sector[4] != 2 || sector[5] != 1)
+		return -ENOEXEC;
+	for (i = 0; i < 512; i++)
+		buffer[i] = sector[i];
+	phoff = ir0_early_le64(sector + 32);
+	phentsize = ir0_early_le16(sector + 54);
+	phnum = ir0_early_le16(sector + 56);
+	header_bytes = 64;
+	if (phoff && phentsize && phnum)
+		header_bytes = phoff + (uint64_t)phnum * phentsize;
+	if (header_bytes > buffer_len)
+		return -E2BIG;
+	if (header_bytes > 512)
+	{
+		sectors = (header_bytes + 511UL) / 512UL;
+		for (i = 1; i < sectors; i++)
+		{
+			if (ir0_block_read_by_name(name, i, 1,
+						   buffer + i * 512UL) != 0)
+				return -EIO;
+		}
+	}
+	image_bytes = ir0_early_elf64_image_bytes(buffer, buffer_len);
+	if (image_bytes == 0)
+		return -ENOEXEC;
+	if (image_bytes > buffer_len)
+		return -E2BIG;
+	sectors = (image_bytes + 511UL) / 512UL;
+	for (i = (header_bytes + 511UL) / 512UL; i < sectors; i++)
+	{
+		if (ir0_block_read_by_name(name, i, 1, buffer + i * 512UL) != 0)
+			return -EIO;
+	}
+	early_rootfs_bind(buffer, image_bytes, user);
+	g_init_from_block = 1;
+	return 0;
+}
+
+int early_rootfs_fd_is_block(int fd)
+{
+	return node_of_fd(fd) == IR0_EARLY_ROOTFS_VDA;
+}
+
+int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count)
+{
+	uint64_t *pos = pos_of_fd(fd);
+	uint64_t off;
+	uint64_t lba;
+	uint64_t n;
+	uint64_t i;
+	uint8_t sector[512];
+	uint8_t tmp[256];
+
+	if (!pos || node_of_fd(fd) != IR0_EARLY_ROOTFS_VDA || !vda_present())
+		return -EBADF;
+	off = *pos;
+	if (off >= vda_bytes())
+		return -EIO;
+	lba = off / 512ULL;
+	if (ir0_block_read_by_name("vda", lba, 1, sector) != 0)
+		return -EIO;
+	n = 512ULL - (off % 512ULL);
+	if (n > count)
+		n = count;
+	if (n > sizeof(tmp))
+		n = sizeof(tmp);
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(tmp, buffer, n) != 0)
+		return -EFAULT;
+	for (i = 0; i < n; i++)
+		sector[(off % 512ULL) + i] = tmp[i];
+	if (ir0_block_write_by_name("vda", lba, 1, sector) != 0)
+		return -EIO;
+	*pos = off + n;
+	return (int64_t)n;
 }
 
 int early_rootfs_ready(void)

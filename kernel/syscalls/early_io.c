@@ -77,6 +77,8 @@ static int64_t early_write(struct early_syscall_context *context,
 
 	if (early_rootfs_fd_is_pipe_write((int)descriptor))
 		return early_rootfs_pipe_write((int)descriptor, buffer, length);
+	if (early_rootfs_fd_is_block((int)descriptor))
+		return early_rootfs_block_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_discards_write((int)descriptor))
 		return early_write_discard(context, buffer, length);
 	if (!early_rootfs_fd_is_console((int)descriptor))
