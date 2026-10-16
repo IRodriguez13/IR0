@@ -9,8 +9,23 @@
 #define EFAULT 14
 #define EINVAL 22
 #define ENOSYS 38
+#define CLOCK_REALTIME 0UL
 #define CLOCK_MONOTONIC 1UL
+#define CLOCK_MONOTONIC_RAW 4UL
+#define CLOCK_REALTIME_COARSE 5UL
+#define CLOCK_MONOTONIC_COARSE 6UL
+#define CLOCK_BOOTTIME 7UL
 #define NS_PER_SEC 1000000000ULL
+
+static int clock_supported(uint64_t clock_id)
+{
+	return clock_id == CLOCK_REALTIME ||
+	       clock_id == CLOCK_MONOTONIC ||
+	       clock_id == CLOCK_MONOTONIC_RAW ||
+	       clock_id == CLOCK_REALTIME_COARSE ||
+	       clock_id == CLOCK_MONOTONIC_COARSE ||
+	       clock_id == CLOCK_BOOTTIME;
+}
 
 static int g_nanosleep_ok;
 static int g_clock_gettime_ok;
@@ -67,7 +82,7 @@ static int64_t early_clock_gettime(void *opaque, uint64_t clock_id,
 	struct timespec value;
 	uint64_t frequency, counter;
 
-	if (clock_id != CLOCK_MONOTONIC)
+	if (!clock_supported(clock_id))
 		return -EINVAL;
 	if (!user || !user->copy_to_user || !ops || !ops->counter_read ||
 	    !ops->counter_frequency)
@@ -131,7 +146,7 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_CLOCK_GETTIME:
 		return early_clock_gettime(opaque, a0, a1);
 	case IR0_SYSCALL_CLOCK_NANOSLEEP:
-		if (a0 != CLOCK_MONOTONIC) return -EINVAL;
+		if (!clock_supported(a0)) return -EINVAL;
 		(void)a1; (void)a3;
 		result = sleep_timespec_user(opaque, a2);
 		if (!result) {
@@ -143,7 +158,30 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 		(void)a1;
 		return early_gettimeofday(opaque, a0);
 	case IR0_SYSCALL_CLOCK_GETRES:
-		return 0;
+	{
+		struct timespec res;
+		const struct early_user_services *user;
+		uint64_t frequency;
+		uint64_t ns;
+
+		if (!clock_supported(a0))
+			return -EINVAL;
+		if (!a1)
+			return 0;
+		if (!services_all || !services_all->user ||
+		    !(user = services_all->user) || !user->copy_to_user ||
+		    !ops || !ops->counter_frequency)
+			return -ENOSYS;
+		frequency = ops->counter_frequency();
+		if (!frequency)
+			return -EINVAL;
+		ns = NS_PER_SEC / frequency;
+		if (!ns)
+			ns = 1;
+		res.tv_sec = 0;
+		res.tv_nsec = (int64_t)ns;
+		return user->copy_to_user(a1, &res, sizeof(res)) == 0 ? 0 : -EFAULT;
+	}
 	default:
 		return -ENOSYS;
 	}
