@@ -85,6 +85,8 @@ static int64_t early_write(struct early_syscall_context *context,
 		return early_rootfs_memfd_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_is_sock((int)descriptor))
 		return early_rootfs_sock_write((int)descriptor, buffer, length);
+	if (early_rootfs_fd_is_fifo((int)descriptor))
+		return early_rootfs_fifo_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_is_block((int)descriptor))
 		return early_rootfs_block_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_discards_write((int)descriptor))

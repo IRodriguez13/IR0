@@ -74,7 +74,11 @@ void arm64_rootfs_early_init(void)
 		return;
 	if (early_rootfs_try_bind_block("vda", g_disk_init, sizeof(g_disk_init),
 					&g_arm64_rootfs_user) == 0)
+	{
 		ir0_boot_smoke("ARM64_DISK_INIT_OK");
+		if (early_rootfs_cpio_ready())
+			ir0_boot_smoke("ARM64_CPIO_ROOT_OK");
+	}
 	else
 		early_rootfs_bind(embedded_elf_blob, len, &g_arm64_rootfs_user);
 	if (early_rootfs_ready())

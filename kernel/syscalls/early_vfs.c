@@ -63,6 +63,8 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_utimensat((int)a0, a1);
 	if (id == IR0_SYSCALL_MKDIRAT)
 		return early_rootfs_mkdirat((int)a0, a1);
+	if (id == IR0_SYSCALL_MKNODAT)
+		return early_rootfs_mknodat((int)a0, a1, a2);
 	if (id == IR0_SYSCALL_UNLINKAT)
 		return early_rootfs_unlinkat((int)a0, a1, (int)a2);
 	if (id == IR0_SYSCALL_RENAMEAT)
@@ -102,7 +104,8 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_FCHMODAT, IR0_SYSCALL_FCHOWN, IR0_SYSCALL_FCHOWNAT,
 	IR0_SYSCALL_CHROOT, IR0_SYSCALL_TRUNCATE, IR0_SYSCALL_FTRUNCATE,
 	IR0_SYSCALL_FLOCK, IR0_SYSCALL_UTIMENSAT, IR0_SYSCALL_MKDIRAT,
-	IR0_SYSCALL_UNLINKAT, IR0_SYSCALL_RENAMEAT, IR0_SYSCALL_SYMLINKAT,
+	IR0_SYSCALL_MKNODAT, IR0_SYSCALL_UNLINKAT, IR0_SYSCALL_RENAMEAT,
+	IR0_SYSCALL_SYMLINKAT,
 	IR0_SYSCALL_LINK, IR0_SYSCALL_LINKAT,
 };
 

@@ -39,6 +39,9 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_TIMERFD,
 	IR0_EARLY_ROOTFS_EPOLL,
 	IR0_EARLY_ROOTFS_SOCK,
+	IR0_EARLY_ROOTFS_FILE,
+	IR0_EARLY_ROOTFS_FIFO,
+	IR0_EARLY_ROOTFS_USERDIR,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -408,6 +411,30 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = 0;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_FILE)
+	{
+		st->st_ino = 16;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_REG;
+		st->st_size = (int64_t)blob_len;
+		st->st_blocks = (int64_t)((blob_len + 511UL) / 512UL);
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_FIFO)
+	{
+		st->st_ino = 17;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_FIFO;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_USERDIR)
+	{
+		st->st_ino = 18;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
 
 	st->st_ino = 1;
 	st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
@@ -557,6 +584,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 				const struct early_user_services *user);
 const uint8_t *early_rootfs_init_blob(uint64_t *length);
 int early_rootfs_init_from_block(void);
+int early_rootfs_cpio_ready(void);
 int early_rootfs_ready(void);
 int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_block(int fd);
@@ -589,6 +617,8 @@ int64_t early_rootfs_epoll_pwait(int epfd, uint64_t events, int maxevents,
 int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv);
 int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_sock(int fd);
+int early_rootfs_fd_is_fifo(int fd);
+int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count);
 int64_t early_rootfs_blkgetsize64(int fd, uint64_t dest);
 int64_t early_rootfs_dup(int oldfd);
 int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
@@ -627,6 +657,7 @@ int64_t early_rootfs_ftruncate(int fd, uint64_t length);
 int64_t early_rootfs_flock(int fd, int op);
 int64_t early_rootfs_utimensat(int dirfd, uint64_t path);
 int64_t early_rootfs_mkdirat(int dirfd, uint64_t path);
+int64_t early_rootfs_mknodat(int dirfd, uint64_t path, uint64_t mode);
 int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_renameat(int olddirfd, uint64_t oldpath, int newdirfd,
 			      uint64_t newpath);

@@ -3268,6 +3268,37 @@ smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 		tail -80 /tmp/arm64-virtio-blk-smoke.log; exit 1; \
 	fi
 
+.PHONY: smoke-arm64-cpio
+ARM64_CPIO_DISK ?= /tmp/ir0-arm64-cpio.img
+smoke-arm64-cpio: kernel-arm64-syscall.bin
+	@echo "  SMOKE   ARM64 virtio-blk Linux newc CPIO root..."
+	@rm -rf /tmp/ir0-arm64-cpio-root
+	@mkdir -p /tmp/ir0-arm64-cpio-root
+	@if [ -f build/hello_aarch64 ]; then \
+		cp build/hello_aarch64 /tmp/ir0-arm64-cpio-root/init; \
+	fi
+	@echo staged-cpio > /tmp/ir0-arm64-cpio-root/note
+	@dd if=/dev/zero of=$(ARM64_CPIO_DISK) bs=1M count=4 status=none
+	@(cd /tmp/ir0-arm64-cpio-root && find . | cpio -o -H newc --quiet) \
+		| dd of=$(ARM64_CPIO_DISK) conv=notrunc status=none
+	@rm -f /tmp/arm64-cpio-smoke.log
+	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-cpio-smoke.log --timeout 25 --stale-sec 10 \
+		--done ARM64_CPIO_ROOT_OK -- \
+		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
+		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
+		-global virtio-mmio.force-legacy=false \
+		-drive if=none,file=$(ARM64_CPIO_DISK),format=raw,id=hd0 \
+		-device virtio-blk-device,drive=hd0 \
+		-display none -no-reboot 2>/dev/null || true
+	@if grep -q "ARM64_CPIO_ROOT_OK" /tmp/arm64-cpio-smoke.log && \
+	   grep -q "ARM64_DISK_INIT_OK" /tmp/arm64-cpio-smoke.log && \
+	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-cpio-smoke.log; then \
+		echo "✓ smoke-arm64-cpio passed (newc root + /init ELF)"; \
+	else \
+		echo "✗ smoke-arm64-cpio FAILED"; \
+		tail -80 /tmp/arm64-cpio-smoke.log; exit 1; \
+	fi
+
 smoke-arm64-virtio-net: kernel-arm64-syscall.bin
 	@echo "  SMOKE   ARM64 virtio-mmio + virtio-net..."
 	@rm -f /tmp/arm64-virtio-net-smoke.log

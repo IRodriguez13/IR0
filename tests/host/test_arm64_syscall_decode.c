@@ -49,6 +49,7 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(95) == IR0_SYSCALL_WAITID);
 	ASSERT(syscall_decode_number(37) == IR0_SYSCALL_LINKAT);
 	ASSERT(syscall_decode_number(112) == IR0_SYSCALL_CLOCK_SETTIME);
+	ASSERT(syscall_decode_number(33) == IR0_SYSCALL_MKNODAT);
 	ASSERT(syscall_decode_number(20) == IR0_SYSCALL_EPOLL_CREATE1);
 	ASSERT(syscall_decode_number(21) == IR0_SYSCALL_EPOLL_CTL);
 	ASSERT(syscall_decode_number(22) == IR0_SYSCALL_EPOLL_PWAIT);
