@@ -9,7 +9,7 @@ The goal is to document implemented behavior first, then known gaps.
 
 Subtree READMEs are concise entry points; this directory owns deeper design,
 operations, history, and bilingual manuals. See the continuous documentation
-rule in `.cursor/rules/ir0-continuous-subtree-docs.mdc`.
+rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 
 **Bootstrap and QEMU usage:** see [SETUP.md](../SETUP.md) at the repository root.
 

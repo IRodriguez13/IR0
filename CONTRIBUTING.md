@@ -20,8 +20,8 @@ Perfiles y techos honestos: `make help-profiles`.
 
 ## 2. Estilo
 
-- C del kernel: Allman braces; cabecera IR0 + SPDX (ver `.cursor/rules` /
-  `Documentation/ai_driven_dev/`).
+- C del kernel: Allman braces; cabecera IR0 + SPDX (ver
+  `Documentation/ai_driven_dev/rules/`).
 - APIs públicas vía `#include <ir0/…>` — no acoplar `fs/`/`mm/` a `drivers/`.
 - Diff mínimo: resolver el requerimiento; sin refactors de paso.
 - Sin stubs que finjan éxito (`return 0` en APIs reales). Preferir `-ENOSYS` /
