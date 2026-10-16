@@ -121,6 +121,22 @@ void process_mm_bind(process_t *p, mm_struct_t *mm)
 				 (uint64_t)(uintptr_t)mm->page_directory);
 }
 
+int process_mm_adopt_active(process_t *p, mm_struct_t *mm)
+{
+	uintptr_t root;
+
+	if (!p || !mm)
+		return -EINVAL;
+
+	root = mm_current_root();
+	if (!root)
+		return -EINVAL;
+
+	mm_init_root(mm, (uint64_t *)root, 0);
+	process_mm_bind(p, mm);
+	return 0;
+}
+
 int process_mm_share(process_t *child, process_t *parent)
 {
 	mm_struct_t *mm;

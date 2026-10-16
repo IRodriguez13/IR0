@@ -19,12 +19,15 @@
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/idle.h>
+#include <ir0/mm_struct.h>
+#include <ir0/oops.h>
 #include <ir0/process_exit.h>
 #include <ir0/cwd.h>
 #include <ir0/fd_install.h>
 #include <ir0/vfs_dispatch.h>
 #include <ir0/vfs_file.h>
 #include <ir0/syscall_identity.h>
+#include <ir0/tlb.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
 #include <kernel/process.h>
@@ -198,6 +201,7 @@ static int arm64_common_lifecycle_contract(void)
 static process_t g_guest;
 static process_t g_child;
 static process_t g_idle;
+static mm_struct_t g_guest_mm;
 static uint8_t g_idle_stack[4096] __attribute__((aligned(16)));
 
 static void arm64_idle_quiescent(void)
@@ -216,6 +220,14 @@ static void arm64_idle_quiescent(void)
 
 void arm64_common_prepare_final_el0(void)
 {
+	if (process_mm_adopt_active(&g_guest, &g_guest_mm) != 0 ||
+	    !process_pgd(&g_guest) ||
+	    (uintptr_t)process_pgd(&g_guest) != mm_current_root())
+	{
+		ir0_boot_smoke("ARM64_PROCESS_PGD_FAIL");
+		panic("arm64: EL0 process failed to adopt active address space");
+	}
+	ir0_boot_smoke("ARM64_PROCESS_PGD_OK");
 	sched_reset();
 	process_guest_rearm(&g_guest);
 	sched_adopt_running_context(&g_guest);
