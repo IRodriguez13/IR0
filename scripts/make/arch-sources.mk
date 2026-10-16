@@ -67,7 +67,6 @@ ARM64_EARLY_SYSCALL_OBJS = \
 	arch/arm64/sources/syscall_mm_early.o \
 	arch/arm64/sources/syscall_vfs_early.o \
 	arch/arm64/sources/syscall_time_early.o \
-	arch/arm64/sources/syscall_signal_early.o \
 	arch/arm64/sources/syscall_process_early.o \
 	arch/arm64/sources/syscall_io_early.o \
 	arch/arm64/sources/boot_stub.o \

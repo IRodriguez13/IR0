@@ -16,7 +16,6 @@
 #include "elf_load_early.h"
 #include "syscall_mm_early.h"
 #include "syscall_time_early.h"
-#include "syscall_signal_early.h"
 #include "syscall_process_early.h"
 #include "syscall_vfs_early.h"
 #include "syscall_io_early.h"
@@ -41,7 +40,6 @@ static const struct syscall_context_provider *const g_early_providers[] = {
 	&arm64_early_mm_provider,
 	&arm64_early_vfs_provider,
 	&arm64_early_time_provider,
-	&arm64_early_signal_provider,
 	&arm64_early_process_provider,
 };
 
