@@ -5,6 +5,7 @@
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
+#include <ir0/signals.h>
 #include <ir0/utsname.h>
 
 #define EAGAIN 11
@@ -15,6 +16,73 @@
 
 static int g_getpid_ok;
 static int g_umask = 0022;
+static uint64_t g_sigmask;
+static uint64_t g_sa_handler[65];
+static uint64_t g_sa_flags[65];
+
+static int64_t early_rt_sigprocmask(struct early_syscall_context *context,
+				    uint64_t how, uint64_t set, uint64_t oldset,
+				    uint64_t sigsetsize)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint64_t incoming = 0;
+
+	if (sigsetsize != 8 && sigsetsize != 16)
+		return -EINVAL;
+	if (!user || !user->copy_to_user || !user->copy_from_user)
+		return -ENOSYS;
+	if (oldset &&
+	    user->copy_to_user(oldset, &g_sigmask, 8) != 0)
+		return -EFAULT;
+	if (!set)
+		return 0;
+	if (user->copy_from_user(&incoming, set, 8) != 0)
+		return -EFAULT;
+	if (how == SIG_BLOCK)
+		g_sigmask |= incoming;
+	else if (how == SIG_UNBLOCK)
+		g_sigmask &= ~incoming;
+	else if (how == SIG_SETMASK)
+		g_sigmask = incoming;
+	else
+		return -EINVAL;
+	return 0;
+}
+
+static int64_t early_rt_sigaction(struct early_syscall_context *context,
+				  uint64_t signo, uint64_t act, uint64_t oldact,
+				  uint64_t sigsetsize)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint64_t blob[4];
+
+	if (signo < 1 || signo > 64)
+		return -EINVAL;
+	if (act && (signo == SIGKILL || signo == SIGSTOP))
+		return -EINVAL;
+	if (sigsetsize != 8 && sigsetsize != 16)
+		return -EINVAL;
+	if (!user || !user->copy_to_user || !user->copy_from_user)
+		return -ENOSYS;
+	if (oldact)
+	{
+		blob[0] = g_sa_handler[signo];
+		blob[1] = g_sa_flags[signo];
+		blob[2] = 0;
+		blob[3] = 0;
+		if (user->copy_to_user(oldact, blob, sizeof(blob)) != 0)
+			return -EFAULT;
+	}
+	if (!act)
+		return 0;
+	if (user->copy_from_user(blob, act, sizeof(blob)) != 0)
+		return -EFAULT;
+	g_sa_handler[signo] = blob[0];
+	g_sa_flags[signo] = blob[1];
+	return 0;
+}
 
 static int64_t early_uname(struct early_syscall_context *context,
 			   uint64_t output)
@@ -65,7 +133,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 {
 	struct early_syscall_context *context = opaque;
 
-	(void)a2; (void)a4; (void)a5;
+	(void)a4; (void)a5;
 	switch (id) {
 	case IR0_SYSCALL_GETPID:
 		g_getpid_ok = 1;
@@ -120,6 +188,10 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return 0;
 	case IR0_SYSCALL_SETGROUPS:
 		return a0 == 0 ? 0 : -EINVAL;
+	case IR0_SYSCALL_RT_SIGPROCMASK:
+		return early_rt_sigprocmask(context, a0, a1, a2, a3);
+	case IR0_SYSCALL_RT_SIGACTION:
+		return early_rt_sigaction(context, a0, a1, a2, a3);
 	case IR0_SYSCALL_EXECVE:
 	{
 		int64_t ret = early_rootfs_execve(a0, a1, a2);
@@ -141,7 +213,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
 	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
 	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_GETGROUPS,
-	IR0_SYSCALL_SETGROUPS, IR0_SYSCALL_EXECVE, IR0_SYSCALL_EXIT,
+	IR0_SYSCALL_SETGROUPS, IR0_SYSCALL_RT_SIGPROCMASK,
+	IR0_SYSCALL_RT_SIGACTION, IR0_SYSCALL_EXECVE, IR0_SYSCALL_EXIT,
 	IR0_SYSCALL_EXIT_GROUP,
 };
 
