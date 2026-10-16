@@ -28,6 +28,15 @@ void test_early_process_abi(void)
 	ASSERT_EQ(ir0_early_process_setpgid(0, 0), -IR0_EARLY_EPERM);
 	ASSERT_EQ(ir0_early_process_setpgid(1, 1), -IR0_EARLY_EPERM);
 	ASSERT_EQ(ir0_early_process_setpgid(2, 2), -IR0_EARLY_ESRCH);
+	ASSERT_EQ(ir0_early_process_kill(1, 0), 0);
+	ASSERT_EQ(ir0_early_process_kill(0, 15), 0);
+	ASSERT_EQ(ir0_early_process_kill(-1, 9), -IR0_EARLY_ESRCH);
+	ASSERT_EQ(ir0_early_process_kill(2, 9), -IR0_EARLY_ESRCH);
+	ASSERT_EQ(ir0_early_process_kill(1, 65), -IR0_EARLY_EINVAL);
+	ASSERT_EQ(ir0_early_process_tkill(1, 14), 0);
+	ASSERT_EQ(ir0_early_process_tkill(2, 14), -IR0_EARLY_ESRCH);
+	ASSERT_EQ(ir0_early_process_tgkill(1, 1, 2), 0);
+	ASSERT_EQ(ir0_early_process_tgkill(2, 1, 2), -IR0_EARLY_ESRCH);
 
 	TEST_END();
 }
