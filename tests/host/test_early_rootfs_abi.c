@@ -80,6 +80,10 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_ino, 9);
 	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_DIR);
 
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_EVENTFD, 0, &st);
+	ASSERT_EQ(st.st_ino, 10);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_REG);
+
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT), 5);
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_TMP), 2);
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_DEV), 6);

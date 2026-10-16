@@ -39,6 +39,7 @@
 #define EROFS  30
 #define ENOTEMPTY 39
 #define ENOEXEC 8
+#define ENOTTY 25
 #define AT_REMOVEDIR 0x200
 #define LOCK_SH 1
 #define LOCK_EX 2
@@ -65,6 +66,11 @@ struct rootfs_slot
 
 #define PIPE_MAX 2
 #define PIPE_BUF 1024
+#define EFD_MAX 2
+#define EFD_CLOEXEC 02000000
+#define EFD_NONBLOCK 00004000
+#define EFD_SEMAPHORE 1
+#define EFD_COUNT_MAX 0xfffffffffffffffeULL
 
 struct early_pipe
 {
@@ -94,6 +100,13 @@ static int g_exec_pending;
 static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
 static char *g_exec_argv[EXEC_ARGC_MAX + 1];
 static struct early_pipe g_pipes[PIPE_MAX];
+static struct early_eventfd
+{
+	int used;
+	uint64_t count;
+	int nonblock;
+	int semaphore;
+} g_eventfd[EFD_MAX];
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -299,6 +312,9 @@ static int close_fd(int fd)
 			    g_pipes[pipe_id].writers == 0)
 				g_pipes[pipe_id].used = 0;
 		}
+		if (g_slots[idx].node == IR0_EARLY_ROOTFS_EVENTFD &&
+		    pipe_id >= 0 && pipe_id < EFD_MAX)
+			g_eventfd[pipe_id].used = 0;
 	}
 	g_slots[idx].used = 0;
 	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
@@ -386,6 +402,8 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 	}
 	for (i = 0; i < PIPE_MAX; i++)
 		g_pipes[i].used = 0;
+	for (i = 0; i < EFD_MAX; i++)
+		g_eventfd[i].used = 0;
 	reset_stdio();
 	g_exec_pending = 0;
 	g_init_from_block = 0;
@@ -679,6 +697,32 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 			return -EFAULT;
 		*pos = off + n;
 		return (int64_t)n;
+	}
+	if (node == IR0_EARLY_ROOTFS_EVENTFD)
+	{
+		int efd = pipe_id_of_fd(fd);
+		uint64_t value;
+
+		if (efd < 0 || efd >= EFD_MAX || !g_eventfd[efd].used)
+			return -EBADF;
+		if (count < 8)
+			return -EINVAL;
+		if (g_eventfd[efd].count == 0)
+			return -EAGAIN;
+		if (g_eventfd[efd].semaphore)
+		{
+			value = 1;
+			g_eventfd[efd].count--;
+		}
+		else
+		{
+			value = g_eventfd[efd].count;
+			g_eventfd[efd].count = 0;
+		}
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, &value, 8) != 0)
+			return -EFAULT;
+		return 8;
 	}
 	idx = slot_from_fd(fd);
 	if (idx < 0)
@@ -1362,6 +1406,84 @@ int64_t early_rootfs_pipe2(uint64_t fds, int flags)
 	return 0;
 }
 
+int early_rootfs_fd_is_eventfd(int fd)
+{
+	return node_of_fd(fd) == IR0_EARLY_ROOTFS_EVENTFD;
+}
+
+int64_t early_rootfs_eventfd2(uint64_t initval, int flags)
+{
+	int efd;
+	int fd;
+	int idx;
+
+	if (!g_ready)
+		return -ENOSYS;
+	if (flags & ~(EFD_CLOEXEC | EFD_NONBLOCK | EFD_SEMAPHORE))
+		return -EINVAL;
+	if (initval > EFD_COUNT_MAX)
+		return -EINVAL;
+	for (efd = 0; efd < EFD_MAX; efd++)
+	{
+		if (!g_eventfd[efd].used)
+			break;
+	}
+	if (efd >= EFD_MAX)
+		return -EMFILE;
+	fd = alloc_fd(IR0_EARLY_ROOTFS_EVENTFD);
+	if (fd < 0)
+		return fd;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+	{
+		close_fd(fd);
+		return -EBADF;
+	}
+	g_eventfd[efd].used = 1;
+	g_eventfd[efd].count = initval;
+	g_eventfd[efd].nonblock = (flags & EFD_NONBLOCK) != 0;
+	g_eventfd[efd].semaphore = (flags & EFD_SEMAPHORE) != 0;
+	g_slots[idx].pipe_id = efd;
+	set_flags_of_fd(fd, IR0_O_RDWR |
+			    ((flags & EFD_NONBLOCK) ? LINUX_O_NONBLOCK : 0));
+	set_cloexec_of_fd(fd, (flags & EFD_CLOEXEC) != 0);
+	return fd;
+}
+
+int64_t early_rootfs_eventfd_write(int fd, uint64_t buffer, uint64_t count)
+{
+	int efd = pipe_id_of_fd(fd);
+	uint64_t add = 0;
+
+	if (efd < 0 || efd >= EFD_MAX || !g_eventfd[efd].used)
+		return -EBADF;
+	if (count < 8)
+		return -EINVAL;
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(&add, buffer, 8) != 0)
+		return -EFAULT;
+	if (add == 0xffffffffffffffffULL)
+		return -EINVAL;
+	if (g_eventfd[efd].count + add < g_eventfd[efd].count ||
+	    g_eventfd[efd].count + add > EFD_COUNT_MAX)
+		return -EAGAIN;
+	g_eventfd[efd].count += add;
+	return 8;
+}
+
+int64_t early_rootfs_blkgetsize64(int fd, uint64_t dest)
+{
+	uint64_t bytes;
+
+	if (!early_rootfs_fd_is_block(fd) || !vda_present())
+		return -ENOTTY;
+	if (!dest || !g_user || !g_user->copy_to_user)
+		return -EFAULT;
+	bytes = vda_bytes();
+	return g_user->copy_to_user(dest, &bytes, sizeof(bytes)) == 0 ?
+	       0 : -EFAULT;
+}
+
 int early_rootfs_poll_revents(int fd, int events)
 {
 	enum ir0_early_rootfs_node node;
@@ -1397,6 +1519,18 @@ int early_rootfs_poll_revents(int fd, int events)
 		if (p->readers == 0)
 			ready |= IR0_EARLY_POLLERR;
 		return ready & (events | IR0_EARLY_POLLHUP | IR0_EARLY_POLLERR);
+	}
+	if (node == IR0_EARLY_ROOTFS_EVENTFD)
+	{
+		int efd = pipe_id_of_fd(fd);
+
+		if (efd < 0 || efd >= EFD_MAX || !g_eventfd[efd].used)
+			return IR0_EARLY_POLLNVAL;
+		if (g_eventfd[efd].count > 0)
+			ready |= IR0_EARLY_POLLIN;
+		if (g_eventfd[efd].count < EFD_COUNT_MAX)
+			ready |= IR0_EARLY_POLLOUT;
+		return ready & events;
 	}
 	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY)
 		ready = IR0_EARLY_POLLOUT;

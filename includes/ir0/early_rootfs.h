@@ -34,6 +34,7 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_TMP,
 	IR0_EARLY_ROOTFS_PIPE_R,
 	IR0_EARLY_ROOTFS_PIPE_W,
+	IR0_EARLY_ROOTFS_EVENTFD,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -317,6 +318,14 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = 0;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_EVENTFD)
+	{
+		st->st_ino = 10;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_REG;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
 
 	st->st_ino = 1;
 	st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
@@ -426,6 +435,10 @@ int early_rootfs_fd_discards_write(int fd);
 int early_rootfs_fd_is_pipe_write(int fd);
 int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count);
 int64_t early_rootfs_pipe2(uint64_t fds, int flags);
+int64_t early_rootfs_eventfd2(uint64_t initval, int flags);
+int64_t early_rootfs_eventfd_write(int fd, uint64_t buffer, uint64_t count);
+int early_rootfs_fd_is_eventfd(int fd);
+int64_t early_rootfs_blkgetsize64(int fd, uint64_t dest);
 int64_t early_rootfs_dup(int oldfd);
 int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
 int64_t early_rootfs_chdir(uint64_t path);
