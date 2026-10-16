@@ -16,6 +16,11 @@
 
 #include <stdint.h>
 
+struct early_user_services;
+
+/* Replace the freestanding usercopy provider after product MM is available. */
+void arm64_syscall_usercopy_bind(const struct early_user_services *user);
+
 /**
  * Dispatch one SVC. Returns value for x0.
  * Sets *leave_el0 nonzero to retarget eret to EL1 continuation.

@@ -9,7 +9,9 @@
 
 #include "pl011.h"
 #include "exc_early.h"
+#include "syscall_early.h"
 #include <ir0/cpu_info.h>
+#include <ir0/copy_user.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/arch_mm.h>
@@ -203,6 +205,40 @@ static process_t g_child;
 static process_t g_idle;
 static mm_struct_t g_guest_mm;
 static uint8_t g_idle_stack[4096] __attribute__((aligned(16)));
+static int g_product_usercopy_observed;
+
+static int arm64_product_copy_from_user(void *destination, uint64_t source,
+					uint64_t size)
+{
+	int ret = copy_from_user(destination, (const void *)(uintptr_t)source,
+				 (size_t)size);
+
+	if (ret == 0 && !g_product_usercopy_observed)
+	{
+		g_product_usercopy_observed = 1;
+		ir0_boot_smoke("ARM64_PRODUCT_USERCOPY_OK");
+	}
+	return ret;
+}
+
+static int arm64_product_copy_to_user(uint64_t destination, const void *source,
+				      uint64_t size)
+{
+	int ret = copy_to_user((void *)(uintptr_t)destination, source,
+			       (size_t)size);
+
+	if (ret == 0 && !g_product_usercopy_observed)
+	{
+		g_product_usercopy_observed = 1;
+		ir0_boot_smoke("ARM64_PRODUCT_USERCOPY_OK");
+	}
+	return ret;
+}
+
+static const struct early_user_services g_product_usercopy = {
+	.copy_from_user = arm64_product_copy_from_user,
+	.copy_to_user = arm64_product_copy_to_user,
+};
 
 static void arm64_idle_quiescent(void)
 {
@@ -228,6 +264,7 @@ void arm64_common_prepare_final_el0(void)
 		panic("arm64: EL0 process failed to adopt active address space");
 	}
 	ir0_boot_smoke("ARM64_PROCESS_PGD_OK");
+	arm64_syscall_usercopy_bind(&g_product_usercopy);
 	sched_reset();
 	process_guest_rearm(&g_guest);
 	sched_adopt_running_context(&g_guest);

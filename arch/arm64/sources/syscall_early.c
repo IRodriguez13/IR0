@@ -177,7 +177,7 @@ static const struct early_mm_services g_arm64_early_mm = {
 	.protect_user_range = arm64_mmu_protect_user_range,
 };
 
-static const struct early_syscall_services g_arm64_early_services = {
+static struct early_syscall_services g_arm64_early_services = {
 	.user = &g_arm64_early_user,
 	.time = &g_arm64_early_time,
 	.console = &g_arm64_early_console,
@@ -185,6 +185,11 @@ static const struct early_syscall_services g_arm64_early_services = {
 	.process = &g_arm64_early_process,
 	.mm = &g_arm64_early_mm,
 };
+
+void arm64_syscall_usercopy_bind(const struct early_user_services *user)
+{
+	g_arm64_early_services.user = user ? user : &g_arm64_early_user;
+}
 
 static void pl011_put_hex64(uint64_t v)
 {
