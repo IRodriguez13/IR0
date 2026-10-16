@@ -2830,7 +2830,8 @@ arm64-common-process-compile:
 	@echo "✓ ARM64 common process subsystem compile contract"
 
 .PHONY: kernel-arm64-all.bin kernel-arm64-all-Image smoke-arm64-all \
-	smoke-arm64-all-dtb smoke-arm64-harness arm64-common-core-compile
+	smoke-arm64-all-dtb smoke-arm64-harness arm64-common-core-compile \
+	arm64-provider-audit
 
 # Compile every architecture-neutral kernel/MM/library/VFS translation unit in
 # an ARM64-only object namespace.  This is deliberately broader than the early
@@ -2933,6 +2934,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		arch/arm64/sources/all_objs_mark.c -o build/arm64-all/all_objs_mark.o
 	@echo "  LD      $@ (portable ALL — no x86 drivers)"
 	@aarch64-linux-gnu-ld --gc-sections $(ARM64_ALL_KEEP_SYMBOLS) \
+		-Map=build/arm64-all/kernel.map \
 		-T arch/arm64/linker.ld -o $@ \
 		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
 		arch/arm64/sources/mmu_early.o \
@@ -2978,6 +2980,18 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-all/min_link_stubs.o build/arm64-all/all_objs_mark.o
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
+arm64-provider-audit: kernel-arm64-all.bin
+	@! grep -q 'allocator_stubs.o' build/arm64-all/kernel.map || \
+		{ echo "✗ ARM64 aggregate linked the harness allocator"; exit 1; }
+	@unexpected=$$(aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$2 ~ /^[WwVv]$$/ { print $$3 }' | \
+		grep -Ev '^(ahci_map_mmio_in_directory|arm64_all_objs_mark|arm64_common_root_smoke|klog_(debug|debug_fmt|error_fmt|print|trace|trace_enabled|trace_fmt)|ktm_checkpoint_emit|ktm_fault_should_fail|video_backend_(get_fb_phys|get_fb_size|is_available))$$' || true); \
+	if [ -n "$$unexpected" ]; then \
+		echo "✗ unexpected weak ARM64 aggregate providers:"; \
+		printf '%s\n' "$$unexpected"; exit 1; \
+	fi
+	@echo "✓ ARM64 provider audit (real allocator/accounting/trace; weak budget contained)"
+
 # Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
 # supplies x0 only when the payload is an Image, not when it loads the raw ELF
 # test binary.  This is intentionally a second test product: it does not
@@ -2986,7 +3000,7 @@ kernel-arm64-all-Image: kernel-arm64-all.bin
 	@aarch64-linux-gnu-objcopy -O binary kernel-arm64-all.bin $@
 	@echo "✓ $@ (Linux arm64 Image header; aggregate harness)"
 
-smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
+smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provider-audit
 	@echo "  SMOKE   ARM64 early aggregate boot + common process compile contract..."
 	@aarch64-linux-gnu-readelf -lW kernel-arm64-all.bin > /tmp/ir0-arm64-all-phdrs.log
 	@! grep -Eq 'LOAD[[:space:]].*RWE' /tmp/ir0-arm64-all-phdrs.log
