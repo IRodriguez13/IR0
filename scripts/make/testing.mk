@@ -2266,7 +2266,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/busybox_load_early.c \
 		arch/arm64/sources/rootfs_early.c arch/arm64/sources/rootfs_early.h \
 		arch/arm64/sources/rr_early.c arch/arm64/sources/rr_early.h \
-		ktm/mocks/arm64/scheduler_stubs.c \
+		ktm/mocks/arm64/allocator_stubs.c \
+		ktm/mocks/arm64/runtime_stubs.c \
+		kernel/clock_accounting.c kernel/process/sched_trace.c \
 		arch/arm64/sources/virtio_blk_early.c arch/arm64/sources/virtio_blk_early.h \
 		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
@@ -2428,13 +2430,28 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c arch/arm64/sources/rr_early.c -o arch/arm64/sources/rr_early.o
-	@echo "  CC      ktm/mocks/arm64/scheduler_stubs.c"
+	@echo "  CC      ARM64 staged runtime providers"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
-		-c ktm/mocks/arm64/scheduler_stubs.c \
-		-o build/arm64-boot/scheduler_stubs.o
+		-c ktm/mocks/arm64/allocator_stubs.c \
+		-o build/arm64-boot/allocator_stubs.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) \
+		-c ktm/mocks/arm64/runtime_stubs.c \
+		-o build/arm64-boot/runtime_stubs.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-c kernel/clock_accounting.c \
+		-o build/arm64-boot/clock_accounting.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
+		-I$(KERNEL_ROOT) -c kernel/process/sched_trace.c \
+		-o build/arm64-boot/sched_trace.o
 	@echo "  CC      arch/arm64/sources/elf_load_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		kernel/lib/elf64_image.c -o build/arm64-boot/elf64_image.o
@@ -2520,7 +2537,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/scheduler_stubs.o \
+		build/arm64-boot/allocator_stubs.o \
+		build/arm64-boot/runtime_stubs.o \
+		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
@@ -2609,7 +2628,9 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
 		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/scheduler_stubs.o build/arm64-boot/elf64_image.o \
+		build/arm64-boot/allocator_stubs.o build/arm64-boot/runtime_stubs.o \
+		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
+		build/arm64-boot/elf64_image.o \
 		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
 		build/arm64-rpi3-early/hello_embed.o \
 		build/arm64-rpi3-early/busybox_load_early.o \
@@ -2739,7 +2760,8 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/scheduler_stubs.o \
+		build/arm64-boot/allocator_stubs.o build/arm64-boot/runtime_stubs.o \
+		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
@@ -2940,7 +2962,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/rr_sched.o \
 		build/arm64-boot/process_registry.o \
 		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/scheduler_stubs.o \
+		build/arm64-boot/runtime_stubs.o \
+		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
 		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
@@ -3015,7 +3038,10 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin
 		awk '$$3 == "exec_detach_shared_mm" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "fd_resource_acquire" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 ~ /^(__kmalloc_checked|__kfree_checked|clock_note_context_switch|process_sched_state_trace)$$/ { if ($$2 != "T") bad = 1; seen++ } END { exit bad || seen != 4 }'
 	@echo "✓ ARM64 common process/MM/create symbols are strong"
+	@echo "✓ ARM64 allocator/accounting/scheduler trace providers are strong"
 	@echo "✓ ARM64 ELF W^X program headers"
 	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \
