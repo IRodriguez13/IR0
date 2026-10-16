@@ -55,6 +55,8 @@ static int (*g_common_task_exit)(int code);
 static void (*g_schedule_exit)(int code);
 static int g_schedule_exit_armed;
 static int g_common_task_exit_published;
+static const struct ir0_syscall_identity_ops *g_identity;
+static int g_identity_used;
 static int g_child_state;
 static int g_enter_child;
 static int g_resume_parent;
@@ -87,6 +89,32 @@ static char g_domainname[IR0_EARLY_HOSTNAME_MAX + 1];
 static uint32_t g_cap[6] = { 0xffffffffU, 0xffffffffU, 0, 0xffffffffU,
 			     0xffffffffU, 0 };
 static int g_ioprio;
+
+static void early_set_current_pid(int64_t pid)
+{
+	g_current_pid = pid;
+	if (g_identity && g_identity->sync_current)
+		g_identity->sync_current(pid);
+}
+
+static void early_publish_creds(void)
+{
+	if (g_identity && g_identity->publish_creds)
+		g_identity->publish_creds(g_uid, g_euid, g_gid, g_egid);
+}
+
+static int64_t early_identity_get(int64_t (*fn)(void), int64_t fallback)
+{
+	int64_t ret;
+
+	if (!g_identity || !fn)
+		return fallback;
+	ret = fn();
+	if (ret < 0)
+		return fallback;
+	g_identity_used = 1;
+	return ret;
+}
 
 static int64_t early_rt_sigprocmask(struct early_syscall_context *context,
 				    uint64_t how, uint64_t set, uint64_t oldset,
@@ -831,7 +859,7 @@ static int64_t early_exit(struct early_syscall_context *context,
 		g_vfork_exec = 0;
 		g_yield_requested = 0;
 		g_resume_parent = 1;
-		g_current_pid = 1;
+		early_set_current_pid(1);
 		if (context && context->leave_usermode)
 			*context->leave_usermode = 1;
 		return (int64_t)status;
@@ -1439,22 +1467,30 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	switch (id) {
 	case IR0_SYSCALL_GETPID:
 		g_getpid_ok = 1;
-		return g_current_pid;
+		return early_identity_get(g_identity ? g_identity->getpid : 0,
+					 g_current_pid);
 	case IR0_SYSCALL_GETTID:
-		return g_current_pid;
+		return early_identity_get(g_identity ? g_identity->gettid : 0,
+					 g_current_pid);
 	case IR0_SYSCALL_SET_TID_ADDRESS:
 		g_clear_tid = a0;
-		return g_current_pid;
+		return early_identity_get(g_identity ? g_identity->gettid : 0,
+					 g_current_pid);
 	case IR0_SYSCALL_GETPPID:
-		return 1;
+		return early_identity_get(g_identity ? g_identity->getppid : 0,
+					 1);
 	case IR0_SYSCALL_GETUID:
-		return g_uid;
+		return early_identity_get(g_identity ? g_identity->getuid : 0,
+					 g_uid);
 	case IR0_SYSCALL_GETEUID:
-		return g_euid;
+		return early_identity_get(g_identity ? g_identity->geteuid : 0,
+					 g_euid);
 	case IR0_SYSCALL_GETGID:
-		return g_gid;
+		return early_identity_get(g_identity ? g_identity->getgid : 0,
+					 g_gid);
 	case IR0_SYSCALL_GETEGID:
-		return g_egid;
+		return early_identity_get(g_identity ? g_identity->getegid : 0,
+					 g_egid);
 	case IR0_SYSCALL_UNAME:
 		return early_uname(context, a0);
 	case IR0_SYSCALL_SET_ROBUST_LIST:
@@ -1534,11 +1570,13 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		if (g_euid == 0)
 		{
 			g_uid = g_euid = g_suid = g_fsuid = (uint32_t)a0;
+			early_publish_creds();
 			return 0;
 		}
 		if ((uint32_t)a0 == g_uid || (uint32_t)a0 == g_suid)
 		{
 			g_euid = g_fsuid = (uint32_t)a0;
+			early_publish_creds();
 			return 0;
 		}
 		return -EPERM;
@@ -1546,11 +1584,13 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		if (g_egid == 0)
 		{
 			g_gid = g_egid = g_sgid = g_fsgid = (uint32_t)a0;
+			early_publish_creds();
 			return 0;
 		}
 		if ((uint32_t)a0 == g_gid || (uint32_t)a0 == g_sgid)
 		{
 			g_egid = g_fsgid = (uint32_t)a0;
+			early_publish_creds();
 			return 0;
 		}
 		return -EPERM;
@@ -1561,6 +1601,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		if (g_euid == 0 || (uint32_t)a0 == g_uid ||
 		    (uint32_t)a0 == g_euid || (uint32_t)a0 == g_suid)
 			g_fsuid = (uint32_t)a0;
+		early_publish_creds();
 		return prev;
 	}
 	case IR0_SYSCALL_SETFSGID:
@@ -1570,6 +1611,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		if (g_egid == 0 || (uint32_t)a0 == g_gid ||
 		    (uint32_t)a0 == g_egid || (uint32_t)a0 == g_sgid)
 			g_fsgid = (uint32_t)a0;
+		early_publish_creds();
 		return prev;
 	}
 	case IR0_SYSCALL_SETREUID:
@@ -1587,6 +1629,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 				return -EPERM;
 			g_euid = g_fsuid = (uint32_t)a1;
 		}
+		early_publish_creds();
 		return 0;
 	case IR0_SYSCALL_SETREGID:
 		if (a0 != UID_NOCHANGE)
@@ -1603,6 +1646,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 				return -EPERM;
 			g_egid = g_fsgid = (uint32_t)a1;
 		}
+		early_publish_creds();
 		return 0;
 	case IR0_SYSCALL_SETRESUID:
 		if (g_euid != 0)
@@ -1623,6 +1667,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 			g_euid = g_fsuid = (uint32_t)a1;
 		if (a2 != UID_NOCHANGE)
 			g_suid = (uint32_t)a2;
+		early_publish_creds();
 		return 0;
 	case IR0_SYSCALL_SETRESGID:
 		if (a0 != UID_NOCHANGE)
@@ -1631,6 +1676,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 			g_egid = g_fsgid = (uint32_t)a1;
 		if (a2 != UID_NOCHANGE)
 			g_sgid = (uint32_t)a2;
+		early_publish_creds();
 		return 0;
 	case IR0_SYSCALL_GETPRIORITY:
 		if (a0 != PRIO_PROCESS)
@@ -1943,7 +1989,7 @@ int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls)
 	if (!g_enter_child)
 		return 0;
 	g_enter_child = 0;
-	g_current_pid = EARLY_CHILD_PID;
+	early_set_current_pid(EARLY_CHILD_PID);
 	g_child_state = CHILD_RUNNING;
 	if (stack)
 		*stack = g_child_stack;
@@ -1971,7 +2017,7 @@ int early_process_clone_resume_parent(uint64_t *frame)
 	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
 		frame[i] = g_parent_frame[i];
 	g_resume_parent = 0;
-	g_current_pid = 1;
+	early_set_current_pid(1);
 	return 1;
 }
 
@@ -2005,7 +2051,7 @@ int early_process_vfork_exec_resume(uint64_t *frame)
 		frame[i] = g_parent_frame[i];
 	g_vfork_exec = 0;
 	g_resume_parent = 0;
-	g_current_pid = 1;
+	early_set_current_pid(1);
 	return 1;
 }
 
@@ -2075,7 +2121,7 @@ int early_process_take_yield(uint64_t *frame)
 		g_child_state = CHILD_RUNNING;
 		g_block_wait_ok = 1;
 	}
-	g_current_pid = dest;
+	early_set_current_pid(dest);
 	return 1;
 }
 
@@ -2125,4 +2171,18 @@ int early_process_common_exit_published(void)
 
 	g_common_task_exit_published = 0;
 	return published;
+}
+
+void early_process_bind_identity(const struct ir0_syscall_identity_ops *ops)
+{
+	g_identity = ops;
+	g_identity_used = 0;
+	if (g_identity && g_identity->sync_current)
+		g_identity->sync_current(g_current_pid);
+	early_publish_creds();
+}
+
+int early_process_identity_used(void)
+{
+	return g_identity_used;
 }

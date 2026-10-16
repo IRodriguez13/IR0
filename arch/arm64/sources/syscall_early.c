@@ -230,8 +230,21 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 	context.leave_usermode = leave_el0;
 	context.smoke_ok = arm64_syscall_smoke_ok;
 	context.services = &g_arm64_early_services;
-	return early_syscall_dispatch_invoke(
-		&g_early_syscall_dispatch, &context, g_early_providers,
-		sizeof(g_early_providers) / sizeof(g_early_providers[0]),
-		syscall_id, a0, a1, a2, a3, a4, a5);
+	{
+		int64_t ret;
+
+		ret = early_syscall_dispatch_invoke(
+			&g_early_syscall_dispatch, &context, g_early_providers,
+			sizeof(g_early_providers) / sizeof(g_early_providers[0]),
+			syscall_id, a0, a1, a2, a3, a4, a5);
+		if (syscall_id == IR0_SYSCALL_GETPID &&
+		    early_process_identity_used())
+		{
+			if (ret == 1)
+				ir0_boot_smoke("ARM64_COMMON_GETPID_OK");
+			else if (ret == 2)
+				ir0_boot_smoke("ARM64_COMMON_CLONE_GETPID_OK");
+		}
+		return ret;
+	}
 }

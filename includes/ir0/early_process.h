@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <ir0/clone.h>
+#include <ir0/syscall_identity.h>
 #include <ir0/syscall_table.h>
 
 /*
@@ -228,3 +229,5 @@ void early_process_bind_common_exit(int (*fn)(int code));
 void early_process_bind_schedule_exit(void (*fn)(int code));
 void early_process_arm_schedule_exit(void);
 int early_process_common_exit_published(void);
+void early_process_bind_identity(const struct ir0_syscall_identity_ops *ops);
+int early_process_identity_used(void);

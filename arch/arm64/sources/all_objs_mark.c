@@ -19,6 +19,7 @@
 #include <ir0/early_process.h>
 #include <ir0/idle.h>
 #include <ir0/process_exit.h>
+#include <ir0/syscall_identity.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
 #include <kernel/process.h>
@@ -190,6 +191,7 @@ static int arm64_common_lifecycle_contract(void)
 }
 
 static process_t g_guest;
+static process_t g_child;
 static process_t g_idle;
 static uint8_t g_idle_stack[4096] __attribute__((aligned(16)));
 
@@ -326,6 +328,9 @@ void arm64_all_objs_mark(void)
 
 		for (i = 0; i < sizeof(g_guest); i++)
 			bytes[i] = 0;
+		bytes = (uint8_t *)&g_child;
+		for (i = 0; i < sizeof(g_child); i++)
+			bytes[i] = 0;
 		bytes = (uint8_t *)&g_idle;
 		for (i = 0; i < sizeof(g_idle); i++)
 			bytes[i] = 0;
@@ -339,6 +344,17 @@ void arm64_all_objs_mark(void)
 		g_guest.comm[2] = 'i';
 		g_guest.comm[3] = 't';
 		g_guest.comm[4] = 0;
+		g_child.task.pid = 2;
+		g_child.ppid = 1;
+		g_child.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+		g_child.state = PROCESS_READY;
+		g_child.mode = USER_MODE;
+		g_child.comm[0] = 'c';
+		g_child.comm[1] = 'l';
+		g_child.comm[2] = 'o';
+		g_child.comm[3] = 'n';
+		g_child.comm[4] = 'e';
+		g_child.comm[5] = 0;
 		g_idle.task.pid = 0;
 		g_idle.lifecycle = PROCESS_LIFECYCLE_ALIVE;
 		g_idle.state = PROCESS_READY;
@@ -353,13 +369,15 @@ void arm64_all_objs_mark(void)
 		g_idle.task.arch.sp_el0 = sp;
 		g_idle.task.arch.x30 = (uint64_t)(uintptr_t)kernel_idle_loop;
 		g_idle.next = &g_guest;
-		g_guest.next = NULL;
+		g_guest.next = &g_child;
+		g_child.next = NULL;
 		process_list = &g_idle;
 		process_exit_bind_services(&guest_ops);
 		process_idle_bind(&idle_ops);
 		process_guest_install(&g_guest);
 		early_process_bind_common_exit(process_exit_guest);
 		early_process_bind_schedule_exit(process_exit);
+		early_process_bind_identity(ir0_syscall_identity_product());
 		ir0_boot_smoke("ARM64_COMMON_GUEST_OK");
 		ir0_boot_smoke("ARM64_COMMON_IDLE_READY");
 	}
