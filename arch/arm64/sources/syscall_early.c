@@ -18,12 +18,12 @@
 #include "syscall_time_early.h"
 #include "syscall_signal_early.h"
 #include "syscall_process_early.h"
-#include "syscall_context_early.h"
 #include "syscall_vfs_early.h"
 #include "syscall_io_early.h"
 #include "pl011.h"
 
 #include <stdint.h>
+#include <ir0/early_syscall.h>
 #include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
 
@@ -34,9 +34,7 @@ void arm64_syscall_reset_busybox_heap(void)
 	arm64_early_mm_reset_busybox_heap();
 }
 
-static struct syscall_handler_table g_early_syscall_handlers;
-/* 0 = uninitialized, 1 = ready, negative = permanent registration failure. */
-static int g_early_syscall_handlers_state;
+static struct early_syscall_dispatch g_early_syscall_dispatch;
 
 static const struct syscall_context_provider *const g_early_providers[] = {
 	&arm64_early_io_provider,
@@ -69,36 +67,11 @@ int arm64_syscall_smoke_ok(void)
 	       arm64_early_time_smoke_ok();
 }
 
-static int arm64_syscall_early_handlers_init(void)
-{
-	unsigned int i;
-	int result;
-
-	if (g_early_syscall_handlers_state)
-		return g_early_syscall_handlers_state == 1 ? 0 :
-			g_early_syscall_handlers_state;
-	syscall_handlers_init(&g_early_syscall_handlers);
-	for (i = 0; i < sizeof(g_early_providers) / sizeof(g_early_providers[0]); i++)
-	{
-		result = syscall_context_provider_register(&g_early_syscall_handlers,
-							  g_early_providers[i]);
-		if (result != 0)
-		{
-			/* Do not retry a partially populated provider table. */
-			g_early_syscall_handlers_state = result;
-			return result;
-		}
-	}
-	g_early_syscall_handlers_state = 1;
-	return 0;
-}
-
 int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 			    uint64_t a3, uint64_t a4, uint64_t a5, int *leave_el0)
 {
-	struct arm64_early_syscall_context context;
+	struct early_syscall_context context;
 	enum ir0_syscall_id syscall_id;
-	int result;
 
 	if (leave_el0)
 		*leave_el0 = 0;
@@ -114,11 +87,10 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		return -ENOSYS;
 	}
 
-	result = arm64_syscall_early_handlers_init();
-	if (result != 0)
-		return result;
-	context.leave_el0 = leave_el0;
+	context.leave_usermode = leave_el0;
 	context.smoke_ok = arm64_syscall_smoke_ok;
-	return syscall_handler_invoke(&g_early_syscall_handlers, &context,
-				      syscall_id, a0, a1, a2, a3, a4, a5);
+	return early_syscall_dispatch_invoke(
+		&g_early_syscall_dispatch, &context, g_early_providers,
+		sizeof(g_early_providers) / sizeof(g_early_providers[0]),
+		syscall_id, a0, a1, a2, a3, a4, a5);
 }

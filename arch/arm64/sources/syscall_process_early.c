@@ -7,11 +7,11 @@
  */
 
 #include "syscall_process_early.h"
-#include "syscall_context_early.h"
 #include "elf_load_early.h"
 #include "mmu_early.h"
 
 #include <ir0/boot_log.h>
+#include <ir0/early_syscall.h>
 #include <ir0/utsname.h>
 
 #define EAGAIN 11
@@ -61,11 +61,11 @@ static int64_t early_getrandom(uint64_t length)
 	return -EAGAIN;
 }
 
-static int64_t early_exit(struct arm64_early_syscall_context *context,
+static int64_t early_exit(struct early_syscall_context *context,
 			  uint64_t status)
 {
-	if (context && context->leave_el0)
-		*context->leave_el0 = 1;
+	if (context && context->leave_usermode)
+		*context->leave_usermode = 1;
 	if (arm64_busybox_mode()) {
 		ir0_boot_smoke("ARM64_BUSYBOX_EXIT_OK");
 		return (int64_t)status;
@@ -83,7 +83,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 				     uint64_t a0, uint64_t a1, uint64_t a2,
 				     uint64_t a3, uint64_t a4, uint64_t a5)
 {
-	struct arm64_early_syscall_context *context = opaque;
+	struct early_syscall_context *context = opaque;
 
 	(void)a2;
 	(void)a4;
