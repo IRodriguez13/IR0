@@ -16,6 +16,8 @@
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
+#include <ir0/early_elf_stack.h>
+#include <ir0/early_syscall.h>
 
 #define PAGE_SIZE 4096UL
 
@@ -80,16 +82,46 @@ void arm64_busybox_note_write(const char *buf, uint64_t len)
 	g_bb_init_wrote = 1;
 }
 
-static void copy_bytes(void *dst, const void *src, uint64_t n)
+static int arm64_bb_copy_from_user(void *destination, uint64_t source,
+				   uint64_t size)
 {
-	uint8_t *d = dst;
-	const uint8_t *s = src;
+	uint8_t *dst = destination;
+	const volatile uint8_t *src;
+	uint64_t i;
 
-	while (n--)
-		*d++ = *s++;
+	if (!destination || size == 0)
+		return 0;
+	if (!arm64_mmu_user_buf_ok(source, size))
+		return -1;
+	src = (const volatile uint8_t *)(uintptr_t)source;
+	for (i = 0; i < size; i++)
+		dst[i] = src[i];
+	return 0;
 }
 
-static void setup_busybox_argv_stack(uint64_t sp_top, int init_stage)
+static int arm64_bb_copy_to_user(uint64_t destination, const void *source,
+				 uint64_t size)
+{
+	volatile uint8_t *dst;
+	const uint8_t *src = source;
+	uint64_t i;
+
+	if (!source || size == 0)
+		return 0;
+	if (!arm64_mmu_user_buf_ok(destination, size))
+		return -1;
+	dst = (volatile uint8_t *)(uintptr_t)destination;
+	for (i = 0; i < size; i++)
+		dst[i] = src[i];
+	return 0;
+}
+
+static const struct early_user_services g_bb_user = {
+	.copy_from_user = arm64_bb_copy_from_user,
+	.copy_to_user = arm64_bb_copy_to_user,
+};
+
+static int setup_busybox_argv_stack(uint64_t sp_top, int init_stage)
 {
 	/*
 	 * Stage 0: echo ARM64_BUSYBOX_EL0_OK.
@@ -97,51 +129,37 @@ static void setup_busybox_argv_stack(uint64_t sp_top, int init_stage)
 	 * via arm64_rootfs_smoke_init() before this drop.  BusyBox init applet
 	 * needs clone/execve/wait (still ENOSYS), so argv[0] stays "echo".
 	 */
-	char *str_area = (char *)(uintptr_t)(sp_top - 256UL);
-	uint64_t *sp;
-	char *p = str_area;
-	uint64_t *aux;
-	uint64_t *randp;
+	char *argv[3];
+	struct ir0_early_elf_stack_params params;
+	uint64_t sp;
 
-	copy_bytes(p, "echo", 5);
-	p += 5;
-	if (init_stage)
-		copy_bytes(p, "ARM64_BUSYBOX_INIT_OK", 22);
-	else
-		copy_bytes(p, "ARM64_BUSYBOX_EL0_OK", 20);
+	argv[0] = "echo";
+	argv[1] = init_stage ? "ARM64_BUSYBOX_INIT_OK" : "ARM64_BUSYBOX_EL0_OK";
+	argv[2] = 0;
 
-	randp = (uint64_t *)(uintptr_t)(sp_top - 256UL - 16UL);
-	randp[0] = 0x72706e646f6d3149ULL;
-	randp[1] = 0x495231302e302e31ULL;
+	params.stack_top = sp_top;
+	params.stack_size = (uint64_t)BB_STACK_PAGES * PAGE_SIZE;
+	params.argv = argv;
+	params.envp = 0;
+	params.aux.phdr = g_bb_phdr;
+	params.aux.phent = g_bb_phent;
+	params.aux.phnum = g_bb_phnum;
+	params.aux.pagesz = PAGE_SIZE;
+	params.aux.base = 0;
+	params.aux.flags = 0;
+	params.aux.entry = g_bb_entry;
+	params.aux.uid = 0;
+	params.aux.euid = 0;
+	params.aux.gid = 0;
+	params.aux.egid = 0;
+	params.aux.secure = 0;
+	params.aux.random = 0;
+	params.aux.execfn = "echo";
 
-	sp = (uint64_t *)(uintptr_t)(sp_top - 640UL);
-	sp[0] = 2;
-	sp[1] = (uint64_t)(uintptr_t)str_area;
-	sp[2] = (uint64_t)(uintptr_t)(str_area + 5);
-	sp[3] = 0;
-	sp[4] = 0;
-	aux = &sp[5];
-#define AUXV_PAIR(index, type, value) do { \
-	aux[(index) * 2] = (type); \
-	aux[(index) * 2 + 1] = (value); \
-} while (0)
-	AUXV_PAIR(0, 3, g_bb_phdr);             /* AT_PHDR */
-	AUXV_PAIR(1, 4, g_bb_phent);            /* AT_PHENT */
-	AUXV_PAIR(2, 5, g_bb_phnum);            /* AT_PHNUM */
-	AUXV_PAIR(3, 6, PAGE_SIZE);              /* AT_PAGESZ */
-	AUXV_PAIR(4, 7, 0);                      /* AT_BASE */
-	AUXV_PAIR(5, 8, 0);                      /* AT_FLAGS */
-	AUXV_PAIR(6, 9, g_bb_entry);             /* AT_ENTRY */
-	AUXV_PAIR(7, 11, 0);                     /* AT_UID */
-	AUXV_PAIR(8, 12, 0);                     /* AT_EUID */
-	AUXV_PAIR(9, 13, 0);                     /* AT_GID */
-	AUXV_PAIR(10, 14, 0);                    /* AT_EGID */
-	AUXV_PAIR(11, 23, 0);                    /* AT_SECURE */
-	AUXV_PAIR(12, 25, (uint64_t)(uintptr_t)randp); /* AT_RANDOM */
-	AUXV_PAIR(13, 31, (uint64_t)(uintptr_t)str_area); /* AT_EXECFN */
-	AUXV_PAIR(14, 0, 0);                     /* AT_NULL */
-#undef AUXV_PAIR
+	if (ir0_early_elf_setup_stack(&g_bb_user, &params, &sp) != 0)
+		return -1;
 	__asm__ volatile("msr sp_el0, %0" :: "r"(sp) : "memory");
+	return 0;
 }
 
 static void enable_fp_simd(void)
@@ -191,7 +209,11 @@ static void enter_busybox_el0(uint64_t entry, int init_stage)
 	enable_fp_simd();
 	arm64_syscall_reset_busybox_heap();
 	g_bb_mode = 1;
-	setup_busybox_argv_stack(ARM64_BB_STACK_TOP, init_stage);
+	if (setup_busybox_argv_stack(ARM64_BB_STACK_TOP, init_stage) != 0)
+	{
+		ir0_boot_smoke("ARM64_BUSYBOX_LOAD_FAIL");
+		return;
+	}
 	if (init_stage)
 		ir0_boot_smoke("ARM64_BUSYBOX_INIT_EL0_DROP");
 	else

@@ -546,6 +546,7 @@ LIB_OBJS = \
     kernel/lib/mount_prefix.o \
     kernel/lib/blockdev.o \
     kernel/lib/elf64_image.o \
+    kernel/lib/early_elf_stack.o \
     kernel/lib/mm_port.o \
     kernel/lib/process_introspect.o \
     kernel/lib/rtc_calendar.o \

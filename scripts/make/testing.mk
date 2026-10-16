@@ -2252,6 +2252,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/syscalls/early_io.c includes/ir0/early_io.h \
 		kernel/syscalls/early_vfs.c includes/ir0/early_vfs.h \
 		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
+		kernel/lib/early_elf_stack.c includes/ir0/early_elf_stack.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
 		kernel/syscalls/early_mm.c includes/ir0/early_mm.h \
 		arch/arm64/sources/elf_policy.c includes/ir0/arch_elf.h \
@@ -2350,6 +2351,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs.c \
 		-o build/arm64-boot/early_rootfs.o
+	@echo "  CC      kernel/lib/early_elf_stack.c (staged SysV ELF stack)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/lib/early_elf_stack.c \
+		-o build/arm64-boot/early_elf_stack.o
 	@echo "  CC      kernel/syscalls/early_process.c (staged Linux process ABI)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_process.c \
@@ -2520,6 +2525,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		build/arm64-boot/early_rootfs.o \
+		build/arm64-boot/early_elf_stack.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/syscall_early.o \
@@ -2594,6 +2600,7 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		build/arm64-boot/early_rootfs.o \
+		build/arm64-boot/early_elf_stack.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
@@ -2725,6 +2732,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		build/arm64-boot/early_rootfs.o \
+		build/arm64-boot/early_elf_stack.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/mm_ops.o build/arm64-min/arch_mm.o \
@@ -2927,6 +2935,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		build/arm64-boot/early_time.o \
 		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
 		build/arm64-boot/early_rootfs.o \
+		build/arm64-boot/early_elf_stack.o \
 		build/arm64-boot/early_process.o \
 		build/arm64-boot/early_mm.o \
 		arch/arm64/sources/mm_ops.o \

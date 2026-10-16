@@ -103,6 +103,7 @@ ARM64_FREESTANDING_RUNTIME_OBJS = \
 
 # EL0 handoff and the embedded userspace image used by the QEMU ARM64 smoke.
 ARM64_EARLY_USERSPACE_OBJS = \
+	kernel/lib/early_elf_stack.o \
 	arch/arm64/sources/elf_load_early.o \
 	arch/arm64/sources/hello_embed.o \
 	arch/arm64/sources/busybox_load_early.o \
