@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <ir0/syscall_table.h>
 
+struct early_mm_layout;
+
 enum early_syscall_event
 {
 	EARLY_SYSCALL_NANOSLEEP_OK,
@@ -33,6 +35,12 @@ struct early_syscall_services
 				 uint64_t size);
 	const char *uts_machine;
 	void (*process_exit_observed)(int overall_smoke_ok);
+	const struct early_mm_layout *mm_layout;
+	int (*userspace_secondary_mode)(void);
+	int (*map_user_page)(uint64_t page, int executable);
+	void (*zero_user_page)(uint64_t page);
+	int (*protect_user_range)(uint64_t address, uint64_t length,
+				  int writable, int executable);
 };
 
 /* Architecture-neutral state passed to staged syscall providers. */

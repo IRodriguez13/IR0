@@ -16,7 +16,6 @@
 #include "elf_load_early.h"
 #include "mmu_early.h"
 #include "rootfs_early.h"
-#include "syscall_mm_early.h"
 #include "pl011.h"
 #include "timer.h"
 
@@ -24,6 +23,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/early_syscall.h>
 #include <ir0/early_io.h>
+#include <ir0/early_mm.h>
 #include <ir0/early_process.h>
 #include <ir0/early_time.h>
 #include <ir0/early_vfs.h>
@@ -32,16 +32,40 @@
 
 #define ENOSYS 38
 
+#ifndef ARM64_MUSL_MMAP_BASE
+#define ARM64_MUSL_MMAP_BASE 0x431a0000UL
+#endif
+#ifndef ARM64_MUSL_MMAP_END
+#define ARM64_MUSL_MMAP_END 0x43200000UL
+#endif
+#ifndef ARM64_BB_BRK_START
+#define ARM64_BB_BRK_START 0x44158000UL
+#endif
+#ifndef ARM64_BB_MMAP_BASE
+#define ARM64_BB_MMAP_BASE 0x44200000UL
+#endif
+#ifndef ARM64_BB_MMAP_END
+#define ARM64_BB_MMAP_END 0x44800000UL
+#endif
+
+static const struct early_mm_layout g_arm64_early_mm_layout = {
+	.primary_heap_base = ARM64_MUSL_MMAP_BASE,
+	.primary_map_limit = ARM64_MUSL_MMAP_END,
+	.secondary_heap_base = ARM64_BB_BRK_START,
+	.secondary_map_base = ARM64_BB_MMAP_BASE,
+	.secondary_map_limit = ARM64_BB_MMAP_END,
+};
+
 void arm64_syscall_reset_busybox_heap(void)
 {
-	arm64_early_mm_reset_busybox_heap();
+	early_mm_reset_secondary_heap(&g_arm64_early_mm_layout);
 }
 
 static struct early_syscall_dispatch g_early_syscall_dispatch;
 
 static const struct syscall_context_provider *const g_early_providers[] = {
 	&early_io_provider,
-	&arm64_early_mm_provider,
+	&early_mm_provider,
 	&early_vfs_provider,
 	&early_time_provider,
 	&early_process_provider,
@@ -117,6 +141,15 @@ static void arm64_early_process_exit_observed(int overall_smoke_ok)
 						 "ARM64_SYSCALL_FAIL");
 }
 
+static void arm64_early_zero_user_page(uint64_t page)
+{
+	volatile uint8_t *bytes = (volatile uint8_t *)(uintptr_t)page;
+	uint64_t index;
+
+	for (index = 0; index < 4096UL; index++)
+		bytes[index] = 0;
+}
+
 static const struct early_syscall_services g_arm64_early_services = {
 	.copy_from_user = arm64_early_copy_from_user,
 	.copy_to_user = arm64_early_copy_to_user,
@@ -135,6 +168,11 @@ static const struct early_syscall_services g_arm64_early_services = {
 	.vfs_readlinkat = arm64_rootfs_readlinkat,
 	.uts_machine = "aarch64",
 	.process_exit_observed = arm64_early_process_exit_observed,
+	.mm_layout = &g_arm64_early_mm_layout,
+	.userspace_secondary_mode = arm64_busybox_mode,
+	.map_user_page = arm64_mmu_map_user_page_flags,
+	.zero_user_page = arm64_early_zero_user_page,
+	.protect_user_range = arm64_mmu_protect_user_range,
 };
 
 static void pl011_put_hex64(uint64_t v)

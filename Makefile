@@ -396,6 +396,7 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_io.o \
 	kernel/syscalls/early_vfs.o \
 	kernel/syscalls/early_process.o \
+	kernel/syscalls/early_mm.o \
     kernel/syscalls/syscall_dispatch.o \
     kernel/sock_udp.o \
     kernel/sock_icmp.o \
