@@ -2990,6 +2990,9 @@ arm64-provider-audit: kernel-arm64-all.bin
 		echo "✗ unexpected weak ARM64 aggregate providers:"; \
 		printf '%s\n' "$$unexpected"; exit 1; \
 	fi
+	@! aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		grep -Eq '[[:space:]](handle_signals|signals_should_handle_on_run)$$' || \
+		{ echo "✗ unused signal harness provider leaked into ARM64 aggregate"; exit 1; }
 	@echo "✓ ARM64 provider audit (real allocator/accounting/trace; weak budget contained)"
 
 # Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
