@@ -19,6 +19,7 @@
 #include <ir0/fd_install.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
+#include <ir0/vfs_file.h>
 #include <ir0/fcntl.h>
 #include <ir0/types.h>
 #include <ir0/statfs.h>
@@ -133,6 +134,7 @@ static enum ir0_early_rootfs_node g_chroot;
 static const struct ir0_cwd_ops *g_cwd_ops;
 static int g_cwd_used;
 static const struct ir0_fd_install_ops *g_fd_ops;
+static int g_vfs_file_used;
 static int g_fd_used;
 
 static void early_publish_fd(int fd, enum ir0_early_rootfs_node node);
@@ -391,7 +393,14 @@ static enum ir0_early_rootfs_node node_of_fd(int fd)
 static uint64_t *pos_of_fd(int fd)
 {
 	int idx;
+	struct vfs_file *f;
 
+	if (g_fd_ops && g_fd_ops->file)
+	{
+		f = g_fd_ops->file(fd);
+		if (f)
+			return (uint64_t *)&f->pos;
+	}
 	if (fd >= 0 && fd <= 2)
 		return g_stdio_open[fd] ? &g_stdio_pos[fd] : 0;
 	idx = slot_from_fd(fd);
@@ -2367,21 +2376,49 @@ static const char *early_node_path(enum ir0_early_rootfs_node node)
 
 static void early_publish_fd(int fd, enum ir0_early_rootfs_node node)
 {
+	int flags;
+
 	if (fd < 0 || !g_fd_ops || !g_fd_ops->install)
 		return;
-	if (g_fd_ops->install(fd, early_node_path(node), 0) == 0)
+	flags = flags_of_fd(fd);
+	if (g_fd_ops->install(fd, early_node_path(node), flags) == 0)
+	{
 		g_fd_used = 1;
+		if (g_fd_ops->file && g_fd_ops->file(fd))
+			g_vfs_file_used = 1;
+	}
 }
 
 void early_rootfs_bind_fdtable(const struct ir0_fd_install_ops *ops)
 {
+	unsigned i;
+
 	g_fd_ops = ops;
 	g_fd_used = 0;
+	g_vfs_file_used = 0;
+	if (!ops || !ops->install)
+		return;
+	for (i = 0; i < 3; i++)
+	{
+		if (g_stdio_open[i])
+			early_publish_fd((int)i, g_stdio_node[i]);
+	}
+	for (i = 0; i < ROOTFS_MAX_OPEN; i++)
+	{
+		if (g_slots[i].used)
+			early_publish_fd((int)(ROOTFS_FD_BASE + i),
+					 g_slots[i].node);
+	}
 }
 
 int early_rootfs_fdtable_used(void)
 {
 	return g_fd_used;
+}
+
+int early_rootfs_vfs_file_used(void)
+{
+	return g_vfs_file_used;
 }
 
 static int early_fdtable_ok(int fd)
@@ -2465,9 +2502,14 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 		idx = slot_from_fd(fd);
 		if (idx < 0)
 			return -EBADF;
+		{
+			uint64_t *dpos = pos_of_fd(fd);
+
+			if (!dpos)
+				return -EBADF;
 		if (count == 0)
 			return -EINVAL;
-		while (g_slots[idx].pos < total)
+		while (*dpos < total)
 		{
 			struct ir0_early_dirent_spec spec;
 			unsigned reclen;
@@ -2476,21 +2518,21 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 
 			if (node == IR0_EARLY_ROOTFS_USERDIR && syn == 0)
 				syn = 2;
-			if (g_slots[idx].pos < syn)
+			if (*dpos < syn)
 			{
 				if (node == IR0_EARLY_ROOTFS_USERDIR &&
 				    ir0_early_rootfs_dir_count(node) == 0)
 				{
-					spec.name = (g_slots[idx].pos == 0) ? "." : "..";
-					spec.ino = (g_slots[idx].pos == 0) ? 18 : 1;
+					spec.name = (*dpos == 0) ? "." : "..";
+					spec.ino = (*dpos == 0) ? 18 : 1;
 					spec.type = IR0_EARLY_DT_DIR;
 				}
 				else
 					spec = ir0_early_rootfs_dir_entry(node,
-							 (unsigned)g_slots[idx].pos);
+							 (unsigned)*dpos);
 			}
 			else if (node == IR0_EARLY_ROOTFS_DEV && vda_present() &&
-				 g_slots[idx].pos == syn)
+				 *dpos == syn)
 			{
 				spec.name = "vda";
 				spec.ino = 8;
@@ -2503,14 +2545,14 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 				if (node == IR0_EARLY_ROOTFS_DEV && vda_present())
 					skip++;
 				if (!fs_child_at(dirpath,
-						 (int)(g_slots[idx].pos - skip),
+						 (int)(*dpos - skip),
 						 &spec))
 					break;
 			}
 		if (!spec.name)
 			break;
 		reclen = ir0_early_dirent64_pack(rec, sizeof(rec), spec.ino,
-						(int64_t)(g_slots[idx].pos + 1),
+						(int64_t)(*dpos + 1),
 						spec.type, spec.name);
 		if (reclen == 0)
 			return -EINVAL;
@@ -2522,7 +2564,8 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 			tmp[tmp_used + i] = rec[i];
 		tmp_used += reclen;
 		written += reclen;
-			g_slots[idx].pos++;
+			(*dpos)++;
+		}
 		}
 		if (written == 0)
 			return 0;

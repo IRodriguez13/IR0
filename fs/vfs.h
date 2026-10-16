@@ -21,10 +21,11 @@
 #include <stdint.h>
 #include <ir0/types.h>
 #include <ir0/vfs_backend.h>
+#include <ir0/vfs_file.h>
 
 struct vfs_dirent;
 
-#define VFS_PATH_MAX 256
+#define VFS_PATH_MAX IR0_VFS_PATH_MAX
 #define VFS_NAME_MAX 255
 
 /* struct vfs_ops — see includes/ir0/vfs_backend.h */
@@ -56,14 +57,6 @@ struct vfs_mount {
 #define IR0_MS_UNSUPPORTED (IR0_MS_BIND)
 
 int vfs_remount(const char *path, unsigned long flags);
-
-/* Open file handle — created by vfs_open, freed by vfs_close */
-struct vfs_file {
-    char path[VFS_PATH_MAX];
-    off_t pos;
-    int flags;
-    int ref_count;
-};
 
 /* Directory entry returned by vfs_readdir */
 struct vfs_dirent {

@@ -366,6 +366,7 @@ KERNEL_OBJS = \
     kernel/process/exit_bind.o \
     kernel/process/idle.o \
     kernel/process/cwd.o \
+    kernel/process/vfs_file.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
     kernel/process/wait_audit.o \

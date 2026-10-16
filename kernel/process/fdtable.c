@@ -17,6 +17,7 @@
 #include <ir0/fd_get.h>
 #include <ir0/fd_install.h>
 #include <ir0/fd_resource.h>
+#include <ir0/vfs_file.h>
 
 int ir0_fd_get(process_t *proc, int fd, ir0_fd_t *out)
 {
@@ -159,19 +160,42 @@ static void fd_copy_path(char *dst, size_t dst_size, const char *src)
 
 static int fd_install_current(int fd, const char *path, int flags)
 {
+	const struct ir0_vfs_file_ops *file_ops = ir0_vfs_file_product();
 	fd_entry_t *e;
+	struct vfs_file *f;
 
 	if (!current_process || !files_struct_live(current_process->files))
 		return -ESRCH;
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
 		return -EBADF;
+	if (!file_ops || !file_ops->alloc)
+		return -EINVAL;
+	f = file_ops->alloc(path, flags);
+	if (!f)
+		return -ENOMEM;
 	e = &current_process->files->fd_table[fd];
+	if (e->in_use)
+		(void)fd_resource_release(e);
 	memset(e, 0, sizeof(*e));
 	e->in_use = true;
 	e->flags = flags;
 	e->pipe_end = -1;
+	e->vfs_file = f;
+	e->resource_ops = ir0_vfs_file_resource_ops();
 	fd_copy_path(e->path, sizeof(e->path), path);
 	return 0;
+}
+
+static struct vfs_file *fd_file_current(int fd)
+{
+	ir0_fd_t h;
+	struct vfs_file *f;
+
+	if (ir0_fd_get(current_process, fd, &h) != 0)
+		return NULL;
+	f = (struct vfs_file *)h.entry->vfs_file;
+	ir0_fd_put(&h);
+	return f;
 }
 
 static int fd_check_current(int fd)
@@ -232,6 +256,7 @@ static const struct ir0_fd_install_ops g_fd_install_ops = {
 	.close = fd_close_current,
 	.clone_files = fd_clone_files,
 	.share_files = fd_share_files,
+	.file = fd_file_current,
 };
 
 const struct ir0_fd_install_ops *ir0_fd_install_product(void)

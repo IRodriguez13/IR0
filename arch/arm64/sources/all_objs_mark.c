@@ -232,6 +232,8 @@ void arm64_common_prepare_fdtable(void)
 	early_rootfs_bind_fdtable(ops);
 	early_process_bind_files(ops);
 	ir0_boot_smoke("ARM64_COMMON_FDTABLE_OK");
+	if (early_rootfs_vfs_file_used())
+		ir0_boot_smoke("ARM64_COMMON_VFS_FILE_OK");
 }
 
 static int arm64_exit_notify_signal(int pid, int sig)

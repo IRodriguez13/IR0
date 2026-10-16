@@ -997,15 +997,10 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         }
     }
 
-    struct vfs_file *f = kmalloc_try(sizeof(*f));
+    struct vfs_file *f = vfs_file_alloc(path, flags);
     if (!f)
         return -ENOMEM;
 
-    strncpy(f->path, path, sizeof(f->path) - 1);
-    f->path[sizeof(f->path) - 1] = '\0';
-    f->pos   = 0;
-    f->flags = flags;
-    f->ref_count = 1;
     *out = f;
     return 0;
 }
@@ -1120,36 +1115,7 @@ int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset)
 
 int vfs_close(struct vfs_file *f)
 {
-	unsigned long irq_flags;
-	int last;
-
-	if (!f)
-		return -EBADF;
-
-	irq_flags = irq_save();
-	if (f->ref_count > 0)
-		f->ref_count--;
-	last = (f->ref_count <= 0);
-	irq_restore(irq_flags);
-
-	if (!last)
-		return 0;
-	/* Last reference to the description: its flock(2) lock dies with it. */
-	ir0_flock_release_file(f);
-	kfree(f);
-	return 0;
-}
-
-void vfs_file_acquire(struct vfs_file *f)
-{
-	unsigned long irq_flags;
-
-	if (!f)
-		return;
-
-	irq_flags = irq_save();
-	f->ref_count++;
-	irq_restore(irq_flags);
+	return vfs_file_put_last(f, ir0_flock_release_file);
 }
 
 off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence)

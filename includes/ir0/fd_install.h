@@ -12,6 +12,8 @@
 
 #include <stdint.h>
 
+struct vfs_file;
+
 /*
  * Linux fs/file.c get_unused_fd_flags() + fd_install() put the number in
  * current->files. IR0 does the same on current_process->files. The
@@ -26,6 +28,7 @@ struct ir0_fd_install_ops
 	int (*close)(int fd);
 	int (*clone_files)(int64_t child_pid);
 	int (*share_files)(int64_t child_pid);
+	struct vfs_file *(*file)(int fd);
 };
 
 const struct ir0_fd_install_ops *ir0_fd_install_product(void);
