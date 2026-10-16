@@ -252,6 +252,10 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 459: return IR0_SYSCALL_LSM_GET_SELF_ATTR;
 	case 460: return IR0_SYSCALL_LSM_SET_SELF_ATTR;
 	case 461: return IR0_SYSCALL_LSM_LIST_MODULES;
+	case 97: return IR0_SYSCALL_UNSHARE;
+	case 171: return IR0_SYSCALL_ADJTIMEX;
+	case 268: return IR0_SYSCALL_SETNS;
+	case 448: return IR0_SYSCALL_PROCESS_MRELEASE;
 	default: return IR0_SYSCALL_UNKNOWN;
 	}
 }

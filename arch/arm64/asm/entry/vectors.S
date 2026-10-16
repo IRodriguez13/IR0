@@ -1113,6 +1113,34 @@ el0_entry:
 	mov	x8, #461
 	svc	#0
 
+	/*
+	 * unshare(0), adjtimex(REALTIME), setns(pidfd, NEWNS), process_mrelease.
+	 * Linux aarch64 97/171/268/448.
+	 */
+	mov	x0, xzr
+	mov	x8, #97
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x100) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x100) >> 16) & 0xffff), lsl #16
+	str	xzr, [x9]
+	str	xzr, [x9, #8]
+	mov	x0, x9
+	mov	x8, #171
+	svc	#0
+	mov	x0, #1
+	mov	x1, xzr
+	mov	x8, #434
+	svc	#0
+	mov	x21, x0
+	mov	x0, x21
+	movz	x1, #0x2, lsl #16
+	mov	x8, #268
+	svc	#0
+	mov	x0, x21
+	mov	x1, xzr
+	mov	x8, #448
+	svc	#0
+
 	/* write(1, user probe page, 15) — "ARM64_WRITE_OK\n" filled by boot */
 	mov	x0, #1
 	movz	x1, #(ARM64_EL0_USER_PAGE_PA & 0xffff)

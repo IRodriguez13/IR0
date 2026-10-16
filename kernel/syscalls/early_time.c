@@ -197,6 +197,12 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_time_set_realtime(opaque, tv.tv_sec,
 					       tv.tv_usec * 1000);
 	}
+	case IR0_SYSCALL_ADJTIMEX:
+		if (!a0)
+			return -EFAULT;
+		a1 = a0;
+		a0 = CLOCK_REALTIME;
+		__attribute__((fallthrough));
 	case IR0_SYSCALL_CLOCK_ADJTIME:
 	{
 		uint8_t tx[IR0_EARLY_TIMEX_BYTES];
@@ -428,6 +434,7 @@ static const enum ir0_syscall_id g_time_syscalls[] = {
 	IR0_SYSCALL_CLOCK_GETRES, IR0_SYSCALL_GETITIMER,
 	IR0_SYSCALL_SETITIMER, IR0_SYSCALL_CLOCK_SETTIME,
 	IR0_SYSCALL_SETTIMEOFDAY, IR0_SYSCALL_CLOCK_ADJTIME,
+	IR0_SYSCALL_ADJTIMEX,
 };
 
 const struct syscall_context_provider early_time_provider = {

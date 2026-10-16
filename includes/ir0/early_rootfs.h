@@ -1020,6 +1020,7 @@ int64_t early_rootfs_landlock_create(uint64_t attr, uint64_t size,
 int64_t early_rootfs_landlock_add(int fd, int type, uint64_t rule,
 				  unsigned flags);
 int64_t early_rootfs_landlock_restrict(int fd, unsigned flags);
+int64_t early_rootfs_setns(int fd, unsigned flags);
 int64_t early_rootfs_statmount(uint64_t req, uint64_t buf, uint64_t bufsize,
 			       unsigned flags);
 int64_t early_rootfs_listmount(uint64_t req, uint64_t ids, uint64_t nr,

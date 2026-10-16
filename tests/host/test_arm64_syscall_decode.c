@@ -132,6 +132,10 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(459) == IR0_SYSCALL_LSM_GET_SELF_ATTR);
 	ASSERT(syscall_decode_number(460) == IR0_SYSCALL_LSM_SET_SELF_ATTR);
 	ASSERT(syscall_decode_number(461) == IR0_SYSCALL_LSM_LIST_MODULES);
-	ASSERT(decoded == 239);
+	ASSERT(syscall_decode_number(97) == IR0_SYSCALL_UNSHARE);
+	ASSERT(syscall_decode_number(171) == IR0_SYSCALL_ADJTIMEX);
+	ASSERT(syscall_decode_number(268) == IR0_SYSCALL_SETNS);
+	ASSERT(syscall_decode_number(448) == IR0_SYSCALL_PROCESS_MRELEASE);
+	ASSERT(decoded == 243);
 	TEST_END();
 }

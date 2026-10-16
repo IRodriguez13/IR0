@@ -1801,6 +1801,36 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_FUTEX_REQUEUE:
 		return early_futex_requeue(context, a0, (unsigned)a1, (int)a2,
 					   (int)a3);
+	case IR0_SYSCALL_UNSHARE:
+		if (a0)
+		{
+			if (a0 & ~(IR0_EARLY_CLONE_NS_ALL | CLONE_FILES |
+				   CLONE_FS | CLONE_SIGHAND | CLONE_VM |
+				   CLONE_THREAD))
+				return -EINVAL;
+			return -EOPNOTSUPP;
+		}
+		if (context && context->services && context->services->time &&
+		    context->services->time->note)
+			context->services->time->note(EARLY_SYSCALL_UNSHARE_OK);
+		return 0;
+	case IR0_SYSCALL_SETNS:
+		return early_rootfs_setns((int)a0, (unsigned)a1);
+	case IR0_SYSCALL_PROCESS_MRELEASE:
+	{
+		int32_t pid;
+
+		if (a1)
+			return -EINVAL;
+		pid = early_rootfs_pidfd_pid((int)a0);
+		if (pid < 0)
+			return pid;
+		if (g_child_state == CHILD_ZOMBIE && pid == EARLY_CHILD_PID)
+			return -ESRCH;
+		if (!early_pid_alive(pid))
+			return -ESRCH;
+		return -EINVAL;
+	}
 	case IR0_SYSCALL_LSM_GET_SELF_ATTR:
 	case IR0_SYSCALL_LSM_SET_SELF_ATTR:
 		if (a3 & ~(uint64_t)IR0_EARLY_LSM_FLAG_SINGLE)
@@ -1882,7 +1912,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_FUTEX_WAITV, IR0_SYSCALL_FUTEX_WAKE,
 	IR0_SYSCALL_FUTEX_WAIT, IR0_SYSCALL_FUTEX_REQUEUE,
 	IR0_SYSCALL_LSM_GET_SELF_ATTR, IR0_SYSCALL_LSM_SET_SELF_ATTR,
-	IR0_SYSCALL_LSM_LIST_MODULES,
+	IR0_SYSCALL_LSM_LIST_MODULES, IR0_SYSCALL_UNSHARE, IR0_SYSCALL_SETNS,
+	IR0_SYSCALL_PROCESS_MRELEASE,
 	IR0_SYSCALL_SETUID,
 	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETFSUID, IR0_SYSCALL_SETFSGID,
 	IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,

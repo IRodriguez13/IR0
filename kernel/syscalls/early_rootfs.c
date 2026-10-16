@@ -6946,6 +6946,19 @@ int32_t early_rootfs_pidfd_pid(int fd)
 	return (int32_t)pipe_id_of_fd(fd);
 }
 
+int64_t early_rootfs_setns(int fd, unsigned flags)
+{
+	enum ir0_early_rootfs_node node = node_of_fd(fd);
+
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	if (node != IR0_EARLY_ROOTFS_PIDFD)
+		return -EINVAL;
+	if (!flags || (flags & ~IR0_EARLY_CLONE_NS_ALL))
+		return -EINVAL;
+	return 0;
+}
+
 int64_t early_rootfs_pidfd_getfd(int target)
 {
 	int64_t fd = early_rootfs_dup(target);
