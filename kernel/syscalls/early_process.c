@@ -14,9 +14,20 @@
 #define EFAULT 14
 #define EINVAL 22
 #define ENOSYS 38
+#define EPERM  1
+#define ESRCH  3
+#define UID_NOCHANGE 0xffffffffUL
+#define PRIO_PROCESS 0
 
 static int g_getpid_ok;
 static int g_umask = 0022;
+static uint32_t g_uid;
+static uint32_t g_euid;
+static uint32_t g_suid;
+static uint32_t g_gid;
+static uint32_t g_egid;
+static uint32_t g_sgid;
+static int32_t g_nice;
 static uint64_t g_sigmask;
 static uint64_t g_sa_handler[65];
 static uint64_t g_sa_flags[65];
@@ -99,19 +110,22 @@ static uint64_t g_altstack_size;
 static int g_altstack_flags = SS_DISABLE;
 
 static int64_t early_getresids(struct early_syscall_context *context,
-			       uint64_t r, uint64_t e, uint64_t s)
+			       uint64_t r, uint64_t e, uint64_t s, int is_gid)
 {
 	const struct early_user_services *user = context && context->services ?
 		context->services->user : 0;
-	uint32_t zero = 0;
+	uint32_t ids[3];
 
 	if (!user || !user->copy_to_user)
 		return -ENOSYS;
-	if (r && user->copy_to_user(r, &zero, sizeof(zero)) != 0)
+	ids[0] = is_gid ? g_gid : g_uid;
+	ids[1] = is_gid ? g_egid : g_euid;
+	ids[2] = is_gid ? g_sgid : g_suid;
+	if (r && user->copy_to_user(r, &ids[0], sizeof(ids[0])) != 0)
 		return -EFAULT;
-	if (e && user->copy_to_user(e, &zero, sizeof(zero)) != 0)
+	if (e && user->copy_to_user(e, &ids[1], sizeof(ids[1])) != 0)
 		return -EFAULT;
-	if (s && user->copy_to_user(s, &zero, sizeof(zero)) != 0)
+	if (s && user->copy_to_user(s, &ids[2], sizeof(ids[2])) != 0)
 		return -EFAULT;
 	return 0;
 }
@@ -322,10 +336,13 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_GETPPID:
 		return 1;
 	case IR0_SYSCALL_GETUID:
+		return g_uid;
 	case IR0_SYSCALL_GETEUID:
+		return g_euid;
 	case IR0_SYSCALL_GETGID:
+		return g_gid;
 	case IR0_SYSCALL_GETEGID:
-		return 0;
+		return g_egid;
 	case IR0_SYSCALL_UNAME:
 		return early_uname(context, a0);
 	case IR0_SYSCALL_SET_ROBUST_LIST:
@@ -387,8 +404,138 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_TGKILL:
 		return ir0_early_process_tgkill((int64_t)a0, (int64_t)a1, a2);
 	case IR0_SYSCALL_GETRESUID:
+		return early_getresids(context, a0, a1, a2, 0);
 	case IR0_SYSCALL_GETRESGID:
-		return early_getresids(context, a0, a1, a2);
+		return early_getresids(context, a0, a1, a2, 1);
+	case IR0_SYSCALL_SETUID:
+		if (g_euid == 0)
+		{
+			g_uid = g_euid = g_suid = (uint32_t)a0;
+			return 0;
+		}
+		if ((uint32_t)a0 == g_uid || (uint32_t)a0 == g_suid)
+		{
+			g_euid = (uint32_t)a0;
+			return 0;
+		}
+		return -EPERM;
+	case IR0_SYSCALL_SETGID:
+		if (g_egid == 0)
+		{
+			g_gid = g_egid = g_sgid = (uint32_t)a0;
+			return 0;
+		}
+		if ((uint32_t)a0 == g_gid || (uint32_t)a0 == g_sgid)
+		{
+			g_egid = (uint32_t)a0;
+			return 0;
+		}
+		return -EPERM;
+	case IR0_SYSCALL_SETREUID:
+		if (a0 != UID_NOCHANGE)
+		{
+			if (g_euid != 0 && (uint32_t)a0 != g_uid &&
+			    (uint32_t)a0 != g_suid)
+				return -EPERM;
+			g_uid = (uint32_t)a0;
+		}
+		if (a1 != UID_NOCHANGE)
+		{
+			if (g_euid != 0 && (uint32_t)a1 != g_uid &&
+			    (uint32_t)a1 != g_suid)
+				return -EPERM;
+			g_euid = (uint32_t)a1;
+		}
+		return 0;
+	case IR0_SYSCALL_SETREGID:
+		if (a0 != UID_NOCHANGE)
+		{
+			if (g_egid != 0 && (uint32_t)a0 != g_gid &&
+			    (uint32_t)a0 != g_sgid)
+				return -EPERM;
+			g_gid = (uint32_t)a0;
+		}
+		if (a1 != UID_NOCHANGE)
+		{
+			if (g_egid != 0 && (uint32_t)a1 != g_gid &&
+			    (uint32_t)a1 != g_sgid)
+				return -EPERM;
+			g_egid = (uint32_t)a1;
+		}
+		return 0;
+	case IR0_SYSCALL_SETRESUID:
+		if (g_euid != 0)
+		{
+			if (a0 != UID_NOCHANGE && (uint32_t)a0 != g_uid &&
+			    (uint32_t)a0 != g_euid && (uint32_t)a0 != g_suid)
+				return -EPERM;
+			if (a1 != UID_NOCHANGE && (uint32_t)a1 != g_uid &&
+			    (uint32_t)a1 != g_euid && (uint32_t)a1 != g_suid)
+				return -EPERM;
+			if (a2 != UID_NOCHANGE && (uint32_t)a2 != g_uid &&
+			    (uint32_t)a2 != g_euid && (uint32_t)a2 != g_suid)
+				return -EPERM;
+		}
+		if (a0 != UID_NOCHANGE)
+			g_uid = (uint32_t)a0;
+		if (a1 != UID_NOCHANGE)
+			g_euid = (uint32_t)a1;
+		if (a2 != UID_NOCHANGE)
+			g_suid = (uint32_t)a2;
+		return 0;
+	case IR0_SYSCALL_SETRESGID:
+		if (a0 != UID_NOCHANGE)
+			g_gid = (uint32_t)a0;
+		if (a1 != UID_NOCHANGE)
+			g_egid = (uint32_t)a1;
+		if (a2 != UID_NOCHANGE)
+			g_sgid = (uint32_t)a2;
+		return 0;
+	case IR0_SYSCALL_GETPRIORITY:
+		if (a0 != PRIO_PROCESS)
+			return -EINVAL;
+		if (a1 != 0 && a1 != 1)
+			return -ESRCH;
+		return 20 + g_nice;
+	case IR0_SYSCALL_SETPRIORITY:
+		if (a0 != PRIO_PROCESS)
+			return -EINVAL;
+		if (a1 != 0 && a1 != 1)
+			return -ESRCH;
+		if ((int64_t)a2 < -20)
+			g_nice = -20;
+		else if ((int64_t)a2 > 19)
+			g_nice = 19;
+		else
+			g_nice = (int32_t)a2;
+		return 0;
+	case IR0_SYSCALL_GET_ROBUST_LIST:
+	{
+		uint64_t head = 0;
+		uint64_t len = 24;
+		const struct early_user_services *user =
+			context && context->services ? context->services->user : 0;
+
+		if (a0 != 0 && a0 != 1)
+			return -ESRCH;
+		if (!user || !user->copy_to_user)
+			return -ENOSYS;
+		if (a1 && user->copy_to_user(a1, &head, sizeof(head)) != 0)
+			return -EFAULT;
+		if (a2 && user->copy_to_user(a2, &len, sizeof(len)) != 0)
+			return -EFAULT;
+		return 0;
+	}
+	case IR0_SYSCALL_SYSLOG:
+		return a0 <= 10 ? 0 : -EINVAL;
+	case IR0_SYSCALL_EXECVEAT:
+	{
+		int64_t ret = early_rootfs_execve(a1, a2, a3);
+
+		if (ret == 0 && context && context->leave_usermode)
+			*context->leave_usermode = 1;
+		return ret;
+	}
 	case IR0_SYSCALL_GETRLIMIT:
 		return early_getrlimit(context, a1);
 	case IR0_SYSCALL_GETRUSAGE:
@@ -436,7 +583,11 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_TGKILL, IR0_SYSCALL_GETRESUID, IR0_SYSCALL_GETRESGID,
 	IR0_SYSCALL_GETRLIMIT, IR0_SYSCALL_GETRUSAGE, IR0_SYSCALL_SYSINFO,
 	IR0_SYSCALL_PERSONALITY, IR0_SYSCALL_SCHED_YIELD,
-	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, IR0_SYSCALL_EXECVE,
+	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, IR0_SYSCALL_SETUID,
+	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
+	IR0_SYSCALL_SETRESUID, IR0_SYSCALL_SETRESGID, IR0_SYSCALL_GETPRIORITY,
+	IR0_SYSCALL_SETPRIORITY, IR0_SYSCALL_GET_ROBUST_LIST,
+	IR0_SYSCALL_SYSLOG, IR0_SYSCALL_EXECVEAT, IR0_SYSCALL_EXECVE,
 	IR0_SYSCALL_EXIT, IR0_SYSCALL_EXIT_GROUP,
 };
 
