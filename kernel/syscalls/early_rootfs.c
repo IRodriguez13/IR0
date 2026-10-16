@@ -466,6 +466,87 @@ int64_t early_rootfs_chdir(uint64_t path)
 	return 0;
 }
 
+int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
+{
+	enum ir0_early_rootfs_node node;
+	int idx;
+	unsigned total;
+	unsigned written = 0;
+	uint8_t rec[32];
+	uint8_t tmp[256];
+	unsigned tmp_used = 0;
+
+	node = node_of_fd(fd);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	total = ir0_early_rootfs_dir_count(node);
+	if (total == 0)
+		return -ENOTDIR;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return -EBADF;
+	if (count == 0)
+		return -EINVAL;
+	while (g_slots[idx].pos < total)
+	{
+		struct ir0_early_dirent_spec spec;
+		unsigned reclen;
+		unsigned i;
+
+		spec = ir0_early_rootfs_dir_entry(node, (unsigned)g_slots[idx].pos);
+		if (!spec.name)
+			break;
+		reclen = ir0_early_dirent64_pack(rec, sizeof(rec), spec.ino,
+						(int64_t)(g_slots[idx].pos + 1),
+						spec.type, spec.name);
+		if (reclen == 0)
+			return -EINVAL;
+		if ((uint64_t)reclen > count - written)
+			break;
+		if (tmp_used + reclen > sizeof(tmp))
+			break;
+		for (i = 0; i < reclen; i++)
+			tmp[tmp_used + i] = rec[i];
+		tmp_used += reclen;
+		written += reclen;
+		g_slots[idx].pos++;
+	}
+	if (written == 0)
+		return 0;
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(buffer, tmp, written) != 0)
+		return -EFAULT;
+	return (int64_t)written;
+}
+
+int early_rootfs_dents_ready(void)
+{
+	uint8_t rec[32];
+	unsigned i;
+	unsigned n;
+
+	if (!g_ready)
+		return 0;
+	n = ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT);
+	if (n != 4 || ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_DEV) != 6)
+		return 0;
+	for (i = 0; i < n; i++)
+	{
+		struct ir0_early_dirent_spec spec;
+		unsigned reclen;
+
+		spec = ir0_early_rootfs_dir_entry(IR0_EARLY_ROOTFS_ROOT, i);
+		if (!spec.name)
+			return 0;
+		reclen = ir0_early_dirent64_pack(rec, sizeof(rec), spec.ino,
+						(int64_t)(i + 1), spec.type,
+						spec.name);
+		if (reclen < 20)
+			return 0;
+	}
+	return 1;
+}
+
 int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size)
 {
 	const char *cwd;

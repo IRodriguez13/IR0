@@ -67,5 +67,26 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_ino, 7);
 	ASSERT_EQ(st.st_rdev, IR0_EARLY_ROOTFS_TTY_RDEV);
 
+	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT), 4);
+	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_DEV), 6);
+	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_NULL), 0);
+	{
+		struct ir0_early_dirent_spec spec;
+		uint8_t rec[32];
+		unsigned reclen;
+
+		spec = ir0_early_rootfs_dir_entry(IR0_EARLY_ROOTFS_ROOT, 2);
+		ASSERT_EQ(spec.ino, 2);
+		ASSERT_EQ(spec.type, IR0_EARLY_DT_REG);
+		ASSERT_STR_EQ(spec.name, "init");
+		reclen = ir0_early_dirent64_pack(rec, sizeof(rec), spec.ino, 3,
+						spec.type, spec.name);
+		ASSERT(reclen >= 24);
+		ASSERT_EQ(rec[18], IR0_EARLY_DT_REG);
+		spec = ir0_early_rootfs_dir_entry(IR0_EARLY_ROOTFS_DEV, 3);
+		ASSERT_EQ(spec.ino, 5);
+		ASSERT_EQ(spec.type, IR0_EARLY_DT_CHR);
+	}
+
 	TEST_END();
 }

@@ -55,6 +55,89 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_ROOTFS_TTY_RDEV     0x500ULL
 #define IR0_EARLY_ROOTFS_CONSOLE_RDEV 0x501ULL
 
+/* Linux dirent.h d_type for getdents64(2). */
+#define IR0_EARLY_DT_CHR 2
+#define IR0_EARLY_DT_DIR 4
+#define IR0_EARLY_DT_REG 8
+
+struct ir0_early_dirent_spec
+{
+	const char *name;
+	uint64_t ino;
+	uint8_t type;
+};
+
+static inline unsigned ir0_early_dirent64_reclen(unsigned namelen)
+{
+	unsigned raw = 19U + namelen + 1U;
+
+	return (raw + 7U) & ~7U;
+}
+
+static inline unsigned ir0_early_dirent64_pack(uint8_t *dst, unsigned cap,
+					      uint64_t ino, int64_t off,
+					      uint8_t type, const char *name)
+{
+	unsigned namelen = 0;
+	unsigned reclen;
+	unsigned i;
+
+	if (!dst || !name)
+		return 0;
+	while (name[namelen] != '\0')
+		namelen++;
+	reclen = ir0_early_dirent64_reclen(namelen);
+	if (reclen == 0 || reclen > cap)
+		return 0;
+	for (i = 0; i < reclen; i++)
+		dst[i] = 0;
+	for (i = 0; i < 8; i++)
+		dst[i] = (uint8_t)(ino >> (8U * i));
+	for (i = 0; i < 8; i++)
+		dst[8 + i] = (uint8_t)((uint64_t)off >> (8U * i));
+	dst[16] = (uint8_t)(reclen & 0xffU);
+	dst[17] = (uint8_t)(reclen >> 8);
+	dst[18] = type;
+	for (i = 0; i <= namelen; i++)
+		dst[19 + i] = (uint8_t)name[i];
+	return reclen;
+}
+
+static inline unsigned ir0_early_rootfs_dir_count(enum ir0_early_rootfs_node node)
+{
+	if (node == IR0_EARLY_ROOTFS_ROOT)
+		return 4;
+	if (node == IR0_EARLY_ROOTFS_DEV)
+		return 6;
+	return 0;
+}
+
+static inline struct ir0_early_dirent_spec
+ir0_early_rootfs_dir_entry(enum ir0_early_rootfs_node node, unsigned idx)
+{
+	static const struct ir0_early_dirent_spec root[] = {
+		{ ".", 1, IR0_EARLY_DT_DIR },
+		{ "..", 1, IR0_EARLY_DT_DIR },
+		{ "init", 2, IR0_EARLY_DT_REG },
+		{ "dev", 3, IR0_EARLY_DT_DIR },
+	};
+	static const struct ir0_early_dirent_spec dev[] = {
+		{ ".", 3, IR0_EARLY_DT_DIR },
+		{ "..", 1, IR0_EARLY_DT_DIR },
+		{ "console", 4, IR0_EARLY_DT_CHR },
+		{ "null", 5, IR0_EARLY_DT_CHR },
+		{ "zero", 6, IR0_EARLY_DT_CHR },
+		{ "tty", 7, IR0_EARLY_DT_CHR },
+	};
+	struct ir0_early_dirent_spec empty = { 0, 0, 0 };
+
+	if (node == IR0_EARLY_ROOTFS_ROOT && idx < 4)
+		return root[idx];
+	if (node == IR0_EARLY_ROOTFS_DEV && idx < 6)
+		return dev[idx];
+	return empty;
+}
+
 static inline int ir0_early_rootfs_path_eq(const char *path, const char *lit)
 {
 	if (!path || !lit)
@@ -193,6 +276,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 int early_rootfs_ready(void);
 int early_rootfs_console_ready(void);
 int early_rootfs_memdev_ready(void);
+int early_rootfs_dents_ready(void);
 int early_rootfs_smoke_init(void);
 int early_rootfs_fd_is_console(int fd);
 int early_rootfs_fd_discards_write(int fd);
@@ -200,6 +284,7 @@ int64_t early_rootfs_dup(int oldfd);
 int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
 int64_t early_rootfs_chdir(uint64_t path);
 int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size);
+int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count);
 
 int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count);

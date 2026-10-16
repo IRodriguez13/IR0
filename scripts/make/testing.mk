@@ -3224,6 +3224,7 @@ smoke-arm64-syscall: kernel-arm64-syscall.bin
 	   grep -q "ARM64_ROOTFS_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_CONSOLE_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_MEMDEV_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_DENTS_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_INIT_EL0_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_CLOCK_GETTIME_OK" /tmp/arm64-syscall-smoke.log && \
