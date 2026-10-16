@@ -91,6 +91,17 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(213) == IR0_SYSCALL_READAHEAD);
 	ASSERT(syscall_decode_number(267) == IR0_SYSCALL_SYNCFS);
 	ASSERT(syscall_decode_number(283) == IR0_SYSCALL_MEMBARRIER);
-	ASSERT(decoded == 177);
+	ASSERT(syscall_decode_number(90) == IR0_SYSCALL_CAPGET);
+	ASSERT(syscall_decode_number(153) == IR0_SYSCALL_TIMES);
+	ASSERT(syscall_decode_number(161) == IR0_SYSCALL_SETHOSTNAME);
+	ASSERT(syscall_decode_number(125) == IR0_SYSCALL_SCHED_GET_PRIORITY_MAX);
+	ASSERT(syscall_decode_number(272) == IR0_SYSCALL_KCMP);
+	ASSERT(syscall_decode_number(286) == IR0_SYSCALL_PREADV2);
+	ASSERT(syscall_decode_number(434) == IR0_SYSCALL_PIDFD_OPEN);
+	ASSERT(syscall_decode_number(424) == IR0_SYSCALL_PIDFD_SEND_SIGNAL);
+	ASSERT(syscall_decode_number(438) == IR0_SYSCALL_PIDFD_GETFD);
+	ASSERT(syscall_decode_number(437) == IR0_SYSCALL_OPENAT2);
+	ASSERT(syscall_decode_number(439) == IR0_SYSCALL_FACCESSAT2);
+	ASSERT(decoded == 197);
 	TEST_END();
 }

@@ -44,6 +44,7 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_USERDIR,
 	IR0_EARLY_ROOTFS_UNIX,
 	IR0_EARLY_ROOTFS_SYMLINK,
+	IR0_EARLY_ROOTFS_PIDFD,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
@@ -149,6 +150,19 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_AT_SYMLINK_NOFOLLOW 0x100
 #define IR0_EARLY_AT_SYMLINK_FOLLOW 0x400
 #define IR0_EARLY_AT_EMPTY_PATH 0x1000
+#define IR0_EARLY_AT_EACCESS 0x200
+#define IR0_EARLY_FACCESSAT2_FLAGS \
+	(IR0_EARLY_AT_SYMLINK_NOFOLLOW | IR0_EARLY_AT_EMPTY_PATH | \
+	 IR0_EARLY_AT_EACCESS)
+#define IR0_EARLY_OPEN_HOW_BYTES 24U
+#define IR0_EARLY_RWF_HIPRI 0x1U
+#define IR0_EARLY_RWF_DSYNC 0x2U
+#define IR0_EARLY_RWF_SYNC 0x4U
+#define IR0_EARLY_RWF_NOWAIT 0x8U
+#define IR0_EARLY_RWF_APPEND 0x10U
+#define IR0_EARLY_RWF_KNOWN \
+	(IR0_EARLY_RWF_HIPRI | IR0_EARLY_RWF_DSYNC | IR0_EARLY_RWF_SYNC | \
+	 IR0_EARLY_RWF_NOWAIT)
 #define IR0_EARLY_STATX_BYTES 256U
 #define IR0_EARLY_STATX_BASIC 0x7ffU
 #define IR0_EARLY_FALLOC_KEEP_SIZE 1
@@ -462,6 +476,14 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 	{
 		st->st_ino = 15;
 		st->st_mode = IR0_EARLY_ROOTFS_MODE_SOCK;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_PIDFD)
+	{
+		st->st_ino = 18;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_REG;
 		st->st_size = 0;
 		st->st_blocks = 0;
 		return;
@@ -943,6 +965,13 @@ int64_t early_rootfs_sync_file_range(int fd, int64_t offset, int64_t nbytes,
 				     unsigned flags);
 int64_t early_rootfs_readahead(int fd, int64_t offset, uint64_t count);
 int64_t early_rootfs_syncfs(int fd);
+int64_t early_rootfs_pidfd_open(int32_t pid, unsigned flags);
+int32_t early_rootfs_pidfd_pid(int fd);
+int64_t early_rootfs_kcmp_file(int fd1, int fd2);
+int64_t early_rootfs_pidfd_getfd(int target);
+int64_t early_rootfs_faccessat2(int dirfd, uint64_t path, int mode, int flags);
+int64_t early_rootfs_openat2(int dirfd, uint64_t path, uint64_t how,
+			     uint64_t usize);
 int early_rootfs_want_creds(int fd);
 int early_rootfs_take_creds(int fd, int32_t *pid, int32_t *uid, int32_t *gid);
 int64_t early_rootfs_send_creds(int fd, int32_t pid, int32_t uid, int32_t gid);

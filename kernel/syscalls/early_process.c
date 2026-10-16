@@ -74,6 +74,11 @@ static uint64_t g_clear_tid;
 static uint64_t g_capbset = ~0ULL;
 static int g_sched_policy;
 static int32_t g_sched_priority;
+static char g_nodename[IR0_EARLY_HOSTNAME_MAX + 1] = { 'i', 'r', '0', 0 };
+static char g_domainname[IR0_EARLY_HOSTNAME_MAX + 1];
+static uint32_t g_cap[6] = { 0xffffffffU, 0xffffffffU, 0, 0xffffffffU,
+			     0xffffffffU, 0 };
+static int g_ioprio;
 
 static int64_t early_rt_sigprocmask(struct early_syscall_context *context,
 				    uint64_t how, uint64_t set, uint64_t oldset,
@@ -331,8 +336,9 @@ static int64_t early_uname(struct early_syscall_context *context,
 
 	if (!user || !user->copy_to_user || !process || !process->uts_machine)
 		return -ENOSYS;
-	ir0_utsname_init(&value, "IR0", "ir0", "0.0.1", "early",
+	ir0_utsname_init(&value, "IR0", g_nodename, "0.0.1", "early",
 			 process->uts_machine);
+	ir0_utsname_copy_field(value.domainname, g_domainname);
 	return user->copy_to_user(output, &value, sizeof(value)) == 0 ? 0 : -EFAULT;
 }
 
@@ -355,11 +361,18 @@ static int early_child_exists(void)
 	return g_child_state != CHILD_NONE;
 }
 
-static int early_pid_exists(int64_t pid)
+static int early_pid_alive(int64_t pid)
 {
-	if (pid == 0 || pid == g_current_pid || pid == 1)
+	if (pid == g_current_pid || pid == 1)
 		return 1;
 	return pid == EARLY_CHILD_PID && early_child_exists();
+}
+
+static int early_pid_exists(int64_t pid)
+{
+	if (pid == 0)
+		return 1;
+	return early_pid_alive(pid);
 }
 
 static int64_t early_write_pid32(struct early_syscall_context *context,
@@ -885,6 +898,271 @@ static int64_t early_membarrier(int cmd, int flags)
 	return -EINVAL;
 }
 
+static int64_t early_set_uts_field(struct early_syscall_context *context,
+				   uint64_t name, uint64_t len, char *dst)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	unsigned i;
+
+	if (!len || len > IR0_EARLY_HOSTNAME_MAX)
+		return -EINVAL;
+	if (!user || !user->copy_from_user)
+		return -EFAULT;
+	for (i = 0; i <= IR0_EARLY_HOSTNAME_MAX; i++)
+		dst[i] = 0;
+	if (user->copy_from_user(dst, name, len) != 0)
+		return -EFAULT;
+	dst[len] = 0;
+	return 0;
+}
+
+static int64_t early_times(struct early_syscall_context *context, uint64_t buf)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	const struct early_time_services *time = context && context->services ?
+		context->services->time : 0;
+	uint64_t tms[4];
+	uint64_t freq;
+	uint64_t ticks;
+
+	tms[0] = tms[1] = tms[2] = tms[3] = 0;
+	freq = (time && time->counter_frequency) ? time->counter_frequency() : 0;
+	ticks = (time && time->counter_read) ? time->counter_read() : 0;
+	if (freq)
+		ticks = ticks / (freq / 100ULL ? freq / 100ULL : 1ULL);
+	if (buf)
+	{
+		if (!user || !user->copy_to_user ||
+		    user->copy_to_user(buf, tms, sizeof(tms)) != 0)
+			return -EFAULT;
+	}
+	return (int64_t)ticks;
+}
+
+static int64_t early_capget(struct early_syscall_context *context, uint64_t header,
+			    uint64_t data)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint32_t hdr[2];
+	uint32_t ver;
+
+	if (!user || !user->copy_from_user || !user->copy_to_user)
+		return -EFAULT;
+	if (user->copy_from_user(hdr, header, sizeof(hdr)) != 0)
+		return -EFAULT;
+	ver = hdr[0];
+	if (ver != IR0_EARLY_LINUX_CAP_VERSION_3)
+	{
+		hdr[0] = IR0_EARLY_LINUX_CAP_VERSION_3;
+		(void)user->copy_to_user(header, hdr, sizeof(hdr));
+		return -EINVAL;
+	}
+	if ((int32_t)hdr[1] != 0 && !early_pid_exists((int64_t)(int32_t)hdr[1]))
+		return -ESRCH;
+	if (data && user->copy_to_user(data, g_cap, sizeof(g_cap)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+static int64_t early_capset(struct early_syscall_context *context, uint64_t header,
+			    uint64_t data)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint32_t hdr[2];
+	uint32_t incoming[6];
+
+	if (!user || !user->copy_from_user)
+		return -EFAULT;
+	if (user->copy_from_user(hdr, header, sizeof(hdr)) != 0)
+		return -EFAULT;
+	if (hdr[0] != IR0_EARLY_LINUX_CAP_VERSION_3)
+		return -EINVAL;
+	if ((int32_t)hdr[1] != 0 && !early_pid_exists((int64_t)(int32_t)hdr[1]))
+		return -ESRCH;
+	if (!data)
+		return -EFAULT;
+	if (user->copy_from_user(incoming, data, sizeof(incoming)) != 0)
+		return -EFAULT;
+	{
+		unsigned i;
+
+		for (i = 0; i < 6; i++)
+			g_cap[i] = incoming[i];
+	}
+	return 0;
+}
+
+static int64_t early_ioprio_set(int which, int64_t who, int ioprio)
+{
+	int class = ioprio >> IR0_EARLY_IOPRIO_CLASS_SHIFT;
+
+	if (which < IR0_EARLY_IOPRIO_WHO_PROCESS ||
+	    which > IR0_EARLY_IOPRIO_WHO_USER)
+		return -EINVAL;
+	if (who != 0 && !early_pid_exists(who) &&
+	    which == IR0_EARLY_IOPRIO_WHO_PROCESS)
+		return -ESRCH;
+	if (class == IR0_EARLY_IOPRIO_CLASS_RT)
+		return -EPERM;
+	if (class != IR0_EARLY_IOPRIO_CLASS_NONE &&
+	    class != IR0_EARLY_IOPRIO_CLASS_BE &&
+	    class != IR0_EARLY_IOPRIO_CLASS_IDLE)
+		return -EINVAL;
+	g_ioprio = ioprio;
+	return 0;
+}
+
+static int64_t early_ioprio_get(int which, int64_t who)
+{
+	if (which < IR0_EARLY_IOPRIO_WHO_PROCESS ||
+	    which > IR0_EARLY_IOPRIO_WHO_USER)
+		return -EINVAL;
+	if (who != 0 && !early_pid_exists(who) &&
+	    which == IR0_EARLY_IOPRIO_WHO_PROCESS)
+		return -ESRCH;
+	return g_ioprio;
+}
+
+static int64_t early_sched_priority_limit(int policy, int max_not_min)
+{
+	if (ir0_early_sched_policy_ok(policy))
+		return 0;
+	if (ir0_early_sched_policy_rt(policy))
+		return max_not_min ? 99 : 1;
+	return -EINVAL;
+}
+
+static int64_t early_sched_rr_interval(struct early_syscall_context *context,
+				       int64_t pid, uint64_t out)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	int64_t ts[2];
+
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	ts[0] = 0;
+	ts[1] = 100000000;
+	if (!user || !user->copy_to_user ||
+	    user->copy_to_user(out, ts, sizeof(ts)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+static int64_t early_sched_getattr(struct early_syscall_context *context,
+				   int64_t pid, uint64_t uattr, uint64_t usize)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint8_t blob[IR0_EARLY_SCHED_ATTR_SIZE_VER1];
+	uint32_t *w;
+	unsigned i;
+
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (usize < IR0_EARLY_SCHED_ATTR_SIZE_VER0)
+		return -EINVAL;
+	for (i = 0; i < sizeof(blob); i++)
+		blob[i] = 0;
+	w = (uint32_t *)(void *)blob;
+	w[0] = IR0_EARLY_SCHED_ATTR_SIZE_VER1;
+	w[1] = (uint32_t)g_sched_policy;
+	w[4] = (uint32_t)g_nice;
+	if (!user || !user->copy_to_user ||
+	    user->copy_to_user(uattr, blob,
+			       usize > sizeof(blob) ? sizeof(blob) : usize) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+static int64_t early_sched_setattr(struct early_syscall_context *context,
+				   int64_t pid, uint64_t uattr, uint64_t flags)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint32_t blob[12];
+	int policy;
+
+	if (flags)
+		return -EINVAL;
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (!user || !user->copy_from_user ||
+	    user->copy_from_user(blob, uattr, IR0_EARLY_SCHED_ATTR_SIZE_VER0) != 0)
+		return -EFAULT;
+	if (blob[0] < IR0_EARLY_SCHED_ATTR_SIZE_VER0)
+		return -EINVAL;
+	policy = (int)blob[1];
+	if (ir0_early_sched_policy_rt(policy))
+		return -EPERM;
+	if (!ir0_early_sched_policy_ok(policy))
+		return -EINVAL;
+	if (blob[4])
+		return -EINVAL;
+	g_sched_policy = policy;
+	return 0;
+}
+
+static int64_t early_kcmp(int64_t pid1, int64_t pid2, int type, uint64_t idx1,
+			  uint64_t idx2)
+{
+	if (!early_pid_alive(pid1) || !early_pid_alive(pid2))
+		return -ESRCH;
+	if (type == IR0_EARLY_KCMP_FILE)
+		return early_rootfs_kcmp_file((int)idx1, (int)idx2);
+	if (type == IR0_EARLY_KCMP_VM || type == IR0_EARLY_KCMP_FILES ||
+	    type == IR0_EARLY_KCMP_FS || type == IR0_EARLY_KCMP_SIGHAND ||
+	    type == IR0_EARLY_KCMP_IO || type == IR0_EARLY_KCMP_SYSVSEM)
+		return 0;
+	return -EINVAL;
+}
+
+static int64_t early_pidfd_open(int64_t pid, unsigned flags)
+{
+	if (pid < 0)
+		return -EINVAL;
+	if (!early_pid_alive(pid))
+		return -ESRCH;
+	return early_rootfs_pidfd_open((int32_t)pid, flags);
+}
+
+static int64_t early_pidfd_send_signal(int fd, uint64_t sig, uint64_t info,
+				       unsigned flags)
+{
+	int32_t pid;
+
+	if (flags)
+		return -EINVAL;
+	if (sig > 64)
+		return -EINVAL;
+	if (info)
+		return -EPERM;
+	pid = early_rootfs_pidfd_pid(fd);
+	if (pid < 0)
+		return pid;
+	if (!early_pid_alive(pid))
+		return -ESRCH;
+	return 0;
+}
+
+static int64_t early_pidfd_getfd(int pidfd, int target, unsigned flags)
+{
+	int32_t pid;
+
+	if (flags)
+		return -EINVAL;
+	pid = early_rootfs_pidfd_pid(pidfd);
+	if (pid < 0)
+		return pid;
+	if (!early_pid_alive(pid))
+		return -ESRCH;
+	return early_rootfs_pidfd_getfd(target);
+}
+
 static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 				     uint64_t a0, uint64_t a1, uint64_t a2,
 				     uint64_t a3, uint64_t a4, uint64_t a5)
@@ -1158,6 +1436,45 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_process_vm(context, (int64_t)a0, a1, a2, a3, a4, a5, 1);
 	case IR0_SYSCALL_MEMBARRIER:
 		return early_membarrier((int)a0, (int)a1);
+	case IR0_SYSCALL_TIMES:
+		return early_times(context, a0);
+	case IR0_SYSCALL_SETHOSTNAME:
+		return early_set_uts_field(context, a0, a1, g_nodename);
+	case IR0_SYSCALL_SETDOMAINNAME:
+		return early_set_uts_field(context, a0, a1, g_domainname);
+	case IR0_SYSCALL_CAPGET:
+		return early_capget(context, a0, a1);
+	case IR0_SYSCALL_CAPSET:
+		return early_capset(context, a0, a1);
+	case IR0_SYSCALL_IOPRIO_SET:
+		return early_ioprio_set((int)a0, (int64_t)a1, (int)a2);
+	case IR0_SYSCALL_IOPRIO_GET:
+		return early_ioprio_get((int)a0, (int64_t)a1);
+	case IR0_SYSCALL_SCHED_GET_PRIORITY_MAX:
+		return early_sched_priority_limit((int)a0, 1);
+	case IR0_SYSCALL_SCHED_GET_PRIORITY_MIN:
+		return early_sched_priority_limit((int)a0, 0);
+	case IR0_SYSCALL_SCHED_RR_GET_INTERVAL:
+		return early_sched_rr_interval(context, (int64_t)a0, a1);
+	case IR0_SYSCALL_SCHED_GETATTR:
+		return early_sched_getattr(context, (int64_t)a0, a1, a2);
+	case IR0_SYSCALL_SCHED_SETATTR:
+		return early_sched_setattr(context, (int64_t)a0, a1, a2);
+	case IR0_SYSCALL_KCMP:
+		return early_kcmp((int64_t)a0, (int64_t)a1, (int)a2, a3, a4);
+	case IR0_SYSCALL_PIDFD_OPEN:
+	{
+		int64_t fd = early_pidfd_open((int64_t)a0, (unsigned)a1);
+
+		if (fd >= 0 && context && context->services &&
+		    context->services->time && context->services->time->note)
+			context->services->time->note(EARLY_SYSCALL_PIDFD_OK);
+		return fd;
+	}
+	case IR0_SYSCALL_PIDFD_SEND_SIGNAL:
+		return early_pidfd_send_signal((int)a0, a1, a2, (unsigned)a3);
+	case IR0_SYSCALL_PIDFD_GETFD:
+		return early_pidfd_getfd((int)a0, (int)a1, (unsigned)a2);
 	case IR0_SYSCALL_SIGALTSTACK:
 		return early_sigaltstack(context, a0, a1);
 	case IR0_SYSCALL_FUTEX:
@@ -1199,6 +1516,13 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_SCHED_GETPARAM, IR0_SYSCALL_SCHED_SETAFFINITY,
 	IR0_SYSCALL_SCHED_GETAFFINITY, IR0_SYSCALL_PROCESS_VM_READV,
 	IR0_SYSCALL_PROCESS_VM_WRITEV, IR0_SYSCALL_MEMBARRIER,
+	IR0_SYSCALL_TIMES, IR0_SYSCALL_SETHOSTNAME, IR0_SYSCALL_SETDOMAINNAME,
+	IR0_SYSCALL_CAPGET, IR0_SYSCALL_CAPSET, IR0_SYSCALL_IOPRIO_SET,
+	IR0_SYSCALL_IOPRIO_GET, IR0_SYSCALL_SCHED_GET_PRIORITY_MAX,
+	IR0_SYSCALL_SCHED_GET_PRIORITY_MIN, IR0_SYSCALL_SCHED_RR_GET_INTERVAL,
+	IR0_SYSCALL_SCHED_SETATTR, IR0_SYSCALL_SCHED_GETATTR, IR0_SYSCALL_KCMP,
+	IR0_SYSCALL_PIDFD_OPEN, IR0_SYSCALL_PIDFD_SEND_SIGNAL,
+	IR0_SYSCALL_PIDFD_GETFD,
 	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, IR0_SYSCALL_SETUID,
 	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
 	IR0_SYSCALL_SETRESUID, IR0_SYSCALL_SETRESGID, IR0_SYSCALL_GETPRIORITY,

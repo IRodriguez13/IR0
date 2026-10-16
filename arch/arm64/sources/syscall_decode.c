@@ -22,6 +22,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 24: return IR0_SYSCALL_DUP3;
 	case 25: return IR0_SYSCALL_FCNTL;
 	case 29: return IR0_SYSCALL_IOCTL;
+	case 30: return IR0_SYSCALL_IOPRIO_SET;
+	case 31: return IR0_SYSCALL_IOPRIO_GET;
 	case 32: return IR0_SYSCALL_FLOCK;
 	case 33: return IR0_SYSCALL_MKNODAT;
 	case 34: return IR0_SYSCALL_MKDIRAT;
@@ -74,6 +76,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 86: return IR0_SYSCALL_TIMERFD_SETTIME;
 	case 87: return IR0_SYSCALL_TIMERFD_GETTIME;
 	case 88: return IR0_SYSCALL_UTIMENSAT;
+	case 90: return IR0_SYSCALL_CAPGET;
+	case 91: return IR0_SYSCALL_CAPSET;
 	case 92: return IR0_SYSCALL_PERSONALITY;
 	case 93: return IR0_SYSCALL_EXIT;
 	case 94: return IR0_SYSCALL_EXIT_GROUP;
@@ -98,6 +102,9 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 122: return IR0_SYSCALL_SCHED_SETAFFINITY;
 	case 123: return IR0_SYSCALL_SCHED_GETAFFINITY;
 	case 124: return IR0_SYSCALL_SCHED_YIELD;
+	case 125: return IR0_SYSCALL_SCHED_GET_PRIORITY_MAX;
+	case 126: return IR0_SYSCALL_SCHED_GET_PRIORITY_MIN;
+	case 127: return IR0_SYSCALL_SCHED_RR_GET_INTERVAL;
 	case 129: return IR0_SYSCALL_KILL;
 	case 130: return IR0_SYSCALL_TKILL;
 	case 131: return IR0_SYSCALL_TGKILL;
@@ -122,8 +129,11 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 156: return IR0_SYSCALL_GETSID;
 	case 157: return IR0_SYSCALL_SETSID;
 	case 158: return IR0_SYSCALL_GETGROUPS;
+	case 153: return IR0_SYSCALL_TIMES;
 	case 159: return IR0_SYSCALL_SETGROUPS;
 	case 160: return IR0_SYSCALL_UNAME;
+	case 161: return IR0_SYSCALL_SETHOSTNAME;
+	case 162: return IR0_SYSCALL_SETDOMAINNAME;
 	case 163: return IR0_SYSCALL_GETRLIMIT;
 	case 165: return IR0_SYSCALL_GETRUSAGE;
 	case 166: return IR0_SYSCALL_UMASK;
@@ -180,16 +190,26 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 269: return IR0_SYSCALL_SENDMMSG;
 	case 270: return IR0_SYSCALL_PROCESS_VM_READV;
 	case 271: return IR0_SYSCALL_PROCESS_VM_WRITEV;
+	case 272: return IR0_SYSCALL_KCMP;
+	case 274: return IR0_SYSCALL_SCHED_SETATTR;
+	case 275: return IR0_SYSCALL_SCHED_GETATTR;
 	case 276: return IR0_SYSCALL_RENAMEAT2;
 	case 278: return IR0_SYSCALL_GETRANDOM;
 	case 285: return IR0_SYSCALL_COPY_FILE_RANGE;
+	case 286: return IR0_SYSCALL_PREADV2;
+	case 287: return IR0_SYSCALL_PWRITEV2;
 	case 279: return IR0_SYSCALL_MEMFD_CREATE;
 	case 281: return IR0_SYSCALL_EXECVEAT;
 	case 283: return IR0_SYSCALL_MEMBARRIER;
 	case 284: return IR0_SYSCALL_MLOCK2;
 	case 291: return IR0_SYSCALL_STATX;
 	case 293: return IR0_SYSCALL_RSEQ;
+	case 424: return IR0_SYSCALL_PIDFD_SEND_SIGNAL;
+	case 434: return IR0_SYSCALL_PIDFD_OPEN;
 	case 436: return IR0_SYSCALL_CLOSE_RANGE;
+	case 437: return IR0_SYSCALL_OPENAT2;
+	case 438: return IR0_SYSCALL_PIDFD_GETFD;
+	case 439: return IR0_SYSCALL_FACCESSAT2;
 	default: return IR0_SYSCALL_UNKNOWN;
 	}
 }

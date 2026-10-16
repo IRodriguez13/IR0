@@ -5004,7 +5004,7 @@ static int fd_espipe(int fd)
 	    node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W ||
 	    node == IR0_EARLY_ROOTFS_EVENTFD || node == IR0_EARLY_ROOTFS_TIMERFD ||
 	    node == IR0_EARLY_ROOTFS_EPOLL || node == IR0_EARLY_ROOTFS_SOCK ||
-	    node == IR0_EARLY_ROOTFS_FIFO)
+	    node == IR0_EARLY_ROOTFS_FIFO || node == IR0_EARLY_ROOTFS_PIDFD)
 		return -ESPIPE;
 	return 0;
 }
@@ -5677,6 +5677,109 @@ int64_t early_rootfs_syncfs(int fd)
 	if (node_of_fd(fd) == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
 	return 0;
+}
+
+int64_t early_rootfs_pidfd_open(int32_t pid, unsigned flags)
+{
+	int fd;
+	int idx;
+
+	if (flags & ~IR0_EARLY_PIDFD_NONBLOCK)
+		return -EINVAL;
+	if (!g_ready)
+		return -ENOSYS;
+	fd = alloc_fd(IR0_EARLY_ROOTFS_PIDFD);
+	if (fd < 0)
+		return fd;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+	{
+		close_fd(fd);
+		return -EBADF;
+	}
+	g_slots[idx].pipe_id = pid;
+	set_flags_of_fd(fd, IR0_O_RDWR |
+			    ((flags & IR0_EARLY_PIDFD_NONBLOCK) ?
+				     LINUX_O_NONBLOCK :
+				     0));
+	set_cloexec_of_fd(fd, 1);
+	return fd;
+}
+
+int32_t early_rootfs_pidfd_pid(int fd)
+{
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_PIDFD)
+		return -EBADF;
+	return (int32_t)pipe_id_of_fd(fd);
+}
+
+int64_t early_rootfs_pidfd_getfd(int target)
+{
+	int64_t fd = early_rootfs_dup(target);
+
+	if (fd < 0)
+		return fd;
+	set_cloexec_of_fd((int)fd, 1);
+	return fd;
+}
+
+int64_t early_rootfs_kcmp_file(int fd1, int fd2)
+{
+	enum ir0_early_rootfs_node n1;
+	enum ir0_early_rootfs_node n2;
+
+	if (!fd_is_open(fd1) || !fd_is_open(fd2))
+		return -EBADF;
+	n1 = node_of_fd(fd1);
+	n2 = node_of_fd(fd2);
+	if (n1 == n2 && pipe_id_of_fd(fd1) == pipe_id_of_fd(fd2))
+		return 0;
+	return fd1 < fd2 ? 1 : 2;
+}
+
+int64_t early_rootfs_faccessat2(int dirfd, uint64_t path, int mode, int flags)
+{
+	char pbuf[32];
+
+	if (mode & ~7)
+		return -EINVAL;
+	if (flags & ~IR0_EARLY_FACCESSAT2_FLAGS)
+		return -EINVAL;
+	if (!g_ready)
+		return -ENOENT;
+	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0 &&
+	    !fd_is_open(dirfd))
+		return -EBADF;
+	if ((flags & IR0_EARLY_AT_EMPTY_PATH) && path)
+	{
+		if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+			return -EFAULT;
+		if (pbuf[0] == 0)
+		{
+			if (dirfd == IR0_EARLY_ROOTFS_AT_FDCWD)
+				return 0;
+			return fd_is_open(dirfd) ? 0 : -EBADF;
+		}
+	}
+	(void)mode;
+	return early_rootfs_faccessat(dirfd, path, flags);
+}
+
+int64_t early_rootfs_openat2(int dirfd, uint64_t path, uint64_t how,
+			     uint64_t usize)
+{
+	uint64_t blob[3];
+
+	if (usize < IR0_EARLY_OPEN_HOW_BYTES)
+		return -EINVAL;
+	if (usize > 4096UL)
+		return -E2BIG;
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(blob, how, sizeof(blob)) != 0)
+		return -EFAULT;
+	if (blob[2])
+		return -EOPNOTSUPP;
+	return early_rootfs_openat(dirfd, path, (int)blob[0]);
 }
 
 int early_rootfs_want_creds(int fd)
