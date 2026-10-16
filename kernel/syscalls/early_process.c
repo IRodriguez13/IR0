@@ -7,6 +7,7 @@
 #include <ir0/utsname.h>
 
 #define EAGAIN 11
+#define ECHILD 10
 #define EFAULT 14
 #define ENOSYS 38
 
@@ -88,6 +89,15 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_EXIT:
 	case IR0_SYSCALL_EXIT_GROUP:
 		return early_exit(context, a0);
+	case IR0_SYSCALL_WAIT4:
+		/*
+		 * Linux wait(2): ECHILD when the caller has no unwaited-for
+		 * children. Staged EL0 has not cloned yet, so this is the
+		 * honest empty-reap result — not ENOSYS.
+		 */
+		(void)a0;
+		(void)a1;
+		return -ECHILD;
 	default:
 		return -ENOSYS;
 	}
@@ -98,8 +108,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_GETUID, IR0_SYSCALL_GETEUID, IR0_SYSCALL_GETGID,
 	IR0_SYSCALL_GETEGID, IR0_SYSCALL_GETPPID, IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
-	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_EXIT,
-	IR0_SYSCALL_EXIT_GROUP,
+	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
+	IR0_SYSCALL_EXIT, IR0_SYSCALL_EXIT_GROUP,
 };
 
 const struct syscall_context_provider early_process_provider = {
