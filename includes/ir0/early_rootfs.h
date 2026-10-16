@@ -30,18 +30,24 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_NULL,
 	IR0_EARLY_ROOTFS_ZERO,
 	IR0_EARLY_ROOTFS_TTY,
+	IR0_EARLY_ROOTFS_VDA,
+	IR0_EARLY_ROOTFS_PIPE_R,
+	IR0_EARLY_ROOTFS_PIPE_W,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
 #define IR0_EARLY_ROOTFS_S_IFREG 0100000U
 #define IR0_EARLY_ROOTFS_S_IFDIR 0040000U
 #define IR0_EARLY_ROOTFS_S_IFCHR 0020000U
+#define IR0_EARLY_ROOTFS_S_IFBLK 0060000U
 #define IR0_EARLY_ROOTFS_MODE_DIR \
 	(IR0_EARLY_ROOTFS_S_IFDIR | 0755U)
 #define IR0_EARLY_ROOTFS_MODE_REG \
 	(IR0_EARLY_ROOTFS_S_IFREG | 0755U)
 #define IR0_EARLY_ROOTFS_MODE_CHR \
 	(IR0_EARLY_ROOTFS_S_IFCHR | 0622U)
+#define IR0_EARLY_ROOTFS_MODE_BLK \
+	(IR0_EARLY_ROOTFS_S_IFBLK | 0660U)
 /*
  * Linux devices.txt (docs.kernel.org/admin-guide/devices.html):
  *   /dev/null    char 1:3
@@ -54,11 +60,18 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_ROOTFS_ZERO_RDEV    0x105ULL
 #define IR0_EARLY_ROOTFS_TTY_RDEV     0x500ULL
 #define IR0_EARLY_ROOTFS_CONSOLE_RDEV 0x501ULL
+/*
+ * Linux virtio_blk uses a dynamic major (often 253 in QEMU).
+ * Staged /dev/vda reports 253:0 so fstat looks like a virtblk disk.
+ */
+#define IR0_EARLY_ROOTFS_VDA_RDEV     0xfd00ULL
 
 /* Linux dirent.h d_type for getdents64(2). */
 #define IR0_EARLY_DT_CHR 2
 #define IR0_EARLY_DT_DIR 4
+#define IR0_EARLY_DT_BLK 6
 #define IR0_EARLY_DT_REG 8
+#define IR0_EARLY_DT_FIFO 1
 
 struct ir0_early_dirent_spec
 {
@@ -191,6 +204,8 @@ static inline enum ir0_early_rootfs_node ir0_early_rootfs_path_node(const char *
 		return IR0_EARLY_ROOTFS_ZERO;
 	if (ir0_early_rootfs_path_eq(path, "/dev/tty"))
 		return IR0_EARLY_ROOTFS_TTY;
+	if (ir0_early_rootfs_path_eq(path, "/dev/vda"))
+		return IR0_EARLY_ROOTFS_VDA;
 	return IR0_EARLY_ROOTFS_NONE;
 }
 
@@ -256,6 +271,15 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_rdev = IR0_EARLY_ROOTFS_TTY_RDEV;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_VDA)
+	{
+		st->st_ino = 8;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_BLK;
+		st->st_rdev = IR0_EARLY_ROOTFS_VDA_RDEV;
+		st->st_size = (int64_t)blob_len;
+		st->st_blocks = (int64_t)((blob_len + 511UL) / 512UL);
+		return;
+	}
 	if (node == IR0_EARLY_ROOTFS_DEV)
 	{
 		st->st_ino = 3;
@@ -277,9 +301,13 @@ int early_rootfs_ready(void);
 int early_rootfs_console_ready(void);
 int early_rootfs_memdev_ready(void);
 int early_rootfs_dents_ready(void);
+int early_rootfs_vda_ready(void);
 int early_rootfs_smoke_init(void);
 int early_rootfs_fd_is_console(int fd);
 int early_rootfs_fd_discards_write(int fd);
+int early_rootfs_fd_is_pipe_write(int fd);
+int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count);
+int64_t early_rootfs_pipe2(uint64_t fds, int flags);
 int64_t early_rootfs_dup(int oldfd);
 int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
 int64_t early_rootfs_chdir(uint64_t path);

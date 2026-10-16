@@ -74,6 +74,8 @@ static int64_t early_write(struct early_syscall_context *context,
 	char bytes[WRITE_MAX];
 	uint64_t count, index;
 
+	if (early_rootfs_fd_is_pipe_write((int)descriptor))
+		return early_rootfs_pipe_write((int)descriptor, buffer, length);
 	if (early_rootfs_fd_discards_write((int)descriptor))
 		return early_write_discard(context, buffer, length);
 	if (!early_rootfs_fd_is_console((int)descriptor))
@@ -258,6 +260,8 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_dup3((int)a0, (int)a1, (int)a2);
 	case IR0_SYSCALL_FCNTL:
 		return early_rootfs_fcntl((int)a0, (int)a1, a2);
+	case IR0_SYSCALL_PIPE2:
+		return early_rootfs_pipe2(a0, (int)a1);
 	case IR0_SYSCALL_PPOLL:
 	default:
 		return -ENOSYS;
@@ -266,7 +270,7 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 
 static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_WRITE, IR0_SYSCALL_WRITEV, IR0_SYSCALL_READV,
-	IR0_SYSCALL_IOCTL, IR0_SYSCALL_FCNTL,
+	IR0_SYSCALL_IOCTL, IR0_SYSCALL_FCNTL, IR0_SYSCALL_PIPE2,
 	IR0_SYSCALL_DUP, IR0_SYSCALL_DUP3, IR0_SYSCALL_PPOLL,
 };
 

@@ -3254,7 +3254,8 @@ smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 		-display none -no-reboot 2>/dev/null || true
 	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-blk-smoke.log && \
 	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "ARM64_BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log; then \
+	   grep -q "ARM64_BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_VDA_OK" /tmp/arm64-virtio-blk-smoke.log; then \
 		echo "✓ smoke-arm64-virtio-blk passed (virtio + portable ir0_block facade)"; \
 	else \
 		echo "✗ smoke-arm64-virtio-blk FAILED"; \

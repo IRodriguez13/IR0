@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <stdint.h>
+#include <ir0/blockdev.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/fcntl.h>
 
@@ -27,6 +28,10 @@
 #define ESPIPE 29
 #define ERANGE 34
 #define E2BIG  7
+#define EAGAIN 11
+#define EPIPE  32
+#define EIO    5
+#define ENOSYS 38
 
 #define ROOTFS_MAX_OPEN 8U
 #define ROOTFS_FD_BASE  3
@@ -43,6 +48,20 @@ struct rootfs_slot
 	uint64_t pos;
 	int flags;
 	int cloexec;
+	int pipe_id;
+};
+
+#define PIPE_MAX 2
+#define PIPE_BUF 1024
+
+struct early_pipe
+{
+	int used;
+	unsigned rpos;
+	unsigned len;
+	int readers;
+	int writers;
+	uint8_t buf[PIPE_BUF];
 };
 
 static struct rootfs_slot g_slots[ROOTFS_MAX_OPEN];
@@ -59,6 +78,7 @@ static enum ir0_early_rootfs_node g_cwd;
 static int g_exec_pending;
 static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
 static char *g_exec_argv[EXEC_ARGC_MAX + 1];
+static struct early_pipe g_pipes[PIPE_MAX];
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -208,6 +228,28 @@ static int status_flags(int flags)
 	return flags & (LINUX_O_ACCMODE | LINUX_O_APPEND | LINUX_O_NONBLOCK);
 }
 
+static int vda_present(void)
+{
+	return ir0_block_name_is_present("vda");
+}
+
+static uint64_t vda_bytes(void)
+{
+	return ir0_block_sector_count_by_name("vda") * 512ULL;
+}
+
+static int pipe_id_of_fd(int fd)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+		return -1;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return -1;
+	return g_slots[idx].pipe_id;
+}
+
 static int close_fd(int fd)
 {
 	int idx;
@@ -226,11 +268,28 @@ static int close_fd(int fd)
 	idx = slot_from_fd(fd);
 	if (idx < 0)
 		return -EBADF;
+	{
+		int pipe_id = g_slots[idx].pipe_id;
+
+		if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
+		{
+			if (g_slots[idx].node == IR0_EARLY_ROOTFS_PIPE_R &&
+			    g_pipes[pipe_id].readers > 0)
+				g_pipes[pipe_id].readers--;
+			if (g_slots[idx].node == IR0_EARLY_ROOTFS_PIPE_W &&
+			    g_pipes[pipe_id].writers > 0)
+				g_pipes[pipe_id].writers--;
+			if (g_pipes[pipe_id].readers == 0 &&
+			    g_pipes[pipe_id].writers == 0)
+				g_pipes[pipe_id].used = 0;
+		}
+	}
 	g_slots[idx].used = 0;
 	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
 	g_slots[idx].pos = 0;
 	g_slots[idx].flags = 0;
 	g_slots[idx].cloexec = 0;
+	g_slots[idx].pipe_id = -1;
 	return 0;
 }
 
@@ -255,6 +314,7 @@ static int install_fd(int fd, enum ir0_early_rootfs_node node)
 	g_slots[idx].pos = 0;
 	g_slots[idx].flags = O_RDWR;
 	g_slots[idx].cloexec = 0;
+	g_slots[idx].pipe_id = -1;
 	return fd;
 }
 
@@ -283,6 +343,7 @@ static int alloc_fd(enum ir0_early_rootfs_node node)
 			g_slots[i].pos = 0;
 			g_slots[i].flags = O_RDWR;
 			g_slots[i].cloexec = 0;
+			g_slots[i].pipe_id = -1;
 			return (int)(ROOTFS_FD_BASE + i);
 		}
 	}
@@ -304,7 +365,10 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_slots[i].pos = 0;
 		g_slots[i].flags = 0;
 		g_slots[i].cloexec = 0;
+		g_slots[i].pipe_id = -1;
 	}
+	for (i = 0; i < PIPE_MAX; i++)
+		g_pipes[i].used = 0;
 	reset_stdio();
 	g_exec_pending = 0;
 	g_ready = (init_blob != 0 && init_len > 0 && user &&
@@ -330,6 +394,8 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 		return -EFAULT;
 	node = ir0_early_rootfs_path_node(pbuf);
 	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
 	if ((flags & LINUX_O_DIRECTORY) &&
 	    node != IR0_EARLY_ROOTFS_ROOT && node != IR0_EARLY_ROOTFS_DEV)
@@ -371,6 +437,65 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (!g_user || !g_user->copy_to_user ||
 		    g_user->copy_to_user(buffer, tmp, n) != 0)
 			return -EFAULT;
+		return (int64_t)n;
+	}
+	if (node == IR0_EARLY_ROOTFS_PIPE_W)
+		return -EBADF;
+	if (node == IR0_EARLY_ROOTFS_PIPE_R)
+	{
+		int pipe_id = pipe_id_of_fd(fd);
+		struct early_pipe *p;
+		unsigned take;
+
+		if (pipe_id < 0)
+			return -EBADF;
+		p = &g_pipes[pipe_id];
+		if (!p->used)
+			return -EBADF;
+		if (p->len == 0)
+			return p->writers ? -EAGAIN : 0;
+		take = p->len;
+		if (take > sizeof(tmp))
+			take = (unsigned)sizeof(tmp);
+		if ((uint64_t)take > count)
+			take = (unsigned)count;
+		for (i = 0; i < take; i++)
+		{
+			tmp[i] = p->buf[p->rpos];
+			p->rpos = (p->rpos + 1U) % PIPE_BUF;
+		}
+		p->len -= take;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, tmp, take) != 0)
+			return -EFAULT;
+		return (int64_t)take;
+	}
+	if (node == IR0_EARLY_ROOTFS_VDA)
+	{
+		uint64_t *pos = pos_of_fd(fd);
+		uint64_t off;
+		uint64_t lba;
+		uint8_t sector[512];
+
+		if (!pos || !vda_present())
+			return -EIO;
+		off = *pos;
+		if (off >= vda_bytes())
+			return 0;
+		lba = off / 512ULL;
+		if (ir0_block_read_by_name("vda", lba, 1, sector) != 0)
+			return -EIO;
+		n = 512ULL - (off % 512ULL);
+		if (n > count)
+			n = count;
+		if (n > sizeof(tmp))
+			n = sizeof(tmp);
+		for (i = 0; i < n; i++)
+			tmp[i] = sector[(off % 512ULL) + i];
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, tmp, n) != 0)
+			return -EFAULT;
+		*pos = off + n;
 		return (int64_t)n;
 	}
 	idx = slot_from_fd(fd);
@@ -467,6 +592,20 @@ int64_t early_rootfs_dup(int oldfd)
 		return -EBADF;
 	set_flags_of_fd(newfd, flags_of_fd(oldfd));
 	set_cloexec_of_fd(newfd, cloexec_of_fd(oldfd));
+	{
+		int pipe_id = pipe_id_of_fd(oldfd);
+		int nidx = slot_from_fd(newfd);
+
+		if (nidx >= 0)
+			g_slots[nidx].pipe_id = pipe_id;
+		if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
+		{
+			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_R)
+				g_pipes[pipe_id].readers++;
+			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_W)
+				g_pipes[pipe_id].writers++;
+		}
+	}
 	return newfd;
 }
 
@@ -486,6 +625,20 @@ int64_t early_rootfs_dup3(int oldfd, int newfd, int flags)
 		return -EBADF;
 	set_flags_of_fd(newfd, flags_of_fd(oldfd));
 	set_cloexec_of_fd(newfd, (flags & LINUX_O_CLOEXEC) != 0);
+	{
+		int pipe_id = pipe_id_of_fd(oldfd);
+		int nidx = slot_from_fd(newfd);
+
+		if (nidx >= 0)
+			g_slots[nidx].pipe_id = pipe_id;
+		if (pipe_id >= 0 && pipe_id < PIPE_MAX && g_pipes[pipe_id].used)
+		{
+			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_R)
+				g_pipes[pipe_id].readers++;
+			if (node_of_fd(oldfd) == IR0_EARLY_ROOTFS_PIPE_W)
+				g_pipes[pipe_id].writers++;
+		}
+	}
 	return newfd;
 }
 
@@ -516,6 +669,7 @@ int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 int64_t early_rootfs_faccessat(int dirfd, uint64_t path, int flags)
 {
 	char pbuf[32];
+	enum ir0_early_rootfs_node node;
 
 	(void)flags;
 	if (!g_ready)
@@ -524,7 +678,10 @@ int64_t early_rootfs_faccessat(int dirfd, uint64_t path, int flags)
 		return -EBADF;
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
-	if (ir0_early_rootfs_path_node(pbuf) == IR0_EARLY_ROOTFS_NONE)
+	node = ir0_early_rootfs_path_node(pbuf);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
 	return 0;
 }
@@ -546,7 +703,12 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 	node = ir0_early_rootfs_path_node(pbuf);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
-	ir0_early_rootfs_fill_stat(node, g_blob_len, &st);
+	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
+		return -ENOENT;
+	ir0_early_rootfs_fill_stat(node,
+				   node == IR0_EARLY_ROOTFS_VDA ? vda_bytes() :
+								 g_blob_len,
+				   &st);
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
 		return -EFAULT;
@@ -561,7 +723,10 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 	node = node_of_fd(fd);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
-	ir0_early_rootfs_fill_stat(node, g_blob_len, &st);
+	ir0_early_rootfs_fill_stat(node,
+				   node == IR0_EARLY_ROOTFS_VDA ? vda_bytes() :
+								 g_blob_len,
+				   &st);
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
 		return -EFAULT;
@@ -600,6 +765,8 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
 	total = ir0_early_rootfs_dir_count(node);
+	if (node == IR0_EARLY_ROOTFS_DEV && vda_present())
+		total++;
 	if (total == 0)
 		return -ENOTDIR;
 	idx = slot_from_fd(fd);
@@ -613,7 +780,15 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 		unsigned reclen;
 		unsigned i;
 
-		spec = ir0_early_rootfs_dir_entry(node, (unsigned)g_slots[idx].pos);
+		if (g_slots[idx].pos < ir0_early_rootfs_dir_count(node))
+			spec = ir0_early_rootfs_dir_entry(node,
+							 (unsigned)g_slots[idx].pos);
+		else
+		{
+			spec.name = "vda";
+			spec.ino = 8;
+			spec.type = IR0_EARLY_DT_BLK;
+		}
 		if (!spec.name)
 			break;
 		reclen = ir0_early_dirent64_pack(rec, sizeof(rec), spec.ino,
@@ -698,13 +873,16 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 	node = node_of_fd(fd);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
-	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY)
+	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY ||
+	    node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W)
 		return -ESPIPE;
 	pos = pos_of_fd(fd);
 	if (!pos)
 		return -EBADF;
 	if (node == IR0_EARLY_ROOTFS_INIT)
 		limit = g_blob_len;
+	else if (node == IR0_EARLY_ROOTFS_VDA)
+		limit = vda_bytes();
 	else if (node == IR0_EARLY_ROOTFS_ROOT || node == IR0_EARLY_ROOTFS_DEV)
 		limit = ir0_early_rootfs_dir_count(node);
 	else
@@ -860,6 +1038,126 @@ char *const *early_rootfs_exec_argv(void)
 void early_rootfs_exec_clear(void)
 {
 	g_exec_pending = 0;
+}
+
+int early_rootfs_vda_ready(void)
+{
+	struct ir0_early_stat64 st;
+
+	if (!g_ready || !vda_present())
+		return 0;
+	if (ir0_early_rootfs_path_node("/dev/vda") != IR0_EARLY_ROOTFS_VDA)
+		return 0;
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_VDA, vda_bytes(), &st);
+	return st.st_mode == IR0_EARLY_ROOTFS_MODE_BLK &&
+	       st.st_rdev == IR0_EARLY_ROOTFS_VDA_RDEV &&
+	       st.st_size > 0;
+}
+
+int early_rootfs_fd_is_pipe_write(int fd)
+{
+	return node_of_fd(fd) == IR0_EARLY_ROOTFS_PIPE_W;
+}
+
+int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count)
+{
+	int pipe_id = pipe_id_of_fd(fd);
+	struct early_pipe *p;
+	uint8_t tmp[256];
+	unsigned room;
+	unsigned put;
+	unsigned i;
+	unsigned wpos;
+
+	if (pipe_id < 0 || node_of_fd(fd) != IR0_EARLY_ROOTFS_PIPE_W)
+		return -EBADF;
+	p = &g_pipes[pipe_id];
+	if (!p->used)
+		return -EBADF;
+	if (p->readers == 0)
+		return -EPIPE;
+	if (count == 0)
+		return 0;
+	room = PIPE_BUF - p->len;
+	if (room == 0)
+		return -EAGAIN;
+	put = room;
+	if (put > sizeof(tmp))
+		put = (unsigned)sizeof(tmp);
+	if ((uint64_t)put > count)
+		put = (unsigned)count;
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(tmp, buffer, put) != 0)
+		return -EFAULT;
+	wpos = (p->rpos + p->len) % PIPE_BUF;
+	for (i = 0; i < put; i++)
+	{
+		p->buf[wpos] = tmp[i];
+		wpos = (wpos + 1U) % PIPE_BUF;
+	}
+	p->len += put;
+	return (int64_t)put;
+}
+
+int64_t early_rootfs_pipe2(uint64_t fds, int flags)
+{
+	int pipe_id;
+	int rfd;
+	int wfd;
+	int pair[2];
+	int ridx;
+	int widx;
+
+	if (!g_ready)
+		return -ENOSYS;
+	if (flags & ~(LINUX_O_CLOEXEC | LINUX_O_NONBLOCK))
+		return -EINVAL;
+	if (!g_user || !g_user->copy_to_user)
+		return -EFAULT;
+	for (pipe_id = 0; pipe_id < PIPE_MAX; pipe_id++)
+	{
+		if (!g_pipes[pipe_id].used)
+			break;
+	}
+	if (pipe_id >= PIPE_MAX)
+		return -EMFILE;
+	rfd = alloc_fd(IR0_EARLY_ROOTFS_PIPE_R);
+	if (rfd < 0)
+		return rfd;
+	wfd = alloc_fd(IR0_EARLY_ROOTFS_PIPE_W);
+	if (wfd < 0)
+	{
+		close_fd(rfd);
+		return wfd;
+	}
+	ridx = slot_from_fd(rfd);
+	widx = slot_from_fd(wfd);
+	if (ridx < 0 || widx < 0)
+	{
+		close_fd(rfd);
+		close_fd(wfd);
+		return -EBADF;
+	}
+	g_pipes[pipe_id].used = 1;
+	g_pipes[pipe_id].rpos = 0;
+	g_pipes[pipe_id].len = 0;
+	g_pipes[pipe_id].readers = 1;
+	g_pipes[pipe_id].writers = 1;
+	g_slots[ridx].pipe_id = pipe_id;
+	g_slots[widx].pipe_id = pipe_id;
+	set_flags_of_fd(rfd, status_flags(flags) | 0);
+	set_flags_of_fd(wfd, status_flags(flags) | 1);
+	set_cloexec_of_fd(rfd, (flags & LINUX_O_CLOEXEC) != 0);
+	set_cloexec_of_fd(wfd, (flags & LINUX_O_CLOEXEC) != 0);
+	pair[0] = rfd;
+	pair[1] = wfd;
+	if (g_user->copy_to_user(fds, pair, sizeof(pair)) != 0)
+	{
+		close_fd(rfd);
+		close_fd(wfd);
+		return -EFAULT;
+	}
+	return 0;
 }
 
 int early_rootfs_smoke_init(void)

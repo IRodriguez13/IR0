@@ -77,6 +77,8 @@ void arm64_rootfs_early_init(void)
 		ir0_boot_smoke("ARM64_MEMDEV_OK");
 	if (early_rootfs_dents_ready())
 		ir0_boot_smoke("ARM64_DENTS_OK");
+	if (early_rootfs_vda_ready())
+		ir0_boot_smoke("ARM64_VDA_OK");
 }
 
 int arm64_rootfs_ready(void)
