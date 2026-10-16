@@ -68,6 +68,9 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_unlinkat((int)a0, a1, (int)a2);
 	if (id == IR0_SYSCALL_RENAMEAT)
 		return early_rootfs_renameat((int)a0, a1, (int)a2, a3);
+	if (id == IR0_SYSCALL_RENAMEAT2)
+		return early_rootfs_renameat2((int)a0, a1, (int)a2, a3,
+					      (unsigned)a4);
 	if (id == IR0_SYSCALL_SYMLINKAT)
 		return early_rootfs_symlinkat(a0, (int)a1, a2);
 	if (id == IR0_SYSCALL_LINK)
@@ -122,7 +125,7 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_MKNODAT, IR0_SYSCALL_UNLINKAT, IR0_SYSCALL_RENAMEAT,
 	IR0_SYSCALL_SYMLINKAT,
 	IR0_SYSCALL_LINK, IR0_SYSCALL_LINKAT,
-	IR0_SYSCALL_FALLOCATE, IR0_SYSCALL_STATX,
+	IR0_SYSCALL_FALLOCATE, IR0_SYSCALL_STATX, IR0_SYSCALL_RENAMEAT2,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

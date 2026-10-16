@@ -18,6 +18,8 @@
 #define ENOTSOCK 88
 #define EOPNOTSUPP 95
 #define WRITE_MAX 256UL
+#define CMSG_HDR 16U
+#define CMSG_CAP 128U
 
 static int g_write_ok;
 static int g_termios_ready;
@@ -250,6 +252,80 @@ static int64_t early_readv(struct early_syscall_context *context,
 		if (vec[1] == 0)
 			continue;
 		n = early_rootfs_read((int)descriptor, vec[0], vec[1]);
+		if (n < 0)
+			return total ? total : n;
+		total += n;
+		if ((uint64_t)n < vec[1])
+			break;
+	}
+	return total;
+}
+
+static int64_t early_preadv(struct early_syscall_context *context,
+			    uint64_t descriptor, uint64_t iov, uint64_t iovcnt,
+			    int64_t offset)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	int64_t total = 0;
+
+	if (offset < 0)
+		return -EINVAL;
+	if (iovcnt == 0)
+		return 0;
+	if (iovcnt > 8)
+		return -EINVAL;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user)
+		return -ENOSYS;
+	for (i = 0; i < iovcnt; i++)
+	{
+		uint64_t vec[2];
+		int64_t n;
+
+		if (user->copy_from_user(vec, iov + i * 16UL, sizeof(vec)) != 0)
+			return total ? total : -EFAULT;
+		if (vec[1] == 0)
+			continue;
+		n = early_rootfs_pread64((int)descriptor, vec[0], vec[1],
+					 offset + total);
+		if (n < 0)
+			return total ? total : n;
+		total += n;
+		if ((uint64_t)n < vec[1])
+			break;
+	}
+	return total;
+}
+
+static int64_t early_pwritev(struct early_syscall_context *context,
+			     uint64_t descriptor, uint64_t iov, uint64_t iovcnt,
+			     int64_t offset)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	int64_t total = 0;
+
+	if (offset < 0)
+		return -EINVAL;
+	if (iovcnt == 0)
+		return 0;
+	if (iovcnt > 8)
+		return -EINVAL;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user)
+		return -ENOSYS;
+	for (i = 0; i < iovcnt; i++)
+	{
+		uint64_t vec[2];
+		int64_t n;
+
+		if (user->copy_from_user(vec, iov + i * 16UL, sizeof(vec)) != 0)
+			return total ? total : -EFAULT;
+		if (vec[1] == 0)
+			continue;
+		n = early_rootfs_pwrite64((int)descriptor, vec[0], vec[1],
+					  offset + total);
 		if (n < 0)
 			return total ? total : n;
 		total += n;
@@ -504,6 +580,53 @@ static int64_t early_epoll_pwait(struct early_syscall_context *context,
 					(int)timeout);
 }
 
+static int64_t parse_scm_rights(const struct early_user_services *user,
+				uint64_t control, uint64_t controllen,
+				int *fds, int *nfds)
+{
+	uint8_t raw[CMSG_CAP];
+	unsigned off = 0;
+	int got = 0;
+
+	*nfds = 0;
+	if (!control || !controllen)
+		return 0;
+	if (controllen > sizeof(raw))
+		return -EINVAL;
+	if (!user || !user->copy_from_user ||
+	    user->copy_from_user(raw, control, controllen) != 0)
+		return -EFAULT;
+	while (off + CMSG_HDR <= controllen)
+	{
+		uint64_t clen = ir0_early_le64(raw + off);
+		int32_t level;
+		int32_t type;
+		unsigned data;
+		unsigned nfd;
+		unsigned i;
+
+		if (clen < CMSG_HDR || off + clen > controllen)
+			return -EINVAL;
+		level = (int32_t)ir0_early_le32(raw + off + 8);
+		type = (int32_t)ir0_early_le32(raw + off + 12);
+		if (level != IR0_EARLY_SOL_SOCKET || type != IR0_EARLY_SCM_RIGHTS)
+			return -EOPNOTSUPP;
+		data = (unsigned)(clen - CMSG_HDR);
+		if (data % 4U)
+			return -EINVAL;
+		nfd = data / 4U;
+		if (got + (int)nfd > IR0_EARLY_RIGHTS_MAX)
+			return -EINVAL;
+		for (i = 0; i < nfd; i++)
+			fds[got + (int)i] =
+				(int)ir0_early_le32(raw + off + CMSG_HDR + i * 4U);
+		got += (int)nfd;
+		off += ir0_early_cmsg_align((unsigned)clen);
+	}
+	*nfds = got;
+	return 0;
+}
+
 static int64_t early_sendmsg(struct early_syscall_context *context,
 			     uint64_t fd, uint64_t msg)
 {
@@ -513,22 +636,37 @@ static int64_t early_sendmsg(struct early_syscall_context *context,
 	uint64_t namelen;
 	uint64_t iov;
 	uint64_t iovlen;
+	uint64_t control;
+	uint64_t controllen;
+	int rights[IR0_EARLY_RIGHTS_MAX];
+	int nrights = 0;
 	uint64_t i;
 	int64_t total = 0;
+	int64_t parsed;
 
 	if (!context || !context->services ||
 	    !(user = context->services->user) || !user->copy_from_user)
 		return -ENOSYS;
 	if (user->copy_from_user(hdr, msg, sizeof(hdr)) != 0)
 		return -EFAULT;
-	if (ir0_early_msghdr_has_cmsg(hdr, sizeof(hdr)))
-		return -EOPNOTSUPP;
 	name = ir0_early_le64(hdr);
 	namelen = ir0_early_le32(hdr + 8);
 	iov = ir0_early_le64(hdr + 16);
 	iovlen = ir0_early_le64(hdr + 24);
+	control = ir0_early_le64(hdr + 32);
+	controllen = ir0_early_le64(hdr + 40);
 	if (iovlen > 8)
 		return -EINVAL;
+	parsed = parse_scm_rights(user, control, controllen, rights, &nrights);
+	if (parsed < 0)
+		return parsed;
+	if (nrights)
+	{
+		int64_t queued = early_rootfs_send_rights((int)fd, rights, nrights);
+
+		if (queued < 0)
+			return queued;
+	}
 	for (i = 0; i < iovlen; i++)
 	{
 		uint64_t vec[2];
@@ -556,18 +694,24 @@ static int64_t early_recvmsg(struct early_syscall_context *context,
 	uint8_t hdr[IR0_EARLY_MSGHDR_BYTES];
 	uint64_t iov;
 	uint64_t iovlen;
+	uint64_t control;
+	uint64_t controllen;
+	int rights[IR0_EARLY_RIGHTS_MAX];
+	int nrights;
 	uint64_t i;
 	int64_t total = 0;
+	uint32_t flags = 0;
 
 	if (!context || !context->services ||
-	    !(user = context->services->user) || !user->copy_from_user)
+	    !(user = context->services->user) || !user->copy_from_user ||
+	    !user->copy_to_user)
 		return -ENOSYS;
 	if (user->copy_from_user(hdr, msg, sizeof(hdr)) != 0)
 		return -EFAULT;
-	if (ir0_early_msghdr_has_cmsg(hdr, sizeof(hdr)))
-		return -EOPNOTSUPP;
 	iov = ir0_early_le64(hdr + 16);
 	iovlen = ir0_early_le64(hdr + 24);
+	control = ir0_early_le64(hdr + 32);
+	controllen = ir0_early_le64(hdr + 40);
 	if (iovlen > 8)
 		return -EINVAL;
 	for (i = 0; i < iovlen; i++)
@@ -585,6 +729,58 @@ static int64_t early_recvmsg(struct early_syscall_context *context,
 		total += n;
 		if ((uint64_t)n < vec[1])
 			break;
+	}
+	nrights = (int)early_rootfs_recv_rights((int)fd, rights,
+						IR0_EARLY_RIGHTS_MAX);
+	if (nrights < 0)
+		return total ? total : nrights;
+	if (nrights > 0)
+	{
+		unsigned need = ir0_early_cmsg_align(CMSG_HDR +
+						     (unsigned)nrights * 4U);
+		uint8_t cmsg[CMSG_CAP];
+		unsigned k;
+
+		if (!control || controllen < need)
+		{
+			int drop;
+
+			for (drop = 0; drop < nrights; drop++)
+				(void)early_rootfs_close(rights[drop]);
+			flags |= IR0_EARLY_MSG_CTRUNC;
+			need = 0;
+		}
+		else
+		{
+			for (k = 0; k < sizeof(cmsg); k++)
+				cmsg[k] = 0;
+			ir0_early_put_le64(cmsg, CMSG_HDR + (unsigned)nrights * 4U);
+			ir0_early_put_le32(cmsg + 8, IR0_EARLY_SOL_SOCKET);
+			ir0_early_put_le32(cmsg + 12, IR0_EARLY_SCM_RIGHTS);
+			for (k = 0; k < (unsigned)nrights; k++)
+				ir0_early_put_le32(cmsg + CMSG_HDR + k * 4U,
+						   (uint32_t)rights[k]);
+			if (user->copy_to_user(control, cmsg, need) != 0)
+				return -EFAULT;
+			if (context->services->time && context->services->time->note)
+				context->services->time->note(
+					EARLY_SYSCALL_SCM_RIGHTS_OK);
+		}
+		ir0_early_put_le64(hdr + 40, need);
+		if (user->copy_to_user(msg + 40, hdr + 40, 8) != 0)
+			return -EFAULT;
+	}
+	else if (control)
+	{
+		ir0_early_put_le64(hdr + 40, 0);
+		if (user->copy_to_user(msg + 40, hdr + 40, 8) != 0)
+			return -EFAULT;
+	}
+	if (flags)
+	{
+		ir0_early_put_le32(hdr + 48, flags);
+		if (user->copy_to_user(msg + 48, hdr + 48, 4) != 0)
+			return -EFAULT;
 	}
 	return total;
 }
@@ -672,6 +868,10 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_pwrite64((int)a0, a1, a2, (int64_t)a3);
 	case IR0_SYSCALL_SENDFILE:
 		return early_rootfs_sendfile((int)a0, (int)a1, a2, a3);
+	case IR0_SYSCALL_PREADV:
+		return early_preadv(opaque, a0, a1, a2, (int64_t)a3);
+	case IR0_SYSCALL_PWRITEV:
+		return early_pwritev(opaque, a0, a1, a2, (int64_t)a3);
 	default:
 		return -ENOSYS;
 	}
@@ -691,6 +891,7 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_RECVFROM, IR0_SYSCALL_SENDMSG, IR0_SYSCALL_RECVMSG,
 	IR0_SYSCALL_SHUTDOWN, IR0_SYSCALL_SETSOCKOPT, IR0_SYSCALL_GETSOCKOPT,
 	IR0_SYSCALL_PREAD64, IR0_SYSCALL_PWRITE64, IR0_SYSCALL_SENDFILE,
+	IR0_SYSCALL_PREADV, IR0_SYSCALL_PWRITEV,
 };
 
 const struct syscall_context_provider early_io_provider = {

@@ -66,6 +66,9 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(71) == IR0_SYSCALL_SENDFILE);
 	ASSERT(syscall_decode_number(227) == IR0_SYSCALL_MSYNC);
 	ASSERT(syscall_decode_number(291) == IR0_SYSCALL_STATX);
-	ASSERT(decoded == 147);
+	ASSERT(syscall_decode_number(69) == IR0_SYSCALL_PREADV);
+	ASSERT(syscall_decode_number(70) == IR0_SYSCALL_PWRITEV);
+	ASSERT(syscall_decode_number(276) == IR0_SYSCALL_RENAMEAT2);
+	ASSERT(decoded == 150);
 	TEST_END();
 }

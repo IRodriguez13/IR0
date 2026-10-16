@@ -177,6 +177,8 @@ static struct early_sockpair
 	int shut[2];
 	int reuseaddr;
 	int so_error;
+	int rights_n[2];
+	int rights[2][IR0_EARLY_RIGHTS_MAX];
 	struct
 	{
 		unsigned rpos;
@@ -221,6 +223,8 @@ static struct early_unix
 	int so_error;
 	int shut_rd;
 	int shut_wr;
+	int rights_n;
+	int rights[IR0_EARLY_RIGHTS_MAX];
 	char bound_path[FS_NAME];
 	unsigned rpos;
 	unsigned len;
@@ -3147,6 +3151,7 @@ int64_t early_rootfs_socket(int domain, int type, int protocol)
 	g_unix[uid].so_error = 0;
 	g_unix[uid].shut_rd = 0;
 	g_unix[uid].shut_wr = 0;
+	g_unix[uid].rights_n = 0;
 	g_unix[uid].bound_path[0] = '\0';
 	g_unix[uid].rpos = 0;
 	g_unix[uid].len = 0;
@@ -3268,6 +3273,8 @@ int64_t early_rootfs_sock_connect(int fd, uint64_t addr, uint64_t addrlen)
 	g_sock[pair].shut[1] = 0;
 	g_sock[pair].reuseaddr = 0;
 	g_sock[pair].so_error = 0;
+	g_sock[pair].rights_n[0] = 0;
+	g_sock[pair].rights_n[1] = 0;
 	g_sock[pair].dgram = 0;
 	g_sock[pair].dir[0].rpos = 0;
 	g_sock[pair].dir[0].len = 0;
@@ -3720,6 +3727,8 @@ int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv)
 	g_sock[pair].shut[1] = 0;
 	g_sock[pair].reuseaddr = 0;
 	g_sock[pair].so_error = 0;
+	g_sock[pair].rights_n[0] = 0;
+	g_sock[pair].rights_n[1] = 0;
 	g_sock[pair].dgram = (kind == IR0_EARLY_SOCK_DGRAM);
 	g_sock[pair].dir[0].rpos = 0;
 	g_sock[pair].dir[0].len = 0;
@@ -4448,13 +4457,51 @@ int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags)
 int64_t early_rootfs_renameat(int olddirfd, uint64_t oldpath, int newdirfd,
 			      uint64_t newpath)
 {
+	return early_rootfs_renameat2(olddirfd, oldpath, newdirfd, newpath, 0);
+}
+
+static void fs_set_path(int fsid, const char *path)
+{
+	unsigned i;
+
+	for (i = 0; path[i] != '\0' && i + 1 < FS_NAME; i++)
+		g_fs[fsid].path[i] = path[i];
+	g_fs[fsid].path[i] = '\0';
+}
+
+static void unix_rebind_path(int fsid, const char *path)
+{
+	unsigned i;
+	unsigned n;
+
+	for (i = 0; i < UNIX_MAX; i++)
+	{
+		if (g_unix[i].used && g_unix[i].bound_fs == fsid)
+		{
+			for (n = 0; path[n] != '\0' &&
+				    n + 1 < sizeof(g_unix[i].bound_path);
+			     n++)
+				g_unix[i].bound_path[n] = path[n];
+			g_unix[i].bound_path[n] = '\0';
+		}
+	}
+}
+
+int64_t early_rootfs_renameat2(int olddirfd, uint64_t oldpath, int newdirfd,
+			       uint64_t newpath, unsigned flags)
+{
 	char oldbuf[FS_NAME];
 	char newbuf[FS_NAME];
+	char saved[FS_NAME];
 	enum ir0_early_rootfs_node node;
 	int fsid;
 	int dest;
 	unsigned i;
 
+	if (flags & IR0_EARLY_RENAME_WHITEOUT)
+		return -EOPNOTSUPP;
+	if (!ir0_early_renameat2_flags_ok(flags))
+		return -EINVAL;
 	if (!g_ready)
 		return -ENOENT;
 	if (olddirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(olddirfd) < 0)
@@ -4482,6 +4529,21 @@ int64_t early_rootfs_renameat(int olddirfd, uint64_t oldpath, int newdirfd,
 	if (!parent_exists(newbuf))
 		return -ENOENT;
 	dest = fs_find(newbuf);
+	if (flags & IR0_EARLY_RENAME_EXCHANGE)
+	{
+		if (dest < 0)
+			return -ENOENT;
+		for (i = 0; g_fs[fsid].path[i] != '\0' && i + 1 < FS_NAME; i++)
+			saved[i] = g_fs[fsid].path[i];
+		saved[i] = '\0';
+		fs_set_path(fsid, g_fs[dest].path);
+		fs_set_path(dest, saved);
+		unix_rebind_path(fsid, g_fs[fsid].path);
+		unix_rebind_path(dest, g_fs[dest].path);
+		return 0;
+	}
+	if (dest >= 0 && (flags & IR0_EARLY_RENAME_NOREPLACE))
+		return -EEXIST;
 	if (dest >= 0)
 	{
 		if (fs_node_kind(g_fs[dest].mode) == IR0_EARLY_ROOTFS_USERDIR)
@@ -4489,27 +4551,100 @@ int64_t early_rootfs_renameat(int olddirfd, uint64_t oldpath, int newdirfd,
 		g_fs[dest].used = 0;
 	}
 	for (i = 0; newbuf[i] != '\0' && i + 1 < FS_NAME; i++)
-		g_fs[fsid].path[i] = newbuf[i];
+		;
 	if (newbuf[i] != '\0')
 		return -ENAMETOOLONG;
-	g_fs[fsid].path[i] = '\0';
+	fs_set_path(fsid, newbuf);
 	if (node == IR0_EARLY_ROOTFS_UNIX)
-	{
-		for (i = 0; i < UNIX_MAX; i++)
-		{
-			if (g_unix[i].used && g_unix[i].bound_fs == fsid)
-			{
-				unsigned n;
-
-				for (n = 0; newbuf[n] != '\0' &&
-					    n + 1 < sizeof(g_unix[i].bound_path);
-				     n++)
-					g_unix[i].bound_path[n] = newbuf[n];
-				g_unix[i].bound_path[n] = '\0';
-			}
-		}
-	}
+		unix_rebind_path(fsid, newbuf);
 	return 0;
+}
+
+int64_t early_rootfs_send_rights(int fd, const int *fds, int n)
+{
+	int pair = sock_pair_of_fd(fd);
+	int uid = unix_id_of_fd(fd);
+	int dest;
+	int i;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK)
+		return -ENOTSOCK;
+	if (!fds || n < 0 || n > IR0_EARLY_RIGHTS_MAX)
+		return -EINVAL;
+	for (i = 0; i < n; i++)
+	{
+		if (!fd_is_open(fds[i]))
+			return -EBADF;
+	}
+	if (pair >= 0 && pair < SOCKPAIR_MAX && g_sock[pair].used)
+	{
+		dest = 1 - (pipe_id_of_fd(fd) & 1);
+		if (g_sock[pair].rights_n[dest])
+			return -EAGAIN;
+		for (i = 0; i < n; i++)
+			g_sock[pair].rights[dest][i] = fds[i];
+		g_sock[pair].rights_n[dest] = n;
+		return 0;
+	}
+	if (uid >= 0 && uid < UNIX_MAX && g_unix[uid].used)
+	{
+		int peer = unix_find_bound(g_unix[uid].bound_path, 0);
+
+		if (g_unix[uid].peer_fs >= 0)
+			peer = unix_find_bound(g_fs[g_unix[uid].peer_fs].path, 0);
+		if (peer < 0)
+			peer = uid;
+		if (g_unix[peer].rights_n)
+			return -EAGAIN;
+		for (i = 0; i < n; i++)
+			g_unix[peer].rights[i] = fds[i];
+		g_unix[peer].rights_n = n;
+		return 0;
+	}
+	return -ENOTCONN;
+}
+
+int64_t early_rootfs_recv_rights(int fd, int *fds, int max)
+{
+	int pair = sock_pair_of_fd(fd);
+	int uid = unix_id_of_fd(fd);
+	int src;
+	int n;
+	int i;
+	int *stored;
+
+	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK)
+		return -ENOTSOCK;
+	if (!fds || max <= 0)
+		return 0;
+	n = 0;
+	stored = 0;
+	if (pair >= 0 && pair < SOCKPAIR_MAX && g_sock[pair].used)
+	{
+		src = pipe_id_of_fd(fd) & 1;
+		n = g_sock[pair].rights_n[src];
+		stored = g_sock[pair].rights[src];
+		g_sock[pair].rights_n[src] = 0;
+	}
+	else if (uid >= 0 && uid < UNIX_MAX && g_unix[uid].used)
+	{
+		n = g_unix[uid].rights_n;
+		stored = g_unix[uid].rights;
+		g_unix[uid].rights_n = 0;
+	}
+	if (n <= 0 || !stored)
+		return 0;
+	if (n > max)
+		n = max;
+	for (i = 0; i < n; i++)
+	{
+		int64_t newfd = early_rootfs_dup(stored[i]);
+
+		if (newfd < 0)
+			return i ? i : newfd;
+		fds[i] = (int)newfd;
+	}
+	return n;
 }
 
 static int fd_espipe(int fd)

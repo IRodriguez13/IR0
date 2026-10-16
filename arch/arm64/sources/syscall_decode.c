@@ -55,6 +55,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 66: return IR0_SYSCALL_WRITEV;
 	case 67: return IR0_SYSCALL_PREAD64;
 	case 68: return IR0_SYSCALL_PWRITE64;
+	case 69: return IR0_SYSCALL_PREADV;
+	case 70: return IR0_SYSCALL_PWRITEV;
 	case 71: return IR0_SYSCALL_SENDFILE;
 	case 72: return IR0_SYSCALL_PSELECT6;
 	case 73: return IR0_SYSCALL_PPOLL;
@@ -155,6 +157,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 242: return IR0_SYSCALL_ACCEPT4;
 	case 260: return IR0_SYSCALL_WAIT4;
 	case 261: return IR0_SYSCALL_PRLIMIT64;
+	case 276: return IR0_SYSCALL_RENAMEAT2;
 	case 278: return IR0_SYSCALL_GETRANDOM;
 	case 279: return IR0_SYSCALL_MEMFD_CREATE;
 	case 281: return IR0_SYSCALL_EXECVEAT;

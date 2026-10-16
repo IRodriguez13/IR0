@@ -309,6 +309,7 @@ el0_entry:
 	mov	x3, #64
 	mov	x8, #47
 	svc	#0
+	mov	x20, x10
 	mov	x0, x10
 	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0xb8) & 0xffff)
 	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0xb8) >> 16) & 0xffff), lsl #16
@@ -324,6 +325,96 @@ el0_entry:
 	mov	x1, #4096
 	mov	x2, #4
 	mov	x8, #227
+	svc	#0
+
+	/* preadv(memfd, iov@+0x1c0, 1, 8) */
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x1c0) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x1c0) >> 16) & 0xffff), lsl #16
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x9c) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x9c) >> 16) & 0xffff), lsl #16
+	str	x10, [x9]
+	mov	x11, #1
+	str	x11, [x9, #8]
+	mov	x0, x20
+	mov	x1, x9
+	mov	x2, #1
+	mov	x3, #8
+	mov	x8, #69
+	svc	#0
+
+	/* socketpair + sendmsg/recvmsg SCM_RIGHTS (memfd) */
+	mov	x0, #1
+	mov	x1, #1
+	mov	x2, xzr
+	movz	x3, #((ARM64_EL0_USER_PAGE_PA + 0x1d0) & 0xffff)
+	movk	x3, #(((ARM64_EL0_USER_PAGE_PA + 0x1d0) >> 16) & 0xffff), lsl #16
+	mov	x8, #199
+	svc	#0
+	movz	x19, #((ARM64_EL0_USER_PAGE_PA + 0x1d0) & 0xffff)
+	movk	x19, #(((ARM64_EL0_USER_PAGE_PA + 0x1d0) >> 16) & 0xffff), lsl #16
+	ldr	w21, [x19]
+	ldr	w22, [x19, #4]
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x220) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x220) >> 16) & 0xffff), lsl #16
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x230) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x230) >> 16) & 0xffff), lsl #16
+	mov	w11, #'R'
+	strb	w11, [x10]
+	str	x10, [x9]
+	mov	x11, #1
+	str	x11, [x9, #8]
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x238) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x238) >> 16) & 0xffff), lsl #16
+	mov	x10, #20
+	str	x10, [x9]
+	mov	w10, #1
+	str	w10, [x9, #8]
+	str	w10, [x9, #12]
+	str	w20, [x9, #16]
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x1e0) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x1e0) >> 16) & 0xffff), lsl #16
+	str	xzr, [x9]
+	str	xzr, [x9, #8]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x220) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x220) >> 16) & 0xffff), lsl #16
+	str	x10, [x9, #16]
+	mov	x10, #1
+	str	x10, [x9, #24]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x238) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x238) >> 16) & 0xffff), lsl #16
+	str	x10, [x9, #32]
+	mov	x10, #20
+	str	x10, [x9, #40]
+	str	xzr, [x9, #48]
+	mov	w0, w21
+	mov	x1, x9
+	mov	x8, #211
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x2a0) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x2a0) >> 16) & 0xffff), lsl #16
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x2b0) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x2b0) >> 16) & 0xffff), lsl #16
+	str	x10, [x9]
+	mov	x11, #1
+	str	x11, [x9, #8]
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x260) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x260) >> 16) & 0xffff), lsl #16
+	str	xzr, [x9]
+	str	xzr, [x9, #8]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x2a0) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x2a0) >> 16) & 0xffff), lsl #16
+	str	x10, [x9, #16]
+	mov	x10, #1
+	str	x10, [x9, #24]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x2c0) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x2c0) >> 16) & 0xffff), lsl #16
+	str	x10, [x9, #32]
+	mov	x10, #32
+	str	x10, [x9, #40]
+	str	xzr, [x9, #48]
+	mov	w0, w22
+	mov	x1, x9
+	mov	x8, #212
 	svc	#0
 
 	/* write(1, user probe page, 15) — "ARM64_WRITE_OK\n" filled by boot */

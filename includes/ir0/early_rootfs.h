@@ -144,6 +144,13 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_MS_ASYNC 1
 #define IR0_EARLY_MS_INVALIDATE 2
 #define IR0_EARLY_MS_SYNC 4
+#define IR0_EARLY_RENAME_NOREPLACE 1U
+#define IR0_EARLY_RENAME_EXCHANGE 2U
+#define IR0_EARLY_RENAME_WHITEOUT 4U
+#define IR0_EARLY_SCM_RIGHTS 1
+#define IR0_EARLY_CMSG_ALIGN 8U
+#define IR0_EARLY_RIGHTS_MAX 4
+#define IR0_EARLY_MSG_CTRUNC 8
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -608,6 +615,22 @@ static inline int ir0_early_msghdr_has_cmsg(const uint8_t *hdr, unsigned n)
 	return control != 0 || controllen != 0;
 }
 
+static inline unsigned ir0_early_cmsg_align(unsigned len)
+{
+	return (len + (IR0_EARLY_CMSG_ALIGN - 1U)) & ~(IR0_EARLY_CMSG_ALIGN - 1U);
+}
+
+static inline int ir0_early_renameat2_flags_ok(unsigned flags)
+{
+	if (flags & IR0_EARLY_RENAME_WHITEOUT)
+		return 0;
+	if ((flags & IR0_EARLY_RENAME_NOREPLACE) &&
+	    (flags & IR0_EARLY_RENAME_EXCHANGE))
+		return 0;
+	return (flags & ~(IR0_EARLY_RENAME_NOREPLACE |
+			  IR0_EARLY_RENAME_EXCHANGE)) == 0;
+}
+
 static inline int ir0_early_sockaddr_un_path(const uint8_t *addr,
 					    unsigned addrlen, char *out,
 					    unsigned cap)
@@ -843,3 +866,7 @@ int64_t early_rootfs_mknodat(int dirfd, uint64_t path, uint64_t mode);
 int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_renameat(int olddirfd, uint64_t oldpath, int newdirfd,
 			      uint64_t newpath);
+int64_t early_rootfs_renameat2(int olddirfd, uint64_t oldpath, int newdirfd,
+			       uint64_t newpath, unsigned flags);
+int64_t early_rootfs_send_rights(int fd, const int *fds, int n);
+int64_t early_rootfs_recv_rights(int fd, int *fds, int max);
