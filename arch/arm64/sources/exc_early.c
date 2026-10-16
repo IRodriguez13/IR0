@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
+#include <ir0/early_rootfs.h>
 
 #define EINVAL 22
 
@@ -165,6 +166,19 @@ void arm64_exc_irq_el1(void)
 	}
 }
 
+void arm64_after_el0(void);
+
+static void arm64_early_exec_replace(void)
+{
+	char *const *argv = early_rootfs_exec_argv();
+
+	early_rootfs_exec_clear();
+	ir0_boot_smoke("ARM64_EXECVE_OK");
+	if (argv)
+		arm64_embedded_elf_enter((char *const *)argv);
+	arm64_after_el0();
+}
+
 void arm64_exc_sync_lower(uint64_t *frame)
 {
 	uint64_t esr;
@@ -210,7 +224,9 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		uint64_t elr;
 		uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL1H;
 
-		if (arm64_early_guest_active())
+		if (early_rootfs_exec_pending())
+			elr = (uint64_t)(uintptr_t)arm64_early_exec_replace;
+		else if (arm64_early_guest_active())
 			elr = (uint64_t)(uintptr_t)arm64_early_guest_leave;
 		else
 			elr = (uint64_t)(uintptr_t)arm64_after_el0;

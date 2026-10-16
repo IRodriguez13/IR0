@@ -3,12 +3,14 @@
 
 #include <stdint.h>
 #include <ir0/early_process.h>
+#include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
 #include <ir0/utsname.h>
 
 #define EAGAIN 11
 #define ECHILD 10
 #define EFAULT 14
+#define EINVAL 22
 #define ENOSYS 38
 
 static int g_getpid_ok;
@@ -114,6 +116,18 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		g_umask = (int)(a0 & 0777U);
 		return previous;
 	}
+	case IR0_SYSCALL_GETGROUPS:
+		return 0;
+	case IR0_SYSCALL_SETGROUPS:
+		return a0 == 0 ? 0 : -EINVAL;
+	case IR0_SYSCALL_EXECVE:
+	{
+		int64_t ret = early_rootfs_execve(a0, a1, a2);
+
+		if (ret == 0 && context && context->leave_usermode)
+			*context->leave_usermode = 1;
+		return ret;
+	}
 	default:
 		return -ENOSYS;
 	}
@@ -126,7 +140,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
 	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
-	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_EXIT,
+	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_GETGROUPS,
+	IR0_SYSCALL_SETGROUPS, IR0_SYSCALL_EXECVE, IR0_SYSCALL_EXIT,
 	IR0_SYSCALL_EXIT_GROUP,
 };
 
