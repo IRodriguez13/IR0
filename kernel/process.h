@@ -595,6 +595,8 @@ __attribute__((noreturn)) void process_exit(int code);
 void process_pre_zombie_teardown(process_t *dying);
 void process_notify_parent_of_exit(process_t *dying);
 void process_resources_release_on_exit(process_t *dying);
+void process_guest_install(process_t *guest);
+int process_exit_guest(int code);
 int process_wait(pid_t pid, int *status, int options);
 
 /*

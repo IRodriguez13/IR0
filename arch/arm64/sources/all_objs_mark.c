@@ -14,6 +14,7 @@
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
+#include <ir0/early_process.h>
 #include <ir0/process_exit.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
@@ -283,6 +284,32 @@ void arm64_all_objs_mark(void)
 		ir0_boot_smoke("ARM64_COMMON_EXIT_OK");
 	else
 		ir0_boot_smoke("ARM64_COMMON_EXIT_FAIL");
+	{
+		static process_t guest;
+		static const struct process_exit_services guest_ops = {
+			.notify_signal = arm64_exit_notify_signal,
+		};
+		uint8_t *bytes = (uint8_t *)&guest;
+		size_t i;
+
+		for (i = 0; i < sizeof(guest); i++)
+			bytes[i] = 0;
+		guest.task.pid = 1;
+		guest.ppid = 0;
+		guest.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+		guest.state = PROCESS_RUNNING;
+		guest.mode = USER_MODE;
+		guest.comm[0] = 'i';
+		guest.comm[1] = 'n';
+		guest.comm[2] = 'i';
+		guest.comm[3] = 't';
+		guest.comm[4] = 0;
+		guest.next = NULL;
+		process_exit_bind_services(&guest_ops);
+		process_guest_install(&guest);
+		early_process_bind_common_exit(process_exit_guest);
+		ir0_boot_smoke("ARM64_COMMON_GUEST_OK");
+	}
 	{
 		int inventory = arm64_boot_memory_contract();
 

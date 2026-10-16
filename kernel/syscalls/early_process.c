@@ -51,6 +51,8 @@ static uint32_t g_sgid;
 static uint32_t g_fsgid;
 static int32_t g_nice;
 static int64_t g_current_pid = 1;
+static int (*g_common_task_exit)(int code);
+static int g_common_task_exit_published;
 static int g_child_state;
 static int g_enter_child;
 static int g_resume_parent;
@@ -836,6 +838,9 @@ static int64_t early_exit(struct early_syscall_context *context,
 	smoke_ok = context && context->smoke_ok && context->smoke_ok();
 	if (context && context->leave_usermode)
 		*context->leave_usermode = 1;
+	if (g_common_task_exit)
+		g_common_task_exit_published =
+			g_common_task_exit((int)(status & 0xffUL));
 	if (context && context->services && context->services->process &&
 	    context->services->process->process_exit_observed)
 		context->services->process->process_exit_observed(smoke_ok);
@@ -2093,4 +2098,17 @@ void early_process_current_ucred(int32_t *pid, int32_t *uid, int32_t *gid)
 int early_process_smoke_ok(void)
 {
 	return g_getpid_ok;
+}
+
+void early_process_bind_common_exit(int (*fn)(int code))
+{
+	g_common_task_exit = fn;
+}
+
+int early_process_common_exit_published(void)
+{
+	int published = g_common_task_exit_published;
+
+	g_common_task_exit_published = 0;
+	return published;
 }

@@ -101,3 +101,22 @@ __attribute__((noreturn)) void process_exit(int code)
 	for (;;)
 		cpu_idle();
 }
+
+/*
+ * Guest/harness exit: same Linux do_exit owners as process_exit()
+ * (teardown, publish zombie, notify parent, drop from the runqueue)
+ * without schedule-away. The image that dropped to EL0 still owns
+ * power-off after init becomes a zombie.
+ */
+int process_exit_guest(int code)
+{
+	process_t *dying = current_process;
+
+	if (!dying || process_is_zombie(dying))
+		return 0;
+	process_pre_zombie_teardown(dying);
+	process_lifecycle_publish_exit(dying, code);
+	process_notify_parent_of_exit(dying);
+	sched_remove_process(dying);
+	return 1;
+}

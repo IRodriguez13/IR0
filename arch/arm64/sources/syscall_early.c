@@ -114,6 +114,8 @@ static void arm64_early_console_write_observed(const char *bytes, uint64_t size)
 
 static void arm64_early_process_exit_observed(int overall_smoke_ok)
 {
+	if (early_process_common_exit_published())
+		ir0_boot_smoke("ARM64_COMMON_GUEST_EXIT_OK");
 	if (arm64_early_guest_active())
 		ir0_boot_smoke("ARM64_GUEST_EXIT_OK");
 	else

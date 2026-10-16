@@ -2138,7 +2138,9 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_pre_zombie_teardown \
 	--undefined=process_notify_parent_of_exit \
 	--undefined=process_resources_release_on_exit \
-	--undefined=process_destroy
+	--undefined=process_destroy \
+	--undefined=process_exit_guest \
+	--undefined=process_guest_install
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
@@ -3004,6 +3006,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
@@ -3026,6 +3030,8 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-dtb-smoke.log

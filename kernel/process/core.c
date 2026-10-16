@@ -131,8 +131,16 @@ void process_init(void)
 	current_process = NULL;
 	process_list = NULL;
 	debug_state_init();
-	/* First spawned process is /sbin/init (PID 1). */
+	/* First spawned process is PID 1. */
 	next_pid = 1;
+}
+
+void process_guest_install(process_t *guest)
+{
+	if (!guest)
+		return;
+	process_list = guest;
+	current_process = guest;
 }
 
 
