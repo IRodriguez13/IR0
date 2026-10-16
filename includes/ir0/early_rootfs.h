@@ -31,6 +31,7 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_ZERO,
 	IR0_EARLY_ROOTFS_TTY,
 	IR0_EARLY_ROOTFS_VDA,
+	IR0_EARLY_ROOTFS_TMP,
 	IR0_EARLY_ROOTFS_PIPE_R,
 	IR0_EARLY_ROOTFS_PIPE_W,
 };
@@ -127,9 +128,11 @@ static inline unsigned ir0_early_dirent64_pack(uint8_t *dst, unsigned cap,
 static inline unsigned ir0_early_rootfs_dir_count(enum ir0_early_rootfs_node node)
 {
 	if (node == IR0_EARLY_ROOTFS_ROOT)
-		return 4;
+		return 5;
 	if (node == IR0_EARLY_ROOTFS_DEV)
 		return 6;
+	if (node == IR0_EARLY_ROOTFS_TMP)
+		return 2;
 	return 0;
 }
 
@@ -141,6 +144,7 @@ ir0_early_rootfs_dir_entry(enum ir0_early_rootfs_node node, unsigned idx)
 		{ "..", 1, IR0_EARLY_DT_DIR },
 		{ "init", 2, IR0_EARLY_DT_REG },
 		{ "dev", 3, IR0_EARLY_DT_DIR },
+		{ "tmp", 9, IR0_EARLY_DT_DIR },
 	};
 	static const struct ir0_early_dirent_spec dev[] = {
 		{ ".", 3, IR0_EARLY_DT_DIR },
@@ -152,10 +156,17 @@ ir0_early_rootfs_dir_entry(enum ir0_early_rootfs_node node, unsigned idx)
 	};
 	struct ir0_early_dirent_spec empty = { 0, 0, 0 };
 
-	if (node == IR0_EARLY_ROOTFS_ROOT && idx < 4)
+	static const struct ir0_early_dirent_spec tmpdir[] = {
+		{ ".", 9, IR0_EARLY_DT_DIR },
+		{ "..", 1, IR0_EARLY_DT_DIR },
+	};
+
+	if (node == IR0_EARLY_ROOTFS_ROOT && idx < 5)
 		return root[idx];
 	if (node == IR0_EARLY_ROOTFS_DEV && idx < 6)
 		return dev[idx];
+	if (node == IR0_EARLY_ROOTFS_TMP && idx < 2)
+		return tmpdir[idx];
 	return empty;
 }
 
@@ -214,6 +225,8 @@ static inline enum ir0_early_rootfs_node ir0_early_rootfs_path_node(const char *
 		return IR0_EARLY_ROOTFS_TTY;
 	if (ir0_early_rootfs_path_eq(path, "/dev/vda"))
 		return IR0_EARLY_ROOTFS_VDA;
+	if (ir0_early_rootfs_path_eq(path, "/tmp"))
+		return IR0_EARLY_ROOTFS_TMP;
 	return IR0_EARLY_ROOTFS_NONE;
 }
 
@@ -296,6 +309,14 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = 0;
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_TMP)
+	{
+		st->st_ino = 9;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
 
 	st->st_ino = 1;
 	st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
@@ -347,3 +368,12 @@ int64_t early_rootfs_fchmodat(int dirfd, uint64_t path, uint64_t mode);
 int64_t early_rootfs_fchown(int fd, uint64_t uid, uint64_t gid);
 int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
 			      uint64_t gid);
+int64_t early_rootfs_chroot(uint64_t path);
+int64_t early_rootfs_truncate(uint64_t path, uint64_t length);
+int64_t early_rootfs_ftruncate(int fd, uint64_t length);
+int64_t early_rootfs_flock(int fd, int op);
+int64_t early_rootfs_utimensat(int dirfd, uint64_t path);
+int64_t early_rootfs_mkdirat(int dirfd, uint64_t path);
+int64_t early_rootfs_unlinkat(int dirfd, uint64_t path, int flags);
+int64_t early_rootfs_renameat(int olddirfd, uint64_t oldpath, int newdirfd,
+			      uint64_t newpath);

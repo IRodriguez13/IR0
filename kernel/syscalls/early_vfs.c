@@ -7,6 +7,7 @@
 #include <ir0/early_vfs.h>
 
 #define ENOSYS 38
+#define EPERM  1
 
 static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 				 uint64_t a0, uint64_t a1, uint64_t a2,
@@ -43,6 +44,25 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_fchown((int)a0, a1, a2);
 	if (id == IR0_SYSCALL_FCHOWNAT)
 		return early_rootfs_fchownat((int)a0, a1, a2, a3);
+	if (id == IR0_SYSCALL_CHROOT)
+		return early_rootfs_chroot(a0);
+	if (id == IR0_SYSCALL_TRUNCATE)
+		return early_rootfs_truncate(a0, a1);
+	if (id == IR0_SYSCALL_FTRUNCATE)
+		return early_rootfs_ftruncate((int)a0, a1);
+	if (id == IR0_SYSCALL_FLOCK)
+		return early_rootfs_flock((int)a0, (int)a1);
+	if (id == IR0_SYSCALL_UTIMENSAT)
+		return early_rootfs_utimensat((int)a0, a1);
+	if (id == IR0_SYSCALL_MKDIRAT)
+		return early_rootfs_mkdirat((int)a0, a1);
+	if (id == IR0_SYSCALL_UNLINKAT)
+		return early_rootfs_unlinkat((int)a0, a1, (int)a2);
+	if (id == IR0_SYSCALL_RENAMEAT)
+		return early_rootfs_renameat((int)a0, a1, (int)a2, a3);
+	if (id == IR0_SYSCALL_SYMLINKAT || id == IR0_SYSCALL_LINK ||
+	    id == IR0_SYSCALL_LINKAT)
+		return -EPERM;
 	if (!ops)
 		return -ENOSYS;
 	switch (id) {
@@ -73,6 +93,10 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_SYNC, IR0_SYSCALL_FSYNC, IR0_SYSCALL_FDATASYNC,
 	IR0_SYSCALL_STATFS, IR0_SYSCALL_FSTATFS, IR0_SYSCALL_FCHMOD,
 	IR0_SYSCALL_FCHMODAT, IR0_SYSCALL_FCHOWN, IR0_SYSCALL_FCHOWNAT,
+	IR0_SYSCALL_CHROOT, IR0_SYSCALL_TRUNCATE, IR0_SYSCALL_FTRUNCATE,
+	IR0_SYSCALL_FLOCK, IR0_SYSCALL_UTIMENSAT, IR0_SYSCALL_MKDIRAT,
+	IR0_SYSCALL_UNLINKAT, IR0_SYSCALL_RENAMEAT, IR0_SYSCALL_SYMLINKAT,
+	IR0_SYSCALL_LINK, IR0_SYSCALL_LINKAT,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

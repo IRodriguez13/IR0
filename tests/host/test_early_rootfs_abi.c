@@ -35,6 +35,7 @@ void test_early_rootfs_abi(void)
 		  IR0_EARLY_ROOTFS_TTY);
 	ASSERT_EQ(ir0_early_rootfs_path_node("/dev/vda"),
 		  IR0_EARLY_ROOTFS_VDA);
+	ASSERT_EQ(ir0_early_rootfs_path_node("/tmp"), IR0_EARLY_ROOTFS_TMP);
 	ASSERT_EQ(ir0_early_rootfs_path_node("/bin/sh"), IR0_EARLY_ROOTFS_NONE);
 	ASSERT_EQ(ir0_early_rootfs_path_node(0), IR0_EARLY_ROOTFS_NONE);
 
@@ -75,7 +76,12 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_rdev, IR0_EARLY_ROOTFS_VDA_RDEV);
 	ASSERT_EQ(st.st_size, 512);
 
-	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT), 4);
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_TMP, 0, &st);
+	ASSERT_EQ(st.st_ino, 9);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_DIR);
+
+	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT), 5);
+	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_TMP), 2);
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_DEV), 6);
 	ASSERT_EQ(ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_NULL), 0);
 	{
