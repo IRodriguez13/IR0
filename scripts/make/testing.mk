@@ -2133,7 +2133,12 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_init_fd_table \
 	--undefined=fork \
 	--undefined=exec_detach_shared_mm \
-	--undefined=fd_resource_acquire
+	--undefined=fd_resource_acquire \
+	--undefined=process_exit \
+	--undefined=process_pre_zombie_teardown \
+	--undefined=process_notify_parent_of_exit \
+	--undefined=process_resources_release_on_exit \
+	--undefined=process_destroy
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
@@ -2840,7 +2845,11 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/process/exec.c \
 	kernel/process/lifecycle.c \
 	kernel/process/parent.c \
+	kernel/process/resources.c \
+	kernel/process/exit.c \
 	kernel/process/wait.c \
+	kernel/process/wait_audit.c \
+	kernel/process/signals.c \
 	kernel/process/domains.c \
 	kernel/process/saved_context.c \
 	kernel/process/saved_environ.c \
@@ -2887,7 +2896,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		-T arch/arm64/linker.ld -o $@ \
 		$(ARM64_ALL_EARLY_LINK_OBJS) \
 		$(ARM64_ALL_PORTABLE_OBJS) build/arm64-all/all_objs_mark.o
-	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
+	@echo "✓ $@ (common process_exit linked; EL0 still staged until current_process is the guest)"
 
 arm64-provider-audit: kernel-arm64-all.bin
 	@semantic=$$(find arch/arm64/sources -maxdepth 1 -type f \
@@ -2971,6 +2980,16 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "fd_resource_acquire" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_exit" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_pre_zombie_teardown" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_notify_parent_of_exit" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_resources_release_on_exit" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "process_destroy" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 ~ /^(__kmalloc_checked|__kfree_checked|clock_note_context_switch|process_sched_state_trace)$$/ { if ($$2 != "T") bad = 1; seen++ } END { exit bad || seen != 4 }'
 	@echo "✓ ARM64 common process/MM/create symbols are strong"
 	@echo "✓ ARM64 allocator/accounting/scheduler trace providers are strong"
@@ -2984,13 +3003,15 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-smoke.log
+	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log
-	@echo "✓ smoke-arm64-all passed (early aggregate boot + BusyBox EL0)"
+	@echo "✓ smoke-arm64-all passed (early aggregate boot + guest EL0)"
 
 smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@echo "  SMOKE   ARM64 aggregate Linux Image + firmware DTB memory inventory..."
@@ -3004,6 +3025,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-dtb-smoke.log

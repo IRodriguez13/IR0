@@ -51,6 +51,7 @@
 #include "syscalls.h"
 #include <ir0/sched.h>
 #include "process.h"
+#include <ir0/process_exit.h>
 #include "rootfs_base.h"
 #include "kernel.h"
 #include "boot_init.h"
@@ -243,6 +244,7 @@ void boot_drivers_rootfs(void)
 void boot_runtime(void)
 {
 	process_init();
+	process_exit_bind_product();
 	log_subsystem_ok("PROCESSES");
 
 	ipc_init();

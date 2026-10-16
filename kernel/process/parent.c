@@ -8,6 +8,7 @@
  */
 
 #include "process_internal.h"
+#include <ir0/process_exit.h>
 
 void process_reparent_children(process_t *dying_parent)
 {
@@ -36,23 +37,39 @@ void process_notify_parent_of_exit(process_t *dying)
 		parent = process_find_by_pid(dying->ppid);
 		if (parent)
 			parent_state_before = parent->state;
-		if (parent && parent->state != PROCESS_ZOMBIE) {
-			send_signal(parent->task.pid, SIGCHLD);
+		if (parent && parent->state != PROCESS_ZOMBIE)
+		{
+			const struct process_exit_services *ops =
+				process_exit_services();
+
+			if (ops && ops->notify_signal)
+				(void)ops->notify_signal(parent->task.pid, SIGCHLD);
 			if (parent->state == PROCESS_BLOCKED ||
 			    process_wait_blocked(parent))
 				process_wait_wake_blocked_parent(parent, dying);
-		} else {
+		}
+		else
+		{
 			/* A missing/dead parent delegates reaping to init. */
 			dying->ppid = 1;
 			parent = process_find_by_pid(1);
-			if (parent) {
+			if (parent)
+			{
+				const struct process_exit_services *ops =
+					process_exit_services();
+
 				if (parent_state_before == -1)
 					parent_state_before = parent->state;
-				send_signal(parent->task.pid, SIGCHLD);
+				if (ops && ops->notify_signal)
+					(void)ops->notify_signal(parent->task.pid,
+								 SIGCHLD);
 				if (parent->state == PROCESS_BLOCKED ||
 				    process_wait_blocked(parent))
-					process_wait_wake_blocked_parent(parent, dying);
-			} else {
+					process_wait_wake_blocked_parent(parent,
+									 dying);
+			}
+			else
+			{
 				dying->ppid = 0;
 			}
 		}

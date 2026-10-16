@@ -8,11 +8,15 @@
  */
 
 #include "pl011.h"
+#include <stddef.h>
+#include <stdint.h>
 #include <ir0/arch_mm.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
+#include <ir0/process_exit.h>
 #include <ir0/sched.h>
+#include <ir0/signals.h>
 #include <kernel/process.h>
 
 static int arm64_mm_descriptor_contract(void)
@@ -181,6 +185,83 @@ static int arm64_common_lifecycle_contract(void)
 	return 0;
 }
 
+static int arm64_exit_notify_signal(int pid, int sig)
+{
+	process_t *target = process_find_by_pid(pid);
+
+	if (!target)
+		return -ESRCH;
+	target->signal_pending |= SIGNAL_MASK(sig);
+	return 0;
+}
+
+static int arm64_common_exit_contract(void)
+{
+	static process_t parent;
+	static process_t child;
+	static process_t init;
+	static const struct process_exit_services ops = {
+		.notify_signal = arm64_exit_notify_signal,
+	};
+	process_t *saved_process_list;
+	process_t *saved_current;
+	uint8_t *bytes;
+	size_t i;
+	int runnable_before;
+
+	if (!process_exit || !process_pre_zombie_teardown)
+		return -1;
+
+	bytes = (uint8_t *)&parent;
+	for (i = 0; i < sizeof(parent); i++)
+		bytes[i] = 0;
+	bytes = (uint8_t *)&child;
+	for (i = 0; i < sizeof(child); i++)
+		bytes[i] = 0;
+	bytes = (uint8_t *)&init;
+	for (i = 0; i < sizeof(init); i++)
+		bytes[i] = 0;
+
+	process_exit_bind_services(&ops);
+	init.task.pid = 1;
+	init.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+	init.state = PROCESS_RUNNING;
+	parent.task.pid = 10;
+	parent.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+	parent.state = PROCESS_BLOCKED;
+	child.task.pid = 11;
+	child.ppid = 10;
+	child.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+	child.state = PROCESS_RUNNING;
+	init.next = &parent;
+	parent.next = &child;
+	child.next = NULL;
+	saved_process_list = process_list;
+	saved_current = current_process;
+	process_list = &init;
+	current_process = &child;
+	process_wait_state_arm(&parent, child.task.pid, 0, NULL);
+	runnable_before = sched_count_runnable();
+	process_pre_zombie_teardown(&child);
+	process_lifecycle_publish_exit(&child, 3);
+	process_notify_parent_of_exit(&child);
+	sched_remove_process(&child);
+	if (!process_is_zombie(&child) ||
+	    process_child_wait_status_word(&child) != (3 << 8) ||
+	    parent.state != PROCESS_READY ||
+	    (parent.signal_pending & SIGNAL_MASK(SIGCHLD)) == 0 ||
+	    sched_count_runnable() != runnable_before + 1)
+	{
+		current_process = saved_current;
+		process_list = saved_process_list;
+		return -1;
+	}
+	sched_remove_process(&parent);
+	current_process = saved_current;
+	process_list = saved_process_list;
+	return 0;
+}
+
 void arm64_all_objs_mark(void)
 {
 	ir0_boot_smoke("ARM64_ALL_OBJS_LINK_OK");
@@ -198,6 +279,10 @@ void arm64_all_objs_mark(void)
 		ir0_boot_smoke("ARM64_COMMON_LIFECYCLE_FAIL");
 		ir0_boot_smoke("ARM64_COMMON_WAIT_FAIL");
 	}
+	if (arm64_common_exit_contract() == 0)
+		ir0_boot_smoke("ARM64_COMMON_EXIT_OK");
+	else
+		ir0_boot_smoke("ARM64_COMMON_EXIT_FAIL");
 	{
 		int inventory = arm64_boot_memory_contract();
 

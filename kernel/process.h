@@ -592,6 +592,9 @@ void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp
 int fork_flow_note_debug_exception(uint64_t *stack);
 void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
+void process_pre_zombie_teardown(process_t *dying);
+void process_notify_parent_of_exit(process_t *dying);
+void process_resources_release_on_exit(process_t *dying);
 int process_wait(pid_t pid, int *status, int options);
 
 /*
