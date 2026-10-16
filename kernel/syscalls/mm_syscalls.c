@@ -1142,7 +1142,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   mmap_audit_log_return("ok", ret, virt_addr_out, aligned_len, vma_inserted,
                         process_pgd(current_process));
   if (DEBUG_MMAP_AUDIT)
-    klog_debug("MMAP", "CLASSIFY BUSYBOX_NEXT_SYSCALL_REACHED stage=mmap-return-ok");
+    klog_debug("MMAP", "CLASSIFY MMAP_RETURN_OK stage=mmap-return-ok");
   return ret;
 }
 
