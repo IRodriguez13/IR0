@@ -4,7 +4,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: elf_load_early.c
- * Description: Load embedded musl hello ELF64 into DRAM and drop to EL0 entry.
+ * Description: Generic ELF64 map + EL0 enter; first guest is an embedded ET_EXEC
  */
 
 #include "elf_load_early.h"
@@ -20,48 +20,54 @@
 
 #define PAGE_SIZE 4096UL
 
-#ifndef ARM64_MUSL_STACK_TOP
-#define ARM64_MUSL_STACK_TOP 0x43180000UL
+#ifndef ARM64_GUEST0_STACK_TOP
+#define ARM64_GUEST0_STACK_TOP 0x43180000UL
 #endif
-#ifndef ARM64_MUSL_MMAP_BASE
-#define ARM64_MUSL_MMAP_BASE 0x431a0000UL
+#ifndef ARM64_GUEST0_MMAP_BASE
+#define ARM64_GUEST0_MMAP_BASE 0x431a0000UL
 #endif
-#ifndef ARM64_MUSL_MMAP_END
-#define ARM64_MUSL_MMAP_END 0x43200000UL
+#ifndef ARM64_GUEST0_MMAP_END
+#define ARM64_GUEST0_MMAP_END 0x43200000UL
 #endif
-#define MUSL_STACK_PAGES 2U
+#define GUEST0_STACK_PAGES 2U
 #define SPSR_DAIF_MASKED 0x3c0UL
 #define SPSR_MODE_EL0T 0x0UL
 
 extern const uint8_t hello_aarch64_blob[];
 extern const uint8_t hello_aarch64_blob_end[];
 
-static int g_musl_wrote;
-static int g_musl_mode;
+static int g_guest_active;
+static int g_guest_wrote;
+static arm64_early_guest_exit_fn g_guest_on_exit;
 
-int arm64_musl_hello_wrote(void)
+void arm64_early_guest_begin(arm64_early_guest_exit_fn on_exit)
 {
-	return g_musl_wrote;
+	g_guest_wrote = 0;
+	g_guest_on_exit = on_exit;
+	g_guest_active = 1;
 }
 
-int arm64_musl_mode(void)
+int arm64_early_guest_active(void)
 {
-	return g_musl_mode;
+	return g_guest_active;
 }
 
-void arm64_musl_note_write(const char *buf, uint64_t len)
+void arm64_early_guest_note_write(const char *buf, uint64_t len)
 {
-	static const char expect[] = "IR0_MUSL_AARCH64_HELLO_OK";
-	uint64_t i;
+	if (g_guest_active && buf && len > 0)
+		g_guest_wrote = 1;
+}
 
-	if (!buf || len < sizeof(expect) - 1)
-		return;
-	for (i = 0; i < sizeof(expect) - 1; i++)
-	{
-		if (buf[i] != expect[i])
-			return;
-	}
-	g_musl_wrote = 1;
+void arm64_early_guest_leave(void)
+{
+	arm64_early_guest_exit_fn on_exit = g_guest_on_exit;
+	int wrote = g_guest_wrote;
+
+	g_guest_active = 0;
+	g_guest_on_exit = 0;
+	g_guest_wrote = 0;
+	if (on_exit)
+		on_exit(wrote);
 }
 
 static int arm64_early_copy_from_user(void *destination, uint64_t source,
@@ -148,14 +154,12 @@ int arm64_early_elf_enter(uint64_t entry, uint64_t stack_top, uint64_t stack_siz
 	__builtin_unreachable();
 }
 
-void arm64_after_musl(void)
+static void after_guest0(int wrote)
 {
-	g_musl_mode = 0;
-	if (g_musl_wrote)
-		ir0_boot_smoke("ARM64_MUSL_HELLO_OK");
+	if (wrote)
+		ir0_boot_smoke("ARM64_GUEST_OK");
 	else
-		ir0_boot_smoke("ARM64_MUSL_HELLO_FAIL");
-	/* Common init handoff contract, backed by the early ARM64 provider. */
+		ir0_boot_smoke("ARM64_GUEST_FAIL");
 	if (arm64_init_handoff_early() != 0)
 	{
 		extern void arm64_enter_el0(void);
@@ -164,7 +168,7 @@ void arm64_after_musl(void)
 	}
 }
 
-int arm64_musl_hello_el0(void)
+int arm64_guest0_el0(void)
 {
 	const uint8_t *blob = hello_aarch64_blob;
 	uint64_t blob_len = (uint64_t)(hello_aarch64_blob_end - hello_aarch64_blob);
@@ -173,16 +177,13 @@ int arm64_musl_hello_el0(void)
 	char *argv[] = { "hello", 0 };
 	unsigned i;
 
-	g_musl_wrote = 0;
-	g_musl_mode = 0;
-
-	for (i = 0; i < MUSL_STACK_PAGES; i++)
+	for (i = 0; i < GUEST0_STACK_PAGES; i++)
 	{
-		uint64_t page = ARM64_MUSL_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
+		uint64_t page = ARM64_GUEST0_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
 
 		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
 		{
-			ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
+			ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
 			return -1;
 		}
 		arm64_elf_zero_early(page, PAGE_SIZE);
@@ -190,7 +191,7 @@ int arm64_musl_hello_el0(void)
 
 	if (arm64_elf_image_load_early(blob, blob_len, &image) != 0)
 	{
-		ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
+		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
 		return -1;
 	}
 
@@ -211,27 +212,26 @@ int arm64_musl_hello_el0(void)
 
 	if (image.initial_brk == 0)
 	{
-		ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
+		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
 		return -1;
 	}
 	{
 		struct early_mm_layout mm;
 
 		mm.heap_base = image.initial_brk;
-		mm.map_base = ARM64_MUSL_MMAP_BASE;
-		mm.map_limit = ARM64_MUSL_MMAP_END;
+		mm.map_base = ARM64_GUEST0_MMAP_BASE;
+		mm.map_limit = ARM64_GUEST0_MMAP_END;
 		early_mm_activate(&mm);
 	}
 
-	ir0_boot_smoke("ARM64_MUSL_LOAD_OK");
-	g_musl_mode = 1;
-	ir0_boot_smoke("ARM64_MUSL_EL0_DROP");
-	if (arm64_early_elf_enter(image.entry, ARM64_MUSL_STACK_TOP,
-				  (uint64_t)MUSL_STACK_PAGES * PAGE_SIZE,
+	ir0_boot_smoke("ARM64_GUEST_LOAD_OK");
+	arm64_early_guest_begin(after_guest0);
+	ir0_boot_smoke("ARM64_GUEST_DROP");
+	if (arm64_early_elf_enter(image.entry, ARM64_GUEST0_STACK_TOP,
+				  (uint64_t)GUEST0_STACK_PAGES * PAGE_SIZE,
 				  &aux, argv) != 0)
 	{
-		ir0_boot_smoke("ARM64_MUSL_LOAD_FAIL");
-		g_musl_mode = 0;
+		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
 		return -1;
 	}
 	return 0;

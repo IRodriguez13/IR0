@@ -98,17 +98,15 @@ static void arm64_early_time_note(enum early_syscall_event event)
 
 static void arm64_early_console_write_observed(const char *bytes, uint64_t size)
 {
-	if (arm64_musl_mode())
-		arm64_musl_note_write(bytes, size);
-	if (arm64_busybox_mode())
-		arm64_busybox_note_write(bytes, size);
+	if (arm64_early_guest_active())
+		arm64_early_guest_note_write(bytes, size);
 }
 
 static void arm64_early_process_exit_observed(int overall_smoke_ok)
 {
-	if (arm64_busybox_mode())
-		ir0_boot_smoke("ARM64_BUSYBOX_EXIT_OK");
-	else if (!arm64_musl_mode())
+	if (arm64_early_guest_active())
+		ir0_boot_smoke("ARM64_GUEST_EXIT_OK");
+	else
 		ir0_boot_smoke(overall_smoke_ok ? "ARM64_SYSCALL_OK" :
 						 "ARM64_SYSCALL_FAIL");
 }
@@ -202,9 +200,9 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 	syscall_id = syscall_decode_number(nr);
 	if (syscall_id == IR0_SYSCALL_UNKNOWN)
 	{
-		if (arm64_busybox_mode())
+		if (arm64_early_guest_active())
 		{
-			pl011_puts("ARM64_BB_ENOSYS_");
+			pl011_puts("ARM64_EL0_ENOSYS_");
 			pl011_put_hex64(nr);
 			pl011_puts("\n");
 		}

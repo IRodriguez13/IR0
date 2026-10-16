@@ -4,7 +4,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: hello_embed.S
- * Description: Embed build/hello_aarch64 (musl static, non-PIE) as a blob.
+ * Description: Embed build/hello_aarch64 (static ET_EXEC) as a blob.
  */
 
 	.section .rodata

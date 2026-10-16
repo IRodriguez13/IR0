@@ -106,10 +106,10 @@ ARM64_EARLY_USERSPACE_OBJS = \
 	kernel/lib/early_elf_stack.o \
 	arch/arm64/sources/elf_load_early.o \
 	arch/arm64/sources/hello_embed.o \
-	arch/arm64/sources/busybox_load_early.o \
+	arch/arm64/sources/embedded_elf_early.o \
 	arch/arm64/sources/init_handoff_early.o \
 	arch/arm64/sources/rootfs_early.o \
-	arch/arm64/sources/busybox_embed.o
+	arch/arm64/sources/embedded_elf_embed.o
 
 # The round-robin scheduler is compiled with the freestanding ARM flags until
 # the full scheduler/provider graph is available on this architecture.

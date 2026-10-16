@@ -210,10 +210,8 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		uint64_t elr;
 		uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL1H;
 
-		if (arm64_musl_mode())
-			elr = (uint64_t)(uintptr_t)arm64_after_musl;
-		else if (arm64_busybox_mode())
-			elr = (uint64_t)(uintptr_t)arm64_after_busybox;
+		if (arm64_early_guest_active())
+			elr = (uint64_t)(uintptr_t)arm64_early_guest_leave;
 		else
 			elr = (uint64_t)(uintptr_t)arm64_after_el0;
 

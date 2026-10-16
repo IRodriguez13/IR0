@@ -52,7 +52,7 @@ static uint64_t read_u64(uint64_t va)
 
 void test_early_elf_stack_abi(void)
 {
-	char *argv[] = { "echo", "ARM64_BUSYBOX_EL0_OK", 0 };
+	char *argv[] = { "echo", "ARM64_EL0_OK", 0 };
 	struct ir0_early_elf_stack_params params;
 	uint64_t sp;
 	uint64_t argv0;
@@ -88,7 +88,7 @@ void test_early_elf_stack_abi(void)
 	ASSERT_EQ(read_u64(sp + 24), 0);
 	ASSERT_EQ(read_u64(sp + 32), 0);
 	ASSERT_EQ(strcmp((const char *)(g_stack + argv0), "echo"), 0);
-	ASSERT_EQ(strcmp((const char *)(g_stack + argv1), "ARM64_BUSYBOX_EL0_OK"),
+	ASSERT_EQ(strcmp((const char *)(g_stack + argv1), "ARM64_EL0_OK"),
 		  0);
 
 	aux = sp + 40;

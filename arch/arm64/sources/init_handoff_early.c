@@ -26,7 +26,7 @@ static long load_init(void *context, const char *path, char *const argv[])
 	(void)context;
 	if (ir0_early_rootfs_path_node(path) != IR0_EARLY_ROOTFS_INIT)
 		return -1;
-	if (arm64_busybox_prepare() != 0)
+	if (arm64_embedded_elf_prepare() != 0)
 		return -1;
 	g_init_argv = argv;
 	return 1;
@@ -48,7 +48,7 @@ static void attach_console(void *context)
 static void schedule_init(void *context)
 {
 	(void)context;
-	arm64_busybox_enter(g_init_argv);
+	arm64_embedded_elf_enter(g_init_argv);
 }
 
 int arm64_init_handoff_early(void)
@@ -58,7 +58,7 @@ int arm64_init_handoff_early(void)
 	 * embedded image's applet until a real PID1 can clone/exec.
 	 * The loader applies this vector; it does not invent program names.
 	 */
-	char *argv[] = { "echo", "ARM64_BUSYBOX_EL0_OK", 0 };
+	char *argv[] = { "echo", "ARM64_EL0_OK", 0 };
 	static const struct ir0_init_handoff_ops ops = {
 		.prepare_rootfs = prepare_rootfs,
 		.prepare_init_task = prepare_init_task,

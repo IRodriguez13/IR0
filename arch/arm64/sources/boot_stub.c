@@ -304,8 +304,8 @@ void boot_main(void)
 		}
 	}
 
-	/* Musl hello EL0 (noreturn on success via eret → after_musl → enter_el0). */
-	if (arm64_musl_hello_el0() != 0)
+	/* First embedded ET_EXEC, then init handoff (noreturn on success). */
+	if (arm64_guest0_el0() != 0)
 		arm64_enter_el0();
 
 idle:

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: rootfs_early.c
- * Description: ARM64 adapter — bind BusyBox blob + MMU usercopy to early_rootfs
+ * Description: ARM64 adapter — bind embedded ET_EXEC blob + MMU usercopy
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -20,8 +20,8 @@
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
 
-extern const uint8_t busybox_aarch64_blob[];
-extern const uint8_t busybox_aarch64_blob_end[];
+extern const uint8_t embedded_elf_blob[];
+extern const uint8_t embedded_elf_blob_end[];
 
 static int arm64_rootfs_copy_from_user(void *destination, uint64_t source,
 				       uint64_t size)
@@ -64,11 +64,11 @@ static const struct early_user_services g_arm64_rootfs_user = {
 
 void arm64_rootfs_early_init(void)
 {
-	uint64_t len = (uint64_t)(busybox_aarch64_blob_end - busybox_aarch64_blob);
+	uint64_t len = (uint64_t)(embedded_elf_blob_end - embedded_elf_blob);
 
 	if (early_rootfs_ready())
 		return;
-	early_rootfs_bind(busybox_aarch64_blob, len, &g_arm64_rootfs_user);
+	early_rootfs_bind(embedded_elf_blob, len, &g_arm64_rootfs_user);
 	if (early_rootfs_ready())
 		ir0_boot_smoke("ARM64_ROOTFS_OK");
 }

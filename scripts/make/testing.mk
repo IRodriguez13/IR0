@@ -260,6 +260,7 @@ busybox-aarch64-min: setup-musl-aarch64
 	@file -b $(BUSYBOX_AARCH64) | grep -qi aarch64
 	@! file -b $(BUSYBOX_AARCH64) | grep -qi pie
 	@LC_ALL=C readelf -h $(BUSYBOX_AARCH64) | grep -q 'Entry point address:.*0x44'
+	@ln -sfn busybox_aarch64 $(KERNEL_ROOT)/build/embedded_elf_aarch64
 	@echo "✓ busybox-aarch64-min → $(BUSYBOX_AARCH64)"
 
 .PHONY: arm64-rpi3-userspace-layout arm64-rpi3-userspace-layout-build
@@ -2263,8 +2264,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/process_early.c arch/arm64/sources/process_early.h \
 		arch/arm64/sources/elf_load_early.c arch/arm64/sources/elf_load_early.h \
 		arch/arm64/sources/hello_embed.S \
-		arch/arm64/sources/busybox_embed.S \
-		arch/arm64/sources/busybox_load_early.c \
+		arch/arm64/sources/embedded_elf_embed.S \
+		arch/arm64/sources/embedded_elf_early.c \
 		arch/arm64/sources/rootfs_early.c arch/arm64/sources/rootfs_early.h \
 		arch/arm64/sources/rr_early.c arch/arm64/sources/rr_early.h \
 		ktm/mocks/arm64/allocator_stubs.c \
@@ -2461,9 +2462,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/elf_image_early.c -o arch/arm64/sources/elf_image_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/elf_load_early.c -o arch/arm64/sources/elf_load_early.o
-	@echo "  CC      arch/arm64/sources/busybox_load_early.c"
+	@echo "  CC      arch/arm64/sources/embedded_elf_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		arch/arm64/sources/busybox_load_early.c -o arch/arm64/sources/busybox_load_early.o
+		arch/arm64/sources/embedded_elf_early.c -o arch/arm64/sources/embedded_elf_early.o
 	@echo "  CC      common init handoff + ARM64 provider"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		kernel/init_handoff.c -o build/arm64-boot/init_handoff.o
@@ -2491,9 +2492,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  AS      arch/arm64/sources/hello_embed.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/sources/hello_embed.S -o arch/arm64/sources/hello_embed.o
-	@echo "  AS      arch/arm64/sources/busybox_embed.S"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
-		arch/arm64/sources/busybox_embed.S -o arch/arm64/sources/busybox_embed.o
+	@echo "  AS      arch/arm64/sources/embedded_elf_embed.S"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
+		-DARM64_EMBEDDED_ELF_PATH='"build/busybox_aarch64"' -c \
+		arch/arm64/sources/embedded_elf_embed.S -o arch/arm64/sources/embedded_elf_embed.o
 	@echo "  AS      arch/arm64/asm/entry/vectors.S"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -c \
 		arch/arm64/asm/entry/vectors.S -o arch/arm64/sources/vectors.o
@@ -2544,9 +2546,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
-		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/embedded_elf_early.o arch/arm64/sources/rootfs_early.o \
 		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
-		arch/arm64/sources/busybox_embed.o \
+		arch/arm64/sources/embedded_elf_embed.o \
 		drivers/virtio/virtio_mmio.o \
 		build/arm64-boot/blockdev.o \
 		arch/arm64/sources/virtio_blk_early.o \
@@ -2565,21 +2567,21 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		arch/arm64/sources/boot_stub.c -o build/arm64-rpi3-early/boot_stub.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) -DARM64_EL0_USER_PAGE_PA=0x02000000 -c \
 		arch/arm64/asm/entry/vectors.S -o build/arm64-rpi3-early/vectors.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_MUSL_STACK_TOP=0x03180000UL \
-		-DARM64_MUSL_MMAP_BASE=0x031a0000UL -DARM64_MUSL_MMAP_END=0x03200000UL -c \
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_GUEST0_STACK_TOP=0x03180000UL \
+		-DARM64_GUEST0_MMAP_BASE=0x031a0000UL -DARM64_GUEST0_MMAP_END=0x03200000UL -c \
 		arch/arm64/sources/elf_load_early.c -o build/arm64-rpi3-early/elf_load_early.o
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_BB_STACK_TOP=0x041a0000UL \
-		-DARM64_BB_MMAP_BASE=0x04200000UL -DARM64_BB_MMAP_END=0x04800000UL \
-		-DARM64_BUSYBOX_SKIP_INIT_HARNESS=1 -c \
-		arch/arm64/sources/busybox_load_early.c -o build/arm64-rpi3-early/busybox_load_early.o
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARM64_GUEST1_STACK_TOP=0x041a0000UL \
+		-DARM64_GUEST1_MMAP_BASE=0x04200000UL -DARM64_GUEST1_MMAP_END=0x04800000UL \
+		-DARM64_SKIP_INIT_HARNESS=1 -c \
+		arch/arm64/sources/embedded_elf_early.c -o build/arm64-rpi3-early/embedded_elf_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c arch/arm64/sources/syscall_early.c \
 		-o build/arm64-rpi3-early/syscall_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
 		-DARM64_HELLO_BLOB_PATH='"build/hello_aarch64_rpi3"' -c \
 		arch/arm64/sources/hello_embed.S -o build/arm64-rpi3-early/hello_embed.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_ASFLAGS) \
-		-DARM64_BUSYBOX_BLOB_PATH='"build/busybox_aarch64_rpi3"' -c \
-		arch/arm64/sources/busybox_embed.S -o build/arm64-rpi3-early/busybox_embed.o
+		-DARM64_EMBEDDED_ELF_PATH='"build/busybox_aarch64_rpi3"' -c \
+		arch/arm64/sources/embedded_elf_embed.S -o build/arm64-rpi3-early/embedded_elf_embed.o
 	@echo "  LD      $@ (load @ 0x80000)"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ \
 		arch/arm64/sources/boot_entry.o build/arm64-rpi3-early/boot_stub.o \
@@ -2616,9 +2618,9 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		build/arm64-boot/elf64_image.o \
 		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
 		build/arm64-rpi3-early/hello_embed.o \
-		build/arm64-rpi3-early/busybox_load_early.o \
+		build/arm64-rpi3-early/embedded_elf_early.o \
 		arch/arm64/sources/rootfs_early.o arch/arm64/sources/init_handoff_early.o \
-		build/arm64-boot/init_handoff.o build/arm64-rpi3-early/busybox_embed.o \
+		build/arm64-boot/init_handoff.o build/arm64-rpi3-early/embedded_elf_embed.o \
 		drivers/virtio/virtio_mmio.o build/arm64-boot/blockdev.o \
 		arch/arm64/sources/virtio_blk_early.o \
 		arch/arm64/sources/virtio_net_early.o build/arm64-rpi3-early/vectors.o
@@ -2643,13 +2645,13 @@ smoke-arm64-rpi3-timer: kernel-arm64-rpi3-early.bin
 	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_EL0_PAGE_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_SYSCALL_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_MUSL_HELLO_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'IR0_MUSL_AARCH64_HELLO_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_PID1_LOAD_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@grep -q 'ARM64_INIT_HANDOFF_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_BUSYBOX_EL0_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_BUSYBOX_EXIT_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_GUEST_OK' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_GUEST_EXIT_OK' /tmp/arm64-rpi3-timer-smoke.log
 	@! grep -q 'ARM64_EL0_SYNC_OTHER' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_BUSYBOX_INIT_DEFERRED' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_INIT_DEFERRED' /tmp/arm64-rpi3-timer-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-timer-smoke.log
 	@echo "✓ smoke-arm64-rpi3-timer passed"
 
@@ -2748,9 +2750,9 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
-		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/embedded_elf_early.o arch/arm64/sources/rootfs_early.o \
 		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
-		arch/arm64/sources/busybox_embed.o \
+		arch/arm64/sources/embedded_elf_embed.o \
 		drivers/virtio/virtio_mmio.o \
 		build/arm64-boot/blockdev.o \
 		arch/arm64/sources/virtio_blk_early.o \
@@ -2949,9 +2951,9 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
 		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
 		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
-		arch/arm64/sources/busybox_load_early.o arch/arm64/sources/rootfs_early.o \
+		arch/arm64/sources/embedded_elf_early.o arch/arm64/sources/rootfs_early.o \
 		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
-		arch/arm64/sources/busybox_embed.o \
+		arch/arm64/sources/embedded_elf_embed.o \
 		drivers/virtio/virtio_mmio.o \
 		build/arm64-boot/blockdev.o \
 		arch/arm64/sources/virtio_blk_early.o \
@@ -3057,7 +3059,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log
@@ -3077,7 +3079,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-dtb-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-dtb-smoke.log
 	@echo "✓ smoke-arm64-all-dtb passed (aggregate core + firmware RAM inventory)"
@@ -3154,7 +3156,7 @@ smoke-arm64-rpi5-contract: kernel-arm64-Image
 	@grep -q 'console_uart_base=0x0000000009000000' /tmp/arm64-rpi5-contract.log
 	@grep -q 'ARM64_DTB_GIC_MMIO_OK' /tmp/arm64-rpi5-contract.log
 	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi5-contract.log
-	@grep -q 'ARM64_BUSYBOX_INIT_OK' /tmp/arm64-rpi5-contract.log
+	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-rpi5-contract.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-rpi5-contract.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi5-contract.log
 	@echo "✓ smoke-arm64-rpi5-contract passed (4 CPU DTB + translated console/GIC + EL0)"
@@ -3290,12 +3292,11 @@ smoke-arm64-syscall: kernel-arm64-syscall.bin
 	   grep -q "ARM64_PROCESS_T_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_RR_SCHED_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_RR_TICK_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_MUSL_LOAD_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_MUSL_HELLO_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_BUSYBOX_LOAD_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_BUSYBOX_EL0_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_GUEST_LOAD_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "IR0_MUSL_AARCH64_HELLO_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_GUEST_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_ROOTFS_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_BUSYBOX_INIT_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_INIT_EL0_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_CLOCK_GETTIME_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_GETTIMEOFDAY_OK" /tmp/arm64-syscall-smoke.log && \
