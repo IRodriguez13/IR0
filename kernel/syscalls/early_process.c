@@ -12,6 +12,7 @@
 #define ENOSYS 38
 
 static int g_getpid_ok;
+static int g_umask = 0022;
 
 static int64_t early_uname(struct early_syscall_context *context,
 			   uint64_t output)
@@ -106,6 +107,13 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return ir0_early_process_setsid();
 	case IR0_SYSCALL_SETPGID:
 		return ir0_early_process_setpgid(a0, a1);
+	case IR0_SYSCALL_UMASK:
+	{
+		int previous = g_umask;
+
+		g_umask = (int)(a0 & 0777U);
+		return previous;
+	}
 	default:
 		return -ENOSYS;
 	}
@@ -118,7 +126,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
 	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
-	IR0_SYSCALL_SETPGID, IR0_SYSCALL_EXIT, IR0_SYSCALL_EXIT_GROUP,
+	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_EXIT,
+	IR0_SYSCALL_EXIT_GROUP,
 };
 
 const struct syscall_context_provider early_process_provider = {
