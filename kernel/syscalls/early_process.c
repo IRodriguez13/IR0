@@ -2,6 +2,7 @@
 /** Architecture-neutral Linux process identity for staged userspace. */
 
 #include <stdint.h>
+#include <ir0/clone.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
@@ -12,10 +13,26 @@
 #define EAGAIN 11
 #define ECHILD 10
 #define EFAULT 14
+#define EINTR  4
 #define EINVAL 22
 #define ENOSYS 38
 #define EPERM  1
 #define ESRCH  3
+#define WNOHANG 1
+#define WEXITED 4
+#define P_ALL 0
+#define P_PID 1
+#define P_PGID 2
+#define CHILD_NONE 0
+#define CHILD_ENTER 1
+#define CHILD_RUNNING 2
+#define CHILD_ZOMBIE 3
+#define EARLY_CHILD_PID 2
+#define LINUX_REBOOT_MAGIC1 0xfee1deadUL
+#define LINUX_REBOOT_MAGIC2 672274793UL
+#define LINUX_REBOOT_MAGIC2A 85072278UL
+#define LINUX_REBOOT_MAGIC2B 369367448UL
+#define LINUX_REBOOT_MAGIC2C 537993216UL
 #define UID_NOCHANGE 0xffffffffUL
 #define PRIO_PROCESS 0
 
@@ -28,6 +45,15 @@ static uint32_t g_gid;
 static uint32_t g_egid;
 static uint32_t g_sgid;
 static int32_t g_nice;
+static int64_t g_current_pid = 1;
+static int g_child_state;
+static int g_enter_child;
+static int g_resume_parent;
+static uint64_t g_child_stack;
+static uint64_t g_child_tls;
+static uint64_t g_child_cleartid;
+static int g_child_wstatus;
+static uint64_t g_parent_frame[IR0_EARLY_EL0_FRAME_WORDS];
 static uint64_t g_sigmask;
 static uint64_t g_sa_handler[65];
 static uint64_t g_sa_flags[65];
@@ -307,11 +333,198 @@ static int64_t early_prlimit64(struct early_syscall_context *context,
 	return user->copy_to_user(old_limit, limit, sizeof(limit)) == 0 ? 0 : -EFAULT;
 }
 
+static int early_child_exists(void)
+{
+	return g_child_state != CHILD_NONE;
+}
+
+static int64_t early_write_pid32(struct early_syscall_context *context,
+				 uint64_t dest, uint32_t pid)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+
+	if (!dest)
+		return 0;
+	if (!user || !user->copy_to_user)
+		return -EFAULT;
+	return user->copy_to_user(dest, &pid, sizeof(pid)) == 0 ? 0 : -EFAULT;
+}
+
+static int64_t early_clone(struct early_syscall_context *context, uint64_t flags,
+			   uint64_t stack, uint64_t parent_tid, uint64_t tls,
+			   uint64_t child_tid)
+{
+	int64_t ret;
+
+	if (!ir0_early_clone_flags_ok(flags))
+		return (flags & CLONE_VM) ? -EINVAL : -ENOSYS;
+	if (early_child_exists())
+		return -EAGAIN;
+	g_child_stack = stack;
+	g_child_tls = (flags & CLONE_SETTLS) ? tls : 0;
+	g_child_cleartid = (flags & CLONE_CHILD_CLEARTID) ? child_tid : 0;
+	g_child_wstatus = 0;
+	g_enter_child = 1;
+	g_resume_parent = 0;
+	g_child_state = CHILD_ENTER;
+	if (flags & CLONE_PARENT_SETTID)
+	{
+		ret = early_write_pid32(context, parent_tid, EARLY_CHILD_PID);
+		if (ret < 0)
+			goto fail;
+	}
+	if (flags & CLONE_CHILD_SETTID)
+	{
+		ret = early_write_pid32(context, child_tid, EARLY_CHILD_PID);
+		if (ret < 0)
+			goto fail;
+	}
+	return EARLY_CHILD_PID;
+
+fail:
+	g_enter_child = 0;
+	g_child_state = CHILD_NONE;
+	g_child_cleartid = 0;
+	return ret;
+}
+
+static int64_t early_wait4(struct early_syscall_context *context, int64_t pid,
+			   uint64_t status, uint64_t options)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	int32_t wstatus;
+
+	if (!early_child_exists())
+		return -ECHILD;
+	if (pid > 0 && pid != EARLY_CHILD_PID)
+		return -ECHILD;
+	if (pid < -1)
+		return -ECHILD;
+	if (g_child_state != CHILD_ZOMBIE)
+		return (options & WNOHANG) ? 0 : -EAGAIN;
+	wstatus = g_child_wstatus;
+	if (status)
+	{
+		if (!user || !user->copy_to_user)
+			return -EFAULT;
+		if (user->copy_to_user(status, &wstatus, sizeof(wstatus)) != 0)
+			return -EFAULT;
+	}
+	g_child_state = CHILD_NONE;
+	g_child_cleartid = 0;
+	if (context && context->services && context->services->process &&
+	    context->services->process->clone_reaped)
+		context->services->process->clone_reaped();
+	return EARLY_CHILD_PID;
+}
+
+static int64_t early_waitid(struct early_syscall_context *context,
+			    uint64_t idtype, uint64_t id, uint64_t infop,
+			    uint64_t options)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint8_t info[128];
+	uint32_t *words;
+	int32_t exit_code;
+	int64_t pid;
+	unsigned int i;
+
+	if ((options & WEXITED) == 0)
+		return -EINVAL;
+	if (idtype == P_PID)
+		pid = (int64_t)id;
+	else if (idtype == P_ALL || idtype == P_PGID)
+		pid = -1;
+	else
+		return -EINVAL;
+	exit_code = (g_child_wstatus >> 8) & 0xff;
+	pid = early_wait4(context, pid, 0, options);
+	if (pid <= 0)
+		return pid;
+	if (!infop)
+		return 0;
+	if (!user || !user->copy_to_user)
+		return -EFAULT;
+	for (i = 0; i < sizeof(info); i++)
+		info[i] = 0;
+	words = (uint32_t *)(void *)info;
+	words[0] = SIGCHLD;
+	words[2] = 1; /* CLD_EXITED */
+	words[4] = EARLY_CHILD_PID;
+	words[6] = (uint32_t)exit_code;
+	return user->copy_to_user(infop, info, sizeof(info)) == 0 ? 0 : -EFAULT;
+}
+
+static int64_t early_getrandom(struct early_syscall_context *context,
+			       uint64_t buffer, uint64_t length)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	const struct early_time_services *time = context && context->services ?
+		context->services->time : 0;
+	uint8_t scratch[64];
+	uint64_t stamp;
+	uint64_t done = 0;
+
+	if (length == 0)
+		return 0;
+	if (!user || !user->copy_to_user || !time || !time->counter_read)
+		return -EAGAIN;
+	stamp = time->counter_read();
+	while (done < length)
+	{
+		uint64_t chunk = length - done;
+		uint64_t i;
+
+		if (chunk > sizeof(scratch))
+			chunk = sizeof(scratch);
+		for (i = 0; i < chunk; i++)
+		{
+			stamp = stamp * 6364136223846793005ULL + (done + i + 1);
+			scratch[i] = (uint8_t)(stamp >> 33);
+		}
+		if (user->copy_to_user(buffer + done, scratch, chunk) != 0)
+			return done ? (int64_t)done : -EFAULT;
+		done += chunk;
+	}
+	return (int64_t)done;
+}
+
+static int64_t early_reboot(struct early_syscall_context *context,
+			    uint64_t magic1, uint64_t magic2)
+{
+	if (magic1 != LINUX_REBOOT_MAGIC1)
+		return -EINVAL;
+	if (magic2 != LINUX_REBOOT_MAGIC2 && magic2 != LINUX_REBOOT_MAGIC2A &&
+	    magic2 != LINUX_REBOOT_MAGIC2B && magic2 != LINUX_REBOOT_MAGIC2C)
+		return -EINVAL;
+	if (context && context->leave_usermode)
+		*context->leave_usermode = 1;
+	return 0;
+}
+
 static int64_t early_exit(struct early_syscall_context *context,
 			  uint64_t status)
 {
-	int smoke_ok = context && context->smoke_ok && context->smoke_ok();
+	int smoke_ok;
 
+	if (g_current_pid == EARLY_CHILD_PID)
+	{
+		if (g_child_cleartid)
+			(void)early_write_pid32(context, g_child_cleartid, 0);
+		g_child_wstatus = (int)((status & 0xffUL) << 8);
+		g_child_state = CHILD_ZOMBIE;
+		g_resume_parent = 1;
+		g_current_pid = 1;
+		if (context && context->leave_usermode)
+			*context->leave_usermode = 1;
+		return (int64_t)status;
+	}
+
+	smoke_ok = context && context->smoke_ok && context->smoke_ok();
 	if (context && context->leave_usermode)
 		*context->leave_usermode = 1;
 	if (context && context->services && context->services->process &&
@@ -326,13 +539,14 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 {
 	struct early_syscall_context *context = opaque;
 
-	(void)a4; (void)a5;
+	(void)a5;
 	switch (id) {
 	case IR0_SYSCALL_GETPID:
 		g_getpid_ok = 1;
-		return 1;
+		return g_current_pid;
 	case IR0_SYSCALL_GETTID:
 	case IR0_SYSCALL_SET_TID_ADDRESS:
+		return g_current_pid;
 	case IR0_SYSCALL_GETPPID:
 		return 1;
 	case IR0_SYSCALL_GETUID:
@@ -352,35 +566,33 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_PRLIMIT64:
 		return early_prlimit64(context, a3);
 	case IR0_SYSCALL_GETRANDOM:
-		return a1 == 0 ? 0 : -EAGAIN;
+		return early_getrandom(context, a0, a1);
 	case IR0_SYSCALL_EXIT:
 	case IR0_SYSCALL_EXIT_GROUP:
 		return early_exit(context, a0);
 	case IR0_SYSCALL_WAIT4:
-		/*
-		 * Linux wait(2): ECHILD when the caller has no unwaited-for
-		 * children. Staged EL0 has not cloned yet, so this is the
-		 * honest empty-reap result — not ENOSYS.
-		 */
-		(void)a0;
-		(void)a1;
-		return -ECHILD;
+		return early_wait4(context, (int64_t)a0, a1, a2);
 	case IR0_SYSCALL_WAITID:
-		/*
-		 * Linux waitid(2): ECHILD when the caller has no children.
-		 * Same empty-reap as wait4 until clone exists.
-		 */
-		(void)a0;
-		(void)a1;
-		(void)a2;
-		return -ECHILD;
+		return early_waitid(context, a0, a1, a2, a3);
+	case IR0_SYSCALL_CLONE:
+		return early_clone(context, a0, a1, a2, a3, a4);
+	case IR0_SYSCALL_VFORK:
+		return early_clone(context,
+				   CLONE_VM | CLONE_VFORK | IR0_EARLY_SIGCHLD,
+				   0, 0, 0, 0);
 	case IR0_SYSCALL_GETPGID:
+		if (a0 == EARLY_CHILD_PID && early_child_exists())
+			return 1;
 		return ir0_early_process_getpgid(a0);
 	case IR0_SYSCALL_GETSID:
+		if (a0 == EARLY_CHILD_PID && early_child_exists())
+			return 1;
 		return ir0_early_process_getsid(a0);
 	case IR0_SYSCALL_SETSID:
 		return ir0_early_process_setsid();
 	case IR0_SYSCALL_SETPGID:
+		if (a0 == EARLY_CHILD_PID && early_child_exists())
+			return -EPERM;
 		return ir0_early_process_setpgid(a0, a1);
 	case IR0_SYSCALL_UMASK:
 	{
@@ -397,11 +609,21 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rt_sigprocmask(context, a0, a1, a2, a3);
 	case IR0_SYSCALL_RT_SIGACTION:
 		return early_rt_sigaction(context, a0, a1, a2, a3);
+	case IR0_SYSCALL_RT_SIGSUSPEND:
+		return -EINTR;
 	case IR0_SYSCALL_KILL:
+		if ((int64_t)a0 == EARLY_CHILD_PID && early_child_exists())
+			return a1 > 64 ? -EINVAL : 0;
+		if ((int64_t)a0 == -1 && early_child_exists())
+			return a1 > 64 ? -EINVAL : 0;
 		return ir0_early_process_kill((int64_t)a0, a1);
 	case IR0_SYSCALL_TKILL:
+		if ((int64_t)a0 == EARLY_CHILD_PID && early_child_exists())
+			return a1 > 64 ? -EINVAL : 0;
 		return ir0_early_process_tkill((int64_t)a0, a1);
 	case IR0_SYSCALL_TGKILL:
+		if ((int64_t)a1 == EARLY_CHILD_PID && early_child_exists())
+			return a2 > 64 ? -EINVAL : 0;
 		return ir0_early_process_tgkill((int64_t)a0, (int64_t)a1, a2);
 	case IR0_SYSCALL_GETRESUID:
 		return early_getresids(context, a0, a1, a2, 0);
@@ -494,13 +716,15 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_GETPRIORITY:
 		if (a0 != PRIO_PROCESS)
 			return -EINVAL;
-		if (a1 != 0 && a1 != 1)
+		if (a1 != 0 && a1 != 1 &&
+		    !(a1 == EARLY_CHILD_PID && early_child_exists()))
 			return -ESRCH;
 		return 20 + g_nice;
 	case IR0_SYSCALL_SETPRIORITY:
 		if (a0 != PRIO_PROCESS)
 			return -EINVAL;
-		if (a1 != 0 && a1 != 1)
+		if (a1 != 0 && a1 != 1 &&
+		    !(a1 == EARLY_CHILD_PID && early_child_exists()))
 			return -ESRCH;
 		if ((int64_t)a2 < -20)
 			g_nice = -20;
@@ -516,7 +740,8 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		const struct early_user_services *user =
 			context && context->services ? context->services->user : 0;
 
-		if (a0 != 0 && a0 != 1)
+		if (a0 != 0 && a0 != 1 &&
+		    !(a0 == EARLY_CHILD_PID && early_child_exists()))
 			return -ESRCH;
 		if (!user || !user->copy_to_user)
 			return -ENOSYS;
@@ -528,6 +753,8 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	}
 	case IR0_SYSCALL_SYSLOG:
 		return a0 <= 10 ? 0 : -EINVAL;
+	case IR0_SYSCALL_REBOOT:
+		return early_reboot(context, a0, a1);
 	case IR0_SYSCALL_EXECVEAT:
 	{
 		int64_t ret = early_rootfs_execve(a1, a2, a3);
@@ -574,12 +801,13 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_GETUID, IR0_SYSCALL_GETEUID, IR0_SYSCALL_GETGID,
 	IR0_SYSCALL_GETEGID, IR0_SYSCALL_GETPPID, IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
-	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
-	IR0_SYSCALL_WAITID,
+	IR0_SYSCALL_RSEQ, 	IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
+	IR0_SYSCALL_WAITID, IR0_SYSCALL_CLONE, IR0_SYSCALL_VFORK,
 	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
 	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_GETGROUPS,
 	IR0_SYSCALL_SETGROUPS, IR0_SYSCALL_RT_SIGPROCMASK,
-	IR0_SYSCALL_RT_SIGACTION, IR0_SYSCALL_KILL, IR0_SYSCALL_TKILL,
+	IR0_SYSCALL_RT_SIGACTION, IR0_SYSCALL_RT_SIGSUSPEND,
+	IR0_SYSCALL_REBOOT, IR0_SYSCALL_KILL, IR0_SYSCALL_TKILL,
 	IR0_SYSCALL_TGKILL, IR0_SYSCALL_GETRESUID, IR0_SYSCALL_GETRESGID,
 	IR0_SYSCALL_GETRLIMIT, IR0_SYSCALL_GETRUSAGE, IR0_SYSCALL_SYSINFO,
 	IR0_SYSCALL_PERSONALITY, IR0_SYSCALL_SCHED_YIELD,
@@ -596,6 +824,48 @@ const struct syscall_context_provider early_process_provider = {
 	.count = sizeof(g_process_syscalls) / sizeof(g_process_syscalls[0]),
 	.handler = early_process_syscall,
 };
+
+int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls)
+{
+	if (!g_enter_child)
+		return 0;
+	g_enter_child = 0;
+	g_current_pid = EARLY_CHILD_PID;
+	g_child_state = CHILD_RUNNING;
+	if (stack)
+		*stack = g_child_stack;
+	if (tls)
+		*tls = g_child_tls;
+	return 1;
+}
+
+void early_process_clone_save_parent(const uint64_t *frame)
+{
+	unsigned int i;
+
+	if (!frame)
+		return;
+	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
+		g_parent_frame[i] = frame[i];
+}
+
+int early_process_clone_resume_parent(uint64_t *frame)
+{
+	unsigned int i;
+
+	if (!g_resume_parent || !frame)
+		return 0;
+	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
+		frame[i] = g_parent_frame[i];
+	g_resume_parent = 0;
+	g_current_pid = 1;
+	return 1;
+}
+
+int64_t early_process_current_pid(void)
+{
+	return g_current_pid;
+}
 
 int early_process_smoke_ok(void)
 {

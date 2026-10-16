@@ -2350,6 +2350,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
 		kernel/lib/early_elf_stack.c includes/ir0/early_elf_stack.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
+		includes/ir0/clone.h \
 		kernel/syscalls/early_mm.c includes/ir0/early_mm.h \
 		arch/arm64/sources/elf_policy.c includes/ir0/arch_elf.h \
 		arch/arm64/sources/syscall_early.c arch/arm64/sources/syscall_early.h \
@@ -3231,8 +3232,9 @@ smoke-arm64-syscall: kernel-arm64-syscall.bin
 	   grep -q "ARM64_GETTIMEOFDAY_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_CLOCK_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_SYSCALL_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_WRITE_OK" /tmp/arm64-syscall-smoke.log; then \
-		echo "✓ smoke-arm64-syscall passed (incl. F7h/F7i/F7j + fork/exec + musl + process_t)"; \
+	   grep -q "ARM64_WRITE_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLONE_OK" /tmp/arm64-syscall-smoke.log; then \
+		echo "✓ smoke-arm64-syscall passed (incl. F7h/F7i/F7j + fork/exec + musl + clone + process_t)"; \
 	else \
 		echo "✗ smoke-arm64-syscall FAILED"; \
 		tail -60 /tmp/arm64-syscall-smoke.log; exit 1; \

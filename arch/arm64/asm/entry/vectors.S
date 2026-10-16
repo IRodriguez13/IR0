@@ -177,6 +177,29 @@ el0_entry:
 	mov	x8, #172
 	svc	#0
 
+	/*
+	 * clone(CLONE_VM|CLONE_VFORK|SIGCHLD, stack=NULL) — Linux aarch64
+	 * syscall 220. Child getpid/exit; parent wait4.
+	 */
+	mov	x0, #0x4111
+	mov	x1, xzr
+	mov	x8, #220
+	svc	#0
+	cbnz	x0, 2f
+	mov	x8, #172
+	svc	#0
+	mov	x0, #42
+	mov	x8, #93
+	svc	#0
+2:
+	mov	x0, #-1
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x70) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x70) >> 16) & 0xffff), lsl #16
+	mov	x2, xzr
+	mov	x3, xzr
+	mov	x8, #260
+	svc	#0
+
 	/* nanosleep({0, 1000000}, NULL) — timespec64 at user page +0x40 */
 	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x40) & 0xffff)
 	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x40) >> 16) & 0xffff), lsl #16

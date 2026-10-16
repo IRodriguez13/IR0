@@ -111,6 +111,11 @@ static void arm64_early_process_exit_observed(int overall_smoke_ok)
 						 "ARM64_SYSCALL_FAIL");
 }
 
+static void arm64_early_clone_reaped(void)
+{
+	ir0_boot_smoke("ARM64_CLONE_OK");
+}
+
 static void arm64_early_zero_user_page(uint64_t page)
 {
 	volatile uint8_t *bytes = (volatile uint8_t *)(uintptr_t)page;
@@ -150,6 +155,7 @@ static const struct early_vfs_services g_arm64_early_vfs = {
 static const struct early_process_services g_arm64_early_process = {
 	.uts_machine = "aarch64",
 	.process_exit_observed = arm64_early_process_exit_observed,
+	.clone_reaped = arm64_early_clone_reaped,
 };
 
 static const struct early_mm_services g_arm64_early_mm = {

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <ir0/clone.h>
 #include <ir0/syscall_table.h>
 
 /*
@@ -13,6 +14,36 @@
 #define IR0_EARLY_EPERM 1
 #define IR0_EARLY_ESRCH 3
 #define IR0_EARLY_EINVAL 22
+#define IR0_EARLY_ENOSYS 38
+#define IR0_EARLY_CSIGNAL 0xffUL
+#define IR0_EARLY_SIGCHLD 17
+#define IR0_EARLY_EL0_FRAME_WORDS 34
+
+/*
+ * Linux clone(2) on AArch64 is syscall 220:
+ *   clone(flags, stack, parent_tid, tls, child_tid)
+ * (man7.org/linux/man-pages/man2/clone.2.html; musl
+ * src/thread/aarch64/clone.s). CSIGNAL is the low 8 bits. Staged
+ * EL0 implements a real child only with CLONE_VM (shared address
+ * space). Private mm / COW fork stays ENOSYS.
+ */
+#define IR0_EARLY_CLONE_ALLOWED \
+	(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_VFORK | \
+	 CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID | \
+	 CLONE_CHILD_SETTID)
+
+static inline int ir0_early_clone_flags_ok(uint64_t flags)
+{
+	uint64_t extras = flags & ~IR0_EARLY_CSIGNAL;
+
+	if ((extras & CLONE_VM) == 0)
+		return 0;
+	if (extras & CLONE_THREAD)
+		return 0;
+	if (extras & ~IR0_EARLY_CLONE_ALLOWED)
+		return 0;
+	return 1;
+}
 
 static inline int64_t ir0_early_process_getpgid(uint64_t pid)
 {
@@ -75,3 +106,7 @@ static inline int64_t ir0_early_process_tgkill(int64_t tgid, int64_t tid,
 
 extern const struct syscall_context_provider early_process_provider;
 int early_process_smoke_ok(void);
+int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls);
+void early_process_clone_save_parent(const uint64_t *frame);
+int early_process_clone_resume_parent(uint64_t *frame);
+int64_t early_process_current_pid(void);

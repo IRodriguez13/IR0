@@ -49,6 +49,7 @@ struct early_process_services
 {
 	const char *uts_machine;
 	void (*process_exit_observed)(int overall_smoke_ok);
+	void (*clone_reaped)(void);
 };
 
 struct early_mm_services

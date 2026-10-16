@@ -37,6 +37,12 @@ void test_early_process_abi(void)
 	ASSERT_EQ(ir0_early_process_tkill(2, 14), -IR0_EARLY_ESRCH);
 	ASSERT_EQ(ir0_early_process_tgkill(1, 1, 2), 0);
 	ASSERT_EQ(ir0_early_process_tgkill(2, 1, 2), -IR0_EARLY_ESRCH);
+	ASSERT(ir0_early_clone_flags_ok(CLONE_VM | CLONE_VFORK |
+				       IR0_EARLY_SIGCHLD));
+	ASSERT(ir0_early_clone_flags_ok(CLONE_VM | IR0_EARLY_SIGCHLD));
+	ASSERT(!ir0_early_clone_flags_ok(IR0_EARLY_SIGCHLD));
+	ASSERT(!ir0_early_clone_flags_ok(CLONE_VM | CLONE_THREAD));
+	ASSERT(!ir0_early_clone_flags_ok(CLONE_VM | 0x00020000UL));
 
 	TEST_END();
 }

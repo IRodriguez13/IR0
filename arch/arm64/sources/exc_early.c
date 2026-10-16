@@ -25,6 +25,7 @@
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
+#include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 
 #define EINVAL 22
@@ -217,6 +218,58 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
 					  frame[3], frame[4], frame[5], &leave);
 		frame[0] = (uint64_t)ret;
+	}
+
+	{
+		uint64_t stack = 0;
+		uint64_t tls = 0;
+
+		if (early_process_clone_take_enter(&stack, &tls))
+		{
+			uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
+			unsigned int i;
+			uint64_t elr;
+			uint64_t spsr;
+			uint64_t sp0;
+
+			for (i = 0; i < 31; i++)
+				words[i] = frame[i];
+			__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
+			__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
+			__asm__ volatile("mrs %0, sp_el0" : "=r"(sp0));
+			words[31] = elr;
+			words[32] = spsr;
+			words[33] = sp0;
+			early_process_clone_save_parent(words);
+			frame[0] = 0;
+			if (stack)
+				__asm__ volatile("msr sp_el0, %0" :: "r"(stack)
+						 : "memory");
+			if (tls)
+				__asm__ volatile("msr tpidr_el0, %0" :: "r"(tls)
+						 : "memory");
+		}
+	}
+
+	if (leave && !early_rootfs_exec_pending())
+	{
+		uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
+
+		if (early_process_clone_resume_parent(words))
+		{
+			unsigned int i;
+
+			for (i = 0; i < 31; i++)
+				frame[i] = words[i];
+			__asm__ volatile("msr elr_el1, %0" :: "r"(words[31])
+					 : "memory");
+			__asm__ volatile("msr spsr_el1, %0" :: "r"(words[32])
+					 : "memory");
+			__asm__ volatile("msr sp_el0, %0" :: "r"(words[33])
+					 : "memory");
+			__asm__ volatile("isb" ::: "memory");
+			leave = 0;
+		}
 	}
 
 	if (leave)
