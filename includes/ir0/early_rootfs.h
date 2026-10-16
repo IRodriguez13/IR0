@@ -969,6 +969,8 @@ struct ir0_fd_install_ops;
 void early_rootfs_bind_fdtable(const struct ir0_fd_install_ops *ops);
 int early_rootfs_fdtable_used(void);
 int early_rootfs_vfs_file_used(void);
+void early_rootfs_bind_vfs_ops(void);
+int early_rootfs_vfs_ops_used(void);
 int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count);
 int64_t early_rootfs_lseek(int fd, int64_t offset, int whence);
 int64_t early_rootfs_fcntl(int fd, int cmd, uint64_t arg);

@@ -20,7 +20,7 @@ struct fd_resource_ops;
 /*
  * Linux fd_install() stores a struct file *, not a path string.
  * IR0's open-file description is this object: path, cursor, flags, ref.
- * Mount/backend dispatch stays in fs/vfs.c; this handle is generic-core.
+ * Path I/O goes through vfs_dispatch / vfs_ops; this handle is generic-core.
  * https://www.kernel.org/doc/html/latest/filesystems/porting.html
  */
 struct vfs_file

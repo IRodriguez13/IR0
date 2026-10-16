@@ -260,6 +260,10 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 		     syscall_id == IR0_SYSCALL_GETDENTS64) &&
 		    ret >= 0 && early_rootfs_vfs_file_used())
 			ir0_boot_smoke("ARM64_COMMON_VFS_READ_OK");
+		if ((syscall_id == IR0_SYSCALL_READ ||
+		     syscall_id == IR0_SYSCALL_PREAD64) &&
+		    ret >= 0 && early_rootfs_vfs_ops_used())
+			ir0_boot_smoke("ARM64_COMMON_VFS_OPS_READ_OK");
 		return ret;
 	}
 }

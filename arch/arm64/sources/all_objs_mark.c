@@ -22,6 +22,8 @@
 #include <ir0/process_exit.h>
 #include <ir0/cwd.h>
 #include <ir0/fd_install.h>
+#include <ir0/vfs_dispatch.h>
+#include <ir0/vfs_file.h>
 #include <ir0/syscall_identity.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
@@ -231,9 +233,27 @@ void arm64_common_prepare_fdtable(void)
 		return;
 	early_rootfs_bind_fdtable(ops);
 	early_process_bind_files(ops);
+	early_rootfs_bind_vfs_ops();
 	ir0_boot_smoke("ARM64_COMMON_FDTABLE_OK");
 	if (early_rootfs_vfs_file_used())
 		ir0_boot_smoke("ARM64_COMMON_VFS_FILE_OK");
+	if (vfs_dispatch_bound())
+		ir0_boot_smoke("ARM64_COMMON_VFS_OPS_OK");
+	{
+		struct vfs_file probe = {
+			.path = "/dev/zero",
+			.pos = 0,
+			.flags = 0,
+			.ref_count = 1,
+		};
+		uint8_t z[4];
+		int n;
+
+		n = vfs_dispatch_read(&probe, z, sizeof(z));
+		if (n == 4 && z[0] == 0 && z[1] == 0 && z[2] == 0 && z[3] == 0 &&
+		    probe.pos == (off_t)sizeof(z))
+			ir0_boot_smoke("ARM64_COMMON_VFS_OPS_READ_OK");
+	}
 }
 
 static int arm64_exit_notify_signal(int pid, int sig)

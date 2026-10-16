@@ -624,6 +624,7 @@ fs/heartfs.o: $(HEART_SRC_BLOB)
 
 FS_OBJS = \
     fs/vfs.o \
+    fs/vfs_dispatch.o \
     fs/path.o \
     fs/chmod.o \
     fs/permissions.o \

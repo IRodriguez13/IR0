@@ -20,6 +20,8 @@
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/vfs_file.h>
+#include <ir0/vfs_dispatch.h>
+#include <ir0/stat.h>
 #include <ir0/fcntl.h>
 #include <ir0/types.h>
 #include <ir0/statfs.h>
@@ -41,6 +43,7 @@
 #define EPIPE  32
 #define EIO    5
 #define ENOSYS 38
+#define ENODEV 19
 #define EPERM  1
 #define EEXIST 17
 #define EBUSY  16
@@ -135,6 +138,7 @@ static const struct ir0_cwd_ops *g_cwd_ops;
 static int g_cwd_used;
 static const struct ir0_fd_install_ops *g_fd_ops;
 static int g_vfs_file_used;
+static int g_vfs_ops_used;
 static int g_fd_used;
 
 static void early_publish_fd(int fd, enum ir0_early_rootfs_node node);
@@ -1653,6 +1657,178 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 	return fd;
 }
 
+static int early_vfs_ops_path_backed(enum ir0_early_rootfs_node node)
+{
+	return node == IR0_EARLY_ROOTFS_INIT ||
+	       node == IR0_EARLY_ROOTFS_ZERO ||
+	       node == IR0_EARLY_ROOTFS_NULL ||
+	       node == IR0_EARLY_ROOTFS_CONSOLE ||
+	       node == IR0_EARLY_ROOTFS_TTY ||
+	       node == IR0_EARLY_ROOTFS_FILE;
+}
+
+static int early_vfs_ops_stat(const char *path, stat_t *st)
+{
+	enum ir0_early_rootfs_node node;
+	struct ir0_early_stat64 raw;
+	int fsid;
+
+	if (!path || !st)
+		return -EFAULT;
+	node = ir0_early_rootfs_path_node(path);
+	if (node != IR0_EARLY_ROOTFS_NONE)
+	{
+		ir0_early_rootfs_fill_stat(node, g_blob_len, &raw);
+		st->st_dev = (dev_t)raw.st_dev;
+		st->st_ino = (ino_t)raw.st_ino;
+		st->st_mode = raw.st_mode;
+		st->st_nlink = raw.st_nlink;
+		st->st_uid = (uid_t)raw.st_uid;
+		st->st_gid = (gid_t)raw.st_gid;
+		st->st_rdev = (dev_t)raw.st_rdev;
+		st->st_size = raw.st_size;
+		st->st_blksize = raw.st_blksize;
+		st->st_blocks = raw.st_blocks;
+		st->st_atime = raw.st_atime_sec;
+		st->st_mtime = raw.st_mtime_sec;
+		st->st_ctime = raw.st_ctime_sec;
+		return 0;
+	}
+	fsid = fs_find(path);
+	if (fsid < 0)
+		return -ENOENT;
+	st->st_dev = 1;
+	st->st_ino = (ino_t)(16 + fsid);
+	st->st_mode = g_fs[fsid].mode;
+	st->st_nlink = 1;
+	st->st_uid = 0;
+	st->st_gid = 0;
+	st->st_rdev = 0;
+	st->st_size = (off_t)g_fs[fsid].size;
+	st->st_blksize = 4096;
+	st->st_blocks = (blkcnt_t)((g_fs[fsid].size + 511U) / 512U);
+	st->st_atime = 0;
+	st->st_mtime = 0;
+	st->st_ctime = 0;
+	return 0;
+}
+
+static int early_vfs_ops_read(const char *path, void *buf, size_t count,
+			      size_t *bytes_read, off_t offset)
+{
+	enum ir0_early_rootfs_node node;
+	uint8_t *dst = buf;
+	size_t n;
+	size_t i;
+	int fsid;
+
+	if (!bytes_read)
+		return -EFAULT;
+	*bytes_read = 0;
+	if (offset < 0)
+		return -EINVAL;
+	if (count == 0)
+		return 0;
+	if (!buf)
+		return -EFAULT;
+	node = ir0_early_rootfs_path_node(path);
+	if (node == IR0_EARLY_ROOTFS_ROOT ||
+	    node == IR0_EARLY_ROOTFS_DEV ||
+	    node == IR0_EARLY_ROOTFS_TMP)
+		return -EISDIR;
+	if (node == IR0_EARLY_ROOTFS_CONSOLE ||
+	    node == IR0_EARLY_ROOTFS_TTY ||
+	    node == IR0_EARLY_ROOTFS_NULL)
+		return 0;
+	if (node == IR0_EARLY_ROOTFS_ZERO)
+	{
+		n = count;
+		for (i = 0; i < n; i++)
+			dst[i] = 0;
+		*bytes_read = n;
+		return 0;
+	}
+	if (node == IR0_EARLY_ROOTFS_INIT)
+	{
+		if (!g_blob || (uint64_t)offset >= g_init_vis)
+			return 0;
+		n = (size_t)(g_init_vis - (uint64_t)offset);
+		if (n > count)
+			n = count;
+		if ((uint64_t)offset >= g_blob_len)
+			return 0;
+		if (n > (size_t)(g_blob_len - (uint64_t)offset))
+			n = (size_t)(g_blob_len - (uint64_t)offset);
+		for (i = 0; i < n; i++)
+			dst[i] = g_blob[(uint64_t)offset + i];
+		*bytes_read = n;
+		return 0;
+	}
+	fsid = fs_find(path);
+	if (fsid < 0)
+		return -ENOENT;
+	if ((g_fs[fsid].mode & IR0_EARLY_ROOTFS_S_IFMT) ==
+	    IR0_EARLY_ROOTFS_S_IFDIR)
+		return -EISDIR;
+	if ((uint64_t)offset >= g_fs[fsid].size)
+		return 0;
+	n = (size_t)(g_fs[fsid].size - (uint64_t)offset);
+	if (n > count)
+		n = count;
+	for (i = 0; i < n; i++)
+		dst[i] = g_fs[fsid].data ? g_fs[fsid].data[(uint64_t)offset + i] :
+					   0;
+	*bytes_read = n;
+	return 0;
+}
+
+static struct vfs_ops g_early_vfs_ops = {
+	.stat = early_vfs_ops_stat,
+	.read = early_vfs_ops_read,
+};
+
+static int64_t early_try_vfs_ops_read(int fd, enum ir0_early_rootfs_node node,
+				      uint64_t buffer, uint64_t count)
+{
+	struct vfs_file *f;
+	uint8_t tmp[256];
+	size_t n;
+	int ret;
+
+	if (!early_vfs_ops_path_backed(node))
+		return -ENODEV;
+	if (!vfs_dispatch_bound() || !g_fd_ops || !g_fd_ops->file)
+		return -ENODEV;
+	f = g_fd_ops->file(fd);
+	if (!f || !f->path[0])
+		return -ENODEV;
+	n = count > sizeof(tmp) ? sizeof(tmp) : (size_t)count;
+	ret = vfs_dispatch_read(f, tmp, n);
+	if (ret < 0)
+		return ret;
+	if (ret == 0)
+	{
+		g_vfs_ops_used = 1;
+		return 0;
+	}
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(buffer, tmp, (uint64_t)ret) != 0)
+		return -EFAULT;
+	g_vfs_ops_used = 1;
+	return (int64_t)ret;
+}
+
+void early_rootfs_bind_vfs_ops(void)
+{
+	g_vfs_ops_used = 0;
+	(void)vfs_dispatch_bind(&g_early_vfs_ops);
+}
+
+int early_rootfs_vfs_ops_used(void)
+{
+	return g_vfs_ops_used;
+}
+
 int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 {
 	enum ir0_early_rootfs_node node;
@@ -1670,6 +1846,12 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		return -EBADF;
 	if (count == 0)
 		return 0;
+	{
+		int64_t via = early_try_vfs_ops_read(fd, node, buffer, count);
+
+		if (via != -ENODEV)
+			return via;
+	}
 	if (node_is_dir(node))
 		return -EISDIR;
 	if (node == IR0_EARLY_ROOTFS_CONSOLE ||
@@ -2359,8 +2541,12 @@ static const char *early_node_path(enum ir0_early_rootfs_node node)
 {
 	if (node == IR0_EARLY_ROOTFS_ROOT)
 		return "/";
+	if (node == IR0_EARLY_ROOTFS_INIT)
+		return "/init";
 	if (node == IR0_EARLY_ROOTFS_DEV)
 		return "/dev";
+	if (node == IR0_EARLY_ROOTFS_VDA)
+		return "/dev/vda";
 	if (node == IR0_EARLY_ROOTFS_TMP)
 		return "/tmp";
 	if (node == IR0_EARLY_ROOTFS_CONSOLE)
