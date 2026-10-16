@@ -7,6 +7,10 @@
 This directory describes the current architecture and operational state of IR0.
 The goal is to document implemented behavior first, then known gaps.
 
+Subtree READMEs are concise entry points; this directory owns deeper design,
+operations, history, and bilingual manuals. See the continuous documentation
+rule in `.cursor/rules/ir0-continuous-subtree-docs.mdc`.
+
 **Bootstrap and QEMU usage:** see [SETUP.md](../SETUP.md) at the repository root.
 
 ## Language Policy
@@ -39,6 +43,7 @@ The goal is to document implemented behavior first, then known gaps.
 - `KTM_FASE_PARITY.md`: historical wave → KTM analogue map (see `HARNESS_MAP.md`).
 - `KTM_FASE_INVENTORY.md`: historical `smoke-fase*` class table (redirect).
 - `CHANGELOG.md`: iteration notes (Unreleased + 0.0.1).
+- `DOCS_POLICY.md`: ownership, size budgets, drift checks, and subtree rollout.
 - `ai_driven_dev/ktm.md`: short agent-facing KTM index (points to `KTM.md`).
 - `ai_driven_dev/rules/ir0-version-stamp.mdc`: lockstep `version.h` / Makefile with upstream tags.
 - `releases/`: ABI board, syscall/pseudo map, 0.0.1 scope and write-path plan.

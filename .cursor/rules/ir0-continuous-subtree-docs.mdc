@@ -1,0 +1,32 @@
+---
+description: Keep critical IR0 subtree documentation concise, local, and code-faithful
+alwaysApply: true
+---
+
+# Continuous Subtree Documentation
+
+Treat documentation as part of every architectural or behavioral change.
+
+- Critical roots are `arch/`, `kernel/`, `mm/`, `sched/`, `fs/`, `drivers/`,
+  `interrupt/`, `net/`, `security/`, `ktm/`, `includes/ir0/`, and `scripts/`.
+- When a change alters a contract, lifetime, facade, build path, invariant, or
+  debugging procedure, update the nearest useful README or canonical document.
+- Subtree READMEs are developer entry points, not books. Prefer 40–120 lines;
+  split material approaching 200 lines into focused canonical documents.
+- A subtree README should answer: purpose, boundaries, important entry points,
+  invariants, how it is selected/built, how to validate it, and known gaps.
+- Link to source symbols, tests, mandocs, or deeper documents. Do not duplicate
+  implementation walkthroughs, changelogs, backlog histories, or command dumps.
+- Describe implemented behavior only. Mark staged, mocked, unsupported, or
+  architecture-specific behavior explicitly.
+- Keep English primary documentation; Spanish mirrors belong under an `esp/`
+  directory. Do not mix languages in one technical document.
+- Before editing, verify claims against current code and build rules. Remove
+  stale claims instead of preserving archaeological prose.
+- Do not create placeholder READMEs. Add a local document only when it provides
+  a stable navigation or contract boundary.
+- Documentation-only edits do not replace runtime/build evidence for code
+  changes. Documentation drift found during development is valid scoped debt
+  and should be repaired or recorded in the backlog.
+
+For long bilingual subsystem manuals, follow `ir0-mandocs-initiative.mdc`.

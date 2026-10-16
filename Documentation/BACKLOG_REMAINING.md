@@ -500,3 +500,20 @@ Stub `ktm-userdev-*-run` remains lab-only.
 | ClassiCube soft_fb0 | **OK under runit** | `make smoke-desk-classicube` / `smoke-desk-play` → `CLASSICUBE_OK` / `DESK_PLAY_OK` |
 | TinyX / Xfbdev full server | Lab green with `force_tinyx`; default smoke = **mini only** | Rebuild `out/Xfbdev`; optional `/mnt/host/force_tinyx` |
 | `kill(2)` / default signal tear-down | **OK** | `smoke-kill-sigterm`; X harness uses `kill(SIGTERM)` + wait |
+
+## DOC — Continuous subtree documentation
+
+Goal: concise, code-faithful entry points for critical kernel subtrees. Follow
+`Documentation/DOCS_POLICY.md` and `.cursor/rules/ir0-continuous-subtree-docs.mdc`.
+
+| ID | Scope | Completion evidence |
+|----|-------|---------------------|
+| DOC-0 | Policy and permanent agent rule | **Closed** — policy, rule, rules index |
+| DOC-1 | Split `arch/README.md` (currently oversized) | Landing page below 200 lines; useful detail preserved in focused docs |
+| DOC-2 | Add concise maps for `kernel`, `mm`, `sched`, `fs` | Each documents boundaries, entry points, invariants and validation |
+| DOC-3 | Add concise maps for `drivers`, `interrupt`, `net`, `security` | No hardware policy leaks or aspirational support claims |
+| DOC-4 | Review `ktm`, `includes/ir0`, `scripts`, and test READMEs | Duplicates removed; canonical links and commands verified |
+| DOC-5 | Add a lightweight drift/size audit | Warn on subtree README >200 lines and broken local links; exceptions reviewed |
+
+Update documentation alongside subsystem work rather than landing one large,
+stale-prone rewrite. Never satisfy this backlog with empty template READMEs.
