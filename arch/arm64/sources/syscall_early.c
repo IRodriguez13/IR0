@@ -30,6 +30,7 @@
 #include <ir0/early_vfs.h>
 #include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
+#include <ir0/tlb.h>
 
 #define ENOSYS 38
 
@@ -51,7 +52,8 @@ static int arm64_early_copy_from_user(void *destination, uint64_t source,
 	const volatile uint8_t *src;
 	uint64_t index;
 
-	if (!arm64_mmu_user_buf_ok(source, size))
+	if (!arm64_mmu_user_buf_ok_in_root((uint64_t)mm_current_root(),
+					   source, size))
 		return -1;
 	src = (const volatile uint8_t *)(uintptr_t)source;
 	for (index = 0; index < size; index++)
@@ -66,7 +68,8 @@ static int arm64_early_copy_to_user(uint64_t destination, const void *source,
 	const uint8_t *src = source;
 	uint64_t index;
 
-	if (!arm64_mmu_user_buf_ok(destination, size))
+	if (!arm64_mmu_user_buf_ok_in_root((uint64_t)mm_current_root(),
+					   destination, size))
 		return -1;
 	dst = (volatile uint8_t *)(uintptr_t)destination;
 	for (index = 0; index < size; index++)
@@ -172,9 +175,9 @@ static const struct early_process_services g_arm64_early_process = {
 };
 
 static const struct early_mm_services g_arm64_early_mm = {
-	.map_user_page = arm64_mmu_map_user_page_flags,
+	.map_user_page = arm64_mmu_map_user_page_flags_current,
 	.zero_user_page = arm64_early_zero_user_page,
-	.protect_user_range = arm64_mmu_protect_user_range,
+	.protect_user_range = arm64_mmu_protect_user_range_current,
 };
 
 static struct early_syscall_services g_arm64_early_services = {

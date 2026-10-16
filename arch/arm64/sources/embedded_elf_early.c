@@ -18,8 +18,14 @@
 #include <ir0/early_elf_stack.h>
 #include <ir0/early_mm.h>
 #include <ir0/early_rootfs.h>
+#include <ir0/tlb.h>
 
 #define PAGE_SIZE 4096UL
+
+/* Final synthetic EL0 probe data; remove with boot_stub product handoff. */
+#ifndef ARM64_EL0_USER_PAGE_PA
+#define ARM64_EL0_USER_PAGE_PA 0x42000000UL
+#endif
 
 #ifndef ARM64_GUEST1_STACK_TOP
 #define ARM64_GUEST1_STACK_TOP 0x441a0000UL
@@ -35,6 +41,7 @@
 static int g_stage;
 static uint64_t g_entry;
 static uint64_t g_heap;
+static uint64_t g_root;
 static struct ir0_early_elf_auxv g_aux;
 
 static void after_guest1(int wrote)
@@ -71,8 +78,9 @@ void arm64_embedded_elf_enter(char *const argv[])
 	int init_stage = g_stage != 0;
 	struct early_mm_layout mm;
 
-	if (g_entry == 0 || g_heap == 0)
+	if (g_entry == 0 || g_heap == 0 || g_root == 0)
 		return;
+	mm_activate((uintptr_t)g_root);
 	mm.heap_base = g_heap;
 	mm.map_base = ARM64_GUEST1_MMAP_BASE;
 	mm.map_limit = ARM64_GUEST1_MMAP_END;
@@ -108,11 +116,14 @@ int arm64_embedded_elf_prepare(void)
 	const uint8_t *blob;
 	uint64_t blob_len = 0;
 	struct ir0_elf64_image image;
+	uint64_t previous_root;
+	uint64_t private_root;
 	unsigned i;
 
 	g_stage = 0;
 	g_entry = 0;
 	g_heap = 0;
+	g_root = 0;
 	arm64_rootfs_early_init();
 	blob = early_rootfs_init_blob(&blob_len);
 	if (!blob || blob_len == 0)
@@ -120,27 +131,39 @@ int arm64_embedded_elf_prepare(void)
 		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
 		return -1;
 	}
+	previous_root = (uint64_t)mm_current_root();
+	private_root = arm64_mmu_root_alloc_clean();
+	if (!private_root)
+	{
+		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
+		return -1;
+	}
+	mm_activate((uintptr_t)private_root);
+	if (arm64_mmu_map_user_page_flags_in_root(private_root,
+						 ARM64_EL0_USER_PAGE_PA, 0) != 0)
+		goto fail_private_root;
 
 	for (i = 0; i < GUEST1_STACK_PAGES; i++)
 	{
 		uint64_t page = ARM64_GUEST1_STACK_TOP - (uint64_t)(i + 1) * PAGE_SIZE;
 
-		if (arm64_mmu_map_user_page_flags(page, 0) != 0)
+		if (arm64_mmu_map_user_page_flags_in_root(private_root, page, 0) != 0)
 		{
-			ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
-			return -1;
+			goto fail_private_root;
 		}
 		arm64_elf_zero_early(page, PAGE_SIZE);
 	}
 
-	if (arm64_elf_image_load_early(blob, blob_len, &image) != 0 ||
+	if (arm64_elf_image_load_early_in_root(blob, blob_len, private_root,
+					       &image) != 0 ||
 	    image.initial_brk == 0)
 	{
-		ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
-		return -1;
+		goto fail_private_root;
 	}
 
 	ir0_boot_smoke("ARM64_GUEST_LOAD_OK");
+	ir0_boot_smoke("ARM64_PRIVATE_INIT_ROOT_OK");
+	g_root = private_root;
 	g_entry = image.entry;
 	g_heap = image.initial_brk;
 	g_aux.phdr = image.phdr;
@@ -158,6 +181,12 @@ int arm64_embedded_elf_prepare(void)
 	g_aux.random = 0;
 	g_aux.execfn = 0;
 	return 0;
+
+fail_private_root:
+	mm_activate((uintptr_t)previous_root);
+	(void)arm64_mmu_root_release(private_root);
+	ir0_boot_smoke("ARM64_GUEST_LOAD_FAIL");
+	return -1;
 }
 
 int arm64_embedded_elf_el0(void)

@@ -815,6 +815,12 @@ int arm64_mmu_map_user_page_flags_in_root(uint64_t root_ttbr, uint64_t pa,
 	return arm64_mmu_map_user_page_at_in_root(root_ttbr, pa, pa, exec_el0);
 }
 
+int arm64_mmu_map_user_page_flags_current(uint64_t pa, int exec_el0)
+{
+	return arm64_mmu_map_user_page_flags_in_root(
+		(uint64_t)mm_current_root(), pa, exec_el0);
+}
+
 int arm64_mmu_map_user_page_flags(uint64_t pa, int exec_el0)
 {
 	return arm64_mmu_map_user_page_flags_in_root(arm64_mmu_root_a(), pa,
@@ -956,6 +962,13 @@ int arm64_mmu_protect_user_range(uint64_t address, uint64_t length,
 {
 	return arm64_mmu_protect_user_range_in_root(arm64_mmu_root_a(),
 						     address, length, writable, exec_el0);
+}
+
+int arm64_mmu_protect_user_range_current(uint64_t address, uint64_t length,
+					 int writable, int exec_el0)
+{
+	return arm64_mmu_protect_user_range_in_root(
+		(uint64_t)mm_current_root(), address, length, writable, exec_el0);
 }
 
 int arm64_mmu_user_buf_ok_in_root(uint64_t root_ttbr, uint64_t va,

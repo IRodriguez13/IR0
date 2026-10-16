@@ -19,6 +19,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
+#include <ir0/tlb.h>
 
 extern const uint8_t embedded_elf_blob[];
 extern const uint8_t embedded_elf_blob_end[];
@@ -36,7 +37,8 @@ static int arm64_rootfs_copy_from_user(void *destination, uint64_t source,
 
 	if (!destination || size == 0)
 		return 0;
-	if (!arm64_mmu_user_buf_ok(source, size))
+	if (!arm64_mmu_user_buf_ok_in_root((uint64_t)mm_current_root(),
+					   source, size))
 		return -1;
 	src = (const volatile uint8_t *)(uintptr_t)source;
 	for (i = 0; i < size; i++)
@@ -53,7 +55,8 @@ static int arm64_rootfs_copy_to_user(uint64_t destination, const void *source,
 
 	if (!source || size == 0)
 		return 0;
-	if (!arm64_mmu_user_buf_ok(destination, size))
+	if (!arm64_mmu_user_buf_ok_in_root((uint64_t)mm_current_root(),
+					   destination, size))
 		return -1;
 	dst = (volatile uint8_t *)(uintptr_t)destination;
 	for (i = 0; i < size; i++)
