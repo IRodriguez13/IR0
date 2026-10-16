@@ -30,7 +30,8 @@ bool ktm_fault_should_fail(const char *name);
  * Named fault points (call sites check the bool). Inactive when CONFIG_KTM_FAULT
  * is off or no matching ioctl-armed slot.
  */
-#if defined(CONFIG_KTM_FAULT) && CONFIG_KTM_FAULT
+#if defined(CONFIG_KTM_FAULT) && CONFIG_KTM_FAULT && \
+	!defined(IR0_FREESTANDING_BOOT)
 #define KTM_FAULT_HIT(name) ktm_fault_should_fail(name)
 #else
 #define KTM_FAULT_HIT(name) (0)

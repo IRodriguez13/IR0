@@ -118,3 +118,14 @@ typedef void (*klog_protocol_mirror_fn)(klog_level_t level, const char *componen
 					const char *message);
 void klog_set_protocol_mirror(klog_protocol_mirror_fn fn);
 
+/*
+ * Link/boot harnesses may compile common policy without the logging runtime.
+ * Product kernels must never define this: it is narrower than
+ * IR0_FREESTANDING_BOOT so early platform logs remain available.
+ */
+#if defined(IR0_KLOG_COMPILE_OUT)
+#define klog_print(...) ((void)0)
+#define klog_debug(...) ((void)0)
+#define klog_debug_fmt(...) ((void)0)
+#define klog_error_fmt(...) ((void)0)
+#endif

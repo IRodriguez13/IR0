@@ -31,7 +31,7 @@ typedef enum ktm_checkpoint
 
 void ktm_checkpoint_emit(ktm_checkpoint_t cp, const char *file, unsigned line);
 
-#if defined(CONFIG_KTM) && CONFIG_KTM
+#if defined(CONFIG_KTM) && CONFIG_KTM && !defined(IR0_FREESTANDING_BOOT)
 #define KTM_CHECKPOINT(cp) ktm_checkpoint_emit((cp), __FILE__, __LINE__)
 #else
 #define KTM_CHECKPOINT(cp) do { } while (0)
