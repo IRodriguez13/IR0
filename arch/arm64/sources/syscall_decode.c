@@ -27,6 +27,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 34: return IR0_SYSCALL_MKDIRAT;
 	case 35: return IR0_SYSCALL_UNLINKAT;
 	case 36: return IR0_SYSCALL_SYMLINKAT;
+	case 37: return IR0_SYSCALL_LINKAT;
 	case 38: return IR0_SYSCALL_RENAMEAT;
 	case 39: return IR0_SYSCALL_UMOUNT2;
 	case 40: return IR0_SYSCALL_MOUNT;
@@ -75,6 +76,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 102: return IR0_SYSCALL_GETITIMER;
 	case 103: return IR0_SYSCALL_SETITIMER;
 	case 104: return IR0_SYSCALL_KEXEC_LOAD;
+	case 112: return IR0_SYSCALL_CLOCK_SETTIME;
 	case 113: return IR0_SYSCALL_CLOCK_GETTIME;
 	case 114: return IR0_SYSCALL_CLOCK_GETRES;
 	case 115: return IR0_SYSCALL_CLOCK_NANOSLEEP;
