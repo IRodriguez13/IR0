@@ -137,6 +137,13 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_SHUT_RDWR 2
 #define IR0_EARLY_AT_SYMLINK_NOFOLLOW 0x100
 #define IR0_EARLY_AT_SYMLINK_FOLLOW 0x400
+#define IR0_EARLY_AT_EMPTY_PATH 0x1000
+#define IR0_EARLY_STATX_BYTES 256U
+#define IR0_EARLY_STATX_BASIC 0x7ffU
+#define IR0_EARLY_FALLOC_KEEP_SIZE 1
+#define IR0_EARLY_MS_ASYNC 1
+#define IR0_EARLY_MS_INVALIDATE 2
+#define IR0_EARLY_MS_SYNC 4
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -476,6 +483,64 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 	st->st_blocks = 0;
 }
 
+static inline void ir0_early_put_le16(uint8_t *p, uint16_t v)
+{
+	p[0] = (uint8_t)v;
+	p[1] = (uint8_t)(v >> 8);
+}
+
+static inline void ir0_early_put_le32(uint8_t *p, uint32_t v)
+{
+	p[0] = (uint8_t)v;
+	p[1] = (uint8_t)(v >> 8);
+	p[2] = (uint8_t)(v >> 16);
+	p[3] = (uint8_t)(v >> 24);
+}
+
+static inline void ir0_early_put_le64(uint8_t *p, uint64_t v)
+{
+	ir0_early_put_le32(p, (uint32_t)v);
+	ir0_early_put_le32(p + 4, (uint32_t)(v >> 32));
+}
+
+/*
+ * Linux include/uapi/linux/stat.h struct statx (256 bytes).
+ * STATX_BASIC_STATS = 0x7ff (man7.org/linux/man-pages/man2/statx.2.html).
+ */
+static inline void ir0_early_statx_from_stat(const struct ir0_early_stat64 *st,
+					     uint8_t *sx)
+{
+	unsigned i;
+	uint32_t rdev_major;
+	uint32_t rdev_minor;
+
+	if (!st || !sx)
+		return;
+	for (i = 0; i < IR0_EARLY_STATX_BYTES; i++)
+		sx[i] = 0;
+	rdev_major = (uint32_t)((st->st_rdev >> 8) & 0xffU);
+	rdev_minor = (uint32_t)(st->st_rdev & 0xffU);
+	ir0_early_put_le32(sx + 0, IR0_EARLY_STATX_BASIC);
+	ir0_early_put_le32(sx + 4, (uint32_t)st->st_blksize);
+	ir0_early_put_le32(sx + 16, st->st_nlink);
+	ir0_early_put_le32(sx + 20, (uint32_t)st->st_uid);
+	ir0_early_put_le32(sx + 24, (uint32_t)st->st_gid);
+	ir0_early_put_le16(sx + 28, (uint16_t)st->st_mode);
+	ir0_early_put_le64(sx + 32, st->st_ino);
+	ir0_early_put_le64(sx + 40, (uint64_t)st->st_size);
+	ir0_early_put_le64(sx + 48, (uint64_t)st->st_blocks);
+	ir0_early_put_le64(sx + 64, (uint64_t)st->st_atime_sec);
+	ir0_early_put_le32(sx + 72, (uint32_t)st->st_atime_nsec);
+	ir0_early_put_le64(sx + 96, (uint64_t)st->st_ctime_sec);
+	ir0_early_put_le32(sx + 104, (uint32_t)st->st_ctime_nsec);
+	ir0_early_put_le64(sx + 112, (uint64_t)st->st_mtime_sec);
+	ir0_early_put_le32(sx + 120, (uint32_t)st->st_mtime_nsec);
+	ir0_early_put_le32(sx + 128, rdev_major);
+	ir0_early_put_le32(sx + 132, rdev_minor);
+	ir0_early_put_le32(sx + 136, 0);
+	ir0_early_put_le32(sx + 140, 1);
+}
+
 static inline int ir0_early_timerfd_clock_ok(uint64_t clock_id)
 {
 	return clock_id == IR0_EARLY_CLOCK_REALTIME ||
@@ -749,6 +814,15 @@ int64_t early_rootfs_faccessat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 				int flags);
 int64_t early_rootfs_fstat(int fd, uint64_t statbuf);
+int64_t early_rootfs_pread64(int fd, uint64_t buffer, uint64_t count,
+			     int64_t offset);
+int64_t early_rootfs_pwrite64(int fd, uint64_t buffer, uint64_t count,
+			      int64_t offset);
+int64_t early_rootfs_sendfile(int out_fd, int in_fd, uint64_t offset,
+			      uint64_t count);
+int64_t early_rootfs_fallocate(int fd, int mode, int64_t offset, int64_t len);
+int64_t early_rootfs_statx(int dirfd, uint64_t path, int flags, uint32_t mask,
+			   uint64_t statxbuf);
 int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
 				uint64_t size);
 int early_rootfs_poll_revents(int fd, int events);

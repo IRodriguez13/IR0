@@ -275,6 +275,57 @@ el0_entry:
 	mov	x8, #115
 	svc	#0
 
+	/*
+	 * memfd + pwrite64/pread64 + fallocate + statx(AT_EMPTY_PATH) +
+	 * msync. Linux aarch64 279/68/67/47/291/227.
+	 */
+	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x90) & 0xffff)
+	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x90) >> 16) & 0xffff), lsl #16
+	mov	w10, #'m'
+	strb	w10, [x0]
+	strb	wzr, [x0, #1]
+	mov	x1, xzr
+	mov	x8, #279
+	svc	#0
+	mov	x10, x0
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x98) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x98) >> 16) & 0xffff), lsl #16
+	mov	w11, #'I'
+	strb	w11, [x1]
+	mov	x2, #1
+	mov	x3, #8
+	mov	x8, #68
+	svc	#0
+	mov	x0, x10
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x9c) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x9c) >> 16) & 0xffff), lsl #16
+	mov	x2, #1
+	mov	x3, #8
+	mov	x8, #67
+	svc	#0
+	mov	x0, x10
+	mov	x1, xzr
+	mov	x2, xzr
+	mov	x3, #64
+	mov	x8, #47
+	svc	#0
+	mov	x0, x10
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0xb8) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0xb8) >> 16) & 0xffff), lsl #16
+	strb	wzr, [x1]
+	mov	x2, #0x1000
+	mov	x3, #0x7ff
+	movz	x4, #((ARM64_EL0_USER_PAGE_PA + 0xc0) & 0xffff)
+	movk	x4, #(((ARM64_EL0_USER_PAGE_PA + 0xc0) >> 16) & 0xffff), lsl #16
+	mov	x8, #291
+	svc	#0
+	movz	x0, #(ARM64_EL0_USER_PAGE_PA & 0xffff)
+	movk	x0, #((ARM64_EL0_USER_PAGE_PA >> 16) & 0xffff), lsl #16
+	mov	x1, #4096
+	mov	x2, #4
+	mov	x8, #227
+	svc	#0
+
 	/* write(1, user probe page, 15) — "ARM64_WRITE_OK\n" filled by boot */
 	mov	x0, #1
 	movz	x1, #(ARM64_EL0_USER_PAGE_PA & 0xffff)

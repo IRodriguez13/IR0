@@ -90,6 +90,7 @@ static void arm64_early_time_note(enum early_syscall_event event)
 		[EARLY_SYSCALL_CLOCK_GETTIME_OK] = "ARM64_CLOCK_GETTIME_OK",
 		[EARLY_SYSCALL_GETTIMEOFDAY_OK] = "ARM64_GETTIMEOFDAY_OK",
 		[EARLY_SYSCALL_CLOCK_NANOSLEEP_OK] = "ARM64_CLOCK_NANOSLEEP_OK",
+		[EARLY_SYSCALL_STATX_OK] = "ARM64_STATX_OK",
 	};
 
 	if ((unsigned int)event < sizeof(tags) / sizeof(tags[0]) && tags[event])

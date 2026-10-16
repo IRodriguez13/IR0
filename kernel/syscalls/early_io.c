@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <ir0/console.h>
 #include <ir0/early_io.h>
+#include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
 #include <ir0/early_time.h>
@@ -331,11 +332,11 @@ static int64_t early_ppoll(struct early_syscall_context *context,
 	if (ready)
 		return ready;
 	/*
-	 * Linux ppoll NULL timeout waits forever. Staged EL0 has no waiter
-	 * wake (no clone, no console input queue), so that would hang.
-	 * A zero or missing timeout returns 0; a positive timeout sleeps
-	 * then returns 0 if still idle.
+	 * Linux ppoll NULL timeout waits forever. With a cloned peer the
+	 * current task yields and the SVC restarts after the peer runs.
+	 * A lone task still returns 0 rather than hang.
 	 */
+	(void)early_process_request_yield();
 	if (!timeout)
 		return 0;
 	sleep_ret = early_sleep_timeout(context, timeout);
@@ -435,6 +436,7 @@ static int64_t early_pselect6(struct early_syscall_context *context,
 			return -EFAULT;
 		return ready;
 	}
+	(void)early_process_request_yield();
 	if (timeout)
 	{
 		sleep_ret = early_sleep_timeout(context, timeout);
@@ -664,6 +666,12 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_ppoll(opaque, a0, a1, a2);
 	case IR0_SYSCALL_PSELECT6:
 		return early_pselect6(opaque, a0, a1, a2, a3, a4);
+	case IR0_SYSCALL_PREAD64:
+		return early_rootfs_pread64((int)a0, a1, a2, (int64_t)a3);
+	case IR0_SYSCALL_PWRITE64:
+		return early_rootfs_pwrite64((int)a0, a1, a2, (int64_t)a3);
+	case IR0_SYSCALL_SENDFILE:
+		return early_rootfs_sendfile((int)a0, (int)a1, a2, a3);
 	default:
 		return -ENOSYS;
 	}
@@ -682,6 +690,7 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_GETSOCKNAME, IR0_SYSCALL_GETPEERNAME, IR0_SYSCALL_SENDTO,
 	IR0_SYSCALL_RECVFROM, IR0_SYSCALL_SENDMSG, IR0_SYSCALL_RECVMSG,
 	IR0_SYSCALL_SHUTDOWN, IR0_SYSCALL_SETSOCKOPT, IR0_SYSCALL_GETSOCKOPT,
+	IR0_SYSCALL_PREAD64, IR0_SYSCALL_PWRITE64, IR0_SYSCALL_SENDFILE,
 };
 
 const struct syscall_context_provider early_io_provider = {

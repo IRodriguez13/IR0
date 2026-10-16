@@ -172,6 +172,20 @@ void test_early_rootfs_abi(void)
 	}
 	ASSERT_EQ(IR0_EARLY_EPOLL_EVENT_BYTES, 16);
 	ASSERT_EQ(IR0_EARLY_ITIMERSPEC_BYTES, 32);
+	ASSERT_EQ(IR0_EARLY_STATX_BYTES, 256);
+	ASSERT_EQ(IR0_EARLY_STATX_BASIC, 0x7ff);
+	{
+		struct ir0_early_stat64 sxst;
+		uint8_t sx[IR0_EARLY_STATX_BYTES];
+
+		ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_CONSOLE, 0, &sxst);
+		ir0_early_statx_from_stat(&sxst, sx);
+		ASSERT_EQ(sx[0], 0xff);
+		ASSERT_EQ(sx[1], 0x07);
+		ASSERT_EQ(sx[28], (uint8_t)(IR0_EARLY_ROOTFS_MODE_CHR & 0xff));
+		ASSERT_EQ(sx[128], 5);
+		ASSERT_EQ(sx[132], 1);
+	}
 	ASSERT_EQ(ir0_early_timespec_to_ticks(1, 0, 1000), 1000);
 	ASSERT_EQ(ir0_early_timespec_to_ticks(0, 500000000, 1000), 500);
 

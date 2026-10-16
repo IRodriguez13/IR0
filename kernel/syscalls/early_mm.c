@@ -155,6 +155,13 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 		if (!a1)
 			return 0;
 		return 0;
+	case IR0_SYSCALL_MSYNC:
+		/* Linux msync(2): addr page-aligned; length 0 is EINVAL. */
+		if (!a1 || (a0 & (PAGE_SIZE - 1)))
+			return -EINVAL;
+		if (a2 & ~(0x1UL | 0x2UL | 0x4UL))
+			return -EINVAL;
+		return 0;
 	default:
 		return -ENOSYS;
 	}
@@ -162,7 +169,7 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 
 static const enum ir0_syscall_id g_mm_syscalls[] = {
 	IR0_SYSCALL_BRK, IR0_SYSCALL_MMAP, IR0_SYSCALL_MUNMAP,
-	IR0_SYSCALL_MPROTECT, IR0_SYSCALL_MADVISE,
+	IR0_SYSCALL_MPROTECT, IR0_SYSCALL_MADVISE, IR0_SYSCALL_MSYNC,
 };
 
 const struct syscall_context_provider early_mm_provider = {

@@ -60,6 +60,12 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(206) == IR0_SYSCALL_SENDTO);
 	ASSERT(syscall_decode_number(207) == IR0_SYSCALL_RECVFROM);
 	ASSERT(syscall_decode_number(279) == IR0_SYSCALL_MEMFD_CREATE);
-	ASSERT(decoded == 141);
+	ASSERT(syscall_decode_number(47) == IR0_SYSCALL_FALLOCATE);
+	ASSERT(syscall_decode_number(67) == IR0_SYSCALL_PREAD64);
+	ASSERT(syscall_decode_number(68) == IR0_SYSCALL_PWRITE64);
+	ASSERT(syscall_decode_number(71) == IR0_SYSCALL_SENDFILE);
+	ASSERT(syscall_decode_number(227) == IR0_SYSCALL_MSYNC);
+	ASSERT(syscall_decode_number(291) == IR0_SYSCALL_STATX);
+	ASSERT(decoded == 147);
 	TEST_END();
 }
