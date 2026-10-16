@@ -16,8 +16,6 @@
 
 #include <stdint.h>
 
-#define ARM64_CLOCK_MONOTONIC      1UL
-
 /**
  * Dispatch one SVC. Returns value for x0.
  * Sets *leave_el0 nonzero to retarget eret to EL1 continuation.

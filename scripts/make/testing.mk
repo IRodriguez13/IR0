@@ -2944,6 +2944,13 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
 arm64-provider-audit: kernel-arm64-all.bin
+	@semantic=$$(find arch/arm64/sources -maxdepth 1 -type f \
+		\( -name 'syscall_*_early.c' -o -name 'syscall_*_early.h' \) \
+		! -name 'syscall_early.c' ! -name 'syscall_early.h' -print); \
+	if [ -n "$$semantic" ]; then \
+		echo "✗ semantic syscall provider leaked into ARM64:"; \
+		printf '%s\n' "$$semantic"; exit 1; \
+	fi
 	@! grep -q 'allocator_stubs.o' build/arm64-all/kernel.map || \
 		{ echo "✗ ARM64 aggregate linked the harness allocator"; exit 1; }
 	@weak=$$(aarch64-linux-gnu-nm kernel-arm64-all.bin | \
@@ -2955,7 +2962,7 @@ arm64-provider-audit: kernel-arm64-all.bin
 	@! aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		grep -Eq '[[:space:]](handle_signals|signals_should_handle_on_run|klog_info)$$' || \
 		{ echo "✗ unused runtime harness provider leaked into ARM64 aggregate"; exit 1; }
-	@echo "✓ ARM64 provider audit (no runtime/link mocks; zero weak symbols)"
+	@echo "✓ ARM64 provider audit (common syscall semantics; no mocks/weak symbols)"
 
 # Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
 # supplies x0 only when the payload is an Image, not when it loads the raw ELF
