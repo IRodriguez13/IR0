@@ -172,6 +172,72 @@ static int64_t early_ioctl(struct early_syscall_context *context,
 	return -ENOTTY;
 }
 
+static int64_t early_writev(struct early_syscall_context *context,
+			    uint64_t descriptor, uint64_t iov, uint64_t iovcnt)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	int64_t total = 0;
+
+	if (iovcnt == 0)
+		return 0;
+	if (iovcnt > 8)
+		return -EINVAL;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user)
+		return -ENOSYS;
+	for (i = 0; i < iovcnt; i++)
+	{
+		uint64_t vec[2];
+		int64_t n;
+
+		if (user->copy_from_user(vec, iov + i * 16UL, sizeof(vec)) != 0)
+			return total ? total : -EFAULT;
+		if (vec[1] == 0)
+			continue;
+		n = early_write(context, descriptor, vec[0], vec[1]);
+		if (n < 0)
+			return total ? total : n;
+		total += n;
+		if ((uint64_t)n < vec[1])
+			break;
+	}
+	return total;
+}
+
+static int64_t early_readv(struct early_syscall_context *context,
+			   uint64_t descriptor, uint64_t iov, uint64_t iovcnt)
+{
+	const struct early_user_services *user;
+	uint64_t i;
+	int64_t total = 0;
+
+	if (iovcnt == 0)
+		return 0;
+	if (iovcnt > 8)
+		return -EINVAL;
+	if (!context || !context->services ||
+	    !(user = context->services->user) || !user->copy_from_user)
+		return -ENOSYS;
+	for (i = 0; i < iovcnt; i++)
+	{
+		uint64_t vec[2];
+		int64_t n;
+
+		if (user->copy_from_user(vec, iov + i * 16UL, sizeof(vec)) != 0)
+			return total ? total : -EFAULT;
+		if (vec[1] == 0)
+			continue;
+		n = early_rootfs_read((int)descriptor, vec[0], vec[1]);
+		if (n < 0)
+			return total ? total : n;
+		total += n;
+		if ((uint64_t)n < vec[1])
+			break;
+	}
+	return total;
+}
+
 static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
@@ -180,6 +246,10 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	switch (id) {
 	case IR0_SYSCALL_WRITE:
 		return early_write(opaque, a0, a1, a2);
+	case IR0_SYSCALL_WRITEV:
+		return early_writev(opaque, a0, a1, a2);
+	case IR0_SYSCALL_READV:
+		return early_readv(opaque, a0, a1, a2);
 	case IR0_SYSCALL_IOCTL:
 		return early_ioctl(opaque, a0, a1, a2);
 	case IR0_SYSCALL_DUP:
@@ -187,6 +257,7 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_DUP3:
 		return early_rootfs_dup3((int)a0, (int)a1, (int)a2);
 	case IR0_SYSCALL_FCNTL:
+		return early_rootfs_fcntl((int)a0, (int)a1, a2);
 	case IR0_SYSCALL_PPOLL:
 	default:
 		return -ENOSYS;
@@ -194,7 +265,8 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 }
 
 static const enum ir0_syscall_id g_io_syscalls[] = {
-	IR0_SYSCALL_WRITE, IR0_SYSCALL_IOCTL, IR0_SYSCALL_FCNTL,
+	IR0_SYSCALL_WRITE, IR0_SYSCALL_WRITEV, IR0_SYSCALL_READV,
+	IR0_SYSCALL_IOCTL, IR0_SYSCALL_FCNTL,
 	IR0_SYSCALL_DUP, IR0_SYSCALL_DUP3, IR0_SYSCALL_PPOLL,
 };
 
