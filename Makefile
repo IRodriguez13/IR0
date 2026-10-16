@@ -1094,15 +1094,14 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 		echo "1" > .build_number; \
 	fi
 
-# ARM64 has a target-local freestanding graph in testing.mk.  Do not reuse the
-# in-tree %.o files here: they may have been produced by an x86 build and are
-# therefore not a hermetic input.  The common C core is compiled independently
-# by arm64-common-core-compile until its complete runtime provider graph replaces
-# the staged boot composition.
-kernel-arm64.bin: kernel-arm64-boot.bin arm64-common-core-compile
-	@echo "  COPY    $@ (staged ARM64 integration image)"
-	@cp kernel-arm64-boot.bin $@
-	@echo "✓ Kernel linked: $@ (common core compile contract passed; early providers remain)"
+# ARM64 has target-local, hermetic graphs in testing.mk.  The public image is
+# the validated aggregate: unlike kernel-arm64-boot.bin it contains the common
+# MM/process slice and no allocator/runtime/link mocks or weak providers.  It is
+# still staged because early syscall/rootfs providers remain.
+kernel-arm64.bin: kernel-arm64-all.bin arm64-common-core-compile arm64-provider-audit
+	@echo "  COPY    $@ (validated ARM64 aggregate)"
+	@cp kernel-arm64-all.bin $@
+	@echo "✓ Kernel linked: $@ (common-core aggregate; early providers remain)"
 
 # Create ISO
 kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg

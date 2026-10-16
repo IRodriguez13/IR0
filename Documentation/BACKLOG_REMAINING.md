@@ -115,6 +115,11 @@
 | Interactive sendkey password path | TTY | Username echoes; password stage stalls in QEMU — lab uses `/etc/ir0-autologin`; GUI: `IR0_NO_AUTOLOGIN=1` |
 | `smoke-runit-ash-interactive` echo OK | **Closed 2026-09-22** | PASS 14.5s (`SYS_READ_RETURN_OK` + `ASH_COMMAND_ECHO_OK`) |
 | Full musl aarch64 CRT restore | Optional toolchain hygiene | Freestanding `hello_aarch64` plus the explicit `ktm/mocks/arm64/allocator_stubs.c` minimal-boot provider unblock `smoke-arm64-boot`; the aggregate uses common allocator/accounting/trace, has no runtime/link mocks and permits zero weak symbols; re-extract musl.cc for libc programs |
+
+`kernel-arm64.bin` now names the validated aggregate. `kernel-arm64-boot.bin`
+remains the explicit early harness with its bump allocator; do not use it as
+product evidence. The main image is mock-free but still staged while
+`syscall_*_early`, early rootfs and early ELF/init providers remain.
 | virtiofs + FUSE | Future host-share | Guest FUSE; 9p remains ship path |
 | Migrate remaining drains/storms stub PID1 → runit+9p | Lab depth | **Mostly closed** — `smoke-ktm-drains-runit`; `init-exit-drain` stays stub (PID1 SUT) |
 
