@@ -151,6 +151,18 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_CMSG_ALIGN 8U
 #define IR0_EARLY_RIGHTS_MAX 4
 #define IR0_EARLY_MSG_CTRUNC 8
+#define IR0_EARLY_SPLICE_F_MOVE 1U
+#define IR0_EARLY_SPLICE_F_NONBLOCK 2U
+#define IR0_EARLY_SPLICE_F_MORE 4U
+#define IR0_EARLY_SPLICE_F_GIFT 8U
+#define IR0_EARLY_SPLICE_F_KNOWN \
+	(IR0_EARLY_SPLICE_F_MOVE | IR0_EARLY_SPLICE_F_NONBLOCK | \
+	 IR0_EARLY_SPLICE_F_MORE | IR0_EARLY_SPLICE_F_GIFT)
+#define IR0_EARLY_CLOSE_RANGE_UNSHARE (1U << 1)
+#define IR0_EARLY_CLOSE_RANGE_CLOEXEC (1U << 2)
+#define IR0_EARLY_CLOSE_RANGE_KNOWN \
+	(IR0_EARLY_CLOSE_RANGE_UNSHARE | IR0_EARLY_CLOSE_RANGE_CLOEXEC)
+#define IR0_EARLY_POSIX_FADV_NOREUSE 5
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -631,6 +643,21 @@ static inline int ir0_early_renameat2_flags_ok(unsigned flags)
 			  IR0_EARLY_RENAME_EXCHANGE)) == 0;
 }
 
+static inline int ir0_early_splice_flags_ok(unsigned flags)
+{
+	return (flags & ~IR0_EARLY_SPLICE_F_KNOWN) == 0;
+}
+
+static inline int ir0_early_close_range_flags_ok(unsigned flags)
+{
+	return (flags & ~IR0_EARLY_CLOSE_RANGE_KNOWN) == 0;
+}
+
+static inline int ir0_early_fadvise_ok(int advice)
+{
+	return advice >= 0 && advice <= IR0_EARLY_POSIX_FADV_NOREUSE;
+}
+
 static inline int ir0_early_sockaddr_un_path(const uint8_t *addr,
 					    unsigned addrlen, char *out,
 					    unsigned cap)
@@ -870,3 +897,13 @@ int64_t early_rootfs_renameat2(int olddirfd, uint64_t oldpath, int newdirfd,
 			       uint64_t newpath, unsigned flags);
 int64_t early_rootfs_send_rights(int fd, const int *fds, int n);
 int64_t early_rootfs_recv_rights(int fd, int *fds, int max);
+int64_t early_rootfs_splice(int fd_in, uint64_t off_in, int fd_out,
+			    uint64_t off_out, uint64_t len, unsigned flags);
+int64_t early_rootfs_tee(int fd_in, int fd_out, uint64_t len, unsigned flags);
+int64_t early_rootfs_close_range(unsigned first, unsigned last,
+				 unsigned flags);
+int64_t early_rootfs_copy_file_range(int fd_in, uint64_t off_in, int fd_out,
+				     uint64_t off_out, uint64_t len,
+				     unsigned flags);
+int64_t early_rootfs_fadvise64(int fd, int64_t offset, uint64_t len,
+			       int advice);

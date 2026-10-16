@@ -55,6 +55,7 @@ static uint64_t g_child_tls;
 static uint64_t g_child_cleartid;
 static int g_child_wstatus;
 static int g_vfork;
+static int g_vfork_exec;
 static int g_yield_requested;
 static int g_block_wait_ok;
 static uint64_t g_parent_frame[IR0_EARLY_EL0_FRAME_WORDS];
@@ -368,6 +369,7 @@ static int64_t early_clone(struct early_syscall_context *context, uint64_t flags
 	if (early_child_exists())
 		return -EAGAIN;
 	g_vfork = (flags & CLONE_VFORK) != 0;
+	g_vfork_exec = 0;
 	g_yield_requested = 0;
 	g_child_frame_valid = 0;
 	g_child_stack = stack;
@@ -534,6 +536,7 @@ static int64_t early_exit(struct early_syscall_context *context,
 		g_child_wstatus = (int)((status & 0xffUL) << 8);
 		g_child_state = CHILD_ZOMBIE;
 		g_vfork = 0;
+		g_vfork_exec = 0;
 		g_yield_requested = 0;
 		g_resume_parent = 1;
 		g_current_pid = 1;
@@ -777,8 +780,12 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	{
 		int64_t ret = early_rootfs_execve(a1, a2, a3);
 
-		if (ret == 0 && context && context->leave_usermode)
-			*context->leave_usermode = 1;
+		if (ret == 0)
+		{
+			early_process_note_exec();
+			if (context && context->leave_usermode)
+				*context->leave_usermode = 1;
+		}
 		return ret;
 	}
 	case IR0_SYSCALL_GETRLIMIT:
@@ -806,8 +813,12 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	{
 		int64_t ret = early_rootfs_execve(a0, a1, a2);
 
-		if (ret == 0 && context && context->leave_usermode)
-			*context->leave_usermode = 1;
+		if (ret == 0)
+		{
+			early_process_note_exec();
+			if (context && context->leave_usermode)
+				*context->leave_usermode = 1;
+		}
 		return ret;
 	}
 	default:
@@ -876,6 +887,35 @@ int early_process_clone_resume_parent(uint64_t *frame)
 		return 0;
 	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
 		frame[i] = g_parent_frame[i];
+	g_resume_parent = 0;
+	g_current_pid = 1;
+	return 1;
+}
+
+void early_process_note_exec(void)
+{
+	if (g_current_pid == EARLY_CHILD_PID && g_vfork)
+	{
+		g_vfork = 0;
+		g_vfork_exec = 1;
+		g_resume_parent = 1;
+	}
+}
+
+int early_process_vfork_exec_resume(uint64_t *frame)
+{
+	unsigned int i;
+
+	if (!frame || !g_vfork_exec || !g_resume_parent ||
+	    g_current_pid != EARLY_CHILD_PID)
+		return 0;
+	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
+		g_child_frame[i] = frame[i];
+	g_child_frame_valid = 1;
+	g_child_state = CHILD_PARKED;
+	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
+		frame[i] = g_parent_frame[i];
+	g_vfork_exec = 0;
 	g_resume_parent = 0;
 	g_current_pid = 1;
 	return 1;

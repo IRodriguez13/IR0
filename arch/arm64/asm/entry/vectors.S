@@ -417,6 +417,81 @@ el0_entry:
 	mov	x8, #212
 	svc	#0
 
+	/* splice(memfd, &off, pipe_w, NULL, 4, 0) + tee + copy_file_range */
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x2e8) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x2e8) >> 16) & 0xffff), lsl #16
+	str	xzr, [x9]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	mov	x0, x20
+	mov	x1, x9
+	ldr	w2, [x10, #4]
+	mov	x3, xzr
+	mov	x4, #4
+	mov	x5, xzr
+	mov	x8, #76
+	svc	#0
+	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x2e0) & 0xffff)
+	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x2e0) >> 16) & 0xffff), lsl #16
+	mov	w11, #-1
+	str	w11, [x0]
+	str	w11, [x0, #4]
+	mov	x1, xzr
+	mov	x8, #59
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	ldr	w0, [x9]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x2e0) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x2e0) >> 16) & 0xffff), lsl #16
+	ldr	w1, [x10, #4]
+	mov	x2, #4
+	mov	x3, xzr
+	mov	x8, #77
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x2f0) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x2f0) >> 16) & 0xffff), lsl #16
+	mov	x10, #48
+	str	x10, [x9]
+	movz	x11, #((ARM64_EL0_USER_PAGE_PA + 0x2e0) & 0xffff)
+	movk	x11, #(((ARM64_EL0_USER_PAGE_PA + 0x2e0) >> 16) & 0xffff), lsl #16
+	ldr	w0, [x11]
+	mov	x1, xzr
+	mov	x2, x20
+	mov	x3, x9
+	mov	x4, #4
+	mov	x5, xzr
+	mov	x8, #76
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x2e8) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x2e8) >> 16) & 0xffff), lsl #16
+	str	xzr, [x9]
+	movz	x10, #((ARM64_EL0_USER_PAGE_PA + 0x2f0) & 0xffff)
+	movk	x10, #(((ARM64_EL0_USER_PAGE_PA + 0x2f0) >> 16) & 0xffff), lsl #16
+	mov	x11, #64
+	str	x11, [x10]
+	mov	x0, x20
+	mov	x1, x9
+	mov	x2, x20
+	mov	x3, x10
+	mov	x4, #4
+	mov	x5, xzr
+	mov	x8, #285
+	svc	#0
+	mov	x0, x20
+	mov	x1, xzr
+	mov	x2, #64
+	mov	x3, xzr
+	mov	x8, #223
+	svc	#0
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x2e0) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x2e0) >> 16) & 0xffff), lsl #16
+	ldr	w0, [x9]
+	ldr	w1, [x9, #4]
+	mov	x2, xzr
+	mov	x8, #436
+	svc	#0
+
 	/* write(1, user probe page, 15) — "ARM64_WRITE_OK\n" filled by boot */
 	mov	x0, #1
 	movz	x1, #(ARM64_EL0_USER_PAGE_PA & 0xffff)

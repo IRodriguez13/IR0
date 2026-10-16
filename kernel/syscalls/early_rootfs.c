@@ -126,6 +126,7 @@ static enum ir0_early_rootfs_node g_chroot;
 static uint64_t g_init_vis;
 static int g_init_from_block;
 static int g_exec_pending;
+static int g_exec_owner;
 static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
 static char *g_exec_argv[EXEC_ARGC_MAX + 1];
 static struct early_pipe g_pipes[PIPE_MAX];
@@ -416,6 +417,124 @@ static int64_t wait_or_eagain(int fd)
 		return -EAGAIN;
 	(void)early_process_request_yield();
 	return -EAGAIN;
+}
+
+static struct early_pipe *pipe_of_fd(int fd)
+{
+	enum ir0_early_rootfs_node node = node_of_fd(fd);
+	int id;
+
+	if (node == IR0_EARLY_ROOTFS_PIPE_R || node == IR0_EARLY_ROOTFS_PIPE_W)
+	{
+		id = pipe_id_of_fd(fd);
+		if (id < 0 || id >= PIPE_MAX || !g_pipes[id].used)
+			return 0;
+		return &g_pipes[id];
+	}
+	if (node == IR0_EARLY_ROOTFS_FIFO)
+	{
+		int fsid = pipe_id_of_fd(fd);
+		int fifo;
+
+		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+			return 0;
+		fifo = g_fs[fsid].fifo_pipe;
+		if (fifo < 0 || fifo >= PIPE_MAX || !g_pipes[fifo].used)
+			return 0;
+		return &g_pipes[fifo];
+	}
+	return 0;
+}
+
+static unsigned pipe_consume(struct early_pipe *p, uint8_t *tmp, unsigned n)
+{
+	unsigned i;
+
+	if (!p || !tmp)
+		return 0;
+	if (n > p->len)
+		n = p->len;
+	for (i = 0; i < n; i++)
+	{
+		tmp[i] = p->buf[p->rpos];
+		p->rpos = (p->rpos + 1U) % PIPE_BUF;
+	}
+	p->len -= n;
+	return n;
+}
+
+static unsigned pipe_peek(struct early_pipe *p, uint8_t *tmp, unsigned n)
+{
+	unsigned i;
+	unsigned rpos;
+
+	if (!p || !tmp)
+		return 0;
+	if (n > p->len)
+		n = p->len;
+	rpos = p->rpos;
+	for (i = 0; i < n; i++)
+	{
+		tmp[i] = p->buf[rpos];
+		rpos = (rpos + 1U) % PIPE_BUF;
+	}
+	return n;
+}
+
+static unsigned pipe_deposit(struct early_pipe *p, const uint8_t *tmp,
+			     unsigned n)
+{
+	unsigned i;
+	unsigned wpos;
+	unsigned room;
+
+	if (!p || !tmp)
+		return 0;
+	room = PIPE_BUF - p->len;
+	if (n > room)
+		n = room;
+	wpos = (p->rpos + p->len) % PIPE_BUF;
+	for (i = 0; i < n; i++)
+	{
+		p->buf[wpos] = tmp[i];
+		wpos = (wpos + 1U) % PIPE_BUF;
+	}
+	p->len += n;
+	return n;
+}
+
+static int64_t splice_wait(int fd, unsigned flags)
+{
+	if (flags & IR0_EARLY_SPLICE_F_NONBLOCK)
+		return -EAGAIN;
+	return wait_or_eagain(fd);
+}
+
+static int load_loff(uint64_t uptr, int64_t *out, int64_t fallback)
+{
+	if (!out)
+		return -EINVAL;
+	if (!uptr)
+	{
+		*out = fallback;
+		return 0;
+	}
+	if (!g_user || !g_user->copy_from_user ||
+	    g_user->copy_from_user(out, uptr, sizeof(*out)) != 0)
+		return -EFAULT;
+	if (*out < 0)
+		return -EINVAL;
+	return 0;
+}
+
+static int store_loff(uint64_t uptr, int64_t value)
+{
+	if (!uptr)
+		return 0;
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(uptr, &value, sizeof(value)) != 0)
+		return -EFAULT;
+	return 0;
 }
 
 static int unix_id_of_fd(int fd)
@@ -1012,6 +1131,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 	g_chroot_path[1] = '\0';
 	reset_stdio();
 	g_exec_pending = 0;
+	g_exec_owner = 0;
 	g_init_from_block = 0;
 	g_ready = (init_blob != 0 && init_len > 0 && user &&
 		   user->copy_from_user && user->copy_to_user);
@@ -2434,12 +2554,14 @@ int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp)
 	if (ret < 0)
 		return ret;
 	g_exec_pending = 1;
+	g_exec_owner = (int)early_process_current_pid();
 	return 0;
 }
 
 int early_rootfs_exec_pending(void)
 {
-	return g_exec_pending;
+	return g_exec_pending &&
+	       (int)early_process_current_pid() == g_exec_owner;
 }
 
 char *const *early_rootfs_exec_argv(void)
@@ -2450,6 +2572,7 @@ char *const *early_rootfs_exec_argv(void)
 void early_rootfs_exec_clear(void)
 {
 	g_exec_pending = 0;
+	g_exec_owner = 0;
 }
 
 int early_rootfs_vda_ready(void)
@@ -4976,6 +5099,268 @@ int64_t early_rootfs_sendfile(int out_fd, int in_fd, uint64_t offset,
 			*inpos = (uint64_t)off;
 	}
 	return (int64_t)done;
+}
+
+static int64_t kwrite_at(int fd, uint64_t off, const uint8_t *tmp, uint64_t n)
+{
+	uint64_t *pos = pos_of_fd(fd);
+	uint64_t saved;
+	int64_t w;
+
+	if (!pos)
+		return -EBADF;
+	saved = *pos;
+	*pos = off;
+	w = kwrite_buf(fd, tmp, n);
+	*pos = saved;
+	return w;
+}
+
+int64_t early_rootfs_splice(int fd_in, uint64_t off_in, int fd_out,
+			    uint64_t off_out, uint64_t len, unsigned flags)
+{
+	struct early_pipe *pin;
+	struct early_pipe *pout;
+	uint8_t tmp[256];
+	uint64_t *inpos;
+	uint64_t *outpos;
+	int64_t in_off = 0;
+	int64_t out_off = 0;
+	unsigned n;
+	int64_t got;
+	int64_t put;
+	int err;
+
+	if (len == 0)
+		return 0;
+	if (!ir0_early_splice_flags_ok(flags))
+		return -EINVAL;
+	if (node_of_fd(fd_in) == IR0_EARLY_ROOTFS_NONE ||
+	    node_of_fd(fd_out) == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	pin = pipe_of_fd(fd_in);
+	pout = pipe_of_fd(fd_out);
+	if (!pin && !pout)
+		return -EINVAL;
+	if (pin && off_in)
+		return -ESPIPE;
+	if (pout && off_out)
+		return -ESPIPE;
+	if (pin && pout && pin == pout)
+		return -EINVAL;
+	if (!pin)
+	{
+		err = fd_espipe(fd_in);
+		if (err < 0)
+			return err;
+		inpos = pos_of_fd(fd_in);
+		err = load_loff(off_in, &in_off, inpos ? (int64_t)*inpos : 0);
+		if (err < 0)
+			return err;
+	}
+	if (!pout)
+	{
+		err = fd_espipe(fd_out);
+		if (err < 0)
+			return err;
+		outpos = pos_of_fd(fd_out);
+		err = load_loff(off_out, &out_off, outpos ? (int64_t)*outpos : 0);
+		if (err < 0)
+			return err;
+	}
+	n = len > 256 ? 256 : (unsigned)len;
+	if (pin && pout)
+	{
+		if (pin->len == 0)
+			return pin->writers == 0 ? 0 : splice_wait(fd_in, flags);
+		if (pout->readers == 0)
+			return -EPIPE;
+		if (pout->len == PIPE_BUF)
+			return splice_wait(fd_out, flags);
+		n = pipe_consume(pin, tmp, n);
+		n = pipe_deposit(pout, tmp, n);
+		return (int64_t)n;
+	}
+	if (pin)
+	{
+		if (pin->len == 0)
+			return pin->writers == 0 ? 0 : splice_wait(fd_in, flags);
+		n = pipe_consume(pin, tmp, n);
+		put = kwrite_at(fd_out, (uint64_t)out_off, tmp, n);
+		if (put < 0)
+			return put;
+		out_off += put;
+		if (off_out)
+		{
+			err = store_loff(off_out, out_off);
+			if (err < 0)
+				return err;
+		}
+		else
+		{
+			outpos = pos_of_fd(fd_out);
+			if (outpos)
+				*outpos = (uint64_t)out_off;
+		}
+		return put;
+	}
+	if (pout->readers == 0)
+		return -EPIPE;
+	if (pout->len == PIPE_BUF)
+		return splice_wait(fd_out, flags);
+	got = kread_at(fd_in, (uint64_t)in_off, tmp, n);
+	if (got <= 0)
+		return got;
+	n = pipe_deposit(pout, tmp, (unsigned)got);
+	in_off += n;
+	if (off_in)
+	{
+		err = store_loff(off_in, in_off);
+		if (err < 0)
+			return err;
+	}
+	else
+	{
+		inpos = pos_of_fd(fd_in);
+		if (inpos)
+			*inpos = (uint64_t)in_off;
+	}
+	return (int64_t)n;
+}
+
+int64_t early_rootfs_tee(int fd_in, int fd_out, uint64_t len, unsigned flags)
+{
+	struct early_pipe *pin;
+	struct early_pipe *pout;
+	uint8_t tmp[256];
+	unsigned n;
+
+	if (len == 0)
+		return 0;
+	if (!ir0_early_splice_flags_ok(flags))
+		return -EINVAL;
+	pin = pipe_of_fd(fd_in);
+	pout = pipe_of_fd(fd_out);
+	if (!pin || !pout)
+		return -EINVAL;
+	if (pin == pout)
+		return -EINVAL;
+	if (pin->len == 0)
+		return pin->writers == 0 ? 0 : splice_wait(fd_in, flags);
+	if (pout->readers == 0)
+		return -EPIPE;
+	if (pout->len == PIPE_BUF)
+		return splice_wait(fd_out, flags);
+	n = len > 256 ? 256 : (unsigned)len;
+	n = pipe_peek(pin, tmp, n);
+	return (int64_t)pipe_deposit(pout, tmp, n);
+}
+
+int64_t early_rootfs_close_range(unsigned first, unsigned last, unsigned flags)
+{
+	unsigned fd;
+
+	if (first > last)
+		return -EINVAL;
+	if (!ir0_early_close_range_flags_ok(flags))
+		return -EINVAL;
+	if (flags & IR0_EARLY_CLOSE_RANGE_UNSHARE)
+		return -EOPNOTSUPP;
+	if (last > (unsigned)(ROOTFS_FD_LIMIT - 1))
+		last = (unsigned)(ROOTFS_FD_LIMIT - 1);
+	if (first > last)
+		return 0;
+	for (fd = first; fd <= last; fd++)
+	{
+		if (node_of_fd((int)fd) == IR0_EARLY_ROOTFS_NONE)
+			continue;
+		if (flags & IR0_EARLY_CLOSE_RANGE_CLOEXEC)
+			set_cloexec_of_fd((int)fd, 1);
+		else
+			(void)early_rootfs_close((int)fd);
+	}
+	return 0;
+}
+
+int64_t early_rootfs_copy_file_range(int fd_in, uint64_t off_in, int fd_out,
+				     uint64_t off_out, uint64_t len,
+				     unsigned flags)
+{
+	uint8_t tmp[256];
+	uint64_t *inpos;
+	uint64_t *outpos;
+	int64_t in_off;
+	int64_t out_off;
+	int64_t got;
+	int64_t put;
+	int err;
+
+	if (flags)
+		return -EINVAL;
+	if (len == 0)
+		return 0;
+	err = fd_espipe(fd_in);
+	if (err < 0)
+		return err;
+	err = fd_espipe(fd_out);
+	if (err < 0)
+		return err;
+	inpos = pos_of_fd(fd_in);
+	outpos = pos_of_fd(fd_out);
+	err = load_loff(off_in, &in_off, inpos ? (int64_t)*inpos : 0);
+	if (err < 0)
+		return err;
+	err = load_loff(off_out, &out_off, outpos ? (int64_t)*outpos : 0);
+	if (err < 0)
+		return err;
+	if (fd_in == fd_out ||
+	    (node_of_fd(fd_in) == node_of_fd(fd_out) &&
+	     pipe_id_of_fd(fd_in) == pipe_id_of_fd(fd_out)))
+	{
+		int64_t in_end = in_off + (int64_t)len;
+		int64_t out_end = out_off + (int64_t)len;
+
+		if (in_off < out_end && out_off < in_end)
+			return -EINVAL;
+	}
+	got = kread_at(fd_in, (uint64_t)in_off, tmp, len > 256 ? 256 : len);
+	if (got <= 0)
+		return got;
+	put = kwrite_at(fd_out, (uint64_t)out_off, tmp, (uint64_t)got);
+	if (put < 0)
+		return put;
+	in_off += put;
+	out_off += put;
+	if (off_in)
+	{
+		err = store_loff(off_in, in_off);
+		if (err < 0)
+			return err;
+	}
+	else if (inpos)
+		*inpos = (uint64_t)in_off;
+	if (off_out)
+	{
+		err = store_loff(off_out, out_off);
+		if (err < 0)
+			return err;
+	}
+	else if (outpos)
+		*outpos = (uint64_t)out_off;
+	return put;
+}
+
+int64_t early_rootfs_fadvise64(int fd, int64_t offset, uint64_t len, int advice)
+{
+	int err;
+
+	(void)len;
+	err = fd_espipe(fd);
+	if (err < 0)
+		return err;
+	if (offset < 0 || !ir0_early_fadvise_ok(advice))
+		return -EINVAL;
+	return 0;
 }
 
 int64_t early_rootfs_fallocate(int fd, int mode, int64_t offset, int64_t len)

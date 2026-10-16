@@ -872,6 +872,27 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_preadv(opaque, a0, a1, a2, (int64_t)a3);
 	case IR0_SYSCALL_PWRITEV:
 		return early_pwritev(opaque, a0, a1, a2, (int64_t)a3);
+	case IR0_SYSCALL_SPLICE:
+	{
+		int64_t ret = early_rootfs_splice((int)a0, a1, (int)a2, a3, a4,
+						  (unsigned)a5);
+		struct early_syscall_context *context = opaque;
+
+		if (ret > 0 && context && context->services &&
+		    context->services->time && context->services->time->note)
+			context->services->time->note(EARLY_SYSCALL_SPLICE_OK);
+		return ret;
+	}
+	case IR0_SYSCALL_TEE:
+		return early_rootfs_tee((int)a0, (int)a1, a2, (unsigned)a3);
+	case IR0_SYSCALL_CLOSE_RANGE:
+		return early_rootfs_close_range((unsigned)a0, (unsigned)a1,
+						(unsigned)a2);
+	case IR0_SYSCALL_COPY_FILE_RANGE:
+		return early_rootfs_copy_file_range((int)a0, a1, (int)a2, a3, a4,
+						    (unsigned)a5);
+	case IR0_SYSCALL_FADVISE64:
+		return early_rootfs_fadvise64((int)a0, (int64_t)a1, a2, (int)a3);
 	default:
 		return -ENOSYS;
 	}
@@ -891,7 +912,9 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_RECVFROM, IR0_SYSCALL_SENDMSG, IR0_SYSCALL_RECVMSG,
 	IR0_SYSCALL_SHUTDOWN, IR0_SYSCALL_SETSOCKOPT, IR0_SYSCALL_GETSOCKOPT,
 	IR0_SYSCALL_PREAD64, IR0_SYSCALL_PWRITE64, IR0_SYSCALL_SENDFILE,
-	IR0_SYSCALL_PREADV, IR0_SYSCALL_PWRITEV,
+	IR0_SYSCALL_PREADV, IR0_SYSCALL_PWRITEV, IR0_SYSCALL_SPLICE,
+	IR0_SYSCALL_TEE, IR0_SYSCALL_CLOSE_RANGE, IR0_SYSCALL_COPY_FILE_RANGE,
+	IR0_SYSCALL_FADVISE64,
 };
 
 const struct syscall_context_provider early_io_provider = {

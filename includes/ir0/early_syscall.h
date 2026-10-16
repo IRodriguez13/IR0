@@ -12,6 +12,7 @@ enum early_syscall_event
 	EARLY_SYSCALL_CLOCK_NANOSLEEP_OK,
 	EARLY_SYSCALL_STATX_OK,
 	EARLY_SYSCALL_SCM_RIGHTS_OK,
+	EARLY_SYSCALL_SPLICE_OK,
 };
 
 struct early_user_services

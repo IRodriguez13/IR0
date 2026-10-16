@@ -179,6 +179,18 @@ void test_early_rootfs_abi(void)
 	ASSERT(!ir0_early_renameat2_flags_ok(IR0_EARLY_RENAME_NOREPLACE |
 					    IR0_EARLY_RENAME_EXCHANGE));
 	ASSERT(!ir0_early_renameat2_flags_ok(IR0_EARLY_RENAME_WHITEOUT));
+	ASSERT(ir0_early_splice_flags_ok(0));
+	ASSERT(ir0_early_splice_flags_ok(IR0_EARLY_SPLICE_F_MOVE |
+					IR0_EARLY_SPLICE_F_NONBLOCK |
+					IR0_EARLY_SPLICE_F_MORE |
+					IR0_EARLY_SPLICE_F_GIFT));
+	ASSERT(!ir0_early_splice_flags_ok(0x10));
+	ASSERT(ir0_early_close_range_flags_ok(0));
+	ASSERT(ir0_early_close_range_flags_ok(IR0_EARLY_CLOSE_RANGE_CLOEXEC));
+	ASSERT(!ir0_early_close_range_flags_ok(1U));
+	ASSERT(ir0_early_fadvise_ok(0));
+	ASSERT(ir0_early_fadvise_ok(IR0_EARLY_POSIX_FADV_NOREUSE));
+	ASSERT(!ir0_early_fadvise_ok(6));
 	ASSERT_EQ(IR0_EARLY_STATX_BYTES, 256);
 	ASSERT_EQ(IR0_EARLY_STATX_BASIC, 0x7ff);
 	{

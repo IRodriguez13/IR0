@@ -69,6 +69,11 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(69) == IR0_SYSCALL_PREADV);
 	ASSERT(syscall_decode_number(70) == IR0_SYSCALL_PWRITEV);
 	ASSERT(syscall_decode_number(276) == IR0_SYSCALL_RENAMEAT2);
-	ASSERT(decoded == 150);
+	ASSERT(syscall_decode_number(76) == IR0_SYSCALL_SPLICE);
+	ASSERT(syscall_decode_number(77) == IR0_SYSCALL_TEE);
+	ASSERT(syscall_decode_number(436) == IR0_SYSCALL_CLOSE_RANGE);
+	ASSERT(syscall_decode_number(285) == IR0_SYSCALL_COPY_FILE_RANGE);
+	ASSERT(syscall_decode_number(223) == IR0_SYSCALL_FADVISE64);
+	ASSERT(decoded == 155);
 	TEST_END();
 }

@@ -60,6 +60,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 71: return IR0_SYSCALL_SENDFILE;
 	case 72: return IR0_SYSCALL_PSELECT6;
 	case 73: return IR0_SYSCALL_PPOLL;
+	case 76: return IR0_SYSCALL_SPLICE;
+	case 77: return IR0_SYSCALL_TEE;
 	case 78: return IR0_SYSCALL_READLINKAT;
 	case 79: return IR0_SYSCALL_NEWFSTATAT;
 	case 80: return IR0_SYSCALL_FSTAT;
@@ -152,6 +154,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 221: return IR0_SYSCALL_EXECVE;
 	case 222: return IR0_SYSCALL_MMAP;
 	case 226: return IR0_SYSCALL_MPROTECT;
+	case 223: return IR0_SYSCALL_FADVISE64;
 	case 227: return IR0_SYSCALL_MSYNC;
 	case 233: return IR0_SYSCALL_MADVISE;
 	case 242: return IR0_SYSCALL_ACCEPT4;
@@ -159,10 +162,12 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 261: return IR0_SYSCALL_PRLIMIT64;
 	case 276: return IR0_SYSCALL_RENAMEAT2;
 	case 278: return IR0_SYSCALL_GETRANDOM;
+	case 285: return IR0_SYSCALL_COPY_FILE_RANGE;
 	case 279: return IR0_SYSCALL_MEMFD_CREATE;
 	case 281: return IR0_SYSCALL_EXECVEAT;
 	case 291: return IR0_SYSCALL_STATX;
 	case 293: return IR0_SYSCALL_RSEQ;
+	case 436: return IR0_SYSCALL_CLOSE_RANGE;
 	default: return IR0_SYSCALL_UNKNOWN;
 	}
 }

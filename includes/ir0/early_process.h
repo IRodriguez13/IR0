@@ -115,3 +115,5 @@ int early_process_request_yield(void);
 int early_process_take_yield(uint64_t *frame);
 int early_process_block_wait_observed(void);
 int64_t early_process_current_pid(void);
+void early_process_note_exec(void);
+int early_process_vfork_exec_resume(uint64_t *frame);

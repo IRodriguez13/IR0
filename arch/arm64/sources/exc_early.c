@@ -280,9 +280,43 @@ void arm64_exc_sync_lower(uint64_t *frame)
 						 : "memory");
 				__asm__ volatile("isb" ::: "memory");
 				leave = 0;
+				if (early_rootfs_exec_pending())
+					leave = 1;
 				if (early_process_block_wait_observed())
 					ir0_boot_smoke("ARM64_BLOCK_WAIT_OK");
 			}
+		}
+	}
+
+	if (leave)
+	{
+		uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
+		unsigned int i;
+		uint64_t elr;
+		uint64_t spsr;
+		uint64_t sp0;
+
+		for (i = 0; i < 31; i++)
+			words[i] = frame[i];
+		__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
+		__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
+		__asm__ volatile("mrs %0, sp_el0" : "=r"(sp0));
+		words[31] = elr;
+		words[32] = spsr;
+		words[33] = sp0;
+		if (early_process_vfork_exec_resume(words))
+		{
+			for (i = 0; i < 31; i++)
+				frame[i] = words[i];
+			__asm__ volatile("msr elr_el1, %0" :: "r"(words[31])
+					 : "memory");
+			__asm__ volatile("msr spsr_el1, %0" :: "r"(words[32])
+					 : "memory");
+			__asm__ volatile("msr sp_el0, %0" :: "r"(words[33])
+					 : "memory");
+			__asm__ volatile("isb" ::: "memory");
+			leave = 0;
+			ir0_boot_smoke("ARM64_VFORK_EXEC_OK");
 		}
 	}
 
