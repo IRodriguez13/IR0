@@ -14,26 +14,35 @@
 
 #include <stdint.h>
 #include <ir0/early_rootfs.h>
+#include <ir0/fcntl.h>
 
 #define EBADF  9
+#define EACCES 13
 #define EFAULT 14
 #define EINVAL 22
 #define EISDIR 21
 #define ENOENT 2
 #define ENOTDIR 20
 #define EMFILE 24
+#define ESPIPE 29
 #define ERANGE 34
+#define E2BIG  7
 
 #define ROOTFS_MAX_OPEN 8U
 #define ROOTFS_FD_BASE  3
 #define ROOTFS_FD_LIMIT ((int)(ROOTFS_FD_BASE + ROOTFS_MAX_OPEN))
-#define LINUX_O_CLOEXEC 02000000
+#define LINUX_O_ACCMODE  IR0_O_ACCMODE
+
+#define EXEC_ARGC_MAX 8
+#define EXEC_ARG_LEN  32
 
 struct rootfs_slot
 {
 	int used;
 	enum ir0_early_rootfs_node node;
 	uint64_t pos;
+	int flags;
+	int cloexec;
 };
 
 static struct rootfs_slot g_slots[ROOTFS_MAX_OPEN];
@@ -43,7 +52,13 @@ static const struct early_user_services *g_user;
 static int g_ready;
 static int g_stdio_open[3];
 static enum ir0_early_rootfs_node g_stdio_node[3];
+static uint64_t g_stdio_pos[3];
+static int g_stdio_flags[3];
+static int g_stdio_cloexec[3];
 static enum ir0_early_rootfs_node g_cwd;
+static int g_exec_pending;
+static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
+static char *g_exec_argv[EXEC_ARGC_MAX + 1];
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -81,6 +96,15 @@ static void reset_stdio(void)
 	g_stdio_node[0] = IR0_EARLY_ROOTFS_CONSOLE;
 	g_stdio_node[1] = IR0_EARLY_ROOTFS_CONSOLE;
 	g_stdio_node[2] = IR0_EARLY_ROOTFS_CONSOLE;
+	g_stdio_pos[0] = 0;
+	g_stdio_pos[1] = 0;
+	g_stdio_pos[2] = 0;
+	g_stdio_flags[0] = O_RDWR;
+	g_stdio_flags[1] = O_RDWR;
+	g_stdio_flags[2] = O_RDWR;
+	g_stdio_cloexec[0] = 0;
+	g_stdio_cloexec[1] = 0;
+	g_stdio_cloexec[2] = 0;
 	g_cwd = IR0_EARLY_ROOTFS_ROOT;
 }
 
@@ -115,6 +139,75 @@ static enum ir0_early_rootfs_node node_of_fd(int fd)
 	return g_slots[idx].node;
 }
 
+static uint64_t *pos_of_fd(int fd)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+		return g_stdio_open[fd] ? &g_stdio_pos[fd] : 0;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return 0;
+	return &g_slots[idx].pos;
+}
+
+static int flags_of_fd(int fd)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+		return g_stdio_open[fd] ? g_stdio_flags[fd] : 0;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return 0;
+	return g_slots[idx].flags;
+}
+
+static void set_flags_of_fd(int fd, int flags)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+	{
+		g_stdio_flags[fd] = flags;
+		return;
+	}
+	idx = slot_from_fd(fd);
+	if (idx >= 0)
+		g_slots[idx].flags = flags;
+}
+
+static int cloexec_of_fd(int fd)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+		return g_stdio_open[fd] ? g_stdio_cloexec[fd] : 0;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return 0;
+	return g_slots[idx].cloexec;
+}
+
+static void set_cloexec_of_fd(int fd, int cloexec)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+	{
+		g_stdio_cloexec[fd] = cloexec ? 1 : 0;
+		return;
+	}
+	idx = slot_from_fd(fd);
+	if (idx >= 0)
+		g_slots[idx].cloexec = cloexec ? 1 : 0;
+}
+
+static int status_flags(int flags)
+{
+	return flags & (LINUX_O_ACCMODE | LINUX_O_APPEND | LINUX_O_NONBLOCK);
+}
+
 static int close_fd(int fd)
 {
 	int idx;
@@ -125,6 +218,9 @@ static int close_fd(int fd)
 			return -EBADF;
 		g_stdio_open[fd] = 0;
 		g_stdio_node[fd] = IR0_EARLY_ROOTFS_NONE;
+		g_stdio_pos[fd] = 0;
+		g_stdio_flags[fd] = 0;
+		g_stdio_cloexec[fd] = 0;
 		return 0;
 	}
 	idx = slot_from_fd(fd);
@@ -133,6 +229,8 @@ static int close_fd(int fd)
 	g_slots[idx].used = 0;
 	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
 	g_slots[idx].pos = 0;
+	g_slots[idx].flags = 0;
+	g_slots[idx].cloexec = 0;
 	return 0;
 }
 
@@ -144,6 +242,9 @@ static int install_fd(int fd, enum ir0_early_rootfs_node node)
 	{
 		g_stdio_open[fd] = 1;
 		g_stdio_node[fd] = node;
+		g_stdio_pos[fd] = 0;
+		g_stdio_flags[fd] = O_RDWR;
+		g_stdio_cloexec[fd] = 0;
 		return fd;
 	}
 	if (fd < ROOTFS_FD_BASE || fd >= ROOTFS_FD_LIMIT)
@@ -152,6 +253,8 @@ static int install_fd(int fd, enum ir0_early_rootfs_node node)
 	g_slots[idx].used = 1;
 	g_slots[idx].node = node;
 	g_slots[idx].pos = 0;
+	g_slots[idx].flags = O_RDWR;
+	g_slots[idx].cloexec = 0;
 	return fd;
 }
 
@@ -178,6 +281,8 @@ static int alloc_fd(enum ir0_early_rootfs_node node)
 			g_slots[i].used = 1;
 			g_slots[i].node = node;
 			g_slots[i].pos = 0;
+			g_slots[i].flags = O_RDWR;
+			g_slots[i].cloexec = 0;
 			return (int)(ROOTFS_FD_BASE + i);
 		}
 	}
@@ -197,8 +302,11 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_slots[i].used = 0;
 		g_slots[i].node = IR0_EARLY_ROOTFS_NONE;
 		g_slots[i].pos = 0;
+		g_slots[i].flags = 0;
+		g_slots[i].cloexec = 0;
 	}
 	reset_stdio();
+	g_exec_pending = 0;
 	g_ready = (init_blob != 0 && init_len > 0 && user &&
 		   user->copy_from_user && user->copy_to_user);
 }
@@ -214,7 +322,6 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 	enum ir0_early_rootfs_node node;
 	int fd;
 
-	(void)flags;
 	if (!g_ready)
 		return -ENOENT;
 	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0)
@@ -224,9 +331,14 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 	node = ir0_early_rootfs_path_node(pbuf);
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
+	if ((flags & LINUX_O_DIRECTORY) &&
+	    node != IR0_EARLY_ROOTFS_ROOT && node != IR0_EARLY_ROOTFS_DEV)
+		return -ENOTDIR;
 	fd = alloc_fd(node);
 	if (fd < 0)
 		return fd;
+	set_flags_of_fd(fd, status_flags(flags));
+	set_cloexec_of_fd(fd, (flags & LINUX_O_CLOEXEC) != 0);
 	return fd;
 }
 
@@ -351,7 +463,11 @@ int64_t early_rootfs_dup(int oldfd)
 	newfd = lowest_unused_fd();
 	if (newfd < 0)
 		return newfd;
-	return install_fd(newfd, node_of_fd(oldfd));
+	if (install_fd(newfd, node_of_fd(oldfd)) < 0)
+		return -EBADF;
+	set_flags_of_fd(newfd, flags_of_fd(oldfd));
+	set_cloexec_of_fd(newfd, cloexec_of_fd(oldfd));
+	return newfd;
 }
 
 int64_t early_rootfs_dup3(int oldfd, int newfd, int flags)
@@ -366,7 +482,11 @@ int64_t early_rootfs_dup3(int oldfd, int newfd, int flags)
 		return -EBADF;
 	if (fd_is_open(newfd) && close_fd(newfd) != 0)
 		return -EBADF;
-	return install_fd(newfd, node_of_fd(oldfd));
+	if (install_fd(newfd, node_of_fd(oldfd)) < 0)
+		return -EBADF;
+	set_flags_of_fd(newfd, flags_of_fd(oldfd));
+	set_cloexec_of_fd(newfd, (flags & LINUX_O_CLOEXEC) != 0);
+	return newfd;
 }
 
 int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
@@ -565,6 +685,181 @@ int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size)
 	    g_user->copy_to_user(buffer, cwd, n) != 0)
 		return -EFAULT;
 	return (int64_t)n;
+}
+
+int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
+{
+	enum ir0_early_rootfs_node node;
+	uint64_t *pos;
+	int64_t base;
+	int64_t next;
+	uint64_t limit;
+
+	node = node_of_fd(fd);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	if (node == IR0_EARLY_ROOTFS_CONSOLE || node == IR0_EARLY_ROOTFS_TTY)
+		return -ESPIPE;
+	pos = pos_of_fd(fd);
+	if (!pos)
+		return -EBADF;
+	if (node == IR0_EARLY_ROOTFS_INIT)
+		limit = g_blob_len;
+	else if (node == IR0_EARLY_ROOTFS_ROOT || node == IR0_EARLY_ROOTFS_DEV)
+		limit = ir0_early_rootfs_dir_count(node);
+	else
+		limit = 0;
+	if (whence == SEEK_SET)
+		base = 0;
+	else if (whence == SEEK_CUR)
+		base = (int64_t)*pos;
+	else if (whence == SEEK_END)
+		base = (int64_t)limit;
+	else
+		return -EINVAL;
+	next = base + offset;
+	if (next < 0)
+		return -EINVAL;
+	*pos = (uint64_t)next;
+	return next;
+}
+
+int64_t early_rootfs_fcntl(int fd, int cmd, uint64_t arg)
+{
+	int newfd;
+
+	if (!fd_is_open(fd))
+		return -EBADF;
+	if (cmd == F_GETFD)
+		return cloexec_of_fd(fd) ? FD_CLOEXEC : 0;
+	if (cmd == F_SETFD)
+	{
+		if (arg & ~(uint64_t)FD_CLOEXEC)
+			return -EINVAL;
+		set_cloexec_of_fd(fd, (int)arg);
+		return 0;
+	}
+	if (cmd == F_GETFL)
+		return flags_of_fd(fd);
+	if (cmd == F_SETFL)
+	{
+		set_flags_of_fd(fd, (flags_of_fd(fd) & LINUX_O_ACCMODE) |
+				    status_flags((int)arg));
+		return 0;
+	}
+	if (cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC)
+	{
+		if ((int64_t)arg < 0 || (int)arg >= ROOTFS_FD_LIMIT)
+			return -EINVAL;
+		for (newfd = (int)arg; newfd < ROOTFS_FD_LIMIT; newfd++)
+		{
+			if (fd_is_open(newfd))
+				continue;
+			if (install_fd(newfd, node_of_fd(fd)) < 0)
+				return -EBADF;
+			set_flags_of_fd(newfd, flags_of_fd(fd));
+			set_cloexec_of_fd(newfd, cmd == F_DUPFD_CLOEXEC);
+			return newfd;
+		}
+		return -EMFILE;
+	}
+	if (cmd == F_GETLK || cmd == F_SETLK || cmd == F_SETLKW)
+		return -EINVAL;
+	return -EINVAL;
+}
+
+int64_t early_rootfs_fchdir(int fd)
+{
+	enum ir0_early_rootfs_node node = node_of_fd(fd);
+
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	if (node != IR0_EARLY_ROOTFS_ROOT && node != IR0_EARLY_ROOTFS_DEV)
+		return -ENOTDIR;
+	g_cwd = node;
+	return 0;
+}
+
+int64_t early_rootfs_fsync(int fd)
+{
+	if (!fd_is_open(fd))
+		return -EBADF;
+	return 0;
+}
+
+static int walk_user_vector(uint64_t user_vec, int store)
+{
+	unsigned i;
+	uint64_t ptr;
+	char discard[EXEC_ARG_LEN];
+
+	if (!user_vec || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	for (i = 0; i < EXEC_ARGC_MAX; i++)
+	{
+		if (g_user->copy_from_user(&ptr, user_vec + (uint64_t)i * 8UL,
+					   sizeof(ptr)) != 0)
+			return -EFAULT;
+		if (!ptr)
+		{
+			if (store)
+				g_exec_argv[i] = 0;
+			return 0;
+		}
+		if (!copy_user_cstr(ptr, store ? g_exec_args[i] : discard,
+				    EXEC_ARG_LEN))
+			return -EFAULT;
+		if (store)
+			g_exec_argv[i] = g_exec_args[i];
+	}
+	if (g_user->copy_from_user(&ptr, user_vec + (uint64_t)EXEC_ARGC_MAX * 8UL,
+				   sizeof(ptr)) != 0)
+		return -EFAULT;
+	if (ptr)
+		return -E2BIG;
+	if (store)
+		g_exec_argv[EXEC_ARGC_MAX] = 0;
+	return 0;
+}
+
+int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp)
+{
+	char pbuf[32];
+	enum ir0_early_rootfs_node node;
+	int ret;
+
+	if (!g_ready || !g_blob)
+		return -ENOENT;
+	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	node = ir0_early_rootfs_path_node(pbuf);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node != IR0_EARLY_ROOTFS_INIT)
+		return -EACCES;
+	ret = walk_user_vector(envp, 0);
+	if (ret < 0)
+		return ret;
+	ret = walk_user_vector(argv, 1);
+	if (ret < 0)
+		return ret;
+	g_exec_pending = 1;
+	return 0;
+}
+
+int early_rootfs_exec_pending(void)
+{
+	return g_exec_pending;
+}
+
+char *const *early_rootfs_exec_argv(void)
+{
+	return g_exec_argv;
+}
+
+void early_rootfs_exec_clear(void)
+{
+	g_exec_pending = 0;
 }
 
 int early_rootfs_smoke_init(void)

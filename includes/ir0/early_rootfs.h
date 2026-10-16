@@ -285,6 +285,14 @@ int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
 int64_t early_rootfs_chdir(uint64_t path);
 int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size);
 int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count);
+int64_t early_rootfs_lseek(int fd, int64_t offset, int whence);
+int64_t early_rootfs_fcntl(int fd, int cmd, uint64_t arg);
+int64_t early_rootfs_fchdir(int fd);
+int64_t early_rootfs_fsync(int fd);
+int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp);
+int early_rootfs_exec_pending(void);
+char *const *early_rootfs_exec_argv(void);
+void early_rootfs_exec_clear(void);
 
 int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count);
