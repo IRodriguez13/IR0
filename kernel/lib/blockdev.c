@@ -263,6 +263,5 @@ void ir0_block_reset_for_test(void)
 	memset(ir0_block_slots, 0, sizeof(ir0_block_slots));
 	ir0_block_slot_count = 0;
 	ir0_block_next_id = IR0_BLOCKDEV_ID_BASE;
-	ir0_block_facade_classified = 0;
 }
 #endif
