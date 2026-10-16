@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <ir0/early_io.h>
+#include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
 
 #define EBADF 9
@@ -21,7 +22,7 @@ static int64_t early_write(struct early_syscall_context *context,
 	char bytes[WRITE_MAX];
 	uint64_t count, index;
 
-	if (descriptor != 1 && descriptor != 2)
+	if (!early_rootfs_fd_is_console((int)descriptor))
 		return -EBADF;
 	if (!length)
 		return 0;
@@ -54,10 +55,12 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_write(opaque, a0, a1, a2);
 	case IR0_SYSCALL_IOCTL:
 		return -ENOTTY;
+	case IR0_SYSCALL_DUP:
+		return early_rootfs_dup((int)a0);
+	case IR0_SYSCALL_DUP3:
+		return early_rootfs_dup3((int)a0, (int)a1, (int)a2);
 	case IR0_SYSCALL_FCNTL:
 	case IR0_SYSCALL_PPOLL:
-	case IR0_SYSCALL_DUP:
-	case IR0_SYSCALL_DUP3:
 	default:
 		return -ENOSYS;
 	}

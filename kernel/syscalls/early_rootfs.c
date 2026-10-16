@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: early_rootfs.c
- * Description: Architecture-neutral staged "/" and "/init" file table
+ * Description: Architecture-neutral staged root, /init and /dev/console table
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -17,12 +17,15 @@
 
 #define EBADF  9
 #define EFAULT 14
+#define EINVAL 22
 #define EISDIR 21
 #define ENOENT 2
 #define EMFILE 24
 
 #define ROOTFS_MAX_OPEN 8U
 #define ROOTFS_FD_BASE  3
+#define ROOTFS_FD_LIMIT ((int)(ROOTFS_FD_BASE + ROOTFS_MAX_OPEN))
+#define LINUX_O_CLOEXEC 02000000
 
 struct rootfs_slot
 {
@@ -36,6 +39,8 @@ static const uint8_t *g_blob;
 static uint64_t g_blob_len;
 static const struct early_user_services *g_user;
 static int g_ready;
+static int g_stdio_open[3];
+static enum ir0_early_rootfs_node g_stdio_node[3];
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -65,6 +70,16 @@ static int strings_equal(const char *left, const char *right)
 	return *left == *right;
 }
 
+static void reset_stdio(void)
+{
+	g_stdio_open[0] = 1;
+	g_stdio_open[1] = 1;
+	g_stdio_open[2] = 1;
+	g_stdio_node[0] = IR0_EARLY_ROOTFS_CONSOLE;
+	g_stdio_node[1] = IR0_EARLY_ROOTFS_CONSOLE;
+	g_stdio_node[2] = IR0_EARLY_ROOTFS_CONSOLE;
+}
+
 static int slot_from_fd(int fd)
 {
 	unsigned idx;
@@ -75,6 +90,77 @@ static int slot_from_fd(int fd)
 	if (idx >= ROOTFS_MAX_OPEN || !g_slots[idx].used)
 		return -1;
 	return (int)idx;
+}
+
+static int fd_is_open(int fd)
+{
+	if (fd >= 0 && fd <= 2)
+		return g_stdio_open[fd];
+	return slot_from_fd(fd) >= 0;
+}
+
+static enum ir0_early_rootfs_node node_of_fd(int fd)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+		return g_stdio_open[fd] ? g_stdio_node[fd] : IR0_EARLY_ROOTFS_NONE;
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return IR0_EARLY_ROOTFS_NONE;
+	return g_slots[idx].node;
+}
+
+static int close_fd(int fd)
+{
+	int idx;
+
+	if (fd >= 0 && fd <= 2)
+	{
+		if (!g_stdio_open[fd])
+			return -EBADF;
+		g_stdio_open[fd] = 0;
+		g_stdio_node[fd] = IR0_EARLY_ROOTFS_NONE;
+		return 0;
+	}
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return -EBADF;
+	g_slots[idx].used = 0;
+	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
+	g_slots[idx].pos = 0;
+	return 0;
+}
+
+static int install_fd(int fd, enum ir0_early_rootfs_node node)
+{
+	unsigned idx;
+
+	if (fd >= 0 && fd <= 2)
+	{
+		g_stdio_open[fd] = 1;
+		g_stdio_node[fd] = node;
+		return fd;
+	}
+	if (fd < ROOTFS_FD_BASE || fd >= ROOTFS_FD_LIMIT)
+		return -EBADF;
+	idx = (unsigned)(fd - ROOTFS_FD_BASE);
+	g_slots[idx].used = 1;
+	g_slots[idx].node = node;
+	g_slots[idx].pos = 0;
+	return fd;
+}
+
+static int lowest_unused_fd(void)
+{
+	int fd;
+
+	for (fd = 0; fd < ROOTFS_FD_LIMIT; fd++)
+	{
+		if (!fd_is_open(fd))
+			return fd;
+	}
+	return -EMFILE;
 }
 
 static int alloc_fd(enum ir0_early_rootfs_node node)
@@ -108,6 +194,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_slots[i].node = IR0_EARLY_ROOTFS_NONE;
 		g_slots[i].pos = 0;
 	}
+	reset_stdio();
 	g_ready = (init_blob != 0 && init_len > 0 && user &&
 		   user->copy_from_user && user->copy_to_user);
 }
@@ -153,8 +240,10 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 	if (count == 0)
 		return 0;
 	sl = &g_slots[idx];
-	if (sl->node == IR0_EARLY_ROOTFS_ROOT)
+	if (sl->node == IR0_EARLY_ROOTFS_ROOT || sl->node == IR0_EARLY_ROOTFS_DEV)
 		return -EISDIR;
+	if (sl->node == IR0_EARLY_ROOTFS_CONSOLE)
+		return 0;
 	if (!g_blob || sl->pos >= g_blob_len)
 		return 0;
 	remain = g_blob_len - sl->pos;
@@ -176,15 +265,56 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 
 int64_t early_rootfs_close(int fd)
 {
-	int idx;
+	return close_fd(fd);
+}
 
-	idx = slot_from_fd(fd);
-	if (idx < 0)
+int early_rootfs_console_ready(void)
+{
+	struct ir0_early_stat64 st;
+
+	if (!g_ready)
+		return 0;
+	if (ir0_early_rootfs_path_node("/dev") != IR0_EARLY_ROOTFS_DEV)
+		return 0;
+	if (ir0_early_rootfs_path_node("/dev/console") != IR0_EARLY_ROOTFS_CONSOLE)
+		return 0;
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_CONSOLE, 0, &st);
+	return st.st_mode == IR0_EARLY_ROOTFS_MODE_CHR &&
+	       st.st_rdev == IR0_EARLY_ROOTFS_CONSOLE_RDEV;
+}
+
+int early_rootfs_fd_is_console(int fd)
+{
+	if (fd >= 0 && fd <= 2)
+		return !g_ready || g_stdio_open[fd];
+	return node_of_fd(fd) == IR0_EARLY_ROOTFS_CONSOLE;
+}
+
+int64_t early_rootfs_dup(int oldfd)
+{
+	int newfd;
+
+	if (!g_ready || !fd_is_open(oldfd))
 		return -EBADF;
-	g_slots[idx].used = 0;
-	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;
-	g_slots[idx].pos = 0;
-	return 0;
+	newfd = lowest_unused_fd();
+	if (newfd < 0)
+		return newfd;
+	return install_fd(newfd, node_of_fd(oldfd));
+}
+
+int64_t early_rootfs_dup3(int oldfd, int newfd, int flags)
+{
+	if (oldfd == newfd)
+		return -EINVAL;
+	if (flags & ~LINUX_O_CLOEXEC)
+		return -EINVAL;
+	if (!g_ready || !fd_is_open(oldfd))
+		return -EBADF;
+	if (newfd < 0 || newfd >= ROOTFS_FD_LIMIT)
+		return -EBADF;
+	if (fd_is_open(newfd) && close_fd(newfd) != 0)
+		return -EBADF;
+	return install_fd(newfd, node_of_fd(oldfd));
 }
 
 int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
@@ -271,7 +401,7 @@ int early_rootfs_smoke_init(void)
 	int fd;
 	struct ir0_early_stat64 st;
 
-	if (!g_ready || !g_blob || g_blob_len < 4)
+	if (!g_ready || !g_blob || g_blob_len < 4 || !early_rootfs_console_ready())
 		return -1;
 	fd = alloc_fd(IR0_EARLY_ROOTFS_INIT);
 	if (fd < 0)

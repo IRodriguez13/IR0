@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_early_rootfs_abi.c
- * Description: Host checks for staged "/" and "/init" path/stat contract
+ * Description: Host checks for staged "/", "/init" and "/dev/console" stat
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -24,6 +24,9 @@ void test_early_rootfs_abi(void)
 
 	ASSERT_EQ(ir0_early_rootfs_path_node("/"), IR0_EARLY_ROOTFS_ROOT);
 	ASSERT_EQ(ir0_early_rootfs_path_node("/init"), IR0_EARLY_ROOTFS_INIT);
+	ASSERT_EQ(ir0_early_rootfs_path_node("/dev"), IR0_EARLY_ROOTFS_DEV);
+	ASSERT_EQ(ir0_early_rootfs_path_node("/dev/console"),
+		  IR0_EARLY_ROOTFS_CONSOLE);
 	ASSERT_EQ(ir0_early_rootfs_path_node("/bin/sh"), IR0_EARLY_ROOTFS_NONE);
 	ASSERT_EQ(ir0_early_rootfs_path_node(0), IR0_EARLY_ROOTFS_NONE);
 
@@ -36,6 +39,15 @@ void test_early_rootfs_abi(void)
 	ASSERT_EQ(st.st_ino, 1);
 	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_DIR);
 	ASSERT_EQ(st.st_size, 0);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_DEV, 0, &st);
+	ASSERT_EQ(st.st_ino, 3);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_DIR);
+
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_CONSOLE, 0, &st);
+	ASSERT_EQ(st.st_ino, 4);
+	ASSERT_EQ(st.st_mode, IR0_EARLY_ROOTFS_MODE_CHR);
+	ASSERT_EQ(st.st_rdev, IR0_EARLY_ROOTFS_CONSOLE_RDEV);
 
 	TEST_END();
 }

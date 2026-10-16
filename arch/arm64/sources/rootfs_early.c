@@ -71,6 +71,8 @@ void arm64_rootfs_early_init(void)
 	early_rootfs_bind(embedded_elf_blob, len, &g_arm64_rootfs_user);
 	if (early_rootfs_ready())
 		ir0_boot_smoke("ARM64_ROOTFS_OK");
+	if (early_rootfs_console_ready())
+		ir0_boot_smoke("ARM64_CONSOLE_OK");
 }
 
 int arm64_rootfs_ready(void)

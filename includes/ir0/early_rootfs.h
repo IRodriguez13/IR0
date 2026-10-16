@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: early_rootfs.h
- * Description: Staged "/" + "/init" nodes (ISA supplies blob and usercopy)
+ * Description: Staged "/", "/init", "/dev/console" (ISA supplies blob/usercopy)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -25,15 +25,22 @@ enum ir0_early_rootfs_node
 	IR0_EARLY_ROOTFS_NONE = 0,
 	IR0_EARLY_ROOTFS_ROOT,
 	IR0_EARLY_ROOTFS_INIT,
+	IR0_EARLY_ROOTFS_DEV,
+	IR0_EARLY_ROOTFS_CONSOLE,
 };
 
 #define IR0_EARLY_ROOTFS_S_IFMT  0170000U
 #define IR0_EARLY_ROOTFS_S_IFREG 0100000U
 #define IR0_EARLY_ROOTFS_S_IFDIR 0040000U
+#define IR0_EARLY_ROOTFS_S_IFCHR 0020000U
 #define IR0_EARLY_ROOTFS_MODE_DIR \
 	(IR0_EARLY_ROOTFS_S_IFDIR | 0755U)
 #define IR0_EARLY_ROOTFS_MODE_REG \
 	(IR0_EARLY_ROOTFS_S_IFREG | 0755U)
+#define IR0_EARLY_ROOTFS_MODE_CHR \
+	(IR0_EARLY_ROOTFS_S_IFCHR | 0622U)
+/* Linux devices.txt: /dev/console is char 5:1. GNU makedev(5,1) == 0x501. */
+#define IR0_EARLY_ROOTFS_CONSOLE_RDEV 0x501ULL
 
 struct ir0_early_stat64
 {
@@ -67,6 +74,15 @@ static inline enum ir0_early_rootfs_node ir0_early_rootfs_path_node(const char *
 	if (path[0] == '/' && path[1] == 'i' && path[2] == 'n' &&
 	    path[3] == 'i' && path[4] == 't' && path[5] == '\0')
 		return IR0_EARLY_ROOTFS_INIT;
+	if (path[0] == '/' && path[1] == 'd' && path[2] == 'e' &&
+	    path[3] == 'v' && path[4] == '\0')
+		return IR0_EARLY_ROOTFS_DEV;
+	if (path[0] == '/' && path[1] == 'd' && path[2] == 'e' &&
+	    path[3] == 'v' && path[4] == '/' && path[5] == 'c' &&
+	    path[6] == 'o' && path[7] == 'n' && path[8] == 's' &&
+	    path[9] == 'o' && path[10] == 'l' && path[11] == 'e' &&
+	    path[12] == '\0')
+		return IR0_EARLY_ROOTFS_CONSOLE;
 	return IR0_EARLY_ROOTFS_NONE;
 }
 
@@ -102,6 +118,23 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 		st->st_blocks = (int64_t)((blob_len + 511UL) / 512UL);
 		return;
 	}
+	if (node == IR0_EARLY_ROOTFS_CONSOLE)
+	{
+		st->st_ino = 4;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_CHR;
+		st->st_rdev = IR0_EARLY_ROOTFS_CONSOLE_RDEV;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
+	if (node == IR0_EARLY_ROOTFS_DEV)
+	{
+		st->st_ino = 3;
+		st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
+		st->st_size = 0;
+		st->st_blocks = 0;
+		return;
+	}
 
 	st->st_ino = 1;
 	st->st_mode = IR0_EARLY_ROOTFS_MODE_DIR;
@@ -112,7 +145,11 @@ static inline void ir0_early_rootfs_fill_stat(enum ir0_early_rootfs_node node,
 void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		       const struct early_user_services *user);
 int early_rootfs_ready(void);
+int early_rootfs_console_ready(void);
 int early_rootfs_smoke_init(void);
+int early_rootfs_fd_is_console(int fd);
+int64_t early_rootfs_dup(int oldfd);
+int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
 
 int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count);
