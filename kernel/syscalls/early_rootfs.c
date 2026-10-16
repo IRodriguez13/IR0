@@ -20,7 +20,9 @@
 #define EINVAL 22
 #define EISDIR 21
 #define ENOENT 2
+#define ENOTDIR 20
 #define EMFILE 24
+#define ERANGE 34
 
 #define ROOTFS_MAX_OPEN 8U
 #define ROOTFS_FD_BASE  3
@@ -41,6 +43,7 @@ static const struct early_user_services *g_user;
 static int g_ready;
 static int g_stdio_open[3];
 static enum ir0_early_rootfs_node g_stdio_node[3];
+static enum ir0_early_rootfs_node g_cwd;
 
 static int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 {
@@ -78,6 +81,7 @@ static void reset_stdio(void)
 	g_stdio_node[0] = IR0_EARLY_ROOTFS_CONSOLE;
 	g_stdio_node[1] = IR0_EARLY_ROOTFS_CONSOLE;
 	g_stdio_node[2] = IR0_EARLY_ROOTFS_CONSOLE;
+	g_cwd = IR0_EARLY_ROOTFS_ROOT;
 }
 
 static int slot_from_fd(int fd)
@@ -228,34 +232,47 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 
 int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 {
+	enum ir0_early_rootfs_node node;
 	int idx;
 	struct rootfs_slot *sl;
 	uint64_t remain;
 	uint64_t n;
+	uint64_t i;
 	uint8_t tmp[256];
 
-	idx = slot_from_fd(fd);
-	if (idx < 0)
+	node = node_of_fd(fd);
+	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
 	if (count == 0)
 		return 0;
-	sl = &g_slots[idx];
-	if (sl->node == IR0_EARLY_ROOTFS_ROOT || sl->node == IR0_EARLY_ROOTFS_DEV)
+	if (node == IR0_EARLY_ROOTFS_ROOT || node == IR0_EARLY_ROOTFS_DEV)
 		return -EISDIR;
-	if (sl->node == IR0_EARLY_ROOTFS_CONSOLE)
+	if (node == IR0_EARLY_ROOTFS_CONSOLE ||
+	    node == IR0_EARLY_ROOTFS_TTY ||
+	    node == IR0_EARLY_ROOTFS_NULL)
 		return 0;
+	if (node == IR0_EARLY_ROOTFS_ZERO)
+	{
+		n = count > sizeof(tmp) ? sizeof(tmp) : count;
+		for (i = 0; i < n; i++)
+			tmp[i] = 0;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(buffer, tmp, n) != 0)
+			return -EFAULT;
+		return (int64_t)n;
+	}
+	idx = slot_from_fd(fd);
+	if (idx < 0)
+		return -EBADF;
+	sl = &g_slots[idx];
 	if (!g_blob || sl->pos >= g_blob_len)
 		return 0;
 	remain = g_blob_len - sl->pos;
 	n = count > remain ? remain : count;
 	if (n > sizeof(tmp))
 		n = sizeof(tmp);
-	{
-		uint64_t i;
-
-		for (i = 0; i < n; i++)
-			tmp[i] = g_blob[sl->pos + i];
-	}
+	for (i = 0; i < n; i++)
+		tmp[i] = g_blob[sl->pos + i];
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(buffer, tmp, n) != 0)
 		return -EFAULT;
@@ -283,11 +300,46 @@ int early_rootfs_console_ready(void)
 	       st.st_rdev == IR0_EARLY_ROOTFS_CONSOLE_RDEV;
 }
 
+int early_rootfs_memdev_ready(void)
+{
+	struct ir0_early_stat64 st;
+
+	if (!g_ready)
+		return 0;
+	if (ir0_early_rootfs_path_node("/dev/null") != IR0_EARLY_ROOTFS_NULL)
+		return 0;
+	if (ir0_early_rootfs_path_node("/dev/zero") != IR0_EARLY_ROOTFS_ZERO)
+		return 0;
+	if (ir0_early_rootfs_path_node("/dev/tty") != IR0_EARLY_ROOTFS_TTY)
+		return 0;
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_NULL, 0, &st);
+	if (st.st_rdev != IR0_EARLY_ROOTFS_NULL_RDEV)
+		return 0;
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_ZERO, 0, &st);
+	if (st.st_rdev != IR0_EARLY_ROOTFS_ZERO_RDEV)
+		return 0;
+	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_TTY, 0, &st);
+	return st.st_mode == IR0_EARLY_ROOTFS_MODE_CHR &&
+	       st.st_rdev == IR0_EARLY_ROOTFS_TTY_RDEV;
+}
+
 int early_rootfs_fd_is_console(int fd)
 {
-	if (fd >= 0 && fd <= 2)
-		return !g_ready || g_stdio_open[fd];
-	return node_of_fd(fd) == IR0_EARLY_ROOTFS_CONSOLE;
+	enum ir0_early_rootfs_node node;
+
+	if (!g_ready && fd >= 0 && fd <= 2)
+		return 1;
+	node = node_of_fd(fd);
+	return node == IR0_EARLY_ROOTFS_CONSOLE ||
+	       node == IR0_EARLY_ROOTFS_TTY;
+}
+
+int early_rootfs_fd_discards_write(int fd)
+{
+	enum ir0_early_rootfs_node node = node_of_fd(fd);
+
+	return node == IR0_EARLY_ROOTFS_NULL ||
+	       node == IR0_EARLY_ROOTFS_ZERO;
 }
 
 int64_t early_rootfs_dup(int oldfd)
@@ -383,17 +435,55 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 
 int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 {
-	int idx;
+	enum ir0_early_rootfs_node node;
 	struct ir0_early_stat64 st;
 
-	idx = slot_from_fd(fd);
-	if (idx < 0)
+	node = node_of_fd(fd);
+	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -EBADF;
-	ir0_early_rootfs_fill_stat(g_slots[idx].node, g_blob_len, &st);
+	ir0_early_rootfs_fill_stat(node, g_blob_len, &st);
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
 		return -EFAULT;
 	return 0;
+}
+
+int64_t early_rootfs_chdir(uint64_t path)
+{
+	char pbuf[32];
+	enum ir0_early_rootfs_node node;
+
+	if (!g_ready)
+		return -ENOENT;
+	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	node = ir0_early_rootfs_path_node(pbuf);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	if (node != IR0_EARLY_ROOTFS_ROOT && node != IR0_EARLY_ROOTFS_DEV)
+		return -ENOTDIR;
+	g_cwd = node;
+	return 0;
+}
+
+int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size)
+{
+	const char *cwd;
+	uint64_t n;
+
+	if (!g_ready)
+		return -ENOENT;
+	cwd = (g_cwd == IR0_EARLY_ROOTFS_DEV) ? "/dev" : "/";
+	n = 0;
+	while (cwd[n] != '\0')
+		n++;
+	n++;
+	if (size < n)
+		return -ERANGE;
+	if (!g_user || !g_user->copy_to_user ||
+	    g_user->copy_to_user(buffer, cwd, n) != 0)
+		return -EFAULT;
+	return (int64_t)n;
 }
 
 int early_rootfs_smoke_init(void)

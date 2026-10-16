@@ -2,26 +2,11 @@
 /** Architecture-neutral VFS routing for staged userspace. */
 
 #include <stdint.h>
+#include <ir0/early_rootfs.h>
 #include <ir0/early_syscall.h>
 #include <ir0/early_vfs.h>
 
-#define EFAULT 14
-#define ENOENT 2
 #define ENOSYS 38
-
-static int64_t early_getcwd(struct early_syscall_context *context,
-			    uint64_t buffer, uint64_t size)
-{
-	static const char root[] = "/";
-
-	if (size < sizeof(root) || !context || !context->services ||
-	    !context->services->user ||
-	    !context->services->user->copy_to_user)
-		return -EFAULT;
-	if (context->services->user->copy_to_user(buffer, root, sizeof(root)) != 0)
-		return -EFAULT;
-	return sizeof(root);
-}
 
 static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 				 uint64_t a0, uint64_t a1, uint64_t a2,
@@ -33,9 +18,9 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 
 	(void)a4; (void)a5;
 	if (id == IR0_SYSCALL_GETCWD)
-		return early_getcwd(context, a0, a1);
+		return early_rootfs_getcwd(a0, a1);
 	if (id == IR0_SYSCALL_CHDIR)
-		return -ENOENT;
+		return early_rootfs_chdir(a0);
 	if (!ops)
 		return -ENOSYS;
 	switch (id) {

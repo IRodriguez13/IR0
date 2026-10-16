@@ -73,6 +73,8 @@ void arm64_rootfs_early_init(void)
 		ir0_boot_smoke("ARM64_ROOTFS_OK");
 	if (early_rootfs_console_ready())
 		ir0_boot_smoke("ARM64_CONSOLE_OK");
+	if (early_rootfs_memdev_ready())
+		ir0_boot_smoke("ARM64_MEMDEV_OK");
 }
 
 int arm64_rootfs_ready(void)
