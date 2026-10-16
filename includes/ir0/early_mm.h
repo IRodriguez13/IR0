@@ -24,6 +24,13 @@ struct early_mm_layout
 	uint64_t map_limit;
 };
 
+#define IR0_EARLY_MCL_CURRENT 1
+#define IR0_EARLY_MCL_FUTURE 2
+#define IR0_EARLY_MCL_ONFAULT 4
+#define IR0_EARLY_MCL_KNOWN \
+	(IR0_EARLY_MCL_CURRENT | IR0_EARLY_MCL_FUTURE | IR0_EARLY_MCL_ONFAULT)
+#define IR0_EARLY_MLOCK_ONFAULT 1
+
 extern const struct syscall_context_provider early_mm_provider;
 
 /* Install the arena for the image about to enter EL0. Copies layout. */

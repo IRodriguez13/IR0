@@ -1042,6 +1042,10 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_RECVMMSG:
 		(void)a3;
 		return early_recvmmsg(opaque, a0, a1, a2, a4);
+	case IR0_SYSCALL_READAHEAD:
+		return early_rootfs_readahead((int)a0, (int64_t)a1, a2);
+	case IR0_SYSCALL_SYNCFS:
+		return early_rootfs_syncfs((int)a0);
 	default:
 		return -ENOSYS;
 	}
@@ -1064,7 +1068,8 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_PREADV, IR0_SYSCALL_PWRITEV, IR0_SYSCALL_SPLICE,
 	IR0_SYSCALL_TEE, IR0_SYSCALL_CLOSE_RANGE, IR0_SYSCALL_COPY_FILE_RANGE,
 	IR0_SYSCALL_FADVISE64, IR0_SYSCALL_VMSPLICE, IR0_SYSCALL_SYNC_FILE_RANGE,
-	IR0_SYSCALL_SENDMMSG, IR0_SYSCALL_RECVMMSG,
+	IR0_SYSCALL_SENDMMSG, IR0_SYSCALL_RECVMMSG, IR0_SYSCALL_READAHEAD,
+	IR0_SYSCALL_SYNCFS,
 };
 
 const struct syscall_context_provider early_io_provider = {

@@ -106,6 +106,63 @@ static inline int64_t ir0_early_process_tgkill(int64_t tgid, int64_t tid,
 
 #define IR0_EARLY_SVC_INSN_BYTES 4
 
+/*
+ * Linux include/uapi/linux/prctl.h and sched.h. TASK_COMM_LEN is 16.
+ * Unknown prctl options return EINVAL. Realtime SCHED_FIFO/RR is EPERM
+ * (no RT class). membarrier(2) QUERY returns the supported cmd mask.
+ */
+#define IR0_EARLY_TASK_COMM_LEN 16
+#define IR0_EARLY_PR_SET_PDEATHSIG 1
+#define IR0_EARLY_PR_GET_PDEATHSIG 2
+#define IR0_EARLY_PR_GET_DUMPABLE 3
+#define IR0_EARLY_PR_SET_DUMPABLE 4
+#define IR0_EARLY_PR_GET_KEEPCAPS 7
+#define IR0_EARLY_PR_SET_KEEPCAPS 8
+#define IR0_EARLY_PR_SET_NAME 15
+#define IR0_EARLY_PR_GET_NAME 16
+#define IR0_EARLY_PR_GET_SECCOMP 21
+#define IR0_EARLY_PR_CAPBSET_READ 23
+#define IR0_EARLY_PR_CAPBSET_DROP 24
+#define IR0_EARLY_PR_SET_NO_NEW_PRIVS 38
+#define IR0_EARLY_PR_GET_NO_NEW_PRIVS 39
+#define IR0_EARLY_PR_GET_TID_ADDRESS 40
+#define IR0_EARLY_PR_SET_THP_DISABLE 41
+#define IR0_EARLY_PR_GET_THP_DISABLE 42
+#define IR0_EARLY_PR_SET_PTRACER 0x59616d61UL
+#define IR0_EARLY_PR_SET_VMA 0x53564d41UL
+#define IR0_EARLY_PR_SET_VMA_ANON_NAME 0
+#define IR0_EARLY_SCHED_OTHER 0
+#define IR0_EARLY_SCHED_FIFO 1
+#define IR0_EARLY_SCHED_RR 2
+#define IR0_EARLY_SCHED_BATCH 3
+#define IR0_EARLY_SCHED_IDLE 5
+#define IR0_EARLY_MEMBARRIER_CMD_QUERY 0
+#define IR0_EARLY_MEMBARRIER_CMD_GLOBAL 1
+#define IR0_EARLY_MEMBARRIER_CMD_GLOBAL_EXPEDITED 2
+#define IR0_EARLY_MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED 4
+#define IR0_EARLY_MEMBARRIER_CMD_PRIVATE_EXPEDITED 8
+#define IR0_EARLY_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED 16
+#define IR0_EARLY_MEMBARRIER_SUPPORTED \
+	(IR0_EARLY_MEMBARRIER_CMD_GLOBAL | \
+	 IR0_EARLY_MEMBARRIER_CMD_GLOBAL_EXPEDITED | \
+	 IR0_EARLY_MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED | \
+	 IR0_EARLY_MEMBARRIER_CMD_PRIVATE_EXPEDITED | \
+	 IR0_EARLY_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED)
+#define IR0_EARLY_IOV_MAX 1024
+#define IR0_EARLY_IOV_BYTES 16
+
+static inline int ir0_early_sched_policy_ok(int policy)
+{
+	return policy == IR0_EARLY_SCHED_OTHER ||
+	       policy == IR0_EARLY_SCHED_BATCH ||
+	       policy == IR0_EARLY_SCHED_IDLE;
+}
+
+static inline int ir0_early_sched_policy_rt(int policy)
+{
+	return policy == IR0_EARLY_SCHED_FIFO || policy == IR0_EARLY_SCHED_RR;
+}
+
 extern const struct syscall_context_provider early_process_provider;
 int early_process_smoke_ok(void);
 int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls);

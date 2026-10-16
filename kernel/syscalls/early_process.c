@@ -64,6 +64,16 @@ static int g_child_frame_valid;
 static uint64_t g_sigmask;
 static uint64_t g_sa_handler[65];
 static uint64_t g_sa_flags[65];
+static char g_comm[IR0_EARLY_TASK_COMM_LEN] = { 'i', 'n', 'i', 't', 0 };
+static int g_pdeathsig;
+static int g_dumpable = 1;
+static int g_keepcaps;
+static int g_no_new_privs;
+static int g_thp_disable;
+static uint64_t g_clear_tid;
+static uint64_t g_capbset = ~0ULL;
+static int g_sched_policy;
+static int32_t g_sched_priority;
 
 static int64_t early_rt_sigprocmask(struct early_syscall_context *context,
 				    uint64_t how, uint64_t set, uint64_t oldset,
@@ -345,6 +355,13 @@ static int early_child_exists(void)
 	return g_child_state != CHILD_NONE;
 }
 
+static int early_pid_exists(int64_t pid)
+{
+	if (pid == 0 || pid == g_current_pid || pid == 1)
+		return 1;
+	return pid == EARLY_CHILD_PID && early_child_exists();
+}
+
 static int64_t early_write_pid32(struct early_syscall_context *context,
 				 uint64_t dest, uint32_t pid)
 {
@@ -554,19 +571,334 @@ static int64_t early_exit(struct early_syscall_context *context,
 	return (int64_t)status;
 }
 
+static int64_t early_prctl(struct early_syscall_context *context, uint64_t option,
+			   uint64_t arg2, uint64_t arg3, uint64_t arg4,
+			   uint64_t arg5)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	char comm[IR0_EARLY_TASK_COMM_LEN];
+	int32_t word;
+	uint64_t addr;
+	unsigned i;
+
+	(void)arg4;
+	(void)arg5;
+	switch (option)
+	{
+	case IR0_EARLY_PR_SET_PDEATHSIG:
+		if (arg2 > 64)
+			return -EINVAL;
+		g_pdeathsig = (int)arg2;
+		return 0;
+	case IR0_EARLY_PR_GET_PDEATHSIG:
+		word = g_pdeathsig;
+		if (!user || !user->copy_to_user ||
+		    user->copy_to_user(arg2, &word, sizeof(word)) != 0)
+			return -EFAULT;
+		return 0;
+	case IR0_EARLY_PR_GET_DUMPABLE:
+		return g_dumpable;
+	case IR0_EARLY_PR_SET_DUMPABLE:
+		if (arg2 > 1)
+			return -EINVAL;
+		g_dumpable = (int)arg2;
+		return 0;
+	case IR0_EARLY_PR_GET_KEEPCAPS:
+		return g_keepcaps;
+	case IR0_EARLY_PR_SET_KEEPCAPS:
+		if (arg2 > 1)
+			return -EINVAL;
+		g_keepcaps = (int)arg2;
+		return 0;
+	case IR0_EARLY_PR_SET_NAME:
+		if (!user || !user->copy_from_user)
+			return -EFAULT;
+		for (i = 0; i < IR0_EARLY_TASK_COMM_LEN; i++)
+			comm[i] = 0;
+		for (i = 0; i < IR0_EARLY_TASK_COMM_LEN - 1; i++)
+		{
+			if (user->copy_from_user(&comm[i], arg2 + i, 1) != 0)
+				return -EFAULT;
+			if (comm[i] == 0)
+				break;
+		}
+		comm[IR0_EARLY_TASK_COMM_LEN - 1] = 0;
+		for (i = 0; i < IR0_EARLY_TASK_COMM_LEN; i++)
+			g_comm[i] = comm[i];
+		return 0;
+	case IR0_EARLY_PR_GET_NAME:
+		if (!user || !user->copy_to_user ||
+		    user->copy_to_user(arg2, g_comm, IR0_EARLY_TASK_COMM_LEN) != 0)
+			return -EFAULT;
+		return 0;
+	case IR0_EARLY_PR_GET_SECCOMP:
+		return 0;
+	case IR0_EARLY_PR_CAPBSET_READ:
+		if (arg2 > 63)
+			return -EINVAL;
+		return (g_capbset >> arg2) & 1ULL;
+	case IR0_EARLY_PR_CAPBSET_DROP:
+		if (arg2 > 63)
+			return -EINVAL;
+		g_capbset &= ~(1ULL << arg2);
+		return 0;
+	case IR0_EARLY_PR_SET_NO_NEW_PRIVS:
+		if (arg2 != 1)
+			return -EINVAL;
+		g_no_new_privs = 1;
+		return 0;
+	case IR0_EARLY_PR_GET_NO_NEW_PRIVS:
+		return g_no_new_privs;
+	case IR0_EARLY_PR_GET_TID_ADDRESS:
+		addr = g_clear_tid;
+		if (!user || !user->copy_to_user ||
+		    user->copy_to_user(arg2, &addr, sizeof(addr)) != 0)
+			return -EFAULT;
+		return 0;
+	case IR0_EARLY_PR_SET_THP_DISABLE:
+		if (arg2 > 1)
+			return -EINVAL;
+		g_thp_disable = (int)arg2;
+		return 0;
+	case IR0_EARLY_PR_GET_THP_DISABLE:
+		return g_thp_disable;
+	case IR0_EARLY_PR_SET_PTRACER:
+		return 0;
+	case IR0_EARLY_PR_SET_VMA:
+		if (arg2 != IR0_EARLY_PR_SET_VMA_ANON_NAME)
+			return -EINVAL;
+		(void)arg3;
+		return 0;
+	default:
+		return -EINVAL;
+	}
+}
+
+static int64_t early_getcpu(struct early_syscall_context *context, uint64_t cpu,
+			    uint64_t node)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint32_t zero = 0;
+
+	if (cpu)
+	{
+		if (!user || !user->copy_to_user ||
+		    user->copy_to_user(cpu, &zero, sizeof(zero)) != 0)
+			return -EFAULT;
+	}
+	if (node)
+	{
+		if (!user || !user->copy_to_user ||
+		    user->copy_to_user(node, &zero, sizeof(zero)) != 0)
+			return -EFAULT;
+	}
+	return 0;
+}
+
+static int64_t early_sched_setparam(struct early_syscall_context *context,
+				    int64_t pid, uint64_t param)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	int32_t prio;
+
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (!user || !user->copy_from_user ||
+	    user->copy_from_user(&prio, param, sizeof(prio)) != 0)
+		return -EFAULT;
+	if (prio != 0)
+		return -EINVAL;
+	g_sched_priority = 0;
+	return 0;
+}
+
+static int64_t early_sched_getparam(struct early_syscall_context *context,
+				    int64_t pid, uint64_t param)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (!user || !user->copy_to_user ||
+	    user->copy_to_user(param, &g_sched_priority, sizeof(g_sched_priority)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+static int64_t early_sched_setscheduler(struct early_syscall_context *context,
+					int64_t pid, int policy, uint64_t param)
+{
+	int64_t ret;
+
+	if (ir0_early_sched_policy_rt(policy))
+		return -EPERM;
+	if (!ir0_early_sched_policy_ok(policy))
+		return -EINVAL;
+	ret = early_sched_setparam(context, pid, param);
+	if (ret < 0)
+		return ret;
+	g_sched_policy = policy;
+	return 0;
+}
+
+static int64_t early_sched_getscheduler(int64_t pid)
+{
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	return g_sched_policy;
+}
+
+static int64_t early_sched_setaffinity(struct early_syscall_context *context,
+				       int64_t pid, uint64_t len, uint64_t mask)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint64_t bits = 0;
+
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (!len || (len & 7UL))
+		return -EINVAL;
+	if (!user || !user->copy_from_user)
+		return -EFAULT;
+	if (user->copy_from_user(&bits, mask, 8) != 0)
+		return -EFAULT;
+	if ((bits & 1ULL) == 0)
+		return -EINVAL;
+	return 0;
+}
+
+static int64_t early_sched_getaffinity(struct early_syscall_context *context,
+				       int64_t pid, uint64_t len, uint64_t mask)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint64_t bits = 1;
+
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (len < 8 || (len & 7UL))
+		return -EINVAL;
+	if (!user || !user->copy_to_user ||
+	    user->copy_to_user(mask, &bits, 8) != 0)
+		return -EFAULT;
+	return 8;
+}
+
+static int64_t early_process_vm(struct early_syscall_context *context,
+			       int64_t pid, uint64_t lvec, uint64_t liovcnt,
+			       uint64_t rvec, uint64_t riovcnt, uint64_t flags,
+			       int write_remote)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	const struct early_time_services *time = context && context->services ?
+		context->services->time : 0;
+	uint64_t li = 0;
+	uint64_t ri = 0;
+	uint64_t lbase = 0;
+	uint64_t llen = 0;
+	uint64_t rbase = 0;
+	uint64_t rlen = 0;
+	int64_t total = 0;
+	uint8_t tmp[256];
+
+	if (flags)
+		return -EINVAL;
+	if (liovcnt > IR0_EARLY_IOV_MAX || riovcnt > IR0_EARLY_IOV_MAX)
+		return -EINVAL;
+	if (!early_pid_exists(pid))
+		return -ESRCH;
+	if (!user || !user->copy_from_user || !user->copy_to_user)
+		return -EFAULT;
+	while (1)
+	{
+		uint64_t n;
+		uint64_t vec[2];
+		int64_t copied;
+
+		while (llen == 0 && li < liovcnt)
+		{
+			if (user->copy_from_user(vec, lvec + li * IR0_EARLY_IOV_BYTES,
+						 sizeof(vec)) != 0)
+				return total ? total : -EFAULT;
+			lbase = vec[0];
+			llen = vec[1];
+			li++;
+		}
+		while (rlen == 0 && ri < riovcnt)
+		{
+			if (user->copy_from_user(vec, rvec + ri * IR0_EARLY_IOV_BYTES,
+						 sizeof(vec)) != 0)
+				return total ? total : -EFAULT;
+			rbase = vec[0];
+			rlen = vec[1];
+			ri++;
+		}
+		if (llen == 0 || rlen == 0)
+			break;
+		n = llen < rlen ? llen : rlen;
+		if (n > sizeof(tmp))
+			n = sizeof(tmp);
+		if (write_remote)
+			copied = user->copy_from_user(tmp, lbase, n);
+		else
+			copied = user->copy_from_user(tmp, rbase, n);
+		if (copied != 0)
+			return total ? total : -EFAULT;
+		if (write_remote)
+			copied = user->copy_to_user(rbase, tmp, n);
+		else
+			copied = user->copy_to_user(lbase, tmp, n);
+		if (copied != 0)
+			return total ? total : -EFAULT;
+		lbase += n;
+		rbase += n;
+		llen -= n;
+		rlen -= n;
+		total += (int64_t)n;
+	}
+	if (total > 0 && time && time->note)
+		time->note(EARLY_SYSCALL_PROCESS_VM_OK);
+	return total;
+}
+
+static int64_t early_membarrier(int cmd, int flags)
+{
+	if (flags)
+		return -EINVAL;
+	if (cmd == IR0_EARLY_MEMBARRIER_CMD_QUERY)
+		return IR0_EARLY_MEMBARRIER_SUPPORTED;
+	if (cmd == IR0_EARLY_MEMBARRIER_CMD_GLOBAL ||
+	    cmd == IR0_EARLY_MEMBARRIER_CMD_GLOBAL_EXPEDITED ||
+	    cmd == IR0_EARLY_MEMBARRIER_CMD_REGISTER_GLOBAL_EXPEDITED ||
+	    cmd == IR0_EARLY_MEMBARRIER_CMD_PRIVATE_EXPEDITED ||
+	    cmd == IR0_EARLY_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED)
+	{
+		__asm__ volatile("" ::: "memory");
+		return 0;
+	}
+	return -EINVAL;
+}
+
 static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 				     uint64_t a0, uint64_t a1, uint64_t a2,
 				     uint64_t a3, uint64_t a4, uint64_t a5)
 {
 	struct early_syscall_context *context = opaque;
 
-	(void)a5;
 	switch (id) {
 	case IR0_SYSCALL_GETPID:
 		g_getpid_ok = 1;
 		return g_current_pid;
 	case IR0_SYSCALL_GETTID:
+		return g_current_pid;
 	case IR0_SYSCALL_SET_TID_ADDRESS:
+		g_clear_tid = a0;
 		return g_current_pid;
 	case IR0_SYSCALL_GETPPID:
 		return 1;
@@ -581,9 +913,10 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_UNAME:
 		return early_uname(context, a0);
 	case IR0_SYSCALL_SET_ROBUST_LIST:
-	case IR0_SYSCALL_PRCTL:
 	case IR0_SYSCALL_RSEQ:
 		return 0;
+	case IR0_SYSCALL_PRCTL:
+		return early_prctl(context, a0, a1, a2, a3, a4);
 	case IR0_SYSCALL_PRLIMIT64:
 		return early_prlimit64(context, a3);
 	case IR0_SYSCALL_GETRANDOM:
@@ -805,6 +1138,26 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_SCHED_YIELD:
 		(void)early_process_request_yield();
 		return 0;
+	case IR0_SYSCALL_GETCPU:
+		return early_getcpu(context, a0, a1);
+	case IR0_SYSCALL_SCHED_SETPARAM:
+		return early_sched_setparam(context, (int64_t)a0, a1);
+	case IR0_SYSCALL_SCHED_GETPARAM:
+		return early_sched_getparam(context, (int64_t)a0, a1);
+	case IR0_SYSCALL_SCHED_SETSCHEDULER:
+		return early_sched_setscheduler(context, (int64_t)a0, (int)a1, a2);
+	case IR0_SYSCALL_SCHED_GETSCHEDULER:
+		return early_sched_getscheduler((int64_t)a0);
+	case IR0_SYSCALL_SCHED_SETAFFINITY:
+		return early_sched_setaffinity(context, (int64_t)a0, a1, a2);
+	case IR0_SYSCALL_SCHED_GETAFFINITY:
+		return early_sched_getaffinity(context, (int64_t)a0, a1, a2);
+	case IR0_SYSCALL_PROCESS_VM_READV:
+		return early_process_vm(context, (int64_t)a0, a1, a2, a3, a4, a5, 0);
+	case IR0_SYSCALL_PROCESS_VM_WRITEV:
+		return early_process_vm(context, (int64_t)a0, a1, a2, a3, a4, a5, 1);
+	case IR0_SYSCALL_MEMBARRIER:
+		return early_membarrier((int)a0, (int)a1);
 	case IR0_SYSCALL_SIGALTSTACK:
 		return early_sigaltstack(context, a0, a1);
 	case IR0_SYSCALL_FUTEX:
@@ -841,6 +1194,11 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_TGKILL, IR0_SYSCALL_GETRESUID, IR0_SYSCALL_GETRESGID,
 	IR0_SYSCALL_GETRLIMIT, IR0_SYSCALL_GETRUSAGE, IR0_SYSCALL_SYSINFO,
 	IR0_SYSCALL_PERSONALITY, IR0_SYSCALL_SCHED_YIELD,
+	IR0_SYSCALL_GETCPU, IR0_SYSCALL_SCHED_SETPARAM,
+	IR0_SYSCALL_SCHED_SETSCHEDULER, IR0_SYSCALL_SCHED_GETSCHEDULER,
+	IR0_SYSCALL_SCHED_GETPARAM, IR0_SYSCALL_SCHED_SETAFFINITY,
+	IR0_SYSCALL_SCHED_GETAFFINITY, IR0_SYSCALL_PROCESS_VM_READV,
+	IR0_SYSCALL_PROCESS_VM_WRITEV, IR0_SYSCALL_MEMBARRIER,
 	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, IR0_SYSCALL_SETUID,
 	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
 	IR0_SYSCALL_SETRESUID, IR0_SYSCALL_SETRESGID, IR0_SYSCALL_GETPRIORITY,

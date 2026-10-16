@@ -941,6 +941,8 @@ int64_t early_rootfs_vmsplice(int fd, uint64_t iov, uint64_t iovcnt,
 			      unsigned flags);
 int64_t early_rootfs_sync_file_range(int fd, int64_t offset, int64_t nbytes,
 				     unsigned flags);
+int64_t early_rootfs_readahead(int fd, int64_t offset, uint64_t count);
+int64_t early_rootfs_syncfs(int fd);
 int early_rootfs_want_creds(int fd);
 int early_rootfs_take_creds(int fd, int32_t *pid, int32_t *uid, int32_t *gid);
 int64_t early_rootfs_send_creds(int fd, int32_t pid, int32_t uid, int32_t gid);

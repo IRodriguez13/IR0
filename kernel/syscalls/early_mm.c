@@ -12,6 +12,7 @@
 #include <ir0/early_mm.h>
 #include <ir0/early_syscall.h>
 
+#define EFAULT 14
 #define ENOMEM 12
 #define EINVAL 22
 #define ENOSYS 38
@@ -125,6 +126,72 @@ static int64_t early_mprotect(struct early_syscall_context *context,
 				       !!(protection & PROT_EXEC)) == 0 ? 0 : -EINVAL;
 }
 
+static int early_page_present(struct early_syscall_context *context,
+			      uint64_t page)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint8_t byte;
+
+	if (!user || !user->copy_from_user)
+		return 0;
+	return user->copy_from_user(&byte, page, 1) == 0;
+}
+
+static int64_t early_mincore(struct early_syscall_context *context,
+			     uint64_t address, uint64_t length, uint64_t vec)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint64_t page;
+	uint64_t end;
+	uint64_t i;
+
+	if (address & (PAGE_SIZE - 1))
+		return -EINVAL;
+	if (!length)
+		return 0;
+	if (address > UINT64_MAX - (length - 1))
+		return -ENOMEM;
+	end = (address + length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	if (!user || !user->copy_to_user)
+		return -EFAULT;
+	i = 0;
+	for (page = address; page < end; page += PAGE_SIZE, i++)
+	{
+		uint8_t present;
+
+		if (!early_page_present(context, page))
+			return -ENOMEM;
+		present = 1;
+		if (user->copy_to_user(vec + i, &present, 1) != 0)
+			return -EFAULT;
+	}
+	return 0;
+}
+
+static int64_t early_mlock_range(struct early_syscall_context *context,
+				 uint64_t address, uint64_t length, int flags)
+{
+	uint64_t start;
+	uint64_t end;
+	uint64_t page;
+
+	(void)flags;
+	if (!length)
+		return 0;
+	start = address & ~(PAGE_SIZE - 1);
+	if (address > UINT64_MAX - (length - 1))
+		return -EINVAL;
+	end = (address + length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	for (page = start; page < end; page += PAGE_SIZE)
+	{
+		if (!early_page_present(context, page))
+			return -ENOMEM;
+	}
+	return 0;
+}
+
 static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 				uint64_t a0, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5)
@@ -162,6 +229,22 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 		if (a2 & ~(0x1UL | 0x2UL | 0x4UL))
 			return -EINVAL;
 		return 0;
+	case IR0_SYSCALL_MINCORE:
+		return early_mincore(context, a0, a1, a2);
+	case IR0_SYSCALL_MLOCK:
+		return early_mlock_range(context, a0, a1, 0);
+	case IR0_SYSCALL_MUNLOCK:
+		return early_mlock_range(context, a0, a1, 0);
+	case IR0_SYSCALL_MLOCK2:
+		if (a2 & ~(uint64_t)IR0_EARLY_MLOCK_ONFAULT)
+			return -EINVAL;
+		return early_mlock_range(context, a0, a1, (int)a2);
+	case IR0_SYSCALL_MLOCKALL:
+		if (a0 == 0 || (a0 & ~(uint64_t)IR0_EARLY_MCL_KNOWN))
+			return -EINVAL;
+		return 0;
+	case IR0_SYSCALL_MUNLOCKALL:
+		return 0;
 	default:
 		return -ENOSYS;
 	}
@@ -170,6 +253,8 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 static const enum ir0_syscall_id g_mm_syscalls[] = {
 	IR0_SYSCALL_BRK, IR0_SYSCALL_MMAP, IR0_SYSCALL_MUNMAP,
 	IR0_SYSCALL_MPROTECT, IR0_SYSCALL_MADVISE, IR0_SYSCALL_MSYNC,
+	IR0_SYSCALL_MINCORE, IR0_SYSCALL_MLOCK, IR0_SYSCALL_MUNLOCK,
+	IR0_SYSCALL_MLOCKALL, IR0_SYSCALL_MUNLOCKALL, IR0_SYSCALL_MLOCK2,
 };
 
 const struct syscall_context_provider early_mm_provider = {

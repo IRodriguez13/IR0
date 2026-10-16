@@ -3238,7 +3238,8 @@ smoke-arm64-syscall: kernel-arm64-syscall.bin
 	   grep -q "ARM64_STATX_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_SCM_RIGHTS_OK" /tmp/arm64-syscall-smoke.log && \
 	   grep -q "ARM64_SPLICE_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_ABSTRACT_OK" /tmp/arm64-syscall-smoke.log; then \
+	   grep -q "ARM64_ABSTRACT_OK" /tmp/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_VM_OK" /tmp/arm64-syscall-smoke.log; then \
 		echo "✓ smoke-arm64-syscall passed (incl. F7h/F7i/F7j + fork/exec + musl + clone + process_t)"; \
 	else \
 		echo "✗ smoke-arm64-syscall FAILED"; \

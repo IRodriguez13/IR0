@@ -5659,6 +5659,26 @@ int64_t early_rootfs_sync_file_range(int fd, int64_t offset, int64_t nbytes,
 	return 0;
 }
 
+int64_t early_rootfs_readahead(int fd, int64_t offset, uint64_t count)
+{
+	int err;
+
+	(void)count;
+	err = fd_espipe(fd);
+	if (err < 0)
+		return err == -ESPIPE ? -EINVAL : err;
+	if (offset < 0)
+		return -EINVAL;
+	return 0;
+}
+
+int64_t early_rootfs_syncfs(int fd)
+{
+	if (node_of_fd(fd) == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	return 0;
+}
+
 int early_rootfs_want_creds(int fd)
 {
 	int uid = unix_id_of_fd(fd);

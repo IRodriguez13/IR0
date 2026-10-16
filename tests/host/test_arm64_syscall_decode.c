@@ -78,6 +78,19 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(84) == IR0_SYSCALL_SYNC_FILE_RANGE);
 	ASSERT(syscall_decode_number(269) == IR0_SYSCALL_SENDMMSG);
 	ASSERT(syscall_decode_number(243) == IR0_SYSCALL_RECVMMSG);
-	ASSERT(decoded == 159);
+	ASSERT(syscall_decode_number(168) == IR0_SYSCALL_GETCPU);
+	ASSERT(syscall_decode_number(122) == IR0_SYSCALL_SCHED_SETAFFINITY);
+	ASSERT(syscall_decode_number(123) == IR0_SYSCALL_SCHED_GETAFFINITY);
+	ASSERT(syscall_decode_number(118) == IR0_SYSCALL_SCHED_SETPARAM);
+	ASSERT(syscall_decode_number(120) == IR0_SYSCALL_SCHED_GETSCHEDULER);
+	ASSERT(syscall_decode_number(270) == IR0_SYSCALL_PROCESS_VM_READV);
+	ASSERT(syscall_decode_number(271) == IR0_SYSCALL_PROCESS_VM_WRITEV);
+	ASSERT(syscall_decode_number(232) == IR0_SYSCALL_MINCORE);
+	ASSERT(syscall_decode_number(228) == IR0_SYSCALL_MLOCK);
+	ASSERT(syscall_decode_number(284) == IR0_SYSCALL_MLOCK2);
+	ASSERT(syscall_decode_number(213) == IR0_SYSCALL_READAHEAD);
+	ASSERT(syscall_decode_number(267) == IR0_SYSCALL_SYNCFS);
+	ASSERT(syscall_decode_number(283) == IR0_SYSCALL_MEMBARRIER);
+	ASSERT(decoded == 177);
 	TEST_END();
 }
