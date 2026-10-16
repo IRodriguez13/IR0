@@ -348,6 +348,15 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		(void)a0;
 		(void)a1;
 		return -ECHILD;
+	case IR0_SYSCALL_WAITID:
+		/*
+		 * Linux waitid(2): ECHILD when the caller has no children.
+		 * Same empty-reap as wait4 until clone exists.
+		 */
+		(void)a0;
+		(void)a1;
+		(void)a2;
+		return -ECHILD;
 	case IR0_SYSCALL_GETPGID:
 		return ir0_early_process_getpgid(a0);
 	case IR0_SYSCALL_GETSID:
@@ -419,6 +428,7 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_GETEGID, IR0_SYSCALL_GETPPID, IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
+	IR0_SYSCALL_WAITID,
 	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
 	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_GETGROUPS,
 	IR0_SYSCALL_SETGROUPS, IR0_SYSCALL_RT_SIGPROCMASK,
