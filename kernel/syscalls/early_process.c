@@ -27,6 +27,7 @@
 #define CHILD_ENTER 1
 #define CHILD_RUNNING 2
 #define CHILD_ZOMBIE 3
+#define CHILD_PARKED 4
 #define EARLY_CHILD_PID 2
 #define LINUX_REBOOT_MAGIC1 0xfee1deadUL
 #define LINUX_REBOOT_MAGIC2 672274793UL
@@ -53,7 +54,12 @@ static uint64_t g_child_stack;
 static uint64_t g_child_tls;
 static uint64_t g_child_cleartid;
 static int g_child_wstatus;
+static int g_vfork;
+static int g_yield_requested;
+static int g_block_wait_ok;
 static uint64_t g_parent_frame[IR0_EARLY_EL0_FRAME_WORDS];
+static uint64_t g_child_frame[IR0_EARLY_EL0_FRAME_WORDS];
+static int g_child_frame_valid;
 static uint64_t g_sigmask;
 static uint64_t g_sa_handler[65];
 static uint64_t g_sa_flags[65];
@@ -361,6 +367,9 @@ static int64_t early_clone(struct early_syscall_context *context, uint64_t flags
 		return (flags & CLONE_VM) ? -EINVAL : -ENOSYS;
 	if (early_child_exists())
 		return -EAGAIN;
+	g_vfork = (flags & CLONE_VFORK) != 0;
+	g_yield_requested = 0;
+	g_child_frame_valid = 0;
 	g_child_stack = stack;
 	g_child_tls = (flags & CLONE_SETTLS) ? tls : 0;
 	g_child_cleartid = (flags & CLONE_CHILD_CLEARTID) ? child_tid : 0;
@@ -386,6 +395,7 @@ fail:
 	g_enter_child = 0;
 	g_child_state = CHILD_NONE;
 	g_child_cleartid = 0;
+	g_vfork = 0;
 	return ret;
 }
 
@@ -403,7 +413,13 @@ static int64_t early_wait4(struct early_syscall_context *context, int64_t pid,
 	if (pid < -1)
 		return -ECHILD;
 	if (g_child_state != CHILD_ZOMBIE)
-		return (options & WNOHANG) ? 0 : -EAGAIN;
+	{
+		if (options & WNOHANG)
+			return 0;
+		if (early_process_request_yield())
+			return -EAGAIN;
+		return -EAGAIN;
+	}
 	wstatus = g_child_wstatus;
 	if (status)
 	{
@@ -517,6 +533,8 @@ static int64_t early_exit(struct early_syscall_context *context,
 			(void)early_write_pid32(context, g_child_cleartid, 0);
 		g_child_wstatus = (int)((status & 0xffUL) << 8);
 		g_child_state = CHILD_ZOMBIE;
+		g_vfork = 0;
+		g_yield_requested = 0;
 		g_resume_parent = 1;
 		g_current_pid = 1;
 		if (context && context->leave_usermode)
@@ -778,6 +796,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return previous;
 	}
 	case IR0_SYSCALL_SCHED_YIELD:
+		(void)early_process_request_yield();
 		return 0;
 	case IR0_SYSCALL_SIGALTSTACK:
 		return early_sigaltstack(context, a0, a1);
@@ -860,6 +879,81 @@ int early_process_clone_resume_parent(uint64_t *frame)
 	g_resume_parent = 0;
 	g_current_pid = 1;
 	return 1;
+}
+
+int early_process_request_yield(void)
+{
+	if (g_current_pid == EARLY_CHILD_PID)
+	{
+		if (g_vfork || g_child_state == CHILD_ZOMBIE)
+			return 0;
+		g_yield_requested = 1;
+		return 1;
+	}
+	if (g_child_state == CHILD_RUNNING || g_child_state == CHILD_PARKED)
+	{
+		g_yield_requested = 1;
+		return 1;
+	}
+	return 0;
+}
+
+int early_process_take_yield(uint64_t *frame)
+{
+	uint64_t *save;
+	uint64_t *load;
+	unsigned int i;
+	int dest;
+	int rewind;
+
+	if (!frame || g_enter_child || g_resume_parent)
+		return 0;
+	dest = 0;
+	rewind = 0;
+	if (g_yield_requested)
+	{
+		if (g_current_pid == EARLY_CHILD_PID && g_vfork)
+		{
+			g_yield_requested = 0;
+			return 0;
+		}
+		dest = (g_current_pid == 1) ? EARLY_CHILD_PID : 1;
+		rewind = 1;
+		g_yield_requested = 0;
+	}
+	else if (g_current_pid == 1 && g_child_state == CHILD_PARKED &&
+		 g_child_frame_valid)
+		dest = EARLY_CHILD_PID;
+	if (!dest)
+		return 0;
+	if (dest == EARLY_CHILD_PID && !g_child_frame_valid &&
+	    g_current_pid == 1)
+		return 0;
+	save = (g_current_pid == 1) ? g_parent_frame : g_child_frame;
+	load = (dest == 1) ? g_parent_frame : g_child_frame;
+	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
+		save[i] = frame[i];
+	if (rewind && save[31] >= IR0_EARLY_SVC_INSN_BYTES)
+		save[31] -= IR0_EARLY_SVC_INSN_BYTES;
+	if (g_current_pid == EARLY_CHILD_PID)
+	{
+		g_child_frame_valid = 1;
+		g_child_state = CHILD_PARKED;
+	}
+	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
+		frame[i] = load[i];
+	if (dest == EARLY_CHILD_PID && g_child_state == CHILD_PARKED)
+	{
+		g_child_state = CHILD_RUNNING;
+		g_block_wait_ok = 1;
+	}
+	g_current_pid = dest;
+	return 1;
+}
+
+int early_process_block_wait_observed(void)
+{
+	return g_block_wait_ok;
 }
 
 int64_t early_process_current_pid(void)

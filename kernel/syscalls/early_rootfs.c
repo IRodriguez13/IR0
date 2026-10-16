@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <ir0/blockdev.h>
 #include <ir0/early_cpio.h>
+#include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/fcntl.h>
 #include <ir0/types.h>
@@ -404,6 +405,14 @@ static int parent_exists(const char *path);
 static int join_under_cwd(char *pbuf, unsigned cap);
 static int unix_find_bound(const char *path, int stream);
 static int64_t unix_dgram_deposit(int uid, const uint8_t *tmp, unsigned count);
+
+static int64_t wait_or_eagain(int fd)
+{
+	if (fd >= 0 && (flags_of_fd(fd) & LINUX_O_NONBLOCK))
+		return -EAGAIN;
+	(void)early_process_request_yield();
+	return -EAGAIN;
+}
 
 static int unix_id_of_fd(int fd)
 {
@@ -1443,7 +1452,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (!p->used)
 			return -EBADF;
 		if (p->len == 0)
-			return p->writers ? -EAGAIN : 0;
+			return p->writers ? wait_or_eagain(fd) : 0;
 		take = p->len;
 		if (take > sizeof(tmp))
 			take = (unsigned)sizeof(tmp);
@@ -1498,7 +1507,10 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (count < 8)
 			return -EINVAL;
 		if (g_eventfd[efd].count == 0)
-			return -EAGAIN;
+			return (g_eventfd[efd].nonblock ||
+				(flags_of_fd(fd) & LINUX_O_NONBLOCK)) ?
+				       -EAGAIN :
+				       wait_or_eagain(fd);
 		if (g_eventfd[efd].semaphore)
 		{
 			value = 1;
@@ -1571,7 +1583,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 			if (g_unix[uid].stream)
 				return -ENOTCONN;
 			if (g_unix[uid].len == 0)
-				return -EAGAIN;
+				return wait_or_eagain(fd);
 			if (g_unix[uid].len < 2)
 				return -EIO;
 			{
@@ -1615,7 +1627,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (g_sock[pair].dir[src].len == 0)
 			return (g_sock[pair].refs[src] &&
 				!(g_sock[pair].shut[src] & 2)) ?
-				       -EAGAIN :
+				       wait_or_eagain(fd) :
 				       0;
 		if (g_sock[pair].dgram)
 		{
@@ -1712,7 +1724,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (!p->used)
 			return -EBADF;
 		if (p->len == 0)
-			return p->writers ? -EAGAIN : 0;
+			return p->writers ? wait_or_eagain(fd) : 0;
 		take = p->len;
 		if (take > sizeof(tmp))
 			take = (unsigned)sizeof(tmp);
@@ -2476,7 +2488,7 @@ int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count)
 		return 0;
 	room = PIPE_BUF - p->len;
 	if (room == 0)
-		return -EAGAIN;
+		return wait_or_eagain(fd);
 	put = room;
 	if (put > sizeof(tmp))
 		put = (unsigned)sizeof(tmp);
@@ -2616,7 +2628,7 @@ int64_t early_rootfs_eventfd_write(int fd, uint64_t buffer, uint64_t count)
 		return -EINVAL;
 	if (g_eventfd[efd].count + add < g_eventfd[efd].count ||
 	    g_eventfd[efd].count + add > EFD_COUNT_MAX)
-		return -EAGAIN;
+		return wait_or_eagain(fd);
 	g_eventfd[efd].count += add;
 	return 8;
 }
@@ -3288,7 +3300,7 @@ int64_t early_rootfs_sock_accept4(int fd, uint64_t addr, uint64_t addrlen,
 	if (!g_unix[uid].stream)
 		return -EOPNOTSUPP;
 	if (g_unix[uid].pending_pair < 0)
-		return -EAGAIN;
+		return wait_or_eagain(fd);
 	pair = g_unix[uid].pending_pair;
 	end = g_unix[uid].pending_end;
 	g_unix[uid].pending_pair = -1;
@@ -3636,7 +3648,7 @@ int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count)
 		return 0;
 	room = PIPE_BUF - p->len;
 	if (room == 0)
-		return -EAGAIN;
+		return wait_or_eagain(fd);
 	put = room;
 	if (put > sizeof(tmp))
 		put = (unsigned)sizeof(tmp);
@@ -3836,7 +3848,7 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 		if (count > 250)
 			return -EMSGSIZE;
 		if (room < count + 2)
-			return -EAGAIN;
+			return wait_or_eagain(fd);
 		if (!g_user || !g_user->copy_from_user ||
 		    g_user->copy_from_user(tmp, buffer, count) != 0)
 			return -EFAULT;
@@ -3855,7 +3867,7 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 		return (int64_t)count;
 	}
 	if (room == 0)
-		return -EAGAIN;
+		return wait_or_eagain(fd);
 	put = room;
 	if (put > sizeof(tmp))
 		put = (unsigned)sizeof(tmp);

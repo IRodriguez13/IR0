@@ -43,6 +43,7 @@ void test_early_process_abi(void)
 	ASSERT(!ir0_early_clone_flags_ok(IR0_EARLY_SIGCHLD));
 	ASSERT(!ir0_early_clone_flags_ok(CLONE_VM | CLONE_THREAD));
 	ASSERT(!ir0_early_clone_flags_ok(CLONE_VM | 0x00020000UL));
+	ASSERT_EQ(IR0_EARLY_SVC_INSN_BYTES, 4);
 
 	TEST_END();
 }

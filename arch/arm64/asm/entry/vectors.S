@@ -200,6 +200,51 @@ el0_entry:
 	mov	x8, #260
 	svc	#0
 
+	/*
+	 * pipe2 + clone(CLONE_VM|SIGCHLD) without VFORK: child blocking
+	 * read, parent write. Proves the 2-task yield (pipe(7)).
+	 */
+	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
+	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	mov	x1, xzr
+	mov	x8, #59
+	svc	#0
+	mov	x0, #0x111
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x400) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x400) >> 16) & 0xffff), lsl #16
+	mov	x8, #220
+	svc	#0
+	cbnz	x0, 3f
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	ldr	w0, [x9]
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x8c) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x8c) >> 16) & 0xffff), lsl #16
+	mov	x2, #1
+	mov	x8, #63
+	svc	#0
+	mov	x0, #0
+	mov	x8, #93
+	svc	#0
+3:
+	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
+	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	ldr	w0, [x9, #4]
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x8c) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x8c) >> 16) & 0xffff), lsl #16
+	mov	w10, #'B'
+	strb	w10, [x1]
+	mov	x2, #1
+	mov	x8, #64
+	svc	#0
+	mov	x0, #-1
+	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x70) & 0xffff)
+	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x70) >> 16) & 0xffff), lsl #16
+	mov	x2, xzr
+	mov	x3, xzr
+	mov	x8, #260
+	svc	#0
+
 	/* nanosleep({0, 1000000}, NULL) — timespec64 at user page +0x40 */
 	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x40) & 0xffff)
 	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x40) >> 16) & 0xffff), lsl #16

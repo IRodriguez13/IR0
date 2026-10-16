@@ -104,9 +104,14 @@ static inline int64_t ir0_early_process_tgkill(int64_t tgid, int64_t tid,
 	return ir0_early_process_tkill(tid, sig);
 }
 
+#define IR0_EARLY_SVC_INSN_BYTES 4
+
 extern const struct syscall_context_provider early_process_provider;
 int early_process_smoke_ok(void);
 int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls);
 void early_process_clone_save_parent(const uint64_t *frame);
 int early_process_clone_resume_parent(uint64_t *frame);
+int early_process_request_yield(void);
+int early_process_take_yield(uint64_t *frame);
+int early_process_block_wait_observed(void);
 int64_t early_process_current_pid(void);
