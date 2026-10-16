@@ -102,6 +102,16 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(438) == IR0_SYSCALL_PIDFD_GETFD);
 	ASSERT(syscall_decode_number(437) == IR0_SYSCALL_OPENAT2);
 	ASSERT(syscall_decode_number(439) == IR0_SYSCALL_FACCESSAT2);
-	ASSERT(decoded == 197);
+	ASSERT(syscall_decode_number(5) == IR0_SYSCALL_SETXATTR);
+	ASSERT(syscall_decode_number(8) == IR0_SYSCALL_GETXATTR);
+	ASSERT(syscall_decode_number(151) == IR0_SYSCALL_SETFSUID);
+	ASSERT(syscall_decode_number(170) == IR0_SYSCALL_SETTIMEOFDAY);
+	ASSERT(syscall_decode_number(264) == IR0_SYSCALL_NAME_TO_HANDLE_AT);
+	ASSERT(syscall_decode_number(266) == IR0_SYSCALL_CLOCK_ADJTIME);
+	ASSERT(syscall_decode_number(435) == IR0_SYSCALL_CLONE3);
+	ASSERT(syscall_decode_number(440) == IR0_SYSCALL_PROCESS_MADVISE);
+	ASSERT(syscall_decode_number(441) == IR0_SYSCALL_EPOLL_PWAIT2);
+	ASSERT(syscall_decode_number(452) == IR0_SYSCALL_FCHMODAT2);
+	ASSERT(decoded == 219);
 	TEST_END();
 }

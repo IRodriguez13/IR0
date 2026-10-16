@@ -75,6 +75,46 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_rootfs_faccessat2((int)a0, a1, (int)a2, (int)a3);
 	if (id == IR0_SYSCALL_OPENAT2)
 		return early_rootfs_openat2((int)a0, a1, a2, a3);
+	if (id == IR0_SYSCALL_FCHMODAT2)
+		return early_rootfs_fchmodat2((int)a0, a1, a2, (unsigned)a3);
+	if (id == IR0_SYSCALL_SETXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, a1,
+					  a2, a3, (unsigned)a4, 0, 0);
+	if (id == IR0_SYSCALL_LSETXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, a1,
+					  a2, a3, (unsigned)a4, 0, 1);
+	if (id == IR0_SYSCALL_FSETXATTR)
+		return early_rootfs_xattr(0, 0, (int)a0, a1, a2, a3,
+					  (unsigned)a4, 0, 0);
+	if (id == IR0_SYSCALL_GETXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, a1,
+					  a2, a3, 0, 1, 0);
+	if (id == IR0_SYSCALL_LGETXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, a1,
+					  a2, a3, 0, 1, 1);
+	if (id == IR0_SYSCALL_FGETXATTR)
+		return early_rootfs_xattr(0, 0, (int)a0, a1, a2, a3, 0, 1, 0);
+	if (id == IR0_SYSCALL_LISTXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, 0,
+					  a1, a2, 0, 2, 0);
+	if (id == IR0_SYSCALL_LLISTXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, 0,
+					  a1, a2, 0, 2, 1);
+	if (id == IR0_SYSCALL_FLISTXATTR)
+		return early_rootfs_xattr(0, 0, (int)a0, 0, a1, a2, 0, 2, 0);
+	if (id == IR0_SYSCALL_REMOVEXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, a1,
+					  0, 0, 0, 3, 0);
+	if (id == IR0_SYSCALL_LREMOVEXATTR)
+		return early_rootfs_xattr(IR0_EARLY_ROOTFS_AT_FDCWD, a0, -1, a1,
+					  0, 0, 0, 3, 1);
+	if (id == IR0_SYSCALL_FREMOVEXATTR)
+		return early_rootfs_xattr(0, 0, (int)a0, a1, 0, 0, 0, 3, 0);
+	if (id == IR0_SYSCALL_NAME_TO_HANDLE_AT)
+		return early_rootfs_name_to_handle_at((int)a0, a1, a2, a3,
+						      (int)a4);
+	if (id == IR0_SYSCALL_OPEN_BY_HANDLE_AT)
+		return early_rootfs_open_by_handle_at((int)a0, a1, (int)a2);
 	if (id == IR0_SYSCALL_SYMLINKAT)
 		return early_rootfs_symlinkat(a0, (int)a1, a2);
 	if (id == IR0_SYSCALL_LINK)
@@ -130,7 +170,13 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_SYMLINKAT,
 	IR0_SYSCALL_LINK, IR0_SYSCALL_LINKAT,
 	IR0_SYSCALL_FALLOCATE, IR0_SYSCALL_STATX, IR0_SYSCALL_RENAMEAT2,
-	IR0_SYSCALL_FACCESSAT2, IR0_SYSCALL_OPENAT2,
+	IR0_SYSCALL_FACCESSAT2, IR0_SYSCALL_OPENAT2, IR0_SYSCALL_FCHMODAT2,
+	IR0_SYSCALL_SETXATTR, IR0_SYSCALL_LSETXATTR, IR0_SYSCALL_FSETXATTR,
+	IR0_SYSCALL_GETXATTR, IR0_SYSCALL_LGETXATTR, IR0_SYSCALL_FGETXATTR,
+	IR0_SYSCALL_LISTXATTR, IR0_SYSCALL_LLISTXATTR, IR0_SYSCALL_FLISTXATTR,
+	IR0_SYSCALL_REMOVEXATTR, IR0_SYSCALL_LREMOVEXATTR,
+	IR0_SYSCALL_FREMOVEXATTR, IR0_SYSCALL_NAME_TO_HANDLE_AT,
+	IR0_SYSCALL_OPEN_BY_HANDLE_AT,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

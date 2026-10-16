@@ -18,6 +18,8 @@
 #define ENOSYS 38
 #define EPERM  1
 #define ESRCH  3
+#define E2BIG  7
+#define EOPNOTSUPP 95
 #define WNOHANG 1
 #define WEXITED 4
 #define P_ALL 0
@@ -42,9 +44,11 @@ static int g_umask = 0022;
 static uint32_t g_uid;
 static uint32_t g_euid;
 static uint32_t g_suid;
+static uint32_t g_fsuid;
 static uint32_t g_gid;
 static uint32_t g_egid;
 static uint32_t g_sgid;
+static uint32_t g_fsgid;
 static int32_t g_nice;
 static int64_t g_current_pid = 1;
 static int g_child_state;
@@ -390,12 +394,17 @@ static int64_t early_write_pid32(struct early_syscall_context *context,
 
 static int64_t early_clone(struct early_syscall_context *context, uint64_t flags,
 			   uint64_t stack, uint64_t parent_tid, uint64_t tls,
-			   uint64_t child_tid)
+			   uint64_t child_tid, uint64_t pidfd_ptr, int from_clone3)
 {
 	int64_t ret;
 
+	if (flags & CLONE_INTO_CGROUP)
+		return -EOPNOTSUPP;
 	if (!ir0_early_clone_flags_ok(flags))
 		return (flags & CLONE_VM) ? -EINVAL : -ENOSYS;
+	if (!from_clone3 && (flags & CLONE_PIDFD) &&
+	    (flags & CLONE_PARENT_SETTID))
+		return -EINVAL;
 	if (early_child_exists())
 		return -EAGAIN;
 	g_vfork = (flags & CLONE_VFORK) != 0;
@@ -421,6 +430,25 @@ static int64_t early_clone(struct early_syscall_context *context, uint64_t flags
 		if (ret < 0)
 			goto fail;
 	}
+	if (flags & CLONE_PIDFD)
+	{
+		int32_t fd;
+		const struct early_user_services *user =
+			context && context->services ? context->services->user : 0;
+		uint64_t dest = from_clone3 ? pidfd_ptr : parent_tid;
+
+		ret = early_rootfs_pidfd_open(EARLY_CHILD_PID, 0);
+		if (ret < 0)
+			goto fail;
+		fd = (int32_t)ret;
+		if (!dest || !user || !user->copy_to_user ||
+		    user->copy_to_user(dest, &fd, sizeof(fd)) != 0)
+		{
+			(void)early_rootfs_close(fd);
+			ret = -EFAULT;
+			goto fail;
+		}
+	}
 	return EARLY_CHILD_PID;
 
 fail:
@@ -429,6 +457,69 @@ fail:
 	g_child_cleartid = 0;
 	g_vfork = 0;
 	return ret;
+}
+
+static int64_t early_clone3(struct early_syscall_context *context, uint64_t uargs,
+			    uint64_t size)
+{
+	const struct early_user_services *user = context && context->services ?
+		context->services->user : 0;
+	uint64_t args[11];
+	uint8_t extra;
+	uint64_t flags;
+	uint64_t stack;
+	uint64_t stack_size;
+	uint64_t off;
+
+	if (size < IR0_EARLY_CLONE_ARGS_VER0)
+		return -EINVAL;
+	if (size > 4096UL)
+		return -E2BIG;
+	if (!uargs || !user || !user->copy_from_user)
+		return -EFAULT;
+	args[0] = args[1] = args[2] = args[3] = args[4] = args[5] = args[6] =
+		args[7] = args[8] = args[9] = args[10] = 0;
+	{
+		uint64_t copy = size < IR0_EARLY_CLONE_ARGS_VER2 ?
+					size :
+					IR0_EARLY_CLONE_ARGS_VER2;
+
+		if (user->copy_from_user(args, uargs, copy) != 0)
+			return -EFAULT;
+	}
+	if (size > IR0_EARLY_CLONE_ARGS_VER2)
+	{
+		for (off = IR0_EARLY_CLONE_ARGS_VER2; off < size; off++)
+		{
+			if (user->copy_from_user(&extra, uargs + off, 1) != 0)
+				return -EFAULT;
+			if (extra)
+				return -E2BIG;
+		}
+	}
+	flags = args[0];
+	if (flags & IR0_EARLY_CSIGNAL)
+		return -EINVAL;
+	if (args[4] > 64)
+		return -EINVAL;
+	if (args[9])
+		return -EOPNOTSUPP;
+	flags |= args[4] & IR0_EARLY_CSIGNAL;
+	stack = args[5];
+	stack_size = args[6];
+	if ((flags & CLONE_VM) != 0 && (!stack || !stack_size))
+		return -EINVAL;
+	if (stack_size)
+		stack += stack_size;
+	{
+		int64_t ret = early_clone(context, flags, stack, args[3], args[7],
+					  args[2], args[1], 1);
+
+		if (ret == EARLY_CHILD_PID && context && context->services &&
+		    context->services->time && context->services->time->note)
+			context->services->time->note(EARLY_SYSCALL_CLONE3_OK);
+		return ret;
+	}
 }
 
 static int64_t early_wait4(struct early_syscall_context *context, int64_t pid,
@@ -1207,11 +1298,13 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_WAITID:
 		return early_waitid(context, a0, a1, a2, a3);
 	case IR0_SYSCALL_CLONE:
-		return early_clone(context, a0, a1, a2, a3, a4);
+		return early_clone(context, a0, a1, a2, a3, a4, 0, 0);
+	case IR0_SYSCALL_CLONE3:
+		return early_clone3(context, a0, a1);
 	case IR0_SYSCALL_VFORK:
 		return early_clone(context,
 				   CLONE_VM | CLONE_VFORK | IR0_EARLY_SIGCHLD,
-				   0, 0, 0, 0);
+				   0, 0, 0, 0, 0, 0);
 	case IR0_SYSCALL_GETPGID:
 		if (a0 == EARLY_CHILD_PID && early_child_exists())
 			return 1;
@@ -1264,27 +1357,45 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_SETUID:
 		if (g_euid == 0)
 		{
-			g_uid = g_euid = g_suid = (uint32_t)a0;
+			g_uid = g_euid = g_suid = g_fsuid = (uint32_t)a0;
 			return 0;
 		}
 		if ((uint32_t)a0 == g_uid || (uint32_t)a0 == g_suid)
 		{
-			g_euid = (uint32_t)a0;
+			g_euid = g_fsuid = (uint32_t)a0;
 			return 0;
 		}
 		return -EPERM;
 	case IR0_SYSCALL_SETGID:
 		if (g_egid == 0)
 		{
-			g_gid = g_egid = g_sgid = (uint32_t)a0;
+			g_gid = g_egid = g_sgid = g_fsgid = (uint32_t)a0;
 			return 0;
 		}
 		if ((uint32_t)a0 == g_gid || (uint32_t)a0 == g_sgid)
 		{
-			g_egid = (uint32_t)a0;
+			g_egid = g_fsgid = (uint32_t)a0;
 			return 0;
 		}
 		return -EPERM;
+	case IR0_SYSCALL_SETFSUID:
+	{
+		uint32_t prev = g_fsuid;
+
+		if (g_euid == 0 || (uint32_t)a0 == g_uid ||
+		    (uint32_t)a0 == g_euid || (uint32_t)a0 == g_suid)
+			g_fsuid = (uint32_t)a0;
+		return prev;
+	}
+	case IR0_SYSCALL_SETFSGID:
+	{
+		uint32_t prev = g_fsgid;
+
+		if (g_egid == 0 || (uint32_t)a0 == g_gid ||
+		    (uint32_t)a0 == g_egid || (uint32_t)a0 == g_sgid)
+			g_fsgid = (uint32_t)a0;
+		return prev;
+	}
 	case IR0_SYSCALL_SETREUID:
 		if (a0 != UID_NOCHANGE)
 		{
@@ -1298,7 +1409,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 			if (g_euid != 0 && (uint32_t)a1 != g_uid &&
 			    (uint32_t)a1 != g_suid)
 				return -EPERM;
-			g_euid = (uint32_t)a1;
+			g_euid = g_fsuid = (uint32_t)a1;
 		}
 		return 0;
 	case IR0_SYSCALL_SETREGID:
@@ -1314,7 +1425,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 			if (g_egid != 0 && (uint32_t)a1 != g_gid &&
 			    (uint32_t)a1 != g_sgid)
 				return -EPERM;
-			g_egid = (uint32_t)a1;
+			g_egid = g_fsgid = (uint32_t)a1;
 		}
 		return 0;
 	case IR0_SYSCALL_SETRESUID:
@@ -1333,7 +1444,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		if (a0 != UID_NOCHANGE)
 			g_uid = (uint32_t)a0;
 		if (a1 != UID_NOCHANGE)
-			g_euid = (uint32_t)a1;
+			g_euid = g_fsuid = (uint32_t)a1;
 		if (a2 != UID_NOCHANGE)
 			g_suid = (uint32_t)a2;
 		return 0;
@@ -1341,7 +1452,7 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		if (a0 != UID_NOCHANGE)
 			g_gid = (uint32_t)a0;
 		if (a1 != UID_NOCHANGE)
-			g_egid = (uint32_t)a1;
+			g_egid = g_fsgid = (uint32_t)a1;
 		if (a2 != UID_NOCHANGE)
 			g_sgid = (uint32_t)a2;
 		return 0;
@@ -1434,6 +1545,39 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_process_vm(context, (int64_t)a0, a1, a2, a3, a4, a5, 0);
 	case IR0_SYSCALL_PROCESS_VM_WRITEV:
 		return early_process_vm(context, (int64_t)a0, a1, a2, a3, a4, a5, 1);
+	case IR0_SYSCALL_PROCESS_MADVISE:
+	{
+		const struct early_user_services *user =
+			context && context->services ? context->services->user : 0;
+		int32_t pid;
+		uint64_t i;
+		int64_t total = 0;
+		uint64_t vec[2];
+
+		if (a4)
+			return -EINVAL;
+		if (a2 > IR0_EARLY_IOV_MAX)
+			return -EINVAL;
+		pid = early_rootfs_pidfd_pid((int)a0);
+		if (pid < 0)
+			return pid;
+		if (!a2)
+			return 0;
+		if (!user || !user->copy_from_user)
+			return -EFAULT;
+		for (i = 0; i < a2; i++)
+		{
+			if (user->copy_from_user(vec,
+						 a1 + i * IR0_EARLY_IOV_BYTES,
+						 sizeof(vec)) != 0)
+				return -EFAULT;
+			if (!vec[1])
+				continue;
+			total += (int64_t)vec[1];
+		}
+		(void)a3;
+		return total;
+	}
 	case IR0_SYSCALL_MEMBARRIER:
 		return early_membarrier((int)a0, (int)a1);
 	case IR0_SYSCALL_TIMES:
@@ -1502,7 +1646,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_GETEGID, IR0_SYSCALL_GETPPID, IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ, 	IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
-	IR0_SYSCALL_WAITID, IR0_SYSCALL_CLONE, IR0_SYSCALL_VFORK,
+	IR0_SYSCALL_WAITID, IR0_SYSCALL_CLONE, IR0_SYSCALL_CLONE3,
+	IR0_SYSCALL_VFORK,
 	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
 	IR0_SYSCALL_SETPGID, IR0_SYSCALL_UMASK, IR0_SYSCALL_GETGROUPS,
 	IR0_SYSCALL_SETGROUPS, IR0_SYSCALL_RT_SIGPROCMASK,
@@ -1514,8 +1659,9 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_GETCPU, IR0_SYSCALL_SCHED_SETPARAM,
 	IR0_SYSCALL_SCHED_SETSCHEDULER, IR0_SYSCALL_SCHED_GETSCHEDULER,
 	IR0_SYSCALL_SCHED_GETPARAM, IR0_SYSCALL_SCHED_SETAFFINITY,
-	IR0_SYSCALL_SCHED_GETAFFINITY, IR0_SYSCALL_PROCESS_VM_READV,
-	IR0_SYSCALL_PROCESS_VM_WRITEV, IR0_SYSCALL_MEMBARRIER,
+	IR0_SYSCALL_SCHED_GETAFFINITY, 	IR0_SYSCALL_PROCESS_VM_READV,
+	IR0_SYSCALL_PROCESS_VM_WRITEV, IR0_SYSCALL_PROCESS_MADVISE,
+	IR0_SYSCALL_MEMBARRIER,
 	IR0_SYSCALL_TIMES, IR0_SYSCALL_SETHOSTNAME, IR0_SYSCALL_SETDOMAINNAME,
 	IR0_SYSCALL_CAPGET, IR0_SYSCALL_CAPSET, IR0_SYSCALL_IOPRIO_SET,
 	IR0_SYSCALL_IOPRIO_GET, IR0_SYSCALL_SCHED_GET_PRIORITY_MAX,
@@ -1523,8 +1669,9 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_SCHED_SETATTR, IR0_SYSCALL_SCHED_GETATTR, IR0_SYSCALL_KCMP,
 	IR0_SYSCALL_PIDFD_OPEN, IR0_SYSCALL_PIDFD_SEND_SIGNAL,
 	IR0_SYSCALL_PIDFD_GETFD,
-	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, IR0_SYSCALL_SETUID,
-	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
+	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, 	IR0_SYSCALL_SETUID,
+	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETFSUID, IR0_SYSCALL_SETFSGID,
+	IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
 	IR0_SYSCALL_SETRESUID, IR0_SYSCALL_SETRESGID, IR0_SYSCALL_GETPRIORITY,
 	IR0_SYSCALL_SETPRIORITY, IR0_SYSCALL_GET_ROBUST_LIST,
 	IR0_SYSCALL_SYSLOG, IR0_SYSCALL_EXECVEAT, IR0_SYSCALL_EXECVE,
@@ -1572,6 +1719,11 @@ int early_process_clone_resume_parent(uint64_t *frame)
 	g_resume_parent = 0;
 	g_current_pid = 1;
 	return 1;
+}
+
+int early_process_is_root(void)
+{
+	return g_euid == 0;
 }
 
 void early_process_note_exec(void)

@@ -10,6 +10,7 @@
 #define EINVAL 22
 #define ENOSYS 38
 #define EPERM  1
+#define EOPNOTSUPP 95
 #define CLOCK_REALTIME 0UL
 #define CLOCK_MONOTONIC 1UL
 #define CLOCK_MONOTONIC_RAW 4UL
@@ -34,6 +35,7 @@ static int g_gettimeofday_ok;
 static int g_clock_nanosleep_ok;
 static struct itimerval g_itimer[3];
 static int64_t g_realtime_off;
+static int64_t g_realtime_nsec;
 
 static const struct early_syscall_services *services(void *opaque)
 {
@@ -97,7 +99,15 @@ static int64_t early_clock_gettime(void *opaque, uint64_t clock_id,
 	value.tv_sec = (int64_t)(counter / frequency);
 	value.tv_nsec = (int64_t)(((counter % frequency) * NS_PER_SEC) / frequency);
 	if (clock_id == CLOCK_REALTIME || clock_id == CLOCK_REALTIME_COARSE)
+	{
 		value.tv_sec += g_realtime_off;
+		value.tv_nsec += g_realtime_nsec;
+		if (value.tv_nsec >= (int64_t)NS_PER_SEC)
+		{
+			value.tv_sec++;
+			value.tv_nsec -= (int64_t)NS_PER_SEC;
+		}
+	}
 	if (user->copy_to_user(output, &value, sizeof(value)) != 0)
 		return -EFAULT;
 	g_clock_gettime_ok = 1;
@@ -122,7 +132,13 @@ static int64_t early_gettimeofday(void *opaque, uint64_t output)
 		return -EINVAL;
 	counter = ops->counter_read();
 	value.tv_sec = (int64_t)(counter / frequency) + g_realtime_off;
-	value.tv_usec = (int64_t)(((counter % frequency) * 1000000ULL) / frequency);
+	value.tv_usec = (int64_t)(((counter % frequency) * 1000000ULL) / frequency) +
+			g_realtime_nsec / 1000;
+	if (value.tv_usec >= 1000000)
+	{
+		value.tv_sec++;
+		value.tv_usec -= 1000000;
+	}
 	if (user->copy_to_user(output, &value, sizeof(value)) != 0)
 		return -EFAULT;
 	g_gettimeofday_ok = 1;
@@ -152,28 +168,146 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 	{
 		struct timespec req;
 		const struct early_user_services *user;
-		uint64_t frequency;
-		int64_t now;
 
 		if (!clock_supported(a0))
 			return -EINVAL;
 		if (a0 != CLOCK_REALTIME)
 			return -EPERM;
 		if (!services_all || !(user = services_all->user) ||
-		    !user->copy_from_user || !ops || !ops->counter_read ||
-		    !ops->counter_frequency)
+		    !user->copy_from_user)
 			return -ENOSYS;
 		if (user->copy_from_user(&req, a1, sizeof(req)) != 0)
 			return -EFAULT;
-		if (req.tv_sec < 0 || req.tv_nsec < 0 ||
-		    req.tv_nsec >= (int64_t)NS_PER_SEC)
+		return early_time_set_realtime(opaque, req.tv_sec, req.tv_nsec);
+	}
+	case IR0_SYSCALL_SETTIMEOFDAY:
+	{
+		struct timeval tv;
+		const struct early_user_services *user;
+
+		if (!a0)
+			return 0;
+		if (!services_all || !(user = services_all->user) ||
+		    !user->copy_from_user)
+			return -ENOSYS;
+		if (user->copy_from_user(&tv, a0, sizeof(tv)) != 0)
+			return -EFAULT;
+		if (tv.tv_usec < 0 || tv.tv_usec >= 1000000)
 			return -EINVAL;
+		return early_time_set_realtime(opaque, tv.tv_sec,
+					       tv.tv_usec * 1000);
+	}
+	case IR0_SYSCALL_CLOCK_ADJTIME:
+	{
+		uint8_t tx[IR0_EARLY_TIMEX_BYTES];
+		const struct early_user_services *user;
+		uint32_t modes;
+		uint64_t frequency;
+		int64_t now_sec;
+		int64_t now_nsec;
+		unsigned i;
+
+		if (a0 != CLOCK_REALTIME)
+			return clock_supported(a0) ? -EPERM : -EINVAL;
+		if (!a1)
+			return -EFAULT;
+		if (!services_all || !(user = services_all->user) ||
+		    !user->copy_from_user || !user->copy_to_user || !ops ||
+		    !ops->counter_read || !ops->counter_frequency)
+			return -ENOSYS;
+		for (i = 0; i < sizeof(tx); i++)
+			tx[i] = 0;
+		if (user->copy_from_user(tx, a1, sizeof(tx)) != 0)
+			return -EFAULT;
+		modes = (uint32_t)tx[0] | ((uint32_t)tx[1] << 8) |
+			((uint32_t)tx[2] << 16) | ((uint32_t)tx[3] << 24);
+		if (modes & ~IR0_EARLY_ADJ_KNOWN)
+			return -EOPNOTSUPP;
 		frequency = ops->counter_frequency();
 		if (!frequency)
 			return -EINVAL;
-		now = (int64_t)(ops->counter_read() / frequency);
-		g_realtime_off = req.tv_sec - now;
-		return 0;
+		now_sec = (int64_t)(ops->counter_read() / frequency) +
+			  g_realtime_off;
+		now_nsec = (int64_t)(((ops->counter_read() % frequency) *
+				      NS_PER_SEC) / frequency) +
+			   g_realtime_nsec;
+		if (now_nsec >= (int64_t)NS_PER_SEC)
+		{
+			now_sec++;
+			now_nsec -= (int64_t)NS_PER_SEC;
+		}
+		if (modes & IR0_EARLY_ADJ_SETOFFSET)
+		{
+			int64_t dsec = 0;
+			int64_t dfrac = 0;
+			unsigned b;
+
+			for (b = 0; b < 8; b++)
+				dsec |= (int64_t)tx[72 + b] << (8 * b);
+			for (b = 0; b < 8; b++)
+				dfrac |= (int64_t)tx[80 + b] << (8 * b);
+			if (modes & IR0_EARLY_ADJ_NANO)
+			{
+				if (dfrac <= -((int64_t)NS_PER_SEC) ||
+				    dfrac >= (int64_t)NS_PER_SEC)
+					return -EINVAL;
+			}
+			else
+			{
+				if (dfrac <= -1000000 || dfrac >= 1000000)
+					return -EINVAL;
+				dfrac *= 1000;
+			}
+			g_realtime_off += dsec;
+			g_realtime_nsec += dfrac;
+			while (g_realtime_nsec >= (int64_t)NS_PER_SEC)
+			{
+				g_realtime_off++;
+				g_realtime_nsec -= (int64_t)NS_PER_SEC;
+			}
+			while (g_realtime_nsec < 0)
+			{
+				g_realtime_off--;
+				g_realtime_nsec += (int64_t)NS_PER_SEC;
+			}
+		}
+		else if (modes & IR0_EARLY_ADJ_OFFSET)
+		{
+			int64_t off = 0;
+			unsigned b;
+
+			for (b = 0; b < 8; b++)
+				off |= (int64_t)tx[8 + b] << (8 * b);
+			if (modes & IR0_EARLY_ADJ_NANO)
+				g_realtime_nsec += off;
+			else
+				g_realtime_nsec += off * 1000;
+			while (g_realtime_nsec >= (int64_t)NS_PER_SEC)
+			{
+				g_realtime_off++;
+				g_realtime_nsec -= (int64_t)NS_PER_SEC;
+			}
+			while (g_realtime_nsec < 0)
+			{
+				g_realtime_off--;
+				g_realtime_nsec += (int64_t)NS_PER_SEC;
+			}
+		}
+		for (i = 0; i < 8; i++)
+			tx[72 + i] = (uint8_t)((uint64_t)now_sec >> (8 * i));
+		{
+			int64_t usec = now_nsec / 1000;
+
+			for (i = 0; i < 8; i++)
+				tx[80 + i] = (uint8_t)((uint64_t)usec >> (8 * i));
+		}
+		tx[40] = IR0_EARLY_TIME_OK;
+		tx[41] = 0;
+		tx[42] = 0;
+		tx[43] = 0;
+		if (user->copy_to_user(a1, tx, sizeof(tx)) != 0)
+			return -EFAULT;
+		return IR0_EARLY_TIME_OK;
 	}
 	case IR0_SYSCALL_CLOCK_GETTIME:
 		return early_clock_gettime(opaque, a0, a1);
@@ -262,6 +396,26 @@ int64_t early_time_realtime_offset(void)
 	return g_realtime_off;
 }
 
+int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec)
+{
+	const struct early_syscall_services *services_all = services(opaque);
+	const struct early_time_services *ops = services_all ? services_all->time : 0;
+	uint64_t frequency;
+	int64_t now;
+
+	if (sec < 0 || nsec < 0 || nsec >= (int64_t)NS_PER_SEC)
+		return -EINVAL;
+	if (!ops || !ops->counter_read || !ops->counter_frequency)
+		return -ENOSYS;
+	frequency = ops->counter_frequency();
+	if (!frequency)
+		return -EINVAL;
+	now = (int64_t)(ops->counter_read() / frequency);
+	g_realtime_off = sec - now;
+	g_realtime_nsec = nsec;
+	return 0;
+}
+
 int early_time_smoke_ok(void)
 {
 	return g_nanosleep_ok && g_clock_gettime_ok && g_gettimeofday_ok &&
@@ -273,6 +427,7 @@ static const enum ir0_syscall_id g_time_syscalls[] = {
 	IR0_SYSCALL_CLOCK_NANOSLEEP, IR0_SYSCALL_GETTIMEOFDAY,
 	IR0_SYSCALL_CLOCK_GETRES, IR0_SYSCALL_GETITIMER,
 	IR0_SYSCALL_SETITIMER, IR0_SYSCALL_CLOCK_SETTIME,
+	IR0_SYSCALL_SETTIMEOFDAY, IR0_SYSCALL_CLOCK_ADJTIME,
 };
 
 const struct syscall_context_provider early_time_provider = {

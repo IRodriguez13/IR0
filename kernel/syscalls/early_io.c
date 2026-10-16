@@ -954,6 +954,32 @@ static int64_t early_io_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_EPOLL_PWAIT:
 		(void)a4;
 		return early_epoll_pwait(opaque, a0, a1, a2, a3);
+	case IR0_SYSCALL_EPOLL_PWAIT2:
+	{
+		int timeout = -1;
+		const struct early_user_services *user;
+		struct early_syscall_context *context = opaque;
+
+		(void)a4;
+		if (a3)
+		{
+			int64_t ts[2];
+
+			user = context && context->services ? context->services->user : 0;
+			if (!user || !user->copy_from_user ||
+			    user->copy_from_user(ts, a3, sizeof(ts)) != 0)
+				return -EFAULT;
+			if (ts[0] < 0 || ts[1] < 0 || ts[1] >= 1000000000LL)
+				return -EINVAL;
+			if (ts[0] == 0 && ts[1] == 0)
+				timeout = 0;
+			else if (ts[0] > 2147483)
+				timeout = 2147483647;
+			else
+				timeout = (int)(ts[0] * 1000 + ts[1] / 1000000);
+		}
+		return early_epoll_pwait(opaque, a0, a1, a2, (uint64_t)timeout);
+	}
 	case IR0_SYSCALL_SOCKET:
 		return early_rootfs_socket((int)a0, (int)a1, (int)a2);
 	case IR0_SYSCALL_SOCKETPAIR:
@@ -1068,7 +1094,8 @@ static const enum ir0_syscall_id g_io_syscalls[] = {
 	IR0_SYSCALL_PSELECT6, IR0_SYSCALL_EVENTFD2, IR0_SYSCALL_MEMFD_CREATE,
 	IR0_SYSCALL_TIMERFD_CREATE, IR0_SYSCALL_TIMERFD_SETTIME,
 	IR0_SYSCALL_TIMERFD_GETTIME, IR0_SYSCALL_EPOLL_CREATE1,
-	IR0_SYSCALL_EPOLL_CTL, IR0_SYSCALL_EPOLL_PWAIT, IR0_SYSCALL_SOCKET,
+	IR0_SYSCALL_EPOLL_CTL, IR0_SYSCALL_EPOLL_PWAIT, IR0_SYSCALL_EPOLL_PWAIT2,
+	IR0_SYSCALL_SOCKET,
 	IR0_SYSCALL_SOCKETPAIR, IR0_SYSCALL_BIND, IR0_SYSCALL_LISTEN,
 	IR0_SYSCALL_CONNECT, IR0_SYSCALL_ACCEPT, IR0_SYSCALL_ACCEPT4,
 	IR0_SYSCALL_GETSOCKNAME, IR0_SYSCALL_GETPEERNAME, IR0_SYSCALL_SENDTO,

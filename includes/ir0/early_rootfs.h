@@ -188,6 +188,15 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_CLOSE_RANGE_KNOWN \
 	(IR0_EARLY_CLOSE_RANGE_UNSHARE | IR0_EARLY_CLOSE_RANGE_CLOEXEC)
 #define IR0_EARLY_POSIX_FADV_NOREUSE 5
+#define IR0_EARLY_XATTR_CREATE 1U
+#define IR0_EARLY_XATTR_REPLACE 2U
+#define IR0_EARLY_XATTR_NAME_MAX 31U
+#define IR0_EARLY_XATTR_VALUE_MAX 64U
+#define IR0_EARLY_FILEID_INO32_GEN 1
+#define IR0_EARLY_HANDLE_DATA 8U
+#define IR0_EARLY_HANDLE_HEADER 8U
+#define IR0_EARLY_FCHMODAT2_FLAGS \
+	(IR0_EARLY_AT_SYMLINK_NOFOLLOW | IR0_EARLY_AT_EMPTY_PATH)
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -932,6 +941,16 @@ int64_t early_rootfs_statfs(uint64_t path, uint64_t buf);
 int64_t early_rootfs_fstatfs(int fd, uint64_t buf);
 int64_t early_rootfs_fchmod(int fd, uint64_t mode);
 int64_t early_rootfs_fchmodat(int dirfd, uint64_t path, uint64_t mode);
+int64_t early_rootfs_fchmodat2(int dirfd, uint64_t path, uint64_t mode,
+			       unsigned flags);
+int64_t early_rootfs_xattr(int dirfd, uint64_t path, int fd, uint64_t name,
+			   uint64_t value, uint64_t size, unsigned flags,
+			   int op, int nofollow);
+int64_t early_rootfs_name_to_handle_at(int dirfd, uint64_t path,
+				       uint64_t handle, uint64_t mnt_id,
+				       int flags);
+int64_t early_rootfs_open_by_handle_at(int mount_fd, uint64_t handle,
+				       int flags);
 int64_t early_rootfs_fchown(int fd, uint64_t uid, uint64_t gid);
 int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
 			      uint64_t gid);

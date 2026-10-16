@@ -13,6 +13,18 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 {
 	switch (abi_number)
 	{
+	case 5: return IR0_SYSCALL_SETXATTR;
+	case 6: return IR0_SYSCALL_LSETXATTR;
+	case 7: return IR0_SYSCALL_FSETXATTR;
+	case 8: return IR0_SYSCALL_GETXATTR;
+	case 9: return IR0_SYSCALL_LGETXATTR;
+	case 10: return IR0_SYSCALL_FGETXATTR;
+	case 11: return IR0_SYSCALL_LISTXATTR;
+	case 12: return IR0_SYSCALL_LLISTXATTR;
+	case 13: return IR0_SYSCALL_FLISTXATTR;
+	case 14: return IR0_SYSCALL_REMOVEXATTR;
+	case 15: return IR0_SYSCALL_LREMOVEXATTR;
+	case 16: return IR0_SYSCALL_FREMOVEXATTR;
 	case 17: return IR0_SYSCALL_GETCWD;
 	case 19: return IR0_SYSCALL_EVENTFD2;
 	case 20: return IR0_SYSCALL_EPOLL_CREATE1;
@@ -124,6 +136,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 148: return IR0_SYSCALL_GETRESUID;
 	case 149: return IR0_SYSCALL_SETRESGID;
 	case 150: return IR0_SYSCALL_GETRESGID;
+	case 151: return IR0_SYSCALL_SETFSUID;
+	case 152: return IR0_SYSCALL_SETFSGID;
 	case 154: return IR0_SYSCALL_SETPGID;
 	case 155: return IR0_SYSCALL_GETPGID;
 	case 156: return IR0_SYSCALL_GETSID;
@@ -140,6 +154,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 167: return IR0_SYSCALL_PRCTL;
 	case 168: return IR0_SYSCALL_GETCPU;
 	case 169: return IR0_SYSCALL_GETTIMEOFDAY;
+	case 170: return IR0_SYSCALL_SETTIMEOFDAY;
 	case 172: return IR0_SYSCALL_GETPID;
 	case 173: return IR0_SYSCALL_GETPPID;
 	case 174: return IR0_SYSCALL_GETUID;
@@ -186,6 +201,9 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 243: return IR0_SYSCALL_RECVMMSG;
 	case 260: return IR0_SYSCALL_WAIT4;
 	case 261: return IR0_SYSCALL_PRLIMIT64;
+	case 264: return IR0_SYSCALL_NAME_TO_HANDLE_AT;
+	case 265: return IR0_SYSCALL_OPEN_BY_HANDLE_AT;
+	case 266: return IR0_SYSCALL_CLOCK_ADJTIME;
 	case 267: return IR0_SYSCALL_SYNCFS;
 	case 269: return IR0_SYSCALL_SENDMMSG;
 	case 270: return IR0_SYSCALL_PROCESS_VM_READV;
@@ -206,10 +224,14 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 293: return IR0_SYSCALL_RSEQ;
 	case 424: return IR0_SYSCALL_PIDFD_SEND_SIGNAL;
 	case 434: return IR0_SYSCALL_PIDFD_OPEN;
+	case 435: return IR0_SYSCALL_CLONE3;
 	case 436: return IR0_SYSCALL_CLOSE_RANGE;
 	case 437: return IR0_SYSCALL_OPENAT2;
 	case 438: return IR0_SYSCALL_PIDFD_GETFD;
 	case 439: return IR0_SYSCALL_FACCESSAT2;
+	case 440: return IR0_SYSCALL_PROCESS_MADVISE;
+	case 441: return IR0_SYSCALL_EPOLL_PWAIT2;
+	case 452: return IR0_SYSCALL_FCHMODAT2;
 	default: return IR0_SYSCALL_UNKNOWN;
 	}
 }

@@ -98,6 +98,9 @@ struct rootfs_slot
 #define EOPNOTSUPP 95
 #define EFBIG 27
 #define ELOOP 40
+#define ENODATA 61
+#define EOVERFLOW 75
+#define ESTALE 116
 #define ENOPROTOOPT 92
 #define NS_PER_SEC 1000000000ULL
 
@@ -144,6 +147,7 @@ static struct early_memfd
 	int used;
 	int refs;
 	uint32_t len;
+	uint32_t mode;
 	uint8_t data[MEMFD_CAP];
 } g_memfd[MEMFD_MAX];
 
@@ -216,6 +220,18 @@ struct early_fs_ent
 };
 
 static struct early_fs_ent g_fs[FS_MAX];
+
+#define XA_MAX 16
+
+static struct early_xattr
+{
+	int used;
+	enum ir0_early_rootfs_node node;
+	int id;
+	char name[IR0_EARLY_XATTR_NAME_MAX + 1];
+	uint32_t vlen;
+	uint8_t value[IR0_EARLY_XATTR_VALUE_MAX];
+} g_xattr[XA_MAX];
 
 static struct early_unix
 {
@@ -1120,7 +1136,10 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 	for (i = 0; i < EFD_MAX; i++)
 		g_eventfd[i].used = 0;
 	for (i = 0; i < MEMFD_MAX; i++)
+	{
 		g_memfd[i].used = 0;
+		g_memfd[i].mode = IR0_EARLY_ROOTFS_MODE_REG;
+	}
 	for (i = 0; i < TIMERFD_MAX; i++)
 		g_timerfd[i].used = 0;
 	for (i = 0; i < EPOLL_MAX; i++)
@@ -1141,6 +1160,8 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_fs[i].data = 0;
 		g_fs[i].size = 0;
 	}
+	for (i = 0; i < XA_MAX; i++)
+		g_xattr[i].used = 0;
 	g_cpio_ready = 0;
 	g_cwd_path[0] = '/';
 	g_cwd_path[1] = '\0';
@@ -2129,6 +2150,9 @@ int64_t early_rootfs_newfstatat(int dirfd, uint64_t path, uint64_t statbuf,
 			 node == IR0_EARLY_ROOTFS_USERDIR)
 			size = 0;
 		ir0_early_rootfs_fill_stat(node, size, &st);
+		fsid = fs_body(fs_find(pbuf));
+		if (fsid >= 0 && g_fs[fsid].used)
+			st.st_mode = g_fs[fsid].mode;
 	}
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
@@ -2167,6 +2191,16 @@ int64_t early_rootfs_fstat(int fd, uint64_t statbuf)
 	else
 		size = g_blob_len;
 	ir0_early_rootfs_fill_stat(node, size, &st);
+	if (node == IR0_EARLY_ROOTFS_MEMFD && mid >= 0 && mid < MEMFD_MAX &&
+	    g_memfd[mid].used)
+		st.st_mode = g_memfd[mid].mode;
+	if (node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_FIFO ||
+	    node == IR0_EARLY_ROOTFS_USERDIR)
+	{
+		mid = fs_body(pipe_id_of_fd(fd));
+		if (mid >= 0 && mid < FS_MAX && g_fs[mid].used)
+			st.st_mode = g_fs[mid].mode;
+	}
 	if (!g_user || !g_user->copy_to_user ||
 	    g_user->copy_to_user(statbuf, &st, sizeof(st)) != 0)
 		return -EFAULT;
@@ -2820,6 +2854,7 @@ int64_t early_rootfs_memfd_create(uint64_t name, unsigned flags)
 	g_memfd[mid].used = 1;
 	g_memfd[mid].refs = 1;
 	g_memfd[mid].len = 0;
+	g_memfd[mid].mode = IR0_EARLY_ROOTFS_MODE_REG;
 	g_slots[idx].pipe_id = mid;
 	set_flags_of_fd(fd, IR0_O_RDWR);
 	set_cloexec_of_fd(fd, (flags & IR0_EARLY_MFD_CLOEXEC) != 0);
@@ -4465,31 +4500,88 @@ int64_t early_rootfs_fstatfs(int fd, uint64_t buf)
 	return 0;
 }
 
+static void apply_stored_mode(enum ir0_early_rootfs_node node, int id,
+			      uint64_t mode)
+{
+	uint32_t perm = (uint32_t)mode & 07777U;
+
+	if (node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_FIFO ||
+	    node == IR0_EARLY_ROOTFS_USERDIR ||
+	    node == IR0_EARLY_ROOTFS_SYMLINK)
+	{
+		int fsid = fs_body(id);
+
+		if (fsid >= 0 && fsid < FS_MAX && g_fs[fsid].used)
+			g_fs[fsid].mode = (g_fs[fsid].mode & S_IFMT) | perm;
+	}
+	if (node == IR0_EARLY_ROOTFS_MEMFD && id >= 0 && id < MEMFD_MAX &&
+	    g_memfd[id].used)
+		g_memfd[id].mode = (g_memfd[id].mode & S_IFMT) | perm;
+}
+
 int64_t early_rootfs_fchmod(int fd, uint64_t mode)
 {
-	(void)mode;
 	if (!g_ready || !fd_is_open(fd))
 		return -EBADF;
+	apply_stored_mode(node_of_fd(fd), pipe_id_of_fd(fd), mode);
 	return 0;
 }
 
 int64_t early_rootfs_fchmodat(int dirfd, uint64_t path, uint64_t mode)
 {
+	return early_rootfs_fchmodat2(dirfd, path, mode, 0);
+}
+
+int64_t early_rootfs_fchmodat2(int dirfd, uint64_t path, uint64_t mode,
+			       unsigned flags)
+{
 	char pbuf[32];
 	enum ir0_early_rootfs_node node;
+	int fsid;
 
-	(void)mode;
+	if (flags & ~IR0_EARLY_FCHMODAT2_FLAGS)
+		return -EINVAL;
 	if (!g_ready)
 		return -ENOENT;
-	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0)
+	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0 &&
+	    !fd_is_open(dirfd))
 		return -EBADF;
+	if ((flags & IR0_EARLY_AT_EMPTY_PATH) && path)
+	{
+		if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+			return -EFAULT;
+		if (pbuf[0] == 0)
+		{
+			if (dirfd == IR0_EARLY_ROOTFS_AT_FDCWD)
+			{
+				apply_stored_mode(g_cwd, -1, mode);
+				return 0;
+			}
+			return early_rootfs_fchmod(dirfd, mode);
+		}
+	}
 	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
 		return -EFAULT;
+	if (!join_under_cwd(pbuf, sizeof(pbuf)))
+		return -ENAMETOOLONG;
 	node = lookup_user_path(pbuf);
+	if (node == IR0_EARLY_ROOTFS_SYMLINK &&
+	    !(flags & IR0_EARLY_AT_SYMLINK_NOFOLLOW))
+	{
+		int walked = follow_path(pbuf, sizeof(pbuf));
+
+		if (walked < 0)
+			return -ELOOP;
+		if (!walked)
+			return -ENOENT;
+		node = lookup_user_path(pbuf);
+	}
 	if (node == IR0_EARLY_ROOTFS_NONE)
 		return -ENOENT;
 	if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return -ENOENT;
+	fsid = fs_find(pbuf);
+	apply_stored_mode(node, fsid, mode);
 	return 0;
 }
 
@@ -4506,6 +4598,323 @@ int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
 	(void)uid;
 	(void)gid;
 	return early_rootfs_fchmodat(dirfd, path, 0);
+}
+
+static int xa_name_eq(const char *left, const char *right)
+{
+	if (!left || !right)
+		return 0;
+	while (*left && *left == *right)
+	{
+		left++;
+		right++;
+	}
+	return *left == *right;
+}
+
+static int xa_find(enum ir0_early_rootfs_node node, int id, const char *name)
+{
+	unsigned i;
+
+	for (i = 0; i < XA_MAX; i++)
+	{
+		if (g_xattr[i].used && g_xattr[i].node == node &&
+		    g_xattr[i].id == id && xa_name_eq(g_xattr[i].name, name))
+			return (int)i;
+	}
+	return -1;
+}
+
+static int resolve_xattr_target(int dirfd, uint64_t path, int fd, int nofollow,
+				enum ir0_early_rootfs_node *node, int *id)
+{
+	char pbuf[32];
+
+	if (fd >= 0)
+	{
+		*node = node_of_fd(fd);
+		if (*node == IR0_EARLY_ROOTFS_NONE)
+			return -EBADF;
+		*id = pipe_id_of_fd(fd);
+		return 0;
+	}
+	if (!g_ready)
+		return -ENOENT;
+	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0)
+		return -EBADF;
+	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+		return -EFAULT;
+	if (!join_under_cwd(pbuf, sizeof(pbuf)))
+		return -ENAMETOOLONG;
+	*node = lookup_user_path(pbuf);
+	if (*node == IR0_EARLY_ROOTFS_SYMLINK && !nofollow)
+	{
+		int walked = follow_path(pbuf, sizeof(pbuf));
+
+		if (walked < 0)
+			return -ELOOP;
+		if (!walked)
+			return -ENOENT;
+		*node = lookup_user_path(pbuf);
+	}
+	if (*node == IR0_EARLY_ROOTFS_NONE)
+		return -ENOENT;
+	*id = fs_find(pbuf);
+	return 0;
+}
+
+int64_t early_rootfs_xattr(int dirfd, uint64_t path, int fd, uint64_t name,
+			   uint64_t value, uint64_t size, unsigned flags,
+			   int op, int nofollow)
+{
+	enum ir0_early_rootfs_node node;
+	int id;
+	int slot;
+	int ret;
+	char nbuf[IR0_EARLY_XATTR_NAME_MAX + 1];
+	unsigned i;
+
+	ret = resolve_xattr_target(dirfd, path, fd, nofollow, &node, &id);
+	if (ret < 0)
+		return ret;
+	if (op != 2)
+	{
+		if (!name || !copy_user_cstr(name, nbuf, sizeof(nbuf)))
+			return -EFAULT;
+		if (nbuf[0] == 0)
+			return -EINVAL;
+	}
+	if (op == 0)
+	{
+		uint8_t raw[IR0_EARLY_XATTR_VALUE_MAX];
+
+		if (flags & ~(IR0_EARLY_XATTR_CREATE | IR0_EARLY_XATTR_REPLACE))
+			return -EINVAL;
+		if ((flags & IR0_EARLY_XATTR_CREATE) &&
+		    (flags & IR0_EARLY_XATTR_REPLACE))
+			return -EINVAL;
+		if (size > IR0_EARLY_XATTR_VALUE_MAX)
+			return -E2BIG;
+		if (size && (!g_user || !g_user->copy_from_user ||
+			     g_user->copy_from_user(raw, value, size) != 0))
+			return -EFAULT;
+		slot = xa_find(node, id, nbuf);
+		if (slot >= 0 && (flags & IR0_EARLY_XATTR_CREATE))
+			return -EEXIST;
+		if (slot < 0 && (flags & IR0_EARLY_XATTR_REPLACE))
+			return -ENODATA;
+		if (slot < 0)
+		{
+			for (slot = 0; slot < XA_MAX; slot++)
+			{
+				if (!g_xattr[slot].used)
+					break;
+			}
+			if (slot >= XA_MAX)
+				return -ENOSPC;
+			g_xattr[slot].used = 1;
+			g_xattr[slot].node = node;
+			g_xattr[slot].id = id;
+			for (i = 0; i < sizeof(nbuf); i++)
+				g_xattr[slot].name[i] = nbuf[i];
+		}
+		g_xattr[slot].vlen = (uint32_t)size;
+		for (i = 0; i < size; i++)
+			g_xattr[slot].value[i] = raw[i];
+		return 0;
+	}
+	if (op == 1)
+	{
+		slot = xa_find(node, id, nbuf);
+		if (slot < 0)
+			return -ENODATA;
+		if (!size)
+			return (int64_t)g_xattr[slot].vlen;
+		if (size < g_xattr[slot].vlen)
+			return -ERANGE;
+		if (!g_user || !g_user->copy_to_user ||
+		    g_user->copy_to_user(value, g_xattr[slot].value,
+					 g_xattr[slot].vlen) != 0)
+			return -EFAULT;
+		return (int64_t)g_xattr[slot].vlen;
+	}
+	if (op == 2)
+	{
+		uint32_t need = 0;
+		uint32_t copied = 0;
+
+		for (i = 0; i < XA_MAX; i++)
+		{
+			unsigned nlen = 0;
+
+			if (!g_xattr[i].used || g_xattr[i].node != node ||
+			    g_xattr[i].id != id)
+				continue;
+			while (g_xattr[i].name[nlen])
+				nlen++;
+			need += nlen + 1U;
+		}
+		if (!size)
+			return (int64_t)need;
+		if (size < need)
+			return -ERANGE;
+		for (i = 0; i < XA_MAX; i++)
+		{
+			unsigned nlen = 0;
+
+			if (!g_xattr[i].used || g_xattr[i].node != node ||
+			    g_xattr[i].id != id)
+				continue;
+			while (g_xattr[i].name[nlen])
+				nlen++;
+			if (!g_user || !g_user->copy_to_user ||
+			    g_user->copy_to_user(value + copied,
+						 g_xattr[i].name,
+						 nlen + 1U) != 0)
+				return -EFAULT;
+			copied += nlen + 1U;
+		}
+		return (int64_t)copied;
+	}
+	if (op == 3)
+	{
+		slot = xa_find(node, id, nbuf);
+		if (slot < 0)
+			return -ENODATA;
+		g_xattr[slot].used = 0;
+		return 0;
+	}
+	return -EINVAL;
+}
+
+int64_t early_rootfs_name_to_handle_at(int dirfd, uint64_t path,
+				       uint64_t handle, uint64_t mnt_id,
+				       int flags)
+{
+	enum ir0_early_rootfs_node node;
+	int id;
+	uint32_t bytes;
+	int32_t type;
+	uint32_t ino;
+	uint32_t gen = 1;
+	int32_t mount = 1;
+	char pbuf[32];
+
+	if (flags & ~(IR0_EARLY_AT_EMPTY_PATH | IR0_EARLY_AT_SYMLINK_FOLLOW))
+		return -EINVAL;
+	if (!handle)
+		return -EFAULT;
+	if (!g_user || !g_user->copy_from_user || !g_user->copy_to_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(&bytes, handle, sizeof(bytes)) != 0)
+		return -EFAULT;
+	if ((flags & IR0_EARLY_AT_EMPTY_PATH) && path)
+	{
+		if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+			return -EFAULT;
+		if (pbuf[0] == 0)
+		{
+			if (dirfd == IR0_EARLY_ROOTFS_AT_FDCWD)
+			{
+				node = g_cwd;
+				id = -1;
+			}
+			else
+			{
+				node = node_of_fd(dirfd);
+				if (node == IR0_EARLY_ROOTFS_NONE)
+					return -EBADF;
+				id = pipe_id_of_fd(dirfd);
+			}
+			goto encode;
+		}
+	}
+	{
+		int ret = resolve_xattr_target(dirfd, path, -1,
+					       !(flags & IR0_EARLY_AT_SYMLINK_FOLLOW),
+					       &node, &id);
+
+		if (ret < 0)
+			return ret;
+	}
+encode:
+	if (bytes < IR0_EARLY_HANDLE_DATA)
+	{
+		bytes = IR0_EARLY_HANDLE_DATA;
+		if (g_user->copy_to_user(handle, &bytes, sizeof(bytes)) != 0)
+			return -EFAULT;
+		return -EOVERFLOW;
+	}
+	bytes = IR0_EARLY_HANDLE_DATA;
+	type = IR0_EARLY_FILEID_INO32_GEN;
+	ino = (uint32_t)node;
+	if (g_user->copy_to_user(handle, &bytes, sizeof(bytes)) != 0 ||
+	    g_user->copy_to_user(handle + 4, &type, sizeof(type)) != 0 ||
+	    g_user->copy_to_user(handle + 8, &ino, sizeof(ino)) != 0 ||
+	    g_user->copy_to_user(handle + 12, &gen, sizeof(gen)) != 0)
+		return -EFAULT;
+	if (id >= 0)
+	{
+		uint32_t packed = (uint32_t)id | 0x80000000U;
+
+		if (g_user->copy_to_user(handle + 12, &packed, sizeof(packed)) != 0)
+			return -EFAULT;
+	}
+	if (mnt_id &&
+	    g_user->copy_to_user(mnt_id, &mount, sizeof(mount)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t early_rootfs_open_by_handle_at(int mount_fd, uint64_t handle, int flags)
+{
+	uint32_t bytes;
+	int32_t type;
+	uint32_t ino;
+	uint32_t gen;
+	enum ir0_early_rootfs_node node;
+	int id;
+	int fd;
+	int idx;
+
+	if (!early_process_is_root())
+		return -EPERM;
+	if (mount_fd != IR0_EARLY_ROOTFS_AT_FDCWD && !fd_is_open(mount_fd))
+		return -EBADF;
+	if (!handle || !g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(&bytes, handle, sizeof(bytes)) != 0 ||
+	    g_user->copy_from_user(&type, handle + 4, sizeof(type)) != 0)
+		return -EFAULT;
+	if (bytes < IR0_EARLY_HANDLE_DATA ||
+	    type != IR0_EARLY_FILEID_INO32_GEN)
+		return -EINVAL;
+	if (g_user->copy_from_user(&ino, handle + 8, sizeof(ino)) != 0 ||
+	    g_user->copy_from_user(&gen, handle + 12, sizeof(gen)) != 0)
+		return -EFAULT;
+	node = (enum ir0_early_rootfs_node)ino;
+	if (node <= IR0_EARLY_ROOTFS_NONE || node > IR0_EARLY_ROOTFS_PIDFD)
+		return -ESTALE;
+	id = (gen & 0x80000000U) ? (int)(gen & 0x7fffffffU) : -1;
+	fd = alloc_fd(node);
+	if (fd < 0)
+		return fd;
+	idx = slot_from_fd(fd);
+	if (idx >= 0 && id >= 0)
+		g_slots[idx].pipe_id = id;
+	set_flags_of_fd(fd, status_flags(flags));
+	set_cloexec_of_fd(fd, (flags & LINUX_O_CLOEXEC) != 0);
+	if (node == IR0_EARLY_ROOTFS_MEMFD && id >= 0 && id < MEMFD_MAX &&
+	    g_memfd[id].used)
+		g_memfd[id].refs++;
+	if ((node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_FIFO ||
+	     node == IR0_EARLY_ROOTFS_USERDIR) &&
+	    (id < 0 || id >= FS_MAX || !g_fs[id].used))
+	{
+		close_fd(fd);
+		return -ESTALE;
+	}
+	return fd;
 }
 
 int64_t early_rootfs_chroot(uint64_t path)

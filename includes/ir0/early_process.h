@@ -28,9 +28,11 @@
  * space). Private mm / COW fork stays ENOSYS.
  */
 #define IR0_EARLY_CLONE_ALLOWED \
-	(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_VFORK | \
-	 CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID | \
-	 CLONE_CHILD_SETTID)
+	(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_PIDFD | \
+	 CLONE_VFORK | CLONE_SETTLS | CLONE_PARENT_SETTID | \
+	 CLONE_CHILD_CLEARTID | CLONE_CHILD_SETTID)
+#define IR0_EARLY_CLONE_ARGS_VER0 64U
+#define IR0_EARLY_CLONE_ARGS_VER2 88U
 
 static inline int ir0_early_clone_flags_ok(uint64_t flags)
 {
@@ -188,6 +190,7 @@ static inline int ir0_early_sched_policy_rt(int policy)
 
 extern const struct syscall_context_provider early_process_provider;
 int early_process_smoke_ok(void);
+int early_process_is_root(void);
 int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls);
 void early_process_clone_save_parent(const uint64_t *frame);
 int early_process_clone_resume_parent(uint64_t *frame);
