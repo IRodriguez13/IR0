@@ -279,43 +279,27 @@ static int64_t early_sigaltstack(struct early_syscall_context *context,
 	return 0;
 }
 
-static int64_t early_futex(struct early_syscall_context *context,
-			   uint64_t uaddr, uint64_t op, uint64_t val,
-			   uint64_t timeout)
+static int64_t early_futex_sleep_timeout(struct early_syscall_context *context,
+					 uint64_t timeout, int64_t clockid)
 {
-	const struct early_syscall_services *services_all;
-	const struct early_user_services *user;
 	const struct early_time_services *ops;
-	uint32_t observed = 0;
-	uint64_t cmd = op & (uint64_t)FUTEX_CMD_MASK;
+	const struct early_user_services *user;
+	struct timespec ts;
+	uint64_t frequency, delta, start;
 
-	if (!context || !(services_all = context->services) ||
-	    !(user = services_all->user) || !user->copy_from_user)
-		return -ENOSYS;
-	if (cmd == FUTEX_WAKE)
-		return 0;
-	if (cmd != FUTEX_WAIT)
-		return -ENOSYS;
-	if (user->copy_from_user(&observed, uaddr, sizeof(observed)) != 0)
+	if (clockid != 0 && clockid != 1)
+		return -EINVAL;
+	user = context->services->user;
+	ops = context->services->time;
+	if (user->copy_from_user(&ts, timeout, sizeof(ts)) != 0)
 		return -EFAULT;
-	if (observed != (uint32_t)val)
-		return -EAGAIN;
-	/*
-	 * No other task can FUTEX_WAKE this waiter (clone is still
-	 * ENOSYS). Honor a timeout by sleeping, then ETIMEDOUT. A NULL
-	 * timeout would hang, so it also returns ETIMEDOUT.
-	 */
-	ops = services_all->time;
-	if (timeout && ops && ops->counter_read && ops->counter_frequency &&
+	if (ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= 1000000000L)
+		return -EINVAL;
+	if (ts.tv_sec == 0 && ts.tv_nsec == 0)
+		return -ETIMEDOUT;
+	if (ops && ops->counter_read && ops->counter_frequency &&
 	    ops->cpu_relax)
 	{
-		struct timespec ts;
-		uint64_t frequency, delta, start;
-
-		if (user->copy_from_user(&ts, timeout, sizeof(ts)) != 0)
-			return -EFAULT;
-		if (ts.tv_sec < 0 || ts.tv_nsec < 0)
-			return -EINVAL;
 		frequency = ops->counter_frequency();
 		if (frequency)
 		{
@@ -327,6 +311,189 @@ static int64_t early_futex(struct early_syscall_context *context,
 		}
 	}
 	return -ETIMEDOUT;
+}
+
+static int64_t early_futex_block(struct early_syscall_context *context,
+				 uint64_t timeout, int64_t clockid)
+{
+	if (timeout)
+		return early_futex_sleep_timeout(context, timeout, clockid);
+	if (early_process_request_yield())
+		return -EAGAIN;
+	return -EAGAIN;
+}
+
+static int early_futex2_flags_ok(unsigned flags)
+{
+	if (flags & ~IR0_EARLY_FUTEX2_VALID_MASK)
+		return 0;
+	if ((flags & IR0_EARLY_FUTEX2_SIZE_MASK) != IR0_EARLY_FUTEX2_SIZE_U32)
+		return 0;
+	return 1;
+}
+
+static int64_t early_futex2_unsupported(unsigned flags)
+{
+	if (flags & (IR0_EARLY_FUTEX2_NUMA | IR0_EARLY_FUTEX2_MPOL))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
+static int64_t early_futex_wait_u32(struct early_syscall_context *context,
+				    uint64_t uaddr, uint32_t val,
+				    uint64_t timeout, int64_t clockid)
+{
+	const struct early_user_services *user;
+	uint32_t observed = 0;
+
+	user = context->services->user;
+	if (!uaddr || user->copy_from_user(&observed, uaddr, sizeof(observed)) != 0)
+		return -EFAULT;
+	if (observed != val)
+		return -EAGAIN;
+	return early_futex_block(context, timeout, clockid);
+}
+
+static int64_t early_futex(struct early_syscall_context *context,
+			   uint64_t uaddr, uint64_t op, uint64_t val,
+			   uint64_t timeout)
+{
+	const struct early_syscall_services *services_all;
+	uint64_t cmd = op & (uint64_t)FUTEX_CMD_MASK;
+
+	if (!context || !(services_all = context->services) ||
+	    !services_all->user || !services_all->user->copy_from_user)
+		return -ENOSYS;
+	if (cmd == FUTEX_WAKE)
+		return 0;
+	if (cmd != FUTEX_WAIT)
+		return -ENOSYS;
+	return early_futex_wait_u32(context, uaddr, (uint32_t)val, timeout, 0);
+}
+
+static int64_t early_futex_waitv(struct early_syscall_context *context,
+				 uint64_t waiters, unsigned nr,
+				 unsigned flags, uint64_t timeout,
+				 int64_t clockid)
+{
+	const struct early_user_services *user;
+	unsigned i;
+
+	if (!context || !context->services || !context->services->user ||
+	    !context->services->user->copy_from_user)
+		return -ENOSYS;
+	if (flags)
+		return -EINVAL;
+	if (!nr || nr > IR0_EARLY_FUTEX_WAITV_MAX || !waiters)
+		return -EINVAL;
+	user = context->services->user;
+	for (i = 0; i < nr; i++)
+	{
+		uint64_t blob[3];
+		unsigned wflags;
+		int64_t ret;
+		uint32_t observed;
+
+		if (user->copy_from_user(blob,
+					 waiters + (uint64_t)i *
+						   IR0_EARLY_FUTEX_WAITV_BYTES,
+					 sizeof(blob)) != 0)
+			return -EFAULT;
+		wflags = (unsigned)(uint32_t)blob[2];
+		if ((uint32_t)(blob[2] >> 32) != 0)
+			return -EINVAL;
+		if (!early_futex2_flags_ok(wflags))
+			return -EINVAL;
+		ret = early_futex2_unsupported(wflags);
+		if (ret < 0)
+			return ret;
+		if (!blob[1] ||
+		    user->copy_from_user(&observed, blob[1],
+					 sizeof(observed)) != 0)
+			return -EFAULT;
+		if (observed != (uint32_t)blob[0])
+			return -EAGAIN;
+	}
+	return early_futex_block(context, timeout, clockid);
+}
+
+static int64_t early_futex_wake2(struct early_syscall_context *context,
+				 uint64_t uaddr, uint64_t mask, int nr,
+				 unsigned flags)
+{
+	uint32_t observed;
+
+	(void)mask;
+	(void)nr;
+	if (!context || !context->services || !context->services->user ||
+	    !context->services->user->copy_from_user)
+		return -ENOSYS;
+	if (!early_futex2_flags_ok(flags))
+		return -EINVAL;
+	if (early_futex2_unsupported(flags) < 0)
+		return -EOPNOTSUPP;
+	if (!uaddr ||
+	    context->services->user->copy_from_user(&observed, uaddr,
+						    sizeof(observed)) != 0)
+		return -EFAULT;
+	(void)observed;
+	return 0;
+}
+
+static int64_t early_futex_wait2(struct early_syscall_context *context,
+				 uint64_t uaddr, uint64_t val, uint64_t mask,
+				 unsigned flags, uint64_t timeout,
+				 int64_t clockid)
+{
+	int64_t ret;
+
+	(void)mask;
+	if (!context || !context->services || !context->services->user)
+		return -ENOSYS;
+	if (!early_futex2_flags_ok(flags))
+		return -EINVAL;
+	ret = early_futex2_unsupported(flags);
+	if (ret < 0)
+		return ret;
+	return early_futex_wait_u32(context, uaddr, (uint32_t)val, timeout,
+				    clockid);
+}
+
+static int64_t early_futex_requeue(struct early_syscall_context *context,
+				   uint64_t waiters, unsigned flags, int nr_wake,
+				   int nr_requeue)
+{
+	uint64_t blob[6];
+	unsigned i;
+	int64_t ret;
+
+	(void)nr_wake;
+	(void)nr_requeue;
+	if (!context || !context->services || !context->services->user ||
+	    !context->services->user->copy_from_user)
+		return -ENOSYS;
+	if (flags || !waiters)
+		return -EINVAL;
+	if (context->services->user->copy_from_user(blob, waiters,
+						    sizeof(blob)) != 0)
+		return -EFAULT;
+	for (i = 0; i < 2; i++)
+	{
+		unsigned wflags = (unsigned)(uint32_t)blob[i * 3 + 2];
+
+		if ((uint32_t)(blob[i * 3 + 2] >> 32) != 0)
+			return -EINVAL;
+		if (!early_futex2_flags_ok(wflags))
+			return -EINVAL;
+		ret = early_futex2_unsupported(wflags);
+		if (ret < 0)
+			return ret;
+		if (!blob[i * 3 + 1])
+			return -EFAULT;
+	}
+	if ((uint32_t)blob[2] != (uint32_t)blob[5])
+		return -EINVAL;
+	return 0;
 }
 
 static int64_t early_uname(struct early_syscall_context *context,
@@ -1623,6 +1790,17 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		return early_sigaltstack(context, a0, a1);
 	case IR0_SYSCALL_FUTEX:
 		return early_futex(context, a0, a1, a2, a3);
+	case IR0_SYSCALL_FUTEX_WAITV:
+		return early_futex_waitv(context, a0, (unsigned)a1, (unsigned)a2,
+					 a3, (int64_t)a4);
+	case IR0_SYSCALL_FUTEX_WAKE:
+		return early_futex_wake2(context, a0, a1, (int)a2, (unsigned)a3);
+	case IR0_SYSCALL_FUTEX_WAIT:
+		return early_futex_wait2(context, a0, a1, a2, (unsigned)a3, a4,
+					 (int64_t)a5);
+	case IR0_SYSCALL_FUTEX_REQUEUE:
+		return early_futex_requeue(context, a0, (unsigned)a1, (int)a2,
+					   (int)a3);
 	case IR0_SYSCALL_EXECVE:
 	{
 		int64_t ret = early_rootfs_execve(a0, a1, a2);
@@ -1669,7 +1847,10 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_SCHED_SETATTR, IR0_SYSCALL_SCHED_GETATTR, IR0_SYSCALL_KCMP,
 	IR0_SYSCALL_PIDFD_OPEN, IR0_SYSCALL_PIDFD_SEND_SIGNAL,
 	IR0_SYSCALL_PIDFD_GETFD,
-	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX, 	IR0_SYSCALL_SETUID,
+	IR0_SYSCALL_SIGALTSTACK, IR0_SYSCALL_FUTEX,
+	IR0_SYSCALL_FUTEX_WAITV, IR0_SYSCALL_FUTEX_WAKE,
+	IR0_SYSCALL_FUTEX_WAIT, IR0_SYSCALL_FUTEX_REQUEUE,
+	IR0_SYSCALL_SETUID,
 	IR0_SYSCALL_SETGID, IR0_SYSCALL_SETFSUID, IR0_SYSCALL_SETFSGID,
 	IR0_SYSCALL_SETREUID, IR0_SYSCALL_SETREGID,
 	IR0_SYSCALL_SETRESUID, IR0_SYSCALL_SETRESGID, IR0_SYSCALL_GETPRIORITY,

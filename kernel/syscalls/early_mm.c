@@ -16,6 +16,7 @@
 #define ENOMEM 12
 #define EINVAL 22
 #define ENOSYS 38
+#define EPERM 1
 #define PAGE_SIZE 4096UL
 #define PROT_READ  0x1UL
 #define PROT_WRITE 0x2UL
@@ -31,6 +32,12 @@ struct early_mm_arena
 static struct early_mm_layout g_layout;
 static struct early_mm_arena g_arena;
 static int g_active;
+static struct
+{
+	uint64_t start;
+	uint64_t end;
+	int used;
+} g_seal[IR0_EARLY_SEAL_MAX];
 
 void early_mm_activate(const struct early_mm_layout *layout)
 {
@@ -46,6 +53,12 @@ void early_mm_activate(const struct early_mm_layout *layout)
 	g_arena.mapped_end = layout->heap_base;
 	g_arena.map_bump = layout->map_base;
 	g_active = 1;
+	{
+		unsigned i;
+
+		for (i = 0; i < IR0_EARLY_SEAL_MAX; i++)
+			g_seal[i].used = 0;
+	}
 }
 
 static int map_zero_page(const struct early_mm_services *ops, uint64_t page)
@@ -111,12 +124,81 @@ static int64_t early_mmap(struct early_syscall_context *context,
 	return (int64_t)base;
 }
 
+static int early_page_present(struct early_syscall_context *context,
+			      uint64_t page);
+
+static int range_sealed(uint64_t address, uint64_t length)
+{
+	uint64_t start;
+	uint64_t end;
+	unsigned i;
+
+	if (!length)
+		return 0;
+	start = address & ~(PAGE_SIZE - 1);
+	if (address > UINT64_MAX - (length - 1))
+		return 1;
+	end = (address + length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	for (i = 0; i < IR0_EARLY_SEAL_MAX; i++)
+	{
+		if (!g_seal[i].used)
+			continue;
+		if (start < g_seal[i].end && end > g_seal[i].start)
+			return 1;
+	}
+	return 0;
+}
+
+static int64_t early_mseal(struct early_syscall_context *context,
+			   uint64_t address, uint64_t length, uint64_t flags)
+{
+	uint64_t start;
+	uint64_t end;
+	uint64_t page;
+	unsigned i;
+	int slot = -1;
+
+	if (flags)
+		return -EINVAL;
+	if (address & (PAGE_SIZE - 1))
+		return -EINVAL;
+	if (!length)
+		return 0;
+	if (address > UINT64_MAX - (length - 1))
+		return -EINVAL;
+	end = (address + length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+	if (!end)
+		return -EINVAL;
+	start = address;
+	for (page = start; page < end; page += PAGE_SIZE)
+	{
+		if (!early_page_present(context, page))
+			return -ENOMEM;
+	}
+	for (i = 0; i < IR0_EARLY_SEAL_MAX; i++)
+	{
+		if (g_seal[i].used && g_seal[i].start == start &&
+		    g_seal[i].end == end)
+			return 0;
+		if (!g_seal[i].used && slot < 0)
+			slot = (int)i;
+	}
+	if (slot < 0)
+		return -ENOMEM;
+	g_seal[slot].start = start;
+	g_seal[slot].end = end;
+	g_seal[slot].used = 1;
+	return 0;
+}
+
 static int64_t early_mprotect(struct early_syscall_context *context,
 			      uint64_t address, uint64_t length,
 			      uint64_t protection)
 {
 	const struct early_mm_services *ops = context->services->mm;
 
+	if (range_sealed(address, length))
+		return -EPERM;
 	if (!protection || (protection & ~(PROT_READ | PROT_WRITE | PROT_EXEC)))
 		return -ENOSYS;
 	if (!ops || !ops->protect_user_range)
@@ -215,7 +297,11 @@ static int64_t early_mm_syscall(void *opaque, enum ir0_syscall_id id,
 		/* Linux munmap(2): length 0 is EINVAL; unmapped holes are OK. */
 		if (!a1)
 			return -EINVAL;
+		if (range_sealed(a0, a1))
+			return -EPERM;
 		return 0;
+	case IR0_SYSCALL_MSEAL:
+		return early_mseal(context, a0, a1, a2);
 	case IR0_SYSCALL_MADVISE:
 		(void)a0;
 		(void)a2;
@@ -255,6 +341,7 @@ static const enum ir0_syscall_id g_mm_syscalls[] = {
 	IR0_SYSCALL_MPROTECT, IR0_SYSCALL_MADVISE, IR0_SYSCALL_MSYNC,
 	IR0_SYSCALL_MINCORE, IR0_SYSCALL_MLOCK, IR0_SYSCALL_MUNLOCK,
 	IR0_SYSCALL_MLOCKALL, IR0_SYSCALL_MUNLOCKALL, IR0_SYSCALL_MLOCK2,
+	IR0_SYSCALL_MSEAL,
 };
 
 const struct syscall_context_provider early_mm_provider = {

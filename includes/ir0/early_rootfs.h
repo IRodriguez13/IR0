@@ -197,6 +197,12 @@ enum ir0_early_rootfs_node
 #define IR0_EARLY_HANDLE_HEADER 8U
 #define IR0_EARLY_FCHMODAT2_FLAGS \
 	(IR0_EARLY_AT_SYMLINK_NOFOLLOW | IR0_EARLY_AT_EMPTY_PATH)
+#define IR0_EARLY_XATTR_ARGS_BYTES 16U
+#define IR0_EARLY_XATTRAT_AT_FLAGS \
+	(IR0_EARLY_AT_SYMLINK_NOFOLLOW | IR0_EARLY_AT_EMPTY_PATH)
+#define IR0_EARLY_FILE_ATTR_BYTES 24U
+#define IR0_EARLY_CACHESTAT_RANGE_BYTES 16U
+#define IR0_EARLY_CACHESTAT_BYTES 40U
 
 /* Linux poll.h bits used by staged ppoll/pselect6. */
 #define IR0_EARLY_POLLIN  0x001
@@ -946,11 +952,20 @@ int64_t early_rootfs_fchmodat2(int dirfd, uint64_t path, uint64_t mode,
 int64_t early_rootfs_xattr(int dirfd, uint64_t path, int fd, uint64_t name,
 			   uint64_t value, uint64_t size, unsigned flags,
 			   int op, int nofollow);
+int64_t early_rootfs_xattrat(int dirfd, uint64_t path, unsigned at_flags,
+			     uint64_t name, uint64_t args, uint64_t usize,
+			     int op);
 int64_t early_rootfs_name_to_handle_at(int dirfd, uint64_t path,
 				       uint64_t handle, uint64_t mnt_id,
 				       int flags);
 int64_t early_rootfs_open_by_handle_at(int mount_fd, uint64_t handle,
 				       int flags);
+int64_t early_rootfs_cachestat(int fd, uint64_t range, uint64_t out,
+			       unsigned flags);
+int64_t early_rootfs_file_getattr(int dirfd, uint64_t path, uint64_t attr,
+				  uint64_t usize, unsigned flags);
+int64_t early_rootfs_file_setattr(int dirfd, uint64_t path, uint64_t attr,
+				  uint64_t usize, unsigned flags);
 int64_t early_rootfs_fchown(int fd, uint64_t uid, uint64_t gid);
 int64_t early_rootfs_fchownat(int dirfd, uint64_t path, uint64_t uid,
 			      uint64_t gid);

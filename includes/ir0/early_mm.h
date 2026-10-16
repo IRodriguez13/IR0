@@ -30,6 +30,7 @@ struct early_mm_layout
 #define IR0_EARLY_MCL_KNOWN \
 	(IR0_EARLY_MCL_CURRENT | IR0_EARLY_MCL_FUTURE | IR0_EARLY_MCL_ONFAULT)
 #define IR0_EARLY_MLOCK_ONFAULT 1
+#define IR0_EARLY_SEAL_MAX 4
 
 extern const struct syscall_context_provider early_mm_provider;
 

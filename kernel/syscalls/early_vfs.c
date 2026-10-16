@@ -19,7 +19,6 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 	const struct early_time_services *time_ops = context && context->services ?
 		context->services->time : 0;
 
-	(void)a5;
 	if (time_ops && time_ops->counter_read && time_ops->counter_frequency)
 		early_rootfs_note_clock(time_ops->counter_read(),
 					time_ops->counter_frequency(),
@@ -115,6 +114,33 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 						      (int)a4);
 	if (id == IR0_SYSCALL_OPEN_BY_HANDLE_AT)
 		return early_rootfs_open_by_handle_at((int)a0, a1, (int)a2);
+	if (id == IR0_SYSCALL_SETXATTRAT)
+		return early_rootfs_xattrat((int)a0, a1, (unsigned)a2, a3, a4,
+					    a5, 0);
+	if (id == IR0_SYSCALL_GETXATTRAT)
+		return early_rootfs_xattrat((int)a0, a1, (unsigned)a2, a3, a4,
+					    a5, 1);
+	if (id == IR0_SYSCALL_LISTXATTRAT)
+		return early_rootfs_xattrat((int)a0, a1, (unsigned)a2, 0, a3,
+					    a4, 2);
+	if (id == IR0_SYSCALL_REMOVEXATTRAT)
+		return early_rootfs_xattrat((int)a0, a1, (unsigned)a2, a3, 0, 0,
+					    3);
+	if (id == IR0_SYSCALL_CACHESTAT)
+	{
+		int64_t ret = early_rootfs_cachestat((int)a0, a1, a2,
+						     (unsigned)a3);
+
+		if (ret == 0 && time_ops && time_ops->note)
+			time_ops->note(EARLY_SYSCALL_CACHESTAT_OK);
+		return ret;
+	}
+	if (id == IR0_SYSCALL_FILE_GETATTR)
+		return early_rootfs_file_getattr((int)a0, a1, a2, a3,
+						 (unsigned)a4);
+	if (id == IR0_SYSCALL_FILE_SETATTR)
+		return early_rootfs_file_setattr((int)a0, a1, a2, a3,
+						 (unsigned)a4);
 	if (id == IR0_SYSCALL_SYMLINKAT)
 		return early_rootfs_symlinkat(a0, (int)a1, a2);
 	if (id == IR0_SYSCALL_LINK)
@@ -176,7 +202,10 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_LISTXATTR, IR0_SYSCALL_LLISTXATTR, IR0_SYSCALL_FLISTXATTR,
 	IR0_SYSCALL_REMOVEXATTR, IR0_SYSCALL_LREMOVEXATTR,
 	IR0_SYSCALL_FREMOVEXATTR, IR0_SYSCALL_NAME_TO_HANDLE_AT,
-	IR0_SYSCALL_OPEN_BY_HANDLE_AT,
+	IR0_SYSCALL_OPEN_BY_HANDLE_AT, IR0_SYSCALL_SETXATTRAT,
+	IR0_SYSCALL_GETXATTRAT, IR0_SYSCALL_LISTXATTRAT,
+	IR0_SYSCALL_REMOVEXATTRAT, IR0_SYSCALL_CACHESTAT,
+	IR0_SYSCALL_FILE_GETATTR, IR0_SYSCALL_FILE_SETATTR,
 };
 
 const struct syscall_context_provider early_vfs_provider = {

@@ -232,6 +232,18 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 440: return IR0_SYSCALL_PROCESS_MADVISE;
 	case 441: return IR0_SYSCALL_EPOLL_PWAIT2;
 	case 452: return IR0_SYSCALL_FCHMODAT2;
+	case 449: return IR0_SYSCALL_FUTEX_WAITV;
+	case 451: return IR0_SYSCALL_CACHESTAT;
+	case 454: return IR0_SYSCALL_FUTEX_WAKE;
+	case 455: return IR0_SYSCALL_FUTEX_WAIT;
+	case 456: return IR0_SYSCALL_FUTEX_REQUEUE;
+	case 462: return IR0_SYSCALL_MSEAL;
+	case 463: return IR0_SYSCALL_SETXATTRAT;
+	case 464: return IR0_SYSCALL_GETXATTRAT;
+	case 465: return IR0_SYSCALL_LISTXATTRAT;
+	case 466: return IR0_SYSCALL_REMOVEXATTRAT;
+	case 468: return IR0_SYSCALL_FILE_GETATTR;
+	case 469: return IR0_SYSCALL_FILE_SETATTR;
 	default: return IR0_SYSCALL_UNKNOWN;
 	}
 }

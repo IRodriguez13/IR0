@@ -112,6 +112,18 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(440) == IR0_SYSCALL_PROCESS_MADVISE);
 	ASSERT(syscall_decode_number(441) == IR0_SYSCALL_EPOLL_PWAIT2);
 	ASSERT(syscall_decode_number(452) == IR0_SYSCALL_FCHMODAT2);
-	ASSERT(decoded == 219);
+	ASSERT(syscall_decode_number(449) == IR0_SYSCALL_FUTEX_WAITV);
+	ASSERT(syscall_decode_number(451) == IR0_SYSCALL_CACHESTAT);
+	ASSERT(syscall_decode_number(454) == IR0_SYSCALL_FUTEX_WAKE);
+	ASSERT(syscall_decode_number(455) == IR0_SYSCALL_FUTEX_WAIT);
+	ASSERT(syscall_decode_number(456) == IR0_SYSCALL_FUTEX_REQUEUE);
+	ASSERT(syscall_decode_number(462) == IR0_SYSCALL_MSEAL);
+	ASSERT(syscall_decode_number(463) == IR0_SYSCALL_SETXATTRAT);
+	ASSERT(syscall_decode_number(464) == IR0_SYSCALL_GETXATTRAT);
+	ASSERT(syscall_decode_number(465) == IR0_SYSCALL_LISTXATTRAT);
+	ASSERT(syscall_decode_number(466) == IR0_SYSCALL_REMOVEXATTRAT);
+	ASSERT(syscall_decode_number(468) == IR0_SYSCALL_FILE_GETATTR);
+	ASSERT(syscall_decode_number(469) == IR0_SYSCALL_FILE_SETATTR);
+	ASSERT(decoded == 231);
 	TEST_END();
 }

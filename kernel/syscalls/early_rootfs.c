@@ -4917,6 +4917,246 @@ int64_t early_rootfs_open_by_handle_at(int mount_fd, uint64_t handle, int flags)
 	return fd;
 }
 
+static int resolve_at_path(int dirfd, uint64_t path, unsigned flags,
+			   enum ir0_early_rootfs_node *node, int *id)
+{
+	char pbuf[32];
+	int nofollow = (flags & IR0_EARLY_AT_SYMLINK_NOFOLLOW) != 0;
+
+	if (flags & IR0_EARLY_AT_EMPTY_PATH)
+	{
+		if (!path)
+		{
+			if (dirfd == IR0_EARLY_ROOTFS_AT_FDCWD)
+			{
+				*node = g_cwd;
+				*id = -1;
+				return 0;
+			}
+			return resolve_xattr_target(0, 0, dirfd, 0, node, id);
+		}
+		if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
+			return -EFAULT;
+		if (pbuf[0] == 0)
+		{
+			if (dirfd == IR0_EARLY_ROOTFS_AT_FDCWD)
+			{
+				*node = g_cwd;
+				*id = -1;
+				return 0;
+			}
+			return resolve_xattr_target(0, 0, dirfd, 0, node, id);
+		}
+	}
+	return resolve_xattr_target(dirfd, path, -1, nofollow, node, id);
+}
+
+static int copy_struct_from_user(void *dest, uint64_t usize, uint64_t src,
+				 uint64_t ksize)
+{
+	uint8_t extra;
+	uint64_t i;
+
+	if (usize < ksize)
+		return -EINVAL;
+	if (usize > 4096)
+		return -E2BIG;
+	if (!g_user || !g_user->copy_from_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(dest, src, ksize) != 0)
+		return -EFAULT;
+	for (i = ksize; i < usize; i++)
+	{
+		if (g_user->copy_from_user(&extra, src + i, 1) != 0)
+			return -EFAULT;
+		if (extra)
+			return -E2BIG;
+	}
+	return 0;
+}
+
+int64_t early_rootfs_xattrat(int dirfd, uint64_t path, unsigned at_flags,
+			     uint64_t name, uint64_t args, uint64_t usize,
+			     int op)
+{
+	enum ir0_early_rootfs_node node;
+	int id;
+	int fd = -1;
+	int ret;
+	uint64_t value = 0;
+	uint64_t size = 0;
+	unsigned xaflags = 0;
+
+	if (at_flags & ~IR0_EARLY_XATTRAT_AT_FLAGS)
+		return -EINVAL;
+	if (op == 0 || op == 1)
+	{
+		uint64_t packed[2];
+
+		if (!args)
+			return -EFAULT;
+		ret = copy_struct_from_user(packed, usize, args,
+					    IR0_EARLY_XATTR_ARGS_BYTES);
+		if (ret < 0)
+			return ret;
+		value = packed[0];
+		size = (uint64_t)(uint32_t)packed[1];
+		xaflags = (unsigned)(uint32_t)(packed[1] >> 32);
+	}
+	else if (op == 2)
+	{
+		value = args;
+		size = usize;
+	}
+	ret = resolve_at_path(dirfd, path, at_flags, &node, &id);
+	if (ret < 0)
+		return ret;
+	if ((at_flags & IR0_EARLY_AT_EMPTY_PATH) &&
+	    dirfd != IR0_EARLY_ROOTFS_AT_FDCWD)
+	{
+		char pbuf[32];
+
+		if (!path ||
+		    (copy_user_cstr(path, pbuf, sizeof(pbuf)) && pbuf[0] == 0))
+			fd = dirfd;
+	}
+	if (fd >= 0)
+		return early_rootfs_xattr(0, 0, fd, name, value, size, xaflags,
+					  op, 0);
+	return early_rootfs_xattr(dirfd, path, -1, name, value, size, xaflags,
+				  op, (at_flags & IR0_EARLY_AT_SYMLINK_NOFOLLOW) != 0);
+}
+
+int64_t early_rootfs_cachestat(int fd, uint64_t range, uint64_t out,
+			       unsigned flags)
+{
+	enum ir0_early_rootfs_node node;
+	uint64_t csr[2];
+	uint64_t cs[5];
+	uint64_t off;
+	uint64_t len;
+	uint64_t filesz = 0;
+	uint64_t covered;
+	unsigned i;
+
+	node = node_of_fd(fd);
+	if (node == IR0_EARLY_ROOTFS_NONE)
+		return -EBADF;
+	if (flags)
+		return -EINVAL;
+	if (!range || !out || !g_user || !g_user->copy_from_user ||
+	    !g_user->copy_to_user)
+		return -EFAULT;
+	if (g_user->copy_from_user(csr, range, sizeof(csr)) != 0)
+		return -EFAULT;
+	off = csr[0];
+	len = csr[1];
+	if (node == IR0_EARLY_ROOTFS_INIT)
+		filesz = g_init_vis;
+	else if (node == IR0_EARLY_ROOTFS_MEMFD)
+	{
+		int mid = pipe_id_of_fd(fd);
+
+		if (mid < 0 || mid >= MEMFD_MAX || !g_memfd[mid].used)
+			return -EBADF;
+		filesz = g_memfd[mid].len;
+	}
+	else if (node == IR0_EARLY_ROOTFS_FILE)
+	{
+		int fsid = pipe_id_of_fd(fd);
+
+		if (fsid < 0 || fsid >= FS_MAX || !g_fs[fsid].used)
+			return -EBADF;
+		filesz = g_fs[fsid].size;
+	}
+	for (i = 0; i < 5; i++)
+		cs[i] = 0;
+	if (off < filesz)
+	{
+		covered = filesz - off;
+		if (len && len < covered)
+			covered = len;
+		cs[0] = (covered + 4095ULL) / 4096ULL;
+	}
+	if (g_user->copy_to_user(out, cs, sizeof(cs)) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+int64_t early_rootfs_file_getattr(int dirfd, uint64_t path, uint64_t attr,
+				  uint64_t usize, unsigned flags)
+{
+	enum ir0_early_rootfs_node node;
+	int id;
+	int ret;
+	uint32_t words[6];
+	unsigned i;
+
+	if (flags & ~(IR0_EARLY_AT_SYMLINK_NOFOLLOW | IR0_EARLY_AT_EMPTY_PATH))
+		return -EINVAL;
+	if (usize > 4096)
+		return -E2BIG;
+	if (usize < IR0_EARLY_FILE_ATTR_BYTES)
+		return -EINVAL;
+	if (!attr || !g_user || !g_user->copy_to_user)
+		return -EFAULT;
+	ret = resolve_at_path(dirfd, path, flags, &node, &id);
+	if (ret < 0)
+		return ret;
+	for (i = 0; i < 6; i++)
+		words[i] = 0;
+	if (node == IR0_EARLY_ROOTFS_INIT || node == IR0_EARLY_ROOTFS_FILE ||
+	    node == IR0_EARLY_ROOTFS_MEMFD)
+		words[3] = 1;
+	if (g_user->copy_to_user(attr, words, IR0_EARLY_FILE_ATTR_BYTES) != 0)
+		return -EFAULT;
+	if (usize > IR0_EARLY_FILE_ATTR_BYTES)
+	{
+		uint8_t zero = 0;
+		uint64_t i64;
+
+		for (i64 = IR0_EARLY_FILE_ATTR_BYTES; i64 < usize; i64++)
+		{
+			if (g_user->copy_to_user(attr + i64, &zero, 1) != 0)
+				return -EFAULT;
+		}
+	}
+	(void)id;
+	return 0;
+}
+
+int64_t early_rootfs_file_setattr(int dirfd, uint64_t path, uint64_t attr,
+				  uint64_t usize, unsigned flags)
+{
+	enum ir0_early_rootfs_node node;
+	int id;
+	int ret;
+	uint32_t words[6];
+	unsigned i;
+
+	if (flags & ~(IR0_EARLY_AT_SYMLINK_NOFOLLOW | IR0_EARLY_AT_EMPTY_PATH))
+		return -EINVAL;
+	if (usize < IR0_EARLY_FILE_ATTR_BYTES)
+		return -EINVAL;
+	if (!attr)
+		return -EFAULT;
+	ret = copy_struct_from_user(words, usize, attr,
+				    IR0_EARLY_FILE_ATTR_BYTES);
+	if (ret < 0)
+		return ret;
+	ret = resolve_at_path(dirfd, path, flags, &node, &id);
+	if (ret < 0)
+		return ret;
+	for (i = 0; i < 6; i++)
+	{
+		if (words[i])
+			return -EOPNOTSUPP;
+	}
+	(void)id;
+	(void)node;
+	return 0;
+}
+
 int64_t early_rootfs_chroot(uint64_t path)
 {
 	char pbuf[32];
