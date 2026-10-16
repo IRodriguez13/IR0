@@ -31,6 +31,7 @@ static int g_nanosleep_ok;
 static int g_clock_gettime_ok;
 static int g_gettimeofday_ok;
 static int g_clock_nanosleep_ok;
+static struct itimerval g_itimer[3];
 
 static const struct early_syscall_services *services(void *opaque)
 {
@@ -157,6 +158,44 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 	case IR0_SYSCALL_GETTIMEOFDAY:
 		(void)a1;
 		return early_gettimeofday(opaque, a0);
+	case IR0_SYSCALL_GETITIMER:
+	case IR0_SYSCALL_SETITIMER:
+	{
+		const struct early_user_services *user;
+		unsigned which = (unsigned)a0;
+
+		if (which > 2)
+			return -EINVAL;
+		if (!services_all || !(user = services_all->user))
+			return -ENOSYS;
+		if (id == IR0_SYSCALL_GETITIMER)
+		{
+			if (!a1)
+				return -EFAULT;
+			if (!user->copy_to_user)
+				return -ENOSYS;
+			return user->copy_to_user(a1, &g_itimer[which],
+						  sizeof(g_itimer[0])) == 0 ?
+				       0 :
+				       -EFAULT;
+		}
+		if (a2)
+		{
+			if (!user->copy_to_user)
+				return -ENOSYS;
+			if (user->copy_to_user(a2, &g_itimer[which],
+					       sizeof(g_itimer[0])) != 0)
+				return -EFAULT;
+		}
+		if (!a1)
+			return 0;
+		if (!user->copy_from_user)
+			return -ENOSYS;
+		return user->copy_from_user(&g_itimer[which], a1,
+					    sizeof(g_itimer[0])) == 0 ?
+			       0 :
+			       -EFAULT;
+	}
 	case IR0_SYSCALL_CLOCK_GETRES:
 	{
 		struct timespec res;
@@ -196,7 +235,8 @@ int early_time_smoke_ok(void)
 static const enum ir0_syscall_id g_time_syscalls[] = {
 	IR0_SYSCALL_NANOSLEEP, IR0_SYSCALL_CLOCK_GETTIME,
 	IR0_SYSCALL_CLOCK_NANOSLEEP, IR0_SYSCALL_GETTIMEOFDAY,
-	IR0_SYSCALL_CLOCK_GETRES,
+	IR0_SYSCALL_CLOCK_GETRES, IR0_SYSCALL_GETITIMER,
+	IR0_SYSCALL_SETITIMER,
 };
 
 const struct syscall_context_provider early_time_provider = {
