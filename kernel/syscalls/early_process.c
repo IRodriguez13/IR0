@@ -98,6 +98,14 @@ static int64_t early_process_syscall(void *opaque, enum ir0_syscall_id id,
 		(void)a0;
 		(void)a1;
 		return -ECHILD;
+	case IR0_SYSCALL_GETPGID:
+		return ir0_early_process_getpgid(a0);
+	case IR0_SYSCALL_GETSID:
+		return ir0_early_process_getsid(a0);
+	case IR0_SYSCALL_SETSID:
+		return ir0_early_process_setsid();
+	case IR0_SYSCALL_SETPGID:
+		return ir0_early_process_setpgid(a0, a1);
 	default:
 		return -ENOSYS;
 	}
@@ -109,7 +117,8 @@ static const enum ir0_syscall_id g_process_syscalls[] = {
 	IR0_SYSCALL_GETEGID, IR0_SYSCALL_GETPPID, IR0_SYSCALL_UNAME,
 	IR0_SYSCALL_SET_ROBUST_LIST, IR0_SYSCALL_PRCTL, IR0_SYSCALL_PRLIMIT64,
 	IR0_SYSCALL_RSEQ, IR0_SYSCALL_GETRANDOM, IR0_SYSCALL_WAIT4,
-	IR0_SYSCALL_EXIT, IR0_SYSCALL_EXIT_GROUP,
+	IR0_SYSCALL_GETPGID, IR0_SYSCALL_GETSID, IR0_SYSCALL_SETSID,
+	IR0_SYSCALL_SETPGID, IR0_SYSCALL_EXIT, IR0_SYSCALL_EXIT_GROUP,
 };
 
 const struct syscall_context_provider early_process_provider = {

@@ -41,6 +41,7 @@ extern void test_elf_initial_brk_abi(void);
 extern void test_elf_local_reloc_abi(void);
 extern void test_elf_interp_abi(void);
 extern void test_early_rootfs_abi(void);
+extern void test_early_process_abi(void);
 extern void test_early_elf_stack_abi(void);
 extern void test_early_mm_abi(void);
 extern void test_musl_cred_abi(void);
@@ -113,6 +114,7 @@ static void (*test_functions[])(void) = {
 	test_elf_local_reloc_abi,
 	test_elf_interp_abi,
 	test_early_rootfs_abi,
+	test_early_process_abi,
 	test_early_elf_stack_abi,
 	test_early_mm_abi,
 	test_musl_cred_abi,
