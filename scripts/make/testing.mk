@@ -2153,6 +2153,101 @@ ARM64_PORTABLE_OBJS = \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
 	arch/arm64/sources/portable_string.o
+
+# Single virt-boot link inventory. rpi3/min/all derive from this so a new
+# early object is added once.
+ARM64_BOOT_LINK_OBJS = \
+	arch/arm64/sources/boot_entry.o \
+	arch/arm64/sources/boot_stub.o \
+	arch/arm64/sources/mmu_early.o \
+	arch/arm64/sources/exc_early.o \
+	arch/arm64/sources/pl011.o \
+	arch/arm64/sources/board.o \
+	arch/arm64/sources/boot_info.o \
+	arch/arm64/sources/platform.o \
+	arch/arm64/sources/freestanding_stubs.o \
+	arch/arm64/sources/serial_io_arm64.o \
+	arch/arm64/sources/slice_hello.o \
+	build/arm64-boot/boot_log.o \
+	arch/arm64/sources/timer.o \
+	arch/arm64/sources/gic_v2.o \
+	arch/arm64/sources/bcm2836_irq.o \
+	arch/arm64/sources/irq_backend.o \
+	arch/arm64/sources/syscall_decode.o \
+	arch/arm64/sources/elf_policy.o \
+	build/arm64-boot/syscall_table.o \
+	build/arm64-boot/early_dispatch.o \
+	build/arm64-boot/early_time.o \
+	build/arm64-boot/early_io.o \
+	build/arm64-boot/early_vfs.o \
+	build/arm64-boot/early_rootfs.o \
+	build/arm64-boot/early_elf_stack.o \
+	build/arm64-boot/early_process.o \
+	build/arm64-boot/early_mm.o \
+	arch/arm64/sources/syscall_early.o \
+	arch/arm64/sources/mm_ops.o \
+	arch/arm64/sources/switch_early.o \
+	arch/arm64/sources/switch_early_asm.o \
+	arch/arm64/sources/process_early.o \
+	build/arm64-boot/switch_arm64.o \
+	build/arm64-boot/arch_context_switch.o \
+	build/arm64-boot/arch_switch.o \
+	build/arm64-boot/arch_tls.o \
+	build/arm64-boot/first_switch.o \
+	build/arm64-boot/portable_string.o \
+	build/arm64-boot/sched.o \
+	build/arm64-boot/sched_switch.o \
+	build/arm64-boot/rr_sched.o \
+	build/arm64-boot/process_registry.o \
+	arch/arm64/sources/rr_early.o \
+	build/arm64-boot/allocator_stubs.o \
+	build/arm64-boot/clock_accounting.o \
+	build/arm64-boot/sched_trace.o \
+	build/arm64-boot/elf64_image.o \
+	arch/arm64/sources/elf_image_early.o \
+	arch/arm64/sources/elf_load_early.o \
+	arch/arm64/sources/hello_embed.o \
+	arch/arm64/sources/embedded_elf_early.o \
+	arch/arm64/sources/rootfs_early.o \
+	arch/arm64/sources/init_handoff_early.o \
+	build/arm64-boot/init_handoff.o \
+	arch/arm64/sources/embedded_elf_embed.o \
+	drivers/virtio/virtio_mmio.o \
+	build/arm64-boot/blockdev.o \
+	arch/arm64/sources/virtio_blk_early.o \
+	arch/arm64/sources/virtio_net_early.o \
+	arch/arm64/sources/vectors.o
+
+ARM64_RPI3_LINK_OBJS := $(ARM64_BOOT_LINK_OBJS)
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/boot_stub.o,build/arm64-rpi3-early/boot_stub.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/board.o,build/arm64-rpi3-early/board.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/vectors.o,build/arm64-rpi3-early/vectors.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/syscall_early.o,build/arm64-rpi3-early/syscall_early.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/elf_load_early.o,build/arm64-rpi3-early/elf_load_early.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/hello_embed.o,build/arm64-rpi3-early/hello_embed.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/embedded_elf_early.o,build/arm64-rpi3-early/embedded_elf_early.o,$(ARM64_RPI3_LINK_OBJS))
+ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/embedded_elf_embed.o,build/arm64-rpi3-early/embedded_elf_embed.o,$(ARM64_RPI3_LINK_OBJS))
+
+ARM64_MIN_LINK_OBJS = \
+	$(filter-out build/arm64-boot/portable_string.o \
+		build/arm64-boot/allocator_stubs.o,$(ARM64_BOOT_LINK_OBJS)) \
+	build/arm64-min/arch_mm.o \
+	build/arm64-min/portable_string.o \
+	build/arm64-min/allocator.o \
+	build/arm64-min/boot_memory.o \
+	build/arm64-min/no_mmu.o \
+	build/arm64-min/paging.o \
+	build/arm64-min/pmm.o \
+	build/arm64-min/kmem.o \
+	build/arm64-min/errno.o \
+	build/arm64-min/open_flags.o \
+	build/arm64-min/min_link_stubs.o
+
+ARM64_ALL_EARLY_LINK_OBJS = \
+	$(filter-out build/arm64-boot/portable_string.o \
+		build/arm64-boot/allocator_stubs.o \
+		build/arm64-boot/arch_tls.o,$(ARM64_BOOT_LINK_OBJS))
+
 .PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin kernel-arm64-vbar.bin \
 	kernel-arm64-el0.bin kernel-arm64-slice.bin kernel-arm64-port.bin \
 	kernel-arm64-gic.bin kernel-arm64-syscall.bin \
@@ -2509,51 +2604,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/common/boot_log.c -o build/arm64-boot/boot_log.o
 	@echo "  LD      $@"
-	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
-		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
-		arch/arm64/sources/mmu_early.o \
-		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
-		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
-		arch/arm64/sources/platform.o \
-		arch/arm64/sources/freestanding_stubs.o \
-		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
-		build/arm64-boot/boot_log.o \
-		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/bcm2836_irq.o \
-		arch/arm64/sources/irq_backend.o \
-		arch/arm64/sources/syscall_decode.o arch/arm64/sources/elf_policy.o \
-		build/arm64-boot/syscall_table.o \
-		build/arm64-boot/early_dispatch.o \
-		build/arm64-boot/early_time.o \
-		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
-		build/arm64-boot/early_rootfs.o \
-		build/arm64-boot/early_elf_stack.o \
-		build/arm64-boot/early_process.o \
-		build/arm64-boot/early_mm.o \
-		arch/arm64/sources/syscall_early.o \
-		arch/arm64/sources/mm_ops.o \
-		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
-		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/arch_context_switch.o \
-		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
-		build/arm64-boot/first_switch.o \
-		build/arm64-boot/portable_string.o \
-		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
-		build/arm64-boot/rr_sched.o \
-		build/arm64-boot/process_registry.o \
-		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/allocator_stubs.o \
-		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
-		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
-		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
-		arch/arm64/sources/embedded_elf_early.o arch/arm64/sources/rootfs_early.o \
-		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
-		arch/arm64/sources/embedded_elf_embed.o \
-		drivers/virtio/virtio_mmio.o \
-		build/arm64-boot/blockdev.o \
-		arch/arm64/sources/virtio_blk_early.o \
-		arch/arm64/sources/virtio_net_early.o \
-		arch/arm64/sources/vectors.o
+	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ $(ARM64_BOOT_LINK_OBJS)
 	@echo "✓ $@"
 
 .PHONY: kernel-arm64-rpi3-early.bin smoke-arm64-rpi3-timer
@@ -2583,47 +2634,7 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 		-DARM64_EMBEDDED_ELF_PATH='"build/busybox_aarch64_rpi3"' -c \
 		arch/arm64/sources/embedded_elf_embed.S -o build/arm64-rpi3-early/embedded_elf_embed.o
 	@echo "  LD      $@ (load @ 0x80000)"
-	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ \
-		arch/arm64/sources/boot_entry.o build/arm64-rpi3-early/boot_stub.o \
-		arch/arm64/sources/mmu_early.o \
-		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
-		build/arm64-rpi3-early/board.o arch/arm64/sources/boot_info.o \
-		arch/arm64/sources/platform.o arch/arm64/sources/freestanding_stubs.o \
-		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
-		build/arm64-boot/boot_log.o arch/arm64/sources/timer.o \
-		arch/arm64/sources/gic_v2.o arch/arm64/sources/bcm2836_irq.o \
-		arch/arm64/sources/irq_backend.o arch/arm64/sources/syscall_decode.o \
-		arch/arm64/sources/elf_policy.o \
-		build/arm64-rpi3-early/syscall_early.o \
-		arch/arm64/sources/mm_ops.o \
-		build/arm64-boot/syscall_table.o \
-		build/arm64-boot/early_dispatch.o \
-		build/arm64-boot/early_time.o \
-		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
-		build/arm64-boot/early_rootfs.o \
-		build/arm64-boot/early_elf_stack.o \
-		build/arm64-boot/early_process.o \
-		build/arm64-boot/early_mm.o \
-		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
-		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/arch_context_switch.o \
-		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
-		build/arm64-boot/first_switch.o \
-		build/arm64-boot/portable_string.o \
-		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
-		build/arm64-boot/rr_sched.o build/arm64-boot/process_registry.o \
-		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/allocator_stubs.o \
-		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
-		build/arm64-boot/elf64_image.o \
-		arch/arm64/sources/elf_image_early.o build/arm64-rpi3-early/elf_load_early.o \
-		build/arm64-rpi3-early/hello_embed.o \
-		build/arm64-rpi3-early/embedded_elf_early.o \
-		arch/arm64/sources/rootfs_early.o arch/arm64/sources/init_handoff_early.o \
-		build/arm64-boot/init_handoff.o build/arm64-rpi3-early/embedded_elf_embed.o \
-		drivers/virtio/virtio_mmio.o build/arm64-boot/blockdev.o \
-		arch/arm64/sources/virtio_blk_early.o \
-		arch/arm64/sources/virtio_net_early.o build/arm64-rpi3-early/vectors.o
+	@aarch64-linux-gnu-ld -T arch/arm64/linker_rpi.ld -o $@ $(ARM64_RPI3_LINK_OBJS)
 	@aarch64-linux-gnu-objcopy -O binary $@ build/arm64-rpi3-early/kernel8.img
 	@python3 tests/arm64/make_rpi3_contract_dtb.py build/arm64-rpi3-early/ir0-rpi3.dtb
 	@echo "✓ $@"
@@ -2717,53 +2728,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		ktm/mocks/arm64/min_link_stubs.c -o build/arm64-min/min_link_stubs.o
 	@echo "  LD      $@ (boot + MEMORY sample — not ALL_OBJS)"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
-		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
-		arch/arm64/sources/mmu_early.o \
-		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
-		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
-		arch/arm64/sources/platform.o arch/arm64/sources/freestanding_stubs.o \
-		build/arm64-boot/boot_log.o \
-		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
-		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/bcm2836_irq.o arch/arm64/sources/irq_backend.o \
-		arch/arm64/sources/syscall_decode.o arch/arm64/sources/elf_policy.o \
-		arch/arm64/sources/syscall_early.o \
-		build/arm64-boot/syscall_table.o \
-		build/arm64-boot/early_dispatch.o \
-		build/arm64-boot/early_time.o \
-		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
-		build/arm64-boot/early_rootfs.o \
-		build/arm64-boot/early_elf_stack.o \
-		build/arm64-boot/early_process.o \
-		build/arm64-boot/early_mm.o \
-		arch/arm64/sources/mm_ops.o build/arm64-min/arch_mm.o \
-		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
-		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/arch_context_switch.o \
-		build/arm64-boot/arch_switch.o build/arm64-boot/arch_tls.o \
-		build/arm64-boot/first_switch.o \
-		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
-		build/arm64-boot/rr_sched.o \
-		build/arm64-boot/process_registry.o \
-		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/allocator_stubs.o \
-		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
-		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
-		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
-		arch/arm64/sources/embedded_elf_early.o arch/arm64/sources/rootfs_early.o \
-		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
-		arch/arm64/sources/embedded_elf_embed.o \
-		drivers/virtio/virtio_mmio.o \
-		build/arm64-boot/blockdev.o \
-		arch/arm64/sources/virtio_blk_early.o \
-		arch/arm64/sources/virtio_net_early.o \
-		arch/arm64/sources/vectors.o \
-		build/arm64-min/portable_string.o \
-		build/arm64-min/allocator.o build/arm64-min/boot_memory.o \
-		build/arm64-min/no_mmu.o build/arm64-min/paging.o \
-		build/arm64-min/pmm.o build/arm64-min/kmem.o \
-		build/arm64-min/errno.o build/arm64-min/open_flags.o \
-		build/arm64-min/min_link_stubs.o \
+		$(ARM64_MIN_LINK_OBJS) \
 		--defsym ARM64_MIN_LINK_MARKER=1
 	@echo "✓ $@ (MEMORY+KERNEL sample+ARCH freestanding linked; drivers ALL_OBJS still BLOCKED)"
 
@@ -2919,46 +2884,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 	@aarch64-linux-gnu-ld --gc-sections $(ARM64_ALL_KEEP_SYMBOLS) \
 		-Map=build/arm64-all/kernel.map \
 		-T arch/arm64/linker.ld -o $@ \
-		arch/arm64/sources/boot_entry.o arch/arm64/sources/boot_stub.o \
-		arch/arm64/sources/mmu_early.o \
-		arch/arm64/sources/exc_early.o arch/arm64/sources/pl011.o \
-		arch/arm64/sources/board.o arch/arm64/sources/boot_info.o \
-		arch/arm64/sources/platform.o \
-		arch/arm64/sources/freestanding_stubs.o \
-		arch/arm64/sources/serial_io_arm64.o arch/arm64/sources/slice_hello.o \
-		build/arm64-boot/boot_log.o \
-		arch/arm64/sources/timer.o arch/arm64/sources/gic_v2.o \
-		arch/arm64/sources/bcm2836_irq.o arch/arm64/sources/irq_backend.o \
-		arch/arm64/sources/syscall_decode.o arch/arm64/sources/elf_policy.o \
-		arch/arm64/sources/syscall_early.o \
-		build/arm64-boot/syscall_table.o \
-		build/arm64-boot/early_dispatch.o \
-		build/arm64-boot/early_time.o \
-		build/arm64-boot/early_io.o build/arm64-boot/early_vfs.o \
-		build/arm64-boot/early_rootfs.o \
-		build/arm64-boot/early_elf_stack.o \
-		build/arm64-boot/early_process.o \
-		build/arm64-boot/early_mm.o \
-		arch/arm64/sources/mm_ops.o \
-		arch/arm64/sources/switch_early.o arch/arm64/sources/switch_early_asm.o \
-		arch/arm64/sources/process_early.o build/arm64-boot/switch_arm64.o \
-		build/arm64-boot/arch_context_switch.o \
-		build/arm64-boot/arch_switch.o build/arm64-boot/first_switch.o \
-		build/arm64-boot/sched.o build/arm64-boot/sched_switch.o \
-		build/arm64-boot/rr_sched.o \
-		build/arm64-boot/process_registry.o \
-		arch/arm64/sources/rr_early.o \
-		build/arm64-boot/clock_accounting.o build/arm64-boot/sched_trace.o \
-		build/arm64-boot/elf64_image.o arch/arm64/sources/elf_image_early.o \
-		arch/arm64/sources/elf_load_early.o arch/arm64/sources/hello_embed.o \
-		arch/arm64/sources/embedded_elf_early.o arch/arm64/sources/rootfs_early.o \
-		arch/arm64/sources/init_handoff_early.o build/arm64-boot/init_handoff.o \
-		arch/arm64/sources/embedded_elf_embed.o \
-		drivers/virtio/virtio_mmio.o \
-		build/arm64-boot/blockdev.o \
-		arch/arm64/sources/virtio_blk_early.o \
-		arch/arm64/sources/virtio_net_early.o \
-		arch/arm64/sources/vectors.o \
+		$(ARM64_ALL_EARLY_LINK_OBJS) \
 		$(ARM64_ALL_PORTABLE_OBJS) build/arm64-all/all_objs_mark.o
 	@echo "✓ $@ (early aggregate link; common product lifecycle not yet linked)"
 
