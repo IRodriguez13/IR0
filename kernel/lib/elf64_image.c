@@ -13,6 +13,7 @@
 #define ELF64_EI_NIDENT 16U
 #define ELF64_PT_LOAD 1U
 #define ELF64_PT_PHDR 6U
+#define ELF64_PAGE_SIZE 4096UL
 
 struct elf64_ehdr
 {
@@ -58,6 +59,7 @@ static int inspect_header(const void *blob_ptr, size_t blob_length,
 	uint64_t phdr_bytes;
 	uint64_t phdr_end;
 	uint64_t phdr_va = 0;
+	uint64_t brk_end = 0;
 	uint16_t i;
 
 	if (!blob || !ops || !image || !ops->machine_supported ||
@@ -85,11 +87,13 @@ static int inspect_header(const void *blob_ptr, size_t blob_length,
 	image->phdr = 0;
 	image->phent = ehdr->e_phentsize;
 	image->phnum = ehdr->e_phnum;
+	image->initial_brk = 0;
 
 	for (i = 0; i < ehdr->e_phnum; i++)
 	{
 		const struct elf64_phdr *ph;
 		uint64_t offset = ehdr->e_phoff + (uint64_t)i * ehdr->e_phentsize;
+		uint64_t seg_end;
 
 		ph = (const struct elf64_phdr *)(blob + offset);
 		if (ph->p_type == ELF64_PT_PHDR)
@@ -100,12 +104,18 @@ static int inspect_header(const void *blob_ptr, size_t blob_length,
 		    !range_valid(ph->p_offset, ph->p_filesz, blob_length) ||
 		    ph->p_vaddr + ph->p_memsz < ph->p_vaddr)
 			return -1;
+		seg_end = ph->p_vaddr + ph->p_memsz;
+		if (seg_end > brk_end)
+			brk_end = seg_end;
 		if (ehdr->e_phoff >= ph->p_offset &&
 		    phdr_end <= ph->p_offset + ph->p_filesz)
 			phdr_va = ph->p_vaddr + (ehdr->e_phoff - ph->p_offset);
 	}
 
 	image->phdr = phdr_va;
+	if (brk_end != 0)
+		image->initial_brk = (brk_end + ELF64_PAGE_SIZE - 1UL) &
+				     ~(ELF64_PAGE_SIZE - 1UL);
 	return 0;
 }
 

@@ -134,6 +134,7 @@ void test_elf64_image_contract(void)
 	ASSERT_EQ(image.type, IR0_ELF64_ET_EXEC);
 	ASSERT_EQ(image.machine, 183);
 	ASSERT_EQ(image.phdr, 0x1000 + sizeof(struct test_ehdr));
+	ASSERT_EQ(image.initial_brk, 0x2000);
 	ASSERT_EQ(context.flags, IR0_ELF64_PF_R | IR0_ELF64_PF_X);
 	ASSERT_EQ(context.memory[sizeof(struct test_ehdr) + sizeof(struct test_phdr)], 0xaa);
 	ASSERT_EQ(context.sealed, 1);

@@ -32,6 +32,8 @@ struct ir0_elf64_image
 	uint64_t phdr;
 	uint16_t phent;
 	uint16_t phnum;
+	/* Linux fs/binfmt_elf.c: mm->start_brk = ELF_PAGEALIGN(max PT_LOAD end). */
+	uint64_t initial_brk;
 };
 
 int ir0_elf64_image_inspect(const void *blob, size_t blob_length,
