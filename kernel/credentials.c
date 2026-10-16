@@ -78,7 +78,12 @@ bool ir0_check_file_access(const char *path, int mode)
     if (!path || !c)
         return false;
 
-    if (ir0_stat_path_routed(path, &st) != 0)
+    /*
+     * VFS-mounted paths use vfs_stat (Linux inode from the path walk).
+     * The syscall router (path_routed) is for /proc /sys /dev, not for
+     * DAC inside vfs_open of a real mount.
+     */
+    if (vfs_stat(path, &st) != 0)
         return false;
 
     if (!current_process)

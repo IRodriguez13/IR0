@@ -76,3 +76,53 @@ int strncmp(const char *a, const char *b, size_t n)
 	}
 	return (unsigned char)*a - (unsigned char)*b;
 }
+
+char *strchr(const char *s, int c)
+{
+	char ch = (char)c;
+
+	if (!s)
+		return NULL;
+	while (*s)
+	{
+		if (*s == ch)
+			return (char *)s;
+		s++;
+	}
+	return ch == '\0' ? (char *)s : NULL;
+}
+
+char *strrchr(const char *s, int c)
+{
+	const char *last = NULL;
+	char ch = (char)c;
+
+	if (!s)
+		return NULL;
+	while (*s)
+	{
+		if (*s == ch)
+			last = s;
+		s++;
+	}
+	if (ch == '\0')
+		return (char *)s;
+	return (char *)last;
+}
+
+char *strncat(char *dst, const char *src, size_t n)
+{
+	char *d = dst;
+
+	if (!dst || !src)
+		return dst;
+	while (*d)
+		d++;
+	while (n && *src)
+	{
+		*d++ = *src++;
+		n--;
+	}
+	*d = '\0';
+	return dst;
+}

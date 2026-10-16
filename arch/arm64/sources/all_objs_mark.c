@@ -29,6 +29,9 @@
 #include <ir0/fd_install.h>
 #include <ir0/vfs_dispatch.h>
 #include <ir0/vfs_file.h>
+#include <ir0/vfs.h>
+#include <ir0/open_flags.h>
+#include <fs/tmpfs.h>
 #include <ir0/syscall_identity.h>
 #include <ir0/tlb.h>
 #include <ir0/paging.h>
@@ -351,6 +354,23 @@ void arm64_common_prepare_fdtable(void)
 		if (n == 4 && z[0] == 0 && z[1] == 0 && z[2] == 0 && z[3] == 0 &&
 		    probe.pos == (off_t)sizeof(z))
 			ir0_boot_smoke("ARM64_COMMON_VFS_OPS_READ_OK");
+	}
+	if (tmpfs_register() == 0 &&
+	    vfs_mount("none", "/tmp", "tmpfs") == 0)
+	{
+		struct vfs_file *f = NULL;
+		char got[4];
+		int n;
+
+		if (vfs_open("/tmp/product", IR0_O_RDWR | IR0_O_CREAT, 0644,
+			     &f) == 0 && f &&
+		    vfs_write(f, "IR0", 3) == 3 &&
+		    vfs_lseek(f, 0, 0) == 0 &&
+		    vfs_read(f, got, 3) == 3 &&
+		    got[0] == 'I' && got[1] == 'R' && got[2] == '0')
+			ir0_boot_smoke("ARM64_PRODUCT_VFS_OK");
+		if (f)
+			(void)vfs_file_put(f);
 	}
 }
 

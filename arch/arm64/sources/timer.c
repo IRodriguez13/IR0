@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 #include <config.h>
+#include <ir0/types.h>
 #include "timer.h"
 
 static uint64_t g_cntfrq;
@@ -45,6 +46,15 @@ uint64_t clock_get_tick_count(void)
 		return 0;
 	return (counter / frequency) * CONFIG_TICK_RATE_HZ +
 	       ((counter % frequency) * CONFIG_TICK_RATE_HZ) / frequency;
+}
+
+time_t clock_get_current_time(void)
+{
+	uint64_t frequency = timer_get_frequency();
+
+	if (frequency == 0)
+		return 0;
+	return (time_t)(timer_read() / frequency);
 }
 
 void timer_set_frequency(uint32_t hz)

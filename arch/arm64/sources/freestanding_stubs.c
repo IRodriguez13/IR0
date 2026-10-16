@@ -48,6 +48,21 @@ void cpu_idle(void)
 	cpu_wait();
 }
 
+void cpu_relax(void)
+{
+	__asm__ volatile("yield" ::: "memory");
+}
+
+void klog_print(const char *str)
+{
+	(void)str;
+}
+
+void klog_hex64(uint64_t num)
+{
+	(void)num;
+}
+
 void panicex(const char *message, panic_level_t level, const char *file,
 	     int line, const char *caller)
 {

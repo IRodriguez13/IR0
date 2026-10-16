@@ -2110,7 +2110,9 @@ smoke-robust-list: kernel-x64-userspace.iso
 ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
 	-DIR0_FREESTANDING_BOOT=1 $(ARM64_BOARD_CFLAGS) \
 	-I. -Iarch/arm64/include -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0
-ARM64_ALL_CFLAGS = $(ARM64_BOOT_CFLAGS) -ffunction-sections -fdata-sections
+ARM64_ALL_CFLAGS = $(ARM64_BOOT_CFLAGS) -ffunction-sections -fdata-sections \
+	-DCONFIG_ENABLE_FS_MINIX=0 -DCONFIG_ENABLE_FS_SIMPLEFS=0 \
+	-DCONFIG_ENABLE_FS_FAT16=0 -DCONFIG_ENABLE_FS_EXT2=0
 ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=current_process \
 	--undefined=process_get_pid \
@@ -2142,7 +2144,11 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_exit_guest \
 	--undefined=process_guest_install \
 	--undefined=kernel_idle_loop \
-	--undefined=process_idle_bind
+	--undefined=process_idle_bind \
+	--undefined=vfs_open \
+	--undefined=vfs_read \
+	--undefined=vfs_write \
+	--undefined=tmpfs_register
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
@@ -2862,6 +2868,11 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/syscalls/syscall_identity.c \
 	kernel/process/cwd.c \
 	kernel/process/vfs_file.c \
+	kernel/credentials.c \
+	fs/permissions.c \
+	fs/vfs.c \
+	fs/tmpfs.c \
+	fs/path.c \
 	kernel/process/wait.c \
 	kernel/process/wait_audit.c \
 	kernel/process/signals.c \
@@ -3015,6 +3026,12 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "vfs_dispatch_bind" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "vfs_open" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "vfs_read" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
+		awk '$$3 == "tmpfs_register" { ok = ($$2 == "T") } END { exit !ok }'
+	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 ~ /^(__kmalloc_checked|__kfree_checked|clock_note_context_switch|process_sched_state_trace)$$/ { if ($$2 != "T") bad = 1; seen++ } END { exit bad || seen != 4 }'
 	@echo "✓ ARM64 common process/MM/create symbols are strong"
 	@echo "✓ ARM64 allocator/accounting/scheduler trace providers are strong"
@@ -3049,6 +3066,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_VFS_READ_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_VFS_OPS_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_VFS_OPS_READ_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_VFS_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
