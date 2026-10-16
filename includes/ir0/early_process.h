@@ -225,4 +225,6 @@ void early_process_current_ucred(int32_t *pid, int32_t *uid, int32_t *gid);
 void early_process_note_exec(void);
 int early_process_vfork_exec_resume(uint64_t *frame);
 void early_process_bind_common_exit(int (*fn)(int code));
+void early_process_bind_schedule_exit(void (*fn)(int code));
+void early_process_arm_schedule_exit(void);
 int early_process_common_exit_published(void);

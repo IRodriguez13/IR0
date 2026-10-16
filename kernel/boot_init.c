@@ -51,6 +51,7 @@
 #include "syscalls.h"
 #include <ir0/sched.h>
 #include "process.h"
+#include <ir0/idle.h>
 #include <ir0/process_exit.h>
 #include "rootfs_base.h"
 #include "kernel.h"
@@ -245,6 +246,13 @@ void boot_runtime(void)
 {
 	process_init();
 	process_exit_bind_product();
+	{
+		static const struct process_idle_services idle_ops = {
+			.poll = kernel_idle_poll,
+		};
+
+		process_idle_bind(&idle_ops);
+	}
 	log_subsystem_ok("PROCESSES");
 
 	ipc_init();

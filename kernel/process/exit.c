@@ -86,6 +86,12 @@ __attribute__((noreturn)) void process_exit(int code)
 			    strncmp(p->comm, "idle", sizeof(p->comm)) == 0)
 			{
 				sched_add_process(p);
+				if (sched_count_runnable() <= 1)
+				{
+					sched_switch_to(p);
+					for (;;)
+						cpu_idle();
+				}
 				break;
 			}
 		}

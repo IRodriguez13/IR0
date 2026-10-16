@@ -21,6 +21,8 @@ typedef struct process process_t;
 void sched_add_process(process_t *proc);
 void sched_remove_process(process_t *proc);
 void sched_schedule_next(void);
+void sched_switch_to(process_t *next);
+void sched_reset(void);
 const char *sched_active_policy_name(void);
 int sched_count_runnable(void);
 void sched_promote_process(process_t *proc);

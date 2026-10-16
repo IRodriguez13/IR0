@@ -8,6 +8,8 @@
  */
 
 #include "pl011.h"
+#include "exc_early.h"
+#include <ir0/cpu_info.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/arch_mm.h>
@@ -15,6 +17,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
 #include <ir0/early_process.h>
+#include <ir0/idle.h>
 #include <ir0/process_exit.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
@@ -186,6 +189,32 @@ static int arm64_common_lifecycle_contract(void)
 	return 0;
 }
 
+static process_t g_guest;
+static process_t g_idle;
+static uint8_t g_idle_stack[4096] __attribute__((aligned(16)));
+
+static void arm64_idle_quiescent(void)
+{
+	process_t *init = process_find_by_pid(1);
+
+	if (init && process_is_zombie(init))
+	{
+		ir0_boot_smoke("ARM64_COMMON_IDLE_OK");
+		ir0_boot_smoke("ARM64_SYSCALL_OK");
+		ir0_boot_smoke("ARM64_EL0_RET_OK");
+		arm64_psci_system_off();
+	}
+	cpu_idle();
+}
+
+void arm64_common_prepare_final_el0(void)
+{
+	sched_reset();
+	process_guest_rearm(&g_guest);
+	sched_adopt_running_context(&g_guest);
+	early_process_arm_schedule_exit();
+}
+
 static int arm64_exit_notify_signal(int pid, int sig)
 {
 	process_t *target = process_find_by_pid(pid);
@@ -285,30 +314,54 @@ void arm64_all_objs_mark(void)
 	else
 		ir0_boot_smoke("ARM64_COMMON_EXIT_FAIL");
 	{
-		static process_t guest;
 		static const struct process_exit_services guest_ops = {
 			.notify_signal = arm64_exit_notify_signal,
 		};
-		uint8_t *bytes = (uint8_t *)&guest;
+		static const struct process_idle_services idle_ops = {
+			.on_quiescent = arm64_idle_quiescent,
+		};
+		uint8_t *bytes = (uint8_t *)&g_guest;
 		size_t i;
+		uintptr_t sp;
 
-		for (i = 0; i < sizeof(guest); i++)
+		for (i = 0; i < sizeof(g_guest); i++)
 			bytes[i] = 0;
-		guest.task.pid = 1;
-		guest.ppid = 0;
-		guest.lifecycle = PROCESS_LIFECYCLE_ALIVE;
-		guest.state = PROCESS_RUNNING;
-		guest.mode = USER_MODE;
-		guest.comm[0] = 'i';
-		guest.comm[1] = 'n';
-		guest.comm[2] = 'i';
-		guest.comm[3] = 't';
-		guest.comm[4] = 0;
-		guest.next = NULL;
+		bytes = (uint8_t *)&g_idle;
+		for (i = 0; i < sizeof(g_idle); i++)
+			bytes[i] = 0;
+		g_guest.task.pid = 1;
+		g_guest.ppid = 0;
+		g_guest.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+		g_guest.state = PROCESS_RUNNING;
+		g_guest.mode = USER_MODE;
+		g_guest.comm[0] = 'i';
+		g_guest.comm[1] = 'n';
+		g_guest.comm[2] = 'i';
+		g_guest.comm[3] = 't';
+		g_guest.comm[4] = 0;
+		g_idle.task.pid = 0;
+		g_idle.lifecycle = PROCESS_LIFECYCLE_ALIVE;
+		g_idle.state = PROCESS_READY;
+		g_idle.mode = KERNEL_MODE;
+		g_idle.comm[0] = 'i';
+		g_idle.comm[1] = 'd';
+		g_idle.comm[2] = 'l';
+		g_idle.comm[3] = 'e';
+		g_idle.comm[4] = 0;
+		sp = (uintptr_t)g_idle_stack + sizeof(g_idle_stack);
+		sp &= ~(uintptr_t)0xf;
+		g_idle.task.arch.sp_el0 = sp;
+		g_idle.task.arch.x30 = (uint64_t)(uintptr_t)kernel_idle_loop;
+		g_idle.next = &g_guest;
+		g_guest.next = NULL;
+		process_list = &g_idle;
 		process_exit_bind_services(&guest_ops);
-		process_guest_install(&guest);
+		process_idle_bind(&idle_ops);
+		process_guest_install(&g_guest);
 		early_process_bind_common_exit(process_exit_guest);
+		early_process_bind_schedule_exit(process_exit);
 		ir0_boot_smoke("ARM64_COMMON_GUEST_OK");
+		ir0_boot_smoke("ARM64_COMMON_IDLE_READY");
 	}
 	{
 		int inventory = arm64_boot_memory_contract();

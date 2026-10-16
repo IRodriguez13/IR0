@@ -2140,7 +2140,9 @@ ARM64_ALL_KEEP_SYMBOLS = \
 	--undefined=process_resources_release_on_exit \
 	--undefined=process_destroy \
 	--undefined=process_exit_guest \
-	--undefined=process_guest_install
+	--undefined=process_guest_install \
+	--undefined=kernel_idle_loop \
+	--undefined=process_idle_bind
 ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 # QEMU virt: pin GICv2 (default may be v3 — freestanding Dist/CPU iface is v2).
 ARM64_QEMU_MACHINE = virt,gic-version=2
@@ -2759,6 +2761,7 @@ ARM64_COMMON_PROCESS_SRCS = \
 	kernel/process/exit.c \
 	kernel/process/wait.c \
 	kernel/process/wait_audit.c \
+	kernel/process/idle.c \
 	kernel/process/wait_state.c \
 	kernel/process/saved_context.c \
 	kernel/process/saved_environ.c \
@@ -2849,6 +2852,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/process/parent.c \
 	kernel/process/resources.c \
 	kernel/process/exit.c \
+	kernel/process/idle.c \
 	kernel/process/wait.c \
 	kernel/process/wait_audit.c \
 	kernel/process/signals.c \
@@ -2898,7 +2902,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		-T arch/arm64/linker.ld -o $@ \
 		$(ARM64_ALL_EARLY_LINK_OBJS) \
 		$(ARM64_ALL_PORTABLE_OBJS) build/arm64-all/all_objs_mark.o
-	@echo "✓ $@ (common process_exit linked; EL0 still staged until current_process is the guest)"
+	@echo "✓ $@ (common process_exit + idle; final EL0 schedules away)"
 
 arm64-provider-audit: kernel-arm64-all.bin
 	@semantic=$$(find arch/arm64/sources -maxdepth 1 -type f \
@@ -3007,6 +3011,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_READY' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
@@ -3031,6 +3037,8 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_READY' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log

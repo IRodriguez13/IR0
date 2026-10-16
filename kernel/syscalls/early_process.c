@@ -52,6 +52,8 @@ static uint32_t g_fsgid;
 static int32_t g_nice;
 static int64_t g_current_pid = 1;
 static int (*g_common_task_exit)(int code);
+static void (*g_schedule_exit)(int code);
+static int g_schedule_exit_armed;
 static int g_common_task_exit_published;
 static int g_child_state;
 static int g_enter_child;
@@ -838,6 +840,8 @@ static int64_t early_exit(struct early_syscall_context *context,
 	smoke_ok = context && context->smoke_ok && context->smoke_ok();
 	if (context && context->leave_usermode)
 		*context->leave_usermode = 1;
+	if (g_schedule_exit && g_schedule_exit_armed)
+		g_schedule_exit((int)(status & 0xffUL));
 	if (g_common_task_exit)
 		g_common_task_exit_published =
 			g_common_task_exit((int)(status & 0xffUL));
@@ -2103,6 +2107,16 @@ int early_process_smoke_ok(void)
 void early_process_bind_common_exit(int (*fn)(int code))
 {
 	g_common_task_exit = fn;
+}
+
+void early_process_bind_schedule_exit(void (*fn)(int code))
+{
+	g_schedule_exit = fn;
+}
+
+void early_process_arm_schedule_exit(void)
+{
+	g_schedule_exit_armed = 1;
 }
 
 int early_process_common_exit_published(void)

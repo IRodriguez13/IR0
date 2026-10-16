@@ -43,6 +43,9 @@ void arm64_exc_sync_lower(uint64_t *frame);
 /** Drop to EL0 (eret); does not return via C. */
 void arm64_enter_el0(void);
 
+/* Aggregate-only: re-arm the guest process_t and arm schedule-away exit. */
+void arm64_common_prepare_final_el0(void);
+
 /** EL1 continuation after EL0 exit SVC (printed ARM64_EL0_RET_OK). */
 void arm64_after_el0(void);
 

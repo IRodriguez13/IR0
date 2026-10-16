@@ -14,6 +14,7 @@
 
 #include <ir0/sched.h>
 #include "sched_ops.h"
+#include "sched_switch.h"
 #include <config.h>
 
 /*
@@ -40,6 +41,17 @@ void sched_remove_process(process_t *proc)
 void sched_schedule_next(void)
 {
 	g_sched_ops->schedule_next();
+}
+
+void sched_switch_to(process_t *next)
+{
+	sched_context_switch_to(next);
+}
+
+void sched_reset(void)
+{
+	if (g_sched_ops->reset)
+		g_sched_ops->reset();
 }
 
 int sched_count_runnable(void)

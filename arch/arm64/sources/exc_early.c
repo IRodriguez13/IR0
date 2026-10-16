@@ -371,6 +371,7 @@ void arm64_enter_el0(void)
 	uint64_t elr = (uint64_t)(uintptr_t)el0_entry;
 	uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL0T;
 
+	arm64_common_prepare_final_el0();
 	ir0_boot_smoke("ARM64_EL0_DROP");
 
 	__asm__ volatile(

@@ -139,7 +139,17 @@ void process_guest_install(process_t *guest)
 {
 	if (!guest)
 		return;
-	process_list = guest;
+	current_process = guest;
+	if (!process_list)
+		process_list = guest;
+}
+
+void process_guest_rearm(process_t *guest)
+{
+	if (!guest)
+		return;
+	guest->lifecycle = PROCESS_LIFECYCLE_ALIVE;
+	guest->state = PROCESS_RUNNING;
 	current_process = guest;
 }
 

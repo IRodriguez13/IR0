@@ -373,10 +373,39 @@ int priority_sched_selftest(void)
 	return 0;
 }
 
+static void priority_reset(void)
+{
+	int band;
+	uint64_t irq_flags = prio_irq_save();
+
+	for (band = 0; band < IR0_SCHED_PRIO_BANDS; band++)
+	{
+		prio_task_t *walk = prio_bands[band].head;
+
+		prio_bands[band].head = NULL;
+		prio_bands[band].tail = NULL;
+		prio_bands[band].curr = NULL;
+		prio_irq_restore(irq_flags);
+		while (walk)
+		{
+			prio_task_t *next = walk->next;
+
+			kfree(walk);
+			walk = next;
+		}
+		irq_flags = prio_irq_save();
+	}
+	prio_preferred_band = -1;
+	prio_preferred_runs = 0;
+	prio_relief_band = -1;
+	prio_irq_restore(irq_flags);
+}
+
 const struct ir0_sched_ops ir0_priority_sched_ops = {
 	.add = priority_add_process,
 	.remove = priority_remove_process,
 	.schedule_next = priority_schedule_next,
 	.count_runnable = priority_count_runnable,
 	.promote = priority_promote_process,
+	.reset = priority_reset,
 };

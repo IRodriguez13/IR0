@@ -317,10 +317,30 @@ void rr_promote_process(process_t *proc)
 	rr_irq_restore(irq_flags);
 }
 
+void rr_reset(void)
+{
+	rr_task_t *walk;
+	uint64_t irq_flags = rr_irq_save();
+
+	walk = rr_head;
+	rr_head = NULL;
+	rr_tail = NULL;
+	rr_current = NULL;
+	rr_irq_restore(irq_flags);
+	while (walk)
+	{
+		rr_task_t *next = walk->next;
+
+		kfree(walk);
+		walk = next;
+	}
+}
+
 const struct ir0_sched_ops ir0_rr_sched_ops = {
 	.add = rr_add_process,
 	.remove = rr_remove_process,
 	.schedule_next = rr_schedule_next,
 	.count_runnable = rr_count_runnable,
 	.promote = rr_promote_process,
+	.reset = rr_reset,
 };

@@ -36,6 +36,10 @@ void __attribute__((weak)) arm64_all_objs_mark(void)
 {
 }
 
+void __attribute__((weak)) arm64_common_prepare_final_el0(void)
+{
+}
+
 int __attribute__((weak)) arm64_common_root_smoke(void)
 {
 	return -1;

@@ -30,6 +30,7 @@ struct ir0_sched_ops
 	void (*schedule_next)(void);
 	int (*count_runnable)(void);
 	void (*promote)(process_t *proc);
+	void (*reset)(void);
 };
 
 extern const struct ir0_sched_ops ir0_rr_sched_ops;

@@ -85,26 +85,7 @@ void kernel_idle_poll(void)
 		sched_schedule_next();
 }
 
-/*
- * kernel_idle_loop - Always-runnable kernel task (Linux idle analogue).
- * Enqueued after /sbin/init so PID 1 runs first; takes over when init exits.
- */
-void kernel_idle_loop(void)
-{
-	for (;;)
-	{
-		enable_interrupts();
-		kernel_idle_poll();
-		/*
-		 * IRQ preemption only returns to userspace today. Idle must yield
-		 * explicitly when a higher-priority task is runnable.
-		 */
-		if (sched_count_runnable() > 1)
-			sched_schedule_next();
-		else
-			cpu_idle();
-	}
-}
+/* kernel_idle_loop lives in kernel/process/idle.c (includes/ir0/idle.h). */
 
 void kmain(uint32_t multiboot_info)
 {
