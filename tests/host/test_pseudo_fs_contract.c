@@ -17,7 +17,7 @@
  * Contract: registered nodes must expose read OR declare directory-only.
  * This host suite validates the ops struct shape without mounting guests.
  */
-static int mock_read(void *ctx, char *buf, size_t count, off_t *off)
+static int64_t mock_read(void *ctx, char *buf, size_t count, off_t *off)
 {
 	(void)ctx;
 	(void)buf;
