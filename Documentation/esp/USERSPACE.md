@@ -1,6 +1,6 @@
 # Acoplamiento IR0 (kernel) ↔ ISD
 
-> **Última verificación:** 2026-09-21  
+> **Última verificación:** 2026-10-16  
 > **Fuente de verdad:** este archivo, `scripts/make/isd.mk`, hermano [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../../SETUP.md),
 > `ISD/services/runit_console_run.c`.  
 > **English:** [`../USERSPACE.md`](../USERSPACE.md)
@@ -10,6 +10,9 @@
 El kernel no es una distro. PID1 (**runit**), **BusyBox**, paquetes, rootfs y
 `disk.img` viven en **ISD**. IR0 compila el kernel, exporta UAPI, delega la
 build de ISD y arranca la imagen.
+
+EL0 ARM (`smoke-arm64-all`) es adaptador de kernel, no producto ISD AArch64.
+Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 ## Camino feliz (primera vez)
 

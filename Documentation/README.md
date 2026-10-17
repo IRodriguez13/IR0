@@ -1,8 +1,8 @@
 # IR0 Kernel Documentation
 
-> **Last verified:** 2026-09-22
+> **Last verified:** 2026-10-16
 > **Source of truth:** files listed in the map below; code under `includes/ir0/`,
-> `kernel/`, `setup/make/legacy-smokes.mk`.
+> `kernel/`, `fs/`, `setup/make/legacy-smokes.mk`.
 
 This directory describes the current architecture and operational state of IR0.
 The goal is to document implemented behavior first, then known gaps.
@@ -26,6 +26,8 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `ai_driven_dev/`: tracked AI agent rules, skills, and install/sync workflow (see below).
 - `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
+- `EARLY_FOLD.md`: staged `early_*` adapter vs product VFS/`ramtab` (ARM ALL `/tmp`).
+- `debts/arm64-core-convergence.md`: ARM scaffolding to replace, not generalize.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.
 - `STABLE.md`: release 0.0.1 checklist; merge→`master` blockers = TinyCC + Doom T2.

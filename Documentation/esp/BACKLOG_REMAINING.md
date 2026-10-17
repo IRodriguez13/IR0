@@ -1,10 +1,13 @@
 # IR0 — Backlog post-0.0.1 (trabajo restante honesto)
 
-> **Última verificación:** 2026-07-25  
+> **Última verificación:** 2026-10-16  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
 > DESK-X: **LINUX-LIKE** (smoke-desk-session OK 2026-07-23); TinyX sigue lab.
 
 ## Closed
+
+Cerrado 2026-10-16: `fs/ramtab.c` + bind `/tmp` de producto en ARM ALL
+(`ARM64_EARLY_PATH_FOLD_OK`). Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 Ver tablas en el archivo inglés, incluida la oleada **2026-07-25** (publicación
 de ISD, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).
@@ -26,7 +29,7 @@ _(vacío)_
 7. ~~F7.1 ARM64 early MM~~ **hecho** — `smoke-arm64-mmu`  
 8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** — `smoke-arm64-vbar`  
 9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** — `smoke-arm64-el0` / `smoke-arm64`  
-10. F7b–F7g + Pack B–E (MM-root + INTERRUPT stubs + MEMORY probe) ~~hecho~~ — deuda = KERNEL_OBJS link ARM + musl aarch64 **BLOCKED**  
+10. F7b–F7g + Pack B–E ~~hecho el bring-up~~ — deuda = `syscall_dispatch` en SVC + ISD AArch64 + fold de `early_process.c`  
 11. F8 … F13 — ver inglés; merge `master` solo con bundle TCC+Doom+userspace (STABLE)  
 12. **F14 HAB** — AC remoto / domótica (userspace; VPN; ESP IR primero) — ver tablas HAB-* en inglés  
 13. **F15 DESK** — **DESK-0…4 hechos** (soft fb); **SEP-1** contrato de árboles + rootfs esqueleto; DESK-5 JVM BLOCKED — ver inglés  

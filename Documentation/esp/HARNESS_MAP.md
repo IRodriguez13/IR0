@@ -1,6 +1,6 @@
 # Mapa de harness (tags y nombres Make)
 
-> **Última verificación:** 2026-09-22
+> **Última verificación:** 2026-10-16
 > **Fuente de verdad:** `setup/make/legacy-smokes.mk`, `scripts/make/testing.mk`,
 > `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`
 
@@ -27,8 +27,9 @@ Debug residual: `IR0_DEBUG_PROC` (ya no `CONFIG_DEBUG_FASE50`).
 ## Targets Make
 
 Preferir `smoke-ipc`, `smoke-pipe`, `smoke-busybox`, `smoke-tcc`,
-`smoke-doomgeneric`, `smoke-ash-interactive`, `build-busybox-min`,
-`build-tcc`. Los `smoke-fase*` / `build-*-fase*` siguen como alias.
+`smoke-doomgeneric`, `smoke-ash-interactive`, `smoke-arm64-all`,
+`build-busybox-min`, `build-tcc`. Los `smoke-fase*` / `build-*-fase*` siguen
+como alias. Tags ARM: `ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`.
 
 Tabla completa en el documento inglés.
 

@@ -1,6 +1,6 @@
 # Harness map (semantic tags and Make names)
 
-> **Last verified:** 2026-09-22
+> **Last verified:** 2026-10-16
 > **Source of truth:** `setup/make/legacy-smokes.mk`, `scripts/make/testing.mk`,
 > `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`,
 > `scripts/architecture_guard.py` (forbids leftover `[FASE` in kernel C).
@@ -28,6 +28,9 @@ C prints semantic tokens. Grep/`--done`/`--require` must match these.
 | PID1 `_exit` | `INIT_EXIT_DRAIN` | `FASE44` |
 | Doom product | `KTM_DOOMGENERIC_OK` / `KTM_DOOMGENERIC_CASE_OK` | `FASE55D_DOOMGENERIC_OK` / `KTM_DOOM_55D_OK` |
 | Doom stub | `KTM_DOOM_STUB_*` | `FASE55B*` |
+| ARM product VFS | `ARM64_PRODUCT_VFS_OK` | — |
+| ARM early `/tmp` fold | `ARM64_EARLY_PATH_FOLD_OK` | — |
+| ARM heap/owned mm | `ARM64_PROCESS_MM_HEAP_OK` / `OWNED_OK` / `RETIRE_OK` / `EXIT_OK` | — |
 
 Kernel production paths must not print `[FASE…`. Debug leftover is
 `IR0_DEBUG_PROC` (not `CONFIG_DEBUG_FASE50`).
@@ -72,6 +75,7 @@ Kernel production paths must not print `[FASE…`. Debug leftover is
 | `build-doom-interactive` | `build-fase55e-doom-interactive` |
 | `run-ash-gui` | `run-fase58e-ash-gui` |
 | `check-ash-logs` | `check-fase58e-logs` |
+| `smoke-arm64-all` | (none — ARM aggregate + product VFS bind) |
 
 `build-init-fase*` aliases still map onto `build-ktm-*` helpers.
 

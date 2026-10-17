@@ -1,6 +1,6 @@
 # Coupling IR0 (kernel) ↔ ISD
 
-> **Last verified:** 2026-09-21  
+> **Last verified:** 2026-10-16  
 > **Source of truth:** this file, `scripts/make/isd.mk`, `scripts/bootstrap-isd.sh`, sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md),
 > `ISD/services/runit_console_run.c`, `ISD/lib/ir0_auth.c`.  
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
@@ -21,6 +21,10 @@ delegates the ISD build, and boots the ISD-owned image.
 **Hard rule:** IR0 must not inject BusyBox/runit/nano one-by-one on the
 canonical product path. Legacy `load-userspace-runit` remains for smokes
 (`IR0_LEGACY_USERSPACE=1`).
+
+ARM64 QEMU EL0 (`smoke-arm64-all`) is a **kernel** staged adapter, not an ISD
+AArch64 product. ISD still has no `rootfs/arch/aarch64` pack. The kernel must
+not name BusyBox or other user programs. See [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 ## Fastest path (first time)
 

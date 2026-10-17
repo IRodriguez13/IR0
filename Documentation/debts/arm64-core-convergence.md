@@ -1,6 +1,6 @@
 # ARM64 to common-core convergence manifest
 
-Status: active, 2026-10-03. This is a dependency manifest, not an instruction
+Status: active, 2026-10-16. This is a dependency manifest, not an instruction
 to move files mechanically. A source moves only when its owner is proven and
 the existing x86 and ARM runtime gates remain green.
 
@@ -63,6 +63,20 @@ pure-move pass.
   into generic ARM platform plus QEMU/Raspberry Pi providers; DTB-derived
   resources are the interface boundary.
 
+### Common staged adapters (fold in progress)
+
+- `fs/ramtab.c` + `includes/ir0/ramtab.h`; owner: in-memory names without a
+  VFS mount; destination: keep until every staged path has a mount; then
+  delete callers in `early_rootfs.c`.
+- `includes/ir0/product_path.h`; owner: optional bind from the staged adapter
+  to product `vfs_*`; destination: keep as the transition seam.
+- `kernel/syscalls/early_rootfs.c`; owner: `/`, `/init`, `/dev/*`, pipes,
+  unix, CPIO; destination: shrink only — do not add ABI. `/tmp/*` already
+  uses product VFS when bound (`ARM64_EARLY_PATH_FOLD_OK`).
+- `kernel/syscalls/early_{dispatch,vfs,io,time,mm,process}.c`; owner: staged
+  EL0; destination: delete after `syscall_dispatch.c` + product modules own
+  the matching slice. See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+
 ### Early scaffolding to replace, not generalize
 
 - `arch/arm64/sources/syscall_{mm,vfs,time,signal,process,io}_early.c`;
@@ -120,6 +134,9 @@ pure-move pass.
    scheduler, signal, IPC and console dependencies required by common
    `exit`/`wait` next.
 4. Replace early process and syscall providers one subsystem at a time.
+   **Started:** path table is `fs/ramtab.c`; ARM ALL `/tmp` uses product VFS.
+   Next: anon fds, then `early_process.c`, then a bounded `syscall_dispatch`
+   SVC slice.
 5. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
 6. Only then perform pure directory moves for boot, MM, IRQ and platform code.
 

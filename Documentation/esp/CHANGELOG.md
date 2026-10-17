@@ -1,6 +1,6 @@
 # IR0 Kernel — Changelog (español)
 
-> **Última verificación:** 2026-09-22  
+> **Última verificación:** 2026-10-16  
 
 > **Fuente de verdad:** historial git, smokes del `Makefile`, [`../STABLE.md`](../STABLE.md), [`../KTM.md`](../KTM.md)
 
@@ -12,6 +12,11 @@ Tag **`v0.0.1-rc4`**. Tras este tag: **solo bugfixing y estabilización** hasta 
 Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ## [Sin publicar]
+
+### Fold del path staged (2026-10-16)
+
+- Tabla de nombres en `fs/ramtab.c`. `/tmp` en ARM ALL vía `vfs.c`.
+- Detalle: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
 ### Sesión + credenciales + fcntl ABI (2026-09-22)
 

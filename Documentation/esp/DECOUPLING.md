@@ -1,6 +1,6 @@
 # Mapa de desacople del kernel IR0
 
-> **Última verificación:** 2026-09-02  
+> **Última verificación:** 2026-10-16  
 > **Fuente de verdad:** `Documentation/DECOUPLING.md` (inglés) + `includes/ir0/*` +
 > [`uaccess.md`](uaccess.md)
 
@@ -11,7 +11,8 @@ mismo contenido sin mezclar idiomas.
 **Oleada ISA (2026-07-26):** fachadas `irq.h`, `arch_switch.h`, `arch_mm.h`, `arch_signal.h`,
 `sigcontext_{x86_64,arm64}.h` (aarch64 = uapi Linux completo); `switch_to` → `arch_switch_to`
 con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `interrupt/arch/` = backend x86-only.
-Residual: musl aarch64 + `ALL_OBJS` producto.
+Residual: ISD AArch64 + `syscall_dispatch` en SVC. `kernel-arm64-all.bin`
+ya enlaza process/MM/VFS de producto; ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 ## Objetivos de diseño
 
@@ -50,11 +51,11 @@ recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`), credenciales, p
 ## Estado multi-arquitectura
 
 - **x86-64:** `kernel-x64.bin` enlaza **`$(ALL_OBJS)`**: kernel completo (Multiboot, etc.).
-- **ARM64:** bring-up temprano en QEMU virt (`make smoke-arm64`: MMU + VBAR + EL0 + PSCI).
-  `kernel-arm64.bin` sigue enlazando **solo `$(ARCH_OBJS)`** — **no** es un port terminado
-  (sin musl/BusyBox/sched/VFS parity). Orden de magnitud: privilegio CPU, no OS.
+- **ARM64:** `smoke-arm64-all` = harness + process/MM/`vfs.c` portable. EL0
+  sigue en `early_dispatch`. ISD aún no empaqueta AArch64. No es paridad x86.
 
-Objetivos de port real: `ALL_OBJS` en ARM64, fault/syscall/mm/fs/sched, rootfs.
+Objetivos de port: dispatch de producto en SVC, rootfs ISD AArch64, fork con mm
+privado. Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 ## Fugas conocidas de acoplamiento
 
 Listado cualitativo actualizado en `Documentation/DECOUPLING.md`: `kernel/main.c` (política de

@@ -1,6 +1,6 @@
 # IR0 con forma Linux (nombres y ABI, no un clon del árbol)
 
-> **Última verificación:** 2026-09-22
+> **Última verificación:** 2026-10-16
 > **Fuente de verdad:** `includes/ir0/copy_user.h`, `includes/ir0/arch_cpu.h`,
 > `includes/ir0/context.h`, `scripts/architecture_guard.py`,
 > [`../DECOUPLING.md`](../DECOUPLING.md), [`../uaccess.md`](../uaccess.md),
@@ -29,6 +29,7 @@ Canónico en inglés: [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 | Layout `kernel/sched/` de Linux | `sched/` en raíz es el scheduler de IR0 |
 | Dump `include/linux/*.h` | Facades chicas y propias |
 | Un `.c` por syscall | Ya hay módulos de dominio |
+| Segundo dump ABI en `early_*.c` | Fold a `fs/` / process; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
 
 ## Facades de arquitectura
 

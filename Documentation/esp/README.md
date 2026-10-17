@@ -1,6 +1,6 @@
 # Documentacion IR0 en Espanol
 
-> **Última verificación:** 2026-09-22
+> **Última verificación:** 2026-10-16
 > **Fuente de verdad:** espejos listados abajo; canónico en `Documentation/`.
 
 Este directorio contiene traducciones de la documentacion tecnica principal.
@@ -20,6 +20,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `MAKEFILE.md`
 - `TOOLING.md`
 - `FILESYSTEM.md`
+- `EARLY_FOLD.md` — adaptador `early_*` vs VFS/`ramtab` de producto
 - `VIRTUAL_FILESYSTEMS.md`
 - `DRIVERS.md`
 - `INTERRUPTS.md`

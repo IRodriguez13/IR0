@@ -2,12 +2,12 @@
 
 | Field | Value |
 |-------|-------|
-| Version | 0.2 |
+| Version | 0.3 |
 | IR0 phase | T0 |
 | Status | stable |
 | Depends on | memory, syscalls, filesystems |
 | Man page | IR0-vfs (section 7) |
-| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
+| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `fs/ramtab.c`, `includes/ir0/vfs_backend.h`, `includes/ir0/product_path.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
 
 ## 1. Overview
 
@@ -23,7 +23,10 @@ This is only half of the story. At the syscall boundary, paths under `/proc`,
 2. **VFS router** — mount table + `vfs_ops` for real mounts (`/`, `/tmp`, …).
 
 This chapter documents both stages because user-visible `open("/dev/console")` never
-calls `vfs_open()` today, while `open("/tmp/foo")` does.
+calls `vfs_open()` today, while `open("/tmp/foo")` does on the **x86 product** path
+and on **ARM ALL** after `product_path` is bound. The staged ARM adapter still
+serves `/` and `/init` itself; leftover names use `fs/ramtab.c` until a mount
+owns them. See `Documentation/EARLY_FOLD.md`.
 
 ## 2. Internal architecture
 
@@ -203,6 +206,8 @@ See section 3 ASCII map and `Documentation/mandocs/diagrams/vfs-routing.mmd`.
 |-------------|--------------|---------|-----------|
 | `/` (minix) | VFS | Disk blocks via `block_dev` | Yes (ATA/etc.) |
 | `/tmp` (tmpfs mount) | VFS | RAM inode tree | No |
+| `/tmp/*` (ARM ALL, product bind) | Staged adapter → `vfs_*` | tmpfs | No |
+| staged names without a mount | `fs/ramtab.c` | In-adapter table | No |
 | `/proc/*` | Syscall | Generated kernel/process text | No |
 | `/sys/*` | Syscall | Registry + kernel state | Mixed |
 | `/dev/fb0`, `/dev/events0` | Syscall/devfs | Driver-backed ops | Yes |

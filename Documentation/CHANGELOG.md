@@ -1,6 +1,6 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-09-22
+> **Last verified:** 2026-10-16
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
@@ -21,6 +21,14 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 - Stress: `setup/pid1/net_command_stress.c` → `NET_STRESS_PASS` / `NC_ONLY_PASS`.
 
 ## [Unreleased]
+
+### Staged early path fold (2026-10-16)
+
+- In-memory staged names moved to `fs/ramtab.c` (`includes/ir0/ramtab.h`).
+- Optional `includes/ir0/product_path.h` bind: ARM ALL `/tmp/*` uses product
+  `vfs.c`/`tmpfs` (`ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`).
+- `early_rootfs.c` remains the adapter for `/`, `/init`, `/dev/*`, pipes, unix.
+- Docs: [`EARLY_FOLD.md`](EARLY_FOLD.md), [`debts/arm64-core-convergence.md`](debts/arm64-core-convergence.md).
 
 ### Session + cred + fcntl ABI (2026-09-22)
 

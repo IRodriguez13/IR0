@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-07-25 (SEP-2: Unix userspace split into the `ISD` sibling; doas persist VERIFIED — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md), [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md), [`KTM.md`](KTM.md))  
+> **Last verified:** 2026-10-16 (ARM early fold: [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD split and doas persist remain — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md), [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md), [`KTM.md`](KTM.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`; product userspace lives in the **`ISD`** sibling. README and old docs may lag; **grep the tree before claiming “done”.**
 
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
@@ -27,7 +27,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 
 | Tier | Target | ~Progress | Proof today |
 |------|--------|-----------|-------------|
-| **T0** | Functional kernel + migrated contracts | ~85% | `make kernel-tests`, `arch-guard`, pseudo-FS contracts; product shell in ISD |
+| **T0** | Functional kernel + migrated contracts | ~85% | `make kernel-tests`, `arch-guard`, pseudo-FS contracts; product shell in ISD; ARM ALL binds product VFS `/tmp` |
 | **T1** | POSIX userspace (runit + musl + ash) | ~75–78% | `smoke-tier1`; manifest tier1+musl; pthread/setuid/perms smokes; `smoke-doas` with `DOAS_PERSIST_OK` |
 | **T2** | Fullscreen graphics (Doom-class) | ~55% | fb0/evdev/mmap; GUI targets in [`STABLE.md`](STABLE.md) |
 | **T3** | Minimal desktop (WM + panel) | ~15–20% | **Planning only** — WM/compositor **out of kernel tree** |
@@ -67,6 +67,16 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | setuid smoke (sin syscall 404) | Done | `setup/pid1/su_setuid_smoke.c`, `make smoke-setuid-exec` |
 | Cred contract ktest | Done | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
 | **Hardening oleada (perm + lifecycle + ktest ABI + ATA size)** | Done | [`HARDENING.md`](HARDENING.md), gates 2026-06-23 |
+
+### ARM64 generic-core bind (2026-10-16)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Product process/MM on ARM ALL | Partial | `kernel-arm64-all.bin`; heap mm + `exit_mm` |
+| Product `vfs.c` + tmpfs `/tmp` | Done (ALL image) | `ARM64_PRODUCT_VFS_OK` |
+| Staged names → `fs/ramtab.c` | Done | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
+| `syscall_dispatch` on ARM SVC | Open | still `early_dispatch` |
+| ISD AArch64 rootfs | Open | no pack |
 
 ### Networking (POSIX UDP minimum)
 

@@ -1,9 +1,10 @@
 # IR0 Filesystem Architecture
 
-> **Last verified:** 2026-08-30  
-> **Source of truth:** `fs/vfs.c`, `fs/minix_fs.c`, `fs/simplefs.c`, `fs/fat16_*.c`,  
-> `fs/ext2_*.c`, `drivers/storage/ahci.c`,  
-> `includes/ir0/blockdev.h`, [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
+> **Last verified:** 2026-10-16  
+> **Source of truth:** `fs/vfs.c`, `fs/tmpfs.c`, `fs/ramtab.c`, `fs/minix_fs.c`,
+> `fs/simplefs.c`, `fs/fat16_*.c`, `fs/ext2_*.c`, `drivers/storage/ahci.c`,
+> `includes/ir0/blockdev.h`, `includes/ir0/product_path.h`,
+> [`EARLY_FOLD.md`](EARLY_FOLD.md), [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
 
 IR0 uses a VFS-first design where policy is centralized and backend filesystems
 provide concrete operations.
@@ -11,7 +12,9 @@ provide concrete operations.
 ## Active Layers
 
 1. `fs/vfs.c`: path resolution, mount dispatch, open/read/write/chmod/chown flow.
-2. Backend filesystems:
+2. `fs/ramtab.c`: bounded in-memory names used by the staged ARM adapter until a
+   VFS mount owns the path (not a `vfs_fstype`). See [`EARLY_FOLD.md`](EARLY_FOLD.md).
+3. Backend filesystems:
    - persistent: `minix`, **FAT16** (`fs/fat16_disk.c`), **EXT2 read-only**
    - in-memory: `tmpfs`, virtual `fat0` (simplefs engine)
    - pseudo: `procfs`, `devfs`, `sysfs`, **`/heart`** (`fs/heartfs.c`)
@@ -24,6 +27,9 @@ provide concrete operations.
 - `procfs` / `sysfs` / `devfs`: pseudo mounts (registry + fd_table binds).
 - `/heart`: IR0 facade reexporting proc/sys + kernel meta + embedded sources.
 - `tmpfs`: volatile files and directories with uid/gid and umask behavior.
+  On ARM ALL, product tmpfs is mounted at `/tmp` and staged path I/O under
+  `/tmp/` binds `includes/ir0/product_path.h` → `vfs_*`
+  (`ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`).
 - `minix`: disk-backed baseline filesystem (rw path audited via vfs-write bundle).
 - `fat16`: on-disk RO mount (`smoke-fat16-mount`) + write path audited
   (`linux-abi-audit-vfs-write-fat`).

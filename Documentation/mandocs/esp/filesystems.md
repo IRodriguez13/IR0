@@ -2,18 +2,19 @@
 
 | Campo | Valor |
 |-------|-------|
-| Versión | 0.2 |
+| Versión | 0.3 |
 | Fase IR0 | T0 |
 | Estado | stable |
 | Depende de | vfs, syscalls, drivers |
 | Página man | IR0-filesystems (sección 7) |
-| Fuentes principales | `fs/tmpfs.c`, `fs/devfs.c`, `fs/procfs.c`, `fs/pseudo_fs_registry.c`, `fs/minix_fs.c`, `fs/hostshare_9p.c`, `drivers/virtio/virtio_9p.c`, `includes/ir0/sysfs.h` |
+| Fuentes principales | `fs/tmpfs.c`, `fs/ramtab.c`, `fs/devfs.c`, `fs/procfs.c`, `fs/pseudo_fs_registry.c`, `fs/minix_fs.c`, `fs/hostshare_9p.c`, `drivers/virtio/virtio_9p.c`, `includes/ir0/sysfs.h` |
 
 ## 1. Visión general
 
 IR0 expone varios backends de sistema de ficheros con modelos de enrutamiento y
 respaldo distintos. **minix** respaldado por bloque e **tmpfs** en memoria se
-registran como drivers `vfs_fstype`. **virtio-9p hostshare** (`fstype "9p"`)
+registran como drivers `vfs_fstype`. `fs/ramtab.c` **no** es un fstype: es la
+tabla de nombres staged (`Documentation/EARLY_FOLD.md`). **virtio-9p hostshare** (`fstype "9p"`)
 monta un share QEMU `-virtfs` para ops de árbol profundas (mkdir/readdir/rename/
 write-at/**symlink**/readlink). **procfs**, **sysfs** y **devfs** son
 principalmente espacios de nombres **del lado syscall** (no montajes VFS

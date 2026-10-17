@@ -200,14 +200,14 @@ pattern); treat explicit `n` as the compile-out signal.
 
 | Aspect | x86-64 | ARM64 |
 |--------|--------|-------|
-| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64.bin` links **only `$(ARCH_OBJS)`** (stubs + early bring-up). |
-| **Boot** | Multiboot → full kernel bring-up. | Freestanding `boot_stub` + `mmu_early` + VBAR/EL0 (`make smoke-arm64`). |
-| **Userspace** | musl / BusyBox / TCC / Doom on x86. | **None** in the ARM image (EL0 SVC smoke only). |
-| **Maturity** | Production ISA for 0.0.1. | **≪10% of a real port** — CPU privilege path only. |
+| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-boot.bin` = early harness. `kernel-arm64-all.bin` = boot + portable process/MM/VFS (no x86 drivers). `kernel-arm64.bin` is still the board/link aggregate, not x86 parity. |
+| **Boot** | Multiboot → full kernel bring-up. | Freestanding `boot_stub` + `mmu_early` + VBAR/EL0; ALL image also links product `vfs.c`/`tmpfs`. |
+| **Userspace** | musl / BusyBox / TCC / Doom on x86 via ISD. | Staged EL0 on QEMU virt (`smoke-arm64-all`). ISD has **no** AArch64 rootfs pack yet. |
+| **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`EARLY_FOLD.md`](EARLY_FOLD.md). Not an ISD product boot. |
 
-So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 F7.1–F7.3 closed
-**early EL1/EL0 bring-up** on QEMU virt; they did **not** deliver OS parity. A real port still
-needs `ALL_OBJS` (or equivalent) for `ARCH=arm64`, fault/syscall/mm/fs/sched, and a rootfs.
+So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 closed early
+EL1/EL0 bring-up **and** a growing set of common objects on `kernel-arm64-all.bin`.
+A product port still needs `syscall_dispatch` on SVC, ISD AArch64, and private-mm fork.
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
@@ -235,11 +235,12 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 1. **`kernel/` and `net/`:** reduce remaining direct `arch_portable` surface where a narrower façade
    helps testing (optional split of “CPU info” vs “I/O port” APIs).
 2. **Facades that include drivers:** optionally split **API-only** headers from `.c`.
-3. **ARM64 product image:** freestanding bring-up exists (`smoke-arm64`); `kernel-arm64.bin`
-   still links **only** `$(ARCH_OBJS)`. ISA facades are wired:
+3. **ARM64 product image:** `smoke-arm64-all` links portable process/MM/VFS and
+   binds `/tmp` through product `vfs.c` ([`EARLY_FOLD.md`](EARLY_FOLD.md)).
+   EL0 still enters via `early_dispatch`. ISA facades are wired:
    `sigcontext_arm64` = Linux aarch64 uapi; `arch_switch` / `arch_mm` = TTBR0 model;
-   `irq_*` → VBAR + GICv2. Full **musl aarch64 + ALL_OBJS** (x86 drivers excluded) remains
-   future work.
+   `irq_*` → VBAR + GICv2. ISD AArch64 + product `syscall_dispatch` on SVC remain
+   open.
 4. **`interrupt/arch/`** is the **x86-only** IDT/PIC/ISR backend (see `interrupt/arch/README.md`).
    Portable and driver code enter via **`ir0/irq.h`** / **`ir0/arch_io.h`**; arm64 never
    links this tree.

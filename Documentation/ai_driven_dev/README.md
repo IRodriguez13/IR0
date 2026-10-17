@@ -7,6 +7,8 @@ Local IDE configuration under `.cursor/` is **gitignored** and must be installed
 here when setting up a developer machine (`make ai-dev-rules-install`). Do **not**
 commit rules under `.cursor/rules/` in the repository root.
 
+ARM staged-adapter vs product VFS: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+
 ## Why this exists
 
 - Share agent constraints with contributors who do not use Cursor.

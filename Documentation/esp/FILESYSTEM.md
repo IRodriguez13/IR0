@@ -1,7 +1,12 @@
 # Arquitectura de Filesystem en IR0
 
+> **Última verificación:** 2026-10-16
+> **Fuente de verdad:** [`../FILESYSTEM.md`](../FILESYSTEM.md), `fs/vfs.c`,
+> `fs/ramtab.c`, [`EARLY_FOLD.md`](EARLY_FOLD.md)
+
 IR0 usa un diseno VFS-first donde la politica se centraliza y los backends
-implementan operaciones concretas.
+implementan operaciones concretas. `fs/ramtab.c` guarda nombres staged sin
+montaje VFS. En ARM ALL, `/tmp` es tmpfs de producto.
 
 ## Capas Activas
 

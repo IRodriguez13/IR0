@@ -1,9 +1,9 @@
 # IR0 — Post-0.0.1 backlog (honest remaining work)
 
-> **Last verified:** 2026-09-01
-> **Source of truth:** `Documentation/ROADMAP.md`, code under `fs/`, `drivers/storage/`,
-> `scripts/linux_abi/`, Makefile gates. Prefer this file for **what is still open**;
-> ROADMAP holds history and tier %.
+> **Last verified:** 2026-10-16
+> **Source of truth:** `Documentation/ROADMAP.md`, [`EARLY_FOLD.md`](EARLY_FOLD.md),
+> code under `fs/`, `drivers/storage/`, `scripts/linux_abi/`, Makefile gates.
+> Prefer this file for **what is still open**; ROADMAP holds history and tier %.
 
 ## Closed (do not re-open without regression)
 
@@ -40,6 +40,8 @@
 | ARM64 early MMU identity map (F7.1) | `smoke-arm64-mmu` → `ARM64_MMU_OK` (TTBR0 idmap DRAM+UART) |
 | ARM64 VBAR + EL1 SVC (F7.2) | `smoke-arm64-vbar` → `ARM64_VBAR_OK` + `ARM64_SVC_RET_OK` |
 | ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
+| ARM ALL product `vfs.c` + tmpfs `/tmp` | `smoke-arm64-all` → `ARM64_PRODUCT_VFS_OK` |
+| Staged path table → `fs/ramtab.c` + product `/tmp` bind | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | AF_UNIX `socketpair` stream | `smoke-socketpair` (`SOCKETPAIR_OK` / `KTM_SOCKETPAIR_OK`) |
 | AF_UNIX abstract + sock poll | `smoke-unix-abstract` (`UNIX_ABSTRACT_OK` / `SOCK_POLL_OK`) |
@@ -169,7 +171,7 @@ product evidence. The main image is mock-free but still staged while
 | **Client RX** | Outbound `g_out` RX buffer; wire/guest echo |
 | **Listen battery** | `smoke-tcp-listen` + `make smoke-f8-net` |
 
-**Not done:** full Internet TCP, E1000 NIC (BLOQUEADO — no driver MVP), arbitrary Internet, ARM64 `ALL_OBJS`.
+**Not done:** full Internet TCP, E1000 NIC (BLOQUEADO — no driver MVP), arbitrary Internet, ARM ISD AArch64 + product SVC dispatch (ALL portable link exists as `kernel-arm64-all.bin`).
 
 ## Closed this wave (2026-07-18) — F8 virtio-net MVP (O3)
 
@@ -218,25 +220,28 @@ Tag `v0.0.1-rc4` = **last pre-release** (feature freeze for 0.0.1 surface); post
 stabilization only. **Ship** `v0.0.1` still needs Maintainer manual VM above. See
 [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md).
 
-## ARM64 — honest status (2026-07-12)
+## ARM64 — honest status (2026-10-16)
 
-**What works (freestanding QEMU virt only):**
+**What works (QEMU virt, staged EL0):**
 
 ```text
-UART → identity MMU → VBAR → EL1 SVC → EL0 drop → EL0 SVC → PSCI OFF
-Proof: make smoke-arm64
+UART → MMU → VBAR → EL0 → early_dispatch
++ product process/mm/vfs objects on kernel-arm64-all.bin
+Proof: make smoke-arm64-all
 ```
 
-**What does not exist yet (real port):**
+Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
+[`EARLY_FOLD.md`](EARLY_FOLD.md).
+
+**Still open (real product port):**
 
 | Gap | Today |
 |-----|--------|
-| Full kernel link | `kernel-arm64.bin` = `ARCH_OBJS` stubs, not `ALL_OBJS` |
-| Syscall dispatch / VFS / MM | x86-only production paths |
-| Context switch | `switch_arm64.c` empty stub |
-| musl / BusyBox / init | no ARM rootfs |
-| GIC / timer / virtio / storage | not wired in boot image |
-| Board beyond QEMU virt | **virt + rpi4 UART QEMU** (`arm64_board`, PL011 `0xfe201000`); **rpi5 stub** (`uart=none`, `ARM64_BOARD_RPI5_STUB`); GIC/SD/DT/RP1 still future |
+| Product SVC table | EL0 still `early_dispatch`, not `syscall_dispatch.c` |
+| Staged adapter | `early_rootfs.c` / `early_process.c` still own most ABI |
+| ISD AArch64 | no `rootfs/arch/aarch64` pack |
+| Private-mm fork / COW | stipulated ENOSYS on staged clone |
+| Board beyond QEMU virt | virt + rpi4 UART QEMU; rpi5 compile stub — not hardware userspace |
 
 **Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
 closed for that slice; track real port as **F7b** above.
