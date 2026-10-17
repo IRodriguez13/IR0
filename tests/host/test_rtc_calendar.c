@@ -35,9 +35,8 @@ void test_rtc_calendar(void)
 	t.second = 0;
 	ASSERT_EQ(rtc_civil_year(&t), 2026);
 	unix_t = rtc_fields_to_unix(&t);
-	/* 2026-07-26 12:00:00 UTC ≈ 1785067200 */
-	ASSERT_EQ((unix_t > 1700000000) ? 1 : 0, 1);
-	ASSERT_EQ((unix_t < 1900000000) ? 1 : 0, 1);
+	/* 2026-07-26 12:00:00 UTC */
+	ASSERT_EQ(unix_t, 1785067200L);
 
 	/* Full year in .year with century=0 (same as date-string path). */
 	memset(&t, 0, sizeof(t));
@@ -56,7 +55,7 @@ void test_rtc_calendar(void)
 	t.minute = 0;
 	t.second = 0;
 	unix_t = rtc_fields_to_unix(&t);
-	ASSERT_EQ((unix_t > 1700000000) ? 1 : 0, 1);
+	ASSERT_EQ(unix_t, 1709164800L);
 
 	/* BCD + 12h PM → 13:00 */
 	memset(&t, 0, sizeof(t));
