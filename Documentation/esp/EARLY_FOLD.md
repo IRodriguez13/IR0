@@ -33,8 +33,10 @@ Con tmpfs montado, `open`/`read`/`write`/`mkdir`/`lseek` bajo `/tmp/` van a
 ## Dispatch de producto
 
 No se enlaza `syscall_dispatch.c` en ARM. Slice honesto: providers
-`ir0_product_identity_provider` y `ir0_product_cwd_provider`
-(`ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK`).
+`ir0_product_identity_provider`, `ir0_product_cwd_provider`,
+`ir0_product_ipc_provider` y `ir0_product_vfs_provider`
+(`ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK`,
+`ARM64_PRODUCT_IPC_OK`, `ARM64_PRODUCT_VFS_SLICE_OK`).
 
 ## ISD AArch64
 
@@ -43,5 +45,5 @@ No se enlaza `syscall_dispatch.c` en ARM. Slice honesto: providers
 
 ## Pendiente
 
-Routing pipe/unix hacia objetos de producto, más IDs en el dispatcher,
-`early_process.c`, rootfs ISD AArch64, fork con mm privado.
+bind/connect AF_UNIX restantes, `early_process.c`, rootfs ISD AArch64,
+fork con mm privado.

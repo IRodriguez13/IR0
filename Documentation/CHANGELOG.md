@@ -27,9 +27,12 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 - Staged pipe/eventfd/memfd/timerfd/epoll and AF_UNIX tables live under
   `ipc/` (`ipc/early_anonfd.c`, `ipc/early_unix.c`).
 - ARM ALL clone child pid comes from `process_find_child_of()`.
-- Semantic providers: `ir0_product_identity_provider`,
-  `ir0_product_cwd_provider` (`ARM64_PRODUCT_IDENTITY_OK`,
-  `ARM64_PRODUCT_CWD_OK`). `syscall_dispatch.c` is not linked on ARM.
+- Semantic providers: identity, cwd, `ir0_product_ipc_provider`
+  (pipe2/socketpair), `ir0_product_vfs_provider` (chdir/openat/stat).
+  Tags: `ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK`,
+  `ARM64_PRODUCT_IPC_OK`, `ARM64_PRODUCT_VFS_SLICE_OK`.
+- Pipe/AF_UNIX byte motion uses `early_ipc_ring_*` in `ipc/`.
+  `syscall_dispatch.c` is not linked on ARM.
 - `make isd-aarch64-prep`: kernel + uapi; `ISD_AARCH64_ROOTFS_ABSENT`.
 - Docs: [`EARLY_FOLD.md`](EARLY_FOLD.md).
 

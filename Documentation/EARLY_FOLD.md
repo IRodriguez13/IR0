@@ -57,8 +57,11 @@ surface). The honest slice is extra `syscall_context_provider` rows:
 |----------|-----|-----|
 | `ir0_product_identity_provider` | getpid/gettid/getppid/getuid/geteuid/getgid/getegid | `ARM64_PRODUCT_IDENTITY_OK` |
 | `ir0_product_cwd_provider` | getcwd via `current_process` + `copy_to_user` | `ARM64_PRODUCT_CWD_OK` |
+| `ir0_product_ipc_provider` | pipe2 / socketpair (`ipc/` tables + ring I/O) | `ARM64_PRODUCT_IPC_OK` |
+| `ir0_product_vfs_provider` | chdir (path-checked `/tmp`), openat, newfstatat, fstat | `ARM64_PRODUCT_VFS_SLICE_OK` |
 
-Boot (`kernel-arm64-boot.bin`) keeps the staged identity/cwd providers.
+Boot (`kernel-arm64-boot.bin`) keeps the staged identity/cwd/path providers.
+PIPE2/SOCKETPAIR are always the ipc/ product table.
 
 ## ISD AArch64
 
@@ -69,16 +72,14 @@ invent a rootfs or set `ISD_ARCH=aarch64` on `first-boot`.
 ## Still early (do not mark done)
 
 - Special char/block nodes and the `/init` blob
-- Routing of pipe/unix syscalls still lives in `early_rootfs.c` (tables only moved)
 - `early_process.c` (~2k lines) — clone pid can come from the registry
 - ARM EL0 body is still `early_dispatch`, not `syscall_dispatch.c`
 - ISD has no `arch/aarch64` / `rootfs/arch/aarch64` product pack
 
 ## Next fold order
 
-1. More product IDs (chdir after path checks, VFS open/stat) without the x86 monolith
-2. Route staged pipe/unix I/O through product `ipc/` / `pipe.c` when those objects exist
-3. `early_process.c` → `kernel/process/` + `process_syscalls.c`
+1. Route remaining AF_UNIX bind/connect through `ipc/` helpers
+2. `early_process.c` → `kernel/process/` + `process_syscalls.c`
 4. Common `elf_loader.c` + ISD AArch64 rootfs
 5. Private-mm fork / COW; then shrink `boot_stub.c`
 
