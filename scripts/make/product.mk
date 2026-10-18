@@ -6,21 +6,16 @@
 ifndef _IR0_PRODUCT_MK
 _IR0_PRODUCT_MK := 1
 
-.PHONY: bootstrap-userspace first-boot machine-create machine-reset machine-info \
+.PHONY: first-boot machine-create machine-reset machine-info \
 	kernel-manager-install kernel-manager-list \
-	kmang kmang-cli kmang-test tui-k \
-	usmang usmang-test usmang-verify tui-u \
+	kmang kmang-cli kmang-test \
+	usmang usmang-test usmang-verify \
 	machine-update-kernel machine-update-userspace \
 	ensure-machine-desktop-sync machine-migrate-home image-vmware poweron run-isd \
 	smoke-runit-boot-isd smoke-init-boot-isd smoke-ext2-root-boot init-cap init-smoke \
 	init-smoke-matrix root-fs-smoke-matrix
 
 INIT_BOOT_PY = python3 scripts/init_boot_capture.py
-
-# Deprecated alias → new bootstrap
-bootstrap-userspace:
-	@echo "note: bootstrap-userspace is deprecated; use make first-boot PROFILE=$(ISD_PROFILE)"
-	+@$(MAKE) first-boot PROFILE=$(ISD_PROFILE)
 
 # '+' so nested make -C ISD inside bootstrap inherits the jobserver.
 first-boot: $(IR0_KERNEL_ROOT_ISO)
@@ -98,8 +93,6 @@ kmang: check-isd
 		exit $$rc; \
 	fi
 
-tui-k: kmang
-
 kmang-cli:
 	@$(KMANG_PY) list --json
 
@@ -110,10 +103,6 @@ usmang-test:
 	@python3 scripts/test_userspace_manager.py -v
 
 usmang: check-isd
-	@chmod +x scripts/userspace_manager.py
-	@$(USMANG_PY) summary
-
-tui-u: check-isd
 	@chmod +x scripts/userspace_manager.py
 	@$(USMANG_PY) tui
 

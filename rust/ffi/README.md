@@ -19,7 +19,7 @@ use ir0::ffi::kernel::*;
 Rust drivers are compiled with:
 
 ```bash
-make unibuild -rust drivers/your_driver.rs
+make unibuild-rust FILE=drivers/your_driver.rs
 ```
 
 See `CONTRIBUTING.md` for full development guide.

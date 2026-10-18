@@ -81,7 +81,7 @@
 |------|-------|
 | Publish **ISD** sibling | https://github.com/IRodriguez13/ISD |
 | Coupling docs | [`USERSPACE.md`](USERSPACE.md), `userspace/README.md` |
-| Remove `debug_bins/` + `kernel/init.c` (dbgshell PID1) | PR #28; `make run-dbgshell` retired |
+| Remove `debug_bins/` + `kernel/init.c` (dbgshell PID1) | PR #28; retired target removed |
 | Drop `CONFIG_KERNEL_DEBUG_SHELL` / `CONFIG_DEBUG_BINS*` | `setup/Kconfig`, `setup/defconfig` |
 | Gates still green | `kernel-x64.bin`, `arch-guard`, `build-matrix-min`, `tests/host` 22/22 |
 

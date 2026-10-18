@@ -143,7 +143,7 @@ fi
 # Check if disk image exists
 if [ ! -f "$DISK_IMAGE" ]; then
     echo "❌ Error: Disk image not found: $DISK_IMAGE"
-    echo "   Create it first with: make create-disk $FS_TYPE"
+    echo "   Create it first with: make create-disk FS=$FS_TYPE"
     exit 1
 fi
 

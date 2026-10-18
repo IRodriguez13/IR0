@@ -19,7 +19,7 @@ was the Tier-0 laboratory REPL. It is **gone from the IR0 tree**.
 Product and lab exploration use the sibling **[ISD](https://github.com/IRodriguez13/ISD)**
 (runit → getty/ash) plus kernel contracts (`make kernel-tests`, linux-abi audits).
 
-`make run-dbgshell` exits with a retirement message. There are no
+The retired `run-dbgshell` target has been removed. There are no
 `CONFIG_KERNEL_DEBUG_SHELL` / `CONFIG_DEBUG_BINS*` Kconfig symbols.
 
 ## 2. Replacement map

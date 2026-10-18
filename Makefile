@@ -1169,7 +1169,7 @@ kernel-x64-test.iso: kernel-x64-test.bin arch/x86-64/grub.cfg
 # you can format and populate this image separately. This target will
 # create a raw disk image if it doesn't already exist.
 # Supports filesystem selection via FS=minix|fat16|fat32|ext4 and size via SIZE=MB (legacy)
-# For new usage, use: make create-disk [filesystem] [size]
+# For new usage, use: make create-disk FS=minix SIZE=200
 disk.img:
 	@if [ -f $@ ]; then \
 		echo "  DISK    $@ already exists"; \
@@ -1203,11 +1203,6 @@ ifeq ($(MAKELEVEL), 0)
 endif
 
 # ARCH is already set at the top of the file
-
-# Legacy alias: `make ir0-auto` / `make auto` (same as default parallel build)
-.PHONY: auto ir0-auto
-auto ir0-auto: ir0
-
 
 # Process architecture parameter and .config selection.
 ifneq ($(filter $(ARCH),x86-64 arm64),$(ARCH))
@@ -1251,11 +1246,11 @@ endif
 ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
 
 # Windows build target
-windows win:
+windows:
 	@echo "Building IR0 Kernel for Windows..."
 	@$(MAKE) -f Makefile.win ir0
 
-windows-clean win-clean:
+windows-clean:
 	@echo "Cleaning Windows build artifacts..."
 	@$(MAKE) -f Makefile.win clean
 
@@ -1328,15 +1323,6 @@ run-fullscreen: kernel-x64-userspace.iso
 			-m 512M -no-reboot \
 			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
 	fi
-
-# Run without disk
-run-nodisk:
-	@echo "run-nodisk retired: product boot requires runit rootfs (use: make run)"
-	@exit 2
-
-run-dbgshell:
-	@echo "run-dbgshell retired: use runit/getty/ash (make run-console)"
-	@exit 2
 
 # Run in console mode (-nographic). Product path: ISD disk for PROFILE.
 # Legacy inject: IR0_LEGACY_USERSPACE=1 make run-console
@@ -1433,41 +1419,25 @@ run-gdb: kernel-x64-userspace.iso load-userspace-runit
 		-s -S
 
 # Create disk image (wrapper for scripts/create_disk.sh)
-# Usage: make create-disk [filesystem] [size]
+# Usage: make create-disk [FS=minix] [SIZE=200]
 # Examples:
 #   make create-disk              # Create 200MB MINIX disk (default)
-#   make create-disk minix 500    # Create 500MB MINIX disk
-#   make create-disk fat32        # Create FAT32 disk (default size)
-#   make create-disk fat32 500    # Create 500MB FAT32 disk
-#   make create-disk ext4 1000    # Create 1GB ext4 disk
-#   make create-disk hints        # Show help
+#   make create-disk FS=minix SIZE=500
+#   make create-disk FS=fat32
+#   make create-disk FS=ext4 SIZE=1000
 create-disk:
-	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
-	if [ -z "$$ARGS" ]; then \
-		./scripts/create_disk.sh "$(TOOL_DEFAULT_DISK_FS_NAME)" "$(CONFIG_TOOL_DEFAULT_DISK_SIZE_MB)"; \
-	elif [ "$$ARGS" = "hints" ] || [ "$$ARGS" = "help" ]; then \
-		./scripts/create_disk.sh --help; \
-	else \
-		./scripts/create_disk.sh $$ARGS; \
-	fi
-	@if [ "$$ARGS" != "hints" ] && [ "$$ARGS" != "help" ]; then \
-		echo "Disk image is ready: disk.img"; \
-	fi
+	@./scripts/create_disk.sh "$(or $(FS),$(TOOL_DEFAULT_DISK_FS_NAME))" \
+		"$(or $(SIZE),$(CONFIG_TOOL_DEFAULT_DISK_SIZE_MB))"
+	@echo "Disk image is ready"
 
 # Delete disk image (useful to reset persistent disk for QEMU)
-# Usage: make delete-disk [filesystem] [filename]
+# Usage: make delete-disk [FS=minix] [DISK=disk.img]
 # Examples:
 #   make delete-disk              # Delete disk.img (default)
-#   make delete-disk minix        # Delete disk.img
-#   make delete-disk fat32        # Delete fat32.img
-#   make delete-disk fat32 fat32.img  # Delete fat32.img explicitly
+#   make delete-disk FS=minix
+#   make delete-disk FS=fat32 DISK=fat32.img
 delete-disk:
-	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
-	if [ -z "$$ARGS" ]; then \
-		./scripts/delete_disk.sh; \
-	else \
-		./scripts/delete_disk.sh $$ARGS; \
-	fi
+	@./scripts/delete_disk.sh $(FS) $(DISK)
 
 # Reset dev disk + inject stamps (explicit wipe; ignores IR0_DEV_PERSIST).
 disk-reset:
@@ -1477,24 +1447,16 @@ disk-reset:
 	echo "✓ disk-reset: $$DISK + inject stamps cleared"
 
 # Load Init binary into virtual disk
-# Usage: make load-init [filesystem] [disk_image] [init_binary]
+# Usage: make load-init [FS=minix] [DISK=disk.img] [INIT=setup/pid1/init]
 # Defaults: filesystem=auto-detect, disk_image=disk.img, init_binary=setup/pid1/init
 # Supported filesystems: minix, fat16, fat32, ext4
 # Note: Requires root privileges (mounts filesystem)
 # Examples:
 #   sudo make load-init                    # Auto-detect, use disk.img
-#   sudo make load-init fat32              # Use fat32.img
-#   sudo make load-init fat32 fat32.img    # Explicit filesystem and disk
-#   make load-init hints                   # Show help
+#   sudo make load-init FS=fat32
+#   sudo make load-init FS=fat32 DISK=fat32.img
 load-init:
-	@ARGS="$(filter-out $@,$(MAKECMDGOALS))"; \
-	if [ -z "$$ARGS" ]; then \
-		./scripts/load_init.sh; \
-	elif [ "$$ARGS" = "hints" ] || [ "$$ARGS" = "help" ]; then \
-		./scripts/load_init.sh --help; \
-	else \
-		./scripts/load_init.sh $$ARGS; \
-	fi
+	@./scripts/load_init.sh $(FS) $(DISK) $(INIT)
 
 -include scripts/make/profiles.mk
 -include scripts/make/docs.mk
@@ -1617,12 +1579,12 @@ help:
 	@echo "  make isdconfig PROFILE=minimal    # extras (.isdconfig)"
 	@echo "  make isd / isd-rootfs / isd-image PROFILE=…"
 	@echo "  make poweron PROFILE=minimal      # boots persistent IR0-machines disk"
-	@echo "  make tui-k                         # kernel manager TUI (kmang)"
-	@echo "  make tui-u                         # userspace manager TUI (usmang)"
+	@echo "  make kmang                         # kernel manager TUI"
+	@echo "  make usmang                        # userspace manager"
 	@echo "  make init-cap PROFILE=minimal-openrc   # serial boot capture → out/init-boot-capture/"
 	@echo "  make init-smoke PROFILE=minimal-sysvinit # QEMU boot smoke (init contract)"
 	@echo "  make init-smoke-matrix             # runit + sysvinit + openrc smokes (x86_64)"
-	@echo "  make usmang PROFILE=minimal        # host ISD summary (non-interactive)"
+	@echo "  make usmang-verify PROFILE=minimal # non-interactive ISD contract check"
 	@echo "  make ci                            # pre-push: fast + Docker E2E"
 	@echo "  make ci-fast                       # ~1 min unit/arch/contracts only"
 	@echo "  make ci-docker                     # Docker E2E on bind-mounted WIP"
@@ -1640,7 +1602,6 @@ help:
 	@echo "  make release-check-boot-container      # Docker git clone + Tier 1 + boot + guest probes"
 	@echo "  make fresh-clone-check PROFILE=minimal # RC gate (optional RELEASE_CHECK_DOUBLE=1)"
 	@echo "  Legacy inject (smokes): IR0_LEGACY_USERSPACE=1 make run"
-	@echo "  Deprecated alias: bootstrap-userspace → first-boot"
 	@echo ""
 	@echo "Profiles / images (scripts/make/profiles.mk):"
 	@echo "  make help-profiles"
@@ -1712,29 +1673,25 @@ help:
 	@echo ""
 	@echo "Unibuild - Isolated Compilation:"
 	@echo "  C files (can compile multiple at once):"
-	@echo "    make unibuild <file1.c> [file2.c] ..."
-	@echo "    make unibuild-win <file1.c> [file2.c] ...     (Windows)"
+	@echo "    make unibuild FILE=\"file1.c file2.c\""
+	@echo "    make unibuild-win FILE=file.c                 (Windows)"
 	@echo ""
 	@echo "  C++ files (can compile multiple at once):"
-	@echo "    make unibuild-cpp <file1.cpp> [file2.cpp] ..."
-	@echo "    make unibuild-cpp-win <file1.cpp> [file2.cpp] ...  (Windows)"
+	@echo "    make unibuild-cpp FILE=file.cpp"
+	@echo "    make unibuild-cpp-win FILE=file.cpp           (Windows)"
 	@echo ""
 	@echo "  Rust files (can compile multiple at once):"
-	@echo "    make unibuild-rust <file1.rs> [file2.rs] ..."
-	@echo "    make unibuild-rust-win <file1.rs> [file2.rs] ...   (Windows)"
+	@echo "    make unibuild-rust FILE=file.rs"
+	@echo "    make unibuild-rust-win FILE=file.rs           (Windows)"
 	@echo ""
 	@echo "  Clean:"
 	@echo "    make unibuild-clean <file>"
 	@echo ""
 	@echo "  Examples:"
-	@echo "    make unibuild fs/tmpfs.c"
-	@echo "    make unibuild fs/tmpfs.c fs/vfs.c fs/path.c"
-	@echo "    make unibuild-cpp cpp/examples/cpp_example.cpp"
-	@echo "    make unibuild-rust rust/drivers/rust_simple_driver.rs"
-	@echo "    make unibuild-win drivers/IO/ps2.c"
-	@echo "    make unibuild-cpp-win cpp/examples/cpp_example.cpp"
-	@echo ""
-	@echo "  Note: You can also use \"file1 file2\" syntax"
+	@echo "    make unibuild FILE=fs/tmpfs.c"
+	@echo "    make unibuild FILE=\"fs/tmpfs.c fs/vfs.c fs/path.c\""
+	@echo "    make unibuild-cpp FILE=cpp/examples/cpp_example.cpp"
+	@echo "    make unibuild-rust FILE=rust/drivers/rust_simple_driver.rs"
 	@echo ""
 	@echo "Quick start: make run"
 	@echo ""
@@ -1747,160 +1704,36 @@ deptest check-env:
 
 # UNIBUILD - ISOLATED FILE COMPILATION
 
-# Helper to get file arguments (supports multiple files from FILE= or positional)
-# Usage in targets: $(call get-file-arg)
-define get-file-arg
-$(if $(FILE),$(FILE),$(filter-out $@,$(MAKECMDGOALS)))
+# One implementation for all isolated compilation modes. FILE may contain a
+# whitespace-separated source list; unknown make targets now fail normally.
+define run-unibuild
+	@FILE_ARG="$(or $(FILE),$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES))"; \
+	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
+		FILTERED=""; \
+		for f in $$FILE_ARG; do \
+			[ "$$f" = "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ] || FILTERED="$$FILTERED $$f"; \
+		done; \
+		FILE_ARG="$$FILTERED"; \
+	fi; \
+	if [ -z "$$FILE_ARG" ]; then \
+		echo "Error: FILE is required (example: make $@ FILE=fs/tmpfs.c)"; \
+		exit 2; \
+	fi; \
+	$(KERNEL_ROOT)/scripts/unibuild.sh $(1) $$FILE_ARG
 endef
 
-# Standard C compilation (supports multiple files)
 unibuild:
-	@FILE_ARG="$(call get-file-arg)"; \
-	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
-		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
-	fi; \
-	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-		FILTERED=""; \
-		for f in $$FILE_ARG; do \
-			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-				FILTERED="$$FILTERED $$f"; \
-			fi; \
-		done; \
-		FILE_ARG="$$FILTERED"; \
-	fi; \
-	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: No file specified"; \
-		echo "Usage: make unibuild <file1.c> [file2.c] ..."; \
-		echo "   Or: make unibuild \"<file1.c>  <file2.c>\""; \
-		echo "Example: make unibuild fs/tmpfs.c"; \
-		echo "Example: make unibuild fs/tmpfs.c fs/vfs.c"; \
-		exit 1; \
-	fi; \
-	$(KERNEL_ROOT)/scripts/unibuild.sh $$FILE_ARG
-
-# C++ compilation (supports multiple files)
+	$(call run-unibuild,)
 unibuild-cpp:
-	@FILE_ARG="$(call get-file-arg)"; \
-	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
-		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
-	fi; \
-	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-		FILTERED=""; \
-		for f in $$FILE_ARG; do \
-			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-				FILTERED="$$FILTERED $$f"; \
-			fi; \
-		done; \
-		FILE_ARG="$$FILTERED"; \
-	fi; \
-	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: No file specified"; \
-		echo "Usage: make unibuild-cpp <file1.cpp> [file2.cpp] ..."; \
-		echo "   Or: make unibuild-cpp \"<file1.cpp> <file2.cpp>\""; \
-		echo "Example: make unibuild-cpp cpp/examples/cpp_example.cpp"; \
-		exit 1; \
-	fi; \
-	$(KERNEL_ROOT)/scripts/unibuild.sh -cpp $$FILE_ARG
-
-# Rust compilation (supports multiple files)
+	$(call run-unibuild,-cpp)
 unibuild-rust:
-	@FILE_ARG="$(call get-file-arg)"; \
-	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
-		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
-	fi; \
-	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-		FILTERED=""; \
-		for f in $$FILE_ARG; do \
-			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-				FILTERED="$$FILTERED $$f"; \
-			fi; \
-		done; \
-		FILE_ARG="$$FILTERED"; \
-	fi; \
-	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: No file specified"; \
-		echo "Usage: make unibuild-rust <file1.rs> [file2.rs] ..."; \
-		echo "   Or: make unibuild-rust \"<file1.rs> <file2.rs>\""; \
-		echo "Example: make unibuild-rust rust/drivers/rust_simple_driver.rs"; \
-		exit 1; \
-	fi; \
-	$(KERNEL_ROOT)/scripts/unibuild.sh -rust $$FILE_ARG
-
-# Windows cross-compilation (C, supports multiple files)
+	$(call run-unibuild,-rust)
 unibuild-win:
-	@FILE_ARG="$(call get-file-arg)"; \
-	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
-		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
-	fi; \
-	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-		FILTERED=""; \
-		for f in $$FILE_ARG; do \
-			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-				FILTERED="$$FILTERED $$f"; \
-			fi; \
-		done; \
-		FILE_ARG="$$FILTERED"; \
-	fi; \
-	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: No file specified"; \
-		echo "Usage: make unibuild-win <file1.c> [file2.c] ..."; \
-		echo "   Or: make unibuild-win \"<file1.c> <file2.c>\""; \
-		echo "Example: make unibuild-win drivers/IO/ps2.c"; \
-		exit 1; \
-	fi; \
-	$(KERNEL_ROOT)/scripts/unibuild.sh -win $$FILE_ARG
-
-# Windows cross-compilation (C++, supports multiple files)
+	$(call run-unibuild,-win)
 unibuild-cpp-win:
-	@FILE_ARG="$(call get-file-arg)"; \
-	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
-		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
-	fi; \
-	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-		FILTERED=""; \
-		for f in $$FILE_ARG; do \
-			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-				FILTERED="$$FILTERED $$f"; \
-			fi; \
-		done; \
-		FILE_ARG="$$FILTERED"; \
-	fi; \
-	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: No file specified"; \
-		echo "Usage: make unibuild-cpp-win <file1.cpp> [file2.cpp] ..."; \
-		echo "   Or: make unibuild-cpp-win \"<file1.cpp> <file2.cpp>\""; \
-		echo "Example: make unibuild-cpp-win cpp/examples/cpp_example.cpp"; \
-		exit 1; \
-	fi; \
-	$(KERNEL_ROOT)/scripts/unibuild.sh -win -cpp $$FILE_ARG
-
-# Windows cross-compilation (Rust, supports multiple files)
+	$(call run-unibuild,-win -cpp)
 unibuild-rust-win:
-	@FILE_ARG="$(call get-file-arg)"; \
-	if [ -z "$$FILE_ARG" ] && [ -n "$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)" ]; then \
-		FILE_ARG="$(CONFIG_TOOL_UNIBUILD_DEFAULT_FILES)"; \
-	fi; \
-	if [ -n "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-		FILTERED=""; \
-		for f in $$FILE_ARG; do \
-			if [ "$$f" != "$(CONFIG_TOOL_UNIBUILD_EXCLUDE_FILE)" ]; then \
-				FILTERED="$$FILTERED $$f"; \
-			fi; \
-		done; \
-		FILE_ARG="$$FILTERED"; \
-	fi; \
-	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: No file specified"; \
-		echo "Usage: make unibuild-rust-win <file1.rs> [file2.rs] ..."; \
-		echo "   Or: make unibuild-rust-win \"<file1.rs> <file2.rs>\""; \
-		echo "Example: make unibuild-rust-win rust/drivers/rust_simple_driver.rs"; \
-		exit 1; \
-	fi; \
-	$(KERNEL_ROOT)/scripts/unibuild.sh -win -rust $$FILE_ARG
-
-# Catch-all target to prevent make from complaining about unknown targets (for positional args)
-%:
-	@:
+	$(call run-unibuild,-win -rust)
 
 unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \
@@ -1987,9 +1820,9 @@ test-drivers-clean:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-debug run-dbgshell run-tap run-nodisk run-console run-gdb debug create-disk delete-disk disk-reset load-init remove-init help \
+.PHONY: all clean run run-debug run-fullscreen run-tap run-console run-gdb debug create-disk delete-disk disk-reset load-init remove-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
-        ir0 ir0-auto auto windows win windows-clean win-clean deptest check-env pre-submit menuconfig menuconfig-en menuconfig-es defconfig sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
+        ir0 windows windows-clean deptest check-env pre-submit menuconfig menuconfig-en menuconfig-es defconfig sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
         en-ext-drv dis-ext-drv \
         test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
         tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard mandocs mandocs-en mandocs-es mandocs-view mandocs-uninstall ai-dev-rules-install \

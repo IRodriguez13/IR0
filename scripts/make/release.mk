@@ -28,7 +28,6 @@ RELEASE_CHECK_DOUBLE ?= 0
 .PHONY: truth-tests tooling-check fresh-clone-check \
 	ci ci-fast ci-docker ci-local ci-local-fast ci-local-boot \
 	ci-local-docker ci-local-docker-wip ci-local-rc \
-	tui-k tui-u \
 	release-check release-check-clean \
 	release-check-container release-check-container-local \
 	release-check-boot release-check-boot-clean \

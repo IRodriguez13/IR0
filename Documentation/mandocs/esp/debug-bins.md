@@ -19,7 +19,7 @@ era el REPL de laboratorio Tier-0. **Ya no está en el árbol IR0**.
 Producto y exploración usan el hermano **[ISD](https://github.com/IRodriguez13/ISD)**
 (runit → getty/ash) y contratos del kernel (`make kernel-tests`, auditorías linux-abi).
 
-`make run-dbgshell` termina con mensaje de retiro. No existen símbolos
+El target retirado `run-dbgshell` fue eliminado. No existen símbolos
 `CONFIG_KERNEL_DEBUG_SHELL` / `CONFIG_DEBUG_BINS*` en Kconfig.
 
 ## 2. Mapa de reemplazo

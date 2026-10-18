@@ -59,7 +59,6 @@ Gate: `make isd-contracts` sección **H**.
 | `make isd-image PROFILE=…` | Solo imagen ISD |
 | `make run PROFILE=…` | QEMU con disco ISD |
 | `make run-console PROFILE=…` | Sin GTK |
-| `bootstrap-userspace` | Deprecado → `first-boot` |
 
 ### Login / getty (2026-09-02)
 

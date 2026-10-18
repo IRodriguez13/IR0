@@ -133,7 +133,7 @@ make run PROFILE=minimal
 ```
 
 `ARCH=x86_64` is the userspace triple; the kernel Makefile accepts it as an alias of `x86-64`.
-Deprecated: `IR0_USERSPACE_ROOT`, `bootstrap-userspace`, `load-userspace-runit` on the
+Deprecated: `IR0_USERSPACE_ROOT` and `load-userspace-runit` on the
 canonical path (still available for smokes via `IR0_LEGACY_USERSPACE=1`).
 
 **Boot without `/sbin/init`:** kernel `panic("Failed to load /sbin/init")`.
@@ -252,7 +252,7 @@ make run-debug
 
 Guest serial and debug events go to the invoking terminal; QEMU monitor on telnet `127.0.0.1:1234`.
 
-`make run-nodisk` and `make run-dbgshell` are retired: product boot requires
+The retired `run-nodisk` and `run-dbgshell` targets were removed: product boot requires
 the runit rootfs.
 
 ### Network (optional, host setup required)

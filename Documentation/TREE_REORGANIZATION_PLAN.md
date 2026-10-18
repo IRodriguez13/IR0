@@ -24,7 +24,7 @@
 - **`debug_bins/` deleted** — not renamed under `userspace/`. Coupling pointer is
   `userspace/README.md` + [`USERSPACE.md`](USERSPACE.md); product shell is
   [ISD](https://github.com/IRodriguez13/ISD).
-- `make run-dbgshell` retired. Remaining stages below that mention renaming
+- The retired `run-dbgshell` target was removed. Remaining stages below that mention renaming
   `debug_bins/` are **obsolete** for that path.
 
 ## 1. Purpose
@@ -68,7 +68,7 @@ This document does **not** authorize moves yet. Execute after:
 |------|-------|------|
 | `Makefile` (committed at `b4bdeee`) | ~2900+ | OBJ lists, arch, kernel link, **partial** split |
 | `Makefile` (working tree) | ~1656 | **−1708** lines moved to includes; adds ktm/futex/sock_udp |
-| `scripts/make/run.mk` | 63 | Daily: `run`, `run-dbgshell`, `run-pid1` (uncommitted) |
+| `scripts/make/run.mk` | removed | Dead duplicate: it was not included by the active build graph. |
 | `scripts/make/legacy-run.mk` | retired | Removed after audit: it was not included by any active build path. |
 | `scripts/make/qa.mk` | 1564 | QA, linux-abi-audit, tier smokes include |
 | `setup/make/legacy-smokes.mk` | 1394 | **46+** `smoke-fase*` / `smoke-userspace-*` (uncommitted) |

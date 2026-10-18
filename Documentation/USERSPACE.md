@@ -127,7 +127,6 @@ Regression gate: `make isd-contracts` section **H** (no `IR0-userspace` leaks).
 | `make isd` / `isd-rootfs` / `isd-image` | Delegate to ISD |
 | `make run PROFILE=…` | Boot ISD disk (stamp-incremental pack) |
 | `make run-console PROFILE=…` | Same without GTK |
-| `make bootstrap-userspace` | **Deprecated** → `first-boot` |
 | `IR0_LEGACY_USERSPACE=1 make run` | Old inject path (smokes) |
 
 ### Login / getty notes (2026-09-02)

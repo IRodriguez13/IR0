@@ -8,7 +8,7 @@
 #   isd isd-rootfs isd-image isd-clean first-boot
 #
 # Canonical interface: PROFILE passed to ISD (see ISD profiles/; no kernel-side semantics).
-# Compat: IR0_PRODUCT_PROFILE, IR0_USERSPACE_ROOT/URL, bootstrap-userspace
+# Compat: IR0_PRODUCT_PROFILE and IR0_USERSPACE_ROOT/URL.
 
 ifndef _IR0_ISD_MK
 _IR0_ISD_MK := 1

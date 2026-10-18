@@ -197,7 +197,7 @@ for SOURCE_FILE in $SOURCE_FILES; do
         cpp)
             if [ -z "$CXX" ]; then
                 echo "Error: C++ compiler not configured"
-                echo "Use: make unibuild -cpp <file.cpp>"
+                echo "Use: make unibuild-cpp FILE=<file.cpp>"
                 EXIT_CODE=1
             else
                 echo "  CXX     $SOURCE_FILE"
@@ -212,7 +212,7 @@ for SOURCE_FILE in $SOURCE_FILES; do
         rs)
             if [ -z "$USE_CARGO" ]; then
                 echo "Error: Rust compiler not configured"
-                echo "Use: make unibuild-rust <file.rs>"
+                echo "Use: make unibuild-rust FILE=<file.rs>"
                 EXIT_CODE=1
             else
                 echo "  RUSTC   $SOURCE_FILE"
@@ -345,4 +345,3 @@ EOF
 done
 
 exit $EXIT_CODE
-

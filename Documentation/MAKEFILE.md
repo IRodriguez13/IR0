@@ -97,7 +97,7 @@ Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-rootf
 | `make help-docs` / `help-pre-submit` | Docs and contributor gate help |
 | `make format` | `clang-format` over C/H sources |
 | `make compile-commands` | `compile_commands.json` for LSP |
-| `make unibuild <file.c>` | Compile single translation units in isolation |
+| `make unibuild FILE=<file.c>` | Compile translation units in isolation |
 | `make check-env` / `deptest` | Host env diagnostic (`PROFILE=desktop-x86_64` default) |
 | `make deptest PROFILE=…` | `desktop-x86_64` \| `userspace` \| `hub-rpi4` \| `watch` \| `all` |
 | `make pre-submit [SUBSYSTEM=mm]` | Local gate → `PRE_SUBMIT_OK` (no push) |
