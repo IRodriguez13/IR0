@@ -55,6 +55,7 @@ TEST_SRCS += test_syscall_table.c
 TEST_SRCS += test_utsname_abi.c
 TEST_SRCS += test_cpu_topology.c
 TEST_SRCS += test_percpu.c
+TEST_SRCS += test_tlb_sync.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -72,6 +73,7 @@ KERNEL_HOST_OBJS += host_syscall_table.o
 KERNEL_HOST_OBJS += host_fd_resource.o
 KERNEL_HOST_OBJS += host_cpu_topology.o
 KERNEL_HOST_OBJS += host_percpu.o
+KERNEL_HOST_OBJS += host_tlb_sync.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -170,7 +172,13 @@ host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
 host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
+host_tlb_sync.o: $(KERNEL_ROOT)/mm/tlb_sync.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
 test_percpu.o: test_percpu.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_tlb_sync.o: test_tlb_sync.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_arm64_elf_policy.o: $(KERNEL_ROOT)/arch/arm64/sources/elf_policy.c

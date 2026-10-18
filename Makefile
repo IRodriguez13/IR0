@@ -521,6 +521,7 @@ MEMORY_OBJS = \
 	mm/boot_memory.o \
 	mm/no_mmu.o \
 	mm/paging.o \
+	mm/tlb_sync.o \
 	mm/pmm.o \
 	mm/kmem.o \
 	mm/page_fault.o

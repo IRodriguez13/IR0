@@ -20,7 +20,7 @@
 #include <ir0/oops.h>
 #include <ir0/cpu.h>
 #include <ir0/cpu.h>
-#include <ir0/tlb.h>
+#include <ir0/tlb_sync.h>
 #include <ir0/page_fault.h>
 #include <ir0/process.h>
 #include <ir0/pmm.h>
@@ -182,7 +182,7 @@ static int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 		pmm_free_frame(new_phys);
 		return -1;
 	}
-	tlb_invalidate_page((uintptr_t)vaddr_aligned);
+	mm_tlb_sync_page(process_pgd(current), (uintptr_t)vaddr_aligned);
 	return 0;
 }
 
@@ -699,7 +699,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		if (pinned)
 			pmm_frame_put(old_phys);
 		pmm_frame_put(old_phys);
-		tlb_invalidate_page((uintptr_t)vaddr_aligned);
+		mm_tlb_sync_page(process_pgd(current), (uintptr_t)vaddr_aligned);
 		irq_restore(irq_flags);
 		return;
 	}

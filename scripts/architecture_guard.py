@@ -31,6 +31,7 @@ Checks:
 20) Portable task setup must not construct x86 RFLAGS directly; use task_ops.
 21) Process lifecycle C must not select an ISA with compiler predefines.
 22) ISA assembly may call only its reviewed C boundary callbacks.
+23) Common MM requests TLB coherence through the address-space-aware facade.
 """
 
 from pathlib import Path
@@ -2262,6 +2263,24 @@ def check_asm_c_boundary():
     return errors
 
 
+COMMON_MM_LOCAL_TLB_RE = re.compile(r"\btlb_invalidate_(?:page|all)\s*\(")
+
+
+def check_common_mm_uses_tlb_sync():
+    """Keep root ownership policy out of ISA-local TLB mechanisms."""
+    errors = []
+    for path in (ROOT / "mm").glob("*.c"):
+        if path.name == "tlb_sync.c":
+            continue
+        for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if COMMON_MM_LOCAL_TLB_RE.search(line):
+                errors.append(
+                    f"[mm-tlb-sync] {path.relative_to(ROOT)}:{lineno}: "
+                    "use mm_tlb_sync_page/all with the affected address-space root"
+                )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -2327,6 +2346,7 @@ def main():
     errors.extend(check_common_elf_uses_isa_policy())
     errors.extend(check_common_mm_uses_user_va_policy())
     errors.extend(check_common_syscall_policy_uses_semantic_ids())
+    errors.extend(check_common_mm_uses_tlb_sync())
 
     if errors:
         print("[arch-guard] FAILED")

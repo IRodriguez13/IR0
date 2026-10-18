@@ -17,8 +17,11 @@ independent CPUs, not to claim that IRQ masking is an SMP lock.
   storage; policy backends must not call `irq_save()` directly.
 - `mm/pmm.c`, `mm/paging.c` and `mm/page_fault.c` have critical regions that
   mask local IRQs while mutating page metadata or PTE state.  SMP replacement:
-  frame allocator and address-space locks, followed by architecture TLB shoot-
-  down callbacks.  A local invalidate is not sufficient after a remote CPU can
+  frame allocator and address-space locks.  Common MM now requests coherence
+  through `mm_tlb_sync_page/all(root, ...)`; its UP backend invalidates only an
+  active root and refuses SMP builds.  The SMP replacement belongs behind that
+  facade and must combine CPU residency masks, IPIs and architecture-local TLB
+  invalidation.  A local invalidate is not sufficient after a remote CPU can
   run the same address space.
 - `kernel/process/{registry,mm_struct,files_lifecycle,fork}.c` protects global
   process ownership and lifecycle lists with local IRQ masking.  SMP
@@ -37,6 +40,7 @@ independent CPUs, not to claim that IRQ masking is an SMP lock.
    changing callers.
 3. Architecture code owns inter-processor interrupt and TLB mechanics.  Common
    MM/scheduler code owns when a shoot-down or reschedule is required.
+   Common code must not activate a foreign root merely to invalidate its TLB.
 4. Preserve the existing UP proof matrix while splitting any critical section:
    x86 runit/ash, ARM64 BusyBox/PID1 EL0, RPi compile, architecture guard and
    ISA-security guard.

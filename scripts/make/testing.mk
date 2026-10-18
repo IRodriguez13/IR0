@@ -2877,6 +2877,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	mm/boot_memory.c \
 	mm/no_mmu.c \
 	mm/paging.c \
+	mm/tlb_sync.c \
 	mm/pmm.c \
 	mm/kmem.c \
 	kernel/errno.c \

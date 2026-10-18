@@ -28,6 +28,7 @@
 #include <ir0/validation.h>
 #include <ir0/ahci_api.h>
 #include <ir0/arch_port.h>
+#include <ir0/tlb_sync.h>
 #include <ir0/errno.h>
 
 /*
@@ -518,7 +519,7 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 		return -1;
 	}
 	pmm_frame_put(old_phys);
-	tlb_invalidate_page(vaddr & ~0xFFFUL);
+	mm_tlb_sync_page(root, vaddr & ~0xFFFUL);
 	irq_restore(irq_flags);
 	return 0;
 }
@@ -736,7 +737,8 @@ static uint64_t alloc_page_table(int level)
  * supervisor identity (kmalloc). In the PMM window use pte_none — kstacks
  * no longer live there (IR0_KSTACK_VA_BASE). Phys COW/zero: boot address-space root.
  */
-static int paging_split_large_level2_leaf(uint64_t *level2_table, size_t index)
+static int paging_split_large_level2_leaf(address_space_root_t root,
+					  uint64_t *level2_table, size_t index)
 {
 	uint64_t level2_entry;
 	uint64_t phys_base;
@@ -771,7 +773,7 @@ static int paging_split_large_level2_leaf(uint64_t *level2_table, size_t index)
 	}
 
 	level2_table[index] = mm_make_table_pte((uintptr_t)pt_phys, 0);
-	tlb_invalidate_all();
+	mm_tlb_sync_all(root);
 	return 0;
 }
 
@@ -802,7 +804,7 @@ int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr)
 		return -1;
 	if (paging_entry_large(level2_table[idx[2]]))
 	{
-		if (paging_split_large_level2_leaf(level2_table, idx[2]) != 0)
+		if (paging_split_large_level2_leaf(root, level2_table, idx[2]) != 0)
 			return -1;
 	}
 	return 0;
@@ -815,7 +817,8 @@ int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr)
  * @create: If 1, create the table if it doesn't exist
  * Returns: Virtual address of the table (NULL if not present and create=0)
  */
-static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
+static uint64_t *get_or_create_table(address_space_root_t root,
+				     uint64_t *parent, size_t index, int create,
                                      uint64_t map_flags, int level)
 {
 	int user = !!(map_flags & PAGE_USER);
@@ -843,7 +846,7 @@ static uint64_t *get_or_create_table(uint64_t *parent, size_t index, int create,
 	{
 		if (!create || level != 3)
 			return NULL;
-		if (paging_split_large_level2_leaf(parent, index) != 0)
+		if (paging_split_large_level2_leaf(root, parent, index) != 0)
 			return NULL;
 	}
 
@@ -891,15 +894,15 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 
 	mm_va_indices((uintptr_t)virt_addr, idx);
 
-	level1_table = get_or_create_table(root, idx[0], 1, flags, 1);
+	level1_table = get_or_create_table(root, root, idx[0], 1, flags, 1);
 	if (!level1_table)
 		return -1;
 
-	level2_table = get_or_create_table(level1_table, idx[1], 1, flags, 2);
+	level2_table = get_or_create_table(root, level1_table, idx[1], 1, flags, 2);
 	if (!level2_table)
 		return -1;
 
-	level3_table = get_or_create_table(level2_table, idx[2], 1, flags, 3);
+	level3_table = get_or_create_table(root, level2_table, idx[2], 1, flags, 3);
 	if (!level3_table)
 		return -1;
 
@@ -986,7 +989,7 @@ int protect_user_region_in_directory(address_space_root_t root,
 		}
 		*pte = mm_make_leaf_pte(mm_pte_phys(*pte), page_flags,
 					!!(page_flags & PAGE_EXEC));
-		tlb_invalidate_page(page);
+		mm_tlb_sync_page(root, page);
 	}
 	return 0;
 }
@@ -1043,7 +1046,7 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 	level3_table[idx[3]] = 0;
     ir0_mm_leaf_freed++;
 
-    tlb_invalidate_page((uintptr_t)virt_addr);
+    mm_tlb_sync_page(root, (uintptr_t)virt_addr);
 
     /*
      * Only return frames that the PMM allocated from RAM. MMIO and other
@@ -1319,16 +1322,7 @@ int copy_process_memory(struct process *parent, struct process *child)
      * we ever run under a different root, reloading only that root would leave
      * stale RW TLB entries and let the parent write shared frames without COW.
      */
-    {
-        uintptr_t parent_root = (uintptr_t)process_mm_root(parent);
-        uintptr_t saved_root = mm_current_root();
-
-        if (parent_root != 0 && saved_root != parent_root)
-            paging_activate_address_space(parent_root);
-        tlb_invalidate_all();
-        if (parent_root != 0 && saved_root != parent_root)
-            paging_activate_address_space(saved_root);
-    }
+    mm_tlb_sync_all(process_pgd(parent));
     return 0;
 }
 
@@ -1441,11 +1435,11 @@ int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start,
 
         mm_va_indices((uintptr_t)va, idx);
 
-        level1_table = get_or_create_table(root, idx[0], 1, 0, 1);
+        level1_table = get_or_create_table(root, root, idx[0], 1, 0, 1);
         if (!level1_table)
             return -1;
 
-        level2_table = get_or_create_table(level1_table, idx[1], 1, 0, 2);
+        level2_table = get_or_create_table(root, level1_table, idx[1], 1, 0, 2);
         if (!level2_table)
             return -1;
 
