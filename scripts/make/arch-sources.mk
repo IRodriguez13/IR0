@@ -62,14 +62,6 @@ ARM64_BACKEND_OBJS = \
 # The freestanding path intentionally provides the Linux syscall ABI in small
 # stages while the common process and VFS implementations are brought up.
 ARM64_EARLY_SYSCALL_OBJS = \
-	kernel/syscalls/early_dispatch.o \
-	kernel/syscalls/early_time.o \
-	kernel/syscalls/early_io.o \
-	kernel/syscalls/early_vfs.o \
-	kernel/syscalls/early_rootfs.o \
-	fs/ramtab.o \
-	kernel/syscalls/early_process.o \
-	kernel/syscalls/early_mm.o \
 	arch/arm64/sources/syscall_early.o \
 	arch/arm64/sources/boot_stub.o \
 	arch/arm64/sources/mmu_early.o \
@@ -104,7 +96,6 @@ ARM64_FREESTANDING_RUNTIME_OBJS = \
 
 # EL0 handoff and the embedded userspace image used by the QEMU ARM64 smoke.
 ARM64_EARLY_USERSPACE_OBJS = \
-	kernel/lib/early_elf_stack.o \
 	arch/arm64/sources/elf_load_early.o \
 	arch/arm64/sources/hello_embed.o \
 	arch/arm64/sources/embedded_elf_early.o \

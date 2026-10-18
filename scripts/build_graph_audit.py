@@ -17,6 +17,8 @@ SOURCE_SUFFIXES = (".c", ".cpp", ".S", ".s", ".asm")
 # These objects intentionally originate from an explicit Make rule, not a
 # source file with the same stem. Keep this list small and review every entry.
 GENERATED_OBJECTS = {
+    "build/x86-64/arch/common/boot_log.o",
+    "build/arm64/arch/common/boot_log.o",
     "build/arm64-boot/rr_sched.o",
     "build/arm64-boot/switch_arm64.o",
     "arch/x86-64/vdso/vdso_blob_embed.o",
