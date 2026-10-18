@@ -15,6 +15,7 @@
 #include "priority_sched.h"
 #include "sched_ops.h"
 #include "sched_switch.h"
+#include "runqueue_lock.h"
 #include <ir0/arch_port.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
@@ -52,12 +53,12 @@ static int prio_relief_band = -1;
 
 static inline uint64_t prio_irq_save(void)
 {
-	return (uint64_t)irq_save();
+	return sched_runqueue_lock();
 }
 
 static inline void prio_irq_restore(uint64_t flags)
 {
-	irq_restore((unsigned long)flags);
+	sched_runqueue_unlock(flags);
 }
 
 static int prio_clamp(int prio)

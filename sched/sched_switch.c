@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "sched_switch.h"
+#include "runqueue_lock.h"
 
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
@@ -27,12 +28,12 @@ static int sched_has_running_context;
 
 static inline uint64_t sched_switch_irq_save(void)
 {
-	return (uint64_t)irq_save();
+	return sched_runqueue_lock();
 }
 
 static inline void sched_switch_irq_restore(uint64_t flags)
 {
-	irq_restore((unsigned long)flags);
+	sched_runqueue_unlock(flags);
 }
 
 void sched_context_switch_to(process_t *next)

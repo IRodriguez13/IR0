@@ -16,6 +16,7 @@
 #include "rr_sched.h"
 #include "sched_ops.h"
 #include "sched_switch.h"
+#include "runqueue_lock.h"
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
@@ -42,12 +43,12 @@ static rr_task_t *rr_current = NULL;
  */
 static inline uint64_t rr_irq_save(void)
 {
-	return (uint64_t)irq_save();
+	return sched_runqueue_lock();
 }
 
 static inline void rr_irq_restore(uint64_t flags)
 {
-	irq_restore((unsigned long)flags);
+	sched_runqueue_unlock(flags);
 }
 
 /**

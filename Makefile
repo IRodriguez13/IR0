@@ -427,8 +427,9 @@ KERNEL_OBJS = \
     kernel/fd_resource_legacy.o \
     ktm/klog.o \
     ktm/d1_13_malloc_pf_diag.o \
-    sched/sched.o \
-    sched/sched_switch.o \
+	sched/sched.o \
+	sched/runqueue_lock.o \
+	sched/sched_switch.o \
     sched/sched_resched.o \
     sched/switch/arch_context_switch.o \
     sched/switch/context_user_resume.o \

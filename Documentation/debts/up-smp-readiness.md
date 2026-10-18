@@ -1,19 +1,20 @@
 # IR0 — UP to SMP readiness boundaries
 
-Status: inventory, 2026-10-10.  IR0 is intentionally UP today.  The purpose of
+Status: active scaffold, 2026-10-18.  IR0 is intentionally UP today.  The purpose of
 this document is to make that assumption explicit before ARM and x86 acquire
 independent CPUs, not to claim that IRQ masking is an SMP lock.
 
 ## Current UP contracts
 
-- `current_process` is a single global selected by `sched/sched_switch.c` and
-  declared in `kernel/process/registry.c`.  It is protected today by local IRQ
-  masking around scheduler and registry transitions.  SMP replacement: a
-  per-CPU current-task accessor; callers must not cache another CPU's task.
-- `sched/rr_sched.c`, `sched/priority_sched.c` and `sched/sched_switch.c` use
-  `irq_save()`/`irq_restore()` to serialize runnable-state lists and the
-  current-task transition.  This is valid only because no second CPU executes
-  the lists.  SMP replacement: scheduler runqueue locks plus local IRQ state.
+- `current_process` remains the compatibility registry symbol, but all writers
+  use `process_set_current()` and update the CPU-local current-task slot.  The
+  scheduler also publishes the selected kernel stack through the same per-CPU
+  state.  SMP replacement: make the compatibility symbol read-only or remove
+  it after all readers use the CPU-local accessor.
+- `sched/runqueue_lock.c` owns serialization for RR, priority and context
+  selection.  Its UP backend masks local IRQs and deliberately refuses an SMP
+  build.  SMP replacement is localized here, followed by per-CPU runqueue
+  storage; policy backends must not call `irq_save()` directly.
 - `mm/pmm.c`, `mm/paging.c` and `mm/page_fault.c` have critical regions that
   mask local IRQs while mutating page metadata or PTE state.  SMP replacement:
   frame allocator and address-space locks, followed by architecture TLB shoot-

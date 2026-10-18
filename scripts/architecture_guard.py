@@ -1708,6 +1708,25 @@ def check_scheduler_user_return_boundary():
     return errors
 
 
+def check_scheduler_runqueue_lock_boundary():
+    """Scheduler policy code must not bypass the runqueue ownership facade."""
+    errors = []
+    sched_tree = ROOT / "sched"
+    owner = sched_tree / "runqueue_lock.c"
+    raw_irq = re.compile(r"\birq_(?:save|restore)\s*\(")
+
+    for path in sched_tree.rglob("*"):
+        if path.suffix not in {".c", ".h"} or path == owner:
+            continue
+        for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if raw_irq.search(line):
+                errors.append(
+                    f"[scheduler-runqueue-lock] {path.relative_to(ROOT)}:{line_no}: "
+                    "use sched_runqueue_lock/unlock"
+                )
+    return errors
+
+
 def check_process_lifecycle_no_isa_conditionals():
     """Keep ISA selection in per-architecture backends, not process/*.c."""
     errors = []
@@ -2275,6 +2294,7 @@ def main():
     errors.extend(check_portable_no_arch_switch_include())
     errors.extend(check_context_backend_include_boundary())
     errors.extend(check_scheduler_user_return_boundary())
+    errors.extend(check_scheduler_runqueue_lock_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_common_c_has_no_isa_conditionals())
     errors.extend(check_common_headers_have_only_data_model_isa_conditionals())
