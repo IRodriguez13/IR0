@@ -796,6 +796,7 @@ pid_t process_get_next_pid(void);
 pid_t process_last_assigned_pid(void);
 void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
+process_t *process_find_child_of(pid_t ppid);
 
 
 

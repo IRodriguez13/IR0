@@ -213,6 +213,7 @@ static inline int ir0_early_sched_policy_rt(int policy)
 }
 
 extern const struct syscall_context_provider early_process_provider;
+extern const struct syscall_context_provider early_process_identity_provider;
 int early_process_smoke_ok(void);
 int early_process_is_root(void);
 int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls);

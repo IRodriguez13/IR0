@@ -2198,6 +2198,7 @@ ARM64_BOOT_LINK_OBJS = \
 	build/arm64-boot/early_rootfs.o \
 	build/arm64-boot/ramtab.o \
 	build/arm64-boot/early_anonfd.o \
+	build/arm64-boot/early_unix.o \
 	build/arm64-boot/vfs_dispatch.o \
 	build/arm64-boot/early_elf_stack.o \
 	build/arm64-boot/early_process.o \
@@ -2376,6 +2377,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
 		fs/ramtab.c includes/ir0/ramtab.h includes/ir0/product_path.h \
 		fs/early_anonfd.c includes/ir0/early_anonfd.h \
+		fs/early_unix.c includes/ir0/early_unix.h \
 		fs/vfs_dispatch.c includes/ir0/vfs_dispatch.h \
 		kernel/lib/early_elf_stack.c includes/ir0/early_elf_stack.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
@@ -2487,6 +2489,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c fs/early_anonfd.c \
 		-o build/arm64-boot/early_anonfd.o
+	@echo "  CC      fs/early_unix.c (staged AF_UNIX tables)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c fs/early_unix.c \
+		-o build/arm64-boot/early_unix.o
 	@echo "  CC      fs/vfs_dispatch.c (portable vfs_ops dispatch)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c fs/vfs_dispatch.c \

@@ -23,6 +23,7 @@
 #include <ir0/vfs_dispatch.h>
 #include <ir0/ramtab.h>
 #include <ir0/early_anonfd.h>
+#include <ir0/early_unix.h>
 #include <ir0/product_path.h>
 #include <ir0/stat.h>
 #include <ir0/fcntl.h>
@@ -96,9 +97,11 @@ struct rootfs_slot
 #define g_memfd g_early_memfd
 #define g_timerfd g_early_timerfd
 #define g_epoll g_early_epoll
-#define SOCKPAIR_MAX 4
-#define UNIX_MAX 4
-#define UNIX_ID_BASE 32
+#define SOCKPAIR_MAX EARLY_SOCKPAIR_MAX
+#define UNIX_MAX EARLY_UNIX_MAX
+#define UNIX_ID_BASE EARLY_UNIX_ID_BASE
+#define g_sock g_early_sock
+#define g_unix g_early_unix
 #define EAFNOSUPPORT 97
 #define ESOCKTNOSUPPORT 94
 #define EPROTONOSUPPORT 93
@@ -150,30 +153,6 @@ static int g_exec_owner;
 static int g_abstract_ok;
 static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
 static char *g_exec_argv[EXEC_ARGC_MAX + 1];
-static struct early_sockpair
-{
-	int used;
-	int refs[2];
-	int dgram;
-	int shut[2];
-	int reuseaddr;
-	int so_error;
-	int rights_n[2];
-	int rights[2][IR0_EARLY_RIGHTS_MAX];
-	int passcred[2];
-	int cred_valid[2];
-	int cred_explicit[2];
-	int32_t cred_pid[2];
-	int32_t cred_uid[2];
-	int32_t cred_gid[2];
-	struct
-	{
-		unsigned rpos;
-		unsigned len;
-		uint8_t buf[PIPE_BUF];
-	} dir[2];
-} g_sock[SOCKPAIR_MAX];
-
 static uint64_t g_clock_mono;
 static uint64_t g_clock_hz;
 static int64_t g_clock_realtime_off;
@@ -219,37 +198,6 @@ static int landlock_allow(const char *path, uint64_t need);
 static int landlock_open_need(const char *path, int flags);
 static int path_of_fd(int fd, char *out, unsigned cap);
 
-static struct early_unix
-{
-	int used;
-	int refs;
-	int stream;
-	int bound_fs;
-	int listening;
-	int pending_pair;
-	int pending_end;
-	int peer_fs;
-	int reuseaddr;
-	int so_error;
-	int shut_rd;
-	int shut_wr;
-	int rights_n;
-	int rights[IR0_EARLY_RIGHTS_MAX];
-	int abstract;
-	unsigned abs_len;
-	uint8_t abs_name[IR0_EARLY_SUN_PATH];
-	int peer_uid;
-	int passcred;
-	int cred_valid;
-	int cred_explicit;
-	int32_t cred_pid;
-	int32_t cred_uid;
-	int32_t cred_gid;
-	char bound_path[RAMTAB_NAME];
-	unsigned rpos;
-	unsigned len;
-	uint8_t buf[PIPE_BUF];
-} g_unix[UNIX_MAX];
 static int g_cpio_ready;
 static char g_cwd_path[RAMTAB_NAME];
 static char g_chroot_path[RAMTAB_NAME];
@@ -966,10 +914,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_slots[i].vf = 0;
 	}
 	early_anonfd_reset();
-	for (i = 0; i < SOCKPAIR_MAX; i++)
-		g_sock[i].used = 0;
-	for (i = 0; i < UNIX_MAX; i++)
-		g_unix[i].used = 0;
+	early_unix_reset();
 	g_clock_mono = 0;
 	g_clock_hz = 0;
 	g_clock_realtime_off = 0;

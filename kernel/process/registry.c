@@ -32,7 +32,27 @@ void process_registry_insert(process_t *process)
 	irq_flags = process_registry_lock();
 	process->next = process_list;
 	process_list = process;
+	if (process->task.pid >= next_pid)
+		next_pid = (pid_t)(process->task.pid + 1);
 	process_registry_unlock(irq_flags);
+}
+
+process_t *process_find_child_of(pid_t ppid)
+{
+	process_t *proc;
+	uint64_t irq_flags = process_registry_lock();
+
+	for (proc = process_list; proc; proc = proc->next)
+	{
+		if (proc->ppid == ppid &&
+		    proc->lifecycle == PROCESS_LIFECYCLE_ALIVE)
+		{
+			process_registry_unlock(irq_flags);
+			return proc;
+		}
+	}
+	process_registry_unlock(irq_flags);
+	return NULL;
 }
 
 void process_registry_install_if_empty(process_t *process)
