@@ -26,3 +26,52 @@ void early_unix_reset(void)
 	for (i = 0; i < EARLY_UNIX_MAX; i++)
 		g_early_unix[i].used = 0;
 }
+
+unsigned early_unix_consume(struct early_unix *u, uint8_t *tmp, unsigned n)
+{
+	if (!u)
+		return 0;
+	return early_ipc_ring_consume(&u->rpos, &u->len, u->buf, tmp, n);
+}
+
+unsigned early_unix_peek(struct early_unix *u, uint8_t *tmp, unsigned n)
+{
+	if (!u)
+		return 0;
+	return early_ipc_ring_peek(u->rpos, u->len, u->buf, tmp, n);
+}
+
+unsigned early_unix_deposit(struct early_unix *u, const uint8_t *tmp,
+			    unsigned n)
+{
+	if (!u)
+		return 0;
+	return early_ipc_ring_deposit(&u->rpos, &u->len, u->buf, tmp, n);
+}
+
+unsigned early_sock_consume(struct early_sockpair *s, int dir, uint8_t *tmp,
+			    unsigned n)
+{
+	if (!s || dir < 0 || dir > 1)
+		return 0;
+	return early_ipc_ring_consume(&s->dir[dir].rpos, &s->dir[dir].len,
+				      s->dir[dir].buf, tmp, n);
+}
+
+unsigned early_sock_peek(struct early_sockpair *s, int dir, uint8_t *tmp,
+			 unsigned n)
+{
+	if (!s || dir < 0 || dir > 1)
+		return 0;
+	return early_ipc_ring_peek(s->dir[dir].rpos, s->dir[dir].len,
+				   s->dir[dir].buf, tmp, n);
+}
+
+unsigned early_sock_deposit(struct early_sockpair *s, int dir,
+			    const uint8_t *tmp, unsigned n)
+{
+	if (!s || dir < 0 || dir > 1)
+		return 0;
+	return early_ipc_ring_deposit(&s->dir[dir].rpos, &s->dir[dir].len,
+				      s->dir[dir].buf, tmp, n);
+}

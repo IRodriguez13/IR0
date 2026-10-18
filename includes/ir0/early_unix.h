@@ -83,3 +83,13 @@ extern struct early_sockpair g_early_sock[EARLY_SOCKPAIR_MAX];
 extern struct early_unix g_early_unix[EARLY_UNIX_MAX];
 
 void early_unix_reset(void);
+unsigned early_unix_consume(struct early_unix *u, uint8_t *tmp, unsigned n);
+unsigned early_unix_peek(struct early_unix *u, uint8_t *tmp, unsigned n);
+unsigned early_unix_deposit(struct early_unix *u, const uint8_t *tmp,
+			    unsigned n);
+unsigned early_sock_consume(struct early_sockpair *s, int dir, uint8_t *tmp,
+			    unsigned n);
+unsigned early_sock_peek(struct early_sockpair *s, int dir, uint8_t *tmp,
+			 unsigned n);
+unsigned early_sock_deposit(struct early_sockpair *s, int dir,
+			    const uint8_t *tmp, unsigned n);

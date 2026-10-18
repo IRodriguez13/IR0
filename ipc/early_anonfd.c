@@ -39,59 +39,81 @@ void early_anonfd_reset(void)
 		g_early_epoll[i].used = 0;
 }
 
-unsigned early_pipe_consume(struct early_pipe *p, uint8_t *tmp, unsigned n)
+unsigned early_ipc_ring_consume(unsigned *rpos, unsigned *len, uint8_t *ring,
+				uint8_t *tmp, unsigned n)
 {
 	unsigned i;
 
-	if (!p || !tmp)
+	if (!rpos || !len || !ring || !tmp)
 		return 0;
-	if (n > p->len)
-		n = p->len;
+	if (n > *len)
+		n = *len;
 	for (i = 0; i < n; i++)
 	{
-		tmp[i] = p->buf[p->rpos];
-		p->rpos = (p->rpos + 1U) % EARLY_PIPE_BUF;
+		tmp[i] = ring[*rpos];
+		*rpos = (*rpos + 1U) % EARLY_PIPE_BUF;
 	}
-	p->len -= n;
+	*len -= n;
 	return n;
 }
 
-unsigned early_pipe_peek(struct early_pipe *p, uint8_t *tmp, unsigned n)
+unsigned early_ipc_ring_peek(unsigned rpos, unsigned len, const uint8_t *ring,
+			     uint8_t *tmp, unsigned n)
 {
 	unsigned i;
-	unsigned rpos;
 
-	if (!p || !tmp)
+	if (!ring || !tmp)
 		return 0;
-	if (n > p->len)
-		n = p->len;
-	rpos = p->rpos;
+	if (n > len)
+		n = len;
 	for (i = 0; i < n; i++)
 	{
-		tmp[i] = p->buf[rpos];
+		tmp[i] = ring[rpos];
 		rpos = (rpos + 1U) % EARLY_PIPE_BUF;
 	}
 	return n;
 }
 
-unsigned early_pipe_deposit(struct early_pipe *p, const uint8_t *tmp,
-			    unsigned n)
+unsigned early_ipc_ring_deposit(unsigned *rpos, unsigned *len, uint8_t *ring,
+				const uint8_t *tmp, unsigned n)
 {
 	unsigned i;
 	unsigned wpos;
 	unsigned room;
 
-	if (!p || !tmp)
+	if (!rpos || !len || !ring || !tmp)
 		return 0;
-	room = EARLY_PIPE_BUF - p->len;
+	room = EARLY_PIPE_BUF - *len;
 	if (n > room)
 		n = room;
-	wpos = (p->rpos + p->len) % EARLY_PIPE_BUF;
+	wpos = (*rpos + *len) % EARLY_PIPE_BUF;
 	for (i = 0; i < n; i++)
 	{
-		p->buf[wpos] = tmp[i];
+		ring[wpos] = tmp[i];
 		wpos = (wpos + 1U) % EARLY_PIPE_BUF;
 	}
-	p->len += n;
+	*len += n;
 	return n;
+}
+
+unsigned early_pipe_consume(struct early_pipe *p, uint8_t *tmp, unsigned n)
+{
+	if (!p)
+		return 0;
+	return early_ipc_ring_consume(&p->rpos, &p->len, p->buf, tmp, n);
+}
+
+unsigned early_pipe_peek(struct early_pipe *p, uint8_t *tmp, unsigned n)
+{
+	if (!p)
+		return 0;
+	return early_ipc_ring_peek(p->rpos, p->len, p->buf, tmp, n);
+}
+
+unsigned early_pipe_deposit(struct early_pipe *p, const uint8_t *tmp,
+			    unsigned n)
+{
+	if (!p)
+		return 0;
+	return early_ipc_ring_deposit(&p->rpos, &p->len, p->buf, tmp, n);
 }

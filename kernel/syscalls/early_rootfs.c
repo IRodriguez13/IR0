@@ -799,6 +799,11 @@ void early_rootfs_bind_product_path(const struct ir0_product_path_ops *ops)
 	g_product_path_used = 0;
 }
 
+const struct ir0_product_path_ops *ir0_product_path_bound(void)
+{
+	return g_product_path;
+}
+
 int early_rootfs_product_path_used(void)
 {
 	return g_product_path_used;
@@ -1599,12 +1604,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 			take = (unsigned)sizeof(tmp);
 		if ((uint64_t)take > count)
 			take = (unsigned)count;
-		for (i = 0; i < take; i++)
-		{
-			tmp[i] = p->buf[p->rpos];
-			p->rpos = (p->rpos + 1U) % PIPE_BUF;
-		}
-		p->len -= take;
+		take = pipe_consume(p, tmp, take);
 		if (!g_user || !g_user->copy_to_user ||
 		    g_user->copy_to_user(buffer, tmp, take) != 0)
 			return -EFAULT;
@@ -1729,31 +1729,22 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 				return -EIO;
 			{
 				uint16_t mlen;
-				unsigned hdr = g_unix[uid].rpos;
+				uint8_t hdr[2];
+				uint8_t pkt[256];
 
-				mlen = (uint16_t)g_unix[uid].buf[hdr];
-				mlen |= (uint16_t)g_unix[uid].buf[(hdr + 1U) %
-								  PIPE_BUF]
-					<< 8;
-				if (g_unix[uid].len < 2U + mlen)
+				if (early_unix_peek(&g_unix[uid], hdr, 2) < 2)
 					return -EIO;
-				g_unix[uid].rpos = (hdr + 2U) % PIPE_BUF;
-				g_unix[uid].len -= 2U;
+				mlen = (uint16_t)hdr[0] | ((uint16_t)hdr[1] << 8);
+				if (g_unix[uid].len < 2U + mlen || mlen > 250)
+					return -EIO;
+				early_unix_consume(&g_unix[uid], pkt, 2U + mlen);
 				take = mlen;
 				if (take > sizeof(tmp))
 					take = (unsigned)sizeof(tmp);
 				if ((uint64_t)take > count)
 					take = (unsigned)count;
-				for (i2 = 0; i2 < mlen; i2++)
-				{
-					uint8_t b = g_unix[uid].buf[g_unix[uid].rpos];
-
-					g_unix[uid].rpos =
-						(g_unix[uid].rpos + 1U) % PIPE_BUF;
-					if (i2 < take)
-						tmp[i2] = b;
-				}
-				g_unix[uid].len -= mlen;
+				for (i2 = 0; i2 < take; i2++)
+					tmp[i2] = pkt[2 + i2];
 				if (!g_user || !g_user->copy_to_user ||
 				    g_user->copy_to_user(buffer, tmp, take) != 0)
 					return -EFAULT;
@@ -1773,34 +1764,24 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		if (g_sock[pair].dgram)
 		{
 			uint16_t mlen;
-			unsigned hdr = g_sock[pair].dir[src].rpos;
+			uint8_t hdr[2];
+			uint8_t pkt[256];
 
 			if (g_sock[pair].dir[src].len < 2)
 				return -EIO;
-			mlen = (uint16_t)g_sock[pair].dir[src].buf[hdr];
-			mlen |= (uint16_t)g_sock[pair].dir[src].buf[(hdr + 1U) %
-								    PIPE_BUF]
-				 << 8;
-			if (g_sock[pair].dir[src].len < 2U + mlen)
+			if (early_sock_peek(&g_sock[pair], src, hdr, 2) < 2)
 				return -EIO;
-			g_sock[pair].dir[src].rpos = (hdr + 2U) % PIPE_BUF;
-			g_sock[pair].dir[src].len -= 2U;
+			mlen = (uint16_t)hdr[0] | ((uint16_t)hdr[1] << 8);
+			if (g_sock[pair].dir[src].len < 2U + mlen || mlen > 250)
+				return -EIO;
+			early_sock_consume(&g_sock[pair], src, pkt, 2U + mlen);
 			take = mlen;
 			if (take > sizeof(tmp))
 				take = (unsigned)sizeof(tmp);
 			if ((uint64_t)take > count)
 				take = (unsigned)count;
-			for (i2 = 0; i2 < mlen; i2++)
-			{
-				uint8_t b = g_sock[pair].dir[src].buf[g_sock[pair].dir[src].rpos];
-
-				g_sock[pair].dir[src].rpos =
-					(g_sock[pair].dir[src].rpos + 1U) %
-					PIPE_BUF;
-				if (i2 < take)
-					tmp[i2] = b;
-			}
-			g_sock[pair].dir[src].len -= mlen;
+			for (i2 = 0; i2 < take; i2++)
+				tmp[i2] = pkt[2 + i2];
 			if (!g_user || !g_user->copy_to_user ||
 			    g_user->copy_to_user(buffer, tmp, take) != 0)
 				return -EFAULT;
@@ -1811,13 +1792,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 			take = (unsigned)sizeof(tmp);
 		if ((uint64_t)take > count)
 			take = (unsigned)count;
-		for (i2 = 0; i2 < take; i2++)
-		{
-			tmp[i2] = g_sock[pair].dir[src].buf[g_sock[pair].dir[src].rpos];
-			g_sock[pair].dir[src].rpos =
-				(g_sock[pair].dir[src].rpos + 1U) % PIPE_BUF;
-		}
-		g_sock[pair].dir[src].len -= take;
+		take = early_sock_consume(&g_sock[pair], src, tmp, take);
 		if (!g_user || !g_user->copy_to_user ||
 		    g_user->copy_to_user(buffer, tmp, take) != 0)
 			return -EFAULT;
@@ -1871,12 +1846,7 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 			take = (unsigned)sizeof(tmp);
 		if ((uint64_t)take > count)
 			take = (unsigned)count;
-		for (i = 0; i < take; i++)
-		{
-			tmp[i] = p->buf[p->rpos];
-			p->rpos = (p->rpos + 1U) % PIPE_BUF;
-		}
-		p->len -= take;
+		take = pipe_consume(p, tmp, take);
 		if (!g_user || !g_user->copy_to_user ||
 		    g_user->copy_to_user(buffer, tmp, take) != 0)
 			return -EFAULT;
@@ -2823,8 +2793,6 @@ int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count)
 	uint8_t tmp[256];
 	unsigned room;
 	unsigned put;
-	unsigned i;
-	unsigned wpos;
 
 	if (pipe_id < 0 || node_of_fd(fd) != IR0_EARLY_ROOTFS_PIPE_W)
 		return -EBADF;
@@ -2846,13 +2814,7 @@ int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count)
 	if (!g_user || !g_user->copy_from_user ||
 	    g_user->copy_from_user(tmp, buffer, put) != 0)
 		return -EFAULT;
-	wpos = (p->rpos + p->len) % PIPE_BUF;
-	for (i = 0; i < put; i++)
-	{
-		p->buf[wpos] = tmp[i];
-		wpos = (wpos + 1U) % PIPE_BUF;
-	}
-	p->len += put;
+	put = pipe_deposit(p, tmp, put);
 	return (int64_t)put;
 }
 
@@ -4183,8 +4145,6 @@ int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count)
 	uint8_t tmp[256];
 	unsigned room;
 	unsigned put;
-	unsigned i;
-	unsigned wpos;
 
 	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_FIFO)
 		return -EBADF;
@@ -4213,13 +4173,7 @@ int64_t early_rootfs_fifo_write(int fd, uint64_t buffer, uint64_t count)
 	if (!g_user || !g_user->copy_from_user ||
 	    g_user->copy_from_user(tmp, buffer, put) != 0)
 		return -EFAULT;
-	wpos = (p->rpos + p->len) % PIPE_BUF;
-	for (i = 0; i < put; i++)
-	{
-		p->buf[wpos] = tmp[i];
-		wpos = (wpos + 1U) % PIPE_BUF;
-	}
-	p->len += put;
+	put = pipe_deposit(p, tmp, put);
 	return (int64_t)put;
 }
 
@@ -4313,8 +4267,7 @@ int64_t early_rootfs_socketpair(int domain, int type, int protocol, uint64_t sv)
 static int64_t unix_dgram_deposit(int uid, const uint8_t *tmp, unsigned count)
 {
 	unsigned room;
-	unsigned wpos;
-	unsigned i;
+	uint8_t hdr[2];
 
 	if (uid < 0 || uid >= UNIX_MAX || !g_unix[uid].used || g_unix[uid].stream)
 		return -ECONNREFUSED;
@@ -4323,17 +4276,11 @@ static int64_t unix_dgram_deposit(int uid, const uint8_t *tmp, unsigned count)
 	room = PIPE_BUF - g_unix[uid].len;
 	if (room < count + 2U)
 		return -EAGAIN;
-	wpos = (g_unix[uid].rpos + g_unix[uid].len) % PIPE_BUF;
-	g_unix[uid].buf[wpos] = (uint8_t)(count & 0xffU);
-	wpos = (wpos + 1U) % PIPE_BUF;
-	g_unix[uid].buf[wpos] = (uint8_t)((count >> 8) & 0xffU);
-	wpos = (wpos + 1U) % PIPE_BUF;
-	for (i = 0; i < count; i++)
-	{
-		g_unix[uid].buf[wpos] = tmp[i];
-		wpos = (wpos + 1U) % PIPE_BUF;
-	}
-	g_unix[uid].len += count + 2U;
+	hdr[0] = (uint8_t)(count & 0xffU);
+	hdr[1] = (uint8_t)((count >> 8) & 0xffU);
+	if (early_unix_deposit(&g_unix[uid], hdr, 2) != 2 ||
+	    early_unix_deposit(&g_unix[uid], tmp, count) != count)
+		return -EAGAIN;
 	note_sender_creds_unix(uid);
 	return (int64_t)count;
 }
@@ -4366,8 +4313,6 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 	uint8_t tmp[256];
 	unsigned room;
 	unsigned put;
-	unsigned i;
-	unsigned wpos;
 
 	if (node_of_fd(fd) != IR0_EARLY_ROOTFS_SOCK)
 		return -EBADF;
@@ -4421,18 +4366,16 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 		if (!g_user || !g_user->copy_from_user ||
 		    g_user->copy_from_user(tmp, buffer, count) != 0)
 			return -EFAULT;
-		wpos = (g_sock[pair].dir[dst].rpos + g_sock[pair].dir[dst].len) %
-		       PIPE_BUF;
-		g_sock[pair].dir[dst].buf[wpos] = (uint8_t)(count & 0xffU);
-		wpos = (wpos + 1U) % PIPE_BUF;
-		g_sock[pair].dir[dst].buf[wpos] = (uint8_t)((count >> 8) & 0xffU);
-		wpos = (wpos + 1U) % PIPE_BUF;
-		for (i = 0; i < count; i++)
 		{
-			g_sock[pair].dir[dst].buf[wpos] = tmp[i];
-			wpos = (wpos + 1U) % PIPE_BUF;
+			uint8_t hdr[2];
+
+			hdr[0] = (uint8_t)(count & 0xffU);
+			hdr[1] = (uint8_t)((count >> 8) & 0xffU);
+			if (early_sock_deposit(&g_sock[pair], dst, hdr, 2) != 2 ||
+			    early_sock_deposit(&g_sock[pair], dst, tmp,
+					       (unsigned)count) != (unsigned)count)
+				return wait_or_eagain(fd);
 		}
-		g_sock[pair].dir[dst].len += (unsigned)count + 2U;
 		note_sender_creds_sock(pair, dst);
 		return (int64_t)count;
 	}
@@ -4446,13 +4389,7 @@ int64_t early_rootfs_sock_write(int fd, uint64_t buffer, uint64_t count)
 	if (!g_user || !g_user->copy_from_user ||
 	    g_user->copy_from_user(tmp, buffer, put) != 0)
 		return -EFAULT;
-	wpos = (g_sock[pair].dir[dst].rpos + g_sock[pair].dir[dst].len) % PIPE_BUF;
-	for (i = 0; i < put; i++)
-	{
-		g_sock[pair].dir[dst].buf[wpos] = tmp[i];
-		wpos = (wpos + 1U) % PIPE_BUF;
-	}
-	g_sock[pair].dir[dst].len += put;
+	put = early_sock_deposit(&g_sock[pair], dst, tmp, put);
 	note_sender_creds_sock(pair, dst);
 	return (int64_t)put;
 }
@@ -6445,7 +6382,6 @@ static int64_t kwrite_buf(int fd, const uint8_t *tmp, uint64_t count)
 		struct early_pipe *p;
 		unsigned room;
 		unsigned put;
-		unsigned wpos;
 
 		if (pipe_id < 0)
 			return -EBADF;
@@ -6462,13 +6398,7 @@ static int64_t kwrite_buf(int fd, const uint8_t *tmp, uint64_t count)
 			put = 256;
 		if ((uint64_t)put > count)
 			put = (unsigned)count;
-		wpos = (p->rpos + p->len) % PIPE_BUF;
-		for (i = 0; i < put; i++)
-		{
-			p->buf[wpos] = tmp[i];
-			wpos = (wpos + 1U) % PIPE_BUF;
-		}
-		p->len += put;
+		put = pipe_deposit(p, tmp, put);
 		return (int64_t)put;
 	}
 	if (node == IR0_EARLY_ROOTFS_FILE)

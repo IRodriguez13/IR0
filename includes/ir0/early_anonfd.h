@@ -84,6 +84,12 @@ extern struct early_timerfd g_early_timerfd[EARLY_TIMERFD_MAX];
 extern struct early_epoll g_early_epoll[EARLY_EPOLL_MAX];
 
 void early_anonfd_reset(void);
+unsigned early_ipc_ring_consume(unsigned *rpos, unsigned *len, uint8_t *ring,
+				uint8_t *tmp, unsigned n);
+unsigned early_ipc_ring_peek(unsigned rpos, unsigned len, const uint8_t *ring,
+			     uint8_t *tmp, unsigned n);
+unsigned early_ipc_ring_deposit(unsigned *rpos, unsigned *len, uint8_t *ring,
+				const uint8_t *tmp, unsigned n);
 unsigned early_pipe_consume(struct early_pipe *p, uint8_t *tmp, unsigned n);
 unsigned early_pipe_peek(struct early_pipe *p, uint8_t *tmp, unsigned n);
 unsigned early_pipe_deposit(struct early_pipe *p, const uint8_t *tmp,
