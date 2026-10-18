@@ -2,9 +2,16 @@
 /* Single owner for the architecture-neutral process registry state. */
 
 #include "process_internal.h"
+#include <ir0/percpu.h>
 
 process_t *current_process;
 process_t *process_list;
+
+void process_set_current(process_t *process)
+{
+	current_process = process;
+	cpu_local_set_current_task(process ? &process->task : NULL);
+}
 
 int process_remove_from_list(process_t *target)
 {

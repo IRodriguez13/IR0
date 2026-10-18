@@ -69,7 +69,7 @@ static void identity_sync_current(int64_t pid)
 		return;
 	p = process_find_by_pid((pid_t)pid);
 	if (p)
-		current_process = p;
+		process_set_current(p);
 }
 
 static void identity_publish_creds(uint32_t uid, uint32_t euid,

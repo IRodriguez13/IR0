@@ -319,9 +319,9 @@ void boot_diagnostics(void)
 					 : NULL;
 		if (holder)
 		{
-			current_process = holder;
+			process_set_current(holder);
 			kernel_test_run_all();
-			current_process = saved;
+			process_set_current(saved);
 		}
 		else
 			klog_error("KTEST", "no process context; suite skipped");

@@ -20,6 +20,7 @@
 #include <ir0/switch.h>
 #include <ir0/oops.h>
 #include <ir0/sched.h>
+#include <ir0/percpu.h>
 #include <stdint.h>
 
 static int sched_has_running_context;
@@ -55,7 +56,8 @@ void sched_context_switch_to(process_t *next)
 		process_set_sched_state(prev, PROCESS_READY);
 
 	process_set_sched_state(next, PROCESS_RUNNING);
-	current_process = next;
+	process_set_current(next);
+	cpu_local_note_context_switch();
 
 	if (!sched_has_running_context)
 	{
@@ -79,7 +81,7 @@ void sched_adopt_running_context(process_t *running)
 	uint64_t irq_flags;
 
 	irq_flags = sched_switch_irq_save();
-	current_process = running;
+	process_set_current(running);
 	sched_has_running_context = running != NULL;
 	if (running)
 		process_set_sched_state(running, PROCESS_RUNNING);

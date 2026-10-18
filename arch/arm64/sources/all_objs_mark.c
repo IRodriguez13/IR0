@@ -458,7 +458,7 @@ static int arm64_common_exit_contract(void)
 	saved_process_list = process_list;
 	saved_current = current_process;
 	process_list = &init;
-	current_process = &child;
+	process_set_current(&child);
 	process_wait_state_arm(&parent, child.task.pid, 0, NULL);
 	runnable_before = sched_count_runnable();
 	process_pre_zombie_teardown(&child);
@@ -471,12 +471,12 @@ static int arm64_common_exit_contract(void)
 	    (parent.signal_pending & SIGNAL_MASK(SIGCHLD)) == 0 ||
 	    sched_count_runnable() != runnable_before + 1)
 	{
-		current_process = saved_current;
+		process_set_current(saved_current);
 		process_list = saved_process_list;
 		return -1;
 	}
 	sched_remove_process(&parent);
-	current_process = saved_current;
+	process_set_current(saved_current);
 	process_list = saved_process_list;
 	return 0;
 }

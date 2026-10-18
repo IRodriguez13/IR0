@@ -383,6 +383,7 @@ KERNEL_OBJS = \
 	kernel/clock_wait.o \
 	kernel/clock_accounting.o \
 	kernel/cpu_topology.o \
+	kernel/percpu.o \
     kernel/credentials.o \
     kernel/power/power_manag.o \
     kernel/kexec.o \

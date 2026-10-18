@@ -128,7 +128,7 @@ uint64_t process_list_count_user(void)
 
 void process_init(void)
 {
-	current_process = NULL;
+	process_set_current(NULL);
 	process_list = NULL;
 	debug_state_init();
 	/* First spawned process is PID 1. */
@@ -139,7 +139,7 @@ void process_guest_install(process_t *guest)
 {
 	if (!guest)
 		return;
-	current_process = guest;
+	process_set_current(guest);
 	if (!process_list)
 		process_list = guest;
 }
@@ -150,7 +150,7 @@ void process_guest_rearm(process_t *guest)
 		return;
 	guest->lifecycle = PROCESS_LIFECYCLE_ALIVE;
 	guest->state = PROCESS_RUNNING;
-	current_process = guest;
+	process_set_current(guest);
 }
 
 

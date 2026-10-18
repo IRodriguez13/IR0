@@ -2216,6 +2216,8 @@ ARM64_BOOT_LINK_OBJS = \
 	build/arm64-boot/sched_switch.o \
 	build/arm64-boot/rr_sched.o \
 	build/arm64-boot/process_registry.o \
+	build/arm64-boot/cpu_topology.o \
+	build/arm64-boot/percpu.o \
 	arch/arm64/sources/rr_early.o \
 	build/arm64-boot/allocator_stubs.o \
 	build/arm64-boot/clock_accounting.o \
@@ -2263,6 +2265,8 @@ ARM64_MIN_LINK_OBJS = \
 ARM64_ALL_EARLY_LINK_OBJS = \
 	$(filter-out build/arm64-boot/portable_string.o \
 		build/arm64-boot/allocator_stubs.o \
+		build/arm64-boot/cpu_topology.o \
+		build/arm64-boot/percpu.o \
 		build/arm64-boot/arch_tls.o,$(ARM64_BOOT_LINK_OBJS))
 
 .PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin kernel-arm64-vbar.bin \
@@ -2390,6 +2394,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
 		kernel/lib/blockdev.c includes/ir0/blockdev.h \
 		sched/sched.c sched/sched_switch.c sched/rr_sched.c \
+		kernel/cpu_topology.c kernel/percpu.c \
 		sched/switch/switch_arm64.c sched/task.h \
 		$(MUSL_AARCH64_HELLO) build/busybox_aarch64 arch/arm64/linker.ld
 	@$(MAKE) -s musl-aarch64-hello
@@ -2508,6 +2513,14 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c kernel/process/registry.c -o build/arm64-boot/process_registry.o
+	@echo "  CC      kernel/cpu_topology.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-c kernel/cpu_topology.c -o build/arm64-boot/cpu_topology.o
+	@echo "  CC      kernel/percpu.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
+		-c kernel/percpu.c -o build/arm64-boot/percpu.o
 	@echo "  CC      sched/sched.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-DIR0_SCHED_EARLY_RR=1 \
@@ -2852,6 +2865,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	mm/kmem.c \
 	kernel/errno.c \
 	kernel/cpu_topology.c \
+	kernel/percpu.c \
 	kernel/lib/open_flags.c \
 	kernel/lib/copy_user.c \
 	kernel/fd_resource.c \
