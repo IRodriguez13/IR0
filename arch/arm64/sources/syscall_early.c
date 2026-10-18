@@ -29,6 +29,8 @@
 #include <ir0/early_time.h>
 #include <ir0/early_vfs.h>
 #include <ir0/cwd.h>
+#include <ir0/product_ipc.h>
+#include <ir0/product_vfs.h>
 #include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
 #include <ir0/tlb.h>
@@ -42,7 +44,9 @@ static const struct syscall_context_provider *g_identity_provider =
 	&early_process_identity_provider;
 static const struct syscall_context_provider *g_cwd_provider =
 	&early_vfs_cwd_provider;
-static const struct syscall_context_provider *g_early_providers[7];
+static const struct syscall_context_provider *g_vfs_path_provider =
+	&early_vfs_path_provider;
+static const struct syscall_context_provider *g_early_providers[9];
 
 void arm64_syscall_bind_identity_provider(const struct syscall_context_provider *p)
 {
@@ -56,16 +60,24 @@ void arm64_syscall_bind_cwd_provider(const struct syscall_context_provider *p)
 		g_cwd_provider = p;
 }
 
+void arm64_syscall_bind_vfs_path_provider(const struct syscall_context_provider *p)
+{
+	if (p)
+		g_vfs_path_provider = p;
+}
+
 static unsigned arm64_fill_providers(void)
 {
 	g_early_providers[0] = &early_io_provider;
 	g_early_providers[1] = &early_mm_provider;
 	g_early_providers[2] = &early_vfs_provider;
-	g_early_providers[3] = g_cwd_provider;
-	g_early_providers[4] = &early_time_provider;
-	g_early_providers[5] = g_identity_provider;
-	g_early_providers[6] = &early_process_provider;
-	return 7;
+	g_early_providers[3] = g_vfs_path_provider;
+	g_early_providers[4] = g_cwd_provider;
+	g_early_providers[5] = &early_time_provider;
+	g_early_providers[6] = g_identity_provider;
+	g_early_providers[7] = &early_process_provider;
+	g_early_providers[8] = &ir0_product_ipc_provider;
+	return 9;
 }
 
 static int arm64_early_copy_from_user(void *destination, uint64_t source,

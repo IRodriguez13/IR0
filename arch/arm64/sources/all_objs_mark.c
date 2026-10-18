@@ -27,6 +27,7 @@
 #include <ir0/oops.h>
 #include <ir0/process_exit.h>
 #include <ir0/cwd.h>
+#include <ir0/product_vfs.h>
 #include <ir0/fd_install.h>
 #include <ir0/vfs_dispatch.h>
 #include <ir0/vfs_file.h>
@@ -583,8 +584,11 @@ void arm64_all_objs_mark(void)
 		early_process_bind_identity(ir0_syscall_identity_product());
 		arm64_syscall_bind_identity_provider(&ir0_product_identity_provider);
 		arm64_syscall_bind_cwd_provider(&ir0_product_cwd_provider);
+		arm64_syscall_bind_vfs_path_provider(&ir0_product_vfs_provider);
 		ir0_boot_smoke("ARM64_PRODUCT_IDENTITY_OK");
 		ir0_boot_smoke("ARM64_PRODUCT_CWD_OK");
+		ir0_boot_smoke("ARM64_PRODUCT_IPC_OK");
+		ir0_boot_smoke("ARM64_PRODUCT_VFS_SLICE_OK");
 		early_rootfs_bind_cwd(ir0_cwd_product());
 		ir0_boot_smoke("ARM64_COMMON_GUEST_OK");
 		ir0_boot_smoke("ARM64_COMMON_IDLE_READY");
