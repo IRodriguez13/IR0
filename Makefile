@@ -382,6 +382,7 @@ KERNEL_OBJS = \
     kernel/vdso.o \
 	kernel/clock_wait.o \
 	kernel/clock_accounting.o \
+	kernel/cpu_topology.o \
     kernel/credentials.o \
     kernel/power/power_manag.o \
     kernel/kexec.o \

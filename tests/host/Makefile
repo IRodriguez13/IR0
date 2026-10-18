@@ -53,6 +53,7 @@ TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
 	test_x86_syscall_decode.c
 TEST_SRCS += test_syscall_table.c
 TEST_SRCS += test_utsname_abi.c
+TEST_SRCS += test_cpu_topology.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -68,6 +69,7 @@ KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
 KERNEL_HOST_OBJS += host_syscall_table.o
 KERNEL_HOST_OBJS += host_fd_resource.o
+KERNEL_HOST_OBJS += host_cpu_topology.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -108,6 +110,9 @@ test_boot_memory.o: test_boot_memory.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_no_mmu_policy.o: test_no_mmu_policy.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+test_cpu_topology.o: test_cpu_topology.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_serial_stub.o: host_serial_stub.c
@@ -155,6 +160,9 @@ host_syscall_table.o: $(KERNEL_ROOT)/kernel/lib/syscall_table.c \
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_fd_resource.o: $(KERNEL_ROOT)/kernel/fd_resource.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_arm64_elf_policy.o: $(KERNEL_ROOT)/arch/arm64/sources/elf_policy.c

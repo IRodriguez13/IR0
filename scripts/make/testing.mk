@@ -2851,6 +2851,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	mm/pmm.c \
 	mm/kmem.c \
 	kernel/errno.c \
+	kernel/cpu_topology.c \
 	kernel/lib/open_flags.c \
 	kernel/lib/copy_user.c \
 	kernel/fd_resource.c \

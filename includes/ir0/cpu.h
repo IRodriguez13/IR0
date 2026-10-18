@@ -39,6 +39,22 @@ void irq_restore(unsigned long flags);
 
 void cpu_halt(void);
 
+/*
+ * Logical CPU topology.  UP builds expose the boot CPU through the same
+ * contract that scheduler/IRQ code will consume once SMP is enabled.
+ * Masks use logical CPU ids; firmware and hardware ids stay arch-private.
+ */
+unsigned int cpu_id(void);
+uint64_t cpu_possible_mask(void);
+uint64_t cpu_present_mask(void);
+uint64_t cpu_online_mask(void);
+uint64_t cpu_active_mask(void);
+unsigned int cpu_online_count(void);
+int cpu_is_possible(unsigned int cpu);
+int cpu_is_present(unsigned int cpu);
+int cpu_is_online(unsigned int cpu);
+int cpu_is_active(unsigned int cpu);
+
 uint64_t timer_read(void);
 
 uint64_t rdmsr(uint32_t msr);
