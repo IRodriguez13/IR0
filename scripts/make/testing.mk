@@ -3110,6 +3110,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_PRODUCT_USERCOPY_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-smoke.log

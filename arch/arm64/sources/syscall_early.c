@@ -37,13 +37,26 @@
 
 static struct early_syscall_dispatch g_early_syscall_dispatch;
 
-static const struct syscall_context_provider *const g_early_providers[] = {
-	&early_io_provider,
-	&early_mm_provider,
-	&early_vfs_provider,
-	&early_time_provider,
-	&early_process_provider,
-};
+static const struct syscall_context_provider *g_identity_provider =
+	&early_process_identity_provider;
+static const struct syscall_context_provider *g_early_providers[6];
+
+void arm64_syscall_bind_identity_provider(const struct syscall_context_provider *p)
+{
+	if (p)
+		g_identity_provider = p;
+}
+
+static unsigned arm64_fill_providers(void)
+{
+	g_early_providers[0] = &early_io_provider;
+	g_early_providers[1] = &early_mm_provider;
+	g_early_providers[2] = &early_vfs_provider;
+	g_early_providers[3] = &early_time_provider;
+	g_early_providers[4] = g_identity_provider;
+	g_early_providers[5] = &early_process_provider;
+	return 6;
+}
 
 static int arm64_early_copy_from_user(void *destination, uint64_t source,
 				      uint64_t size)
@@ -244,10 +257,9 @@ int64_t arm64_syscall_early(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
 
 		ret = early_syscall_dispatch_invoke(
 			&g_early_syscall_dispatch, &context, g_early_providers,
-			sizeof(g_early_providers) / sizeof(g_early_providers[0]),
+			arm64_fill_providers(),
 			syscall_id, a0, a1, a2, a3, a4, a5);
-		if (syscall_id == IR0_SYSCALL_GETPID &&
-		    early_process_identity_used())
+		if (syscall_id == IR0_SYSCALL_GETPID)
 		{
 			if (ret == 1)
 				ir0_boot_smoke("ARM64_COMMON_GETPID_OK");

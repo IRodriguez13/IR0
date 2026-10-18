@@ -581,6 +581,8 @@ void arm64_all_objs_mark(void)
 		early_process_bind_common_exit(process_exit_guest);
 		early_process_bind_schedule_exit(process_exit);
 		early_process_bind_identity(ir0_syscall_identity_product());
+		arm64_syscall_bind_identity_provider(&ir0_product_identity_provider);
+		ir0_boot_smoke("ARM64_PRODUCT_IDENTITY_OK");
 		early_rootfs_bind_cwd(ir0_cwd_product());
 		ir0_boot_smoke("ARM64_COMMON_GUEST_OK");
 		ir0_boot_smoke("ARM64_COMMON_IDLE_READY");

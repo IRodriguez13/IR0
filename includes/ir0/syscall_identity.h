@@ -11,6 +11,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <ir0/syscall_table.h>
 
 /*
  * Linux getpid(2) / getppid(2) / getuid(2) read current. IR0 serves the
@@ -33,3 +34,4 @@ struct ir0_syscall_identity_ops
 };
 
 const struct ir0_syscall_identity_ops *ir0_syscall_identity_product(void);
+extern const struct syscall_context_provider ir0_product_identity_provider;

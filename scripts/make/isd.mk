@@ -328,4 +328,16 @@ USMANG_PY = python3 scripts/userspace_manager.py \
 
 -include $(KERNEL_ROOT)/scripts/make/product.mk
 
+# Kernel + uapi only. ISD still has no aarch64 rootfs; do not invent one.
+.PHONY: isd-aarch64-prep
+isd-aarch64-prep: kernel-arm64-all.bin
+	@$(MAKE) -s headers_install DESTDIR=$(KERNEL_ROOT)/build/isd-aarch64-uapi
+	@if [ -d "$(IR0_ISD_ROOT)/arch/aarch64" ] || \
+	    [ -d "$(IR0_ISD_ROOT)/rootfs/arch/aarch64" ]; then \
+		echo "ISD_AARCH64_ROOTFS_PRESENT"; \
+	else \
+		echo "ISD_AARCH64_ROOTFS_ABSENT"; \
+	fi
+	@echo "ISD_AARCH64_KERNEL_OK"
+
 endif
