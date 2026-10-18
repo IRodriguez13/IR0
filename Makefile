@@ -131,14 +131,17 @@ endif
 
 # Product distribution (ISD). Recipes live in scripts/make/isd.mk.
 # Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
-IR0_LEAN_GOALS := kernel-x64.bin kernel-x64.iso print-build-objects \
-	build-graph-audit help headers_install compile-commands disasm
+# Empty MAKECMDGOALS is tab-completion (`make -qp`) and a bare `make`.
+# Those must not parse the 6k-line QA catalog. Name a non-lean goal to load it.
+IR0_LEAN_GOALS := all ir0 clean help \
+	kernel-x64.bin kernel-x64.iso \
+	kernel-arm64.bin kernel-arm64-all.bin kernel-arm64-boot.bin \
+	print-build-objects build-graph-audit \
+	headers_install compile-commands disasm \
+	menuconfig menuconfig-en defconfig arch-guard
 IR0_NONLEAN_GOALS := $(filter-out $(IR0_LEAN_GOALS),$(MAKECMDGOALS))
 -include scripts/make/ir0_public.mk
-ifeq ($(strip $(MAKECMDGOALS)),)
--include scripts/make/isd.mk
--include scripts/make/release.mk
-else ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
+ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
 -include scripts/make/isd.mk
 -include scripts/make/release.mk
 endif
@@ -1474,14 +1477,14 @@ load-init:
 -include scripts/make/class-b.mk
 -include scripts/make/arm64-board.mk
 
-# QA / smoke / KTM targets are expensive to parse and are irrelevant to a
-# direct kernel compile. Keep the daily compile/inspection graph lean; any
-# mixed or unknown goal loads the full catalog conservatively.
-ifeq ($(strip $(MAKECMDGOALS)),)
--include scripts/make/testing.mk
-else ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
+# QA / smoke / KTM: parse only when a non-lean goal is named.
+ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
 -include scripts/make/testing.mk
 endif
+
+.PHONY: arch-guard
+arch-guard:
+	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
 # Host↔guest clipboard via 9p dennis (.ir0/clipboard → guest ir0-paste)
 .PHONY: clip-send clip-pull clip-status

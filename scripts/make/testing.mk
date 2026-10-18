@@ -6427,9 +6427,6 @@ runtime-mount-check: kernel-tests
 	 grep -q "ok .* - block_hda_read_contract" /tmp/ktest.log
 	@echo "✓ runtime-mount-check passed"
 
-arch-guard:
-	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
-
 repo-hygiene-guard:
 	@python3 $(KERNEL_ROOT)/scripts/repo_hygiene_guard.py
 

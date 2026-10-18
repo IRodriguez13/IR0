@@ -19,10 +19,11 @@ invokes them with stable target names. Focused smoke fragments live under
 `scripts/make/` (e.g. `boot-audio.mk` → `smoke-sb16-probe`, `class-b.mk` →
 `smoke-class-b-mitigated`) and are `-include`d from the root Makefile.
 
-Lean compile goals (`kernel-x64.bin`, `kernel-x64.iso`, `print-build-objects`,
-`build-graph-audit`, `help`, `headers_install`, `compile-commands`, `disasm`)
-do **not** parse `scripts/make/testing.mk` or ISD/release recipes. Any other
-or mixed goal still loads the full catalog.
+Lean goals (`help`, `all`, `ir0`, `clean`, `kernel-x64.bin`, ARM64 link
+targets, `arch-guard`, `defconfig`, `menuconfig`, inspect targets) do **not**
+parse `scripts/make/testing.mk` or ISD/release recipes. A bare `make` and
+tab-completion (empty `MAKECMDGOALS`) stay lean. Any other or mixed goal
+still loads the full catalog.
 
 ## Configuration flow
 
