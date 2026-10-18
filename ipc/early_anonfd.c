@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: early_anonfd.c
- * Description: Bounded staged anonymous-fd tables (not product pipe/epoll)
+ * Description: Staged pipe/eventfd/memfd/timerfd/epoll tables (ipc/)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

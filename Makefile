@@ -415,8 +415,8 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_vfs.o \
 	kernel/syscalls/early_rootfs.o \
 	fs/ramtab.o \
-	fs/early_anonfd.o \
-	fs/early_unix.o \
+	ipc/early_anonfd.o \
+	ipc/early_unix.o \
 	kernel/syscalls/early_process.o \
 	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \

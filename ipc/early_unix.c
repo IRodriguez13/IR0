@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: early_unix.c
- * Description: Bounded staged AF_UNIX / socketpair tables
+ * Description: Staged AF_UNIX / socketpair tables (ipc/)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

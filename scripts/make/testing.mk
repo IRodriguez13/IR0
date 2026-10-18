@@ -2376,8 +2376,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/syscalls/early_vfs.c includes/ir0/early_vfs.h \
 		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
 		fs/ramtab.c includes/ir0/ramtab.h includes/ir0/product_path.h \
-		fs/early_anonfd.c includes/ir0/early_anonfd.h \
-		fs/early_unix.c includes/ir0/early_unix.h \
+		ipc/early_anonfd.c includes/ir0/early_anonfd.h \
+		ipc/early_unix.c includes/ir0/early_unix.h \
 		fs/vfs_dispatch.c includes/ir0/vfs_dispatch.h \
 		kernel/lib/early_elf_stack.c includes/ir0/early_elf_stack.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
@@ -2485,13 +2485,13 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c fs/ramtab.c \
 		-o build/arm64-boot/ramtab.o
-	@echo "  CC      fs/early_anonfd.c (staged anon fd tables)"
+	@echo "  CC      ipc/early_anonfd.c (staged anon fd tables)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
-		-I$(KERNEL_ROOT)/includes/ir0 -c fs/early_anonfd.c \
+		-I$(KERNEL_ROOT)/includes/ir0 -c ipc/early_anonfd.c \
 		-o build/arm64-boot/early_anonfd.o
-	@echo "  CC      fs/early_unix.c (staged AF_UNIX tables)"
+	@echo "  CC      ipc/early_unix.c (staged AF_UNIX tables)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
-		-I$(KERNEL_ROOT)/includes/ir0 -c fs/early_unix.c \
+		-I$(KERNEL_ROOT)/includes/ir0 -c ipc/early_unix.c \
 		-o build/arm64-boot/early_unix.o
 	@echo "  CC      fs/vfs_dispatch.c (portable vfs_ops dispatch)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
@@ -3111,6 +3111,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_CWD_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-smoke.log
@@ -3152,6 +3153,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PRODUCT_CWD_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-dtb-smoke.log
