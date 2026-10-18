@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <ir0/syscall_table.h>
 
 /*
  * Linux getcwd(2) / chdir(2) / chroot(2) read and write the calling
@@ -28,3 +29,4 @@ struct ir0_cwd_ops
 };
 
 const struct ir0_cwd_ops *ir0_cwd_product(void);
+extern const struct syscall_context_provider ir0_product_cwd_provider;

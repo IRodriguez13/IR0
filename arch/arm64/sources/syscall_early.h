@@ -22,6 +22,7 @@ struct early_user_services;
 /* Replace the freestanding usercopy provider after product MM is available. */
 void arm64_syscall_usercopy_bind(const struct early_user_services *user);
 void arm64_syscall_bind_identity_provider(const struct syscall_context_provider *p);
+void arm64_syscall_bind_cwd_provider(const struct syscall_context_provider *p);
 
 /**
  * Dispatch one SVC. Returns value for x0.

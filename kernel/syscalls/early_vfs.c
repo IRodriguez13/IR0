@@ -203,7 +203,7 @@ static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 static const enum ir0_syscall_id g_vfs_syscalls[] = {
 	IR0_SYSCALL_READ, IR0_SYSCALL_CLOSE, IR0_SYSCALL_OPENAT,
 	IR0_SYSCALL_FACCESSAT, IR0_SYSCALL_NEWFSTATAT, IR0_SYSCALL_FSTAT,
-	IR0_SYSCALL_READLINKAT, IR0_SYSCALL_GETCWD, IR0_SYSCALL_CHDIR,
+	IR0_SYSCALL_READLINKAT, IR0_SYSCALL_CHDIR,
 	IR0_SYSCALL_GETDENTS64, IR0_SYSCALL_LSEEK, IR0_SYSCALL_FCHDIR,
 	IR0_SYSCALL_SYNC, IR0_SYSCALL_FSYNC, IR0_SYSCALL_FDATASYNC,
 	IR0_SYSCALL_STATFS, IR0_SYSCALL_FSTATFS, IR0_SYSCALL_FCHMOD,
@@ -232,5 +232,15 @@ static const enum ir0_syscall_id g_vfs_syscalls[] = {
 const struct syscall_context_provider early_vfs_provider = {
 	.ids = g_vfs_syscalls,
 	.count = sizeof(g_vfs_syscalls) / sizeof(g_vfs_syscalls[0]),
+	.handler = early_vfs_syscall,
+};
+
+static const enum ir0_syscall_id g_vfs_cwd_syscalls[] = {
+	IR0_SYSCALL_GETCWD,
+};
+
+const struct syscall_context_provider early_vfs_cwd_provider = {
+	.ids = g_vfs_cwd_syscalls,
+	.count = sizeof(g_vfs_cwd_syscalls) / sizeof(g_vfs_cwd_syscalls[0]),
 	.handler = early_vfs_syscall,
 };
