@@ -126,18 +126,13 @@ static int fork_child_mm_create(process_t *child, process_t *parent)
 
 static int fork_attach_pending_child(process_t *child, process_t *parent)
 {
-	uint64_t irq_flags;
-
 	if (!child || !parent)
 		return -EINVAL;
 
 	if (KTM_FAULT_HIT("process.fork_enqueue"))
 		return -ENOMEM;
 
-	irq_flags = process_irq_save();
-	child->next = process_list;
-	process_list = child;
-	process_irq_restore(irq_flags);
+	process_registry_insert(child);
 
 	process_set_sched_state(child, PROCESS_BLOCKED);
 	parent->fork_pending_child = child;
@@ -564,14 +559,7 @@ pid_t vfork_process(void *child_stack)
 		}
 	}
 
-	{
-		uint64_t irq_flags;
-
-		irq_flags = process_irq_save();
-		child->next = process_list;
-		process_list = child;
-		process_irq_restore(irq_flags);
-	}
+	process_registry_insert(child);
 
 	if (process_vfork_link(parent, child) != 0)
 	{

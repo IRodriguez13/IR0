@@ -19,8 +19,6 @@
 #include <ir0/syscall_frame.h>
 #include <ir0/mm.h>
 
-static pid_t next_pid = 2;
-
 static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
 				  arch_task_syscall_frame_t *out)
 {
@@ -107,9 +105,11 @@ uint64_t process_list_count(void)
 {
 	process_t *p;
 	uint64_t n = 0;
+	uint64_t irq_flags = process_registry_lock();
 
 	for (p = process_list; p; p = p->next)
 		n++;
+	process_registry_unlock(irq_flags);
 	return n;
 }
 
@@ -117,22 +117,22 @@ uint64_t process_list_count_user(void)
 {
 	process_t *p;
 	uint64_t n = 0;
+	uint64_t irq_flags = process_registry_lock();
 
 	for (p = process_list; p; p = p->next)
 	{
 		if (p->mode == USER_MODE && p->state != PROCESS_ZOMBIE)
 			n++;
 	}
+	process_registry_unlock(irq_flags);
 	return n;
 }
 
 void process_init(void)
 {
 	process_set_current(NULL);
-	process_list = NULL;
+	process_registry_reset();
 	debug_state_init();
-	/* First spawned process is PID 1. */
-	next_pid = 1;
 }
 
 void process_guest_install(process_t *guest)
@@ -140,8 +140,7 @@ void process_guest_install(process_t *guest)
 	if (!guest)
 		return;
 	process_set_current(guest);
-	if (!process_list)
-		process_list = guest;
+	process_registry_install_if_empty(guest);
 }
 
 void process_guest_rearm(process_t *guest)
@@ -153,41 +152,6 @@ void process_guest_rearm(process_t *guest)
 	process_set_current(guest);
 }
 
-
-pid_t process_get_next_pid(void)
-{
-	uint64_t irq_flags = process_irq_save();
-	pid_t pid = next_pid++;
-	process_irq_restore(irq_flags);
-	return pid;
-}
-
-/* Highest PID already handed out (0 if none). */
-pid_t process_last_assigned_pid(void)
-{
-	uint64_t irq_flags = process_irq_save();
-	pid_t last = (next_pid > 1) ? (pid_t)(next_pid - 1) : 0;
-
-	process_irq_restore(irq_flags);
-	return last;
-}
-
-/*
- * KTM boot scenarios (and similar early probes) may advance next_pid.
- * runit-init / BusyBox init require getpid()==1. Restore the allocator so the
- * first userspace spawn is PID 1 when that slot is free.
- */
-void process_prepare_pid1_for_init(void)
-{
-	uint64_t irq_flags;
-
-	if (process_find_by_pid(1))
-		return;
-
-	irq_flags = process_irq_save();
-	next_pid = 1;
-	process_irq_restore(irq_flags);
-}
 
 process_t *process_get_current(void)
 {
@@ -243,18 +207,18 @@ process_t *get_process_list(void)
 process_t *process_find_by_pid(pid_t pid)
 {
 	process_t *proc;
-	uint64_t irq_flags = process_irq_save();
+	uint64_t irq_flags = process_registry_lock();
 
 	for (proc = process_list; proc; proc = proc->next)
 	{
 		if (proc->task.pid == pid)
 		{
-			process_irq_restore(irq_flags);
+			process_registry_unlock(irq_flags);
 			return proc;
 		}
 	}
 
-	process_irq_restore(irq_flags);
+	process_registry_unlock(irq_flags);
 	return NULL;
 }
 

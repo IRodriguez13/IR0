@@ -2217,6 +2217,7 @@ ARM64_BOOT_LINK_OBJS = \
 	build/arm64-boot/sched_switch.o \
 	build/arm64-boot/rr_sched.o \
 	build/arm64-boot/process_registry.o \
+	build/arm64-boot/process_registry_lock.o \
 	build/arm64-boot/cpu_topology.o \
 	build/arm64-boot/percpu.o \
 	arch/arm64/sources/rr_early.o \
@@ -2269,6 +2270,7 @@ ARM64_ALL_EARLY_LINK_OBJS = \
 		build/arm64-boot/cpu_topology.o \
 		build/arm64-boot/percpu.o \
 		build/arm64-boot/runqueue_lock.o \
+		build/arm64-boot/process_registry_lock.o \
 		build/arm64-boot/arch_tls.o,$(ARM64_BOOT_LINK_OBJS))
 
 .PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin kernel-arm64-vbar.bin \
@@ -2396,6 +2398,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
 		kernel/lib/blockdev.c includes/ir0/blockdev.h \
 		sched/sched.c sched/runqueue_lock.c sched/sched_switch.c sched/rr_sched.c \
+		kernel/process/registry_lock.c \
 		kernel/cpu_topology.c kernel/percpu.c \
 		sched/switch/switch_arm64.c sched/task.h \
 		$(MUSL_AARCH64_HELLO) build/busybox_aarch64 arch/arm64/linker.ld
@@ -2515,6 +2518,12 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
 		-I$(KERNEL_ROOT) \
 		-c kernel/process/registry.c -o build/arm64-boot/process_registry.o
+	@echo "  CC      kernel/process/registry_lock.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
+		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT) \
+		-c kernel/process/registry_lock.c \
+		-o build/arm64-boot/process_registry_lock.o
 	@echo "  CC      kernel/cpu_topology.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
@@ -2877,6 +2886,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/lib/copy_user.c \
 	kernel/fd_resource.c \
 	sched/runqueue_lock.c \
+	kernel/process/registry_lock.c \
 	kernel/process/core.c \
 	kernel/process/create.c \
 	kernel/process/cred_groups.c \

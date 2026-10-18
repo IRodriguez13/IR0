@@ -15,9 +15,11 @@ int process_live_count(void)
 {
 	process_t *process;
 	int count = 0;
+	uint64_t irq_flags = process_registry_lock();
 
 	for (process = process_list; process; process = process->next)
 		count++;
+	process_registry_unlock(irq_flags);
 	return count;
 }
 

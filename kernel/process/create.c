@@ -249,13 +249,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		goto fail_proc;
 	}
 
-	/* Add to process list */
-	{
-		uint64_t irq_flags = process_irq_save();
-		proc->next = process_list;
-		process_list = proc;
-		process_irq_restore(irq_flags);
-	}
+	/* Publish only after the process owns all mandatory resources. */
+	process_registry_insert(proc);
 
 	/* Add to scheduler */
 	sched_add_process(proc);

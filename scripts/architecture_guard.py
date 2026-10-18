@@ -1745,6 +1745,25 @@ def check_process_lifecycle_no_isa_conditionals():
     return errors
 
 
+def check_process_registry_ownership():
+    """Only registry.c may mutate the global process-list head."""
+    errors = []
+    process_tree = ROOT / "kernel" / "process"
+    owner = process_tree / "registry.c"
+    mutation = re.compile(r"\bprocess_list\s*=")
+
+    for path in process_tree.glob("*.c"):
+        if path == owner:
+            continue
+        for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+            if mutation.search(line):
+                errors.append(
+                    f"[process-registry-owner] {path.relative_to(ROOT)}:{line_no}: "
+                    "use process_registry_insert/reset helpers"
+                )
+    return errors
+
+
 def check_common_c_has_no_isa_conditionals():
     """Select ISA implementations by objects/facades, never inside common C."""
     errors = []
@@ -2296,6 +2315,7 @@ def main():
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_scheduler_runqueue_lock_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
+    errors.extend(check_process_registry_ownership())
     errors.extend(check_common_c_has_no_isa_conditionals())
     errors.extend(check_common_headers_have_only_data_model_isa_conditionals())
     errors.extend(check_arch_sources_need_no_compiler_isa_selection())

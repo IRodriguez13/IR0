@@ -349,6 +349,7 @@ KERNEL_OBJS = \
     kernel/cmdline.o \
     kernel/rootfs_base.o \
     kernel/process/registry.o \
+	kernel/process/registry_lock.o \
     kernel/process/limits.o \
     kernel/process/core.o \
     kernel/process/sched_trace.o \

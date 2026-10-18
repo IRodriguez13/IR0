@@ -41,6 +41,21 @@ independent CPUs, not to claim that IRQ masking is an SMP lock.
    x86 runit/ash, ARM64 BusyBox/PID1 EL0, RPi compile, architecture guard and
    ISA-security guard.
 
+## Required lock order
+
+The future SMP backend must preserve this outer-to-inner order:
+
+1. scheduler runqueue ownership;
+2. global process/PID registry ownership;
+3. individual process lifetime state;
+4. process MM, then files/descriptor state;
+5. driver or filesystem-private registries.
+
+No callback into VFS, a driver, allocation, or userspace copying may occur
+while holding the runqueue or process-registry lock.  Current UP facades only
+mask local IRQs, but keeping this order now prevents the eventual spinlock
+backend from inheriting an accidental inversion.
+
 ## Entry criteria for an SMP implementation wave
 
 - Per-CPU current-task and CPU-local data accessors exist behind common APIs.
