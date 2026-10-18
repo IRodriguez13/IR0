@@ -18,6 +18,7 @@
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
+#include <ir0/percpu.h>
 #include <ir0/switch.h>
 #include <ir0/tls.h>
 
@@ -46,6 +47,7 @@ static void context_prepare_next(task_t *next)
 			(address_space_root_t)task_mm_root(next));
 #endif
 	set_current_kernel_stack(next_proc);
+	cpu_local_set_kernel_stack(next_proc->kstack_top);
 	set_tls(process_tls_get(next_proc));
 }
 

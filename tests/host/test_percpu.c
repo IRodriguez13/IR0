@@ -19,6 +19,11 @@ void test_percpu_up_contract(void)
 	ASSERT(cpu_local_irq_leave() == -EINVAL);
 	cpu_local_irq_enter();
 	ASSERT(cpu->irq_depth == 1);
+	cpu_local_irq_enter();
+	ASSERT(cpu->irq_depth == 2);
+	ASSERT(cpu->interrupts == 2);
+	ASSERT(cpu_local_irq_leave() == 0);
+	ASSERT(cpu->irq_depth == 1);
 	ASSERT(cpu_local_irq_leave() == 0);
 	ASSERT(cpu->irq_depth == 0);
 	cpu_local_note_context_switch();

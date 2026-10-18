@@ -30,6 +30,7 @@
 #include <ir0/arm64_board.h>
 #include <ir0/virtio_mmio.h>
 #include <ir0/boot_log.h>
+#include <ir0/percpu.h>
 #include <stdint.h>
 
 void __attribute__((weak)) arm64_all_objs_mark(void)
@@ -121,6 +122,14 @@ static void arm64_irq_oneshot_demo(void)
 	if (!arm64_timer_irq_seen())
 	{
 		ir0_boot_smoke("ARM64_TIMER_IRQ_FAIL");
+	}
+	else if (cpu_local()->irq_depth == 0 && cpu_local()->interrupts != 0)
+	{
+		ir0_boot_smoke("ARM64_IRQ_ACCOUNTING_OK");
+	}
+	else
+	{
+		ir0_boot_smoke("ARM64_IRQ_ACCOUNTING_FAIL");
 	}
 }
 

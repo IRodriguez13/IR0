@@ -3093,6 +3093,8 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_IRQ_ACCOUNTING_OK' /tmp/arm64-all-smoke.log
+	@! grep -q 'ARM64_IRQ_ACCOUNTING_FAIL' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
 	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log

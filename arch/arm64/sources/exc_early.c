@@ -21,6 +21,7 @@
 #include "rr_early.h"
 
 #include <ir0/process.h>
+#include <ir0/percpu.h>
 #include <ir0/sched.h>
 
 #include <stdint.h>
@@ -139,6 +140,10 @@ void arm64_exc_irq_el1(void)
 {
 	uint32_t iar = arm64_irq_backend_ack();
 	uint32_t irq = iar & 0x3ffU;
+	int schedule_tick = 0;
+	process_t *before = NULL;
+
+	cpu_local_irq_enter();
 
 	arch_timer_oneshot_disarm();
 
@@ -152,18 +157,25 @@ void arm64_exc_irq_el1(void)
 
 		if (arm64_rr_tick_sched_active())
 		{
-			process_t *before = current_process;
-
-			sched_schedule_next();
-			/* Re-arm only when the IRQ handler resumes (no context switch). */
-			if (current_process == before)
-				arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);
+			before = current_process;
+			schedule_tick = 1;
 		}
 	}
 
 	if (irq < 1020U)
 	{
 		arm64_irq_backend_eoi(iar);
+	}
+
+	(void)cpu_local_irq_leave();
+
+	/* Scheduling starts outside the accounted hard-IRQ section. */
+	if (schedule_tick)
+	{
+		sched_schedule_next();
+		/* Re-arm only when the IRQ handler resumes (no context switch). */
+		if (current_process == before)
+			arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);
 	}
 }
 

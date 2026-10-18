@@ -22,6 +22,7 @@
 #include <asm/debug_trap.h>
 #include <kernel/process.h>
 #include <ir0/cpu.h>
+#include <ir0/percpu.h>
 #include <ir0/clock.h>
 #include <ir0/arch_io.h>
 #include <config.h>
@@ -205,10 +206,12 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack);
  */
 void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
 {
+    cpu_local_irq_enter();
     ktm_stack_watch((uint64_t)(uintptr_t)&interrupt_number);
     ktm_irq_nest_enter();
     isr_handler64_dispatch(interrupt_number, stack);
     ktm_irq_nest_exit();
+    (void)cpu_local_irq_leave();
 }
 
 static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
