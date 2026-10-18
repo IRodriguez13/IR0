@@ -14,7 +14,8 @@
 IR0 exposes several filesystem backends with different routing and backing models.
 Block-backed **minix** and in-memory **tmpfs** register as `vfs_fstype` drivers.
 `fs/ramtab.c` is **not** a filesystem type: it is the staged name table used
-until a VFS mount owns the path (`Documentation/EARLY_FOLD.md`).
+until a VFS mount owns the path (`Documentation/EARLY_FOLD.md`). Staged
+pipe/unix tables live in `ipc/`.
 **virtio-9p hostshare** (`fstype "9p"`) mounts a QEMU `-virtfs` share for deep
 tree ops (mkdir/readdir/rename/write-at/**symlink**/readlink). **procfs**,
 **sysfs**, and **devfs** are primarily **syscall-side** namespaces (not full VFS

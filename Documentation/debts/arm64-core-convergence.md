@@ -1,6 +1,6 @@
 # ARM64 to common-core convergence manifest
 
-Status: active, 2026-10-16. This is a dependency manifest, not an instruction
+Status: active, 2026-10-18. This is a dependency manifest, not an instruction
 to move files mechanically. A source moves only when its owner is proven and
 the existing x86 and ARM runtime gates remain green.
 
@@ -70,12 +70,17 @@ pure-move pass.
   delete callers in `early_rootfs.c`.
 - `includes/ir0/product_path.h`; owner: optional bind from the staged adapter
   to product `vfs_*`; destination: keep as the transition seam.
-- `kernel/syscalls/early_rootfs.c`; owner: `/`, `/init`, `/dev/*`, pipes,
-  unix, CPIO; destination: shrink only — do not add ABI. `/tmp/*` already
+- `ipc/early_anonfd.c`, `ipc/early_unix.c`; owner: staged IPC object tables;
+  destination: product `ipc/` / pipe objects. Keep out of `fs/`.
+- `kernel/syscalls/early_rootfs.c`; owner: `/`, `/init`, `/dev/*`, CPIO,
+  syscall routing onto those tables; destination: shrink only. `/tmp/*`
   uses product VFS when bound (`ARM64_EARLY_PATH_FOLD_OK`).
+- `ir0_product_identity_provider` / `ir0_product_cwd_provider`; owner:
+  ARM ALL semantic IDs already on product `current_process`; destination:
+  more IDs without linking `syscall_dispatch.c`.
 - `kernel/syscalls/early_{dispatch,vfs,io,time,mm,process}.c`; owner: staged
-  EL0; destination: delete after `syscall_dispatch.c` + product modules own
-  the matching slice. See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+  EL0; destination: delete after product providers own the matching slice.
+  See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
 ### Early scaffolding to replace, not generalize
 

@@ -1,7 +1,8 @@
 # IR0 Filesystem Architecture
 
-> **Last verified:** 2026-10-16  
-> **Source of truth:** `fs/vfs.c`, `fs/tmpfs.c`, `fs/ramtab.c`, `fs/minix_fs.c`,
+> **Last verified:** 2026-10-18  
+> **Source of truth:** `fs/vfs.c`, `fs/tmpfs.c`, `fs/ramtab.c`, `ipc/early_*.c`,
+> `fs/minix_fs.c`,
 > `fs/simplefs.c`, `fs/fat16_*.c`, `fs/ext2_*.c`, `drivers/storage/ahci.c`,
 > `includes/ir0/blockdev.h`, `includes/ir0/product_path.h`,
 > [`EARLY_FOLD.md`](EARLY_FOLD.md), [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
@@ -13,7 +14,8 @@ provide concrete operations.
 
 1. `fs/vfs.c`: path resolution, mount dispatch, open/read/write/chmod/chown flow.
 2. `fs/ramtab.c`: bounded in-memory names used by the staged ARM adapter until a
-   VFS mount owns the path (not a `vfs_fstype`). See [`EARLY_FOLD.md`](EARLY_FOLD.md).
+   VFS mount owns the path (not a `vfs_fstype`). Staged pipe/unix tables live
+   in `ipc/`, not here. See [`EARLY_FOLD.md`](EARLY_FOLD.md).
 3. Backend filesystems:
    - persistent: `minix`, **FAT16** (`fs/fat16_disk.c`), **EXT2 read-only**
    - in-memory: `tmpfs`, virtual `fat0` (simplefs engine)

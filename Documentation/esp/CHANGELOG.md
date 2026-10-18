@@ -1,6 +1,6 @@
 # IR0 Kernel — Changelog (español)
 
-> **Última verificación:** 2026-10-16  
+> **Última verificación:** 2026-10-18  
 
 > **Fuente de verdad:** historial git, smokes del `Makefile`, [`../STABLE.md`](../STABLE.md), [`../KTM.md`](../KTM.md)
 
@@ -12,6 +12,11 @@ Tag **`v0.0.1-rc4`**. Tras este tag: **solo bugfixing y estabilización** hasta 
 Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ## [Sin publicar]
+
+### IPC staged + slice de dispatch (2026-10-18)
+
+- Tablas pipe/AF_UNIX en `ipc/`. Identity/getcwd de producto en ARM ALL.
+- `isd-aarch64-prep` sin inventar rootfs. Ver [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
 ### Fold del path staged (2026-10-16)
 

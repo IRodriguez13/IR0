@@ -1,6 +1,6 @@
 # IR0 — Post-0.0.1 backlog (honest remaining work)
 
-> **Last verified:** 2026-10-16
+> **Last verified:** 2026-10-18
 > **Source of truth:** `Documentation/ROADMAP.md`, [`EARLY_FOLD.md`](EARLY_FOLD.md),
 > code under `fs/`, `drivers/storage/`, `scripts/linux_abi/`, Makefile gates.
 > Prefer this file for **what is still open**; ROADMAP holds history and tier %.
@@ -42,6 +42,9 @@
 | ARM64 EL0 drop + SVC + PSCI off (F7.3) | `smoke-arm64-el0` / `make smoke-arm64` |
 | ARM ALL product `vfs.c` + tmpfs `/tmp` | `smoke-arm64-all` → `ARM64_PRODUCT_VFS_OK` |
 | Staged path table → `fs/ramtab.c` + product `/tmp` bind | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
+| Staged IPC tables → `ipc/` | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
+| ARM ALL product identity + getcwd providers | `ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK` |
+| ISD aarch64 kernel-only prep | `make isd-aarch64-prep` → `ISD_AARCH64_KERNEL_OK` + `ROOTFS_ABSENT` |
 | AF_UNIX + TCP loopback + `send`/`recv` | `smoke-stream-sock` (`STREAM_SENDRECV_OK`) |
 | AF_UNIX `socketpair` stream | `smoke-socketpair` (`SOCKETPAIR_OK` / `KTM_SOCKETPAIR_OK`) |
 | AF_UNIX abstract + sock poll | `smoke-unix-abstract` (`UNIX_ABSTRACT_OK` / `SOCK_POLL_OK`) |

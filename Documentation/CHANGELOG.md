@@ -1,6 +1,6 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-10-16
+> **Last verified:** 2026-10-18
 > **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
@@ -21,6 +21,17 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 - Stress: `setup/pid1/net_command_stress.c` → `NET_STRESS_PASS` / `NC_ONLY_PASS`.
 
 ## [Unreleased]
+
+### Staged IPC + product dispatcher slice (2026-10-18)
+
+- Staged pipe/eventfd/memfd/timerfd/epoll and AF_UNIX tables live under
+  `ipc/` (`ipc/early_anonfd.c`, `ipc/early_unix.c`).
+- ARM ALL clone child pid comes from `process_find_child_of()`.
+- Semantic providers: `ir0_product_identity_provider`,
+  `ir0_product_cwd_provider` (`ARM64_PRODUCT_IDENTITY_OK`,
+  `ARM64_PRODUCT_CWD_OK`). `syscall_dispatch.c` is not linked on ARM.
+- `make isd-aarch64-prep`: kernel + uapi; `ISD_AARCH64_ROOTFS_ABSENT`.
+- Docs: [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 ### Staged early path fold (2026-10-16)
 

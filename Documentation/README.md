@@ -26,7 +26,7 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `ai_driven_dev/`: tracked AI agent rules, skills, and install/sync workflow (see below).
 - `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
-- `EARLY_FOLD.md`: staged `early_*` adapter vs product VFS/`ramtab` (ARM ALL `/tmp`).
+- `EARLY_FOLD.md`: staged `early_*` adapter vs product VFS/`ramtab`/`ipc/` and ARM identity/cwd providers.
 - `debts/arm64-core-convergence.md`: ARM scaffolding to replace, not generalize.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.

@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-10-16 (ARM early fold: [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD split and doas persist remain — see [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md), [`ARCH_DEBT_SEP.md`](ARCH_DEBT_SEP.md), [`KTM.md`](KTM.md))  
+> **Last verified:** 2026-10-18 (ARM early fold + ipc/ tables + product identity/cwd; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs still absent — [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`; product userspace lives in the **`ISD`** sibling. README and old docs may lag; **grep the tree before claiming “done”.**
 
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
@@ -75,6 +75,8 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | Product process/MM on ARM ALL | Partial | `kernel-arm64-all.bin`; heap mm + `exit_mm` |
 | Product `vfs.c` + tmpfs `/tmp` | Done (ALL image) | `ARM64_PRODUCT_VFS_OK` |
 | Staged names → `fs/ramtab.c` | Done | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
+| Staged IPC tables → `ipc/` | Done | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
+| ARM ALL identity/cwd providers | Done | `ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK` |
 | `syscall_dispatch` on ARM SVC | Open | still `early_dispatch` |
 | ISD AArch64 rootfs | Open | no pack |
 

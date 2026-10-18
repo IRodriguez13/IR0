@@ -1,13 +1,13 @@
 # IR0 — Backlog post-0.0.1 (trabajo restante honesto)
 
-> **Última verificación:** 2026-10-16  
+> **Última verificación:** 2026-10-18  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
 > DESK-X: **LINUX-LIKE** (smoke-desk-session OK 2026-07-23); TinyX sigue lab.
 
 ## Closed
 
-Cerrado 2026-10-16: `fs/ramtab.c` + bind `/tmp` de producto en ARM ALL
-(`ARM64_EARLY_PATH_FOLD_OK`). Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+Cerrado 2026-10-18: tablas IPC en `ipc/`, providers identity/getcwd en ARM
+ALL, `isd-aarch64-prep` honesto. Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 Ver tablas en el archivo inglés, incluida la oleada **2026-07-25** (publicación
 de ISD, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).

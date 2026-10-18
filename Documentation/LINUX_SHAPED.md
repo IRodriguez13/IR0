@@ -33,7 +33,7 @@ Spanish mirror: [`esp/LINUX_SHAPED.md`](esp/LINUX_SHAPED.md).
 | `include/linux/*.h` dump | Facades stay small and IR0-owned |
 | One `.c` per syscall | Domain modules under `kernel/syscalls/` already exist |
 | Linux Kconfig / `drivers/` clone | IR0 Kconfig + `includes/ir0/` facades |
-| A second ABI dump in `early_*.c` | Fold into `fs/`, `kernel/process/`, product syscalls ([`EARLY_FOLD.md`](EARLY_FOLD.md)) |
+| A second ABI dump in `early_*.c` | Fold into `fs/`, `ipc/`, `kernel/process/`, product providers ([`EARLY_FOLD.md`](EARLY_FOLD.md)) |
 
 ## Architecture facades
 

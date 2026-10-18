@@ -29,7 +29,7 @@ Canónico en inglés: [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 | Layout `kernel/sched/` de Linux | `sched/` en raíz es el scheduler de IR0 |
 | Dump `include/linux/*.h` | Facades chicas y propias |
 | Un `.c` por syscall | Ya hay módulos de dominio |
-| Segundo dump ABI en `early_*.c` | Fold a `fs/` / process; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
+| Segundo dump ABI en `early_*.c` | Fold a `fs/`, `ipc/`, process; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
 
 ## Facades de arquitectura
 

@@ -1,6 +1,6 @@
 # IR0 Kernel — Roadmap consolidado de desarrollo
 
-> **Última verificación:** 2026-10-16 (fold ARM: [`EARLY_FOLD.md`](EARLY_FOLD.md); release **0.0.1** — ver [`STABLE.md`](STABLE.md))  
+> **Última verificación:** 2026-10-18 (fold ARM + `ipc/` + identity/cwd; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs ausente)  
 > **Fuente de verdad:** código en `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/` y gates CTR en `Makefile`.
 
 Documento consolidado: tiers, oleadas completadas, backlog repriorizado (storage antes que TCP/X11) e hitos de evolución.

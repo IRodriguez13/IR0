@@ -20,7 +20,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `MAKEFILE.md`
 - `TOOLING.md`
 - `FILESYSTEM.md`
-- `EARLY_FOLD.md` — adaptador `early_*` vs VFS/`ramtab` de producto
+- `EARLY_FOLD.md` — adaptador `early_*` vs VFS/`ramtab`/`ipc/` y providers ARM
 - `VIRTUAL_FILESYSTEMS.md`
 - `DRIVERS.md`
 - `INTERRUPTS.md`

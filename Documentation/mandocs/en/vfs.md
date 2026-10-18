@@ -26,7 +26,8 @@ This chapter documents both stages because user-visible `open("/dev/console")` n
 calls `vfs_open()` today, while `open("/tmp/foo")` does on the **x86 product** path
 and on **ARM ALL** after `product_path` is bound. The staged ARM adapter still
 serves `/` and `/init` itself; leftover names use `fs/ramtab.c` until a mount
-owns them. See `Documentation/EARLY_FOLD.md`.
+owns them. Staged pipe/unix tables are under `ipc/`. See
+`Documentation/EARLY_FOLD.md`.
 
 ## 2. Internal architecture
 
