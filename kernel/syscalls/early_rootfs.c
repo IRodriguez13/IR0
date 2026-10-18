@@ -22,6 +22,7 @@
 #include <ir0/vfs_file.h>
 #include <ir0/vfs_dispatch.h>
 #include <ir0/ramtab.h>
+#include <ir0/early_anonfd.h>
 #include <ir0/product_path.h>
 #include <ir0/stat.h>
 #include <ir0/fcntl.h>
@@ -78,18 +79,23 @@ struct rootfs_slot
 	struct vfs_file *vf;
 };
 
-#define PIPE_MAX 2
-#define PIPE_BUF 1024
-#define EFD_MAX 2
+#define PIPE_MAX EARLY_PIPE_MAX
+#define PIPE_BUF EARLY_PIPE_BUF
+#define EFD_MAX EARLY_EFD_MAX
 #define EFD_CLOEXEC 02000000
 #define EFD_NONBLOCK 00004000
 #define EFD_SEMAPHORE 1
 #define EFD_COUNT_MAX 0xfffffffffffffffeULL
-#define MEMFD_MAX 2
-#define MEMFD_CAP 4096
-#define TIMERFD_MAX 2
-#define EPOLL_MAX 2
-#define EPOLL_SLOTS 8
+#define MEMFD_MAX EARLY_MEMFD_MAX
+#define MEMFD_CAP EARLY_MEMFD_CAP
+#define TIMERFD_MAX EARLY_TIMERFD_MAX
+#define EPOLL_MAX EARLY_EPOLL_MAX
+#define EPOLL_SLOTS EARLY_EPOLL_SLOTS
+#define g_pipes g_early_pipes
+#define g_eventfd g_early_eventfd
+#define g_memfd g_early_memfd
+#define g_timerfd g_early_timerfd
+#define g_epoll g_early_epoll
 #define SOCKPAIR_MAX 4
 #define UNIX_MAX 4
 #define UNIX_ID_BASE 32
@@ -113,16 +119,6 @@ struct rootfs_slot
 #define ESTALE 116
 #define ENOPROTOOPT 92
 #define NS_PER_SEC 1000000000ULL
-
-struct early_pipe
-{
-	int used;
-	unsigned rpos;
-	unsigned len;
-	int readers;
-	int writers;
-	uint8_t buf[PIPE_BUF];
-};
 
 static struct rootfs_slot g_slots[ROOTFS_MAX_OPEN];
 static const uint8_t *g_blob;
@@ -154,48 +150,6 @@ static int g_exec_owner;
 static int g_abstract_ok;
 static char g_exec_args[EXEC_ARGC_MAX][EXEC_ARG_LEN];
 static char *g_exec_argv[EXEC_ARGC_MAX + 1];
-static struct early_pipe g_pipes[PIPE_MAX];
-static struct early_eventfd
-{
-	int used;
-	uint64_t count;
-	int nonblock;
-	int semaphore;
-} g_eventfd[EFD_MAX];
-
-static struct early_memfd
-{
-	int used;
-	int refs;
-	uint32_t len;
-	uint32_t mode;
-	uint8_t data[MEMFD_CAP];
-} g_memfd[MEMFD_MAX];
-
-static struct early_timerfd
-{
-	int used;
-	int refs;
-	int clock;
-	int armed;
-	uint64_t expire;
-	uint64_t interval;
-	uint64_t ticks;
-} g_timerfd[TIMERFD_MAX];
-
-static struct early_epoll
-{
-	int used;
-	int refs;
-	struct
-	{
-		int used;
-		int fd;
-		uint32_t events;
-		uint64_t data;
-	} slot[EPOLL_SLOTS];
-} g_epoll[EPOLL_MAX];
-
 static struct early_sockpair
 {
 	int used;
@@ -518,62 +472,9 @@ static struct early_pipe *pipe_of_fd(int fd)
 	return 0;
 }
 
-static unsigned pipe_consume(struct early_pipe *p, uint8_t *tmp, unsigned n)
-{
-	unsigned i;
-
-	if (!p || !tmp)
-		return 0;
-	if (n > p->len)
-		n = p->len;
-	for (i = 0; i < n; i++)
-	{
-		tmp[i] = p->buf[p->rpos];
-		p->rpos = (p->rpos + 1U) % PIPE_BUF;
-	}
-	p->len -= n;
-	return n;
-}
-
-static unsigned pipe_peek(struct early_pipe *p, uint8_t *tmp, unsigned n)
-{
-	unsigned i;
-	unsigned rpos;
-
-	if (!p || !tmp)
-		return 0;
-	if (n > p->len)
-		n = p->len;
-	rpos = p->rpos;
-	for (i = 0; i < n; i++)
-	{
-		tmp[i] = p->buf[rpos];
-		rpos = (rpos + 1U) % PIPE_BUF;
-	}
-	return n;
-}
-
-static unsigned pipe_deposit(struct early_pipe *p, const uint8_t *tmp,
-			     unsigned n)
-{
-	unsigned i;
-	unsigned wpos;
-	unsigned room;
-
-	if (!p || !tmp)
-		return 0;
-	room = PIPE_BUF - p->len;
-	if (n > room)
-		n = room;
-	wpos = (p->rpos + p->len) % PIPE_BUF;
-	for (i = 0; i < n; i++)
-	{
-		p->buf[wpos] = tmp[i];
-		wpos = (wpos + 1U) % PIPE_BUF;
-	}
-	p->len += n;
-	return n;
-}
+#define pipe_consume early_pipe_consume
+#define pipe_peek early_pipe_peek
+#define pipe_deposit early_pipe_deposit
 
 static int64_t splice_wait(int fd, unsigned flags)
 {
@@ -1064,19 +965,7 @@ void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		g_slots[i].pipe_id = -1;
 		g_slots[i].vf = 0;
 	}
-	for (i = 0; i < PIPE_MAX; i++)
-		g_pipes[i].used = 0;
-	for (i = 0; i < EFD_MAX; i++)
-		g_eventfd[i].used = 0;
-	for (i = 0; i < MEMFD_MAX; i++)
-	{
-		g_memfd[i].used = 0;
-		g_memfd[i].mode = IR0_EARLY_ROOTFS_MODE_REG;
-	}
-	for (i = 0; i < TIMERFD_MAX; i++)
-		g_timerfd[i].used = 0;
-	for (i = 0; i < EPOLL_MAX; i++)
-		g_epoll[i].used = 0;
+	early_anonfd_reset();
 	for (i = 0; i < SOCKPAIR_MAX; i++)
 		g_sock[i].used = 0;
 	for (i = 0; i < UNIX_MAX; i++)
