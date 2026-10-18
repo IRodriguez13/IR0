@@ -3087,6 +3087,7 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_REGISTRY_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_COMMON_IDLE_READY' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_PROCESS_PGD_OK' /tmp/arm64-all-smoke.log
 	@grep -q 'ARM64_PROCESS_MM_HEAP_OK' /tmp/arm64-all-smoke.log
@@ -3133,6 +3134,7 @@ smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PROCESS_REGISTRY_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_IDLE_READY' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-dtb-smoke.log
 	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-dtb-smoke.log

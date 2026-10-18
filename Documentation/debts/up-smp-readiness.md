@@ -9,8 +9,9 @@ independent CPUs, not to claim that IRQ masking is an SMP lock.
 - `current_process` remains the compatibility registry symbol, but all writers
   use `process_set_current()` and update the CPU-local current-task slot.  The
   scheduler also publishes the selected kernel stack through the same per-CPU
-  state.  SMP replacement: make the compatibility symbol read-only or remove
-  it after all readers use the CPU-local accessor.
+  state.  ARM ALL publishes idle/init/clone through `process_registry_insert()`
+  (`ARM64_PROCESS_REGISTRY_OK`).  SMP replacement: make the compatibility
+  symbol read-only or remove it after all readers use the CPU-local accessor.
 - `sched/runqueue_lock.c` owns serialization for RR, priority and context
   selection.  Its UP backend masks local IRQs and deliberately refuses an SMP
   build.  SMP replacement is localized here, followed by per-CPU runqueue

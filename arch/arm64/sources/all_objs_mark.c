@@ -563,13 +563,21 @@ void arm64_all_objs_mark(void)
 		sp &= ~(uintptr_t)0xf;
 		g_idle.task.arch.sp_el0 = sp;
 		g_idle.task.arch.x30 = (uint64_t)(uintptr_t)kernel_idle_loop;
-		g_idle.next = &g_guest;
-		g_guest.next = &g_child;
+		g_idle.next = NULL;
+		g_guest.next = NULL;
 		g_child.next = NULL;
-		process_list = &g_idle;
+		process_registry_reset();
+		process_registry_insert(&g_idle);
+		process_registry_insert(&g_guest);
+		process_registry_insert(&g_child);
 		process_exit_bind_services(&guest_ops);
 		process_idle_bind(&idle_ops);
 		process_guest_install(&g_guest);
+		if (process_find_by_pid(0) == &g_idle &&
+		    process_find_by_pid(1) == &g_guest &&
+		    process_find_by_pid(2) == &g_child &&
+		    process_get_current() == &g_guest)
+			ir0_boot_smoke("ARM64_PROCESS_REGISTRY_OK");
 		early_process_bind_common_exit(process_exit_guest);
 		early_process_bind_schedule_exit(process_exit);
 		early_process_bind_identity(ir0_syscall_identity_product());

@@ -362,6 +362,8 @@ typedef struct process
 
 /* Scheduler/boot ownership transition; keeps the per-CPU task slot coherent. */
 void process_set_current(process_t *process);
+void process_registry_reset(void);
+void process_registry_insert(process_t *process);
 
 #ifndef IR0_SCHED_PRIO_BANDS
 #define IR0_SCHED_PRIO_BANDS 8
