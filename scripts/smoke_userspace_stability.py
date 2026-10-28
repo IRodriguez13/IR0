@@ -58,7 +58,7 @@ def main() -> int:
         help="Enable doom if a known WAD path exists (default for make target)",
     )
     ap.add_argument("--no-tcc", action="store_true")
-    ap.add_argument("--doom-bin", type=Path, default=ROOT / "setup/pid1/fase55e_doom_interactive")
+    ap.add_argument("--doom-bin", type=Path, default=ROOT / "setup/pid1/ktm_doom_interactive")
     ap.add_argument("--wad", type=Path, default=None)
     args = ap.parse_args()
 

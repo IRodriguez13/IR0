@@ -135,7 +135,7 @@ Canónico vs raw:
 - Eco en blanco pero serial OK: comprobar termios ICANON/ECHO; verificar attach backend.
 - poll bloqueado: asegurar que `stdin_wake_check` corre desde bucle idle.
 
-Build/run: `make run-fase58e-ash-gui` (ver SETUP.md).
+Build/run: `make run-ash-gui` (ver SETUP.md).
 
 ## 10. Hoja de ruta futura
 

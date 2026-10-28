@@ -1,8 +1,8 @@
 # Interactive BusyBox ash on `/dev/console` (QEMU GTK)
 
 > **Last verified:** 2026-09-22
-> **Source of truth:** `setup/make/legacy-smokes.mk` (`smoke-ash-interactive`;
-> alias `smoke-fase58e-ash-interactive`), [`HARNESS_MAP.md`](HARNESS_MAP.md).
+> **Source of truth:** `scripts/make/testing.mk` (`run-ash-gui`,
+> `smoke-runit-ash-interactive`), [`HARNESS_MAP.md`](HARNESS_MAP.md).
 
 **Status:** Done (2026-05-25)  
 **Tier:** T1 (minimal POSIX userspace) — vertical slice  
@@ -127,14 +127,14 @@ canonical line editing. Re-enabling `FEATURE_EDITING` requires a working
 ```bash
 make kernel-x64.bin
 make build-runit build-busybox-min kernel-x64-userspace.iso
-make smoke-ash-interactive
+make smoke-runit-ash-interactive
 ```
 
 Optional SDL display:
 
 ```bash
 make run-ash-gui ASH_GUI_DISPLAY=sdl
-# alias: make run-fase58e-ash-gui
+# alias: make run-ash-gui
 ```
 
 **Important:** Click the QEMU window to give it keyboard focus before typing.
@@ -167,7 +167,7 @@ Manual pass criteria:
 Automated smoke (headless + QEMU monitor `sendkey`):
 
 ```bash
-make smoke-ash-interactive
+make smoke-runit-ash-interactive
 make check-ash-logs   # also greps /tmp/ash-gui-smoke.log when present
 ```
 

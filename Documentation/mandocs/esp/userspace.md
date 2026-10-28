@@ -64,7 +64,7 @@ entradas de directorio de MINIX v1), `appliance` no abre login interactivo
 | `make smoke-runit-boot` | Smoke headless de PID1 |
 | `make smoke-runit-login` | Autologin root (password vacío) |
 | `make smoke-runit-login-nonroot` | No-root: crypt(3) + uid 1001 + PS1 |
-| `make run-fase58e-ash-gui` | ash interactivo GTK |
+| `make run-ash-gui` | ash interactivo GTK |
 | `make kmang` | Catálogo interactivo de ISO kernel; `poweron` arranca Default — ver **`man IR0-kmang`** |
 | `make usmang` | Resumen ISD en host; detalle desktop solo con `PROFILE=desktop` |
 | `make smoke-x11-pointer PROFILE=desktop` | TinyX fullscreen + clientes desktop |

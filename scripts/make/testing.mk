@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # QA / smoke / KTM / test targets — included from the main Makefile.
-# Legacy phase smokes: IR0_LEGACY_SMOKE=1 (setup/make/legacy-smokes.mk)
 # Extended QA entry: scripts/ir0-qa.sh <target>
 
 # Userspace init smoke binaries (copied to /sbin/init via load-init)
@@ -191,7 +190,7 @@ MUSL_CC_AARCH64 ?= $(shell \
 	true)
 MUSL_AARCH64_HELLO = $(KERNEL_ROOT)/build/hello_aarch64
 BUSYBOX_SRC ?= $(IR0_USERSPACE_ROOT)/packages/busybox/src
-TCC_SRC ?= /tmp/tinycc-fase52
+TCC_SRC ?= /tmp/ir0-tinycc
 
 .PHONY: setup-musl-aarch64 musl-aarch64-hello smoke-musl-aarch64-toolchain
 setup-musl-aarch64:
@@ -4348,8 +4347,8 @@ smoke-runit-ash-interactive: load-userspace-runit kernel-x64-userspace-ash-smoke
 	@python3 scripts/smoke_runit_ash_interactive.py --log $(RUNIT_ASH_SMOKE_LOG) --timeout 90 --iso kernel-x64-userspace-ash-smoke.iso --disk disk.img
 	@echo "  LOG     $(RUNIT_ASH_SMOKE_LOG)"
 
-# T1 GUI — runit → BusyBox ash on /dev/console (tier1 stable; not legacy-only).
-.PHONY: run-ash-gui run-fase58e-ash-gui check-ash-logs check-fase58e-logs
+# T1 GUI — runit → BusyBox ash on /dev/console (tier1 stable).
+.PHONY: run-ash-gui check-ash-logs
 
 run-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	@case "$(ASH_GUI_DISPLAY)" in none|headless) \
@@ -4361,8 +4360,8 @@ run-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  HINT     then: ls / pwd / echo hi"
 	@echo "  HINT     Doom via virtio-9p: /mnt/host/doomgeneric /mnt/host/doom1.wad"
 	@rm -f $(ASH_GUI_LOG); \
-	DISK=$$(mktemp /tmp/ir0-fase58e-ash.XXXXXX.img); \
-	SHARE=$$(mktemp -d /tmp/ir0-fase58e-share.XXXXXX); \
+	DISK=$$(mktemp /tmp/ir0-ash-gui.XXXXXX.img); \
+	SHARE=$$(mktemp -d /tmp/ir0-ash-share.XXXXXX); \
 	cp -f disk.img $$DISK; \
 	VIRTFS=""; \
 	if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
@@ -4387,8 +4386,6 @@ run-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	rm -f $$DISK; \
 	rm -rf $$SHARE
 
-run-fase58e-ash-gui: run-ash-gui
-
 check-ash-logs:
 	@echo "=== ash GUI (runit + compact smoke tags) ==="
 	@if [ -f "$(ASH_GUI_LOG)" ]; then \
@@ -4399,10 +4396,8 @@ check-ash-logs:
 		grep -E 'RUNIT_STAGE1_OK|RUNIT_STAGE2_OK|RUNSV_CONSOLE_START|ASH_INTERACTIVE_READY|KBD_USER_POLL_OK|TTY_CANON_LINE_READY|SYS_READ_RETURN_OK|ASH_COMMAND_ECHO_OK|ASH_COMMAND_EXEC_OK' "$(ASH_GUI_SMOKE_LOG)" || echo "(no smoke tags)"; \
 	fi
 
-check-fase58e-logs: check-ash-logs
-
 build-tcc:
-	@./setup/tcc/build-fase52.sh
+	@./setup/tcc/build-tcc.sh
 
 build-ktm-tcc-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -4656,7 +4651,7 @@ kernel-x64-userspace-eager.iso: kernel-x64-userspace-eager.bin arch/x86-64/grub.
 	@rm -rf iso_userspace_eager
 	@echo "✓ ISO (userspace init, eager MM bisect) created: $@"
 
-# --- Validation (tooling entry points; historical smokes: IR0_LEGACY_SMOKE=1) ---
+# --- Validation (tooling entry points) ---
 .PHONY: ctr smoke-tier1 test-fast agent-fast diag-contract ktm ktm-check ktm-manifest ktm-classify ktm-classify-selftest ktm-report
 
 ctr:
@@ -6133,10 +6128,6 @@ ktm-classify:
 
 ktm-report:
 	@python3 scripts/ktm_report.py $(or $(LOG),/tmp/runit-ash-smoke.log)
-
-ifdef IR0_LEGACY_SMOKE
-include setup/make/legacy-smokes.mk
-endif
 
 # TEST SUITE — Compila todos los artefactos de test (estilo kernels de producción).
 # - Código kernel en host para Valgrind (make kernel-memsafe)

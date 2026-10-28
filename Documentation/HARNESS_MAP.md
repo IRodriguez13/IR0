@@ -1,13 +1,13 @@
 # Harness map (semantic tags and Make names)
 
-> **Last verified:** 2026-10-16
-> **Source of truth:** `setup/make/legacy-smokes.mk`, `scripts/make/testing.mk`,
-> `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`,
-> `scripts/architecture_guard.py` (forbids leftover `[FASE` in kernel C).
+> **Last verified:** 2026-10-28
+> **Source of truth:** `scripts/make/testing.mk`, `setup/pid1/ktm_*.c`,
+> `setup/doom/doomgeneric_ir0.c`, `scripts/architecture_guard.py`
+> (forbids leftover `[FASE` in kernel C).
 
 Canonical names for QEMU smokes, KTM userdev cases, and serial tags.
-Wave-era `FASE*` identifiers are **aliases or external contracts**, not
-production names.
+Wave-era `FASE*` identifiers survive only as **external contracts**; the kernel
+no longer prints them.
 
 Spanish mirror: [`esp/HARNESS_MAP.md`](esp/HARNESS_MAP.md).
 Historical class table: [`KTM_FASE_INVENTORY.md`](KTM_FASE_INVENTORY.md)
@@ -35,52 +35,24 @@ C prints semantic tokens. Grep/`--done`/`--require` must match these.
 Kernel production paths must not print `[FASE…`. Debug leftover is
 `IR0_DEBUG_PROC` (not `CONFIG_DEBUG_FASE50`).
 
-## Make targets (prefer these)
+## Make targets
 
-| Semantic target | Legacy alias still works |
-|-----------------|--------------------------|
-| `smoke-reclaim` | `smoke-userspace-fase41-reclaim` |
-| `smoke-fork-exit-storm` | `smoke-fase43-fork-exit-storm` |
-| `smoke-fork-wait-storm` | `smoke-fase43-fork-wait-storm` |
-| `smoke-exec-loop` | `smoke-fase43-exec-loop` |
-| `smoke-fork-wait-drain` | `smoke-fase44-fork-wait-drain` |
-| `smoke-exec-drain` | `smoke-fase44-exec-drain` |
-| `smoke-init-exit-drain` | `smoke-fase44-init-exit-drain` |
-| `smoke-fork-rollback` | `smoke-fase45-fork-rollback-storm` |
-| `smoke-fork-mem-touch` | `smoke-fase45-fork-mem-touch` |
-| `smoke-fork-no-recursion` | `smoke-fase46-fork-no-recursion` |
-| `smoke-fork-heap` | `smoke-fase46-fork-heap` |
-| `smoke-ipc` | `smoke-fase48-ipc` |
-| `smoke-pipe` | `smoke-fase49-pipe` |
-| `smoke-busybox` | `smoke-fase50-busybox` |
-| `smoke-exec-only` | `smoke-fase50-exec-only` |
-| `smoke-programs` | `smoke-fase50-programs` |
-| `smoke-shell` | `smoke-fase51-shell` |
-| `smoke-tcc` | `smoke-fase52-tcc` |
-| `smoke-fs-dev` | `smoke-fase53a-fs-dev` |
-| `smoke-posix-pseudofs` | `smoke-fase53b-posix-pseudofs` |
-| `smoke-fbdev` | `smoke-fase54a-fbdev` |
-| `smoke-input` | `smoke-fase54b-input` |
-| `smoke-input-det` | `smoke-fase54c-input-det` |
-| `smoke-doom-prereq` | `smoke-fase55a-doom-prereq` |
-| `smoke-doom-stub` | `smoke-fase55b-doom-stub` |
-| `smoke-doom-timing` | `smoke-fase55c-timing-input` |
-| `smoke-doomgeneric` | `smoke-fase55d-doomgeneric` |
-| `smoke-ash-interactive` | `smoke-fase58e-ash-interactive` |
-| `smoke-busybox-coreutils` | `smoke-fase58l-busybox-coreutils` |
-| `build-busybox-min` | `build-busybox-fase50-min` |
-| `build-busybox-plus` | `build-busybox-fase58-plus` |
-| `build-busybox-full` | `build-busybox-fase58-full` |
-| `build-tcc` | `build-tcc-fase52` |
-| `build-doom-interactive` | `build-fase55e-doom-interactive` |
-| `run-ash-gui` | `run-fase58e-ash-gui` |
-| `check-ash-logs` | `check-fase58e-logs` |
-| `smoke-arm64-all` | (none — ARM aggregate + product VFS bind) |
+The historical `smoke-fase*` / `build-*-fase*` alias catalog was removed on
+2026-10-28 together with `setup/make/legacy-smokes.mk`. Only the canonical
+names exist; there is no `IR0_LEGACY_SMOKE` gate.
 
-`build-init-fase*` aliases still map onto `build-ktm-*` helpers.
+| Area | Target |
+|------|--------|
+| Tier-1 boot + ash | `smoke-tier1`, `run-ash-gui`, `check-ash-logs` |
+| runit product boot | `smoke-runit-boot`, `smoke-runit-login`, `smoke-runit-power` |
+| BusyBox | `build-busybox-min`, `build-busybox-plus`, `build-busybox-full` |
+| TinyCC | `build-tcc` |
+| KTM in-guest smokes | `build-ktm-*` build helpers and their `smoke-*` runners |
+| COW data-plane | `smoke-mm-cow-lazy` |
+| ARM64 | `smoke-arm64-all` and the per-slice `smoke-arm64-*` targets |
 
-Enable historical recipes with `IR0_LEGACY_SMOKE=1` when the Makefile
-requires that flag.
+`build-init-*` targets compile the ring-3 init that `make load-init` injects;
+`make build-init-musl` produces the musl static build of `init_musl.c`.
 
 ## Generated binaries (IR0 tree)
 
@@ -100,7 +72,6 @@ requires that flag.
 | ISD `packages/busybox/fase58_*.config` | External package contract |
 | `setup/pid1/fase52_staging/` | TCC sysroot; high-risk path |
 | `runit_fase55d_*` in ISD stage-bin | Sibling service names |
-| `scripts/migrate_fase*.py` | Historical one-shot tools |
 
 ## Canonical KTM gates (prefer over legacy QEMU)
 

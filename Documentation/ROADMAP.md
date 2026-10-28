@@ -16,7 +16,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 | **One tier at a time** | Vertical slices with runnable proof (ktest, host test, QEMU smoke). |
 | **KTM = dev ally** | Kernel Test Module (`ktm/`, `CONFIG_KTM`) is for **developer** regression/debug only — not a userspace security subsystem (that comes later). Must stay low overhead. |
 | **Log hygiene** | After a feature is stable, trim debug serial storms (semantic tags, audit) or gate behind Kconfig (`IR0_DEBUG_PROC`). |
-| **Makefile = tooling** | Historical phase smokes live in `setup/make/legacy-smokes.mk` (`IR0_LEGACY_SMOKE=1`). Default CTR stays lean: `smoke-tier1`, `roadmap-phase*`, `ktm-*`. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
+| **Makefile = tooling** | `scripts/make/testing.mk` is the only QA catalog; the historical phase catalog is gone. CTR stays lean: `smoke-tier1`, `roadmap-phase*`, `ktm-*`. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
 | **Don't break userspace** | Syscall ABI stable unless versioned break documented in `Documentation/mandocs/`. Public UAPI is exported with `make headers_install`. |
 | **Kernel ≠ product** | If PID 1 can replace it without recompiling the kernel, it lives in `ISD` (BusyBox, runit, login, doas, `/etc`), not here. |
 | **Post-milestone sprints** | After each green gate / oleada: optimization + architecture sanitization **before** the next big feature. **Rule:** `Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md` (`make ai-dev-rules-install`). |
@@ -166,7 +166,7 @@ Deferred: **IR0-system** (release manifest pinning kernel + userspace + desktop 
 
 | Item | Status |
 |------|--------|
-| Legacy smokes extracted | `setup/make/legacy-smokes.mk` |
+| Legacy smoke catalog | Removed — `scripts/make/testing.mk` only |
 | Rust driver template | `rust_simple_driver.rs` |
 | **`kernel/syscalls.c` split (ARCH-1 / H1)** | **Done** — 86 L glue |
 | **FASE43–48 → `kernel/debug/fase_audit.c` (H2)** | **Done** |

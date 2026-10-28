@@ -1,14 +1,13 @@
 # KTM / tier smoke PID1 harness (not product rootfs)
 
 This directory holds **test init binaries and staging ELFs** for kernel QA (KTM,
-tier smokes, legacy phase targets). It is **not** the product PID1.
+tier smokes). It is **not** the product PID1.
 
 | Concern | Location |
 |---------|----------|
 | Product PID1 (runit) | `ISD/services/`, staged to `/sbin/init` on `disk.img` |
 | Kernel Kconfig | `setup/Kconfig`, `setup/defconfig` |
 | KTM smoke inits | `setup/pid1/*.c` → built by `scripts/make/testing.mk` |
-| Legacy phase smokes | `setup/make/legacy-smokes.mk` (`IR0_LEGACY_SMOKE=1`) |
 
 ## Expected contents
 

@@ -142,7 +142,7 @@ Lifecycle:
 - `[EXEC_AUDIT][VFS]` during ELF load when audit active.
 - wait4 on zombie: ensure parent reaps or init adopts orphans.
 - Segfault after exec: check PT_LOAD mapping and stack setup.
-- musl smoke: `make smoke-userspace-musl`.
+- musl init: `make build-init-musl`, then `make load-init`.
 
 ## 10. Future roadmap
 

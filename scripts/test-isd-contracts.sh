@@ -221,9 +221,6 @@ path_leaks=$(rg -n '\.\./IR0-userspace|IRodriguez13/IR0-userspace|IR0-userspace/
 	|| bad "H IR0-userspace path leaks"
 grep -q 'Naming coherence' Documentation/USERSPACE.md \
 	&& ok "H USERSPACE naming table" || bad "H USERSPACE naming doc"
-! grep -q 'include setup/make/legacy-smokes.mk' scripts/make/testing.mk \
-	|| [ "$(grep -c 'include setup/make/legacy-smokes.mk' scripts/make/testing.mk)" -eq 1 ] \
-	&& ok "H single legacy-smokes include" || bad "H duplicate legacy-smokes include"
 
 ENS=scripts/ensure-host-deps.sh
 TMP=$(mktemp -d)

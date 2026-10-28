@@ -47,7 +47,7 @@ runs. Product BusyBox enables `CONFIG_ASH_EXPAND_PRMT` and `CONFIG_ASH_TEST`
 (`[`/`test` builtins). Prompt (`PS1`): `# ` for root, `user@host:$PWD$ ` for
 others (`HOSTNAME` from `/etc/hostname`, default `unix`). Accounts: `root`
 (empty password), `ir0`/`ivan` (MD5 crypt). Lab disks may include
-`/etc/ir0-autologin` (see FASE58E / `run-fase58e-ash-gui`). Smokes:
+`/etc/ir0-autologin` (see FASE58E / `run-ash-gui`). Smokes:
 `smoke-runit-login` (root autologin), `smoke-runit-login-nonroot` (ivan + crypt).
 
 **Product profiles.** `/etc/ir0-profile` (written by
@@ -82,7 +82,7 @@ the console policy: `development` keeps root autologin and prints a warning,
 | `make smoke-runit-boot` | Headless PID1 boot smoke |
 | `make smoke-runit-login` | Root autologin (empty password) |
 | `make smoke-runit-login-nonroot` | Non-root: crypt(3) + uid 1001 + PS1 |
-| `make run-fase58e-ash-gui` | Interactive ash on GTK |
+| `make run-ash-gui` | Interactive ash on GTK |
 | `make smoke-tier1` | Bundle: runit boot + ash |
 | `make kmang` | Interactive kernel ISO catalog (`scripts/kernel_manager.py`); `poweron` boots Default — see **`man IR0-kmang`** |
 | `make usmang` | Host ISD summary; desktop detail only when `PROFILE=desktop` |

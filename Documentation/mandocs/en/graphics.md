@@ -85,7 +85,7 @@ ASCII:
 | Boot | Multiboot info, early page tables |
 | Input | events0 paired with fb0 in clients |
 | TTY | typewriter shares console_renderer |
-| Userspace | fase55 Doom smokes, musl static build |
+| Userspace | Doom smokes, musl static build |
 
 ## 7. Visual maps
 
@@ -108,7 +108,7 @@ ASCII:
 ## 9. Debugging tips
 
 - `[BOOT] vbe_fail_reason=`: 1=mb_null, 2=no_fb, 3=bad_dims, 4=map_fail.
-- Smoke: `build-init-fase54a-fbdev`, `run-fase55d-doomgeneric-gui`.
+- Smoke: `build-ktm-fbdev-smoke`; interactive Doom: `run-ash-gui REAL_WAD_PATH=...`.
 - Blank GUI: verify userspace ISO + VBE config, not debug-shell-only ISO.
 - mmap fails: check fd is fb0 (device_id 15) and VBE enabled.
 

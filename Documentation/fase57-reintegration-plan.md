@@ -1,5 +1,10 @@
 # FASE57 Experimental Reintegration Plan
 
+> **Historical record:** this plan was executed in the FASE57 wave. Target names
+> it quotes (`smoke-fase52-tcc`, `smoke-fase50-busybox`, …) were removed with
+> `setup/make/legacy-smokes.mk`; use [`HARNESS_MAP.md`](HARNESS_MAP.md) for the
+> current catalog.
+
 Controlled rollback from `fase57-experimental-broken-arch-prctl` onto stable
 (`8012866` → `fase57-stable-base`), re-applying experimental work in atomic
 vertical slices with smoke gates between each step.
@@ -77,8 +82,8 @@ keypress time.
 Full write-up: **`Documentation/fase58e-ash-interactive-console.md`**
 
 ```bash
-make run-fase58e-ash-gui
-make check-fase58e-logs   # /tmp/fase58e-ash-gui.log
+make run-ash-gui
+make check-ash-logs   # /tmp/fase58e-ash-gui.log
 ```
 
 ## Step D — **Deferred** (do not apply before E/F)

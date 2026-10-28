@@ -73,12 +73,11 @@ Rule: callers prefer `copy_*_user` or `copy_*_user_mm`. Do not assume
 ## Harness names
 
 Wave-era `FASE*` tokens are gone from C. Semantic serial tags and Make
-targets live in [`HARNESS_MAP.md`](HARNESS_MAP.md). Old `smoke-fase*` /
-`build-*-fase*` names remain **aliases**.
+targets live in [`HARNESS_MAP.md`](HARNESS_MAP.md). The old `smoke-fase*` /
+`build-*-fase*` alias catalog was removed with `setup/make/legacy-smokes.mk`.
 
 Kept on purpose (external or high-risk):
 
 - ISD env `FASE50_BUSYBOX_BIN` (scripts in the ISD sibling still read it)
 - ISD config paths `packages/busybox/fase58_*.config`
 - `setup/pid1/fase52_staging/` (TCC sysroot; do not `git mv`)
-- Historical migrate scripts under `scripts/migrate_fase*.py`

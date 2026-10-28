@@ -6,7 +6,7 @@
  * the harness matches init_musl.c linkage (sys/syscall.h breaks musl startup).
  *
  * Built: make build-musl-arch-prctl-smoke
- * Smoke: make smoke-musl-arch-prctl
+ * Run: none - build-only gate (MUSL_ARCH_PRCTL_OK string check).
  */
 
 #include <unistd.h>

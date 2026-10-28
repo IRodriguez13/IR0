@@ -5,7 +5,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-TCC_SRC="${TCC_SRC:-/tmp/tinycc-fase52}"
+TCC_SRC="${TCC_SRC:-/tmp/ir0-tinycc}"
 STAGE="${ROOT}/setup/pid1/fase52_staging"
 MUSL_CC="${MUSL_CC:-$(command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc)}"
 MUSL_LIB="${MUSL_LIB:-/usr/lib/x86_64-linux-musl}"
@@ -17,11 +17,11 @@ if [ -z "$MUSL_CC" ]; then
 fi
 
 if [ ! -d "$TCC_SRC" ]; then
-	echo "  FASE52  Cloning TinyCC into $TCC_SRC"
+	echo "  TCC  Cloning TinyCC into $TCC_SRC"
 	git clone --depth 1 https://github.com/TinyCC/tinycc.git "$TCC_SRC"
 fi
 
-echo "  FASE52  Building static tcc"
+echo "  TCC  Building static tcc"
 rm -f "${TCC_SRC}/config-extra.mak"
 (
 	cd "$TCC_SRC"
@@ -132,7 +132,7 @@ EOF
 	rm -rf "$ardir"
 }
 
-stage_musl_headers_fase52c() {
+stage_musl_headers_tcc() {
 	local h d
 
 	mkdir -p "${STAGE}/usr/include/bits"
@@ -160,8 +160,8 @@ stage_musl_link_runtime() {
 	install -m 0644 "${STAGE}/usr/lib/libc.a" "${STAGE}/lib/tcc/libc.a"
 }
 
-FASE52_STAGE_MODE="${FASE52_STAGE:-link}"
-echo "  FASE52  Staging rootfs payloads (${FASE52_STAGE_MODE}) -> $STAGE"
+TCC_STAGE_MODE="${TCC_STAGE:-link}"
+echo "  TCC  Staging rootfs payloads (${TCC_STAGE_MODE}) -> $STAGE"
 rm -rf "$STAGE"
 mkdir -p "${STAGE}/bin" "${STAGE}/lib/tcc"
 
@@ -175,19 +175,19 @@ for obj in runmain.o bt-exe.o bt-log.o; do
 	fi
 done
 
-case "$FASE52_STAGE_MODE" in
+case "$TCC_STAGE_MODE" in
 minimal)
 	;;
 link)
 	stage_musl_link_runtime
-	stage_musl_headers_fase52c
+	stage_musl_headers_tcc
 	;;
 full)
 	stage_musl_link_runtime
 	mkdir -p "${STAGE}/lib/tcc/include" "${STAGE}/usr/include"
 	cp -a "${TCC_SRC}/include/." "${STAGE}/lib/tcc/include/"
 	cp -f "${TCC_SRC}/tcclib.h" "${STAGE}/lib/tcc/include/" 2>/dev/null || true
-	stage_musl_headers_fase52c
+	stage_musl_headers_tcc
 	for obj in bcheck.o; do
 		if [ -f "${TCC_SRC}/${obj}" ]; then
 			install -m 0644 "${TCC_SRC}/${obj}" "${STAGE}/lib/tcc/${obj}"
@@ -197,7 +197,7 @@ full)
 	done
 	;;
 *)
-	echo "✗ unknown FASE52_STAGE=${FASE52_STAGE_MODE} (minimal|link|full)" >&2
+	echo "✗ unknown TCC_STAGE=${TCC_STAGE_MODE} (minimal|link|full)" >&2
 	exit 1
 	;;
 esac
@@ -220,7 +220,7 @@ if ! "${STAGE}/bin/tcc" -B"${ROOT_TEST}/lib/tcc" -nostdlib -run /tmp/f52_hello.c
 	echo "✗ staged tcc -run self-test failed" >&2
 	exit 1
 fi
-if [ "$FASE52_STAGE_MODE" = "link" ] || [ "$FASE52_STAGE_MODE" = "full" ]; then
+if [ "$TCC_STAGE_MODE" = "link" ] || [ "$TCC_STAGE_MODE" = "full" ]; then
 	if ! "${STAGE}/bin/tcc" -B"${ROOT_TEST}/lib/tcc" -static \
 		-L"${LIBDIR}" -o /tmp/f52_static /tmp/f52_hello.c; then
 		echo "✗ staged tcc -static self-test failed" >&2
@@ -295,4 +295,4 @@ fi
 
 STAGE_FILES="$(find "$STAGE" -type f | wc -l)"
 STAGE_BYTES="$(du -sb "$STAGE" | awk '{print $1}')"
-echo "✓ build-tcc-fase52 OK (staging=${STAGE} mode=${FASE52_STAGE_MODE} files=${STAGE_FILES} bytes=${STAGE_BYTES})"
+echo "✓ build-tcc OK (staging=${STAGE} mode=${TCC_STAGE_MODE} files=${STAGE_FILES} bytes=${STAGE_BYTES})"

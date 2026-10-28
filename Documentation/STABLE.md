@@ -188,7 +188,7 @@ Details: [`mandocs/en/mm.md`](mandocs/en/mm.md), [`MEMORY.md`](MEMORY.md).
 | Interactive ash on FB console | `includes/ir0/console.c`, TTY echo | [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.md) |
 | musl static toolchain | `MUSL_CC`, `kernel-x64-userspace.iso` | tier1 smokes |
 | Public UAPI export | `includes/uapi/`, `make headers_install DESTDIR=…` | `make -C ISD headers` |
-| TinyCC | `setup/tcc/build-fase52.sh` | `build-tcc-fase52` |
+| TinyCC | `setup/tcc/build-tcc.sh` | `build-tcc` |
 
 ### Networking (UDP + local streams)
 
@@ -250,8 +250,8 @@ Everything in this table was reached in at least one oleada and has a **runnable
 |------|------------|-----------------|-------------------|
 | **T0** | Kernel contracts (ktest / linux-abi; no in-tree dbgshell) | `make kernel-tests` | `make run-console` / `run-pid1` (runit/getty/ash) |
 | **T0** | pseudo-FS `/proc` `/dev` `/sys` | ktests, `runtime-mount-check` | explore from ash after tier1 boot |
-| **T1** | runit + services | `make smoke-runit-boot` | `make run-fase58e-ash-gui` |
-| **T1** | BusyBox ash interactive | `make smoke-tier1` | `make run-fase58e-ash-gui` |
+| **T1** | runit + services | `make smoke-runit-boot` | `make run-ash-gui` |
+| **T1** | BusyBox ash interactive | `make smoke-tier1` | `make run-ash-gui` |
 | **T1** | multi-UID / permissions | `make smoke-multiuser-perms` | `su` / `id` in ash (rootfs) |
 | **T1** | pthread / futex path | `make smoke-musl-pthread` | — |
 | **T1** | setuid exec | `make smoke-setuid-exec` | — |
@@ -283,7 +283,7 @@ make roadmap-phase2-driver-expansion   # + runtime-net + runtime-mount
 
 ```bash
 make defconfig
-make run-fase58e-ash-gui
+make run-ash-gui
 ```
 
 Builds its own temporary MINIX disk (runit + BusyBox). **No** `IR0_LEGACY_SMOKE=1` — target lives in main `Makefile`.
@@ -299,7 +299,7 @@ Details: [`fase58e-ash-interactive-console.md`](fase58e-ash-interactive-console.
 | Target | What you get |
 |--------|----------------|
 | `make run` | Product path: runit → getty/login → BusyBox ash |
-| `make run-fase58e-ash-gui` | runit → BusyBox ash (recommended) |
+| `make run-ash-gui` | runit → BusyBox ash (recommended) |
 | `make run-fase58c-fbdev-gui` | Framebuffer probe on `/dev/fb0` |
 | `make run-fase55d-doomgeneric-gui` | doomgeneric stub (needs IWAD + inject — see SETUP) |
 

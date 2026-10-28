@@ -1329,7 +1329,7 @@ def main() -> int:
     ap.add_argument(
         "--doom-bin",
         type=Path,
-        default=ROOT / "setup/pid1/fase55e_doom_interactive",
+        default=ROOT / "setup/pid1/ktm_doom_interactive",
     )
     ap.add_argument(
         "--wad",

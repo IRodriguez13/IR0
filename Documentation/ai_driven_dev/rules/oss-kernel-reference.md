@@ -64,7 +64,7 @@ Do not `sched_add_process()` until PT_LOAD, stack, and arch entry state are read
    List each hop and verify it is wired; one missing link (e.g. no CR3 load, empty FD table, wrong STAR for `sysret`) fails the whole path silently.
 3. Identify subsystem (mm, exec, sched, syscall, driver, fs).
 4. Find the analogous upstream function and compare **ordering and invariants**, not line-by-line code.
-5. Fix IR0 minimally; run `make smoke-userspace-init` / ktests as appropriate.
+5. Fix IR0 minimally; run `make smoke-tier1` / ktests as appropriate.
 
 ## Local Linux tree and real patches
 

@@ -8,7 +8,7 @@
 #
 # Usage: inject_ken_games_minix.sh [disk.img]
 # Env:
-#   IR0_KEN_DOOM_BIN   default: setup/pid1/fase55e_doom_interactive
+#   IR0_KEN_DOOM_BIN   default: setup/pid1/ktm_doom_interactive
 #   REAL_WAD_PATH      IWAD source (copied as doom1.wad)
 #   IR0_INSTALL_KEN_GAMES=0  skip
 
@@ -17,7 +17,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DISK="${1:-${ROOT}/disk.img}"
 INJECT="${ROOT}/scripts/inject_init_minix.py"
-BIN="${IR0_KEN_DOOM_BIN:-${ROOT}/setup/pid1/fase55e_doom_interactive}"
+BIN="${IR0_KEN_DOOM_BIN:-${ROOT}/setup/pid1/ktm_doom_interactive}"
 WAD="${REAL_WAD_PATH:-}"
 
 if [ "${IR0_INSTALL_KEN_GAMES:-1}" = "0" ]; then

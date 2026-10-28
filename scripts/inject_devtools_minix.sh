@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 # Inject in-guest toolchain onto a MINIX disk.img:
-#   TinyCC staging (fase52) + GNU make + sample hello/Makefile
+#   TinyCC staging + GNU make + sample hello/Makefile
 #   + /bin/cc → tcc hardlink
 #
 # Usage: inject_devtools_minix.sh DISK_IMAGE
-# Prereq: make build-tcc-fase52 && make build-gmake-static
+# Prereq: make build-tcc && make build-gmake-static
 
 set -euo pipefail
 
@@ -20,7 +20,7 @@ if [ ! -f "${DISK}" ]; then
 	exit 1
 fi
 if [ ! -x "${TCC_STAGE}/bin/tcc" ]; then
-	echo "✗ missing ${TCC_STAGE}/bin/tcc — run: make build-tcc-fase52" >&2
+	echo "✗ missing ${TCC_STAGE}/bin/tcc — run: make build-tcc" >&2
 	exit 1
 fi
 for req in \
@@ -31,7 +31,7 @@ for req in \
 	"${TCC_STAGE}/lib/tcc/crtn.o"
 do
 	if [ ! -f "${req}" ]; then
-		echo "✗ missing ${req} — run: make build-tcc-fase52 (FASE52_STAGE=link|full)" >&2
+		echo "✗ missing ${req} — run: make build-tcc (TCC_STAGE=link|full)" >&2
 		exit 1
 	fi
 done

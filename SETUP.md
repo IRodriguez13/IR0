@@ -357,7 +357,7 @@ qemu-system-x86_64 \
 ```
 
 runit stage 2 brings up console services; product path uses BusyBox `ash` on
-`/dev/console` (GUI helper: `make run-fase58e-ash-gui`). Type in the QEMU window
+`/dev/console` (GUI helper: `make run-ash-gui`). Type in the QEMU window
 (keyboard focus required).
 
 Extended applet set (optional):
@@ -378,7 +378,7 @@ Provide a legal IWAD (e.g. `DOOM1.WAD`). Set path when injecting:
 
 ```bash
 export REAL_WAD_PATH=/path/to/DOOM1.WAD
-python3 scripts/inject_init_minix.py "$DISK" setup/pid1/fase55e_doom_interactive bin/doomgeneric
+python3 scripts/inject_init_minix.py "$DISK" setup/pid1/ktm_doom_interactive bin/doomgeneric
 python3 scripts/inject_init_minix.py "$DISK" "$REAL_WAD_PATH" usr/share/doom/doom1.wad
 ```
 
@@ -393,10 +393,10 @@ Requires `/dev/fb0` and input devices as implemented in devfs. Without a WAD, sk
 ## TinyCC (optional)
 
 ```bash
-make build-tcc-fase52
+make build-tcc
 ```
 
-Clones/builds TinyCC via `setup/tcc/build-fase52.sh` (default output under `/tmp/tinycc-fase52`). Used for in-guest compilation experiments; not required for basic shell bring-up.
+Clones/builds TinyCC via `setup/tcc/build-tcc.sh` (default output under `/tmp/ir0-tinycc`). Used for in-guest compilation experiments; not required for basic shell bring-up.
 
 ## Essential Make Targets
 
@@ -416,7 +416,7 @@ Clones/builds TinyCC via `setup/tcc/build-fase52.sh` (default output under `/tmp
 | `build-busybox-fase50-min` | Build static BusyBox |
 | `build-busybox-fase58-full` | BusyBox with extended applets |
 | `build-fase55e-doom-interactive` | Build doomgeneric binary |
-| `build-tcc-fase52` | Build TinyCC (optional) |
+| `build-tcc` | Build TinyCC (optional) |
 | `clean` | Remove build artifacts |
 
 Configuration menu (optional):

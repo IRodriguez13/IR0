@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# QA / smoke / test / CI gates — targets live in scripts/make/testing.mk (included by default).
+# QA / smoke / test / CI gates — targets live in scripts/make/testing.mk (loaded for QA goals).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,7 +12,6 @@ IR0 QA / smoke / CI — scripts/ir0-qa.sh
 
 Usage:
   scripts/ir0-qa.sh <make-target> [make-args...]
-  IR0_LEGACY_SMOKE=1 scripts/ir0-qa.sh smoke-fase50-busybox
 
 Interactive testing:
   make test                  TUI suite picker (scripts/test_catalog.yaml)
@@ -26,10 +25,6 @@ Common gates:
   make smoke-tier1           runit boot + ash interactive
   make release-0.0.1         release gate
   make health                analyze + memsafe + kernel-tests
-
-Extended GUI / legacy (IR0_LEGACY_SMOKE=1):
-  run-fase58e-ash-gui          runit + BusyBox ash (GTK)
-  run-fase55d-doomgeneric-gui  Doom interactive (set REAL_WAD_PATH=...)
 
 List all make targets:
   scripts/ir0-qa.sh targets

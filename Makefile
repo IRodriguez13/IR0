@@ -139,6 +139,7 @@ IR0_LEAN_GOALS := all ir0 clean help \
 	print-build-objects build-graph-audit \
 	headers_install compile-commands disasm \
 	menuconfig menuconfig-en defconfig arch-guard
+
 IR0_NONLEAN_GOALS := $(filter-out $(IR0_LEAN_GOALS),$(MAKECMDGOALS))
 -include scripts/make/ir0_public.mk
 ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
@@ -1656,8 +1657,7 @@ help:
 	@echo "  make kernel-tests     In-kernel ktest suite (QEMU)"
 	@echo "  make smoke-tier1      Tier-1: runit boot + ash interactive"
 	@echo "  make release-0.0.1    Release 0.0.1 gate"
-	@echo "  scripts/ir0-qa.sh help   Extended QA / GUI runs / legacy targets"
-	@echo "  IR0_LEGACY_SMOKE=1    Historical smoke-fase* (setup/make/legacy-smokes.mk)"
+	@echo "  scripts/ir0-qa.sh help   Extended QA / GUI runs"
 	@echo ""
 	@echo "Debug (off by default; rebuild kernel after change):"
 	@echo "  IR0_DEBUG_PMM=1       PMM FREE/RECLAIM traces"
@@ -1844,7 +1844,7 @@ test-drivers-clean:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-debug run-fullscreen run-tap run-console run-gdb debug create-disk delete-disk disk-reset load-init remove-init help \
+.PHONY: all clean run run-debug run-fullscreen run-tap run-console run-gdb debug create-disk delete-disk disk-reset load-init help \
         unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
         ir0 windows windows-clean deptest check-env pre-submit menuconfig menuconfig-en menuconfig-es defconfig sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
         en-ext-drv dis-ext-drv \
@@ -1855,8 +1855,8 @@ test-drivers-clean:
         build-linux-abi-stat-probe \
         linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
         linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
-        runtime-net-check runtime-mount-check smoke-qemu smoke-userspace-init smoke-userspace-musl smoke-musl-arch-prctl smoke-userspace-shell smoke-userspace-segv smoke-real-hw smoke-all smoke-regression-light smoke-regression-light-fast smoke-regression-full \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-ktm-posix-pseudofs-smoke build-init-heart-smoke build-ktm-fbdev-smoke build-ktm-input-smoke build-ktm-input-det-smoke build-ktm-doom-prereq-smoke build-ktm-doom-stub build-ktm-doom-timing-stub build-ktm-doomgeneric-smoke build-ktm-doom-interactive build-ktm-boot-halt-bin build-ktm-fbdev-gui-bin run-fase58e-ash-gui check-fase58e-logs build-ktm-busybox-manifest-smoke smoke-busybox-manifest kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy load-init-with-smoke load-init-with-musl load-userspace-rootfs \
+        runtime-net-check runtime-mount-check smoke-qemu smoke-real-hw smoke-all \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-ktm-posix-pseudofs-smoke build-init-heart-smoke build-ktm-fbdev-smoke build-ktm-input-smoke build-ktm-input-det-smoke build-ktm-doom-prereq-smoke build-ktm-doom-stub build-ktm-doom-timing-stub build-ktm-doomgeneric-smoke build-ktm-doom-interactive build-ktm-boot-halt-bin build-ktm-fbdev-gui-bin build-ktm-busybox-manifest-smoke smoke-busybox-manifest kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \

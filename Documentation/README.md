@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-10-16
 > **Source of truth:** files listed in the map below; code under `includes/ir0/`,
-> `kernel/`, `fs/`, `setup/make/legacy-smokes.mk`.
+> `kernel/`, `fs/`, `scripts/make/`.
 
 This directory describes the current architecture and operational state of IR0.
 The goal is to document implemented behavior first, then known gaps.

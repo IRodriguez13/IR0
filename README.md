@@ -146,7 +146,7 @@ demand paging and fork COW paths exercised in-tree, VFS (MINIX root, tmpfs,
 path-routed `/proc`/`/sys`), console/TTY, musl/BusyBox bring-up. Networking
 includes UDP/ICMP, **AF_UNIX** streams, and lab-grade TCP — not a full Internet
 stack or production NIC story. Optional demos: BusyBox `ash` via runit
-(`make load-userspace-runit` / `run-fase58e-ash-gui`), doomgeneric on `/dev/fb0`.
+(`make load-userspace-runit` / `run-ash-gui`), doomgeneric on `/dev/fb0`.
 
 **ARM64:** early bring-up and board scaffolding (QEMU `virt`, RPi4 UART lab).
 Not a flashable appliance and not feature-parity with x86.

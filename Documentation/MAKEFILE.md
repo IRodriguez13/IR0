@@ -52,7 +52,7 @@ default subsystems to **enabled** (bring-up friendly).
 | `make kernel-x64.bin` | Linked ELF only |
 | `make kernel-x64.iso` | Bootable ISO |
 | `make kernel-x64-userspace.iso` | Userspace-oriented ISO (init/musl smokes) |
-| `make clean` | Remove objects, ISOs, generated smoke logs |
+| `make clean` | Remove build output, objects, generated headers (disk images preserved) |
 
 ### Run (QEMU)
 
@@ -61,7 +61,7 @@ default subsystems to **enabled** (bring-up friendly).
 | `make run` | Product GUI: userspace ISO + runit/getty/ash |
 | `make run-console` | Serial-focused |
 | `make run-gdb` | Wait for GDB on localhost:1234 |
-| `make run-fase58e-ash-gui` | Interactive ash; Doom/WAD via virtio-9p when `REAL_WAD_PATH` set |
+| `make run-ash-gui` | Interactive ash; Doom/WAD via virtio-9p when `REAL_WAD_PATH` set |
 | `make run-bootlog` | Boot log → `build/hostshare/ir0-boot.log` (reuses `disk.img`) |
 | `make smoke-runit-boot` | runit PID1 boot smoke |
 | `make load-userspace-runit` | Inject runit + BusyBox on MINIX disk (cached stamp) |
@@ -71,7 +71,7 @@ root (`disk.img`) today — root-from-virtio is not implemented. Extra payloads
 (Doom, WAD, boot log export) use virtio-9p when available; `load-userspace-runit`
 skips reinject when the stamp is newer than inputs.
 
-Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-rootfs`.
+Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-runit`.
 
 ### Validation and gates
 
@@ -125,9 +125,9 @@ Adding a new subsystem requires **four wiring points** (CTR rule):
 3. `Makefile` object list / `CFLAGS`
 4. Optional menuconfig preset in `scripts/kconfig/menuconfig.py`
 
-## Smoke and fase targets
+## Smoke targets
 
-Historical bring-up targets use `faseNN` / `smoke-faseNN` prefixes. They share:
+Smoke targets share one pipeline:
 
 - Init binary build (`build-init-*`, `build-busybox-*`)
 - MINIX rootfs injection (`scripts/inject_init_minix.py`)

@@ -129,7 +129,7 @@ Ciclo de vida:
 - `[EXEC_AUDIT][VFS]` durante carga ELF cuando auditoría activa.
 - wait4 sobre zombie: asegurar que parent hace reap o init adopta huérfanos.
 - Segfault tras exec: comprobar mapeo PT_LOAD y setup de pila.
-- Smoke musl: `make smoke-userspace-musl`.
+- Init musl: `make build-init-musl`, luego `make load-init`.
 
 ## 10. Hoja de ruta futura
 

@@ -1,8 +1,8 @@
 # BusyBox ash interactivo en `/dev/console` (QEMU GTK)
 
 > **Última verificación:** 2026-09-22
-> **Fuente de verdad:** `smoke-ash-interactive` (alias `smoke-fase58e-ash-interactive`),
-> [`HARNESS_MAP.md`](HARNESS_MAP.md).
+> **Fuente de verdad:** `scripts/make/testing.mk` (`run-ash-gui`,
+> `smoke-runit-ash-interactive`), [`HARNESS_MAP.md`](HARNESS_MAP.md).
 
 **Estado:** Hecho (2026-05-25)  
 **Tier:** T1 (userspace POSIX mínimo) — vertical slice  
@@ -83,12 +83,12 @@ El kernel hace eco y línea canónica; no hace falta lineedit de BusyBox en esta
 
 ```bash
 make build-runit build-busybox-fase50-min kernel-x64-userspace.iso
-make run-fase58e-ash-gui
+make run-ash-gui
 ```
 
 **Clic en la ventana QEMU** antes de teclear.
 
-Log serial: `/tmp/fase58e-ash-gui.log` — `make check-fase58e-logs`
+Log serial: `/tmp/ash-gui.log` — `make check-ash-logs`
 
 Reconstruir la **ISO** tras cambios en el kernel.
 
@@ -102,11 +102,11 @@ Reconstruir la **ISO** tras cambios en el kernel.
 Smoke automático (headless):
 
 ```bash
-make smoke-fase58e-ash-interactive
-make check-fase58e-logs
+make smoke-runit-ash-interactive
+make check-ash-logs
 ```
 
-Si falla la inyección por monitor, usar GUI manual: `make run-fase58e-ash-gui`
+Si falla la inyección por monitor, usar GUI manual: `make run-ash-gui`
 
 Tags compactos (sin spam por carácter): `ASH_INTERACTIVE_READY`, `KBD_USER_POLL_OK`,
 `TTY_CANON_LINE_READY`, `SYS_READ_RETURN_OK`, `ASH_COMMAND_ECHO_OK`,

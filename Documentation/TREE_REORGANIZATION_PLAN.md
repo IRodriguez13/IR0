@@ -6,6 +6,16 @@
 
 ---
 
+## Status update (2026-10-28) — legacy smoke catalog removed
+
+- **`setup/make/legacy-smokes.mk` deleted** — the historical `smoke-fase*`
+  catalog and its `IR0_LEGACY_SMOKE` gate are gone. `scripts/make/testing.mk`
+  is the only QA catalog; `run-ash-gui` / `check-ash-logs` cover the T1 GUI
+  path. Sections below that describe `legacy.mk`, the `IR0_LEGACY_SMOKE`
+  include, or `smoke-fase*` aliases are **obsolete**.
+- **`make clean` moved to `scripts/make/clean.mk`** — it is a lean goal and no
+  longer needs the QA catalog to be parsed.
+
 ## Status update (2026-09-21) — naming + bridge coherence
 
 - **ISD canonical name** — docs, scripts, and `userspace/README.md` use **ISD**

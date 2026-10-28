@@ -5,7 +5,7 @@
  * Root is already mounted by the kernel (vfs_init_root). No mount / here.
  *
  * Built by: make build-init-minimal
- * Loaded by: make load-init (or load-init-with-musl after swapping binary)
+ * Loaded by: make load-init (musl variant: make build-init-musl)
  * Boot with: CONFIG_KERNEL_DEBUG_SHELL=n
  *
  * Oleada 2: requires /bin/sh on disk.img for interactive smoke.

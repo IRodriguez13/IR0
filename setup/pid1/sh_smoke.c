@@ -3,7 +3,7 @@
  * Minimal /bin/sh stub for oleada 2 smoke — musl static, ring-3 execve target.
  *
  * Built by: make build-sh-smoke
- * Injected as: /bin/sh on disk.img (see load-userspace-rootfs)
+ * Injected as: /bin/sh on disk.img (see load-userspace-runit)
  */
 
 #include <unistd.h>

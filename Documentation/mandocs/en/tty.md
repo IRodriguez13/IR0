@@ -155,7 +155,7 @@ Canonical vs raw:
   getty after `CONSOLE_SESSION_REPROMPT` does not reattach stdin to the
   keyboard ring. Distinct from the i8042 duplication race (fixed).
 
-Build/run: `make run-fase58e-ash-gui` (see SETUP.md).
+Build/run: `make run-ash-gui` (see SETUP.md).
 
 ## 10. Future roadmap
 

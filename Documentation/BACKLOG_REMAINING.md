@@ -103,7 +103,7 @@
 
 | Item | Proof |
 |------|-------|
-| getty/login + welcome | `make smoke-runit-login` (`GETTY_READY` / `LOGIN_OK`); GUI: `run-fase58e-ash-gui` |
+| getty/login + welcome | `make smoke-runit-login` (`GETTY_READY` / `LOGIN_OK`); GUI: `run-ash-gui` |
 | First-boot account defaults | `ir0-firstboot` → `FIRSTBOOT_OK` / `FIRSTBOOT_SKIP`; rootfs `ISD/rootfs/etc/` |
 | `fsck.ir0` stage1 | `FSCK_OK` / `FSCK_SKIPPED` / `FSCK_FAIL` (honest) |
 | Driver summary NOTICE | `DRIVER_SUMMARY_OK` + structured `DRIVER_SUMMARY` event |
