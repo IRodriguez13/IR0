@@ -299,28 +299,6 @@ smoke-exec-storm: build-ktm-exec-storm-smoke build-ktm-true-helper kernel-x64-us
 		exit 1; \
 	fi
 
-smoke-fork-exit-storm: build-ktm-fork-exit-storm-smoke kernel-x64-userspace.iso
-	@echo "  WARN    DEPRECATED: prefer 'make ktm-userdev-fork-storm-run' (see Documentation/HARNESS_MAP.md)"
-	@if [ ! -f disk.img ]; then \
-		echo "  DISK    Creating disk.img..."; \
-		$(MAKE) create-disk; \
-	fi
-	@echo "  SMOKE   fork+exit storm..."
-	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	$(SMOKE_QEMU_RUN) --log $(IR0_MM_FORK_EXIT_STORM_LOG) --timeout 150 --done IR0_MM_FORK_EXIT_STORM -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none; \
-	rm -f $$DISK;
-	@if grep -q "IR0_MM_FORK_EXIT_STORM" $(IR0_MM_FORK_EXIT_STORM_LOG); then \
-		echo "✓ smoke-fork-exit-storm finished"; \
-	else \
-		echo "✗ smoke-fork-exit-storm FAILED"; \
-		exit 1; \
-	fi
-
 smoke-fork-exit-storm: build-ktm-fork-exit-storm-deep-smoke kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then \
 		echo "  DISK    Creating disk.img..."; \
@@ -1297,36 +1275,6 @@ smoke-busybox-coreutils: build-ktm-busybox-manifest-smoke build-busybox-full ker
 		exit 1; \
 	fi
 
-# BUSY-2 ship gate: product config (fase58) + manifest inject + BUSYBOX_MANIFEST_OK
-BUSYBOX_MANIFEST_SMOKE_LOG = /tmp/busybox-manifest-smoke.log
-smoke-busybox-manifest: build-ktm-busybox-manifest-smoke build-busybox-plus kernel-x64-userspace.iso
-	@echo "  SMOKE   BUSY-2 product applet manifest..."
-	@strings $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) 2>/dev/null | grep -q "KTM_BB_MANIFEST_HARNESS_ID" || \
-		(echo "✗ $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) is not BusyBox manifest harness — run build-ktm-busybox-manifest-smoke"; exit 1)
-	@DISK=$$(mktemp /tmp/ir0-busy-manifest-disk.XXXXXX.img); \
-	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
-	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	python3 scripts/inject_init_minix.py $$DISK $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) sbin/init && \
-	chmod +x scripts/busybox_inject_manifest.sh && \
-	FASE50_BUSYBOX_BIN=$(BUSYBOX_REAL_BIN) BUSYBOX_REAL_BIN=$(BUSYBOX_REAL_BIN) \
-		scripts/busybox_inject_manifest.sh $$DISK $(BUSYBOX_REAL_BIN) && \
-	$(SMOKE_QEMU_RUN) --log $(BUSYBOX_MANIFEST_SMOKE_LOG) --timeout 90 --done BUSYBOX_MANIFEST_OK -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none; \
-	rm -f $$DISK
-	@if grep -q "BUSYBOX_MANIFEST_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
-	    grep -q "KTM_BB_MANIFEST_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
-	    grep -q "KTM_BB_MANIFEST_ECHO_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
-	    grep -q "KTM_BB_MANIFEST_LS_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG) && \
-	    grep -q "KTM_BB_MANIFEST_CAT_PATH_OK" $(BUSYBOX_MANIFEST_SMOKE_LOG); then \
-		echo "✓ smoke-busybox-manifest finished"; \
-	else \
-		echo "✗ smoke-busybox-manifest FAILED"; \
-		grep -E 'KTM_BB_MANIFEST_|BUSYBOX_|KERNEL PANIC' $(BUSYBOX_MANIFEST_SMOKE_LOG) | tail -30; \
-		exit 1; \
-	fi
-
 check-fase58c-logs:
 	@echo "=== FB-A (boot) ==="
 	@if [ -f "$(KTM_BOOT_HALT_GUI_LOG)" ]; then \
@@ -1463,3 +1411,56 @@ smoke-fase52-tcc: smoke-tcc
 smoke-fase48-ipc: smoke-ipc
 smoke-fase50-programs: smoke-programs
 build-tcc-fase52: build-tcc
+
+# Deprecated FASE build aliases (init_fase* → ktm_* rename).
+.PHONY: build-init-fase41-reclaim build-init-fase42-pt-reclaim build-init-fase42-exec-storm \
+	build-init-fase42-fork-exit-storm build-init-fase43-fork-exit-storm \
+	build-init-fase43-fork-wait-storm build-init-fase43-exec-loop \
+	build-init-fase44-fork-wait-drain build-init-fase44-exec-drain \
+	build-init-fase44-init-exit-drain build-init-fase45-fork-rollback-storm \
+	build-init-fase45-fork-mem-touch build-init-fase46-fork-no-recursion \
+	build-init-fase46-fork-heap build-init-fase48-ipc build-init-fase49-pipe \
+	build-init-fase50-busybox build-init-fase50-exec-only build-init-fase50-programs \
+	build-init-fase51-shell build-init-fase52-tcc build-init-fase53a-fs-dev \
+	build-init-fase53b-posix-pseudofs build-init-fase54a-fbdev build-init-fase54b-input \
+	build-init-fase54c-input-deterministic build-init-fase55a-doom-prereq \
+	build-init-fase58c-boot-halt build-init-fase58c-fbdev \
+	build-fase41-true build-fase48-busybox build-fase48-echo build-fase48-cat \
+	build-fase48-ipc-bins build-fase50-hello build-fase58l-busybox-smoke \
+	build-fase58c-boot-halt build-fase58c-fbdev build-doom-interactive
+build-init-fase41-reclaim: build-ktm-reclaim-exit-smoke
+build-init-fase42-pt-reclaim: build-ktm-pt-reclaim-smoke
+build-init-fase42-exec-storm: build-ktm-exec-storm-smoke
+build-init-fase42-fork-exit-storm: build-ktm-fork-exit-storm-smoke
+build-init-fase43-fork-exit-storm: build-ktm-fork-exit-storm-deep-smoke
+build-init-fase43-fork-wait-storm: build-ktm-fork-wait-storm-smoke
+build-init-fase43-exec-loop: build-ktm-exec-loop-smoke
+build-init-fase44-fork-wait-drain: build-ktm-fork-wait-drain-smoke
+build-init-fase44-exec-drain: build-ktm-exec-drain-smoke
+build-init-fase44-init-exit-drain: build-ktm-init-exit-drain-smoke
+build-init-fase45-fork-rollback-storm: build-ktm-fork-rollback-smoke
+build-init-fase45-fork-mem-touch: build-ktm-fork-mem-touch-smoke
+build-init-fase46-fork-no-recursion: build-ktm-fork-no-recursion-smoke
+build-init-fase46-fork-heap: build-ktm-fork-heap-smoke
+build-init-fase48-ipc: build-ktm-ipc-smoke
+build-init-fase49-pipe: build-ktm-pipe-smoke
+build-init-fase50-busybox: build-ktm-busybox-smoke
+build-init-fase50-exec-only: build-ktm-exec-only-smoke
+build-init-fase50-programs: build-ktm-programs-smoke
+build-init-fase51-shell: build-ktm-shell-smoke
+build-init-fase52-tcc: build-ktm-tcc-smoke
+build-init-fase53a-fs-dev: build-ktm-fs-dev-smoke
+build-init-fase53b-posix-pseudofs: build-ktm-posix-pseudofs-smoke
+build-init-fase54a-fbdev: build-ktm-fbdev-smoke
+build-init-fase54b-input: build-ktm-input-smoke
+build-init-fase54c-input-deterministic: build-ktm-input-det-smoke
+build-init-fase55a-doom-prereq: build-ktm-doom-prereq-smoke
+build-init-fase58c-boot-halt: build-ktm-boot-halt-bin
+build-init-fase58c-fbdev: build-ktm-fbdev-gui-bin
+build-fase41-true: build-ktm-true-helper
+build-fase48-busybox build-fase48-echo build-fase48-cat build-fase48-ipc-bins: build-ktm-ipc-helpers
+build-fase50-hello: build-ktm-hello-helper
+build-fase58l-busybox-smoke: build-ktm-busybox-manifest-smoke
+build-fase58c-boot-halt: build-ktm-boot-halt-bin
+build-fase58c-fbdev: build-ktm-fbdev-gui-bin
+build-doom-interactive: build-ktm-doom-interactive
