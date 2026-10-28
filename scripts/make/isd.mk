@@ -68,6 +68,16 @@ endif
 IR0_PRODUCT_PROFILE := $(ISD_PROFILE)
 export IR0_PRODUCT_PROFILE
 
+# Canonical kernel-manager context. `make kmang` always opens the same store;
+# product build PROFILE variables cannot silently redirect its history.
+# Resolve it before the artifact cache below so its file name is keyed
+# correctly.
+KMANG_ARCH ?= x86_64
+KMANG_PROFILE ?= desktop
+ifeq ($(origin PROFILE),command line)
+  KMANG_PROFILE := $(ISD_PROFILE)
+endif
+
 IR0_ISD_MAKE = $(MAKE) -C "$(IR0_ISD_ROOT)" \
 	IR0_ROOT="$(KERNEL_ROOT)" \
 	ARCH="$(ISD_ARCH)" \
@@ -126,13 +136,6 @@ IR0_MACHINE_VMDK = $(IR0_MACHINE_DIR)/ir0-$(ISD_PROFILE).vmdk
 IR0_MACHINE_KERNEL_LINK = $(IR0_MACHINE_DIR)/kernel-current.iso
 IR0_KERNEL_BUILD_ID = $(IR0_VERSION_STRING)-build$(IR0_BUILD_NUMBER)
 
-# Canonical kernel-manager context. `make kmang` always opens the same store;
-# product build PROFILE variables cannot silently redirect its history.
-KMANG_ARCH ?= x86_64
-KMANG_PROFILE ?= desktop
-ifeq ($(origin PROFILE),command line)
-  KMANG_PROFILE := $(ISD_PROFILE)
-endif
 KMANG_MACHINE ?= default
 KMANG_MACHINE_DIR = $(IR0_MACHINE_ROOT)/$(KMANG_ARCH)/$(KMANG_PROFILE)/$(KMANG_MACHINE)
 
