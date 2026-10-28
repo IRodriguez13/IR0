@@ -2390,7 +2390,8 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		kernel/process/registry_lock.c \
 		kernel/cpu_topology.c kernel/percpu.c \
 		sched/switch/switch_arm64.c sched/task.h \
-		$(MUSL_AARCH64_HELLO) build/busybox_aarch64 arch/arm64/linker.ld
+		arch/arm64/linker.ld
+	@mkdir -p build/arm64-boot
 	@$(MAKE) -s musl-aarch64-hello
 	@$(MAKE) -s busybox-aarch64-min
 	@echo "  CC      arch/arm64/sources/boot_stub.c (F7j process+TTBR+musl+RR+bb+virtio)"
@@ -2512,7 +2513,6 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
 		-c arch/arm64/sources/process_early.c -o arch/arm64/sources/process_early.o
 	@echo "  CC      sched/rr_sched.c"
-	@mkdir -p build/arm64-boot
 	@echo "  CC      kernel/process/registry.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \

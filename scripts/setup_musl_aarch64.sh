@@ -16,9 +16,7 @@ if [ -x "$GCC" ]; then
 		"$GCC" -dumpmachine
 		exit 0
 	fi
-	echo "✓ musl aarch64 present (CRT incomplete — freestanding hello fallback OK): $GCC"
-	"$GCC" -dumpmachine
-	exit 0
+	echo "  WARN    musl aarch64 CRT incomplete; reinstalling: $GCC" >&2
 fi
 
 mkdir -p "$ROOT/toolchain"

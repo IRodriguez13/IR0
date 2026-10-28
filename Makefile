@@ -133,9 +133,10 @@ endif
 # Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
 # Empty MAKECMDGOALS is tab-completion (`make -qp`) and a bare `make`.
 # Those must not parse the 6k-line QA catalog. Name a non-lean goal to load it.
+# ARM64 link products live in the QA catalog today, so naming one must load
+# that catalog. Only x86_64 stays in the lean set.
 IR0_LEAN_GOALS := all ir0 clean help \
 	kernel-x64.bin kernel-x64.iso \
-	kernel-arm64.bin kernel-arm64-all.bin kernel-arm64-boot.bin \
 	print-build-objects build-graph-audit \
 	headers_install compile-commands disasm \
 	menuconfig menuconfig-en defconfig arch-guard
