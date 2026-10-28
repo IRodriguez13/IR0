@@ -6,7 +6,8 @@
 
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# CDPATH may make `cd` print its destination and corrupt command substitution.
+ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 PYTHON="${SMOKE_AUTOKILL_PYTHON:-python3}"
 AUTOKILL="$ROOT/scripts/smoke_autokill.py"
 

@@ -3,7 +3,7 @@
 # Host contract tests for ISD bridge + ensure-host-deps consent (no real sudo).
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 MK_BRIDGE="scripts/make/isd.mk"
 MK_PRODUCT="scripts/make/product.mk"
@@ -22,10 +22,10 @@ test -x scripts/bootstrap-isd.sh && ok "A bootstrap-isd executable" || bad "A ex
 grep -q 'PROFILE="$(ISD_PROFILE)"' scripts/make/isd.mk && ok "A PROFILE to ISD make" || bad "A PROFILE prop"
 grep -q 'filter minimal minimal-sysvinit minimal-openrc development desktop desktop-console appliance,$(PROFILE)' scripts/make/isd.mk \
 	&& ok "A ISD_PROFILE follows env PROFILE" || bad "A ISD_PROFILE env sync"
-got=$(MAKEFLAGS= PROFILE=desktop IR0_PRODUCT_PROFILE= make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
+got=$(MAKEFLAGS= PROFILE=desktop IR0_PRODUCT_PROFILE= make -s -pn isd-plan 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
 [ "$got" = desktop ] && ok "A PROFILE=desktop → ISD_PROFILE=desktop" \
 	|| bad "A PROFILE=desktop got ISD_PROFILE=${got:-empty}"
-got=$(MAKEFLAGS= PROFILE=desktop-console IR0_PRODUCT_PROFILE= make -s -pn 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
+got=$(MAKEFLAGS= PROFILE=desktop-console IR0_PRODUCT_PROFILE= make -s -pn isd-plan 2>/dev/null | sed -n 's/^ISD_PROFILE := //p' | head -1)
 [ "$got" = desktop-console ] && ok "A PROFILE=desktop-console → ISD_PROFILE=desktop-console" \
 	|| bad "A PROFILE=desktop-console got ISD_PROFILE=${got:-empty}"
 grep -q 'ensure-machine-desktop-sync' $MK_ALL \
