@@ -8,6 +8,12 @@
 
 KERNEL_ROOT := $(CURDIR)
 
+# Every rule this tree uses is explicit. Clearing the built-in suffix list stops
+# make from searching it for the thousands of prerequisites recorded in the
+# generated .d files, which costs more than parsing this Makefile. The setting
+# is local to this process: recursive makes re-initialise their own list.
+.SUFFIXES:
+
 # Default architecture (resolved after .config load)
 ARCH ?=
 
@@ -20,23 +26,31 @@ IR0_VERSION_PATCH := 1
 IR0_VERSION_SUFFIX :=
 IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)$(IR0_VERSION_SUFFIX)
 
-# Build information 
-
-IR0_BUILD_DATE := $(shell LC_TIME=C date +"%b %d %Y")
-IR0_BUILD_TIME := $(shell date +"%H:%M:%S")
-IR0_BUILD_USER := $(shell whoami 2>/dev/null || echo "unknown")
-IR0_BUILD_HOST := $(shell hostname 2>/dev/null || echo "localhost")
-IR0_BUILD_CC := $(shell $(CC) --version 2>/dev/null | head -n1 | cut -d' ' -f1-3 || echo "gcc unknown")
-# Reset machine-local build counter when the release string changes (rc boundary).
-$(shell \
+# Build information. One shell for the whole banner: every $(shell) is a fork,
+# and recursive makes pay this cost on each parse. The stamp reset must run
+# before the counter is read.
+IR0_BUILD_META := $(shell \
 	stamp='$(IR0_VERSION_STRING)'; \
-	if [ -f .build_number_version ]; then \
-		old=$$(cat .build_number_version 2>/dev/null); \
-		if [ "$$old" != "$$stamp" ]; then echo 1 > .build_number; fi; \
+	old=$$(cat .build_number_version 2>/dev/null || true); \
+	if [ "$$old" != "$$stamp" ]; then \
+		echo 1 > .build_number; \
+		printf '%s\n' "$$stamp" > .build_number_version; \
 	fi; \
-	echo "$$stamp" > .build_number_version)
+	printf '%s %s %s %s\n' \
+		"$$(LC_TIME=C date +'%b %d %Y %H:%M:%S')" \
+		"$$(whoami 2>/dev/null || echo unknown)" \
+		"$$(hostname 2>/dev/null || echo localhost)" \
+		"$$(cat .build_number 2>/dev/null || echo 1)")
+IR0_BUILD_DATE := $(wordlist 1,3,$(IR0_BUILD_META))
+IR0_BUILD_TIME := $(word 4,$(IR0_BUILD_META))
+IR0_BUILD_USER := $(word 5,$(IR0_BUILD_META))
+IR0_BUILD_HOST := $(word 6,$(IR0_BUILD_META))
 # Build number - auto-increment on each kernel link (local to this workspace).
-IR0_BUILD_NUMBER := $(shell [ -f .build_number ] && cat .build_number || echo "1")
+IR0_BUILD_NUMBER := $(word 7,$(IR0_BUILD_META))
+# Compiler banner: one fork for the compiler, shell builtins for the split.
+IR0_BUILD_CC := $(shell { $(CC) --version 2>/dev/null || echo "gcc unknown"; } | \
+	{ read -r name ver patch rest || true; \
+		printf '%s %s%s\n' "$$name" "$$ver" "$${patch:+ $$patch}"; })
 # Increment build number for next build (only if building kernel target)
 -include .build_number_inc
 
@@ -1863,5 +1877,7 @@ test-drivers-clean:
         format compile-commands disasm stack-usage clean-net \
         run-ping
 
-# Include dependency files
--include $(ALL_OBJS:.o=.d)
+# Include dependency files. The wildcard keeps make from searching its
+# implicit rule database for every missing .d on the first build, which costs
+# more than parsing this Makefile.
+-include $(wildcard $(ALL_OBJS:.o=.d))

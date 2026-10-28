@@ -19,11 +19,31 @@ invokes them with stable target names. Focused smoke fragments live under
 `scripts/make/` (e.g. `boot-audio.mk` → `smoke-sb16-probe`, `class-b.mk` →
 `smoke-class-b-mitigated`) and are `-include`d from the root Makefile.
 
-Lean goals (`help`, `all`, `ir0`, `clean`, `kernel-x64.bin`, ARM64 link
-targets, `arch-guard`, `defconfig`, `menuconfig`, inspect targets) do **not**
-parse `scripts/make/testing.mk` or ISD/release recipes. A bare `make` and
-tab-completion (empty `MAKECMDGOALS`) stay lean. Any other or mixed goal
-still loads the full catalog.
+Lean goals (`help`, `all`, `ir0`, `clean`, `kernel-x64.bin`,
+`kernel-x64.iso`, inspect targets, `arch-guard`, `defconfig`, `menuconfig`)
+do **not** parse `scripts/make/testing.mk` or ISD/release recipes. A bare
+`make` and tab-completion (empty `MAKECMDGOALS`) stay lean. Any other or mixed
+goal still loads the full catalog. ARM64 link products are defined in the QA
+catalog, so naming one loads it.
+
+## Parse cost
+
+Every recursive make re-parses the root file, so the parse path is kept cheap
+on purpose:
+
+- `.SUFFIXES:` is cleared at the top. Every rule this tree uses is explicit;
+  leaving the built-in suffix list active makes make search it for the
+  thousands of prerequisites recorded in generated `.d` files, which costs
+  more than parsing the Makefile.
+- Build metadata (date, time, user, host, counter) comes from one `$(shell)`
+  instead of five; the compiler banner costs one fork.
+- Dependency includes are wrapped in `$(wildcard ...)` so a first build never
+  asks make to remake hundreds of missing `.d` files.
+- `scripts/make/isd.mk` caches the KMANG artifact environment in
+  `build/.isd-artifacts` and only reloads it when inputs change.
+
+Measure with `make -n help` (lean) and `make -n test-list` (full catalog);
+both should stay in the tens of milliseconds.
 
 ## Configuration flow
 
@@ -52,7 +72,7 @@ default subsystems to **enabled** (bring-up friendly).
 | `make kernel-x64.bin` | Linked ELF only |
 | `make kernel-x64.iso` | Bootable ISO |
 | `make kernel-x64-userspace.iso` | Userspace-oriented ISO (init/musl smokes) |
-| `make clean` | Remove build output, objects, generated headers (disk images preserved) |
+| `make clean` | Remove `build/`, objects, deps, ISOs, generated headers and in-tree smoke binaries (disk images, `toolchain/`, staging caches, `dist/`, `out/` preserved) |
 
 ### Run (QEMU)
 
