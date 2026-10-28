@@ -78,6 +78,15 @@ int main(void)
 	(void)ktm_assert_true(fd, "fork_ok", 1);
 	(void)ktm_checkpoint(fd, "child_spawned");
 
+	/* Existence probe must neither wake nor kill the child. */
+	if (kill(pid, 0) != 0)
+	{
+		(void)ktm_assert_true(fd, "kill_probe0_ok", 0);
+		fails++;
+	}
+	else
+		(void)ktm_assert_true(fd, "kill_probe0_ok", 1);
+
 	if (kill(pid, SIGTERM) != 0)
 	{
 		(void)ktm_assert_true(fd, "kill_ok", 0);

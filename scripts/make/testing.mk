@@ -1692,38 +1692,6 @@ smoke-posix-depth: kernel-x64-userspace.iso
 
 PTY_WINSZ_SMOKE_LOG = /tmp/pty-winsz-smoke.log
 
-.PHONY: smoke-kill-sigterm build-init-kill-sigterm-smoke
-build-init-kill-sigterm-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_kill_sigterm_smoke.c
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-init-kill-sigterm-smoke OK"
-
-KILL_SIGTERM_SMOKE_LOG = /tmp/kill-sigterm-smoke.log
-smoke-kill-sigterm: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   kill(2) SIGTERM + kill(pid,0) (no #UD)..."
-	@$(MAKE) -s build-init-kill-sigterm-smoke
-	@DISK=$$(mktemp /tmp/ir0-kill-sigterm.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(KILL_SIGTERM_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(KILL_SIGTERM_SMOKE_LOG) --timeout 60 \
-		--done 'KILL_SIGTERM_OK' -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 256M -no-reboot -net none || true; \
-	rm -f $$DISK; \
-	if grep -q "KILL_PROBE0_OK" $(KILL_SIGTERM_SMOKE_LOG) && \
-	   grep -q "KILL_SIGTERM_OK" $(KILL_SIGTERM_SMOKE_LOG) && \
-	   ! grep -qiE 'undefined opcode|#UD|KERNEL PANIC|panic' $(KILL_SIGTERM_SMOKE_LOG); then \
-		echo "✓ smoke-kill-sigterm passed"; \
-	else \
-		echo "✗ smoke-kill-sigterm FAILED"; \
-		grep -E 'KILL_|panic|#UD|undefined' $(KILL_SIGTERM_SMOKE_LOG) | tail -40; \
-		exit 1; \
-	fi
-
 .PHONY: smoke-pty-winsz build-init-pty-winsz-smoke
 build-init-pty-winsz-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
@@ -3317,6 +3285,11 @@ smoke-hostshare-exec: build-ktm-fork-wait-case build-runit kernel-x64-userspace.
 		--require KTM_USERDEV_OK || RC=$$?; \
 	rm -f $$DISK; \
 	if [ $$RC -eq 0 ]; then echo "✓ smoke-hostshare-exec passed (runit PID1)"; else echo "✗ smoke-hostshare-exec FAILED"; exit $$RC; fi
+
+# kill(2) SIGTERM + kill(pid, 0) is part of the fork_wait pilot.
+.PHONY: smoke-kill-sigterm
+smoke-kill-sigterm: ktm-userdev-run
+	@echo "✓ smoke-kill-sigterm (alias → ktm-userdev-run)"
 
 HOSTSHARE_9P_SMOKE_LOG = /tmp/hostshare-9p-smoke.log
 smoke-hostshare-9p: kernel-x64-userspace.iso

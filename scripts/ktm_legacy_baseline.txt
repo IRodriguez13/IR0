@@ -32,7 +32,6 @@ setup/pid1/init_hostshare_9p_smoke.c
 setup/pid1/init_hostshare_tree_smoke.c
 setup/pid1/init_isa_debug_exit_smoke.c
 setup/pid1/init_kexec_load_smoke.c
-setup/pid1/init_kill_sigterm_smoke.c
 setup/pid1/init_mmap_smoke.c
 setup/pid1/init_posix_depth_smoke.c
 setup/pid1/init_posix_setsid_smoke.c
