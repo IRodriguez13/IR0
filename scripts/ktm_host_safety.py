@@ -72,6 +72,8 @@ def host_total_mib() -> int:
         size = os.sysconf("SC_PAGE_SIZE")
     except (ValueError, OSError, AttributeError):
         return 0
+    if pages <= 0 or size <= 0:
+        return 0
     return pages * size // (1024 * 1024)
 
 
@@ -95,7 +97,8 @@ def host_available_mib() -> int:
     try:
         pages = os.sysconf("SC_AVPHYS_PAGES")
         size = os.sysconf("SC_PAGE_SIZE")
-        return pages * size // (1024 * 1024)
+        if pages > 0 and size > 0:
+            return pages * size // (1024 * 1024)
     except (ValueError, OSError, AttributeError):
         pass
     # Last resort: half of physical RAM is a safe proxy.
