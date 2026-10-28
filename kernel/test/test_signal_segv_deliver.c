@@ -65,7 +65,7 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	saved_mode = p->mode;
 	saved_handler = p->signal_handlers[SIGSEGV];
 	saved_restorer = p->signal_restorer[SIGSEGV];
-	saved_context = p->saved_context;
+	saved_context = process_saved_context_peek(p);
 	saved_sa_flags = p->signal_sa_flags[SIGSEGV];
 	saved_sa_mask = p->signal_sa_mask[SIGSEGV];
 	saved_mask = p->signal_mask;
@@ -73,7 +73,7 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	saved_pending = p->signal_pending;
 	saved_mask_saved = p->signal_mask_saved;
 	saved_mask_saved_valid = p->signal_mask_saved_valid;
-	saved_enter_pending = p->signal_enter_pending;
+	saved_enter_pending = process_signal_enter_pending(p) != 0;
 	saved_last_delivered = p->signal_last_delivered;
 	saved_frame_sp = p->signal_frame_sp;
 
@@ -90,7 +90,7 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	p->signal_mask_saved = 0;
 	p->signal_mask_saved_valid = 0;
 	p->signal_frame_sp = 0;
-	p->saved_context = NULL;
+	process_saved_context_init(p);
 
 	frame[0] = 14;
 	frame[1] = 4;
@@ -128,10 +128,14 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	p->signal_pending = saved_pending;
 	p->signal_mask_saved = saved_mask_saved;
 	p->signal_mask_saved_valid = saved_mask_saved_valid;
-	p->signal_enter_pending = saved_enter_pending;
+	if (saved_enter_pending)
+		process_signal_enter_pending_set(p);
+	else
+		process_signal_enter_pending_clear(p);
 	p->signal_last_delivered = saved_last_delivered;
 	p->signal_frame_sp = saved_frame_sp;
-	p->saved_context = saved_context;
+	if (saved_context)
+		KASSERT(process_saved_context_attach(p, saved_context) == 0);
 
 	KTEST_END();
 }
