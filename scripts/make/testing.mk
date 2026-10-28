@@ -6138,18 +6138,6 @@ ifdef IR0_LEGACY_SMOKE
 include setup/make/legacy-smokes.mk
 endif
 
-clean:
-	@echo "Cleaning build artifacts..."
-	@find . -name "*.o" -type f -delete
-	@find . -name "*.d" -type f -delete
-	@find . -name "*.bin" -type f -delete
-	@find . -name "*.su" -type f -delete
-	@rm -f kernel-x64.iso kernel-x64-test.iso
-	@rm -f kernel-x64.map kernel-arm64.map kernel-x64.disasm compile_commands.json
-	@rm -rf iso iso_test
-	@$(MAKE) -C tests/kernel_memsafe clean 2>/dev/null || true
-	@echo "Clean done."
-
 # TEST SUITE — Compila todos los artefactos de test (estilo kernels de producción).
 # - Código kernel en host para Valgrind (make kernel-memsafe)
 # - Kernel con tests in-kernel (ktest) para make kernel-tests

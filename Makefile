@@ -1481,6 +1481,9 @@ load-init:
 -include scripts/make/class-b.mk
 -include scripts/make/arm64-board.mk
 
+# `clean` is a lean goal: keep it out of the QA catalog.
+-include scripts/make/clean.mk
+
 # QA / smoke / KTM: parse only when a non-lean goal is named.
 ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
 -include scripts/make/testing.mk
