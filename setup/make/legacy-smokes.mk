@@ -105,16 +105,6 @@ load-userspace-rootfs: build-init-minimal build-sh-smoke
 	@chmod +x scripts/load_userspace_rootfs.sh
 	@./scripts/load_userspace_rootfs.sh disk.img $(INIT_SMOKE_BIN) $(SH_SMOKE_BIN)
 
-# Inject runit + BusyBox on MINIX disk (canonical PID1).
-# Retired: load-userspace-irinit / smoke-userspace-irinit (irinit removed).
-load-userspace-irinit:
-	@echo "✗ load-userspace-irinit retired — use: make load-userspace-runit"
-	@exit 2
-
-smoke-userspace-irinit:
-	@echo "✗ smoke-userspace-irinit retired — use: make smoke-runit-boot"
-	@exit 2
-
 # QEMU smoke: PID1 fork+execve /bin/sh in ring 3.
 smoke-userspace-shell: load-userspace-rootfs kernel-x64-userspace.iso
 	@echo "  SMOKE   userspace fork/exec /bin/sh (init_minimal PID1)..."
@@ -1350,12 +1340,6 @@ check-fase58c-logs:
 	@if [ -f "$(KTM_DOOM_GUI_LOG)" ]; then \
 		grep -E 'DOOMGENERIC_WAD_LOAD_OK|DOOMGENERIC_FIRST_FRAME_OK|DOOMGENERIC_FRAME_LOOP_OK|DOOMGENERIC_FRAMEBUFFER_VISIBLE' "$(KTM_DOOM_GUI_LOG)" || echo "(no doom tags)"; \
 	else echo "missing $(KTM_DOOM_GUI_LOG)"; fi
-
-# Legacy irinit GUI path retired — product PID1 is runit (ash GUI).
-run-irinit-interactive-gui:
-	@echo "✗ run-irinit-interactive-gui retired (irinit removed)"
-	@echo "  use: make run-fase58e-ash-gui"
-	@exit 2
 
 smoke-current-fase54b: kernel-x64.bin arch-guard smoke-input
 	@echo "FAST_ITERATION_GATES_OK"

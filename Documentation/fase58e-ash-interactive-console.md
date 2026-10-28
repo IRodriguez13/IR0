@@ -126,7 +126,7 @@ canonical line editing. Re-enabling `FEATURE_EDITING` requires a working
 
 ```bash
 make kernel-x64.bin
-make kernel-x64-userspace.iso build-irinit build-busybox-min
+make build-runit build-busybox-min kernel-x64-userspace.iso
 make smoke-ash-interactive
 ```
 
@@ -154,7 +154,7 @@ Rebuild the **ISO** after kernel changes; QEMU loads the ISO, not a bare
 ```bash
 make -s kernel-x64.bin
 python3 scripts/architecture_guard.py
-make -s kernel-x64-userspace.iso build-irinit build-busybox-min
+make -s build-runit build-busybox-min kernel-x64-userspace.iso
 ```
 
 Manual pass criteria:

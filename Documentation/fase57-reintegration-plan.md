@@ -36,7 +36,7 @@ failed (`sys_dup2` only accepts 0–63). Shell exited immediately; GUI stayed bl
 |------|-------|-------|
 | devfs fd binding | `kernel/syscalls/fs_syscalls.c`, `kernel/syscalls.c`, `kernel/process.h` | `open("/dev/*")` → real `fd_table` slot (`is_devfs`) |
 | Console handoff | `kernel/console_backend.c`, `fs/devfs.c` | FB/VGA text, banner `IR0 console ready` |
-| irinit | `setup/pid1/irinit.c`, `Makefile` | `run-irinit-interactive-gui`; no respawn storm |
+| irinit (historical) | `setup/pid1/irinit.c`, `Makefile` | Retired; the supported path is runit via `run-ash-gui` |
 | Debug noise | `includes/ir0/debug_runtime.h`, `mm/pmm.c`, `mm/paging.c`, `kernel/process.c`, `sched/switch/arch_context_switch.c` | Off by default; `IR0_DEBUG_PMM/WAIT/PROC=1` |
 
 ### Tags (serial, one-shot where noted)
@@ -57,7 +57,7 @@ make -s smoke-fase52-tcc         # PASS
 ### Manual GUI
 
 ```bash
-make run-irinit-interactive-gui REAL_WAD_PATH=/path/to/doom1.wad
+make run-ash-gui REAL_WAD_PATH=/path/to/doom1.wad
 # serial log: /tmp/userspace-irinit-gui.log
 # click QEMU window for keyboard; try: ls, pwd, echo hi
 ```

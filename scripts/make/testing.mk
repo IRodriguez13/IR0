@@ -1230,22 +1230,6 @@ build-ktm-shell-smoke:
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-shell-smoke OK"
 
-build-irinit:
-	@echo "✗ build-irinit retired — PID1 is runit (make build-runit)"
-	@exit 2
-
-load-userspace-irinit:
-	@echo "✗ load-userspace-irinit retired — use: make load-userspace-runit"
-	@exit 2
-
-smoke-userspace-irinit:
-	@echo "✗ smoke-userspace-irinit retired — use: make smoke-runit-boot"
-	@exit 2
-
-run-irinit-interactive-gui:
-	@echo "✗ run-irinit-interactive-gui retired — use: make run-ash-gui"
-	@exit 2
-
 build-runit: check-userspace
 	@$(IR0_USERSPACE_MAKE) build-runit build-services
 	@chmod +x $(IR0_USERSPACE_ROOT)/scripts/build-services.sh

@@ -82,7 +82,7 @@ El kernel hace eco y línea canónica; no hace falta lineedit de BusyBox en esta
 ## Compilar y ejecutar
 
 ```bash
-make kernel-x64-userspace.iso build-irinit build-busybox-fase50-min
+make build-runit build-busybox-fase50-min kernel-x64-userspace.iso
 make run-fase58e-ash-gui
 ```
 

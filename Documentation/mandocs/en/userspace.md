@@ -99,8 +99,8 @@ boots an unenrolled workspace build. Full contract: **`man IR0-kmang`**.
 `resolve-packages.sh`; desktop X clients are listed only for `PROFILE=desktop`.
 ISD version is independent of kernel local build numbers.
 
-Retired fail-fast aliases: `build-irinit`, `load-userspace-irinit`,
-`smoke-userspace-irinit`, `run-irinit-interactive-gui` (print redirect and exit 2).
+The retired `irinit` aliases were removed. Use `build-runit`,
+`smoke-runit-boot`, and `run-ash-gui`.
 
 ## 5. Identity
 

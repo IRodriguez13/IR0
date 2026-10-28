@@ -78,8 +78,8 @@ Contrato completo: **`man IR0-kmang`**.
 **usmang:** lee `ISD/VERSION` y `profiles/<PROFILE>/packages.txt` reales; clientes X
 solo con `PROFILE=desktop`. Versión ISD ≠ build local del kernel.
 
-Aliases retirados (fail-fast): `build-irinit`, `load-userspace-irinit`,
-`smoke-userspace-irinit`, `run-irinit-interactive-gui`.
+Los aliases de `irinit` fueron eliminados. Usar `build-runit`,
+`smoke-runit-boot` y `run-ash-gui`.
 
 ## 4. Identidad
 
