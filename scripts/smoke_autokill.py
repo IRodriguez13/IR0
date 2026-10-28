@@ -285,6 +285,15 @@ def read_new_log(state: MonitorState) -> None:
         state.last_growth_at = time.monotonic()
 
 
+def drain_log(state: MonitorState) -> None:
+    """Read every remaining byte after QEMU exits (still bounded per call)."""
+    while True:
+        before = state.offset
+        read_new_log(state)
+        if state.offset == before:
+            return
+
+
 def success_satisfied(state: MonitorState) -> bool:
     if not state.success_tags:
         return False
@@ -410,7 +419,7 @@ def run_smoke(
                         return 0
 
                     if proc.poll() is not None:
-                        read_new_log(state)
+                        drain_log(state)
                         if success_satisfied(state):
                             state.reason = "qemu_exit_success"
                             state.matched_success = first_success_match(state)
