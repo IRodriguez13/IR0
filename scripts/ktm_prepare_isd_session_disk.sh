@@ -15,6 +15,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON="${PYTHON:-python3}"
 cd "$ROOT"
 
 if [ -n "${IR0_USERSPACE_ROOT:-}" ] && [ -z "${IR0_ISD_ROOT:-}" ]; then
@@ -88,7 +89,7 @@ if [ ! -f "$DISK" ]; then
 	exit 1
 fi
 
-python3 "$ROOT/scripts/verify_minix_rootfs.py" --gate "$DISK" \
+"$PYTHON" "$ROOT/scripts/verify_minix_rootfs.py" --gate "$DISK" \
 	/bin/busybox /bin/echo /bin/cat /bin/true /bin/sh /bin/ls /bin/uname >&2
 
 echo "$DISK"
