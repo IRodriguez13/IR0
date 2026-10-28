@@ -34,12 +34,31 @@ if [ ! -f "${ISD_ROOT}/Makefile" ]; then
 	exit 0
 fi
 
+# Reuse the cache when ISD make graph and profile inputs are not newer.
+# `make -C ISD print-artifacts-mk` parses the whole ISD build (~0.6 s) and
+# runs on every non-lean IR0 goal; the artifact paths only change when one
+# of these inputs does.
+if [ -f "$OUT" ] && [ -z "${IR0_ISD_ARTIFACTS_FORCE:-}" ]; then
+	stale="$(find \
+		"$ISD_ROOT/Makefile" "$ISD_ROOT/mk" \
+		"$ISD_ROOT/profiles/$PROFILE" "$ISD_ROOT/.isdconfig.d/$PROFILE" \
+		"$ISD_ROOT/scripts" "$ISD_ROOT/out/$ARCH/stamps/uapi" \
+		"$IR0_ROOT/IR0_ISD_INTERFACE" \
+		-newer "$OUT" -print -quit 2>/dev/null || true)"
+	pkg_stale="$(find "$ISD_ROOT/packages" -maxdepth 1 \
+		-newer "$OUT" -print -quit 2>/dev/null || true)"
+	if [ -z "$stale" ] && [ -z "$pkg_stale" ] \
+		&& [ -d "$ISD_ROOT/profiles/$PROFILE" ]; then
+		exit 0
+	fi
+fi
+
 mkdir -p "$(dirname "$OUT")"
 tmp="${OUT}.tmp.$$"
 
 if ! make -C "$ISD_ROOT" IR0_ROOT="$IR0_ROOT" ARCH="$ARCH" PROFILE="$PROFILE" \
 	-s print-artifacts-mk >"$tmp" 2>/dev/null; then
-	rm -f "$tmp"
+	rm -f "$tmp" "$OUT"
 	exit 0
 fi
 
@@ -75,5 +94,9 @@ while IFS= read -r line; do
 		;;
 	esac
 done <"$tmp" >"${tmp}.map"
-mv "${tmp}.map" "$OUT"
+if cmp -s "${tmp}.map" "$OUT"; then
+	rm -f "${tmp}.map"
+else
+	mv "${tmp}.map" "$OUT"
+fi
 rm -f "$tmp"
