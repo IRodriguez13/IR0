@@ -8,6 +8,11 @@ import argparse
 import re
 import sys
 from pathlib import Path
+from typing import Iterable
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from ktm_host_safety import iter_log_lines  # noqa: E402
 
 FLIGHT_BEGIN = re.compile(r"--- KTM FLIGHT RECORDER")
 FLIGHT_END = re.compile(r"--- END KTM FLIGHT RECORDER")
@@ -57,18 +62,19 @@ def _fmt_syscall(etype: str, a0: int, a1: int, a2: int, a3: int) -> str:
     return f"{etype} a0=0x{a0:x} a1=0x{a1:x}"
 
 
-def extract_flight_block(text: str) -> str:
-    lines: list[str] = []
+def extract_flight_block(lines: Iterable[str]) -> str:
+    block: list[str] = []
     inside = False
-    for line in text.splitlines():
+    for line in lines:
+        line = line.rstrip("\r\n")
         if FLIGHT_BEGIN.search(line):
             inside = True
             continue
         if inside and FLIGHT_END.search(line):
             break
         if inside:
-            lines.append(line)
-    return "\n".join(lines)
+            block.append(line)
+    return "\n".join(block)
 
 
 def decode_block(block: str, *, tail: int) -> list[dict]:
@@ -105,14 +111,12 @@ def main() -> int:
     args = ap.parse_args()
 
     if args.log and args.log.is_file():
-        text = args.log.read_text(errors="replace")
+        block = extract_flight_block(iter_log_lines(args.log))
     elif args.log:
         print(f"log missing: {args.log}", file=sys.stderr)
         return 1
     else:
-        text = sys.stdin.read()
-
-    block = extract_flight_block(text)
+        block = extract_flight_block(sys.stdin)
     if not block.strip():
         print("KTM_FLIGHT_DECODE: no flight recorder block in log")
         return 1

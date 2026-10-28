@@ -53,9 +53,11 @@ Scope: `scripts/ktm_*`, `scripts/smoke_*`, `scripts/inject_init_minix.py`,
   for userdev pilots) and rejects anything above 2 GiB or 25% of host RAM,
   whichever is lower. It refuses to start when guest RAM + 512 MiB headroom
   exceeds available host memory.
-- **Never read a whole log into memory.** Stream from the last offset with a
-  fixed buffer (<= 1 MiB), keep only a bounded tail (`deque(maxlen=...)`), and
-  fail at `--max-log-mib` (default 64) instead of growing without bound.
+- **Never read a whole log into memory.** Live runners stream from the last
+  offset with a fixed buffer (<= 1 MiB), keep only a bounded tail
+  (`deque(maxlen=...)`), and fail at `--max-log-mib` (default 64) instead of
+  growing without bound. Post-mortem tools use `read_log_text` (64 MiB cap) or
+  `iter_log_lines`; `log.read_text()` is banned.
 - **No unbounded waits.** Every run has a hard timeout (explicit `--timeout`,
   a `--profile`, or the 180 s default) and a stale-log window.
   `start_new_session=True` plus process-group kill on every exit path.

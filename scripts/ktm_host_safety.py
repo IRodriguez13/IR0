@@ -159,6 +159,17 @@ def make_temp_disk(prefix: str = "ir0-ktm-") -> Path:
     return Path(name)
 
 
+def read_log_text(path: Path, max_bytes: int = MAX_LOG_BYTES) -> str:
+    """Read a log for analysis tools, capped at ``max_bytes``.
+
+    Live runners must stream with :func:`iter_log_lines`; post-mortem tools
+    that need the whole text use this bounded read instead of ``read_text``.
+    """
+    with path.open("rb") as fp:
+        data = fp.read(max_bytes)
+    return data.decode("utf-8", errors="replace")
+
+
 def iter_log_lines(
     path: Path, max_bytes: int = MAX_LOG_BYTES
 ) -> Iterator[str]:

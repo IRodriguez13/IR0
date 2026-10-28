@@ -11,6 +11,10 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from ktm_host_safety import MAX_LOG_BYTES, read_log_text  # noqa: E402
+
 
 def classify(text: str) -> list[tuple[str, str, str]]:
     hits: list[tuple[str, str, str]] = []
@@ -127,7 +131,13 @@ def main() -> int:
     parser.add_argument("log", nargs="?", type=Path, help="log file (default: stdin)")
     args = parser.parse_args()
 
-    text = args.log.read_text(errors="replace") if args.log else sys.stdin.read()
+    if args.log:
+        if not args.log.is_file():
+            print(f"log missing: {args.log}", file=sys.stderr)
+            return 1
+        text = read_log_text(args.log)
+    else:
+        text = sys.stdin.read(MAX_LOG_BYTES)
     hits = classify(text)
 
     if not hits:

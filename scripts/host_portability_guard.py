@@ -72,6 +72,11 @@ PATTERNS: tuple[tuple[str, str, str], ...] = (
         "hardcoded /tmp; use ${TMPDIR:-/tmp} or tempfile.gettempdir()",
     ),
     (
+        "unbounded_log_read",
+        r"\blog\.read_text\(",
+        "read logs through read_log_text (64 MiB cap) or iter_log_lines",
+    ),
+    (
         "gnu_sed_i",
         r"\bsed\s+-i",
         "sed -i is GNU-only; write a temp file and mv, or use Python",

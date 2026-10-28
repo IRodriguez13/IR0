@@ -68,3 +68,12 @@ py_tempfile_mktemp       scripts/smoke_sigchld_tty.py                     2
 py_tempfile_mktemp       scripts/smoke_sigchld_wait.py                    2
 py_tempfile_mktemp       scripts/smoke_sys_panic.py                       2
 py_tempfile_mktemp       scripts/smoke_tty_raw_probe.py                   1
+unbounded_log_read       scripts/smoke_desktop_cmd_matrix.py              20
+unbounded_log_read       scripts/smoke_desktop_nano_mnt.py                4
+unbounded_log_read       scripts/smoke_doas_dmesg_pipe.py                 6
+unbounded_log_read       scripts/smoke_firstboot_wizard.py                2
+unbounded_log_read       scripts/smoke_mouse_tty_isolation.py             5
+unbounded_log_read       scripts/smoke_proc_coherence.py                  2
+unbounded_log_read       scripts/smoke_proc_stat_top.py                   2
+unbounded_log_read       scripts/smoke_tty_raw_probe.py                   7
+unbounded_log_read       scripts/smoke_x11_pointer.py                     4
