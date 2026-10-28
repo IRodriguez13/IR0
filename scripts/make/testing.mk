@@ -8,7 +8,6 @@ INIT_MUSL_SRC  = setup/pid1/init_musl.c
 MUSL_ARCH_PRCTL_SMOKE_SRC = setup/pid1/musl_arch_prctl_smoke.c
 MUSL_PTHREAD_SMOKE_SRC = setup/pid1/musl_pthread_smoke.c
 SETUID_EXEC_SMOKE_SRC = setup/pid1/setuid_exec_smoke.c
-CHROOT_SMOKE_SRC = setup/pid1/chroot_smoke.c
 SETID_HELPER_SRC = setup/pid1/setid_helper.c
 PASSWD_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/passwd_smoke.c
 DOAS_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/doas_smoke.c
@@ -83,7 +82,6 @@ INIT_SMOKE_BIN   = setup/pid1/init
 MUSL_ARCH_PRCTL_BIN = setup/pid1/musl_arch_prctl_smoke
 MUSL_PTHREAD_SMOKE_BIN = setup/pid1/musl_pthread_smoke
 SETUID_EXEC_SMOKE_BIN = setup/pid1/setuid_exec_smoke
-CHROOT_SMOKE_BIN = setup/pid1/chroot_smoke
 SETID_HELPER_BIN = setup/pid1/setid_helper
 PASSWD_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/passwd_smoke
 SH_SMOKE_BIN     = setup/pid1/sh_smoke
@@ -129,7 +127,6 @@ KTM_DOOMGENERIC_LOG = /tmp/userspace-doomgeneric.log
 MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
 MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
 SETUID_EXEC_SMOKE_LOG = /tmp/userspace-setuid-exec.log
-CHROOT_SMOKE_LOG = /tmp/userspace-chroot.log
 PASSWD_SMOKE_LOG = /tmp/userspace-passwd.log
 KTM_DOOM_INTERACTIVE_BIN = setup/pid1/ktm_doom_interactive
 KTM_DOOM_INTERACTIVE_GUI_LOG = /tmp/doomgeneric-gui.log
@@ -332,18 +329,6 @@ build-setuid-exec-smoke:
 	@strings $(SETUID_EXEC_SMOKE_BIN) 2>/dev/null | grep -q "SETUID_EXEC_ALL_OK" || \
 		(echo "✗ setuid smoke missing SETUID_EXEC_ALL_OK string"; exit 1)
 	@echo "✓ build-setuid-exec-smoke OK"
-
-build-chroot-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  MUSL    Building chroot smoke ($(CHROOT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(CHROOT_SMOKE_BIN) $(CHROOT_SMOKE_SRC)
-	@file $(CHROOT_SMOKE_BIN) | grep -q ELF
-	@strings $(CHROOT_SMOKE_BIN) 2>/dev/null | grep -q "CHROOT_OK" || \
-		(echo "✗ chroot smoke missing CHROOT_OK string"; exit 1)
-	@echo "✓ build-chroot-smoke OK"
 
 build-passwd-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -3579,36 +3564,6 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 		grep -E 'SETSID|SETPGID|POSIX_|panic' $(POSIX_SETSID_LOG) | tail -30; exit 1; \
 	fi
 
-.PHONY: smoke-vfork build-init-vfork
-VFORK_SMOKE_LOG = /tmp/vfork-smoke.log
-build-init-vfork:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_vfork_smoke.c
-	@echo "✓ build-init-vfork OK"
-
-smoke-vfork: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   vfork shared-mm + exec..."
-	@$(MAKE) -s build-init-vfork
-	@DISK=$$(mktemp /tmp/ir0-vfork.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(VFORK_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(VFORK_SMOKE_LOG) --timeout 90 --stale-sec 25 \
-		--done VFORK_ALL_OK --fail-regex 'VFORK_.*FAIL|KERNEL PANIC' -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rm -f $$DISK; \
-	if grep -q "VFORK_SHARE_OK" $(VFORK_SMOKE_LOG) && \
-	    grep -q "VFORK_EXEC_OK" $(VFORK_SMOKE_LOG) && \
-	    grep -q "VFORK_ALL_OK" $(VFORK_SMOKE_LOG); then \
-		echo "✓ smoke-vfork passed"; \
-	else \
-		echo "✗ smoke-vfork FAILED"; \
-		grep -E 'VFORK_|panic|EXEC_MM' $(VFORK_SMOKE_LOG) | tail -40; exit 1; \
-	fi
-
 .PHONY: smoke-posix-sighup-tty build-init-posix-sighup-tty
 POSIX_SIGHUP_LOG = /tmp/posix-sighup-tty-smoke.log
 build-init-posix-sighup-tty:
@@ -4647,6 +4602,10 @@ KTM_EVENT_FDS_SRC = $(KTM_USERDEV_DIR)/ktm_event_fds_case.c $(KTM_USERDEV_LIB_SR
 KTM_EVENT_FDS_BIN = $(KTM_USERDEV_DIR)/ktm_event_fds_case
 KTM_POSIX_SHM_SRC = $(KTM_USERDEV_DIR)/ktm_posix_shm_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_POSIX_SHM_BIN = $(KTM_USERDEV_DIR)/ktm_posix_shm_case
+KTM_VFORK_SRC = $(KTM_USERDEV_DIR)/ktm_vfork_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_VFORK_BIN = $(KTM_USERDEV_DIR)/ktm_vfork_case
+KTM_CHROOT_SRC = $(KTM_USERDEV_DIR)/ktm_chroot_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_CHROOT_BIN = $(KTM_USERDEV_DIR)/ktm_chroot_case
 
 # All userdev pilots run via hostshare stub + share payload (virtio-9p).
 build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
@@ -4658,7 +4617,8 @@ build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-socketpair-case build-ktm-fb-map-shared-case \
 	build-ktm-scm-rights-case build-ktm-unix-abstract-case build-ktm-sysv-shm-case \
 	build-ktm-memfd-shared-case build-ktm-unix-harden-case \
-	build-ktm-unix-flags-case build-ktm-event-fds-case build-ktm-posix-shm-case: \
+	build-ktm-unix-flags-case build-ktm-event-fds-case build-ktm-posix-shm-case \
+	build-ktm-vfork-case build-ktm-chroot-case: \
 	build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
@@ -5167,6 +5127,20 @@ build-ktm-posix-shm-case:
 	@file $(KTM_POSIX_SHM_BIN) | grep -q ELF
 	@echo "✓ build-ktm-posix-shm-case OK"
 
+build-ktm-vfork-case:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cross compiler not found"; exit 1; fi
+	@echo "  KTM     Building vfork pilot ($(KTM_VFORK_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) -o $(KTM_VFORK_BIN) $(KTM_VFORK_SRC)
+	@file $(KTM_VFORK_BIN) | grep -q ELF
+	@echo "✓ build-ktm-vfork-case OK"
+
+build-ktm-chroot-case:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cross compiler not found"; exit 1; fi
+	@echo "  KTM     Building chroot pilot ($(KTM_CHROOT_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) -o $(KTM_CHROOT_BIN) $(KTM_CHROOT_SRC)
+	@file $(KTM_CHROOT_BIN) | grep -q ELF
+	@echo "✓ build-ktm-chroot-case OK"
+
 ktm-userdev-posix-shm-run: build-ktm-posix-shm-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
@@ -5189,6 +5163,36 @@ ktm-userdev-posix-shm-runit-run: build-ktm-posix-shm-case build-runit kernel-x64
 
 smoke-posix-shm: ktm-userdev-posix-shm-runit-run
 	@echo "✓ smoke-posix-shm (alias → ktm-userdev-posix-shm-runit-run)"
+
+ktm-userdev-vfork-run: build-ktm-vfork-case build-ktm-true-helper build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_VFORK_BIN) \
+		--inject $(KTM_TRUE_HELPER_BIN):bin/f41true \
+		--log /tmp/ktm-userdev-vfork.log --timeout 90 \
+		--done KTM_USERDEV_OK \
+		--require 'TEST_END|vfork_share|PASS' \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-vfork-run (vfork shared-mm + exec)"
+
+# Canonical plane is KTM; keep the smoke name as a CI alias.
+.PHONY: smoke-vfork
+smoke-vfork: ktm-userdev-vfork-run
+	@echo "✓ smoke-vfork (alias → ktm-userdev-vfork-run)"
+
+ktm-userdev-chroot-run: build-ktm-chroot-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_CHROOT_BIN) \
+		--log /tmp/ktm-userdev-chroot.log --timeout 90 \
+		--done KTM_USERDEV_OK \
+		--require 'TEST_END|chroot_jail|PASS' \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-chroot-run (chroot remap + fork inherit)"
+
+.PHONY: smoke-chroot
+smoke-chroot: ktm-userdev-chroot-run
+	@echo "✓ smoke-chroot (alias → ktm-userdev-chroot-run)"
 
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
@@ -5950,30 +5954,6 @@ smoke-setuid-exec: build-setuid-exec-smoke kernel-x64-userspace.iso
 			  grep -E 'SETID_|SETUID_' $(SETUID_EXEC_SMOKE_LOG) | tail -20; exit 1; }; \
 	done
 	@echo "✓ smoke-setuid-exec passed"
-
-CHROOT_SMOKE_TAGS = CHROOT_OPEN_INSIDE_OK CHROOT_OUTSIDE_DENIED CHROOT_GETCWD_OK \
-	CHROOT_FORK_INHERIT_OK CHROOT_OK
-
-.PHONY: build-chroot-smoke smoke-chroot
-smoke-chroot: build-chroot-smoke kernel-x64-userspace.iso
-	@echo "  SMOKE   chroot(2) jail remap + fork inherit..."
-	@DISK=$$(mktemp /tmp/ir0-chroot-smoke.XXXXXX.img); \
-	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
-	python3 scripts/inject_init_minix.py --format-large $$DISK && \
-	python3 scripts/inject_init_minix.py $$DISK $(CHROOT_SMOKE_BIN) sbin/init && \
-	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init && \
-	$(SMOKE_QEMU_RUN) --log $(CHROOT_SMOKE_LOG) --timeout 60 --stale-sec 20 \
-		--done CHROOT_OK --fail-regex 'CHROOT_FAIL|KERNEL PANIC' -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rm -f $$DISK;
-	@for tag in $(CHROOT_SMOKE_TAGS); do \
-		grep -q "$$tag" $(CHROOT_SMOKE_LOG) || \
-			{ echo "✗ smoke-chroot FAILED (missing $$tag)"; \
-			  grep -E 'CHROOT_' $(CHROOT_SMOKE_LOG) | tail -30; exit 1; }; \
-	done
-	@echo "✓ smoke-chroot passed"
 
 smoke-musl-pthread: build-musl-pthread-smoke kernel-x64-userspace.iso
 	@echo "  SMOKE   musl pthread_create + join..."

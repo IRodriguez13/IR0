@@ -20,7 +20,6 @@
 # payloads) that do not use a test suffix.
 
 # --- userspace PID1 harnesses (serial-only) ---
-setup/pid1/chroot_smoke.c
 setup/pid1/cmd_stress_smoke.c
 setup/pid1/init_desktop_resize_smoke.c
 setup/pid1/init_ext2_smoke.c
@@ -45,7 +44,6 @@ setup/pid1/init_reboot_s3_smoke.c
 setup/pid1/init_robust_list_smoke.c
 setup/pid1/init_segv_smoke.c
 setup/pid1/init_tcp_listen_smoke.c
-setup/pid1/init_vfork_smoke.c
 setup/pid1/ktm_boot_halt_smoke.c
 setup/pid1/ktm_doom_prereq_smoke.c
 setup/pid1/ktm_fbdev_gui_smoke.c

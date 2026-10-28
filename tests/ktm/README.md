@@ -12,7 +12,7 @@ repo root.
 | Path | Role |
 |------|------|
 | `tests/ktm/scenarios/` | In-kernel scenarios linked into the kernel (`TEST_BEGIN` / `TEST_END` at boot) |
-| `tests/ktm/userdev/` | musl static pilots injected as `/sbin/init` for QEMU smokes (`make ktm-userdev-*`) |
+| `tests/ktm/userdev/` | musl static pilots injected as `/mnt/host/ir0_payload` (hostshare stub or runit) for QEMU smokes (`make ktm-userdev-*`) |
 | `tests/ktm/lib/` | Shared userspace helper (`libktm_user.c`) over `/dev/ktm` ioctls |
 
 Host-side KTM checks (panic inventory, sched contract, Class B predicate) remain

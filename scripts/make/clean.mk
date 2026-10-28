@@ -37,7 +37,7 @@ IR0_CLEAN_SMOKE_BINS := \
 	setup/pid1/ktm_fbdev_gui setup/pid1/init \
 	setup/pid1/musl_arch_prctl_smoke setup/pid1/musl_pthread_smoke \
 	setup/pid1/musl_pthread_libc_smoke setup/pid1/setuid_exec_smoke \
-	setup/pid1/chroot_smoke setup/pid1/setid_helper setup/pid1/sh_smoke \
+	setup/pid1/setid_helper setup/pid1/sh_smoke \
 	setup/pid1/userspace_segv setup/pid1/sbin/irinit \
 	setup/pid1/tcc_power_halt_harness setup/pid1/init_hostshare_exec \
 	setup/pid1/pipeline_stress_smoke setup/pid1/session_walk_smoke \
