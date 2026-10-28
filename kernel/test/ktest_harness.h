@@ -15,6 +15,10 @@
 /**
  * IR0 Kernel - Test harness (in-kernel)
  * Batería exhaustiva: ASSERT y logging vía KTM klog para tests dentro del kernel.
+ *
+ * Diagnostics use INFO, not DEBUG: the canonical test ISO boots with
+ * ir0.loglevel=normal, so DEBUG records never reach /tmp/ktest.log and a
+ * failing assertion would be indistinguishable from a silent "not ok".
  */
 
 #ifndef _KERNEL_KTEST_HARNESS_H
@@ -38,48 +42,68 @@
 extern int _ktest_failed;
 extern int _ktest_count;
 extern int _ktest_pass;
+extern const char *_ktest_current_name;
 
 #define KTEST_BEGIN(name) do { \
 	_ktest_failed = 0; \
 	_ktest_count++; \
-	klog_debug_fmt("KTEST", "[KTEST] %s ...", (name)); \
+	_ktest_current_name = (name); \
 } while (0)
 
 #define KTEST_END() do { \
-	if (_ktest_failed) { \
-		klog_debug("KTEST", "FAIL"); \
+	klog_info_fmt("KTEST", "[KTEST] %s ... %s", \
+		      _ktest_current_name ? _ktest_current_name : "unknown", \
+		      _ktest_failed ? "FAIL" : "PASS"); \
+	if (_ktest_failed) \
 		_ktest_pass = 0; \
-	} else { \
-		klog_debug("KTEST", "PASS"); \
-	} \
 } while (0)
 
 #define KASSERT(cond) do { \
 	if (!(cond)) { \
-		klog_debug_fmt("KTEST", "[KTEST] ASSERT failed: %s (line %x)", \
-			       #cond, (unsigned)(uint32_t)__LINE__); \
+		klog_info_fmt("KTEST", "[KTEST] ASSERT failed: %s (line %u)", \
+			      #cond, (unsigned)__LINE__); \
 		_ktest_failed = 1; \
 	} \
 } while (0)
 
 #define KASSERT_EQ(a, b) do { \
-	if ((a) != (b)) { \
-		klog_debug_fmt("KTEST", "[KTEST] ASSERT_EQ failed: %s != %s (line %x)", \
-			       #a, #b, (unsigned)(uint32_t)__LINE__); \
+	__typeof__(a) _ktest_a = (a); \
+	__typeof__(b) _ktest_b = (b); \
+	if (_ktest_a != _ktest_b) { \
+		klog_info_fmt("KTEST", \
+			      "[KTEST] ASSERT_EQ failed: %s != %s (line %u) " \
+			      "left=0x%llx right=0x%llx", \
+			      #a, #b, (unsigned)__LINE__, \
+			      (unsigned long long)_ktest_a, \
+			      (unsigned long long)_ktest_b); \
 		_ktest_failed = 1; \
 	} \
 } while (0)
 
 #define KASSERT_GE(a, b) do { \
-	if ((a) < (b)) { \
-		klog_debug("KTEST", "[KTEST] ASSERT_GE failed"); \
+	__typeof__(a) _ktest_a = (a); \
+	__typeof__(b) _ktest_b = (b); \
+	if (_ktest_a < _ktest_b) { \
+		klog_info_fmt("KTEST", \
+			      "[KTEST] ASSERT_GE failed: %s >= %s (line %u) " \
+			      "left=0x%llx right=0x%llx", \
+			      #a, #b, (unsigned)__LINE__, \
+			      (unsigned long long)_ktest_a, \
+			      (unsigned long long)_ktest_b); \
 		_ktest_failed = 1; \
 	} \
 } while (0)
 
 #define KASSERT_GT(a, b) do { \
-	if ((a) <= (b)) { \
-		klog_debug("KTEST", "[KTEST] ASSERT_GT failed"); \
+	__typeof__(a) _ktest_a = (a); \
+	__typeof__(b) _ktest_b = (b); \
+	if (_ktest_a <= _ktest_b) { \
+		klog_info_fmt("KTEST", \
+			      "[KTEST] ASSERT_GT failed: %s > %s (line %u) " \
+			      "left=0x%llx right=0x%llx", \
+			      #a, #b, (unsigned)__LINE__, \
+			      (unsigned long long)_ktest_a, \
+			      (unsigned long long)_ktest_b); \
 		_ktest_failed = 1; \
 	} \
 } while (0)
