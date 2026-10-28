@@ -5810,11 +5810,15 @@ smoke-tcp-listen: kernel-x64-userspace.iso
 	grep -E 'F8_TCP_LISTEN_|panic' $(F8_TCP_LISTEN_SMOKE_LOG) | tail -60; \
 	exit 1
 
+ktm-adoption-guard:
+	@python3 $(KERNEL_ROOT)/scripts/ktm_adoption_guard.py
+
 ktm-check: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
 	@python3 scripts/ktm_classify_selftest.py
 	@python3 scripts/ktm_panic_inventory.py --check
 	@python3 scripts/ktm_syscall_manifest.py --tier1 || true
+	@$(MAKE) -s ktm-adoption-guard
 	@echo "✓ KTM check complete (tier-1 manifest gaps are informational)"
 
 ktm-classify-selftest:

@@ -502,6 +502,12 @@ Source: `scripts/smoke_session_soak.py`.
    [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md).
 4. Keep uapi event type numbers in sync between `event.h` and `uapi.h`
    (`KTM_UAPI_EVENT_*`).
+5. New in-guest / in-kernel harnesses report through KTM. The adoption ratchet
+   (`make ktm-adoption-guard`, part of `ktm-check`) fails when a
+   `setup/pid1/*_{smoke,probe,stress}.c` or `kernel/test/test_*.c` file is
+   serial-only and not listed in `scripts/ktm_legacy_baseline.txt`. The ledger
+   only shrinks: converting a harness to `libktm_user` or a KTM scenario
+   requires deleting its line.
 
 ### 7.1 Canonical test plane (when KTM is better)
 

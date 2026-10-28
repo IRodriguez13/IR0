@@ -16,6 +16,13 @@ over new ad-hoc serial dialects. See [`HARNESS_MAP.md`](../HARNESS_MAP.md)
 before claiming a wave-era case is covered. For how to author scenarios or
 userdev pilots, read **[`KTM.md`](../KTM.md)** first.
 
+The adoption ratchet (`make ktm-adoption-guard`, run by `ktm-check`) keeps new
+`setup/pid1/*_{smoke,probe,stress}.c` and `kernel/test/test_*.c` harnesses from
+being added as serial-only tests. Legacy files are listed in
+`scripts/ktm_legacy_baseline.txt`; converting one to KTM means deleting its
+line. The guard also verifies that every `tests/ktm/userdev` pilot includes
+`libktm_user.h` and every `tests/ktm/scenarios` file registers a scenario.
+
 ---
 
 ## Facade
