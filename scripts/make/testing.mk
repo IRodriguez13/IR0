@@ -5713,8 +5713,13 @@ smoke-tcp-listen: kernel-x64-userspace.iso
 	grep -E 'F8_TCP_LISTEN_|panic' $(F8_TCP_LISTEN_SMOKE_LOG) | tail -60; \
 	exit 1
 
+.PHONY: ktm-adoption-guard host-portability-guard
+
 ktm-adoption-guard:
 	@python3 $(KERNEL_ROOT)/scripts/ktm_adoption_guard.py
+
+host-portability-guard:
+	@python3 $(KERNEL_ROOT)/scripts/host_portability_guard.py
 
 ktm-check: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
@@ -5722,6 +5727,7 @@ ktm-check: kernel-x64.bin arch-guard
 	@python3 scripts/ktm_panic_inventory.py --check
 	@python3 scripts/ktm_syscall_manifest.py --tier1 || true
 	@$(MAKE) -s ktm-adoption-guard
+	@$(MAKE) -s host-portability-guard
 	@echo "✓ KTM check complete (tier-1 manifest gaps are informational)"
 
 ktm-classify-selftest:

@@ -65,6 +65,7 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-api-public-private.md` | always | Facade naming; anti cross-coupling |
 | `ir0-smoke-behavior-validation.md` | always | QEMU smoke guards and multi-trial |
 | `ir0-ktm-instrumentation.md` | on demand | KTM tags and panic metadata |
+| `ir0-ktm-host-portability-safety.md` | always | KTM host tooling is UNIX-portable and never risks host RAM/disk |
 | `ir0-linux-fork-debug-reference.md` | on demand | `$LINUX_TREE` fork debug workflow |
 | `ir0-workspace.md` | always | Tier map and CTR gates (installed locally) |
 | `ir0-arm64-rpi5-x86-regression-gate.md` | always | ARM64/RPi5 work must preserve facades and keep x86_64 green |
