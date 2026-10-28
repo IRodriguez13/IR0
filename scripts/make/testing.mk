@@ -1657,66 +1657,6 @@ smoke-desktop-twm-resize: check-isd
 		--inject scripts/inject_init_minix.py
 	@echo "✓ smoke-desktop-twm-resize passed"
 
-PTY_WINSZ_SMOKE_LOG = /tmp/pty-winsz-smoke.log
-
-.PHONY: smoke-pty-winsz build-init-pty-winsz-smoke
-build-init-pty-winsz-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_pty_winsz_smoke.c
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-init-pty-winsz-smoke OK"
-
-smoke-pty-winsz: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   PTY TIOCSWINSZ + SIGWINCH..."
-	@$(MAKE) -s build-init-pty-winsz-smoke
-	@DISK=$$(mktemp /tmp/ir0-pty-winsz.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(PTY_WINSZ_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(PTY_WINSZ_SMOKE_LOG) --timeout 60 \
-		--done 'PTY_WINSZ_OK' -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rc=$$?; rm -f $$DISK; \
-	if grep -q 'PTY_WINSZ_OK' $(PTY_WINSZ_SMOKE_LOG) && \
-	   { grep -q 'PTY_WINCH_SENT' $(PTY_WINSZ_SMOKE_LOG) || \
-	     grep -q 'PTY_WINCH_OK' $(PTY_WINSZ_SMOKE_LOG); }; then \
-		echo "✓ smoke-pty-winsz passed"; \
-	else \
-		echo "✗ smoke-pty-winsz FAILED"; \
-		grep -E 'PTY_|errno|panic' $(PTY_WINSZ_SMOKE_LOG) | tail -30; exit 1; \
-	fi
-
-.PHONY: smoke-prlimit build-init-prlimit
-PRLIMIT_SMOKE_LOG = /tmp/prlimit-smoke.log
-build-init-prlimit:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_prlimit_smoke.c
-	@echo "✓ build-init-prlimit OK"
-
-smoke-prlimit: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   prlimit64 RLIMIT_NOFILE..."
-	@$(MAKE) -s build-init-prlimit
-	@DISK=$$(mktemp /tmp/ir0-prlimit.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(PRLIMIT_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(PRLIMIT_SMOKE_LOG) --timeout 45 --stale-sec 15 \
-		--done PRLIMIT_OK -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rm -f $$DISK; \
-	if grep -q "PRLIMIT_OK" $(PRLIMIT_SMOKE_LOG); then \
-		echo "✓ smoke-prlimit passed"; \
-	else \
-		echo "✗ smoke-prlimit FAILED"; \
-		grep -E 'PRLIMIT_|panic' $(PRLIMIT_SMOKE_LOG) | tail -30; exit 1; \
-	fi
-
 .PHONY: smoke-robust-list build-init-robust-list
 ROBUST_SMOKE_LOG = /tmp/robust-list-smoke.log
 build-init-robust-list:
@@ -5147,6 +5087,11 @@ ktm-userdev-posix-depth-run: build-ktm-posix-depth-case build-init-hostshare-exe
 .PHONY: smoke-posix-depth
 smoke-posix-depth: ktm-userdev-posix-depth-run
 	@echo "✓ smoke-posix-depth (alias → ktm-userdev-posix-depth-run)"
+
+# prlimit64 and PTY winsize/SIGWINCH are assertions in the posix_depth pilot.
+.PHONY: smoke-prlimit smoke-pty-winsz
+smoke-prlimit smoke-pty-winsz: ktm-userdev-posix-depth-run
+	@echo "✓ $@ (alias → ktm-userdev-posix-depth-run)"
 
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso

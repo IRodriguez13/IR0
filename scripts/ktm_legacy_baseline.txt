@@ -35,8 +35,6 @@ setup/pid1/init_kexec_load_smoke.c
 setup/pid1/init_mmap_smoke.c
 setup/pid1/init_posix_setsid_smoke.c
 setup/pid1/init_posix_sighup_tty_smoke.c
-setup/pid1/init_prlimit_smoke.c
-setup/pid1/init_pty_winsz_smoke.c
 setup/pid1/init_reboot_kexec_enosys_smoke.c
 setup/pid1/init_reboot_s3_smoke.c
 setup/pid1/init_robust_list_smoke.c

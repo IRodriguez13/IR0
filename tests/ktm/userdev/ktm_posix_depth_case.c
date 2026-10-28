@@ -14,6 +14,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,6 +24,7 @@
 #include <sys/select.h>
 #include <sys/syscall.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "libktm_user.h"
@@ -42,6 +44,17 @@
 #ifndef TIOCGWINSZ
 #define TIOCGWINSZ 0x5413
 #endif
+#ifndef TIOCSCTTY
+#define TIOCSCTTY 0x540E
+#endif
+
+static volatile sig_atomic_t got_winch;
+
+static void on_winch(int sig)
+{
+	(void)sig;
+	got_winch = 1;
+}
 
 static void say(const char *s)
 {
@@ -176,6 +189,21 @@ int main(void)
 		goto done;
 	}
 	expect(fd, "pts_open", 1, &fails);
+
+	/* TIOCSCTTY requires a session leader; PID1 already is one. */
+	if (getsid(0) != getpid())
+		expect(fd, "setsid", setsid() >= 0, &fails);
+	expect(fd, "tiocsctty", ioctl(master, TIOCSCTTY, 0) == 0, &fails);
+
+	{
+		struct sigaction sa;
+
+		memset(&sa, 0, sizeof(sa));
+		sa.sa_handler = on_winch;
+		expect(fd, "sigwinch_handler",
+		       sigaction(SIGWINCH, &sa, NULL) == 0, &fails);
+	}
+
 	expect(fd, "tiocswinsz",
 	       ioctl(master, TIOCSWINSZ, &ws_set) == 0, &fails);
 	memset(&ws_get, 0, sizeof(ws_get));
@@ -184,6 +212,16 @@ int main(void)
 		       ws_get.ws_row == ws_set.ws_row &&
 		       ws_get.ws_col == ws_set.ws_col,
 	       &fails);
+
+	{
+		struct timespec ts = { .tv_sec = 0, .tv_nsec = 5 * 1000 * 1000 };
+		int i;
+
+		for (i = 0; i < 40 && !got_winch; i++)
+			(void)nanosleep(&ts, NULL);
+	}
+	expect(fd, "sigwinch", got_winch != 0, &fails);
+
 	expect(fd, "pty_mwrite", write(master, "P", 1) == 1, &fails);
 	memset(buf, 0, sizeof(buf));
 	expect(fd, "pty_sread",
