@@ -26,10 +26,10 @@ IR0_VERSION_PATCH := 1
 IR0_VERSION_SUFFIX :=
 IR0_VERSION_STRING := $(IR0_VERSION_MAJOR).$(IR0_VERSION_MINOR).$(IR0_VERSION_PATCH)$(IR0_VERSION_SUFFIX)
 
-# Build information. One shell for the whole banner: every $(shell) is a fork,
-# and recursive makes pay this cost on each parse. The stamp reset must run
-# before the counter is read.
-IR0_BUILD_META := $(shell \
+# Build information is lazy and memoized: help, graph queries and unrelated
+# tooling must not fork date/whoami/hostname or mutate the build stamp.
+# The first consumer replaces this recursive variable with the computed value.
+IR0_BUILD_META = $(eval IR0_BUILD_META := $(shell \
 	stamp='$(IR0_VERSION_STRING)'; \
 	old=$$(cat .build_number_version 2>/dev/null || true); \
 	if [ "$$old" != "$$stamp" ]; then \
@@ -40,17 +40,17 @@ IR0_BUILD_META := $(shell \
 		"$$(LC_TIME=C date +'%b %d %Y %H:%M:%S')" \
 		"$$(whoami 2>/dev/null || echo unknown)" \
 		"$$(hostname 2>/dev/null || echo localhost)" \
-		"$$(cat .build_number 2>/dev/null || echo 1)")
-IR0_BUILD_DATE := $(wordlist 1,3,$(IR0_BUILD_META))
-IR0_BUILD_TIME := $(word 4,$(IR0_BUILD_META))
-IR0_BUILD_USER := $(word 5,$(IR0_BUILD_META))
-IR0_BUILD_HOST := $(word 6,$(IR0_BUILD_META))
+		"$$(cat .build_number 2>/dev/null || echo 1)"))$(IR0_BUILD_META)
+IR0_BUILD_DATE = $(wordlist 1,3,$(IR0_BUILD_META))
+IR0_BUILD_TIME = $(word 4,$(IR0_BUILD_META))
+IR0_BUILD_USER = $(word 5,$(IR0_BUILD_META))
+IR0_BUILD_HOST = $(word 6,$(IR0_BUILD_META))
 # Build number - auto-increment on each kernel link (local to this workspace).
-IR0_BUILD_NUMBER := $(word 7,$(IR0_BUILD_META))
-# Compiler banner: one fork for the compiler, shell builtins for the split.
-IR0_BUILD_CC := $(shell { $(CC) --version 2>/dev/null || echo "gcc unknown"; } | \
+IR0_BUILD_NUMBER = $(word 7,$(IR0_BUILD_META))
+# Compiler banner follows the same lazy memoization rule.
+IR0_BUILD_CC = $(eval IR0_BUILD_CC := $(shell { $(CC) --version 2>/dev/null || echo "gcc unknown"; } | \
 	{ read -r name ver patch rest || true; \
-		printf '%s %s%s\n' "$$name" "$$ver" "$${patch:+ $$patch}"; })
+		printf '%s %s%s\n' "$$name" "$$ver" "$${patch:+ $$patch}"; }))$(IR0_BUILD_CC)
 # Increment build number for next build (only if building kernel target)
 -include .build_number_inc
 
@@ -277,8 +277,9 @@ QEMU_GTK_BASE = gtk,zoom-to-fit=off
 # Probe optional GTK flags; never fail the build if unsupported.
 QEMU_DISPLAY_GTK = $(shell \
 	_opts='$(QEMU_GTK_BASE)'; \
-	if $(QEMU) -display help 2>&1 | grep -q show-menubar; then _opts="$$_opts,show-menubar=off"; fi; \
-	if $(QEMU) -display help 2>&1 | grep -q show-tabs; then _opts="$$_opts,show-tabs=off"; fi; \
+	_help="$$( $(QEMU) -display help 2>&1 || true )"; \
+	if printf '%s\n' "$$_help" | grep -q show-menubar; then _opts="$$_opts,show-menubar=off"; fi; \
+	if printf '%s\n' "$$_help" | grep -q show-tabs; then _opts="$$_opts,show-tabs=off"; fi; \
 	echo "-display $$_opts $(QEMU_NAME)")
 QEMU_DISPLAY_GTK_DEBUG = -display gtk $(QEMU_NAME)
 
