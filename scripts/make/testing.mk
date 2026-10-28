@@ -26,29 +26,7 @@ INIT_SEGV_SMOKE_SRC = setup/pid1/init_segv_smoke.c
 INIT_HEAP_SMOKE_SRC = setup/pid1/init_heap_smoke.c
 INIT_FAT16_SMOKE_SRC = setup/pid1/init_fat16_smoke.c
 INIT_MMAP_SMOKE_SRC = setup/pid1/init_mmap_smoke.c
-INIT_STACK_HEAP_ISO_SRC = setup/pid1/init_stack_heap_iso_smoke.c
 INIT_FORK_MEM_SMOKE_SRC = setup/pid1/init_fork_mem_smoke.c
-KTM_RECLAIM_EXIT_SMOKE_SRC = setup/pid1/ktm_reclaim_exit_smoke.c
-KTM_PT_RECLAIM_SMOKE_SRC = setup/pid1/ktm_pt_reclaim_smoke.c
-KTM_EXEC_STORM_SMOKE_SRC = setup/pid1/ktm_exec_storm_smoke.c
-KTM_FORK_EXIT_STORM_SMOKE_SRC = setup/pid1/ktm_fork_exit_storm_smoke.c
-KTM_FORK_EXIT_STORM_DEEP_SMOKE_SRC = setup/pid1/ktm_fork_exit_storm_deep_smoke.c
-KTM_FORK_WAIT_STORM_SMOKE_SRC = setup/pid1/ktm_fork_wait_storm_smoke.c
-KTM_EXEC_LOOP_SMOKE_SRC = setup/pid1/ktm_exec_loop_smoke.c
-KTM_FORK_WAIT_DRAIN_SMOKE_SRC = setup/pid1/ktm_fork_wait_drain_smoke.c
-KTM_EXEC_DRAIN_SMOKE_SRC = setup/pid1/ktm_exec_drain_smoke.c
-KTM_INIT_EXIT_DRAIN_SMOKE_SRC = setup/pid1/ktm_init_exit_drain_smoke.c
-KTM_FORK_ROLLBACK_SMOKE_SRC = setup/pid1/ktm_fork_rollback_smoke.c
-KTM_FORK_MEM_TOUCH_SMOKE_SRC = setup/pid1/ktm_fork_mem_touch_smoke.c
-KTM_FORK_NO_RECURSE_SMOKE_SRC = setup/pid1/ktm_fork_no_recursion_smoke.c
-KTM_FORK_HEAP_SMOKE_SRC = setup/pid1/ktm_fork_heap_smoke.c
-KTM_IPC_SMOKE_SRC = setup/pid1/ktm_ipc_smoke.c
-KTM_PIPE_SMOKE_SRC = setup/pid1/ktm_pipe_smoke.c
-KTM_BUSYBOX_SMOKE_SRC = setup/pid1/ktm_busybox_smoke.c
-KTM_KTM_EXEC_ONLY_SMOKE_SRC = setup/pid1/ktm_exec_only_smoke.c
-KTM_SHELL_SMOKE_SRC = setup/pid1/ktm_shell_smoke.c
-KTM_TCC_SMOKE_SRC = setup/pid1/ktm_tcc_smoke.c
-KTM_TCC_HARNESS_BIN = setup/pid1/tcc_harness
 INIT_TCC_POWER_HALT_SRC = setup/pid1/init_tcc_power_halt.c
 TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
 TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
@@ -56,7 +34,6 @@ KTM_DOOMGENERIC_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = $(IR0_USERSPACE_OUT)/x86_64/smoke/stage-bin
 # Smoke runit helpers (fase55d, tcc power, busybox power) live under smoke/stage-bin.
 RUNIT_SMOKE_STAGE_BIN = $(IR0_USERSPACE_OUT)/smoke/stage-bin
-KTM_FS_DEV_SMOKE_SRC = setup/pid1/ktm_fs_dev_smoke.c
 KTM_POSIX_PSEUDOFS_SMOKE_SRC = setup/pid1/ktm_posix_pseudofs_smoke.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
 KTM_FBDEV_SMOKE_SRC = setup/pid1/ktm_fbdev_smoke.c
@@ -81,15 +58,6 @@ ifneq ($(origin FASE58E_DISPLAY), undefined)
 ASH_GUI_DISPLAY = $(FASE58E_DISPLAY)
 endif
 ASH_GUI_SMOKE_LOG = /tmp/ash-gui-smoke.log
-KTM_PROGRAMS_SMOKE_SRC = setup/pid1/ktm_programs_smoke.c
-KTM_IPC_CAT_HELPER_SRC = setup/pid1/ktm_ipc_cat_helper.c
-KTM_IPC_ECHO_HELPER_SRC = setup/pid1/ktm_ipc_echo_helper.c
-KTM_IPC_BUSYBOX_HELPER_SRC = setup/pid1/ktm_ipc_busybox_helper.c
-KTM_HELLO_HELPER_SRC = setup/pid1/ktm_hello_helper.c
-KTM_IPC_CAT_HELPER_BIN = setup/pid1/ipc_cat
-KTM_IPC_ECHO_HELPER_BIN = setup/pid1/ipc_echo
-KTM_IPC_BUSYBOX_HELPER_BIN = setup/pid1/ipc_busybox
-KTM_HELLO_HELPER_BIN = setup/pid1/hello_helper
 BUSYBOX_REAL_BIN = setup/pid1/busybox_real
 # ISD scripts still read FASE50_BUSYBOX_BIN; keep as alias.
 FASE50_BUSYBOX_BIN = $(BUSYBOX_REAL_BIN)
@@ -123,7 +91,6 @@ SEGV_SMOKE_BIN   = setup/pid1/userspace_segv
 KTM_TRUE_HELPER_BIN  = setup/pid1/f41true
 HEAP_SMOKE_LOG   = /tmp/userspace-heap-smoke.log
 MMAP_SMOKE_LOG   = /tmp/userspace-mmap-smoke.log
-ISO_SMOKE_LOG    = /tmp/userspace-stack-heap-iso.log
 FORK_MEM_SMOKE_LOG = /tmp/userspace-fork-mem-smoke.log
 FAT16_SMOKE_IMG  = build/fat16_smoke.img
 FAT16_SMOKE_LOG  = /tmp/fat16-smoke.log
@@ -823,16 +790,6 @@ build-init-mmap-smoke:
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
 	@echo "✓ build-init-mmap-smoke OK"
 
-build-init-stack-heap-iso-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building stack/heap isolation smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_STACK_HEAP_ISO_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-init-stack-heap-iso-smoke OK"
-
 build-init-fork-mem-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
@@ -852,178 +809,6 @@ build-ktm-true-helper:
 	@$(MUSL_CC) -static -Os -o $(KTM_TRUE_HELPER_BIN) $(KTM_TRUE_HELPER_SRC)
 	@file $(KTM_TRUE_HELPER_BIN) | grep -q ELF
 	@echo "✓ build-ktm-true-helper OK"
-
-build-ktm-reclaim-exit-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building reclaim smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_RECLAIM_EXIT_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-reclaim-exit-smoke OK"
-
-build-ktm-pt-reclaim-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building page-table reclaim smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_PT_RECLAIM_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-pt-reclaim-smoke OK"
-
-build-ktm-exec-storm-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building exec storm smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_EXEC_STORM_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-exec-storm-smoke OK"
-
-build-ktm-fork-exit-storm-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork+exit storm smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_EXIT_STORM_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-exit-storm-smoke OK"
-
-build-ktm-fork-exit-storm-deep-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork+exit storm smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_EXIT_STORM_DEEP_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-exit-storm-deep-smoke OK"
-
-build-ktm-fork-wait-storm-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork+wait storm smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_WAIT_STORM_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-wait-storm-smoke OK"
-
-build-ktm-exec-loop-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building exec loop smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_EXEC_LOOP_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-exec-loop-smoke OK"
-
-build-ktm-fork-wait-drain-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork-wait-drain smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_WAIT_DRAIN_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-wait-drain-smoke OK"
-
-build-ktm-exec-drain-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building exec-drain smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_EXEC_DRAIN_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-exec-drain-smoke OK"
-
-build-ktm-init-exit-drain-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building init-exit-drain smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_INIT_EXIT_DRAIN_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-init-exit-drain-smoke OK"
-
-build-ktm-fork-rollback-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork rollback storm ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_ROLLBACK_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-rollback-smoke OK"
-
-build-ktm-fork-mem-touch-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork mem touch ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_MEM_TOUCH_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-mem-touch-smoke OK"
-
-build-ktm-fork-no-recursion-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork-no-recursion ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_NO_RECURSE_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-no-recursion-smoke OK"
-
-build-ktm-fork-heap-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fork+heap ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FORK_HEAP_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fork-heap-smoke OK"
-
-build-ktm-ipc-helpers:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  IPC     Building /bin/cat /bin/echo /bin/busybox"
-	@$(MUSL_CC) -static -Os -o $(KTM_IPC_CAT_HELPER_BIN) $(KTM_IPC_CAT_HELPER_SRC)
-	@$(MUSL_CC) -static -Os -o $(KTM_IPC_ECHO_HELPER_BIN) $(KTM_IPC_ECHO_HELPER_SRC)
-	@$(MUSL_CC) -static -Os -o $(KTM_IPC_BUSYBOX_HELPER_BIN) $(KTM_IPC_BUSYBOX_HELPER_SRC)
-	@file $(KTM_IPC_CAT_HELPER_BIN) $(KTM_IPC_ECHO_HELPER_BIN) $(KTM_IPC_BUSYBOX_HELPER_BIN) | grep -q ELF
-	@echo "✓ build-ktm-ipc-helpers OK"
-
-build-ktm-ipc-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building IPC smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_IPC_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-ipc-smoke OK"
-
-build-ktm-pipe-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building pipe smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_PIPE_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-pipe-smoke OK"
 
 build-busybox-min:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -1188,46 +973,6 @@ ktm-userdev-busybox-manifest-run: build-ktm-busybox-manifest-smoke build-busybox
 
 smoke-busybox-manifest: ktm-userdev-busybox-manifest-run
 	@echo "✓ smoke-busybox-manifest (alias → ktm-userdev-busybox-manifest-run)"
-
-build-ktm-hello-helper:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  HELLO   Building hello-world ($(KTM_HELLO_HELPER_BIN))"
-	@$(MUSL_CC) -static -Os -o $(KTM_HELLO_HELPER_BIN) $(KTM_HELLO_HELPER_SRC)
-	@file $(KTM_HELLO_HELPER_BIN) | grep -q ELF
-	@echo "✓ build-ktm-hello-helper OK"
-
-build-ktm-busybox-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building BusyBox smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_BUSYBOX_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-busybox-smoke OK"
-
-build-ktm-exec-only-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building EXEC-only smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_KTM_EXEC_ONLY_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-exec-only-smoke OK"
-
-build-ktm-shell-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building shell smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_SHELL_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-shell-smoke OK"
 
 build-runit: check-userspace
 	@$(IR0_USERSPACE_MAKE) build-runit build-services
@@ -2023,13 +1768,6 @@ smoke-pty-winsz: kernel-x64-userspace.iso
 		echo "✗ smoke-pty-winsz FAILED"; \
 		grep -E 'PTY_|errno|panic' $(PTY_WINSZ_SMOKE_LOG) | tail -30; exit 1; \
 	fi
-
-.PHONY: build-init-epoll-basic
-EPOLL_SMOKE_LOG = /tmp/epoll-basic-smoke.log
-build-init-epoll-basic:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_epoll_basic_smoke.c
-	@echo "✓ build-init-epoll-basic OK (legacy inject; prefer ktm-userdev-epoll-run)"
 
 .PHONY: smoke-prlimit build-init-prlimit
 PRLIMIT_SMOKE_LOG = /tmp/prlimit-smoke.log
@@ -3498,16 +3236,10 @@ smoke-arm64: smoke-arm64-boot smoke-arm64-dtb smoke-arm64-el2-normalize smoke-ar
 	smoke-arm64-gic smoke-arm64-syscall smoke-arm64-vbar smoke-arm64-el0
 	@echo "✓ smoke-arm64 (boot+dtb+el2+mmu+slice+port+gic+syscall+vbar+el0) passed"
 
-.PHONY: smoke-stream-sock build-init-stream-sock-smoke
 .PHONY: smoke-hostshare-9p build-init-hostshare-9p-smoke
 .PHONY: smoke-hostshare-tree build-init-hostshare-tree-smoke
 .PHONY: smoke-hostshare-exec build-init-hostshare-exec
 # (arm64 full kernel-arm64.bin remains available via ARCH=arm64)
-build-init-stream-sock-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_stream_sock_smoke.c
-	@echo "✓ build-init-stream-sock-smoke OK"
-
 build-init-hostshare-9p-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_9p_smoke.c
@@ -3638,8 +3370,6 @@ smoke-hostshare-9p: kernel-x64-userspace.iso
 		exit 1; \
 	fi
 
-STREAM_SOCK_SMOKE_LOG = /tmp/stream-sock-smoke.log
-# Legacy serial inject kept as build-init-stream-sock-smoke only;
 # smoke-stream-sock aliases to ktm-userdev-stream-sock-run (see KTM targets).
 
 .PHONY: smoke-ahci-multi
@@ -4399,26 +4129,6 @@ check-ash-logs:
 build-tcc:
 	@./setup/tcc/build-tcc.sh
 
-build-ktm-tcc-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  HARNESS Building TCC smoke ($(KTM_TCC_HARNESS_BIN))"
-	@$(MUSL_CC) -static -Os -o $(KTM_TCC_HARNESS_BIN) $(KTM_TCC_SMOKE_SRC)
-	@file $(KTM_TCC_HARNESS_BIN) | grep -q ELF
-	@echo "✓ build-ktm-tcc-smoke OK"
-
-build-ktm-fs-dev-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building fs/dev smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_FS_DEV_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-fs-dev-smoke OK"
-
 build-ktm-posix-pseudofs-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \
 		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
@@ -4550,16 +4260,6 @@ build-ktm-doom-interactive:
 		-o $(KTM_DOOM_INTERACTIVE_BIN) -lm
 	@file $(KTM_DOOM_INTERACTIVE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-doom-interactive OK"
-
-build-ktm-programs-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building programs smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_PROGRAMS_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-programs-smoke OK"
 
 # Kernel ISO booting /sbin/init (CONFIG_KERNEL_DEBUG_SHELL=n)
 # Default: lazy anon mmap + brk (defconfig LAZY_*=y). Bisect: make kernel-x64-userspace-eager.bin

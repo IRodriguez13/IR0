@@ -47,7 +47,7 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | runit product boot | `smoke-runit-boot`, `smoke-runit-login`, `smoke-runit-power` |
 | BusyBox | `build-busybox-min`, `build-busybox-plus`, `build-busybox-full` |
 | TinyCC | `build-tcc` |
-| KTM in-guest smokes | `build-ktm-*` build helpers and their `smoke-*` runners |
+| KTM in-guest smokes | `ktm-userdev-*-run` pilots (`tests/ktm/userdev/`) |
 | COW data-plane | `smoke-mm-cow-lazy` |
 | ARM64 | `smoke-arm64-all` and the per-slice `smoke-arm64-*` targets |
 
@@ -59,9 +59,6 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | Variable / path now | Old path |
 |---------------------|----------|
 | `setup/pid1/busybox_real` (`BUSYBOX_REAL_BIN`) | `fase50_busybox_real` |
-| `setup/pid1/hello_helper` | `fase50_hello` |
-| `setup/pid1/ipc_cat` / `ipc_echo` / `ipc_busybox` | `fase48_*` |
-| `setup/pid1/tcc_harness` | `fase52_harness` |
 | `setup/pid1/busybox_manifest_smoke` | `fase58l_busybox_smoke` |
 
 ## Kept FASE strings (do not rename)

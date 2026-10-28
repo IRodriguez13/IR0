@@ -31,9 +31,8 @@ IR0_CLEAN_PRODUCTS := \
 # Keep this list in sync with the compiled-artifact entries in .gitignore.
 IR0_CLEAN_SMOKE_BINS := \
 	setup/doom/doomgeneric_smoke \
-	setup/pid1/f41true setup/pid1/busybox_real setup/pid1/hello_helper \
-	setup/pid1/ipc_busybox setup/pid1/ipc_cat setup/pid1/ipc_echo \
-	setup/pid1/ktm_doom_interactive setup/pid1/tcc_harness \
+	setup/pid1/f41true setup/pid1/busybox_real \
+	setup/pid1/ktm_doom_interactive \
 	setup/pid1/busybox_manifest_smoke setup/pid1/ktm_boot_halt \
 	setup/pid1/ktm_fbdev_gui setup/pid1/init \
 	setup/pid1/musl_arch_prctl_smoke setup/pid1/musl_pthread_smoke \

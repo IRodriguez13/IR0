@@ -37,7 +37,7 @@ no hay compuerta `IR0_LEGACY_SMOKE`.
 | Arranque producto runit | `smoke-runit-boot`, `smoke-runit-login`, `smoke-runit-power` |
 | BusyBox | `build-busybox-min`, `build-busybox-plus`, `build-busybox-full` |
 | TinyCC | `build-tcc` |
-| Smokes KTM en invitado | helpers `build-ktm-*` y sus runners `smoke-*` |
+| Smokes KTM en invitado | pilotos `ktm-userdev-*-run` (`tests/ktm/userdev/`) |
 | Plano de datos COW | `smoke-mm-cow-lazy` |
 | ARM64 | `smoke-arm64-all` y los targets `smoke-arm64-*` |
 
