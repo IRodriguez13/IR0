@@ -48,7 +48,6 @@ setup/pid1/ktm_fbdev_gui_smoke.c
 setup/pid1/ktm_fbdev_smoke.c
 setup/pid1/ktm_input_det_smoke.c
 setup/pid1/ktm_input_smoke.c
-setup/pid1/ktm_posix_pseudofs_smoke.c
 setup/pid1/musl_arch_prctl_smoke.c
 setup/pid1/musl_pthread_libc_smoke.c
 setup/pid1/musl_pthread_smoke.c

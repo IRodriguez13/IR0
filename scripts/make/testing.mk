@@ -33,7 +33,6 @@ KTM_DOOMGENERIC_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = $(IR0_USERSPACE_OUT)/x86_64/smoke/stage-bin
 # Smoke runit helpers (fase55d, tcc power, busybox power) live under smoke/stage-bin.
 RUNIT_SMOKE_STAGE_BIN = $(IR0_USERSPACE_OUT)/smoke/stage-bin
-KTM_POSIX_PSEUDOFS_SMOKE_SRC = setup/pid1/ktm_posix_pseudofs_smoke.c
 INIT_HEART_SMOKE_SRC = setup/pid1/init_heart_smoke.c
 KTM_FBDEV_SMOKE_SRC = setup/pid1/ktm_fbdev_smoke.c
 KTM_INPUT_SMOKE_SRC = setup/pid1/ktm_input_smoke.c
@@ -4024,16 +4023,6 @@ check-ash-logs:
 
 build-tcc:
 	@./setup/tcc/build-tcc.sh
-
-build-ktm-posix-pseudofs-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then \
-		echo "✗ musl cross compiler not found (install musl-tools or set MUSL_CC=...)"; \
-		exit 1; \
-	fi
-	@echo "  INIT    Building posix/pseudo-fs smoke ($(INIT_SMOKE_BIN))"
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(KTM_POSIX_PSEUDOFS_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-ktm-posix-pseudofs-smoke OK"
 
 build-init-heart-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then \

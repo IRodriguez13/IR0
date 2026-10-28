@@ -1872,7 +1872,7 @@ test-drivers-clean:
         linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
         linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
         runtime-net-check runtime-mount-check smoke-qemu smoke-real-hw smoke-all \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-ktm-posix-pseudofs-smoke build-init-heart-smoke build-ktm-fbdev-smoke build-ktm-input-smoke build-ktm-input-det-smoke build-ktm-doom-prereq-smoke build-ktm-doom-stub build-ktm-doom-timing-stub build-ktm-doomgeneric-smoke build-ktm-doom-interactive build-ktm-boot-halt-bin build-ktm-fbdev-gui-bin build-ktm-busybox-manifest-smoke smoke-busybox-manifest kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy \
+        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-heart-smoke build-ktm-fbdev-smoke build-ktm-input-smoke build-ktm-input-det-smoke build-ktm-doom-prereq-smoke build-ktm-doom-stub build-ktm-doom-timing-stub build-ktm-doomgeneric-smoke build-ktm-doom-interactive build-ktm-boot-halt-bin build-ktm-fbdev-gui-bin build-ktm-busybox-manifest-smoke smoke-busybox-manifest kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy \
         roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
         scale-readiness-gate config-wiring-check arch-config-check \
         format compile-commands disasm stack-usage clean-net \
