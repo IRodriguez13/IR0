@@ -10,18 +10,38 @@ Default max wait: 180s. Heavy smokes (TCC / BusyBox / Doom) should use 90–120s
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import signal
 import subprocess
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Sequence
+
+# Scripts live next to this file; keep the import working from any cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from ktm_host_safety import (  # noqa: E402  (after sys.path setup)
+    DEFAULT_MEM_MIB,
+    LOG_CHUNK,
+    MAX_LINE_CHARS,
+    MAX_LOG_BYTES,
+    MAX_MEM_MIB,
+    MAX_TIMEOUT_SEC,
+    ensure_qemu_mem,
+    parse_mem_mib,
+)
 
 DEFAULT_TIMEOUT_SEC = 180
 DEFAULT_STALE_SEC = 90
 TAIL_LINES = 40
+READ_CHUNK = LOG_CHUNK          # 1 MiB per poll: bounded host RAM
+MAX_PENDING_CHARS = MAX_LINE_CHARS  # a line without newline cannot grow forever
+TAG_TAIL_CHARS = 16 * 1024      # overlap so a tag split across reads still matches
+DEFAULT_MAX_LOG_MIB = MAX_LOG_BYTES // (1024 * 1024)
 
 # Any line matching one of these (after success tags not yet complete) → FAIL.
 DEFAULT_FAIL_RES: list[str] = [
@@ -165,10 +185,14 @@ class MonitorState:
     fail_res: list[re.Pattern[str]]
     timeout_sec: int
     stale_sec: int
-    lines: list[str] = field(default_factory=list)
+    max_log_bytes: int
+    # Bounded history: a runaway guest must not grow host RAM.
+    lines: deque[str] = field(default_factory=lambda: deque(maxlen=TAIL_LINES * 8))
+    seen_success: set[str] = field(default_factory=set)
+    scan_tail: str = ""
     last_tag: str = ""
     last_syscall: str = ""
-    last_size: int = 0
+    offset: int = 0
     last_growth_at: float = field(default_factory=time.monotonic)
     matched_success: str = ""
     matched_fail: str = ""
@@ -203,9 +227,9 @@ def ingest_lines(state: MonitorState, new_text: str) -> None:
     if not data.endswith("\n") and not data.endswith("\r"):
         state.pending = parts[-1]
         parts = parts[:-1]
-    elif data.endswith("\n"):
-        # trailing empty from final newline
-        pass
+    if len(state.pending) > MAX_PENDING_CHARS:
+        # A line that never ends is a broken guest, not an excuse to grow RAM.
+        state.pending = state.pending[-MAX_PENDING_CHARS:]
 
     for part in parts:
         line = part.rstrip("\r")
@@ -216,70 +240,90 @@ def ingest_lines(state: MonitorState, new_text: str) -> None:
             state.last_tag = line.strip()
         if line_is_syscall(line):
             state.last_syscall = line.strip()
+        if not state.matched_fail:
+            for pat in state.fail_res:
+                if pat.search(line):
+                    state.matched_fail = line.strip()
+                    break
+
+    # Bounded overlap so a success tag split across reads still matches.
+    flat = data.replace("\r", "").replace("\n", "")
+    state.scan_tail = (state.scan_tail + flat)[-TAG_TAIL_CHARS:]
+    for tag in state.success_tags:
+        if tag in state.scan_tail:
+            state.seen_success.add(tag)
 
 
 def read_new_log(state: MonitorState) -> None:
     try:
-        data = state.log_path.read_text(encoding="utf-8", errors="replace")
-    except FileNotFoundError:
+        size = state.log_path.stat().st_size
+    except (FileNotFoundError, OSError):
         return
 
-    size = len(data)
-    if size > state.last_size:
-        ingest_lines(state, data[state.last_size:])
-        state.last_size = size
+    # Truncation/rotation: restart from the beginning instead of seeking past EOF.
+    if size < state.offset:
+        state.offset = 0
+        state.pending = ""
+        state.scan_tail = ""
+
+    progressed = False
+    budget = READ_CHUNK
+    while budget > 0 and state.offset < size:
+        try:
+            with state.log_path.open("rb") as fp:
+                fp.seek(state.offset)
+                chunk = fp.read(min(budget, size - state.offset))
+        except (FileNotFoundError, OSError):
+            return
+        if not chunk:
+            return
+        state.offset += len(chunk)
+        budget -= len(chunk)
+        progressed = True
+        ingest_lines(state, chunk.decode("utf-8", errors="replace"))
+    if progressed:
         state.last_growth_at = time.monotonic()
-
-
-def log_text_flat(state: MonitorState) -> str:
-    """Full log with CR/LF stripped — avoids false misses when serial flushes mid-tag."""
-    try:
-        text = state.log_path.read_text(encoding="utf-8", errors="replace")
-    except FileNotFoundError:
-        text = "\n".join(state.lines)
-    return text.replace("\0", "").replace("\r", "").replace("\n", "")
 
 
 def success_satisfied(state: MonitorState) -> bool:
     if not state.success_tags:
         return False
-    text = log_text_flat(state)
     if state.success_mode == "any":
-        return any(tag in text for tag in state.success_tags)
-    return all(tag in text for tag in state.success_tags)
+        return bool(state.seen_success)
+    return all(tag in state.seen_success for tag in state.success_tags)
 
 
 def first_success_match(state: MonitorState) -> str:
-    text = log_text_flat(state)
     if state.success_mode == "any":
         for tag in state.success_tags:
-            if tag in text:
+            if tag in state.seen_success:
                 return tag
         return ""
-    if all(tag in text for tag in state.success_tags):
+    if all(tag in state.seen_success for tag in state.success_tags):
         return ",".join(state.success_tags)
     return ""
 
 
 def first_fail_match(state: MonitorState) -> str:
-    for line in state.lines:
-        for pat in state.fail_res:
-            if pat.search(line):
-                return line.strip()
-    return ""
+    return state.matched_fail
 
 
 def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
+    """Terminate QEMU and anything it spawned; the child is a session leader."""
     if proc.poll() is not None:
         return
     try:
-        proc.send_signal(signal.SIGTERM)
+        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        proc.terminate()
+    try:
         proc.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        proc.kill()
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
         proc.wait(timeout=5)
-    except ProcessLookupError:
-        pass
 
 
 def print_summary(state: MonitorState, elapsed_sec: float, verdict: str) -> None:
@@ -297,7 +341,7 @@ def print_summary(state: MonitorState, elapsed_sec: float, verdict: str) -> None
     if state.last_syscall:
         print(f"last_syscall: {state.last_syscall}")
     print(f"--- last {TAIL_LINES} log lines ---")
-    for line in state.lines[-TAIL_LINES:]:
+    for line in list(state.lines)[-TAIL_LINES:]:
         print(line)
     print("=== END SMOKE AUTOKILL SUMMARY ===")
 
@@ -310,6 +354,7 @@ def run_smoke(
     fail_res: list[str],
     timeout_sec: int,
     stale_sec: int,
+    max_log_mib: int = DEFAULT_MAX_LOG_MIB,
 ) -> int:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     if log_path.exists():
@@ -322,6 +367,7 @@ def run_smoke(
         fail_res=compile_patterns(fail_res),
         timeout_sec=timeout_sec,
         stale_sec=stale_sec,
+        max_log_bytes=max_log_mib * 1024 * 1024,
     )
 
     with log_path.open("ab", buffering=0) as log_fp:
@@ -341,6 +387,12 @@ def run_smoke(
                 while True:
                     read_new_log(state)
                     elapsed = time.monotonic() - start
+
+                    if state.offset > state.max_log_bytes:
+                        state.reason = "log_too_large"
+                        kill_process_group(proc)
+                        print_summary(state, elapsed, "FAIL")
+                        return 1
 
                     fail_line = first_fail_match(state)
                     if fail_line:
@@ -365,7 +417,9 @@ def run_smoke(
                             print_summary(state, elapsed, "PASS")
                             return 0
                         state.reason = "qemu_exit"
-                        state.matched_fail = state.lines[-1].strip() if state.lines else ""
+                        state.matched_fail = (
+                            list(state.lines)[-1].strip() if state.lines else ""
+                        )
                         print_summary(state, elapsed, "FAIL")
                         return 1
 
@@ -377,7 +431,7 @@ def run_smoke(
 
                     if (
                         stale_sec > 0
-                        and state.lines
+                        and state.offset > 0
                         and (time.monotonic() - state.last_growth_at) >= stale_sec
                     ):
                         state.reason = "stale_no_progress"
@@ -440,6 +494,28 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Allow panic text for a smoke whose success condition is the panic itself",
     )
     parser.add_argument(
+        "--mem",
+        default=f"{DEFAULT_MEM_MIB}M",
+        help=f"Guest RAM when the QEMU command omits -m (default {DEFAULT_MEM_MIB}M)",
+    )
+    parser.add_argument(
+        "--max-mem-mib",
+        type=int,
+        default=MAX_MEM_MIB,
+        help=f"Hard guest RAM ceiling in MiB (max {MAX_MEM_MIB})",
+    )
+    parser.add_argument(
+        "--allow-low-mem",
+        action="store_true",
+        help="Skip the available-RAM headroom check (dangerous; CI only)",
+    )
+    parser.add_argument(
+        "--max-log-mib",
+        type=int,
+        default=DEFAULT_MAX_LOG_MIB,
+        help=f"Fail when the serial log exceeds this size (default {DEFAULT_MAX_LOG_MIB})",
+    )
+    parser.add_argument(
         "qemu_cmd",
         nargs=argparse.REMAINDER,
         help="QEMU command after --",
@@ -455,6 +531,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         qemu_cmd = qemu_cmd[1:]
     if not qemu_cmd:
         print("smoke_autokill.py: missing QEMU command after --", file=sys.stderr)
+        return 2
+
+    if not (1 <= args.timeout <= MAX_TIMEOUT_SEC):
+        print(
+            f"smoke_autokill.py: --timeout must be 1..{MAX_TIMEOUT_SEC}",
+            file=sys.stderr,
+        )
+        return 2
+    if args.stale_sec < 0:
+        print("smoke_autokill.py: --stale-sec must be >= 0", file=sys.stderr)
+        return 2
+    if not (1 <= args.max_mem_mib <= MAX_MEM_MIB):
+        print(
+            f"smoke_autokill.py: --max-mem-mib must be 1..{MAX_MEM_MIB}",
+            file=sys.stderr,
+        )
+        return 2
+    if not (1 <= args.max_log_mib <= 1024):
+        print("smoke_autokill.py: --max-log-mib must be 1..1024", file=sys.stderr)
+        return 2
+    try:
+        requested_mib = parse_mem_mib(args.mem)
+        qemu_cmd = ensure_qemu_mem(
+            qemu_cmd,
+            requested_mib=requested_mib,
+            max_mib=args.max_mem_mib,
+            allow_low_mem=args.allow_low_mem,
+        )
+    except (ValueError, RuntimeError) as exc:
+        print(f"smoke_autokill.py: {exc}", file=sys.stderr)
         return 2
 
     success_tags = list(args.success_tags)
@@ -487,6 +593,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 2
 
+    if not (1 <= timeout_sec <= MAX_TIMEOUT_SEC):
+        print(
+            f"smoke_autokill.py: profile timeout must be 1..{MAX_TIMEOUT_SEC}",
+            file=sys.stderr,
+        )
+        return 2
+    if stale_sec < 0:
+        print(
+            "smoke_autokill.py: profile stale-sec must be >= 0",
+            file=sys.stderr,
+        )
+        return 2
+    # A stale window longer than the hard timeout can never fire; clamp it
+    # instead of rejecting the many targets that only pass --timeout.
+    stale_sec = min(stale_sec, timeout_sec)
+
     return run_smoke(
         log_path=Path(args.log),
         qemu_cmd=qemu_cmd,
@@ -495,6 +617,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         fail_res=fail_patterns,
         timeout_sec=timeout_sec,
         stale_sec=stale_sec,
+        max_log_mib=args.max_log_mib,
     )
 
 

@@ -9,6 +9,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHON="${PYTHON:-python3}"
 QUIET=0
 if [ "${1:-}" = "--quiet-console" ]; then
 	QUIET=1
@@ -40,8 +41,8 @@ if [ ! -x "$US_ROOT/scripts/install-to-disk.sh" ]; then
 	exit 1
 fi
 
-dd if=/dev/zero of="$DISK_OUT" bs=1M count=200 status=none
-python3 scripts/inject_init_minix.py --format-large "$DISK_OUT"
+dd if=/dev/zero of="$DISK_OUT" bs=1048576 count=200 2>/dev/null
+"$PYTHON" scripts/inject_init_minix.py --format-large "$DISK_OUT"
 FASE50_BUSYBOX_BIN="${BUSYBOX_REAL_BIN:-${FASE50_BUSYBOX_BIN:-setup/pid1/busybox_real}}" \
 	BUSYBOX_REAL_BIN="${BUSYBOX_REAL_BIN:-$FASE50_BUSYBOX_BIN}" \
 	IR0_ROOT="$ROOT" "$US_ROOT/scripts/install-to-disk.sh" "$DISK_OUT"
@@ -53,11 +54,11 @@ if [ "$QUIET" = 1 ]; then
 		echo "✗ missing runit_pause_run — run make build-runit" >&2
 		exit 1
 	fi
-	python3 scripts/inject_init_minix.py "$DISK_OUT" \
+	"$PYTHON" scripts/inject_init_minix.py "$DISK_OUT" \
 		"$US_PAUSE_STAGE/runit_pause_run" etc/runit/sv/console/run
-	python3 scripts/inject_init_minix.py "$DISK_OUT" \
+	"$PYTHON" scripts/inject_init_minix.py "$DISK_OUT" \
 		"$US_PAUSE_STAGE/runit_pause_run" etc/runit/sv/logger/run
 fi
 
-python3 scripts/verify_minix_rootfs.py "$DISK_OUT" /sbin/init /etc/runit/sv/ktm/run
+"$PYTHON" scripts/verify_minix_rootfs.py "$DISK_OUT" /sbin/init /etc/runit/sv/ktm/run
 echo "$DISK_OUT"

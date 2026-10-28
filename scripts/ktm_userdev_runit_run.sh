@@ -14,9 +14,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INIT=""
-LOG="/tmp/ktm-userdev-runit.log"
+LOG="${TMPDIR:-/tmp}/ktm-userdev-runit.log"
 DONE="KTM_USERDEV_OK"
 TIMEOUT=180
+PYTHON="${PYTHON:-python3}"
 REQUIRES=()
 INJECTS=()
 QEMU_ARGS=()
@@ -87,7 +88,7 @@ fi
 
 cd "$ROOT"
 chmod +x scripts/ktm_prepare_runit_hostshare_disk.sh
-DISK="$(mktemp /tmp/ir0-ktm-runit.XXXXXX.img)"
+DISK="$(mktemp "${TMPDIR:-/tmp}/ir0-ktm-runit.XXXXXX")"
 cleanup() {
 	rm -f "$DISK"
 }
@@ -96,7 +97,7 @@ trap cleanup EXIT
 scripts/ktm_prepare_runit_hostshare_disk.sh --quiet-console "$DISK" >/dev/null
 
 ARGS=(
-	python3 scripts/ktm_userdev_runner.py
+	"$PYTHON" scripts/ktm_userdev_runner.py
 	--disk "$DISK"
 	--init "$INIT"
 	--log "$LOG"
@@ -106,14 +107,14 @@ ARGS=(
 	--require RUNSV_HOSTSHARE_START
 	--require HOSTSHARE_EXEC_MOUNT_OK
 )
-ARGS+=("${REQUIRES[@]}")
-ARGS+=("${INJECTS[@]}")
+ARGS+=(${REQUIRES[@]+"${REQUIRES[@]}"})
+ARGS+=(${INJECTS[@]+"${INJECTS[@]}"})
 if [ -n "$HOST_FILE" ]; then
 	ARGS+=(--host-file "$HOST_FILE")
 fi
 if [ -n "$HOST_GREP" ]; then
 	ARGS+=(--host-grep "$HOST_GREP")
 fi
-ARGS+=("${QEMU_ARGS[@]}")
+ARGS+=(${QEMU_ARGS[@]+"${QEMU_ARGS[@]}"})
 
 "${ARGS[@]}"

@@ -12,18 +12,35 @@ import sys
 import tempfile
 from pathlib import Path
 
+# Scripts live next to this file; keep the import working from any cwd.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from ktm_host_safety import (  # noqa: E402  (after sys.path setup)
+    MAX_LOG_BYTES,
+    MAX_MEM_MIB,
+    MAX_TIMEOUT_SEC,
+    make_temp_disk,
+    parse_mem_mib,
+    scan_log,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STUB = ROOT / "setup/pid1/init_hostshare_exec"
 PAYLOAD_NAME = "ir0_payload"
+DEFAULT_LOG = Path(tempfile.gettempdir()) / "ktm-userdev-run.log"
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Run IR0 KTM userdev pilot: stub on disk + payload on virtio-9p"
     )
-    ap.add_argument("--log", default="/tmp/ktm-userdev-run.log")
+    ap.add_argument("--log", default=str(DEFAULT_LOG))
     ap.add_argument("--timeout", type=int, default=90)
+    ap.add_argument(
+        "--mem",
+        default="256M",
+        help="QEMU guest RAM (default 256M; capped at 2G or 25% of host RAM)",
+    )
     ap.add_argument(
         "--init",
         default=str(ROOT / "tests/ktm/userdev/ktm_fork_wait_case"),
@@ -85,15 +102,25 @@ def main() -> int:
         action="store_true",
         help="Omit virtio-9p share (product disks that do not need hostshare)",
     )
-    ap.add_argument(
-        "--mem",
-        default="256M",
-        help="QEMU guest RAM (default 256M)",
-    )
     args = ap.parse_args()
     require = list(args.require)
     if not require:
         require = ["TEST_END|fork_wait_signal|PASS"]
+
+    if not (1 <= args.timeout <= MAX_TIMEOUT_SEC):
+        print(f"✗ --timeout must be 1..{MAX_TIMEOUT_SEC}", file=sys.stderr)
+        return 2
+    try:
+        mem_mib = parse_mem_mib(args.mem)
+    except ValueError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 2
+    if mem_mib > MAX_MEM_MIB:
+        print(
+            f"✗ --mem {mem_mib} MiB exceeds the {MAX_MEM_MIB} MiB host-safe cap",
+            file=sys.stderr,
+        )
+        return 2
 
     iso = ROOT / "kernel-x64-userspace.iso"
     if not iso.is_file():
@@ -128,8 +155,8 @@ def main() -> int:
             print(f"✗ --inject missing source: {src_s}", file=sys.stderr)
             return 2
         dest = dest.lstrip("/")
-        if not dest:
-            print(f"✗ --inject empty DEST in {spec!r}", file=sys.stderr)
+        if not dest or ".." in dest.split("/"):
+            print(f"✗ --inject DEST must stay inside the image: {spec!r}", file=sys.stderr)
             return 2
         injects.append((src, dest))
 
@@ -162,26 +189,26 @@ def main() -> int:
     own_disk = False
     if prebuilt_disk is not None:
         if mutate:
-            disk = Path(tempfile.mktemp(prefix="ir0-ktm-userdev-", suffix=".img"))
+            disk = make_temp_disk()
             own_disk = True
         else:
             disk = prebuilt_disk
     else:
-        disk = Path(tempfile.mktemp(prefix="ir0-ktm-userdev-", suffix=".img"))
+        disk = make_temp_disk()
         own_disk = True
 
     try:
         if prebuilt_disk is not None and own_disk:
             shutil.copy2(prebuilt_disk, disk)
         elif prebuilt_disk is None:
-            subprocess.check_call(["cp", "-f", str(base), str(disk)], cwd=str(ROOT))
+            shutil.copy2(base, disk)
         # Replace PID1 on a work copy: empty kernel disk.img (stub or payload)
         # or a packed ISD disk (--legacy-disk-init runs the case as /sbin/init).
         if prebuilt_disk is None or args.legacy_disk_init:
             disk_init = payload_bin if args.legacy_disk_init else stub_bin
             subprocess.check_call(
                 [
-                    "python3",
+                    sys.executable,
                     "scripts/inject_init_minix.py",
                     str(disk),
                     str(disk_init),
@@ -193,7 +220,7 @@ def main() -> int:
         for src, dest in injects:
             subprocess.check_call(
                 [
-                    "python3",
+                    sys.executable,
                     "scripts/inject_init_minix.py",
                     str(disk),
                     str(src),
@@ -248,48 +275,57 @@ def main() -> int:
             mode = f"share-payload={PAYLOAD_NAME}"
         print(f"  KTM-USERDEV-RUN log={log} share={share_dir} ({mode})")
         rc = subprocess.call(cmd, cwd=str(ROOT))
+
+        if log.is_file() and log.stat().st_size > MAX_LOG_BYTES:
+            print(
+                f"✗ serial log exceeds {MAX_LOG_BYTES // (1024 * 1024)} MiB; "
+                "the guest is likely looping",
+                file=sys.stderr,
+            )
+            return 1
+
+        needles = [args.done, *require]
+        found, matches = scan_log(log, needles)
+        if args.done not in found:
+            print(f"✗ {args.done} missing", file=sys.stderr)
+            for line in matches:
+                print(line)
+            return 1 if rc == 0 else rc
+        for needle in require:
+            if needle not in found:
+                print(f"✗ required tag missing: {needle}", file=sys.stderr)
+                return 1
+
+        if args.host_file and share_dir is not None:
+            share_root = share_dir.resolve()
+            host_path = (share_dir / args.host_file).resolve()
+            try:
+                host_path.relative_to(share_root)
+            except ValueError:
+                print(
+                    f"✗ --host-file escapes the share: {args.host_file}",
+                    file=sys.stderr,
+                )
+                return 1
+            if not host_path.is_file():
+                print(f"✗ host share missing file: {host_path}", file=sys.stderr)
+                return 1
+            body = host_path.read_text(encoding="utf-8", errors="replace")
+            if args.host_grep and args.host_grep not in body:
+                print(
+                    f"✗ host file missing '{args.host_grep}': {host_path}",
+                    file=sys.stderr,
+                )
+                return 1
+            print(f"✓ host share OK ({host_path})")
+
+        print("✓ ktm-userdev-run OK")
+        return 0
     finally:
         if own_disk and disk.exists():
             disk.unlink()
-
-    text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
-    text = text.replace("\0", "").replace("\r", "")
-    flat = text.replace("\n", "")
-    if args.done not in flat:
-        print(f"✗ {args.done} missing", file=sys.stderr)
-        for line in text.splitlines():
-            if "KTM|" in line or "KTM_" in line or "HOSTSHARE_" in line:
-                print(line)
         if own_share and share_dir and share_dir.exists():
-            subprocess.call(["rm", "-rf", str(share_dir)])
-        return 1 if rc == 0 else rc
-    for needle in require:
-        if needle not in flat:
-            print(f"✗ required tag missing: {needle}", file=sys.stderr)
-            if own_share and share_dir and share_dir.exists():
-                subprocess.call(["rm", "-rf", str(share_dir)])
-            return 1
-
-    if args.host_file and share_dir is not None:
-        host_path = share_dir / args.host_file
-        if not host_path.is_file():
-            print(f"✗ host share missing file: {host_path}", file=sys.stderr)
-            if own_share:
-                subprocess.call(["rm", "-rf", str(share_dir)])
-            return 1
-        body = host_path.read_text(encoding="utf-8", errors="replace")
-        if args.host_grep and args.host_grep not in body:
-            print(f"✗ host file missing '{args.host_grep}': {host_path}", file=sys.stderr)
-            if own_share:
-                subprocess.call(["rm", "-rf", str(share_dir)])
-            return 1
-        print(f"✓ host share OK ({host_path})")
-
-    if own_share and share_dir and share_dir.exists():
-        subprocess.call(["rm", "-rf", str(share_dir)])
-
-    print("✓ ktm-userdev-run OK")
-    return 0
+            shutil.rmtree(share_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

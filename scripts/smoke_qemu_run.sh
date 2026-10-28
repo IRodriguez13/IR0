@@ -19,12 +19,17 @@ success_mode="all"
 success_tags=()
 fail_patterns=()
 expected_panic=0
+mem=""
+max_mem_mib=""
+allow_low_mem=0
+max_log_mib=""
 qemu_args=()
 
 usage()
 {
 	echo "usage: $0 --log FILE [--timeout SEC] [--stale-sec SEC] [--profile NAME]" \
-		"[--success-mode all|any] [--done TAG]... [--fail-regex RE]... -- QEMU_ARGS..." >&2
+		"[--success-mode all|any] [--mem SIZE] [--max-mem-mib N]" \
+		"[--allow-low-mem] [--max-log-mib N] [--done TAG]... [--fail-regex RE]... -- QEMU_ARGS..." >&2
 	exit 2
 }
 
@@ -62,6 +67,22 @@ while [[ $# -gt 0 ]]; do
 		expected_panic=1
 		shift
 		;;
+	--mem)
+		mem="${2:-}"
+		shift 2
+		;;
+	--max-mem-mib)
+		max_mem_mib="${2:-}"
+		shift 2
+		;;
+	--allow-low-mem)
+		allow_low_mem=1
+		shift
+		;;
+	--max-log-mib)
+		max_log_mib="${2:-}"
+		shift 2
+		;;
 	--)
 		shift
 		qemu_args=("$@")
@@ -95,11 +116,24 @@ fi
 if [[ "$expected_panic" -eq 1 ]]; then
 	cmd+=("--expected-panic")
 fi
+if [[ -n "$mem" ]]; then
+	cmd+=("--mem" "$mem")
+fi
+if [[ -n "$max_mem_mib" ]]; then
+	cmd+=("--max-mem-mib" "$max_mem_mib")
+fi
+if [[ "$allow_low_mem" -eq 1 ]]; then
+	cmd+=("--allow-low-mem")
+fi
+if [[ -n "$max_log_mib" ]]; then
+	cmd+=("--max-log-mib" "$max_log_mib")
+fi
 
-for tag in "${success_tags[@]}"; do
+# bash 3.2 (macOS) treats an empty "${arr[@]}" as unbound under set -u.
+for tag in ${success_tags[@]+"${success_tags[@]}"}; do
 	cmd+=("--success" "$tag")
 done
-for pat in "${fail_patterns[@]}"; do
+for pat in ${fail_patterns[@]+"${fail_patterns[@]}"}; do
 	cmd+=("--fail" "$pat")
 done
 
