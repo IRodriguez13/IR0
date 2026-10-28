@@ -84,6 +84,6 @@ extern int _ktest_pass;
 	} \
 } while (0)
 
-void kernel_test_run_all(void);
+int kernel_test_run_all(void);
 
 #endif

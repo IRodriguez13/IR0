@@ -12,7 +12,12 @@
 #include <config.h>
 #include <string.h>
 
-#define KTM_SCENARIO_MAX 16
+/*
+ * 16 boot scenarios plus the optional block_read_eio probe and the ktest
+ * bridge. Keep headroom so a new scenario cannot silently fail to register
+ * (ktm_scenario_register returns -1 when the table is full).
+ */
+#define KTM_SCENARIO_MAX 32
 
 static const ktm_scenario_t *g_scenarios[KTM_SCENARIO_MAX];
 static unsigned g_nsc;

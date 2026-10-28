@@ -309,7 +309,6 @@ void boot_diagnostics(void)
 
 #if defined(IR0_KERNEL_TESTS)
 	{
-		extern void kernel_test_run_all(void);
 		process_t *saved = current_process;
 		process_t *holder;
 		pid_t holder_pid;
@@ -320,7 +319,8 @@ void boot_diagnostics(void)
 		if (holder)
 		{
 			process_set_current(holder);
-			kernel_test_run_all();
+			if (ktm_scenario_run("kernel.ktest") != KTM_OK)
+				klog_error("KTEST", "kernel.ktest scenario failed");
 			process_set_current(saved);
 		}
 		else

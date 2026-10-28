@@ -99,6 +99,7 @@ void ktm_scenario_register_vfs_open_flags(void);
 void ktm_scenario_register_process_reclaim_exit(void);
 void ktm_scenario_register_process_exec(void);
 void ktm_scenario_register_process_fork_rollback(void);
+void ktm_scenario_register_ktest_bridge(void);
 #if defined(CONFIG_KTM_BLOCK_FAKE) && CONFIG_KTM_BLOCK_FAKE
 void ktm_scenario_register_block_read_eio(void);
 #endif
@@ -121,6 +122,7 @@ void ktm_scenarios_register_builtins(void)
 	ktm_scenario_register_process_reclaim_exit();
 	ktm_scenario_register_process_exec();
 	ktm_scenario_register_process_fork_rollback();
+	ktm_scenario_register_ktest_bridge();
 #if defined(CONFIG_KTM_BLOCK_FAKE) && CONFIG_KTM_BLOCK_FAKE
 	ktm_scenario_register_block_read_eio();
 #endif

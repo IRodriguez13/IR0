@@ -238,4 +238,4 @@ static inline void ktm_sched_gate_check_before_sched(const char *caller)
 #define KASSERT_GE   KTM_ASSERT_GE
 #define KASSERT_GT   KTM_ASSERT_GT
 
-void kernel_test_run_all(void);
+int kernel_test_run_all(void);

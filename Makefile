@@ -498,6 +498,7 @@ KERNEL_OBJS += \
     tests/ktm/scenarios/process_reclaim_exit.o \
     tests/ktm/scenarios/process_exec.o \
     tests/ktm/scenarios/process_fork_rollback.o \
+    tests/ktm/scenarios/ktest_bridge.o \
     ktm/userdev.o \
     ktm/ktm_flight.o \
     ktm/ktm_panic_class.o \

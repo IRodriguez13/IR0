@@ -142,11 +142,13 @@ make -s smoke-runit-boot
 2. Tests en `tests/ktm/`; `ktm/` solo runtime.
 3. Paridad FASE: consultar `KTM_FASE_PARITY.md` antes de marcar COVERED.
 4. Mantener sync `event.h` ↔ `KTM_UAPI_EVENT_*` en `uapi.h`.
-5. Todo harness nuevo en `setup/pid1/*_{smoke,probe,stress}.c` o
-   `kernel/test/test_*.c` reporta por KTM. El ratchet
-   `make ktm-adoption-guard` (dentro de `ktm-check`) falla si el archivo es
-   solo-serial y no está en `scripts/ktm_legacy_baseline.txt`. El ledger solo
-   se reduce: al convertir un harness a `libktm_user` o a un escenario KTM se
-   borra su línea.
+5. Todo harness nuevo en `setup/pid1/*_{smoke,probe,stress}.c` reporta por KTM.
+   El ratchet `make ktm-adoption-guard` (dentro de `ktm-check`) falla si el
+   archivo es solo-serial y no está en `scripts/ktm_legacy_baseline.txt`. El
+   ledger solo se reduce: al convertir un harness a `libktm_user` se borra su
+   línea. La suite in-kernel `kernel/test/test_*.c` queda fuera del ledger
+   porque corre por el escenario KTM `kernel.ktest`
+   (`tests/ktm/scenarios/ktest_bridge.c`); el guard verifica ese puente y que
+   `kernel-tests` exija su PASS.
 
 Detalle completo y tablas: **[`../KTM.md`](../KTM.md)**.

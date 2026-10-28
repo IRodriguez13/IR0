@@ -5851,13 +5851,14 @@ kernel-memsafe:
 	@echo "✓ kernel-memsafe passed"
 
 # Batería in-kernel al estilo KUnit: tests se ejecutan al arranque (no dependen de la shell).
-# QEMU headless, sin red. El kernel (kernel-x64-test.bin) llama kernel_test_run_all() en boot.
+# QEMU headless, sin red. boot_init ejecuta el escenario KTM kernel.ktest,
+# que corre kernel_test_run_all() en contexto de proceso.
 kernel-tests: kernel-x64-test.iso disk.img
 	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
-	@$(SMOKE_QEMU_RUN) --log /tmp/ktest.log --timeout 60 --done "test(s) passed" \
-		--fail-regex 'Some tests FAILED|not ok ' -- \
+	@$(SMOKE_QEMU_RUN) --log /tmp/ktest.log --timeout 60 --done "TEST_END|kernel.ktest|PASS" \
+		--fail-regex 'Some tests FAILED|not ok |TEST_END[|]kernel[.]ktest[|]FAIL' -- \
 		$(QEMU) -cdrom kernel-x64-test.iso -drive file=disk.img,format=raw,if=ide,index=0 -serial stdio -display none -m 128M -no-reboot -net none; \
-	grep -q "All .* test(s) passed" /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log && ! grep -q "# SKIP need process" /tmp/ktest.log; \
+	grep -q "All .* test(s) passed" /tmp/ktest.log && grep -q 'TEST_END|kernel.ktest|PASS' /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log && ! grep -q "# SKIP need process" /tmp/ktest.log; \
 	if [ $$? -eq 0 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
 
 smoke-multiuser-perms: kernel-tests

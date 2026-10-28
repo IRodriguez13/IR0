@@ -213,7 +213,7 @@ static void ktest_print_decimal(uint32_t n)
 		serial_putchar(buf[--i]);
 }
 
-void kernel_test_run_all(void)
+int kernel_test_run_all(void)
 {
 	int total = 0;
 	int idx;
@@ -269,4 +269,5 @@ void kernel_test_run_all(void)
 		klog_error("KTEST", "suite failed");
 	}
 	klog_debug("KERN", "[KTEST] ========================================\n");
+	return _ktest_pass ? 0 : -1;
 }

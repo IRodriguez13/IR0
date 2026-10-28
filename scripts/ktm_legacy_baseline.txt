@@ -8,8 +8,11 @@
 # this file; never add an entry to silence a new test.
 #
 # Conversion targets:
-#   * setup/pid1  -> tests/ktm/userdev/<case>_case.c using libktm_user.h
-#   * kernel/test -> tests/ktm/scenarios/ (KTM scenario) or a ktest bridge
+#   * setup/pid1 -> tests/ktm/userdev/<case>_case.c using libktm_user.h
+#
+# The in-kernel ktest suite is not listed here: it runs through the
+# kernel.ktest KTM scenario (tests/ktm/scenarios/ktest_bridge.c), so every
+# kernel/test/test_*.c case reports through the KTM plane already.
 #
 # Deliberately outside KTM (Documentation/KTM.md §8): product HOST smokes
 # (runit boot/ash), storage/hardware/ARM machine smokes, tests/host ABI units,
@@ -58,21 +61,3 @@ setup/pid1/session_walk_smoke.c
 setup/pid1/setuid_exec_smoke.c
 setup/pid1/sh_smoke.c
 setup/pid1/tty_raw_probe.c
-
-# --- in-kernel ktest cases (KTAP output) ---
-kernel/test/test_allocator.c
-kernel/test/test_brk_post_exec.c
-kernel/test/test_cred_access.c
-kernel/test/test_debug_contracts.c
-kernel/test/test_ktm_sched.c
-kernel/test/test_mmap_null_placement.c
-kernel/test/test_path.c
-kernel/test/test_process.c
-kernel/test/test_procfs.c
-kernel/test/test_resource_registry.c
-kernel/test/test_runner.c
-kernel/test/test_signal_segv_deliver.c
-kernel/test/test_sock_stream.c
-kernel/test/test_string.c
-kernel/test/test_syscall.c
-kernel/test/test_tty_canon_read.c

@@ -3,18 +3,22 @@
 """KTM adoption ratchet.
 
 KTM is the canonical test plane (Documentation/KTM.md §8). This guard keeps new
-in-guest and in-kernel harnesses from being added as serial-only smokes, and it
-keeps the legacy ledger shrinking.
+in-guest harnesses from being added as serial-only smokes, and it keeps the
+legacy ledger shrinking.
 
 Scope:
 
   setup/pid1/*_{smoke,probe,stress}.c   userspace harnesses run as PID1/payload
-  kernel/test/test_*.c                  in-kernel ktest cases and runner
 
 A harness counts as KTM when it reports through the KTM plane: it includes
-libktm_user.h / the KTM uapi, calls the /dev/ktm ioctl helpers, or registers an
-in-kernel KTM scenario. Everything else is legacy and must appear in
-scripts/ktm_legacy_baseline.txt.
+libktm_user.h / the KTM uapi or calls the /dev/ktm ioctl helpers. Everything
+else is legacy and must appear in scripts/ktm_legacy_baseline.txt.
+
+The in-kernel ktest suite (kernel/test/test_*.c) is not tracked file by file:
+it runs through the kernel.ktest KTM scenario (tests/ktm/scenarios/
+ktest_bridge.c), so every case in the suite reports through the KTM plane. The
+guard verifies that bridge, its int return contract, and the kernel-tests gate
+instead.
 
 The ledger is a ratchet in both directions:
 
@@ -34,9 +38,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "ktm_legacy_baseline.txt"
+KTEST_BRIDGE = ROOT / "tests" / "ktm" / "scenarios" / "ktest_bridge.c"
+KTEST_RUNNER = ROOT / "kernel" / "test" / "test_runner.c"
+KERNEL_TESTS_MK = ROOT / "scripts" / "make" / "testing.mk"
 
 PID1_TEST_SUFFIXES = ("_smoke.c", "_probe.c", "_stress.c")
-KERNEL_TEST_GLOB = "test_*.c"
 
 MAIN_RE = re.compile(r"\b(?:int|void)\s+main\s*\(")
 KTM_USER_RE = re.compile(
@@ -59,13 +65,6 @@ def classify_pid1(path: Path) -> str:
     return "legacy"
 
 
-def classify_kernel_test(path: Path) -> str:
-    text = path.read_text(encoding="utf-8", errors="replace")
-    if KTM_SCENARIO_RE.search(text):
-        return "ktm"
-    return "legacy"
-
-
 def current_legacy() -> dict[str, str]:
     """Return {path: reason} for every legacy harness in scope."""
     legacy: dict[str, str] = {}
@@ -74,9 +73,6 @@ def current_legacy() -> dict[str, str]:
             continue
         if classify_pid1(path) == "legacy":
             legacy[rel(path)] = "serial-only PID1 smoke"
-    for path in sorted((ROOT / "kernel" / "test").glob(KERNEL_TEST_GLOB)):
-        if classify_kernel_test(path) == "legacy":
-            legacy[rel(path)] = "legacy in-kernel ktest (KTAP)"
     return legacy
 
 
@@ -112,6 +108,34 @@ def check_ktm_artifacts(errors: list[str]) -> tuple[int, int]:
                 f"{rel(path)}: scenario file does not register a ktm_scenario_t"
             )
     return pilots, scenarios
+
+
+def check_kernel_ktest_bridge(errors: list[str]) -> None:
+    """The in-kernel ktest suite must run through the kernel.ktest scenario."""
+    if not KTEST_BRIDGE.exists():
+        errors.append(
+            f"{rel(KTEST_BRIDGE)}: missing — kernel/test must run through KTM"
+        )
+        return
+    bridge = KTEST_BRIDGE.read_text(encoding="utf-8", errors="replace")
+    if '"kernel.ktest"' not in bridge:
+        errors.append(f"{rel(KTEST_BRIDGE)}: does not register kernel.ktest")
+    if "ktm_scenario_register" not in bridge:
+        errors.append(f"{rel(KTEST_BRIDGE)}: does not register a KTM scenario")
+
+    runner = KTEST_RUNNER.read_text(encoding="utf-8", errors="replace")
+    if "int kernel_test_run_all(void)" not in runner:
+        errors.append(
+            f"{rel(KTEST_RUNNER)}: kernel_test_run_all must return int so the "
+            "KTM scenario can report pass/fail"
+        )
+
+    testing = KERNEL_TESTS_MK.read_text(encoding="utf-8", errors="replace")
+    if "TEST_END|kernel.ktest|PASS" not in testing:
+        errors.append(
+            f"{rel(KERNEL_TESTS_MK)}: kernel-tests does not gate on the "
+            "kernel.ktest KTM result"
+        )
 
 
 def main() -> int:
@@ -157,6 +181,7 @@ def main() -> int:
             )
 
     pilots, scenarios = check_ktm_artifacts(errors)
+    check_kernel_ktest_bridge(errors)
 
     if errors:
         print("[ktm-adoption-guard] FAILED")
@@ -166,7 +191,8 @@ def main() -> int:
 
     print(
         f"[ktm-adoption-guard] OK "
-        f"(legacy={len(legacy)} baselined, userdev={pilots}, scenarios={scenarios})"
+        f"(legacy={len(legacy)} baselined, userdev={pilots}, scenarios={scenarios}, "
+        "ktest_bridge=ok)"
     )
     return 0
 

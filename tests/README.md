@@ -28,9 +28,14 @@ El directorio `tests/` centraliza todo lo que compila y ejecuta tests. El kernel
 
 En Linux, **KUnit** ejecuta tests al boot desde un executor que recorre una sección del linker; la salida es **KTAP** (parseable). En IR0:
 
-- **Executor al arranque**: En `kmain()` se llama a `kernel_test_run_all()` (símbolo weak; solo en kernel-x64-test.bin). No hace falta shell ni teclear `ktest`.
+- **Executor al arranque**: `boot_init` ejecuta el escenario KTM `kernel.ktest`
+  (`tests/ktm/scenarios/ktest_bridge.c`), que llama a `kernel_test_run_all()`
+  en contexto de proceso. El símbolo es weak: solo se enlaza en
+  kernel-x64-test.bin. No hace falta shell ni teclear `ktest`.
 - **KTAP por serial**: Se emite `1..N` y por cada test `ok N - name` o `not ok N - name`.
-- **make kernel-tests** comprueba que aparezca `All N test(s) passed` y que no haya `not ok`, `Some tests FAILED` ni `# SKIP need process`.
+- **make kernel-tests** exige `All N test(s) passed`, el resultado KTM
+  `TEST_END|kernel.ktest|PASS`, y que no haya `not ok`, `Some tests FAILED` ni
+  `# SKIP need process`.
 
 El set base sin proceso (`boot_ok`, `resource_registry`, `allocator`, `path`, `string`) sigue existiendo, pero en kernel de test la ejecución ocurre desde `init_1` para que también corran los dependientes de proceso (syscalls/procfs/process_current/contratos debug bins).
 
