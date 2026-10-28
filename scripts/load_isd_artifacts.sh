@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Generate ISD artifact cache for make -include (avoids $(shell) newline collapse).
 set -euo pipefail
+# `cd` prints its target when CDPATH is set; ISD resolves ROOT with
+# `cd ... && pwd`, so keep the caller environment out of the bridge.
+unset CDPATH
 
 ISD_ROOT="${1:?ISD root}"
 ARCH="${2:-x86_64}"
