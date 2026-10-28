@@ -61,6 +61,19 @@ typedef struct tmpfs_data
 static tmpfs_data_t *tmpfs_instances[TMPFS_MAX_DIRS] = {NULL};
 static int num_tmpfs_instances = 0;
 
+static int tmpfs_copy_path(char *dest, size_t dest_size, const char *src)
+{
+    size_t len;
+
+    if (!dest || dest_size == 0 || !src)
+        return -EINVAL;
+    len = strlen(src);
+    if (len >= dest_size)
+        return -ENAMETOOLONG;
+    memcpy(dest, src, len + 1);
+    return 0;
+}
+
 /* Get TMPFS instance for a given mount point */
 static tmpfs_data_t *tmpfs_get_instance(const char *mount_point)
 {
@@ -198,9 +211,9 @@ static tmpfs_inode_t *tmpfs_lookup_inode(tmpfs_data_t *tmpfs, const char *rel_pa
         return tmpfs->root;
     
     /* Split path into components */
-    char path_copy[TMPFS_MAX_NAME_LEN + 1];
-    strncpy(path_copy, rel_path, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    char path_copy[VFS_PATH_MAX];
+    if (tmpfs_copy_path(path_copy, sizeof(path_copy), rel_path) != 0)
+        return NULL;
     
     tmpfs_inode_t *current = tmpfs->root;
     char *token = path_copy;
@@ -407,9 +420,9 @@ int tmpfs_mkdir(const char *path, mode_t mode)
         return -EEXIST;
     
     /* Split into parent and name */
-    char path_copy[256];
-    strncpy(path_copy, rel_path, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    char path_copy[VFS_PATH_MAX];
+    if (tmpfs_copy_path(path_copy, sizeof(path_copy), rel_path) != 0)
+        return -ENAMETOOLONG;
     
     char *last_slash = strrchr(path_copy, '/');
     const char *dirname = NULL;
@@ -476,9 +489,9 @@ int tmpfs_create_file(const char *path, mode_t mode)
         return -EEXIST;
     
     /* Split into parent and name */
-    char path_copy[256];
-    strncpy(path_copy, rel_path, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    char path_copy[VFS_PATH_MAX];
+    if (tmpfs_copy_path(path_copy, sizeof(path_copy), rel_path) != 0)
+        return -ENAMETOOLONG;
     
     char *last_slash = strrchr(path_copy, '/');
     const char *filename = NULL;
@@ -638,9 +651,9 @@ int tmpfs_link(const char *oldpath, const char *newpath)
     if (tmpfs_lookup_inode(tmpfs, new_rel))
         return -EEXIST;
 
-    char path_copy[256];
-    strncpy(path_copy, new_rel, sizeof(path_copy) - 1);
-    path_copy[sizeof(path_copy) - 1] = '\0';
+    char path_copy[VFS_PATH_MAX];
+    if (tmpfs_copy_path(path_copy, sizeof(path_copy), new_rel) != 0)
+        return -ENAMETOOLONG;
 
     char *last_slash = strrchr(path_copy, '/');
     const char *linkname = NULL;
