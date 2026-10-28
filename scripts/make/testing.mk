@@ -1658,38 +1658,6 @@ smoke-desktop-twm-resize: check-isd
 		--inject scripts/inject_init_minix.py
 	@echo "✓ smoke-desktop-twm-resize passed"
 
-POSIX_DEPTH_SMOKE_LOG = /tmp/posix-depth-smoke.log
-INIT_POSIX_DEPTH_SMOKE_SRC = setup/pid1/init_posix_depth_smoke.c
-.PHONY: smoke-posix-depth build-init-posix-depth-smoke
-
-build-init-posix-depth-smoke:
-	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
-	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) $(INIT_POSIX_DEPTH_SMOKE_SRC)
-	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-init-posix-depth-smoke OK"
-
-smoke-posix-depth: kernel-x64-userspace.iso
-	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@echo "  SMOKE   POSIX depth (prlimit/epoll/pselect/pty)..."
-	@$(MAKE) -s build-init-posix-depth-smoke
-	@DISK=$$(mktemp /tmp/ir0-posix-depth.XXXXXX.img); \
-	cp -f disk.img $$DISK; \
-	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
-	rm -f $(POSIX_DEPTH_SMOKE_LOG); \
-	$(SMOKE_QEMU_RUN) --log $(POSIX_DEPTH_SMOKE_LOG) --timeout 90 \
-		--done 'POSIX_DEPTH_OK' -- \
-		$(QEMU) -cdrom kernel-x64-userspace.iso \
-		-drive file=$$DISK,format=raw,if=ide,index=0 \
-		-serial stdio -display none -m 128M -no-reboot -net none; \
-	rc=$$?; rm -f $$DISK; \
-	if tr -d '\n\r' < $(POSIX_DEPTH_SMOKE_LOG) | grep -q 'POSIX_DEPTH_OK'; then \
-		echo "✓ smoke-posix-depth passed"; \
-	elif [ $$rc -ne 0 ]; then \
-		echo "✗ smoke-posix-depth FAILED (QEMU/autokill)"; exit $$rc; \
-	else \
-		echo "✗ smoke-posix-depth FAILED (tag missing)"; exit 1; \
-	fi
-
 PTY_WINSZ_SMOKE_LOG = /tmp/pty-winsz-smoke.log
 
 .PHONY: smoke-pty-winsz build-init-pty-winsz-smoke
@@ -4579,6 +4547,8 @@ KTM_VFORK_SRC = $(KTM_USERDEV_DIR)/ktm_vfork_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_VFORK_BIN = $(KTM_USERDEV_DIR)/ktm_vfork_case
 KTM_CHROOT_SRC = $(KTM_USERDEV_DIR)/ktm_chroot_case.c $(KTM_USERDEV_LIB_SRC)
 KTM_CHROOT_BIN = $(KTM_USERDEV_DIR)/ktm_chroot_case
+KTM_POSIX_DEPTH_SRC = $(KTM_USERDEV_DIR)/ktm_posix_depth_case.c $(KTM_USERDEV_LIB_SRC)
+KTM_POSIX_DEPTH_BIN = $(KTM_USERDEV_DIR)/ktm_posix_depth_case
 
 # All userdev pilots run via hostshare stub + share payload (virtio-9p).
 build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
@@ -4591,7 +4561,8 @@ build-ktm-fork-wait-case build-ktm-cow-touch-case build-ktm-fork-storm-case \
 	build-ktm-scm-rights-case build-ktm-unix-abstract-case build-ktm-sysv-shm-case \
 	build-ktm-memfd-shared-case build-ktm-unix-harden-case \
 	build-ktm-unix-flags-case build-ktm-event-fds-case build-ktm-posix-shm-case \
-	build-ktm-vfork-case build-ktm-chroot-case: \
+	build-ktm-vfork-case build-ktm-chroot-case \
+	build-ktm-posix-depth-case: \
 	build-init-hostshare-exec
 
 build-ktm-fork-wait-case:
@@ -5114,6 +5085,13 @@ build-ktm-chroot-case:
 	@file $(KTM_CHROOT_BIN) | grep -q ELF
 	@echo "✓ build-ktm-chroot-case OK"
 
+build-ktm-posix-depth-case:
+	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cross compiler not found"; exit 1; fi
+	@echo "  KTM     Building posix_depth pilot ($(KTM_POSIX_DEPTH_BIN))"
+	@$(MUSL_CC) $(KTM_USERDEV_MUSL_FLAGS) -o $(KTM_POSIX_DEPTH_BIN) $(KTM_POSIX_DEPTH_SRC)
+	@file $(KTM_POSIX_DEPTH_BIN) | grep -q ELF
+	@echo "✓ build-ktm-posix-depth-case OK"
+
 ktm-userdev-posix-shm-run: build-ktm-posix-shm-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
@@ -5166,6 +5144,20 @@ ktm-userdev-chroot-run: build-ktm-chroot-case build-init-hostshare-exec kernel-x
 .PHONY: smoke-chroot
 smoke-chroot: ktm-userdev-chroot-run
 	@echo "✓ smoke-chroot (alias → ktm-userdev-chroot-run)"
+
+ktm-userdev-posix-depth-run: build-ktm-posix-depth-case build-init-hostshare-exec kernel-x64-userspace.iso
+	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
+	@python3 scripts/ktm_userdev_runner.py \
+		--init $(KTM_POSIX_DEPTH_BIN) \
+		--log /tmp/ktm-userdev-posix-depth.log --timeout 90 \
+		--done KTM_USERDEV_OK \
+		--require 'TEST_END|posix_depth|PASS' \
+		--require KTM_USERDEV_OK
+	@echo "✓ ktm-userdev-posix-depth-run (prlimit/epoll/pselect/pty)"
+
+.PHONY: smoke-posix-depth
+smoke-posix-depth: ktm-userdev-posix-depth-run
+	@echo "✓ smoke-posix-depth (alias → ktm-userdev-posix-depth-run)"
 
 
 ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x64-userspace.iso
