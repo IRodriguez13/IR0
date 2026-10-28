@@ -344,7 +344,7 @@ static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, in
 	size_t best = 0;
 	struct ext2_vol *best_vol = NULL;
 
-	if (!path || !rel)
+	if (!path || !rel || rel_sz == 0 || !is_root)
 		return NULL;
 	for (int i = 0; i < EXT2_MAX_MOUNTS; i++)
 	{
@@ -373,9 +373,13 @@ static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, in
 	}
 	else
 	{
+		const char *relative = path + best + (path[best] == '/' ? 1 : 0);
+		size_t relative_len = strlen(relative);
+
+		if (relative_len >= rel_sz)
+			return NULL;
 		*is_root = 0;
-		strncpy(rel, path + best + (path[best] == '/' ? 1 : 0), rel_sz - 1);
-		rel[rel_sz - 1] = '\0';
+		memcpy(rel, relative, relative_len + 1);
 	}
 	return best_vol;
 }
