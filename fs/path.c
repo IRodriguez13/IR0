@@ -58,6 +58,9 @@ int normalize_path(const char *src, char *dest, size_t size)
         comp_len = 0;
         while (*src && *src != '/' && comp_len < sizeof(comp) - 1)
             comp[comp_len++] = *src++;
+	/* Never reinterpret one overlong name as multiple path components. */
+	if (*src && *src != '/')
+		return -1;
         comp[comp_len] = '\0';
 
         // Handle . and ..
@@ -121,18 +124,16 @@ int join_paths(const char *base, const char *rel, char *dest, size_t size)
     char combined[512];
     size_t base_len = strlen(base);
     size_t rel_len = strlen(rel);
+    size_t separator = base_len > 0 && base[base_len - 1] != '/';
 
-    if (base_len + 1 + rel_len >= sizeof(combined))
+    if (base_len >= sizeof(combined) ||
+	rel_len >= sizeof(combined) - base_len - separator)
         return -1;
 
-    strncpy(combined, base, sizeof(combined) - 1);
-    combined[sizeof(combined) - 1] = '\0';
-    if (base_len > 0 && combined[base_len - 1] != '/')
-    {
-        combined[base_len] = '/';
-        combined[base_len + 1] = '\0';
-    }
-    strcat(combined, rel);
+    memcpy(combined, base, base_len);
+    if (separator)
+        combined[base_len++] = '/';
+    memcpy(combined + base_len, rel, rel_len + 1);
 
     // Normalize the combined path
     return normalize_path(combined, dest, size);
@@ -158,8 +159,10 @@ int get_parent_path(const char *path, char *dest, size_t size)
         return 0;
     }
 
-    // Copy path
+    // Copy path. Truncating here would resolve the parent of another path.
     char temp[256];
+    if (strlen(path) >= sizeof(temp))
+        return -1;
     strncpy(temp, path, sizeof(temp) - 1);
     temp[sizeof(temp) - 1] = '\0';
 

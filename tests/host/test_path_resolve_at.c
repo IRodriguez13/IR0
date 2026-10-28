@@ -28,6 +28,8 @@ static int resolve_relative(const char *dir_base, const char *rel,
 void test_path_resolve_at(void)
 {
 	char resolved[256];
+	char long_component[258];
+	char long_path[300];
 	int rc;
 
 	TEST_BEGIN("path_resolve_at_supervise_lock");
@@ -42,5 +44,19 @@ void test_path_resolve_at(void)
 	                      resolved, sizeof(resolved));
 	ASSERT_EQ(rc, 0);
 	ASSERT_STR_EQ(resolved, "/etc/runit/sv/logger/supervise/control");
+	TEST_END();
+
+	memset(long_component, 'a', sizeof(long_component));
+	long_component[0] = '/';
+	long_component[sizeof(long_component) - 1] = '\0';
+	TEST_BEGIN("path_rejects_overlong_component");
+	ASSERT_EQ(normalize_path(long_component, resolved, sizeof(resolved)), -1);
+	TEST_END();
+
+	memset(long_path, 'b', sizeof(long_path));
+	long_path[0] = '/';
+	long_path[sizeof(long_path) - 1] = '\0';
+	TEST_BEGIN("path_parent_rejects_truncation");
+	ASSERT_EQ(get_parent_path(long_path, resolved, sizeof(resolved)), -1);
 	TEST_END();
 }
