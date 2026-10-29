@@ -391,10 +391,45 @@ void ktest_mount_tmpfs_contract(void)
 	KASSERT_EQ(r, (int64_t)strlen(msg));
 	KASSERT(strcmp(readback, msg) == 0);
 
-	KASSERT_EQ(sys_truncate("/mntkt/mount_probe.txt", 0), 0);
+	/* Hardlinks share one inode and survive removal of either directory entry. */
+	KASSERT_EQ(sys_link("/mntkt/mount_probe.txt", "/mntkt/mount_alias.txt"), 0);
+	stat_t original_st;
+	stat_t alias_st;
+	KASSERT_EQ(vfs_stat("/mntkt/mount_probe.txt", &original_st), 0);
+	KASSERT_EQ(vfs_stat("/mntkt/mount_alias.txt", &alias_st), 0);
+	KASSERT_EQ(original_st.st_ino, alias_st.st_ino);
+	KASSERT_EQ(original_st.st_nlink, (nlink_t)2);
+	KASSERT_EQ(alias_st.st_nlink, (nlink_t)2);
+	struct ir0_statfs linked_fs;
+	memset(&linked_fs, 0, sizeof(linked_fs));
+	KASSERT_EQ(vfs_statfs("/mntkt/mount_alias.txt", &linked_fs), 0);
+	KASSERT_EQ(linked_fs.f_ffree, written_fs.f_ffree);
+	KASSERT_EQ(linked_fs.f_bfree, written_fs.f_bfree);
+	int64_t alias_fd = sys_open("/mntkt/mount_alias.txt", KTEST_O_RDWR, 0);
+	KASSERT_GT(alias_fd, 0);
+	KASSERT_EQ(sys_write((int)alias_fd, "alias", 5), 5);
+	sys_close((int)alias_fd);
+	file_fd = sys_open("/mntkt/mount_probe.txt", O_RDONLY, 0);
+	KASSERT_GT(file_fd, 0);
+	memset(readback, 0, sizeof(readback));
+	KASSERT_EQ(sys_read((int)file_fd, readback, 5), 5);
+	sys_close((int)file_fd);
+	KASSERT(memcmp(readback, "alias", 5) == 0);
+	KASSERT_EQ(tmpfs_chmod("/mntkt/mount_alias.txt", 0600), 0);
+	KASSERT_EQ(vfs_stat("/mntkt/mount_probe.txt", &original_st), 0);
+	KASSERT_EQ(original_st.st_mode & (mode_t)0777, (mode_t)0600);
+	KASSERT_EQ(sys_truncate("/mntkt/mount_alias.txt", 5), 0);
+	KASSERT_EQ(vfs_stat("/mntkt/mount_probe.txt", &original_st), 0);
+	KASSERT_EQ(original_st.st_size, 5);
+	KASSERT_EQ(sys_unlink("/mntkt/mount_probe.txt"), 0);
+	KASSERT(vfs_stat("/mntkt/mount_probe.txt", &original_st) < 0);
+	KASSERT_EQ(vfs_stat("/mntkt/mount_alias.txt", &alias_st), 0);
+	KASSERT_EQ(alias_st.st_nlink, (nlink_t)1);
+
+	KASSERT_EQ(sys_truncate("/mntkt/mount_alias.txt", 0), 0);
 	struct ir0_statfs truncated_fs;
 	memset(&truncated_fs, 0, sizeof(truncated_fs));
-	KASSERT_EQ(vfs_statfs("/mntkt/mount_probe.txt", &truncated_fs), 0);
+	KASSERT_EQ(vfs_statfs("/mntkt/mount_alias.txt", &truncated_fs), 0);
 	KASSERT_EQ(truncated_fs.f_bfree, empty_fs.f_bfree);
 
 	char mounts[1024];
