@@ -49,6 +49,30 @@ void resource_register_irq(uint8_t irq, const char *name)
     s_irq_count++;
 }
 
+static int resource_name_eq(const char *a, const char *b)
+{
+    return a && b && strcmp(a, b) == 0;
+}
+
+int resource_unregister_irq(uint8_t irq, const char *name)
+{
+    int i;
+
+    if (!name)
+        return -ENOENT;
+    for (i = 0; i < s_irq_count; i++)
+    {
+        if (s_irq_list[i].irq != irq ||
+            !resource_name_eq(s_irq_list[i].name, name))
+            continue;
+        for (int j = i; j + 1 < s_irq_count; j++)
+            s_irq_list[j] = s_irq_list[j + 1];
+        s_irq_count--;
+        return 0;
+    }
+    return -ENOENT;
+}
+
 void resource_register_ioport(uint16_t start, uint16_t end, const char *name)
 {
     if (!name || s_ioport_count >= MAX_IOPORT_ENTRIES)
@@ -57,6 +81,26 @@ void resource_register_ioport(uint16_t start, uint16_t end, const char *name)
     s_ioport_list[s_ioport_count].end = end;
     s_ioport_list[s_ioport_count].name = name;
     s_ioport_count++;
+}
+
+int resource_unregister_ioport(uint16_t start, uint16_t end, const char *name)
+{
+    int i;
+
+    if (!name)
+        return -ENOENT;
+    for (i = 0; i < s_ioport_count; i++)
+    {
+        if (s_ioport_list[i].start != start ||
+            s_ioport_list[i].end != end ||
+            !resource_name_eq(s_ioport_list[i].name, name))
+            continue;
+        for (int j = i; j + 1 < s_ioport_count; j++)
+            s_ioport_list[j] = s_ioport_list[j + 1];
+        s_ioport_count--;
+        return 0;
+    }
+    return -ENOENT;
 }
 
 void resource_foreach_irq(int (*cb)(uint8_t irq, const char *name, void *ctx), void *ctx)
@@ -89,6 +133,26 @@ void resource_register_mmio(uint64_t start, uint64_t end, const char *name)
     s_mmio_list[s_mmio_count].end = end;
     s_mmio_list[s_mmio_count].name = name;
     s_mmio_count++;
+}
+
+int resource_unregister_mmio(uint64_t start, uint64_t end, const char *name)
+{
+    int i;
+
+    if (!name)
+        return -ENOENT;
+    for (i = 0; i < s_mmio_count; i++)
+    {
+        if (s_mmio_list[i].start != start ||
+            s_mmio_list[i].end != end ||
+            !resource_name_eq(s_mmio_list[i].name, name))
+            continue;
+        for (int j = i; j + 1 < s_mmio_count; j++)
+            s_mmio_list[j] = s_mmio_list[j + 1];
+        s_mmio_count--;
+        return 0;
+    }
+    return -ENOENT;
 }
 
 void resource_foreach_mmio(int (*cb)(uint64_t start, uint64_t end, const char *name, void *ctx), void *ctx)

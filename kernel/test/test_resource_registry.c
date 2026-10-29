@@ -20,6 +20,7 @@
 
 #include "test/ktest_harness.h"
 #include "resource_registry.h"
+#include "syscalls.h"
 #include <stddef.h>
 #include <string.h>
 
@@ -91,37 +92,131 @@ void ktest_resource_registry(void)
 
 	KTEST_BEGIN("resource_registry");
 
-	memset(&probe, 0, sizeof(probe));
+	/*
+	 * Register, verify, and unregister each resource.  The registry is a
+	 * boot-wide table; leaving test entries behind would leak them into
+	 * /proc/interrupts, /proc/ioports, and /proc/iomem for every later
+	 * test and for userspace.
+	 */
 	resource_register_irq(0x5A, "ktest_irq");
+	memset(&probe, 0, sizeof(probe));
 	resource_foreach_irq(cb_irq, &probe);
 	KASSERT(probe.found);
 	KASSERT_EQ(probe.irq, 0x5A);
-	KASSERT_GT(probe.calls, 0);
-
-	memset(&probe, 0, sizeof(probe));
-	resource_register_ioport(0x1234, 0x1237, "ktest_ioport");
-	resource_foreach_ioport(cb_ioport, &probe);
-	KASSERT(probe.found);
-	KASSERT_EQ(probe.ioport_start, 0x1234);
-	KASSERT_EQ(probe.ioport_end, 0x1237);
-	KASSERT_GT(probe.calls, 0);
-
-	memset(&probe, 0, sizeof(probe));
-	resource_register_mmio(0xDEAD0000ULL, 0xDEAD0FFFULL, "ktest_mmio");
-	resource_foreach_mmio(cb_mmio, &probe);
-	KASSERT(probe.found);
-	KASSERT_EQ(probe.mmio_start, 0xDEAD0000ULL);
-	KASSERT_EQ(probe.mmio_end, 0xDEAD0FFFULL);
 	KASSERT_GT(probe.calls, 0);
 
 	/* A non-zero callback return stops the walk after the current entry. */
 	resource_foreach_irq(cb_stop_first, &stop_calls);
 	KASSERT_EQ(stop_calls, 1);
 
+	/* Wrong name or range must not remove the entry. */
+	KASSERT_EQ(resource_unregister_irq(0x5A, "ktest_other"), -ENOENT);
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_irq(cb_irq, &probe);
+	KASSERT(probe.found);
+
+	KASSERT_EQ(resource_unregister_irq(0x5A, "ktest_irq"), 0);
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_irq(cb_irq, &probe);
+	KASSERT(!probe.found);
+	KASSERT_EQ(resource_unregister_irq(0x5A, "ktest_irq"), -ENOENT);
+
+	resource_register_ioport(0x1234, 0x1237, "ktest_ioport");
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_ioport(cb_ioport, &probe);
+	KASSERT(probe.found);
+	KASSERT_EQ(probe.ioport_start, 0x1234);
+	KASSERT_EQ(probe.ioport_end, 0x1237);
+	KASSERT_GT(probe.calls, 0);
+
+	KASSERT_EQ(resource_unregister_ioport(0x1234, 0x1236,
+					      "ktest_ioport"), -ENOENT);
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_ioport(cb_ioport, &probe);
+	KASSERT(probe.found);
+
+	KASSERT_EQ(resource_unregister_ioport(0x1234, 0x1237,
+					      "ktest_ioport"), 0);
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_ioport(cb_ioport, &probe);
+	KASSERT(!probe.found);
+
+	resource_register_mmio(0xDEAD0000ULL, 0xDEAD0FFFULL, "ktest_mmio");
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_mmio(cb_mmio, &probe);
+	KASSERT(probe.found);
+	KASSERT_EQ(probe.mmio_start, 0xDEAD0000ULL);
+	KASSERT_EQ(probe.mmio_end, 0xDEAD0FFFULL);
+	KASSERT_GT(probe.calls, 0);
+
+	KASSERT_EQ(resource_unregister_mmio(0xDEAD0000ULL, 0xDEAD0FFEULL,
+					    "ktest_mmio"), -ENOENT);
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_mmio(cb_mmio, &probe);
+	KASSERT(probe.found);
+
+	KASSERT_EQ(resource_unregister_mmio(0xDEAD0000ULL, 0xDEAD0FFFULL,
+					    "ktest_mmio"), 0);
+	memset(&probe, 0, sizeof(probe));
+	resource_foreach_mmio(cb_mmio, &probe);
+	KASSERT(!probe.found);
+
 	/* NULL callbacks are a documented no-op, not a crash. */
 	resource_foreach_irq(NULL, NULL);
 	resource_foreach_ioport(NULL, NULL);
 	resource_foreach_mmio(NULL, NULL);
+
+	KTEST_END();
+}
+
+static int ktest_proc_contains(const char *path, const char *needle)
+{
+	char buf[2048];
+	int64_t fd;
+	int64_t n;
+
+	fd = sys_open(path, 0, 0);
+	if (fd <= 0)
+		return -1;
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	if (n <= 0)
+		return -1;
+	return strstr(buf, needle) != NULL;
+}
+
+void ktest_resource_procfs_visibility(void)
+{
+	KTEST_BEGIN("resource_procfs_visibility");
+
+	resource_register_irq(0x7E, "ktest_proc_irq");
+	resource_register_ioport(0x2F00, 0x2F03, "ktest_proc_ioport");
+	resource_register_mmio(0xCAFE0000ULL, 0xCAFE0FFFULL,
+			       "ktest_proc_mmio");
+
+	/* Each reader must expose the registered resource in its own format. */
+	KASSERT_EQ(ktest_proc_contains("/proc/interrupts",
+				       "126\tktest_proc_irq"), 1);
+	KASSERT_EQ(ktest_proc_contains("/proc/ioports",
+				       "12032\t12035\tktest_proc_ioport"), 1);
+	KASSERT_EQ(ktest_proc_contains(
+			   "/proc/iomem",
+			   "00000000cafe0000-00000000cafe0fff : ktest_proc_mmio"),
+		   1);
+
+	KASSERT_EQ(resource_unregister_irq(0x7E, "ktest_proc_irq"), 0);
+	KASSERT_EQ(resource_unregister_ioport(0x2F00, 0x2F03,
+					      "ktest_proc_ioport"), 0);
+	KASSERT_EQ(resource_unregister_mmio(0xCAFE0000ULL, 0xCAFE0FFFULL,
+					    "ktest_proc_mmio"), 0);
+
+	/* Unregistered resources must disappear from the exported views. */
+	KASSERT_EQ(ktest_proc_contains("/proc/interrupts",
+				       "ktest_proc_irq"), 0);
+	KASSERT_EQ(ktest_proc_contains("/proc/ioports",
+				       "ktest_proc_ioport"), 0);
+	KASSERT_EQ(ktest_proc_contains("/proc/iomem", "ktest_proc_mmio"), 0);
 
 	KTEST_END();
 }

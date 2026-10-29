@@ -38,6 +38,7 @@ struct ktest_case {
 static const struct ktest_case ktest_cases[] = {
 	{ ktest_boot_ok, "boot_ok", 0 },
 	{ ktest_resource_registry, "resource_registry", 0 },
+	{ ktest_resource_procfs_visibility, "resource_procfs_visibility", 1 },
 	{ ktest_allocator, "allocator", 0 },
 	{ ktest_path, "path", 0 },
 	{ ktest_string, "string", 0 },

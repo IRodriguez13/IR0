@@ -16,6 +16,7 @@
 
 void ktest_boot_ok(void);
 void ktest_resource_registry(void);
+void ktest_resource_procfs_visibility(void);
 void ktest_allocator(void);
 void ktest_path(void);
 void ktest_string(void);
