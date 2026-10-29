@@ -472,6 +472,143 @@ void ktest_mount_longest_prefix_contract(void)
 	KTEST_END();
 }
 
+#define KTEST_BLK_SECTORS      4u
+#define KTEST_BLK_SECTOR_SIZE  512u
+#define KTEST_BLK_MAX_IO       2u
+#define KTEST_BLK_NAME         "ktestblk"
+
+static uint8_t ktest_blk_data[KTEST_BLK_SECTORS * KTEST_BLK_SECTOR_SIZE];
+static unsigned ktest_blk_read_calls;
+
+static int ktest_blk_read(void *ctx, uint64_t lba, uint32_t count, void *buf)
+{
+	size_t off;
+
+	(void)ctx;
+	if (!buf || count == 0)
+		return -EINVAL;
+	if (lba + (uint64_t)count > KTEST_BLK_SECTORS)
+		return -EINVAL;
+	ktest_blk_read_calls++;
+	off = (size_t)lba * KTEST_BLK_SECTOR_SIZE;
+	memcpy(buf, ktest_blk_data + off, (size_t)count * KTEST_BLK_SECTOR_SIZE);
+	return 0;
+}
+
+static int ktest_blk_write(void *ctx, uint64_t lba, uint32_t count,
+			   const void *buf)
+{
+	size_t off;
+
+	(void)ctx;
+	if (!buf || count == 0)
+		return -EINVAL;
+	if (lba + (uint64_t)count > KTEST_BLK_SECTORS)
+		return -EINVAL;
+	off = (size_t)lba * KTEST_BLK_SECTOR_SIZE;
+	memcpy(ktest_blk_data + off, buf, (size_t)count * KTEST_BLK_SECTOR_SIZE);
+	return 0;
+}
+
+static const struct ir0_block_ops ktest_blk_ops = {
+	.read = ktest_blk_read,
+	.write = ktest_blk_write,
+	.flush = NULL,
+};
+
+/*
+ * The block facade is the only path filesystems use. Exercise it with a
+ * registered fake device: the real hda is absent under QEMU, so the hda
+ * test alone never reads a sector.
+ */
+void ktest_block_layer_contract(void)
+{
+	static struct ir0_block_device dev;
+	struct ir0_block_info info;
+	dev_t id;
+	uint8_t sectors[3 * KTEST_BLK_SECTOR_SIZE] __attribute__((aligned(4)));
+	uint8_t pattern[KTEST_BLK_SECTOR_SIZE] __attribute__((aligned(4)));
+	int found = -1;
+	int i;
+
+	KTEST_BEGIN("block_layer_contract");
+
+	for (i = 0; i < (int)KTEST_BLK_SECTORS; i++)
+		memset(ktest_blk_data + i * KTEST_BLK_SECTOR_SIZE, 0x40 + i,
+		       KTEST_BLK_SECTOR_SIZE);
+	ktest_blk_read_calls = 0;
+
+	memset(&dev, 0, sizeof(dev));
+	dev.ops = &ktest_blk_ops;
+	dev.info.sector_size = KTEST_BLK_SECTOR_SIZE;
+	dev.info.max_sectors_per_io = KTEST_BLK_MAX_IO;
+	dev.info.sector_count = KTEST_BLK_SECTORS;
+	dev.info.flags = 0;
+	memcpy(dev.info.name, KTEST_BLK_NAME, sizeof(KTEST_BLK_NAME));
+
+	KASSERT_EQ(ir0_block_register(&dev), 0);
+	/* Registering the same name twice must not create a second slot. */
+	KASSERT_EQ(ir0_block_register(&dev), -EEXIST);
+
+	id = ir0_block_lookup_by_name(KTEST_BLK_NAME);
+	KASSERT(id != 0);
+	KASSERT(ir0_block_name_is_present(KTEST_BLK_NAME));
+	KASSERT_EQ(ir0_block_sector_count_by_name(KTEST_BLK_NAME),
+		   (uint64_t)KTEST_BLK_SECTORS);
+
+	KASSERT_EQ(ir0_block_get_info(id, &info), 0);
+	KASSERT_EQ(info.sector_size, KTEST_BLK_SECTOR_SIZE);
+	KASSERT_EQ(info.max_sectors_per_io, KTEST_BLK_MAX_IO);
+	KASSERT_EQ(info.sector_count, (uint64_t)KTEST_BLK_SECTORS);
+	KASSERT(strcmp(info.name, KTEST_BLK_NAME) == 0);
+
+	for (i = 0; i < ir0_block_count(); i++)
+	{
+		const char *name = ir0_block_name_at(i);
+
+		if (name && strcmp(name, KTEST_BLK_NAME) == 0)
+		{
+			found = i;
+			break;
+		}
+	}
+	KASSERT_GE(found, 0);
+	if (found >= 0)
+		KASSERT_EQ(ir0_block_dev_at(found), id);
+
+	/*
+	 * max_sectors_per_io = 2 forces the facade to split this into two
+	 * backend reads and to advance the LBA between them.
+	 */
+	memset(sectors, 0, sizeof(sectors));
+	KASSERT_EQ(ir0_block_read(id, 0, 3, sectors), 0);
+	KASSERT_EQ(ktest_blk_read_calls, 2u);
+	KASSERT_EQ(memcmp(sectors, ktest_blk_data, sizeof(sectors)), 0);
+
+	/* A write through the facade must be visible to the next read. */
+	memset(pattern, 0xEE, sizeof(pattern));
+	KASSERT_EQ(ir0_block_write_by_name(KTEST_BLK_NAME, 1, 1, pattern), 0);
+	memset(sectors, 0, sizeof(sectors));
+	KASSERT_EQ(ir0_block_read_by_name(KTEST_BLK_NAME, 1, 1, sectors), 0);
+	KASSERT_EQ(memcmp(sectors, pattern, sizeof(pattern)), 0);
+
+	/* Argument and range validation. */
+	KASSERT_EQ(ir0_block_read(id, 0, 0, sectors), -EINVAL);
+	KASSERT_EQ(ir0_block_read(id, 0, 1, NULL), -EINVAL);
+	KASSERT_EQ(ir0_block_read(id, KTEST_BLK_SECTORS - 1, 2, sectors),
+		   -EINVAL);
+	KASSERT_EQ(ir0_block_read_by_name("ktest-missing", 0, 1, sectors),
+		   -ENODEV);
+	KASSERT_EQ(ir0_block_read_by_name(KTEST_BLK_NAME, 0, 1, NULL),
+		   -EINVAL);
+	KASSERT_EQ(ir0_block_get_info(0, &info), -EINVAL);
+
+	/* flush is optional: a NULL backend hook is a successful no-op. */
+	KASSERT_EQ(ir0_block_flush(id), 0);
+
+	KTEST_END();
+}
+
 void ktest_block_hda_read_contract(void)
 {
 	char buf[512];
@@ -481,19 +618,24 @@ void ktest_block_hda_read_contract(void)
 	KTEST_BEGIN("block_hda_read_contract");
 
 	/*
-	 * IDE/block presence is environment-dependent. Exercise the path
-	 * when hda works; otherwise end without failing the suite.
+	 * hda presence depends on the host disk. When absent, assert the
+	 * absence contract instead of ending silently; block_layer_contract
+	 * covers the read path with a fake device either way.
 	 */
-	memset(buf, 0, sizeof(buf));
-	if (!ir0_block_name_is_present("hda") ||
-	    ir0_block_sector_count_by_name("hda") == 0ULL ||
-	    ir0_block_read_by_name("hda", 0, 1, buf) != 0)
+	if (!ir0_block_name_is_present("hda"))
 	{
+		KASSERT_EQ(ir0_block_lookup_by_name("hda"), 0u);
+		KASSERT_EQ(ir0_block_sector_count_by_name("hda"), 0ULL);
+		KASSERT_EQ(ir0_block_read_by_name("hda", 0, 1, buf), -ENODEV);
 		KTEST_END();
 		return;
 	}
 
+	KASSERT_GT(ir0_block_sector_count_by_name("hda"), 0ULL);
+	KASSERT_EQ(ir0_block_read_by_name("hda", 0, 1, buf), 0);
+
 	fd = sys_open("/dev/hda", KTEST_O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
 	if (fd <= 0)
 	{
 		KTEST_END();
@@ -503,9 +645,7 @@ void ktest_block_hda_read_contract(void)
 	memset(buf, 0, sizeof(buf));
 	n = sys_read((int)fd, buf, sizeof(buf));
 	sys_close((int)fd);
-	/* Full 512B read is the strong contract when the block layer works. */
-	if (n == 512)
-		KASSERT_EQ(n, 512);
+	KASSERT_EQ(n, (int64_t)sizeof(buf));
 
 	{
 		char one_a[512] __attribute__((aligned(4)));
@@ -515,13 +655,11 @@ void ktest_block_hda_read_contract(void)
 		memset(one_a, 0, sizeof(one_a));
 		memset(one_b, 0, sizeof(one_b));
 		memset(two, 0, sizeof(two));
-		if (ir0_block_read_by_name("hda", 0, 1, one_a) == 0 &&
-		    ir0_block_read_by_name("hda", 1, 1, one_b) == 0 &&
-		    ir0_block_read_by_name("hda", 0, 2, two) == 0)
-		{
-			KASSERT_EQ(memcmp(two, one_a, 512), 0);
-			KASSERT_EQ(memcmp(two + 512, one_b, 512), 0);
-		}
+		KASSERT_EQ(ir0_block_read_by_name("hda", 0, 1, one_a), 0);
+		KASSERT_EQ(ir0_block_read_by_name("hda", 1, 1, one_b), 0);
+		KASSERT_EQ(ir0_block_read_by_name("hda", 0, 2, two), 0);
+		KASSERT_EQ(memcmp(two, one_a, 512), 0);
+		KASSERT_EQ(memcmp(two + 512, one_b, 512), 0);
 	}
 
 	KTEST_END();
