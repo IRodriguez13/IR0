@@ -121,6 +121,13 @@ endif
 
 # Flags
 CFLAGS = -ffreestanding -nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin
+# Optimization. Without an explicit -O, GCC builds the kernel at -O0.
+# The -fno-strict-* flags are required, not cosmetic: kernel code casts
+# between unrelated struct types (fd payloads, VMA/file backends) and relies
+# on unsigned wrap-around in size/bounds arithmetic, both of which -O2 is
+# otherwise allowed to exploit. Keep frame pointers so panic dumps stay useful.
+KERNEL_OPT ?= -O2
+CFLAGS += $(KERNEL_OPT) -fno-strict-aliasing -fno-strict-overflow -fno-omit-frame-pointer
 # Never build the kernel as PIE/PIC. With PIE, GCC keeps a PC base in %rbx and
 # emits call*(%rbx+rel). A clobbered %rbx (context switch / interrupt) jumps into
 # .bss — observed as #UD/#GP at current_process / fork_restore_audit (desk X).
@@ -1068,6 +1075,10 @@ $(AUTOCONF_HDR): $(KERNEL_ROOT)/.config
 $(ALL_OBJS): $(AUTOCONF_HDR)
 $(ALL_OBJS_TEST): $(AUTOCONF_HDR)
 endif
+
+# make cannot see CFLAGS changes. Depend on the Makefile so editing a flag
+# cannot leave a mixed object tree (e.g. -O0 and -O2 objects in one link).
+$(ALL_OBJS) $(ALL_OBJS_TEST): $(KERNEL_ROOT)/Makefile
 
 # BUILD RULES
 
