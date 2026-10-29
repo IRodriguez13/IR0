@@ -275,6 +275,11 @@ void ktest_mount_tmpfs_contract(void)
 	ktest_ensure_mountpoint_dir("/mntkt");
 
 	int64_t ret = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
+	if (ret == -EBUSY)
+	{
+		(void)sys_umount("/mntkt", 0);
+		ret = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
+	}
 	KASSERT_EQ(ret, 0);
 
 	int64_t dup = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
@@ -288,8 +293,18 @@ void ktest_mount_tmpfs_contract(void)
 	KASSERT_GT(file_fd, 0);
 	const char *msg = "tmpfs-mount-ok";
 	int64_t w = sys_write((int)file_fd, msg, strlen(msg));
-	KASSERT_GT(w, 0);
+	KASSERT_EQ(w, (int64_t)strlen(msg));
 	sys_close((int)file_fd);
+
+	/* The file must survive the close and read back from the mounted fs. */
+	file_fd = sys_open("/mntkt/mount_probe.txt", O_RDONLY, 0);
+	KASSERT_GT(file_fd, 0);
+	char readback[64];
+	memset(readback, 0, sizeof(readback));
+	int64_t r = sys_read((int)file_fd, readback, sizeof(readback) - 1);
+	sys_close((int)file_fd);
+	KASSERT_EQ(r, (int64_t)strlen(msg));
+	KASSERT(strcmp(readback, msg) == 0);
 
 	char mounts[1024];
 	memset(mounts, 0, sizeof(mounts));
@@ -321,7 +336,7 @@ void ktest_mount_multi_fs_contract(void)
 	KASSERT_GT(sfd, 0);
 	const char *smsg = "simplefs-ok";
 	int64_t sw = sys_write((int)sfd, smsg, strlen(smsg));
-	KASSERT_GT(sw, 0);
+	KASSERT_EQ(sw, (int64_t)strlen(smsg));
 	sys_close((int)sfd);
 
 	int64_t ffd = sys_open("/mnt/fat/HELLO.TXT",
@@ -329,8 +344,25 @@ void ktest_mount_multi_fs_contract(void)
 	KASSERT_GT(ffd, 0);
 	const char *fmsg = "fat16-ok";
 	int64_t fw = sys_write((int)ffd, fmsg, strlen(fmsg));
-	KASSERT_GT(fw, 0);
+	KASSERT_EQ(fw, (int64_t)strlen(fmsg));
 	sys_close((int)ffd);
+
+	char sread[64];
+	char fread_buf[64];
+	memset(sread, 0, sizeof(sread));
+	memset(fread_buf, 0, sizeof(fread_buf));
+	sfd = sys_open("/mnt/simple/s1.txt", O_RDONLY, 0);
+	KASSERT_GT(sfd, 0);
+	KASSERT_EQ(sys_read((int)sfd, sread, sizeof(sread) - 1),
+		   (int64_t)strlen(smsg));
+	sys_close((int)sfd);
+	ffd = sys_open("/mnt/fat/HELLO.TXT", O_RDONLY, 0);
+	KASSERT_GT(ffd, 0);
+	KASSERT_EQ(sys_read((int)ffd, fread_buf, sizeof(fread_buf) - 1),
+		   (int64_t)strlen(fmsg));
+	sys_close((int)ffd);
+	KASSERT(strcmp(sread, smsg) == 0);
+	KASSERT(strcmp(fread_buf, fmsg) == 0);
 
 	char mounts[1024];
 	memset(mounts, 0, sizeof(mounts));
