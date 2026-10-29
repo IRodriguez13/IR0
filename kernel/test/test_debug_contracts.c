@@ -18,6 +18,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/net.h>
 #include <ir0/stat.h>
 #include <ir0/vfs.h>
 #include <string.h>
@@ -175,17 +176,82 @@ void ktest_proc_netinfo_contract(void)
 
 	int64_t fd = sys_open("/proc/netinfo", O_RDONLY, 0);
 #if CONFIG_ENABLE_NETWORKING
+	struct net_device fake;
+	char buf[256];
+	int64_t n;
+	const char *line;
+	int found = 0;
+	static const char expected[] =
+		"ktest0\t1500\tUP,RUNNING,BROADCAST\t02:00:00:00:00:01";
+
+	/*
+	 * /proc/netinfo is registered even when no NIC is present, so an
+	 * empty read proves nothing.  Register a fake device (unregistered
+	 * before returning) and require its exact tab-separated row.
+	 */
+	memset(&fake, 0, sizeof(fake));
+	fake.name = "ktest0";
+	fake.mtu = 1500;
+	fake.flags = IFF_UP | IFF_RUNNING | IFF_BROADCAST;
+	fake.mac[0] = 0x02;
+	fake.mac[5] = 0x01;
+
+	KASSERT_EQ(net_register_device(&fake), 0);
 	KASSERT_GT(fd, 0);
 	if (fd > 0)
 	{
-		char buf[256];
 		memset(buf, 0, sizeof(buf));
-		int64_t n = sys_read((int)fd, buf, sizeof(buf) - 1);
+		n = sys_read((int)fd, buf, sizeof(buf) - 1);
+		sys_close((int)fd);
+		KASSERT_GT(n, 0);
+		KASSERT(n < (int64_t)sizeof(buf));
+
+		line = buf;
+		while (*line)
+		{
+			const char *nl = strchr(line, '\n');
+
+			if (!nl)
+				break;
+			if ((size_t)(nl - line) == sizeof(expected) - 1 &&
+			    strncmp(line, expected, sizeof(expected) - 1) == 0)
+			{
+				found = 1;
+				break;
+			}
+			line = nl + 1;
+		}
+		KASSERT(found);
+	}
+	net_unregister_device(&fake);
+
+	/* The row must disappear once the device is gone. */
+	fd = sys_open("/proc/netinfo", O_RDONLY, 0);
+	KASSERT_GT(fd, 0);
+	if (fd > 0)
+	{
+		memset(buf, 0, sizeof(buf));
+		n = sys_read((int)fd, buf, sizeof(buf) - 1);
 		sys_close((int)fd);
 		KASSERT_GE(n, 0);
+		KASSERT(!contains_text(buf, "ktest0"));
 	}
 #else
-	KASSERT(fd < 0);
+	/*
+	 * The node is registered unconditionally; without networking the
+	 * reader returns an empty file rather than making open() fail.
+	 */
+	KASSERT_GT(fd, 0);
+	if (fd > 0)
+	{
+		char buf[64];
+		int64_t n;
+
+		memset(buf, 0, sizeof(buf));
+		n = sys_read((int)fd, buf, sizeof(buf) - 1);
+		sys_close((int)fd);
+		KASSERT_EQ(n, 0);
+	}
 #endif
 
 	KTEST_END();

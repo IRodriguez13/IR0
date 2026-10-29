@@ -262,9 +262,19 @@ void ktest_procfs_pid_fd(void)
 
 void ktest_procfs_pid_environ(void)
 {
+	static char *const test_envp[] = {
+		"KTEST_ENV=alpha",
+		"KTEST_SECOND=beta",
+		NULL,
+	};
+	char *saved_blob;
+	size_t saved_len;
+	uint64_t saved_envp_user;
+	size_t expect_len;
 	int64_t fd;
 	char buf[512];
 	int64_t n;
+	int rc;
 
 	KTEST_BEGIN("procfs_pid_environ");
 	if (!current_process)
@@ -273,15 +283,54 @@ void ktest_procfs_pid_environ(void)
 		return;
 	}
 
+	/*
+	 * The holder process runs in kernel mode, so proc_pid_environ_read()
+	 * cannot follow exec_envp_user and must serve the saved blob.  Install
+	 * a known blob instead of accepting whatever the boot path left
+	 * behind: an empty read used to pass whenever saved_environ_len == 0.
+	 *
+	 * Detach the boot blob first so process_saved_environ_set() does not
+	 * free it; restore it after the test.
+	 */
+	saved_blob = current_process->saved_environ;
+	saved_len = current_process->saved_environ_len;
+	saved_envp_user = current_process->exec_envp_user;
+	current_process->saved_environ = NULL;
+	current_process->saved_environ_len = 0;
+	current_process->exec_envp_user = 0;
+
+	rc = process_saved_environ_set(current_process, test_envp);
+	if (rc != 0)
+	{
+		KASSERT_EQ(rc, 0);
+		goto restore;
+	}
+
+	expect_len = strlen(test_envp[0]) + 1 + strlen(test_envp[1]) + 1;
+	KASSERT_EQ(current_process->saved_environ_len, expect_len);
+
 	fd = sys_open("/proc/self/environ", 0, 0);
 	KASSERT_GT(fd, 0);
 	KASSERT(fd < 1000);
-	memset(buf, 0, sizeof(buf));
-	n = sys_read((int)fd, buf, sizeof(buf) - 1);
-	sys_close((int)fd);
-	KASSERT_GE(n, 0);
-	if (current_process->saved_environ_len > 0)
-		KASSERT_GT(n, 0);
+	if (fd > 0)
+	{
+		memset(buf, 0, sizeof(buf));
+		n = sys_read((int)fd, buf, sizeof(buf) - 1);
+		KASSERT_EQ(n, (int64_t)expect_len);
+		KASSERT_EQ(memcmp(buf, current_process->saved_environ,
+				  expect_len), 0);
+
+		/* A second read is at EOF, not a replay of the same blob. */
+		n = sys_read((int)fd, buf, sizeof(buf) - 1);
+		KASSERT_EQ(n, 0);
+		sys_close((int)fd);
+	}
+
+restore:
+	process_saved_environ_clear(current_process);
+	current_process->saved_environ = saved_blob;
+	current_process->saved_environ_len = saved_len;
+	current_process->exec_envp_user = saved_envp_user;
 
 	KTEST_END();
 }
