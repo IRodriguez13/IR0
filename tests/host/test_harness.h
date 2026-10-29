@@ -21,6 +21,7 @@
 #ifndef _IR0_TEST_HARNESS_H
 #define _IR0_TEST_HARNESS_H
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,25 +55,48 @@ extern int _ir0_test_pass;
 	} \
 } while (0)
 
+/*
+ * Evaluate each operand exactly once: ASSERT_EQ(f(), g()) used to call both
+ * functions up to three times, which broke stateful helpers and made a
+ * failure report a different value than the one compared.  Print through
+ * uintptr_t instead of long so 64-bit values and pointers survive intact on
+ * both LP64 and ILP32 hosts.
+ */
 #define ASSERT_EQ(a, b) do { \
-	if ((a) != (b)) { \
-		fprintf(stderr, "\n[TEST] ASSERT_EQ failed: %s == %s (%s:%d) (%ld != %ld)\n", \
-			#a, #b, __FILE__, __LINE__, (long)(a), (long)(b)); \
+	__typeof__(a) _ir0_eq_a = (a); \
+	__typeof__(b) _ir0_eq_b = (b); \
+	if (!(_ir0_eq_a == _ir0_eq_b)) { \
+		fprintf(stderr, \
+			"\n[TEST] ASSERT_EQ failed: %s == %s (%s:%d) " \
+			"(0x%llx != 0x%llx)\n", \
+			#a, #b, __FILE__, __LINE__, \
+			(unsigned long long)(uintptr_t)_ir0_eq_a, \
+			(unsigned long long)(uintptr_t)_ir0_eq_b); \
 		_ir0_test_failed = 1; \
 	} \
 } while (0)
 
 #define ASSERT_STR_EQ(a, b) do { \
-	if (strcmp((a), (b)) != 0) { \
-		fprintf(stderr, "\n[TEST] ASSERT_STR_EQ failed: \"%s\" != \"%s\" (%s:%d)\n", \
-			(a), (b), __FILE__, __LINE__); \
+	const char *_ir0_str_a = (a); \
+	const char *_ir0_str_b = (b); \
+	if (!_ir0_str_a || !_ir0_str_b || \
+	    strcmp(_ir0_str_a, _ir0_str_b) != 0) { \
+		fprintf(stderr, \
+			"\n[TEST] ASSERT_STR_EQ failed: \"%s\" != \"%s\" " \
+			"(%s:%d)\n", \
+			_ir0_str_a ? _ir0_str_a : "(null)", \
+			_ir0_str_b ? _ir0_str_b : "(null)", \
+			__FILE__, __LINE__); \
 		_ir0_test_failed = 1; \
 	} \
 } while (0)
 
 #define ASSERT_NE(a, b) do { \
-	if ((a) == (b)) { \
-		fprintf(stderr, "\n[TEST] ASSERT_NE failed: %s != %s (%s:%d)\n", \
+	__typeof__(a) _ir0_ne_a = (a); \
+	__typeof__(b) _ir0_ne_b = (b); \
+	if (_ir0_ne_a == _ir0_ne_b) { \
+		fprintf(stderr, \
+			"\n[TEST] ASSERT_NE failed: %s != %s (%s:%d)\n", \
 			#a, #b, __FILE__, __LINE__); \
 		_ir0_test_failed = 1; \
 	} \
