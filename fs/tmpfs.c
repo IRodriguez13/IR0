@@ -90,6 +90,9 @@ static tmpfs_data_t *tmpfs_get_instance(const char *mount_point)
 /* Get TMPFS instance for a given path */
 static tmpfs_data_t *tmpfs_get_instance_for_path(const char *path)
 {
+    tmpfs_data_t *best = NULL;
+    size_t best_len = 0;
+
     if (!path)
         return NULL;
     
@@ -98,19 +101,19 @@ static tmpfs_data_t *tmpfs_get_instance_for_path(const char *path)
     {
         if (!tmpfs_instances[i])
             continue;
-        
+
         size_t mp_len = strlen(tmpfs_instances[i]->mount_point);
-        if (strncmp(path, tmpfs_instances[i]->mount_point, mp_len) == 0)
-        {
-            /* Check if path is exactly mount point or has trailing slash */
-            if (path[mp_len] == '\0' || path[mp_len] == '/')
-            {
-                return tmpfs_instances[i];
-            }
-        }
+        if (mp_len <= best_len)
+            continue;
+        if (strncmp(path, tmpfs_instances[i]->mount_point, mp_len) != 0)
+            continue;
+        if (path[mp_len] != '\0' && path[mp_len] != '/')
+            continue;
+        best = tmpfs_instances[i];
+        best_len = mp_len;
     }
-    
-    return NULL;
+
+    return best;
 }
 
 /* Extract relative path from full path */
