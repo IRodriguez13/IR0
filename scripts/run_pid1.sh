@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INIT="${INIT:-setup/pid1/sbin/init}"
 DISK="${IR0_DISK:-disk.img}"
 ISO="${KERNEL_USERSPACE_ISO:-$ROOT/kernel-x64-userspace.iso}"
-SERIAL_LOG="${IR0_SERIAL_LOG:-/tmp/ir0-run.log}"
+SERIAL_LOG="${IR0_SERIAL_LOG:-${TMPDIR:-/tmp}/ir0-run.log}"
 QEMU="${QEMU:-qemu-system-x86_64}"
 QEMU_EXTRA="${IR0_QEMU_ARGS:-}"
 FRESH_DISK="${IR0_FRESH_DISK:-0}"
@@ -63,7 +63,7 @@ if [[ ! -f "$BASE_DISK" ]]; then
 fi
 
 if [[ "$FRESH_DISK" == "1" ]]; then
-	WORK_DISK="$(mktemp /tmp/ir0-run-pid1.XXXXXX.img)"
+	WORK_DISK="$(mktemp "${TMPDIR:-/tmp}/ir0-run-pid1.XXXXXX")"
 	cp -f "$BASE_DISK" "$WORK_DISK"
 	trap cleanup EXIT
 	RUN_DISK="$WORK_DISK"

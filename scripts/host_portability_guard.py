@@ -58,6 +58,7 @@ SCOPE_GLOBS = (
     "scripts/linux_abi_audit.py",
     "scripts/make/*.mk",
     "scripts/release_check_guest_probes.py",
+    "scripts/run_pid1.sh",
     "scripts/smoke_*.py",
     "scripts/smoke_*.sh",
     "tests/ktm/**/*.py",
