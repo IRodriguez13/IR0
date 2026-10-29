@@ -20,6 +20,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/net.h>
 #include <ir0/stat.h>
+#include <ir0/statfs.h>
 #include <ir0/vfs.h>
 #include <string.h>
 
@@ -348,6 +349,12 @@ void ktest_mount_tmpfs_contract(void)
 	}
 	KASSERT_EQ(ret, 0);
 
+	struct ir0_statfs empty_fs;
+	memset(&empty_fs, 0, sizeof(empty_fs));
+	KASSERT_EQ(vfs_statfs("/mntkt", &empty_fs), 0);
+	KASSERT_EQ(empty_fs.f_type, IR0_TMPFS_MAGIC);
+	KASSERT(empty_fs.f_blocks > 0);
+
 	int64_t dup = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
 	KASSERT(dup < 0);
 
@@ -362,6 +369,11 @@ void ktest_mount_tmpfs_contract(void)
 	KASSERT_EQ(w, (int64_t)strlen(msg));
 	sys_close((int)file_fd);
 
+	struct ir0_statfs written_fs;
+	memset(&written_fs, 0, sizeof(written_fs));
+	KASSERT_EQ(vfs_statfs("/mntkt/mount_probe.txt", &written_fs), 0);
+	KASSERT_EQ(written_fs.f_bfree + 1, empty_fs.f_bfree);
+
 	/* The file must survive the close and read back from the mounted fs. */
 	file_fd = sys_open("/mntkt/mount_probe.txt", O_RDONLY, 0);
 	KASSERT_GT(file_fd, 0);
@@ -371,6 +383,12 @@ void ktest_mount_tmpfs_contract(void)
 	sys_close((int)file_fd);
 	KASSERT_EQ(r, (int64_t)strlen(msg));
 	KASSERT(strcmp(readback, msg) == 0);
+
+	KASSERT_EQ(sys_truncate("/mntkt/mount_probe.txt", 0), 0);
+	struct ir0_statfs truncated_fs;
+	memset(&truncated_fs, 0, sizeof(truncated_fs));
+	KASSERT_EQ(vfs_statfs("/mntkt/mount_probe.txt", &truncated_fs), 0);
+	KASSERT_EQ(truncated_fs.f_bfree, empty_fs.f_bfree);
 
 	char mounts[1024];
 	memset(mounts, 0, sizeof(mounts));

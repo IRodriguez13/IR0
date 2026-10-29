@@ -1239,14 +1239,12 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 #if CONFIG_ENABLE_FS_TMPFS
 	if (strcmp(fst, "tmpfs") == 0)
 	{
-		buf->f_type = IR0_TMPFS_MAGIC;
-		buf->f_bsize = 4096;
-		buf->f_frsize = 4096;
-		buf->f_blocks = 0;
-		buf->f_bfree = 0;
-		buf->f_bavail = 0;
-		buf->f_namelen = 255;
-		return 0;
+		int rc;
+
+		vfs_fs_op_acquire();
+		rc = tmpfs_statfs(path, buf);
+		vfs_fs_op_release();
+		return rc;
 	}
 	if (strcmp(fst, "9p") == 0)
 	{
