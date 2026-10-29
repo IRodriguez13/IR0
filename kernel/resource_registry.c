@@ -16,19 +16,19 @@
 
 struct irq_entry {
     uint8_t irq;
-    const char *name;
+    char name[RESOURCE_NAME_MAX];
 };
 
 struct ioport_entry {
     uint16_t start;
     uint16_t end;
-    const char *name;
+    char name[RESOURCE_NAME_MAX];
 };
 
 struct mmio_entry {
     uint64_t start;
     uint64_t end;
-    const char *name;
+    char name[RESOURCE_NAME_MAX];
 };
 
 static struct irq_entry s_irq_list[MAX_IRQ_ENTRIES];
@@ -40,18 +40,35 @@ static int s_ioport_count;
 static struct mmio_entry s_mmio_list[MAX_MMIO_ENTRIES];
 static int s_mmio_count;
 
+static void resource_set_name(char *dst, const char *src)
+{
+    size_t len = strlen(src);
+
+    if (len >= RESOURCE_NAME_MAX)
+        len = RESOURCE_NAME_MAX - 1;
+    memcpy(dst, src, len);
+    dst[len] = '\0';
+}
+
 void resource_register_irq(uint8_t irq, const char *name)
 {
     if (!name || s_irq_count >= MAX_IRQ_ENTRIES)
         return;
     s_irq_list[s_irq_count].irq = irq;
-    s_irq_list[s_irq_count].name = name;
+    resource_set_name(s_irq_list[s_irq_count].name, name);
     s_irq_count++;
 }
 
-static int resource_name_eq(const char *a, const char *b)
+static int resource_name_eq(const char *stored, const char *name)
 {
-    return a && b && strcmp(a, b) == 0;
+    if (!stored || !name)
+        return 0;
+    /*
+     * Compare the same prefix that resource_set_name() stores, so a caller
+     * can unregister with the original long name even though it was
+     * truncated at registration.
+     */
+    return strncmp(stored, name, RESOURCE_NAME_MAX - 1) == 0;
 }
 
 int resource_unregister_irq(uint8_t irq, const char *name)
@@ -79,7 +96,7 @@ void resource_register_ioport(uint16_t start, uint16_t end, const char *name)
         return;
     s_ioport_list[s_ioport_count].start = start;
     s_ioport_list[s_ioport_count].end = end;
-    s_ioport_list[s_ioport_count].name = name;
+    resource_set_name(s_ioport_list[s_ioport_count].name, name);
     s_ioport_count++;
 }
 
@@ -131,7 +148,7 @@ void resource_register_mmio(uint64_t start, uint64_t end, const char *name)
         return;
     s_mmio_list[s_mmio_count].start = start;
     s_mmio_list[s_mmio_count].end = end;
-    s_mmio_list[s_mmio_count].name = name;
+    resource_set_name(s_mmio_list[s_mmio_count].name, name);
     s_mmio_count++;
 }
 

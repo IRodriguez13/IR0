@@ -85,6 +85,23 @@ static int cb_stop_first(uint8_t irq, const char *name, void *ctx)
 	return 1;
 }
 
+struct ktest_name_probe {
+	int found;
+	char name[RESOURCE_NAME_MAX];
+};
+
+static int cb_irq_name(uint8_t irq, const char *name, void *ctx)
+{
+	struct ktest_name_probe *probe = ctx;
+
+	if (irq == 0x5B && name)
+	{
+		probe->found = 1;
+		strncpy(probe->name, name, sizeof(probe->name) - 1);
+	}
+	return 0;
+}
+
 void ktest_resource_registry(void)
 {
 	struct ktest_res_probe probe;
@@ -120,6 +137,25 @@ void ktest_resource_registry(void)
 	resource_foreach_irq(cb_irq, &probe);
 	KASSERT(!probe.found);
 	KASSERT_EQ(resource_unregister_irq(0x5A, "ktest_irq"), -ENOENT);
+
+	/*
+	 * Names are copied at registration.  Keeping the caller's pointer
+	 * would make the registry dangle as soon as the caller reused or
+	 * released its buffer; mutate the source and require the original.
+	 */
+	{
+		char mutable_name[RESOURCE_NAME_MAX];
+		struct ktest_name_probe name_probe;
+
+		strcpy(mutable_name, "ktest_copy");
+		resource_register_irq(0x5B, mutable_name);
+		strcpy(mutable_name, "mutated");
+		memset(&name_probe, 0, sizeof(name_probe));
+		resource_foreach_irq(cb_irq_name, &name_probe);
+		KASSERT(name_probe.found);
+		KASSERT(strcmp(name_probe.name, "ktest_copy") == 0);
+		KASSERT_EQ(resource_unregister_irq(0x5B, "ktest_copy"), 0);
+	}
 
 	resource_register_ioport(0x1234, 0x1237, "ktest_ioport");
 	memset(&probe, 0, sizeof(probe));

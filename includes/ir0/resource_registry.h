@@ -12,6 +12,9 @@
 #include <ir0/errno.h>
 #include <stdint.h>
 
+/* Registered names are copied into the registry; longer names are truncated. */
+#define RESOURCE_NAME_MAX 32
+
 void resource_register_irq(uint8_t irq, const char *name);
 void resource_register_ioport(uint16_t start, uint16_t end, const char *name);
 void resource_register_mmio(uint64_t start, uint64_t end, const char *name);
