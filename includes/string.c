@@ -994,8 +994,13 @@ int tolower(int c)
 
 char *itoa(int value, char *str, int base)
 {
+    static const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
     char *ptr = str, *ptr1 = str, tmp_char;
-    int tmp_value;
+    unsigned int magnitude;
+    int negative = 0;
+
+    if (!str)
+        return NULL;
 
     if (base < 2 || base > 36)
     {
@@ -1003,24 +1008,32 @@ char *itoa(int value, char *str, int base)
         return str;
     }
 
-    while (value)
+    if (base == 10 && value < 0)
     {
-        tmp_value = value;
-        value /= base;
-        *ptr++ = "0123456789abcdefghijklmnopqrstuvwxyz"[tmp_value - value * base];
+        negative = 1;
+        /* -(INT_MIN) is undefined; negate in unsigned arithmetic. */
+        magnitude = (unsigned int)(-(value + 1)) + 1u;
     }
+    else
+        magnitude = (unsigned int)value;
 
-    // Apply negative sign for base 10
-    if (tmp_value < 0 && base == 10)
+    do
+    {
+        *ptr++ = digits[magnitude % (unsigned int)base];
+        magnitude /= (unsigned int)base;
+    } while (magnitude);
+
+    if (negative)
         *ptr++ = '-';
-    *ptr-- = '\0';
 
-    // Reverse the string
-    while (ptr1 < ptr)
+    *ptr = '\0';
+
+    /* Reverse the digits in place. */
+    for (ptr--; ptr1 < ptr; ptr1++, ptr--)
     {
         tmp_char = *ptr;
-        *ptr-- = *ptr1;
-        *ptr1++ = tmp_char;
+        *ptr = *ptr1;
+        *ptr1 = tmp_char;
     }
 
     return str;
