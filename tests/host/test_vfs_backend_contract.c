@@ -148,6 +148,8 @@ void test_vfs_backend_contract(void)
 
 	mock_reset();
 
+	/* read() returns a length; it does not promise a trailing NUL. */
+	memset(buf, 0, sizeof(buf));
 	n = 999;
 	rc = mock_ops.read(MOCK_PATH, buf, sizeof(buf), &n, 0);
 	ASSERT_EQ(rc, 0);
