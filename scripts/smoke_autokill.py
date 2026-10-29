@@ -286,8 +286,14 @@ def read_new_log(state: MonitorState) -> None:
 
 
 def drain_log(state: MonitorState) -> None:
-    """Read every remaining byte after QEMU exits (still bounded per call)."""
-    while True:
+    """Read remaining bytes after QEMU exits, stopping at the log cap.
+
+    A guest can flood the serial port and exit in the same breath.  Reading
+    the whole file here would bypass max_log_bytes and could turn a runaway
+    log into a PASS verdict, so stop as soon as the cap is exceeded just like
+    the running loop does.
+    """
+    while state.offset <= state.max_log_bytes:
         before = state.offset
         read_new_log(state)
         if state.offset == before:
@@ -355,6 +361,30 @@ def print_summary(state: MonitorState, elapsed_sec: float, verdict: str) -> None
     print("=== END SMOKE AUTOKILL SUMMARY ===")
 
 
+def finish_after_exit(state: MonitorState, elapsed_sec: float) -> int:
+    """Classify a smoke whose QEMU process has already exited.
+
+    The serial log may have grown past the cap while QEMU was shutting down.
+    Check the size again after the bounded drain so a guest that floods the
+    log and exits is reported as log_too_large instead of passing on a tag
+    that happens to sit past the cap.
+    """
+    drain_log(state)
+    if state.offset > state.max_log_bytes:
+        state.reason = "log_too_large"
+        print_summary(state, elapsed_sec, "FAIL")
+        return 1
+    if success_satisfied(state):
+        state.reason = "qemu_exit_success"
+        state.matched_success = first_success_match(state)
+        print_summary(state, elapsed_sec, "PASS")
+        return 0
+    state.reason = "qemu_exit"
+    state.matched_fail = list(state.lines)[-1].strip() if state.lines else ""
+    print_summary(state, elapsed_sec, "FAIL")
+    return 1
+
+
 def run_smoke(
     log_path: Path,
     qemu_cmd: list[str],
@@ -419,18 +449,7 @@ def run_smoke(
                         return 0
 
                     if proc.poll() is not None:
-                        drain_log(state)
-                        if success_satisfied(state):
-                            state.reason = "qemu_exit_success"
-                            state.matched_success = first_success_match(state)
-                            print_summary(state, elapsed, "PASS")
-                            return 0
-                        state.reason = "qemu_exit"
-                        state.matched_fail = (
-                            list(state.lines)[-1].strip() if state.lines else ""
-                        )
-                        print_summary(state, elapsed, "FAIL")
-                        return 1
+                        return finish_after_exit(state, elapsed)
 
                     if elapsed >= timeout_sec:
                         state.reason = "timeout"

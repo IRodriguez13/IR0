@@ -22,6 +22,8 @@ violation must shrink the ledger.
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import os
 import re
 import stat
@@ -36,6 +38,7 @@ MAKE_TESTING = ROOT / "scripts" / "make" / "testing.mk"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import ktm_host_safety as safety  # noqa: E402
+import smoke_autokill as smoke  # noqa: E402
 
 SCOPE_GLOBS = (
     "scripts/ktm_*.py",
@@ -301,6 +304,70 @@ def self_test_errors() -> list[str]:
             expect(lines[-1] == tag, "iter_log_lines keeps a split line intact")
             found_limited, _ = safety.scan_log(log, [tag], max_bytes=1024)
             expect(tag not in found_limited, "scan_log honors max_bytes")
+
+        with tempfile.TemporaryDirectory(prefix="ir0-guard-drain-") as tmp:
+            # A guest that floods serial and exits must not be drained past
+            # the cap; a tag beyond the cap must not turn the run into PASS.
+            log = Path(tmp) / "serial.log"
+            tag = "GUARD_DRAIN_OK"
+            log.write_bytes(
+                b"x" * (2 * smoke.READ_CHUNK) + b"\n" + tag.encode() + b"\n"
+            )
+            state = smoke.MonitorState(
+                log_path=log,
+                success_tags=[tag],
+                success_mode="all",
+                fail_res=[],
+                timeout_sec=1,
+                stale_sec=0,
+                max_log_bytes=smoke.READ_CHUNK,
+            )
+            smoke.drain_log(state)
+            expect(
+                state.offset <= state.max_log_bytes + smoke.READ_CHUNK,
+                "drain_log stops at max_log_bytes",
+            )
+            expect(
+                not smoke.success_satisfied(state),
+                "drain_log does not read a success tag past the cap",
+            )
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = smoke.finish_after_exit(state, 0.0)
+            expect(rc == 1, "finish_after_exit fails an oversized log")
+            expect(
+                state.reason == "log_too_large",
+                f"oversized exit reason is {state.reason!r}",
+            )
+
+        with tempfile.TemporaryDirectory(prefix="ir0-guard-exit-") as tmp:
+            tag = "GUARD_EXIT_OK"
+            for payload, want_rc, want_reason in (
+                (b"boot\n" + tag.encode() + b"\n", 0, "qemu_exit_success"),
+                (b"boot\n", 1, "qemu_exit"),
+            ):
+                log = Path(tmp) / "serial.log"
+                log.write_bytes(payload)
+                state = smoke.MonitorState(
+                    log_path=log,
+                    success_tags=[tag],
+                    success_mode="all",
+                    fail_res=[],
+                    timeout_sec=1,
+                    stale_sec=0,
+                    max_log_bytes=1024,
+                )
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = smoke.finish_after_exit(state, 0.0)
+                expect(
+                    rc == want_rc,
+                    f"finish_after_exit rc={rc}, want {want_rc}",
+                )
+                expect(
+                    state.reason == want_reason,
+                    f"finish_after_exit reason={state.reason!r}, "
+                    f"want {want_reason!r}",
+                )
     except Exception as exc:  # noqa: BLE001 - a broken helper is a hard failure
         errors.append(f"self-test crashed: {exc!r}")
     return errors
