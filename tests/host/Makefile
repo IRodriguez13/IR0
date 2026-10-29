@@ -49,6 +49,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 TEST_SRCS += test_pmm_banks.c test_boot_memory.c test_no_mmu_policy.c
 TEST_SRCS += test_fd_resource_contract.c
 TEST_SRCS += test_harness_contract.c
+TEST_SRCS += test_mm_root_slots.c
 # ARM64 firmware contract is pure C and host-testable.
 TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
 	test_x86_syscall_decode.c
@@ -374,6 +375,9 @@ test_fd_resource_contract.o: test_fd_resource_contract.c
 
 test_harness_contract.o: test_harness_contract.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+test_mm_root_slots.o: test_mm_root_slots.c
+	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_arch_task_contract.o: test_arch_task_contract.c
 	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<

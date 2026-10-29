@@ -95,6 +95,7 @@ extern void test_cpu_topology_up_contract(void);
 extern void test_percpu_up_contract(void);
 extern void test_tlb_sync_up_contract(void);
 extern void test_harness_assertion_contract(void);
+extern void test_mm_user_root_slot_contract(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -173,6 +174,7 @@ static void (*test_functions[])(void) = {
 	test_percpu_up_contract,
 	test_tlb_sync_up_contract,
 	test_harness_assertion_contract,
+	test_mm_user_root_slot_contract,
 	NULL
 };
 

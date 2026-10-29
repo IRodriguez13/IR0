@@ -27,6 +27,17 @@ unsigned mm_user_root_slots(void);
 unsigned mm_root_slots(void);
 
 /*
+ * True when @index is a root slot owned by the process.  Never compare
+ * against a hardcoded 256: x86-64 splits the root 256/256, but ARM64 owns
+ * the whole 512-entry TTBR0 L0, and a stale level1 table in the upper
+ * slots would never be reclaimed on unmap.
+ */
+static inline int mm_user_root_slot(unsigned index)
+{
+	return index < mm_user_root_slots();
+}
+
+/*
  * Copy present kernel-half entries from @src_root into @dst_root.
  * User half of @dst_root is left untouched by this helper.
  */

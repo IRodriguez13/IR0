@@ -1102,7 +1102,8 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 		ir0_mm_free_table_frame(pd_frame, 2);
 	}
 
-	if (idx[0] < 256 && page_table_is_empty(level1_table))
+	if (mm_user_root_slot((unsigned)idx[0]) &&
+	    page_table_is_empty(level1_table))
 	{
 		level1_frame = paging_entry_pfn(root[idx[0]]);
 		root[idx[0]] = 0;
