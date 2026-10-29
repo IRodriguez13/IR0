@@ -44,6 +44,7 @@
 #include <ir0/pipe_fd.h>
 #include <ir0/sock_stream.h>
 #include <ir0/signals.h>
+#include <ir0/syscall.h>
 #include <ir0/procfs.h>
 #include "io_syscalls.h"
 #include <ir0/pseudo_fs.h>

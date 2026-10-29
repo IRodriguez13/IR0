@@ -36,6 +36,7 @@
 #include <ir0/pseudo_fs.h>
 #include <ir0/clock_wait.h>
 #include <ir0/signals.h>
+#include <ir0/syscall.h>
 #include <ir0/arch_port.h>
 #include <ir0/cpu.h>
 #include <ir0/paging.h>

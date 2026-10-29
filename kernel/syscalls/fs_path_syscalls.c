@@ -38,6 +38,7 @@
 #include <ir0/version.h>
 #include <ir0/vfs.h>
 #include <ir0/statfs.h>
+#include <ir0/syscall.h>
 #include <ir0/memfd.h>
 #include <ir0/posix_shm.h>
 #include <stddef.h>

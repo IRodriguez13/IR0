@@ -32,6 +32,8 @@ Checks:
 21) Process lifecycle C must not select an ISA with compiler predefines.
 22) ISA assembly may call only its reviewed C boundary callbacks.
 23) Common MM requests TLB coherence through the address-space-aware facade.
+24) Error numbers are defined only by includes/errno.h; subsystems consume the
+    canonical catalog through <errno.h> or <ir0/errno.h>.
 """
 
 from pathlib import Path
@@ -2265,6 +2267,42 @@ def check_asm_c_boundary():
 
 COMMON_MM_LOCAL_TLB_RE = re.compile(r"\btlb_invalidate_(?:page|all)\s*\(")
 
+ERRNO_DEFINE_RE = re.compile(
+    r"^\s*#\s*define\s+(E[A-Z0-9_]+)\b", re.MULTILINE
+)
+
+
+def check_errno_has_single_catalog():
+    """Reject subsystem-local copies of canonical Linux errno names."""
+    errors = []
+    catalog = ROOT / "includes" / "errno.h"
+    canonical_names = set(ERRNO_DEFINE_RE.findall(catalog.read_text(errors="replace")))
+
+    for base in (
+        ROOT / "arch",
+        ROOT / "drivers",
+        ROOT / "fs",
+        ROOT / "includes",
+        ROOT / "interrupt",
+        ROOT / "ipc",
+        ROOT / "kernel",
+        ROOT / "mm",
+        ROOT / "net",
+        ROOT / "sched",
+        ROOT / "tests",
+    ):
+        for path in iter_c_files(base):
+            if path == catalog:
+                continue
+            for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                match = ERRNO_DEFINE_RE.match(line)
+                if match and match.group(1) in canonical_names:
+                    errors.append(
+                        f"[errno-local-definition] {path.relative_to(ROOT)}:{lineno}: "
+                        f"{match.group(1)} belongs in includes/errno.h"
+                    )
+    return errors
+
 
 def check_common_mm_uses_tlb_sync():
     """Keep root ownership policy out of ISA-local TLB mechanisms."""
@@ -2347,6 +2385,7 @@ def main():
     errors.extend(check_common_mm_uses_user_va_policy())
     errors.extend(check_common_syscall_policy_uses_semantic_ids())
     errors.extend(check_common_mm_uses_tlb_sync())
+    errors.extend(check_errno_has_single_catalog())
 
     if errors:
         print("[arch-guard] FAILED")

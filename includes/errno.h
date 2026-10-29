@@ -27,6 +27,7 @@
 #define EBADF		 9	/* Bad file number */
 #define ECHILD		10	/* No child processes */
 #define EAGAIN		11	/* Try again */
+#define EWOULDBLOCK	EAGAIN	/* Operation would block (POSIX alias) */
 #define ENOMEM		12	/* Out of memory */
 #define EACCES		13	/* Permission denied */
 #define EFAULT		14	/* Bad address */
@@ -109,6 +110,8 @@
 #define EPROTONOSUPPORT	93	/* Protocol not supported */
 #define ESOCKTNOSUPPORT	94	/* Socket type not supported */
 #define ENOTSUP		95	/* Not supported */
+#define ENOTSUPP	ENOTSUP	/* Historical IR0 spelling */
+#define EOPNOTSUPP	ENOTSUP	/* Linux/POSIX socket spelling */
 #define EPFNOSUPPORT	96	/* Protocol family not supported */
 #define EAFNOSUPPORT	97	/* Address family not supported by protocol */
 #define EADDRINUSE	98	/* Address already in use */

@@ -29,32 +29,8 @@
 #include <ir0/fcntl.h>
 #include <ir0/types.h>
 #include <ir0/statfs.h>
+#include <ir0/errno.h>
 
-#define EBADF  9
-#define EACCES 13
-#define ENOMSG 42
-#define EBADFD 77
-#define EFAULT 14
-#define EINVAL 22
-#define EISDIR 21
-#define ENOENT 2
-#define ENOTDIR 20
-#define EMFILE 24
-#define ESPIPE 29
-#define ERANGE 34
-#define E2BIG  7
-#define EAGAIN 11
-#define EPIPE  32
-#define EIO    5
-#define ENOSYS 38
-#define ENODEV 19
-#define EPERM  1
-#define EEXIST 17
-#define EBUSY  16
-#define EROFS  30
-#define ENOTEMPTY 39
-#define ENOEXEC 8
-#define ENOTTY 25
 #define AT_REMOVEDIR 0x200
 #define LOCK_SH 1
 #define LOCK_EX 2
@@ -102,25 +78,6 @@ struct rootfs_slot
 #define UNIX_ID_BASE EARLY_UNIX_ID_BASE
 #define g_sock g_early_sock
 #define g_unix g_early_unix
-#define EAFNOSUPPORT 97
-#define ESOCKTNOSUPPORT 94
-#define EPROTONOSUPPORT 93
-#define ENOSPC 28
-#define EMSGSIZE 90
-#define ENAMETOOLONG 36
-#define ENOTSOCK 88
-#define EADDRINUSE 98
-#define ECONNREFUSED 111
-#define EISCONN 106
-#define ENOTCONN 107
-#define ENXIO 6
-#define EOPNOTSUPP 95
-#define EFBIG 27
-#define ELOOP 40
-#define ENODATA 61
-#define EOVERFLOW 75
-#define ESTALE 116
-#define ENOPROTOOPT 92
 #define NS_PER_SEC 1000000000ULL
 
 static struct rootfs_slot g_slots[ROOTFS_MAX_OPEN];

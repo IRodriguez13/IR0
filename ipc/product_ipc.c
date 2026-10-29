@@ -13,10 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/early_rootfs.h>
+#include <ir0/errno.h>
 #include <ir0/product_ipc.h>
 #include <ir0/syscall_id.h>
-
-#define ENOSYS 38
 
 static int64_t product_ipc_syscall(void *context, enum ir0_syscall_id id,
 				   uint64_t a0, uint64_t a1, uint64_t a2,

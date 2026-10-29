@@ -11,12 +11,8 @@
 #include <stdint.h>
 #include <ir0/early_mm.h>
 #include <ir0/early_syscall.h>
+#include <ir0/errno.h>
 
-#define EFAULT 14
-#define ENOMEM 12
-#define EINVAL 22
-#define ENOSYS 38
-#define EPERM 1
 #define PAGE_SIZE 4096UL
 #define PROT_READ  0x1UL
 #define PROT_WRITE 0x2UL

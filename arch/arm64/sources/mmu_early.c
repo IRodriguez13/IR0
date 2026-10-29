@@ -20,10 +20,8 @@
 #include <arch/common/arch_portable.h>
 #include <ir0/arch_mm.h>
 #include <ir0/arm64_board.h>
+#include <ir0/errno.h>
 #include <stdint.h>
-
-#define EINVAL 22
-#define ENODEV 19
 
 #define PAGE_SIZE        4096UL
 #define BLOCK_2M         0x200000UL

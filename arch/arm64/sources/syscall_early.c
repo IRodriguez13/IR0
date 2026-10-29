@@ -23,6 +23,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/early_syscall.h>
 #include <ir0/early_io.h>
+#include <ir0/errno.h>
 #include <ir0/early_mm.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
@@ -34,9 +35,6 @@
 #include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
 #include <ir0/tlb.h>
-
-#define ENOSYS 38
-
 
 static struct early_syscall_dispatch g_early_syscall_dispatch;
 

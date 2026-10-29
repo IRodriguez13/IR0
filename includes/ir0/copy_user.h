@@ -22,10 +22,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/mm.h>
-
-#ifndef EFAULT
-#define EFAULT 14
-#endif
+#include <ir0/errno.h>
 
 /**
  * copy_to_user - Copy data from kernel to user space

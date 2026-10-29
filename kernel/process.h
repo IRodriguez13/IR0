@@ -26,10 +26,7 @@
 #include <ir0/mm.h>
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
-
-#ifndef ECHILD
-#define ECHILD 10 /* No child processes (POSIX; matches ir0/errno.h) */
-#endif
+#include <ir0/errno.h>
 
 /* waitpid / wait4 options and status inspection (POSIX-style) */
 #define WNOHANG 1
