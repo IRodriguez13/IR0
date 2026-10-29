@@ -21,6 +21,7 @@
 #include <ir0/types.h>
 
 struct vfs_dirent;
+struct ir0_statfs;
 
 /* TMPFS API functions for VFS integration */
 bool tmpfs_is_available(void);
@@ -36,6 +37,7 @@ int tmpfs_chown(const char *path, uid_t owner, gid_t group);
 int tmpfs_chmod(const char *path, mode_t mode);
 int tmpfs_truncate(const char *path, size_t length);
 int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);
+int tmpfs_statfs(const char *path, struct ir0_statfs *buf);
 
 /* Filesystem registration */
 int tmpfs_register(void);

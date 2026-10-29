@@ -21,6 +21,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <ir0/stat.h>
+#include <ir0/statfs.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
 #include <ir0/credentials.h>
@@ -167,7 +168,10 @@ static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
     if (inode->data)
     {
         kfree(inode->data);
-        tmpfs->total_size -= inode->size;
+        if (tmpfs->total_size >= inode->size)
+            tmpfs->total_size -= inode->size;
+        else
+            tmpfs->total_size = 0;
     }
     
     /* Remove from parent's children list */
@@ -576,19 +580,33 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
 
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
+    tmpfs_data_t *tmpfs;
+    tmpfs_inode_t *inode;
+    size_t old_size;
     size_t offset_u;
 
     if (!path || !buf)
         return -EINVAL;
     if (offset < 0)
         return -EINVAL;
-    
-    tmpfs_inode_t *inode = tmpfs_find_inode(path);
+
+    tmpfs = tmpfs_get_instance_for_path(path);
+    if (!tmpfs)
+        return -ENODEV;
+    inode = tmpfs_lookup_inode(
+        tmpfs, tmpfs_get_relative_path(path, tmpfs->mount_point));
     if (!inode)
         return -ENOENT;
     
     if (inode->is_dir)
         return -EISDIR;
+
+    if (count == 0)
+    {
+        if (written_count)
+            *written_count = 0;
+        return 0;
+    }
     
     /* Calculate new size */
     offset_u = (size_t)offset;
@@ -596,9 +614,10 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
         count > TMPFS_MAX_FILE_SIZE - offset_u)
         return -EFBIG;
     size_t new_size = offset_u + count;
+    old_size = inode->size;
     
     /* Reallocate if needed */
-    if (new_size > inode->size)
+    if (new_size > inode->size && new_size > inode->data_cap)
     {
         uint8_t *new_data = (uint8_t *)kmalloc_try(new_size);
         if (!new_data)
@@ -611,12 +630,15 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
             kfree(inode->data);
         }
         
-        /* Zero out new space */
-        memset(new_data + inode->size, 0, new_size - inode->size);
-        
         inode->data = new_data;
-        inode->size = new_size;
         inode->data_cap = new_size;
+    }
+
+    if (new_size > old_size)
+    {
+        memset(inode->data + old_size, 0, new_size - old_size);
+        inode->size = new_size;
+        tmpfs->total_size += new_size - old_size;
     }
     
     /* Write data */
@@ -688,7 +710,7 @@ int tmpfs_link(const char *oldpath, const char *newpath)
     dst->uid = src->uid;
     dst->gid = src->gid;
     dst->size = src->size;
-    dst->data_cap = src->data_cap;
+    dst->data_cap = src->size;
     dst->is_dir = false;
     dst->mtime = src->mtime;
     strncpy(dst->name, linkname, TMPFS_MAX_NAME_LEN);
@@ -815,10 +837,18 @@ int tmpfs_chown(const char *path, uid_t owner, gid_t group)
  */
 int tmpfs_truncate(const char *path, size_t length)
 {
+    tmpfs_data_t *tmpfs;
+    tmpfs_inode_t *inode;
+    size_t old_size;
+
     if (!path)
         return -EINVAL;
 
-    tmpfs_inode_t *inode = tmpfs_find_inode(path);
+    tmpfs = tmpfs_get_instance_for_path(path);
+    if (!tmpfs)
+        return -ENODEV;
+    inode = tmpfs_lookup_inode(
+        tmpfs, tmpfs_get_relative_path(path, tmpfs->mount_point));
     if (!inode)
         return -ENOENT;
     if (inode->is_dir)
@@ -827,8 +857,11 @@ int tmpfs_truncate(const char *path, size_t length)
     if (length > TMPFS_MAX_FILE_SIZE)
         return -EFBIG;
 
+    old_size = inode->size;
+
     if (length < inode->size) {
         inode->size = (uint32_t)length;
+        tmpfs->total_size -= old_size - length;
         inode->mtime = clock_get_current_time();
         return 0;
     }
@@ -841,6 +874,7 @@ int tmpfs_truncate(const char *path, size_t length)
         if (inode->data && length <= inode->data_cap) {
             memset(inode->data + inode->size, 0, length - inode->size);
             inode->size = (uint32_t)length;
+            tmpfs->total_size += length - old_size;
             inode->mtime = clock_get_current_time();
             return 0;
         }
@@ -858,11 +892,47 @@ int tmpfs_truncate(const char *path, size_t length)
         inode->data = new_data;
         inode->size = (uint32_t)length;
         inode->data_cap = length;
+        tmpfs->total_size += length - old_size;
         inode->mtime = clock_get_current_time();
         return 0;
     }
 
     inode->mtime = clock_get_current_time();
+    return 0;
+}
+
+int tmpfs_statfs(const char *path, struct ir0_statfs *buf)
+{
+    const size_t block_size = 4096;
+    const size_t capacity = TMPFS_MAX_FILES * TMPFS_MAX_FILE_SIZE;
+    tmpfs_data_t *tmpfs;
+    size_t used_blocks;
+    size_t used_inodes = 0;
+
+    if (!path || !buf)
+        return -EINVAL;
+
+    tmpfs = tmpfs_get_instance_for_path(path);
+    if (!tmpfs)
+        return -ENODEV;
+
+    for (int i = 0; i < TMPFS_MAX_FILES; i++)
+    {
+        if (tmpfs->inodes[i].ino != 0)
+            used_inodes++;
+    }
+
+    memset(buf, 0, sizeof(*buf));
+    used_blocks = (tmpfs->total_size + block_size - 1) / block_size;
+    buf->f_type = IR0_TMPFS_MAGIC;
+    buf->f_bsize = block_size;
+    buf->f_frsize = block_size;
+    buf->f_blocks = capacity / block_size;
+    buf->f_bfree = buf->f_blocks - used_blocks;
+    buf->f_bavail = buf->f_bfree;
+    buf->f_files = TMPFS_MAX_FILES;
+    buf->f_ffree = TMPFS_MAX_FILES - used_inodes;
+    buf->f_namelen = TMPFS_MAX_NAME_LEN;
     return 0;
 }
 
