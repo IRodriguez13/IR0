@@ -16,6 +16,7 @@
 #include "syscalls.h"
 #include <config.h>
 #include <ir0/abi/mmap_contract.h>
+#include <ir0/copy_user.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
 #include <stdint.h>
@@ -27,14 +28,28 @@
 
 #define KTEST_BUSYBOX_INITIAL_BRK 0x453000UL
 
+static int ktest_pte_state(uintptr_t va, uint64_t *flags)
+{
+	if (!current_process || !process_pgd(current_process))
+		return 0;
+	return is_page_mapped_in_directory(process_pgd(current_process), va,
+					   flags) == 1;
+}
+
 static int ktest_pte_present(uintptr_t va)
 {
 	uint64_t flags = 0;
 
-	if (!current_process || !process_pgd(current_process))
+	return ktest_pte_state(va, &flags);
+}
+
+static int ktest_pte_user(uintptr_t va)
+{
+	uint64_t flags = 0;
+
+	if (!ktest_pte_state(va, &flags))
 		return 0;
-	return is_page_mapped_in_directory(process_pgd(current_process), va,
-					   &flags) == 1;
+	return (flags & PAGE_USER) != 0;
 }
 
 static void *ktest_mmap_anon(size_t len, int prot, int flags, void *addr)
@@ -53,14 +68,41 @@ static void ktest_unmap_all(void **maps, size_t n)
 	}
 }
 
+/*
+ * Pick a free page below the top-down allocations. Searching upward from
+ * IR0_MMAP_NULL_MIN_VA was wrong: 0x60000000 sits inside the 1 GiB identity
+ * leaf, which map_page_in_directory() cannot split. Stay in the high arena
+ * where the tables are already 4 KiB-granular, and check both the VMA list
+ * and the PTE so a MAP_FIXED does not silently replace another slot.
+ */
+static uintptr_t ktest_find_free_page_below(uintptr_t high)
+{
+	uintptr_t va = high & ~(PAGE_SIZE_4KB - 1);
+
+	while (va >= USER_MMAP_START)
+	{
+		if (va != USER_MMAP_START &&
+		    !process_user_va_range_overlaps(current_process, va,
+						    PAGE_SIZE_4KB) &&
+		    !ktest_pte_present(va) &&
+		    ir0_mmap_respects_stack_gap(va, PAGE_SIZE_4KB,
+						USER_STACK_BASE))
+			return va;
+		if (va < PAGE_SIZE_4KB)
+			break;
+		va -= PAGE_SIZE_4KB;
+	}
+	return 0;
+}
+
 void ktest_mmap_null_placement(void)
 {
 	void *slot[4];
+	void *fixed = NULL;
 	uintptr_t addrs[4];
 	uint64_t saved_heap_start;
 	uint64_t saved_heap_end;
 	uint64_t saved_mmap_base;
-	void *fixed;
 	uintptr_t fixed_addr;
 	size_t i;
 
@@ -86,6 +128,7 @@ void ktest_mmap_null_placement(void)
 		KASSERT(ir0_mmap_respects_stack_gap(addrs[i], 0x1000,
 						    USER_STACK_BASE));
 		KASSERT(ktest_pte_present(addrs[i]));
+		KASSERT(ktest_pte_user(addrs[i]));
 	}
 
 	for (i = 0; i < 4; i++)
@@ -105,15 +148,39 @@ void ktest_mmap_null_placement(void)
 				addrs[j] + 0x1000 <= addrs[i]);
 	}
 
-	fixed_addr = addrs[3] - 0x1000UL;
-	fixed = ktest_mmap_anon(0x1000, KTEST_PROT_RW,
-				KTEST_MAP_PRIVATE | KTEST_MAP_ANONYMOUS |
-				KTEST_MAP_FIXED,
-				(void *)fixed_addr);
-	KASSERT(fixed == (void *)fixed_addr);
-	KASSERT(ktest_pte_present(fixed_addr));
-	slot[3] = fixed;
-	addrs[3] = fixed_addr;
+	{
+		uintptr_t lowest = addrs[0];
+
+		for (i = 1; i < 4; i++)
+			if (addrs[i] < lowest)
+				lowest = addrs[i];
+		fixed_addr = ktest_find_free_page_below(lowest - PAGE_SIZE_4KB);
+	}
+	KASSERT(fixed_addr != 0);
+	if (fixed_addr != 0)
+	{
+		fixed = ktest_mmap_anon(0x1000, KTEST_PROT_RW,
+					KTEST_MAP_PRIVATE | KTEST_MAP_ANONYMOUS |
+						KTEST_MAP_FIXED,
+					(void *)fixed_addr);
+		KASSERT(fixed == (void *)fixed_addr);
+		if (fixed == (void *)fixed_addr)
+		{
+			uint8_t written = 0x5A;
+			uint8_t readback = 0;
+
+			KASSERT(ktest_pte_present(fixed_addr));
+			KASSERT(ktest_pte_user(fixed_addr));
+			/* The mapping must be usable, not merely present in the PTE. */
+			KASSERT(copy_to_user_mm(process_pgd(current_process),
+						fixed_addr, &written,
+						sizeof(written)) == 0);
+			KASSERT(copy_from_user_mm(process_pgd(current_process),
+						  fixed_addr, &readback,
+						  sizeof(readback)) == 0);
+			KASSERT(readback == written);
+		}
+	}
 
 	{
 		uint64_t id_flags = 0;
@@ -131,6 +198,7 @@ void ktest_mmap_null_placement(void)
 					(void *)0x600000UL);
 		KASSERT(split == (void *)0x600000UL);
 		KASSERT(ktest_pte_present(0x600000UL));
+		KASSERT(ktest_pte_user(0x600000UL));
 		KASSERT(sys_munmap(split, 0x1000) == 0);
 
 		heap_fixed = ktest_mmap_anon(0x1000, KTEST_PROT_RW,
@@ -150,6 +218,8 @@ void ktest_mmap_null_placement(void)
 		KASSERT(sys_munmap(anon, 0x4000) == 0);
 	}
 
+	if (fixed)
+		KASSERT(sys_munmap(fixed, 0x1000) == 0);
 	ktest_unmap_all(slot, 4);
 
 	process_set_heap_start(current_process, saved_heap_start);
