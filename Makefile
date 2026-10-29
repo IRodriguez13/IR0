@@ -528,6 +528,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_ktm_sched.o \
 	kernel/test/test_sock_stream.o \
 	kernel/test/test_mmap_null_placement.o \
+	kernel/test/test_mm_contracts.o \
 	kernel/test/test_signal_segv_deliver.o \
 	kernel/test/test_brk_post_exec.o \
 	kernel/test/test_tty_canon_read.o \

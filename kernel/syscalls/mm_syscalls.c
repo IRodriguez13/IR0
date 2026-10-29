@@ -47,35 +47,149 @@
 #define MMAP_AUDIT_FAILED ((void *)(intptr_t)-1)
 
 
-static void mm_prepare_map_fixed(uintptr_t start, size_t length)
+/*
+ * Compute the page-aligned bounds of a VMA. Returns -1 when the stored
+ * length cannot be aligned without wrapping.
+ */
+static int mm_vma_bounds(const struct mmap_region *region, uintptr_t *start,
+			 uintptr_t *end)
+{
+	uintptr_t region_start;
+	size_t aligned_length;
+
+	if (!region || !start || !end)
+		return -1;
+	if (region->length > UINTPTR_MAX - (PAGE_SIZE_4KB - 1))
+		return -1;
+	region_start = (uintptr_t)region->addr & PAGE_FRAME_MASK;
+	aligned_length = (region->length + PAGE_SIZE_4KB - 1) & PAGE_FRAME_MASK;
+	if (region_start > UINTPTR_MAX - aligned_length)
+		return -1;
+	*start = region_start;
+	*end = region_start + aligned_length;
+	return 0;
+}
+
+/*
+ * Detach [start, end) from the VMA list, splitting a region when the range
+ * covers only its middle. munmap(2) and MAP_FIXED both replace part of a
+ * mapping; dropping the whole VMA there left the remaining PTEs untracked
+ * and leaked their frames.
+ *
+ * A single contiguous range can split at most one VMA, so one spare node is
+ * allocated up front. On -ENOMEM the list is untouched.
+ *
+ * Returns 1 when at least one VMA overlapped, 0 when none did, or -ENOMEM.
+ */
+static int mm_detach_vma_range(uintptr_t start, uintptr_t end)
 {
 	struct mmap_region **link;
-	uintptr_t end;
+	struct mmap_region *spare = NULL;
+	struct mmap_region *walk;
+	int need_split = 0;
+	int touched = 0;
 
-	if (!current_process || length == 0)
-		return;
-
-	end = start + length;
+	if (!current_process || start >= end)
+		return 0;
 	link = process_mmap_list_p(current_process);
 	if (!link)
-		return;
+		return 0;
 
+	for (walk = *link; walk; walk = walk->next)
+	{
+		uintptr_t region_start;
+		uintptr_t region_end;
+
+		if (mm_vma_bounds(walk, &region_start, &region_end) != 0)
+			continue;
+		if (region_end <= start || region_start >= end)
+			continue;
+		if (region_start < start && region_end > end)
+		{
+			need_split = 1;
+			break;
+		}
+	}
+	if (need_split)
+	{
+		spare = kmalloc_try(sizeof(*spare));
+		if (!spare)
+			return -ENOMEM;
+	}
+
+	link = process_mmap_list_p(current_process);
 	while (*link)
 	{
 		struct mmap_region *region = *link;
-		uintptr_t region_start = (uintptr_t)region->addr & ~(PAGE_SIZE_4KB - 1);
-		uintptr_t region_end = region_start +
-			((region->length + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1));
+		uintptr_t region_start;
+		uintptr_t region_end;
 
-		if (region_end <= start || region_start >= end)
+		if (mm_vma_bounds(region, &region_start, &region_end) != 0 ||
+		    region_end <= start || region_start >= end)
 		{
 			link = &region->next;
 			continue;
 		}
 
-		*link = region->next;
-		kfree(region);
+		touched = 1;
+		if (start <= region_start && end >= region_end)
+		{
+			*link = region->next;
+			kfree(region);
+			continue;
+		}
+
+		if (region_start < start && end < region_end)
+		{
+			struct mmap_region *right = spare;
+
+			spare = NULL;
+			right->addr = (void *)end;
+			right->hint_addr = (void *)end;
+			right->length = region_end - end;
+			right->prot = region->prot;
+			right->flags = region->flags;
+			right->next = region->next;
+			region->length = start - region_start;
+			region->next = right;
+			link = &right->next;
+			continue;
+		}
+
+		if (region_start < start)
+		{
+			/* Keep [region_start, start), drop the tail. */
+			region->length = start - region_start;
+			link = &region->next;
+			continue;
+		}
+
+		/* Keep [end, region_end), drop the head. */
+		region->addr = (void *)end;
+		region->hint_addr = (void *)end;
+		region->length = region_end - end;
+		link = &region->next;
 	}
+
+	if (spare)
+		kfree(spare);
+	return touched;
+}
+
+static int mm_prepare_map_fixed(uintptr_t start, size_t length)
+{
+	uintptr_t end;
+	int detached;
+
+	if (!current_process || length == 0)
+		return 0;
+
+	if (start > UINTPTR_MAX - length)
+		return -EINVAL;
+	end = start + length;
+	detached = mm_detach_vma_range(start, end);
+	if (detached < 0)
+		return detached;
 
 	for (uintptr_t page = start; page < end; page += PAGE_SIZE_4KB)
 	{
@@ -83,6 +197,7 @@ static void mm_prepare_map_fixed(uintptr_t start, size_t length)
 						NULL) == 1)
 			unmap_page_in_directory(process_pgd(current_process), page);
 	}
+	return 0;
 }
 
 static int mm_mmap_verify_ptes(address_space_root_t root, uintptr_t virt_addr,
@@ -993,7 +1108,13 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 		      (unsigned long long)(uint64_t)process_heap_end(current_process),
 		      (unsigned long long)process_syscall_ip(current_process));
 
-    mm_prepare_map_fixed(hint_addr, length);
+    if (mm_prepare_map_fixed(hint_addr, length) != 0)
+    {
+      ret = SYSCALL_PTR_ERR(ENOMEM);
+      mmap_audit_log_return("map-fixed-vma-split-failed", ret, hint_addr,
+			    length, 0, process_pgd(current_process));
+      return ret;
+    }
     virt_addr = hint_addr;
     use_hint = true;
   }
@@ -1148,8 +1269,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
 int sys_munmap(void *addr, size_t length)
 {
-  uint64_t unmapped_pages = 0;
-  paging_ir0_mm_checkpoint("munmap-before", (int32_t)process_get_pid());
+  uintptr_t start_page;
+  uintptr_t end_page;
+  size_t aligned_length;
+  int detached;
+
   if (!current_process)
     return -ESRCH;
   if (!addr || length == 0)
@@ -1159,45 +1283,36 @@ int sys_munmap(void *addr, size_t length)
   if (!is_user_address(addr, length))
     return -EFAULT;
 
+  if (length > SIZE_MAX - (PAGE_SIZE_4KB - 1))
+    return -EINVAL;
+
   /* Align to page boundaries */
-  uintptr_t start_page = (uintptr_t)addr & ~0xFFF;
-  size_t aligned_length = ((length + 0xFFF) & ~0xFFF);
+  start_page = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
+  aligned_length = (length + PAGE_SIZE_4KB - 1) & (size_t)PAGE_FRAME_MASK;
+  if (start_page > UINTPTR_MAX - aligned_length)
+    return -EINVAL;
+  end_page = start_page + aligned_length;
 
-  /* Find the mapping */
-  struct mmap_region *current = process_mmap_list(current_process);
-  struct mmap_region *prev = NULL;
+  paging_ir0_mm_checkpoint("munmap-before", (int32_t)process_get_pid());
 
-  while (current)
-  {
-    uintptr_t mapping_start = (uintptr_t)current->addr & ~0xFFF;
-    uintptr_t mapping_end = mapping_start + ((current->length + 0xFFF) & ~0xFFF);
-    
-    if (start_page >= mapping_start && (start_page + aligned_length) <= mapping_end)
-    {
-      /* Remove from list */
-      if (prev)
-        prev->next = current->next;
-      else
-        process_mm_set_mmap_list(current_process, current->next);
+  /*
+   * Drop only the requested range. A partial munmap must split the VMA:
+   * freeing the whole record left the surviving PTEs untracked, so their
+   * frames could never be released through munmap again.
+   */
+  detached = mm_detach_vma_range(start_page, end_page);
+  if (detached < 0)
+    return detached;
+  if (detached == 0)
+    return -EINVAL; /* Not found */
 
-      /* Unmap pages in process page directory */
-      for (uintptr_t page = start_page; page < start_page + aligned_length; page += PAGE_SIZE_4KB)
-      {
-        if (unmap_page_in_directory(process_pgd(current_process), page) == 0)
-          unmapped_pages++;
-      }
+  for (uintptr_t page = start_page; page < end_page; page += PAGE_SIZE_4KB)
+    (void)unmap_page_in_directory(process_pgd(current_process), page);
 
-      /* Free the mapping structure */
-      kfree(current);
-      KTM_CHECKPOINT(KTM_CP_MM_UNMAP);
-      paging_ir0_mm_checkpoint("munmap-after", (int32_t)current_process->task.pid);
-      return 0;
-    }
-    prev = current;
-    current = current->next;
-  }
-
-  return -EINVAL; /* Not found */
+  KTM_CHECKPOINT(KTM_CP_MM_UNMAP);
+  paging_ir0_mm_checkpoint("munmap-after",
+			   (int32_t)current_process->task.pid);
+  return 0;
 }
 
 int sys_mprotect(void *addr, size_t len, int prot)
@@ -1242,7 +1357,10 @@ int sys_mprotect(void *addr, size_t len, int prot)
   }
 
   range_start = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
-  range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) & (uintptr_t)PAGE_FRAME_MASK;
+  if (len > UINTPTR_MAX - (uintptr_t)addr)
+    return -EINVAL;
+  range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) &
+	      (uintptr_t)PAGE_FRAME_MASK;
   root = process_pgd(current_process);
 
   map_flags = PAGE_USER;
@@ -1255,6 +1373,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
   {
     uint64_t *pte;
     uint64_t phys;
+    uint64_t page_flags = map_flags;
 
     pte = paging_get_pte(root, page);
     if (!pte || !(*pte & PAGE_PRESENT))
@@ -1265,7 +1384,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
       phys = pmm_alloc_frame();
       if (phys == 0)
         return -ENOMEM;
-      if (map_page_in_directory(root, page, phys, map_flags) != 0)
+      if (map_page_in_directory(root, page, phys, page_flags) != 0)
       {
         pmm_free_frame(phys);
         return -ENOMEM;
@@ -1282,7 +1401,16 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
     saw_present = 1;
     phys = *pte & PAGE_FRAME_MASK;
-    if (map_page_in_directory(root, page, phys, map_flags) != 0)
+    /*
+     * Keep the software COW bit and the hardware access bits. A shared
+     * frame must stay read-only even when mprotect asks for PROT_WRITE;
+     * clearing PAGE_COW here would make the next store write through the
+     * parent's frame instead of copying it.
+     */
+    page_flags |= *pte & (PAGE_COW | PAGE_DIRTY | PAGE_ACCESSED);
+    if ((page_flags & PAGE_COW) && (page_flags & PAGE_RW))
+      page_flags &= ~PAGE_RW;
+    if (map_page_in_directory(root, page, phys, page_flags) != 0)
       return -ENOMEM;
     tlb_invalidate_page((uintptr_t)page);
   }

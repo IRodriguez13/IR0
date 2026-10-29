@@ -15,6 +15,7 @@
 #include "test/ktest_harness.h"
 #include "test/ktest_decl.h"
 #include <ir0/ktm/klog.h>
+#include <ir0/serial_io.h>
 #include "process.h"
 #include <stddef.h>
 
@@ -87,6 +88,11 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_cred_access_contract, "cred_access_contract", 1 },
 	{ ktest_devfs_hci_open_contract, "devfs_hci_open_contract", 1 },
 	{ ktest_mmap_null_placement, "mmap_null_placement", 1 },
+	{ ktest_munmap_partial_preserves_vma,
+	  "munmap_partial_preserves_vma", 1 },
+	{ ktest_mmap_fixed_partial_overlap_preserves_vma,
+	  "mmap_fixed_partial_overlap_preserves_vma", 1 },
+	{ ktest_mprotect_preserves_cow, "mprotect_preserves_cow", 1 },
 	{ ktest_signal_segv_deliver_irq_frame,
 	  "signal_segv_deliver_irq_frame", 1 },
 	{ ktest_brk_post_exec, "brk_post_exec", 1 },
