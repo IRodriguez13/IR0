@@ -56,15 +56,15 @@ arm64-rpi3-compile: kernel-arm64-rpi3-min.bin
 smoke-arm64-rpi3-boot: kernel-arm64-rpi3-min.bin
 	@echo "  SMOKE   ARM64 QEMU raspi3b board boot..."
 	@aarch64-linux-gnu-objcopy -O binary $< build/arm64-rpi3/kernel8.img
-	@rm -f /tmp/arm64-rpi3-boot-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi3-boot-smoke.log --timeout 20 \
+	@rm -f $(HOST_TMP)/arm64-rpi3-boot-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-rpi3-boot-smoke.log --timeout 20 \
 		--stale-sec 8 --done ARM64_BOOT_OK -- \
 		qemu-system-aarch64 -M raspi3b \
 		-kernel build/arm64-rpi3/kernel8.img -nographic \
 		-serial mon:stdio -display none -no-reboot 2>/dev/null
-	@grep -q 'board=rpi3' /tmp/arm64-rpi3-boot-smoke.log
-	@grep -q 'ARM64_BOOT_OK' /tmp/arm64-rpi3-boot-smoke.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-boot-smoke.log
+	@grep -q 'board=rpi3' $(HOST_TMP)/arm64-rpi3-boot-smoke.log
+	@grep -q 'ARM64_BOOT_OK' $(HOST_TMP)/arm64-rpi3-boot-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-rpi3-boot-smoke.log
 	@echo "✓ smoke-arm64-rpi3-boot passed (real QEMU Raspberry model)"
 
 kernel-arm64-rpi4-min.bin:
@@ -98,21 +98,21 @@ smoke-arm64-rpi4-boot: kernel-arm64-rpi4-min.bin
 		echo "⊘ smoke-arm64-rpi4-boot SKIP (QEMU has no raspi4b machine)"; \
 	else \
 		echo "  SMOKE   ARM64 QEMU raspi4b board min boot..."; \
-		rm -f /tmp/arm64-rpi4-boot-smoke.log; \
-		$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi4-boot-smoke.log --timeout 20 --stale-sec 8 \
+		rm -f $(HOST_TMP)/arm64-rpi4-boot-smoke.log; \
+		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-rpi4-boot-smoke.log --timeout 20 --stale-sec 8 \
 			--done ARM64_BOOT_OK -- \
 			qemu-system-aarch64 -M raspi4b \
 			-kernel kernel-arm64-rpi4-min.bin -nographic -serial mon:stdio \
 			-display none -no-reboot 2>/dev/null || true; \
-		if grep -q 'IR0 kernel' /tmp/arm64-rpi4-boot-smoke.log && \
-		   grep -q '\[BOOT\]' /tmp/arm64-rpi4-boot-smoke.log && \
-		   grep -q 'board=rpi4' /tmp/arm64-rpi4-boot-smoke.log && \
-		   grep -q 'ARM64_BOOT_OK' /tmp/arm64-rpi4-boot-smoke.log; then \
+		if grep -q 'IR0 kernel' $(HOST_TMP)/arm64-rpi4-boot-smoke.log && \
+		   grep -q '\[BOOT\]' $(HOST_TMP)/arm64-rpi4-boot-smoke.log && \
+		   grep -q 'board=rpi4' $(HOST_TMP)/arm64-rpi4-boot-smoke.log && \
+		   grep -q 'ARM64_BOOT_OK' $(HOST_TMP)/arm64-rpi4-boot-smoke.log; then \
 			echo "✓ smoke-arm64-rpi4-boot passed (banner + board=rpi4 + ARM64_BOOT_OK)"; \
-			grep -E '\[BOOT\]|\[ARCH\]|ARM64_BOOT' /tmp/arm64-rpi4-boot-smoke.log | head -10; \
+			grep -E '\[BOOT\]|\[ARCH\]|ARM64_BOOT' $(HOST_TMP)/arm64-rpi4-boot-smoke.log | head -10; \
 		else \
 			echo "✗ smoke-arm64-rpi4-boot FAILED"; \
-			head -40 /tmp/arm64-rpi4-boot-smoke.log; \
+			head -40 $(HOST_TMP)/arm64-rpi4-boot-smoke.log; \
 			exit 1; \
 		fi; \
 	fi

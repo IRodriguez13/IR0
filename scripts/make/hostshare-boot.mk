@@ -15,7 +15,7 @@
 .PHONY: run-bootlog smoke-boot-log-hostshare help-bootlog
 
 IR0_HOSTSHARE_DIR ?= $(KERNEL_ROOT)/build/hostshare
-BOOT_LOG_HOSTSHARE_SMOKE_LOG ?= /tmp/ir0-boot-log-hostshare-smoke.log
+BOOT_LOG_HOSTSHARE_SMOKE_LOG ?= $(HOST_TMP)/ir0-boot-log-hostshare-smoke.log
 
 help-bootlog:
 	@echo "IR0 boot log → host (virtio-9p)"
@@ -56,7 +56,7 @@ smoke-boot-log-hostshare:
 	$(ir0_bootlog_prepare_desktop)
 	@echo "  SMOKE   boot log → virtio-9p hostshare..."
 	@rm -f $(BOOT_LOG_HOSTSHARE_SMOKE_LOG)
-	@DISK=$$(mktemp /tmp/ir0-boot-log-hs.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-boot-log-hs.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	$(SMOKE_QEMU_RUN) --log $(BOOT_LOG_HOSTSHARE_SMOKE_LOG) --timeout 45 --stale-sec 12 \
 		--done BOOT_LOG_HOSTSHARE_OK -- \

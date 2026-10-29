@@ -13,10 +13,10 @@ PASSWD_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/passwd_smoke.c
 DOAS_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/doas_smoke.c
 SUDO_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/sudo_smoke.c
 IR0_AUTH_LIB_SRC = $(IR0_USERSPACE_ROOT)/lib/ir0_auth.c
-RECOVERY_SMOKE_LOG = /tmp/userspace-recovery.log
-DOAS_SMOKE_LOG = /tmp/userspace-doas.log
+RECOVERY_SMOKE_LOG = $(HOST_TMP)/userspace-recovery.log
+DOAS_SMOKE_LOG = $(HOST_TMP)/userspace-doas.log
 DOAS_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/doas_smoke
-SUDO_SMOKE_LOG = /tmp/userspace-sudo.log
+SUDO_SMOKE_LOG = $(HOST_TMP)/userspace-sudo.log
 SUDO_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/sudo_smoke
 SUDO_BIN = $(IR0_USERSPACE_OUT)/$(ISD_ARCH)/product/stage-bin/sudo
 SETID_SCRIPT_SRC = setup/pid1/setid_script.sh
@@ -28,7 +28,7 @@ INIT_MMAP_SMOKE_SRC = setup/pid1/init_mmap_smoke.c
 INIT_FORK_MEM_SMOKE_SRC = setup/pid1/init_fork_mem_smoke.c
 INIT_TCC_POWER_HALT_SRC = setup/pid1/init_tcc_power_halt.c
 TCC_POWER_HALT_HARNESS_BIN = setup/pid1/tcc_power_halt_harness
-TCC_POWER_HALT_LOG = /tmp/tcc-power-halt-smoke.log
+TCC_POWER_HALT_LOG = $(HOST_TMP)/tcc-power-halt-smoke.log
 KTM_DOOMGENERIC_SMOKE_BIN = setup/doom/doomgeneric_smoke
 RUNIT_STAGE_BIN = $(IR0_USERSPACE_OUT)/x86_64/smoke/stage-bin
 # Smoke runit helpers (fase55d, tcc power, busybox power) live under smoke/stage-bin.
@@ -46,16 +46,16 @@ KTM_FBDEV_GUI_SMOKE_SRC = setup/pid1/ktm_fbdev_gui_smoke.c
 KTM_BOOT_HALT_BIN = setup/pid1/ktm_boot_halt
 KTM_FBDEV_GUI_BIN = setup/pid1/ktm_fbdev_gui
 KTM_GUI_DISPLAY ?= gtk
-KTM_BOOT_HALT_GUI_LOG = /tmp/boot-gui.log
-KTM_FBDEV_GUI_LOG = /tmp/fbdev-gui.log
-KTM_DOOM_GUI_LOG = /tmp/doom-gui.log
-ASH_GUI_LOG = /tmp/ash-gui.log
+KTM_BOOT_HALT_GUI_LOG = $(HOST_TMP)/boot-gui.log
+KTM_FBDEV_GUI_LOG = $(HOST_TMP)/fbdev-gui.log
+KTM_DOOM_GUI_LOG = $(HOST_TMP)/doom-gui.log
+ASH_GUI_LOG = $(HOST_TMP)/ash-gui.log
 ASH_GUI_DISPLAY ?= gtk
 # Honor the old override name if the caller still passes it.
 ifneq ($(origin FASE58E_DISPLAY), undefined)
 ASH_GUI_DISPLAY = $(FASE58E_DISPLAY)
 endif
-ASH_GUI_SMOKE_LOG = /tmp/ash-gui-smoke.log
+ASH_GUI_SMOKE_LOG = $(HOST_TMP)/ash-gui-smoke.log
 BUSYBOX_REAL_BIN = setup/pid1/busybox_real
 # ISD scripts still read FASE50_BUSYBOX_BIN; keep as alias.
 FASE50_BUSYBOX_BIN = $(BUSYBOX_REAL_BIN)
@@ -69,11 +69,11 @@ IR0_BUSYBOX_FULL_BIN = $(IR0_USERSPACE_OUT)/busybox-full
 IR0_BUSYBOX_AUTH_BIN = $(IR0_USERSPACE_OUT)/busybox-auth
 BB_MATRIX_SMOKE_SRC = $(IR0_USERSPACE_ROOT)/smoke/busybox_matrix_smoke.c
 BB_MATRIX_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/busybox_matrix_smoke
-BB_MATRIX_LOG = /tmp/busybox-applet-matrix.log
+BB_MATRIX_LOG = $(HOST_TMP)/busybox-applet-matrix.log
 BB_MATRIX_TSV = $(IR0_USERSPACE_ROOT)/packages/busybox/bb_status.tsv
 KTM_BUSYBOX_MANIFEST_SMOKE_SRC = setup/pid1/ktm_busybox_manifest_smoke.c
 KTM_BUSYBOX_MANIFEST_SMOKE_BIN = setup/pid1/busybox_manifest_smoke
-KTM_BUSYBOX_MANIFEST_SMOKE_LOG = /tmp/busybox-manifest-smoke.log
+KTM_BUSYBOX_MANIFEST_SMOKE_LOG = $(HOST_TMP)/busybox-manifest-smoke.log
 KTM_TRUE_HELPER_SRC = setup/pid1/ktm_true_helper.c
 SH_SMOKE_SRC     = setup/pid1/sh_smoke.c
 SEGV_SMOKE_SRC   = setup/pid1/userspace_segv.c
@@ -86,61 +86,61 @@ PASSWD_SMOKE_BIN = $(IR0_USERSPACE_OUT)/smoke/passwd_smoke
 SH_SMOKE_BIN     = setup/pid1/sh_smoke
 SEGV_SMOKE_BIN   = setup/pid1/userspace_segv
 KTM_TRUE_HELPER_BIN  = setup/pid1/f41true
-HEAP_SMOKE_LOG   = /tmp/userspace-heap-smoke.log
-MMAP_SMOKE_LOG   = /tmp/userspace-mmap-smoke.log
-FORK_MEM_SMOKE_LOG = /tmp/userspace-fork-mem-smoke.log
+HEAP_SMOKE_LOG   = $(HOST_TMP)/userspace-heap-smoke.log
+MMAP_SMOKE_LOG   = $(HOST_TMP)/userspace-mmap-smoke.log
+FORK_MEM_SMOKE_LOG = $(HOST_TMP)/userspace-fork-mem-smoke.log
 FAT16_SMOKE_IMG  = build/fat16_smoke.img
-FAT16_SMOKE_LOG  = /tmp/fat16-smoke.log
-RECLAIM_LOG = /tmp/userspace-reclaim.log
-PT_RECLAIM_LOG = /tmp/userspace-pt-reclaim.log
-EXEC_STORM_LOG = /tmp/userspace-exec-storm.log
-FORK_EXIT_STORM42_LOG = /tmp/userspace-fork-exit-storm42.log
-FORK_EXIT_STORM_LOG = /tmp/userspace-fork-exit-storm.log
-FORK_WAIT_STORM_LOG = /tmp/userspace-fork-wait-storm.log
-EXEC_LOOP_LOG = /tmp/userspace-exec-loop.log
-FORK_WAIT_DRAIN_LOG = /tmp/userspace-fork-wait-drain.log
-EXEC_DRAIN_LOG = /tmp/userspace-exec-drain.log
-INIT_EXIT_DRAIN_LOG = /tmp/userspace-init-exit-drain.log
-FORK_ROLLBACK_STORM_LOG = /tmp/userspace-fork-rollback.log
-FORK_MEM_TOUCH_LOG = /tmp/userspace-fork-mem-touch.log
-FORK_NO_RECURSE_LOG = /tmp/userspace-fork-no-recursion.log
-FORK_HEAP_LOG = /tmp/userspace-fork-heap.log
-IPC_SMOKE_LOG = /tmp/userspace-ipc.log
-PIPE_SMOKE_LOG = /tmp/userspace-pipe.log
-BUSYBOX_SMOKE_LOG = /tmp/userspace-busybox.log
-EXEC_ONLY_LOG = /tmp/userspace-exec-only.log
-KTM_SHELL_SHELL_LOG = /tmp/userspace-shell.log
-KTM_TCC_TCC_LOG = /tmp/userspace-tcc.log
+FAT16_SMOKE_LOG  = $(HOST_TMP)/fat16-smoke.log
+RECLAIM_LOG = $(HOST_TMP)/userspace-reclaim.log
+PT_RECLAIM_LOG = $(HOST_TMP)/userspace-pt-reclaim.log
+EXEC_STORM_LOG = $(HOST_TMP)/userspace-exec-storm.log
+FORK_EXIT_STORM42_LOG = $(HOST_TMP)/userspace-fork-exit-storm42.log
+FORK_EXIT_STORM_LOG = $(HOST_TMP)/userspace-fork-exit-storm.log
+FORK_WAIT_STORM_LOG = $(HOST_TMP)/userspace-fork-wait-storm.log
+EXEC_LOOP_LOG = $(HOST_TMP)/userspace-exec-loop.log
+FORK_WAIT_DRAIN_LOG = $(HOST_TMP)/userspace-fork-wait-drain.log
+EXEC_DRAIN_LOG = $(HOST_TMP)/userspace-exec-drain.log
+INIT_EXIT_DRAIN_LOG = $(HOST_TMP)/userspace-init-exit-drain.log
+FORK_ROLLBACK_STORM_LOG = $(HOST_TMP)/userspace-fork-rollback.log
+FORK_MEM_TOUCH_LOG = $(HOST_TMP)/userspace-fork-mem-touch.log
+FORK_NO_RECURSE_LOG = $(HOST_TMP)/userspace-fork-no-recursion.log
+FORK_HEAP_LOG = $(HOST_TMP)/userspace-fork-heap.log
+IPC_SMOKE_LOG = $(HOST_TMP)/userspace-ipc.log
+PIPE_SMOKE_LOG = $(HOST_TMP)/userspace-pipe.log
+BUSYBOX_SMOKE_LOG = $(HOST_TMP)/userspace-busybox.log
+EXEC_ONLY_LOG = $(HOST_TMP)/userspace-exec-only.log
+KTM_SHELL_SHELL_LOG = $(HOST_TMP)/userspace-shell.log
+KTM_TCC_TCC_LOG = $(HOST_TMP)/userspace-tcc.log
 # Bisect lazy vs eager MM in legacy smokes: KERNEL_USERSPACE_ISO=kernel-x64-userspace-eager.iso
 KERNEL_USERSPACE_ISO ?= kernel-x64-userspace.iso
-KTM_FS_DEV_FS_DEV_LOG = /tmp/userspace-fs-dev.log
-KTM_POSIX_PSEUDOFS_POSIX_PSEUDOFS_LOG = /tmp/userspace-posix-pseudofs.log
-HEART_SMOKE_LOG = /tmp/userspace-heart.log
-KTM_FBDEV_FBDEV_LOG = /tmp/userspace-fbdev.log
-KTM_INPUT_INPUT_LOG = /tmp/userspace-input.log
-KTM_INPUT_DET_INPUT_DET_LOG = /tmp/userspace-input-det.log
-KTM_DOOM_PREREQ_LOG = /tmp/userspace-doom-prereq.log
-KTM_DOOM_STUB_LOG = /tmp/userspace-doom-stub.log
-KTM_DOOM_TIMING_STUB_LOG = /tmp/userspace-doom-timing.log
-KTM_DOOMGENERIC_LOG = /tmp/userspace-doomgeneric.log
-MUSL_ARCH_PRCTL_LOG = /tmp/userspace-musl-arch-prctl.log
-MUSL_PTHREAD_SMOKE_LOG = /tmp/userspace-musl-pthread.log
-SETUID_EXEC_SMOKE_LOG = /tmp/userspace-setuid-exec.log
-PASSWD_SMOKE_LOG = /tmp/userspace-passwd.log
+KTM_FS_DEV_FS_DEV_LOG = $(HOST_TMP)/userspace-fs-dev.log
+KTM_POSIX_PSEUDOFS_POSIX_PSEUDOFS_LOG = $(HOST_TMP)/userspace-posix-pseudofs.log
+HEART_SMOKE_LOG = $(HOST_TMP)/userspace-heart.log
+KTM_FBDEV_FBDEV_LOG = $(HOST_TMP)/userspace-fbdev.log
+KTM_INPUT_INPUT_LOG = $(HOST_TMP)/userspace-input.log
+KTM_INPUT_DET_INPUT_DET_LOG = $(HOST_TMP)/userspace-input-det.log
+KTM_DOOM_PREREQ_LOG = $(HOST_TMP)/userspace-doom-prereq.log
+KTM_DOOM_STUB_LOG = $(HOST_TMP)/userspace-doom-stub.log
+KTM_DOOM_TIMING_STUB_LOG = $(HOST_TMP)/userspace-doom-timing.log
+KTM_DOOMGENERIC_LOG = $(HOST_TMP)/userspace-doomgeneric.log
+MUSL_ARCH_PRCTL_LOG = $(HOST_TMP)/userspace-musl-arch-prctl.log
+MUSL_PTHREAD_SMOKE_LOG = $(HOST_TMP)/userspace-musl-pthread.log
+SETUID_EXEC_SMOKE_LOG = $(HOST_TMP)/userspace-setuid-exec.log
+PASSWD_SMOKE_LOG = $(HOST_TMP)/userspace-passwd.log
 KTM_DOOM_INTERACTIVE_BIN = setup/pid1/ktm_doom_interactive
-KTM_DOOM_INTERACTIVE_GUI_LOG = /tmp/doomgeneric-gui.log
+KTM_DOOM_INTERACTIVE_GUI_LOG = $(HOST_TMP)/doomgeneric-gui.log
 # irinit retired — product PID1 is runit (see build-runit / load-userspace-runit).
 RUNIT_BIN_DIR = $(IR0_USERSPACE_OUT)/bin
 RUNIT_INIT_BIN = $(RUNIT_BIN_DIR)/runit-init
-RUNIT_SMOKE_LOG = /tmp/runit-boot-smoke.log
-RUNIT_ASH_SMOKE_LOG = /tmp/runit-ash-smoke.log
+RUNIT_SMOKE_LOG = $(HOST_TMP)/runit-boot-smoke.log
+RUNIT_ASH_SMOKE_LOG = $(HOST_TMP)/runit-ash-smoke.log
 DOOM_FRAMES ?= 0
 DOOM_FRAME_DUMP_EVERY ?= 0
 DOOM_DISPLAY ?= gtk
 # Optional Doom IWAD for ken/games and legacy smokes (no maintainer home path).
 REAL_WAD_PATH ?= $(or $(ISD_DOOM_IWAD),$(IR0_DOOM_IWAD),)
 KTM_TCC_TCC_STAGE = setup/pid1/fase52_staging
-PROGRAMS_SMOKE_LOG = /tmp/userspace-programs.log
+PROGRAMS_SMOKE_LOG = $(HOST_TMP)/userspace-programs.log
 # Serial-log autokill: scripts/smoke_autokill.py (default max 180s; heavy smokes use --profile 90–120s).
 SMOKE_QEMU_RUN = bash scripts/smoke_qemu_run.sh
 MUSL_CC ?= $(shell command -v x86_64-linux-musl-gcc 2>/dev/null || command -v musl-gcc 2>/dev/null)
@@ -153,7 +153,7 @@ MUSL_CC_AARCH64 ?= $(shell \
 	true)
 MUSL_AARCH64_HELLO = $(KERNEL_ROOT)/build/hello_aarch64
 BUSYBOX_SRC ?= $(IR0_USERSPACE_ROOT)/packages/busybox/src
-TCC_SRC ?= /tmp/ir0-tinycc
+TCC_SRC ?= $(HOST_TMP)/ir0-tinycc
 
 .PHONY: setup-musl-aarch64 musl-aarch64-hello smoke-musl-aarch64-toolchain
 setup-musl-aarch64:
@@ -201,12 +201,17 @@ busybox-aarch64-min: setup-musl-aarch64
 		fi; \
 		$(MAKE) -s -C "$(BUSYBOX_AARCH64_BUILD)" mrproper; \
 		cp -f "$(BUSYBOX_SRC)/.config" "$(BUSYBOX_AARCH64_BUILD)/.config"; \
-		sed -i 's|^CONFIG_EXTRA_CFLAGS=.*|CONFIG_EXTRA_CFLAGS="-fno-pie"|' \
-			"$(BUSYBOX_AARCH64_BUILD)/.config"; \
-		sed -i 's|^CONFIG_EXTRA_LDFLAGS=.*|CONFIG_EXTRA_LDFLAGS="-no-pie -Wl,-Ttext-segment=0x44000000"|' \
-			"$(BUSYBOX_AARCH64_BUILD)/.config"; \
-		sed -i 's|^# CONFIG_ECHO is not set|CONFIG_ECHO=y|' \
-			"$(BUSYBOX_AARCH64_BUILD)/.config"; \
+		$(PYTHON) scripts/config_set_line.py \
+			"$(BUSYBOX_AARCH64_BUILD)/.config" \
+			'^CONFIG_EXTRA_CFLAGS=|^# CONFIG_EXTRA_CFLAGS is not set' \
+			'CONFIG_EXTRA_CFLAGS="-fno-pie"'; \
+		$(PYTHON) scripts/config_set_line.py \
+			"$(BUSYBOX_AARCH64_BUILD)/.config" \
+			'^CONFIG_EXTRA_LDFLAGS=|^# CONFIG_EXTRA_LDFLAGS is not set' \
+			'CONFIG_EXTRA_LDFLAGS="-no-pie -Wl,-Ttext-segment=0x44000000"'; \
+		$(PYTHON) scripts/config_set_line.py \
+			"$(BUSYBOX_AARCH64_BUILD)/.config" \
+			'^CONFIG_ECHO=|^# CONFIG_ECHO is not set' 'CONFIG_ECHO=y'; \
 		$(MAKE) -s -C "$(BUSYBOX_AARCH64_BUILD)" \
 			ARCH=arm64 CROSS_COMPILE="$(MUSL_CROSS_AARCH64)" \
 			CC="$(MUSL_CC_AARCH64)" oldconfig </dev/null; \
@@ -278,7 +283,7 @@ build-init-smoke:
 	@$(CC) -nostdlib -static -Os -fno-stack-protector -Wl,-e,_start -Wl,-s,-z,noexecstack \
 		-o $(INIT_SMOKE_BIN) $(INIT_SMOKE_SRC)
 	@file $(INIT_SMOKE_BIN) | grep -q ELF
-	@echo "✓ build-init-smoke OK ($(shell stat -c%s $(INIT_SMOKE_BIN) 2>/dev/null || stat -f%z $(INIT_SMOKE_BIN)) bytes)"
+	@echo "✓ build-init-smoke OK ($$(wc -c < $(INIT_SMOKE_BIN) | tr -d ' ') bytes)"
 
 build-init-musl:
 	@if [ -z "$(MUSL_CC)" ]; then \
@@ -374,7 +379,7 @@ DOAS_SMOKE_TAGS = DOAS_SETUP_OK DOAS_GRANT_OK DOAS_ENV_OK DOAS_DENY_AUTH_OK DOAS
 
 smoke-doas: build-doas-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   OpenDoas grant/deny/env..."
-	@DISK=$$(mktemp /tmp/ir0-doas-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-doas-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(DOAS_SMOKE_BIN) sbin/init && \
 	python3 scripts/inject_init_minix.py $$DISK $(IR0_ISD_ROOT)/tests/fixtures/development/passwd etc/passwd && \
@@ -416,7 +421,7 @@ SUDO_SMOKE_TAGS = SUDO_SETUP_OK SUDO_GRANT_OK SUDO_ENV_OK SUDO_DENY_AUTH_OK SUDO
 
 smoke-sudo: build-sudo-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   GNU sudo grant/deny/env over controlling PTY..."
-	@DISK=$$(mktemp /tmp/ir0-sudo-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-sudo-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(SUDO_SMOKE_BIN) sbin/init && \
 	python3 scripts/inject_init_minix.py --setuid $$DISK $(SUDO_BIN) usr/bin/sudo && \
@@ -439,7 +444,7 @@ smoke-sudo: build-sudo-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "✓ smoke-sudo passed"
 
 RECOVERY_SMOKE_TAGS = RECOVERY_BOOT_SELECTED RECOVERY_START RECOVERY_ROOT_RO RECOVERY_SHELL_READY
-RECOVERY_SMOKE_ISO = /tmp/ir0-recovery-smoke.iso
+RECOVERY_SMOKE_ISO = $(HOST_TMP)/ir0-recovery-smoke.iso
 
 # QEMU -kernel cannot load this x86-64 Multiboot ELF; GRUB ISO + recovery cfg.
 kernel-x64-userspace-recovery.iso: kernel-x64-userspace.bin arch/x86-64/grub-recovery.cfg
@@ -454,7 +459,7 @@ kernel-x64-userspace-recovery.iso: kernel-x64-userspace.bin arch/x86-64/grub-rec
 
 smoke-recovery: load-userspace-runit kernel-x64-userspace-recovery.iso
 	@echo "  SMOKE   recovery boot (ir0.recovery=1, rootfs RO)..."
-	@DISK=$$(mktemp /tmp/ir0-recovery-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-recovery-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	$(SMOKE_QEMU_RUN) --log $(RECOVERY_SMOKE_LOG) --timeout 60 --stale-sec 20 \
 		--done RECOVERY_SHELL_READY --fail-regex 'RECOVERY_HANDOFF_FAIL|KERNEL PANIC' -- \
@@ -469,15 +474,15 @@ smoke-recovery: load-userspace-runit kernel-x64-userspace-recovery.iso
 	done
 	@echo "✓ smoke-recovery passed"
 
-FSCK_STAGE1_LOG = /tmp/ir0-fsck-stage1.log
-FSCK_REMOUNT_LOG = /tmp/ir0-fsck-remount.log
+FSCK_STAGE1_LOG = $(HOST_TMP)/ir0-fsck-stage1.log
+FSCK_REMOUNT_LOG = $(HOST_TMP)/ir0-fsck-remount.log
 
 .PHONY: smoke-fsck-remount-rw
 smoke-fsck-remount-rw: load-userspace-runit kernel-x64-userspace-recovery.iso
 	@echo "  SMOKE   fsck stage1 (development) + recovery remount RW..."
 	@rm -f disk.img.runit.stamp
 	@IR0_PRODUCT_PROFILE=development $(MAKE) -s load-userspace-runit
-	@DISK=$$(mktemp /tmp/ir0-fsck-stage1.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-fsck-stage1.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rc=0; \
 	$(SMOKE_QEMU_RUN) --log $(FSCK_STAGE1_LOG) --timeout 55 --stale-sec 18 \
@@ -498,7 +503,7 @@ smoke-fsck-remount-rw: load-userspace-runit kernel-x64-userspace-recovery.iso
 
 PIPELINE_STRESS_SRC = setup/pid1/pipeline_stress_smoke.c
 PIPELINE_STRESS_BIN = setup/pid1/pipeline_stress_smoke
-PIPELINE_STRESS_LOG = /tmp/ir0-pipeline-stress.log
+PIPELINE_STRESS_LOG = $(HOST_TMP)/ir0-pipeline-stress.log
 
 .PHONY: build-pipeline-stress-smoke smoke-pipeline-stress
 
@@ -515,7 +520,7 @@ build-pipeline-stress-smoke: $(PIPELINE_STRESS_SRC)
 # Product runit disk + BusyBox ash: hexdump|head, yes|head, od|head, N rounds.
 smoke-pipeline-stress: build-pipeline-stress-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   ash pipeline stress (hexdump|head + rounds)..."
-	@DISK=$$(mktemp /tmp/ir0-pipeline-stress.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-pipeline-stress.XXXXXX"); \
 	cp -f disk.img $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(PIPELINE_STRESS_BIN) sbin/init && \
 	$(SMOKE_QEMU_RUN) --log $(PIPELINE_STRESS_LOG) --timeout 120 --stale-sec 40 \
@@ -533,7 +538,7 @@ smoke-pipeline-stress: build-pipeline-stress-smoke load-userspace-runit kernel-x
 # Recursive walk of the real IR0 tree over virtio-9p — the interactive
 # workload (`find` from /) that no smoke exercised before it double-faulted.
 SESSION_WALK_BIN = setup/pid1/session_walk_smoke
-SESSION_WALK_LOG = /tmp/ir0-session-walk.log
+SESSION_WALK_LOG = $(HOST_TMP)/ir0-session-walk.log
 
 .PHONY: build-session-walk-smoke smoke-session-walk
 build-session-walk-smoke:
@@ -544,7 +549,7 @@ build-session-walk-smoke:
 smoke-session-walk: build-session-walk-smoke kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   session walk (find over real 9p tree + /proc + /heart)..."
-	@DISK=$$(mktemp /tmp/ir0-session-walk.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-session-walk.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(SESSION_WALK_BIN) sbin/init; \
 	rm -f $(SESSION_WALK_LOG); \
@@ -565,7 +570,7 @@ smoke-session-walk: build-session-walk-smoke kernel-x64-userspace.iso
 
 CMD_STRESS_SRC = setup/pid1/cmd_stress_smoke.c
 CMD_STRESS_BIN = setup/pid1/cmd_stress_smoke
-CMD_STRESS_LOG = /tmp/ir0-cmd-stress.log
+CMD_STRESS_LOG = $(HOST_TMP)/ir0-cmd-stress.log
 
 .PHONY: build-cmd-stress-smoke smoke-cmd-stress
 
@@ -581,7 +586,7 @@ build-cmd-stress-smoke: $(CMD_STRESS_SRC)
 
 smoke-cmd-stress: build-cmd-stress-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   BusyBox cmd battery (PID1)..."
-	@DISK=$$(mktemp /tmp/ir0-cmd-stress.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-cmd-stress.XXXXXX"); \
 	cp -f disk.img $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(CMD_STRESS_BIN) sbin/init && \
 	$(SMOKE_QEMU_RUN) --log $(CMD_STRESS_LOG) --timeout 120 --stale-sec 40 \
@@ -609,7 +614,7 @@ smoke-shell-pipe-stress: load-userspace-runit kernel-x64-userspace.iso
 	@python3 scripts/smoke_shell_pipe_stress.py \
 		--iso kernel-x64-userspace.iso \
 		--disk disk.img \
-		--log /tmp/ir0-shell-pipe-stress.log \
+		--log $(HOST_TMP)/ir0-shell-pipe-stress.log \
 		--timeout 180
 	@echo "✓ smoke-shell-pipe-stress passed"
 
@@ -621,7 +626,7 @@ smoke-session-soak: load-userspace-runit kernel-x64-userspace.iso
 	@python3 scripts/smoke_session_soak.py \
 		--iso kernel-x64-userspace.iso \
 		--disk disk.img \
-		--log /tmp/ir0-session-soak.log \
+		--log $(HOST_TMP)/ir0-session-soak.log \
 		--rounds $(SOAK_ROUNDS) $(SOAK_EXTRA)
 	@echo "✓ smoke-session-soak passed"
 
@@ -684,7 +689,7 @@ smoke-session-chaos: load-userspace-runit kernel-x64-userspace.iso
 	@python3 scripts/smoke_session_chaos.py \
 		--iso kernel-x64-userspace.iso \
 		--disk disk.img \
-		--log /tmp/ir0-session-chaos.log
+		--log $(HOST_TMP)/ir0-session-chaos.log
 	@echo "✓ smoke-session-chaos passed"
 
 # Session-stability battery for 0.0.1 desk/terminal hardening.
@@ -812,7 +817,7 @@ build-busybox-min:
 	@echo "  BUSYBOX Building ash+coreutils static BusyBox from $(BUSYBOX_SRC)"
 	@chmod +x scripts/busybox_apply_fragment.sh
 	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(BUSYBOX_MIN_CFG)"
-	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
+	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$(PARALLEL_JOBS)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(BUSYBOX_REAL_BIN)"
 	@file "$(BUSYBOX_REAL_BIN)" | grep -q ELF
 	@chmod +x scripts/busybox_check_manifest.sh
@@ -835,7 +840,7 @@ build-busybox-plus:
 	@echo "  BUSYBOX Building ash+coreutils BusyBox from $(BUSYBOX_SRC)"
 	@chmod +x scripts/busybox_apply_fragment.sh
 	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(BUSYBOX_PLUS_CFG)"
-	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
+	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$(PARALLEL_JOBS)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(BUSYBOX_REAL_BIN)"
 	@file "$(BUSYBOX_REAL_BIN)" | grep -q ELF
 	@chmod +x scripts/busybox_check_manifest.sh
@@ -858,7 +863,7 @@ build-busybox-full:
 	@echo "  BUSYBOX Building full applets BusyBox from $(BUSYBOX_SRC)"
 	@chmod +x scripts/busybox_apply_fragment.sh
 	@scripts/busybox_apply_fragment.sh "$(BUSYBOX_SRC)" "$(BUSYBOX_FULL_CFG)"
-	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$$(nproc)
+	@$(MAKE) -C "$(BUSYBOX_SRC)" CC="$(MUSL_CC)" CFLAGS="-fno-pie" LDFLAGS="-no-pie" -j$(PARALLEL_JOBS)
 	@cp -f "$(BUSYBOX_SRC)/busybox" "$(BUSYBOX_REAL_BIN)"
 	@file "$(BUSYBOX_REAL_BIN)" | grep -q ELF
 	@chmod +x scripts/busybox_check_manifest.sh
@@ -890,7 +895,7 @@ build-busybox-matrix-smoke:
 # Applet status matrix from real guest behaviour (never from "it compiled").
 busybox-matrix: build-busybox-matrix-smoke build-busybox-ir0-full kernel-x64-userspace.iso
 	@echo "  SMOKE   BusyBox applet matrix (supported / partial / unavailable)..."
-	@DISK=$$(mktemp /tmp/ir0-bbmatrix.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-bbmatrix.XXXXXX"); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(BB_MATRIX_SMOKE_BIN) sbin/init && \
@@ -926,12 +931,12 @@ build-ktm-busybox-manifest-smoke:
 	@echo "✓ build-ktm-busybox-manifest-smoke OK"
 
 # BUSY-2 ship gate — canonical KTM runner (prebuilt format-large + manifest disk)
-BUSYBOX_MANIFEST_SMOKE_LOG ?= /tmp/busybox-manifest-smoke.log
+BUSYBOX_MANIFEST_SMOKE_LOG ?= $(HOST_TMP)/busybox-manifest-smoke.log
 ktm-userdev-busybox-manifest-run: build-ktm-busybox-manifest-smoke build-busybox-plus kernel-x64-userspace.iso
 	@echo "  SMOKE   BUSY-2 product applet manifest (KTM)..."
 	@strings $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) 2>/dev/null | grep -q "KTM_BB_MANIFEST_HARNESS_ID" || \
 		(echo "✗ $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) is not KTM busybox manifest harness — run build-ktm-busybox-manifest-smoke"; exit 1)
-	@DISK=$$(mktemp /tmp/ir0-busy-manifest-disk.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-busy-manifest-disk.XXXXXX"); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(KTM_BUSYBOX_MANIFEST_SMOKE_BIN) sbin/init && \
@@ -1061,7 +1066,7 @@ load-userspace-devtools: build-tcc build-gmake-static
 
 smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit PID1 boot (console + logger)..."
-	@DISK=$$(mktemp /tmp/ir0-runit-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-runit-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_SMOKE_LOG) --timeout 50 --stale-sec 18 \
 		--done RUNSV_CONSOLE_START --done RUNSV_LOGGER_START --done GETTY_READY -- \
@@ -1084,7 +1089,7 @@ smoke-runit-boot: load-userspace-runit kernel-x64-userspace.iso
 		exit 1; \
 	fi
 
-RUNIT_LOGIN_SMOKE_LOG = /tmp/runit-login-smoke.log
+RUNIT_LOGIN_SMOKE_LOG = $(HOST_TMP)/runit-login-smoke.log
 smoke-runit-login: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit Unix login (root / empty password)..."
 	@if [ "$${IR0_DEV_PERSIST:-0}" != "1" ]; then rm -f $(IR0_DEV_DISK).runit.stamp; fi
@@ -1110,7 +1115,7 @@ smoke-desktop-nano: kernel-x64-userspace.iso
 
 # Product binaries stress: top quit, man, dmesg/pipes, tcc hello, optional doom.
 # Uses ISD development disk (top/man/tcc). Doom only if DOOM1.WAD is on the host.
-USERSPACE_STABILITY_LOG = /tmp/ir0-userspace-stability.log
+USERSPACE_STABILITY_LOG = $(HOST_TMP)/ir0-userspace-stability.log
 USERSPACE_STABILITY_DISK ?= $(IR0_USERSPACE_ROOT)/out/x86_64/images/development/disk.img
 .PHONY: smoke-userspace-stability
 smoke-userspace-stability: kernel-x64-userspace-ash-smoke.iso
@@ -1135,8 +1140,8 @@ smoke-userspace-shebang: kernel-x64-userspace-ash-smoke.iso
 		--key-delay 0.2 --batch-size 1 --skip-poweroff \
 		--iso kernel-x64-userspace-ash-smoke.iso \
 		--disk $(USERSPACE_STABILITY_DISK) \
-		--log /tmp/ir0-userspace-shebang.log
-	@echo "  LOG     /tmp/ir0-userspace-shebang.log"
+		--log $(HOST_TMP)/ir0-userspace-shebang.log
+	@echo "  LOG     $(HOST_TMP)/ir0-userspace-shebang.log"
 
 .PHONY: smoke-userspace-random-intr
 smoke-userspace-random-intr: kernel-x64-userspace-ash-smoke.iso
@@ -1148,8 +1153,8 @@ smoke-userspace-random-intr: kernel-x64-userspace-ash-smoke.iso
 		--key-delay 0.2 --batch-size 1 --skip-poweroff \
 		--iso kernel-x64-userspace-ash-smoke.iso \
 		--disk $(USERSPACE_STABILITY_DISK) \
-		--log /tmp/ir0-userspace-random-intr.log
-	@echo "  LOG     /tmp/ir0-userspace-random-intr.log"
+		--log $(HOST_TMP)/ir0-userspace-random-intr.log
+	@echo "  LOG     $(HOST_TMP)/ir0-userspace-random-intr.log"
 
 .PHONY: smoke-userspace-ping-intr
 smoke-userspace-ping-intr: kernel-x64-userspace-ash-smoke.iso
@@ -1161,11 +1166,11 @@ smoke-userspace-ping-intr: kernel-x64-userspace-ash-smoke.iso
 		--key-delay 0.2 --batch-size 1 --skip-poweroff \
 		--iso kernel-x64-userspace-ash-smoke.iso \
 		--disk $(USERSPACE_STABILITY_DISK) \
-		--log /tmp/ir0-userspace-ping-intr.log
-	@echo "  LOG     /tmp/ir0-userspace-ping-intr.log"
+		--log $(HOST_TMP)/ir0-userspace-ping-intr.log
+	@echo "  LOG     $(HOST_TMP)/ir0-userspace-ping-intr.log"
 
 # Interactive firstboot wizard (HMP): password Confirm must not #UD under IRQ1.
-FIRSTBOOT_WIZARD_LOG = /tmp/ir0-firstboot-wizard.log
+FIRSTBOOT_WIZARD_LOG = $(HOST_TMP)/ir0-firstboot-wizard.log
 FIRSTBOOT_WIZARD_DISK ?= $(IR0_USERSPACE_ROOT)/out/x86_64/images/desktop/disk.img
 .PHONY: smoke-firstboot-wizard
 smoke-firstboot-wizard: kernel-x64-userspace.iso
@@ -1181,7 +1186,7 @@ smoke-firstboot-wizard: kernel-x64-userspace.iso
 
 # Boot the same temporary disk twice: provisioning must persist and the second
 # boot must observe FIRSTBOOT_SKIP without losing passwd/shadow state.
-PERSISTENT_BOOT_LOG = /tmp/ir0-persistent-boot.log
+PERSISTENT_BOOT_LOG = $(HOST_TMP)/ir0-persistent-boot.log
 .PHONY: smoke-persistent-boot
 smoke-persistent-boot: kernel-x64-userspace.iso ensure-isd-disk
 	@echo "  SMOKE   persistent state across two boots..."
@@ -1193,7 +1198,7 @@ smoke-persistent-boot: kernel-x64-userspace.iso ensure-isd-disk
 	@echo "  LOG     $(PERSISTENT_BOOT_LOG)"
 
 # Non-root path: crypt(3) auth + setuid drop + /etc/profile PS1 (typed via monitor).
-RUNIT_LOGIN_NONROOT_SMOKE_LOG = /tmp/runit-login-nonroot-smoke.log
+RUNIT_LOGIN_NONROOT_SMOKE_LOG = $(HOST_TMP)/runit-login-nonroot-smoke.log
 smoke-runit-login-nonroot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit Unix login non-root (ivan, crypt + uid drop)..."
 	@chmod +x scripts/smoke_runit_login_nonroot.py
@@ -1203,30 +1208,30 @@ smoke-runit-login-nonroot: load-userspace-runit kernel-x64-userspace.iso
 
 smoke-klog-ktm-off:
 	@set -e; \
-	backup=$$(mktemp /tmp/ir0-klog-config.XXXXXX); \
+	backup=$$(mktemp "$(HOST_TMP)/ir0-klog-config.XXXXXX"); \
 	if [ -f .config ]; then cp .config $$backup; else : > $$backup; fi; \
 	restore() { if [ -s $$backup ]; then cp $$backup .config; else rm -f .config; fi; rm -f $$backup; }; \
 	trap restore EXIT; \
 	$(MAKE) -s ir0_defconfig PROFILE=desktop BOARD=; \
 	python3 scripts/kconfig/menuconfig.py --set KTM=n; \
 	$(MAKE) -s kernel-x64-userspace.iso load-userspace-runit; \
-	DISK=$$(mktemp /tmp/ir0-klog-ktm-off.XXXXXX.img); \
+	DISK=$$(mktemp "$(HOST_TMP)/ir0-klog-ktm-off.XXXXXX"); \
 	cp -f disk.img $$DISK; \
-	$(SMOKE_QEMU_RUN) --log /tmp/klog-ktm-off.log --timeout 50 --stale-sec 18 \
+	$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/klog-ktm-off.log --timeout 50 --stale-sec 18 \
 		--done GETTY_READY -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$DISK,format=raw,if=ide,index=0 \
 		-serial stdio -display none -m 256M -no-reboot -net none; \
 	rm -f $$DISK; \
-	grep -q 'GETTY_READY' /tmp/klog-ktm-off.log; \
-	grep -q '\[#[0-9][0-9]*\] \[EARLY_ARCH\]' /tmp/klog-ktm-off.log; \
+	grep -q 'GETTY_READY' $(HOST_TMP)/klog-ktm-off.log; \
+	grep -q '\[#[0-9][0-9]*\] \[EARLY_ARCH\]' $(HOST_TMP)/klog-ktm-off.log; \
 	echo "✓ smoke-klog-ktm-off passed"
 
 # System power MVP: runit service calls reboot(2) HALT; PASS = serial tags (QEMU -no-reboot).
-RUNIT_POWER_SMOKE_LOG = /tmp/runit-power-smoke.log
+RUNIT_POWER_SMOKE_LOG = $(HOST_TMP)/runit-power-smoke.log
 smoke-runit-power: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + sys_reboot HALT (power_manag)..."
-	@DISK=$$(mktemp /tmp/ir0-runit-power.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-runit-power.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	 \
 	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK power \
@@ -1251,11 +1256,11 @@ smoke-runit-power: load-userspace-runit kernel-x64-userspace.iso
 		exit 1; \
 	fi
 
-SYSFS_PANIC_SERVICE_LOG = /tmp/ir0-sysfs-panic-service.log
+SYSFS_PANIC_SERVICE_LOG = $(HOST_TMP)/ir0-sysfs-panic-service.log
 .PHONY: smoke-sysfs-panic-service
 smoke-sysfs-panic-service: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   deterministic /sys/kernel/panic service..."
-	@DISK=$$(mktemp /tmp/ir0-sysfs-panic.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-sysfs-panic.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK syspanic \
 		$(RUNIT_STAGE_BIN)/runit_sysfs_panic_run \
@@ -1275,10 +1280,10 @@ smoke-sysfs-panic-service: load-userspace-runit kernel-x64-userspace.iso
 	@echo "✓ smoke-sysfs-panic-service passed"
 
 # BusyBox halt applet → sys_reboot (requires CONFIG_HALT in fase58 fragment).
-RUNIT_BB_HALT_LOG = /tmp/runit-busybox-halt-smoke.log
+RUNIT_BB_HALT_LOG = $(HOST_TMP)/runit-busybox-halt-smoke.log
 smoke-runit-busybox-halt: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + BusyBox halt applet..."
-	@DISK=$$(mktemp /tmp/ir0-runit-bb-halt.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-runit-bb-halt.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	 \
 	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK bbhalt \
@@ -1302,10 +1307,10 @@ smoke-runit-busybox-halt: load-userspace-runit kernel-x64-userspace.iso
 	fi
 
 # BusyBox poweroff applet → sys_reboot(POWER_OFF).
-RUNIT_BB_POWEROFF_LOG = /tmp/runit-busybox-poweroff-smoke.log
+RUNIT_BB_POWEROFF_LOG = $(HOST_TMP)/runit-busybox-poweroff-smoke.log
 smoke-runit-busybox-poweroff: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + BusyBox poweroff applet..."
-	@DISK=$$(mktemp /tmp/ir0-runit-bb-pwroff.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-runit-bb-pwroff.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	 \
 	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK bbpwroff \
@@ -1329,10 +1334,10 @@ smoke-runit-busybox-poweroff: load-userspace-runit kernel-x64-userspace.iso
 	fi
 
 # BusyBox reboot applet → sys_reboot(RESTART).
-RUNIT_BB_REBOOT_LOG = /tmp/runit-busybox-reboot-smoke.log
+RUNIT_BB_REBOOT_LOG = $(HOST_TMP)/runit-busybox-reboot-smoke.log
 smoke-runit-busybox-reboot: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   runit + BusyBox reboot applet..."
-	@DISK=$$(mktemp /tmp/ir0-runit-bb-reboot.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-runit-bb-reboot.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	 \
 	$(IR0_USERSPACE_ROOT)/scripts/inject-smoke-service.sh $$DISK bbreboot \
@@ -1373,7 +1378,7 @@ smoke-tcc-power-halt: build-runit build-init-tcc-power-halt build-tcc $(KERNEL_U
 		(echo "✗ $(TCC_POWER_HALT_HARNESS_BIN) is not TCC power harness"; exit 1)
 	@test -d $(KTM_TCC_TCC_STAGE)/bin || (echo "✗ missing $(KTM_TCC_TCC_STAGE) — run build-tcc"; exit 1)
 	@test -f $(RUNIT_STAGE_BIN)/runit_tcc_power_run || (echo "✗ missing runit_tcc_power_run — run build-runit"; exit 1)
-	@DISK=$$(mktemp /tmp/ir0-tcc-power.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-tcc-power.XXXXXX"); \
 	dd if=/dev/zero of=$$DISK bs=1M count=200 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	FASE50_BUSYBOX_BIN=$(BUSYBOX_REAL_BIN) BUSYBOX_REAL_BIN=$(BUSYBOX_REAL_BIN) \
@@ -1422,7 +1427,7 @@ smoke-mm-cow-lazy: kernel-x64-userspace.iso
 	fi
 	@echo "  SMOKE   MM lazy alloc + fork COW (heap + mmap, lazy kernel)..."
 	@$(MAKE) -s build-init-heap-smoke
-	@DISK=$$(mktemp /tmp/ir0-mm-cow-lazy.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-mm-cow-lazy.XXXXXX"); \
 	truncate -s 200M $$DISK; \
 	python3 scripts/inject_init_minix.py --format-large $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
@@ -1446,8 +1451,8 @@ smoke-mm-cow-lazy: kernel-x64-userspace.iso
 	grep -q "MMAP_SMOKE.*verify=1" $(MMAP_SMOKE_LOG) && \
 	grep -q "\\[PF\\] userspace segv pid=" $(MMAP_SMOKE_LOG) && MMAP_OK=1; \
 	$(MAKE) -s build-init-fork-mem-smoke; \
-	printf 'PARENT-FILE-OK!' > /tmp/ir0-mm-cow.dat; \
-	python3 scripts/inject_init_minix.py $$DISK /tmp/ir0-mm-cow.dat etc/f40.dat; \
+	printf 'PARENT-FILE-OK!' > $(HOST_TMP)/ir0-mm-cow.dat; \
+	python3 scripts/inject_init_minix.py $$DISK $(HOST_TMP)/ir0-mm-cow.dat etc/f40.dat; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(FORK_MEM_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(FORK_MEM_SMOKE_LOG) --timeout 180 \
@@ -1474,7 +1479,7 @@ build/fat16_smoke.img:
 
 # GPT partition parse smoke (secondary IDE disk).
 GPT_SMOKE_IMG = build/gpt_smoke.img
-GPT_SMOKE_LOG = /tmp/gpt-partition-smoke.log
+GPT_SMOKE_LOG = $(HOST_TMP)/gpt-partition-smoke.log
 .PHONY: build/gpt_smoke.img smoke-gpt-partition
 
 build/gpt_smoke.img:
@@ -1483,7 +1488,7 @@ build/gpt_smoke.img:
 smoke-gpt-partition: kernel-x64-userspace.iso build/gpt_smoke.img
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   GPT partition table on hdb..."
-	@DISK=$$(mktemp /tmp/ir0-gpt-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-gpt-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rm -f $(GPT_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(GPT_SMOKE_LOG) --timeout 60 --stale-sec 20 \
@@ -1502,7 +1507,7 @@ smoke-gpt-partition: kernel-x64-userspace.iso build/gpt_smoke.img
 	fi
 
 EXT2_SMOKE_IMG = build/ext2_smoke.img
-EXT2_SMOKE_LOG = /tmp/ext2-smoke.log
+EXT2_SMOKE_LOG = $(HOST_TMP)/ext2-smoke.log
 INIT_EXT2_SMOKE_SRC = setup/pid1/init_ext2_smoke.c
 .PHONY: build/ext2_smoke.img smoke-ext2-mount build-init-ext2-smoke
 
@@ -1520,7 +1525,7 @@ smoke-ext2-mount: kernel-x64-userspace.iso build/ext2_smoke.img
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   EXT2 read/write + Xauthority hardlink on /dev/hdb..."
 	@$(MAKE) -s build-init-ext2-smoke
-	@DISK=$$(mktemp /tmp/ir0-ext2-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-ext2-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(EXT2_SMOKE_LOG); \
@@ -1553,13 +1558,13 @@ smoke-ext2-mount: kernel-x64-userspace.iso build/ext2_smoke.img
 	else \
 		echo "✗ smoke-ext2-mount persistence FAILED (tag missing)"; exit 1; \
 	fi; \
-	e2fsck -fn $(EXT2_SMOKE_IMG) >/tmp/ext2-smoke-fsck.log 2>&1 || { \
-		cat /tmp/ext2-smoke-fsck.log; \
+	e2fsck -fn $(EXT2_SMOKE_IMG) >$(HOST_TMP)/ext2-smoke-fsck.log 2>&1 || { \
+		cat $(HOST_TMP)/ext2-smoke-fsck.log; \
 		echo "✗ EXT2 image consistency check failed"; exit 1; \
 	}; \
 	echo "✓ EXT2 e2fsck consistency passed"
 
-EXT2_STARTX_LOG = /tmp/ext2-startx-smoke.log
+EXT2_STARTX_LOG = $(HOST_TMP)/ext2-startx-smoke.log
 EXT2_STARTX_INIT = build/init-ext2-startx-smoke
 .PHONY: smoke-ext2-startx smoke-x11-pointer
 
@@ -1567,18 +1572,18 @@ EXT2_STARTX_INIT = build/init-ext2-startx-smoke
 smoke-desktop-home-boot: check-isd
 	+@$(MAKE) -s kernel-x64-userspace.iso PROFILE=desktop
 	+@$(MAKE) -s ensure-isd-disk ensure-isd-home PROFILE=desktop
-	@ROOT_DISK=$$(mktemp /tmp/ir0-home-boot-root.XXXXXX.img); \
-	HOME_DISK=$$(mktemp /tmp/ir0-home-boot-home.XXXXXX.img); \
-	cp --reflink=auto "$(IR0_ISD_DISK)" $$ROOT_DISK; \
-	cp --reflink=auto "$(IR0_ISD_HOME_DISK)" $$HOME_DISK; \
-	$(SMOKE_QEMU_RUN) --log /tmp/desktop-home-boot.log --timeout 60 \
+	@ROOT_DISK=$$(mktemp "$(HOST_TMP)/ir0-home-boot-root.XXXXXX"); \
+	HOME_DISK=$$(mktemp "$(HOST_TMP)/ir0-home-boot-home.XXXXXX"); \
+	$(CP_REFLINK) "$(IR0_ISD_DISK)" $$ROOT_DISK; \
+	$(CP_REFLINK) "$(IR0_ISD_HOME_DISK)" $$HOME_DISK; \
+	$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/desktop-home-boot.log --timeout 60 \
 		--done 'EXT2_HOME_MOUNT_OK' -- \
 		$(QEMU) -cdrom kernel-x64-userspace.iso \
 		-drive file=$$ROOT_DISK,format=raw,if=ide,index=0 \
 		-drive file=$$HOME_DISK,format=raw,if=ide,index=1 \
 		-serial stdio -display none -m 512M -no-reboot -net none; \
 	rc=$$?; \
-	e2fsck -fn $$HOME_DISK >/tmp/desktop-home-fsck.log 2>&1 || rc=1; \
+	e2fsck -fn $$HOME_DISK >$(HOST_TMP)/desktop-home-fsck.log 2>&1 || rc=1; \
 	rm -f $$ROOT_DISK $$HOME_DISK; \
 	exit $$rc
 
@@ -1590,10 +1595,10 @@ smoke-ext2-startx: check-isd
 	+@$(MAKE) -s ensure-isd-disk ensure-isd-home PROFILE=desktop
 	@$(MUSL_CC) -static -Os -o $(EXT2_STARTX_INIT) \
 		setup/pid1/init_ext2_startx_smoke.c
-	@ROOT_DISK=$$(mktemp /tmp/ir0-startx-root.XXXXXX.img); \
-	HOME_DISK=$$(mktemp /tmp/ir0-startx-home.XXXXXX.img); \
-	cp --reflink=auto "$(IR0_ISD_DISK)" $$ROOT_DISK; \
-	cp --reflink=auto "$(IR0_ISD_HOME_DISK)" $$HOME_DISK; \
+	@ROOT_DISK=$$(mktemp "$(HOST_TMP)/ir0-startx-root.XXXXXX"); \
+	HOME_DISK=$$(mktemp "$(HOST_TMP)/ir0-startx-home.XXXXXX"); \
+	$(CP_REFLINK) "$(IR0_ISD_DISK)" $$ROOT_DISK; \
+	$(CP_REFLINK) "$(IR0_ISD_HOME_DISK)" $$HOME_DISK; \
 	python3 scripts/inject_init_minix.py $$ROOT_DISK \
 		$(EXT2_STARTX_INIT) sbin/init; \
 	$(SMOKE_QEMU_RUN) --log $(EXT2_STARTX_LOG) --timeout 90 \
@@ -1604,8 +1609,8 @@ smoke-ext2-startx: check-isd
 		-drive file=$$HOME_DISK,format=raw,if=ide,index=1 \
 		-serial stdio -display none -m 512M -no-reboot -net none; \
 	rc=$$?; \
-	e2fsck -fn $$HOME_DISK >/tmp/ext2-startx-fsck.log 2>&1 || { \
-		cat /tmp/ext2-startx-fsck.log; rc=1; \
+	e2fsck -fn $$HOME_DISK >$(HOST_TMP)/ext2-startx-fsck.log 2>&1 || { \
+		cat $(HOST_TMP)/ext2-startx-fsck.log; rc=1; \
 	}; \
 	rm -f $$ROOT_DISK $$HOME_DISK; \
 	if [ $$rc -ne 0 ]; then exit $$rc; fi; \
@@ -1632,7 +1637,7 @@ smoke-x11-pointer: smoke-ext2-startx
 		--inject scripts/inject_init_minix.py
 
 DESKTOP_RESIZE_INIT = build/init-desktop-resize-smoke
-DESKTOP_RESIZE_LOG = /tmp/desktop-resize-smoke.log
+DESKTOP_RESIZE_LOG = $(HOST_TMP)/desktop-resize-smoke.log
 .PHONY: smoke-desktop-twm-resize build-init-desktop-resize-smoke
 
 build-init-desktop-resize-smoke:
@@ -1658,7 +1663,7 @@ smoke-desktop-twm-resize: check-isd
 	@echo "✓ smoke-desktop-twm-resize passed"
 
 .PHONY: smoke-robust-list build-init-robust-list
-ROBUST_SMOKE_LOG = /tmp/robust-list-smoke.log
+ROBUST_SMOKE_LOG = $(HOST_TMP)/robust-list-smoke.log
 build-init-robust-list:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_robust_list_smoke.c
@@ -1668,7 +1673,7 @@ smoke-robust-list: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   set/get_robust_list + exit cleanup..."
 	@$(MAKE) -s build-init-robust-list
-	@DISK=$$(mktemp /tmp/ir0-robust.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-robust.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(ROBUST_SMOKE_LOG); \
@@ -1874,7 +1879,7 @@ arm64-slice-compile:
 	done
 	@echo "  CC      includes/string.c (compile-only probe, not linked — needs oops.h)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) \
-		-c includes/string.c -o /tmp/ir0-string-arm64-probe.o
+		-c includes/string.c -o $(HOST_TMP)/ir0-string-arm64-probe.o
 	@echo "✓ arm64-slice-compile OK (slice+pl011+serial_io + string.c probe)"
 
 arm64-portable-compile: arm64-slice-compile
@@ -1893,19 +1898,19 @@ arm64-portable-compile: arm64-slice-compile
 # Pack E: probe MEMORY_OBJS for ARCH=arm64 (compile-only). Not a full ALL_OBJS link.
 arm64-all-objs-probe: arm64-portable-compile
 	@echo "  PROBE   arm64-all-objs-probe (MEMORY_OBJS compile-only)"
-	@rm -f /tmp/ir0-arm64-all-objs-probe.log
+	@rm -f $(HOST_TMP)/ir0-arm64-all-objs-probe.log
 	@echo "INTERRUPT_OBJS wall: cleared (irq_portable_stubs replaces lidt/isr_stubs_64)" \
-		> /tmp/ir0-arm64-all-objs-probe.log
+		> $(HOST_TMP)/ir0-arm64-all-objs-probe.log
 	@fail=0; \
 	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c; do \
 		echo "  CC      $$src (probe)"; \
 		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
-			-c $$src -o /tmp/ir0-arm64-probe-$$$$.o >> /tmp/ir0-arm64-all-objs-probe.log 2>&1; then \
-			echo "FIRST_DIVERGENCE: $$src" | tee -a /tmp/ir0-arm64-all-objs-probe.log; \
+			-c $$src -o $(HOST_TMP)/ir0-arm64-probe-$$$$.o >> $(HOST_TMP)/ir0-arm64-all-objs-probe.log 2>&1; then \
+			echo "FIRST_DIVERGENCE: $$src" | tee -a $(HOST_TMP)/ir0-arm64-all-objs-probe.log; \
 			fail=1; \
 			break; \
 		fi; \
-		rm -f /tmp/ir0-arm64-probe-$$$$.o; \
+		rm -f $(HOST_TMP)/ir0-arm64-probe-$$$$.o; \
 	done; \
 	if [ $$fail -eq 0 ]; then \
 		for src in kernel/main.c kernel/lib/open_flags.c \
@@ -1921,22 +1926,22 @@ arm64-all-objs-probe: arm64-portable-compile
 				-I$(KERNEL_ROOT)/arch/common \
 				-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
 				-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
-				-c $$src -o /tmp/ir0-arm64-probe-$$$$.o >> /tmp/ir0-arm64-all-objs-probe.log 2>&1; then \
-				echo "FIRST_DIVERGENCE: $$src" | tee -a /tmp/ir0-arm64-all-objs-probe.log; \
+				-c $$src -o $(HOST_TMP)/ir0-arm64-probe-$$$$.o >> $(HOST_TMP)/ir0-arm64-all-objs-probe.log 2>&1; then \
+				echo "FIRST_DIVERGENCE: $$src" | tee -a $(HOST_TMP)/ir0-arm64-all-objs-probe.log; \
 				fail=1; \
 				break; \
 			fi; \
-			rm -f /tmp/ir0-arm64-probe-$$$$.o; \
+			rm -f $(HOST_TMP)/ir0-arm64-probe-$$$$.o; \
 		done; \
 	fi; \
 	if [ $$fail -eq 0 ]; then \
 		echo "MEMORY_OBJS+KERNEL sample(+errno/cred/switch/clock/drv/copy_user/logging/futex/net_compat): compile OK (not linked)" \
-			| tee -a /tmp/ir0-arm64-all-objs-probe.log; \
+			| tee -a $(HOST_TMP)/ir0-arm64-all-objs-probe.log; \
 		echo "NEXT: make ARCH=arm64 kernel-arm64-all.bin (portable ALL link; x86 drivers still out)"; \
 		echo "✓ arm64-all-objs-probe: interrupt wall cleared; probe compile OK"; \
 	else \
-		echo "✗ arm64-all-objs-probe: see /tmp/ir0-arm64-all-objs-probe.log"; \
-		tail -40 /tmp/ir0-arm64-all-objs-probe.log; \
+		echo "✗ arm64-all-objs-probe: see $(HOST_TMP)/ir0-arm64-all-objs-probe.log"; \
+		tail -40 $(HOST_TMP)/ir0-arm64-all-objs-probe.log; \
 		exit 1; \
 	fi
 
@@ -2297,29 +2302,29 @@ kernel-arm64-rpi3-early.bin: kernel-arm64-boot.bin arm64-rpi3-userspace-layout \
 
 smoke-arm64-rpi3-timer: kernel-arm64-rpi3-early.bin
 	@echo "  SMOKE   ARM64 raspi3b firmware DTB + BCM2836 timer IRQ..."
-	@rm -f /tmp/arm64-rpi3-timer-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi3-timer-smoke.log --timeout 20 \
+	@rm -f $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-rpi3-timer-smoke.log --timeout 20 \
 		--stale-sec 8 --done ARM64_TIMER_IRQ_OK -- \
 		qemu-system-aarch64 -M raspi3b \
 		-kernel build/arm64-rpi3-early/kernel8.img \
 		-dtb build/arm64-rpi3-early/ir0-rpi3.dtb \
 		-nographic -serial mon:stdio -display none -no-reboot 2>/dev/null
-	@grep -q 'ARM64_DTB_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'dtb_irq_controller=0x0000000000000003' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_IRQ_MAP_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_BCM2836_IRQ_MAP_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_BCM2836_IRQ_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_EL0_PAGE_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_SYSCALL_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'IR0_MUSL_AARCH64_HELLO_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_PID1_LOAD_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_INIT_HANDOFF_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_GUEST_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_GUEST_EXIT_OK' /tmp/arm64-rpi3-timer-smoke.log
-	@! grep -q 'ARM64_EL0_SYNC_OTHER' /tmp/arm64-rpi3-timer-smoke.log
-	@grep -q 'ARM64_INIT_DEFERRED' /tmp/arm64-rpi3-timer-smoke.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_DTB_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'dtb_irq_controller=0x0000000000000003' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_IRQ_MAP_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BCM2836_IRQ_MAP_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_BCM2836_IRQ_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_TIMER_IRQ_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_EL0_PAGE_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_SYSCALL_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'IR0_MUSL_AARCH64_HELLO_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_PID1_LOAD_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_INIT_HANDOFF_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_GUEST_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_GUEST_EXIT_OK' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@! grep -q 'ARM64_EL0_SYNC_OTHER' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@grep -q 'ARM64_INIT_DEFERRED' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-rpi3-timer-smoke.log
 	@echo "✓ smoke-arm64-rpi3-timer passed"
 
 .PHONY: kernel-arm64-Image
@@ -2536,7 +2541,7 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 		arch/arm64/sources/all_objs_mark.c arch/arm64/sources/portable_string.c
 	@echo "  CC      ARM64_ALL portable objs (not x86 drivers)"
 	@mkdir -p build/arm64-all
-	@rm -f /tmp/ir0-arm64-all-link.log
+	@rm -f $(HOST_TMP)/ir0-arm64-all-link.log
 	@test $(words $(ARM64_ALL_PORTABLE_SRCS)) -eq $(words $(sort $(notdir $(ARM64_ALL_PORTABLE_SRCS)))) || \
 		{ echo "✗ duplicate ARM64 aggregate object basename"; exit 1; }
 	@fail=0; \
@@ -2549,8 +2554,8 @@ kernel-arm64-all.bin: kernel-arm64-boot.bin \
 			-I$(KERNEL_ROOT)/arch/common \
 			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
 			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
-			-c $$src -o build/arm64-all/$$base.o 2>>/tmp/ir0-arm64-all-link.log; then \
-			echo "✗ compile $$src"; cat /tmp/ir0-arm64-all-link.log | tail -20; exit 1; \
+			-c $$src -o build/arm64-all/$$base.o 2>>$(HOST_TMP)/ir0-arm64-all-link.log; then \
+			echo "✗ compile $$src"; cat $(HOST_TMP)/ir0-arm64-all-link.log | tail -20; exit 1; \
 		fi; \
 	done
 	@echo "  CC      arch/arm64/sources/all_objs_mark.c"
@@ -2595,10 +2600,10 @@ kernel-arm64-all-Image: kernel-arm64-all.bin
 
 smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provider-audit
 	@echo "  SMOKE   ARM64 early aggregate boot + common process compile contract..."
-	@aarch64-linux-gnu-readelf -lW kernel-arm64-all.bin > /tmp/ir0-arm64-all-phdrs.log
-	@! grep -Eq 'LOAD[[:space:]].*RWE' /tmp/ir0-arm64-all-phdrs.log
-	@grep -Eq 'LOAD[[:space:]].*R E' /tmp/ir0-arm64-all-phdrs.log
-	@grep -Eq 'LOAD[[:space:]].*RW[[:space:]]' /tmp/ir0-arm64-all-phdrs.log
+	@aarch64-linux-gnu-readelf -lW kernel-arm64-all.bin > $(HOST_TMP)/ir0-arm64-all-phdrs.log
+	@! grep -Eq 'LOAD[[:space:]].*RWE' $(HOST_TMP)/ir0-arm64-all-phdrs.log
+	@grep -Eq 'LOAD[[:space:]].*R E' $(HOST_TMP)/ir0-arm64-all-phdrs.log
+	@grep -Eq 'LOAD[[:space:]].*RW[[:space:]]' $(HOST_TMP)/ir0-arm64-all-phdrs.log
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
 		awk '$$3 == "current_process" { ok = ($$2 == "B") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-all.bin | \
@@ -2676,90 +2681,90 @@ smoke-arm64-all: arm64-common-process-compile kernel-arm64-all.bin arm64-provide
 	@echo "✓ ARM64 common process/MM/create symbols are strong"
 	@echo "✓ ARM64 allocator/accounting/scheduler trace providers are strong"
 	@echo "✓ ARM64 ELF W^X program headers"
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-all-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-all.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PROCESS_REGISTRY_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_IDLE_READY' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PROCESS_PGD_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PROCESS_MM_HEAP_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PROCESS_MM_OWNED_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PROCESS_MM_RETIRE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PROCESS_MM_EXIT_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRIVATE_INIT_ROOT_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRODUCT_USERCOPY_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRODUCT_CWD_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRODUCT_IPC_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRODUCT_VFS_SLICE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_FDTABLE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_OPEN_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_FILE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_READ_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_OPS_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_OPS_READ_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_PRODUCT_VFS_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_EARLY_PATH_FOLD_OK' /tmp/arm64-all-smoke.log
-	@! grep -q 'ARM64_COMMON_EXIT_FAIL' /tmp/arm64-all-smoke.log
-	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_IRQ_ACCOUNTING_OK' /tmp/arm64-all-smoke.log
-	@! grep -q 'ARM64_IRQ_ACCOUNTING_FAIL' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_TTBR_PRIVATE_OK' /tmp/arm64-all-smoke.log
-	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-smoke.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-smoke.log
+	@grep -q 'ARM64_ALL_OBJS_LINK_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_WAIT_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_EXIT_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_REGISTRY_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_READY' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_PGD_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_MM_HEAP_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_MM_OWNED_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_MM_RETIRE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PROCESS_MM_EXIT_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRIVATE_INIT_ROOT_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_USERCOPY_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_CWD_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_IPC_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_VFS_SLICE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GETPID_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_GETCWD_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_FDTABLE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_OPEN_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_FILE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_READ_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_OPS_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_OPS_READ_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_PRODUCT_VFS_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_EARLY_PATH_FOLD_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@! grep -q 'ARM64_COMMON_EXIT_FAIL' $(HOST_TMP)/arm64-all-smoke.log
+	@! grep -q 'ARM64_MM_DESCRIPTOR_CONTRACT_FAIL' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_BOOT_MEMORY_UNAVAILABLE' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_INIT_EL0_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_IRQ_ACCOUNTING_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@! grep -q 'ARM64_IRQ_ACCOUNTING_FAIL' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_TTBR_PRIVATE_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@grep -q 'ARM64_EL0_RET_OK' $(HOST_TMP)/arm64-all-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-all-smoke.log
 	@echo "✓ smoke-arm64-all passed (early aggregate boot + guest EL0)"
 
 smoke-arm64-all-dtb: arm64-common-process-compile kernel-arm64-all-Image
 	@echo "  SMOKE   ARM64 aggregate Linux Image + firmware DTB memory inventory..."
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-all-dtb-smoke.log --timeout 20 --stale-sec 8 \
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-all-dtb-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-all-Image -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null
-	@grep -q 'ARM64_ALL_OBJS_LINK_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_DTB_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_WAIT_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_GUEST_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_PROCESS_REGISTRY_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_IDLE_READY' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_IDLE_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_PRODUCT_CWD_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_PRODUCT_IPC_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_PRODUCT_VFS_SLICE_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_GETPID_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_GETCWD_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_FDTABLE_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_OPEN_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_FILE_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_READ_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_OPS_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_VFS_OPS_READ_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_BOOT_MEMORY_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_COMMON_ROOT_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-all-dtb-smoke.log
-	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-all-dtb-smoke.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_ALL_OBJS_LINK_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_DTB_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_LIFECYCLE_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_WAIT_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_EXIT_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PROCESS_REGISTRY_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_READY' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_IDLE_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GUEST_EXIT_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PRODUCT_IDENTITY_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PRODUCT_CWD_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PRODUCT_IPC_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_PRODUCT_VFS_SLICE_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GETPID_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_CLONE_GETPID_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_GETCWD_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_FDTABLE_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_OPEN_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_FILE_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_READ_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_OPS_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_VFS_OPS_READ_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_BOOT_MEMORY_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_COMMON_ROOT_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_INIT_EL0_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@grep -q 'ARM64_EL0_RET_OK' $(HOST_TMP)/arm64-all-dtb-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-all-dtb-smoke.log
 	@echo "✓ smoke-arm64-all-dtb passed (aggregate core + firmware RAM inventory)"
 
 # Full ARM contract: raw payload must decline absent firmware honestly, while
@@ -2774,48 +2779,48 @@ smoke-arm64-boot: kernel-arm64-boot.bin
 		awk '$$3 == "first_switch_to" { ok = ($$2 == "T") } END { exit !ok }'
 	@aarch64-linux-gnu-nm kernel-arm64-boot.bin | \
 		awk '$$3 == "strncmp" { ok = ($$2 == "T") } END { exit !ok }'
-	@rm -f /tmp/arm64-boot-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-boot-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-boot-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-boot-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_BOOT_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-boot.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_BOOT_OK" /tmp/arm64-boot-smoke.log && \
+	@if grep -q "ARM64_BOOT_OK" $(HOST_TMP)/arm64-boot-smoke.log && \
 	    awk '/\[INFO\] \[BOOT\] IR0 kernel/{found=1; exit} NR>20{exit} END{exit !found}' \
-		/tmp/arm64-boot-smoke.log; then \
+		$(HOST_TMP)/arm64-boot-smoke.log; then \
 		echo "✓ smoke-arm64-boot passed (banner-first + ARM64_BOOT_OK)"; \
-		grep -E '\[BOOT\]|\[ARCH\]|ARM64_BOOT' /tmp/arm64-boot-smoke.log | head -10; \
+		grep -E '\[BOOT\]|\[ARCH\]|ARM64_BOOT' $(HOST_TMP)/arm64-boot-smoke.log | head -10; \
 	else \
 		echo "✗ smoke-arm64-boot FAILED (need BOOT banner then ARM64_BOOT_OK)"; \
-		head -30 /tmp/arm64-boot-smoke.log; exit 1; \
+		head -30 $(HOST_TMP)/arm64-boot-smoke.log; exit 1; \
 	fi
 
 .PHONY: smoke-arm64-dtb smoke-arm64-rpi5-contract
 smoke-arm64-dtb: kernel-arm64-Image
 	@echo "  SMOKE   ARM64 Linux Image + firmware DTB resources..."
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-dtb-smoke.log \
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-dtb-smoke.log \
 		--timeout 20 --stale-sec 8 --done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-Image -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null
-	@grep -q 'ARM64_DTB_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_DTB_MEMORY_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_DTB_CPU_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_DTB_TIMER_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_DTB_GIC_MMIO_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_MMIO_HIGH_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_DTB_MMU_WINDOW_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' /tmp/arm64-dtb-smoke.log
-	@grep -q 'dtb_ram_base=0x0000000040000000' /tmp/arm64-dtb-smoke.log
-	@grep -q 'dtb_ram_size=0x0000000008000000' /tmp/arm64-dtb-smoke.log
-	@grep -q 'dtb_cpu_count=0x0000000000000001' /tmp/arm64-dtb-smoke.log
-	@grep -q 'dtb_irq_controller=0x0000000000000001' /tmp/arm64-dtb-smoke.log
-	@grep -q 'gic_dist_base=0x0000000008000000' /tmp/arm64-dtb-smoke.log
-	@grep -q 'gic_cpu_base=0x0000000008010000' /tmp/arm64-dtb-smoke.log
-	@grep -q 'dtb_psci_conduit=0x0000000000000001' /tmp/arm64-dtb-smoke.log
-	@grep -q 'dtb_usable_count=0x0000000000000003' /tmp/arm64-dtb-smoke.log
-	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-dtb-smoke.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_MEMORY_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_CPU_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_TIMER_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_GIC_MMIO_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_MMIO_HIGH_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_MMU_WINDOW_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_DTB_USABLE_MEMORY_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'dtb_ram_base=0x0000000040000000' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'dtb_ram_size=0x0000000008000000' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'dtb_cpu_count=0x0000000000000001' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'dtb_irq_controller=0x0000000000000001' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'gic_dist_base=0x0000000008000000' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'gic_cpu_base=0x0000000008010000' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'dtb_psci_conduit=0x0000000000000001' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'dtb_usable_count=0x0000000000000003' $(HOST_TMP)/arm64-dtb-smoke.log
+	@grep -q 'ARM64_EL0_RET_OK' $(HOST_TMP)/arm64-dtb-smoke.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-dtb-smoke.log
 	@echo "✓ smoke-arm64-dtb passed (x0 DTB + CPU topology + bounded 128 MiB RAM)"
 
 smoke-arm64-rpi5-contract: kernel-arm64-Image
@@ -2823,195 +2828,195 @@ smoke-arm64-rpi5-contract: kernel-arm64-Image
 	@python3 tests/arm64/make_rpi5_contract_dtb.py \
 		build/arm64-rpi5-contract/bcm2712-virt-contract.dtb
 	@echo "  SMOKE   BCM2712-shaped firmware contract on QEMU virt..."
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-rpi5-contract.log \
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-rpi5-contract.log \
 		--timeout 20 --stale-sec 8 --done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a76 -smp 4 -m 128M \
 		-kernel kernel-arm64-Image \
 		-dtb build/arm64-rpi5-contract/bcm2712-virt-contract.dtb \
 		-nographic -serial mon:stdio -display none -no-reboot 2>/dev/null
-	@grep -q 'dtb_cpu_count=0x0000000000000004' /tmp/arm64-rpi5-contract.log
-	@grep -q 'ARM64_DTB_CONSOLE_OK' /tmp/arm64-rpi5-contract.log
-	@grep -q 'console_uart_base=0x0000000009000000' /tmp/arm64-rpi5-contract.log
-	@grep -q 'ARM64_DTB_GIC_MMIO_OK' /tmp/arm64-rpi5-contract.log
-	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-rpi5-contract.log
-	@grep -q 'ARM64_INIT_EL0_OK' /tmp/arm64-rpi5-contract.log
-	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-rpi5-contract.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-rpi5-contract.log
+	@grep -q 'dtb_cpu_count=0x0000000000000004' $(HOST_TMP)/arm64-rpi5-contract.log
+	@grep -q 'ARM64_DTB_CONSOLE_OK' $(HOST_TMP)/arm64-rpi5-contract.log
+	@grep -q 'console_uart_base=0x0000000009000000' $(HOST_TMP)/arm64-rpi5-contract.log
+	@grep -q 'ARM64_DTB_GIC_MMIO_OK' $(HOST_TMP)/arm64-rpi5-contract.log
+	@grep -q 'ARM64_TIMER_IRQ_OK' $(HOST_TMP)/arm64-rpi5-contract.log
+	@grep -q 'ARM64_INIT_EL0_OK' $(HOST_TMP)/arm64-rpi5-contract.log
+	@grep -q 'ARM64_EL0_RET_OK' $(HOST_TMP)/arm64-rpi5-contract.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-rpi5-contract.log
 	@echo "✓ smoke-arm64-rpi5-contract passed (4 CPU DTB + translated console/GIC + EL0)"
 
 smoke-arm64-el2-normalize: kernel-arm64-boot.bin
 	@echo "  SMOKE   ARM64 QEMU EL2 firmware entry normalization..."
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-el2-normalize.log \
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-el2-normalize.log \
 		--timeout 20 --stale-sec 8 --done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE),virtualization=on \
 		-cpu cortex-a53 -m 128M -kernel kernel-arm64-boot.bin \
 		-nographic -serial mon:stdio -display none -no-reboot 2>/dev/null
-	@grep -q 'ARM64_TIMER_IRQ_OK' /tmp/arm64-el2-normalize.log
-	@grep -q 'ARM64_EL0_RET_OK' /tmp/arm64-el2-normalize.log
-	@! grep -Eqi 'panic|exception.*fail|corrupt' /tmp/arm64-el2-normalize.log
+	@grep -q 'ARM64_TIMER_IRQ_OK' $(HOST_TMP)/arm64-el2-normalize.log
+	@grep -q 'ARM64_EL0_RET_OK' $(HOST_TMP)/arm64-el2-normalize.log
+	@! grep -Eqi 'panic|exception.*fail|corrupt' $(HOST_TMP)/arm64-el2-normalize.log
 	@echo "✓ smoke-arm64-el2-normalize passed (EL2 → EL1h → EL0)"
 
 smoke-arm64-mmu: kernel-arm64-mmu.bin
 	@echo "  SMOKE   ARM64 QEMU virt early MMU tag..."
-	@rm -f /tmp/arm64-mmu-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-mmu-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-mmu-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-mmu-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_MMU_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-mmu.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_MMU_OK" /tmp/arm64-mmu-smoke.log; then \
+	@if grep -q "ARM64_MMU_OK" $(HOST_TMP)/arm64-mmu-smoke.log; then \
 		echo "✓ smoke-arm64-mmu passed"; \
 	else \
 		echo "✗ smoke-arm64-mmu FAILED"; \
-		tail -40 /tmp/arm64-mmu-smoke.log; exit 1; \
+		tail -40 $(HOST_TMP)/arm64-mmu-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-vbar: kernel-arm64-vbar.bin
 	@echo "  SMOKE   ARM64 QEMU virt VBAR/SVC tag..."
-	@rm -f /tmp/arm64-vbar-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-vbar-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-vbar-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-vbar-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_VBAR_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-vbar.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_VBAR_OK" /tmp/arm64-vbar-smoke.log && \
-	   grep -q "ARM64_SVC_RET_OK" /tmp/arm64-vbar-smoke.log; then \
+	@if grep -q "ARM64_VBAR_OK" $(HOST_TMP)/arm64-vbar-smoke.log && \
+	   grep -q "ARM64_SVC_RET_OK" $(HOST_TMP)/arm64-vbar-smoke.log; then \
 		echo "✓ smoke-arm64-vbar passed"; \
 	else \
 		echo "✗ smoke-arm64-vbar FAILED"; \
-		tail -40 /tmp/arm64-vbar-smoke.log; exit 1; \
+		tail -40 $(HOST_TMP)/arm64-vbar-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-el0: kernel-arm64-el0.bin
 	@echo "  SMOKE   ARM64 QEMU virt EL0 drop + SVC..."
-	@rm -f /tmp/arm64-el0-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-el0-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-el0-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-el0-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_EL0_RET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-el0.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_EL0_DROP" /tmp/arm64-el0-smoke.log && \
-	   grep -q "ARM64_EL0_SVC_OK" /tmp/arm64-el0-smoke.log && \
-	   grep -q "ARM64_EL0_RET_OK" /tmp/arm64-el0-smoke.log; then \
+	@if grep -q "ARM64_EL0_DROP" $(HOST_TMP)/arm64-el0-smoke.log && \
+	   grep -q "ARM64_EL0_SVC_OK" $(HOST_TMP)/arm64-el0-smoke.log && \
+	   grep -q "ARM64_EL0_RET_OK" $(HOST_TMP)/arm64-el0-smoke.log; then \
 		echo "✓ smoke-arm64-el0 passed"; \
 	else \
 		echo "✗ smoke-arm64-el0 FAILED"; \
-		tail -50 /tmp/arm64-el0-smoke.log; exit 1; \
+		tail -50 $(HOST_TMP)/arm64-el0-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-slice: kernel-arm64-slice.bin arm64-slice-compile
 	@echo "  SMOKE   ARM64 QEMU virt F7b.1 portable slice..."
-	@rm -f /tmp/arm64-slice-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-slice-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-slice-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-slice-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_SLICE_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-slice.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_SLICE_OK" /tmp/arm64-slice-smoke.log; then \
+	@if grep -q "ARM64_SLICE_OK" $(HOST_TMP)/arm64-slice-smoke.log; then \
 		echo "✓ smoke-arm64-slice passed"; \
 	else \
 		echo "✗ smoke-arm64-slice FAILED"; \
-		tail -50 /tmp/arm64-slice-smoke.log; exit 1; \
+		tail -50 $(HOST_TMP)/arm64-slice-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-port: kernel-arm64-port.bin arm64-portable-compile
 	@echo "  SMOKE   ARM64 QEMU virt F7b pack (PL011+paging+timer+GIC IRQ)..."
-	@rm -f /tmp/arm64-port-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-port-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-port-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-port-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_TIMER_IRQ_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-port.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_PL011_OK" /tmp/arm64-port-smoke.log && \
-	   grep -q "ARM64_PAGING_OK" /tmp/arm64-port-smoke.log && \
-	   grep -q "ARM64_GIC_MAP_OK" /tmp/arm64-port-smoke.log && \
-	   grep -q "ARM64_TIMER_OK" /tmp/arm64-port-smoke.log && \
-	   grep -q "ARM64_GIC_OK" /tmp/arm64-port-smoke.log && \
-	   grep -q "ARM64_TIMER_IRQ_OK" /tmp/arm64-port-smoke.log; then \
+	@if grep -q "ARM64_PL011_OK" $(HOST_TMP)/arm64-port-smoke.log && \
+	   grep -q "ARM64_PAGING_OK" $(HOST_TMP)/arm64-port-smoke.log && \
+	   grep -q "ARM64_GIC_MAP_OK" $(HOST_TMP)/arm64-port-smoke.log && \
+	   grep -q "ARM64_TIMER_OK" $(HOST_TMP)/arm64-port-smoke.log && \
+	   grep -q "ARM64_GIC_OK" $(HOST_TMP)/arm64-port-smoke.log && \
+	   grep -q "ARM64_TIMER_IRQ_OK" $(HOST_TMP)/arm64-port-smoke.log; then \
 		echo "✓ smoke-arm64-port passed"; \
 	else \
 		echo "✗ smoke-arm64-port FAILED"; \
-		tail -60 /tmp/arm64-port-smoke.log; exit 1; \
+		tail -60 $(HOST_TMP)/arm64-port-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-gic: kernel-arm64-gic.bin
 	@echo "  SMOKE   ARM64 QEMU virt GICv2 + timer IRQ..."
-	@rm -f /tmp/arm64-gic-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-gic-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-gic-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-gic-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_TIMER_IRQ_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-gic.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_GIC_OK" /tmp/arm64-gic-smoke.log && \
-	   grep -q "ARM64_TIMER_IRQ_OK" /tmp/arm64-gic-smoke.log; then \
+	@if grep -q "ARM64_GIC_OK" $(HOST_TMP)/arm64-gic-smoke.log && \
+	   grep -q "ARM64_TIMER_IRQ_OK" $(HOST_TMP)/arm64-gic-smoke.log; then \
 		echo "✓ smoke-arm64-gic passed"; \
 	else \
 		echo "✗ smoke-arm64-gic FAILED"; \
-		tail -60 /tmp/arm64-gic-smoke.log; exit 1; \
+		tail -60 $(HOST_TMP)/arm64-gic-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-syscall: kernel-arm64-syscall.bin
 	@echo "  SMOKE   ARM64 QEMU virt F7d EL0 (getpid+nanosleep+write)..."
-	@rm -f /tmp/arm64-syscall-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-syscall-smoke.log --timeout 20 --stale-sec 8 \
+	@rm -f $(HOST_TMP)/arm64-syscall-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-syscall-smoke.log --timeout 20 --stale-sec 8 \
 		--done ARM64_SYSCALL_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_EL0_PAGE_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_SWITCH_B" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_TTBR_B_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_TTBR_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_PROCESS_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_PROCESS_TTBR_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_FORK_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_EXEC_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_PROCESS_T_SWITCH_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_RR_SCHED_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_RR_TICK_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_GUEST_LOAD_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "IR0_MUSL_AARCH64_HELLO_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_GUEST_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_ROOTFS_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_CONSOLE_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_MEMDEV_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_DENTS_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_INIT_EL0_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_CLOCK_GETTIME_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_GETTIMEOFDAY_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_CLOCK_NANOSLEEP_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_SYSCALL_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_WRITE_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_CLONE_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_BLOCK_WAIT_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_STATX_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_SCM_RIGHTS_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_SPLICE_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_ABSTRACT_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_PROCESS_VM_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_PIDFD_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_CLONE3_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_CACHESTAT_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_LANDLOCK_OK" /tmp/arm64-syscall-smoke.log && \
-	   grep -q "ARM64_UNSHARE_OK" /tmp/arm64-syscall-smoke.log; then \
+	@if grep -q "ARM64_EL0_PAGE_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SWITCH_B" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SWITCH_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_TTBR_B_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_TTBR_SWITCH_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_SWITCH_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_TTBR_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_FORK_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_EXEC_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_T_SWITCH_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_RR_SCHED_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_RR_TICK_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_GUEST_LOAD_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "IR0_MUSL_AARCH64_HELLO_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_GUEST_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_ROOTFS_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CONSOLE_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_MEMDEV_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_DENTS_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_INIT_EL0_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_NANOSLEEP_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLOCK_GETTIME_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_GETTIMEOFDAY_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLOCK_NANOSLEEP_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SYSCALL_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_WRITE_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLONE_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_BLOCK_WAIT_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_STATX_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SCM_RIGHTS_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_SPLICE_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_ABSTRACT_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PROCESS_VM_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_PIDFD_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CLONE3_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_CACHESTAT_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_LANDLOCK_OK" $(HOST_TMP)/arm64-syscall-smoke.log && \
+	   grep -q "ARM64_UNSHARE_OK" $(HOST_TMP)/arm64-syscall-smoke.log; then \
 		echo "✓ smoke-arm64-syscall passed (incl. F7h/F7i/F7j + fork/exec + musl + clone + process_t)"; \
 	else \
 		echo "✗ smoke-arm64-syscall FAILED"; \
-		tail -60 /tmp/arm64-syscall-smoke.log; exit 1; \
+		tail -60 $(HOST_TMP)/arm64-syscall-smoke.log; exit 1; \
 	fi
 
 .PHONY: smoke-arm64-virtio-blk smoke-arm64-virtio-net
-ARM64_VIRTIO_DISK ?= /tmp/ir0-arm64-virtio-blk.img
+ARM64_VIRTIO_DISK ?= $(HOST_TMP)/ir0-arm64-virtio-blk.img
 smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 	@echo "  SMOKE   ARM64 virtio-mmio + virtio-blk..."
 	@dd if=/dev/zero of=$(ARM64_VIRTIO_DISK) bs=1M count=4 status=none
 	@if [ -f build/hello_aarch64 ]; then \
 		dd if=build/hello_aarch64 of=$(ARM64_VIRTIO_DISK) conv=notrunc status=none; \
 	fi
-	@rm -f /tmp/arm64-virtio-blk-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-virtio-blk-smoke.log --timeout 25 --stale-sec 10 \
+	@rm -f $(HOST_TMP)/arm64-virtio-blk-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-virtio-blk-smoke.log --timeout 25 --stale-sec 10 \
 		--done ARM64_BLOCKDEV_FACADE_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
@@ -3019,32 +3024,32 @@ smoke-arm64-virtio-blk: kernel-arm64-syscall.bin
 		-drive if=none,file=$(ARM64_VIRTIO_DISK),format=raw,id=hd0 \
 		-device virtio-blk-device,drive=hd0 \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "ARM64_BLOCKDEV_FACADE_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "ARM64_VDA_OK" /tmp/arm64-virtio-blk-smoke.log && \
-	   grep -q "ARM64_DISK_INIT_OK" /tmp/arm64-virtio-blk-smoke.log; then \
+	@if grep -q "ARM64_VIRTIO_MMIO_OK" $(HOST_TMP)/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_VIRTIO_BLK_OK" $(HOST_TMP)/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_BLOCKDEV_FACADE_OK" $(HOST_TMP)/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_VDA_OK" $(HOST_TMP)/arm64-virtio-blk-smoke.log && \
+	   grep -q "ARM64_DISK_INIT_OK" $(HOST_TMP)/arm64-virtio-blk-smoke.log; then \
 		echo "✓ smoke-arm64-virtio-blk passed (virtio + disk /init ELF + ir0_block)"; \
 	else \
 		echo "✗ smoke-arm64-virtio-blk FAILED"; \
-		tail -80 /tmp/arm64-virtio-blk-smoke.log; exit 1; \
+		tail -80 $(HOST_TMP)/arm64-virtio-blk-smoke.log; exit 1; \
 	fi
 
 .PHONY: smoke-arm64-cpio
-ARM64_CPIO_DISK ?= /tmp/ir0-arm64-cpio.img
+ARM64_CPIO_DISK ?= $(HOST_TMP)/ir0-arm64-cpio.img
 smoke-arm64-cpio: kernel-arm64-syscall.bin
 	@echo "  SMOKE   ARM64 virtio-blk Linux newc CPIO root..."
-	@rm -rf /tmp/ir0-arm64-cpio-root
-	@mkdir -p /tmp/ir0-arm64-cpio-root
+	@rm -rf $(HOST_TMP)/ir0-arm64-cpio-root
+	@mkdir -p $(HOST_TMP)/ir0-arm64-cpio-root
 	@if [ -f build/hello_aarch64 ]; then \
-		cp build/hello_aarch64 /tmp/ir0-arm64-cpio-root/init; \
+		cp build/hello_aarch64 $(HOST_TMP)/ir0-arm64-cpio-root/init; \
 	fi
-	@echo staged-cpio > /tmp/ir0-arm64-cpio-root/note
+	@echo staged-cpio > $(HOST_TMP)/ir0-arm64-cpio-root/note
 	@dd if=/dev/zero of=$(ARM64_CPIO_DISK) bs=1M count=4 status=none
-	@(cd /tmp/ir0-arm64-cpio-root && find . | cpio -o -H newc --quiet) \
+	@(cd $(HOST_TMP)/ir0-arm64-cpio-root && find . | cpio -o -H newc --quiet) \
 		| dd of=$(ARM64_CPIO_DISK) conv=notrunc status=none
-	@rm -f /tmp/arm64-cpio-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-cpio-smoke.log --timeout 25 --stale-sec 10 \
+	@rm -f $(HOST_TMP)/arm64-cpio-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-cpio-smoke.log --timeout 25 --stale-sec 10 \
 		--done ARM64_CPIO_ROOT_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
@@ -3052,31 +3057,31 @@ smoke-arm64-cpio: kernel-arm64-syscall.bin
 		-drive if=none,file=$(ARM64_CPIO_DISK),format=raw,id=hd0 \
 		-device virtio-blk-device,drive=hd0 \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_CPIO_ROOT_OK" /tmp/arm64-cpio-smoke.log && \
-	   grep -q "ARM64_DISK_INIT_OK" /tmp/arm64-cpio-smoke.log && \
-	   grep -q "ARM64_VIRTIO_BLK_OK" /tmp/arm64-cpio-smoke.log; then \
+	@if grep -q "ARM64_CPIO_ROOT_OK" $(HOST_TMP)/arm64-cpio-smoke.log && \
+	   grep -q "ARM64_DISK_INIT_OK" $(HOST_TMP)/arm64-cpio-smoke.log && \
+	   grep -q "ARM64_VIRTIO_BLK_OK" $(HOST_TMP)/arm64-cpio-smoke.log; then \
 		echo "✓ smoke-arm64-cpio passed (newc root + /init ELF)"; \
 	else \
 		echo "✗ smoke-arm64-cpio FAILED"; \
-		tail -80 /tmp/arm64-cpio-smoke.log; exit 1; \
+		tail -80 $(HOST_TMP)/arm64-cpio-smoke.log; exit 1; \
 	fi
 
 smoke-arm64-virtio-net: kernel-arm64-syscall.bin
 	@echo "  SMOKE   ARM64 virtio-mmio + virtio-net..."
-	@rm -f /tmp/arm64-virtio-net-smoke.log
-	@$(SMOKE_QEMU_RUN) --log /tmp/arm64-virtio-net-smoke.log --timeout 25 --stale-sec 10 \
+	@rm -f $(HOST_TMP)/arm64-virtio-net-smoke.log
+	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-virtio-net-smoke.log --timeout 25 --stale-sec 10 \
 		--done ARM64_VIRTIO_NET_OK -- \
 		qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a53 -m 128M \
 		-kernel kernel-arm64-syscall.bin -nographic -serial mon:stdio \
 		-global virtio-mmio.force-legacy=false \
 		-netdev user,id=n0 -device virtio-net-device,netdev=n0 \
 		-display none -no-reboot 2>/dev/null || true
-	@if grep -q "ARM64_VIRTIO_MMIO_OK" /tmp/arm64-virtio-net-smoke.log && \
-	   grep -q "ARM64_VIRTIO_NET_OK" /tmp/arm64-virtio-net-smoke.log; then \
+	@if grep -q "ARM64_VIRTIO_MMIO_OK" $(HOST_TMP)/arm64-virtio-net-smoke.log && \
+	   grep -q "ARM64_VIRTIO_NET_OK" $(HOST_TMP)/arm64-virtio-net-smoke.log; then \
 		echo "✓ smoke-arm64-virtio-net passed"; \
 	else \
 		echo "✗ smoke-arm64-virtio-net FAILED"; \
-		tail -80 /tmp/arm64-virtio-net-smoke.log; exit 1; \
+		tail -80 $(HOST_TMP)/arm64-virtio-net-smoke.log; exit 1; \
 	fi
 
 .PHONY: smoke-arm64-nanosleep smoke-arm64-switch
@@ -3110,13 +3115,13 @@ build-init-hostshare-tree-smoke:
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_hostshare_tree_smoke.c
 	@echo "✓ build-init-hostshare-tree-smoke OK"
 
-HOSTSHARE_TREE_SMOKE_LOG = /tmp/hostshare-tree-smoke.log
+HOSTSHARE_TREE_SMOKE_LOG = $(HOST_TMP)/hostshare-tree-smoke.log
 smoke-hostshare-tree: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   virtio-9p tree (mkdir/readdir/write-at/rename/symlink/unlink)..."
 	@$(MAKE) -s build-init-hostshare-tree-smoke
-	@SHARE=$$(mktemp -d /tmp/ir0-hostshare-tree.XXXXXX); \
-	DISK=$$(mktemp /tmp/ir0-hostshare-tree.XXXXXX.img); \
+	@SHARE=$$(mktemp -d "$(HOST_TMP)/ir0-hostshare-tree.XXXXXX"); \
+	DISK=$$(mktemp "$(HOST_TMP)/ir0-hostshare-tree.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(HOSTSHARE_TREE_SMOKE_LOG); \
@@ -3158,7 +3163,7 @@ build-init-hostshare-exec:
 	@file $(HOSTSHARE_EXEC_STUB) | grep -q ELF
 	@echo "✓ build-init-hostshare-exec OK"
 
-HOSTSHARE_EXEC_SMOKE_LOG = /tmp/hostshare-exec-smoke.log
+HOSTSHARE_EXEC_SMOKE_LOG = $(HOST_TMP)/hostshare-exec-smoke.log
 # Legacy stub PID1 path (kept for lab).
 smoke-hostshare-exec-stub: build-init-hostshare-exec build-ktm-fork-wait-case kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
@@ -3176,7 +3181,7 @@ smoke-hostshare-exec-stub: build-init-hostshare-exec build-ktm-fork-wait-case ke
 # Product-shaped pilot: runit PID1 + kill(SIGTERM) in fork_wait case.
 smoke-hostshare-exec: build-ktm-fork-wait-case build-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   hostshare exec under runit PID1 (fork_wait + kill)..."
-	@DISK=$$(mktemp /tmp/ir0-hostshare-exec-runit.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-hostshare-exec-runit.XXXXXX"); \
 	chmod +x scripts/ktm_prepare_runit_hostshare_disk.sh; \
 	scripts/ktm_prepare_runit_hostshare_disk.sh --quiet-console $$DISK >/dev/null; \
 	RC=0; \
@@ -3198,14 +3203,14 @@ smoke-hostshare-exec: build-ktm-fork-wait-case build-runit kernel-x64-userspace.
 smoke-kill-sigterm: ktm-userdev-run
 	@echo "✓ smoke-kill-sigterm (alias → ktm-userdev-run)"
 
-HOSTSHARE_9P_SMOKE_LOG = /tmp/hostshare-9p-smoke.log
+HOSTSHARE_9P_SMOKE_LOG = $(HOST_TMP)/hostshare-9p-smoke.log
 smoke-hostshare-9p: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   virtio-9p host share (QEMU -virtfs → /mnt/host)..."
 	@$(MAKE) -s build-init-hostshare-9p-smoke
-	@SHARE=$$(mktemp -d /tmp/ir0-hostshare.XXXXXX); \
+	@SHARE=$$(mktemp -d "$(HOST_TMP)/ir0-hostshare.XXXXXX"); \
 	mkdir -p $$SHARE/subdir; \
-	DISK=$$(mktemp /tmp/ir0-hostshare.XXXXXX.img); \
+	DISK=$$(mktemp "$(HOST_TMP)/ir0-hostshare.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(HOSTSHARE_9P_SMOKE_LOG); \
@@ -3238,12 +3243,12 @@ smoke-hostshare-9p: kernel-x64-userspace.iso
 # smoke-stream-sock aliases to ktm-userdev-stream-sock-run (see KTM targets).
 
 .PHONY: smoke-ahci-multi
-AHCI_MULTI_SMOKE_LOG = /tmp/ahci-multi-smoke.log
+AHCI_MULTI_SMOKE_LOG = $(HOST_TMP)/ahci-multi-smoke.log
 smoke-ahci-multi: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   AHCI dual-port register..."
-	@DISK0=$$(mktemp /tmp/ir0-ahci-m0.XXXXXX.img); \
-	DISK1=$$(mktemp /tmp/ir0-ahci-m1.XXXXXX.img); \
+	@DISK0=$$(mktemp "$(HOST_TMP)/ir0-ahci-m0.XXXXXX"); \
+	DISK1=$$(mktemp "$(HOST_TMP)/ir0-ahci-m1.XXXXXX"); \
 	cp -f disk.img $$DISK0; \
 	cp -f disk.img $$DISK1; \
 	rm -f $(AHCI_MULTI_SMOKE_LOG); \
@@ -3265,7 +3270,7 @@ smoke-ahci-multi: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-isa-debug-exit build-init-isa-debug-exit-smoke
-ISA_DEBUG_EXIT_LOG = /tmp/isa-debug-exit-smoke.log
+ISA_DEBUG_EXIT_LOG = $(HOST_TMP)/isa-debug-exit-smoke.log
 build-init-isa-debug-exit-smoke:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_isa_debug_exit_smoke.c
@@ -3275,7 +3280,7 @@ smoke-isa-debug-exit: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   isa-debug-exit on halt..."
 	@$(MAKE) -s build-init-isa-debug-exit-smoke
-	@DISK=$$(mktemp /tmp/ir0-isa-exit.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-isa-exit.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(ISA_DEBUG_EXIT_LOG); \
@@ -3294,7 +3299,7 @@ smoke-isa-debug-exit: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-reboot-kexec-enosys build-init-reboot-kexec-enosys
-KEXEC_ENOSYS_LOG = /tmp/reboot-kexec-enosys-smoke.log
+KEXEC_ENOSYS_LOG = $(HOST_TMP)/reboot-kexec-enosys-smoke.log
 build-init-reboot-kexec-enosys:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_reboot_kexec_enosys_smoke.c
@@ -3304,7 +3309,7 @@ smoke-reboot-kexec-enosys: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   reboot(KEXEC) → stub reboot..."
 	@$(MAKE) -s build-init-reboot-kexec-enosys
-	@DISK=$$(mktemp /tmp/ir0-kexec-enosys.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-kexec-enosys.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(KEXEC_ENOSYS_LOG); \
@@ -3324,7 +3329,7 @@ smoke-reboot-kexec-enosys: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-kexec-load build-init-kexec-load
-KEXEC_LOAD_LOG = /tmp/kexec-load-smoke.log
+KEXEC_LOAD_LOG = $(HOST_TMP)/kexec-load-smoke.log
 build-init-kexec-load:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_kexec_load_smoke.c
@@ -3334,7 +3339,7 @@ smoke-kexec-load: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   kexec_load + reboot(KEXEC) loaded..."
 	@$(MAKE) -s build-init-kexec-load
-	@DISK=$$(mktemp /tmp/ir0-kexec-load.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-kexec-load.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(KEXEC_LOAD_LOG); \
@@ -3354,7 +3359,7 @@ smoke-kexec-load: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-reboot-suspend-stub build-init-reboot-suspend-stub
-SUSPEND_STUB_LOG = /tmp/reboot-suspend-stub-smoke.log
+SUSPEND_STUB_LOG = $(HOST_TMP)/reboot-suspend-stub-smoke.log
 build-init-reboot-suspend-stub:
 	@$(MAKE) -s build-init-reboot-s3
 
@@ -3362,7 +3367,7 @@ smoke-reboot-suspend-stub: smoke-reboot-s3
 	@echo "✓ smoke-reboot-suspend-stub passed (alias of smoke-reboot-s3)"
 
 .PHONY: smoke-reboot-s3 build-init-reboot-s3
-S3_SMOKE_LOG = /tmp/reboot-s3-smoke.log
+S3_SMOKE_LOG = $(HOST_TMP)/reboot-s3-smoke.log
 build-init-reboot-s3:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_reboot_s3_smoke.c
@@ -3372,7 +3377,7 @@ smoke-reboot-s3: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   reboot(SW_SUSPEND) S3 enter/resume..."
 	@$(MAKE) -s build-init-reboot-s3
-	@DISK=$$(mktemp /tmp/ir0-s3.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-s3.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(S3_SMOKE_LOG); \
@@ -3392,11 +3397,11 @@ smoke-reboot-s3: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-sched-prio
-SCHED_PRIO_LOG = /tmp/sched-prio-smoke.log
+SCHED_PRIO_LOG = $(HOST_TMP)/sched-prio-smoke.log
 smoke-sched-prio: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   priority-band scheduler selftest (POLICY=2)..."
-	@DISK=$$(mktemp /tmp/ir0-sched-prio.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-sched-prio.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rm -f $(SCHED_PRIO_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(SCHED_PRIO_LOG) --timeout 90 --stale-sec 60 \
@@ -3415,7 +3420,7 @@ smoke-sched-prio: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-posix-setsid build-init-posix-setsid
-POSIX_SETSID_LOG = /tmp/posix-setsid-smoke.log
+POSIX_SETSID_LOG = $(HOST_TMP)/posix-setsid-smoke.log
 build-init-posix-setsid:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_posix_setsid_smoke.c
@@ -3425,7 +3430,7 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   setsid + setpgid..."
 	@$(MAKE) -s build-init-posix-setsid
-	@DISK=$$(mktemp /tmp/ir0-posix-setsid.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-posix-setsid.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(POSIX_SETSID_LOG); \
@@ -3445,7 +3450,7 @@ smoke-posix-setsid: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-posix-sighup-tty build-init-posix-sighup-tty
-POSIX_SIGHUP_LOG = /tmp/posix-sighup-tty-smoke.log
+POSIX_SIGHUP_LOG = $(HOST_TMP)/posix-sighup-tty-smoke.log
 build-init-posix-sighup-tty:
 	@if [ -z "$(MUSL_CC)" ]; then echo "✗ musl cc missing"; exit 1; fi
 	@$(MUSL_CC) -static -Os -o $(INIT_SMOKE_BIN) setup/pid1/init_posix_sighup_tty_smoke.c
@@ -3455,7 +3460,7 @@ smoke-posix-sighup-tty: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   PTY TIOCSCTTY + SIGHUP..."
 	@$(MAKE) -s build-init-posix-sighup-tty
-	@DISK=$$(mktemp /tmp/ir0-posix-sighup.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-posix-sighup.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(POSIX_SIGHUP_LOG); \
@@ -3474,11 +3479,11 @@ smoke-posix-sighup-tty: kernel-x64-userspace.iso
 		grep -E 'SIGHUP|PTY_|POSIX_|panic' $(POSIX_SIGHUP_LOG) | tail -40; exit 1; \
 	fi
 .PHONY: smoke-ahci-detect smoke-ahci-read
-AHCI_SMOKE_LOG = /tmp/ahci-detect-smoke.log
+AHCI_SMOKE_LOG = $(HOST_TMP)/ahci-detect-smoke.log
 smoke-ahci-detect: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   AHCI PCI detect..."
-	@DISK=$$(mktemp /tmp/ir0-ahci-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-ahci-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rm -f $(AHCI_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(AHCI_SMOKE_LOG) --timeout 45 --stale-sec 15 \
@@ -3497,11 +3502,11 @@ smoke-ahci-detect: kernel-x64-userspace.iso
 		exit 1; \
 	fi
 
-AHCI_READ_SMOKE_LOG = /tmp/ahci-read-smoke.log
+AHCI_READ_SMOKE_LOG = $(HOST_TMP)/ahci-read-smoke.log
 smoke-ahci-read: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   AHCI block read (LBA0)..."
-	@DISK=$$(mktemp /tmp/ir0-ahci-read.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-ahci-read.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rm -f $(AHCI_READ_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(AHCI_READ_SMOKE_LOG) --timeout 60 --stale-sec 20 \
@@ -3523,11 +3528,11 @@ smoke-ahci-read: kernel-x64-userspace.iso
 	fi
 
 .PHONY: smoke-nvme-read
-NVME_READ_SMOKE_LOG = /tmp/nvme-read-smoke.log
+NVME_READ_SMOKE_LOG = $(HOST_TMP)/nvme-read-smoke.log
 smoke-nvme-read: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   NVMe block read (LBA0)..."
-	@DISK=$$(mktemp /tmp/ir0-nvme-read.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-nvme-read.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rm -f $(NVME_READ_SMOKE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(NVME_READ_SMOKE_LOG) --timeout 60 --stale-sec 20 \
@@ -3554,7 +3559,7 @@ smoke-fat16-mount: kernel-x64-userspace.iso build/fat16_smoke.img
 	fi
 	@echo "  SMOKE   FAT16 mount + read HELLO.TXT on /dev/hdb..."
 	@$(MAKE) -s build-init-fat16-smoke
-	@DISK=$$(mktemp /tmp/ir0-fat16-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-fat16-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	rm -f $(FAT16_SMOKE_LOG); \
@@ -3925,8 +3930,8 @@ run-ash-gui: load-userspace-runit kernel-x64-userspace.iso
 	@echo "  HINT     then: ls / pwd / echo hi"
 	@echo "  HINT     Doom via virtio-9p: /mnt/host/doomgeneric /mnt/host/doom1.wad"
 	@rm -f $(ASH_GUI_LOG); \
-	DISK=$$(mktemp /tmp/ir0-ash-gui.XXXXXX.img); \
-	SHARE=$$(mktemp -d /tmp/ir0-ash-share.XXXXXX); \
+	DISK=$$(mktemp "$(HOST_TMP)/ir0-ash-gui.XXXXXX"); \
+	SHARE=$$(mktemp -d "$(HOST_TMP)/ir0-ash-share.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	VIRTFS=""; \
 	if [ -n "$(REAL_WAD_PATH)" ] && [ -f "$(REAL_WAD_PATH)" ]; then \
@@ -4402,7 +4407,7 @@ ktm: ktm-check
 ktm-run: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_runner.py --scenario $(or $(SCENARIO),process.lifecycle) \
-		--log /tmp/ktm-run.log --timeout 60
+		--log $(HOST_TMP)/ktm-run.log --timeout 60
 
 KTM_TESTS_DIR = tests/ktm
 KTM_USERDEV_LIB = $(KTM_TESTS_DIR)/lib
@@ -4595,13 +4600,13 @@ build-ktm-fb-map-shared-case:
 
 ktm-userdev-run: build-ktm-fork-wait-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@python3 scripts/ktm_userdev_runner.py --log /tmp/ktm-userdev-run.log --timeout 90
+	@python3 scripts/ktm_userdev_runner.py --log $(HOST_TMP)/ktm-userdev-run.log --timeout 90
 
 ktm-userdev-fault-pipe-run: build-ktm-fault-pipe-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FAULT_PIPE_BIN) \
-		--log /tmp/ktm-userdev-fault-pipe.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-fault-pipe.log --timeout 90 \
 		--done KTM_FAULT_PIPE_OK \
 		--require 'TEST_END|fault_pipe|PASS' \
 		--require KTM_FAULT_PIPE_OK \
@@ -4616,7 +4621,7 @@ ktm-userdev-fault-exec-run: build-ktm-fault-exec-case build-ktm-true-helper buil
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FAULT_EXEC_BIN) \
 		--inject $(KTM_TRUE_HELPER_BIN):bin/f41true \
-		--log /tmp/ktm-userdev-fault-exec.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-fault-exec.log --timeout 90 \
 		--done KTM_FAULT_EXEC_OK \
 		--require 'TEST_END|fault_exec|PASS' \
 		--require KTM_FAULT_EXEC_OK \
@@ -4631,7 +4636,7 @@ ktm-userdev-epoll-run: build-ktm-epoll-case build-init-hostshare-exec kernel-x64
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_EPOLL_BIN) \
-		--log /tmp/ktm-userdev-epoll.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-epoll.log --timeout 90 \
 		--done KTM_EPOLL_OK \
 		--require KTM_EPOLL_OK \
 		--require EPOLL_BASIC_OK \
@@ -4644,7 +4649,7 @@ ktm-userdev-epoll-runit-run: build-ktm-epoll-case build-runit kernel-x64-userspa
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_EPOLL_BIN) \
-		--log /tmp/ktm-userdev-epoll-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-epoll-runit-run.log \
 		--done KTM_EPOLL_OK \
 		--require KTM_EPOLL_OK \
 		--require EPOLL_BASIC_OK \
@@ -4659,7 +4664,7 @@ ktm-userdev-stream-sock-run: build-ktm-stream-sock-case build-init-hostshare-exe
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_STREAM_SOCK_BIN) \
-		--log /tmp/ktm-userdev-stream-sock.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-stream-sock.log --timeout 90 \
 		--done KTM_STREAM_SOCK_OK \
 		--require KTM_STREAM_SOCK_OK \
 		--require STREAM_SOCK_OK \
@@ -4673,7 +4678,7 @@ ktm-userdev-stream-sock-runit-run: build-ktm-stream-sock-case build-runit kernel
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_STREAM_SOCK_BIN) \
-		--log /tmp/ktm-userdev-stream-sock-runit.log \
+		--log $(HOST_TMP)/ktm-userdev-stream-sock-runit.log \
 		--done KTM_STREAM_SOCK_OK \
 		--require KTM_STREAM_SOCK_OK \
 		--require STREAM_SOCK_OK \
@@ -4688,7 +4693,7 @@ ktm-userdev-socketpair-run: build-ktm-socketpair-case build-init-hostshare-exec 
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_SOCKETPAIR_BIN) \
-		--log /tmp/ktm-userdev-socketpair.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-socketpair.log --timeout 90 \
 		--done KTM_SOCKETPAIR_OK \
 		--require KTM_SOCKETPAIR_OK \
 		--require SOCKETPAIR_OK \
@@ -4700,7 +4705,7 @@ ktm-userdev-socketpair-runit-run: build-ktm-socketpair-case build-runit kernel-x
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_SOCKETPAIR_BIN) \
-		--log /tmp/ktm-userdev-socketpair-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-socketpair-runit-run.log \
 		--done KTM_SOCKETPAIR_OK \
 		--require KTM_SOCKETPAIR_OK \
 		--require SOCKETPAIR_OK \
@@ -4715,7 +4720,7 @@ ktm-userdev-fb-map-shared-run: build-ktm-fb-map-shared-case build-init-hostshare
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FB_MAP_SHARED_BIN) \
-		--log /tmp/ktm-userdev-fb-map-shared.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-fb-map-shared.log --timeout 90 \
 		--done KTM_FB_MAP_SHARED_OK \
 		--require KTM_FB_MAP_SHARED_OK \
 		--require FB_MAP_SHARED_OK \
@@ -4728,7 +4733,7 @@ ktm-userdev-fb-map-shared-runit-run: build-ktm-fb-map-shared-case build-runit ke
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_FB_MAP_SHARED_BIN) \
-		--log /tmp/ktm-userdev-fb-map-shared-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-fb-map-shared-runit-run.log \
 		--done KTM_FB_MAP_SHARED_OK \
 		--require KTM_FB_MAP_SHARED_OK \
 		--require FB_MAP_SHARED_OK \
@@ -4751,7 +4756,7 @@ ktm-userdev-x11-evdev-fb-run: build-ktm-x11-evdev-fb-case build-init-hostshare-e
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_X11_EVDEV_FB_BIN) \
-		--log /tmp/ktm-userdev-x11-evdev-fb.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-x11-evdev-fb.log --timeout 90 \
 		--done KTM_X11_EVDEV_FB_OK \
 		--require KTM_X11_EVDEV_FB_OK \
 		--require FB_BITFIELD_OK \
@@ -4776,7 +4781,7 @@ ktm-userdev-scm-rights-run: build-ktm-scm-rights-case build-init-hostshare-exec 
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_SCM_RIGHTS_BIN) \
-		--log /tmp/ktm-userdev-scm-rights.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-scm-rights.log --timeout 90 \
 		--done KTM_SCM_RIGHTS_OK \
 		--require KTM_SCM_RIGHTS_OK --require SCM_RIGHTS_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-scm-rights-run"
@@ -4786,7 +4791,7 @@ ktm-userdev-scm-rights-runit-run: build-ktm-scm-rights-case build-runit kernel-x
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_SCM_RIGHTS_BIN) \
-		--log /tmp/ktm-userdev-scm-rights-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-scm-rights-runit-run.log \
 		--done KTM_SCM_RIGHTS_OK \
 		--require KTM_SCM_RIGHTS_OK \
 		--require SCM_RIGHTS_OK \
@@ -4808,7 +4813,7 @@ ktm-userdev-unix-abstract-run: build-ktm-unix-abstract-case build-init-hostshare
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_UNIX_ABSTRACT_BIN) \
-		--log /tmp/ktm-userdev-unix-abstract.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-unix-abstract.log --timeout 90 \
 		--done KTM_UNIX_ABSTRACT_OK \
 		--require KTM_UNIX_ABSTRACT_OK --require UNIX_ABSTRACT_OK --require SOCK_POLL_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-unix-abstract-run"
@@ -4818,7 +4823,7 @@ ktm-userdev-unix-abstract-runit-run: build-ktm-unix-abstract-case build-runit ke
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_UNIX_ABSTRACT_BIN) \
-		--log /tmp/ktm-userdev-unix-abstract-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-unix-abstract-runit-run.log \
 		--done KTM_UNIX_ABSTRACT_OK \
 		--require KTM_UNIX_ABSTRACT_OK \
 		--require UNIX_ABSTRACT_OK \
@@ -4841,7 +4846,7 @@ ktm-userdev-sysv-shm-run: build-ktm-sysv-shm-case build-init-hostshare-exec kern
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_SYSV_SHM_BIN) \
-		--log /tmp/ktm-userdev-sysv-shm.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-sysv-shm.log --timeout 90 \
 		--done KTM_SYSV_SHM_OK \
 		--require KTM_SYSV_SHM_OK --require SYSV_SHM_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-sysv-shm-run"
@@ -4851,7 +4856,7 @@ ktm-userdev-sysv-shm-runit-run: build-ktm-sysv-shm-case build-runit kernel-x64-u
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_SYSV_SHM_BIN) \
-		--log /tmp/ktm-userdev-sysv-shm-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-sysv-shm-runit-run.log \
 		--done KTM_SYSV_SHM_OK \
 		--require KTM_SYSV_SHM_OK \
 		--require SYSV_SHM_OK \
@@ -4873,7 +4878,7 @@ ktm-userdev-memfd-shared-run: build-ktm-memfd-shared-case build-init-hostshare-e
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_MEMFD_SHARED_BIN) \
-		--log /tmp/ktm-userdev-memfd-shared.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-memfd-shared.log --timeout 90 \
 		--done MEMFD_SHARED_OK \
 		--require KTM_MEMFD_SHARED_OK --require MEMFD_SHARED_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-memfd-shared-run"
@@ -4883,7 +4888,7 @@ ktm-userdev-memfd-shared-runit-run: build-ktm-memfd-shared-case build-runit kern
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_MEMFD_SHARED_BIN) \
-		--log /tmp/ktm-userdev-memfd-shared-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-memfd-shared-runit-run.log \
 		--done KTM_USERDEV_OK \
 		--require KTM_MEMFD_SHARED_OK \
 		--require MEMFD_SHARED_OK \
@@ -4905,7 +4910,7 @@ ktm-userdev-unix-harden-run: build-ktm-unix-harden-case build-init-hostshare-exe
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_UNIX_HARDEN_BIN) \
-		--log /tmp/ktm-userdev-unix-harden.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-unix-harden.log --timeout 90 \
 		--done KTM_UNIX_HARDEN_OK \
 		--require KTM_UNIX_HARDEN_OK --require GETPEERNAME_OK --require SCM_MULTI_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-unix-harden-run"
@@ -4915,7 +4920,7 @@ ktm-userdev-unix-harden-runit-run: build-ktm-unix-harden-case build-runit kernel
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_UNIX_HARDEN_BIN) \
-		--log /tmp/ktm-userdev-unix-harden-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-unix-harden-runit-run.log \
 		--done KTM_UNIX_HARDEN_OK \
 		--require KTM_UNIX_HARDEN_OK \
 		--require GETPEERNAME_OK \
@@ -4938,7 +4943,7 @@ ktm-userdev-unix-flags-run: build-ktm-unix-flags-case build-init-hostshare-exec 
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_UNIX_FLAGS_BIN) \
-		--log /tmp/ktm-userdev-unix-flags.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-unix-flags.log --timeout 90 \
 		--done KTM_USERDEV_OK \
 		--require UNIX_FLAGS_OK --require ACCEPT4_OK --require MSG_PEEK_OK --require SO_REUSEADDR_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-unix-flags-run"
@@ -4948,7 +4953,7 @@ ktm-userdev-unix-flags-runit-run: build-ktm-unix-flags-case build-runit kernel-x
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_UNIX_FLAGS_BIN) \
-		--log /tmp/ktm-userdev-unix-flags-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-unix-flags-runit-run.log \
 		--done KTM_USERDEV_OK \
 		--require UNIX_FLAGS_OK \
 		--require ACCEPT4_OK \
@@ -4972,7 +4977,7 @@ ktm-userdev-event-fds-run: build-ktm-event-fds-case build-init-hostshare-exec ke
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_EVENT_FDS_BIN) \
-		--log /tmp/ktm-userdev-event-fds.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-event-fds.log --timeout 90 \
 		--done KTM_USERDEV_OK \
 		--require EVENTFD_OK --require TIMERFD_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-event-fds-run"
@@ -4982,7 +4987,7 @@ ktm-userdev-event-fds-runit-run: build-ktm-event-fds-case build-runit kernel-x64
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_EVENT_FDS_BIN) \
-		--log /tmp/ktm-userdev-event-fds-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-event-fds-runit-run.log \
 		--done KTM_USERDEV_OK \
 		--require EVENTFD_OK \
 		--require TIMERFD_OK \
@@ -5025,7 +5030,7 @@ ktm-userdev-posix-shm-run: build-ktm-posix-shm-case build-init-hostshare-exec ke
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_POSIX_SHM_BIN) \
-		--log /tmp/ktm-userdev-posix-shm.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-posix-shm.log --timeout 90 \
 		--done KTM_USERDEV_OK \
 		--require POSIX_SHM_OK --require KTM_USERDEV_OK
 	@echo "✓ ktm-userdev-posix-shm-run"
@@ -5035,7 +5040,7 @@ ktm-userdev-posix-shm-runit-run: build-ktm-posix-shm-case build-runit kernel-x64
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_POSIX_SHM_BIN) \
-		--log /tmp/ktm-userdev-posix-shm-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-posix-shm-runit-run.log \
 		--done KTM_USERDEV_OK \
 		--require POSIX_SHM_OK \
 		--require KTM_USERDEV_OK
@@ -5049,7 +5054,7 @@ ktm-userdev-vfork-run: build-ktm-vfork-case build-ktm-true-helper build-init-hos
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_VFORK_BIN) \
 		--inject $(KTM_TRUE_HELPER_BIN):bin/f41true \
-		--log /tmp/ktm-userdev-vfork.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-vfork.log --timeout 90 \
 		--done KTM_USERDEV_OK \
 		--require 'TEST_END|vfork_share|PASS' \
 		--require KTM_USERDEV_OK
@@ -5064,7 +5069,7 @@ ktm-userdev-chroot-run: build-ktm-chroot-case build-init-hostshare-exec kernel-x
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_CHROOT_BIN) \
-		--log /tmp/ktm-userdev-chroot.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-chroot.log --timeout 90 \
 		--done KTM_USERDEV_OK \
 		--require 'TEST_END|chroot_jail|PASS' \
 		--require KTM_USERDEV_OK
@@ -5078,7 +5083,7 @@ ktm-userdev-posix-depth-run: build-ktm-posix-depth-case build-init-hostshare-exe
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_POSIX_DEPTH_BIN) \
-		--log /tmp/ktm-userdev-posix-depth.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-posix-depth.log --timeout 90 \
 		--done KTM_USERDEV_OK \
 		--require 'TEST_END|posix_depth|PASS' \
 		--require KTM_USERDEV_OK
@@ -5098,7 +5103,7 @@ ktm-userdev-cow-run: build-ktm-cow-touch-case build-init-hostshare-exec kernel-x
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_COW_TOUCH_BIN) \
-		--log /tmp/ktm-userdev-cow-run.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-cow-run.log --timeout 90 \
 		--done KTM_USERDEV_COW_OK \
 		--require 'TEST_END|cow_touch|PASS' \
 		--require KTM_USERDEV_COW_OK
@@ -5107,7 +5112,7 @@ ktm-userdev-fork-storm-run: build-ktm-fork-storm-case build-init-hostshare-exec 
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FORK_STORM_BIN) \
-		--log /tmp/ktm-userdev-fork-storm.log --timeout 240 \
+		--log $(HOST_TMP)/ktm-userdev-fork-storm.log --timeout 240 \
 		--done KTM_USERDEV_FORK_STORM_OK \
 		--require 'TEST_END|fork_exit_storm|PASS' \
 		--require KTM_USERDEV_FORK_STORM_OK
@@ -5119,7 +5124,7 @@ ktm-userdev-fork-storm-virtfs-run: build-ktm-fork-storm-case build-init-hostshar
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FORK_STORM_BIN) \
-		--log /tmp/ktm-userdev-fork-storm-virtfs.log --timeout 240 \
+		--log $(HOST_TMP)/ktm-userdev-fork-storm-virtfs.log --timeout 240 \
 		--done KTM_USERDEV_FORK_STORM_OK \
 		--require 'TEST_END|fork_exit_storm|PASS' \
 		--require KTM_USERDEV_FORK_STORM_OK \
@@ -5133,7 +5138,7 @@ ktm-userdev-fork-storm-runit-run: build-ktm-fork-storm-case build-runit kernel-x
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_FORK_STORM_BIN) \
-		--log /tmp/ktm-userdev-fork-storm-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-fork-storm-runit-run.log \
 		--timeout 240 \
 		--done KTM_USERDEV_FORK_STORM_OK \
 		--require 'TEST_END|fork_exit_storm|PASS' \
@@ -5181,7 +5186,7 @@ ktm-userdev-exec-drain-run: build-ktm-exec-drain-case build-init-hostshare-exec 
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_EXEC_DRAIN_BIN) \
 		--inject $(KTM_TRUE_HELPER_BIN):bin/f41true \
-		--log /tmp/ktm-userdev-exec-drain.log --timeout 360 \
+		--log $(HOST_TMP)/ktm-userdev-exec-drain.log --timeout 360 \
 		--done KTM_USERDEV_EXEC_DRAIN_OK \
 		--require 'TEST_END|exec_drain|PASS' \
 		--require KTM_USERDEV_EXEC_DRAIN_OK
@@ -5192,7 +5197,7 @@ ktm-userdev-exec-drain-virtfs-run: build-ktm-exec-drain-case build-init-hostshar
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_EXEC_DRAIN_BIN) \
 		--inject $(KTM_TRUE_HELPER_BIN):bin/f41true \
-		--log /tmp/ktm-userdev-exec-drain-virtfs.log --timeout 360 \
+		--log $(HOST_TMP)/ktm-userdev-exec-drain-virtfs.log --timeout 360 \
 		--done KTM_USERDEV_EXEC_DRAIN_OK \
 		--require 'TEST_END|exec_drain|PASS' \
 		--require KTM_USERDEV_EXEC_DRAIN_OK \
@@ -5207,7 +5212,7 @@ ktm-userdev-exec-drain-runit-run: build-ktm-exec-drain-case build-runit kernel-x
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_EXEC_DRAIN_BIN) \
 		--inject $(KTM_TRUE_HELPER_BIN):bin/f41true \
-		--log /tmp/ktm-userdev-exec-drain-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-exec-drain-runit-run.log \
 		--timeout 360 \
 		--done KTM_USERDEV_EXEC_DRAIN_OK \
 		--require 'TEST_END|exec_drain|PASS' \
@@ -5240,7 +5245,7 @@ ktm-userdev-session-stress-run: build-ktm-session-stress-case build-init-hostsha
 		--disk "$$ISD_DISK" \
 		--init $(KTM_SESSION_STRESS_BIN) \
 		--inject $(HOSTSHARE_EXEC_STUB):sbin/init \
-		--log /tmp/ktm-userdev-session-stress.log --timeout 600 \
+		--log $(HOST_TMP)/ktm-userdev-session-stress.log --timeout 600 \
 		--mem 512M \
 		--done KTM_USERDEV_SESSION_STRESS_OK \
 		--require HOSTSHARE_EXEC_MOUNT_OK \
@@ -5252,7 +5257,7 @@ ktm-userdev-reap-drain-run: build-ktm-reap-drain-case build-init-hostshare-exec 
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_REAP_DRAIN_BIN) \
-		--log /tmp/ktm-userdev-reap-drain.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-reap-drain.log --timeout 120 \
 		--done KTM_USERDEV_REAP_DRAIN_OK \
 		--require 'TEST_END|reap_drain|PASS' \
 		--require KTM_USERDEV_REAP_DRAIN_OK
@@ -5262,7 +5267,7 @@ ktm-userdev-reap-drain-virtfs-run: build-ktm-reap-drain-case build-init-hostshar
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_REAP_DRAIN_BIN) \
-		--log /tmp/ktm-userdev-reap-drain-virtfs.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-reap-drain-virtfs.log --timeout 120 \
 		--done KTM_USERDEV_REAP_DRAIN_OK \
 		--require 'TEST_END|reap_drain|PASS' \
 		--require KTM_USERDEV_REAP_DRAIN_OK \
@@ -5276,7 +5281,7 @@ ktm-userdev-reap-drain-runit-run: build-ktm-reap-drain-case build-runit kernel-x
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_REAP_DRAIN_BIN) \
-		--log /tmp/ktm-userdev-reap-drain-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-reap-drain-runit-run.log \
 		--timeout 120 \
 		--done KTM_USERDEV_REAP_DRAIN_OK \
 		--require 'TEST_END|reap_drain|PASS' \
@@ -5290,7 +5295,7 @@ ktm-userdev-init-exit-drain-run: build-ktm-init-exit-drain-case build-init-hosts
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INIT_EXIT_DRAIN_BIN) \
-		--log /tmp/ktm-userdev-init-exit-drain.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-init-exit-drain.log --timeout 120 \
 		--done KTM_INIT_EXIT_DRAIN_OK \
 		--require 'TEST_END|init_exit_drain|PASS' \
 		--require KTM_INIT_EXIT_DRAIN_OK \
@@ -5301,7 +5306,7 @@ ktm-userdev-init-exit-drain-virtfs-run: build-ktm-init-exit-drain-case build-ini
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INIT_EXIT_DRAIN_BIN) \
-		--log /tmp/ktm-userdev-init-exit-drain-virtfs.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-init-exit-drain-virtfs.log --timeout 120 \
 		--done KTM_INIT_EXIT_DRAIN_OK \
 		--require 'TEST_END|init_exit_drain|PASS' \
 		--require KTM_INIT_EXIT_DRAIN_OK \
@@ -5359,7 +5364,7 @@ ktm-userdev-posix-pseudofs-run: build-ktm-posix-pseudofs-case build-init-hostsha
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_POSIX_PSEUDOFS_BIN) \
-		--log /tmp/ktm-userdev-posix-pseudofs.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-posix-pseudofs.log --timeout 120 \
 		--done KTM_USERDEV_POSIX_PSEUDOFS_OK \
 		--require 'TEST_END|posix_pseudofs|PASS' \
 		--require KTM_USERDEV_POSIX_PSEUDOFS_OK \
@@ -5370,7 +5375,7 @@ ktm-userdev-posix-pseudofs-virtfs-run: build-ktm-posix-pseudofs-case build-init-
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_POSIX_PSEUDOFS_BIN) \
-		--log /tmp/ktm-userdev-posix-pseudofs-virtfs.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-posix-pseudofs-virtfs.log --timeout 120 \
 		--done KTM_USERDEV_POSIX_PSEUDOFS_OK \
 		--require 'TEST_END|posix_pseudofs|PASS' \
 		--require KTM_USERDEV_POSIX_PSEUDOFS_OK \
@@ -5385,7 +5390,7 @@ ktm-userdev-posix-pseudofs-runit-run: build-ktm-posix-pseudofs-case build-runit 
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_POSIX_PSEUDOFS_BIN) \
-		--log /tmp/ktm-userdev-posix-pseudofs-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-posix-pseudofs-runit-run.log \
 		--timeout 120 \
 		--done KTM_USERDEV_POSIX_PSEUDOFS_OK \
 		--require 'TEST_END|posix_pseudofs|PASS' \
@@ -5400,7 +5405,7 @@ ktm-userdev-input-det-run: build-ktm-input-det-case build-init-hostshare-exec ke
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INPUT_DET_BIN) \
-		--log /tmp/ktm-userdev-input-det.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-input-det.log --timeout 120 \
 		--done KTM_USERDEV_INPUT_DET_OK \
 		--require 'TEST_END|input_det|PASS' \
 		--require KTM_USERDEV_INPUT_DET_OK
@@ -5410,7 +5415,7 @@ ktm-userdev-input-det-virtfs-run: build-ktm-input-det-case build-init-hostshare-
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_INPUT_DET_BIN) \
-		--log /tmp/ktm-userdev-input-det-virtfs.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-input-det-virtfs.log --timeout 120 \
 		--done KTM_USERDEV_INPUT_DET_OK \
 		--require 'TEST_END|input_det|PASS' \
 		--require KTM_USERDEV_INPUT_DET_OK \
@@ -5424,7 +5429,7 @@ ktm-userdev-input-det-runit-run: build-ktm-input-det-case build-runit kernel-x64
 	@chmod +x scripts/ktm_userdev_runit_run.sh; \
 	scripts/ktm_userdev_runit_run.sh \
 		--init $(KTM_INPUT_DET_BIN) \
-		--log /tmp/ktm-userdev-input-det-runit-run.log \
+		--log $(HOST_TMP)/ktm-userdev-input-det-runit-run.log \
 		--timeout 120 \
 		--done KTM_USERDEV_INPUT_DET_OK \
 		--require 'TEST_END|input_det|PASS' \
@@ -5449,7 +5454,7 @@ ktm-userdev-nic-reach-run: build-ktm-nic-reach-case build-init-hostshare-exec ke
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_NIC_REACH_BIN) \
-		--log /tmp/ktm-userdev-nic-reach.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-nic-reach.log --timeout 120 \
 		--done F8_NIC_REACH_OK \
 		--require 'TEST_END|nic_reach|PASS' \
 		--require F8_NIC_REACH_OK \
@@ -5461,7 +5466,7 @@ ktm-userdev-nic-reach-virtfs-run: build-ktm-nic-reach-case build-init-hostshare-
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_NIC_REACH_BIN) \
-		--log /tmp/ktm-userdev-nic-reach-virtfs.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-nic-reach-virtfs.log --timeout 120 \
 		--done F8_NIC_REACH_OK \
 		--require 'TEST_END|nic_reach|PASS' \
 		--require F8_NIC_REACH_OK \
@@ -5480,7 +5485,7 @@ ktm-userdev-nic-reach-virtio-run: build-ktm-nic-reach-case build-init-hostshare-
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_NIC_REACH_BIN) \
-		--log /tmp/ktm-userdev-nic-reach-virtio.log --timeout 120 \
+		--log $(HOST_TMP)/ktm-userdev-nic-reach-virtio.log --timeout 120 \
 		--done F8_NIC_REACH_OK \
 		--require 'TEST_END|nic_reach|PASS' \
 		--require F8_NIC_REACH_OK \
@@ -5495,13 +5500,13 @@ smoke-nic-reach-virtio: ktm-userdev-nic-reach-virtio-run
 
 ktm-userdev-tcp-guest-run: build-ktm-tcp-guest-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@rm -f /tmp/f8-tcp-guest-host.ok
+	@rm -f $(HOST_TMP)/f8-tcp-guest-host.ok
 	@python3 scripts/tcp_wire_host_listener.py --port 8889 --expect GUESTTCP \
-		--reply 'GUESTECHO\n' --timeout 150 --out /tmp/f8-tcp-guest-host.ok & \
+		--reply 'GUESTECHO\n' --timeout 150 --out $(HOST_TMP)/f8-tcp-guest-host.ok & \
 	LPID=$$!; sleep 1; \
 	python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_GUEST_BIN) \
-		--log /tmp/ktm-userdev-tcp-guest.log --timeout 180 \
+		--log $(HOST_TMP)/ktm-userdev-tcp-guest.log --timeout 180 \
 		--done F8_TCP_GUEST_OK \
 		--require 'TEST_END|tcp_guest|PASS' \
 		--require F8_TCP_GUEST_OK \
@@ -5510,18 +5515,18 @@ ktm-userdev-tcp-guest-run: build-ktm-tcp-guest-case build-init-hostshare-exec ke
 		--qemu-arg=-netdev --qemu-arg=user,id=net0 \
 		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0; \
 	RC=$$?; kill $$LPID 2>/dev/null || true; wait $$LPID 2>/dev/null || true; \
-	test -f /tmp/f8-tcp-guest-host.ok && exit $$RC; exit 1
+	test -f $(HOST_TMP)/f8-tcp-guest-host.ok && exit $$RC; exit 1
 	@echo "✓ ktm-userdev-tcp-guest-run (F8-2 guest TCP wire)"
 
 ktm-userdev-tcp-guest-virtfs-run: build-ktm-tcp-guest-case build-init-hostshare-exec kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
-	@rm -f /tmp/f8-tcp-guest-host.ok
+	@rm -f $(HOST_TMP)/f8-tcp-guest-host.ok
 	@python3 scripts/tcp_wire_host_listener.py --port 8889 --expect GUESTTCP \
-		--reply 'GUESTECHO\n' --timeout 150 --out /tmp/f8-tcp-guest-host.ok & \
+		--reply 'GUESTECHO\n' --timeout 150 --out $(HOST_TMP)/f8-tcp-guest-host.ok & \
 	LPID=$$!; sleep 1; \
 	python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_GUEST_BIN) \
-		--log /tmp/ktm-userdev-tcp-guest-virtfs.log --timeout 180 \
+		--log $(HOST_TMP)/ktm-userdev-tcp-guest-virtfs.log --timeout 180 \
 		--done F8_TCP_GUEST_OK \
 		--require 'TEST_END|tcp_guest|PASS' \
 		--require F8_TCP_GUEST_OK \
@@ -5533,7 +5538,7 @@ ktm-userdev-tcp-guest-virtfs-run: build-ktm-tcp-guest-case build-init-hostshare-
 		--qemu-arg=-netdev --qemu-arg=user,id=net0 \
 		--qemu-arg=-device --qemu-arg=rtl8139,netdev=net0; \
 	RC=$$?; kill $$LPID 2>/dev/null || true; wait $$LPID 2>/dev/null || true; \
-	test -f /tmp/f8-tcp-guest-host.ok && exit $$RC; exit 1
+	test -f $(HOST_TMP)/f8-tcp-guest-host.ok && exit $$RC; exit 1
 	@echo "✓ ktm-userdev-tcp-guest-virtfs-run (F8-2 wire + virtio-9p)"
 
 # Alias ship/docs name for F8-2
@@ -5550,7 +5555,7 @@ build-ktm-tcp-wire-case:
 	@file $(KTM_TCP_WIRE_BIN) | grep -q ELF
 	@echo "✓ build-ktm-tcp-wire-case OK"
 
-F8_TCP_WIRE_HOST_OK = /tmp/f8-tcp-wire-host.ok
+F8_TCP_WIRE_HOST_OK = $(HOST_TMP)/f8-tcp-wire-host.ok
 F8_TCP_WIRE_NETDEV = user,id=net0
 
 ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case build-init-hostshare-exec kernel-x64-userspace.iso
@@ -5562,7 +5567,7 @@ ktm-userdev-tcp-wire-virtfs-run: build-ktm-tcp-wire-case build-init-hostshare-ex
 	RC=0; \
 	python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_WIRE_BIN) \
-		--log /tmp/ktm-userdev-tcp-wire-virtfs.log --timeout 180 \
+		--log $(HOST_TMP)/ktm-userdev-tcp-wire-virtfs.log --timeout 180 \
 		--done F8_TCP_WIRE_OK \
 		--require 'TEST_END|tcp_wire|PASS' \
 		--require F8_TCP_WIRE_OK \
@@ -5591,7 +5596,7 @@ ktm-userdev-tcp-wire-run: build-ktm-tcp-wire-case build-init-hostshare-exec kern
 	RC=0; \
 	python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_WIRE_BIN) \
-		--log /tmp/ktm-userdev-tcp-wire.log --timeout 180 \
+		--log $(HOST_TMP)/ktm-userdev-tcp-wire.log --timeout 180 \
 		--done F8_TCP_WIRE_OK \
 		--require 'TEST_END|tcp_wire|PASS' \
 		--require F8_TCP_WIRE_OK \
@@ -5621,7 +5626,7 @@ build-ktm-tcp-peer-cc-case:
 	@file $(KTM_TCP_PEER_CC_BIN) | grep -q ELF
 	@echo "✓ build-ktm-tcp-peer-cc-case OK"
 
-F8_TCP_PEER_CC_HOST_OK = /tmp/f8-tcp-peer-cc-host.ok
+F8_TCP_PEER_CC_HOST_OK = $(HOST_TMP)/f8-tcp-peer-cc-host.ok
 
 .PHONY: ktm-userdev-tcp-peer-cc-virtfs-run smoke-tcp-peer-cc build-ktm-tcp-peer-cc-case
 ktm-userdev-tcp-peer-cc-virtfs-run: build-ktm-tcp-peer-cc-case build-init-hostshare-exec kernel-x64-userspace.iso
@@ -5633,7 +5638,7 @@ ktm-userdev-tcp-peer-cc-virtfs-run: build-ktm-tcp-peer-cc-case build-init-hostsh
 	RC=0; \
 	python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_TCP_PEER_CC_BIN) \
-		--log /tmp/ktm-userdev-tcp-peer-cc-virtfs.log --timeout 180 \
+		--log $(HOST_TMP)/ktm-userdev-tcp-peer-cc-virtfs.log --timeout 180 \
 		--done F8_TCP_PEER_CC_OK \
 		--require 'TEST_END|tcp_peer_cc|PASS' \
 		--require F8_TCP_PEER_CC_OK \
@@ -5666,8 +5671,8 @@ smoke-f8-net:
 	@$(MAKE) -s smoke-tcp-listen
 	@echo "✓ smoke-f8-net passed"
 .PHONY: smoke-tcp-listen build-init-tcp-listen-smoke
-F8_TCP_LISTEN_HOST_OK = /tmp/f8-tcp-listen-host.ok
-F8_TCP_LISTEN_SMOKE_LOG = /tmp/tcp-listen-smoke.log
+F8_TCP_LISTEN_HOST_OK = $(HOST_TMP)/f8-tcp-listen-host.ok
+F8_TCP_LISTEN_SMOKE_LOG = $(HOST_TMP)/tcp-listen-smoke.log
 F8_TCP_LISTEN_HOSTPORT = 18777
 F8_TCP_LISTEN_NETDEV = user,id=net0,hostfwd=tcp::$(F8_TCP_LISTEN_HOSTPORT)-:7777
 
@@ -5682,7 +5687,7 @@ smoke-tcp-listen: kernel-x64-userspace.iso
 	@$(MAKE) -s build-init-tcp-listen-smoke
 	@ATTEMPT=1; \
 	while [ $$ATTEMPT -le 2 ]; do \
-	  DISK=$$(mktemp /tmp/ir0-tcp-listen.XXXXXX.img); \
+	  DISK=$$(mktemp "$(HOST_TMP)/ir0-tcp-listen.XXXXXX"); \
 	  cp -f disk.img $$DISK; \
 	  python3 scripts/inject_init_minix.py $$DISK $(INIT_SMOKE_BIN) sbin/init; \
 	  rm -f $(F8_TCP_LISTEN_HOST_OK) $(F8_TCP_LISTEN_SMOKE_LOG); \
@@ -5737,10 +5742,10 @@ ktm-manifest:
 	@python3 scripts/ktm_syscall_manifest.py --tier1
 
 ktm-classify:
-	@python3 scripts/ktm_log_classify.py $(or $(LOG),/tmp/runit-ash-smoke.log)
+	@python3 scripts/ktm_log_classify.py $(or $(LOG),$(HOST_TMP)/runit-ash-smoke.log)
 
 ktm-report:
-	@python3 scripts/ktm_report.py $(or $(LOG),/tmp/runit-ash-smoke.log)
+	@python3 scripts/ktm_report.py $(or $(LOG),$(HOST_TMP)/runit-ash-smoke.log)
 
 # TEST SUITE — Compila todos los artefactos de test (estilo kernels de producción).
 # - Código kernel en host para Valgrind (make kernel-memsafe)
@@ -5766,7 +5771,7 @@ kernel-memsafe:
 # Each run writes to a private mktemp log so two builds cannot interleave
 # their output.  On exit the log is copied to KTEST_LOG, the stable evidence
 # path consumed by the smoke/runtime targets below.
-KTEST_LOG ?= /tmp/ktest.log
+KTEST_LOG ?= $(HOST_TMP)/ktest.log
 
 kernel-tests: kernel-x64-test.iso disk.img
 	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
@@ -5804,7 +5809,7 @@ smoke-multiuser-perms: kernel-tests
 
 MUSL_PTHREAD_LIBC_SMOKE_SRC = setup/pid1/musl_pthread_libc_smoke.c
 MUSL_PTHREAD_LIBC_SMOKE_BIN = setup/pid1/musl_pthread_libc_smoke
-MUSL_PTHREAD_LIBC_SMOKE_LOG = /tmp/userspace-musl-pthread-libc.log
+MUSL_PTHREAD_LIBC_SMOKE_LOG = $(HOST_TMP)/userspace-musl-pthread-libc.log
 
 build-musl-pthread-libc-smoke:
 	@echo "  MUSL    Building pthread libc smoke ($(MUSL_PTHREAD_LIBC_SMOKE_BIN))"
@@ -5817,7 +5822,7 @@ build-musl-pthread-libc-smoke:
 smoke-musl-pthread-libc: build-musl-pthread-libc-smoke kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   musl pthread_create/join (-lpthread)..."
-	@DISK=$$(mktemp /tmp/ir0-musl-pthread-libc.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-musl-pthread-libc.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	python3 scripts/inject_init_minix.py $$DISK $(MUSL_PTHREAD_LIBC_SMOKE_BIN) sbin/init && \
 	rm -f $(MUSL_PTHREAD_LIBC_SMOKE_LOG); \
@@ -5842,7 +5847,7 @@ PASSWD_SMOKE_TAGS = PASSWD_SETUP_OK PASSWD_CHANGE_OK PASSWD_WRONG_OLD_OK \
 # and the set-user-ID /bin/passwd installed by install-to-disk.sh.
 smoke-passwd: build-passwd-smoke load-userspace-runit kernel-x64-userspace.iso
 	@echo "  SMOKE   passwd(1) shadow update, wrong old password, other user..."
-	@DISK=$$(mktemp /tmp/ir0-passwd-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-passwd-smoke.XXXXXX"); \
 	cp -f disk.img $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(PASSWD_SMOKE_BIN) sbin/init && \
 	python3 scripts/verify_minix_rootfs.py $$DISK /sbin/init /bin/passwd \
@@ -5862,7 +5867,7 @@ smoke-passwd: build-passwd-smoke load-userspace-runit kernel-x64-userspace.iso
 
 smoke-setuid-exec: build-setuid-exec-smoke kernel-x64-userspace.iso
 	@echo "  SMOKE   setuid/setgid on exec, saved IDs, no_new_privs, exec DAC..."
-	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-userspace-disk.XXXXXX"); \
 	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
 	python3 scripts/inject_init_minix.py --format-large $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(SETUID_EXEC_SMOKE_BIN) sbin/init && \
@@ -5887,7 +5892,7 @@ smoke-setuid-exec: build-setuid-exec-smoke kernel-x64-userspace.iso
 
 smoke-musl-pthread: build-musl-pthread-smoke kernel-x64-userspace.iso
 	@echo "  SMOKE   musl pthread_create + join..."
-	@DISK=$$(mktemp /tmp/ir0-userspace-disk.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-userspace-disk.XXXXXX"); \
 	dd if=/dev/zero of=$$DISK bs=1M count=64 status=none && \
 	python3 scripts/inject_init_minix.py --format $$DISK && \
 	python3 scripts/inject_init_minix.py $$DISK $(MUSL_PTHREAD_SMOKE_BIN) sbin/init && \

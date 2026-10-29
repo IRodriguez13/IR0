@@ -32,13 +32,13 @@ endif
 endif
 
 .PHONY: smoke-sb16-probe
-SB16_PROBE_LOG ?= /tmp/ir0-sb16-probe.log
+SB16_PROBE_LOG ?= $(HOST_TMP)/ir0-sb16-probe.log
 # Stock userspace ISO + QEMU SB16 (+ Adlib). Requires DSP detect / SB16_DSP_OK.
 # Adlib may still report ABSENT on some QEMU builds — SB16 is the gate.
 smoke-sb16-probe: kernel-x64-userspace.iso
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@echo "  SMOKE   SB16 probe (QEMU sb16+adlib)..."
-	@DISK=$$(mktemp /tmp/ir0-sb16-probe.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-sb16-probe.XXXXXX"); \
 	cp -f disk.img $$DISK; \
 	rm -f $(SB16_PROBE_LOG); \
 	$(SMOKE_QEMU_RUN) --log $(SB16_PROBE_LOG) --timeout 90 --stale-sec 60 \

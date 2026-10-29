@@ -156,6 +156,11 @@ IR0_LEAN_GOALS := all ir0 clean help \
 	menuconfig menuconfig-en defconfig arch-guard
 
 IR0_NONLEAN_GOALS := $(filter-out $(IR0_LEAN_GOALS),$(MAKECMDGOALS))
+
+# Portable host helpers (HOST_TMP, CP_REFLINK) must load before any recipe
+# fragment that expands them.
+-include scripts/make/host-portable.mk
+
 -include scripts/make/ir0_public.mk
 ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
 -include scripts/make/isd.mk
@@ -1225,8 +1230,9 @@ disk.img:
 # BUILD CONFIGURATION
 # ============================================
 
-# Parallel jobs: default to all CPU cores (override: make -j1 or PARALLEL_JOBS=1)
-NPROC := $(shell nproc 2>/dev/null || echo 4)
+# Parallel jobs: default to all CPU cores (override: make -j1 or PARALLEL_JOBS=1).
+# getconf is POSIX; sysctl covers BSD/macOS where nproc does not exist.
+NPROC := $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 PARALLEL_JOBS ?= $(NPROC)
 
 # Top-level invocations compile object files in parallel unless -j is already set.
@@ -1688,7 +1694,7 @@ help:
 	@echo "  make compile-commands Generate compile_commands.json for LSP/IDE"
 	@echo "  make disasm           Disassemble kernel binary (objdump -d -S)"
 	@echo "  make stack-usage      Rebuild with -fstack-usage and show top consumers"
-	@echo "Build uses -j\$$(nproc) by default (override: make -j1 or PARALLEL_JOBS=4)."
+	@echo "Build uses -j$(PARALLEL_JOBS) by default (override: make -j1 or PARALLEL_JOBS=4)."
 	@echo ""
 	@echo "Utilities:"
 	@echo "  make menuconfig       Kernel configuration menu (curses TUI)"

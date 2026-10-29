@@ -33,20 +33,24 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "host_portability_baseline.txt"
-MAKE_TESTING = ROOT / "scripts" / "make" / "testing.mk"
+MAKE_DIR = ROOT / "scripts" / "make"
+MAKE_FILES = (ROOT / "Makefile", *sorted(MAKE_DIR.glob("*.mk")))
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import ktm_host_safety as safety  # noqa: E402
 import smoke_autokill as smoke  # noqa: E402
+import config_set_line as config_set  # noqa: E402
 
 SCOPE_GLOBS = (
+    "Makefile",
+    "scripts/config_set_line.py",
     "scripts/ktm_*.py",
     "scripts/ktm_*.sh",
+    "scripts/make/*.mk",
     "scripts/smoke_*.py",
     "scripts/smoke_*.sh",
     "scripts/inject_init_minix.py",
-    "scripts/make/testing.mk",
     "tests/ktm/**/*.py",
     "tests/ktm/**/*.sh",
 )
@@ -141,7 +145,19 @@ COMPILED = tuple(
 )
 WHY = {name: why for name, _pattern, why in PATTERNS}
 
-QEMU_DIRECT_RE = re.compile(r"(?:\$\(QEMU\)|qemu-system-[a-z0-9_]+)\s+-")
+# Helpers that implement the portable replacement necessarily name the
+# GNU-only construct they abstract. Keep this list tiny and explicit; every
+# other occurrence must be fixed or frozen in the ledger.
+HELPER_ALLOW = {
+    ("gnu_reflink", "scripts/make/host-portable.mk"),
+    ("gnu_sed_i", "scripts/config_set_line.py"),
+}
+
+# A real launch passes a device/disk/serial option right after the binary.
+# `qemu -display help` is a capability probe: it never starts a guest.
+QEMU_DIRECT_RE = re.compile(
+    r"(?:\$\(QEMU\)|qemu-system-[a-z0-9_]+)\s+-(?!display\s+help)"
+)
 WRAPPER_NAMES = (
     "SMOKE_QEMU_RUN",
     "smoke_qemu_run.sh",
@@ -177,6 +193,8 @@ def scan_file(path: Path) -> dict[str, list[int]]:
     text = path.read_text(encoding="utf-8", errors="replace")
     for lineno, line in code_lines(text):
         for name, regex, _why in COMPILED:
+            if (name, rel(path)) in HELPER_ALLOW:
+                continue
             if regex.search(line):
                 found.setdefault(name, []).append(lineno)
     return found
@@ -208,37 +226,39 @@ def load_baseline() -> dict[tuple[str, str], int]:
 def qemu_policy_errors() -> list[str]:
     """Every QEMU invocation must be memory-capped or go through a wrapper."""
     errors: list[str] = []
-    if not MAKE_TESTING.exists():
-        return [f"{rel(MAKE_TESTING)}: missing"]
-    lines = MAKE_TESTING.read_text(encoding="utf-8", errors="replace").splitlines()
-    block: list[tuple[int, str]] = []
-
-    def check(items: list[tuple[int, str]]) -> None:
-        body = "\n".join(line for _lineno, line in items)
-        direct = [
-            lineno
-            for lineno, line in items
-            if QEMU_DIRECT_RE.search(line)
-        ]
-        if not direct:
-            return
-        wrapped = any(name in body for name in WRAPPER_NAMES)
-        capped = re.search(r"(?:^|\s)-m\s+\S+", body) is not None
-        if not wrapped and not capped:
-            errors.append(
-                f"{rel(MAKE_TESTING)}:{direct[0]}: QEMU runs without a wrapper "
-                "or an explicit -m; use $(SMOKE_QEMU_RUN) or add -m"
-            )
-
-    for lineno, line in enumerate(lines, 1):
-        if line.startswith("\t"):
-            block.append((lineno, line))
+    for path in MAKE_FILES:
+        if not path.exists():
+            errors.append(f"{rel(path)}: missing")
             continue
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        block: list[tuple[int, str]] = []
+
+        def check(items: list[tuple[int, str]]) -> None:
+            body = "\n".join(line for _lineno, line in items)
+            direct = [
+                lineno
+                for lineno, line in items
+                if QEMU_DIRECT_RE.search(line)
+            ]
+            if not direct:
+                return
+            wrapped = any(name in body for name in WRAPPER_NAMES)
+            capped = re.search(r"(?:^|\s)-m\s+\S+", body) is not None
+            if not wrapped and not capped:
+                errors.append(
+                    f"{rel(path)}:{direct[0]}: QEMU runs without a wrapper "
+                    "or an explicit -m; use $(SMOKE_QEMU_RUN) or add -m"
+                )
+
+        for lineno, line in enumerate(lines, 1):
+            if line.startswith("\t"):
+                block.append((lineno, line))
+                continue
+            if block:
+                check(block)
+                block = []
         if block:
             check(block)
-            block = []
-    if block:
-        check(block)
     return errors
 
 
@@ -284,6 +304,31 @@ def self_test_errors() -> list[str]:
             )
         finally:
             safety.host_available_mib = original_available
+
+        with tempfile.TemporaryDirectory(prefix="ir0-guard-config-") as tmp:
+            config = Path(tmp) / ".config"
+            config.write_text("CONFIG_A=1\n", encoding="utf-8")
+            expect(
+                config_set.set_line(config, r"^CONFIG_A=.*", "CONFIG_A=2"),
+                "config_set_line rewrites an existing assignment",
+            )
+            expect(
+                config.read_text(encoding="utf-8") == "CONFIG_A=2\n",
+                "config_set_line wrote the replacement",
+            )
+            expect(
+                config_set.rewrite("X=1\n", r"^Y=", "Y=2") == "X=1\nY=2\n",
+                "config_set_line appends a missing assignment",
+            )
+            expect(
+                config_set.rewrite(
+                    "CONFIG_ECHO=y\n",
+                    r"^CONFIG_ECHO=|^# CONFIG_ECHO is not set",
+                    "CONFIG_ECHO=y",
+                )
+                == "CONFIG_ECHO=y\n",
+                "config_set_line does not duplicate an existing assignment",
+            )
 
         disk = safety.make_temp_disk(prefix="ir0-guard-selftest-")
         try:

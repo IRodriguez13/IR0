@@ -156,14 +156,14 @@ machine-migrate-home: check-isd
 		grep -q '^Inode:'; then \
 		echo "✗ ext2 /home/ivan already exists; refusing to merge over live data"; exit 2; \
 	fi
-	@cp --reflink=auto "$(IR0_MACHINE_HOME_DISK)" \
+	@$(CP_REFLINK) "$(IR0_MACHINE_HOME_DISK)" \
 		"$(IR0_MACHINE_HOME_DISK).migration-new"
 	@python3 scripts/migrate_minix_home_to_ext2.py \
 		--minix "$(IR0_MACHINE_DISK)" \
 		--ext2 "$(IR0_MACHINE_HOME_DISK).migration-new" \
 		--kernel-root "$(KERNEL_ROOT)"
 	@e2fsck -fn "$(IR0_MACHINE_HOME_DISK).migration-new"
-	@cp --reflink=auto "$(IR0_MACHINE_HOME_DISK)" \
+	@$(CP_REFLINK) "$(IR0_MACHINE_HOME_DISK)" \
 		"$(IR0_MACHINE_HOME_DISK).previous"
 	@mv "$(IR0_MACHINE_HOME_DISK).migration-new" "$(IR0_MACHINE_HOME_DISK)"
 	@echo "✓ legacy home migrated; rollback: $(IR0_MACHINE_HOME_DISK).previous"
@@ -195,7 +195,7 @@ poweron: check-isd
 		exit 2; \
 	}
 	@echo "Running persistent IR0 + ISD machine ($(IR0_MACHINE)) ROOT_FS=$(ISD_ROOT_FS)"
-	@echo "  DISK     $(IR0_MACHINE_DISK) ($$(stat -c%s '$(IR0_MACHINE_DISK)' | numfmt --to=iec 2>/dev/null || stat -c%s '$(IR0_MACHINE_DISK)'))"
+	@echo "  DISK     $(IR0_MACHINE_DISK) ($$(wc -c < '$(IR0_MACHINE_DISK)' | tr -d ' ') bytes)"
 	@KERNEL_ISO="$$(python3 scripts/kernel_manager.py --machine-dir \
 		"$(IR0_MACHINE_DIR)" --arch "$(ISD_ARCH)" \
 		--profile "$(ISD_PROFILE)" --machine "$(IR0_MACHINE)" \
@@ -234,7 +234,7 @@ run-isd: kernel-x64-userspace.iso ensure-isd-disk ensure-isd-home
 # Release / Tier 1.5: boot smoke on ISD-built disk (not legacy load-userspace-runit).
 smoke-runit-boot-isd: kernel-x64-userspace.iso ensure-isd-disk
 	@echo "  SMOKE   runit PID1 boot (ISD disk PROFILE=$(ISD_PROFILE))..."
-	@DISK=$$(mktemp /tmp/ir0-runit-smoke.XXXXXX.img); \
+	@DISK=$$(mktemp "$(HOST_TMP)/ir0-runit-smoke.XXXXXX"); \
 	cp -f "$(IR0_ISD_DISK)" $$DISK; \
 	$(SMOKE_QEMU_RUN) --log $(RUNIT_SMOKE_LOG) --timeout 50 --stale-sec 18 \
 		--done RUNSV_CONSOLE_START --done RUNSV_LOGGER_START --done GETTY_READY -- \

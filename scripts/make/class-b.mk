@@ -35,7 +35,7 @@ ktm-userdev-fault-class-b-run: build-ktm-fault-class-b-case build-init-hostshare
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FAULT_CLASS_B_BIN) \
-		--log /tmp/ktm-userdev-fault-class-b.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-fault-class-b.log --timeout 90 \
 		--done KTM_CLASS_B_OK \
 		--require CLASS_B_FAULT_INJECT \
 		--require KERNEL_RETURN_FRAME_REPAIR \
@@ -54,7 +54,7 @@ smoke-class-b-repro: build-ktm-fault-class-b-case build-init-hostshare-exec
 	@if [ ! -f disk.img ]; then $(MAKE) -s disk.img; fi
 	@python3 scripts/ktm_userdev_runner.py \
 		--init $(KTM_FAULT_CLASS_B_BIN) \
-		--log /tmp/ktm-userdev-fault-class-b-repro.log --timeout 90 \
+		--log $(HOST_TMP)/ktm-userdev-fault-class-b-repro.log --timeout 90 \
 		--done KERNEL_RET_BAD_RIP \
 		--require CLASS_B_FAULT_INJECT \
 		--require KERNEL_RET_BAD_RIP

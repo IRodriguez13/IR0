@@ -2,12 +2,7 @@
 # Format: <pattern-id> <path> <count>
 # Generated with: python3 scripts/host_portability_guard.py --print-baseline
 # New violations fail the guard; fixing one requires shrinking this file.
-gnu_nproc                scripts/make/testing.mk                          3
-gnu_reflink              scripts/make/testing.mk                          4
 gnu_reflink              scripts/smoke_x11_pointer.py                     2
-gnu_sed_i                scripts/make/testing.mk                          3
-gnu_stat_c               scripts/make/testing.mk                          1
-hardcoded_tmp            scripts/make/testing.mk                          482
 hardcoded_tmp            scripts/smoke_ash_direct_segv_probe.py           1
 hardcoded_tmp            scripts/smoke_ash_irq_preempt_stable.py          1
 hardcoded_tmp            scripts/smoke_console_session_fork.py            1
@@ -38,7 +33,6 @@ hardcoded_tmp            scripts/smoke_sys_panic.py                       2
 hardcoded_tmp            scripts/smoke_tty_raw_probe.py                   1
 hardcoded_tmp            scripts/smoke_userspace_stability.py             1
 hardcoded_tmp            scripts/smoke_x11_pointer.py                     5
-mktemp_suffix            scripts/make/testing.mk                          47
 py_hardcoded_python3     scripts/smoke_runit_login_nonroot.py             1
 py_tempfile_mktemp       scripts/smoke_ash_direct_segv_probe.py           1
 py_tempfile_mktemp       scripts/smoke_ash_irq_preempt_stable.py          1
