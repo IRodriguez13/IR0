@@ -35,24 +35,34 @@ static struct ir0_block_device *ir0_block_find(dev_t id)
 int ir0_block_register(struct ir0_block_device *dev)
 {
 	int i;
+	int free_slot = -1;
 	struct ir0_block_slot *slot;
 
 	if (!dev || !dev->ops || !dev->ops->read)
 		return -EINVAL;
 
+	/*
+	 * Scan every slot: a duplicate name must be rejected even when an
+	 * earlier slot is free.  Stopping at the first hole let a duplicate
+	 * register into the hole whenever the registry had a gap.
+	 */
 	for (i = 0; i < IR0_BLOCKDEV_MAX; i++)
 	{
 		if (!ir0_block_slots[i].used)
-			break;
+		{
+			if (free_slot < 0)
+				free_slot = i;
+			continue;
+		}
 		if (dev->info.name[0] &&
 		    strncmp(ir0_block_slots[i].dev.info.name, dev->info.name,
 			    IR0_BLOCKDEV_NAME_MAX) == 0)
 			return -EEXIST;
 	}
-	if (i >= IR0_BLOCKDEV_MAX)
+	if (free_slot < 0)
 		return -ENOMEM;
 
-	slot = &ir0_block_slots[i];
+	slot = &ir0_block_slots[free_slot];
 	slot->dev = *dev;
 	if (slot->dev.id == 0)
 	{
@@ -64,8 +74,8 @@ int ir0_block_register(struct ir0_block_device *dev)
 	if (slot->dev.info.max_sectors_per_io == 0)
 		slot->dev.info.max_sectors_per_io = 1;
 	slot->used = 1;
-	if (i >= ir0_block_slot_count)
-		ir0_block_slot_count = i + 1;
+	if (free_slot >= ir0_block_slot_count)
+		ir0_block_slot_count = free_slot + 1;
 	return 0;
 }
 
@@ -263,5 +273,21 @@ void ir0_block_reset_for_test(void)
 	memset(ir0_block_slots, 0, sizeof(ir0_block_slots));
 	ir0_block_slot_count = 0;
 	ir0_block_next_id = IR0_BLOCKDEV_ID_BASE;
+}
+
+void ir0_block_unregister_for_test(dev_t dev)
+{
+	int i;
+
+	for (i = 0; i < IR0_BLOCKDEV_MAX; i++)
+	{
+		if (!ir0_block_slots[i].used || ir0_block_slots[i].dev.id != dev)
+			continue;
+		memset(&ir0_block_slots[i], 0, sizeof(ir0_block_slots[i]));
+		while (ir0_block_slot_count > 0 &&
+		       !ir0_block_slots[ir0_block_slot_count - 1].used)
+			ir0_block_slot_count--;
+		return;
+	}
 }
 #endif

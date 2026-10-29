@@ -49,6 +49,7 @@ extern void test_musl_cred_abi(void);
 extern void test_credential_saved_ids(void);
 extern void test_blockdev_facade_contract(void);
 extern void test_blockdev_readonly_allows_read(void);
+extern void test_blockdev_duplicate_check_scans_gaps(void);
 extern void test_arch_irq_facade_nested(void);
 extern void test_arch_mm_pte_facade(void);
 extern void test_open_flags_linux_to_ir0(void);
@@ -128,6 +129,7 @@ static void (*test_functions[])(void) = {
 	test_credential_saved_ids,
 	test_blockdev_facade_contract,
 	test_blockdev_readonly_allows_read,
+	test_blockdev_duplicate_check_scans_gaps,
 	test_arch_irq_facade_nested,
 	test_arch_mm_pte_facade,
 	test_open_flags_linux_to_ir0,

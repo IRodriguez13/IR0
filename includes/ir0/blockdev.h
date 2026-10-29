@@ -73,6 +73,9 @@ int ir0_block_write_by_name(const char *name, uint64_t lba, uint32_t count,
 #ifdef TEST_HOST
 /* Host-only: clear registry between unit tests. */
 void ir0_block_reset_for_test(void);
+
+/* Host-only: free a slot without compacting, to exercise registry holes. */
+void ir0_block_unregister_for_test(dev_t dev);
 #endif
 
 #endif /* _IR0_BLOCKDEV_H */

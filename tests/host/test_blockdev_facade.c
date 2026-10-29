@@ -161,3 +161,58 @@ void test_blockdev_readonly_allows_read(void)
 
 	TEST_END();
 }
+
+void test_blockdev_duplicate_check_scans_gaps(void)
+{
+	struct ir0_block_device first;
+	struct ir0_block_device second;
+	struct ir0_block_device probe;
+	dev_t first_id;
+
+	TEST_BEGIN("blockdev_duplicate_check_scans_gaps");
+
+	ir0_block_reset_for_test();
+
+	memset(&first, 0, sizeof(first));
+	first.ops = &mock_ops;
+	first.info.sector_size = MOCK_SEC_SIZE;
+	first.info.max_sectors_per_io = 1;
+	first.info.sector_count = MOCK_SECTORS;
+	strncpy(first.info.name, "gap0", sizeof(first.info.name) - 1);
+	ASSERT_EQ(ir0_block_register(&first), 0);
+
+	memset(&second, 0, sizeof(second));
+	second.ops = &mock_ops;
+	second.info.sector_size = MOCK_SEC_SIZE;
+	second.info.max_sectors_per_io = 1;
+	second.info.sector_count = MOCK_SECTORS;
+	strncpy(second.info.name, "gap1", sizeof(second.info.name) - 1);
+	ASSERT_EQ(ir0_block_register(&second), 0);
+	ASSERT_EQ(ir0_block_count(), 2);
+
+	first_id = ir0_block_lookup_by_name("gap0");
+	ASSERT(first_id != 0);
+	ir0_block_unregister_for_test(first_id);
+	ASSERT(!ir0_block_is_present(first_id));
+	ASSERT(ir0_block_lookup_by_name("gap0") == 0);
+
+	/*
+	 * Slot 0 is free and "gap1" lives in slot 1.  Registration used to
+	 * stop scanning at the hole and accept the duplicate.
+	 */
+	probe = second;
+	ASSERT_EQ(ir0_block_register(&probe), -EEXIST);
+
+	/* A unique device still reuses the hole without growing the table. */
+	strncpy(probe.info.name, "gap2", sizeof(probe.info.name) - 1);
+	ASSERT_EQ(ir0_block_register(&probe), 0);
+	ASSERT_EQ(ir0_block_count(), 2);
+	ASSERT(ir0_block_lookup_by_name("gap2") != 0);
+	ASSERT(ir0_block_name_at(0) != NULL);
+	ASSERT(strcmp(ir0_block_name_at(0), "gap2") == 0);
+	ASSERT(ir0_block_name_at(1) != NULL);
+	ASSERT(strcmp(ir0_block_name_at(1), "gap1") == 0);
+
+	ir0_block_reset_for_test();
+	TEST_END();
+}
