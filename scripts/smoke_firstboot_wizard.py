@@ -14,9 +14,9 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = ROOT.parent / "ISD"
@@ -72,7 +72,7 @@ def type_str(port: int, text: str, delay: float = 0.12) -> None:
 def wait_re(log: Path, rx: re.Pattern[str], proc: subprocess.Popen, limit: float) -> str:
     t0 = time.time()
     while time.time() - t0 < limit:
-        text = log.read_text(errors="replace")
+        text = safety.read_log_text(log)
         if FAIL_RE.search(text):
             return text
         if rx.search(text):
@@ -80,7 +80,7 @@ def wait_re(log: Path, rx: re.Pattern[str], proc: subprocess.Popen, limit: float
         if proc.poll() is not None:
             return text
         time.sleep(0.2)
-    return log.read_text(errors="replace")
+    return safety.read_log_text(log)
 
 
 def main() -> int:
@@ -91,7 +91,7 @@ def main() -> int:
         type=Path,
         default=ISD / "out/x86_64/images/desktop/disk.img",
     )
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-firstboot-wizard.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-firstboot-wizard.log")
     ap.add_argument("--port", type=int, default=46201)
     ap.add_argument("--timeout", type=float, default=120.0)
     ap.add_argument("--user", default="ivan")
@@ -102,7 +102,7 @@ def main() -> int:
         print(f"✗ need iso+disk: {args.iso} {args.disk}", file=sys.stderr)
         return 2
 
-    disk = Path(tempfile.mktemp(prefix="ir0-fbwiz.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-fbwiz.", suffix=".img")
     shutil.copy2(args.disk, disk)
     args.log.write_text("")
     subprocess.run(

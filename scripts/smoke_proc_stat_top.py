@@ -10,9 +10,9 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = ROOT.parent / "ISD"
@@ -70,8 +70,8 @@ def main() -> int:
         print(f"✗ need iso ({iso}) and disk ({disk_src})", file=sys.stderr)
         return 2
 
-    log = Path(tempfile.mkstemp(prefix="ir0-proc-stat-", suffix=".log")[1])
-    disk = Path(tempfile.mktemp(prefix="ir0-proc-stat.", suffix=".img"))
+    log = safety.make_temp_path(prefix="ir0-proc-stat-", suffix=".log")
+    disk = safety.make_temp_path(prefix="ir0-proc-stat.", suffix=".img")
     shutil.copy2(disk_src, disk)
     port = args.monitor_port
 
@@ -101,7 +101,7 @@ def main() -> int:
         deadline = time.time() + args.timeout
         text = ""
         while time.time() < deadline:
-            text = log.read_text(errors="replace")
+            text = safety.read_log_text(log)
             if PROMPT_RE.search(text) and "ASH_INTERACTIVE_READY" in text:
                 break
             if proc.poll() is not None:
@@ -121,7 +121,7 @@ def main() -> int:
             time.sleep(2.5)
 
         time.sleep(1.5)
-        text = log.read_text(errors="replace")
+        text = safety.read_log_text(log)
         ok = True
         if not re.search(r"(?m)^cpu\s+\d+\s+\d+\s+\d+\s+\d+", text):
             print("✗ /proc/stat cpu line missing", file=sys.stderr)

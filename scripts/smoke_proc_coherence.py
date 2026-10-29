@@ -8,9 +8,9 @@ import re
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPT_RE = re.compile(r"(?:ivan|root)@(?:ir0|unix):\S*[#$]")
@@ -43,7 +43,7 @@ def type_line(port: int, line: str) -> None:
 
 def main() -> int:
     port = 4444
-    log = Path(tempfile.mkstemp(prefix="ir0-proc-coh-", suffix=".log")[1])
+    log = safety.make_temp_path(prefix="ir0-proc-coh-", suffix=".log")
     disk = ROOT / "disk.img"
     iso = ROOT / "kernel-x64-userspace.iso"
     if not disk.is_file() or not iso.is_file():
@@ -77,7 +77,7 @@ def main() -> int:
     try:
         deadline = time.time() + 45
         while time.time() < deadline:
-            text = log.read_text(errors="replace")
+            text = safety.read_log_text(log)
             if PROMPT_RE.search(text) or "GETTY_READY" in text:
                 break
             if proc.poll() is not None:
@@ -110,7 +110,7 @@ def main() -> int:
             time.sleep(0.8)
 
         time.sleep(1.5)
-        text = log.read_text(errors="replace")
+        text = safety.read_log_text(log)
         ok = True
         # date should not be 1970 when RTC is wired
         if re.search(r"\b1970\b", text) and "Jan" in text:

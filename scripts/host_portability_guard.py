@@ -44,13 +44,16 @@ import config_set_line as config_set  # noqa: E402
 
 SCOPE_GLOBS = (
     "Makefile",
+    "scripts/baseline_capture.py",
     "scripts/config_set_line.py",
+    "scripts/init_boot_capture.py",
+    "scripts/inject_init_minix.py",
     "scripts/ktm_*.py",
     "scripts/ktm_*.sh",
     "scripts/make/*.mk",
+    "scripts/release_check_guest_probes.py",
     "scripts/smoke_*.py",
     "scripts/smoke_*.sh",
-    "scripts/inject_init_minix.py",
     "tests/ktm/**/*.py",
     "tests/ktm/**/*.sh",
 )
@@ -80,7 +83,7 @@ PATTERNS: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "unbounded_log_read",
-        r"\blog\.read_text\(",
+        r'\.read_text\(errors="replace"\)',
         "read logs through read_log_text (64 MiB cap) or iter_log_lines",
     ),
     (
@@ -145,6 +148,11 @@ COMPILED = tuple(
 )
 WHY = {name: why for name, _pattern, why in PATTERNS}
 
+# A line may opt out of one pattern with a trailing
+# `# portability-guard: allow <id>` comment when the construct is correct in
+# context (for example a guest-side /tmp path inside a shell command).
+ALLOW_RE = re.compile(r"portability-guard:\s*allow\s+([a-z0-9_]+)")
+
 # Helpers that implement the portable replacement necessarily name the
 # GNU-only construct they abstract. Keep this list tiny and explicit; every
 # other occurrence must be fixed or frozen in the ledger.
@@ -192,8 +200,9 @@ def scan_file(path: Path) -> dict[str, list[int]]:
     found: dict[str, list[int]] = {}
     text = path.read_text(encoding="utf-8", errors="replace")
     for lineno, line in code_lines(text):
+        allowed = set(ALLOW_RE.findall(line))
         for name, regex, _why in COMPILED:
-            if (name, rel(path)) in HELPER_ALLOW:
+            if name in allowed or (name, rel(path)) in HELPER_ALLOW:
                 continue
             if regex.search(line):
                 found.setdefault(name, []).append(lineno)
@@ -305,6 +314,29 @@ def self_test_errors() -> list[str]:
         finally:
             safety.host_available_mib = original_available
 
+        expect(
+            ALLOW_RE.findall("# portability-guard: allow hardcoded_tmp")
+            == ["hardcoded_tmp"],
+            "line allow marker parses",
+        )
+
+        with tempfile.TemporaryDirectory(prefix="ir0-guard-tmpdir-") as tmp:
+            original_dir = tempfile.tempdir
+            original_env = os.environ.get("TMPDIR")
+            try:
+                os.environ["TMPDIR"] = tmp
+                tempfile.tempdir = None
+                expect(
+                    safety.host_temp_dir() == Path(tmp),
+                    "host_temp_dir honors TMPDIR",
+                )
+            finally:
+                tempfile.tempdir = original_dir
+                if original_env is None:
+                    os.environ.pop("TMPDIR", None)
+                else:
+                    os.environ["TMPDIR"] = original_env
+
         with tempfile.TemporaryDirectory(prefix="ir0-guard-config-") as tmp:
             config = Path(tmp) / ".config"
             config.write_text("CONFIG_A=1\n", encoding="utf-8")
@@ -337,6 +369,19 @@ def self_test_errors() -> list[str]:
             expect(mode == 0o600, f"temp disk mode is {oct(mode)}, want 0o600")
         finally:
             disk.unlink(missing_ok=True)
+
+        temp_file = safety.make_temp_path(
+            prefix="ir0-guard-path.", suffix=".txt"
+        )
+        try:
+            mode = stat.S_IMODE(temp_file.stat().st_mode)
+            expect(temp_file.is_file(), "make_temp_path creates a file")
+            expect(
+                mode == 0o600,
+                f"make_temp_path mode is {oct(mode)}, want 0o600",
+            )
+        finally:
+            temp_file.unlink(missing_ok=True)
 
         with tempfile.TemporaryDirectory(prefix="ir0-guard-log-") as tmp:
             log = Path(tmp) / "serial.log"

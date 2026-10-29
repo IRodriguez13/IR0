@@ -31,6 +31,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -329,7 +330,7 @@ STABILITY_CASES: list[Case] = [
     ),
     Case(
         "dmesg_file",
-        "dmesg>/tmp/d.txt;wc -c /tmp/d.txt;echo DMESG_FILE_OK",
+        "dmesg>/tmp/d.txt;wc -c /tmp/d.txt;echo DMESG_FILE_OK",  # portability-guard: allow hardcoded_tmp (guest path)
         expect_prompt_any("DMESG_FILE_OK"),
         echo="DMESG_FILE_OK",
         timeout=45.0,
@@ -463,7 +464,7 @@ def wait_pred(
     log: Path, pred: Callable[[str], bool], t0: float, limit: float, proc: subprocess.Popen
 ) -> str:
     while time.time() - t0 < limit:
-        t = log.read_text(errors="replace")
+        t = safety.read_log_text(log)
         if pred(t) or any(r.search(t) for r in FAIL_RES):
             return t
         if proc.poll() is not None:
@@ -725,7 +726,7 @@ def login_desktop(
         )
     except TimeoutError:
         return "login_wait"
-    whole = log.read_text(errors="replace")
+    whole = safety.read_log_text(log)
     if "ASH_INTERACTIVE_READY" in whole or PROMPT_RE.search(whole):
         time.sleep(0.8)
         if do_su and "root@" not in whole[-400:]:
@@ -739,13 +740,13 @@ def login_desktop(
     d = max(key_delay, 0.45)
 
     for attempt in range(3):
-        base = len(log.read_text(errors="replace"))
+        base = len(safety.read_log_text(log))
         mon.type_str("ivan", d)
         # Confirm username echo before Enter (detects ivann / ian drops).
         confirm_deadline = time.time() + 8
         typed_ok = False
         while time.time() < confirm_deadline:
-            tail = log.read_text(errors="replace")[base:]
+            tail = safety.read_log_text(log)[base:]
             if "ivann" in tail:
                 mon.key("ctrl-u")
                 time.sleep(0.25)
@@ -775,7 +776,7 @@ def login_desktop(
             wait_pred(log, lambda t: "Password:" in t or "Login incorrect" in t, t0, 40, proc)
         except TimeoutError:
             continue
-        whole = log.read_text(errors="replace")
+        whole = safety.read_log_text(log)
         if "Login incorrect" in whole[base:] and "Password:" not in whole[base:]:
             time.sleep(1.0)
             continue
@@ -793,7 +794,7 @@ def login_desktop(
             )
         except TimeoutError:
             return "login_timeout"
-        whole = log.read_text(errors="replace")
+        whole = safety.read_log_text(log)
         if "Login incorrect" in whole[base:] and not LOGIN_PROMPT_RE.search(
             whole[base:]
         ):
@@ -803,13 +804,13 @@ def login_desktop(
             return "no_prompt"
         time.sleep(1.0)
         if do_su:
-            sbase = len(log.read_text(errors="replace"))
+            sbase = len(safety.read_log_text(log))
             mon.type_str("su", key_delay)
             mon.ret()
             time.sleep(0.8)
             mon.ret()
             time.sleep(1.0)
-            fail = classify_fail(log.read_text(errors="replace")[sbase:])
+            fail = classify_fail(safety.read_log_text(log)[sbase:])
             if fail:
                 return fail
         return None
@@ -824,24 +825,24 @@ def run_cases(
     key_delay: float,
 ) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
-    login_mark = len(log.read_text(errors="replace"))
+    login_mark = len(safety.read_log_text(log))
 
     for case in cases:
         settle = time.time() + 8
         while time.time() < settle:
-            if PROMPT_RE.search(log.read_text(errors="replace")[-500:]):
+            if PROMPT_RE.search(safety.read_log_text(log)[-500:]):
                 break
             time.sleep(0.15)
         time.sleep(0.4)
 
         def attempt_once() -> str:
-            whole0 = log.read_text(errors="replace")
+            whole0 = safety.read_log_text(log)
             base = len(whole0)
             prompts0 = len(PROMPT_RE.findall(whole0))
             inject_case(mon, case, key_delay)
             deadline = time.time() + case.timeout
             while time.time() < deadline:
-                whole = log.read_text(errors="replace")
+                whole = safety.read_log_text(log)
                 new = whole[base:]
                 saw_echo = echo_ok(case, new)
                 # Once the command is echoing, ignore redraw "storms".
@@ -863,7 +864,7 @@ def run_cases(
                 )
                 if (prompt_ok or nano_ok) and saw_echo and case.expect(norm):
                     time.sleep(0.25)
-                    new2 = log.read_text(errors="replace")[base:]
+                    new2 = safety.read_log_text(log)[base:]
                     fail = classify_fail(new2, allow_storm=False)
                     if (
                         fail == "console_restart"
@@ -873,7 +874,7 @@ def run_cases(
                         fail = None
                     return f"FAIL:{fail}" if fail else "PASS"
                 if proc.poll() is not None:
-                    whole = log.read_text(errors="replace")
+                    whole = safety.read_log_text(log)
                     new = whole[base:]
                     norm = normalize_serial(new)
                     if (
@@ -920,7 +921,7 @@ def run_cases(
                 continue
             return results
 
-    after = log.read_text(errors="replace")[login_mark:]
+    after = safety.read_log_text(log)[login_mark:]
     if LOCK_SPAM_RE.search(after) and after.count("unable to lock") >= 3:
         results.append(("post_lock", "FAIL:lock_spam"))
     elif STAGE2_RE.search(after):
@@ -931,30 +932,30 @@ def run_cases(
 def run_poweroff(mon: Monitor, log: Path, proc: subprocess.Popen, key_delay: float) -> str:
     settle = time.time() + 15
     while time.time() < settle:
-        if PROMPT_RE.search(log.read_text(errors="replace")[-500:]):
+        if PROMPT_RE.search(safety.read_log_text(log)[-500:]):
             break
         time.sleep(0.2)
     time.sleep(0.5)
-    base = len(log.read_text(errors="replace"))
+    base = len(safety.read_log_text(log))
     mon.type_str("halt -f", max(key_delay, 0.45))
     mon.ret()
     deadline = time.time() + 30
     while time.time() < deadline:
-        new = log.read_text(errors="replace")[base:]
+        new = safety.read_log_text(log)[base:]
         if any(r.search(new) for r in FAIL_RES):
             return "FAIL:panic"
         if "ISA_DEBUG_EXIT_OK" in new or "SYSTEM_SHUTDOWN" in new:
             return "PASS"
         if proc.poll() is not None:
             time.sleep(0.4)
-            new = log.read_text(errors="replace")[base:]
+            new = safety.read_log_text(log)[base:]
             if any(r.search(new) for r in FAIL_RES):
                 return "FAIL:panic"
             return "PASS"
         time.sleep(0.2)
     stop_qemu(proc)
     time.sleep(0.3)
-    new = log.read_text(errors="replace")[base:]
+    new = safety.read_log_text(log)[base:]
     if any(r.search(new) for r in FAIL_RES):
         return "FAIL:panic"
     if "ISA_DEBUG_EXIT_OK" in new or "SYSTEM_SHUTDOWN" in new:
@@ -975,7 +976,7 @@ def run_session(
     share_dir: Optional[Path],
     do_poweroff: bool,
 ) -> list[tuple[str, str]]:
-    disk = Path(tempfile.mktemp(suffix=".img", prefix="ir0-cmx."))
+    disk = safety.make_temp_path(suffix=".img", prefix="ir0-cmx.")
     shutil.copy(disk_src, disk)
     log_dir = ROOT / "build" / "cmx-logs"
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -1029,7 +1030,7 @@ def run_session(
                     "-device",
                     "virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on",
                 ]
-            stderr_path = Path(tempfile.mktemp(prefix="ir0-desktop-matrix-qemu.", suffix=".stderr"))
+            stderr_path = safety.make_temp_path(prefix="ir0-desktop-matrix-qemu.", suffix=".stderr")
             stderr_file = stderr_path.open("wb")
             proc = subprocess.Popen(qemu_cmd, stdout=subprocess.DEVNULL, stderr=stderr_file)
             mon = Monitor(port)
@@ -1047,12 +1048,12 @@ def run_session(
                     last_fail = fail
                     with log.open("a") as out:
                         out.write(f"\n--- login attempt {attempt} FAIL:{fail} ---\n")
-                        out.write(batch_log.read_text(errors="replace"))
+                        out.write(safety.read_log_text(batch_log))
                     time.sleep(0.8)
                     continue
                 results = run_cases(mon, batch_log, proc, cases, key_delay)
                 with log.open("a") as out:
-                    out.write(batch_log.read_text(errors="replace"))
+                    out.write(safety.read_log_text(batch_log))
                 # Retry whole session on console death / panic / enter storm.
                 hard = any(
                     st.startswith("FAIL:enter_storm")
@@ -1087,7 +1088,7 @@ def run_session(
                     po = run_poweroff(mon, batch_log, proc, key_delay)
                     results.append(("poweroff", po))
                     with log.open("a") as out:
-                        out.write(batch_log.read_text(errors="replace"))
+                        out.write(safety.read_log_text(batch_log))
                 return results
             except (TimeoutError, ConnectionError, OSError) as e:
                 last_fail = f"session:{e}"
@@ -1095,13 +1096,13 @@ def run_session(
                 if proc.poll() is not None and (
                     not batch_log.is_file() or batch_log.stat().st_size == 0
                 ):
-                    detail = stderr_path.read_text(errors="replace").strip()
+                    detail = safety.read_log_text(stderr_path).strip()
                     print(f"QEMU exited before serial output (rc={proc.returncode})")
                     if detail:
                         print(detail)
                 with log.open("a") as out:
                     if batch_log.is_file():
-                        out.write(batch_log.read_text(errors="replace"))
+                        out.write(safety.read_log_text(batch_log))
                 continue
             finally:
                 mon.close()
@@ -1298,7 +1299,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=ROOT / "disk.img")
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-cmd-matrix.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-cmd-matrix.log")
     ap.add_argument("--rounds", type=int, default=1)
     ap.add_argument("--port", type=int, default=45901)
     ap.add_argument("--key-delay", type=float, default=0.40)

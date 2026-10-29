@@ -23,9 +23,9 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TIMEOUT = 75
@@ -55,7 +55,7 @@ FAIL_MARKERS = [
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -72,12 +72,12 @@ def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
 
 
 def inject(disk: Path, content: str, dest: str) -> None:
-    tmp = Path(tempfile.mktemp(prefix="ir0-login-nonroot-inject."))
+    tmp = safety.make_temp_path(prefix="ir0-login-nonroot-inject.")
     tmp.write_text(content)
     try:
         subprocess.run(
             [
-                "python3",
+                sys.executable,
                 str(ROOT / "scripts" / "inject_init_minix.py"),
                 str(disk),
                 str(tmp),
@@ -92,7 +92,7 @@ def inject(disk: Path, content: str, dest: str) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Runit non-root login smoke")
-    parser.add_argument("--log", default="/tmp/runit-login-nonroot-smoke.log")
+    parser.add_argument("--log", default=str(safety.host_temp_dir() / "runit-login-nonroot-smoke.log"))
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
     parser.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace.iso"))
@@ -108,7 +108,7 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    disk = Path(tempfile.mktemp(prefix="ir0-login-nonroot.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-login-nonroot.", suffix=".img")
     shutil.copy2(src_disk, disk)
     inject(disk, f"{LOGIN_USER}\n", "etc/ir0-autologin")
     inject(disk, SHADOW_CONTENT, "etc/shadow")

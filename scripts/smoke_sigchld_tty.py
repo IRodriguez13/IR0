@@ -14,13 +14,13 @@ import crypt
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 import importlib.util
+import ktm_host_safety as safety
 
 _spec = importlib.util.spec_from_file_location(
     "relogin", str(ROOT / "scripts" / "smoke_desktop_relogin.py"))
@@ -69,9 +69,9 @@ def attempt(iso: Path, src: Path, port: int) -> int:
         "wheel=1\nlock_root=1\nrecovery=1\n"
     )
 
-    disk = Path(tempfile.mktemp(prefix="ir0-sigchld-tty.", suffix=".img"))
-    seed = Path(tempfile.mktemp(prefix="ir0-sigchld-tty-seed.", suffix=".txt"))
-    log = Path("/tmp/ir0-sigchld-tty.log")
+    disk = safety.make_temp_path(prefix="ir0-sigchld-tty.", suffix=".img")
+    seed = safety.make_temp_path(prefix="ir0-sigchld-tty-seed.", suffix=".txt")
+    log = safety.host_temp_dir() / "ir0-sigchld-tty.log"
     proc = None
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)

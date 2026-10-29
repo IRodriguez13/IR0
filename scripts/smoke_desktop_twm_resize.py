@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,7 +69,7 @@ def twm_resize_gesture(channel: socket.socket) -> None:
 def tail_text(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def wait_for(pattern: str, log: Path, deadline: float) -> bool:
@@ -151,7 +152,7 @@ def main() -> int:
             rc = 0
         finally:
             if log.exists():
-                shutil.copyfile(log, "/tmp/ir0-desktop-resize-serial.log")
+                shutil.copyfile(log, safety.host_temp_dir() / "ir0-desktop-resize-serial.log")
             if qemu.poll() is None:
                 qemu.terminate()
                 try:

@@ -20,9 +20,9 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -183,7 +183,7 @@ def clear_prompt_line(port: int) -> None:
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return normalize_serial_smoke(path.read_text(errors="replace"))
+    return normalize_serial_smoke(safety.read_log_text(path))
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -255,12 +255,12 @@ def run_once(args: argparse.Namespace) -> int:
         print(f"✗ missing disk: {src_disk} — run make load-userspace-runit", file=sys.stderr)
         return 1
 
-    disk = Path(tempfile.mktemp(prefix="ir0-runit-ash-smoke.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-runit-ash-smoke.", suffix=".img")
     shutil.copy2(src_disk, disk)
 
     # Minimal profile disks stop at FIRSTBOOT_PENDING (wizard). Seed a lab
     # account so getty reaches ash without blocking the smoke gate.
-    seed_path = Path(tempfile.mktemp(prefix="ir0-ash-seed.", suffix=".txt"))
+    seed_path = safety.make_temp_path(prefix="ir0-ash-seed.", suffix=".txt")
     try:
         import crypt
 
@@ -296,7 +296,7 @@ def run_once(args: argparse.Namespace) -> int:
         "-no-reboot",
         "-net", "none",
     ]
-    stderr_path = Path(tempfile.mktemp(prefix="ir0-runit-ash-qemu.", suffix=".stderr"))
+    stderr_path = safety.make_temp_path(prefix="ir0-runit-ash-qemu.", suffix=".stderr")
     stderr_file = stderr_path.open("wb")
     proc = subprocess.Popen(
         qemu_cmd,
@@ -341,7 +341,7 @@ def run_once(args: argparse.Namespace) -> int:
             if proc.poll() is not None:
                 stderr_file.flush()
                 if not read_log(log_path):
-                    detail = stderr_path.read_text(errors="replace").strip()
+                    detail = safety.read_log_text(stderr_path).strip()
                     print(f"✗ QEMU exited before serial output (rc={proc.returncode})")
                     if detail:
                         print(detail)
@@ -470,7 +470,7 @@ def run_once(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Runit + ash interactive smoke")
-    parser.add_argument("--log", default="/tmp/runit-ash-smoke.log")
+    parser.add_argument("--log", default=str(safety.host_temp_dir() / "runit-ash-smoke.log"))
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
     parser.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace-ash-smoke.iso"))

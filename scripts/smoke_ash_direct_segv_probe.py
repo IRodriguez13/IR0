@@ -18,9 +18,9 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = ROOT.parent / "ISD"
@@ -56,7 +56,7 @@ def send_keys(port: int, keys: list[str]) -> None:
 
 def log_text(path: Path) -> str:
     try:
-        return path.read_text(errors="replace")
+        return safety.read_log_text(path)
     except OSError:
         return ""
 
@@ -68,7 +68,7 @@ def main() -> int:
         "--disk-src",
         default=str(ISD / "out/x86_64/images/development/disk.img"),
     )
-    ap.add_argument("--log", default="/tmp/ash-direct-segv-probe.log")
+    ap.add_argument("--log", default=str(safety.host_temp_dir() / "ash-direct-segv-probe.log"))
     ap.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     ap.add_argument("--monitor-port", type=int, default=MONITOR_PORT)
     args = ap.parse_args()
@@ -83,7 +83,7 @@ def main() -> int:
     if log_path.exists():
         log_path.unlink()
 
-    disk = Path(tempfile.mktemp(prefix="ir0-ash-direct.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-ash-direct.", suffix=".img")
     shutil.copy2(args.disk_src, disk)
 
     inj = subprocess.run(

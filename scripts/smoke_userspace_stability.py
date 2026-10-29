@@ -18,6 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = ROOT.parent / "ISD"
@@ -45,7 +46,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=DEFAULT_DISK)
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-userspace-stability.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-userspace-stability.log")
     ap.add_argument("--rounds", type=int, default=1)
     ap.add_argument("--port", type=int, default=46101)
     ap.add_argument("--key-delay", type=float, default=0.40)

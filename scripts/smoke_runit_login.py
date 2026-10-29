@@ -14,9 +14,9 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TIMEOUT = 60
@@ -33,7 +33,7 @@ NEED_TAGS = [
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -51,7 +51,7 @@ def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Runit Unix login smoke")
-    parser.add_argument("--log", default="/tmp/runit-login-smoke.log")
+    parser.add_argument("--log", default=str(safety.host_temp_dir() / "runit-login-smoke.log"))
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
     parser.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace.iso"))
@@ -67,7 +67,7 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    disk = Path(tempfile.mktemp(prefix="ir0-login-smoke.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-login-smoke.", suffix=".img")
     subprocess.run(["cp", "-f", str(src), str(disk)], check=True)
     proc = subprocess.Popen(
         [

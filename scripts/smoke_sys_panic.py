@@ -23,10 +23,10 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -88,8 +88,8 @@ def shell_ready(port: int, log: Path) -> bool:
 
 def attempt(iso: Path, src: Path, log: Path, port: int, year: str,
             user: str, password: str, seed_body: str) -> int:
-    disk = Path(tempfile.mktemp(prefix="ir0-sys-panic.", suffix=".img"))
-    seed = Path(tempfile.mktemp(prefix="ir0-sys-panic-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-sys-panic.", suffix=".img")
+    seed = safety.make_temp_path(prefix="ir0-sys-panic-seed.", suffix=".txt")
     proc = None
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)
@@ -197,7 +197,7 @@ def attempt(iso: Path, src: Path, log: Path, port: int, year: str,
 
         # Optional: capture the emulated framebuffer for manual FB inspection.
         try:
-            shot = Path("/tmp/ir0-sys-panic.ppm")
+            shot = safety.host_temp_dir() / "ir0-sys-panic.ppm"
             mon(port, f"screendump {shot}", 0.6)
             if shot.is_file() and shot.stat().st_size > 0:
                 print(f"  OK  framebuffer captured to {shot} "
@@ -218,7 +218,7 @@ def attempt(iso: Path, src: Path, log: Path, port: int, year: str,
 def main() -> int:
     iso = Path(os.environ.get("ISO", str(ROOT / "kernel-x64-userspace.iso")))
     src = Path(os.environ.get("DISK", str(ROOT / "disk.img")))
-    log = Path("/tmp/ir0-sys-panic.log")
+    log = safety.host_temp_dir() / "ir0-sys-panic.log"
     port = int(os.environ.get("PORT", "46239"))
     if not iso.is_file() or not src.is_file():
         print("✗ missing iso/disk", file=sys.stderr)

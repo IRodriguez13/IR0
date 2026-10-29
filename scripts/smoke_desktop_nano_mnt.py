@@ -4,7 +4,7 @@
 Desktop nano smoke (kernel tty CSI + termios + static musl nano).
 
 Default path: inject nano into a temp MINIX disk (avoids flaky HMP su+9p),
-login as ivan, edit /tmp/nano-smoke.txt, save, cat + NANO_SMOKE_OK.
+login as ivan, edit a file under the guest temp dir, save, cat + NANO_SMOKE_OK.
 
 Optional --share: also stage nano on virtfs (experimental).
 """
@@ -30,6 +30,7 @@ from smoke_desktop_cmd_matrix import (  # noqa: E402
     normalize_serial,
     run_session,
 )
+import ktm_host_safety as safety
 
 DEFAULT_NANO = Path(
     os.environ.get(
@@ -64,7 +65,7 @@ def inject_nano_disk(disk: Path, nano: Path) -> None:
 def _serial_has(log: Path, needle: str) -> bool:
     if not log.is_file():
         return False
-    return needle in log.read_text(errors="replace")
+    return needle in safety.read_log_text(log)
 
 
 def nano_inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
@@ -72,10 +73,10 @@ def nano_inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
         inject_case(mon, case, key_delay)
         return
     # Prefer the batch serial log path used by run_session.
-    log = Path(os.environ.get("IR0_NANO_SMOKE_LOG", "/tmp/ir0-nano-mnt.log"))
+    log = Path(os.environ.get("IR0_NANO_SMOKE_LOG", str(safety.host_temp_dir() / "ir0-nano-mnt.log")))
     d = max(key_delay, 0.35)
     # Short path: MINIX NAME_MAX is tight; long names → nano "Filename too long".
-    mon.type_str("TERM=linux /usr/bin/nano /tmp/n.txt", d)
+    mon.type_str("TERM=linux /usr/bin/nano /tmp/n.txt", d)  # portability-guard: allow hardcoded_tmp (guest path)
     mon.ret()
     # Wait for nano chrome (CSI paint / title) before body text.
     deadline = time.monotonic() + 20.0
@@ -91,7 +92,7 @@ def nano_inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
     mon.key("ctrl-x")
     deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline:
-        text = log.read_text(errors="replace") if log.is_file() else ""
+        text = safety.read_log_text(log) if log.is_file() else ""
         if "Save modified" in text or "Yes" in text[-800:]:
             break
         time.sleep(0.2)
@@ -99,7 +100,7 @@ def nano_inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
     mon.key("y")
     deadline = time.monotonic() + 15.0
     while time.monotonic() < deadline:
-        text = log.read_text(errors="replace") if log.is_file() else ""
+        text = safety.read_log_text(log) if log.is_file() else ""
         if "File Name" in text or "Write" in text[-1200:]:
             break
         time.sleep(0.2)
@@ -107,7 +108,7 @@ def nano_inject_case(mon: Monitor, case: Case, key_delay: float) -> None:
     mon.ret()
     deadline = time.monotonic() + 25.0
     while time.monotonic() < deadline:
-        text = log.read_text(errors="replace") if log.is_file() else ""
+        text = safety.read_log_text(log) if log.is_file() else ""
         if "KERNEL PANIC" in text:
             return
         tail = text[-500:]
@@ -129,7 +130,7 @@ def main() -> int:
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=ROOT / "disk.img")
     ap.add_argument("--nano", type=Path, default=DEFAULT_NANO)
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-nano-mnt.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-nano-mnt.log")
     ap.add_argument("--port", type=int, default=46101)
     ap.add_argument("--key-delay", type=float, default=0.40)
     ap.add_argument(
@@ -154,7 +155,7 @@ def main() -> int:
 
     mx.inject_case = nano_inject_case
 
-    work_disk = Path(tempfile.mktemp(suffix=".img", prefix="ir0-nano-disk."))
+    work_disk = safety.make_temp_path(suffix=".img", prefix="ir0-nano-disk.")
     shutil.copy2(args.disk, work_disk)
     share_dir = None
     try:

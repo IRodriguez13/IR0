@@ -10,9 +10,9 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPT_RE = re.compile(r"(?:root|ivan)@ir0:\S*[#$]")
@@ -45,7 +45,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=ROOT / "disk.img")
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-mouse-tty.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-mouse-tty.log")
     ap.add_argument("--port", type=int, default=46221)
     ap.add_argument("--timeout", type=float, default=90.0)
     args = ap.parse_args()
@@ -54,7 +54,7 @@ def main() -> int:
         print("✗ missing iso/disk", file=sys.stderr)
         return 2
 
-    work = Path(tempfile.mktemp(suffix=".img", prefix="ir0-mouse-tty."))
+    work = safety.make_temp_path(suffix=".img", prefix="ir0-mouse-tty.")
     shutil.copy2(args.disk, work)
     args.log.write_text("")
     proc = subprocess.Popen(
@@ -85,7 +85,7 @@ def main() -> int:
             if proc.poll() is not None:
                 print("✗ qemu exited early", file=sys.stderr)
                 return 1
-            text = args.log.read_text(errors="replace")
+            text = safety.read_log_text(args.log)
             if "ASH_INTERACTIVE_READY" in text or PROMPT_RE.search(text):
                 break
             time.sleep(0.2)
@@ -102,7 +102,7 @@ def main() -> int:
             except OSError:
                 time.sleep(0.2)
 
-        mark = len(args.log.read_text(errors="replace"))
+        mark = len(safety.read_log_text(args.log))
         for i in range(25):
             mon_cmd(args.port, f"mouse_move {i % 7} {(i * 3) % 5}")
             if i % 5 == 0:
@@ -110,7 +110,7 @@ def main() -> int:
                 mon_cmd(args.port, "mouse_button 0")
         time.sleep(0.8)
 
-        mid = strip_noise(args.log.read_text(errors="replace")[mark:])
+        mid = strip_noise(safety.read_log_text(args.log)[mark:])
         # Prompt redraws are OK; alphanumeric from mouse path is not.
         mid_noprompt = PROMPT_RE.sub("", mid)
         if re.search(r"[A-Za-z0-9]", mid_noprompt):
@@ -118,13 +118,13 @@ def main() -> int:
             return 1
 
         # Keyboard still responds (short path — HMP drops long strings).
-        mark2 = len(args.log.read_text(errors="replace"))
+        mark2 = len(safety.read_log_text(args.log))
         mon_cmd(args.port, "sendkey a", 0.1)
         mon_cmd(args.port, "sendkey ret", 0.1)
         t1 = time.time()
         kbd_ok = False
         while time.time() - t1 < 12:
-            delta = args.log.read_text(errors="replace")[mark2:]
+            delta = safety.read_log_text(args.log)[mark2:]
             if "KERNEL PANIC" in delta:
                 print("✗ panic during keyboard check", file=sys.stderr)
                 return 1

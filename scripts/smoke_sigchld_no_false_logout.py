@@ -11,7 +11,6 @@ import crypt
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -19,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ISD_DISK = ROOT.parent / "ISD/out/x86_64/images/development/disk.img"
 
 import importlib.util
+import ktm_host_safety as safety
 
 _spec = importlib.util.spec_from_file_location(
     "relogin", str(ROOT / "scripts" / "smoke_desktop_relogin.py"))
@@ -47,7 +47,7 @@ def main() -> int:
     # Product smokes must exercise the ISD-owned rootfs.  The legacy IR0
     # disk.img can be stale and silently omit current shell/profile policy.
     src = Path(os.environ.get("DISK", str(DEFAULT_ISD_DISK)))
-    log = Path("/tmp/ir0-sigchld-no-false-logout.log")
+    log = safety.host_temp_dir() / "ir0-sigchld-no-false-logout.log"
     port = int(os.environ.get("PORT", "46745"))
     if not iso.is_file() or not src.is_file():
         print("✗ missing iso/disk", file=sys.stderr)
@@ -60,8 +60,8 @@ def main() -> int:
         "wheel=1\nlock_root=1\nrecovery=1\n"
     )
 
-    disk = Path(tempfile.mktemp(prefix="ir0-sigchld-nolog.", suffix=".img"))
-    seed = Path(tempfile.mktemp(prefix="ir0-sigchld-nolog-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-sigchld-nolog.", suffix=".img")
+    seed = safety.make_temp_path(prefix="ir0-sigchld-nolog-seed.", suffix=".txt")
     proc = None
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)

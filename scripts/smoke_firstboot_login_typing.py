@@ -17,13 +17,13 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 import importlib.util
+import ktm_host_safety as safety
 
 _guards_spec = importlib.util.spec_from_file_location(
     "guards", str(ROOT / "scripts" / "smoke_tty_guards.py"))
@@ -85,7 +85,7 @@ def type_str(port: int, text: str, delay: float = 0.10, enter: bool = True) -> N
 
 
 def read_log(path: Path) -> str:
-    return path.read_text(errors="replace") if path.is_file() else ""
+    return safety.read_log_text(path) if path.is_file() else ""
 
 
 def wait_re(log: Path, rx: re.Pattern[str], proc: subprocess.Popen, limit: float) -> str:
@@ -117,7 +117,7 @@ def wait_prompt(log: Path, proc: subprocess.Popen, limit: float) -> bool:
 
 
 def run_trial(args: argparse.Namespace, trial: int) -> int:
-    disk = Path(tempfile.mktemp(prefix=f"ir0-fb-type-{trial}.", suffix=".img"))
+    disk = safety.make_temp_path(prefix=f"ir0-fb-type-{trial}.", suffix=".img")
     port = args.port + trial
     shutil.copy2(args.disk, disk)
     args.log.write_text("")
@@ -241,7 +241,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=ROOT / "disk.img")
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-firstboot-login-typing.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-firstboot-login-typing.log")
     ap.add_argument("--port", type=int, default=46207)
     ap.add_argument("--timeout", type=float, default=180.0)
     ap.add_argument("--user", default="ivan")

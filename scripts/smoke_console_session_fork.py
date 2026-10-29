@@ -15,9 +15,9 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = ROOT.parent / "ISD"
@@ -48,7 +48,7 @@ def send_keys(port: int, keys: list[str], delay: float = 0.1) -> None:
 
 def log_text(path: Path) -> str:
     try:
-        return path.read_text(errors="replace")
+        return safety.read_log_text(path)
     except OSError:
         return ""
 
@@ -64,7 +64,7 @@ def main() -> int:
         "--console-bin",
         default=str(ISD / "out/x86_64/product/stage-bin/runit_console_run"),
     )
-    ap.add_argument("--log", default="/tmp/console-session-fork-smoke.log")
+    ap.add_argument("--log", default=str(safety.host_temp_dir() / "console-session-fork-smoke.log"))
     ap.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     ap.add_argument("--monitor-port", type=int, default=MONITOR_PORT)
     args = ap.parse_args()
@@ -77,7 +77,7 @@ def main() -> int:
     log_path = Path(args.log)
     log_path.unlink(missing_ok=True)
 
-    disk = Path(tempfile.mktemp(prefix="ir0-console-fork.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-console-fork.", suffix=".img")
     shutil.copy2(args.disk_src, disk)
 
     inj = subprocess.run(

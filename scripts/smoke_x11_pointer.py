@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 
 FAILURES = ("[STARTX][FAIL]", "Fatal server error", "[PANIC]",
@@ -196,8 +197,8 @@ def main() -> int:
         before = work / "before.ppm"
         after = work / "after.ppm"
         keyboard = work / "keyboard.ppm"
-        subprocess.run(["cp", "--reflink=auto", args.root, root], check=True)
-        subprocess.run(["cp", "--reflink=auto", args.home, home], check=True)
+        shutil.copyfile(args.root, root)
+        shutil.copyfile(args.home, home)
         subprocess.run([args.inject, root, args.init, "sbin/init"], check=True)
         qemu = subprocess.Popen([
             args.qemu, "-cdrom", args.iso,
@@ -210,7 +211,7 @@ def main() -> int:
         try:
             deadline = time.monotonic() + 90
             while time.monotonic() < deadline:
-                output = log.read_text(errors="replace") if log.exists() else ""
+                output = safety.read_log_text(log) if log.exists() else ""
                 if "STARTX_EXT2_OK" in output:
                     break
                 failure = detected_failure(output)
@@ -243,7 +244,7 @@ def main() -> int:
             monitor_command(channel, f"screendump {keyboard}")
             keyboard_deadline = time.monotonic() + 20
             while time.monotonic() < keyboard_deadline:
-                output = log.read_text(errors="replace")
+                output = safety.read_log_text(log)
                 if "X11_KEYBOARD_COMMAND_OK" in output:
                     break
                 failure = detected_failure(output)
@@ -258,7 +259,7 @@ def main() -> int:
             # delayed xterm/X server failures rather than proving only that a
             # single mouse packet reached the framebuffer.
             time.sleep(3.0)
-            output = log.read_text(errors="replace")
+            output = safety.read_log_text(log)
             failure = detected_failure(output)
             if failure:
                 raise RuntimeError(
@@ -271,7 +272,7 @@ def main() -> int:
             second = after.read_bytes()
             changed = sum(left != right for left, right in zip(first, second))
             changed += abs(len(first) - len(second))
-            output = log.read_text(errors="replace")
+            output = safety.read_log_text(log)
             # Xfbdev may skip its optional protocol-reset write when the PS/2
             # device is already synchronized.  Motion is proved by the read
             # path plus a changed framebuffer, so DEV_MOUSE_WRITE is not a
@@ -320,15 +321,15 @@ def main() -> int:
             return 0
         finally:
             if log.exists():
-                shutil.copyfile(log, "/tmp/ir0-x11-pointer-serial.log")
+                shutil.copyfile(log, safety.host_temp_dir() / "ir0-x11-pointer-serial.log")
             if before.exists():
-                shutil.copyfile(before, "/tmp/ir0-x11-pointer-before.ppm")
+                shutil.copyfile(before, safety.host_temp_dir() / "ir0-x11-pointer-before.ppm")
             if after.exists():
-                shutil.copyfile(after, "/tmp/ir0-x11-pointer-after.ppm")
+                shutil.copyfile(after, safety.host_temp_dir() / "ir0-x11-pointer-after.ppm")
             if keyboard.exists():
-                shutil.copyfile(keyboard, "/tmp/ir0-x11-keyboard.ppm")
+                shutil.copyfile(keyboard, safety.host_temp_dir() / "ir0-x11-keyboard.ppm")
             if home.exists():
-                shutil.copyfile(home, "/tmp/ir0-x11-pointer-home.img")
+                shutil.copyfile(home, safety.host_temp_dir() / "ir0-x11-pointer-home.img")
             if qemu.poll() is None:
                 qemu.terminate()
                 qemu.wait(timeout=10)

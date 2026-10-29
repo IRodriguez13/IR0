@@ -10,9 +10,9 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPT_RE = re.compile(r"(?:root|ivan)@ir0:\S*[#$]")
@@ -54,11 +54,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=ROOT / "disk.img")
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-doas-pipe.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-doas-pipe.log")
     ap.add_argument("--port", type=int, default=46231)
     args = ap.parse_args()
 
-    work = Path(tempfile.mktemp(suffix=".img", prefix="ir0-doas-pipe."))
+    work = safety.make_temp_path(suffix=".img", prefix="ir0-doas-pipe.")
     shutil.copy2(args.disk, work)
     args.log.write_text("")
     proc = subprocess.Popen(
@@ -86,7 +86,7 @@ def main() -> int:
     try:
         t0 = time.time()
         while time.time() - t0 < 90:
-            t = args.log.read_text(errors="replace")
+            t = safety.read_log_text(args.log)
             if "ASH_INTERACTIVE_READY" in t or PROMPT_RE.search(t):
                 break
             if proc.poll() is not None:
@@ -108,12 +108,12 @@ def main() -> int:
             "doas dmesg | grep IR0",
         ]
         for cmd in variants:
-            mark = len(args.log.read_text(errors="replace"))
+            mark = len(safety.read_log_text(args.log))
             type_str(args.port, cmd)
             mon(args.port, "sendkey ret")
             deadline = time.time() + 25
             while time.time() < deadline:
-                text = args.log.read_text(errors="replace")
+                text = safety.read_log_text(args.log)
                 if "KERNEL PANIC" in text or "double-free" in text:
                     print(f"✗ PANIC on: {cmd}")
                     print(text[mark:][-800:])
@@ -129,7 +129,7 @@ def main() -> int:
                 time.sleep(0.2)
             else:
                 # Timeout without panic — still check
-                text = args.log.read_text(errors="replace")
+                text = safety.read_log_text(args.log)
                 if "KERNEL PANIC" in text or "double-free" in text:
                     print(f"✗ PANIC on: {cmd}")
                     return 1
@@ -139,11 +139,11 @@ def main() -> int:
 
         # Loop the hottest case
         for i in range(5):
-            mark = len(args.log.read_text(errors="replace"))
+            mark = len(safety.read_log_text(args.log))
             type_str(args.port, "doas dmesg | grep IR0")
             mon(args.port, "sendkey ret")
             time.sleep(2.5)
-            text = args.log.read_text(errors="replace")
+            text = safety.read_log_text(args.log)
             if "KERNEL PANIC" in text or "double-free" in text:
                 print(f"✗ PANIC on loop iter {i}")
                 return 1

@@ -39,6 +39,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 import importlib.util
+import ktm_host_safety as safety
 
 _guards_spec = importlib.util.spec_from_file_location(
     "guards", str(ROOT / "scripts" / "smoke_tty_guards.py"))
@@ -147,7 +148,7 @@ def strip_ansi(text: str) -> str:
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def log_for_prompt(log: Path) -> str:
@@ -341,7 +342,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace.iso"))
     ap.add_argument("--disk", default=str(ROOT / "disk.img"))
-    ap.add_argument("--log", default="/tmp/ir0-session-chaos.log")
+    ap.add_argument("--log", default=str(safety.host_temp_dir() / "ir0-session-chaos.log"))
     ap.add_argument("--timeout", type=int, default=240)
     ap.add_argument("--port", type=int, default=46327)
     ap.add_argument("--hard-budget", type=float, default=45.0)
@@ -368,8 +369,8 @@ def main() -> int:
         "recovery=1\n"
     )
 
-    disk = Path(tempfile.mktemp(prefix="ir0-chaos.", suffix=".img"))
-    seed_path = Path(tempfile.mktemp(prefix="ir0-chaos-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-chaos.", suffix=".img")
+    seed_path = safety.make_temp_path(prefix="ir0-chaos-seed.", suffix=".txt")
     share = Path(tempfile.mkdtemp(prefix="ir0-chaos-share."))
     (share / "host_marker.txt").write_text("from_host\n", encoding="utf-8")
     proc = None
@@ -502,7 +503,7 @@ def main() -> int:
             print(f"  share={share}", file=sys.stderr)
             print(text[-8000:], file=sys.stderr)
             return 1
-        body = guest_marker.read_text(errors="replace")
+        body = safety.read_log_text(guest_marker)
         if "guest_ok" not in body:
             kill_qemu(proc)
             print(f"✗ virtio-9p guest marker content unexpected: {body!r}",

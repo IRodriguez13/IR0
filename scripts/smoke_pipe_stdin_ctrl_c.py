@@ -11,13 +11,13 @@ import crypt
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
 import importlib.util
+import ktm_host_safety as safety
 
 _spec = importlib.util.spec_from_file_location(
     "relogin", str(ROOT / "scripts" / "smoke_desktop_relogin.py"))
@@ -50,7 +50,7 @@ def run_cmd(port: int, cmd: str, pause: float = 0.5) -> None:
 def main() -> int:
     iso = Path(os.environ.get("ISO", str(ROOT / "kernel-x64-userspace.iso")))
     src = Path(os.environ.get("DISK", str(ROOT / "disk.img")))
-    log = Path("/tmp/ir0-pipe-stdin-ctrl-c.log")
+    log = safety.host_temp_dir() / "ir0-pipe-stdin-ctrl-c.log"
     port = int(os.environ.get("PORT", "46747"))
     if not iso.is_file() or not src.is_file():
         print("✗ missing iso/disk", file=sys.stderr)
@@ -63,8 +63,8 @@ def main() -> int:
         "wheel=1\nlock_root=1\nrecovery=1\n"
     )
 
-    disk = Path(tempfile.mktemp(prefix="ir0-pipe-intr.", suffix=".img"))
-    seed = Path(tempfile.mktemp(prefix="ir0-pipe-intr-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-pipe-intr.", suffix=".img")
+    seed = safety.make_temp_path(prefix="ir0-pipe-intr-seed.", suffix=".txt")
     proc = None
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)

@@ -25,9 +25,9 @@ import re
 import shutil
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "scripts" / "init_boot_contract.json"
@@ -354,14 +354,14 @@ def run_capture(
     ).resolve()
     if not smoke_only:
         out_dir.mkdir(parents=True, exist_ok=True)
-    log_path = out_dir / "serial.log" if not smoke_only else Path(tempfile.mktemp(suffix=".log"))
+    log_path = out_dir / "serial.log" if not smoke_only else safety.make_temp_path(suffix=".log")
 
-    tmp_disk = Path(tempfile.mktemp(suffix=".img"))
+    tmp_disk = safety.make_temp_path(suffix=".img")
     tmp_home: Path | None = None
     shutil.copy2(disk_src, tmp_disk)
     if profile_requires_home_disk(isd, profile):
         home_src = ensure_home_disk(isd, profile, arch)
-        tmp_home = Path(tempfile.mktemp(suffix=".home.ext2.img"))
+        tmp_home = safety.make_temp_path(suffix=".home.ext2.img")
         shutil.copy2(home_src, tmp_home)
     try:
         success_tags = spec["autokill_success"]

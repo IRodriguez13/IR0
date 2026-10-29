@@ -155,11 +155,25 @@ def ensure_qemu_mem(
     return cmd
 
 
-def make_temp_disk(prefix: str = "ir0-ktm-") -> Path:
-    """Secure temp disk path; caller owns cleanup."""
-    fd, name = tempfile.mkstemp(prefix=prefix, suffix=".img")
+def make_temp_path(prefix: str = "ir0-ktm-", suffix: str = "") -> Path:
+    """Reserve a private temp path with mkstemp; caller owns cleanup.
+
+    tempfile.mktemp only invents a name, so another process can create it
+    between the check and the first write. mkstemp reserves the inode.
+    """
+    fd, name = tempfile.mkstemp(prefix=prefix, suffix=suffix)
     os.close(fd)
     return Path(name)
+
+
+def make_temp_disk(prefix: str = "ir0-ktm-") -> Path:
+    """Secure temp disk path; caller owns cleanup."""
+    return make_temp_path(prefix=prefix, suffix=".img")
+
+
+def host_temp_dir() -> Path:
+    """Host temp directory, honoring TMPDIR; never hardcode /tmp."""
+    return Path(tempfile.gettempdir())
 
 
 def read_log_text(path: Path, max_bytes: int = MAX_LOG_BYTES) -> str:

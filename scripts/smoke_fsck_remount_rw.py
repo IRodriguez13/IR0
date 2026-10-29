@@ -17,9 +17,9 @@ import importlib.util
 import os
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = Path(os.environ.get("IR0_ISD_ROOT", str(ROOT.parent / "ISD")))
@@ -50,7 +50,7 @@ def profile_with_recovery_hook() -> Path:
         "\t/sbin/rfsmoke\n"
         "fi\n"
     )
-    tmp = Path(tempfile.mktemp(prefix="ir0-recovery-profile.", suffix=".sh"))
+    tmp = safety.make_temp_path(prefix="ir0-recovery-profile.", suffix=".sh")
     tmp.write_text(base + hook, encoding="utf-8")
     return tmp
 
@@ -59,7 +59,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace-recovery.iso"))
     ap.add_argument("--disk", default=str(ROOT / "disk.img"))
-    ap.add_argument("--log", default="/tmp/ir0-fsck-remount.log")
+    ap.add_argument("--log", default=str(safety.host_temp_dir() / "ir0-fsck-remount.log"))
     ap.add_argument("--timeout", type=int, default=90)
     args = ap.parse_args()
 
@@ -71,10 +71,10 @@ def main() -> int:
         return 1
 
     helper = ROOT / "scripts" / "recovery_fsck_smoke.sh"
-    marker = Path(tempfile.mktemp(prefix="ir0-recovery-marker.", suffix=".txt"))
+    marker = safety.make_temp_path(prefix="ir0-recovery-marker.", suffix=".txt")
     marker.write_text("1\n", encoding="utf-8")
     profile = profile_with_recovery_hook()
-    disk = Path(tempfile.mktemp(prefix="ir0-fsck-remount.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-fsck-remount.", suffix=".img")
     inject = ROOT / "scripts" / "inject_init_minix.py"
     proc = None
     try:

@@ -14,9 +14,9 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_TIMEOUT = 90
@@ -36,7 +36,7 @@ SECOND_BOOT_TAGS = [
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -54,7 +54,7 @@ def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Firstboot seed smoke (minimal)")
-    parser.add_argument("--log", default="/tmp/firstboot-seed-smoke.log")
+    parser.add_argument("--log", default=str(safety.host_temp_dir() / "firstboot-seed-smoke.log"))
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
     parser.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace.iso"))
@@ -87,8 +87,8 @@ def main() -> int:
         "recovery=1\n"
     )
 
-    disk = Path(tempfile.mktemp(prefix="ir0-fb-seed.", suffix=".img"))
-    seed_path = Path(tempfile.mktemp(prefix="ir0-fb-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-fb-seed.", suffix=".img")
+    seed_path = safety.make_temp_path(prefix="ir0-fb-seed.", suffix=".txt")
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)
         seed_path.write_text(seed_body, encoding="utf-8")

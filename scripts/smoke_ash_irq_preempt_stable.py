@@ -18,9 +18,9 @@ import signal
 import socket
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 ISD = ROOT.parent / "ISD"
@@ -61,7 +61,7 @@ POST_FIRSTBOOT_USER = re.compile(r"Enter your Unix username:")
 
 def log_text(path: Path) -> str:
     try:
-        return path.read_text(errors="replace")
+        return safety.read_log_text(path)
     except OSError:
         return ""
 
@@ -121,7 +121,7 @@ def ash_ready(text: str) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Ash IRQ preempt stability smoke")
-    ap.add_argument("--log", default="/tmp/ash-irq-preempt-stable.log")
+    ap.add_argument("--log", default=str(safety.host_temp_dir() / "ash-irq-preempt-stable.log"))
     ap.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     ap.add_argument("--stable-sec", type=int, default=DEFAULT_STABLE_SEC)
     ap.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
@@ -155,7 +155,7 @@ def main() -> int:
     )
     time.sleep(0.3)
 
-    disk = Path(tempfile.mktemp(prefix="ir0-ash-stable.", suffix=".img"))
+    disk = safety.make_temp_path(prefix="ir0-ash-stable.", suffix=".img")
     shutil.copy2(src_disk, disk)
 
     qemu_cmd = [

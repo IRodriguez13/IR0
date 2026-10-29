@@ -14,13 +14,13 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from smoke_desktop_cmd_matrix import Monitor, cleanup_port  # noqa: E402
+import ktm_host_safety as safety
 
 INJECT = ROOT / "scripts" / "inject_init_minix.py"
 PROBE_SRC = ROOT / "setup" / "pid1" / "tty_raw_probe.c"
@@ -44,7 +44,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", type=Path, default=ROOT / "kernel-x64-userspace.iso")
     ap.add_argument("--disk", type=Path, default=ROOT / "disk.img")
-    ap.add_argument("--log", type=Path, default=Path("/tmp/ir0-tty-raw-probe.log"))
+    ap.add_argument("--log", type=Path, default=safety.host_temp_dir() / "ir0-tty-raw-probe.log")
     ap.add_argument("--port", type=int, default=46111)
     ap.add_argument("--timeout", type=float, default=90.0)
     ap.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
@@ -55,7 +55,7 @@ def main() -> int:
         return 2
 
     build_probe()
-    work = Path(tempfile.mktemp(suffix=".img", prefix="ir0-tty-probe."))
+    work = safety.make_temp_path(suffix=".img", prefix="ir0-tty-probe.")
     shutil.copy2(args.disk, work)
     subprocess.run(
         [sys.executable, str(INJECT), str(work), str(PROBE_BIN), "usr/bin/tty_raw_probe"],
@@ -93,7 +93,7 @@ def main() -> int:
     try:
         mon.connect(timeout=25)
         while time.monotonic() - t0 < args.timeout:
-            text = args.log.read_text(errors="replace") if args.log.is_file() else ""
+            text = safety.read_log_text(args.log) if args.log.is_file() else ""
             if "ASH_INTERACTIVE_READY" in text or "root@" in text:
                 break
             if (
@@ -115,7 +115,7 @@ def main() -> int:
             time.sleep(0.3)
         else:
             print("✗ timeout waiting for shell", file=sys.stderr)
-            print((args.log.read_text(errors="replace") if args.log.is_file() else "")[-1500:])
+            print((safety.read_log_text(args.log) if args.log.is_file() else "")[-1500:])
             return 1
 
         time.sleep(0.8)
@@ -125,7 +125,7 @@ def main() -> int:
         # Wait for probe ready tag
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            text = args.log.read_text(errors="replace")
+            text = safety.read_log_text(args.log)
             if "TTY_PROBE_WAIT_CTRLX" in text:
                 break
             time.sleep(0.2)
@@ -133,21 +133,21 @@ def main() -> int:
         time.sleep(0.8)
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            text = args.log.read_text(errors="replace")
+            text = safety.read_log_text(args.log)
             if "TTY_PROBE_WAIT_ARROW" in text:
                 break
             time.sleep(0.2)
         mon.key("up")
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
-            text = args.log.read_text(errors="replace")
+            text = safety.read_log_text(args.log)
             if "TTY_PROBE_WAIT_ENTER" in text:
                 break
             time.sleep(0.2)
         mon.key("ret")
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            text = args.log.read_text(errors="replace")
+            text = safety.read_log_text(args.log)
             if "TTY_PROBE_OK" in text:
                 print("✓ smoke-tty-raw-probe PASS (Ctrl-X=0x18 + ESC[A] + Enter=0x0d)")
                 return 0
@@ -157,7 +157,7 @@ def main() -> int:
                 return 1
             time.sleep(0.2)
         print("✗ timeout waiting TTY_PROBE_OK", file=sys.stderr)
-        print(args.log.read_text(errors="replace")[-2500:], file=sys.stderr)
+        print(safety.read_log_text(args.log)[-2500:], file=sys.stderr)
         return 1
     finally:
         mon.close()

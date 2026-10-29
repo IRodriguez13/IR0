@@ -26,9 +26,9 @@ import re
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 PROMPT_RE = re.compile(r"[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+:\S*[#$]")
@@ -57,7 +57,7 @@ ROUND_COMMANDS = [
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -225,7 +225,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace.iso"))
     ap.add_argument("--disk", default=str(ROOT / "disk.img"))
-    ap.add_argument("--log", default="/tmp/ir0-session-soak.log")
+    ap.add_argument("--log", default=str(safety.host_temp_dir() / "ir0-session-soak.log"))
     ap.add_argument("--rounds", type=int, default=8)
     # Off by default: the relogin path stalls the harness after a few
     # cycles, which cut every run short at round 3 and starved the soak of
@@ -255,8 +255,8 @@ def main() -> int:
         "recovery=1\n"
     )
 
-    disk = Path(tempfile.mktemp(prefix="ir0-soak.", suffix=".img"))
-    seed_path = Path(tempfile.mktemp(prefix="ir0-soak-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-soak.", suffix=".img")
+    seed_path = safety.make_temp_path(prefix="ir0-soak-seed.", suffix=".txt")
     proc = None
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)

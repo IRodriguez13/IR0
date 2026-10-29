@@ -23,9 +23,9 @@ import re
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "out" / "baseline"
@@ -97,7 +97,7 @@ def write_problems() -> None:
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return path.read_text(errors="replace")
+    return safety.read_log_text(path)
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -256,8 +256,8 @@ def run_qemu_capture(timeout: int, port: int) -> tuple[bool, str]:
         "wheel=1\n"
         "lock_root=1\n"
     )
-    disk = Path(tempfile.mktemp(prefix="ir0-baseline.", suffix=".img"))
-    seed_path = Path(tempfile.mktemp(prefix="ir0-baseline-seed.", suffix=".txt"))
+    disk = safety.make_temp_path(prefix="ir0-baseline.", suffix=".img")
+    seed_path = safety.make_temp_path(prefix="ir0-baseline-seed.", suffix=".txt")
     log_path = OUT / "qemu-serial.log"
     try:
         subprocess.run(["cp", "-f", str(src), str(disk)], check=True)
