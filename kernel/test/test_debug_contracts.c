@@ -535,6 +535,19 @@ void ktest_mount_longest_prefix_contract(void)
 	KASSERT(contains_text(outer_buf, "outer-tmpfs"));
 	KASSERT(contains_text(inner_buf, "inner-simplefs"));
 
+	/* Same-backend nested mounts must also select the longest prefix. */
+	ktest_ensure_mountpoint_dir("/mnt/lp/nested");
+	int64_t mn = sys_mount("none", "/mnt/lp/nested", "tmpfs", 0, NULL);
+	KASSERT(mn == 0 || mn == -EBUSY);
+	int64_t nfd = sys_open("/mnt/lp/nested/private.txt",
+			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
+	KASSERT_GT(nfd, 0);
+	KASSERT_GT(sys_write((int)nfd, "nested", 6), 0);
+	sys_close((int)nfd);
+	KASSERT_EQ(sys_umount("/mnt/lp/nested", 0), 0);
+	stat_t nested_st;
+	KASSERT(vfs_stat("/mnt/lp/nested/private.txt", &nested_st) < 0);
+
 	KTEST_END();
 }
 
