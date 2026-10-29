@@ -6,11 +6,7 @@
 #include <ir0/early_time.h>
 #include <ir0/time.h>
 
-#define EFAULT 14
-#define EINVAL 22
-#define ENOSYS 38
-#define EPERM  1
-#define EOPNOTSUPP 95
+#include <ir0/errno.h>
 #define CLOCK_REALTIME 0UL
 #define CLOCK_MONOTONIC 1UL
 #define CLOCK_MONOTONIC_RAW 4UL

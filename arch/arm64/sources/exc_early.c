@@ -28,8 +28,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
-
-#define EINVAL 22
+#include <ir0/errno.h>
 
 /* ESR_EL1: EC 0x15 = SVC instruction from AArch64. */
 #define ESR_EC_SHIFT 26

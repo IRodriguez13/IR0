@@ -8,7 +8,7 @@
 #include <ir0/early_vfs.h>
 #include <ir0/product_vfs.h>
 
-#define ENOSYS 38
+#include <ir0/errno.h>
 
 static int64_t early_vfs_syscall(void *opaque, enum ir0_syscall_id id,
 				 uint64_t a0, uint64_t a1, uint64_t a2,

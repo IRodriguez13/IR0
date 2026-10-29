@@ -11,17 +11,8 @@
 #include <ir0/time.h>
 #include <ir0/utsname.h>
 #include <ir0/process.h>
+#include <ir0/errno.h>
 
-#define EAGAIN 11
-#define ECHILD 10
-#define EFAULT 14
-#define EINTR  4
-#define EINVAL 22
-#define ENOSYS 38
-#define EPERM  1
-#define ESRCH  3
-#define E2BIG  7
-#define EOPNOTSUPP 95
 #define WNOHANG 1
 #define WEXITED 4
 #define P_ALL 0
@@ -189,7 +180,6 @@ static int64_t early_rt_sigaction(struct early_syscall_context *context,
 #define FUTEX_PRIVATE_FLAG 128
 #define FUTEX_CLOCK_REALTIME 256
 #define FUTEX_CMD_MASK ~(FUTEX_PRIVATE_FLAG | FUTEX_CLOCK_REALTIME)
-#define ETIMEDOUT 110
 #define SS_DISABLE 2
 
 static uint32_t g_personality;

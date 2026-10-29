@@ -17,7 +17,7 @@
 #include <ir0/early_syscall.h>
 #include <ir0/syscall_id.h>
 
-#define ENOSYS 38
+#include <ir0/errno.h>
 
 static int host_map_user_page(uint64_t page, int executable)
 {

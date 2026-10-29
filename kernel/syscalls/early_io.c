@@ -9,15 +9,8 @@
 #include <ir0/early_syscall.h>
 #include <ir0/early_time.h>
 #include <ir0/time.h>
+#include <ir0/errno.h>
 
-#define EBADF 9
-#define EAGAIN 11
-#define EFAULT 14
-#define EINVAL 22
-#define ENOSYS 38
-#define ENOTTY 25
-#define ENOTSOCK 88
-#define EOPNOTSUPP 95
 #define WRITE_MAX 256UL
 #define CMSG_HDR 16U
 #define CMSG_CAP 128U
