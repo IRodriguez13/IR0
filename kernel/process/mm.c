@@ -185,6 +185,7 @@ void process_unmap_user_pages_all(address_space_root_t root,
 	for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
 	{
 		uint64_t *level1 = process_pt_child(root, i4);
+		uint64_t *level2;
 
 		if (!level1)
 			continue;
@@ -193,8 +194,7 @@ void process_unmap_user_pages_all(address_space_root_t root,
 
 		for (i3 = 0; i3 < entries; i3++)
 		{
-			uint64_t *level2 = process_pt_child(level1, i3);
-
+			level2 = process_pt_child(level1, i3);
 			if (!level2)
 				continue;
 			if (stats)
@@ -240,9 +240,30 @@ void process_unmap_user_pages_all(address_space_root_t root,
 					{
 						stats->missing_pages++;
 					}
+
+					/*
+					 * unmap_page_in_directory() frees empty
+					 * page tables, including the one just
+					 * read. Re-fetch every level from its
+					 * live parent before the next entry so
+					 * the walk never touches freed memory.
+					 */
+					level1 = process_pt_child(root, i4);
+					if (!level1)
+						goto next_i4;
+					level2 = process_pt_child(level1, i3);
+					if (!level2)
+						goto next_i3;
+					level3 = process_pt_child(level2, i2);
+					if (!level3)
+						break;
 				}
 			}
+next_i3:
+			;
 		}
+next_i4:
+		;
 	}
 }
 

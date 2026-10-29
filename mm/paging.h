@@ -134,6 +134,12 @@ int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr);
  */
 int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr);
 
+/*
+ * ktest-only: poison a page table just before it is freed, so a walk that
+ * keeps reading through a stale pointer is detected. Off by default.
+ */
+void paging_test_poison_freed_tables(int enable);
+
 /**
  * Unmap a virtual address in the current address space (current address-space root)
  */

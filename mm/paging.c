@@ -220,6 +220,18 @@ static int page_table_is_empty(const uint64_t *table)
     return 1;
 }
 
+/*
+ * ktest hook: overwrite a table before freeing it so a walk that keeps using
+ * the old pointer sees garbage instead of silently reading zeros. Disabled
+ * outside the test that requests it.
+ */
+static int paging_test_poison_freed;
+
+void paging_test_poison_freed_tables(int enable)
+{
+    paging_test_poison_freed = !!enable;
+}
+
 static void ir0_mm_free_table_frame(uint64_t frame, int level)
 {
     if (!frame)
@@ -231,6 +243,9 @@ static void ir0_mm_free_table_frame(uint64_t frame, int level)
         ir0_mm_level2_freed++;
     else if (level == 3)
         ir0_mm_level3_freed++;
+
+    if (paging_test_poison_freed)
+        memset((void *)(uintptr_t)frame, 0xA5, PAGE_SIZE_4KB);
 
     ir0_mm_set_frame_type(frame, IR0_MM_FRAME_UNKNOWN);
     ir0_mm_frame_pt_free++;

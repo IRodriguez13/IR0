@@ -62,6 +62,7 @@ void ktest_mmap_null_placement(void);
 void ktest_munmap_partial_preserves_vma(void);
 void ktest_mmap_fixed_partial_overlap_preserves_vma(void);
 void ktest_mprotect_preserves_cow(void);
+void ktest_reclaim_freed_page_tables_safely(void);
 void ktest_signal_segv_deliver_irq_frame(void);
 void ktest_brk_post_exec(void);
 void ktest_brk_linux_fail_returns_current(void);

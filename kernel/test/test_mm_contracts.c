@@ -13,12 +13,17 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
+#include "process.h"
+#include "process/process_internal.h"
 #include "syscalls.h"
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/kmem.h>
 #include <ir0/paging.h>
+#include <ir0/pmm.h>
 #include <ir0/process.h>
+#include <ir0/sched.h>
 #include <stdint.h>
+#include <string.h>
 
 #define KTEST_MAP_PRIVATE   0x02
 #define KTEST_MAP_ANONYMOUS 0x20
@@ -221,6 +226,84 @@ void ktest_mmap_fixed_partial_overlap_preserves_vma(void)
 	process_set_heap_start(current_process, saved_heap_start);
 	process_set_heap_end(current_process, saved_heap_end);
 	process_set_mmap_base(current_process, saved_mmap_base);
+	KTEST_END();
+}
+
+static void ktest_reclaim_child_entry(void)
+{
+	process_exit(0);
+}
+
+void ktest_reclaim_freed_page_tables_safely(void)
+{
+	pid_t pid;
+	process_t *child;
+	address_space_root_t root;
+	uintptr_t va = USER_MMAP_END - PAGE_SIZE_4KB;
+	uint64_t phys = 0;
+	process_reclaim_stats_t stats;
+
+	KTEST_BEGIN("reclaim_freed_page_tables_safely");
+	pid = spawn_kernel(ktest_reclaim_child_entry, "reclaim_child");
+	KASSERT_GT(pid, 0);
+	child = pid > 0 ? process_find_by_pid(pid) : NULL;
+	KASSERT(child != NULL);
+	if (!child)
+	{
+		KTEST_END();
+		return;
+	}
+
+	root = process_pgd(child);
+	KASSERT(root != NULL);
+	if (root)
+	{
+		phys = pmm_alloc_frame();
+		KASSERT(phys != 0);
+		if (phys != 0)
+		{
+			int mapped = map_page_in_directory(root, va, phys,
+						 PAGE_USER | PAGE_RW);
+
+			KASSERT_EQ(mapped, 0);
+			if (mapped == 0)
+			{
+				KASSERT(is_page_mapped_in_directory(root, va,
+								    NULL) == 1);
+
+				memset(&stats, 0, sizeof(stats));
+				/*
+				 * Make the UAF visible: a table freed mid-walk
+				 * is overwritten with 0xA5 instead of keeping
+				 * stale zeros.
+				 */
+				paging_test_poison_freed_tables(1);
+				process_unmap_user_pages_all(root, &stats);
+				paging_test_poison_freed_tables(0);
+
+				/*
+				 * Exactly one user PTE existed. The old walk
+				 * freed its page table and then kept reading
+				 * the freed entries, counting every poisoned
+				 * slot as a mapping.
+				 */
+				KASSERT_EQ(stats.mapped_pages, 1ULL);
+				KASSERT_EQ(stats.freed_pages, 1ULL);
+				KASSERT_EQ(stats.missing_pages, 0ULL);
+				KASSERT(is_page_mapped_in_directory(root, va,
+								    NULL) == 0);
+			}
+			else
+			{
+				pmm_free_frame(phys);
+			}
+		}
+	}
+
+	process_mark_zombie(child);
+	child->exit_code = 0;
+	sched_remove_process(child);
+	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KTEST_END();
 }
 
