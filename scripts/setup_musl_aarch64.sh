@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/toolchain/aarch64-linux-musl"
 GCC="$DEST/bin/aarch64-linux-musl-gcc"
 TGZ_URL="${MUSL_AARCH64_TGZ_URL:-https://musl.cc/aarch64-linux-musl-cross.tgz}"
-CACHE_TGZ="${MUSL_AARCH64_TGZ:-/tmp/aarch64-linux-musl-cross.tgz}"
+CACHE_TGZ="${MUSL_AARCH64_TGZ:-${TMPDIR:-/tmp}/aarch64-linux-musl-cross.tgz}"
 
 if [ -x "$GCC" ]; then
 	crt="$("$GCC" -print-file-name=crt1.o 2>/dev/null || true)"
@@ -20,8 +20,8 @@ if [ -x "$GCC" ]; then
 fi
 
 mkdir -p "$ROOT/toolchain"
-TMPDIR="$(mktemp -d /tmp/ir0-musl-aarch64.XXXXXX)"
-cleanup() { rm -rf "$TMPDIR"; }
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/ir0-musl-aarch64.XXXXXX")"
+cleanup() { rm -rf "$WORKDIR"; }
 trap cleanup EXIT
 
 if [ ! -f "$CACHE_TGZ" ]; then
@@ -30,9 +30,13 @@ if [ ! -f "$CACHE_TGZ" ]; then
 fi
 
 echo "  EXTRACT $CACHE_TGZ → $DEST"
-tar -xzf "$CACHE_TGZ" -C "$TMPDIR"
+tar -xzf "$CACHE_TGZ" -C "$WORKDIR"
 # musl.cc layout: aarch64-linux-musl-cross/{bin,lib,...}
-SRC="$(find "$TMPDIR" -maxdepth 2 -type d -name 'bin' | head -1)"
+SRC="$(find "$WORKDIR" -maxdepth 2 -type d -name 'bin' | head -1)"
+if [ -z "$SRC" ]; then
+	echo "✗ toolchain archive has no bin/ directory" >&2
+	exit 1
+fi
 SRC="$(dirname "$SRC")"
 rm -rf "$DEST"
 mv "$SRC" "$DEST"
