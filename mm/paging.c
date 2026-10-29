@@ -227,6 +227,9 @@ static int page_table_is_empty(const uint64_t *table)
  */
 static int paging_test_poison_freed;
 
+/* Fill byte used to make a stale page-table walk visible to a test. */
+#define PAGING_TEST_POISON_BYTE 0xA5
+
 void paging_test_poison_freed_tables(int enable)
 {
     paging_test_poison_freed = !!enable;
@@ -245,7 +248,7 @@ static void ir0_mm_free_table_frame(uint64_t frame, int level)
         ir0_mm_level3_freed++;
 
     if (paging_test_poison_freed)
-        memset((void *)(uintptr_t)frame, 0xA5, PAGE_SIZE_4KB);
+        memset((void *)(uintptr_t)frame, PAGING_TEST_POISON_BYTE, PAGE_SIZE_4KB);
 
     ir0_mm_set_frame_type(frame, IR0_MM_FRAME_UNKNOWN);
     ir0_mm_frame_pt_free++;
@@ -357,7 +360,7 @@ void paging_copy_phys_page(uintptr_t dst_phys, uintptr_t src_phys)
 	uintptr_t saved;
 
 	paging_phys_map_begin(&saved);
-	memcpy((void *)dst_phys, (void *)src_phys, 0x1000);
+	memcpy((void *)dst_phys, (void *)src_phys, PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
 }
 
@@ -366,7 +369,7 @@ void paging_zero_phys_page(uintptr_t phys)
 	uintptr_t saved;
 
 	paging_phys_map_begin(&saved);
-	memset((void *)phys, 0, 0x1000);
+	memset((void *)phys, 0, PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
 }
 
@@ -383,7 +386,7 @@ void paging_poison_phys_page(uintptr_t phys, uint8_t pattern)
 	uintptr_t saved;
 
 	paging_phys_map_begin(&saved);
-	memset((void *)phys, (int)pattern, 0x1000);
+	memset((void *)phys, (int)pattern, PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
 }
 
@@ -527,14 +530,14 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 	map_flags &= ~(PAGE_COW | PAGE_GLOBAL);
 	if (mm_pte_executable(entry))
 		map_flags |= PAGE_EXEC;
-	if (map_page_in_directory(root, vaddr & ~0xFFFUL, new_phys, map_flags) != 0)
+	if (map_page_in_directory(root, vaddr & (uintptr_t)PAGE_FRAME_MASK, new_phys, map_flags) != 0)
 	{
 		pmm_free_frame(new_phys);
 		irq_restore(irq_flags);
 		return -1;
 	}
 	pmm_frame_put(old_phys);
-	mm_tlb_sync_page(root, vaddr & ~0xFFFUL);
+	mm_tlb_sync_page(root, vaddr & (uintptr_t)PAGE_FRAME_MASK);
 	irq_restore(irq_flags);
 	return 0;
 }
@@ -594,8 +597,8 @@ int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
 
         if (paging_resolve_user_page(root, page, 1, &phys) != 0)
             return -1;
-        off = dst & 0xFFFU;
-        chunk = (size_t)(0x1000U - off);
+        off = dst & (uintptr_t)PAGE_OFFSET_MASK;
+        chunk = (size_t)(PAGE_SIZE_4KB - off);
         if (chunk > n)
             chunk = n;
 
@@ -633,8 +636,8 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
 
         if (paging_resolve_user_page(root, page, 0, &phys) != 0)
             return -1;
-        off = src & 0xFFFU;
-        chunk = (size_t)(0x1000U - off);
+        off = src & (uintptr_t)PAGE_OFFSET_MASK;
+        chunk = (size_t)(PAGE_SIZE_4KB - off);
         if (chunk > n)
             chunk = n;
 
@@ -670,8 +673,8 @@ int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
 
         if (paging_resolve_user_page(root, page, 1, &phys) != 0)
             return -1;
-        off = dst & 0xFFFU;
-        chunk = (size_t)(0x1000U - off);
+        off = dst & (uintptr_t)PAGE_OFFSET_MASK;
+        chunk = (size_t)(PAGE_SIZE_4KB - off);
         if (chunk > n)
             chunk = n;
 
@@ -710,7 +713,7 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
  */
 static uint64_t alloc_page_table(int level)
 {
-    void *page = kmalloc_aligned_try(4096, 4096);
+    void *page = kmalloc_aligned_try(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
     paging_oom_class_t oom_cls;
 
     if (!page)
@@ -721,7 +724,7 @@ static uint64_t alloc_page_table(int level)
     }
     
     /* Zero out the page */
-    memset(page, 0, 4096);
+    memset(page, 0, PAGE_SIZE_4KB);
 
     switch (level)
     {
@@ -926,7 +929,7 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 		int had_leaf;
 
 		had_leaf = mm_pte_present(level3_table[idx[3]]);
-		entry = mm_make_leaf_pte((uintptr_t)phys_addr, flags & 0xFFFULL,
+		entry = mm_make_leaf_pte((uintptr_t)phys_addr, flags & PAGE_MAP_FLAGS_MASK,
 					     !!(flags & PAGE_EXEC));
 		level3_table[idx[3]] = entry;
 		if (!had_leaf)

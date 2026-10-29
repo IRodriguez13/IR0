@@ -45,6 +45,15 @@
 /* Physical frame: align/strip low page-offset bits from an address. */
 #define PAGE_FRAME_MASK     (~0xFFFULL)
 
+/* Byte offset inside a 4 KiB frame. */
+#define PAGE_OFFSET_MASK    (PAGE_SIZE_4KB - 1U)
+
+/*
+ * Low 12 PTE flag bits accepted by mm_make_leaf_pte(). PAGE_EXEC lives in
+ * bit 52 and is passed to that helper separately.
+ */
+#define PAGE_MAP_FLAGS_MASK 0xFFFULL
+
 /**
  * Enable paging (sets CR0.PG bit)
  */
