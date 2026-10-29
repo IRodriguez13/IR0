@@ -14,6 +14,7 @@
 
 #include "test/ktest_harness.h"
 #include "syscalls.h"
+#include "../../fs/tmpfs.h"
 #include <config.h>
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
@@ -354,6 +355,12 @@ void ktest_mount_tmpfs_contract(void)
 	KASSERT_EQ(vfs_statfs("/mntkt", &empty_fs), 0);
 	KASSERT_EQ(empty_fs.f_type, IR0_TMPFS_MAGIC);
 	KASSERT(empty_fs.f_blocks > 0);
+
+	char long_tmpfs_name[sizeof("/mntkt/") + 256];
+	memcpy(long_tmpfs_name, "/mntkt/", sizeof("/mntkt/") - 1);
+	memset(long_tmpfs_name + sizeof("/mntkt/") - 1, 'x', 256);
+	long_tmpfs_name[sizeof(long_tmpfs_name) - 1] = '\0';
+	KASSERT_EQ(tmpfs_create_file(long_tmpfs_name, 0644), -ENAMETOOLONG);
 
 	int64_t dup = sys_mount("none", "/mntkt", "tmpfs", 0, NULL);
 	KASSERT(dup < 0);

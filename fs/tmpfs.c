@@ -108,7 +108,8 @@ static tmpfs_data_t *tmpfs_get_instance_for_path(const char *path)
             continue;
         if (strncmp(path, tmpfs_instances[i]->mount_point, mp_len) != 0)
             continue;
-        if (path[mp_len] != '\0' && path[mp_len] != '/')
+        if (!(mp_len == 1 && tmpfs_instances[i]->mount_point[0] == '/') &&
+            path[mp_len] != '\0' && path[mp_len] != '/')
             continue;
         best = tmpfs_instances[i];
         best_len = mp_len;
@@ -274,6 +275,9 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
 {
     if (!dir_name)
         return -EINVAL;
+
+    if (strlen(dir_name) >= sizeof(((tmpfs_data_t *)0)->mount_point))
+        return -ENAMETOOLONG;
 
     if (tmpfs_get_instance(dir_name))
         return 0;
@@ -446,8 +450,10 @@ int tmpfs_mkdir(const char *path, mode_t mode)
         parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
     }
     
-    if (strlen(dirname) == 0 || strlen(dirname) > TMPFS_MAX_NAME_LEN)
+    if (strlen(dirname) == 0)
         return -EINVAL;
+    if (strlen(dirname) > TMPFS_MAX_NAME_LEN)
+        return -ENAMETOOLONG;
     
     /* Find parent */
     tmpfs_inode_t *parent = tmpfs_lookup_inode(tmpfs, parent_path);
@@ -515,8 +521,10 @@ int tmpfs_create_file(const char *path, mode_t mode)
         parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
     }
     
-    if (strlen(filename) == 0 || strlen(filename) > TMPFS_MAX_NAME_LEN)
+    if (strlen(filename) == 0)
         return -EINVAL;
+    if (strlen(filename) > TMPFS_MAX_NAME_LEN)
+        return -ENAMETOOLONG;
     
     /* Find parent */
     tmpfs_inode_t *parent = tmpfs_lookup_inode(tmpfs, parent_path);
@@ -695,8 +703,10 @@ int tmpfs_link(const char *oldpath, const char *newpath)
         parent_path = (path_copy[0] == '\0') ? "/" : path_copy;
     }
 
-    if (strlen(linkname) == 0 || strlen(linkname) > TMPFS_MAX_NAME_LEN)
+    if (strlen(linkname) == 0)
         return -EINVAL;
+    if (strlen(linkname) > TMPFS_MAX_NAME_LEN)
+        return -ENAMETOOLONG;
 
     tmpfs_inode_t *parent = tmpfs_lookup_inode(tmpfs, parent_path);
     if (!parent || !parent->is_dir)
