@@ -137,6 +137,8 @@ static int hs_read(const char *path, void *buf, size_t count, size_t *bytes_read
 	int rc;
 	const char *rel = rel_of(path);
 
+	if (bytes_read)
+		*bytes_read = 0;
 	if (!rel || !rel[0])
 		return -EISDIR;
 	if (offset < 0)
@@ -155,6 +157,8 @@ static int hs_write(const char *path, const void *buf, size_t count,
 	const char *rel = rel_of(path);
 	int rc;
 
+	if (bytes_written)
+		*bytes_written = 0;
 	if (!rel || !rel[0])
 		return -EISDIR;
 	if (offset < 0)

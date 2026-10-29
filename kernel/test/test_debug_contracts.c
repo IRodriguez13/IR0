@@ -375,6 +375,15 @@ void ktest_mount_tmpfs_contract(void)
 	int64_t w = sys_write((int)file_fd, msg, strlen(msg));
 	KASSERT_EQ(w, (int64_t)strlen(msg));
 	sys_close((int)file_fd);
+	size_t backend_count = 123;
+	char backend_byte = 0;
+	KASSERT_EQ(tmpfs_read_file("/mntkt/mount_probe.txt", &backend_byte, 1,
+				    &backend_count, (off_t)-1), -EINVAL);
+	KASSERT_EQ(backend_count, (size_t)0);
+	backend_count = 123;
+	KASSERT_EQ(tmpfs_write_file("/mntkt/mount_probe.txt", &backend_byte, 0,
+				     &backend_count, 4096), 0);
+	KASSERT_EQ(backend_count, (size_t)0);
 
 	struct ir0_statfs written_fs;
 	memset(&written_fs, 0, sizeof(written_fs));
