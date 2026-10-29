@@ -647,7 +647,9 @@ static int simplefs_read_common(const char *fs_name, const char *path, void *buf
         return -ENOENT;
     if (e->is_dir)
         return -EISDIR;
-    if (offset < 0 || (size_t)offset >= e->size)
+    if (offset < 0)
+        return -EINVAL;
+    if ((size_t)offset >= e->size)
         return 0;
 
     avail = e->size - (size_t)offset;
@@ -690,6 +692,8 @@ static int simplefs_write_common(const char *fs_name, const char *path, const vo
         return -EISDIR;
     if (offset < 0)
         return -EINVAL;
+    if (count == 0)
+        return 0;
 
     if ((size_t)offset > SIMPLEFS_MAX_FILE_SIZE ||
         count > SIMPLEFS_MAX_FILE_SIZE - (size_t)offset)

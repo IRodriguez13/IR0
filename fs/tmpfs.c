@@ -603,7 +603,11 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
 {
     tmpfs_file_t *file;
 
+    if (read_count)
+        *read_count = 0;
     if (!path || !buf)
+        return -EINVAL;
+    if (offset < 0)
         return -EINVAL;
     
     tmpfs_inode_t *inode = tmpfs_find_inode(path);
@@ -617,7 +621,7 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
     if (!file)
         return -EIO;
     
-    if (offset < 0 || (size_t)offset >= file->size)
+    if ((size_t)offset >= file->size)
         return 0;  /* EOF */
     
     size_t available = file->size - (size_t)offset;
@@ -642,6 +646,8 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
     size_t old_size;
     size_t offset_u;
 
+    if (written_count)
+        *written_count = 0;
     if (!path || !buf)
         return -EINVAL;
     if (offset < 0)
@@ -663,11 +669,7 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
         return -EIO;
 
     if (count == 0)
-    {
-        if (written_count)
-            *written_count = 0;
         return 0;
-    }
     
     /* Calculate new size */
     offset_u = (size_t)offset;

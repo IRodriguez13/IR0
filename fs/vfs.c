@@ -1008,8 +1008,8 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 int vfs_read(struct vfs_file *f, char *buf, size_t count)
 {
     if (!f)   return -EBADF;
-    if (!buf) return -EFAULT;
     if (count == 0) return 0;
+    if (!buf) return -EFAULT;
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
         return -EBADF;
 
@@ -1032,8 +1032,8 @@ int vfs_read(struct vfs_file *f, char *buf, size_t count)
 int vfs_write(struct vfs_file *f, const char *buf, size_t count)
 {
     if (!f)   return -EBADF;
-    if (!buf) return -EFAULT;
     if (count == 0) return 0;
+    if (!buf) return -EFAULT;
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
         return -EBADF;
     if (mount_is_readonly(f->path))
@@ -1065,10 +1065,10 @@ int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset)
 {
     if (!f)
         return -EBADF;
-    if (!buf)
-        return -EFAULT;
     if (count == 0)
         return 0;
+    if (!buf)
+        return -EFAULT;
     if (offset < 0)
         return -EINVAL;
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
@@ -1090,10 +1090,10 @@ int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset)
 {
     if (!f)
         return -EBADF;
-    if (!buf)
-        return -EFAULT;
     if (count == 0)
         return 0;
+    if (!buf)
+        return -EFAULT;
     if (offset < 0)
         return -EINVAL;
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
