@@ -16,12 +16,22 @@
 
 #include <stdint.h>
 
+#ifndef WNOHANG
 #define WNOHANG 1
+#endif
 
+#ifndef WIFEXITED
 #define WIFEXITED(status)   (((status) & 0x7f) == 0)
+#endif
+#ifndef WEXITSTATUS
 #define WEXITSTATUS(status) (((status) >> 8) & 0xff)
+#endif
+#ifndef WIFSIGNALED
 #define WIFSIGNALED(status) (((status) & 0x7f) > 0 && ((status) & 0x7f) != 0x7f)
+#endif
+#ifndef WTERMSIG
 #define WTERMSIG(status)    ((status) & 0x7f)
+#endif
 
 static inline int ir0_make_wait_status(int exit_code, int exit_signal)
 {

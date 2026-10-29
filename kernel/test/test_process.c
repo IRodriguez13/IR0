@@ -151,6 +151,20 @@ void ktest_wait4_minus_one_reaps_any_child(void)
 	KASSERT_EQ(process_wait((pid_t)-1, &status, 0), pid_b);
 	KASSERT_EQ(status, (20 & 0xFF) << 8);
 	KASSERT(process_find_by_pid(pid_b) == NULL);
+
+	/* wait(-1) reaps one child; the READY sibling must not leak. */
+	{
+		process_t *child_a = process_find_by_pid(pid_a);
+
+		KASSERT(child_a != NULL);
+		if (child_a)
+		{
+			process_mark_zombie(child_a);
+			child_a->exit_code = 10;
+			sched_remove_process(child_a);
+			KASSERT_EQ(process_wait(pid_a, NULL, 0), pid_a);
+		}
+	}
 	KTEST_END();
 }
 
@@ -185,10 +199,17 @@ void ktest_wait4_wnohang_specific(void)
 
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
-	KASSERT_EQ(child->state, PROCESS_READY);
+	KASSERT_EQ((int)child->state, (int)PROCESS_READY);
 
 	KASSERT_EQ(process_wait(pid, NULL, WNOHANG), 0);
 	KASSERT(process_find_by_pid(pid) != NULL);
+
+	/* WNOHANG must leave the child alive, but the test must reap it. */
+	process_mark_zombie(child);
+	child->exit_code = 10;
+	sched_remove_process(child);
+	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
+	KASSERT(process_find_by_pid(pid) == NULL);
 	KTEST_END();
 }
 
