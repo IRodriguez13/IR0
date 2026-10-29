@@ -7,7 +7,7 @@
 # Repository root (this Makefile lives in tests/host/).
 KERNEL_ROOT ?= ../..
 CC         = gcc
-BASE_CFLAGS = -Wall -Wextra -g -I. -DTEST_HOST
+BASE_CFLAGS = -Wall -Wextra -g -I. -DTEST_HOST -MMD -MP
 # idirafter: resolve <ir0/...> after system headers so host <string.h> wins over includes/string.h
 HOST_KERNEL_CPPFLAGS = -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/ktm/include \
 	-I$(KERNEL_ROOT)/arch/x86-64/include \
@@ -88,8 +88,15 @@ MATRIX_CAPTURE_CFLAGS = $(BASE_CFLAGS) -I$(IR0_USERSPACE_ROOT)/smoke
 
 all: $(TEST_BIN)
 
+# Compile a kernel object from an explicitly named source.
+KERNEL_CC = $(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+
+# Tests in this directory use the implicit %.o: %.c rule.
+%.o: %.c
+	$(KERNEL_CC)
+
 host_pseudo_fs_registry.o: $(KERNEL_ROOT)/fs/pseudo_fs_registry.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 	$(CC) $(KERNEL_CFLAGS) -DCONFIG_ENABLE_USB_HOST=0 -c -o $@ $<
@@ -100,60 +107,30 @@ host_kmem_stub.o: host_kmem_stub.c
 host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/mm/pmm.h
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<
 
-host_pmm_stubs.o: host_pmm_stubs.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
 host_boot_memory.o: $(KERNEL_ROOT)/mm/boot_memory.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_no_mmu.o: $(KERNEL_ROOT)/mm/no_mmu.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_pmm_banks.o: test_pmm_banks.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_boot_memory.o: test_boot_memory.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_no_mmu_policy.o: test_no_mmu_policy.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_cpu_topology.o: test_cpu_topology.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-host_serial_stub.o: host_serial_stub.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-host_klog_stub.o: host_klog_stub.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_pipe_fd_stub.o: host_pipe_fd_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-host_sysfs_honesty_stub.o: host_sysfs_honesty_stub.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-host_sysfs_net_stub.o: host_sysfs_net_stub.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
 host_named_fifo.o: $(KERNEL_ROOT)/kernel/lib/named_fifo.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DIR0_DEBUG_PROC=0 -c -o $@ $<
 
-test_credential_saved_ids.o: test_credential_saved_ids.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
 host_path.o: $(KERNEL_ROOT)/fs/path.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_mount_prefix.o: $(KERNEL_ROOT)/kernel/lib/mount_prefix.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_arm64_boot_info.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
@@ -163,25 +140,19 @@ host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 
 host_syscall_table.o: $(KERNEL_ROOT)/kernel/lib/syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_fd_resource.o: $(KERNEL_ROOT)/kernel/fd_resource.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_tlb_sync.o: $(KERNEL_ROOT)/mm/tlb_sync.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_percpu.o: test_percpu.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_tlb_sync.o: test_tlb_sync.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_arm64_elf_policy.o: $(KERNEL_ROOT)/arch/arm64/sources/elf_policy.c
 	$(CC) $(KERNEL_CFLAGS) \
@@ -197,25 +168,22 @@ host_x86_elf_policy.o: $(KERNEL_ROOT)/arch/x86-64/sources/elf_policy.c
 		-Delf_local_reloc_value=x86_test_elf_local_reloc_value \
 		-c -o $@ $<
 
-test_arm64_boot_info.o: test_arm64_boot_info.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
 test_arm64_syscall_decode.o: test_arm64_syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 test_x86_syscall_decode.o: test_x86_syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
 	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 test_syscall_table.o: test_syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 test_utsname_abi.o: test_utsname_abi.c \
 	$(KERNEL_ROOT)/includes/ir0/utsname.h
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PROC=0 -c -o $@ $<
@@ -224,19 +192,13 @@ host_blockdev.o: $(KERNEL_ROOT)/kernel/lib/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
 host_elf64_image.o: $(KERNEL_ROOT)/kernel/lib/elf64_image.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/lib/early_elf_stack.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_early_mm.o: $(KERNEL_ROOT)/kernel/syscalls/early_mm.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_early_elf_stack_abi.o: test_early_elf_stack_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_early_mm_abi.o: test_early_mm_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_arch_irq_stub.o: host_arch_irq_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
@@ -245,31 +207,19 @@ host_arch_mm_stub.o: host_arch_mm_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 host_ps2_set1.o: $(KERNEL_ROOT)/kernel/lib/ps2_set1.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/kernel/lib/ps2_mouse_pkt.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_rtc_calendar.o: $(KERNEL_ROOT)/kernel/lib/rtc_calendar.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 host_matrix_capture.o: $(IR0_USERSPACE_ROOT)/smoke/matrix_capture.c
 	$(CC) $(MATRIX_CAPTURE_CFLAGS) -c -o $@ $<
 
 test_matrix_capture.o: test_matrix_capture.c
 	$(CC) $(MATRIX_CAPTURE_CFLAGS) -c -o $@ $<
-
-test_rtc_calendar.o: test_rtc_calendar.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_ps2_set1_modifiers.o: test_ps2_set1_modifiers.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_ps2_mouse_pkt.o: test_ps2_mouse_pkt.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_pipe_close_refcount.o: test_pipe_close_refcount.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_runner.o: test_runner.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
@@ -278,13 +228,7 @@ test_blockdev_facade.o: test_blockdev_facade.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
 host_open_flags.o: $(KERNEL_ROOT)/kernel/lib/open_flags.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_open_flags_abi.o: test_open_flags_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_fcntl_abi.o: test_fcntl_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+	$(KERNEL_CC)
 
 test_ktm_panic_inventory.o: test_ktm_panic_inventory.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
@@ -298,113 +242,19 @@ test_arch_mm_pte_facade.o: test_arch_mm_pte_facade.c
 test_example.o: test_example.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-test_pseudo_fs_proc_registry.o: test_pseudo_fs_proc_registry.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_pseudo_fs_registry.o: test_pseudo_fs_registry.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_pseudo_fs_children.o: test_pseudo_fs_children.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_usb_pci_scan.o: test_usb_pci_scan.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
 test_bt_scan_sync.o: test_bt_scan_sync.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
-
-test_vfs_backend_contract.o: test_vfs_backend_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_stat_user_abi.o: test_stat_user_abi.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-test_named_fifo_supervise.o: test_named_fifo_supervise.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_path_resolve_at.o: test_path_resolve_at.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_path_chroot.o: test_path_chroot.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
 test_ktm_sched_contract.o: test_ktm_sched_contract.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
-
-test_class_b_ctx_invariant.o: test_class_b_ctx_invariant.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_musl_mmap_contract.o: test_musl_mmap_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_musl_cred_abi.o: test_musl_cred_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_signal_rt_sigaction_abi.o: test_signal_rt_sigaction_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_sigreturn_sleep_eintr_abi.o: test_sigreturn_sleep_eintr_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_mmap_null_placement.o: test_mmap_null_placement.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_elf_initial_brk_abi.o: test_elf_initial_brk_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_elf_local_reloc_abi.o: test_elf_local_reloc_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_elf_interp_abi.o: test_elf_interp_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_early_rootfs_abi.o: test_early_rootfs_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_early_cpio_abi.o: test_early_cpio_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_early_process_abi.o: test_early_process_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_elf64_image.o: test_elf64_image.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_fd_resource_contract.o: test_fd_resource_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 test_harness_contract.o: test_harness_contract.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-test_mm_root_slots.o: test_mm_root_slots.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_arch_task_contract.o: test_arch_task_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_pseudo_fs_contract.o: test_pseudo_fs_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_pseudo_fs_honesty.o: test_pseudo_fs_honesty.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_procfs_linux_abi.o: test_procfs_linux_abi.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_mm_mirror_contract.o: test_mm_mirror_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_netdev_contract.o: test_netdev_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_sched_backend_contract.o: test_sched_backend_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_block_backend_contract.o: test_block_backend_contract.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
-
-test_mount_prefix_boundary.o: test_mount_prefix_boundary.c
-	$(CC) $(KERNEL_CFLAGS) -c -o $@ $<
+-include $(TEST_OBJS:.o=.d)
 
 $(TEST_BIN): $(TEST_OBJS)
 	$(CC) -o $@ $(TEST_OBJS) $(LDFLAGS)
@@ -416,4 +266,4 @@ memsafe: $(TEST_BIN)
 	valgrind --leak-check=full --error-exitcode=1 ./$(TEST_BIN)
 
 clean:
-	rm -f $(TEST_OBJS) $(TEST_BIN)
+	rm -f $(TEST_OBJS) $(TEST_OBJS:.o=.d) $(TEST_BIN)
