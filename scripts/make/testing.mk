@@ -5925,7 +5925,8 @@ kernel-analyze: kernel-x64.bin
 	@if nm kernel-x64.bin 2>/dev/null | grep -q ' [Tt] kmain$$'; then echo "✓ kernel-analyze passed (kmain present)"; else echo "✗ kernel-analyze FAILED (kmain not found)"; exit 1; fi
 
 # H6: kernel .text regression gate (raise KERNEL_TEXT_BUDGET only with documented reason).
-KERNEL_TEXT_BUDGET ?= 960000
+# -O2 baseline is ~817 KiB; keep ~5% headroom for small fixes, not new subsystems.
+KERNEL_TEXT_BUDGET ?= 860000
 
 kernel-text-budget: kernel-x64.bin
 	@TEXT=$$(size -A kernel-x64.bin | awk '/^\.text/{print $$2}'); \
