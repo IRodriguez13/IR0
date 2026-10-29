@@ -25,18 +25,25 @@ ISD = ROOT.parent / "ISD"
 MATRIX = ROOT / "scripts" / "smoke_desktop_cmd_matrix.py"
 
 DEFAULT_DISK = ISD / "out/x86_64/images/development/disk.img"
-DEFAULT_WADS = [
-    Path("/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD"),
-    Path.home() / "Escritorio/universal-doom/DOOM1.WAD",
-    ROOT / "DOOM1.WAD",
-    ROOT / "doom1.wad",
-]
+
+
+def default_wads() -> list[Path]:
+    """WAD candidates: env override, the user's home, then the repo root."""
+    env = os.environ.get("IR0_DOOM_WAD")
+    candidates = [Path(env)] if env else []
+    candidates += [
+        Path.home() / "Escritorio/universal-doom/DOOM1.WAD",
+        Path.home() / "doom/DOOM1.WAD",
+        ROOT / "DOOM1.WAD",
+        ROOT / "doom1.wad",
+    ]
+    return candidates
 
 
 def find_wad(explicit: Optional[Path]) -> Optional[Path]:
     if explicit is not None and explicit.is_file():
         return explicit
-    for p in DEFAULT_WADS:
+    for p in default_wads():
         if p.is_file():
             return p
     return None

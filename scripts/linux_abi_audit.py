@@ -19,6 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts" / "linux_abi"))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+import ktm_host_safety as safety  # noqa: E402
 
 from compare import (  # noqa: E402
     CompareResult,
@@ -49,6 +52,14 @@ from compare import (  # noqa: E402
     compare_wait4_wnohang,
     render_markdown,
 )
+
+
+def ktest_log_path() -> Path:
+    """Kernel-tests evidence path, honoring KTEST_LOG and TMPDIR."""
+    override = os.environ.get("KTEST_LOG")
+    if override:
+        return Path(override)
+    return safety.host_temp_dir() / "ktest.log"
 
 
 def load_contracts() -> dict:
@@ -367,7 +378,7 @@ def run_host_brk_test() -> bool | None:
 def run_ktest_brk(name: str) -> bool | None:
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         return None
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
     reuse = reuse_ktest_evidence(ktest_log, name)
     if reuse is not None:
         return reuse
@@ -382,7 +393,7 @@ def reuse_ktest_evidence(ktest_log: Path, name: str) -> bool | None:
     """Return True/False when log proves pass/fail; None if inconclusive."""
     if not ktest_log.is_file():
         return None
-    text = ktest_log.read_text(errors="replace")
+    text = safety.read_log_text(ktest_log)
     if f"[KTEST] {name} ... PASS" in text:
         return True
     if f"[KTEST] {name} ... FAIL" in text:
@@ -398,7 +409,7 @@ def audit_brk(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "brk"
     ir0_dir = report_dir / "ir0" / "brk"
     grow = int(cfg.get("grow_bytes", 4096))
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_brk_probe(report_dir)
 
@@ -410,7 +421,7 @@ def audit_brk(report_dir: Path, cfg: dict) -> CompareResult:
 
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         ktest_ok = None
-    elif ktest_log.is_file() and "[KTEST] brk_post_exec ... PASS" in ktest_log.read_text(errors="replace"):
+    elif ktest_log.is_file() and "[KTEST] brk_post_exec ... PASS" in safety.read_log_text(ktest_log):
         ktest_ok = True
         print(f"  NOTE  reusing brk ktest evidence from {ktest_log}")
     else:
@@ -481,7 +492,7 @@ def audit_wait4(report_dir: Path, cfg: dict) -> CompareResult:
     ir0_dir = report_dir / "ir0" / "wait4"
     child_exit = int(cfg.get("child_exit_status", 42))
     ktest_name = cfg.get("ktest", "wait4_status")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_wait4_probe(report_dir)
 
@@ -490,9 +501,7 @@ def audit_wait4(report_dir: Path, cfg: dict) -> CompareResult:
 
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         ktest_ok = None
-    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-        errors="replace"
-    ):
+    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
         ktest_ok = True
         print(f"  NOTE  reusing wait4 ktest evidence from {ktest_log}")
     else:
@@ -548,7 +557,7 @@ def audit_read(report_dir: Path, cfg: dict) -> CompareResult:
     pipe_data_hex = str(cfg.get("pipe_data_hex", "68656c6c6f0a"))
     ebadf_errno = int(cfg.get("ebadf_errno", 9))
     ktest_name = cfg.get("ktest", "syscall_pipe")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_read_probe(report_dir)
 
@@ -557,9 +566,7 @@ def audit_read(report_dir: Path, cfg: dict) -> CompareResult:
 
     ktest_ok = None
     if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
             print(f"  NOTE  reusing read ktest evidence from {ktest_log}")
 
@@ -622,7 +629,7 @@ def audit_mmap(report_dir: Path, cfg: dict) -> CompareResult:
     verify_data_hex = str(cfg.get("verify_data_hex", "4d4d41504f4b0a"))
     ebadf_errno = int(cfg.get("ebadf_errno", 9))
     ktest_name = cfg.get("ktest", "mmap_null_placement")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_mmap_probe(report_dir)
 
@@ -631,9 +638,7 @@ def audit_mmap(report_dir: Path, cfg: dict) -> CompareResult:
 
     ktest_ok = None
     if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
             print(f"  NOTE  reusing mmap ktest evidence from {ktest_log}")
 
@@ -706,13 +711,13 @@ def audit_mprotect(report_dir: Path, cfg: dict) -> CompareResult:
 def audit_mount(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "mount"
     ir0_dir = report_dir / "ir0" / "mount"
-    mount_path = str(cfg.get("mount_path", "/tmp/ir0mnt"))
-    mount_noent_path = str(cfg.get("mount_noent_path", "/tmp/ir0mnt_nope"))
+    mount_path = str(cfg.get("mount_path", "/tmp/ir0mnt"))  # portability-guard: allow hardcoded_tmp (guest path)
+    mount_noent_path = str(cfg.get("mount_noent_path", "/tmp/ir0mnt_nope"))  # portability-guard: allow hardcoded_tmp (guest path)
     rw_data_hex = str(cfg.get("rw_data_hex", "6d6e746f6b0a"))
     enoent_errno = int(cfg.get("enoent_errno", 2))
     enodev_errno = int(cfg.get("enodev_errno", 19))
     ktest_name = cfg.get("ktest", "mount_tmpfs_contract")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_mount_probe(report_dir)
 
@@ -721,9 +726,7 @@ def audit_mount(report_dir: Path, cfg: dict) -> CompareResult:
 
     ktest_ok = None
     if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
             print(f"  NOTE  reusing mount ktest evidence from {ktest_log}")
 
@@ -793,10 +796,8 @@ def audit_execve(report_dir: Path, cfg: dict) -> CompareResult:
 
     ktest_ok = None
     if ktest_name and not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        ktest_log = Path("/tmp/ktest.log")
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        ktest_log = ktest_log_path()
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
             print(f"  NOTE  reusing execve ktest evidence from {ktest_log}")
 
@@ -829,7 +830,7 @@ def audit_openat(report_dir: Path, cfg: dict) -> CompareResult:
     enoent_errno = int(cfg.get("enoent_errno", 2))
     ebadf_errno = int(cfg.get("ebadf_errno", 9))
     ktest_name = cfg.get("ktest", "syscall_open_close")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_openat_probe(report_dir)
 
@@ -838,9 +839,7 @@ def audit_openat(report_dir: Path, cfg: dict) -> CompareResult:
 
     ktest_ok = None
     if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
             print(f"  NOTE  reusing openat ktest evidence from {ktest_log}")
 
@@ -1039,7 +1038,7 @@ def audit_process_lifecycle(report_dir: Path, cfg: dict) -> CompareResult:
     sh_ir0 = ROOT / "scripts" / "linux_abi" / "run_ir0_process_lifecycle.sh"
 
     ktest_ok: bool | None = None
-    ktest_log = Path(os.environ.get("KTEST_LOG", "/tmp/ktest.log"))
+    ktest_log = ktest_log_path()
     ktest_name = cfg.get("ktest", "wait4_status")
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         ktest_ok = None
@@ -1083,7 +1082,7 @@ def audit_wait4_wnohang(report_dir: Path, cfg: dict) -> CompareResult:
     child_exit = int(cfg.get("child_exit_status", 5))
     echild_errno = int(cfg.get("echild_errno", 10))
     ktest_name = cfg.get("ktest", "wait4_status")
-    ktest_log = Path(os.environ.get("KTEST_LOG", "/tmp/ktest.log"))
+    ktest_log = ktest_log_path()
 
     build_wait4_wnohang_probe(report_dir)
 
@@ -1092,9 +1091,7 @@ def audit_wait4_wnohang(report_dir: Path, cfg: dict) -> CompareResult:
 
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         ktest_ok = None
-    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-        errors="replace"
-    ):
+    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
         ktest_ok = True
         print(f"  NOTE  reusing wait4_wnohang ktest evidence from {ktest_log}")
     else:
@@ -1142,7 +1139,7 @@ def audit_kill_sigterm(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "kill_sigterm"
     ir0_dir = report_dir / "ir0" / "kill_sigterm"
     ktest_name = cfg.get("ktest", "kill_sigterm_wait_status")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_kill_sigterm_probe(report_dir)
 
@@ -1151,9 +1148,7 @@ def audit_kill_sigterm(report_dir: Path, cfg: dict) -> CompareResult:
 
     if os.environ.get("LINUX_ABI_SKIP_KTEST"):
         ktest_ok = None
-    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-        errors="replace"
-    ):
+    elif ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
         ktest_ok = True
         print(f"  NOTE  reusing kill_sigterm ktest evidence from {ktest_log}")
     else:
@@ -1203,7 +1198,7 @@ def audit_pipe(report_dir: Path, cfg: dict) -> CompareResult:
     pipe_data_hex = str(cfg.get("pipe_data_hex", "68656c6c6f0a"))
     ebadf_errno = int(cfg.get("ebadf_errno", 9))
     ktest_name = cfg.get("ktest", "syscall_pipe")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_read_probe(report_dir)
 
@@ -1212,9 +1207,7 @@ def audit_pipe(report_dir: Path, cfg: dict) -> CompareResult:
 
     ktest_ok = None
     if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
 
     if run_cmd(["bash", str(sh_linux), str(linux_dir)]) != 0:
@@ -1250,15 +1243,13 @@ def audit_poll(report_dir: Path, cfg: dict) -> CompareResult:
     linux_dir = report_dir / "linux" / "poll"
     ir0_dir = report_dir / "ir0" / "poll"
     ktest_name = cfg.get("ktest", "poll_resume_invariant")
-    ktest_log = Path("/tmp/ktest.log")
+    ktest_log = ktest_log_path()
 
     build_poll_probe(report_dir)
 
     ktest_ok = None
     if not os.environ.get("LINUX_ABI_SKIP_KTEST"):
-        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in ktest_log.read_text(
-            errors="replace"
-        ):
+        if ktest_log.is_file() and f"[KTEST] {ktest_name} ... PASS" in safety.read_log_text(ktest_log):
             ktest_ok = True
 
     if not _run_simple_workloads(

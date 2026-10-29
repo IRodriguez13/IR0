@@ -8,7 +8,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STAGE="${ROOT}/setup/pid1/devtools_staging"
-SRC_DIR="${GMAKE_SRC:-/tmp/gmake-ir0}"
+SRC_DIR="${GMAKE_SRC:-${TMPDIR:-/tmp}/gmake-ir0}"
 VER="${GMAKE_VER:-4.4.1}"
 TARBALL="make-${VER}.tar.gz"
 URL="https://ftp.gnu.org/gnu/make/${TARBALL}"
@@ -40,7 +40,8 @@ echo "  GMAKE   Building static make-${VER} with ${MUSL_CC}"
 		CC="${MUSL_CC}" CFLAGS="-static -Os" LDFLAGS="-static" \
 			./configure --host=x86_64-linux-musl --disable-nls --without-guile
 	fi
-	make -j"$(nproc)"
+	jobs=$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+	make -j"$jobs"
 	# Prefer the real binary (not libtool wrapper).
 	if [ -x make ]; then
 		cp -f make "${STAGE}/bin/make"

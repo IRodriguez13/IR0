@@ -45,11 +45,14 @@ import config_set_line as config_set  # noqa: E402
 SCOPE_GLOBS = (
     "Makefile",
     "scripts/baseline_capture.py",
+    "scripts/build_gmake_static.sh",
     "scripts/config_set_line.py",
+    "scripts/d1_13_linux_ground_truth.py",
     "scripts/init_boot_capture.py",
     "scripts/inject_init_minix.py",
     "scripts/ktm_*.py",
     "scripts/ktm_*.sh",
+    "scripts/linux_abi_audit.py",
     "scripts/make/*.mk",
     "scripts/release_check_guest_probes.py",
     "scripts/smoke_*.py",
@@ -75,6 +78,11 @@ PATTERNS: tuple[tuple[str, str, str], ...] = (
         "py_hardcoded_python3",
         r"""["']python3["']""",
         "hardcoded python3; use sys.executable",
+    ),
+    (
+        "py_hardcoded_home",
+        r'Path\("/home/[^"]+"\)',
+        "hardcoded home path; use Path.home() or an environment override",
     ),
     (
         "hardcoded_tmp",

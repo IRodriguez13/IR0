@@ -21,6 +21,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+import ktm_host_safety as safety
 
 MEMMOVE_ENTRY = 0x4422BF
 REP_MOVSQ = 0x4422E3
@@ -139,7 +140,7 @@ def parse_strace_summary(strace_log: Path, summary: Path) -> None:
     mmap_events: list[str] = []
     brk_events: list[str] = []
 
-    for line in strace_log.read_text(errors="replace").splitlines():
+    for line in safety.read_log_text(strace_log).splitlines():
         if "= " not in line:
             continue
         if "read(" in line and "<unfinished" not in line:

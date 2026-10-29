@@ -31,10 +31,27 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
-import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+
+import ktm_host_safety as safety  # noqa: E402
+
+
+def default_wad_path() -> Optional[Path]:
+    """WAD candidates: env override, the user's home, then the repo root."""
+    env = os.environ.get("IR0_DOOM_WAD")
+    candidates = [Path(env)] if env else []
+    candidates += [
+        Path.home() / "Escritorio/universal-doom/DOOM1.WAD",
+        ROOT / "DOOM1.WAD",
+        ROOT / "doom1.wad",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
 
 SPECIAL = {
     " ": "spc",
@@ -1335,7 +1352,8 @@ def main() -> int:
     ap.add_argument(
         "--wad",
         type=Path,
-        default=Path("/home/ivanr013/Escritorio/universal-doom/DOOM1.WAD"),
+        default=None,
+        help="DOOM1.WAD (default: $IR0_DOOM_WAD, ~/Escritorio/universal-doom, repo root)",
     )
     args = ap.parse_args()
 
@@ -1345,7 +1363,9 @@ def main() -> int:
     if args.only_doom:
         args.with_doom = True
     if args.with_doom:
-        if not args.doom_bin.is_file() or not args.wad.is_file():
+        if args.wad is None:
+            args.wad = default_wad_path()
+        if args.wad is None or not args.wad.is_file() or not args.doom_bin.is_file():
             print(
                 f"✗ missing doom bin or WAD ({args.doom_bin}, {args.wad})",
                 file=sys.stderr,
