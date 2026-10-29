@@ -20,8 +20,10 @@
 #include "syscalls.h"
 #include "process.h"
 #include <kernel/syscalls/fs_syscalls.h>
+#include <ir0/abi/mmap_contract.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
+#include <ir0/mman.h>
 #include <ir0/named_fifo.h>
 #include <ir0/path_routed.h>
 #include <ir0/permissions.h>
@@ -109,11 +111,47 @@ void ktest_procfs_pid_status(void)
 	KTEST_END();
 }
 
+static int ktest_parse_hex64(const char **pp, uint64_t *out)
+{
+	const char *p = *pp;
+	uint64_t value = 0;
+	int digits = 0;
+
+	for (;;)
+	{
+		char c = *p;
+		int d;
+
+		if (c >= '0' && c <= '9')
+			d = c - '0';
+		else if (c >= 'a' && c <= 'f')
+			d = c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F')
+			d = c - 'A' + 10;
+		else
+			break;
+		if (value > (UINT64_MAX >> 4))
+			return -1;
+		value = (value << 4) | (uint64_t)d;
+		p++;
+		digits++;
+	}
+	if (digits == 0)
+		return -1;
+	*pp = p;
+	*out = value;
+	return 0;
+}
+
 void ktest_procfs_pid_maps(void)
 {
 	int64_t fd;
-	char buf[512];
+	char buf[2048];
 	int64_t n;
+	void *mapped;
+	uintptr_t map_start;
+	uintptr_t map_end;
+	int found = 0;
 
 	KTEST_BEGIN("procfs_pid_maps");
 	if (!current_process)
@@ -122,17 +160,59 @@ void ktest_procfs_pid_maps(void)
 		return;
 	}
 
-	/* /proc/self/maps: readable; when the task has an mm, each line is a
-	 * "<hex>-<hex> <perms>" range. A pure kernel thread may have no regions. */
+	/*
+	 * Map one anonymous page so maps has a range whose bounds we know,
+	 * then require that exact range (and its permissions) in the output.
+	 * A maps file that omits tracked mmap regions must not pass.
+	 */
+	mapped = sys_mmap(NULL, IR0_PAGE_SIZE, PROT_READ | PROT_WRITE,
+			  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	KASSERT(mapped != NULL && mapped != (void *)(intptr_t)-1);
+	if (mapped == NULL || mapped == (void *)(intptr_t)-1)
+	{
+		KTEST_END();
+		return;
+	}
+	map_start = (uintptr_t)mapped;
+	map_end = map_start + IR0_PAGE_SIZE;
+
 	fd = sys_open("/proc/self/maps", 0, 0);
 	KASSERT_GT(fd, 0);
 	KASSERT(fd < 1000);
 	memset(buf, 0, sizeof(buf));
 	n = sys_read((int)fd, buf, sizeof(buf) - 1);
 	sys_close((int)fd);
-	KASSERT_GE(n, 0);
-	if (n > 0)
-		KASSERT(strstr(buf, "-") != NULL);
+	KASSERT_GT(n, 0);
+	KASSERT(strstr(buf, "-") != NULL);
+
+	{
+		const char *line = buf;
+
+		while (line && *line)
+		{
+			const char *p = line;
+			uint64_t start;
+			uint64_t end;
+
+			if (ktest_parse_hex64(&p, &start) == 0 && *p == '-')
+			{
+				p++;
+				if (ktest_parse_hex64(&p, &end) == 0 &&
+				    start == (uint64_t)map_start &&
+				    end == (uint64_t)map_end)
+				{
+					KASSERT(strncmp(p, " rw-p ", 6) == 0);
+					found = 1;
+					break;
+				}
+			}
+			line = strchr(line, '\n');
+			if (line)
+				line++;
+		}
+	}
+	KASSERT(found);
+	KASSERT_EQ(sys_munmap(mapped, IR0_PAGE_SIZE), 0);
 
 	/* /proc/self/statm: 7 space-separated page counts; first is a digit. */
 	fd = sys_open("/proc/self/statm", 0, 0);
