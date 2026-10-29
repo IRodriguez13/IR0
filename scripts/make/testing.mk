@@ -1849,6 +1849,7 @@ ARM64_MIN_LINK_OBJS = \
 	build/arm64-min/paging.o \
 	build/arm64-min/pmm.o \
 	build/arm64-min/kmem.o \
+	build/arm64-min/tlb_sync.o \
 	build/arm64-min/errno.o \
 	build/arm64-min/open_flags.o \
 	build/arm64-min/min_link_stubs.o
@@ -2370,6 +2371,7 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 	@mkdir -p build/arm64-min
 	@fail=0; \
 	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c \
+		mm/tlb_sync.c \
 		kernel/errno.c kernel/lib/open_flags.c \
 		arch/arm64/sources/arch_mm.c arch/arm64/sources/portable_string.c; do \
 		base=$$(basename $$src .c); \
