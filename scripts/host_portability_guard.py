@@ -48,8 +48,11 @@ SCOPE_GLOBS = (
     "scripts/build_gmake_static.sh",
     "scripts/config_set_line.py",
     "scripts/d1_13_linux_ground_truth.py",
+    "scripts/host_portable.sh",
     "scripts/init_boot_capture.py",
     "scripts/inject_init_minix.py",
+    "scripts/ir0-clip.sh",
+    "scripts/isd_machine_*.sh",
     "scripts/ktm_*.py",
     "scripts/ktm_*.sh",
     "scripts/linux_abi_audit.py",
@@ -165,8 +168,10 @@ ALLOW_RE = re.compile(r"portability-guard:\s*allow\s+([a-z0-9_]+)")
 # GNU-only construct they abstract. Keep this list tiny and explicit; every
 # other occurrence must be fixed or frozen in the ledger.
 HELPER_ALLOW = {
+    ("gnu_reflink", "scripts/host_portable.sh"),
     ("gnu_reflink", "scripts/make/host-portable.mk"),
     ("gnu_sed_i", "scripts/config_set_line.py"),
+    ("gnu_stat_c", "scripts/host_portable.sh"),
 }
 
 # A real launch passes a device/disk/serial option right after the binary.

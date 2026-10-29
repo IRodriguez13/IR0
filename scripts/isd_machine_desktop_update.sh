@@ -3,6 +3,9 @@
 # Atomically add/update the ISD desktop payload without replacing guest state.
 set -euo pipefail
 
+# shellcheck source=scripts/host_portable.sh
+. "$(dirname "$0")/host_portable.sh"
+
 TREE="${IR0_ISD_ROOTFS:?IR0_ISD_ROOTFS is required}"
 DISK="${IR0_MACHINE_DISK:?IR0_MACHINE_DISK is required}"
 INJECT="${IR0_INJECT_TOOL:?IR0_INJECT_TOOL is required}"
@@ -19,7 +22,7 @@ fi
 temporary="${DISK}.desktop-new.$$"
 previous="${DISK}.previous"
 trap 'rm -f "$temporary"' EXIT
-cp --reflink=auto --sparse=always "$DISK" "$temporary"
+host_copy_disk "$DISK" "$temporary"
 
 inject_file()
 {
@@ -30,7 +33,7 @@ inject_file()
 		echo "✗ desktop payload missing: $source" >&2
 		exit 2
 	fi
-	mode=$(stat -c '%a' "$source")
+	mode=$(host_file_mode "$source")
 	python3 "$INJECT" --mode "$mode" "$temporary" "$source" "$path"
 }
 
@@ -78,7 +81,7 @@ done
 python3 "$INJECT" --owner 0:0 --mode 01777 --chown "$temporary" tmp
 
 # Keep one complete rootfs rollback. HOME and managed kernels are separate.
-cp --reflink=auto --sparse=always "$DISK" "$previous"
+host_copy_disk "$DISK" "$previous"
 mv "$temporary" "$DISK"
 trap - EXIT
 echo "✓ desktop userspace updated atomically: $DISK"

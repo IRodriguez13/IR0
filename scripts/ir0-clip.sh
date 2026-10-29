@@ -6,6 +6,9 @@
 # Guest → host:  in VM: ir0-clip-out "text"   then on host: make clip-pull
 set -euo pipefail
 
+# shellcheck source=scripts/host_portable.sh
+. "$(dirname "$0")/host_portable.sh"
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CLIP_DIR="${IR0_CLIP_DIR:-${ROOT}/.ir0/clipboard}"
 INBOX="${CLIP_DIR}/inbox.txt"
@@ -81,7 +84,7 @@ cmd_status()
 	echo "CLIP_DIR=${CLIP_DIR}"
 	for f in "$INBOX" "$OUTBOX" "$META"; do
 		if [ -f "$f" ]; then
-			echo "  $(basename "$f"): $(wc -c < "$f") bytes  $(stat -c '%y' "$f" 2>/dev/null || stat -f '%Sm' "$f")"
+			echo "  $(basename "$f"): $(host_file_size "$f") bytes  $(host_file_mtime "$f")"
 		else
 			echo "  $(basename "$f"): (missing)"
 		fi

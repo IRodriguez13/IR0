@@ -3,6 +3,9 @@
 # Manage a mutable IR0 machine disk separately from reproducible ISD images.
 set -euo pipefail
 
+# shellcheck source=scripts/host_portable.sh
+. "$(dirname "$0")/host_portable.sh"
+
 ACTION="${1:-}"
 BASE_DISK="${IR0_MACHINE_BASE_DISK:?IR0_MACHINE_BASE_DISK is required}"
 MACHINE_DISK="${IR0_MACHINE_DISK:?IR0_MACHINE_DISK is required}"
@@ -17,12 +20,12 @@ machine_disk_usable() {
 	local base_size machine_size
 
 	[ -f "$MACHINE_DISK" ] || return 1
-	machine_size=$(stat -c%s "$MACHINE_DISK" 2>/dev/null || echo 0)
+	machine_size=$(host_file_size "$MACHINE_DISK" 2>/dev/null || echo 0)
 	[ "$machine_size" -gt 0 ] || return 1
 	if [ ! -f "$BASE_DISK" ]; then
 		return 0
 	fi
-	base_size=$(stat -c%s "$BASE_DISK" 2>/dev/null || echo 0)
+	base_size=$(host_file_size "$BASE_DISK" 2>/dev/null || echo 0)
 	[ "$base_size" -gt 0 ] || return 0
 	[ "$machine_size" -ge "$base_size" ] || return 1
 	return 0
@@ -46,7 +49,7 @@ create)
 	mkdir -p "$(dirname "$MACHINE_DISK")"
 	tmp="${MACHINE_DISK}.new.$$"
 	trap 'rm -f "$tmp"' EXIT
-	cp --reflink=auto --sparse=always "$BASE_DISK" "$tmp"
+	host_copy_disk "$BASE_DISK" "$tmp"
 	mv "$tmp" "$MACHINE_DISK"
 	trap - EXIT
 	echo "✓ machine disk created: $MACHINE_DISK"
@@ -64,7 +67,7 @@ reset)
 	mkdir -p "$(dirname "$MACHINE_DISK")"
 	tmp="${MACHINE_DISK}.new.$$"
 	trap 'rm -f "$tmp"' EXIT
-	cp --reflink=auto --sparse=always "$BASE_DISK" "$tmp"
+	host_copy_disk "$BASE_DISK" "$tmp"
 	mv "$tmp" "$MACHINE_DISK"
 	trap - EXIT
 	echo "✓ machine reset from base: $MACHINE_DISK"
