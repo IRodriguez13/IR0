@@ -94,6 +94,7 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_mmap_fixed_partial_overlap_preserves_vma,
 	  "mmap_fixed_partial_overlap_preserves_vma", 1 },
 	{ ktest_mprotect_preserves_cow, "mprotect_preserves_cow", 1 },
+	{ ktest_mprotect_updates_maps, "mprotect_updates_maps", 1 },
 	{ ktest_reclaim_freed_page_tables_safely,
 	  "reclaim_freed_page_tables_safely", 1 },
 	{ ktest_signal_segv_deliver_irq_frame,

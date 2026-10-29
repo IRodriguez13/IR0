@@ -307,6 +307,164 @@ void ktest_reclaim_freed_page_tables_safely(void)
 	KTEST_END();
 }
 
+static int ktest_maps_parse_hex(const char **pp, uint64_t *out)
+{
+	const char *p = *pp;
+	uint64_t value = 0;
+	int digits = 0;
+
+	for (;;)
+	{
+		char c = *p;
+		int d;
+
+		if (c >= '0' && c <= '9')
+			d = c - '0';
+		else if (c >= 'a' && c <= 'f')
+			d = c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F')
+			d = c - 'A' + 10;
+		else
+			break;
+		if (value > (UINT64_MAX >> 4))
+			return -1;
+		value = (value << 4) | (uint64_t)d;
+		p++;
+		digits++;
+	}
+	if (digits == 0)
+		return -1;
+	*pp = p;
+	*out = value;
+	return 0;
+}
+
+/*
+ * Read /proc/self/maps and return the four permission characters for the
+ * exact [start, end) range.  A missing range or a stale VMA prot fails.
+ */
+static int ktest_maps_perms(uintptr_t start, uintptr_t end, char perms[5])
+{
+	char buf[4096];
+	const char *line;
+	int64_t fd;
+	int64_t n;
+
+	fd = sys_open("/proc/self/maps", 0, 0);
+	if (fd <= 0)
+		return -1;
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	if (n <= 0)
+		return -1;
+
+	line = buf;
+	while (*line)
+	{
+		const char *p = line;
+		uint64_t line_start;
+		uint64_t line_end;
+
+		if (ktest_maps_parse_hex(&p, &line_start) == 0 && *p == '-')
+		{
+			p++;
+			if (ktest_maps_parse_hex(&p, &line_end) == 0 &&
+			    line_start == (uint64_t)start &&
+			    line_end == (uint64_t)end && *p == ' ')
+			{
+				memcpy(perms, p + 1, 4);
+				perms[4] = '\0';
+				return 0;
+			}
+		}
+		line = strchr(line, '\n');
+		if (!line)
+			break;
+		line++;
+	}
+	return -1;
+}
+
+void ktest_mprotect_updates_maps(void)
+{
+	void *region;
+	uintptr_t base;
+	uint64_t saved_heap_start;
+	uint64_t saved_heap_end;
+	uint64_t saved_mmap_base;
+	char perms[5];
+	int rc;
+
+	KTEST_BEGIN("mprotect_updates_maps");
+	KASSERT(current_process != NULL);
+
+	saved_heap_start = process_heap_start(current_process);
+	saved_heap_end = process_heap_end(current_process);
+	saved_mmap_base = process_mmap_base(current_process);
+	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_mmap_base(current_process, 0);
+
+	region = ktest_mm_mmap_anon(3 * PAGE_SIZE_4KB, KTEST_PROT_RW,
+				    KTEST_MAP_PRIVATE | KTEST_MAP_ANONYMOUS);
+	KASSERT(region != NULL && region != (void *)(intptr_t)-1);
+	if (region == NULL || region == (void *)(intptr_t)-1)
+	{
+		process_set_heap_start(current_process, saved_heap_start);
+		process_set_heap_end(current_process, saved_heap_end);
+		process_set_mmap_base(current_process, saved_mmap_base);
+		KTEST_END();
+		return;
+	}
+	base = (uintptr_t)region;
+
+	/*
+	 * Protect only the middle page.  Linux splits the VMA into three, so
+	 * maps must report rw-p, r--p, rw-p.  A single line covering all
+	 * three pages proves the VMA metadata was not split with the PTEs.
+	 */
+	rc = sys_mprotect((void *)(base + PAGE_SIZE_4KB), PAGE_SIZE_4KB,
+			  KTEST_PROT_READ);
+	KASSERT_EQ(rc, 0);
+	KASSERT_EQ(ktest_maps_perms(base, base + PAGE_SIZE_4KB, perms), 0);
+	KASSERT(strcmp(perms, "rw-p") == 0);
+	KASSERT_EQ(ktest_maps_perms(base + PAGE_SIZE_4KB,
+				    base + 2 * PAGE_SIZE_4KB, perms), 0);
+	KASSERT(strcmp(perms, "r--p") == 0);
+	KASSERT_EQ(ktest_maps_perms(base + 2 * PAGE_SIZE_4KB,
+				    base + 3 * PAGE_SIZE_4KB, perms), 0);
+	KASSERT(strcmp(perms, "rw-p") == 0);
+
+	/*
+	 * Restoring the whole range must update every split VMA and coalesce
+	 * them back into one, as Linux does; otherwise repeated split/restore
+	 * cycles fragment the VMA list.
+	 */
+	rc = sys_mprotect(region, 3 * PAGE_SIZE_4KB, KTEST_PROT_RW);
+	KASSERT_EQ(rc, 0);
+	KASSERT_EQ(ktest_maps_perms(base, base + 3 * PAGE_SIZE_4KB, perms),
+		  0);
+	KASSERT(strcmp(perms, "rw-p") == 0);
+
+	/* And a left-edge split on the first of the three VMAs. */
+	rc = sys_mprotect(region, PAGE_SIZE_4KB, KTEST_PROT_READ);
+	KASSERT_EQ(rc, 0);
+	KASSERT_EQ(ktest_maps_perms(base, base + PAGE_SIZE_4KB, perms), 0);
+	KASSERT(strcmp(perms, "r--p") == 0);
+	KASSERT_EQ(ktest_maps_perms(base + PAGE_SIZE_4KB,
+				    base + 3 * PAGE_SIZE_4KB, perms), 0);
+	KASSERT(strcmp(perms, "rw-p") == 0);
+
+	KASSERT_EQ(sys_munmap(region, 3 * PAGE_SIZE_4KB), 0);
+	ktest_mm_cleanup(base, 3 * PAGE_SIZE_4KB);
+
+	process_set_heap_start(current_process, saved_heap_start);
+	process_set_heap_end(current_process, saved_heap_end);
+	process_set_mmap_base(current_process, saved_mmap_base);
+	KTEST_END();
+}
+
 void ktest_mprotect_preserves_cow(void)
 {
 	void *region;
