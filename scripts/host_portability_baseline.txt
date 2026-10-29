@@ -7,7 +7,7 @@ gnu_reflink              scripts/make/testing.mk                          4
 gnu_reflink              scripts/smoke_x11_pointer.py                     2
 gnu_sed_i                scripts/make/testing.mk                          3
 gnu_stat_c               scripts/make/testing.mk                          1
-hardcoded_tmp            scripts/make/testing.mk                          489
+hardcoded_tmp            scripts/make/testing.mk                          482
 hardcoded_tmp            scripts/smoke_ash_direct_segv_probe.py           1
 hardcoded_tmp            scripts/smoke_ash_irq_preempt_stable.py          1
 hardcoded_tmp            scripts/smoke_console_session_fork.py            1

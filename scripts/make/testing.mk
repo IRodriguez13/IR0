@@ -5762,16 +5762,41 @@ kernel-memsafe:
 # Batería in-kernel al estilo KUnit: tests se ejecutan al arranque (no dependen de la shell).
 # QEMU headless, sin red. boot_init ejecuta el escenario KTM kernel.ktest,
 # que corre kernel_test_run_all() en contexto de proceso.
+#
+# Each run writes to a private mktemp log so two builds cannot interleave
+# their output.  On exit the log is copied to KTEST_LOG, the stable evidence
+# path consumed by the smoke/runtime targets below.
+KTEST_LOG ?= /tmp/ktest.log
+
 kernel-tests: kernel-x64-test.iso disk.img
 	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
-	@$(SMOKE_QEMU_RUN) --log /tmp/ktest.log --timeout 60 --done "TEST_END|kernel.ktest|PASS" \
+	@ktest_log=$$(mktemp "$${TMPDIR:-/tmp}/ir0-ktest.XXXXXX") || exit 1; \
+	$(SMOKE_QEMU_RUN) --log "$$ktest_log" --timeout 60 --done "TEST_END|kernel.ktest|PASS" \
 		--fail-regex 'Some tests FAILED|not ok |TEST_END[|]kernel[.]ktest[|]FAIL' -- \
 		$(QEMU) -cdrom kernel-x64-test.iso -drive file=disk.img,format=raw,if=ide,index=0 -serial stdio -display none -m 128M -no-reboot -net none; \
-	grep -q "All .* test(s) passed" /tmp/ktest.log && grep -q 'TEST_END|kernel.ktest|PASS' /tmp/ktest.log && ! grep -q "Some tests FAILED" /tmp/ktest.log && ! grep -q "not ok " /tmp/ktest.log && ! grep -q "# SKIP need process" /tmp/ktest.log; \
-	if [ $$? -eq 0 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
+	run_status=$$?; \
+	passed=0; \
+	if [ $$run_status -eq 0 ] && \
+	   grep -q "All .* test(s) passed" "$$ktest_log" && \
+	   grep -q 'TEST_END|kernel.ktest|PASS' "$$ktest_log" && \
+	   ! grep -q "Some tests FAILED" "$$ktest_log" && \
+	   ! grep -q "not ok " "$$ktest_log" && \
+	   ! grep -q "# SKIP need process" "$$ktest_log"; then \
+		passed=1; \
+	fi; \
+	if ! cp -f "$$ktest_log" "$(KTEST_LOG)"; then \
+		rm -f "$$ktest_log" "$$ktest_log.qemu-stderr"; \
+		echo "✗ kernel-tests FAILED (cannot write $(KTEST_LOG))"; \
+		exit 1; \
+	fi; \
+	if [ -f "$$ktest_log.qemu-stderr" ]; then \
+		cp -f "$$ktest_log.qemu-stderr" "$(KTEST_LOG).qemu-stderr" 2>/dev/null || true; \
+	fi; \
+	rm -f "$$ktest_log" "$$ktest_log.qemu-stderr"; \
+	if [ $$passed -eq 1 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
 
 smoke-multiuser-perms: kernel-tests
-	@grep -q "MULTIUSER_PERMS_OK" /tmp/ktest.log || \
+	@grep -q "MULTIUSER_PERMS_OK" $(KTEST_LOG) || \
 		(echo "✗ smoke-multiuser-perms FAILED (tag missing)"; exit 1)
 	@echo "✓ smoke-multiuser-perms passed"
 
@@ -6000,11 +6025,11 @@ runtime-net-check:
 
 runtime-mount-check: kernel-tests
 	@echo "  RUNTIME  mount contract smoke (QEMU)"
-	@grep -q "ok .* - mount_proc_contract" /tmp/ktest.log && \
-	 grep -q "ok .* - mount_tmpfs_contract" /tmp/ktest.log && \
-	 grep -q "ok .* - mount_multi_fs_contract" /tmp/ktest.log && \
-	 grep -q "ok .* - mount_longest_prefix_contract" /tmp/ktest.log && \
-	 grep -q "ok .* - block_hda_read_contract" /tmp/ktest.log
+	@grep -q "ok .* - mount_proc_contract" $(KTEST_LOG) && \
+	 grep -q "ok .* - mount_tmpfs_contract" $(KTEST_LOG) && \
+	 grep -q "ok .* - mount_multi_fs_contract" $(KTEST_LOG) && \
+	 grep -q "ok .* - mount_longest_prefix_contract" $(KTEST_LOG) && \
+	 grep -q "ok .* - block_hda_read_contract" $(KTEST_LOG)
 	@echo "✓ runtime-mount-check passed"
 
 repo-hygiene-guard:
