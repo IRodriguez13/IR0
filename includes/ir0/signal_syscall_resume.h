@@ -95,7 +95,12 @@ static inline void signal_resume_blocked_syscall_frame(
 {
 	arch_syscall_frame_t snap;
 
-	if (!out || !resume_rax || !block_sf)
+	if (!resume_rax)
+		return;
+
+	/* Defined result even when the frame pointers are unusable. */
+	*resume_rax = (uint64_t)(int64_t)(-EINTR);
+	if (!out || !block_sf)
 		return;
 
 	snap = *block_sf;
@@ -106,8 +111,6 @@ static inline void signal_resume_blocked_syscall_frame(
 		*resume_rax = (uint64_t)block_nr;
 		syscall_frame_arm_restart(out);
 	}
-	else
-		*resume_rax = (uint64_t)(int64_t)(-EINTR);
 }
 
 static inline int signal_blocked_syscall_is_console_read(uint32_t block_nr,

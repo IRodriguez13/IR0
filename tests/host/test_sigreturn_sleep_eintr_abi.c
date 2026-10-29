@@ -78,5 +78,20 @@ void test_sigreturn_sleep_eintr_frame_abi(void)
 	ASSERT(signal_syscall_user_ptr_suspicious(0x3fULL));
 	ASSERT(!signal_syscall_user_ptr_suspicious(0x7fdf8000ULL));
 
+	/*
+	 * A missing frame must still leave resume_rax defined; the old helper
+	 * returned early and callers read an uninitialized local.
+	 */
+	rax = 0xdeadbeefULL;
+	signal_resume_blocked_syscall_frame(NULL, &rax, &block, 0, __NR_read);
+	ASSERT_EQ((int64_t)rax, (int64_t)(-EINTR));
+
+	rax = 0xdeadbeefULL;
+	signal_resume_blocked_syscall_frame(&out, &rax, NULL, 1, __NR_read);
+	ASSERT_EQ((int64_t)rax, (int64_t)(-EINTR));
+
+	/* A NULL resume_rax pointer is tolerated and writes nothing. */
+	signal_resume_blocked_syscall_frame(&out, NULL, &block, 0, __NR_read);
+
 	TEST_END();
 }
