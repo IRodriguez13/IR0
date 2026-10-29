@@ -58,7 +58,7 @@ smoke-arm64-rpi3-boot: kernel-arm64-rpi3-min.bin
 	@aarch64-linux-gnu-objcopy -O binary $< build/arm64-rpi3/kernel8.img
 	@rm -f $(HOST_TMP)/arm64-rpi3-boot-smoke.log
 	@$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-rpi3-boot-smoke.log --timeout 20 \
-		--stale-sec 8 --done ARM64_BOOT_OK -- \
+		--stale-sec 8 --mem 1G --done ARM64_BOOT_OK -- \
 		qemu-system-aarch64 -M raspi3b \
 		-kernel build/arm64-rpi3/kernel8.img -nographic \
 		-serial mon:stdio -display none -no-reboot 2>/dev/null
