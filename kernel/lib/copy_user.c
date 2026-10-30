@@ -163,15 +163,20 @@ int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src)
 
 	if (current && current->mode == KERNEL_MODE)
 	{
-		size_t n = 0;
-
-		while (n + 1 < dst_sz && ((const char *)src)[n])
+		for (i = 0; i < dst_sz; i++)
 		{
-			dst[n] = ((const char *)src)[n];
-			n++;
+			char c = ((const char *)src)[i];
+
+			if (c == '\0')
+			{
+				dst[i] = '\0';
+				return 0;
+			}
+			if (i + 1 < dst_sz)
+				dst[i] = c;
 		}
-		dst[n] = '\0';
-		return 0;
+		dst[dst_sz - 1] = '\0';
+		return -ENAMETOOLONG;
 	}
 
 	if (!is_user_address(src, 1))
@@ -180,18 +185,22 @@ int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src)
 	if (!current || !process_pgd(current))
 		return -EFAULT;
 
-	for (i = 0; i + 1 < dst_sz; i++)
+	for (i = 0; i < dst_sz; i++)
 	{
 		char c;
 
 		if (copy_from_user_mm(process_pgd(current),
 				      (uintptr_t)src + i, &c, 1) != 0)
 			return -EFAULT;
-		dst[i] = c;
 		if (c == '\0')
+		{
+			dst[i] = '\0';
 			return 0;
+		}
+		if (i + 1 < dst_sz)
+			dst[i] = c;
 	}
 
 	dst[dst_sz - 1] = '\0';
-	return 0;
+	return -ENAMETOOLONG;
 }

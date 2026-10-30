@@ -39,6 +39,8 @@ void ktest_usercopy_explicit_mm_range_contract(void)
 {
 	address_space_root_t invalid_root = (address_space_root_t)(uintptr_t)1;
 	uintptr_t upper = mm_user_va_end();
+	process_mode_t saved_mode;
+	char string_buf[4];
 	char byte = 0;
 
 	KTEST_BEGIN("usercopy_explicit_mm_range_contract");
@@ -55,6 +57,21 @@ void ktest_usercopy_explicit_mm_range_contract(void)
 	KASSERT(copy_to_user_mm(invalid_root, UINTPTR_MAX - 1, &byte, 4) != 0);
 	KASSERT(copy_from_user_mm(invalid_root, UINTPTR_MAX - 1, &byte, 4) != 0);
 	KASSERT(zero_user_mm(invalid_root, UINTPTR_MAX - 1, 4) != 0);
+
+	/* Kernel-mode harness exercises the bounded C-string semantics. */
+	KASSERT(current_process != NULL);
+	if (current_process)
+	{
+		saved_mode = current_process->mode;
+		current_process->mode = KERNEL_MODE;
+		KASSERT_EQ(copy_from_user_cstring(string_buf, sizeof(string_buf),
+					       "abc"), 0);
+		KASSERT_EQ(strcmp(string_buf, "abc"), 0);
+		KASSERT_EQ(copy_from_user_cstring(string_buf, sizeof(string_buf),
+					       "abcd"), -ENAMETOOLONG);
+		KASSERT_EQ(string_buf[sizeof(string_buf) - 1], '\0');
+		current_process->mode = saved_mode;
+	}
 
 	KTEST_END();
 }

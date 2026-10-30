@@ -52,8 +52,9 @@ int clear_user(void *dst, size_t n);
 
 /**
  * copy_from_user_cstring - Copy a NUL-terminated string from userspace.
- * Stops at NUL or dst_sz-1; does not read past unmapped pages like a fixed
- * 256-byte copy_from_user would when src sits near USER_STACK_TOP.
+ * Does not read past unmapped pages like a fixed-size copy would when src
+ * sits near USER_STACK_TOP. Returns -ENAMETOOLONG instead of accepting a
+ * truncated string when the terminator does not fit in @dst.
  */
 int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src);
 
