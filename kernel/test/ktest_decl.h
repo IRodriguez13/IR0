@@ -62,6 +62,7 @@ void ktest_block_hda_read_contract(void);
 void ktest_cred_access_contract(void);
 void ktest_devfs_hci_open_contract(void);
 void ktest_mmap_null_placement(void);
+void ktest_usercopy_explicit_mm_range_contract(void);
 void ktest_munmap_partial_preserves_vma(void);
 void ktest_mmap_fixed_partial_overlap_preserves_vma(void);
 void ktest_mprotect_preserves_cow(void);

@@ -91,6 +91,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_cred_access_contract, "cred_access_contract", 1 },
 	{ ktest_devfs_hci_open_contract, "devfs_hci_open_contract", 1 },
 	{ ktest_mmap_null_placement, "mmap_null_placement", 1 },
+	{ ktest_usercopy_explicit_mm_range_contract,
+	  "usercopy_explicit_mm_range_contract", 1 },
 	{ ktest_munmap_partial_preserves_vma,
 	  "munmap_partial_preserves_vma", 1 },
 	{ ktest_mmap_fixed_partial_overlap_preserves_vma,

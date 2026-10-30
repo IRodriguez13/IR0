@@ -17,6 +17,7 @@
 #include "process/process_internal.h"
 #include "syscalls.h"
 #include <ir0/abi/mmap_contract.h>
+#include <ir0/copy_user.h>
 #include <ir0/kmem.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
@@ -33,6 +34,30 @@
 #define KTEST_PROT_RW       (KTEST_PROT_READ | KTEST_PROT_WRITE)
 
 #define KTEST_BUSYBOX_INITIAL_BRK 0x453000UL
+
+void ktest_usercopy_explicit_mm_range_contract(void)
+{
+	address_space_root_t invalid_root = (address_space_root_t)(uintptr_t)1;
+	uintptr_t upper = mm_user_va_end();
+	char byte = 0;
+
+	KTEST_BEGIN("usercopy_explicit_mm_range_contract");
+
+	/* Empty copies never dereference either endpoint or require an mm. */
+	KASSERT_EQ(copy_to_user_mm(NULL, 0, NULL, 0), 0);
+	KASSERT_EQ(copy_from_user_mm(NULL, 0, NULL, 0), 0);
+	KASSERT_EQ(zero_user_mm(NULL, 0, 0), 0);
+
+	/* Reject wraparound and ranges crossing the ISA-owned user window. */
+	KASSERT(copy_to_user_mm(invalid_root, upper - 1, &byte, 2) != 0);
+	KASSERT(copy_from_user_mm(invalid_root, upper - 1, &byte, 2) != 0);
+	KASSERT(zero_user_mm(invalid_root, upper - 1, 2) != 0);
+	KASSERT(copy_to_user_mm(invalid_root, UINTPTR_MAX - 1, &byte, 4) != 0);
+	KASSERT(copy_from_user_mm(invalid_root, UINTPTR_MAX - 1, &byte, 4) != 0);
+	KASSERT(zero_user_mm(invalid_root, UINTPTR_MAX - 1, 4) != 0);
+
+	KTEST_END();
+}
 
 static int ktest_mm_pte_flags(uintptr_t va, uint64_t *flags)
 {

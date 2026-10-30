@@ -585,7 +585,9 @@ int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
 {
     const uint8_t *s = src;
 
-    if (!root || !src)
+    if (n == 0)
+        return 0;
+    if (!root || !src || !mm_user_va_ok(dst, n))
         return -1;
 
     while (n > 0)
@@ -621,10 +623,10 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
                                        void *dst, size_t n)
 {
     uint8_t *d = dst;
-    uintptr_t src0 = src;
-    size_t n0 = n;
 
-    if (!root || !dst)
+    if (n == 0)
+        return 0;
+    if (!root || !dst || !mm_user_va_ok(src, n))
         return -1;
 
     while (n > 0)
@@ -653,15 +655,15 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
         n -= chunk;
     }
 
-    (void)src0;
-    (void)n0;
     return 0;
 }
 
 int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
 				  size_t n)
 {
-    if (!root)
+    if (n == 0)
+        return 0;
+    if (!root || !mm_user_va_ok(dst, n))
         return -1;
 
     while (n > 0)
