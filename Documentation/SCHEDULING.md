@@ -73,4 +73,4 @@ See [`KTM.md`](KTM.md) (Class B context). Product repair: `IR0_CLASS_B_REPAIR=1`
 
 - Mandocs: [`mandocs/en/scheduler.md`](mandocs/en/scheduler.md)
 - Decoupling map: [`DECOUPLING.md`](DECOUPLING.md)
-- Class B gates: `scripts/make/class-b.mk`
+- Class B gates: `make -C tests/host run` (`test_class_b_ctx_invariant`) and the KTM Class B scenario.

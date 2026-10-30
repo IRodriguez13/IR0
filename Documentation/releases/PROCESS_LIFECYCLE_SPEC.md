@@ -63,11 +63,9 @@ Compare treats Linux skip as acceptable; **IR0 must pass** `reparent_mid_wait` a
 ## Gates (capability VERIFIED)
 
 ```bash
-make linux-abi-audit-process-lifecycle
-make kernel-tests          # wait4_*, signal ktests
-make smoke-tier1
-make smoke-mm-cow-lazy
-IR0_INCLUDE_QA=1 make release-0.0.1
+python3 scripts/linux_abi_audit.py --contract process_lifecycle
+make ktest                  # wait4_*, signal ktests
+make agent-fast             # ctr + ktest
 ```
 
 ## References

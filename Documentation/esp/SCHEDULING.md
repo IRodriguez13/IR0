@@ -35,8 +35,9 @@ del wait se llama `kernel_idle_poll_nosched()` para que los wakes no aniden
 ## Class B
 
 Par CS ring-0 + RIP userspace ilegal para `kernel_ret`. Producto:
-`IR0_CLASS_B_REPAIR=1`. Gates: `make smoke-class-b-mitigated` /
-`smoke-class-b-repro` (`scripts/make/class-b.mk`). Ver [`../KTM.md`](../KTM.md).
+`IR0_CLASS_B_REPAIR=1`. Gates actuales: escenario KTM Class B (manual) y
+`make -C tests/host run` (`test_class_b_ctx_invariant`). Los targets
+`smoke-class-b-*` se eliminaron con el catálogo QA. Ver [`../KTM.md`](../KTM.md).
 
 ## Características runtime
 

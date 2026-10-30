@@ -9,7 +9,8 @@ can exhaust the host's RAM or disk, or make a fresh clone unrunnable. Treat
 every host script as production code.
 
 Scope: `scripts/ktm_*`, `scripts/smoke_*`, `scripts/inject_init_minix.py`,
-`scripts/make/testing.mk`, `tests/ktm/**`, and any helper they invoke.
+`Makefile`, `scripts/make/ktm.mk`, `scripts/run_qemu.sh`, `scripts/unibuild.sh`,
+`tests/ktm/**`, and any helper they invoke.
 
 ## Portability contract (Linux, BSD, macOS)
 

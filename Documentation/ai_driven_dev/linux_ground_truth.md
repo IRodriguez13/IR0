@@ -21,14 +21,14 @@ or **exec/fork** semantics for musl/BusyBox/TCC:
 
 ```bash
 # Full audit for all enabled contracts (brk + wait4 + read + mmap + mount)
-make linux-abi-audit
+python3 scripts/linux_abi_audit.py --all
 
 # Single contract iteration
-make linux-abi-audit-wait4
-make linux-abi-audit-read
-make linux-abi-audit-mmap
-make linux-abi-audit-mount
-make linux-abi-audit-vfs-write
+python3 scripts/linux_abi_audit.py --contract wait4
+python3 scripts/linux_abi_audit.py --contract read
+python3 scripts/linux_abi_audit.py --contract mmap
+python3 scripts/linux_abi_audit.py --contract mount
+python3 scripts/linux_abi_audit.py --contract vfs-write
 
 # Report artifacts
 build/linux_abi_audit/report.md
@@ -51,13 +51,13 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | Syscall / area | Status | host trace | IR0 trace | host tests | ktests | smoke | Notes |
 |----------------|--------|:----------:|:---------:|:----------:|:------:|:-----:|-------|
 | execve | PARTIAL | — | — | — | partial | tier1 | ELF load path; no paired audit yet |
-| brk | VERIFIED | ✓ | ✓ | ✓ | ✓ | partial | `make linux-abi-audit`; probe `scripts/linux_abi/workloads/brk_probe.c` |
-| mmap | VERIFIED | ✓ | ✓ | ✓ | ✓ | partial | `make linux-abi-audit-mmap`; anon RW/PROT_NONE/MAP_FIXED/munmap/bad-fd errno; **no file-backed mmap** |
+| brk | VERIFIED | ✓ | ✓ | ✓ | ✓ | partial | `python3 scripts/linux_abi_audit.py --contract brk`; probe `scripts/linux_abi/workloads/brk_probe.c` |
+| mmap | VERIFIED | ✓ | ✓ | ✓ | ✓ | partial | `python3 scripts/linux_abi_audit.py --contract mmap`; anon RW/PROT_NONE/MAP_FIXED/munmap/bad-fd errno; **no file-backed mmap** |
 | munmap | PARTIAL | — | — | — | partial | — | No paired audit |
 | mprotect | UNKNOWN | — | — | — | — | — | |
 | fork | PARTIAL | — | — | — | partial | — | |
 | clone | UNKNOWN | — | — | — | — | — | pthread smoke separate |
-| wait4 | VERIFIED | ✓ | ✓ | — | ✓ | — | `make linux-abi-audit-wait4`; probe `scripts/linux_abi/workloads/wait4_probe.c`; ktest `wait4_status` |
+| wait4 | VERIFIED | ✓ | ✓ | — | ✓ | — | `python3 scripts/linux_abi_audit.py --contract wait4`; probe `scripts/linux_abi/workloads/wait4_probe.c`; ktest `wait4_status` |
 | exit | PARTIAL | — | — | — | partial | — | |
 | signals | PARTIAL | — | — | ✓ | partial | — | `test_signal_rt_sigaction_abi` |
 | pipe | LINUX-LIKE | — | — | ✓ | ✓ | — | host pipe tests |
@@ -65,19 +65,19 @@ Evidence columns: **host trace** | **IR0 trace** | **host tests** | **ktests** |
 | poll | PARTIAL | — | — | ✓ | partial | — | KTM poll matrix host test |
 | select | UNKNOWN | — | — | — | — | — | |
 | ioctl | PARTIAL | — | — | — | partial | — | TTY/winsize legacy captures |
-| read | VERIFIED | ✓ | ✓ | — | ✓ | — | `make linux-abi-audit-read`; probe `read_probe.c` (pipe/EOF/EBADF); ktest `syscall_pipe` |
+| read | VERIFIED | ✓ | ✓ | — | ✓ | — | `python3 scripts/linux_abi_audit.py --contract read`; probe `read_probe.c` (pipe/EOF/EBADF); ktest `syscall_pipe` |
 | lseek | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write` (SEEK_SET/CUR/END) |
-| openat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `linux-abi-audit-openat`; bundle `vfs_write` O_CREAT/TRUNC/APPEND/EXCL |
+| openat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `python3 scripts/linux_abi_audit.py --contract openat`; bundle `vfs_write` O_CREAT/TRUNC/APPEND/EXCL |
 | rename | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write` |
 | unlink | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write` |
-| stat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `make linux-abi-audit-stat`; probe `stat_probe.c` |
+| stat | VERIFIED | ✓ | ✓ | ✓ | partial | — | `python3 scripts/linux_abi_audit.py --contract stat`; probe `stat_probe.c` |
 | truncate / ftruncate | VERIFIED | ✓ | ✓ | — | partial | — | bundle `vfs_write`; MINIX grow + `sys_ftruncate` |
-| VFS write-path | VERIFIED | ✓ | ✓ | — | partial | — | `make linux-abi-audit-vfs-write`; probe `vfs_write_probe.c`; 29 pasos |
+| VFS write-path | VERIFIED | ✓ | ✓ | — | partial | — | `python3 scripts/linux_abi_audit.py --contract vfs-write`; probe `vfs_write_probe.c`; 29 pasos |
 | write | VERIFIED | ✓ | ✓ | — | partial | ✓ | bundle `vfs_write` roundtrip |
-| mount | VERIFIED | ✓ | ✓ | — | ✓ | partial | `make linux-abi-audit-mount`; tmpfs none `/tmp/ir0mnt`, rw/umount, ENOENT/ENODEV; **FAT16 smoke separado** |
+| mount | VERIFIED | ✓ | ✓ | — | ✓ | partial | `python3 scripts/linux_abi_audit.py --contract mount`; tmpfs none `/tmp/ir0mnt`, rw/umount, ENOENT/ENODEV; **FAT16 smoke separado** |
 | umount2 | PARTIAL | — | — | — | partial | — | |
 
-Update **brk** row after each green `make linux-abi-audit`. Enable the next contract in
+Update **brk** row after each green `python3 scripts/linux_abi_audit.py --all`. Enable the next contract in
 `contracts.json` only when workload + compare scripts exist.
 
 ## Suggested next contracts (priority)

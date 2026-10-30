@@ -57,7 +57,8 @@ make -s arch-guard
 For broader config confidence:
 
 ```bash
-make -s build-matrix-full
+make -s ctr            # kernel + arch-guard + matrix-min + host tests
+make -s agent-fast     # ctr + in-kernel ktest battery
 ```
 
 ## Review Mode Checklist

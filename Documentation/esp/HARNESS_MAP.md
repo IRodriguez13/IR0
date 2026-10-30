@@ -1,7 +1,12 @@
 # Mapa de harness (tags y nombres Make)
 
+> **Nota de build (2026-10-29):** este documento es un inventario histórico de
+> nombres de smoke/KTM. La mayoría de los targets `make smoke-*` ya no existen.
+> Gates actuales: `make ctr`, `make agent-fast`, `make ktest`,
+> `make build-matrix-min`, `make arch-guard`.
+
 > **Última verificación:** 2026-10-28
-> **Fuente de verdad:** `scripts/make/testing.mk`,
+> **Fuente de verdad:** `Documentation/CHANGELOG.md`, `scripts/ktm_*.py`,
 > `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`
 
 Nombres canónicos de smokes QEMU, casos KTM y tags serial.
@@ -33,16 +38,16 @@ no hay compuerta `IR0_LEGACY_SMOKE`.
 
 | Área | Target |
 |------|--------|
-| Tier-1 arranque + ash | `smoke-tier1`, `run-ash-gui`, `check-ash-logs` |
-| Arranque producto runit | `smoke-runit-boot`, `smoke-runit-login`, `smoke-runit-power` |
-| BusyBox | `build-busybox-min`, `build-busybox-plus`, `build-busybox-full` |
-| TinyCC | `build-tcc` |
-| Smokes KTM en invitado | pilotos `ktm-userdev-*-run` (`tests/ktm/userdev/`) |
-| Plano de datos COW | `smoke-mm-cow-lazy` |
-| ARM64 | `smoke-arm64-all` y los targets `smoke-arm64-*` |
+| Gate rápido del kernel | `make test-fast` |
+| Suite dentro del kernel | `make ktest` |
+| Gate arquitectónico completo | `make ctr` / `make agent-fast` |
+| Inventario KTM | `make ktm-check` / `make ktm-manifest` |
+| Producto x86-64 | `make ir0` / `make run [gui\|console\|debug]` |
+| Agregado ARM64 | `make ir0 arm64` / `make run arm64 console` |
+| Imagen Raspberry Pi | `make ir0 arm64 rpi3` (o `rpi4`, `rpi5`) |
 
-`build-init-*` compila el init ring-3 que inyecta `make load-init`;
-`make build-init-musl` genera la variante musl estática de `init_musl.c`.
+Los paquetes de userspace (BusyBox, runit, TinyCC e imágenes ISD) se construyen
+en el repositorio ISD; el Makefile del kernel ya no actúa como proxy.
 
 Tabla completa en el documento inglés.
 

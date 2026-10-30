@@ -7,17 +7,19 @@
 | Estado | estable |
 | Depende de | boot, process, vfs, tty |
 | Man page | Acoplamiento IR0-ISD (sección 7) |
-| Fuentes principales | `kernel/main.c`, `scripts/make/isd.mk`, `scripts/kernel_manager.py`, `scripts/userspace_manager.py`, repo hermano `ISD/` |
+| Fuentes principales | `kernel/main.c`, `Makefile` raíz, `IR0_ISD_INTERFACE`, `Documentation/USERSPACE.md`, repo hermano `ISD/` |
 
-> **Última verificación:** 2026-09-21
+> **Última verificación:** 2026-10-29
 
-> **Nota (2026-09-18):** el rootfs de producto y los perfiles se construyen desde el
-> repo hermano **`ISD/`** (`IR0_ISD_ROOT`). El kernel dispara boot vía `scripts/make/isd.mk`:
-> discos persistentes, `make kmang` (TUI catálogo ISO) y `make usmang` (inspector ISD
-> en host). Env obsoleto `IR0_USERSPACE_*` alias de `IR0_ISD_*`; repo antes
-> **IR0-userspace**, hoy **ISD**.
+> **Nota de build (2026-10-29):** el Makefile de IR0 ya no clona ni compila
+> ISD. El rootfs y los perfiles los construye el hermano **`ISD/`**
+> (`IR0_ISD_ROOT`). Targets del kernel: `make ir0`, `make run DISK=…`,
+> `make headers_install` y los gates CTR/ktest. Se eliminaron `first-boot`,
+> `build-runit`, `load-userspace-runit`, `run-ash-gui`, `smoke-tier1`,
+> `kmang`, `poweron` y `usmang`.
 
-> **Nota (2026-07-24):** el PID1 transitorio **irinit** se eliminó. Producto y tests usan solo **runit** (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
+> **Nota (2026-07-24):** el PID1 transitorio **irinit** se eliminó. Producto y
+> tests usan solo **runit**; el rootfs lo arma ISD.
 
 ## 1. Resumen
 
@@ -36,6 +38,8 @@ DoomGeneric son payloads opcionales.
 | `rootfs_base.c` | Crea `/bin`, `/sbin`, `/dev`, `/proc`, … |
 | `inject_init_minix.py` | Escribe binarios en imagen MINIX v1 |
 | `busybox-1.36.1` | Applets; receta y configs en `ISD/packages/busybox/` |
+| `kernel-x64.iso` | ISO de kernel que construye este árbol |
+| `disk.img` | Rootfs construido por ISD; se adjunta en runtime con `DISK=…` |
 
 **Comportamiento runit:** stage 1 prepara el rootfs; stage 2 supervisa
 servicios; la consola hace getty/login (`runit_console_run`): auth contra
@@ -54,34 +58,47 @@ directo de root con `/etc/ir0-noroot` (nombre ≤14 bytes por el límite de
 entradas de directorio de MINIX v1), `appliance` no abre login interactivo
 (`CONSOLE_NO_LOGIN`).
 
-## 3. Targets Make
+## 3. Flujo de datos
+
+```text
+  make ir0                        # kernel-x64.iso
+       │
+       ▼
+  make run DISK=../ISD/out/.../disk.img
+       │
+       ▼
+  QEMU boot → kexecve("/sbin/init")
+       │
+       ▼
+  runit stage1 → stage2 → consola → /bin/sh (BusyBox ash)
+```
+
+La imagen de rootfs la produce el tooling de ISD. IR0 no inyecta binarios en
+ella como parte del build del kernel.
+
+## 4. Targets Make
 
 | Target | Rol |
 |--------|-----|
-| `make headers_install DESTDIR=…` | Exportar la UAPI pública (`includes/uapi/`) al userspace |
-| `make build-runit` | Delega en `ISD` (runit + ELFs de servicio) |
-| `make load-userspace-runit` | Formatear disco MINIX e instalar el rootfs del hermano |
-| `make smoke-runit-boot` | Smoke headless de PID1 |
-| `make smoke-runit-login` | Autologin root (password vacío) |
-| `make smoke-runit-login-nonroot` | No-root: crypt(3) + uid 1001 + PS1 |
-| `make run-ash-gui` | ash interactivo GTK |
-| `make kmang` | Catálogo interactivo de ISO kernel; `poweron` arranca Default — ver **`man IR0-kmang`** |
-| `make usmang` | Resumen ISD en host; detalle desktop solo con `PROFILE=desktop` |
-| `make smoke-x11-pointer PROFILE=desktop` | TinyX fullscreen + clientes desktop |
+| `make run DISK=…` | Arrancar el ISO con un disco de usuarios construido por ISD |
+| `make headers_install DESTDIR=…` | Exportar la UAPI pública (`includes/uapi/`) para un build externo |
+| `make check-env PROFILE=userspace` | Toolchain del host para builds externos de ISD |
+| `make ir0` | Solo ISO de kernel (sin usuarios) |
+
+ISD es dueño de sus propios targets (`build`, `stage-rootfs`, `pack-minix`, …);
+IR0 no los replica ni envuelve. Ver `Documentation/esp/USERSPACE.md` y
+[`../USERSPACE.md`](../../USERSPACE.md).
 
 Guía: [`USERSPACE.md`](../../USERSPACE.md), [`TOOLING.md`](../../TOOLING.md).
 
-**kmang:** el `#N` de build es **local a la máquina**. Comparar hosts por SHA-256 y
-procedencia, no solo por `#N`. La TUI avisa si el ISO Workspace difiere del Default.
-Contrato completo: **`man IR0-kmang`**.
+**Build number:** el `#N` es **local a la máquina**. Comparar hosts por SHA-256 y
+procedencia, no solo por `#N`. El versionado de ISD es independiente del
+contador del kernel.
 
-**usmang:** lee `ISD/VERSION` y `profiles/<PROFILE>/packages.txt` reales; clientes X
-solo con `PROFILE=desktop`. Versión ISD ≠ build local del kernel.
+Los aliases de `irinit` y los viejos targets de usuarios fueron eliminados.
+Usar `make ir0` + `make run DISK=…` y los comandos propios de ISD.
 
-Los aliases de `irinit` fueron eliminados. Usar `build-runit`,
-`smoke-runit-boot` y `run-ash-gui`.
-
-## 4. Identidad
+## 5. Identidad
 
 - Banner serial: `IR0 kernel <IR0_VERSION_STRING>` (`ir0_boot_serial_ready()`).
 - `uname`: sysname `IR0`, nodename `unix`, version `IR0/Unix`.

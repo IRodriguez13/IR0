@@ -1,9 +1,10 @@
 # FASE57 Experimental Reintegration Plan
 
 > **Historical record:** this plan was executed in the FASE57 wave. Target names
-> it quotes (`smoke-fase52-tcc`, `smoke-fase50-busybox`, …) were removed with
-> `setup/make/legacy-smokes.mk`; use [`HARNESS_MAP.md`](HARNESS_MAP.md) for the
-> current catalog.
+> it quotes (`smoke-fase52-tcc`, `smoke-fase50-busybox`, `run-ash-gui`, …) were
+> removed with the legacy smoke catalog and the 2026-10-29 build-system
+> redesign; use [`HARNESS_MAP.md`](HARNESS_MAP.md) and
+> [`MAKEFILE.md`](MAKEFILE.md) for the current surface.
 
 Controlled rollback from `fase57-experimental-broken-arch-prctl` onto stable
 (`8012866` → `fase57-stable-base`), re-applying experimental work in atomic

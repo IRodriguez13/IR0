@@ -1,8 +1,9 @@
 # BusyBox ash interactivo en `/dev/console` (QEMU GTK)
 
-> **Última verificación:** 2026-09-22
-> **Fuente de verdad:** `scripts/make/testing.mk` (`run-ash-gui`,
-> `smoke-runit-ash-interactive`), [`HARNESS_MAP.md`](HARNESS_MAP.md).
+> **Nota histórica (2026-10-29):** esta página registra el slice de usuarios de
+> 2026. Los targets `run-ash-gui` / `smoke-*` ya no existen. Las imágenes de
+> usuarios las construye ISD y se adjuntan con `make run DISK=…`; los gates del
+> kernel son `make ctr` / `make ktest`.
 
 **Estado:** Hecho (2026-05-25)  
 **Tier:** T1 (userspace POSIX mínimo) — vertical slice  

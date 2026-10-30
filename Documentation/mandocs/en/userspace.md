@@ -7,17 +7,20 @@
 | Status | stable |
 | Depends on | boot, process, vfs, tty |
 | Man page | IR0-ISD coupling (section 7) |
-| Primary sources | `kernel/main.c`, `scripts/make/isd.mk`, `scripts/kernel_manager.py`, `scripts/userspace_manager.py`, sibling `ISD/` |
+| Primary sources | `kernel/main.c`, root `Makefile`, `IR0_ISD_INTERFACE`, `Documentation/USERSPACE.md`, sibling `ISD/` |
 
-> **Last verified:** 2026-09-21
+> **Last verified:** 2026-10-29
 
-> **Note (2026-09-18):** product rootfs and profiles are built from the sibling **`ISD/`**
-> tree (`IR0_ISD_ROOT`). The kernel repo drives boot via `scripts/make/isd.mk`:
-> persistent machine disks, `make kmang` (kernel ISO catalog TUI), and `make usmang`
-> (host ISD inspector). Deprecated env `IR0_USERSPACE_*` aliases `IR0_ISD_*`; repo
-> formerly named **IR0-userspace**, now **ISD**.
+> **Build-surface note (2026-10-29):** the IR0 Makefile no longer clones or
+> builds ISD. Product rootfs and profiles are built by the sibling **`ISD/`**
+> tree (`IR0_ISD_ROOT`). Kernel targets are `make ir0`, `make run DISK=…`,
+> `make headers_install`, and the CTR/ktest gates. Targets such as
+> `first-boot`, `build-runit`, `load-userspace-runit`, `run-ash-gui`,
+> `smoke-tier1`, `kmang`, `poweron`, and `usmang` were removed.
 
-> **Note (2026-07-24):** transitional PID1 **irinit** was removed. Product and tests use **runit** only (`make build-runit` / `load-userspace-runit` / `smoke-runit-boot`).
+> **Note (2026-07-24):** transitional PID1 **irinit** was removed. Product and
+> tests use **runit** only; the rootfs is assembled by ISD.
+
 
 ## 1. Overview
 
@@ -36,7 +39,8 @@ T2 graphics milestones.
 | `rootfs_base.c` | Creates `/bin`, `/sbin`, `/dev`, `/proc`, … on disk |
 | `inject_init_minix.py` | Writes binaries into MINIX v1 image |
 | `busybox-1.36.1` | Applets; recipe and configs in `ISD/packages/busybox/` |
-| `kernel-x64-userspace.bin` | Kernel built with `IR0_USERSPACE_INIT_BOOT=1` |
+| `kernel-x64.iso` | Kernel ISO built by this tree |
+| `disk.img` | ISD-built rootfs image, attached at runtime with `DISK=…` |
 
 **runit behavior:** stage 1 prepares the rootfs; stage 2 supervises services; the
 console service runs getty/login (`runit_console_run`): auth against
@@ -60,10 +64,10 @@ the console policy: `development` keeps root autologin and prints a warning,
 ## 3. Data flow
 
 ```text
-  make kernel-x64-userspace.iso + disk.img
+  make ir0                        # kernel-x64.iso
        │
        ▼
-  inject_init_minix.py  (runit-init → /sbin/init, busybox → /bin/...)
+  make run DISK=../ISD/out/.../disk.img
        │
        ▼
   QEMU boot → kexecve("/sbin/init")
@@ -72,35 +76,30 @@ the console policy: `development` keeps root autologin and prints a warning,
   runit stage1 → stage2 → console → /bin/sh (BusyBox ash)
 ```
 
+The rootfs image is produced by ISD's own tooling. IR0 does not inject
+binaries into it as part of the kernel build.
+
 ## 4. Make targets
 
 | Target | Role |
 |--------|------|
-| `make headers_install DESTDIR=…` | Export public UAPI (`includes/uapi/`) for the userspace build |
-| `make build-runit` | Delegates to `ISD` (runit + service ELFs) |
-| `make load-userspace-runit` | Format MINIX disk and install the product rootfs from the sibling |
-| `make smoke-runit-boot` | Headless PID1 boot smoke |
-| `make smoke-runit-login` | Root autologin (empty password) |
-| `make smoke-runit-login-nonroot` | Non-root: crypt(3) + uid 1001 + PS1 |
-| `make run-ash-gui` | Interactive ash on GTK |
-| `make smoke-tier1` | Bundle: runit boot + ash |
-| `make kmang` | Interactive kernel ISO catalog (`scripts/kernel_manager.py`); `poweron` boots Default — see **`man IR0-kmang`** |
-| `make usmang` | Host ISD summary; desktop detail only when `PROFILE=desktop` |
-| `make smoke-x11-pointer PROFILE=desktop` | Fullscreen TinyX + dual xterm + desktop clients |
+| `make run DISK=…` | Boot the kernel ISO with an ISD-built userspace disk |
+| `make headers_install DESTDIR=…` | Export public UAPI (`includes/uapi/`) for an external userspace build |
+| `make check-env PROFILE=userspace` | Host toolchain used by external ISD builds |
+| `make ir0` | Kernel ISO only (no userspace) |
+
+ISD owns its own target names (`build`, `stage-rootfs`, `pack-minix`, …); IR0
+does not mirror or wrap them. See `Documentation/USERSPACE.md` and
+[`../USERSPACE.md`](../../USERSPACE.md).
 
 Coupling guide: [`USERSPACE.md`](../../USERSPACE.md), [`TOOLING.md`](../../TOOLING.md).
 
-**kmang honesty:** build `#N` is **machine-local** (`.build_number` per host). Compare
-hosts by SHA-256 and provenance (`compare`, `info --json`), not by `#N` alone.
-The TUI warns when Workspace ISO diverges from Default — `poweron` never silently
-boots an unenrolled workspace build. Full contract: **`man IR0-kmang`**.
+**Build number honesty:** build `#N` is **machine-local** (`.build_number` per
+host). Compare hosts by SHA-256 and provenance, not by `#N` alone. ISD release
+versioning is independent of the kernel counter.
 
-**usmang honesty:** reads real `ISD/VERSION`, `profiles/<PROFILE>/packages.txt`, and
-`resolve-packages.sh`; desktop X clients are listed only for `PROFILE=desktop`.
-ISD version is independent of kernel local build numbers.
-
-The retired `irinit` aliases were removed. Use `build-runit`,
-`smoke-runit-boot`, and `run-ash-gui`.
+The retired `irinit` aliases and the old userspace make targets were removed.
+Use `make ir0` + `make run DISK=…` and ISD's own build commands.
 
 ## 5. Identity
 

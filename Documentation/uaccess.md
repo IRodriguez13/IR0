@@ -167,9 +167,9 @@ treats `KERNEL_UACCESS_FAULT` as **FATAL** (same class as panic / canary).
 make -s kernel-x64.bin
 make -s arch-guard
 make -s -C tests/host run          # includes usercopy_no_raw_user_touch
-rm -f kernel-x64-userspace.iso
-make -s kernel-x64-userspace.iso   # then md5 bin ↔ extracted ISO kernel
-SOAK_ROUNDS=2 make -s smoke-session-soak
+make -s ir0                        # rebuild kernel-x64.iso after kernel changes
+# then md5 the extracted ISO kernel against kernel-x64.bin
+python3 scripts/smoke_session_soak.py --rounds 2   # needs an ISD-built disk
 # expect: 0× KERNEL_UACCESS_FAULT, session_segv=0
 ```
 

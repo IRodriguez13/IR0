@@ -9,20 +9,20 @@ Kernel Unix-like **IR0**. Reglas canónicas en `~/.cursor/rules/kernel-linux/`.
 Instalar/actualizar symlinks (IR0 + linux-upstream):
 
 ```bash
-make kernel-linux-rules-install
-# o: ./scripts/install-cursor-rules.sh
+./scripts/install-cursor-rules.sh
+# o: make ai-dev-rules-install   # AGENTS.md + reglas respaldadas por docs
 ```
 
 ## Capas
 
 | Capa | Reglas | Verificación |
 |------|--------|--------------|
-| IR0 tiers T0–T3 | `ir0-tier-t*` | `make smoke-*`, tags en serial |
-| POSIX / userspace | `ir0-tier-t1`, **`ir0-userspace-first-linux-abi`**, **`ir0-no-userspace-patches`** | musl smokes, contratos ABI; kernel-first, sin parches ports |
+| IR0 tiers T0–T3 | `ir0-tier-t*` | `make ktest`, tags en serial |
+| POSIX / userspace | `ir0-tier-t1`, **`ir0-userspace-first-linux-abi`**, **`ir0-no-userspace-patches`** | `scripts/linux_abi/`, contratos ABI; kernel-first, sin parches ports |
 | Arquitectura | `kernel-architecture-rigor`, `kernel-c-allman-style` | `make arch-guard`, CTR gates |
 | Linux ground truth | `linux-ground-truth-first` | `scripts/d1_13_linux_ground_truth.py` |
 | Linux fork debug | `ir0-linux-fork-debug-reference` | `$LINUX_TREE` (= `~/Escritorio/linux`), `git log -S` / `git show` |
-| Smoke behavior | `ir0-smoke-behavior-validation` | `smoke_tty_guards.py`, multi-trial, guards en ventana de sesión |
+| Smoke behavior | `ir0-smoke-behavior-validation` | scripts de smoke, multi-trial, guards en ventana de sesión |
 | Upstream discipline | `linux-upstream-*` | referencia Linux/BSD al diseñar syscalls, MM, drivers |
 | Version stamp | `ir0-version-stamp` | `includes/ir0/version.h` + `Makefile` ↔ tags `v0.0.1*` |
 

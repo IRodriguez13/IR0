@@ -1,5 +1,10 @@
 # IR0 Kernel — Roadmap consolidado de desarrollo
 
+> **Nota de build (2026-10-29):** los nombres históricos de gates
+> (`make smoke-*`, `roadmap-phase*`, `release-0.0.1`) ya no son targets make.
+> Gates actuales: `make ctr`, `make agent-fast`, `make ktest`,
+> `make build-matrix-min`, `make arch-guard`. Ver [`MAKEFILE.md`](MAKEFILE.md).
+
 > **Última verificación:** 2026-10-18 (fold ARM + `ipc/` + identity/cwd; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs ausente)  
 > **Fuente de verdad:** código en `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/` y gates CTR en `Makefile`.
 
@@ -95,13 +100,13 @@ Backlog detallado: [`../ROADMAP.md`](../ROADMAP.md) secciones P1–P3.
 
 ```bash
 make -s kernel-x64.bin
-make -s kernel-tests
 make -s arch-guard
 make -s build-matrix-min
 make -s -C tests/host run
 make -s kernel-text-budget
-make smoke-tier1    # T1 activo
-make health         # batería extendida
+make -s ctr           # gate rápido de merge
+make -s agent-fast    # ctr + ktest en QEMU
+make health           # batería extendida
 ```
 
 ---

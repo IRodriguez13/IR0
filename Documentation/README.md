@@ -37,8 +37,8 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `HARNESS_MAP.md`: **semantic smoke/KTM tags and Make names**; `smoke-fase*`
   aliases (Spanish: `esp/HARNESS_MAP.md`).
 - `KTM.md`: **canonical KTM guide** — internals, **klog layers**, kernel API, `/dev/ktm`, gates (Spanish: `esp/KTM.md`).
-- `USERSPACE.md`: **kernel ↔ ISD coupling** — `make first-boot`, BusyBox
-  path, no-init panic contract (Spanish: `esp/USERSPACE.md`).
+- `USERSPACE.md`: **kernel ↔ ISD boundary** — external userspace builds,
+  `make run DISK=…`, no-init panic contract (Spanish: `esp/USERSPACE.md`).
 - `virtio.md`: **virtio-9p hostshare + virtio-net** — QEMU flags, guest mount,
   `smoke-session-chaos` / `smoke-hostshare-*` (Spanish: `esp/virtio.md`).
 - `KLOG.md`: **structured event core** — `klog_record`, phases, early clock, sinks, `/proc/kmsg`, product boot via runit/ash (Spanish: `esp/KLOG.md`).
@@ -60,7 +60,7 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
 - `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`
-  (QEMU GTK); target `smoke-ash-interactive` (alias `smoke-fase58e-ash-interactive`).
+  (historical smoke notes; userspace binaries come from ISD).
 - `input/ps2-routing.md`: i8042 demux (AUXDATA), set-1 modifiers, mouse packets
   (Spanish: `esp/input/ps2-routing.md`).
 - `filesystems/virtual-file-semantics.md`: snapshot / bounce / ring / stream read

@@ -80,9 +80,9 @@ Minimum before claiming fixed:
 make -s kernel-x64.bin
 make -s -C tests/host run
 # When contract exists:
-IR0_INCLUDE_QA=1 make linux-abi-audit-<contract>
-# Console/signal oleada:
-make -s smoke-ctrl-c-spam smoke-sigchld-no-false-logout smoke-sigchld-sysfs-stress
+python3 scripts/linux_abi_audit.py --contract <contract>
+# Console/signal work:
+make -s ktest
 ```
 
 Update `Documentation/releases/IR0_0.0.1_ABI_BOARD.md` when contract state changes.

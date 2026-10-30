@@ -3,6 +3,12 @@
 > **Last verified:** 2026-10-18 (ARM early fold + ipc/ tables + product identity/cwd; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs still absent — [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`; product userspace lives in the **`ISD`** sibling. README and old docs may lag; **grep the tree before claiming “done”.**
 
+> **Build-system note (2026-10-29):** historical gate names in this roadmap
+> (`make smoke-*`, `roadmap-phase*`, `release-0.0.1`) are no longer make
+> targets. Current gates: `make ctr`, `make agent-fast`, `make ktest`,
+> `make build-matrix-min`, `make arch-guard`. See
+> [`MAKEFILE.md`](MAKEFILE.md).
+
 This document consolidates tier goals, completed oleadas, reprioritized backlog (storage before TCP/X11), and **recommended evolution milestones**. **What is stable for QEMU test today** is canonical in [`STABLE.md`](STABLE.md). **Open work only:** [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md).
 
 ---
@@ -16,7 +22,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 | **One tier at a time** | Vertical slices with runnable proof (ktest, host test, QEMU smoke). |
 | **KTM = dev ally** | Kernel Test Module (`ktm/`, `CONFIG_KTM`) is for **developer** regression/debug only — not a userspace security subsystem (that comes later). Must stay low overhead. |
 | **Log hygiene** | After a feature is stable, trim debug serial storms (semantic tags, audit) or gate behind Kconfig (`IR0_DEBUG_PROC`). |
-| **Makefile = tooling** | `scripts/make/testing.mk` is the only QA catalog; the historical phase catalog is gone. CTR stays lean: `smoke-tier1`, `roadmap-phase*`, `ktm-*`. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
+| **Makefile = tooling** | Root `Makefile` is the kernel entry point; fragments under `scripts/make/` hold recipes. CTR stays lean: `make ctr`, `build-matrix-min`, `arch-guard`, `ktest`. Historical phase/QA-smoke catalogs are gone. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
 | **Don't break userspace** | Syscall ABI stable unless versioned break documented in `Documentation/mandocs/`. Public UAPI is exported with `make headers_install`. |
 | **Kernel ≠ product** | If PID 1 can replace it without recompiling the kernel, it lives in `ISD` (BusyBox, runit, login, doas, `/etc`), not here. |
 | **Post-milestone sprints** | After each green gate / oleada: optimization + architecture sanitization **before** the next big feature. **Rule:** `Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md` (`make ai-dev-rules-install`). |
@@ -166,7 +172,7 @@ Deferred: **IR0-system** (release manifest pinning kernel + userspace + desktop 
 
 | Item | Status |
 |------|--------|
-| Legacy smoke catalog | Removed — `scripts/make/testing.mk` only |
+| Legacy smoke catalog | Removed — no QA catalog; kernel gates live in `scripts/make/ktm.mk` |
 | Rust driver template | `rust_simple_driver.rs` |
 | **`kernel/syscalls.c` split (ARCH-1 / H1)** | **Done** — 86 L glue |
 | **FASE43–48 → `kernel/debug/fase_audit.c` (H2)** | **Done** |

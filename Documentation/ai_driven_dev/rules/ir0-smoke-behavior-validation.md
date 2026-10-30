@@ -40,7 +40,7 @@ Complementa `ir0-smoke-autokill.md`, `ir0-unit-tests-policy.md`, `ir0-code-sourc
 
 - Assert **errno**, valor de retorno y estado observable (wait status, VMA, fd flags).
 - Contrato Linux: workload + compare (`scripts/linux_abi/`) antes de marcar VERIFIED.
-- Tras cambio kernel: `make -C tests/host run` del alcance + smoke del tier afectado.
+- Tras cambio kernel: `make -C tests/host run` del alcance + `make ktest` si tocó QEMU.
 
 ## Criterio de cierre de fix
 

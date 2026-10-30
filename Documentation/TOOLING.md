@@ -1,21 +1,32 @@
 # IR0 Tooling and Build
 
 This document describes the active build, configuration, and validation flow.
-It is aligned with the current Makefile and menuconfig behavior.
+It is aligned with the current root Makefile and menuconfig behavior.
 
 ## Core Build Targets
 
-- `make -j4`: full kernel build, link, and ISO generation.
-- `make kernel-x64.bin`: build and link kernel only.
-- `make kernel-x64.iso`: generate ISO from the current kernel image.
+- `make ir0`: build the default artifact for `ARCH`/`BOARD`.
+  - x86-64 → `kernel-x64.iso`
+  - `arm64` → `kernel-arm64.bin`
+  - `arm64 rpi4` → `build/arm64-rpi4/kernel8.img`
+- `make ir0 arm64`: ARM64 QEMU `virt` aggregate.
+- `make kernel-x64.bin`: build and link the kernel only.
+- `make kernel-x64.iso`: generate an ISO from the current kernel image.
+- `make all`: same artifact as `ir0`, without the `-Werror` policy.
 - `make clean`: remove generated build artifacts.
 
 ## Runtime Targets
 
-- `make run`: QEMU GUI profile with standard IR0 emulated hardware.
-- `make run-console`: serial/console focused execution.
-- `make run-debug`: debug-oriented runtime profile.
-- `make run-gdb`: starts QEMU waiting for GDB on localhost.
+- `make run`: QEMU GUI on x86-64, serial on ARM64.
+- `make run console`: serial/console focused execution (`-nographic`).
+- `make run debug`: guest-error/int logging plus QEMU monitor.
+- `make run fullscreen`: GTK full screen.
+- `make run gdb`: start QEMU waiting for GDB on localhost:1234.
+- `make run arm64 rpi4`: boot `build/arm64-rpi4/kernel8.img`.
+
+`run` never builds. It resolves the artifact from `ARCH`/`BOARD` and refuses to
+start when it is missing. `DISK=…` attaches a userspace image; `DISK=none` opts
+out. See `Documentation/MAKEFILE.md` for the full variable list.
 
 ## Configuration Workflow
 
@@ -39,15 +50,21 @@ It is aligned with the current Makefile and menuconfig behavior.
 
 ## Validation Targets
 
-- `make build-matrix-min`: fast profile matrix.
-- `make build-matrix-full`: extended matrix with guards.
-- `make runtime-net-check`: QEMU runtime smoke for networking paths.
-- `make scale-readiness-gate`: stabilization gate target.
+- `make ctr`: fast merge gate (kernel + `arch-guard` + `build-matrix-min` + host tests).
+- `make agent-fast`: `ctr` plus the in-kernel ktest battery.
+- `make ktest` / `make kernel-tests`: in-kernel tests in QEMU.
+- `make ktm-check`: host tests + KTM classify/manifest/adoption/portability guards.
+- `make build-matrix-min`: fast `.config` matrix; restores the caller's `.config`.
+- `make health`: `kernel-analyze` + text budget + memsafe + kernel tests.
 - `make arch-guard`: architecture boundary checks (including `fs/` no direct `<arch/`, no
   `interrupt/arch` in portable trees; see `scripts/architecture_guard.py`).
+- `make repo-hygiene-guard`: repository hygiene checks.
 - `python3 scripts/kernel_export_digest.py kernel-x64.bin`: SHA-256 of sorted global `nm`
   exports (same-toolchain rebuild comparison); see `Documentation/DECOUPLING.md`.
 
+There is no `build-matrix-full`, QA smoke catalog, or release bundle in the
+current Makefile. Historical target names in release documents are not
+build-system entry points.
 
 ## Documentation Targets
 
@@ -63,39 +80,31 @@ Uninstall: `make mandocs-uninstall` or `MANDOC_LANG=all make mandocs-uninstall`
 
 - `make ai-dev-rules-install`: copy AI dev rules into gitignored `.cursor/`.
 
-## Persistent machine tooling
+## External userspace tooling
 
-- `make kmang`: TUI catalog for boot ISOs under `IR0-machines/` (Default /
-  Fallback / Workspace). Build `#N` is host-local; compare with SHA-256.
-  On **desktop** / **desktop-console** profiles, **Enter** (select kernel) and
-  **`b`** (boot Default) ask **terminal only** vs **X direct**, then write a
-  one-shot `/etc/ir0-session` on the machine disk before `poweron`.
-- `make kernel-manager-install`: rebuild workspace ISO and enroll it as Default.
-- `make poweron`: boot Default (or workspace ISO only if the catalog is empty).
-- `make machine-update-kernel`: rebuild ISO only — does not enroll; kmang `i`
-  is still required before `poweron` picks it up.
-- `make usmang`: host inspector for ISD release, package origins, `USERLAND_BASE`,
-  and desktop package set (independent of kernel `#N`).
-- `make kmang-test`: host regression tests for the kernel catalog, confirm-twice cleanup, and session prompt.
-- `make usmang-test`: host tests for the ISD inspector CLI and help legend.
-- `make smoke-desktop-twm-resize`: twm title resize → xterm SIGWINCH + session survival (PROFILE=desktop).
+The kernel Makefile does not expose ISD, kernel-manager, or machine-catalog
+targets. `scripts/kernel_manager.py` remains in the tree for manual catalog
+inspection, but it is not wired to `make`. Build userspace images with the
+sibling [ISD](https://github.com/IRodriguez13/ISD) repository and attach the
+result with `make run DISK=…`.
 
-**Build `#N` vs release tag:** `#363` in kmang is the **machine-local** counter in
-`.build_number` (incremented on each `kernel-x64.bin` link). It is independent of
-`IR0_VERSION_STRING` (`0.0.1-rc5`, etc.). When the release string changes (e.g.
-rc5 → rc6), the Makefile resets `.build_number` to `1` automatically
-(`.build_number_version` stamp).
+**Build `#N` vs release tag:** `#363` in host tooling is the **machine-local**
+counter in `.build_number` (incremented on each `kernel-x64.bin` link). It is
+independent of `IR0_VERSION_STRING` (`0.0.1-rc5`, etc.). When the release string
+changes (e.g. rc5 → rc6), the Makefile resets `.build_number` to `1`
+automatically (`.build_number_version` stamp).
 
 ## Current Strengths
 
 - Strong config reproducibility via defconfig and scripted overrides.
-- Useful blend of compile-time matrix and runtime QEMU smoke checks.
+- Useful blend of compile-time matrix and in-kernel QEMU tests.
 - Menuconfig supports both TUI language modes and CLI automation.
+- Small, predictable target set; no ISD or product coupling in the kernel build.
 
 ## Current Risks
 
 - Runtime validation is still scenario-based, not exhaustive.
 - Some advanced features are guarded by MVP-level policy.
-- CI-style coverage is **local** (`make health`, CTR gates, KTM/smokes). GitHub Actions
-  no longer runs the heavy `Tests` workflow; optional `Update LOC` is manual only.
-
+- CI-style coverage is **local** (`make health`, `make ctr`, `make agent-fast`).
+  GitHub Actions no longer runs the heavy `Tests` workflow; optional `Update LOC`
+  is manual only.

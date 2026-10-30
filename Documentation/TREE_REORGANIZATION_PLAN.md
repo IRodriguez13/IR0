@@ -1,18 +1,25 @@
 # IR0 — Tree reorganization plan (post–0.0.1)
 
 > **Last verified:** 2026-09-21  
-> **Status:** PLAN ONLY — no file moves until release 0.0.1 capability gates are stable  
+> **Status:** PLAN ONLY — historical; the build-system redesign landed 2026-10-29
 > **Source of truth:** repository layout, `Makefile`, `scripts/make/*.mk`, `setup/pid1/`, `tests/`
 
 ---
 
+## Status update (2026-10-29) — kernel-only Makefile
+
+- The root Makefile no longer includes `scripts/make/testing.mk`, ISD, product,
+  release, profile, or QA fragments. Current kernels gates live in
+  `scripts/make/ktm.mk`; ARM64 in `scripts/make/arm64.mk`.
+- `scripts/make/testing.mk`, `scripts/make/isd.mk`, `Makefile.win`, and the
+  smoke catalog were deleted. References below to those files are historical.
+
 ## Status update (2026-10-28) — legacy smoke catalog removed
 
 - **`setup/make/legacy-smokes.mk` deleted** — the historical `smoke-fase*`
-  catalog and its `IR0_LEGACY_SMOKE` gate are gone. `scripts/make/testing.mk`
-  is the only QA catalog; `run-ash-gui` / `check-ash-logs` cover the T1 GUI
-  path. Sections below that describe `legacy.mk`, the `IR0_LEGACY_SMOKE`
-  include, or `smoke-fase*` aliases are **obsolete**.
+  catalog and its `IR0_LEGACY_SMOKE` gate are gone. Sections below that describe
+  `legacy.mk`, the `IR0_LEGACY_SMOKE` include, or `smoke-fase*` aliases are
+  **obsolete**.
 - **`make clean` moved to `scripts/make/clean.mk`** — it is a lean goal and no
   longer needs the QA catalog to be parsed.
 

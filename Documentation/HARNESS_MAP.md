@@ -1,9 +1,14 @@
 # Harness map (semantic tags and Make names)
 
+> **Build-system note (2026-10-29):** this page is a historical inventory of
+> smoke and KTM names. Most `make smoke-*` targets listed below no longer exist.
+> Current gates: `make ctr`, `make agent-fast`, `make ktest`,
+> `make build-matrix-min`, `make arch-guard`.
+
 > **Last verified:** 2026-10-28
-> **Source of truth:** `scripts/make/testing.mk`, `setup/pid1/ktm_*.c`,
-> `setup/doom/doomgeneric_ir0.c`, `scripts/architecture_guard.py`
-> (forbids leftover `[FASE` in kernel C).
+> **Source of truth:** `Documentation/CHANGELOG.md`, `scripts/ktm_*.py`,
+> `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`,
+> `scripts/architecture_guard.py` (forbids leftover `[FASE` in kernel C).
 
 Canonical names for QEMU smokes, KTM userdev cases, and serial tags.
 Wave-era `FASE*` identifiers survive only as **external contracts**; the kernel
@@ -43,16 +48,16 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 
 | Area | Target |
 |------|--------|
-| Tier-1 boot + ash | `smoke-tier1`, `run-ash-gui`, `check-ash-logs` |
-| runit product boot | `smoke-runit-boot`, `smoke-runit-login`, `smoke-runit-power` |
-| BusyBox | `build-busybox-min`, `build-busybox-plus`, `build-busybox-full` |
-| TinyCC | `build-tcc` |
-| KTM in-guest smokes | `ktm-userdev-*-run` pilots (`tests/ktm/userdev/`) |
-| COW data-plane | `smoke-mm-cow-lazy` |
-| ARM64 | `smoke-arm64-all` and the per-slice `smoke-arm64-*` targets |
+| Fast kernel gate | `make test-fast` |
+| In-kernel suite | `make ktest` |
+| Full architecture gate | `make ctr` / `make agent-fast` |
+| KTM inventory | `make ktm-check` / `make ktm-manifest` |
+| x86-64 product | `make ir0` / `make run [gui\|console\|debug]` |
+| ARM64 aggregate | `make ir0 arm64` / `make run arm64 console` |
+| Raspberry Pi image | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |
 
-`build-init-*` targets compile the ring-3 init that `make load-init` injects;
-`make build-init-musl` produces the musl static build of `init_musl.c`.
+Userspace package builds (BusyBox, runit, TinyCC and ISD images) belong to the
+ISD repository; the kernel Makefile no longer proxies those package targets.
 
 ## Generated binaries (IR0 tree)
 

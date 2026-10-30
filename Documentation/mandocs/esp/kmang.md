@@ -4,12 +4,19 @@
 |-------|-------|
 | Version | 0.1 |
 | Fase IR0 | T1 (herramientas host para maquinas ISD persistentes) |
-| Estado | stable |
+| Estado | historico (targets make eliminados) |
 | Depende de | userspace, boot, onboarding |
 | Pagina man | IR0-kmang (seccion 7) |
-| Fuentes principales | `scripts/kernel_manager.py`, `scripts/make/isd.mk`, `scripts/test_kernel_manager.py`, `scripts/test-isd-contracts.sh` |
+| Fuentes principales | `scripts/kernel_manager.py`, `scripts/test_kernel_manager.py` |
 
 > **Ultima verificacion:** 2026-09-20
+
+> **Nota de build (2026-10-29):** `make kmang`, `make poweron`,
+> `make kernel-manager-*`, `make usmang` y `scripts/make/isd.mk` se eliminaron
+> con el Makefile solo-kernel. `scripts/kernel_manager.py` sigue en el arbol
+> como herramienta host independiente (`python3 scripts/kernel_manager.py`),
+> pero IR0 ya no la conecta a make. Arranca un kernel con `make run`, no con
+> `poweron`.
 
 ## 1. Vision general
 
@@ -111,7 +118,7 @@ Estados de salud: `verified`, `checksum-only`, `legacy-unverified`, o motivos de
 
 | Subsistema | Relacion |
 |------------|----------|
-| `scripts/make/isd.mk` | `KMANG_PY`, `make kmang`, `kernel-manager-*`, `poweron` |
+| `scripts/make/isd.mk` | Eliminado 2026-10-29; sus definiciones son históricas |
 | ISD / userspace | Disco rootfs separado del catalogo kernel |
 | `make usmang` | Inspector host complementario para userland ISD |
 | Boot / version | `IR0_VERSION_STRING` prefija ids de catalogo |
@@ -169,7 +176,7 @@ python3 scripts/kernel_manager.py --machine-dir … info ID --json
 python3 scripts/kernel_manager.py --machine-dir … help
 ```
 
-**Tests:** `python3 scripts/test_kernel_manager.py` (tambien `make kmang-test`, `make isd-contracts`).
+**Tests:** `python3 scripts/test_kernel_manager.py` (independiente; sin wrapper make).
 
 ## 10. Roadmap
 

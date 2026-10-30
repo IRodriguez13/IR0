@@ -1,8 +1,9 @@
 # Interactive BusyBox ash on `/dev/console` (QEMU GTK)
 
-> **Last verified:** 2026-09-22
-> **Source of truth:** `scripts/make/testing.mk` (`run-ash-gui`,
-> `smoke-runit-ash-interactive`), [`HARNESS_MAP.md`](HARNESS_MAP.md).
+> **Historical note (2026-10-29):** this page records the 2026 userspace slice.
+> The `run-ash-gui` / `smoke-*` make targets no longer exist. Current userspace
+> images are built by ISD and attached with `make run DISK=…`; kernel gates are
+> `make ctr` / `make ktest`.
 
 **Status:** Done (2026-05-25)  
 **Tier:** T1 (minimal POSIX userspace) — vertical slice  

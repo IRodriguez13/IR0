@@ -22,6 +22,23 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 
 ## [Unreleased]
 
+### Build system redesign (2026-10-29)
+
+- Root `Makefile` reduced to the kernel target set: `ir0`, `run`,
+  `menuconfig`, `ktest`, `ctr`, `arch-guard`, `build-matrix-min`, docs and
+  unibuild. Positional syntax: `make ir0 arm64`, `make run arm64 rpi4`.
+- Removed ISD/product/release/profile/QA fragments, `Makefile.win`, Windows
+  cross-compilation, and the 6k-line QA catalog.
+- `make run` now only launches an already-built artifact through
+  `scripts/run_qemu.sh`; it never builds or touches ISD.
+- Removed `first-boot`, `poweron`, `kmang`, `run-console`, `run-tap`,
+  `pre-submit`, `build-matrix-full`, and `smoke-*` make targets.
+- Test catalog trimmed to targets that still exist; `make ctr` is the fast
+  merge gate and `make agent-fast` adds the in-kernel ktest battery.
+- Restored the `kernel-x64-test.bin` link by adding `kernel/errno.o` to the
+  test-only object list (`strerror` contract test).
+- Docs: `Documentation/MAKEFILE.md`, `TOOLING.md`, `USERSPACE.md`, `SETUP.md`.
+
 ### Staged IPC + product dispatcher slice (2026-10-18)
 
 - Staged pipe/eventfd/memfd/timerfd/epoll and AF_UNIX tables live under

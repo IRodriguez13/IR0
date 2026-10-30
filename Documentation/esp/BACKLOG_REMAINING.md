@@ -1,5 +1,11 @@
 # IR0 — Backlog post-0.0.1 (trabajo restante honesto)
 
+> **Nota de build (2026-10-29):** los nombres históricos de gates
+> (`make smoke-*`, `run-ash-gui`, `first-boot`, …) ya no son targets make.
+> Gates actuales: `make ctr`, `make agent-fast`, `make ktest`,
+> `make build-matrix-min`, `make arch-guard`, `make health`. Este archivo
+> preserva la evidencia histórica; ver [`MAKEFILE.md`](MAKEFILE.md).
+
 > **Última verificación:** 2026-10-18  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
 > DESK-X: **LINUX-LIKE** (smoke-desk-session OK 2026-07-23); TinyX sigue lab.

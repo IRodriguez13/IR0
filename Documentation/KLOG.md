@@ -8,7 +8,7 @@
 
 Human kernel logging is an **event core**, not a free-form string dump. KTM is an
 optional observer of the same stream; `CONFIG_KTM=n` keeps klog, serial, console,
-`/proc/kmsg`, and `/dev/kmsg` alive (`make smoke-klog-ktm-off`).
+`/proc/kmsg`, and `/dev/kmsg` alive (covered by host tests and ktest runs).
 
 ## Presentation profiles
 
@@ -88,7 +88,7 @@ Human line:
 | Console (VGA/FB) | Rate-limited: NOTICE+ and BOOT/INIT/CLOCK/DRIVERS/PLATFORM/HYPERVISOR |
 | `/proc/kmsg` | `klog_read_records()` |
 | `/dev/kmsg` | Same read backend; writes become `klog_info("USER", …)` |
-| Hostshare | `make run-bootlog` / `smoke-boot-log-hostshare` — reuses `disk.img` when present; virtio-9p for `ir0-boot.log` only |
+| Hostshare | Opt-in `CONFIG_BOOT_LOG_HOSTSHARE=y` + 9p share tagged `ir0share` (`IR0_QEMU_EXTRA`); writes `ir0-boot.log` only |
 | KTM protocol | Optional mirror via `klog_set_protocol_mirror` when `CONFIG_KTM=y` |
 
 Boot completion (product): `kernel core initialization complete` → (optional)
@@ -99,9 +99,9 @@ QEMU host warnings live on host stderr (`*.qemu-stderr`), not the guest serial s
 
 ## Product path (no in-kernel shell)
 
-Daily `make run-console` / `run-pid1` / `run-bootlog` → `kernel-x64-userspace.iso`
-+ runit/getty/ash from **ISD**. The ring-0 dbgshell / `debug_bins/`
-tree was **removed** (2026-07-25); see [`USERSPACE.md`](USERSPACE.md).
+Daily `make run DISK=…` boots the kernel ISO plus a runit/getty/ash rootfs
+built by **ISD**. The ring-0 dbgshell / `debug_bins/` tree was **removed**
+(2026-07-25); see [`USERSPACE.md`](USERSPACE.md).
 
 Exploration: `cat /proc/kmsg` or `dmesg` from ash.
 
@@ -109,10 +109,9 @@ Exploration: `cat /proc/kmsg` or `dmesg` from ash.
 
 | Target | Expect |
 |--------|--------|
-| `make smoke-runit-boot` | Sequence lines + `GETTY_READY` / `DRIVER_SUMMARY_OK` |
-| `make smoke-klog-ktm-off` | Boot with `CONFIG_KTM=n`; `[#…] [EARLY_ARCH]` present |
-| `make smoke-boot-log-hostshare` | Host `ir0-boot.log` contains `IR0 kernel` + records |
-| `make pre-submit` | Build + arch-guard + host tests |
+| `make ktest` | In-kernel battery; serial sequence lines intact |
+| `make ctr` | Kernel + arch-guard + config matrix + host tests |
+| Hostshare (manual) | `CONFIG_BOOT_LOG_HOSTSHARE=y` + 9p `ir0share`; host `ir0-boot.log` contains `IR0 kernel` + records |
 
 ## Related docs
 

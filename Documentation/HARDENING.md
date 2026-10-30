@@ -1,5 +1,9 @@
 # IR0 — Architecture hardening backlog
 
+> **Build-system note (2026-10-29):** historical `make smoke-*` gate names below
+> are no longer build targets. Current equivalents: `make ctr`, `make ktest`,
+> `make build-matrix-min`, `make arch-guard`.
+
 > **Last verified:** 2026-09-01  
 > **Source of truth:** `kernel/syscalls.c`, `kernel/process/*`, `includes/ir0/*`, `scripts/architecture_guard.py`, CTR gates in `Makefile`, ktest runner in `kernel/test/test_runner.c`.
 

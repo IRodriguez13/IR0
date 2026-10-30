@@ -7,7 +7,7 @@ está en el [README](README.md) y en [SETUP.md](SETUP.md).
 
 ```bash
 make check-env                    # alias de make deptest
-make check-env PROFILE=desktop-x86_64
+make check-env PROFILE=hub-rpi4   # toolchain ARM64
 make defconfig && make ir0 && make run
 make sync-mandocs && make man TOPIC=boot
 ```
@@ -16,7 +16,7 @@ make sync-mandocs && make man TOPIC=boot
 unsupported_version / present_but_unusable) con hints de paquete por distro.
 No tratan `command -v` como prueba suficiente.
 
-Perfiles y techos honestos: `make help-profiles`.
+`make run` solo lanza un artefacto ya compilado; no compila ni toca ISD.
 
 ## 2. Estilo
 
@@ -33,16 +33,13 @@ Perfiles y techos honestos: `make help-profiles`.
 Antes de pedir review:
 
 ```bash
-make pre-submit                   # batería mínima → PRE_SUBMIT_OK
-make pre-submit SUBSYSTEM=mm      # + smoke-mm-cow-lazy
-make pre-submit SUBSYSTEM=net     # + smoke-stream-sock
-make pre-submit SUBSYSTEM=arm64   # + smoke-arm64
+make ctr                          # kernel + arch-guard + matrix-min + host tests → CTR_OK
+make agent-fast                   # ctr + ktest en QEMU
+make test-run SUITE=ktest         # suite puntual del catálogo
 ```
 
-`pre-submit` **no** publica nada. Corre build + `arch-guard` + `tests/host` +
-chequeo de formato del diff, y smokes del subsistema si aplica.
-
-Gates CTR habituales (oleadas mayores):
+`ctr` es el gate rápido de merge. `agent-fast` añade la batería ktest dentro de
+QEMU. Para cambios de arquitectura o configuración, corré además:
 
 ```bash
 make -s kernel-x64.bin
@@ -50,6 +47,9 @@ make -s arch-guard
 make -s build-matrix-min
 make -s -C tests/host run
 ```
+
+El catálogo (`make test-list`) solo lista targets que existen. `make test` abre
+la TUI interactiva.
 
 ## 4. Formato del commit
 
@@ -64,7 +64,8 @@ Cambios funcionales:
 - …
 
 Tests:
-- make pre-submit SUBSYSTEM=… → PRE_SUBMIT_OK
+- make ctr → CTR_OK
+- make agent-fast → ktest OK
 
 Signed-off-by: Iván Ezequiel Rodriguez <ivanrwcm25@gmail.com>
 ```
@@ -91,20 +92,19 @@ si un hook inyectó trailers.
 Incluí en el PR o mensaje:
 
 ```text
-PRE_SUBMIT_OK
+CTR_OK
 Subsystem: mm
-Tests: … passed
-Smoke gates: … passed
+Tests: make ctr / make agent-fast → passed
 Patch formatting: OK
 ```
 
-Comandos exactos corridos (no “compila en el IDE”). Si un smoke se salta
+Comandos exactos corridos (no “compila en el IDE”). Si una suite se salta
 (p. ej. sin `raspi4b` en QEMU), decilo.
 
 ## Principios de entrada (qué copiamos de kernels de producción)
 
 - Superficie de entrada estable (`check-env` → `defconfig` → `ir0` → `run`).
-- Ayuda descubrible: `make help`, `help-profiles`, `help-docs`, `help-pre-submit`.
+- Ayuda descubrible: `make help`, `help-docs`.
 - Perfiles explícitos y configuraciones reproducibles (`setup/configs/*.defconfig`).
 - Docs versionadas junto al código; diagnósticos accionables.
 - Targets pequeños y composables; sin magia de red en el build.

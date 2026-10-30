@@ -15,7 +15,8 @@
 
 The TTY layer provides line discipline, echo, and blocking read for `/dev/console`
 and `/dev/tty`. A **UNIX98 PTY multiplex** (`/dev/ptmx` + `/dev/pts/N`) lives in
-the same devfs module for xterm, dual-console smokes, and `linux-abi-audit-pty-multiplex`.
+the same devfs module for xterm, dual-console smokes, and the `pty_multiplex`
+Linux ABI contract (`python3 scripts/linux_abi_audit.py --contract pty_multiplex`).
 Input arrives from the PS/2 keyboard path; output goes through
 `console_backend` to serial and VGA/framebuffer typewriter rendering. BusyBox
 `ash` on `/dev/console` is the primary interactive userspace consumer.
@@ -52,7 +53,7 @@ Portable code must use `includes/ir0/pty_devfs.h` — not raw device ids outside
   TIOCSWINSZ → SIGWINCH to slave readers (xterm resize smoke)
 ```
 
-Contract gate: `make linux-abi-audit-pty-multiplex` + `make smoke-pty-winsz`.
+Contract: `python3 scripts/linux_abi_audit.py --contract pty_multiplex`.
 Host Linux compare uses `unshare` + fresh devpts (`run_linux_pty_multiplex.sh`).
 Contract **VERIFIED** as of 2026-09-18 (audit PASS).
 
@@ -140,14 +141,15 @@ Canonical vs raw:
 
 ## 9. Debugging tips
 
-- Interactive ash smoke: `Documentation/fase58e-ash-interactive-console.md`.
-- Session soak with relogin: `make smoke-session-soak SOAK_EXTRA="--relogin-every 3"`
-  (or run `scripts/smoke_session_soak.py` with `--relogin-every`). Login must
+- Interactive ash: `Documentation/fase58e-ash-interactive-console.md`.
+- Session soak with relogin: `python3 scripts/smoke_session_soak.py --relogin-every 3`
+  (needs an ISD-built disk). Login must
   sample the getty prompt baseline *before* typing `exit`, and settle ~1.5 s
   after the username prompt; typing too early makes getty respawn without
   printing `Password:`.
-- PTY: `make smoke-pty-winsz`; audit `linux-abi-audit-pty-multiplex`.
-- Dual xterm desktop: `make smoke-x11-pointer PROFILE=desktop`.
+- PTY: `python3 scripts/linux_abi_audit.py --contract pty_multiplex`; winsize
+  coverage is tracked in `scripts/linux_abi/contracts.json`.
+- Dual xterm desktop: build the X11 rootfs with ISD, then `make run DISK=…`.
 - Serial: keyboard layout via `CONFIG_KEYBOARD_LAYOUT`; syscall keymap get/set.
 - Blank echo but serial OK: check ICANON/ECHO termios; verify backend attach.
 - poll blocked: ensure `stdin_wake_check` runs from idle loop.
@@ -155,7 +157,7 @@ Canonical vs raw:
   getty after `CONSOLE_SESSION_REPROMPT` does not reattach stdin to the
   keyboard ring. Distinct from the i8042 duplication race (fixed).
 
-Build/run: `make run-ash-gui` (see SETUP.md).
+Build/run: `make ir0 && make run DISK=…` (ISD-built rootfs; see SETUP.md).
 
 ## 10. Future roadmap
 

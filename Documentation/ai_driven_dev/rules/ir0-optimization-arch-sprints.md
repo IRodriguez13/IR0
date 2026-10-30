@@ -41,10 +41,10 @@ make -s kernel-x64.bin
 make -s arch-guard
 make -s build-matrix-min
 make -s -C tests/host run
-# Si tocó ktest/QEMU: make kernel-tests y smokes del tier afectado
+# Si tocó ktest/QEMU: make ktest
 ```
 
-Oleada grande: añadir `make roadmap-phaseN-*` o smokes listados en `Documentation/ROADMAP.md`.
+Oleada grande: añadir `make ctr` y los scripts de smoke aplicables al área tocada.
 
 ## Relación con otras reglas
 

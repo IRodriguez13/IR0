@@ -1,5 +1,11 @@
 # IR0 — Post-0.0.1 backlog (honest remaining work)
 
+> **Build-system note (2026-10-29):** historical gate names below (`make smoke-*`,
+> `run-ash-gui`, `first-boot`, …) are no longer make targets. Current gates:
+> `make ctr`, `make agent-fast`, `make ktest`, `make build-matrix-min`,
+> `make arch-guard`, `make health`. This file preserves the historical evidence
+> trail; see [`MAKEFILE.md`](MAKEFILE.md) for the live target set.
+
 > **Last verified:** 2026-10-18
 > **Source of truth:** `Documentation/ROADMAP.md`, [`EARLY_FOLD.md`](EARLY_FOLD.md),
 > code under `fs/`, `drivers/storage/`, `scripts/linux_abi/`, Makefile gates.

@@ -1,8 +1,13 @@
 # Doom T2 — doomgeneric real IWAD
 
 > **Last verified:** 2026-09-22
-> **Source of truth:** `setup/doom/doomgeneric_ir0.c`, `setup/make/legacy-smokes.mk`
-> (`smoke-doomgeneric`; alias `smoke-fase55d-doomgeneric`),
+> **Build-system note (2026-10-29):** this is a historical Doom T2 record. The
+> `smoke-doomgeneric`, `build-doom-interactive`, and related `make` targets were
+> removed with the legacy smoke catalog and the kernel-only Makefile. Build Doom
+> payloads with ISD or the local scripts; kernel gates are `make ctr` /
+> `make ktest`.
+
+> **Source of truth:** `setup/doom/doomgeneric_ir0.c`,
 > [`HARNESS_MAP.md`](../HARNESS_MAP.md).
 
 Historical filename kept so existing links work.

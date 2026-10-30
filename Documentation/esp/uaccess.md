@@ -151,9 +151,8 @@ El soak marca `KERNEL_UACCESS_FAULT` como **FATAL**.
 make -s kernel-x64.bin
 make -s arch-guard
 make -s -C tests/host run
-rm -f kernel-x64-userspace.iso
-make -s kernel-x64-userspace.iso
-SOAK_ROUNDS=2 make -s smoke-session-soak
+make -s ir0                        # kernel-x64.iso
+python3 scripts/smoke_session_soak.py --rounds 2   # needs an ISD-built disk
 ```
 
 ## Documentos relacionados

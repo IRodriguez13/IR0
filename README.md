@@ -5,32 +5,32 @@
 <h1 align="center">IR0 Kernel</h1>
 
 <p align="center">
- Unix-like kernel (GPL-3.0) — x86-64 bring-up under QEMU, narrow facades,
- partial Linux ABI.
+ Unix-like kernel (GPL-3.0) — x86-64 and ARM64 bring-up under QEMU, narrow
+ facades, partial Linux ABI.
 </p>
 
-  IR0 is a operating-system kernel (GPL-3.0). Primary bring-up target is
-  **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace). Version
-  string: **`0.0.1-rc6`** (last pre-release before `v0.0.1` final).
+  IR0 is an operating-system kernel (GPL-3.0). Primary bring-up target is
+  **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace); **ARM64**
+  covers QEMU `virt` and Raspberry Pi 3/4/5 board images. Version string:
+  **`0.0.1-rc6`** (last pre-release before `v0.0.1` final).
 
+## Kernel and userspace
 
-## ISD — IR0 Software Distribution
-
-**ISD** is the official product userspace for IR0: runit PID 1, BusyBox,
-login/firstboot, packages, rootfs, and the MINIX `disk.img`. Sources live in
-the sibling repo [`ISD`](https://github.com/IRodriguez13/ISD). This tree is the
-kernel, UAPI export, and QEMU/boot orchestration.
+The kernel tree builds the kernel and its boot artifacts. The finished
+userspace — runit PID 1, BusyBox, login, packages, rootfs, and `disk.img` —
+lives in the sibling [`ISD`](https://github.com/IRodriguez13/ISD) repository.
 
 | Layer | Role |
 |-------|------|
-| **IR0** (this tree) | mechanisms, drivers, UAPI, ISO |
-| **ISD** (sibling repo) | packages, services, rootfs, `disk.img` |
-| **Product** (both) | `make first-boot` / `make run PROFILE=…` |
+| **IR0** (this tree) | mechanisms, drivers, UAPI, kernel ISO / board images |
+| **ISD** (separate repo) | packages, services, rootfs, `disk.img` |
 
-IR0 does **not** inject BusyBox/runit/nano individually on the canonical path —
-ISD builds a finished image; IR0 boots it.
+The IR0 Makefile does **not** clone, build, or pack ISD. `make run` only boots
+an artifact that is already on disk; attach a userspace image with `DISK=…`
+when you have one. Without `/sbin/init` on a disk the kernel **panics** at the
+handoff — there is no in-kernel fallback shell.
 
-### Screenshots (ISD on QEMU)
+### Screenshots (ISD userspace on QEMU)
 
 <p align="center">
   <img src="scripts/kconfig/assets/isd-firstboot.png" alt="ISD first boot — create your account" width="720" />
@@ -57,22 +57,22 @@ ISD builds a finished image; IR0 boots it.
 <p align="center"><em>BusyBox <code>top</code>: runit PID 1, <code>runsvdir</code>/<code>runsv</code>, ash, and idle.</em></p>
 
 <p align="center">
-  <img src="scripts/kconfig/assets/isd-doom.png" alt="IR0/Unix — Doom on QEMU (desktop profile)" width="720" />
+  <img src="scripts/kconfig/assets/isd-doom.png" alt="IR0/Unix — Doom on QEMU" width="720" />
 </p>
 
-<p align="center"><em>Doom on IR0/Unix (<code>PROFILE=desktop</code>): framebuffer + input path.</em></p>
+<p align="center"><em>Doom on IR0/Unix: framebuffer + input path.</em></p>
 
 <p align="center">
   <img src="scripts/kconfig/assets/isd-x11-desktop.png" alt="IR0 running an upstream X11 desktop with uname output" width="960" />
 </p>
 
-<p align="center"><em>Upstream X11 session on IR0 (<code>PROFILE=desktop-console</code>, manual <code>startx</code>): TinyX/Xfbdev, twm, xterm, Xaw clients. Terminal shows <code>uname -a</code> on kernel <code>0.0.1-rc6</code>.</em></p>
+<p align="center"><em>Upstream X11 session on IR0 (TinyX/Xfbdev, twm, xterm, Xaw clients). Terminal shows <code>uname -a</code> on kernel <code>0.0.1-rc6</code>.</em></p>
 
 <p align="center">
   <img src="scripts/kconfig/assets/isd-nano-desktop.png" alt="IR0 X11 desktop — GNU nano editing main.c in xterm" width="960" />
 </p>
 
-<p align="center"><em>Desktop session with twm, xclock, xeyes, and xlogo; <code>GNU nano</code> editing a small C program in xterm (<code>PROFILE=desktop</code>).</em></p>
+<p align="center"><em>Desktop session with twm, xclock, xeyes, and xlogo; <code>GNU nano</code> editing a small C program in xterm.</em></p>
 
 <p align="center">
   <img src="./scripts/kconfig/assets/isd-panic-gtk.png" alt="IR0 kernel panic on GTK framebuffer — uptime, fault site, safe shutdown" width="720" />
@@ -85,30 +85,56 @@ ISD builds a finished image; IR0 boots it.
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make check-env                    # host diagnostic (or: first-boot asks to install)
-make first-boot PROFILE=minimal   # host deps (ask) + clone ../ISD + image + ISO
-make run PROFILE=minimal          # QEMU GTK → getty → BusyBox ash
-
-# Full desktop userspace (X11 stack) — terminal first, start GUI when you want:
-make first-boot PROFILE=desktop-console
-make run PROFILE=desktop-console   # login → ash; then: startx
+make check-env          # host diagnostic
+make defconfig          # write .config from setup/defconfig
+make ir0                # build kernel-x64.iso
+make run                # boot the ISO in QEMU
 ```
 
-`first-boot` asks before installing host packages (`IR0_DEPS_INSTALL=ask|yes|never`).
-sudo is used only for that install, never for clone/build. It does not require Rust
-nightly (only if you enable example drivers in menuconfig). Host needs musl-tools,
-bison (`yacc`), git, curl, and the usual desktop ISO toolchain — see [SETUP.md](SETUP.md).
+`make run` never builds. Re-run `make ir0` after a source change.
+
+ARM64:
+
+```bash
+make ir0 arm64          # QEMU virt aggregate
+make run arm64          # serial console
+make ir0 arm64 rpi4     # build/arm64-rpi4/kernel8.img
+make run arm64 rpi4     # boot the board image
+```
+
+To boot a userspace disk built by ISD:
+
+```bash
+make run DISK=../ISD/out/x86_64/images/minimal/disk.img
+```
+
+The kernel needs `musl-tools`, `bison` (`yacc`), `git`, `curl`, and the usual
+ISO toolchain — see [SETUP.md](SETUP.md). Rust nightly is optional and only
+needed when menuconfig enables the example drivers.
 
 Layout:
 
 ```text
 parent/
-├── IR0/
-└── ISD/                  # cloned automatically if missing
+├── IR0/                  # this repository (kernel)
+└── ISD/                  # optional sibling: userspace packages + disk.img
 ```
 
-Kernel-only ISO (no shell): `make ir0`. Without `/sbin/init` on the ISD disk the
-kernel **panics** at handoff — there is no in-kernel fallback shell.
+## Common targets
+
+| Target | Purpose |
+|--------|---------|
+| `make ir0` | Build the default artifact (x86 ISO or ARM64 image) |
+| `make run` | Boot an already-built artifact in QEMU |
+| `make menuconfig` | Curses configuration TUI |
+| `make ktest` | In-kernel ktest battery in QEMU |
+| `make test` | Interactive test TUI |
+| `make ctr` | Fast merge gate: kernel + arch-guard + matrix-min + host tests |
+| `make arch-guard` | Architecture boundary guard |
+| `make build-matrix-min` | Minimal `.config` compile matrix (restores `.config`) |
+| `make clean` | Remove generated build output |
+
+Documentation:
 
 ```bash
 make sync-mandocs         # man pages → ~/.local/share/man (no sudo)
@@ -116,40 +142,25 @@ make man TOPIC=onboarding
 make man TOPIC=boot
 ```
 
-Full coupling guide: **[Documentation/USERSPACE.md](Documentation/USERSPACE.md)**.
-
-| Profile | Meaning | Status |
-|---------|---------|--------|
-| `desktop` / `make desktop-x86_64` | x86-64 ISO + QEMU | **Supported** — official first boot |
-| `userspace` | musl / BusyBox ISO path | **Experimental** |
-| `hub-rpi4` | ARM64 RPi4 UART min | **Hardware lab / UART** — boots under QEMU `raspi4b` when present; **not** SD-flashable |
-| `watch-rpi5-stub` | ARM64 RPi5 stub | **Planned** — compile-only (`uart=none`) |
-
-```bash
-make check-env PROFILE=desktop-x86_64
-make run-bootlog                   # optional: boot log → build/hostshare/ir0-boot.log
-make help-profiles
-make pre-submit                    # local contributor gate → PRE_SUBMIT_OK
-```
-
-Full toolchain notes: **[SETUP.md](SETUP.md)**.
+Full target list: `make help`. Full toolchain notes: **[SETUP.md](SETUP.md)**.
 How to contribute: **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 Subsystem docs: **[Documentation/](Documentation/README.md)** — `make man TOPIC=…`.
+Userspace boundary: **[Documentation/USERSPACE.md](Documentation/USERSPACE.md)**.
 
 ## Context
 
 **Linux ABI:** partial by design — syscall coverage grows contract-by-contract
-(`Documentation/releases/IR0_0.0.1_ABI_BOARD.md`, `make linux-abi-audit`).
+(`Documentation/releases/IR0_0.0.1_ABI_BOARD.md`).
 
 **x86-64 (default):** uniprocessor kernel with RR scheduling, fork/exec/wait,
 demand paging and fork COW paths exercised in-tree, VFS (MINIX root, tmpfs,
 path-routed `/proc`/`/sys`), console/TTY, musl/BusyBox bring-up. Networking
 includes UDP/ICMP, **AF_UNIX** streams, and lab-grade TCP — not a full Internet
-stack or production NIC story. Optional demos: BusyBox `ash` via runit
-(`make load-userspace-runit` / `run-ash-gui`), doomgeneric on `/dev/fb0`.
+stack or production NIC story. Optional userspace demos (BusyBox `ash`, X11,
+doomgeneric on `/dev/fb0`) come from ISD.
 
-**ARM64:** early bring-up and board scaffolding (QEMU `virt`, RPi4 UART lab).
-Not a flashable appliance and not feature-parity with x86.
+**ARM64:** early bring-up and board scaffolding (QEMU `virt`, RPi3/4/5 UART
+images). Not a flashable appliance and not feature-parity with x86.
 
 **Non-goals today:** SMP, desktop-class userspace, or “better than Linux.”
 Near-term focus is open, rebuildable appliance profiles with a thin Makefile

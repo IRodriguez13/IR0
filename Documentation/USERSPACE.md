@@ -1,148 +1,101 @@
-# Coupling IR0 (kernel) ↔ ISD
+# IR0 kernel ↔ ISD userspace
 
-> **Last verified:** 2026-10-16  
-> **Source of truth:** this file, `scripts/make/isd.mk`, `scripts/bootstrap-isd.sh`, sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md),
-> `ISD/services/runit_console_run.c`, `ISD/lib/ir0_auth.c`.  
+> **Last verified:** 2026-10-29
+> **Source of truth:** this file, the root `Makefile`, `IR0_ISD_INTERFACE`,
+> sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md).
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
 
-## Why two repositories?
+## Boundary
 
-The kernel alone is not a Unix distro. Product PID1 (**runit**), **BusyBox**,
-login/doas, packages, man pages, and the finished MINIX `disk.img` live in
-**ISD** (IR0 Software Distribution). IR0 compiles the kernel, exports UAPI,
-delegates the ISD build, and boots the ISD-owned image.
+The kernel alone is not a Unix distribution. Product PID1 (**runit**),
+**BusyBox**, login, packages, the rootfs, and the finished MINIX `disk.img`
+live in **ISD** (IR0 Software Distribution). IR0 compiles the kernel and boots
+a userspace image that someone else built.
 
 | Lives in **IR0** | Lives in **ISD** |
 |------------------|------------------|
 | Kernel, drivers, UAPI (`includes/uapi/`) | Packages, services, rootfs, profiles |
-| Boot ISO / QEMU orchestration | `out/<arch>/images/<profile>/disk.img` |
-| Host-deps / first-boot wrapper | `.isdconfig` extras, `stage-rootfs`, `pack-minix` |
+| Kernel ISO / ARM64 board images | `out/<arch>/images/<profile>/disk.img` |
+| QEMU launcher (`scripts/run_qemu.sh`) | `.isdconfig` extras, stage/pack scripts |
 
-**Hard rule:** IR0 must not inject BusyBox/runit/nano one-by-one on the
-canonical product path. Legacy `load-userspace-runit` remains for smokes
-(`IR0_LEGACY_USERSPACE=1`).
+**Hard rule:** the IR0 Makefile does not clone, build, or pack ISD. There are no
+`first-boot`, `isd`, `run PROFILE=…`, `kmang`, or `poweron` targets. The kernel
+build graph is complete without a sibling checkout.
 
-ARM64 QEMU EL0 (`smoke-arm64-all`) is a **kernel** staged adapter, not an ISD
-AArch64 product. ISD still has no `rootfs/arch/aarch64` pack. The kernel must
-not name BusyBox or other user programs. See [`EARLY_FOLD.md`](EARLY_FOLD.md).
+## Build and boot
 
-## Fastest path (first time)
-
-Happy path on an **x86_64 Linux** host (Debian/Ubuntu/Arch/Fedora/openSUSE or
-WSL2). Target: clone → two commands → QEMU with ash.
+### 1. Kernel
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make first-boot PROFILE=minimal
-make run PROFILE=minimal
+make check-env
+make defconfig
+make ir0
 ```
 
-| PROFILE | Expectation in guest |
-|---------|----------------------|
-| `minimal` | Interactive firstboot (create user) then login |
-| `development` | Lab autologin root (empty password allowed) |
-| `desktop` | Like minimal + fuller BusyBox/applets (heavier pack) |
+`make ir0` produces `kernel-x64.iso`. ARM64 equivalents:
 
-`first-boot` will:
-
-1. Check host deps (`IR0_DEPS_INSTALL=ask|yes|never`, default **ask**)
-2. Ask before any `sudo apt-get install` (never captures the password)
-3. Clone `../ISD` if missing
-4. Write `.isdconfig` only if absent
-5. Fetch sources, export UAPI, build packages (stamp-incremental)
-6. Stage rootfs + pack `disk.img` under ISD (`format-large` wipes MINIX inodes)
-7. Build `kernel-x64-userspace.iso`
-
-`make run` rebuilds the ISO if needed, then `ensure-isd-disk` (stamp-incremental
-pack; first pack ~1–3 min — progress is printed). Then QEMU GTK.
-
-Layout (only supported arrangement — no `$HOME/ISD` or path search heuristics):
-
-```text
-workspace/
-├── IR0/
-└── ISD/
+```bash
+make ir0 arm64
+make ir0 arm64 rpi4
 ```
 
-Set `IR0_ISD_ROOT=/path/to/ISD` when the sibling layout is not used; `make check-isd`
-fails early with an actionable message if ISD is missing.
+### 2. Userspace image
 
-### IR0↔ISD interface
+Build the sibling distribution with its own Makefile/tooling:
+
+```bash
+git clone https://github.com/IRodriguez13/ISD.git ../ISD
+make -C ../ISD help          # ISD owns its profiles and targets
+```
+
+The exact ISD target names belong to that repository; IR0 does not mirror or
+wrap them.
+
+### 3. Boot
+
+```bash
+make run DISK=../ISD/out/x86_64/images/minimal/disk.img
+```
+
+`DISK` is optional. Without it the kernel boots the ISO and panics at the
+`/sbin/init` handoff — there is no in-kernel fallback shell. `DISK=none`
+explicitly opts out when a local `disk.img` exists.
+
+`make run` never builds. Rebuild the kernel with `make ir0` after source
+changes, and rebuild the userspace image with ISD after userspace changes.
+
+## Interface contract
 
 | File | Repo | Role |
 |------|------|------|
 | `IR0/IR0_ISD_INTERFACE` | IR0 | Published integration version (`VERSION=1`) + required adapter scripts |
 | `ISD/IR0_ISD_INTERFACE_SUPPORTED` | ISD | Maximum interface version this ISD checkout supports |
 
-ISD `check-ir0-interface` runs before headers/image paths; IR0 `check-isd` verifies
-the sibling ISD supports the kernel's interface version.
+IR0 exports UAPI with `make headers_install DESTDIR=…`; an external userspace
+build consumes that export. ISD checks the interface version before building
+packages. The kernel must not name BusyBox or other user programs.
 
-### Release verification (Tier 1, no QEMU)
-
-| Target | Role |
-|--------|------|
-| `make release-check PROFILE=minimal` | Kernel + bridge + ISD rootfs verify + usmang verify |
-| `make release-check-clean PROFILE=minimal` | Same, but rejects stale `out/` / workspace ISO |
-| `make release-check-container` | Fresh shallow clone of IR0+ISD in Docker (Tier 1 CI) |
-| `make truth-tests` | Negative/honesty tests for kmang, usmang, ISD path resolver |
-
-| Variable | Default | Role |
-|----------|---------|------|
-| `IR0_ISD_ROOT` | `../ISD` | distribution tree |
-| `IR0_ISD_URL` | `https://github.com/IRodriguez13/ISD.git` | clone URL |
-| `PROFILE` | `minimal` (when passed on CLI) | ISD product profile |
-| `IR0_PRODUCT_PROFILE` | alias of ISD profile | compat |
-| `ISD_ARCH` | `x86_64` | userspace arch name |
-| `IR0_USERSPACE_ROOT` / `_URL` | aliases of `IR0_ISD_*` | **deprecated** (remove after 0.0.1) |
-
-### Naming coherence
-
-| Name | Status |
-|------|--------|
-| **ISD** | Canonical repo and tree (`../ISD`, `IR0_ISD_ROOT`) |
-| `IR0-userspace` | Former repo name — only in historical footnotes |
-| `IR0_USERSPACE_*` | Deprecated env aliases; still synced in `isd.mk` |
-| `userspace/` (IR0 dir) | Pointer README only — not a rootfs |
-| `setup/pid1/` | KTM/tier **smoke** inits — not product PID1 |
-| `load-userspace-*` | Legacy **inject** smokes (`IR0_LEGACY_USERSPACE=1`) |
-
-Regression gate: `make isd-contracts` section **H** (no `IR0-userspace` leaks).
-
-### Config layers
+## Configuration layers
 
 | File | Owner | Meaning |
 |------|-------|---------|
 | `IR0/.config` | kernel | Kconfig |
 | `ISD/profiles/<p>/profile.conf` | ISD | login/root/fsck policy |
 | `ISD/profiles/<p>/packages.txt` | ISD | mandatory packages |
-| `ISD/.isdconfig` | ISD | optional packages + applets (`make isdconfig`) |
+| `ISD/.isdconfig` | ISD | optional packages + applets |
 
-### Targets
+`PROFILE=…` is an ISD concept. It is not a kernel build variable anymore; the
+kernel selects `ARCH` and, on ARM64, `BOARD`.
 
-| Target | Role |
-|--------|------|
-| `make first-boot PROFILE=…` | Full product bootstrap |
-| `make isdconfig PROFILE=…` | Interactive extras (TTY: packages + applets e.g. top) |
-| `make isd` / `isd-rootfs` / `isd-image` | Delegate to ISD |
-| `make run PROFILE=…` | Boot ISD disk (stamp-incremental pack) |
-| `make run-console PROFILE=…` | Same without GTK |
-| `IR0_LEGACY_USERSPACE=1 make run` | Old inject path (smokes) |
+## ARM64
 
-### Login / getty notes (2026-09-02)
+ARM64 QEMU is a **kernel** target (`qemu-virt`, RPi3/4/5 board images). ISD has
+no AArch64 product rootfs today. Do not assume an x86-64 `disk.img` can be
+attached to an ARM64 boot.
 
-After firstboot, `etc/runit/sv/console/run` (`runit_console_run`) prompts for
-username/password. Smoke markers such as `LOGIN_USER_READ` go to **`/dev/serial`**
-only (not the human TTY). Emitting that tag on every empty/`EINTR`/`EOF` read used
-to busy-loop the prompt and flood the serial log so it looked like
-`Enter your Unix username: LOGIN_USER_READ` repeated. Fixed in ISD:
-
-- `ir0_read_line` retries `EINTR`, treats `r==0` as EOF (not a blank name).
-- Login loop tags `LOGIN_USER_READ` only after a non-empty username; backs off
-  with `sleep(1)` on read failure.
-
-**Unix reminders (not bugs):** `chown root` with mode `0755` still lets others
-execute the file; restrict with `chmod`. `/tmp` as tmpfs is intentional RAM FS.
+## Kernel-side userspace contracts
 
 ### Shebang scripts (`#!`)
 
@@ -152,47 +105,21 @@ script path is appended to `argv`. Recursion depth is capped at 4; non-ELF files
 without a valid shebang return `-ENOEXEC`. Example: `./script.sh` with
 `#!/bin/sh` runs the interpreter on the script path.
 
-### Incremental builds
+### Login / getty notes
 
-ISD stamps under `out/<arch>/stamps/{toolchain,uapi,packages,rootfs,images}/`.
-A second `make first-boot PROFILE=minimal` without input changes must not
-re-run package `build.sh` scripts.
+After ISD firstboot, `etc/runit/sv/console/run` (`runit_console_run`) prompts for
+username/password. Smoke markers such as `LOGIN_USER_READ` go to **`/dev/serial`**
+only (not the human TTY). Emitting that tag on every empty/`EINTR`/`EOF` read
+used to busy-loop the prompt and flood the serial log. Fixed in ISD:
 
-See ISD [`Documentation/PACKAGES.md`](https://github.com/IRodriguez13/ISD/blob/master/Documentation/PACKAGES.md).
+- `ir0_read_line` retries `EINTR`, treats `r==0` as EOF (not a blank name).
+- Login loop tags `LOGIN_USER_READ` only after a non-empty username; backs off
+  with `sleep(1)` on read failure.
 
-## Persistent machine + kmang
+**Unix reminders (not bugs):** `chown root` with mode `0755` still lets others
+execute the file; restrict with `chmod`. `/tmp` as tmpfs is intentional RAM FS.
 
-Kernel boot ISOs for a installed machine live under sibling `IR0-machines/`,
-managed by `scripts/kernel_manager.py` (`make kmang`).
-
-| Concept | Meaning |
-|---------|---------|
-| Workspace | `IR0/kernel-x64-userspace.iso` just built in the tree |
-| Default | Symlink `kernel-current.iso` — what `make poweron` boots |
-| Fallback | Previous Default after a select/install |
-| Installed | Catalog copies with SHA-256 metadata |
-
-**Build numbers are machine-local.** `.build_number` increments on each link on
-that host. `#1420` on a smoke host and `#1450` on a laptop can be the same
-branch tip; never treat `#N` as a global release id. kmang stores provenance
-(builder host/user, optional git short SHA, SHA-256) so the TUI can tell
-workspace drift from merely “an older local counter”.
-
-Typical loop after a kernel change:
-
-```bash
-make kernel-x64-userspace.iso   # or: make machine-update-kernel
-make kmang                      # press i (install) then b (boot)
-# or non-interactive:
-make kernel-manager-install && make poweron PROFILE=desktop
-```
-
-An old ISD rootfs (missing X clients / desktop session scripts) will boot fine
-with a new kernel but will not show the verified X11 session. Refresh userspace
-explicitly (`make isd-image PROFILE=desktop` / `machine-update-userspace`) —
-do not expect kernel rebuilds to upgrade third-party packages.
-
-## Userspace versioning (ISD-owned, implemented)
+## Userspace versioning (ISD-owned)
 
 | Layer | Mechanism |
 |-------|-----------|
@@ -200,9 +127,9 @@ do not expect kernel rebuilds to upgrade third-party packages.
 | Package origins | `/usr/share/isd/package-manifest.txt` (`first-party` / `third-party` / `third-party+isd-patches`) |
 | Userland base | `USERLAND_BASE=busybox` in `profiles/*/profile.conf` (`coreutils` reserved) |
 | Guest CLI | `ir0-status version \| profile \| kernel \| packages \| userland \| busybox` |
-| Host CLI | `make usmang` → `scripts/userspace_manager.py` |
+| Host CLI | `python3 scripts/userspace_manager.py` (ISD inspector; not a make target) |
 
-Keep IR0 adapting to Linux/musl ABI; leave package recipes in ISD. Do **not**
+Keep IR0 adapting to the Linux/musl ABI; leave package recipes in ISD. Do **not**
 share the kernel `.build_number` counter with ISD releases.
 
 Desktop ABI contract: [`DESKTOP_ABI.md`](DESKTOP_ABI.md) (IR0) and ISD

@@ -15,8 +15,9 @@
 
 La capa TTY proporciona disciplina de línea, eco y lectura bloqueante para
 `/dev/console` y `/dev/tty`. Un **multiplex PTY estilo UNIX98** (`/dev/ptmx` +
-`/dev/pts/N`) vive en el mismo módulo devfs para xterm, smokes duales y
-`linux-abi-audit-pty-multiplex`. La entrada llega desde la ruta PS/2 del teclado;
+`/dev/pts/N`) vive en el mismo módulo devfs para xterm, smokes duales y el
+contrato Linux ABI `pty_multiplex`
+(`python3 scripts/linux_abi_audit.py --contract pty_multiplex`). La entrada llega desde la ruta PS/2 del teclado;
 la salida pasa por `console_backend` hacia serial y renderizado typewriter
 VGA/framebuffer. BusyBox `ash` sobre `/dev/console` es el consumidor interactivo
 de userspace principal.
@@ -43,7 +44,7 @@ Código portable: `includes/ir0/pty_devfs.h` — ids fijos solo en `fs/devfs.c`
 (`architecture_guard.py` exige ids únicos y prohíbe `devfs_find_node_by_id` en
 hot paths de syscalls; usar `fd_entry.dev_node`).
 
-Gate: `make linux-abi-audit-pty-multiplex` + `make smoke-pty-winsz`.
+Contrato: `python3 scripts/linux_abi_audit.py --contract pty_multiplex`.
 Compare host Linux con `unshare` + devpts nuevo. Contrato **VERIFIED** (2026-09-18).
 
 ## 3. Flujo de datos
@@ -128,14 +129,15 @@ Canónico vs raw:
 
 ## 9. Consejos de depuración
 
-- Smoke ash interactivo: `Documentation/fase58e-ash-interactive-console.md`.
-- PTY: `make smoke-pty-winsz`; audit `linux-abi-audit-pty-multiplex`.
-- Escritorio dual xterm: `make smoke-x11-pointer PROFILE=desktop`.
+- Smoke ash interactivo: `Documentation/esp/fase58e-ash-interactive-console.md`.
+- PTY: `python3 scripts/linux_abi_audit.py --contract pty_multiplex`; la
+  cobertura de winsize se trackea en `scripts/linux_abi/contracts.json`.
+- Escritorio dual xterm: construí el rootfs X11 con ISD y usá `make run DISK=…`.
 - Serial: layout teclado vía `CONFIG_KEYBOARD_LAYOUT`; get/set keymap syscall.
 - Eco en blanco pero serial OK: comprobar termios ICANON/ECHO; verificar attach backend.
 - poll bloqueado: asegurar que `stdin_wake_check` corre desde bucle idle.
 
-Build/run: `make run-ash-gui` (ver SETUP.md).
+Build/run: `make ir0 && make run DISK=…` (rootfs de ISD; ver SETUP.md).
 
 ## 10. Hoja de ruta futura
 

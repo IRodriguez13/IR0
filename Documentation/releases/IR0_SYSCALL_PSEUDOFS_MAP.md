@@ -44,6 +44,6 @@ plus IR0 metadata; it does **not** replace them.
 
 ## Related gates
 
-- `make agent-fast`, `make smoke-tier1`
+- `make agent-fast`, `make ktest`
 - `make diag-contract CONTRACT=dup` (prefer `/proc/uptime` after fd unify)
 - `make smoke-heart` (`HEART_*` tags)

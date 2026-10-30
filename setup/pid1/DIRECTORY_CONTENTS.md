@@ -7,7 +7,7 @@ tier smokes). It is **not** the product PID1.
 |---------|----------|
 | Product PID1 (runit) | `ISD/services/`, staged to `/sbin/init` on `disk.img` |
 | Kernel Kconfig | `setup/Kconfig`, `setup/defconfig` |
-| KTM smoke inits | `setup/pid1/*.c` → built by `scripts/make/testing.mk` |
+| KTM smoke inits | `setup/pid1/*.c` (sources kept; no root Makefile target) |
 
 ## Expected contents
 
@@ -17,13 +17,16 @@ tier smokes). It is **not** the product PID1.
 
 ## Usage (smokes)
 
+These harnesses are **not wired into the lean root Makefile**. Compile them with
+the host toolchain or a dedicated ISD/QA command when you need one:
+
 ```bash
-make -s build-ktm-<scenario>-bin    # see scripts/make/testing.mk
-IR0_LEGACY_USERSPACE=1 make load-userspace-runit   # legacy MINIX inject path
+gcc -static -o setup/pid1/init setup/pid1/init_musl.c    # example only
 ```
 
-Product boot: `make first-boot PROFILE=…` → ISD-owned `disk.img` (see
-`Documentation/USERSPACE.md`).
+Product boot: build the rootfs with ISD and run `make run DISK=…` (see
+`Documentation/USERSPACE.md`). The old `build-ktm-*`, `load-userspace-runit`,
+and `first-boot` targets were removed.
 
 Future move (planned): `setup/pid1/` → `qa/smokes/pid1/` per
 `Documentation/TREE_REORGANIZATION_PLAN.md`.

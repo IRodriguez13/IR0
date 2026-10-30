@@ -1,6 +1,6 @@
 # IR0 Makefile — Central Tooling Orchestrator
 
-The root `Makefile` is the single entry point for building, configuring, validating, and
+The root `Makefile` is the single entry point for building, configuring, testing, and
 running the IR0 kernel. Sub-makefiles (`tests/host/Makefile`, `tests/kernel_memsafe/Makefile`)
 handle isolated harnesses; everything else flows through the root file.
 
@@ -11,25 +11,30 @@ handle isolated harnesses; everything else flows through the root file.
 | Architecture selection | `ARCH`, `CONFIG_ARCH_*`, cross-compile prefixes |
 | Feature composition | `-include .config` gates `OBJS`, `CFLAGS`, and ISO contents |
 | Version stamping | `IR0_VERSION_*`, build number, date/user/host in `version.o` |
-| Developer UX | `help`, `menuconfig`, `unibuild`, smoke and matrix targets |
-| Quality gates | `arch-guard`, `repo-hygiene-guard`, `build-matrix-*`, `health` |
+| Developer UX | `help`, `menuconfig`, `unibuild`, test TUI |
+| Quality gates | `arch-guard`, `ctr`, `build-matrix-min`, `health` |
 
-Python scripts under `scripts/` implement logic that would be unreadable in Make; the Makefile
-invokes them with stable target names. Focused smoke fragments live under
-`scripts/make/` (e.g. `boot-audio.mk` → `smoke-sb16-probe`, `class-b.mk` →
-`smoke-class-b-mitigated`) and are `-include`d from the root Makefile.
+Python scripts under `scripts/` implement logic that would be unreadable in Make; the
+Makefile invokes them with stable target names. Target recipes live in small fragments
+under `scripts/make/`:
 
-Lean goals (`help`, `all`, `ir0`, `clean`, `kernel-x64.bin`,
-`kernel-x64.iso`, inspect targets, `arch-guard`, `defconfig`, `menuconfig`)
-do **not** parse `scripts/make/testing.mk` or ISD/release recipes. A bare
-`make` and tab-completion (empty `MAKECMDGOALS`) stay lean. Any other or mixed
-goal still loads the full catalog. ARM64 link products are defined in the QA
-catalog, so naming one loads it.
+| Fragment | Contents |
+|----------|----------|
+| `arch-sources.mk` | Architecture object inventories and freestanding exceptions |
+| `arm64.mk` | ARM64 boot/aggregate/board build graph (parsed only for `ARCH=arm64`) |
+| `arm64-board.mk` | RPi3/4/5 `kernel8.img` packaging (ARM64 only) |
+| `clean.mk` | `make clean` |
+| `docs.mk` | Man pages and docs helpers |
+| `host-portable.mk` | POSIX host helpers (`HOST_TMP`) |
+| `ktm.mk` | `ktest`, host harnesses, CTR/KTM gates, test catalog |
+
+There is no ISD, product, release, profile, QA, or Windows fragment. The root file is
+the complete graph for a kernel checkout.
 
 ## Parse cost
 
-Every recursive make re-parses the root file, so the parse path is kept cheap
-on purpose:
+Every recursive make re-parses the root file, so the parse path is kept cheap on
+purpose:
 
 - `.SUFFIXES:` is cleared at the top. Every rule this tree uses is explicit;
   leaving the built-in suffix list active makes make search it for the
@@ -39,11 +44,32 @@ on purpose:
   instead of five; the compiler banner costs one fork.
 - Dependency includes are wrapped in `$(wildcard ...)` so a first build never
   asks make to remake hundreds of missing `.d` files.
-- `scripts/make/isd.mk` caches the KMANG artifact environment in
-  `build/.isd-artifacts` and only reloads it when inputs change.
+- The ARM64 graph is only parsed when `ARCH=arm64`.
+- There is no conditional QA catalog anymore: `help`, `clean`, `ir0`, `run`
+  and every gate parse the same small set of fragments.
 
-Measure with `make -n help` (lean) and `make -n test-list` (full catalog);
-both should stay in the tens of milliseconds.
+Measure with `make -n help` and `make -n ir0 arm64`; both should stay well under
+a tenth of a second on a normal workstation.
+
+## Positional syntax
+
+Architecture and board are ordinary make goals as well as variables:
+
+```bash
+make ir0 x86-64
+make ir0 arm64
+make ir0 arm64 rpi4
+make run arm64 console
+```
+
+| Token class | Values | Effect |
+|-------------|--------|--------|
+| Architecture | `x86-64`, `x86_64`, `amd64`, `arm64`, `aarch64` | Sets `ARCH` |
+| Board (ARM64) | `qemu-virt`, `rpi3`, `rpi4`, `rpi5` | Sets `BOARD` |
+| Run mode | `gui`, `console`, `debug`, `fullscreen`, `gdb` | Alias of `make run <mode>` |
+
+The tokens are also declared as no-op goals so make accepts them. `ARCH=` and
+`BOARD=` environment variables keep working.
 
 ## Configuration flow
 
@@ -68,41 +94,60 @@ default subsystems to **enabled** (bring-up friendly).
 
 | Target | Output |
 |--------|--------|
-| `make all` / `make ir0` | Kernel binary + ISO (default profile) |
-| `make kernel-x64.bin` | Linked ELF only |
-| `make kernel-x64.iso` | Bootable ISO |
-| `make kernel-x64-userspace.iso` | Userspace-oriented ISO (init/musl smokes) |
-| `make clean` | Remove `build/`, objects, deps, ISOs, generated headers and in-tree smoke binaries (disk images, `toolchain/`, staging caches, `dist/`, `out/` preserved) |
+| `make ir0` | x86-64: `kernel-x64.iso`. ARM64: `kernel-arm64.bin`. Board: `build/arm64-<board>/kernel8.img` |
+| `make ir0 arm64` | ARM64 aggregate (`kernel-arm64-all.bin` + common-core/provider gates) |
+| `make ir0 arm64 rpi4` | RPi4 `kernel8.img` plus its ELF twin |
+| `make all` | Same artifact as `ir0`, without the `-Werror` policy |
+| `make kernel-x64.bin` | Linked x86-64 ELF only |
+| `make kernel-x64.iso` | Bootable GRUB ISO |
+| `make kernel-x64-test.bin` | Kernel built with the in-kernel ktest battery |
+| `make clean` | Remove objects, deps, images and generated headers (disk images, `toolchain/`, `dist/`, `out/` preserved) |
+
+`ir0` compiles with `-Werror`; use `make all` or the individual artifact targets
+when a third-party compiler introduces a warning you need to inspect first.
+When `CONFIG_TOOL_AUTO_RUN_DEPTEST=y`, `ir0` runs `deptest` first.
 
 ### Run (QEMU)
 
 | Target | Notes |
 |--------|-------|
-| `make run` | Product GUI: userspace ISO + runit/getty/ash |
-| `make run-console` | Serial-focused |
-| `make run-gdb` | Wait for GDB on localhost:1234 |
-| `make run-ash-gui` | Interactive ash; Doom/WAD via virtio-9p when `REAL_WAD_PATH` set |
-| `make run-bootlog` | Boot log → `build/hostshare/ir0-boot.log` (reuses `disk.img`) |
-| `make smoke-runit-boot` | runit PID1 boot smoke |
-| `make load-userspace-runit` | Inject runit + BusyBox on MINIX disk (cached stamp) |
+| `make run` | GUI on x86-64; serial on ARM64 |
+| `make run console` | `-nographic` |
+| `make run debug` | Guest-error/int log + monitor on telnet `127.0.0.1:1234` |
+| `make run fullscreen` | GTK full screen |
+| `make run gdb` | Wait for GDB on localhost:1234 |
+| `make run arm64 rpi4` | Boot `build/arm64-rpi4/kernel8.img` |
 
-**Disk injection policy:** `/sbin/init` and the runit tree must live on the MINIX
-root (`disk.img`) today — root-from-virtio is not implemented. Extra payloads
-(Doom, WAD, boot log export) use virtio-9p when available; `load-userspace-runit`
-skips reinject when the stamp is newer than inputs.
+`run` **only launches an artifact that is already on disk**. It never invokes
+make, never builds, and never touches ISD. `scripts/run_qemu.sh` resolves the
+product from `ARCH`/`BOARD`, refuses to start when the artifact is missing, and
+execs QEMU. Useful variables: `IR0_PRODUCT`, `DISK` (`none` opts out),
+`IR0_MEM`, `IR0_NET=0`, `IR0_DENNIS_9P=0`, `IR0_AUDIO=1`, `IR0_QEMU_EXTRA`.
 
-Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-runit`.
+On x86-64, `disk.img` is attached automatically when it exists. It is optional;
+without it the kernel boots the ISO and reaches the `/sbin/init` handoff, which
+requires a userspace disk built outside this tree.
 
-### Validation and gates
+### Tests and gates
 
 | Target | Script / mechanism |
 |--------|-------------------|
-| `make arch-guard` | `scripts/architecture_guard.py` |
-| `make repo-hygiene-guard` | `scripts/repo_hygiene_guard.py` |
-| `make build-matrix-min` | Multiple `.config` profiles, compile-only |
-| `make build-matrix-full` | Extended matrix + runtime checks |
-| `make health` | `kernel-analyze` + memsafe + kernel-tests |
-| `make smoke-*` | QEMU smokes via `scripts/smoke_qemu_run.sh` |
+| `make ktest` / `kernel-tests` | In-kernel ktest battery in QEMU (headless) |
+| `make test` | Interactive test TUI (`scripts/test_tui.py`) |
+| `make test-list` | List catalog suites |
+| `make test-run SUITE=host,ktest` | Run catalog suites non-interactively |
+| `make test-fast` | `kernel-x64.bin` + `arch-guard` + host tests + `ktm-check` |
+| `make agent-fast` | `test-fast` + `ktest` |
+| `make ctr` | `scripts/ctr.sh`: kernel + arch-guard + matrix-min + host tests |
+| `make ktm-check` | Host tests + KTM classify/manifest/adoption/portability guards |
+| `make build-matrix-min` | Minimal `.config` compile matrix; restores the caller's `.config` on every exit path |
+| `make arch-guard` | Architecture boundary checks (`scripts/architecture_guard.py`) |
+| `make repo-hygiene-guard` | Repository hygiene (`scripts/repo_hygiene_guard.py`) |
+| `make health` | `kernel-analyze` + text budget + memsafe + kernel tests |
+| `make tests` | Build the ktest kernel, kernel-memsafe harness and host tests |
+
+The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
+`make test-run` and the TUI are thin wrappers around that catalog.
 
 ### Documentation
 
@@ -110,23 +155,38 @@ Disk lifecycle: `create-disk`, `delete-disk`, `load-init`, `load-userspace-runit
 |--------|--------|
 | `make sync-mandocs` | Rebuild + install → `~/.local/share/man` (no sudo) |
 | `make man TOPIC=boot` | `man IR0-boot` without requiring MANPATH setup |
-| `make mandocs` / `mandocs-en` | Build manuals (interactive / one language) |
+| `make mandocs` / `mandocs-en` / `mandocs-es` | Build manuals (interactive / one language) |
 | `make mandocs-view` | Open installed / built `IR0-krnl` |
+| `make mandocs-uninstall` | Remove installed pages |
 | `make ai-dev-rules-install` | Install tracked rules into gitignored `.cursor/` |
+| `make help-docs` | Documentation target help |
 
 ### Developer tooling
 
 | Target | Purpose |
 |--------|---------|
 | `make help` | Full target listing (always current) |
-| `make help-profiles` | Product profiles + honest ceilings |
-| `make help-docs` / `help-pre-submit` | Docs and contributor gate help |
 | `make format` | `clang-format` over C/H sources |
 | `make compile-commands` | `compile_commands.json` for LSP |
+| `make disasm` | `objdump -d -S kernel-x64.bin` |
+| `make stack-usage` | Stack-usage report for kernel objects |
+| `make print-build-objects` | Object inventory used by graph audits |
+| `make build-graph-audit` | Audit the generated build graph |
 | `make unibuild FILE=<file.c>` | Compile translation units in isolation |
-| `make check-env` / `deptest` | Host env diagnostic (`PROFILE=desktop-x86_64` default) |
-| `make deptest PROFILE=…` | `desktop-x86_64` \| `userspace` \| `hub-rpi4` \| `watch` \| `all` |
-| `make pre-submit [SUBSYSTEM=mm]` | Local gate → `PRE_SUBMIT_OK` (no push) |
+| `make unibuild-cpp` / `unibuild-rust` / `unibuild-clean` | Other isolated compiler modes |
+| `make headers_install` | Export `includes/uapi` to `DESTDIR` |
+| `make check-env` / `deptest` | Host environment diagnostic |
+
+### Utilities
+
+| Target | Purpose |
+|--------|---------|
+| `make create-disk [FS=minix] [SIZE=200]` | Create a blank disk image |
+| `make delete-disk` / `disk-reset` | Remove or reset the local disk |
+| `make load-init` | Inject an init binary into a disk |
+| `make sync-menuconfig` | Re-sync generated config headers |
+| `make sync-menuconfig-defconfig` | Re-sync from `setup/defconfig` |
+| `make sync-menuconfig-check` | Verify generated config is current |
 
 ## Object list composition
 
@@ -135,8 +195,12 @@ The Makefile builds `ALL_OBJS` from layered fragments:
 - **Core:** `kernel/`, `fs/`, `mm/`, `sched/`, `includes/ir0/`
 - **Arch:** `arch/x86-64/` or `arch/arm64/` selected by `ARCH`
 - **Drivers:** gated by `CONFIG_ENABLE_*` and `CONFIG_INIT_*`
-- **Userspace coupling:** sibling `ISD` via `IR0_USERSPACE_ROOT` (see [`USERSPACE.md`](USERSPACE.md)); no in-tree `debug_bins/`
 - **Generated:** `version.o`, kconfig headers
+- **ARM64:** `scripts/make/arm64.mk` and `scripts/make/arm64-board.mk`
+
+There is no userspace coupling in the object list: the kernel never compiles or
+links ISD packages. Userspace images come from the sibling ISD repository and
+are attached at runtime as `disk.img`.
 
 Adding a new subsystem requires **four wiring points** (CTR rule):
 
@@ -144,16 +208,6 @@ Adding a new subsystem requires **four wiring points** (CTR rule):
 2. `setup/defconfig` default
 3. `Makefile` object list / `CFLAGS`
 4. Optional menuconfig preset in `scripts/kconfig/menuconfig.py`
-
-## Smoke targets
-
-Smoke targets share one pipeline:
-
-- Init binary build (`build-init-*`, `build-busybox-*`)
-- MINIX rootfs injection (`scripts/inject_init_minix.py`)
-- QEMU runner with timeout and done-tag matching (`scripts/smoke_qemu_run.sh`)
-
-Prefer extending existing smoke patterns over ad-hoc QEMU shell loops.
 
 ## Relationship to Documentation
 
@@ -163,5 +217,6 @@ Prefer extending existing smoke patterns over ad-hoc QEMU shell loops.
 | `DECOUPLING.md` | Why arch-guard exists |
 | `Documentation/ai_driven_dev/` | Agent rules for Makefile/Kconfig changes |
 | `SETUP.md` | First-time bootstrap sequence |
+| `USERSPACE.md` | External ISD boundary and manual userspace images |
 
 For the authoritative list of targets, run **`make help`** — it is maintained alongside the Makefile.

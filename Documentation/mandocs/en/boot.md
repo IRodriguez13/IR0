@@ -122,7 +122,7 @@ New contributors: start with `make man TOPIC=onboarding` (first bug walkthrough)
 | Symptom | Check |
 |---------|-------|
 | No serial after banner | `klog_boot_hold` / serial_init order |
-| Stuck before getty | `smoke-runit-boot` tags / disk inject |
+| Stuck before getty | ISD-built `disk.img` attached with `DISK=…`; check serial tags |
 | Missing `/proc/kmsg` content | `klog_read_records` vs old logging buffer |
 
 ## 10. Known limits

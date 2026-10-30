@@ -1,9 +1,11 @@
 # Virtio in IR0 (QEMU)
 
 > **Last verified:** 2026-09-02  
+> **Build note (2026-10-29):** the `smoke-*` targets quoted below were removed
+> with the legacy QA catalog. Build the kernel with `make ir0`, attach disks with
+> `make run DISK=…`, and pass extra QEMU flags through `IR0_QEMU_EXTRA`.
 > **Source of truth:** `drivers/net/virtio_net.c`, `fs/hostshare_9p.c`,  
-> `make smoke-hostshare-9p`, `make smoke-nic-reach-virtio`,  
-> `make smoke-session-chaos`, [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md)
+> `scripts/run_qemu.sh`, [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md)
 
 IR0 talks to the host through **legacy virtio-pci** devices in QEMU
 (`disable-modern=on`). Two product paths matter for day-to-day use:
@@ -28,7 +30,7 @@ mkdir -p "$SHARE"
 echo from_host > "$SHARE/host_marker.txt"
 
 qemu-system-x86_64 \
-  -cdrom kernel-x64-userspace.iso \
+  -cdrom kernel-x64.iso \
   -drive file=disk.img,format=raw,if=ide,index=0 \
   -fsdev local,id=ir0fs,path=$SHARE,security_model=none \
   -device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on \
@@ -51,26 +53,29 @@ umount /mnt/host
 
 BusyBox may need `busybox mount -t 9p …` if `mount` is not the applet you expect.
 
-### Automated gates
+### Automated checks
 
-| Target | Proves |
-|--------|--------|
-| `make smoke-hostshare-9p` | Flat + subdir write visible on host |
-| `make smoke-hostshare-exec` | Runit mounts share and `execve`s `/mnt/host/ir0_payload` |
-| `make smoke-session-chaos` | Interactive login + 9p mount/ls/cat/write/umount + `/dev/*` chaos |
+The old `smoke-hostshare-*` / `smoke-session-chaos` targets no longer exist.
+Drive the same sequence manually from a shell in the guest (the commands above)
+or script it against a known ISD-built disk.
 
 Product “drop a binary” recipe: [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md).
 
 ### Manual interactive (GTK)
 
 ```bash
-make -s kernel-x64-userspace.iso   # after kernel changes: rm ISO first
-# Ensure disk has accounts (firstboot or seed). Then e.g.:
-qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-  -drive file=$IR0_ISD_DISK,format=raw,if=ide,index=0 \
-  -fsdev local,id=ir0fs,path=$HOME/Escritorio/code,security_model=none \
-  -device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on \
-  -serial file:/tmp/ir0-serial.log -m 512M
+make -s ir0                        # rebuild kernel-x64.iso after kernel changes
+# Ensure disk has accounts (ISD rootfs or seed). Then:
+make run DISK=$IR0_ISD_DISK
+```
+
+To use the `ir0share` tag instead of the automatic `dennis` share:
+
+```bash
+IR0_DENNIS_9P=0 IR0_QEMU_EXTRA="\
+  -fsdev local,id=ir0fs,path=$SHARE,security_model=none \
+  -device virtio-9p-pci,fsdev=ir0fs,mount_tag=ir0share,disable-modern=on" \
+  make run DISK=$IR0_ISD_DISK
 ```
 
 Mount `/mnt/host` after login; edit on the host, re-read in the guest (or reverse).
@@ -81,8 +86,9 @@ Legacy `virtio-net-pci` probes before RTL8139 when present. Interface name in
 guest: typically **`virt0`**.
 
 ```bash
-# Smoke (no rtl8139 device):
-make -s smoke-nic-reach-virtio
+# Manual check: boot without rtl8139 (IR0_NET disables the default NIC).
+IR0_NET=0 IR0_QEMU_EXTRA="-device virtio-net-pci,netdev=n0,disable-modern=on \
+  -netdev user,id=n0" make run console
 # Expect: F8_NIC_REACH_OK + NIC_PING_REPLY_OK
 ```
 
@@ -99,7 +105,8 @@ Default product images often use RTL8139; virtio-net is the alternate NIC path.
 
 ## Session chaos (coherence)
 
-`make smoke-session-chaos` logs into getty and runs awkward but legal commands:
+The old `smoke-session-chaos` target is gone; run the same awkward but legal
+commands from getty manually:
 
 - `cat` / `head` on `/dev/null`, `/dev/zero`, `/dev/urandom`, write to `/dev/full`
 - stderr redirect (`2>/home/...`)
@@ -120,10 +127,10 @@ automation can trip ash `STACK_TOP_OVERRUN` under load; prefer
 
 | Topic | Note |
 |-------|------|
-| Stale ISO | Rebuild `kernel-x64-userspace.iso` and md5-match the userspace bin |
+| Stale ISO | Rebuild `kernel-x64.iso` (`make ir0`) and md5-match the extracted kernel |
 | `disable-modern=on` | Required for current drivers |
 | Serial vs VGA | Smoke tags on `/dev/serial` may look “stuck” to the prompt in combined logs |
-| Pipe soft hangs | Soft set in chaos may `^C` and skip — same flake class as `smoke-shell-pipe-stress` |
+| Pipe soft hangs | Soft set in chaos may `^C` and skip — same flake class as the old pipe-stress smoke |
 | virtiofs | Not implemented; do not document as working |
 
 ## Related

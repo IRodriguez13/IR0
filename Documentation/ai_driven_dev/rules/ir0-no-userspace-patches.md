@@ -47,7 +47,7 @@ make -s kernel-x64.bin
 make -s arch-guard
 make -s -C tests/host run
 # When contract exists:
-make -s linux-abi-audit-<contract>
+python3 scripts/linux_abi_audit.py --contract <contract>
 ```
 
 Update `scripts/linux_abi/contracts.json` and

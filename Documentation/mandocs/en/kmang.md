@@ -4,12 +4,18 @@
 |-------|-------|
 | Version | 0.1 |
 | IR0 phase | T1 (host tooling for persistent ISD machines) |
-| Status | stable |
+| Status | historical (make targets removed) |
 | Depends on | userspace, boot, onboarding |
 | Man page | IR0-kmang (section 7) |
-| Primary sources | `scripts/kernel_manager.py`, `scripts/make/isd.mk`, `scripts/test_kernel_manager.py`, `scripts/test-isd-contracts.sh` |
+| Primary sources | `scripts/kernel_manager.py`, `scripts/test_kernel_manager.py` |
 
 > **Last verified:** 2026-09-20
+
+> **Build-system note (2026-10-29):** `make kmang`, `make poweron`,
+> `make kernel-manager-*`, `make usmang`, and `scripts/make/isd.mk` were
+> removed with the kernel-only Makefile. `scripts/kernel_manager.py` remains in
+> the tree as a standalone host tool (`python3 scripts/kernel_manager.py`), but
+> IR0 no longer wires it to make. Boot a kernel with `make run`, not `poweron`.
 
 ## 1. Overview
 
@@ -119,7 +125,7 @@ Guest `/etc/profile` (ISD) reads the one-shot file on console login, then delete
 
 | Subsystem | Relation |
 |-----------|----------|
-| `scripts/make/isd.mk` | Defines `KMANG_PY`, `make kmang`, `kernel-manager-*`, `poweron` |
+| `scripts/make/isd.mk` | Removed 2026-10-29; its definitions are historical |
 | `ISD` / ISD | Rootfs disk separate from kernel catalog |
 | `make usmang` | Complementary host inspector for ISD userland |
 | Boot / version stamp | `IR0_VERSION_STRING` prefixes catalog ids |
@@ -180,7 +186,7 @@ python3 scripts/kernel_manager.py --machine-dir … info ID --json
 python3 scripts/kernel_manager.py --machine-dir … help
 ```
 
-**Tests:** `python3 scripts/test_kernel_manager.py` (also `make kmang-test`, `make isd-contracts`).
+**Tests:** `python3 scripts/test_kernel_manager.py` (standalone; no make wrapper).
 
 ## 10. Future roadmap
 

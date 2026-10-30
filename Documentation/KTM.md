@@ -1,12 +1,19 @@
 # KTM — Kernel Test Module
 
-> **Last verified:** 2026-08-30
+> **Last verified:** 2026-10-29
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,
 > `mm/page_fault.c`, `scripts/smoke_session_soak.py`,
 > `includes/ir0/klog_event.h`, [`KLOG.md`](KLOG.md),
 > `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,
 > `scripts/ktm_userdev_runit_run.sh`, `scripts/smoke_autokill.py`,
-> `scripts/make/class-b.mk`, root `Makefile` targets `ktm-*` / `smoke-class-b-*` / `smoke-klog-ktm-off`
+> `scripts/make/ktm.mk`
+>
+> **Build-system note (2026-10-29):** the QA smoke catalog was removed. Targets
+> such as `ktm-run`, `smoke-*`, `ktm-userdev-*-run`, and `build-ktm-*` are no
+> longer make goals. Current gates are `make ktest` (in-kernel battery plus KTM
+> boot suite), `make ctr`, and `make ktm-check`; the `scripts/ktm_*.py` and
+> `scripts/ktm_userdev_*.sh` helpers remain available for manual runs against an
+> ISD-built disk.
 
 KTM is IR0’s **canonical kernel test and diagnostic plane**: typed events, checkpoints,
 snapshots, in-kernel scenarios, `/dev/ktm` for userspace-driven cases, and host runners
@@ -101,7 +108,7 @@ Rules of thumb:
   Product kernels route through `klog_boot_hold` + `klog_event(BOOT_BANNER, …)`;
   freestanding ARM64 early boot (`IR0_FREESTANDING_BOOT`) emits the same layout
   via `arch/common/boot_log.c` (with `#sequence` + `EARLY_ARCH`).
-- `CONFIG_KTM=n`: klog + `/proc/kmsg` still work (`make smoke-klog-ktm-off`).
+- `CONFIG_KTM=n`: klog + `/proc/kmsg` still work (covered by host/ktest runs).
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
   `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.
 
@@ -109,18 +116,17 @@ Rules of thumb:
 
 Illegal pairing for `kernel_ret`: task CS is ring-0 but RIP looks like userspace.
 Product default `IR0_CLASS_B_REPAIR=1` (`config.h`) repairs from `syscall_frame` when
-possible. Gates:
+possible. The `smoke-class-b-*` make targets were removed with the QA catalog;
+the kernel repair path and the host invariant remain:
 
-| Target | Expect |
-|--------|--------|
-| `make smoke-class-b-mitigated` | inject + `KERNEL_RETURN_FRAME_REPAIR` + `KTM_CLASS_B_OK` |
-| `make smoke-class-b-repro` | rebuild with `IR0_CLASS_B_REPAIR=0` → `KERNEL_RET_BAD_RIP` |
+| Gate | Expect |
+|------|--------|
+| KTM Class B scenario (manual) | inject + `KERNEL_RETURN_FRAME_REPAIR` + `KTM_CLASS_B_OK` |
 | `make -C tests/host run` | `test_class_b_ctx_invariant` |
 
 Impl: `sched/switch/arch_context_switch.c`, `process_arm_kernel_syscall_sleep` /
 `want_kernel_ret`, `sched_context_switch_take_skip_prev_save` (IRQ preempt must not
 overwrite a saved user iretq frame). Host fixtures: `tests/mocks/sched/class_b.h`.
-Makefile fragment: `scripts/make/class-b.mk`.
 
 ### Serial protocol (grep-friendly)
 
@@ -221,18 +227,18 @@ void ktm_scenario_register_foo_bar(void)
 **Invariants mask:** `KTM_INV_PROCESS`, `KTM_INV_FRAMES`, `KTM_INV_ALL`
 (`includes/ir0/ktm/ktm.h`).
 
-### 4.4 Run kernel scenarios from the host
+### 4.4 Run kernel scenarios
+
+The boot suite runs **all** registered scenarios when `CONFIG_KTM_TEST` is
+enabled (`ktm_scenarios_run_boot`):
 
 ```bash
-make -s ktm-run                          # default SCENARIO=process.lifecycle
-make -s ktm-run SCENARIO=ipc.pipe_lifecycle
+make ktest
 ```
 
-Uses `scripts/ktm_runner.py` against `kernel-x64-userspace.iso` and expects
-`TEST_END|<name>|PASS` on serial.
-
-Boot suite runs **all** registered scenarios when `CONFIG_KTM_TEST` is enabled
-(`ktm_scenarios_run_boot`).
+`scripts/ktm_runner.py` still exists for manual host-driven runs, but it expects
+a KTM-enabled userspace ISO that the current Makefile does not build. Point it
+at an artifact you built yourself and expect `TEST_END|<name>|PASS` on serial.
 
 ---
 
@@ -362,66 +368,22 @@ valid **dev aids**; T3 checklist smokes are already on the hybrid path.
 ## 6. Gates cheat sheet
 
 ```bash
-# In-kernel suite / single scenario
-make -s ktm-run
-make -s ktm-run SCENARIO=mm.cow_fork
+# In-kernel battery (ktest + registered KTM scenarios at boot)
+make -s ktest
 
-# Session-level corruption watchdogs (section 7)
-make -s smoke-session-walk                  # 9p tree walk, kstack peak, name round-trip
-make -s smoke-session-soak SOAK_ROUNDS=14   # long console soak; fails only on watchdogs
-
-# Userspace /dev/ktm pilots
-make -s ktm-userdev-run
-make -s ktm-userdev-cow-run
-make -s ktm-userdev-fork-storm-virtfs-run
-make -s ktm-userdev-exec-drain-virtfs-run
-make -s ktm-userdev-reap-drain-virtfs-run
-make -s ktm-userdev-init-exit-drain-virtfs-run
-make -s ktm-userdev-posix-pseudofs-virtfs-run
-make -s ktm-userdev-input-det-virtfs-run
-make -s smoke-nic-reach          # F8-1 L3 rtl8139 (NIC_PING_REPLY_OK)
-make -s smoke-nic-reach-virtio   # F8-1 L3 virtio-net-pci legacy
-make -s smoke-tcp-guest          # F8-2 guest→host wire :8889
-make -s smoke-tcp-wire           # F8-3 wire send+recv (peer only)
-make -s smoke-tcp-peer-cc        # peer loss + rexmit (LINUX-LIKE, port 8890)
-make -s smoke-tcp-listen         # F8 listen host→guest :7777
-make -s smoke-f8-net             # battery: nic + guest + wire + listen
-make -s smoke-t3-prep            # T3 sockets/IPC/fb battery (all runit)
-make -s smoke-desk-xfbdev        # OPTIONAL DESK-1 (sibling IR0-desktop; not release)
-make -s smoke-desk-wm            # OPTIONAL DESK-2 fb session
-make -s smoke-desk-classicube    # OPTIONAL DESK-3 soft_fb0
-make -s smoke-desk-play          # OPTIONAL DESK-4
-make -s smoke-desk               # OPTIONAL battery DESK-1..4
-make -s smoke-ktm-drains-runit   # fork/exec/reap/pseudofs/input runit + init-exit stub
-make -s smoke-epoll-basic        # alias → ktm-userdev-epoll-runit-run
-make -s smoke-stream-sock        # alias → ktm-userdev-stream-sock-runit-run
-make -s smoke-kill-sigterm       # kill(2) SIGTERM + probe0
-make -s smoke-socketpair         # alias → ktm-userdev-socketpair-runit-run
-make -s smoke-fb-map-shared      # alias → ktm-userdev-fb-map-shared-runit-run
-make -s smoke-scm-rights         # alias → *-scm-rights-runit-run
-make -s smoke-unix-abstract      # alias → *-unix-abstract-runit-run
-make -s smoke-sysv-shm           # alias → *-sysv-shm-runit-run
-make -s smoke-memfd-shared       # alias → *-memfd-shared-runit-run
-make -s smoke-unix-harden        # alias → *-unix-harden-runit-run
-make -s smoke-unix-flags         # alias → *-unix-flags-runit-run
-make -s smoke-event-fds          # alias → *-event-fds-runit-run
-make -s smoke-posix-shm          # alias → *-posix-shm-runit-run
-make -s ktm-userdev-socketpair-run  # stub PID1 residual (lab)
-make -s ktm-userdev-busybox-manifest-run  # BUSY-2 product applets (canonical)
-make -s smoke-busybox-manifest   # alias → ktm-userdev-busybox-manifest-run
-make -s ktm-userdev-doom-55d-run # hybrid: runit + WAD + KTM_DOOM_55D_OK
-make -s ktm-userdev-tcc-power-halt-run  # hybrid: runit + TCC + POWER_TCC_KTM_OK
-make -s smoke-runit-boot         # product PID1 (not userdev)
-
-# Hygiene
-make -s arch-guard               # no [FASE in kernel trees; ktm-include rules
-make -s ktm-check                # host + classify selftest + panic inventory
+# Host-side KTM invariants and manifests
+make -s ktm-check
+make -s ktm-manifest
 python3 scripts/ktm_log_classify.py /tmp/some.log
+
+# Architecture and generic gates
+make -s arch-guard
+make -s ctr
 ```
 
-Deep COW data-plane remains `make smoke-mm-cow-lazy` (not replaced by `mm.cow_fork`
-bookkeeping scenario). Host-share: `make smoke-hostshare-9p` (MVP read) and
-`make smoke-hostshare-exec` (stub + payload exec).
+The old `smoke-*` / `ktm-userdev-*` catalog targets were removed with the QA
+fragment (2026-10-29). The underlying runners remain in `scripts/` for manual
+runs against an ISD-built `disk.img`; pass them an explicit product/disk.
 
 **Critical product battery (hybrid):**
 
@@ -481,10 +443,11 @@ Source: `mm/page_fault.c` (`pf_user_segv`).
 
 ### 7.4 Soak harness
 
-`make smoke-session-soak SOAK_ROUNDS=N` drives many rounds of pipelines, heavy
-`readdir` and set-id exec over one console. It fails **only** on the watchdogs
-above; a stalled command or a session segv is counted and reported, not treated
-as the verdict.
+`python3 scripts/smoke_session_soak.py --rounds N` drives many rounds of
+pipelines, heavy `readdir` and set-id exec over one console. It needs an
+ISD-built disk (or `--disk`/`--iso` overrides) and is not a make target anymore.
+It fails **only** on the watchdogs above; a stalled command or a session segv is
+counted and reported, not treated as the verdict.
 
 Relogin is off by default (`--relogin-every 0`): the harness stalls after a few
 logout cycles, which cut every run short before the soak accumulated any uptime.
@@ -515,7 +478,7 @@ Source: `scripts/smoke_session_soak.py`.
 
 | Plane | Owns |
 |-------|------|
-| **KTM** (`ktm-run` / `ktm-userdev-*`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot; **BusyBox manifest** (`ktm-userdev-busybox-manifest-run`) |
+| **KTM** (`make ktest` / manual `scripts/ktm_*.py`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot; **BusyBox manifest** (`ktm-userdev-busybox-manifest-run`, manual) |
 | **Hybrid KTM + product HOST** | Doom 55d / TCC power-halt under **runit**; Xfbdev/mini under **runit + 9p** (`runit_hostshare_payload_run`); emit done tags + optional `KTM_*` |
 | **Keep outside KTM** | `arch-guard`, `tests/host` ABI/facade units, `linux-abi-audit-*`, deep COW `smoke-mm-cow-lazy`, product HOST **runit-boot / ash** (PID1 SUT), storage/hw/ARM machine smokes |
 | **Do not add** | A new serial-only smoke for a gap KTM already covers better — add/extend scenario or userdev + `--require KTM_*` / `KTM\|…` protocol |

@@ -23,17 +23,17 @@ platform, driver, boot, and build support needed to reach common-kernel userspac
 ## Mandatory gates for every ARM64 increment
 
 ```bash
-make -s smoke-arm64
-make -s arm64-rpi5-compile
+make -s ir0 arm64
+make -s ir0 arm64 rpi5
 make -s arch-guard
-make -s isa-security-guard
+python3 scripts/isa_security_guard.py
 make -s build-matrix-min
 make -s kernel-x64.bin
 make -s -C tests/host run
 ```
 
-Use `make -s pre-submit SUBSYSTEM=arm64` as the aggregate local gate when it
-covers the touched area. A RPi5 compile stub proves only board selection and
+Use `make -s ctr` as the aggregate x86_64 gate; add the ARM64 builds above. A
+RPi5 compile stub proves only board selection and
 linkage; it is never evidence of hardware boot or common-kernel userspace.
 
 If boot, MM, exceptions, signals, syscalls, scheduling, or shared drivers changed,

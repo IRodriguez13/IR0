@@ -3,7 +3,7 @@
 > **Last verified:** 2026-07-10  
 > **Source of truth:** `fs/pseudo_fs_registry.c`, `fs/heartfs.c`, `fs/procfs.c`,  
 > `kernel/syscalls/fs_syscalls.c`, `Documentation/releases/IR0_SYSCALL_PSEUDOFS_MAP.md`,  
-> `make IR0_LEGACY_SMOKE=1 smoke-heart`, `make smoke-tier1`
+> `make ktest`, `make ctr`
 
 ## Architecture
 
@@ -55,7 +55,5 @@ dispatch). **Forbidden:** one `.c` per syscall. See
 
 ```bash
 make agent-fast
-make diag-contract CONTRACT=dup    # /proc/uptime
-make IR0_LEGACY_SMOKE=1 smoke-heart
-make smoke-tier1
+make ktest
 ```

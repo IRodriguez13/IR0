@@ -1,99 +1,115 @@
-# Acoplamiento IR0 (kernel) ↔ ISD
+# IR0 kernel ↔ usuarios ISD
 
-> **Última verificación:** 2026-10-16  
-> **Fuente de verdad:** este archivo, `scripts/make/isd.mk`, hermano [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../../SETUP.md),
-> `ISD/services/runit_console_run.c`.  
+> **Última verificación:** 2026-10-29
+> **Fuente de verdad:** este archivo, `Makefile` raíz, `IR0_ISD_INTERFACE`,
+> hermano [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../../SETUP.md).
 > **English:** [`../USERSPACE.md`](../USERSPACE.md)
 
-## Por qué dos repositorios
+## Frontera
 
-El kernel no es una distro. PID1 (**runit**), **BusyBox**, paquetes, rootfs y
-`disk.img` viven en **ISD**. IR0 compila el kernel, exporta UAPI, delega la
-build de ISD y arranca la imagen.
+El kernel no es una distro. PID1 (**runit**), **BusyBox**, login, paquetes,
+rootfs y `disk.img` viven en **ISD**. IR0 compila el kernel y arranca una
+imagen de usuarios que otro árbol construyó.
 
-EL0 ARM (`smoke-arm64-all`) es adaptador de kernel, no producto ISD AArch64.
-Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+| Vive en **IR0** | Vive en **ISD** |
+|-----------------|-----------------|
+| Kernel, drivers, UAPI (`includes/uapi/`) | Paquetes, servicios, rootfs, perfiles |
+| ISO de kernel / imágenes ARM64 | `out/<arch>/images/<profile>/disk.img` |
+| Launcher QEMU (`scripts/run_qemu.sh`) | Extras `.isdconfig`, stage/pack |
 
-## Camino feliz (primera vez)
+**Regla dura:** el Makefile de IR0 no clona, compila ni empaqueta ISD. No hay
+targets `first-boot`, `isd`, `run PROFILE=…`, `kmang` ni `poweron`. El grafo del
+kernel se completa sin un checkout hermano.
 
-Host **x86_64 Linux** (o WSL2). Objetivo: clonar → dos comandos → QEMU.
+## Construir y arrancar
+
+### 1. Kernel
 
 ```bash
 git clone https://github.com/IRodriguez13/IR0.git
 cd IR0
-make first-boot PROFILE=minimal
-make run PROFILE=minimal
+make check-env
+make defconfig
+make ir0
 ```
 
-| PROFILE | En el guest |
-|---------|-------------|
-| `minimal` | Firstboot interactivo (crear usuario) + login |
-| `development` | Autologin root (lab) |
-| `desktop` | Como minimal + más applets (pack más lento) |
+Equivalente ARM64:
 
-`first-boot` pregunta antes de instalar deps del host (`IR0_DEPS_INSTALL=ask|yes|never`).
-Clona `../ISD` si falta. `make run` puede tardar 1–3 min en el primer pack
-MINIX (imprime progreso); no está colgado tras el ISO.
+```bash
+make ir0 arm64
+make ir0 arm64 rpi4
+```
 
-| Variable | Default |
-|----------|---------|
-| `IR0_ISD_ROOT` | `../ISD` |
-| `PROFILE` | `minimal` / `development` / … |
-| `IR0_USERSPACE_*` | alias deprecado de `IR0_ISD_*` |
+### 2. Imagen de usuarios
 
-### Coherencia de nombres
+Construí el hermano ISD con su propio Makefile/herramientas:
 
-| Nombre | Estado |
-|--------|--------|
-| **ISD** | Repo y árbol canónicos (`../ISD`, `IR0_ISD_ROOT`) |
-| `IR0-userspace` | Nombre antiguo del repo — solo notas históricas |
-| `userspace/` (en IR0) | README puntero — no es rootfs |
-| `setup/pid1/` | Inits de **smoke** KTM — no PID1 de producto |
+```bash
+git clone https://github.com/IRodriguez13/ISD.git ../ISD
+make -C ../ISD help
+```
 
-Gate: `make isd-contracts` sección **H**.
+Los nombres de targets de ISD pertenecen a ese repositorio; IR0 no los envuelve.
 
-| Target | Rol |
-|--------|-----|
-| `make first-boot PROFILE=…` | Bootstrap completo |
-| `make isdconfig PROFILE=…` | Extras interactivos (paquetes + applets, p. ej. top) |
-| `make isd-image PROFILE=…` | Solo imagen ISD |
-| `make run PROFILE=…` | QEMU con disco ISD |
-| `make run-console PROFILE=…` | Sin GTK |
+### 3. Arrancar
 
-### Login / getty (2026-09-02)
+```bash
+make run DISK=../ISD/out/x86_64/images/minimal/disk.img
+```
 
-El spam `LOGIN_USER_READ` post-firstboot era un busy-loop de getty (`EINTR`/`EOF`
-+ tag en cada iteración). Fix en ISD: `ir0_read_line` reintenta `EINTR`; el tag
-solo si el username no está vacío. Detalle: [`../USERSPACE.md`](../USERSPACE.md).
+`DISK` es opcional. Sin disco, el kernel arranca el ISO y entra en pánico en el
+handoff a `/sbin/init` — no hay shell de respaldo en el kernel. `DISK=none` evita
+adjuntar un `disk.img` local.
 
-`chown root` con `0755` sigue permitiendo ejecutar a otros (Unix). `/tmp` tmpfs
-es intencional.
+`make run` nunca compila. Reconstruí el kernel con `make ir0` tras cambiar
+fuentes, y la imagen de usuarios con ISD tras cambiar usuarios.
 
-Config: `IR0/.config` (kernel) ≠ `ISD/.isdconfig` (extras de distro).
+## Contrato de interfaz
 
-## Máquina persistente + kmang
+| Archivo | Repo | Rol |
+|---------|------|-----|
+| `IR0/IR0_ISD_INTERFACE` | IR0 | Versión de integración (`VERSION=1`) + adapters requeridos |
+| `ISD/IR0_ISD_INTERFACE_SUPPORTED` | ISD | Versión máxima soportada por ese checkout |
 
-Los ISO de kernel de una máquina instalada viven en el hermano `IR0-machines/`,
-gestionados por `scripts/kernel_manager.py` (`make kmang`).
+IR0 exporta UAPI con `make headers_install DESTDIR=…`; un build externo de
+usuarios consume esa exportación. ISD valida la versión antes de empaquetar.
 
-| Concepto | Significado |
-|----------|-------------|
-| Workspace | `IR0/kernel-x64-userspace.iso` recién construido |
-| Default | Symlink `kernel-current.iso` — lo que arranca `make poweron` |
-| Fallback | Default anterior tras un select/install |
-| Installed | Copias en catálogo con SHA-256 |
+## Capas de configuración
 
-**Los números de build son locales a la máquina.** `.build_number` sube en cada
-link de ese host. `#1420` en un smoke y `#1450` en tu PC pueden ser el mismo
-tip de rama; no uses `#N` como id global. kmang guarda procedencia (host/user,
-git corto opcional, SHA-256) para ver si el Workspace diverge del Default.
+| Archivo | Dueño | Significado |
+|---------|-------|-------------|
+| `IR0/.config` | kernel | Kconfig |
+| `ISD/profiles/<p>/profile.conf` | ISD | login/root/fsck |
+| `ISD/profiles/<p>/packages.txt` | ISD | paquetes obligatorios |
+| `ISD/.isdconfig` | ISD | paquetes/applets opcionales |
 
-Tras cambiar el kernel: reconstruir el ISO → `make kmang` → `i` → `b`
-(o `make kernel-manager-install && make poweron`). Un ISD viejo arranca con un
-kernel nuevo pero no mostrará la sesión X11 verificada hasta actualizar el
-rootfs (`make isd-image PROFILE=desktop` / `machine-update-userspace`).
+`PROFILE=…` es un concepto de ISD. Ya no es una variable del build del kernel;
+el kernel elige `ARCH` y, en ARM64, `BOARD`.
 
-## Versionado de userspace (ISD, implementado)
+## ARM64
+
+ARM64 QEMU es un target de **kernel** (`qemu-virt`, imágenes RPi3/4/5). ISD no
+tiene hoy rootfs producto AArch64. No asumas que un `disk.img` x86-64 se puede
+adjuntar a un boot ARM64.
+
+## Contratos del lado kernel
+
+### Scripts con shebang (`#!`)
+
+`execve` / `exec_replace_current` en `kernel/elf_loader.c` reconocen una línea
+`#!` antes de validar ELF: ruta del intérprete, argumento opcional y luego la
+ruta del script agregada a `argv`. La recursión está limitada a 4; archivos no
+ELF sin shebang válido devuelven `-ENOEXEC`.
+
+### Login / getty
+
+Tras el firstboot de ISD, `etc/runit/sv/console/run` (`runit_console_run`) pide
+usuario/password. Los marcadores de smoke (`LOGIN_USER_READ`) van solo a
+**`/dev/serial`**. Emitir el tag en cada lectura vacía/`EINTR`/`EOF` generaba un
+busy-loop; corregido en ISD (`ir0_read_line` reintenta `EINTR`, `r==0` es EOF,
+tag solo con username no vacío).
+
+## Versionado de usuarios (ISD)
 
 | Capa | Mecanismo |
 |------|-----------|
@@ -101,7 +117,7 @@ rootfs (`make isd-image PROFILE=desktop` / `machine-update-userspace`).
 | Orígenes de paquetes | `/usr/share/isd/package-manifest.txt` |
 | Base userland | `USERLAND_BASE=busybox` (`coreutils` reservado) |
 | Guest | `ir0-status version \| packages \| userland` |
-| Host | `make usmang` |
+| Host | `python3 scripts/userspace_manager.py` (inspector ISD; no es target make) |
 
-IR0 se adapta al ABI Linux/musl; no se parchean clientes X upstream. Ver
+IR0 se adapta al ABI Linux/musl; no se parchean clientes upstream. Ver
 [`../DESKTOP_ABI.md`](../DESKTOP_ABI.md).

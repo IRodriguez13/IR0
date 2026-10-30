@@ -3,7 +3,7 @@
 > **Última verificación:** 2026-07-23  
 > **Fuente de verdad:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,  
 > `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,  
-> `scripts/smoke_autokill.py`, `scripts/make/class-b.mk`, targets `ktm-*` del Makefile  
+> `scripts/smoke_autokill.py`, `scripts/make/ktm.mk`
 > **Canónico (inglés):** [`../KTM.md`](../KTM.md)
 
 KTM es el **plano canónico de test y diagnóstico** del kernel IR0: eventos tipados,

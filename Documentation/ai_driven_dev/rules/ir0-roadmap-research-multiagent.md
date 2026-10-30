@@ -37,7 +37,7 @@ Quick reference when spanning ≥2 subsystems:
 |-------|------|-------------|
 | explore | Web + codebase gap analysis | Prioritized P0/P1 list with file paths |
 | generalPurpose | Implementation | Minimal diff, facades preserved |
-| generalPurpose | Tests + CTR validation | `make kernel-x64.bin`, `arch-guard`, `build-matrix-min`, `tests/host` |
+| generalPurpose | Tests + CTR validation | `make ctr`, plus `make ktest` when QEMU/ktest paths changed |
 
 Launch **2–3 agents concurrently** when workstreams are independent (e.g. syscalls vs devfs vs host tests).
 

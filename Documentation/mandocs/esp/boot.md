@@ -104,9 +104,10 @@ Fuente Mermaid: `Documentation/mandocs/diagrams/boot.mmd`
 
 ## 9. Consejos de depuración
 
-Nuevos contribuidores: `make man TOPIC=onboarding`. Boot log opcional en el host:
-`make run-bootlog` → `build/hostshare/ir0-boot.log` con `BOOT_LOG_HOSTSHARE=y`
-y QEMU `-virtfs` (`BOOT_LOG_HOSTSHARE_OK` / `_SKIP`).
+Nuevos contribuidores: `make man TOPIC=onboarding`. Boot log opcional en el
+host: activá `CONFIG_BOOT_LOG_HOSTSHARE=y` en `make menuconfig` y adjuntá un
+share 9p con tag `ir0share` vía `IR0_QEMU_EXTRA` (`BOOT_LOG_HOSTSHARE_OK` /
+`_SKIP`).
 
 Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `DRIVER_SUMMARY_OK`,
 `FIRST_BAREMETAL_BOOT*` (solo bare-metal), handoff userspace,
@@ -118,14 +119,15 @@ Tags serial: `[ARCH]`, COMP `BOOT` vía klog, `[DRIVERS]`, `DRIVER_SUMMARY_OK`,
 | Fallo montaje raíz | `block_dev_is_present(CONFIG_ROOT_BLOCK_DEVICE)`; fallback tmpfs |
 | GUI en blanco | `[BOOT] vbe_fail_reason=` (1=mb_null, 2=no_fb, 3=bad_dims, 4=map_fail) |
 | Init no encontrado | Imagen MINIX sin `/sbin/init`; usar scripts inject |
-| Sin `ir0-boot.log` en host | Hace falta `BOOT_LOG_HOSTSHARE=y` + `-virtfs`; `make help-bootlog` |
+| Sin `ir0-boot.log` en host | Hace falta `BOOT_LOG_HOSTSHARE=y` + share 9p `ir0share` vía `IR0_QEMU_EXTRA` |
 
-Build: `make kernel-x64.iso`; userspace: `make kernel-x64-userspace.iso`.
+Build: `make ir0` (kernel ISO); usuarios: construí `disk.img` con ISD y usá
+`make run DISK=…`.
 
 ## 10. Hoja de ruta futura
 
 - Arranque temprano ARM64 usa `ir0_boot_*` portable + `arm64_board` (`qemu-virt` /
-  `rpi4` / stub `rpi5`). UART RPi4 min: `make smoke-arm64-rpi4-boot`. Hello sin CRT
+  `rpi4` / stub `rpi5`). UART RPi4 min: `make run arm64 rpi4`. Hello sin CRT
   musl: fallback freestanding en `musl-aarch64-hello`.
 - Arranque SMP/APIC-first no es primario (`CONFIG_ENABLE_SMP=0`).
 - Mapa higher-half del kernel no implementado (solo mapa bajo de identidad).
