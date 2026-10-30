@@ -14,6 +14,7 @@
 
 #include "test/ktest_harness.h"
 #include "syscalls.h"
+#include "../errno.h"
 #include "../../fs/tmpfs.h"
 #include <config.h>
 #include <ir0/blockdev.h>
@@ -38,6 +39,18 @@ static int count_tabs(const char *line)
 		line++;
 	}
 	return tabs;
+}
+
+void ktest_errno_string_contract(void)
+{
+	KTEST_BEGIN("errno_string_contract");
+
+	KASSERT_EQ(strcmp(strerror(EINVAL), "Invalid argument"), 0);
+	KASSERT_EQ(strcmp(strerror(0), "Unknown error"), 0);
+	KASSERT_EQ(strcmp(strerror(-EINVAL), "Unknown error"), 0);
+	KASSERT_EQ(strcmp(strerror(ERRNO_MAX + 1), "Unknown error"), 0);
+
+	KTEST_END();
 }
 
 static int contains_text(const char *haystack, const char *needle)

@@ -57,6 +57,7 @@ void ktest_mount_multi_fs_contract(void);
 void ktest_mount_longest_prefix_contract(void);
 void ktest_mount_umount_remount_contract(void);
 void ktest_block_layer_contract(void);
+void ktest_errno_string_contract(void);
 void ktest_block_hda_read_contract(void);
 void ktest_cred_access_contract(void);
 void ktest_devfs_hci_open_contract(void);

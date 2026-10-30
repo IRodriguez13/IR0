@@ -11,10 +11,9 @@
  * Description: IR0 kernel source/header file
  */
 
-#include <errno.h>
-#include <includes/errno.h>
+#include "errno.h"
 
-const char *errno_str[] = {
+static const char *const errno_str[ERRNO_MAX + 1] = {
     [EPERM] = "Operation not permitted",
     [ENOENT] = "No such file or directory",
     [ESRCH] = "No such process",
@@ -147,3 +146,12 @@ const char *errno_str[] = {
     [ERFKILL] = "Operation not possible due to RF-kill",
     [EHWPOISON] = "Memory page has hardware error",
 };
+
+const char *strerror(int errnum)
+{
+    static const char unknown[] = "Unknown error";
+
+    if (errnum <= 0 || errnum > ERRNO_MAX || errno_str[errnum] == 0)
+        return unknown;
+    return errno_str[errnum];
+}

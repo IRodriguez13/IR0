@@ -86,6 +86,7 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_mount_umount_remount_contract,
 	  "mount_umount_remount_contract", 1 },
 	{ ktest_block_layer_contract, "block_layer_contract", 1 },
+	{ ktest_errno_string_contract, "errno_string_contract", 1 },
 	{ ktest_block_hda_read_contract, "block_hda_read_contract", 1 },
 	{ ktest_cred_access_contract, "cred_access_contract", 1 },
 	{ ktest_devfs_hci_open_contract, "devfs_hci_open_contract", 1 },
