@@ -15,14 +15,4 @@ _IR0_HOST_PORTABLE_MK := 1
 # surprises inside single-quoted strings.
 HOST_TMP ?= $(patsubst %/,%,$(or $(TMPDIR),/tmp))
 
-# GNU cp supports --reflink=auto (copy-on-write when the filesystem allows
-# it, plain copy otherwise). BSD/macOS cp does not know the flag, so detect
-# support once and fall back to a portable copy.
-CP_REFLINK := $(shell \
-	if cp --help 2>/dev/null | grep -q -- '--reflink'; then \
-		echo 'cp --reflink=auto'; \
-	else \
-		echo cp; \
-	fi)
-
 endif # _IR0_HOST_PORTABLE_MK

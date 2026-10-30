@@ -15,6 +15,7 @@
 
 #include "test_harness.h"
 
+#include <errno.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -63,9 +64,23 @@ static int run_assertion_child(void (*fn)(void), char *output, size_t out_len)
 	}
 
 	close(fds[1]);
-	n = read(fds[0], output, out_len - 1);
-	if (n > 0)
-		output[n] = '\0';
+	{
+		size_t used = 0;
+
+		while (used < out_len - 1)
+		{
+			n = read(fds[0], output + used, out_len - 1 - used);
+			if (n > 0)
+			{
+				used += (size_t)n;
+				continue;
+			}
+			if (n < 0 && errno == EINTR)
+				continue;
+			break;
+		}
+		output[used] = '\0';
+	}
 	close(fds[0]);
 
 	if (waitpid(pid, &status, 0) != pid)

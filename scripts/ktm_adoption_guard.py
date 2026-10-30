@@ -40,7 +40,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BASELINE = ROOT / "scripts" / "ktm_legacy_baseline.txt"
 KTEST_BRIDGE = ROOT / "tests" / "ktm" / "scenarios" / "ktest_bridge.c"
 KTEST_RUNNER = ROOT / "kernel" / "test" / "test_runner.c"
-KERNEL_TESTS_MK = ROOT / "scripts" / "make" / "testing.mk"
+KERNEL_TESTS_MK = ROOT / "scripts" / "make" / "ktm.mk"
 
 PID1_TEST_SUFFIXES = ("_smoke.c", "_probe.c", "_stress.c")
 

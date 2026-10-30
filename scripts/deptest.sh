@@ -22,7 +22,7 @@
 # Usage:
 #   make deptest
 #   make check-env PROFILE=desktop-x86_64
-#   make deptest PROFILE=minimal   # ISD first-boot deps (→ userspace)
+#   make deptest PROFILE=userspace  # host toolchain for external ISD builds
 #   PROFILE=hub BOARD=rpi4 ./scripts/deptest.sh
 #
 
@@ -263,7 +263,7 @@ echo "OS: ${OS_TYPE}   PROFILE=${PROFILE_DISPLAY}   BOARD=${BOARD:-—}   pm=${P
 if [ "$IN_WSL" -eq 1 ]; then
 	echo "WSL: detected — QEMU uses TCG if /dev/kvm is missing (slower, still OK)."
 	echo "     Nested KVM (optional): Win11 + %UserProfile%\\.wslconfig nestedVirtualization=true"
-	echo "     GUI: WSLg or X server; headless: make run-console / IR0_DEBUG=1"
+	echo "     GUI: WSLg or X server; headless: make run console"
 fi
 echo "=========================================="
 echo ""
@@ -388,7 +388,7 @@ need_desktop() {
 		ok_line ".config present"
 	else
 		report_issue ".config" optional \
-			"  Missing — next: make defconfig   (or: make first-boot / make ir0_defconfig PROFILE=desktop)"
+			"  Missing — next: make defconfig   (or: make menuconfig)"
 	fi
 	echo ""
 }
@@ -489,7 +489,7 @@ need_userspace() {
 		ok_line "host arch ${_host_m} (ISD product path supported)"
 		;;
 	*)
-		report_issue "host arch ${_host_m}" required 			"  make first-boot / ISD x86_64 images need an x86_64 host (or a cross musl toolchain + QEMU user).
+		report_issue "host arch ${_host_m}" required 			"  External ISD x86_64 images need an x86_64 host (or a cross musl toolchain + QEMU user).
   On WSL/ARM64 Windows: use an x86_64 distro/VM, or build only the kernel ARM profiles."
 		;;
 	esac
@@ -543,7 +543,6 @@ need_arm64() {
 
 echo "Optional (warnings only):"
 echo "-------------------------"
-optional_cmd "MinGW GCC (Windows cross)" x86_64-w64-mingw32-gcc
 if command -v python3 >/dev/null 2>&1; then
 	if python3 -c "from PIL import Image" 2>/dev/null; then
 		ok_line "PIL/Pillow"
@@ -557,26 +556,26 @@ NEXT=""
 case "${PROFILE}" in
 desktop)
 	need_desktop
-	NEXT="make defconfig && make ir0    # or: make desktop-x86_64"
+	NEXT="make defconfig && make ir0"
 	;;
 userspace)
 	need_desktop
 	need_userspace
-	NEXT="make defconfig && make kernel-x64-userspace.iso"
+	NEXT="make defconfig && make ir0    # attach an ISD-built disk.img at runtime"
 	;;
 hub)
 	need_arm64 hub
-	NEXT="make hub-rpi4    # UART min lab — not SD-flashable OS"
+	NEXT="make ir0 arm64 rpi4    # UART min lab — not SD-flashable OS"
 	;;
 watch)
 	need_arm64 watch
-	NEXT="make watch-rpi5-stub    # compile stub only"
+	NEXT="make ir0 arm64 rpi5    # compile stub only"
 	;;
 all)
 	need_desktop
 	need_userspace
 	need_arm64 hub
-	NEXT="make help-profiles"
+	NEXT="make help"
 	;;
 esac
 

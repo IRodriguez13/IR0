@@ -115,6 +115,8 @@ disk.img.*.stamp
 
 # Local kernel-maintainer index pointer (install.sh); never commit machine paths
 .kernel-maintainer-index.yaml
+.kernel-manager.lock
+disk.img.backup.*
 setup/pid1/pipeline_stress_smoke
 setup/pid1/cmd_stress_smoke
 setup/pid1/tty_raw_probe

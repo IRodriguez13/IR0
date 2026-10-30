@@ -1,246 +1,177 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-only
+#
+# unibuild.sh — compile one or more kernel translation units in isolation.
+#
+#   scripts/unibuild.sh [-cpp|-rust] FILE [FILE...]
+#
+# The object lands next to its source (foo.c -> foo.o). C and C++ files are
+# compiled in parallel up to the host CPU count; Rust uses a persistent cargo
+# workdir so libcore is not rebuilt on every invocation.
+#
+# This is a developer aid, not the kernel build graph: it never links and never
+# writes outside the source tree except under build/unibuild-rust/.
 
-# Parse flags
-BUILD_MODE="native"
-LANGUAGE="c"
+set -eu
 
+usage() {
+	cat <<'EOF'
+usage: scripts/unibuild.sh [-cpp|-rust] FILE [FILE...]
+
+  -cpp    compile C++ sources (default: C)
+  -rust   compile Rust sources through cargo/build-std
+
+C and C++ files compile in parallel. Objects are written next to each source.
+Examples:
+  make unibuild FILE="fs/tmpfs.c fs/vfs.c"
+  make unibuild-cpp FILE=cpp/examples/cpp_example.cpp
+  make unibuild-rust FILE=rust/drivers/rust_simple_driver.rs
+EOF
+}
+
+LANGUAGE=c
 while [ $# -gt 0 ]; do
-    case "$1" in
-        -win)
-            BUILD_MODE="win"
-            shift
-            ;;
-        -rust)
-            LANGUAGE="rust"
-            shift
-            ;;
-        -cpp)
-            LANGUAGE="cpp"
-            shift
-            ;;
-        *)
-            break
-            ;;
-    esac
+	case "$1" in
+	-cpp) LANGUAGE=cpp; shift ;;
+	-rust) LANGUAGE=rust; shift ;;
+	-win | -win-cpp | -win-rust)
+		echo "✗ unibuild: Windows cross-compilation was removed; use WSL." >&2
+		exit 2
+		;;
+	-h | --help) usage; exit 0 ;;
+	--) shift; break ;;
+	-*) echo "✗ unibuild: unknown option: $1" >&2; usage >&2; exit 2 ;;
+	*) break ;;
+	esac
 done
 
-# Check if files were provided after flags
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 [-win] [-rust|-cpp] <source_file1> [source_file2] [source_file3] ..."
-    echo "       Compiles one or more source files independently"
-    echo ""
-    echo "Flags:"
-    echo "  -win   Cross-compile for Windows using MinGW"
-    echo "  -rust  Compile Rust source files (future support)"
-    echo "  -cpp   Compile C++ source files (future support)"
-    echo ""
-    echo "Flags can be combined:"
-    echo "  -win -cpp    Cross-compile C++ for Windows"
-    echo "  -win -rust   Cross-compile Rust for Windows (future)"
-    exit 1
+	usage >&2
+	exit 2
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-KERNEL_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-cd "$KERNEL_ROOT" || exit 1
+ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$ROOT"
 
-SOURCE_FILES="$@"
+ARCH="${ARCH:-x86-64}"
+case "$ARCH" in
+x86_64 | amd64) ARCH=x86-64 ;;
+aarch64) ARCH=arm64 ;;
+x86-64 | arm64) ;;
+*)
+	echo "✗ unibuild: unsupported ARCH=$ARCH (use x86-64 or arm64)" >&2
+	exit 2
+	;;
+esac
 
-# Detect OS and compiler based on BUILD_MODE and LANGUAGE
-if [ "$LANGUAGE" = "rust" ]; then
-    # Rust compilation with cargo (build-std for libcore)
-    echo "===> Compiling Rust for IR0 Kernel"
-    
-    # Check if rustc and cargo are available
-    if ! command -v rustc > /dev/null 2>&1; then
-        echo "Error: Rust compiler (rustc) not found"
-        echo "Install Rust: curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh"
-        exit 1
-    fi
-    
-    if ! command -v cargo > /dev/null 2>&1; then
-        echo "Error: Cargo not found"
-        echo "Install Rust toolchain with cargo"
-        exit 1
-    fi
-    
-    # Check for rust-src component (required for build-std)
-    if ! rustup component list | grep -q "rust-src (installed)"; then
-        echo "Installing rust-src component (required for build-std)..."
-        rustup component add rust-src
-        if [ $? -ne 0 ]; then
-            echo "Error: Failed to install rust-src"
-            echo "Run: rustup component add rust-src"
-            exit 1
-        fi
-    fi
-    
-    RUST_TARGET="$KERNEL_ROOT/rust/x86_64-ir0-kernel.json"
-    
-    # Note: We use cargo instead of rustc to enable build-std
-    # This compiles libcore from source for our custom target
-    USE_CARGO=1
-    
-    if [ "$BUILD_MODE" = "win" ]; then
-        echo "Note: Cross-compiling Rust to Windows (experimental)"
-    fi
-elif [ "$LANGUAGE" = "cpp" ]; then
-    # C++ compilation
-    echo "===> Compiling C++ for IR0 Kernel"
-    
-    if [ "$BUILD_MODE" = "win" ]; then
-        # Windows cross-compilation
-        if command -v x86_64-w64-mingw32-g++ > /dev/null 2>&1; then
-            CXX="x86_64-w64-mingw32-g++"
-            CXXFLAGS="-m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics"
-            CXXFLAGS="$CXXFLAGS -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2"
-            CXXFLAGS="$CXXFLAGS -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-            # Note: Removed -Wno-pointer-to-int-cast flags to catch real issues
-            echo "Using MinGW G++ for Windows cross-compilation"
-        else
-            echo "Error: MinGW G++ cross-compiler not found"
-            echo "Install with: sudo apt-get install mingw-w64"
-            exit 1
-        fi
-    else
-        # Native compilation
-        if command -v g++ > /dev/null 2>&1; then
-            CXX="g++"
-        elif command -v clang++ > /dev/null 2>&1; then
-            CXX="clang++"
-        else
-            echo "Error: C++ compiler not found (g++ or clang++)"
-            exit 1
-        fi
-        
-        # C++ kernel flags (matching unibuild expectations)
-        CXXFLAGS="-m64 -ffreestanding -fno-exceptions -fno-rtti -fno-threadsafe-statics"
-        CXXFLAGS="$CXXFLAGS -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2"
-        CXXFLAGS="$CXXFLAGS -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-    fi
-    
-    # Add include paths for C++
-    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/includes -I$KERNEL_ROOT -I$KERNEL_ROOT/includes/ir0"
-    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/arch/common -I$KERNEL_ROOT/arch/x86-64/include"
-    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/kernel"
-    CXXFLAGS="$CXXFLAGS -I$KERNEL_ROOT/drivers -I$KERNEL_ROOT/fs -I$KERNEL_ROOT/interrupt"
-elif [ "$BUILD_MODE" = "win" ]; then
-    # Cross-compilation to Windows using MinGW (C language)
-    echo "==> Cross-compiling C for Windows with MinGW"
-    if command -v x86_64-w64-mingw32-gcc > /dev/null 2>&1; then
-        CC="x86_64-w64-mingw32-gcc"
-        ASM="nasm"
-        ASMFLAGS="-f win64"
-        CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-        # Note: Removed -Wno-pointer-to-int-cast flags to catch real issues
-        export USE_MINGW=1
-    else
-        echo "Error: MinGW cross-compiler not found"
-        echo "Install with: sudo apt-get install mingw-w64"
-        exit 1
-    fi
-elif [ "$OS" = "Windows_NT" ] || [ -n "$WINDIR" ]; then
-    # Native Windows - use GCC (MSYS2/MinGW) which supports ELF
-    CC="gcc"
-    ASM="nasm"
-    # Try ELF format first (kernel needs ELF)
-    ASMFLAGS="-f elf64"
-    CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-    # Test if ELF format works, fallback to win64 if not
-    if ! nasm -f elf64 /dev/null 2>/dev/null && ! nasm -f elf64 nul 2>/dev/null; then
-        ASMFLAGS="-f win64"
-    fi
-elif [ -n "$USE_MINGW" ] && command -v x86_64-w64-mingw32-gcc > /dev/null 2>&1; then
-    # Explicit cross-compilation from Linux using MinGW-w64
-    CC="x86_64-w64-mingw32-gcc"
-    ASM="nasm"
-    ASMFLAGS="-f win64"
-    CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
-    # Note: Removed -Wno-pointer-to-int-cast flags to catch real issues
+if [ "$ARCH" = arm64 ]; then
+	CC="${CC:-aarch64-linux-gnu-gcc}"
+	CXX="${CXX:-aarch64-linux-gnu-g++}"
+	ASM="${ASM:-aarch64-linux-gnu-gcc}"
+	ARCH_FLAGS="-mgeneral-regs-only -DARCH_ARM64"
+	ARCH_INC="-I$ROOT/arch/arm64/include"
+	ASM_FLAGS="-c"
 else
-    # Native Linux (default)
-    CC="gcc"
-    ASM="nasm"
-    ASMFLAGS="-f elf64"
-    CFLAGS="-m64 -ffreestanding -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -nostdlib -lgcc -g -Wall -Wextra -fno-stack-protector -fno-builtin"
+	CC="${CC:-gcc}"
+	CXX="${CXX:-g++}"
+	ASM="${ASM:-nasm}"
+	ARCH_FLAGS="-m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -DARCH_X86_64 -DARCH_X86"
+	ARCH_INC="-I$ROOT/arch/x86-64/include"
+	ASM_FLAGS="-f elf64 -I$ROOT/"
 fi
 
-CFLAGS="$CFLAGS -I./includes -I./ -I./includes/ir0"
-CFLAGS="$CFLAGS -I./arch/common -I./arch/x86-64/include"
-CFLAGS="$CFLAGS -I./kernel"
-CFLAGS="$CFLAGS -I./drivers -I./fs -I./interrupt"
+# Keep these in lockstep with the root Makefile. A unibuild object that is
+# compiled with different ABI, optimization or aliasing flags is worse than no
+# unibuild object at all.
+BASE_FLAGS="-ffreestanding -nostdlib -g -Wall -Wextra -fno-stack-protector -fno-builtin"
+OPT_FLAGS="-O2 -fno-strict-aliasing -fno-strict-overflow -fno-omit-frame-pointer -fno-pie -fno-pic"
+INCLUDES="-I$ROOT -I$ROOT/includes -I$ROOT/includes/uapi -I$ROOT/ktm/include"
+INCLUDES="$INCLUDES -I$ROOT/includes/ir0 -I$ROOT/mm -I$ROOT/arch/common"
+INCLUDES="$INCLUDES $ARCH_INC -I$ROOT/arch/arm64 -I$ROOT/kernel -I$ROOT/sched"
+INCLUDES="$INCLUDES -I$ROOT/drivers -I$ROOT/fs -I$ROOT/net -I$ROOT/interrupt"
+CFLAGS="$BASE_FLAGS $OPT_FLAGS $ARCH_FLAGS -DIR0_DESKTOP $INCLUDES"
+CXXFLAGS="$CFLAGS -fno-exceptions -fno-rtti -fno-threadsafe-statics"
 
-# Process each source file
-EXIT_CODE=0
-for SOURCE_FILE in $SOURCE_FILES; do
-    if [ ! -f "$SOURCE_FILE" ]; then
-        echo "Error: File not found: $SOURCE_FILE"
-        EXIT_CODE=1
-        continue
-    fi
+JOBS="${UNIBUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)}"
+case "$JOBS" in
+'' | *[!0-9]* | 0) JOBS=1 ;;
+esac
 
-    EXT="${SOURCE_FILE##*.}"
-    BASENAME=$(basename "$SOURCE_FILE" ".$EXT")
-    DIRNAME=$(dirname "$SOURCE_FILE")
-    OUTPUT_FILE="$DIRNAME/$BASENAME.o"
+compile_one() {
+	src=$1
+	if [ ! -f "$src" ]; then
+		echo "✗ unibuild: file not found: $src" >&2
+		return 1
+	fi
 
-    case "$EXT" in
-        c)
-            echo "  CC      $SOURCE_FILE"
-            $CC $CFLAGS -c "$SOURCE_FILE" -o "$OUTPUT_FILE"
-            if [ $? -eq 0 ]; then
-                echo "  OBJ     $OUTPUT_FILE"
-            else
-                EXIT_CODE=1
-            fi
-            ;;
-        cpp)
-            if [ -z "$CXX" ]; then
-                echo "Error: C++ compiler not configured"
-                echo "Use: make unibuild-cpp FILE=<file.cpp>"
-                EXIT_CODE=1
-            else
-                echo "  CXX     $SOURCE_FILE"
-                $CXX $CXXFLAGS -c "$SOURCE_FILE" -o "$OUTPUT_FILE"
-                if [ $? -eq 0 ]; then
-                    echo "  OBJ     $OUTPUT_FILE"
-                else
-                    EXIT_CODE=1
-                fi
-            fi
-            ;;
-        rs)
-            if [ -z "$USE_CARGO" ]; then
-                echo "Error: Rust compiler not configured"
-                echo "Use: make unibuild-rust FILE=<file.rs>"
-                EXIT_CODE=1
-            else
-                echo "  RUSTC   $SOURCE_FILE"
-                
-                # Check for nightly toolchain (required for build-std)
-                if ! rustup toolchain list | grep -q "nightly"; then
-                    echo "Installing nightly toolchain (required for build-std)..."
-                    rustup toolchain install nightly
-                fi
-                
-                # Create temporary cargo project for build-std
-                TEMP_DIR=$(mktemp -d)
-                TEMP_PROJECT="$TEMP_DIR/temp_rust"
-                
-                # Create project structure manually
-                mkdir -p "$TEMP_PROJECT/src"
-                mkdir -p "$TEMP_PROJECT/.cargo"
-                
-                # Copy source file
-                cp "$KERNEL_ROOT/$SOURCE_FILE" "$TEMP_PROJECT/src/lib.rs"
-                
-                # Get absolute path for target
-                TARGET_PATH=$(cd "$KERNEL_ROOT" && pwd)/rust/x86_64-ir0-kernel.json
-                
-                # Create Cargo.toml
-                cat > "$TEMP_PROJECT/Cargo.toml" << 'EOF'
+	dir=$(dirname "$src")
+	base=$(basename "$src")
+	out="$dir/${base%.*}.o"
+
+	case "$src" in
+	*.c)
+		if [ "$LANGUAGE" = cpp ]; then
+			echo "✗ unibuild: $src is C; use make unibuild" >&2
+			return 1
+		fi
+		echo "  CC      $src"
+		$CC $CFLAGS -c "$src" -o "$out"
+		;;
+	*.cpp | *.cc | *.cxx)
+		if [ "$LANGUAGE" != cpp ]; then
+			echo "✗ unibuild: $src is C++; use make unibuild-cpp" >&2
+			return 1
+		fi
+		echo "  CXX     $src"
+		$CXX $CXXFLAGS -c "$src" -o "$out"
+		;;
+	*.asm)
+		echo "  AS      $src"
+		$ASM $ASM_FLAGS "$src" -o "$out"
+		;;
+	*.s | *.S)
+		echo "  AS      $src"
+		$CC $CFLAGS -c "$src" -o "$out"
+		;;
+	*)
+		echo "✗ unibuild: unsupported source type: $src" >&2
+		return 1
+		;;
+	esac
+
+	echo "  OBJ     $out"
+}
+
+rust_build() {
+	src=$1
+	if [ ! -f "$src" ]; then
+		echo "✗ unibuild: file not found: $src" >&2
+		return 1
+	fi
+
+	command -v cargo >/dev/null 2>&1 || {
+		echo "✗ unibuild: cargo not found; install Rust (https://rustup.rs)" >&2
+		return 1
+	}
+	command -v rustup >/dev/null 2>&1 || {
+		echo "✗ unibuild: rustup not found (needed for build-std)" >&2
+		return 1
+	}
+	if ! rustup toolchain list | grep -q '^nightly'; then
+		echo "  RUSTUP  installing nightly (build-std)"
+		rustup toolchain install nightly >/dev/null 2>&1 || return 1
+	fi
+	if ! rustup component list --installed 2>/dev/null | grep -q '^rust-src'; then
+		echo "  RUSTUP  adding rust-src"
+		rustup component add rust-src >/dev/null 2>&1 || return 1
+	fi
+
+	work="$ROOT/build/unibuild-rust"
+	mkdir -p "$work/src" "$work/.cargo"
+	cp "$src" "$work/src/lib.rs"
+	cat > "$work/Cargo.toml" <<'EOF'
 [package]
-name = "temp_rust_build"
+name = "ir0_unibuild"
 version = "0.1.0"
 edition = "2021"
 
@@ -255,93 +186,67 @@ panic = "abort"
 opt-level = 2
 lto = true
 EOF
-
-                # Create .cargo/config.toml for build-std
-                cat > "$TEMP_PROJECT/.cargo/config.toml" << EOF
+	cat > "$work/.cargo/config.toml" <<'EOF'
 [unstable]
 build-std = ["core"]
 build-std-features = []
 EOF
 
-                # Build with cargo nightly
-                cd "$TEMP_PROJECT"
-                OUTPUT=$(cargo +nightly build --release --target "$TARGET_PATH" -Zbuild-std=core 2>&1)
-                BUILD_SUCCESS=$?
-                
-                if [ $BUILD_SUCCESS -eq 0 ]; then
-                    # Cargo target dir for JSON targets can vary across toolchains.
-                    TARGET_ROOT="$TEMP_PROJECT/target"
-                    TARGET_DIR=$(ls -d "$TARGET_ROOT"/*/release 2>/dev/null | head -1)
-                    RUST_LIB=""
-                    
-                    if [ -n "$TARGET_DIR" ]; then
-                        # Prefer staticlib artifact.
-                        if [ -f "$TARGET_DIR/libtemp_rust_build.a" ]; then
-                            RUST_LIB="$TARGET_DIR/libtemp_rust_build.a"
-                        fi
-                        if [ -z "$RUST_LIB" ]; then
-                            for candidate in "$TARGET_DIR"/deps/libtemp_rust_build-*.a "$TARGET_DIR"/deps/*.a; do
-                                if [ -f "$candidate" ]; then
-                                    RUST_LIB="$candidate"
-                                    break
-                                fi
-                            done
-                        fi
-                        # Fallback: accept rlib archives when staticlib is not produced.
-                        if [ -z "$RUST_LIB" ]; then
-                            if [ -f "$TARGET_DIR/libtemp_rust_build.rlib" ]; then
-                                RUST_LIB="$TARGET_DIR/libtemp_rust_build.rlib"
-                            fi
-                        fi
-                        if [ -z "$RUST_LIB" ]; then
-                            for candidate in "$TARGET_DIR"/deps/libtemp_rust_build-*.rlib "$TARGET_DIR"/deps/*.rlib; do
-                                if [ -f "$candidate" ]; then
-                                    RUST_LIB="$candidate"
-                                    break
-                                fi
-                            done
-                        fi
-                    fi
+	# cargo >= 1.9x requires an explicit opt-in for `.json` target specs.
+	json_spec=
+	if cargo +nightly -Z help 2>/dev/null | grep -q 'json-target-spec'; then
+		json_spec=-Zjson-target-spec
+	fi
 
-                    if [ -n "$RUST_LIB" ] && [ -f "$RUST_LIB" ]; then
-                        # Keep Makefile flow unchanged: output path ends with .o.
-                        cd "$KERNEL_ROOT"
-                        cp "$RUST_LIB" "$OUTPUT_FILE"
-                        echo "  OBJ     $OUTPUT_FILE"
-                    else
-                        echo "Error: Build succeeded but no output library found"
-                        if [ -n "$TARGET_DIR" ]; then
-                            echo "Looked in: $TARGET_DIR"
-                        else
-                            echo "Looked in: $TARGET_ROOT/*/release"
-                        fi
-                        EXIT_CODE=1
-                    fi
-                else
-                    echo "$OUTPUT" | grep "error"
-                    EXIT_CODE=1
-                fi
-                
-                # Cleanup
-                cd "$KERNEL_ROOT"
-                rm -rf "$TEMP_DIR"
-            fi
-            ;;
-        asm)
-            echo "  ASM     $SOURCE_FILE"
-            $ASM $ASMFLAGS "$SOURCE_FILE" -o "$OUTPUT_FILE"
-            if [ $? -eq 0 ]; then
-                echo "  OBJ     $OUTPUT_FILE"
-            else
-                EXIT_CODE=1
-            fi
-            ;;
-        *)
-            echo "Error: Unsupported file type: .$EXT"
-            echo "Supported types: .c, .cpp, .rs, .asm"
-            EXIT_CODE=1
-            ;;
-    esac
+	echo "  RUSTC   $src"
+	(
+		cd "$work"
+		cargo +nightly build --release \
+			--target "$ROOT/rust/x86_64-ir0-kernel.json" \
+			-Zbuild-std=core $json_spec
+	) || return 1
+
+	lib=$(find "$work/target" -path '*/release/libir0_unibuild.a' -type f 2>/dev/null | head -1)
+	if [ -z "$lib" ]; then
+		lib=$(find "$work/target" -path '*/release/deps/*.a' -type f 2>/dev/null | head -1)
+	fi
+	if [ -z "$lib" ]; then
+		echo "✗ unibuild: cargo succeeded but no static library was produced" >&2
+		return 1
+	fi
+
+	dir=$(dirname "$src")
+	base=$(basename "$src")
+	out="$dir/${base%.*}.o"
+	cp "$lib" "$out"
+	echo "  OBJ     $out"
+}
+
+status=0
+
+if [ "$LANGUAGE" = rust ]; then
+	for src in "$@"; do
+		rust_build "$src" || status=1
+	done
+	exit "$status"
+fi
+
+pids=""
+running=0
+for src in "$@"; do
+	compile_one "$src" &
+	pids="$pids $!"
+	running=$((running + 1))
+	if [ "$running" -ge "$JOBS" ]; then
+		for pid in $pids; do
+			wait "$pid" || status=1
+		done
+		pids=""
+		running=0
+	fi
+done
+for pid in $pids; do
+	wait "$pid" || status=1
 done
 
-exit $EXIT_CODE
+exit "$status"

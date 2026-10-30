@@ -8,7 +8,8 @@
 #   make mandocs-en / -es
 #
 
-.PHONY: sync-mandocs help-docs man
+.PHONY: sync-mandocs help-docs man mandocs mandocs-en mandocs-es \
+	mandocs-uninstall mandocs-view ai-dev-rules-install
 
 MANDOC_SYNC_LANG ?= all
 MANDOC_PREFIX ?= $(HOME)/.local
@@ -61,3 +62,33 @@ help-docs:
 	@echo "  make mandocs-view              # open installed IR0-krnl"
 	@echo "  make mandocs-uninstall"
 	@echo "  Source: Documentation/mandocs/  (pull repo, then sync-mandocs)"
+
+mandocs:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py
+
+mandocs-en:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --lang en
+
+mandocs-es:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --lang es
+
+mandocs-uninstall:
+	@python3 $(KERNEL_ROOT)/scripts/build_mandocs.py --uninstall \
+		$(if $(MANDOC_LANG),--lang $(MANDOC_LANG),) \
+		$(if $(MANDOC_PREFIX),--prefix $(MANDOC_PREFIX),)
+
+mandocs-view:
+	@lang=$${MANDOC_LANG:-$$(cat build/mandoc/last-lang 2>/dev/null || echo en)}; \
+	if [ "$$lang" = "es" ] && man -w ir0-krnl-es >/dev/null 2>&1; then \
+		man ir0-krnl-es; \
+	elif man -w ir0-krnl >/dev/null 2>&1; then \
+		man ir0-krnl; \
+	elif [ -f build/mandoc/$$lang/ir0-krnl.7 ]; then \
+		man -l build/mandoc/$$lang/ir0-krnl.7; \
+	else \
+		echo "missing manual — run: make mandocs MANDOC_LANG=$$lang"; \
+		exit 1; \
+	fi
+
+ai-dev-rules-install:
+	@python3 $(KERNEL_ROOT)/scripts/sync_ai_dev_rules.py install

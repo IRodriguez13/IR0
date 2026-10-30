@@ -13,9 +13,28 @@ KERNEL_ROOT := $(CURDIR)
 # generated .d files, which costs more than parsing this Makefile. The setting
 # is local to this process: recursive makes re-initialise their own list.
 .SUFFIXES:
+.DEFAULT_GOAL := help
 
 # Default architecture (resolved after .config load)
 ARCH ?=
+
+# Positional modifiers: `make ir0 arm64`, `make run rpi4 console`, ...
+# They are parsed here and are also declared as no-op goals at the bottom so
+# make accepts them without turning them into build prerequisites.
+IR0_ARCH_GOALS := x86-64 x86_64 amd64 arm64 aarch64
+IR0_BOARD_GOALS := qemu-virt rpi3 rpi4 rpi5
+IR0_RUN_MODES := gui console debug fullscreen gdb
+
+IR0_GOAL_ARCH := $(firstword $(filter $(IR0_ARCH_GOALS),$(MAKECMDGOALS)))
+IR0_GOAL_BOARD := $(firstword $(filter $(IR0_BOARD_GOALS),$(MAKECMDGOALS)))
+IR0_RUN_MODE := $(firstword $(filter $(IR0_RUN_MODES),$(MAKECMDGOALS)))
+
+ifneq ($(IR0_GOAL_ARCH),)
+override ARCH := $(IR0_GOAL_ARCH)
+endif
+ifneq ($(IR0_GOAL_BOARD),)
+override BOARD := $(IR0_GOAL_BOARD)
+endif
 
 CFLAGS_TARGET := -DIR0_DESKTOP
 
@@ -95,6 +114,14 @@ ifeq ($(ARCH),aarch64)
 override ARCH := arm64
 endif
 
+# BOARD only exists for ARM64. Keep qemu-virt as the default so
+# `make ir0 arm64` and `make run arm64` agree without extra flags.
+ifeq ($(ARCH),arm64)
+BOARD ?= qemu-virt
+else
+BOARD :=
+endif
+
 ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
 TOOL_DEFAULT_DISK_FS_NAME := fat32
 else ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),2)
@@ -146,32 +173,23 @@ ISO_DIR = iso
 # Targets
 ifeq ($(ARCH),arm64)
 DEFAULT_BUILD_TARGET := kernel-arm64.bin
+ifneq ($(filter rpi3 rpi4 rpi5,$(BOARD)),)
+DEFAULT_BUILD_TARGET := build/arm64-$(BOARD)/kernel8.img
+endif
 else
 DEFAULT_BUILD_TARGET := kernel-x64.iso
 endif
 
-# Product distribution (ISD). Recipes live in scripts/make/isd.mk.
-# Compat: IR0_USERSPACE_ROOT/URL alias IR0_ISD_ROOT/URL.
-# Empty MAKECMDGOALS is tab-completion (`make -qp`) and a bare `make`.
-# Those must not parse the 6k-line QA catalog. Name a non-lean goal to load it.
-# ARM64 link products live in the QA catalog today, so naming one must load
-# that catalog. Only x86_64 stays in the lean set.
-IR0_LEAN_GOALS := all ir0 clean help \
-	kernel-x64.bin kernel-x64.iso \
-	print-build-objects build-graph-audit \
-	headers_install compile-commands disasm \
-	menuconfig menuconfig-en defconfig arch-guard
-
-IR0_NONLEAN_GOALS := $(filter-out $(IR0_LEAN_GOALS),$(MAKECMDGOALS))
-
-# Portable host helpers (HOST_TMP, CP_REFLINK) must load before any recipe
-# fragment that expands them.
+# Portable host helpers (HOST_TMP) must load before any recipe fragment that
+# expands them.
 -include scripts/make/host-portable.mk
 
--include scripts/make/ir0_public.mk
-ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
--include scripts/make/isd.mk
--include scripts/make/release.mk
+# ARM64 keeps its hermetic freestanding build graph in a fragment. Parse it
+# only for an ARM64 invocation so x86 builds never pay for it.
+ifeq ($(ARCH),arm64)
+ARM64_BOARD := $(BOARD)
+-include scripts/make/arm64.mk
+-include scripts/make/arm64-board.mk
 endif
 
 all: $(DEFAULT_BUILD_TARGET)
@@ -269,116 +287,14 @@ LDFLAGS = -m aarch64elf -T arch/arm64/linker.ld -Map=kernel-arm64.map
 endif
 
 
-# CONFIGURACIÓN QEMU (ABSTRACCIÓN)
-
-# Comandos QEMU por arquitectura
-QEMU_64_CMD = qemu-system-x86_64
-
-# Configuración QEMU básica
-QEMU_MEMORY = 512M
-QEMU_FLAGS = -no-reboot -no-shutdown
-QEMU_TIMEOUT = 30
-
-# Display profiles (GTK flags vary by QEMU version — probe once).
-QEMU_DISPLAY_SDL = -display sdl2
-QEMU_DISPLAY_NONE = -display none
-QEMU_NGRAPHIC = -nographic
-QEMU_NAME = -name IR0/Unix-x86_64
-# Guest scale-2 glyphs are sharp; avoid host soft-scale blur.
-QEMU_GTK_BASE = gtk,zoom-to-fit=off
-# Probe optional GTK flags; never fail the build if unsupported.
-QEMU_DISPLAY_GTK = $(shell \
-	_opts='$(QEMU_GTK_BASE)'; \
-	_help="$$( $(QEMU) -display help 2>&1 || true )"; \
-	if printf '%s\n' "$$_help" | grep -q show-menubar; then _opts="$$_opts,show-menubar=off"; fi; \
-	if printf '%s\n' "$$_help" | grep -q show-tabs; then _opts="$$_opts,show-tabs=off"; fi; \
-	echo "-display $$_opts $(QEMU_NAME)")
-QEMU_DISPLAY_GTK_DEBUG = -display gtk $(QEMU_NAME)
-
-# Configuración por defecto
-QEMU_DISPLAY = $(QEMU_DISPLAY_GTK)
-QEMU_SERIAL = -serial stdio
-QEMU_TEST_DISPLAY = $(QEMU_DISPLAY_NONE)  # Para pruebas automáticas
-
-# Opciones de debugging y logging
-QEMU_DEBUG_INT = -d int,cpu_reset
-QEMU_DEBUG_EXEC = -d exec
-QEMU_DEBUG_GUEST = -d guest_errors
-QEMU_DEBUG_PAGE = -d page
-QEMU_DEBUG_ALL = -d int,cpu_reset,exec,guest_errors,page
-QEMU_LOG_FILE = -D qemu_debug.log
-
-# Hardware soportado por IR0 Kernel
-# Network: RTL8139
-# User-mode networking: permite UDP pero ICMP saliente está limitado
-# Para mejor soporte de ping, usar TAP networking (ver QEMU_NET_RTL8139_TAP)
-QEMU_NET_RTL8139 = -netdev user,id=net0 -device rtl8139,netdev=net0
-
-# TAP networking: Permite ping bidireccional (requiere permisos root y bridge configurado)
-# Uso: 1) Crear bridge: sudo ip link add br0 type bridge
-#      2) Agregar interfaz física: sudo ip link set eth0 master br0 (o wlan0)
-#      3) Crear TAP: sudo ip tuntap add tap0 mode tap
-#      4) Agregar TAP al bridge: sudo ip link set tap0 master br0
-#      5) Activar interfaces: sudo ip link set br0 up && sudo ip link set tap0 up
-#      6) Usar: make run-tap (o cambiar QEMU_NET_ALL a usar QEMU_NET_RTL8139_TAP)
-QEMU_NET_RTL8139_TAP = -netdev tap,id=net0,ifname=tap0,script=no,downscript=no -device rtl8139,netdev=net0
-ifneq ($(CONFIG_ENABLE_NETWORKING),n)
-QEMU_NET_ALL = $(QEMU_NET_RTL8139)
-else
-QEMU_NET_ALL =
-endif
-
-# Audio: Sound Blaster 16 + Adlib (QEMU 8+ needs audiodev; ISA on default pc).
-# Default backend is PulseAudio so the Linux host hears guest PCM (Doom /dev/audio).
-# CI / headless: QEMU_AUDIO_BACKEND=none. Alternatives: alsa, sdl, pipewire.
-QEMU_AUDIO_BACKEND ?= pa
-QEMU_AUDIO_DEV = -audiodev $(QEMU_AUDIO_BACKEND),id=snd0
-QEMU_AUDIO_SB16 = $(QEMU_AUDIO_DEV) -device sb16,audiodev=snd0
-QEMU_AUDIO_ADLIB = -device adlib,audiodev=snd0
-# Silent audiodev for automated smokes (no host mixer required).
-QEMU_AUDIO_DEV_SILENT = -audiodev none,id=snd0
-QEMU_AUDIO_SB16_SILENT = $(QEMU_AUDIO_DEV_SILENT) -device sb16,audiodev=snd0
-ifneq ($(CONFIG_ENABLE_SOUND),n)
-QEMU_AUDIO_ALL = $(QEMU_AUDIO_SB16) $(QEMU_AUDIO_ADLIB)
-else
-QEMU_AUDIO_ALL =
-endif
-
-# Storage: ATA/IDE disk (product run uses IR0_DISK → ISD image; smokes may override)
+# QEMU / runtime
+#
+# `make run` delegates every flag to scripts/run_qemu.sh so the launcher can be
+# used from any shell and never builds or touches ISD. Only the test runner
+# needs the raw binary name here.
+QEMU_64_CMD ?= qemu-system-x86_64
+SMOKE_QEMU_RUN ?= bash scripts/smoke_qemu_run.sh
 IR0_DISK ?= disk.img
-# When 1, local run/smokes reuse DISK + inject stamps (skip stamp rm). CI leaves unset/0.
-IR0_DEV_PERSIST ?= 0
-# Dev disk image (override to ISD development disk.img when persist=1).
-ifeq ($(IR0_DEV_PERSIST),1)
-  _ISD_DEV_DISK := $(IR0_USERSPACE_ROOT)/out/x86_64/images/development/disk.img
-  ifneq ($(wildcard $(_ISD_DEV_DISK)),)
-    IR0_DEV_DISK := $(_ISD_DEV_DISK)
-  else
-    IR0_DEV_DISK ?= $(IR0_DISK)
-  endif
-else
-  IR0_DEV_DISK ?= $(IR0_DISK)
-endif
-QEMU_STORAGE_IDE = -drive file=$(IR0_DISK),format=raw,if=ide,index=0
-
-# Serial: COM1 para debug
-QEMU_SERIAL_COM1 = -serial stdio
-
-# Guest outb(0xf4) → QEMU process exit (halt/poweroff). Needed with -no-shutdown.
-QEMU_ISA_DEBUG_EXIT = -device isa-debug-exit,iobase=0xf4,iosize=0x04
-
-QEMU_HW_IR0_ALL = $(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT)
-
-# Full host IR0 tree at guest /heart/dennis/src (writable; long names OK).
-# Default on for interactive run*; IR0_DENNIS_9P=0 to skip.
-IR0_DENNIS_9P ?= 1
-QEMU_DENNIS_9P = -fsdev local,id=dennisfs,path=$(KERNEL_ROOT),security_model=none \
-	-device virtio-9p-pci,fsdev=dennisfs,mount_tag=dennis,disable-modern=on
-ifeq ($(IR0_DENNIS_9P),0)
-QEMU_DENNIS_9P =
-endif
-
-QEMU_64_FLAGS = -cdrom
 
 # KERNEL OBJECTS 
 
@@ -527,6 +443,7 @@ endif
 
 # In-kernel test suite: linked only in kernel-x64-test.bin (make tests)
 KERNEL_TEST_OBJS = \
+	kernel/errno.o \
 	kernel/test/test_runner.o \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
@@ -1004,15 +921,6 @@ CFLAGS += -DCONFIG_TICK_RATE_HZ=$(CONFIG_TICK_RATE_HZ)
 # Product boot always loads /sbin/init (legacy KERNEL_DEBUG_SHELL removed).
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
 
-# Force /sbin/init boot path for userspace smoke ISO (overrides autoconf in config.h)
-ifneq ($(USERSPACE_INIT_BUILD),)
-CFLAGS += -DIR0_USERSPACE_INIT_BOOT=1
-# USERSPACE_EAGER_MM=1 disables lazy anon mmap + brk (bisect only; default is lazy).
-ifeq ($(USERSPACE_EAGER_MM),1)
-CFLAGS += -DCONFIG_LAZY_ANON_MMAP=0 -DCONFIG_LAZY_BRK_HEAP=0
-endif
-endif
-
 # Architecture source inventories and their exceptional freestanding rules.
 -include scripts/make/arch-sources.mk
 
@@ -1137,12 +1045,6 @@ ifeq ($(ARCH),arm64)
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-# Keep the image blobs separate from their C loaders.
-arch/arm64/sources/hello_embed.o: arch/arm64/sources/hello_embed.S $(MUSL_AARCH64_HELLO)
-	@$(MAKE) -s musl-aarch64-hello
-	@echo "  AS      $<"
-	@$(CC) $(CFLAGS) -c arch/arm64/sources/hello_embed.S -o $@
-
 arch/arm64/asm/context/switch_early.o: arch/arm64/asm/context/switch_early.S
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
@@ -1164,14 +1066,22 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 		echo "1" > .build_number; \
 	fi
 
-# ARM64 has target-local, hermetic graphs in testing.mk.  The public image is
-# the validated aggregate: unlike kernel-arm64-boot.bin it contains the common
-# MM/process slice and no allocator/runtime/link mocks or weak providers.  It is
-# still staged because early syscall/rootfs providers remain.
+# ARM64 public image: the validated aggregate contains the common MM/process
+# slice and no allocator/runtime/link mocks or weak providers. Early syscall
+# and rootfs providers remain staged.
 kernel-arm64.bin: kernel-arm64-all.bin arm64-common-core-compile arm64-provider-audit
 	@echo "  COPY    $@ (validated ARM64 aggregate)"
 	@cp kernel-arm64-all.bin $@
 	@echo "✓ Kernel linked: $@ (common-core aggregate; early providers remain)"
+
+# Raspberry Pi firmware loads a raw kernel8.img at 0x80000.
+ifneq ($(filter rpi3 rpi4 rpi5,$(BOARD)),)
+build/arm64-$(BOARD)/kernel8.img: kernel-arm64-$(BOARD)-min.bin
+	@mkdir -p $(@D)
+	@echo "  OBJCOPY $< → $@"
+	@aarch64-linux-gnu-objcopy -O binary $< $@
+	@echo "✓ Board image ready: $@"
+endif
 
 # Create ISO
 kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
@@ -1284,7 +1194,8 @@ endif
 # BUILD TARGETS
 # ============================================
 
-# Objetivo principal: warnings como errores (replica CI / toolchains estrictos).
+# `ir0` is the single build entry point. It compiles with -Werror and selects
+# the artifact from ARCH/BOARD: x86 ISO, ARM64 aggregate, or board kernel8.img.
 ir0: CFLAGS += -Werror
 
 ifeq ($(CONFIG_TOOL_AUTO_RUN_DEPTEST),y)
@@ -1293,181 +1204,30 @@ else
 IR0_PRECHECK_TARGETS :=
 endif
 
-# Default target
 ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
 
-# Windows build target
-windows:
-	@echo "Building IR0 Kernel for Windows..."
-	@$(MAKE) -f Makefile.win ir0
+# ============================================
+# RUN
+# ============================================
 
-windows-clean:
-	@echo "Cleaning Windows build artifacts..."
-	@$(MAKE) -f Makefile.win clean
+# `run` only launches an artifact that is already on disk. The launcher
+# resolves ARCH/BOARD and refuses to start if the product is missing; it never
+# invokes make and never touches ISD.
+#
+#   make run                 GUI (x86) / serial (ARM64)
+#   make run console         -nographic
+#   make run debug           QEMU guest-error/int log + monitor
+#   make run fullscreen      GTK full screen
+#   make run gdb             wait for GDB on localhost:1234
+#   make run arm64 rpi4      board image under build/arm64-rpi4/
+RUN_MODE := $(or $(IR0_RUN_MODE),gui)
 
-# QEMU COMMANDS
+run:
+	@ARCH="$(ARCH)" BOARD="$(BOARD)" ./scripts/run_qemu.sh $(RUN_MODE)
 
-# Run with GUI and disk (default) - ALL IR0 SUPPORTED HARDWARE
-# Note: This target does NOT call clean-net or rebuild with special flags
-# It simply runs the existing kernel ISO. Use 'make run-tap' for TAP networking.
-# Product console: ISD-owned disk for PROFILE (no per-binary inject).
-# First time: make first-boot PROFILE=minimal && make run PROFILE=minimal
-# Legacy inject: IR0_LEGACY_USERSPACE=1 make run  (load-userspace-*)
-# Ungrab mouse/keyboard in QEMU GTK: Ctrl+Alt+G (SETUP.md).
-run: kernel-x64-userspace.iso
-	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
-		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then \
-			$(MAKE) -s load-userspace-devtools; \
-		else \
-			$(MAKE) -s load-userspace-runit; \
-		fi; \
-		echo "Running IR0/Unix (LEGACY inject → disk.img)..."; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot \
-			$(QEMU_DISPLAY); \
-	else \
-		$(MAKE) run-isd; \
-	fi
-
-# Run with GUI and serial debug output - ALL IR0 SUPPORTED HARDWARE
-run-debug: kernel-x64-userspace.iso
-	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
-		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then $(MAKE) -s load-userspace-devtools; \
-		else $(MAKE) -s load-userspace-runit; fi; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot -no-shutdown \
-			$(QEMU_DISPLAY_GTK_DEBUG) \
-			-serial stdio \
-			-monitor telnet:127.0.0.1:1234,server,nowait \
-			-d guest_errors,int $(QEMU_LOG_FILE); \
-	else \
-		$(MAKE) -s ensure-isd-disk; \
-		echo "Running IR0+ISD debug (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
-			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot -no-shutdown \
-			$(QEMU_DISPLAY_GTK_DEBUG) \
-			-serial stdio \
-			-monitor telnet:127.0.0.1:1234,server,nowait \
-			-d guest_errors,int $(QEMU_LOG_FILE); \
-	fi
-
-# run-bootlog: defined in scripts/make/hostshare-boot.mk (serial + optional 9p boot log).
-# Human interactive with serial in-terminal: make run-debug.
-
-run-fullscreen: kernel-x64-userspace.iso
-	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
-		if [ "$${IR0_WITH_DEVTOOLS:-1}" = "1" ]; then $(MAKE) -s load-userspace-devtools; \
-		else $(MAKE) -s load-userspace-runit; fi; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot \
-			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
-	else \
-		$(MAKE) -s ensure-isd-disk; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
-			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) $(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot \
-			-display gtk,zoom-to-fit=on,full-screen=on $(QEMU_NAME); \
-	fi
-
-# Run in console mode (-nographic). Product path: ISD disk for PROFILE.
-# Legacy inject: IR0_LEGACY_USERSPACE=1 make run-console
-run-console: kernel-x64-userspace.iso
-	@if [ "$${IR0_LEGACY_USERSPACE:-0}" = "1" ]; then \
-		$(MAKE) -s load-userspace-runit; \
-		echo "Running IR0/Unix console (LEGACY inject → disk.img)..."; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			$(QEMU_HW_IR0_ALL) $(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot -no-shutdown \
-			$(QEMU_NGRAPHIC); \
-	else \
-		$(MAKE) -s ensure-isd-disk; \
-		echo "Running IR0+ISD console (PROFILE=$(ISD_PROFILE) DISK=$(IR0_ISD_DISK))..."; \
-		qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-			-drive file=$(IR0_ISD_DISK),format=raw,if=ide,index=0 \
-			$(QEMU_NET_ALL) $(QEMU_AUDIO_ALL) $(QEMU_SERIAL_COM1) $(QEMU_ISA_DEBUG_EXIT) \
-			$(QEMU_DENNIS_9P) \
-			-m 512M -no-reboot -no-shutdown \
-			$(QEMU_NGRAPHIC); \
-	fi
-
-# Run with TAP networking (permite ping bidireccional, requiere root y bridge configurado)
-# Pasos previos (bridge y TAP):
-#   1. sudo ip link add br0 type bridge
-#   2. sudo ip link set eth0 master br0  (reemplaza eth0 con tu interfaz)
-#   3. sudo ip tuntap add tap0 mode tap
-#   4. sudo ip link set tap0 master br0
-#   5. sudo ip link set br0 up && sudo ip link set tap0 up
-run-tap: load-userspace-runit
-	@echo "🚀 Running IR0 Kernel with TAP networking (full ICMP support)..."
-	@echo "   Hardware: RTL8139, ATA/IDE, Serial, PS/2, VGA (audio disabled)"
-	@echo "   ⚠️  Requires: root permissions and TAP interface configured"
-	@if [ ! -c /dev/net/tun ]; then \
-		echo "ERROR: TUN/TAP device not available. Install: sudo modprobe tun"; \
-		exit 1; \
-	fi
-	@echo "   📝 Building kernel with TAP networking support (auto-configure IP)..."
-	@$(MAKE) clean-net 2>/dev/null || true
-	@$(MAKE) CFLAGS="$(CFLAGS) -DIR0_TAP_NETWORKING" kernel-x64-userspace.iso
-	@echo "   🎮 Starting QEMU (audio disabled to avoid ALSA errors)..."
-	sudo qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_NET_RTL8139_TAP) $(QEMU_STORAGE_IDE) $(QEMU_SERIAL_COM1) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY) \
-		$(QEMU_DEBUG_GUEST) $(QEMU_LOG_FILE)
-
-# Run with ICMP ping support (user-mode networking, no TAP/bridge needed)
-# Enables unprivileged ICMP sockets via sysctl so QEMU SLiRP can forward ping.
-# Only needs sudo once to set the sysctl; QEMU itself runs unprivileged.
-# Guest IP: 10.0.2.15, Gateway/DNS: 10.0.2.2 (always pingable)
-# Internet: ping 8.8.8.8 works after sysctl is set.
-run-ping: kernel-x64-userspace.iso load-userspace-runit
-	@echo "  PING    Checking ICMP socket permissions..."
-	@CURRENT=$$(cat /proc/sys/net/ipv4/ping_group_range 2>/dev/null); \
-	if echo "$$CURRENT" | grep -q "^0[[:space:]]"; then \
-		echo "          ping_group_range already configured: $$CURRENT"; \
-	else \
-		echo "          Setting net.ipv4.ping_group_range (requires sudo once)..."; \
-		sudo sysctl -w net.ipv4.ping_group_range="0 2147483647" || { \
-			echo "ERROR: Could not set ping_group_range. Run manually:"; \
-			echo "  sudo sysctl -w net.ipv4.ping_group_range=\"0 2147483647\""; \
-			exit 1; \
-		}; \
-	fi
-	@echo "  PING    Launching QEMU with user-mode networking (ICMP enabled)"
-	@echo "          Guest: 10.0.2.15 | Gateway: 10.0.2.2 | DNS: 10.0.2.3"
-	@echo "          Try: ping 10.0.2.2   (gateway, always works)"
-	@echo "          Try: ping 8.8.8.8    (internet, needs sysctl)"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY)
-
-# Debug mode (detailed QEMU logging) - ALL IR0 SUPPORTED HARDWARE
-debug: kernel-x64-userspace.iso load-userspace-runit
-	@echo "Running IR0 Kernel (debug) with all supported hardware..."
-	@echo "   Hardware: RTL8139, SB16, ATA/IDE, Serial, PS/2, VGA"
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_HW_IR0_ALL) \
-		-m 512M -no-reboot -no-shutdown \
-		$(QEMU_DISPLAY) \
-		-d int,cpu_reset,guest_errors $(QEMU_LOG_FILE)
-
-# QEMU con servidor GDB: inspección de memoria, breakpoints, single-step.
-run-gdb: kernel-x64-userspace.iso load-userspace-runit
-	@echo "  GDB     QEMU waiting for GDB on localhost:1234"
-	@echo "          In another terminal run:"
-	@echo "            gdb -x scripts/kernel.gdb"
-	@echo "          Breakpoints on kmain and kernel_panic are set automatically."
-	qemu-system-x86_64 -cdrom kernel-x64-userspace.iso \
-		$(QEMU_SERIAL_COM1) -drive file=disk.img,format=raw,if=ide,index=0 \
-		-m 512M -no-reboot -no-shutdown -display none -net none \
-		-s -S
+# Historical mode names remain valid shortcuts (`make debug` == run debug).
+.PHONY: gui console debug fullscreen gdb
+gui console debug fullscreen gdb: run
 
 # Create disk image (wrapper for scripts/create_disk.sh)
 # Usage: make create-disk [FS=minix] [SIZE=200]
@@ -1509,21 +1269,11 @@ disk-reset:
 load-init:
 	@./scripts/load_init.sh $(FS) $(DISK) $(INIT)
 
--include scripts/make/profiles.mk
+# Focused target fragments. Each one is small and always parsed; the old QA
+# catalog is gone, so every goal stays in the same fast parse path.
 -include scripts/make/docs.mk
--include scripts/make/pre-submit.mk
--include scripts/make/hostshare-boot.mk
--include scripts/make/boot-audio.mk
--include scripts/make/class-b.mk
--include scripts/make/arm64-board.mk
-
-# `clean` is a lean goal: keep it out of the QA catalog.
+-include scripts/make/ktm.mk
 -include scripts/make/clean.mk
-
-# QA / smoke / KTM: parse only when a non-lean goal is named.
-ifneq ($(strip $(IR0_NONLEAN_GOALS)),)
--include scripts/make/testing.mk
-endif
 
 .PHONY: arch-guard
 arch-guard:
@@ -1545,11 +1295,6 @@ clip-status:
 	@chmod +x scripts/ir0-clip.sh
 	@scripts/ir0-clip.sh status
 
-
-# Clean only network objects
-clean-net:
-	@echo "Cleaning network objects for TAP rebuild..."
-	@rm -f net/*.o
 
 # HELP
 
@@ -1626,133 +1371,59 @@ help:
 	@echo "║               IR0 KERNEL - BUILD SYSTEM                    ║"
 	@echo "╚════════════════════════════════════════════════════════════╝"
 	@echo ""
-	@echo "Start here (new clone):"
-	@echo "  make first-boot PROFILE=minimal   # deps + clone ISD + image + ISO"
-	@echo "  make poweron PROFILE=minimal      # persistent installed machine"
-	@echo "  make check-env && make defconfig && make ir0"
-	@echo "  make sync-mandocs && make man TOPIC=onboarding"
-	@echo "  make help-profiles         # kernel board profiles (desktop | hub | watch)"
-	@echo "  make pre-submit            # local contributor gate (no push)"
-	@echo ""
-	@echo "ISD distribution (sibling ../ISD — scripts/make/isd.mk):"
-	@echo "  make first-boot PROFILE=minimal|development"
-	@echo "  make isdconfig PROFILE=minimal    # extras (.isdconfig)"
-	@echo "  make isd / isd-rootfs / isd-image PROFILE=…"
-	@echo "  make poweron PROFILE=minimal      # boots persistent IR0-machines disk"
-	@echo "  make kmang                         # kernel manager TUI"
-	@echo "  make usmang                        # userspace manager"
-	@echo "  make init-cap PROFILE=minimal-openrc   # serial boot capture → out/init-boot-capture/"
-	@echo "  make init-smoke PROFILE=minimal-sysvinit # QEMU boot smoke (init contract)"
-	@echo "  make init-smoke-matrix             # runit + sysvinit + openrc smokes (x86_64)"
-	@echo "  make usmang-verify PROFILE=minimal # non-interactive ISD contract check"
-	@echo "  make ci                            # pre-push: fast + Docker E2E"
-	@echo "  make ci-fast                       # ~1 min unit/arch/contracts only"
-	@echo "  make ci-docker                     # Docker E2E on bind-mounted WIP"
-	@echo "  make ci-local                      # alias for ci"
-	@echo "  make ci-local-fast                 # alias for ci-fast"
-	@echo "  make ci-local-docker               # alias for ci-docker"
-	@echo "  make ci-local-boot                 # + host ISO/kmang/QEMU/guest probes"
-	@echo "  make ci-local-rc                   # post-push: git clone fresh-clone-check"
-	@echo "  make release-check PROFILE=minimal     # Tier-1 integration gate (no QEMU)"
-	@echo "  make release-check-clean PROFILE=minimal"
-	@echo "  make release-check-container           # Docker: git clone IR0+ISD (no bind mounts)"
-	@echo "  make release-check-container-local     # Docker: bind-mount WIP tree (dev only)"
-	@echo "  make release-check-boot PROFILE=minimal   # Tier 1.5: ISO + kmang verify + QEMU + guest probes"
-	@echo "  make release-check-boot-clean PROFILE=minimal"
-	@echo "  make release-check-boot-container      # Docker git clone + Tier 1 + boot + guest probes"
-	@echo "  make fresh-clone-check PROFILE=minimal # RC gate (optional RELEASE_CHECK_DOUBLE=1)"
-	@echo "  Legacy inject (smokes): IR0_LEGACY_USERSPACE=1 make run"
-	@echo ""
-	@echo "Profiles / images (scripts/make/profiles.mk):"
-	@echo "  make help-profiles"
-	@echo "  make desktop-x86_64 | hub-rpi4 | watch-rpi5-stub"
-	@echo "  make ir0_defconfig PROFILE=… [BOARD=…]"
-	@echo "  make sync-menuconfig | sync-menuconfig-defconfig"
-	@echo "  make mandocs-from-menuconfig MANDOC_LANG=en   # or: menuconfig key M"
-	@echo ""
-	@echo "Docs (man pages from Documentation/mandocs):"
-	@echo "  make sync-mandocs | man TOPIC=boot | help-docs | mandocs-en"
-	@echo ""
 	@echo "Build:"
-	@echo "  make ir0              Build kernel ISO (-Werror)"
-	@echo "  make all              Build kernel ISO"
-	@echo "  make windows          Build kernel for Windows (cross-compile)"
-	@echo "  make clean            Clean all build artifacts"
+	@echo "  make ir0                     x86-64 kernel ISO (default)"
+	@echo "  make ir0 arm64               ARM64 qemu-virt aggregate"
+	@echo "  make ir0 arm64 rpi4          ARM64 board image (rpi3|rpi4|rpi5)"
+	@echo "  make defconfig               Write setup/defconfig → .config"
+	@echo "  make menuconfig              Curses configuration TUI"
+	@echo "  make menuconfig-en|-es       Menuconfig in English / Spanish"
+	@echo "  make clean                   Remove objects, images and generated headers"
 	@echo ""
-	@echo "Run:"
-	@echo "  make run              Run with GUI + disk (recommended)"
-	@echo "  make run PROFILE=minimal|development   ISD product disk"
+	@echo "Run (launches an already built artifact; never builds):"
+	@echo "  make run                     GUI on x86, serial on ARM64"
+	@echo "  make run console             -nographic"
+	@echo "  make run debug               QEMU guest-error/int log + monitor"
+	@echo "  make run fullscreen          GTK full screen"
+	@echo "  make run gdb                 Wait for GDB on localhost:1234"
+	@echo "  make run arm64 rpi4          Boot build/arm64-rpi4/kernel8.img"
 	@echo ""
-	@echo "Testing (scripts/make/testing.mk — see scripts/test_catalog.yaml):"
-	@echo "  make test             Interactive test TUI (pick suites, R run)"
-	@echo "  make test-list        List catalog suites"
-	@echo "  make test-run SUITE=host,ktest   Non-interactive (CI / agents)"
-	@echo "  make ctr              CTR gates: kernel + arch-guard + matrix-min + host"
-	@echo "  make test-fast        arch-guard + tests/host only"
-	@echo "  make kernel-tests     In-kernel ktest suite (QEMU)"
-	@echo "  make smoke-tier1      Tier-1: runit boot + ash interactive"
-	@echo "  make release-0.0.1    Release 0.0.1 gate"
-	@echo "  scripts/ir0-qa.sh help   Extended QA / GUI runs"
+	@echo "Kernel tests and gates:"
+	@echo "  make ktest                   In-kernel ktest suite in QEMU"
+	@echo "  make test                    Interactive test TUI"
+	@echo "  make test-list               List catalog suites"
+	@echo "  make test-run SUITE=host,ktest"
+	@echo "  make ctr                     kernel + arch-guard + matrix-min + host tests"
+	@echo "  make ktm-check               Host tests + KTM invariants"
+	@echo "  make arch-guard              Architecture boundary guard"
+	@echo "  make build-matrix-min        Minimal compile matrix (restores .config)"
+	@echo "  make tests | health          Build harnesses / full kernel health"
 	@echo ""
-	@echo "Debug (off by default; rebuild kernel after change):"
-	@echo "  IR0_DEBUG_PMM=1       PMM FREE/RECLAIM traces"
-	@echo "  IR0_DEBUG_WAIT=1      WAIT_EXIT_AUDIT / CTX resume traces"
-	@echo "  IR0_DEBUG_PROC=1      Process lifecycle traces"
+	@echo "Documentation:"
+	@echo "  make sync-mandocs            Rebuild + install man pages (no sudo)"
+	@echo "  make man TOPIC=boot          Open IR0-boot without MANPATH setup"
+	@echo "  make mandocs | mandocs-en|es Build manuals"
+	@echo "  make mandocs-view            Open installed IR0-krnl"
+	@echo "  make ai-dev-rules-install    Install tracked rules into .cursor/"
 	@echo ""
-	@echo "Dev Tooling:"
-	@echo "  make format           Format all C/H files with clang-format"
-	@echo "  make analyze          Run cppcheck (warning,style) if installed"
-	@echo "  make compile-commands Generate compile_commands.json for LSP/IDE"
-	@echo "  make disasm           Disassemble kernel binary (objdump -d -S)"
-	@echo "  make stack-usage      Rebuild with -fstack-usage and show top consumers"
-	@echo "Build uses -j$(PARALLEL_JOBS) by default (override: make -j1 or PARALLEL_JOBS=4)."
+	@echo "Develop:"
+	@echo "  make format                  clang-format over C/H sources"
+	@echo "  make compile-commands        compile_commands.json for LSP"
+	@echo "  make disasm                  objdump -d -S kernel-x64.bin"
+	@echo "  make unibuild FILE=fs/tmpfs.c"
+	@echo "  make unibuild-cpp FILE=cpp/examples/cpp_example.cpp"
+	@echo "  make unibuild-rust FILE=rust/drivers/rust_simple_driver.rs"
+	@echo "  make unibuild-clean FILE=fs/tmpfs.c"
+	@echo "  make headers_install         Export includes/uapi to DESTDIR"
 	@echo ""
 	@echo "Utilities:"
-	@echo "  make menuconfig       Kernel configuration menu (curses TUI)"
-	@echo "  make menuconfig-en    Open menuconfig with English UI"
-	@echo "  make menuconfig-es    Open menuconfig with Spanish UI"
-	@echo "  make defconfig        Write default .config (all features enabled)"
-	@echo "  make sync-menuconfig  Merge new Kconfig symbols into .config (safe)"
-	@echo "  make sync-menuconfig-defconfig  Refresh setup/defconfig from Kconfig"
-	@echo "  make sync-menuconfig-check      Dry-run: show config drift vs Kconfig"
-	@echo "  make check-env | deptest   Host env diagnostic (default desktop-x86_64)"
-	@echo "  make deptest PROFILE=desktop-x86_64|userspace|minimal|hub-rpi4|watch|all"
-	@echo "  make pre-submit [SUBSYSTEM=mm|net|arm64]   Local gate → PRE_SUBMIT_OK"
-	@echo "  make tests | kernel-memsafe | kernel-analyze | health | arch-guard"
-	@echo "  make ktm-check | linux-abi-audit | ktm-report"
-	@echo "  make create-disk | load-init | disk-reset"
-	@echo "  IR0_DEV_PERSIST=1     Reuse disk/stamps across local smokes (not CI)"
-	@echo "  make mandocs | mandocs-en | mandocs-es | help-docs"
-	@echo "  make help             Show this help"
+	@echo "  make check-env | deptest     Host environment diagnostic"
+	@echo "  make create-disk [FS=minix] [SIZE=200]"
+	@echo "  make delete-disk | disk-reset | load-init"
+	@echo "  make sync-menuconfig | sync-menuconfig-defconfig"
 	@echo ""
-	@echo "Extern Drivers (Multi-Language):"
-	@echo "  make en-ext-drv       Enable example drivers for next build"
-	@echo "  make dis-ext-drv      Disable example drivers"
-	@echo "  Note: Extern drivers are optional and disabled by default"
-	@echo ""
-	@echo "Unibuild - Isolated Compilation:"
-	@echo "  C files (can compile multiple at once):"
-	@echo "    make unibuild FILE=\"file1.c file2.c\""
-	@echo "    make unibuild-win FILE=file.c                 (Windows)"
-	@echo ""
-	@echo "  C++ files (can compile multiple at once):"
-	@echo "    make unibuild-cpp FILE=file.cpp"
-	@echo "    make unibuild-cpp-win FILE=file.cpp           (Windows)"
-	@echo ""
-	@echo "  Rust files (can compile multiple at once):"
-	@echo "    make unibuild-rust FILE=file.rs"
-	@echo "    make unibuild-rust-win FILE=file.rs           (Windows)"
-	@echo ""
-	@echo "  Clean:"
-	@echo "    make unibuild-clean <file>"
-	@echo ""
-	@echo "  Examples:"
-	@echo "    make unibuild FILE=fs/tmpfs.c"
-	@echo "    make unibuild FILE=\"fs/tmpfs.c fs/vfs.c fs/path.c\""
-	@echo "    make unibuild-cpp FILE=cpp/examples/cpp_example.cpp"
-	@echo "    make unibuild-rust FILE=rust/drivers/rust_simple_driver.rs"
-	@echo ""
-	@echo "Quick start: make run"
+	@echo "Debug flags (rebuild after change): IR0_DEBUG_PMM=1 IR0_DEBUG_WAIT=1 IR0_DEBUG_PROC=1"
+	@echo "Build uses -j$(PARALLEL_JOBS) by default (override: make -j1 or PARALLEL_JOBS=4)."
 	@echo ""
 
 # DEPENDENCY TEST
@@ -1787,12 +1458,6 @@ unibuild-cpp:
 	$(call run-unibuild,-cpp)
 unibuild-rust:
 	$(call run-unibuild,-rust)
-unibuild-win:
-	$(call run-unibuild,-win)
-unibuild-cpp-win:
-	$(call run-unibuild,-win -cpp)
-unibuild-rust-win:
-	$(call run-unibuild,-win -rust)
 
 unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \
@@ -1861,7 +1526,6 @@ test-drivers: test-driver-rust test-driver-cpp
 	@echo ""
 
 # Clean test driver objects
-# Clean test driver objects
 test-drivers-clean:
 	@echo "Cleaning test driver objects..."
 	@if [ -n "$(RUST_ONLY)" ]; then \
@@ -1879,23 +1543,21 @@ test-drivers-clean:
 
 # PHONY TARGETS
 
-.PHONY: all clean run run-debug run-fullscreen run-tap run-console run-gdb debug create-disk delete-disk disk-reset load-init help \
-        unibuild unibuild-cpp unibuild-rust unibuild-win unibuild-cpp-win unibuild-rust-win unibuild-clean \
-        ir0 windows windows-clean deptest check-env pre-submit menuconfig menuconfig-en menuconfig-es defconfig sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
-        en-ext-drv dis-ext-drv \
-        test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
-        tests kernel-memsafe kernel-tests kernel-analyze analyze health build-matrix-min build-matrix-full config-sim arch-guard repo-hygiene-guard mandocs mandocs-en mandocs-es mandocs-view mandocs-uninstall ai-dev-rules-install \
-        build-linux-abi-brk-probe build-linux-abi-wait4-probe build-linux-abi-read-probe \
-        build-linux-abi-mmap-probe build-linux-abi-mount-probe build-linux-abi-openat-probe \
-        build-linux-abi-stat-probe \
-        linux-abi-audit linux-abi-audit-brk linux-abi-audit-wait4 linux-abi-audit-read \
-        linux-abi-audit-mmap linux-abi-audit-mount linux-abi-audit-openat linux-abi-audit-stat \
-        runtime-net-check runtime-mount-check smoke-qemu smoke-real-hw smoke-all \
-        build-init-smoke build-init-musl build-musl-arch-prctl-smoke build-init-minimal build-init-segv-smoke build-sh-smoke build-userspace-segv build-init-heart-smoke build-ktm-fbdev-smoke build-ktm-input-smoke build-ktm-input-det-smoke build-ktm-doom-prereq-smoke build-ktm-doom-stub build-ktm-doom-timing-stub build-ktm-doomgeneric-smoke build-ktm-doom-interactive build-ktm-boot-halt-bin build-ktm-fbdev-gui-bin build-ktm-busybox-manifest-smoke smoke-busybox-manifest kernel-x64-userspace.bin kernel-x64-userspace.iso kernel-x64-userspace-lazy.bin kernel-x64-userspace-lazy.iso smoke-mm-cow-lazy \
-        roadmap-phase1-stability roadmap-phase2-driver-expansion roadmap-phase3-core-features \
-        scale-readiness-gate config-wiring-check arch-config-check \
-        format compile-commands disasm stack-usage clean-net \
-        run-ping
+.PHONY: all clean ir0 run help gui console debug fullscreen gdb \
+	create-disk delete-disk disk-reset load-init \
+	menuconfig menuconfig-en menuconfig-es defconfig \
+	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
+	headers_install deptest check-env \
+	unibuild unibuild-cpp unibuild-rust unibuild-clean \
+	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
+	format analyze compile-commands disasm stack-usage print-build-objects build-graph-audit \
+	arch-guard clip-send clip-pull clip-status
+
+# Positional modifiers are accepted as goals and intentionally do nothing on
+# their own: `make ir0 arm64` and `make run arm64 console` carry the action.
+.PHONY: $(IR0_ARCH_GOALS) $(IR0_BOARD_GOALS)
+$(IR0_ARCH_GOALS) $(IR0_BOARD_GOALS):
+	@:
 
 # Include dependency files. The wildcard keeps make from searching its
 # implicit rule database for every missing .d on the first build, which costs
