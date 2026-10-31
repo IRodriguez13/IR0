@@ -46,6 +46,18 @@ static const pseudo_fs_ops_t mock_ops = {
 	.read = mock_read,
 };
 
+static int64_t oversized_read(void *ctx, char *buf, size_t count, off_t *off)
+{
+	(void)ctx;
+	(void)buf;
+	(void)off;
+	return (int64_t)count + 1;
+}
+
+static const pseudo_fs_ops_t oversized_ops = {
+	.read = oversized_read,
+};
+
 void test_pseudo_fs_register_lookup_read(void)
 {
 	const pseudo_fs_entry_t *e;
@@ -94,6 +106,26 @@ void test_pseudo_fs_register_lookup_read(void)
 	memset(out, 0, sizeof(out));
 	n = pseudo_fs_read_fd(fd, out, sizeof(out) - 1, 5);
 	ASSERT_EQ(n, 0);
+	ASSERT_EQ(pseudo_fs_read_fd(fd, out, sizeof(out), -1), -EINVAL);
+
+	rc = pseudo_fs_register("/heart", "beat", &mock_ops, "alive");
+	ASSERT_EQ(rc, 0);
+	rc = pseudo_fs_open_path("/heart/beat", 0, &fd);
+	ASSERT_EQ(rc, 0);
+	memset(out, 0, sizeof(out));
+	n = pseudo_fs_read_fd(fd, out, sizeof(out) - 1, 0);
+	ASSERT_EQ(n, 5);
+	ASSERT_STR_EQ(out, "alive");
+
+	{
+		off_t offset = 0;
+		ASSERT_EQ(pseudo_fs_ops_read(&oversized_ops, NULL, out, sizeof(out),
+		                             &offset),
+		          -EIO);
+		offset = -1;
+		ASSERT_EQ(pseudo_fs_ops_read(&mock_ops, "x", out, sizeof(out), &offset),
+		          -EINVAL);
+	}
 
 	pseudo_fs_reset();
 	TEST_END();

@@ -407,6 +407,8 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
 
     if (!buf || count == 0)
         return 0;
+    if (offset < 0)
+        return -EINVAL;
 
     dyn = pseudo_fs_find_dynamic_by_fd(fd);
     if (dyn)
@@ -417,6 +419,8 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
         full = dyn->ops->read(dyn->ctx, full_buf, sizeof(full_buf), &inner);
         if (full < 0)
             return full;
+        if ((uint64_t)full > sizeof(full_buf))
+            return -EIO;
 
         if (offset >= full)
             return 0;
@@ -432,12 +436,16 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
     entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
     if (!entry)
         entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
+    if (!entry)
+        entry = pseudo_fs_find_by_fd_table(g_heart_entries, g_heart_count, fd);
     if (!entry || !entry->ops || !entry->ops->read)
         return -EBADF;
 
     full = entry->ops->read(entry->ctx, full_buf, sizeof(full_buf), &inner);
     if (full < 0)
         return full;
+    if ((uint64_t)full > sizeof(full_buf))
+        return -EIO;
 
     if (offset >= full)
         return 0;
@@ -640,6 +648,8 @@ int64_t pseudo_fs_ops_read(const pseudo_fs_ops_t *ops, void *ctx, char *buf,
 
 	if (!ops || !ops->read || !buf || !offset)
 		return -EINVAL;
+	if (*offset < 0)
+		return -EINVAL;
 
 	/*
 	 * Always regenerate from offset 0 into a bounce buffer, then slice.
@@ -649,6 +659,8 @@ int64_t pseudo_fs_ops_read(const pseudo_fs_ops_t *ops, void *ctx, char *buf,
 	full = ops->read(ctx, full_buf, sizeof(full_buf), &gen_off);
 	if (full < 0)
 		return full;
+	if ((uint64_t)full > sizeof(full_buf))
+		return -EIO;
 
 	if (*offset >= full)
 		return 0;
