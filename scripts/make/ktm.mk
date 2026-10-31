@@ -18,9 +18,9 @@ ctr:
 	@chmod +x scripts/ctr.sh
 	@./scripts/ctr.sh
 
-test-fast: kernel-x64.bin arch-guard
-	@$(MAKE) -s -C tests/host run
-	@$(MAKE) -s ktm-check
+# Alias of ktm-check: kernel + arch-guard + host tests + KTM invariants.
+# Keeping one path avoids running arch-guard and tests/host twice.
+test-fast: ktm-check
 
 agent-fast: test-fast kernel-tests
 	@echo "✓ agent-fast OK (host + ktest)"

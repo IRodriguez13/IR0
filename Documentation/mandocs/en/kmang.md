@@ -119,7 +119,7 @@ Guest `/etc/profile` (ISD) reads the one-shot file on console login, then delete
   `etc/ir0-session` before a boot you requested from the TUI.
 - kmang does **not** replace ISD package/version management (`userspace_manager.py`).
 - kmang does **not** run QEMU; `poweron` consumes `resolve` output only.
-- Host tests live in `scripts/test_kernel_manager.py`; gate via `make isd-contracts`.
+- Host tests live in `scripts/test_kernel_manager.py`; run them directly (no make wrapper).
 
 ## 6. Relations to other subsystems
 

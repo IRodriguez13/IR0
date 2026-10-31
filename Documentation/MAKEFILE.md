@@ -1,14 +1,20 @@
-# IR0 Makefile — Central Tooling Orchestrator
+# IR0 Makefile — Lean Build Entry Point
 
 The root `Makefile` is the single entry point for building, configuring, testing, and
 running the IR0 kernel. Sub-makefiles (`tests/host/Makefile`, `tests/kernel_memsafe/Makefile`)
 handle isolated harnesses; everything else flows through the root file.
+
+The public surface is deliberately small: one build target per architecture/board,
+configuration TUIs, the KTM/ktest gates needed by contributors, docs, and unibuild.
+There is no extended QA/ISD/release/smoke catalog in this tree; those entries were
+removed in the 2026-10-29 build-system redesign.
 
 ## Design role
 
 | Concern | Makefile responsibility |
 |---------|-------------------------|
 | Architecture selection | `ARCH`, `CONFIG_ARCH_*`, cross-compile prefixes |
+| Board selection | `BOARD=qemu-virt\|rpi3\|rpi4\|rpi5` → `ARM64_BOARD` |
 | Feature composition | `-include .config` gates `OBJS`, `CFLAGS`, and ISO contents |
 | Version stamping | `IR0_VERSION_*`, build number, date/user/host in `version.o` |
 | Developer UX | `help`, `menuconfig`, `unibuild`, test TUI |
@@ -77,7 +83,7 @@ The tokens are also declared as no-op goals so make accepts them. `ARCH=` and
 setup/defconfig  ──►  .config  ──►  -include .config
                          │
                          ├── CONFIG_* gates object lists (OBJS, DRIVER_OBJS, …)
-                         ├── setup/generated/autoconf.h (via menuconfig / kconfig)
+                         ├── includes/generated/autoconf.h (via menuconfig / kconfig)
                          └── CFLAGS_TARGET profiles (-DIR0_DESKTOP, …)
 ```
 
@@ -107,7 +113,13 @@ default subsystems to **enabled** (bring-up friendly).
 when a third-party compiler introduces a warning you need to inspect first.
 When `CONFIG_TOOL_AUTO_RUN_DEPTEST=y`, `ir0` runs `deptest` first.
 
+ARM64 board images also emit `build/arm64-<board>/kernel8.img`, which is what QEMU's
+raspi machines consume.
+
 ### Run (QEMU)
+
+`run` only boots an artifact that already exists. It never compiles and never
+touches ISD.
 
 | Target | Notes |
 |--------|-------|
@@ -167,6 +179,7 @@ The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
 |--------|---------|
 | `make help` | Full target listing (always current) |
 | `make format` | `clang-format` over C/H sources |
+| `make analyze` | `cppcheck` when installed |
 | `make compile-commands` | `compile_commands.json` for LSP |
 | `make disasm` | `objdump -d -S kernel-x64.bin` |
 | `make stack-usage` | Stack-usage report for kernel objects |

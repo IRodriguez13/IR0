@@ -1143,6 +1143,17 @@ def main():
         print("Applied explicit symbol assignments and synced config files")
         return
 
+    # --lang en|es: set the UI language and enter the TUI in one process.
+    if len(args) > 1 and args[0] == "--lang":
+        lang = args[1].strip().lower()
+        if lang not in VALID_UI_LANGS:
+            print("usage: menuconfig.py --lang en|es", file=sys.stderr)
+            sys.exit(2)
+        set_ui_lang(symbols, lang)
+        enforce_dependencies(symbols)
+        save_config(symbols)
+        args = args[2:]
+
     # Interactive: symbols already merged with Kconfig defaults via load_dotconfig
     curses.wrapper(run_menu, symbols)
 

@@ -270,7 +270,7 @@ SMP, CFS backend, kernel modules (MOD-*) — see P2 below.
 | # | Item | Notes |
 |---|------|-------|
 | 18 | **Rust/C++ driver platform (definitive ABI)** | Stable `probe`/`remove` via `includes/ir0/*`; mandocs + `DECOUPLING.md` — **DRV-*** |
-| 18b | **Fast incremental Rust/C++ build** | `unibuild-rust`, `test-driver-cpp`, ccache — **BUILD-1** |
+| 18b | **Fast incremental Rust/C++ build** | `unibuild-rust`, `unibuild-cpp`, ccache — **BUILD-1** |
 | 18c | **Reference driver vertical slice** | Rust or C++ → registry → `/dev`/sysfs → smoke — **DRV-4** |
 | 18d | **Kernel module loader + modprobe** | ELF reloc, `insmod`/`rmmod`/`modprobe` — **MOD-*** |
 | 19 | **Scheduler backend (CFS/priority)** | **Partial** — priority bands = real ops backend (`sched.h`); CFS policy `1` = honest RR alias (no fake `cfs_sched` wrapper). Real CFS runqueue still open. |
@@ -316,7 +316,7 @@ tras gates verdes del hito anterior. Cada sprint cierra con `make arch-guard` + 
 | **ARCH-5** host contracts | Nuevo syscall o facade pública | Test host sin colisión glibc (`tests/host/`) | `make -C tests/host run` verde |
 | **PERF-1** hot paths | T1 boot estable | Poll/sleep sin spin; wake batching | `ktm_poll_arch_resume_matrix`, idle profile |
 | **PERF-2** MM / COW | `smoke-mm-cow-lazy` verde | huge-page COW; menos TLB shootdown | FASE40 extendido |
-| **PERF-3** driver build | Rust/C++ driver edit loop | Incremental compile; ccache | `unibuild-rust`, `test-drivers` |
+| **PERF-3** driver build | Rust/C++ driver edit loop | Incremental compile; ccache | `unibuild-rust`, `unibuild-cpp` |
 | **POSIX-1** threads musl | `smoke-musl-pthread` verde | `pthread_create`+`join` libc; robust mutex exit | Nuevo smoke; sin `clone` inline |
 | **POSIX-2** job control | PTY milestone | `SA_RESTART`, sessions, `SIGHUP` en controlling TTY | ktests señales + ash job smoke |
 
@@ -358,10 +358,10 @@ Today: `rust_simple_driver` and C++ test objects link **statically** (`Makefile`
 | **DRV-1** | Stable driver registration ABI | One C contract for Rust, C++, and C | `includes/ir0/`, `Documentation/DECOUPLING.md` |
 | **DRV-2** | Templates + mandocs (“how to write a driver”) | Consistent human/AI review | `rust/drivers/`, C++ driver tree, mandocs |
 | **DRV-3** | `arch-guard` rules for driver boundaries | Portable vs arch separation | `scripts/architecture_guard.py` |
-| **BUILD-1** | Fast incremental Rust/C++ compile | Driver iteration without full `kernel-x64.bin` | `unibuild-rust`, `test-driver-cpp`, ccache |
-| **DRV-4** | **Vertical slice:** one integrated reference driver | build → load (static or MOD-*) → `/dev`/sysfs → smoke | `make test-drivers`, dedicated smoke |
+| **BUILD-1** | Fast incremental Rust/C++ compile | Driver iteration without full `kernel-x64.bin` | `unibuild-rust`, `unibuild-cpp`, ccache |
+| **DRV-4** | **Vertical slice:** one integrated reference driver | build → load (static or MOD-*) → `/dev`/sysfs → smoke | `make unibuild-cpp`, dedicated smoke |
 
-Current references: `rust/drivers/rust_simple_driver.rs`, `make test-driver-rust`, `make test-driver-cpp`.
+Current references: `rust/drivers/rust_simple_driver.rs` (`make unibuild-rust FILE=...`) and `cpp/examples/cpp_example.cpp` (`make unibuild-cpp FILE=...`).
 
 ### Cross-cutting (storage, net, graphics — existing backlog)
 

@@ -9,36 +9,30 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_runner  # noqa: E402  (same directory; catalog parser)
+
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "test_runner.py"
 
 
 def load_rows() -> list[dict]:
-    proc = subprocess.run(
-        [sys.executable, str(RUNNER), "--list"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr or "test_runner --list failed")
+    suites = test_runner.load_catalog(test_runner.CATALOG)
     rows: list[dict] = []
-    for line in proc.stdout.splitlines():
-        line = line.strip()
-        if not line or line[0] not in "* ":
+    for suite in suites:
+        sid = suite.get("id")
+        if not sid:
             continue
-        default = line[0] == "*"
-        rest = line[2:]
-        sid, _, tail = rest.partition(" ")
-        grp = ""
-        label = tail
-        if tail.startswith("["):
-            g_end = tail.find("]")
-            if g_end > 1:
-                grp = tail[1:g_end].strip()
-                label = tail[g_end + 1 :].strip()
-        rows.append({"id": sid, "group": grp, "label": label, "default": default, "on": default})
+        default = bool(suite.get("default"))
+        rows.append(
+            {
+                "id": sid,
+                "group": suite.get("group", ""),
+                "label": suite.get("label", suite.get("make", "")),
+                "default": default,
+                "on": default,
+            }
+        )
     return rows
 
 
@@ -123,7 +117,11 @@ def main_curses(stdscr) -> int:
         elif ch in (ord("r"), ord("R")):
             status = "running..."
             draw(stdscr, rows, idx, persist, status)
+            curses.endwin()
             rc, msg = run_selected(rows, persist)
+            stdscr.refresh()
+            curses.doupdate()
+            stdscr.keypad(True)
             status = msg
             if rc != 0:
                 stdscr.addstr(curses.LINES - 1, 0, f"Failed ({msg}). Press any key.")

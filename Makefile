@@ -8,6 +8,7 @@
 
 KERNEL_ROOT := $(CURDIR)
 
+# `make help` is the default goal; the build entry point is `make ir0`.
 # Every rule this tree uses is explicit. Clearing the built-in suffix list stops
 # make from searching it for the thousands of prerequisites recorded in the
 # generated .d files, which costs more than parsing this Makefile. The setting
@@ -209,12 +210,10 @@ menuconfig:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
 
 menuconfig-en:
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set TOOL_MENUCONFIG_LANG=en >/dev/null
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --lang en
 
 menuconfig-es:
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --set TOOL_MENUCONFIG_LANG=es >/dev/null
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --lang es
 
 defconfig:
 	@cp $(KERNEL_ROOT)/setup/defconfig $(KERNEL_ROOT)/.config
@@ -1198,6 +1197,7 @@ endif
 # the artifact from ARCH/BOARD: x86 ISO, ARM64 aggregate, or board kernel8.img.
 ir0: CFLAGS += -Werror
 
+# Auto-run the host dependency check when menuconfig asks for it.
 ifeq ($(CONFIG_TOOL_AUTO_RUN_DEPTEST),y)
 IR0_PRECHECK_TARGETS := deptest
 else
@@ -1231,11 +1231,6 @@ gui console debug fullscreen gdb: run
 
 # Create disk image (wrapper for scripts/create_disk.sh)
 # Usage: make create-disk [FS=minix] [SIZE=200]
-# Examples:
-#   make create-disk              # Create 200MB MINIX disk (default)
-#   make create-disk FS=minix SIZE=500
-#   make create-disk FS=fat32
-#   make create-disk FS=ext4 SIZE=1000
 create-disk:
 	@./scripts/create_disk.sh "$(or $(FS),$(TOOL_DEFAULT_DISK_FS_NAME))" \
 		"$(or $(SIZE),$(CONFIG_TOOL_DEFAULT_DISK_SIZE_MB))"
@@ -1243,10 +1238,6 @@ create-disk:
 
 # Delete disk image (useful to reset persistent disk for QEMU)
 # Usage: make delete-disk [FS=minix] [DISK=disk.img]
-# Examples:
-#   make delete-disk              # Delete disk.img (default)
-#   make delete-disk FS=minix
-#   make delete-disk FS=fat32 DISK=fat32.img
 delete-disk:
 	@./scripts/delete_disk.sh $(FS) $(DISK)
 
@@ -1259,13 +1250,6 @@ disk-reset:
 
 # Load Init binary into virtual disk
 # Usage: make load-init [FS=minix] [DISK=disk.img] [INIT=setup/pid1/init]
-# Defaults: filesystem=auto-detect, disk_image=disk.img, init_binary=setup/pid1/init
-# Supported filesystems: minix, fat16, fat32, ext4
-# Note: Requires root privileges (mounts filesystem)
-# Examples:
-#   sudo make load-init                    # Auto-detect, use disk.img
-#   sudo make load-init FS=fat32
-#   sudo make load-init FS=fat32 DISK=fat32.img
 load-init:
 	@./scripts/load_init.sh $(FS) $(DISK) $(INIT)
 
@@ -1367,9 +1351,7 @@ stack-usage:
 	@echo ""
 
 help:
-	@echo "╔════════════════════════════════════════════════════════════╗"
-	@echo "║               IR0 KERNEL - BUILD SYSTEM                    ║"
-	@echo "╚════════════════════════════════════════════════════════════╝"
+	@echo "IR0 kernel — lean build system"
 	@echo ""
 	@echo "Build:"
 	@echo "  make ir0                     x86-64 kernel ISO (default)"

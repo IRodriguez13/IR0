@@ -112,7 +112,7 @@ Estados de salud: `verified`, `checksum-only`, `legacy-unverified`, o motivos de
   opcional antes de un boot pedido desde la TUI.
 - kmang **no** reemplaza gestion de paquetes ISD (`userspace_manager.py`).
 - kmang **no** lanza QEMU; `poweron` consume solo la salida de `resolve`.
-- Tests host: `scripts/test_kernel_manager.py`; gate en `make isd-contracts`.
+- Tests host: `scripts/test_kernel_manager.py`; ejecutalos directamente (sin wrapper make).
 
 ## 6. Relacion con otros subsistemas
 

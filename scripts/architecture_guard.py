@@ -36,13 +36,37 @@ Checks:
     canonical catalog through <errno.h> or <ir0/errno.h>.
 """
 
+from functools import lru_cache
 from pathlib import Path
 import json
+import os
 import sys
 import re
 
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Generated, vendored and VCS trees are not IR0 sources. Skipping them keeps
+# `make arch-guard` fast (the toolchain alone carries >1k C/H files).
+ROOT_PREFIX = str(ROOT) + os.sep
+SKIP_DIR_NAMES = frozenset(
+    {
+        ".git",
+        ".hg",
+        ".svn",
+        ".cache",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "artifacts",
+        "build",
+        "dist",
+        "iso",
+        "node_modules",
+        "out",
+        "toolchain",
+    }
+)
 
 FORBIDDEN_PATHS = [
     ROOT / "fs",
@@ -199,13 +223,32 @@ PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
 ]
 
 
-def iter_c_files(base: Path):
+@lru_cache(maxsize=None)
+def iter_c_files(base: Path) -> tuple[Path, ...]:
+    """Return the C/H files under *base*, pruned and cached for this run."""
     if base.is_file():
-        yield base
-        return
-    for p in base.rglob("*"):
-        if p.suffix in (".c", ".h"):
-            yield p
+        return (base,)
+    files: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+        for name in sorted(filenames):
+            if name.endswith((".c", ".h")):
+                files.append(Path(dirpath) / name)
+    return tuple(files)
+
+
+@lru_cache(maxsize=None)
+def read_file_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+@lru_cache(maxsize=None)
+def rel_to_root(path: Path) -> Path:
+    """Memoized relative path; string slicing beats pathlib.relative_to here."""
+    raw = str(path)
+    if raw.startswith(ROOT_PREFIX):
+        return Path(raw[len(ROOT_PREFIX):])
+    raise ValueError(f"{path} is not under {ROOT}")
 
 
 def check_forbidden_includes():
@@ -213,13 +256,13 @@ def check_forbidden_includes():
     for target in FORBIDDEN_PATHS:
         for fpath in iter_c_files(target):
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
+            rel = rel_to_root(fpath)
             for idx, line in enumerate(lines, start=1):
                 if DRIVER_INCLUDE_RE.search(line):
-                    rel = fpath.relative_to(ROOT)
                     errors.append(f"[forbidden-include] {rel}:{idx}: {line.strip()}")
     return errors
 
@@ -237,11 +280,11 @@ def check_semantic_tls_contract():
     errors = []
     for fpath in (ROOT / "includes" / "ir0").glob("*.h"):
         for idx, line in enumerate(
-            fpath.read_text(encoding="utf-8", errors="replace").splitlines(),
+            read_file_text(fpath).splitlines(),
             start=1,
         ):
             if LEGACY_TLS_CONTRACT_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(f"[legacy-tls-contract] {rel}:{idx}: {line.strip()}")
     return errors
 
@@ -251,7 +294,7 @@ def check_process_fd_lifecycle_boundary():
     for rel in ("kernel/process/files_struct.c", "kernel/process/fdtable.c"):
         fpath = ROOT / rel
         for idx, line in enumerate(
-            fpath.read_text(encoding="utf-8", errors="replace").splitlines(),
+            read_file_text(fpath).splitlines(),
             start=1,
         ):
             if FD_LIFECYCLE_SUBTYPE_RE.search(line):
@@ -273,13 +316,13 @@ def check_interrupt_arch_portable():
     for base in PORTABLE_DIRS_NO_INTERRUPT_ARCH:
         for fpath in iter_c_files(base):
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
+            rel = rel_to_root(fpath)
             for idx, line in enumerate(lines, start=1):
                 if INTERRUPT_ARCH_INCLUDE_RE.search(line):
-                    rel = fpath.relative_to(ROOT)
                     errors.append(
                         f"[portable-no-interrupt-arch] {rel}:{idx}: {line.strip()}"
                     )
@@ -291,13 +334,13 @@ def check_fs_no_direct_arch():
     base = ROOT / "fs"
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
+        rel = rel_to_root(fpath)
         for idx, line in enumerate(lines, start=1):
             if FS_DIRECT_ARCH_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
                 errors.append(f"[fs-no-direct-arch] {rel}:{idx}: {line.strip()}")
     return errors
 
@@ -307,13 +350,13 @@ def check_mm_net_no_arch_includes():
     for base in PORTABLE_DIRS_MM_NET_NO_ARCH:
         for fpath in iter_c_files(base):
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
+            rel = rel_to_root(fpath)
             for idx, line in enumerate(lines, start=1):
                 if PORTABLE_MM_NET_ARCH_INCLUDE_RE.search(line):
-                    rel = fpath.relative_to(ROOT)
                     tag = (
                         "[sched-no-arch-include]"
                         if base.name == "sched"
@@ -331,12 +374,12 @@ def check_facade_no_drivers_include():
         return errors
     for fpath in base.rglob("*.h"):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
+        rel = rel_to_root(fpath)
         for idx, line in enumerate(lines, start=1):
-            rel = fpath.relative_to(ROOT)
             if DRIVER_INCLUDE_RE.search(line):
                 errors.append(
                     f"[facade-no-drivers-include] {rel}:{idx}: {line.strip()}"
@@ -360,8 +403,8 @@ def check_facade_no_kernel_include():
         return errors
     for fpath in base.rglob("*.h"):
         try:
-            rel_s = fpath.relative_to(ROOT).as_posix()
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            rel_s = rel_to_root(fpath).as_posix()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
@@ -380,13 +423,13 @@ def check_portable_trees_no_kernel_headers():
     for base in PORTABLE_DIRS_NO_KERNEL_HEADERS:
         for fpath in iter_c_files(base):
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             for idx, line in enumerate(lines, start=1):
                 if KERNEL_HEADER_INCLUDE_RE.search(line):
-                    rel = fpath.relative_to(ROOT)
+                    rel = rel_to_root(fpath)
                     errors.append(
                         f"[portable-no-kernel-header] {rel}:{idx}: {line.strip()}"
                     )
@@ -398,13 +441,13 @@ def check_drivers_ir0_block_dev_only():
     base = ROOT / "drivers"
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
             if DRIVER_BLOCK_DEV_RAW_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(
                     f"[driver-block-dev-facade] {rel}:{idx}: {line.strip()}"
                 )
@@ -416,13 +459,13 @@ def check_drivers_no_arch_includes():
     base = ROOT / "drivers"
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
             if DRIVERS_ARCH_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(f"[drivers-no-arch] {rel}:{idx}: {line.strip()}")
     return errors
 
@@ -432,13 +475,13 @@ def check_kernel_no_driver_includes():
     base = ROOT / "kernel"
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
             if KERNEL_DRIVER_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(
                     f"[kernel-no-driver-include] {rel}:{idx}: {line.strip()}"
                 )
@@ -450,13 +493,13 @@ def check_kernel_no_direct_arch_portable():
     base = ROOT / "kernel"
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
             if KERNEL_ARCH_PORTABLE_DIRECT_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(
                     f"[kernel-use-arch-port-facade] {rel}:{idx}: {line.strip()}"
                 )
@@ -468,13 +511,13 @@ def check_fs_no_mm_includes():
     base = ROOT / "fs"
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
             if FS_MM_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(f"[fs-no-mm-include] {rel}:{idx}: {line.strip()}")
     return errors
 
@@ -487,13 +530,13 @@ def check_ktm_no_mm_includes():
         return errors
     for fpath in iter_c_files(base):
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, start=1):
             if FS_MM_INCLUDE_RE.search(line):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(f"[ktm-no-mm-include] {rel}:{idx}: {line.strip()}")
     return errors
 
@@ -506,26 +549,20 @@ def check_bluetooth_subdir_include_policy():
         if not scan_root.exists():
             continue
         for fpath in iter_c_files(scan_root):
-            allowed_bluetooth_vendor = False
-            try:
-                fpath.relative_to(bt_root)
-                allowed_bluetooth_vendor = True
-            except ValueError:
-                allowed_bluetooth_vendor = False
-
-            # Allow subsystem-local includes inside drivers/bluetooth only.
-            if allowed_bluetooth_vendor:
+            if str(fpath).startswith(str(bt_root) + os.sep):
                 continue
 
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
 
             for idx, line in enumerate(lines, start=1):
+                if "bluetooth/" not in line:
+                    continue
                 if BLUETOOTH_SUBDIR_INCLUDE_RE.search(line):
-                    rel = fpath.relative_to(ROOT)
+                    rel = rel_to_root(fpath)
                     errors.append(
                         f"[bluetooth-include-scope] {rel}:{idx}: {line.strip()}"
                     )
@@ -557,7 +594,7 @@ def check_devfs_usercopy_contract():
                 current_fn = name
         if DEVFS_USERCOPY_RE.search(line):
             if current_fn not in DEVFS_USERCOPY_WHITELIST:
-                rel = devfs_path.relative_to(ROOT)
+                rel = rel_to_root(devfs_path)
                 errors.append(
                     f"[devfs-io-contract-usercopy] {rel}:{idx}: {line.strip()} (fn={current_fn})"
                 )
@@ -589,14 +626,14 @@ def check_usercopy_no_raw_user_touch():
         if not fpath.is_file():
             continue
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
 
         current_fn = None
         saw_load_cr3 = False
-        rel = fpath.relative_to(ROOT)
+        rel = rel_to_root(fpath)
 
         for idx, line in enumerate(lines, start=1):
             stripped = line.lstrip()
@@ -660,12 +697,12 @@ def check_ktm_core_no_fase():
     for base in roots:
         for fpath in iter_c_files(base):
             try:
-                text = fpath.read_text(encoding="utf-8", errors="replace")
+                text = read_file_text(fpath)
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             if fase_re.search(text):
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 errors.append(f"[ktm-no-fase] {rel}: FASE markers forbidden in KTM core")
     return errors
 
@@ -689,9 +726,9 @@ def check_ktm_no_fase_serial():
         if not base.exists():
             continue
         for fpath in iter_c_files(base):
-            rel = str(fpath.relative_to(ROOT)).replace("\\", "/")
+            rel = str(rel_to_root(fpath)).replace("\\", "/")
             try:
-                text = fpath.read_text(encoding="utf-8", errors="replace")
+                text = read_file_text(fpath)
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -738,18 +775,20 @@ def check_klog_serial_print_allowlist():
         if not base.exists():
             continue
         for fpath in iter_c_files(base):
-            rel = str(fpath.relative_to(ROOT)).replace("\\", "/")
+            rel = str(rel_to_root(fpath)).replace("\\", "/")
             if rel in allow:
                 continue
             if "/third-party/" in rel:
                 continue
             try:
-                text = fpath.read_text(encoding="utf-8", errors="replace")
+                text = read_file_text(fpath)
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             for idx, line in enumerate(text.splitlines(), 1):
                 if _line_is_comment_only(line):
+                    continue
+                if "serial_print" not in line:
                     continue
                 if serial_re.search(line):
                     errors.append(
@@ -780,11 +819,11 @@ def check_ktm_angle_includes():
     for base in scan:
         for fpath in iter_c_files(base):
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
-            rel = fpath.relative_to(ROOT)
+            rel = rel_to_root(fpath)
             for idx, line in enumerate(lines, 1):
                 if bad_re.search(line) or facade_rel_re.search(line):
                     errors.append(
@@ -801,11 +840,11 @@ def check_kernel_no_relative_includes():
     for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "process"):
         for fpath in iter_c_files(base):
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
-            rel = fpath.relative_to(ROOT)
+            rel = rel_to_root(fpath)
             for idx, line in enumerate(lines, 1):
                 if bad_re.search(line):
                     errors.append(
@@ -845,19 +884,17 @@ PORTABLE_ISA_ALLOWLIST = {
 }
 
 
+@lru_cache(maxsize=None)
 def _line_is_comment_only(line: str) -> bool:
     s = line.strip()
-    return (
-        not s
-        or s.startswith("//")
-        or s.startswith("/*")
-        or s.startswith("*")
-        or s.startswith("#")
-    )
+    return not s or s[0] in "/*"
 
 
+@lru_cache(maxsize=None)
 def _is_empty_compiler_barrier(line: str) -> bool:
     """Permit asm volatile(\"\" ::: \"memory\") — not ISA-specific."""
+    if '""' not in line:
+        return False
     s = re.sub(r"\s+", "", line)
     return bool(
         re.search(
@@ -874,11 +911,11 @@ def check_portable_no_isa_asm():
     for base in PORTABLE_ISA_TREES:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PORTABLE_ISA_ALLOWLIST:
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             rel_s = str(rel).replace("\\", "/")
@@ -887,12 +924,14 @@ def check_portable_no_isa_asm():
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             for idx, line in enumerate(lines, 1):
                 if _line_is_comment_only(line):
+                    continue
+                if "asm" not in line.lower():
                     continue
                 if _is_empty_compiler_barrier(line):
                     continue
@@ -928,9 +967,9 @@ def check_portable_no_isa_leak_literals():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             rel_s = str(rel).replace("\\", "/")
@@ -939,12 +978,22 @@ def check_portable_no_isa_leak_literals():
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             for idx, line in enumerate(lines, 1):
                 if _line_is_comment_only(line):
+                    continue
+                low = line.lower()
+                if not (
+                    "0x402" in line
+                    or "cr2" in low
+                    or "iretq" in low
+                    or "sysret" in low
+                    or "rflags_if" in low
+                    or "ir0_rflags_sanitize_user" in low
+                ):
                     continue
                 if PORTABLE_HARDCODED_RIP_RE.search(line):
                     errors.append(
@@ -1029,11 +1078,11 @@ def check_portable_no_task_arch_fields():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PORTABLE_TASK_ARCH_ALLOWLIST:
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             rel_s = str(rel).replace("\\", "/")
@@ -1045,12 +1094,14 @@ def check_portable_no_task_arch_fields():
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             for idx, line in enumerate(lines, 1):
                 if _line_is_comment_only(line):
+                    continue
+                if "arch." not in line:
                     continue
                 if PORTABLE_TASK_ARCH_FIELD_RE.search(line):
                     errors.append(
@@ -1090,22 +1141,24 @@ def check_process_pgd_accessor():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PROCESS_PGD_ALLOWLIST:
                 continue
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             for idx, line in enumerate(lines, 1):
                 if _line_is_comment_only(line):
+                    continue
+                if "page_directory" not in line:
                     continue
                 if PROCESS_PGD_FIELD_RE.search(line):
                     errors.append(
@@ -1145,17 +1198,17 @@ def check_process_saved_context_accessor():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PROCESS_SAVED_CONTEXT_ALLOWLIST:
                 continue
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1200,17 +1253,17 @@ def check_process_signal_enter_accessor():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PROCESS_SIGNAL_ENTER_ALLOWLIST:
                 continue
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1256,17 +1309,17 @@ def check_process_signal_defer_accessor():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PROCESS_SIGNAL_DEFER_ALLOWLIST:
                 continue
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1311,17 +1364,17 @@ def check_process_wait_state_accessor():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in PROCESS_WAIT_FIELD_ALLOWLIST:
                 continue
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1372,11 +1425,11 @@ def check_syscall_frame_accessor():
     for base in trees:
         if not base.is_dir():
             continue
-        for fpath in list(iter_c_files(base)) + list(base.rglob("*.h")):
+        for fpath in iter_c_files(base):
             if fpath in SYSCALL_FRAME_ALLOWLIST:
                 continue
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             rel_s = str(rel).replace("\\", "/")
@@ -1385,7 +1438,7 @@ def check_syscall_frame_accessor():
             if fpath.suffix not in (".c", ".h"):
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1471,7 +1524,7 @@ def check_includes_ir0_no_c_sources():
         return errors
     for fpath in inc.rglob("*.c"):
         errors.append(
-            f"[includes-migration] {fpath.relative_to(ROOT)}: "
+            f"[includes-migration] {rel_to_root(fpath)}: "
             f"move implementation to kernel/lib/ or subsystem tree"
         )
     return errors
@@ -1515,13 +1568,13 @@ def check_portable_no_arch_prefix_calls():
             continue
         for fpath in iter_c_files(base):
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 rel_s = str(rel).replace("\\", "/")
             except ValueError:
                 continue
             allow = PORTABLE_ARCH_CALL_ALLOW.get(rel_s, set())
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1556,14 +1609,14 @@ def check_portable_no_arch_switch_include():
             continue
         for fpath in iter_c_files(base):
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
                 rel_s = str(rel).replace("\\", "/")
             except ValueError:
                 continue
             if rel_s in ARCH_SWITCH_INCLUDE_ALLOW:
                 continue
             try:
-                lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+                lines = read_file_text(fpath).splitlines()
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1583,18 +1636,20 @@ def check_context_backend_include_boundary():
     errors = []
     for fpath in iter_c_files(ROOT):
         try:
-            rel_s = str(fpath.relative_to(ROOT)).replace("\\", "/")
+            rel_s = str(rel_to_root(fpath)).replace("\\", "/")
         except ValueError:
             continue
         if rel_s in CONTEXT_BACKEND_INCLUDE_ALLOW:
             continue
         try:
-            lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+            lines = read_file_text(fpath).splitlines()
         except Exception as exc:
             errors.append(f"[read-error] {fpath}: {exc}")
             continue
         for idx, line in enumerate(lines, 1):
             if _line_is_comment_only(line):
+                continue
+            if "context_backend.h" not in line:
                 continue
             if CONTEXT_BACKEND_INCLUDE_RE.search(line):
                 errors.append(
@@ -1646,11 +1701,11 @@ def check_portable_port1_no_legacy_arch_mm():
             continue
         for fpath in iter_c_files(base):
             try:
-                rel = fpath.relative_to(ROOT)
+                rel = rel_to_root(fpath)
             except ValueError:
                 continue
             try:
-                text = fpath.read_text(encoding="utf-8", errors="replace")
+                text = read_file_text(fpath)
             except Exception as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
@@ -1692,7 +1747,7 @@ def check_scheduler_user_return_boundary():
         text = path.read_text(encoding="utf-8", errors="replace")
         if re.search(r"\bhandle_signals\s*\(", text):
             errors.append(
-                f"{path.relative_to(ROOT)}: scheduler must not deliver signals; "
+                f"{rel_to_root(path)}: scheduler must not deliver signals; "
                 "use the exit-to-user facade"
             )
 
@@ -1724,7 +1779,7 @@ def check_scheduler_runqueue_lock_boundary():
         for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if raw_irq.search(line):
                 errors.append(
-                    f"[scheduler-runqueue-lock] {path.relative_to(ROOT)}:{line_no}: "
+                    f"[scheduler-runqueue-lock] {rel_to_root(path)}:{line_no}: "
                     "use sched_runqueue_lock/unlock"
                 )
     return errors
@@ -1737,12 +1792,12 @@ def check_process_lifecycle_no_isa_conditionals():
     process_tree = ROOT / "kernel" / "process"
 
     for fpath in process_tree.glob("*.c"):
-        lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = read_file_text(fpath).splitlines()
         for idx, line in enumerate(lines, 1):
             if isa_re.search(line):
                 errors.append(
                     f"[process-no-isa-conditional] "
-                    f"{fpath.relative_to(ROOT)}:{idx}: move ISA policy to a "
+                    f"{rel_to_root(fpath)}:{idx}: move ISA policy to a "
                     f"selected backend: {line.strip()}"
                 )
     return errors
@@ -1761,7 +1816,7 @@ def check_process_registry_ownership():
         for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if mutation.search(line):
                 errors.append(
-                    f"[process-registry-owner] {path.relative_to(ROOT)}:{line_no}: "
+                    f"[process-registry-owner] {rel_to_root(path)}:{line_no}: "
                     "use process_registry_insert/reset helpers"
                 )
     return errors
@@ -1784,12 +1839,12 @@ def check_common_c_has_no_isa_conditionals():
             continue
         for fpath in root.rglob("*.c"):
             for idx, line in enumerate(
-                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+                read_file_text(fpath).splitlines(), 1
             ):
                 if isa_conditional.search(line):
                     errors.append(
                         f"[common-c-no-isa-conditional] "
-                        f"{fpath.relative_to(ROOT)}:{idx}: select an object or "
+                        f"{rel_to_root(fpath)}:{idx}: select an object or "
                         f"facade backend: {line.strip()}"
                     )
     return errors
@@ -1809,9 +1864,9 @@ def check_common_headers_have_only_data_model_isa_conditionals():
         if not root.is_dir():
             continue
         for fpath in root.rglob("*.h"):
-            rel = str(fpath.relative_to(ROOT))
+            rel = str(rel_to_root(fpath))
             for idx, line in enumerate(
-                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+                read_file_text(fpath).splitlines(), 1
             ):
                 if isa_conditional.search(line) and rel not in allowed:
                     errors.append(
@@ -1833,12 +1888,12 @@ def check_arch_sources_need_no_compiler_isa_selection():
 
     for fpath in arch_tree.rglob("*.c"):
         for idx, line in enumerate(
-            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            read_file_text(fpath).splitlines(), 1
         ):
             if isa_conditional.search(line):
                 errors.append(
                     f"[arch-source-no-compiler-isa-conditional] "
-                    f"{fpath.relative_to(ROOT)}:{idx}: the build already "
+                    f"{rel_to_root(fpath)}:{idx}: the build already "
                     f"selected this ISA object: {line.strip()}"
                 )
     return errors
@@ -1854,11 +1909,11 @@ def check_process_lifecycle_uses_semantic_return_state():
 
     for fpath in process_tree.glob("*.c"):
         for idx, line in enumerate(
-            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            read_file_text(fpath).splitlines(), 1
         ):
             if forbidden.search(line) and not line.lstrip().startswith("/*"):
                 errors.append(
-                    f"[process-return-state-neutral] {fpath.relative_to(ROOT)}:"
+                    f"[process-return-state-neutral] {rel_to_root(fpath)}:"
                     f"{idx}: use task return-state/MM facades: {line.strip()}"
                 )
     return errors
@@ -1876,11 +1931,11 @@ def check_portable_task_api_has_no_x86_register_aliases():
             continue
         for fpath in iter_c_files(root):
             for idx, line in enumerate(
-                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+                read_file_text(fpath).splitlines(), 1
             ):
                 if forbidden.search(line):
                     errors.append(
-                        f"[task-api-semantic-registers] {fpath.relative_to(ROOT)}:"
+                        f"[task-api-semantic-registers] {rel_to_root(fpath)}:"
                         f"{idx}: use task arg/retval/IP/SP accessors: {line.strip()}"
                     )
     return errors
@@ -1907,10 +1962,10 @@ def check_portable_code_has_no_private_asm_headers():
             continue
         for fpath in iter_c_files(root):
             for idx, line in enumerate(
-                fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+                read_file_text(fpath).splitlines(), 1
             ):
                 if private_include.search(line):
-                    rel = str(fpath.relative_to(ROOT))
+                    rel = str(rel_to_root(fpath))
                     if selection_gateways.get(rel) == line.strip():
                         continue
                     errors.append(
@@ -1931,7 +1986,7 @@ def check_common_paging_uses_neutral_roots():
     for relative in ("mm/paging.c", "mm/paging.h"):
         fpath = ROOT / relative
         for idx, line in enumerate(
-            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            read_file_text(fpath).splitlines(), 1
         ):
             if legacy.search(line):
                 errors.append(
@@ -1958,7 +2013,7 @@ def check_common_address_space_contracts():
     for relative in contracts:
         fpath = ROOT / relative
         for idx, line in enumerate(
-            fpath.read_text(encoding="utf-8", errors="replace").splitlines(), 1
+            read_file_text(fpath).splitlines(), 1
         ):
             if legacy.search(line):
                 errors.append(
@@ -1982,7 +2037,7 @@ def check_common_elf_uses_isa_policy():
         for path in iter_c_files(base):
             for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
                 if forbidden.search(line):
-                    rel = path.relative_to(ROOT)
+                    rel = rel_to_root(path)
                     errors.append(
                         f"[elf-isa-policy] {rel}:{line_no}: use arch_elf facade"
                     )
@@ -1998,7 +2053,7 @@ def check_common_mm_uses_user_va_policy():
         for path in iter_c_files(base):
             for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
                 if forbidden.search(line):
-                    rel = path.relative_to(ROOT)
+                    rel = rel_to_root(path)
                     errors.append(
                         f"[user-va-policy] {rel}:{line_no}: use arch_mm facade"
                     )
@@ -2017,7 +2072,7 @@ def check_common_syscall_policy_uses_semantic_ids():
     for path in targets:
         for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if forbidden.search(line):
-                rel = path.relative_to(ROOT)
+                rel = rel_to_root(path)
                 errors.append(
                     f"[syscall-semantic-id] {rel}:{line_no}: use syscall_id facade"
                 )
@@ -2068,7 +2123,7 @@ def check_devfs_unique_device_ids():
     def claim(dev_id, label, line_no):
         prev = owners.get(dev_id)
         if prev and prev[0] != label:
-            rel = devfs_path.relative_to(ROOT)
+            rel = rel_to_root(devfs_path)
             errors.append(
                 f"[devfs-unique-device-id] id={dev_id} used by {prev[0]}:{prev[1]} "
                 f"and {label}:{line_no} ({rel})"
@@ -2139,7 +2194,7 @@ def check_devfs_no_find_by_id_outside_devfs():
                 errors.append(f"[read-error] {path}: {exc}")
                 continue
             if needle in text:
-                rel = path.relative_to(ROOT)
+                rel = rel_to_root(path)
                 errors.append(
                     f"[devfs-find-by-id] {needle} in portable path {rel} "
                     f"(use fd_entry_devfs_node / dev_node at open)"
@@ -2187,7 +2242,7 @@ def check_ktm_mock_boundaries():
         for path in iter_c_files(base):
             for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
                 if mock_include.search(line):
-                    rel = path.relative_to(ROOT)
+                    rel = rel_to_root(path)
                     errors.append(
                         f"[ktm-mock-production-include] {rel}:{line_no}: {line.strip()}"
                     )
@@ -2196,7 +2251,7 @@ def check_ktm_mock_boundaries():
         for path in iter_c_files(mock_root):
             text = path.read_text(errors="replace")
             if "ir0_boot_smoke" in text or "klog_smoke" in text:
-                rel = path.relative_to(ROOT)
+                rel = rel_to_root(path)
                 errors.append(
                     f"[ktm-mock-self-report] {rel}: harness must observe facade results"
                 )
@@ -2218,7 +2273,7 @@ def check_hardware_backends_do_not_self_test_log():
             continue
         for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if any(token in line for token in forbidden):
-                rel = path.relative_to(ROOT)
+                rel = rel_to_root(path)
                 errors.append(
                     f"[hardware-self-test-log] {rel}:{line_no}: {line.strip()}"
                 )
@@ -2298,7 +2353,7 @@ def check_errno_has_single_catalog():
                 match = ERRNO_DEFINE_RE.match(line)
                 if match and match.group(1) in canonical_names:
                     errors.append(
-                        f"[errno-local-definition] {path.relative_to(ROOT)}:{lineno}: "
+                        f"[errno-local-definition] {rel_to_root(path)}:{lineno}: "
                         f"{match.group(1)} belongs in includes/errno.h"
                     )
     return errors
@@ -2313,7 +2368,7 @@ def check_common_mm_uses_tlb_sync():
         for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
             if COMMON_MM_LOCAL_TLB_RE.search(line):
                 errors.append(
-                    f"[mm-tlb-sync] {path.relative_to(ROOT)}:{lineno}: "
+                    f"[mm-tlb-sync] {rel_to_root(path)}:{lineno}: "
                     "use mm_tlb_sync_page/all with the affected address-space root"
                 )
     return errors

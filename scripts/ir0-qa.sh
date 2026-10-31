@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
-# QA / smoke / test / CI gates — targets live in scripts/make/testing.mk (loaded for QA goals).
+# QA / test / CI helper — wraps the current kernel make targets.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -8,7 +8,7 @@ cd "$ROOT"
 
 show_help() {
 	cat <<'EOF'
-IR0 QA / smoke / CI — scripts/ir0-qa.sh
+IR0 QA / test / CI — scripts/ir0-qa.sh
 
 Usage:
   scripts/ir0-qa.sh <make-target> [make-args...]
@@ -20,11 +20,13 @@ Interactive testing:
 
 Common gates:
   make ctr                   kernel + arch-guard + matrix-min + tests/host
-  make test-fast             arch-guard + tests/host only
+  make test-fast             kernel + arch-guard + host + ktm-check
   make kernel-tests          in-kernel ktest suite (QEMU)
-  make smoke-tier1           runit boot + ash interactive
-  make release-0.0.1         release gate
+  make ktm-check             host tests + KTM invariants
   make health                analyze + memsafe + kernel-tests
+
+The legacy QA smoke catalog and ISD/release targets were removed from the
+Makefile; userspace images are built by ISD and attached with `make run DISK=…`.
 
 List all make targets:
   scripts/ir0-qa.sh targets
