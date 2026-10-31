@@ -15,6 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SYSCALL_H = ROOT / "includes/uapi/ir0/syscall_linux.h"
 SYSCALL_DISPATCH_C = ROOT / "kernel/syscalls/syscall_dispatch.c"
 SYSCALLS_C = ROOT / "kernel/syscalls.c"  # legacy fallback if dispatch not split yet
+X86_DECODE_C = ROOT / "arch/x86-64/sources/syscall_decode.c"
 
 TIER1_BUSYBOX = {
     0: "read", 1: "write", 2: "open", 3: "close", 5: "fstat",
@@ -96,6 +97,44 @@ def parse_wired_table(path: Path) -> set[int]:
     return wired
 
 
+def parse_semantic_decoder(path: Path, name_to_nr: dict[str, int]) -> dict[int, str]:
+    """Map native Linux numbers to IR0 semantic identities."""
+    decoded: dict[int, str] = {}
+    text = path.read_text()
+    pattern = re.compile(
+        r"case\s+__NR_(\w+)\s*:\s*return\s+(IR0_SYSCALL_[A-Z0-9_]+)\s*;"
+    )
+    for abi_name, semantic_id in pattern.findall(text):
+        nr = name_to_nr.get(abi_name)
+        if nr is not None:
+            decoded[nr] = semantic_id
+    return decoded
+
+
+def parse_semantic_handlers(path: Path) -> set[str]:
+    """Return semantic identities assigned a concrete native handler."""
+    text = path.read_text()
+    return set(
+        re.findall(
+            r"syscall_semantic_table\[(IR0_SYSCALL_[A-Z0-9_]+)\]\s*=\s*"
+            r"[A-Za-z_][A-Za-z0-9_]*\s*;",
+            text,
+        )
+    )
+
+
+def parse_semantic_contract(
+    dispatch_path: Path, decoder_path: Path
+) -> tuple[dict[int, str], set[str]]:
+    """Read both sides of the native ABI-to-common-core contract."""
+    names = parse_nr_define(SYSCALL_H)
+    name_to_nr = {name: nr for nr, name in names.items()}
+    return (
+        parse_semantic_decoder(decoder_path, name_to_nr),
+        parse_semantic_handlers(dispatch_path),
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tier1", action="store_true", help="show tier-1/busybox risks only")
@@ -105,6 +144,20 @@ def main() -> int:
     names = parse_nr_define(SYSCALL_H)
     dispatch_path = SYSCALL_DISPATCH_C if SYSCALL_DISPATCH_C.is_file() else SYSCALLS_C
     wired = parse_wired_table(dispatch_path)
+    semantic_errors: list[str] = []
+    if X86_DECODE_C.is_file():
+        decoded, handlers = parse_semantic_contract(dispatch_path, X86_DECODE_C)
+        if not decoded:
+            semantic_errors.append("x86-64 decoder exposes no semantic syscall identities")
+        if not handlers:
+            semantic_errors.append("common dispatcher exposes no semantic syscall handlers")
+        for semantic_id in sorted(set(decoded.values()) - handlers):
+            semantic_errors.append(f"decoded without common handler: {semantic_id}")
+        for semantic_id in sorted(handlers - set(decoded.values())):
+            semantic_errors.append(f"common handler unreachable from x86-64: {semantic_id}")
+        wired |= {
+            nr for nr, semantic_id in decoded.items() if semantic_id in handlers
+        }
 
     missing_tier1 = []
     for nr, label in sorted(TIER1_BUSYBOX.items()):
@@ -122,6 +175,11 @@ def main() -> int:
     print("KTM_SYSCALL_MANIFEST")
     print(f"  wired_total={len(wired)}  linux_nr_defined={len(names)}")
 
+    if semantic_errors:
+        print("  semantic_contract_errors:")
+        for error in semantic_errors:
+            print(f"    - {error}")
+
     if args.tier1 or missing_tier1:
         print("  tier1_missing:")
         for nr, sym in missing_tier1:
@@ -138,7 +196,7 @@ def main() -> int:
         for nr in enosys_risk[:20]:
             print(f"    - {nr:3d} __NR_{names[nr]}")
 
-    return 1 if (missing_tier1 or missing_musl) else 0
+    return 1 if (semantic_errors or missing_tier1 or missing_musl) else 0
 
 
 if __name__ == "__main__":
