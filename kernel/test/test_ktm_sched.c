@@ -41,7 +41,7 @@ void ktest_process_reset_blocked_syscall_state(void)
 	KASSERT_EQ(p.poll_resume_via_arch, 0);
 	KASSERT_EQ(p.kernel_syscall_sleep, 0);
 	KASSERT_EQ(p.kernel_sleep_interrupted, 0);
-	KASSERT_EQ(p.syscall_resume_rax, 0);
+	KASSERT_EQ(p.syscall_resume_rax, 0ULL);
 	KASSERT(p.wait_status_ptr == NULL);
 	KASSERT(p.poll_waiter == NULL);
 
