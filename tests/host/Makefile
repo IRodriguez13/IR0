@@ -96,7 +96,7 @@ KERNEL_CC = $(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 	$(KERNEL_CC)
 
 host_pseudo_fs_registry.o: $(KERNEL_ROOT)/fs/pseudo_fs_registry.c
-	$(KERNEL_CC)
+	$(CC) $(KERNEL_CFLAGS) -include stdio.h -c -o $@ $<
 
 host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 	$(CC) $(KERNEL_CFLAGS) -DCONFIG_ENABLE_USB_HOST=0 -c -o $@ $<
