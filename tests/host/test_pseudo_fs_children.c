@@ -66,6 +66,7 @@ void test_pseudo_fs_path_has_children_and_collect(void)
 	const struct vfs_dirent *de;
 	int rc;
 	int n;
+	char overlong[300];
 
 	TEST_BEGIN("pseudo_fs_path_has_children_collect");
 
@@ -104,6 +105,11 @@ void test_pseudo_fs_path_has_children_and_collect(void)
 	ASSERT_EQ(pseudo_fs_collect_registry_children("/sys", NULL, 16, 0), -EINVAL);
 	ASSERT_EQ(pseudo_fs_collect_registry_children("/sys", entries, 0, 0), -EINVAL);
 	ASSERT_EQ(pseudo_fs_collect_registry_children("/sys", entries, 16, -1), -EINVAL);
+	memset(overlong, 'x', sizeof(overlong));
+	overlong[sizeof(overlong) - 1] = '\0';
+	ASSERT_EQ(pseudo_fs_path_has_children(overlong), 0);
+	ASSERT_EQ(pseudo_fs_collect_registry_children(overlong, entries, 16, 0),
+	          -ENAMETOOLONG);
 
 	memset(entries, 0, sizeof(entries));
 	n = pseudo_fs_collect_registry_children("/sys", entries, 16, 0);

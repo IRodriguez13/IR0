@@ -52,6 +52,7 @@ void test_pseudo_fs_register_lookup_read(void)
 	int rc;
 	int fd;
 	char out[64];
+	char overlong[300];
 	int64_t n;
 
 	TEST_BEGIN("pseudo_fs_register_lookup_read");
@@ -75,6 +76,12 @@ void test_pseudo_fs_register_lookup_read(void)
 
 	rc = pseudo_fs_register("/sys", "kernel/metrics", &mock_ops, "dup");
 	ASSERT_EQ(rc, -EEXIST);
+
+	memset(overlong, 'x', sizeof(overlong));
+	overlong[sizeof(overlong) - 1] = '\0';
+	rc = pseudo_fs_register("/sys", overlong, &mock_ops, "truncated");
+	ASSERT_EQ(rc, -ENAMETOOLONG);
+	ASSERT(pseudo_fs_lookup(overlong) == NULL);
 
 	rc = pseudo_fs_open_path("/sys/kernel/metrics/detail", 0, &fd);
 	ASSERT_EQ(rc, 0);

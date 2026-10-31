@@ -46,32 +46,39 @@ static pseudo_fs_dynamic_reg_t g_dyn_regs[PSEUDO_FS_MAX_DYNAMIC];
 static int g_dyn_reg_count;
 static pseudo_fs_dynamic_open_t g_dyn_opens[PSEUDO_FS_MAX_DYNAMIC];
 
-static void pseudo_fs_normalize(const char *in, char *out, size_t out_sz)
+static int pseudo_fs_normalize(const char *in, char *out, size_t out_sz)
 {
     size_t len;
 
     if (!out || out_sz == 0)
-        return;
+        return -EINVAL;
 
     out[0] = '\0';
     if (!in || !in[0])
-        return;
+        return -EINVAL;
+
+    len = strlen(in);
 
     if (in[0] != '/')
     {
-        snprintf(out, out_sz, "/%s", in);
-        return;
+        if (out_sz < 2 || len > out_sz - 2)
+            return -ENAMETOOLONG;
+        out[0] = '/';
+        memcpy(out + 1, in, len + 1);
+        return 0;
     }
 
-    strncpy(out, in, out_sz - 1);
-    out[out_sz - 1] = '\0';
+    if (len >= out_sz)
+        return -ENAMETOOLONG;
+    memcpy(out, in, len + 1);
 
-    len = strlen(out);
     while (len > 1 && out[len - 1] == '/')
     {
         out[len - 1] = '\0';
         len--;
     }
+
+    return 0;
 }
 
 static int pseudo_fs_build_full_path(const char *mount_prefix, const char *rel_path,
@@ -80,8 +87,12 @@ static int pseudo_fs_build_full_path(const char *mount_prefix, const char *rel_p
     char prefix[128];
     char rel[128];
 
-    pseudo_fs_normalize(mount_prefix, prefix, sizeof(prefix));
-    pseudo_fs_normalize(rel_path, rel, sizeof(rel));
+    int rc = pseudo_fs_normalize(mount_prefix, prefix, sizeof(prefix));
+    if (rc != 0)
+        return rc;
+    rc = pseudo_fs_normalize(rel_path, rel, sizeof(rel));
+    if (rc != 0)
+        return rc;
 
     if (!prefix[0] || !rel[0])
         return -EINVAL;
@@ -145,7 +156,8 @@ static const pseudo_fs_entry_t *pseudo_fs_lookup_table(const pseudo_fs_entry_t *
     if (!table || !full_path)
         return NULL;
 
-    pseudo_fs_normalize(full_path, norm, sizeof(norm));
+    if (pseudo_fs_normalize(full_path, norm, sizeof(norm)) != 0)
+        return NULL;
 
     for (int i = 0; i < count; i++)
     {
@@ -179,7 +191,8 @@ static int pseudo_fs_entry_is_exact(const pseudo_fs_entry_t *entry,
 
 	if (!entry || !full_path)
 		return 0;
-	pseudo_fs_normalize(full_path, norm, sizeof(norm));
+	if (pseudo_fs_normalize(full_path, norm, sizeof(norm)) != 0)
+		return 0;
 	return strcmp(entry->full_path, norm) == 0;
 }
 
@@ -231,7 +244,11 @@ int pseudo_fs_register_dynamic(const char *mount_prefix,
     if (g_dyn_reg_count >= PSEUDO_FS_MAX_DYNAMIC)
         return -ENOSPC;
 
-    pseudo_fs_normalize(mount_prefix, prefix, sizeof(prefix));
+    {
+        int rc = pseudo_fs_normalize(mount_prefix, prefix, sizeof(prefix));
+        if (rc != 0)
+            return rc;
+    }
 
     for (int i = 0; i < g_dyn_reg_count; i++)
     {
@@ -274,7 +291,11 @@ static int pseudo_fs_dynamic_try_match(const char *full_path, void **out_ctx,
     if (!full_path || !out_ctx || !out_ops)
         return -EINVAL;
 
-    pseudo_fs_normalize(full_path, norm, sizeof(norm));
+    {
+        int rc = pseudo_fs_normalize(full_path, norm, sizeof(norm));
+        if (rc != 0)
+            return rc;
+    }
 
     for (int i = 0; i < g_dyn_reg_count; i++)
     {
@@ -773,7 +794,8 @@ static int pseudo_fs_table_has_children(const pseudo_fs_entry_t *table, int coun
     if (!table || !dir_path)
         return 0;
 
-    pseudo_fs_normalize(dir_path, norm, sizeof(norm));
+    if (pseudo_fs_normalize(dir_path, norm, sizeof(norm)) != 0)
+        return 0;
     plen = strlen(norm);
 
     for (int i = 0; i < count; i++)
@@ -840,7 +862,11 @@ int pseudo_fs_collect_registry_children(const char *dir_path,
     if (!dir_path || !entries || max_entries <= 0 || start_n < 0)
         return -EINVAL;
 
-    pseudo_fs_normalize(dir_path, norm, sizeof(norm));
+    {
+        int rc = pseudo_fs_normalize(dir_path, norm, sizeof(norm));
+        if (rc != 0)
+            return rc;
+    }
     plen = strlen(norm);
     n = start_n;
 
