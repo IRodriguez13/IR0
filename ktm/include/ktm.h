@@ -231,11 +231,24 @@ static inline void ktm_sched_gate_check_before_sched(const char *caller)
 	} \
 } while (0)
 
-#define KTEST_BEGIN  KTM_BEGIN
-#define KTEST_END    KTM_END
-#define KASSERT      KTM_ASSERT
-#define KASSERT_EQ   KTM_ASSERT_EQ
-#define KASSERT_GE   KTM_ASSERT_GE
-#define KASSERT_GT   KTM_ASSERT_GT
+/* Legacy spellings remain available, but an explicit harness owns its API. */
+#ifndef KTEST_BEGIN
+#define KTEST_BEGIN KTM_BEGIN
+#endif
+#ifndef KTEST_END
+#define KTEST_END KTM_END
+#endif
+#ifndef KASSERT
+#define KASSERT KTM_ASSERT
+#endif
+#ifndef KASSERT_EQ
+#define KASSERT_EQ KTM_ASSERT_EQ
+#endif
+#ifndef KASSERT_GE
+#define KASSERT_GE KTM_ASSERT_GE
+#endif
+#ifndef KASSERT_GT
+#define KASSERT_GT KTM_ASSERT_GT
+#endif
 
 int kernel_test_run_all(void);
