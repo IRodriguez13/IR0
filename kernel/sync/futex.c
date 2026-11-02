@@ -33,6 +33,8 @@ struct ir0_futex_slot
 
 static struct ir0_futex_slot futex_waiters[IR0_FUTEX_MAX_WAITERS];
 
+void (*ir0_futex_before_sleep)(process_t *proc);
+
 static void futex_slot_release_if_mine(int slot, process_t *proc)
 {
 	if (slot < 0 || slot >= IR0_FUTEX_MAX_WAITERS || !proc)
@@ -62,6 +64,10 @@ int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 			process_set_sched_state(proc, PROCESS_BLOCKED);
 			while (proc->state == PROCESS_BLOCKED)
 			{
+				if (ir0_futex_before_sleep)
+					ir0_futex_before_sleep(proc);
+				if (proc->state != PROCESS_BLOCKED)
+					break;
 				sched_schedule_next();
 				if (proc->state != PROCESS_BLOCKED)
 					break;

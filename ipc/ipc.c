@@ -522,6 +522,8 @@ static void ipc_unlock(ipc_channel_t *channel)
  * gap between unlock and wait_queue_add. Rechecking after the enqueue catches
  * that wakeup; otherwise the sleeper blocks with data already queued.
  */
+void (*ipc_sleep_recheck_probe)(ipc_channel_t *channel);
+
 static void ipc_channel_sleep(ipc_channel_t *channel, wait_queue_t *wq,
 			      int for_read)
 {
@@ -529,6 +531,8 @@ static void ipc_channel_sleep(ipc_channel_t *channel, wait_queue_t *wq,
 	int proceed;
 
 	wait_queue_add(wq, current_process);
+	if (ipc_sleep_recheck_probe)
+		ipc_sleep_recheck_probe(channel);
 
 	ir0_spin_lock(&lock);
 	if (for_read)

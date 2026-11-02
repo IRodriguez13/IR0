@@ -97,6 +97,14 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va);
 
 /*
+ * Test double consulted before the ISA backend. NULL in production.
+ * Return -EOPNOTSUPP to fall through to the real backend. Any other
+ * value is the unmap result and the generic walker does not run.
+ */
+typedef int (*mm_backend_unmap_hook_fn)(address_space_root_t root, uintptr_t va);
+extern mm_backend_unmap_hook_fn mm_backend_unmap_hook;
+
+/*
  * Resolve an owned user leaf without exposing translation-table layout to the
  * generic uaccess path. Return -EOPNOTSUPP for generic-walker roots.
  */

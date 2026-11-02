@@ -157,8 +157,12 @@ int mm_backend_reclaim_user_frames(address_space_root_t root,
 	return 0;
 }
 
+mm_backend_unmap_hook_fn mm_backend_unmap_hook;
+
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
 {
+	if (mm_backend_unmap_hook)
+		return mm_backend_unmap_hook(root, va);
 	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
 		return -EOPNOTSUPP;
 	return arm64_mmu_unmap_user_page_in_root((uint64_t)(uintptr_t)root, va);

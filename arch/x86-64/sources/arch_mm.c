@@ -183,8 +183,12 @@ int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
 	return -EOPNOTSUPP;
 }
 
+mm_backend_unmap_hook_fn mm_backend_unmap_hook;
+
 int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
 {
+	if (mm_backend_unmap_hook)
+		return mm_backend_unmap_hook(root, va);
 	(void)root;
 	(void)va;
 	return -EOPNOTSUPP;

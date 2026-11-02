@@ -95,6 +95,12 @@ uint32_t ipc_allocate_channel_id(void);
 ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count);
 ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count);
 
+/*
+ * Called after the waiter is queued and before the ring is checked again.
+ * NULL outside ktest. Must not sleep or schedule.
+ */
+extern void (*ipc_sleep_recheck_probe)(ipc_channel_t *channel);
+
 void ipc_channel_ref(ipc_channel_t *channel);
 void ipc_channel_unref(ipc_channel_t *channel);
 
