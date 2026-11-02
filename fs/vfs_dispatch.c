@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/errno.h>
+#include <ir0/overflow.h>
 #include <ir0/vfs_dispatch.h>
 #include <ir0/vfs_file.h>
 
@@ -49,6 +50,7 @@ int vfs_dispatch_read(struct vfs_file *f, void *buf, size_t count)
 {
 	struct vfs_ops *ops;
 	size_t done = 0;
+	off_t new_pos;
 	int ret;
 
 	if (!f)
@@ -65,6 +67,10 @@ int vfs_dispatch_read(struct vfs_file *f, void *buf, size_t count)
 	ret = ops->read(f->path, buf, count, &done, f->pos);
 	if (ret != 0)
 		return ret;
-	f->pos += (off_t)done;
+	if (done > count)
+		return -EIO;
+	if (ir0_off_add_size_overflow(f->pos, done, &new_pos))
+		return -EOVERFLOW;
+	f->pos = new_pos;
 	return (int)done;
 }

@@ -1008,6 +1008,7 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 
 int vfs_read(struct vfs_file *f, char *buf, size_t count)
 {
+    off_t new_pos;
     if (!f)   return -EBADF;
     if (count == 0) return 0;
     if (!buf) return -EFAULT;
@@ -1026,12 +1027,17 @@ int vfs_read(struct vfs_file *f, char *buf, size_t count)
     }
     if (ret != 0)
         return ret;
-    f->pos += (off_t)done;
+    if (done > count)
+        return -EIO;
+    if (ir0_off_add_size_overflow(f->pos, done, &new_pos))
+        return -EOVERFLOW;
+    f->pos = new_pos;
     return (int)done;
 }
 
 int vfs_write(struct vfs_file *f, const char *buf, size_t count)
 {
+    off_t new_pos;
     if (!f)   return -EBADF;
     if (count == 0) return 0;
     if (!buf) return -EFAULT;
@@ -1058,7 +1064,11 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count)
     int ret = vfs_ops_write(ops, f->path, buf, count, &done, f->pos);
     if (ret != 0)
         return ret;
-    f->pos += (off_t)done;
+    if (done > count)
+        return -EIO;
+    if (ir0_off_add_size_overflow(f->pos, done, &new_pos))
+        return -EOVERFLOW;
+    f->pos = new_pos;
     return (int)done;
 }
 

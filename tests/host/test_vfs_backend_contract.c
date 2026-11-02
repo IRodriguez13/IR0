@@ -153,6 +153,9 @@ void test_vfs_backend_contract(void)
 	ASSERT_EQ(pos, 2);
 	ASSERT(ir0_add_overflow((off_t)INT64_MAX, (off_t)1, &pos));
 	ASSERT(ir0_add_overflow((off_t)INT64_MIN, (off_t)-1, &pos));
+	ASSERT(!ir0_off_add_size_overflow((off_t)8, (size_t)4, &pos));
+	ASSERT_EQ(pos, 12);
+	ASSERT(ir0_off_add_size_overflow((off_t)INT64_MAX, (size_t)1, &pos));
 
 	TEST_END();
 
