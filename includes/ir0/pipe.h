@@ -42,6 +42,8 @@ typedef struct pipe
 pipe_t *pipe_create(void);
 int pipe_read(pipe_t *pipe, void *buf, size_t count);
 int pipe_write(pipe_t *pipe, const void *buf, size_t count);
+/* Put bytes back at the read end. Returns how many fit. */
+int pipe_unread(pipe_t *pipe, const void *buf, size_t count);
 void pipe_close_end(pipe_t *pipe, int end);
 void pipe_wait_enter(pipe_t *pipe);
 void pipe_wait_leave(pipe_t *pipe);

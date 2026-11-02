@@ -1052,7 +1052,15 @@ int64_t sys_read(int fd, void *buf, size_t count)
           return 0;
         }
         if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
+        {
+          /*
+           * pipe_read already consumed the bytes. Put them back so a
+           * bad user pointer does not drop the pipe contents. Linux
+           * copies into the user buffer before advancing the ring.
+           */
+          pipe_unread(pipe, kernel_read_buf, (size_t)ret);
           return -EFAULT;
+        }
         process_clear_in_thread_syscall_block(current_process);
         return ret;
       }

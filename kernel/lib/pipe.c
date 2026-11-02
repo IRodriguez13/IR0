@@ -195,6 +195,36 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 	return (int)bytes_read;
 }
 
+int pipe_unread(pipe_t *pipe, const void *buf, size_t count)
+{
+	ir0_spinlock_t lock;
+	const char *src;
+	size_t space;
+	size_t n;
+	size_t i;
+
+	if (!pipe || (!buf && count > 0))
+		return -EINVAL;
+
+	src = (const char *)buf;
+	ir0_spin_lock(&lock);
+	space = PIPE_SIZE - pipe->count;
+	n = (count < space) ? count : space;
+	/*
+	 * Prepend in order. A writer may have reused the space this read
+	 * freed; restore only what still fits. The caller still reports
+	 * -EFAULT, so userspace retries the bytes that did not fit.
+	 */
+	for (i = n; i > 0; i--)
+	{
+		pipe->read_pos = (pipe->read_pos + PIPE_SIZE - 1) % PIPE_SIZE;
+		pipe->buffer[pipe->read_pos] = src[i - 1];
+	}
+	pipe->count += n;
+	ir0_spin_unlock(&lock);
+	return (int)n;
+}
+
 int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 {
 	if (!pipe || !buf)
