@@ -114,8 +114,10 @@ PML4s for user processes.
    and `oom_score_adj > -1000`. Badness is resident pages + page-table pages,
    scaled by `oom_score_adj`; the allocating task is marked origin and wins
    selection.
-5. User allocation failure (`mm/page_fault.c`) elects one victim and retries
-   once, mirroring Linux `__alloc_pages_slowpath` after reclaim fails.
+5. User allocation failure (`mm/page_fault.c`) runs `mm_reclaim_run` first.
+   If that frees pages, the fault retries without a kill. Otherwise it elects
+   one victim and retries once, as Linux `__alloc_pages_slowpath` does after
+   direct reclaim.
 6. `process_destroy` unmaps under **process PML4**, not necessarily active CR3.
 
 ## 9. Debugging tips

@@ -64,9 +64,10 @@ int process_oom_score_adj_set(struct process *process, int adjustment);
  * host-testable; these entry points own candidate collection, victim
  * signalling and the OOM event counters.
  *
- * oom_handle_alloc_failure() is the allocator hook: it only acts when a user
- * task is allocating, and returns 0 when a victim was killed so the caller may
- * retry (or simply return and let the faulting instruction re-execute).
+ * oom_handle_alloc_failure() is the allocator hook. It acts only for a user
+ * task. It returns 0 when reclaim freed a page, or when another task was
+ * killed, so the caller retries the allocation once. Killing the current
+ * task does not return. The pre-patch hook was oom_out_of_memory() directly.
  */
 int oom_kill_process(struct process *victim, const char *reason);
 int oom_out_of_memory(struct process *origin, const char *reason);

@@ -10,11 +10,12 @@
  *
  * Linux reference: mm/oom_kill.c (out_of_memory / select_bad_process /
  * oom_kill_process) and __alloc_pages_slowpath, which runs the killer only
- * after direct reclaim has failed. IR0 has no swap or page cache to reclaim,
- * so the hook fires directly from the failing user allocation.
+ * after direct reclaim has failed. IR0 has no swap or page cache; reclaimers
+ * register on the facade, and the hook kills only when that scan frees nothing.
  */
 
 #include <ir0/oom.h>
+#include <ir0/reclaim.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/pmm.h>
@@ -146,10 +147,24 @@ int oom_out_of_memory(struct process *origin, const char *reason)
 
 int oom_handle_alloc_failure(struct process *current, const char *site)
 {
+    struct ir0_reclaim_result reclaimed;
+    int rc;
+
     if (!current || current->mode != USER_MODE)
         return -ENOMEM;
     if (ir0_panic_in_progress())
         return -ENOMEM;
+
+    /*
+     * Linux __alloc_pages_slowpath tries direct reclaim before the killer.
+     * -EBUSY means a scan is already running, so this path must not elect a
+     * second victim. Zero pages reclaimed means there is nothing to free.
+     */
+    rc = mm_reclaim_run(1, &reclaimed);
+    if (rc == -EBUSY)
+        return -ENOMEM;
+    if (rc == 0 && reclaimed.reclaimed_pages > 0)
+        return 0;
 
     return oom_out_of_memory(current, site);
 }

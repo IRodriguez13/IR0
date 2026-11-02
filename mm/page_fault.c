@@ -144,9 +144,9 @@ static void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
 	if (phys_addr == 0)
 	{
 		/*
-		 * Linux __alloc_pages_slowpath: with nothing left to reclaim, run
-		 * the OOM killer and retry the allocation once. If the killer
-		 * picked this task, send_signal() never returns here.
+		 * Linux __alloc_pages_slowpath: reclaim, then at most one kill,
+		 * then one retry. Return 0 means a page was freed or another
+		 * task was killed. Killing this task does not return here.
 		 */
 		if (oom_handle_alloc_failure(current, "demand-zero") != 0)
 		{
@@ -697,10 +697,9 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 					(unsigned)used,
 					(unsigned)free_fr);
 			/*
-			 * Linux returns VM_FAULT_RETRY after the OOM killer frees a
-			 * task: the faulting instruction re-executes and re-enters
-			 * this handler with memory available. Only fail the fault
-			 * when no victim was elected.
+			 * Return 0: reclaim freed a page, or the killer chose another
+			 * task. The faulting instruction runs again. Killing this
+			 * task does not return. Anything else fails the fault.
 			 */
 			if (oom_handle_alloc_failure(current, "cow") == 0)
 				return;

@@ -114,8 +114,10 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
    `pid > 1` y `oom_score_adj > -1000`. La badness es páginas residentes +
    páginas de tablas, escalada por `oom_score_adj`; la tarea que asigna se
    marca como origen y gana la selección.
-5. El fallo de asignación user (`mm/page_fault.c`) elige una víctima y
-   reintenta una vez, como Linux `__alloc_pages_slowpath` tras fallar reclaim.
+5. El fallo de asignación user (`mm/page_fault.c`) corre `mm_reclaim_run`
+   primero. Si libera páginas, el fallo reintenta sin matar. Si no, elige una
+   víctima y reintenta una vez, como Linux `__alloc_pages_slowpath` tras el
+   reclaim directo.
 6. `process_destroy` desmapea bajo **PML4 del proceso**, no necesariamente CR3 activo.
 
 ## 9. Consejos de depuración
