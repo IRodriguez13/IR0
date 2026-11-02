@@ -1455,6 +1455,14 @@ int proc_pid_oom_score_adj_write(pid_t pid, const char *buf, size_t count)
 		return -ENOENT;
 	if (target != current_process && current_process->euid != 0)
 		return -EPERM;
+	/*
+	 * Linux requires CAP_SYS_RESOURCE to lower oom_score_adj. Without this
+	 * check an unprivileged task can write -1000 to /proc/self and make
+	 * itself permanently immune to global OOM selection.
+	 */
+	if (value < process_oom_score_adj_get(target) &&
+	    current_process->euid != 0)
+		return -EPERM;
 
 	rc = process_oom_score_adj_set(target, (int)value);
 	if (rc != 0)

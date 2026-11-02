@@ -529,6 +529,7 @@ void ktest_procfs_oom_score(void)
 	int64_t fd;
 	int64_t n;
 	int original;
+	uint32_t saved_euid;
 
 	KTEST_BEGIN("procfs_oom_score");
 	if (!current_process)
@@ -559,6 +560,15 @@ void ktest_procfs_oom_score(void)
 	sys_close((int)fd);
 	KASSERT_GT(n, 0);
 	KASSERT_EQ(atoi(buf), 500);
+
+	/* Unprivileged callers may raise their own score, but not gain immunity. */
+	saved_euid = current_process->euid;
+	current_process->euid = 1000;
+	fd = sys_open(adj_path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, "0\n", 2), -EPERM);
+	sys_close((int)fd);
+	current_process->euid = saved_euid;
 
 	/* /proc/self/oom_score is a normalised 0..1000 integer. */
 	fd = sys_open(score_path, 0, 0);
