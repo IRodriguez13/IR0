@@ -269,12 +269,15 @@ def tui_draw_summary(
     isd: Path,
     profiles: list[str],
     selected: int,
+    scroll: int,
     active: str,
     arch: str,
     message: str,
     show_help: bool,
     help_scroll: int,
-) -> int:
+    init_labels: dict[str, str],
+    summary_lines: list[str],
+) -> tuple[int, int]:
     height, width = screen.getmaxyx()
     screen.erase()
     if show_help:
@@ -287,34 +290,34 @@ def tui_draw_summary(
                 break
             screen.addstr(row + 1, 2, line[: max(0, width - 4)])
         screen.addstr(0, 2, "usmang help (q/Esc close)", curses.A_BOLD)
-        return help_scroll
+        return scroll, help_scroll
 
     screen.addstr(0, 2, "IR0 Userspace Manager (usmang)", curses.A_BOLD)
-    screen.addstr(1, 2, f"ISD: {isd}"[: max(0, width - 4)])
+    screen.addstr(1, 2, "Up/Down move   Enter apply   h/? help   q quit"[: max(0, width - 4)])
     list_top = 3
-    for index, name in enumerate(profiles):
-        y = list_top + index
-        if y >= height - 8:
-            break
+    detail_room = min(8, max(3, len(summary_lines) + 2))
+    list_room = max(1, height - list_top - detail_room - 1)
+    if selected < scroll:
+        scroll = selected
+    if selected >= scroll + list_room:
+        scroll = selected - list_room + 1
+    for row, name in enumerate(profiles[scroll:scroll + list_room]):
+        index = scroll + row
         marker = ">" if name == active else " "
         attr = curses.A_REVERSE if index == selected else 0
-        try:
-            init = profile_init_system(isd, name)
-        except UnsupportedInitSystem:
-            init = "INVALID"
-        label = f"{marker} {name:<20} init={init}"
-        screen.addstr(y, 2, label[: max(0, width - 4)], attr)
+        label = f"{marker} {name:<20} init={init_labels.get(name, '?')}"
+        screen.addstr(list_top + row, 2, label[: max(0, width - 4)], attr)
 
-    detail_top = list_top + min(len(profiles), max(1, height - 11))
-    screen.addstr(detail_top, 2, f"Active profile: {active}", curses.A_BOLD)
-    for offset, line in enumerate(build_summary_lines(isd, active, arch)):
+    detail_top = list_top + min(len(profiles), list_room)
+    screen.addstr(detail_top, 2, f"Active profile: {active}"[: max(0, width - 4)], curses.A_BOLD)
+    for offset, line in enumerate(summary_lines):
         y = detail_top + 1 + offset
-        if y >= height - 2:
+        if y >= height - 1:
             break
         screen.addstr(y, 4, line[: max(0, width - 6)])
     screen.addstr(height - 1, 2, message[: max(0, width - 4)])
     screen.refresh()
-    return help_scroll
+    return scroll, help_scroll
 
 
 def width_msg(screen: curses.window) -> int:
@@ -333,13 +336,25 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
         return 2
     selected = profiles.index(profile) if profile in profiles else 0
     active = profiles[selected]
-    message = "h/? help  a admin  v verify  c boot-contract  Enter apply  q quit"
+    message = "a admin   v verify   c boot-contract   s refresh"
     show_help = False
     help_scroll = 0
+    scroll = 0
+    init_labels: dict[str, str] = {}
+    for name in profiles:
+        try:
+            init_labels[name] = profile_init_system(isd, name)
+        except UnsupportedInitSystem:
+            init_labels[name] = "INVALID"
+    summary_key: tuple[str, str] | None = None
+    summary_lines: list[str] = []
     while True:
-        help_scroll = tui_draw_summary(
-            screen, isd, profiles, selected, active, arch, message,
-            show_help, help_scroll,
+        if summary_key != (active, arch):
+            summary_lines = build_summary_lines(isd, active, arch)
+            summary_key = (active, arch)
+        scroll, help_scroll = tui_draw_summary(
+            screen, isd, profiles, selected, scroll, active, arch, message,
+            show_help, help_scroll, init_labels, summary_lines,
         )
         if show_help:
             key = screen.getch()
@@ -364,6 +379,7 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
             message = f"active profile → {active}"
             continue
         if key == ord("s"):
+            summary_key = None
             message = "summary refreshed"
             continue
         if key == ord("a"):
@@ -376,6 +392,7 @@ def tui(screen: curses.window, isd: Path, profile: str, arch: str) -> int:
                 f"admin → {new_tool} ({admin_package_for(new_tool)}); "
                 f"wrote {cfg_path.name}; rebuild ISD rootfs"
             )
+            summary_key = None
             continue
         if key == ord("v"):
             payload, code = cmd_verify(isd, active, arch, None)

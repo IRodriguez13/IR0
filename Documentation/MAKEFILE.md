@@ -89,6 +89,7 @@ setup/defconfig  ──►  .config  ──►  -include .config
 
 - **`make defconfig`** — baseline `.config` from `setup/defconfig`.
 - **`make menuconfig`** — interactive TUI (`scripts/kconfig/menuconfig.py`).
+  `MENUCONFIG_LANG=es` or `MENUCONFIG_LANG=en` forces the language.
 - **`python3 scripts/kconfig/menuconfig.py --set KEY=VALUE`** — non-interactive updates.
 
 When `.config` is absent, `CONFIG_*` variables are empty and most `ifneq ($(CONFIG_FOO),n)` guards
@@ -146,8 +147,8 @@ requires a userspace disk built outside this tree.
 |--------|-------------------|
 | `make ktest` / `kernel-tests` | In-kernel ktest battery in QEMU (headless) |
 | `make test` | Interactive test TUI (`scripts/test_tui.py`) |
-| `make test-list` | List catalog suites |
-| `make test-run SUITE=host,ktest` | Run catalog suites non-interactively |
+| `make test SUITE=list` | List catalog suites |
+| `make test SUITE=host,ktest` | Run catalog suites non-interactively |
 | `make test-fast` | `kernel-x64.bin` + `arch-guard` + host tests + `ktm-check` |
 | `make agent-fast` | `test-fast` + `ktest` |
 | `make ctr` | `scripts/ctr.sh`: kernel + arch-guard + matrix-min + host tests |
@@ -160,7 +161,7 @@ requires a userspace disk built outside this tree.
 | `make tests` | Build the ktest kernel, kernel-memsafe harness and host tests |
 
 The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
-`make test-run` and the TUI are thin wrappers around that catalog.
+`make test` is the only catalog entry. With `SUITE` it runs; without it, it opens the TUI.
 
 ### Documentation
 
@@ -189,7 +190,7 @@ The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
 | `make unibuild FILE=<file.c>` | Compile translation units in isolation |
 | `make unibuild-cpp` / `unibuild-rust` / `unibuild-clean` | Other isolated compiler modes |
 | `make headers_install` | Export `includes/uapi` to `DESTDIR` |
-| `make check-env` / `deptest` | Host environment diagnostic |
+| `make check-env` | Host environment diagnostic (`deptest` is the same recipe) |
 
 ### Utilities
 

@@ -1,53 +1,25 @@
 # IR0 test suite catalog — consumed by scripts/test_runner.py and scripts/test_tui.py
-# Only targets that exist in the lean root Makefile belong here.
+# Only the public daily/CI gates belong here. Internal aliases stay make targets.
 
 suites:
-  # --- Fast / CTR ---
   - id: host
-    group: ctr
-    label: "Fast gate (kernel + arch-guard + host + ktm-check)"
+    group: daily
+    label: "Host and KTM gate"
     make: test-fast
     default: true
 
   - id: ktest
-    group: ctr
-    label: "In-kernel ktests (QEMU boot)"
+    group: daily
+    label: "In-kernel tests in QEMU"
     make: ktest
     default: true
 
   - id: ctr
-    group: ctr
-    label: "CTR gates (kernel + arch-guard + matrix-min + host)"
+    group: daily
+    label: "Merge gate (kernel, guard, daily matrix, host)"
     make: ctr
 
-  - id: memsafe
-    group: ctr
-    label: "Kernel memsafe (Valgrind host build)"
-    make: kernel-memsafe
-
-  - id: agent-fast
-    group: ctr
-    label: "Fast gate + in-kernel ktests"
-    make: agent-fast
-
-  # --- KTM ---
-  - id: ktm-check
-    group: ktm
-    label: "KTM check (host + classify + manifest)"
-    make: ktm-check
-
-  - id: ktm-manifest
-    group: ktm
-    label: "KTM manifest inventory"
-    make: ktm-manifest
-
-  # --- Harnesses / health ---
-  - id: harnesses
-    group: health
-    label: "Build test kernel + host harnesses"
-    make: tests
-
-  - id: health
-    group: health
-    label: "Health (analyze + memsafe + ktests)"
-    make: health
+  - id: matrix
+    group: ci
+    label: "Full config matrix"
+    make: build-matrix-full

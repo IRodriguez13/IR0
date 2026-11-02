@@ -32,8 +32,7 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 
 - `make defconfig`: reset to baseline config.
 - `make menuconfig`: interactive TUI configuration.
-- `make menuconfig-en`: force English menuconfig session.
-- `make menuconfig-es`: force Spanish menuconfig session.
+- `make menuconfig MENUCONFIG_LANG=en` or `MENUCONFIG_LANG=es`: force the TUI language.
 - `python3 scripts/kconfig/menuconfig.py --set ...`: non-interactive mutation.
 - `python3 scripts/kconfig/menuconfig.py --preset ...`: preset-based setup.
 

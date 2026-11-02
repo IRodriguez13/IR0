@@ -35,7 +35,7 @@ Antes de pedir review:
 ```bash
 make ctr                          # kernel + arch-guard + matrix-min + host tests → CTR_OK
 make agent-fast                   # ctr + ktest en QEMU
-make test-run SUITE=ktest         # suite puntual del catálogo
+make test SUITE=ktest             # suite puntual del catálogo
 ```
 
 `ctr` es el gate rápido de merge. `agent-fast` añade la batería ktest dentro de
@@ -48,7 +48,7 @@ make -s build-matrix-min
 make -s -C tests/host run
 ```
 
-El catálogo (`make test-list`) solo lista targets que existen. `make test` abre
+El catálogo (`make test SUITE=list`) solo lista targets que existen. `make test` abre
 la TUI interactiva.
 
 ## 4. Formato del commit

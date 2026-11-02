@@ -28,7 +28,7 @@ def load_rows() -> list[dict]:
             {
                 "id": sid,
                 "group": suite.get("group", ""),
-                "label": suite.get("label", suite.get("make", "")),
+                "label": suite.get("make", suite.get("label", "")),
                 "default": default,
                 "on": default,
             }
@@ -36,35 +36,49 @@ def load_rows() -> list[dict]:
     return rows
 
 
-def draw(stdscr, rows: list[dict], idx: int, persist: bool, status: str) -> None:
-    stdscr.erase()
-    h, w = stdscr.getmaxyx()
-    title = " IR0 Test Menu (KTM-style) "
-    stdscr.addstr(0, max(0, (w - len(title)) // 2), title, curses.A_BOLD)
-    stdscr.addstr(1, 0, "Space toggle  A all/none  D defaults  R run  P persist  Q quit")
-    stdscr.addstr(2, 0, f"Persist disk: {'ON' if persist else 'off'}  {status}"[: max(0, w - 1)])
-
-    y = 4
+def display_lines(rows: list[dict]) -> list[tuple[str, int | None]]:
+    lines: list[tuple[str, int | None]] = []
     last_grp = None
     for i, row in enumerate(rows):
-        if y >= h - 2:
-            break
-        if row["group"] != last_grp:
-            if y > 4:
-                y += 1
-            grp_title = row["group"] or "other"
-            if y < h - 2:
-                stdscr.addstr(y, 0, f"[{grp_title}]", curses.A_UNDERLINE)
-                y += 1
-            last_grp = row["group"]
+        group = row["group"] or "other"
+        if group != last_grp:
+            lines.append((f"[{group}]", None))
+            last_grp = group
         mark = "[x]" if row["on"] else "[ ]"
-        line = f"{mark} {row['id']:16} {row['label']}"
-        attr = curses.A_REVERSE if i == idx else curses.A_NORMAL
-        if y < h - 2:
-            stdscr.addstr(y, 0, line[: max(0, w - 1)], attr)
-            y += 1
+        lines.append((f"{mark} {row['id']:<8} make {row['label']}", i))
+    return lines
+
+
+def draw(stdscr, rows: list[dict], idx: int, scroll: int, persist: bool, status: str) -> int:
+    stdscr.erase()
+    h, w = stdscr.getmaxyx()
+    title = " IR0 tests "
+    stdscr.addstr(0, max(0, (w - len(title)) // 2), title, curses.A_BOLD)
+    stdscr.addstr(1, 0, "Space toggle   A all   D defaults   R run   P disk   Q quit"[: max(0, w - 1)])
+    selected = sum(1 for row in rows if row["on"])
+    stdscr.addstr(
+        2, 0,
+        f"disk {'on' if persist else 'off'}   {selected} selected   {status}"[: max(0, w - 1)],
+    )
+
+    lines = display_lines(rows)
+    cursor_line = next((n for n, (_text, row_i) in enumerate(lines) if row_i == idx), 0)
+    list_top = 4
+    room = max(1, h - list_top)
+    if cursor_line < scroll:
+        scroll = cursor_line
+    if cursor_line >= scroll + room:
+        scroll = cursor_line - room + 1
+    scroll = max(0, min(scroll, max(0, len(lines) - room)))
+
+    for offset, (text, row_i) in enumerate(lines[scroll:scroll + room]):
+        attr = curses.A_REVERSE if row_i == idx else curses.A_NORMAL
+        if row_i is None:
+            attr = curses.A_UNDERLINE
+        stdscr.addstr(list_top + offset, 0, text[: max(0, w - 1)], attr)
 
     stdscr.refresh()
+    return scroll
 
 
 def run_selected(rows: list[dict], persist: bool) -> tuple[int, str]:
@@ -91,11 +105,12 @@ def main_curses(stdscr) -> int:
         return 2
 
     idx = 0
+    scroll = 0
     persist = False
     status = ""
 
     while True:
-        draw(stdscr, rows, idx, persist, status)
+        scroll = draw(stdscr, rows, idx, scroll, persist, status)
         ch = stdscr.getch()
         if ch in (ord("q"), ord("Q"), 27):
             return 0
@@ -116,7 +131,7 @@ def main_curses(stdscr) -> int:
             persist = not persist
         elif ch in (ord("r"), ord("R")):
             status = "running..."
-            draw(stdscr, rows, idx, persist, status)
+            scroll = draw(stdscr, rows, idx, scroll, persist, status)
             curses.endwin()
             rc, msg = run_selected(rows, persist)
             stdscr.refresh()
@@ -131,7 +146,7 @@ def main_curses(stdscr) -> int:
 
 def main() -> int:
     if not sys.stdin.isatty():
-        sys.stderr.write("test_tui requires a terminal; use: make test-run SUITE=host,ktest\n")
+        sys.stderr.write("test_tui requires a terminal; use: make test SUITE=host,ktest\n")
         return 2
     try:
         return curses.wrapper(main_curses)

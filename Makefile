@@ -207,13 +207,7 @@ headers_install:
 	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -name '*.h' | wc -l) headers)"
 
 menuconfig:
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py
-
-menuconfig-en:
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --lang en
-
-menuconfig-es:
-	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --lang es
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py $(if $(MENUCONFIG_LANG),--lang $(MENUCONFIG_LANG),)
 
 defconfig:
 	@cp $(KERNEL_ROOT)/setup/defconfig $(KERNEL_ROOT)/.config
@@ -1268,22 +1262,6 @@ arch-guard:
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
 # Host↔guest clipboard via 9p dennis (.ir0/clipboard → guest ir0-paste)
-.PHONY: clip-send clip-pull clip-status
-IR0_CLIP_DIR = $(KERNEL_ROOT)/.ir0/clipboard
-
-clip-send:
-	@chmod +x scripts/ir0-clip.sh
-	@scripts/ir0-clip.sh send
-
-clip-pull:
-	@chmod +x scripts/ir0-clip.sh
-	@scripts/ir0-clip.sh pull
-
-clip-status:
-	@chmod +x scripts/ir0-clip.sh
-	@scripts/ir0-clip.sh status
-
-
 # HELP
 
 # DEV TOOLING
@@ -1377,8 +1355,7 @@ help:
 	@echo "  make ir0 arm64               ARM64 qemu-virt aggregate"
 	@echo "  make ir0 arm64 rpi4          ARM64 board image (rpi3|rpi4|rpi5)"
 	@echo "  make defconfig               Write setup/defconfig → .config"
-	@echo "  make menuconfig              Curses configuration TUI"
-	@echo "  make menuconfig-en|-es       Menuconfig in English / Spanish"
+	@echo "  make menuconfig              Configuration TUI (MENUCONFIG_LANG=es)"
 	@echo "  make clean                   Remove objects, images and generated headers"
 	@echo ""
 	@echo "Run (launches an already built artifact; never builds):"
@@ -1389,22 +1366,17 @@ help:
 	@echo "  make run gdb                 Wait for GDB on localhost:1234"
 	@echo "  make run arm64 rpi4          Boot build/arm64-rpi4/kernel8.img"
 	@echo ""
-	@echo "Kernel tests and gates:"
-	@echo "  make ktest | kernel-tests    In-kernel ktest suite in QEMU"
-	@echo "  make test-fast               kernel + arch-guard + host tests + KTM"
-	@echo "  make agent-fast              test-fast + kernel-tests"
-	@echo "  make test                    Interactive test TUI"
-	@echo "  make test-list               List catalog suites"
-	@echo "  make test-run SUITE=host,ktest"
-	@echo "  make ctr                     kernel + arch-guard + matrix-min + host tests"
-	@echo "  make ktm-check               Host tests + KTM invariants"
-	@echo "  make arch-guard              Architecture boundary guard"
-	@echo "  make build-matrix-min        Daily .config matrix (restores .config)"
-	@echo "  make build-matrix-full       Daily matrix plus scheduler, storage split, USB, Bluetooth"
-	@echo "  make kernel-memsafe          Valgrind over kernel code on the host"
-	@echo "  make config-wiring-check | arch-config-check"
-	@echo "  make repo-hygiene-guard | truth-tests"
-	@echo "  make tests | health          Build harnesses / full kernel health"
+	@echo "Check:"
+	@echo "  make check-env               Host toolchain diagnostic"
+	@echo "  make test-fast               Kernel + arch-guard + host tests + KTM"
+	@echo "  make ktest                   In-kernel tests in QEMU"
+	@echo "  make ctr                     Merge gate (includes the daily matrix)"
+	@echo "  make arch-guard              Architecture boundary"
+	@echo "  make build-matrix-min        Daily .config matrix"
+	@echo "  make build-matrix-full       Daily matrix plus CI cases"
+	@echo "  make test                    Test TUI"
+	@echo "  make test SUITE=host,ktest   Run catalog suites"
+	@echo "  make test SUITE=list         List catalog suites"
 	@echo ""
 	@echo "Documentation:"
 	@echo "  make sync-mandocs            Rebuild + install man pages (no sudo)"
@@ -1414,22 +1386,12 @@ help:
 	@echo "  make ai-dev-rules-install    Install tracked rules into .cursor/"
 	@echo ""
 	@echo "Develop:"
-	@echo "  make format                  clang-format on tracked C/H, skipping toolchain/ and setup/"
+	@echo "  make format                  clang-format tracked C/H, skip toolchain/ and setup/"
 	@echo "  make analyze                 cppcheck on kernel trees when installed"
-	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
-	@echo "  make compile-commands        compile_commands.json for LSP"
-	@echo "  make disasm                  objdump -d -S kernel-x64.bin"
 	@echo "  make unibuild FILE=fs/tmpfs.c"
-	@echo "  make unibuild-cpp FILE=cpp/examples/cpp_example.cpp"
-	@echo "  make unibuild-rust FILE=rust/drivers/rust_simple_driver.rs"
-	@echo "  make unibuild-clean FILE=fs/tmpfs.c"
 	@echo "  make headers_install         Export includes/uapi to DESTDIR"
-	@echo ""
-	@echo "Utilities:"
-	@echo "  make check-env | deptest     Host environment diagnostic"
 	@echo "  make create-disk [FS=minix] [SIZE=200]"
 	@echo "  make delete-disk | disk-reset | load-init"
-	@echo "  make sync-menuconfig | sync-menuconfig-defconfig"
 	@echo ""
 	@echo "Debug flags (rebuild after change): IR0_DEBUG_PMM=1 IR0_DEBUG_WAIT=1 IR0_DEBUG_PROC=1"
 	@echo "Build uses -j$(PARALLEL_JOBS) by default (override: make -j1 or PARALLEL_JOBS=4)."
@@ -1555,13 +1517,13 @@ test-drivers-clean:
 
 .PHONY: all clean ir0 run help gui console debug fullscreen gdb \
 	create-disk delete-disk disk-reset load-init \
-	menuconfig menuconfig-en menuconfig-es defconfig \
+	menuconfig defconfig \
 	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
 	headers_install deptest check-env \
 	unibuild unibuild-cpp unibuild-rust unibuild-clean \
 	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
 	format analyze compile-commands disasm stack-usage print-build-objects build-graph-audit \
-	arch-guard clip-send clip-pull clip-status
+	arch-guard
 
 # Positional modifiers are accepted as goals and intentionally do nothing on
 # their own: `make ir0 arm64` and `make run arm64 console` carry the action.

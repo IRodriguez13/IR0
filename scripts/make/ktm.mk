@@ -10,7 +10,7 @@
 	ktm-classify-selftest ktm-adoption-guard host-portability-guard \
 	build-matrix-min build-matrix-full build-matrix-run \
 	config-wiring-check arch-config-check \
-	repo-hygiene-guard truth-tests test test-list test-run
+	repo-hygiene-guard truth-tests test
 
 # CTR is the fast merge gate: kernel + architecture boundary + config matrix +
 # host unit tests. `scripts/ctr.sh` owns the ordering so agents and humans run
@@ -242,13 +242,13 @@ repo-hygiene-guard:
 truth-tests:
 	@python3 scripts/test_truth_tooling.py
 
-# Small test catalog / TUI. The catalog only lists targets that still exist.
+# One test entry. No SUITE opens the TUI. SUITE=list prints the catalog.
+# SUITE=host,ktest runs those catalog ids.
 test:
-	@python3 scripts/test_tui.py
-
-test-list:
-	@python3 scripts/test_runner.py --list
-
-test-run:
-	@test -n "$(SUITE)" || (echo "usage: make test-run SUITE=host,ktest|ctr" >&2; exit 2)
-	@python3 scripts/test_runner.py --suites "$(SUITE)" $(if $(filter 1,$(IR0_DEV_PERSIST)),--persist,)
+	@if [ "$(SUITE)" = list ]; then \
+		python3 scripts/test_runner.py --list; \
+	elif [ -n "$(SUITE)" ]; then \
+		python3 scripts/test_runner.py --suites "$(SUITE)" $(if $(filter 1,$(IR0_DEV_PERSIST)),--persist,); \
+	else \
+		python3 scripts/test_tui.py; \
+	fi

@@ -8,7 +8,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "== product gate: ISA isolation =="
-make -s arch-guard isa-security-guard build-matrix-min
+make -s arch-guard isa-security-guard build-matrix-full
 
 echo "== product gate: TUI truth =="
 scripts/release_check_tui.sh

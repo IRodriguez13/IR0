@@ -123,9 +123,9 @@ Default highlights:
 Interactive configuration:
 
 ```bash
-make menuconfig       # curses TUI
-make menuconfig-en    # force English
-make menuconfig-es    # force Spanish
+make menuconfig                      # curses TUI
+make menuconfig MENUCONFIG_LANG=es  # force Spanish
+make menuconfig MENUCONFIG_LANG=en  # force English
 ```
 
 If `.config` is missing, the Makefile still builds with bring-up defaults; run

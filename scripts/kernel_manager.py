@@ -1040,24 +1040,52 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
     help_scroll = 0
     detail: str | None = None
     message = "Press h/? for full key legend"
+    snapshot: dict | None = None
     while True:
         entries = store.installed()
-        workspace_id = None
-        workspace_health = "not configured"
-        workspace_digest = None
-        if source is not None and version is not None:
-            try:
-                workspace_id, workspace_arch = store.source_identity(source, version)
-                workspace_digest = store.checksum(source.resolve())
-                workspace_health = (
-                    "installed" if workspace_id in entries else "not installed"
-                )
-                workspace_health += f", {workspace_arch}"
-            except (OSError, ValueError) as error:
-                workspace_health = f"unavailable: {error}"
-        if refresh_status:
+        if (
+            refresh_status
+            or snapshot is None
+            or snapshot["entries"] != list(entries)
+        ):
             statuses = {kernel_id: store.verify(kernel_id) for kernel_id in entries}
+            described = {kernel_id: store.describe(kernel_id) for kernel_id in entries}
+            workspace_id = None
+            workspace_health = "not configured"
+            workspace_digest = None
+            if source is not None and version is not None:
+                try:
+                    workspace_id, workspace_arch = store.source_identity(source, version)
+                    workspace_digest = store.checksum(source.resolve())
+                    workspace_health = (
+                        "installed" if workspace_id in entries else "not installed"
+                    )
+                    workspace_health += f", {workspace_arch}"
+                except (OSError, ValueError) as error:
+                    workspace_health = f"unavailable: {error}"
+            next_build = store.next_local_build()
+            disk_level, disk_detail = store.machine_disk_health()
+            snapshot = {
+                "entries": list(entries),
+                "statuses": statuses,
+                "described": described,
+                "workspace_id": workspace_id,
+                "workspace_health": workspace_health,
+                "workspace_digest": workspace_digest,
+                "next_label": (
+                    f"next local #{next_build}" if next_build is not None
+                    else "next local #?"
+                ),
+                "disk_status": store.disk_status(),
+                "disk_level": disk_level,
+                "disk_detail": disk_detail,
+            }
             refresh_status = False
+        statuses = snapshot["statuses"]
+        described = snapshot["described"]
+        workspace_id = snapshot["workspace_id"]
+        workspace_health = snapshot["workspace_health"]
+        workspace_digest = snapshot["workspace_digest"]
         selected = min(selected, max(0, len(entries) - 1))
         height, width = screen.getmaxyx()
         list_top = 10
@@ -1119,13 +1147,11 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                 width - 4,
             ),
         )
-        next_build = store.next_local_build()
-        next_label = f"next local #{next_build}" if next_build is not None else "next local #?"
         screen.addstr(
             2, 2,
             _clip(
-                f"Build scope: machine-local counters  |  {next_label}  |  "
-                f"{store.disk_status()}",
+                f"Build scope: machine-local counters  |  {snapshot['next_label']}  |  "
+                f"{snapshot['disk_status']}",
                 width - 4,
             ),
         )
@@ -1146,7 +1172,8 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
             sync_line = "Default matches Workspace (same id and SHA-256)"
             sync_attr = 0
         screen.addstr(7, 2, _clip(sync_line, width - 4), sync_attr)
-        disk_level, disk_detail = store.machine_disk_health()
+        disk_level = snapshot["disk_level"]
+        disk_detail = snapshot["disk_detail"]
         if disk_level == "bad":
             disk_line = f"! {disk_detail} — h/? → Product boot"
             disk_attr = curses.A_BOLD
@@ -1172,7 +1199,7 @@ def tui(screen: curses.window, store: KernelStore, make_args: list[str],
                 tags.append("workspace")
             valid, state = statuses.get(kernel_id, (False, "unknown"))
             health = "ok" if valid and state == "verified" else state
-            meta = store.describe(kernel_id)
+            meta = described[kernel_id]
             prov = _provenance_label(meta)
             suffix = f" [{', '.join(tags)}]" if tags else ""
             line = f"{marker} [{store.arch}] {kernel_id} [{health}]{suffix}  {prov}"

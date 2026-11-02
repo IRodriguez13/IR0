@@ -27,7 +27,8 @@ BOARD_SYMBOLS = ("ARM64_BOARD_QEMU_VIRT", "ARM64_BOARD_RPI4", "ARM64_BOARD_RPI5"
 I18N = {
     "en": {
         "title": " IR0 Kernel Configuration ",
-        "footer": " Space toggle  Enter edit  S save  D defaults  G/T/I/C/W presets  M mandocs  ' or H presets  ? symbol  L lang  Q quit ",
+        "footer": " Space toggle   Enter edit   S save   ? help   Q quit",
+        "keys": "D defaults   G/T/I/C/W preset   M manuals   H preset help   L language",
         "modified": " [MODIFIED] ",
         "help_title": " Symbol ",
         "preset_help_title": " Build presets ",
@@ -50,7 +51,8 @@ I18N = {
     },
     "es": {
         "title": " Configuracion del Kernel IR0 ",
-        "footer": " Espacio toggle  Enter editar  S guardar  D defecto  G/T/I/C/W presets  M mandocs  ' o H presets  ? simbolo  L idioma  Q salir ",
+        "footer": " Espacio cambia   Enter edita   S guarda   ? ayuda   Q sale",
+        "keys": "D defecto   G/T/I/C/W preset   M manuales   H ayuda preset   L idioma",
         "modified": " [MODIFICADO] ",
         "help_title": " Opcion ",
         "preset_help_title": " Perfiles de compilacion ",
@@ -799,6 +801,10 @@ def run_menu(stdscr, symbols):
         stdscr.attron(curses.color_pair(1))
         stdscr.addstr(h - 1, 0, footer[:w - 1].ljust(w - 1))
         stdscr.attroff(curses.color_pair(1))
+        show_keys = h >= 8
+        list_limit = h - 3 if show_keys else h - 2
+        if show_keys:
+            stdscr.addstr(h - 2, 0, tr(ui_lang, "keys")[:w - 1])
 
         if dirty:
             mod = tr(ui_lang, "modified")
@@ -807,7 +813,7 @@ def run_menu(stdscr, symbols):
             stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
 
         list_top = 2
-        list_h = h - 4
+        list_h = h - (5 if h >= 8 else 4)
 
         if cursor < scroll:
             scroll = cursor
@@ -821,15 +827,15 @@ def run_menu(stdscr, symbols):
             if sym.menu and sym.menu != current_menu:
                 current_menu = sym.menu
                 header = f"--- {current_menu} ---"
-                if row < h - 2:
+                if row < list_limit:
                     stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
                     stdscr.addstr(row, 2, header[:w - 4])
                     stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
                     row += 1
-                    if row >= h - 2:
+                    if row >= list_limit:
                         break
 
-            if row >= h - 2:
+            if row >= list_limit:
                 break
 
             is_sel = (idx == cursor)

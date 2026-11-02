@@ -32,8 +32,7 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
 
 - `make defconfig`: vuelve al baseline.
 - `make menuconfig`: configuracion interactiva TUI.
-- `make menuconfig-en`: fuerza menuconfig en ingles.
-- `make menuconfig-es`: fuerza menuconfig en espanol.
+- `make menuconfig MENUCONFIG_LANG=en` o `MENUCONFIG_LANG=es`: fuerza el idioma de la TUI.
 - `python3 scripts/kconfig/menuconfig.py --set ...`: cambios no interactivos.
 - `python3 scripts/kconfig/menuconfig.py --preset ...`: aplicacion de preset.
 

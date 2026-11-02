@@ -15,15 +15,14 @@ Usage:
 
 Interactive testing:
   make test                  TUI suite picker (scripts/test_catalog.yaml)
-  make test-list             List suites
-  make test-run SUITE=host,ktest
+  make test SUITE=list       List suites
+  make test SUITE=host,ktest
 
 Common gates:
   make ctr                   kernel + arch-guard + matrix-min + tests/host
   make test-fast             kernel + arch-guard + host + ktm-check
-  make kernel-tests          in-kernel ktest suite (QEMU)
-  make ktm-check             host tests + KTM invariants
-  make health                analyze + memsafe + kernel-tests
+  make ktest                 in-kernel ktest suite (QEMU)
+  make build-matrix-full     daily matrix plus CI cases
 
 The legacy QA smoke catalog and ISD/release targets were removed from the
 Makefile; userspace images are built by ISD and attached with `make run DISK=…`.

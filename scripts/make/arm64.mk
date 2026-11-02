@@ -6,7 +6,6 @@
 #   kernel-arm64.bin              validated qemu-virt aggregate (default)
 #   kernel-arm64-boot.bin         early qemu-virt ELF
 #   kernel-arm64-<board>-min.bin  early board images (rpi3/rpi4/rpi5)
-#   kernel-arm64-all-Image        Linux Image header over the aggregate ELF
 #
 # The early aggregate is self-contained: it embeds build/hello_aarch64 as its
 # EL0 guest and rootfs seed. No ISD/BusyBox artifact is required to build it.
@@ -37,12 +36,6 @@ MUSL_CC_AARCH64 ?= $(shell \
 		echo $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc) || \
 	true)
 MUSL_AARCH64_HELLO := $(KERNEL_ROOT)/build/hello_aarch64
-MUSL_AARCH64_HELLO_RPI3 := $(KERNEL_ROOT)/build/hello_aarch64_rpi3
-
-.PHONY: setup-musl-aarch64 musl-aarch64-hello
-
-setup-musl-aarch64:
-	@bash $(KERNEL_ROOT)/scripts/setup_musl_aarch64.sh
 
 $(KERNEL_ROOT)/build:
 	@mkdir -p $@
@@ -63,10 +56,7 @@ $(MUSL_AARCH64_HELLO): setup/pid1/hello_aarch64.c setup/pid1/hello_aarch64_frees
 	fi
 	@file $@ | grep -qi 'aarch64'
 	@file $@ | grep -qi 'static'
-	@echo "✓ musl-aarch64-hello → $@ (ET_EXEC @ 0x43000000)"
-
-musl-aarch64-hello: $(MUSL_AARCH64_HELLO)
-	@:
+	@echo "✓ hello_aarch64 → $@ (ET_EXEC @ 0x43000000)"
 
 # Keep the image blob separate from its C loader. The generic %.o: %.S rule in
 # the root Makefile would otherwise lose the explicit hello dependency.
@@ -220,22 +210,6 @@ ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/elf_load_early.o,build/arm64-
 ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/hello_embed.o,build/arm64-rpi3-early/hello_embed.o,$(ARM64_RPI3_LINK_OBJS))
 ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/embedded_elf_early.o,build/arm64-rpi3-early/embedded_elf_early.o,$(ARM64_RPI3_LINK_OBJS))
 ARM64_RPI3_LINK_OBJS := $(subst arch/arm64/sources/embedded_elf_embed.o,build/arm64-rpi3-early/embedded_elf_embed.o,$(ARM64_RPI3_LINK_OBJS))
-
-ARM64_MIN_LINK_OBJS = \
-	$(filter-out build/arm64-boot/portable_string.o \
-		build/arm64-boot/allocator_stubs.o,$(ARM64_BOOT_LINK_OBJS)) \
-	build/arm64-min/arch_mm.o \
-	build/arm64-min/portable_string.o \
-	build/arm64-min/allocator.o \
-	build/arm64-min/boot_memory.o \
-	build/arm64-min/no_mmu.o \
-	build/arm64-min/paging.o \
-	build/arm64-min/pmm.o \
-	build/arm64-min/kmem.o \
-	build/arm64-min/tlb_sync.o \
-	build/arm64-min/errno.o \
-	build/arm64-min/open_flags.o \
-	build/arm64-min/min_link_stubs.o
 
 ARM64_ALL_EARLY_LINK_OBJS = \
 	$(filter-out build/arm64-boot/portable_string.o \
@@ -645,40 +619,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "✓ $@"
 
 
-# Honest min link: MEMORY_OBJS + KERNEL sample + freestanding ARCH (+ stubs).
-# Does NOT claim product ALL_OBJS (x86 ATA/RTL8139/VBE remain excluded).
-.PHONY: kernel-arm64-min.bin
-kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
-		arch/arm64/sources/freestanding_stubs.c
-	@echo "  CC      ARM64_MIN MEMORY+KERNEL sample"
-	@mkdir -p build/arm64-min
-	@fail=0; \
-	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c \
-		mm/tlb_sync.c \
-		kernel/errno.c kernel/lib/open_flags.c \
-		arch/arm64/sources/arch_mm.c arch/arm64/sources/portable_string.c; do \
-		base=$$(basename $$src .c); \
-		echo "  CC      $$src (min)"; \
-		if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
-			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
-			-I$(KERNEL_ROOT)/arch/common \
-			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
-			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
-			-c $$src -o build/arm64-min/$$base.o; then \
-			echo "✗ compile $$src"; fail=1; break; \
-		fi; \
-	done; \
-	if [ $$fail -ne 0 ]; then exit 1; fi
-	@echo "  CC      ktm/mocks/arm64/min_link_stubs.c"
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		ktm/mocks/arm64/min_link_stubs.c -o build/arm64-min/min_link_stubs.o
-	@echo "  LD      $@ (boot + MEMORY sample — not ALL_OBJS)"
-	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ \
-		$(ARM64_MIN_LINK_OBJS) \
-		--defsym ARM64_MIN_LINK_MARKER=1
-	@echo "✓ $@ (MEMORY+KERNEL sample+ARCH freestanding linked; drivers ALL_OBJS still BLOCKED)"
-
-.PHONY: kernel-arm64-all.bin kernel-arm64-all-Image \
+.PHONY: kernel-arm64-all.bin \
 	arm64-common-core-compile arm64-provider-audit
 
 # Compile every architecture-neutral kernel/MM/library/VFS translation unit in
@@ -826,10 +767,3 @@ arm64-provider-audit: kernel-arm64-all.bin
 		grep -Eq '[[:space:]](handle_signals|signals_should_handle_on_run|klog_info)$$' || \
 		{ echo "✗ unused runtime harness provider leaked into ARM64 aggregate"; exit 1; }
 	@echo "✓ ARM64 provider audit (common syscall semantics; no mocks/weak symbols)"
-
-# Keep the aggregate harness on the Linux arm64 boot protocol as well.  QEMU
-# supplies x0 only when the payload is an Image, not when it loads the raw ELF
-# test binary.  This is intentionally a second test product: it does not
-# alter the production firmware handoff or synthesize a DTB address.
-kernel-arm64-all-Image: kernel-arm64-all.bin
-	@aarch64-linux-gnu-objcopy -O binary kernel-arm64-all.bin $@

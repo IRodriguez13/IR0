@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-only
 # Host↔guest clipboard bridge via virtio-9p (mount_tag=dennis → /heart/dennis/src).
 #
-# Host → guest:  make clip-send   then in VM: ir0-paste  (alias: paste)
-# Guest → host:  in VM: ir0-clip-out "text"   then on host: make clip-pull
+# Host → guest:  scripts/ir0-clip.sh send   then in VM: ir0-paste  (alias: paste)
+# Guest → host:  in VM: ir0-clip-out "text"   then on host: scripts/ir0-clip.sh pull
 set -euo pipefail
 
 # shellcheck source=scripts/host_portable.sh
@@ -99,8 +99,6 @@ Usage: scripts/ir0-clip.sh send|pull|status
   send    host clipboard → .ir0/clipboard/inbox.txt (9p dennis)
   pull    outbox.txt → host clipboard
   status  show bridge files
-
-Makefile: make clip-send | clip-pull | clip-status
 EOF
 }
 

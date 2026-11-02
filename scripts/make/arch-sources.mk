@@ -118,8 +118,7 @@ ARM64_FIRST_SWITCH_OBJS = \
 	build/arm64-boot/rr_sched.o \
 	build/arm64-boot/switch_arm64.o
 
-# ktm/mocks/arm64/min_link_stubs.o is a link-probe shim for kernel-arm64-min.bin.
-# It stays out of ARCH_OBJS_ARM64 so it cannot land in a bootable image.
+# ktm/mocks/arm64/min_link_stubs.c is not part of ARCH_OBJS_ARM64.
 
 $(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
 	@mkdir -p $(@D)
