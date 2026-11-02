@@ -113,6 +113,7 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_sock_stream_accept_fifo_backlog,
 	  "sock_stream_accept_fifo_backlog", 0 },
 	{ ktest_sock_stream_segmented_queue, "sock_stream_segmented_queue", 0 },
+	{ ktest_oom_reclaim_before_kill, "oom_reclaim_before_kill", 1 },
 	/*
 	 * tty_canon_block_wake: needs cooperative schedule from a real
 	 * timer/IRQ context; from kmain+holder it can spin forever.

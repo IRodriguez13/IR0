@@ -460,6 +460,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_signal_segv_deliver.o \
 	kernel/test/test_brk_post_exec.o \
 	kernel/test/test_tty_canon_read.o \
+	kernel/test/test_oom_hook.o \
 	ktm/ktm_invariant.o \
 	ktm/ktm_sched_gate.o
 
