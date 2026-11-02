@@ -30,10 +30,9 @@ static uint64_t oom_kills;
  * Re-entrancy guard: the kill path frees address spaces and can touch the
  * allocator again. A nested OOM event must not run a second victim election.
  */
-static volatile int oom_scan_active;
+static uint8_t oom_scan_active;
 
 static void oom_candidate_project(const process_t *process,
-                                  const process_t *origin,
                                   struct ir0_oom_candidate *out)
 {
     uint64_t resident = 0;
@@ -53,9 +52,6 @@ static void oom_candidate_project(const process_t *process,
     if (process->lifecycle != PROCESS_LIFECYCLE_ALIVE ||
         process->state == PROCESS_ZOMBIE)
         out->flags |= IR0_OOM_CANDIDATE_SKIP;
-    if (process == origin)
-        out->flags |= IR0_OOM_CANDIDATE_ORIGIN;
-
     out->resident_pages = resident;
     out->page_table_pages = tables;
     out->score_adj = process->oom_score_adj;
@@ -63,7 +59,7 @@ static void oom_candidate_project(const process_t *process,
 
 uint64_t oom_kill_count(void)
 {
-    return oom_kills;
+    return __atomic_load_n(&oom_kills, __ATOMIC_RELAXED);
 }
 
 int oom_kill_process(struct process *victim, const char *reason)
@@ -85,7 +81,7 @@ int oom_kill_process(struct process *victim, const char *reason)
                     "[OOM] kill pid=%d comm=%s reason=%s",
                     pid, victim->comm[0] ? victim->comm : "(none)",
                     reason ? reason : "unknown");
-    oom_kills++;
+    __atomic_add_fetch(&oom_kills, 1, __ATOMIC_RELAXED);
 
     /*
      * send_signal() owns default-fatal delivery: for a foreign task it tears
@@ -93,7 +89,10 @@ int oom_kill_process(struct process *victim, const char *reason)
      * current task it never returns from process_exit().
      */
     if (send_signal(pid, SIGKILL) != 0)
+    {
+        __atomic_sub_fetch(&oom_kills, 1, __ATOMIC_RELAXED);
         return -ESRCH;
+    }
     return 0;
 }
 
@@ -107,29 +106,27 @@ int oom_out_of_memory(struct process *origin, const char *reason)
     int found = 0;
     int pid;
 
-    if (oom_scan_active)
+    if (__atomic_test_and_set(&oom_scan_active, __ATOMIC_ACQUIRE))
         return -EBUSY;
-    oom_scan_active = 1;
 
     total = (uint64_t)pmm_total_frames();
     flags = irq_save();
     for (process = process_list; process; process = process->next)
     {
-        oom_candidate_project(process, origin, &candidate);
+        oom_candidate_project(process, &candidate);
         if (!oom_candidate_better(&candidate, found ? &best : NULL, total))
             continue;
         best = candidate;
         found = 1;
     }
     irq_restore(flags);
-    oom_scan_active = 0;
-
     if (!found)
     {
         klog_notice_fmt("OOM",
                         "[OOM] no eligible victim (origin=%d reason=%s)",
                         origin ? (int)origin->task.pid : -1,
                         reason ? reason : "unknown");
+        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
         return -ESRCH;
     }
 
@@ -140,9 +137,28 @@ int oom_out_of_memory(struct process *origin, const char *reason)
     pid = (int)best.pid;
     process = process_find_by_pid(pid);
     if (!process)
+    {
+        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
         return -ESRCH;
+    }
 
-    return oom_kill_process(process, reason);
+    /*
+     * Killing current never returns. Release the election guard first so the
+     * global OOM path is not left permanently disabled after this task exits.
+     * Foreign victims complete teardown synchronously on today's UP kernel;
+     * keep the guard held through that teardown to prevent double selection.
+     */
+    if (process == current_process)
+    {
+        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
+        return oom_kill_process(process, reason);
+    }
+    {
+        int rc = oom_kill_process(process, reason);
+
+        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
+        return rc;
+    }
 }
 
 int oom_handle_alloc_failure(struct process *current, const char *site)
