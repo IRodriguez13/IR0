@@ -130,7 +130,7 @@ specific driver implementation file:
 | Resources | `resource_registry.h` | IRQ / I/O port registration from drivers |
 | VFS-backed devices | `devfs.h`, `procfs.h`, `sysfs.h` | Virtual filesystems |
 | Pseudo-fs registry | `pseudo_fs.h` | Longest-prefix table for `/proc` / `/sys` nodes |
-| Credential helpers | `credentials.h` | **`kernel/credentials.c`** (`ir0_current_cred`, PID, access checks without pulling `kernel/*.h`) |
+| Credential helpers | `credentials.h` | **`kernel/process/credentials.c`** (`ir0_current_cred`, PID, access checks without pulling `kernel/*.h`) |
 | `process_t` / task globals | `process.h` | `/proc`, `mm/paging.c` fork paths needing struct layout |
 | Bluetooth façade | `bluetooth.h` | `ir0_bluetooth_poll`, `ir0_bluetooth_register_driver` without `drivers/bluetooth/*.c` callers |
 

@@ -69,7 +69,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | Multi-UID + grupos suplementarios + `fchmod`/*at* | Done | `fs/permissions.c`, `fs/passwd_db.c`, `fs_syscalls.c` |
 | `S_ISUID`/`S_ISGID` on exec; deprecate `sudo_auth` | Done | `elf_loader.c`, `CONFIG_IR0_SUDO_AUTH_SYSCALL=n` |
 | Señales (`SIGHUP`/`SIGPIPE`, `kill`/`tgkill`, EINTR básico) | Done | `includes/ir0/signals.c`, `io_syscalls.c` |
-| Pthreads subset (`CLONE_THREAD`, futex, `exit_group`) | Done | `kernel/futex.c`, `process_clone_thread`, `smoke-musl-pthread` |
+| Pthreads subset (`CLONE_THREAD`, futex, `exit_group`) | Done | `kernel/sync/futex.c`, `process_clone_thread`, `smoke-musl-pthread` |
 | setuid smoke (sin syscall 404) | Done | `setup/pid1/su_setuid_smoke.c`, `make smoke-setuid-exec` |
 | Cred contract ktest | Done | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
 | **Hardening oleada (perm + lifecycle + ktest ABI + ATA size)** | Done | [`HARDENING.md`](HARDENING.md), gates 2026-06-23 |
@@ -91,7 +91,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | Item | Status | Paths |
 |------|--------|-------|
 | IPv4 stack (UDP/ICMP/ARP, `/dev/net`) | Done | `net/`, `Documentation/mandocs/en/net.md` |
-| **`socket` / `bind` / `sendto` / `recvfrom`** (AF_INET SOCK_DGRAM) | Done | `kernel/sock_udp.c`, `kernel/syscalls/socket_syscalls.c` |
+| **`socket` / `bind` / `sendto` / `recvfrom`** (AF_INET SOCK_DGRAM) | Done | `kernel/net/sock_udp.c`, `kernel/syscalls/socket_syscalls.c` |
 | **`connect` / `accept`** (UDP) | Done | `kernel/syscalls/socket_syscalls.c` — `accept` → `-EOPNOTSUPP` (SOCK_DGRAM) |
 | TCP stream ABI | Pending | Stack pieces may exist; no libc-facing TCP syscalls |
 

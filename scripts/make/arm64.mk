@@ -266,12 +266,12 @@ arm64-all-objs-probe: arm64-portable-compile
 	done; \
 	if [ $$fail -eq 0 ]; then \
 		for src in kernel/main.c kernel/lib/open_flags.c \
-			kernel/errno.c kernel/credentials.c \
+			kernel/errno.c kernel/process/credentials.c \
 			sched/switch/switch_arm64.c \
-			kernel/clock_wait.c kernel/driver_registry.c \
+			kernel/time/clock_wait.c kernel/driver_registry.c \
 			kernel/lib/copy_user.c \
-			kernel/lib/logging.c kernel/futex.c \
-			kernel/net_compat.c; do \
+			kernel/lib/logging.c kernel/sync/futex.c \
+			kernel/net/net_compat.c; do \
 			echo "  CC      $$src (KERNEL probe)"; \
 			if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 				-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
@@ -336,7 +336,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/rootfs_early.c arch/arm64/sources/rootfs_early.h \
 		arch/arm64/sources/rr_early.c arch/arm64/sources/rr_early.h \
 		ktm/mocks/arm64/allocator_stubs.c \
-		kernel/clock_accounting.c kernel/process/sched_trace.c \
+		kernel/time/clock_accounting.c kernel/process/sched_trace.c \
 		arch/arm64/sources/virtio_blk_early.c arch/arm64/sources/virtio_blk_early.h \
 		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
@@ -554,7 +554,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-o build/arm64-boot/allocator_stubs.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
-		-c kernel/clock_accounting.c \
+		-c kernel/time/clock_accounting.c \
 		-o build/arm64-boot/clock_accounting.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
@@ -667,7 +667,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/percpu.c \
 	kernel/lib/open_flags.c \
 	kernel/lib/copy_user.c \
-	kernel/fd_resource.c \
+	kernel/fd/fd_resource.c \
 	sched/runqueue_lock.c \
 	kernel/process/registry_lock.c \
 	kernel/process/core.c \
@@ -691,7 +691,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/syscalls/product_vfs.c \
 	kernel/process/cwd.c \
 	kernel/process/vfs_file.c \
-	kernel/credentials.c \
+	kernel/process/credentials.c \
 	fs/permissions.c \
 	fs/vfs.c \
 	fs/tmpfs.c \

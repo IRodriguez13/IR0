@@ -289,7 +289,7 @@ Closed for 0.0.1 without re-smoke unless regression: **runit**, **BusyBox ash/ap
 
 ### Permissions & lifecycle (T0/T1)
 
-- **`ir0_access_from_stat_groups()`** — supplementary group checks for path permission facades (`fs/permissions.c`, `kernel/credentials.c`, `includes/ir0/path_routed.c`, `kernel/syscalls.c`).
+- **`ir0_access_from_stat_groups()`** — supplementary group checks for path permission facades (`fs/permissions.c`, `kernel/process/credentials.c`, `includes/ir0/path_routed.c`, `kernel/syscalls.c`).
 - **ARCH-3** — `process_release_fds()` closes devfs nodes; `fork_rollback()` releases child FD table on failure.
 - **ARCH-4** — exit/destroy/exec-fail serial storms gated with `CONFIG_DEBUG_FASE50`.
 

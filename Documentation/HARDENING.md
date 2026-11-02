@@ -71,7 +71,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 
 | Area | Change | Evidence |
 |------|--------|----------|
-| Supplementary groups | `ir0_access_from_stat_groups()`; wired in `fs/permissions.c`, `kernel/credentials.c`, `includes/ir0/path_routed.c`, `kernel/syscalls.c` (`access`, `faccessat`, `chdir`) | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
+| Supplementary groups | `ir0_access_from_stat_groups()`; wired in `fs/permissions.c`, `kernel/process/credentials.c`, `includes/ir0/path_routed.c`, `kernel/syscalls.c` (`access`, `faccessat`, `chdir`) | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
 | ARCH-3 lifecycle | `process_release_fds()` → `devfs_close_node()`; `fork_rollback()` releases child FDs | Code review + `kernel-tests` |
 | ARCH-4 log hygiene | Serial storms in `process_exit` / `process_destroy` / exec fail gated with `IR0_DEBUG_PROC` | Boot log on `smoke-tier1` |
 | ktest open ABI | Direct `sys_open()` from ktest must use **Linux** open bits (`KTEST_O_*` in `kernel/test/ktest_harness.h`), not `includes/ir0/fcntl.h` `O_*` (IR0 internal) | `mount_*` ktests green |

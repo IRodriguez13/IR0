@@ -2003,8 +2003,8 @@ def check_common_address_space_contracts():
     contracts = (
         "includes/ir0/memfd.h",
         "includes/ir0/ktm/user_canary.h",
-        "kernel/memfd.c",
-        "kernel/sysv_shm.c",
+        "kernel/fd/memfd.c",
+        "kernel/sync/sysv_shm.c",
         "kernel/vdso.c",
         "kernel/process/mm_struct.c",
         "ktm/user_canary.c",

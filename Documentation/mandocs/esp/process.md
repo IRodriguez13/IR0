@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | scheduler, memory, syscalls, elf_loader |
 | Página man | ir0-process (sección 7) |
-| Fuentes principales | `kernel/process.c`, `kernel/process.h`, `kernel/elf_loader.c`, `kernel/credentials.c` |
+| Fuentes principales | `kernel/process.c`, `kernel/process.h`, `kernel/elf_loader.c`, `kernel/process/credentials.c` |
 
 ## 1. Visión general
 

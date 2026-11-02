@@ -3,7 +3,7 @@
 > **Última verificación:** 2026-07-23
 > **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/rr_sched.c`,
 > `sched/priority_sched.c`, `sched/sched_switch.c`, `sched/sched_resched.c`,
-> `kernel/clock_wait.c`, `kernel/syscalls/io_syscalls.c`
+> `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`
 
 IR0 scheduling is selected through a portable facade and a backend ops table
 configured from Kconfig.
@@ -32,7 +32,7 @@ configured from Kconfig.
 ## Blocking syscalls (poll / pause / nanosleep)
 
 Blocked waiters use `process_arm_kernel_syscall_sleep` + `PROCESS_BLOCKED` and
-[`kernel/clock_wait.c`](../kernel/clock_wait.c):
+[`kernel/time/clock_wait.c`](../kernel/time/clock_wait.c):
 
 - `ir0_clock_wait_block_until` — nanosleep / `poll(NULL,0,timeout)`.
 - `ir0_clock_wait_service_runqueue` — poll/pause loops.

@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | process, vfs, syscalls |
 | Página man | IR0-security (sección 7) |
-| Fuentes principales | `kernel/credentials.c`, `kernel/elf_loader.c`, `kernel/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/credentials.h` |
+| Fuentes principales | `kernel/process/credentials.c`, `kernel/elf_loader.c`, `kernel/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/credentials.h` |
 
 > **Última verificación:** 2026-07-25
 

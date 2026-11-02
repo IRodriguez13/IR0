@@ -330,11 +330,11 @@ KERNEL_OBJS = \
     kernel/process/mm.o \
     kernel/process/signals.o \
     kernel/vdso.o \
-	kernel/clock_wait.o \
-	kernel/clock_accounting.o \
+	kernel/time/clock_wait.o \
+	kernel/time/clock_accounting.o \
 	kernel/cpu_topology.o \
 	kernel/percpu.o \
-    kernel/credentials.o \
+    kernel/process/credentials.o \
     kernel/power/power_manag.o \
     kernel/kexec.o \
     kernel/syscalls.o \
@@ -361,24 +361,24 @@ KERNEL_OBJS = \
 	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \
     kernel/syscalls/syscall_dispatch.o \
-    kernel/sock_udp.o \
-    kernel/sock_icmp.o \
-    kernel/sock_stream.o \
-    kernel/sock_inet_ioctl.o \
-    kernel/sysv_shm.o \
-    kernel/memfd.o \
-    kernel/eventfd.o \
-    kernel/timerfd.o \
-    kernel/posix_shm.o \
+    kernel/net/sock_udp.o \
+    kernel/net/sock_icmp.o \
+    kernel/net/sock_stream.o \
+    kernel/net/sock_inet_ioctl.o \
+    kernel/sync/sysv_shm.o \
+    kernel/fd/memfd.o \
+    kernel/fd/eventfd.o \
+    kernel/fd/timerfd.o \
+    kernel/sync/posix_shm.o \
     kernel/input_events.o \
     kernel/elf_loader.o \
     kernel/driver_registry.o \
     kernel/resource_registry.o \
     ipc/ipc.o \
-    kernel/futex.o \
-    kernel/net_compat.o \
-    kernel/fd_resource.o \
-    kernel/fd_resource_legacy.o \
+    kernel/sync/futex.o \
+    kernel/net/net_compat.o \
+    kernel/fd/fd_resource.o \
+    kernel/fd/fd_resource_legacy.o \
     ktm/klog.o \
     ktm/d1_13_malloc_pf_diag.o \
 	sched/sched.o \

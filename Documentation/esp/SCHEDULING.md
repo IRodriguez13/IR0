@@ -2,7 +2,7 @@
 
 > **Última verificación:** 2026-07-23
 > **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/rr_sched.c`,
-> `sched/priority_sched.c`, `sched/sched_switch.c`, `kernel/clock_wait.c`  
+> `sched/priority_sched.c`, `sched/sched_switch.c`, `kernel/time/clock_wait.c`  
 > **Canónico (inglés):** [`../SCHEDULING.md`](../SCHEDULING.md)
 
 El scheduling en IR0 se selecciona por una fachada portable y una tabla de ops

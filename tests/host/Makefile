@@ -152,7 +152,7 @@ host_syscall_table.o: $(KERNEL_ROOT)/kernel/lib/syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
 	$(KERNEL_CC)
 
-host_fd_resource.o: $(KERNEL_ROOT)/kernel/fd_resource.c
+host_fd_resource.o: $(KERNEL_ROOT)/kernel/fd/fd_resource.c
 	$(KERNEL_CC)
 
 host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
