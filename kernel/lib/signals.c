@@ -1139,7 +1139,14 @@ void handle_signals(void)
                         frame.handler = handler;
                         frame.signum = sig;
                         frame.ctx = *ctx;
-                        frame.oldmask = (uint64_t)current->signal_mask;
+                        /*
+                         * rt_sigsuspend publishes the pre-suspend mask in
+                         * signal_mask_saved before delivery. The handler must
+                         * restore that mask, not the temporary one.
+                         */
+                        frame.oldmask = current->signal_mask_saved_valid
+                            ? (uint64_t)current->signal_mask_saved
+                            : (uint64_t)current->signal_mask;
 
                         if (copy_to_user_mm(
 				    process_pgd(current), frame_addr, &frame,

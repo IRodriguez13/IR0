@@ -554,16 +554,20 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 	}
 
 	/*
-	 * Deliver before returning, while the temporary mask is still
-	 * installed: Linux runs the handler from the signal-delivery path and
-	 * only then restores the saved mask (kernel/signal.c, sigsuspend +
+	 * Deliver while the temporary mask is still installed, and publish the
+	 * pre-suspend mask so the sigframe restores it (Linux sigsuspend +
 	 * restore_saved_sigmask). Returning -EINTR with the signal still
-	 * pending — unlike sys_pause(), which already delivers here — made ash
-	 * spin: every following sigsuspend saw the same pending bit and
-	 * returned at once. Observed as 400k+ back-to-back rt_sigsuspend calls
-	 * with the pipeline's children left unreaped (state R, children Z).
+	 * pending made ash spin: the next sigsuspend saw the same bit and
+	 * returned at once.
 	 */
-	current_process->signal_mask = saved_mask;
+	current_process->signal_mask_saved = saved_mask;
+	current_process->signal_mask_saved_valid = 1;
+	handle_signals();
+	if (!process_signal_enter_pending(current_process))
+	{
+		current_process->signal_mask = saved_mask;
+		current_process->signal_mask_saved_valid = 0;
+	}
 	return -EINTR;
 }
 
