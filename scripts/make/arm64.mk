@@ -4,8 +4,9 @@
 #
 # Products:
 #   kernel-arm64.bin              validated qemu-virt aggregate (default)
+#   kernel-arm64-boot.bin         early qemu-virt ELF
 #   kernel-arm64-<board>-min.bin  early board images (rpi3/rpi4/rpi5)
-#   kernel-arm64-Image            raw Linux arm64 Image header
+#   kernel-arm64-all-Image        Linux Image header over the aggregate ELF
 #
 # The early aggregate is self-contained: it embeds build/hello_aarch64 as its
 # EL0 guest and rootfs seed. No ISD/BusyBox artifact is required to build it.
@@ -245,9 +246,7 @@ ARM64_ALL_EARLY_LINK_OBJS = \
 		build/arm64-boot/process_registry_lock.o \
 		build/arm64-boot/arch_tls.o,$(ARM64_BOOT_LINK_OBJS))
 
-.PHONY: kernel-arm64-boot.bin kernel-arm64-mmu.bin kernel-arm64-vbar.bin \
-	kernel-arm64-el0.bin kernel-arm64-slice.bin kernel-arm64-port.bin \
-	kernel-arm64-gic.bin kernel-arm64-syscall.bin \
+.PHONY: kernel-arm64-boot.bin \
 	arm64-slice-compile arm64-portable-compile arm64-all-objs-probe
 arm64-slice-compile:
 	@echo "  CC      ARM64_SLICE_OBJS (F7b)"
@@ -646,40 +645,6 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "✓ $@"
 
 
-.PHONY: kernel-arm64-Image
-kernel-arm64-Image: kernel-arm64-boot.bin
-	@aarch64-linux-gnu-objcopy -O binary kernel-arm64-boot.bin $@
-	@echo "✓ $@ (Linux arm64 Image header)"
-
-# Alias: same image; smoke looks for post-MMU / VBAR / EL0 / slice / port tags.
-kernel-arm64-mmu.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
-kernel-arm64-vbar.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
-kernel-arm64-el0.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
-kernel-arm64-slice.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
-kernel-arm64-port.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
-kernel-arm64-gic.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
-kernel-arm64-syscall.bin: kernel-arm64-boot.bin
-	@cp -f kernel-arm64-boot.bin $@
-	@echo "✓ $@"
-
 # Honest min link: MEMORY_OBJS + KERNEL sample + freestanding ARCH (+ stubs).
 # Does NOT claim product ALL_OBJS (x86 ATA/RTL8139/VBE remain excluded).
 .PHONY: kernel-arm64-min.bin
@@ -712,55 +677,6 @@ kernel-arm64-min.bin: kernel-arm64-boot.bin ktm/mocks/arm64/min_link_stubs.c \
 		$(ARM64_MIN_LINK_OBJS) \
 		--defsym ARM64_MIN_LINK_MARKER=1
 	@echo "✓ $@ (MEMORY+KERNEL sample+ARCH freestanding linked; drivers ALL_OBJS still BLOCKED)"
-
-# The aggregate boot image is still an early-runtime composition.  Keep its
-# historical filename for automation compatibility, but do not confuse it with
-# the product KERNEL_OBJS graph.  The compile contract below covers the entire
-# common process subsystem independently of that early link boundary.
-ARM64_COMMON_PROCESS_SRCS = \
-	kernel/process/registry.c \
-	kernel/process/core.c \
-	kernel/process/create.c \
-	kernel/process/domains.c \
-	kernel/process/mm_struct.c \
-	kernel/process/files_struct.c \
-	kernel/process/fork.c \
-	kernel/process/exec.c \
-	kernel/process/lifecycle.c \
-	kernel/process/parent.c \
-	kernel/process/resources.c \
-	kernel/process/exit.c \
-	kernel/process/wait.c \
-	kernel/process/wait_audit.c \
-	kernel/process/idle.c \
-	kernel/process/wait_state.c \
-	kernel/process/saved_context.c \
-	kernel/process/saved_environ.c \
-	kernel/process/signal_enter.c \
-	kernel/process/fdtable.c \
-	kernel/process/pseudo_fd_bind.c \
-	kernel/process/mm.c \
-	kernel/process/signals.c
-
-.PHONY: arm64-common-process-compile
-arm64-common-process-compile:
-	@echo "  CC      ARM64 common process subsystem"
-	@mkdir -p build/arm64-common-process
-	@set -e; for src in $(ARM64_COMMON_PROCESS_SRCS); do \
-		obj=build/arm64-common-process/$$(basename $$src .c).o; \
-		echo "  CC      $$src"; \
-		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
-			-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
-			-I$(KERNEL_ROOT)/arch/common \
-			-I$(KERNEL_ROOT)/fs -I$(KERNEL_ROOT)/net \
-			-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT) \
-			-c $$src -o $$obj; \
-	done
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
-		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
-		-c arch/arm64/sources/arch_debug.c \
-		-o build/arm64-common-process/arch_debug.o
-	@echo "✓ ARM64 common process subsystem compile contract"
 
 .PHONY: kernel-arm64-all.bin kernel-arm64-all-Image \
 	arm64-common-core-compile arm64-provider-audit

@@ -15,10 +15,7 @@ IR0_CLEAN_PRODUCTS := \
 	kernel-arm64.bin kernel-arm64-all.bin kernel-arm64-boot.bin \
 	kernel-arm64-min.bin kernel-arm64-rpi3-min.bin \
 	kernel-arm64-rpi4-min.bin kernel-arm64-rpi5-min.bin \
-	kernel-arm64-mmu.bin kernel-arm64-vbar.bin kernel-arm64-el0.bin \
-	kernel-arm64-slice.bin kernel-arm64-port.bin kernel-arm64-gic.bin \
-	kernel-arm64-syscall.bin \
-	kernel-arm64-Image kernel-arm64-all-Image \
+	kernel-arm64-all-Image \
 	kernel-x64.map kernel-arm64.map kernel-x64.disasm \
 	compile_commands.json qemu_debug.log
 

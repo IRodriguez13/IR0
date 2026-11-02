@@ -152,7 +152,8 @@ requires a userspace disk built outside this tree.
 | `make agent-fast` | `test-fast` + `ktest` |
 | `make ctr` | `scripts/ctr.sh`: kernel + arch-guard + matrix-min + host tests |
 | `make ktm-check` | Host tests + KTM classify/manifest/adoption/portability guards |
-| `make build-matrix-min` | Minimal `.config` compile matrix; restores the caller's `.config` on every exit path |
+| `make build-matrix-min` | Daily `.config` matrix (defconfig, tiny, net off, storage off, tmpfs root, arm64 scaffold, lazy MM off); restores `.config` |
+| `make build-matrix-full` | `build-matrix-min` plus scheduler, split storage, USB and Bluetooth; for CI |
 | `make arch-guard` | Architecture boundary checks (`scripts/architecture_guard.py`) |
 | `make repo-hygiene-guard` | Repository hygiene (`scripts/repo_hygiene_guard.py`) |
 | `make health` | `kernel-analyze` + text budget + memsafe + kernel tests |
@@ -178,11 +179,11 @@ The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
 | Target | Purpose |
 |--------|---------|
 | `make help` | Full target listing (always current) |
-| `make format` | `clang-format` over C/H sources |
-| `make analyze` | `cppcheck` when installed |
+| `make format` | `clang-format` on tracked `*.c`/`*.h`, excluding `toolchain/` and `setup/` |
+| `make analyze` | `cppcheck` on `kernel/`, `mm/`, `fs/`, `net/`, `drivers/`, `arch/`, `sched/` when installed |
 | `make compile-commands` | `compile_commands.json` for LSP |
 | `make disasm` | `objdump -d -S kernel-x64.bin` |
-| `make stack-usage` | Stack-usage report for kernel objects |
+| `make stack-usage` | Forced kernel rebuild with `-fstack-usage`; does not delete the ISO or disk |
 | `make print-build-objects` | Object inventory used by graph audits |
 | `make build-graph-audit` | Audit the generated build graph |
 | `make unibuild FILE=<file.c>` | Compile translation units in isolation |

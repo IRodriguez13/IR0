@@ -51,7 +51,8 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
 - `make agent-fast`: `ctr` + bateria ktest in-kernel.
 - `make ktest` / `make kernel-tests`: tests in-kernel en QEMU.
 - `make ktm-check`: tests host + guards KTM (classify/manifest/adoption/portabilidad).
-- `make build-matrix-min`: matriz `.config` rapida; restaura el `.config` del usuario.
+- `make build-matrix-min`: matriz `.config` diaria; restaura el `.config` del usuario.
+- `make build-matrix-full`: la matriz diaria mas scheduler, storage partido, USB y Bluetooth.
 - `make health`: `kernel-analyze` + text budget + memsafe + kernel tests.
 - `make arch-guard`: fronteras de arquitectura (`scripts/architecture_guard.py`).
 - `make repo-hygiene-guard`: higiene del repositorio.
@@ -59,9 +60,9 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
   globales ordenados (`nm`), comparable entre builds con la misma cadena de
   herramientas (`Documentation/DECOUPLING.md`).
 
-No hay `build-matrix-full`, catalogo QA de smokes ni bundle de release en el
-Makefile actual. Nombres historicos en documentos de release no son puntos de
-entrada del build.
+No hay catalogo QA de smokes ni bundle de release en el Makefile actual.
+Nombres historicos en documentos de release no son puntos de entrada del build.
+`build-matrix-full` es el superconjunto de CI de `build-matrix-min`.
 
 ## Targets de Documentacion
 

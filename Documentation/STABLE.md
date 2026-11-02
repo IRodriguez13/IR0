@@ -3,8 +3,8 @@
 > **Build-system note (2026-10-29):** this document preserves the historical
 > 0.0.1 release/merge baseline. The root Makefile was later reduced to the
 > kernel target set; targets such as `smoke-*`, `release-0.0.1`,
-> `ktm-userdev-*`, `run-console`, and `build-matrix-full` are no longer build
-> entry points. Current commands: `make help`, `Documentation/MAKEFILE.md`,
+> `ktm-userdev-*` and `run-console` are no longer build entry points.
+> Current commands: `make help`, `Documentation/MAKEFILE.md`,
 > `Documentation/TOOLING.md`.
 
 > **Last verified:** 2026-09-22

@@ -54,7 +54,8 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 - `make agent-fast`: `ctr` plus the in-kernel ktest battery.
 - `make ktest` / `make kernel-tests`: in-kernel tests in QEMU.
 - `make ktm-check`: host tests + KTM classify/manifest/adoption/portability guards.
-- `make build-matrix-min`: fast `.config` matrix; restores the caller's `.config`.
+- `make build-matrix-min`: daily `.config` matrix; restores the caller's `.config`.
+- `make build-matrix-full`: the daily matrix plus scheduler, split storage, USB and Bluetooth.
 - `make health`: `kernel-analyze` + text budget + memsafe + kernel tests.
 - `make arch-guard`: architecture boundary checks (including `fs/` no direct `<arch/`, no
   `interrupt/arch` in portable trees; see `scripts/architecture_guard.py`).
@@ -62,9 +63,9 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 - `python3 scripts/kernel_export_digest.py kernel-x64.bin`: SHA-256 of sorted global `nm`
   exports (same-toolchain rebuild comparison); see `Documentation/DECOUPLING.md`.
 
-There is no `build-matrix-full`, QA smoke catalog, or release bundle in the
-current Makefile. Historical target names in release documents are not
-build-system entry points.
+There is no QA smoke catalog or release bundle in the current Makefile.
+Historical target names in release documents are not build-system entry points.
+`build-matrix-full` is the CI superset of `build-matrix-min`.
 
 ## Documentation Targets
 

@@ -2,8 +2,8 @@
 
 > **Nota de build (2026-10-29):** este documento preserva la baseline histórica
 > de release 0.0.1. El Makefile raíz se redujo después al set de kernel; targets
-> como `smoke-*`, `release-0.0.1`, `ktm-userdev-*`, `run-console` y
-> `build-matrix-full` ya no son puntos de entrada. Comandos actuales:
+> como `smoke-*`, `release-0.0.1`, `ktm-userdev-*` y `run-console` ya no son
+> puntos de entrada. Comandos actuales:
 > `make help`, `Documentation/MAKEFILE.md`, `Documentation/TOOLING.md`.
 
 > **Última verificación:** 2026-07-30  

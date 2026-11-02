@@ -8,7 +8,8 @@
 .PHONY: ctr test-fast agent-fast ktest kernel-tests tests kernel-memsafe \
 	kernel-analyze kernel-text-budget health ktm-check ktm-manifest \
 	ktm-classify-selftest ktm-adoption-guard host-portability-guard \
-	build-matrix-min config-wiring-check arch-config-check \
+	build-matrix-min build-matrix-full build-matrix-run \
+	config-wiring-check arch-config-check \
 	repo-hygiene-guard truth-tests test test-list test-run
 
 # CTR is the fast merge gate: kernel + architecture boundary + config matrix +
@@ -63,6 +64,7 @@ kernel-memsafe:
 
 # KUnit-style battery that runs at boot. QEMU is headless and disk-only; the
 # private log is copied to KTEST_LOG for evidence after the run.
+# `ktest` is the public name; `kernel-tests` is the same recipe.
 KTEST_LOG ?= $(HOST_TMP)/ktest.log
 
 ktest: kernel-tests
@@ -129,10 +131,22 @@ health: kernel-analyze kernel-text-budget
 	@echo ""
 	@echo "✓ health passed (kernel-analyze, kernel-text-budget, kernel-memsafe, kernel-tests)"
 
-# Minimal permanent build matrix for modular configs. The matrix is x86_64:
-# force ARCH so a caller's `ARCH=arm64` cannot poison the generated objects.
-# The caller's .config is restored on every exit path, including failures.
+# Daily .config matrix. ctr uses build-matrix-min (seven cases, six kernel
+# rebuilds). build-matrix-full adds the scheduler, split-storage, USB and
+# Bluetooth rebuilds for CI. Both restore the caller's .config on every
+# exit path. ARCH=x86_64 is forced so a caller's ARCH=arm64 cannot poison
+# the generated objects.
 build-matrix-min:
+	@$(MAKE) -s build-matrix-run IR0_MATRIX_TIER=min
+
+build-matrix-full:
+	@$(MAKE) -s build-matrix-run IR0_MATRIX_TIER=full
+
+build-matrix-run:
+	@if [ "$(IR0_MATRIX_TIER)" != min ] && [ "$(IR0_MATRIX_TIER)" != full ]; then \
+		echo "build-matrix-run: IR0_MATRIX_TIER must be min or full" >&2; \
+		exit 2; \
+	fi
 	@$(MAKE) -s config-wiring-check
 	@$(MAKE) -s arch-config-check
 	@set -eu; \
@@ -166,41 +180,43 @@ build-matrix-min:
 	$(MAKE) defconfig >/dev/null; \
 	python3 scripts/kconfig/menuconfig.py --set ENABLE_STORAGE_ATA=n ENABLE_STORAGE_ATA_BLOCK=n INIT_STORAGE_ATA=n INIT_STORAGE_ATA_BLOCK=n >/dev/null; \
 	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
-	echo "  MATRIX  storage core without block layer"; \
-	$(MAKE) defconfig >/dev/null; \
-	python3 scripts/kconfig/menuconfig.py --set ENABLE_STORAGE_ATA=y ENABLE_STORAGE_ATA_BLOCK=n INIT_STORAGE_ATA=y INIT_STORAGE_ATA_BLOCK=n >/dev/null; \
-	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
 	echo "  MATRIX  tmpfs-only root"; \
 	$(MAKE) defconfig >/dev/null; \
 	python3 scripts/kconfig/menuconfig.py --set ENABLE_FS_MINIX=n ENABLE_FS_TMPFS=y ROOT_FILESYSTEM=tmpfs >/dev/null; \
-	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
-	echo "  MATRIX  scheduler policy 1"; \
-	$(MAKE) defconfig >/dev/null; \
-	python3 scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=1 >/dev/null; \
-	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
-	echo "  MATRIX  scheduler policy 2"; \
-	$(MAKE) defconfig >/dev/null; \
-	python3 scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=2 >/dev/null; \
 	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
 	echo "  MATRIX  arm64 config scaffold"; \
 	$(MAKE) defconfig >/dev/null; \
 	python3 scripts/kconfig/menuconfig.py --set ARCH_X86_64=n ARCH_ARM64=y DRV_NIC_RTL8139=n DRV_NIC_E1000=n >/dev/null; \
 	$(MAKE) -s arch-config-check >/dev/null; \
-	echo "  MATRIX  USB host enabled"; \
-	$(MAKE) defconfig >/dev/null; \
-	python3 scripts/kconfig/menuconfig.py --set ENABLE_USB_HOST=y INIT_USB_HOST=y >/dev/null; \
-	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
-	echo "  MATRIX  Bluetooth disabled"; \
-	$(MAKE) defconfig >/dev/null; \
-	python3 scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n >/dev/null; \
-	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
 	echo "  MATRIX  lazy MM disabled (eager mmap/brk bisect)"; \
 	$(MAKE) defconfig >/dev/null; \
 	python3 scripts/kconfig/menuconfig.py --set LAZY_ANON_MMAP=n LAZY_BRK_HEAP=n >/dev/null; \
 	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+	if [ "$(IR0_MATRIX_TIER)" = full ]; then \
+		echo "  MATRIX  storage core without block layer"; \
+		$(MAKE) defconfig >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set ENABLE_STORAGE_ATA=y ENABLE_STORAGE_ATA_BLOCK=n INIT_STORAGE_ATA=y INIT_STORAGE_ATA_BLOCK=n >/dev/null; \
+		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+		echo "  MATRIX  scheduler policy 1"; \
+		$(MAKE) defconfig >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=1 >/dev/null; \
+		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+		echo "  MATRIX  scheduler policy 2"; \
+		$(MAKE) defconfig >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=2 >/dev/null; \
+		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+		echo "  MATRIX  USB host enabled"; \
+		$(MAKE) defconfig >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set ENABLE_USB_HOST=y INIT_USB_HOST=y >/dev/null; \
+		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+		echo "  MATRIX  Bluetooth disabled"; \
+		$(MAKE) defconfig >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set ENABLE_BLUETOOTH=n INIT_BLUETOOTH_DRIVER=n >/dev/null; \
+		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+	fi; \
 	$(MAKE) defconfig >/dev/null; \
 	$(MAKE) -s arch-guard; \
-	echo "✓ build-matrix-min passed"
+	echo "✓ build-matrix-$(IR0_MATRIX_TIER) passed"
 
 config-wiring-check:
 	@if [ -f "$(KERNEL_ROOT)/.config" ] && [ ! -f "$(KERNEL_ROOT)/includes/generated/autoconf.h" ]; then \

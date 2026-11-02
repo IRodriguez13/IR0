@@ -1288,17 +1288,28 @@ clip-status:
 # DEV TOOLING
 
 format:
-	@echo "  FMT     Formatting *.c *.h ..."
-	@find . \( -name "*.c" -o -name "*.h" \) \
-		-not -path "./setup/*" -not -path "./build/*" -not -path "./.git/*" \
-		| xargs clang-format -i
-	@echo "✓ Format done"
+	@echo "  FMT     Formatting tracked *.c *.h (excluding toolchain/ and setup/) ..."
+	@files=$$(git ls-files '*.c' '*.h' | while IFS= read -r f; do \
+		case "$$f" in \
+			toolchain/*|setup/*) continue ;; \
+		esac; \
+		printf '%s\n' "$$f"; \
+	done); \
+	if [ -z "$$files" ]; then \
+		echo "✓ Format done (no files)"; \
+		exit 0; \
+	fi; \
+	printf '%s\n' "$$files" | xargs clang-format -i; \
+	echo "✓ Format done"
 
-# Análisis estático con cppcheck (opcional).
+# Static analysis with cppcheck when it is installed. Scope is the kernel
+# trees; third-party checkouts and generated images stay out.
 analyze:
 	@if command -v cppcheck >/dev/null 2>&1; then \
-		echo "  CPPCHECK --enable=warning,style --quiet ..."; \
-		cppcheck --enable=warning,style --quiet -i.git -iiso -iiso_test .; \
+		echo "  CPPCHECK kernel mm fs net drivers arch sched"; \
+		cppcheck --enable=warning,style --quiet \
+			-i toolchain -i build -i iso -i iso_test \
+			kernel mm fs net drivers arch sched; \
 	else \
 		echo "cppcheck is not installed; skipping static analysis."; \
 		echo "Install cppcheck to enable this target (e.g. apt install cppcheck, dnf install cppcheck, pacman -S cppcheck, brew install cppcheck)."; \
@@ -1344,13 +1355,17 @@ disasm: kernel-x64.bin
 	@echo "✓ Disassembly: kernel-x64.disasm ($(shell wc -l < kernel-x64.disasm 2>/dev/null || echo ?) lines)"
 
 stack-usage:
-	@echo "  STACK   Rebuilding with -fstack-usage ..."
-	@$(MAKE) clean
-	@$(MAKE) CFLAGS="$(CFLAGS) -fstack-usage" kernel-x64.bin
+	@echo "  STACK   Rebuilding kernel objects with -fstack-usage ..."
+	@find . \( -path ./.git -o -path ./toolchain -o -path ./third-party \
+		-o -path ./setup/third-party -o -path ./build -o -path ./rust/target \) -prune -o \
+		-type f -name '*.su' -exec rm -f {} +
+	@$(MAKE) -B CFLAGS="$(CFLAGS) -fstack-usage" kernel-x64.bin
 	@echo ""
 	@echo "Top 30 stack consumers:"
 	@echo "-----------------------------------------------"
-	@find . -name "*.su" -exec cat {} + 2>/dev/null | sort -t: -k3 -rn | head -30
+	@find . \( -path ./.git -o -path ./toolchain -o -path ./third-party \
+		-o -path ./setup/third-party -o -path ./build -o -path ./rust/target \) -prune -o \
+		-type f -name '*.su' -exec cat {} + 2>/dev/null | sort -t: -k3 -rn | head -30
 	@echo ""
 
 help:
@@ -1374,14 +1389,20 @@ help:
 	@echo "  make run arm64 rpi4          Boot build/arm64-rpi4/kernel8.img"
 	@echo ""
 	@echo "Kernel tests and gates:"
-	@echo "  make ktest                   In-kernel ktest suite in QEMU"
+	@echo "  make ktest | kernel-tests    In-kernel ktest suite in QEMU"
+	@echo "  make test-fast               kernel + arch-guard + host tests + KTM"
+	@echo "  make agent-fast              test-fast + kernel-tests"
 	@echo "  make test                    Interactive test TUI"
 	@echo "  make test-list               List catalog suites"
 	@echo "  make test-run SUITE=host,ktest"
 	@echo "  make ctr                     kernel + arch-guard + matrix-min + host tests"
 	@echo "  make ktm-check               Host tests + KTM invariants"
 	@echo "  make arch-guard              Architecture boundary guard"
-	@echo "  make build-matrix-min        Minimal compile matrix (restores .config)"
+	@echo "  make build-matrix-min        Daily .config matrix (restores .config)"
+	@echo "  make build-matrix-full       Daily matrix plus scheduler, storage split, USB, Bluetooth"
+	@echo "  make kernel-memsafe          Valgrind over kernel code on the host"
+	@echo "  make config-wiring-check | arch-config-check"
+	@echo "  make repo-hygiene-guard | truth-tests"
 	@echo "  make tests | health          Build harnesses / full kernel health"
 	@echo ""
 	@echo "Documentation:"
@@ -1392,7 +1413,9 @@ help:
 	@echo "  make ai-dev-rules-install    Install tracked rules into .cursor/"
 	@echo ""
 	@echo "Develop:"
-	@echo "  make format                  clang-format over C/H sources"
+	@echo "  make format                  clang-format on tracked C/H, skipping toolchain/ and setup/"
+	@echo "  make analyze                 cppcheck on kernel trees when installed"
+	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
 	@echo "  make compile-commands        compile_commands.json for LSP"
 	@echo "  make disasm                  objdump -d -S kernel-x64.bin"
 	@echo "  make unibuild FILE=fs/tmpfs.c"
@@ -1412,6 +1435,7 @@ help:
 	@echo ""
 
 # DEPENDENCY TEST
+# check-env is the public alias. Both names share this recipe.
 
 deptest check-env:
 	@chmod +x $(KERNEL_ROOT)/scripts/deptest.sh

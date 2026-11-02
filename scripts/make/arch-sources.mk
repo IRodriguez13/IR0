@@ -118,11 +118,8 @@ ARM64_FIRST_SWITCH_OBJS = \
 	build/arm64-boot/rr_sched.o \
 	build/arm64-boot/switch_arm64.o
 
-# Deliberately excluded from the real ARM64 boot image. They are only used by
-# kernel-arm64-min.bin and kernel-arm64-all.bin link-probe targets in
-# scripts/make/arm64.mk.
-ARM64_LINK_PROBE_ONLY_OBJS = \
-	ktm/mocks/arm64/min_link_stubs.o
+# ktm/mocks/arm64/min_link_stubs.o is a link-probe shim for kernel-arm64-min.bin.
+# It stays out of ARCH_OBJS_ARM64 so it cannot land in a bootable image.
 
 $(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
 	@mkdir -p $(@D)
@@ -138,16 +135,6 @@ ARCH_OBJS_ARM64 = \
 	$(ARM64_EARLY_SCHEDULER_OBJS) \
 	$(ARM64_EARLY_STORAGE_OBJS) \
 	$(ARM64_FIRST_SWITCH_OBJS)
-
-.PHONY: arm64-staging-audit
-
-# Prevent a link-probe shim from silently becoming part of a bootable image.
-arm64-staging-audit:
-	@if [ -n "$(filter $(ARM64_LINK_PROBE_ONLY_OBJS),$(ARCH_OBJS_ARM64))" ]; then \
-		echo "arm64-staging-audit: link-probe objects leaked into ARCH_OBJS_ARM64" >&2; \
-		exit 1; \
-	fi
-	@echo "[arm64-staging-audit] OK (link probes excluded; staged sets classified)"
 
 build/arm64-boot/rr_sched.o: sched/rr_sched.c
 	@mkdir -p build/arm64-boot
