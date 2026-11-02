@@ -2271,7 +2271,7 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
   }
 
   to_read = count;
-  if ((size_t)offset + to_read > file_size)
+  if (to_read > file_size - (size_t)offset)
     to_read = file_size - (size_t)offset;
 
   dst = (uint8_t *)buf;
@@ -2367,11 +2367,12 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   if (file_inode.i_mode & MINIX_IFDIR)
     return -EISDIR;
 
+  if ((size_t)offset > minix_fs.superblock.s_max_size ||
+      count > (size_t)minix_fs.superblock.s_max_size - (size_t)offset)
+    return -EFBIG;
   new_size = (size_t)file_inode.i_size;
   if ((size_t)offset + count > new_size)
     new_size = (size_t)offset + count;
-  if (new_size > minix_fs.superblock.s_max_size)
-    return -EFBIG;
 
   if ((size_t)offset > (size_t)file_inode.i_size)
   {

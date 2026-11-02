@@ -554,6 +554,9 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 	size_t done = 0;
 	int ret;
 
+	if (!nread || (count > 0 && !buf))
+		return -EINVAL;
+	*nread = 0;
 	if (offset < 0)
 		return -EINVAL;
 	v = ext2_find(path, rel, sizeof(rel), &is_root);
@@ -568,11 +571,8 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 	if ((ino.i_mode & 0xF000) == 0x4000)
 		return -EISDIR;
 	if ((uint64_t)offset >= ino.i_size)
-	{
-		*nread = 0;
 		return 0;
-	}
-	if ((uint64_t)offset + count > ino.i_size)
+	if (count > (size_t)(ino.i_size - (uint32_t)offset))
 		count = (size_t)(ino.i_size - (uint32_t)offset);
 
 	block_buf = kmalloc(v->block_size);
@@ -1307,10 +1307,11 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 	struct ext2_inode inode;
 	uint8_t *block_buf;
 	uint32_t ino;
+	uint64_t max_size;
 	size_t done = 0;
 	int ret;
 
-	if (offset < 0 || !bytes_written)
+	if (offset < 0 || !bytes_written || (count > 0 && !buf))
 		return -EINVAL;
 	*bytes_written = 0;
 	v = ext2_find(path, rel, sizeof(rel), &is_root);
@@ -1324,8 +1325,10 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 		return ret;
 	if ((inode.i_mode & EXT2_S_IFMT) == EXT2_S_IFDIR)
 		return -EISDIR;
-	if ((uint64_t)offset + count >
-	    (uint64_t)ext2_max_file_blocks(v) * v->block_size)
+	max_size = (uint64_t)ext2_max_file_blocks(v) * v->block_size;
+	if (max_size > UINT32_MAX)
+		max_size = UINT32_MAX;
+	if ((uint64_t)offset > max_size || count > max_size - (uint64_t)offset)
 		return -EFBIG;
 	block_buf = kmalloc(v->block_size);
 	if (!block_buf)
