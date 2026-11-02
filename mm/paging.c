@@ -928,12 +928,23 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 
 	{
 		uint64_t entry;
+		uint64_t old_entry;
+		uint64_t old_phys;
 		int had_leaf;
 
-		had_leaf = mm_pte_present(level3_table[idx[3]]);
+		old_entry = level3_table[idx[3]];
+		had_leaf = mm_pte_present(old_entry);
+		old_phys = had_leaf ? paging_entry_pfn(old_entry) : 0;
 		entry = mm_make_leaf_pte((uintptr_t)phys_addr, flags & PAGE_MAP_FLAGS_MASK,
 					     !!(flags & PAGE_EXEC));
 		level3_table[idx[3]] = entry;
+		/*
+		 * Replacing a different PMM frame must drop the old one.
+		 * mprotect rewrites the same frame and must not.
+		 */
+		if (had_leaf && old_phys != paging_entry_pfn(entry) &&
+		    old_phys >= pmm_get_start() && old_phys < pmm_get_end())
+			pmm_frame_put(old_phys);
 		if (!had_leaf)
 			ir0_mm_leaf_created++;
 
@@ -1029,9 +1040,11 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 	uint64_t pd_frame;
 	uint64_t level1_frame;
 	ir0_mm_frame_type_t freed_type;
+	int split;
 
 	if (!root)
 		return -1;
+	split = 0;
 	{
 		int backend_result = mm_backend_unmap_user_page(root, virt_addr);
 
@@ -1054,13 +1067,28 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 	if (!level2_table || !mm_pte_present(level2_table[idx[2]]))
 		return -1;
 	if (paging_entry_large(level2_table[idx[2]]))
-		return -1;
+	{
+		/*
+		 * A 2 MiB leaf covers this 4 KiB address. Split it, then drop
+		 * only the requested page. munmap and MAP_FIXED used to ignore
+		 * the failure and leave the huge leaf in place.
+		 */
+		if (paging_ensure_4k_leaf(root, virt_addr) != 0)
+			return -1;
+		split = 1;
+		level2_table = paging_entry_table(level1_table[idx[1]]);
+		if (!level2_table || paging_entry_large(level2_table[idx[2]]))
+			return -1;
+	}
 	level3_table = paging_entry_table(level2_table[idx[2]]);
 	if (!level3_table)
 		return -1;
 
 	if (!mm_pte_present(level3_table[idx[3]]))
-		return -1;
+	{
+		/* The 2 MiB split already dropped this slot. A hole stays -1. */
+		return split ? 0 : -1;
+	}
 
 	phys_frame = paging_entry_pfn(level3_table[idx[3]]);
 	level3_table[idx[3]] = 0;

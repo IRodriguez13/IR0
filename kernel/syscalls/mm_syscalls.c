@@ -410,6 +410,7 @@ static int mm_prepare_map_fixed(uintptr_t start, size_t length)
 {
 	uintptr_t end;
 	int detached;
+	int failed;
 
 	if (!current_process || length == 0)
 		return 0;
@@ -421,12 +422,17 @@ static int mm_prepare_map_fixed(uintptr_t start, size_t length)
 	if (detached < 0)
 		return detached;
 
+	failed = 0;
 	for (uintptr_t page = start; page < end; page += PAGE_SIZE_4KB)
 	{
 		if (is_page_mapped_in_directory(process_pgd(current_process), page,
-						NULL) == 1)
-			unmap_page_in_directory(process_pgd(current_process), page);
+						NULL) == 1 &&
+		    unmap_page_in_directory(process_pgd(current_process),
+					    page) != 0)
+			failed = 1;
 	}
+	if (failed)
+		return -ENOMEM;
 	return 0;
 }
 
