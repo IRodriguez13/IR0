@@ -1592,7 +1592,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     goto out;
   }
 
-  if (fd <= 2)
+  if (fd <= 2 && !fd_entry_is_redirected(e))
   {
     if (whence == SEEK_SET)
       new_offset = offset;

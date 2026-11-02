@@ -274,7 +274,7 @@ int64_t sys_fsync(int fd)
     return -EBADF;
 
   fd_table = get_process_fd_table();
-  if (!fd_table[fd].in_use)
+  if (!fd_table || !fd_table[fd].in_use)
     return -EBADF;
 
   if (fd_table[fd].is_pipe || fd_table[fd].is_socket)
@@ -839,7 +839,7 @@ int64_t sys_ftruncate(int fd, off_t length)
     return -EBADF;
 
   fd_table = get_process_fd_table();
-  if (!fd_table[fd].in_use)
+  if (!fd_table || !fd_table[fd].in_use)
     return -EBADF;
 
   /* Pseudo /proc|/sys|/heart binds are not truncatable regular files. */

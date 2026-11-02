@@ -1476,9 +1476,11 @@ int vfs_rename(const char *oldpath, const char *newpath)
             if (ret != 0)
                 return ret;
         }
-        else if (vfs_unlink(newpath) != 0)
+        else
         {
-            return -EACCES;
+            ret = vfs_unlink(newpath);
+            if (ret != 0)
+                return ret;
         }
     }
 

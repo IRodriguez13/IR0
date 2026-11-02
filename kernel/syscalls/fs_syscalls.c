@@ -251,7 +251,7 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
         copy_len = bufsiz;
       if (copy_to_user(buf, kbuf, copy_len) != 0)
         return -EFAULT;
-      return (int64_t)len;
+      return (int64_t)copy_len;
     }
     if (rc != -ENOENT)
       return rc;
@@ -266,7 +266,7 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
       copy_len = bufsiz;
     if (copy_to_user(buf, kbuf, copy_len) != 0)
       return -EFAULT;
-    return (int64_t)len;
+    return (int64_t)copy_len;
   }
   if (rc != -ENOSYS && rc != -ENOENT && rc != -EINVAL)
     return rc;
@@ -287,7 +287,7 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
     copy_len = bufsiz;
   if (copy_to_user(buf, target, copy_len) != 0)
     return -EFAULT;
-  return (int64_t)len;
+  return (int64_t)copy_len;
 }
 
 static int64_t do_symlinkat(const char *target, int linkdirfd,
@@ -1217,7 +1217,7 @@ int64_t sys_fstat(int fd, stat_t *buf)
     return -EBADF;
 
   fd_entry_t *fd_table = get_process_fd_table();
-  if (!fd_table[fd].in_use)
+  if (!fd_table || !fd_table[fd].in_use)
     return -EBADF;
 
   if (fd_table[fd].is_pipe)
@@ -1240,7 +1240,7 @@ int64_t sys_fstat(int fd, stat_t *buf)
       rc = 0;
     }
   }
-  else if (fd <= 2)
+  else if (fd <= 2 && !stdio_is_redirected(fd_table, fd))
   {
     memset(&kst, 0, sizeof(kst));
     kst.st_dev = 0;
