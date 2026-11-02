@@ -516,6 +516,37 @@ static void ipc_unlock(ipc_channel_t *channel)
 }
 #endif
 
+/*
+ * Enqueue, then look again before sleeping. The channel critical section is
+ * only irq-save, so a peer can fill the ring and wake an empty queue in the
+ * gap between unlock and wait_queue_add. Rechecking after the enqueue catches
+ * that wakeup; otherwise the sleeper blocks with data already queued.
+ */
+static void ipc_channel_sleep(ipc_channel_t *channel, wait_queue_t *wq,
+			      int for_read)
+{
+	ir0_spinlock_t lock;
+	int proceed;
+
+	wait_queue_add(wq, current_process);
+
+	ir0_spin_lock(&lock);
+	if (for_read)
+		proceed = !ring_buffer_empty(&channel->rb) || channel->writers <= 0;
+	else
+		proceed = !ring_buffer_full(&channel->rb) || channel->readers <= 0;
+	ir0_spin_unlock(&lock);
+
+	if (proceed)
+	{
+		wait_queue_remove_process(wq, current_process);
+		process_set_sched_state(current_process, PROCESS_READY);
+		return;
+	}
+	if (current_process->state == PROCESS_BLOCKED)
+		sched_schedule_next();
+}
+
 ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
 {
     size_t bytes_read = 0;
@@ -549,8 +580,7 @@ ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
         }
 
         ir0_spin_unlock(&lock);
-        wait_queue_add(&channel->read_queue, current_process);
-        sched_schedule_next();
+        ipc_channel_sleep(channel, &channel->read_queue, 1);
     }
 
     channel->readers--;
@@ -591,8 +621,7 @@ ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
         }
 
         ir0_spin_unlock(&lock);
-        wait_queue_add(&channel->write_queue, current_process);
-        sched_schedule_next();
+        ipc_channel_sleep(channel, &channel->write_queue, 0);
     }
 
     channel->writers--;
