@@ -27,6 +27,7 @@
 #include <mm/allocator.h>
 #include <ir0/oops.h>
 #include <ir0/ktm/fault.h>
+#include <ir0/overflow.h>
 #include <config.h>
 
 /* Compiler optimization hints */
@@ -76,6 +77,9 @@ void *__krealloc_impl(void *ptr, size_t size)
  */
 void *__kmalloc_aligned_impl(size_t size, size_t alignment)
 {
+	size_t total_size;
+	size_t padding;
+
 	if (size == 0 || alignment == 0)
 		return NULL;
 
@@ -83,8 +87,10 @@ void *__kmalloc_aligned_impl(size_t size, size_t alignment)
 	if ((alignment & (alignment - 1)) != 0)
 		return NULL;
 
-	/* Allocate extra space to ensure we can align */
-	size_t total_size = size + alignment - 1 + sizeof(void *);
+	/* Allocate extra space to ensure we can align. */
+	if (ir0_add_overflow(alignment - 1, sizeof(void *), &padding) ||
+	    ir0_add_overflow(size, padding, &total_size))
+		return NULL;
 	void *raw_ptr = __kmalloc_impl(total_size);
 	if (!raw_ptr)
 		return NULL;

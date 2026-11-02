@@ -29,6 +29,7 @@
 #include <ir0/kmem.h>
 #include <ir0/klog.h>
 #include <ir0/oops.h>
+#include <ir0/overflow.h>
 #include <config.h>
 
 /* Block header - at the start of each block */
@@ -177,6 +178,9 @@ void alloc_init(void)
  */
 void *alloc(size_t size)
 {
+	size_t total_size;
+	size_t metadata_size;
+
 	/* Initialize allocator on first use - lazy initialization pattern.
 	 * This allows the allocator to be used early in boot before full
 	 * initialization is complete.
@@ -198,7 +202,14 @@ void *alloc(size_t size)
 	 * Then mask to 16-byte boundary for cache alignment.
 	 * This ensures all blocks are properly aligned for efficient access.
 	 */
-	size_t total_size = (size + sizeof(block_header_t) + sizeof(block_footer_t) + 15) & ~15;
+	if (ir0_add_overflow(sizeof(block_header_t), sizeof(block_footer_t),
+			     &metadata_size) ||
+	    ir0_add_overflow(size, metadata_size, &total_size) ||
+	    ir0_add_overflow(total_size, (size_t)15, &total_size))
+		return NULL;
+	total_size &= ~(size_t)15;
+	if (total_size > allocator.heap_size)
+		return NULL;
 
 	/* Search free list using first-fit algorithm.
 	 * First-fit is simple and works well for kernel workloads where
