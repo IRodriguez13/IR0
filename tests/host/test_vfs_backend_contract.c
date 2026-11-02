@@ -11,7 +11,9 @@
 #include "test_harness_ir0.h"
 #include <ir0/vfs_backend.h>
 #include <ir0/errno.h>
+#include <ir0/overflow.h>
 #include <ir0/stat.h>
+#include <stdint.h>
 #include <string.h>
 
 #define MOCK_PATH "/mockfile"
@@ -143,6 +145,16 @@ void test_vfs_backend_contract(void)
 	size_t n;
 	stat_t st;
 	int rc;
+	off_t pos;
+
+	TEST_BEGIN("vfs_checked_offset_arithmetic");
+
+	ASSERT(!ir0_add_overflow((off_t)4, (off_t)-2, &pos));
+	ASSERT_EQ(pos, 2);
+	ASSERT(ir0_add_overflow((off_t)INT64_MAX, (off_t)1, &pos));
+	ASSERT(ir0_add_overflow((off_t)INT64_MIN, (off_t)-1, &pos));
+
+	TEST_END();
 
 	TEST_BEGIN("vfs_backend_contract_pread_eof");
 
@@ -153,19 +165,19 @@ void test_vfs_backend_contract(void)
 	n = 999;
 	rc = mock_ops.read(MOCK_PATH, buf, sizeof(buf), &n, 0);
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(n, 5);
+	ASSERT_EQ(n, (size_t)5);
 	ASSERT_STR_EQ(buf, "hello");
 
 	n = 999;
 	rc = mock_ops.read(MOCK_PATH, buf, 4, &n, 2);
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(n, 3);
+	ASSERT_EQ(n, (size_t)3);
 	ASSERT(memcmp(buf, "llo", 3) == 0);
 
 	n = 999;
 	rc = mock_ops.read(MOCK_PATH, buf, 4, &n, 100);
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(n, 0);
+	ASSERT_EQ(n, (size_t)0);
 
 	TEST_END();
 
@@ -176,8 +188,8 @@ void test_vfs_backend_contract(void)
 	n = 0;
 	rc = mock_ops.write(MOCK_PATH, "X", 1, &n, 10);
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(n, 1);
-	ASSERT_EQ(mock_file.size, 11);
+	ASSERT_EQ(n, (size_t)1);
+	ASSERT_EQ(mock_file.size, (size_t)11);
 	ASSERT_EQ(mock_file.data[10], 'X');
 	ASSERT_EQ(mock_file.data[5], 0);
 
@@ -190,7 +202,7 @@ void test_vfs_backend_contract(void)
 
 	rc = mock_ops.truncate(MOCK_PATH, 3);
 	ASSERT_EQ(rc, 0);
-	ASSERT_EQ(mock_file.size, 3);
+	ASSERT_EQ(mock_file.size, (size_t)3);
 
 	rc = mock_ops.stat(MOCK_PATH, &st);
 	ASSERT_EQ(rc, 0);

@@ -46,6 +46,7 @@
 #include <ir0/klog.h>
 #include <ir0/console_backend.h>
 #include <ir0/statfs.h>
+#include <ir0/overflow.h>
 #include <ir0/virtio_9p.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/cpu.h>
@@ -1129,7 +1130,8 @@ off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence)
         new_pos = offset;
         break;
     case SEEK_CUR:
-        new_pos = f->pos + offset;
+        if (ir0_add_overflow(f->pos, offset, &new_pos))
+            return -EOVERFLOW;
         break;
     case SEEK_END: {
         struct vfs_ops *ops = ops_for_path(f->path);
@@ -1138,7 +1140,8 @@ off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence)
         stat_t st;
         if (vfs_ops_stat(ops, f->path, &st) != 0)
             return -EIO;
-        new_pos = st.st_size + offset;
+        if (ir0_add_overflow(st.st_size, offset, &new_pos))
+            return -EOVERFLOW;
         break;
     }
     default:
