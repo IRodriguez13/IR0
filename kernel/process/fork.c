@@ -52,6 +52,7 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	child_pid = process_get_next_pid();
 	child->task.priority = parent->task.priority;
 	child->task.state = TASK_READY;
+	child->oom_score_adj = parent->oom_score_adj;
 	task_context_clone(&child->task.arch, &parent->task.arch);
 	child->start_ticks = clock_get_tick_count();
 	process_tls_set(child, process_tls_get(parent));

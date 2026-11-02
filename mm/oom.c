@@ -73,13 +73,34 @@ uint64_t oom_candidate_badness(const struct ir0_oom_candidate *candidate,
     return points == UINT64_MAX ? UINT64_MAX : points + 1;
 }
 
+int oom_candidate_better(const struct ir0_oom_candidate *candidate,
+                         const struct ir0_oom_candidate *incumbent,
+                         uint64_t total_pages)
+{
+    uint64_t score;
+    uint64_t best;
+
+    if (!candidate)
+        return 0;
+    score = oom_candidate_badness(candidate, total_pages);
+    if (score == 0)
+        return 0;
+    if (!incumbent)
+        return 1;
+
+    best = oom_candidate_badness(incumbent, total_pages);
+    if (score != best)
+        return score > best;
+    /* Deterministic tie-break: the lowest PID is the older process. */
+    return candidate->pid < incumbent->pid;
+}
+
 int oom_select_candidate(const struct ir0_oom_candidate *candidates,
                          size_t count, uint64_t total_pages,
                          size_t *selected_index)
 {
-    uint64_t best_score = 0;
-    int32_t best_pid = 0;
     size_t best = 0;
+    int found = 0;
     size_t i;
 
     if (!candidates || !selected_index)
@@ -87,22 +108,46 @@ int oom_select_candidate(const struct ir0_oom_candidate *candidates,
 
     for (i = 0; i < count; i++)
     {
-        uint64_t score = oom_candidate_badness(&candidates[i], total_pages);
-
-        if (score == 0)
+        if (!oom_candidate_better(&candidates[i],
+                                  found ? &candidates[best] : NULL,
+                                  total_pages))
             continue;
-        if (score > best_score ||
-            (score == best_score &&
-             (best_pid == 0 || candidates[i].pid < best_pid)))
-        {
-            best = i;
-            best_pid = candidates[i].pid;
-            best_score = score;
-        }
+        best = i;
+        found = 1;
     }
 
-    if (best_score == 0)
+    if (!found)
         return -ESRCH;
     *selected_index = best;
     return 0;
+}
+
+uint64_t oom_badness_score(uint64_t resident_pages, uint64_t page_table_pages,
+                           int score_adj, uint64_t total_pages)
+{
+    struct ir0_oom_candidate candidate = {
+        .pid = 2, /* any PID above init so eligibility admits the query */
+        .flags = IR0_OOM_CANDIDATE_USER | IR0_OOM_CANDIDATE_ALIVE |
+                 IR0_OOM_CANDIDATE_HAS_MM,
+        .resident_pages = resident_pages,
+        .page_table_pages = page_table_pages,
+    };
+    uint64_t badness;
+
+    if (total_pages == 0)
+        return 0;
+    if (score_adj < IR0_OOM_SCORE_ADJ_MIN)
+        score_adj = IR0_OOM_SCORE_ADJ_MIN;
+    if (score_adj > IR0_OOM_SCORE_ADJ_MAX)
+        score_adj = IR0_OOM_SCORE_ADJ_MAX;
+    candidate.score_adj = (int16_t)score_adj;
+
+    badness = oom_candidate_badness(&candidate, total_pages);
+    if (badness == 0)
+        return 0;
+    if (badness == UINT64_MAX || badness >= total_pages)
+        return 1000;
+    if (badness > UINT64_MAX / 1000)
+        return 1000;
+    return (badness * 1000) / total_pages;
 }

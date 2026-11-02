@@ -32,6 +32,7 @@ void ktest_procfs_pid_environ(void);
 void ktest_routed_open_access(void);
 void ktest_procfs_self_symlink(void);
 void ktest_procfs_pid_exe(void);
+void ktest_procfs_oom_score(void);
 void ktest_procfs_stat(void);
 void ktest_process_current(void);
 void ktest_wait4_status(void);

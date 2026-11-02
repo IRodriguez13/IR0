@@ -25,6 +25,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/mman.h>
 #include <ir0/named_fifo.h>
+#include <ir0/oom.h>
 #include <ir0/path_routed.h>
 #include <ir0/permissions.h>
 #include <ir0/procfs.h>
@@ -517,6 +518,68 @@ static int ktest_parse_ull_field(const char *line, const char *prefix,
 		return -1;
 	*out = v;
 	return 0;
+}
+
+void ktest_procfs_oom_score(void)
+{
+	const char *adj_path = "/proc/self/oom_score_adj";
+	const char *score_path = "/proc/self/oom_score";
+	char buf[64];
+	char restore[16];
+	int64_t fd;
+	int64_t n;
+	int original;
+
+	KTEST_BEGIN("procfs_oom_score");
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	fd = sys_open(adj_path, 0, 0);
+	KASSERT_GT(fd, 0);
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	original = atoi(buf);
+	KASSERT(original >= IR0_OOM_SCORE_ADJ_MIN);
+	KASSERT(original <= IR0_OOM_SCORE_ADJ_MAX);
+
+	fd = sys_open(adj_path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, "500\n", 4), 4);
+	sys_close((int)fd);
+
+	fd = sys_open(adj_path, 0, 0);
+	KASSERT_GT(fd, 0);
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT_EQ(atoi(buf), 500);
+
+	/* /proc/self/oom_score is a normalised 0..1000 integer. */
+	fd = sys_open(score_path, 0, 0);
+	KASSERT_GT(fd, 0);
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT(buf[0] >= '0' && buf[0] <= '9');
+	KASSERT(atoi(buf) >= 0);
+	KASSERT(atoi(buf) <= 1000);
+
+	/* Leave the knob as we found it for the rest of the suite. */
+	snprintf(restore, sizeof(restore), "%d\n", original);
+	fd = sys_open(adj_path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, restore, strlen(restore)),
+		  (int64_t)strlen(restore));
+	sys_close((int)fd);
+
+	KTEST_END();
 }
 
 void ktest_procfs_stat(void)

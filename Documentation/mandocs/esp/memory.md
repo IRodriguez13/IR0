@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | boot, process, syscalls |
 | Página man | IR0-memory (sección 7) |
-| Fuentes principales | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
+| Fuentes principales | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `mm/oom.c`, `mm/oom_kill.c`, `mm/page_fault.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
 
 ## 1. Visión general
 
@@ -24,6 +24,8 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
 | Heap | `mm/allocator.c` | Allocador boundary-tag en `0x800000`, 24 MiB |
 | kmem | `mm/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
 | Paging | `mm/paging.c` | `map_page_in_directory`, mapas user/supervisor, auditoría OOM |
+| Política OOM | `mm/oom.c` | Badness/eligibilidad pura y orden determinista de víctimas |
+| Killer OOM | `mm/oom_kill.c` | Recorrido del registro, `SIGKILL`, hook de reintento (`oom_handle_alloc_failure`) |
 | Syscalls | `kernel/syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
 | ELF | `kernel/elf_loader.c` | PT_LOAD vía `map_user_region_in_directory` |
 
@@ -108,14 +110,21 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
 1. PMM gestiona solo `PMM_PHYS_BASE`..`PMM_PHYS_SIZE` (predeterminado 32–48 MiB).
 2. El heap del kernel está acotado; no crece hacia PMM en runtime.
 3. Aislamiento user/kernel vía PML4 separado por proceso (excepto idle comparte CR3 kernel).
-4. Rutas OOM clasificadas: `FASE43` boot_fatal / kernel_fatal / user_recoverable.
-5. `process_destroy` desmapea bajo **PML4 del proceso**, no necesariamente CR3 activo.
+4. Política OOM: las candidatas deben ser tareas user, vivas, con `mm`,
+   `pid > 1` y `oom_score_adj > -1000`. La badness es páginas residentes +
+   páginas de tablas, escalada por `oom_score_adj`; la tarea que asigna se
+   marca como origen y gana la selección.
+5. El fallo de asignación user (`mm/page_fault.c`) elige una víctima y
+   reintenta una vez, como Linux `__alloc_pages_slowpath` tras fallar reclaim.
+6. `process_destroy` desmapea bajo **PML4 del proceso**, no necesariamente CR3 activo.
 
 ## 9. Consejos de depuración
 
-Tags: `[PMM]`, `[FASE43][OOM_CLASS]`, `SERIAL: ELF: Mapping segment`, `FB_MMAP_*`.
+Tags: `[PMM]`, `[PF] COW OOM`, `[OOM] kill`, `SERIAL: ELF: Mapping segment`, `FB_MMAP_*`.
 
 - `/proc/meminfo` — estadísticas de memoria en runtime (texto generado procfs).
+- `/proc/<pid>/oom_score_adj` — sesgo escribible (`-1000..1000`; `-1000` excluye).
+- `/proc/<pid>/oom_score` — badness normalizada (`0..1000`) desde un snapshot fijado.
 - Bucles de page fault: comprobar mmap no mapeado o desbordamiento de heap.
 - Fallo mmap framebuffer: verificar `CONFIG_ENABLE_VBE` y apertura fb0.
 
@@ -123,5 +132,7 @@ Tags: `[PMM]`, `[FASE43][OOM_CLASS]`, `SERIAL: ELF: Mapping segment`, `FB_MMAP_*
 
 - Fork copy-on-write — **no implementado** (copia completa hoy).
 - Demand paging para mmap anónimo — parcial; el manejador de fault cubre algunos casos.
+- Killer OOM — implementado para fallos user de demand-zero/COW/identity-promote;
+  las asignaciones kernel siguen devolviendo `NULL` para que el llamador decida.
 - VA higher-half del kernel — no planificada en el árbol actual.
 - Pool PMM mayor / descubrimiento dinámico de memoria física más allá de deuda del mapa mem Multiboot.

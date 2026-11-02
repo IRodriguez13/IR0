@@ -2,6 +2,7 @@
 /* Process-count policy shared by fork and its sysfs presentation. */
 
 #include "process_internal.h"
+#include <ir0/oom.h>
 #include <ir0/process_limits.h>
 
 static uint32_t max_processes = 1024;
@@ -30,5 +31,23 @@ int process_limit_set(uint32_t limit)
 	if (limit < (uint32_t)process_live_count())
 		return -EINVAL;
 	max_processes = limit;
+	return 0;
+}
+
+int process_oom_score_adj_get(const process_t *process)
+{
+	if (!process)
+		return 0;
+	return (int)process->oom_score_adj;
+}
+
+int process_oom_score_adj_set(process_t *process, int adjustment)
+{
+	if (!process)
+		return -EINVAL;
+	if (adjustment < IR0_OOM_SCORE_ADJ_MIN ||
+	    adjustment > IR0_OOM_SCORE_ADJ_MAX)
+		return -EINVAL;
+	process->oom_score_adj = (int16_t)adjustment;
 	return 0;
 }

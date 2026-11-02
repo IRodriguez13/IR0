@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | boot, process, syscalls |
 | Man page | IR0-memory (section 7) |
-| Primary sources | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
+| Primary sources | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `mm/oom.c`, `mm/oom_kill.c`, `mm/page_fault.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
 
 ## 1. Overview
 
@@ -24,6 +24,8 @@ PML4s for user processes.
 | Heap | `mm/allocator.c` | Boundary-tag allocator at `0x800000`, 24 MiB |
 | kmem | `mm/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
 | Paging | `mm/paging.c` | `map_page_in_directory`, user/supervisor maps, OOM audit |
+| OOM policy | `mm/oom.c` | Pure badness/eligibility and deterministic victim ordering |
+| OOM killer | `mm/oom_kill.c` | Registry walk, `SIGKILL`, retry hook (`oom_handle_alloc_failure`) |
 | Syscalls | `kernel/syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
 | ELF | `kernel/elf_loader.c` | PT_LOAD via `map_user_region_in_directory` |
 
@@ -108,14 +110,21 @@ PML4s for user processes.
 1. PMM manages only `PMM_PHYS_BASE`..`PMM_PHYS_SIZE` (default 32–48 MiB).
 2. Kernel heap is bounded; no grow into PMM at runtime.
 3. User/kernel isolation via separate PML4 per process (except idle shares kernel CR3).
-4. OOM paths classified: `FASE43` boot_fatal / kernel_fatal / user_recoverable.
-5. `process_destroy` unmaps under **process PML4**, not necessarily active CR3.
+4. OOM policy: candidates must be user tasks, alive, have an `mm`, `pid > 1`
+   and `oom_score_adj > -1000`. Badness is resident pages + page-table pages,
+   scaled by `oom_score_adj`; the allocating task is marked origin and wins
+   selection.
+5. User allocation failure (`mm/page_fault.c`) elects one victim and retries
+   once, mirroring Linux `__alloc_pages_slowpath` after reclaim fails.
+6. `process_destroy` unmaps under **process PML4**, not necessarily active CR3.
 
 ## 9. Debugging tips
 
-Tags: `[PMM]`, `[FASE43][OOM_CLASS]`, `SERIAL: ELF: Mapping segment`, `FB_MMAP_*`.
+Tags: `[PMM]`, `[PF] COW OOM`, `[OOM] kill`, `SERIAL: ELF: Mapping segment`, `FB_MMAP_*`.
 
 - `/proc/meminfo` — runtime memory stats (procfs generated text).
+- `/proc/<pid>/oom_score_adj` — writable bias (`-1000..1000`; `-1000` opts out).
+- `/proc/<pid>/oom_score` — normalised badness (`0..1000`) from a pinned snapshot.
 - Page fault loops: check unmapped mmap or heap overrun.
 - Framebuffer mmap fails: verify `CONFIG_ENABLE_VBE` and fb0 open.
 
@@ -123,5 +132,7 @@ Tags: `[PMM]`, `[FASE43][OOM_CLASS]`, `SERIAL: ELF: Mapping segment`, `FB_MMAP_*
 
 - Copy-on-write fork — **not implemented** (full copy today).
 - Demand paging for anonymous mmap — partial; fault handler covers some cases.
+- OOM killer — implemented for user demand-zero/COW/identity-promote failures;
+  kernel allocations still return `NULL` for the caller to handle.
 - Higher-half kernel VA — not planned in current tree.
 - Larger PMM pool / dynamic physical memory discovery beyond Multiboot mem map debt.

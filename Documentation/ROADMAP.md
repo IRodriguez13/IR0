@@ -489,7 +489,7 @@ flowchart TB
 
 | Milestone | Why it matters |
 |-----------|----------------|
-| **OOM killer path** | Prevent silent hang under memory pressure |
+| **OOM killer path** | **DONE** — Linux-style elect + `SIGKILL` + retry on user allocation failure; `/proc/<pid>/oom_score_adj`, `/proc/<pid>/oom_score` (`ktest procfs_oom_score`) |
 | **Watchdog (soft)** | QEMU/real HW hang detection in smokes |
 | **`/proc/self/maps` contract tests** | Exec, mmap, COW regression guard |
 

@@ -68,29 +68,39 @@ uint64_t *process_pt_child(uint64_t *table, size_t index)
 	return (uint64_t *)mm_pte_phys(table[index]);
 }
 
-uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
+void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
+                         uint64_t *page_table_pages)
 {
 	size_t i4;
 	size_t i3;
 	size_t i2;
 	size_t i1;
 	uint64_t count = 0;
+	uint64_t tables = 0;
 	address_space_root_t root;
 	size_t entries;
 
+	if (resident_pages)
+		*resident_pages = 0;
+	if (page_table_pages)
+		*page_table_pages = 0;
 	if (!mm || !mm->page_directory)
-		return 0;
+		return;
 
 	root = mm->page_directory;
 	entries = mm_table_entries();
 	if (entries == 0)
-		return 0;
+		return;
+
+	/* The root directory itself is one page table. */
+	tables = 1;
 	for (i4 = 0; i4 < (size_t)mm_user_root_slots(); i4++)
 	{
 		uint64_t *level1 = process_pt_child(root, i4);
 
 		if (!level1)
 			continue;
+		tables++;
 
 		for (i3 = 0; i3 < entries; i3++)
 		{
@@ -105,6 +115,7 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 					count += mm_large_leaf_pages(1);
 				continue;
 			}
+			tables++;
 
 			for (i2 = 0; i2 < entries; i2++)
 			{
@@ -122,6 +133,7 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 				level3 = process_pt_child(level2, i2);
 				if (!level3)
 					continue;
+				tables++;
 
 				for (i1 = 0; i1 < entries; i1++)
 				{
@@ -134,7 +146,18 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 		}
 	}
 
-	return count;
+	if (resident_pages)
+		*resident_pages = count;
+	if (page_table_pages)
+		*page_table_pages = tables;
+}
+
+uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
+{
+	uint64_t resident = 0;
+
+	mm_count_user_pages(mm, &resident, NULL);
+	return resident;
 }
 
 uint64_t process_count_resident_user_pages(const process_t *p)

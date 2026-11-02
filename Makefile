@@ -483,6 +483,7 @@ MEMORY_OBJS = \
 	mm/boot_memory.o \
 	mm/no_mmu.o \
 	mm/oom.o \
+	mm/oom_kill.o \
 	mm/paging.o \
 	mm/tlb_sync.o \
 	mm/pmm.o \

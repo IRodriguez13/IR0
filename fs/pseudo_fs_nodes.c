@@ -488,6 +488,8 @@ typedef struct proc_pid_file_ctx
 #define PROC_PID_FILE_STATM   4
 #define PROC_PID_FILE_ENVIRON 5
 #define PROC_PID_FILE_FD_LINK 6
+#define PROC_PID_FILE_OOM_SCORE_ADJ 7
+#define PROC_PID_FILE_OOM_SCORE 8
 #define PROC_PID_CTX_MAX      32
 
 static proc_pid_file_ctx_t g_proc_pid_ctx[PROC_PID_CTX_MAX];
@@ -561,6 +563,8 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
     if (strcmp(name, "status") != 0 && strcmp(name, "cmdline") != 0 &&
         strcmp(name, "maps") != 0 && strcmp(name, "statm") != 0 &&
         strcmp(name, "environ") != 0 &&
+        strcmp(name, "oom_score_adj") != 0 &&
+        strcmp(name, "oom_score") != 0 &&
         !(strcmp(name, "stat") == 0 && pid > 0))
         return -ENOENT;
 
@@ -583,6 +587,10 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
         ctx->kind = PROC_PID_FILE_STATM;
     else if (strcmp(name, "environ") == 0)
         ctx->kind = PROC_PID_FILE_ENVIRON;
+    else if (strcmp(name, "oom_score_adj") == 0)
+        ctx->kind = PROC_PID_FILE_OOM_SCORE_ADJ;
+    else if (strcmp(name, "oom_score") == 0)
+        ctx->kind = PROC_PID_FILE_OOM_SCORE;
     else
         ctx->kind = PROC_PID_FILE_STATUS;
     ctx->in_use = 1;
@@ -608,10 +616,26 @@ static int64_t proc_pid_file_read(void *ctx, char *buf, size_t count, off_t *off
         return proc_pid_statm_read(buf, count, file->pid);
     if (file->kind == PROC_PID_FILE_ENVIRON)
         return proc_pid_environ_read(buf, count, file->pid);
+    if (file->kind == PROC_PID_FILE_OOM_SCORE_ADJ)
+        return proc_pid_oom_score_adj_read(buf, count, file->pid);
+    if (file->kind == PROC_PID_FILE_OOM_SCORE)
+        return proc_pid_oom_score_read(buf, count, file->pid);
     if (file->kind == PROC_PID_FILE_FD_LINK)
         return proc_pid_fd_link_target_read(buf, count, file->pid, file->fd_num);
 
     return proc_status_read(buf, count, file->pid);
+}
+
+static int64_t proc_pid_file_write(void *ctx, const char *buf, size_t count)
+{
+    proc_pid_file_ctx_t *file = ctx;
+
+    if (!file || !buf)
+        return -EINVAL;
+    if (file->kind != PROC_PID_FILE_OOM_SCORE_ADJ)
+        return -EACCES;
+
+    return proc_pid_oom_score_adj_write(file->pid, buf, count);
 }
 
 static int64_t proc_pid_file_close(void *ctx)
@@ -642,6 +666,8 @@ static int proc_pid_file_stat(void *ctx, stat_t *st)
         st->st_mode = S_IFLNK | 0777;
     else if (file->kind == PROC_PID_FILE_ENVIRON)
         st->st_mode = S_IFREG | 0400;
+    else if (file->kind == PROC_PID_FILE_OOM_SCORE_ADJ)
+        st->st_mode = S_IFREG | 0644;
     else
         st->st_mode = S_IFREG | 0444;
     st->st_nlink = 1;
@@ -654,6 +680,7 @@ static int proc_pid_file_stat(void *ctx, stat_t *st)
 
 static const pseudo_fs_ops_t proc_pid_file_ops = {
     .read = proc_pid_file_read,
+    .write = proc_pid_file_write,
     .close = proc_pid_file_close,
     .stat = proc_pid_file_stat,
 };

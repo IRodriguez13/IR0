@@ -24,6 +24,7 @@
 #include <ir0/page_fault.h>
 #include <ir0/process.h>
 #include <ir0/pmm.h>
+#include <ir0/oom.h>
 #include <ir0/signals.h>
 #include <ir0/copy_user.h>
 #include <ir0/arch_task.h>
@@ -142,8 +143,22 @@ static void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
 	phys_addr = pmm_alloc_frame();
 	if (phys_addr == 0)
 	{
-		pf_user_segv(current, stack, fault_addr, info);
-		return;
+		/*
+		 * Linux __alloc_pages_slowpath: with nothing left to reclaim, run
+		 * the OOM killer and retry the allocation once. If the killer
+		 * picked this task, send_signal() never returns here.
+		 */
+		if (oom_handle_alloc_failure(current, "demand-zero") != 0)
+		{
+			pf_user_segv(current, stack, fault_addr, info);
+			return;
+		}
+		phys_addr = pmm_alloc_frame();
+		if (phys_addr == 0)
+		{
+			pf_user_segv(current, stack, fault_addr, info);
+			return;
+		}
 	}
 
 	vaddr_aligned = fault_addr & ~0xFFFUL;
@@ -174,7 +189,14 @@ static int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 
 	new_phys = pmm_alloc_frame();
 	if (!new_phys)
-		return -1;
+	{
+		/* Same retry contract as do_anonymous_page. */
+		if (oom_handle_alloc_failure(current, "identity-promote") != 0)
+			return -1;
+		new_phys = pmm_alloc_frame();
+		if (!new_phys)
+			return -1;
+	}
 	paging_zero_phys_page(new_phys);
 	if (map_page_in_directory(process_pgd(current), vaddr_aligned, new_phys,
 				  map_flags) != 0)
@@ -674,6 +696,14 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 					(unsigned)pmm_frame_refcount(old_phys),
 					(unsigned)used,
 					(unsigned)free_fr);
+			/*
+			 * Linux returns VM_FAULT_RETRY after the OOM killer frees a
+			 * task: the faulting instruction re-executes and re-enters
+			 * this handler with memory available. Only fail the fault
+			 * when no victim was elected.
+			 */
+			if (oom_handle_alloc_failure(current, "cow") == 0)
+				return;
 			pf_user_segv(current, stack, fault_addr, info);
 			return;
 		}

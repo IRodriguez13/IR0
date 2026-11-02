@@ -35,6 +35,8 @@
 #include <ir0/ktm/stack_watch.h>
 #include <ir0/process.h>
 #include <ir0/mm_struct.h>
+#include <ir0/oom.h>
+#include <ir0/pmm.h>
 #include <ir0/credentials.h>
 #include <config.h>
 #include <ir0/version.h>
@@ -92,6 +94,7 @@ typedef struct proc_fs_snap
 	uint32_t egid;
 	uint32_t suid;
 	uint32_t sgid;
+	int oom_score_adj;
 	char *cmdline_copy;
 	size_t cmdline_len;
 	uint64_t heap_start;
@@ -141,6 +144,7 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->egid = proc->egid;
 	snap->suid = proc->suid;
 	snap->sgid = proc->sgid;
+	snap->oom_score_adj = process_oom_score_adj_get(proc);
 	snap->cmdline_copy = NULL;
 	snap->cmdline_len = 0;
 
@@ -814,6 +818,8 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
         if (strcmp(rest, "cmdline") == 0) return "cmdline";
         if (strcmp(rest, "maps") == 0) return "maps";
         if (strcmp(rest, "statm") == 0) return "statm";
+        if (strcmp(rest, "oom_score_adj") == 0) return "oom_score_adj";
+        if (strcmp(rest, "oom_score") == 0) return "oom_score";
         if (strcmp(rest, "environ") == 0) return "environ";
         if (strcmp(rest, "exe") == 0) return "exe_link";
         if (strcmp(rest, "stat") == 0) return "stat";
@@ -874,6 +880,10 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
             return "maps";
         if (strncmp(slash + 1, "statm", 5) == 0)
             return "statm";
+        if (strncmp(slash + 1, "oom_score_adj", 13) == 0)
+            return "oom_score_adj";
+        if (strncmp(slash + 1, "oom_score", 9) == 0)
+            return "oom_score";
         if (strncmp(slash + 1, "fd", 2) == 0 &&
             (slash[3] == '\0' || slash[3] == '/'))
         {
@@ -911,6 +921,10 @@ static const char *proc_parse_path(const char *path, pid_t *pid_out)
                 return "maps";
             if (strncmp(slash + 1, "statm", 5) == 0)
                 return "statm";
+            if (strncmp(slash + 1, "oom_score_adj", 13) == 0)
+                return "oom_score_adj";
+            if (strncmp(slash + 1, "oom_score", 9) == 0)
+                return "oom_score";
             if (strncmp(slash + 1, "fd", 2) == 0 &&
                 (slash[3] == '\0' || slash[3] == '/'))
             {
@@ -1362,6 +1376,119 @@ int proc_pid_statm_read(char *buf, size_t count, pid_t pid)
 		       (unsigned long long)size_pages,
 		       (unsigned long long)rss);
 	proc_fs_snap_release(&snap);
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	buf[len] = '\0';
+	return len;
+}
+
+/*
+ * /proc/[pid]/oom_score_adj — Linux proc(5): signed bias in [-1000, 1000].
+ * IR0_OOM_SCORE_ADJ_MIN (-1000) removes the task from OOM consideration.
+ */
+int proc_pid_oom_score_adj_read(char *buf, size_t count, pid_t pid)
+{
+	proc_fs_snap_t snap;
+	int len;
+
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
+
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
+
+	len = snprintf(buf, count, "%d\n", snap.oom_score_adj);
+	proc_fs_snap_release(&snap);
+	if (len < 0)
+		return -1;
+	if (len >= (int)count)
+	{
+		buf[count - 1] = '\0';
+		return (int)(count - 1);
+	}
+	buf[len] = '\0';
+	return len;
+}
+
+/*
+ * /proc/[pid]/oom_score_adj write. Only the task itself or a privileged
+ * (euid 0) task may change the bias, mirroring the Linux capability check.
+ */
+int proc_pid_oom_score_adj_write(pid_t pid, const char *buf, size_t count)
+{
+	process_t *target;
+	char value_buf[16];
+	size_t copy_len;
+	long value;
+	char *end;
+	int rc;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+	if (!current_process)
+		return -ESRCH;
+
+	copy_len = count < sizeof(value_buf) - 1 ? count : sizeof(value_buf) - 1;
+	memcpy(value_buf, buf, copy_len);
+	value_buf[copy_len] = '\0';
+
+	value = strtol(value_buf, &end, 10);
+	if (end == value_buf)
+		return -EINVAL;
+	while (*end == '\n' || *end == '\r' || *end == ' ' || *end == '\t')
+		end++;
+	if (*end != '\0')
+		return -EINVAL;
+	if (value < IR0_OOM_SCORE_ADJ_MIN || value > IR0_OOM_SCORE_ADJ_MAX)
+		return -EINVAL;
+
+	if (pid == -1)
+		pid = current_process->task.pid;
+	target = process_find_by_pid(pid);
+	if (!target)
+		return -ENOENT;
+	if (target != current_process && current_process->euid != 0)
+		return -EPERM;
+
+	rc = process_oom_score_adj_set(target, (int)value);
+	if (rc != 0)
+		return rc;
+	return (int)count;
+}
+
+/*
+ * /proc/[pid]/oom_score — Linux proc(5): badness normalised to 0..1000.
+ * Computed from a pinned snapshot so a concurrent reap cannot free the mm
+ * while the page-table walk runs.
+ */
+int proc_pid_oom_score_read(char *buf, size_t count, pid_t pid)
+{
+	proc_fs_snap_t snap;
+	uint64_t resident = 0;
+	uint64_t tables = 0;
+	uint64_t score;
+	int len;
+
+	if (VALIDATE_BUFFER(buf, count) != 0)
+		return -1;
+	memset(buf, 0, count);
+
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
+
+	if (snap.mm)
+		mm_count_user_pages(snap.mm, &resident, &tables);
+	score = oom_badness_score(resident, tables, snap.oom_score_adj,
+				  (uint64_t)pmm_total_frames());
+	proc_fs_snap_release(&snap);
+
+	len = snprintf(buf, count, "%llu\n", (unsigned long long)score);
 	if (len < 0)
 		return -1;
 	if (len >= (int)count)
@@ -2557,6 +2684,8 @@ static int proc_readdir_fill_pid_subdir(struct vfs_dirent *entries, int max_entr
 	n = proc_readdir_add(entries, max_entries, n, "stat", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "maps", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "statm", DT_REG);
+	n = proc_readdir_add(entries, max_entries, n, "oom_score_adj", DT_REG);
+	n = proc_readdir_add(entries, max_entries, n, "oom_score", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "fd", DT_DIR);
 	n = proc_readdir_add(entries, max_entries, n, "environ", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "exe", DT_LNK);

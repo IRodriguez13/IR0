@@ -194,6 +194,13 @@ typedef struct process
 		uint64_t rlim_cur;
 		uint64_t rlim_max;
 	} rlimits[IR0_RLIM_NLIMITS];
+
+	/*
+	 * Linux oom_score_adj (-1000..1000): per-process bias for the OOM victim
+	 * policy. IR0_OOM_SCORE_ADJ_MIN makes the task ineligible; 0 is neutral.
+	 * Inherited across fork and preserved across execve.
+	 */
+	int16_t oom_score_adj;
 	
 	/* Poll: waiter activo mientras el proceso está bloqueado en poll() */
 	void *poll_waiter;
@@ -827,6 +834,13 @@ uint64_t process_count_resident_user_pages(const process_t *p);
 
 /* Page-table walk; @mm must be held alive (mm_get) for the duration of the call. */
 uint64_t mm_count_resident_user_pages(const mm_struct_t *mm);
+
+/*
+ * One-pass walk used by the OOM badness calculation: resident user leaf pages
+ * plus the page tables that map them. Either output may be NULL.
+ */
+void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
+                         uint64_t *page_table_pages);
 
 int64_t process_close_fd(process_t *proc, int fd);
 void process_exec_close_cloexec(process_t *p);
