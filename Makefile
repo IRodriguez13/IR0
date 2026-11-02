@@ -1203,14 +1203,18 @@ IR0_PRECHECK_TARGETS :=
 endif
 
 ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
+	@mkdir -p build
+	@printf 'ARCH=%s\nBOARD=%s\n' '$(ARCH)' '$(BOARD)' > build/last-product.env
 
 # ============================================
 # RUN
 # ============================================
 
-# `run` only launches an artifact that is already on disk. The launcher
-# resolves ARCH/BOARD and refuses to start if the product is missing; it never
-# invokes make and never touches ISD.
+# `run` launches an artifact that is already on disk. It never builds.
+# With no arch/board on the command line it reuses build/last-product.env,
+# written by the last `make ir0`, so `make run console` boots the ISA just
+# compiled. A board word alone (`make run rpi4`) implies arm64.
+# x86 attaches the ISD profile root (PROFILE=minimal unless overridden).
 #
 #   make run                 GUI (x86) / serial (ARM64)
 #   make run console         -nographic
@@ -1218,10 +1222,29 @@ ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
 #   make run fullscreen      GTK full screen
 #   make run gdb             wait for GDB on localhost:1234
 #   make run arm64 rpi4      board image under build/arm64-rpi4/
+#   make run x86-64          force x86 even after an ARM build
 RUN_MODE := $(or $(IR0_RUN_MODE),gui)
 
 run:
-	@ARCH="$(ARCH)" BOARD="$(BOARD)" ./scripts/run_qemu.sh $(RUN_MODE)
+	@arch='$(ARCH)'; board='$(BOARD)'; \
+	goal_arch='$(IR0_GOAL_ARCH)'; goal_board='$(IR0_GOAL_BOARD)'; \
+	if [ -n "$$goal_board" ] && [ -z "$$goal_arch" ]; then \
+		arch=arm64; board=$$goal_board; \
+	elif [ -z "$$goal_arch" ] && [ -z "$$goal_board" ] && [ -f build/last-product.env ]; then \
+		while IFS= read -r line; do \
+			case $$line in \
+			ARCH=x86-64|ARCH=x86_64|ARCH=amd64|ARCH=arm64|ARCH=aarch64) \
+				arch=$${line#ARCH=} ;; \
+			BOARD=|BOARD=qemu-virt|BOARD=rpi3|BOARD=rpi4|BOARD=rpi5) \
+				board=$${line#BOARD=} ;; \
+			esac; \
+		done < build/last-product.env; \
+	fi; \
+	case $$arch in \
+	x86_64|amd64) arch=x86-64 ;; \
+	aarch64) arch=arm64 ;; \
+	esac; \
+	ARCH="$$arch" BOARD="$$board" ./scripts/run_qemu.sh $(RUN_MODE)
 
 # Historical mode names remain valid shortcuts (`make debug` == run debug).
 .PHONY: gui console debug fullscreen gdb
@@ -1359,12 +1382,11 @@ help:
 	@echo "  make clean                   Remove objects, images and generated headers"
 	@echo ""
 	@echo "Run (launches an already built artifact; never builds):"
-	@echo "  make run                     GUI on x86, serial on ARM64"
-	@echo "  make run console             -nographic"
-	@echo "  make run debug               QEMU guest-error/int log + monitor"
-	@echo "  make run fullscreen          GTK full screen"
-	@echo "  make run gdb                 Wait for GDB on localhost:1234"
-	@echo "  make run arm64 rpi4          Boot build/arm64-rpi4/kernel8.img"
+	@echo "  make run                     Last built ISA; GUI on x86, serial on ARM64"
+	@echo "  make run console             -nographic, same ISA"
+	@echo "  make run rpi4                ARM64 Raspberry Pi 4 image"
+	@echo "  make run x86-64              x86 with the ISD userspace disk"
+	@echo "  make run debug|fullscreen|gdb"
 	@echo ""
 	@echo "Check:"
 	@echo "  make check-env               Host toolchain diagnostic"

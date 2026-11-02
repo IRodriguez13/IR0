@@ -125,13 +125,57 @@ if [ ! -f "$PRODUCT" ]; then
 	exit 1
 fi
 
-# Disk is optional. Auto-attach disk.img when it exists; DISK=none opts out.
+# Disk is optional only with DISK=none. On x86 the userspace root is the ISD
+# profile image. The repo's disk.img is a local Minix volume and often has no
+# /sbin/init; attaching it hides the ISD root and boots a kernel with no shell.
 NO_DISK=0
 case "$DISK" in
 none | -) DISK=""; NO_DISK=1 ;;
 esac
-if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = x86-64 ] && [ -f "$ROOT/disk.img" ]; then
-	DISK="$ROOT/disk.img"
+
+resolve_isd_root_disk() {
+	isd_root=${IR0_ISD_ROOT:-$ROOT/../ISD}
+	profile=${PROFILE:-${ISD_PROFILE:-minimal}}
+	manifest=$isd_root/scripts/print-artifacts.sh
+	command -v bash >/dev/null 2>&1 || return 1
+	[ -f "$manifest" ] || return 1
+	# print-artifacts.sh is bash. Its paths are the profile's packed images.
+	root_disk=
+	root_ext2=
+	root_fs=minix
+	while IFS= read -r line; do
+		case $line in
+		ROOT_DISK=*) root_disk=${line#ROOT_DISK=} ;;
+		ROOT_DISK_EXT2=*) root_ext2=${line#ROOT_DISK_EXT2=} ;;
+		ROOT_FS=*) root_fs=${line#ROOT_FS=} ;;
+		esac
+	done <<EOF
+$(ARCH=x86_64 PROFILE="$profile" IR0_ROOT="$ROOT" bash "$manifest")
+EOF
+	case "$root_fs" in
+	ext2)
+		[ -n "$root_ext2" ] && [ -f "$root_ext2" ] || return 1
+		DISK=$root_ext2
+		;;
+	*)
+		[ -n "$root_disk" ] && [ -f "$root_disk" ] || return 1
+		DISK=$root_disk
+		;;
+	esac
+	return 0
+}
+
+if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = x86-64 ]; then
+	resolve_isd_root_disk || true
+	if [ -z "$DISK" ] && [ -f "$ROOT/disk.img" ]; then
+		DISK=$ROOT/disk.img
+	fi
+	if [ -z "$DISK" ]; then
+		echo "✗ run: no userspace disk for x86-64" >&2
+		echo "  build one: make -C \"\${IR0_ISD_ROOT:-../ISD}\" image-minix PROFILE=minimal" >&2
+		echo "  or pass DISK=<image>  (DISK=none boots the kernel alone)" >&2
+		exit 1
+	fi
 fi
 if [ -n "$DISK" ] && [ ! -f "$DISK" ]; then
 	echo "✗ run: disk image not found: $DISK" >&2
@@ -238,6 +282,10 @@ if [ "${IR0_QUIET:-0}" != 1 ]; then
 	echo "  RUN     $qemu $MODE ARCH=$ARCH${BOARD:+ BOARD=$BOARD}"
 	echo "          product: $PRODUCT"
 	[ -n "$DISK" ] && echo "          disk:    $DISK"
+fi
+
+if [ "${IR0_RUN_DRY:-0}" = 1 ]; then
+	exit 0
 fi
 
 exec "$qemu" "$@"

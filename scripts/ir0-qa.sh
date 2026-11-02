@@ -24,8 +24,9 @@ Common gates:
   make ktest                 in-kernel ktest suite (QEMU)
   make build-matrix-full     daily matrix plus CI cases
 
-The legacy QA smoke catalog and ISD/release targets were removed from the
-Makefile; userspace images are built by ISD and attached with `make run DISK=…`.
+The legacy QA smoke catalog was removed from the Makefile. `make run` on x86
+attaches the ISD profile disk (`PROFILE`, default minimal). Build that image
+in the ISD tree.
 
 List all make targets:
   scripts/ir0-qa.sh targets

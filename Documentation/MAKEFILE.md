@@ -131,15 +131,13 @@ touches ISD.
 | `make run gdb` | Wait for GDB on localhost:1234 |
 | `make run arm64 rpi4` | Boot `build/arm64-rpi4/kernel8.img` |
 
-`run` **only launches an artifact that is already on disk**. It never invokes
-make, never builds, and never touches ISD. `scripts/run_qemu.sh` resolves the
-product from `ARCH`/`BOARD`, refuses to start when the artifact is missing, and
-execs QEMU. Useful variables: `IR0_PRODUCT`, `DISK` (`none` opts out),
-`IR0_MEM`, `IR0_NET=0`, `IR0_DENNIS_9P=0`, `IR0_AUDIO=1`, `IR0_QEMU_EXTRA`.
+`run` boots the artifact from the last `make ir0` when the command line does
+not name an architecture. A board word alone (`make run rpi4`) selects ARM64.
+`make run x86-64` forces x86 after an ARM build.
 
-On x86-64, `disk.img` is attached automatically when it exists. It is optional;
-without it the kernel boots the ISO and reaches the `/sbin/init` handoff, which
-requires a userspace disk built outside this tree.
+On x86-64 the disk is the ISD profile root (`PROFILE=minimal` by default,
+`../ISD/out/x86_64/images/<profile>/`). The repo `disk.img` is used only when
+that image is missing. `DISK=none` boots the kernel with no root disk.
 
 ### Tests and gates
 
