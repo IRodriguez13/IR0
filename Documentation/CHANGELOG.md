@@ -22,6 +22,19 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 
 ## [Unreleased]
 
+### Guest contracts in the boot ktest (2026-11-02)
+
+- `kernel/test/test_fix_contracts.c` adds 13 cases. `make ktest` on that day:
+  76/76, `TEST_END|kernel.ktest|PASS`.
+- The cases lock readlink length, redirected stdio `fstat`/`lseek`, a dead fd
+  table (`-EBADF`), rename on a read-only mount (`-EROFS`), pipe bytes kept
+  after `-EFAULT`, `rt_sigsuspend` consuming a pending signal, futex slot
+  release, the IPC enqueue-then-recheck, a 2 MiB leaf split, PTE replace
+  refcount, and `MAP_FIXED` returning `-ENOMEM` when unmap fails.
+- Three hooks stay `NULL` outside the suite: `ir0_futex_before_sleep`,
+  `ipc_sleep_recheck_probe`, `mm_backend_unmap_hook`.
+- Catalog: [`testing/KTEST_FIX_CONTRACTS.md`](testing/KTEST_FIX_CONTRACTS.md).
+
 ### Build system redesign (2026-10-29)
 
 - Root `Makefile` reduced to the kernel target set: `ir0`, `run`,

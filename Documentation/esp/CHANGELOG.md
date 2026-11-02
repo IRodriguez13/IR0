@@ -13,6 +13,20 @@ Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ## [Sin publicar]
 
+### Contratos de guest en el ktest de boot (2026-11-02)
+
+- `kernel/test/test_fix_contracts.c` suma 13 casos. `make ktest` ese día:
+  76/76, `TEST_END|kernel.ktest|PASS`.
+- Cubren readlink, `fstat`/`lseek` de stdio redirigido, tabla de fd muerta
+  (`-EBADF`), rename en montaje de solo lectura (`-EROFS`), bytes de pipe
+  tras `-EFAULT`, `rt_sigsuspend` que consume la señal pendiente, liberación
+  del slot de futex, rechequeo de IPC tras encolar, partición de hoja de
+  2 MiB, refcount al reemplazar un PTE, y `MAP_FIXED` que devuelve `-ENOMEM`
+  si el unmap falla.
+- Tres ganchos quedan en `NULL` fuera de la suite: `ir0_futex_before_sleep`,
+  `ipc_sleep_recheck_probe`, `mm_backend_unmap_hook`.
+- Catálogo: [`testing/KTEST_FIX_CONTRACTS.md`](testing/KTEST_FIX_CONTRACTS.md).
+
 ### IPC staged + slice de dispatch (2026-10-18)
 
 - Tablas pipe/AF_UNIX en `ipc/`. Identity/getcwd de producto en ARM ALL.

@@ -150,5 +150,7 @@ make -s smoke-runit-boot
    porque corre por el escenario KTM `kernel.ktest`
    (`tests/ktm/scenarios/ktest_bridge.c`); el guard verifica ese puente y que
    `kernel-tests` exija su PASS.
+   Los 13 casos del 2026-11-02 y sus ganchos están en
+   [`testing/KTEST_FIX_CONTRACTS.md`](testing/KTEST_FIX_CONTRACTS.md).
 
 Detalle completo y tablas: **[`../KTM.md`](../KTM.md)**.

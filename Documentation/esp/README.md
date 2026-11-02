@@ -27,6 +27,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `MEMORY.md`
 - `LINUX_SHAPED.md` — nombres/ABI Linux sin clonar el árbol
 - `HARNESS_MAP.md` — tags y targets semánticos (`smoke-fase*` = alias)
+- `testing/KTEST_FIX_CONTRACTS.md` — 13 casos del ktest de boot (canónico: `../testing/KTEST_FIX_CONTRACTS.md`)
 - `uaccess.md` — frontera `copy_*_user` / `copy_*_user_mm` multi-ISA
 - `PROCESSES.md`
 - `SCHEDULING.md`

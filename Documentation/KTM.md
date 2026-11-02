@@ -236,6 +236,9 @@ enabled (`ktm_scenarios_run_boot`):
 make ktest
 ```
 
+The cases added on 2026-11-02, and the three NULL hooks they install, are
+catalogued in [`testing/KTEST_FIX_CONTRACTS.md`](testing/KTEST_FIX_CONTRACTS.md).
+
 `scripts/ktm_runner.py` still exists for manual host-driven runs, but it expects
 a KTM-enabled userspace ISO that the current Makefile does not build. Point it
 at an artifact you built yourself and expect `TEST_END|<name>|PASS` on serial.

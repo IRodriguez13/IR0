@@ -36,6 +36,9 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
   facades, usercopy layers, what not to copy (Spanish: `esp/LINUX_SHAPED.md`).
 - `HARNESS_MAP.md`: **semantic smoke/KTM tags and Make names**; `smoke-fase*`
   aliases (Spanish: `esp/HARNESS_MAP.md`).
+- `testing/KTEST_FIX_CONTRACTS.md`: **13 boot-ktest cases** that lock the
+  2026-11-02 syscall, futex, IPC, and MM fixes, plus the NULL test hooks
+  (Spanish: `esp/testing/KTEST_FIX_CONTRACTS.md`).
 - `KTM.md`: **canonical KTM guide** — internals, **klog layers**, kernel API, `/dev/ktm`, gates (Spanish: `esp/KTM.md`).
 - `USERSPACE.md`: **kernel ↔ ISD boundary** — external userspace builds,
   `make run DISK=…`, no-init panic contract (Spanish: `esp/USERSPACE.md`).
