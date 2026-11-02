@@ -33,6 +33,17 @@ struct ir0_futex_slot
 
 static struct ir0_futex_slot futex_waiters[IR0_FUTEX_MAX_WAITERS];
 
+static void futex_slot_release_if_mine(int slot, process_t *proc)
+{
+	if (slot < 0 || slot >= IR0_FUTEX_MAX_WAITERS || !proc)
+		return;
+	if (!futex_waiters[slot].in_use || futex_waiters[slot].proc != proc)
+		return;
+	futex_waiters[slot].in_use = 0;
+	futex_waiters[slot].proc = NULL;
+	futex_waiters[slot].uaddr = NULL;
+}
+
 int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 {
 	int i;
@@ -56,6 +67,13 @@ int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 					break;
 				kernel_idle_poll();
 			}
+			/*
+			 * futex_wake already clears the slot. Any other exit
+			 * (signal, console) leaves it occupied, and the next
+			 * waiter eventually gets -EAGAIN. Release only if this
+			 * task still owns the slot: wake may have reused it.
+			 */
+			futex_slot_release_if_mine(i, proc);
 			if (proc->syscall_interrupted)
 			{
 				proc->syscall_interrupted = 0;

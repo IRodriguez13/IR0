@@ -9,6 +9,7 @@
  */
 
 #include "process_internal.h"
+#include <ir0/futex.h>
 #include <ir0/process_exit.h>
 
 static struct process_exit_services g_exit_ops;
@@ -53,6 +54,7 @@ void process_resources_release_on_exit(process_t *dying)
 		g_exit_ops.purge_pipe_waiters(dying);
 	if (g_exit_ops.purge_ipc_waiters)
 		g_exit_ops.purge_ipc_waiters(dying);
+	ir0_futex_drop_process(dying);
 	if (dying->fork_pending_child)
 		process_fork_abort_pending_on_exit(dying);
 	process_mm_release_on_exit(dying);
