@@ -484,6 +484,7 @@ MEMORY_OBJS = \
 	mm/no_mmu.o \
 	mm/oom.o \
 	mm/oom_kill.o \
+	mm/reclaim.o \
 	mm/paging.o \
 	mm/tlb_sync.o \
 	mm/pmm.o \

@@ -48,6 +48,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_mount_prefix_boundary.c
 TEST_SRCS += test_pmm_banks.c test_boot_memory.c test_no_mmu_policy.c
 TEST_SRCS += test_oom_policy.c
+TEST_SRCS += test_mm_reclaim.c
 TEST_SRCS += test_fd_resource_contract.c
 TEST_SRCS += test_harness_contract.c
 TEST_SRCS += test_mm_root_slots.c
@@ -70,6 +71,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_matrix_capture.o host_mount_prefix.o
 KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o host_no_mmu.o
 KERNEL_HOST_OBJS += host_oom.o
+KERNEL_HOST_OBJS += host_reclaim.o
 KERNEL_HOST_OBJS += host_elf64_image.o host_early_elf_stack.o host_early_mm.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
@@ -116,6 +118,9 @@ host_no_mmu.o: $(KERNEL_ROOT)/mm/no_mmu.c
 	$(KERNEL_CC)
 
 host_oom.o: $(KERNEL_ROOT)/mm/oom.c
+	$(KERNEL_CC)
+
+host_reclaim.o: $(KERNEL_ROOT)/mm/reclaim.c
 	$(KERNEL_CC)
 
 host_pipe_fd_stub.o: host_pipe_fd_stub.c
