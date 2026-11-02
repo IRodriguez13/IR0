@@ -482,6 +482,7 @@ MEMORY_OBJS = \
 	mm/allocator.o \
 	mm/boot_memory.o \
 	mm/no_mmu.o \
+	mm/oom.o \
 	mm/paging.o \
 	mm/tlb_sync.o \
 	mm/pmm.o \

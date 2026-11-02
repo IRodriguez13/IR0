@@ -20,6 +20,7 @@ int _ir0_test_count;
 int _ir0_test_pass;
 
 extern void test_harness_smoke(void);
+extern void test_oom_policy(void);
 extern void test_example_asserts(void);
 extern void test_pseudo_fs_register_lookup_read(void);
 extern void test_pseudo_fs_proc_registry_paths(void);
@@ -177,6 +178,7 @@ static void (*test_functions[])(void) = {
 	test_tlb_sync_up_contract,
 	test_harness_assertion_contract,
 	test_mm_user_root_slot_contract,
+	test_oom_policy,
 	NULL
 };
 

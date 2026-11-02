@@ -799,6 +799,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	mm/allocator.c \
 	mm/boot_memory.c \
 	mm/no_mmu.c \
+	mm/oom.c \
 	mm/paging.c \
 	mm/tlb_sync.c \
 	mm/pmm.c \
