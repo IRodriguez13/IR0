@@ -22,10 +22,12 @@ static int use_fb = 0;
 static int fb_console_cols = CONSOLE_WIDTH;
 static int fb_console_rows = CONSOLE_HEIGHT;
 static int fb_scale = CONSOLE_FB_SCALE_DEFAULT;
-static int fb_origin_x;
-static int fb_origin_y;
 static int fb_cell_w;
 static int fb_cell_h;
+#if CONFIG_ENABLE_VBE
+static int fb_origin_x;
+static int fb_origin_y;
+#endif
 
 /* Glyph+color shadow so the software cursor can restore column 0 after CR/LF. */
 static uint16_t cell_shadow[CONSOLE_MAX_HEIGHT][CONSOLE_MAX_WIDTH];

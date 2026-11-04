@@ -2084,6 +2084,33 @@ def check_common_syscall_policy_uses_semantic_ids():
     return errors
 
 
+def check_sysv_shm_is_network_independent():
+    """Keep SysV IPC registration independent from optional networking."""
+    path = ROOT / "kernel" / "syscalls" / "syscall_dispatch.c"
+    errors = []
+    network_depths = []
+    depth = 0
+
+    for line_no, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+        stripped = line.strip()
+        if stripped.startswith("#if"):
+            depth += 1
+            if "CONFIG_ENABLE_NETWORKING" in stripped:
+                network_depths.append(depth)
+        elif stripped.startswith("#endif"):
+            if network_depths and network_depths[-1] == depth:
+                network_depths.pop()
+            depth = max(0, depth - 1)
+
+        if ("syscall_semantic_table[IR0_SYSCALL_SHM" in stripped and
+                network_depths):
+            errors.append(
+                f"[sysv-shm-config] {rel_to_root(path)}:{line_no}: "
+                "SysV SHM must not depend on networking"
+            )
+    return errors
+
+
 def _parse_devfs_pty_id_block():
     """Return (pts0, pty_max) from includes/ir0/pty_devfs.h."""
     pty_h = ROOT / "includes" / "ir0" / "pty_devfs.h"
@@ -2444,6 +2471,7 @@ def main():
     errors.extend(check_common_elf_uses_isa_policy())
     errors.extend(check_common_mm_uses_user_va_policy())
     errors.extend(check_common_syscall_policy_uses_semantic_ids())
+    errors.extend(check_sysv_shm_is_network_independent())
     errors.extend(check_common_mm_uses_tlb_sync())
     errors.extend(check_errno_has_single_catalog())
 
