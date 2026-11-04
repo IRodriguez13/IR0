@@ -120,7 +120,8 @@ int64_t sys_shmget(int key, size_t size, int shmflg)
 		return -ENOSPC;
 
 	memset(free_slot, 0, sizeof(*free_slot));
-	free_slot->frames = kmalloc(npages * sizeof(uintptr_t));
+	/* shmget reports ENOMEM; it must not panic merely allocating metadata. */
+	free_slot->frames = kmalloc_try(npages * sizeof(uintptr_t));
 	if (!free_slot->frames)
 		return -ENOMEM;
 	memset(free_slot->frames, 0, npages * sizeof(uintptr_t));

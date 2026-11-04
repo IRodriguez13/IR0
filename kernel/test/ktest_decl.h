@@ -96,3 +96,4 @@ void ktest_ipc_read_rechecks_after_enqueue(void);
 void ktest_unmap_splits_2mb_leaf(void);
 void ktest_map_replaced_frame_is_released(void);
 void ktest_map_fixed_aborts_when_unmap_fails(void);
+void ktest_shmget_metadata_oom_returns_enomem(void);
