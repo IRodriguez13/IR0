@@ -88,6 +88,7 @@ static int64_t wrap_sys_mmap(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4,
 	return ir0_mmap_syscall_ret(ret);
 }
 
+#if CONFIG_ENABLE_NETWORKING
 WRAP3(sys_socket, int, int, int)
 WRAP3(sys_bind, int, const struct sockaddr *, socklen_t)
 WRAP3(sys_connect, int, const struct sockaddr *, socklen_t)
@@ -102,6 +103,7 @@ WRAP3(sys_getsockname, int, struct sockaddr *, socklen_t *)
 WRAP3(sys_getpeername, int, struct sockaddr *, socklen_t *)
 WRAP5(sys_setsockopt, int, int, int, const void *, socklen_t)
 WRAP5(sys_getsockopt, int, int, int, void *, socklen_t *)
+#endif
 WRAP3(sys_shmget, int, size_t, int)
 WRAP3(sys_shmat, int, const void *, int)
 WRAP1(sys_shmdt, const void *)
@@ -111,8 +113,10 @@ WRAP2(sys_eventfd2, unsigned int, int)
 WRAP2(sys_timerfd_create, int, int)
 WRAP4(sys_timerfd_settime, int, int, const struct itimerspec *, struct itimerspec *)
 WRAP2(sys_timerfd_gettime, int, struct itimerspec *)
+#if CONFIG_ENABLE_NETWORKING
 WRAP6(sys_sendto, int, const void *, size_t, int, const struct sockaddr *, socklen_t)
 WRAP6(sys_recvfrom, int, void *, size_t, int, struct sockaddr *, socklen_t *)
+#endif
 
 WRAP1(sys_exit, int)
 WRAP1(sys_exit_group, int)
@@ -457,14 +461,14 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SENDMSG] = wrap_sys_sendmsg;
   syscall_semantic_table[IR0_SYSCALL_SENDTO] = wrap_sys_sendto;
   syscall_semantic_table[IR0_SYSCALL_SETSOCKOPT] = wrap_sys_setsockopt;
-  syscall_semantic_table[IR0_SYSCALL_SHMAT] = wrap_sys_shmat;
-  syscall_semantic_table[IR0_SYSCALL_SHMCTL] = wrap_sys_shmctl;
-  syscall_semantic_table[IR0_SYSCALL_SHMDT] = wrap_sys_shmdt;
-  syscall_semantic_table[IR0_SYSCALL_SHMGET] = wrap_sys_shmget;
   syscall_semantic_table[IR0_SYSCALL_SHUTDOWN] = wrap_sys_shutdown;
   syscall_semantic_table[IR0_SYSCALL_SOCKET] = wrap_sys_socket;
   syscall_semantic_table[IR0_SYSCALL_SOCKETPAIR] = wrap_sys_socketpair;
 #endif
+  syscall_semantic_table[IR0_SYSCALL_SHMAT] = wrap_sys_shmat;
+  syscall_semantic_table[IR0_SYSCALL_SHMCTL] = wrap_sys_shmctl;
+  syscall_semantic_table[IR0_SYSCALL_SHMDT] = wrap_sys_shmdt;
+  syscall_semantic_table[IR0_SYSCALL_SHMGET] = wrap_sys_shmget;
 }
 
 /**

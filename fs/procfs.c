@@ -513,6 +513,7 @@ static int proc_sock_append(struct proc_sock_fmt_ctx *c, const char *line)
 	return 0;
 }
 
+#if CONFIG_ENABLE_NETWORKING
 static int proc_inet_row_cb(const struct sock_stream_inet_snap *s, void *ctx)
 {
 	struct proc_sock_fmt_ctx *c = ctx;
@@ -566,6 +567,7 @@ static int proc_raw_row_cb(const struct sock_icmp_snap *s, void *ctx)
 		return -1;
 	return proc_sock_append(c, line);
 }
+#endif
 
 static int proc_unix_row_cb(const struct sock_stream_unix_snap *s, void *ctx)
 {
