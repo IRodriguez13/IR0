@@ -83,6 +83,8 @@ void ktest_oom_reclaim_before_kill(void);
 void ktest_readlink_returns_copied_bytes(void);
 void ktest_fstat_redirected_stdio_is_file(void);
 void ktest_lseek_redirected_stdio_uses_file(void);
+void ktest_read_efault_keeps_offset(void);
+void ktest_socket_read_efault_keeps_bytes(void);
 void ktest_fsync_null_fd_table(void);
 void ktest_rename_keeps_unlink_errno(void);
 void ktest_pipe_read_efault_keeps_bytes(void);

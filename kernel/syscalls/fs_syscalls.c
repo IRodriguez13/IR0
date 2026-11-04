@@ -1004,6 +1004,15 @@ int64_t sys_read(int fd, void *buf, size_t count)
     int nb = (fd_table[fd].flags & O_NONBLOCK) != 0;
     ssize_t n;
 
+    /*
+     * Validate the destination before dequeuing: a failed copy_to_user()
+     * must not drop socket bytes (Linux read(2) EFAULT contract).
+     * KERNEL_MODE callers (ktest/dbgshell) pass kernel buffers.
+     */
+    if (current_process->mode != KERNEL_MODE &&
+        !is_user_address_checked(buf, read_size, 1))
+      return -EFAULT;
+
     for (;;)
     {
       n = sock_stream_recv_flags(ss, kernel_read_buf, read_size, 0);
@@ -1116,16 +1125,30 @@ int64_t sys_read(int fd, void *buf, size_t count)
     while (total < count)
     {
       size_t chunk = count - total;
+      off_t pos_before;
 
       if (chunk > sizeof(kernel_read_buf))
         chunk = sizeof(kernel_read_buf);
+      /*
+       * Validate the destination before consuming file data. A failed
+       * copy_to_user() must not advance f_pos (Linux read(2) contract).
+       * KERNEL_MODE callers (ktest/dbgshell) pass kernel buffers.
+       */
+      if (current_process->mode != KERNEL_MODE &&
+          !is_user_address_checked((char *)buf + total, chunk, 1))
+        return total > 0 ? (int64_t)total : -EFAULT;
+      pos_before = vfs_file->pos;
       ret = vfs_read(vfs_file, kernel_read_buf, chunk);
       if (ret < 0)
         return total > 0 ? (int64_t)total : ret;
       if (ret == 0)
         break;
       if (copy_to_user((char *)buf + total, kernel_read_buf, (size_t)ret) != 0)
+      {
+        fd_table[fd].offset = (uint64_t)pos_before;
+        vfs_file->pos = pos_before;
         return total > 0 ? (int64_t)total : -EFAULT;
+      }
       total += (size_t)ret;
       if ((size_t)ret < chunk)
         break;
