@@ -727,7 +727,6 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 
 		if (pinned)
 			pmm_frame_put(old_phys);
-		pmm_frame_put(old_phys);
 		mm_tlb_sync_page(process_pgd(current), (uintptr_t)vaddr_aligned);
 		irq_restore(irq_flags);
 		return;

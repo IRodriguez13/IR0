@@ -536,7 +536,6 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 		irq_restore(irq_flags);
 		return -1;
 	}
-	pmm_frame_put(old_phys);
 	mm_tlb_sync_page(root, vaddr & (uintptr_t)PAGE_FRAME_MASK);
 	irq_restore(irq_flags);
 	return 0;

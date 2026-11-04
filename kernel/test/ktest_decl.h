@@ -67,6 +67,8 @@ void ktest_usercopy_explicit_mm_range_contract(void);
 void ktest_munmap_partial_preserves_vma(void);
 void ktest_mmap_fixed_partial_overlap_preserves_vma(void);
 void ktest_mprotect_preserves_cow(void);
+void ktest_cow_write_fault_drops_old_once(void);
+void ktest_copy_to_user_cow_break_drops_old_once(void);
 void ktest_mprotect_updates_maps(void);
 void ktest_reclaim_freed_page_tables_safely(void);
 void ktest_signal_segv_deliver_irq_frame(void);
