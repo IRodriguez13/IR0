@@ -668,6 +668,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/lib/open_flags.c \
 	kernel/lib/copy_user.c \
 	kernel/fd/fd_resource.c \
+	kernel/futex.c \
 	sched/runqueue_lock.c \
 	kernel/process/registry_lock.c \
 	kernel/process/core.c \
