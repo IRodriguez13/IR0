@@ -1197,7 +1197,7 @@ ir0: CFLAGS += -Werror
 
 # Auto-run the host dependency check when menuconfig asks for it.
 ifeq ($(CONFIG_TOOL_AUTO_RUN_DEPTEST),y)
-IR0_PRECHECK_TARGETS := deptest
+IR0_PRECHECK_TARGETS := check-env
 else
 IR0_PRECHECK_TARGETS :=
 endif
@@ -1373,6 +1373,9 @@ stack-usage:
 help:
 	@echo "IR0 kernel — lean build system"
 	@echo ""
+	@echo "Start here:"
+	@echo "  make onboard                 check-env → defconfig (if missing) → ir0 → test-fast"
+	@echo ""
 	@echo "Build:"
 	@echo "  make ir0                     x86-64 kernel ISO (default)"
 	@echo "  make ir0 arm64               ARM64 qemu-virt aggregate"
@@ -1391,7 +1394,7 @@ help:
 	@echo "Check:"
 	@echo "  make check-env               Host toolchain diagnostic"
 	@echo "  make test-fast               Kernel + arch-guard + host tests + KTM"
-	@echo "  make ktest                   In-kernel tests in QEMU"
+	@echo "  make kernel-tests            In-kernel tests in QEMU"
 	@echo "  make ctr                     Merge gate (includes the daily matrix)"
 	@echo "  make arch-guard              Architecture boundary"
 	@echo "  make build-matrix-min        Daily .config matrix"
@@ -1410,6 +1413,7 @@ help:
 	@echo "Develop:"
 	@echo "  make format                  clang-format tracked C/H, skip toolchain/ and setup/"
 	@echo "  make analyze                 cppcheck on kernel trees when installed"
+	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
 	@echo "  make unibuild FILE=fs/tmpfs.c"
 	@echo "  make headers_install         Export includes/uapi to DESTDIR"
 	@echo "  make create-disk [FS=minix] [SIZE=200]"
@@ -1420,9 +1424,10 @@ help:
 	@echo ""
 
 # DEPENDENCY TEST
-# check-env is the public alias. Both names share this recipe.
+# check-env is the public host diagnostic. The script keeps its historical
+# deptest.sh name so existing automation can still call it directly.
 
-deptest check-env:
+check-env:
 	@chmod +x $(KERNEL_ROOT)/scripts/deptest.sh
 	@PROFILE="$(PROFILE)" BOARD="$(BOARD)" $(KERNEL_ROOT)/scripts/deptest.sh
 
@@ -1541,7 +1546,7 @@ test-drivers-clean:
 	create-disk delete-disk disk-reset load-init \
 	menuconfig defconfig \
 	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
-	headers_install deptest check-env \
+	headers_install check-env \
 	unibuild unibuild-cpp unibuild-rust unibuild-clean \
 	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
 	format analyze compile-commands disasm stack-usage print-build-objects build-graph-audit \

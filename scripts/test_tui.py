@@ -36,10 +36,26 @@ def load_rows() -> list[dict]:
     return rows
 
 
-def display_lines(rows: list[dict]) -> list[tuple[str, int | None]]:
+def filter_rows(rows: list[dict], query: str) -> list[int]:
+    """Return row indices matching query (id, group or label)."""
+    needle = query.strip().lower()
+    if not needle:
+        return list(range(len(rows)))
+    return [
+        i
+        for i, row in enumerate(rows)
+        if needle in row["id"].lower()
+        or needle in row["group"].lower()
+        or needle in row["label"].lower()
+    ]
+
+
+def display_lines(rows: list[dict], view: list[int]) -> list[tuple[str, int | None]]:
+    """Build the display lines once per filter/toggle change."""
     lines: list[tuple[str, int | None]] = []
     last_grp = None
-    for i, row in enumerate(rows):
+    for i in view:
+        row = rows[i]
         group = row["group"] or "other"
         if group != last_grp:
             lines.append((f"[{group}]", None))
@@ -49,40 +65,105 @@ def display_lines(rows: list[dict]) -> list[tuple[str, int | None]]:
     return lines
 
 
-def draw(stdscr, rows: list[dict], idx: int, scroll: int, persist: bool, status: str) -> int:
+def selected_ids(rows: list[dict], view: list[int]) -> list[str]:
+    return [rows[i]["id"] for i in view if rows[i]["on"]]
+
+
+def draw(
+    stdscr,
+    rows: list[dict],
+    view: list[int],
+    lines: list[tuple[str, int | None]],
+    cursor: int,
+    scroll: int,
+    persist: bool,
+    status: str,
+    query: str,
+) -> tuple[int, int]:
     stdscr.erase()
     h, w = stdscr.getmaxyx()
+    if h < 3 or w < 2:
+        stdscr.refresh()
+        return scroll, 1
+
     title = " IR0 tests "
-    stdscr.addstr(0, max(0, (w - len(title)) // 2), title, curses.A_BOLD)
-    stdscr.addstr(1, 0, "Space toggle   A all   D defaults   R run   P disk   Q quit"[: max(0, w - 1)])
-    selected = sum(1 for row in rows if row["on"])
-    stdscr.addstr(
-        2, 0,
-        f"disk {'on' if persist else 'off'}   {selected} selected   {status}"[: max(0, w - 1)],
+    _safe_addstr(stdscr, 0, max(0, (w - len(title)) // 2), title, curses.A_BOLD)
+    _safe_addstr(
+        stdscr,
+        1,
+        0,
+        "Space toggle   A all   D defaults   R run   P disk   / search   Q quit",
     )
 
-    lines = display_lines(rows)
-    cursor_line = next((n for n, (_text, row_i) in enumerate(lines) if row_i == idx), 0)
+    chosen = len(selected_ids(rows, view))
+    scope = f"{len(view)}/{len(rows)} suites"
+    if query:
+        scope += f"  filter:{query}"
+    _safe_addstr(
+        stdscr,
+        2,
+        0,
+        f"disk {'on' if persist else 'off'}   {chosen} selected   {scope}   {status}",
+    )
+
     list_top = 4
     room = max(1, h - list_top)
+    cursor_line = 0
+    current_row = view[cursor] if view else None
+    for n, (_text, row_i) in enumerate(lines):
+        if current_row is not None and row_i == current_row:
+            cursor_line = n
+            break
+
     if cursor_line < scroll:
         scroll = cursor_line
     if cursor_line >= scroll + room:
         scroll = cursor_line - room + 1
     scroll = max(0, min(scroll, max(0, len(lines) - room)))
 
-    for offset, (text, row_i) in enumerate(lines[scroll:scroll + room]):
-        attr = curses.A_REVERSE if row_i == idx else curses.A_NORMAL
-        if row_i is None:
-            attr = curses.A_UNDERLINE
-        stdscr.addstr(list_top + offset, 0, text[: max(0, w - 1)], attr)
+    if not view:
+        _safe_addstr(stdscr, list_top, 0, "  no suites match the current filter")
+    else:
+        for offset, (text, row_i) in enumerate(lines[scroll : scroll + room]):
+            attr = curses.A_REVERSE if row_i == current_row else curses.A_NORMAL
+            if row_i is None:
+                attr = curses.A_UNDERLINE
+            _safe_addstr(stdscr, list_top + offset, 0, text, attr)
 
     stdscr.refresh()
-    return scroll
+    return scroll, room
 
 
-def run_selected(rows: list[dict], persist: bool) -> tuple[int, str]:
-    ids = [r["id"] for r in rows if r["on"]]
+def _safe_addstr(stdscr, y: int, x: int, text: str, attr: int = curses.A_NORMAL) -> None:
+    try:
+        h, w = stdscr.getmaxyx()
+        if y < 0 or y >= h or x >= w:
+            return
+        stdscr.addstr(y, x, text[: max(0, w - x - 1)], attr)
+    except curses.error:
+        pass
+
+
+def prompt_search(stdscr, current: str) -> str:
+    h, w = stdscr.getmaxyx()
+    if h < 2 or w < 4:
+        return current
+    curses.curs_set(1)
+    curses.echo()
+    try:
+        stdscr.addstr(h - 1, 0, " " * max(0, w - 1))
+        stdscr.addstr(h - 1, 0, "/ ")
+        stdscr.refresh()
+        raw = stdscr.getstr(h - 1, 2, max(1, w - 3))
+        return raw.decode("utf-8", "replace").strip()
+    except curses.error:
+        return current
+    finally:
+        curses.noecho()
+        curses.curs_set(0)
+
+
+def run_selected(ids: list[str], persist: bool) -> tuple[int, str]:
     if not ids:
         return 2, "nothing selected"
     cmd = [sys.executable, str(RUNNER), "--suites", ",".join(ids)]
@@ -104,42 +185,108 @@ def main_curses(stdscr) -> int:
         stdscr.getch()
         return 2
 
-    idx = 0
+    query = ""
+    view = filter_rows(rows, query)
+    lines = display_lines(rows, view)
+    cursor = 0
     scroll = 0
     persist = False
     status = ""
 
     while True:
-        scroll = draw(stdscr, rows, idx, scroll, persist, status)
+        scroll, page = draw(
+            stdscr, rows, view, lines, cursor, scroll, persist, status, query
+        )
         ch = stdscr.getch()
-        if ch in (ord("q"), ord("Q"), 27):
+
+        if ch == curses.KEY_RESIZE:
+            scroll = min(scroll, max(0, len(lines) - 1))
+            continue
+
+        if ch in (ord("q"), ord("Q")):
             return 0
-        if ch in (curses.KEY_UP, ord("k")):
-            idx = (idx - 1) % len(rows)
+        if ch == 27:
+            if query:
+                query = ""
+                view = filter_rows(rows, query)
+                lines = display_lines(rows, view)
+                cursor = 0
+                scroll = 0
+                status = ""
+                continue
+            return 0
+
+        if ch == ord("/"):
+            query = prompt_search(stdscr, query)
+            view = filter_rows(rows, query)
+            lines = display_lines(rows, view)
+            cursor = 0
+            scroll = 0
+            status = f"{len(view)} match(es)" if query else ""
+        elif ch in (curses.KEY_UP, ord("k")):
+            if view:
+                cursor = (cursor - 1) % len(view)
+            status = ""
         elif ch in (curses.KEY_DOWN, ord("j")):
-            idx = (idx + 1) % len(rows)
+            if view:
+                cursor = (cursor + 1) % len(view)
+            status = ""
+        elif ch == curses.KEY_PPAGE:
+            if view:
+                cursor = max(0, cursor - page)
+            status = ""
+        elif ch == curses.KEY_NPAGE:
+            if view:
+                cursor = min(len(view) - 1, cursor + page)
+            status = ""
+        elif ch == curses.KEY_HOME:
+            cursor = 0
+            status = ""
+        elif ch == curses.KEY_END:
+            cursor = max(0, len(view) - 1)
+            status = ""
         elif ch == ord(" "):
-            rows[idx]["on"] = not rows[idx]["on"]
+            if view:
+                row = rows[view[cursor]]
+                row["on"] = not row["on"]
+                lines = display_lines(rows, view)
+            status = ""
         elif ch in (ord("a"), ord("A")):
-            val = not all(r["on"] for r in rows)
-            for r in rows:
-                r["on"] = val
+            targets = [rows[i] for i in view]
+            val = not all(row["on"] for row in targets)
+            for row in targets:
+                row["on"] = val
+            lines = display_lines(rows, view)
+            status = ""
         elif ch in (ord("d"), ord("D")):
-            for r in rows:
-                r["on"] = r["default"]
+            for row in rows:
+                row["on"] = row["default"]
+            lines = display_lines(rows, view)
+            status = ""
         elif ch in (ord("p"), ord("P")):
             persist = not persist
+            status = ""
         elif ch in (ord("r"), ord("R")):
+            ids = selected_ids(rows, view)
+            if not ids:
+                status = "nothing selected"
+                continue
             status = "running..."
-            scroll = draw(stdscr, rows, idx, scroll, persist, status)
+            draw(stdscr, rows, view, lines, cursor, scroll, persist, status, query)
             curses.endwin()
-            rc, msg = run_selected(rows, persist)
+            rc, msg = run_selected(ids, persist)
             stdscr.refresh()
             curses.doupdate()
             stdscr.keypad(True)
+            curses.curs_set(0)
             status = msg
             if rc != 0:
-                stdscr.addstr(curses.LINES - 1, 0, f"Failed ({msg}). Press any key.")
+                _safe_addstr(
+                    stdscr,
+                    curses.LINES - 1,
+                    0,
+                    f"Failed ({msg}). Press any key.",
+                )
                 stdscr.refresh()
                 stdscr.getch()
 

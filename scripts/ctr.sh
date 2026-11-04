@@ -21,8 +21,8 @@ echo "== CTR: tests/host =="
 make -s -C tests/host run
 
 if [[ "$RUN_KTM" == "1" ]]; then
-	echo "== CTR: ktest (KTM in QEMU) =="
-	make -s ARCH=x86_64 ktest
+	echo "== CTR: kernel-tests (KTM in QEMU) =="
+	make -s ARCH=x86_64 kernel-tests
 fi
 
 echo "CTR_OK"

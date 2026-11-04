@@ -27,7 +27,7 @@ BOARD_SYMBOLS = ("ARM64_BOARD_QEMU_VIRT", "ARM64_BOARD_RPI4", "ARM64_BOARD_RPI5"
 I18N = {
     "en": {
         "title": " IR0 Kernel Configuration ",
-        "footer": " Space toggle   Enter edit   S save   ? help   Q quit",
+        "footer": " Space toggle   Enter edit   S save   / search   ? help   Q quit",
         "keys": "D defaults   G/T/I/C/W preset   M manuals   H preset help   L language",
         "modified": " [MODIFIED] ",
         "help_title": " Symbol ",
@@ -37,6 +37,8 @@ I18N = {
         "depends": "Depends on",
         "range": "Range",
         "saved": "Configuration saved to .config",
+        "search_prompt": "Search symbol",
+        "search_none": "No visible symbol matches that search",
         "preset_generic": "Applied preset: generic (desktop x86)",
         "preset_tiny": "Applied preset: tiny",
         "preset_iot": "Applied preset: hub / IoT (ARM64 rpi4)",
@@ -51,7 +53,7 @@ I18N = {
     },
     "es": {
         "title": " Configuracion del Kernel IR0 ",
-        "footer": " Espacio cambia   Enter edita   S guarda   ? ayuda   Q sale",
+        "footer": " Espacio cambia   Enter edita   S guarda   / busca   ? ayuda   Q sale",
         "keys": "D defecto   G/T/I/C/W preset   M manuales   H ayuda preset   L idioma",
         "modified": " [MODIFICADO] ",
         "help_title": " Opcion ",
@@ -61,6 +63,8 @@ I18N = {
         "depends": "Depende de",
         "range": "Rango",
         "saved": "Configuracion guardada en .config",
+        "search_prompt": "Buscar simbolo",
+        "search_none": "Ningun simbolo visible coincide con la busqueda",
         "preset_generic": "Preset aplicado: generic (desktop x86)",
         "preset_tiny": "Preset aplicado: tiny",
         "preset_iot": "Preset aplicado: hub / IoT (ARM64 rpi4)",
@@ -765,6 +769,42 @@ def apply_preset(symbols, preset):
 # Curses TUI
 # ---------------------------------------------------------------------------
 
+def build_menu_lines(visible):
+    """Return display lines plus the line index for each visible symbol."""
+    lines = []
+    line_of = []
+    current_menu = None
+    for i, sym in enumerate(visible):
+        if sym.menu and sym.menu != current_menu:
+            current_menu = sym.menu
+            lines.append(("header", current_menu))
+        line_of.append(len(lines))
+        lines.append(("sym", i))
+    return lines, line_of
+
+
+def find_visible_symbol(visible, query):
+    needle = query.strip().lower()
+    if needle.startswith("config_"):
+        needle = needle[len("config_") :]
+    if not needle:
+        return None
+    for i, sym in enumerate(visible):
+        if needle in sym.name.lower() or needle in sym.prompt.lower():
+            return i
+    return None
+
+
+def _safe_addstr(win, y, x, text, attr=0):
+    try:
+        h, w = win.getmaxyx()
+        if y < 0 or y >= h or x < 0 or x >= w:
+            return
+        win.addstr(y, x, text[: max(0, w - x)], attr)
+    except curses.error:
+        pass
+
+
 def run_menu(stdscr, symbols):
     curses.curs_set(0)
     curses.start_color()
@@ -776,93 +816,118 @@ def run_menu(stdscr, symbols):
     curses.init_pair(5, curses.COLOR_CYAN, -1)
 
     visible = [s for s in symbols if dep_satisfied(symbols, s)]
+    lines, line_of = build_menu_lines(visible)
     cursor = 0
     scroll = 0
+    visible_dirty = False
     show_help = False
     show_preset_help = False
     ui_lang = get_ui_lang(symbols)
     dirty = False
 
     while True:
-        visible = [s for s in symbols if dep_satisfied(symbols, s)]
-        if cursor >= len(visible):
-            cursor = max(0, len(visible) - 1)
+        # Recompute dependencies only after a value changes, never on scroll.
+        if visible_dirty:
+            keep = visible[cursor].name if visible and cursor < len(visible) else None
+            visible = [s for s in symbols if dep_satisfied(symbols, s)]
+            lines, line_of = build_menu_lines(visible)
+            cursor = 0
+            if keep is not None:
+                for i, sym in enumerate(visible):
+                    if sym.name == keep:
+                        cursor = i
+                        break
+            if visible:
+                cursor = min(cursor, len(visible) - 1)
+            else:
+                cursor = 0
+            visible_dirty = False
 
         stdscr.erase()
         h, w = stdscr.getmaxyx()
+        if h < 3 or w < 2:
+            stdscr.refresh()
+            stdscr.getch()
+            continue
 
         title = tr(ui_lang, "title")
-        stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-        stdscr.addstr(0, 0, " " * w)
-        stdscr.addstr(0, max(0, (w - len(title)) // 2), title)
-        stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
+        _safe_addstr(
+            stdscr, 0, 0, " " * max(0, w - 1), curses.color_pair(1) | curses.A_BOLD
+        )
+        _safe_addstr(
+            stdscr,
+            0,
+            max(0, (w - len(title)) // 2),
+            title,
+            curses.color_pair(1) | curses.A_BOLD,
+        )
 
         footer = tr(ui_lang, "footer")
-        stdscr.attron(curses.color_pair(1))
-        stdscr.addstr(h - 1, 0, footer[:w - 1].ljust(w - 1))
-        stdscr.attroff(curses.color_pair(1))
+        _safe_addstr(
+            stdscr, h - 1, 0, footer.ljust(max(0, w - 1)), curses.color_pair(1)
+        )
         show_keys = h >= 8
-        list_limit = h - 3 if show_keys else h - 2
         if show_keys:
-            stdscr.addstr(h - 2, 0, tr(ui_lang, "keys")[:w - 1])
+            _safe_addstr(stdscr, h - 2, 0, tr(ui_lang, "keys"))
 
         if dirty:
             mod = tr(ui_lang, "modified")
-            stdscr.attron(curses.color_pair(4) | curses.A_BOLD)
-            stdscr.addstr(0, w - len(mod) - 1, mod)
-            stdscr.attroff(curses.color_pair(4) | curses.A_BOLD)
+            _safe_addstr(
+                stdscr,
+                0,
+                w - len(mod) - 1,
+                mod,
+                curses.color_pair(4) | curses.A_BOLD,
+            )
 
         list_top = 2
-        list_h = h - (5 if h >= 8 else 4)
+        list_h = max(1, h - (5 if show_keys else 4))
+        if visible:
+            cursor = min(cursor, len(visible) - 1)
+            cursor_line = line_of[cursor]
+            if cursor_line < scroll:
+                scroll = cursor_line
+            if cursor_line >= scroll + list_h:
+                scroll = cursor_line - list_h + 1
+            scroll = max(0, min(scroll, max(0, len(lines) - list_h)))
 
-        if cursor < scroll:
-            scroll = cursor
-        if cursor >= scroll + list_h:
-            scroll = cursor - list_h + 1
+            for offset, (kind, value) in enumerate(lines[scroll : scroll + list_h]):
+                row = list_top + offset
+                if row >= h - 2:
+                    break
+                if kind == "header":
+                    _safe_addstr(
+                        stdscr,
+                        row,
+                        2,
+                        f"--- {value} ---",
+                        curses.color_pair(5) | curses.A_BOLD,
+                    )
+                    continue
 
-        current_menu = None
-        row = list_top
-        for idx in range(scroll, min(scroll + list_h, len(visible))):
-            sym = visible[idx]
-            if sym.menu and sym.menu != current_menu:
-                current_menu = sym.menu
-                header = f"--- {current_menu} ---"
-                if row < list_limit:
-                    stdscr.attron(curses.color_pair(5) | curses.A_BOLD)
-                    stdscr.addstr(row, 2, header[:w - 4])
-                    stdscr.attroff(curses.color_pair(5) | curses.A_BOLD)
-                    row += 1
-                    if row >= list_limit:
-                        break
+                sym = visible[value]
+                if sym.type == "bool":
+                    marker = "[*]" if sym.value == "y" else "[ ]"
+                    color = (
+                        curses.color_pair(3)
+                        if sym.value == "y"
+                        else curses.color_pair(0)
+                    )
+                elif sym.type == "int":
+                    marker = f"({sym.value})"
+                    color = curses.color_pair(2)
+                else:
+                    marker = f'"{sym.value}"'
+                    color = curses.color_pair(2)
 
-            if row >= list_limit:
-                break
+                line = f"  {marker} {sym.prompt}"
+                if len(line) > w - 2:
+                    line = line[: max(0, w - 5)] + "..."
 
-            is_sel = (idx == cursor)
-
-            if sym.type == "bool":
-                marker = "[*]" if sym.value == "y" else "[ ]"
-                color = curses.color_pair(3) if sym.value == "y" else curses.color_pair(0)
-            elif sym.type == "int":
-                marker = f"({sym.value})"
-                color = curses.color_pair(2)
-            else:
-                marker = f'"{sym.value}"'
-                color = curses.color_pair(2)
-
-            line = f"  {marker} {sym.prompt}"
-            if len(line) > w - 2:
-                line = line[:w - 5] + "..."
-
-            if is_sel:
-                stdscr.attron(curses.A_REVERSE)
-            stdscr.attron(color)
-            stdscr.addstr(row, 0, line.ljust(w - 1)[:w - 1])
-            stdscr.attroff(color)
-            if is_sel:
-                stdscr.attroff(curses.A_REVERSE)
-
-            row += 1
+                attr = color | (curses.A_REVERSE if value == cursor else 0)
+                _safe_addstr(stdscr, row, 0, line.ljust(max(0, w - 1)), attr)
+        else:
+            _safe_addstr(stdscr, list_top, 0, "  No visible symbols")
 
         if show_help and cursor < len(visible):
             sym = visible[cursor]
@@ -923,18 +988,21 @@ def run_menu(stdscr, symbols):
             show_preset_help = False
             continue
 
+        if key == curses.KEY_RESIZE:
+            continue
+
         if key == curses.KEY_UP or key == ord('k'):
             cursor = max(0, cursor - 1)
         elif key == curses.KEY_DOWN or key == ord('j'):
-            cursor = min(len(visible) - 1, cursor + 1)
+            cursor = min(max(0, len(visible) - 1), cursor + 1)
         elif key == curses.KEY_HOME:
             cursor = 0
         elif key == curses.KEY_END:
-            cursor = len(visible) - 1
+            cursor = max(0, len(visible) - 1)
         elif key == curses.KEY_PPAGE:
             cursor = max(0, cursor - list_h)
         elif key == curses.KEY_NPAGE:
-            cursor = min(len(visible) - 1, cursor + list_h)
+            cursor = min(max(0, len(visible) - 1), cursor + list_h)
         elif key in (ord(' '), ord('\n'), curses.KEY_ENTER, 10, 13):
             if cursor < len(visible):
                 sym = visible[cursor]
@@ -964,6 +1032,16 @@ def run_menu(stdscr, symbols):
                     if val is not None:
                         sym.value = val
                         dirty = True
+            visible_dirty = True
+        elif key == ord('/'):
+            query = curses_input(stdscr, tr(ui_lang, "search_prompt"), "", h, w)
+            if query:
+                found = find_visible_symbol(visible, query)
+                if found is None:
+                    flash_msg(stdscr, tr(ui_lang, "search_none"), h, w)
+                else:
+                    cursor = found
+                    scroll = 0
         elif key == ord('?'):
             show_help = True
         elif key in (ord("'"), ord("H"), ord("h")):
@@ -976,30 +1054,36 @@ def run_menu(stdscr, symbols):
             for s in symbols:
                 s.value = s.effective_default()
             dirty = True
+            visible_dirty = True
         elif key == ord('g') or key == ord('G'):
             apply_preset(symbols, "generic")
             ui_lang = get_ui_lang(symbols)
             dirty = True
+            visible_dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_generic"), h, w)
         elif key == ord('t') or key == ord('T'):
             apply_preset(symbols, "tiny")
             ui_lang = get_ui_lang(symbols)
             dirty = True
+            visible_dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_tiny"), h, w)
         elif key == ord('i') or key == ord('I'):
             apply_preset(symbols, "iot")
             ui_lang = get_ui_lang(symbols)
             dirty = True
+            visible_dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_iot"), h, w)
         elif key == ord('w') or key == ord('W'):
             apply_preset(symbols, "watch")
             ui_lang = get_ui_lang(symbols)
             dirty = True
+            visible_dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_watch"), h, w)
         elif key == ord('c') or key == ord('C'):
             apply_preset(symbols, "custom")
             ui_lang = get_ui_lang(symbols)
             dirty = True
+            visible_dirty = True
             flash_msg(stdscr, tr(ui_lang, "preset_custom"), h, w)
         elif key == ord('m') or key == ord('M'):
             default_lang = get_ui_lang(symbols)
@@ -1025,6 +1109,7 @@ def run_menu(stdscr, symbols):
             ui_lang = "es" if ui_lang == "en" else "en"
             set_ui_lang(symbols, ui_lang)
             dirty = True
+            visible_dirty = True
             flash_msg(stdscr, tr(ui_lang, "lang_switched"), h, w)
         elif key == ord('q') or key == ord('Q'):
             if dirty:
@@ -1033,23 +1118,45 @@ def run_menu(stdscr, symbols):
             break
 
 
+def _dismiss_dialog(win, parent=None):
+    try:
+        win.clear()
+        win.refresh()
+    except curses.error:
+        pass
+    if parent is not None:
+        # A dialog window overwrites cells that stdscr still believes are
+        # unchanged. Repaint the parent so the next diff starts from truth.
+        try:
+            parent.redrawwin()
+            parent.refresh()
+        except curses.error:
+            pass
+
+
 def curses_input(stdscr, label, current, h, w):
     """Simple single-line input dialog."""
-    box_w = min(50, w - 4)
+    box_w = max(8, min(50, w - 4))
     box_h = 5
-    box_y = (h - box_h) // 2
-    box_x = (w - box_w) // 2
+    box_y = max(0, (h - box_h) // 2)
+    box_x = max(0, (w - box_w) // 2)
     win = curses.newwin(box_h, box_w, box_y, box_x)
     win.box()
-    win.addstr(0, 2, f" {label} ")
+    win.addstr(0, 2, f" {label} "[: max(1, box_w - 4)])
     win.addstr(2, 2, "> ")
     win.refresh()
 
-    curses.curs_set(1)
-    curses.echo()
-    buf = win.getstr(2, 4, box_w - 6)
-    curses.noecho()
-    curses.curs_set(0)
+    buf = b""
+    try:
+        curses.curs_set(1)
+        curses.echo()
+        buf = win.getstr(2, 4, max(1, box_w - 6))
+    except curses.error:
+        return current
+    finally:
+        curses.noecho()
+        curses.curs_set(0)
+        _dismiss_dialog(win, stdscr)
 
     try:
         return buf.decode("utf-8").strip()
@@ -1058,34 +1165,39 @@ def curses_input(stdscr, label, current, h, w):
 
 
 def flash_msg(stdscr, msg, h, w):
-    box_w = min(len(msg) + 6, w - 2)
-    box_y = h // 2
-    box_x = (w - box_w) // 2
+    box_w = max(8, min(len(msg) + 6, w - 2))
+    box_y = max(0, h // 2)
+    box_x = max(0, (w - box_w) // 2)
     try:
         win = curses.newwin(3, box_w, box_y, box_x)
         win.box()
         win.attron(curses.color_pair(3) | curses.A_BOLD)
-        win.addstr(1, 2, msg[:box_w - 4])
+        win.addstr(1, 2, msg[: max(1, box_w - 4)])
         win.attroff(curses.color_pair(3) | curses.A_BOLD)
         win.refresh()
         curses.napms(1200)
+        _dismiss_dialog(win, stdscr)
     except curses.error:
         pass
 
 
 def confirm(stdscr, msg, h, w):
-    box_w = min(len(msg) + 16, w - 2)
-    box_y = h // 2
-    box_x = (w - box_w) // 2
+    box_w = max(8, min(len(msg) + 16, w - 2))
+    box_y = max(0, h // 2)
+    box_x = max(0, (w - box_w) // 2)
+    win = None
     try:
         win = curses.newwin(3, box_w, box_y, box_x)
         win.box()
-        win.addstr(1, 2, f"{msg} [y/N] ")
+        win.addstr(1, 2, f"{msg} [y/N] "[: max(1, box_w - 4)])
         win.refresh()
         key = win.getch()
         return key in (ord('y'), ord('Y'))
     except curses.error:
         return False
+    finally:
+        if win is not None:
+            _dismiss_dialog(win, stdscr)
 
 
 # ---------------------------------------------------------------------------

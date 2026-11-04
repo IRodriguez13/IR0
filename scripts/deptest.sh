@@ -1,7 +1,7 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
 #
-# deptest.sh — Host environment diagnostic for IR0 (alias: make check-env).
+# deptest.sh — Host environment diagnostic for IR0 (`make check-env`).
 #
 # Profiles (PROFILE=…; aliases match product image names):
 #   desktop | desktop-x86_64  — make ir0 / desktop-x86_64
@@ -20,9 +20,9 @@
 #   present_but_unusable  — found on PATH but fails a probe → exit 1
 #
 # Usage:
-#   make deptest
+#   make check-env
 #   make check-env PROFILE=desktop-x86_64
-#   make deptest PROFILE=userspace  # host toolchain for external ISD builds
+#   make check-env PROFILE=userspace  # host toolchain for external ISD builds
 #   PROFILE=hub BOARD=rpi4 ./scripts/deptest.sh
 #
 
@@ -158,8 +158,7 @@ print_install_hints() {
 	esac
 	echo ""
 	echo "Re-run:"
-	echo "  make deptest PROFILE=${PROFILE_DISPLAY}"
-	echo "  # alias: make check-env PROFILE=${PROFILE_DISPLAY}"
+	echo "  make check-env PROFILE=${PROFILE_DISPLAY}"
 }
 
 # $1=tool_name $2=kind  $3=detail  $4=apt  $5=pacman  $6=dnf  [$7=zypper]
@@ -556,7 +555,7 @@ NEXT=""
 case "${PROFILE}" in
 desktop)
 	need_desktop
-	NEXT="make defconfig && make ir0"
+	NEXT="make onboard    # build + fast tests (keeps .config)"
 	;;
 userspace)
 	need_desktop
@@ -592,6 +591,5 @@ fi
 
 echo "[deptest] FAIL — profile ${PROFILE_DISPLAY}: ${ERRORS} required issue(s), ${WARNINGS} optional warning(s)"
 echo "  Fix the [deptest] blocks above, then:"
-echo "  make deptest PROFILE=${PROFILE_DISPLAY}"
-echo "  # alias: make check-env PROFILE=${PROFILE_DISPLAY}"
+echo "  make check-env PROFILE=${PROFILE_DISPLAY}"
 exit 1

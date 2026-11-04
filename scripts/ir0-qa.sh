@@ -20,8 +20,8 @@ Interactive testing:
 
 Common gates:
   make ctr                   kernel + arch-guard + matrix-min + tests/host
-  make test-fast             kernel + arch-guard + host + ktm-check
-  make ktest                 in-kernel ktest suite (QEMU)
+  make test-fast             kernel + arch-guard + host + KTM guards
+  make kernel-tests          in-kernel test suite (QEMU)
   make build-matrix-full     daily matrix plus CI cases
 
 The legacy QA smoke catalog was removed from the Makefile. `make run` on x86
