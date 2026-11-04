@@ -192,7 +192,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	handler = p->signal_handlers[sig];
 	sa_flags = p->signal_sa_flags[sig];
 
-	ctx = kmalloc(sizeof(*ctx));
+	ctx = kmalloc_try(sizeof(*ctx));
 	if (!ctx)
 		return 0;
 
@@ -966,7 +966,7 @@ void handle_signals(void)
                             continue;
                         }
 
-                        ctx = kmalloc(sizeof(struct sigcontext));
+                        ctx = kmalloc_try(sizeof(struct sigcontext));
                         if (!ctx)
                         {
                             current->signal_handlers[sig] = SIG_DFL;

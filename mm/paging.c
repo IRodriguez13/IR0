@@ -131,7 +131,7 @@ static int ir0_mm_frame_type_ensure(void)
     if (total_frames == 0)
         return -1;
 
-    ir0_mm_frame_type_map = kmalloc(total_frames);
+    ir0_mm_frame_type_map = kmalloc_try(total_frames);
     if (!ir0_mm_frame_type_map)
         return -1;
 

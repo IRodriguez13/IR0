@@ -73,7 +73,7 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
     if (!wq || !proc)
         return;
 
-    wait_queue_node_t *node = kmalloc(sizeof(wait_queue_node_t));
+    wait_queue_node_t *node = kmalloc_try(sizeof(wait_queue_node_t));
     if (!node)
         return;
 
@@ -324,7 +324,7 @@ size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len)
 
 ipc_channel_t *ipc_channel_create(uint32_t id)
 {
-    ipc_channel_t *channel = kmalloc(sizeof(ipc_channel_t));
+    ipc_channel_t *channel = kmalloc_try(sizeof(ipc_channel_t));
     if (!channel)
         return NULL;
 
@@ -644,4 +644,3 @@ int ipc_init(void)
     next_channel_id = 1;
     return 0;
 }
-
