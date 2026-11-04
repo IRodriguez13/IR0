@@ -230,7 +230,7 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
                          IP4_ARGS(ntohl((interface_ip != 0) ? interface_ip : my_ip)));
             
             /* Send ARP Reply */
-            struct arp_header *reply = (struct arp_header *)kmalloc(sizeof(struct arp_header));
+            struct arp_header *reply = (struct arp_header *)kmalloc_try(sizeof(struct arp_header));
             if (!reply)
                 return;
             
@@ -450,7 +450,7 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     }
     
     /* Create new entry */
-    entry = (struct arp_cache_entry *)kmalloc(sizeof(struct arp_cache_entry));
+    entry = (struct arp_cache_entry *)kmalloc_try(sizeof(struct arp_cache_entry));
     if (!entry)
     {
         arp_irq_restore(flags);
@@ -478,7 +478,7 @@ void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
 {
     LOG_INFO_FMT("ARP", "Sending ARP request for IP " IP4_FMT, IP4_ARGS(ntohl(target_ip)));
     
-    struct arp_header *request = (struct arp_header *)kmalloc(sizeof(struct arp_header));
+    struct arp_header *request = (struct arp_header *)kmalloc_try(sizeof(struct arp_header));
     if (!request)
     {
         LOG_ERROR("ARP", "Failed to allocate ARP request");
@@ -844,4 +844,3 @@ int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip)
     arp_irq_restore(flags);
     return -1;
 }
-

@@ -248,7 +248,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
             size_t reply_len = len;
             if (reply_len > 1500)
                 reply_len = 1500;
-            uint8_t *reply = kmalloc(reply_len);
+            uint8_t *reply = kmalloc_try(reply_len);
             if (!reply)
             {
                 LOG_ERROR("ICMP", "Failed to allocate memory for ICMP reply");
@@ -438,7 +438,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     }
     
     size_t icmp_len = sizeof(struct icmp_header) + actual_payload_len;
-    uint8_t *icmp_packet = kmalloc(icmp_len);
+    uint8_t *icmp_packet = kmalloc_try(icmp_len);
     if (!icmp_packet)
         return -1;
 
@@ -474,7 +474,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
                  (int)id, (int)seq);
 
     /* Track this echo request so we can match the reply */
-    struct icmp_pending_echo *pending = kmalloc(sizeof(struct icmp_pending_echo));
+    struct icmp_pending_echo *pending = kmalloc_try(sizeof(struct icmp_pending_echo));
     if (pending)
     {
         uint64_t irq_flags = icmp_irq_save();
@@ -660,4 +660,3 @@ int icmp_init(void)
     LOG_INFO("ICMP", "ICMP protocol initialized");
     return 0;
 }
-
