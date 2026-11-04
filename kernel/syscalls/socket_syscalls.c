@@ -428,7 +428,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	{
 		ssize_t n;
 
-		kbuf = kmalloc(len);
+		kbuf = kmalloc_try(len);
 		if (!kbuf)
 			return -ENOMEM;
 		if (copy_from_user(kbuf, buf, len) != 0)
@@ -454,7 +454,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	icmp = sock_icmp_fd_lookup(fd);
 	if (icmp)
 	{
-		kbuf = kmalloc(len);
+		kbuf = kmalloc_try(len);
 		if (!kbuf)
 			return -ENOMEM;
 		if (copy_from_user(kbuf, buf, len) != 0)
@@ -474,7 +474,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	if (!sock)
 		return -ENOTSOCK;
 
-	kbuf = kmalloc(len);
+	kbuf = kmalloc_try(len);
 	if (!kbuf)
 		return -ENOMEM;
 	if (copy_from_user(kbuf, buf, len) != 0)
@@ -529,7 +529,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		uint64_t rto;
 
 		nb = sock_nonblock_fd(fd, flags);
-		kbuf = kmalloc(len);
+		kbuf = kmalloc_try(len);
 		if (!kbuf)
 			return -ENOMEM;
 		rto = sock_stream_get_timeout_ms(ss, 1);
@@ -604,7 +604,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 	if (icmp)
 	{
 		nb = sock_nonblock_fd(fd, flags);
-		kbuf = kmalloc(len);
+		kbuf = kmalloc_try(len);
 		if (!kbuf)
 			return -ENOMEM;
 
@@ -686,7 +686,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		return -ENOTSOCK;
 
 	nb = sock_nonblock_fd(fd, flags);
-	kbuf = kmalloc(len);
+	kbuf = kmalloc_try(len);
 	if (!kbuf)
 		return -ENOMEM;
 
@@ -1222,7 +1222,7 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 
 		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
 			continue;
-		kbuf = kmalloc(iov_stack[i].iov_len);
+		kbuf = kmalloc_try(iov_stack[i].iov_len);
 		if (!kbuf)
 		{
 			scm_discard_staged(staged_rights, staged_count);
@@ -1396,7 +1396,7 @@ recv_payload:
 
 		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
 			continue;
-		kbuf = kmalloc(iov_stack[i].iov_len);
+		kbuf = kmalloc_try(iov_stack[i].iov_len);
 		if (!kbuf)
 		{
 			scm_close_installed_fds(installed_fds,
