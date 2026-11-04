@@ -145,6 +145,8 @@ static const struct ktest_case ktest_cases[] = {
 	  "map_replaced_frame_is_released", 1 },
 	{ ktest_map_fixed_aborts_when_unmap_fails,
 	  "map_fixed_aborts_when_unmap_fails", 1 },
+	{ ktest_shmget_metadata_oom_returns_enomem,
+	  "shmget_metadata_oom_returns_enomem", 1 },
 	/*
 	 * tty_canon_block_wake: needs cooperative schedule from a real
 	 * timer/IRQ context; from kmain+holder it can spin forever.

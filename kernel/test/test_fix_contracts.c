@@ -31,6 +31,8 @@
 #include <ir0/signals.h>
 #include <ir0/stat.h>
 #include <ir0/stat_user.h>
+#include <ir0/sysv_shm.h>
+#include <ir0/ktm/fault.h>
 #include <ir0/vfs.h>
 #include <string.h>
 
@@ -635,5 +637,16 @@ void ktest_map_fixed_aborts_when_unmap_fails(void)
 		KASSERT_EQ(*kept, kept_pte);
 
 	(void)sys_munmap((void *)map_fixed_fail_va, PAGE_SIZE_4KB);
+	KTEST_END();
+}
+
+void ktest_shmget_metadata_oom_returns_enomem(void)
+{
+	int64_t ret;
+
+	KTEST_BEGIN("shmget_metadata_oom_returns_enomem");
+	KASSERT_EQ(ktm_fault_configure("kmem.alloc", KTM_FAULT_ONCE, 0), 0);
+	ret = sys_shmget(IR0_IPC_PRIVATE, 4096u, 0);
+	KASSERT_EQ(ret, (int64_t)-ENOMEM);
 	KTEST_END();
 }
