@@ -9,9 +9,9 @@
  * File: irq.h
  * Description: Portable IRQ subsystem bring-up (IDT/PIC vs VBAR/GIC backends).
  *
- * Portable / driver code must use this facade — not interrupt/arch headers.
- * x86: arch/x86-64/.../arch_irq_init.c → interrupt/arch (IDT/PIC impl).
- * arm64: arch/arm64/.../arch_irq_init.c → VBAR + gic_v2 (no interrupt/arch).
+ * Portable / driver code must use this facade — not arch interrupt headers.
+ * x86: arch/x86-64/.../arch_irq_init.c → arch/x86-64/sources/interrupt.
+ * arm64: arch/arm64/.../arch_irq_init.c → VBAR + gic_v2.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

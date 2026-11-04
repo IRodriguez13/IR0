@@ -31,10 +31,10 @@
 #include <string.h>
 #include <config.h>
 #include <drivers/multilang_drivers.h>
-#include <drivers/IO/ps2.h>
+#include <drivers/input/ps2.h>
 #include <ir0/irq.h>
 #if CONFIG_ENABLE_PC_SPEAKER
-#include <drivers/IO/pc_speaker.h>
+#include <drivers/char/pc_speaker.h>
 #endif
 #if CONFIG_ENABLE_STORAGE_ATA
 #include <drivers/storage/ata.h>
@@ -46,12 +46,12 @@
 #include <ir0/resource_registry.h>
 
 #if CONFIG_ENABLE_MOUSE
-#include <drivers/IO/ps2_mouse.h>
+#include <drivers/input/ps2_mouse.h>
 #endif
 
 #if CONFIG_ENABLE_SOUND
-#include <drivers/audio/sound_blaster.h>
-#include <drivers/audio/adlib.h>
+#include <sound/sound_blaster.h>
+#include <sound/adlib.h>
 #include <drivers/dma/dma.h>
 #endif
 

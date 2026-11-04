@@ -11,8 +11,8 @@
  * Description: IR0 kernel source/header file
  */
 
-#include "pic.h"
-#include "io.h"
+#include <interrupt/pic.h>
+#include <interrupt/io.h>
 #include <ir0/vga.h>
 
 /*

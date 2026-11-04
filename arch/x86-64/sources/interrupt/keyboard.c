@@ -12,10 +12,10 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "idt.h"
-#include "pic.h"
-#include "io.h"
-#include "keyboard.h"
+#include <interrupt/idt.h>
+#include <interrupt/pic.h>
+#include <interrupt/io.h>
+#include <interrupt/keyboard.h>
 #include <ir0/arch_cpu.h>
 
 #define PS2_DATA_PORT 0x60

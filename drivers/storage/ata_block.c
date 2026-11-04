@@ -7,7 +7,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
-#include <drivers/disk/partition.h>
+#include <drivers/storage/partition.h>
 #include <string.h>
 
 static const char *ata_names[] = { "hda", "hdb", "hdc", "hdd" };

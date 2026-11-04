@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <interrupt/arch/idt.h>
+#include <interrupt/idt.h>
 #include <stdint.h>
 
 #define EARLY_COM1 0x3F8

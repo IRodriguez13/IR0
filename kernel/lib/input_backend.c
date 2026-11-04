@@ -19,7 +19,7 @@
 #endif
 #include <ir0/irq.h>
 
-/* Implemented in interrupt/arch/keyboard.c — no portable #include of that tree. */
+/* Implemented in arch/x86-64/sources/interrupt/keyboard.c — no portable include. */
 extern char keyboard_buffer_get(void);
 extern int keyboard_buffer_has_data(void);
 extern void keyboard_buffer_clear(void);
