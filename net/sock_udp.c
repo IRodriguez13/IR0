@@ -53,7 +53,9 @@ struct sock_udp
 };
 
 static struct sock_udp *sock_bound_list;
+#if CONFIG_ENABLE_NETWORKING
 static uint16_t sock_next_ephemeral = 32768;
+#endif
 
 static inline uint64_t sock_irq_save(void)
 {
@@ -65,6 +67,7 @@ static inline void sock_irq_restore(uint64_t flags)
 	irq_restore((unsigned long)flags);
 }
 
+#if CONFIG_ENABLE_NETWORKING
 static bool sock_port_in_use(uint16_t port)
 {
 	struct sock_udp *s;
@@ -142,8 +145,6 @@ static void sock_udp_rx_enqueue(struct sock_udp *sock, ip4_addr_t src_ip,
 	sock->rx_count++;
 	sock_irq_restore(flags);
 }
-
-#if CONFIG_ENABLE_NETWORKING
 
 static void sock_udp_rx_from_net(struct net_device *dev, ip4_addr_t src_ip,
 				 uint16_t src_port, const void *data, size_t len,
@@ -296,12 +297,9 @@ int sock_udp_bind(struct sock_udp *sock, uint16_t port_host)
 #endif
 }
 
+#if CONFIG_ENABLE_NETWORKING
 static int sock_udp_ensure_port(struct sock_udp *sock)
 {
-#if !CONFIG_ENABLE_NETWORKING
-	(void)sock;
-	return -ENOSYS;
-#else
 	uint16_t port;
 	int ret;
 	uint64_t flags;
@@ -324,8 +322,8 @@ static int sock_udp_ensure_port(struct sock_udp *sock)
 	ret = sock_udp_install_port_handler(sock, port);
 	sock_irq_restore(flags);
 	return ret;
-#endif
 }
+#endif
 
 int sock_udp_connect(struct sock_udp *sock, uint32_t peer_ip_be,
 		     uint16_t peer_port_host)

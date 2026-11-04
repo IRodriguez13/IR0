@@ -85,6 +85,7 @@ int sock_icmp_poll_readable(struct sock_icmp *sock)
 	return ready;
 }
 
+#if CONFIG_ENABLE_NETWORKING
 static void sock_icmp_rx_enqueue_locked(struct sock_icmp *sock, ip4_addr_t src_ip,
 					const void *data, size_t len)
 {
@@ -134,6 +135,7 @@ static void sock_icmp_list_add(struct sock_icmp *sock)
 	sock_icmp_open_list = sock;
 	sock_icmp_irq_restore(flags);
 }
+#endif
 
 static void sock_icmp_list_remove(struct sock_icmp *sock)
 {
@@ -156,13 +158,6 @@ static void sock_icmp_list_remove(struct sock_icmp *sock)
 void sock_icmp_rx_deliver(uint32_t src_ip_be, uint32_t dst_ip_be, uint8_t ttl,
 			  const void *icmp_data, size_t icmp_len)
 {
-	struct sock_icmp *s;
-	uint64_t flags;
-	ip4_addr_t src_ip = src_ip_be;
-	uint8_t wire[SOCK_ICMP_PKT_MAX];
-	struct ip_header *ip;
-	size_t total;
-
 #if !CONFIG_ENABLE_NETWORKING
 	(void)src_ip_be;
 	(void)dst_ip_be;
@@ -171,6 +166,13 @@ void sock_icmp_rx_deliver(uint32_t src_ip_be, uint32_t dst_ip_be, uint8_t ttl,
 	(void)icmp_len;
 	return;
 #else
+	struct sock_icmp *s;
+	uint64_t flags;
+	ip4_addr_t src_ip = src_ip_be;
+	uint8_t wire[SOCK_ICMP_PKT_MAX];
+	struct ip_header *ip;
+	size_t total;
+
 	/*
 	 * Linux SOCK_RAW IPPROTO_ICMP delivers IP header + ICMP to
 	 * userspace (BusyBox unpack4 reads ihl/ttl before ICMP).
