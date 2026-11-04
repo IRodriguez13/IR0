@@ -305,7 +305,7 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
     if (num_tmpfs_instances >= TMPFS_MAX_DIRS)
         return -ENOSPC;
 
-    tmpfs_data_t *tmpfs = (tmpfs_data_t *)kmalloc(sizeof(tmpfs_data_t));
+    tmpfs_data_t *tmpfs = (tmpfs_data_t *)kmalloc_try(sizeof(tmpfs_data_t));
     if (!tmpfs)
         return -ENOMEM;
 
@@ -573,7 +573,7 @@ int tmpfs_create_file(const char *path, mode_t mode)
         const struct ir0_task_cred *cr = ir0_current_cred();
         mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
         mode_t effective_mode = mode & ~umask_value;
-        tmpfs_file_t *file = (tmpfs_file_t *)kmalloc(sizeof(*file));
+        tmpfs_file_t *file = (tmpfs_file_t *)kmalloc_try(sizeof(*file));
 
         if (!file)
         {
@@ -947,7 +947,7 @@ int tmpfs_truncate(const char *path, size_t length)
             return 0;
         }
 
-        uint8_t *new_data = (uint8_t *)kmalloc(length);
+        uint8_t *new_data = (uint8_t *)kmalloc_try(length);
         if (!new_data)
             return -ENOMEM;
 
