@@ -561,6 +561,20 @@ void ktest_procfs_oom_score(void)
 	KASSERT_GT(n, 0);
 	KASSERT_EQ(atoi(buf), 500);
 
+	/* A long write must not be accepted after truncating to a valid prefix. */
+	fd = sys_open(adj_path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, "500            garbage", 22), -EINVAL);
+	sys_close((int)fd);
+
+	fd = sys_open(adj_path, 0, 0);
+	KASSERT_GT(fd, 0);
+	memset(buf, 0, sizeof(buf));
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+	KASSERT_EQ(atoi(buf), 500);
+
 	/* Unprivileged callers may raise their own score, but not gain immunity. */
 	saved_euid = current_process->euid;
 	current_process->euid = 1000;

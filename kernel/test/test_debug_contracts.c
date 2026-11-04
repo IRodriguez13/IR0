@@ -21,6 +21,7 @@
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/net.h>
+#include <ir0/process_limits.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
 #include <ir0/vfs.h>
@@ -181,6 +182,39 @@ void ktest_sysfs_hostname_contract(void)
 	sys_close((int)fd);
 	KASSERT_GT(n, 0);
 	KASSERT(buf[0] != '\0');
+
+	KTEST_END();
+}
+
+void ktest_sysfs_max_processes_contract(void)
+{
+	const char *path = "/sys/kernel/max_processes";
+	uint32_t original;
+	char restore[16];
+	int64_t fd;
+
+	KTEST_BEGIN("sysfs_max_processes_contract");
+	original = process_limit_get();
+
+	fd = sys_open(path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, "2048\n", 5), 5);
+	sys_close((int)fd);
+	KASSERT_EQ(process_limit_get(), 2048U);
+
+	/* This wrapped to 1024 in the old uint32_t decimal parser. */
+	fd = sys_open(path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, "4294968320\n", 11), -EINVAL);
+	sys_close((int)fd);
+	KASSERT_EQ(process_limit_get(), 2048U);
+
+	snprintf(restore, sizeof(restore), "%u\n", original);
+	fd = sys_open(path, O_RDWR, 0);
+	KASSERT_GT(fd, 0);
+	KASSERT_EQ(sys_write((int)fd, restore, strlen(restore)),
+		  (int64_t)strlen(restore));
+	sys_close((int)fd);
 
 	KTEST_END();
 }
