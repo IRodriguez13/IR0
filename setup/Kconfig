@@ -318,7 +318,7 @@ endmenu
 menu "Tooling"
 
     config TOOL_AUTO_RUN_DEPTEST
-        bool "Run deptest automatically before 'make ir0'"
+        bool "Run check-env automatically before 'make ir0'"
         default n
         help
           When enabled, 'make ir0' executes dependency checks first.

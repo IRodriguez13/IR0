@@ -94,7 +94,7 @@ tests/ktm/userdev/ktm_*_case
 !tests/ktm/userdev/ktm_*_case.c
 /tmp/ktest.log
 nohup.out
-interrupt/arch/x86-64/isr_stubs_64.asm
+arch/x86-64/asm/interrupt/isr_stubs_64.asm
 toolchain/
 
 # Default headers_install output

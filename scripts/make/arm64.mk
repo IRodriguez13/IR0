@@ -270,8 +270,8 @@ arm64-all-objs-probe: arm64-portable-compile
 			sched/switch/switch_arm64.c \
 			kernel/time/clock_wait.c kernel/driver_registry.c \
 			kernel/lib/copy_user.c \
-			kernel/lib/logging.c kernel/sync/futex.c \
-			kernel/net/net_compat.c; do \
+			kernel/lib/logging.c kernel/futex.c \
+			net/net_compat.c; do \
 			echo "  CC      $$src (KERNEL probe)"; \
 			if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
 				-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
@@ -668,6 +668,7 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/lib/open_flags.c \
 	kernel/lib/copy_user.c \
 	kernel/fd/fd_resource.c \
+	kernel/futex.c \
 	sched/runqueue_lock.c \
 	kernel/process/registry_lock.c \
 	kernel/process/core.c \

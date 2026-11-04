@@ -2,7 +2,7 @@
 
 > **Build-system note (2026-10-29):** this page is a historical inventory of
 > smoke and KTM names. Most `make smoke-*` targets listed below no longer exist.
-> Current gates: `make ctr`, `make agent-fast`, `make ktest`,
+> Current gates: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`.
 
 > **Last verified:** 2026-10-28
@@ -49,9 +49,9 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | Area | Target |
 |------|--------|
 | Fast kernel gate | `make test-fast` |
-| In-kernel suite | `make ktest` |
+| In-kernel suite | `make kernel-tests` |
 | Full architecture gate | `make ctr` / `make agent-fast` |
-| KTM inventory | `make ktm-check` / `make ktm-manifest` |
+| KTM inventory | `make test-fast` / `make ktm-manifest` |
 | x86-64 product | `make ir0` / `make run [gui\|console\|debug]` |
 | ARM64 aggregate | `make ir0 arm64` / `make run arm64 console` |
 | Raspberry Pi image | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |

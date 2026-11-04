@@ -8,6 +8,20 @@ For architecture and capability boundaries, see [README.md](README.md).
 For the kernel ↔ userspace boundary, see
 [Documentation/USERSPACE.md](Documentation/USERSPACE.md).
 
+## Quick start (x86-64)
+
+On a prepared host, one command validates the toolchain, keeps an existing
+`.config` (or writes the default one), builds `kernel-x64.iso`, and runs the
+fast gates:
+
+```bash
+make onboard
+```
+
+Then boot with `make run` and run the in-kernel battery with
+`make kernel-tests`. `make help` lists the full surface. If `onboard` stops in
+`check-env`, the diagnostic prints the missing package for your distro.
+
 ## Prerequisites
 
 ### Required for `make ir0` (x86-64 kernel ISO + QEMU)
@@ -56,7 +70,7 @@ make check-env PROFILE=hub-rpi4   # ARM64 RPi4 UART profile
 make check-env PROFILE=all        # union of the profiles
 ```
 
-`check-env` / `deptest` classify missing tools as **required**, **optional**,
+`check-env` classifies missing tools as **required**, **optional**,
 **unsupported_version**, or **present_but_unusable**, with apt/pacman/dnf
 install hints. Exit 0 only when every required check for that profile passed.
 
@@ -235,12 +249,12 @@ make run console > boot.log 2>&1
 |--------|-------------|
 | `defconfig` | Install default `.config` |
 | `menuconfig` | Curses configuration TUI |
-| `check-env` / `deptest` | Check build dependencies |
+| `check-env` | Check build dependencies |
 | `ir0` | Default artifact for `ARCH`/`BOARD` |
 | `kernel-x64.bin` | Build kernel ELF |
 | `kernel-x64.iso` | Build boot ISO |
 | `run` | QEMU with an already-built artifact |
-| `ktest` / `kernel-tests` | In-kernel ktest battery in QEMU |
+| `kernel-tests` | In-kernel ktest battery in QEMU |
 | `test` | Interactive test TUI |
 | `ctr` | Kernel + arch-guard + matrix-min + host tests |
 | `arch-guard` | Architecture boundary guard |

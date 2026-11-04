@@ -1424,7 +1424,6 @@ int proc_pid_oom_score_adj_write(pid_t pid, const char *buf, size_t count)
 {
 	process_t *target;
 	char value_buf[16];
-	size_t copy_len;
 	long value;
 	char *end;
 	int rc;
@@ -1433,10 +1432,12 @@ int proc_pid_oom_score_adj_write(pid_t pid, const char *buf, size_t count)
 		return -EINVAL;
 	if (!current_process)
 		return -ESRCH;
+	/* Never accept a valid prefix while silently discarding excess input. */
+	if (count >= sizeof(value_buf))
+		return -EINVAL;
 
-	copy_len = count < sizeof(value_buf) - 1 ? count : sizeof(value_buf) - 1;
-	memcpy(value_buf, buf, copy_len);
-	value_buf[copy_len] = '\0';
+	memcpy(value_buf, buf, count);
+	value_buf[count] = '\0';
 
 	value = strtol(value_buf, &end, 10);
 	if (end == value_buf)

@@ -5,8 +5,8 @@ IR0 architecture guardrails.
 Checks:
 1) No direct <drivers/...> includes inside fs/* and kernel/syscalls.c.
 2) Required facade headers for subsystem decoupling exist.
-3) Portable trees (fs/kernel/mm/net) must not include interrupt controller headers
-   (#include <interrupt/arch/...>);
+3) Portable trees (fs/kernel/mm/net) must not include arch interrupt headers
+   (#include <interrupt/...> or <arch/.../interrupt/...>);
 4) Files under fs/ must not use #include <arch/...>; use includes/ir0/* facades instead.
 5) fs/, mm/, net/, drivers/: no #include <kernel/*.h> (no whitelist).
 6) mm/, net/, sched/: no #include <arch/...>.
@@ -132,8 +132,10 @@ DRIVER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]drivers/')
 FACADE_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
 FACADE_SCHED_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]sched/')
 
-# interrupt/* is for hardware backends; portable code uses arch_portable/facades.
-INTERRUPT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]interrupt/arch/')
+# Arch interrupt backends are hardware-specific; portable code uses ir0/irq.h.
+INTERRUPT_ARCH_INCLUDE_RE = re.compile(
+    r'^\s*#\s*include\s*[<"](?:interrupt/|arch/[^/">]+/(?:sources|include)/interrupt/)'
+)
 
 # fs/ pseudo-VFS layers must route CPU/HW probes through ir0/*.h wrappers.
 FS_DIRECT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
@@ -1727,7 +1729,10 @@ def check_scheduler_user_return_boundary():
     errors = []
     sched_header = ROOT / "includes" / "ir0" / "sched.h"
     sched_tree = ROOT / "sched"
-    irq_dispatch = ROOT / "interrupt" / "arch" / "isr_handlers.c"
+    irq_dispatch = (
+        ROOT / "arch" / "x86-64" / "sources" / "interrupt" /
+        "isr_handlers.c"
+    )
 
     header_text = sched_header.read_text(encoding="utf-8", errors="replace")
     for forbidden in (
@@ -2004,7 +2009,7 @@ def check_common_address_space_contracts():
         "includes/ir0/memfd.h",
         "includes/ir0/ktm/user_canary.h",
         "kernel/fd/memfd.c",
-        "kernel/sync/sysv_shm.c",
+        "ipc/sysv_shm.c",
         "kernel/vdso.c",
         "kernel/process/mm_struct.c",
         "ktm/user_canary.c",

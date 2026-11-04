@@ -2,7 +2,7 @@
 
 > **Build-system note (2026-10-29):** historical gate names below (`make smoke-*`,
 > `run-ash-gui`, `first-boot`, …) are no longer make targets. Current gates:
-> `make ctr`, `make agent-fast`, `make ktest`, `make build-matrix-min`,
+> `make ctr`, `make agent-fast`, `make kernel-tests`, `make build-matrix-min`,
 > `make arch-guard`, `make health`. This file preserves the historical evidence
 > trail; see [`MAKEFILE.md`](MAKEFILE.md) for the live target set.
 

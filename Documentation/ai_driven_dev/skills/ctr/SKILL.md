@@ -58,7 +58,7 @@ For broader config confidence:
 
 ```bash
 make -s ctr            # kernel + arch-guard + matrix-min + host tests
-make -s agent-fast     # ctr + in-kernel ktest battery
+make -s agent-fast     # test-fast + in-kernel test battery
 ```
 
 ## Review Mode Checklist

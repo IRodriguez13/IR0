@@ -3,7 +3,7 @@
 > **Historical note (2026-10-29):** this page records the 2026 userspace slice.
 > The `run-ash-gui` / `smoke-*` make targets no longer exist. Current userspace
 > images are built by ISD and attached with `make run DISK=…`; kernel gates are
-> `make ctr` / `make ktest`.
+> `make ctr` / `make kernel-tests`.
 
 **Status:** Done (2026-05-25)  
 **Tier:** T1 (minimal POSIX userspace) — vertical slice  

@@ -39,7 +39,7 @@ Pendiente fuera de oleada: smoke Doom IWAD al disparar; pipe stress 5/6.
 | **H1** | **Hecho** | Glue 86 L |
 | **H2** | **Hecho** | Módulo `fase_audit` completo |
 | **H3** | **Hecho** | arch-guard regla 14 |
-| **H4** | Hecho (musl) | ktm inventory vía `make ktm-check` |
+| **H4** | Hecho (musl) | ktm inventory vía `make test-fast` |
 | **H5** | **Hecho** | devfs read unificado |
 | **H6** | **Hecho** | budget `.text` en `health` |
 

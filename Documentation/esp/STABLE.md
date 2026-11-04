@@ -133,7 +133,7 @@ Ver tabla completa en [`../HARDENING.md`](../HARDENING.md). Resumen: split sysca
 | T1 | permisos multi-UID | `make smoke-multiuser-perms` | `su`/`id` en ash |
 | T1 | COW + lazy | `make smoke-mm-cow-lazy` | — |
 | T2 | fb0 / input | smokes legacy FASE54¹ | `run-fase58c-fbdev-gui`, Doom GUI |
-| Dev | KTM + host | `make ktm-check`, `tests/host` | — |
+| Dev | KTM + host | `make test-fast`, `tests/host` | — |
 | Dev | Host-share 9p | `make smoke-hostshare-9p` | — |
 
 ¹ `IR0_LEGACY_SMOKE=1` para smokes históricos FASE54/55.

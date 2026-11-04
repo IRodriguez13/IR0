@@ -1,7 +1,7 @@
 # IR0 — Architecture hardening backlog
 
 > **Build-system note (2026-10-29):** historical `make smoke-*` gate names below
-> are no longer build targets. Current equivalents: `make ctr`, `make ktest`,
+> are no longer build targets. Current equivalents: `make ctr`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`.
 
 > **Last verified:** 2026-09-01  
@@ -140,7 +140,7 @@ All `includes/ir0/*.h` decoupled from `<drivers/...>`. New canonical headers: `v
 | Item | Status |
 |------|--------|
 | `test_musl_cred_abi.c` | Wired; uses `includes/ir0/abi/musl_cred_abi.h` |
-| `test_ktm_panic_inventory.c` | Still via `make ktm-check` only |
+| `test_ktm_panic_inventory.c` | Still via `make test-fast` only |
 | ktest `KTEST_O_*` | Documented |
 
 ---

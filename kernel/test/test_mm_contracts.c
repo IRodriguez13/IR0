@@ -20,6 +20,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/kmem.h>
 #include <ir0/paging.h>
+#include <ir0/page_fault.h>
 #include <ir0/pmm.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
@@ -571,5 +572,158 @@ void ktest_mprotect_preserves_cow(void)
 	process_set_heap_start(current_process, saved_heap_start);
 	process_set_heap_end(current_process, saved_heap_end);
 	process_set_mmap_base(current_process, saved_mmap_base);
+	KTEST_END();
+}
+
+/*
+ * A COW write fault replaces the PTE and must drop the old frame exactly
+ * once. map_page_in_directory() already releases the replaced frame, so the
+ * fault path must not issue a second put for the same mapping reference.
+ */
+void ktest_cow_write_fault_drops_old_once(void)
+{
+	void *region;
+	uintptr_t base;
+	uint64_t *pte;
+	uint64_t flags = 0;
+	uint64_t irq_frame[6] = { 0 };
+	struct page_fault_info info;
+
+	KTEST_BEGIN("cow_write_fault_drops_old_once");
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	region = ktest_mm_mmap_anon(PAGE_SIZE_4KB, KTEST_PROT_RW,
+				    KTEST_MAP_PRIVATE | KTEST_MAP_ANONYMOUS);
+	KASSERT(region != NULL && region != (void *)(intptr_t)-1);
+	if (region == NULL || region == (void *)(intptr_t)-1)
+	{
+		KTEST_END();
+		return;
+	}
+	base = (uintptr_t)region;
+
+	/*
+	 * Anonymous mmap is lazy: populate the page with a controlled
+	 * demand-zero fault before touching the PTE.
+	 */
+	memset(&info, 0, sizeof(info));
+	info.address = base;
+	info.ip = (uintptr_t)ktest_cow_write_fault_drops_old_once;
+	info.sp = (uintptr_t)irq_frame;
+	info.user = 1;
+	info.write = 1;
+	info.present = 0;
+	mm_page_fault_handle(&info, irq_frame);
+
+	pte = paging_get_pte(process_pgd(current_process), base);
+	KASSERT(pte != NULL && (*pte & PAGE_PRESENT));
+	if (pte && (*pte & PAGE_PRESENT))
+	{
+		char verify[2] = { 0 };
+
+		/*
+		 * The ktest runs on the kernel root, so a direct store to the
+		 * user VA would fault on the active CR3. Walk the process root
+		 * instead, as the uaccess layer does.
+		 */
+		KASSERT_EQ(copy_to_user_mm(process_pgd(current_process), base,
+					   "AB", 2), 0);
+
+		/* Simulate a fork-shared page: read-only plus the COW bit. */
+		*pte = (*pte & ~PAGE_RW) | PAGE_COW;
+
+		memset(&info, 0, sizeof(info));
+		info.address = base;
+		info.ip = (uintptr_t)ktest_cow_write_fault_drops_old_once;
+		info.sp = (uintptr_t)irq_frame;
+		info.user = 1;
+		info.write = 1;
+		info.present = 1;
+
+		mm_page_fault_handle(&info, irq_frame);
+
+		flags = 0;
+		KASSERT(ktest_mm_pte_flags(base, &flags));
+		KASSERT((flags & PAGE_COW) == 0);
+		KASSERT((flags & PAGE_RW) != 0);
+		KASSERT_EQ(copy_from_user_mm(process_pgd(current_process), base,
+					     verify, sizeof(verify)), 0);
+		KASSERT(memcmp(verify, "AB", sizeof(verify)) == 0);
+	}
+
+	KASSERT_EQ(sys_munmap(region, PAGE_SIZE_4KB), 0);
+	ktest_mm_cleanup(base, PAGE_SIZE_4KB);
+	KTEST_END();
+}
+
+/*
+ * The uaccess COW breaker replaces a RO+COW PTE before writing through the
+ * physical frame. map_page_in_directory() already releases the replaced
+ * frame, so this path must not put the old frame again either.
+ */
+void ktest_copy_to_user_cow_break_drops_old_once(void)
+{
+	void *region;
+	uintptr_t base;
+	uint64_t *pte;
+	uint64_t flags = 0;
+	uint64_t irq_frame[6] = { 0 };
+	struct page_fault_info info;
+	char verify[2] = { 0 };
+
+	KTEST_BEGIN("copy_to_user_cow_break_drops_old_once");
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	region = ktest_mm_mmap_anon(PAGE_SIZE_4KB, KTEST_PROT_RW,
+				    KTEST_MAP_PRIVATE | KTEST_MAP_ANONYMOUS);
+	KASSERT(region != NULL && region != (void *)(intptr_t)-1);
+	if (region == NULL || region == (void *)(intptr_t)-1)
+	{
+		KTEST_END();
+		return;
+	}
+	base = (uintptr_t)region;
+
+	/* Populate the lazy anonymous page through a controlled fault. */
+	memset(&info, 0, sizeof(info));
+	info.address = base;
+	info.ip = (uintptr_t)ktest_copy_to_user_cow_break_drops_old_once;
+	info.sp = (uintptr_t)irq_frame;
+	info.user = 1;
+	info.write = 1;
+	info.present = 0;
+	mm_page_fault_handle(&info, irq_frame);
+
+	pte = paging_get_pte(process_pgd(current_process), base);
+	KASSERT(pte != NULL && (*pte & PAGE_PRESENT));
+	if (pte && (*pte & PAGE_PRESENT))
+	{
+		/* Simulate a fork-shared page: read-only plus the COW bit. */
+		*pte = (*pte & ~PAGE_RW) | PAGE_COW;
+
+		KASSERT_EQ(copy_to_user_mm(process_pgd(current_process), base,
+					   "CD", 2), 0);
+
+		flags = 0;
+		KASSERT(ktest_mm_pte_flags(base, &flags));
+		KASSERT((flags & PAGE_COW) == 0);
+		KASSERT((flags & PAGE_RW) != 0);
+		KASSERT_EQ(copy_from_user_mm(process_pgd(current_process), base,
+					     verify, sizeof(verify)), 0);
+		KASSERT(memcmp(verify, "CD", sizeof(verify)) == 0);
+	}
+
+	KASSERT_EQ(sys_munmap(region, PAGE_SIZE_4KB), 0);
+	ktest_mm_cleanup(base, PAGE_SIZE_4KB);
 	KTEST_END();
 }

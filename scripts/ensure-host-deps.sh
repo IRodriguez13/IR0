@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0-only
 #
-# ensure-host-deps.sh — Run deptest for a profile; if required tools are
+# ensure-host-deps.sh — Run the host dependency check for a profile; if required tools are
 # missing, explain what is needed and optionally install with user consent.
 #
 # Usage (from IR0 tree):
@@ -144,7 +144,7 @@ if [ ! -s "$LIST" ]; then
 	echo "  Rust example drivers: https://rustup.rs"
 	echo "    rustup toolchain install nightly"
 	echo "    rustup component add rust-src --toolchain nightly"
-	echo "  Then: make deptest PROFILE=${PROFILE}"
+	echo "  Then: make check-env PROFILE=${PROFILE}"
 	exit 1
 fi
 
@@ -157,7 +157,7 @@ if [ -z "$INSTALL_CMD" ]; then
 	echo "  Could not build an install command for package manager '${PM}'."
 	echo "  Supported: apt (Debian/Ubuntu/Mint), pacman (Arch), dnf (Fedora), zypper (openSUSE)."
 	echo "  Install the packages listed above manually (see SETUP.md),"
-	echo "  then re-run: make first-boot   # or: make deptest PROFILE=${PROFILE}"
+	echo "  then re-run: make first-boot   # or: make check-env PROFILE=${PROFILE}"
 	exit 1
 fi
 
@@ -183,7 +183,7 @@ ask)
 		if ! read -r ans; then
 			echo "[ensure-host-deps] Non-interactive stdin — not installing."
 			echo "  Re-run with a TTY, or: IR0_DEPS_INSTALL=yes make first-boot"
-			echo "  Or install manually per SETUP.md and: make deptest PROFILE=${PROFILE}"
+			echo "  Or install manually per SETUP.md and: make check-env PROFILE=${PROFILE}"
 			exit 1
 		fi
 	fi
@@ -200,7 +200,7 @@ esac
 
 if [ "$do_install" -eq 0 ]; then
 	echo "[ensure-host-deps] Declined. Read SETUP.md and install host tools,"
-	echo "  then re-run make first-boot (or make deptest PROFILE=${PROFILE})."
+	echo "  then re-run make first-boot (or make check-env PROFILE=${PROFILE})."
 	exit 1
 fi
 
@@ -221,7 +221,7 @@ if [ "$install_rc" -ne 0 ]; then
 	echo "[ensure-host-deps] Package install failed (exit ${install_rc})."
 	echo "  Fix network/apt mirrors/sudo, or install manually:"
 	echo "    ${INSTALL_CMD}"
-	echo "  Then: make deptest PROFILE=${PROFILE}"
+	echo "  Then: make check-env PROFILE=${PROFILE}"
 	exit 1
 fi
 
@@ -232,5 +232,5 @@ if run_deptest "$LIST"; then
 	exit 0
 fi
 
-echo "[ensure-host-deps] Still failing after install. See SETUP.md / make deptest."
+echo "[ensure-host-deps] Still failing after install. See SETUP.md / make check-env."
 exit 1

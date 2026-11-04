@@ -10,8 +10,8 @@
 >
 > **Build-system note (2026-10-29):** the QA smoke catalog was removed. Targets
 > such as `ktm-run`, `smoke-*`, `ktm-userdev-*-run`, and `build-ktm-*` are no
-> longer make goals. Current gates are `make ktest` (in-kernel battery plus KTM
-> boot suite), `make ctr`, and `make ktm-check`; the `scripts/ktm_*.py` and
+> longer make goals. Current gates are `make kernel-tests` (in-kernel battery plus KTM
+> boot suite), `make ctr`, and `make test-fast`; the `scripts/ktm_*.py` and
 > `scripts/ktm_userdev_*.sh` helpers remain available for manual runs against an
 > ISD-built disk.
 
@@ -233,7 +233,7 @@ The boot suite runs **all** registered scenarios when `CONFIG_KTM_TEST` is
 enabled (`ktm_scenarios_run_boot`):
 
 ```bash
-make ktest
+make kernel-tests
 ```
 
 The cases added on 2026-11-02, and the three NULL hooks they install, are
@@ -372,10 +372,10 @@ valid **dev aids**; T3 checklist smokes are already on the hybrid path.
 
 ```bash
 # In-kernel battery (ktest + registered KTM scenarios at boot)
-make -s ktest
+make -s kernel-tests
 
 # Host-side KTM invariants and manifests
-make -s ktm-check
+make -s test-fast
 make -s ktm-manifest
 python3 scripts/ktm_log_classify.py /tmp/some.log
 
@@ -469,7 +469,7 @@ Source: `scripts/smoke_session_soak.py`.
 4. Keep uapi event type numbers in sync between `event.h` and `uapi.h`
    (`KTM_UAPI_EVENT_*`).
 5. New in-guest harnesses report through KTM. The adoption ratchet
-   (`make ktm-adoption-guard`, part of `ktm-check`) fails when a
+   (`make ktm-adoption-guard`, part of `test-fast`) fails when a
    `setup/pid1/*_{smoke,probe,stress}.c` file is serial-only and not listed in
    `scripts/ktm_legacy_baseline.txt`. The ledger only shrinks: converting a
    harness to `libktm_user` requires deleting its line. The in-kernel ktest
@@ -481,7 +481,7 @@ Source: `scripts/smoke_session_soak.py`.
 
 | Plane | Owns |
 |-------|------|
-| **KTM** (`make ktest` / manual `scripts/ktm_*.py`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot; **BusyBox manifest** (`ktm-userdev-busybox-manifest-run`, manual) |
+| **KTM** (`make kernel-tests` / manual `scripts/ktm_*.py`) | Kernel state, fork/exec/IPC depth, guest net wire, fault injection, syscall depth that fits a musl pilot; **BusyBox manifest** (`ktm-userdev-busybox-manifest-run`, manual) |
 | **Hybrid KTM + product HOST** | Doom 55d / TCC power-halt under **runit**; Xfbdev/mini under **runit + 9p** (`runit_hostshare_payload_run`); emit done tags + optional `KTM_*` |
 | **Keep outside KTM** | `arch-guard`, `tests/host` ABI/facade units, `linux-abi-audit-*`, deep COW `smoke-mm-cow-lazy`, product HOST **runit-boot / ash** (PID1 SUT), storage/hw/ARM machine smokes |
 | **Do not add** | A new serial-only smoke for a gap KTM already covers better — add/extend scenario or userdev + `--require KTM_*` / `KTM\|…` protocol |

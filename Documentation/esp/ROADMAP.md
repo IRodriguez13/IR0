@@ -2,7 +2,7 @@
 
 > **Nota de build (2026-10-29):** los nombres históricos de gates
 > (`make smoke-*`, `roadmap-phase*`, `release-0.0.1`) ya no son targets make.
-> Gates actuales: `make ctr`, `make agent-fast`, `make ktest`,
+> Gates actuales: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`. Ver [`MAKEFILE.md`](MAKEFILE.md).
 
 > **Última verificación:** 2026-10-18 (fold ARM + `ipc/` + identity/cwd; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs ausente)  
@@ -70,7 +70,7 @@ Ver checklist completo en [`STABLE.md`](STABLE.md).
 - Smokes: multiuser-perms, musl-pthread, setuid-exec.
 
 ### KTM
-- panic site, inventory, `make ktm-check`.
+- panic site, inventory, `make test-fast`.
 
 ### MM — COW + lazy
 - **Cerrado 0.0.1:** `smoke-mm-cow-lazy`.

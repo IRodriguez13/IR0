@@ -109,7 +109,7 @@ Exploration: `cat /proc/kmsg` or `dmesg` from ash.
 
 | Target | Expect |
 |--------|--------|
-| `make ktest` | In-kernel battery; serial sequence lines intact |
+| `make kernel-tests` | In-kernel battery; serial sequence lines intact |
 | `make ctr` | Kernel + arch-guard + config matrix + host tests |
 | Hostshare (manual) | `CONFIG_BOOT_LOG_HOSTSHARE=y` + 9p `ir0share`; host `ir0-boot.log` contains `IR0 kernel` + records |
 

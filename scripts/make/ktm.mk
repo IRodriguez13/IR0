@@ -5,12 +5,34 @@
 # Everything here uses the kernel and the two harness trees; nothing reaches
 # into ISD, the QA smoke catalog or a product image.
 
-.PHONY: ctr test-fast agent-fast ktest kernel-tests tests kernel-memsafe \
-	kernel-analyze kernel-text-budget health ktm-check ktm-manifest \
+.PHONY: onboard ctr test-fast agent-fast kernel-tests tests kernel-memsafe \
+	kernel-analyze kernel-text-budget health ktm-manifest \
 	ktm-classify-selftest ktm-adoption-guard host-portability-guard \
 	build-matrix-min build-matrix-full build-matrix-run \
 	config-wiring-check arch-config-check \
 	repo-hygiene-guard truth-tests test
+
+# One-command first build for a new contributor: validate the host, create
+# .config only when it is absent, build the x86-64 ISO and run the fast gates.
+# An existing .config is never overwritten; `make defconfig` resets it on
+# purpose. ARM64 has its own toolchain profile (check-env PROFILE=hub-rpi4)
+# and is not part of this shortcut.
+onboard: check-env
+	@if [ ! -f $(KERNEL_ROOT)/.config ]; then \
+		echo "  ONBOARD  no .config → defconfig"; \
+		$(MAKE) -s defconfig; \
+	else \
+		echo "  ONBOARD  keeping existing .config"; \
+	fi
+	@echo "  ONBOARD  build kernel-x64.iso"
+	@$(MAKE) -s ir0
+	@echo "  ONBOARD  fast gates (arch-guard, host tests, KTM)"
+	@$(MAKE) -s test-fast
+	@echo ""
+	@echo "✓ onboard complete"
+	@echo "  Boot:   make run"
+	@echo "  QEMU:   make kernel-tests"
+	@echo "  TUI:    make test"
 
 # CTR is the fast merge gate: kernel + architecture boundary + config matrix +
 # host unit tests. `scripts/ctr.sh` owns the ordering so agents and humans run
@@ -19,23 +41,23 @@ ctr:
 	@chmod +x scripts/ctr.sh
 	@./scripts/ctr.sh
 
-# Alias of ktm-check: kernel + arch-guard + host tests + KTM invariants.
-# Keeping one path avoids running arch-guard and tests/host twice.
-test-fast: ktm-check
-
-agent-fast: test-fast kernel-tests
-	@echo "✓ agent-fast OK (host + ktest)"
-
-# KTM is the kernel's in-tree tracing/assertion layer. These two gates are
-# cheap and catch manifest drift without booting QEMU.
-ktm-check: kernel-x64.bin arch-guard
+# Kernel + arch-guard + host tests + KTM invariants. This is the canonical
+# daily gate; `make agent-fast` adds the in-kernel battery.
+test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
 	@python3 scripts/ktm_classify_selftest.py
 	@python3 scripts/ktm_panic_inventory.py --check
 	@python3 scripts/ktm_syscall_manifest.py --tier1 || true
 	@$(MAKE) -s ktm-adoption-guard
 	@$(MAKE) -s host-portability-guard
-	@echo "✓ KTM check complete (tier-1 manifest gaps are informational)"
+	@echo "✓ test-fast complete (tier-1 manifest gaps are informational)"
+
+agent-fast: test-fast kernel-tests
+	@echo "✓ agent-fast OK (test-fast + kernel-tests)"
+
+# KTM is the kernel's in-tree tracing/assertion layer. These gates are cheap
+# and catch manifest drift without booting QEMU; `test-fast` chains the
+# classify, adoption and portability checks.
 
 ktm-classify-selftest:
 	@python3 scripts/ktm_classify_selftest.py
@@ -64,10 +86,7 @@ kernel-memsafe:
 
 # KUnit-style battery that runs at boot. QEMU is headless and disk-only; the
 # private log is copied to KTEST_LOG for evidence after the run.
-# `ktest` is the public name; `kernel-tests` is the same recipe.
 KTEST_LOG ?= $(HOST_TMP)/ktest.log
-
-ktest: kernel-tests
 
 kernel-tests: kernel-x64-test.iso disk.img
 	@echo "  KTEST   Running in-kernel test suite at boot (KUnit-style)..."
@@ -95,7 +114,13 @@ kernel-tests: kernel-x64-test.iso disk.img
 		cp -f "$$ktest_log.qemu-stderr" "$(KTEST_LOG).qemu-stderr" 2>/dev/null || true; \
 	fi; \
 	rm -f "$$ktest_log" "$$ktest_log.qemu-stderr"; \
-	if [ $$passed -eq 1 ]; then echo "✓ kernel-tests passed"; exit 0; else echo "✗ kernel-tests FAILED"; exit 1; fi
+	if [ $$passed -eq 1 ]; then \
+		echo "✓ kernel-tests passed (log: $(KTEST_LOG))"; \
+		exit 0; \
+	else \
+		echo "✗ kernel-tests FAILED (log: $(KTEST_LOG))"; \
+		exit 1; \
+	fi
 
 # Kernel binary analysis: sections (size -A), undefined symbols, kmain.
 kernel-analyze: kernel-x64.bin

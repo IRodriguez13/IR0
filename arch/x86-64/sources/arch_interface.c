@@ -21,7 +21,7 @@
 #include <string.h>
 #include <config.h>
 #include <ir0/irq.h>
-#include <interrupt/arch/idt.h> /* idt_set_gate64 for syscall int 0x80 */
+#include <interrupt/idt.h> /* idt_set_gate64 for syscall int 0x80 */
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif

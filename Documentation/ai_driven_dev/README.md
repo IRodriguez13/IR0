@@ -51,6 +51,7 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | Rule | Scope | Summary |
 |------|-------|---------|
 | `kernel-architecture-rigor.md` | always | Facades, SPDX, testing, honest docs |
+| `ir0-bugfix-red-green-proof.md` | always | Reproduce on the unpatched tree, prove the same test passes with the fix |
 | `kernel-c-allman-style.md` | C sources | Allman brace style |
 | `kernel-docs-language-policy.md` | `**/*.md` | English primary; Spanish in `Documentation/esp/` |
 | `ir0-git-commit-hygiene.md` | always | Maintainer author only; Signed-off-by; never Co-authored-by |
@@ -76,6 +77,10 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-tier-t3-desktop-minimal.md` | tier T3 | WM/desktop (planning only) |
 
 ## Mandatory agent workflow (CTR)
+
+Every kernel bug fix needs red/green proof first: run the new test on the
+unpatched tree (must fail), then on the patched tree (must pass), and once more
+with the fix reverted. See `rules/ir0-bugfix-red-green-proof.md`.
 
 After substantial kernel changes, agents must run:
 

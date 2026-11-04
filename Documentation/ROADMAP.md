@@ -5,7 +5,7 @@
 
 > **Build-system note (2026-10-29):** historical gate names in this roadmap
 > (`make smoke-*`, `roadmap-phase*`, `release-0.0.1`) are no longer make
-> targets. Current gates: `make ctr`, `make agent-fast`, `make ktest`,
+> targets. Current gates: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`. See
 > [`MAKEFILE.md`](MAKEFILE.md).
 
@@ -22,7 +22,7 @@ This document consolidates tier goals, completed oleadas, reprioritized backlog 
 | **One tier at a time** | Vertical slices with runnable proof (ktest, host test, QEMU smoke). |
 | **KTM = dev ally** | Kernel Test Module (`ktm/`, `CONFIG_KTM`) is for **developer** regression/debug only — not a userspace security subsystem (that comes later). Must stay low overhead. |
 | **Log hygiene** | After a feature is stable, trim debug serial storms (semantic tags, audit) or gate behind Kconfig (`IR0_DEBUG_PROC`). |
-| **Makefile = tooling** | Root `Makefile` is the kernel entry point; fragments under `scripts/make/` hold recipes. CTR stays lean: `make ctr`, `build-matrix-min`, `arch-guard`, `ktest`. Historical phase/QA-smoke catalogs are gone. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
+| **Makefile = tooling** | Root `Makefile` is the kernel entry point; fragments under `scripts/make/` hold recipes. CTR stays lean: `make ctr`, `build-matrix-min`, `arch-guard`, `kernel-tests`. Historical phase/QA-smoke catalogs are gone. C test sources are kept; Makefile wiring is curated, not deleted blindly. |
 | **Don't break userspace** | Syscall ABI stable unless versioned break documented in `Documentation/mandocs/`. Public UAPI is exported with `make headers_install`. |
 | **Kernel ≠ product** | If PID 1 can replace it without recompiling the kernel, it lives in `ISD` (BusyBox, runit, login, doas, `/etc`), not here. |
 | **Post-milestone sprints** | After each green gate / oleada: optimization + architecture sanitization **before** the next big feature. **Rule:** `Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md` (`make ai-dev-rules-install`). |
@@ -101,7 +101,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 |------|--------|-------|
 | Unified header | Done | `ktm/include/ktm.h` |
 | Invariants / panic classify / ctx snapshot / sched gate | Done | `ktm/ktm_*.c` |
-| **`[KTM][PANIC_SITE]` + panic macro audit** | Done | `includes/ir0/oops.h`, `scripts/ktm_panic_inventory.py`, `make ktm-check` |
+| **`[KTM][PANIC_SITE]` + panic macro audit** | Done | `includes/ir0/oops.h`, `scripts/ktm_panic_inventory.py`, `make test-fast` |
 | Syscall manifest | Done | `scripts/ktm_syscall_manifest.py`, `make ktm-manifest` |
 | Host contract tests | Done | `tests/host/test_ktm_sched_contract.c`, `test_ktm_panic_inventory.c` |
 | **klog hub + CLASSIFY hygiene** | Done (2026-07-21) | `ktm/klog.c`, `<ir0/ktm/klog.h>`, [`KTM.md`](KTM.md) |

@@ -1,5 +1,6 @@
 # IR0 test suite catalog — consumed by scripts/test_runner.py and scripts/test_tui.py
-# Only the public daily/CI gates belong here. Internal aliases stay make targets.
+# Only the public daily/CI gates belong here. Suite ids are independent of the
+# make target they invoke.
 
 suites:
   - id: host
@@ -11,7 +12,7 @@ suites:
   - id: ktest
     group: daily
     label: "In-kernel tests in QEMU"
-    make: ktest
+    make: kernel-tests
     default: true
 
   - id: ctr

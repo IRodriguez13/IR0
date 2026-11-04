@@ -41,7 +41,7 @@ make -s kernel-x64.bin
 make -s arch-guard
 make -s build-matrix-min
 make -s -C tests/host run
-# Si tocó ktest/QEMU: make ktest
+# Si tocó ktest/QEMU: make kernel-tests
 ```
 
 Oleada grande: añadir `make ctr` y los scripts de smoke aplicables al área tocada.

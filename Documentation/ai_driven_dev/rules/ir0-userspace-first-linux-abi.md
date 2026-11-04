@@ -82,7 +82,7 @@ make -s -C tests/host run
 # When contract exists:
 python3 scripts/linux_abi_audit.py --contract <contract>
 # Console/signal work:
-make -s ktest
+make -s kernel-tests
 ```
 
 Update `Documentation/releases/IR0_0.0.1_ABI_BOARD.md` when contract state changes.

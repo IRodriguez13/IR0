@@ -13,9 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/irq.h>
-#include <interrupt/arch/idt.h>
-#include <interrupt/arch/pic.h>
-#include <interrupt/arch/keyboard.h>
+#include <interrupt/idt.h>
+#include <interrupt/pic.h>
+#include <interrupt/keyboard.h>
 
 void irq_tables_init(void)
 {

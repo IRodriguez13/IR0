@@ -50,9 +50,9 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 ## Validation Targets
 
 - `make ctr`: fast merge gate (kernel + `arch-guard` + `build-matrix-min` + host tests).
-- `make agent-fast`: `ctr` plus the in-kernel ktest battery.
-- `make ktest` / `make kernel-tests`: in-kernel tests in QEMU.
-- `make ktm-check`: host tests + KTM classify/manifest/adoption/portability guards.
+- `make agent-fast`: `test-fast` plus the in-kernel test battery.
+- `make kernel-tests`: in-kernel tests in QEMU.
+- `make test-fast`: host tests + KTM classify/manifest/adoption/portability guards.
 - `make build-matrix-min`: daily `.config` matrix; restores the caller's `.config`.
 - `make build-matrix-full`: the daily matrix plus scheduler, split storage, USB and Bluetooth.
 - `make health`: `kernel-analyze` + text budget + memsafe + kernel tests.
