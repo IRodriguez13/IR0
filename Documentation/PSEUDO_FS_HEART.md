@@ -3,7 +3,7 @@
 > **Last verified:** 2026-07-10  
 > **Source of truth:** `fs/pseudo_fs_registry.c`, `fs/heartfs.c`, `fs/procfs.c`,  
 > `kernel/syscalls/fs_syscalls.c`, `Documentation/releases/IR0_SYSCALL_PSEUDOFS_MAP.md`,  
-> `make ktest`, `make ctr`
+> `make kernel-tests`, `make ctr`
 
 ## Architecture
 
@@ -55,5 +55,5 @@ dispatch). **Forbidden:** one `.c` per syscall. See
 
 ```bash
 make agent-fast
-make ktest
+make kernel-tests
 ```

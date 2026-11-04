@@ -1,26 +1,28 @@
 # Guest contracts locked by ktest
 
-> **Last verified:** 2026-11-02
+> **Last verified:** 2026-11-03
 > **Source of truth:** `kernel/test/test_fix_contracts.c`,
-> `kernel/test/test_runner.c`, `includes/ir0/futex.h`, `includes/ir0/ipc.h`,
-> `includes/ir0/arch_mm.h`, `kernel/sync/futex.c`, `ipc/ipc.c`,
+> `kernel/test/test_mm_contracts.c`, `kernel/test/test_runner.c`,
+> `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
+> `kernel/sync/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
 > `arch/x86-64/sources/arch_mm.c`, `arch/arm64/sources/arch_mm.c`
 
 Spanish: [`../esp/testing/KTEST_FIX_CONTRACTS.md`](../esp/testing/KTEST_FIX_CONTRACTS.md).
 
-`make ktest` boots `kernel-x64-test.bin` and reports through the KTM scenario
-`kernel.ktest`. On 2026-11-02 the suite printed `All 76 test(s) passed` and
+`make kernel-tests` boots `kernel-x64-test.bin` and reports through the KTM scenario
+`kernel.ktest`. On 2026-11-03 the suite printed `All 80 test(s) passed` and
 `TEST_END|kernel.ktest|PASS`. The later panic `Failed to load /sbin/init` is
 the test ISO, after that verdict.
 
-Thirteen of those cases live in `kernel/test/test_fix_contracts.c`. They fail
-the boot if the behavior below regresses. The other cases are older and are
-not listed here.
+Fifteen of those cases live in `kernel/test/test_fix_contracts.c`. They fail
+the boot if the behavior below regresses. The COW cases below live in
+`kernel/test/test_mm_contracts.c`. The rest of the suite is older and is not
+listed here.
 
 ## How to run
 
 ```bash
-make ktest
+make kernel-tests
 ```
 
 The runner is `scripts/make/ktm.mk` (`SMOKE_QEMU_RUN`, 128 MiB guest, 60 s
@@ -34,9 +36,11 @@ bytes; search it with `rg -a`.
 | `readlink_returns_copied_bytes` | `sys_readlink` of `/proc/self/fd/0` (or `/proc/self/exe` when that link is shorter than 2 bytes) returns the copied length. A 1-byte buffer returns `1`. |
 | `fstat_redirected_stdio_is_file` | After `dup2` of a tmpfs regular file onto fd 0, `sys_fstat` fills `struct ir0_user_stat` (`includes/ir0/stat_user.h`) and the mode is a regular file, not a character device. |
 | `lseek_redirected_stdio_uses_file` | After `dup2` of a 4-byte file onto fd 1, `sys_lseek(1, 0, SEEK_END)` returns `4`. `dup2` returns the new fd. |
+| `read_efault_keeps_offset` | A `USER_MODE` `sys_read` into a range-valid but unmapped user address returns `-EFAULT` without advancing the file offset. The next read returns the two bytes that were written (`AB`). |
 | `fsync_null_fd_table` | Poisoning `files_struct.magic` makes `sys_fstat`, `sys_fsync`, and `sys_ftruncate` return `-EBADF`. The magic is restored. |
 | `rename_keeps_unlink_errno` | `sys_rename` of one file onto another on a read-only tmpfs returns `-EROFS`. |
 | `pipe_read_efault_keeps_bytes` | With the write end closed, a `USER_MODE` `sys_read` into an unmapped user address returns `-EFAULT`. The next read returns the two bytes that were written (`AB`). |
+| `socket_read_efault_keeps_bytes` | A `USER_MODE` `sys_read` on an `AF_UNIX` stream into an unmapped user address returns `-EFAULT`. The next read returns the two bytes that were sent, so the failed copy did not dequeue them. |
 | `rt_sigsuspend_consumes_pending` | With `SIGUSR1` pending and a handler that is neither `SIG_DFL`, `SIG_IGN`, nor a user address, `sys_rt_sigsuspend` returns `-EINTR`, clears that pending bit, restores the previous mask, and leaves `signal_mask_saved_valid` clear. |
 | `futex_interrupted_wait_frees_slot` | A wait that is marked interrupted before sleep returns `-EINTR`. A later `ir0_futex_wake` of that word returns `0` (the slot is free). |
 | `futex_exit_drop_frees_slot` | `ir0_futex_drop_process` during the wait frees the slot. The wake issued from the hook returns `0`, and a wake after the wait also returns `0`. |
@@ -44,6 +48,16 @@ bytes; search it with `rg -a`.
 | `unmap_splits_2mb_leaf` | On a private page directory (not the live CR3), unmapping the base of a 2 MiB identity leaf clears that 4 KiB page and leaves the next 4 KiB page mapped. |
 | `map_replaced_frame_is_released` | Replacing a PTE with a different frame drops the old frame's refcount to 0. Rewriting the same frame leaves the refcount at 1. Unmap drops it to 0. |
 | `map_fixed_aborts_when_unmap_fails` | `MAP_FIXED` over two anonymous pages returns `-ENOMEM` when the unmap backend refuses the second page. The first page is no longer mapped. The second page's PTE value is unchanged. |
+
+The COW cases are new and live in `kernel/test/test_mm_contracts.c`:
+
+| KTAP name | What a pass means |
+|-----------|-------------------|
+| `cow_write_fault_drops_old_once` | A write fault on a `PAGE_COW` PTE replaces the frame and drops the old frame exactly once (no `PMM: double free detected` panic). The new PTE is writable without `PAGE_COW`, and the page contents survive the copy. |
+| `copy_to_user_cow_break_drops_old_once` | A `copy_to_user_mm` write to a `PAGE_COW` page breaks COW through the uaccess path and drops the old frame exactly once (no double free). The new PTE is writable without `PAGE_COW`, and the written bytes read back through `copy_from_user_mm`. |
+
+A double free panics the guest before the suite prints its verdict, so a
+regression fails the whole `make kernel-tests` run.
 
 ## Test hooks
 
@@ -74,9 +88,7 @@ When the hook is `NULL`, x86-64 `mm_backend_unmap_user_page` still returns
   user instruction pointer. The case proves that delivery under the temporary
   mask clears the pending bit and restores the previous mask when
   `process_signal_enter_pending` stays clear.
-- AF_UNIX `read` still consumes bytes before `copy_to_user` and has no unread
-  path (`kernel/syscalls/fs_syscalls.c`). The pipe case does not cover it.
 - The 2 MiB case uses a private directory. It does not unmap a 1 GiB identity
   leaf in the live CR3. That leaf still cannot be split by
   `map_page_in_directory`.
-- Passing `make ktest` is the x86-64 guest proof. It is not an ARM64 boot.
+- Passing `make kernel-tests` is the x86-64 guest proof. It is not an ARM64 boot.

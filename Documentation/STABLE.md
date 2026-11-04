@@ -268,7 +268,7 @@ Everything in this table was reached in at least one oleada and has a **runnable
 | **T2** | Doom + real IWAD | `smoke-fase55d-doomgeneric`¹ | `make run-fase55d-doomgeneric-gui` |
 | **Dev** | KTM boot + userdev | `make ktm-run`, `make ktm-userdev-run` | — |
 | **Dev** | Host-share 9p (KTM artifacts + exec) | `make smoke-hostshare-9p` / `smoke-hostshare-exec` | — |
-| **Dev** | KTM inventory | `make ktm-check` | — |
+| **Dev** | KTM inventory | `make test-fast` | — |
 | **Dev** | arch + host contracts | `make arch-guard`, `make -C tests/host run` | — |
 
 ¹ Legacy phase smokes: `IR0_LEGACY_SMOKE=1 make smoke-fase54a-fbdev` (see `setup/make/legacy-smokes.mk`). Tier1 smokes above do **not** require legacy flag.
@@ -284,7 +284,7 @@ make roadmap-phase2-driver-expansion   # + runtime-net + runtime-mount
 
 ## QEMU — test the system with UI
 
-**Prerequisites:** `make deptest` green; `musl-tools` for userspace ISO; QEMU with GTK (`-display gtk`).
+**Prerequisites:** `make check-env` green; `musl-tools` for userspace ISO; QEMU with GTK (`-display gtk`).
 
 ### Quick path: runit + ash (recommended)
 

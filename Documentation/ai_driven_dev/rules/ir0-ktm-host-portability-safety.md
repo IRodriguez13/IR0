@@ -85,7 +85,7 @@ Scope: `scripts/ktm_*`, `scripts/smoke_*`, `scripts/inject_init_minix.py`,
 
 ## Enforcement
 
-- `make host-portability-guard` (part of `ktm-check`) scans host tooling for
+- `make host-portability-guard` (part of `test-fast`) scans host tooling for
   banned patterns and exercises the QEMU memory/log helpers.
 - Existing violations live in `scripts/host_portability_baseline.txt`; the
   ledger only shrinks. New violations fail.

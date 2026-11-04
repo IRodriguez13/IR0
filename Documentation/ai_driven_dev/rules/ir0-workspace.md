@@ -17,7 +17,7 @@ Instalar/actualizar symlinks (IR0 + linux-upstream):
 
 | Capa | Reglas | Verificación |
 |------|--------|--------------|
-| IR0 tiers T0–T3 | `ir0-tier-t*` | `make ktest`, tags en serial |
+| IR0 tiers T0–T3 | `ir0-tier-t*` | `make kernel-tests`, tags en serial |
 | POSIX / userspace | `ir0-tier-t1`, **`ir0-userspace-first-linux-abi`**, **`ir0-no-userspace-patches`** | `scripts/linux_abi/`, contratos ABI; kernel-first, sin parches ports |
 | Arquitectura | `kernel-architecture-rigor`, `kernel-c-allman-style` | `make arch-guard`, CTR gates |
 | Linux ground truth | `linux-ground-truth-first` | `scripts/d1_13_linux_ground_truth.py` |

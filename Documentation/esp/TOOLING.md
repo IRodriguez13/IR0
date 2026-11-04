@@ -47,9 +47,9 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
 ## Targets de Validacion
 
 - `make ctr`: gate rapido de merge (kernel + `arch-guard` + `build-matrix-min` + tests host).
-- `make agent-fast`: `ctr` + bateria ktest in-kernel.
-- `make ktest` / `make kernel-tests`: tests in-kernel en QEMU.
-- `make ktm-check`: tests host + guards KTM (classify/manifest/adoption/portabilidad).
+- `make agent-fast`: `test-fast` + bateria de tests in-kernel.
+- `make kernel-tests`: tests in-kernel en QEMU.
+- `make test-fast`: tests host + guards KTM (classify/manifest/adoption/portabilidad).
 - `make build-matrix-min`: matriz `.config` diaria; restaura el `.config` del usuario.
 - `make build-matrix-full`: la matriz diaria mas scheduler, storage partido, USB y Bluetooth.
 - `make health`: `kernel-analyze` + text budget + memsafe + kernel tests.

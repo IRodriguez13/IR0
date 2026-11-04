@@ -23,7 +23,7 @@ built by the sibling **ISD** repository, not by this Makefile.
 
 | Piece | Role |
 |-------|------|
-| `make check-env` / `deptest` | Host diagnostic (required / optional / unusable) |
+| `make check-env` | Host diagnostic (required / optional / unusable) |
 | `make defconfig` / `ir0` / `run` | Official first boot (x86-64 QEMU) |
 | `make menuconfig` | Curses configuration TUI (English / Spanish variants) |
 | `make sync-mandocs` / `make man TOPIC=` | Docs without MANPATH fights |
@@ -35,6 +35,14 @@ built by the sibling **ISD** repository, not by this Makefile.
 and never invokes ISD.
 
 ## 3. Data flow — first boot
+
+Shortcut for a prepared host:
+
+```bash
+make onboard        # check-env → defconfig if missing → ir0 → test-fast
+```
+
+It keeps an existing `.config`; run `make defconfig` explicitly to reset it.
 
 ```text
   git clone IR0 → cd IR0

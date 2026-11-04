@@ -5,7 +5,7 @@
 > `smoke-doomgeneric`, `build-doom-interactive`, and related `make` targets were
 > removed with the legacy smoke catalog and the kernel-only Makefile. Build Doom
 > payloads with ISD or the local scripts; kernel gates are `make ctr` /
-> `make ktest`.
+> `make kernel-tests`.
 
 > **Source of truth:** `setup/doom/doomgeneric_ir0.c`,
 > [`HARNESS_MAP.md`](../HARNESS_MAP.md).

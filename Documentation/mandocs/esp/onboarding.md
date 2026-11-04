@@ -24,7 +24,7 @@ Makefile.
 
 | Pieza | Rol |
 |-------|-----|
-| `make check-env` / `deptest` | Diagnóstico host (required / optional / unusable) |
+| `make check-env` | Diagnóstico host (required / optional / unusable) |
 | `make defconfig` / `ir0` / `run` | Primer boot oficial (x86-64 QEMU) |
 | `make menuconfig` | TUI de configuración (variantes inglés / español) |
 | `make sync-mandocs` / `make man TOPIC=` | Docs sin pelear MANPATH |
@@ -35,6 +35,15 @@ Makefile.
 `make run` solo lanza un artefacto ya compilado. No compila ni invoca ISD.
 
 ## 3. Flujo de datos — primer boot
+
+Atajo para un host ya preparado:
+
+```bash
+make onboard        # check-env → defconfig si falta → ir0 → test-fast
+```
+
+Respeta un `.config` existente; corré `make defconfig` explícitamente para
+resetearlo.
 
 ```text
   git clone IR0 → cd IR0

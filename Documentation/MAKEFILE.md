@@ -32,7 +32,7 @@ under `scripts/make/`:
 | `clean.mk` | `make clean` |
 | `docs.mk` | Man pages and docs helpers |
 | `host-portable.mk` | POSIX host helpers (`HOST_TMP`) |
-| `ktm.mk` | `ktest`, host harnesses, CTR/KTM gates, test catalog |
+| `ktm.mk` | `kernel-tests`, host harnesses, CTR/KTM gates, test catalog |
 
 There is no ISD, product, release, profile, QA, or Windows fragment. The root file is
 the complete graph for a kernel checkout.
@@ -89,7 +89,8 @@ setup/defconfig  ──►  .config  ──►  -include .config
 
 - **`make defconfig`** — baseline `.config` from `setup/defconfig`.
 - **`make menuconfig`** — interactive TUI (`scripts/kconfig/menuconfig.py`).
-  `MENUCONFIG_LANG=es` or `MENUCONFIG_LANG=en` forces the language.
+  `MENUCONFIG_LANG=es` or `MENUCONFIG_LANG=en` forces the language. Press `/`
+  to search symbols, PgUp/PgDn/Home/End to navigate, and `?` for help.
 - **`python3 scripts/kconfig/menuconfig.py --set KEY=VALUE`** — non-interactive updates.
 
 When `.config` is absent, `CONFIG_*` variables are empty and most `ifneq ($(CONFIG_FOO),n)` guards
@@ -101,6 +102,7 @@ default subsystems to **enabled** (bring-up friendly).
 
 | Target | Output |
 |--------|--------|
+| `make onboard` | First contributor build: host check → `defconfig` only if `.config` is absent → `kernel-x64.iso` → `test-fast` |
 | `make ir0` | x86-64: `kernel-x64.iso`. ARM64: `kernel-arm64.bin`. Board: `build/arm64-<board>/kernel8.img` |
 | `make ir0 arm64` | ARM64 aggregate (`kernel-arm64-all.bin` + common-core/provider gates) |
 | `make ir0 arm64 rpi4` | RPi4 `kernel8.img` plus its ELF twin |
@@ -112,7 +114,7 @@ default subsystems to **enabled** (bring-up friendly).
 
 `ir0` compiles with `-Werror`; use `make all` or the individual artifact targets
 when a third-party compiler introduces a warning you need to inspect first.
-When `CONFIG_TOOL_AUTO_RUN_DEPTEST=y`, `ir0` runs `deptest` first.
+When `CONFIG_TOOL_AUTO_RUN_DEPTEST=y`, `ir0` runs `check-env` first.
 
 ARM64 board images also emit `build/arm64-<board>/kernel8.img`, which is what QEMU's
 raspi machines consume.
@@ -143,23 +145,22 @@ that image is missing. `DISK=none` boots the kernel with no root disk.
 
 | Target | Script / mechanism |
 |--------|-------------------|
-| `make ktest` / `kernel-tests` | In-kernel ktest battery in QEMU (headless) |
-| `make test` | Interactive test TUI (`scripts/test_tui.py`) |
+| `make kernel-tests` | In-kernel test battery in QEMU (headless) |
+| `make test` | Interactive test TUI (`scripts/test_tui.py`; `/` filters suites) |
 | `make test SUITE=list` | List catalog suites |
 | `make test SUITE=host,ktest` | Run catalog suites non-interactively |
-| `make test-fast` | `kernel-x64.bin` + `arch-guard` + host tests + `ktm-check` |
-| `make agent-fast` | `test-fast` + `ktest` |
+| `make test-fast` | `kernel-x64.bin` + `arch-guard` + host tests + KTM guards |
+| `make agent-fast` | `test-fast` + `kernel-tests` |
 | `make ctr` | `scripts/ctr.sh`: kernel + arch-guard + matrix-min + host tests |
-| `make ktm-check` | Host tests + KTM classify/manifest/adoption/portability guards |
 | `make build-matrix-min` | Daily `.config` matrix (defconfig, tiny, net off, storage off, tmpfs root, arm64 scaffold, lazy MM off); restores `.config` |
 | `make build-matrix-full` | `build-matrix-min` plus scheduler, split storage, USB and Bluetooth; for CI |
 | `make arch-guard` | Architecture boundary checks (`scripts/architecture_guard.py`) |
 | `make repo-hygiene-guard` | Repository hygiene (`scripts/repo_hygiene_guard.py`) |
 | `make health` | `kernel-analyze` + text budget + memsafe + kernel tests |
-| `make tests` | Build the ktest kernel, kernel-memsafe harness and host tests |
+| `make tests` | Build the in-kernel test kernel, kernel-memsafe harness and host tests |
 
-The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
-`make test` is the only catalog entry. With `SUITE` it runs; without it, it opens the TUI.
+The catalog (`scripts/test_catalog.yaml`) lists only public gates that still
+exist. `make test` opens the picker; `SUITE=<id>` runs suites non-interactively.
 
 ### Documentation
 
@@ -188,7 +189,7 @@ The catalog (`scripts/test_catalog.yaml`) only lists targets that still exist.
 | `make unibuild FILE=<file.c>` | Compile translation units in isolation |
 | `make unibuild-cpp` / `unibuild-rust` / `unibuild-clean` | Other isolated compiler modes |
 | `make headers_install` | Export `includes/uapi` to `DESTDIR` |
-| `make check-env` | Host environment diagnostic (`deptest` is the same recipe) |
+| `make check-env` | Host environment diagnostic (`scripts/deptest.sh`) |
 
 ### Utilities
 

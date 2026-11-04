@@ -13,5 +13,5 @@ in-kernel fue eliminado; ver [`USERSPACE.md`](USERSPACE.md).
 Perfiles: `LOG_PROFILE_*` + cmdline `ir0.loglevel=` / `ir0.trace=` (ver inglés).
 Exploración T0: `cat /proc/kmsg` desde ash.
 
-Gates: `make ktest`, `make ctr`; hostshare es opt-in
+Gates: `make kernel-tests`, `make ctr`; hostshare es opt-in
 (`CONFIG_BOOT_LOG_HOSTSHARE=y` + 9p `ir0share`).

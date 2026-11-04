@@ -6,13 +6,19 @@ está en el [README](README.md) y en [SETUP.md](SETUP.md).
 ## 1. Arranque del entorno
 
 ```bash
-make check-env                    # alias de make deptest
+make onboard                      # check-env + build + test-fast (x86-64)
+make check-env                    # diagnóstico del host
 make check-env PROFILE=hub-rpi4   # toolchain ARM64
 make defconfig && make ir0 && make run
 make sync-mandocs && make man TOPIC=boot
 ```
 
-`check-env` / `deptest` diagnostican el host (required / optional /
+`make onboard` es el atajo para el primer build: valida el host, respeta un
+`.config` existente (o escribe el default), construye `kernel-x64.iso` y corre
+los gates rápidos. No sobrescribe configuración; usá `make defconfig` para
+resetearla a propósito.
+
+`check-env` diagnostica el host (required / optional /
 unsupported_version / present_but_unusable) con hints de paquete por distro.
 No tratan `command -v` como prueba suficiente.
 

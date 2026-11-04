@@ -127,7 +127,7 @@ parent/
 | `make ir0` | Build the default artifact (x86 ISO or ARM64 image) |
 | `make run` | Boot an already-built artifact in QEMU |
 | `make menuconfig` | Curses configuration TUI |
-| `make ktest` | In-kernel ktest battery in QEMU |
+| `make kernel-tests` | In-kernel ktest battery in QEMU |
 | `make test` | Interactive test TUI |
 | `make ctr` | Fast merge gate: kernel + arch-guard + matrix-min + host tests |
 | `make arch-guard` | Architecture boundary guard |
