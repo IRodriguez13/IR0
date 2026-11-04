@@ -258,12 +258,17 @@ int sys_kernel_process_live_count(void)
  */
 int sys_kernel_max_processes_write_reg(const char *buf, size_t count)
 {
+    char value_buf[32];
+    uint32_t new_value = 0;
+    size_t copy_len;
+
     if (!buf || count == 0)
-        return 0;
+        return -EINVAL;
     
     /* Parse number from buffer */
-    char value_buf[32];
-    size_t copy_len = (count < sizeof(value_buf) - 1) ? count : (sizeof(value_buf) - 1);
+    if (count >= sizeof(value_buf))
+        return -EINVAL;
+    copy_len = count;
     memcpy(value_buf, buf, copy_len);
     value_buf[copy_len] = '\0';
     
@@ -274,12 +279,17 @@ int sys_kernel_max_processes_write_reg(const char *buf, size_t count)
         value_buf[copy_len] = '\0';
     }
     
-    uint32_t new_value = 0;
+    if (copy_len == 0)
+        return -EINVAL;
     for (size_t i = 0; i < copy_len; i++)
     {
         if (value_buf[i] >= '0' && value_buf[i] <= '9')
         {
-            new_value = new_value * 10 + (value_buf[i] - '0');
+            uint32_t digit = (uint32_t)(value_buf[i] - '0');
+
+            if (new_value > (UINT32_MAX - digit) / 10U)
+                return -EINVAL;
+            new_value = new_value * 10U + digit;
         }
         else
         {
