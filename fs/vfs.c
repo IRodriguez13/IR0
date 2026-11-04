@@ -692,7 +692,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     if (!ft)
         return -ENODEV;
 
-    struct vfs_mount *m = kmalloc(sizeof(*m));
+    struct vfs_mount *m = kmalloc_try(sizeof(*m));
     if (!m)
         return -ENOMEM;
 
