@@ -228,6 +228,9 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
 {
     if (!dev || !data)
         return -1;
+
+    if (len > UINT16_MAX - sizeof(struct udp_header))
+        return -1;
     
     /* Allocate UDP packet */
     size_t udp_header_len = sizeof(struct udp_header);

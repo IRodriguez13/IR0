@@ -231,6 +231,8 @@ static int tcp_send_raw(struct net_device *dev, ip4_addr_t dest_ip,
 
 	if (!dev)
 		return -1;
+	if (payload_len > UINT16_MAX - TCP_HDR_LEN)
+		return -1;
 
 	pkt = kmalloc_try(total);
 	if (!pkt)

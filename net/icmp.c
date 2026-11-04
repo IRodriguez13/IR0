@@ -422,7 +422,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
 int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip, 
                            uint16_t id, uint16_t seq, const void *data, size_t len)
 {
-    if (!dev)
+    if (!dev || (len > 0 && !data))
         return -1;
 
     /* ICMP Echo Request structure.
@@ -436,6 +436,9 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
         /* Add default 32-byte payload (total packet will be ~64 bytes: 14 Eth + 20 IP + 8 ICMP + 32 payload = 74) */
         actual_payload_len = 32;
     }
+
+    if (actual_payload_len > UINT16_MAX - sizeof(struct icmp_header))
+        return -1;
     
     size_t icmp_len = sizeof(struct icmp_header) + actual_payload_len;
     uint8_t *icmp_packet = kmalloc_try(icmp_len);
