@@ -376,6 +376,9 @@ static int ip_send_fragment(struct net_device *dev, ip4_addr_t dest_ip,
                             ip4_addr_t next_hop_ip, uint8_t ttl)
 {
     size_t ip_header_len = sizeof(struct ip_header);
+
+    if (len > UINT16_MAX - ip_header_len)
+        return -EMSGSIZE;
     size_t fragment_len = ip_header_len + len;
     
     uint8_t *fragment = kmalloc_try(fragment_len);
@@ -441,6 +444,9 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
 {
     if (!dev || !payload)
         return -1;
+
+    if (len > UINT16_MAX - sizeof(struct ip_header))
+        return -EMSGSIZE;
 
     if (dev->mtu <= sizeof(struct eth_header) + sizeof(struct ip_header))
     {
