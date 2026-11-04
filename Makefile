@@ -251,7 +251,6 @@ CFLAGS += -I$(KERNEL_ROOT)/sched
 CFLAGS += -I$(KERNEL_ROOT)/drivers
 CFLAGS += -I$(KERNEL_ROOT)/fs
 CFLAGS += -I$(KERNEL_ROOT)/net
-CFLAGS += -I$(KERNEL_ROOT)/interrupt
 CFLAGS += -MMD -MP
 
 IR0_DEBUG_PMM ?= 0
@@ -361,22 +360,22 @@ KERNEL_OBJS = \
 	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \
     kernel/syscalls/syscall_dispatch.o \
-    kernel/net/sock_udp.o \
-    kernel/net/sock_icmp.o \
-    kernel/net/sock_stream.o \
-    kernel/net/sock_inet_ioctl.o \
-    kernel/sync/sysv_shm.o \
+    net/sock_udp.o \
+    net/sock_icmp.o \
+    net/sock_stream.o \
+    net/sock_inet_ioctl.o \
+    ipc/sysv_shm.o \
     kernel/fd/memfd.o \
     kernel/fd/eventfd.o \
     kernel/fd/timerfd.o \
-    kernel/sync/posix_shm.o \
+    ipc/posix_shm.o \
     kernel/input_events.o \
     kernel/elf_loader.o \
     kernel/driver_registry.o \
     kernel/resource_registry.o \
     ipc/ipc.o \
-    kernel/sync/futex.o \
-    kernel/net/net_compat.o \
+    kernel/futex.o \
+    net/net_compat.o \
     kernel/fd/fd_resource.o \
     kernel/fd/fd_resource_legacy.o \
     ktm/klog.o \
@@ -528,13 +527,13 @@ LIB_OBJS = \
     includes/string.o
 
 INTERRUPT_OBJS_X86_64 = \
-    interrupt/arch/idt.o \
-    interrupt/arch/x86-64/early_idt.o \
-    interrupt/arch/pic.o \
-    interrupt/arch/isr_handlers.o \
-    interrupt/arch/keyboard.o \
-    interrupt/arch/x86-64/isr_stubs_64.o \
-    interrupt/arch/x86-64/early_idt_stubs.o
+    arch/x86-64/sources/interrupt/idt.o \
+    arch/x86-64/sources/interrupt/early_idt.o \
+    arch/x86-64/sources/interrupt/pic.o \
+    arch/x86-64/sources/interrupt/isr_handlers.o \
+    arch/x86-64/sources/interrupt/keyboard.o \
+    arch/x86-64/asm/interrupt/isr_stubs_64.o \
+    arch/x86-64/asm/interrupt/early_idt_stubs.o
 
 # ARM64: do not pull lidt / isr_stubs_64 — GIC is in ARCH_OBJS.
 INTERRUPT_OBJS_ARM64 = \
@@ -548,7 +547,7 @@ endif
 
 DRIVER_OBJS = \
     drivers/driver_bootstrap.o \
-    drivers/IO/ps2.o \
+    drivers/input/ps2.o \
     drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
     drivers/timer/hpet/hpet.o \
@@ -641,7 +640,7 @@ CFLAGS += -DCONFIG_ENABLE_FS_EXT2=0
 endif
 
 DISK_OBJS = \
-    drivers/disk/partition.o
+    drivers/storage/partition.o
 
 # ============================================
 # CONDITIONAL SUBSYSTEM OBJECTS
@@ -697,8 +696,8 @@ endif
 # Sound (Sound Blaster 16 + Adlib OPL2 + ISA DMA)
 ifneq ($(CONFIG_ENABLE_SOUND),n)
 SOUND_OBJS = \
-    drivers/audio/sound_blaster.o \
-    drivers/audio/adlib.o \
+    sound/sound_blaster.o \
+    sound/adlib.o \
     drivers/dma/dma.o
 CFLAGS += -DCONFIG_ENABLE_SOUND=1
 else
@@ -739,7 +738,7 @@ endif
 
 # PS/2 mouse
 ifneq ($(CONFIG_ENABLE_MOUSE),n)
-MOUSE_OBJS = drivers/IO/ps2_mouse.o
+MOUSE_OBJS = drivers/input/ps2_mouse.o
 CFLAGS += -DCONFIG_ENABLE_MOUSE=1
 else
 MOUSE_OBJS =
@@ -748,7 +747,7 @@ endif
 
 # PC speaker
 ifneq ($(CONFIG_ENABLE_PC_SPEAKER),n)
-PC_SPEAKER_OBJS = drivers/IO/pc_speaker.o
+PC_SPEAKER_OBJS = drivers/char/pc_speaker.o
 CFLAGS += -DCONFIG_ENABLE_PC_SPEAKER=1
 else
 PC_SPEAKER_OBJS =

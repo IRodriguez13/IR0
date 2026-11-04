@@ -25,7 +25,7 @@
 #include <arch/x86-64/sources/tss_x64.h>
 #include <ir0/irq.h>
 #include <ir0/ktm/klog.h>
-#include <interrupt/arch/idt.h> /* idt_early_install64 only */
+#include <interrupt/idt.h> /* idt_early_install64 only */
 
 /*
  * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (musl CRT uses XMM).

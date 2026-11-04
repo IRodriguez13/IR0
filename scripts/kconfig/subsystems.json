@@ -41,11 +41,11 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "interrupt/arch/idt.c",
-          "interrupt/arch/pic.c",
-          "interrupt/arch/isr_handlers.c",
-          "interrupt/arch/keyboard.c",
-          "interrupt/arch/x86-64/isr_stubs_64.asm"
+          "arch/x86-64/sources/interrupt/idt.c",
+          "arch/x86-64/sources/interrupt/pic.c",
+          "arch/x86-64/sources/interrupt/isr_handlers.c",
+          "arch/x86-64/sources/interrupt/keyboard.c",
+          "arch/x86-64/asm/interrupt/isr_stubs_64.asm"
         ],
         "arm32": []
       },
@@ -142,8 +142,8 @@
       "architectures": ["x86-64"],
       "files": {
         "x86-64": [
-          "interrupt/arch/keyboard.c",
-          "drivers/IO/ps2.c"
+          "arch/x86-64/sources/interrupt/keyboard.c",
+          "drivers/input/ps2.c"
         ],
         "arm32": []
       },
@@ -156,7 +156,7 @@
       "architectures": ["x86-64"],
       "files": {
         "x86-64": [
-          "drivers/IO/ps2_mouse.c"
+          "drivers/input/ps2_mouse.c"
         ],
         "arm32": []
       },
@@ -217,7 +217,7 @@
       "architectures": ["x86-64"],
       "files": {
         "x86-64": [
-          "drivers/audio/sound_blaster.c",
+          "sound/sound_blaster.c",
           "drivers/dma/dma.c"
         ],
         "arm32": []
@@ -231,7 +231,7 @@
       "architectures": ["x86-64"],
       "files": {
         "x86-64": [
-          "drivers/audio/adlib.c"
+          "sound/adlib.c"
         ],
         "arm32": []
       },
@@ -257,7 +257,7 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "drivers/disk/partition.c"
+          "drivers/storage/partition.c"
         ],
         "arm32": []
       },

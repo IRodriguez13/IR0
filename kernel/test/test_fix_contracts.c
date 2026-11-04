@@ -17,6 +17,7 @@
 #include "syscalls.h"
 #include <kernel/syscalls/fs_path_syscalls.h>
 #include <kernel/syscalls/fs_syscalls.h>
+#include <kernel/syscalls/socket_syscalls.h>
 #include <ir0/arch_mm.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
@@ -150,6 +151,118 @@ void ktest_lseek_redirected_stdio_uses_file(void)
 	KTEST_END();
 }
 
+void ktest_read_efault_keeps_offset(void)
+{
+	const char *path = "/mntfix-readoff/reg";
+	int64_t file_fd = -1;
+	int mount_rc;
+	process_mode_t saved;
+	char got[2];
+	uintptr_t bad;
+	int64_t rc;
+
+	KTEST_BEGIN("read_efault_keeps_offset");
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	mount_rc = ktest_mount_rw("/mntfix-readoff");
+	KASSERT_EQ(mount_rc, 0);
+	if (mount_rc != 0)
+	{
+		KTEST_END();
+		return;
+	}
+
+	file_fd = sys_open(path, KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC,
+			   0644);
+	KASSERT_GT(file_fd, 2);
+	if (file_fd <= 2)
+		goto out;
+
+	KASSERT_EQ(sys_write((int)file_fd, "AB", 2), (int64_t)2);
+	KASSERT_EQ(sys_lseek((int)file_fd, 0, SEEK_SET), (int64_t)0);
+
+	/*
+	 * Validate a user VA that passes the range check but has no PTE, so
+	 * copy_to_user() fails after the VFS read has already advanced f_pos.
+	 */
+	bad = mm_user_va_start();
+	if (is_page_mapped_in_directory(process_pgd(current_process), bad,
+					NULL) == 1)
+		bad = mm_user_va_start() + 0x00B00000UL;
+
+	saved = current_process->mode;
+	current_process->mode = USER_MODE;
+	rc = sys_read((int)file_fd, (void *)bad, 2);
+	current_process->mode = saved;
+	KASSERT_EQ(rc, (int64_t)-EFAULT);
+
+	/* A failed read must not consume the file; the same bytes stay there. */
+	memset(got, 0, sizeof(got));
+	rc = sys_read((int)file_fd, got, 2);
+	KASSERT_EQ(rc, (int64_t)2);
+	KASSERT(got[0] == 'A' && got[1] == 'B');
+
+out:
+	if (file_fd > 2)
+		(void)sys_close((int)file_fd);
+	(void)vfs_remount("/mntfix-readoff", IR0_MS_REMOUNT);
+	(void)sys_umount("/mntfix-readoff", 0);
+	KTEST_END();
+}
+
+void ktest_socket_read_efault_keeps_bytes(void)
+{
+	int sv[2] = { -1, -1 };
+	process_mode_t saved;
+	char got[2];
+	uintptr_t bad;
+	int64_t rc;
+
+	KTEST_BEGIN("socket_read_efault_keeps_bytes");
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	rc = sys_socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0, sv);
+	KASSERT_EQ(rc, (int64_t)0);
+	if (rc != 0)
+	{
+		KTEST_END();
+		return;
+	}
+
+	KASSERT_EQ(sys_write(sv[0], "AB", 2), (int64_t)2);
+
+	bad = mm_user_va_start();
+	if (is_page_mapped_in_directory(process_pgd(current_process), bad,
+					NULL) == 1)
+		bad = mm_user_va_start() + 0x00B00000UL;
+
+	saved = current_process->mode;
+	current_process->mode = USER_MODE;
+	rc = sys_read(sv[1], (void *)bad, 2);
+	current_process->mode = saved;
+	KASSERT_EQ(rc, (int64_t)-EFAULT);
+
+	/* EFAULT must not dequeue the peer's bytes. */
+	memset(got, 0, sizeof(got));
+	rc = sys_read(sv[1], got, 2);
+	KASSERT_EQ(rc, (int64_t)2);
+	KASSERT(got[0] == 'A' && got[1] == 'B');
+
+	(void)sys_close(sv[0]);
+	(void)sys_close(sv[1]);
+	KTEST_END();
+}
+
 void ktest_fsync_null_fd_table(void)
 {
 	files_struct_t *files;
@@ -221,7 +334,7 @@ void ktest_pipe_read_efault_keeps_bytes(void)
 	process_mode_t saved;
 	char got[2];
 	int64_t rc;
-	uintptr_t bad = 0x00400000UL;
+	uintptr_t bad = mm_user_va_start();
 
 	KTEST_BEGIN("pipe_read_efault_keeps_bytes");
 	KASSERT(current_process != NULL);
@@ -236,7 +349,7 @@ void ktest_pipe_read_efault_keeps_bytes(void)
 
 	if (is_page_mapped_in_directory(process_pgd(current_process), bad,
 					NULL) == 1)
-		bad = 0x00F00000UL;
+		bad = mm_user_va_start() + 0x00B00000UL;
 
 	saved = current_process->mode;
 	current_process->mode = USER_MODE;

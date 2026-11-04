@@ -11,9 +11,9 @@
  * Description: Interrupt Service Routine handlers for exceptions, hardware interrupts, and system calls
  */
 
-#include "idt.h"
-#include "pic.h"
-#include "io.h"
+#include <interrupt/idt.h>
+#include <interrupt/pic.h>
+#include <interrupt/io.h>
 #include <ir0/vga.h>
 #include <ir0/signals.h>
 #include <ir0/oops.h>
