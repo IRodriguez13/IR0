@@ -14,7 +14,7 @@
 IR0 ofrece tres familias IPC en bring-up: **canales de mensajes en kernel** vía
 ioctl de `/dev/ipc`, **tuberías** en memoria vía `pipe`/`pipe2`, y sockets
 stream **AF_UNIX** (`socket` / `socketpair` / `bind` / `connect` / `send`/`recv`)
-en `kernel/net/sock_stream.c` + `socket_syscalls.c`. Las tuberías siguen siendo el
+en `net/sock_stream.c` + `socket_syscalls.c`. Las tuberías siguen siendo el
 path POSIX principal para redirección de shell. El IPC por canales es
 experimental con limitaciones de wake documentadas abajo.
 
@@ -24,7 +24,7 @@ experimental con limitaciones de wake documentadas abajo.
 |-----------|---------|-----|
 | Canales | `kernel/ipc.c` | `ipc_channel_*`, ring buffer 4096 bytes |
 | Tuberías | `includes/ir0/pipe.c` | `pipe_create`, `pipe_read/write`, refcounts |
-| AF_UNIX stream | `kernel/net/sock_stream.c`, `socket_syscalls.c` | socket/socketpair/bind/connect/send/recv |
+| AF_UNIX stream | `net/sock_stream.c`, `socket_syscalls.c` | socket/socketpair/bind/connect/send/recv |
 | Syscalls | `io_syscalls.c` / `socket_syscalls.c` | `sys_pipe`, `sys_pipe2`, familia socket |
 | devfs | `fs/devfs.c` | `/dev/ipc` device_id 13, ioctl 0x5001–0x5003 |
 

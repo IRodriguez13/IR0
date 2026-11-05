@@ -101,7 +101,7 @@ PROCESS_BLOCKED → sched_schedule_next()
 | Area | Path | Role |
 |------|------|------|
 | TTY wait + echo | `includes/ir0/console.c` | `tty_sleep_for_input`, `ir0_console_keypress`, canon echo |
-| Keyboard | `interrupt/arch/keyboard.c` | PS/2 poll, `keyboard_buffer_add`, userspace diag tags |
+| Keyboard | `arch/x86-64/sources/interrupt/keyboard.c` | PS/2 poll, `keyboard_buffer_add`, userspace diag tags |
 | Stdin syscall | `kernel/syscalls.c` | `syscalls_read_stdio_stdin` → `ir0_console_read`; poll wait poll |
 | Console draw | `kernel/console_backend.c`, `drivers/video/*` | FB handoff, `typewriter_vga_print_char` |
 | devfs console | `fs/devfs.c` | `/dev/console`, `/dev/tty`, termios ioctl |

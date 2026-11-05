@@ -4,7 +4,7 @@
 > **Fuente de verdad:** `kernel/test/test_fix_contracts.c`,
 > `kernel/test/test_mm_contracts.c`, `kernel/test/test_runner.c`,
 > `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
-> `kernel/sync/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
+> `kernel/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
 > `arch/x86-64/sources/arch_mm.c`, `arch/arm64/sources/arch_mm.c`
 
 Canónico en inglés: [`../../testing/KTEST_FIX_CONTRACTS.md`](../../testing/KTEST_FIX_CONTRACTS.md).

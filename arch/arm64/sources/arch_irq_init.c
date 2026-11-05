@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: arch_irq_init.c
- * Description: ARM64 irq_* facade → VBAR + GICv2 (no interrupt/arch).
+ * Description: ARM64 irq_* facade → VBAR + GICv2 (no x86 interrupt backend).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

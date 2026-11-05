@@ -123,6 +123,34 @@ else
 BOARD :=
 endif
 
+# Hardware backend object selection. Test-only KTM mocks replace the
+# production facade implementation at link time; product defconfigs keep every
+# KTM_*_MOCK option disabled. `scripts/architecture_guard.py` rejects a mock
+# enabled without CONFIG_KTM.
+CONSOLE_BACKEND_OBJ := kernel/console_backend.o
+MM_PORT_OBJ := mm/mm_port.o
+VIDEO_BACKEND_OBJ := drivers/video/video_backend.o
+INPUT_BACKEND_OBJ := drivers/input/input_backend.o
+AUDIO_BACKEND_OBJ := sound/audio_backend.o
+
+ifeq ($(CONFIG_KTM),y)
+ifeq ($(CONFIG_KTM_CONSOLE_MOCK),y)
+CONSOLE_BACKEND_OBJ := ktm/mocks/console/ktm_console_mock.o
+endif
+ifeq ($(CONFIG_KTM_MM_PORT_MOCK),y)
+MM_PORT_OBJ := ktm/mocks/mm/ktm_mm_port_mock.o
+endif
+ifeq ($(CONFIG_KTM_VIDEO_MOCK),y)
+VIDEO_BACKEND_OBJ := ktm/mocks/video/ktm_video_mock.o
+endif
+ifeq ($(CONFIG_KTM_INPUT_MOCK),y)
+INPUT_BACKEND_OBJ := ktm/mocks/input/ktm_input_mock.o
+endif
+ifeq ($(CONFIG_KTM_AUDIO_MOCK),y)
+AUDIO_BACKEND_OBJ := ktm/mocks/audio/ktm_audio_mock.o
+endif
+endif
+
 ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),1)
 TOOL_DEFAULT_DISK_FS_NAME := fat32
 else ifeq ($(CONFIG_TOOL_DEFAULT_DISK_FS),2)
@@ -338,6 +366,9 @@ KERNEL_OBJS = \
     kernel/kexec.o \
     kernel/syscalls.o \
     kernel/syscalls/fs_syscalls.o \
+    kernel/syscalls/fs_rw.o \
+    kernel/syscalls/fs_meta.o \
+    kernel/syscalls/fs_dirent.o \
     kernel/syscalls/fs_path_syscalls.o \
     kernel/syscalls/validate_user.o \
     kernel/syscalls/mm_syscalls.o \
@@ -351,6 +382,11 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_io.o \
 	kernel/syscalls/early_vfs.o \
 	kernel/syscalls/early_rootfs.o \
+	kernel/syscalls/early_rootfs_state.o \
+	kernel/syscalls/early_rootfs_ipc.o \
+	kernel/syscalls/early_rootfs_socket.o \
+	kernel/syscalls/early_rootfs_file.o \
+	kernel/syscalls/early_rootfs_meta.o \
 	fs/ramtab.o \
 	ipc/early_anonfd.o \
 	ipc/early_unix.o \
@@ -365,9 +401,9 @@ KERNEL_OBJS = \
     net/sock_stream.o \
     net/sock_inet_ioctl.o \
     ipc/sysv_shm.o \
-    kernel/fd/memfd.o \
-    kernel/fd/eventfd.o \
-    kernel/fd/timerfd.o \
+    mm/memfd.o \
+    fs/eventfd.o \
+    fs/timerfd.o \
     ipc/posix_shm.o \
     kernel/input_events.o \
     kernel/elf_loader.o \
@@ -376,8 +412,8 @@ KERNEL_OBJS = \
     ipc/ipc.o \
     kernel/futex.o \
     net/net_compat.o \
-    kernel/fd/fd_resource.o \
-    kernel/fd/fd_resource_legacy.o \
+    fs/fd_resource.o \
+    fs/fd_resource_legacy.o \
     ktm/klog.o \
     ktm/d1_13_malloc_pf_diag.o \
 	sched/sched.o \
@@ -386,7 +422,7 @@ KERNEL_OBJS = \
     sched/sched_resched.o \
     sched/switch/arch_context_switch.o \
     sched/switch/context_user_resume.o \
-    kernel/console_backend.o
+    $(CONSOLE_BACKEND_OBJ)
 
 ifeq ($(CONFIG_KTM),y)
 KERNEL_OBJS += \
@@ -426,6 +462,9 @@ KERNEL_OBJS += \
     ktm/ktm_ctx_snapshot.o \
     ktm/ktm_probe_diag.o \
     $(KTM_D1_DIAG_OBJS)
+ifeq ($(CONFIG_KTM_PLATFORM_MOCK),y)
+KERNEL_OBJS += ktm/mocks/platform/ktm_platform_mock.o
+endif
 ifeq ($(CONFIG_KTM_BLOCK_FAKE),y)
 KERNEL_OBJS += \
     ktm/mocks/block/ktm_block_fake.o \
@@ -487,43 +526,43 @@ MEMORY_OBJS = \
 	mm/page_fault.o
 
 LIB_OBJS = \
-    kernel/lib/vga.o \
-    kernel/lib/logging.o \
-    kernel/lib/boot_log_hostshare.o \
-    kernel/lib/oops.o \
-    kernel/lib/signals.o \
-    kernel/lib/pipe.o \
-    kernel/lib/copy_user.o \
-    kernel/lib/open_flags.o \
-    kernel/lib/syscall_table.o \
-    kernel/lib/stat_user.o \
-    kernel/lib/named_fifo.o \
-    kernel/lib/named_socket.o \
-    kernel/lib/named_devnode.o \
-    kernel/lib/supervise_path.o \
-    kernel/lib/named_symlink.o \
-    kernel/lib/path_user.o \
-    kernel/lib/path_routed.o \
-    kernel/lib/utsname_info.o \
-    kernel/lib/version_stamp.o \
-    kernel/lib/console.o \
-    kernel/lib/ps2_set1.o \
-    kernel/lib/ps2_mouse_pkt.o \
-    kernel/lib/ash_smoke.o \
-    kernel/lib/fb.o \
-    kernel/lib/input.o \
-    kernel/lib/utimens.o \
-    kernel/lib/exec_read_trace.o \
-    kernel/lib/mount_prefix.o \
-    kernel/lib/blockdev.o \
-    kernel/lib/elf64_image.o \
-    kernel/lib/early_elf_stack.o \
-    kernel/lib/mm_port.o \
-    kernel/lib/process_introspect.o \
-    kernel/lib/rtc_calendar.o \
-    kernel/lib/video_backend.o \
-    kernel/lib/input_backend.o \
-    kernel/lib/audio_backend.o \
+    drivers/char/vga.o \
+    kernel/logging.o \
+    kernel/boot_log_hostshare.o \
+    kernel/oops.o \
+    kernel/signals.o \
+    fs/pipe.o \
+    mm/copy_user.o \
+    fs/open_flags.o \
+    kernel/syscalls/syscall_table.o \
+    fs/stat_user.o \
+    fs/named_fifo.o \
+    fs/named_socket.o \
+    fs/named_devnode.o \
+    fs/supervise_path.o \
+    fs/named_symlink.o \
+    fs/path_user.o \
+    fs/path_routed.o \
+    kernel/utsname_info.o \
+    kernel/version_stamp.o \
+    drivers/tty/console.o \
+    drivers/input/ps2_set1.o \
+    drivers/input/ps2_mouse_pkt.o \
+    kernel/ash_smoke.o \
+    drivers/video/fb.o \
+    drivers/input/input.o \
+    fs/utimens.o \
+    kernel/exec_read_trace.o \
+    fs/mount_prefix.o \
+    block/blockdev.o \
+    kernel/elf64_image.o \
+    kernel/early_elf_stack.o \
+    $(MM_PORT_OBJ) \
+    kernel/process/process_introspect.o \
+    drivers/rtc/rtc_calendar.o \
+    $(VIDEO_BACKEND_OBJ) \
+    $(INPUT_BACKEND_OBJ) \
+    $(AUDIO_BACKEND_OBJ) \
     includes/string.o
 
 INTERRUPT_OBJS_X86_64 = \
@@ -599,12 +638,21 @@ FS_OBJS = \
     fs/pseudo_fs_nodes.o \
     fs/heartfs.o \
     fs/procfs.o \
+    fs/procfs_process.o \
+    fs/procfs_net.o \
+    fs/procfs_system.o \
     fs/devfs.o \
+    fs/devfs_net.o \
+    fs/devfs_block.o \
     fs/sysfs.o \
     fs/hostshare_9p.o
 
 ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
 FS_OBJS += fs/minix_fs.o
+FS_OBJS += fs/minix_inode.o
+FS_OBJS += fs/minix_dir.o
+FS_OBJS += fs/minix_file.o
+FS_OBJS += fs/minix_meta.o
 CFLAGS += -DCONFIG_ENABLE_FS_MINIX=1
 else
 CFLAGS += -DCONFIG_ENABLE_FS_MINIX=0

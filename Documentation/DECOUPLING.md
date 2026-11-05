@@ -29,11 +29,11 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 
 | Area | Mechanism |
 |------|-----------|
-| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `interrupt/arch/idt.h`. |
+| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `arch/x86-64/include/interrupt/idt.h`. |
 | Staged syscall dispatch | **`early_syscall_dispatch_invoke()`** owns provider registration and semantic-ID dispatch in common C. Narrow `user/time/console/vfs/process/mm` ops groups prevent a monolithic early facade. ISA code owns ABI decoding, exception return, machine layout and early mechanisms. |
 | Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); x86-only iretq repair stays behind `<asm/context.h>`. New portable code includes the domain header ([`context.h`](../../includes/ir0/context.h)). [`arch_cpu.h`](../../includes/ir0/arch_cpu.h) is a compatibility umbrella only (does **not** include `cpu.h`). |
 | Context switch | **`switch_to(prev, next)`** → **`arch_switch_to`** ([`includes/ir0/context.h`](../../includes/ir0/context.h), [`arch_switch.h`](../../includes/ir0/arch_switch.h)); first entry **`first_switch_to`**. ISA bodies in `arch/*/sources/arch_switch.c`. |
-| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/arch_irq_init.c`. Portable trees must not `#include <interrupt/arch/...>`. |
+| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/arch_irq_init.c`. Portable trees must not include arch interrupt backend headers. |
 | Signals / sigcontext | ISA layouts in [`sigcontext_x86_64.h`](../../includes/ir0/sigcontext_x86_64.h) / [`sigcontext_arm64.h`](../../includes/ir0/sigcontext_arm64.h); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
 | Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
@@ -51,7 +51,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `facade-no-drivers-include` | `includes/ir0/*.h` | No `#include <drivers/…>` |
 | `facade-no-arch-include` | `includes/ir0/*.h` | No `#include <arch/…>` |
 | `facade-no-sched-include` | `includes/ir0/*.h` | No `#include <sched/…>` |
-| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | No `#include <interrupt/arch/...>` (use **`ir0/irq.h`**) |
+| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | No arch interrupt backend includes (use **`ir0/irq.h`**) |
 | `process-pgd-accessor` | broad | No `process->page_directory`; use **`process_pgd`/`process_set_pgd`** |
 | `syscall-frame-accessor` | portable trees | No `syscall_frame.<gpr>`; use **`process_syscall_*`** |
 | `portable-no-task-arch-field` | portable | No `task->arch.<field>`; use **`task_get_*`/`task_set_*`** |
@@ -121,7 +121,7 @@ specific driver implementation file:
 | Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order (opaque headers) |
 | Power | `platform_ops.h` | `kernel/power/power_manag.c` |
 | Scheduler | **`sched.h`** (`scheduler_api.h` → alias) | Process/timer/IRQ → `sched_schedule_next()` |
-| IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not `interrupt/arch/*` from portable/drivers |
+| IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not arch interrupt backend headers from portable/drivers |
 | UP spinlock | **`spinlock.h`** (`ir0_spinlock_t`; irq-save on UP) | Hot paths e.g. `kernel/lib/pipe.c` read/write |
 | Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/page_fault.c` calls; impl in `arch/*/sources/arch_pf_debug.c` |
 | Signal sigreturn ctx | `process_saved_context_*()` in `process.h` | Only `kernel/process/saved_context.c` may touch `->saved_context` |
@@ -241,7 +241,7 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
    `sigcontext_arm64` = Linux aarch64 uapi; `arch_switch` / `arch_mm` = TTBR0 model;
    `irq_*` → VBAR + GICv2. ISD AArch64 + product `syscall_dispatch` on SVC remain
    open.
-4. **`interrupt/arch/`** is the **x86-only** IDT/PIC/ISR backend (see `interrupt/arch/README.md`).
+4. **`arch/x86-64/sources/interrupt/`** is the **x86-only** IDT/PIC/ISR backend (see `Documentation/architecture/x86-64-interrupt-backend.md`).
    Portable and driver code enter via **`ir0/irq.h`** / **`ir0/arch_io.h`**; arm64 never
    links this tree.
 

@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | process, scheduler, interrupts |
 | Man page | IR0-signals (section 7) |
-| Primary sources | `includes/ir0/signals.c`, `includes/ir0/signals.h`, `kernel/syscalls.c`, `sched/rr_sched.c`, `interrupt/arch/isr_handlers.c` |
+| Primary sources | `includes/ir0/signals.c`, `includes/ir0/signals.h`, `kernel/syscalls.c`, `sched/rr_sched.c`, `arch/x86-64/sources/interrupt/isr_handlers.c` |
 
 ## 1. Overview
 
