@@ -83,7 +83,7 @@ void logging_init(void)
 
     /* Allocate log buffer */
     size_t buffer_size = sizeof(log_entry_t) * LOG_BUFFER_MAX_ENTRIES;
-    log_buffer = (log_entry_t *)kmalloc(buffer_size);
+    log_buffer = (log_entry_t *)kmalloc_try(buffer_size);
     if (!log_buffer)
     {
         /* If allocation fails, logging will still work but buffer won't */
