@@ -57,7 +57,7 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 - `make build-matrix-full`: the daily matrix plus scheduler, split storage, USB and Bluetooth.
 - `make health`: `kernel-analyze` + text budget + memsafe + kernel tests.
 - `make arch-guard`: architecture boundary checks (including `fs/` no direct `<arch/`, no
-  `interrupt/arch` in portable trees; see `scripts/architecture_guard.py`).
+  arch interrupt backend headers in portable trees; see `scripts/architecture_guard.py`).
 - `make repo-hygiene-guard`: repository hygiene checks.
 - `python3 scripts/kernel_export_digest.py kernel-x64.bin`: SHA-256 of sorted global `nm`
   exports (same-toolchain rebuild comparison); see `Documentation/DECOUPLING.md`.

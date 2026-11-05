@@ -1,17 +1,17 @@
 # IR0 Interrupt and Exception Path
 
 > **Last verified:** 2026-09-01  
-> **Source of truth:** `interrupt/arch/isr_handlers.c`, `interrupt/arch/pic.c`, `interrupt/arch/idt.c`
+> **Source of truth:** `arch/x86-64/sources/interrupt/isr_handlers.c`, `arch/x86-64/sources/interrupt/pic.c`, `arch/x86-64/sources/interrupt/idt.c`
 
 IR0 uses x86-64 IDT + PIC flow with a syscall gateway and exception-to-signal
 integration for process-facing error handling.
 
 ## Core Components
 
-- IDT setup and load path in `interrupt/arch/idt.c`.
-- PIC setup and IRQ masking/unmasking in `interrupt/arch/pic.c`.
+- IDT setup and load path in `arch/x86-64/sources/interrupt/idt.c`.
+- PIC setup and IRQ masking/unmasking in `arch/x86-64/sources/interrupt/pic.c`.
 - ISR stubs in architecture assembly.
-- C-side routing and handlers in `interrupt/arch/isr_handlers.c`.
+- C-side routing and handlers in `arch/x86-64/sources/interrupt/isr_handlers.c`.
 
 ## Runtime Behavior
 

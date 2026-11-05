@@ -1,25 +1,29 @@
 # Interrupt Subsystem
 
-> **Last verified:** 2026-07-26  
-> **Source of truth:** `includes/ir0/irq.h`, `arch/*/sources/arch_irq_init.c`, `interrupt/arch/`
+> **Last verified:** 2026-11-04
+> **Source of truth:** `includes/ir0/irq.h`, `arch/*/sources/arch_irq_init.c`,
+> `arch/x86-64/sources/interrupt/`
 
 Interrupt handling, exception management, and hardware interrupt routing.
 
 **Portable entry (product):** call `irq_tables_init` / `irq_controller_init` /
 `irq_keyboard_init` / `irq_unmask_line` / `irq_keyboard_poll_ps2` via
-`#include <ir0/irq.h>`. Do **not** `#include <interrupt/arch/...>` from
+`#include <ir0/irq.h>`. Do **not** include arch interrupt backend headers from
 `kernel/`, `fs/`, `mm/`, `net/`, or drivers — port I/O is `ir0/arch_io.h`.
 
-**Implementation today:** x86-64 IDT/PIC/ISR live under `interrupt/arch/` and are
-wired by `arch/x86-64/sources/arch_irq_init.c`. ARM64 `arch_irq_init.c` is a
-GIC/bring-up scaffold (product EL0 IRQ path still BLOCKED).
+**Implementation today:** x86-64 IDT/PIC/ISR live under
+`arch/x86-64/{sources,include,asm}/interrupt/` and are wired by
+`arch/x86-64/sources/arch_irq_init.c`. ARM64 `arch_irq_init.c` is a GIC/bring-up
+scaffold (product EL0 IRQ path still BLOCKED).
 
 ## Architecture
 
 ```
-includes/ir0/irq.h           - Portable facade (bring-up + unmask + PS/2 poll)
-arch/*/sources/arch_irq_init.c
-interrupt/arch/              - x86 IDT/PIC/ISR implementation (not a portable API)
+includes/ir0/irq.h                       - Portable facade (bring-up + unmask + PS/2 poll)
+arch/*/sources/arch_irq_init.c           - Per-ISA bring-up
+arch/x86-64/sources/interrupt/           - x86 IDT/PIC/ISR implementation
+arch/x86-64/include/interrupt/           - x86 backend headers (not a portable API)
+arch/x86-64/asm/interrupt/               - x86 ISR assembly stubs
 ```
 
 ## Components

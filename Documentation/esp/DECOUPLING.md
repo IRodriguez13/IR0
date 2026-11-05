@@ -10,7 +10,7 @@ mismo contenido sin mezclar idiomas.
 
 **Oleada ISA (2026-07-26):** fachadas `irq.h`, `arch_switch.h`, `arch_mm.h`, `arch_signal.h`,
 `sigcontext_{x86_64,arm64}.h` (aarch64 = uapi Linux completo); `switch_to` → `arch_switch_to`
-con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `interrupt/arch/` = backend x86-only.
+con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `arch/x86-64/sources/interrupt/` = backend x86-only.
 Residual: ISD AArch64 + `syscall_dispatch` en SVC. `kernel-arm64-all.bin`
 ya enlaza process/MM/VFS de producto; ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
@@ -69,7 +69,7 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 |----------|--------|-------|
 | `forbidden-include` | `fs/`, `kernel/syscalls.c` | Sin `#include <drivers/...>` |
 | `missing-facade` | `includes/ir0/` | Deben existir las fachadas requeridas (`arch_port.h`, `mm_port.h`, …) |
-| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | Sin `#include <interrupt/arch/...>` |
+| `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | Sin cabeceras del backend de interrupciones de arch |
 | `fs-no-direct-arch` | `fs/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
 | `fs-no-mm-include` | `fs/` | Sin `#include <mm/...>`; usar **`ir0/mm_port.h`** u otras fachadas |
 | `mm-net-no-arch-include` | `mm/`, `net/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |

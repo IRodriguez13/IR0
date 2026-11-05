@@ -60,6 +60,10 @@
         "x86-64": [
           "fs/vfs.c",
           "fs/minix_fs.c",
+          "fs/minix_inode.c",
+          "fs/minix_dir.c",
+          "fs/minix_file.c",
+          "fs/minix_meta.c",
           "fs/path.c",
           "fs/chmod.c"
         ],
@@ -96,12 +100,12 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "kernel/lib/vga.c",
-          "kernel/lib/logging.c",
-          "kernel/lib/oops.c",
-          "kernel/lib/signals.c",
-          "kernel/lib/pipe.c",
-          "kernel/lib/copy_user.c",
+          "drivers/char/vga.c",
+          "kernel/logging.c",
+          "kernel/oops.c",
+          "kernel/signals.c",
+          "fs/pipe.c",
+          "mm/copy_user.c",
           "includes/string.c"
         ],
         "arm32": []
@@ -171,7 +175,7 @@
         "x86-64": [
           "drivers/video/vbe.c",
           "drivers/video/typewriter.c",
-          "kernel/lib/vga.c"
+          "drivers/char/vga.c"
         ],
         "arm32": []
       },

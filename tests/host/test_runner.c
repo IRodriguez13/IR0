@@ -99,6 +99,12 @@ extern void test_percpu_up_contract(void);
 extern void test_tlb_sync_up_contract(void);
 extern void test_harness_assertion_contract(void);
 extern void test_mm_user_root_slot_contract(void);
+extern void test_console_backend_mock_contract(void);
+extern void test_input_backend_mock_contract(void);
+extern void test_video_backend_mock_contract(void);
+extern void test_audio_backend_mock_contract(void);
+extern void test_mm_port_mock_contract(void);
+extern void test_platform_mock_contract(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -181,6 +187,12 @@ static void (*test_functions[])(void) = {
 	test_mm_user_root_slot_contract,
 	test_oom_policy,
 	test_mm_reclaim_contract,
+	test_console_backend_mock_contract,
+	test_input_backend_mock_contract,
+	test_video_backend_mock_contract,
+	test_audio_backend_mock_contract,
+	test_mm_port_mock_contract,
+	test_platform_mock_contract,
 	NULL
 };
 

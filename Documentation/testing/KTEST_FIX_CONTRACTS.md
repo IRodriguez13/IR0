@@ -1,20 +1,20 @@
 # Guest contracts locked by ktest
 
-> **Last verified:** 2026-11-03
+> **Last verified:** 2026-11-05
 > **Source of truth:** `kernel/test/test_fix_contracts.c`,
 > `kernel/test/test_mm_contracts.c`, `kernel/test/test_runner.c`,
 > `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
-> `kernel/sync/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
+> `kernel/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
 > `arch/x86-64/sources/arch_mm.c`, `arch/arm64/sources/arch_mm.c`
 
 Spanish: [`../esp/testing/KTEST_FIX_CONTRACTS.md`](../esp/testing/KTEST_FIX_CONTRACTS.md).
 
 `make kernel-tests` boots `kernel-x64-test.bin` and reports through the KTM scenario
-`kernel.ktest`. On 2026-11-03 the suite printed `All 80 test(s) passed` and
+`kernel.ktest`. On 2026-11-05 the suite printed `All 82 test(s) passed` and
 `TEST_END|kernel.ktest|PASS`. The later panic `Failed to load /sbin/init` is
 the test ISO, after that verdict.
 
-Fifteen of those cases live in `kernel/test/test_fix_contracts.c`. They fail
+Sixteen of those cases live in `kernel/test/test_fix_contracts.c`. They fail
 the boot if the behavior below regresses. The COW cases below live in
 `kernel/test/test_mm_contracts.c`. The rest of the suite is older and is not
 listed here.
@@ -48,6 +48,7 @@ bytes; search it with `rg -a`.
 | `unmap_splits_2mb_leaf` | On a private page directory (not the live CR3), unmapping the base of a 2 MiB identity leaf clears that 4 KiB page and leaves the next 4 KiB page mapped. |
 | `map_replaced_frame_is_released` | Replacing a PTE with a different frame drops the old frame's refcount to 0. Rewriting the same frame leaves the refcount at 1. Unmap drops it to 0. |
 | `map_fixed_aborts_when_unmap_fails` | `MAP_FIXED` over two anonymous pages returns `-ENOMEM` when the unmap backend refuses the second page. The first page is no longer mapped. The second page's PTE value is unchanged. |
+| `shmget_metadata_oom_returns_enomem` | With `kmem.alloc` armed to fail once, `sys_shmget` of a private 4 KiB segment returns `-ENOMEM` instead of publishing a half-initialized segment. |
 
 The COW cases are new and live in `kernel/test/test_mm_contracts.c`:
 

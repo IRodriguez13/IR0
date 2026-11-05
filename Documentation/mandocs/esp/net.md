@@ -7,14 +7,14 @@
 | Estado | stable |
 | Depende de | drivers, interrupts, syscalls |
 | Página man | IR0-net (sección 7) |
-| Fuentes principales | `net/net.c`, `net/tcp.c`, `net/{arp,ip,icmp,udp,dhcp,dns}.c`, `kernel/net/sock_stream.c`, `drivers/net/rtl8139.c`, `fs/devfs.c` |
+| Fuentes principales | `net/net.c`, `net/tcp.c`, `net/{arp,ip,icmp,udp,dhcp,dns}.c`, `net/sock_stream.c`, `drivers/net/rtl8139.c`, `fs/devfs.c` |
 
 ## 1. Visión general
 
 IR0 implementa una pila IPv4 en el kernel (Ethernet → ARP → IP → ICMP/UDP/TCP
 wire) con un único driver de NIC (RTL8139). Control y depuración siguen usando
 `/dev/net` y nodos proc. Además, **AF_INET `SOCK_STREAM`** está cableado vía
-`kernel/net/sock_stream.c` a un camino mínimo **TCP wire** en `net/tcp.c`
+`net/sock_stream.c` a un camino mínimo **TCP wire** en `net/tcp.c`
 (`tcp_wire_connect` / listen / accept / send / recv / close).
 
 No es una pila TCP / Internet completa. Hay caminos de laboratorio con
@@ -33,13 +33,13 @@ honesto + EOF en guest (`recv` devuelve 0 tras FIN del peer y RX drenado).
 | ICMP | `net/icmp.c` | Echo request/reply, lista pendiente de ping |
 | UDP | `net/udp.c` | Handlers de puerto para DHCP/DNS |
 | TCP wire | `net/tcp.c` | Handshake SYN/ACK, payload, teardown FIN/ACK, listeners inbound |
-| Stream sockets | `kernel/net/sock_stream.c` | AF_INET SOCK_STREAM → `tcp_wire_*` |
+| Stream sockets | `net/sock_stream.c` | AF_INET SOCK_STREAM → `tcp_wire_*` |
 | DHCP/DNS | `net/dhcp.c`, `net/dns.c` | Cliente DHCP únicamente; resolvedor DNS registro A |
 | NIC | `drivers/net/rtl8139.c` | Probe, anillo TX/RX, hook IRQ |
 | Control | `fs/devfs.c` | `/dev/net` device_id 8, ioctl 0x3001–0x3004 |
 
 Fachada: `includes/ir0/net.h`, `net/tcp.h`. Con `CONFIG_ENABLE_NETWORKING=0`,
-`kernel/net/net_compat.c` proporciona stubs débiles.
+`net/net_compat.c` proporciona stubs débiles.
 
 ## 3. Flujo de datos
 

@@ -1,5 +1,5 @@
 > **Última verificación:** 2026-07-25
-> **Fuente de verdad:** `interrupt/arch/keyboard.c`, `drivers/IO/ps2_mouse.c`, `includes/ir0/ps2_mouse_pkt.c`, `includes/ir0/ps2_set1.c`, `includes/ir0/input_backend.c`
+> **Fuente de verdad:** `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/input/ps2_mouse.c`, `includes/ir0/ps2_mouse_pkt.c`, `includes/ir0/ps2_set1.c`, `includes/ir0/input_backend.c`
 
 # PS/2 keyboard/mouse routing (i8042)
 

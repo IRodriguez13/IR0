@@ -573,6 +573,62 @@ menu "Debugging"
           block.read_eio_once. Uses ir0_block_register; no VFS bypass.
           This mock is test-only and must never be linked into product images.
 
+    config KTM_CONSOLE_MOCK
+        bool "KTM console facade mock (test-only)"
+        depends on KTM
+        default n
+        help
+          Links ktm/mocks/console/ktm_console_mock.c instead of
+          kernel/console_backend.c. Records console output and exercises
+          framebuffer/serial-mirror branches without touching VGA or COM1.
+          Never enable in product images.
+
+    config KTM_INPUT_MOCK
+        bool "KTM input facade mock (test-only)"
+        depends on KTM
+        default n
+        help
+          Links ktm/mocks/input/ktm_input_mock.c instead of
+          drivers/input/input_backend.c. Provides injectable keyboard and
+          mouse state without an i8042 controller. Never enable in products.
+
+    config KTM_VIDEO_MOCK
+        bool "KTM video facade mock (test-only)"
+        depends on KTM
+        default n
+        help
+          Links ktm/mocks/video/ktm_video_mock.c instead of
+          drivers/video/video_backend.c. Provides synthetic mode info and a
+          private framebuffer without VBE. Never enable in products.
+
+    config KTM_AUDIO_MOCK
+        bool "KTM audio facade mock (test-only)"
+        depends on KTM
+        default n
+        help
+          Links ktm/mocks/audio/ktm_audio_mock.c instead of
+          sound/audio_backend.c. Records PCM requests and forces success or
+          failure without an SB16 codec. Never enable in products.
+
+    config KTM_MM_PORT_MOCK
+        bool "KTM MM stats facade mock (test-only)"
+        depends on KTM
+        default n
+        help
+          Links ktm/mocks/mm/ktm_mm_port_mock.c instead of mm/mm_port.c.
+          Supplies deterministic PMM/allocator numbers for /proc tests.
+          Never enable in products.
+
+    config KTM_PLATFORM_MOCK
+        bool "KTM platform power ops mock (test-only)"
+        depends on KTM
+        default n
+        help
+          Links ktm/mocks/platform/ktm_platform_mock.c, a ready-made
+          ir0_platform_ops table that records halt/reboot/poweroff calls.
+          Tests still select it explicitly with ir0_platform_ops_set().
+          Never enable in products.
+
     config KTM_SERIAL_VERBOSE
         bool "KTM verbose serial (CHECKPOINT/PROBE/EV/LOG protocol)"
         depends on KTM

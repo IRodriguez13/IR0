@@ -21,7 +21,7 @@
 #include <ir0/vfs.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 
 extern void epoll_acquire(void *epoll_state);
 extern void epoll_release(void *epoll_state);

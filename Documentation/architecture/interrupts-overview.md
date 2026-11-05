@@ -1,21 +1,19 @@
 # IR0 Interrupt System
 
-This directory contains the complete interrupt handling system for IR0, including IDT management, PIC configuration, and ISR implementations.
+IR0 implements interrupt handling with IDT management, PIC configuration, and ISR
+routing. The x86-64 backend now lives under `arch/x86-64/`; portable code enters
+through `ir0/irq.h`.
 
 ## Components
 
-### Core Files
-- `idt.c/h` - Interrupt Descriptor Table management
-- `pic.c/h` - Programmable Interrupt Controller configuration
-- `isr_handlers.c/h` - Interrupt Service Routine implementations
-
-### Architecture-Specific (`arch/`)
-- `arch/idt.c/h` - Architecture-specific IDT implementation
-- `arch/keyboard.c/h` - Keyboard interrupt handler
-- `arch/isr_handlers.c` - Low-level ISR implementations
-- `arch/pic.c/h` - PIC-specific code
-- `arch/io.h` - I/O port operations for interrupts
-- `arch/x86-64/isr_stubs_64.asm` - Assembly interrupt stubs
+### x86-64 Backend (`arch/x86-64/`)
+- `sources/interrupt/idt.c` / `include/interrupt/idt.h` - Interrupt Descriptor Table
+- `sources/interrupt/pic.c` / `include/interrupt/pic.h` - Programmable Interrupt Controller
+- `sources/interrupt/isr_handlers.c` - Interrupt Service Routine routing
+- `sources/interrupt/keyboard.c` / `include/interrupt/keyboard.h` - Keyboard IRQ handler
+- `include/interrupt/io.h` - I/O port operations for interrupts
+- `asm/interrupt/isr_stubs_64.asm` - Assembly interrupt stubs
+- `asm/interrupt/early_idt_stubs.asm` - Early-boot exception stubs
 
 ## Features
 

@@ -7,14 +7,14 @@
 | Status | stable |
 | Depends on | drivers, interrupts, syscalls |
 | Man page | IR0-net (section 7) |
-| Primary sources | `net/net.c`, `net/tcp.c`, `net/{arp,ip,icmp,udp,dhcp,dns}.c`, `kernel/net/sock_stream.c`, `drivers/net/rtl8139.c`, `fs/devfs.c` |
+| Primary sources | `net/net.c`, `net/tcp.c`, `net/{arp,ip,icmp,udp,dhcp,dns}.c`, `net/sock_stream.c`, `drivers/net/rtl8139.c`, `fs/devfs.c` |
 
 ## 1. Overview
 
 IR0 implements an in-kernel IPv4 stack (Ethernet → ARP → IP → ICMP/UDP/TCP wire)
 with a single NIC driver (RTL8139). Control and debug still use `/dev/net` and
 proc nodes. In addition, **AF_INET `SOCK_STREAM`** is wired through
-`kernel/net/sock_stream.c` onto a minimal **TCP wire** path in `net/tcp.c`
+`net/sock_stream.c` onto a minimal **TCP wire** path in `net/tcp.c`
 (`tcp_wire_connect` / listen / accept / send / recv / close).
 
 This is **not** a full TCP / Internet stack. Lab paths include limited recovery
@@ -33,13 +33,13 @@ and no claim of arbitrary Internet reachability. Wire teardown is honest FIN/ACK
 | ICMP | `net/icmp.c` | Echo request/reply, ping pending list |
 | UDP | `net/udp.c` | Port handlers for DHCP/DNS |
 | TCP wire | `net/tcp.c` | SYN/ACK handshake, payload, FIN/ACK teardown, inbound listeners |
-| Stream sockets | `kernel/net/sock_stream.c` | AF_INET SOCK_STREAM → `tcp_wire_*` |
+| Stream sockets | `net/sock_stream.c` | AF_INET SOCK_STREAM → `tcp_wire_*` |
 | DHCP/DNS | `net/dhcp.c`, `net/dns.c` | Client-only DHCP; DNS A-record resolver |
 | NIC | `drivers/net/rtl8139.c` | Probe, TX/RX ring, IRQ hook |
 | Control | `fs/devfs.c` | `/dev/net` device_id 8, ioctl 0x3001–0x3004 |
 
 Facade: `includes/ir0/net.h`, `net/tcp.h`. When `CONFIG_ENABLE_NETWORKING=0`,
-`kernel/net/net_compat.c` provides weak stubs.
+`net/net_compat.c` provides weak stubs.
 
 ## 3. Data flow
 

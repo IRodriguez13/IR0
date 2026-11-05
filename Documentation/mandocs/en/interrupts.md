@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | boot, drivers, syscalls |
 | Man page | IR0-interrupts (section 7) |
-| Primary sources | `interrupt/arch/{idt,pic,isr_handlers}.c`, `interrupt/arch/x86-64/isr_stubs_64.asm`, `arch/x86-64/asm/syscall_*.asm`, `arch/x86-64/sources/fault.c` |
+| Primary sources | `arch/x86-64/sources/interrupt/{idt,pic,isr_handlers}.c`, `arch/x86-64/asm/interrupt/isr_stubs_64.asm`, `arch/x86-64/asm/syscall_*.asm`, `arch/x86-64/sources/fault.c` |
 
 ## 1. Overview
 
@@ -20,8 +20,8 @@ exceptions map to signals for user tasks or panic for kernel faults.
 
 | Component | Path |
 |-----------|------|
-| IDT | `interrupt/arch/idt.c` — 256 gates, `#DF` uses IST1 |
-| PIC | `interrupt/arch/pic.c` — remap bases 0x20/0x28, mask/unmask, EOI |
+| IDT | `arch/x86-64/sources/interrupt/idt.c` — 256 gates, `#DF` uses IST1 |
+| PIC | `arch/x86-64/sources/interrupt/pic.c` — remap bases 0x20/0x28, mask/unmask, EOI |
 | Stubs | `isr_stubs_64.asm` → `isr_common_stub_64` → `isr_handler64` |
 | Syscall int | `syscall_entry_64.asm` — IDT 0x80 / vector 128 jmp to entry |
 | Syscall insn | `syscall_insn_entry_64.asm` — LSTAR, 8 KiB kstack |
@@ -68,7 +68,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
 
 ## 5. Subsystem boundaries
 
-- Portable code must not `#include <interrupt/arch/...>` — use facades and arch_port.
+- Portable code must not arch interrupt backend headers — use facades and arch_port.
 - Vector 128 handler in C is no-op; real int 0x80 jumps directly to syscall asm.
 - No APIC/IOAPIC primary path — legacy PIC only.
 

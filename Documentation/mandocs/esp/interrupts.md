@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | boot, drivers, syscalls |
 | Página man | IR0-interrupts (sección 7) |
-| Fuentes principales | `interrupt/arch/{idt,pic,isr_handlers}.c`, `interrupt/arch/x86-64/isr_stubs_64.asm`, `arch/x86-64/asm/syscall_*.asm`, `arch/x86-64/sources/fault.c` |
+| Fuentes principales | `arch/x86-64/sources/interrupt/{idt,pic,isr_handlers}.c`, `arch/x86-64/asm/interrupt/isr_stubs_64.asm`, `arch/x86-64/asm/syscall_*.asm`, `arch/x86-64/sources/fault.c` |
 
 ## 1. Visión general
 
@@ -21,8 +21,8 @@ señales para tareas de usuario o panic para fallos en kernel.
 
 | Componente | Ruta |
 |------------|------|
-| IDT | `interrupt/arch/idt.c` — 256 gates, `#DF` usa IST1 |
-| PIC | `interrupt/arch/pic.c` — remap bases 0x20/0x28, mask/unmask, EOI |
+| IDT | `arch/x86-64/sources/interrupt/idt.c` — 256 gates, `#DF` usa IST1 |
+| PIC | `arch/x86-64/sources/interrupt/pic.c` — remap bases 0x20/0x28, mask/unmask, EOI |
 | Stubs | `isr_stubs_64.asm` → `isr_common_stub_64` → `isr_handler64` |
 | Syscall int | `syscall_entry_64.asm` — IDT 0x80 / vector 128 salto a entry |
 | Syscall insn | `syscall_insn_entry_64.asm` — LSTAR, kstack 8 KiB |
@@ -69,7 +69,7 @@ señales para tareas de usuario o panic para fallos en kernel.
 
 ## 5. Límites del subsistema
 
-- El código portable no debe `#include <interrupt/arch/...>` — usar fachadas y arch_port.
+- El código portable no debe cabeceras del backend de interrupciones de arch — usar fachadas y arch_port.
 - Handler vector 128 en C es no-op; el int 0x80 real salta directo al asm syscall.
 - Sin APIC/IOAPIC como path primario — solo PIC legacy.
 
