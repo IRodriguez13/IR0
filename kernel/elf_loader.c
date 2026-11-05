@@ -47,6 +47,7 @@
 #include <ir0/abi/elf_interp_contract.h>
 #include <ir0/errno.h>
 #include <ir0/elf64_image.h>
+#include <ir0/overflow.h>
 #include <errno.h>
 
 #define EXEC_SHEBANG_MAX_DEPTH 4
@@ -161,6 +162,13 @@ typedef struct
 #define ELF_AUXV_PAIRS 16
 #define ELF_AT_RANDOM_BYTES 16
 #define AT_CLKTCK_VALUE 100
+
+static int elf_stack_add_size(size_t *total, size_t add)
+{
+    if (!total || ir0_add_overflow(*total, add, total))
+        return -E2BIG;
+    return 0;
+}
 
 static void elf_trace_argv_contract(process_t *proc, const char *image_path,
                                     const char *stage)
@@ -1044,33 +1052,54 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     
     /* Calculate total stack size needed */
     size_t strings_size = 0;
+    size_t stack_size;
+    size_t stack_available;
     
     /* Calculate argv strings size */
     for (int i = 0; i < argc; i++)
     {
         if (argv[i])
-            strings_size += strlen(argv[i]) + 1;
+        {
+            size_t len = strlen(argv[i]);
+
+            if (len == SIZE_MAX ||
+                elf_stack_add_size(&strings_size, len + 1) != 0)
+                return -E2BIG;
+        }
     }
     
     /* Calculate envp strings size */
     for (int i = 0; i < envc; i++)
     {
         if (envp[i])
-            strings_size += strlen(envp[i]) + 1;
+        {
+            size_t len = strlen(envp[i]);
+
+            if (len == SIZE_MAX ||
+                elf_stack_add_size(&strings_size, len + 1) != 0)
+                return -E2BIG;
+        }
     }
     
     /* Total size: argc slot + argv[] + envp[] + auxv[] + strings + alignment */
-    size_t stack_size = sizeof(uint64_t) +
-                       (argc + 1) * sizeof(uint64_t) +
-                       (envc + 1) * sizeof(uint64_t) +
-                       ELF_AUXV_PAIRS * 2 * sizeof(uint64_t) +
-                       ELF_AT_RANDOM_BYTES +
-                       strings_size +
-                       16;
+    stack_size = sizeof(uint64_t);
+    if (elf_stack_add_size(&stack_size,
+                           (size_t)(argc + 1) * sizeof(uint64_t)) != 0 ||
+        elf_stack_add_size(&stack_size,
+                           (size_t)(envc + 1) * sizeof(uint64_t)) != 0 ||
+        elf_stack_add_size(&stack_size,
+                           (size_t)ELF_AUXV_PAIRS * 2 * sizeof(uint64_t)) != 0 ||
+        elf_stack_add_size(&stack_size, ELF_AT_RANDOM_BYTES) != 0 ||
+        elf_stack_add_size(&stack_size, strings_size) != 0 ||
+        elf_stack_add_size(&stack_size, 16) != 0)
+        return -E2BIG;
     
     /* Leave 256 bytes margin for safety */
     size_t stack_margin = 256;
-    if (stack_size > (process_stack_size(process) - stack_margin))
+    if (process_stack_size(process) <= stack_margin)
+        return -ENOMEM;
+    stack_available = process_stack_size(process) - stack_margin;
+    if (stack_size > stack_available)
     {
         klog_debug_fmt("ELF", "SERIAL: ELF: ERROR - Stack too small for arguments (need %x bytes, have %x)\n", (unsigned)((uint32_t)stack_size), (unsigned)((uint32_t)process_stack_size(process)));
         return -ENOMEM;
