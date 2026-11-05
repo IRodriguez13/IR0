@@ -357,7 +357,7 @@ int clock_set_alarm(uint32_t seconds, clock_alarm_callback_t callback, void *dat
     uint64_t trigger_time = current_time + (seconds * 1000);
     
     /* Allocate alarm structure */
-    clock_alarm_t *alarm = kmalloc(sizeof(clock_alarm_t));
+    clock_alarm_t *alarm = kmalloc_try(sizeof(clock_alarm_t));
     if (!alarm)
     {
         return -1;
@@ -668,4 +668,3 @@ void clock_cancel_all_alarms(void)
     clock_state.alarms = NULL;
     clock_state.alarm_count = 0;
 }
-

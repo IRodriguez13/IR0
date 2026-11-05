@@ -799,7 +799,7 @@ int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
     }
     
     /* Create new interface IP entry */
-    if_ip = kmalloc(sizeof(struct arp_interface_ip));
+    if_ip = kmalloc_try(sizeof(struct arp_interface_ip));
     if (!if_ip)
     {
         arp_irq_restore(flags);
