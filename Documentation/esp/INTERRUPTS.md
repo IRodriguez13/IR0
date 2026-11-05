@@ -17,10 +17,10 @@ excepciones con senales hacia procesos.
 
 ## Componentes Base
 
-- Setup/carga de IDT en `interrupt/arch/idt.c`.
-- Setup de PIC y manejo IRQ mask/unmask en `interrupt/arch/pic.c`.
+- Setup/carga de IDT en `arch/x86-64/sources/interrupt/idt.c`.
+- Setup de PIC y manejo IRQ mask/unmask en `arch/x86-64/sources/interrupt/pic.c`.
 - Stubs ISR en assembly de arquitectura.
-- Routing y handlers en `interrupt/arch/isr_handlers.c`.
+- Routing y handlers en `arch/x86-64/sources/interrupt/isr_handlers.c`.
 
 ## Comportamiento Runtime
 

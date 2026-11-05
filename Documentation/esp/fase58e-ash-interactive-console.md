@@ -65,7 +65,7 @@ En espera bloqueada: `sched_schedule_next()` → si sigue BLOCKED →
 | Área | Archivo |
 |------|---------|
 | TTY / espera | `includes/ir0/console.c` |
-| Teclado | `interrupt/arch/keyboard.c` |
+| Teclado | `arch/x86-64/sources/interrupt/keyboard.c` |
 | Syscalls | `kernel/syscalls.c` |
 | PID 1 | `setup/pid1/irinit.c` |
 | BusyBox | `setup/busybox/fase50_minimal.config` |

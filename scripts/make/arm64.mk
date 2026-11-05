@@ -155,6 +155,11 @@ ARM64_BOOT_LINK_OBJS = \
 	build/arm64-boot/early_io.o \
 	build/arm64-boot/early_vfs.o \
 	build/arm64-boot/early_rootfs.o \
+	build/arm64-boot/early_rootfs_state.o \
+	build/arm64-boot/early_rootfs_ipc.o \
+	build/arm64-boot/early_rootfs_socket.o \
+	build/arm64-boot/early_rootfs_file.o \
+	build/arm64-boot/early_rootfs_meta.o \
 	build/arm64-boot/ramtab.o \
 	build/arm64-boot/early_anonfd.o \
 	build/arm64-boot/early_unix.o \
@@ -265,12 +270,12 @@ arm64-all-objs-probe: arm64-portable-compile
 		rm -f $(HOST_TMP)/ir0-arm64-probe-$$$$.o; \
 	done; \
 	if [ $$fail -eq 0 ]; then \
-		for src in kernel/main.c kernel/lib/open_flags.c \
+		for src in kernel/main.c fs/open_flags.c \
 			kernel/errno.c kernel/process/credentials.c \
 			sched/switch/switch_arm64.c \
 			kernel/time/clock_wait.c kernel/driver_registry.c \
-			kernel/lib/copy_user.c \
-			kernel/lib/logging.c kernel/futex.c \
+			mm/copy_user.c \
+			kernel/logging.c kernel/futex.c \
 			net/net_compat.c; do \
 			echo "  CC      $$src (KERNEL probe)"; \
 			if ! aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
@@ -308,18 +313,24 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/bcm2836_irq.c arch/arm64/sources/bcm2836_irq.h \
 		arch/arm64/sources/irq_backend.c arch/arm64/sources/irq_backend.h \
 		arch/arm64/sources/syscall_decode.c includes/ir0/syscall_id.h \
-		kernel/lib/syscall_table.c includes/ir0/syscall_table.h \
+		kernel/syscalls/syscall_table.c includes/ir0/syscall_table.h \
 		kernel/syscalls/early_dispatch.c includes/ir0/early_syscall.h \
 		kernel/syscalls/early_time.c includes/ir0/early_time.h \
 		kernel/syscalls/early_io.c includes/ir0/early_io.h \
 		kernel/syscalls/early_vfs.c includes/ir0/early_vfs.h \
 		kernel/syscalls/early_rootfs.c includes/ir0/early_rootfs.h \
+		kernel/syscalls/early_rootfs_internal.h \
+		kernel/syscalls/early_rootfs_state.c \
+		kernel/syscalls/early_rootfs_ipc.c \
+		kernel/syscalls/early_rootfs_socket.c \
+		kernel/syscalls/early_rootfs_file.c \
+		kernel/syscalls/early_rootfs_meta.c \
 		fs/ramtab.c includes/ir0/ramtab.h includes/ir0/product_path.h \
 		ipc/early_anonfd.c includes/ir0/early_anonfd.h \
 		ipc/early_unix.c includes/ir0/early_unix.h \
 		ipc/product_ipc.c includes/ir0/product_ipc.h \
 		fs/vfs_dispatch.c includes/ir0/vfs_dispatch.h \
-		kernel/lib/early_elf_stack.c includes/ir0/early_elf_stack.h \
+		kernel/early_elf_stack.c includes/ir0/early_elf_stack.h \
 		kernel/syscalls/early_process.c includes/ir0/early_process.h \
 		includes/ir0/clone.h \
 		kernel/syscalls/early_mm.c includes/ir0/early_mm.h \
@@ -340,7 +351,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		arch/arm64/sources/virtio_blk_early.c arch/arm64/sources/virtio_blk_early.h \
 		arch/arm64/sources/virtio_net_early.c arch/arm64/sources/virtio_net_early.h \
 		drivers/virtio/virtio_mmio.c includes/ir0/virtio_mmio.h \
-		kernel/lib/blockdev.c includes/ir0/blockdev.h \
+		block/blockdev.c includes/ir0/blockdev.h \
 		sched/sched.c sched/runqueue_lock.c sched/sched_switch.c sched/rr_sched.c \
 		kernel/process/registry_lock.c \
 		kernel/cpu_topology.c kernel/percpu.c \
@@ -396,9 +407,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  CC      arch/arm64/sources/syscall_decode.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/syscall_decode.c -o arch/arm64/sources/syscall_decode.o
-	@echo "  CC      kernel/lib/syscall_table.c (semantic dispatch)"
+	@echo "  CC      kernel/syscalls/syscall_table.c (semantic dispatch)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
-		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/lib/syscall_table.c \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/syscall_table.c \
 		-o build/arm64-boot/syscall_table.o
 	@echo "  CC      kernel/syscalls/early_dispatch.c (staged semantic dispatch)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
@@ -420,6 +431,26 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs.c \
 		-o build/arm64-boot/early_rootfs.o
+	@echo "  CC      kernel/syscalls/early_rootfs_state.c (shared rootfs state)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs_state.c \
+		-o build/arm64-boot/early_rootfs_state.o
+	@echo "  CC      kernel/syscalls/early_rootfs_ipc.c (early pipes/eventfd/timerfd/epoll)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs_ipc.c \
+		-o build/arm64-boot/early_rootfs_ipc.o
+	@echo "  CC      kernel/syscalls/early_rootfs_socket.c (early AF_UNIX sockets)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs_socket.c \
+		-o build/arm64-boot/early_rootfs_socket.o
+	@echo "  CC      kernel/syscalls/early_rootfs_file.c (early file I/O)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs_file.c \
+		-o build/arm64-boot/early_rootfs_file.o
+	@echo "  CC      kernel/syscalls/early_rootfs_meta.c (early metadata/landlock)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/syscalls/early_rootfs_meta.c \
+		-o build/arm64-boot/early_rootfs_meta.o
 	@echo "  CC      fs/ramtab.c (path table for staged names)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c fs/ramtab.c \
@@ -440,9 +471,9 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c fs/vfs_dispatch.c \
 		-o build/arm64-boot/vfs_dispatch.o
-	@echo "  CC      kernel/lib/early_elf_stack.c (staged SysV ELF stack)"
+	@echo "  CC      kernel/early_elf_stack.c (staged SysV ELF stack)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
-		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/lib/early_elf_stack.c \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/early_elf_stack.c \
 		-o build/arm64-boot/early_elf_stack.o
 	@echo "  CC      kernel/syscalls/early_process.c (staged Linux process ABI)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
@@ -563,7 +594,7 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		-o build/arm64-boot/sched_trace.o
 	@echo "  CC      arch/arm64/sources/elf_load_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
-		kernel/lib/elf64_image.c -o build/arm64-boot/elf64_image.o
+		kernel/elf64_image.c -o build/arm64-boot/elf64_image.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
 		arch/arm64/sources/elf_image_early.c -o arch/arm64/sources/elf_image_early.o
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -c \
@@ -583,10 +614,10 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c \
 		drivers/virtio/virtio_mmio.c -o drivers/virtio/virtio_mmio.o
-	@echo "  CC      kernel/lib/blockdev.c (portable facade)"
+	@echo "  CC      block/blockdev.c (portable facade)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c \
-		kernel/lib/blockdev.c -o build/arm64-boot/blockdev.o
+		block/blockdev.c -o build/arm64-boot/blockdev.o
 	@echo "  CC      arch/arm64/sources/virtio_blk_early.c"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c \
@@ -665,9 +696,9 @@ ARM64_ALL_PORTABLE_SRCS = \
 	kernel/errno.c \
 	kernel/cpu_topology.c \
 	kernel/percpu.c \
-	kernel/lib/open_flags.c \
-	kernel/lib/copy_user.c \
-	kernel/fd/fd_resource.c \
+	fs/open_flags.c \
+	mm/copy_user.c \
+	fs/fd_resource.c \
 	kernel/futex.c \
 	sched/runqueue_lock.c \
 	kernel/process/registry_lock.c \

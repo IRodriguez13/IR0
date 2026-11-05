@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | interrupts, memory |
 | Página man | IR0-drivers (sección 7) |
-| Fuentes principales | `kernel/driver_registry.c`, `drivers/driver_bootstrap.c`, `drivers/init_drv.c`, `interrupt/arch/pic.c`, `interrupt/arch/isr_handlers.c` |
+| Fuentes principales | `kernel/driver_registry.c`, `drivers/driver_bootstrap.c`, `drivers/init_drv.c`, `arch/x86-64/sources/interrupt/pic.c`, `arch/x86-64/sources/interrupt/isr_handlers.c` |
 
 ## 1. Visión general
 

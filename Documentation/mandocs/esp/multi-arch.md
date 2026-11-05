@@ -30,7 +30,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 | Backends ISA | `arch/*/sources/arch_*.c` | switch, mm, signal, syscall frame, irq_init |
 | sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | uapi Linux en ambas ISA |
 | Interfaz común | `arch/common/arch_interface.c` | Despacho cross-arch |
-| x86-64 | `arch/x86-64/` + `interrupt/arch/` | IDT/PIC impl + userspace |
+| x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | IDT/PIC impl + userspace |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; musl ALL_OBJS BLOCKED |
 | Context switch | `arch_switch_to` → asm/C por ISA | dispatcher en `sched/switch/arch_context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` en Makefile | `ARCH_OBJS_ARM64` incluye `switch_early.S` |

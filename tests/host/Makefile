@@ -45,7 +45,8 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_procfs_linux_abi.c \
 	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c \
-	test_mount_prefix_boundary.c
+	test_mount_prefix_boundary.c \
+	test_backend_mock_contract.c
 TEST_SRCS += test_pmm_banks.c test_boot_memory.c test_no_mmu_policy.c
 TEST_SRCS += test_oom_policy.c
 TEST_SRCS += test_mm_reclaim.c
@@ -80,6 +81,9 @@ KERNEL_HOST_OBJS += host_fd_resource.o
 KERNEL_HOST_OBJS += host_cpu_topology.o
 KERNEL_HOST_OBJS += host_percpu.o
 KERNEL_HOST_OBJS += host_tlb_sync.o
+KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
+	host_ktm_video_mock.o host_ktm_audio_mock.o \
+	host_ktm_mm_port_mock.o host_ktm_platform_mock.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
@@ -126,13 +130,13 @@ host_reclaim.o: $(KERNEL_ROOT)/mm/reclaim.c
 host_pipe_fd_stub.o: host_pipe_fd_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-host_named_fifo.o: $(KERNEL_ROOT)/kernel/lib/named_fifo.c
+host_named_fifo.o: $(KERNEL_ROOT)/fs/named_fifo.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -DIR0_DEBUG_PROC=0 -c -o $@ $<
 
 host_path.o: $(KERNEL_ROOT)/fs/path.c
 	$(KERNEL_CC)
 
-host_mount_prefix.o: $(KERNEL_ROOT)/kernel/lib/mount_prefix.c
+host_mount_prefix.o: $(KERNEL_ROOT)/fs/mount_prefix.c
 	$(KERNEL_CC)
 
 host_arm64_boot_info.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info.c
@@ -148,11 +152,11 @@ host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
 
-host_syscall_table.o: $(KERNEL_ROOT)/kernel/lib/syscall_table.c \
+host_syscall_table.o: $(KERNEL_ROOT)/kernel/syscalls/syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
 	$(KERNEL_CC)
 
-host_fd_resource.o: $(KERNEL_ROOT)/kernel/fd/fd_resource.c
+host_fd_resource.o: $(KERNEL_ROOT)/fs/fd_resource.c
 	$(KERNEL_CC)
 
 host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
@@ -162,6 +166,24 @@ host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
 	$(KERNEL_CC)
 
 host_tlb_sync.o: $(KERNEL_ROOT)/mm/tlb_sync.c
+	$(KERNEL_CC)
+
+host_ktm_console_mock.o: $(KERNEL_ROOT)/ktm/mocks/console/ktm_console_mock.c
+	$(KERNEL_CC)
+
+host_ktm_input_mock.o: $(KERNEL_ROOT)/ktm/mocks/input/ktm_input_mock.c
+	$(KERNEL_CC)
+
+host_ktm_video_mock.o: $(KERNEL_ROOT)/ktm/mocks/video/ktm_video_mock.c
+	$(KERNEL_CC)
+
+host_ktm_audio_mock.o: $(KERNEL_ROOT)/ktm/mocks/audio/ktm_audio_mock.c
+	$(KERNEL_CC)
+
+host_ktm_mm_port_mock.o: $(KERNEL_ROOT)/ktm/mocks/mm/ktm_mm_port_mock.c
+	$(KERNEL_CC)
+
+host_ktm_platform_mock.o: $(KERNEL_ROOT)/ktm/mocks/platform/ktm_platform_mock.c
 	$(KERNEL_CC)
 
 host_arm64_elf_policy.o: $(KERNEL_ROOT)/arch/arm64/sources/elf_policy.c
@@ -195,16 +217,16 @@ test_utsname_abi.o: test_utsname_abi.c \
 	$(KERNEL_ROOT)/includes/ir0/utsname.h
 	$(KERNEL_CC)
 
-host_pipe.o: $(KERNEL_ROOT)/kernel/lib/pipe.c
+host_pipe.o: $(KERNEL_ROOT)/fs/pipe.c
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PROC=0 -c -o $@ $<
 
-host_blockdev.o: $(KERNEL_ROOT)/kernel/lib/blockdev.c
+host_blockdev.o: $(KERNEL_ROOT)/block/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
-host_elf64_image.o: $(KERNEL_ROOT)/kernel/lib/elf64_image.c
+host_elf64_image.o: $(KERNEL_ROOT)/kernel/elf64_image.c
 	$(KERNEL_CC)
 
-host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/lib/early_elf_stack.c
+host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/early_elf_stack.c
 	$(KERNEL_CC)
 
 host_early_mm.o: $(KERNEL_ROOT)/kernel/syscalls/early_mm.c
@@ -216,13 +238,13 @@ host_arch_irq_stub.o: host_arch_irq_stub.c
 host_arch_mm_stub.o: host_arch_mm_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-host_ps2_set1.o: $(KERNEL_ROOT)/kernel/lib/ps2_set1.c
+host_ps2_set1.o: $(KERNEL_ROOT)/drivers/input/ps2_set1.c
 	$(KERNEL_CC)
 
-host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/kernel/lib/ps2_mouse_pkt.c
+host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/drivers/input/ps2_mouse_pkt.c
 	$(KERNEL_CC)
 
-host_rtc_calendar.o: $(KERNEL_ROOT)/kernel/lib/rtc_calendar.c
+host_rtc_calendar.o: $(KERNEL_ROOT)/drivers/rtc/rtc_calendar.c
 	$(KERNEL_CC)
 
 host_matrix_capture.o: $(IR0_USERSPACE_ROOT)/smoke/matrix_capture.c
@@ -237,7 +259,7 @@ test_runner.o: test_runner.c
 test_blockdev_facade.o: test_blockdev_facade.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
-host_open_flags.o: $(KERNEL_ROOT)/kernel/lib/open_flags.c
+host_open_flags.o: $(KERNEL_ROOT)/fs/open_flags.c
 	$(KERNEL_CC)
 
 test_ktm_panic_inventory.o: test_ktm_panic_inventory.c

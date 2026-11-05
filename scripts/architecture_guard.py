@@ -2008,7 +2008,7 @@ def check_common_address_space_contracts():
     contracts = (
         "includes/ir0/memfd.h",
         "includes/ir0/ktm/user_canary.h",
-        "kernel/fd/memfd.c",
+        "mm/memfd.c",
         "ipc/sysv_shm.c",
         "kernel/vdso.c",
         "kernel/process/mm_struct.c",
@@ -2265,6 +2265,27 @@ def check_ktm_mock_boundaries():
                 rel = cfg.relative_to(ROOT)
                 errors.append(
                     f"[ktm-mock-product-config] {rel}:{line_no}: {line.strip()}"
+                )
+
+    # A developer .config may select mocks, but only on top of KTM. Without
+    # KTM the mock object is not linked and the build would silently keep the
+    # production backend, which is exactly the ambiguity the mocks avoid.
+    local_config = ROOT / ".config"
+    if local_config.exists():
+        ktm_enabled = False
+        enabled_mocks = []
+        for line_no, line in enumerate(
+            local_config.read_text(errors="replace").splitlines(), 1
+        ):
+            stripped = line.strip()
+            if stripped == "CONFIG_KTM=y":
+                ktm_enabled = True
+            elif re.match(r"CONFIG_KTM_.*(?:FAKE|MOCK)=y$", stripped):
+                enabled_mocks.append((line_no, stripped))
+        if enabled_mocks and not ktm_enabled:
+            for line_no, symbol in enabled_mocks:
+                errors.append(
+                    f"[ktm-mock-requires-ktm] .config:{line_no}: {symbol}"
                 )
 
     mock_include = re.compile(r'^\s*#\s*include\s*[<\"]ktm_mock_')

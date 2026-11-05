@@ -100,7 +100,7 @@ void test_usercopy_no_raw_user_touch(void)
 
 	TEST_BEGIN("usercopy_no_raw_user_touch");
 
-	ASSERT_EQ(read_file("../../kernel/lib/signals.c", &sig, &sig_len), 0);
+	ASSERT_EQ(read_file("../../kernel/signals.c", &sig, &sig_len), 0);
 	ASSERT(strstr(sig, "memcpy((void *)") == NULL);
 	ASSERT(strstr(sig, "copy_to_user_mm") != NULL);
 

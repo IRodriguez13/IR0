@@ -32,7 +32,7 @@ NEON.
 | sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | Linux uapi on both ISAs (`__reserved[4096]` on aarch64) |
 | Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
-| x86-64 | `arch/x86-64/` + `interrupt/arch/` | boot, IDT/PIC impl, user mode, syscalls |
+| x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | boot, IDT/PIC impl, user mode, syscalls |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; freestanding EL0 smokes |
 | Context switch | `arch_switch_to` → `switch_context_x64` / `switch_context_arm64` | portable dispatcher in `sched/switch/arch_context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | `ARCH_OBJS_ARM64` includes `switch_early.S` |
@@ -92,8 +92,8 @@ NEON.
 |----------|---------------|
 | Scheduler | per-arch switch; first entry via `first_switch_to` |
 | Syscalls | per-arch entry ASM / stub |
-| Interrupts | Product entry: `ir0/irq.h`; impl PIC (x86 `interrupt/arch/`) vs GIC scaffold (arm64) |
-| Drivers | port I/O via `ir0/arch_io.h` (not `interrupt/arch/io.h`) |
+| Interrupts | Product entry: `ir0/irq.h`; impl PIC (x86 `arch/x86-64/sources/interrupt/`) vs GIC scaffold (arm64) |
+| Drivers | port I/O via `ir0/arch_io.h` (not `arch/x86-64/include/interrupt/io.h`) |
 | VFS/procfs | CPU info via `arch_port` |
 
 ## 7. Visual maps
