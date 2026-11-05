@@ -329,7 +329,7 @@ static int32_t rtl8139_hw_init(void)
     for (i = 0; i < 4; i++)
     {
         /* Allocate TX buffer - kmalloc should return aligned memory, but verify */
-        rtl8139_tx_buffers[i] = (uint8_t *)kmalloc(RTL8139_MAX_TX_SIZE);
+        rtl8139_tx_buffers[i] = (uint8_t *)kmalloc_try(RTL8139_MAX_TX_SIZE);
         if (!rtl8139_tx_buffers[i])
         {
             LOG_ERROR("RTL8139", "Failed to allocate TX buffer");

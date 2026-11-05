@@ -190,7 +190,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
      * matches our calculation, the packet is valid. If not, we drop it.
      */
     uint16_t received_checksum = icmp->checksum;
-    uint8_t *icmp_scratch = kmalloc(len);
+    uint8_t *icmp_scratch = kmalloc_try(len);
     uint16_t calculated_checksum;
 
     if (!icmp_scratch)
