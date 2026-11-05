@@ -55,7 +55,7 @@ int bt_device_init(void)
         return ret;
     
     /* Allocate device manager */
-    bt_manager = (struct bt_device_manager *)kmalloc(sizeof(struct bt_device_manager));
+    bt_manager = (struct bt_device_manager *)kmalloc_try(sizeof(struct bt_device_manager));
     if (!bt_manager)
         return -ENOMEM;
     
