@@ -97,7 +97,7 @@ static char *dup_driver_field(const char *src, bool *owned_out)
         return NULL;
 
     len = strlen(src) + 1;
-    copy = (char *)kmalloc(len);
+    copy = (char *)kmalloc_try(len);
     if (!copy)
         return NULL;
     memcpy(copy, src, len);
@@ -221,7 +221,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     }
 
     /* Allocate driver structure */
-    ir0_driver_t* driver = (ir0_driver_t*)kmalloc(sizeof(ir0_driver_t));
+    ir0_driver_t* driver = (ir0_driver_t*)kmalloc_try(sizeof(ir0_driver_t));
 
     if (!driver)
     {

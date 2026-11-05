@@ -332,7 +332,7 @@ int hci_core_init(void)
         return ret;
     
     /* Allocate HCI device structure */
-    hci_dev = (struct hci_device *)kmalloc(sizeof(struct hci_device));
+    hci_dev = (struct hci_device *)kmalloc_try(sizeof(struct hci_device));
     if (!hci_dev)
         return -ENOMEM;
     
