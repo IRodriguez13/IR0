@@ -56,7 +56,8 @@ TEST_SRCS += test_mm_root_slots.c
 # ARM64 firmware contract is pure C and host-testable.
 TEST_SRCS += test_arm64_boot_info.c test_arm64_syscall_decode.c \
 	test_x86_syscall_decode.c
-TEST_SRCS += test_syscall_table.c
+	TEST_SRCS += test_syscall_table.c
+	TEST_SRCS += test_architecture_guard.c
 TEST_SRCS += test_utsname_abi.c
 TEST_SRCS += test_cpu_topology.c
 TEST_SRCS += test_percpu.c

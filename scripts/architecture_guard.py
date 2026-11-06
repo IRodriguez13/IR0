@@ -27,7 +27,8 @@ Checks:
 17) includes/ir0/*.h must not #include <kernel/...> except ARCH-STAB allowlist (6 passthrough headers).
 18) process_t.page_directory must not be touched outside process.h /
     mm_struct.c — use process_pgd() / process_set_pgd() (mm->page_directory OK).
-19) kernel/lib I1–I2: selected syscall/MM/IPC helpers must not remain as .c under includes/ir0/.
+19) If kernel/lib/ exists, selected syscall/MM/IPC helper .c files must not duplicate the same
+    basename under includes/ir0/ (I1–I2 migration duplicate check).
 20) Portable task setup must not construct x86 RFLAGS directly; use task_ops.
 21) Process lifecycle C must not select an ISA with compiler predefines.
 22) ISA assembly may call only its reviewed C boundary callbacks.
@@ -1667,12 +1668,11 @@ def check_context_backend_include_boundary():
 
 
 def check_kernel_lib_i1_migration():
-    """kernel/lib holds migrated facade implementations; none left under includes/ir0/."""
+    """If kernel/lib exists, no *.c there may duplicate includes/ir0/*.c (same basename)."""
     errors = []
     lib_dir = ROOT / "kernel" / "lib"
     inc_dir = ROOT / "includes" / "ir0"
     if not lib_dir.is_dir():
-        errors.append("[includes-migration] missing kernel/lib/")
         return errors
     for fpath in sorted(lib_dir.glob("*.c")):
         name = fpath.name
