@@ -3,7 +3,7 @@
 > **Build-system note (2026-10-29):** this is the historical 0.0.1
 > certification board. `make release-0.0.1*`, `make linux-abi-audit`, and
 > `make smoke-*` are no longer build targets. Current gates: `make ctr`,
-> `make agent-fast`, `make ktest`, `make build-matrix-min`.
+> `make agent-fast`, `make kernel-tests`, `make build-matrix-min`.
 
 > **Last verified:** 2026-09-22  
 > **Source of truth:** `python3 scripts/linux_abi_audit.py`,
