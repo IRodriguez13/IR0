@@ -15,6 +15,7 @@
 #include "test/ktest_harness.h"
 #include "syscalls.h"
 #include "../errno.h"
+#include "../../drivers/storage/partition.h"
 #include "../../fs/devfs_internal.h"
 #include "../../fs/tmpfs.h"
 #include <config.h>
@@ -901,27 +902,14 @@ static const struct ir0_block_ops ktest_disk_ops = {
 	.flush = NULL,
 };
 
-/*
- * /dev/hd* I/O is byte-addressed. The backend is sector-addressed, so the
- * devfs layer must preserve the intra-sector offset and perform
- * read-modify-write for short writes instead of touching whole sectors.
- */
-void ktest_devfs_disk_unaligned_contract(void)
+static const char *ktest_disk_register(uint8_t *disk_id_out,
+				       uint64_t sector_count,
+				       uint32_t max_sectors_per_io)
 {
 	static struct ir0_block_device dev;
-	devfs_disk_ctx_t ctx;
-	devfs_entry_t entry;
-	uint8_t before[sizeof(ktest_disk_data)];
-	uint8_t pattern[600];
-	uint8_t out[700];
-	const char *name = NULL;
-	uint8_t disk_id = 0;
-	int64_t n;
-	int rc;
+	uint8_t d;
 
-	KTEST_BEGIN("devfs_disk_unaligned_contract");
-
-	for (uint8_t d = 1; d < 4; d++)
+	for (d = 1; d < 4; d++)
 	{
 		const char *candidate = ir0_block_legacy_name(d);
 
@@ -930,17 +918,37 @@ void ktest_devfs_disk_unaligned_contract(void)
 		memset(&dev, 0, sizeof(dev));
 		dev.ops = &ktest_disk_ops;
 		dev.info.sector_size = KTEST_DISK_SECTOR_SIZE;
-		dev.info.max_sectors_per_io = 2;
-		dev.info.sector_count = KTEST_DISK_SECTORS;
+		dev.info.max_sectors_per_io = max_sectors_per_io;
+		dev.info.sector_count = sector_count;
 		strncpy(dev.info.name, candidate, IR0_BLOCKDEV_NAME_MAX - 1);
-		rc = ir0_block_register(&dev);
-		if (rc == 0)
+		if (ir0_block_register(&dev) == 0)
 		{
-			name = candidate;
-			disk_id = d;
-			break;
+			*disk_id_out = d;
+			return candidate;
 		}
 	}
+	return NULL;
+}
+
+/*
+ * /dev/hd* I/O is byte-addressed. The backend is sector-addressed, so the
+ * devfs layer must preserve the intra-sector offset and perform
+ * read-modify-write for short writes instead of touching whole sectors.
+ */
+void ktest_devfs_disk_unaligned_contract(void)
+{
+	devfs_disk_ctx_t ctx;
+	devfs_entry_t entry;
+	uint8_t before[sizeof(ktest_disk_data)];
+	uint8_t pattern[600];
+	uint8_t out[700];
+	const char *name = NULL;
+	uint8_t disk_id = 0;
+	int64_t n;
+
+	KTEST_BEGIN("devfs_disk_unaligned_contract");
+
+	name = ktest_disk_register(&disk_id, KTEST_DISK_SECTORS, 2);
 	KASSERT(name != NULL);
 	KASSERT(disk_id >= 1 && disk_id <= 3);
 	if (!name)
@@ -1003,6 +1011,157 @@ void ktest_devfs_disk_unaligned_contract(void)
 	memset(out, 0, sizeof(out));
 	n = dev_disk_read(&entry, out, 16, KTEST_DISK_SECTORS * 512);
 	KASSERT_EQ(n, 0);
+
+	KTEST_END();
+}
+
+#define KTEST_DISK_HUGE_SECTORS \
+	((UINT64_MAX / KTEST_DISK_SECTOR_SIZE) + 1u)
+
+struct ktest_disk_sector_req {
+	uint8_t drive;
+	uint32_t lba;
+	void *buffer;
+};
+
+struct ktest_disk_geometry_req {
+	uint8_t drive;
+	uint64_t *size_sectors;
+	uint64_t *size_bytes;
+};
+
+/*
+ * The legacy DISK_* ioctls address sectors relative to the opened node.
+ * A partition node must never reach the sectors of the next partition, and
+ * the ATA backend truncates LBAs to 32 bits, so a partition that starts
+ * above that window must be rejected instead of wrapping to disk sector 0.
+ */
+void ktest_devfs_disk_ioctl_bounds_contract(void)
+{
+	devfs_disk_ctx_t part_ctx;
+	devfs_disk_ctx_t whole_ctx;
+	devfs_disk_ctx_t bogus_ctx;
+	devfs_entry_t part_entry;
+	devfs_entry_t whole_entry;
+	devfs_entry_t bogus_entry;
+	partition_info_t pinfo;
+	struct ktest_disk_sector_req req;
+	struct ktest_disk_geometry_req geom;
+	uint8_t sector[KTEST_DISK_SECTOR_SIZE];
+	uint8_t pattern[KTEST_DISK_SECTOR_SIZE];
+	uint8_t disk_id = 0;
+	const char *name;
+	uint64_t sectors = 0;
+	uint64_t bytes = 0;
+	mbr_t *mbr;
+
+	KTEST_BEGIN("devfs_disk_ioctl_bounds_contract");
+
+	name = ktest_disk_register(&disk_id, KTEST_DISK_HUGE_SECTORS, 2);
+	KASSERT(name != NULL);
+	if (!name)
+	{
+		KTEST_END();
+		return;
+	}
+
+	/* Four real data sectors; the declared size only feeds geometry. */
+	for (size_t i = 0; i < sizeof(ktest_disk_data); i++)
+		ktest_disk_data[i] = (uint8_t)(i * 7u + 3u);
+	memset(ktest_disk_data, 0, KTEST_DISK_SECTOR_SIZE);
+	mbr = (mbr_t *)ktest_disk_data;
+	mbr->partitions[0].system_id = 0x83;
+	mbr->partitions[0].start_lba = 1;
+	mbr->partitions[0].total_sectors = 2;
+	mbr->partitions[1].system_id = 0x83;
+	mbr->partitions[1].start_lba = 0xFFFFFFFFu;
+	mbr->partitions[1].total_sectors = 2;
+	mbr->signature = 0xAA55;
+
+	KASSERT_EQ(read_partition_table(disk_id), 0);
+	memset(&pinfo, 0, sizeof(pinfo));
+	KASSERT_EQ(get_partition_info(disk_id, 0, &pinfo), 0);
+	KASSERT_EQ(pinfo.start_lba, (uint64_t)1);
+	KASSERT_EQ(pinfo.total_sectors, (uint64_t)2);
+
+	memset(&part_ctx, 0, sizeof(part_ctx));
+	part_ctx.disk_id = disk_id;
+	part_ctx.partition_number = 0;
+	memset(&part_entry, 0, sizeof(part_entry));
+	part_entry.device_id = DEVFS_DISK_BASE_ID + disk_id;
+	part_entry.driver_data = &part_ctx;
+
+	/* Partition LBA 0 maps to disk LBA 1, not disk LBA 0. */
+	memset(sector, 0, sizeof(sector));
+	req.drive = 0;
+	req.lba = 0;
+	req.buffer = sector;
+	KASSERT_EQ(dev_disk_ioctl(&part_entry, DISK_READ_SECTOR, &req),
+		   (int64_t)512);
+	KASSERT_EQ(memcmp(sector, ktest_disk_data + 512, 512), 0);
+
+	/* One sector past the partition must not reach disk sector 3. */
+	req.lba = 2;
+	KASSERT_EQ(dev_disk_ioctl(&part_entry, DISK_READ_SECTOR, &req),
+		   (int64_t)-1);
+
+	/* The write variant must fail before touching the neighbour sector. */
+	memset(pattern, 0x77, sizeof(pattern));
+	memcpy(sector, ktest_disk_data + 3 * 512, 512);
+	req.buffer = pattern;
+	KASSERT_EQ(dev_disk_ioctl(&part_entry, DISK_WRITE_SECTOR, &req),
+		   (int64_t)-1);
+	KASSERT_EQ(memcmp(ktest_disk_data + 3 * 512, sector, 512), 0);
+
+	/* A partition above the 32-bit window must not wrap to sector 0. */
+	memset(&pinfo, 0, sizeof(pinfo));
+	KASSERT_EQ(get_partition_info(disk_id, 1, &pinfo), 0);
+	part_ctx.partition_number = 1;
+	memset(sector, 0, sizeof(sector));
+	req.lba = 1;
+	req.buffer = sector;
+	KASSERT_EQ(dev_disk_ioctl(&part_entry, DISK_READ_SECTOR, &req),
+		   (int64_t)-1);
+
+	/* A partition entry that no longer resolves must fail closed. */
+	memset(&bogus_ctx, 0, sizeof(bogus_ctx));
+	bogus_ctx.disk_id = disk_id;
+	bogus_ctx.partition_number = 7;
+	memset(&bogus_entry, 0, sizeof(bogus_entry));
+	bogus_entry.device_id = DEVFS_DISK_BASE_ID + disk_id;
+	bogus_entry.driver_data = &bogus_ctx;
+	req.drive = disk_id;
+	req.lba = 0;
+	req.buffer = sector;
+	KASSERT_EQ(dev_disk_ioctl(&bogus_entry, DISK_READ_SECTOR, &req),
+		   (int64_t)-1);
+
+	/* Partition geometry reports the partition extent. */
+	memset(&part_ctx, 0, sizeof(part_ctx));
+	part_ctx.disk_id = disk_id;
+	part_ctx.partition_number = 0;
+	part_entry.driver_data = &part_ctx;
+	geom.drive = 0;
+	geom.size_sectors = &sectors;
+	geom.size_bytes = &bytes;
+	KASSERT_EQ(dev_disk_ioctl(&part_entry, DISK_GET_GEOMETRY, &geom),
+		   (int64_t)0);
+	KASSERT_EQ(sectors, (uint64_t)2);
+	KASSERT_EQ(bytes, (uint64_t)(2 * KTEST_DISK_SECTOR_SIZE));
+
+	/* Byte geometry saturates instead of wrapping past UINT64_MAX. */
+	memset(&whole_ctx, 0, sizeof(whole_ctx));
+	whole_ctx.disk_id = disk_id;
+	whole_ctx.is_whole = 1;
+	memset(&whole_entry, 0, sizeof(whole_entry));
+	whole_entry.device_id = DEVFS_DISK_BASE_ID + disk_id;
+	whole_entry.driver_data = &whole_ctx;
+	sectors = 0;
+	bytes = 0;
+	KASSERT_EQ(dev_disk_ioctl(&whole_entry, DISK_GET_GEOMETRY, &geom),
+		   (int64_t)0);
+	KASSERT_EQ(sectors, KTEST_DISK_HUGE_SECTORS);
+	KASSERT_EQ(bytes, UINT64_MAX);
 
 	KTEST_END();
 }

@@ -419,6 +419,28 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     }
 }
 
+/*
+ * Legacy DISK_* ioctls take a 32-bit sector number relative to the opened
+ * node.  A partition node must reject anything past its extent, and the
+ * absolute LBA must stay inside the 32-bit window that legacy backends
+ * (notably ATA) truncate to.
+ */
+static int devfs_disk_ioctl_lba(uint64_t start_lba, uint64_t total_sectors,
+                                uint32_t req_lba, uint32_t *out_lba)
+{
+    uint64_t lba;
+
+    if (!out_lba)
+        return -1;
+    if ((uint64_t)req_lba >= total_sectors)
+        return -1;
+    lba = start_lba + (uint64_t)req_lba;
+    if (lba > UINT32_MAX)
+        return -1;
+    *out_lba = (uint32_t)lba;
+    return 0;
+}
+
 int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     uint8_t disk_id = 0;
@@ -436,9 +458,13 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
     if (have_disk_ctx)
     {
+        /*
+         * Fail closed: an unreadable partition entry must not fall back to
+         * the caller-supplied drive and reach the whole disk instead.
+         */
         if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
-            have_disk_ctx = 0;
-        else if (!is_whole)
+            return -1;
+        if (!is_whole)
         {
             part_start_lba = pinfo.start_lba;
             part_sectors = pinfo.total_sectors;
@@ -460,9 +486,11 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : req->drive;
                     const char *disk_name = ir0_block_legacy_name(d);
-                    uint32_t lba = (uint32_t)req->lba;
-                    if (have_disk_ctx && !is_whole)
-                        lba = (uint32_t)(part_start_lba + req->lba);
+                    uint32_t lba = req->lba;
+                    if (have_disk_ctx && !is_whole &&
+                        devfs_disk_ioctl_lba(part_start_lba, part_sectors,
+                                             req->lba, &lba) != 0)
+                        return -1;
                     if (disk_name && ir0_block_name_is_present(disk_name) &&
                         ir0_block_read_by_name(disk_name, lba, 1, req->buffer) == 0)
                         return 512;
@@ -483,9 +511,11 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : req->drive;
                     const char *disk_name = ir0_block_legacy_name(d);
-                    uint32_t lba = (uint32_t)req->lba;
-                    if (have_disk_ctx && !is_whole)
-                        lba = (uint32_t)(part_start_lba + req->lba);
+                    uint32_t lba = req->lba;
+                    if (have_disk_ctx && !is_whole &&
+                        devfs_disk_ioctl_lba(part_start_lba, part_sectors,
+                                             req->lba, &lba) != 0)
+                        return -1;
                     if (disk_name && ir0_block_name_is_present(disk_name) &&
                         ir0_block_write_by_name(disk_name, lba, 1, req->buffer) == 0)
                         return 512;
@@ -510,10 +540,13 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                         return -1;
                     uint64_t sectors =
                         (have_disk_ctx && !is_whole) ? part_sectors : ir0_block_sector_count_by_name(disk_name);
+                    uint64_t bytes = sectors > UINT64_MAX / 512u
+                                         ? UINT64_MAX
+                                         : sectors * 512u;
                     if (geom->size_sectors)
                         *geom->size_sectors = sectors;
                     if (geom->size_bytes)
-                        *geom->size_bytes = sectors * 512;
+                        *geom->size_bytes = bytes;
                     return 0;
                 }
             }

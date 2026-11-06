@@ -93,6 +93,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_block_hda_read_contract, "block_hda_read_contract", 1 },
 	{ ktest_devfs_disk_unaligned_contract,
 	  "devfs_disk_unaligned_contract", 1 },
+	{ ktest_devfs_disk_ioctl_bounds_contract,
+	  "devfs_disk_ioctl_bounds_contract", 1 },
 	{ ktest_cred_access_contract, "cred_access_contract", 1 },
 	{ ktest_devfs_hci_open_contract, "devfs_hci_open_contract", 1 },
 	{ ktest_mmap_null_placement, "mmap_null_placement", 1 },

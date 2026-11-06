@@ -11,7 +11,7 @@
 Canónico en inglés: [`../../testing/KTEST_FIX_CONTRACTS.md`](../../testing/KTEST_FIX_CONTRACTS.md).
 
 `make kernel-tests` arranca `kernel-x64-test.bin` y reporta por el escenario KTM
-`kernel.ktest`. El 2026-11-05 la suite imprimió `All 83 test(s) passed` y
+`kernel.ktest`. El 2026-11-05 la suite imprimió `All 84 test(s) passed` y
 `TEST_END|kernel.ktest|PASS`. El pánico posterior `Failed to load /sbin/init`
 es el ISO de test, después de ese veredicto.
 
@@ -63,6 +63,7 @@ El caso de dispositivo de bloque vive en `kernel/test/test_debug_contracts.c`:
 | Nombre KTAP | Qué significa un pass |
 |-------------|------------------------|
 | `devfs_disk_unaligned_contract` | `/dev/hd*` conserva el offset de byte dentro del sector. Una lectura en offset 1 devuelve los bytes 1..512; una escritura de 4 bytes en offset 3 cambia solo esos bytes; una escritura de 600 bytes en offset 500 cambia solo ese rango. Las lecturas se recortan al tamaño del dispositivo. |
+| `devfs_disk_ioctl_bounds_contract` | Los ioctls legacy `DISK_*` sobre una partición rechazan sectores fuera de su extent, nunca truncan el LBA absoluto hacia el inicio del disco, fallan cerrado cuando la entrada de partición no se resuelve y saturan los bytes de geometría en lugar de desbordar. |
 
 Un double free paniquea el guest antes de que la suite imprima su veredicto,
 así que una regresión falla todo el run de `make kernel-tests`.
