@@ -391,6 +391,7 @@ static int simplefs_mount_common(const char *fs_name, const char *dev, const cha
 {
     char mount_norm[256];
     simplefs_store_t *store;
+    simplefs_mount_t *slot = NULL;
     int blk_rc;
 
     if (!dir || !fs_name)
@@ -401,33 +402,34 @@ static int simplefs_mount_common(const char *fs_name, const char *dev, const cha
         return blk_rc;
 
     simplefs_normalize_mount(dir, mount_norm, sizeof(mount_norm));
-    store = simplefs_get_or_create_store(fs_name, dev ? dev : "none", strict_83_names);
-    if (!store)
-        return -ENOMEM;
 
     for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
     {
         if (g_mounts[i].in_use && strcmp(g_mounts[i].mount_path, mount_norm) == 0)
             return -EBUSY;
+        if (!g_mounts[i].in_use && !slot)
+            slot = &g_mounts[i];
     }
 
-    for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
-    {
-        if (g_mounts[i].in_use)
-            continue;
-        memset(&g_mounts[i], 0, sizeof(g_mounts[i]));
-        g_mounts[i].in_use = 1;
-        g_mounts[i].store = store;
-        strncpy(g_mounts[i].fs_name, fs_name, sizeof(g_mounts[i].fs_name) - 1);
-        g_mounts[i].fs_name[sizeof(g_mounts[i].fs_name) - 1] = '\0';
-        strncpy(g_mounts[i].mount_path, mount_norm, sizeof(g_mounts[i].mount_path) - 1);
-        g_mounts[i].mount_path[sizeof(g_mounts[i].mount_path) - 1] = '\0';
-        if (store)
-            store->mount_refcount++;
-        return 0;
-    }
+    /* Do not allocate a store until a mount slot is definitely available.
+     * Otherwise EBUSY/ENOSPC leaves an unowned store in the global registry. */
+    if (!slot)
+        return -ENOSPC;
 
-    return -ENOSPC;
+    store = simplefs_get_or_create_store(fs_name, dev ? dev : "none", strict_83_names);
+    if (!store)
+        return -ENOMEM;
+
+    memset(slot, 0, sizeof(*slot));
+    slot->in_use = 1;
+    slot->store = store;
+    strncpy(slot->fs_name, fs_name, sizeof(slot->fs_name) - 1);
+    slot->fs_name[sizeof(slot->fs_name) - 1] = '\0';
+    strncpy(slot->mount_path, mount_norm, sizeof(slot->mount_path) - 1);
+    slot->mount_path[sizeof(slot->mount_path) - 1] = '\0';
+    store->mount_refcount++;
+    return 0;
+
 }
 
 static simplefs_mount_t *simplefs_context_mount(const char *fs_name, const char *path, char *name, int *is_root, int *rc)
