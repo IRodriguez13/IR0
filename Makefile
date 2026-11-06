@@ -248,7 +248,9 @@ all: $(DEFAULT_BUILD_TARGET)
 # Only includes/uapi leaves the kernel tree: a userspace package that needs a
 # private kernel header is a broken boundary, not a missing include path.
 UAPI_DIR = $(KERNEL_ROOT)/includes/uapi
-DESTDIR ?= $(KERNEL_ROOT)
+# Default: staged under build/ (ignored) so the repo root is not littered with
+# usr/include. Override with DESTDIR=/ for a FHS-style system install.
+DESTDIR ?= $(KERNEL_ROOT)/build/uapi-install
 
 headers_install:
 	@mkdir -p $(DESTDIR)/usr/include
@@ -1616,7 +1618,7 @@ help:
 	@echo "  make analyze                 cppcheck on kernel trees when installed"
 	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
 	@echo "  make unibuild FILE=fs/tmpfs.c"
-	@echo "  make headers_install         Export includes/uapi to DESTDIR"
+	@echo "  make headers_install         Export includes/uapi to DESTDIR (default: build/uapi-install)"
 	@echo "  make create-disk [FS=minix] [SIZE=200]"
 	@echo "  make delete-disk | disk-reset | load-init"
 	@echo ""

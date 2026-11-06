@@ -97,9 +97,11 @@ nohup.out
 arch/x86-64/asm/interrupt/isr_stubs_64.asm
 toolchain/
 
-# Default headers_install output
-/usr/
+# headers_install default output (Makefile: DESTDIR=build/uapi-install)
+build/uapi-install/
 
+# Legacy: older defaults dumped usr/include at repo root
+/usr/
 
 # Product rootfs rebuild stamps (ISD drives the real build).
 *.runit.stamp

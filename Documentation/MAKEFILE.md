@@ -198,7 +198,7 @@ exist. `make test` opens the picker; `SUITE=<id>` runs suites non-interactively.
 | `make build-graph-audit` | Audit the generated build graph |
 | `make unibuild FILE=<file.c>` | Compile translation units in isolation |
 | `make unibuild-cpp` / `unibuild-rust` / `unibuild-clean` | Other isolated compiler modes |
-| `make headers_install` | Export `includes/uapi` to `DESTDIR` |
+| `make headers_install` | Export `includes/uapi` to `DESTDIR/usr/include` (default: `build/uapi-install`) |
 | `make check-env` | Host environment diagnostic (`scripts/deptest.sh`) |
 
 ### Utilities

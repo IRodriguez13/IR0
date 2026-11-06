@@ -71,8 +71,10 @@ fuentes, y la imagen de usuarios con ISD tras cambiar usuarios.
 | `IR0/IR0_ISD_INTERFACE` | IR0 | Versión de integración (`VERSION=1`) + adapters requeridos |
 | `ISD/IR0_ISD_INTERFACE_SUPPORTED` | ISD | Versión máxima soportada por ese checkout |
 
-IR0 exporta UAPI con `make headers_install DESTDIR=…`; un build externo de
-usuarios consume esa exportación. ISD valida la versión antes de empaquetar.
+IR0 exporta UAPI con `make headers_install` (por defecto:
+`build/uapi-install/usr/include`; se puede sobreescribir con `DESTDIR=…`). Un
+build externo de usuarios consume esa exportación. ISD valida la versión antes
+de empaquetar.
 
 ## Capas de configuración
 

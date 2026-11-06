@@ -24,7 +24,7 @@ make run DISK=../ISD/out/x86_64/images/minimal/disk.img
 | Env / target | Role |
 |--------------|------|
 | `DISK=…` | Attach an ISD-built raw disk to `make run` |
-| `make headers_install` | Export `includes/uapi/` for external userspace builds |
+| `make headers_install` | Export `includes/uapi/` to `build/uapi-install/usr/include` (override `DESTDIR`) |
 | `IR0_ISD_ROOT` | Conventional path to ISD (documentation/tooling only) |
 | `IR0_USERSPACE_ROOT` | **Deprecated** alias of `IR0_ISD_ROOT` |
 

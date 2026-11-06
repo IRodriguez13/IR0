@@ -73,9 +73,10 @@ changes, and rebuild the userspace image with ISD after userspace changes.
 | `IR0/IR0_ISD_INTERFACE` | IR0 | Published integration version (`VERSION=1`) + required adapter scripts |
 | `ISD/IR0_ISD_INTERFACE_SUPPORTED` | ISD | Maximum interface version this ISD checkout supports |
 
-IR0 exports UAPI with `make headers_install DESTDIR=…`; an external userspace
-build consumes that export. ISD checks the interface version before building
-packages. The kernel must not name BusyBox or other user programs.
+IR0 exports UAPI with `make headers_install` (default install tree:
+`build/uapi-install/usr/include`, overridable with `DESTDIR=…`). An external
+userspace build consumes that export. ISD checks the interface version before
+building packages. The kernel must not name BusyBox or other user programs.
 
 ## Configuration layers
 
