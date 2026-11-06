@@ -16,6 +16,30 @@ typedef struct devfs_disk_ctx {
     uint8_t partition_number;
 } devfs_disk_ctx_t;
 
+static size_t devfs_disk_sectors_for_count(size_t count)
+{
+    return count / 512 + (count % 512 != 0);
+}
+
+/* Legacy block backends take a 32-bit LBA.  Never let a wider devfs offset
+ * wrap into an unrelated sector when it crosses that backend boundary. */
+static void devfs_disk_clamp_u32_lba(uint64_t start_lba, size_t *num_sectors)
+{
+    uint64_t available;
+
+    if (!num_sectors)
+        return;
+    if (start_lba > UINT32_MAX)
+    {
+        *num_sectors = 0;
+        return;
+    }
+
+    available = (uint64_t)UINT32_MAX - start_lba + 1;
+    if ((uint64_t)*num_sectors > available)
+        *num_sectors = (size_t)available;
+}
+
 /*
  * Resolve whole-disk vs partition extents for disk_ops (/dev/hd*).
  */
@@ -63,7 +87,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         if (offset < 0)
             return -1;
         uint64_t sector_off = (uint64_t)((unsigned long)offset / 512);
-        size_t num_sectors = (count + 511) / 512;
+        size_t num_sectors = devfs_disk_sectors_for_count(count);
         if (num_sectors == 0)
             return 0;
         uint64_t start_lba = sector_off;
@@ -71,6 +95,8 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         {
             if (sector_off >= pinfo.total_sectors)
                 return 0;
+            if (pinfo.start_lba > UINT64_MAX - sector_off)
+                return -EIO;
             start_lba = pinfo.start_lba + sector_off;
             if (num_sectors > pinfo.total_sectors - sector_off)
                 num_sectors = (size_t)(pinfo.total_sectors - sector_off);
@@ -80,9 +106,12 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
             uint64_t disk_sectors = ir0_block_sector_count_by_name(disk_name);
             if (sector_off >= disk_sectors)
                 return 0;
-            if (sector_off + num_sectors > disk_sectors)
+            if (num_sectors > disk_sectors - sector_off)
                 num_sectors = (size_t)(disk_sectors - sector_off);
         }
+        devfs_disk_clamp_u32_lba(start_lba, &num_sectors);
+        if (num_sectors == 0)
+            return 0;
         char *dst = (char *)buf;
         size_t bytes_done = 0;
         while (num_sectors > 0)
@@ -266,7 +295,7 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     if (offset < 0)
         return -1;
     uint64_t sector_off = (uint64_t)((unsigned long)offset / 512);
-    size_t num_sectors = (count + 511) / 512;
+    size_t num_sectors = devfs_disk_sectors_for_count(count);
     if (num_sectors == 0)
         return 0;
     uint64_t start_lba = sector_off;
@@ -274,6 +303,8 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     {
         if (sector_off >= pinfo.total_sectors)
             return 0;
+        if (pinfo.start_lba > UINT64_MAX - sector_off)
+            return -EIO;
         start_lba = pinfo.start_lba + sector_off;
         if (num_sectors > pinfo.total_sectors - sector_off)
             num_sectors = (size_t)(pinfo.total_sectors - sector_off);
@@ -283,9 +314,12 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
         uint64_t disk_sectors = ir0_block_sector_count_by_name(disk_name);
         if (sector_off >= disk_sectors)
             return 0;
-        if (sector_off + num_sectors > disk_sectors)
+        if (num_sectors > disk_sectors - sector_off)
             num_sectors = (size_t)(disk_sectors - sector_off);
     }
+    devfs_disk_clamp_u32_lba(start_lba, &num_sectors);
+    if (num_sectors == 0)
+        return 0;
     const char *src = (const char *)buf;
     size_t bytes_done = 0;
     while (num_sectors > 0)
