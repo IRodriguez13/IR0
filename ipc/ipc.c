@@ -163,29 +163,34 @@ void wait_queue_wake_all(wait_queue_t *wq)
 static void wait_queue_remove_process(wait_queue_t *wq, process_t *proc)
 {
     ir0_spinlock_t lock;
-    wait_queue_node_t **cur;
+    wait_queue_node_t *prev;
+    wait_queue_node_t *cur;
 
     if (!wq || !proc)
         return;
 
     ir0_spin_lock(&lock);
-    cur = &wq->head;
-    while (*cur)
+    prev = NULL;
+    cur = wq->head;
+    while (cur)
     {
-        if ((*cur)->process == proc)
+        if (cur->process == proc)
         {
-            wait_queue_node_t *dead = *cur;
-
-            *cur = dead->next;
-            if (wq->tail == dead)
-                wq->tail = NULL;
+            if (prev)
+                prev->next = cur->next;
+            else
+                wq->head = cur->next;
+            /* Removing the tail from a non-empty queue must retain its
+             * predecessor.  Clearing it made the next enqueue dereference
+             * NULL even though head still held a waiter. */
+            if (wq->tail == cur)
+                wq->tail = prev;
             ir0_spin_unlock(&lock);
-            kfree(dead);
-            ir0_spin_lock(&lock);
-            cur = &wq->head;
-            continue;
+            kfree(cur);
+            return;
         }
-        cur = &(*cur)->next;
+        prev = cur;
+        cur = cur->next;
     }
     ir0_spin_unlock(&lock);
 }

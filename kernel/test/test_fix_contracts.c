@@ -513,6 +513,48 @@ void ktest_ipc_read_rechecks_after_enqueue(void)
 	KTEST_END();
 }
 
+void ktest_ipc_wait_queue_tail_survives_exit_purge(void)
+{
+	ipc_channel_t *channel;
+	process_t exiting;
+	process_t newcomer;
+	uint32_t id = 0x4b54514eu; /* "KTQN" */
+
+	KTEST_BEGIN("ipc_wait_queue_tail_survives_exit_purge");
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+	memset(&exiting, 0, sizeof(exiting));
+	memset(&newcomer, 0, sizeof(newcomer));
+	channel = ipc_channel_get_or_create(id);
+	KASSERT(channel != NULL);
+	if (!channel)
+	{
+		KTEST_END();
+		return;
+	}
+	ipc_channel_ref(channel);
+	wait_queue_add(&channel->read_queue, current_process);
+	wait_queue_add(&channel->read_queue, &exiting);
+	ipc_purge_waiters_for_process(&exiting);
+	wait_queue_add(&channel->read_queue, &newcomer);
+	KASSERT(channel->read_queue.head != NULL);
+	KASSERT(channel->read_queue.tail != NULL);
+	KASSERT(channel->read_queue.head->process == current_process);
+	KASSERT(channel->read_queue.tail->process == &newcomer);
+	KASSERT(channel->read_queue.head->next == channel->read_queue.tail);
+	/* Purge both nodes before dropping the only channel reference, so teardown
+	 * does not schedule synthetic test processes. */
+	ipc_purge_waiters_for_process(&newcomer);
+	ipc_purge_waiters_for_process(current_process);
+	process_set_sched_state(current_process, PROCESS_READY);
+	ipc_channel_unref(channel);
+	KTEST_END();
+}
+
 void ktest_unmap_splits_2mb_leaf(void)
 {
 	address_space_root_t root;
