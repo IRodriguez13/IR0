@@ -1,6 +1,6 @@
 # Wave-era → KTM parity map
 
-> **Last verified:** 2026-09-22
+> **Last verified:** 2026-11-06
 > **Canonical names:** [`HARNESS_MAP.md`](HARNESS_MAP.md)
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/`, `make ktm-run`, `make ktm-userdev-*`.
 > **Inventory:** [`KTM_FASE_INVENTORY.md`](KTM_FASE_INVENTORY.md) (historical).
@@ -93,7 +93,7 @@ make -s arch-guard
 
 ## Prioridad restante (agente — sin VM mantenedor)
 
-1. ARM64 full `ALL_OBJS` link + musl aarch64 — **BLOCKED** (toolchain / KERNEL_OBJS)
+1. ARM64 **`$(ALL_OBJS)`** kernel link — **done** (`kernel-arm64-product.bin`); musl aarch64 + ISD rootfs — **BLOCKED** (toolchain / packaging vs x86)
 2. F8 beyond MVP (peer-driven rexmit/window/CC, E1000/virtio-net) — listen+wire MVP already in `smoke-f8-net`
 3. virtiofs+FUSE — Future (9p remains ship host-share)
 

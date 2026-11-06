@@ -39,7 +39,7 @@ Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 ### IPC staged + slice de dispatch (2026-10-18)
 
 - Tablas pipe/AF_UNIX en `ipc/`. Identity/getcwd de producto en ARM ALL.
-- `isd-aarch64-prep` sin inventar rootfs. Ver [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+- Sin `isd-aarch64-prep` en este árbol; `make headers_install` exporta uapi. Rootfs AArch64 = ISD. Ver [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
 ### Fold del path staged (2026-10-16)
 

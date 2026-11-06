@@ -8,17 +8,24 @@
 | Depends on | boot, syscalls, scheduler |
 | Man page | IR0-multi-arch (section 7) |
 | Primary sources | `arch/common/arch_interface.c`, `arch/*/sources/arch_{switch,mm,signal,syscall_frame,irq_init}.c`, `includes/ir0/{arch_switch,arch_mm,arch_signal,irq,sigcontext_*}.h`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
-| Last verified | 2026-07-26 |
+| Last verified | 2026-11-06 |
 
 ## 1. Overview
 
 IR0 separates portable kernel code from architecture backends under `arch/`.
 **x86-64** is the production target (ISO, musl userspace, full syscall path).
-**arm64** freestanding QEMU virt boot covers MMU identity map, VBAR/SVC EL1,
-EL0 drop, GIC/timer scaffold, early context switch (**F7h**), dual TTBR roots
-(**F7i**), and freestanding process+TTBR switch (**F7j**). Full `process_t`
-fork/exec, musl aarch64, and `ALL_OBJS` product link remain **BLOCKED**
-(toolchain / interrupt wall).
+**arm64** ships a **portable product kernel**: `kernel-arm64-product.bin` (and
+`kernel-arm64.bin`, a copy after `arm64-common-core-compile` +
+`arm64-provider-audit`) links the same **`$(ALL_OBJS)`** set as x86 — no x86-only
+drivers in that link, but the surface is the common kernel, not a second
+“stub OS”. Tiny board `-min` images (`kernel-arm64-<board>-min.bin`,
+`scripts/make/arm64-board.mk`) keep a **freestanding** bring-up path for
+firmware load addresses. **musl aarch64 userspace + ISD AArch64 packaging**
+remain the open toolchain/product gap (not the kernel link step).
+
+The historical F7 QEMU virt sequence (MMU → VBAR → EL0 scaffolding) is still
+useful context below; product boot today goes through the shared `ir0_kernel_boot`
+path with `IR0_FREESTANDING_BOOT` **off** for `kernel-arm64-product.bin`.
 
 Boot CFLAGS include `-mgeneral-regs-only` so early EL1 code does not trap on
 NEON.
@@ -33,7 +40,7 @@ NEON.
 | Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | boot, IDT/PIC impl, user mode, syscalls |
-| arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; freestanding EL0 smokes |
+| arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; product link `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` boards = freestanding bring-up |
 | Context switch | `arch_switch_to` → `switch_context_x64` / `switch_context_arm64` | portable dispatcher in `sched/switch/arch_context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | `ARCH_OBJS_ARM64` includes `switch_early.S` |
 
@@ -59,7 +66,7 @@ NEON.
                      → switch_to(prev, next)    # later
 ```
 
-**arm64 freestanding (current smoke path):**
+**arm64 historical F7 virt sequence (wave-era smokes — reference):**
 
 ```text
   _start → BOOT_OK → MMU_OK → VBAR → SVC / EL0 tags
@@ -75,7 +82,7 @@ NEON.
 - `arch/` implements hooks declared in `arch_portable.h` / `arch_port.h`.
 - Portable code selects behavior via `CONFIG_*` and facades, not `#ifdef` in `fs/`.
 - Makefile gates object lists per `ARCH=x86-64|arm64`.
-- Freestanding ARM smokes must not claim product `process_t` / musl readiness.
+- Board `-min` / old freestanding smokes must not be read as “full musl product on ARM64”.
 
 ## 5. Subsystem boundaries
 
@@ -107,10 +114,10 @@ NEON.
      ┌─────┴─────┐
      ▼           ▼
   x86-64      arm64
-  (full)      (freestanding + probe)
+  (full ISO)  (product ALL_OBJS + -min bring-up + probes)
      │           │
-  boot/syscall  boot_stub + switch_early
-  switch_x64    process_early / TTBR
+  boot/syscall  ir0_kernel_boot / -min boot_stub
+  switch_x64    switch + MMU / GIC
 ```
 
 Porting checklist:
@@ -143,21 +150,20 @@ Porting checklist:
 - `make build-matrix-min` — builds arch variants per matrix.
 - `make arch-guard` — facade violations before merge.
 - `get_arch_name()` / `/proc/cpuinfo` for runtime ISA string.
-- arm64 boot: `make smoke-arm64` / `smoke-arm64-syscall` (requires
-  `ARM64_PROCESS_TTBR_OK` among other tags). First framed line must be the
-  portable BOOT banner (`ir0_boot_serial_ready`), then `ARM64_*` smoke tags.
-- arm64 F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
-- arm64 portable compile: `make arm64-portable-compile` (curated objs — **not** `ALL_OBJS`).
-- Probe: `make arm64-all-objs-probe` (MEMORY + KERNEL sample compile-only).
-- arm64 scaffold link: `make ARCH=arm64 kernel-arm64.bin`.
+- arm64 product build: `make ARCH=arm64 kernel-arm64.bin` → `kernel-arm64-product.bin`
+  (**`$(ALL_OBJS)`**) + `kernel-arm64.img` for QEMU `-kernel`.
+- arm64 QEMU serial check: `make smoke-arm64-hypervisor-log` (needs `qemu-system-aarch64`;
+  optional **SKIP** when missing).
+- arm64 portable compile probe: `make arm64-portable-compile` (curated objs — **not** a link).
+- spot-check: `make arm64-all-objs-probe` (MEMORY + KERNEL sample compile-only).
 - arm64 boards: `make smoke-arm64-rpi4-boot` (QEMU `raspi4b` or **SKIP** if machine
   missing); `make arm64-rpi5-compile` (stub strings only). See `scripts/make/arm64-board.mk`.
 
 ## 10. Future roadmap
 
-- Product ARM `fork`/`exec` / `rr_sched` with real `process_t` — **not** in freestanding image.
-- **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / interrupt wall).
-- Product musl aarch64 + shared process_t IRQ delivery (facades ready; ALL_OBJS still BLOCKED).
+- Product ARM `fork`/`exec` / `rr_sched` with full Linux parity — still staged (`early_dispatch`, not full `syscall_dispatch` on SVC everywhere userspace expects).
+- **musl aarch64 + ISD AArch64 rootfs** — packaging/toolchain gap; kernel **`$(ALL_OBJS)`** link exists (`kernel-arm64-product.bin`).
+- Shared IRQ delivery refinements (GIC policy, timers) as the port hardens.
 - SPI / full GIC distributor policy beyond bank-0 PPI/SGI (`irq_unmask_line` covers bank 0).
 - Raspberry Pi 4: GIC-400, SD, mailbox, DTB (beyond UART min smoke).
 - Raspberry Pi 5: RP1 UART + real bring-up (board id stub only today).

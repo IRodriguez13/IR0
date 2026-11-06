@@ -1,6 +1,6 @@
 # KTM — Kernel Test Module
 
-> **Last verified:** 2026-10-29
+> **Last verified:** 2026-11-06
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,
 > `mm/page_fault.c`, `scripts/smoke_session_soak.py`,
 > `includes/ir0/klog_event.h`, [`KLOG.md`](KLOG.md),
@@ -106,7 +106,7 @@ Rules of thumb:
 - **Boot banner is the first framed serial line on every ISA.** Call
   `ir0_boot_serial_ready()` after UART/serial init (`includes/ir0/boot_log.h`).
   Product kernels route through `klog_boot_hold` + `klog_event(BOOT_BANNER, …)`;
-  freestanding ARM64 early boot (`IR0_FREESTANDING_BOOT`) emits the same layout
+  board `-min` bring-up images (`kernel-arm64-*-min.bin`, `IR0_FREESTANDING_BOOT`) still emit the same layout
   via `arch/common/boot_log.c` (with `#sequence` + `EARLY_ARCH`).
 - `CONFIG_KTM=n`: klog + `/proc/kmsg` still work (covered by host/ktest runs).
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy

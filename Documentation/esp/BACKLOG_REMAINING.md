@@ -6,14 +6,15 @@
 > `make build-matrix-min`, `make arch-guard`, `make health`. Este archivo
 > preserva la evidencia histórica; ver [`MAKEFILE.md`](MAKEFILE.md).
 
-> **Última verificación:** 2026-10-18  
+> **Última verificación:** 2026-11-06  
 > Espejo de [`../BACKLOG_REMAINING.md`](../BACKLOG_REMAINING.md) (inglés canónico).
 > DESK-X: **LINUX-LIKE** (smoke-desk-session OK 2026-07-23); TinyX sigue lab.
 
 ## Closed
 
 Cerrado 2026-10-18: tablas IPC en `ipc/`, providers identity/getcwd en ARM
-ALL, `isd-aarch64-prep` honesto. Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+ALL. No existe `make isd-aarch64-prep` en este árbol; empaquetado rootfs =
+ISD. Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 Ver tablas en el archivo inglés, incluida la oleada **2026-07-25** (publicación
 de ISD, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).
@@ -32,9 +33,9 @@ _(vacío)_
 4. ~~F4 kexec mínimo~~ **hecho** — stub + `kexec_load` MVP (`smoke-kexec-load`)  
 5. ~~F5 Suspend / S3~~ **hecho** — `_S3_` + soft resume (`smoke-reboot-s3`)   
 6. ~~F6 NVMe~~ **hecho** — `smoke-nvme-read`  
-7. ~~F7.1 ARM64 early MM~~ **hecho** — `smoke-arm64-mmu`  
-8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** — `smoke-arm64-vbar`  
-9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** — `smoke-arm64-el0` / `smoke-arm64`  
+7. ~~F7.1 ARM64 early MM~~ **hecho** (oleada histórica; nombres `smoke-arm64-*` ya no son targets)  
+8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** (id.)  
+9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** (id.; producto hoy: `kernel-arm64-product.bin`)  
 10. F7b–F7g + Pack B–E ~~hecho el bring-up~~ — deuda = `syscall_dispatch` en SVC + ISD AArch64 + fold de `early_process.c`  
 11. F8 … F13 — ver inglés; merge `master` solo con bundle TCC+Doom+userspace (STABLE)  
 12. **F14 HAB** — AC remoto / domótica (userspace; VPN; ESP IR primero) — ver tablas HAB-* en inglés  

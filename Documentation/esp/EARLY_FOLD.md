@@ -1,9 +1,9 @@
 # Fold de `early_*` hacia subsistemas ordinarios
 
-> **Última verificación:** 2026-10-18
+> **Última verificación:** 2026-11-06
 > **Fuente de verdad:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
 > `includes/ir0/product_path.h`, `kernel/syscalls/early_rootfs.c`,
-> `make smoke-arm64-all`
+> `make kernel-arm64.bin` (`kernel-arm64-product.bin`)
 
 Canónico en inglés: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
@@ -30,6 +30,10 @@ IPC staged vive en **`ipc/`** (junto a `ipc/ipc.c`), no en `fs/`.
 Con tmpfs montado, `open`/`read`/`write`/`mkdir`/`lseek` bajo `/tmp/` van a
 `vfs.c`. Tags: `ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`.
 
+El kernel de producto ARM64 (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
+**`$(ALL_OBJS)`**) lleva tmpfs + ramtab; no existe enlace separado
+`kernel-arm64-all.bin`.
+
 ## Dispatch de producto
 
 No se enlaza `syscall_dispatch.c` en ARM. Slice honesto: providers
@@ -40,8 +44,9 @@ No se enlaza `syscall_dispatch.c` en ARM. Slice honesto: providers
 
 ## ISD AArch64
 
-`make isd-aarch64-prep` deja kernel + uapi y declara
-`ISD_AARCH64_ROOTFS_ABSENT`. No inventa rootfs.
+No hay target `make isd-aarch64-prep` en este árbol. Para solo headers:
+`make headers_install` (exporta `includes/uapi` a `DESTDIR`). El empaquetado
+de rootfs AArch64 sigue siendo trabajo **ISD**.
 
 ## Pendiente
 

@@ -72,7 +72,8 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
   `ARM64_PRODUCT_IPC_OK`, `ARM64_PRODUCT_VFS_SLICE_OK`.
 - Pipe/AF_UNIX byte motion uses `early_ipc_ring_*` in `ipc/`.
   `syscall_dispatch.c` is not linked on ARM.
-- `make isd-aarch64-prep`: kernel + uapi; `ISD_AARCH64_ROOTFS_ABSENT`.
+- No in-tree `make isd-aarch64-prep`; use `make headers_install` for exported uapi only.
+  AArch64 rootfs packaging stays in the **ISD** sibling (`ISD_AARCH64_ROOTFS_ABSENT` honest).
 - Docs: [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 ### Staged early path fold (2026-10-16)
@@ -216,7 +217,7 @@ input, stalling the soak at relogin.
   `FIRST_BAREMETAL_BOOT` / `_SKIP` / `_FAIL` (skipped under hypervisor).
 - Docs: [`KLOG.md`](KLOG.md), updated boot/VFS/KTM/BACKLOG.
 - ARM64: freestanding `hello_aarch64` when musl CRT is incomplete; early boot
-  stubs for `sched_context_switch_to` / `klog_info`. Proof: `smoke-arm64-boot`.
+  stubs for `sched_context_switch_to` / `klog_info`. Embedded path: `scripts/make/arm64.mk`.
 
 ### runit-only + Unix login + stage1 helpers (2026-07-24)
 

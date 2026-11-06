@@ -54,14 +54,14 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | Full architecture gate | `make ctr` / `make agent-fast` |
 | KTM inventory | `make test-fast` / `make ktm-manifest` |
 | x86-64 product | `make ir0` / `make run [gui\|console\|debug]` |
-| ARM64 aggregate | `make ir0 arm64` / `make run arm64 console` |
+| ARM64 product kernel | `make ir0 arm64` / `make run arm64 console` |
 | Raspberry Pi image | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |
 
 **Optional QEMU smokes (small set, `scripts/make/arm64*.mk`):**
 
 | Target | What it checks |
 |--------|----------------|
-| `make smoke-arm64-hypervisor-log` | Serial: `[HYPERVISOR]` line (FDT/CPUID path) + `ARM64_BOOT_OK` |
+| `make smoke-arm64-hypervisor-log` | Serial: `[HYPERVISOR]` line (FDT/CPUID path) + `ARM64_BOOT_OK` (runs `kernel-arm64-product.bin`) |
 | `make smoke-arm64-rpi3-boot` | Raspberry Pi 3 model in QEMU |
 | `make smoke-arm64-rpi4-boot` | Raspberry Pi 4 model when QEMU provides `raspi4b` |
 

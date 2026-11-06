@@ -8,17 +8,23 @@
 | Depende de | boot, syscalls, scheduler |
 | Página man | IR0-multi-arch (sección 7) |
 | Fuentes principales | Ver versión inglesa `Documentation/mandocs/en/multi-arch.md` (fachadas `irq`/`arch_switch`/`arch_mm`/`arch_signal`) |
-| Última verificación | 2026-07-26 |
+| Última verificación | 2026-11-06 |
 
 ## 1. Visión general
 
 IR0 separa código portable del kernel de backends de arquitectura bajo `arch/`.
 **x86-64** es el objetivo de producción (ISO, userspace musl, ruta syscall
-completa). **arm64** freestanding en QEMU virt cubre MMU identity map, VBAR/SVC
-EL1, drop EL0, scaffold GIC/timer, context switch temprano (**F7h**), raíces
-TTBR duales (**F7i**) y switch proceso+TTBR freestanding (**F7j**). `fork`/`exec`
-producto, musl aarch64 y link `ALL_OBJS` siguen **BLOCKED** (toolchain / muro
-de interrupciones).
+completa). **arm64** tiene kernel de producto portable: `kernel-arm64-product.bin`
+(y `kernel-arm64.bin`, copia tras `arm64-common-core-compile` +
+`arm64-provider-audit`) enlaza el mismo **`$(ALL_OBJS)`** que x86. Las imágenes
+`-min` por placa (`kernel-arm64-<board>-min.bin`, `scripts/make/arm64-board.mk`)
+mantienen un camino **freestanding** para direcciones de carga del firmware.
+El hueco abierto es **musl aarch64 + empaquetado rootfs ISD**, no el paso de link
+del kernel.
+
+La secuencia histórica F7 en QEMU virt (MMU → VBAR → EL0) sigue siendo contexto
+útil abajo; el arranque de producto hoy usa la cadena compartida `ir0_kernel_boot`
+con `IR0_FREESTANDING_BOOT` **apagado** en `kernel-arm64-product.bin`.
 
 CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 temprano.
 
@@ -31,7 +37,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 | sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | uapi Linux en ambas ISA |
 | Interfaz común | `arch/common/arch_interface.c` | Despacho cross-arch |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | IDT/PIC impl + userspace |
-| arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; musl ALL_OBJS BLOCKED |
+| arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; link producto `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` = freestanding |
 | Context switch | `arch_switch_to` → asm/C por ISA | dispatcher en `sched/switch/arch_context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` en Makefile | `ARCH_OBJS_ARM64` incluye `switch_early.S` |
 
@@ -57,7 +63,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
                      → switch_to(prev, next)    # posteriores
 ```
 
-**arm64 freestanding (smoke actual):**
+**arm64 secuencia F7 histórica (oleadas — referencia):**
 
 ```text
   _start → BOOT_OK → MMU_OK → VBAR → tags SVC / EL0
@@ -73,7 +79,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 - `arch/` implementa hooks declarados en `arch_portable.h` / `arch_port.h`.
 - Código portable selecciona comportamiento vía `CONFIG_*` y fachadas, no `#ifdef` en `fs/`.
 - Makefile condiciona listas de objetos por `ARCH=x86-64|arm64`.
-- Smokes ARM freestanding no deben reclamar readiness de `process_t` / musl producto.
+- Imágenes `-min` / smokes freestanding viejos no equivalen a “musl producto completo en ARM64”.
 
 ## 5. Límites del subsistema
 
@@ -105,10 +111,10 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
      ┌─────┴─────┐
      ▼           ▼
   x86-64      arm64
-  (completo)  (freestanding + probe)
+  (ISO completo)  (producto ALL_OBJS + -min + probes)
      │           │
-  boot/syscall  boot_stub + switch_early
-  switch_x64    process_early / TTBR
+  boot/syscall  ir0_kernel_boot / boot_stub -min
+  switch_x64    switch + MMU / GIC
 ```
 
 Checklist de porting:
@@ -141,20 +147,20 @@ Checklist de porting:
 - `make build-matrix-min` — compila variantes arch según matrix.
 - `make arch-guard` — violaciones de fachada antes de merge.
 - `get_arch_name()` / `/proc/cpuinfo` para cadena ISA en runtime.
-- Boot arm64: `make smoke-arm64` / `smoke-arm64-syscall` (exige
-  `ARM64_PROCESS_TTBR_OK` entre otros tags).
-- F7b pack: `make smoke-arm64-port` / `smoke-arm64-gic`.
-- Compile portable: `make arm64-portable-compile` (objs curados — **no** `ALL_OBJS`).
-- Probe: `make arm64-all-objs-probe` (MEMORY + sample KERNEL compile-only).
-- Link scaffold: `make ARCH=arm64 kernel-arm64.bin`.
+- Build producto arm64: `make ARCH=arm64 kernel-arm64.bin` → `kernel-arm64-product.bin`
+  (**`$(ALL_OBJS)`**) + `kernel-arm64.img` para QEMU `-kernel`.
+- Check serial QEMU: `make smoke-arm64-hypervisor-log` (exige `qemu-system-aarch64`;
+  **SKIP** si falta).
+- Compile portable: `make arm64-portable-compile` (objs curados — **no** es un link).
+- Probe: `make arm64-all-objs-probe` (MEMORY + muestra KERNEL compile-only).
 - Boards: `make smoke-arm64-rpi4-boot` (QEMU `raspi4b` o **SKIP** si no hay máquina);
   `make arm64-rpi5-compile` (solo strings stub). Ver `scripts/make/arm64-board.mk`.
 
 ## 10. Hoja de ruta futura
 
-- `fork`/`exec` ARM producto / `rr_sched` con `process_t` real — **fuera** de la imagen freestanding.
-- **ALL_OBJS + musl aarch64** — BLOCKED (toolchain SETUP / muro IRQ).
-- GIC detrás de `register_irq` en path producto.
+- `fork`/`exec` / `rr_sched` con paridad Linux plena — aún en adaptadores (`early_dispatch`).
+- **musl aarch64 + rootfs ISD AArch64** — hueco de toolchain/packaging; el kernel ya enlaza **`$(ALL_OBJS)`** (`kernel-arm64-product.bin`).
+- GIC / timers — endurecer política según avance el port.
 - Raspberry Pi 4: GIC-400, SD, mailbox, DTB (más allá del UART min).
 - Raspberry Pi 5: UART RP1 + bring-up real (hoy solo stub de board id).
 - Eliminar clusters `#ifdef` solo x86 en keyboard/console.

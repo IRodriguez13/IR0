@@ -1,10 +1,10 @@
 # Staged `early_*` fold into ordinary subsystems
 
-> **Last verified:** 2026-10-18
+> **Last verified:** 2026-11-06
 > **Source of truth:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
 > `includes/ir0/product_path.h`, `kernel/syscalls/early_rootfs.c`,
 > `kernel/syscalls/early_process.c`, `arch/arm64/sources/all_objs_mark.c`,
-> `make smoke-arm64-all`
+> `make kernel-arm64.bin` (product link: `kernel-arm64-product.bin`)
 
 Spanish: [`esp/EARLY_FOLD.md`](esp/EARLY_FOLD.md).
 Manifest of remaining ARM scaffolding: [`debts/arm64-core-convergence.md`](debts/arm64-core-convergence.md).
@@ -39,10 +39,13 @@ When `tmpfs_register()` + `vfs_mount("none", "/tmp", "tmpfs")` succeed, ARM
 ALL binds `ir0_product_path_ops` to `vfs_*`. Then staged `openat`/`read`/
 `write`/`mkdirat`/`lseek` for paths under `/tmp/` use product VFS.
 
+The **ARM64 product kernel** (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
+linked from **`$(ALL_OBJS)`**) carries tmpfs + ramtab + the fold tags below.
+There is no separate `kernel-arm64-all.bin` link anymore.
+
 | Image | `/tmp` path |
 |-------|-------------|
-| `kernel-arm64-boot.bin` | Ramtab / synthetic `/tmp` only (no product `vfs.c`) |
-| `kernel-arm64-all.bin` | Product tmpfs + `ARM64_PRODUCT_VFS_OK` / `ARM64_EARLY_PATH_FOLD_OK` |
+| `kernel-arm64-product.bin` / `kernel-arm64.bin` | Product tmpfs + `ARM64_PRODUCT_VFS_OK` / `ARM64_EARLY_PATH_FOLD_OK` when bound |
 | `kernel-x64.bin` | Product VFS as always; ramtab is linked but unused as root |
 
 Host ABI tests (`test_early_rootfs_abi`) still check synthetic `/`, `/init`,
@@ -60,14 +63,14 @@ surface). The honest slice is extra `syscall_context_provider` rows:
 | `ir0_product_ipc_provider` | pipe2 / socketpair (`ipc/` tables + ring I/O) | `ARM64_PRODUCT_IPC_OK` |
 | `ir0_product_vfs_provider` | chdir (path-checked `/tmp`), openat, newfstatat, fstat | `ARM64_PRODUCT_VFS_SLICE_OK` |
 
-Boot (`kernel-arm64-boot.bin`) keeps the staged identity/cwd/path providers.
 PIPE2/SOCKETPAIR are always the ipc/ product table.
 
 ## ISD AArch64
 
-`make isd-aarch64-prep` builds `kernel-arm64-all.bin` and installs uapi headers.
-It prints `ISD_AARCH64_ROOTFS_ABSENT` until ISD grows that tree. It does **not**
-invent a rootfs or set `ISD_ARCH=aarch64` on `first-boot`.
+There is **no** `make isd-aarch64-prep` target in this tree. For headers only,
+use `make headers_install` (exports `includes/uapi` to `DESTDIR`, default
+`build/uapi-install`). Packaging an AArch64 rootfs remains **ISD** work; the
+kernel does not invent one.
 
 ## Still early (do not mark done)
 
@@ -89,8 +92,8 @@ invent a rootfs or set `ISD_ARCH=aarch64` on `first-boot`.
 make -s kernel-x64.bin
 make -s arch-guard
 make -s -C tests/host run
-make -s smoke-arm64-all   # PATH_FOLD + PRODUCT_IDENTITY + PRODUCT_CWD
-make -s isd-aarch64-prep  # KERNEL_OK + ROOTFS_ABSENT until ISD exists
+make -s kernel-arm64.bin   # arm64-common-core-compile + arm64-provider-audit
+make -s smoke-arm64-hypervisor-log   # optional; needs qemu-system-aarch64
 ```
 
 Linux references: VFS

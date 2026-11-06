@@ -109,13 +109,13 @@ default subsystems to **enabled** (bring-up friendly).
 |--------|--------|
 | `make onboard` | First contributor build: host check → `defconfig` only if `.config` is absent → `kernel-x64.iso` → `test-fast` |
 | `make ir0` | x86-64: `kernel-x64.iso`. ARM64: `kernel-arm64.bin`. Board: `build/arm64-<board>/kernel8.img` |
-| `make ir0 arm64` | ARM64 aggregate (`kernel-arm64-all.bin` + common-core/provider gates) |
+| `make ir0 arm64` | ARM64 product kernel (`kernel-arm64.bin` ← `kernel-arm64-product.bin` + common-core compile + provider audit) |
 | `make ir0 arm64 rpi4` | RPi4 `kernel8.img` plus its ELF twin |
 | `make all` | Same artifact as `ir0`, without the `-Werror` policy |
 | `make kernel-x64.bin` | Linked x86-64 ELF only |
 | `make kernel-x64.iso` | Bootable GRUB ISO |
 | `make kernel-x64-test.bin` | Kernel built with the in-kernel ktest battery |
-| `make kernel-arm64.bin` | ARM64 aggregate (forces `ARCH=arm64` when used as the goal) |
+| `make kernel-arm64.bin` | ARM64 product kernel (forces `ARCH=arm64` when used as the goal) |
 | `make clean` | Remove objects, deps, images and generated headers (disk images, `toolchain/`, `dist/`, `out/` preserved) |
 
 `ir0` compiles with `-Werror`; use `make all` or the individual artifact targets

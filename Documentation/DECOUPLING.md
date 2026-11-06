@@ -1,6 +1,6 @@
 # Kernel Decoupling Map
 
-> **Last verified:** 2026-10-16
+> **Last verified:** 2026-11-06
 > **Source of truth:** `includes/ir0/*`, `scripts/architecture_guard.py`, `ktm/include/klog.h`,
 > [`uaccess.md`](uaccess.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
@@ -200,14 +200,15 @@ pattern); treat explicit `n` as the compile-out signal.
 
 | Aspect | x86-64 | ARM64 |
 |--------|--------|-------|
-| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-boot.bin` = early harness. `kernel-arm64-all.bin` = boot + portable process/MM/VFS (no x86 drivers). `kernel-arm64.bin` is still the board/link aggregate, not x86 parity. |
-| **Boot** | Multiboot → full kernel bring-up. | Freestanding `boot_stub` + `mmu_early` + VBAR/EL0; ALL image also links product `vfs.c`/`tmpfs`. |
+| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-product.bin` / `kernel-arm64.bin` = the same portable **`$(ALL_OBJS)`** product link (validated by `arm64-common-core-compile` + `arm64-provider-audit`). Board `kernel-arm64-<board>-min.bin` images are tiny freestanding bring-ups (`scripts/make/arm64-board.mk`), not the product kernel. |
+| **Boot** | Multiboot → full kernel bring-up. | Product path: shared `ir0_kernel_boot` chain (no `IR0_FREESTANDING_BOOT`). `-min` board images still use freestanding flags for firmware load addresses. |
 | **Userspace** | musl / BusyBox / TCC / Doom on x86 via ISD. | Staged EL0 on QEMU virt (`make ir0 arm64`). ISD has **no** AArch64 rootfs pack yet. |
 | **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`EARLY_FOLD.md`](EARLY_FOLD.md). Not an ISD product boot. |
 
-So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 closed early
-EL1/EL0 bring-up **and** a growing set of common objects on `kernel-arm64-all.bin`.
-A product port still needs `syscall_dispatch` on SVC, ISD AArch64, and private-mm fork.
+So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 now links the
+same portable object set as x86 (`ALL_OBJS`); staged adapters (`early_*`) and
+`syscall_dispatch` on SVC remain the gap vs full Linux-like userspace. ISD AArch64 and
+private-mm fork are still open.
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
