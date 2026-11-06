@@ -37,6 +37,13 @@ int fd_resource_release(fd_entry_t *entry)
 	if (!entry->resource_ops->release)
 		return -EINVAL;
 	entry->resource_ops->release(entry);
+	/*
+	 * A descriptor resource has a single release transition.  Most close
+	 * callers clear the whole fd entry immediately afterwards, but keeping a
+	 * stale provider here turned an accidental second release into a provider
+	 * double-put (and, for owning providers, a potential double-free).
+	 */
+	entry->resource_ops = NULL;
 	entry->vfs_file = NULL;
 	return 0;
 }
