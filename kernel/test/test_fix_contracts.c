@@ -555,6 +555,18 @@ void ktest_ipc_wait_queue_tail_survives_exit_purge(void)
 	KTEST_END();
 }
 
+void ktest_ipc_ring_buffer_oom_is_recoverable(void)
+{
+	ring_buffer_t rb;
+
+	KTEST_BEGIN("ipc_ring_buffer_oom_is_recoverable");
+	memset(&rb, 0, sizeof(rb));
+	KASSERT_EQ(ktm_fault_configure("kmem.alloc", KTM_FAULT_ONCE, 0), 0);
+	KASSERT_EQ(ring_buffer_init(&rb, 64), -1);
+	KASSERT(rb.buffer == NULL);
+	KTEST_END();
+}
+
 void ktest_unmap_splits_2mb_leaf(void)
 {
 	address_space_root_t root;

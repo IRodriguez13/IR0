@@ -96,6 +96,7 @@ void ktest_futex_interrupted_wait_frees_slot(void);
 void ktest_futex_exit_drop_frees_slot(void);
 void ktest_ipc_read_rechecks_after_enqueue(void);
 void ktest_ipc_wait_queue_tail_survives_exit_purge(void);
+void ktest_ipc_ring_buffer_oom_is_recoverable(void);
 void ktest_unmap_splits_2mb_leaf(void);
 void ktest_map_replaced_frame_is_released(void);
 void ktest_map_fixed_aborts_when_unmap_fails(void);

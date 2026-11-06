@@ -240,7 +240,9 @@ int ring_buffer_init(ring_buffer_t *rb, size_t size)
     if (!rb || size == 0)
         return -1;
 
-    rb->buffer = kmalloc(size);
+    /* A channel is user-triggerable; exhaustion must fail the create path,
+     * not turn an ordinary IPC allocation into a kernel panic. */
+    rb->buffer = kmalloc_try(size);
     if (!rb->buffer)
         return -1;
 
