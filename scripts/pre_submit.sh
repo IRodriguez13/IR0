@@ -148,7 +148,8 @@ vfs|fs)
 sched|scheduler)
 	;;
 arm|arm64|hub)
-	run_smoke smoke-arm64 || true
+	# Historical meta-target `smoke-arm64` was removed; keep a light QEMU check when possible.
+	run_smoke smoke-arm64-hypervisor-log || true
 	;;
 *)
 	echo ""
