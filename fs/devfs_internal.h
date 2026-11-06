@@ -53,3 +53,10 @@ void devfs_register_disk_topology(void);
 
 #define DEVFS_DISK_AGGREGATE_ID  9
 #define DEVFS_DISK_BASE_ID       20
+
+/* Per-node context for whole-disk and partition /dev/hd* handlers. */
+typedef struct devfs_disk_ctx {
+    uint8_t disk_id;
+    uint8_t is_whole;
+    uint8_t partition_number;
+} devfs_disk_ctx_t;

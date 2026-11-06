@@ -1,8 +1,9 @@
 # Contratos de guest que fija ktest
 
-> **Última verificación:** 2026-11-03
+> **Última verificación:** 2026-11-05
 > **Fuente de verdad:** `kernel/test/test_fix_contracts.c`,
-> `kernel/test/test_mm_contracts.c`, `kernel/test/test_runner.c`,
+> `kernel/test/test_mm_contracts.c`, `kernel/test/test_debug_contracts.c`,
+> `kernel/test/test_runner.c`,
 > `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
 > `kernel/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
 > `arch/x86-64/sources/arch_mm.c`, `arch/arm64/sources/arch_mm.c`
@@ -10,11 +11,11 @@
 Canónico en inglés: [`../../testing/KTEST_FIX_CONTRACTS.md`](../../testing/KTEST_FIX_CONTRACTS.md).
 
 `make kernel-tests` arranca `kernel-x64-test.bin` y reporta por el escenario KTM
-`kernel.ktest`. El 2026-11-03 la suite imprimió `All 80 test(s) passed` y
+`kernel.ktest`. El 2026-11-05 la suite imprimió `All 83 test(s) passed` y
 `TEST_END|kernel.ktest|PASS`. El pánico posterior `Failed to load /sbin/init`
 es el ISO de test, después de ese veredicto.
 
-Quince de esos casos viven en `kernel/test/test_fix_contracts.c`. Fallan el
+Dieciséis de esos casos viven en `kernel/test/test_fix_contracts.c`. Fallan el
 boot si el comportamiento de abajo regresa. Los casos de COW de abajo viven en
 `kernel/test/test_mm_contracts.c`. El resto de la suite es anterior y no se
 lista aquí.
@@ -48,6 +49,7 @@ bytes NUL; buscarlo con `rg -a`.
 | `unmap_splits_2mb_leaf` | En un directorio de páginas privado (no el CR3 vivo), desmapear la base de una hoja de identidad de 2 MiB limpia esa página de 4 KiB y deja mapeada la página de 4 KiB siguiente. |
 | `map_replaced_frame_is_released` | Reemplazar un PTE con otro frame baja el refcount del frame viejo a 0. Reescribir el mismo frame deja el refcount en 1. El unmap lo baja a 0. |
 | `map_fixed_aborts_when_unmap_fails` | `MAP_FIXED` sobre dos páginas anónimas devuelve `-ENOMEM` cuando el backend de unmap rechaza la segunda. La primera deja de estar mapeada. El valor del PTE de la segunda no cambia. |
+| `shmget_metadata_oom_returns_enomem` | Con `kmem.alloc` armado para fallar una vez, `sys_shmget` de un segmento privado de 4 KiB devuelve `-ENOMEM` en vez de publicar un segmento a medio inicializar. |
 
 Los casos de COW son nuevos y viven en `kernel/test/test_mm_contracts.c`:
 
@@ -55,6 +57,12 @@ Los casos de COW son nuevos y viven en `kernel/test/test_mm_contracts.c`:
 |-------------|------------------------|
 | `cow_write_fault_drops_old_once` | Un fault de escritura sobre un PTE `PAGE_COW` reemplaza el frame y libera el frame viejo exactamente una vez (sin el pánico `PMM: double free detected`). El PTE nuevo es escribible y no tiene `PAGE_COW`, y el contenido de la página sobrevive la copia. |
 | `copy_to_user_cow_break_drops_old_once` | Un `copy_to_user_mm` sobre una página `PAGE_COW` rompe COW por el camino de uaccess y libera el frame viejo exactamente una vez (sin double free). El PTE nuevo es escribible y no tiene `PAGE_COW`, y los bytes escritos se leen de vuelta con `copy_from_user_mm`. |
+
+El caso de dispositivo de bloque vive en `kernel/test/test_debug_contracts.c`:
+
+| Nombre KTAP | Qué significa un pass |
+|-------------|------------------------|
+| `devfs_disk_unaligned_contract` | `/dev/hd*` conserva el offset de byte dentro del sector. Una lectura en offset 1 devuelve los bytes 1..512; una escritura de 4 bytes en offset 3 cambia solo esos bytes; una escritura de 600 bytes en offset 500 cambia solo ese rango. Las lecturas se recortan al tamaño del dispositivo. |
 
 Un double free paniquea el guest antes de que la suite imprima su veredicto,
 así que una regresión falla todo el run de `make kernel-tests`.

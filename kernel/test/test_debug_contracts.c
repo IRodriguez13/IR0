@@ -15,6 +15,7 @@
 #include "test/ktest_harness.h"
 #include "syscalls.h"
 #include "../errno.h"
+#include "../../fs/devfs_internal.h"
 #include "../../fs/tmpfs.h"
 #include <config.h>
 #include <ir0/blockdev.h>
@@ -856,6 +857,152 @@ void ktest_block_hda_read_contract(void)
 		KASSERT_EQ(memcmp(two, one_a, 512), 0);
 		KASSERT_EQ(memcmp(two + 512, one_b, 512), 0);
 	}
+
+	KTEST_END();
+}
+
+#define KTEST_DISK_SECTORS       4u
+#define KTEST_DISK_SECTOR_SIZE   512u
+
+static uint8_t ktest_disk_data[KTEST_DISK_SECTORS * KTEST_DISK_SECTOR_SIZE];
+
+static int ktest_disk_read(void *ctx, uint64_t lba, uint32_t count, void *buf)
+{
+	size_t off;
+
+	(void)ctx;
+	if (!buf || count == 0 ||
+	    lba + (uint64_t)count > KTEST_DISK_SECTORS)
+		return -EINVAL;
+	off = (size_t)lba * KTEST_DISK_SECTOR_SIZE;
+	memcpy(buf, ktest_disk_data + off,
+	       (size_t)count * KTEST_DISK_SECTOR_SIZE);
+	return 0;
+}
+
+static int ktest_disk_write(void *ctx, uint64_t lba, uint32_t count,
+			    const void *buf)
+{
+	size_t off;
+
+	(void)ctx;
+	if (!buf || count == 0 ||
+	    lba + (uint64_t)count > KTEST_DISK_SECTORS)
+		return -EINVAL;
+	off = (size_t)lba * KTEST_DISK_SECTOR_SIZE;
+	memcpy(ktest_disk_data + off, buf,
+	       (size_t)count * KTEST_DISK_SECTOR_SIZE);
+	return 0;
+}
+
+static const struct ir0_block_ops ktest_disk_ops = {
+	.read = ktest_disk_read,
+	.write = ktest_disk_write,
+	.flush = NULL,
+};
+
+/*
+ * /dev/hd* I/O is byte-addressed. The backend is sector-addressed, so the
+ * devfs layer must preserve the intra-sector offset and perform
+ * read-modify-write for short writes instead of touching whole sectors.
+ */
+void ktest_devfs_disk_unaligned_contract(void)
+{
+	static struct ir0_block_device dev;
+	devfs_disk_ctx_t ctx;
+	devfs_entry_t entry;
+	uint8_t before[sizeof(ktest_disk_data)];
+	uint8_t pattern[600];
+	uint8_t out[700];
+	const char *name = NULL;
+	uint8_t disk_id = 0;
+	int64_t n;
+	int rc;
+
+	KTEST_BEGIN("devfs_disk_unaligned_contract");
+
+	for (uint8_t d = 1; d < 4; d++)
+	{
+		const char *candidate = ir0_block_legacy_name(d);
+
+		if (!candidate || ir0_block_name_is_present(candidate))
+			continue;
+		memset(&dev, 0, sizeof(dev));
+		dev.ops = &ktest_disk_ops;
+		dev.info.sector_size = KTEST_DISK_SECTOR_SIZE;
+		dev.info.max_sectors_per_io = 2;
+		dev.info.sector_count = KTEST_DISK_SECTORS;
+		strncpy(dev.info.name, candidate, IR0_BLOCKDEV_NAME_MAX - 1);
+		rc = ir0_block_register(&dev);
+		if (rc == 0)
+		{
+			name = candidate;
+			disk_id = d;
+			break;
+		}
+	}
+	KASSERT(name != NULL);
+	KASSERT(disk_id >= 1 && disk_id <= 3);
+	if (!name)
+	{
+		KTEST_END();
+		return;
+	}
+
+	for (size_t i = 0; i < sizeof(ktest_disk_data); i++)
+		ktest_disk_data[i] = (uint8_t)(i * 7u + 3u);
+
+	memset(&ctx, 0, sizeof(ctx));
+	ctx.disk_id = disk_id;
+	ctx.is_whole = 1;
+	memset(&entry, 0, sizeof(entry));
+	entry.device_id = DEVFS_DISK_BASE_ID + disk_id;
+	entry.driver_data = &ctx;
+
+	memset(out, 0, sizeof(out));
+	n = dev_disk_read(&entry, out, 4, 0);
+	KASSERT_EQ(n, 4);
+	KASSERT_EQ(memcmp(out, ktest_disk_data, 4), 0);
+
+	/* Offset 1 starts at byte 1, not at the beginning of sector 0. */
+	memset(out, 0, sizeof(out));
+	n = dev_disk_read(&entry, out, 512, 1);
+	KASSERT_EQ(n, 512);
+	KASSERT_EQ(memcmp(out, ktest_disk_data + 1, 511), 0);
+	KASSERT_EQ(out[511], ktest_disk_data[512]);
+
+	/* A range crossing a sector boundary keeps the same byte offset. */
+	memset(out, 0, sizeof(out));
+	n = dev_disk_read(&entry, out, 600, 500);
+	KASSERT_EQ(n, 600);
+	KASSERT_EQ(memcmp(out, ktest_disk_data + 500, 600), 0);
+
+	/* A short write at offset 3 preserves bytes before and after it. */
+	memcpy(before, ktest_disk_data, sizeof(before));
+	memset(pattern, 0xA5, sizeof(pattern));
+	n = dev_disk_write(&entry, pattern, 4, 3);
+	KASSERT_EQ(n, 4);
+	KASSERT_EQ(memcmp(ktest_disk_data, before, 3), 0);
+	KASSERT_EQ(memcmp(ktest_disk_data + 3, pattern, 4), 0);
+	KASSERT_EQ(memcmp(ktest_disk_data + 7, before + 7,
+			 sizeof(before) - 7), 0);
+
+	/* A write crossing sectors updates only the requested bytes. */
+	memcpy(before, ktest_disk_data, sizeof(before));
+	n = dev_disk_write(&entry, pattern, 600, 500);
+	KASSERT_EQ(n, 600);
+	KASSERT_EQ(memcmp(ktest_disk_data + 500, pattern, 600), 0);
+	KASSERT_EQ(memcmp(ktest_disk_data, before, 500), 0);
+	KASSERT_EQ(memcmp(ktest_disk_data + 1100, before + 1100,
+			 sizeof(before) - 1100), 0);
+
+	/* Reads are clamped to the device extent. */
+	memset(out, 0, sizeof(out));
+	n = dev_disk_read(&entry, out, 16, KTEST_DISK_SECTORS * 512 - 4);
+	KASSERT_EQ(n, 4);
+	memset(out, 0, sizeof(out));
+	n = dev_disk_read(&entry, out, 16, KTEST_DISK_SECTORS * 512);
+	KASSERT_EQ(n, 0);
 
 	KTEST_END();
 }

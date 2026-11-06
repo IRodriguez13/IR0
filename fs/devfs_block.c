@@ -10,17 +10,6 @@
 #include "devfs_internal.h"
 
 
-typedef struct devfs_disk_ctx {
-    uint8_t disk_id;
-    uint8_t is_whole;
-    uint8_t partition_number;
-} devfs_disk_ctx_t;
-
-static size_t devfs_disk_sectors_for_count(size_t count)
-{
-    return count / 512 + (count % 512 != 0);
-}
-
 /* Legacy block backends take a 32-bit LBA.  Never let a wider devfs offset
  * wrap into an unrelated sector when it crosses that backend boundary. */
 static void devfs_disk_clamp_u32_lba(uint64_t start_lba, size_t *num_sectors)
@@ -69,72 +58,153 @@ static int devfs_resolve_disk_geo(const devfs_entry_t *entry, uint8_t *disk_out,
     return 0;
 }
 
+struct devfs_disk_io {
+    const char *name;
+    uint64_t lba;
+    size_t bytes;
+    size_t in_sector;
+};
+
+/*
+ * Resolve a byte range against the whole disk or partition extent, clamp it
+ * to the 32-bit backend LBA window, and keep the intra-sector offset.
+ */
+static int devfs_disk_prepare_io(const devfs_entry_t *entry, off_t offset,
+                                 size_t count, struct devfs_disk_io *io)
+{
+    uint8_t disk_id;
+    partition_info_t pinfo;
+    int is_whole = 0;
+    uint64_t sector_off;
+    uint64_t available_sectors;
+    size_t sectors;
+
+    if (!io)
+        return -EINVAL;
+
+    io->name = NULL;
+    io->lba = 0;
+    io->bytes = 0;
+    io->in_sector = 0;
+
+    if (offset < 0)
+        return -EINVAL;
+    if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
+        return -ENODEV;
+
+    io->name = ir0_block_legacy_name(disk_id);
+    if (!io->name || !ir0_block_name_is_present(io->name))
+        return -ENODEV;
+
+    sector_off = (uint64_t)offset / 512;
+    io->in_sector = (size_t)((uint64_t)offset % 512);
+
+    if (!is_whole)
+    {
+        if (sector_off >= pinfo.total_sectors)
+            return 0;
+        if (pinfo.start_lba > UINT64_MAX - sector_off)
+            return -EIO;
+        io->lba = pinfo.start_lba + sector_off;
+        available_sectors = pinfo.total_sectors - sector_off;
+    }
+    else
+    {
+        uint64_t disk_sectors = ir0_block_sector_count_by_name(io->name);
+
+        if (sector_off >= disk_sectors)
+            return 0;
+        io->lba = sector_off;
+        available_sectors = disk_sectors - sector_off;
+    }
+
+    if (available_sectors > (uint64_t)(SIZE_MAX / 512))
+        available_sectors = (uint64_t)(SIZE_MAX / 512);
+    sectors = (size_t)available_sectors;
+    devfs_disk_clamp_u32_lba(io->lba, &sectors);
+    if (sectors == 0)
+        return 0;
+    if (count > sectors * 512)
+        count = sectors * 512;
+    io->bytes = count;
+    return 0;
+}
+
+static int devfs_disk_read_interrupted(void)
+{
+    if (current_process && signals_pause_should_interrupt(current_process))
+    {
+        handle_signals();
+        return 1;
+    }
+    return 0;
+}
+
 int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     if (!buf)
         return -1;
     if (entry->device_id != DEVFS_DISK_AGGREGATE_ID)
     {
-        uint8_t disk_id;
-        partition_info_t pinfo;
-        int is_whole = 0;
-
-        if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
-            return -ENODEV;
-        const char *disk_name = ir0_block_legacy_name(disk_id);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
-            return -ENODEV;
-        if (offset < 0)
-            return -1;
-        uint64_t sector_off = (uint64_t)((unsigned long)offset / 512);
-        size_t num_sectors = devfs_disk_sectors_for_count(count);
-        if (num_sectors == 0)
-            return 0;
-        uint64_t start_lba = sector_off;
-        if (!is_whole)
-        {
-            if (sector_off >= pinfo.total_sectors)
-                return 0;
-            if (pinfo.start_lba > UINT64_MAX - sector_off)
-                return -EIO;
-            start_lba = pinfo.start_lba + sector_off;
-            if (num_sectors > pinfo.total_sectors - sector_off)
-                num_sectors = (size_t)(pinfo.total_sectors - sector_off);
-        }
-        else
-        {
-            uint64_t disk_sectors = ir0_block_sector_count_by_name(disk_name);
-            if (sector_off >= disk_sectors)
-                return 0;
-            if (num_sectors > disk_sectors - sector_off)
-                num_sectors = (size_t)(disk_sectors - sector_off);
-        }
-        devfs_disk_clamp_u32_lba(start_lba, &num_sectors);
-        if (num_sectors == 0)
-            return 0;
+        struct devfs_disk_io io;
+        uint8_t bounce[512];
         char *dst = (char *)buf;
-        size_t bytes_done = 0;
-        while (num_sectors > 0)
+        size_t done = 0;
+        int rc;
+
+        rc = devfs_disk_prepare_io(entry, offset, count, &io);
+        if (rc != 0)
+            return rc;
+        if (io.bytes == 0)
+            return 0;
+
+        /* A non-zero offset starts inside the first sector. */
+        if (io.in_sector != 0)
         {
-            uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
+            size_t chunk = 512 - io.in_sector;
+
+            if (chunk > io.bytes)
+                chunk = io.bytes;
+            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            memcpy(dst, bounce + io.in_sector, chunk);
+            done += chunk;
+            io.lba++;
+        }
+
+        while (io.bytes - done >= 512)
+        {
+            size_t remaining = io.bytes - done;
+            size_t sectors = remaining / 512;
+            uint8_t n;
 
             /* cat /dev/hda must be interruptible (Ctrl+C → EINTR). */
-            if (current_process &&
-                signals_pause_should_interrupt(current_process))
-            {
-                handle_signals();
-                if (bytes_done > 0)
-                    return (int64_t)bytes_done;
-                return -EINTR;
-            }
-            if (ir0_block_read_by_name(disk_name, (uint32_t)start_lba, n, dst))
-                return (int64_t)bytes_done;
-            bytes_done += (size_t)n * 512;
-            start_lba += n;
-            num_sectors -= n;
-            dst += (size_t)n * 512;
+            if (devfs_disk_read_interrupted())
+                return done ? (int64_t)done : -EINTR;
+
+            if (sectors > 255)
+                sectors = 255;
+            n = (uint8_t)sectors;
+            rc = ir0_block_read_by_name(io.name, io.lba, n, dst + done);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            done += (size_t)n * 512;
+            io.lba += n;
         }
-        return (int64_t)((bytes_done < count) ? bytes_done : count);
+
+        /* A short tail must not read past the caller's buffer. */
+        if (done < io.bytes)
+        {
+            size_t tail = io.bytes - done;
+
+            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            memcpy(dst + done, bounce, tail);
+            done += tail;
+        }
+        return (int64_t)done;
     }
     /* Aggregate /dev/disk: generate listing */
 
@@ -283,56 +353,70 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
         return count;
     if (!buf)
         return -1;
-    uint8_t disk_id;
-    partition_info_t pinfo;
-    int is_whole = 0;
 
-    if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
-        return -ENODEV;
-    const char *disk_name = ir0_block_legacy_name(disk_id);
-    if (!disk_name || !ir0_block_name_is_present(disk_name))
-        return -ENODEV;
-    if (offset < 0)
-        return -1;
-    uint64_t sector_off = (uint64_t)((unsigned long)offset / 512);
-    size_t num_sectors = devfs_disk_sectors_for_count(count);
-    if (num_sectors == 0)
-        return 0;
-    uint64_t start_lba = sector_off;
-    if (!is_whole)
     {
-        if (sector_off >= pinfo.total_sectors)
+        struct devfs_disk_io io;
+        uint8_t bounce[512];
+        const char *src = (const char *)buf;
+        size_t done = 0;
+        int rc;
+
+        rc = devfs_disk_prepare_io(entry, offset, count, &io);
+        if (rc != 0)
+            return rc;
+        if (io.bytes == 0)
             return 0;
-        if (pinfo.start_lba > UINT64_MAX - sector_off)
-            return -EIO;
-        start_lba = pinfo.start_lba + sector_off;
-        if (num_sectors > pinfo.total_sectors - sector_off)
-            num_sectors = (size_t)(pinfo.total_sectors - sector_off);
+
+        /* A non-zero offset starts inside the first sector: read-modify-write. */
+        if (io.in_sector != 0)
+        {
+            size_t chunk = 512 - io.in_sector;
+
+            if (chunk > io.bytes)
+                chunk = io.bytes;
+            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            memcpy(bounce + io.in_sector, src, chunk);
+            rc = ir0_block_write_by_name(io.name, io.lba, 1, bounce);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            done += chunk;
+            io.lba++;
+        }
+
+        while (io.bytes - done >= 512)
+        {
+            size_t remaining = io.bytes - done;
+            size_t sectors = remaining / 512;
+            uint8_t n;
+
+            if (sectors > 255)
+                sectors = 255;
+            n = (uint8_t)sectors;
+            rc = ir0_block_write_by_name(io.name, io.lba, n, src + done);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            done += (size_t)n * 512;
+            io.lba += n;
+        }
+
+        /* A short tail must not overwrite the rest of the sector. */
+        if (done < io.bytes)
+        {
+            size_t tail = io.bytes - done;
+
+            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            memcpy(bounce, src + done, tail);
+            rc = ir0_block_write_by_name(io.name, io.lba, 1, bounce);
+            if (rc != 0)
+                return done ? (int64_t)done : rc;
+            done += tail;
+        }
+        return (int64_t)done;
     }
-    else
-    {
-        uint64_t disk_sectors = ir0_block_sector_count_by_name(disk_name);
-        if (sector_off >= disk_sectors)
-            return 0;
-        if (num_sectors > disk_sectors - sector_off)
-            num_sectors = (size_t)(disk_sectors - sector_off);
-    }
-    devfs_disk_clamp_u32_lba(start_lba, &num_sectors);
-    if (num_sectors == 0)
-        return 0;
-    const char *src = (const char *)buf;
-    size_t bytes_done = 0;
-    while (num_sectors > 0)
-    {
-        uint8_t n = (num_sectors > 255) ? 255 : (uint8_t)num_sectors;
-        if (ir0_block_write_by_name(disk_name, (uint32_t)start_lba, n, src))
-            return (int64_t)bytes_done;
-        bytes_done += (size_t)n * 512;
-        start_lba += n;
-        num_sectors -= n;
-        src += (size_t)n * 512;
-    }
-    return (int64_t)((bytes_done < count) ? bytes_done : count);
 }
 
 int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
