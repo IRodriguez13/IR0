@@ -818,6 +818,16 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)&sys_poweroff_control);
     pseudo_fs_register("/sys", "kernel/halt", &sys_power_ops,
                        (void *)&sys_halt_control);
+    pseudo_fs_register("/sys", "firmware/ir0/protocol", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_firmware_ir0_protocol_read_reg);
+    pseudo_fs_register("/sys", "firmware/ir0/bootloader", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_firmware_ir0_bootloader_read_reg);
+    pseudo_fs_register("/sys", "firmware/ir0/cmdline", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_firmware_ir0_cmdline_read_reg);
+    pseudo_fs_register("/sys", "firmware/ir0/framebuffer", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_firmware_ir0_framebuffer_read_reg);
+    pseudo_fs_register("/sys", "firmware/ir0/boot_detail", &sys_static_read_ops,
+		       (void *)(uintptr_t)sys_firmware_ir0_boot_detail_read_reg);
     pseudo_fs_register("/sys", "devices/system", &sys_static_read_ops,
                        (void *)(uintptr_t)sys_devices_system_read_reg);
     pseudo_fs_register("/sys", "devices/block", &sys_static_read_ops,

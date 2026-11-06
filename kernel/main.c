@@ -25,7 +25,6 @@
 #include <ir0/poll.h>
 #include <ir0/sched.h>
 #include "kernel.h"
-#include "boot_init.h"
 #include "syscalls.h"
 #include "syscalls/io_syscalls.h"
 
@@ -87,18 +86,4 @@ void kernel_idle_poll(void)
 
 /* kernel_idle_loop lives in kernel/process/idle.c (includes/ir0/idle.h). */
 
-void kmain(uint32_t multiboot_info)
-{
-	boot_early(multiboot_info);
-	boot_memory_serial(multiboot_info);
-	boot_drivers_rootfs();
-	boot_runtime();
-	boot_diagnostics();
-	boot_enter_userspace();
-
-	for (;;)
-	{
-		kernel_idle_poll();
-		cpu_idle();
-	}
-}
+/* kmain → ir0_kernel_boot() (kernel/kernel_wiring.c, kernel/boot_flow.c). */

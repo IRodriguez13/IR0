@@ -7,6 +7,9 @@ ARCH_OBJS_COMMON = \
 	$(ARCH_COMMON_BOOT_LOG_OBJ)
 
 ARCH_OBJS_X86_64 = \
+	arch/x86-64/sources/boot_firmware_sysfs_arch.o \
+	arch/x86-64/sources/x86_boot_port.o \
+	arch/x86-64/sources/x86_oops_port.o \
 	arch/x86-64/sources/arch_debug.o \
 	arch/x86-64/sources/debug_trap.o \
 	arch/x86-64/sources/arch_interface.o \
@@ -44,8 +47,15 @@ ARCH_OBJS_X86_64 = \
 # ARM64 backend providers used by both the normal and freestanding paths.
 ARM64_BACKEND_OBJS = \
 	$(ARCH_COMMON_BOOT_LOG_OBJ) \
+	arch/arm64/sources/boot_firmware_sysfs_arch.o \
+	arch/arm64/sources/arm64_boot_port.o \
 	arch/arm64/sources/arch_debug.o \
 	arch/arm64/sources/arch_arm64.o \
+	arch/arm64/sources/board.o \
+	arch/arm64/sources/boot_info.o \
+	arch/arm64/sources/irq_backend.o \
+	arch/arm64/sources/elf_image_early.o \
+	arch/arm64/sources/arm64_boot_common.o \
 	arch/arm64/sources/arch_early.o \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
@@ -58,6 +68,10 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/bcm2836_irq.o \
 	arch/arm64/sources/syscall_decode.o \
 	arch/arm64/sources/elf_policy.o
+
+# Portable kernel: ir0/cpu.h + irq.h facades (replaces freestanding_stubs subset).
+ARM64_INTERFACE_OBJS_PRODUCT = \
+	arch/arm64/sources/arch_interface.o
 
 # The freestanding path intentionally provides the Linux syscall ABI in small
 # stages while the common process and VFS implementations are brought up.
@@ -84,12 +98,20 @@ ARM64_PROCESS_BACKEND_OBJS = \
 	arch/arm64/sources/arch_switch.o \
 	arch/arm64/sources/arch_mm.o \
 	arch/arm64/sources/arch_irq_init.o \
-	arch/arm64/sources/arch_page_fault.o
+	arch/arm64/sources/arch_page_fault.o \
+	arch/arm64/sources/arch_pf_debug.o \
+	arch/arm64/sources/user_mode.o \
+	arch/arm64/sources/acpi_pm_stub.o
 
 # Minimal runtime services needed before the complete kernel service graph is
 # available. These are real freestanding providers, not link-only shims.
 ARM64_FREESTANDING_RUNTIME_OBJS = \
 	arch/arm64/sources/freestanding_stubs.o \
+	arch/arm64/asm/context/switch_early.o \
+	arch/arm64/sources/switch_early.o \
+	arch/arm64/sources/process_early.o
+
+ARM64_FREESTANDING_RUNTIME_OBJS_PRODUCT = \
 	arch/arm64/asm/context/switch_early.o \
 	arch/arm64/sources/switch_early.o \
 	arch/arm64/sources/process_early.o
@@ -111,12 +133,17 @@ ARM64_EARLY_SCHEDULER_OBJS = \
 # QEMU virtio block support is part of the early usable-machine path.
 ARM64_EARLY_STORAGE_OBJS = \
 	arch/arm64/sources/virtio_blk_early.o \
+	arch/arm64/sources/virtio_net_early.o \
 	drivers/virtio/virtio_mmio.o
 
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \
 	build/arm64-boot/rr_sched.o \
 	build/arm64-boot/switch_arm64.o
+
+ARM64_FIRST_SWITCH_OBJS_PRODUCT = \
+	arch/arm64/sources/first_switch.o \
+	sched/switch/switch_arm64.o
 
 # ktm/mocks/arm64/min_link_stubs.c is not part of ARCH_OBJS_ARM64.
 
@@ -125,7 +152,7 @@ $(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
 	@echo "  CC      $< ($(ARCH) namespace)"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-ARCH_OBJS_ARM64 = \
+ARCH_OBJS_ARM64_FREESTANDING = \
 	$(ARM64_BACKEND_OBJS) \
 	$(ARM64_EARLY_SYSCALL_OBJS) \
 	$(ARM64_PROCESS_BACKEND_OBJS) \
@@ -134,6 +161,18 @@ ARCH_OBJS_ARM64 = \
 	$(ARM64_EARLY_SCHEDULER_OBJS) \
 	$(ARM64_EARLY_STORAGE_OBJS) \
 	$(ARM64_FIRST_SWITCH_OBJS)
+
+ARCH_OBJS_ARM64_PRODUCT = \
+	arch/arm64/asm/boot/entry.o \
+	$(ARM64_BACKEND_OBJS) \
+	$(ARM64_INTERFACE_OBJS_PRODUCT) \
+	$(filter-out arch/arm64/sources/syscall_stub.o,$(ARM64_EARLY_SYSCALL_OBJS)) \
+	$(ARM64_PROCESS_BACKEND_OBJS) \
+	$(ARM64_FREESTANDING_RUNTIME_OBJS_PRODUCT) \
+	$(ARM64_EARLY_USERSPACE_OBJS) \
+	$(ARM64_EARLY_SCHEDULER_OBJS) \
+	$(ARM64_EARLY_STORAGE_OBJS) \
+	$(ARM64_FIRST_SWITCH_OBJS_PRODUCT)
 
 build/arm64-boot/rr_sched.o: sched/rr_sched.c
 	@mkdir -p build/arm64-boot
@@ -151,7 +190,11 @@ build/arm64-boot/switch_arm64.o: sched/switch/switch_arm64.c
 		-c sched/switch/switch_arm64.c -o build/arm64-boot/switch_arm64.o
 
 ifeq ($(ARCH),arm64)
-ARCH_OBJS := $(ARCH_OBJS_ARM64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+ARCH_OBJS := $(ARCH_OBJS_ARM64_PRODUCT)
+else
+ARCH_OBJS := $(ARCH_OBJS_ARM64_FREESTANDING)
+endif
 else
 ARCH_OBJS := $(ARCH_OBJS_COMMON) $(ARCH_OBJS_X86_64)
 endif

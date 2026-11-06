@@ -18,6 +18,7 @@
  */
 #include <stdint.h>
 #include <stdbool.h>
+#include <ir0/driver_backend.h>
 #include <ir0/vga.h>
 #include <ir0/multiboot.h>
 #include <string.h>
@@ -128,6 +129,14 @@ int vbe_init(void)
     if (vbe_state.initialized)
         return 0;
 
+#if !IR0_LEGACY_PC_IO
+    /*
+     * PC VGA text MMIO is not present without legacy PC I/O. Installing this
+     * fallback marks vbe "initialized" and can lure console paths into
+     * touching 0xB8000 (sync abort storm from EL1 on ARM).
+     */
+    return -1;
+#else
     vbe_state.framebuffer_addr = 0xB8000;
     vbe_state.width = 80;
     vbe_state.height = 25;
@@ -136,6 +145,7 @@ int vbe_init(void)
     vbe_state.fb = (uint8_t *)(uintptr_t)0xB8000;
     vbe_state.initialized = true;
     return 0;
+#endif
 }
 
 // Clear screen with color

@@ -14,7 +14,10 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <config.h>
+#include <ir0/driver_backend.h>
 #include <ir0/vga.h>
+#include <ir0/cpu_info.h>
 #include <ir0/types.h>
 #include <ir0/kmem.h>
 #include <ir0/arch_port.h>
@@ -148,12 +151,22 @@ int clock_system_init(void)
     /* Initialize alarm system */
     clock_state.alarms = NULL;
     clock_state.alarm_count = 0;
-    
+
+/*
+ * Legacy PC uses PIT; ARM64 product uses the arch timer (see Makefile: IR0_LEGACY_PC_IO).
+ * .config may still describe the developer’s menuconfig host (x86) — do not use CONFIG_ARCH_* alone for this split.
+ */
+#if !IR0_LEGACY_PC_IO
+    timer_init();
+    clock_state.pit_enabled = 0;
+    clock_state.active_timer = CLOCK_TIMER_NONE;
+#else
     /* Initialize PIT */
     extern void init_PIT(uint32_t frequency);
     init_PIT(CONFIG_TICK_RATE_HZ);
     clock_state.pit_enabled = 1;
     clock_state.active_timer = CLOCK_TIMER_PIT;
+#endif
 
     /* Wall clock: realtime_boot_epoch = RTC_UTC; then += monotonic elapsed. */
     clock_try_set_realtime_from_rtc();
@@ -164,7 +177,11 @@ int clock_system_init(void)
 
     /* Mark as initialized */
     clock_state.initialized = 1;
+#if !IR0_LEGACY_PC_IO
+    klog_notice("CLOCK", "Clock system initialized (ARM Generic Timer jiffy)");
+#else
     klog_notice("CLOCK", "Clock system initialized with PIT");
+#endif
     return 0;
 }
 
@@ -177,6 +194,10 @@ void init_clock(void)
 /* Timer detection - prioritize higher precision timers */
 clock_timer_t detect_best_clock(void)
 {
+#if !IR0_LEGACY_PC_IO
+	(void)clock_state;
+	return CLOCK_TIMER_NONE;
+#else
     /* Try to detect best available timer in order of preference:
      * 1. LAPIC timer (best precision, per-CPU, ~1MHz)
      * 2. HPET (high precision, system-wide, sub-microsecond)
@@ -206,6 +227,7 @@ clock_timer_t detect_best_clock(void)
     clock_state.pit_enabled = 1;
     clock_state.active_timer = CLOCK_TIMER_PIT;
     return CLOCK_TIMER_PIT;
+#endif
 }
 
 clock_timer_t get_current_timer_type(void)

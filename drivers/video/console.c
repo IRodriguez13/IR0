@@ -17,6 +17,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/driver_backend.h>
 
 static int use_fb = 0;
 static int fb_console_cols = CONSOLE_WIDTH;
@@ -32,7 +33,9 @@ static int fb_origin_y;
 /* Glyph+color shadow so the software cursor can restore column 0 after CR/LF. */
 static uint16_t cell_shadow[CONSOLE_MAX_HEIGHT][CONSOLE_MAX_WIDTH];
 
+#if IR0_LEGACY_PC_IO
 #define VGA_BUF ((volatile uint16_t *)0xB8000)
+#endif
 
 static int shadow_rows(void)
 {
@@ -97,6 +100,7 @@ static void shadow_clear(uint8_t color)
 	}
 }
 
+#if IR0_LEGACY_PC_IO
 static void put_cell_vga(int row, int col, char c, uint8_t color)
 {
 	if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
@@ -121,6 +125,7 @@ static void clear_vga(uint8_t color)
 	for (i = 0; i < CONSOLE_WIDTH * CONSOLE_HEIGHT; i++)
 		VGA_BUF[i] = (uint16_t)((color << 8) | ' ');
 }
+#endif
 
 #if CONFIG_ENABLE_VBE
 /*
@@ -408,8 +413,18 @@ void console_draw_cell(int row, int col, char c, uint8_t color)
 {
 	if (use_fb)
 		put_cell_fb(row, col, c, color);
+#if IR0_LEGACY_PC_IO
 	else
 		put_cell_vga(row, col, c, color);
+#else
+	else
+	{
+		(void)row;
+		(void)col;
+		(void)c;
+		(void)color;
+	}
+#endif
 }
 
 void console_put_cell(int row, int col, char c, uint8_t color)
@@ -435,8 +450,10 @@ void console_scroll_up(uint8_t clear_color)
 	shadow_scroll_up(clear_color);
 	if (use_fb)
 		scroll_up_fb(clear_color);
+#if IR0_LEGACY_PC_IO
 	else
 		scroll_up_vga(clear_color);
+#endif
 }
 
 void console_clear(uint8_t color)
@@ -444,8 +461,10 @@ void console_clear(uint8_t color)
 	shadow_clear(color);
 	if (use_fb)
 		clear_fb(color);
+#if IR0_LEGACY_PC_IO
 	else
 		clear_vga(color);
+#endif
 }
 
 void console_init(void)
@@ -456,6 +475,10 @@ void console_init(void)
 	uint32_t bpp;
 
 	use_fb = 0;
+	/*
+	 * vbe_init() may register a 16bpp VGA-text fallback on x86. That must
+	 * not enable the framebuffer console path (ARM has no VGA; never use_fb).
+	 */
 	if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 &&
 	    w >= 640 && h >= 400)
 	{

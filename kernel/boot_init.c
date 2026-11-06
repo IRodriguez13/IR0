@@ -41,8 +41,11 @@
 #include <ir0/console.h>
 #include <ir0/multiboot.h>
 #include <ir0/ktm/ktm.h>
+#include <ir0/ktm/klog.h>
+#include <ir0/boot_arch.h>
 #include <ir0/boot_log.h>
 #include <ir0/boot_memory.h>
+#include <ir0/boot_firmware_sysfs.h>
 #include <ir0/init_handoff.h>
 #include <ir0/vfs.h>
 #include <ir0/open_flags.h>
@@ -57,13 +60,17 @@
 #include "kernel.h"
 #include "boot_init.h"
 
-void boot_early(uint32_t multiboot_info)
+#include <ir0/boot_port.h>
+
+void boot_early(uintptr_t firmware_handle)
 {
 #if !CONFIG_ENABLE_VBE
-	(void)multiboot_info;
+	(void)firmware_handle;
 #endif
 
-	set_boot_params((void *)(uintptr_t)multiboot_info);
+	set_boot_params((void *)firmware_handle);
+	ir0_boot_arch_firmware_early(firmware_handle);
+	ir0_boot_firmware_sysfs_init();
 	ir0_cmdline_apply_log_profile();
 	early_init();
 	heap_init();
@@ -73,7 +80,7 @@ void boot_early(uint32_t multiboot_info)
 	 * that print() uses framebuffer when gfxpayload=1024x768x32 in grub.
 	 */
 #if CONFIG_ENABLE_VBE
-	if (video_backend_init_from_multiboot(multiboot_info) != 0)
+	if (video_backend_init_from_multiboot((uint32_t)firmware_handle) != 0)
 		video_backend_init_fallback();
 #endif
 	console_backend_init();
@@ -81,7 +88,7 @@ void boot_early(uint32_t multiboot_info)
 		console_backend_clear(0x0F);
 }
 
-void boot_memory_serial(uint32_t multiboot_info)
+void boot_memory_serial(uintptr_t firmware_handle)
 {
 	/*
 	 * The architecture facade supplies reserved-free RAM banks. x86 currently
@@ -99,10 +106,12 @@ void boot_memory_serial(uint32_t multiboot_info)
 	 */
 	paging_pin_kernel_address_space(paging_current_address_space());
 
+	ir0_boot_port_serial_before_logging();
+
 	logging_init();
 	(void)klog_promote_normal_ring();
 	ir0_driver_registry_init();
-	serial_init();
+	ir0_boot_port_serial_after_driver_registry();
 
 	klog_set_boot_phase(KLOG_BOOT_EARLY_ARCH);
 	ir0_boot_serial_ready();
@@ -112,29 +121,7 @@ void boot_memory_serial(uint32_t multiboot_info)
 	klog_set_boot_phase(KLOG_BOOT_MEMORY);
 	klog_info("PMM", "physical memory manager online");
 	klog_set_boot_phase(KLOG_BOOT_PLATFORM);
-	{
-		char hv_vendor[16];
-
-		if (hypervisor_present() &&
-		    hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
-		{
-			if (strncmp(hv_vendor, "TCGTCGTCGTCG", 12) == 0)
-				ir0_boot_info("HYPERVISOR",
-					      "detected vendor=TCG (QEMU TCG)");
-			else if (strncmp(hv_vendor, "KVMKVMKVM", 9) == 0)
-				ir0_boot_info("HYPERVISOR",
-					      "detected vendor=KVM");
-			else
-				log_info_fmt("HYPERVISOR", "detected vendor=%s",
-					     hv_vendor);
-		}
-		else
-		{
-			ir0_boot_info("HYPERVISOR", "none detected");
-			ir0_boot_notice("PLATFORM",
-					"Bare-metal execution confirmed!");
-		}
-	}
+	ir0_boot_log_platform_hypervisor();
 
 #if CONFIG_ENABLE_VBE
 	{
@@ -157,11 +144,10 @@ void boot_memory_serial(uint32_t multiboot_info)
 					: "",
 				(unsigned)video_backend_fail_reason());
 
-			if (multiboot_info)
+			if (firmware_handle)
 			{
 				const struct multiboot_info *mb =
-					(const struct multiboot_info *)(uintptr_t)
-						multiboot_info;
+					(const struct multiboot_info *)firmware_handle;
 				log_info_fmt(
 					"BOOT",
 					"Multiboot flags=0x%x (bit12=FB:%u) addr=0x%x w=%u h=%u bpp=%u",
@@ -176,12 +162,12 @@ void boot_memory_serial(uint32_t multiboot_info)
 			else
 				log_info("BOOT", "Multiboot info is NULL");
 #else
-			(void)multiboot_info;
+			(void)firmware_handle;
 #endif
 		}
 	}
 #else
-	(void)multiboot_info;
+	(void)firmware_handle;
 #endif
 
 	log_subsystem_ok("CORE");
@@ -240,6 +226,8 @@ void boot_drivers_rootfs(void)
 			klog_smoke("FIRST_BAREMETAL_BOOT_FAIL");
 		}
 	}
+
+	ir0_boot_port_maybe_seed_init_from_embedded();
 }
 
 void boot_runtime(void)
@@ -397,6 +385,7 @@ void boot_enter_userspace(void)
 
 	klog_set_boot_phase(KLOG_BOOT_USERSPACE);
 	klog_notice("BOOT", "system ready for userspace");
+	ir0_boot_arch_userspace_handoff_smoke();
 	klog_event(KLOG_EVENT_USERSPACE_HANDOFF, 0, KLOG_LEVEL_INFO, "INIT",
 		   "exec /sbin/init");
 	init_pid = ir0_init_handoff_run(&ops, NULL, "/sbin/init", argv_init);

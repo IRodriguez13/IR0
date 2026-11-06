@@ -77,6 +77,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_proc_version_contract, "proc_version_contract", 1 },
 	{ ktest_proc_uptime_contract, "proc_uptime_contract", 1 },
 	{ ktest_sysfs_hostname_contract, "sysfs_hostname_contract", 1 },
+	{ ktest_sysfs_firmware_ir0_contract,
+	  "sysfs_firmware_ir0_contract", 1 },
 	{ ktest_sysfs_max_processes_contract,
 	  "sysfs_max_processes_contract", 1 },
 	{ ktest_proc_netinfo_contract, "proc_netinfo_contract", 1 },

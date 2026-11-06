@@ -12,7 +12,9 @@
 #   ARCH=x86-64|arm64       target architecture (default: .config / x86-64)
 #   BOARD=qemu-virt|rpi3|rpi4|rpi5   ARM64 board (default: qemu-virt)
 #   IR0_PRODUCT=path        explicit product (default: per ARCH/BOARD)
-#   DISK=path|none          x86 raw disk (default: disk.img when present)
+#   DISK=path|none          raw root disk (x86 IDE; arm64 virt virtio-blk "vda")
+#                           default: ISD profile image when present, else disk.img (x86
+#                           requires a disk; arm64 virt keeps DISK optional)
 #   QEMU=path               explicit QEMU binary
 #   IR0_MEM=512M|1G|...     guest memory (default: 512M x86, 1G ARM64)
 #   IR0_NET=0               disable the default user-mode NIC
@@ -91,13 +93,14 @@ else
 	BOARD=""
 fi
 
-# Product resolution. Board images are raw kernel8.img files for QEMU's
-# raspi machines; the ELF twin remains the link product.
+# Product resolution. qemu-virt boots the raw Linux Image so QEMU's
+# bootloader passes the DTB in x0. An ELF -kernel leaves x0 clear.
+# Board images are raw kernel8.img files for QEMU's raspi machines.
 if [ -z "$PRODUCT" ]; then
 	if [ "$ARCH" = arm64 ]; then
 		case "$BOARD" in
 		rpi3 | rpi4 | rpi5) PRODUCT="kernel-arm64-$BOARD-min.bin" ;;
-		*) PRODUCT="kernel-arm64.bin" ;;
+		*) PRODUCT="kernel-arm64.img" ;;
 		esac
 	else
 		PRODUCT="kernel-x64.iso"
@@ -139,6 +142,11 @@ resolve_isd_root_disk() {
 	manifest=$isd_root/scripts/print-artifacts.sh
 	command -v bash >/dev/null 2>&1 || return 1
 	[ -f "$manifest" ] || return 1
+	# ISD layout is per-tuple (e.g. out/aarch64/images/... vs out/x86_64/...).
+	isd_manifest_arch=x86_64
+	case "$ARCH" in
+	arm64) isd_manifest_arch=aarch64 ;;
+	esac
 	# print-artifacts.sh is bash. Its paths are the profile's packed images.
 	root_disk=
 	root_ext2=
@@ -150,7 +158,7 @@ resolve_isd_root_disk() {
 		ROOT_FS=*) root_fs=${line#ROOT_FS=} ;;
 		esac
 	done <<EOF
-$(ARCH=x86_64 PROFILE="$profile" IR0_ROOT="$ROOT" bash "$manifest")
+$(ARCH="$isd_manifest_arch" PROFILE="$profile" IR0_ROOT="$ROOT" bash "$manifest")
 EOF
 	case "$root_fs" in
 	ext2)
@@ -175,6 +183,14 @@ if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = x86-64 ]; then
 		echo "  build one: make -C \"\${IR0_ISD_ROOT:-../ISD}\" image-minix PROFILE=minimal" >&2
 		echo "  or pass DISK=<image>  (DISK=none boots the kernel alone)" >&2
 		exit 1
+	fi
+fi
+# ARM64 qemu-virt: optional virtio-blk (kernel registers vda; early rootfs can bind /init from disk).
+if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = arm64 ] &&
+	[ "$BOARD" = qemu-virt ]; then
+	resolve_isd_root_disk || true
+	if [ -z "$DISK" ] && [ -f "$ROOT/disk.img" ]; then
+		DISK=$ROOT/disk.img
 	fi
 fi
 if [ -n "$DISK" ] && [ ! -f "$DISK" ]; then
@@ -222,6 +238,17 @@ if [ "$ARCH" = arm64 ]; then
 	set -- "$@" -M "$MACHINE" -kernel "$PRODUCT" -no-reboot
 	if [ "$MACHINE" = virt ]; then
 		set -- "$@" -cpu cortex-a57
+		# Modern virtio-mmio. A NIC is enough for the probe; a block
+		# device is only present when the caller passes one.
+		set -- "$@" -global virtio-mmio.force-legacy=false
+		if [ -n "$DISK" ]; then
+			set -- "$@" -drive "file=$DISK,format=raw,if=none,id=ir0_root" \
+				-device virtio-blk-device,drive=ir0_root
+		fi
+		if [ "${IR0_NET:-1}" != 0 ]; then
+			set -- "$@" -netdev user,id=net0 \
+				-device virtio-net-device,netdev=net0
+		fi
 	fi
 	case "$MODE" in
 	gdb)

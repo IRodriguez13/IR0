@@ -27,6 +27,8 @@
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
 #include <ir0/vfs.h>
+#include <ir0/sysfs.h>
+#include <ir0/boot_firmware_sysfs.h>
 #include <string.h>
 
 static int count_tabs(const char *line)
@@ -184,6 +186,27 @@ void ktest_sysfs_hostname_contract(void)
 	sys_close((int)fd);
 	KASSERT_GT(n, 0);
 	KASSERT(buf[0] != '\0');
+
+	KTEST_END();
+}
+
+void ktest_sysfs_firmware_ir0_contract(void)
+{
+	char pbuf[128];
+	char dbuf[1536];
+
+	KTEST_BEGIN("sysfs_firmware_ir0_contract");
+
+	ir0_boot_firmware_sysfs_init();
+
+	KASSERT_GT(sys_firmware_ir0_protocol_read_reg(pbuf, sizeof(pbuf)), 0);
+	KASSERT(contains_text(pbuf, "unknown") || contains_text(pbuf, "multiboot1") ||
+		contains_text(pbuf, "fdt") || contains_text(pbuf, "dtb_invalid"));
+
+	KASSERT_GT(sys_firmware_ir0_boot_detail_read_reg(dbuf, sizeof(dbuf)), 0);
+	KASSERT(contains_text(dbuf, "unavailable") ||
+		contains_text(dbuf, "multiboot_valid") ||
+		contains_text(dbuf, "fdt_valid"));
 
 	KTEST_END();
 }

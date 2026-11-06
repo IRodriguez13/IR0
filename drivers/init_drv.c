@@ -44,6 +44,7 @@
 #include <ir0/block_dev.h>
 #include <drivers/serial/serial.h>
 #include <ir0/resource_registry.h>
+#include <ir0/driver_backend.h>
 
 #if CONFIG_ENABLE_MOUSE
 #include <drivers/input/ps2_mouse.h>
@@ -78,26 +79,26 @@ void ata_block_register(void);
 
 static int boot_init_ps2_controller(void)
 {
-#if CONFIG_INIT_PS2_CONTROLLER
-    ps2_init();
+#if IR0_LEGACY_PC_IO && CONFIG_INIT_PS2_CONTROLLER
+	ps2_init();
 #endif
-    return 0;
+	return 0;
 }
 
 static int boot_init_keyboard(void)
 {
-#if CONFIG_INIT_PS2_CONTROLLER
-    irq_keyboard_init();
+#if IR0_LEGACY_PC_IO && CONFIG_INIT_PS2_CONTROLLER
+	irq_keyboard_init();
 #endif
-    return 0;
+	return 0;
 }
 
 static int boot_init_mouse(void)
 {
-#if CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
-    ps2_mouse_init();
+#if IR0_LEGACY_PC_IO && CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
+	ps2_mouse_init();
 #endif
-    return 0;
+	return 0;
 }
 
 static int boot_init_pc_speaker(void)
@@ -172,13 +173,21 @@ static int boot_init_hostshare_9p(void)
 
 static void register_bootstrap_plan(void)
 {
+#if IR0_LEGACY_PC_IO
+	const int ps2_boot = CONFIG_INIT_PS2_CONTROLLER;
+	const int ps2_mouse_boot =
+	    (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER);
+#else
+	const int ps2_boot = 0;
+	const int ps2_mouse_boot = 0;
+#endif
     driver_bootstrap_reset();
     driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_controller", boot_init_ps2_controller,
-                              CONFIG_INIT_PS2_CONTROLLER);
+			      ps2_boot);
     driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_keyboard", boot_init_keyboard,
-                              CONFIG_INIT_PS2_CONTROLLER);
+			      ps2_boot);
     driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_mouse", boot_init_mouse,
-                              (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER));
+			      ps2_mouse_boot);
     driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "pc_speaker", boot_init_pc_speaker,
                               (CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "hostshare_9p", boot_init_hostshare_9p,

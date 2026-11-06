@@ -3,7 +3,8 @@
 # ARM64 product recipes — lean fragment included by the root Makefile.
 #
 # Products:
-#   kernel-arm64.bin              validated qemu-virt aggregate (default)
+#   kernel-arm64.bin              validated qemu-virt aggregate ELF
+#   kernel-arm64.img              raw Linux Image booted by `make run` on virt
 #   kernel-arm64-boot.bin         early qemu-virt ELF
 #   kernel-arm64-<board>-min.bin  early board images (rpi3/rpi4/rpi5)
 #
@@ -132,6 +133,9 @@ ARM64_PORTABLE_OBJS = \
 # early object is added once.
 ARM64_BOOT_LINK_OBJS = \
 	arch/arm64/sources/boot_entry.o \
+	arch/arm64/sources/arm64_boot_common.o \
+	arch/arm64/sources/kernel_arm64_entry.o \
+	build/arm64-boot/boot_flow.o \
 	arch/arm64/sources/boot_stub.o \
 	arch/arm64/sources/mmu_early.o \
 	arch/arm64/sources/exc_early.o \
@@ -303,6 +307,8 @@ arm64-all-objs-probe: arm64-portable-compile
 	fi
 
 kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_early.c \
+		kernel/boot_flow.c arch/arm64/sources/arm64_boot_common.c \
+		arch/arm64/sources/kernel_arm64_entry.c \
 		arch/arm64/asm/boot/entry.S arch/arm64/sources/boot_info.c \
 		arch/arm64/sources/mmu_early.h arch/arm64/sources/exc_early.c \
 		arch/arm64/sources/exc_early.h arch/arm64/sources/slice_hello.c \
@@ -358,6 +364,17 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 		sched/switch/switch_arm64.c sched/task.h \
 		arch/arm64/linker.ld $(MUSL_AARCH64_HELLO)
 	@mkdir -p build/arm64-boot
+	@echo "  CC      kernel/boot_flow.c (freestanding — dispatches arch bring-up)"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c kernel/boot_flow.c -o build/arm64-boot/boot_flow.o
+	@echo "  CC      arch/arm64/sources/arm64_boot_common.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c arch/arm64/sources/arm64_boot_common.c \
+		-o arch/arm64/sources/arm64_boot_common.o
+	@echo "  CC      arch/arm64/sources/kernel_arm64_entry.c"
+	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/includes \
+		-I$(KERNEL_ROOT)/includes/ir0 -c arch/arm64/sources/kernel_arm64_entry.c \
+		-o arch/arm64/sources/kernel_arm64_entry.o
 	@echo "  CC      arch/arm64/sources/boot_stub.c (F7j process+TTBR+musl+RR+bb+virtio)"
 	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/includes \
 		-I$(KERNEL_ROOT)/includes/ir0 -c \
@@ -648,6 +665,64 @@ kernel-arm64-boot.bin: arch/arm64/sources/boot_stub.c arch/arm64/sources/mmu_ear
 	@echo "  LD      $@"
 	@aarch64-linux-gnu-ld -T arch/arm64/linker.ld -o $@ $(ARM64_BOOT_LINK_OBJS)
 	@echo "✓ $@"
+
+# FDT-derived hypervisor banner (common boot_log) under QEMU virt.
+.PHONY: smoke-arm64-hypervisor-log
+smoke-arm64-hypervisor-log: kernel-arm64-boot.bin
+	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
+		echo "⊘ smoke-arm64-hypervisor-log SKIP (qemu-system-aarch64 not in PATH)"; \
+	else \
+		echo "  SMOKE   ARM64 QEMU virt HYPERVISOR boot log..."; \
+		rm -f $(HOST_TMP)/arm64-hypervisor-smoke.log; \
+		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-hypervisor-smoke.log \
+			--timeout 25 --stale-sec 10 --mem 256M --done ARM64_BOOT_OK -- \
+			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
+			-kernel kernel-arm64-boot.bin -nographic -serial mon:stdio \
+			-display none -no-reboot 2>/dev/null; \
+		grep -q '\[HYPERVISOR\]' $(HOST_TMP)/arm64-hypervisor-smoke.log; \
+		grep -Eq 'TCG \(QEMU TCG\)|vendor=KVM|Microsoft Hv|VMware|none detected' \
+			$(HOST_TMP)/arm64-hypervisor-smoke.log || \
+		grep -q 'Bare-metal execution confirmed' $(HOST_TMP)/arm64-hypervisor-smoke.log; \
+		grep -q 'ARM64_BOOT_OK' $(HOST_TMP)/arm64-hypervisor-smoke.log; \
+		echo "✓ smoke-arm64-hypervisor-log (HYPERVISOR line + ARM64_BOOT_OK)"; \
+	fi
+
+# Portable product kernel (ir0_kernel_boot, no IR0_FREESTANDING_BOOT): tag before /sbin/init handoff.
+.PHONY: smoke-arm64-product-log
+smoke-arm64-product-log: kernel-arm64-product.bin
+	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
+		echo "⊘ smoke-arm64-product-log SKIP (qemu-system-aarch64 not in PATH)"; \
+	else \
+		echo "  SMOKE   ARM64 product kernel handoff tag..."; \
+		rm -f $(HOST_TMP)/arm64-product-smoke.log; \
+		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-product-smoke.log \
+			--timeout 45 --stale-sec 15 --mem 256M --expected-panic \
+			--done ARM64_PRODUCT_BOOT_HANDOFF -- \
+			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
+			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-display none -no-reboot 2>/dev/null && \
+		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-smoke.log && \
+		echo "✓ smoke-arm64-product-log (ARM64_PRODUCT_BOOT_HANDOFF)"; \
+	fi
+
+# Handoff + first EL0 syscall from init (parity signal vs x86 product path): needs both tags.
+.PHONY: smoke-arm64-product-usermode-log
+smoke-arm64-product-usermode-log: kernel-arm64-product.bin
+	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
+		echo "⊘ smoke-arm64-product-usermode-log SKIP (qemu-system-aarch64 not in PATH)"; \
+	else \
+		echo "  SMOKE   ARM64 product handoff + EL0 syscall..."; \
+		rm -f $(HOST_TMP)/arm64-product-usermode-smoke.log; \
+		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-product-usermode-smoke.log \
+			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
+			--done ARM64_PRODUCT_BOOT_HANDOFF --done ARM64_PRODUCT_EL0_SYSCALL_OK -- \
+			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
+			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-display none -no-reboot 2>/dev/null && \
+		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
+		grep -q 'ARM64_PRODUCT_EL0_SYSCALL_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
+		echo "✓ smoke-arm64-product-usermode-log (handoff + EL0 syscall)"; \
+	fi
 
 
 .PHONY: kernel-arm64-all.bin \

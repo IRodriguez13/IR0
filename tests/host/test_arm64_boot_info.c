@@ -268,5 +268,14 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(arm64_board_boot_info()->reserved_range_count == 4U);
 	ASSERT(arm64_fdt_boot_info_init((uintptr_t)(fdt + 1)) != 0);
 	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
+	/* x0 empty, DTB sitting at the fallback address. */
+	ASSERT(arm64_fdt_boot_info_init_fallback(0, (uintptr_t)platform_fdt) == 0);
+	ASSERT(arm64_board_boot_info()->fdt_valid == 1);
+	ASSERT(arm64_board_boot_info()->fdt_pa == (uintptr_t)platform_fdt);
+	/* A valid x0 wins over a bad fallback. */
+	ASSERT(arm64_fdt_boot_info_init_fallback((uintptr_t)platform_fdt, 1) == 0);
+	ASSERT(arm64_board_boot_info()->fdt_pa == (uintptr_t)platform_fdt);
+	ASSERT(arm64_fdt_boot_info_init_fallback(0, 0) != 0);
+	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
 	TEST_END();
 }

@@ -14,11 +14,63 @@
 
 #include <ir0/input_backend.h>
 #include <config.h>
+#include <ir0/driver_backend.h>
 #if CONFIG_ENABLE_MOUSE
 #include <ir0/ps2_mouse.h>
 #endif
 #include <ir0/irq.h>
 
+#if !IR0_LEGACY_PC_IO
+/*
+ * PS/2 keyboard path is legacy-PC only; virtio-input and other boards wire separately.
+ * Stubs keep the input_backend TU linkable on non-legacy backends.
+ */
+char keyboard_buffer_get(void)
+{
+	return 0;
+}
+
+int keyboard_buffer_has_data(void)
+{
+	return 0;
+}
+
+void keyboard_buffer_clear(void)
+{
+}
+
+void keyboard_all_keys_up(void)
+{
+}
+
+int keyboard_set_layout(int layout)
+{
+	(void)layout;
+	return -1;
+}
+
+int keyboard_get_layout(void)
+{
+	return 0;
+}
+
+const char *keyboard_get_layout_name(int layout)
+{
+	(void)layout;
+	return "";
+}
+
+int keyboard_set_console_mode(int mode)
+{
+	(void)mode;
+	return -1;
+}
+
+int keyboard_get_console_mode(void)
+{
+	return 0;
+}
+#elif IR0_LEGACY_PC_IO
 /* Implemented in arch/x86-64/sources/interrupt/keyboard.c — no portable include. */
 extern char keyboard_buffer_get(void);
 extern int keyboard_buffer_has_data(void);
@@ -29,11 +81,14 @@ extern int keyboard_get_layout(void);
 extern const char *keyboard_get_layout_name(int layout);
 extern int keyboard_set_console_mode(int mode);
 extern int keyboard_get_console_mode(void);
+#endif
 extern int poll_wake_check_nosched(void);
 
 void input_mouse_feed_byte(uint8_t data)
 {
-#if CONFIG_ENABLE_MOUSE
+#if !IR0_LEGACY_PC_IO
+	(void)data;
+#elif CONFIG_ENABLE_MOUSE
 	ps2_mouse_feed_byte(data);
 #else
 	(void)data; /* Discard AUX while mouse driver is disabled. */
@@ -51,7 +106,9 @@ void input_mouse_handle_interrupt(void)
 
 bool input_mouse_is_available(void)
 {
-#if CONFIG_ENABLE_MOUSE
+#if !IR0_LEGACY_PC_IO
+	return false;
+#elif CONFIG_ENABLE_MOUSE
 	return ps2_mouse_is_available();
 #else
 	return false;
@@ -62,7 +119,9 @@ bool input_mouse_get_state(ir0_mouse_state_t *out)
 {
 	if (!out)
 		return false;
-#if CONFIG_ENABLE_MOUSE
+#if !IR0_LEGACY_PC_IO
+	return false;
+#elif CONFIG_ENABLE_MOUSE
 	if (!ps2_mouse_is_available())
 		return false;
 	{
@@ -92,7 +151,10 @@ bool input_mouse_get_state(ir0_mouse_state_t *out)
 
 bool input_mouse_set_sensitivity(uint8_t sensitivity)
 {
-#if CONFIG_ENABLE_MOUSE
+#if !IR0_LEGACY_PC_IO
+	(void)sensitivity;
+	return false;
+#elif CONFIG_ENABLE_MOUSE
 	return ps2_mouse_set_sample_rate(sensitivity);
 #else
 	(void)sensitivity;
@@ -102,7 +164,9 @@ bool input_mouse_set_sensitivity(uint8_t sensitivity)
 
 bool input_mouse_packet_available(void)
 {
-#if CONFIG_ENABLE_MOUSE
+#if !IR0_LEGACY_PC_IO
+	return false;
+#elif CONFIG_ENABLE_MOUSE
 	return ps2_mouse_packet_available();
 #else
 	return false;
@@ -111,7 +175,10 @@ bool input_mouse_packet_available(void)
 
 int input_mouse_read_ps2(uint8_t packet[3])
 {
-#if CONFIG_ENABLE_MOUSE
+#if !IR0_LEGACY_PC_IO
+	(void)packet;
+	return 0;
+#elif CONFIG_ENABLE_MOUSE
 	ps2_mouse_packet_t source;
 
 	if (!packet || !ps2_mouse_packet_available() ||

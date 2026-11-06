@@ -12,6 +12,7 @@
  */
 
 #include <ir0/vga.h>
+#include <ir0/driver_backend.h>
 #include <ir0/serial_io.h>
 #include <ir0/console_backend.h>
 #include <ir0/video_console.h>
@@ -58,11 +59,18 @@ void putchar_at(char c, unsigned char color, int x, int y)
         console_put_cell(y, x, c, color);
         return;
     }
+#if !IR0_LEGACY_PC_IO
+    (void)c;
+    (void)color;
+    (void)x;
+    (void)y;
+#else
     {
         unsigned short *vga = (unsigned short *)VGA_MEMORY;
         int index = y * VGA_WIDTH + x;
         vga[index] = (unsigned short)c | (unsigned short)color << 8;
     }
+#endif
 }
 
 /* Scroll screen up by one line */
@@ -78,6 +86,7 @@ void scroll()
         cursor_pos = cursor_y * cols + cursor_x;
         return;
     }
+#if IR0_LEGACY_PC_IO
     {
         unsigned short *vga = (unsigned short *)VGA_MEMORY;
 
@@ -89,6 +98,10 @@ void scroll()
 
         cursor_y = VGA_HEIGHT - 1;
     }
+#else
+    cursor_y = rows - 1;
+    cursor_pos = cursor_y * cols + cursor_x;
+#endif
 }
 
 /*
@@ -212,6 +225,7 @@ void clear_screen()
         cursor_pos = 0;
         return;
     }
+#if IR0_LEGACY_PC_IO
     {
         unsigned short *vga = (unsigned short *)VGA_MEMORY;
         unsigned short blank = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
@@ -223,6 +237,11 @@ void clear_screen()
         cursor_y = 0;
         cursor_pos = 0;
     }
+#else
+    cursor_x = 0;
+    cursor_y = 0;
+    cursor_pos = 0;
+#endif
 }
 
 /* Función para printf básico (sin implementar aquí, pero la idea) */

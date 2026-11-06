@@ -29,12 +29,29 @@ IR0_RUN_MODES := gui console debug fullscreen gdb
 IR0_GOAL_ARCH := $(firstword $(filter $(IR0_ARCH_GOALS),$(MAKECMDGOALS)))
 IR0_GOAL_BOARD := $(firstword $(filter $(IR0_BOARD_GOALS),$(MAKECMDGOALS)))
 IR0_RUN_MODE := $(firstword $(filter $(IR0_RUN_MODES),$(MAKECMDGOALS)))
+# Building any ARM64 product recipe requires ARM64 fragments (.config may still
+# default CONFIG_ARCH_X86_64=y — without this, prerequisite arm64-common-core-compile
+# and similar targets are undefined and fail opaquely).
+IR0_GOAL_ARM64_PRODUCT := $(firstword $(filter \
+	kernel-arm64% smoke-arm64% arm64-%,$(MAKECMDGOALS)))
+
+IR0_ARM64_PRODUCT ?= n
+
+# Product kernel image and smokes that run it must set IR0_ARM64_PRODUCT so ALL_OBJS,
+# ARCH_OBJS, and driver filters match `make kernel-arm64-product.bin` (not freestanding).
+ifneq ($(filter kernel-arm64-product.bin kernel-arm64-product smoke-arm64-product%,$(MAKECMDGOALS)),)
+override ARCH := arm64
+override IR0_ARM64_PRODUCT := y
+endif
 
 ifneq ($(IR0_GOAL_ARCH),)
 override ARCH := $(IR0_GOAL_ARCH)
 endif
 ifneq ($(IR0_GOAL_BOARD),)
 override BOARD := $(IR0_GOAL_BOARD)
+endif
+ifneq ($(IR0_GOAL_ARM64_PRODUCT),)
+override ARCH := arm64
 endif
 
 CFLAGS_TARGET := -DIR0_DESKTOP
@@ -219,6 +236,10 @@ ifeq ($(ARCH),arm64)
 ARM64_BOARD := $(BOARD)
 -include scripts/make/arm64.mk
 -include scripts/make/arm64-board.mk
+# Board macros (qemu-virt vs rpi*) — required by portable sources such as
+# arch/arm64/sources/boot_info.c for DTB fallbacks; freestanding uses the same via
+# ARM64_BOOT_CFLAGS.
+CFLAGS += $(ARM64_BOARD_CFLAGS)
 endif
 
 all: $(DEFAULT_BUILD_TARGET)
@@ -272,6 +293,7 @@ ifeq ($(ARCH),x86-64)
 CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
 else ifeq ($(ARCH),arm64)
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/include
+CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/sources
 endif
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64
 CFLAGS += -I$(KERNEL_ROOT)/kernel
@@ -306,6 +328,12 @@ ASMFLAGS = -f elf64 -I$(CURDIR)/
 LDFLAGS = -m aarch64elf -T arch/arm64/linker.ld -Map=kernel-arm64.map
 endif
 
+# kernel-arm64-product links via the compiler driver so libgcc resolves __sync_* on AArch64.
+KERNEL_ARM64_PRODUCT_LINK_CMD := $(CC)
+KERNEL_ARM64_PRODUCT_LINK_FLAGS := -nostdlib -static \
+	-Wl,-T,$(KERNEL_ROOT)/arch/arm64/linker.ld \
+	-Wl,-Map,$(KERNEL_ROOT)/kernel-arm64.map
+
 
 # QEMU / runtime
 #
@@ -320,7 +348,13 @@ IR0_DISK ?= disk.img
 
 KERNEL_OBJS = \
 	kernel/main.o \
+	arch/common/boot_arch.o \
+	arch/common/boot_port.o \
+	arch/common/oops_port.o \
+	kernel/boot_flow.o \
+	kernel/kernel_wiring.o \
 	kernel/boot_init.o \
+	kernel/boot_firmware_sysfs.o \
 	kernel/init_handoff.o \
     kernel/cmdline.o \
     kernel/rootfs_base.o \
@@ -512,6 +546,12 @@ else
 CFLAGS += -DCONFIG_SCHEDULER_POLICY=0
 endif
 
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+KERNEL_OBJS += arch/arm64/sources/boot_arch_portable.o
+endif
+endif
+
 MEMORY_OBJS = \
 	mm/allocator.o \
 	mm/boot_memory.o \
@@ -565,6 +605,17 @@ LIB_OBJS = \
     $(AUDIO_BACKEND_OBJ) \
     includes/string.o
 
+# ARM64 product virtio keyboard has no i8042 — drop PS/2 scan-code tables.
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+LIB_OBJS_PRODUCT := $(filter-out drivers/input/ps2_set1.o drivers/input/ps2_mouse_pkt.o,$(LIB_OBJS))
+else
+LIB_OBJS_PRODUCT := $(LIB_OBJS)
+endif
+else
+LIB_OBJS_PRODUCT := $(LIB_OBJS)
+endif
+
 INTERRUPT_OBJS_X86_64 = \
     arch/x86-64/sources/interrupt/idt.o \
     arch/x86-64/sources/interrupt/early_idt.o \
@@ -579,7 +630,11 @@ INTERRUPT_OBJS_ARM64 = \
     arch/arm64/sources/irq_portable_stubs.o
 
 ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+INTERRUPT_OBJS :=
+else
 INTERRUPT_OBJS := $(INTERRUPT_OBJS_ARM64)
+endif
 else
 INTERRUPT_OBJS := $(INTERRUPT_OBJS_X86_64)
 endif
@@ -608,6 +663,18 @@ DRIVER_OBJS = \
 ifneq ($(ARCH),arm64)
 DRIVER_OBJS += drivers/serial/serial.o
 DRIVER_OBJS += drivers/timer/rtc/rtc.o
+endif
+
+# Portable ARM64 product link: drop PS/2 + legacy x86 timer probes (virt uses GIC + arch timer).
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+DRIVER_OBJS := $(filter-out drivers/input/ps2.o \
+	drivers/timer/pit/pit.o \
+	drivers/timer/hpet/hpet.o \
+	drivers/timer/hpet/find_hpet.o \
+	drivers/timer/acpi/acpi_pm.o \
+	drivers/timer/lapic/lapic.o,$(DRIVER_OBJS))
+endif
 endif
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
@@ -793,6 +860,14 @@ MOUSE_OBJS =
 CFLAGS += -DCONFIG_ENABLE_MOUSE=0
 endif
 
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+MOUSE_OBJS :=
+CFLAGS := $(filter-out -DCONFIG_ENABLE_MOUSE=1,$(CFLAGS))
+CFLAGS += -DCONFIG_ENABLE_MOUSE=0
+endif
+endif
+
 # PC speaker
 ifneq ($(CONFIG_ENABLE_PC_SPEAKER),n)
 PC_SPEAKER_OBJS = drivers/char/pc_speaker.o
@@ -969,6 +1044,14 @@ CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
 # Architecture source inventories and their exceptional freestanding rules.
 -include scripts/make/arch-sources.mk
 
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+CFLAGS += -DIR0_ARM64_PRODUCT_KERNEL=1
+# Freestanding link: avoid libgcc LSE init that calls glibc __getauxval.
+CFLAGS += -mno-outline-atomics
+endif
+endif
+
 CPP_OBJS = \
 	cpp/runtime/compat.o
 
@@ -999,7 +1082,7 @@ CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=0
 endif
 
 # All objects (kernel sin tests in-kernel)
-ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS_PRODUCT) $(INTERRUPT_OBJS) \
            $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
            $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
@@ -1007,13 +1090,33 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
            $(STORAGE_NVME_OBJS)
 
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+ALL_OBJS := $(filter-out cpp/runtime/compat.o,$(ALL_OBJS))
+endif
+endif
+
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/main.o build/test/kernel/boot_init.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/main.o build/test/kernel/boot_init.o \
+	build/test/kernel/boot_flow.o build/test/kernel/kernel_wiring.o
+
+# Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
+KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
+	build/test/arch/common/boot_port.o \
+	build/test/arch/common/oops_port.o
+ifeq ($(ARCH),arm64)
+ifeq ($(IR0_ARM64_PRODUCT),y)
+KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch_portable.o
+endif
+endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-ALL_OBJS_TEST = $(filter-out kernel/main.o kernel/boot_init.o,$(KERNEL_OBJS)) \
-                $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+ALL_OBJS_TEST = $(filter-out kernel/main.o kernel/boot_init.o kernel/boot_flow.o \
+	kernel/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
+	arch/common/oops_port.o \
+	arch/arm64/sources/boot_arch_portable.o,$(KERNEL_OBJS)) \
+                $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
@@ -1093,6 +1196,15 @@ ifeq ($(ARCH),arm64)
 arch/arm64/asm/context/switch_early.o: arch/arm64/asm/context/switch_early.S
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
+
+# Early-userspace embed uses the same static blob as kernel-arm64-boot.bin.
+ifeq ($(IR0_ARM64_PRODUCT),y)
+arch/arm64/sources/hello_embed.o: $(MUSL_AARCH64_HELLO)
+arch/arm64/sources/embedded_elf_embed.o: $(MUSL_AARCH64_HELLO) arch/arm64/sources/embedded_elf_embed.S
+	@echo "  AS      arch/arm64/sources/embedded_elf_embed.S (hello blob)"
+	@$(CC) $(CFLAGS) -DARM64_EMBEDDED_ELF_PATH='"build/hello_aarch64"' -c \
+		arch/arm64/sources/embedded_elf_embed.S -o $@
+endif
 endif
 
 
@@ -1117,7 +1229,19 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 kernel-arm64.bin: kernel-arm64-all.bin arm64-common-core-compile arm64-provider-audit
 	@echo "  COPY    $@ (validated ARM64 aggregate)"
 	@cp kernel-arm64-all.bin $@
+	@echo "  OBJCOPY kernel-arm64.img (Linux Image; QEMU sets x0 to the DTB)"
+	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64.img
 	@echo "✓ Kernel linked: $@ (common-core aggregate; early providers remain)"
+
+# Portable ARM64 kernel: same ir0_kernel_boot chain as x86 (no IR0_FREESTANDING_BOOT).
+# `make kernel-arm64-product.bin` forces ARCH=arm64 + IR0_ARM64_PRODUCT via goal detection.
+kernel-arm64-product.bin: $(ALL_OBJS) arch/arm64/linker.ld
+	@echo "  LD      $@"
+	@$(KERNEL_ARM64_PRODUCT_LINK_CMD) $(KERNEL_ARM64_PRODUCT_LINK_FLAGS) \
+		-Wl,--defsym,ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS) -lgcc
+	@echo "✓ Kernel linked: $@"
+	@echo "  OBJCOPY kernel-arm64-product.img (Linux Image; QEMU sets x0 to the DTB)"
+	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64-product.img
 
 # Raspberry Pi firmware loads a raw kernel8.img at 0x80000.
 ifneq ($(filter rpi3 rpi4 rpi5,$(BOARD)),)
@@ -1147,6 +1271,30 @@ kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@echo "  LD      $@ (with in-kernel tests)"
 	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)
 	@echo "✓ Kernel (test) linked: $@"
+
+build/test/arch/common/%.o: arch/common/%.c
+	@mkdir -p $(@D)
+	@echo "  CC      $< (test variant)"
+	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
+		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
+		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
+		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
+		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
+		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
+		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
+		-c $< -o $@
+
+build/test/arch/arm64/sources/%.o: arch/arm64/sources/%.c
+	@mkdir -p $(@D)
+	@echo "  CC      $< (test variant)"
+	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
+		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
+		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
+		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
+		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
+		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
+		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
+		-c $< -o $@
 
 build/test/kernel/%.o: kernel/%.c
 	@mkdir -p $(@D)
@@ -1229,6 +1377,7 @@ endif
 
 ifeq ($(ARCH),x86-64)
 CFLAGS += -DARCH_X86_64 -DARCH_X86
+CFLAGS += -DIR0_LEGACY_PC_IO=1
 QEMU = qemu-system-x86_64
 else
 CFLAGS += -DARCH_ARM64
@@ -1427,6 +1576,10 @@ help:
 	@echo "Build:"
 	@echo "  make ir0                     x86-64 kernel ISO (default)"
 	@echo "  make ir0 arm64               ARM64 qemu-virt aggregate"
+	@echo "  make kernel-arm64.bin        same aggregate (forces ARCH=arm64)"
+	@echo "  make smoke-arm64-hypervisor-log  QEMU virt: HYPERVISOR line + ARM64_BOOT_OK"
+	@echo "  make smoke-arm64-product-log     QEMU virt: kernel-arm64-product.bin handoff tag"
+	@echo "  make smoke-arm64-product-usermode-log  QEMU: handoff + first EL0 syscall (init)"
 	@echo "  make ir0 arm64 rpi4          ARM64 board image (rpi3|rpi4|rpi5)"
 	@echo "  make defconfig               Write setup/defconfig → .config"
 	@echo "  make menuconfig              Configuration TUI (MENUCONFIG_LANG=es)"

@@ -41,7 +41,6 @@ static int tw_rows(void)
 /* VGA Text Mode Constants */
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
-#define VGA_BUFFER ((volatile uint16_t *)0xB8000)
 #define SCROLLBACK_LINES 200
 
 /* Global typewriter state — default off (product console must not delay). */

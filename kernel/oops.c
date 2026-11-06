@@ -25,6 +25,7 @@
 #include <string.h>
 #include <config.h>
 #include <ir0/copy_user.h>
+#include <ir0/oops_port.h>
 #include <mm/paging.h>
 
 /* Exception frame captured before panicex (CPU fault site, not reporter). */
@@ -484,21 +485,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     /* Dump CPU state - registers and control registers (serial only). */
     dump_registers();
 
-    /* IRETQ checkpoint buffer (debug: see kernel/scheduler/switch/switch_x64.asm) */
-    {
-        extern uint64_t iretq_checkpoint_buf[32];
-        size_t k;
-
-        klog_print("\n--- IRETQ CHECKPOINT BUFFER ---\n");
-        for (k = 0; k < 32; k++)
-        {
-            klog_print("ckpt[");
-            klog_hex32((uint32_t)k);
-            klog_print("] = ");
-            klog_hex64(iretq_checkpoint_buf[k]);
-            klog_print("\n");
-        }
-    }
+    ir0_oops_dump_arch_extra();
 
     /* Never unwind during panic — see dump_stack_trace() stub rationale. */
     klog_print("STACK TRACE skipped (panic-safe)\n");
