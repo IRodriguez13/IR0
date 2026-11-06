@@ -34,10 +34,15 @@ Checks:
 23) Common MM requests TLB coherence through the address-space-aware facade.
 24) Error numbers are defined only by includes/errno.h; subsystems consume the
     canonical catalog through <errno.h> or <ir0/errno.h>.
+25) Portable .c under drivers/fs/kernel/mm/net/sched/ipc/ktm/interrupt must not
+    use #if* on compiler ISA or CONFIG_ARCH_* tokens; use build-selected
+    backends or IR0_LEGACY_PC_IO (includes/ir0/driver_backend.h). Ignore
+    // line comments when matching (avoids flagging examples in comments).
 """
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 import json
 import os
 import sys
@@ -1790,6 +1795,18 @@ def check_scheduler_runqueue_lock_boundary():
     return errors
 
 
+def _line_skipped_for_isa_token_scan(line: str) -> bool:
+    """Skip // comments and common block-comment markers (fewer false positives)."""
+    s = line.lstrip()
+    if not s:
+        return True
+    if s.startswith("//"):
+        return True
+    if s.startswith("/*") or s.startswith("*"):
+        return True
+    return False
+
+
 def check_process_lifecycle_no_isa_conditionals():
     """Keep ISA selection in per-architecture backends, not process/*.c."""
     errors = []
@@ -1799,6 +1816,8 @@ def check_process_lifecycle_no_isa_conditionals():
     for fpath in process_tree.glob("*.c"):
         lines = read_file_text(fpath).splitlines()
         for idx, line in enumerate(lines, 1):
+            if _line_skipped_for_isa_token_scan(line):
+                continue
             if isa_re.search(line):
                 errors.append(
                     f"[process-no-isa-conditional] "
@@ -1827,13 +1846,34 @@ def check_process_registry_ownership():
     return errors
 
 
+def _cpp_directive_not_in_trailing_comment(line: str) -> Optional[str]:
+    """
+    Return the preprocessor token line, or None if the #if/elif is only in a comment.
+
+    Avoids false positives like:  int x;  // #ifdef __aarch64__
+    """
+    s = line.rstrip("\n")
+    # Strip // comments (whole-line or trailing).
+    if "//" in s:
+        before, _after = s.split("//", 1)
+        s = before.rstrip()
+    if not s.strip():
+        return None
+    if not re.match(r"^\s*#\s*(?:if|ifdef|ifndef|elif)\b", s):
+        return None
+    return s
+
+
 def check_common_c_has_no_isa_conditionals():
     """Select ISA implementations by objects/facades, never inside common C."""
     errors = []
-    isa_conditional = re.compile(
-        r"^\s*#\s*(?:if|ifdef|ifndef|elif).*"
+    # IR0_LEGACY_PC_IO is the Makefile-selected legacy PC class gate (drivers, etc.).
+    isa_token = (
         r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|ARCH_X86|"
-        r"ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
+        r"ARCH_ARM64|ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
+    )
+    isa_conditional = re.compile(
+        rf"^\s*#\s*(?:if|ifdef|ifndef|elif)\b.*\b{isa_token}\b"
     )
     roots = (ROOT / "drivers", ROOT / "fs", ROOT / "interrupt",
              ROOT / "kernel", ROOT / "ktm", ROOT / "mm", ROOT / "net",
@@ -1846,11 +1886,15 @@ def check_common_c_has_no_isa_conditionals():
             for idx, line in enumerate(
                 read_file_text(fpath).splitlines(), 1
             ):
-                if isa_conditional.search(line):
+                preproc = _cpp_directive_not_in_trailing_comment(line)
+                if preproc is None:
+                    continue
+                if isa_conditional.search(preproc):
                     errors.append(
                         f"[common-c-no-isa-conditional] "
                         f"{rel_to_root(fpath)}:{idx}: select an object or "
-                        f"facade backend: {line.strip()}"
+                        f"facade backend (use IR0_LEGACY_PC_IO for PC-only paths): "
+                        f"{line.strip()}"
                     )
     return errors
 
