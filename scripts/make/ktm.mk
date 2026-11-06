@@ -219,7 +219,7 @@ build-matrix-run:
 	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
 	echo "  MATRIX  KTM hardware backend mocks"; \
 	$(MAKE) defconfig >/dev/null; \
-	python3 scripts/kconfig/menuconfig.py --set KTM_CONSOLE_MOCK=y KTM_INPUT_MOCK=y KTM_VIDEO_MOCK=y KTM_AUDIO_MOCK=y KTM_MM_PORT_MOCK=y KTM_PLATFORM_MOCK=y >/dev/null; \
+	python3 scripts/kconfig/menuconfig.py --set KTM_CONSOLE_MOCK=y KTM_INPUT_MOCK=y KTM_VIDEO_MOCK=y KTM_AUDIO_MOCK=y KTM_MM_PORT_MOCK=y KTM_PLATFORM_MOCK=y KTM_BLOCK_FAKE=y >/dev/null; \
 	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
 	if [ "$(IR0_MATRIX_TIER)" = full ]; then \
 		echo "  MATRIX  storage core without block layer"; \
