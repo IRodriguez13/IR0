@@ -1,6 +1,6 @@
 # IR0 kernel ↔ ISD userspace
 
-> **Last verified:** 2026-10-29
+> **Last verified:** 2026-11-06
 > **Source of truth:** this file, the root `Makefile`, `IR0_ISD_INTERFACE`,
 > sibling [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../SETUP.md).
 > **Spanish:** [`esp/USERSPACE.md`](esp/USERSPACE.md)
@@ -91,9 +91,24 @@ kernel selects `ARCH` and, on ARM64, `BOARD`.
 
 ## ARM64
 
-ARM64 QEMU is a **kernel** target (`qemu-virt`, RPi3/4/5 board images). ISD has
-no AArch64 product rootfs today. Do not assume an x86-64 `disk.img` can be
-attached to an ARM64 boot.
+ARM64 QEMU is a **kernel** target (`qemu-virt`, RPi3/4/5 board images). **ISD**
+keeps one userspace tree per ISA under **`out/<ARCH>/`** (see sibling
+`ISD/mk/paths.mk`: e.g. `out/x86_64/`, `out/aarch64/`). Build the AArch64 disk
+from the ISD checkout, then attach it when running the ARM64 kernel:
+
+```bash
+make -C ../ISD build ARCH=aarch64 PROFILE=minimal
+make run ARCH=arm64 console DISK=../ISD/out/aarch64/images/minimal/disk.img
+```
+
+Do **not** attach an **`x86_64`** `disk.img` to an ARM64 boot — binaries are the
+wrong ISA.
+
+**Privilege elevation (tests):** the `minimal` profile installs **`sudo`** (see
+`ISD/profiles/minimal/packages.txt` and `ADMIN_ELEVATION=sudo` in
+`profile.conf`). `resolve-packages.sh` only adds `opendoas`/`sudo` when that
+package is listed or enabled via `.isdconfig` — `ADMIN_ELEVATION` alone does not
+pull the binary.
 
 ## Kernel-side userspace contracts
 

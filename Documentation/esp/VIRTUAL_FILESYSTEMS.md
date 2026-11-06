@@ -1,6 +1,6 @@
 # Virtual Filesystems en IR0
 
-> **Última verificación:** 2026-08-30
+> **Última verificación:** 2026-11-06
 > **Fuente de verdad:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.h`,
 > `fs/vfs.c` (`vfs_statfs`), `includes/ir0/statfs.h`,
 > [`VIRTUAL_FILESYSTEMS.md`](../VIRTUAL_FILESYSTEMS.md) (canónico en inglés)
@@ -68,6 +68,11 @@ Los dirents numéricos (PID) van **antes** que el registry estático porque
 ## `/sys`
 
 `sysfs` expone datos de kernel/sistema en un namespace estructurado.
+
+### Endpoints comunes (resumen; canónico en inglés)
+
+- `/sys/firmware/ir0/{protocol,bootloader,cmdline,framebuffer,boot_detail}` —
+  instantánea firmware/arranque (ver [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md))
 
 ### Notas
 

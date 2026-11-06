@@ -77,6 +77,11 @@ make run arm64 console
 The tokens are also declared as no-op goals so make accepts them. `ARCH=` and
 `BOARD=` environment variables keep working.
 
+Goals whose names start with **`kernel-arm64`**, **`smoke-arm64`**, or **`arm64-`**
+(including `make kernel-arm64.bin` or `make smoke-arm64-hypervisor-log`)
+**override `ARCH` to `arm64`** so the ARM64 makefile fragments load even when
+`.config` still selects x86-64 as the default architecture.
+
 ## Configuration flow
 
 ```text
@@ -110,6 +115,7 @@ default subsystems to **enabled** (bring-up friendly).
 | `make kernel-x64.bin` | Linked x86-64 ELF only |
 | `make kernel-x64.iso` | Bootable GRUB ISO |
 | `make kernel-x64-test.bin` | Kernel built with the in-kernel ktest battery |
+| `make kernel-arm64.bin` | ARM64 aggregate (forces `ARCH=arm64` when used as the goal) |
 | `make clean` | Remove objects, deps, images and generated headers (disk images, `toolchain/`, `dist/`, `out/` preserved) |
 
 `ir0` compiles with `-Werror`; use `make all` or the individual artifact targets
@@ -158,6 +164,10 @@ that image is missing. `DISK=none` boots the kernel with no root disk.
 | `make repo-hygiene-guard` | Repository hygiene (`scripts/repo_hygiene_guard.py`) |
 | `make health` | `kernel-analyze` + text budget + memsafe + kernel tests |
 | `make tests` | Build the in-kernel test kernel, kernel-memsafe harness and host tests |
+
+Optional ARM64 QEMU checks (require `qemu-system-aarch64` where noted): see
+`make smoke-arm64-hypervisor-log`, `smoke-arm64-rpi3-boot`, `smoke-arm64-rpi4-boot`
+in `scripts/make/arm64.mk` / `arm64-board.mk`.
 
 The catalog (`scripts/test_catalog.yaml`) lists only public gates that still
 exist. `make test` opens the picker; `SUITE=<id>` runs suites non-interactively.

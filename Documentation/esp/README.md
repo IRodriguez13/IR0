@@ -1,6 +1,6 @@
 # Documentacion IR0 en Espanol
 
-> **Última verificación:** 2026-10-16
+> **Última verificación:** 2026-11-06
 > **Fuente de verdad:** espejos listados abajo; canónico en `Documentation/`.
 
 Este directorio contiene traducciones de la documentacion tecnica principal.
@@ -26,7 +26,8 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `INTERRUPTS.md`
 - `MEMORY.md`
 - `LINUX_SHAPED.md` — nombres/ABI Linux sin clonar el árbol
-- `HARNESS_MAP.md` — tags y targets semánticos (`smoke-fase*` = alias)
+- `HARNESS_MAP.md` — tags y targets semánticos; smokes ARM64 opcionales (`smoke-arm64-*`)
+- `../includes/ir0/smp_convergence.h` — mapa diseño Linux→IR0 para SMP/red (solo comentarios)
 - `testing/KTEST_FIX_CONTRACTS.md` — 13 casos del ktest de boot (canónico: `../testing/KTEST_FIX_CONTRACTS.md`)
 - `uaccess.md` — frontera `copy_*_user` / `copy_*_user_mm` multi-ISA
 - `PROCESSES.md`

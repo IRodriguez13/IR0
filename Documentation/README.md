@@ -1,6 +1,6 @@
 # IR0 Kernel Documentation
 
-> **Last verified:** 2026-10-16
+> **Last verified:** 2026-11-06
 > **Source of truth:** files listed in the map below; code under `includes/ir0/`,
 > `kernel/`, `fs/`, `scripts/make/`.
 
@@ -34,6 +34,8 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `BACKLOG_REMAINING.md`: honest post-0.0.1 open work (storage, POSIX, residual).
 - `LINUX_SHAPED.md`: **Linux names/ABI without cloning the Linux tree** —
   facades, usercopy layers, what not to copy (Spanish: `esp/LINUX_SHAPED.md`).
+- `../includes/ir0/smp_convergence.h`: **Linux → IR0 design map** for future SMP,
+  netdev scaling, and locking (comments only; not a runtime API).
 - `HARNESS_MAP.md`: **semantic smoke/KTM tags and Make names**; `smoke-fase*`
   aliases (Spanish: `esp/HARNESS_MAP.md`).
 - `testing/KTEST_FIX_CONTRACTS.md`: **13 boot-ktest cases** that lock the
@@ -55,6 +57,8 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `DRIVERS.md`: driver registry, bootstrap flow, config-gated initialization, **SB16 QEMU smoke**.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
 - `MEMORY.md`: PMM, allocator, paging, real fork COW + lazy alloc limits.
+- `ARM64_STACK_MODEL.md`: EL0→EL1 exception frame vs **SP_EL1**, **SPSel**, `set_current_kernel_stack` (Spanish: `esp/ARM64_STACK_MODEL.md`).
+- [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md): `/sys/firmware/ir0/*` boot snapshot (Spanish: [`esp/sysfs-firmware-ir0.md`](esp/sysfs-firmware-ir0.md)).
 - `uaccess.md`: **kernel↔userspace copy frontier** — `copy_*_user`,
   `copy_*_user_mm`, `*_region_in_directory`, multi-ISA `mm_user_va_ok`,
   arch-guard tags, `KERNEL_UACCESS_FAULT` (Spanish: `esp/uaccess.md`).

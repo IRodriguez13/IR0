@@ -1,6 +1,6 @@
 # IR0 Virtual Filesystems
 
-> **Last verified:** 2026-09-04
+> **Last verified:** 2026-11-06
 > **Source of truth:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.c`,
 > `fs/pseudo_fs_registry.c`, `fs/pseudo_fs_nodes.c`,
 > `kernel/syscalls/mm_syscalls.c` (`sys_sysinfo`),
@@ -241,6 +241,8 @@ and backed by handlers in `fs/sysfs.c`.
 - `/sys/class/net` and `/sys/class/net/<iface>/...` (dynamic per interface)
 - `/sys/class/bluetooth/hci0/{address,state}`,
   `/sys/class/bluetooth/{topology/neighbors,sessions}`
+- `/sys/firmware/ir0/{protocol,bootloader,cmdline,framebuffer,boot_detail}` —
+  boot/firmware snapshot (see [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md))
 
 ### Notes
 

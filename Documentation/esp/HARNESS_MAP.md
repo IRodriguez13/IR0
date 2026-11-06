@@ -5,7 +5,7 @@
 > Gates actuales: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`.
 
-> **Última verificación:** 2026-10-28
+> **Última verificación:** 2026-11-06
 > **Fuente de verdad:** `Documentation/CHANGELOG.md`, `scripts/ktm_*.py`,
 > `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`
 
@@ -45,6 +45,14 @@ no hay compuerta `IR0_LEGACY_SMOKE`.
 | Producto x86-64 | `make ir0` / `make run [gui\|console\|debug]` |
 | Agregado ARM64 | `make ir0 arm64` / `make run arm64 console` |
 | Imagen Raspberry Pi | `make ir0 arm64 rpi3` (o `rpi4`, `rpi5`) |
+
+**Smokes QEMU opcionales (conjunto pequeño, `scripts/make/arm64*.mk`):**
+
+| Target | Qué comprueba |
+|--------|----------------|
+| `make smoke-arm64-hypervisor-log` | Serial: línea `[HYPERVISOR]` + `ARM64_BOOT_OK` |
+| `make smoke-arm64-rpi3-boot` | Modelo Raspberry Pi 3 en QEMU |
+| `make smoke-arm64-rpi4-boot` | Modelo Raspberry Pi 4 si QEMU expone `raspi4b` |
 
 Los paquetes de userspace (BusyBox, runit, TinyCC e imágenes ISD) se construyen
 en el repositorio ISD; el Makefile del kernel ya no actúa como proxy.

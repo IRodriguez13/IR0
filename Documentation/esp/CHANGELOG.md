@@ -1,6 +1,6 @@
 # IR0 Kernel — Changelog (español)
 
-> **Última verificación:** 2026-10-18  
+> **Última verificación:** 2026-11-06  
 
 > **Fuente de verdad:** historial git, smokes del `Makefile`, [`../STABLE.md`](../STABLE.md), [`../KTM.md`](../KTM.md)
 
@@ -12,6 +12,15 @@ Tag **`v0.0.1-rc4`**. Tras este tag: **solo bugfixing y estabilización** hasta 
 Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ## [Sin publicar]
+
+### Goals ARM64 + smoke de hipervisor (2026-11-06)
+
+- Goals `kernel-arm64*`, `smoke-arm64*` y `arm64-*` fuerzan `ARCH=arm64` para
+  cargar fragmentos ARM64 aunque `.config` predetermine x86-64.
+- `make smoke-arm64-hypervisor-log`: QEMU `virt` comprueba serial `[HYPERVISOR]` y
+  `ARM64_BOOT_OK` (SKIP si no hay `qemu-system-aarch64`).
+- `includes/ir0/smp_convergence.h`: mapa diseño Linux→IR0 para SMP/red futuro
+  (solo comentarios).
 
 ### Contratos de guest en el ktest de boot (2026-11-02)
 

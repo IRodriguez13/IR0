@@ -11,6 +11,8 @@ Esta alineado con el Makefile raiz y menuconfig actuales.
   - `arm64 rpi4` → `build/arm64-rpi4/kernel8.img`
 - `make ir0 arm64`: agregado ARM64 para QEMU `virt`.
 - `make kernel-x64.bin`: compila y linkea solo el kernel.
+- `make kernel-arm64.bin`: agregado ARM64 qemu-virt (fuerza `ARCH=arm64` si se
+  usa como goal de make, aunque `.config` predetermine x86).
 - `make kernel-x64.iso`: genera el ISO desde la imagen actual.
 - `make all`: mismo artefacto que `ir0`, sin la politica `-Werror`.
 - `make clean`: limpia artefactos generados.
@@ -59,8 +61,10 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
   globales ordenados (`nm`), comparable entre builds con la misma cadena de
   herramientas (`Documentation/DECOUPLING.md`).
 
-No hay catalogo QA de smokes ni bundle de release en el Makefile actual.
-Nombres historicos en documentos de release no son puntos de entrada del build.
+No hay gran catalogo QA de smokes en el Makefile raiz. Siguen unos pocos
+checks QEMU ARM64 (`smoke-arm64-hypervisor-log`, `smoke-arm64-rpi3-boot`,
+`smoke-arm64-rpi4-boot` en `scripts/make/arm64*.mk`). Los nombres de smokes
+de oleadas viejas en documentos de release siguen sin ser entrada de build.
 `build-matrix-full` es el superconjunto de CI de `build-matrix-min`.
 
 ## Targets de Documentacion

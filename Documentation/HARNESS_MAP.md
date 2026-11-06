@@ -5,7 +5,7 @@
 > Current gates: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`.
 
-> **Last verified:** 2026-10-28
+> **Last verified:** 2026-11-06
 > **Source of truth:** `Documentation/CHANGELOG.md`, `scripts/ktm_*.py`,
 > `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`,
 > `scripts/architecture_guard.py` (forbids leftover `[FASE` in kernel C).
@@ -36,6 +36,7 @@ C prints semantic tokens. Grep/`--done`/`--require` must match these.
 | ARM product VFS | `ARM64_PRODUCT_VFS_OK` | — |
 | ARM early `/tmp` fold | `ARM64_EARLY_PATH_FOLD_OK` | — |
 | ARM heap/owned mm | `ARM64_PROCESS_MM_HEAP_OK` / `OWNED_OK` / `RETIRE_OK` / `EXIT_OK` | — |
+| ARM64 boot / hypervisor banner | `ARM64_BOOT_OK` | — (see `make smoke-arm64-hypervisor-log`) |
 
 Kernel production paths must not print `[FASE…`. Debug leftover is
 `IR0_DEBUG_PROC` (not `CONFIG_DEBUG_FASE50`).
@@ -55,6 +56,14 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | x86-64 product | `make ir0` / `make run [gui\|console\|debug]` |
 | ARM64 aggregate | `make ir0 arm64` / `make run arm64 console` |
 | Raspberry Pi image | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |
+
+**Optional QEMU smokes (small set, `scripts/make/arm64*.mk`):**
+
+| Target | What it checks |
+|--------|----------------|
+| `make smoke-arm64-hypervisor-log` | Serial: `[HYPERVISOR]` line (FDT/CPUID path) + `ARM64_BOOT_OK` |
+| `make smoke-arm64-rpi3-boot` | Raspberry Pi 3 model in QEMU |
+| `make smoke-arm64-rpi4-boot` | Raspberry Pi 4 model when QEMU provides `raspi4b` |
 
 Userspace package builds (BusyBox, runit, TinyCC and ISD images) belong to the
 ISD repository; the kernel Makefile no longer proxies those package targets.

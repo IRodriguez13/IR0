@@ -1,6 +1,6 @@
 # IR0 kernel ↔ usuarios ISD
 
-> **Última verificación:** 2026-10-29
+> **Última verificación:** 2026-11-06
 > **Fuente de verdad:** este archivo, `Makefile` raíz, `IR0_ISD_INTERFACE`,
 > hermano [ISD](https://github.com/IRodriguez13/ISD), [SETUP.md](../../SETUP.md).
 > **English:** [`../USERSPACE.md`](../USERSPACE.md)
@@ -88,9 +88,22 @@ el kernel elige `ARCH` y, en ARM64, `BOARD`.
 
 ## ARM64
 
-ARM64 QEMU es un target de **kernel** (`qemu-virt`, imágenes RPi3/4/5). ISD no
-tiene hoy rootfs producto AArch64. No asumas que un `disk.img` x86-64 se puede
-adjuntar a un boot ARM64.
+ARM64 QEMU es un target de **kernel** (`qemu-virt`, imágenes RPi3/4/5). **ISD**
+separa usuarios por ISA en **`out/<ARCH>/`** (véase `ISD/mk/paths.mk`, p. ej.
+`out/x86_64/`, `out/aarch64/`). Construís el disco aarch64 desde el checkout
+ISD y lo adjuntás al kernel ARM64:
+
+```bash
+make -C ../ISD build ARCH=aarch64 PROFILE=minimal
+make run ARCH=arm64 console DISK=../ISD/out/aarch64/images/minimal/disk.img
+```
+
+No adjuntes un **`x86_64`** `disk.img` a un boot ARM64.
+
+**Elevación (tests):** el perfil `minimal` incluye el paquete **`sudo`** y
+`ADMIN_ELEVATION=sudo` en `profile.conf`. `resolve-packages.sh` solo agrega
+`opendoas`/`sudo` si el paquete está en `packages.txt` o activado en
+`.isdconfig` — **no** basta con la variable `ADMIN_ELEVATION` sola.
 
 ## Contratos del lado kernel
 

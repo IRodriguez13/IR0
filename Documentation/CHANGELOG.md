@@ -1,6 +1,6 @@
 # IR0 Kernel Changelog
 
-> **Last verified:** 2026-10-18
+> **Last verified:** 2026-11-06
 > **Source of truth:** git history, `make ctr`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
@@ -21,6 +21,15 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 - Stress: `setup/pid1/net_command_stress.c` → `NET_STRESS_PASS` / `NC_ONLY_PASS`.
 
 ## [Unreleased]
+
+### ARM64 build goals + hypervisor smoke (2026-11-06)
+
+- Make goals `kernel-arm64*`, `smoke-arm64*`, and `arm64-*` force `ARCH=arm64`
+  so ARM64 fragments load when `.config` still defaults to x86-64.
+- `make smoke-arm64-hypervisor-log`: QEMU `virt` serial checks `[HYPERVISOR]` and
+  `ARM64_BOOT_OK` (skip if `qemu-system-aarch64` is missing).
+- `includes/ir0/smp_convergence.h`: design-only map of Linux subsystems → IR0
+  facades for future SMP/net work.
 
 ### Guest contracts in the boot ktest (2026-11-02)
 

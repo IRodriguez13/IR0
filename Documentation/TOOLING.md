@@ -11,6 +11,8 @@ It is aligned with the current root Makefile and menuconfig behavior.
   - `arm64 rpi4` → `build/arm64-rpi4/kernel8.img`
 - `make ir0 arm64`: ARM64 QEMU `virt` aggregate.
 - `make kernel-x64.bin`: build and link the kernel only.
+- `make kernel-arm64.bin`: ARM64 qemu-virt aggregate (forces `ARCH=arm64` when
+  used as the make goal, even if `.config` defaults to x86).
 - `make kernel-x64.iso`: generate an ISO from the current kernel image.
 - `make all`: same artifact as `ir0`, without the `-Werror` policy.
 - `make clean`: remove generated build artifacts.
@@ -62,8 +64,10 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 - `python3 scripts/kernel_export_digest.py kernel-x64.bin`: SHA-256 of sorted global `nm`
   exports (same-toolchain rebuild comparison); see `Documentation/DECOUPLING.md`.
 
-There is no QA smoke catalog or release bundle in the current Makefile.
-Historical target names in release documents are not build-system entry points.
+There is no large QA smoke catalog in the root Makefile. A **small** set of
+ARM64 QEMU checks remains (`smoke-arm64-hypervisor-log`, `smoke-arm64-rpi3-boot`,
+`smoke-arm64-rpi4-boot` in `scripts/make/arm64*.mk`). Historical wave-era smoke
+names in old docs are still not entry points.
 `build-matrix-full` is the CI superset of `build-matrix-min`.
 
 ## Documentation Targets
