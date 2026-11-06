@@ -1,0 +1,30 @@
+---
+description: IR0 — compare audits against stable/ZIP via git worktree (do not wipe working tree)
+alwaysApply: true
+---
+
+# Audit / regression vs older tree (git worktree)
+
+When validating an **external audit**, **ZIP snapshot**, or **stable vs HEAD** comparison, **do not** replace or delete the current checkout to "run the old kernel".
+
+## Pattern
+
+1. Keep the current branch as the development line.
+2. Add a **separate worktree** at the reference ref:
+
+   ```bash
+   git fetch origin stable
+   git worktree add ../IR0-stable-audit origin/stable
+   ```
+
+3. Run the **same commands** in both trees (e.g. `python3 scripts/architecture_guard.py`, `make -s kernel-x64.bin`, `make -s -C tests/host run`).
+4. Record **command + exit code** for old vs new when claiming red/green proof.
+5. Remove when done: `git worktree remove ../IR0-stable-audit`.
+
+## Anti-patterns
+
+- `git checkout stable` on the only clone mid-feature without stash/worktree.
+- Removing source paths to "test old code".
+- Reporting gate results without naming **which Git ref** was tested.
+
+Relation: `ir0-bugfix-red-green-proof.mdc` (kernel fixes), `ir0-git-commit-hygiene.mdc`.

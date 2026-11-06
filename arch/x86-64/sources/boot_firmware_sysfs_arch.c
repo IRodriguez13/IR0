@@ -13,7 +13,10 @@
 
 #include <string.h>
 
-/* Identity-mapped low RAM: bounded copy from Multiboot physical pointers. */
+/*
+ * Identity-mapped low RAM: bounded copy from Multiboot physical pointers.
+ * Valid only while those regions remain mapped (early boot before the snapshot).
+ */
 static size_t copy_phys_cstr_trunc(uint32_t phys, char *dst, size_t dst_sz,
 				   size_t max_read)
 {
@@ -72,10 +75,14 @@ void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snaps
 
 	if (mb->flags & MULTIBOOT_FLAG_FB)
 	{
-		addr_lo = (uint32_t)(mb->framebuffer_addr & 0xFFFFFFFFu);
+		uint64_t fb_pa;
+
+		fb_pa = mb->framebuffer_addr;
+		addr_lo = (uint32_t)(fb_pa & 0xFFFFFFFFu);
+		(void)addr_lo;
 		snprintf(snap->framebuffer, sizeof(snap->framebuffer),
-			 "addr=0x%x pitch=%u width=%u height=%u bpp=%u type=%u",
-			 (unsigned)addr_lo, (unsigned)mb->framebuffer_pitch,
+			 "addr=0x%llx pitch=%u width=%u height=%u bpp=%u type=%u",
+			 (unsigned long long)fb_pa, (unsigned)mb->framebuffer_pitch,
 			 (unsigned)mb->framebuffer_width,
 			 (unsigned)mb->framebuffer_height,
 			 (unsigned)mb->framebuffer_bpp,
