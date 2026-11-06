@@ -72,6 +72,13 @@ int sys_class_net_collect_children(const char *dir_path,
 				   int start_n);
 int sys_class_net_path_has_children(const char *path);
 
+/* /sys/firmware/ir0 — boot protocol snapshot (see Documentation/sysfs-firmware-ir0.md). */
+int sys_firmware_ir0_protocol_read_reg(char *buf, size_t count);
+int sys_firmware_ir0_bootloader_read_reg(char *buf, size_t count);
+int sys_firmware_ir0_cmdline_read_reg(char *buf, size_t count);
+int sys_firmware_ir0_framebuffer_read_reg(char *buf, size_t count);
+int sys_firmware_ir0_boot_detail_read_reg(char *buf, size_t count);
+
 /* Attr ids for /sys/class/net/<iface>/… (0 = the iface directory itself). */
 enum
 {

@@ -26,7 +26,9 @@
 #define MULTIBOOT_FLAG_BOOTDEV  (1 << 1)
 #define MULTIBOOT_FLAG_CMDLINE  (1 << 2)
 #define MULTIBOOT_FLAG_MODS    (1 << 3)
+#define MULTIBOOT_FLAG_SYMS    (1 << 4)
 #define MULTIBOOT_FLAG_MMAP    (1 << 6)
+#define MULTIBOOT_FLAG_LOADER_NAME (1 << 9)
 #define MULTIBOOT_FLAG_VBE     (1 << 11)
 #define MULTIBOOT_FLAG_FB      (1 << 12)
 

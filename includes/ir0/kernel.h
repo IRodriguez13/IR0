@@ -18,8 +18,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-/* Main kernel entry point. multiboot_info is physical addr of Multiboot info (ebx), may be 0. */
-void kmain(uint32_t multiboot_info);
+/*
+ * Main kernel entry point. firmware_handle is architecture-defined (physical):
+ * x86-64: Multiboot info address (legacy ebx); may be 0.
+ */
+void kmain(uintptr_t firmware_handle);
 
 void gdt_install(void);
 void setup_tss(void);

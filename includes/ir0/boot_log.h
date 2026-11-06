@@ -46,6 +46,9 @@ void ir0_boot_arch(const char *message);
 /* Autokill / stage tags under COMP SMOKE (tag remains greppable as substring). */
 void ir0_boot_smoke(const char *tag);
 
+/* Hypervisor / bare-metal — portable; uses hypervisor_present() from cpu_info. */
+void ir0_boot_log_platform_hypervisor(void);
+
 #ifdef __cplusplus
 }
 #endif
