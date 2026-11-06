@@ -263,10 +263,16 @@ void sock_icmp_release(struct sock_icmp *sock)
 		sock_icmp_irq_restore(flags);
 		return;
 	}
+	/*
+	 * RX delivery walks sock_icmp_open_list from interrupt context.  Remove
+	 * the last-reference object before restoring IRQs: otherwise a packet can
+	 * observe this still-published node after magic has been cleared and queue
+	 * data onto memory about to be freed.
+	 */
+	sock_icmp_list_remove(sock);
 	sock->magic = 0;
 	sock_icmp_irq_restore(flags);
 
-	sock_icmp_list_remove(sock);
 	sock_icmp_free_rx(sock);
 	kfree(sock);
 }
