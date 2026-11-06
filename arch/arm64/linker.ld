@@ -59,6 +59,7 @@ SECTIONS
     } :data
 
     _end = .;
+    arm64_image_size = _end - _start;
 
     /DISCARD/ :
     {

@@ -75,11 +75,17 @@ uint32_t get_cpu_clflush_size(void)
 
 int hypervisor_present(void)
 {
+	const struct arm64_board_boot_info *info = arm64_board_boot_info();
+
+	if (info && info->fdt_valid)
+		return info->hypervisor_kind != ARM64_HV_NONE;
 	return 0;
 }
 
 int hypervisor_vendor(char *buf, size_t n)
 {
+	if (arm64_board_hypervisor_vendor(buf, n) == 0)
+		return 0;
 	if (buf && n)
 		buf[0] = '\0';
 	return -1;

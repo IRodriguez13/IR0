@@ -21,11 +21,12 @@
 
 #define BOOT_STACK_SIZE 4096
 
+/* Referenced by arch/arm64/asm/boot/entry_board_min.S */
 uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
 
 void boot_main(void)
 {
-	extern uintptr_t arm64_firmware_fdt;
+	extern volatile uintptr_t arm64_firmware_fdt;
 	extern char _start[];
 	extern char _end[];
 

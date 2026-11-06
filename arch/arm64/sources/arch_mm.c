@@ -40,8 +40,13 @@ size_t mm_boot_usable_range_count(void)
 {
 	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
 
-	if (!boot || !boot->fdt_valid)
+	if (!boot)
 		return 0;
+	/*
+	 * Usable RAM is published only after arm64_board_finalize_memory() runs
+	 * (build_usable_ranges). QEMU virt may use a synthetic DRAM bank when FDT
+	 * is unreadable at EL1; fdt_valid stays 0 but usable_range_count is valid.
+	 */
 	return boot->usable_range_count;
 }
 
@@ -51,7 +56,7 @@ int mm_boot_usable_range(size_t index, struct ir0_phys_range *range)
 
 	if (!range)
 		return -EINVAL;
-	if (!boot || !boot->fdt_valid)
+	if (!boot || boot->usable_range_count == 0U)
 		return -ENODEV;
 	if (index >= boot->usable_range_count)
 		return -EINVAL;

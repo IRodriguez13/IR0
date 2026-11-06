@@ -20,6 +20,8 @@
 #include "elf_load_early.h"
 #include "rr_early.h"
 
+#include <config.h>
+
 #include <ir0/process.h>
 #include <ir0/percpu.h>
 #include <ir0/sched.h>
@@ -29,6 +31,7 @@
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/errno.h>
+#include <ir0/clock.h>
 
 /* ESR_EL1: EC 0x15 = SVC instruction from AArch64. */
 #define ESR_EC_SHIFT 26
@@ -51,6 +54,12 @@
 
 extern char ir0_el1_vectors[];
 extern void el0_entry(void);
+
+#if !defined(IR0_FREESTANDING_BOOT)
+int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
+			 uint64_t arg3, uint64_t arg4, uint64_t arg5,
+			 uint64_t arg6);
+#endif
 
 uint8_t el0_stack[EL0_STACK_SIZE] __attribute__((aligned(16)));
 
@@ -154,6 +163,18 @@ void arm64_exc_irq_el1(void)
 			ir0_boot_smoke("ARM64_TIMER_IRQ_OK");
 		}
 
+#if !defined(IR0_FREESTANDING_BOOT)
+		if (clock_is_ready())
+		{
+			if (!arm64_rr_tick_sched_active())
+			{
+				clock_note_irq();
+				clock_tick();
+				arch_timer_periodic_arm();
+			}
+		}
+#endif
+
 		if (arm64_rr_tick_sched_active())
 		{
 			before = current_process;
@@ -217,19 +238,31 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		}
 		leave = 1;
 	}
-	else
-	{
-		if (!g_el0_svc_tagged)
+		else
 		{
-			g_el0_svc_tagged = 1;
-			ir0_boot_smoke("ARM64_EL0_SVC_OK");
-		}
+			if (!g_el0_svc_tagged)
+			{
+				g_el0_svc_tagged = 1;
+				ir0_boot_smoke("ARM64_EL0_SVC_OK");
+#if defined(IR0_ARM64_PRODUCT_KERNEL)
+				ir0_boot_smoke("ARM64_PRODUCT_EL0_SYSCALL_OK");
+#endif
+			}
 
-		/* frame: x0@0 … x8@8 (pairs of uint64_t). */
-		ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
+			/*
+			 * frame: x0@0 … x30 in the 256-byte stub slot (vectors.S);
+			 * x8 = syscall number. Return value in frame[0]; asm path
+			 * restores GPRs and eret (no separate SP_EL1 adjustment).
+			 */
+#if defined(IR0_FREESTANDING_BOOT)
+			ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
 					  frame[3], frame[4], frame[5], &leave);
-		frame[0] = (uint64_t)ret;
-	}
+#else
+			ret = syscall_dispatch(frame[8], frame[0], frame[1], frame[2],
+				       frame[3], frame[4], frame[5]);
+#endif
+			frame[0] = (uint64_t)ret;
+		}
 
 	{
 		uint64_t stack = 0;

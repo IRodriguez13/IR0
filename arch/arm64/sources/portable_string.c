@@ -14,6 +14,8 @@
 
 #include <stddef.h>
 
+#if defined(IR0_FREESTANDING_BOOT)
+
 size_t strlen(const char *s)
 {
 	size_t n = 0;
@@ -126,3 +128,5 @@ char *strncat(char *dst, const char *src, size_t n)
 	*d = '\0';
 	return dst;
 }
+
+#endif

@@ -37,6 +37,8 @@ uint64_t timer_read(void)
 	return pct;
 }
 
+#if defined(IR0_FREESTANDING_BOOT)
+
 uint64_t clock_get_tick_count(void)
 {
 	uint64_t counter = timer_read();
@@ -56,6 +58,8 @@ time_t clock_get_current_time(void)
 		return 0;
 	return (time_t)(timer_read() / frequency);
 }
+
+#endif
 
 void timer_set_frequency(uint32_t hz)
 {
@@ -93,6 +97,28 @@ void arch_timer_oneshot_arm(uint32_t ticks)
 {
 	uint64_t tval = ticks ? ticks : 1000U;
 	uint64_t ctl = 1UL; /* ENABLE=1, IMASK=0 */
+
+	arch_timer_oneshot_disarm();
+	__asm__ volatile("msr cntp_tval_el0, %0" :: "r"(tval) : "memory");
+	__asm__ volatile("isb" ::: "memory");
+	__asm__ volatile("msr cntp_ctl_el0, %0" :: "r"(ctl) : "memory");
+	__asm__ volatile("isb" ::: "memory");
+}
+
+void arch_timer_periodic_arm(void)
+{
+	uint64_t frq = g_cntfrq;
+	uint64_t tval;
+	uint64_t ctl = 1UL; /* ENABLE=1, interrupt unmasked */
+
+	if (frq == 0)
+		__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
+	if (frq == 0)
+		return;
+
+	tval = frq / (uint64_t)CONFIG_TICK_RATE_HZ;
+	if (tval == 0)
+		tval = 1;
 
 	arch_timer_oneshot_disarm();
 	__asm__ volatile("msr cntp_tval_el0, %0" :: "r"(tval) : "memory");

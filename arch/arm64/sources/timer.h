@@ -27,3 +27,6 @@ void arch_timer_oneshot_arm(uint32_t ticks);
 
 /** Disable physical timer (clear ENABLE). */
 void arch_timer_oneshot_disarm(void);
+
+/** Periodic EL1 physical timer at CONFIG_TICK_RATE_HZ (CNTP_TVAL reload). */
+void arch_timer_periodic_arm(void);

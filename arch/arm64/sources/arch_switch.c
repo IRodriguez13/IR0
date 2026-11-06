@@ -18,6 +18,13 @@
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
 #include <stdint.h>
+#include <config.h>
+
+/*
+ * Must match exc_entry / exc_entry_frame in arch/arm64/asm/entry/vectors.S
+ * (sub sp, sp, #256 before saving the trap frame).
+ */
+#define ARM64_EXC_FRAME_RESERVE 256U
 
 extern void switch_context_arm64(task_t *prev, task_t *next);
 
@@ -25,14 +32,30 @@ void set_current_kernel_stack(struct process *p)
 {
 	process_t *proc = (process_t *)p;
 
-	if (!proc || !proc->kstack_top)
+	if (!proc || !proc->kstack_top || !proc->kstack_base)
 		return;
 
 	/*
-	 * Exception entry from EL0 uses SP_EL1. Cooperative EL1 switch keeps
-	 * the running SP; this primes the banked stack for the next EL0 drop.
+	 * Lower-EL sync entry uses SP_EL1 and subtracts ARM64_EXC_FRAME_RESERVE
+	 * before storing the 31-GPR+Lr frame. Program SP_EL1 so the first
+	 * exception from EL0 has headroom within [kstack_base, kstack_top).
+	 * Cooperative EL1 switch (arm64_cpu_switch) continues to use mov sp, x2
+	 * with SPSel==1; see Documentation/ARM64_STACK_MODEL.md.
 	 */
-	__asm__ volatile("msr sp_el1, %0" :: "r"(proc->kstack_top) : "memory");
+	{
+		uint64_t base = (uint64_t)(uintptr_t)proc->kstack_base;
+		uint64_t top = proc->kstack_top;
+		uint64_t sp;
+
+		if (top <= base ||
+		    (uint64_t)IR0_PROC_KSTACK_SIZE < (uint64_t)ARM64_EXC_FRAME_RESERVE)
+			return;
+		sp = (top - (uint64_t)ARM64_EXC_FRAME_RESERVE) & ~0xFULL;
+		/* Vector does sub sp,sp,#256 first — need sp_el1 - 256 >= base */
+		if (sp < base + (uint64_t)ARM64_EXC_FRAME_RESERVE || sp >= top)
+			return;
+		__asm__ volatile("msr sp_el1, %0\n\tisb" :: "r"(sp) : "memory");
+	}
 }
 
 void switch_save_user_rsp(struct process *prev)

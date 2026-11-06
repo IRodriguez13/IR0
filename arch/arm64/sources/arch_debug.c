@@ -2,6 +2,11 @@
 /* ARM64 debug-state lifecycle facade. */
 
 #include <ir0/arch_debug.h>
+#include <ir0/oops.h>
+
+void dump_registers(void)
+{
+}
 
 void debug_state_init(void)
 {

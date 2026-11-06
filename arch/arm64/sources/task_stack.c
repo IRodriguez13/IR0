@@ -20,7 +20,14 @@ int process_kernel_stack_alloc(process_t *p)
 		return -ENOMEM;
 	memset(base, 0, IR0_PROC_KSTACK_SIZE);
 	p->kstack_base = base;
-	p->kstack_top = (uint64_t)(uintptr_t)base + IR0_PROC_KSTACK_SIZE;
+	/*
+	 * Exclusive high water mark (same convention as x86 task_stack.c):
+	 * valid bytes are [base, kstack_top). set_current_kernel_stack programs
+	 * SP_EL1 so vectors.S can sub #256 for the EL0 sync frame (see
+	 * Documentation/ARM64_STACK_MODEL.md).
+	 */
+	p->kstack_top =
+		(uint64_t)(uintptr_t)base + (uint64_t)IR0_PROC_KSTACK_SIZE;
 	p->saved_user_rsp = 0;
 	return 0;
 }

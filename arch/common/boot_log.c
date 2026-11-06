@@ -13,13 +13,16 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/boot_log.h>
+#include <ir0/cpu_info.h>
 #include <ir0/serial_io.h>
 #include <ir0/version.h>
 
 #include <stddef.h>
+#include <string.h>
 
 #ifndef IR0_FREESTANDING_BOOT
 #include <ir0/ktm/klog.h>
+#include <ir0/logging.h>
 #endif
 
 #ifdef IR0_FREESTANDING_BOOT
@@ -153,4 +156,34 @@ void ir0_boot_smoke(const char *tag)
 #else
 	boot_emit_raw("INFO", "SMOKE", tag ? tag : "?");
 #endif
+}
+
+void ir0_boot_log_platform_hypervisor(void)
+{
+	char hv_vendor[16];
+
+	if (hypervisor_present() &&
+	    hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
+	{
+		if (strncmp(hv_vendor, "TCGTCGTCGTCG", 12) == 0)
+			ir0_boot_info("HYPERVISOR",
+				      "detected vendor=TCG (QEMU TCG)");
+		else if (strncmp(hv_vendor, "KVMKVMKVM", 9) == 0)
+			ir0_boot_info("HYPERVISOR",
+				      "detected vendor=KVM");
+#ifndef IR0_FREESTANDING_BOOT
+		else
+			log_info_fmt("HYPERVISOR", "detected vendor=%s",
+				     hv_vendor);
+#else
+		else
+			ir0_boot_info("HYPERVISOR", hv_vendor);
+#endif
+	}
+	else
+	{
+		ir0_boot_info("HYPERVISOR", "none detected");
+		ir0_boot_notice("PLATFORM",
+				"Bare-metal execution confirmed!");
+	}
 }

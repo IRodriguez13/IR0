@@ -15,7 +15,17 @@
 
 uint32_t arch_arm64_platform_id(void)
 {
-    return 0;
+	return 0;
+}
+
+const char *get_arch_name(void)
+{
+	return "aarch64 (ARM64)";
+}
+
+const char *get_arch_uname_machine(void)
+{
+	return "aarch64";
 }
 
 const char *boot_entry_name(void)

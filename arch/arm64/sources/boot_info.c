@@ -12,6 +12,9 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
+
+#include <config.h>
 
 #define FDT_MAGIC        0xd00dfeedU
 #define FDT_HEADER_SIZE  40U
@@ -24,11 +27,18 @@
 #define ARM64_FRAME_SIZE 4096U
 #define FDT_NODE_DEPTH_MAX 32U
 
-/* Written by the stackless entry assembly before x0 is reused. */
-uintptr_t arm64_firmware_fdt;
+/*
+ * Written by stackless entry (entry.S) before kmain; must be volatile so the C
+ * compiler does not assume it stays zero across the asm handoff.
+ */
+volatile uintptr_t arm64_firmware_fdt;
 
 static struct arm64_board_boot_info g_boot_info;
 static int g_memory_finalized;
+#if defined(IR0_ARM64_BOARD_QEMU_VIRT)
+/* True when FDT was unreadable but we installed a fixed DRAM bank for PMM (QEMU virt). */
+static int g_qemu_virt_synthetic_ram;
+#endif
 
 static uint64_t min_u64(uint64_t a, uint64_t b)
 {
@@ -122,6 +132,31 @@ static int append_usable(uint64_t base, uint64_t end)
 	range->size = end - base;
 	return 0;
 }
+
+#if defined(IR0_ARM64_BOARD_QEMU_VIRT)
+/*
+ * QEMU virt places a DTB in RAM, but when the Image is linked as a plain ELF (not the
+ * Linux --dumpdtb path), firmware may leave RAM at the DTB address unreadable to EL1
+ * until MMU maps it — FDT parse then fails with magic 0. Supply one DRAM bank so
+ * arm64_board_finalize_memory() and mm_boot_usable_range* can hand off to the portable PMM.
+ * Size matches common smokes (-m 256M); reserve kernel image via finalize_memory.
+ */
+static void arm64_qemu_virt_synthetic_ram_only(void)
+{
+	g_boot_info.fdt_valid = 0;
+	g_boot_info.fdt_pa = 0;
+	g_boot_info.fdt_size = 0;
+	g_boot_info.fdt_magic = 0;
+	g_boot_info.memory_range_count = 0;
+	g_boot_info.reserved_range_count = 0;
+	g_boot_info.usable_range_count = 0;
+	g_qemu_virt_synthetic_ram = 1;
+	if (append_range(g_boot_info.memory, &g_boot_info.memory_range_count,
+			 ARM64_BOOT_MEMORY_RANGES_MAX, 0x40000000UL,
+			 0x10000000UL) != 0)
+		g_qemu_virt_synthetic_ram = 0;
+}
+#endif
 
 static int build_usable_ranges(void)
 {
@@ -295,6 +330,60 @@ static int string_list_has_prefix(const volatile uint8_t *value, uint32_t len,
 	return 0;
 }
 
+static void arm64_set_hypervisor(enum arm64_hypervisor_kind k,
+				 const char *vendor_up_to_15)
+{
+	size_t i;
+
+	g_boot_info.hypervisor_kind = k;
+	if (!vendor_up_to_15)
+	{
+		g_boot_info.hypervisor_vendor[0] = '\0';
+		return;
+	}
+	for (i = 0; i < sizeof(g_boot_info.hypervisor_vendor) - 1U &&
+		    vendor_up_to_15[i];
+	     i++)
+		g_boot_info.hypervisor_vendor[i] = vendor_up_to_15[i];
+	g_boot_info.hypervisor_vendor[i] = '\0';
+}
+
+static void arm64_note_hypervisor_compatible(const volatile uint8_t *value,
+					     uint32_t len)
+{
+	if (string_list_has(value, len, "linux,kvm") ||
+	    string_list_has(value, len, "arm,kvm"))
+	{
+		arm64_set_hypervisor(ARM64_HV_KVM, "KVMKVMKVM");
+		return;
+	}
+	if (string_list_has(value, len, "xen,xen") ||
+	    string_list_has(value, len, "arm,xen") ||
+	    string_list_has(value, len, "xen,arm"))
+	{
+		arm64_set_hypervisor(ARM64_HV_XEN, "XenVMMXenVMM");
+		return;
+	}
+	if (string_list_has(value, len, "microsoft,hyperv-genic") ||
+	    string_list_has(value, len, "microsoft,hyperv"))
+	{
+		arm64_set_hypervisor(ARM64_HV_HYPERV, "Microsoft Hv");
+		return;
+	}
+	if (string_list_has(value, len, "vmware,vmvisor") ||
+	    string_list_has(value, len, "vmware,GuestVM"))
+	{
+		arm64_set_hypervisor(ARM64_HV_VMWARE, "VMwareVMware");
+		return;
+	}
+	if (string_list_has(value, len, "qemu,virt") ||
+	    string_list_has_prefix(value, len, "qemu,"))
+	{
+		if (g_boot_info.hypervisor_kind == ARM64_HV_NONE)
+			arm64_set_hypervisor(ARM64_HV_QEMU, "TCGTCGTCGTCG");
+	}
+}
+
 static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 {
 	const volatile uint8_t *structure;
@@ -443,6 +532,7 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 			}
 			else if (prop_name_is(strings, strings_size, nameoff, "compatible"))
 			{
+				arm64_note_hypervisor_compatible(value, len);
 				if (string_list_has(value, len, "arm,gic-v3"))
 					g_boot_info.irq_controller = ARM64_IRQ_CONTROLLER_GIC_V3;
 				else if (string_list_has(value, len, "arm,gic-400") ||
@@ -720,6 +810,7 @@ static int parse_irq_resources(const volatile uint8_t *fdt, uint32_t total)
 				node->child_size_cells = read_be32(value);
 			else if (prop_name_is(strings, strings_size, nameoff, "compatible"))
 			{
+				arm64_note_hypervisor_compatible(value, len);
 				if (string_list_has(value, len, "arm,gic-v3"))
 					node->model = ARM64_IRQ_CONTROLLER_GIC_V3;
 				else if (string_list_has(value, len, "arm,gic-400") ||
@@ -777,6 +868,8 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.memory_range_count = 0;
 	g_boot_info.reserved_range_count = 0;
 	g_boot_info.usable_range_count = 0;
+	g_boot_info.hypervisor_kind = ARM64_HV_NONE;
+	g_boot_info.hypervisor_vendor[0] = '\0';
 
 	/* Linux arm64 boot protocol requires an 8-byte-aligned DTB in RAM. */
 	if (!fdt_pa || (fdt_pa & 7U) != 0)
@@ -805,6 +898,42 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	return 0;
 }
 
+int arm64_fdt_boot_info_init_fallback(uintptr_t primary, uintptr_t fallback)
+{
+	if (arm64_fdt_boot_info_init(primary) == 0)
+		return 0;
+	if (fallback != 0 && fallback != primary &&
+	    arm64_fdt_boot_info_init(fallback) == 0)
+		return 0;
+#if defined(IR0_ARM64_BOARD_QEMU_VIRT)
+	arm64_qemu_virt_synthetic_ram_only();
+	return g_qemu_virt_synthetic_ram ? 0 : -1;
+#else
+	(void)fallback;
+	return -1;
+#endif
+}
+
+int arm64_board_hypervisor_present(void)
+{
+	return g_boot_info.fdt_valid &&
+	       g_boot_info.hypervisor_kind != ARM64_HV_NONE;
+}
+
+int arm64_board_hypervisor_vendor(char *buf, size_t n)
+{
+	if (!buf || n < 13U)
+		return -1;
+	if (!arm64_board_hypervisor_present())
+	{
+		buf[0] = '\0';
+		return -1;
+	}
+	strncpy(buf, g_boot_info.hypervisor_vendor, n);
+	buf[n - 1U] = '\0';
+	return 0;
+}
+
 const struct arm64_board_boot_info *arm64_board_boot_info(void)
 {
 	return &g_boot_info;
@@ -814,13 +943,24 @@ int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size)
 {
 	uint32_t i;
 	struct ir0_phys_range kernel;
+	int have_ram_bank;
 
-	if (!g_boot_info.fdt_valid || kernel_size == 0U ||
+	have_ram_bank =
+	    g_boot_info.fdt_valid ||
+#if defined(IR0_ARM64_BOARD_QEMU_VIRT)
+	    g_qemu_virt_synthetic_ram;
+#else
+	    0;
+#endif
+
+	if (!have_ram_bank || kernel_size == 0U ||
 	    (uint64_t)kernel_base + (uint64_t)kernel_size < (uint64_t)kernel_base)
 		return -1;
 	if (g_memory_finalized)
 		return 0;
-	if (g_boot_info.reserved_range_count > ARM64_BOOT_RESERVED_RANGES_MAX - 2U)
+	/* DTB + kernel reservations; synthetic path may have no parsable DTB. */
+	if (g_boot_info.reserved_range_count >
+	    ARM64_BOOT_RESERVED_RANGES_MAX - (g_boot_info.fdt_valid ? 2U : 1U))
 		return -1;
 
 	kernel.base = (uint64_t)kernel_base;
@@ -835,10 +975,14 @@ int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size)
 				return -1;
 		}
 	}
+	if (g_boot_info.fdt_valid && g_boot_info.fdt_size != 0U)
+	{
+		if (append_range(g_boot_info.reserved, &g_boot_info.reserved_range_count,
+				 ARM64_BOOT_RESERVED_RANGES_MAX, g_boot_info.fdt_pa,
+				 g_boot_info.fdt_size) != 0)
+			return -1;
+	}
 	if (append_range(g_boot_info.reserved, &g_boot_info.reserved_range_count,
-			 ARM64_BOOT_RESERVED_RANGES_MAX, g_boot_info.fdt_pa,
-			 g_boot_info.fdt_size) != 0 ||
-	    append_range(g_boot_info.reserved, &g_boot_info.reserved_range_count,
 			 ARM64_BOOT_RESERVED_RANGES_MAX, kernel.base,
 			 kernel.size) != 0)
 		return -1;

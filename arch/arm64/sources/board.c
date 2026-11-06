@@ -14,6 +14,7 @@
 
 #include <ir0/arm64_board.h>
 #include <ir0/boot_log.h>
+#include <config.h>
 
 #include <stddef.h>
 
@@ -57,6 +58,8 @@ static const struct arm64_board_desc g_board = {
 	.uart_mmio_line = "uart_mmio=0x09000000",
 	.platform_ops = &arm64_virt_platform_ops,
 	.boot_info_init = arm64_fdt_boot_info_init,
+	/* QEMU virt RAM base. Used only when x0 did not carry a DTB. */
+	.dtb_fallback_pa = 0x40000000UL,
 };
 #endif
 
@@ -73,7 +76,11 @@ int arm64_board_capture_boot_info(uintptr_t fdt_pa)
 	{
 		return -1;
 	}
-	return b->boot_info_init(fdt_pa);
+	if (b->boot_info_init != arm64_fdt_boot_info_init)
+	{
+		return b->boot_info_init(fdt_pa);
+	}
+	return arm64_fdt_boot_info_init_fallback(fdt_pa, b->dtb_fallback_pa);
 }
 
 void arm64_board_apply_platform(void)
@@ -112,6 +119,7 @@ void arm64_board_log_arch(void)
 	{
 		ir0_boot_arch("dtb=firmware-x0");
 		ir0_boot_smoke("ARM64_DTB_OK");
+#if DEBUG_BOOT
 		if (boot->memory_range_count > 0)
 		{
 			ir0_boot_info_hex64("ARCH", "dtb_ram_base",
@@ -175,6 +183,7 @@ void arm64_board_log_arch(void)
 		}
 		else
 			ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_FAIL");
+#endif
 	}
 	else
 	{

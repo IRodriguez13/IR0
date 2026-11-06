@@ -15,8 +15,8 @@ _start:
 	b	.Lprimary_entry
 	.long	0
 	.quad	0x80000
-	/* Zero is valid and keeps the header usable by minimal board linkers. */
-	.quad	0
+	/* QEMU ignores text_offset unless image_size is non-zero. */
+	.quad	arm64_image_size
 	.quad	0x2
 	.quad	0
 	.quad	0
@@ -56,11 +56,21 @@ _start:
 	eret
 
 .Lel1_entry:
+	/*
+	 * Use SP_EL1 for the boot stack so EL1h matches arm64_cpu_switch and
+	 * vectors.S (current EL with SPx). firmware may leave SPSel undefined.
+	 */
+	msr	spsel, #1
+	isb
 	msr	daifset, #0xf
 	adrp	x1, boot_stack
 	add	x1, x1, :lo12:boot_stack
 	add	sp, x1, #1, lsl #12
-	b	boot_main
+	/* Firmware handle was saved early; EL2/EL3 paths may clobber x0. */
+	adrp	x2, arm64_firmware_fdt
+	add	x2, x2, :lo12:arm64_firmware_fdt
+	ldr	x0, [x2]
+	bl	kmain
 
 .Lunsupported_el:
 	wfe
