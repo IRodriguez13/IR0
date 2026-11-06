@@ -144,6 +144,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_futex_exit_drop_frees_slot, "futex_exit_drop_frees_slot", 1 },
 	{ ktest_ipc_read_rechecks_after_enqueue,
 	  "ipc_read_rechecks_after_enqueue", 1 },
+	{ ktest_ipc_wait_queue_tail_survives_exit_purge,
+	  "ipc_wait_queue_tail_survives_exit_purge", 1 },
 	{ ktest_unmap_splits_2mb_leaf, "unmap_splits_2mb_leaf", 1 },
 	{ ktest_map_replaced_frame_is_released,
 	  "map_replaced_frame_is_released", 1 },
