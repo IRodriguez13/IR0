@@ -15,7 +15,7 @@ Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ### Contratos de guest en el ktest de boot (2026-11-02)
 
-- `kernel/test/test_fix_contracts.c` suma 13 casos. `make ktest` ese día:
+- `kernel/test/test_fix_contracts.c` suma 13 casos. `make kernel-tests` ese día:
   76/76, `TEST_END|kernel.ktest|PASS`.
 - Cubren readlink, `fstat`/`lseek` de stdio redirigido, tabla de fd muerta
   (`-EBADF`), rename en montaje de solo lectura (`-EROFS`), bytes de pipe

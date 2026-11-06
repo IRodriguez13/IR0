@@ -2,7 +2,8 @@
 
 > **Last verified:** 2026-11-05
 > **Source of truth:** `kernel/test/test_fix_contracts.c`,
-> `kernel/test/test_mm_contracts.c`, `kernel/test/test_runner.c`,
+> `kernel/test/test_mm_contracts.c`, `kernel/test/test_debug_contracts.c`,
+> `kernel/test/test_runner.c`,
 > `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
 > `kernel/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
 > `arch/x86-64/sources/arch_mm.c`, `arch/arm64/sources/arch_mm.c`
@@ -10,7 +11,7 @@
 Spanish: [`../esp/testing/KTEST_FIX_CONTRACTS.md`](../esp/testing/KTEST_FIX_CONTRACTS.md).
 
 `make kernel-tests` boots `kernel-x64-test.bin` and reports through the KTM scenario
-`kernel.ktest`. On 2026-11-05 the suite printed `All 82 test(s) passed` and
+`kernel.ktest`. On 2026-11-05 the suite printed `All 84 test(s) passed` and
 `TEST_END|kernel.ktest|PASS`. The later panic `Failed to load /sbin/init` is
 the test ISO, after that verdict.
 
@@ -56,6 +57,13 @@ The COW cases are new and live in `kernel/test/test_mm_contracts.c`:
 |-----------|-------------------|
 | `cow_write_fault_drops_old_once` | A write fault on a `PAGE_COW` PTE replaces the frame and drops the old frame exactly once (no `PMM: double free detected` panic). The new PTE is writable without `PAGE_COW`, and the page contents survive the copy. |
 | `copy_to_user_cow_break_drops_old_once` | A `copy_to_user_mm` write to a `PAGE_COW` page breaks COW through the uaccess path and drops the old frame exactly once (no double free). The new PTE is writable without `PAGE_COW`, and the written bytes read back through `copy_from_user_mm`. |
+
+The block-device case lives in `kernel/test/test_debug_contracts.c`:
+
+| KTAP name | What a pass means |
+|-----------|-------------------|
+| `devfs_disk_unaligned_contract` | `/dev/hd*` keeps the byte offset inside a sector. A read at offset 1 returns bytes 1..512; a 4-byte write at offset 3 changes only those bytes; a 600-byte write at offset 500 changes only that range. Reads clamp to the device extent. |
+| `devfs_disk_ioctl_bounds_contract` | Legacy `DISK_*` ioctls on a partition reject sector numbers past the partition extent, never truncate the absolute LBA into the disk start, fail closed when the partition entry cannot be resolved, and saturate geometry bytes instead of wrapping. |
 
 A double free panics the guest before the suite prints its verdict, so a
 regression fails the whole `make kernel-tests` run.

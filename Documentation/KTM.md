@@ -476,6 +476,10 @@ Source: `scripts/smoke_session_soak.py`.
    suite is exempt from the ledger because it runs through the `kernel.ktest`
    KTM scenario (`tests/ktm/scenarios/ktest_bridge.c`); the guard verifies that
    bridge and the `kernel-tests` gate that requires its PASS result.
+6. Replace a device facade in tests through the link-time `CONFIG_KTM_*_MOCK`
+   objects or a registry fake ([`ktm/mocks/README.md`](../ktm/mocks/README.md)).
+   Do not add test-only branches, synthetic responses, or smoke markers to a
+   production hardware backend.
 
 ### 7.1 Canonical test plane (when KTM is better)
 
@@ -498,6 +502,7 @@ remain SUB / non-default. Doom/TCC keep runit recipes; KTM names are hybrid alia
 | Doc | Content |
 |-----|---------|
 | [`tests/ktm/README.md`](../tests/ktm/README.md) | Tree layout for test artifacts |
+| [`ktm/mocks/README.md`](../ktm/mocks/README.md) | Link-time and registry-based hardware fakes |
 | [`ai_driven_dev/ktm.md`](ai_driven_dev/ktm.md) | Agent-facing summary |
 | [`KTM_FASE_PARITY.md`](KTM_FASE_PARITY.md) | FASE → KTM coverage class |
 | [`KTM_FASE_INVENTORY.md`](KTM_FASE_INVENTORY.md) | Legacy smoke → KTM gate map |

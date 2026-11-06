@@ -64,8 +64,8 @@ Compare treats Linux skip as acceptable; **IR0 must pass** `reparent_mid_wait` a
 
 ```bash
 python3 scripts/linux_abi_audit.py --contract process_lifecycle
-make ktest                  # wait4_*, signal ktests
-make agent-fast             # ctr + ktest
+make kernel-tests           # wait4_*, signal ktests
+make agent-fast             # ctr + kernel-tests
 ```
 
 ## References

@@ -3,7 +3,7 @@
 # KTM adoption ledger — legacy harnesses that do not report through KTM yet.
 #
 # Read by scripts/ktm_adoption_guard.py (make ktm-adoption-guard, part of
-# ktm-check). The list is a ratchet: adding a new serial-only harness fails the
+# test-fast). The list is a ratchet: adding a new serial-only harness fails the
 # guard, and removing a harness requires deleting its line here. Only shrink
 # this file; never add an entry to silence a new test.
 #

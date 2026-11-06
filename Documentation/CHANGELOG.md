@@ -1,7 +1,7 @@
 # IR0 Kernel Changelog
 
 > **Last verified:** 2026-10-18
-> **Source of truth:** git history, `make ktm-check`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
+> **Source of truth:** git history, `make ctr`, roadmap smokes in `Makefile`, [`HARDENING.md`](HARDENING.md), [`KTM.md`](KTM.md), [`LINUX_SHAPED.md`](LINUX_SHAPED.md)
 
 This file tracks user-visible and developer-facing changes per iteration.
 For tier backlog see [`ROADMAP.md`](ROADMAP.md). For **what is stable in QEMU** see [`STABLE.md`](STABLE.md).
@@ -24,7 +24,7 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 
 ### Guest contracts in the boot ktest (2026-11-02)
 
-- `kernel/test/test_fix_contracts.c` adds 13 cases. `make ktest` on that day:
+- `kernel/test/test_fix_contracts.c` adds 13 cases. `make kernel-tests` on that day:
   76/76, `TEST_END|kernel.ktest|PASS`.
 - The cases lock readlink length, redirected stdio `fstat`/`lseek`, a dead fd
   table (`-EBADF`), rename on a read-only mount (`-EROFS`), pipe bytes kept
@@ -366,14 +366,14 @@ Closed for 0.0.1 without re-smoke unless regression: **runit**, **BusyBox ash/ap
 - **Fault path** — `arch/x86-64/sources/fault.c`, HPET, arch divide-by-zero use `PANIC_HW` where appropriate.
 - **`[KTM][PANIC_SITE]`** — `ktm_panic_site_emit()` logs file, line, caller, and message on every `panicex`.
 - **`ktm_classify_kernel_panic_ex()`** — Classification uses panic level first, then message heuristics (`KERNEL_HW_FAULT`, `KERNEL_OOM`, etc.).
-- **`scripts/ktm_panic_inventory.py`** — CI gate in `make ktm-check`; host test `test_ktm_panic_inventory_contract`.
+- **`scripts/ktm_panic_inventory.py`** — CI gate in `make test-fast`; host test `test_ktm_panic_inventory_contract`.
 
 ### Validation (this iteration)
 
 | Check | Result |
 |-------|--------|
 | `make kernel-x64.bin` | OK |
-| `make ktm-check` | OK |
+| `make test-fast` | OK |
 | `kernel-tests` (32/32) | prior green |
 | `smoke-mm-cow-lazy`, tier1 smokes | prior green |
 | `tests/host` | 10 tests incl. panic inventory |
