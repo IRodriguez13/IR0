@@ -425,6 +425,7 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_rootfs_ipc.o \
 	kernel/syscalls/early_rootfs_socket.o \
 	kernel/syscalls/early_rootfs_file.o \
+	kernel/syscalls/early_rootfs_landlock.o \
 	kernel/syscalls/early_rootfs_meta.o \
 	fs/ramtab.o \
 	ipc/early_anonfd.o \

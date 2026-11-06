@@ -5,7 +5,8 @@
  *
  * File: early_rootfs_internal.h
  * Description: Private state and helpers for the split early rootfs backend.
- *              Not a public ABI; only kernel/syscalls/early_rootfs*.c include it.
+ *              Not a public ABI; only kernel/syscalls/early_rootfs*.c (incl.
+ *              early_rootfs_landlock.c) include it.
  */
 
 #pragma once
