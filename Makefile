@@ -29,19 +29,17 @@ IR0_RUN_MODES := gui console debug fullscreen gdb
 IR0_GOAL_ARCH := $(firstword $(filter $(IR0_ARCH_GOALS),$(MAKECMDGOALS)))
 IR0_GOAL_BOARD := $(firstword $(filter $(IR0_BOARD_GOALS),$(MAKECMDGOALS)))
 IR0_RUN_MODE := $(firstword $(filter $(IR0_RUN_MODES),$(MAKECMDGOALS)))
-# Building any ARM64 product recipe requires ARM64 fragments (.config may still
-# default CONFIG_ARCH_X86_64=y — without this, prerequisite arm64-common-core-compile
-# and similar targets are undefined and fail opaquely).
+# Building any ARM64 goal needs scripts/make/arm64.mk (.config may still default
+# CONFIG_ARCH_X86_64=y — without forcing ARCH=arm64, arm64-* prerequisites are
+# undefined and fail opaquely).
 IR0_GOAL_ARM64_PRODUCT := $(firstword $(filter \
 	kernel-arm64% smoke-arm64% arm64-%,$(MAKECMDGOALS)))
 
 IR0_ARM64_PRODUCT ?= n
 
-# Product kernel image and smokes that run it must set IR0_ARM64_PRODUCT so ALL_OBJS,
-# ARCH_OBJS, and driver filters match `make kernel-arm64-product.bin` (not freestanding).
+# Product-only ARM64 smokes force ARCH=arm64 (IR0_ARM64_PRODUCT is implied for all arm64 builds).
 ifneq ($(filter kernel-arm64-product.bin kernel-arm64-product smoke-arm64-product%,$(MAKECMDGOALS)),)
 override ARCH := arm64
-override IR0_ARM64_PRODUCT := y
 endif
 
 ifneq ($(IR0_GOAL_ARCH),)
@@ -140,6 +138,12 @@ else
 BOARD :=
 endif
 
+# ARM64: always use the portable product kernel link (same as kernel-arm64-product.bin).
+# The legacy freestanding early image path is retired.
+ifeq ($(ARCH),arm64)
+override IR0_ARM64_PRODUCT := y
+endif
+
 # Hardware backend object selection. Test-only KTM mocks replace the
 # production facade implementation at link time; product defconfigs keep every
 # KTM_*_MOCK option disabled. `scripts/architecture_guard.py` rejects a mock
@@ -230,15 +234,14 @@ endif
 # expands them.
 -include scripts/make/host-portable.mk
 
-# ARM64 keeps its hermetic freestanding build graph in a fragment. Parse it
-# only for an ARM64 invocation so x86 builds never pay for it.
+# ARM64: QEMU smokes, board -min images, and hello blob helpers. Parse only for
+# ARCH=arm64 so x86 builds never pay for it.
 ifeq ($(ARCH),arm64)
 ARM64_BOARD := $(BOARD)
 -include scripts/make/arm64.mk
 -include scripts/make/arm64-board.mk
 # Board macros (qemu-virt vs rpi*) — required by portable sources such as
-# arch/arm64/sources/boot_info.c for DTB fallbacks; freestanding uses the same via
-# ARM64_BOOT_CFLAGS.
+# arch/arm64/sources/boot_info.c for DTB fallbacks.
 CFLAGS += $(ARM64_BOARD_CFLAGS)
 endif
 
@@ -549,9 +552,7 @@ CFLAGS += -DCONFIG_SCHEDULER_POLICY=0
 endif
 
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 KERNEL_OBJS += arch/arm64/sources/boot_arch_portable.o
-endif
 endif
 
 MEMORY_OBJS = \
@@ -607,13 +608,9 @@ LIB_OBJS = \
     $(AUDIO_BACKEND_OBJ) \
     includes/string.o
 
-# ARM64 product virtio keyboard has no i8042 — drop PS/2 scan-code tables.
+# ARM64 virtio keyboard has no i8042 — drop PS/2 scan-code tables.
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 LIB_OBJS_PRODUCT := $(filter-out drivers/input/ps2_set1.o drivers/input/ps2_mouse_pkt.o,$(LIB_OBJS))
-else
-LIB_OBJS_PRODUCT := $(LIB_OBJS)
-endif
 else
 LIB_OBJS_PRODUCT := $(LIB_OBJS)
 endif
@@ -627,16 +624,9 @@ INTERRUPT_OBJS_X86_64 = \
     arch/x86-64/asm/interrupt/isr_stubs_64.o \
     arch/x86-64/asm/interrupt/early_idt_stubs.o
 
-# ARM64: do not pull lidt / isr_stubs_64 — GIC is in ARCH_OBJS.
-INTERRUPT_OBJS_ARM64 = \
-    arch/arm64/sources/irq_portable_stubs.o
-
+# ARM64: do not pull lidt / isr_stubs_64 — GIC and friends live in ARCH_OBJS.
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 INTERRUPT_OBJS :=
-else
-INTERRUPT_OBJS := $(INTERRUPT_OBJS_ARM64)
-endif
 else
 INTERRUPT_OBJS := $(INTERRUPT_OBJS_X86_64)
 endif
@@ -667,16 +657,14 @@ DRIVER_OBJS += drivers/serial/serial.o
 DRIVER_OBJS += drivers/timer/rtc/rtc.o
 endif
 
-# Portable ARM64 product link: drop PS/2 + legacy x86 timer probes (virt uses GIC + arch timer).
+# ARM64: drop PS/2 + legacy x86 timer probes (virt uses GIC + arch timer).
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 DRIVER_OBJS := $(filter-out drivers/input/ps2.o \
 	drivers/timer/pit/pit.o \
 	drivers/timer/hpet/hpet.o \
 	drivers/timer/hpet/find_hpet.o \
 	drivers/timer/acpi/acpi_pm.o \
 	drivers/timer/lapic/lapic.o,$(DRIVER_OBJS))
-endif
 endif
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
@@ -863,11 +851,9 @@ CFLAGS += -DCONFIG_ENABLE_MOUSE=0
 endif
 
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 MOUSE_OBJS :=
 CFLAGS := $(filter-out -DCONFIG_ENABLE_MOUSE=1,$(CFLAGS))
 CFLAGS += -DCONFIG_ENABLE_MOUSE=0
-endif
 endif
 
 # PC speaker
@@ -1043,15 +1029,13 @@ CFLAGS += -DCONFIG_TICK_RATE_HZ=$(CONFIG_TICK_RATE_HZ)
 # Product boot always loads /sbin/init (legacy KERNEL_DEBUG_SHELL removed).
 CFLAGS += -DCONFIG_KERNEL_DEBUG_SHELL=0
 
-# Architecture source inventories and their exceptional freestanding rules.
+# Architecture source inventories.
 -include scripts/make/arch-sources.mk
 
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 CFLAGS += -DIR0_ARM64_PRODUCT_KERNEL=1
-# Freestanding link: avoid libgcc LSE init that calls glibc __getauxval.
+# Avoid libgcc LSE init that calls glibc __getauxval.
 CFLAGS += -mno-outline-atomics
-endif
 endif
 
 CPP_OBJS = \
@@ -1093,9 +1077,7 @@ ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS_PRODUCT) $(INTERRUPT_OBJS) \
            $(STORAGE_NVME_OBJS)
 
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 ALL_OBJS := $(filter-out cpp/runtime/compat.o,$(ALL_OBJS))
-endif
 endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
@@ -1108,9 +1090,7 @@ KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
 	build/test/arch/common/boot_port.o \
 	build/test/arch/common/oops_port.o
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
 KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch_portable.o
-endif
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
@@ -1199,14 +1179,12 @@ arch/arm64/asm/context/switch_early.o: arch/arm64/asm/context/switch_early.S
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-# Early-userspace embed uses the same static blob as kernel-arm64-boot.bin.
-ifeq ($(IR0_ARM64_PRODUCT),y)
+# Early-userspace embed links build/hello_aarch64 (musl when available).
 arch/arm64/sources/hello_embed.o: $(MUSL_AARCH64_HELLO)
 arch/arm64/sources/embedded_elf_embed.o: $(MUSL_AARCH64_HELLO) arch/arm64/sources/embedded_elf_embed.S
 	@echo "  AS      arch/arm64/sources/embedded_elf_embed.S (hello blob)"
 	@$(CC) $(CFLAGS) -DARM64_EMBEDDED_ELF_PATH='"build/hello_aarch64"' -c \
 		arch/arm64/sources/embedded_elf_embed.S -o $@
-endif
 endif
 
 
@@ -1225,18 +1203,17 @@ kernel-x64.bin: $(ALL_OBJS) arch/x86-64/linker.ld
 		echo "1" > .build_number; \
 	fi
 
-# ARM64 public image: the validated aggregate contains the common MM/process
-# slice and no allocator/runtime/link mocks or weak providers. Early syscall
-# and rootfs providers remain staged.
-kernel-arm64.bin: kernel-arm64-all.bin arm64-common-core-compile arm64-provider-audit
-	@echo "  COPY    $@ (validated ARM64 aggregate)"
-	@cp kernel-arm64-all.bin $@
+# ARM64 public image: same portable link as kernel-arm64-product.bin (validated
+# by arm64-common-core-compile + arm64-provider-audit).
+kernel-arm64.bin: kernel-arm64-product.bin arm64-common-core-compile arm64-provider-audit
+	@echo "  COPY    $@ (ARM64 product kernel)"
+	@cp kernel-arm64-product.bin $@
 	@echo "  OBJCOPY kernel-arm64.img (Linux Image; QEMU sets x0 to the DTB)"
 	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64.img
-	@echo "✓ Kernel linked: $@ (common-core aggregate; early providers remain)"
+	@echo "✓ Kernel image ready: $@"
 
 # Portable ARM64 kernel: same ir0_kernel_boot chain as x86 (no IR0_FREESTANDING_BOOT).
-# `make kernel-arm64-product.bin` forces ARCH=arm64 + IR0_ARM64_PRODUCT via goal detection.
+# `make kernel-arm64-product.bin` forces ARCH=arm64 via goal detection.
 kernel-arm64-product.bin: $(ALL_OBJS) arch/arm64/linker.ld
 	@echo "  LD      $@"
 	@$(KERNEL_ARM64_PRODUCT_LINK_CMD) $(KERNEL_ARM64_PRODUCT_LINK_FLAGS) \
@@ -1391,7 +1368,7 @@ endif
 # ============================================
 
 # `ir0` is the single build entry point. It compiles with -Werror and selects
-# the artifact from ARCH/BOARD: x86 ISO, ARM64 aggregate, or board kernel8.img.
+# the artifact from ARCH/BOARD: x86 ISO, ARM64 product kernel, or board kernel8.img.
 ir0: CFLAGS += -Werror
 
 # Auto-run the host dependency check when menuconfig asks for it.
@@ -1577,9 +1554,9 @@ help:
 	@echo ""
 	@echo "Build:"
 	@echo "  make ir0                     x86-64 kernel ISO (default)"
-	@echo "  make ir0 arm64               ARM64 qemu-virt aggregate"
-	@echo "  make kernel-arm64.bin        same aggregate (forces ARCH=arm64)"
-	@echo "  make smoke-arm64-hypervisor-log  QEMU virt: HYPERVISOR line + ARM64_BOOT_OK"
+	@echo "  make ir0 arm64               ARM64 qemu-virt product kernel"
+	@echo "  make kernel-arm64.bin        same (forces ARCH=arm64)"
+	@echo "  make smoke-arm64-hypervisor-log  QEMU virt: HYPERVISOR line + ARM64_BOOT_OK (product)"
 	@echo "  make smoke-arm64-product-log     QEMU virt: kernel-arm64-product.bin handoff tag"
 	@echo "  make smoke-arm64-product-usermode-log  QEMU: handoff + first EL0 syscall (init)"
 	@echo "  make ir0 arm64 rpi4          ARM64 board image (rpi3|rpi4|rpi5)"

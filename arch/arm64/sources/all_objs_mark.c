@@ -4,7 +4,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: all_objs_mark.c
- * Description: Marker TU forced into kernel-arm64-all.bin link.
+ * Description: Optional ARM64 aggregate smoke TU (historical; not linked in the product kernel path).
  */
 
 #include "pl011.h"

@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Architecture-specific object inventories and freestanding ARM64 exceptions.
+# Architecture-specific object inventories (ARM64 portable product path).
 
 ARCH_COMMON_BOOT_LOG_OBJ = build/$(ARCH)/arch/common/boot_log.o
 
@@ -138,11 +138,6 @@ ARM64_EARLY_STORAGE_OBJS = \
 
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \
-	build/arm64-boot/rr_sched.o \
-	build/arm64-boot/switch_arm64.o
-
-ARM64_FIRST_SWITCH_OBJS_PRODUCT = \
-	arch/arm64/sources/first_switch.o \
 	sched/switch/switch_arm64.o
 
 # ktm/mocks/arm64/min_link_stubs.c is not part of ARCH_OBJS_ARM64.
@@ -152,17 +147,7 @@ $(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
 	@echo "  CC      $< ($(ARCH) namespace)"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-ARCH_OBJS_ARM64_FREESTANDING = \
-	$(ARM64_BACKEND_OBJS) \
-	$(ARM64_EARLY_SYSCALL_OBJS) \
-	$(ARM64_PROCESS_BACKEND_OBJS) \
-	$(ARM64_FREESTANDING_RUNTIME_OBJS) \
-	$(ARM64_EARLY_USERSPACE_OBJS) \
-	$(ARM64_EARLY_SCHEDULER_OBJS) \
-	$(ARM64_EARLY_STORAGE_OBJS) \
-	$(ARM64_FIRST_SWITCH_OBJS)
-
-ARCH_OBJS_ARM64_PRODUCT = \
+ARCH_OBJS_ARM64 = \
 	arch/arm64/asm/boot/entry.o \
 	$(ARM64_BACKEND_OBJS) \
 	$(ARM64_INTERFACE_OBJS_PRODUCT) \
@@ -172,29 +157,10 @@ ARCH_OBJS_ARM64_PRODUCT = \
 	$(ARM64_EARLY_USERSPACE_OBJS) \
 	$(ARM64_EARLY_SCHEDULER_OBJS) \
 	$(ARM64_EARLY_STORAGE_OBJS) \
-	$(ARM64_FIRST_SWITCH_OBJS_PRODUCT)
-
-build/arm64-boot/rr_sched.o: sched/rr_sched.c
-	@mkdir -p build/arm64-boot
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -DARCH_ARM64=1 \
-		-I$(KERNEL_ROOT)/sched -I$(KERNEL_ROOT)/includes \
-		-I$(KERNEL_ROOT)/includes/ir0 -I$(KERNEL_ROOT)/arch/common \
-		-I$(KERNEL_ROOT) \
-		-c sched/rr_sched.c -o build/arm64-boot/rr_sched.o
-
-build/arm64-boot/switch_arm64.o: sched/switch/switch_arm64.c
-	@mkdir -p build/arm64-boot
-	@aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) -I$(KERNEL_ROOT)/sched \
-		-I$(KERNEL_ROOT)/includes -I$(KERNEL_ROOT)/includes/ir0 \
-		-I$(KERNEL_ROOT)/arch/common \
-		-c sched/switch/switch_arm64.c -o build/arm64-boot/switch_arm64.o
+	$(ARM64_FIRST_SWITCH_OBJS)
 
 ifeq ($(ARCH),arm64)
-ifeq ($(IR0_ARM64_PRODUCT),y)
-ARCH_OBJS := $(ARCH_OBJS_ARM64_PRODUCT)
-else
-ARCH_OBJS := $(ARCH_OBJS_ARM64_FREESTANDING)
-endif
+ARCH_OBJS := $(ARCH_OBJS_ARM64)
 else
 ARCH_OBJS := $(ARCH_OBJS_COMMON) $(ARCH_OBJS_X86_64)
 endif

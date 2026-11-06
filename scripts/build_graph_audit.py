@@ -19,8 +19,6 @@ SOURCE_SUFFIXES = (".c", ".cpp", ".S", ".s", ".asm")
 GENERATED_OBJECTS = {
     "build/x86-64/arch/common/boot_log.o",
     "build/arm64/arch/common/boot_log.o",
-    "build/arm64-boot/rr_sched.o",
-    "build/arm64-boot/switch_arm64.o",
     "arch/x86-64/vdso/vdso_blob_embed.o",
 }
 
