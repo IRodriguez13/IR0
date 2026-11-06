@@ -23,6 +23,31 @@ The first five replace the production object at link time. `KTM_PLATFORM_MOCK`
 instead links `ktm/mocks/platform/ktm_platform_mock.c`; tests select
 `ktm_platform_mock_ops` explicitly through `ir0_platform_ops_set()`.
 
+## Registry-based fakes
+
+Two hardware families are faked through their public registry instead of
+link-time replacement:
+
+| Family | Production seam | Fake | CONFIG option |
+| --- | --- | --- | --- |
+| block | `ir0_block_register()` (`ir0/blockdev.h`) | `ktm/mocks/block/ktm_block_fake.c` | `KTM_BLOCK_FAKE` |
+| net | `net_register_device()` (`ir0/net.h`) | test-local `struct net_device` | none (register in the test) |
+
+The block fake registers a bounded RAM disk and injects `-EIO` on a selected
+read. Net tests register a `net_device` with their own `send`/`poll`/`get_stats`
+callbacks, so no NIC driver or `CONFIG_DRV_NIC_*` is required. See
+`tests/host/test_netdev_contract.c` and `ktest_proc_netinfo_contract`.
+
+## Scope
+
+Link-time mocks cover facades whose production object owns a specific device:
+console, input, video, audio, MM stats, and platform power. Arch services
+(serial, timer, interrupt controller, RTC hardware access) are not replaced:
+their portable logic is host-tested, and the device access itself is the arch
+boundary. RTC calendar logic is covered by `tests/host/test_rtc_calendar.c`;
+tests can satisfy `rtc_read_time()` with a fake provider when they need a
+deterministic wall clock.
+
 ## Link contract
 
 - A mock must be selected explicitly by a test-only `CONFIG_KTM_*` option.
