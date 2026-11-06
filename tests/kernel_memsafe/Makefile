@@ -5,8 +5,11 @@
 
 KERNEL_ROOT ?= ../..
 CC         = gcc
-CFLAGS    := -Wall -Wextra -g -I. -I$(KERNEL_ROOT)/kernel -I$(KERNEL_ROOT) \
-	-idirafter $(KERNEL_ROOT)/includes
+# Keep libc headers authoritative for this host/Valgrind harness.  Kernel
+# headers remain available after the system include paths so <errno.h> does
+# not resolve to kernel/errno.h and recursively hide host errno constants.
+CFLAGS    := -Wall -Wextra -g -I. -I$(KERNEL_ROOT) \
+	-idirafter $(KERNEL_ROOT)/kernel -idirafter $(KERNEL_ROOT)/includes
 LDFLAGS   =
 
 KERNEL_SRC = $(KERNEL_ROOT)/kernel/resource_registry.c
