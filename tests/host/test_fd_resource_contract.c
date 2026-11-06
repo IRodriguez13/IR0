@@ -42,6 +42,10 @@ void test_fd_resource_contract(void)
 	ASSERT(fd_resource_release(&entry) == 0);
 	ASSERT(released == 1);
 	ASSERT(entry.vfs_file == NULL);
+	ASSERT(entry.resource_ops == NULL);
+	/* Release is idempotent at the facade: never call a provider twice. */
+	ASSERT(fd_resource_release(&entry) == 0);
+	ASSERT(released == 1);
 	fd_resource_forget(&entry);
 	ASSERT(entry.resource_ops == NULL);
 	TEST_END();
