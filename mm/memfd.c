@@ -18,6 +18,7 @@
 #include <ir0/pmm.h>
 #include <ir0/fcntl.h>
 #include <ir0/arch_cpu.h>
+#include <ir0/overflow.h>
 #include <string.h>
 
 extern fd_entry_t *get_process_fd_table(void);
@@ -175,6 +176,8 @@ int ir0_memfd_mmap(struct ir0_memfd *m, address_space_root_t root, uintptr_t va,
 	size_t map_len;
 	size_t p;
 	size_t start_page;
+	size_t page_count;
+	size_t map_end;
 
 	if (!m || !ir0_memfd_is(m) || !root)
 		return -EINVAL;
@@ -184,17 +187,24 @@ int ir0_memfd_mmap(struct ir0_memfd *m, address_space_root_t root, uintptr_t va,
 	if (off_u % PAGE_SZ)
 		return -EINVAL;
 	map_len = length;
-	if (off_u + map_len > m->size)
+	if (ir0_add_overflow(off_u, map_len, &map_end) || map_end > m->size)
 		map_len = m->size - off_u;
+	if (map_len > SIZE_MAX - (PAGE_SZ - 1))
+		return -EINVAL;
 	map_len = (map_len + PAGE_SZ - 1) & ~(size_t)(PAGE_SZ - 1);
 	if (map_len == 0)
 		return -EINVAL;
 	start_page = off_u / PAGE_SZ;
-	for (p = 0; p < map_len / PAGE_SZ; p++)
+	page_count = map_len / PAGE_SZ;
+	if (start_page > m->npages || page_count > m->npages - start_page)
+		return -EINVAL;
+	if (va > UINTPTR_MAX - map_len)
+		return -EINVAL;
+	for (p = 0; p < page_count; p++)
 	{
 		size_t idx = start_page + p;
 
-		if (idx >= m->npages || !m->frames[idx])
+		if (!m->frames[idx])
 			return -EINVAL;
 		pmm_frame_get(m->frames[idx]);
 		if (map_page_in_directory(root, va + p * PAGE_SZ, m->frames[idx],
