@@ -64,7 +64,7 @@
       "id": "wait4",
       "enabled": true,
       "title": "Wait for child",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "ktest": "wait4_status",
       "child_exit_status": 42
     },
@@ -98,7 +98,7 @@
       "id": "pipe",
       "enabled": true,
       "title": "Pipe IPC",
-      "status_doc": "LINUX-LIKE",
+      "status_doc": "VERIFIED",
       "ktest": "syscall_pipe",
       "pipe_read_len": 6,
       "pipe_data_hex": "68656c6c6f0a",

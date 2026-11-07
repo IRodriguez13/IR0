@@ -55,6 +55,11 @@ test-fast: kernel-x64.bin arch-guard
 agent-fast: test-fast kernel-tests
 	@echo "✓ agent-fast OK (test-fast + kernel-tests)"
 
+.PHONY: wave-a-gates
+wave-a-gates:
+	@chmod +x scripts/wave_a_gates.sh
+	@./scripts/wave_a_gates.sh
+
 # KTM is the kernel's in-tree tracing/assertion layer. These gates are cheap
 # and catch manifest drift without booting QEMU; `test-fast` chains the
 # classify, adoption and portability checks.
