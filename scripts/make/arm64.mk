@@ -58,12 +58,6 @@ $(MUSL_AARCH64_HELLO): setup/pid1/hello_aarch64.c setup/pid1/hello_aarch64_frees
 	@file $@ | grep -qi 'static'
 	@echo "✓ hello_aarch64 → $@ (ET_EXEC @ 0x43000000)"
 
-# Keep the image blob separate from its C loader. The generic %.o: %.S rule in
-# the root Makefile would otherwise lose the explicit hello dependency.
-arch/arm64/sources/hello_embed.o: arch/arm64/sources/hello_embed.S $(MUSL_AARCH64_HELLO)
-	@echo "  AS      $<"
-	@$(CC) $(CFLAGS) -c $< -o $@
-
 # Freestanding-ish flags for compile-only probes and the ARM64 common-core
 # contract (no IR0_FREESTANDING_BOOT — retired alongside kernel-arm64-boot.bin).
 ARM64_COMMON_CORE_COMPILE_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
@@ -84,7 +78,6 @@ ARM64_QEMU_MACHINE = virt,gic-version=2
 
 # F7b curated portable objs (not ALL_OBJS).
 ARM64_SLICE_OBJS = \
-	arch/arm64/sources/slice_hello.o \
 	arch/arm64/sources/board.o \
 	arch/arm64/sources/boot_info.o \
 	arch/arm64/sources/fdt_reader.o \
@@ -113,7 +106,7 @@ arm64-slice-compile:
 	@echo "  CC      includes/string.c (compile-only probe, not linked — needs oops.h)"
 	@aarch64-linux-gnu-gcc $(ARM64_COMMON_CORE_COMPILE_CFLAGS) \
 		-c includes/string.c -o $(HOST_TMP)/ir0-string-arm64-probe.o
-	@echo "✓ arm64-slice-compile OK (slice+pl011+serial_io + string.c probe)"
+	@echo "✓ arm64-slice-compile OK (board+boot_info+pl011+serial + string.c probe)"
 
 arm64-portable-compile: arm64-slice-compile
 	@echo "  CC      ARM64_PORTABLE_OBJS (F7b P2 — not ALL_OBJS)"

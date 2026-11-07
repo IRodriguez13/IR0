@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — ARM64 freestanding boot
- * Shared bring-up used by qemu-virt aggregate and board-min images.
+ * IR0 Kernel — ARM64 platform setup for the portable boot path.
  */
 
 #pragma once
@@ -9,10 +8,7 @@
 #include <stdint.h>
 
 /**
- * Platform setup shared by freestanding bring-up and the portable boot_early path:
- * DTB capture, identity MMU, IRQ controller map, generic timer, VBAR, optional virtio.
- * Does not drop to EL0 or run the freestanding guest.
+ * DTB capture, identity MMU, IRQ controller map, generic timer, VBAR and
+ * optional virtio-blk. Called from boot_arch.c before ir0_kernel_boot().
  */
 void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle);
-
-void arm64_early_bringup(uintptr_t firmware_handle);

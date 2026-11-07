@@ -15,5 +15,5 @@
 
 void irq_portable_stubs_init(void)
 {
-	/* GIC bring-up lives in gic_v2 / boot_stub — non-empty TU for the .o. */
+	/* GIC bring-up lives in gic_v2 / boot_common — non-empty TU for the .o. */
 }

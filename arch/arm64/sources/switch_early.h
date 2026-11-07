@@ -39,8 +39,3 @@ void arm64_cpu_switch(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next);
  */
 void arm64_cpu_switch_mm(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next,
 			 uint64_t next_ttbr);
-
-/**
- * Two-stack cooperative switch demo. Prints ARM64_SWITCH_B then ARM64_SWITCH_OK.
- */
-void arm64_switch_early_smoke(void);

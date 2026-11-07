@@ -116,21 +116,16 @@ REQUIRED_FACADES = [
 
 REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "linker.ld",
-    ROOT / "arch" / "arm64" / "sources" / "boot_stub.c",
-    ROOT / "arch" / "arm64" / "sources" / "mmu_early.c",
     ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
-    ROOT / "arch" / "arm64" / "sources" / "slice_hello.c",
     ROOT / "arch" / "arm64" / "sources" / "pl011.c",
     ROOT / "arch" / "arm64" / "sources" / "serial.c",
     ROOT / "arch" / "arm64" / "sources" / "mm_ops.c",
     ROOT / "arch" / "arm64" / "sources" / "gic_v2.c",
-    ROOT / "arch" / "arm64" / "sources" / "syscall_early.c",
     ROOT / "arch" / "arm64" / "sources" / "timer.c",
     ROOT / "arch" / "arm64" / "sources" / "portable_string.c",
     ROOT / "arch" / "arm64" / "asm" / "entry" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "early.c",
     ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
-    ROOT / "arch" / "arm64" / "sources" / "syscall_stub.c",
 ]
 
 DRIVER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]drivers/')
@@ -2371,7 +2366,6 @@ def check_hardware_backends_do_not_self_test_log():
     paths = [
         ROOT / "drivers" / "virtio" / "virtio_mmio.c",
         ROOT / "arch" / "arm64" / "sources" / "virtio_blk_early.c",
-        ROOT / "arch" / "arm64" / "sources" / "virtio_net_early.c",
     ]
     forbidden = ("ir0_boot_smoke", "klog_smoke", "pl011_puts")
 

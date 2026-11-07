@@ -36,21 +36,9 @@ int arm64_timer_irq_seen(void);
 
 /**
  * C sync handler (Lower EL AArch64). @frame is saved GPRs (x0 at [0], x8 at [8]).
- * Dispatches SVC; may retarget eret to arm64_after_el0 on exit.
+ * Dispatches SVC through syscall_dispatch(); aborts go to common MM.
  */
 void arm64_exc_sync_lower(uint64_t *frame);
-
-/** Drop to EL0 (eret); does not return via C. */
-void arm64_enter_el0(void);
-
-/* Aggregate-only: re-arm the guest process_t and arm schedule-away exit. */
-void arm64_common_prepare_final_el0(void);
-
-/* Aggregate-only: bind files_struct after the kernel heap is live. */
-void arm64_common_prepare_fdtable(void);
-
-/** EL1 continuation after EL0 exit SVC (printed ARM64_EL0_RET_OK). */
-void arm64_after_el0(void);
 
 /** PSCI SYSTEM_OFF via HVC (QEMU virt). */
 void arm64_psci_system_off(void);

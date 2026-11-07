@@ -1235,13 +1235,6 @@ ifeq ($(ARCH),arm64)
 arch/arm64/asm/context/switch_early.o: arch/arm64/asm/context/switch_early.S
 	@echo "  AS      $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
-
-# Early-userspace embed links build/hello_aarch64 (musl when available).
-arch/arm64/sources/hello_embed.o: $(MUSL_AARCH64_HELLO)
-arch/arm64/sources/embedded_elf_embed.o: $(MUSL_AARCH64_HELLO) arch/arm64/sources/embedded_elf_embed.S
-	@echo "  AS      arch/arm64/sources/embedded_elf_embed.S (hello blob)"
-	@$(CC) $(CFLAGS) -DARM64_EMBEDDED_ELF_PATH='"build/hello_aarch64"' -c \
-		arch/arm64/sources/embedded_elf_embed.S -o $@
 endif
 
 
