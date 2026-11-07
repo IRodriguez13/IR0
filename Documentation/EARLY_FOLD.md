@@ -33,11 +33,13 @@ Do not park pipe/unix/eventfd tables in `fs/`.
 `ramtab` is **not** a `vfs_fstype`. Do not add new Linux ABI only inside
 `early_rootfs.c`.
 
-## `/tmp` on ARM ALL
+## Product fold prefixes (`/tmp`, `/run`) on ARM ALL
 
-When `tmpfs_register()` + `vfs_mount("none", "/tmp", "tmpfs")` succeed, ARM
-ALL binds `ir0_product_path_ops` to `vfs_*`. Then staged `openat`/`read`/
-`write`/`mkdirat`/`lseek` for paths under `/tmp/` use product VFS.
+When `tmpfs_register()` + `vfs_mount("none", "/tmp", "tmpfs")` and
+`vfs_mount("none", "/run", "tmpfs")` succeed, ARM ALL binds
+`ir0_product_path_ops` to `vfs_*`. Staged `openat`/`read`/`write`/`mkdirat`/
+`lseek` and **newc CPIO** members under `/tmp/` or `/run/` use product VFS
+(`ir0_product_path_is_foldable` in `fs/product_path.c`).
 
 The **ARM64 product kernel** (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 linked from **`$(ALL_OBJS)`**) carries tmpfs + ramtab + the fold tags below.
@@ -89,6 +91,7 @@ kernel does not invent one.
 ## Gates
 
 ```bash
+make -s wave-a-gates         # x64 T1 slice: host + pipe/wait4/execve/lifecycle/pty audits
 make -s kernel-x64.bin
 make -s arch-guard
 make -s -C tests/host run

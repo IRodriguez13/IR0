@@ -25,10 +25,13 @@ IPC staged vive en **`ipc/`** (junto a `ipc/ipc.c`), no en `fs/`.
 | Providers de producto | `getpid`/`getcwd` en ARM ALL |
 | `early_dispatch.c` | SVC semántico |
 
-## `/tmp` en ARM ALL
+## `/tmp` y `/run` en ARM ALL
 
-Con tmpfs montado, `open`/`read`/`write`/`mkdir`/`lseek` bajo `/tmp/` van a
-`vfs.c`. Tags: `ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`.
+Con tmpfs en `/tmp` y `/run`, `open`/`read`/`write`/`mkdir`/`lseek` y miembros
+**newc CPIO** bajo esos prefijos van a `vfs.c` (`ir0_product_path_is_foldable`
+en `fs/product_path.c`). Tags: `ARM64_PRODUCT_VFS_OK`,
+`ARM64_EARLY_PATH_FOLD_OK`, `ARM64_EARLY_PATH_RUN_FOLD_OK`,
+`ARM64_INITRAMFS_CPIO_OK`.
 
 El kernel de producto ARM64 (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 **`$(ALL_OBJS)`**) lleva tmpfs + ramtab; no existe enlace separado
