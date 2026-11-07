@@ -1113,9 +1113,15 @@ else
 CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=0
 endif
 
-# includes/generated/autoconf.h (from .config) is included via config.h.
-ifneq ($(wildcard $(KERNEL_ROOT)/includes/generated/autoconf.h),)
+# .config is the single source of CONFIG_* (Kbuild model). config.h pulls in
+# includes/generated/autoconf.h (generated from .config before any object
+# builds) and then fills defaults for symbols Kconfig does not emit. Force-
+# include it so a CONFIG_* test placed ahead of an explicit <config.h> sees the
+# same value. Decide on .config, not autoconf.h: after `make clean` the header
+# is not on disk yet when this Makefile is parsed.
+ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
 CFLAGS := $(filter-out -DCONFIG_%,$(CFLAGS))
+CFLAGS += -include $(KERNEL_ROOT)/config.h
 endif
 
 # All objects (kernel sin tests in-kernel)
