@@ -590,6 +590,9 @@ MEMORY_OBJS = \
 	mm/pmm.o \
 	mm/kmem.o \
 	mm/page_fault.o \
+	mm/page_fault_user.o \
+	mm/page_fault_cow.o \
+	mm/page_fault_kernel.o \
 	mm/swap/swap_header.o \
 	mm/swap/swap.o \
 	mm/swap/swap_io.o \
