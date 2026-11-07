@@ -61,6 +61,7 @@ int __attribute__((weak)) arm64_common_root_smoke(void)
 	return -1;
 }
 
+#if DEBUG_BOOT
 static void fill_user_page(void)
 {
 	static const char msg[] = "ARM64_WRITE_OK\n";
@@ -81,6 +82,7 @@ static void fill_user_page(void)
 	ts[0] = 0;
 	ts[1] = 1000000;
 }
+#endif /* DEBUG_BOOT */
 
 #if DEBUG_BOOT
 static void arm64_irq_oneshot_demo(void)
@@ -361,7 +363,6 @@ void arm64_early_bringup(uintptr_t firmware_handle)
 	if (arm64_guest0_el0() != 0)
 		arm64_enter_el0();
 
-idle:
 	for (;;)
 	{
 		__asm__ volatile("wfi" ::: "memory");

@@ -27,6 +27,7 @@ arm64_cpu_switch:
 	ldp	x27, x28, [x1, #64]
 	ldp	x29, x30, [x1, #80]
 	ldr	x2, [x1, #96]
+	bic	x2, x2, #0xf		/* AAPCS64: SP must be 16-byte aligned */
 	mov	sp, x2
 	ret
 	.size	arm64_cpu_switch, .-arm64_cpu_switch

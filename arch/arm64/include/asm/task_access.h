@@ -9,9 +9,9 @@
 #define IR0_TASK_ARG0_FIELD x0
 #define IR0_TASK_ARG1_FIELD x1
 #define IR0_TASK_ARG2_FIELD x2
-#define IR0_TASK_GET_CS(t) ((uint16_t)0)
+#define IR0_TASK_GET_CS(t) ((void)(t), (uint16_t)0)
 #define IR0_TASK_SET_CS(t,v) do { (void)(t); (void)(v); } while (0)
-#define IR0_TASK_GET_SS(t) ((uint16_t)0)
+#define IR0_TASK_GET_SS(t) ((void)(t), (uint16_t)0)
 #define IR0_TASK_SET_SS(t,v) do { (void)(t); (void)(v); } while (0)
 #define IR0_TASK_SET_USER_STATE(t) do { (void)(t); } while (0)
 #define IR0_TASK_SET_KERNEL_STATE(t) do { (void)(t); } while (0)

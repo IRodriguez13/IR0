@@ -20,6 +20,29 @@
 #define ARM64_EL0_USER_PAGE_PA 0x42000000
 #endif
 
+/* Single early user page layout — all offsets must stay within 4096 bytes. */
+#define ARM64_EL0_OFF_TIMESPEC  0x40
+#define ARM64_EL0_OFF_CLOCK     0x50
+#define ARM64_EL0_OFF_TIMEVAL   0x60
+#define ARM64_EL0_OFF_WAIT      0x70
+#define ARM64_EL0_OFF_PIPE      0x80
+#define ARM64_EL0_OFF_PIPE_BYTE 0x8c
+#define ARM64_EL0_OFF_GETCWD    0x300
+#define ARM64_EL0_GETCWD_LEN    256
+#define ARM64_EL0_OFF_CLONE_STK 0x400
+
+#if (ARM64_EL0_OFF_GETCWD + ARM64_EL0_GETCWD_LEN) > 4096
+#error "EL0 scratch layout exceeds one user page"
+#endif
+#if ARM64_EL0_OFF_PIPE_BYTE + 1 > ARM64_EL0_OFF_GETCWD
+#error "EL0 pipe scratch overlaps getcwd buffer"
+#endif
+
+	.macro	load_user_page_va, reg, off
+	movz	\reg, #((ARM64_EL0_USER_PAGE_PA + \off) & 0xffff)
+	movk	\reg, #(((ARM64_EL0_USER_PAGE_PA + \off) >> 16) & 0xffff), lsl #16
+	.endm
+
 	.macro	exc_entry, c_handler
 	sub	sp, sp, #256
 	stp	x0, x1, [sp, #0]
@@ -178,9 +201,8 @@ el0_entry:
 	svc	#0
 
 	/* getcwd(2) — Linux aarch64 syscall 17 */
-	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x300) & 0xffff)
-	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x300) >> 16) & 0xffff), lsl #16
-	mov	x1, #256
+	load_user_page_va x0, ARM64_EL0_OFF_GETCWD
+	mov	x1, #ARM64_EL0_GETCWD_LEN
 	mov	x8, #17
 	svc	#0
 
@@ -200,8 +222,7 @@ el0_entry:
 	svc	#0
 2:
 	mov	x0, #-1
-	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x70) & 0xffff)
-	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x70) >> 16) & 0xffff), lsl #16
+	load_user_page_va x1, ARM64_EL0_OFF_WAIT
 	mov	x2, xzr
 	mov	x3, xzr
 	mov	x8, #260
@@ -211,22 +232,18 @@ el0_entry:
 	 * pipe2 + clone(CLONE_VM|SIGCHLD) without VFORK: child blocking
 	 * read, parent write. Proves the 2-task yield (pipe(7)).
 	 */
-	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
-	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	load_user_page_va x0, ARM64_EL0_OFF_PIPE
 	mov	x1, xzr
 	mov	x8, #59
 	svc	#0
 	mov	x0, #0x111
-	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x400) & 0xffff)
-	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x400) >> 16) & 0xffff), lsl #16
+	load_user_page_va x1, ARM64_EL0_OFF_CLONE_STK
 	mov	x8, #220
 	svc	#0
 	cbnz	x0, 3f
-	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
-	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	load_user_page_va x9, ARM64_EL0_OFF_PIPE
 	ldr	w0, [x9]
-	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x8c) & 0xffff)
-	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x8c) >> 16) & 0xffff), lsl #16
+	load_user_page_va x1, ARM64_EL0_OFF_PIPE_BYTE
 	mov	x2, #1
 	mov	x8, #63
 	svc	#0
@@ -234,41 +251,35 @@ el0_entry:
 	mov	x8, #93
 	svc	#0
 3:
-	movz	x9, #((ARM64_EL0_USER_PAGE_PA + 0x80) & 0xffff)
-	movk	x9, #(((ARM64_EL0_USER_PAGE_PA + 0x80) >> 16) & 0xffff), lsl #16
+	load_user_page_va x9, ARM64_EL0_OFF_PIPE
 	ldr	w0, [x9, #4]
-	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x8c) & 0xffff)
-	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x8c) >> 16) & 0xffff), lsl #16
+	load_user_page_va x1, ARM64_EL0_OFF_PIPE_BYTE
 	mov	w10, #'B'
 	strb	w10, [x1]
 	mov	x2, #1
 	mov	x8, #64
 	svc	#0
 	mov	x0, #-1
-	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x70) & 0xffff)
-	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x70) >> 16) & 0xffff), lsl #16
+	load_user_page_va x1, ARM64_EL0_OFF_WAIT
 	mov	x2, xzr
 	mov	x3, xzr
 	mov	x8, #260
 	svc	#0
 
 	/* nanosleep({0, 1000000}, NULL) — timespec64 at user page +0x40 */
-	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x40) & 0xffff)
-	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x40) >> 16) & 0xffff), lsl #16
+	load_user_page_va x0, ARM64_EL0_OFF_TIMESPEC
 	mov	x1, xzr			/* rem = NULL */
 	mov	x8, #101
 	svc	#0
 
 	/* clock_gettime(CLOCK_MONOTONIC, user_page+0x50) */
 	mov	x0, #1			/* CLOCK_MONOTONIC */
-	movz	x1, #((ARM64_EL0_USER_PAGE_PA + 0x50) & 0xffff)
-	movk	x1, #(((ARM64_EL0_USER_PAGE_PA + 0x50) >> 16) & 0xffff), lsl #16
+	load_user_page_va x1, ARM64_EL0_OFF_CLOCK
 	mov	x8, #113
 	svc	#0
 
 	/* gettimeofday(user_page+0x60, NULL) */
-	movz	x0, #((ARM64_EL0_USER_PAGE_PA + 0x60) & 0xffff)
-	movk	x0, #(((ARM64_EL0_USER_PAGE_PA + 0x60) >> 16) & 0xffff), lsl #16
+	load_user_page_va x0, ARM64_EL0_OFF_TIMEVAL
 	mov	x1, xzr
 	mov	x8, #169
 	svc	#0
@@ -276,8 +287,7 @@ el0_entry:
 	/* clock_nanosleep(MONOTONIC, 0, timespec@+0x40, NULL) */
 	mov	x0, #1
 	mov	x1, xzr
-	movz	x2, #((ARM64_EL0_USER_PAGE_PA + 0x40) & 0xffff)
-	movk	x2, #(((ARM64_EL0_USER_PAGE_PA + 0x40) >> 16) & 0xffff), lsl #16
+	load_user_page_va x2, ARM64_EL0_OFF_TIMESPEC
 	mov	x3, xzr
 	mov	x8, #115
 	svc	#0

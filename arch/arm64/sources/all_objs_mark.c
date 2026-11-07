@@ -401,6 +401,8 @@ void arm64_common_prepare_fdtable(void)
 			if (vfs_mkdir("/tmp/fold", 0755) == 0 &&
 			    ir0_product_path_is_tmp("/tmp/fold"))
 				ir0_boot_smoke("ARM64_EARLY_PATH_FOLD_OK");
+			if (early_rootfs_cpio_fold_product() > 0)
+				ir0_boot_smoke("ARM64_INITRAMFS_CPIO_OK");
 		}
 	}
 }
