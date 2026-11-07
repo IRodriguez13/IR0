@@ -22,6 +22,10 @@ struct page_fault_info
 	uintptr_t address;
 	uintptr_t ip;
 	uintptr_t sp;
+	uint64_t syndrome;  /* ISA fault code: x86 #PF error code, ARM64 ESR_EL1 */
+	uint64_t status;    /* interrupted flags: x86 RFLAGS, ARM64 SPSR_EL1 */
+	uint64_t code_seg;  /* x86 CS; 0 on ISAs without segmentation */
+	uint64_t stack_seg; /* x86 SS; 0 on ISAs without segmentation */
 	int user;      /* 1 = fault in user mode */
 	int write;
 	int present;
@@ -32,7 +36,10 @@ struct page_fault_info
 /*
  * Decode a fault from the opaque ISA entry context (fault address, access
  * classification and saved exception frame).
- * x86-64: errcode is #PF error code; frame is ISR stack (rip at [2], rsp at [5]).
+ * x86-64: errcode is the #PF error code; frame is the ISR stack
+ *   ([1] error code, [2] rip, [3] cs, [4] rflags, [5] rsp, [6] ss).
+ * arm64: errcode is ESR_EL1; frame is the vectors.S GPR block.
+ * Common MM reads only the decoded fields, never the frame layout.
  * Returns 0 or -errno (-EINVAL, -EOPNOTSUPP on stub ISAs).
  */
 int page_fault_decode(struct page_fault_info *out, uint64_t errcode,

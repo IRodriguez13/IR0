@@ -29,6 +29,10 @@ int page_fault_decode(struct page_fault_info *out, uint64_t errcode,
 	out->address = (uintptr_t)fault_addr;
 	out->ip = frame ? (uintptr_t)frame[2] : 0;
 	out->sp = frame ? (uintptr_t)frame[5] : 0;
+	out->syndrome = errcode;
+	out->status = frame ? frame[4] : 0;
+	out->code_seg = frame ? frame[3] : 0;
+	out->stack_seg = frame ? frame[6] : 0;
 	out->user = (errcode & 4) != 0;
 	out->write = (errcode & 2) != 0;
 	out->present = (errcode & 1) != 0;

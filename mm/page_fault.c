@@ -232,9 +232,9 @@ static void pf_audit_classify(uint64_t *stack,
 
 	fault_addr = (uint64_t)info->address;
 	not_present = !info->present;
-	fault_rip = stack ? stack[2] : (uint64_t)info->ip;
-	fault_cs = stack ? stack[3] : 0;
-	fault_rsp = stack ? stack[5] : (uint64_t)info->sp;
+	fault_rip = (uint64_t)info->ip;
+	fault_cs = info->code_seg;
+	fault_rsp = (uint64_t)info->sp;
 
 	if (current && process_pgd(current))
 	{
@@ -278,12 +278,10 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	 */
 	ir0_log_user_fault_frame(
 		14, (unsigned long long)fault_addr,
-		stack ? (unsigned long long)stack[1] : 0ULL,
-		info ? (unsigned long long)info->ip
-		     : (stack ? (unsigned long long)stack[2] : 0ULL),
-		stack ? (unsigned long long)stack[3] : 0ULL,
-		info ? (unsigned long long)info->sp
-		     : (stack ? (unsigned long long)stack[5] : 0ULL),
+		info ? (unsigned long long)info->syndrome : 0ULL,
+		info ? (unsigned long long)info->ip : 0ULL,
+		info ? (unsigned long long)info->code_seg : 0ULL,
+		info ? (unsigned long long)info->sp : 0ULL,
 		info ? info->present : 0, info ? info->write : 0,
 		info ? info->exec : 0,
 		p ? (unsigned)((uint32_t)p->task.pid) : 0,
@@ -832,12 +830,10 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		 */
 		ir0_log_user_fault_frame(
 			14, (unsigned long long)fault_addr,
-			stack ? (unsigned long long)stack[1] : 0ULL,
-			stack ? (unsigned long long)stack[2]
-			      : (unsigned long long)info->ip,
-			stack ? (unsigned long long)stack[3] : 0ULL,
-			stack ? (unsigned long long)stack[5]
-			      : (unsigned long long)info->sp,
+			(unsigned long long)info->syndrome,
+			(unsigned long long)info->ip,
+			(unsigned long long)info->code_seg,
+			(unsigned long long)info->sp,
 			info->present, info->write, info->exec,
 			current ? (unsigned)((uint32_t)current->task.pid) : 0,
 			current ? current->comm : "(none)");
@@ -847,8 +843,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 			      (unsigned long long)fault_addr,
 			      (unsigned)(write ? 1 : 0),
 			      (unsigned)(current ? (uint32_t)current->task.pid : 0),
-			      (unsigned long long)(stack ? stack[2]
-							: (uint64_t)info->ip));
+			      (unsigned long long)info->ip);
 		if (current && current->mode == USER_MODE)
 		{
 			if (!process_signal_default_kill(current, SIGSEGV))
@@ -861,11 +856,11 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 	}
 
 	{
-		uint64_t fault_rip = stack ? stack[2] : (uint64_t)info->ip;
-		uint64_t fault_cs = stack ? stack[3] : 0;
-		uint64_t fault_rflags = stack ? stack[4] : 0;
-		uint64_t fault_rsp = stack ? stack[5] : (uint64_t)info->sp;
-		uint64_t fault_ss = stack ? stack[6] : 0;
+		uint64_t fault_rip = (uint64_t)info->ip;
+		uint64_t fault_cs = info->code_seg;
+		uint64_t fault_rflags = info->status;
+		uint64_t fault_rsp = (uint64_t)info->sp;
+		uint64_t fault_ss = info->stack_seg;
 		process_t *cur = process_get_current();
 		int stack_overflow = 0;
 
@@ -919,7 +914,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		 * panic dump still leaves the primary #PF site in the banner.
 		 */
 		panic_note_exception_frame(
-			14, stack ? stack[1] : 0, fault_rip, fault_cs,
+			14, info->syndrome, fault_rip, fault_cs,
 			fault_rflags, fault_rsp, fault_ss, stack_overflow,
 			cur ? (uint32_t)cur->task.pid : 0,
 			cur ? cur->comm : "(none)");
