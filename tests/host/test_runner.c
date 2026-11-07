@@ -85,7 +85,7 @@ extern void test_procfs_linux_abi(void);
 extern void test_pseudo_fs_honesty(void);
 extern void test_matrix_capture_suite(void);
 extern void test_mount_prefix_boundary(void);
-extern void test_product_path_fold(void);
+extern void test_bpath_fold(void);
 extern void test_arm64_boot_info_fdt_contract(void);
 extern void test_arm64_syscall_decode_contract(void);
 extern void test_x86_syscall_decode_contract(void);
@@ -173,7 +173,7 @@ static void (*test_functions[])(void) = {
 	test_pseudo_fs_honesty,
 	test_matrix_capture_suite,
 	test_mount_prefix_boundary,
-	test_product_path_fold,
+	test_bpath_fold,
 	test_arm64_boot_info_fdt_contract,
 	test_arm64_syscall_decode_contract,
 	test_x86_syscall_decode_contract,

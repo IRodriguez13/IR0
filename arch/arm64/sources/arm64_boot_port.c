@@ -8,6 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/boot_log.h>
 #include <ir0/boot_port.h>
 #include <ir0/serial_io.h>
 #include <ir0/ktm/klog.h>
@@ -17,6 +18,7 @@
 #include <string.h>
 
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
+#include <ir0/bpivot.h>
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
 #include <ir0/vfs.h>
@@ -70,6 +72,9 @@ static void boot_arm64_seed_embedded_init(void)
 	(void)vfs_close(f);
 	klog_info("BOOT",
 		  "ARM64: seeded /sbin/init from embedded hello (no block rootfs)");
+
+	if (ir0_bpivot_product_boot(ir0_bpath_vfs_product_ops()) == 0)
+		ir0_boot_smoke("ARM64_BPIVOT_COMMIT_OK");
 }
 #endif
 

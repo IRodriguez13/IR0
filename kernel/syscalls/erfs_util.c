@@ -352,7 +352,7 @@ enum ir0_early_rootfs_node lookup_user_path(char *pbuf)
 	node = ir0_early_rootfs_path_node(pbuf);
 	if (node != IR0_EARLY_ROOTFS_NONE)
 		return node;
-	node = product_lookup(pbuf);
+	node = bpath_lookup(pbuf);
 	if (node != IR0_EARLY_ROOTFS_NONE)
 		return node;
 	idx = ramtab_find(pbuf);

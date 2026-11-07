@@ -21,8 +21,8 @@
 #include <ir0/errno.h>
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
-#include <ir0/product_path.h>
-#include <ir0/product_pivot.h>
+#include <ir0/bpath.h>
+#include <ir0/bpivot.h>
 #include <ir0/idle.h>
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
@@ -368,7 +368,7 @@ void arm64_common_prepare_fdtable(void)
 		    probe.pos == (off_t)sizeof(z))
 			ir0_boot_smoke("ARM64_COMMON_VFS_OPS_READ_OK");
 	}
-	if (ir0_product_pivot_mount_trees() >= 2)
+	if (ir0_bpivot_mount_trees() >= 2)
 	{
 		struct vfs_file *f = NULL;
 		char got[4];
@@ -384,7 +384,7 @@ void arm64_common_prepare_fdtable(void)
 		if (f)
 			(void)vfs_file_put(f);
 		{
-			static const struct ir0_product_path_ops path_ops = {
+			static const struct ir0_bpath_ops path_ops = {
 				.stat = vfs_stat,
 				.open = vfs_open,
 				.read = arm64_product_read,
@@ -397,19 +397,8 @@ void arm64_common_prepare_fdtable(void)
 				.truncate = vfs_truncate,
 			};
 
-			early_rootfs_bind_product_path(&path_ops);
-			if (vfs_mkdir("/tmp/fold", 0755) == 0 &&
-			    ir0_product_path_is_foldable("/tmp/fold"))
-				ir0_boot_smoke("ARM64_EARLY_PATH_FOLD_OK");
-			if (vfs_mkdir("/run/fold", 0755) == 0 &&
-			    ir0_product_path_is_foldable("/run/fold"))
-				ir0_boot_smoke("ARM64_EARLY_PATH_RUN_FOLD_OK");
-			if (early_rootfs_cpio_fold_product() > 0)
-			{
-				ir0_boot_smoke("ARM64_INITRAMFS_CPIO_OK");
-				if (ir0_product_pivot_cpio_fold_done())
-					ir0_boot_smoke("ARM64_EARLY_ROOT_PIVOT_OK");
-			}
+			if (ir0_bpivot_product_boot(&path_ops) == 0)
+				ir0_boot_smoke("ARM64_BPIVOT_COMMIT_OK");
 		}
 	}
 }

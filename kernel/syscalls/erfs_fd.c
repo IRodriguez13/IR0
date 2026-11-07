@@ -180,8 +180,8 @@ int close_fd(int fd)
 			}
 		}
 	}
-	if (g_slots[idx].vf && g_product_path && g_product_path->put)
-		(void)g_product_path->put(g_slots[idx].vf);
+	if (g_slots[idx].vf && g_bpath && g_bpath->put)
+		(void)g_bpath->put(g_slots[idx].vf);
 	g_slots[idx].vf = 0;
 	g_slots[idx].used = 0;
 	g_slots[idx].node = IR0_EARLY_ROOTFS_NONE;

@@ -214,6 +214,25 @@ smoke-arm64-product-log: kernel-arm64-product.bin
 		echo "✓ smoke-arm64-product-log (ARM64_PRODUCT_BOOT_HANDOFF)"; \
 	fi
 
+.PHONY: smoke-arm64-bpivot-product
+smoke-arm64-bpivot-product: kernel-arm64-product.bin
+	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
+		echo "⊘ smoke-arm64-bpivot-product SKIP (qemu-system-aarch64 not in PATH)"; \
+	else \
+		echo "  SMOKE   ARM64 portable bpivot boot (common fs/bpivot_boot.c)..."; \
+		rm -f $(HOST_TMP)/arm64-bpivot-smoke.log; \
+		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-bpivot-smoke.log \
+			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
+			--done IR0_BPIVOT_COMMIT_OK --done ARM64_BPIVOT_COMMIT_OK -- \
+			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
+			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-display none -no-reboot 2>/dev/null && \
+		grep -q 'IR0_BPIVOT_MOUNT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		grep -q 'IR0_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		grep -q 'ARM64_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		echo "✓ smoke-arm64-bpivot-product (IR0_BPIVOT_* + ARM64_BPIVOT_COMMIT_OK)"; \
+	fi
+
 # Handoff + first EL0 syscall from init (parity signal vs x86 product path): needs both tags.
 .PHONY: smoke-arm64-product-usermode-log
 smoke-arm64-product-usermode-log: kernel-arm64-product.bin

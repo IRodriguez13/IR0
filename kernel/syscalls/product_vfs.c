@@ -16,7 +16,7 @@
 #include <ir0/cwd.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/errno.h>
-#include <ir0/product_path.h>
+#include <ir0/bpath.h>
 #include <ir0/product_vfs.h>
 #include <ir0/stat.h>
 #include <ir0/syscall_id.h>
@@ -42,7 +42,7 @@ static int64_t product_chdir(uint64_t path)
 {
 	char pbuf[256];
 	stat_t st;
-	const struct ir0_product_path_ops *ops;
+	const struct ir0_bpath_ops *ops;
 	const struct ir0_cwd_ops *cwd;
 	int64_t ret;
 	int rc;
@@ -52,8 +52,8 @@ static int64_t product_chdir(uint64_t path)
 		return rc;
 	if (pbuf[0] == '\0')
 		return -ENOENT;
-	ops = ir0_product_path_bound();
-	if (ops && ops->stat && ir0_product_path_is_foldable(pbuf))
+	ops = ir0_bpath_bound();
+	if (ops && ops->stat && ir0_bpath_is_foldable(pbuf))
 	{
 		if (ops->stat(pbuf, &st) < 0)
 			return -ENOENT;

@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-11-06
 > **Source of truth:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
-> `includes/ir0/product_path.h`, `kernel/syscalls/erfs*.c`,
+> `includes/ir0/bpath.h`, `kernel/syscalls/erfs*.c`,
 > `kernel/syscalls/early_process.c`, `arch/arm64/sources/all_objs_mark.c`,
 > `make kernel-arm64.bin` (product link: `kernel-arm64-product.bin`)
 
@@ -24,7 +24,7 @@ Do not park pipe/unix/eventfd tables in `fs/`.
 | Product VFS | Mounts, `vfs_open`/`read`/`write`, tmpfs | `fs/vfs.c`, `fs/tmpfs.c` |
 | Ramtab | Bounded in-memory names **not** on a VFS mount | `fs/ramtab.c` |
 | Staged IPC tables | pipe/eventfd/memfd/timerfd/epoll, AF_UNIX/socketpair | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
-| Product path bind | Optional ops so the adapter can call product VFS | `includes/ir0/product_path.h` |
+| Product path bind | Optional ops so the adapter can call product VFS | `includes/ir0/bpath.h` |
 | Early adapter (`erfs`) | `/`, `/init`, `/dev/*`, CPIO blob, syscall routing | `kernel/syscalls/erfs_*.c` |
 | Early process | Staged clone/wait; child pid from process registry | `kernel/syscalls/early_process.c` |
 | Product identity/cwd | Semantic table providers on ARM ALL | `ir0_product_identity_provider`, `ir0_product_cwd_provider` |
@@ -35,14 +35,19 @@ Do not park pipe/unix/eventfd tables in `fs/`.
 
 ## Product pivot (initramfs → tmpfs trees) on ARM ALL
 
-`ir0_product_pivot_mount_trees()` (`fs/product_pivot.c`) mounts **tmpfs** on
-`/tmp`, `/run`, `/usr`, `/etc`, `/bin`, `/sbin`, `/var`, `/lib`, `/opt`,
-`/home`, `/root`, `/srv`, `/mnt`. ARM ALL binds `ir0_product_path_ops` to
+`ir0_bpivot_mount_trees()` (`fs/bpivot.c`) mounts **tmpfs** on
+`/bpivot`, `/tmp`, `/run`, `/usr`, `/etc`, `/bin`, `/sbin`, `/var`, `/lib`,
+`/opt`, `/home`, `/root`, `/srv`, `/mnt`. `ir0_bpivot_commit()` creates
+`IR0_BPIVOT_NEW_ROOT` / `IR0_BPIVOT_PUT_OLD` staging and prunes ramtab
+entries that now exist on product VFS. ARM ALL binds `ir0_bpath_ops` to
 `vfs_*`. Staged `openat`/`read`/`write`/`mkdirat`/`lseek` and **newc CPIO**
-members under those trees use product VFS (`ir0_product_path_is_foldable` in
-`fs/product_path.c`). **`/dev/*`**, **`/`**, and **`/init`** stay on erfs
-(`ir0_product_path_is_reserved_early`). After `early_rootfs_cpio_fold_product()`:
-`ARM64_INITRAMFS_CPIO_OK` and `ARM64_EARLY_ROOT_PIVOT_OK`.
+members under those trees use product VFS (`ir0_bpath_is_foldable` in
+`fs/bpath.c`). **`/dev/*`**, **`/`**, and **`/init`** stay on erfs
+(`ir0_bpath_is_reserved_early`). After `early_rootfs_cpio_bpath_fold()`:
+Portable smoke tags: `IR0_BPIVOT_MOUNT_OK`, `IR0_BPATH_FOLD_OK`,
+`IR0_INITRAMFS_CPIO_OK` (when CPIO fold runs), `IR0_BPIVOT_STAGING_OK`,
+`IR0_BPIVOT_COMMIT_OK`. ARM64 product boot also emits `ARM64_BPIVOT_COMMIT_OK`.
+x86 exercises the same path via ktest `bpivot_boot_contract`.
 
 The **ARM64 product kernel** (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 linked from **`$(ALL_OBJS)`**) carries tmpfs + ramtab + the fold tags below.

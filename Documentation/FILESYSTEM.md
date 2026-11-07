@@ -4,7 +4,7 @@
 > **Source of truth:** `fs/vfs.c`, `fs/tmpfs.c`, `fs/ramtab.c`, `ipc/early_*.c`,
 > `fs/minix_fs.c`,
 > `fs/simplefs.c`, `fs/fat16_*.c`, `fs/ext2_*.c`, `drivers/storage/ahci.c`,
-> `includes/ir0/blockdev.h`, `includes/ir0/product_path.h`,
+> `includes/ir0/blockdev.h`, `includes/ir0/bpath.h`,
 > [`EARLY_FOLD.md`](EARLY_FOLD.md), [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
 
 IR0 uses a VFS-first design where policy is centralized and backend filesystems
@@ -30,7 +30,7 @@ provide concrete operations.
 - `/heart`: IR0 facade reexporting proc/sys + kernel meta + embedded sources.
 - `tmpfs`: volatile files and directories with uid/gid and umask behavior.
   On ARM ALL, product tmpfs is mounted at `/tmp` and staged path I/O under
-  `/tmp/` binds `includes/ir0/product_path.h` → `vfs_*`
+  `/tmp/` binds `includes/ir0/bpath.h` → `vfs_*`
   (`ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`).
 - `minix`: disk-backed baseline filesystem (rw path audited via vfs-write bundle).
 - `fat16`: on-disk RO mount (`smoke-fat16-mount`) + write path audited

@@ -27,7 +27,7 @@
 #include <ir0/ramtab.h>
 #include <ir0/early_anonfd.h>
 #include <ir0/early_unix.h>
-#include <ir0/product_path.h>
+#include <ir0/bpath.h>
 #include <ir0/stat.h>
 #include <ir0/fcntl.h>
 #include <ir0/types.h>
@@ -134,8 +134,8 @@ extern const struct ir0_fd_install_ops *g_fd_ops;
 extern int g_vfs_file_used;
 extern int g_vfs_ops_used;
 extern int g_fd_used;
-extern const struct ir0_product_path_ops *g_product_path;
-extern int g_product_path_used;
+extern const struct ir0_bpath_ops *g_bpath;
+extern int g_bpath_used;
 extern uint64_t g_init_vis;
 extern int g_init_from_block;
 extern int g_exec_pending;
@@ -170,7 +170,7 @@ int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz);
 int erfs_cpio_find_init(const uint8_t *buf, uint64_t bytes,
 			const uint8_t **init_data, uint64_t *init_len);
 int erfs_cpio_install_members(const uint8_t *buf, uint64_t bytes);
-int early_rootfs_cpio_fold_product(void);
+int early_rootfs_cpio_bpath_fold(void);
 void early_publish_root(void);
 int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
 int64_t early_try_vfs_ops_read(int fd, enum ir0_early_rootfs_node node,
@@ -190,8 +190,8 @@ int fd_espipe(int fd);
 int fd_is_open(int fd);
 int flags_of_fd(int fd);
 int follow_path(char *pbuf, unsigned cap);
-int ir0_product_path_is_tmp(const char *path);
-enum ir0_early_rootfs_node product_lookup(const char *path);
+int ir0_bpath_is_tmp(const char *path);
+enum ir0_early_rootfs_node bpath_lookup(const char *path);
 int64_t product_attach_open(int fd, const char *path, int flags);
 int join_under_cwd(char *pbuf, unsigned cap);
 int landlock_allow(const char *path, uint64_t need);
@@ -207,7 +207,7 @@ int path_of_fd(int fd, char *out, unsigned cap);
 int pipe_id_of_fd(int fd);
 struct early_pipe *pipe_of_fd(int fd);
 uint64_t *pos_of_fd(int fd);
-int product_path_live(void);
+int bpath_live(void);
 int64_t product_xfer(int fd, uint64_t buffer, uint64_t count, int write);
 void set_cloexec_of_fd(int fd, int cloexec);
 int cloexec_of_fd(int fd);

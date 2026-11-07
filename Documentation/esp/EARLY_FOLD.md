@@ -2,7 +2,7 @@
 
 > **Última verificación:** 2026-11-06
 > **Fuente de verdad:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
-> `includes/ir0/product_path.h`, `kernel/syscalls/erfs*.c`,
+> `includes/ir0/bpath.h`, `kernel/syscalls/erfs*.c`,
 > `make kernel-arm64.bin` (`kernel-arm64-product.bin`)
 
 Canónico en inglés: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
@@ -19,7 +19,7 @@ IPC staged vive en **`ipc/`** (junto a `ipc/ipc.c`), no en `fs/`.
 | VFS de producto (`fs/vfs.c`, tmpfs) | Montajes y I/O de path |
 | `fs/ramtab.c` | Nombres en RAM **sin** montaje VFS |
 | `ipc/early_anonfd.c`, `ipc/early_unix.c` | Tablas pipe/eventfd/AF_UNIX |
-| `product_path.h` | Bind opcional adaptador → `vfs_*` |
+| `bpath.h` | Bind opcional adaptador → `vfs_*` |
 | `early_rootfs.c` | `/`, `/init`, `/dev/*`, blob CPIO, routing |
 | `early_process.c` | clone/wait; pid hijo desde el registry |
 | Providers de producto | `getpid`/`getcwd` en ARM ALL |
@@ -27,12 +27,14 @@ IPC staged vive en **`ipc/`** (junto a `ipc/ipc.c`), no en `fs/`.
 
 ## Pivot de producto (initramfs → tmpfs FHS) en ARM ALL
 
-`ir0_product_pivot_mount_trees()` monta tmpfs en `/tmp`, `/run`, `/usr`,
+`ir0_bpivot_mount_trees()` monta tmpfs en `/bpivot`, `/tmp`, `/run`, `/usr`,
 `/etc`, `/bin`, `/sbin`, `/var`, `/lib`, `/opt`, `/home`, `/root`, `/srv`,
-`/mnt`. Los miembros **newc CPIO** bajo esos árboles se pliegan a `vfs.c`;
+`/mnt`. `ir0_bpivot_commit()` arma `/bpivot/new` y `/bpivot/old` y poda
+ramtab donde el VFS ya tiene el objeto. Miembros **newc CPIO** bajo esos
+árboles se pliegan a `vfs.c`;
 `/dev/*`, `/` e `/init` siguen en erfs. Tags: `ARM64_PRODUCT_VFS_OK`,
 `ARM64_EARLY_PATH_FOLD_OK`, `ARM64_INITRAMFS_CPIO_OK`,
-`ARM64_EARLY_ROOT_PIVOT_OK`.
+`ARM64_BPIVOT_COMMIT_OK`.
 
 El kernel de producto ARM64 (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 **`$(ALL_OBJS)`**) lleva tmpfs + ramtab; no existe enlace separado

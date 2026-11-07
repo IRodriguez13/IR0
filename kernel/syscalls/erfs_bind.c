@@ -9,7 +9,7 @@
 
 #include "erfs_internal.h"
 
-#include <ir0/product_pivot.h>
+#include <ir0/bpivot.h>
 
 static void early_unix_rehome(int old_id, int new_id)
 {
@@ -43,42 +43,42 @@ static void reset_stdio(void)
 	g_chroot = IR0_EARLY_ROOTFS_ROOT;
 }
 
-void early_rootfs_bind_product_path(const struct ir0_product_path_ops *ops)
+void early_rootfs_bind_bpath(const struct ir0_bpath_ops *ops)
 {
-	g_product_path = ops;
-	g_product_path_used = 0;
+	g_bpath = ops;
+	g_bpath_used = 0;
 }
 
-const struct ir0_product_path_ops *ir0_product_path_bound(void)
+const struct ir0_bpath_ops *ir0_bpath_bound(void)
 {
-	return g_product_path;
+	return g_bpath;
 }
 
-int early_rootfs_product_path_used(void)
+int early_rootfs_bpath_used(void)
 {
-	return g_product_path_used;
+	return g_bpath_used;
 }
 
-int product_path_live(void)
+int bpath_live(void)
 {
 	stat_t st;
 
-	if (!g_product_path || !g_product_path->stat)
+	if (!g_bpath || !g_bpath->stat)
 		return 0;
-	if (ir0_product_pivot_mount_count() > 0)
+	if (ir0_bpivot_mount_count() > 0)
 		return 1;
-	return g_product_path->stat("/tmp", &st) == 0;
+	return g_bpath->stat("/tmp", &st) == 0;
 }
 
-enum ir0_early_rootfs_node product_lookup(const char *path)
+enum ir0_early_rootfs_node bpath_lookup(const char *path)
 {
 	stat_t st;
 
-	if (!product_path_live() || !ir0_product_path_is_foldable(path))
+	if (!bpath_live() || !ir0_bpath_is_foldable(path))
 		return IR0_EARLY_ROOTFS_NONE;
-	if (g_product_path->stat(path, &st) != 0)
+	if (g_bpath->stat(path, &st) != 0)
 		return IR0_EARLY_ROOTFS_NONE;
-	g_product_path_used = 1;
+	g_bpath_used = 1;
 	if ((st.st_mode & S_IFMT) == S_IFDIR)
 		return IR0_EARLY_ROOTFS_USERDIR;
 	return IR0_EARLY_ROOTFS_FILE;
@@ -90,20 +90,20 @@ int64_t product_attach_open(int fd, const char *path, int flags)
 	int sidx;
 	int rc;
 
-	if (!g_product_path || !g_product_path->open)
+	if (!g_bpath || !g_bpath->open)
 		return -ENODEV;
-	rc = g_product_path->open(path, flags, 0644, &vf);
+	rc = g_bpath->open(path, flags, 0644, &vf);
 	if (rc < 0)
 		return rc;
 	sidx = slot_from_fd(fd);
 	if (sidx < 0)
 	{
-		if (g_product_path->put && vf)
-			(void)g_product_path->put(vf);
+		if (g_bpath->put && vf)
+			(void)g_bpath->put(vf);
 		return -EBADF;
 	}
 	g_slots[sidx].vf = vf;
-	g_product_path_used = 1;
+	g_bpath_used = 1;
 	return 0;
 }
 
@@ -122,32 +122,32 @@ int64_t product_xfer(int fd, uint64_t buffer, uint64_t count, int write)
 	uint8_t tmp[256];
 	int n;
 
-	if (!vf || !g_product_path)
+	if (!vf || !g_bpath)
 		return -ENODEV;
 	if (count == 0)
 		return 0;
 	n = (int)(count > sizeof(tmp) ? sizeof(tmp) : count);
 	if (write)
 	{
-		if (!g_product_path->write)
+		if (!g_bpath->write)
 			return -ENODEV;
 		if (!g_user || !g_user->copy_from_user ||
 		    g_user->copy_from_user(tmp, buffer, (uint64_t)n) != 0)
 			return -EFAULT;
-		n = g_product_path->write(vf, tmp, (size_t)n);
+		n = g_bpath->write(vf, tmp, (size_t)n);
 	}
 	else
 	{
-		if (!g_product_path->read)
+		if (!g_bpath->read)
 			return -ENODEV;
-		n = g_product_path->read(vf, tmp, (size_t)n);
+		n = g_bpath->read(vf, tmp, (size_t)n);
 		if (n > 0 && (!g_user || !g_user->copy_to_user ||
 			      g_user->copy_to_user(buffer, tmp, (uint64_t)n) != 0))
 			return -EFAULT;
 	}
 	if (n < 0)
 		return n;
-	g_product_path_used = 1;
+	g_bpath_used = 1;
 	return n;
 }
 

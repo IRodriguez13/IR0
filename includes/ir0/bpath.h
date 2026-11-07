@@ -6,8 +6,8 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: product_path.h
- * Description: Optional product VFS ops for staged path I/O under a live mount
+ * File: bpath.h
+ * Description: Boot-path VFS ops for staged erfs routing onto product mounts.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -19,16 +19,16 @@
 #include <ir0/stat.h>
 #include <ir0/vfs_file.h>
 
-#define IR0_PRODUCT_PATH_TMP_PREF "/tmp/"
-#define IR0_PRODUCT_PATH_RUN_PREF "/run/"
+#define IR0_BPATH_TMP_PREF "/tmp/"
+#define IR0_BPATH_RUN_PREF "/run/"
 
-struct ir0_product_dirent
+struct ir0_bpath_dirent
 {
 	char name[40];
 	uint8_t type;
 };
 
-struct ir0_product_path_ops
+struct ir0_bpath_ops
 {
 	int (*stat)(const char *path, stat_t *st);
 	int (*open)(const char *path, int flags, mode_t mode,
@@ -41,13 +41,16 @@ struct ir0_product_path_ops
 	int (*unlink)(const char *path);
 	int (*rmdir)(const char *path);
 	int (*truncate)(const char *path, size_t len);
-	int (*readdir)(const char *path, struct ir0_product_dirent *ents,
+	int (*readdir)(const char *path, struct ir0_bpath_dirent *ents,
 		       int max);
 };
 
-void early_rootfs_bind_product_path(const struct ir0_product_path_ops *ops);
-int early_rootfs_product_path_used(void);
-int ir0_product_path_is_reserved_early(const char *path);
-int ir0_product_path_is_foldable(const char *path);
-int ir0_product_path_is_tmp(const char *path);
-const struct ir0_product_path_ops *ir0_product_path_bound(void);
+void early_rootfs_bind_bpath(const struct ir0_bpath_ops *ops);
+int early_rootfs_bpath_used(void);
+int ir0_bpath_is_reserved_early(const char *path);
+int ir0_bpath_is_foldable(const char *path);
+int ir0_bpath_is_tmp(const char *path);
+const struct ir0_bpath_ops *ir0_bpath_bound(void);
+
+/* Non-zero when product VFS serves staged bpath prefixes (erfs fold path). */
+int bpath_live(void);

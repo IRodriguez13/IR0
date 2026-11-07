@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | memory, syscalls, filesystems |
 | Man page | IR0-vfs (section 7) |
-| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `fs/ramtab.c`, `includes/ir0/vfs_backend.h`, `includes/ir0/product_path.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
+| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `fs/ramtab.c`, `includes/ir0/vfs_backend.h`, `includes/ir0/bpath.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
 
 ## 1. Overview
 
@@ -24,7 +24,7 @@ This is only half of the story. At the syscall boundary, paths under `/proc`,
 
 This chapter documents both stages because user-visible `open("/dev/console")` never
 calls `vfs_open()` today, while `open("/tmp/foo")` does on the **x86 product** path
-and on **ARM ALL** after `product_path` is bound. The staged ARM adapter still
+and on **ARM ALL** after `bpath` is bound. The staged ARM adapter still
 serves `/` and `/init` itself; leftover names use `fs/ramtab.c` until a mount
 owns them. Staged pipe/unix tables are under `ipc/`. See
 `Documentation/EARLY_FOLD.md`.

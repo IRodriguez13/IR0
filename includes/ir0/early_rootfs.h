@@ -902,10 +902,10 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 const uint8_t *early_rootfs_init_blob(uint64_t *length);
 int early_rootfs_init_from_block(void);
 int early_rootfs_cpio_ready(void);
-int early_rootfs_cpio_fold_product(void);
+int early_rootfs_cpio_bpath_fold(void);
 
 /* Non-zero when staging mounts exist and CPIO members were folded to product VFS. */
-int early_rootfs_product_pivot_done(void);
+int early_rootfs_bpivot_done(void);
 int early_rootfs_ready(void);
 int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_block(int fd);

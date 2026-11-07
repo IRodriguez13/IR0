@@ -79,7 +79,7 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 ### Staged early path fold (2026-10-16)
 
 - In-memory staged names moved to `fs/ramtab.c` (`includes/ir0/ramtab.h`).
-- Optional `includes/ir0/product_path.h` bind: ARM ALL `/tmp/*` uses product
+- Optional `includes/ir0/bpath.h` bind: ARM ALL `/tmp/*` uses product
   `vfs.c`/`tmpfs` (`ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`).
 - `early_rootfs.c` remains the adapter for `/`, `/init`, `/dev/*`, pipes, unix.
 - Docs: [`EARLY_FOLD.md`](EARLY_FOLD.md), [`debts/arm64-core-convergence.md`](debts/arm64-core-convergence.md).

@@ -532,6 +532,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
 	kernel/test/test_debug_contracts.o \
+	kernel/test/test_bpivot_boot.o \
 	kernel/test/test_process.o \
 	kernel/test/test_cred_access.o \
 	kernel/test/test_resource_registry.o \
@@ -591,8 +592,9 @@ LIB_OBJS = \
     fs/pipe.o \
     mm/copy_user.o \
     fs/open_flags.o \
-    fs/product_path.o \
-    fs/product_pivot.o \
+    fs/bpath.o \
+    fs/bpivot.o \
+    fs/bpivot_boot.o \
     kernel/syscalls/syscall_table.o \
     fs/stat_user.o \
     fs/named_fifo.o \

@@ -10,7 +10,7 @@
 #include "erfs_internal.h"
 
 #include <ir0/early_cpio.h>
-#include <ir0/product_pivot.h>
+#include <ir0/bpivot.h>
 #include <ir0/vfs_file.h>
 
 const uint8_t *g_cpio_buf;
@@ -31,23 +31,23 @@ static int cpio_install_product_tmp(const char *norm, uint32_t mode,
 	struct vfs_file *vf;
 	int rc;
 
-	if (!product_path_live() || !ir0_product_path_is_foldable(norm) ||
-	    !g_product_path)
+	if (!bpath_live() || !ir0_bpath_is_foldable(norm) ||
+	    !g_bpath)
 		return 0;
 	if ((mode & S_IFMT) == S_IFDIR)
 	{
-		rc = g_product_path->mkdir ? g_product_path->mkdir(norm, mode & 07777U) : -ENOSYS;
+		rc = g_bpath->mkdir ? g_bpath->mkdir(norm, mode & 07777U) : -ENOSYS;
 		return rc < 0 ? rc : 1;
 	}
 	if ((mode & S_IFMT) != S_IFREG)
 		return 0;
-	if (!g_product_path->open || !g_product_path->put)
+	if (!g_bpath->open || !g_bpath->put)
 		return -ENOSYS;
-	rc = g_product_path->open(norm, IR0_O_RDWR | IR0_O_CREAT | IR0_O_TRUNC,
+	rc = g_bpath->open(norm, IR0_O_RDWR | IR0_O_CREAT | IR0_O_TRUNC,
 				  mode & 07777U, &vf);
 	if (rc < 0)
 		return rc;
-	if (size > 0 && data && g_product_path->write)
+	if (size > 0 && data && g_bpath->write)
 	{
 		size_t wrote = 0;
 
@@ -57,17 +57,17 @@ static int cpio_install_product_tmp(const char *norm, uint32_t mode,
 
 			if (chunk > 4096U)
 				chunk = 4096U;
-			rc = (int)g_product_path->write(vf, data + wrote, chunk);
+			rc = (int)g_bpath->write(vf, data + wrote, chunk);
 			if (rc < 0)
 			{
-				(void)g_product_path->put(vf);
+				(void)g_bpath->put(vf);
 				return rc;
 			}
 			wrote += (size_t)rc;
 		}
 	}
-	(void)g_product_path->put(vf);
-	g_product_path_used = 1;
+	(void)g_bpath->put(vf);
+	g_bpath_used = 1;
 	return 1;
 }
 
@@ -148,13 +148,13 @@ int erfs_cpio_install_members(const uint8_t *buf, uint64_t bytes)
 	return count;
 }
 
-int early_rootfs_cpio_fold_product(void)
+int early_rootfs_cpio_bpath_fold(void)
 {
 	uint64_t off = 0;
 
 	if (!g_cpio_ready || !g_cpio_buf || g_cpio_len == 0)
 		return -ENOENT;
-	if (!product_path_live())
+	if (!bpath_live())
 		return -ENODEV;
 	g_cpio_product_installed = 0;
 	while (1)
@@ -178,12 +178,12 @@ int early_rootfs_cpio_fold_product(void)
 			return prod;
 	}
 	if (g_cpio_product_installed > 0)
-		ir0_product_pivot_note_cpio_fold(g_cpio_product_installed);
+		ir0_bpivot_note_cpio_fold(g_cpio_product_installed);
 	return g_cpio_product_installed > 0 ? g_cpio_product_installed :
 					      -ENOENT;
 }
 
-int early_rootfs_product_pivot_done(void)
+int early_rootfs_bpivot_done(void)
 {
-	return ir0_product_pivot_cpio_fold_done();
+	return ir0_bpivot_cpio_fold_done();
 }

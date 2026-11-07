@@ -234,6 +234,26 @@ int ramtab_add(const char *path, uint32_t mode, uint32_t size,
 	return -ENOSPC;
 }
 
+int ramtab_prune_matching(int (*should_drop)(const char *path))
+{
+	unsigned i;
+	int n = 0;
+
+	if (!should_drop)
+		return -EINVAL;
+	for (i = 0; i < RAMTAB_MAX; i++)
+	{
+		if (!g_tab[i].used)
+			continue;
+		if (!should_drop(g_tab[i].path))
+			continue;
+		g_tab[i].used = 0;
+		g_tab[i].link_to = -1;
+		n++;
+	}
+	return n;
+}
+
 enum ir0_early_rootfs_node ramtab_node_kind(uint32_t mode)
 {
 	uint32_t type = mode & S_IFMT;

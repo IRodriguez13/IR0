@@ -51,3 +51,6 @@ int ramtab_child_count(const char *dir);
 int ramtab_child_at(const char *dir, int which,
 		    struct ir0_early_dirent_spec *spec);
 enum ir0_early_rootfs_node ramtab_node_kind(uint32_t mode);
+
+/* Drop ramtab entries where should_drop(path) is non-zero. Returns count. */
+int ramtab_prune_matching(int (*should_drop)(const char *path));

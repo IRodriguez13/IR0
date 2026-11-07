@@ -68,7 +68,7 @@ pure-move pass.
 - `fs/ramtab.c` + `includes/ir0/ramtab.h`; owner: in-memory names without a
   VFS mount; destination: keep until every staged path has a mount; then
   delete callers in `erfs_*.c`.
-- `includes/ir0/product_path.h`; owner: optional bind from the staged adapter
+- `includes/ir0/bpath.h`; owner: optional bind from the staged adapter
   to product `vfs_*`; destination: keep as the transition seam.
 - `ipc/early_anonfd.c`, `ipc/early_unix.c`; owner: staged IPC object tables;
   destination: product `ipc/` / pipe objects. Keep out of `fs/`.

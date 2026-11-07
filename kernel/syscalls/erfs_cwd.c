@@ -279,14 +279,14 @@ int64_t early_rootfs_lseek(int fd, int64_t offset, int whence)
 	int64_t next;
 	uint64_t limit;
 
-	if (vf_of_fd(fd) && g_product_path && g_product_path->lseek)
+	if (vf_of_fd(fd) && g_bpath && g_bpath->lseek)
 	{
 		off_t got;
 
-		got = g_product_path->lseek(vf_of_fd(fd), (off_t)offset, whence);
+		got = g_bpath->lseek(vf_of_fd(fd), (off_t)offset, whence);
 		if (got < 0)
 			return (int64_t)got;
-		g_product_path_used = 1;
+		g_bpath_used = 1;
 		return (int64_t)got;
 	}
 	node = node_of_fd(fd);

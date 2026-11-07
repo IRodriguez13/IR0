@@ -3,12 +3,12 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: product_path.c
- * Description: Product VFS fold path prefixes for staged erfs routing.
+ * File: bpath.c
+ * Description: Boot-path fold prefixes for staged erfs → product VFS routing.
  */
 
-#include <ir0/product_path.h>
-#include <ir0/product_pivot.h>
+#include <ir0/bpath.h>
+#include <ir0/bpivot.h>
 
 static int path_eq(const char *path, const char *literal)
 {
@@ -24,7 +24,7 @@ static int path_eq(const char *path, const char *literal)
 	return path[i] == '\0';
 }
 
-int ir0_product_path_is_reserved_early(const char *path)
+int ir0_bpath_is_reserved_early(const char *path)
 {
 	if (!path || path[0] != '/')
 		return 1;
@@ -32,6 +32,10 @@ int ir0_product_path_is_reserved_early(const char *path)
 		return 1;
 	if (path[1] == 'd' && path[2] == 'e' && path[3] == 'v' &&
 	    (path[4] == '\0' || path[4] == '/'))
+		return 1;
+	if (path[1] == 'b' && path[2] == 'p' && path[3] == 'i' &&
+	    path[4] == 'v' && path[5] == 'o' && path[6] == 't' &&
+	    (path[7] == '\0' || path[7] == '/'))
 		return 1;
 	return 0;
 }
@@ -50,15 +54,15 @@ static int path_has_nontrivial_prefix(const char *path, const char *pref)
 	return path[i] != '\0';
 }
 
-static int path_under_pivot_tree(const char *path)
+static int path_under_bpivot_tree(const char *path)
 {
 	int i;
 
-	if (ir0_product_pivot_mount_count() <= 0)
+	if (ir0_bpivot_mount_count() <= 0)
 		return 0;
-	for (i = 0; ir0_product_pivot_trees[i]; i++)
+	for (i = 0; ir0_bpivot_trees[i]; i++)
 	{
-		const char *m = ir0_product_pivot_trees[i];
+		const char *m = ir0_bpivot_trees[i];
 		char pref[16];
 		unsigned j;
 
@@ -78,17 +82,17 @@ static int path_under_pivot_tree(const char *path)
 	return 0;
 }
 
-int ir0_product_path_is_foldable(const char *path)
+int ir0_bpath_is_foldable(const char *path)
 {
-	if (!path || ir0_product_path_is_reserved_early(path))
+	if (!path || ir0_bpath_is_reserved_early(path))
 		return 0;
-	if (ir0_product_pivot_mount_count() > 0)
-		return path_under_pivot_tree(path);
-	return path_has_nontrivial_prefix(path, IR0_PRODUCT_PATH_TMP_PREF) ||
-	       path_has_nontrivial_prefix(path, IR0_PRODUCT_PATH_RUN_PREF);
+	if (ir0_bpivot_mount_count() > 0)
+		return path_under_bpivot_tree(path);
+	return path_has_nontrivial_prefix(path, IR0_BPATH_TMP_PREF) ||
+	       path_has_nontrivial_prefix(path, IR0_BPATH_RUN_PREF);
 }
 
-int ir0_product_path_is_tmp(const char *path)
+int ir0_bpath_is_tmp(const char *path)
 {
-	return path_has_nontrivial_prefix(path, IR0_PRODUCT_PATH_TMP_PREF);
+	return path_has_nontrivial_prefix(path, IR0_BPATH_TMP_PREF);
 }

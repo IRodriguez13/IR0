@@ -3,7 +3,7 @@
 > **Last verified:** 2026-10-16
 > **Source of truth:** `includes/ir0/copy_user.h`, `includes/ir0/arch_cpu.h`,
 > `includes/ir0/context.h`, `includes/ir0/cpu.h`, `includes/ir0/irq.h`,
-> `includes/ir0/ramtab.h`, `includes/ir0/product_path.h`,
+> `includes/ir0/ramtab.h`, `includes/ir0/bpath.h`,
 > `scripts/architecture_guard.py`, [`DECOUPLING.md`](DECOUPLING.md),
 > [`uaccess.md`](uaccess.md), [`HARNESS_MAP.md`](HARNESS_MAP.md),
 > [`EARLY_FOLD.md`](EARLY_FOLD.md)

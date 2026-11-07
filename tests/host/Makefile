@@ -46,7 +46,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c \
 	test_mount_prefix_boundary.c \
-	test_product_path_fold.c \
+	test_bpath_fold.c \
 	test_backend_mock_contract.c
 TEST_SRCS += test_pmm_banks.c test_boot_memory.c test_no_mmu_policy.c
 TEST_SRCS += test_oom_policy.c
@@ -66,7 +66,7 @@ TEST_SRCS += test_tlb_sync.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
-	host_open_flags.o host_product_path.o host_product_pivot_stub.o \
+	host_open_flags.o host_bpath.o host_bpivot_stub.o \
 	host_sysfs_net_stub.o host_sysfs_honesty_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
@@ -264,10 +264,13 @@ test_blockdev_facade.o: test_blockdev_facade.c
 host_open_flags.o: $(KERNEL_ROOT)/fs/open_flags.c
 	$(KERNEL_CC)
 
-host_product_path.o: $(KERNEL_ROOT)/fs/product_path.c
+host_bpath.o: $(KERNEL_ROOT)/fs/bpath.c
 	$(KERNEL_CC)
 
-test_product_path_fold.o: test_product_path_fold.c
+host_bpivot_stub.o: host_bpivot_stub.c
+	$(CC) $(BASE_CFLAGS) -idirafter $(KERNEL_ROOT)/includes -c -o $@ $<
+
+test_bpath_fold.o: test_bpath_fold.c
 	$(CC) $(BASE_CFLAGS) -idirafter $(KERNEL_ROOT)/includes -c -o $@ $<
 
 test_ktm_panic_inventory.o: test_ktm_panic_inventory.c
