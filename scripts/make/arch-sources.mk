@@ -7,16 +7,15 @@ ARCH_OBJS_COMMON = \
 	$(ARCH_COMMON_BOOT_LOG_OBJ)
 
 ARCH_OBJS_X86_64 = \
-	arch/x86-64/sources/boot_firmware_sysfs_arch.o \
-	arch/x86-64/sources/x86_boot_port.o \
-	arch/x86-64/sources/x86_oops_port.o \
+	arch/x86-64/sources/firmware_sysfs.o \
+	arch/x86-64/sources/boot_port.o \
+	arch/x86-64/sources/oops_port.o \
 	arch/x86-64/sources/debug.o \
 	arch/x86-64/sources/debug_trap.o \
 	arch/x86-64/sources/interface.o \
-	arch/x86-64/sources/cpu.o \
 	arch/x86-64/sources/platform.o \
 	arch/x86-64/sources/gdt.o \
-	arch/x86-64/sources/tss_x64.o \
+	arch/x86-64/sources/tss.o \
 	arch/x86-64/sources/early.o \
 	arch/x86-64/sources/user_mode.o \
 	arch/x86-64/sources/fork.o \
@@ -32,7 +31,6 @@ ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/mm.o \
 	arch/x86-64/sources/irq.o \
 	arch/x86-64/sources/page_fault.o \
-	arch/x86-64/sources/idt_arch_x64.o \
 	arch/x86-64/sources/fault.o \
 	arch/x86-64/sources/debug_dump.o \
 	arch/x86-64/sources/pf_debug.o \
@@ -48,8 +46,8 @@ ARCH_OBJS_X86_64 = \
 # ARM64 backend providers used by both the normal and freestanding paths.
 ARM64_BACKEND_OBJS = \
 	$(ARCH_COMMON_BOOT_LOG_OBJ) \
-	arch/arm64/sources/boot_firmware_sysfs_arch.o \
-	arch/arm64/sources/arm64_boot_port.o \
+	arch/arm64/sources/firmware_sysfs.o \
+	arch/arm64/sources/boot_port.o \
 	arch/arm64/sources/debug.o \
 	arch/arm64/sources/cpu.o \
 	arch/arm64/sources/board.o \
@@ -59,7 +57,7 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/boot_info_devices.o \
 	arch/arm64/sources/irq_backend.o \
 	arch/arm64/sources/elf_image_early.o \
-	arch/arm64/sources/arm64_boot_common.o \
+	arch/arm64/sources/boot_common.o \
 	arch/arm64/sources/early.o \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
@@ -68,7 +66,7 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/mm_ops.o \
 	arch/arm64/sources/dma.o \
 	arch/arm64/sources/pl011.o \
-	arch/arm64/sources/serial_io_arm64.o \
+	arch/arm64/sources/serial.o \
 	arch/arm64/sources/gic_v2.o \
 	arch/arm64/sources/bcm2836_irq.o \
 	arch/arm64/sources/syscall_decode.o \

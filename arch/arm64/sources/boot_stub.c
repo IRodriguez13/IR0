@@ -3,12 +3,12 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_stub.c
- * Description: Legacy name — bring-up lives in arm64_boot_common.c; entry is kmain.
+ * Description: Legacy name — bring-up lives in boot_common.c; entry is kmain.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "arm64_boot_common.h"
+#include "boot_common.h"
 
 #include <stdint.h>
 

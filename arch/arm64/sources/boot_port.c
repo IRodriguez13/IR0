@@ -2,7 +2,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: arm64_boot_port.c
+ * File: boot_port.c
  * Description: ARM64 boot hooks — DTB handoff for kmain, PL011 before klog, optional init seed.
  */
 

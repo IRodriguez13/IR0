@@ -13,7 +13,7 @@
 
 #include <stdint.h>
 #include <string.h>
-#include "tss_x64.h"
+#include "tss.h"
 #include "gdt.h"
 
 extern tss_t kernel_tss;

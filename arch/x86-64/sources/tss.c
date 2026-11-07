@@ -7,7 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: tss_x64.c
+ * File: tss.c
  * Description: IR0 kernel source/header file
  */
 
@@ -16,7 +16,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "gdt.h"
-#include "tss_x64.h"
+#include "tss.h"
 
 
 /* Global TSS instance */

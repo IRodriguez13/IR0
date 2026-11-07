@@ -15,7 +15,7 @@
 define ARM64_BOARD_MIN_BUILD
 	@mkdir -p $(1)
 	@for src in board_boot_min.c board.c boot_info.c fdt_reader.c \
-		boot_info_platform.c boot_info_devices.c pl011.c serial_io_arm64.c \
+		boot_info_platform.c boot_info_devices.c pl011.c serial.c \
 		platform.c portable_string.c freestanding_stubs.c; do \
 		echo "  CC      arch/arm64/sources/$$src → $(1)/"; \
 		aarch64-linux-gnu-gcc $(ARM64_BOOT_CFLAGS) $(2) \
@@ -30,7 +30,7 @@ define ARM64_BOARD_MIN_BUILD
 		$(1)/boot_entry.o $(1)/board_boot_min.o $(1)/board.o \
 		$(1)/boot_info.o $(1)/fdt_reader.o \
 		$(1)/boot_info_platform.o $(1)/boot_info_devices.o $(1)/pl011.o \
-		$(1)/serial_io_arm64.o $(1)/platform.o $(1)/portable_string.o \
+		$(1)/serial.o $(1)/platform.o $(1)/portable_string.o \
 		$(1)/freestanding_stubs.o \
 		$(1)/boot_log.o
 	@aarch64-linux-gnu-readelf -lW $@ > $(1)/program-headers.log

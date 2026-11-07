@@ -7,7 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: tss_x64.h
+ * File: tss.h
  * Description: IR0 kernel source/header file
  */
 

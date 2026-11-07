@@ -2,7 +2,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: boot_arch_portable.c
+ * File: boot_arch.c
  * Description: ARM64 boot_arch hooks for the portable kernel (overrides weak boot_arch.c).
  */
 
@@ -14,7 +14,7 @@
 #include <stdint.h>
 
 #if !defined(IR0_FREESTANDING_BOOT)
-#include "arm64_boot_common.h"
+#include "boot_common.h"
 #endif
 
 void ir0_boot_arch_firmware_early(uintptr_t firmware_handle)

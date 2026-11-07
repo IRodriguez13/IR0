@@ -91,7 +91,7 @@ ARM64_SLICE_OBJS = \
 	arch/arm64/sources/boot_info_platform.o \
 	arch/arm64/sources/boot_info_devices.o \
 	arch/arm64/sources/pl011.o \
-	arch/arm64/sources/serial_io_arm64.o
+	arch/arm64/sources/serial.o
 ARM64_PORTABLE_OBJS = \
 	$(ARM64_SLICE_OBJS) \
 	arch/arm64/sources/gic_v2.o \

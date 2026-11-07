@@ -121,7 +121,7 @@ REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
     ROOT / "arch" / "arm64" / "sources" / "slice_hello.c",
     ROOT / "arch" / "arm64" / "sources" / "pl011.c",
-    ROOT / "arch" / "arm64" / "sources" / "serial_io_arm64.c",
+    ROOT / "arch" / "arm64" / "sources" / "serial.c",
     ROOT / "arch" / "arm64" / "sources" / "mm_ops.c",
     ROOT / "arch" / "arm64" / "sources" / "gic_v2.c",
     ROOT / "arch" / "arm64" / "sources" / "syscall_early.c",
@@ -764,7 +764,7 @@ def check_klog_serial_print_allowlist():
         "drivers/serial/serial.c",
         "drivers/serial/serial.h",
         "includes/ir0/serial_io.h",
-        "arch/arm64/sources/serial_io_arm64.c",
+        "arch/arm64/sources/serial.c",
         "ktm/mocks/arm64/min_link_stubs.c",
         "tests/host/host_serial_stub.c",
         # Freestanding early boot (IR0_FREESTANDING_BOOT) before klog hub exists.

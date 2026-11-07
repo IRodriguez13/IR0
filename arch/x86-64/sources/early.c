@@ -22,7 +22,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <arch/x86-64/sources/gdt.h>
-#include <arch/x86-64/sources/tss_x64.h>
+#include <arch/x86-64/sources/tss.h>
 #include <ir0/irq.h>
 #include <ir0/ktm/klog.h>
 #include <interrupt/idt.h> /* idt_early_install64 only */

@@ -2,13 +2,13 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: arm64_boot_common.c
+ * File: boot_common.c
  * Description: ARM64 freestanding bring-up (MMU, IRQ, virtio) — shared by all boards.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "arm64_boot_common.h"
+#include "boot_common.h"
 #include "mmu_early.h"
 #include "exc_early.h"
 #include "slice_hello.h"

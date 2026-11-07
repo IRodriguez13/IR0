@@ -2,7 +2,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: boot_firmware_sysfs_arch.c
+ * File: firmware_sysfs.c
  * Description: ARM64 firmware/DTB snapshot for the IR0 firmware sysfs node.
  */
 

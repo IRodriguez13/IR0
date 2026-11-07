@@ -28,8 +28,8 @@ The Architecture Subsystem provides architecture-specific implementations and ab
 - **Purpose**: x86-64 implementation
 - **Features**:
   - **Boot Assembly**: `boot_x64.asm` - 64-bit boot sequence
-  - **Architecture Code**: `arch_x64.c/h` - x86-64 specific functions
-  - **Interrupt Handling**: `idt_arch_x64.c/h` - 64-bit IDT management
+  - **Architecture Code**: `cpu.c` - x86-64 CPU setup provider
+  - **Interrupt Handling**: `interrupt/idt.c` - 64-bit IDT management
   - **Fault Handling**: `fault.c` - Exception and fault handling
   - **Linker Script**: `linker.ld` - 64-bit memory layout
   - **GRUB Configuration**: `grub.cfg` - Bootloader configuration
@@ -455,8 +455,8 @@ El Subsistema de Arquitectura proporciona implementaciones y abstracciones espec
 - **Propósito**: Implementación de x86-64
 - **Características**:
   - **Assembly de Boot**: `boot_x64.asm` - Secuencia de boot de 64 bits
-  - **Código de Arquitectura**: `arch_x64.c/h` - Funciones específicas de x86-64
-  - **Manejo de Interrupciones**: `idt_arch_x64.c/h` - Gestión de IDT de 64 bits
+  - **Código de Arquitectura**: `cpu.c` - Proveedor de setup de CPU x86-64
+  - **Manejo de Interrupciones**: `interrupt/idt.c` - Gestión de IDT de 64 bits
   - **Manejo de Fallos**: `fault.c` - Manejo de excepciones y fallos
   - **Script de Linker**: `linker.ld` - Layout de memoria de 64 bits
   - **Configuración GRUB**: `grub.cfg` - Configuración del bootloader

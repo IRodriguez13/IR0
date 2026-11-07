@@ -11,7 +11,7 @@
  * Description: Serial port driver for debugging output (x86 COM1 16550).
  *
  * ARCH=arm64 does not link this TU (see Makefile DRIVER_OBJS); PL011 lives in
- * arch/arm64/sources/serial_io_arm64.c. Object selection is the ISA boundary.
+ * arch/arm64/sources/serial.c. Object selection is the ISA boundary.
  */
 
 #include <stdint.h>

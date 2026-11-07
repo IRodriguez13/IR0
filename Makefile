@@ -569,7 +569,7 @@ CFLAGS += -DCONFIG_SCHEDULER_POLICY=0
 endif
 
 ifeq ($(ARCH),arm64)
-KERNEL_OBJS += arch/arm64/sources/boot_arch_portable.o
+KERNEL_OBJS += arch/arm64/sources/boot_arch.o
 endif
 
 MEMORY_OBJS = \
@@ -678,7 +678,7 @@ DRIVER_OBJS = \
 	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
-# COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial_io_arm64.c (PL011).
+# COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial.c (PL011).
 ifneq ($(ARCH),arm64)
 DRIVER_OBJS += drivers/serial/serial.o
 DRIVER_OBJS += drivers/timer/rtc/rtc.o
@@ -1134,14 +1134,14 @@ KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
 	build/test/arch/common/boot_port.o \
 	build/test/arch/common/oops_port.o
 ifeq ($(ARCH),arm64)
-KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch_portable.o
+KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
 ALL_OBJS_TEST = $(filter-out kernel/main.o kernel/boot_init.o kernel/boot_flow.o \
 	kernel/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
 	arch/common/oops_port.o \
-	arch/arm64/sources/boot_arch_portable.o,$(KERNEL_OBJS)) \
+	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \

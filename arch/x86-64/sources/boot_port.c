@@ -2,7 +2,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: x86_boot_port.c
+ * File: boot_port.c
  * Description: x86_64 boot hooks — serial after driver registry; kmain handle passthrough.
  */
 

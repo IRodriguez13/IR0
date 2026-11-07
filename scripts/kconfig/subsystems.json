@@ -78,11 +78,9 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "arch/x86-64/sources/cpu.c",
           "arch/x86-64/sources/gdt.c",
-          "arch/x86-64/sources/tss_x64.c",
+          "arch/x86-64/sources/tss.c",
           "arch/x86-64/sources/user_mode.c",
-          "arch/x86-64/sources/idt_arch_x64.c",
           "arch/x86-64/sources/fault.c",
           "arch/x86-64/asm/boot/boot_x64.asm",
           "arch/x86-64/asm/entry/syscall_int80.asm",

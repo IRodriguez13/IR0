@@ -2,7 +2,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: x86_oops_port.c
+ * File: oops_port.c
  * Description: x86_64 extra panic diagnostics (iretq checkpoint buffer).
  */
 
