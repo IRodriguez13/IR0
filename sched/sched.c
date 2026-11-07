@@ -13,34 +13,27 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/sched.h>
-#include "sched_ops.h"
+#include "backend.h"
 #include "sched_switch.h"
-#include <config.h>
 
-/*
- * Policy 0: round-robin ops.
- * Policy 1: CFS name only — still RR ops (honest alias; no cfs_sched.c / no rr include).
- * Policy 2: priority-band ops.
- */
-#if CONFIG_SCHEDULER_POLICY == 2 && !defined(IR0_SCHED_EARLY_RR)
-static const struct ir0_sched_ops *const g_sched_ops = &ir0_priority_sched_ops;
-#else
-static const struct ir0_sched_ops *const g_sched_ops = &ir0_rr_sched_ops;
-#endif
+static const struct ir0_sched_ops *sched_ops(void)
+{
+	return sched_backend_active();
+}
 
 void sched_add_process(process_t *proc)
 {
-	g_sched_ops->add(proc);
+	sched_ops()->add(proc);
 }
 
 void sched_remove_process(process_t *proc)
 {
-	g_sched_ops->remove(proc);
+	sched_ops()->remove(proc);
 }
 
 void sched_schedule_next(void)
 {
-	g_sched_ops->schedule_next();
+	sched_ops()->schedule_next();
 }
 
 void sched_switch_to(process_t *next)
@@ -50,29 +43,26 @@ void sched_switch_to(process_t *next)
 
 void sched_reset(void)
 {
-	if (g_sched_ops->reset)
-		g_sched_ops->reset();
+	if (sched_ops()->reset)
+		sched_ops()->reset();
 }
 
 int sched_count_runnable(void)
 {
-	return g_sched_ops->count_runnable();
+	return sched_ops()->count_runnable();
 }
 
 void sched_promote_process(process_t *proc)
 {
-	g_sched_ops->promote(proc);
+	sched_ops()->promote(proc);
 }
 
 const char *sched_active_policy_name(void)
 {
-#if defined(IR0_SCHED_EARLY_RR)
-	return "round_robin";
-#elif CONFIG_SCHEDULER_POLICY == 1
-	return "cfs";
-#elif CONFIG_SCHEDULER_POLICY == 2
-	return "priority";
-#else
-	return "round_robin";
-#endif
+	return sched_ops()->name;
+}
+
+int sched_selftest(void)
+{
+	return sched_ops()->selftest ? sched_ops()->selftest() : 0;
 }

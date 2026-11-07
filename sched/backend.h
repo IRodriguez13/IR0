@@ -6,8 +6,8 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: sched_ops.h
- * Description: Backend ops table (sched/ only — not a portable include).
+ * File: backend.h
+ * Description: Scheduler backend contract (sched/ only — not a portable include).
  *
  * Contract (API layers):
  * - Portable callers use <ir0/sched.h> only (facade).
@@ -31,7 +31,8 @@ struct ir0_sched_ops
 	int (*count_runnable)(void);
 	void (*promote)(process_t *proc);
 	void (*reset)(void);
+	int (*selftest)(void);
+	const char *name;
 };
 
-extern const struct ir0_sched_ops ir0_rr_sched_ops;
-extern const struct ir0_sched_ops ir0_priority_sched_ops;
+const struct ir0_sched_ops *sched_backend_active(void);

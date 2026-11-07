@@ -6,16 +6,16 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: priority_sched.c
+ * File: backend.c
  * Description: Fixed priority-band runqueues (RR within band); not CFS.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "priority_sched.h"
-#include "sched_ops.h"
-#include "sched_switch.h"
-#include "runqueue_lock.h"
+#include "process.h"
+#include "../backend.h"
+#include "../sched_switch.h"
+#include "../runqueue_lock.h"
 #include <ir0/arch_port.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
@@ -402,11 +402,13 @@ static void priority_reset(void)
 	prio_irq_restore(irq_flags);
 }
 
-const struct ir0_sched_ops ir0_priority_sched_ops = {
+const struct ir0_sched_ops sched_prio_ops = {
 	.add = priority_add_process,
 	.remove = priority_remove_process,
 	.schedule_next = priority_schedule_next,
 	.count_runnable = priority_count_runnable,
 	.promote = priority_promote_process,
 	.reset = priority_reset,
+	.selftest = priority_sched_selftest,
+	.name = "priority",
 };

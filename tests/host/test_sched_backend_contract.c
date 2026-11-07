@@ -13,7 +13,7 @@
 
 /*
  * Host cannot link rr/priority backends easily; validate the ops-table
- * contract shape that sched/sched_ops.h documents.
+ * contract shape that sched/backend.h documents.
  */
 struct host_sched_ops
 {

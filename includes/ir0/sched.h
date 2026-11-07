@@ -26,6 +26,7 @@ void sched_reset(void);
 const char *sched_active_policy_name(void);
 int sched_count_runnable(void);
 void sched_promote_process(process_t *proc);
+int sched_selftest(void);
 
 /*
  * Adopt a context that firmware or an early harness is already executing.

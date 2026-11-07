@@ -11,7 +11,7 @@
           "kernel/process.c",
           "kernel/syscalls.c",
           "kernel/elf_loader.c",
-          "sched/rr_sched.c",
+          "sched/rr/backend.c",
           "kernel/driver_registry.c"
         ],
         "arm32": []
@@ -119,7 +119,7 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "sched/rr_sched.c",
+          "sched/rr/backend.c",
           "arch/x86-64/asm/context/switch_x64.asm"
         ],
         "arm32": []

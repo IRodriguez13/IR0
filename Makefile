@@ -557,11 +557,11 @@ KERNEL_TEST_OBJS = \
 # Scheduler backend selection from menuconfig (ops via <ir0/sched.h>).
 # Policy 1 (CFS) is an honest RR alias — same backend object, different policy name.
 ifeq ($(CONFIG_SCHEDULER_POLICY),2)
-SCHED_BACKEND_OBJS = sched/priority_sched.o
+SCHED_BACKEND_OBJS = sched/prio/backend.o
 else
-SCHED_BACKEND_OBJS = sched/rr_sched.o
+SCHED_BACKEND_OBJS = sched/rr/backend.o
 endif
-KERNEL_OBJS += $(SCHED_BACKEND_OBJS)
+KERNEL_OBJS += sched/backend_select.o $(SCHED_BACKEND_OBJS)
 ifneq ($(CONFIG_SCHEDULER_POLICY),)
 CFLAGS += -DCONFIG_SCHEDULER_POLICY=$(CONFIG_SCHEDULER_POLICY)
 else

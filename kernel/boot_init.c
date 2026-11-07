@@ -233,16 +233,10 @@ void boot_runtime(void)
 	klog_set_boot_phase(KLOG_BOOT_TIME);
 	clock_system_init();
 	klog_info("CLOCK", "monotonic clock online");
-#if CONFIG_SCHEDULER_POLICY == 2
-	{
-		extern int priority_sched_selftest(void);
-
-		if (priority_sched_selftest() == 0)
-			klog_smoke("SCHED_PRIO_OK");
-		else
-			klog_smoke("SCHED_PRIO_FAIL");
-	}
-#endif
+	if (sched_selftest() == 0)
+		klog_smoke("SCHED_POLICY_OK");
+	else
+		klog_smoke("SCHED_POLICY_FAIL");
 	klog_info_fmt("SCHED", "SCHED_POLICY=%s", sched_active_policy_name());
 
 	syscall_init();

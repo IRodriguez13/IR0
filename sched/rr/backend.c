@@ -6,17 +6,16 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: rr_sched.c
+ * File: backend.c
  * Description: IR0 Kernel - Round-Robin Scheduler
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process.h"
-#include "rr_sched.h"
-#include "sched_ops.h"
-#include "sched_switch.h"
-#include "runqueue_lock.h"
+#include "../backend.h"
+#include "../sched_switch.h"
+#include "../runqueue_lock.h"
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
@@ -27,6 +26,12 @@
  * Ready list is singly linked (head -> ... -> tail, next=NULL). Advance wraps
  * with `next ? next : rr_head`; it is not a circular queue.
  */
+typedef struct rr_task
+{
+	process_t *process;
+	struct rr_task *next;
+} rr_task_t;
+
 static rr_task_t *rr_head = NULL;
 static rr_task_t *rr_tail = NULL;
 static rr_task_t *rr_current = NULL;
@@ -337,11 +342,18 @@ void rr_reset(void)
 	}
 }
 
-const struct ir0_sched_ops ir0_rr_sched_ops = {
+const struct ir0_sched_ops sched_rr_ops = {
 	.add = rr_add_process,
 	.remove = rr_remove_process,
 	.schedule_next = rr_schedule_next,
 	.count_runnable = rr_count_runnable,
 	.promote = rr_promote_process,
 	.reset = rr_reset,
+	.selftest = NULL,
+#if CONFIG_SCHEDULER_POLICY == 1 && !defined(IR0_SCHED_EARLY_RR)
+	/* Policy 1 is an honest CFS name alias over the RR backend. */
+	.name = "cfs",
+#else
+	.name = "round_robin",
+#endif
 };
