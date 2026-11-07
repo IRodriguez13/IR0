@@ -2,7 +2,7 @@
 
 #include "test_harness.h"
 
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 
 #include <stdint.h>
 #include <string.h>

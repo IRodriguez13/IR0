@@ -19,7 +19,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <ir0/arch_mm.h>
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 #include <ir0/errno.h>
 #include <stdint.h>
 

@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 #include <ir0/boot_firmware_sysfs.h>
 
 #include <string.h>

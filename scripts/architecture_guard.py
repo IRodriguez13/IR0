@@ -895,6 +895,56 @@ PORTABLE_ISA_ALLOWLIST = {
     ROOT / "includes" / "ir0" / "syscall_arm64.h",
 }
 
+# ISA firmware headers must not leak into portable policy trees.
+PORTABLE_NO_ISA_FIRMWARE_TREES = (
+    ROOT / "kernel",
+    ROOT / "fs",
+    ROOT / "mm",
+    ROOT / "net",
+    ROOT / "sched",
+    ROOT / "ipc",
+    ROOT / "includes" / "ir0",
+)
+PORTABLE_ISA_FIRMWARE_INCLUDE_RE = re.compile(
+    r'^\s*#\s*include\s*[<"](?:ir0/)?(?:arm64_board|multiboot)\.h[>"]'
+)
+PORTABLE_ISA_FIRMWARE_ALLOWLIST = {
+    ROOT / "includes" / "ir0" / "multiboot.h",
+}
+
+
+def check_portable_no_isa_firmware_headers():
+    """Ban Multiboot/arm64_board includes from portable policy trees."""
+    errors = []
+    for base in PORTABLE_NO_ISA_FIRMWARE_TREES:
+        if not base.is_dir():
+            continue
+        for fpath in iter_c_files(base):
+            if fpath in PORTABLE_ISA_FIRMWARE_ALLOWLIST:
+                continue
+            try:
+                rel = rel_to_root(fpath)
+            except ValueError:
+                continue
+            if fpath.suffix not in (".c", ".h"):
+                continue
+            try:
+                lines = read_file_text(fpath).splitlines()
+            except Exception as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            for idx, line in enumerate(lines, 1):
+                if _line_is_comment_only(line):
+                    continue
+                if PORTABLE_ISA_FIRMWARE_INCLUDE_RE.search(line):
+                    errors.append(
+                        f"[portable-no-isa-firmware] {rel}:{idx}: use "
+                        f"boot_memory / platform facades; no Multiboot or "
+                        f"arm64_board in portable code: {line.strip()}"
+                    )
+    return errors
+
+
 
 @lru_cache(maxsize=None)
 def _line_is_comment_only(line: str) -> bool:
@@ -2466,6 +2516,7 @@ def main():
     errors.extend(check_kernel_no_relative_includes())
     errors.extend(check_portable_no_isa_asm())
     errors.extend(check_portable_no_isa_leak_literals())
+    errors.extend(check_portable_no_isa_firmware_headers())
     errors.extend(check_portable_no_task_arch_fields())
     errors.extend(check_process_pgd_accessor())
     errors.extend(check_process_saved_context_accessor())

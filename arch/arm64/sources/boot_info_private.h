@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 
 #include <stddef.h>
 #include <stdint.h>

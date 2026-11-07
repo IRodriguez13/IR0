@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
 
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 #include <stdint.h>
 
 #define ARM64_IRQ_PHYS_TIMER 30U

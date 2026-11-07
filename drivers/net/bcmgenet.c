@@ -14,7 +14,7 @@
 #include "bcmgenet.h"
 
 #include <config.h>
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 #include <ir0/dma.h>
 #include <ir0/errno.h>
 #include <ir0/irq.h>

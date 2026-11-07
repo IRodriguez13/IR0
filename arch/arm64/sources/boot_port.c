@@ -11,7 +11,7 @@
 #include <ir0/boot_log.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
-#include <ir0/arm64_board.h>
+#include <arm64_board.h>
 #include <ir0/errno.h>
 #include <ir0/serial_io.h>
 #include <ir0/ktm/klog.h>

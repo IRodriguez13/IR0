@@ -11,6 +11,8 @@ BASE_CFLAGS = -Wall -Wextra -g -I. -DTEST_HOST -MMD -MP
 # idirafter: resolve <ir0/...> after system headers so host <string.h> wins over includes/string.h
 HOST_KERNEL_CPPFLAGS = -I$(KERNEL_ROOT) -I$(KERNEL_ROOT)/ktm/include \
 	-I$(KERNEL_ROOT)/arch/x86-64/include \
+	-I$(KERNEL_ROOT)/arch/arm64/include \
+	-I$(KERNEL_ROOT)/arch/arm64/sources \
 	-I$(KERNEL_ROOT)/includes/uapi \
 	-idirafter $(KERNEL_ROOT)/includes \
 	-I$(KERNEL_ROOT)/tests/mocks

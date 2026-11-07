@@ -240,10 +240,9 @@ int proc_version_read(char *buf, size_t count)
     return len;
 }
 
-/* /proc/cmdline: Multiboot command line only (empty when absent). */
+/* /proc/cmdline: portable boot snapshot (Multiboot or DTB bootargs). */
 int proc_boot_cmdline_read(char *buf, size_t count)
 {
-    const struct multiboot_info *mb;
     const char *cmdline;
     size_t n;
     size_t i;
@@ -251,14 +250,12 @@ int proc_boot_cmdline_read(char *buf, size_t count)
     if (VALIDATE_BUFFER(buf, count) != 0)
         return -1;
 
-    mb = (const struct multiboot_info *)get_boot_params();
-    if (!mb || !(mb->flags & MULTIBOOT_FLAG_CMDLINE) || !mb->cmdline)
+    cmdline = boot_memory_cmdline();
+    if (!cmdline || cmdline[0] == '\0')
     {
         buf[0] = '\0';
         return 0;
     }
-
-    cmdline = (const char *)(uintptr_t)mb->cmdline;
 
     n = 0;
     while (cmdline[n] && n + 1 < count)

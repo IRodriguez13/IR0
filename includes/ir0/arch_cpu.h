@@ -17,7 +17,6 @@
 
 #include <ir0/arch_types.h>
 #include <ir0/early_clock.h>
-#include <ir0/multiboot.h>
 #include <ir0/tlb.h>
 #include <ir0/tls.h>
 #include <ir0/cpu_info.h>
