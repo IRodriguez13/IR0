@@ -2,7 +2,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: arch_interface.c
+ * File: interface.c
  * Description: ARM64 implementation of the portable architecture interface (cpu.h, irq.h).
  *
  * The freestanding image links freestanding_stubs.c for a minimal subset; the
@@ -25,7 +25,7 @@
 
 void *__attribute__((weak)) g_arch_boot_params;
 
-/* Implemented in arch/arm64/sources/arch_irq_init.c */
+/* Implemented by the arm64 IRQ provider. */
 void irq_tables_init(void);
 void irq_controller_init(void);
 

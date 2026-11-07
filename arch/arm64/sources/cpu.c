@@ -7,7 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_arm64.c
+ * File: cpu.c
  * Description: ARM64 architecture support scaffolding.
  */
 

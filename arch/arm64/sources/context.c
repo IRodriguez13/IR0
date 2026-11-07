@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_switch.c
+ * File: context.c
  * Description: ARM64 switch_to — TTBR0, SP_EL0/SP_EL1, TPIDR_EL0 TLS, EL1 switch.
  */
 

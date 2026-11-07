@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_signal.c
+ * File: signal.c
  * Description: ARM64 exception-frame ↔ Linux aarch64 sigcontext delivery.
  *
  * Frame layout matches vectors.S exc_entry_frame (x0@0 … x30@240).

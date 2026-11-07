@@ -128,7 +128,7 @@ REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "sources" / "timer.c",
     ROOT / "arch" / "arm64" / "sources" / "portable_string.c",
     ROOT / "arch" / "arm64" / "asm" / "entry" / "vectors.S",
-    ROOT / "arch" / "arm64" / "sources" / "arch_early.c",
+    ROOT / "arch" / "arm64" / "sources" / "early.c",
     ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
     ROOT / "arch" / "arm64" / "sources" / "syscall_stub.c",
 ]
@@ -1546,8 +1546,8 @@ ARCH_PUBLIC_CALL_RE = re.compile(r"\barch_[a-z_][a-z0-9_]*\s*\(")
 CONTEXT_BACKEND_INCLUDE_ALLOW = {
     "sched/switch/context_switch.c",
     "sched/switch/context_user_resume.c",
-    "arch/x86-64/sources/arch_switch.c",
-    "arch/arm64/sources/arch_switch.c",
+    "arch/x86-64/sources/context.c",
+    "arch/arm64/sources/context.c",
 }
 
 PORTABLE_NO_ARCH_CALL_TREES = [

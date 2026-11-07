@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the root for full license information.
  *
- * File: arch_pf_debug.c
+ * File: pf_debug.c
  * Description: arm64 page-fault debug stubs (x86 frame layout lives on x86-64).
  */
 

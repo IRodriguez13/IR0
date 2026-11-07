@@ -10,32 +10,32 @@ ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/boot_firmware_sysfs_arch.o \
 	arch/x86-64/sources/x86_boot_port.o \
 	arch/x86-64/sources/x86_oops_port.o \
-	arch/x86-64/sources/arch_debug.o \
+	arch/x86-64/sources/debug.o \
 	arch/x86-64/sources/debug_trap.o \
-	arch/x86-64/sources/arch_interface.o \
-	arch/x86-64/sources/arch_x64.o \
+	arch/x86-64/sources/interface.o \
+	arch/x86-64/sources/cpu.o \
 	arch/x86-64/sources/platform.o \
 	arch/x86-64/sources/gdt.o \
 	arch/x86-64/sources/tss_x64.o \
-	arch/x86-64/sources/arch_early.o \
+	arch/x86-64/sources/early.o \
 	arch/x86-64/sources/user_mode.o \
-	arch/x86-64/sources/arch_fork.o \
+	arch/x86-64/sources/fork.o \
 	arch/x86-64/sources/fork_asm_hooks.o \
-	arch/x86-64/sources/arch_task_ops.o \
+	arch/x86-64/sources/task.o \
 	arch/x86-64/sources/task_stack.o \
 	arch/x86-64/sources/syscall_decode.o \
 	arch/x86-64/sources/elf_policy.o \
-	arch/x86-64/sources/arch_syscall_frame.o \
-	arch/x86-64/sources/arch_signal.o \
-	arch/x86-64/sources/arch_switch.o \
+	arch/x86-64/sources/syscall_frame.o \
+	arch/x86-64/sources/signal.o \
+	arch/x86-64/sources/context.o \
 	arch/x86-64/sources/switch_diag.o \
-	arch/x86-64/sources/arch_mm.o \
-	arch/x86-64/sources/arch_irq_init.o \
-	arch/x86-64/sources/arch_page_fault.o \
+	arch/x86-64/sources/mm.o \
+	arch/x86-64/sources/irq.o \
+	arch/x86-64/sources/page_fault.o \
 	arch/x86-64/sources/idt_arch_x64.o \
 	arch/x86-64/sources/fault.o \
 	arch/x86-64/sources/debug_dump.o \
-	arch/x86-64/sources/arch_pf_debug.o \
+	arch/x86-64/sources/pf_debug.o \
 	arch/x86-64/sources/mm_ops.o \
 	arch/x86-64/sources/dma.o \
 	arch/x86-64/vdso/blob.o \
@@ -50,8 +50,8 @@ ARM64_BACKEND_OBJS = \
 	$(ARCH_COMMON_BOOT_LOG_OBJ) \
 	arch/arm64/sources/boot_firmware_sysfs_arch.o \
 	arch/arm64/sources/arm64_boot_port.o \
-	arch/arm64/sources/arch_debug.o \
-	arch/arm64/sources/arch_arm64.o \
+	arch/arm64/sources/debug.o \
+	arch/arm64/sources/cpu.o \
 	arch/arm64/sources/board.o \
 	arch/arm64/sources/boot_info.o \
 	arch/arm64/sources/fdt_reader.o \
@@ -60,7 +60,7 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/irq_backend.o \
 	arch/arm64/sources/elf_image_early.o \
 	arch/arm64/sources/arm64_boot_common.o \
-	arch/arm64/sources/arch_early.o \
+	arch/arm64/sources/early.o \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
 	arch/arm64/sources/rtc.o \
@@ -76,7 +76,7 @@ ARM64_BACKEND_OBJS = \
 
 # Portable kernel: ir0/cpu.h + irq.h facades (replaces freestanding_stubs subset).
 ARM64_INTERFACE_OBJS_PRODUCT = \
-	arch/arm64/sources/arch_interface.o
+	arch/arm64/sources/interface.o
 
 # The freestanding path intentionally provides the Linux syscall ABI in small
 # stages while the common process and VFS implementations are brought up.
@@ -94,18 +94,18 @@ ARM64_EARLY_SYSCALL_OBJS = \
 # Architecture implementations of the generic process, MM and context facade.
 ARM64_PROCESS_BACKEND_OBJS = \
 	arch/arm64/sources/platform.o \
-	arch/arm64/sources/arch_fork.o \
+	arch/arm64/sources/fork.o \
 	arch/arm64/sources/fork_asm_hooks.o \
-	arch/arm64/sources/arch_task_ops.o \
-	arch/arm64/sources/arch_tls.o \
+	arch/arm64/sources/task.o \
+	arch/arm64/sources/tls.o \
 	arch/arm64/sources/task_stack.o \
-	arch/arm64/sources/arch_syscall_frame.o \
-	arch/arm64/sources/arch_signal.o \
-	arch/arm64/sources/arch_switch.o \
-	arch/arm64/sources/arch_mm.o \
-	arch/arm64/sources/arch_irq_init.o \
-	arch/arm64/sources/arch_page_fault.o \
-	arch/arm64/sources/arch_pf_debug.o \
+	arch/arm64/sources/syscall_frame.o \
+	arch/arm64/sources/signal.o \
+	arch/arm64/sources/context.o \
+	arch/arm64/sources/mm.o \
+	arch/arm64/sources/irq.o \
+	arch/arm64/sources/page_fault.o \
+	arch/arm64/sources/pf_debug.o \
 	arch/arm64/sources/user_mode.o \
 	arch/arm64/sources/acpi_pm_stub.o
 
@@ -144,7 +144,7 @@ ARM64_EARLY_STORAGE_OBJS = \
 
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \
-	arch/arm64/sources/context_switch.o
+	arch/arm64/sources/switch.o
 
 # ktm/mocks/arm64/min_link_stubs.c is not part of ARCH_OBJS_ARM64.
 

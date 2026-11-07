@@ -6,40 +6,38 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_irq_init.c
- * Description: x86-64 irq_* facade → IDT / PIC / keyboard.
+ * File: irq.c
+ * Description: ARM64 irq_* facade → VBAR + GICv2 (no x86 interrupt backend).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/irq.h>
-#include <interrupt/idt.h>
-#include <interrupt/pic.h>
-#include <interrupt/keyboard.h>
+#include <stdint.h>
+
+#include "exc_early.h"
+#include "irq_backend.h"
 
 void irq_tables_init(void)
 {
-	idt_init64();
-	idt_load64();
+	(void)arm64_vbar_early_install();
 }
 
 void irq_controller_init(void)
 {
-	pic_remap64();
+	(void)arm64_irq_backend_init();
 }
 
 void irq_keyboard_init(void)
 {
-	keyboard_init();
+	/* No PS/2 on virt/rpi path yet. */
 }
 
 void irq_unmask_line(unsigned irq)
 {
-	if (irq < 16)
-		pic_unmask_irq((uint8_t)irq);
+	(void)arm64_irq_backend_enable((uint32_t)irq);
 }
 
 void irq_keyboard_poll_ps2(void)
 {
-	keyboard_poll_ps2();
 }

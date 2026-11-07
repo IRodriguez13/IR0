@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_fork.c
+ * File: fork.c
  * Description: x86-64 fork return / TLS / syscall-frame apply for portable fork.c.
  */
 

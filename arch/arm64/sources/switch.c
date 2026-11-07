@@ -3,7 +3,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: context_switch.c
+ * File: switch.c
  * Description: ARM64 EL1 cooperative context switch with optional TTBR0.
  */
 

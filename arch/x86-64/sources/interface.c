@@ -7,7 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_interface.c
+ * File: interface.c
  * Description: x86-64 implementation of the portable architecture interface.
  */
 

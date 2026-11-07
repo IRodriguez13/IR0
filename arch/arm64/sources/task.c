@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_task_ops.c
+ * File: task.c
  * Description: ARM64 task context ↔ Linux aarch64 sigcontext / frame transfer.
  */
 

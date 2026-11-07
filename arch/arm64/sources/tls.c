@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* ARM64 implementation of the semantic userspace TLS-base facade. */
+/* ARM64 userspace TLS-base provider. */
 
 #include <ir0/process.h>
 #include <ir0/tls.h>

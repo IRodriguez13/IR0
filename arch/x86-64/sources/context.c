@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_switch.c
+ * File: context.c
  * Description: x86-64 switch_to implementation (TSS, syscall resume, iretq).
  */
 

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* x86 debug-state lifecycle facade. */
+/* x86 debug-state lifecycle provider. */
 
 #include <ir0/arch_debug.h>
 #include <asm/debug_trap.h>

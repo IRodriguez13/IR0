@@ -97,7 +97,7 @@ ARM64_PORTABLE_OBJS = \
 	arch/arm64/sources/gic_v2.o \
 	arch/arm64/sources/bcm2836_irq.o \
 	arch/arm64/sources/irq_backend.o \
-	arch/arm64/sources/arch_irq_init.o \
+	arch/arm64/sources/irq.o \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
 	arch/arm64/sources/portable_string.o
@@ -148,7 +148,7 @@ arm64-all-objs-probe: arm64-portable-compile
 	if [ $$fail -eq 0 ]; then \
 		for src in kernel/main.c fs/open_flags.c \
 			kernel/errno.c kernel/process/credentials.c \
-			arch/arm64/sources/context_switch.c \
+			arch/arm64/sources/switch.c \
 			kernel/time/clock_wait.c kernel/driver_registry.c \
 			mm/copy_user.c \
 			kernel/logging.c kernel/futex.c \

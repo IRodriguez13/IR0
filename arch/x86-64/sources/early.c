@@ -7,7 +7,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_early.c
+ * File: early.c
  * Description: IR0 kernel source/header file
  */
 
@@ -82,4 +82,3 @@ void interrupt_init_x86_64(void)
 	irq_controller_init();
 	klog_info("ARCH", "x86-64 interrupt init: IDT and PIC initialized");
 }
-

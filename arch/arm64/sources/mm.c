@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_mm.c
+ * File: mm.c
  * Description: ARM64 root-table helpers (TTBR0-only identity model).
  *
  * IR0 arm64 uses a single TTBR0 root (mmu_early / mm_activate) — no TTBR1
