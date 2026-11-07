@@ -81,6 +81,29 @@ struct pty_pair
 extern struct pty_pair g_ptys[DEVFS_PTY_MAX];
 extern devfs_node_t dev_pts_nodes[DEVFS_PTY_MAX];
 
+/* Device nodes owned by the split /dev backend files. */
+extern devfs_node_t dev_tty0;
+extern devfs_node_t dev_tty1;
+extern devfs_node_t dev_stdin;
+extern devfs_node_t dev_stdout;
+extern devfs_node_t dev_stderr;
+extern devfs_node_t dev_random;
+extern devfs_node_t dev_urandom;
+extern devfs_node_t dev_full;
+extern devfs_node_t dev_fb0;
+extern devfs_node_t dev_events0;
+extern devfs_node_t dev_input_event0;
+extern devfs_node_t dev_serial;
+extern devfs_node_t dev_ipc;
+#if CONFIG_ENABLE_BLUETOOTH
+extern devfs_node_t dev_bluetooth_hci0;
+#endif
+
+/* Cross-file helpers for the split /dev backend. */
+int devfs_console_can_read(devfs_entry_t *entry, pid_t pid);
+int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
+void devfs_input_init(void);
+
 int dev_net_pid_has_ready_ping(pid_t pid);
 void devfs_register_disk_topology(void);
 

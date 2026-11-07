@@ -726,6 +726,13 @@ FS_OBJS = \
     fs/procfs_net.o \
     fs/procfs_system.o \
     fs/devfs.o \
+    fs/devfs_char.o \
+    fs/devfs_console.o \
+    fs/devfs_audio.o \
+    fs/devfs_input.o \
+    fs/devfs_fb.o \
+    fs/devfs_tty.o \
+    fs/devfs_ipc.o \
     fs/devfs_pty.o \
     fs/devfs_net.o \
     fs/devfs_block.o \
