@@ -25,6 +25,17 @@
  */
 #define SPSR_EL1_EL0T_AARCH64_DAIF_UNMASKED 0x0UL
 
+/* CPACR_EL1.FPEN=0b11: no trap on FP/SIMD at EL0/EL1 (musl crt uses NEON). */
+static void arm64_enable_fp_simd(void)
+{
+	uint64_t cpacr;
+
+	__asm__ volatile("mrs %0, cpacr_el1" : "=r"(cpacr));
+	cpacr |= (3UL << 20);
+	__asm__ volatile("msr cpacr_el1, %0" :: "r"(cpacr) : "memory");
+	__asm__ volatile("isb" ::: "memory");
+}
+
 void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
 {
 	uint64_t elr = (uint64_t)(uintptr_t)entry;
@@ -37,6 +48,8 @@ void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
 	/* musl expects the TLS base in TPIDR_EL0 before first user insn. */
 	if (current_process)
 		tls_set_base(process_tls_get(current_process));
+
+	arm64_enable_fp_simd();
 
 	ir0_boot_smoke("ARM64_USER_ERET");
 	__asm__ volatile(

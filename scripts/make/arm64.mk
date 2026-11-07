@@ -253,23 +253,32 @@ smoke-arm64-bpivot-product: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scrip
 		echo "✓ smoke-arm64-bpivot-product (CPIO fold + real root switch)"; \
 	fi
 
-# Handoff + first EL0 syscall from init (parity signal vs x86 product path): needs both tags.
+# Handoff + first EL0 syscall via syscall_dispatch (CPIO init, no embedded hello).
 .PHONY: smoke-arm64-product-usermode-log
-smoke-arm64-product-usermode-log: kernel-arm64-product.bin
+smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/make_test_cpio.py
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
 		echo "⊘ smoke-arm64-product-usermode-log SKIP (qemu-system-aarch64 not in PATH)"; \
 	else \
-		echo "  SMOKE   ARM64 product handoff + EL0 syscall..."; \
+		cpio=$$(mktemp "$${TMPDIR:-/tmp}/ir0-arm64-usermode.XXXXXX"); \
+		trap 'rm -f "$$cpio"' EXIT HUP INT TERM; \
+		python3 scripts/make_test_cpio.py \
+			--init $(MUSL_AARCH64_HELLO) --output "$$cpio"; \
+		echo "  SMOKE   ARM64 product handoff + EL0 syscall (CPIO)..."; \
 		rm -f $(HOST_TMP)/arm64-product-usermode-smoke.log; \
 		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-product-usermode-smoke.log \
 			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
-			--done ARM64_PRODUCT_BOOT_HANDOFF --done ARM64_PRODUCT_EL0_SYSCALL_OK -- \
+			--done ARM64_PRODUCT_BOOT_HANDOFF --done INIT_EXEC_LOADED_OK \
+			--done ARM64_PRODUCT_EL0_SYSCALL_OK -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
+			-global virtio-mmio.force-legacy=false \
 			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
+			-drive file="$$cpio",format=raw,if=none,id=usermode \
+			-device virtio-blk-device,drive=usermode \
 			-display none -no-reboot 2>/dev/null && \
 		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
+		grep -q 'INIT_EXEC_LOADED_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
 		grep -q 'ARM64_PRODUCT_EL0_SYSCALL_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
-		echo "✓ smoke-arm64-product-usermode-log (handoff + EL0 syscall)"; \
+		echo "✓ smoke-arm64-product-usermode-log (handoff + EL0 via syscall_dispatch)"; \
 	fi
 
 
@@ -301,7 +310,7 @@ arm64-common-core-compile: $(ARM64_COMMON_CORE_BUILD_OBJS)
 	@! printf '%s\n' $(ARM64_COMMON_CORE_SRCS) | grep -Eq '^arch/|^ktm/'
 	@echo "✓ ARM64 common core compile contract ($$(printf '%s\n' $(ARM64_COMMON_CORE_SRCS) | wc -l) C units)"
 
-# Policy: no extra staged semantic syscall TUs; no KTM harness allocator in the link.
+# Policy: no staged syscall bring-up / hello / RR smokes in the product ELF.
 arm64-provider-audit: kernel-arm64-product.bin
 	@semantic=$$(find arch/arm64/sources -maxdepth 1 -type f \
 		\( -name 'syscall_*_early.c' -o -name 'syscall_*_early.h' \) \
@@ -312,4 +321,11 @@ arm64-provider-audit: kernel-arm64-product.bin
 	fi
 	@! aarch64-linux-gnu-nm kernel-arm64-product.bin | grep -q 'allocator_stubs' || \
 		{ echo "✗ ARM64 product linked harness allocator_stubs"; exit 1; }
-	@echo "✓ ARM64 provider audit (semantic syscall inventory + no harness allocator)"
+	@for sym in arm64_syscall_early hello_aarch64_blob arm64_rr_sched_smoke \
+		arm64_guest0_el0; do \
+		if aarch64-linux-gnu-nm kernel-arm64-product.bin | grep -q "$$sym"; then \
+			echo "✗ ARM64 product still links bring-up symbol: $$sym"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "✓ ARM64 provider audit (no early syscall/hello/RR; no harness allocator)"

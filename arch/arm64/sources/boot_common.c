@@ -11,17 +11,11 @@
 #include "boot_common.h"
 #include "mmu_early.h"
 #include "exc_early.h"
-#include "slice_hello.h"
 #include "pl011.h"
 #include "timer.h"
 #include "gic_v2.h"
 #include "irq_backend.h"
-#include "switch_early.h"
-#include "process_early.h"
-#include "elf_load_early.h"
-#include "rr_early.h"
 #include "virtio_blk_early.h"
-#include "virtio_net_early.h"
 
 #include <arch/common/arch_portable.h>
 #include <arm64_board.h>
@@ -32,6 +26,15 @@
 #include <config.h>
 
 #include <stdint.h>
+
+#if defined(IR0_FREESTANDING_BOOT) || DEBUG_BOOT
+#include "slice_hello.h"
+#include "switch_early.h"
+#include "process_early.h"
+#include "elf_load_early.h"
+#include "rr_early.h"
+#include "virtio_net_early.h"
+#endif
 
 #define BOOT_STACK_SIZE 4096
 uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
@@ -337,6 +340,7 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 				}
 			}
 
+#if defined(IR0_FREESTANDING_BOOT) || DEBUG_BOOT
 			if (arm64_virtio_mmio_find(VIRTIO_ID_NET))
 			{
 #if DEBUG_BOOT
@@ -348,6 +352,7 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 				(void)arm64_virtio_net_init();
 #endif
 			}
+#endif
 		}
 		else if (virtio_probe == VIRTIO_MMIO_PROBE_ABSENT)
 		{
@@ -362,6 +367,7 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 	}
 }
 
+#if defined(IR0_FREESTANDING_BOOT)
 void arm64_early_bringup(uintptr_t firmware_handle)
 {
 	arm64_platform_setup_for_portable_boot(firmware_handle);
@@ -374,3 +380,4 @@ void arm64_early_bringup(uintptr_t firmware_handle)
 		__asm__ volatile("wfi" ::: "memory");
 	}
 }
+#endif

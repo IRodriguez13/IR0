@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_port.c
- * Description: ARM64 boot hooks — DTB handoff for kmain, PL011 before klog, optional init seed.
+ * Description: ARM64 boot hooks — DTB handoff, PL011, CPIO/vda bind for PID 1.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -21,11 +21,9 @@
 #include <string.h>
 
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
-#include "rootfs_early.h"
 #include <ir0/bpivot.h>
-#include <ir0/open_flags.h>
-#include <ir0/stat.h>
-#include <ir0/vfs.h>
+#include <ir0/copy_user.h>
+#include <ir0/early_rootfs.h>
 #include <rootfs_base.h>
 #endif
 
@@ -34,50 +32,49 @@ extern volatile uintptr_t arm64_firmware_fdt;
 #endif
 
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
-extern const uint8_t hello_aarch64_blob[];
-extern const uint8_t hello_aarch64_blob_end[];
+#define ARM64_DISK_INIT_MAX (128UL * 1024UL)
 
-static void boot_arm64_seed_embedded_init(void)
+static uint8_t g_disk_init[ARM64_DISK_INIT_MAX];
+
+static int arm64_product_copy_from_user(void *destination, uint64_t source,
+					uint64_t size)
 {
-	struct vfs_file *f;
-	const uint8_t *p;
-	size_t remain;
-	stat_t st;
+	return copy_from_user(destination, (const void *)(uintptr_t)source,
+			      (size_t)size);
+}
 
-	arm64_rootfs_early_init();
+static int arm64_product_copy_to_user(uint64_t destination, const void *source,
+				      uint64_t size)
+{
+	return copy_to_user((void *)(uintptr_t)destination, source,
+			    (size_t)size);
+}
+
+static const struct early_user_services g_product_usercopy = {
+	.copy_from_user = arm64_product_copy_from_user,
+	.copy_to_user = arm64_product_copy_to_user,
+};
+
+/*
+ * Bind virtio-blk CPIO (or ELF init) when present. No embedded hello seed —
+ * PID 1 must come from the block image via common kexecve("/sbin/init").
+ */
+static void boot_arm64_bind_block_rootfs(void)
+{
+	int ret;
+
+	ret = early_rootfs_try_bind_block("vda", g_disk_init,
+					  sizeof(g_disk_init),
+					  &g_product_usercopy);
+	if (ret == 0)
+	{
+		ir0_boot_smoke("ARM64_DISK_INIT_OK");
+		if (early_rootfs_cpio_ready())
+			ir0_boot_smoke("ARM64_CPIO_ROOT_OK");
+		if (early_rootfs_ready())
+			ir0_boot_smoke("ARM64_ROOTFS_OK");
+	}
 	ir0_rootfs_prepare_userspace_base();
-	if (vfs_stat("/sbin/init", &st) == 0)
-		return;
-	p = hello_aarch64_blob;
-	remain = (size_t)(hello_aarch64_blob_end - hello_aarch64_blob);
-	if (remain == 0U)
-		return;
-	if (vfs_open("/sbin/init",
-		     IR0_O_WRONLY | IR0_O_CREAT | IR0_O_TRUNC, 0755, &f) != 0)
-	{
-		klog_warn("BOOT",
-			  "ARM64: could not create /sbin/init from embedded hello");
-		return;
-	}
-	while (remain > 0U)
-	{
-		size_t chunk = remain > 4096U ? 4096U : remain;
-		int w = vfs_write(f, (const char *)p, chunk);
-
-		if (w < 0 || (size_t)w != chunk)
-		{
-			klog_warn("BOOT",
-				  "ARM64: embedded /sbin/init write incomplete");
-			(void)vfs_close(f);
-			return;
-		}
-		p += chunk;
-		remain -= chunk;
-	}
-	(void)vfs_close(f);
-	klog_info("BOOT",
-		  "ARM64: seeded /sbin/init from embedded hello (no block rootfs)");
-
 	if (ir0_bpivot_product_boot(ir0_bpath_vfs_product_ops()) == 0)
 		ir0_boot_smoke("ARM64_BPIVOT_COMMIT_OK");
 }
@@ -151,6 +148,12 @@ void ir0_boot_port_serial_after_driver_registry(void)
 void ir0_boot_port_maybe_seed_init_from_embedded(void)
 {
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
-	boot_arm64_seed_embedded_init();
+	/*
+	 * Not a seed: bind block rootfs / CPIO when present. Missing /sbin/init
+	 * fails honestly in the common handoff (same as x86 without ISD).
+	 */
+	boot_arm64_bind_block_rootfs();
+#else
+	(void)0;
 #endif
 }

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: exc_early.c
- * Description: VBAR, SVC ABI, IRQ (timer), EL0 drop, PSCI HVC (F7.2–F7c).
+ * Description: VBAR, SVC ABI, IRQ (timer), EL0 drop, PSCI HVC (product + freestanding).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -17,9 +17,6 @@
 #include "irq_backend.h"
 #include <ir0/irq.h>
 #include "timer.h"
-#include "syscall_early.h"
-#include "elf_load_early.h"
-#include "rr_early.h"
 
 #include <config.h>
 
@@ -29,16 +26,27 @@
 
 #include <stdint.h>
 #include <ir0/boot_log.h>
-#include <ir0/early_process.h>
-#include <ir0/early_rootfs.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
+#include <ir0/oops.h>
+#include <ir0/signals.h>
+
+#if defined(IR0_FREESTANDING_BOOT)
+#include "syscall_early.h"
+#include "elf_load_early.h"
+#include "rr_early.h"
+#include <ir0/early_process.h>
+#include <ir0/early_rootfs.h>
+#endif
 
 /* ESR_EL1: EC 0x15 = SVC instruction from AArch64. */
 #define ESR_EC_SHIFT 26
 #define ESR_EC_MASK  0x3FUL
 #define ESR_EC_SVC64 0x15UL
+#define ESR_EC_FPASIMD 0x07UL /* trapped FP/SIMD access */
 #define ESR_EC_IABT_LOWER 0x20UL
+#define ESR_EC_PC_ALIGN 0x22UL
+#define ESR_EC_SP_ALIGN 0x26UL
 #define ESR_EC_DABT_LOWER 0x24UL
 #define ESR_EC_BRK64 0x3CUL
 
@@ -166,8 +174,10 @@ void arm64_exc_irq_el1(void)
 {
 	uint32_t iar = arm64_irq_backend_ack();
 	uint32_t irq = iar & 0x3ffU;
+#if defined(IR0_FREESTANDING_BOOT)
 	int schedule_tick = 0;
 	process_t *before = NULL;
+#endif
 
 	cpu_local_irq_enter();
 
@@ -184,20 +194,17 @@ void arm64_exc_irq_el1(void)
 #if !defined(IR0_FREESTANDING_BOOT)
 		if (clock_is_ready())
 		{
-			if (!arm64_rr_tick_sched_active())
-			{
-				clock_note_irq();
-				clock_tick();
-				arch_timer_periodic_arm();
-			}
+			clock_note_irq();
+			clock_tick();
+			arch_timer_periodic_arm();
 		}
-#endif
-
+#else
 		if (arm64_rr_tick_sched_active())
 		{
 			before = current_process;
 			schedule_tick = 1;
 		}
+#endif
 	}
 #if !defined(IR0_FREESTANDING_BOOT)
 	else
@@ -211,16 +218,20 @@ void arm64_exc_irq_el1(void)
 
 	(void)cpu_local_irq_leave();
 
-	/* Scheduling starts outside the accounted hard-IRQ section. */
+#if defined(IR0_FREESTANDING_BOOT)
 	if (schedule_tick)
 	{
 		sched_schedule_next();
-		/* Re-arm only when the IRQ handler resumes (no context switch). */
 		if (current_process == before)
 			arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);
 	}
+#else
+	(void)current_process;
+	(void)RR_TICK_ONESHOT_TICKS;
+#endif
 }
 
+#if defined(IR0_FREESTANDING_BOOT)
 void arm64_after_el0(void);
 
 static void arm64_early_exec_replace(void)
@@ -233,18 +244,64 @@ static void arm64_early_exec_replace(void)
 		arm64_embedded_elf_enter((char *const *)argv);
 	arm64_after_el0();
 }
+#endif
+
+#if !defined(IR0_FREESTANDING_BOOT)
+/*
+ * EL0 synchronous exception that is not a syscall and not yet routed to the
+ * common MM fault path: terminate the task with the Linux signal for that
+ * class (arch/arm64/mm/fault.c, kernel/traps.c). Returning would replay the
+ * faulting instruction forever.
+ */
+static void arm64_el0_fault_kill(uint64_t ec)
+{
+	process_t *p = current_process;
+	int sig;
+
+	if (ec == ESR_EC_IABT_LOWER || ec == ESR_EC_DABT_LOWER)
+		sig = SIGSEGV;
+	else if (ec == ESR_EC_BRK64)
+		sig = SIGTRAP;
+	else if (ec == ESR_EC_PC_ALIGN || ec == ESR_EC_SP_ALIGN)
+		sig = SIGBUS;
+	else
+		sig = SIGILL;
+
+	if (!p || p->mode != USER_MODE)
+		panic("arm64: EL0 exception without a user task");
+	if (!process_signal_default_kill(p, sig))
+	{
+		p->exit_signal = sig;
+		process_exit(0);
+	}
+}
+#endif
 
 void arm64_exc_sync_lower(uint64_t *frame)
 {
 	uint64_t esr;
-	int leave = 0;
 	int64_t ret;
+#if defined(IR0_FREESTANDING_BOOT)
+	int leave = 0;
+#endif
 
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) != ESR_EC_SVC64)
 	{
 		uint64_t ec = (esr >> ESR_EC_SHIFT) & ESR_EC_MASK;
 
+		if (ec == ESR_EC_FPASIMD)
+		{
+			uint64_t cpacr;
+
+			/* Lazy enable: retry the trapping instruction. */
+			__asm__ volatile("mrs %0, cpacr_el1" : "=r"(cpacr));
+			cpacr |= (3UL << 20);
+			__asm__ volatile("msr cpacr_el1, %0" :: "r"(cpacr)
+					 : "memory");
+			__asm__ volatile("isb" ::: "memory");
+			return;
+		}
 		if (ec == ESR_EC_IABT_LOWER)
 			ir0_boot_smoke("ARM64_EL0_INSN_ABORT");
 		else if (ec == ESR_EC_DABT_LOWER)
@@ -258,33 +315,32 @@ void arm64_exc_sync_lower(uint64_t *frame)
 			exc_put_hex64(esr);
 			pl011_puts("\n");
 		}
-		leave = 1;
-	}
-		else
-		{
-			if (!g_el0_svc_tagged)
-			{
-				g_el0_svc_tagged = 1;
-				ir0_boot_smoke("ARM64_EL0_SVC_OK");
-#if defined(IR0_ARM64_PRODUCT_KERNEL)
-				ir0_boot_smoke("ARM64_PRODUCT_EL0_SYSCALL_OK");
-#endif
-			}
-
-			/*
-			 * frame: x0@0 … x30 in the 256-byte stub slot (vectors.S);
-			 * x8 = syscall number. Return value in frame[0]; asm path
-			 * restores GPRs and eret (no separate SP_EL1 adjustment).
-			 */
 #if defined(IR0_FREESTANDING_BOOT)
-			ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
-					  frame[3], frame[4], frame[5], &leave);
+		leave = 1;
+		goto freestanding_leave;
 #else
-			ret = syscall_dispatch(frame[8], frame[0], frame[1], frame[2],
-				       frame[3], frame[4], frame[5]);
+		arm64_el0_fault_kill(ec);
+		return;
 #endif
-			frame[0] = (uint64_t)ret;
-		}
+	}
+
+	if (!g_el0_svc_tagged)
+	{
+		g_el0_svc_tagged = 1;
+		ir0_boot_smoke("ARM64_EL0_SVC_OK");
+#if defined(IR0_ARM64_PRODUCT_KERNEL)
+		ir0_boot_smoke("ARM64_PRODUCT_EL0_SYSCALL_OK");
+#endif
+	}
+
+	/*
+	 * frame: x0@0 … x30 in the 256-byte stub slot (vectors.S);
+	 * x8 = syscall number. Return value in frame[0].
+	 */
+#if defined(IR0_FREESTANDING_BOOT)
+	ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
+				  frame[3], frame[4], frame[5], &leave);
+	frame[0] = (uint64_t)ret;
 
 	{
 		uint64_t stack = 0;
@@ -407,6 +463,7 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		}
 	}
 
+freestanding_leave:
 	if (leave)
 	{
 		uint64_t elr;
@@ -423,8 +480,14 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		__asm__ volatile("msr spsr_el1, %0" :: "r"(spsr) : "memory");
 		__asm__ volatile("isb" ::: "memory");
 	}
+#else
+	ret = syscall_dispatch(frame[8], frame[0], frame[1], frame[2],
+			       frame[3], frame[4], frame[5]);
+	frame[0] = (uint64_t)ret;
+#endif
 }
 
+#if defined(IR0_FREESTANDING_BOOT)
 void arm64_after_el0(void)
 {
 	ir0_boot_smoke("ARM64_EL0_RET_OK");
@@ -451,3 +514,13 @@ void arm64_enter_el0(void)
 		: "memory");
 	__builtin_unreachable();
 }
+#else
+void arm64_after_el0(void)
+{
+}
+
+void arm64_enter_el0(void)
+{
+	arm64_psci_system_off();
+}
+#endif

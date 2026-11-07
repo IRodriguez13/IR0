@@ -19,7 +19,7 @@
 #include <drivers/net/bcmgenet.h>
 #endif
 
-#if !IR0_LEGACY_PC_IO
+#if !IR0_LEGACY_PC_IO && defined(IR0_FREESTANDING_BOOT)
 extern int arm64_virtio_net_init(void);
 #endif
 
@@ -31,7 +31,9 @@ int net_stack_probe_drivers(void)
 #if CONFIG_DRV_NIC_BCMGENET
 	(void)bcmgenet_init();
 #endif
+#if defined(IR0_FREESTANDING_BOOT)
 	(void)arm64_virtio_net_init();
+#endif
 	return ret;
 #else
 

@@ -56,7 +56,6 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/boot_info_platform.o \
 	arch/arm64/sources/boot_info_devices.o \
 	arch/arm64/sources/irq_backend.o \
-	arch/arm64/sources/elf_image_early.o \
 	arch/arm64/sources/boot_common.o \
 	arch/arm64/sources/early.o \
 	arch/arm64/sources/interrupts.o \
@@ -76,18 +75,21 @@ ARM64_BACKEND_OBJS = \
 ARM64_INTERFACE_OBJS_PRODUCT = \
 	arch/arm64/sources/interface.o
 
-# The freestanding path intentionally provides the Linux syscall ABI in small
-# stages while the common process and VFS implementations are brought up.
+# ISA entry retained in the product image (name “early” is historical).
+ARM64_PRODUCT_ENTRY_OBJS = \
+	arch/arm64/sources/mmu_early.o \
+	arch/arm64/sources/exc_early.o \
+	arch/arm64/sources/portable_string.o \
+	arch/arm64/asm/entry/vectors.o
+
+# Freestanding/bring-up-only — not linked into kernel-arm64-product.bin.
 ARM64_EARLY_SYSCALL_OBJS = \
 	arch/arm64/sources/usercopy_early.o \
 	arch/arm64/sources/syscall_early.o \
 	arch/arm64/sources/boot_stub.o \
-	arch/arm64/sources/mmu_early.o \
-	arch/arm64/sources/exc_early.o \
 	arch/arm64/sources/slice_hello.o \
-	arch/arm64/sources/portable_string.o \
-	arch/arm64/asm/entry/vectors.o \
-	arch/arm64/sources/syscall_stub.o
+	arch/arm64/sources/syscall_stub.o \
+	arch/arm64/sources/elf_image_early.o
 
 # Architecture implementations of the generic process, MM and context facade.
 ARM64_PROCESS_BACKEND_OBJS = \
@@ -115,12 +117,18 @@ ARM64_FREESTANDING_RUNTIME_OBJS = \
 	arch/arm64/sources/switch_early.o \
 	arch/arm64/sources/process_early.o
 
-ARM64_FREESTANDING_RUNTIME_OBJS_PRODUCT = \
+# Product needs the cooperative switch asm + mm helper (historical “early” names).
+ARM64_PRODUCT_SWITCH_OBJS = \
 	arch/arm64/asm/context/switch_early.o \
-	arch/arm64/sources/switch_early.o \
-	arch/arm64/sources/process_early.o
+	arch/arm64/sources/switch_early.o
 
-# EL0 handoff and the embedded userspace image used by the QEMU ARM64 smoke.
+# Bring-up scheduler/process harness — freestanding only.
+ARM64_EARLY_SCHEDULER_OBJS = \
+	$(ARM64_PRODUCT_SWITCH_OBJS) \
+	arch/arm64/sources/process_early.o \
+	arch/arm64/sources/rr_early.o
+
+# Embedded hello / early exec — freestanding only.
 ARM64_EARLY_USERSPACE_OBJS = \
 	arch/arm64/sources/elf_load_early.o \
 	arch/arm64/sources/hello_embed.o \
@@ -129,16 +137,14 @@ ARM64_EARLY_USERSPACE_OBJS = \
 	arch/arm64/sources/rootfs_early.o \
 	arch/arm64/sources/embedded_elf_embed.o
 
-# The round-robin scheduler is compiled with the freestanding ARM flags until
-# the full scheduler/provider graph is available on this architecture.
-ARM64_EARLY_SCHEDULER_OBJS = \
-	arch/arm64/sources/rr_early.o
-
-# QEMU virtio block support is part of the early usable-machine path.
-ARM64_EARLY_STORAGE_OBJS = \
+# Product keeps virtio-blk (CPIO/vda); virtio-net early stays freestanding-only.
+ARM64_PRODUCT_STORAGE_OBJS = \
 	arch/arm64/sources/virtio_blk_early.o \
-	arch/arm64/sources/virtio_net_early.o \
 	drivers/virtio/virtio_mmio.o
+
+ARM64_EARLY_STORAGE_OBJS = \
+	$(ARM64_PRODUCT_STORAGE_OBJS) \
+	arch/arm64/sources/virtio_net_early.o
 
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \
@@ -151,16 +157,15 @@ $(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
 	@echo "  CC      $< ($(ARCH) namespace)"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
+# Product portable ARM64 kernel: common $(ALL_OBJS) path, no userspace bring-up.
 ARCH_OBJS_ARM64 = \
 	arch/arm64/asm/boot/entry.o \
 	$(ARM64_BACKEND_OBJS) \
 	$(ARM64_INTERFACE_OBJS_PRODUCT) \
-	$(filter-out arch/arm64/sources/syscall_stub.o,$(ARM64_EARLY_SYSCALL_OBJS)) \
+	$(ARM64_PRODUCT_ENTRY_OBJS) \
 	$(ARM64_PROCESS_BACKEND_OBJS) \
-	$(ARM64_FREESTANDING_RUNTIME_OBJS_PRODUCT) \
-	$(ARM64_EARLY_USERSPACE_OBJS) \
-	$(ARM64_EARLY_SCHEDULER_OBJS) \
-	$(ARM64_EARLY_STORAGE_OBJS) \
+	$(ARM64_PRODUCT_SWITCH_OBJS) \
+	$(ARM64_PRODUCT_STORAGE_OBJS) \
 	$(ARM64_FIRST_SWITCH_OBJS)
 
 ifeq ($(ARCH),arm64)
