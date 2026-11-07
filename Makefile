@@ -591,6 +591,7 @@ LIB_OBJS = \
     fs/pipe.o \
     mm/copy_user.o \
     fs/open_flags.o \
+    fs/product_path.o \
     kernel/syscalls/syscall_table.o \
     fs/stat_user.o \
     fs/named_fifo.o \
@@ -1262,6 +1263,11 @@ kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
 	@grub-mkrescue -o $@ iso
 	@echo "✓ ISO created: $@"
 
+# linux-abi-audit, kmang, and tier-1 smokes use this historical name.
+kernel-x64-userspace.iso: kernel-x64.iso
+	@ln -sfn kernel-x64.iso $@
+	@echo "✓ $@ → kernel-x64.iso (rescue ISO with current kernel-x64.bin)"
+
 # Kernel con tests in-kernel (solo al hacer make tests / kernel-tests)
 # config.h documents IR0_KERNEL_TESTS; Makefile ensures it for this target.
 # kmain must be compiled with that flag: a leftover kernel-x64.bin main.o
@@ -1594,6 +1600,7 @@ help:
 	@echo "Check:"
 	@echo "  make check-env               Host toolchain diagnostic"
 	@echo "  make test-fast               Kernel + arch-guard + host tests + KTM"
+	@echo "  make wave-a-gates            Oleada A: T1 slice + linux-abi audits"
 	@echo "  make kernel-tests            In-kernel tests in QEMU"
 	@echo "  make ctr                     Merge gate (includes the daily matrix)"
 	@echo "  make arch-guard              Architecture boundary"

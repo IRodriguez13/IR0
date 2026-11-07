@@ -30,7 +30,7 @@ static int cpio_install_product_tmp(const char *norm, uint32_t mode,
 	struct vfs_file *vf;
 	int rc;
 
-	if (!product_path_live() || !ir0_product_path_is_tmp(norm) ||
+	if (!product_path_live() || !ir0_product_path_is_foldable(norm) ||
 	    !g_product_path)
 		return 0;
 	if ((mode & S_IFMT) == S_IFDIR)

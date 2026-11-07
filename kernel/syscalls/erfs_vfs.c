@@ -77,7 +77,7 @@ int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags)
 	}
 		if (node == IR0_EARLY_ROOTFS_NONE)
 	{
-		if (product_path_live() && ir0_product_path_is_tmp(pbuf) &&
+		if (product_path_live() && ir0_product_path_is_foldable(pbuf) &&
 		    (flags & O_CREAT))
 			node = IR0_EARLY_ROOTFS_FILE;
 		else
@@ -102,7 +102,7 @@ if (node == IR0_EARLY_ROOTFS_VDA && !vda_present())
 		return fd;
 	set_flags_of_fd(fd, status_flags(flags));
 	set_cloexec_of_fd(fd, (flags & LINUX_O_CLOEXEC) != 0);
-	if (product_path_live() && ir0_product_path_is_tmp(pbuf) &&
+	if (product_path_live() && ir0_product_path_is_foldable(pbuf) &&
 	    (node == IR0_EARLY_ROOTFS_FILE || node == IR0_EARLY_ROOTFS_USERDIR))
 	{
 		int64_t prc = product_attach_open(fd, pbuf, flags);

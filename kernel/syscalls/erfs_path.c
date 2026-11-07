@@ -205,7 +205,7 @@ int64_t early_rootfs_mkdirat(int dirfd, uint64_t path)
 	    ramtab_find(pbuf) >= 0)
 		return -EEXIST;
 	if (!parent_exists(pbuf) &&
-	    !(product_path_live() && ir0_product_path_is_tmp(pbuf)))
+	    !(product_path_live() && ir0_product_path_is_foldable(pbuf)))
 		return -ENOENT;
 	{
 		int denied = landlock_allow(pbuf, IR0_EARLY_LANDLOCK_FS_MAKE_DIR);
@@ -213,7 +213,7 @@ int64_t early_rootfs_mkdirat(int dirfd, uint64_t path)
 		if (denied < 0)
 			return denied;
 	}
-	if (product_path_live() && ir0_product_path_is_tmp(pbuf) &&
+	if (product_path_live() && ir0_product_path_is_foldable(pbuf) &&
 	    g_product_path->mkdir)
 	{
 		ret = g_product_path->mkdir(pbuf, 0755);

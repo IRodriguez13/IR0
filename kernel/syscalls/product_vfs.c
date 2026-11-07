@@ -53,7 +53,7 @@ static int64_t product_chdir(uint64_t path)
 	if (pbuf[0] == '\0')
 		return -ENOENT;
 	ops = ir0_product_path_bound();
-	if (ops && ops->stat && ir0_product_path_is_tmp(pbuf))
+	if (ops && ops->stat && ir0_product_path_is_foldable(pbuf))
 	{
 		if (ops->stat(pbuf, &st) < 0)
 			return -ENOENT;

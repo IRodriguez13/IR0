@@ -368,7 +368,8 @@ void arm64_common_prepare_fdtable(void)
 			ir0_boot_smoke("ARM64_COMMON_VFS_OPS_READ_OK");
 	}
 	if (tmpfs_register() == 0 &&
-	    vfs_mount("none", "/tmp", "tmpfs") == 0)
+	    vfs_mount("none", "/tmp", "tmpfs") == 0 &&
+	    vfs_mount("none", "/run", "tmpfs") == 0)
 	{
 		struct vfs_file *f = NULL;
 		char got[4];
@@ -399,8 +400,11 @@ void arm64_common_prepare_fdtable(void)
 
 			early_rootfs_bind_product_path(&path_ops);
 			if (vfs_mkdir("/tmp/fold", 0755) == 0 &&
-			    ir0_product_path_is_tmp("/tmp/fold"))
+			    ir0_product_path_is_foldable("/tmp/fold"))
 				ir0_boot_smoke("ARM64_EARLY_PATH_FOLD_OK");
+			if (vfs_mkdir("/run/fold", 0755) == 0 &&
+			    ir0_product_path_is_foldable("/run/fold"))
+				ir0_boot_smoke("ARM64_EARLY_PATH_RUN_FOLD_OK");
 			if (early_rootfs_cpio_fold_product() > 0)
 				ir0_boot_smoke("ARM64_INITRAMFS_CPIO_OK");
 		}

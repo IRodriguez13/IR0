@@ -41,20 +41,6 @@ static void reset_stdio(void)
 	g_chroot = IR0_EARLY_ROOTFS_ROOT;
 }
 
-int ir0_product_path_is_tmp(const char *path)
-{
-	unsigned i;
-
-	if (!path)
-		return 0;
-	for (i = 0; IR0_PRODUCT_PATH_TMP_PREF[i] != '\0'; i++)
-	{
-		if (path[i] != IR0_PRODUCT_PATH_TMP_PREF[i])
-			return 0;
-	}
-	return path[i] != '\0';
-}
-
 void early_rootfs_bind_product_path(const struct ir0_product_path_ops *ops)
 {
 	g_product_path = ops;
@@ -84,7 +70,7 @@ enum ir0_early_rootfs_node product_lookup(const char *path)
 {
 	stat_t st;
 
-	if (!product_path_live() || !ir0_product_path_is_tmp(path))
+	if (!product_path_live() || !ir0_product_path_is_foldable(path))
 		return IR0_EARLY_ROOTFS_NONE;
 	if (g_product_path->stat(path, &st) != 0)
 		return IR0_EARLY_ROOTFS_NONE;

@@ -20,6 +20,7 @@
 #include <ir0/vfs_file.h>
 
 #define IR0_PRODUCT_PATH_TMP_PREF "/tmp/"
+#define IR0_PRODUCT_PATH_RUN_PREF "/run/"
 
 struct ir0_product_dirent
 {
@@ -46,5 +47,6 @@ struct ir0_product_path_ops
 
 void early_rootfs_bind_product_path(const struct ir0_product_path_ops *ops);
 int early_rootfs_product_path_used(void);
+int ir0_product_path_is_foldable(const char *path);
 int ir0_product_path_is_tmp(const char *path);
 const struct ir0_product_path_ops *ir0_product_path_bound(void);
