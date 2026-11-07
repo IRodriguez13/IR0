@@ -47,9 +47,53 @@
 #include <linux/keyboard.h>
 #include <linux/vt.h>
 #include "vfs.h"
+#include <ir0/pty_devfs.h>
+#include <string.h>
+
+#define PTY_BUF_SIZE 1024
+#define DEVFS_PTY_VFS_TAG 0x50545900u
+
+struct pty_ring
+{
+	char buf[PTY_BUF_SIZE];
+	unsigned int head;
+	unsigned int tail;
+	unsigned int count;
+};
+
+struct pty_pair
+{
+	struct pty_ring m2s;
+	struct pty_ring s2m;
+	int master_open;
+	int master_refs;
+	int slave_open;
+	int slave_refs;
+	int locked;
+	int ctty_set;
+	pid_t fg_pgid;
+	pid_t session_sid;
+	struct ir0_winsize winsz;
+	struct ir0_termios termios;
+	int termios_ready;
+};
+
+extern struct pty_pair g_ptys[DEVFS_PTY_MAX];
+extern devfs_node_t dev_pts_nodes[DEVFS_PTY_MAX];
 
 int dev_net_pid_has_ready_ping(pid_t pid);
 void devfs_register_disk_topology(void);
+
+pid_t devfs_current_pid(void);
+int devfs_register_node(devfs_node_t *node);
+
+int pty_ring_pop(struct pty_ring *r, char *dst, size_t n);
+int64_t dev_pts_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
+int64_t pty_master_ioctl_pair(struct pty_pair *p, int slot, uint64_t request, void *arg);
+
+void devfs_pty_register_nodes(void);
+
+extern devfs_node_t dev_ptmx;
 
 #define DEVFS_DISK_AGGREGATE_ID  9
 #define DEVFS_DISK_BASE_ID       20

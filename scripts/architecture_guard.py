@@ -579,33 +579,38 @@ def check_bluetooth_subdir_include_policy():
 
 def check_devfs_usercopy_contract():
     errors = []
-    devfs_path = ROOT / "fs" / "devfs.c"
-    if not devfs_path.exists():
-        return errors
-
-    try:
-        lines = devfs_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except Exception as exc:
-        errors.append(f"[read-error] {devfs_path}: {exc}")
-        return errors
-
+    devfs_paths = [ROOT / "fs" / "devfs.c", ROOT / "fs" / "devfs_pty.c"]
     current_fn = None
-    fn_re = re.compile(r'^\s*(?:static\s+)?(?:inline\s+)?[A-Za-z_][A-Za-z0-9_\s\*]*\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(')
+    fn_re = re.compile(
+        r'^\s*(?:static\s+)?(?:inline\s+)?[A-Za-z_][A-Za-z0-9_\s\*]*\s+'
+        r'([A-Za-z_][A-Za-z0-9_]*)\s*\('
+    )
 
-    for idx, line in enumerate(lines, start=1):
-        # Skip `return foo(` — not a function definition (false positive).
-        stripped = line.lstrip()
-        m = fn_re.match(line)
-        if m and not stripped.startswith("return"):
-            name = m.group(1)
-            if name not in ("if", "while", "for", "switch", "return", "sizeof"):
-                current_fn = name
-        if DEVFS_USERCOPY_RE.search(line):
-            if current_fn not in DEVFS_USERCOPY_WHITELIST:
-                rel = rel_to_root(devfs_path)
-                errors.append(
-                    f"[devfs-io-contract-usercopy] {rel}:{idx}: {line.strip()} (fn={current_fn})"
-                )
+    for devfs_path in devfs_paths:
+        if not devfs_path.exists():
+            continue
+
+        try:
+            lines = devfs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except Exception as exc:
+            errors.append(f"[read-error] {devfs_path}: {exc}")
+            continue
+
+        current_fn = None
+        for idx, line in enumerate(lines, start=1):
+            stripped = line.lstrip()
+            m = fn_re.match(line)
+            if m and not stripped.startswith("return"):
+                name = m.group(1)
+                if name not in ("if", "while", "for", "switch", "return", "sizeof"):
+                    current_fn = name
+            if DEVFS_USERCOPY_RE.search(line):
+                if current_fn not in DEVFS_USERCOPY_WHITELIST:
+                    rel = rel_to_root(devfs_path)
+                    errors.append(
+                        f"[devfs-io-contract-usercopy] {rel}:{idx}: {line.strip()} "
+                        f"(fn={current_fn})"
+                    )
     return errors
 
 
@@ -2177,35 +2182,27 @@ def check_devfs_unique_device_ids():
     unique dev_t). Duplicate device_id values break fd routing (PTY incident).
     """
     errors = []
-    devfs_path = ROOT / "fs" / "devfs.c"
-    if not devfs_path.is_file():
-        return errors
-
+    devfs_paths = (ROOT / "fs" / "devfs.c", ROOT / "fs" / "devfs_pty.c")
     pts0, pty_max = _parse_devfs_pty_id_block()
     pty_end = pts0 + pty_max
     disk_base = 20
     disk_whole_count = 4
 
-    try:
-        lines = devfs_path.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError as exc:
-        errors.append(f"[read-error] {devfs_path}: {exc}")
-        return errors
-
     owners = {}
     id_re = re.compile(r"\.device_id\s*=\s*(\d+)\b")
     name_re = re.compile(r'\.name\s*=\s*"([^"]+)"')
 
-    def claim(dev_id, label, line_no):
+    def claim(dev_id, label, line_no, path):
         prev = owners.get(dev_id)
         if prev and prev[0] != label:
-            rel = rel_to_root(devfs_path)
+            rel_prev = rel_to_root(prev[2])
+            rel_new = rel_to_root(path)
             errors.append(
                 f"[devfs-unique-device-id] id={dev_id} used by {prev[0]}:{prev[1]} "
-                f"and {label}:{line_no} ({rel})"
+                f"({rel_prev}) and {label}:{line_no} ({rel_new})"
             )
             return
-        owners[dev_id] = (label, line_no)
+        owners[dev_id] = (label, line_no, path)
 
     reserved = []
     for i in range(pty_max):
@@ -2220,24 +2217,34 @@ def check_devfs_unique_device_ids():
                 return _label
         return None
 
-    for idx, line in enumerate(lines, start=1):
-        m_id = id_re.search(line)
-        if not m_id:
+    for devfs_path in devfs_paths:
+        if not devfs_path.is_file():
             continue
-        dev_id = int(m_id.group(1))
-        m_name = name_re.search(line)
-        label = m_name.group(1) if m_name else f"line-{idx}"
-        slot = in_reserved(dev_id)
-        if slot and not label.startswith("pts/") and "DEVFS_PTS0" not in line:
-            errors.append(
-                f"[devfs-unique-device-id] static id={dev_id} ({label}:{idx}) "
-                f"falls in reserved {slot} block"
-            )
-        claim(dev_id, label, idx)
+        try:
+            lines = devfs_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError as exc:
+            errors.append(f"[read-error] {devfs_path}: {exc}")
+            return errors
+
+        for idx, line in enumerate(lines, start=1):
+            m_id = id_re.search(line)
+            if not m_id:
+                continue
+            dev_id = int(m_id.group(1))
+            m_name = name_re.search(line)
+            label = m_name.group(1) if m_name else f"line-{idx}"
+            slot = in_reserved(dev_id)
+            if slot and not label.startswith("pts/") and "DEVFS_PTS0" not in line:
+                rel = rel_to_root(devfs_path)
+                errors.append(
+                    f"[devfs-unique-device-id] static id={dev_id} ({label}:{idx} {rel}) "
+                    f"falls in reserved {slot} block"
+                )
+            claim(dev_id, label, idx, devfs_path)
 
     for start, end, label in reserved:
         for dev_id in range(start, end):
-            claim(dev_id, label, f"reserved-{dev_id}")
+            claim(dev_id, label, f"reserved-{dev_id}", devfs_paths[0])
 
     return errors
 
@@ -2245,12 +2252,14 @@ def check_devfs_unique_device_ids():
 def check_devfs_no_find_by_id_outside_devfs():
     """
     fd_table stores dev_node at open; re-resolving by device_id in syscalls was
-    a first-match footgun (PTY vs evdev collision). Allow only fs/devfs.c and
+    a first-match footgun (PTY vs evdev collision). Allow only fs/devfs.c,
+    fs/devfs_pty.c, and
     the documented fallback in includes/ir0/devfs.h.
     """
     errors = []
     allow_files = {
         ROOT / "fs" / "devfs.c",
+        ROOT / "fs" / "devfs_pty.c",
         ROOT / "includes" / "ir0" / "devfs.h",
     }
     scan_roots = [ROOT / "kernel", ROOT / "fs", ROOT / "mm", ROOT / "net"]

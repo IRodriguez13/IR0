@@ -19,7 +19,7 @@
 
 /*
  * Linux UNIX98 PTY multiplex (man ptmx, TIOCGPTN, TIOCSPTLCK).
- * Implementation: fs/devfs.c — portable code uses this facade only.
+ * Implementation: fs/devfs_pty.c — portable code uses this facade only.
  */
 #define DEVFS_PTMX_DEVICE_ID  43u
 /*
