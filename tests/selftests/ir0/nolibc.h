@@ -16,6 +16,7 @@
 #define SYS_write		64
 #define SYS_close		57
 #define SYS_exit		93
+#define SYS_getpid		172
 #define SYS_openat		56
 #define SYS_swapon		224
 #define SYS_swapoff		225
@@ -52,7 +53,8 @@ static long nolibc_call(long nr, long a, long b, long c, long d, ...)
 	return ret;
 }
 
-#define syscall(nr, ...) nolibc_call((nr), __VA_ARGS__, 0L, 0L, 0L, 0L)
+/* ## eats the comma when the selftest passes only the syscall number. */
+#define syscall(nr, ...) nolibc_call((nr), ##__VA_ARGS__, 0L, 0L, 0L, 0L)
 
 static ssize_t write(int fd, const void *buf, size_t count)
 {

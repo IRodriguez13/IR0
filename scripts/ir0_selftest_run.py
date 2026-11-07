@@ -30,6 +30,11 @@ def main() -> int:
     parser.add_argument("--binary", required=True)
     parser.add_argument("--log", required=True)
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument(
+        "--done",
+        default="",
+        help="KTAP success tag (default from binary basename)",
+    )
     args = parser.parse_args()
 
     binary = Path(args.binary)
@@ -43,6 +48,14 @@ def main() -> int:
     tap = ROOT / "scripts" / "ir0_selftest_tap.py"
     require(smoke, "host QEMU runner")
     require(tap, "KTAP parser")
+
+    done_tag = args.done
+    if not done_tag:
+        name = binary.name
+        if name == "identity":
+            done_tag = "ok 2 write_stdout"
+        else:
+            done_tag = "ok 4 close_ebadf"
 
     if args.arch == "x86_64":
         iso = ROOT / "kernel-x64-userspace.iso"
@@ -88,7 +101,7 @@ def main() -> int:
                     "--mem",
                     "256M",
                     "--done",
-                    "ok 4 close_ebadf",
+                    done_tag,
                     "--",
                     "qemu-system-x86_64",
                     "-cdrom",
@@ -151,7 +164,7 @@ def main() -> int:
                     "--done",
                     "INIT_EXEC_LOADED_OK",
                     "--done",
-                    "ok 4 close_ebadf",
+                    done_tag,
                     "--",
                     "qemu-system-aarch64",
                     "-M",
