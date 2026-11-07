@@ -205,11 +205,11 @@ void test_video_backend_mock_contract(void)
 	ASSERT(video_backend_get_fb() == NULL);
 
 	ktm_video_mock_set_init_results(-1, 0);
-	ASSERT_EQ(video_backend_init_from_multiboot(0x1234), -1);
+	ASSERT_EQ(video_backend_init_from_boot(), -1);
 	ASSERT(!video_backend_is_available());
 	ASSERT_EQ(video_backend_init_fallback(), 0);
 	ASSERT(video_backend_is_available());
-	ASSERT_EQ(ktm_video_mock_multiboot_calls(), 1);
+	ASSERT_EQ(ktm_video_mock_boot_calls(), 1);
 	ASSERT_EQ(ktm_video_mock_fallback_calls(), 1);
 
 	ktm_video_mock_set_info(800, 600, 24);
@@ -234,7 +234,7 @@ void test_video_backend_mock_contract(void)
 
 	/* A failed re-init does not silently drop a working mode. */
 	ktm_video_mock_set_init_results(-1, -1);
-	ASSERT_EQ(video_backend_init_from_multiboot(0), -1);
+	ASSERT_EQ(video_backend_init_from_boot(), -1);
 	ASSERT(video_backend_is_available());
 
 	ktm_video_mock_set_available(0);

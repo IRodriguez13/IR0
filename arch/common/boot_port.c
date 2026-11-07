@@ -26,12 +26,6 @@ __attribute__((weak)) int ir0_boot_port_snapshot_fill(
 	return -ENODEV;
 }
 
-__attribute__((weak)) int ir0_boot_port_video_init(uintptr_t firmware_handle)
-{
-	(void)firmware_handle;
-	return -ENODEV;
-}
-
 __attribute__((weak)) void ir0_boot_port_serial_before_logging(void)
 {
 }

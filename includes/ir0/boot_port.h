@@ -22,7 +22,6 @@ extern "C" {
 uintptr_t ir0_kmain_normalize_firmware_handle(uintptr_t firmware_handle);
 int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 				struct ir0_boot_snapshot *snapshot);
-int ir0_boot_port_video_init(uintptr_t firmware_handle);
 
 void ir0_boot_port_serial_before_logging(void);
 void ir0_boot_port_serial_after_driver_registry(void);

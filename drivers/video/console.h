@@ -87,7 +87,7 @@ void console_clear(uint8_t color);
 /*
  * console_init - Initialize console backend.
  * Chooses VGA (0xB8000) or framebuffer based on vbe_is_available() and bpp.
- * Call after vbe_init_from_multiboot / vbe_init.
+ * Call after vbe_init_from_boot / vbe_init.
  */
 void console_init(void);
 

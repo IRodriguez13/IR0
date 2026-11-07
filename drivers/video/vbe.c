@@ -20,16 +20,16 @@
 #include <stdbool.h>
 #include <ir0/driver_backend.h>
 #include <ir0/vga.h>
-#include <ir0/multiboot.h>
+#include <ir0/boot_memory.h>
 #include <string.h>
 #include <mm/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
 
-/* Diagnostic: reason for vbe_init_from_multiboot failure (0=none, 1=mb_null, 2=no_fb_flag, 3=bad_dims, 4=map_fail) */
+/* Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor, 2=no framebuffer, 3=bad_dims, 4=map_fail) */
 int vbe_fail_reason;
 
-/* Global VBE state (OSDev: linear framebuffer from multiboot) */
+/* Global VBE state: linear framebuffer described by the boot snapshot. */
 static struct {
     bool initialized;
     uint32_t framebuffer_addr;
@@ -43,33 +43,30 @@ static struct {
 } vbe_state = {0};
 
 /*
- * vbe_init_from_multiboot - Initialize VBE from Multiboot info (OSDev)
- * @mb_info: Physical address of multiboot info structure (ebx from boot)
- *
- * When GRUB uses gfxpayload=auto or gfxpayload=1024x768, it provides
- * framebuffer info in multiboot info (flags bit 12).
+ * vbe_init_from_boot - Initialize VBE from the boot snapshot framebuffer
+ * @bfb: Firmware framebuffer in neutral form (filled by the ISA boot port
+ *       from Multiboot on x86-64 or the DTB on ARM64).
  */
-int vbe_init_from_multiboot(uint32_t mb_info)
+int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
 {
     vbe_fail_reason = 0;
-    if (!mb_info)
+    if (!bfb)
     {
         vbe_fail_reason = 1;
         return -1;
     }
 
-    struct multiboot_info *mb = (struct multiboot_info *)(uintptr_t)mb_info;
-    if (!(mb->flags & MULTIBOOT_FLAG_FB))
+    if (bfb->width == 0)
     {
         vbe_fail_reason = 2;
         return -1;
     }
 
-    uint32_t fb_phys = (uint32_t)(mb->framebuffer_addr & 0xFFFFFFFF);
-    uint32_t pitch = mb->framebuffer_pitch;
-    uint32_t w = mb->framebuffer_width;
-    uint32_t h = mb->framebuffer_height;
-    uint8_t bpp = mb->framebuffer_bpp;
+    uint32_t fb_phys = (uint32_t)(bfb->base & 0xFFFFFFFF);
+    uint32_t pitch = bfb->pitch;
+    uint32_t w = bfb->width;
+    uint32_t h = bfb->height;
+    uint8_t bpp = bfb->bpp;
 
     if (w == 0 || h == 0 || bpp == 0)
     {
@@ -111,9 +108,13 @@ int vbe_init_from_multiboot(uint32_t mb_info)
     vbe_state.height = h;
     vbe_state.pitch = pitch;
     vbe_state.bpp = bpp;
-    vbe_state.fb_type = mb->framebuffer_type;
-    for (int i = 0; i < 6; i++)
-        vbe_state.color_info[i] = mb->color_info[i];
+    vbe_state.fb_type = bfb->type;
+    vbe_state.color_info[0] = bfb->red_pos;
+    vbe_state.color_info[1] = bfb->red_size;
+    vbe_state.color_info[2] = bfb->green_pos;
+    vbe_state.color_info[3] = bfb->green_size;
+    vbe_state.color_info[4] = bfb->blue_pos;
+    vbe_state.color_info[5] = bfb->blue_size;
     vbe_state.fb = (uint8_t *)(uintptr_t)fb_phys;
     vbe_state.initialized = true;
 
@@ -125,7 +126,7 @@ int vbe_init_from_multiboot(uint32_t mb_info)
 
 int vbe_init(void)
 {
-    /* Fallback: if no multiboot fb, use VGA text (80x25) */
+    /* Fallback: if the firmware gave no framebuffer, use VGA text (80x25) */
     if (vbe_state.initialized)
         return 0;
 
@@ -245,7 +246,7 @@ bool vbe_is_available(void)
 
 /*
  * vbe_rgb_to_pixel - Convert R,G,B to framebuffer format.
- * Uses multiboot color_info when valid; otherwise BGR (0xBBGGRR) which is
+ * Uses the firmware RGB field layout when valid; otherwise BGR (0xBBGGRR) which is
  * common on PC/QEMU/VirtualBox.
  */
 uint32_t vbe_rgb_to_pixel(uint8_t r, uint8_t g, uint8_t b)
@@ -255,7 +256,7 @@ uint32_t vbe_rgb_to_pixel(uint8_t r, uint8_t g, uint8_t b)
         return 0xFF000000U | ((uint32_t)b << 16) | ((uint32_t)g << 8) | (uint32_t)r;
     }
 
-    if (vbe_state.fb_type != MULTIBOOT_FB_TYPE_RGB)
+    if (vbe_state.fb_type != IR0_BOOT_FB_TYPE_RGB)
     {
         return 0xFF000000U | ((uint32_t)b << 16) | ((uint32_t)g << 8) | (uint32_t)r;
     }

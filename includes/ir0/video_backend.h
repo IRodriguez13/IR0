@@ -17,7 +17,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-int video_backend_init_from_multiboot(uint32_t multiboot_info);
+/* Bring up the firmware framebuffer described by the boot snapshot. */
+int video_backend_init_from_boot(void);
 int video_backend_init_fallback(void);
 bool video_backend_is_available(void);
 int video_backend_fail_reason(void);

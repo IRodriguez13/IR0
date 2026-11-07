@@ -19,9 +19,9 @@
 
 static uint8_t g_fb[KTM_VIDEO_MOCK_FB_SIZE];
 static int g_available;
-static int g_multiboot_result;
+static int g_boot_result;
 static int g_fallback_result;
-static int g_multiboot_calls;
+static int g_boot_calls;
 static int g_fallback_calls;
 static int g_fail_reason;
 static uint32_t g_width = 640;
@@ -38,9 +38,9 @@ void ktm_video_mock_reset(void)
 	for (i = 0; i < KTM_VIDEO_MOCK_FB_SIZE; i++)
 		g_fb[i] = 0;
 	g_available = 0;
-	g_multiboot_result = 0;
+	g_boot_result = 0;
 	g_fallback_result = 0;
-	g_multiboot_calls = 0;
+	g_boot_calls = 0;
 	g_fallback_calls = 0;
 	g_fail_reason = 0;
 	g_width = 640;
@@ -56,9 +56,9 @@ void ktm_video_mock_set_available(int on)
 	g_available = on ? 1 : 0;
 }
 
-void ktm_video_mock_set_init_results(int multiboot_result, int fallback_result)
+void ktm_video_mock_set_init_results(int boot_result, int fallback_result)
 {
-	g_multiboot_result = multiboot_result;
+	g_boot_result = boot_result;
 	g_fallback_result = fallback_result;
 }
 
@@ -89,13 +89,12 @@ void ktm_video_mock_set_fail_reason(int reason)
 	g_fail_reason = reason;
 }
 
-int video_backend_init_from_multiboot(uint32_t multiboot_info)
+int video_backend_init_from_boot(void)
 {
-	(void)multiboot_info;
-	g_multiboot_calls++;
-	if (g_multiboot_result == 0)
+	g_boot_calls++;
+	if (g_boot_result == 0)
 		g_available = 1;
-	return g_multiboot_result;
+	return g_boot_result;
 }
 
 int video_backend_init_fallback(void)
@@ -151,9 +150,9 @@ uint8_t *ktm_video_mock_framebuffer(void)
 	return g_fb;
 }
 
-int ktm_video_mock_multiboot_calls(void)
+int ktm_video_mock_boot_calls(void)
 {
-	return g_multiboot_calls;
+	return g_boot_calls;
 }
 
 int ktm_video_mock_fallback_calls(void)

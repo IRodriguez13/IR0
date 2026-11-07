@@ -78,7 +78,7 @@ void boot_early(uintptr_t firmware_handle)
 	heap_init();
 
 #if CONFIG_ENABLE_VBE
-	if (ir0_boot_port_video_init(firmware_handle) != 0)
+	if (video_backend_init_from_boot() != 0)
 		video_backend_init_fallback();
 #endif
 	console_backend_init();

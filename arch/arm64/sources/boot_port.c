@@ -118,7 +118,9 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 		snapshot->initrd.base = boot->initrd_start;
 		snapshot->initrd.size = boot->initrd_end - boot->initrd_start;
 	}
-	snapshot->framebuffer = boot->framebuffer;
+	/* DTB simple-framebuffer: address range only; no mode yet (width 0). */
+	snapshot->framebuffer.base = boot->framebuffer.base;
+	snapshot->framebuffer.size = boot->framebuffer.size;
 	for (i = 0; i < IR0_BOOT_CMDLINE_MAX - 1U &&
 		    boot->bootargs[i] != '\0'; i++)
 		snapshot->cmdline[i] = boot->bootargs[i];
@@ -128,12 +130,6 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 	if (boot->fdt_valid)
 		ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_OK");
 	return 0;
-}
-
-int ir0_boot_port_video_init(uintptr_t firmware_handle)
-{
-	(void)firmware_handle;
-	return -ENODEV;
 }
 
 void ir0_boot_port_serial_before_logging(void)

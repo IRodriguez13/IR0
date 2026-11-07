@@ -14,7 +14,6 @@
 #include <ir0/multiboot.h>
 #include <ir0/pmm.h>
 #include <ir0/serial_io.h>
-#include <ir0/video_backend.h>
 
 #include <config.h>
 #include <stddef.h>
@@ -240,8 +239,22 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 		if (framebuffer_size != 0 &&
 		    info->framebuffer_addr <= UINT64_MAX - framebuffer_size)
 		{
-			snapshot->framebuffer.base = info->framebuffer_addr;
-			snapshot->framebuffer.size = framebuffer_size;
+			struct ir0_boot_framebuffer *fb = &snapshot->framebuffer;
+
+			fb->base = info->framebuffer_addr;
+			fb->size = framebuffer_size;
+			fb->width = info->framebuffer_width;
+			fb->height = info->framebuffer_height;
+			fb->pitch = info->framebuffer_pitch;
+			fb->bpp = info->framebuffer_bpp;
+			/* Multiboot types (indexed, RGB, EGA text) map 1:1. */
+			fb->type = info->framebuffer_type;
+			fb->red_pos = info->color_info[0];
+			fb->red_size = info->color_info[1];
+			fb->green_pos = info->color_info[2];
+			fb->green_size = info->color_info[3];
+			fb->blue_pos = info->color_info[4];
+			fb->blue_size = info->color_info[5];
 			if (x86_snapshot_add_reserved(snapshot,
 						      info->framebuffer_addr,
 						      framebuffer_size) != 0)
@@ -250,13 +263,6 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 	}
 	snapshot->valid = snapshot->usable_count != 0;
 	return snapshot->valid ? 0 : -ENODEV;
-}
-
-int ir0_boot_port_video_init(uintptr_t firmware_handle)
-{
-	if (firmware_handle > UINT32_MAX)
-		return -EINVAL;
-	return video_backend_init_from_multiboot((uint32_t)firmware_handle);
 }
 
 void ir0_boot_port_serial_before_logging(void)

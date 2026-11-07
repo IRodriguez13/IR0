@@ -19,15 +19,17 @@
 #include <ir0/video_backend.h>
 #include <config.h>
 #if CONFIG_ENABLE_VBE
+#include <ir0/boot_memory.h>
 #include <ir0/vbe.h>
 #endif
 
-int video_backend_init_from_multiboot(uint32_t multiboot_info)
+int video_backend_init_from_boot(void)
 {
 #if CONFIG_ENABLE_VBE
-    return vbe_init_from_multiboot(multiboot_info);
+    const struct ir0_boot_snapshot *snapshot = boot_memory_snapshot();
+
+    return vbe_init_from_boot(snapshot ? &snapshot->framebuffer : NULL);
 #else
-    (void)multiboot_info;
     return -1;
 #endif
 }

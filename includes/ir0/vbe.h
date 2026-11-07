@@ -19,7 +19,8 @@
 
 extern int vbe_fail_reason;
 
-int vbe_init_from_multiboot(uint32_t multiboot_info);
+struct ir0_boot_framebuffer;
+int vbe_init_from_boot(const struct ir0_boot_framebuffer *fb);
 int vbe_init(void);
 void vbe_clear(uint32_t color);
 void vbe_putpixel(uint32_t x, uint32_t y, uint32_t color);

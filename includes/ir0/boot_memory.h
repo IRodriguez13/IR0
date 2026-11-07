@@ -16,6 +16,34 @@
 #define IR0_BOOT_MEMORY_MAX_RESERVATIONS 32U
 #define IR0_BOOT_CMDLINE_MAX 256U
 
+/* Pixel layout of a linear framebuffer handed over by the firmware. */
+#define IR0_BOOT_FB_TYPE_INDEXED 0U
+#define IR0_BOOT_FB_TYPE_RGB     1U
+#define IR0_BOOT_FB_TYPE_TEXT    2U
+
+/*
+ * Firmware framebuffer in neutral form. Each ISA fills it from its boot
+ * protocol (Multiboot on x86-64, a DTB simple-framebuffer on ARM64); video
+ * drivers consume only this. width == 0 means no usable framebuffer.
+ */
+struct ir0_boot_framebuffer
+{
+	uint64_t base;
+	uint64_t size;
+	uint32_t width;
+	uint32_t height;
+	uint32_t pitch;      /* bytes per line */
+	uint8_t bpp;
+	uint8_t type;        /* IR0_BOOT_FB_TYPE_* */
+	/* RGB only: red/green/blue field position and size, in bits. */
+	uint8_t red_pos;
+	uint8_t red_size;
+	uint8_t green_pos;
+	uint8_t green_size;
+	uint8_t blue_pos;
+	uint8_t blue_size;
+};
+
 struct ir0_boot_snapshot
 {
 	struct ir0_phys_range usable[IR0_BOOT_MEMORY_MAX_BANKS];
@@ -24,7 +52,7 @@ struct ir0_boot_snapshot
 	size_t reserved_count;
 	struct ir0_phys_range firmware;
 	struct ir0_phys_range initrd;
-	struct ir0_phys_range framebuffer;
+	struct ir0_boot_framebuffer framebuffer;
 	char cmdline[IR0_BOOT_CMDLINE_MAX];
 	int valid;
 	int synthetic_memory;

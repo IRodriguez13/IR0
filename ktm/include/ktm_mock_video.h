@@ -19,7 +19,7 @@
 void ktm_video_mock_reset(void);
 
 void ktm_video_mock_set_available(int on);
-void ktm_video_mock_set_init_results(int multiboot_result, int fallback_result);
+void ktm_video_mock_set_init_results(int boot_result, int fallback_result);
 void ktm_video_mock_set_info(uint32_t width, uint32_t height, uint32_t bpp);
 void ktm_video_mock_set_pitch(uint32_t pitch);
 void ktm_video_mock_set_fb_phys(uint32_t phys);
@@ -27,5 +27,5 @@ void ktm_video_mock_set_fb_size(uint32_t size);
 void ktm_video_mock_set_fail_reason(int reason);
 
 uint8_t *ktm_video_mock_framebuffer(void);
-int ktm_video_mock_multiboot_calls(void);
+int ktm_video_mock_boot_calls(void);
 int ktm_video_mock_fallback_calls(void);
