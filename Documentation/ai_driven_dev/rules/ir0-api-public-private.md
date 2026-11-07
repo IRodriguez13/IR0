@@ -65,7 +65,7 @@ Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm`.
 
 ## Excepciones
 
-- Bring-up freestanding (`arch/arm64/sources/rr_early.c`, etc.): asm/backend directo OK si el file header dice **no producción**.
+- Bring-up freestanding (`arch/arm64/sources/board_boot_min.c`, etc.): asm/backend directo OK si el file header dice **no producción**.
 - Shared `sched_switch.*` / `*_ops` entre backends: OK; no runqueues cruzadas.
 
 ## Al añadir API

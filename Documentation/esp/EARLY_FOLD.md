@@ -1,6 +1,6 @@
 # Fold de `early_*` hacia subsistemas ordinarios
 
-> **Última verificación:** 2026-11-06
+> **Última verificación:** 2026-11-07
 > **Fuente de verdad:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
 > `includes/ir0/bpath.h`, `kernel/syscalls/erfs*.c`,
 > `make kernel-arm64.bin` (`kernel-arm64-product.bin`)
@@ -43,13 +43,12 @@ El kernel de producto ARM64 (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 ## Dispatch de producto
 
 `kernel-arm64-product.bin` enlaza la tabla común `syscall_dispatch.c`.
-SVC de EL0 entra ahí (no `arm64_syscall_early`). Los objetos de bring-up
-(`syscall_early`, `hello_embed`, `rr_early`, `rootfs_early`, …) **no**
-están en el link de producto.
+SVC de EL0 entra ahí. Los objetos de bring-up freestanding
+(`syscall_early`, `hello_embed`, `rr_early`, `rootfs_early`, `all_objs_mark`,
+…) se borraron el 2026-11-07; ningún target los enlazaba.
 
-Las etiquetas históricas de fold-slice (`ARM64_PRODUCT_*_SLICE_OK` /
-binds de providers en `all_objs_mark.c`) son solo marcadores de bring-up.
-Prueba de ABI de producto:
+Las etiquetas históricas de fold-slice (`ARM64_PRODUCT_*_SLICE_OK`) eran
+solo marcadores de bring-up. Prueba de ABI de producto:
 
 | Gate | Contrato |
 |------|----------|

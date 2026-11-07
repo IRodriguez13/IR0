@@ -79,17 +79,14 @@ not call through a non-NULL hook.
 |--------|---------------|----------|
 | `ir0_futex_before_sleep` | Start of a blocked `ir0_futex_wait`, before `sched_schedule_next` | May mark the task `PROCESS_READY`. Must not call `ir0_futex_wait`. |
 | `ipc_sleep_recheck_probe` | After `wait_queue_add`, before the ring is checked again | Must not sleep or schedule. |
-| `mm_backend_unmap_hook` | First thing in `mm_backend_unmap_user_page` on x86-64 and ARM64 | Return `-EOPNOTSUPP` to fall through to the ISA backend. Any other value is the unmap result and the generic walker does not run. |
+| `paging_unmap_test_hook` | First thing in `unmap_page_in_directory` (`mm/paging.c`), both ISAs | Return `-EOPNOTSUPP` to fall through to the table walker. Any other value is the unmap result and the walker does not run. |
 
-`unmap_page_in_directory` already returns a backend result other than
-`-EOPNOTSUPP` without walking the page tables. The `MAP_FIXED` case uses
-that: the hook returns `-EIO` for one address and `-EOPNOTSUPP` for the
-rest. `is_page_mapped_in_directory` does not consult the hook, so the page
-still looks mapped and `mm_prepare_map_fixed` records the failure.
+The `MAP_FIXED` case returns `-EIO` for one address and `-EOPNOTSUPP` for
+the rest. `is_page_mapped_in_directory` does not consult the hook, so the
+page still looks mapped and `mm_prepare_map_fixed` records the failure.
 
-When the hook is `NULL`, x86-64 `mm_backend_unmap_user_page` still returns
-`-EOPNOTSUPP`. ARM64 still unmaps only a root it owns and otherwise returns
-`-EOPNOTSUPP`.
+There is no ISA-private user mapping backend: x86-64 and ARM64 user roots
+both go through the common walker.
 
 ## What this suite does not claim
 

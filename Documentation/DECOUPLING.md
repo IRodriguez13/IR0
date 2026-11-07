@@ -207,12 +207,11 @@ pattern); treat explicit `n` as the compile-out signal.
 
 So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 now links the
 same portable object set as x86 (`ALL_OBJS`) and product SVC enters `syscall_dispatch`.
-Remaining gaps vs full Linux-like userspace: user MM still runs through a
-private ARM64 page-table manager (39-bit TTBR0) that the common 4-level walker
-cannot read, so anonymous `mmap` and `fork` fail; EL0 aborts are not yet routed
-to the common fault handler; FP/SIMD state is not saved on context switch (both
-ISAs); ISD AArch64 rootfs pack; product block transport (still
-`virtio_blk_early` for CPIO/`vda`).
+User MM, fault handling and task switching also run through the common
+kernel (`make ir0-selftest-fault-arm64`). Remaining gaps vs full Linux-like
+userspace: FP/SIMD state is not saved on context switch (both ISAs); ISD
+AArch64 rootfs pack; product block transport (still `virtio_blk_early` for
+CPIO/`vda`).
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep

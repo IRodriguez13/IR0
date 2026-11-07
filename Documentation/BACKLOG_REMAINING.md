@@ -245,7 +245,7 @@ Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
 | Product SVC table | Done — product SVC → `syscall_dispatch`; selftests `openat`/`identity` |
 | Staged adapter | Freestanding bring-up still uses `early_*`; filtered out of product link |
 | ISD AArch64 | no `rootfs/arch/aarch64` pack |
-| User MM (mmap / fork / COW) | **Open.** User pages are mapped by the private `arm64_mmu_*_in_root` manager (39-bit, 3-level TTBR0) while common `mm/paging.c` walks 4-level 48-bit roots; anonymous `mmap` and `fork` return `ENOMEM` (`make ir0-selftest-fault-arm64`). EL0 aborts kill the task with SIGSEGV instead of entering the common fault handler. |
+| User MM (mmap / fork / COW) | **Done.** User roots are 4-level 48-bit tables built by common `mm/paging.c` (`arch/arm64/sources/mmu.c`, `mm.c`); EL0/EL1 aborts enter `mm_page_fault_handle`. Proof: `make ir0-selftest-fault-arm64` 3/3 (was 0/3 with `ENOMEM`). |
 | FP/SIMD context | **Open on both ISAs.** No FP/SIMD register save on context switch (x86 and ARM64). |
 | Board beyond QEMU virt | virt + rpi4 UART QEMU; rpi5 compile stub — not hardware userspace |
 

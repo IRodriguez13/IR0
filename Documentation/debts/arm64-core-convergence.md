@@ -76,51 +76,39 @@ pure-move pass.
   syscall routing onto those tables; destination: shrink only. `/tmp/*`
   uses product VFS when bound (`ARM64_EARLY_PATH_FOLD_OK`).
 - `ir0_product_identity_provider` / `ir0_product_cwd_provider`; owner:
-  historical fold-slice markers in `all_objs_mark.c` / freestanding; product
+  historical fold-slice markers (retired with the freestanding stack); product
   ABI proof is `syscall_dispatch` + `ir0-selftest-arm64` / `identity`.
 - `kernel/syscalls/early_{dispatch,vfs,io,time,mm,process}.c`; owner: staged
-  freestanding EL0 only (filtered out of product link); destination: delete
-  after bring-up smokes no longer need them. See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+  freestanding EL0 only; the freestanding stack is gone, so nothing calls them.
+  Destination: delete. See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
-### Early scaffolding to replace, not generalize
+### Early scaffolding still linked by the product image
 
-- `arch/arm64/sources/syscall_{mm,vfs,time,signal,process,io}_early.c`;
-  owner: bring-up adapters; destination: delete after the matching common
-  syscall handlers link and pass BusyBox/init; dependencies are the semantic
-  syscall-provider table and user-copy/address-space facades.
-- `arch/arm64/sources/syscall_early.c`; owner: freestanding SVC coordinator;
-  destination: delete with freestanding images (product SVC already uses
-  `syscall_dispatch`).
-- `arch/arm64/sources/{process,rr}_early.c`; freestanding scheduler harness only.
-- `arch/arm64/sources/switch_early.c` + `switch_early.S`; still linked by product
-  for `arm64_cpu_switch` / `arm64_cpu_switch_mm` (rename out of “early” later);
-  smoke helpers in the same TU are unused on the product path.
-- `arch/arm64/sources/{elf_image,elf_load,busybox_load}_early.c`;
-  owner: embedded-image bring-up provider; destination: delete after common
-  exec/VFS loads `/init`; the ELF parser itself already lives in common code.
-- `arch/arm64/sources/{rootfs,init_handoff}_early.c`; owner: embedded rootfs and
-  PID 1 adapter; destination: delete after common rootfs/VFS and process spawn
-  implement the existing init-handoff operations.
-- `arch/arm64/sources/{virtio_blk,virtio_net}_early.c`; owner: bring-up device
-  providers; destination: delete after the common block/network stacks consume
-  production virtio transport callbacks.
-- `arch/arm64/sources/{mmu,exc}_early.c`; owner: pre-production MMU/exception
-  bootstrap; destination: retain only the truly pre-MMU entry portion and
-  delete the runtime portion once production MM/fault handling takes over.
-- `arch/arm64/sources/{freestanding,min_link,rr_early}_stubs.c` and
-  `irq_portable_stubs.c`; owner: link/test scaffolding; destination: test mocks
-  or deletion; forbidden as providers in a production ARM image.
+The freestanding bring-up stack (`mmu_early`, `syscall_early`,
+`{process,rr}_early`, `{elf_image,elf_load,embedded_elf}_early`,
+`{rootfs,init_handoff}_early`, `usercopy_early`, `virtio_net_early`,
+`boot_stub`, `slice_hello`, `syscall_stub`, `all_objs_mark`, the hello
+embeds and the `el0_entry` workload in `vectors.S`) was deleted on
+2026-11-07. No build target linked it after product EL0 moved to
+`syscall_dispatch` and user roots moved to the common 48-bit walker
+(`mmu.c`). What remains:
+
+- `arch/arm64/sources/exc_early.c`; product vectors' C side (SVC dispatch,
+  aborts into `mm_page_fault_handle`). Destination: rename out of "early".
+- `arch/arm64/sources/switch_early.c` + `switch_early.S`;
+  `arm64_cpu_switch` / `arm64_cpu_switch_mm` for the product switch.
+  Destination: rename out of "early".
+- `arch/arm64/sources/virtio_blk_early.c`; product CPIO/`vda` block provider.
+  Destination: the common virtio block driver over `drivers/virtio/virtio_mmio.c`.
+- `arch/arm64/sources/freestanding_stubs.c`; board `-min` images only.
+- `irq_portable_stubs.c`; compile probe only; forbidden as a product provider.
 
 ### Boot-only assets and harnesses
 
-- `boot_entry.S`, `vectors.S`, `boot_stub.c`, `early.c`;
-  owner: ARM boot; destination: keep, later `arch/arm64/boot/`; `boot_stub.c`
-  must shrink as early subsystems are retired.
-- `hello_embed.S`, `busybox_embed.S`, `slice_hello.c`, `all_objs_mark.c`;
-  owner: ARM integration tests; destination: an ARM test-image area after the
-  production boot no longer embeds them; they are not kernel facilities.
-- `board_boot_min.c`; owner: board contract harness; destination: ARM tests;
-  must never be linked into the product image.
+- `entry.S`, `vectors.S`, `early.c`; owner: ARM boot; destination: keep,
+  later `arch/arm64/boot/`.
+- `board_boot_min.c` + `entry_board_min.S`; owner: board contract harness;
+  destination: ARM tests; must never be linked into the product image.
 
 ## Ordered convergence
 

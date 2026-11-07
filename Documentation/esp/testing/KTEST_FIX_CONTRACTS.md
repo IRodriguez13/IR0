@@ -79,17 +79,14 @@ caminos de producción no pasan por un gancho distinto de `NULL`.
 |---------|-------------|----------|
 | `ir0_futex_before_sleep` | Al empezar un `ir0_futex_wait` bloqueado, antes de `sched_schedule_next` | Puede marcar la tarea `PROCESS_READY`. No debe llamar a `ir0_futex_wait`. |
 | `ipc_sleep_recheck_probe` | Después de `wait_queue_add`, antes de volver a mirar el ring | No debe dormir ni planificar. |
-| `mm_backend_unmap_hook` | Lo primero en `mm_backend_unmap_user_page` en x86-64 y ARM64 | Devolver `-EOPNOTSUPP` para caer al backend de la ISA. Cualquier otro valor es el resultado del unmap y el walker genérico no corre. |
+| `paging_unmap_test_hook` | Lo primero en `unmap_page_in_directory` (`mm/paging.c`), ambas ISAs | Devolver `-EOPNOTSUPP` para caer al walker de tablas. Cualquier otro valor es el resultado del unmap y el walker no corre. |
 
-`unmap_page_in_directory` ya devuelve un resultado de backend distinto de
-`-EOPNOTSUPP` sin caminar las tablas. El caso `MAP_FIXED` usa eso: el gancho
-devuelve `-EIO` para una dirección y `-EOPNOTSUPP` para el resto.
-`is_page_mapped_in_directory` no consulta el gancho, así que la página sigue
-pareciendo mapeada y `mm_prepare_map_fixed` registra el fallo.
+El caso `MAP_FIXED` devuelve `-EIO` para una dirección y `-EOPNOTSUPP` para
+el resto. `is_page_mapped_in_directory` no consulta el gancho, así que la
+página sigue pareciendo mapeada y `mm_prepare_map_fixed` registra el fallo.
 
-Con el gancho en `NULL`, `mm_backend_unmap_user_page` de x86-64 sigue
-devolviendo `-EOPNOTSUPP`. ARM64 sigue desmapeando solo un root que le
-pertenece y, si no, devuelve `-EOPNOTSUPP`.
+No hay backend privado de mapeo de usuario por ISA: los roots de usuario de
+x86-64 y ARM64 pasan por el walker común.
 
 ## Qué no afirma esta suite
 

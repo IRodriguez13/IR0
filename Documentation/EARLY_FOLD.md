@@ -1,9 +1,9 @@
 # Staged `early_*` fold into ordinary subsystems
 
-> **Last verified:** 2026-11-06
+> **Last verified:** 2026-11-07
 > **Source of truth:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
 > `includes/ir0/bpath.h`, `kernel/syscalls/erfs*.c`,
-> `kernel/syscalls/early_process.c`, `arch/arm64/sources/all_objs_mark.c`,
+> `kernel/syscalls/early_process.c`,
 > `make kernel-arm64.bin` (product link: `kernel-arm64-product.bin`)
 
 Spanish: [`esp/EARLY_FOLD.md`](esp/EARLY_FOLD.md).
@@ -64,12 +64,12 @@ and `/dev/*` nodes from `includes/ir0/early_rootfs.h`.
 ## Product SVC path (ARM ALL)
 
 `kernel-arm64-product.bin` links the common `syscall_dispatch.c` table.
-EL0 SVC enters that table (not `arm64_syscall_early`). Bring-up objects
-(`syscall_early`, `hello_embed`, `rr_early`, `rootfs_early`, …) are **not**
-in the product link.
+EL0 SVC enters that table. The freestanding bring-up objects
+(`syscall_early`, `hello_embed`, `rr_early`, `rootfs_early`, `all_objs_mark`,
+…) were deleted on 2026-11-07; nothing linked them.
 
-Historical fold-slice tags (`ARM64_PRODUCT_*_SLICE_OK` / provider binds in
-`all_objs_mark.c`) are bring-up markers only. Product ABI proof is:
+Historical fold-slice tags (`ARM64_PRODUCT_*_SLICE_OK`) were bring-up
+markers only. Product ABI proof is:
 
 | Gate | Contract |
 |------|----------|
@@ -99,7 +99,7 @@ kernel does not invent one.
 1. Route remaining AF_UNIX bind/connect through `ipc/` helpers
 2. `early_process.c` → `kernel/process/` + `process_syscalls.c`
 4. Common `elf_loader.c` + ISD AArch64 rootfs
-5. Private-mm fork / COW; then shrink `boot_stub.c`
+5. Private-mm fork / COW on ARM (`ir0-selftest-fault-arm64`)
 
 ## Gates
 

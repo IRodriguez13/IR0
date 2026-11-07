@@ -56,11 +56,10 @@ recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`), credenciales, p
   `scripts/make/arm64*.mk` ejercitan el kernel de producto (`kernel-arm64-product.bin`).
   EL0 producto → `syscall_dispatch`. ISD aún no empaqueta AArch64. No es paridad x86.
 
-Objetivos de port abiertos: MM de usuario (hoy un gestor de tablas ARM64
-privado de 39 bits que el walker común de 4 niveles no puede leer; `mmap`
-anónimo y `fork` fallan con `ENOMEM`), aborts de EL0 hacia el manejador común
-de fallos, guardado de FP/SIMD en el cambio de contexto (ambas ISAs), rootfs
-ISD AArch64, transporte block de producto.
+El MM de usuario, los fallos y el cambio de tareas también pasan por el
+núcleo común (`make ir0-selftest-fault-arm64`). Objetivos de port abiertos:
+guardado de FP/SIMD en el cambio de contexto (ambas ISAs), rootfs ISD
+AArch64, transporte block de producto.
 Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 ## Fugas conocidas de acoplamiento
 

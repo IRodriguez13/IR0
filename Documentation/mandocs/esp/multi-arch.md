@@ -63,7 +63,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
                      → switch_to(prev, next)    # posteriores
 ```
 
-**arm64 secuencia F7 histórica (oleadas — referencia):**
+**arm64 secuencia F7 histórica (oleadas; código borrado el 2026-11-07):**
 
 ```text
   _start → BOOT_OK → MMU_OK → VBAR → tags SVC / EL0
@@ -113,7 +113,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
   x86-64      arm64
   (ISO completo)  (producto ALL_OBJS + -min + probes)
      │           │
-  boot/syscall  ir0_kernel_boot / boot_stub -min
+  boot/syscall  ir0_kernel_boot / board_boot_min -min
   switch_x64    switch + MMU / GIC
 ```
 

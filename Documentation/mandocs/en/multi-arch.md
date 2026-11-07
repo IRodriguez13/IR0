@@ -66,7 +66,7 @@ NEON.
                      → switch_to(prev, next)    # later
 ```
 
-**arm64 historical F7 virt sequence (wave-era smokes — reference):**
+**arm64 historical F7 virt sequence (wave-era smokes; code deleted 2026-11-07):**
 
 ```text
   _start → BOOT_OK → MMU_OK → VBAR → SVC / EL0 tags
@@ -116,7 +116,7 @@ NEON.
   x86-64      arm64
   (full ISO)  (product ALL_OBJS + -min bring-up + probes)
      │           │
-  boot/syscall  ir0_kernel_boot / -min boot_stub
+  boot/syscall  ir0_kernel_boot / -min board_boot_min
   switch_x64    switch + MMU / GIC
 ```
 
