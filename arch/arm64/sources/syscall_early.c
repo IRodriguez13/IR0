@@ -16,6 +16,7 @@
 #include "elf_load_early.h"
 #include "mmu_early.h"
 #include "rootfs_early.h"
+#include "usercopy_early.h"
 #include "pl011.h"
 #include "timer.h"
 
@@ -78,38 +79,6 @@ static unsigned arm64_fill_providers(void)
 	return 9;
 }
 
-static int arm64_early_copy_from_user(void *destination, uint64_t source,
-				      uint64_t size)
-{
-	uint8_t *dst = destination;
-	const volatile uint8_t *src;
-	uint64_t index;
-
-	if (!arm64_mmu_user_buf_ok_in_root((uint64_t)mm_current_root(),
-					   source, size))
-		return -1;
-	src = (const volatile uint8_t *)(uintptr_t)source;
-	for (index = 0; index < size; index++)
-		dst[index] = src[index];
-	return 0;
-}
-
-static int arm64_early_copy_to_user(uint64_t destination, const void *source,
-				    uint64_t size)
-{
-	volatile uint8_t *dst;
-	const uint8_t *src = source;
-	uint64_t index;
-
-	if (!arm64_mmu_user_buf_ok_in_root((uint64_t)mm_current_root(),
-					   destination, size))
-		return -1;
-	dst = (volatile uint8_t *)(uintptr_t)destination;
-	for (index = 0; index < size; index++)
-		dst[index] = src[index];
-	return 0;
-}
-
 static uint64_t arm64_early_counter_frequency(void)
 {
 	return timer_get_frequency();
@@ -163,15 +132,6 @@ static void arm64_early_process_exit_observed(int overall_smoke_ok)
 static void arm64_early_clone_reaped(void)
 {
 	ir0_boot_smoke("ARM64_CLONE_OK");
-}
-
-static void arm64_early_zero_user_page(uint64_t page)
-{
-	volatile uint8_t *bytes = (volatile uint8_t *)(uintptr_t)page;
-	uint64_t index;
-
-	for (index = 0; index < 4096UL; index++)
-		bytes[index] = 0;
 }
 
 static const struct early_user_services g_arm64_early_user = {

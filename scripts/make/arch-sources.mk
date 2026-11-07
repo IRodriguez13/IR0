@@ -76,6 +76,7 @@ ARM64_INTERFACE_OBJS_PRODUCT = \
 # The freestanding path intentionally provides the Linux syscall ABI in small
 # stages while the common process and VFS implementations are brought up.
 ARM64_EARLY_SYSCALL_OBJS = \
+	arch/arm64/sources/usercopy_early.o \
 	arch/arm64/sources/syscall_early.o \
 	arch/arm64/sources/boot_stub.o \
 	arch/arm64/sources/mmu_early.o \
