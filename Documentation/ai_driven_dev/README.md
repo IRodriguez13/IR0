@@ -22,6 +22,7 @@ ARM staged-adapter vs product VFS: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 | `AGENTS.md` | Short agent entrypoint (style, endpoints, tier map) |
 | `rules/*.md` | Full rule set (architecture, tiers, git hygiene, multi-agent) |
 | `skills/ctr/SKILL.md` | CTR checklist — compile gates and facade discipline |
+| `skills/baseline-compare/SKILL.md` | Unpatched vs patched runs (`scripts/baseline_compare.sh`) and internal branch cleanup |
 
 ## Install into Cursor (local only)
 
@@ -33,7 +34,7 @@ make ai-dev-rules-install
 python3 scripts/sync_ai_dev_rules.py install
 ```
 
-This copies rules into `.cursor/rules/*.mdc`, the CTR skill into `.cursor/skills/`,
+This copies rules into `.cursor/rules/*.mdc`, every tracked skill into `.cursor/skills/<name>/`,
 and `AGENTS.md` to the repository root (also gitignored).
 
 ## Export after editing local Cursor rules
@@ -52,6 +53,7 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 |------|-------|---------|
 | `kernel-architecture-rigor.md` | always | Facades, SPDX, testing, honest docs |
 | `ir0-bugfix-red-green-proof.md` | always | Reproduce on the unpatched tree, prove the same test passes with the fix |
+| `ir0-baseline-branches.md` | always | Compare against the unpatched kernel in throwaway trees; delete internal branches after merge and push |
 | `kernel-c-allman-style.md` | C sources | Allman brace style |
 | `kernel-docs-language-policy.md` | `**/*.md` | English primary; Spanish in `Documentation/esp/` |
 | `ir0-git-commit-hygiene.md` | always | Maintainer author only; Signed-off-by; never Co-authored-by |

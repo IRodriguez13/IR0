@@ -44,12 +44,11 @@ Keep the failing and passing logs until the change is reviewed.
      `kernel/test/test_runner.c`, or
    - QEMU smoke/harness when the bug needs a real boot or userspace.
 2. Run the test on the **unpatched baseline first** and save the failing log.
-   If the fix is already in the working tree, isolate the baseline without
-   losing work:
+   If the fix is already in the working tree, build the baseline in its own
+   throwaway tree instead of reverting in place (`ir0-baseline-branches.md`,
+   skill `baseline-compare`):
    ```bash
-   git stash push -- <fix files>     # keep the new test in the tree
-   # or
-   git worktree add /tmp/ir0-baseline HEAD
+   scripts/baseline_compare.sh <unpatched-ref> -- -s <test-target>
    ```
 3. Apply the fix and run **exactly the same command**. Save the passing log.
 4. Revert the fix once and confirm the same failure returns; restore the fix.

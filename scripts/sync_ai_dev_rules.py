@@ -22,9 +22,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOC_ROOT = ROOT / "Documentation" / "ai_driven_dev"
 RULES_SRC = ROOT / ".cursor" / "rules"
-SKILL_SRC = ROOT / ".cursor" / "skills" / "ctr" / "SKILL.md"
+SKILLS_SRC = ROOT / ".cursor" / "skills"
 RULES_DST = DOC_ROOT / "rules"
-SKILL_DST = DOC_ROOT / "skills" / "ctr" / "SKILL.md"
+SKILLS_DST = DOC_ROOT / "skills"
 
 FRONTMATTER_RE = re.compile(r"^---\s*\n.*?\n---\s*\n", re.DOTALL)
 META_LINE_RE = re.compile(r"^(\w+):\s*(.+)$")
@@ -57,7 +57,8 @@ def build_frontmatter(meta: dict[str, str]) -> str:
 
 def rewrite_paths_to_doc(text: str) -> str:
     repl = [
-        (r"\.cursor/skills/ctr/SKILL\.md", "Documentation/ai_driven_dev/skills/ctr/SKILL.md"),
+        (r"\.cursor/skills/([A-Za-z0-9_-]+)/SKILL\.md",
+         r"Documentation/ai_driven_dev/skills/\1/SKILL.md"),
         (r"\.cursor/rules/([A-Za-z0-9_-]+)\.mdc", r"Documentation/ai_driven_dev/rules/\1.md"),
         (r"`([A-Za-z0-9_-]+)\.mdc`", r"`\1.md`"),
         (r"under `/esp`", "under `Documentation/esp/`"),
@@ -73,7 +74,8 @@ def rewrite_paths_to_doc(text: str) -> str:
 
 def rewrite_paths_to_cursor(text: str) -> str:
     repl = [
-        (r"Documentation/ai_driven_dev/skills/ctr/SKILL\.md", ".cursor/skills/ctr/SKILL.md"),
+        (r"Documentation/ai_driven_dev/skills/([A-Za-z0-9_-]+)/SKILL\.md",
+         r".cursor/skills/\1/SKILL.md"),
         (r"Documentation/ai_driven_dev/rules/([A-Za-z0-9_-]+)\.md", r".cursor/rules/\1.mdc"),
         (r"`([A-Za-z0-9_-]+)\.md`", r"`\1.mdc`"),
     ]
@@ -106,14 +108,26 @@ def export_rules() -> int:
     return count
 
 
-def export_skill() -> bool:
-    if not SKILL_SRC.is_file():
-        print(f"export: skip skill (missing {SKILL_SRC})", file=sys.stderr)
-        return False
-    SKILL_DST.parent.mkdir(parents=True, exist_ok=True)
-    text = rewrite_paths_to_doc(SKILL_SRC.read_text(encoding="utf-8"))
-    SKILL_DST.write_text(text, encoding="utf-8")
-    return True
+def _tracked_skill_names() -> list[str]:
+    """Skills versioned under Documentation/ai_driven_dev/skills/<name>/."""
+    if not SKILLS_DST.is_dir():
+        return []
+    return sorted(p.parent.name for p in SKILLS_DST.glob("*/SKILL.md"))
+
+
+def export_skills() -> list[str]:
+    # Only skills already tracked: local-only .cursor skills stay local.
+    done: list[str] = []
+    for name in _tracked_skill_names():
+        src = SKILLS_SRC / name / "SKILL.md"
+        if not src.is_file():
+            print(f"export: skip skill {name} (missing {src})", file=sys.stderr)
+            continue
+        dst = SKILLS_DST / name / "SKILL.md"
+        dst.write_text(rewrite_paths_to_doc(src.read_text(encoding="utf-8")),
+                       encoding="utf-8")
+        done.append(name)
+    return done
 
 
 def _doc_rule_sources() -> list[Path]:
@@ -151,36 +165,38 @@ def install_rules() -> int:
     return count
 
 
-def install_skill() -> bool:
-    if not SKILL_DST.is_file():
-        print(f"install: missing {SKILL_DST}", file=sys.stderr)
-        return False
-    SKILL_SRC.parent.mkdir(parents=True, exist_ok=True)
-    text = rewrite_paths_to_cursor(SKILL_DST.read_text(encoding="utf-8"))
-    SKILL_SRC.write_text(text, encoding="utf-8")
-    return True
+def install_skills() -> list[str]:
+    done: list[str] = []
+    for name in _tracked_skill_names():
+        src = SKILLS_DST / name / "SKILL.md"
+        dst = SKILLS_SRC / name / "SKILL.md"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(rewrite_paths_to_cursor(src.read_text(encoding="utf-8")),
+                       encoding="utf-8")
+        done.append(name)
+    return done
 
 
 def cmd_export(_: argparse.Namespace) -> int:
     n = export_rules()
-    skill = export_skill()
+    skills = export_skills()
     print(f"export: {n} rules -> {RULES_DST.relative_to(ROOT)}")
-    if skill:
-        print(f"export: skill -> {SKILL_DST.relative_to(ROOT)}")
+    for name in skills:
+        print(f"export: skill {name} -> {(SKILLS_DST / name).relative_to(ROOT)}")
     return 0
 
 
 def cmd_install(_: argparse.Namespace) -> int:
     n = install_rules()
-    skill = install_skill()
+    skills = install_skills()
     agents_src = DOC_ROOT / "AGENTS.md"
     agents_dst = ROOT / "AGENTS.md"
     if agents_src.is_file():
         shutil.copy2(agents_src, agents_dst)
         print(f"install: AGENTS.md -> {agents_dst.relative_to(ROOT)}")
     print(f"install: {n} rules -> {RULES_SRC.relative_to(ROOT)}")
-    if skill:
-        print(f"install: skill -> {SKILL_SRC.relative_to(ROOT)}")
+    for name in skills:
+        print(f"install: skill {name} -> {(SKILLS_SRC / name).relative_to(ROOT)}")
     return 0
 
 
