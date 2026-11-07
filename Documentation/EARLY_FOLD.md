@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-11-06
 > **Source of truth:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
-> `includes/ir0/product_path.h`, `kernel/syscalls/early_rootfs.c`,
+> `includes/ir0/product_path.h`, `kernel/syscalls/erfs*.c`,
 > `kernel/syscalls/early_process.c`, `arch/arm64/sources/all_objs_mark.c`,
 > `make kernel-arm64.bin` (product link: `kernel-arm64-product.bin`)
 
@@ -25,7 +25,7 @@ Do not park pipe/unix/eventfd tables in `fs/`.
 | Ramtab | Bounded in-memory names **not** on a VFS mount | `fs/ramtab.c` |
 | Staged IPC tables | pipe/eventfd/memfd/timerfd/epoll, AF_UNIX/socketpair | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
 | Product path bind | Optional ops so the adapter can call product VFS | `includes/ir0/product_path.h` |
-| Early adapter | `/`, `/init`, `/dev/*`, CPIO blob, syscall routing | `kernel/syscalls/early_rootfs.c` |
+| Early adapter (`erfs`) | `/`, `/init`, `/dev/*`, CPIO blob, syscall routing | `kernel/syscalls/erfs_*.c` |
 | Early process | Staged clone/wait; child pid from process registry | `kernel/syscalls/early_process.c` |
 | Product identity/cwd | Semantic table providers on ARM ALL | `ir0_product_identity_provider`, `ir0_product_cwd_provider` |
 | Early SVC | Semantic-ID dispatch until more product IDs move | `kernel/syscalls/early_dispatch.c` |

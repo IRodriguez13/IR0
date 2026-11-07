@@ -2,7 +2,7 @@
 
 > **Última verificación:** 2026-11-06
 > **Fuente de verdad:** `fs/ramtab.c`, `ipc/early_anonfd.c`, `ipc/early_unix.c`,
-> `includes/ir0/product_path.h`, `kernel/syscalls/early_rootfs.c`,
+> `includes/ir0/product_path.h`, `kernel/syscalls/erfs*.c`,
 > `make kernel-arm64.bin` (`kernel-arm64-product.bin`)
 
 Canónico en inglés: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).

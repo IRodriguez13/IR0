@@ -67,12 +67,12 @@ pure-move pass.
 
 - `fs/ramtab.c` + `includes/ir0/ramtab.h`; owner: in-memory names without a
   VFS mount; destination: keep until every staged path has a mount; then
-  delete callers in `early_rootfs.c`.
+  delete callers in `erfs_*.c`.
 - `includes/ir0/product_path.h`; owner: optional bind from the staged adapter
   to product `vfs_*`; destination: keep as the transition seam.
 - `ipc/early_anonfd.c`, `ipc/early_unix.c`; owner: staged IPC object tables;
   destination: product `ipc/` / pipe objects. Keep out of `fs/`.
-- `kernel/syscalls/early_rootfs.c`; owner: `/`, `/init`, `/dev/*`, CPIO,
+- `kernel/syscalls/erfs_*.c`; owner: `/`, `/init`, `/dev/*`, CPIO,
   syscall routing onto those tables; destination: shrink only. `/tmp/*`
   uses product VFS when bound (`ARM64_EARLY_PATH_FOLD_OK`).
 - `ir0_product_identity_provider` / `ir0_product_cwd_provider`; owner:
