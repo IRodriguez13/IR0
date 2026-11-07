@@ -2033,8 +2033,9 @@ def check_common_paging_uses_neutral_roots():
         r"\b(?:CR3|cr3|PML4|pml4|PDPT|pdpt|PAGE_NX|CONFIG_ARCH_X86_64)\b"
     )
 
-    for relative in ("mm/paging.c", "mm/paging.h"):
-        fpath = ROOT / relative
+    # Every unit of the split paging core (paging.c, paging_*.c, headers).
+    for fpath in sorted((ROOT / "mm").glob("paging*.[ch]")):
+        relative = fpath.relative_to(ROOT).as_posix()
         for idx, line in enumerate(
             read_file_text(fpath).splitlines(), 1
         ):

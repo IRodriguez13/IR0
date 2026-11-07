@@ -582,6 +582,10 @@ MEMORY_OBJS = \
 	mm/page_table_pool.o \
 	mm/reclaim.o \
 	mm/paging.o \
+	mm/paging_uaccess.o \
+	mm/paging_fork.o \
+	mm/paging_identity.o \
+	mm/paging_audit.o \
 	mm/tlb_sync.o \
 	mm/pmm.o \
 	mm/kmem.o \

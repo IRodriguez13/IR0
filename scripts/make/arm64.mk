@@ -128,7 +128,7 @@ arm64-all-objs-probe: arm64-portable-compile
 	@echo "INTERRUPT_OBJS wall: cleared (irq_portable_stubs replaces lidt/isr_stubs_64)" \
 		> $(HOST_TMP)/ir0-arm64-all-objs-probe.log
 	@fail=0; \
-	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/pmm.c mm/kmem.c; do \
+	for src in mm/allocator.c mm/boot_memory.c mm/no_mmu.c mm/paging.c mm/paging_uaccess.c mm/paging_fork.c mm/paging_identity.c mm/paging_audit.c mm/pmm.c mm/kmem.c; do \
 		echo "  CC      $$src (probe)"; \
 		if ! aarch64-linux-gnu-gcc $(ARM64_COMMON_CORE_COMPILE_CFLAGS) -DARCH_ARM64=1 \
 			-c $$src -o $(HOST_TMP)/ir0-arm64-probe-$$$$.o >> $(HOST_TMP)/ir0-arm64-all-objs-probe.log 2>&1; then \

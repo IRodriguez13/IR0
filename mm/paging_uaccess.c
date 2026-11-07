@@ -1,0 +1,222 @@
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: paging_uaccess.c
+ * Description: Kernel copies to and from user memory through the page tables, breaking COW like a write fault.
+ */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#include <stdint.h>
+#include <config.h>
+#include <ir0/logging.h>
+#include <ir0/oops.h>
+#include <ir0/process.h>
+#include <ir0/mm.h>
+#include <ir0/debug_runtime.h>
+#include <ir0/mm_alloc.h>
+#include <ir0/page_table_pool.h>
+#include "paging.h"
+#include <string.h>
+#include <ir0/kmem.h>
+#include <mm/pmm.h>
+#include <ir0/validation.h>
+#include <ir0/arch_port.h>
+#include <ir0/tlb_sync.h>
+#include <ir0/errno.h>
+#include <ir0/swap.h>
+#include <ir0/arch_cpu.h>
+#include "paging_internal.h"
+
+/*
+ * Copy or zero user memory via mapped physical frames. Process address-space root may omit
+ * PMM identity (Linux-like holes); switch to the pinned boot address-space root for PA
+ * access (same as paging_copy_phys_page / paging_zero_phys_page).
+ */
+
+/**
+ * Kernel writes via PA identity must not touch RO+COW shared frames (that
+ * bypasses hardware WP and corrupts the sibling mm). Break COW like #PF.
+ */
+static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
+				 uintptr_t vaddr)
+{
+	uint64_t entry;
+	uintptr_t old_phys;
+	uintptr_t new_phys;
+	uint64_t map_flags;
+	unsigned long irq_flags;
+
+	if (!pte || !pte_present(*pte))
+		return -1;
+	if (pte_write(*pte))
+		return 0;
+	if (!pte_cow(*pte) || !pte_user(*pte))
+		return -1;
+
+	irq_flags = irq_save();
+	entry = *pte;
+	old_phys = mm_pte_phys(entry);
+	new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
+	if (!new_phys)
+	{
+		irq_restore(irq_flags);
+		return -1;
+	}
+	paging_copy_phys_page(new_phys, old_phys);
+	map_flags = mm_pte_mapping_flags(entry) | PAGE_USER | PAGE_RW;
+	map_flags &= ~(PAGE_COW | PAGE_GLOBAL);
+	if (mm_pte_executable(entry))
+		map_flags |= PAGE_EXEC;
+	if (map_page_in_directory(root, vaddr & (uintptr_t)PAGE_FRAME_MASK, new_phys, map_flags) != 0)
+	{
+		pmm_free_frame(new_phys);
+		irq_restore(irq_flags);
+		return -1;
+	}
+	mm_tlb_sync_page(root, vaddr & (uintptr_t)PAGE_FRAME_MASK);
+	irq_restore(irq_flags);
+	return 0;
+}
+
+static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
+				     int write, uintptr_t *phys_out)
+{
+	uint64_t *pte;
+
+	if (!root || !phys_out)
+		return -1;
+	pte = paging_get_pte(root, page);
+	if (!pte || !mm_pte_present(*pte))
+		return -1;
+	if (write && !pte_write(*pte) && pte_cow(*pte))
+	{
+		if (paging_cow_break_leaf(root, pte, page) != 0)
+			return -1;
+		pte = paging_get_pte(root, page);
+		if (!pte || !mm_pte_present(*pte) || !pte_write(*pte))
+			return -1;
+	}
+	*phys_out = paging_entry_pfn(*pte);
+	return 0;
+}
+
+int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
+                                     const void *src, size_t n)
+{
+    const uint8_t *s = src;
+
+    if (n == 0)
+        return 0;
+    if (!root || !src || !mm_user_va_ok(dst, n))
+        return -1;
+
+    while (n > 0)
+    {
+        uintptr_t page = dst & (uintptr_t)PAGE_FRAME_MASK;
+        uintptr_t phys;
+        size_t off;
+        size_t chunk;
+
+        if (paging_resolve_user_page(root, page, 1, &phys) != 0)
+            return -1;
+        off = dst & (uintptr_t)PAGE_OFFSET_MASK;
+        chunk = (size_t)(PAGE_SIZE_4KB - off);
+        if (chunk > n)
+            chunk = n;
+
+	{
+		uintptr_t saved;
+
+		paging_phys_map_begin(&saved);
+		memcpy((void *)(phys + off), s, chunk);
+		paging_phys_map_end(saved);
+	}
+        dst += chunk;
+        s += chunk;
+        n -= chunk;
+    }
+
+    return 0;
+}
+
+int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
+                                       void *dst, size_t n)
+{
+    uint8_t *d = dst;
+
+    if (n == 0)
+        return 0;
+    if (!root || !dst || !mm_user_va_ok(src, n))
+        return -1;
+
+    while (n > 0)
+    {
+        uintptr_t page = src & (uintptr_t)PAGE_FRAME_MASK;
+        uintptr_t phys;
+        size_t off;
+        size_t chunk;
+
+        if (paging_resolve_user_page(root, page, 0, &phys) != 0)
+            return -1;
+        off = src & (uintptr_t)PAGE_OFFSET_MASK;
+        chunk = (size_t)(PAGE_SIZE_4KB - off);
+        if (chunk > n)
+            chunk = n;
+
+	{
+		uintptr_t saved;
+
+		paging_phys_map_begin(&saved);
+		memcpy(d, (const void *)(phys + off), chunk);
+		paging_phys_map_end(saved);
+	}
+        src += chunk;
+        d += chunk;
+        n -= chunk;
+    }
+
+    return 0;
+}
+
+int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
+				  size_t n)
+{
+    if (n == 0)
+        return 0;
+    if (!root || !mm_user_va_ok(dst, n))
+        return -1;
+
+    while (n > 0)
+    {
+        uintptr_t page = dst & (uintptr_t)PAGE_FRAME_MASK;
+        uintptr_t phys;
+        size_t off;
+        size_t chunk;
+
+        if (paging_resolve_user_page(root, page, 1, &phys) != 0)
+            return -1;
+        off = dst & (uintptr_t)PAGE_OFFSET_MASK;
+        chunk = (size_t)(PAGE_SIZE_4KB - off);
+        if (chunk > n)
+            chunk = n;
+
+	{
+		uintptr_t saved;
+
+		paging_phys_map_begin(&saved);
+		memset((void *)(phys + off), 0, chunk);
+		paging_phys_map_end(saved);
+	}
+        dst += chunk;
+        n -= chunk;
+    }
+
+    return 0;
+}
+
