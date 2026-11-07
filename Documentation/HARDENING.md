@@ -37,7 +37,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 | **poll ABI** | `fd_can_write_for(proc)` uses `process_fd_table(proc)` — no `current_process` swap | `kernel/syscalls/io_syscalls.c` |
 | **MM soft-grow** | Removed heap/stack implicit +1 page on fault past VMA top | `mm/page_fault.c` |
 | **IPC lock facade** | `includes/ir0/spinlock.h` on pipe read/write hot path | `kernel/lib/pipe.c` |
-| **PF debug portable** | x86 `pf_debug_*` moved to `arch/x86-64/sources/arch_pf_debug.c` | `arch-guard` (no `arch_*` from `mm/`) |
+| **PF debug portable** | x86 `pf_debug_*` moved to `arch/x86-64/sources/pf_debug.c` | `arch-guard` (no `arch_*` from `mm/`) |
 | **saved_context** | `kernel/process/saved_context.c` + arch-guard on `->saved_context` | `scripts/architecture_guard.py` |
 
 **Gates:** `kernel-x64.bin`, `arch-guard`, `build-matrix-min`, `tests/host` 43/43, `smoke-sb16-probe`.

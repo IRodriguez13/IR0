@@ -35,7 +35,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 | Fachada portable | `arch_port.h`, `irq.h`, `context.h` | CPU, IRQ, `switch_to` |
 | Backends ISA | `arch/*/sources/arch_*.c` | switch, mm, signal, syscall frame, irq_init |
 | sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | uapi Linux en ambas ISA |
-| Interfaz común | `arch/common/arch_interface.c` | Despacho cross-arch |
+| Interfaz común | `arch/*/sources/interface.c` | Despacho cross-arch |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | IDT/PIC impl + userspace |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; link producto `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` = freestanding |
 | Context switch | `switch_to` → backend privado por ISA | dispatcher en `sched/switch/context_switch.c` |
@@ -158,7 +158,7 @@ Checklist de porting:
 
 ## 10. Hoja de ruta futura
 
-- `fork`/`exec` / `rr_sched` con paridad Linux plena — aún en adaptadores (`early_dispatch`).
+- `fork`/`exec` / `sched/rr` con paridad Linux plena — aún en adaptadores (`early_dispatch`).
 - **musl aarch64 + rootfs ISD AArch64** — hueco de toolchain/packaging; el kernel ya enlaza **`$(ALL_OBJS)`** (`kernel-arm64-product.bin`).
 - GIC / timers — endurecer política según avance el port.
 - Raspberry Pi 4: GIC-400, SD, mailbox, DTB (más allá del UART min).

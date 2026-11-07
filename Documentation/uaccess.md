@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-09-22  
 > **Source of truth:** `includes/ir0/copy_user.h`, `kernel/lib/copy_user.c`,  
-> `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/arch_mm.c`,  
+> `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/mm.c`,
 > `mm/paging.c` (`copy_*_region_in_directory`, `zero_user_region_in_directory`),
 > [`LINUX_SHAPED.md`](LINUX_SHAPED.md),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
@@ -42,7 +42,7 @@ flowchart TB
     CU["includes/ir0/copy_user.h<br/>copy_to/from_user clear_user<br/>copy_*_user_mm<br/>get_user put_user access_ok"]
   end
   subgraph isa [Per-ISA VA window]
-    VA["mm_user_va_ok()<br/>arch/*/sources/arch_mm.c"]
+    VA["mm_user_va_ok()<br/>arch/*/sources/mm.c"]
   end
   subgraph mm [Portable MM walk]
     REG["copy_*_region_in_directory<br/>zero_user_region_in_directory<br/>COW break on write"]
@@ -93,7 +93,7 @@ kernel-initiated user write.
 |-------|-----------|----------------|
 | Contract + macros | `includes/ir0/copy_user.h` | Same API on every ISA |
 | Portable glue | `kernel/lib/copy_user.c` | Mode check, call `mm_user_va_ok`, dispatch to region helpers |
-| VA window | `mm_user_va_ok` in `arch/x86-64/sources/arch_mm.c` and `arch/arm64/sources/arch_mm.c` | ISA canonical user range |
+| VA window | `mm_user_va_ok` in `arch/x86-64/sources/mm.c` and `arch/arm64/sources/mm.c` | ISA canonical user range |
 | COW / PTE walk | `mm/paging.c` (x86-64 production MM) | Present RO / COW break |
 | Arm64 early | early MM / `arm64_mmu_user_buf_ok` where still used | Must still go through `copy_*_user` names; **no COW claim** until portable MM matches |
 
@@ -105,7 +105,7 @@ kernel-initiated user write.
 4. Arm64 early without COW: expect `-EFAULT` or incomplete write semantics until MM parity; do **not** invent a second parallel API name.
 
 x86-64 window (code): `0x00400000` … `0x00007FFFFFFFFFFF` in
-[`arch/x86-64/sources/arch_mm.c`](../arch/x86-64/sources/arch_mm.c).
+[`arch/x86-64/sources/mm.c`](../arch/x86-64/sources/mm.c).
 
 ## Callers migrated (P0, 2026-09-02)
 

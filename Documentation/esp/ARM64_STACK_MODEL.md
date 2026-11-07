@@ -1,7 +1,7 @@
 # Pila kernel ARM64 y SP_EL1 (producto)
 
 > **Última verificación:** 2026-11-07  
-> **Fuente de verdad:** `arch/arm64/asm/entry/vectors.S`, `arch/arm64/sources/arch_switch.c`  
+> **Fuente de verdad:** `arch/arm64/asm/entry/vectors.S`, `arch/arm64/sources/context.c`
 > (`set_current_kernel_stack`), `arch/arm64/asm/boot/entry.S`, `sched/switch/context_switch.c`
 > (`context_prepare_next` → `set_current_kernel_stack`).
 

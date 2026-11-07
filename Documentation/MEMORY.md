@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-11-07  
 > **Source of truth:** `mm/pmm.c`, `mm/paging.c`, `mm/page_fault.c`,  
-> `mm/swap/`, `includes/ir0/swap.h`, `arch/x86-64/sources/arch_pf_debug.c`,  
+> `mm/swap/`, `includes/ir0/swap.h`, `arch/x86-64/sources/pf_debug.c`,
 > `Documentation/mandocs/en/mm.md`, `Documentation/uaccess.md`,  
 > `make smoke-mm-cow-lazy`, `tests/host` swap contracts, `ktest_swap_header_and_area`
 
@@ -16,7 +16,7 @@ process isolation.
 - `mm/allocator.c` plus `includes/ir0/kmem.h`: kernel dynamic allocator.
 - `mm/paging.c`: virtual mapping, page-table setup, fork share-on-fork (`PAGE_COW`).
 - `mm/page_fault.c`: portable demand-zero, anon mmap, write-fault COW break, SIGSEGV policy.
-- `arch/x86-64/sources/arch_pf_debug.c`: optional `DEBUG_D1_DIAG` register-frame forensics (`pf_debug_stack_adjacent`, `pf_debug_memmove_fault`); arm64 stubs in `arch/arm64/sources/arch_pf_debug.c`.
+- `arch/x86-64/sources/pf_debug.c`: optional `DEBUG_D1_DIAG` register-frame forensics (`pf_debug_stack_adjacent`, `pf_debug_memmove_fault`); arm64 stubs in `arch/arm64/sources/pf_debug.c`.
 
 ## Operational Model
 

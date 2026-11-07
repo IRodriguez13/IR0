@@ -20,7 +20,7 @@ arguments past the eighth. Typed events do not have those failure modes.
 IRQs off in a hot loop, or from any code running while the kernel stack or CR3
 is mid-transition.
 
-Measured: emitting from the resume gate in `arch_switch.c` took
+Measured: emitting from the resume gate in `context.c` took
 `smoke-pipeline-stress` from 1 failure in 6 to 2 in 4 and introduced SIGSEGV
 modes that did not exist before. Removing it restored the baseline. The
 instrumentation was changing the ordering it was meant to observe.

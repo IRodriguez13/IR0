@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | boot, syscalls, scheduler |
 | Man page | IR0-multi-arch (section 7) |
-| Primary sources | `arch/common/arch_interface.c`, `arch/*/sources/arch_{switch,mm,signal,syscall_frame,irq_init}.c`, `includes/ir0/{arch_switch,arch_mm,arch_signal,irq,sigcontext_*}.h`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
+| Primary sources | `arch/*/sources/interface.c`, `arch/*/sources/{context,mm,signal,syscall_frame,irq}.c`, `includes/ir0/{arch_switch,arch_mm,arch_signal,irq,sigcontext_*}.h`, `scripts/architecture_guard.py`, `includes/ir0/arch_port.h` |
 | Last verified | 2026-11-06 |
 
 ## 1. Overview
@@ -37,7 +37,7 @@ NEON.
 | Portable facade | `includes/ir0/arch_port.h`, `irq.h`, `context.h` | CPU, IRQ bring-up, `switch_to` |
 | ISA backends | `arch/*/sources/arch_*.c` | switch, mm half, signal frames, syscall frames, irq_init |
 | sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | Linux uapi on both ISAs (`__reserved[4096]` on aarch64) |
-| Common interface | `arch/common/arch_interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
+| Common interface | `arch/*/sources/interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | boot, IDT/PIC impl, user mode, syscalls |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; product link `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` boards = freestanding bring-up |
@@ -161,7 +161,7 @@ Porting checklist:
 
 ## 10. Future roadmap
 
-- Product ARM `fork`/`exec` / `rr_sched` with full Linux parity — still staged (`early_dispatch`, not full `syscall_dispatch` on SVC everywhere userspace expects).
+- Product ARM `fork`/`exec` / `sched/rr` with full Linux parity — still staged (`early_dispatch`, not full `syscall_dispatch` on SVC everywhere userspace expects).
 - **musl aarch64 + ISD AArch64 rootfs** — packaging/toolchain gap; kernel **`$(ALL_OBJS)`** link exists (`kernel-arm64-product.bin`).
 - Shared IRQ delivery refinements (GIC policy, timers) as the port hardens.
 - SPI / full GIC distributor policy beyond bank-0 PPI/SGI (`irq_unmask_line` covers bank 0).

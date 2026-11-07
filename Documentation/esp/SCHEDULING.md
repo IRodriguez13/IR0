@@ -1,8 +1,9 @@
 # Scheduling en IR0
 
-> **Última verificación:** 2026-07-23
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/rr_sched.c`,
-> `sched/priority_sched.c`, `sched/sched_switch.c`, `kernel/time/clock_wait.c`  
+> **Última verificación:** 2026-11-07
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`,
+> `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`,
+> `sched/sched_switch.c`, `kernel/time/clock_wait.c`
 > **Canónico (inglés):** [`../SCHEDULING.md`](../SCHEDULING.md)
 
 El scheduling en IR0 se selecciona por una fachada portable y una tabla de ops
@@ -11,10 +12,12 @@ de backend configurada desde Kconfig.
 ## Modelo de selección
 
 - API portable: [`includes/ir0/sched.h`](../../includes/ir0/sched.h).
-- Despacho: [`sched/sched.c`](../../sched/sched.c) con `struct ir0_sched_ops`
-  según `CONFIG_SCHEDULER_POLICY`.
-- Ops de backend: [`sched/sched_ops.h`](../../sched/sched_ops.h) — RR y priority
-  exportan su propia tabla; un backend no incluye al otro.
+- Despacho: [`sched/sched.c`](../../sched/sched.c) llama `sched_backend_active()`.
+- Selección: [`sched/backend_select.c`](../../sched/backend_select.c) mapea
+  `CONFIG_SCHEDULER_POLICY` a la tabla activa en compilación.
+- Ops de backend: [`sched/backend.h`](../../sched/backend.h) es el contrato privado;
+  [`sched/rr/backend.h`](../../sched/rr/backend.h) y
+  [`sched/prio/backend.h`](../../sched/prio/backend.h) exportan una tabla cada uno.
 - Switch compartido: [`sched/sched_switch.c`](../../sched/sched_switch.c).
 - Compat: `scheduler_api.h` solo redirige a `<ir0/sched.h>`.
 
@@ -22,9 +25,9 @@ de backend configurada desde Kconfig.
 
 | `CONFIG_SCHEDULER_POLICY` | Nombre | Objeto |
 |---------------------------|--------|--------|
-| `0` | `round_robin` | `rr_sched.o` |
-| `1` | `cfs` | Alias honesto de RR (sin `cfs_sched.c`) |
-| `2` (defconfig) | `priority` | `priority_sched.o` |
+| `0` | `round_robin` | `sched/rr/backend.o` |
+| `1` | `cfs` | Mismo objeto RR (alias honesto, sin `cfs_sched.c`) |
+| `2` (defconfig) | `priority` | `sched/prio/backend.o` |
 
 ## Syscalls bloqueantes (poll / pause / nanosleep)
 
@@ -48,7 +51,7 @@ Par CS ring-0 + RIP userspace ilegal para `kernel_ret`. Producto:
 ## Puntos fuertes
 
 - Callers portables no incluyen headers de RR ni de peers.
-- Priority es backend real (no wrapper que incluye `rr_sched.h`).
+- Priority es backend real (no wrapper que incluye el runqueue de RR).
 - Sleeps de poll/pause ceden sin tormentas de schedule anidadas.
 
 ## Puntos débiles

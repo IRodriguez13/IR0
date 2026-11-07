@@ -1,7 +1,7 @@
 # Planificador de IR0
 
-> **Última verificación:** 2026-07-17
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/sched_ops.h`, `sched/rr_sched.c`, `sched/priority_sched.c`
+> **Última verificación:** 2026-11-07
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`, `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`
 
 | Campo | Valor |
 |-------|-------|
@@ -10,7 +10,7 @@
 | Estado | stable |
 | Depende de | process, memory |
 | Página man | IR0-scheduler (sección 7) |
-| Fuentes principales | `includes/ir0/sched.h`, `sched/sched.c`, `sched/sched_switch.c`, `sched/priority_sched.c`, `sched/rr_sched.c`, `arch/common/arch_portable.h`, `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
+| Fuentes principales | `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`, `sched/sched_switch.c`, `arch/common/arch_portable.h`, `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
 
 ## 1. Visión general
 
@@ -27,16 +27,18 @@ El código portable **no** embebe `iretq`.
 | Pieza | Rol |
 |-------|-----|
 | `includes/ir0/sched.h` | API portable (sin `<sched/…>`) |
-| `sched/sched.c` | Ops activas; despacho |
-| `sched/sched_ops.h` | Contrato de backend |
+| `sched/sched.c` | Fachada portable; despacho vía `sched_backend_active()` |
+| `sched/backend.h` | Contrato privado de ops |
+| `sched/backend_select.c` | Selección de política en compilación |
+| `sched/rr/backend.c` / `sched/prio/backend.c` | Implementaciones; una tabla por política vía su propio `backend.h` |
 | `sched/sched_switch.c` | `sched_context_switch_to` compartido |
 | `sched/sched_resched.c` | Helpers de resched (IRQ/TTY/retorno a user) |
-| `priority_sched.c` | Backend por defecto (policy 2) |
-| `rr_sched.c` | Cola circular (policy 0 / 1) |
+| `sched/prio/backend.c` | Backend por defecto (policy 2) |
+| `sched/rr/backend.c` | Lista de listos (policy 0 / 1) |
 | `first_switch_to` | Primera entrada (propiedad de arch) |
 
-**Policy `1` (`cfs`):** mismas ops que RR; no existe `cfs_sched.c` ni un wrapper
-que incluya `rr_sched.h`.
+**Policy `1` (`cfs`):** mismo objeto backend que RR; no existe `cfs_sched.c`
+ni un wrapper que incluya el runqueue de RR.
 
 ## 3. Flujo
 

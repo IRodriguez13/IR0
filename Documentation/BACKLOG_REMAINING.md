@@ -82,7 +82,7 @@
 | PF soft-grow removed | `mm/page_fault.c` |
 | `ir0_spinlock` + pipe hot path | `includes/ir0/spinlock.h`, `pipe.c` |
 | `saved_context` accessors + arch-guard | `saved_context.c`, `architecture_guard.py` |
-| `pf_debug_*` in arch tree | `arch_pf_debug.c` (x86/arm64) |
+| `pf_debug_*` in arch tree | `pf_debug.c` (x86/arm64) |
 
 ## Closed this wave (2026-07-25) — tree boundary: no in-kernel userspace shell
 
@@ -255,7 +255,7 @@ closed for that slice; track real port as **F7b** above.
 `ARM64_SLICE_OK`; `make arm64-slice-compile` also probes `includes/string.c` (compile-only,
 not linked — still pulls oops headers). Not `ALL_OBJS`.
 
-**F7b pack (2026-07-12):** PL011 TU + `serial_io_arm64` + early paging API verify +
+**F7b pack (2026-07-12):** PL011 TU + `serial` + early paging API verify +
 GIC Device map (no IRQ program) + arch timer CNTFRQ/CNTPCT.
 Proof (historical wave targets — **not** current `Makefile` entry points):
 `smoke-arm64-port` → `ARM64_PL011_OK` + `ARM64_PAGING_OK` + `ARM64_GIC_MAP_OK`

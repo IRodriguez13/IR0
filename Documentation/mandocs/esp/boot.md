@@ -7,7 +7,7 @@
 | Estado | stable (producto: solo runit; dbgshell eliminado) |
 | Depende de | memory, drivers, vfs, process |
 | Página man | IR0-boot (sección 7) |
-| Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
+| Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Visión general
 
@@ -24,7 +24,7 @@ habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit desde
 | Etapa | Componente | Archivo |
 |-------|------------|---------|
 | Entrada del loader | Comprobación Multiboot, PAE, long mode | `arch/x86-64/asm/boot_x64.asm` |
-| CPU temprana | GDT, TSS, SSE | `arch/x86-64/sources/arch_early.c` |
+| CPU temprana | GDT, TSS, SSE | `arch/x86-64/sources/early.c` |
 | Entrada del kernel | Orquestación + fases de boot | `kernel/main.c` (`kmain`) |
 | Event core | `klog_record` + early clock | `ktm/klog.c`, `arch_early_clock_*` |
 | Drivers | Bootstrap por etapas + probe events | `drivers/init_drv.c` |

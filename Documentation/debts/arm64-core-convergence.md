@@ -17,7 +17,7 @@ the existing x86 and ARM runtime gates remain green.
 ## Current canonical contracts
 
 - Task context: `includes/ir0/task_ops.h`; implemented by each ISA's
-  `arch_task_ops.c`. The redundant `arch_task_ops.h` alias was removed.
+  `task.c`. The redundant `arch_task_ops.h` alias was removed.
 - Syscall frame: `includes/ir0/syscall_frame.h`; ISA storage stays in
   `arch_syscall_frame_*.h`, and each ISA implements frame transfer.
 - Address translation: `includes/ir0/arch_mm.h`; common MM consumes semantic
@@ -58,7 +58,7 @@ pure-move pass.
 - `arch/arm64/sources/{timer,gic_v2,bcm2836_irq,irq_backend,interrupts}.c`;
   owner: ARM timer/IRQ mechanism; destination: keep, later `arch/arm64/irq/`;
   board selection must remain behind platform discovery.
-- `arch/arm64/sources/{board,boot_info,platform,pl011,serial_io_arm64}.c`;
+- `arch/arm64/sources/{board,boot_info,platform,pl011,serial}.c`;
   owner: platform discovery and early console; destination: keep, later split
   into generic ARM platform plus QEMU/Raspberry Pi providers; DTB-derived
   resources are the interface boundary.
@@ -112,7 +112,7 @@ pure-move pass.
 
 ### Boot-only assets and harnesses
 
-- `boot_entry.S`, `vectors.S`, `boot_stub.c`, `arch_early.c`;
+- `boot_entry.S`, `vectors.S`, `boot_stub.c`, `early.c`;
   owner: ARM boot; destination: keep, later `arch/arm64/boot/`; `boot_stub.c`
   must shrink as early subsystems are retired.
 - `hello_embed.S`, `busybox_embed.S`, `slice_hello.c`, `all_objs_mark.c`;

@@ -29,15 +29,15 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 
 | Area | Mechanism |
 |------|-----------|
-| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/common/arch_interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `arch/x86-64/include/interrupt/idt.h`. |
+| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/*/sources/interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `arch/x86-64/include/interrupt/idt.h`. |
 | Staged syscall dispatch | **`early_syscall_dispatch_invoke()`** owns provider registration and semantic-ID dispatch in common C. Narrow `user/time/console/vfs/process/mm` ops groups prevent a monolithic early facade. ISA code owns ABI decoding, exception return, machine layout and early mechanisms. |
 | Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); x86-only iretq repair stays behind `<asm/context.h>`. New portable code includes the domain header ([`context.h`](../../includes/ir0/context.h)). [`arch_cpu.h`](../../includes/ir0/arch_cpu.h) is a compatibility umbrella only (does **not** include `cpu.h`). |
 | Context switch | **`switch_to(prev, next)`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); first entry **`first_switch_to`**. Portable policy is in `sched/switch/context_switch.c`; ISA backends stay in `arch/*/sources/`. |
-| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/arch_irq_init.c`. Portable trees must not include arch interrupt backend headers. |
+| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/irq.c`. Portable trees must not include arch interrupt backend headers. |
 | Signals / sigcontext | ISA layouts in [`sigcontext_x86_64.h`](../../includes/ir0/sigcontext_x86_64.h) / [`sigcontext_arm64.h`](../../includes/ir0/sigcontext_arm64.h); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
 | Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
-| User VA window | **`mm_user_va_ok(addr, size)`** ([`mm.h`](../../includes/ir0/mm.h)); ISA bodies in `arch/*/sources/arch_mm.c`. |
+| User VA window | **`mm_user_va_ok(addr, size)`** ([`mm.h`](../../includes/ir0/mm.h)); ISA bodies in `arch/*/sources/mm.c`. |
 | Usercopy | **`copy_to/from_user` / `clear_user`** (current mm); **`copy_*_user_mm` / `zero_user_mm`** (explicit pgd); `*_region_in_directory` is the walk primitive ([`copy_user.h`](../../includes/ir0/copy_user.h)). Never CR3+`memcpy` to user VA. Full contract: [`uaccess.md`](uaccess.md). |
 | IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`cpu_relax`**, **`smp_mb`**, **`timer_read`** ([`cpu.h`](../../includes/ir0/cpu.h), [`irq.h`](../../includes/ir0/irq.h), [`arch_mm.h`](../../includes/ir0/arch_mm.h)). No `arch_` prefix on new hot-path facades. |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
@@ -123,7 +123,7 @@ specific driver implementation file:
 | Scheduler | **`sched.h`** (`scheduler_api.h` → alias) | Process/timer/IRQ → `sched_schedule_next()` |
 | IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not arch interrupt backend headers from portable/drivers |
 | UP spinlock | **`spinlock.h`** (`ir0_spinlock_t`; irq-save on UP) | Hot paths e.g. `kernel/lib/pipe.c` read/write |
-| Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/page_fault.c` calls; impl in `arch/*/sources/arch_pf_debug.c` |
+| Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/page_fault.c` calls; impl in `arch/*/sources/pf_debug.c` |
 | Signal sigreturn ctx | `process_saved_context_*()` in `process.h` | Only `kernel/process/saved_context.c` may touch `->saved_context` |
 | Context switch | **`context.h`** | `switch_to` / kernel stack handoff |
 | MM root layout | **`arch_mm.h`** | User/kernel half of page-table root |

@@ -1,8 +1,9 @@
 # IR0 Scheduling
 
-> **Última verificación:** 2026-07-23
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/rr_sched.c`,
-> `sched/priority_sched.c`, `sched/sched_switch.c`, `sched/sched_resched.c`,
+> **Última verificación:** 2026-11-07
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`,
+> `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`,
+> `sched/sched_switch.c`, `sched/sched_resched.c`,
 > `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`
 
 IR0 scheduling is selected through a portable facade and a backend ops table
@@ -12,10 +13,14 @@ configured from Kconfig.
 
 - Portable API: [`includes/ir0/sched.h`](../includes/ir0/sched.h) (`sched_add_process`,
   `sched_schedule_next`, `sched_count_runnable`, …).
-- Dispatch: [`sched/sched.c`](../sched/sched.c) holds a `const struct ir0_sched_ops *`
-  selected at build time (`CONFIG_SCHEDULER_POLICY`).
-- Backend ops: [`sched/sched_ops.h`](../sched/sched_ops.h) — RR and priority each export
-  their own `ir0_*_sched_ops` table. Backends must not `#include` each other.
+- Dispatch: [`sched/sched.c`](../sched/sched.c) calls `sched_backend_active()` and
+  nowhere names a concrete policy.
+- Selection: [`sched/backend_select.c`](../sched/backend_select.c) maps
+  `CONFIG_SCHEDULER_POLICY` to the active ops table at build time.
+- Backend ops: [`sched/backend.h`](../sched/backend.h) is the private contract;
+  [`sched/rr/backend.h`](../sched/rr/backend.h) and
+  [`sched/prio/backend.h`](../sched/prio/backend.h) export one table each.
+  Backends must not `#include` or call each other's private symbols.
 - Shared switch helper: [`sched/sched_switch.c`](../sched/sched_switch.c)
   (`sched_context_switch_to`) — not a runqueue API.
 - Compat: `includes/ir0/scheduler_api.h` and `sched/scheduler_api.h` only
@@ -25,9 +30,13 @@ configured from Kconfig.
 
 | `CONFIG_SCHEDULER_POLICY` | Name (`sched_active_policy_name`) | Backend object |
 |---------------------------|-----------------------------------|----------------|
-| `0` | `round_robin` | `sched/rr_sched.o` |
-| `1` | `cfs` | **Same RR ops** (honest alias — no `cfs_sched.c`, no CFS runqueue) |
-| `2` (defconfig) | `priority` | `sched/priority_sched.o` only |
+| `0` | `round_robin` | `sched/rr/backend.o` |
+| `1` | `cfs` | **Same RR backend object** (honest alias — no CFS runqueue) |
+| `2` (defconfig) | `priority` | `sched/prio/backend.o` only |
+
+The priority backend reports its boot selftest through `ops->selftest`;
+`kernel/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL` without
+referencing a policy symbol.
 
 ## Blocking syscalls (poll / pause / nanosleep)
 
@@ -57,7 +66,8 @@ See [`KTM.md`](KTM.md) (Class B context). Product repair: `IR0_CLASS_B_REPAIR=1`
 
 ## Strengths
 
-- Portable callers never include `<sched/rr_sched.h>` or peer backends.
+- Portable callers never include `<sched/backend.h>`, `<sched/rr/backend.h>`, or
+  peer backends.
 - Policy iteration is ops-table / Makefile object selection.
 - Priority bands are a real separate backend (not a wrapper of RR headers).
 - Blocked syscall sleeps yield without nested schedule storms.

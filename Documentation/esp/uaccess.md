@@ -4,7 +4,7 @@
 > Capas `copy_*_user_mm`: ver [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 
 > **Fuente de verdad:** `includes/ir0/copy_user.h`, `kernel/lib/copy_user.c`,  
-> `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/arch_mm.c`,  
+> `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/mm.c`,
 > `mm/paging.c` (`copy_*_region_in_directory`, `zero_user_region_in_directory`),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
 > (`check_usercopy_no_raw_user_touch`), `tests/host/test_usercopy_contract.c`,  
@@ -41,7 +41,7 @@ flowchart TB
     CU["includes/ir0/copy_user.h<br/>copy_to/from_user clear_user<br/>get_user put_user access_ok"]
   end
   subgraph isa [Ventana VA por ISA]
-    VA["mm_user_va_ok()<br/>arch/*/sources/arch_mm.c"]
+    VA["mm_user_va_ok()<br/>arch/*/sources/mm.c"]
   end
   subgraph mm [Walk MM portable]
     REG["copy_*_region_in_directory<br/>zero_user_region_in_directory<br/>COW break en write"]
@@ -89,7 +89,7 @@ vía soportada para romper COW en un write iniciado por el kernel.
 |------|------------------|-----------------|
 | Contrato + macros | `includes/ir0/copy_user.h` | Misma API en toda ISA |
 | Glue portable | `kernel/lib/copy_user.c` | Modo, `mm_user_va_ok`, dispatch a region |
-| Ventana VA | `mm_user_va_ok` en `arch/*/sources/arch_mm.c` | Rango user canónico por ISA |
+| Ventana VA | `mm_user_va_ok` en `arch/*/sources/mm.c` | Rango user canónico por ISA |
 | COW / walk PTE | `mm/paging.c` (MM producción x86-64) | Presente RO / COW break |
 | Arm64 early | MM early / helpers existentes | Debe pasar por nombres `copy_*_user`; **sin reclamar COW** hasta paridad |
 
@@ -101,7 +101,7 @@ vía soportada para romper COW en un write iniciado por el kernel.
 4. Arm64 early sin COW: no inventar una segunda API con otro nombre.
 
 Ventana x86-64: `0x00400000` … `0x00007FFFFFFFFFFF` en
-[`arch/x86-64/sources/arch_mm.c`](../../arch/x86-64/sources/arch_mm.c).
+[`arch/x86-64/sources/mm.c`](../../arch/x86-64/sources/mm.c).
 
 ## Callers migrados (P0, 2026-09-02)
 

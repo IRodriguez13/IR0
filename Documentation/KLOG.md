@@ -3,7 +3,7 @@
 > **Last verified:** 2026-07-24
 > **Source of truth:** `includes/ir0/klog_event.h`, `ktm/klog.c`, `ktm/include/klog.h`,
 > `kernel/cmdline.c`, `arch/common/boot_log.c`,
-> `arch/common/arch_interface.c` (`arch_early_clock_*`), `fs/procfs.c` (`proc_kmsg_read`),
+> `arch/*/sources/interface.c` (`arch_early_clock_*`), `fs/procfs.c` (`proc_kmsg_read`),
 > `fs/devfs.c` (`dev_kmsg_*`), `includes/ir0/boot_log_hostshare.c`, `kernel/main.c`
 
 Human kernel logging is an **event core**, not a free-form string dump. KTM is an

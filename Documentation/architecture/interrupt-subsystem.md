@@ -1,7 +1,7 @@
 # Interrupt Subsystem
 
 > **Last verified:** 2026-11-04
-> **Source of truth:** `includes/ir0/irq.h`, `arch/*/sources/arch_irq_init.c`,
+> **Source of truth:** `includes/ir0/irq.h`, `arch/*/sources/irq.c`,
 > `arch/x86-64/sources/interrupt/`
 
 Interrupt handling, exception management, and hardware interrupt routing.
@@ -13,14 +13,14 @@ Interrupt handling, exception management, and hardware interrupt routing.
 
 **Implementation today:** x86-64 IDT/PIC/ISR live under
 `arch/x86-64/{sources,include,asm}/interrupt/` and are wired by
-`arch/x86-64/sources/arch_irq_init.c`. ARM64 `arch_irq_init.c` is a GIC/bring-up
+`arch/x86-64/sources/irq.c`. ARM64 `irq.c` is a GIC/bring-up
 scaffold (product EL0 IRQ path still BLOCKED).
 
 ## Architecture
 
 ```
 includes/ir0/irq.h                       - Portable facade (bring-up + unmask + PS/2 poll)
-arch/*/sources/arch_irq_init.c           - Per-ISA bring-up
+arch/*/sources/irq.c           - Per-ISA bring-up
 arch/x86-64/sources/interrupt/           - x86 IDT/PIC/ISR implementation
 arch/x86-64/include/interrupt/           - x86 backend headers (not a portable API)
 arch/x86-64/asm/interrupt/               - x86 ISR assembly stubs

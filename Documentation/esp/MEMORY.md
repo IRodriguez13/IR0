@@ -17,7 +17,7 @@ aislamiento de procesos.
 ## Cambios recientes (2026-09-01)
 
 - Eliminado soft-grow implicito heap/stack en `#PF` (fuera de VMA → SIGSEGV).
-- Forensics x86 bajo `DEBUG_D1_DIAG` en `arch/x86-64/sources/arch_pf_debug.c`.
+- Forensics x86 bajo `DEBUG_D1_DIAG` en `arch/x86-64/sources/pf_debug.c`.
 - COW sin cambio de contrato; gate: `make smoke-mm-cow-lazy`.
 
 ## Capas Principales

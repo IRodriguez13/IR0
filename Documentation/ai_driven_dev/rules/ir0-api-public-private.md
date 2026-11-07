@@ -34,7 +34,7 @@ Si la función **por detrás** usa asm/intrinsics de ISA, el nombre público deb
 Backends (RR, priority, futuros) **no** incluyen ni llaman privados del peer. Eligen `next` → `sched_context_switch_to` → `switch_to`. Ops table / facade; no includes cruzados.
 
 ```text
-❌ BAD:  priority_sched.c → #include "rr_sched.h"
+❌ BAD:  sched/prio/backend.c → #include "../rr/backend.h"
 ✅ GOOD: priority → sched_context_switch_to(next) → switch_to(prev, next)
 ```
 

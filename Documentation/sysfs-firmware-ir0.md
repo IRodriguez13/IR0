@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-11-06  
 > **Source of truth:** `includes/ir0/boot_firmware_sysfs.h`, `kernel/boot_firmware_sysfs.c`,  
-> `arch/*/sources/boot_firmware_sysfs_arch.c`, `fs/pseudo_fs_nodes.c`
+> `arch/*/sources/firmware_sysfs.c`, `fs/pseudo_fs_nodes.c`
 
 IR0 exposes a best-effort firmware/boot snapshot under the sysfs pseudo-fs.
 

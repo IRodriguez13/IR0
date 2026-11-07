@@ -14,8 +14,8 @@ Makefile).
 
 | ISA | Bring-up path |
 |-----|----------------|
-| x86-64 | `arch/x86-64/sources/arch_irq_init.c` → this tree |
-| arm64 | `arch/arm64/sources/arch_irq_init.c` → VBAR + `gic_v2` (never links this tree) |
+| x86-64 | `arch/x86-64/sources/irq.c` → this tree |
+| arm64 | `arch/arm64/sources/irq.c` → VBAR + `gic_v2` (never links this tree) |
 
 Do **not** include these backend headers from `kernel/`, `fs/`, `mm/`, `net/`,
 `drivers/`, or `sched/`. Use `ir0/irq.h` and `ir0/arch_io.h`.

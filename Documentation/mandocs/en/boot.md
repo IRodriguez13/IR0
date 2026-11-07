@@ -7,7 +7,7 @@
 | Status | stable (product: runit only; dbgshell removed) |
 | Depends on | memory, drivers, vfs, process |
 | Man page | IR0-boot (section 7) |
-| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/arch_early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
+| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Overview
 
@@ -23,7 +23,7 @@ dbgshell / `debug_bins/` path was **removed** (2026-07-25); see
 | Stage | Component | File |
 |-------|-----------|------|
 | Loader entry | Multiboot check, PAE, long mode | `arch/x86-64/asm/boot_x64.asm` |
-| Early CPU | GDT, TSS, SSE, **early IDT** | `arch/x86-64/sources/arch_early.c`, `arch/x86-64/sources/interrupt/early_idt.c`, `arch/x86-64/asm/interrupt/early_idt_stubs.asm` |
+| Early CPU | GDT, TSS, SSE, **early IDT** | `arch/x86-64/sources/early.c`, `arch/x86-64/sources/interrupt/early_idt.c`, `arch/x86-64/asm/interrupt/early_idt_stubs.asm` |
 | Kernel entry | Orchestration + boot phases | `kernel/main.c` (`kmain`) |
 | Log profile | Kconfig + `ir0.loglevel=` cmdline | `kernel/cmdline.c` |
 | Event core | `klog_record` + early clock | `ktm/klog.c`, `arch_early_clock_*` |
