@@ -66,6 +66,32 @@ uintptr_t mm_pte_phys(uint64_t e);
 uint64_t mm_pte_mapping_flags(uint64_t e);
 void mm_pte_mark_cow(uint64_t *e);
 
+/*
+ * Portable leaf predicates (Linux pte_present/pte_write/...). Common code must
+ * use these instead of testing raw descriptor bits: IR0_MM_MAP_* values only
+ * coincide with hardware bits on x86-64.
+ */
+static inline int pte_present(uint64_t e)
+{
+	return mm_pte_present(e);
+}
+
+static inline int pte_user(uint64_t e)
+{
+	return mm_pte_present(e) &&
+	       (mm_pte_mapping_flags(e) & IR0_MM_MAP_USER) != 0;
+}
+
+static inline int pte_write(uint64_t e)
+{
+	return (mm_pte_mapping_flags(e) & IR0_MM_MAP_WRITE) != 0;
+}
+
+static inline int pte_cow(uint64_t e)
+{
+	return (mm_pte_mapping_flags(e) & IR0_MM_MAP_COW) != 0;
+}
+
 uint64_t mm_make_table_pte(uintptr_t phys, int user);
 uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec);
 void mm_pte_set_user(uint64_t *e);

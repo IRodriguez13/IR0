@@ -26,7 +26,14 @@
 #define A64_PTE_AP_EL0    (1ULL << 6) /* AP[1]=1 → EL0 access when AP[2]=0 */
 #define A64_PTE_AP_RO     (1ULL << 7)
 #define A64_PTE_NG        (1ULL << 11)
+#define A64_PTE_PXN       (1ULL << 53)
 #define A64_PTE_UXN       (1ULL << 54)
+#define A64_PTE_SH_INNER  (3ULL << 8)
+#define A64_PTE_ATTR(i)   ((uint64_t)(i) << 2)
+#define A64_PTE_ATTR_MASK (7ULL << 2)
+/* MAIR_EL1 slots programmed by mmu.c. */
+#define A64_MAIR_DEVICE   0U
+#define A64_MAIR_NORMAL   1U
 #define A64_PTE_SW_COW    (1ULL << 55)
 #define A64_PTE_PFN_MASK  0x0000FFFFFFFFF000ULL
 #define A64_INDEX_MASK    0x1FFUL
@@ -197,6 +204,18 @@ uint64_t mm_pte_mapping_flags(uint64_t e)
 		flags |= IR0_MM_MAP_COW;
 	if (mm_pte_executable(e))
 		flags |= IR0_MM_MAP_EXEC;
+	if ((e & A64_PTE_ATTR_MASK) == A64_PTE_ATTR(A64_MAIR_DEVICE))
+		flags |= IR0_MM_MAP_NOCACHE;
+	if (e & A64_PTE_AF)
+		flags |= IR0_MM_MAP_ACCESSED;
+	/*
+	 * No hardware dirty tracking (no DBM): report writable or COW pages as
+	 * dirty so reclaim never drops data it cannot prove clean.
+	 */
+	if (flags & (IR0_MM_MAP_WRITE | IR0_MM_MAP_COW))
+		flags |= IR0_MM_MAP_DIRTY;
+	if (mm_pte_large(e))
+		flags |= IR0_MM_MAP_LARGE;
 	return flags;
 }
 

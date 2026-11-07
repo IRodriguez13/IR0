@@ -547,7 +547,7 @@ void ktest_mprotect_preserves_cow(void)
 	if (pte)
 	{
 		/* Simulate a fork-shared page: read-only plus the COW bit. */
-		*pte = (*pte & ~PAGE_RW) | PAGE_COW;
+		mm_pte_mark_cow(pte);
 		KASSERT(ktest_mm_pte_flags(base, &flags));
 		KASSERT((flags & PAGE_COW) != 0);
 		KASSERT((flags & PAGE_RW) == 0);
@@ -621,8 +621,8 @@ void ktest_cow_write_fault_drops_old_once(void)
 	mm_page_fault_handle(&info, irq_frame);
 
 	pte = paging_get_pte(process_pgd(current_process), base);
-	KASSERT(pte != NULL && (*pte & PAGE_PRESENT));
-	if (pte && (*pte & PAGE_PRESENT))
+	KASSERT(pte != NULL && pte_present(*pte));
+	if (pte && pte_present(*pte))
 	{
 		char verify[2] = { 0 };
 
@@ -635,7 +635,7 @@ void ktest_cow_write_fault_drops_old_once(void)
 					   "AB", 2), 0);
 
 		/* Simulate a fork-shared page: read-only plus the COW bit. */
-		*pte = (*pte & ~PAGE_RW) | PAGE_COW;
+		mm_pte_mark_cow(pte);
 
 		memset(&info, 0, sizeof(info));
 		info.address = base;
@@ -705,11 +705,11 @@ void ktest_copy_to_user_cow_break_drops_old_once(void)
 	mm_page_fault_handle(&info, irq_frame);
 
 	pte = paging_get_pte(process_pgd(current_process), base);
-	KASSERT(pte != NULL && (*pte & PAGE_PRESENT));
-	if (pte && (*pte & PAGE_PRESENT))
+	KASSERT(pte != NULL && pte_present(*pte));
+	if (pte && pte_present(*pte))
 	{
 		/* Simulate a fork-shared page: read-only plus the COW bit. */
-		*pte = (*pte & ~PAGE_RW) | PAGE_COW;
+		mm_pte_mark_cow(pte);
 
 		KASSERT_EQ(copy_to_user_mm(process_pgd(current_process), base,
 					   "CD", 2), 0);

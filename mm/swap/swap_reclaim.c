@@ -107,7 +107,7 @@ int ir0_swap_out_page(process_t *proc, uintptr_t va)
 		return -ENOMEM;
 	va &= ~(uintptr_t)(PAGE_SIZE_4KB - 1U);
 	pte = paging_get_pte(process_pgd(proc), va);
-	if (!pte || !mm_pte_present(*pte) || !(*pte & PAGE_USER))
+	if (!pte || !mm_pte_present(*pte) || !pte_user(*pte))
 		return -ENOENT;
 	phys = mm_pte_phys(*pte);
 	if (pmm_frame_refcount(phys) != 1)
@@ -197,7 +197,7 @@ static int try_range(process_t *proc, uintptr_t start, uintptr_t end,
 				return 1;
 			}
 		}
-		else if (mm_pte_present(*pte) && (*pte & PAGE_USER) &&
+		else if (mm_pte_present(*pte) && pte_user(*pte) &&
 			 ir0_swap_out_page(proc, va) == 0)
 		{
 			if (reclaimed)

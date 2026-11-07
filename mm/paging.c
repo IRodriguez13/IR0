@@ -509,11 +509,11 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 	uint64_t map_flags;
 	unsigned long irq_flags;
 
-	if (!pte || !(*pte & PAGE_PRESENT))
+	if (!pte || !pte_present(*pte))
 		return -1;
-	if ((*pte & PAGE_RW))
+	if (pte_write(*pte))
 		return 0;
-	if (!(*pte & PAGE_COW) || !(*pte & PAGE_USER))
+	if (!pte_cow(*pte) || !pte_user(*pte))
 		return -1;
 
 	irq_flags = irq_save();
@@ -567,12 +567,12 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 	pte = paging_get_pte(root, page);
 	if (!pte || !mm_pte_present(*pte))
 		return -1;
-	if (write && !(*pte & PAGE_RW) && (*pte & PAGE_COW))
+	if (write && !pte_write(*pte) && pte_cow(*pte))
 	{
 		if (paging_cow_break_leaf(root, pte, page) != 0)
 			return -1;
 		pte = paging_get_pte(root, page);
-		if (!pte || !mm_pte_present(*pte) || !(*pte & PAGE_RW))
+		if (!pte || !mm_pte_present(*pte) || !pte_write(*pte))
 			return -1;
 	}
 	*phys_out = paging_entry_pfn(*pte);
@@ -1036,7 +1036,7 @@ int protect_user_region_in_directory(address_space_root_t root,
 		if (!pte || !mm_pte_present(*pte))
 			return -1;
 		/* A shared COW frame must remain hardware read-only until its write fault. */
-		if ((*pte & PAGE_COW) && (page_flags & PAGE_RW))
+		if (pte_cow(*pte) && (page_flags & PAGE_RW))
 		{
 			page_flags &= ~PAGE_RW;
 			page_flags |= PAGE_COW;
@@ -1342,7 +1342,7 @@ int copy_process_memory(struct process *parent, struct process *child)
                         continue;
                     }
                     if (!mm_pte_present(page_entry) ||
-                        !(page_entry & PAGE_USER))
+                        !pte_user(page_entry))
                         continue;
 
                     parent_phys = paging_entry_pfn(page_entry);
@@ -1352,11 +1352,11 @@ int copy_process_memory(struct process *parent, struct process *child)
 					idx[3] = i1;
 					virt_addr = mm_va_from_indices(idx);
 
-                    was_writable = (page_entry & PAGE_RW) != 0;
+                    was_writable = pte_write(page_entry) != 0;
 					flags = mm_pte_mapping_flags(page_entry);
                     flags &= ~PAGE_GLOBAL;
                     flags |= PAGE_USER;
-                    if (was_writable || (page_entry & PAGE_COW))
+                    if (was_writable || pte_cow(page_entry))
                     {
                         flags &= ~PAGE_RW;
                         flags |= PAGE_COW;
@@ -1406,8 +1406,8 @@ int copy_process_memory(struct process *parent, struct process *child)
                     uint64_t page_entry = level3_table[i1];
 
                     if (!mm_pte_present(page_entry) ||
-                        !(page_entry & PAGE_USER) ||
-                        !(page_entry & PAGE_RW))
+                        !pte_user(page_entry) ||
+                        !pte_write(page_entry))
                         continue;
 
 					mm_pte_mark_cow(&level3_table[i1]);

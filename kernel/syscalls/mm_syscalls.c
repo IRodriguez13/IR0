@@ -849,13 +849,13 @@ static void mmap_audit_log_pte(const char *tag, address_space_root_t root,
   mapped = is_page_mapped_in_directory(root, va, &pte_flags);
   pte = paging_get_pte(root, va);
 
-  if (pte && (*pte & PAGE_PRESENT))
+  if (pte && pte_present(*pte))
   {
     klog_debug_fmt("MMAP", "PTE tag=%s va=%llx mapped=%llx present=%llx "
                    "user=%llx rw=%llx nx=%llx pfn=%llx",
                    tag ? tag : "(null)", (unsigned long long)((uint64_t)va),
                    (unsigned long long)((uint64_t)(mapped > 0 ? 1 : 0)),
-                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte && pte_present(*pte) ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_USER ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_RW ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte && !mm_pte_executable(*pte) ? 1 : 0)),
@@ -867,7 +867,7 @@ static void mmap_audit_log_pte(const char *tag, address_space_root_t root,
                    "user=%llx rw=%llx nx=%llx",
                    tag ? tag : "(null)", (unsigned long long)((uint64_t)va),
                    (unsigned long long)((uint64_t)(mapped > 0 ? 1 : 0)),
-                   (unsigned long long)((uint64_t)(pte && (*pte & PAGE_PRESENT) ? 1 : 0)),
+                   (unsigned long long)((uint64_t)(pte && pte_present(*pte) ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_USER ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte_flags & PAGE_RW ? 1 : 0)),
                    (unsigned long long)((uint64_t)(pte && !mm_pte_executable(*pte) ? 1 : 0)));
@@ -1617,7 +1617,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
     uint64_t page_flags = map_flags;
 
     pte = paging_get_pte(root, page);
-    if (!pte || !(*pte & PAGE_PRESENT))
+    if (!pte || !pte_present(*pte))
     {
       /* Gaps only OK when covering a known mmap region (lazy anon). */
       if (!matched)
@@ -1641,14 +1641,14 @@ int sys_mprotect(void *addr, size_t len, int prot)
     }
 
     saw_present = 1;
-    phys = *pte & PAGE_FRAME_MASK;
+    phys = mm_pte_phys(*pte);
     /*
      * Keep the software COW bit and the hardware access bits. A shared
      * frame must stay read-only even when mprotect asks for PROT_WRITE;
      * clearing PAGE_COW here would make the next store write through the
      * parent's frame instead of copying it.
      */
-    page_flags |= *pte & (PAGE_COW | PAGE_DIRTY | PAGE_ACCESSED);
+    page_flags |= mm_pte_mapping_flags(*pte) & (PAGE_COW | PAGE_DIRTY | PAGE_ACCESSED);
     if ((page_flags & PAGE_COW) && (page_flags & PAGE_RW))
       page_flags &= ~PAGE_RW;
     if (map_page_in_directory(root, page, phys, page_flags) != 0)

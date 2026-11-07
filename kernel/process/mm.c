@@ -111,7 +111,7 @@ void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
 			{
 				level1_entry = level1[i3];
 				if (mm_pte_present(level1_entry) &&
-				    (level1_entry & PAGE_USER) && mm_pte_large(level1_entry))
+				    pte_user(level1_entry) && mm_pte_large(level1_entry))
 					count += mm_large_leaf_pages(1);
 				continue;
 			}
@@ -124,7 +124,7 @@ void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
 
 				if (!mm_pte_present(level2_entry))
 					continue;
-				if ((level2_entry & PAGE_USER) && mm_pte_large(level2_entry))
+				if (pte_user(level2_entry) && mm_pte_large(level2_entry))
 				{
 					count += mm_large_leaf_pages(2);
 					continue;
@@ -139,7 +139,7 @@ void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
 				{
 					uint64_t ent = level3[i1];
 
-					if (mm_pte_present(ent) && (ent & PAGE_USER))
+					if (mm_pte_present(ent) && pte_user(ent))
 						count++;
 				}
 			}
@@ -238,7 +238,7 @@ void process_unmap_user_pages_all(address_space_root_t root,
 					uintptr_t virt;
 					size_t idx[4];
 
-					if (!mm_pte_present(ent) || !(ent & PAGE_USER))
+					if (!mm_pte_present(ent) || !pte_user(ent))
 						continue;
 					if (stats)
 					{

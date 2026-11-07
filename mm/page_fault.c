@@ -631,7 +631,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		 * After huge-PDE break, slots are pte_none (Linux). Demand-zero
 		 * inside heap/stack/mmap — same as !present path above.
 		 */
-		if (!pte || !(*pte & PAGE_PRESENT))
+		if (!pte || !pte_present(*pte))
 		{
 			irq_restore(irq_flags);
 			if (pf_addr_may_promote_identity(current, fault_addr))
@@ -655,7 +655,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		 * present+!USER identity leftover: install anon zero
 		 * (do_anonymous_page), never memcpy PMM.
 		 */
-		if (pte && (*pte & PAGE_PRESENT) && !(*pte & PAGE_USER) &&
+		if (pte && pte_present(*pte) && !pte_user(*pte) &&
 		    pf_addr_may_promote_identity(current, fault_addr))
 		{
 			if (pf_identity_to_anon_zero(current, vaddr_aligned,
@@ -668,8 +668,8 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 			irq_restore(irq_flags);
 			return;
 		}
-		if (!pte || !(*pte & PAGE_PRESENT) || !(*pte & PAGE_USER) ||
-		    !(*pte & PAGE_COW) || (*pte & PAGE_RW))
+		if (!pte || !pte_present(*pte) || !pte_user(*pte) ||
+		    !pte_cow(*pte) || pte_write(*pte))
 		{
 			uint64_t pte_val = pte ? *pte : 0;
 
@@ -777,7 +777,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 			return;
 		}
 		pte = paging_get_pte(process_pgd(current), vaddr_aligned);
-		if (!pte || !(*pte & PAGE_PRESENT))
+		if (!pte || !pte_present(*pte))
 		{
 			irq_restore(irq_flags);
 			if (pf_addr_may_promote_identity(current, fault_addr))
@@ -790,7 +790,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 			pf_user_segv(current, stack, fault_addr, info);
 			return;
 		}
-		if (pte && (*pte & PAGE_PRESENT) && !(*pte & PAGE_USER) &&
+		if (pte && pte_present(*pte) && !pte_user(*pte) &&
 		    pf_addr_may_promote_identity(current, fault_addr))
 		{
 			if (pf_identity_to_anon_zero(current, vaddr_aligned,
