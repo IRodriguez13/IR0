@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_firmware_sysfs_arch.c
- * Description: ARM64 firmware/DTB snapshot for /sys/firmware/ir0/*.
+ * Description: ARM64 firmware/DTB snapshot for the IR0 firmware sysfs node.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

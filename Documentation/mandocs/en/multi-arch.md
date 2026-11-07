@@ -41,7 +41,7 @@ NEON.
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | boot, IDT/PIC impl, user mode, syscalls |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; product link `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` boards = freestanding bring-up |
-| Context switch | `arch_switch_to` → `switch_context_x64` / `switch_context_arm64` | portable dispatcher in `sched/switch/arch_context_switch.c` |
+| Context switch | `switch_to` → ISA-private backend | portable dispatcher in `sched/switch/context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | `ARCH_OBJS_ARM64` includes `switch_early.S` |
 
 **Guard tags (`architecture_guard.py`):** portable trees must not include

@@ -474,7 +474,7 @@ KERNEL_OBJS = \
 	sched/runqueue_lock.o \
 	sched/sched_switch.o \
     sched/sched_resched.o \
-    sched/switch/arch_context_switch.o \
+    sched/switch/context_switch.o \
     sched/switch/context_user_resume.o \
     $(CONSOLE_BACKEND_OBJ)
 

@@ -54,7 +54,7 @@ GRUB → boot_x64.asm
               → vfs_init_root() + sentinel opcional FIRST_BAREMETAL_BOOT
               → process_init + ipc_init + clock_system_init (MONOTONIC)
               → syscall_init + syscalls_init
-              → irq_init + boot_irq_unmask + sti
+              → irq_init + ir0_boot_port_unmask_irqs + sti
               → fase USERSPACE: kexecve("/sbin/init")
               → sched_schedule_next → ring 3
 ```

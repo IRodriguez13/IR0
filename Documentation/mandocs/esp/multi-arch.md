@@ -38,7 +38,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 | Interfaz común | `arch/common/arch_interface.c` | Despacho cross-arch |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | IDT/PIC impl + userspace |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; link producto `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` = freestanding |
-| Context switch | `arch_switch_to` → asm/C por ISA | dispatcher en `sched/switch/arch_context_switch.c` |
+| Context switch | `switch_to` → backend privado por ISA | dispatcher en `sched/switch/context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` en Makefile | `ARCH_OBJS_ARM64` incluye `switch_early.S` |
 
 **Tags guard (`architecture_guard.py`):** árboles portables no deben incluir

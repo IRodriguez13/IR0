@@ -15,9 +15,10 @@ struct process;
 
 /*
  * These hooks deliberately express scheduling events, not registers or
- * instructions.  sched/switch owns the state machine; each ISA owns the raw
- * checkpoint and frame repair.
+ * instructions. sched/switch owns the state machine; each ISA owns the raw
+ * checkpoint, stack handoff, and frame repair.
  */
+void context_backend_switch(task_t *prev, task_t *next);
 int context_backend_checkpoint(task_t *prev);
 void context_backend_prepare_user_frame(struct process *proc, task_t *task);
 uint64_t context_backend_user_return_value(const struct process *proc,

@@ -307,7 +307,7 @@ void irq_init(void)
     interrupt_init();
 }
 
-void boot_irq_unmask(void)
+void ir0_boot_port_unmask_irqs(void)
 {
 	/* PIC lines — x86 only; arm64 uses GIC PPIs via arch_irq_init. */
 	irq_unmask_line(0);

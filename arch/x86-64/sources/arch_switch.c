@@ -12,7 +12,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_switch.h>
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
 #include <ir0/task.h>
@@ -258,17 +257,12 @@ static void arch_fixup_user_task_for_iretq(process_t *proc)
 	process_apply_syscall_frame_to_task(&proc->task, sf, task_get_retval(&proc->task));
 }
 
-void arch_switch_to(task_t *prev, task_t *next)
+void context_backend_switch(task_t *prev, task_t *next)
 {
-    /*
-     * High-regression area: wait4, irq_frame_saved, syscall_resume_rax,
-     * and kernel_ret vs user-iret. Do not simplify these gates without
-     * wait4 + blocked-syscall coverage.
-     */
-    process_t *next_proc = next ? task_to_process(next) : NULL;
+	process_t *next_proc = next ? task_to_process(next) : NULL;
 
-    if (next_proc && next && arch_will_resume_user_iretq(next_proc, next))
-        arch_repair_user_gprs_from_syscall_frame(next_proc, next);
+	if (next_proc && arch_will_resume_user_iretq(next_proc, next))
+		arch_repair_user_gprs_from_syscall_frame(next_proc, next);
 
-    switch_context_x64(prev, next);
+	switch_context_x64(prev, next);
 }

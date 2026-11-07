@@ -148,7 +148,7 @@ arm64-all-objs-probe: arm64-portable-compile
 	if [ $$fail -eq 0 ]; then \
 		for src in kernel/main.c fs/open_flags.c \
 			kernel/errno.c kernel/process/credentials.c \
-			sched/switch/switch_arm64.c \
+			arch/arm64/sources/context_switch.c \
 			kernel/time/clock_wait.c kernel/driver_registry.c \
 			mm/copy_user.c \
 			kernel/logging.c kernel/futex.c \

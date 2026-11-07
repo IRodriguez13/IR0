@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-11-07  
 > **Source of truth:** `arch/arm64/asm/entry/vectors.S`, `arch/arm64/sources/arch_switch.c`  
-> (`set_current_kernel_stack`), `arch/arm64/asm/boot/entry.S`, `sched/switch/arch_context_switch.c`  
+> (`set_current_kernel_stack`), `arch/arm64/asm/boot/entry.S`, `sched/switch/context_switch.c`
 > (`context_prepare_next` → `set_current_kernel_stack`).
 
 ## Why two stack pointers matter

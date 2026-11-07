@@ -12,7 +12,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_switch.h>
 #include <ir0/arch_task.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/context_backend.h>
@@ -55,7 +54,7 @@ void switch_save_user_rsp(struct process *prev)
 	proc->saved_user_rsp = sp_el0;
 }
 
-void arch_switch_to(task_t *prev, task_t *next)
+void context_backend_switch(task_t *prev, task_t *next)
 {
 	process_t *next_proc;
 

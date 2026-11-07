@@ -6,15 +6,15 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_context_switch.c
- * Description: Portable switch_to() dispatcher — ISA body in arch_switch.c.
+ * File: context_switch.c
+ * Description: Portable switch_to() state preparation and backend dispatch.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_switch.h>
 #include <ir0/arch_mm.h>
 #include <ir0/context.h>
+#include <ir0/context_backend.h>
 #include <ir0/task.h>
 #include <ir0/arch_task.h>
 #include <ir0/process.h>
@@ -71,5 +71,5 @@ void switch_to(task_t *prev, task_t *next)
 #else
 	/* The staged boot image deliberately omits the process-resume state machine. */
 #endif
-	arch_switch_to(prev, next);
+	context_backend_switch(prev, next);
 }

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: boot_log.c
- * Description: Portable boot serial contract (banner-first, ISA-agnostic format).
+ * Description: Portable, banner-first boot log facade.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -22,7 +22,6 @@
 
 #ifndef IR0_FREESTANDING_BOOT
 #include <ir0/ktm/klog.h>
-#include <ir0/logging.h>
 #endif
 
 #ifdef IR0_FREESTANDING_BOOT
@@ -30,15 +29,15 @@
 static int g_boot_hold = 1;
 static uint64_t g_boot_sequence;
 
-static void boot_append(char *buf, size_t sz, size_t *off, const char *s)
+static void boot_append(char *buf, size_t size, size_t *offset, const char *text)
 {
 	size_t i;
 
-	if (!buf || !off || !s || sz == 0)
+	if (!buf || !offset || !text || size == 0)
 		return;
-	for (i = 0; s[i] && *off + 1 < sz; i++)
-		buf[(*off)++] = s[i];
-	buf[*off] = '\0';
+	for (i = 0; text[i] && *offset + 1 < size; i++)
+		buf[(*offset)++] = text[i];
+	buf[*offset] = '\0';
 }
 
 static void boot_emit_raw(const char *level, const char *comp, const char *msg)
@@ -80,6 +79,34 @@ static void boot_emit_raw(const char *level, const char *comp, const char *msg)
 }
 #endif
 
+enum boot_log_level {
+	BOOT_LOG_INFO,
+	BOOT_LOG_NOTICE,
+	BOOT_LOG_WARN,
+};
+
+static void boot_event(enum boot_log_level level, const char *component,
+			       const char *message)
+{
+#ifndef IR0_FREESTANDING_BOOT
+	static const klog_level_t klog_levels[] = {
+		KLOG_LEVEL_INFO,
+		KLOG_LEVEL_NOTICE,
+		KLOG_LEVEL_WARN,
+	};
+
+	klog_event(KLOG_EVENT_BOOT_INFO, 0, klog_levels[level], component, message);
+#else
+	static const char *const level_names[] = {
+		"INFO",
+		"NOTICE",
+		"WARN",
+	};
+
+	boot_emit_raw(level_names[level], component, message);
+#endif
+}
+
 void ir0_boot_serial_ready(void)
 {
 #ifndef IR0_FREESTANDING_BOOT
@@ -94,30 +121,17 @@ void ir0_boot_serial_ready(void)
 
 void ir0_boot_info(const char *component, const char *message)
 {
-#ifndef IR0_FREESTANDING_BOOT
-	klog_event(KLOG_EVENT_BOOT_INFO, 0, KLOG_LEVEL_INFO, component, message);
-#else
-	boot_emit_raw("INFO", component, message);
-#endif
+	boot_event(BOOT_LOG_INFO, component, message);
 }
 
 void ir0_boot_notice(const char *component, const char *message)
 {
-#ifndef IR0_FREESTANDING_BOOT
-	klog_event(KLOG_EVENT_BOOT_INFO, 0, KLOG_LEVEL_NOTICE, component,
-		   message);
-#else
-	boot_emit_raw("NOTICE", component, message);
-#endif
+	boot_event(BOOT_LOG_NOTICE, component, message);
 }
 
 void ir0_boot_warn(const char *component, const char *message)
 {
-#ifndef IR0_FREESTANDING_BOOT
-	klog_event(KLOG_EVENT_BOOT_INFO, 0, KLOG_LEVEL_WARN, component, message);
-#else
-	boot_emit_raw("WARN", component, message);
-#endif
+	boot_event(BOOT_LOG_WARN, component, message);
 }
 
 void ir0_boot_info_hex64(const char *component, const char *label,
@@ -171,14 +185,8 @@ void ir0_boot_log_platform_hypervisor(void)
 		else if (strncmp(hv_vendor, "KVMKVMKVM", 9) == 0)
 			ir0_boot_info("HYPERVISOR",
 				      "detected vendor=KVM");
-#ifndef IR0_FREESTANDING_BOOT
-		else
-			log_info_fmt("HYPERVISOR", "detected vendor=%s",
-				     hv_vendor);
-#else
 		else
 			ir0_boot_info("HYPERVISOR", hv_vendor);
-#endif
 	}
 	else
 	{

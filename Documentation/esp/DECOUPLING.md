@@ -8,8 +8,8 @@ Este documento es la versión en español de `Documentation/DECOUPLING.md`. La d
 técnica principal se mantiene en inglés en el directorio `Documentation/`; aquí se resume el
 mismo contenido sin mezclar idiomas.
 
-**Oleada ISA (2026-07-26):** fachadas `irq.h`, `arch_switch.h`, `arch_mm.h`, `arch_signal.h`,
-`sigcontext_{x86_64,arm64}.h` (aarch64 = uapi Linux completo); `switch_to` → `arch_switch_to`
+**Oleada ISA (2026-07-26):** fachadas `irq.h`, `context.h`, `arch_mm.h`, `arch_signal.h`,
+`sigcontext_{x86_64,arm64}.h` (aarch64 = uapi Linux completo); `switch_to` → backend privado de ISA
 con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `arch/x86-64/sources/interrupt/` = backend x86-only.
 Residual: ISD AArch64 + `syscall_dispatch` en SVC. `kernel-arm64-product.bin`
 / `kernel-arm64.bin` enlaza **`$(ALL_OBJS)`** (mismo corte portable que x86);

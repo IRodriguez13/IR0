@@ -251,7 +251,7 @@ void boot_runtime(void)
 
 	klog_set_boot_phase(KLOG_BOOT_INTERRUPTS);
 	irq_init();
-	boot_irq_unmask();
+	ir0_boot_port_unmask_irqs();
 	enable_interrupts();
 #if CONFIG_ENABLE_SOUND
 	if (sb16_is_available())

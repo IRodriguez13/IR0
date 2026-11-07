@@ -7,12 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: boot_log.h
- * Description: Portable boot serial contract — same framed lines on every ISA.
- *
- * After serial is ready, call ir0_boot_serial_ready() first. That emits the
- * sober product banner as the first framed line. Later lines use COMP BOOT
- * (universal), ARCH (ISA/board detail), HYPERVISOR / PLATFORM, or SMOKE
- * (autokill tags). ASCII art belongs at login / quiet=0 — not here.
+ * Description: Portable, banner-first boot log facade.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -25,28 +20,25 @@
 extern "C" {
 #endif
 
-/*
- * Call once after serial_init() (or arch UART init). Releases boot hold and
- * prints: [ts] [INFO] [BOOT] IR0 kernel <ver>
- */
+/* Call once after serial_init() to emit the boot banner. */
 void ir0_boot_serial_ready(void);
 
-/* Framed INFO / NOTICE / WARN — same layout as klog human channel. */
+/* Framed boot events. */
 void ir0_boot_info(const char *component, const char *message);
 void ir0_boot_notice(const char *component, const char *message);
 void ir0_boot_warn(const char *component, const char *message);
 
-/* Structured early diagnostic without bypassing the boot logging hub. */
+/* Structured early diagnostic. */
 void ir0_boot_info_hex64(const char *component, const char *label,
 			 uint64_t value);
 
-/* ISA/board detail under COMP ARCH (does not replace the BOOT banner). */
+/* ISA/board detail. */
 void ir0_boot_arch(const char *message);
 
-/* Autokill / stage tags under COMP SMOKE (tag remains greppable as substring). */
+/* Greppable boot stage tag. */
 void ir0_boot_smoke(const char *tag);
 
-/* Hypervisor / bare-metal — portable; uses hypervisor_present() from cpu_info. */
+/* Hypervisor or bare-metal identity. */
 void ir0_boot_log_platform_hypervisor(void);
 
 #ifdef __cplusplus

@@ -27,6 +27,10 @@
 #include <ir0/page_fault.h>
 #include <ir0/arch_info.h>
 
+/* Legacy users of this umbrella retain the portable IRQ critical-section API. */
+unsigned long irq_save(void);
+void irq_restore(unsigned long flags);
+
 /*
  * Context-switch entry lives in context.h. Forward decls here keep this
  * umbrella from pulling task.h into every legacy include.

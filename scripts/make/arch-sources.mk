@@ -144,7 +144,7 @@ ARM64_EARLY_STORAGE_OBJS = \
 
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \
-	sched/switch/switch_arm64.o
+	arch/arm64/sources/context_switch.o
 
 # ktm/mocks/arm64/min_link_stubs.c is not part of ARCH_OBJS_ARM64.
 

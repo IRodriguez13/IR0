@@ -6,11 +6,10 @@
  * Description: Context-switch facade (portable sched policy API).
  *
  * Callers model "change to the next runnable task", not "invoke the ISA switch
- * backend". Implementation is selected at link time (switch_x64.asm /
- * switch_context_arm64.S) via switch_to() → arch_switch_to() in the
- * sched/switch dispatcher only.
+ * backend". The portable dispatcher selects an ISA backend through the
+ * internal context backend contract; raw mechanics remain below arch/.
  *
- * Include this (or sched.h), not arch_switch.h, from portable code.
+ * Include this (or sched.h) from portable code.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -104,7 +104,6 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "credentials.h",
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
     ROOT / "includes" / "ir0" / "irq.h",
-    ROOT / "includes" / "ir0" / "arch_switch.h",
     ROOT / "includes" / "ir0" / "context_backend.h",
     ROOT / "includes" / "ir0" / "arch_mm.h",
     ROOT / "includes" / "ir0" / "task_ops.h",
@@ -1544,19 +1543,8 @@ def check_includes_ir0_no_c_sources():
 
 
 ARCH_PUBLIC_CALL_RE = re.compile(r"\barch_[a-z_][a-z0-9_]*\s*\(")
-PORTABLE_ARCH_CALL_ALLOW = {
-    "sched/switch/arch_context_switch.c": {
-        "arch_switch_to",
-    },
-}
-
-ARCH_SWITCH_INCLUDE_ALLOW = {
-    "sched/switch/arch_context_switch.c",
-    "arch/x86-64/sources/arch_switch.c",
-    "arch/arm64/sources/arch_switch.c",
-}
-
 CONTEXT_BACKEND_INCLUDE_ALLOW = {
+    "sched/switch/context_switch.c",
     "sched/switch/context_user_resume.c",
     "arch/x86-64/sources/arch_switch.c",
     "arch/arm64/sources/arch_switch.c",
@@ -1585,7 +1573,6 @@ def check_portable_no_arch_prefix_calls():
                 rel_s = str(rel).replace("\\", "/")
             except ValueError:
                 continue
-            allow = PORTABLE_ARCH_CALL_ALLOW.get(rel_s, set())
             try:
                 lines = read_file_text(fpath).splitlines()
             except Exception as exc:
@@ -1596,8 +1583,6 @@ def check_portable_no_arch_prefix_calls():
                     continue
                 for m in ARCH_PUBLIC_CALL_RE.finditer(line):
                     name = m.group(0).split("(")[0].strip()
-                    if name in allow:
-                        continue
                     errors.append(
                         f"[portable-no-arch-call] {rel_s}:{idx}: "
                         f"use simple facade, not {name}()"
@@ -1605,43 +1590,9 @@ def check_portable_no_arch_prefix_calls():
     return errors
 
 
-ARCH_SWITCH_INCLUDE_RE = re.compile(
-    r'#\s*include\s*[<"]ir0/arch_switch\.h[>"]'
-)
-
 CONTEXT_BACKEND_INCLUDE_RE = re.compile(
     r'#\s*include\s*[<"]ir0/context_backend\.h[>"]'
 )
-
-
-def check_portable_no_arch_switch_include():
-    """arch_switch.h is ISA-private; portable code uses context.h / switch_to()."""
-    errors = []
-    for base in PORTABLE_NO_ARCH_CALL_TREES:
-        if not base.is_dir():
-            continue
-        for fpath in iter_c_files(base):
-            try:
-                rel = rel_to_root(fpath)
-                rel_s = str(rel).replace("\\", "/")
-            except ValueError:
-                continue
-            if rel_s in ARCH_SWITCH_INCLUDE_ALLOW:
-                continue
-            try:
-                lines = read_file_text(fpath).splitlines()
-            except Exception as exc:
-                errors.append(f"[read-error] {fpath}: {exc}")
-                continue
-            for idx, line in enumerate(lines, 1):
-                if _line_is_comment_only(line):
-                    continue
-                if ARCH_SWITCH_INCLUDE_RE.search(line):
-                    errors.append(
-                        f"[portable-no-arch-switch-include] {rel_s}:{idx}: "
-                        f"use <ir0/context.h> / switch_to(), not arch_switch.h"
-                    )
-    return errors
 
 
 def check_context_backend_include_boundary():
@@ -2528,7 +2479,6 @@ def main():
     errors.extend(check_includes_ir0_no_c_sources())
     errors.extend(check_portable_port1_no_legacy_arch_mm())
     errors.extend(check_portable_no_arch_prefix_calls())
-    errors.extend(check_portable_no_arch_switch_include())
     errors.extend(check_context_backend_include_boundary())
     errors.extend(check_scheduler_user_return_boundary())
     errors.extend(check_scheduler_runqueue_lock_boundary())

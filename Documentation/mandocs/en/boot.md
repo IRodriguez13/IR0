@@ -55,7 +55,7 @@ GRUB → boot_x64.asm
               → vfs_init_root() + optional FIRST_BAREMETAL_BOOT sentinel
               → process_init + ipc_init + clock_system_init (MONOTONIC)
               → syscall_init + syscalls_init
-              → irq_init + boot_irq_unmask + sti  (full IDT replaces early table)
+              → irq_init + ir0_boot_port_unmask_irqs + sti  (full IDT replaces early table)
               → "kernel core initialization complete"
               → [CONFIG_KTM] suite → "KTM validation complete"
               → "system ready for userspace" + kexecve("/sbin/init")

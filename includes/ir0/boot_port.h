@@ -27,6 +27,7 @@ int ir0_boot_port_video_init(uintptr_t firmware_handle);
 void ir0_boot_port_serial_before_logging(void);
 void ir0_boot_port_serial_after_driver_registry(void);
 void ir0_boot_port_maybe_seed_init_from_embedded(void);
+void ir0_boot_port_unmask_irqs(void);
 
 #ifdef __cplusplus
 }

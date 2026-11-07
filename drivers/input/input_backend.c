@@ -101,7 +101,7 @@ void input_mouse_handle_interrupt(void)
 	 * IRQ12 and IRQ1 share the i8042 output buffer. Always demux by
 	 * status AUXDATA — never assume this IRQ's byte is mouse-only.
 	 */
-	irq_keyboard_poll_ps2();
+	input_kbd_poll_ps2();
 }
 
 bool input_mouse_is_available(void)

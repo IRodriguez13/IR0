@@ -136,7 +136,7 @@ void irq_init(void)
 	interrupt_init();
 }
 
-void boot_irq_unmask(void)
+void ir0_boot_port_unmask_irqs(void)
 {
 	(void)arm64_irq_backend_enable(ARM64_IRQ_PHYS_TIMER);
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
