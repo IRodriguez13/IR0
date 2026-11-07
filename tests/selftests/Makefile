@@ -10,6 +10,8 @@ OPENAT_SRC := syscall/openat.c
 OPENAT_BIN := $(BUILD_DIR)/openat
 IDENTITY_SRC := syscall/identity.c
 IDENTITY_BIN := $(BUILD_DIR)/identity
+FAULT_SRC := mm/fault.c
+FAULT_BIN := $(BUILD_DIR)/fault
 SWAPON_SRC := syscall/swapon.c
 SWAPON_BIN := $(BUILD_DIR)/swapon
 KSFT_INC := -I$(CURDIR)
@@ -40,9 +42,9 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 	-nostdlib -L$(X86_MUSL_LIB) -lc $(X86_MUSL_LIB)/crtn.o
 endif
 
-.PHONY: all openat identity swapon clean
+.PHONY: all openat identity swapon fault clean
 
-all: openat identity swapon
+all: openat identity swapon fault
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -80,6 +82,18 @@ $(SWAPON_BIN): $(SWAPON_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest swapon"
 	@$(CC) $(CFLAGS) -o $@ $(SWAPON_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+fault: $(FAULT_BIN)
+
+$(FAULT_BIN): $(FAULT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest fault"
+	@$(CC) $(CFLAGS) -o $@ $(FAULT_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

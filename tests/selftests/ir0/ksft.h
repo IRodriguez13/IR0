@@ -59,6 +59,24 @@ static void ksft_write_lit(const char *s)
 	(void)write(1, s, n);
 }
 
+/* KTAP diagnostic line: "# <label>=<value>". */
+static void ksft_print_num(const char *label, long value)
+{
+	char buf[24];
+	unsigned int n = 0;
+	unsigned long mag = value < 0 ? (unsigned long)(-value)
+				      : (unsigned long)value;
+
+	ksft_write_lit("# ");
+	ksft_write_lit(label);
+	ksft_write_lit("=");
+	if (value < 0)
+		buf[n++] = '-';
+	n += ksft_u32_to_dec((unsigned int)mag, buf + n);
+	buf[n++] = '\n';
+	(void)write(1, buf, n);
+}
+
 static void ksft_set_plan(unsigned int count)
 {
 	char nbuf[12];
