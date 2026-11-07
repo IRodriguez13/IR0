@@ -53,12 +53,12 @@ void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
 
 void switch_to_user_task(const task_t *task)
 {
-	process_t *p;
+	const process_t *p;
 
 	if (!task)
 		panic("switch_to_user_task: null task");
 
-	p = task_to_process(task);
+	p = task_to_process_const(task);
 	if (!p)
 		panic("switch_to_user_task: orphan task");
 
