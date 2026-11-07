@@ -10,6 +10,7 @@
 #pragma once
 
 #include <ir0/stat.h>
+#include <ir0/swap.h>
 #include <ir0/time.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -79,6 +80,12 @@ struct vfs_ops {
 	 * both st_atim and st_mtim.
 	 */
 	int (*utimens)(const char *path, const struct timespec times[2]);
+	/*
+	 * Pin a preallocated, non-sparse file as swap backing. Backends that
+	 * cannot map stable physical extents leave this NULL (swapon → -EOPNOTSUPP).
+	 */
+	int (*map_swap_extents)(const char *path, struct ir0_swap_extent *out,
+				size_t max, size_t *count, dev_t *dev);
 };
 
 /*

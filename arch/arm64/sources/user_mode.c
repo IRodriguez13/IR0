@@ -13,6 +13,7 @@
 #include <ir0/process.h>
 #include <ir0/arch_task.h>
 #include <ir0/tls.h>
+#include <ir0/boot_log.h>
 #include <sched/task.h>
 
 #include <stdint.h>
@@ -37,6 +38,7 @@ void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
 	if (current_process)
 		tls_set_base(process_tls_get(current_process));
 
+	ir0_boot_smoke("ARM64_USER_ERET");
 	__asm__ volatile(
 		"msr	sp_el0, %0\n"
 		"msr	elr_el1, %1\n"

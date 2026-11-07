@@ -20,6 +20,10 @@ static struct ir0_boot_snapshot g_boot_snapshot;
 
 int boot_memory_snapshot_init(uintptr_t firmware_handle)
 {
+	if (g_boot_snapshot.valid && g_boot_snapshot.usable_count > 0 &&
+	    g_boot_snapshot.usable_count <= IR0_BOOT_MEMORY_MAX_BANKS &&
+	    g_boot_snapshot.reserved_count <= IR0_BOOT_MEMORY_MAX_RESERVATIONS)
+		return 0;
 	memset(&g_boot_snapshot, 0, sizeof(g_boot_snapshot));
 	if (ir0_boot_port_snapshot_fill(firmware_handle, &g_boot_snapshot) != 0 ||
 	    !g_boot_snapshot.valid || g_boot_snapshot.usable_count == 0 ||

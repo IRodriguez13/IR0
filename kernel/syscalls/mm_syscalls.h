@@ -30,3 +30,5 @@ int sys_mprotect(void *addr, size_t len, int prot);
 
 /* sysinfo(2): memory, load averages, uptime and process count. */
 int64_t sys_sysinfo(void *user_info);
+int64_t sys_swapon(const char *user_path, int flags);
+int64_t sys_swapoff(const char *user_path);

@@ -155,6 +155,8 @@
 #define __NR_fstatfs      138
 #define __NR_mount        165
 #define __NR_umount2      166
+#define __NR_swapon       167
+#define __NR_swapoff      168
 #define __NR_sync         162
 #define __NR_reboot       169
 #define __NR_kexec_load   246

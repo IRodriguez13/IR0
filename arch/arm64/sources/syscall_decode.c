@@ -188,6 +188,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case 220: return IR0_SYSCALL_CLONE;
 	case 221: return IR0_SYSCALL_EXECVE;
 	case 222: return IR0_SYSCALL_MMAP;
+	case 224: return IR0_SYSCALL_SWAPON;
+	case 225: return IR0_SYSCALL_SWAPOFF;
 	case 226: return IR0_SYSCALL_MPROTECT;
 	case 223: return IR0_SYSCALL_FADVISE64;
 	case 227: return IR0_SYSCALL_MSYNC;

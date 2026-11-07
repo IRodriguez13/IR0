@@ -818,20 +818,7 @@ int proc_kmsg_read(char *buf, size_t count)
 /* /proc/swaps: Linux-style header; empty table when no swap devices. */
 int proc_swaps_read(char *buf, size_t count)
 {
-    static const char hdr[] =
-        "Filename\t\tType\t\tSize\t\tUsed\t\tPriority\n";
-
-    if (VALIDATE_BUFFER(buf, count) != 0)
-        return -1;
-    memset(buf, 0, count);
-    if (count <= sizeof(hdr))
-    {
-        memcpy(buf, hdr, count - 1);
-        buf[count - 1] = '\0';
-        return (int)(count - 1);
-    }
-    memcpy(buf, hdr, sizeof(hdr) - 1);
-    return (int)(sizeof(hdr) - 1);
+    return ir0_swap_format_proc(buf, count);
 }
 
 /*

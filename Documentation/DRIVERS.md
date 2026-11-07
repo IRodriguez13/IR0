@@ -1,7 +1,7 @@
 # IR0 Driver Subsystem
 
-> **Last verified:** 2026-10-29
-> **Source of truth:** `drivers/init_drv.c`, `sound/sound_blaster.c`, `arch/x86-64/sources/interrupt/isr_handlers.c`, `scripts/run_qemu.sh`
+> **Last verified:** 2026-11-07
+> **Source of truth:** `drivers/init_drv.c`, `drivers/net/bcmgenet.c`, `sound/sound_blaster.c`, `arch/x86-64/sources/interrupt/isr_handlers.c`, `scripts/run_qemu.sh`
 
 IR0 uses a centralized registry and bootstrap path for core and optional drivers.
 
@@ -19,7 +19,12 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 - Storage: ATA core and ATA block path. Odd userspace buffers use a 512-byte
   bounce in `drivers/storage/ata.c`; MINIX fast-path skips when dst/src is odd
   (`fs/minix_fs.c`) to avoid alignment storms.
-- Network: RTL8139 path used by network stack.
+- Network: RTL8139 and virtio-net on x86-64. ARM64 Raspberry Pi 4 uses BCM2711
+  GENET v5 (`drivers/net/bcmgenet.c`, `CONFIG_DRV_NIC_BCMGENET`) with FDT
+  `brcm,bcm2711-genet-v5`, DMA burst `0x08`, PHY@1 `rgmii-rxid`. Probe is honest:
+  missing FDT node logs `GENET_PROBE_ABSENT`; hardware L2/ARP/ICMP is **BLOCKED**
+  until a real RPi4 or QEMU GENET model is available. Raspberry Pi 3 LAN9514
+  remains blocked pending DWC2+USB.
 - Audio: Sound Blaster, Adlib, PC speaker.
 - Video/console: typewriter, console backend, VBE path.
 - Serial: UART logging/control path.

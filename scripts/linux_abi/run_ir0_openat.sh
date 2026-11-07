@@ -32,7 +32,7 @@ python3 "$ROOT/scripts/inject_init_minix.py" "$DISK" "$PROBE" sbin/init
 rm -f "$LOG"
 echo "  LINUX_ABI  QEMU openat_probe (IR0 workload)"
 set +e
-bash "$SMOKE" --log "$LOG" --timeout 90 --stale-sec 12 --done 'OPENATOK' -- \
+bash "$SMOKE" --log "$LOG" --timeout 90 --stale-sec 12 --done 'ok 4 close_ebadf' -- \
 	"$QEMU" -cdrom "$ISO" \
 	-drive file="$DISK",format=raw,if=ide,index=0 \
 	-serial stdio -display none -m 256M -no-reboot -net none
@@ -44,7 +44,7 @@ cp "$LOG" "$OUT/stdout.log"
 python3 "$ROOT/scripts/linux_abi/parse_openat_trace.py" ir0 "$OUT/stdout.log" "$OUT/trace.json"
 
 flat_log="$(tr -d '\n\r' < "$LOG" 2>/dev/null || true)"
-if echo "$flat_log" | grep -q 'OPENATOK'; then
+if echo "$flat_log" | grep -q 'ok 4 close_ebadf'; then
 	rc=0
 elif python3 -c "import json,sys; d=json.load(open('$OUT/trace.json')); sys.exit(0 if len(d.get('audit_steps',[]))>=4 else 1)" 2>/dev/null; then
 	rc=0

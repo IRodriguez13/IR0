@@ -34,6 +34,7 @@
 #include <ir0/sysv_shm.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/vfs.h>
+#include <config.h>
 #include <string.h>
 
 static int ktest_mount_rw(const char *path)
@@ -564,6 +565,32 @@ void ktest_ipc_ring_buffer_oom_is_recoverable(void)
 	KASSERT_EQ(ktm_fault_configure("kmem.alloc", KTM_FAULT_ONCE, 0), 0);
 	KASSERT_EQ(ring_buffer_init(&rb, 64), -1);
 	KASSERT(rb.buffer == NULL);
+	KTEST_END();
+}
+
+void ktest_user_root_identity_maps_pmm(void)
+{
+	address_space_root_t root;
+	uintptr_t pmm_last;
+
+	KTEST_BEGIN("user_root_identity_maps_pmm");
+	if (!mm_large_identity_supported())
+	{
+		KTEST_END();
+		return;
+	}
+	root = mm_create_user_root();
+	KASSERT(root != NULL);
+	if (!root)
+	{
+		KTEST_END();
+		return;
+	}
+	pmm_last = (uintptr_t)PMM_PHYS_BASE + (uintptr_t)PMM_PHYS_SIZE -
+		   (uintptr_t)PAGE_SIZE_2MB;
+	KASSERT_EQ(is_page_mapped_in_directory(root, PMM_PHYS_BASE, NULL), 1);
+	KASSERT_EQ(is_page_mapped_in_directory(root, pmm_last, NULL), 1);
+	mm_destroy_user_root(root);
 	KTEST_END();
 }
 

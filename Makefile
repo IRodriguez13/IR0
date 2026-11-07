@@ -549,6 +549,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_tty_canon_read.o \
 	kernel/test/test_oom_hook.o \
 	kernel/test/test_fix_contracts.o \
+	kernel/test/test_swap.o \
 	ktm/ktm_invariant.o \
 	ktm/ktm_sched_gate.o
 
@@ -584,13 +585,18 @@ MEMORY_OBJS = \
 	mm/tlb_sync.o \
 	mm/pmm.o \
 	mm/kmem.o \
-	mm/page_fault.o
+	mm/page_fault.o \
+	mm/swap/swap_header.o \
+	mm/swap/swap.o \
+	mm/swap/swap_io.o \
+	mm/swap/swap_reclaim.o
 
 LIB_OBJS = \
     drivers/char/vga.o \
     kernel/logging.o \
     kernel/boot_log_hostshare.o \
     kernel/oops.o \
+    kernel/irq_dispatch.o \
     kernel/signals.o \
     fs/pipe.o \
     mm/copy_user.o \
@@ -810,6 +816,16 @@ else
 CFLAGS += -DCONFIG_DRV_NIC_VIRTIO_NET=0
 endif
 CFLAGS += -DCONFIG_DRV_NIC_E1000=0
+ifeq ($(ARCH),arm64)
+ifneq ($(CONFIG_DRV_NIC_BCMGENET),n)
+NET_DRIVER_OBJS += drivers/net/bcmgenet.o
+CFLAGS += -DCONFIG_DRV_NIC_BCMGENET=1
+else
+CFLAGS += -DCONFIG_DRV_NIC_BCMGENET=0
+endif
+else
+CFLAGS += -DCONFIG_DRV_NIC_BCMGENET=0
+endif
 CFLAGS += -DCONFIG_ENABLE_NETWORKING=1
 else
 NET_OBJS =
@@ -817,6 +833,7 @@ NET_DRIVER_OBJS =
 CFLAGS += -DCONFIG_DRV_NIC_RTL8139=0
 CFLAGS += -DCONFIG_DRV_NIC_VIRTIO_NET=0
 CFLAGS += -DCONFIG_DRV_NIC_E1000=0
+CFLAGS += -DCONFIG_DRV_NIC_BCMGENET=0
 CFLAGS += -DCONFIG_ENABLE_NETWORKING=0
 endif
 
@@ -1391,7 +1408,7 @@ CFLAGS += -DARCH_X86_64 -DARCH_X86
 CFLAGS += -DIR0_LEGACY_PC_IO=1
 QEMU = qemu-system-x86_64
 else
-CFLAGS += -DARCH_ARM64
+CFLAGS += -DARCH_ARM64 $(ARM64_BOARD_CFLAGS)
 QEMU = qemu-system-aarch64
 endif
 
@@ -1486,6 +1503,7 @@ load-init:
 # catalog is gone, so every goal stays in the same fast parse path.
 -include scripts/make/docs.mk
 -include scripts/make/ktm.mk
+-include scripts/make/selftest.mk
 -include scripts/make/clean.mk
 
 .PHONY: arch-guard

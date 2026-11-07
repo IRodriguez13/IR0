@@ -25,6 +25,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <ir0/arm64_board.h>
+#include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/percpu.h>
 #include <ir0/virtio_mmio.h>
@@ -156,8 +157,8 @@ static void arm64_board_capture_and_heap(uintptr_t firmware_handle)
 	extern char _end[];
 
 	(void)arm64_board_capture_boot_info(firmware_handle);
-	(void)arm64_board_finalize_memory((uintptr_t)_start,
-					  (size_t)(_end - _start));
+	(void)arm64_board_prepare_memory((uintptr_t)_start,
+					 (size_t)(_end - _start));
 	arm64_board_apply_platform();
 }
 
@@ -166,6 +167,11 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 	const struct arm64_board_boot_info *boot_info;
 
 	arm64_board_capture_and_heap(firmware_handle);
+	/*
+	 * Snapshot firmware RAM while the MMU is still off. After TTBR0 is
+	 * loaded, boot_info BSS must not be the only copy of the inventory.
+	 */
+	(void)boot_memory_snapshot_init(firmware_handle);
 
 	pl011_init();
 

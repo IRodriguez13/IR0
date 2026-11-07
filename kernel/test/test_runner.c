@@ -150,6 +150,8 @@ static const struct ktest_case ktest_cases[] = {
 	  "ipc_wait_queue_tail_survives_exit_purge", 1 },
 	{ ktest_ipc_ring_buffer_oom_is_recoverable,
 	  "ipc_ring_buffer_oom_is_recoverable", 1 },
+	{ ktest_user_root_identity_maps_pmm,
+	  "user_root_identity_maps_pmm", 1 },
 	{ ktest_unmap_splits_2mb_leaf, "unmap_splits_2mb_leaf", 1 },
 	{ ktest_map_replaced_frame_is_released,
 	  "map_replaced_frame_is_released", 1 },
@@ -157,6 +159,7 @@ static const struct ktest_case ktest_cases[] = {
 	  "map_fixed_aborts_when_unmap_fails", 1 },
 	{ ktest_shmget_metadata_oom_returns_enomem,
 	  "shmget_metadata_oom_returns_enomem", 1 },
+	{ ktest_swap_header_and_area, "swap_header_and_area", 0 },
 	/* Switches the live root mount; it must remain the final contract. */
 	{ ktest_bpivot_boot_contract, "bpivot_boot_contract", 1 },
 	/*

@@ -147,6 +147,24 @@ int mm_pte_present(uint64_t e)
 	return (e & A64_PTE_VALID) != 0;
 }
 
+int mm_pte_is_swap(uint64_t e)
+{
+	return !mm_pte_present(e) && e != 0 && ((e & 3ULL) == 0);
+}
+
+void mm_pte_swap_decode(uint64_t e, unsigned *type, uint64_t *offset)
+{
+	if (type)
+		*type = (unsigned)((e >> 2) & 0x3fULL);
+	if (offset)
+		*offset = e >> 8;
+}
+
+uint64_t mm_make_swap_pte(unsigned type, uint64_t offset)
+{
+	return (offset << 8) | (((uint64_t)type & 0x3fULL) << 2);
+}
+
 int mm_pte_large(uint64_t e)
 {
 	/* Block descriptor: valid + not table (bit1 clear) at L1/L2. */

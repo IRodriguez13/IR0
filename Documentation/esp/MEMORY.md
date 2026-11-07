@@ -1,7 +1,7 @@
 # Subsistema de Memoria en IR0
 
-> **Última verificación:** 2026-09-02  
-> **Fuente de verdad:** [`../MEMORY.md`](../MEMORY.md), [`uaccess.md`](uaccess.md)
+> **Última verificación:** 2026-11-07  
+> **Fuente de verdad:** [`../MEMORY.md`](../MEMORY.md), [`uaccess.md`](uaccess.md), `mm/swap/`
 
 La memoria en IR0 combina PMM, allocator del kernel y paginacion para
 aislamiento de procesos.
@@ -47,6 +47,8 @@ aislamiento de procesos.
 
 ## Puntos Debiles
 
-- Features VM avanzadas siguen limitadas (por ejemplo, COW/swap de nivel full).
+- Swap anónimo privado existe (`swapon`/`swapoff`, partición o swapfile MINIX);
+  no hay zswap, hibernación ni swap file-backed/shared.
+- Huge-page COW y políticas POSIX profundas de VM siguen fuera de alcance.
 - El tuning para cargas grandes aun no es foco principal.
 - Algunas politicas priorizan simplicidad sobre profundidad POSIX completa.

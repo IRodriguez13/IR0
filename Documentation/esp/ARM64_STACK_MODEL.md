@@ -1,6 +1,6 @@
 # Pila kernel ARM64 y SP_EL1 (producto)
 
-> **Última verificación:** 2026-11-06  
+> **Última verificación:** 2026-11-07  
 > **Fuente de verdad:** `arch/arm64/asm/entry/vectors.S`, `arch/arm64/sources/arch_switch.c`  
 > (`set_current_kernel_stack`), `arch/arm64/asm/boot/entry.S`, `sched/switch/arch_context_switch.c`  
 > (`context_prepare_next` → `set_current_kernel_stack`).
@@ -35,6 +35,10 @@ sp_el1 = (kstack_top - 256) & ~0xF
 con `sp_el1 >= kstack_base` (si no, no se actualiza). Es más estricto que “top − 16”:  
 deja margen para el prólogo del vector. `IR0_PROC_KSTACK_SIZE` (`config.h`) es  
 suficiente para procesos normales.
+
+La escritura usa `SPSel=0` para que `SP_EL1` sea el banco inactivo. Un  
+`msr sp_el1` directo en EL1h sustituiría la pila kernel viva; el epílogo de C  
+sacaría LR de la kstack vacía y retornaría a la dirección 0.
 
 ## Arranque: SPSel
 

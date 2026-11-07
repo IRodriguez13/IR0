@@ -15,6 +15,7 @@
 #include "exc_early.h"
 #include "pl011.h"
 #include "irq_backend.h"
+#include <ir0/irq.h>
 #include "timer.h"
 #include "syscall_early.h"
 #include "elf_load_early.h"
@@ -65,6 +66,7 @@ uint8_t el0_stack[EL0_STACK_SIZE] __attribute__((aligned(16)));
 
 static volatile int g_timer_irq_seen;
 static int g_el0_svc_tagged;
+static int g_sync_other_tagged;
 
 extern process_t *current_process;
 
@@ -140,7 +142,23 @@ void arm64_exc_sync_el1(void)
 	}
 	else
 	{
-		ir0_boot_smoke("ARM64_SYNC_OTHER");
+		if (!g_sync_other_tagged)
+		{
+			uint64_t elr;
+			uint64_t far;
+
+			g_sync_other_tagged = 1;
+			ir0_boot_smoke("ARM64_SYNC_OTHER");
+			__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
+			__asm__ volatile("mrs %0, far_el1" : "=r"(far));
+			pl011_puts("ARM64_EL1_ESR_");
+			exc_put_hex64(esr);
+			pl011_puts("_ELR_");
+			exc_put_hex64(elr);
+			pl011_puts("_FAR_");
+			exc_put_hex64(far);
+			pl011_putc('\n');
+		}
 	}
 }
 
@@ -181,6 +199,10 @@ void arm64_exc_irq_el1(void)
 			schedule_tick = 1;
 		}
 	}
+#if !defined(IR0_FREESTANDING_BOOT)
+	else
+		(void)irq_dispatch(irq);
+#endif
 
 	if (irq < 1020U)
 	{

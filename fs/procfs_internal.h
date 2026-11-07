@@ -35,6 +35,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/partition.h>
 #include <ir0/blockdev.h>
+#include <ir0/swap.h>
 #include <ir0/multiboot.h>
 #include <ir0/arch_cpu.h>
 #include <fs/vfs.h>

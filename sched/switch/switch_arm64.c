@@ -30,6 +30,12 @@ void switch_context_arm64(task_t *prev, task_t *next)
 	prev_ctx = prev ? (void *)&prev->arch.x19 : (void *)discard_ctx;
 	next_ctx = (void *)&next->arch.x19;
 	next_ttbr = next->arch.ttbr0_el1;
+	/*
+	 * Fresh kernel threads (idle) have elr_el1 = entry and x30 = 0.
+	 * arm64_cpu_switch RETs to x30, so seed LR from the saved ELR.
+	 */
+	if (!next->arch.x30)
+		next->arch.x30 = next->arch.elr_el1;
 
 	if (next_ttbr)
 		arm64_cpu_switch_mm(prev_ctx, next_ctx, next_ttbr);

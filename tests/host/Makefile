@@ -63,6 +63,7 @@ TEST_SRCS += test_utsname_abi.c
 TEST_SRCS += test_cpu_topology.c
 TEST_SRCS += test_percpu.c
 TEST_SRCS += test_tlb_sync.c
+TEST_SRCS += test_swap.c test_bcmgenet.c test_dma_irq.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -77,13 +78,16 @@ KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o \
 KERNEL_HOST_OBJS += host_oom.o
 KERNEL_HOST_OBJS += host_reclaim.o
 KERNEL_HOST_OBJS += host_elf64_image.o host_early_elf_stack.o host_early_mm.o
-KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_syscall_decode.o \
+KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_fdt_reader.o \
+	host_arm64_boot_info_platform.o host_arm64_boot_info_devices.o \
+	host_arm64_syscall_decode.o \
 	host_x86_syscall_decode.o host_arm64_elf_policy.o host_x86_elf_policy.o
 KERNEL_HOST_OBJS += host_syscall_table.o
 KERNEL_HOST_OBJS += host_fd_resource.o
 KERNEL_HOST_OBJS += host_cpu_topology.o
 KERNEL_HOST_OBJS += host_percpu.o
 KERNEL_HOST_OBJS += host_tlb_sync.o
+KERNEL_HOST_OBJS += host_swap_header.o host_swap.o host_swap_reclaim.o host_dma.o host_irq_dispatch.o
 KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
 	host_ktm_video_mock.o host_ktm_audio_mock.o \
 	host_ktm_mm_port_mock.o host_ktm_platform_mock.o
@@ -148,6 +152,15 @@ host_mount_prefix.o: $(KERNEL_ROOT)/fs/mount_prefix.c
 host_arm64_boot_info.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info.c
 	$(KERNEL_CC)
 
+host_arm64_fdt_reader.o: $(KERNEL_ROOT)/arch/arm64/sources/fdt_reader.c
+	$(KERNEL_CC)
+
+host_arm64_boot_info_platform.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info_platform.c
+	$(KERNEL_CC)
+
+host_arm64_boot_info_devices.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info_devices.c
+	$(KERNEL_CC)
+
 host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h
 	$(KERNEL_CC)
@@ -172,6 +185,21 @@ host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
 	$(KERNEL_CC)
 
 host_tlb_sync.o: $(KERNEL_ROOT)/mm/tlb_sync.c
+	$(KERNEL_CC)
+
+host_swap_header.o: $(KERNEL_ROOT)/mm/swap/swap_header.c
+	$(KERNEL_CC)
+
+host_swap.o: $(KERNEL_ROOT)/mm/swap/swap.c
+	$(KERNEL_CC)
+
+host_swap_reclaim.o: $(KERNEL_ROOT)/mm/swap/swap_reclaim.c
+	$(KERNEL_CC)
+
+host_dma.o: $(KERNEL_ROOT)/arch/x86-64/sources/dma.c
+	$(KERNEL_CC)
+
+host_irq_dispatch.o: $(KERNEL_ROOT)/kernel/irq_dispatch.c
 	$(KERNEL_CC)
 
 host_ktm_console_mock.o: $(KERNEL_ROOT)/ktm/mocks/console/ktm_console_mock.c

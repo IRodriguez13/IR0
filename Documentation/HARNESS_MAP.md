@@ -5,7 +5,7 @@
 > Current gates: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`.
 
-> **Last verified:** 2026-11-06
+> **Last verified:** 2026-11-07
 > **Source of truth:** `Documentation/CHANGELOG.md`, `scripts/ktm_*.py`,
 > `setup/pid1/ktm_*.c`, `setup/doom/doomgeneric_ir0.c`,
 > `scripts/architecture_guard.py` (forbids leftover `[FASE` in kernel C).
@@ -37,6 +37,8 @@ C prints semantic tokens. Grep/`--done`/`--require` must match these.
 | ARM early `/tmp` fold | `ARM64_EARLY_PATH_FOLD_OK` | — |
 | ARM heap/owned mm | `ARM64_PROCESS_MM_HEAP_OK` / `OWNED_OK` / `RETIRE_OK` / `EXIT_OK` | — |
 | ARM64 boot / hypervisor banner | `ARM64_BOOT_OK` | — (see `make smoke-arm64-hypervisor-log`) |
+| Userspace KTAP selftests | `[OPENATOK]`, KTAP `ok`/`not ok` | `make ir0-selftest-x86` / `ir0-selftest-arm64` |
+| BCM2711 GENET probe | `GENET_PROBE_ABSENT` / `GENET_PROBE_OK` / `GENET_PROBE_BLOCKED` / `GENET_PROBE_NOLINK` | ARM64 + `CONFIG_DRV_NIC_BCMGENET`; hardware traffic BLOCKED without RPi4 |
 
 Kernel production paths must not print `[FASE…`. Debug leftover is
 `IR0_DEBUG_PROC` (not `CONFIG_DEBUG_FASE50`).
@@ -56,6 +58,7 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | x86-64 product | `make ir0` / `make run [gui\|console\|debug]` |
 | ARM64 product kernel | `make ir0 arm64` / `make run arm64 console` |
 | Raspberry Pi image | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |
+| Userspace KTAP selftests | `make ir0-selftest-x86` / `make ir0-selftest-arm64` |
 
 **Optional QEMU smokes (small set, `scripts/make/arm64*.mk`):**
 

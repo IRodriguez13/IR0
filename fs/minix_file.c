@@ -1337,6 +1337,8 @@ int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t
 
 int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
+	if (ir0_swap_path_busy(path))
+		return -ETXTBSY;
 	return minix_fs_pwrite_at(path, buf, count, offset, written_count);
 }
 
@@ -1352,6 +1354,8 @@ int minix_truncate(const char *path, size_t length)
 
   if (!path || !minix_fs.initialized)
     return -EIO;
+  if (ir0_swap_path_busy(path))
+    return -ETXTBSY;
 
   if (length > minix_fs.superblock.s_max_size)
     return -EFBIG;
@@ -1411,4 +1415,62 @@ int minix_truncate(const char *path, size_t length)
   if (DEBUG_VFS)
     klog_info("MINIX", "CLASSIFY LARGE_FILE_TRUNCATE_OK");
   return 0;
+}
+
+int minix_map_swap_extents(const char *path, struct ir0_swap_extent *out,
+			   size_t max, size_t *count, dev_t *dev)
+{
+	minix_inode_t inode;
+	uint16_t ino;
+	size_t pages;
+	size_t page;
+	size_t n = 0;
+
+	if (!path || !out || !count || max == 0)
+		return -EINVAL;
+	*count = 0;
+	if (dev)
+		*dev = minix_backing_dev();
+	if (minix_lookup(path, &inode, &ino) != 0)
+		return -ENOENT;
+	if ((inode.i_mode & MINIX_IFMT) != MINIX_IFREG)
+		return -EINVAL;
+	if (inode.i_size < (2U * IR0_SWAP_PAGE_SIZE))
+		return -EINVAL;
+	pages = inode.i_size / IR0_SWAP_PAGE_SIZE;
+	for (page = 0; page < pages; page++)
+	{
+		uint32_t zone[4];
+		size_t zi;
+		uint64_t lba;
+
+		for (zi = 0; zi < 4U; zi++)
+		{
+			if (minix_inode_zone_at(&inode, ino, page * 4U + zi, 0,
+						&zone[zi]) != 0 ||
+			    zone[zi] == 0)
+				return -EINVAL;
+		}
+		if (zone[1] != zone[0] + 1U || zone[2] != zone[0] + 2U ||
+		    zone[3] != zone[0] + 3U)
+			return -EINVAL;
+		lba = (uint64_t)zone[0] * 2ULL;
+		if (n > 0 &&
+		    out[n - 1U].file_page + out[n - 1U].nr_pages == page &&
+		    out[n - 1U].phys_lba +
+			    (uint64_t)out[n - 1U].nr_pages * 8ULL ==
+			lba)
+		{
+			out[n - 1U].nr_pages++;
+			continue;
+		}
+		if (n >= max)
+			return -ENOSPC;
+		out[n].file_page = page;
+		out[n].phys_lba = lba;
+		out[n].nr_pages = 1;
+		n++;
+	}
+	*count = n;
+	return n > 0 ? 0 : -EINVAL;
 }

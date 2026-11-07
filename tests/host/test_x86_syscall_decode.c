@@ -24,6 +24,9 @@ void test_x86_syscall_decode_contract(void)
 	       IR0_SYSCALL_CLOCK_GETTIME);
 	ASSERT(x86_test_syscall_decode_number(__NR_clock_gettime64) ==
 	       IR0_SYSCALL_CLOCK_GETTIME64);
+	ASSERT(x86_test_syscall_decode_number(__NR_swapon) == IR0_SYSCALL_SWAPON);
+	ASSERT(x86_test_syscall_decode_number(__NR_swapoff) ==
+	       IR0_SYSCALL_SWAPOFF);
 	ASSERT(x86_test_syscall_decode_number(UINT64_MAX) == IR0_SYSCALL_UNKNOWN);
 	for (number = 0; number < __NR_syscall_max; number++)
 	{
@@ -37,6 +40,6 @@ void test_x86_syscall_decode_contract(void)
 		decoded++;
 	}
 	/* Keep the native ABI catalog and its regression test in lockstep. */
-	ASSERT(decoded == 162);
+	ASSERT(decoded == 164);
 	TEST_END();
 }

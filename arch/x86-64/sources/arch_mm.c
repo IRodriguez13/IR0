@@ -109,12 +109,17 @@ address_space_root_t mm_create_user_root(void)
 	kernel_root = (address_space_root_t)kernel_root_phys;
 	mm_copy_kernel_half(root, kernel_root);
 
-	/* The x86 backend owns its required supervisor identity coverage. */
+	/*
+	 * Identity-map kernel heap and the PMM pool (PA==VA). Page-table
+	 * frames live in PMM; mm_copy_kernel_half writes the process PML4
+	 * through that window. Stop at USER_MMAP_START / PMM end so 2 MiB
+	 * supervisor leaves do not cover the user mmap arena.
+	 */
 	if (map_supervisor_identity_low(root, 0, mm_user_va_start()) != 0 ||
 	    map_supervisor_identity_low(root, KEYBOARD_BUFFER_ADDR,
 					supervisor_kbd_end) != 0 ||
 	    map_supervisor_identity_2mb(root, supervisor_kbd_end,
-					PMM_PHYS_BASE) != 0 ||
+					PMM_PHYS_BASE + PMM_PHYS_SIZE) != 0 ||
 	    mm_map_platform_supervisor(root) != 0)
 	{
 		paging_reclaim_user_tables(root);

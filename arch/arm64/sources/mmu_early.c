@@ -774,6 +774,24 @@ static int arm64_mmu_map_user_page_at_flags_owned_in_root(uint64_t root_ttbr,
 	    (root->table_l2_dram[l2_idx] & 0x0000FFFFFFFFF000UL) !=
 		(l3_pa & 0x0000FFFFFFFFF000UL))
 	{
+		uint64_t old_l2 = root->table_l2_dram[l2_idx];
+
+		/*
+		 * A 2 MiB EL1 identity leaf must not become a hollow L3: PMM
+		 * and kernel data in the other 511 pages stay PA==VA after
+		 * the process TTBR0 is activated.
+		 */
+		if ((old_l2 & PTE_VALID) &&
+		    (old_l2 & PTE_TYPE_TABLE) == PTE_TYPE_BLOCK)
+		{
+			unsigned slot;
+			uint64_t block_pa = old_l2 & 0x0000FFFFFFE00000UL;
+
+			for (slot = 0; slot < PTE_ENTRIES; slot++)
+				l3[slot] = pte_page_4k(block_pa +
+						       (uint64_t)slot * PAGE_SIZE,
+						       PTE_AP_RW_EL1, 0, 0);
+		}
 		root->table_l2_dram[l2_idx] = pte_table(l3_pa);
 	}
 
@@ -898,22 +916,41 @@ int arm64_mmu_user_page_info_in_root(uint64_t root_ttbr, uint64_t va,
 	struct arm64_mmu_root *root = root_from_ttbr(root_ttbr);
 	uint64_t *l3;
 	uint64_t entry;
+	uint64_t l2_idx;
+	uint64_t l2;
 
 	if (!root || !pa || !flags)
 		return -EINVAL;
 	l3 = l3_table_find_for_l2(root, L2_INDEX(va));
-	if (!l3)
-		return -EINVAL;
-	entry = l3[L3_INDEX(va)];
-	if ((entry & PTE_TYPE_PAGE) != PTE_TYPE_PAGE)
-		return -EINVAL;
-	*pa = entry & PTE_ADDR_MASK;
-	*flags = IR0_MM_MAP_PRESENT | IR0_MM_MAP_USER;
-	if ((entry & PTE_AP_MASK) != PTE_AP_RO_EL0)
-		*flags |= IR0_MM_MAP_WRITE;
-	if ((entry & PTE_UXN) == 0)
-		*flags |= IR0_MM_MAP_EXEC;
-	return 0;
+	if (l3)
+	{
+		entry = l3[L3_INDEX(va)];
+		if ((entry & PTE_TYPE_PAGE) == PTE_TYPE_PAGE)
+		{
+			*pa = entry & PTE_ADDR_MASK;
+			*flags = IR0_MM_MAP_PRESENT | IR0_MM_MAP_USER;
+			if ((entry & PTE_AP_MASK) != PTE_AP_RO_EL0)
+				*flags |= IR0_MM_MAP_WRITE;
+			if ((entry & PTE_UXN) == 0)
+				*flags |= IR0_MM_MAP_EXEC;
+			return 0;
+		}
+	}
+	/*
+	 * ELF PT_LOAD at the DRAM identity window has no L3 user leaf until
+	 * a later split. Kernel uaccess still needs PA==VA for that window.
+	 */
+	l2_idx = L2_INDEX(va);
+	l2 = root->table_l2_dram[l2_idx];
+	if ((l2 & PTE_TYPE_TABLE) == PTE_TYPE_BLOCK && (l2 & PTE_VALID))
+	{
+		*pa = (l2 & 0x0000FFFFFFE00000UL) | (va & (BLOCK_2M - 1UL));
+		*pa &= PTE_ADDR_MASK;
+		*flags = IR0_MM_MAP_PRESENT | IR0_MM_MAP_USER |
+			 IR0_MM_MAP_WRITE | IR0_MM_MAP_EXEC;
+		return 0;
+	}
+	return -EINVAL;
 }
 
 int arm64_mmu_protect_user_range_in_root(uint64_t root_ttbr,

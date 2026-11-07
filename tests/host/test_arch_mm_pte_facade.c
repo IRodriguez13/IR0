@@ -9,6 +9,9 @@
 
 void mm_va_indices(uintptr_t va, size_t idx[4]);
 int mm_pte_present(uint64_t e);
+int mm_pte_is_swap(uint64_t e);
+void mm_pte_swap_decode(uint64_t e, unsigned *type, uint64_t *offset);
+uint64_t mm_make_swap_pte(unsigned type, uint64_t offset);
 int mm_pte_large(uint64_t e);
 uintptr_t mm_pte_phys(uint64_t e);
 uint64_t mm_make_table_pte(uintptr_t phys, int user);
@@ -48,6 +51,18 @@ void test_arch_mm_pte_facade(void)
 	ASSERT(!(e & 0x4ULL));
 	mm_pte_set_user(&e);
 	ASSERT(e & 0x4ULL);
+
+	e = mm_make_swap_pte(3, 12);
+	ASSERT(!mm_pte_present(e));
+	ASSERT(mm_pte_is_swap(e));
+	{
+		unsigned type = 0;
+		uint64_t offset = 0;
+
+		mm_pte_swap_decode(e, &type, &offset);
+		ASSERT_EQ(3U, type);
+		ASSERT_EQ(12ULL, offset);
+	}
 
 	TEST_END();
 }

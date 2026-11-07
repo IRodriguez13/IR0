@@ -36,6 +36,7 @@
 #include <ir0/arch_mm.h>
 #include <mm/paging.h>
 #include <ir0/abi/mmap_contract.h>
+#include <ir0/swap.h>
 
 /* Supervisor 2 MiB identity under each process address-space root. */
 #define PF_IDENTITY_USER_FLOOR 0x00600000UL
@@ -504,6 +505,33 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		current = process_get_current();
 		if (!current || !process_pgd(current))
 			return;
+
+		{
+			uint64_t *swap_pte;
+			uint64_t map_flags = PAGE_USER | PAGE_RW;
+			struct mmap_region *swap_mr;
+
+			swap_pte = paging_get_pte(process_pgd(current),
+						  (uintptr_t)(fault_addr & ~0xFFFULL));
+			if (swap_pte && mm_pte_is_swap(*swap_pte))
+			{
+				swap_mr = pf_mmap_region_for(current, fault_addr);
+				if (swap_mr)
+				{
+					map_flags = PAGE_USER;
+					if (swap_mr->prot & 0x2)
+						map_flags |= PAGE_RW;
+					if (swap_mr->prot & 0x4)
+						map_flags |= PAGE_EXEC;
+				}
+				if (ir0_swap_in_page(current,
+						     (uintptr_t)fault_addr,
+						     map_flags) == 0)
+					return;
+				pf_user_segv(current, stack, fault_addr, info);
+				return;
+			}
+		}
 
 		{
 			struct mmap_region *mr;

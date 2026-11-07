@@ -29,6 +29,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/errno.h>
+#include <ir0/swap.h>
 
 /*
  * Boot/kernel address-space root with full PMM identity. Pinned once before
@@ -968,6 +969,30 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 	return 0;
 }
 
+int paging_install_pte(address_space_root_t root, uintptr_t virt_addr, uint64_t pte)
+{
+	size_t idx[4];
+	uint64_t *level1_table;
+	uint64_t *level2_table;
+	uint64_t *level3_table;
+	uint64_t flags = PAGE_USER;
+
+	if (!root)
+		return -1;
+	mm_va_indices(virt_addr, idx);
+	level1_table = get_or_create_table(root, root, idx[0], 1, flags, 1);
+	if (!level1_table)
+		return -1;
+	level2_table = get_or_create_table(root, level1_table, idx[1], 1, flags, 2);
+	if (!level2_table)
+		return -1;
+	level3_table = get_or_create_table(root, level2_table, idx[2], 1, flags, 3);
+	if (!level3_table)
+		return -1;
+	level3_table[idx[3]] = pte;
+	return 0;
+}
+
 /**
  * Map a single 4KB page - SIMPLIFIED
  * Only works with existing page tables from boot
@@ -1084,6 +1109,13 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 
 	if (!mm_pte_present(level3_table[idx[3]]))
 	{
+		if (mm_pte_is_swap(level3_table[idx[3]]))
+		{
+			(void)ir0_swap_drop_pte(level3_table[idx[3]]);
+			level3_table[idx[3]] = 0;
+			mm_tlb_sync_page(root, (uintptr_t)virt_addr);
+			return 0;
+		}
 		/* The 2 MiB split already dropped this slot. A hole stays -1. */
 		return split ? 0 : -1;
 	}
@@ -1289,6 +1321,26 @@ int copy_process_memory(struct process *parent, struct process *child)
 					size_t idx[4];
                     int was_writable;
 
+                    if (mm_pte_is_swap(page_entry))
+                    {
+                        idx[0] = i4;
+                        idx[1] = i3;
+                        idx[2] = i2;
+                        idx[3] = i1;
+                        virt_addr = mm_va_from_indices(idx);
+                        if (ir0_swap_dup_pte(page_entry) != 0 ||
+                            paging_install_pte(child_root, virt_addr,
+                                               page_entry) != 0)
+                        {
+                            extern void process_unmap_user_pages_all(
+                                address_space_root_t root, void *reclaim_stats);
+
+                            (void)ir0_swap_drop_pte(page_entry);
+                            process_unmap_user_pages_all(child_root, NULL);
+                            return -1;
+                        }
+                        continue;
+                    }
                     if (!mm_pte_present(page_entry) ||
                         !(page_entry & PAGE_USER))
                         continue;

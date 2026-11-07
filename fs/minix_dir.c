@@ -351,6 +351,8 @@ int minix_fs_rm(const char *path)
     typewriter_vga_print("Error: MINIX filesystem not initialized\n", 0x0C);
     return -ENODEV;
   }
+  if (ir0_swap_path_busy(path))
+    return -ETXTBSY;
 
   if (!path || kstrlen(path) == 0)
   {

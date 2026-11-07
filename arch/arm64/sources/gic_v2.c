@@ -73,28 +73,25 @@ int arm64_gic_v2_enable(uint32_t irq)
 	uint32_t bit;
 	uint32_t reg;
 	uint32_t shift;
+	uint32_t cfg;
 
-	if (irq >= 32U)
-	{
-		/* Freestanding slice only programs PPI/SGI bank 0. */
+	if (irq >= 1020U)
 		return -1;
-	}
-
 	if (arm64_gic_v2_init() != 0)
 		return -1;
 
-	GICD_REG8_PTR(0x400UL)[irq] = 0x00;
-	GICD_REG8_PTR(0x800UL)[irq] = 0x01; /* CPU0 */
+	GICD_REG8_PTR(0x400UL)[irq] = 0xa0;
+	GICD_REG8_PTR(0x800UL)[irq] = 0x01;
 
-	/* Edge for PPI timer (ICFGR bit pair). */
 	reg = irq / 16U;
 	shift = (irq % 16U) * 2U;
+	cfg = (irq < 32U) ? 2U : 0U; /* PPI edge; SPI level */
 	GICD_REG32_PTR(0xC00UL)[reg] =
-		(GICD_REG32_PTR(0xC00UL)[reg] & ~(3U << shift)) | (2U << shift);
+		(GICD_REG32_PTR(0xC00UL)[reg] & ~(3U << shift)) | (cfg << shift);
 
-	bit = 1U << irq;
-	GICD_REG32(0x280UL) = bit;
-	GICD_REG32(0x100UL) = bit;
+	bit = 1U << (irq % 32U);
+	GICD_REG32_PTR(0x280UL)[irq / 32U] = bit;
+	GICD_REG32_PTR(0x100UL)[irq / 32U] = bit;
 
 	__asm__ volatile("dsb sy" ::: "memory");
 	__asm__ volatile("isb" ::: "memory");

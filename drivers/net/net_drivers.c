@@ -15,6 +15,9 @@
 #if CONFIG_DRV_NIC_VIRTIO_NET && IR0_LEGACY_PC_IO
 #include <drivers/net/virtio_net.h>
 #endif
+#if CONFIG_DRV_NIC_BCMGENET
+#include <drivers/net/bcmgenet.h>
+#endif
 
 #if !IR0_LEGACY_PC_IO
 extern int arm64_virtio_net_init(void);
@@ -25,6 +28,9 @@ int net_stack_probe_drivers(void)
 	int ret = 0;
 
 #if !IR0_LEGACY_PC_IO
+#if CONFIG_DRV_NIC_BCMGENET
+	(void)bcmgenet_init();
+#endif
 	(void)arm64_virtio_net_init();
 	return ret;
 #else

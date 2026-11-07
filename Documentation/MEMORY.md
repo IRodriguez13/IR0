@@ -1,9 +1,10 @@
 # IR0 Memory Subsystem
 
-> **Last verified:** 2026-09-02  
+> **Last verified:** 2026-11-07  
 > **Source of truth:** `mm/pmm.c`, `mm/paging.c`, `mm/page_fault.c`,  
-> `arch/x86-64/sources/arch_pf_debug.c`, `Documentation/mandocs/en/mm.md`,  
-> `Documentation/uaccess.md`, `make smoke-mm-cow-lazy`
+> `mm/swap/`, `includes/ir0/swap.h`, `arch/x86-64/sources/arch_pf_debug.c`,  
+> `Documentation/mandocs/en/mm.md`, `Documentation/uaccess.md`,  
+> `make smoke-mm-cow-lazy`, `tests/host` swap contracts, `ktest_swap_header_and_area`
 
 IR0 memory management currently combines PMM, kernel allocator, and paging-based
 process isolation.
@@ -24,6 +25,11 @@ process isolation.
 - Paging provides address-space boundaries and execution context transitions.
 - Fork shares present user PFNs; formerly writable pages are mapped read-only with
   software `PAGE_COW` (PTE bit 9) until the first write fault.
+- Anonymous private pages can be swapped through `swapon`/`swapoff` (`__NR` 167/168
+  on x86-64, 224/225 on ARM64). Areas are SWAPSPACE2 block devices or preallocated
+  MINIX swapfiles with pinned extents. Swap PTEs are ISA-encoded; reclaim walks
+  heap/stack/anon mmap in process context. File-backed/shared swap, zswap, and
+  hibernation are out of scope. Non-MINIX swapfiles return `-EOPNOTSUPP`.
 
 ## Page-fault policy notes (2026-09-01)
 
@@ -59,6 +65,6 @@ process isolation.
 
 ## Weak Points
 
-- No huge-page COW, no file-backed COW, no swap-class reclaim.
+- No huge-page COW, no file-backed COW, no zswap/zram, no hibernation.
 - Performance tuning for large workloads is not yet the main target.
 - Some memory policies still prioritize simplicity over full POSIX-like depth.

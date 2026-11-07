@@ -87,6 +87,9 @@ ARM64_SLICE_OBJS = \
 	arch/arm64/sources/slice_hello.o \
 	arch/arm64/sources/board.o \
 	arch/arm64/sources/boot_info.o \
+	arch/arm64/sources/fdt_reader.o \
+	arch/arm64/sources/boot_info_platform.o \
+	arch/arm64/sources/boot_info_devices.o \
 	arch/arm64/sources/pl011.o \
 	arch/arm64/sources/serial_io_arm64.o
 ARM64_PORTABLE_OBJS = \
@@ -245,6 +248,8 @@ smoke-arm64-bpivot-product: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scrip
 		grep -q 'IR0_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
 		grep -q 'ARM64_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
 		grep -q 'INIT_EXEC_LOADED_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		test "$$(grep -c 'ARM64_SYNC_OTHER' \
+			$(HOST_TMP)/arm64-bpivot-smoke.log || true)" -le 1 && \
 		echo "✓ smoke-arm64-bpivot-product (CPIO fold + real root switch)"; \
 	fi
 

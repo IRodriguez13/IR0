@@ -10,24 +10,10 @@
 #include "devfs_internal.h"
 
 
-/* Legacy block backends take a 32-bit LBA.  Never let a wider devfs offset
- * wrap into an unrelated sector when it crosses that backend boundary. */
-static void devfs_disk_clamp_u32_lba(uint64_t start_lba, size_t *num_sectors)
-{
-    uint64_t available;
-
-    if (!num_sectors)
-        return;
-    if (start_lba > UINT32_MAX)
-    {
-        *num_sectors = 0;
-        return;
-    }
-
-    available = (uint64_t)UINT32_MAX - start_lba + 1;
-    if ((uint64_t)*num_sectors > available)
-        *num_sectors = (size_t)available;
-}
+/*
+ * Block I/O is 64-bit LBA through ir0_block_*. Device/partition size is the
+ * only bound; do not clamp to UINT32_MAX (that rejected large swap images).
+ */
 
 /*
  * Resolve whole-disk vs partition extents for disk_ops (/dev/hd*).
@@ -121,7 +107,6 @@ static int devfs_disk_prepare_io(const devfs_entry_t *entry, off_t offset,
     if (available_sectors > (uint64_t)(SIZE_MAX / 512))
         available_sectors = (uint64_t)(SIZE_MAX / 512);
     sectors = (size_t)available_sectors;
-    devfs_disk_clamp_u32_lba(io->lba, &sectors);
     if (sectors == 0)
         return 0;
     if (count > sectors * 512)

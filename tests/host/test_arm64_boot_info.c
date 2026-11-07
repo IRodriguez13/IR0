@@ -15,6 +15,32 @@ static void put_be32(uint8_t *p, uint32_t value)
 	p[3] = (uint8_t)value;
 }
 
+static uint32_t get_be32(const uint8_t *p)
+{
+	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+	       ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+}
+
+static size_t find_property_length(uint8_t *fdt, uint32_t name_offset,
+				   uint32_t expected_length)
+{
+	uint32_t structure_offset = get_be32(fdt + 8U);
+	uint32_t structure_size = get_be32(fdt + 36U);
+	uint32_t offset;
+
+	for (offset = structure_offset;
+	     offset + 12U <= structure_offset + structure_size; offset += 4U)
+	{
+		if (get_be32(fdt + offset) == 3U &&
+		    get_be32(fdt + offset + 4U) == expected_length &&
+		    get_be32(fdt + offset + 8U) == name_offset)
+		{
+			return offset + 4U;
+		}
+	}
+	return 0U;
+}
+
 static size_t append_be32(uint8_t *p, size_t off, uint32_t value)
 {
 	put_be32(p + off, value);
@@ -214,7 +240,9 @@ void test_arm64_boot_info_fdt_contract(void)
 {
 	uint8_t fdt[64] __attribute__((aligned(8)));
 	uint8_t platform_fdt[1024] __attribute__((aligned(8)));
+	uint8_t malformed_fdt[1024] __attribute__((aligned(8)));
 	const struct arm64_board_boot_info *info;
+	size_t property_length_offset;
 	size_t platform_fdt_size;
 
 	memset(fdt, 0, sizeof(fdt));
@@ -266,6 +294,22 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(info->usable[3].size == 0x05e00000ULL);
 	ASSERT(arm64_board_finalize_memory(0x40080000U, 0x80000U) == 0);
 	ASSERT(arm64_board_boot_info()->reserved_range_count == 4U);
+	memcpy(malformed_fdt, platform_fdt, platform_fdt_size);
+	property_length_offset = find_property_length(malformed_fdt, 27U, 16U);
+	ASSERT(property_length_offset != 0U);
+	put_be32(malformed_fdt + property_length_offset, 15U);
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)malformed_fdt) != 0);
+	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
+	memcpy(malformed_fdt, platform_fdt, platform_fdt_size);
+	property_length_offset = find_property_length(malformed_fdt, 27U, 16U);
+	ASSERT(property_length_offset != 0U);
+	put_be32(malformed_fdt + property_length_offset, 0xfffffff0U);
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)malformed_fdt) != 0);
+	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
+	memcpy(malformed_fdt, platform_fdt, platform_fdt_size);
+	put_be32(malformed_fdt + 16U, (uint32_t)platform_fdt_size - 8U);
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)malformed_fdt) != 0);
+	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
 	ASSERT(arm64_fdt_boot_info_init((uintptr_t)(fdt + 1)) != 0);
 	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
 	/* x0 empty, DTB sitting at the fallback address. */
@@ -277,5 +321,76 @@ void test_arm64_boot_info_fdt_contract(void)
 	ASSERT(arm64_board_boot_info()->fdt_pa == (uintptr_t)platform_fdt);
 	ASSERT(arm64_fdt_boot_info_init_fallback(0, 0) != 0);
 	ASSERT(arm64_board_boot_info()->fdt_valid == 0);
+	TEST_END();
+}
+
+void test_arm64_boot_info_genet_fdt(void)
+{
+	static const char strings[] =
+		"#address-cells\0#size-cells\0reg\0compatible\0interrupts\0"
+		"phy-mode\0local-mac-address\0";
+	static const char genet_compat[] = "brcm,bcm2711-genet-v5";
+	static const char phy_mode[] = "rgmii-rxid";
+	static const uint8_t mac[6] = { 0xdc, 0xa6, 0x32, 0x00, 0x00, 0x01 };
+	uint8_t fdt[512] __attribute__((aligned(8)));
+	const struct arm64_board_boot_info *info;
+	const size_t struct_off = 72U;
+	size_t off = struct_off;
+	size_t strings_off;
+
+	memset(fdt, 0, sizeof(fdt));
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "");
+	off = append_prop_u32(fdt, off, 0U, 2U);
+	off = append_prop_u32(fdt, off, 15U, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "ethernet@fd580000");
+	off = append_prop_bytes(fdt, off, 31U, genet_compat,
+				(uint32_t)sizeof(genet_compat));
+	off = append_be32(fdt, off, 3U);
+	off = append_be32(fdt, off, 16U);
+	off = append_be32(fdt, off, 27U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0xfd580000U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x10000U);
+	off = append_be32(fdt, off, 3U);
+	off = append_be32(fdt, off, 24U);
+	off = append_be32(fdt, off, 42U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 157U);
+	off = append_be32(fdt, off, 4U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 158U);
+	off = append_be32(fdt, off, 4U);
+	off = append_prop_bytes(fdt, off, 53U, phy_mode,
+				(uint32_t)sizeof(phy_mode));
+	off = append_prop_bytes(fdt, off, 62U, mac, 6U);
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 9U);
+	strings_off = off;
+	memcpy(fdt + strings_off, strings, sizeof(strings));
+	off += sizeof(strings);
+	put_be32(fdt, 0xd00dfeedU);
+	put_be32(fdt + 4, (uint32_t)off);
+	put_be32(fdt + 8, (uint32_t)struct_off);
+	put_be32(fdt + 12, (uint32_t)strings_off);
+	put_be32(fdt + 16, 40U);
+	put_be32(fdt + 32, (uint32_t)sizeof(strings));
+	put_be32(fdt + 36, (uint32_t)(strings_off - struct_off));
+
+	TEST_BEGIN("arm64 genet FDT discovery");
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)fdt) == 0);
+	info = arm64_board_boot_info();
+	ASSERT(info->genet_present == 1);
+	ASSERT(info->genet_mmio.base == 0xfd580000ULL);
+	ASSERT(info->genet_mmio.size == 0x10000ULL);
+	ASSERT_EQ(info->genet_irq_count, 2U);
+	ASSERT_EQ(info->genet_irq[0], 189U);
+	ASSERT_EQ(info->genet_irq[1], 190U);
+	ASSERT_EQ(info->genet_phy_addr, 1U);
+	ASSERT_STR_EQ(info->genet_phy_mode, "rgmii-rxid");
+	ASSERT_EQ(info->genet_mac[0], (uint8_t)0xdc);
 	TEST_END();
 }

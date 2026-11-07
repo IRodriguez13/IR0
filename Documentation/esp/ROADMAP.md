@@ -5,7 +5,7 @@
 > Gates actuales: `make ctr`, `make agent-fast`, `make kernel-tests`,
 > `make build-matrix-min`, `make arch-guard`. Ver [`MAKEFILE.md`](MAKEFILE.md).
 
-> **Última verificación:** 2026-10-18 (fold ARM + `ipc/` + identity/cwd; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs ausente)  
+> **Última verificación:** 2026-11-07 (swap ABI + selftests KTAP + GENET RPi4 probe; detalle EN: [`../ROADMAP.md`](../ROADMAP.md); ISD aarch64 rootfs ausente)  
 > **Fuente de verdad:** código en `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/` y gates CTR en `Makefile`.
 
 Documento consolidado: tiers, oleadas completadas, backlog repriorizado (storage antes que TCP/X11) e hitos de evolución.

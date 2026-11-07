@@ -140,6 +140,8 @@ WRAP3(sys_unlinkat, int, const char *, int)
 WRAP4(sys_renameat, int, const char *, int, const char *)
 WRAP1(sys_uname, struct utsname *)
 WRAP1(sys_sysinfo, void *)
+WRAP2(sys_swapon, const char *, int)
+WRAP1(sys_swapoff, const char *)
 WRAP2(sys_access, const char *, int)
 WRAP4(sys_faccessat, int, const char *, int, int)
 WRAP1(sys_dup, int)
@@ -428,6 +430,8 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SYMLINK] = wrap_sys_symlink;
   syscall_semantic_table[IR0_SYSCALL_SYMLINKAT] = wrap_sys_symlinkat;
   syscall_semantic_table[IR0_SYSCALL_SYNC] = wrap_sys_sync;
+  syscall_semantic_table[IR0_SYSCALL_SWAPON] = wrap_sys_swapon;
+  syscall_semantic_table[IR0_SYSCALL_SWAPOFF] = wrap_sys_swapoff;
   syscall_semantic_table[IR0_SYSCALL_SYSINFO] = wrap_sys_sysinfo;
   syscall_semantic_table[IR0_SYSCALL_SYSLOG] = wrap_sys_syslog;
   syscall_semantic_table[IR0_SYSCALL_TGKILL] = wrap_sys_tgkill;

@@ -28,6 +28,26 @@ int mm_pte_present(uint64_t e)
 	return (e & X86_PTE_PRESENT) != 0;
 }
 
+int mm_pte_is_swap(uint64_t e)
+{
+	return !mm_pte_present(e) && e != 0;
+}
+
+void mm_pte_swap_decode(uint64_t e, unsigned *type, uint64_t *offset)
+{
+	uint64_t val = e >> 1;
+
+	if (type)
+		*type = (unsigned)(val & 0x1fULL);
+	if (offset)
+		*offset = val >> 5;
+}
+
+uint64_t mm_make_swap_pte(unsigned type, uint64_t offset)
+{
+	return (((uint64_t)(type & 0x1fU) | (offset << 5)) << 1);
+}
+
 int mm_pte_large(uint64_t e)
 {
 	return mm_pte_present(e) && ((e & X86_PTE_LARGE) != 0);

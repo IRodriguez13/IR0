@@ -48,6 +48,7 @@
 #include <ir0/boot_firmware_sysfs.h>
 #include <ir0/init_handoff.h>
 #include <ir0/vfs.h>
+#include <ir0/swap.h>
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
 #include <ir0/ipc.h>
@@ -215,6 +216,7 @@ void boot_drivers_rootfs(void)
 void boot_runtime(void)
 {
 	process_init();
+	ir0_swap_init();
 	process_exit_bind_product();
 	{
 		static const struct process_idle_services idle_ops = {

@@ -30,7 +30,7 @@ int arm64_gic_v2_configure(uint64_t distributor_base, uint64_t distributor_size,
 int arm64_gic_v2_init(void);
 
 /**
- * Enable IRQ line @irq (SGI/PPI bank 0, irq < 32). Calls init if needed.
+ * Enable IRQ line @irq (SGI/PPI/SPI, irq < 1020). Calls init if needed.
  * Returns 0 on success, -1 if out of range.
  */
 int arm64_gic_v2_enable(uint32_t irq);

@@ -152,7 +152,7 @@ ir0_el1_vectors:
 	.org 0x400
 	b	exc_sync_lower
 	.org 0x480
-	b	exc_unhandled
+	b	exc_irq_el1h
 	.org 0x500
 	b	exc_unhandled
 	.org 0x580

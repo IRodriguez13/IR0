@@ -213,6 +213,7 @@
       "title": "openat(2) + close(2)",
       "status_doc": "VERIFIED",
       "ktest": "syscall_open_close",
+      "selftest": "syscall/openat",
       "existing_path": "/proc/uptime",
       "enoent_errno": 2,
       "ebadf_errno": 9

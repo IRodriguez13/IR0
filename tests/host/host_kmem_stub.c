@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
+#define _POSIX_C_SOURCE 200112L
 /**
  * IR0 Kernel — host test stubs for kmem symbols used by kernel sources
  * compiled into the host test suite.
@@ -47,4 +48,27 @@ void *kmalloc_try(size_t size)
 	if (host_kmem_should_fail())
 		return NULL;
 	return malloc(size);
+}
+
+void *kmalloc_aligned_try(size_t size, size_t alignment)
+{
+	void *p = NULL;
+	size_t align = alignment < sizeof(void *) ? sizeof(void *) : alignment;
+
+	if (host_kmem_should_fail())
+		return NULL;
+	if (size == 0)
+		size = align;
+	if (posix_memalign(&p, align, size) != 0)
+		return NULL;
+	return p;
+}
+
+void __kfree_aligned_checked(void *ptr, const char *file, int line,
+			     const char *caller)
+{
+	(void)file;
+	(void)line;
+	(void)caller;
+	free(ptr);
 }

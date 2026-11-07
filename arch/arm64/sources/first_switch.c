@@ -9,6 +9,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <ir0/oops.h>
+#include <ir0/arch_cpu.h>
 #include <sched/task.h>
 #include <ir0/process.h>
 
@@ -25,6 +26,17 @@ void first_switch_to(struct process *next)
 	root = process_mm_root(p);
 	if (!root)
 		panic("first_switch_to: null mm root");
+
+	/*
+	 * Match x86 first_switch_to: a USER_MODE init image must exception-
+	 * return to EL0. Cooperative EL1 switch only RETs via x30, which is
+	 * unset on a freshly spawned ELF.
+	 */
+	if (p->mode == USER_MODE)
+	{
+		switch_to_user_task(&p->task);
+		panic("Returned from first_switch_to user (ARM64)");
+	}
 
 	mm_activate((uintptr_t)root);
 	switch_context_arm64(NULL, &p->task);

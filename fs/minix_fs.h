@@ -22,6 +22,7 @@
 #include <stdbool.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
+#include <ir0/swap.h>
 #include <ir0/types.h>  // For standard types
 
 
@@ -177,6 +178,9 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode, const char *nam
 // Operaciones de bloques
 int minix_read_block(uint32_t block_num, void *buffer);
 int minix_write_block(uint32_t block_num, const void *buffer);
+dev_t minix_backing_dev(void);
+int minix_map_swap_extents(const char *path, struct ir0_swap_extent *out,
+			   size_t max, size_t *count, dev_t *dev);
 
 // Operaciones de zonas
 uint32_t minix_alloc_zone(void);

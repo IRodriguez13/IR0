@@ -119,6 +119,10 @@ void arm64_board_log_arch(void)
 	{
 		ir0_boot_arch("dtb=firmware-x0");
 		ir0_boot_smoke("ARM64_DTB_OK");
+		if (boot->usable_range_count > 0U)
+			ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_OK");
+		else
+			ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_FAIL");
 #if DEBUG_BOOT
 		if (boot->memory_range_count > 0)
 		{

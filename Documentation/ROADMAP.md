@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-11-06 (ARM64 product link = `kernel-arm64-product.bin` / `kernel-arm64.bin`; early fold + ipc/ tables; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs still absent — [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
+> **Last verified:** 2026-11-07 (ARM64 product link = `kernel-arm64-product.bin` / `kernel-arm64.bin`; swap ABI + MINIX swapfile; userspace KTAP selftests; RPi4 GENET probe; early fold + ipc/ tables; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs still absent — [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`; product userspace lives in the **`ISD`** sibling. README and old docs may lag; **grep the tree before claiming “done”.**
 
 > **Build-system note (2026-10-29):** historical gate names in this roadmap
@@ -73,6 +73,17 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | setuid smoke (sin syscall 404) | Done | `setup/pid1/su_setuid_smoke.c`, `make smoke-setuid-exec` |
 | Cred contract ktest | Done | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
 | **Hardening oleada (perm + lifecycle + ktest ABI + ATA size)** | Done | [`HARDENING.md`](HARDENING.md), gates 2026-06-23 |
+
+### Swap, selftests, RPi4 GENET (2026-11-07)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| ARM64 boot-info FDT split | Done | `arch/arm64/sources/boot_info*.c`, `tests/host/test_arm64_boot_info.c` |
+| Userspace KTAP selftests | Done | `tests/selftests/`, `make ir0-selftest-x86` (openat) |
+| `swapon`/`swapoff` + SWAPSPACE2 + MINIX extents | Done | `mm/swap/`, host + ktest header/area; PTE swap-in/out in `page_fault.c` |
+| Portable DMA + IRQ dispatch | Done | `includes/ir0/dma.h`, `includes/ir0/irq.h`, host `test_dma_irq` |
+| BCM2711 GENET v5 driver | Probe only | `drivers/net/bcmgenet.c`; FDT host test PASS; L2/ARP/ICMP **BLOCKED** without RPi4/QEMU GENET |
+| RPi3 SMSC95xx | Blocked | Needs DWC2 + USB host (out of this oleada) |
 
 ### ARM64 generic-core bind (2026-10-16)
 

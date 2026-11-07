@@ -37,6 +37,7 @@ ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/debug_dump.o \
 	arch/x86-64/sources/arch_pf_debug.o \
 	arch/x86-64/sources/mm_ops.o \
+	arch/x86-64/sources/dma.o \
 	arch/x86-64/vdso/blob.o \
 	arch/x86-64/vdso/vdso_blob_embed.o \
 	arch/x86-64/asm/boot/boot_x64.o \
@@ -53,6 +54,9 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/arch_arm64.o \
 	arch/arm64/sources/board.o \
 	arch/arm64/sources/boot_info.o \
+	arch/arm64/sources/fdt_reader.o \
+	arch/arm64/sources/boot_info_platform.o \
+	arch/arm64/sources/boot_info_devices.o \
 	arch/arm64/sources/irq_backend.o \
 	arch/arm64/sources/elf_image_early.o \
 	arch/arm64/sources/arm64_boot_common.o \
@@ -62,6 +66,7 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/rtc.o \
 	arch/arm64/sources/vdso.o \
 	arch/arm64/sources/mm_ops.o \
+	arch/arm64/sources/dma.o \
 	arch/arm64/sources/pl011.o \
 	arch/arm64/sources/serial_io_arm64.o \
 	arch/arm64/sources/gic_v2.o \

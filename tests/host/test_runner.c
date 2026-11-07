@@ -107,6 +107,10 @@ extern void test_video_backend_mock_contract(void);
 extern void test_audio_backend_mock_contract(void);
 extern void test_mm_port_mock_contract(void);
 extern void test_platform_mock_contract(void);
+extern void test_swap_header_and_areas(void);
+extern void test_bcmgenet_register_contract(void);
+extern void test_dma_irq_contract(void);
+extern void test_arm64_boot_info_genet_fdt(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -175,6 +179,7 @@ static void (*test_functions[])(void) = {
 	test_mount_prefix_boundary,
 	test_bpath_fold,
 	test_arm64_boot_info_fdt_contract,
+	test_arm64_boot_info_genet_fdt,
 	test_arm64_syscall_decode_contract,
 	test_x86_syscall_decode_contract,
 	test_syscall_handler_table_contract,
@@ -197,6 +202,9 @@ static void (*test_functions[])(void) = {
 	test_audio_backend_mock_contract,
 	test_mm_port_mock_contract,
 	test_platform_mock_contract,
+	test_swap_header_and_areas,
+	test_bcmgenet_register_contract,
+	test_dma_irq_contract,
 	NULL
 };
 

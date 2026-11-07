@@ -1,6 +1,6 @@
 # ARM64 kernel stack and SP_EL1 (product)
 
-> **Last verified:** 2026-11-06  
+> **Last verified:** 2026-11-07  
 > **Source of truth:** `arch/arm64/asm/entry/vectors.S`, `arch/arm64/sources/arch_switch.c`  
 > (`set_current_kernel_stack`), `arch/arm64/asm/boot/entry.S`, `sched/switch/arch_context_switch.c`  
 > (`context_prepare_next` → `set_current_kernel_stack`).
@@ -36,6 +36,10 @@ with `sp_el1 >= kstack_base` (else the update is skipped). This is stricter than
 “top − 16”: it leaves room for the vector prologue.  
 `IR0_PROC_KSTACK_SIZE` (see `config.h`) is large enough that the check passes for  
 normal processes.
+
+The write uses `SPSel=0` so `SP_EL1` is the inactive bank. A direct  
+`msr sp_el1` at EL1h would replace the live kernel stack; the function  
+epilogue would then pop LR from the empty kstack and return to EL1 address 0.
 
 ## Boot: SPSel
 

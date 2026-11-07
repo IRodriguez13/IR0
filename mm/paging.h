@@ -114,6 +114,7 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
  * Returns: 0 on success, -1 on failure
  */
 int map_page_in_directory(address_space_root_t root, uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
+int paging_install_pte(address_space_root_t root, uintptr_t virt_addr, uint64_t pte);
 
 /**
  * Check if a virtual address is mapped in a page directory

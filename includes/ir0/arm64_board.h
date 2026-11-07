@@ -101,6 +101,13 @@ struct arm64_board_boot_info
 	uint64_t initrd_end;
 	enum arm64_hypervisor_kind hypervisor_kind;
 	char hypervisor_vendor[16];
+	int genet_present;
+	struct ir0_phys_range genet_mmio;
+	uint32_t genet_irq[2];
+	uint32_t genet_irq_count;
+	uint8_t genet_mac[6];
+	char genet_phy_mode[16];
+	uint32_t genet_phy_addr;
 };
 
 extern const struct ir0_platform_ops arm64_virt_platform_ops;
@@ -126,6 +133,12 @@ int arm64_fdt_boot_info_init_fallback(uintptr_t primary, uintptr_t fallback);
 
 /* Subtract kernel, DTB and firmware reservations from discovered RAM. */
 int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size);
+
+/*
+ * Ensure at least one usable RAM bank exists, using the QEMU virt 256 MiB
+ * identity window when firmware reported a DTB without memory nodes.
+ */
+int arm64_board_prepare_memory(uintptr_t kernel_base, size_t kernel_size);
 
 /* Emit ARCH lines (and WARN if uart_mmio == 0). */
 void arm64_board_log_arch(void);

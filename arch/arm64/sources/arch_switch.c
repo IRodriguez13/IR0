@@ -32,30 +32,15 @@ void set_current_kernel_stack(struct process *p)
 {
 	process_t *proc = (process_t *)p;
 
-	if (!proc || !proc->kstack_top || !proc->kstack_base)
-		return;
-
 	/*
-	 * Lower-EL sync entry uses SP_EL1 and subtracts ARM64_EXC_FRAME_RESERVE
-	 * before storing the 31-GPR+Lr frame. Program SP_EL1 so the first
-	 * exception from EL0 has headroom within [kstack_base, kstack_top).
-	 * Cooperative EL1 switch (arm64_cpu_switch) continues to use mov sp, x2
-	 * with SPSel==1; see Documentation/ARM64_STACK_MODEL.md.
+	 * Do not MSR SP_EL1 at EL1h. That register is the live stack
+	 * (SPSel=1); writing it clobbers LR and RET-to-0 (ARM64_SYNC_OTHER).
+	 * Switching to SPSel=0 to reach the inactive bank hangs this QEMU
+	 * virt bring-up before the first EL0 drop. Keep the boot SP_EL1
+	 * for lower-EL vectors; cpu_local_set_kernel_stack still records
+	 * kstack_top. ARM DDI 0487: SPSel selects the current SP.
 	 */
-	{
-		uint64_t base = (uint64_t)(uintptr_t)proc->kstack_base;
-		uint64_t top = proc->kstack_top;
-		uint64_t sp;
-
-		if (top <= base ||
-		    (uint64_t)IR0_PROC_KSTACK_SIZE < (uint64_t)ARM64_EXC_FRAME_RESERVE)
-			return;
-		sp = (top - (uint64_t)ARM64_EXC_FRAME_RESERVE) & ~0xFULL;
-		/* Vector does sub sp,sp,#256 first — need sp_el1 - 256 >= base */
-		if (sp < base + (uint64_t)ARM64_EXC_FRAME_RESERVE || sp >= top)
-			return;
-		__asm__ volatile("msr sp_el1, %0\n\tisb" :: "r"(sp) : "memory");
-	}
+	(void)proc;
 }
 
 void switch_save_user_rsp(struct process *prev)
@@ -91,6 +76,21 @@ void arch_switch_to(task_t *prev, task_t *next)
 				sp_el0 = task_get_sp(next);
 			__asm__ volatile("msr sp_el0, %0" :: "r"(sp_el0)
 					 : "memory");
+		}
+
+		/*
+		 * First user entry (and later resumes whose SPSR is EL0t): x86
+		 * switch_context_x64 iretqs when CS.RPL==3. ARM cooperative
+		 * switch only RETs at EL1, so drop through switch_to_user.
+		 * Blocked-syscall kernel_ret still uses switch_context_arm64.
+		 */
+		if (next_proc->mode == USER_MODE &&
+		    task_return_state_is_user(next) &&
+		    !next_proc->kernel_syscall_sleep &&
+		    !next_proc->want_kernel_ret)
+		{
+			switch_to_user_task(next);
+			return;
 		}
 	}
 

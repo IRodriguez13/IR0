@@ -24,6 +24,8 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(132) == IR0_SYSCALL_SIGALTSTACK);
 	ASSERT(syscall_decode_number(165) == IR0_SYSCALL_GETRUSAGE);
 	ASSERT(syscall_decode_number(179) == IR0_SYSCALL_SYSINFO);
+	ASSERT(syscall_decode_number(224) == IR0_SYSCALL_SWAPON);
+	ASSERT(syscall_decode_number(225) == IR0_SYSCALL_SWAPOFF);
 	ASSERT(syscall_decode_number(233) == IR0_SYSCALL_MADVISE);
 	ASSERT(syscall_decode_number(78) == IR0_SYSCALL_READLINKAT);
 	ASSERT(syscall_decode_number(93) == IR0_SYSCALL_EXIT);
@@ -136,6 +138,6 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(171) == IR0_SYSCALL_ADJTIMEX);
 	ASSERT(syscall_decode_number(268) == IR0_SYSCALL_SETNS);
 	ASSERT(syscall_decode_number(448) == IR0_SYSCALL_PROCESS_MRELEASE);
-	ASSERT(decoded == 243);
+	ASSERT(decoded == 245);
 	TEST_END();
 }

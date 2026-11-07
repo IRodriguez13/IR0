@@ -45,6 +45,7 @@ ctr:
 # daily gate; `make agent-fast` adds the in-kernel battery.
 test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
+	@python3 $(KERNEL_ROOT)/tests/host/test_selftest_tap.py
 	@python3 scripts/ktm_classify_selftest.py
 	@python3 scripts/ktm_panic_inventory.py --check
 	@python3 scripts/ktm_syscall_manifest.py --tier1 || true

@@ -29,6 +29,9 @@
 #define X86_CR0_WP        (1ULL << 16)
 #define X86_CR4_PAE       (1ULL << 5)
 
+unsigned long irq_save(void);
+void irq_restore(unsigned long flags);
+
 void mm_activate(uintptr_t root)
 {
 	__asm__ volatile("mov %0, %%cr3" :: "r"(root) : "memory");
@@ -158,6 +161,26 @@ uintptr_t mm_va_from_indices(const size_t idx[4])
 int mm_pte_present(uint64_t e)
 {
 	return (e & X86_PTE_PRESENT) != 0;
+}
+
+int mm_pte_is_swap(uint64_t e)
+{
+	return !mm_pte_present(e) && e != 0;
+}
+
+void mm_pte_swap_decode(uint64_t e, unsigned *type, uint64_t *offset)
+{
+	uint64_t val = e >> 1;
+
+	if (type)
+		*type = (unsigned)(val & 0x1fULL);
+	if (offset)
+		*offset = val >> 5;
+}
+
+uint64_t mm_make_swap_pte(unsigned type, uint64_t offset)
+{
+	return (((uint64_t)(type & 0x1fU) | (offset << 5)) << 1);
 }
 
 int mm_pte_large(uint64_t e)

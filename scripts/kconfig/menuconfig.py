@@ -653,6 +653,7 @@ def apply_preset(symbols, preset):
             "ENABLE_NETWORKING": "y",
             "DRV_NIC_RTL8139": "n",
             "DRV_NIC_E1000": "n",
+            "DRV_NIC_BCMGENET": "y",
             "ENABLE_SOUND": "n",
             "ENABLE_BLUETOOTH": "y",
             "ENABLE_MOUSE": "n",

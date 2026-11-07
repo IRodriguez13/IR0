@@ -95,6 +95,11 @@ static dev_t minix_root_dev_id(void)
 	return minix_root_dev;
 }
 
+dev_t minix_backing_dev(void)
+{
+	return minix_root_dev_id();
+}
+
 static void minix_emit_blockdev_classify(void)
 {
 	if (minix_blockdev_classified)
@@ -672,6 +677,7 @@ static struct vfs_ops minix_fs_ops = {
 	.chown   = minix_fs_chown,
 	.chmod   = minix_fs_chmod,
 	.utimens = minix_fs_utimens,
+	.map_swap_extents = minix_map_swap_extents,
 };
 
 static struct vfs_fstype minix_fs_type;

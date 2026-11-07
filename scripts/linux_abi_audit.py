@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -152,27 +153,12 @@ def build_execve_probe(report_dir: Path) -> tuple[Path, Path]:
 
 def build_openat_probe(report_dir: Path) -> Path:
     out = report_dir / "openat_probe"
-    src = ROOT / "scripts" / "linux_abi" / "workloads" / "openat_probe.c"
+    built = ROOT / "build" / "selftests" / "x86_64" / "openat"
     out.parent.mkdir(parents=True, exist_ok=True)
-    musl_cc = "musl-gcc"
-    try:
-        subprocess.run(["musl-gcc", "--version"], capture_output=True, check=True)
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        musl_cc = "gcc"
-    ir0_path = "/proc/uptime"
-    rc = run_cmd(
-        [
-            musl_cc,
-            "-static",
-            "-Os",
-            f'-DOPEN_EXISTING_PATH="{ir0_path}"',
-            "-o",
-            str(out),
-            str(src),
-        ]
-    )
-    if rc != 0 or not out.is_file():
-        raise RuntimeError(f"failed to build {out.name}")
+    rc = run_cmd(["make", "-C", str(ROOT / "tests" / "selftests"), "ARCH=x86_64", "openat"])
+    if rc != 0 or not built.is_file():
+        raise RuntimeError("failed to build selftests/syscall/openat")
+    shutil.copy2(built, out)
     return out
 
 

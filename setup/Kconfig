@@ -138,6 +138,14 @@ menu "Networking"
           Minimal virtio-net legacy TX/RX for QEMU
           (-device virtio-net-pci,...,disable-modern=on).
 
+    config DRV_NIC_BCMGENET
+        bool "Driver plugin: BCM2711 GENET (Raspberry Pi 4)"
+        default n
+        depends on ENABLE_NETWORKING && ARCH_ARM64
+        help
+          Broadcom GENET v5 (brcm,bcm2711-genet-v5) for Raspberry Pi 4.
+          Raspberry Pi 3 LAN9514/SMSC95xx remains blocked pending USB.
+
 endmenu
 
 menu "Sound"
