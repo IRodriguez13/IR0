@@ -66,7 +66,7 @@ TEST_SRCS += test_tlb_sync.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
-	host_open_flags.o host_product_path.o \
+	host_open_flags.o host_product_path.o host_product_pivot_stub.o \
 	host_sysfs_net_stub.o host_sysfs_honesty_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \

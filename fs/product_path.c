@@ -8,6 +8,33 @@
  */
 
 #include <ir0/product_path.h>
+#include <ir0/product_pivot.h>
+
+static int path_eq(const char *path, const char *literal)
+{
+	unsigned i;
+
+	if (!path || !literal)
+		return 0;
+	for (i = 0; literal[i] != '\0'; i++)
+	{
+		if (path[i] != literal[i])
+			return 0;
+	}
+	return path[i] == '\0';
+}
+
+int ir0_product_path_is_reserved_early(const char *path)
+{
+	if (!path || path[0] != '/')
+		return 1;
+	if (path_eq(path, "/") || path_eq(path, "/init"))
+		return 1;
+	if (path[1] == 'd' && path[2] == 'e' && path[3] == 'v' &&
+	    (path[4] == '\0' || path[4] == '/'))
+		return 1;
+	return 0;
+}
 
 static int path_has_nontrivial_prefix(const char *path, const char *pref)
 {
@@ -23,8 +50,40 @@ static int path_has_nontrivial_prefix(const char *path, const char *pref)
 	return path[i] != '\0';
 }
 
+static int path_under_pivot_tree(const char *path)
+{
+	int i;
+
+	if (ir0_product_pivot_mount_count() <= 0)
+		return 0;
+	for (i = 0; ir0_product_pivot_trees[i]; i++)
+	{
+		const char *m = ir0_product_pivot_trees[i];
+		char pref[16];
+		unsigned j;
+
+		if (path_eq(path, m))
+			return 1;
+		j = 0;
+		while (m[j] != '\0' && j + 2 < sizeof(pref))
+		{
+			pref[j] = m[j];
+			j++;
+		}
+		pref[j++] = '/';
+		pref[j] = '\0';
+		if (path_has_nontrivial_prefix(path, pref))
+			return 1;
+	}
+	return 0;
+}
+
 int ir0_product_path_is_foldable(const char *path)
 {
+	if (!path || ir0_product_path_is_reserved_early(path))
+		return 0;
+	if (ir0_product_pivot_mount_count() > 0)
+		return path_under_pivot_tree(path);
 	return path_has_nontrivial_prefix(path, IR0_PRODUCT_PATH_TMP_PREF) ||
 	       path_has_nontrivial_prefix(path, IR0_PRODUCT_PATH_RUN_PREF);
 }

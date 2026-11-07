@@ -10,6 +10,7 @@
 #include "erfs_internal.h"
 
 #include <ir0/early_cpio.h>
+#include <ir0/product_pivot.h>
 #include <ir0/vfs_file.h>
 
 const uint8_t *g_cpio_buf;
@@ -176,6 +177,13 @@ int early_rootfs_cpio_fold_product(void)
 		else if (prod < 0)
 			return prod;
 	}
+	if (g_cpio_product_installed > 0)
+		ir0_product_pivot_note_cpio_fold(g_cpio_product_installed);
 	return g_cpio_product_installed > 0 ? g_cpio_product_installed :
 					      -ENOENT;
+}
+
+int early_rootfs_product_pivot_done(void)
+{
+	return ir0_product_pivot_cpio_fold_done();
 }

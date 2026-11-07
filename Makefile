@@ -592,6 +592,7 @@ LIB_OBJS = \
     mm/copy_user.o \
     fs/open_flags.o \
     fs/product_path.o \
+    fs/product_pivot.o \
     kernel/syscalls/syscall_table.o \
     fs/stat_user.o \
     fs/named_fifo.o \

@@ -9,6 +9,8 @@
 
 #include "erfs_internal.h"
 
+#include <ir0/product_pivot.h>
+
 static void early_unix_rehome(int old_id, int new_id)
 {
 	int i;
@@ -63,6 +65,8 @@ int product_path_live(void)
 
 	if (!g_product_path || !g_product_path->stat)
 		return 0;
+	if (ir0_product_pivot_mount_count() > 0)
+		return 1;
 	return g_product_path->stat("/tmp", &st) == 0;
 }
 

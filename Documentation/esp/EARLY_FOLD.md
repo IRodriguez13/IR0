@@ -25,13 +25,14 @@ IPC staged vive en **`ipc/`** (junto a `ipc/ipc.c`), no en `fs/`.
 | Providers de producto | `getpid`/`getcwd` en ARM ALL |
 | `early_dispatch.c` | SVC semántico |
 
-## `/tmp` y `/run` en ARM ALL
+## Pivot de producto (initramfs → tmpfs FHS) en ARM ALL
 
-Con tmpfs en `/tmp` y `/run`, `open`/`read`/`write`/`mkdir`/`lseek` y miembros
-**newc CPIO** bajo esos prefijos van a `vfs.c` (`ir0_product_path_is_foldable`
-en `fs/product_path.c`). Tags: `ARM64_PRODUCT_VFS_OK`,
-`ARM64_EARLY_PATH_FOLD_OK`, `ARM64_EARLY_PATH_RUN_FOLD_OK`,
-`ARM64_INITRAMFS_CPIO_OK`.
+`ir0_product_pivot_mount_trees()` monta tmpfs en `/tmp`, `/run`, `/usr`,
+`/etc`, `/bin`, `/sbin`, `/var`, `/lib`, `/opt`, `/home`, `/root`, `/srv`,
+`/mnt`. Los miembros **newc CPIO** bajo esos árboles se pliegan a `vfs.c`;
+`/dev/*`, `/` e `/init` siguen en erfs. Tags: `ARM64_PRODUCT_VFS_OK`,
+`ARM64_EARLY_PATH_FOLD_OK`, `ARM64_INITRAMFS_CPIO_OK`,
+`ARM64_EARLY_ROOT_PIVOT_OK`.
 
 El kernel de producto ARM64 (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 **`$(ALL_OBJS)`**) lleva tmpfs + ramtab; no existe enlace separado

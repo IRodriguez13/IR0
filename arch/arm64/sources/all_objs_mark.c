@@ -22,6 +22,7 @@
 #include <ir0/early_process.h>
 #include <ir0/early_rootfs.h>
 #include <ir0/product_path.h>
+#include <ir0/product_pivot.h>
 #include <ir0/idle.h>
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
@@ -367,9 +368,7 @@ void arm64_common_prepare_fdtable(void)
 		    probe.pos == (off_t)sizeof(z))
 			ir0_boot_smoke("ARM64_COMMON_VFS_OPS_READ_OK");
 	}
-	if (tmpfs_register() == 0 &&
-	    vfs_mount("none", "/tmp", "tmpfs") == 0 &&
-	    vfs_mount("none", "/run", "tmpfs") == 0)
+	if (ir0_product_pivot_mount_trees() >= 2)
 	{
 		struct vfs_file *f = NULL;
 		char got[4];
@@ -406,7 +405,11 @@ void arm64_common_prepare_fdtable(void)
 			    ir0_product_path_is_foldable("/run/fold"))
 				ir0_boot_smoke("ARM64_EARLY_PATH_RUN_FOLD_OK");
 			if (early_rootfs_cpio_fold_product() > 0)
+			{
 				ir0_boot_smoke("ARM64_INITRAMFS_CPIO_OK");
+				if (ir0_product_pivot_cpio_fold_done())
+					ir0_boot_smoke("ARM64_EARLY_ROOT_PIVOT_OK");
+			}
 		}
 	}
 }

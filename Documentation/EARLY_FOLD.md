@@ -33,13 +33,16 @@ Do not park pipe/unix/eventfd tables in `fs/`.
 `ramtab` is **not** a `vfs_fstype`. Do not add new Linux ABI only inside
 `early_rootfs.c`.
 
-## Product fold prefixes (`/tmp`, `/run`) on ARM ALL
+## Product pivot (initramfs → tmpfs trees) on ARM ALL
 
-When `tmpfs_register()` + `vfs_mount("none", "/tmp", "tmpfs")` and
-`vfs_mount("none", "/run", "tmpfs")` succeed, ARM ALL binds
-`ir0_product_path_ops` to `vfs_*`. Staged `openat`/`read`/`write`/`mkdirat`/
-`lseek` and **newc CPIO** members under `/tmp/` or `/run/` use product VFS
-(`ir0_product_path_is_foldable` in `fs/product_path.c`).
+`ir0_product_pivot_mount_trees()` (`fs/product_pivot.c`) mounts **tmpfs** on
+`/tmp`, `/run`, `/usr`, `/etc`, `/bin`, `/sbin`, `/var`, `/lib`, `/opt`,
+`/home`, `/root`, `/srv`, `/mnt`. ARM ALL binds `ir0_product_path_ops` to
+`vfs_*`. Staged `openat`/`read`/`write`/`mkdirat`/`lseek` and **newc CPIO**
+members under those trees use product VFS (`ir0_product_path_is_foldable` in
+`fs/product_path.c`). **`/dev/*`**, **`/`**, and **`/init`** stay on erfs
+(`ir0_product_path_is_reserved_early`). After `early_rootfs_cpio_fold_product()`:
+`ARM64_INITRAMFS_CPIO_OK` and `ARM64_EARLY_ROOT_PIVOT_OK`.
 
 The **ARM64 product kernel** (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 linked from **`$(ALL_OBJS)`**) carries tmpfs + ramtab + the fold tags below.
