@@ -85,7 +85,6 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_dev_net_contract, "dev_net_contract", 1 },
 	{ ktest_mount_proc_contract, "mount_proc_contract", 1 },
 	{ ktest_mount_tmpfs_contract, "mount_tmpfs_contract", 1 },
-	{ ktest_bpivot_boot_contract, "bpivot_boot_contract", 1 },
 	{ ktest_mount_multi_fs_contract, "mount_multi_fs_contract", 1 },
 	{ ktest_mount_longest_prefix_contract,
 	  "mount_longest_prefix_contract", 1 },
@@ -158,6 +157,8 @@ static const struct ktest_case ktest_cases[] = {
 	  "map_fixed_aborts_when_unmap_fails", 1 },
 	{ ktest_shmget_metadata_oom_returns_enomem,
 	  "shmget_metadata_oom_returns_enomem", 1 },
+	/* Switches the live root mount; it must remain the final contract. */
+	{ ktest_bpivot_boot_contract, "bpivot_boot_contract", 1 },
 	/*
 	 * tty_canon_block_wake: needs cooperative schedule from a real
 	 * timer/IRQ context; from kmain+holder it can spin forever.

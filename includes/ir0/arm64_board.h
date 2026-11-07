@@ -22,6 +22,7 @@
 #define ARM64_BOOT_MEMORY_RANGES_MAX 8U
 #define ARM64_BOOT_RESERVED_RANGES_MAX 16U
 #define ARM64_BOOT_USABLE_RANGES_MAX 32U
+#define ARM64_BOOTARGS_MAX 256U
 
 enum arm64_irq_controller_model
 {
@@ -94,6 +95,10 @@ struct arm64_board_boot_info
 	struct ir0_phys_range reserved[ARM64_BOOT_RESERVED_RANGES_MAX];
 	uint32_t usable_range_count;
 	struct ir0_phys_range usable[ARM64_BOOT_USABLE_RANGES_MAX];
+	struct ir0_phys_range framebuffer;
+	char bootargs[ARM64_BOOTARGS_MAX];
+	uint64_t initrd_start;
+	uint64_t initrd_end;
 	enum arm64_hypervisor_kind hypervisor_kind;
 	char hypervisor_vendor[16];
 };

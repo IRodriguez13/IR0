@@ -134,12 +134,19 @@ static void vfs_fs_op_release(void)
 	irq_restore(flags);
 }
 
+static int vfs_backend_path(struct vfs_ops *ops, const char *path,
+			    char *backend, size_t backend_size);
+
 static int vfs_ops_stat(struct vfs_ops *ops, const char *path, stat_t *st)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->stat(path, st);
+	ret = ops->stat(backend, st);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -147,10 +154,14 @@ static int vfs_ops_stat(struct vfs_ops *ops, const char *path, stat_t *st)
 static int vfs_ops_read(struct vfs_ops *ops, const char *path, void *buf,
 			size_t count, size_t *done, off_t offset)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->read(path, buf, count, done, offset);
+	ret = ops->read(backend, buf, count, done, offset);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -158,50 +169,70 @@ static int vfs_ops_read(struct vfs_ops *ops, const char *path, void *buf,
 static int vfs_ops_write(struct vfs_ops *ops, const char *path, const void *buf,
 			 size_t count, size_t *done, off_t offset)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->write(path, buf, count, done, offset);
+	ret = ops->write(backend, buf, count, done, offset);
 	vfs_fs_op_release();
 	return ret;
 }
 
 static int vfs_ops_create(struct vfs_ops *ops, const char *path, mode_t mode)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->create(path, mode);
+	ret = ops->create(backend, mode);
 	vfs_fs_op_release();
 	return ret;
 }
 
 static int vfs_ops_mkdir(struct vfs_ops *ops, const char *path, mode_t mode)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->mkdir(path, mode);
+	ret = ops->mkdir(backend, mode);
 	vfs_fs_op_release();
 	return ret;
 }
 
 static int vfs_ops_unlink(struct vfs_ops *ops, const char *path)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->unlink(path);
+	ret = ops->unlink(backend);
 	vfs_fs_op_release();
 	return ret;
 }
 
 static int vfs_ops_rmdir(struct vfs_ops *ops, const char *path)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->rmdir(path);
+	ret = ops->rmdir(backend);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -209,10 +240,14 @@ static int vfs_ops_rmdir(struct vfs_ops *ops, const char *path)
 static int vfs_ops_readdir(struct vfs_ops *ops, const char *path,
 			   struct vfs_dirent *entries, int max)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->readdir(path, entries, max);
+	ret = ops->readdir(backend, entries, max);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -220,10 +255,18 @@ static int vfs_ops_readdir(struct vfs_ops *ops, const char *path,
 static int vfs_ops_link(struct vfs_ops *ops, const char *oldpath,
 			const char *newpath)
 {
+	char old_backend[VFS_PATH_MAX];
+	char new_backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, oldpath, old_backend, sizeof(old_backend));
+	if (ret != 0)
+		return ret;
+	ret = vfs_backend_path(ops, newpath, new_backend, sizeof(new_backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->link(oldpath, newpath);
+	ret = ops->link(old_backend, new_backend);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -231,10 +274,14 @@ static int vfs_ops_link(struct vfs_ops *ops, const char *oldpath,
 static int vfs_ops_symlink(struct vfs_ops *ops, const char *target,
 			   const char *linkpath)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, linkpath, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->symlink(target, linkpath);
+	ret = ops->symlink(target, backend);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -242,10 +289,14 @@ static int vfs_ops_symlink(struct vfs_ops *ops, const char *target,
 static int vfs_ops_readlink(struct vfs_ops *ops, const char *path, char *buf,
 			    size_t buflen)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->readlink(path, buf, buflen);
+	ret = ops->readlink(backend, buf, buflen);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -253,10 +304,18 @@ static int vfs_ops_readlink(struct vfs_ops *ops, const char *path, char *buf,
 static int vfs_ops_rename(struct vfs_ops *ops, const char *oldpath,
 			  const char *newpath)
 {
+	char old_backend[VFS_PATH_MAX];
+	char new_backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, oldpath, old_backend, sizeof(old_backend));
+	if (ret != 0)
+		return ret;
+	ret = vfs_backend_path(ops, newpath, new_backend, sizeof(new_backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->rename(oldpath, newpath);
+	ret = ops->rename(old_backend, new_backend);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -264,30 +323,42 @@ static int vfs_ops_rename(struct vfs_ops *ops, const char *oldpath,
 static int vfs_ops_chown(struct vfs_ops *ops, const char *path, uid_t owner,
 			 gid_t group)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->chown(path, owner, group);
+	ret = ops->chown(backend, owner, group);
 	vfs_fs_op_release();
 	return ret;
 }
 
 static int vfs_ops_chmod(struct vfs_ops *ops, const char *path, mode_t mode)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->chmod(path, mode);
+	ret = ops->chmod(backend, mode);
 	vfs_fs_op_release();
 	return ret;
 }
 
 static int vfs_ops_truncate(struct vfs_ops *ops, const char *path, size_t length)
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->truncate(path, length);
+	ret = ops->truncate(backend, length);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -295,10 +366,14 @@ static int vfs_ops_truncate(struct vfs_ops *ops, const char *path, size_t length
 static int vfs_ops_utimens(struct vfs_ops *ops, const char *path,
 			   const struct timespec times[2])
 {
+	char backend[VFS_PATH_MAX];
 	int ret;
 
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
 	vfs_fs_op_acquire();
-	ret = ops->utimens(path, times);
+	ret = ops->utimens(backend, times);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -354,6 +429,48 @@ static struct vfs_mount *find_mount(const char *path)
         }
     }
     return best;
+}
+
+static int vfs_backend_path(struct vfs_ops *ops, const char *path,
+			    char *backend, size_t backend_size)
+{
+    struct vfs_mount *m;
+    const char *suffix;
+    size_t base_len;
+    size_t suffix_len;
+
+    if (!ops || !path || !backend || backend_size == 0)
+        return -EINVAL;
+    m = find_mount(path);
+    if (!m || !m->fs || m->fs->ops != ops)
+        return -ENODEV;
+
+    if (strcmp(m->path, "/") == 0)
+        suffix = path;
+    else
+        suffix = path + strlen(m->path);
+
+    base_len = strlen(m->backend_path);
+    suffix_len = strlen(suffix);
+    if (strcmp(m->backend_path, "/") == 0)
+    {
+        if (suffix[0] == '\0')
+            suffix = "/";
+        else if (suffix[0] == '/')
+            suffix++;
+        suffix_len = strlen(suffix);
+        if (suffix_len + 2 > backend_size)
+            return -ENAMETOOLONG;
+        backend[0] = '/';
+        memcpy(backend + 1, suffix, suffix_len + 1);
+        return 0;
+    }
+
+    if (base_len + suffix_len + 1 > backend_size)
+        return -ENAMETOOLONG;
+    memcpy(backend, m->backend_path, base_len);
+    memcpy(backend + base_len, suffix, suffix_len + 1);
+    return 0;
 }
 
 static int mount_is_readonly(const char *path)
@@ -698,6 +815,8 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     strncpy(m->path, mount_path, sizeof(m->path) - 1);
     m->path[sizeof(m->path) - 1] = '\0';
+    strncpy(m->backend_path, mount_path, sizeof(m->backend_path) - 1);
+    m->backend_path[sizeof(m->backend_path) - 1] = '\0';
     if (dev) {
         strncpy(m->dev, dev, sizeof(m->dev) - 1);
         m->dev[sizeof(m->dev) - 1] = '\0';
@@ -803,6 +922,132 @@ int vfs_umount(const char *path)
         mounts = victim->next;
 
     kfree(victim);
+    return 0;
+}
+
+static struct vfs_mount *vfs_mount_exact(const char *path)
+{
+    struct vfs_mount *m;
+
+    for (m = mounts; m; m = m->next)
+    {
+        if (strcmp(m->path, path) == 0)
+            return m;
+    }
+    return NULL;
+}
+
+static int vfs_path_below(const char *path, const char *parent)
+{
+    size_t parent_len;
+
+    if (!path || !parent)
+        return 0;
+    parent_len = strlen(parent);
+    return strncmp(path, parent, parent_len) == 0 &&
+           path[parent_len] == '/';
+}
+
+static int vfs_pivot_mount_path(const struct vfs_mount *m,
+                                const struct vfs_mount *new_mount,
+                                const char *new_root, const char *old_root,
+                                char *out, size_t out_size)
+{
+    const char *suffix;
+    size_t old_len;
+    size_t suffix_len;
+
+    if (m == new_mount)
+    {
+        if (out_size < 2)
+            return -ENAMETOOLONG;
+        out[0] = '/';
+        out[1] = '\0';
+        return 0;
+    }
+    if (vfs_path_below(m->path, new_root))
+    {
+        suffix = m->path + strlen(new_root);
+        if (strlen(suffix) + 1 > out_size)
+            return -ENAMETOOLONG;
+        memcpy(out, suffix, strlen(suffix) + 1);
+        return 0;
+    }
+
+    suffix = strcmp(m->path, "/") == 0 ? "" : m->path;
+    old_len = strlen(old_root);
+    suffix_len = strlen(suffix);
+    if (old_len + suffix_len + 1 > out_size)
+        return -ENAMETOOLONG;
+    memcpy(out, old_root, old_len);
+    memcpy(out + old_len, suffix, suffix_len + 1);
+    return 0;
+}
+
+int vfs_pivot_root(const char *new_root, const char *put_old)
+{
+    char new_path[VFS_PATH_MAX];
+    char old_path[VFS_PATH_MAX];
+    char candidate[VFS_PATH_MAX];
+    struct vfs_mount *new_mount;
+    struct vfs_mount *m;
+    struct vfs_mount *other;
+    stat_t st;
+    size_t new_len;
+
+    if (!new_root || !put_old)
+        return -EINVAL;
+    if (ir0_current_cred() && !ir0_cred_is_root())
+        return -EPERM;
+    if (validate_path(new_root) != 0 || validate_path(put_old) != 0)
+        return -EINVAL;
+    normalize_mount_path(new_root, new_path, sizeof(new_path));
+    normalize_mount_path(put_old, old_path, sizeof(old_path));
+    if (strcmp(new_path, "/") == 0)
+        return -EBUSY;
+    new_len = strlen(new_path);
+    if (strncmp(old_path, new_path, new_len) != 0 ||
+        old_path[new_len] != '/')
+        return -EINVAL;
+    if (vfs_stat(new_path, &st) != 0 || !S_ISDIR(st.st_mode) ||
+        vfs_stat(old_path, &st) != 0 || !S_ISDIR(st.st_mode))
+        return -ENOTDIR;
+    if (!vfs_mount_exact("/"))
+        return -EINVAL;
+    new_mount = vfs_mount_exact(new_path);
+    if (!new_mount)
+        return -EINVAL;
+
+    for (m = mounts; m; m = m->next)
+    {
+        int ret = vfs_pivot_mount_path(m, new_mount, new_path,
+                                       old_path + new_len,
+                                       candidate, sizeof(candidate));
+        if (ret != 0)
+            return ret;
+        for (other = mounts; other != m; other = other->next)
+        {
+            char other_path[VFS_PATH_MAX];
+
+            ret = vfs_pivot_mount_path(other, new_mount, new_path,
+                                       old_path + new_len,
+                                       other_path, sizeof(other_path));
+            if (ret != 0)
+                return ret;
+            if (strcmp(candidate, other_path) == 0)
+                return -EBUSY;
+        }
+    }
+
+    for (m = mounts; m; m = m->next)
+    {
+        if (vfs_pivot_mount_path(m, new_mount, new_path,
+                                 old_path + new_len,
+                                 candidate, sizeof(candidate)) != 0)
+            return -EIO;
+        strncpy(m->path, candidate, sizeof(m->path) - 1);
+        m->path[sizeof(m->path) - 1] = '\0';
+    }
     return 0;
 }
 
@@ -1781,6 +2026,7 @@ int vfs_utimens(const char *path, const struct timespec times[2])
 int vfs_read_file(const char *path, void **data, size_t *size)
 {
     struct vfs_ops *ops;
+    char backend[VFS_PATH_MAX];
     stat_t st;
     int ret;
     size_t fsize;
@@ -1818,9 +2064,12 @@ int vfs_read_file(const char *path, void **data, size_t *size)
         klog_print("\n");
     }
 
+    ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+    if (ret != 0)
+        return ret;
     vfs_fs_op_acquire();
 
-    ret = ops->stat(path, &st);
+    ret = ops->stat(backend, &st);
     if (ret != 0)
     {
         vfs_exec_audit_log("stat_fail", path, ret, 0, 0, 0, 0, -1);
@@ -1876,7 +2125,7 @@ int vfs_read_file(const char *path, void **data, size_t *size)
     {
         size_t chunk = 0;
 
-        ret = ops->read(path, (uint8_t *)buf + total, fsize - total,
+        ret = ops->read(backend, (uint8_t *)buf + total, fsize - total,
                         &chunk, (off_t)total);
         if (ret != 0)
         {

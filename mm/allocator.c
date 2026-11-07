@@ -73,29 +73,50 @@ static inline block_header_t *get_header_from_footer(block_footer_t *footer)
 /* Get previous physical block using current header */
 static inline block_header_t *get_prev_block(block_header_t *current)
 {
-	/* Check if we're at the start of heap */
-	if ((void *)current <= allocator.heap_start)
+	uintptr_t current_addr = (uintptr_t)current;
+	uintptr_t heap_start = (uintptr_t)allocator.heap_start;
+	block_footer_t *prev_footer;
+	block_header_t *previous;
 
+	if (current_addr <= heap_start ||
+	    current_addr > (uintptr_t)allocator.heap_end)
+	{
 	#if DEBUG_MEMORY_ALLOCATOR
 		klog_print("[ALLOC] We're not in heap start");
 	#endif
 
-	return NULL;
+		return NULL;
+	}
 
-	/* Get footer of previous block (just before current header) */
-	block_footer_t *prev_footer = (block_footer_t *)((char *)current - sizeof(block_footer_t));
+	prev_footer = (block_footer_t *)(current_addr - sizeof(block_footer_t));
 
-	/* Validate that prev_footer is within heap bounds */
-	if ((void *)prev_footer < allocator.heap_start)
-
+	if ((uintptr_t)prev_footer < heap_start ||
+	    prev_footer->size < sizeof(block_header_t) + sizeof(block_footer_t) ||
+	    prev_footer->size > current_addr - heap_start ||
+	    (prev_footer->size & 15U) != 0U ||
+	    (prev_footer->is_free != 0 && prev_footer->is_free != 1))
+	{
 	#if DEBUG_MEMORY_ALLOCATOR
-		klog_print("[ALLOC] We're not in heap boundaries");
+		klog_print("[ALLOC] Invalid previous boundary tag");
 	#endif
 
 		return NULL;
+	}
 
+	previous = get_header_from_footer(prev_footer);
+	if ((uintptr_t)previous < heap_start ||
+	    previous->size != prev_footer->size ||
+	    previous->is_free != prev_footer->is_free ||
+	    (uintptr_t)previous + previous->size != current_addr)
+	{
+	#if DEBUG_MEMORY_ALLOCATOR
+		klog_print("[ALLOC] Inconsistent previous boundary tag");
+	#endif
 
-	return get_header_from_footer(prev_footer);
+		return NULL;
+	}
+
+	return previous;
 }
 
 /* Get next physical block */
@@ -491,4 +512,12 @@ void alloc_stats(size_t *total, size_t *used, size_t *allocs)
 	/* allocator.total_allocated, allocator.total_freed */
 	/* allocator.coalesce_forward_count, allocator.coalesce_backward_count */
 #endif
+}
+
+void alloc_coalesce_stats(size_t *forward, size_t *backward)
+{
+	if (forward)
+		*forward = allocator.coalesce_forward_count;
+	if (backward)
+		*backward = allocator.coalesce_backward_count;
 }

@@ -50,6 +50,7 @@ static const struct ir0_reclaimer oom_stock = {
 
 void ktest_oom_reclaim_before_kill(void)
 {
+	struct ir0_reclaim_result drained;
 	process_mode_t saved;
 	uint64_t kills;
 	int rc;
@@ -69,6 +70,7 @@ void ktest_oom_reclaim_before_kill(void)
 		KTEST_END();
 		return;
 	}
+	KASSERT_EQ(mm_reclaim_run(UINT64_MAX, &drained), 0);
 	oom_stock_left = 1;
 	kills = oom_kill_count();
 	saved = current_process->mode;

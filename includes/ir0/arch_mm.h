@@ -34,10 +34,6 @@
 uintptr_t mm_kernel_heap_start(void);
 size_t mm_kernel_heap_size(void);
 
-/* Firmware-reserved-free physical RAM banks for the generic boot inventory. */
-size_t mm_boot_usable_range_count(void);
-int mm_boot_usable_range(size_t index, struct ir0_phys_range *range);
-
 /* Inclusive userspace virtual-address window for the selected ISA policy. */
 uintptr_t mm_user_va_start(void);
 uintptr_t mm_user_va_end(void);
@@ -121,3 +117,6 @@ int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
  */
 int mm_backend_reclaim_user_frames(address_space_root_t root,
 				   uint64_t *reclaimed_pages);
+
+/* Install board/ISA-owned supervisor MMIO mappings in a process root. */
+int mm_map_platform_supervisor(address_space_root_t root);

@@ -38,4 +38,6 @@ void alloc_free(void *ptr);
 
 void alloc_stats(size_t *total, size_t *used, size_t *allocs);
 
+void alloc_coalesce_stats(size_t *forward, size_t *backward);
+
 void *all_realloc(void *ptr, size_t new_size);

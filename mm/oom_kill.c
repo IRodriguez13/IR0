@@ -19,9 +19,10 @@
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/pmm.h>
+#include <ir0/percpu.h>
 #include <ir0/signals.h>
 #include <ir0/cpu.h>
-#include <ir0/ktm/klog.h>
+#include <ir0/logging.h>
 #include <string.h>
 #include <stdint.h>
 
@@ -77,7 +78,7 @@ int oom_kill_process(struct process *victim, const char *reason)
      * Linux logs the victim before signalling so a hang inside teardown still
      * leaves the audit trail on the serial console.
      */
-    klog_notice_fmt("OOM",
+    log_info_fmt("OOM",
                     "[OOM] kill pid=%d comm=%s reason=%s",
                     pid, victim->comm[0] ? victim->comm : "(none)",
                     reason ? reason : "unknown");
@@ -122,7 +123,7 @@ int oom_out_of_memory(struct process *origin, const char *reason)
     irq_restore(flags);
     if (!found)
     {
-        klog_notice_fmt("OOM",
+        log_info_fmt("OOM",
                         "[OOM] no eligible victim (origin=%d reason=%s)",
                         origin ? (int)origin->task.pid : -1,
                         reason ? reason : "unknown");
@@ -169,6 +170,8 @@ int oom_handle_alloc_failure(struct process *current, const char *site)
     if (!current || current->mode != USER_MODE)
         return -ENOMEM;
     if (ir0_panic_in_progress())
+        return -ENOMEM;
+    if (cpu_local()->irq_depth != 0U)
         return -ENOMEM;
 
     /*

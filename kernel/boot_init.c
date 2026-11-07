@@ -39,7 +39,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
-#include <ir0/multiboot.h>
+#include <ir0/boot_params.h>
 #include <ir0/ktm/ktm.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/boot_arch.h>
@@ -70,17 +70,14 @@ void boot_early(uintptr_t firmware_handle)
 
 	set_boot_params((void *)firmware_handle);
 	ir0_boot_arch_firmware_early(firmware_handle);
+	(void)boot_memory_snapshot_init(firmware_handle);
 	ir0_boot_firmware_sysfs_init();
 	ir0_cmdline_apply_log_profile();
 	early_init();
 	heap_init();
 
-	/*
-	 * VBE framebuffer from Multiboot. Must run before first print() so
-	 * that print() uses framebuffer when gfxpayload=1024x768x32 in grub.
-	 */
 #if CONFIG_ENABLE_VBE
-	if (video_backend_init_from_multiboot((uint32_t)firmware_handle) != 0)
+	if (ir0_boot_port_video_init(firmware_handle) != 0)
 		video_backend_init_fallback();
 #endif
 	console_backend_init();
@@ -144,23 +141,8 @@ void boot_memory_serial(uintptr_t firmware_handle)
 					: "",
 				(unsigned)video_backend_fail_reason());
 
-			if (firmware_handle)
-			{
-				const struct multiboot_info *mb =
-					(const struct multiboot_info *)firmware_handle;
-				log_info_fmt(
-					"BOOT",
-					"Multiboot flags=0x%x (bit12=FB:%u) addr=0x%x w=%u h=%u bpp=%u",
-					(unsigned)mb->flags,
-					(mb->flags & (1u << 12)) ? 1u : 0u,
-					(unsigned)(mb->framebuffer_addr &
-						   0xFFFFFFFFu),
-					(unsigned)mb->framebuffer_width,
-					(unsigned)mb->framebuffer_height,
-					(unsigned)mb->framebuffer_bpp);
-			}
-			else
-				log_info("BOOT", "Multiboot info is NULL");
+			if (!boot_memory_snapshot())
+				log_info("BOOT", "Firmware snapshot unavailable");
 #else
 			(void)firmware_handle;
 #endif
@@ -355,6 +337,7 @@ static void handoff_init_loaded(void *context, long init_pid)
 	(void)context;
 	klog_info_fmt("INIT", "/sbin/init loaded (PID %d), scheduling",
 		      (int)init_pid);
+	klog_smoke("INIT_EXEC_LOADED_OK");
 }
 
 static void handoff_attach_console(void *context)

@@ -219,6 +219,28 @@ int early_rootfs_cpio_ready(void)
 	return g_cpio_ready;
 }
 
+int early_rootfs_bind_cpio(const uint8_t *buffer, uint64_t bytes,
+			   const struct early_user_services *user)
+{
+	const uint8_t *init_data = 0;
+	uint64_t init_len = 0;
+	int installed;
+
+	if (!buffer || bytes < IR0_EARLY_CPIO_HEADER || !user ||
+	    !ir0_early_cpio_magic(buffer))
+		return -EINVAL;
+	if (erfs_cpio_find_init(buffer, bytes, &init_data, &init_len) != 0)
+		return -ENOEXEC;
+	early_rootfs_bind(init_data, init_len, user);
+	g_cpio_buf = buffer;
+	g_cpio_len = bytes;
+	installed = erfs_cpio_install_members(buffer, bytes);
+	if (installed < 0)
+		return installed;
+	g_cpio_ready = installed > 0;
+	return g_cpio_ready ? 0 : -ENOENT;
+}
+
 int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 				uint64_t buffer_len,
 				const struct early_user_services *user)
@@ -242,9 +264,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 	{
 		uint64_t bytes = vda_bytes();
 		uint64_t load;
-		const uint8_t *init_data = 0;
-		uint64_t init_len = 0;
-		int installed;
+		int ret;
 
 		if (bytes > buffer_len)
 			bytes = buffer_len;
@@ -255,16 +275,10 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 						   buffer + i * 512UL) != 0)
 				return -EIO;
 		}
-		if (erfs_cpio_find_init(buffer, bytes, &init_data, &init_len) != 0)
-			return -ENOEXEC;
-		early_rootfs_bind(init_data, init_len, user);
+		ret = early_rootfs_bind_cpio(buffer, bytes, user);
+		if (ret != 0)
+			return ret;
 		g_init_from_block = 1;
-		g_cpio_buf = buffer;
-		g_cpio_len = bytes;
-		installed = erfs_cpio_install_members(buffer, bytes);
-		if (installed < 0)
-			return installed;
-		g_cpio_ready = installed > 0;
 		return 0;
 	}
 	if (sector[0] != 0x7f || sector[1] != 'E' || sector[2] != 'L' ||

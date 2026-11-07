@@ -19,14 +19,13 @@
 #include <ir0/process.h>
 #include <ir0/mm.h>
 #include <ir0/debug_runtime.h>
-#include <ir0/video_backend.h>
+#include <ir0/mm_alloc.h>
+#include <ir0/page_table_pool.h>
 #include "paging.h"
 #include <string.h>
-#include <mm/allocator.h>
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <ir0/validation.h>
-#include <ir0/ahci_api.h>
 #include <ir0/arch_port.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/errno.h>
@@ -253,7 +252,7 @@ static void ir0_mm_free_table_frame(uint64_t frame, int level)
     ir0_mm_set_frame_type(frame, IR0_MM_FRAME_UNKNOWN);
     ir0_mm_frame_pt_free++;
     ir0_mm_log_frame_type("FREE", frame, IR0_MM_FRAME_PT);
-    kfree_aligned((void *)(uintptr_t)frame);
+    page_table_frame_free((uintptr_t)frame);
 }
 
 /*
@@ -519,7 +518,7 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 	irq_flags = irq_save();
 	entry = *pte;
 	old_phys = mm_pte_phys(entry);
-	new_phys = pmm_alloc_frame();
+	new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
 	if (!new_phys)
 	{
 		irq_restore(irq_flags);
@@ -714,7 +713,8 @@ static uint64_t *get_existing_table(uint64_t *table, size_t index)
  */
 static uint64_t alloc_page_table(int level)
 {
-    void *page = kmalloc_aligned_try(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+    uintptr_t frame = page_table_frame_alloc(MM_ALLOC_ATOMIC);
+    void *page = (void *)frame;
     paging_oom_class_t oom_cls;
 
     if (!page)
@@ -745,8 +745,7 @@ static uint64_t alloc_page_table(int level)
     ir0_mm_frame_pt_alloc++;
     ir0_mm_log_frame_type("ALLOC", (uint64_t)(uintptr_t)page, IR0_MM_FRAME_PT);
 
-    /* Return physical address (identity mapped for now) */
-    return (uint64_t)page;
+    return (uint64_t)frame;
 }
 
 /*
@@ -1200,7 +1199,7 @@ int map_user_region_in_directory(address_space_root_t root,
     {
         uintptr_t virt_addr = virtual_start + offset;
 
-        uintptr_t phys_addr = pmm_alloc_frame();
+        uintptr_t phys_addr = mm_alloc_frame(MM_ALLOC_DIRECT_RECLAIM);
         if (phys_addr == 0)
         {
             /* Rollback: unmap everything we mapped so far */
@@ -1375,43 +1374,6 @@ int copy_process_memory(struct process *parent, struct process *child)
 }
 
 
-#if CONFIG_ENABLE_VBE
-/*
- * Supervisor-only identity map for the linear framebuffer MMIO window.
- * Syscalls run ring 0 with process address-space root; /dev/console FB writes need this
- * mapping in every process page table (not userspace mmap).
- */
-static void map_supervisor_framebuffer_mmio(address_space_root_t root)
-{
-    uint32_t fb_phys;
-    uint32_t fb_size;
-    uint32_t off;
-
-    if (!root || !video_backend_is_available())
-        return;
-
-    fb_phys = video_backend_get_fb_phys();
-    fb_size = video_backend_get_fb_size();
-    if (fb_phys == 0 || fb_size == 0)
-        return;
-    if (fb_size > (4U * 1024U * 1024U))
-        fb_size = 4U * 1024U * 1024U;
-
-    for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
-    {
-        uint64_t p = (uint64_t)fb_phys + off;
-
-        if (map_page_in_directory(root, p, p, PAGE_PRESENT | PAGE_RW) != 0)
-            break;
-    }
-}
-#else
-static void map_supervisor_framebuffer_mmio(address_space_root_t root)
-{
-    (void)root;
-}
-#endif
-
 /*
  * map_supervisor_identity_low - 4 KiB identity map for kernel low memory
  *
@@ -1441,13 +1403,6 @@ int map_supervisor_identity_low(address_space_root_t root, uint64_t start,
                                   PAGE_PRESENT | PAGE_RW | PAGE_EXEC) != 0)
             return -1;
     }
-
-    map_supervisor_framebuffer_mmio(root);
-    /*
-     * AHCI ABAR is high MMIO (not in low identity). Map into every process
-     * address-space root so ir0_block_* DMA setup can touch port registers under syscall.
-     */
-    ahci_map_mmio_in_directory(root);
 
     return 0;
 }

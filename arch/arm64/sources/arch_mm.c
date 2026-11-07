@@ -22,7 +22,6 @@
 #include <ir0/oops.h>
 #include <ir0/errno.h>
 #include <ir0/pmm.h>
-#include <ir0/arm64_board.h>
 #include "mmu_early.h"
 
 uintptr_t mm_kernel_heap_start(void)
@@ -34,34 +33,6 @@ uintptr_t mm_kernel_heap_start(void)
 size_t mm_kernel_heap_size(void)
 {
 	return 0x01800000UL;
-}
-
-size_t mm_boot_usable_range_count(void)
-{
-	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
-
-	if (!boot)
-		return 0;
-	/*
-	 * Usable RAM is published only after arm64_board_finalize_memory() runs
-	 * (build_usable_ranges). QEMU virt may use a synthetic DRAM bank when FDT
-	 * is unreadable at EL1; fdt_valid stays 0 but usable_range_count is valid.
-	 */
-	return boot->usable_range_count;
-}
-
-int mm_boot_usable_range(size_t index, struct ir0_phys_range *range)
-{
-	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
-
-	if (!range)
-		return -EINVAL;
-	if (!boot || boot->usable_range_count == 0U)
-		return -ENODEV;
-	if (index >= boot->usable_range_count)
-		return -EINVAL;
-	*range = boot->usable[index];
-	return 0;
 }
 
 uintptr_t mm_user_va_start(void)
@@ -127,6 +98,12 @@ void mm_prepare_root_activation(address_space_root_t root)
 {
 	(void)root;
 	/* The staged TTBR0 maps are self-contained until root pooling lands. */
+}
+
+int mm_map_platform_supervisor(address_space_root_t root)
+{
+	(void)root;
+	return 0;
 }
 
 int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,

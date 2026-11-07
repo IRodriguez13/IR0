@@ -14,7 +14,7 @@
 #include <ir0/bpath.h>
 
 #define IR0_BPIVOT_NEW_ROOT "/bpivot/new"
-#define IR0_BPIVOT_PUT_OLD   "/bpivot/old"
+#define IR0_BPIVOT_PUT_OLD   "/bpivot/new/old"
 
 int ir0_bpivot_mount_trees(void);
 int ir0_bpivot_mount_count(void);
@@ -26,6 +26,8 @@ int ir0_bpivot_tree_count(void);
 int ir0_bpivot_prepare_staging(void);
 int ir0_bpivot_commit(void);
 int ir0_bpivot_committed(void);
+int ir0_bpivot_root_switched(void);
+int ir0_bpivot_stage_path(const char *path, char *out, size_t out_size);
 
 const struct ir0_bpath_ops *ir0_bpath_vfs_product_ops(void);
 

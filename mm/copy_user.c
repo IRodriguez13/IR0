@@ -16,7 +16,7 @@
 #include <mm/paging.h>
 #include <string.h>
 #include <config.h>
-#include <ir0/ktm/klog.h>
+#include <ir0/logging.h>
 
 int is_user_address_checked(const void *addr, size_t size, int check_mapped)
 {
@@ -48,8 +48,8 @@ int is_user_address_checked(const void *addr, size_t size, int check_mapped)
 			if (mapped != 1)
 			{
 #if DEBUG_SYSCALLS
-				klog_info("COPY_USER",
-					  "Address range contains unmapped pages");
+				log_info("COPY_USER",
+					 "Address range contains unmapped pages");
 #endif
 				return 0;
 			}

@@ -30,6 +30,10 @@
 #endif
 #endif
 
+#ifndef CONFIG_ARM64_SYNTHETIC_RAM_FALLBACK
+#define CONFIG_ARM64_SYNTHETIC_RAM_FALLBACK 1
+#endif
+
 /* MEMORY SUBSYSTEM DEBUG FLAGS                                              */
 
 /* Memory Allocator Debug */

@@ -9,7 +9,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/boot_log.h>
+#include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
+#include <ir0/arm64_board.h>
+#include <ir0/errno.h>
 #include <ir0/serial_io.h>
 #include <ir0/ktm/klog.h>
 
@@ -18,6 +21,7 @@
 #include <string.h>
 
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
+#include "rootfs_early.h"
 #include <ir0/bpivot.h>
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
@@ -40,6 +44,7 @@ static void boot_arm64_seed_embedded_init(void)
 	size_t remain;
 	stat_t st;
 
+	arm64_rootfs_early_init();
 	ir0_rootfs_prepare_userspace_base();
 	if (vfs_stat("/sbin/init", &st) == 0)
 		return;
@@ -86,6 +91,52 @@ uintptr_t ir0_kmain_normalize_firmware_handle(uintptr_t firmware_handle)
 	(void)firmware_handle;
 	return (uintptr_t)arm64_firmware_fdt;
 #endif
+}
+
+int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
+				struct ir0_boot_snapshot *snapshot)
+{
+	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
+	size_t i;
+
+	(void)firmware_handle;
+	if (!snapshot || !boot ||
+	    boot->usable_range_count == 0 ||
+	    boot->usable_range_count > IR0_BOOT_MEMORY_MAX_BANKS ||
+	    boot->reserved_range_count > IR0_BOOT_MEMORY_MAX_RESERVATIONS)
+		return -ENODEV;
+	for (i = 0; i < boot->usable_range_count; i++)
+		snapshot->usable[i] = boot->usable[i];
+	snapshot->usable_count = boot->usable_range_count;
+	for (i = 0; i < boot->reserved_range_count; i++)
+		snapshot->reserved[i] = boot->reserved[i];
+	snapshot->reserved_count = boot->reserved_range_count;
+	if (boot->fdt_valid && boot->fdt_size != 0)
+	{
+		snapshot->firmware.base = boot->fdt_pa;
+		snapshot->firmware.size = boot->fdt_size;
+	}
+	if (boot->initrd_start != 0 && boot->initrd_end > boot->initrd_start)
+	{
+		snapshot->initrd.base = boot->initrd_start;
+		snapshot->initrd.size = boot->initrd_end - boot->initrd_start;
+	}
+	snapshot->framebuffer = boot->framebuffer;
+	for (i = 0; i < IR0_BOOT_CMDLINE_MAX - 1U &&
+		    boot->bootargs[i] != '\0'; i++)
+		snapshot->cmdline[i] = boot->bootargs[i];
+	snapshot->cmdline[i] = '\0';
+	snapshot->synthetic_memory = !boot->fdt_valid;
+	snapshot->valid = 1;
+	if (boot->fdt_valid)
+		ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_OK");
+	return 0;
+}
+
+int ir0_boot_port_video_init(uintptr_t firmware_handle)
+{
+	(void)firmware_handle;
+	return -ENODEV;
 }
 
 void ir0_boot_port_serial_before_logging(void)

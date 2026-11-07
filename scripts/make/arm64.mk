@@ -186,7 +186,7 @@ smoke-arm64-hypervisor-log: kernel-arm64-product.bin
 		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-hypervisor-smoke.log \
 			--timeout 25 --stale-sec 10 --mem 256M --done ARM64_BOOT_OK -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
-			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
 			-display none -no-reboot 2>/dev/null; \
 		grep -q '\[HYPERVISOR\]' $(HOST_TMP)/arm64-hypervisor-smoke.log; \
 		grep -Eq 'TCG \(QEMU TCG\)|vendor=KVM|Microsoft Hv|VMware|none detected' \
@@ -208,29 +208,44 @@ smoke-arm64-product-log: kernel-arm64-product.bin
 			--timeout 45 --stale-sec 15 --mem 256M --expected-panic \
 			--done ARM64_PRODUCT_BOOT_HANDOFF -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
-			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
 			-display none -no-reboot 2>/dev/null && \
 		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-smoke.log && \
 		echo "✓ smoke-arm64-product-log (ARM64_PRODUCT_BOOT_HANDOFF)"; \
 	fi
 
 .PHONY: smoke-arm64-bpivot-product
-smoke-arm64-bpivot-product: kernel-arm64-product.bin
+smoke-arm64-bpivot-product: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/make_test_cpio.py
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
 		echo "⊘ smoke-arm64-bpivot-product SKIP (qemu-system-aarch64 not in PATH)"; \
 	else \
+		cpio=$$(mktemp "$${TMPDIR:-/tmp}/ir0-arm64-bpivot.XXXXXX"); \
+		trap 'rm -f "$$cpio"' EXIT HUP INT TERM; \
+		python3 scripts/make_test_cpio.py \
+			--init $(MUSL_AARCH64_HELLO) --output "$$cpio"; \
 		echo "  SMOKE   ARM64 portable bpivot boot (common fs/bpivot_boot.c)..."; \
 		rm -f $(HOST_TMP)/arm64-bpivot-smoke.log; \
 		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-bpivot-smoke.log \
 			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
-			--done IR0_BPIVOT_COMMIT_OK --done ARM64_BPIVOT_COMMIT_OK -- \
+			--done ARM64_DTB_OK --done ARM64_DTB_USABLE_MEMORY_OK \
+			--done ARM64_CPIO_ROOT_OK --done IR0_INITRAMFS_CPIO_OK \
+			--done IR0_BPIVOT_COMMIT_OK --done ARM64_BPIVOT_COMMIT_OK \
+			--done INIT_EXEC_LOADED_OK -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
-			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-global virtio-mmio.force-legacy=false \
+			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
+			-drive file="$$cpio",format=raw,if=none,id=bpivot \
+			-device virtio-blk-device,drive=bpivot \
 			-display none -no-reboot 2>/dev/null && \
+		grep -q 'ARM64_DTB_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		grep -q 'ARM64_DTB_USABLE_MEMORY_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		grep -q 'ARM64_CPIO_ROOT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		grep -q 'IR0_INITRAMFS_CPIO_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
 		grep -q 'IR0_BPIVOT_MOUNT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
 		grep -q 'IR0_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
 		grep -q 'ARM64_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		echo "✓ smoke-arm64-bpivot-product (IR0_BPIVOT_* + ARM64_BPIVOT_COMMIT_OK)"; \
+		grep -q 'INIT_EXEC_LOADED_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
+		echo "✓ smoke-arm64-bpivot-product (CPIO fold + real root switch)"; \
 	fi
 
 # Handoff + first EL0 syscall from init (parity signal vs x86 product path): needs both tags.
@@ -245,7 +260,7 @@ smoke-arm64-product-usermode-log: kernel-arm64-product.bin
 			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
 			--done ARM64_PRODUCT_BOOT_HANDOFF --done ARM64_PRODUCT_EL0_SYSCALL_OK -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
-			-kernel kernel-arm64-product.bin -nographic -serial mon:stdio \
+			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
 			-display none -no-reboot 2>/dev/null && \
 		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
 		grep -q 'ARM64_PRODUCT_EL0_SYSCALL_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \

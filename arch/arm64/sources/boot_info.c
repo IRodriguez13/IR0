@@ -150,6 +150,11 @@ static void arm64_qemu_virt_synthetic_ram_only(void)
 	g_boot_info.memory_range_count = 0;
 	g_boot_info.reserved_range_count = 0;
 	g_boot_info.usable_range_count = 0;
+	g_boot_info.framebuffer.base = 0;
+	g_boot_info.framebuffer.size = 0;
+	g_boot_info.bootargs[0] = '\0';
+	g_boot_info.initrd_start = 0;
+	g_boot_info.initrd_end = 0;
 	g_qemu_virt_synthetic_ram = 1;
 	if (append_range(g_boot_info.memory, &g_boot_info.memory_range_count,
 			 ARM64_BOOT_MEMORY_RANGES_MAX, 0x40000000UL,
@@ -399,8 +404,10 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 	uint32_t off = 0;
 	uint32_t depth = 0;
 	uint32_t memory_depth = 0;
+	uint32_t framebuffer_depth = 0;
 	uint32_t cpus_depth = 0;
 	uint32_t psci_depth = 0;
+	uint32_t chosen_depth = 0;
 	uint32_t reserved_depth = 0;
 	uint32_t reserved_child_depth = 0;
 
@@ -429,6 +436,10 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 			    node_is_memory(structure + name_start, off - name_start))
 				memory_depth = depth;
 			if (depth == 2U &&
+			    node_has_prefix(structure + name_start, off - name_start,
+					    "framebuffer@"))
+				framebuffer_depth = depth;
+			if (depth == 2U &&
 			    node_name_is(structure + name_start, off - name_start, "cpus"))
 				cpus_depth = depth;
 			else if (cpus_depth != 0U && depth == cpus_depth + 1U &&
@@ -437,6 +448,10 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 				g_boot_info.cpu_count++;
 			if (node_name_is(structure + name_start, off - name_start, "psci"))
 				psci_depth = depth;
+			if (depth == 2U &&
+			    node_name_is(structure + name_start, off - name_start,
+					 "chosen"))
+				chosen_depth = depth;
 			if (depth == 2U &&
 			    node_name_is(structure + name_start, off - name_start,
 					 "reserved-memory"))
@@ -449,12 +464,16 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 		{
 			if (memory_depth == depth)
 				memory_depth = 0;
+			if (framebuffer_depth == depth)
+				framebuffer_depth = 0;
 			if (reserved_child_depth == depth)
 				reserved_child_depth = 0;
 			if (cpus_depth == depth)
 				cpus_depth = 0;
 			if (psci_depth == depth)
 				psci_depth = 0;
+			if (chosen_depth == depth)
+				chosen_depth = 0;
 			if (reserved_depth == depth)
 				reserved_depth = 0;
 			if (depth == 0)
@@ -509,6 +528,20 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 					len -= tuple_cells * 4U;
 				}
 			}
+			else if (framebuffer_depth == depth &&
+				 prop_name_is(strings, strings_size, nameoff, "reg") &&
+				 address_cells > 0U && address_cells <= 2U &&
+				 size_cells > 0U && size_cells <= 2U)
+			{
+				tuple_cells = address_cells + size_cells;
+				if (len < tuple_cells * 4U)
+					return -1;
+				g_boot_info.framebuffer.base =
+					read_cells(value, address_cells);
+				g_boot_info.framebuffer.size =
+					read_cells(value + address_cells * 4U,
+						   size_cells);
+			}
 			else if (reserved_child_depth == depth &&
 				 prop_name_is(strings, strings_size, nameoff, "reg") &&
 				 reserved_address_cells > 0U && reserved_address_cells <= 2U &&
@@ -529,6 +562,36 @@ static int parse_platform_tree(const volatile uint8_t *fdt, uint32_t total)
 					value += tuple_cells * 4U;
 					len -= tuple_cells * 4U;
 				}
+			}
+			else if (chosen_depth == depth &&
+				 prop_name_is(strings, strings_size, nameoff,
+					      "bootargs"))
+			{
+				uint32_t i;
+
+				if (len == 0 || len > ARM64_BOOTARGS_MAX)
+					return -1;
+				for (i = 0; i < len && value[i] != 0; i++)
+					g_boot_info.bootargs[i] = (char)value[i];
+				if (i == len || i >= ARM64_BOOTARGS_MAX)
+					return -1;
+				g_boot_info.bootargs[i] = '\0';
+			}
+			else if (chosen_depth == depth &&
+				 prop_name_is(strings, strings_size, nameoff,
+					      "linux,initrd-start"))
+			{
+				if (len != 4U && len != 8U)
+					return -1;
+				g_boot_info.initrd_start = read_cells(value, len / 4U);
+			}
+			else if (chosen_depth == depth &&
+				 prop_name_is(strings, strings_size, nameoff,
+					      "linux,initrd-end"))
+			{
+				if (len != 4U && len != 8U)
+					return -1;
+				g_boot_info.initrd_end = read_cells(value, len / 4U);
 			}
 			else if (prop_name_is(strings, strings_size, nameoff, "compatible"))
 			{
@@ -868,11 +931,17 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	g_boot_info.memory_range_count = 0;
 	g_boot_info.reserved_range_count = 0;
 	g_boot_info.usable_range_count = 0;
+	g_boot_info.framebuffer.base = 0;
+	g_boot_info.framebuffer.size = 0;
+	g_boot_info.bootargs[0] = '\0';
+	g_boot_info.initrd_start = 0;
+	g_boot_info.initrd_end = 0;
 	g_boot_info.hypervisor_kind = ARM64_HV_NONE;
 	g_boot_info.hypervisor_vendor[0] = '\0';
 
 	/* Linux arm64 boot protocol requires an 8-byte-aligned DTB in RAM. */
-	if (!fdt_pa || (fdt_pa & 7U) != 0)
+	if (!fdt_pa || (fdt_pa & 7U) != 0 ||
+	    fdt_pa > UINTPTR_MAX - FDT_HEADER_SIZE)
 	{
 		return -1;
 	}
@@ -885,7 +954,8 @@ int arm64_fdt_boot_info_init(uintptr_t fdt_pa)
 	}
 	size = read_be32(header + 4);
 	g_boot_info.fdt_size = size;
-	if (size < FDT_HEADER_SIZE || size > FDT_MAX_SIZE)
+	if (size < FDT_HEADER_SIZE || size > FDT_MAX_SIZE ||
+	    fdt_pa > UINTPTR_MAX - size)
 	{
 		return -1;
 	}
@@ -906,8 +976,12 @@ int arm64_fdt_boot_info_init_fallback(uintptr_t primary, uintptr_t fallback)
 	    arm64_fdt_boot_info_init(fallback) == 0)
 		return 0;
 #if defined(IR0_ARM64_BOARD_QEMU_VIRT)
+#if CONFIG_ARM64_SYNTHETIC_RAM_FALLBACK
 	arm64_qemu_virt_synthetic_ram_only();
 	return g_qemu_virt_synthetic_ram ? 0 : -1;
+#else
+	return -1;
+#endif
 #else
 	(void)fallback;
 	return -1;
@@ -943,6 +1017,7 @@ int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size)
 {
 	uint32_t i;
 	struct ir0_phys_range kernel;
+	uint32_t extra_reservations;
 	int have_ram_bank;
 
 	have_ram_bank =
@@ -958,9 +1033,19 @@ int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size)
 		return -1;
 	if (g_memory_finalized)
 		return 0;
-	/* DTB + kernel reservations; synthetic path may have no parsable DTB. */
+	if ((g_boot_info.initrd_start == 0) != (g_boot_info.initrd_end == 0) ||
+	    (g_boot_info.initrd_start != 0 &&
+	     g_boot_info.initrd_end <= g_boot_info.initrd_start))
+		return -1;
+	extra_reservations = 1U;
+	if (g_boot_info.fdt_valid)
+		extra_reservations++;
+	if (g_boot_info.initrd_start != 0)
+		extra_reservations++;
+	if (g_boot_info.framebuffer.size != 0)
+		extra_reservations++;
 	if (g_boot_info.reserved_range_count >
-	    ARM64_BOOT_RESERVED_RANGES_MAX - (g_boot_info.fdt_valid ? 2U : 1U))
+	    ARM64_BOOT_RESERVED_RANGES_MAX - extra_reservations)
 		return -1;
 
 	kernel.base = (uint64_t)kernel_base;
@@ -982,6 +1067,20 @@ int arm64_board_finalize_memory(uintptr_t kernel_base, size_t kernel_size)
 				 g_boot_info.fdt_size) != 0)
 			return -1;
 	}
+	if (g_boot_info.initrd_start != 0 &&
+	    append_range(g_boot_info.reserved,
+			 &g_boot_info.reserved_range_count,
+			 ARM64_BOOT_RESERVED_RANGES_MAX,
+			 g_boot_info.initrd_start,
+			 g_boot_info.initrd_end - g_boot_info.initrd_start) != 0)
+		return -1;
+	if (g_boot_info.framebuffer.size != 0 &&
+	    append_range(g_boot_info.reserved,
+			 &g_boot_info.reserved_range_count,
+			 ARM64_BOOT_RESERVED_RANGES_MAX,
+			 g_boot_info.framebuffer.base,
+			 g_boot_info.framebuffer.size) != 0)
+		return -1;
 	if (append_range(g_boot_info.reserved, &g_boot_info.reserved_range_count,
 			 ARM64_BOOT_RESERVED_RANGES_MAX, kernel.base,
 			 kernel.size) != 0)

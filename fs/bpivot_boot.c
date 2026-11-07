@@ -60,6 +60,9 @@ int ir0_bpivot_product_boot(const struct ir0_bpath_ops *ops)
 
 	ir0_boot_smoke("IR0_BPIVOT_MOUNT_OK");
 	early_rootfs_bind_bpath(ops);
+	ret = ir0_bpivot_prepare_staging();
+	if (ret != 0)
+		return ret;
 
 	if (vfs_mkdir("/tmp/fold", 0755) == 0 &&
 	    ir0_bpath_is_foldable("/tmp/fold"))
@@ -73,6 +76,10 @@ int ir0_bpivot_product_boot(const struct ir0_bpath_ops *ops)
 		fold = early_rootfs_cpio_bpath_fold();
 		if (fold > 0)
 			ir0_boot_smoke("IR0_INITRAMFS_CPIO_OK");
+	}
+	else
+	{
+		return -ENOENT;
 	}
 
 	ret = ir0_bpivot_commit();

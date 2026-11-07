@@ -14,10 +14,11 @@
 
 #include <ir0/arch_mm.h>
 #include <ir0/mm_range.h>
-#include <ir0/kmem.h>
 #include <ir0/errno.h>
+#include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
 #include <ir0/video_backend.h>
+#include <ir0/ahci_api.h>
 #include <config.h>
 #include <mm/paging.h>
 #include <string.h>
@@ -30,20 +31,6 @@ uintptr_t mm_kernel_heap_start(void)
 size_t mm_kernel_heap_size(void)
 {
 	return 0x01800000UL;
-}
-
-size_t mm_boot_usable_range_count(void)
-{
-	return 1;
-}
-
-int mm_boot_usable_range(size_t index, struct ir0_phys_range *range)
-{
-	if (!range || index != 0)
-		return -EINVAL;
-	range->base = PMM_PHYS_BASE;
-	range->size = PMM_PHYS_SIZE;
-	return 0;
 }
 
 uintptr_t mm_user_va_start(void)
@@ -103,7 +90,8 @@ address_space_root_t mm_create_user_root(void)
 	address_space_root_t kernel_root;
 	const uint64_t supervisor_kbd_end = 0x00600000UL;
 
-	root = kmalloc_aligned_try(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
+	root = (address_space_root_t)page_table_frame_alloc(
+		MM_ALLOC_DIRECT_RECLAIM);
 	if (!root)
 	{
 		paging_oom_note("mm_create_user_root", paging_oom_classify_current());
@@ -126,33 +114,13 @@ address_space_root_t mm_create_user_root(void)
 	    map_supervisor_identity_low(root, KEYBOARD_BUFFER_ADDR,
 					supervisor_kbd_end) != 0 ||
 	    map_supervisor_identity_2mb(root, supervisor_kbd_end,
-					PMM_PHYS_BASE) != 0)
+					PMM_PHYS_BASE) != 0 ||
+	    mm_map_platform_supervisor(root) != 0)
 	{
-		kfree_aligned(root);
+		paging_reclaim_user_tables(root);
+		page_table_frame_free((uintptr_t)root);
 		return NULL;
 	}
-
-#if CONFIG_ENABLE_VBE
-#if !defined(IR0_USERSPACE_INIT_BOOT) || !IR0_USERSPACE_INIT_BOOT
-	if (video_backend_is_available() && video_backend_get_fb_phys() != 0)
-	{
-		uint32_t fb_phys = video_backend_get_fb_phys();
-		uint32_t fb_size = video_backend_get_fb_size();
-		uint32_t off;
-
-		if (fb_size > (4U * 1024U * 1024U))
-			fb_size = 4U * 1024U * 1024U;
-		for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
-		{
-			uint64_t p = fb_phys + off;
-
-			if (map_page_in_directory(root, p, p,
-						  PAGE_PRESENT | PAGE_RW) != 0)
-				break;
-		}
-	}
-#endif
-#endif
 
 	paging_ir0_mm_note_root_created((uintptr_t)root);
 	return root;
@@ -164,13 +132,46 @@ void mm_destroy_user_root(address_space_root_t root)
 		return;
 	paging_reclaim_user_tables(root);
 	paging_ir0_mm_note_root_freed((uintptr_t)root);
-	kfree_aligned(root);
+	page_table_frame_free((uintptr_t)root);
 }
 
 void mm_prepare_root_activation(address_space_root_t root)
 {
 	if (root)
 		paging_sync_kernel_mappings(root);
+}
+
+int mm_map_platform_supervisor(address_space_root_t root)
+{
+#if CONFIG_ENABLE_VBE
+	uint32_t off;
+	uint32_t fb_phys;
+	uint32_t fb_size;
+
+	if (root && video_backend_is_available())
+	{
+		fb_phys = video_backend_get_fb_phys();
+		fb_size = video_backend_get_fb_size();
+		if (fb_phys != 0 && fb_size != 0)
+		{
+			if (fb_size > (4U * 1024U * 1024U))
+				fb_size = 4U * 1024U * 1024U;
+			for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
+			{
+				uint64_t address = (uint64_t)fb_phys + off;
+
+				if (map_page_in_directory(root, address, address,
+							  PAGE_PRESENT |
+							  PAGE_RW) != 0)
+					return -ENOMEM;
+			}
+		}
+	}
+#else
+	(void)root;
+#endif
+	ahci_map_mmio_in_directory(root);
+	return 0;
 }
 
 int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,

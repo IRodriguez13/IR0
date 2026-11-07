@@ -42,6 +42,7 @@ struct vfs_fstype {
 /* Mount table entry */
 struct vfs_mount {
     char path[VFS_PATH_MAX];
+    char backend_path[VFS_PATH_MAX];
     char dev[64];
     struct vfs_fstype *fs;
     unsigned long flags; /* MS_RDONLY and friends */
@@ -77,6 +78,7 @@ int vfs_init(void);
 int vfs_register_fs(struct vfs_fstype *fs);
 int vfs_mount(const char *dev, const char *path, const char *fstype);
 int vfs_umount(const char *path);
+int vfs_pivot_root(const char *new_root, const char *put_old);
 int vfs_init_with_minix(void);
 int vfs_init_root(void);
 

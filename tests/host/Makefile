@@ -72,7 +72,8 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
 	host_ps2_set1.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
-KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o host_no_mmu.o
+KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o \
+	host_alloc_policy.o host_no_mmu.o
 KERNEL_HOST_OBJS += host_oom.o
 KERNEL_HOST_OBJS += host_reclaim.o
 KERNEL_HOST_OBJS += host_elf64_image.o host_early_elf_stack.o host_early_mm.o
@@ -118,6 +119,9 @@ host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/mm/pmm.h
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<
 
 host_boot_memory.o: $(KERNEL_ROOT)/mm/boot_memory.c
+	$(KERNEL_CC)
+
+host_alloc_policy.o: $(KERNEL_ROOT)/mm/alloc_policy.c
 	$(KERNEL_CC)
 
 host_no_mmu.o: $(KERNEL_ROOT)/mm/no_mmu.c

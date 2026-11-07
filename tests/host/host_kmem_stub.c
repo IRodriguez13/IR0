@@ -7,11 +7,30 @@
 #include <stdlib.h>
 #include <stddef.h>
 
+static long g_allocations_before_failure = -1;
+
+static int host_kmem_should_fail(void)
+{
+	if (g_allocations_before_failure < 0)
+		return 0;
+	if (g_allocations_before_failure == 0)
+		return 1;
+	g_allocations_before_failure--;
+	return 0;
+}
+
+void host_kmem_fail_after(long successful_allocations)
+{
+	g_allocations_before_failure = successful_allocations;
+}
+
 void *__kmalloc_checked(size_t size, const char *file, int line, const char *caller)
 {
 	(void)file;
 	(void)line;
 	(void)caller;
+	if (host_kmem_should_fail())
+		return NULL;
 	return malloc(size);
 }
 
@@ -25,5 +44,7 @@ void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 
 void *kmalloc_try(size_t size)
 {
+	if (host_kmem_should_fail())
+		return NULL;
 	return malloc(size);
 }

@@ -208,6 +208,14 @@ static void pmm_owner_set_locked(size_t frame_index, pmm_owner_class_t cls,
 int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count)
 {
 	struct ir0_phys_range normalized[PMM_MAX_MEMORY_BANKS];
+	struct pmm_bank banks[PMM_MAX_MEMORY_BANKS];
+	uint8_t *bitmap;
+	uint8_t *owner_classes;
+	int32_t *owner_pids;
+	uint32_t *frame_refs;
+	size_t bitmap_size;
+	size_t owner_pid_size;
+	size_t frame_ref_size;
 	size_t i;
 	size_t accepted;
 	size_t total_frames = 0;
@@ -227,64 +235,66 @@ int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count)
 		frames = normalized[i].size / PMM_FRAME_SIZE;
 		if (frames > SIZE_MAX - total_frames)
 			return -1;
-		pmm.banks[i].base = base;
-		pmm.banks[i].frames = frames;
-		pmm.banks[i].first_frame = total_frames;
+		banks[i].base = base;
+		banks[i].frames = frames;
+		banks[i].first_frame = total_frames;
 		total_frames += frames;
 	}
 	if (accepted == 0 || total_frames == 0)
 		return -1;
-	pmm.bank_count = accepted;
-	pmm.total_frames = total_frames;
-	pmm.mem_start = pmm.banks[0].base;
-	pmm.mem_end = pmm.banks[accepted - 1].base +
-		(uintptr_t)(pmm.banks[accepted - 1].frames * PMM_FRAME_SIZE);
+	if (total_frames > SIZE_MAX - 7U ||
+	    total_frames > SIZE_MAX / sizeof(int32_t) ||
+	    total_frames > SIZE_MAX / sizeof(uint32_t))
+		return -1;
+	bitmap_size = (total_frames + 7U) / 8U;
+	owner_pid_size = total_frames * sizeof(int32_t);
+	frame_ref_size = total_frames * sizeof(uint32_t);
 
-	/* Allocate bitmap (1 bit per frame) */
+	bitmap = kmalloc_try(bitmap_size);
+	owner_classes = kmalloc_try(total_frames * sizeof(uint8_t));
+	owner_pids = kmalloc_try(owner_pid_size);
+	frame_refs = kmalloc_try(frame_ref_size);
+	if (!bitmap || !owner_classes || !owner_pids || !frame_refs)
 	{
-		size_t bitmap_size = (pmm.total_frames + 7) / 8;
-
-		pmm.bitmap = kmalloc(bitmap_size);
-
-		if (!pmm.bitmap)
-		{
+		if (bitmap)
+			kfree(bitmap);
+		if (owner_classes)
+			kfree(owner_classes);
+		if (owner_pids)
+			kfree(owner_pids);
+		if (frame_refs)
+			kfree(frame_refs);
 #if DEBUG_PMM
-			klog_print("[PMM] CRITICAL: Failed to allocate bitmap\n");
+		klog_print("[PMM] CRITICAL: Failed to allocate mandatory metadata\n");
 #endif
-			return -1;
-		}
-
-		/* Initialize all frames as free (bitmap = 0) */
-		for (i = 0; i < bitmap_size; i++)
-			pmm.bitmap[i] = 0;
+		return -1;
 	}
 
+	for (i = 0; i < bitmap_size; i++)
+		bitmap[i] = 0;
+	for (i = 0; i < total_frames; i++)
+	{
+		owner_classes[i] = PMM_OWNER_NONE;
+		owner_pids[i] = -1;
+		frame_refs[i] = 0;
+	}
+
+	for (i = 0; i < accepted; i++)
+		pmm.banks[i] = banks[i];
+	pmm.bank_count = accepted;
+	pmm.total_frames = total_frames;
+	pmm.mem_start = banks[0].base;
+	pmm.mem_end = banks[accepted - 1].base +
+		(uintptr_t)(banks[accepted - 1].frames * PMM_FRAME_SIZE);
+	pmm.bitmap = bitmap;
+	pmm_owner_class_tab = owner_classes;
+	pmm_frame_owner_pid = owner_pids;
+	pmm_frame_refs = frame_refs;
 	pmm.used_frames = 0;
-	pmm.initialized = 1;
 	pmm_search_hint = 0;
 	pmm_diag_double_free = 0;
 	pmm_diag_events = 0;
-
-	pmm_owner_class_tab = kmalloc(pmm.total_frames * sizeof(uint8_t));
-	if (pmm_owner_class_tab)
-	{
-		for (i = 0; i < pmm.total_frames; i++)
-			pmm_owner_class_tab[i] = PMM_OWNER_NONE;
-	}
-
-	pmm_frame_owner_pid = kmalloc(pmm.total_frames * sizeof(int32_t));
-	if (pmm_frame_owner_pid)
-	{
-		for (i = 0; i < pmm.total_frames; i++)
-			pmm_frame_owner_pid[i] = -1;
-	}
-
-	pmm_frame_refs = kmalloc(pmm.total_frames * sizeof(uint32_t));
-	if (pmm_frame_refs)
-	{
-		for (i = 0; i < pmm.total_frames; i++)
-			pmm_frame_refs[i] = 0;
-	}
+	pmm.initialized = 1;
 
 #if DEBUG_PMM
 	klog_print("[PMM] Initialized\n");

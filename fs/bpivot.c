@@ -15,11 +15,13 @@
 #include <ir0/vfs.h>
 
 #include "tmpfs.h"
+#include <string.h>
 
 static int g_bpivot_mounts;
 static int g_bpivot_cpio_fold;
 static int g_bpivot_staging;
 static int g_bpivot_committed;
+static int g_bpivot_root_switched;
 
 const char *const ir0_bpivot_trees[] = {
 	"/bpivot",
@@ -103,6 +105,7 @@ int ir0_bpivot_tree_count(void)
 int ir0_bpivot_prepare_staging(void)
 {
 	stat_t st;
+	int ret;
 
 	if (g_bpivot_staging)
 		return 0;
@@ -113,20 +116,39 @@ int ir0_bpivot_prepare_staging(void)
 		if (vfs_stat(IR0_BPIVOT_NEW_ROOT, &st) != 0)
 			return -EIO;
 	}
+	ret = vfs_mount("none", IR0_BPIVOT_NEW_ROOT, "tmpfs");
+	if (ret != 0 && ret != -EBUSY)
+		return -EIO;
 	if (vfs_mkdir(IR0_BPIVOT_PUT_OLD, 0755) != 0)
 	{
 		if (vfs_stat(IR0_BPIVOT_PUT_OLD, &st) != 0)
 			return -EIO;
 	}
-	if (vfs_mount("none", IR0_BPIVOT_NEW_ROOT, "tmpfs") != 0)
-		return -EIO;
 	g_bpivot_staging = 1;
+	return 0;
+}
+
+int ir0_bpivot_stage_path(const char *path, char *out, size_t out_size)
+{
+	size_t root_len;
+	size_t path_len;
+
+	if (!path || !out || path[0] != '/' || !g_bpivot_staging ||
+	    g_bpivot_root_switched)
+		return -EINVAL;
+	root_len = sizeof(IR0_BPIVOT_NEW_ROOT) - 1;
+	path_len = strlen(path);
+	if (root_len + path_len + 1 > out_size)
+		return -ENAMETOOLONG;
+	memcpy(out, IR0_BPIVOT_NEW_ROOT, root_len);
+	memcpy(out + root_len, path, path_len + 1);
 	return 0;
 }
 
 static int bpivot_ramtab_drop_cb(const char *path)
 {
 	const struct ir0_bpath_ops *ops;
+	char staged[VFS_PATH_MAX];
 	stat_t st;
 
 	if (!ir0_bpath_is_foldable(path))
@@ -134,7 +156,9 @@ static int bpivot_ramtab_drop_cb(const char *path)
 	ops = ir0_bpath_bound();
 	if (!ops || !ops->stat)
 		return 0;
-	return ops->stat(path, &st) == 0;
+	if (ir0_bpivot_stage_path(path, staged, sizeof(staged)) != 0)
+		return 0;
+	return ops->stat(staged, &st) == 0;
 }
 
 static int bpivot_staging_valid(void)
@@ -162,12 +186,14 @@ int ir0_bpivot_commit(void)
 		return -EIO;
 	if (!bpivot_staging_valid())
 		return -EIO;
-	if (ir0_bpivot_cpio_fold_done())
-	{
-		pruned = ramtab_prune_matching(bpivot_ramtab_drop_cb);
-		if (pruned < 0)
-			return pruned;
-	}
+	if (!ir0_bpivot_cpio_fold_done())
+		return -EINVAL;
+	pruned = ramtab_prune_matching(bpivot_ramtab_drop_cb);
+	if (pruned < 0)
+		return pruned;
+	if (vfs_pivot_root(IR0_BPIVOT_NEW_ROOT, IR0_BPIVOT_PUT_OLD) != 0)
+		return -EIO;
+	g_bpivot_root_switched = 1;
 	g_bpivot_committed = 1;
 	return 0;
 }
@@ -175,4 +201,9 @@ int ir0_bpivot_commit(void)
 int ir0_bpivot_committed(void)
 {
 	return g_bpivot_committed;
+}
+
+int ir0_bpivot_root_switched(void)
+{
+	return g_bpivot_root_switched;
 }

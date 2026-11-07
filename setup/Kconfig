@@ -46,6 +46,14 @@ menu "Architecture"
 
     endchoice
 
+    config ARM64_SYNTHETIC_RAM_FALLBACK
+        bool "Allow bounded QEMU-virt RAM fallback without a valid DTB"
+        default y
+        help
+          Permit the QEMU product smoke to use its fixed 256 MiB DRAM window
+          when an ELF -kernel handoff provides no readable DTB. Disable this
+          for firmware-validation builds that must fail closed.
+
 endmenu
 
 menu "General"

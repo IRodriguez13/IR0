@@ -902,6 +902,8 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 const uint8_t *early_rootfs_init_blob(uint64_t *length);
 int early_rootfs_init_from_block(void);
 int early_rootfs_cpio_ready(void);
+int early_rootfs_bind_cpio(const uint8_t *buffer, uint64_t bytes,
+			   const struct early_user_services *user);
 int early_rootfs_cpio_bpath_fold(void);
 
 /* Non-zero when staging mounts exist and CPIO members were folded to product VFS. */

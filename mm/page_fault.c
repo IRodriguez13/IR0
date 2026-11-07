@@ -23,22 +23,19 @@
 #include <ir0/tlb_sync.h>
 #include <ir0/page_fault.h>
 #include <ir0/process.h>
+#include <ir0/mm_alloc.h>
 #include <ir0/pmm.h>
 #include <ir0/oom.h>
 #include <ir0/signals.h>
 #include <ir0/copy_user.h>
 #include <ir0/arch_task.h>
-#include <ir0/ktm/klog.h>
-#include <ir0/ktm/event.h>
-#include <ir0/ktm/deferred.h>
-#include <ir0/ktm/user_canary.h>
+#include <ir0/logging.h>
+#include <ir0/mm_diag.h>
 #include <ir0/page_fault.h>
 #include <ir0/arch_pf_debug.h>
 #include <ir0/arch_mm.h>
 #include <mm/paging.h>
 #include <ir0/abi/mmap_contract.h>
-#include <ktm.h>
-#include <ktm_probe_diag.h>
 
 /* Supervisor 2 MiB identity under each process address-space root. */
 #define PF_IDENTITY_USER_FLOOR 0x00600000UL
@@ -140,7 +137,7 @@ static void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
 	uintptr_t phys_addr;
 	uint64_t vaddr_aligned;
 
-	phys_addr = pmm_alloc_frame();
+	phys_addr = mm_alloc_frame(MM_ALLOC_ATOMIC);
 	if (phys_addr == 0)
 	{
 		/*
@@ -153,7 +150,7 @@ static void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
 			pf_user_segv(current, stack, fault_addr, info);
 			return;
 		}
-		phys_addr = pmm_alloc_frame();
+		phys_addr = mm_alloc_frame(MM_ALLOC_ATOMIC);
 		if (phys_addr == 0)
 		{
 			pf_user_segv(current, stack, fault_addr, info);
@@ -187,13 +184,13 @@ static int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 {
 	uintptr_t new_phys;
 
-	new_phys = pmm_alloc_frame();
+	new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
 	if (!new_phys)
 	{
 		/* Same retry contract as do_anonymous_page. */
 		if (oom_handle_alloc_failure(current, "identity-promote") != 0)
 			return -1;
-		new_phys = pmm_alloc_frame();
+		new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
 		if (!new_phys)
 			return -1;
 	}
@@ -251,22 +248,22 @@ static void pf_audit_classify(uint64_t *stack,
 		 (pf_mmap_region_for(current, fault_addr) != NULL);
 	in_userspace_range = mm_user_va_ok((uintptr_t)fault_addr, 1);
 
-	klog_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
+	log_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
-	klog_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_mmap_region_for(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
+	log_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_mmap_region_for(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
 
 	if (!info->user && in_userspace_range)
-		klog_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR addr_in_userspace=1");
+		log_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR addr_in_userspace=1");
 
 	if (info->user && not_present && in_vma && mapped <= 0)
-		klog_debug("PF", "CLASSIFY PF_ADDR_IN_VMA_NOT_MAPPED");
+		log_debug("PF", "CLASSIFY PF_ADDR_IN_VMA_NOT_MAPPED");
 	else if (info->user && not_present && !in_vma)
-		klog_debug("PF", "CLASSIFY PF_ADDR_NOT_IN_VMA");
+		log_debug("PF", "CLASSIFY PF_ADDR_NOT_IN_VMA");
 	else if (info->user && not_present && in_vma)
-		klog_debug("PF", "CLASSIFY USER_PF_SHOULD_BE_HANDLED");
+		log_debug("PF", "CLASSIFY USER_PF_SHOULD_BE_HANDLED");
 
 	if (!info->user && fault_rip != 0)
-		klog_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_rip));
+		log_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_rip));
 #endif /* DEBUG_PAGE_FAULTS */
 }
 
@@ -294,7 +291,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	if (signals_deliver_from_irq_frame(p, SIGSEGV, stack, fault_addr))
 		return;
 
-	ktm_probe_diag_pf(p, fault_addr, info ? info->ip : 0);
+	mm_diag_probe_user_fault(p, fault_addr, info ? info->ip : 0);
 
 	if (!p)
 		panic("[PF] userspace fault without process");
@@ -321,7 +318,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	{
 		uint64_t sp_words[4] = { 0, 0, 0, 0 };
 
-		klog_notice_fmt("PF",
+		log_info_fmt("PF",
 				"[PF] STACK_TOP_OVERRUN pid=%x addr=%llx rip=%llx write=%llx off=%llx\n",
 				(unsigned)((uint32_t)p->task.pid),
 				(unsigned long long)fault_addr,
@@ -345,7 +342,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 						       (uintptr_t)info->sp,
 						       sp_words,
 						       sizeof(sp_words)) == 0)
-			klog_notice_fmt("PF",
+			log_info_fmt("PF",
 					"[PF] STACK_TOP_OVERRUN usp=%llx w0=%llx w1=%llx w2=%llx w3=%llx\n",
 					(unsigned long long)info->sp,
 					(unsigned long long)sp_words[0],
@@ -354,17 +351,13 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 					(unsigned long long)sp_words[3]);
 	}
 
-	ktm_user_canary_check(process_pgd(p), (uint64_t)USER_STACK_TOP,
-			      (uint32_t)p->task.pid, "segv");
-
-	ktm_event_ring_dump(48, (1u << KTM_SUBSYS_IPC) | (1u << KTM_SUBSYS_SCHED) |
-				(1u << KTM_SUBSYS_MM));
+	mm_diag_dump_user_segv(p, (uint64_t)USER_STACK_TOP);
 
 	/*
 	 * NOTICE (not DEBUG): smoke-mm-cow-lazy greps this on serial; default
 	 * klog level drops DEBUG.
 	 */
-	klog_notice_fmt("PF",
+	log_info_fmt("PF",
 			"[PF] userspace segv pid=%x addr=%llx write=%llx present=%llx rip=%llx user=%llx handler=%llx proc_mask=%x ignored=%x (no handler)\n",
 			(unsigned)((uint32_t)p->task.pid),
 			(unsigned long long)fault_addr,
@@ -375,7 +368,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 			(unsigned long long)((uint64_t)(uintptr_t)p->signal_handlers[SIGSEGV]),
 			(unsigned)(p->signal_mask),
 			(unsigned)(p->signal_ignored));
-	klog_notice_fmt("PF",
+	log_info_fmt("PF",
 			"[PF] segv diag pid=%x rdi=%llx rsi=%llx rsp=%llx "
 			"sigframe_sp=%llx mask_saved=%x enter_pend=%x "
 			"saved_ctx=%x\n",
@@ -400,7 +393,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 							 (uint64_t)fault_addr,
 							 &pte_flags);
 
-		klog_notice_fmt("PF",
+		log_info_fmt("PF",
 				"[PF] segv pte pid=%x addr=%llx mapped=%llx flags=%llx user=%llx rw=%llx\n",
 				(unsigned)((uint32_t)p->task.pid),
 				(unsigned long long)fault_addr,
@@ -418,7 +411,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 		 * Split across two records: klog_notice_fmt drops arguments
 		 * past the eighth, which silently corrupted the tail fields.
 		 */
-		klog_notice_fmt("PF",
+		log_info_fmt("PF",
 				"[PF] segv vma pid=%x addr=%llx heap=[%llx,%llx) stack=%llx\n",
 				(unsigned)((uint32_t)p->task.pid),
 				(unsigned long long)fault_addr,
@@ -426,7 +419,7 @@ static void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 				(unsigned long long)(uint64_t)process_heap_end(p),
 				(unsigned long long)(pf_addr_in_stack(p, fault_addr) ? 1ULL : 0ULL));
 		if (mr)
-			klog_notice_fmt("PF",
+			log_info_fmt("PF",
 					"[PF] segv vma rgn pid=%x vma=%llx len=%llx prot=%llx flags=%llx hint=%llx\n",
 					(unsigned)((uint32_t)p->task.pid),
 					(unsigned long long)(uint64_t)(uintptr_t)mr->addr,
@@ -488,14 +481,14 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 	{
 		process_t *pf_cur = process_get_current();
 
-		ktm_deferred_record(KTM_DEFERRED_PAGE_FAULT,
-				    pf_cur ? (uint32_t)pf_cur->task.pid : 0,
-				    fault_addr,
-				    (uint64_t)(unsigned)((not_present ? 1u : 0u) |
-							 (write ? 2u : 0u) |
-							 (user ? 4u : 0u) |
-							 (insn_fetch ? 8u : 0u)),
-				    (uint64_t)info->ip);
+		mm_diag_record_page_fault(
+			pf_cur ? (uint32_t)pf_cur->task.pid : 0,
+			fault_addr,
+			(uint64_t)(unsigned)((not_present ? 1U : 0U) |
+					    (write ? 2U : 0U) |
+					    (user ? 4U : 0U) |
+					    (insn_fetch ? 8U : 0U)),
+			(uint64_t)info->ip);
 	}
 
 	if (user && not_present)
@@ -598,7 +591,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 					  vaddr_aligned) != 0)
 		{
 			irq_restore(irq_flags);
-			klog_notice_fmt("PF",
+			log_info_fmt("PF",
 					"[PF] write-fault no-COW pid=%x addr=%llx pte=0\n",
 					(unsigned)((uint32_t)current->task.pid),
 					(unsigned long long)fault_addr);
@@ -623,7 +616,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 						    stack, info);
 				return;
 			}
-			klog_notice_fmt("PF",
+			log_info_fmt("PF",
 					"[PF] write-fault no-COW pid=%x addr=%llx pte=0\n",
 					(unsigned)((uint32_t)current->task.pid),
 					(unsigned long long)fault_addr);
@@ -653,7 +646,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 			uint64_t pte_val = pte ? *pte : 0;
 
 			irq_restore(irq_flags);
-			klog_notice_fmt("PF",
+			log_info_fmt("PF",
 					"[PF] write-fault no-COW pid=%x addr=%llx pte=%llx\n",
 					(unsigned)((uint32_t)current->task.pid),
 					(unsigned long long)fault_addr,
@@ -678,7 +671,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		 * corrupting the parent's .data/.bss (seen as RIP/addr=0 SEGV
 		 * in multi-fork ash/pipeline smokes).
 		 */
-		new_phys = pmm_alloc_frame();
+		new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
 		if (!new_phys)
 		{
 			size_t tot = 0;
@@ -689,7 +682,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 				pmm_frame_put(old_phys);
 			irq_restore(irq_flags);
 			pmm_stats(&tot, &used, &free_fr);
-			klog_notice_fmt("PF",
+			log_info_fmt("PF",
 					"[PF] COW OOM pid=%x addr=%llx refs=%u used=%u free=%u\n",
 					(unsigned)((uint32_t)current->task.pid),
 					(unsigned long long)fault_addr,
@@ -820,7 +813,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 			info->present, info->write, info->exec,
 			current ? (unsigned)((uint32_t)current->task.pid) : 0,
 			current ? current->comm : "(none)");
-		klog_info_fmt("PF",
+		log_info_fmt("PF",
 			      "CLASSIFY KERNEL_UACCESS_FAULT addr=%llx write=%x "
 			      "pid=%x rip=%llx",
 			      (unsigned long long)fault_addr,
@@ -867,7 +860,7 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 		print(" pid=");
 		print_hex((uintptr_t)(cur ? (uint32_t)cur->task.pid : 0));
 		print("\n");
-		klog_error_fmt("PF",
+		log_error_fmt("PF",
 			       "kernel_pf addr=%llx write=%llx user=%llx rip=%llx cs=%llx rsp=%llx pid=%x",
 			       (unsigned long long)fault_addr,
 			       (unsigned long long)(write ? 1 : 0),

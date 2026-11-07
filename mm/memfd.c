@@ -15,6 +15,7 @@
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
+#include <ir0/mm_alloc.h>
 #include <ir0/pmm.h>
 #include <ir0/fcntl.h>
 #include <ir0/arch_cpu.h>
@@ -146,7 +147,7 @@ int ir0_memfd_ftruncate(struct ir0_memfd *m, size_t length)
 		memcpy(nf, m->frames, m->npages * sizeof(uintptr_t));
 	for (i = m->npages; i < need; i++)
 	{
-		uintptr_t phys = pmm_alloc_frame();
+		uintptr_t phys = mm_alloc_frame(MM_ALLOC_DIRECT_RECLAIM);
 
 		if (!phys)
 		{

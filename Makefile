@@ -358,6 +358,7 @@ KERNEL_OBJS = \
 	arch/common/oops_port.o \
 	kernel/boot_flow.o \
 	kernel/kernel_wiring.o \
+	kernel/mm_diag.o \
 	kernel/boot_init.o \
 	kernel/boot_firmware_sysfs.o \
 	kernel/init_handoff.o \
@@ -572,10 +573,12 @@ endif
 
 MEMORY_OBJS = \
 	mm/allocator.o \
+	mm/alloc_policy.o \
 	mm/boot_memory.o \
 	mm/no_mmu.o \
 	mm/oom.o \
 	mm/oom_kill.o \
+	mm/page_table_pool.o \
 	mm/reclaim.o \
 	mm/paging.o \
 	mm/tlb_sync.o \

@@ -50,17 +50,6 @@ static const char *hv_kind_name(enum arm64_hypervisor_kind k)
 	}
 }
 
-static const char *uart_model_name(enum arm64_uart_model u)
-{
-	switch (u)
-	{
-	case ARM64_UART_PL011:
-		return "pl011";
-	default:
-		return "unknown";
-	}
-}
-
 static const char *psci_name(enum arm64_psci_conduit c)
 {
 	switch (c)
@@ -95,15 +84,14 @@ void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snaps
 		snprintf(snap->protocol, sizeof(snap->protocol), "dtb_invalid");
 
 	snprintf(snap->bootloader, sizeof(snap->bootloader), "firmware-dtb-handoff");
-	snap->cmdline[0] = '\0';
+	snprintf(snap->cmdline, sizeof(snap->cmdline), "%s", b->bootargs);
 
-	if (b->console_uart != ARM64_UART_UNKNOWN && b->console_mmio.size != 0U)
+	if (b->framebuffer.size != 0U)
 	{
 		snprintf(snap->framebuffer, sizeof(snap->framebuffer),
-			 "uart=%s mmio_base=0x%llx mmio_size=0x%llx",
-			 uart_model_name(b->console_uart),
-			 (unsigned long long)b->console_mmio.base,
-			 (unsigned long long)b->console_mmio.size);
+			 "addr=0x%llx size=0x%llx",
+			 (unsigned long long)b->framebuffer.base,
+			 (unsigned long long)b->framebuffer.size);
 	}
 	else
 	{

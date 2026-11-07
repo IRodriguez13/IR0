@@ -9,8 +9,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/cmdline.h>
+#include <ir0/boot_memory.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/multiboot.h>
 #include <config.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -99,18 +99,15 @@ int ir0_cmdline_ash_smoke_enabled(void)
 
 void ir0_cmdline_apply_log_profile(void)
 {
-	const struct multiboot_info *mb;
 	const char *cmdline;
 	const char *p;
 	const char *val;
 
 	apply_kconfig_default();
 
-	mb = (const struct multiboot_info *)get_boot_params();
-	if (!mb || !(mb->flags & MULTIBOOT_FLAG_CMDLINE) || !mb->cmdline)
+	cmdline = boot_memory_cmdline();
+	if (!cmdline || !cmdline[0])
 		return;
-
-	cmdline = (const char *)(uintptr_t)mb->cmdline;
 	p = cmdline;
 	while (*p)
 	{

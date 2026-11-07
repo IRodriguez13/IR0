@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/boot_firmware_sysfs.h>
+#include <ir0/boot_memory.h>
 #include <ir0/multiboot.h>
 
 #include <string.h>
@@ -25,7 +26,8 @@ static size_t copy_phys_cstr_trunc(uint32_t phys, char *dst, size_t dst_sz,
 	if (!dst || dst_sz == 0)
 		return 0;
 	dst[0] = '\0';
-	if (phys == 0)
+	if (phys == 0 || phys >= 0x20000000U ||
+	    max_read > 0x20000000U - phys)
 		return 0;
 	for (i = 0; i + 1 < dst_sz && i < max_read; i++)
 	{
@@ -43,13 +45,15 @@ static size_t copy_phys_cstr_trunc(uint32_t phys, char *dst, size_t dst_sz,
 void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snapshot *snap)
 {
 	const struct multiboot_info *mb;
+	const struct ir0_boot_snapshot *snapshot;
 	uint32_t addr_lo;
 
 	if (!snap)
 		return;
 
+	snapshot = boot_memory_snapshot();
 	mb = (const struct multiboot_info *)get_boot_params();
-	if (!mb)
+	if (!mb || !snapshot)
 	{
 		snprintf(snap->protocol, sizeof(snap->protocol), "multiboot1");
 		snprintf(snap->boot_detail, sizeof(snap->boot_detail),
@@ -67,11 +71,8 @@ void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snaps
 	else
 		snprintf(snap->bootloader, sizeof(snap->bootloader), "unavailable");
 
-	if ((mb->flags & MULTIBOOT_FLAG_CMDLINE) && mb->cmdline)
-		copy_phys_cstr_trunc(mb->cmdline, snap->cmdline, sizeof(snap->cmdline),
-				    sizeof(snap->cmdline) - 1);
-	else
-		snap->cmdline[0] = '\0';
+	snprintf(snap->cmdline, sizeof(snap->cmdline), "%s",
+		 snapshot->cmdline);
 
 	if (mb->flags & MULTIBOOT_FLAG_FB)
 	{

@@ -18,7 +18,12 @@
  */
 
 #include "test/ktest_harness.h"
+#include <ir0/boot_memory.h>
 #include <ir0/kmem.h>
+#include <ir0/page_table_pool.h>
+#include <ir0/pmm.h>
+#include <ir0/reclaim.h>
+#include <mm/allocator.h>
 #include <string.h>
 
 void ktest_allocator(void)
@@ -33,6 +38,40 @@ void ktest_allocator(void)
 	void *q = kmalloc(128);
 	KASSERT(q != NULL);
 	kfree(q);
+
+	{
+		size_t backward_before;
+		size_t backward_after;
+		void *left;
+		void *right;
+		void *guard;
+
+		alloc_coalesce_stats(NULL, &backward_before);
+		left = kmalloc(256);
+		right = kmalloc(256);
+		guard = kmalloc(64);
+		KASSERT(left != NULL);
+		KASSERT(right != NULL);
+		KASSERT(guard != NULL);
+		kfree(left);
+		kfree(right);
+		alloc_coalesce_stats(NULL, &backward_after);
+		KASSERT_EQ(backward_after, backward_before + 1);
+		kfree(guard);
+	}
+
+	{
+		struct ir0_reclaim_result result;
+		uintptr_t frame;
+
+		frame = page_table_frame_alloc(MM_ALLOC_ATOMIC);
+		KASSERT(frame != 0);
+		KASSERT(!boot_memory_range_is_reserved(frame, PMM_FRAME_SIZE));
+		KASSERT_EQ(pmm_frame_owner_class(frame), PMM_OWNER_PAGE_TABLE);
+		page_table_frame_free(frame);
+		KASSERT_EQ(mm_reclaim_run(1, &result), 0);
+		KASSERT_EQ(result.reclaimed_pages, 1);
+	}
 
 	KTEST_END();
 }

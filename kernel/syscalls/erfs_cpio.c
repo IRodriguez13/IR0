@@ -29,21 +29,25 @@ static int cpio_install_product_tmp(const char *norm, uint32_t mode,
 				    uint32_t size, const uint8_t *data)
 {
 	struct vfs_file *vf;
+	char staged[IR0_VFS_PATH_MAX];
 	int rc;
 
 	if (!bpath_live() || !ir0_bpath_is_foldable(norm) ||
 	    !g_bpath)
 		return 0;
+	rc = ir0_bpivot_stage_path(norm, staged, sizeof(staged));
+	if (rc != 0)
+		return rc;
 	if ((mode & S_IFMT) == S_IFDIR)
 	{
-		rc = g_bpath->mkdir ? g_bpath->mkdir(norm, mode & 07777U) : -ENOSYS;
+		rc = g_bpath->mkdir ? g_bpath->mkdir(staged, mode & 07777U) : -ENOSYS;
 		return rc < 0 ? rc : 1;
 	}
 	if ((mode & S_IFMT) != S_IFREG)
 		return 0;
 	if (!g_bpath->open || !g_bpath->put)
 		return -ENOSYS;
-	rc = g_bpath->open(norm, IR0_O_RDWR | IR0_O_CREAT | IR0_O_TRUNC,
+	rc = g_bpath->open(staged, IR0_O_RDWR | IR0_O_CREAT | IR0_O_TRUNC,
 				  mode & 07777U, &vf);
 	if (rc < 0)
 		return rc;
