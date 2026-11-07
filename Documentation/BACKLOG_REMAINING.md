@@ -230,9 +230,9 @@ stabilization only. **Ship** `v0.0.1` still needs Maintainer manual VM above. Se
 **What works (QEMU virt, staged EL0):**
 
 ```text
-UART → MMU → VBAR → EL0 → early_dispatch
-+ product process/mm/vfs objects on kernel-arm64-product.bin ($(ALL_OBJS))
-Proof: make kernel-arm64.bin smoke-arm64-hypervisor-log (optional QEMU)
+UART → MMU → VBAR → EL0 → syscall_dispatch (product)
++ CPIO/vda PID1 (no embedded hello)
+Proof: make smoke-arm64-product-usermode-log / ir0-selftest-arm64
 ```
 
 Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
@@ -242,10 +242,11 @@ Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
 
 | Gap | Today |
 |-----|--------|
-| Product SVC table | EL0 still `early_dispatch`, not `syscall_dispatch.c` |
-| Staged adapter | `early_rootfs.c` / `early_process.c` still own most ABI |
+| Product SVC table | Done — product SVC → `syscall_dispatch`; selftests `openat`/`identity` |
+| Staged adapter | Freestanding bring-up still uses `early_*`; filtered out of product link |
 | ISD AArch64 | no `rootfs/arch/aarch64` pack |
-| Private-mm fork / COW | stipulated ENOSYS on staged clone |
+| User MM (mmap / fork / COW) | **Open.** User pages are mapped by the private `arm64_mmu_*_in_root` manager (39-bit, 3-level TTBR0) while common `mm/paging.c` walks 4-level 48-bit roots; anonymous `mmap` and `fork` return `ENOMEM` (`make ir0-selftest-fault-arm64`). EL0 aborts kill the task with SIGSEGV instead of entering the common fault handler. |
+| FP/SIMD context | **Open on both ISAs.** No FP/SIMD register save on context switch (x86 and ARM64). |
 | Board beyond QEMU virt | virt + rpi4 UART QEMU; rpi5 compile stub — not hardware userspace |
 
 **Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as

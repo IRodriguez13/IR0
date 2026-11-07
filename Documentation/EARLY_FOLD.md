@@ -61,19 +61,24 @@ There is no separate `kernel-arm64-all.bin` link anymore.
 Host ABI tests (`test_early_rootfs_abi`) still check synthetic `/`, `/init`,
 and `/dev/*` nodes from `includes/ir0/early_rootfs.h`.
 
-## Product dispatcher slice (ARM ALL)
+## Product SVC path (ARM ALL)
 
-`syscall_dispatch.c` is **not** linked on ARM (it pulls x86-only product
-surface). The honest slice is extra `syscall_context_provider` rows:
+`kernel-arm64-product.bin` links the common `syscall_dispatch.c` table.
+EL0 SVC enters that table (not `arm64_syscall_early`). Bring-up objects
+(`syscall_early`, `hello_embed`, `rr_early`, `rootfs_early`, …) are **not**
+in the product link.
 
-| Provider | IDs | Tag |
-|----------|-----|-----|
-| `ir0_product_identity_provider` | getpid/gettid/getppid/getuid/geteuid/getgid/getegid | `ARM64_PRODUCT_IDENTITY_OK` |
-| `ir0_product_cwd_provider` | getcwd via `current_process` + `copy_to_user` | `ARM64_PRODUCT_CWD_OK` |
-| `ir0_product_ipc_provider` | pipe2 / socketpair (`ipc/` tables + ring I/O) | `ARM64_PRODUCT_IPC_OK` |
-| `ir0_product_vfs_provider` | chdir (path-checked `/tmp`), openat, newfstatat, fstat | `ARM64_PRODUCT_VFS_SLICE_OK` |
+Historical fold-slice tags (`ARM64_PRODUCT_*_SLICE_OK` / provider binds in
+`all_objs_mark.c`) are bring-up markers only. Product ABI proof is:
 
-PIPE2/SOCKETPAIR are always the ipc/ product table.
+| Gate | Contract |
+|------|----------|
+| `make ir0-selftest-arm64` | `openat` KTAP via `syscall_dispatch` |
+| `make ir0-selftest-identity-arm64` | `getpid` + `write(1)` |
+| `make smoke-arm64-product-usermode-log` | CPIO `/sbin/init` + `ARM64_PRODUCT_EL0_SYSCALL_OK` |
+
+PID 1 comes from virtio-blk CPIO/`vda` (or fails honestly). There is **no**
+embedded hello seed on the product image.
 
 ## ISD AArch64
 
@@ -84,9 +89,9 @@ kernel does not invent one.
 
 ## Still early (do not mark done)
 
-- Special char/block nodes and the `/init` blob
+- Special char/block nodes and the `/init` blob on the staged adapter
 - `early_process.c` (~2k lines) — clone pid can come from the registry
-- ARM EL0 body is still `early_dispatch`, not `syscall_dispatch.c`
+- virtio-blk still uses the `virtio_blk_early` transport (product needs `vda`)
 - ISD has no `arch/aarch64` / `rootfs/arch/aarch64` product pack
 
 ## Next fold order

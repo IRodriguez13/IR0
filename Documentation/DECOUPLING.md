@@ -206,9 +206,13 @@ pattern); treat explicit `n` as the compile-out signal.
 | **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`EARLY_FOLD.md`](EARLY_FOLD.md). Not an ISD product boot. |
 
 So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 now links the
-same portable object set as x86 (`ALL_OBJS`); staged adapters (`early_*`) and
-`syscall_dispatch` on SVC remain the gap vs full Linux-like userspace. ISD AArch64 and
-private-mm fork are still open.
+same portable object set as x86 (`ALL_OBJS`) and product SVC enters `syscall_dispatch`.
+Remaining gaps vs full Linux-like userspace: user MM still runs through a
+private ARM64 page-table manager (39-bit TTBR0) that the common 4-level walker
+cannot read, so anonymous `mmap` and `fork` fail; EL0 aborts are not yet routed
+to the common fault handler; FP/SIMD state is not saved on context switch (both
+ISAs); ISD AArch64 rootfs pack; product block transport (still
+`virtio_blk_early` for CPIO/`vda`).
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
@@ -238,10 +242,10 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 2. **Facades that include drivers:** optionally split **API-only** headers from `.c`.
 3. **ARM64 product image:** `make ir0 arm64` links portable process/MM/VFS and
    binds `/tmp` through product `vfs.c` ([`EARLY_FOLD.md`](EARLY_FOLD.md)).
-   EL0 still enters via `early_dispatch`. ISA facades are wired:
-   `sigcontext_arm64` = Linux aarch64 uapi; `arch_switch` / `arch_mm` = TTBR0 model;
-   `irq_*` → VBAR + GICv2. ISD AArch64 + product `syscall_dispatch` on SVC remain
-   open.
+   Product EL0 enters via `syscall_dispatch` (selftests `openat`/`identity`).
+   ISA facades are wired: `sigcontext_arm64` = Linux aarch64 uapi;
+   `arch_switch` / `arch_mm` = TTBR0 model; `irq_*` → VBAR + GICv2.
+   ISD AArch64 rootfs pack remains open.
 4. **`arch/x86-64/sources/interrupt/`** is the **x86-only** IDT/PIC/ISR backend (see `Documentation/architecture/x86-64-interrupt-backend.md`).
    Portable and driver code enter via **`ir0/irq.h`** / **`ir0/arch_io.h`**; arm64 never
    links this tree.

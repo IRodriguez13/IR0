@@ -76,11 +76,11 @@ pure-move pass.
   syscall routing onto those tables; destination: shrink only. `/tmp/*`
   uses product VFS when bound (`ARM64_EARLY_PATH_FOLD_OK`).
 - `ir0_product_identity_provider` / `ir0_product_cwd_provider`; owner:
-  ARM ALL semantic IDs already on product `current_process`; destination:
-  more IDs without linking `syscall_dispatch.c`.
+  historical fold-slice markers in `all_objs_mark.c` / freestanding; product
+  ABI proof is `syscall_dispatch` + `ir0-selftest-arm64` / `identity`.
 - `kernel/syscalls/early_{dispatch,vfs,io,time,mm,process}.c`; owner: staged
-  EL0; destination: delete after product providers own the matching slice.
-  See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+  freestanding EL0 only (filtered out of product link); destination: delete
+  after bring-up smokes no longer need them. See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 
 ### Early scaffolding to replace, not generalize
 
@@ -88,12 +88,13 @@ pure-move pass.
   owner: bring-up adapters; destination: delete after the matching common
   syscall handlers link and pass BusyBox/init; dependencies are the semantic
   syscall-provider table and user-copy/address-space facades.
-- `arch/arm64/sources/syscall_early.c`; owner: early SVC coordinator;
-  destination: delete after production dispatch owns the EL0 path; it may only
-  decode, compose providers and invoke the semantic table.
-- `arch/arm64/sources/{process,switch,rr}_early.c` and `switch_early.S`;
-  owner: bring-up scheduler/process harness; destination: delete after common
-  create/fork/exec/exit/wait plus production ARM switch reach real PID 1.
+- `arch/arm64/sources/syscall_early.c`; owner: freestanding SVC coordinator;
+  destination: delete with freestanding images (product SVC already uses
+  `syscall_dispatch`).
+- `arch/arm64/sources/{process,rr}_early.c`; freestanding scheduler harness only.
+- `arch/arm64/sources/switch_early.c` + `switch_early.S`; still linked by product
+  for `arm64_cpu_switch` / `arm64_cpu_switch_mm` (rename out of “early” later);
+  smoke helpers in the same TU are unused on the product path.
 - `arch/arm64/sources/{elf_image,elf_load,busybox_load}_early.c`;
   owner: embedded-image bring-up provider; destination: delete after common
   exec/VFS loads `/init`; the ELF parser itself already lives in common code.
@@ -140,10 +141,14 @@ pure-move pass.
    `exit`/`wait` next.
 4. Replace early process and syscall providers one subsystem at a time.
    **Started:** path table is `fs/ramtab.c`; ARM ALL `/tmp` uses product VFS.
-   Next: anon fds, then `early_process.c`, then a bounded `syscall_dispatch`
-   SVC slice.
-5. Load PID 1 through common VFS/exec and retire embedded-rootfs policy.
-6. Only then perform pure directory moves for boot, MM, IRQ and platform code.
+   **Product SVC:** `syscall_dispatch` is linked and used; bring-up
+   `syscall_early` / hello / RR are filtered out of `kernel-arm64-product.bin`.
+   Next: shrink portable `early_process.c` / erfs for remaining staged nodes.
+5. Load PID 1 through common VFS/exec. **Product:** no embedded hello seed;
+   CPIO/`vda` bind + `kexecve("/sbin/init")`. ISD AArch64 rootfs still open.
+6. Board descriptor lives under `arch/arm64/include/arm64_board.h` (not
+   `includes/ir0/`). `/proc/cmdline` uses `boot_memory_cmdline()`.
+7. Only then perform pure directory moves for boot, MM, IRQ and platform code.
 
 The acceptance condition is stronger than compilation: x86 production boot,
 ARM QEMU BusyBox/init EL0, Raspberry Pi 3 userspace, Raspberry Pi 5 compile,

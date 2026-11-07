@@ -36,7 +36,7 @@ _(vacío)_
 7. ~~F7.1 ARM64 early MM~~ **hecho** (oleada histórica; nombres `smoke-arm64-*` ya no son targets)  
 8. ~~F7.2 ARM64 VBAR/SVC~~ **hecho** (id.)  
 9. ~~F7.3 ARM64 EL0 + PSCI~~ **hecho** (id.; producto hoy: `kernel-arm64-product.bin`)  
-10. F7b–F7g + Pack B–E ~~hecho el bring-up~~ — deuda = `syscall_dispatch` en SVC + ISD AArch64 + fold de `early_process.c`  
+10. F7b–F7g + Pack B–E ~~hecho el bring-up~~ — `syscall_dispatch` en SVC de producto **hecho**; deuda = ISD AArch64 + fold residual de `early_process.c` (bring-up)  
 11. F8 … F13 — ver inglés; merge `master` solo con bundle TCC+Doom+userspace (STABLE)  
 12. **F14 HAB** — AC remoto / domótica (userspace; VPN; ESP IR primero) — ver tablas HAB-* en inglés  
 13. **F15 DESK** — **DESK-0…4 hechos** (soft fb); **SEP-1** contrato de árboles + rootfs esqueleto; DESK-5 JVM BLOCKED — ver inglés  

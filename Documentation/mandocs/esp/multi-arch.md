@@ -158,7 +158,7 @@ Checklist de porting:
 
 ## 10. Hoja de ruta futura
 
-- `fork`/`exec` / `sched/rr` con paridad Linux plena — aún en adaptadores (`early_dispatch`).
+- `fork`/`exec` / `sched/rr` con paridad Linux plena — producto ya usa `syscall_dispatch`; falta rootfs ISD AArch64 y endurecer smokes BusyBox.
 - **musl aarch64 + rootfs ISD AArch64** — hueco de toolchain/packaging; el kernel ya enlaza **`$(ALL_OBJS)`** (`kernel-arm64-product.bin`).
 - GIC / timers — endurecer política según avance el port.
 - Raspberry Pi 4: GIC-400, SD, mailbox, DTB (más allá del UART min).

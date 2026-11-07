@@ -141,7 +141,7 @@ Porting checklist:
 6. **Boot serial contract is ISA-agnostic:** after UART init, `ir0_boot_serial_ready()`
    emits the same `[BOOT] IR0 kernel <ver>` banner first; ISA detail uses
    COMP `ARCH`, stage tags COMP `SMOKE` (`includes/ir0/boot_log.h`).
-7. **ARM64 board is compile-time** (`includes/ir0/arm64_board.h`, `ARM64_BOARD=` /
+7. **ARM64 board is compile-time** (`arch/arm64/include/arm64_board.h`, `ARM64_BOARD=` /
    Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU
    `raspi4b`), `rpi5` (UART stub — no RP1 yet). No DTB parse yet.
 
@@ -161,7 +161,7 @@ Porting checklist:
 
 ## 10. Future roadmap
 
-- Product ARM `fork`/`exec` / `sched/rr` with full Linux parity — still staged (`early_dispatch`, not full `syscall_dispatch` on SVC everywhere userspace expects).
+- Product ARM uses common `syscall_dispatch` on SVC; BusyBox/ISD AArch64 rootfs and full Linux parity smokes remain open.
 - **musl aarch64 + ISD AArch64 rootfs** — packaging/toolchain gap; kernel **`$(ALL_OBJS)`** link exists (`kernel-arm64-product.bin`).
 - Shared IRQ delivery refinements (GIC policy, timers) as the port hardens.
 - SPI / full GIC distributor policy beyond bank-0 PPI/SGI (`irq_unmask_line` covers bank 0).

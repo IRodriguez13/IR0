@@ -94,7 +94,8 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | Staged names → `fs/ramtab.c` | Done | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
 | Staged IPC tables → `ipc/` | Done | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
 | ARM ALL identity/cwd providers | Done | `ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK` |
-| `syscall_dispatch` on ARM SVC | Open | still `early_dispatch` |
+| `syscall_dispatch` on ARM SVC | Done | product SVC → `syscall_dispatch`; selftests `openat`/`identity` |
+| Product without embedded hello | Done | CPIO/`vda` bind; no `hello_aarch64_blob` in product `nm` |
 | ISD AArch64 rootfs | Open | no pack |
 
 ### Networking (POSIX UDP minimum)

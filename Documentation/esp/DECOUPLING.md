@@ -11,9 +11,9 @@ mismo contenido sin mezclar idiomas.
 **Oleada ISA (2026-07-26):** fachadas `irq.h`, `context.h`, `arch_mm.h`, `arch_signal.h`,
 `sigcontext_{x86_64,arm64}.h` (aarch64 = uapi Linux completo); `switch_to` → backend privado de ISA
 con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `arch/x86-64/sources/interrupt/` = backend x86-only.
-Residual: ISD AArch64 + `syscall_dispatch` en SVC. `kernel-arm64-product.bin`
-/ `kernel-arm64.bin` enlaza **`$(ALL_OBJS)`** (mismo corte portable que x86);
-ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+Residual: ISD AArch64 (rootfs BusyBox). Producto ARM ya usa `syscall_dispatch`
+en SVC. `kernel-arm64-product.bin` / `kernel-arm64.bin` enlaza **`$(ALL_OBJS)`**
+(mismo corte portable que x86); ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 
 ## Objetivos de diseño
 
@@ -54,10 +54,14 @@ recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`), credenciales, p
 - **x86-64:** `kernel-x64.bin` enlaza **`$(ALL_OBJS)`**: kernel completo (Multiboot, etc.).
 - **ARM64:** `make kernel-arm64.bin` + smokes `smoke-arm64-*` en
   `scripts/make/arm64*.mk` ejercitan el kernel de producto (`kernel-arm64-product.bin`).
-  EL0 sigue en `early_dispatch`. ISD aún no empaqueta AArch64. No es paridad x86.
+  EL0 producto → `syscall_dispatch`. ISD aún no empaqueta AArch64. No es paridad x86.
 
-Objetivos de port: dispatch de producto en SVC, rootfs ISD AArch64, fork con mm
-privado. Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+Objetivos de port abiertos: MM de usuario (hoy un gestor de tablas ARM64
+privado de 39 bits que el walker común de 4 niveles no puede leer; `mmap`
+anónimo y `fork` fallan con `ENOMEM`), aborts de EL0 hacia el manejador común
+de fallos, guardado de FP/SIMD en el cambio de contexto (ambas ISAs), rootfs
+ISD AArch64, transporte block de producto.
+Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
 ## Fugas conocidas de acoplamiento
 
 Listado cualitativo actualizado en `Documentation/DECOUPLING.md`: `kernel/main.c` (política de

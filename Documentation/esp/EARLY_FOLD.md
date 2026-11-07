@@ -42,11 +42,23 @@ El kernel de producto ARM64 (`kernel-arm64-product.bin` / `kernel-arm64.bin`,
 
 ## Dispatch de producto
 
-No se enlaza `syscall_dispatch.c` en ARM. Slice honesto: providers
-`ir0_product_identity_provider`, `ir0_product_cwd_provider`,
-`ir0_product_ipc_provider` y `ir0_product_vfs_provider`
-(`ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK`,
-`ARM64_PRODUCT_IPC_OK`, `ARM64_PRODUCT_VFS_SLICE_OK`).
+`kernel-arm64-product.bin` enlaza la tabla común `syscall_dispatch.c`.
+SVC de EL0 entra ahí (no `arm64_syscall_early`). Los objetos de bring-up
+(`syscall_early`, `hello_embed`, `rr_early`, `rootfs_early`, …) **no**
+están en el link de producto.
+
+Las etiquetas históricas de fold-slice (`ARM64_PRODUCT_*_SLICE_OK` /
+binds de providers en `all_objs_mark.c`) son solo marcadores de bring-up.
+Prueba de ABI de producto:
+
+| Gate | Contrato |
+|------|----------|
+| `make ir0-selftest-arm64` | `openat` KTAP vía `syscall_dispatch` |
+| `make ir0-selftest-identity-arm64` | `getpid` + `write(1)` |
+| `make smoke-arm64-product-usermode-log` | CPIO `/sbin/init` + `ARM64_PRODUCT_EL0_SYSCALL_OK` |
+
+PID 1 viene de CPIO/`vda` virtio-blk (o falla con honestidad). No hay seed
+hello embebido en la imagen de producto.
 
 ## ISD AArch64
 
@@ -56,5 +68,5 @@ de rootfs AArch64 sigue siendo trabajo **ISD**.
 
 ## Pendiente
 
-bind/connect AF_UNIX restantes, `early_process.c`, rootfs ISD AArch64,
-fork con mm privado.
+transporte `virtio_blk_early` → driver de producto, rootfs ISD AArch64,
+`early_process.c` residual en bring-up freestanding.
