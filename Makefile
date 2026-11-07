@@ -420,13 +420,24 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_time.o \
 	kernel/syscalls/early_io.o \
 	kernel/syscalls/early_vfs.o \
-	kernel/syscalls/early_rootfs.o \
-	kernel/syscalls/early_rootfs_state.o \
-	kernel/syscalls/early_rootfs_ipc.o \
-	kernel/syscalls/early_rootfs_socket.o \
-	kernel/syscalls/early_rootfs_file.o \
-	kernel/syscalls/early_rootfs_landlock.o \
-	kernel/syscalls/early_rootfs_meta.o \
+	kernel/syscalls/erfs.o \
+	kernel/syscalls/erfs_fd.o \
+	kernel/syscalls/erfs_bind.o \
+	kernel/syscalls/erfs_cwd.o \
+	kernel/syscalls/erfs_stat.o \
+	kernel/syscalls/erfs_util.o \
+	kernel/syscalls/erfs_vfs.o \
+	kernel/syscalls/erfs_cpio.o \
+	kernel/syscalls/erfs_state.o \
+	kernel/syscalls/erfs_ipc.o \
+	kernel/syscalls/erfs_socket.o \
+	kernel/syscalls/erfs_file.o \
+	kernel/syscalls/erfs_landlock.o \
+	kernel/syscalls/erfs_xattr.o \
+	kernel/syscalls/erfs_mount.o \
+	kernel/syscalls/erfs_path.o \
+	kernel/syscalls/erfs_vfs_ops.o \
+	kernel/syscalls/erfs_meta.o \
 	fs/ramtab.o \
 	ipc/early_anonfd.o \
 	ipc/early_unix.o \
@@ -700,6 +711,7 @@ FS_OBJS = \
     fs/procfs_net.o \
     fs/procfs_system.o \
     fs/devfs.o \
+    fs/devfs_pty.o \
     fs/devfs_net.o \
     fs/devfs_block.o \
     fs/sysfs.o \
@@ -1066,6 +1078,11 @@ MULTILANG_DRIVER_SUPPORT_OBJ += drivers/multilang_drivers.o
 CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=1
 else
 CFLAGS += -DKERNEL_ENABLE_EXAMPLE_DRIVERS=0
+endif
+
+# includes/generated/autoconf.h (from .config) is included via config.h.
+ifneq ($(wildcard $(KERNEL_ROOT)/includes/generated/autoconf.h),)
+CFLAGS := $(filter-out -DCONFIG_%,$(CFLAGS))
 endif
 
 # All objects (kernel sin tests in-kernel)

@@ -3,11 +3,11 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: kernel/syscalls/early_rootfs_socket.c
+ * File: kernel/syscalls/erfs_socket.c
  * Description: early AF_UNIX sockets, socketpairs and FIFOs.
  */
 
-#include "early_rootfs_internal.h"
+#include "erfs_internal.h"
 
 static int64_t unix_dgram_deposit(int uid, const uint8_t *tmp, unsigned count);
 

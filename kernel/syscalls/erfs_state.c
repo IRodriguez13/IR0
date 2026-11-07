@@ -7,7 +7,7 @@
  * Description: Shared state for the split early rootfs backend.
  */
 
-#include "early_rootfs_internal.h"
+#include "erfs_internal.h"
 
 struct rootfs_slot g_slots[ROOTFS_MAX_OPEN];
 const uint8_t *g_blob;

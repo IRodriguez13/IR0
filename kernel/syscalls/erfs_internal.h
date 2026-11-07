@@ -3,10 +3,14 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: early_rootfs_internal.h
+ * File: erfs_internal.h
  * Description: Private state and helpers for the split early rootfs backend.
- *              Not a public ABI; only kernel/syscalls/early_rootfs*.c (incl.
- *              early_rootfs_landlock.c) include it.
+ *              Not a public ABI; only kernel/syscalls/erfs*.c (incl.
+ *              erfs_landlock.c, erfs_xattr.c,
+ *              erfs_mount.c, erfs_path.c, erfs_vfs_ops.c,
+ *              erfs_fd.c, erfs_bind.c, erfs_cwd.c,
+ *              erfs_stat.c, erfs_util.c, erfs_vfs.c, erfs_cpio.c)
+ *              include it.
  */
 
 #pragma once
@@ -149,21 +153,32 @@ extern uint64_t g_ll_handled;
 extern int g_ll_n;
 extern struct early_ll_rule g_ll_rules[LL_RULE_MAX];
 extern int g_cpio_ready;
+extern const uint8_t *g_cpio_buf;
+extern uint64_t g_cpio_len;
+extern int g_cpio_product_installed;
 extern char g_cwd_path[RAMTAB_NAME];
 extern char g_chroot_path[RAMTAB_NAME];
 
 /* Cross-file helpers (private). */
 int alloc_fd(enum ir0_early_rootfs_node node);
+int early_fdtable_ok(int fd);
 void apply_chroot(char *pbuf, unsigned cap);
 uint64_t clock_now_ticks(int clock);
 int close_fd(int fd);
 void copy_kstr(char *dst, unsigned cap, const char *src);
 int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz);
+int erfs_cpio_find_init(const uint8_t *buf, uint64_t bytes,
+			const uint8_t **init_data, uint64_t *init_len);
+int erfs_cpio_install_members(const uint8_t *buf, uint64_t bytes);
+int early_rootfs_cpio_fold_product(void);
 void early_publish_root(void);
 int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
+int64_t early_try_vfs_ops_read(int fd, enum ir0_early_rootfs_node node,
+			       uint64_t buffer, uint64_t count);
 int64_t early_rootfs_close(int fd);
 int early_rootfs_console_ready(void);
 int64_t early_rootfs_dup(int oldfd);
+int64_t early_rootfs_fcntl_dupfd(int fd, int minfd, int cloexec);
 int64_t early_rootfs_faccessat(int dirfd, uint64_t path, int flags);
 int early_rootfs_fd_is_block(int fd);
 int64_t early_rootfs_ftruncate(int fd, uint64_t length);
@@ -176,6 +191,8 @@ int fd_is_open(int fd);
 int flags_of_fd(int fd);
 int follow_path(char *pbuf, unsigned cap);
 int ir0_product_path_is_tmp(const char *path);
+enum ir0_early_rootfs_node product_lookup(const char *path);
+int64_t product_attach_open(int fd, const char *path, int flags);
 int join_under_cwd(char *pbuf, unsigned cap);
 int landlock_allow(const char *path, uint64_t need);
 int landlock_open_need(const char *path, int flags);
@@ -193,6 +210,7 @@ uint64_t *pos_of_fd(int fd);
 int product_path_live(void);
 int64_t product_xfer(int fd, uint64_t buffer, uint64_t count, int write);
 void set_cloexec_of_fd(int fd, int cloexec);
+int cloexec_of_fd(int fd);
 void set_flags_of_fd(int fd, int flags);
 int slot_from_fd(int fd);
 int sock_pair_of_fd(int fd);

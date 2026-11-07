@@ -3,11 +3,11 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: kernel/syscalls/early_rootfs_file.c
+ * File: kernel/syscalls/erfs_file.c
  * Description: early file I/O (pread/pwrite/splice/sendfile/fallocate).
  */
 
-#include "early_rootfs_internal.h"
+#include "erfs_internal.h"
 
 int64_t early_rootfs_file_write(int fd, uint64_t buffer, uint64_t count)
 {

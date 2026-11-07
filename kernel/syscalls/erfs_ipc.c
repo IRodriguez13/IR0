@@ -3,11 +3,11 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: kernel/syscalls/early_rootfs_ipc.c
+ * File: kernel/syscalls/erfs_ipc.c
  * Description: early pipes, eventfd, memfd, timerfd and epoll.
  */
 
-#include "early_rootfs_internal.h"
+#include "erfs_internal.h"
 
 int64_t early_rootfs_pipe_write(int fd, uint64_t buffer, uint64_t count)
 {
