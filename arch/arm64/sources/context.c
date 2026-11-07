@@ -55,46 +55,24 @@ void switch_save_user_rsp(struct process *prev)
 	proc->saved_user_rsp = sp_el0;
 }
 
+/*
+ * Every switch is kernel to kernel on the task's own stack (Linux
+ * cpu_switch_to). Returning to EL0 always goes through the task's exception
+ * frame or, on first run, the ret-to-user trampoline (switch.c), so the
+ * outgoing task keeps its kernel continuation. SP_EL0 is restored from the
+ * exception frame (asm/exc_frame.h), not programmed here.
+ */
 void context_backend_switch(task_t *prev, task_t *next)
 {
-	process_t *next_proc;
-
 	if (!next)
 		return;
-
-	next_proc = task_to_process(next);
-
-	if (next_proc)
-	{
-		/* Always program SP_EL0 — skipping when saved_user_rsp==0 left
-		 * a stale value from the previous task (Bugbot).
-		 */
-		{
-			uint64_t sp_el0 = next_proc->saved_user_rsp;
-
-			if (!sp_el0)
-				sp_el0 = task_get_sp(next);
-			__asm__ volatile("msr sp_el0, %0" :: "r"(sp_el0)
-					 : "memory");
-		}
-
-		/*
-		 * First user entry (and later resumes whose SPSR is EL0t): x86
-		 * switch_context_x64 iretqs when CS.RPL==3. ARM cooperative
-		 * switch only RETs at EL1, so drop through switch_to_user.
-		 * Blocked-syscall kernel_ret still uses switch_context_arm64.
-		 */
-		if (next_proc->mode == USER_MODE &&
-		    task_return_state_is_user(next) &&
-		    !next_proc->kernel_syscall_sleep &&
-		    !next_proc->want_kernel_ret)
-		{
-			switch_to_user_task(next);
-			return;
-		}
-	}
-
 	switch_context_arm64(prev, next);
+}
+
+int context_backend_resumes_user_frame(void)
+{
+	/* Each task traps on its own kernel stack (switch_to_user sets SP_EL1). */
+	return 0;
 }
 
 int context_backend_checkpoint(task_t *prev)

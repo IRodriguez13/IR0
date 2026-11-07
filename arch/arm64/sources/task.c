@@ -15,6 +15,7 @@
 #include <ir0/task_ops.h>
 #include <ir0/arch_task.h>
 #include <ir0/signals.h>
+#include <asm/exc_frame.h>
 #include <string.h>
 
 uint64_t task_initial_user_status(void)
@@ -126,7 +127,7 @@ void task_save_user_exception_frame(task_t *t, const void *opaque_frame)
 
 	/*
 	 * vectors.S exc_entry_frame: x0@0 … x30@240 (31 GPRs).
-	 * ELR / SPSR / SP_EL0 live in system registers at exception entry.
+	 * ELR / SPSR / SP_EL0 follow at asm/exc_frame.h offsets.
 	 */
 	t->arch.x0 = frame[0];
 	t->arch.x1 = frame[1];
@@ -160,9 +161,9 @@ void task_save_user_exception_frame(task_t *t, const void *opaque_frame)
 	t->arch.x29 = frame[29];
 	t->arch.x30 = frame[30];
 
-	__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-	__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
+	elr = frame[ARM64_EXC_IDX_ELR];
+	spsr = frame[ARM64_EXC_IDX_SPSR];
+	sp_el0 = frame[ARM64_EXC_IDX_SP];
 	t->arch.elr_el1 = elr;
 	t->arch.spsr_el1 = spsr;
 	t->arch.sp_el0 = sp_el0;

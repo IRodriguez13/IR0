@@ -9,7 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "boot_common.h"
-#include "mmu_early.h"
+#include "mmu.h"
 #include "exc_early.h"
 #include "pl011.h"
 #include "timer.h"
@@ -28,66 +28,12 @@
 
 #include <stdint.h>
 
-#if defined(IR0_FREESTANDING_BOOT) || DEBUG_BOOT
-#include "slice_hello.h"
-#include "switch_early.h"
-#include "process_early.h"
-#include "elf_load_early.h"
-#include "rr_early.h"
-#include "virtio_net_early.h"
-#endif
-
 #define BOOT_STACK_SIZE ARM64_BOOT_STACK_SIZE
 uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
 
 #define VIRT_GIC_DIST 0x08000000UL
 #define VIRT_GIC_CPU  0x08010000UL
 #define VIRT_GIC_SIZE 0x00010000UL
-#define USER_PAGE_SIZE 4096
-
-#ifndef ARM64_EL0_USER_PAGE_PA
-#define ARM64_EL0_USER_PAGE_PA 0x42000000UL
-#endif
-
-void __attribute__((weak)) arm64_all_objs_mark(void)
-{
-}
-
-void __attribute__((weak)) arm64_common_prepare_final_el0(void)
-{
-}
-
-void __attribute__((weak)) arm64_common_prepare_fdtable(void)
-{
-}
-
-int __attribute__((weak)) arm64_common_root_smoke(void)
-{
-	return -1;
-}
-
-#if DEBUG_BOOT
-static void fill_user_page(void)
-{
-	static const char msg[] = "ARM64_WRITE_OK\n";
-	volatile uint8_t *p = (volatile uint8_t *)(uintptr_t)ARM64_EL0_USER_PAGE_PA;
-	volatile int64_t *ts;
-	unsigned i;
-
-	for (i = 0; msg[i]; i++)
-	{
-		p[i] = (uint8_t)msg[i];
-	}
-	for (; i < USER_PAGE_SIZE; i++)
-	{
-		p[i] = 0;
-	}
-
-	ts = (volatile int64_t *)(p + 0x40);
-	ts[0] = 0;
-	ts[1] = 1000000;
-}
-#endif /* DEBUG_BOOT */
 
 #if DEBUG_BOOT
 static void arm64_irq_oneshot_demo(void)
@@ -187,11 +133,8 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 	arm64_board_log_arch();
 	ir0_boot_log_platform_hypervisor();
 	ir0_boot_smoke("ARM64_BOOT_OK");
-#if DEBUG_BOOT
-	arm64_all_objs_mark();
-#endif
 
-	if (arm64_mmu_early_enable() != 0)
+	if (arm64_mmu_enable() != 0)
 	{
 		ir0_boot_smoke("ARM64_MMU_FAIL");
 		for (;;)
@@ -202,18 +145,10 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 	pl011_init();
 	ir0_boot_smoke("ARM64_PL011_OK");
 
-	if (arm64_mmu_early_verify() == 0)
-	{
+	if (arm64_mmu_verify() == 0)
 		ir0_boot_smoke("ARM64_PAGING_OK");
-		if (arm64_common_root_smoke() == 0)
-			ir0_boot_smoke("ARM64_COMMON_ROOT_OK");
-		else
-			ir0_boot_smoke("ARM64_COMMON_ROOT_UNAVAILABLE");
-	}
 	else
-	{
 		ir0_boot_smoke("ARM64_PAGING_FAIL");
-	}
 	if (arm64_mmu_map_device_range(0x1001ff000UL, 0x3000UL) == 0)
 		ir0_boot_smoke("ARM64_MMIO_HIGH_OK");
 	else
@@ -243,42 +178,12 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 		ir0_boot_smoke("ARM64_IRQ_MAP_FAIL");
 	}
 
+	timer_init();
 #if DEBUG_BOOT
-	if (arm64_mmu_map_user_page(ARM64_EL0_USER_PAGE_PA) == 0)
-	{
-		fill_user_page();
-		ir0_boot_smoke("ARM64_EL0_PAGE_OK");
-	}
-	else
-	{
-		ir0_boot_smoke("ARM64_EL0_PAGE_FAIL");
-	}
-
-	boot_info = arm64_board_boot_info();
-	if (boot_info->fdt_valid && boot_info->memory_range_count > 0U)
-	{
-		uint64_t first_byte_past_ram = boot_info->memory[0].base +
-					       boot_info->memory[0].size;
-
-		if (arm64_mmu_map_user_page(first_byte_past_ram) != 0)
-			ir0_boot_smoke("ARM64_DTB_MMU_WINDOW_OK");
-		else
-			ir0_boot_smoke("ARM64_DTB_MMU_WINDOW_FAIL");
-	}
-
-	arm64_slice_after_mmu();
-
-	timer_init();
 	if (arch_timer_smoke_ok() == 0)
-	{
 		ir0_boot_smoke("ARM64_TIMER_OK");
-	}
 	else
-	{
 		ir0_boot_smoke("ARM64_TIMER_FAIL");
-	}
-#else
-	timer_init();
 #endif
 
 	if (arm64_vbar_early_install() != 0)
@@ -293,27 +198,8 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 
 	arm64_exc_trigger_svc();
 	ir0_boot_smoke("ARM64_SVC_RET_OK");
-
-	arm64_switch_early_smoke();
-
-	if (arm64_mmu_ttbr_dual_smoke() == 0)
-	{
-		ir0_boot_smoke("ARM64_TTBR_B_OK");
-		ir0_boot_smoke("ARM64_TTBR_SWITCH_OK");
-		ir0_boot_smoke("ARM64_TTBR_PRIVATE_OK");
-	}
-	else
-	{
-		ir0_boot_smoke("ARM64_TTBR_SWITCH_FAIL");
-	}
-
-	(void)arm64_process_ttbr_smoke();
-	(void)arm64_fork_exec_smoke();
-	(void)arm64_process_t_switch_smoke();
-	(void)arm64_rr_sched_smoke();
 #endif
-	arm64_common_prepare_fdtable();
-	arm64_mmu_activate_root_a();
+	mm_activate(arm64_mmu_kernel_root());
 
 	{
 		int virtio_probe = arm64_virtio_mmio_probe();
@@ -340,20 +226,6 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 					ir0_boot_smoke("ARM64_VIRTIO_BLK_FAIL");
 				}
 			}
-
-#if defined(IR0_FREESTANDING_BOOT) || DEBUG_BOOT
-			if (arm64_virtio_mmio_find(VIRTIO_ID_NET))
-			{
-#if DEBUG_BOOT
-				if (arm64_virtio_net_init() == 0)
-					ir0_boot_smoke("ARM64_VIRTIO_NET_OK");
-				else
-					ir0_boot_smoke("ARM64_VIRTIO_NET_FAIL");
-#else
-				(void)arm64_virtio_net_init();
-#endif
-			}
-#endif
 		}
 		else if (virtio_probe == VIRTIO_MMIO_PROBE_ABSENT)
 		{
@@ -367,18 +239,3 @@ void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
 		}
 	}
 }
-
-#if defined(IR0_FREESTANDING_BOOT)
-void arm64_early_bringup(uintptr_t firmware_handle)
-{
-	arm64_platform_setup_for_portable_boot(firmware_handle);
-
-	if (arm64_guest0_el0() != 0)
-		arm64_enter_el0();
-
-	for (;;)
-	{
-		__asm__ volatile("wfi" ::: "memory");
-	}
-}
-#endif

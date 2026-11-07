@@ -545,25 +545,9 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 				     int write, uintptr_t *phys_out)
 {
 	uint64_t *pte;
-	uint64_t backend_flags;
-	uintptr_t backend_phys;
-	int backend_result;
 
 	if (!root || !phys_out)
 		return -1;
-	backend_result = mm_backend_lookup_user_page(root, page, &backend_phys,
-						     &backend_flags);
-	if (backend_result != -EOPNOTSUPP)
-	{
-		if (backend_result != 0 ||
-		    !(backend_flags & IR0_MM_MAP_PRESENT) ||
-		    !(backend_flags & IR0_MM_MAP_USER) ||
-		    (write && !(backend_flags & IR0_MM_MAP_WRITE)))
-			return -1;
-		*phys_out = backend_phys;
-		return 0;
-	}
-
 	pte = paging_get_pte(root, page);
 	if (!pte || !mm_pte_present(*pte))
 		return -1;
@@ -897,14 +881,6 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 
 	if (!root)
 		return -1;
-	if (flags & PAGE_USER)
-	{
-		int backend_result = mm_backend_map_user_page(root, virt_addr,
-							      phys_addr, flags);
-
-		if (backend_result != -EOPNOTSUPP)
-			return backend_result;
-	}
 
 	/*
 	 * USER maps over the supervisor identity window are allowed: brk growth
@@ -1012,7 +988,6 @@ int protect_user_region_in_directory(address_space_root_t root,
 {
 	uintptr_t end;
 	uintptr_t page;
-	int backend_result;
 
 	if (!root || length == 0 || (start & (PAGE_SIZE_4KB - 1U)) != 0)
 		return -1;
@@ -1023,10 +998,6 @@ int protect_user_region_in_directory(address_space_root_t root,
 		return -1;
 	end = start + length;
 	flags |= PAGE_USER;
-
-	backend_result = mm_backend_protect_user_range(root, start, length, flags);
-	if (backend_result != -EOPNOTSUPP)
-		return backend_result;
 
 	for (page = start; page < end; page += PAGE_SIZE_4KB)
 	{
@@ -1048,6 +1019,8 @@ int protect_user_region_in_directory(address_space_root_t root,
 	return 0;
 }
 
+paging_unmap_test_hook_fn paging_unmap_test_hook;
+
 /**
  * Unmap a single 4KB page in the page directory rooted at @root.
  * Safe when address-space root points at a different address space than @root.
@@ -1068,11 +1041,12 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 	if (!root)
 		return -1;
 	split = 0;
+	if (paging_unmap_test_hook)
 	{
-		int backend_result = mm_backend_unmap_user_page(root, virt_addr);
+		int hook_result = paging_unmap_test_hook(root, virt_addr);
 
-		if (backend_result != -EOPNOTSUPP)
-			return backend_result;
+		if (hook_result != -EOPNOTSUPP)
+			return hook_result;
 	}
 
 	mm_va_indices(virt_addr, idx);
@@ -1465,13 +1439,10 @@ int map_supervisor_identity_low(address_space_root_t root, uint64_t start,
  * Cheaper than 4 KiB walks for the kernel heap and PMM frame pool. Callers must
  * not overlap [0x400000, 0x600000): a 2 MiB slot there would block user ELF.
  */
-int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start,
-				uint64_t end)
+static int map_supervisor_2mb(address_space_root_t root, uint64_t start,
+			      uint64_t end, uint64_t flags, int exec)
 {
     uint64_t va;
-
-    if (!mm_large_identity_supported())
-        return map_supervisor_identity_low(root, start, end);
 
     if (!root || end <= start)
         return -1;
@@ -1506,12 +1477,31 @@ int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start,
         }
 
         entry = mm_make_leaf_pte((uintptr_t)va,
-                                 PAGE_RW | PAGE_SIZE_2MB_FLAG, 1);
+                                 flags | PAGE_SIZE_2MB_FLAG, exec);
         level2_table[idx[2]] = entry;
         ir0_mm_leaf_created++;
     }
 
     return 0;
+}
+
+int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start,
+				uint64_t end)
+{
+    if (!mm_large_identity_supported())
+        return map_supervisor_identity_low(root, start, end);
+    return map_supervisor_2mb(root, start, end, PAGE_RW, 1);
+}
+
+/*
+ * map_supervisor_device_2mb - 2 MiB uncached, non-executable supervisor
+ * identity for MMIO windows (Device memory on ARM64).
+ */
+int map_supervisor_device_2mb(address_space_root_t root, uint64_t start,
+			      uint64_t end)
+{
+    return map_supervisor_2mb(root, start, end,
+                              PAGE_RW | IR0_MM_MAP_NOCACHE, 0);
 }
 
 void paging_reclaim_user_tables(address_space_root_t root)

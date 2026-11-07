@@ -233,18 +233,39 @@ uint64_t mm_make_table_pte(uintptr_t phys, int user)
 	return e;
 }
 
+/*
+ * Stage-1 leaf descriptor (ARM DDI 0487, D8.3). An L3 page needs bits[1:0] =
+ * 0b11; an L1/L2 block uses 0b01. Normal memory takes the inner-shareable
+ * write-back MAIR slot, IR0_MM_MAP_NOCACHE the Device-nGnRnE slot. Like Linux,
+ * EL0 mappings are never executable at EL1 (PXN) and kernel mappings are
+ * never executable at EL0 (UXN).
+ */
 uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 {
 	uint64_t e = ((uint64_t)phys & A64_PTE_PFN_MASK) | A64_PTE_VALID | A64_PTE_AF;
 
+	if (!(flags12 & IR0_MM_MAP_LARGE))
+		e |= A64_PTE_TABLE;
+	if (flags12 & IR0_MM_MAP_NOCACHE)
+		e |= A64_PTE_ATTR(A64_MAIR_DEVICE);
+	else
+		e |= A64_PTE_ATTR(A64_MAIR_NORMAL) | A64_PTE_SH_INNER;
 	if (flags12 & IR0_MM_MAP_USER)
-		e |= A64_PTE_AP_EL0 | A64_PTE_NG;
+	{
+		e |= A64_PTE_AP_EL0 | A64_PTE_NG | A64_PTE_PXN;
+		if (!exec)
+			e |= A64_PTE_UXN;
+	}
+	else
+	{
+		e |= A64_PTE_UXN;
+		if (!exec)
+			e |= A64_PTE_PXN;
+	}
 	if (!(flags12 & IR0_MM_MAP_WRITE))
 		e |= A64_PTE_AP_RO;
 	if (flags12 & IR0_MM_MAP_COW)
 		e |= A64_PTE_SW_COW | A64_PTE_AP_RO;
-	if (!exec)
-		e |= A64_PTE_UXN;
 	return e;
 }
 

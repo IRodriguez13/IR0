@@ -8,7 +8,7 @@
  */
 
 #include "irq_backend.h"
-#include "mmu_early.h"
+#include "mmu.h"
 
 #include <ir0/dma.h>
 #include <ir0/errno.h>

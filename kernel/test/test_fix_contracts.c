@@ -705,9 +705,9 @@ void ktest_map_fixed_aborts_when_unmap_fails(void)
 	}
 	kept_pte = *kept;
 
-	mm_backend_unmap_hook = map_fixed_unmap_fails_one_page;
+	paging_unmap_test_hook = map_fixed_unmap_fails_one_page;
 	fixed = sys_mmap(region, 2 * PAGE_SIZE_4KB, prot, flags | MAP_FIXED, -1, 0);
-	mm_backend_unmap_hook = NULL;
+	paging_unmap_test_hook = NULL;
 
 	KASSERT(fixed == (void *)(intptr_t)(-ENOMEM));
 	KASSERT(is_page_mapped_in_directory(process_pgd(current_process), base,

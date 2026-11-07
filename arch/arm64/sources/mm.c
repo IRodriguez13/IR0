@@ -7,22 +7,25 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mm.c
- * Description: ARM64 root-table helpers (TTBR0-only identity model).
+ * Description: ARM64 address-space policy for the common MM.
  *
- * IR0 arm64 uses a single TTBR0 root (mmu_early / mm_activate) — no TTBR1
- * high-half kernel yet. Kernel/shared identity is installed by
- * process_mm_create_root() via map_supervisor_identity_low(), not by
- * copying a PML4-style kernel half. COW/unmap walks the full 512-slot root.
+ * User roots are 4-level 48-bit TTBR0 tables built and walked by the common
+ * mm/paging.c code through the descriptor encoders in mm_ops.c, exactly as on
+ * x86-64. Each root carries a supervisor identity map (DRAM window and Device
+ * blocks, see mmu.c) so exception entry runs with the process root loaded.
+ * There is no TTBR1 higher-half kernel yet.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/arch_mm.h>
 #include <ir0/mm_range.h>
-#include <ir0/oops.h>
-#include <ir0/errno.h>
+#include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
-#include "mmu_early.h"
+#include <mm/paging.h>
+#include <string.h>
+
+#include "mmu.h"
 
 uintptr_t mm_kernel_heap_start(void)
 {
@@ -42,18 +45,19 @@ uintptr_t mm_user_va_start(void)
 
 uintptr_t mm_user_va_end(void)
 {
-	/* Current 48-bit TTBR0 policy; the backend owns future VA-size changes. */
+	/* 48-bit TTBR0 (TCR_EL1.T0SZ = 16). */
 	return 0x0000FFFFFFFFFFFFUL;
 }
 
 int mm_large_identity_supported(void)
 {
-	return 0;
+	/* L2 block descriptors map the DRAM window and Device MMIO. */
+	return 1;
 }
 
 unsigned mm_user_root_slots(void)
 {
-	/* Entire TTBR0 L0 is process-owned for walk/COW (no TTBR1 split). */
+	/* TTBR0 covers only the low half: every L0 slot belongs to the root. */
 	return 512;
 }
 
@@ -66,115 +70,58 @@ void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root)
 {
 	(void)dst_root;
 	(void)src_root;
-	/*
-	 * No root-slot kernel half: TTBR1 not wired. Caller maps supervisor
-	 * identity separately (see process_mm_create_root()).
-	 */
+	/* No shared kernel half: the supervisor identity is per root (mmu.c). */
 }
 
 int mm_user_va_ok(uintptr_t addr, size_t size)
 {
-	/*
-	 * Portable mm path: same canonical low-half window as x86-64 until
-	 * TTBR0/TTBR1 split lands. Early EL0 probes still use
-	 * arm64_mmu_user_buf_ok behind their own wrappers.
-	 */
 	return mm_user_range_ok(addr, size, mm_user_va_start(),
 				mm_user_va_end());
 }
 
 address_space_root_t mm_create_user_root(void)
 {
-	return (address_space_root_t)(uintptr_t)arm64_mmu_root_alloc_clean();
+	address_space_root_t root;
+
+	root = (address_space_root_t)page_table_frame_alloc(
+		MM_ALLOC_DIRECT_RECLAIM);
+	if (!root)
+	{
+		paging_oom_note("mm_create_user_root", paging_oom_classify_current());
+		return NULL;
+	}
+	memset(root, 0, PAGE_SIZE_4KB);
+
+	if (arm64_mmu_map_supervisor(root) != 0)
+	{
+		paging_reclaim_user_tables(root);
+		page_table_frame_free((uintptr_t)root);
+		return NULL;
+	}
+
+	paging_ir0_mm_note_root_created((uintptr_t)root);
+	return root;
 }
 
 void mm_destroy_user_root(address_space_root_t root)
 {
-	if (root && arm64_mmu_root_release((uint64_t)(uintptr_t)root) != 0)
-		panic("arm64: invalid private root release");
+	if (!root)
+		return;
+	paging_reclaim_user_tables(root);
+	paging_ir0_mm_note_root_freed((uintptr_t)root);
+	page_table_frame_free((uintptr_t)root);
 }
 
 void mm_prepare_root_activation(address_space_root_t root)
 {
-	(void)root;
-	/* The staged TTBR0 maps are self-contained until root pooling lands. */
+	if (root && (uintptr_t)root != arm64_mmu_kernel_root())
+		(void)arm64_mmu_sync_supervisor(root);
 }
 
 int mm_map_platform_supervisor(address_space_root_t root)
 {
+	/* Device blocks are part of arm64_mmu_map_supervisor(). */
 	(void)root;
 	return 0;
 }
 
-int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
-			     uintptr_t pa, uint64_t flags)
-{
-	if (!root || !(flags & IR0_MM_MAP_USER) ||
-	    !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
-		return -EOPNOTSUPP;
-	return arm64_mmu_map_user_frame_in_root(
-		(uint64_t)(uintptr_t)root, va, pa,
-		!!(flags & IR0_MM_MAP_WRITE), !!(flags & IR0_MM_MAP_EXEC));
-}
-
-int mm_backend_reclaim_user_frames(address_space_root_t root,
-				   uint64_t *reclaimed_pages)
-{
-	uint64_t reclaimed = 0;
-	uint64_t phys;
-	int ret;
-
-	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
-		return -EOPNOTSUPP;
-	while ((ret = arm64_mmu_take_owned_user_frame(
-		(uint64_t)(uintptr_t)root, &phys)) == 0)
-	{
-		pmm_free_frame((uintptr_t)phys);
-		reclaimed++;
-	}
-	if (ret != -EINVAL)
-		return ret;
-	if (reclaimed_pages)
-		*reclaimed_pages = reclaimed;
-	return 0;
-}
-
-mm_backend_unmap_hook_fn mm_backend_unmap_hook;
-
-int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va)
-{
-	if (mm_backend_unmap_hook)
-		return mm_backend_unmap_hook(root, va);
-	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
-		return -EOPNOTSUPP;
-	return arm64_mmu_unmap_user_page_in_root((uint64_t)(uintptr_t)root, va);
-}
-
-int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
-				uintptr_t *phys, uint64_t *flags)
-{
-	uint64_t arm64_phys;
-	int ret;
-
-	if (!root || !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
-		return -EOPNOTSUPP;
-	ret = arm64_mmu_user_page_info_in_root((uint64_t)(uintptr_t)root, va,
-						   &arm64_phys, flags);
-	if (ret != 0)
-		return ret;
-	if (!phys)
-		return -EINVAL;
-	*phys = (uintptr_t)arm64_phys;
-	return 0;
-}
-
-int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
-				  size_t length, uint64_t flags)
-{
-	if (!root || !(flags & IR0_MM_MAP_USER) ||
-	    !arm64_mmu_root_owned((uint64_t)(uintptr_t)root))
-		return -EOPNOTSUPP;
-	return arm64_mmu_protect_user_range_in_root(
-		(uint64_t)(uintptr_t)root, start, length,
-		!!(flags & IR0_MM_MAP_WRITE), !!(flags & IR0_MM_MAP_EXEC));
-}

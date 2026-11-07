@@ -81,6 +81,19 @@ int context_try_resume_user_frame(task_t *prev, task_t *next)
 		return 0;
 
 	proc = next ? task_to_process(next) : NULL;
+	if (!context_backend_resumes_user_frame())
+	{
+		/*
+		 * The task kept its kernel continuation on its own stack: finish
+		 * the syscall there instead of dropping it for the user frame.
+		 */
+		if (proc)
+		{
+			proc->irq_frame_saved = 0;
+			proc->coop_resched_resume = 0;
+		}
+		return 0;
+	}
 	prev_proc = prev ? task_to_process(prev) : NULL;
 	context_backend_trace_user_frame_resume(prev_proc, proc, next);
 	return context_resume_user_frame(prev, next);

@@ -145,6 +145,15 @@ int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr);
 int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr);
 
 /*
+ * Test double consulted first by unmap_page_in_directory(). NULL in
+ * production. Return -EOPNOTSUPP to fall through to the table walker; any
+ * other value is the unmap result and the walker does not run.
+ */
+typedef int (*paging_unmap_test_hook_fn)(address_space_root_t root,
+					 uintptr_t virt_addr);
+extern paging_unmap_test_hook_fn paging_unmap_test_hook;
+
+/*
  * ktest-only: poison a page table just before it is freed, so a walk that
  * keeps reading through a stale pointer is detected. Off by default.
  */
@@ -178,6 +187,8 @@ int map_supervisor_identity_low(address_space_root_t root, uint64_t start, uint6
  * physical VA under process address-space root.
  */
 int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start, uint64_t end);
+/* Supervisor-only 2 MiB uncached, non-executable identity for MMIO windows. */
+int map_supervisor_device_2mb(address_space_root_t root, uint64_t start, uint64_t end);
 
 /* Copy/zero user VAs via page-table walk (kernel address-space root, no user address-space root switch) */
 int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,

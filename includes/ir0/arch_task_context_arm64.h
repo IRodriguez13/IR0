@@ -54,7 +54,18 @@ typedef struct arch_task_context
 	uint64_t elr_el1;
 	uint64_t spsr_el1;
 	uint64_t ttbr0_el1;
+	/*
+	 * Kernel continuation saved by arm64_cpu_switch (Linux
+	 * thread.cpu_context): x19..x30 then SP. Kept apart from the user
+	 * return state above, which it used to overlay.
+	 */
+	uint64_t kctx[13];
+	/* Non-zero once kctx holds a real continuation of this task. */
+	uint64_t kctx_valid;
 } arch_task_context_t;
+
+#define ARM64_KCTX_LR 11
+#define ARM64_KCTX_SP 12
 
 #define TASK_CONTEXT_ASSERT_LAYOUT(task_type) \
 	_Static_assert(sizeof(task_type) >= sizeof(arch_task_context_t), \

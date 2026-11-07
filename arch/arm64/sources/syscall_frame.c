@@ -17,6 +17,7 @@
 #include <ir0/errno.h>
 #include <kernel/process.h>
 #include <stddef.h>
+#include <asm/exc_frame.h>
 #include <string.h>
 
 static void arm64_copy_exc_gprs(arch_syscall_frame_t *sf, const uint64_t *frame)
@@ -39,9 +40,9 @@ void syscall_capture_frame_at_entry(struct process *p,
 	sf = &p->syscall_frame;
 	arm64_copy_exc_gprs(sf, frame_base);
 
-	__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-	__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
+	elr = frame_base[ARM64_EXC_IDX_ELR];
+	spsr = frame_base[ARM64_EXC_IDX_SPSR];
+	sp_el0 = frame_base[ARM64_EXC_IDX_SP];
 
 	sf->elr = elr;
 	if (!sf->elr && rip_hw)
@@ -63,20 +64,18 @@ void syscall_restore_exit_regs(struct process *p,
 	sf = &p->syscall_frame;
 	memcpy(stack_r9_slot, &sf->x0, 31 * sizeof(uint64_t));
 
-	__asm__ volatile("msr elr_el1, %0" :: "r"(sf->elr) : "memory");
-	__asm__ volatile("msr spsr_el1, %0" :: "r"(sf->spsr) : "memory");
-	__asm__ volatile("msr sp_el0, %0" :: "r"(sf->sp) : "memory");
+	/* @stack_r9_slot is the exception frame base; eret reloads these. */
+	stack_r9_slot[ARM64_EXC_IDX_ELR] = sf->elr;
+	stack_r9_slot[ARM64_EXC_IDX_SPSR] = sf->spsr;
+	stack_r9_slot[ARM64_EXC_IDX_SP] = sf->sp;
 }
 
 int exception_frame_is_user(const void *opaque_frame)
 {
-	uint64_t spsr;
+	const uint64_t *frame = opaque_frame;
 
-	(void)opaque_frame;
-	/*
-	 * SPSR_EL1.M[3:0] == 0 → EL0t (AArch64). Frame pointer alone does not
-	 * encode privilege; exception entry left SPSR in the system register.
-	 */
-	__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-	return ((spsr & 0xfu) == 0u) ? 1 : 0;
+	/* SPSR_EL1.M[3:0] == 0 → EL0t (AArch64). */
+	if (!frame)
+		return 0;
+	return (frame[ARM64_EXC_IDX_SPSR] & 0xfu) == 0u;
 }

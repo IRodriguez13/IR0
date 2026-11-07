@@ -113,39 +113,5 @@ void mm_destroy_user_root(address_space_root_t root);
 /* Prepare ISA-private shared mappings before a root becomes current. */
 void mm_prepare_root_activation(address_space_root_t root);
 
-/*
- * Optional backend-owned user mapping. Return -EOPNOTSUPP when @root belongs
- * to the generic walker; otherwise return 0 or a negative errno.
- */
-int mm_backend_map_user_page(address_space_root_t root, uintptr_t va,
-			     uintptr_t pa, uint64_t flags);
-int mm_backend_unmap_user_page(address_space_root_t root, uintptr_t va);
-
-/*
- * Test double consulted before the ISA backend. NULL in production.
- * Return -EOPNOTSUPP to fall through to the real backend. Any other
- * value is the unmap result and the generic walker does not run.
- */
-typedef int (*mm_backend_unmap_hook_fn)(address_space_root_t root, uintptr_t va);
-extern mm_backend_unmap_hook_fn mm_backend_unmap_hook;
-
-/*
- * Resolve an owned user leaf without exposing translation-table layout to the
- * generic uaccess path. Return -EOPNOTSUPP for generic-walker roots.
- */
-int mm_backend_lookup_user_page(address_space_root_t root, uintptr_t va,
-				uintptr_t *phys, uint64_t *flags);
-
-/* Apply final user permissions to backend-owned leaves. */
-int mm_backend_protect_user_range(address_space_root_t root, uintptr_t start,
-				  size_t length, uint64_t flags);
-
-/*
- * Retire user frames owned by an ISA-private translation root.  Backends must
- * return -EOPNOTSUPP for roots handled by the common table walker.
- */
-int mm_backend_reclaim_user_frames(address_space_root_t root,
-				   uint64_t *reclaimed_pages);
-
 /* Install board/ISA-owned supervisor MMIO mappings in a process root. */
 int mm_map_platform_supervisor(address_space_root_t root);

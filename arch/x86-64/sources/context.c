@@ -131,6 +131,12 @@ void x86_prepare_task_user_return(process_t *proc)
 	arch_repair_user_gprs_from_syscall_frame(proc, &proc->task);
 }
 
+int context_backend_resumes_user_frame(void)
+{
+	/* Syscalls run on the shared kernel_syscall_stack (syscall_64.asm). */
+	return 1;
+}
+
 int context_backend_checkpoint(task_t *prev)
 {
 	if (!prev)

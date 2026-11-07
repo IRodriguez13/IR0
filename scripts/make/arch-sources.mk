@@ -77,19 +77,10 @@ ARM64_INTERFACE_OBJS_PRODUCT = \
 
 # ISA entry retained in the product image (name “early” is historical).
 ARM64_PRODUCT_ENTRY_OBJS = \
-	arch/arm64/sources/mmu_early.o \
+	arch/arm64/sources/mmu.o \
 	arch/arm64/sources/exc_early.o \
 	arch/arm64/sources/portable_string.o \
 	arch/arm64/asm/entry/vectors.o
-
-# Freestanding/bring-up-only — not linked into kernel-arm64-product.bin.
-ARM64_EARLY_SYSCALL_OBJS = \
-	arch/arm64/sources/usercopy_early.o \
-	arch/arm64/sources/syscall_early.o \
-	arch/arm64/sources/boot_stub.o \
-	arch/arm64/sources/slice_hello.o \
-	arch/arm64/sources/syscall_stub.o \
-	arch/arm64/sources/elf_image_early.o
 
 # Architecture implementations of the generic process, MM and context facade.
 ARM64_PROCESS_BACKEND_OBJS = \
@@ -109,42 +100,15 @@ ARM64_PROCESS_BACKEND_OBJS = \
 	arch/arm64/sources/user_mode.o \
 	arch/arm64/sources/acpi_pm_stub.o
 
-# Minimal runtime services needed before the complete kernel service graph is
-# available. These are real freestanding providers, not link-only shims.
-ARM64_FREESTANDING_RUNTIME_OBJS = \
-	arch/arm64/sources/freestanding_stubs.o \
-	arch/arm64/asm/context/switch_early.o \
-	arch/arm64/sources/switch_early.o \
-	arch/arm64/sources/process_early.o
-
 # Product needs the cooperative switch asm + mm helper (historical “early” names).
 ARM64_PRODUCT_SWITCH_OBJS = \
 	arch/arm64/asm/context/switch_early.o \
 	arch/arm64/sources/switch_early.o
 
-# Bring-up scheduler/process harness — freestanding only.
-ARM64_EARLY_SCHEDULER_OBJS = \
-	$(ARM64_PRODUCT_SWITCH_OBJS) \
-	arch/arm64/sources/process_early.o \
-	arch/arm64/sources/rr_early.o
-
-# Embedded hello / early exec — freestanding only.
-ARM64_EARLY_USERSPACE_OBJS = \
-	arch/arm64/sources/elf_load_early.o \
-	arch/arm64/sources/hello_embed.o \
-	arch/arm64/sources/embedded_elf_early.o \
-	arch/arm64/sources/init_handoff_early.o \
-	arch/arm64/sources/rootfs_early.o \
-	arch/arm64/sources/embedded_elf_embed.o
-
-# Product keeps virtio-blk (CPIO/vda); virtio-net early stays freestanding-only.
+# Product keeps virtio-blk (CPIO/vda).
 ARM64_PRODUCT_STORAGE_OBJS = \
 	arch/arm64/sources/virtio_blk_early.o \
 	drivers/virtio/virtio_mmio.o
-
-ARM64_EARLY_STORAGE_OBJS = \
-	$(ARM64_PRODUCT_STORAGE_OBJS) \
-	arch/arm64/sources/virtio_net_early.o
 
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \

@@ -30,14 +30,10 @@
 #include <ir0/clock.h>
 #include <ir0/oops.h>
 #include <ir0/signals.h>
+#include <ir0/page_fault.h>
+#include <ir0/tls.h>
+#include <asm/exc_frame.h>
 
-#if defined(IR0_FREESTANDING_BOOT)
-#include "syscall_early.h"
-#include "elf_load_early.h"
-#include "rr_early.h"
-#include <ir0/early_process.h>
-#include <ir0/early_rootfs.h>
-#endif
 
 /* ESR_EL1: EC 0x15 = SVC instruction from AArch64. */
 #define ESR_EC_SHIFT 26
@@ -48,37 +44,24 @@
 #define ESR_EC_PC_ALIGN 0x22UL
 #define ESR_EC_SP_ALIGN 0x26UL
 #define ESR_EC_DABT_LOWER 0x24UL
+#define ESR_EC_IABT_CUR 0x21UL
+#define ESR_EC_DABT_CUR 0x25UL
 #define ESR_EC_BRK64 0x3CUL
-
-/* SPSR_EL1: DAIF masked + mode. */
-#define SPSR_DAIF_MASKED 0x3C0UL
-#define SPSR_MODE_EL0T   0x00UL
-#define SPSR_MODE_EL1H   0x05UL
 
 /* PSCI 0.2 (SMC Calling Convention) — QEMU virt uses HVC conduit at EL1. */
 #define PSCI_0_2_FN_SYSTEM_OFF   0x84000008UL
 #define PSCI_0_2_FN_SYSTEM_RESET 0x84000009UL
 
-#define EL0_STACK_SIZE 4096
-
 extern char ir0_el1_vectors[];
-extern void el0_entry(void);
 
-#if !defined(IR0_FREESTANDING_BOOT)
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 			 uint64_t arg3, uint64_t arg4, uint64_t arg5,
 			 uint64_t arg6);
-#endif
-
-uint8_t el0_stack[EL0_STACK_SIZE] __attribute__((aligned(16)));
 
 static volatile int g_timer_irq_seen;
 static int g_el0_svc_tagged;
-static int g_sync_other_tagged;
 
 extern process_t *current_process;
-
-#define RR_TICK_ONESHOT_TICKS 10000U
 
 static void exc_put_hex64(uint64_t value)
 {
@@ -139,6 +122,8 @@ void arm64_exc_trigger_svc(void)
 	__asm__ volatile("svc #0" ::: "memory");
 }
 
+static void arm64_abort_to_common_mm(uint64_t esr, uint64_t *frame);
+
 void arm64_exc_sync_el1(void)
 {
 	uint64_t esr;
@@ -148,25 +133,27 @@ void arm64_exc_sync_el1(void)
 	{
 		ir0_boot_smoke("ARM64_VBAR_OK");
 	}
+	else if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_IABT_CUR ||
+		 ((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_DABT_CUR)
+	{
+		/* Kernel abort: uaccess SIGSEGV or panic, decided by common MM. */
+		arm64_abort_to_common_mm(esr, NULL);
+	}
 	else
 	{
-		if (!g_sync_other_tagged)
-		{
-			uint64_t elr;
-			uint64_t far;
+		uint64_t elr;
+		uint64_t far;
 
-			g_sync_other_tagged = 1;
-			ir0_boot_smoke("ARM64_SYNC_OTHER");
-			__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-			__asm__ volatile("mrs %0, far_el1" : "=r"(far));
-			pl011_puts("ARM64_EL1_ESR_");
-			exc_put_hex64(esr);
-			pl011_puts("_ELR_");
-			exc_put_hex64(elr);
-			pl011_puts("_FAR_");
-			exc_put_hex64(far);
-			pl011_putc('\n');
-		}
+		__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
+		__asm__ volatile("mrs %0, far_el1" : "=r"(far));
+		pl011_puts("ARM64_EL1_ESR_");
+		exc_put_hex64(esr);
+		pl011_puts("_ELR_");
+		exc_put_hex64(elr);
+		pl011_puts("_FAR_");
+		exc_put_hex64(far);
+		pl011_putc('\n');
+		panic("arm64: unhandled EL1 synchronous exception");
 	}
 }
 
@@ -174,10 +161,6 @@ void arm64_exc_irq_el1(void)
 {
 	uint32_t iar = arm64_irq_backend_ack();
 	uint32_t irq = iar & 0x3ffU;
-#if defined(IR0_FREESTANDING_BOOT)
-	int schedule_tick = 0;
-	process_t *before = NULL;
-#endif
 
 	cpu_local_irq_enter();
 
@@ -191,25 +174,15 @@ void arm64_exc_irq_el1(void)
 			ir0_boot_smoke("ARM64_TIMER_IRQ_OK");
 		}
 
-#if !defined(IR0_FREESTANDING_BOOT)
 		if (clock_is_ready())
 		{
 			clock_note_irq();
 			clock_tick();
 			arch_timer_periodic_arm();
 		}
-#else
-		if (arm64_rr_tick_sched_active())
-		{
-			before = current_process;
-			schedule_tick = 1;
-		}
-#endif
 	}
-#if !defined(IR0_FREESTANDING_BOOT)
 	else
 		(void)irq_dispatch(irq);
-#endif
 
 	if (irq < 1020U)
 	{
@@ -217,50 +190,45 @@ void arm64_exc_irq_el1(void)
 	}
 
 	(void)cpu_local_irq_leave();
-
-#if defined(IR0_FREESTANDING_BOOT)
-	if (schedule_tick)
-	{
-		sched_schedule_next();
-		if (current_process == before)
-			arch_timer_oneshot_arm(RR_TICK_ONESHOT_TICKS);
-	}
-#else
-	(void)current_process;
-	(void)RR_TICK_ONESHOT_TICKS;
-#endif
 }
 
-#if defined(IR0_FREESTANDING_BOOT)
-void arm64_after_el0(void);
-
-static void arm64_early_exec_replace(void)
-{
-	char *const *argv = early_rootfs_exec_argv();
-
-	early_rootfs_exec_clear();
-	ir0_boot_smoke("ARM64_EXECVE_OK");
-	if (argv)
-		arm64_embedded_elf_enter((char *const *)argv);
-	arm64_after_el0();
-}
-#endif
-
-#if !defined(IR0_FREESTANDING_BOOT)
 /*
- * EL0 synchronous exception that is not a syscall and not yet routed to the
- * common MM fault path: terminate the task with the Linux signal for that
- * class (arch/arm64/mm/fault.c, kernel/traps.c). Returning would replay the
- * faulting instruction forever.
+ * Instruction/data abort: decode ESR/FAR and run the common demand-paging,
+ * COW and SIGSEGV policy, as x86 does from its #PF vector.
  */
-static void arm64_el0_fault_kill(uint64_t ec)
+static void arm64_abort_to_common_mm(uint64_t esr, uint64_t *frame)
+{
+	struct page_fault_info info;
+
+	if (page_fault_decode(&info, esr, frame) != 0)
+		panic("arm64: abort decode failed");
+	mm_page_fault_handle(&info, frame);
+}
+
+/*
+ * EL0 synchronous exception that is neither a syscall nor an abort:
+ * terminate the task with the Linux signal for that class
+ * (arch/arm64/kernel/traps.c). Returning would replay the instruction
+ * forever.
+ */
+static void arm64_el0_fault_kill(uint64_t esr)
 {
 	process_t *p = current_process;
+	uint64_t ec = (esr >> ESR_EC_SHIFT) & ESR_EC_MASK;
+	uint64_t far;
+	uint64_t elr;
+	uint64_t sp_el0;
 	int sig;
 
-	if (ec == ESR_EC_IABT_LOWER || ec == ESR_EC_DABT_LOWER)
-		sig = SIGSEGV;
-	else if (ec == ESR_EC_BRK64)
+	__asm__ volatile("mrs %0, far_el1" : "=r"(far));
+	__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
+	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
+	/* Vector 6 = invalid-opcode class in the shared fault log. */
+	ir0_log_user_fault_frame(6U, far, esr, elr, 0, sp_el0, 0, 0, 0,
+				 p ? (unsigned)p->task.pid : 0U,
+				 p ? p->comm : "(none)");
+
+	if (ec == ESR_EC_BRK64)
 		sig = SIGTRAP;
 	else if (ec == ESR_EC_PC_ALIGN || ec == ESR_EC_SP_ALIGN)
 		sig = SIGBUS;
@@ -275,15 +243,11 @@ static void arm64_el0_fault_kill(uint64_t ec)
 		process_exit(0);
 	}
 }
-#endif
 
 void arm64_exc_sync_lower(uint64_t *frame)
 {
 	uint64_t esr;
 	int64_t ret;
-#if defined(IR0_FREESTANDING_BOOT)
-	int leave = 0;
-#endif
 
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) != ESR_EC_SVC64)
@@ -315,13 +279,11 @@ void arm64_exc_sync_lower(uint64_t *frame)
 			exc_put_hex64(esr);
 			pl011_puts("\n");
 		}
-#if defined(IR0_FREESTANDING_BOOT)
-		leave = 1;
-		goto freestanding_leave;
-#else
-		arm64_el0_fault_kill(ec);
+		if (ec == ESR_EC_IABT_LOWER || ec == ESR_EC_DABT_LOWER)
+			arm64_abort_to_common_mm(esr, frame);
+		else
+			arm64_el0_fault_kill(esr);
 		return;
-#endif
 	}
 
 	if (!g_el0_svc_tagged)
@@ -337,190 +299,14 @@ void arm64_exc_sync_lower(uint64_t *frame)
 	 * frame: x0@0 … x30 in the 256-byte stub slot (vectors.S);
 	 * x8 = syscall number. Return value in frame[0].
 	 */
-#if defined(IR0_FREESTANDING_BOOT)
-	ret = arm64_syscall_early(frame[8], frame[0], frame[1], frame[2],
-				  frame[3], frame[4], frame[5], &leave);
-	frame[0] = (uint64_t)ret;
-
-	{
-		uint64_t stack = 0;
-		uint64_t tls = 0;
-
-		if (early_process_clone_take_enter(&stack, &tls))
-		{
-			uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
-			unsigned int i;
-			uint64_t elr;
-			uint64_t spsr;
-			uint64_t sp0;
-
-			for (i = 0; i < 31; i++)
-				words[i] = frame[i];
-			__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-			__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-			__asm__ volatile("mrs %0, sp_el0" : "=r"(sp0));
-			words[31] = elr;
-			words[32] = spsr;
-			words[33] = sp0;
-			early_process_clone_save_parent(words);
-			frame[0] = 0;
-			if (stack)
-				__asm__ volatile("msr sp_el0, %0" :: "r"(stack)
-						 : "memory");
-			if (tls)
-				__asm__ volatile("msr tpidr_el0, %0" :: "r"(tls)
-						 : "memory");
-		}
-		else
-		{
-			uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
-			unsigned int i;
-			uint64_t elr;
-			uint64_t spsr;
-			uint64_t sp0;
-
-			for (i = 0; i < 31; i++)
-				words[i] = frame[i];
-			__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-			__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-			__asm__ volatile("mrs %0, sp_el0" : "=r"(sp0));
-			words[31] = elr;
-			words[32] = spsr;
-			words[33] = sp0;
-			if (early_process_take_yield(words))
-			{
-				for (i = 0; i < 31; i++)
-					frame[i] = words[i];
-				__asm__ volatile("msr elr_el1, %0" ::
-						 "r"(words[31])
-						 : "memory");
-				__asm__ volatile("msr spsr_el1, %0" ::
-						 "r"(words[32])
-						 : "memory");
-				__asm__ volatile("msr sp_el0, %0" ::
-						 "r"(words[33])
-						 : "memory");
-				__asm__ volatile("isb" ::: "memory");
-				leave = 0;
-				if (early_rootfs_exec_pending())
-					leave = 1;
-				if (early_process_block_wait_observed())
-					ir0_boot_smoke("ARM64_BLOCK_WAIT_OK");
-			}
-		}
-	}
-
-	if (leave)
-	{
-		uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
-		unsigned int i;
-		uint64_t elr;
-		uint64_t spsr;
-		uint64_t sp0;
-
-		for (i = 0; i < 31; i++)
-			words[i] = frame[i];
-		__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-		__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-		__asm__ volatile("mrs %0, sp_el0" : "=r"(sp0));
-		words[31] = elr;
-		words[32] = spsr;
-		words[33] = sp0;
-		if (early_process_vfork_exec_resume(words))
-		{
-			for (i = 0; i < 31; i++)
-				frame[i] = words[i];
-			__asm__ volatile("msr elr_el1, %0" :: "r"(words[31])
-					 : "memory");
-			__asm__ volatile("msr spsr_el1, %0" :: "r"(words[32])
-					 : "memory");
-			__asm__ volatile("msr sp_el0, %0" :: "r"(words[33])
-					 : "memory");
-			__asm__ volatile("isb" ::: "memory");
-			leave = 0;
-			ir0_boot_smoke("ARM64_VFORK_EXEC_OK");
-		}
-	}
-
-	if (leave && !early_rootfs_exec_pending())
-	{
-		uint64_t words[IR0_EARLY_EL0_FRAME_WORDS];
-
-		if (early_process_clone_resume_parent(words))
-		{
-			unsigned int i;
-
-			for (i = 0; i < 31; i++)
-				frame[i] = words[i];
-			__asm__ volatile("msr elr_el1, %0" :: "r"(words[31])
-					 : "memory");
-			__asm__ volatile("msr spsr_el1, %0" :: "r"(words[32])
-					 : "memory");
-			__asm__ volatile("msr sp_el0, %0" :: "r"(words[33])
-					 : "memory");
-			__asm__ volatile("isb" ::: "memory");
-			leave = 0;
-		}
-	}
-
-freestanding_leave:
-	if (leave)
-	{
-		uint64_t elr;
-		uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL1H;
-
-		if (early_rootfs_exec_pending())
-			elr = (uint64_t)(uintptr_t)arm64_early_exec_replace;
-		else if (arm64_early_guest_active())
-			elr = (uint64_t)(uintptr_t)arm64_early_guest_leave;
-		else
-			elr = (uint64_t)(uintptr_t)arm64_after_el0;
-
-		__asm__ volatile("msr elr_el1, %0" :: "r"(elr) : "memory");
-		__asm__ volatile("msr spsr_el1, %0" :: "r"(spsr) : "memory");
-		__asm__ volatile("isb" ::: "memory");
-	}
-#else
+	/*
+	 * Same entry contract as x86 syscall_64.asm: snapshot the user frame
+	 * (fork, clone, sigreturn and restart read p->syscall_frame), dispatch,
+	 * then reload the thread pointer of whichever task returns to EL0.
+	 */
+	process_capture_syscall_frame_at_entry(frame, frame[ARM64_EXC_IDX_ELR]);
 	ret = syscall_dispatch(frame[8], frame[0], frame[1], frame[2],
 			       frame[3], frame[4], frame[5]);
 	frame[0] = (uint64_t)ret;
-#endif
+	tls_restore_current();
 }
-
-#if defined(IR0_FREESTANDING_BOOT)
-void arm64_after_el0(void)
-{
-	ir0_boot_smoke("ARM64_EL0_RET_OK");
-	arm64_psci_system_off();
-}
-
-void arm64_enter_el0(void)
-{
-	uint64_t sp0 = (uint64_t)(uintptr_t)&el0_stack[EL0_STACK_SIZE];
-	uint64_t elr = (uint64_t)(uintptr_t)el0_entry;
-	uint64_t spsr = SPSR_DAIF_MASKED | SPSR_MODE_EL0T;
-
-	arm64_common_prepare_final_el0();
-	ir0_boot_smoke("ARM64_EL0_DROP");
-
-	__asm__ volatile(
-		"msr	sp_el0, %0\n"
-		"msr	elr_el1, %1\n"
-		"msr	spsr_el1, %2\n"
-		"isb\n"
-		"eret\n"
-		:
-		: "r"(sp0), "r"(elr), "r"(spsr)
-		: "memory");
-	__builtin_unreachable();
-}
-#else
-void arm64_after_el0(void)
-{
-}
-
-void arm64_enter_el0(void)
-{
-	arm64_psci_system_off();
-}
-#endif

@@ -39,6 +39,8 @@ int fork_prepare_child_return(struct process *child, struct process *parent)
 {
 	if (!child)
 		return 0;
+	/* The child starts fresh: never resume the parent's kernel continuation. */
+	child->task.arch.kctx_valid = 0;
 
 	if (parent && parent->mode == USER_MODE)
 		process_apply_syscall_frame_to_task(&child->task,

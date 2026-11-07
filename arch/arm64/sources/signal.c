@@ -19,6 +19,7 @@
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
 #include <stdint.h>
+#include <asm/exc_frame.h>
 #include <string.h>
 
 uint64_t sigcontext_ip(const struct sigcontext *ctx)
@@ -138,10 +139,11 @@ void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 	for (i = 0; i < 31; i++)
 		ctx->regs[i] = frame[i];
 
+	/* Return state comes from the saved frame (asm/exc_frame.h). */
 	__asm__ volatile("mrs %0, far_el1" : "=r"(far));
-	__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-	__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
+	elr = frame[ARM64_EXC_IDX_ELR];
+	spsr = frame[ARM64_EXC_IDX_SPSR];
+	sp_el0 = frame[ARM64_EXC_IDX_SP];
 	ctx->fault_address = far;
 	ctx->pc = elr;
 	ctx->pstate = spsr;
@@ -150,11 +152,7 @@ void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 
 uint64_t irq_frame_sp(const uint64_t *frame)
 {
-	uint64_t sp_el0;
-
-	(void)frame;
-	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
-	return sp_el0;
+	return frame ? frame[ARM64_EXC_IDX_SP] : 0;
 }
 
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
@@ -179,9 +177,9 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 		frame[2] = 0;
 	}
 
-	__asm__ volatile("msr elr_el1, %0" :: "r"(elr) : "memory");
-	__asm__ volatile("msr sp_el0, %0" :: "r"(new_rsp) : "memory");
-	__asm__ volatile("isb" ::: "memory");
+	/* vectors.S restores ELR/SP_EL0 from the frame on eret. */
+	frame[ARM64_EXC_IDX_ELR] = elr;
+	frame[ARM64_EXC_IDX_SP] = new_rsp;
 }
 
 void signal_prepare_task_handler(task_t *t, void *handler, int sig,
