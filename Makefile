@@ -443,6 +443,8 @@ KERNEL_OBJS = \
 	ipc/early_unix.o \
 	ipc/product_ipc.o \
 	kernel/syscalls/product_vfs.o \
+	kernel/syscalls/early_process_state.o \
+	kernel/syscalls/early_process_helpers.o \
 	kernel/syscalls/early_process.o \
 	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \
