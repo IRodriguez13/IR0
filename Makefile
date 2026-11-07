@@ -412,6 +412,9 @@ KERNEL_OBJS = \
     kernel/syscalls/fs_path_syscalls.o \
     kernel/syscalls/validate_user.o \
     kernel/syscalls/mm_syscalls.o \
+    kernel/syscalls/mm_vma.o \
+    kernel/syscalls/mm_brk.o \
+    kernel/syscalls/swap_syscalls.o \
     kernel/syscalls/socket_syscalls.o \
     kernel/syscalls/process_syscalls.o \
     kernel/syscalls/io_syscalls.o \
