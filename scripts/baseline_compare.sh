@@ -83,10 +83,20 @@ fi
 prepare "$work/base"
 prepare "$work/patched"
 
+# Host tests find the sibling ISD checkout relative to the tree
+# (tests/host/Makefile: $(KERNEL_ROOT)/../ISD); a throwaway tree has no
+# sibling, so pass the caller's ISD explicitly when it exists.
+isd_root=${IR0_ISD_ROOT:-}
+if [ -z "$isd_root" ] && [ -d "$root/../ISD" ]; then
+	isd_root=$(cd "$root/../ISD" && pwd -P)
+fi
+
 run()
 {
 	name=$1; shift
-	if (cd "$work/$name" && make "$@") >"$work/$name.log" 2>&1; then
+	if (cd "$work/$name" &&
+	    if [ -n "$isd_root" ]; then IR0_ISD_ROOT=$isd_root; export IR0_ISD_ROOT; fi &&
+	    make "$@") >"$work/$name.log" 2>&1; then
 		echo 0
 	else
 		echo 1
