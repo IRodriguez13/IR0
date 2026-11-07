@@ -34,5 +34,5 @@ bool ktm_fault_should_fail(const char *name);
 	!defined(IR0_FREESTANDING_BOOT)
 #define KTM_FAULT_HIT(name) ktm_fault_should_fail(name)
 #else
-#define KTM_FAULT_HIT(name) (0)
+#define KTM_FAULT_HIT(name) ((void)(name), 0)
 #endif
