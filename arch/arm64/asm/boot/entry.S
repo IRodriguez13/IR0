@@ -5,6 +5,8 @@
  * normalize an EL2 firmware entry to EL1h, then establish the C stack. No
  * compiler-generated prologue is allowed before x0 has been saved.
  */
+#include <asm/boot.h>
+
 
 	.section .text.boot, "ax"
 	.align  3
@@ -65,7 +67,7 @@ _start:
 	msr	daifset, #0xf
 	adrp	x1, boot_stack
 	add	x1, x1, :lo12:boot_stack
-	add	sp, x1, #1, lsl #12
+	add	sp, x1, #(ARM64_BOOT_STACK_SIZE >> 12), lsl #12
 	/* Firmware handle was saved early; EL2/EL3 paths may clobber x0. */
 	adrp	x2, arm64_firmware_fdt
 	add	x2, x2, :lo12:arm64_firmware_fdt

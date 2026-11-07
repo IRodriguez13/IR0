@@ -19,6 +19,7 @@
 
 #include <arch/common/arch_portable.h>
 #include <arm64_board.h>
+#include <asm/boot.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
 #include <ir0/percpu.h>
@@ -36,7 +37,7 @@
 #include "virtio_net_early.h"
 #endif
 
-#define BOOT_STACK_SIZE 4096
+#define BOOT_STACK_SIZE ARM64_BOOT_STACK_SIZE
 uint8_t boot_stack[BOOT_STACK_SIZE] __attribute__((aligned(16)));
 
 #define VIRT_GIC_DIST 0x08000000UL
