@@ -37,8 +37,6 @@
 _Static_assert(sizeof(struct ir0_termios) == 36,
 	       "ir0_termios must match Linux uapi termios for TCGETS");
 
-extern void kernel_idle_poll(void);
-
 #define IR0_TTY_MAX_READ_WAITERS 8
 #define IR0_TTY_ECHO_COLOR       0x07u
 #define IR0_TTY_CANON_MAX        256

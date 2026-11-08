@@ -16,9 +16,9 @@
 #include <ir0/oops.h>
 #include <ir0/video_backend.h>
 #include <ir0/ktm/checkpoint.h>
+#include <ir0/serial_io.h>
 
 /* From freestanding_stubs / serial when linked with boot image. */
-extern void serial_print(const char *s);
 
 void __attribute__((weak)) panicex(const char *message, panic_level_t level,
 				   const char *file, int line,

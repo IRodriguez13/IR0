@@ -28,15 +28,6 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 
-/* Forward declarations for driver registration functions */
-/* These are defined in the Rust/C++ driver source files */
-
-/* Rust drivers */
-extern void* register_rust_simple_driver(void);
-
-/* C++ drivers */
-extern ir0_driver_t* register_cpp_example_driver(void);
-
 /**
  * Register all multi-language example drivers
  * 

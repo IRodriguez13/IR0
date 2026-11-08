@@ -9,8 +9,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm_internal.h>
-
-extern void paging_oom_audit(const char *tag);
+#include <mm/paging.h>
+#include "scenarios.h"
 
 static int scenario_mm_oom_class_run(ktm_context_t *ctx)
 {

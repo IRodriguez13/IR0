@@ -11,6 +11,7 @@
 #include <ktm_internal.h>
 #include <ir0/errno.h>
 #include <ir0/pipe.h>
+#include "scenarios.h"
 #include <string.h>
 
 static int scenario_pipe_lifecycle_run(ktm_context_t *ctx)

@@ -30,6 +30,9 @@
 #include <ir0/input_backend.h>
 #include <mm/paging.h>
 #include <string.h>
+#include <interrupt/keyboard.h>
+#include <drivers/timer/pit/pit.h>
+#include <arch/x86-64/sources/fault.h>
 #if CONFIG_ENABLE_SOUND
 #include <ir0/sound_blaster.h>
 #endif
@@ -38,11 +41,6 @@
 #endif
 
 /* Declaraciones externas para el nuevo driver de teclado */
-extern void keyboard_handler64(void);
-extern void increment_pit_ticks(void);
-extern void page_fault_handler_x64(uint64_t *stack);
-extern void gpf_audit_from_isr(uint64_t *stack);
-extern uintptr_t paging_current_address_space(void);
 extern uint64_t iretq_checkpoint_buf[40];
 extern uint64_t isr_abi_entry_intno;
 extern uint64_t isr_abi_entry_has_err;

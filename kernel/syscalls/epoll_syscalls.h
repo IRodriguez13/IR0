@@ -18,6 +18,7 @@
 #include <ir0/select.h>
 #include <ir0/time.h>
 #include <stdint.h>
+#include <ir0/epoll.h>
 
 struct epoll_event;
 
@@ -30,6 +31,3 @@ int64_t sys_epoll_pwait(int epfd, struct epoll_event *events, int maxevents,
 int64_t sys_pselect6(int nfds, fd_set *readfds, fd_set *writefds,
 		     fd_set *exceptfds, const struct timespec *timeout,
 		     const void *sigmask);
-void epoll_acquire(void *epoll_state);
-void epoll_release(void *epoll_state);
-void epoll_release_fd(void *epoll_state);

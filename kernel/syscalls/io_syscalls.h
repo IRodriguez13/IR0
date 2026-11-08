@@ -20,6 +20,8 @@
 #include <ir0/time.h>
 #include <ir0/process.h>
 #include <ir0/pipe.h>
+#include <ir0/files_struct.h>
+#include <ir0/devfs.h>
 #include <stddef.h>
 
 int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms);
@@ -38,7 +40,6 @@ int fd_can_read_for(process_t *proc, int fd);
 int fd_can_write_for(process_t *proc, int fd);
 int64_t sys_pause(void);
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem);
-void poll_wake_check(void);
 void syscall_wake_blocked_on_child(process_t *parent);
 void syscall_poll_finish_blocked_resume(process_t *proc);
 
@@ -53,14 +54,8 @@ int64_t sys_pipe(int pipefd[2]);
 int64_t sys_pipe2(int pipefd[2], int flags);
 /* Linux syslog(2) / klogctl — BusyBox dmesg. */
 int64_t sys_syslog(int type, char *bufp, int len);
-fd_entry_t *get_process_fd_table(void);
-void ensure_devfs_init(void);
 int stdio_is_redirected(fd_entry_t *fd_table, int fd);
 int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need);
 void pipe_wake_check(void);
 void pipe_wake_all(pipe_t *pipe);
 void pipe_purge_waiters_for_process(process_t *proc);
-void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
-		       uint64_t *blocked_readers, uint64_t *blocked_writers);
-void fd_slot_note_created(fd_entry_t *entry);
-void fd_slot_note_destroyed(void);

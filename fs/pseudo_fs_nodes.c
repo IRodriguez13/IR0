@@ -24,6 +24,7 @@
 #include <ir0/errno.h>
 #include <ir0/stat.h>
 #include <string.h>
+#include "procfs_internal.h"
 
 #if CONFIG_ENABLE_BLUETOOTH
 #include <ir0/bluetooth.h>
@@ -31,7 +32,6 @@
 
 #define PSEUDO_SYS_MAX_CPUS 16
 
-extern int proc_mounts_read(char *buf, size_t count);
 
 static int g_pseudo_fs_nodes_ready;
 static int g_proc_dynamic_registered;

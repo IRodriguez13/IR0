@@ -64,7 +64,6 @@ static void arch_audit_iret_frame(const task_t *task)
 #endif
 
 #if !MINGW_BUILD
-extern void switch_to_user_task_asm(const task_t *task);
 #endif
 
 void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)

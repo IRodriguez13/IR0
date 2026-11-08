@@ -17,10 +17,8 @@
 #include <ir0/arch_cpu.h>
 #include <stdint.h>
 #include <string.h>
-
-extern fd_entry_t *get_process_fd_table(void);
-extern void fd_slot_note_created(fd_entry_t *entry);
-extern void poll_wake_check(void);
+#include <ir0/files_struct.h>
+#include <ir0/poll.h>
 
 #define EFD_MAX 32
 #define EFD_MAGIC 0x45464421u /* EFD! */

@@ -12,11 +12,11 @@
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
+#include "scenarios.h"
 #include <string.h>
+#include <kernel/process.h>
 
 extern process_t *process_list;
-extern void process_reap_zombie_child(process_t *child);
-extern pid_t process_get_next_pid(void);
 
 static int process_exists(pid_t pid)
 {
@@ -83,26 +83,6 @@ static const ktm_scenario_t scenario_process_lifecycle = {
 	.run = scenario_process_lifecycle_run,
 	.teardown = NULL,
 };
-
-void ktm_scenario_register_pipe_lifecycle(void);
-void ktm_scenario_register_mm_cow_fork(void);
-void ktm_scenario_register_mm_vma(void);
-void ktm_scenario_register_mm_page_tables(void);
-void ktm_scenario_register_mm_steady_state(void);
-void ktm_scenario_register_vfs_devfs(void);
-void ktm_scenario_register_shell_redir(void);
-void ktm_scenario_register_mm_oom_class(void);
-void ktm_scenario_register_process_wait_drain(void);
-void ktm_scenario_register_graphics_fb(void);
-void ktm_scenario_register_input_events0(void);
-void ktm_scenario_register_vfs_open_flags(void);
-void ktm_scenario_register_process_reclaim_exit(void);
-void ktm_scenario_register_process_exec(void);
-void ktm_scenario_register_process_fork_rollback(void);
-void ktm_scenario_register_ktest_bridge(void);
-#if defined(CONFIG_KTM_BLOCK_FAKE) && CONFIG_KTM_BLOCK_FAKE
-void ktm_scenario_register_block_read_eio(void);
-#endif
 
 void ktm_scenarios_register_builtins(void)
 {

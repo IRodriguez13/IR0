@@ -21,9 +21,7 @@
 #include <ir0/arch_cpu.h>
 #include <ir0/overflow.h>
 #include <string.h>
-
-extern fd_entry_t *get_process_fd_table(void);
-extern void fd_slot_note_created(fd_entry_t *entry);
+#include <ir0/files_struct.h>
 
 #define MEMFD_MAX 16
 #define MEMFD_MAX_PAGES 1024

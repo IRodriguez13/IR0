@@ -15,24 +15,15 @@
 #pragma once
 
 #include <stdint.h>
+#include <ir0/keyboard.h>
 
 #define KEYBOARD_LAYOUT_US     0
 #define KEYBOARD_LAYOUT_LATAM  1
-
-char keyboard_buffer_get(void);
-int keyboard_buffer_has_data(void);
-void keyboard_buffer_clear(void);
 
 void keyboard_handler64(void);
 void keyboard_poll_ps2(void);
 
 void keyboard_init(void);
-
-int keyboard_set_layout(int layout);
-int keyboard_get_layout(void);
-const char *keyboard_get_layout_name(int layout);
-int keyboard_set_console_mode(int mode);
-int keyboard_get_console_mode(void);
 
 /* Momentary + lock modifier snapshot (see ps2_set1.h masks). */
 uint32_t keyboard_modifiers_mask(void);
@@ -41,7 +32,6 @@ int keyboard_ctrl_active(void);
  * Resync momentary keys only (device reinit / overflow / focus loss).
  * Does not replace correct break-code processing.
  */
-void keyboard_all_keys_up(void);
 
 void set_idle_mode(int is_idle);
 int is_in_idle_mode(void);

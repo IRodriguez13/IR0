@@ -10,6 +10,7 @@
 
 #include <ktm_internal.h>
 #include <ir0/open_flags.h>
+#include "scenarios.h"
 
 static int scenario_vfs_open_flags_run(ktm_context_t *ctx)
 {

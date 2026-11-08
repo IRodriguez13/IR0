@@ -17,8 +17,7 @@
 #include <ir0/console.h>
 #include <ir0/sched.h>
 #include <string.h>
-
-extern void kernel_idle_poll(void);
+#include <ir0/kernel.h>
 
 static volatile int tty_ktest_done;
 static volatile int64_t tty_ktest_result;

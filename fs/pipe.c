@@ -15,6 +15,7 @@
 #include <ir0/ktm/fault.h>
 #include <string.h>
 #include <config.h>
+#include <ir0/files_struct.h>
 
 static uint64_t pipe_stats_created;
 static uint64_t pipe_stats_destroyed;
@@ -434,9 +435,6 @@ void pipe_abort_unopened(pipe_t *pipe)
 	pipe_stats_destroyed++;
 	kfree(pipe);
 }
-
-extern void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
-			      uint64_t *blocked_readers, uint64_t *blocked_writers);
 
 void pipe_ipc_lifecycle_audit(void)
 {

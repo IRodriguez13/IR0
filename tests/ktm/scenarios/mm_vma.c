@@ -11,6 +11,7 @@
 #include <ktm_internal.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
+#include "scenarios.h"
 #include <string.h>
 
 static unsigned vma_count(struct mmap_region *head)

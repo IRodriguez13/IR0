@@ -9,9 +9,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm_internal.h>
-
-extern void paging_steady_state_audit(const char *tag, uint64_t frames_baseline,
-				     uint64_t mm_created, uint64_t mm_destroyed);
+#include <mm/paging.h>
+#include "scenarios.h"
 
 static int scenario_mm_steady_state_run(ktm_context_t *ctx)
 {

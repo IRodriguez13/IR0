@@ -16,6 +16,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <ir0/cpu.h>
 
 /* Match mm/paging.h leaf/table descriptor bits (x86-64 4K). */
 #define X86_PTE_PRESENT   0x1ULL
@@ -28,9 +29,6 @@
 #define X86_CR0_PG        (1ULL << 31)
 #define X86_CR0_WP        (1ULL << 16)
 #define X86_CR4_PAE       (1ULL << 5)
-
-unsigned long irq_save(void);
-void irq_restore(unsigned long flags);
 
 void mm_activate(uintptr_t root)
 {

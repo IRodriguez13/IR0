@@ -11,16 +11,14 @@
 #include <ktm_internal.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
+#include "scenarios.h"
 #include <string.h>
+#include <mm/paging.h>
+#include <kernel/process.h>
 
 #define PT_CHURN_ROUNDS 32
 
-extern void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
-					 uint64_t *pt_alloc, uint64_t *pt_free,
-					 uint64_t *kernel_alloc, uint64_t *kernel_free);
 extern process_t *process_list;
-extern void process_reap_zombie_child(process_t *child);
-extern pid_t process_get_next_pid(void);
 
 static void assert_category_balance(void)
 {

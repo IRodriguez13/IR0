@@ -14,38 +14,6 @@
 #define EARLY_COM1 0x3F8
 #define IDT_TYPE_INTERRUPT_GATE 0x8E
 
-extern void early_isr0(void);
-extern void early_isr1(void);
-extern void early_isr2(void);
-extern void early_isr3(void);
-extern void early_isr4(void);
-extern void early_isr5(void);
-extern void early_isr6(void);
-extern void early_isr7(void);
-extern void early_isr8(void);
-extern void early_isr9(void);
-extern void early_isr10(void);
-extern void early_isr11(void);
-extern void early_isr12(void);
-extern void early_isr13(void);
-extern void early_isr14(void);
-extern void early_isr15(void);
-extern void early_isr16(void);
-extern void early_isr17(void);
-extern void early_isr18(void);
-extern void early_isr19(void);
-extern void early_isr20(void);
-extern void early_isr21(void);
-extern void early_isr22(void);
-extern void early_isr23(void);
-extern void early_isr24(void);
-extern void early_isr25(void);
-extern void early_isr26(void);
-extern void early_isr27(void);
-extern void early_isr28(void);
-extern void early_isr29(void);
-extern void early_isr30(void);
-extern void early_isr31(void);
 
 static void early_com1_putc(char c)
 {

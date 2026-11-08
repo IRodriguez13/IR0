@@ -12,8 +12,7 @@
 #include <ir0/arch_cpu.h>
 #include <sched/task.h>
 #include <ir0/process.h>
-
-extern void switch_context_arm64(task_t *prev, task_t *next);
+#include "switch_early.h"
 
 void first_switch_to(struct process *next)
 {

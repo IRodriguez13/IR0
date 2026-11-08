@@ -10,8 +10,7 @@
 
 #include <ktm_internal.h>
 #include <ir0/devfs.h>
-
-extern void ensure_devfs_init(void);
+#include "scenarios.h"
 
 static int scenario_input_events0_run(ktm_context_t *ctx)
 {

@@ -10,6 +10,7 @@
 
 #include <ktm_internal.h>
 #include <ir0/fb.h>
+#include "scenarios.h"
 
 static int scenario_graphics_fb_run(ktm_context_t *ctx)
 {

@@ -18,10 +18,7 @@
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <sched/task.h>
-
-extern void arm64_cpu_switch(void *prev_ctx, void *next_ctx);
-extern void arm64_cpu_switch_mm(void *prev_ctx, void *next_ctx,
-				uint64_t next_ttbr);
+#include "switch_early.h"
 
 /*
  * First run of a user task (fork child, new image): we are on the task's own

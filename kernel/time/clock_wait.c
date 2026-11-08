@@ -18,9 +18,8 @@
 #include <ir0/errno.h>
 #include <ir0/sched.h>
 #include <ir0/arch_port.h>
+#include <ir0/kernel.h>
 
-extern void kernel_idle_poll(void);
-extern void kernel_idle_poll_nosched(void);
 extern process_t *process_list;
 extern process_t *current_process;
 

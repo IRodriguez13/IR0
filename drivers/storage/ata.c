@@ -20,11 +20,11 @@
 #include <ir0/arch_cpu.h>
 #include <ir0/resource_registry.h>
 #include <stdint.h>
+#include <fs/vfs.h>
 
 #define ATA_WAIT_LOOPS 50000
 #define ATA_MAX_RETRY  3
 
-int vfs_exec_audit_is_active(void);
 static bool ata_wait_ready_probe(uint8_t drive);
 static bool ata_wait_drq_probe(uint8_t drive);
 

@@ -298,3 +298,6 @@ static inline void fd_entry_devfs_unbind(fd_entry_t *e)
 	e->dev_device_id = 0;
 	e->dev_node = NULL;
 }
+
+/* Mount /dev on first use (kernel/syscalls/io_syscalls.c). */
+void ensure_devfs_init(void);

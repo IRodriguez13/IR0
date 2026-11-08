@@ -26,8 +26,6 @@
 void *__attribute__((weak)) g_arch_boot_params;
 
 /* Implemented by the arm64 IRQ provider. */
-void irq_tables_init(void);
-void irq_controller_init(void);
 
 void enable_interrupts(void)
 {

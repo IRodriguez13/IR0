@@ -12,9 +12,9 @@
 #include <ir0/futex.h>
 #include <ir0/process_exit.h>
 #include <ir0/signals.h>
+#include <net/tcp.h>
 
 #if CONFIG_ENABLE_NETWORKING
-void tcp_wire_on_process_exit(uint32_t pid);
 #endif
 
 static void product_exit_robust_list(process_t *dying)

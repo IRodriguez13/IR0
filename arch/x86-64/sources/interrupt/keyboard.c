@@ -28,14 +28,13 @@
 #include <ir0/cmdline.h>
 #include <ir0/console.h>
 #include <ir0/ps2_set1.h>
+#include <kernel/syscalls.h>
 
 #define PS2_STATUS_PORT        0x64
 #define PS2_STATUS_OUTPUT_FULL 0x01
 /* i8042: output buffer byte is from AUX (mouse) when set — Linux I8042_STR_AUXDATA */
 #define PS2_STATUS_AUXDATA     0x20
 
-void wakeup_from_idle(void);
-void stdin_wake_check(void);
 static void keyboard_buffer_add(char c);
 static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len);
 static void keyboard_feed_scancode(uint8_t scancode);

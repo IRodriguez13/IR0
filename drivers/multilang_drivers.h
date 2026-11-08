@@ -37,5 +37,9 @@
  */
 int register_multilang_example_drivers(void);
 
+/* Example registrations defined by the Rust and C++ driver sources. */
+void *register_rust_simple_driver(void);
+ir0_driver_t *register_cpp_example_driver(void);
+
 #endif /* IR0_MULTILANG_DRIVERS_H */
 

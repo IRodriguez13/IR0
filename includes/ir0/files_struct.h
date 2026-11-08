@@ -49,6 +49,13 @@ void files_put(files_struct_t *f);
 
 void process_files_bind(struct process *p, files_struct_t *f);
 
+/* Current task's fd table and fd-slot accounting (kernel/syscalls/io_syscalls.c). */
+fd_entry_t *get_process_fd_table(void);
+void fd_slot_note_created(fd_entry_t *entry);
+void fd_slot_note_destroyed(void);
+void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
+		       uint64_t *blocked_readers, uint64_t *blocked_writers);
+
 /* CLONE_FILES: share parent's table (same memory). Returns 0 or -errno. */
 int process_files_share(struct process *child, struct process *parent);
 

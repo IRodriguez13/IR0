@@ -18,8 +18,7 @@
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
 #include <string.h>
-
-extern void kernel_idle_poll(void);
+#include <ir0/kernel.h>
 
 #define IR0_FUTEX_MAX_WAITERS 64
 

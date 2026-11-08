@@ -13,7 +13,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/ktm/scenario.h>
+#include "scenarios.h"
 #include <stddef.h>
+#include <kernel/test/test_runner.h>
+
+/* Only IR0_INCLUDE_QA builds link the ktest runner; elsewhere it is NULL. */
+#pragma weak kernel_test_run_all
 
 /*
  * kernel/test is only linked into kernel-x64-test.bin. A weak reference keeps
@@ -21,7 +26,6 @@
  * registers the scenario, while the test kernel registers it and boot_init
  * runs it from a holder process (ktest needs current_process).
  */
-extern int kernel_test_run_all(void) __attribute__((weak));
 
 static int ktest_bridge_run(ktm_context_t *ctx)
 {

@@ -40,6 +40,40 @@ void idt_set_gate64(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags,
 /* Minimal exception table right after GDT/TSS; replaced by idt_init64(). */
 void idt_early_install64(void);
 
+/* Early exception stubs, arch/x86-64/asm/interrupt/early_idt_stubs.asm. */
+extern void early_isr0(void);
+extern void early_isr1(void);
+extern void early_isr2(void);
+extern void early_isr3(void);
+extern void early_isr4(void);
+extern void early_isr5(void);
+extern void early_isr6(void);
+extern void early_isr7(void);
+extern void early_isr8(void);
+extern void early_isr9(void);
+extern void early_isr10(void);
+extern void early_isr11(void);
+extern void early_isr12(void);
+extern void early_isr13(void);
+extern void early_isr14(void);
+extern void early_isr15(void);
+extern void early_isr16(void);
+extern void early_isr17(void);
+extern void early_isr18(void);
+extern void early_isr19(void);
+extern void early_isr20(void);
+extern void early_isr21(void);
+extern void early_isr22(void);
+extern void early_isr23(void);
+extern void early_isr24(void);
+extern void early_isr25(void);
+extern void early_isr26(void);
+extern void early_isr27(void);
+extern void early_isr28(void);
+extern void early_isr29(void);
+extern void early_isr30(void);
+extern void early_isr31(void);
+
 void isr_handler64(uint64_t interrupt_number, uint64_t *stack);
 
 extern void isr0_64(void);

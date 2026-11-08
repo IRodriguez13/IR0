@@ -24,6 +24,7 @@
 #include <string.h>
 #include <ir0/arch_port.h>
 #include <ir0/spinlock.h>
+#include <ir0/poll.h>
 
 /* Ring buffer: 64 input_event entries */
 #define INPUT_EVENT_QUEUE_SIZE 64
@@ -33,7 +34,6 @@ static volatile unsigned int ev_tail;
 static volatile int events_readers;
 
 /* Poll core callback: marks matching waiters ready without scheduling in IRQ. */
-extern int poll_wake_check_nosched(void);
 static input_ready_notifier_t mouse_ready_notifier;
 
 void input_mouse_set_ready_notifier(input_ready_notifier_t notifier)

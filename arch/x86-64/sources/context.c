@@ -27,17 +27,16 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/oops.h>
 #include <ir0/ktm/fault.h>
+#include <mm/paging.h>
 #include <config.h>
 #include <pmm.h>
 #include <mm/allocator.h>
 
 #include "switch_diag.h"
+#include "tss.h"
 
-extern int switch_context_x64(task_t *prev, task_t *next);
-extern uintptr_t paging_current_address_space(void);
 extern uint64_t kernel_syscall_stack_top;
 extern uint64_t user_rsp_save;
-extern void tss_set_rsp0(uint64_t rsp0);
 
 static void arch_fixup_user_task_for_iretq(process_t *proc);
 

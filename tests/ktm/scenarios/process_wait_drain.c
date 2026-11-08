@@ -11,13 +11,13 @@
 #include <ktm_internal.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
+#include "scenarios.h"
 #include <string.h>
+#include <kernel/process.h>
 
 #define WAIT_DRAIN_N 64
 
 extern process_t *process_list;
-extern void process_reap_zombie_child(process_t *child);
-extern pid_t process_get_next_pid(void);
 
 static int process_exists(pid_t pid)
 {

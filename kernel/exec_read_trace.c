@@ -5,8 +5,7 @@
 
 #include <ir0/exec_read_trace.h>
 #include <ir0/ktm/klog.h>
-
-int vfs_exec_audit_is_active(void);
+#include <fs/vfs.h>
 
 static int exec_read_trace_on(void)
 {

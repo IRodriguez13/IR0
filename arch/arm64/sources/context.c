@@ -19,14 +19,13 @@
 #include <ir0/process.h>
 #include <stdint.h>
 #include <config.h>
+#include "switch_early.h"
 
 /*
  * Must match exc_entry / exc_entry_frame in arch/arm64/asm/entry/vectors.S
  * (sub sp, sp, #256 before saving the trap frame).
  */
 #define ARM64_EXC_FRAME_RESERVE 256U
-
-extern void switch_context_arm64(task_t *prev, task_t *next);
 
 void set_current_kernel_stack(struct process *p)
 {

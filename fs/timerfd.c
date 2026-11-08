@@ -18,10 +18,8 @@
 #include <ir0/time.h>
 #include <ir0/arch_cpu.h>
 #include <string.h>
-
-extern fd_entry_t *get_process_fd_table(void);
-extern void fd_slot_note_created(fd_entry_t *entry);
-extern void poll_wake_check(void);
+#include <ir0/files_struct.h>
+#include <ir0/poll.h>
 
 #define TFD_MAX 16
 #define TFD_MAGIC 0x54464421u /* TFD! */

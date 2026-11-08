@@ -18,6 +18,7 @@
 #include "log.h"
 #include <config.h>
 #include <string.h>
+#include <ir0/poll.h>
 
 #if CONFIG_ENABLE_NETWORKING
 #include "tcp.h"
@@ -88,8 +89,6 @@ struct sock_stream
 
 static struct sock_stream g_socks[CONFIG_STREAM_SOCKET_CAPACITY];
 static void (*g_rights_dtor)(void *entry, size_t sz);
-
-extern void poll_wake_check(void);
 
 void sock_stream_set_rights_dtor(void (*dtor)(void *entry, size_t sz))
 {

@@ -54,14 +54,11 @@
 #include <ir0/pipe.h>
 #include <ir0/pipe_fd.h>
 #include <string.h>
+#include <ir0/kernel.h>
 
 static int devfs_initialized;
 
 static int64_t sys_pipe_install(int pipefd[2], int flags);
-
-
-extern void kernel_idle_poll(void);
-extern void kernel_idle_poll_nosched(void);
 
 /* poll(2): esperar eventos en fd. Bloquea hasta que haya datos o timeout.      */
 
@@ -540,7 +537,6 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
   unsigned int i;
   int fd;
 
-
   if (!current_process)
     return -ESRCH;
   if (io_signal_deliverable())
@@ -630,7 +626,6 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
     pfds[npoll].revents = 0;
     npoll++;
   }
-
 
   if (npoll == 0)
   {

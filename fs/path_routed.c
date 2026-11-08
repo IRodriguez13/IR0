@@ -19,8 +19,6 @@
 #include <ir0/pseudo_fs.h>
 #include <fs/vfs.h>
 
-extern void ensure_devfs_init(void);
-
 static int ir0_access_mode_from_linux(int mode)
 {
     int access_mode;

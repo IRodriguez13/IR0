@@ -21,6 +21,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/page_fault.h>
 #include <ktm.h>
+#include "fault.h"
 
 void page_fault_handler_x64(uint64_t *stack)
 {

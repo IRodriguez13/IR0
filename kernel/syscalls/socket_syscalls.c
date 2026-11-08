@@ -46,8 +46,6 @@
 
 #define IPPROTO_UDP 17
 
-extern int64_t sys_close(int fd);
-
 static int64_t unix_fill_sockaddr(struct sock_stream *ss, struct sockaddr *addr,
 				  socklen_t *addrlen)
 {

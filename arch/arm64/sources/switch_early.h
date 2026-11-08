@@ -39,3 +39,8 @@ void arm64_cpu_switch(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next);
  */
 void arm64_cpu_switch_mm(struct arm64_cpu_ctx *prev, struct arm64_cpu_ctx *next,
 			 uint64_t next_ttbr);
+
+struct task;
+
+/* Kernel-to-kernel task switch (switch.c); @prev may be NULL on first entry. */
+void switch_context_arm64(struct task *prev, struct task *next);

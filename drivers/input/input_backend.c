@@ -19,6 +19,8 @@
 #include <ir0/ps2_mouse.h>
 #endif
 #include <ir0/irq.h>
+#include <ir0/poll.h>
+#include <ir0/keyboard.h>
 
 #if !IR0_LEGACY_PC_IO
 /*
@@ -70,19 +72,7 @@ int keyboard_get_console_mode(void)
 {
 	return 0;
 }
-#elif IR0_LEGACY_PC_IO
-/* Implemented in arch/x86-64/sources/interrupt/keyboard.c — no portable include. */
-extern char keyboard_buffer_get(void);
-extern int keyboard_buffer_has_data(void);
-extern void keyboard_buffer_clear(void);
-extern void keyboard_all_keys_up(void);
-extern int keyboard_set_layout(int layout);
-extern int keyboard_get_layout(void);
-extern const char *keyboard_get_layout_name(int layout);
-extern int keyboard_set_console_mode(int mode);
-extern int keyboard_get_console_mode(void);
-#endif
-extern int poll_wake_check_nosched(void);
+#endif /* x86-64 implements <ir0/keyboard.h> in interrupt/keyboard.c */
 
 void input_mouse_feed_byte(uint8_t data)
 {

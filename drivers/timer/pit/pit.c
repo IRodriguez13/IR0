@@ -42,7 +42,6 @@ static ir0_driver_info_t pit_info = {
 /* Global variable for PIT ticks */
 uint64_t pit_ticks = 0;
 
-extern void timer_stub();
 
 static uint32_t ticks = 0;
 
