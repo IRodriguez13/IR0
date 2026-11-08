@@ -12,6 +12,9 @@ import sys
 import tempfile
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ktm_host_safety as safety  # noqa: E402
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -203,8 +206,9 @@ def main() -> int:
     if args.expected_panic:
         # The panic stops userspace before KTAP can report; the done tags
         # matched above are the verdict. A "not ok" printed first still fails.
-        text = log.read_text(errors="replace")
-        if any(line.strip().startswith("not ok") for line in text.splitlines()):
+        if any(
+            line.strip().startswith("not ok") for line in safety.iter_log_lines(log)
+        ):
             print(f"ir0-selftest: failed before panic log={log}", file=sys.stderr)
             return 1
         print("ir0-selftest: expected panic reached")
