@@ -33,9 +33,12 @@
  */
 #define VBE_FB_MAX_SIZE (512ULL * 1024ULL * 1024ULL)
 
-/* Pre-mapped GRUB framebuffer window in the x86-64 boot page tables. */
+/*
+ * Pre-mapped GRUB framebuffer window in the x86-64 boot page tables: two
+ * 2 MiB pages at 0xFD000000 (pd_fb in arch/x86-64/asm/boot/boot_x64.asm).
+ */
 #define VBE_PREMAPPED_START 0xFD000000ULL
-#define VBE_PREMAPPED_END   0xFE000000ULL
+#define VBE_PREMAPPED_END   0xFD400000ULL
 #define VBE_LOW_IDENTITY_END 0x2000000ULL
 
 /*
