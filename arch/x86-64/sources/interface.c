@@ -26,8 +26,6 @@
 #include <ir0/net.h>
 #endif
 
-static void *g_arch_boot_params = NULL;
-
 // Detect MinGW-w64 cross-compilation
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
     #define MINGW_BUILD 1
@@ -268,16 +266,6 @@ void cpu_idle(void)
 void cpu_halt(void)
 {
     cpu_wait();
-}
-
-void set_boot_params(void *params)
-{
-    g_arch_boot_params = params;
-}
-
-void *get_boot_params(void)
-{
-    return g_arch_boot_params;
 }
 
 /**

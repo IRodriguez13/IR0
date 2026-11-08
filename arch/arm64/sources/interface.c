@@ -23,8 +23,6 @@
 #include "irq_backend.h"
 #include "timer.h"
 
-void *__attribute__((weak)) g_arch_boot_params;
-
 /* Implemented by the arm64 IRQ provider. */
 
 void enable_interrupts(void)
@@ -104,16 +102,6 @@ void cpu_idle(void)
 void cpu_halt(void)
 {
 	cpu_wait();
-}
-
-void set_boot_params(void *params)
-{
-	g_arch_boot_params = params;
-}
-
-void *get_boot_params(void)
-{
-	return g_arch_boot_params;
 }
 
 void early_init(void)

@@ -38,7 +38,6 @@
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
-#include <ir0/boot_params.h>
 #include <ir0/ktm/ktm.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/boot_arch.h>
@@ -68,7 +67,6 @@ void boot_early(uintptr_t firmware_handle)
 	(void)firmware_handle;
 #endif
 
-	set_boot_params((void *)firmware_handle);
 	ir0_boot_arch_firmware_early(firmware_handle);
 	(void)boot_memory_snapshot_init(firmware_handle);
 	ir0_boot_firmware_sysfs_init();

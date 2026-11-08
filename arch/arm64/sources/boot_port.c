@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/boot_log.h>
+#include <ir0/boot_params.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
 #include <arm64_board.h>
@@ -80,13 +81,16 @@ static void boot_arm64_bind_block_rootfs(void)
 }
 #endif
 
-uintptr_t ir0_kmain_normalize_firmware_handle(uintptr_t firmware_handle)
+/* The entry stub stashes the firmware DTB pointer (x0) before kmain. */
+void ir0_boot_port_params(uintptr_t firmware_handle,
+			  struct ir0_boot_params *params)
 {
+	params->protocol = IR0_BOOT_PROTOCOL_FDT;
 #if defined(IR0_FREESTANDING_BOOT)
-	return firmware_handle;
+	params->info = firmware_handle;
 #else
 	(void)firmware_handle;
-	return (uintptr_t)arm64_firmware_fdt;
+	params->info = (uintptr_t)arm64_firmware_fdt;
 #endif
 }
 

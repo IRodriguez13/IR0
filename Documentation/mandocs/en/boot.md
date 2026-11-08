@@ -40,8 +40,8 @@ in `RDI` for `kmain`.
 
 ```
 GRUB → boot_x64.asm
-         → kmain(multiboot_info)
-              → set_boot_params / ir0_cmdline_apply_log_profile / early_init
+         → kmain(multiboot_info) → set_boot_params(MULTIBOOT1, info)
+              → ir0_cmdline_apply_log_profile / early_init
                  (GDT + TSS + early IDT)
               → heap_init (0x800000)
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot

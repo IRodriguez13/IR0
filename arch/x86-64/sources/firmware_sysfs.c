@@ -10,6 +10,7 @@
 
 #include <ir0/boot_firmware_sysfs.h>
 #include <ir0/boot_memory.h>
+#include <ir0/boot_params.h>
 #include <ir0/multiboot.h>
 
 #include <string.h>
@@ -44,7 +45,8 @@ static size_t copy_phys_cstr_trunc(uint32_t phys, char *dst, size_t dst_sz,
 
 void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snapshot *snap)
 {
-	const struct multiboot_info *mb;
+	const struct multiboot_info *mb = NULL;
+	const struct ir0_boot_params *params;
 	const struct ir0_boot_snapshot *snapshot;
 	uint32_t addr_lo;
 
@@ -52,7 +54,9 @@ void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snaps
 		return;
 
 	snapshot = boot_memory_snapshot();
-	mb = (const struct multiboot_info *)get_boot_params();
+	params = get_boot_params();
+	if (params->protocol == IR0_BOOT_PROTOCOL_MULTIBOOT1 && params->info)
+		mb = (const struct multiboot_info *)(uintptr_t)params->info;
 	if (!mb || !snapshot)
 	{
 		snprintf(snap->protocol, sizeof(snap->protocol), "multiboot1");

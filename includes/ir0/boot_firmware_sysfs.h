@@ -38,7 +38,7 @@ struct ir0_boot_firmware_sysfs_snapshot
  */
 void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snapshot *snap);
 
-/* Called once during boot_early after arch firmware setup and set_boot_params(). */
+/* Called once during boot_early after arch firmware setup and the boot snapshot. */
 void ir0_boot_firmware_sysfs_init(void);
 
 #ifdef __cplusplus

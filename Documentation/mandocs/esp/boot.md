@@ -40,8 +40,8 @@ información Multiboot en `RDI` para `kmain`.
 
 ```
 GRUB → boot_x64.asm
-         → kmain(multiboot_info)
-              → set_boot_params / early_init
+         → kmain(multiboot_info) → set_boot_params(MULTIBOOT1, info)
+              → early_init
               → heap_init (0x800000)
               → [CONFIG_ENABLE_VBE] video_backend_init_from_multiboot
               → console_backend_init

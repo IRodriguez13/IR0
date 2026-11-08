@@ -20,7 +20,6 @@
 
 #pragma once
 
-#include <ir0/boot_params.h>
 #include <stdint.h>
 
 #define MULTIBOOT_FLAG_MEM      (1 << 0)

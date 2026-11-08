@@ -380,6 +380,7 @@ KERNEL_OBJS = \
 	kernel/mm_diag.o \
 	kernel/boot_init.o \
 	kernel/boot_firmware_sysfs.o \
+	kernel/boot_params.o \
 	kernel/init_handoff.o \
     kernel/cmdline.o \
     kernel/rootfs_base.o \
