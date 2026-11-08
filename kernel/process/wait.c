@@ -299,7 +299,7 @@ int process_wait(pid_t pid, int *status, int options)
 			pid_t reaped_pid;
 
 			if (status && current_process->mode == USER_MODE &&
-			    process_validate_userspace_buffer(status, sizeof(int)) != 0)
+			    !access_ok(status, sizeof(int)))
 			{
 				process_irq_restore(irq_flags);
 				return -EFAULT;

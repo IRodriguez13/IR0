@@ -418,7 +418,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 		return -ESRCH;
 	if (!buf)
 		return -EINVAL;
-	if (validate_userspace_buffer(buf, len) != 0)
+	if (!access_ok(buf, len))
 		return -EFAULT;
 
 	ss = sock_stream_fd_lookup(fd);
@@ -517,7 +517,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		return -ESRCH;
 	if (!buf)
 		return -EINVAL;
-	if (validate_userspace_buffer(buf, len) != 0)
+	if (!access_ok(buf, len))
 		return -EFAULT;
 
 	ss = sock_stream_fd_lookup(fd);
@@ -587,14 +587,14 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 
 	if (addrlen)
 	{
-		if (validate_userspace_buffer(addrlen, sizeof(socklen_t)) != 0)
+		if (!access_ok(addrlen, sizeof(socklen_t)))
 			return -EFAULT;
 		if (copy_from_user(&out_len, addrlen, sizeof(socklen_t)) != 0)
 			return -EFAULT;
 	}
 	if (src_addr && out_len > 0)
 	{
-		if (validate_userspace_buffer(src_addr, out_len) != 0)
+		if (!access_ok(src_addr, out_len))
 			return -EFAULT;
 	}
 
@@ -1195,8 +1195,8 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 	{
 		if (iov_stack[i].iov_len != 0 &&
 		    (!iov_stack[i].iov_base ||
-		     validate_userspace_buffer(iov_stack[i].iov_base,
-					       iov_stack[i].iov_len) != 0))
+		     !access_ok(iov_stack[i].iov_base,
+					       iov_stack[i].iov_len)))
 			return -EFAULT;
 	}
 	if (msg.msg_controllen > 0)
@@ -1316,8 +1316,8 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	{
 		if (iov_stack[i].iov_len != 0 &&
 		    (!iov_stack[i].iov_base ||
-		     validate_userspace_buffer(iov_stack[i].iov_base,
-					       iov_stack[i].iov_len) != 0))
+		     !access_ok(iov_stack[i].iov_base,
+					       iov_stack[i].iov_len)))
 			return -EFAULT;
 	}
 	if (sock_stream_rights_count(ss) > 0 && msg.msg_control && msg.msg_controllen > 0)

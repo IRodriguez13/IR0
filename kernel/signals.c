@@ -145,7 +145,7 @@ int signals_has_user_handler(process_t *p, int sig)
 	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
 		return 0;
 	if (p->mode == USER_MODE &&
-	    !is_user_address((void *)handler, sizeof(void *)))
+	    !mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
 		return 0;
 	return 1;
 }
@@ -783,7 +783,7 @@ void handle_signals(void)
 			continue;
                 
                 /* Validate handler is in userspace */
-                if (is_user_address((void *)handler, sizeof(void *)))
+                if (mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
                 {
 #if DEBUG_PROCESS
                     klog_info_fmt("SIGNAL",
@@ -981,8 +981,8 @@ void handle_signals(void)
 
                         restorer_fn = current->signal_restorer[sig];
                         if (!restorer_fn ||
-                            !is_user_address((void *)restorer_fn,
-                                             sizeof(void *)))
+                            !mm_user_va_ok((uintptr_t)restorer_fn,
+                                            sizeof(void *)))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%x reason=no_restorer",
@@ -1142,7 +1142,7 @@ int register_signal_handler(int signal, void (*handler)(int))
     /* Validate handler is in userspace (for USER_MODE processes) */
     if (current->mode == USER_MODE && handler != SIG_DFL && handler != SIG_IGN)
     {
-        if (!is_user_address((void *)handler, sizeof(void *)))
+        if (!mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
             return -1; /* Invalid handler address */  
     }
     

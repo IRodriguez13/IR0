@@ -45,7 +45,7 @@ void mm_copy_kernel_half(address_space_root_t dst_root,
 			 const uint64_t *src_root);
 
 /*
- * ISA userspace VA window for access_ok / is_user_address (no page walk).
+ * ISA userspace VA window for access_ok() and user range checks (no page walk).
  * Returns 1 if [addr, addr+size) is a canonical user range for this arch.
  */
 int mm_user_va_ok(uintptr_t addr, size_t size);

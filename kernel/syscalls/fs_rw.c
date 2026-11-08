@@ -344,8 +344,7 @@ int64_t sys_writev(int fd, const struct iovec *iov, int iovcnt)
     return -EINVAL;
   if (iovcnt > IR0_UIO_MAXIOV)
     return -EINVAL;
-  if (validate_userspace_buffer(iov,
-                                (size_t)iovcnt * sizeof(struct iovec)) != 0)
+  if (!access_ok(iov, (size_t)iovcnt * sizeof(struct iovec)))
     return -EFAULT;
 
   for (i = 0; i < iovcnt; i++)
@@ -536,10 +535,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
     /*
      * Validate the destination before dequeuing: a failed copy_to_user()
      * must not drop socket bytes (Linux read(2) EFAULT contract).
-     * KERNEL_MODE callers (ktest/dbgshell) pass kernel buffers.
      */
-    if (current_process->mode != KERNEL_MODE &&
-        !is_user_address_checked(buf, read_size, 1))
+    if (!access_ok_mapped(buf, read_size))
       return -EFAULT;
 
     for (;;)
@@ -661,10 +658,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
       /*
        * Validate the destination before consuming file data. A failed
        * copy_to_user() must not advance f_pos (Linux read(2) contract).
-       * KERNEL_MODE callers (ktest/dbgshell) pass kernel buffers.
        */
-      if (current_process->mode != KERNEL_MODE &&
-          !is_user_address_checked((char *)buf + total, chunk, 1))
+      if (!access_ok_mapped((char *)buf + total, chunk))
         return total > 0 ? (int64_t)total : -EFAULT;
       pos_before = vfs_file->pos;
       ret = vfs_read(vfs_file, kernel_read_buf, chunk);
@@ -705,8 +700,7 @@ int64_t sys_readv(int fd, const struct iovec *iov, int iovcnt)
     return -EINVAL;
   if (iovcnt > IR0_UIO_MAXIOV)
     return -EINVAL;
-  if (validate_userspace_buffer(iov,
-                                (size_t)iovcnt * sizeof(struct iovec)) != 0)
+  if (!access_ok(iov, (size_t)iovcnt * sizeof(struct iovec)))
     return -EFAULT;
 
   for (i = 0; i < iovcnt; i++)

@@ -12,8 +12,9 @@
  *
  * Contract: never memcpy/memset/strncpy or direct dereference of a userspace
  * pointer. Always copy_to_user / copy_from_user / clear_user (or
- * copy_*_user_mm for a non-current mm). KERNEL_MODE
- * bypass is only for dbgshell/ktest.
+ * copy_*_user_mm for a non-current mm), after access_ok() when a pointer
+ * is checked ahead of the copy. Kernel threads (dbgshell/ktest) pass kernel
+ * buffers through the same calls.
  */
 
 #ifndef _IR0_COPY_USER_H
@@ -64,16 +65,28 @@ int clear_user(void *dst, size_t n);
 long strncpy_from_user(char *dst, const char *src, long count);
 
 /**
- * is_user_address / access_ok - Canonical userspace VA window (ISA helper).
- * Returns: 1 if valid user address range, 0 otherwise.
+ * access_ok - Check a syscall pointer argument before using it
+ * @addr: userspace pointer
+ * @size: bytes the syscall will access at @addr
+ *
+ * For a user process, [@addr, @addr + @size) must lie in the ISA user VA
+ * window; mapping and permissions are checked by the copy itself. Kernel
+ * threads (KERNEL_MODE: dbgshell, ktest) pass kernel buffers to syscalls and
+ * always pass, as copy_{to,from}_user() accept them.
+ * Address ranges that are not copied through (mmap hints, signal handlers,
+ * TLS bases) use mm_user_va_ok() from <ir0/mm.h>.
+ * Returns: 1 if valid, 0 otherwise.
  */
-int is_user_address(const void *addr, size_t size);
-int is_user_address_checked(const void *addr, size_t size, int check_mapped);
+int access_ok(const void *addr, size_t size);
 
-static inline int access_ok(const void *addr, size_t size)
-{
-	return is_user_address(addr, size);
-}
+/**
+ * access_ok_mapped - access_ok() plus every page present in the current mm
+ *
+ * For a syscall that consumes data before it copies it out (pipe, socket
+ * and file reads), so a bad destination fails before anything is lost.
+ * Returns: 1 if valid, 0 otherwise.
+ */
+int access_ok_mapped(const void *addr, size_t size);
 
 /*
  * Scalar helpers (Linux-shaped). Evaluate to 0 on success, -EFAULT on fault.

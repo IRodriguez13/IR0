@@ -18,7 +18,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/pipe.h>
-#include "validate_user.h"
+#include <ir0/copy_user.h>
 #include "io_syscalls.h"
 
 /*

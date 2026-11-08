@@ -105,7 +105,7 @@ int64_t sys_getgroups(int size, gid_t *list)
 
 	if (!list || size < 0)
 		return -EINVAL;
-	if (validate_userspace_buffer(list, (size_t)size * sizeof(gid_t)) != 0)
+	if (!access_ok(list, (size_t)size * sizeof(gid_t)))
 		return -EFAULT;
 	if (size < (int)n)
 		return -EINVAL;
@@ -132,7 +132,7 @@ int64_t sys_setgroups(size_t size, const gid_t *list)
 	if (size > 0 && !list)
 		return -EFAULT;
 	if (size > 0 &&
-	    validate_userspace_buffer(list, size * sizeof(gid_t)) != 0)
+	    !access_ok(list, size * sizeof(gid_t)))
 		return -EFAULT;
 
 	for (i = 0; i < size; i++)
@@ -155,7 +155,7 @@ static int cred_copy_out_u32(void *uptr, uint32_t value)
 {
 	if (!uptr)
 		return 0;
-	if (validate_userspace_buffer(uptr, sizeof(value)) != 0)
+	if (!access_ok(uptr, sizeof(value)))
 		return -EFAULT;
 	if (copy_to_user(uptr, &value, sizeof(value)) != 0)
 		return -EFAULT;
@@ -373,7 +373,7 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 
 	if (oldact)
 	{
-		if (validate_userspace_buffer(oldact, user_bytes) != 0)
+		if (!access_ok(oldact, user_bytes))
 			return -EFAULT;
 		memset(&kold, 0, sizeof(kold));
 		kold.sa_handler = current_process->signal_handlers[signum];
@@ -387,7 +387,7 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 
 	if (act)
 	{
-		if (validate_userspace_buffer(act, user_bytes) != 0)
+		if (!access_ok(act, user_bytes))
 			return -EFAULT;
 		memset(&kact, 0, sizeof(kact));
 		if (copy_from_user(&kact, act, user_bytes) != 0)
@@ -422,7 +422,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 
 		if (sigsetsize == sizeof(uint64_t))
 		{
-			if (validate_userspace_buffer(oldset, sizeof(uint64_t)) != 0)
+			if (!access_ok(oldset, sizeof(uint64_t)))
 				return -EFAULT;
 			legacy64 = (uint64_t)ir0_sigword_to_linux(current_process->signal_mask);
 			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
@@ -430,7 +430,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 		}
 		else
 		{
-			if (validate_userspace_buffer(oldset, sizeof(sigset_t)) != 0)
+			if (!access_ok(oldset, sizeof(sigset_t)))
 				return -EFAULT;
 			ir0_sigset_set_low32(&kold, current_process->signal_mask);
 			if (copy_to_user(oldset, &kold, sizeof(kold)) != 0)
@@ -443,7 +443,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 
 	if (sigsetsize == sizeof(uint64_t))
 	{
-		if (validate_userspace_buffer(set, sizeof(uint64_t)) != 0)
+		if (!access_ok(set, sizeof(uint64_t)))
 			return -EFAULT;
 		if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
 			return -EFAULT;
@@ -451,7 +451,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 	}
 	else
 	{
-		if (validate_userspace_buffer(set, sizeof(sigset_t)) != 0)
+		if (!access_ok(set, sizeof(sigset_t)))
 			return -EFAULT;
 		if (copy_from_user(&kset, set, sizeof(kset)) != 0)
 			return -EFAULT;
@@ -501,7 +501,7 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 	memset(&kset, 0, sizeof(kset));
 	copy_bytes = (sigsetsize == sizeof(uint64_t)) ? sizeof(uint64_t)
 						      : sizeof(sigset_t);
-	if (validate_userspace_buffer((void *)mask, copy_bytes) != 0)
+	if (!access_ok((void *)mask, copy_bytes))
 		return -EFAULT;
 	if (copy_from_user(&kset, mask, copy_bytes) != 0)
 		return -EFAULT;
@@ -635,7 +635,7 @@ int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
 
 	if (head && current_process->mode == USER_MODE)
 	{
-		if (validate_userspace_buffer(head, sizeof(struct robust_list_head)) != 0)
+		if (!access_ok(head, sizeof(struct robust_list_head)))
 			return -EFAULT;
 	}
 
@@ -656,9 +656,9 @@ int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
 		return -ESRCH;
 	if (!head_ptr || !len_ptr)
 		return -EFAULT;
-	if (validate_userspace_buffer(head_ptr, sizeof(*head_ptr)) != 0)
+	if (!access_ok(head_ptr, sizeof(*head_ptr)))
 		return -EFAULT;
-	if (validate_userspace_buffer(len_ptr, sizeof(*len_ptr)) != 0)
+	if (!access_ok(len_ptr, sizeof(*len_ptr)))
 		return -EFAULT;
 
 	head = target->robust_list;
@@ -702,7 +702,7 @@ void process_exit_robust_list(process_t *p)
 	if (!uaddr)
 		uaddr = (int *)kh.list;
 	if (uaddr && p->mode == USER_MODE &&
-	    is_user_address(uaddr, sizeof(int)))
+	    mm_user_va_ok((uintptr_t)uaddr, sizeof(int)))
 		(void)ir0_futex_wake(uaddr, 1);
 
 	p->robust_list = NULL;
@@ -1217,7 +1217,7 @@ int64_t sys_exec(const char *pathname,
     return -EFAULT;
   }
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   /* Unix-style: resolve relative against cwd; absolute under chroot. */
@@ -1246,11 +1246,12 @@ int64_t sys_exec(const char *pathname,
   }
 
   /* argv/envp are NULL-terminated vectors; only validate the first slot here.
-   * Per-entry mapped checks happen inside the iteration below.
+   * Each slot and string is then copied with copy_from_user() /
+   * strncpy_from_user(), which fail with -EFAULT on unmapped pages.
    */
-  if (argv && !is_user_address(argv, sizeof(char *)))
+  if (argv && !access_ok(argv, sizeof(char *)))
     return -EFAULT;
-  if (envp && !is_user_address(envp, sizeof(char *)))
+  if (envp && !access_ok(envp, sizeof(char *)))
     return -EFAULT;
 
   /* Copy argv and envp from userspace if provided */
@@ -1269,12 +1270,6 @@ int64_t sys_exec(const char *pathname,
       const void *slot = (const char *)argv + i * sizeof(char *);
       char *user_ptr = NULL;
 
-      /* Each slot is 8 bytes — within a single page; check mapping for that page. */
-      if (!is_user_address_checked(slot, sizeof(char *), 1))
-      {
-        rc_vec = -EFAULT;
-        break;
-      }
       if (copy_from_user(&user_ptr, slot, sizeof(char *)) != 0)
       {
         rc_vec = -EFAULT;
@@ -1282,12 +1277,6 @@ int64_t sys_exec(const char *pathname,
       }
       if (user_ptr == NULL)
         break;  /* end of vector */
-      /* Validate string start is mapped (first byte covers its starting page). */
-      if (!is_user_address_checked(user_ptr, 1, 1))
-      {
-        rc_vec = -EFAULT;
-        break;
-      }
 
       char *arg_str = (char *)kmalloc(256);
       if (!arg_str)
@@ -1330,11 +1319,6 @@ int64_t sys_exec(const char *pathname,
       const void *slot = (const char *)envp + i * sizeof(char *);
       char *user_ptr = NULL;
 
-      if (!is_user_address_checked(slot, sizeof(char *), 1))
-      {
-        rc_vec = -EFAULT;
-        break;
-      }
       if (copy_from_user(&user_ptr, slot, sizeof(char *)) != 0)
       {
         rc_vec = -EFAULT;
@@ -1342,12 +1326,6 @@ int64_t sys_exec(const char *pathname,
       }
       if (user_ptr == NULL)
         break;
-
-      if (!is_user_address_checked(user_ptr, 1, 1))
-      {
-        rc_vec = -EFAULT;
-        break;
-      }
 
       char *env_str = (char *)kmalloc(256);
       if (!env_str)
@@ -1685,7 +1663,7 @@ int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction 
   if (oldact)
   {
     /* Validate oldact is in userspace (for USER_MODE processes) */
-    if (validate_userspace_buffer(oldact, sizeof(struct sigaction)) != 0)
+    if (!access_ok(oldact, sizeof(struct sigaction)))
       return -EFAULT;
 
     oldact->sa_handler = current_process->signal_handlers[signum];
@@ -1698,7 +1676,7 @@ int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction 
   if (act)
   {
     /* Validate act is in userspace (for USER_MODE processes) */
-    if (validate_userspace_buffer((const void *)act, sizeof(struct sigaction)) != 0)
+    if (!access_ok((const void *)act, sizeof(struct sigaction)))
       return -EFAULT;
 
     /* Register new handler */
@@ -1754,7 +1732,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
      * used as the TLS pointer installed FS=0xffffffffffffffe2; the next
      * TCB store then #PF'd the session shell at that address.
      */
-    if (addr != 0 && !is_user_address((void *)(uintptr_t)addr, 1))
+    if (addr != 0 && !mm_user_va_ok((uintptr_t)addr, 1))
       return -EPERM;
     process_tls_set(current_process, (uint64_t)addr);
     set_tls((uint64_t)addr);
@@ -1765,7 +1743,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
   {
     if (addr == 0)
       return -EINVAL;
-    if (validate_userspace_buffer((void *)(uintptr_t)addr, sizeof(uint64_t)) != 0)
+    if (!access_ok((void *)(uintptr_t)addr, sizeof(uint64_t)))
       return -EFAULT;
     fsbase = process_tls_get(current_process);
     if (copy_to_user((void *)(uintptr_t)addr, &fsbase, sizeof(uint64_t)) != 0)
@@ -1784,7 +1762,7 @@ int64_t sys_set_tid_address(int *tidptr)
   if (!current_process)
     return -ESRCH;
 
-  if (tidptr && validate_userspace_buffer(tidptr, sizeof(int)) != 0)
+  if (tidptr && !access_ok(tidptr, sizeof(int)))
     return -EFAULT;
 
   current_process->set_tid_ptr = tidptr;
@@ -1803,7 +1781,7 @@ int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
   if (!current_process)
     return -ESRCH;
 
-  if (uaddr && validate_userspace_buffer(uaddr, sizeof(int)) != 0)
+  if (uaddr && !access_ok(uaddr, sizeof(int)))
     return -EFAULT;
 
   cmd = op & 0x7f; /* strip FUTEX_PRIVATE_FLAG / CLOCK_REALTIME bits */
@@ -1838,7 +1816,7 @@ int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags)
   if (buflen == 0)
     return 0;
 
-  if (validate_userspace_buffer(buf, buflen) != 0)
+  if (!access_ok(buf, buflen))
     return -EFAULT;
 
   seed = clock_get_uptime_milliseconds() ^
@@ -1885,7 +1863,7 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
 
   if (old_limit)
   {
-    if (validate_userspace_buffer(old_limit, 16) != 0)
+    if (!access_ok(old_limit, 16))
       return -EFAULT;
     lim[0] = target->rlimits[resource].rlim_cur;
     lim[1] = target->rlimits[resource].rlim_max;
@@ -1895,7 +1873,7 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
 
   if (new_limit)
   {
-    if (validate_userspace_buffer((void *)new_limit, 16) != 0)
+    if (!access_ok((void *)new_limit, 16))
       return -EFAULT;
     if (copy_from_user(lim, new_limit, 16) != 0)
       return -EFAULT;
@@ -1946,8 +1924,8 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
 
   user_sp = process_syscall_sp(current_process);
   if (user_sp >= 0x400000UL &&
-      validate_userspace_buffer((const void *)(uintptr_t)user_sp,
-				sizeof(user_frame)) == 0 &&
+      access_ok((const void *)(uintptr_t)user_sp,
+				sizeof(user_frame)) &&
       copy_from_user(&user_frame, (const void *)(uintptr_t)user_sp,
 		     sizeof(user_frame)) == 0)
   {
@@ -1960,7 +1938,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
     if (!restore_ctx)
     {
       if (!ctx ||
-          validate_userspace_buffer(ctx, sizeof(struct sigcontext)) != 0)
+          !access_ok(ctx, sizeof(struct sigcontext)))
         return -EFAULT;
       restore_ctx = ctx;
     }

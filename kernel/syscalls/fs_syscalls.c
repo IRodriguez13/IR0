@@ -799,7 +799,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
     return -EFAULT;
 
   /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   len = strncpy_from_user(path_copy, pathname, sizeof(path_copy));
@@ -843,7 +843,7 @@ int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
     return -ESRCH;
   if (!pathname)
     return -EFAULT;
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -923,7 +923,7 @@ int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   if ((mode & S_IFMT) != S_IFIFO &&
@@ -958,7 +958,7 @@ int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   if ((mode & S_IFMT) != S_IFIFO &&

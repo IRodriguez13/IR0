@@ -1021,7 +1021,7 @@ static int proc_environ_read_live(const process_t *proc, char *buf, size_t count
 
 	envp_array = proc->exec_envp_user;
 	if (!envp_array ||
-	    !is_user_address((const void *)(uintptr_t)envp_array, sizeof(uint64_t)))
+	    !access_ok((const void *)(uintptr_t)envp_array, sizeof(uint64_t)))
 		return 0;
 
 	for (i = 0; i < PROC_ENVIRON_VARS_MAX; i++)
@@ -1034,13 +1034,9 @@ static int proc_environ_read_live(const process_t *proc, char *buf, size_t count
 							     sizeof(uint64_t));
 		size_t len;
 
-		if (!is_user_address_checked(slot, sizeof(uint64_t), 1))
-			break;
 		if (copy_from_user(&str_ptr, slot, sizeof(str_ptr)) != 0)
 			break;
 		if (str_ptr == 0)
-			break;
-		if (!is_user_address_checked((const void *)(uintptr_t)str_ptr, 1, 1))
 			break;
 		entry_len = strncpy_from_user(entry,
 					      (const char *)(uintptr_t)str_ptr,

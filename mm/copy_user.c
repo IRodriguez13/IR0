@@ -4,10 +4,10 @@
  * Copyright (C) 2025–2026  Iván Rodriguez
  *
  * File: copy_user.c
- * Description: Portable copy_to/from_user with mode-aware validation.
- *              USER_MODE walks process page tables (COW-safe). KERNEL_MODE
- *              bypass is dbgshell/ktest only — never use for production
- *              userspace pointers.
+ * Description: access_ok() and copy_{to,from}_user() for the current process.
+ *              User processes are checked against the ISA user VA window and
+ *              copied through their page tables (COW-safe, -EFAULT instead
+ *              of a kernel fault). Kernel threads pass kernel buffers.
  */
 
 #include <ir0/copy_user.h>
@@ -15,58 +15,48 @@
 #include "process.h"
 #include <mm/paging.h>
 #include <string.h>
-#include <config.h>
-#include <ir0/logging.h>
 
-int is_user_address_checked(const void *addr, size_t size, int check_mapped)
+/*
+ * Kernel threads (KERNEL_MODE: dbgshell, ktest harness) call syscalls with
+ * kernel buffers, so every user-pointer check passes their pointers through,
+ * like Linux uaccess_kernel(). The mode is fixed at spawn, inherited by
+ * fork, and exec requires USER_MODE, so no pointer from userspace is ever
+ * checked under this rule.
+ */
+static int uaccess_kernel(const process_t *current)
 {
+	return current && current->mode == KERNEL_MODE;
+}
+
+int access_ok(const void *addr, size_t size)
+{
+	if (uaccess_kernel(process_get_current()))
+		return 1;
+	return mm_user_va_ok((uintptr_t)addr, size);
+}
+
+int access_ok_mapped(const void *addr, size_t size)
+{
+	process_t *current = process_get_current();
 	uintptr_t start = (uintptr_t)addr;
-	uintptr_t end = start + size;
+	uintptr_t page;
 
-	if (addr == NULL)
-		return 0;
-
-	if (end < start)
-		return 0;
-
+	if (uaccess_kernel(current))
+		return 1;
 	if (!mm_user_va_ok(start, size))
 		return 0;
+	if (!current || !process_pgd(current))
+		return 0;
 
-	if (check_mapped)
+	for (page = start & ~(uintptr_t)(PAGE_SIZE_4KB - 1); page < start + size;
+	     page += PAGE_SIZE_4KB)
 	{
-		process_t *current = process_get_current();
-
-		if (!current || !process_pgd(current))
+		if (is_page_mapped_in_directory(process_pgd(current), page,
+						NULL) != 1)
 			return 0;
-
-		for (uintptr_t addr_check = start & ~0xFFFUL; addr_check < end;
-		     addr_check += 0x1000UL)
-		{
-			int mapped = is_page_mapped_in_directory(
-				process_pgd(current), addr_check, NULL);
-
-			if (mapped != 1)
-			{
-#if DEBUG_SYSCALLS
-				log_info("COPY_USER",
-					 "Address range contains unmapped pages");
-#endif
-				return 0;
-			}
-		}
 	}
 
 	return 1;
-}
-
-int is_user_address(const void *addr, size_t size)
-{
-	/*
-	 * Fast range check only; unmapped pages fault on copy. Callers that must
-	 * reject unmapped user pointers before touching page tables (e.g. exec
-	 * argv/envp walks) use is_user_address_checked(addr, size, 1).
-	 */
-	return is_user_address_checked(addr, size, 0);
 }
 
 int copy_to_user(void *dst, const void *src, size_t n)
@@ -76,30 +66,20 @@ int copy_to_user(void *dst, const void *src, size_t n)
 	if (n == 0)
 		return 0;
 
-	/* KERNEL_MODE bypass (dbgshell, embedded init) */
-	if (current && current->mode == KERNEL_MODE)
+	if (uaccess_kernel(current))
 	{
 		memcpy(dst, src, n);
 		return 0;
 	}
 
-	if (!is_user_address(dst, n))
-		return -EFAULT;
-
 	/*
-	 * Walk target process page tables via MM facade — safe under any active
-	 * active address-space root and fails cleanly on guard/unmapped pages (no
-	 * kernel page-fault panic).
+	 * Walk the process page tables instead of dereferencing @dst: safe under
+	 * any active root, and guard/unmapped/supervisor pages give -EFAULT
+	 * instead of a kernel page fault.
 	 */
-	if (current && process_pgd(current))
-	{
-		if (copy_to_user_mm(process_pgd(current), (uintptr_t)dst, src,
-				    n) != 0)
-			return -EFAULT;
-		return 0;
-	}
-
-	return -EFAULT;
+	if (!current || !process_pgd(current))
+		return -EFAULT;
+	return copy_to_user_mm(process_pgd(current), (uintptr_t)dst, src, n);
 }
 
 int copy_from_user(void *dst, const void *src, size_t n)
@@ -109,24 +89,15 @@ int copy_from_user(void *dst, const void *src, size_t n)
 	if (n == 0)
 		return 0;
 
-	if (current && current->mode == KERNEL_MODE)
+	if (uaccess_kernel(current))
 	{
 		memcpy(dst, src, n);
 		return 0;
 	}
 
-	if (!is_user_address(src, n))
+	if (!current || !process_pgd(current))
 		return -EFAULT;
-
-	if (current && process_pgd(current))
-	{
-		if (copy_from_user_mm(process_pgd(current), (uintptr_t)src, dst,
-				      n) != 0)
-			return -EFAULT;
-		return 0;
-	}
-
-	return -EFAULT;
+	return copy_from_user_mm(process_pgd(current), (uintptr_t)src, dst, n);
 }
 
 int clear_user(void *dst, size_t n)
@@ -136,21 +107,15 @@ int clear_user(void *dst, size_t n)
 	if (n == 0)
 		return 0;
 
-	if (current && current->mode == KERNEL_MODE)
+	if (uaccess_kernel(current))
 	{
 		memset(dst, 0, n);
 		return 0;
 	}
 
-	if (!is_user_address(dst, n))
-		return -EFAULT;
-
 	if (!current || !process_pgd(current))
 		return -EFAULT;
-
-	if (clear_user_mm(process_pgd(current), (uintptr_t)dst, n) != 0)
-		return -EFAULT;
-	return 0;
+	return clear_user_mm(process_pgd(current), (uintptr_t)dst, n);
 }
 
 long strncpy_from_user(char *dst, const char *src, long count)

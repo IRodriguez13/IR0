@@ -335,7 +335,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 
   if (!user_fds)
     return -EFAULT;
-  if (validate_userspace_buffer(user_fds, nfds * sizeof(struct pollfd)) != 0)
+  if (!access_ok(user_fds, nfds * sizeof(struct pollfd)))
     return -EFAULT;
 
   struct pollfd *kfds = (struct pollfd *)kcalloc(nfds, sizeof(struct pollfd));
@@ -558,21 +558,21 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
   if (user_r)
   {
-    if (validate_userspace_buffer(user_r, sizeof(fd_set)) != 0)
+    if (!access_ok(user_r, sizeof(fd_set)))
       return -EFAULT;
     if (copy_from_user(&kr, user_r, sizeof(fd_set)) != 0)
       return -EFAULT;
   }
   if (user_w)
   {
-    if (validate_userspace_buffer(user_w, sizeof(fd_set)) != 0)
+    if (!access_ok(user_w, sizeof(fd_set)))
       return -EFAULT;
     if (copy_from_user(&kw, user_w, sizeof(fd_set)) != 0)
       return -EFAULT;
   }
   if (user_e)
   {
-    if (validate_userspace_buffer(user_e, sizeof(fd_set)) != 0)
+    if (!access_ok(user_e, sizeof(fd_set)))
       return -EFAULT;
     if (copy_from_user(&ke, user_e, sizeof(fd_set)) != 0)
       return -EFAULT;
@@ -713,7 +713,7 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
 
   if (user_tv)
   {
-    if (validate_userspace_buffer(user_tv, sizeof(tv)) != 0)
+    if (!access_ok(user_tv, sizeof(tv)))
       return -EFAULT;
     if (copy_from_user(&tv, user_tv, sizeof(tv)) != 0)
       return -EFAULT;
@@ -941,7 +941,7 @@ int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem)
     return -EFAULT;
   if (copy_from_user(&kreq, req, sizeof(kreq)) != 0)
     return -EFAULT;
-  if (rem && validate_userspace_buffer(rem, sizeof(struct timespec)) != 0)
+  if (rem && !access_ok(rem, sizeof(struct timespec)))
     return -EFAULT;
 
   /* Convert to milliseconds; clamp tv_nsec to 0-999999999 */
@@ -1846,7 +1846,7 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
   if (!pipefd)
     return -EFAULT;
 
-  if (validate_userspace_buffer(pipefd, sizeof(int) * 2) != 0)
+  if (!access_ok(pipefd, sizeof(int) * 2))
     return -EFAULT;
 
   if (flags & ~(O_NONBLOCK | O_CLOEXEC))

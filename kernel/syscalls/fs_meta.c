@@ -23,9 +23,9 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
     return -EFAULT;
   if (bufsiz == 0)
     return -EINVAL;
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
-  if (validate_userspace_buffer(buf, bufsiz) != 0)
+  if (!access_ok(buf, bufsiz))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -99,7 +99,7 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
   len = strncpy_from_user(target_copy, target, sizeof(target_copy));
   if (len < 0 || (size_t)len == sizeof(target_copy))
     return -EFAULT;
-  if (validate_userspace_string(linkpath, 256) != 0)
+  if (!access_ok(linkpath, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(linkdirfd, linkpath, link_resolved,
@@ -129,7 +129,7 @@ int64_t sys_fstat(int fd, stat_t *buf)
   if (!current_process || !buf)
     return -EFAULT;
 
-  if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
+  if (!access_ok(buf, IR0_USER_STAT_SIZE))
     return -EFAULT;
 
   if (fd < 0)
@@ -212,7 +212,7 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (!current_process || !pathname || !buf)
     return -EFAULT;
 
-  if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
+  if (!access_ok(buf, IR0_USER_STAT_SIZE))
     return -EFAULT;
 
   memset(&kst, 0, sizeof(kst));
@@ -242,7 +242,7 @@ int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
   if (!current_process || !buf)
     return -EFAULT;
 
-  if (validate_userspace_buffer(buf, IR0_USER_STAT_SIZE) != 0)
+  if (!access_ok(buf, IR0_USER_STAT_SIZE))
     return -EFAULT;
 
   memset(&kst, 0, sizeof(kst));
@@ -276,7 +276,7 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
     return -EFAULT;
   if (flags & ~AT_REMOVEDIR)
     return -EINVAL;
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -328,9 +328,9 @@ int64_t sys_renameat(int olddirfd, const char *oldpath,
 
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
-  if (validate_userspace_string(oldpath, 256) != 0)
+  if (!access_ok(oldpath, 256))
     return -EFAULT;
-  if (validate_userspace_string(newpath, 256) != 0)
+  if (!access_ok(newpath, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(olddirfd, oldpath, old_resolved, sizeof(old_resolved));

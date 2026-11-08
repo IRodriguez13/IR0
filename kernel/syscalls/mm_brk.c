@@ -85,7 +85,7 @@ int64_t sys_brk(void *addr)
 	 * current program break so musl's `__syscall(SYS_brk) < end` probe
 	 * sees a real VA instead of -EFAULT.
 	 */
-	if (!is_user_address(addr, 0) || new_brk < heap_lo ||
+	if (!mm_user_va_ok((uintptr_t)addr, 0) || new_brk < heap_lo ||
 	    new_brk > heap_lo + USER_HEAP_MAX_SIZE)
 		return (int64_t)current_brk;
 

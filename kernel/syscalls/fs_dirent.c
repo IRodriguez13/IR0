@@ -271,7 +271,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
   if (!dirent || count == 0)
     return -EINVAL;
 
-  if (validate_userspace_buffer(dirent, count) != 0)
+  if (!access_ok(dirent, count))
     return -EFAULT;
 
   fd_table = get_process_fd_table();

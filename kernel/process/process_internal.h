@@ -100,7 +100,3 @@ void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 void wait_exit_audit_classify_user_frame(const char *tag, process_t *p);
 void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status);
 void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *status);
-
-/* core.c — shared with wait status copy */
-int process_validate_userspace_buffer(const void *buf, size_t size);
-

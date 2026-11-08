@@ -261,7 +261,7 @@ int64_t sys_epoll_create1(int flags)
 
 	if (op == EPOLL_CTL_ADD || op == EPOLL_CTL_MOD)
 	{
-		if (!event || validate_userspace_buffer(event, sizeof(ev)) != 0)
+		if (!event || !access_ok(event, sizeof(ev)))
 			return -EFAULT;
 		if (copy_from_user(&ev, event, sizeof(ev)) != 0)
 			return -EFAULT;
@@ -329,8 +329,8 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 		return -EINVAL;
 	}
 	if (!events ||
-	    validate_userspace_buffer(events,
-				      (size_t)maxevents * sizeof(struct epoll_event)) != 0)
+	    !access_ok(events,
+		       (size_t)maxevents * sizeof(struct epoll_event)))
 	{
 		epoll_wait_leave(ep);
 		return -EFAULT;
@@ -448,7 +448,7 @@ int64_t sys_pselect6(int nfds, fd_set *readfds, fd_set *writefds,
 	/* Linux pselect6 6th arg is { sigset_t *ss; size_t ss_len }. */
 	if (sigmask)
 	{
-		if (validate_userspace_buffer((void *)sigmask, sizeof(pack)) != 0)
+		if (!access_ok((void *)sigmask, sizeof(pack)))
 			return -EFAULT;
 		if (copy_from_user(&pack, sigmask, sizeof(pack)) != 0)
 			return -EFAULT;
@@ -460,7 +460,7 @@ int64_t sys_pselect6(int nfds, fd_set *readfds, fd_set *writefds,
 
 	if (timeout)
 	{
-		if (validate_userspace_buffer((void *)timeout, sizeof(ts)) != 0)
+		if (!access_ok((void *)timeout, sizeof(ts)))
 		{
 			io_temp_sigmask_end(applied, saved_mask);
 			return -EFAULT;

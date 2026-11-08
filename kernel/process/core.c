@@ -222,35 +222,6 @@ process_t *process_find_by_pid(pid_t pid)
 	return NULL;
 }
 
-
-
-int process_validate_userspace_buffer(const void *buf, size_t size)
-{
-	if (!current_process)
-		return -ESRCH;
-
-	if (current_process->mode == KERNEL_MODE)
-	{
-		uint64_t addr = (uint64_t)buf;
-
-		if (addr >= process_stack_start(current_process) &&
-		    addr + size <= process_stack_start(current_process) + process_stack_size(current_process))
-			return 0;
-		if (process_heap_start(current_process) > 0 &&
-		    addr >= process_heap_start(current_process) &&
-		    addr + size <= process_heap_end(current_process))
-			return 0;
-		if (mm_user_va_ok((uintptr_t)buf, size))
-			return 0;
-		return -EFAULT;
-	}
-
-	if (!mm_user_va_ok((uintptr_t)buf, size))
-		return -EFAULT;
-
-	return 0;
-}
-
 /*
  * process_capture_syscall_frame_at_entry - Snapshot user GPRs at syscall entry.
  * Layout decode is ISA-private (arch_syscall_frame).

@@ -37,7 +37,7 @@ static void product_clear_child_tid(process_t *dying)
 				    &zero, sizeof(zero)) == 0)
 			(void)ir0_futex_wake(tidptr, 1);
 	}
-	else if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)
+	else if (access_ok(tidptr, sizeof(zero)))
 	{
 		(void)copy_to_user(tidptr, &zero, sizeof(zero));
 		(void)ir0_futex_wake(tidptr, 1);

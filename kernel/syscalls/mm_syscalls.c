@@ -155,7 +155,7 @@ static uintptr_t mm_find_free_va(address_space_root_t root, process_t *proc,
 		if (hint < USER_MMAP_START ||
 		    hint + length > USER_MMAP_END || hint + length < hint)
 			return 0;
-		if (!is_user_address((void *)(uintptr_t)hint, length))
+		if (!mm_user_va_ok((uintptr_t)hint, length))
 			return 0;
 		if (proc && process_user_va_range_overlaps(proc, hint, length))
 			return 0;
@@ -575,7 +575,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           uintptr_t hint_addr = (uintptr_t)addr;
           if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
             return SYSCALL_PTR_ERR(EINVAL);
-          if (!is_user_address(addr, map_len))
+          if (!mm_user_va_ok((uintptr_t)addr, map_len))
             return SYSCALL_PTR_ERR(EFAULT);
           int mapped = is_page_mapped_in_directory(process_pgd(current_process), hint_addr, NULL);
           if (mapped == 1)
@@ -704,7 +704,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
 	  if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
 	    return SYSCALL_PTR_ERR(EINVAL);
-	  if (!is_user_address(addr, map_len))
+	  if (!mm_user_va_ok((uintptr_t)addr, map_len))
 	    return SYSCALL_PTR_ERR(EFAULT);
 	  if (is_page_mapped_in_directory(process_pgd(current_process),
 					  hint_addr, NULL) == 1)
@@ -779,7 +779,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     if (addr == NULL ||
         (hint_addr & (PAGE_SIZE_4KB - 1)) != 0 ||
-        !is_user_address(addr, length))
+        !mm_user_va_ok((uintptr_t)addr, length))
     {
       ret = SYSCALL_PTR_ERR(EINVAL);
       mmap_audit_log_return("map-fixed-bad-addr", ret, 0, 0, 0,
@@ -831,7 +831,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
            hint_addr >= USER_MMAP_START &&
            hint_addr + length <= USER_MMAP_END &&
            hint_addr + length >= hint_addr &&
-           is_user_address(addr, length))
+           mm_user_va_ok((uintptr_t)addr, length))
   {
     bool collision = false;
 
@@ -984,7 +984,7 @@ int sys_munmap(void *addr, size_t length)
     return -EINVAL;
 
   /* Validate address is in userspace */
-  if (!is_user_address(addr, length))
+  if (!mm_user_va_ok((uintptr_t)addr, length))
     return -EFAULT;
 
   if (length > SIZE_MAX - (PAGE_SIZE_4KB - 1))
@@ -1040,7 +1040,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
     return -EINVAL;
 
-  if (!is_user_address(addr, len))
+  if (!mm_user_va_ok((uintptr_t)addr, len))
     return -EFAULT;
 
   /*

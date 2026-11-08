@@ -115,7 +115,7 @@ int64_t sys_gettimeofday(struct timeval *tv, void *tz)
 
 	if (!current_process || !tv)
 		return -EFAULT;
-	if (validate_userspace_buffer(tv, sizeof(struct timeval)) != 0)
+	if (!access_ok(tv, sizeof(struct timeval)))
 		return -EFAULT;
 
 	uptime_ms = clock_get_uptime_milliseconds();
@@ -146,7 +146,7 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	if (!current_process || !tp)
 		return -EFAULT;
 
-  if (validate_userspace_buffer(tp, sizeof(struct timespec)) != 0)
+  if (!access_ok(tp, sizeof(struct timespec)))
 		return -EFAULT;
 
 	uptime_ms = clock_get_uptime_milliseconds();
@@ -196,7 +196,7 @@ int64_t sys_getitimer(int which, struct itimerval *curr_value)
 		return -EINVAL;
 	if (!curr_value)
 		return -EFAULT;
-	if (validate_userspace_buffer(curr_value, sizeof(struct itimerval)) != 0)
+	if (!access_ok(curr_value, sizeof(struct itimerval)))
 		return -EFAULT;
 
 	now = clock_get_uptime_milliseconds();
@@ -225,7 +225,7 @@ int64_t sys_setitimer(int which, const struct itimerval *new_value,
 
 	if (old_value)
 	{
-		if (validate_userspace_buffer(old_value, sizeof(struct itimerval)) != 0)
+		if (!access_ok(old_value, sizeof(struct itimerval)))
 			return -EFAULT;
 		if (copy_to_user(old_value, &old, sizeof(old)) != 0)
 			return -EFAULT;
@@ -234,7 +234,7 @@ int64_t sys_setitimer(int which, const struct itimerval *new_value,
 	if (!new_value)
 		return 0;
 
-	if (validate_userspace_buffer((void *)new_value, sizeof(struct itimerval)) != 0)
+	if (!access_ok((void *)new_value, sizeof(struct itimerval)))
 		return -EFAULT;
 	if (copy_from_user(&kval, new_value, sizeof(kval)) != 0)
 		return -EFAULT;

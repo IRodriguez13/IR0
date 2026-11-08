@@ -81,7 +81,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   if (!mountpoint)
     return -EFAULT;
 
-  if (validate_userspace_string(mountpoint, 256) != 0)
+  if (!access_ok(mountpoint, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(mountpoint, mountpoint_resolved,
@@ -98,9 +98,9 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   if (!dev)
     return -EFAULT;
 
-  if (validate_userspace_string(dev, 256) != 0)
+  if (!access_ok(dev, 256))
     return -EFAULT;
-  if (fstype && validate_userspace_string(fstype, 32) != 0)
+  if (fstype && !access_ok(fstype, 32))
     return -EFAULT;
 
   len = strncpy_from_user(dev_copy, dev, sizeof(dev_copy));
@@ -224,7 +224,7 @@ int64_t sys_umount(const char *target, int flags)
   if (!target)
     return -EFAULT;
 
-  if (validate_userspace_string(target, 256) != 0)
+  if (!access_ok(target, 256))
     return -EFAULT;
 
   if (flags != 0)
@@ -305,7 +305,7 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
   if (!pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -325,7 +325,7 @@ int64_t sys_mkdirat(int dirfd, const char *pathname, mode_t mode)
     return -ESRCH;
   if (!pathname)
     return -EFAULT;
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -345,7 +345,7 @@ int64_t sys_chmod(const char *path, mode_t mode)
   const char *path_to_use = path;
   int rc;
 
-  if (validate_userspace_string(path, 256) != 0)
+  if (!access_ok(path, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
@@ -372,7 +372,7 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
 
   if (!current_process || !path)
     return -EFAULT;
-  if (validate_userspace_string(path, 256) != 0)
+  if (!access_ok(path, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
@@ -395,9 +395,9 @@ int64_t sys_link(const char *oldpath, const char *newpath)
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
 
-  if (validate_userspace_string(oldpath, 256) != 0)
+  if (!access_ok(oldpath, 256))
     return -EFAULT;
-  if (validate_userspace_string(newpath, 256) != 0)
+  if (!access_ok(newpath, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
@@ -429,9 +429,9 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
 
-  if (validate_userspace_string(oldpath, 256) != 0)
+  if (!access_ok(oldpath, 256))
     return -EFAULT;
-  if (validate_userspace_string(newpath, 256) != 0)
+  if (!access_ok(newpath, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
@@ -467,7 +467,7 @@ int64_t sys_uname(struct utsname *buf)
   if (!current_process || !buf)
     return -EFAULT;
 
-  if (validate_userspace_buffer(buf, sizeof(struct utsname)) != 0)
+  if (!access_ok(buf, sizeof(struct utsname)))
     return -EFAULT;
 
   ir0_utsname_fill_version(version, sizeof(version));
@@ -504,7 +504,7 @@ int64_t sys_access(const char *pathname, int mode)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -536,7 +536,7 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
   masked_flags = flags & ~(IR0_AT_EACCESS | IR0_AT_SYMLINK_NOFOLLOW);
   if (masked_flags != 0)
     return -EINVAL;
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -579,7 +579,7 @@ int64_t sys_rmdir(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -647,7 +647,7 @@ int64_t sys_chdir(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -666,7 +666,7 @@ int64_t sys_getcwd(char *buf, size_t size)
   if (!current_process || !buf || size == 0)
     return -EFAULT;
 
-  if (validate_userspace_buffer(buf, size) != 0)
+  if (!access_ok(buf, size))
     return -EFAULT;
 
   process_cwd_ensure_absolute(current_process);
@@ -703,7 +703,7 @@ int64_t sys_chroot(const char *path)
   if (!ir0_cred_is_root())
     return -EPERM;
 
-  if (validate_userspace_string(path, 256) != 0)
+  if (!access_ok(path, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
@@ -757,7 +757,7 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
     if (dirfd != IR0_AT_FDCWD)
       return -ENOSYS;
 
-    if (validate_userspace_string(pathname, 256) != 0)
+    if (!access_ok(pathname, 256))
       return -EFAULT;
 
     rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -768,7 +768,7 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
 
   if (times)
   {
-    if (validate_userspace_buffer(times, sizeof(ktimes)) != 0)
+    if (!access_ok(times, sizeof(ktimes)))
       return -EFAULT;
     if (copy_from_user(ktimes, times, sizeof(ktimes)) != 0)
       return -EFAULT;
@@ -786,7 +786,7 @@ int64_t sys_unlink(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -816,7 +816,7 @@ int64_t sys_truncate(const char *pathname, off_t length)
   if (length < 0)
     return -EINVAL;
 
-  if (validate_userspace_string(pathname, 256) != 0)
+  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -880,7 +880,7 @@ int64_t sys_statfs(const char *pathname, void *buf)
 
 	if (!current_process || !pathname || !buf)
 		return -EFAULT;
-	if (validate_userspace_buffer(buf, sizeof(kst)) != 0)
+	if (!access_ok(buf, sizeof(kst)))
 		return -EFAULT;
 
 	rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -905,7 +905,7 @@ int64_t sys_fstatfs(int fd, void *buf)
 
 	if (!current_process || !buf)
 		return -EFAULT;
-	if (validate_userspace_buffer(buf, sizeof(kst)) != 0)
+	if (!access_ok(buf, sizeof(kst)))
 		return -EFAULT;
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
 		return -EBADF;
