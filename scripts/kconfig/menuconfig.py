@@ -22,7 +22,6 @@ AUTOCONF_DIR = os.path.join(KERNEL_ROOT, "includes", "generated")
 AUTOCONF_H   = os.path.join(AUTOCONF_DIR, "autoconf.h")
 VALID_UI_LANGS = ("en", "es")
 ARCH_SYMBOLS = ("ARCH_X86_64", "ARCH_ARM64")
-BOARD_SYMBOLS = ("ARM64_BOARD_QEMU_VIRT", "ARM64_BOARD_RPI4", "ARM64_BOARD_RPI5")
 
 I18N = {
     "en": {
@@ -124,9 +123,12 @@ class ConfigSymbol:
         self.range_hi = None
         self.help_text = ""
         self.menu   = ""          # parent menu title
+        self.choice = None        # KChoice when declared inside choice/endchoice
 
     def effective_default(self):
         if self.type == "bool":
+            if self.choice is not None:
+                return "y" if self.name == self.choice.default_member() else "n"
             return self.default if self.default in ("y", "n") else "y"
         if self.type == "int":
             try:
@@ -134,6 +136,23 @@ class ConfigSymbol:
             except (TypeError, ValueError):
                 return "0"
         return self.default or ""
+
+
+class KChoice:
+    """A bool choice/endchoice block: exactly one member is y (Linux Kconfig)."""
+    def __init__(self):
+        self.prompt = ""
+        self.type = "bool"
+        self.default = None       # member name from the choice's `default`
+        self.depends = None       # shown in help only; members are not hidden
+        self.help_text = ""
+        self.members = []
+
+    def default_member(self):
+        names = [m.name for m in self.members]
+        if self.default in names:
+            return self.default
+        return names[0] if names else None
 
 
 def normalize_string_value(val):
@@ -148,7 +167,8 @@ def normalize_string_value(val):
 def parse_kconfig(path):
     """Return a list of ConfigSymbol from a Kconfig file."""
     symbols = []
-    current = None
+    current = None            # ConfigSymbol or KChoice receiving attributes
+    choice = None             # open choice block, if any
     menu_stack = []
     in_help = False
 
@@ -186,18 +206,33 @@ def parse_kconfig(path):
             continue
         if stripped.startswith("if ") or stripped == "endif":
             continue
+        if stripped == "choice":
+            choice = KChoice()
+            current = choice
+            continue
+        if stripped == "endchoice":
+            choice = None
+            current = None
+            continue
 
         m = re.match(r"config\s+(\w+)", stripped)
         if m:
             current = ConfigSymbol(m.group(1))
             current.menu = menu_stack[-1] if menu_stack else ""
+            if choice is not None:
+                current.choice = choice
+                choice.members.append(current)
             symbols.append(current)
             continue
 
         if current is None:
             continue
 
-        if stripped.startswith("bool"):
+        if stripped.startswith("prompt"):
+            m2 = re.search(r'"([^"]*)"', stripped)
+            if m2:
+                current.prompt = m2.group(1)
+        elif stripped.startswith("bool"):
             current.type = "bool"
             m2 = re.search(r'"([^"]*)"', stripped)
             if m2:
@@ -342,15 +377,37 @@ def write_config_file(symbols, path, header_lines=None):
                 f.write(f"{key}={s.value}\n")
 
 
-def set_board_selection(symbols, selected_name):
-    """Exclusive ARM64 board choice (like ARCH_*)."""
+def select_choice_member(sym):
+    """Make sym the only y member of its choice block. Return True if changed."""
     changed = False
+    for member in sym.choice.members:
+        desired = "y" if member is sym else "n"
+        if member.value != desired:
+            member.value = desired
+            changed = True
+    return changed
+
+
+def enforce_choices(symbols):
+    """
+    Keep every choice one-hot. None selected -> choice default. Several
+    selected (hand-edited or corrupted .config) -> the default if it is among
+    them, else the first in Kconfig order.
+    """
+    changed = False
+    seen = []
     for sym in symbols:
-        if sym.name in BOARD_SYMBOLS:
-            desired = "y" if sym.name == selected_name else "n"
-            if sym.value != desired:
-                sym.value = desired
-                changed = True
+        if sym.choice is None or any(c is sym.choice for c in seen):
+            continue
+        ch = sym.choice
+        seen.append(ch)
+        on = [m for m in ch.members if m.value == "y"]
+        if len(on) == 1:
+            continue
+        pick = ch.default_member()
+        if on and pick not in [m.name for m in on]:
+            pick = on[0].name
+        changed |= select_choice_member(sym_lookup(symbols, pick))
     return changed
 
 
@@ -513,6 +570,7 @@ def set_ui_lang(symbols, lang):
 def enforce_dependencies(symbols):
     changed = False
     changed |= enforce_arch_choice(symbols)
+    changed |= enforce_choices(symbols)
     for sym in symbols:
         if sym.type == "bool" and sym.value == "y" and not dep_satisfied(symbols, sym):
             sym.value = "n"
@@ -536,8 +594,8 @@ def set_symbol_value(symbols, assignment):
             raise ValueError(f"Boolean symbol {key} requires y/n")
         if key in ARCH_SYMBOLS and raw_val == "y":
             set_arch_selection(symbols, key)
-        elif key in BOARD_SYMBOLS and raw_val == "y":
-            set_board_selection(symbols, key)
+        elif sym.choice is not None and raw_val == "y":
+            select_choice_member(sym)
         else:
             sym.value = raw_val
     elif sym.type == "int":
@@ -759,11 +817,9 @@ def apply_preset(symbols, preset):
     for sym in symbols:
         if sym.name in values:
             sym.value = values[sym.name]
-    # Exclusive board choice if any board symbol is set
-    for bname in BOARD_SYMBOLS:
-        if values.get(bname) == "y":
-            set_board_selection(symbols, bname)
-            break
+    for sym in symbols:
+        if sym.choice is not None and values.get(sym.name) == "y":
+            select_choice_member(sym)
     enforce_dependencies(symbols)
 
 # ---------------------------------------------------------------------------
@@ -1011,9 +1067,9 @@ def run_menu(stdscr, symbols):
                     if sym.name in ARCH_SYMBOLS:
                         if sym.value != "y":
                             dirty |= set_arch_selection(symbols, sym.name)
-                    elif sym.name in BOARD_SYMBOLS:
+                    elif sym.choice is not None:
                         if sym.value != "y":
-                            dirty |= set_board_selection(symbols, sym.name)
+                            dirty |= select_choice_member(sym)
                     else:
                         sym.value = "n" if sym.value == "y" else "y"
                         dirty = True
