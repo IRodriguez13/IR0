@@ -302,6 +302,12 @@ sync-menuconfig-defconfig:
 sync-menuconfig-check:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --sync-capabilities --dry-run
 
+# Fail when setup/defconfig or setup/configs/*.defconfig drifted from
+# setup/Kconfig (part of test-fast). Fix: make sync-menuconfig-defconfig.
+sync-menuconfig-defconfig-check:
+	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --sync-capabilities --defconfig-only --dry-run || \
+		{ echo "✗ defconfig drift: run 'make sync-menuconfig-defconfig' and commit setup/" >&2; exit 1; }
+
 CFLAGS += $(CFLAGS_TARGET)
 
 # Include paths
@@ -1817,6 +1823,7 @@ test-drivers-clean:
 	create-disk delete-disk disk-reset load-init \
 	menuconfig defconfig \
 	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
+	sync-menuconfig-defconfig-check \
 	headers_install check-env \
 	unibuild unibuild-cpp unibuild-rust unibuild-clean \
 	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
