@@ -27,6 +27,20 @@ int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 	return 0;
 }
 
+static uint64_t g_root_map_last;
+static unsigned long g_root_map_calls;
+
+int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
+			  uint64_t phys_addr, uint64_t flags)
+{
+	(void)flags;
+	if (!root || virt_addr != phys_addr)
+		return -1;
+	g_root_map_last = phys_addr;
+	g_root_map_calls++;
+	return 0;
+}
+
 static uint64_t g_mmio_start;
 static uint64_t g_mmio_end;
 

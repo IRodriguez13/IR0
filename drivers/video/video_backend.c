@@ -108,3 +108,13 @@ uint32_t video_backend_get_fb_size(void)
     return 0;
 #endif
 }
+
+int video_backend_map_supervisor(address_space_root_t root)
+{
+#if CONFIG_ENABLE_VBE
+    return vbe_map_supervisor(root);
+#else
+    (void)root;
+    return 0;
+#endif
+}

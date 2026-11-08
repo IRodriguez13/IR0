@@ -19,7 +19,6 @@
 #include <ir0/pmm.h>
 #include <ir0/video_backend.h>
 #include <ir0/ahci_api.h>
-#include <config.h>
 #include <mm/paging.h>
 #include <string.h>
 
@@ -148,33 +147,8 @@ void mm_prepare_root_activation(address_space_root_t root)
 
 int mm_map_platform_supervisor(address_space_root_t root)
 {
-#if CONFIG_ENABLE_VBE
-	uint32_t off;
-	uint64_t fb_phys;
-	uint32_t fb_size;
-
-	if (root && video_backend_is_available())
-	{
-		fb_phys = video_backend_get_fb_phys();
-		fb_size = video_backend_get_fb_size();
-		if (fb_phys != 0 && fb_size != 0)
-		{
-			if (fb_size > (4U * 1024U * 1024U))
-				fb_size = 4U * 1024U * 1024U;
-			for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
-			{
-				uint64_t address = fb_phys + off;
-
-				if (map_page_in_directory(root, address, address,
-							  PAGE_PRESENT |
-							  PAGE_RW) != 0)
-					return -ENOMEM;
-			}
-		}
-	}
-#else
-	(void)root;
-#endif
+	if (video_backend_map_supervisor(root) != 0)
+		return -ENOMEM;
 	ahci_map_mmio_in_directory(root);
 	return 0;
 }

@@ -145,6 +145,13 @@ uint32_t video_backend_get_fb_size(void)
 	return g_fb_size;
 }
 
+/* The mock framebuffer lives in kernel BSS, already mapped everywhere. */
+int video_backend_map_supervisor(address_space_root_t root)
+{
+	(void)root;
+	return 0;
+}
+
 uint8_t *ktm_video_mock_framebuffer(void)
 {
 	return g_fb;

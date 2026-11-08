@@ -25,6 +25,7 @@
 #include <mm/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
+#include <ir0/errno.h>
 
 /*
  * Largest framebuffer accepted from firmware. 8K at 32 bpp is ~127 MiB; a
@@ -36,6 +37,9 @@
 #define VBE_PREMAPPED_START 0xFD000000ULL
 #define VBE_PREMAPPED_END   0xFE000000ULL
 #define VBE_LOW_IDENTITY_END 0x2000000ULL
+
+/* Supervisor mapping window installed in each process root. */
+#define VBE_SUPERVISOR_MAP_MAX (4U * 1024U * 1024U)
 
 /*
  * Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor,
@@ -259,6 +263,31 @@ uint32_t vbe_get_fb_size(void)
     if (!vbe_state.initialized)
         return 0;
     return vbe_state.fb_size;
+}
+
+/*
+ * vbe_map_supervisor - Identity-map the framebuffer into a process root
+ * @root: translation root that receives supervisor RW mappings.
+ *
+ * Kernel console writes go through the PA==VA framebuffer pointer, so every
+ * address space the kernel runs in needs the framebuffer pages.
+ */
+int vbe_map_supervisor(address_space_root_t root)
+{
+    uint64_t base = vbe_state.framebuffer_addr;
+    uint32_t size = vbe_state.fb_size;
+
+    if (!root || !vbe_state.initialized || base == 0 || size == 0)
+        return 0;
+    if (size > VBE_SUPERVISOR_MAP_MAX)
+        size = VBE_SUPERVISOR_MAP_MAX;
+    for (uint32_t off = 0; off < size; off += 4096U)
+    {
+        if (map_page_in_directory(root, base + off, base + off,
+                                  PAGE_PRESENT | PAGE_RW) != 0)
+            return -ENOMEM;
+    }
+    return 0;
 }
 
 // Check if VBE is available

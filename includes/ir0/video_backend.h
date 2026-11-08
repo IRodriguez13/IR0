@@ -16,6 +16,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <ir0/mm.h>
 
 /* Bring up the firmware framebuffer described by the boot snapshot. */
 int video_backend_init_from_boot(void);
@@ -27,3 +28,5 @@ uint8_t *video_backend_get_fb(void);
 uint32_t video_backend_get_pitch(void);
 uint64_t video_backend_get_fb_phys(void);
 uint32_t video_backend_get_fb_size(void);
+/* Identity-map the active framebuffer into a process translation root. */
+int video_backend_map_supervisor(address_space_root_t root);
