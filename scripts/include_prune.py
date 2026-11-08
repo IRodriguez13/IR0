@@ -8,13 +8,13 @@ stay byte-identical and no new warning appears. Lines are blanked (not
 deleted) while probing so __LINE__ does not move; the surviving include
 block is compacted at the end.
 
-Two kinds of include are always kept, because an identical object does not
-prove they are unneeded:
+A header that declares a function this file defines is always kept: an
+identical object does not prove it unneeded, because without it the compiler
+no longer checks the definition against its prototype.
 
-- <config.h> in a file with preprocessor conditionals: the default build
-  cannot prove that a disabled CONFIG_/DEBUG_ branch does not need it.
-- A header that declares a function this file defines: without it the
-  compiler no longer checks the definition against its prototype.
+<config.h> is force-included by the Makefile in every kernel build (a tree
+without .config builds setup/defconfig), so an explicit include of it is
+always redundant.
 
 Run from the repository root of a tree that is not building anything else:
 
@@ -44,7 +44,6 @@ INCLUDE_DIRS = (
     ROOT / "arch/arm64/sources",
 )
 INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]([^>"]+)[>"]')
-CONDITIONAL_RE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif)\b", re.M)
 ISAS = (
     ("x86_64", {}, "strip"),
     ("arm64", {"ARCH": "arm64"}, "aarch64-linux-gnu-strip"),
@@ -116,7 +115,6 @@ def prune(path: Path) -> list[str]:
     obj = path.with_suffix(".o")
     original = path.read_text()
     lines = original.split("\n")
-    keep_config = bool(CONDITIONAL_RE.search(original))
     base = signatures(obj)
     if None in base:
         raise SystemExit(f"{path}: does not build cleanly on both ISAs")
@@ -125,8 +123,6 @@ def prune(path: Path) -> list[str]:
         for i, line in enumerate(list(lines)):
             match = INCLUDE_RE.match(line)
             if not match:
-                continue
-            if keep_config and match.group(1) == "config.h":
                 continue
             if declares_own_definition(path, original, line):
                 continue
