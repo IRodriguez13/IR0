@@ -23,7 +23,6 @@
 #include <ir0/kmem.h>
 #include <mm/pmm.h>
 #include <mm/paging.h>
-#include <init.h>
 #include <ir0/arch_port.h>
 #include <ir0/arch_info.h>
 #include <config.h>
@@ -58,7 +57,7 @@
 #include <ir0/idle.h>
 #include <ir0/process_exit.h>
 #include "rootfs_base.h"
-#include "kernel.h"
+#include <ir0/kernel.h>
 #include "boot_init.h"
 
 #include <ir0/boot_port.h>

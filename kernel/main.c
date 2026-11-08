@@ -24,7 +24,7 @@
 #include <ir0/input_backend.h>
 #include <ir0/poll.h>
 #include <ir0/sched.h>
-#include "kernel.h"
+#include <ir0/kernel.h>
 #include "syscalls.h"
 #include "syscalls/io_syscalls.h"
 

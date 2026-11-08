@@ -15,8 +15,6 @@
 #pragma once
 
 #include <stdint.h>
-#include <stddef.h>
-#include <stdbool.h>
 
 /*
  * Main kernel entry point. firmware_handle is architecture-defined (physical):
@@ -24,27 +22,6 @@
  */
 void kmain(uintptr_t firmware_handle);
 
-void gdt_install(void);
-void setup_tss(void);
-void logging_init(void);
-void ps2_init(void);
-void keyboard_init(void);
-void keyboard_poll_ps2(void);
-void simple_alloc_init(void);
-void ata_init(void);
-int vfs_init_with_minix(void);
-int vfs_init_root(void);
-void process_init(void);
-int clock_system_init(void);
-void syscalls_init(void);
-void idt_init64(void);
-void idt_load64(void);
-void pic_remap64(void);
-void pic_unmask_irq(uint8_t irq);
-void serial_init(void);
-void heap_init(void);
-bool sb16_init(void);
-
+/* Idle-time polling of console, pipes and network (kernel/main.c). */
 void kernel_idle_poll(void);
 void kernel_idle_poll_nosched(void);
-void kernel_idle_loop(void);

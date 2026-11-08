@@ -364,6 +364,9 @@ typedef struct process
 
 } process_t;
 
+/* Boot-time reset of the current-process slot and the process registry. */
+void process_init(void);
+
 /* Scheduler/boot ownership transition; keeps the per-CPU task slot coherent. */
 void process_set_current(process_t *process);
 void process_registry_reset(void);
