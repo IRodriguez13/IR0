@@ -1028,6 +1028,7 @@ static int proc_environ_read_live(const process_t *proc, char *buf, size_t count
 	{
 		uint64_t str_ptr = 0;
 		char entry[PROC_ENVIRON_ENTRY_MAX];
+		long entry_len;
 		const void *slot = (const void *)(uintptr_t)(envp_array +
 							     (uint64_t)i *
 							     sizeof(uint64_t));
@@ -1041,8 +1042,10 @@ static int proc_environ_read_live(const process_t *proc, char *buf, size_t count
 			break;
 		if (!is_user_address_checked((const void *)(uintptr_t)str_ptr, 1, 1))
 			break;
-		if (copy_from_user_cstring(entry, sizeof(entry),
-					   (const char *)(uintptr_t)str_ptr) != 0)
+		entry_len = strncpy_from_user(entry,
+					      (const char *)(uintptr_t)str_ptr,
+					      sizeof(entry));
+		if (entry_len < 0 || (size_t)entry_len == sizeof(entry))
 			break;
 
 		len = strlen(entry) + 1;

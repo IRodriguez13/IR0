@@ -43,11 +43,13 @@ int ir0_resolve_user_path_at(int dirfd, const char *user_path, char *resolved,
                              const char *root)
 {
     char path_copy[256];
+    long len;
 
     if (!user_path || !resolved || resolved_sz == 0)
         return -EFAULT;
 
-    if (copy_from_user_cstring(path_copy, sizeof(path_copy), user_path) != 0)
+    len = strncpy_from_user(path_copy, user_path, sizeof(path_copy));
+    if (len < 0 || (size_t)len == sizeof(path_copy))
         return -EFAULT;
 
     return ir0_resolve_kpath_at(dirfd, path_copy, resolved, resolved_sz, cwd,

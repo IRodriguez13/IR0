@@ -65,12 +65,12 @@ void ktest_usercopy_explicit_mm_range_contract(void)
 	{
 		saved_mode = current_process->mode;
 		current_process->mode = KERNEL_MODE;
-		KASSERT_EQ(copy_from_user_cstring(string_buf, sizeof(string_buf),
-					       "abc"), 0);
+		KASSERT_EQ(strncpy_from_user(string_buf, "abc",
+					     sizeof(string_buf)), 3);
 		KASSERT_EQ(strcmp(string_buf, "abc"), 0);
-		KASSERT_EQ(copy_from_user_cstring(string_buf, sizeof(string_buf),
-					       "abcd"), -ENAMETOOLONG);
-		KASSERT_EQ(string_buf[sizeof(string_buf) - 1], '\0');
+		KASSERT_EQ(strncpy_from_user(string_buf, "abcd",
+					     sizeof(string_buf)), 4);
+		KASSERT_EQ(strncpy_from_user(string_buf, "abc", 0), 0);
 		current_process->mode = saved_mode;
 	}
 

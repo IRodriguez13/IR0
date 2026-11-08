@@ -91,11 +91,13 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
   char link_resolved[256];
   char target_copy[256];
   stat_t st;
+  long len;
   int rc;
 
   if (!current_process || !target || !linkpath)
     return -EFAULT;
-  if (copy_from_user_cstring(target_copy, sizeof(target_copy), target) != 0)
+  len = strncpy_from_user(target_copy, target, sizeof(target_copy));
+  if (len < 0 || (size_t)len == sizeof(target_copy))
     return -EFAULT;
   if (validate_userspace_string(linkpath, 256) != 0)
     return -EFAULT;
@@ -379,13 +381,15 @@ static int fs_resolve_fchmodat_path(int dirfd, const char *pathname, char *resol
                                   size_t resolved_sz, int flags)
 {
   char path_copy[256];
+  long len;
   int rc;
 
   if (!pathname)
     return -EFAULT;
   if (flags & ~(IR0_AT_SYMLINK_NOFOLLOW | IR0_AT_EMPTY_PATH))
     return -EINVAL;
-  if (copy_from_user_cstring(path_copy, sizeof(path_copy), pathname) != 0)
+  len = strncpy_from_user(path_copy, pathname, sizeof(path_copy));
+  if (len < 0 || (size_t)len == sizeof(path_copy))
     return -EFAULT;
 
   if (path_copy[0] == '\0')

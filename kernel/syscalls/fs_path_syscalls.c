@@ -70,6 +70,7 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   const char *dev_path;
   const char *mount_fstype;
   int dev_is_pseudo = 0;
+  long len;
   int rc;
 
   (void)data;
@@ -102,12 +103,14 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   if (fstype && validate_userspace_string(fstype, 32) != 0)
     return -EFAULT;
 
-  if (copy_from_user_cstring(dev_copy, sizeof(dev_copy), dev) != 0)
+  len = strncpy_from_user(dev_copy, dev, sizeof(dev_copy));
+  if (len < 0 || (size_t)len == sizeof(dev_copy))
     return -EFAULT;
 
   if (fstype)
   {
-    if (copy_from_user_cstring(fstype_buf, sizeof(fstype_buf), fstype) != 0)
+    len = strncpy_from_user(fstype_buf, fstype, sizeof(fstype_buf));
+    if (len < 0 || (size_t)len == sizeof(fstype_buf))
       return -EFAULT;
     mount_fstype = fstype_buf[0] ? fstype_buf : CONFIG_ROOT_FILESYSTEM;
   }

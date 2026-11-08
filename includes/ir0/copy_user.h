@@ -51,12 +51,17 @@ int copy_from_user(void *dst, const void *src, size_t n);
 int clear_user(void *dst, size_t n);
 
 /**
- * copy_from_user_cstring - Copy a NUL-terminated string from userspace.
- * Does not read past unmapped pages like a fixed-size copy would when src
- * sits near USER_STACK_TOP. Returns -ENAMETOOLONG instead of accepting a
- * truncated string when the terminator does not fit in @dst.
+ * strncpy_from_user - Copy a NUL-terminated string from userspace (Linux).
+ * @dst: kernel destination, at least @count bytes
+ * @src: userspace source
+ * @count: maximum number of bytes to copy, including the NUL
+ *
+ * Never reads past the page holding the terminator.
+ * Returns: the string length (without the NUL) on success; @count when no
+ * NUL was found in @count bytes (@dst is then not terminated); -EFAULT on
+ * a bad or unmapped source.
  */
-int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src);
+long strncpy_from_user(char *dst, const char *src, long count);
 
 /**
  * is_user_address / access_ok - Canonical userspace VA window (ISA helper).

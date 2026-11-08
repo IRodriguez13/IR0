@@ -123,13 +123,15 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
   char path_copy[256];
   char dirpath[256];
   char joined[256];
+  long len;
   int rc;
 
   if (!current_process)
     return -ESRCH;
   if (!user_path || !resolved || resolved_sz == 0)
     return -EFAULT;
-  if (copy_from_user_cstring(path_copy, sizeof(path_copy), user_path) != 0)
+  len = strncpy_from_user(path_copy, user_path, sizeof(path_copy));
+  if (len < 0 || (size_t)len == sizeof(path_copy))
     return -EFAULT;
 
   if (path_copy[0] == '/')
@@ -788,6 +790,7 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   int ir0_flags;
   int linux_open_flags = flags;
   size_t plen;
+  long len;
   int path_rc;
 
   if (!current_process)
@@ -799,9 +802,9 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (validate_userspace_string(pathname, 256) != 0)
     return -EFAULT;
 
-  if (copy_from_user_cstring(path_copy, sizeof(path_copy), pathname) != 0)
+  len = strncpy_from_user(path_copy, pathname, sizeof(path_copy));
+  if (len < 0 || (size_t)len == sizeof(path_copy))
     return -EFAULT;
-  path_copy[sizeof(path_copy) - 1] = '\0';
 
   plen = 0;
   while (path_copy[plen] && plen < sizeof(path_copy))

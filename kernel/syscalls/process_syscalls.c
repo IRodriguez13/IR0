@@ -1297,7 +1297,9 @@ int64_t sys_exec(const char *pathname,
       }
       /* Stop at NUL — fixed 256-byte copies EFAULT when heap strings sit
        * near an unmapped page (doas prepenv/asprintf). */
-      if (copy_from_user_cstring(arg_str, 256, user_ptr) != 0)
+      long arg_len = strncpy_from_user(arg_str, user_ptr, 256);
+
+      if (arg_len < 0 || arg_len == 256)
       {
         kfree(arg_str);
         rc_vec = -EFAULT;
@@ -1353,7 +1355,9 @@ int64_t sys_exec(const char *pathname,
         rc_vec = -ENOMEM;
         break;
       }
-      if (copy_from_user_cstring(env_str, 256, user_ptr) != 0)
+      long env_len = strncpy_from_user(env_str, user_ptr, 256);
+
+      if (env_len < 0 || env_len == 256)
       {
         kfree(env_str);
         rc_vec = -EFAULT;

@@ -153,54 +153,38 @@ int clear_user(void *dst, size_t n)
 	return 0;
 }
 
-int copy_from_user_cstring(char *dst, size_t dst_sz, const char *src)
+long strncpy_from_user(char *dst, const char *src, long count)
 {
-	process_t *current = process_get_current();
-	size_t i;
+	uintptr_t addr = (uintptr_t)src;
+	long done = 0;
 
-	if (!dst || dst_sz == 0 || !src)
+	if (count <= 0)
+		return 0;
+	if (!dst || !src)
 		return -EFAULT;
 
-	if (current && current->mode == KERNEL_MODE)
+	/*
+	 * Copy at most to the end of each source page, so a string that ends
+	 * just before an unmapped page never touches it.
+	 */
+	while (done < count)
 	{
-		for (i = 0; i < dst_sz; i++)
-		{
-			char c = ((const char *)src)[i];
+		size_t chunk = PAGE_SIZE_4KB - ((addr + (uintptr_t)done) &
+						(PAGE_SIZE_4KB - 1));
+		size_t i;
 
-			if (c == '\0')
-			{
-				dst[i] = '\0';
-				return 0;
-			}
-			if (i + 1 < dst_sz)
-				dst[i] = c;
-		}
-		dst[dst_sz - 1] = '\0';
-		return -ENAMETOOLONG;
-	}
-
-	if (!is_user_address(src, 1))
-		return -EFAULT;
-
-	if (!current || !process_pgd(current))
-		return -EFAULT;
-
-	for (i = 0; i < dst_sz; i++)
-	{
-		char c;
-
-		if (copy_from_user_mm(process_pgd(current),
-				      (uintptr_t)src + i, &c, 1) != 0)
+		if (chunk > (size_t)(count - done))
+			chunk = (size_t)(count - done);
+		if (copy_from_user(dst + done, (const void *)(addr + (uintptr_t)done),
+				   chunk) != 0)
 			return -EFAULT;
-		if (c == '\0')
+		for (i = 0; i < chunk; i++)
 		{
-			dst[i] = '\0';
-			return 0;
+			if (dst[done + (long)i] == '\0')
+				return done + (long)i;
 		}
-		if (i + 1 < dst_sz)
-			dst[i] = c;
+		done += (long)chunk;
 	}
 
-	dst[dst_sz - 1] = '\0';
-	return -ENAMETOOLONG;
+	return count;
 }
