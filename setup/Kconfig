@@ -246,6 +246,13 @@ menu "Filesystems"
           On-disk FAT16 read-only parser for ATA block devices (hda, hda1, …)
           and a virtual backend at /dev/fat0 delegating to simplefs for mount tests.
 
+    config ENABLE_FS_EXT2
+        bool "EXT2 filesystem (on-disk root and mounts)"
+        default y
+        help
+          Bounded EXT2 backend for persistent volumes (fs/ext2_disk.c): the
+          ext2 product root and ext2 mounts on ATA block devices.
+
 endmenu
 
 menu "Platform Devices"
