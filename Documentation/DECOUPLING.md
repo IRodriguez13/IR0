@@ -61,6 +61,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `portable-no-kernel-header` | `fs/`, `mm/`, `net/`, `drivers/` | No `#include <kernel/...>` |
 | `driver-block-dev-facade` | `drivers/` | No raw `#include <drivers/storage/block_dev.h>`; use **`ir0/block_dev.h`** |
 | `drivers-no-arch` | `drivers/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
+| `c-file-prototype` | All kernel `.c` files | No non-static prototype at file scope; declare it in the owner's header (asm entry points included) |
 | `duplicate-declaration` | All kernel headers | A function prototype lives in exactly one header; private headers include their **`ir0/*`** facade instead of copying it |
 | `kernel-no-driver-include` | `kernel/` (whole tree) | No `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |

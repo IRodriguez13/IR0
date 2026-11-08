@@ -497,25 +497,32 @@ def _header_prototypes(text: str) -> set[str]:
 
 
 def check_single_header_declarations():
-    """Each kernel function is declared in exactly one header.
+    """Each kernel function is declared in exactly one header, never in a .c.
 
     Private headers include their includes/ir0 facade (or the owning sibling
-    header) instead of re-declaring it, so prototypes cannot drift apart.
+    header) instead of re-declaring it, so prototypes cannot drift apart. A
+    prototype written into a .c file is never checked against the definition
+    and often hides a layering shortcut; it belongs in the owner's header
+    (asm entry points included).
     """
     errors = []
     owners: dict[str, list[str]] = {}
     for tree in SINGLE_DECL_TREES:
         for fpath in iter_c_files(ROOT / tree):
-            if fpath.suffix != ".h":
-                continue
             try:
                 text = read_file_text(fpath)
             except OSError as exc:
                 errors.append(f"[read-error] {fpath}: {exc}")
                 continue
             rel = str(rel_to_root(fpath))
-            for name in _header_prototypes(text):
-                owners.setdefault(name, []).append(rel)
+            for name in sorted(_header_prototypes(text)):
+                if fpath.suffix == ".h":
+                    owners.setdefault(name, []).append(rel)
+                else:
+                    errors.append(
+                        f"[c-file-prototype] {rel}: {name} "
+                        "(declare it in the owner's header and include that)"
+                    )
     for name in sorted(owners):
         if len(owners[name]) > 1:
             errors.append(
