@@ -20,6 +20,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/arch_io.h>
 #include <mm/paging.h>
 #include <string.h>
 #include <stdint.h>

@@ -49,3 +49,8 @@ enum ir0_system_action
  */
 void kernel_system_shutdown(enum ir0_system_action action)
 	__attribute__((noreturn));
+
+/* ISA power primitives behind kernel_system_shutdown(); none return. */
+void system_halt(void) __attribute__((noreturn));
+void system_reboot(void) __attribute__((noreturn));
+void system_poweroff(void) __attribute__((noreturn));

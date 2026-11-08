@@ -25,18 +25,6 @@
 #include <ir0/arch_mm.h>
 #include <ir0/page_fault.h>
 #include <ir0/arch_info.h>
+#include <ir0/cpu.h>
+#include <ir0/context.h>
 
-/* Legacy users of this umbrella retain the portable IRQ critical-section API. */
-unsigned long irq_save(void);
-void irq_restore(unsigned long flags);
-
-/*
- * Context-switch entry lives in context.h. Forward decls here keep this
- * umbrella from pulling task.h into every legacy include.
- */
-struct task;
-struct process;
-
-void switch_to_user(arch_addr_t entry, arch_addr_t stack);
-void switch_to_user_task(const struct task *task);
-void first_switch_to(struct process *next);

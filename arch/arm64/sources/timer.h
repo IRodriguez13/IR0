@@ -15,11 +15,9 @@
 #pragma once
 
 #include <stdint.h>
+#include <ir0/cpu_info.h>
+#include <ir0/cpu.h>
 
-void timer_init(void);
-uint64_t timer_read(void);
-void timer_set_frequency(uint32_t hz);
-uint32_t timer_get_frequency(void);
 int arch_timer_smoke_ok(void);
 
 /** Arm EL1 physical timer one-shot (CNTP_TVAL + ENABLE, IMASK clear). */

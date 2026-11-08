@@ -17,10 +17,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-void cpu_idle(void);
-void system_halt(void) __attribute__((noreturn));
-void system_reboot(void) __attribute__((noreturn));
-void system_poweroff(void) __attribute__((noreturn));
 
 size_t get_page_size(void);
 uint32_t get_cpu_id(void);

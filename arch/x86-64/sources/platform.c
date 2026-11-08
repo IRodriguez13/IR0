@@ -36,7 +36,7 @@
  * @ecx: Output for ECX register
  * @edx: Output for EDX register
  */
-static inline void cpuid(uint32_t leaf, uint32_t subleaf,
+static inline void cpuid_count(uint32_t leaf, uint32_t subleaf,
                          uint32_t *eax, uint32_t *ebx,
                          uint32_t *ecx, uint32_t *edx)
 {
@@ -61,11 +61,11 @@ uint32_t get_cpu_id(void)
     uint32_t eax, ebx, ecx, edx;
     
     /* Check if CPUID supports leaf 0x1 (basic info) */
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax >= 1)
     {
         /* Get CPUID leaf 0x1 - contains APIC ID in bits 31:24 of EBX */
-        cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+        cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
         return (ebx >> 24) & 0xFF;
     }
     /* Default to 0 if CPUID not available or not x86 */
@@ -82,11 +82,11 @@ uint32_t get_cpu_count(void)
     uint32_t eax, ebx, ecx, edx;
     
     /* Check if CPUID supports leaf 0x1 */
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax >= 1)
     {
         /* Get CPUID leaf 0x1 */
-        cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+        cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
         
         /* Check if HT/SMT is supported */
         if (edx & (1 << 28))  /* HTT bit */
@@ -100,11 +100,11 @@ uint32_t get_cpu_count(void)
     }
     
     /* Check if CPUID supports leaf 0xB (extended topology) */
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax >= 0xB)
     {
         /* Try to get logical processor count from leaf 0xB */
-        cpuid(0xB, 0, &eax, &ebx, &ecx, &edx);
+        cpuid_count(0xB, 0, &eax, &ebx, &ecx, &edx);
         if (ebx != 0)
         {
             /* EBX contains number of logical processors at this level */
@@ -126,7 +126,7 @@ int get_cpu_vendor(char *vendor_buf)
         return -1;
     
     uint32_t eax, ebx, ecx, edx;
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     
     /* Vendor string is in EBX, EDX, ECX (in that order) */
     memcpy(vendor_buf, &ebx, 4);
@@ -149,11 +149,11 @@ int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
     uint32_t eax, ebx, ecx, edx;
     
     /* Check if CPUID supports leaf 0x1 */
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax >= 1)
     {
         /* Get CPUID leaf 0x1 - contains family/model/stepping in EAX */
-        cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+        cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
         
         if (family)
         {
@@ -194,7 +194,7 @@ int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping)
 int get_cpuid_max_leaf(uint32_t *max_leaf)
 {
     uint32_t eax, ebx, ecx, edx;
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (max_leaf)
         *max_leaf = eax;
     return 0;
@@ -211,13 +211,13 @@ int get_cpu_brand_string(char *buf, size_t size)
     if (!buf || size < 49)
         return -1;
     uint32_t eax, ebx, ecx, edx;
-    cpuid(0x80000000U, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0x80000000U, 0, &eax, &ebx, &ecx, &edx);
     if (eax < 0x80000004U)
         return -1;
     uint32_t *u = (uint32_t *)buf;
-    cpuid(0x80000002U, 0, &u[0], &u[1], &u[2], &u[3]);
-    cpuid(0x80000003U, 0, &u[4], &u[5], &u[6], &u[7]);
-    cpuid(0x80000004U, 0, &u[8], &u[9], &u[10], &u[11]);
+    cpuid_count(0x80000002U, 0, &u[0], &u[1], &u[2], &u[3]);
+    cpuid_count(0x80000003U, 0, &u[4], &u[5], &u[6], &u[7]);
+    cpuid_count(0x80000004U, 0, &u[8], &u[9], &u[10], &u[11]);
     buf[48] = '\0';
     /* Trim trailing spaces */
     for (int i = 47; i >= 0 && (buf[i] == ' ' || buf[i] == '\0'); i--)
@@ -234,10 +234,10 @@ int get_cpu_brand_string(char *buf, size_t size)
 int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
 {
     uint32_t eax, ebx, ecx, edx;
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax < 1)
         return -1;
-    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
     if (out_edx)
         *out_edx = edx;
     if (out_ecx)
@@ -252,10 +252,10 @@ int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx)
 uint32_t get_cpu_clflush_size(void)
 {
     uint32_t eax, ebx, ecx, edx;
-    cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
     if (eax < 1)
         return 0;
-    cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+    cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
     return ((ebx >> 8) & 0xFF) * 8;
 }
 
@@ -268,14 +268,14 @@ int hypervisor_present(void)
 	if (cached)
 		return present;
 
-	cpuid(0, 0, &eax, &ebx, &ecx, &edx);
+	cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
 	if (eax < 1)
 	{
 		present = 0;
 		cached = 1;
 		return 0;
 	}
-	cpuid(1, 0, &eax, &ebx, &ecx, &edx);
+	cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
 	present = (ecx & (1u << 31)) ? 1 : 0;
 	cached = 1;
 	return present;
@@ -293,7 +293,7 @@ int hypervisor_vendor(char *buf, size_t n)
 		buf[0] = '\0';
 		return -1;
 	}
-	cpuid(0x40000000U, 0, &eax, &ebx, &ecx, &edx);
+	cpuid_count(0x40000000U, 0, &eax, &ebx, &ecx, &edx);
 	memcpy(vendor + 0, &ebx, 4);
 	memcpy(vendor + 4, &ecx, 4);
 	memcpy(vendor + 8, &edx, 4);

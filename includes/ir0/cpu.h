@@ -19,9 +19,6 @@
 /*
  * Portable names — no arch_ prefix. ISA asm lives in arch backends.
  * Prefer these over legacy arch_* from new/portable call sites.
- *
- * Do not include this from arch_cpu.h: backends declare a local cpuid()
- * with a subleaf argument that conflicts with the portable prototype.
  */
 
 void cpu_relax(void);
@@ -38,6 +35,7 @@ unsigned long irq_save(void);
 void irq_restore(unsigned long flags);
 
 void cpu_halt(void);
+void cpu_idle(void);
 
 /*
  * Logical CPU topology.  UP builds expose the boot CPU through the same
@@ -62,10 +60,6 @@ void wrmsr(uint32_t msr, uint64_t value);
 void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
 	   uint32_t *edx);
 
-uint16_t inw(uint16_t port);
-void outw(uint16_t port, uint16_t value);
-uint32_t inl(uint16_t port);
-void outl(uint16_t port, uint32_t value);
 
 /* x86 debug registers; no-op / zero on other ISA */
 void debug_reg_write(unsigned int regno, uint64_t value);

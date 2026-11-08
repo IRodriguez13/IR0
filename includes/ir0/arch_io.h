@@ -8,18 +8,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: arch_io.h
- * Description: Portable CPU, interrupt, port-I/O and MMIO interface.
+ * Description: Portable port-I/O and MMIO accessors.
  */
 
 #pragma once
 
 #include <stdint.h>
 #include <ir0/arch_types.h>
-
-
-void enable_interrupts(void);
-void disable_interrupts(void);
-
 
 uint8_t inb(uint16_t port);
 void outb(uint16_t port, uint8_t value);
@@ -34,7 +29,7 @@ void mmio_write32(arch_addr_t addr, uint32_t value);
 /* Short platform I/O delay; a no-op on architectures without port I/O. */
 void io_wait(void);
 
-/* Wider port I/O — also declared in <ir0/cpu.h>; one impl in arch_interface.c */
+/* Wider port I/O; a no-op returning zero on ISAs without port I/O. */
 uint16_t inw(uint16_t port);
 void outw(uint16_t port, uint16_t value);
 uint32_t inl(uint16_t port);
@@ -42,15 +37,4 @@ void outl(uint16_t port, uint32_t value);
 
 uintptr_t read_fault_address(void);
 
-
-const char *get_arch_name(void);
-const char *get_arch_uname_machine(void);
-
-
 void cpu_wait(void);
-void cpu_idle(void);
-void cpu_halt(void);
-void system_halt(void) __attribute__((noreturn));
-void system_reboot(void) __attribute__((noreturn));
-void system_poweroff(void) __attribute__((noreturn));
-void set_boot_params(void *params);

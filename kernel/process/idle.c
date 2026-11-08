@@ -11,6 +11,7 @@
 #include <ir0/idle.h>
 #include <ir0/irq.h>
 #include <ir0/sched.h>
+#include <ir0/cpu.h>
 
 static struct process_idle_services g_idle_ops;
 
