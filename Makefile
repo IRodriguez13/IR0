@@ -1542,6 +1542,7 @@ load-init:
 # catalog is gone, so every goal stays in the same fast parse path.
 -include scripts/make/docs.mk
 -include scripts/make/ktm.mk
+-include scripts/make/ktm-userdev.mk
 -include scripts/make/selftest.mk
 -include scripts/make/clean.mk
 
