@@ -7,7 +7,10 @@
  *              code through rt_sigreturn: with SA_RESTORER the handler
  *              returns into the caller's trampoline on every ISA, and
  *              rt_sigreturn restores the pre-handler signal mask so the
- *              same signal can be caught again.
+ *              same signal can be caught again. Without SA_RESTORER, Linux
+ *              arm64 returns through the kernel-provided trampoline, while
+ *              Linux x86_64 cannot build the frame and forces SIGSEGV; the
+ *              signal is never dropped silently.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -21,6 +24,7 @@
 #ifndef IR0_SELFTEST_NOLIBC
 #include <errno.h>
 #include <signal.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #endif
@@ -30,6 +34,21 @@
 #define SIGACTION_EXIT_CODE 4
 #define KILL_EXIT_CODE 5
 #define MASK_EXIT_CODE 6
+
+/* Kernel rt_sigaction(2) argument, without any libc trampoline. */
+struct kernel_sigaction
+{
+	void (*handler)(int);
+	unsigned long flags;
+	void (*restorer)(void);
+	unsigned long mask;
+};
+
+enum child_case
+{
+	CASE_LIBC_RESTORER,
+	CASE_NO_RESTORER,
+};
 
 static volatile int handler_runs;
 
@@ -47,6 +66,15 @@ static int install_with_libc(int sig)
 	return sigaction(sig, &sa, 0) == 0;
 }
 
+static int install_without_restorer(int sig)
+{
+	struct kernel_sigaction ksa = { 0 };
+
+	ksa.handler = count_and_return;
+	return syscall(SYS_rt_sigaction, sig, (long)&ksa, 0L,
+		       (long)sizeof(ksa.mask)) == 0;
+}
+
 /* The handler blocks @sig while it runs; rt_sigreturn must unblock it. */
 static int still_blocked(int sig)
 {
@@ -58,11 +86,16 @@ static int still_blocked(int sig)
 	return sigismember(&cur, sig) != 0;
 }
 
-static void run_child(void)
+static void run_child(enum child_case which)
 {
+	int installed;
 	int round;
 
-	if (!install_with_libc(SIGUSR1))
+	if (which == CASE_LIBC_RESTORER)
+		installed = install_with_libc(SIGUSR1);
+	else
+		installed = install_without_restorer(SIGUSR1);
+	if (!installed)
 		_exit(SIGACTION_EXIT_CODE);
 	/*
 	 * Code after kill() runs only once rt_sigreturn restored the
@@ -80,7 +113,7 @@ static void run_child(void)
 	_exit(RESUMED_EXIT_CODE);
 }
 
-static int child_status(void)
+static int child_status(enum child_case which)
 {
 	int status = 0;
 	int pid;
@@ -92,7 +125,7 @@ static int child_status(void)
 		return -1;
 	}
 	if (pid == 0)
-		run_child();
+		run_child(which);
 	if (wait4(pid, &status, 0, 0) != pid)
 	{
 		ksft_print_num("wait4_errno", errno);
@@ -109,10 +142,30 @@ static int exited_with(int status, int code)
 	return 0;
 }
 
+#if defined(__aarch64__)
+/* Linux arm64 setup_return(): no SA_RESTORER returns through the vDSO. */
+static int no_restorer_ok(int status)
+{
+	return exited_with(status, RESUMED_EXIT_CODE);
+}
+#else
+/* Linux x86_64 setup_rt_frame(): no SA_RESTORER -> force_sigsegv(). */
+static int no_restorer_ok(int status)
+{
+	if (status >= 0 && WIFSIGNALED(status) && WTERMSIG(status) == SIGSEGV)
+		return 1;
+	ksft_print_num("wait_status", status);
+	return 0;
+}
+#endif
+
 int main(void)
 {
-	ksft_set_plan(1);
-	ksft_test_result(exited_with(child_status(), RESUMED_EXIT_CODE),
+	ksft_set_plan(2);
+	ksft_test_result(exited_with(child_status(CASE_LIBC_RESTORER),
+				     RESUMED_EXIT_CODE),
 			 "handler_returns_through_sa_restorer");
+	ksft_test_result(no_restorer_ok(child_status(CASE_NO_RESTORER)),
+			 "handler_without_sa_restorer_follows_isa_abi");
 	return ksft_exit();
 }

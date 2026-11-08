@@ -231,7 +231,7 @@ ir0-selftest-signal-return-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SIGN
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_SIGNAL_RETURN) \
-		--done "ok 1 handler_returns_through_sa_restorer" \
+		--done "ok 2 handler_without_sa_restorer_follows_isa_abi" \
 		--log $(HOST_TMP)/ir0-selftest-x86-signal-return.log
 	@echo "✓ ir0-selftest-signal-return-x86"
 
@@ -239,7 +239,7 @@ ir0-selftest-signal-return-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_SIGNAL_RETURN) \
-		--done "ok 1 handler_returns_through_sa_restorer" \
+		--done "ok 2 handler_without_sa_restorer_follows_isa_abi" \
 		--log $(HOST_TMP)/ir0-selftest-arm64-signal-return.log
 	@echo "✓ ir0-selftest-signal-return-arm64"
 
