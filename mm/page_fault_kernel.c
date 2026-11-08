@@ -10,9 +10,6 @@
  * Description: Kernel-mode faults: uaccess faults kill the task, anything else panics.
  */
 
-
-
-
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>

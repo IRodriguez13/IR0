@@ -10,13 +10,6 @@
  * Description: User faults: VMA lookup, anonymous zero pages, not-present and read-protection faults.
  */
 
-
-
-
-
-
-
-
 #include <ir0/cpu.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/process.h>

@@ -10,13 +10,6 @@
  * Description: User write to a present read-only page: copy-on-write break or SIGSEGV.
  */
 
-
-
-
-
-
-
-
 #include <ir0/cpu.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/process.h>

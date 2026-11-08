@@ -12,8 +12,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-
-
 #include <config.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
@@ -23,7 +21,6 @@
 #include <ir0/arch_pf_debug.h>
 #include <mm/paging.h>
 #include "page_fault_internal.h"
-
 
 static void pf_audit_classify(uint64_t *stack,
 			      const struct page_fault_info *info)
