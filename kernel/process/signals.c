@@ -40,6 +40,9 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 		return 0;
 	if (p->signal_ignored & SIGNAL_MASK(sig))
 		return 0;
+	/* A blocked signal stays pending (Linux): not fatal until unblocked. */
+	if (p->signal_mask & SIGNAL_MASK(sig))
+		return 0;
 	handler = p->signal_handlers[sig];
 	if (handler && handler != SIG_DFL && handler != SIG_IGN)
 		return 0;

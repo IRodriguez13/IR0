@@ -625,6 +625,12 @@ static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
  * 3. Termination signals (SIGTERM, SIGINT, SIGQUIT, SIGABRT)
  * 4. Other signals
  */
+/* Pending signals whose default action is Terminate, in handling order. */
+static const int signal_default_terminate[] = {
+    SIGSEGV, SIGFPE, SIGILL, SIGBUS, SIGTERM, SIGINT, SIGHUP, SIGQUIT,
+    SIGABRT, SIGPIPE,
+};
+
 void handle_signals(void)
 {
     process_t *current = process_get_current();
@@ -663,170 +669,42 @@ void handle_signals(void)
         return;
     }
 
-    /* Error signals — terminate unless a userspace handler is registered */
-    if (current->signal_pending & SIGNAL_MASK(SIGSEGV))
-    {
-        if (!signals_has_user_handler(current, SIGSEGV))
-        {
-	    /*
-	     * Pending-bit kill without a live #PF frame (e.g. send_signal from
-	     * non-PF path). Still emit a greppable tag so session smokes are
-	     * not limited to CONSOLE_SESSION_SEGV.
-	     */
-	    klog_info_fmt("FAULT",
-			  "USER_FAULT_FRAME CLASSIFY SIGNAL_KILL_SIGSEGV "
-			  "pid=%x comm=%s",
-			  (unsigned)((uint32_t)current->task.pid),
-			  current->comm[0] ? current->comm : "(none)");
-	    klog_print("USER_FAULT_FRAME\n");
-            signal_exit_current(SIGSEGV);
-            return;
-        }
-    }
-
-    if (current->signal_pending & SIGNAL_MASK(SIGFPE))
-    {
-        if (!signals_has_user_handler(current, SIGFPE))
-        {
-#if DEBUG_PROCESS
-            klog_info("SIGNAL", "SIGFPE received (arithmetic error), terminating process");
-#endif
-            signal_exit_current(SIGFPE);
-            return;
-        }
-    }
-
-    if (current->signal_pending & SIGNAL_MASK(SIGILL))
-    {
-        if (!signals_has_user_handler(current, SIGILL))
-        {
-#if DEBUG_PROCESS
-            klog_info("SIGNAL", "SIGILL received (illegal instruction), terminating process");
-#endif
-            signal_exit_current(SIGILL);
-            return;
-        }
-    }
-
-    if (current->signal_pending & SIGNAL_MASK(SIGBUS))
-    {
-        if (!signals_has_user_handler(current, SIGBUS))
-        {
-#if DEBUG_PROCESS
-            klog_info("SIGNAL", "SIGBUS received (bus error), terminating process");
-#endif
-            signal_exit_current(SIGBUS);
-            return;
-        }
-    }
-
-    /* Termination signals */
-    if (current->signal_pending & SIGNAL_MASK(SIGTERM))
-    {
-#if IR0_DEBUG_PROC
-        klog_info_fmt("SIGNAL",
-                      "[SIGTERM_AUDIT] handle_signals SIGTERM pending pid=0x%x ignored=0x%x mask=0x%x",
-                      (unsigned)current->task.pid,
-                      (unsigned)current->signal_ignored,
-                      (unsigned)current->signal_mask);
-#endif
-        if (current->signal_ignored & SIGNAL_MASK(SIGTERM))
-        {
-            current->signal_pending &= ~SIGNAL_MASK(SIGTERM);
-            return;
-        }
-        if (!signals_has_user_handler(current, SIGTERM))
-        {
-#if DEBUG_PROCESS
-            klog_info("SIGNAL", "SIGTERM received, terminating process");
-#endif
-#if IR0_DEBUG_PROC
-            klog_info_fmt("SIGNAL",
-                          "[SIGTERM_AUDIT] default terminate pid=0x%x exit_signal=15",
-                          (unsigned)current->task.pid);
-#endif
-            signal_exit_current(SIGTERM);
-        }
-    }
-
     /*
-     * SIGINT/SIGQUIT: same contract as SIGTERM. BusyBox ash installs a
-     * handler and may raise(SIGINT) after a fg job (^C in nano). Always
-     * process_exit(130) killed the login shell → runsv restart loop.
+     * Default action Terminate (Linux signal(7)), one rule for all: an
+     * ignored signal is dropped, a blocked one stays pending, a caught one
+     * is left for the handler delivery below, anything else ends the task.
+     * BusyBox ash relies on this: it catches SIGINT and may raise() it
+     * after a foreground job, and a blocked SIGTERM must not kill it.
      */
-    if (current->signal_pending & SIGNAL_MASK(SIGINT))
+    for (size_t i = 0; i < sizeof(signal_default_terminate) /
+				sizeof(signal_default_terminate[0]); i++)
     {
-        if (current->signal_ignored & SIGNAL_MASK(SIGINT))
-        {
-            current->signal_pending &= ~SIGNAL_MASK(SIGINT);
-        }
-        else if (!signals_has_user_handler(current, SIGINT))
-        {
-#if DEBUG_PROCESS
-            klog_info("SIGNAL", "SIGINT received, terminating process");
-#endif
-            signal_exit_current(SIGINT);
-        }
-        /* else: fall through to userspace handler delivery below */
-    }
+        int sig = signal_default_terminate[i];
 
-    if (current->signal_pending & SIGNAL_MASK(SIGHUP))
-    {
-        if (current->signal_ignored & SIGNAL_MASK(SIGHUP))
+        if (!(current->signal_pending & SIGNAL_MASK(sig)))
+            continue;
+        if (current->signal_ignored & SIGNAL_MASK(sig))
         {
-            current->signal_pending &= ~SIGNAL_MASK(SIGHUP);
+            current->signal_pending &= ~SIGNAL_MASK(sig);
+            continue;
         }
-        else if (!signals_has_user_handler(current, SIGHUP))
+        if ((current->signal_mask & SIGNAL_MASK(sig)) ||
+            signals_has_user_handler(current, sig))
+            continue;
+        if (sig == SIGSEGV)
         {
-            klog_info("SIGNAL", "SIGHUP received, terminating process");
-            signal_exit_current(SIGHUP);
+            /*
+             * Pending-bit kill without a live fault frame (kill(2) from
+             * another path): keep a greppable tag for session smokes.
+             */
+            klog_info_fmt("FAULT",
+                          "USER_FAULT_FRAME CLASSIFY SIGNAL_KILL_SIGSEGV "
+                          "pid=%x comm=%s",
+                          (unsigned)((uint32_t)current->task.pid),
+                          current->comm[0] ? current->comm : "(none)");
+            klog_print("USER_FAULT_FRAME\n");
         }
-    }
-
-    if (current->signal_pending & SIGNAL_MASK(SIGQUIT))
-    {
-        if (current->signal_ignored & SIGNAL_MASK(SIGQUIT))
-        {
-            current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
-        }
-        else if (!signals_has_user_handler(current, SIGQUIT))
-        {
-#if DEBUG_PROCESS
-            klog_info("SIGNAL", "SIGQUIT received, terminating process");
-#endif
-            signal_exit_current(SIGQUIT);
-        }
-    }
-
-    if (current->signal_pending & SIGNAL_MASK(SIGABRT))
-    {
-#if DEBUG_PROCESS
-        klog_info("SIGNAL", "SIGABRT received, terminating process");
-#endif
-        signal_exit_current(SIGABRT);
-    }
-
-    /*
-     * SIGPIPE: write(2) to a pipe/FIFO with no readers (Linux signal(7)).
-     * Queued from sys_write; delivered here before returning to ring 3.
-     * Masked: leave pending (no terminate). Ignored: drop. Default: exit.
-     * User handler: fall through to delivery below.
-     */
-    if (current->signal_pending & SIGNAL_MASK(SIGPIPE))
-    {
-        if (current->signal_ignored & SIGNAL_MASK(SIGPIPE))
-        {
-            current->signal_pending &= ~SIGNAL_MASK(SIGPIPE);
-        }
-        else if (current->signal_mask & SIGNAL_MASK(SIGPIPE))
-        {
-            /* blocked — keep pending */
-        }
-        else if (!signals_has_user_handler(current, SIGPIPE))
-        {
-            signal_exit_current(SIGPIPE);
-        }
-        /* else: fall through to userspace handler delivery below */
+        signal_exit_current(sig);
     }
 
     /* SIGCONT - continue if stopped */
