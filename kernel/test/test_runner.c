@@ -80,6 +80,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_sysfs_hostname_contract, "sysfs_hostname_contract", 1 },
 	{ ktest_sysfs_firmware_ir0_contract,
 	  "sysfs_firmware_ir0_contract", 1 },
+	{ ktest_boot_snapshot_acpi_rsdp_contract,
+	  "boot_snapshot_acpi_rsdp_contract", 0 },
 	{ ktest_sysfs_max_processes_contract,
 	  "sysfs_max_processes_contract", 1 },
 	{ ktest_proc_netinfo_contract, "proc_netinfo_contract", 1 },

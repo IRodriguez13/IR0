@@ -19,7 +19,10 @@
 #include "../../fs/devfs_internal.h"
 #include "../../fs/tmpfs.h"
 #include <config.h>
+#include <ir0/acpi_pm.h>
+#include <ir0/acpi_rsdp.h>
 #include <ir0/blockdev.h>
+#include <ir0/boot_memory.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/net.h>
@@ -207,6 +210,28 @@ void ktest_sysfs_firmware_ir0_contract(void)
 	KASSERT(contains_text(dbuf, "unavailable") ||
 		contains_text(dbuf, "multiboot_valid") ||
 		contains_text(dbuf, "fdt_valid"));
+
+	KTEST_END();
+}
+
+/*
+ * ACPI consumers take the RSDP from the boot snapshot instead of scanning
+ * firmware memory: when the snapshot carries one it must be a valid RSDP,
+ * and ACPI power management can only come up from it.
+ */
+void ktest_boot_snapshot_acpi_rsdp_contract(void)
+{
+	const struct ir0_boot_snapshot *snapshot;
+
+	KTEST_BEGIN("boot_snapshot_acpi_rsdp_contract");
+
+	snapshot = boot_memory_snapshot();
+	KASSERT(snapshot != NULL);
+	if (snapshot->acpi_rsdp != 0)
+		KASSERT(acpi_rsdp_valid((const struct acpi_rsdp *)(uintptr_t)
+					snapshot->acpi_rsdp));
+	if (ir0_acpi_pm_init() == 0)
+		KASSERT(snapshot->acpi_rsdp != 0);
 
 	KTEST_END();
 }

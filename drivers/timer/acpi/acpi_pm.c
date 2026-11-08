@@ -5,6 +5,9 @@
  * File: acpi_pm.c
  * Description: ACPI FADT PM1a/b poweroff/suspend + DSDT _S5_/_S3_ SLP_TYP.
  *
+ * The RSDP comes from the boot snapshot (struct ir0_boot_snapshot::acpi_rsdp);
+ * this driver does not search firmware memory for it.
+ *
  * Only walks tables that are either inside the early identity map (0..48MiB)
  * or mapped on demand via 4KiB supervisor identity (no boot-map expand).
  * QEMU often places RSDT/FADT higher; on-demand map prefers real PM1a over
@@ -18,6 +21,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/acpi_pm.h>
+#include <ir0/acpi_rsdp.h>
+#include <ir0/boot_memory.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/paging.h>
@@ -25,28 +30,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define ACPI_RSDP_SIG "RSD PTR "
-#define ACPI_RSDP_SEARCH_START 0x000E0000u
-#define ACPI_RSDP_SEARCH_END   0x00100000u
 #define ACPI_SLP_EN            (1u << 13)
 /* Early boot identity map covers 0..48MiB; above that we map on demand. */
 #define ACPI_SAFE_PHYS_MAX     0x03000000ull
 /* Refuse absurd table addresses (QEMU ACPI lives well below 4GiB). */
 #define ACPI_MAP_PHYS_CAP      0x100000000ull
 #define ACPI_MAP_MAX_BYTES     (256u * 1024u)
-
-typedef struct
-{
-	char signature[8];
-	uint8_t checksum;
-	char oem_id[6];
-	uint8_t revision;
-	uint32_t rsdt_address;
-	uint32_t length;
-	uint64_t xsdt_address;
-	uint8_t ext_checksum;
-	uint8_t reserved[3];
-} __attribute__((packed)) acpi_rsdp_ext_t;
 
 typedef struct
 {
@@ -370,30 +359,28 @@ static int scan_xsdt_for_fadt(uint64_t xsdt_phys)
 
 int ir0_acpi_pm_init(void)
 {
-	uint32_t addr;
+	const struct ir0_boot_snapshot *snapshot;
+	const struct acpi_rsdp *rsdp;
 
 	if (g_acpi_pm_ready)
 		return 0;
 
-	for (addr = ACPI_RSDP_SEARCH_START; addr < ACPI_RSDP_SEARCH_END; addr += 16)
-	{
-		acpi_rsdp_ext_t *rsdp = (acpi_rsdp_ext_t *)(uintptr_t)addr;
+	/* The boot protocol (or its arch fallback) located the RSDP. */
+	snapshot = boot_memory_snapshot();
+	if (!snapshot || snapshot->acpi_rsdp == 0 ||
+	    !phys_safe(snapshot->acpi_rsdp, sizeof(*rsdp)))
+		return -1;
+	rsdp = (const struct acpi_rsdp *)(uintptr_t)snapshot->acpi_rsdp;
+	if (!acpi_rsdp_valid(rsdp))
+		return -1;
 
-		if (acpi_memcmp(rsdp->signature, ACPI_RSDP_SIG, 8) != 0)
-			continue;
-		if (!acpi_checksum_ok(rsdp, 20))
-			continue;
+	if (rsdp->revision >= 2 && rsdp->length >= 33 &&
+	    rsdp->length <= sizeof(*rsdp) &&
+	    acpi_checksum_ok(rsdp, rsdp->length) &&
+	    scan_xsdt_for_fadt(rsdp->xsdt_address) == 0)
+		return 0;
 
-		if (rsdp->revision >= 2 && rsdp->length >= 33 &&
-		    rsdp->length <= sizeof(*rsdp) &&
-		    acpi_checksum_ok(rsdp, rsdp->length) &&
-		    scan_xsdt_for_fadt(rsdp->xsdt_address) == 0)
-			return 0;
-
-		if (scan_rsdt_for_fadt(rsdp->rsdt_address) == 0)
-			return 0;
-	}
-	return -1;
+	return scan_rsdt_for_fadt(rsdp->rsdt_address);
 }
 
 int ir0_acpi_pm_try_poweroff(void)

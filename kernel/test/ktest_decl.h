@@ -52,6 +52,7 @@ void ktest_proc_version_contract(void);
 void ktest_proc_uptime_contract(void);
 void ktest_sysfs_hostname_contract(void);
 void ktest_sysfs_firmware_ir0_contract(void);
+void ktest_boot_snapshot_acpi_rsdp_contract(void);
 void ktest_sysfs_max_processes_contract(void);
 void ktest_proc_netinfo_contract(void);
 void ktest_dev_net_contract(void);

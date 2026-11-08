@@ -12,7 +12,8 @@
  */
 
 #include "find_hpet.h"
-#include <vga.h>
+#include <ir0/acpi_rsdp.h>
+#include <ir0/boot_memory.h>
 
 static int memcmp(const void *s1, const void *s2, size_t n)
 {
@@ -42,74 +43,44 @@ static int is_valid_acpi_address(uintptr_t addr)
     return 1;
 }
 
-// Validar checksum de RSDP
-static int validate_rsdp_checksum(rsdp_t *rsdp)
+/*
+ * Walk the RSDT behind the RSDP recorded in the boot snapshot and return the
+ * HPET description table, or NULL when the firmware exposes none.
+ */
+void *find_hpet_table(void)
 {
-    uint8_t *bytes = (uint8_t *)rsdp;
-    uint8_t sum = 0;
+    const struct ir0_boot_snapshot *snapshot = boot_memory_snapshot();
+    const struct acpi_rsdp *rsdp;
+    acpi_sdt_header_t *rsdt;
+    uint32_t *table_ptrs;
+    int entries;
 
-    for (int i = 0; i < 20; i++)
-    { // RSDP v1.0 tiene 20 bytes
-        sum += bytes[i];
-    }
+    if (!snapshot || snapshot->acpi_rsdp == 0)
+        return NULL;
+    rsdp = (const struct acpi_rsdp *)(uintptr_t)snapshot->acpi_rsdp;
+    if (!acpi_rsdp_valid(rsdp) || !is_valid_acpi_address(rsdp->rsdt_address))
+        return NULL;
 
-    return sum == 0; // Checksum válido si suma es 0
-}
+    rsdt = (acpi_sdt_header_t *)(uintptr_t)rsdp->rsdt_address;
+    if (rsdt->length < sizeof(acpi_sdt_header_t) ||
+        memcmp(rsdt->signature, "RSDT", 4) != 0)
+        return NULL;
 
-void *find_hpet_table()
-{
-    for (uint32_t addr = RSDP_SEARCH_START; addr < RSDP_SEARCH_END; addr += 16)
+    entries = (rsdt->length - sizeof(acpi_sdt_header_t)) / 4;
+    /* Bound the walk: a corrupt length must not run through memory. */
+    if (entries > 64)
+        return NULL;
+
+    table_ptrs = (uint32_t *)((uint8_t *)rsdt + sizeof(acpi_sdt_header_t));
+    for (int i = 0; i < entries; i++)
     {
-        char *sig = (char *)(uintptr_t)addr;
+        acpi_sdt_header_t *table;
 
-        //  Usar implementación propia de memcmp
-        if (memcmp(sig, ACPI_RSDP_SIGNATURE, 8) == 0)
-        {
-            rsdp_t *rsdp = (rsdp_t *)(uintptr_t)addr;
-
-            //  Validar checksum de RSDP
-            if (!validate_rsdp_checksum(rsdp))
-                continue; // RSDP corrupto, seguir buscando
-
-            //  Validar que rsdt_address sea válido
-            if (!is_valid_acpi_address(rsdp->rsdt_address))
-                continue;
-
-            acpi_sdt_header_t *rsdt = (acpi_sdt_header_t *)(uintptr_t)rsdp->rsdt_address;
-
-            //  Validar longitud de RSDT
-            if (rsdt->length < sizeof(acpi_sdt_header_t))
-                continue;
-
-            //  Verificar signature de RSDT
-            if (memcmp(rsdt->signature, "RSDT", 4) != 0)
-                continue;
-
-            int entries = (rsdt->length - sizeof(acpi_sdt_header_t)) / 4;
-
-            // Limitar número de entradas para evitar loops infinitos
-            if (entries > 64)
-                continue;
-
-            uint32_t *table_ptrs = (uint32_t *)((uint8_t *)rsdt + sizeof(acpi_sdt_header_t));
-
-            for (int i = 0; i < entries; i++)
-            {
-                // Validar cada puntero de tabla
-                if (!is_valid_acpi_address(table_ptrs[i]))
-                    continue;
-
-                acpi_sdt_header_t *table = (acpi_sdt_header_t *)(uintptr_t)table_ptrs[i];
-
-                // Verificar que el puntero no sea NULL
-                if (table == NULL)
-                    continue;
-
-                // Comparar signature completa, no solo el primer uint32_t
-                if (memcmp(table->signature, "HPET", 4) == 0)
-                    return table;
-            }
-        }
+        if (!is_valid_acpi_address(table_ptrs[i]))
+            continue;
+        table = (acpi_sdt_header_t *)(uintptr_t)table_ptrs[i];
+        if (memcmp(table->signature, "HPET", 4) == 0)
+            return table;
     }
 
     return NULL;
