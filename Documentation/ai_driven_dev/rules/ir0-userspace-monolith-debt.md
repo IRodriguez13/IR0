@@ -33,7 +33,7 @@ Subsystems communicate via callbacks/facades, not hard cross-deps:
 | open/read/write | `linux_open_flags_to_ir0` → `vfs_*` → `fs->ops` |
 | mmap/brk | mm facade → arch paging |
 | schedule/switch | sched core → arch context switch |
-| user copy | `copy_user` / `copy_*_region_in_directory` with explicit `page_directory` |
+| user copy | `access_ok` + `copy_*_user`; `copy_*_user_mm` with an explicit root |
 
 **Never** assume `active_cr3` when the target is another process (pipes, wake, cross-task copy).
 
@@ -42,7 +42,7 @@ Subsystems communicate via callbacks/facades, not hard cross-deps:
 - Linux open flags: translate in syscall/ABI layer only (`includes/ir0/open_flags.*`).
 - VFS: generic create/truncate semantics; backends implement path ops only.
 - MINIX/tmpfs/etc.: backend only; no Linux ABI flags.
-- User copies: `copy_to_user_region_in_directory(pml4, …)` when CR3 may differ.
+- User copies: `copy_to_user_mm(root, …)` when the target is not the current mm.
 
 ## Oleada discipline
 

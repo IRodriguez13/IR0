@@ -1,11 +1,11 @@
 # Frontera kernel ↔ userspace (uaccess)
 
-> **Última verificación:** 2026-09-22  
+> **Última verificación:** 2026-11-08  
 > Capas `copy_*_user_mm`: ver [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 
-> **Fuente de verdad:** `includes/ir0/copy_user.h`, `kernel/lib/copy_user.c`,  
+> **Fuente de verdad:** `includes/ir0/copy_user.h`, `mm/copy_user.c`,  
 > `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/mm.c`,
-> `mm/paging.c` (`copy_*_region_in_directory`, `zero_user_region_in_directory`),  
+> `mm/paging_uaccess.c` (`copy_*_user_mm`, `clear_user_mm`),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
 > (`check_usercopy_no_raw_user_touch`), `tests/host/test_usercopy_contract.c`,  
 > `scripts/smoke_session_soak.py` (FATAL incluye `KERNEL_UACCESS_FAULT`)
@@ -38,13 +38,13 @@ flowchart TB
     Sys[syscalls / signals / helpers VFS]
   end
   subgraph facade [Facade agnóstica de ISA]
-    CU["includes/ir0/copy_user.h<br/>copy_to/from_user clear_user<br/>get_user put_user access_ok"]
+    CU["includes/ir0/copy_user.h<br/>access_ok copy_to/from_user clear_user<br/>strncpy_from_user get_user put_user"]
   end
   subgraph isa [Ventana VA por ISA]
     VA["mm_user_va_ok()<br/>arch/*/sources/mm.c"]
   end
   subgraph mm [Walk MM portable]
-    REG["copy_*_region_in_directory<br/>zero_user_region_in_directory<br/>COW break en write"]
+    REG["copy_*_user_mm clear_user_mm<br/>solo hojas user<br/>COW break en write"]
   end
   Sys --> CU --> VA
   CU --> REG
@@ -55,16 +55,28 @@ flowchart TB
 1. **Nunca** `memcpy` / `memset` / `strncpy` / `*` directo a un puntero
    userspace en un path de producción.
 2. **Siempre** usar:
-   - `copy_to_user` / `copy_from_user` / `clear_user` para el mm **actual**, o
-   - `copy_to_user_mm` / `copy_from_user_mm` / `zero_user_mm` cuando el pgd es
-     explícito. Esas envuelven `*_region_in_directory` (primitiva de walk).
+   - `copy_to_user` / `copy_from_user` / `clear_user` / `strncpy_from_user`
+     para el mm **actual**, o
+   - `copy_to_user_mm` / `copy_from_user_mm` / `clear_user_mm` solo cuando el
+     destino no es el mm actual (carga ELF, frames de señal, exit/wait de otro
+     proceso).
+   - Un puntero validado antes de copiar usa `access_ok(addr, n)`; no hay otro
+     validador. Rangos que nunca se copian (mmap/munmap/mprotect, brk, handler
+     de señal, base TLS) usan `mm_user_va_ok()`.
 3. **Nunca** `load_page_directory(user_pgd)` + `memcpy((void *)user_va, …)`.
    Ese patrón mató ash post-login: write a PTE presente RO / COW con `cs=8` →
    `KERNEL_UACCESS_FAULT`.
 4. Preferir bounce para structs chicos (`utsname`, `timeval`, `timespec`):
    rellenar en stack kernel y un `copy_to_user`.
-5. El bypass `KERNEL_MODE` en `copy_user.c` es **solo** dbgshell / tareas
-   embebidas — no para punteros ring-3.
+5. Los hilos del kernel (`KERNEL_MODE`: dbgshell, ktest) llaman syscalls con
+   buffers del kernel. Una sola regla estática en `mm/copy_user.c`
+   (`uaccess_kernel()`) hace que `access_ok()`, `access_ok_mapped()` y las
+   copias los acepten. El modo se fija en spawn, se hereda en fork y exec
+   exige `USER_MODE`: ningún puntero ring-3 pasa por esa regla.
+6. El walk toca solo hojas **accesibles a user** (`pte_user`). La ventana VA
+   user también contiene páginas identity supervisor (anillo de teclado x86-64
+   en `0x500000`); un puntero de syscall ahí es `-EFAULT`
+   (`make ir0-selftest-uaccess-x86` / `-arm64`).
 
 Comentario de contrato: [`includes/ir0/copy_user.h`](../../includes/ir0/copy_user.h).
 
@@ -72,15 +84,15 @@ Comentario de contrato: [`includes/ir0/copy_user.h`](../../includes/ir0/copy_use
 
 | API | Rol |
 |-----|-----|
-| `access_ok(addr, n)` | Alias de `is_user_address` (nombre estilo Linux) |
-| `is_user_address` / `_checked` | Ventana VA (+ walk mapped opcional) |
-| `copy_to_user` / `copy_from_user` | Proceso actual → region helpers |
-| `clear_user` | Cero vía `zero_user_mm` |
+| `access_ok(addr, n)` | Única validación de puntero user: ventana VA (hilos del kernel pasan) |
+| `access_ok_mapped(addr, n)` | `access_ok` + todas las páginas presentes; para lecturas que consumen datos antes de copiar |
+| `copy_to_user` / `copy_from_user` | Proceso actual → `copy_*_user_mm` sobre su raíz |
+| `clear_user` | Cero vía `clear_user_mm` |
+| `strncpy_from_user(dst, src, n)` | Semántica Linux: largo, `n` si no entra el NUL, o `-EFAULT` |
 | `get_user` / `put_user` | Macros escalares sobre `copy_*_user` |
-| `copy_*_user_mm` / `zero_user_mm` | pgd explícito (callers) |
-| `copy_*_region_in_directory` | primitiva de walk detrás de `_mm` |
+| `copy_*_user_mm` / `clear_user_mm` | Raíz explícita (análogo a `access_process_vm`) |
 
-Implementación con COW: [`mm/paging.c`](../../mm/paging.c). Es la **única**
+Implementación con COW: [`mm/paging_uaccess.c`](../../mm/paging_uaccess.c). Es la **única**
 vía soportada para romper COW en un write iniciado por el kernel.
 
 ## Layout multi-ISA (aislar fallos por arquitectura)
@@ -88,9 +100,9 @@ vía soportada para romper COW en un write iniciado por el kernel.
 | Capa | Ruta en el árbol | Responsabilidad |
 |------|------------------|-----------------|
 | Contrato + macros | `includes/ir0/copy_user.h` | Misma API en toda ISA |
-| Glue portable | `kernel/lib/copy_user.c` | Modo, `mm_user_va_ok`, dispatch a region |
+| Glue portable | `mm/copy_user.c` | Regla de hilos del kernel, `access_ok`, dispatch a `_mm` |
 | Ventana VA | `mm_user_va_ok` en `arch/*/sources/mm.c` | Rango user canónico por ISA |
-| COW / walk PTE | `mm/paging.c` (MM producción x86-64) | Presente RO / COW break |
+| COW / walk PTE | `mm/paging_uaccess.c` | Hoja user, RO / COW break |
 | Arm64 early | MM early / helpers existentes | Debe pasar por nombres `copy_*_user`; **sin reclamar COW** hasta paridad |
 
 **Cómo aislar un bug de ISA:**
@@ -107,12 +119,12 @@ Ventana x86-64: `0x00400000` … `0x00007FFFFFFFFFFF` en
 
 | Área | Archivo | Patrón actual |
 |------|---------|---------------|
-| Frames / `siginfo` | `kernel/lib/signals.c` | `copy_to_user_region_in_directory(process_pgd(p), …)` |
+| Frames / `siginfo` | `kernel/signals.c` | `copy_to_user_mm(process_pgd(p), …)` |
 | `uname` | `kernel/syscalls/fs_path_syscalls.c` | `utsname` kernel + `copy_to_user` |
 | `gettimeofday` | `kernel/syscalls/time_syscalls.c` | bounce + `copy_to_user` |
 | `nanosleep` rem | `kernel/syscalls/io_syscalls.c` | `copy_from_user` / `copy_to_user` |
 | `getrandom` | `kernel/syscalls/process_syscalls.c` | chunk kernel + `copy_to_user` |
-| mprotect zero | `kernel/syscalls/mm_syscalls.c` | `zero_user_region_in_directory` |
+| mprotect zero | `kernel/syscalls/mm_syscalls.c` | `clear_user_mm` |
 
 ## Enforcement estático (forma del árbol → CI reproducible)
 

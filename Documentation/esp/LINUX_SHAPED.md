@@ -43,9 +43,10 @@ La reparación previa a `iretq` es privada de x86; el core usa `switch_to_user_t
 
 | Capa | Nombre IR0 |
 |------|------------|
-| mm actual | `copy_to/from_user`, `clear_user` |
-| pgd explícito (callers) | `copy_*_user_mm`, `zero_user_mm` |
-| primitiva de walk | `*_region_in_directory` |
+| mm actual | `copy_to/from_user`, `clear_user`, `strncpy_from_user` |
+| raíz explícita (callers) | `copy_*_user_mm`, `clear_user_mm` |
+| validación de puntero | `access_ok` |
+| ventana VA | `mm_user_va_ok` |
 
 Detalle: [`../uaccess.md`](../uaccess.md).
 

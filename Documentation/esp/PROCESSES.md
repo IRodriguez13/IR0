@@ -13,7 +13,7 @@ credenciales en forma incremental.
 - Integración con syscalls en `kernel/syscalls/process_syscalls.c`.
 - Handoff al scheduler vía scheduler API.
 - Rutas de señales y wait/reap integradas al estado de proceso.
-- Frames/`siginfo` vía `copy_to_user_region_in_directory` (nunca CR3+`memcpy`);
+- Frames/`siginfo` vía `copy_to_user_mm` (nunca CR3+`memcpy`);
   contrato: [`uaccess.md`](uaccess.md).
 
 ## Datos clave por proceso
