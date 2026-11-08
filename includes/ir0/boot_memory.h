@@ -53,6 +53,11 @@ struct ir0_boot_snapshot
 	struct ir0_phys_range firmware;
 	struct ir0_phys_range initrd;
 	struct ir0_boot_framebuffer framebuffer;
+	/*
+	 * Physical address of the ACPI RSDP handed over by the boot protocol
+	 * (Linux: boot_params.acpi_rsdp_addr); 0 when the platform has none.
+	 */
+	uint64_t acpi_rsdp;
 	char cmdline[IR0_BOOT_CMDLINE_MAX];
 	int valid;
 	int synthetic_memory;

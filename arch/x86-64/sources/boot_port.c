@@ -8,6 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/acpi_rsdp.h>
 #include <ir0/boot_port.h>
 #include <ir0/boot_memory.h>
 #include <ir0/errno.h>
@@ -22,6 +23,12 @@
 #define X86_BOOT_IDENTITY_LIMIT 0x20000000ULL
 #define X86_MULTIBOOT_MMAP_MAX  (1024U * 1024U)
 #define X86_MULTIBOOT_MODULE_MAX 32U
+
+/* Legacy BIOS RSDP search areas (ACPI 6.5 §5.2.5.1). */
+#define X86_BDA_EBDA_SEGMENT    0x40EU
+#define X86_EBDA_SEARCH_BYTES   1024U
+#define X86_BIOS_ROM_START      0x000E0000U
+#define X86_BIOS_ROM_END        0x00100000U
 
 struct x86_multiboot_mmap_entry
 {
@@ -177,6 +184,48 @@ static int x86_snapshot_parse_modules(struct ir0_boot_snapshot *snapshot,
 	return 0;
 }
 
+static uint64_t x86_acpi_rsdp_scan_area(uint64_t start, uint64_t end)
+{
+	uint64_t address;
+
+	for (address = start; address + ACPI_RSDP_V1_SIZE <= end; address += 16U)
+	{
+		if (acpi_rsdp_valid((const struct acpi_rsdp *)(uintptr_t)address))
+			return address;
+	}
+	return 0;
+}
+
+/*
+ * Multiboot 1 carries no RSDP, so this backend falls back to the legacy BIOS
+ * search: the first KiB of the EBDA, then the BIOS ROM area below 1 MiB.
+ * Both lie inside the low identity map that is live during the snapshot.
+ * A boot protocol that hands over the RSDP (Multiboot 2 ACPI tag, UEFI
+ * configuration table) must fill snapshot->acpi_rsdp from it instead.
+ */
+static uint64_t x86_acpi_rsdp_legacy_bios(void)
+{
+	const volatile uint16_t *ebda_segment;
+	uint64_t ebda;
+	uint64_t rsdp;
+
+	/*
+	 * The BDA lives at physical page 0. Hide the constant address from the
+	 * compiler, which otherwise treats it as a null-page access.
+	 */
+	ebda_segment = (const volatile uint16_t *)(uintptr_t)X86_BDA_EBDA_SEGMENT;
+	__asm__("" : "+r"(ebda_segment));
+	ebda = (uint64_t)*ebda_segment << 4;
+	if (ebda >= 0x400U && ebda < X86_BIOS_ROM_START)
+	{
+		rsdp = x86_acpi_rsdp_scan_area(ebda,
+					       ebda + X86_EBDA_SEARCH_BYTES);
+		if (rsdp != 0)
+			return rsdp;
+	}
+	return x86_acpi_rsdp_scan_area(X86_BIOS_ROM_START, X86_BIOS_ROM_END);
+}
+
 uintptr_t ir0_kmain_normalize_firmware_handle(uintptr_t firmware_handle)
 {
 	return firmware_handle;
@@ -261,6 +310,7 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 				return -EINVAL;
 		}
 	}
+	snapshot->acpi_rsdp = x86_acpi_rsdp_legacy_bios();
 	snapshot->valid = snapshot->usable_count != 0;
 	return snapshot->valid ? 0 : -ENODEV;
 }

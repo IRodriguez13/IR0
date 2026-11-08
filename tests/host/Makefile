@@ -67,6 +67,7 @@ TEST_SRCS += test_percpu.c
 TEST_SRCS += test_tlb_sync.c
 TEST_SRCS += test_swap.c test_bcmgenet.c test_dma_irq.c
 TEST_SRCS += test_vbe_boot.c
+TEST_SRCS += test_acpi_rsdp.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \

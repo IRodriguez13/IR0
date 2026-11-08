@@ -98,6 +98,7 @@ extern void test_boot_memory_normalization(void);
 extern void test_vbe_boot_framebuffer_bounds(void);
 extern void test_vbe_supervisor_map_covers_framebuffer(void);
 extern void test_vbe_boot_premapped_window_is_4mib(void);
+extern void test_acpi_rsdp_validation(void);
 extern void test_no_mmu_policy_contract(void);
 extern void test_cpu_topology_up_contract(void);
 extern void test_percpu_up_contract(void);
@@ -194,6 +195,7 @@ static void (*test_functions[])(void) = {
 	test_vbe_boot_framebuffer_bounds,
 	test_vbe_supervisor_map_covers_framebuffer,
 	test_vbe_boot_premapped_window_is_4mib,
+	test_acpi_rsdp_validation,
 	test_no_mmu_policy_contract,
 	test_cpu_topology_up_contract,
 	test_percpu_up_contract,
