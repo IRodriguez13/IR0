@@ -518,7 +518,9 @@ void signal_note_syscall_return(process_t *p, int64_t ret)
 }
 
 /*
- * Pick a mapped user stack slot for [restorer][sigframe] + handler redzone.
+ * Pick a mapped user stack slot for [return slot][sigframe] + handler redzone.
+ * The return slot holds the restorer on ISAs whose handlers return with a
+ * stack pop (SIGFRAME_RETURN_SLOT); it is empty on link-register ISAs.
  * When the interrupted SP is near the stack guard (deep call chain in
  * recvfrom → ping), placing the frame below saved SP lands in unmapped
  * pages and syscalls from the handler (clock_gettime in SIGALRM) fail with
@@ -574,7 +576,7 @@ static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
 		saved_sp = 0;
 
 	user_sp = saved_sp;
-	if (user_sp < sizeof(struct sigframe) + 8)
+	if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
 		user_sp = 0;
 
 	/*
@@ -588,23 +590,24 @@ static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
 	{
 		uint64_t margin = SIGNAL_HANDLER_TOP_MARGIN;
 
-		if (margin + sizeof(struct sigframe) + 8 + 2048UL >
-		    (stack_hi - stack_lo))
+		if (margin + sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT +
+		    2048UL > (stack_hi - stack_lo))
 			margin = (stack_hi - stack_lo) / 4;
 
 		user_sp = (stack_hi - margin) & ~0xFUL;
-		if (user_sp < sizeof(struct sigframe) + 8 + min_sp)
+		if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT +
+			      min_sp)
 			return 0;
 	}
 	else
 	{
-		if (user_sp < sizeof(struct sigframe) + 8)
+		if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
 			return 0;
 	}
 
 	user_sp -= sizeof(struct sigframe);
 	frame_addr = user_sp;
-	user_sp -= 8;
+	user_sp -= SIGFRAME_RETURN_SLOT;
 
 	if (user_sp < min_sp || frame_addr + sizeof(struct sigframe) > stack_hi)
 		return 0;
@@ -1007,9 +1010,10 @@ void handle_signals(void)
                         if (copy_to_user_mm(
 				    process_pgd(current), frame_addr, &frame,
 				    sizeof(struct sigframe)) != 0 ||
-			    copy_to_user_mm(
+			    (SIGFRAME_RETURN_SLOT != 0 &&
+			     copy_to_user_mm(
 				    process_pgd(current), user_sp, &restorer,
-				    sizeof(restorer)) != 0)
+				    SIGFRAME_RETURN_SLOT) != 0))
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%d reason=copy",
@@ -1056,6 +1060,7 @@ void handle_signals(void)
                             current, 0, (uint64_t)(uint32_t)sig);
                         process_syscall_set_arg(current, 1, 0);
                         process_syscall_set_arg(current, 2, 0);
+                        signal_set_return(&current->syscall_frame, restorer);
                         if (!process_syscall_flags(current))
                             process_syscall_set_flags(current,
                                                       task_initial_user_status());

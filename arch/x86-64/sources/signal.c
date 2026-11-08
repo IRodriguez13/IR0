@@ -189,6 +189,13 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 	}
 }
 
+void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
+{
+	/* The handler's `ret` pops the restorer from SIGFRAME_RETURN_SLOT. */
+	(void)sf;
+	(void)restorer;
+}
+
 void signal_prepare_task_handler(task_t *t, void *handler, int sig,
 				      uint64_t frame_sp)
 {

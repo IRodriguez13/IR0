@@ -128,10 +128,12 @@ struct sigaction {
  * struct sigframe - Signal frame on userspace stack
  * Complete context saved when signal handler is invoked.
  *
- * Layout on stack (low→high): [restorer][sigframe…]. Handler entry RSP must
- * be 8 mod 16 (SysV). sizeof must be 0 mod 16 so that after aligning RSP,
- * subtracting this frame and the 8-byte restorer leaves RSP ≡ 8; otherwise
- * musl/glibc movaps in rt_sigaction/setitimer #GP (BusyBox ping SIGALRM).
+ * Layout on stack (low→high): [return slot][sigframe…]. The return slot is
+ * SIGFRAME_RETURN_SLOT bytes: the 8-byte restorer on x86-64, empty on arm64
+ * (x30 holds it). sizeof must be 0 mod 16 so that after aligning SP the
+ * handler entry SP is 8 mod 16 on x86-64 (SysV; otherwise musl/glibc movaps
+ * in rt_sigaction/setitimer #GP, BusyBox ping SIGALRM) and 16-byte aligned
+ * on arm64 (AAPCS64).
  */
 struct sigframe {
     void (*handler)(int);     /* Signal handler function */

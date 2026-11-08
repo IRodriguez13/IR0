@@ -2079,6 +2079,8 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/syscall.h": "#include <asm/syscall_user.h>",
         "includes/ir0/arch_task.h": "#include <asm/task_access.h>",
         "includes/ir0/abi/vdso_contract.h": "#include <asm/vdso_contract.h>",
+        "includes/ir0/abi/signal_contract.h":
+            "#include <asm/signal_contract.h>",
     }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
              ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers",

@@ -182,6 +182,13 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 	frame[ARM64_EXC_IDX_SP] = new_rsp;
 }
 
+void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
+{
+	/* Linux arm64 setup_return(): regs[30] = sigtramp. */
+	if (sf)
+		sf->x30 = restorer;
+}
+
 void signal_prepare_task_handler(task_t *t, void *handler, int sig,
 				      uint64_t frame_sp)
 {

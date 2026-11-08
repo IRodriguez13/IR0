@@ -58,6 +58,14 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 /* Read user SP from an IRQ frame (for stack-window policy). */
 uint64_t irq_frame_sp(const uint64_t *frame);
 
+/*
+ * Make the handler return into @restorer. An ISA that returns through a
+ * link register (arm64 x30) sets it in @sf; an ISA with a nonzero
+ * SIGFRAME_RETURN_SLOT pops it from the stack slot portable code fills and
+ * leaves @sf alone (x86-64).
+ */
+void signal_set_return(arch_syscall_frame_t *sf, uint64_t restorer);
+
 /* Async delivery: set IP/SP and first arg for a user signal handler.
  * Syscall return register (x0/rax) must stay 0 on entry; signum only in arg0.
  */

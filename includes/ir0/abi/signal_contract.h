@@ -15,6 +15,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <asm/signal_contract.h>
 
 /*
  * Bytes kept free below USER_STACK_TOP for alternate signal frames when the
@@ -24,3 +25,10 @@
  * 7ffff000 under interactive ash.
  */
 #define SIGNAL_HANDLER_TOP_MARGIN 0x4000UL
+
+/*
+ * Bytes reserved just below the sigframe for the handler's return address
+ * (the restorer). Zero when the ISA returns through a link register.
+ */
+#define SIGFRAME_RETURN_SLOT IR0_ARCH_SIGFRAME_RETURN_SLOT
+
