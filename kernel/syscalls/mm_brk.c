@@ -12,43 +12,10 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <kernel/syscalls.h>
 #include "mm_syscalls.h"
-#include "syscalls_glue.h"
-#include <ir0/abi/mmap_contract.h>
-#include <config.h>
-#include <ir0/vfs.h>
-#include <ir0/copy_user.h>
-#include <ir0/errno.h>
-#include <ir0/kmem.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/stat.h>
 #include <ir0/process.h>
-#include <ir0/files_struct.h>
-#include <ir0/mm_struct.h>
 #include <ir0/paging.h>
-#include <ir0/pmm.h>
-#include <ir0/mm_port.h>
-#include <ir0/mman.h>
-#include <ir0/clock.h>
-#include <mm/allocator.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_mm.h>
-#include <ir0/ktm/checkpoint.h>
-#include <ir0/swap.h>
-#include <ir0/path_user.h>
-#include <ir0/permissions.h>
-#include <ir0/blockdev.h>
-#include <ir0/vfs_dispatch.h>
-#include <stdbool.h>
-#include <string.h>
-
-#include <ir0/fb.h>
-#include <ir0/memfd.h>
-#include <ir0/validation.h>
-#include <stdint.h>
-#include "mm_syscalls_internal.h"
-
 
 /*
  * Does [lo, hi) overlap any registered mmap region of @proc?

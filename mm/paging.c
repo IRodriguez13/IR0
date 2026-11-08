@@ -12,33 +12,19 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <stdint.h>
-#include <config.h>
-#include <ir0/logging.h>
-#include <ir0/oops.h>
-#include <ir0/process.h>
-#include <ir0/mm.h>
-#include <ir0/debug_runtime.h>
-#include <ir0/mm_alloc.h>
 #include <ir0/page_table_pool.h>
 #include "paging.h"
 #include "paging_internal.h"
 #include <string.h>
-#include <ir0/kmem.h>
 #include <mm/pmm.h>
-#include <ir0/validation.h>
-#include <ir0/arch_port.h>
 #include <ir0/tlb_sync.h>
-#include <ir0/errno.h>
 #include <ir0/swap.h>
-
 /*
  * Boot/kernel address-space root with full PMM identity. Pinned once before
  * any process mm. Used like Linux kmap for physical page copy/zero
  * after process tables punch identity holes to pte_none.
  */
 static uintptr_t paging_kernel_root;
-
 void paging_pin_kernel_address_space(uintptr_t root)
 {
 	if (paging_kernel_root || !root)
