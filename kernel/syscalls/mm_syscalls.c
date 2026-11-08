@@ -24,7 +24,7 @@
 #include <ir0/mm_port.h>
 #include <ir0/mman.h>
 #include <ir0/clock.h>
-#include <mm/allocator.h>
+#include <ir0/arch_mm.h>
 #include <ir0/arch_port.h>
 #include <ir0/ktm/checkpoint.h>
 #include <string.h>
@@ -787,7 +787,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       return ret;
     }
     if (hint_addr < (uintptr_t)PMM_PHYS_BASE &&
-	hint_addr + length > (uintptr_t)SIMPLE_HEAP_START)
+	hint_addr + length > mm_kernel_heap_start())
     {
       ret = SYSCALL_PTR_ERR(EINVAL);
       mmap_audit_log_return("map-fixed-kernel-heap", ret, hint_addr, length, 0,

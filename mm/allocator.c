@@ -8,21 +8,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: allocator.c
- * Description: IR0 kernel source/header file
- */
-
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: allocator.c
- * Description: Kernel heap allocator with free-list and boundary tags
- *              for efficient O(1) coalescing in both directions
+ * Description: Kernel heap backend with a free list and boundary tags
+ *              for O(1) coalescing in both directions
  */
 
 #include "allocator.h"
@@ -142,7 +129,7 @@ static inline void set_block(block_header_t *header, size_t size, int is_free)
 	footer->is_free = is_free;
 }
 
-void alloc_init(void)
+void heap_init(void)
 {
 	if (allocator.initialized)
 		return;
@@ -171,7 +158,7 @@ void alloc_init(void)
 }
 
 /**
- * alloc - Allocate memory from the kernel heap
+ * heap_alloc - Allocate memory from the kernel heap
  * @size: Number of bytes to allocate (will be aligned to 16 bytes)
  *
  * This function implements a first-fit allocation strategy with block
@@ -197,7 +184,7 @@ void alloc_init(void)
  *
  * Returns: Pointer to allocated memory, or NULL on failure (OOM)
  */
-void *alloc(size_t size)
+void *heap_alloc(size_t size)
 {
 	size_t total_size;
 	size_t metadata_size;
@@ -207,7 +194,7 @@ void *alloc(size_t size)
 	 * initialization is complete.
 	 */
 	if (!allocator.initialized)
-		alloc_init();
+		heap_init();
 
 	/* Zero-sized allocations are invalid - return NULL.
 	 * This simplifies the implementation by avoiding edge cases.
@@ -367,7 +354,7 @@ void *alloc(size_t size)
 
 /* FREE WITH O(1) BIDIRECTIONAL COALESCING                                   */
 
-void alloc_free(void *ptr)
+void heap_free(void *ptr)
 {
 	if (!ptr || !allocator.initialized)
 		return;
@@ -379,7 +366,7 @@ void alloc_free(void *ptr)
 	if ((void *)block < allocator.heap_start || (void *)block >= allocator.heap_end)
     {
 		klog_print("[ALLOC] BUG: Out of bounds allocation!!");
-		panicex("Out of bounds allocation", 0, __FILE__, __LINE__, "alloc_free()");
+		panicex("Out of bounds allocation", 0, __FILE__, __LINE__, "heap_free()");
 		return;
 	}
 
@@ -387,7 +374,7 @@ void alloc_free(void *ptr)
 	if (block->is_free)
     {
 		klog_print("[ALLOC] BUG: double-free detected\n");
-		panicex("double-free detected", 0, __FILE__, __LINE__, "alloc_free()");
+		panicex("double-free detected", 0, __FILE__, __LINE__, "heap_free()");
 		return;
 	}
 
@@ -466,7 +453,7 @@ void alloc_free(void *ptr)
 
 /* STATISTICS                                                                */
 
-void alloc_stats(size_t *total, size_t *used, size_t *allocs)
+void heap_stats(size_t *total, size_t *used, size_t *allocs)
 {
 	if (total)
 		*total = allocator.heap_size;
@@ -484,7 +471,7 @@ void alloc_stats(size_t *total, size_t *used, size_t *allocs)
 #endif
 }
 
-void alloc_coalesce_stats(size_t *forward, size_t *backward)
+void heap_coalesce_stats(size_t *forward, size_t *backward)
 {
 	if (forward)
 		*forward = allocator.coalesce_forward_count;

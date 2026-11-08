@@ -28,7 +28,6 @@ SUBST = [
     (re.compile(r"#include\s*<kernel/kernel\.h>"), "#include <ir0/kernel.h>"),
     (re.compile(r"#include\s*<mm/paging\.h>"), "#include <ir0/paging.h>"),
     (re.compile(r"#include\s*<mm/pmm\.h>"), "#include <ir0/pmm.h>"),
-    (re.compile(r"#include\s*<mm/allocator\.h>"), "#include <ir0/allocator.h>"),
     (re.compile(r"#include\s*<fs/vfs\.h>"), "#include <ir0/vfs.h>"),
     (re.compile(r"#include\s*<sched/task\.h>"), "#include <ir0/task.h>"),
     (re.compile(r"#include\s*<sched/scheduler_api\.h>"), "#include <ir0/scheduler_api.h>"),

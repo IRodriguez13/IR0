@@ -35,5 +35,5 @@ uintptr_t ir0_mm_pmm_end(void)
 
 void ir0_mm_alloc_stats(size_t *total, size_t *used, size_t *allocs)
 {
-	alloc_stats(total, used, allocs);
+	heap_stats(total, used, allocs);
 }

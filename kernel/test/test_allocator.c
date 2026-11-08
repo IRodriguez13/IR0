@@ -42,7 +42,7 @@ void ktest_allocator(void)
 		void *right;
 		void *guard;
 
-		alloc_coalesce_stats(NULL, &backward_before);
+		heap_coalesce_stats(NULL, &backward_before);
 		left = kmalloc(256);
 		right = kmalloc(256);
 		guard = kmalloc(64);
@@ -51,7 +51,7 @@ void ktest_allocator(void)
 		KASSERT(guard != NULL);
 		kfree(left);
 		kfree(right);
-		alloc_coalesce_stats(NULL, &backward_after);
+		heap_coalesce_stats(NULL, &backward_after);
 		KASSERT_EQ(backward_after, backward_before + 1);
 		kfree(guard);
 	}

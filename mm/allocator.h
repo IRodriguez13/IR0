@@ -8,35 +8,22 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: allocator.h
- * Description: IR0 kernel source/header file
+ * Description: mm-private kernel heap backend (first-fit free list with
+ *              boundary tags). Everything outside mm/ uses <ir0/kmem.h>.
  */
 
-/* Simple unified memory allocator */
 #pragma once
 
-#include <stdint.h>
 #include <stddef.h>
 #include <ir0/arch_mm.h>
 
-/*
- * Memory layout (from boot: 0-32MB mapped)
- * 0x000000 - 0x100000 : Reserved (BIOS, boot)
- * 0x100000 - 0x800000 : Kernel code/data (1MB-8MB)
- * 0x800000 - 0x2000000: Heap (8MB-32MB = 24MB heap)
- */
-
+/* The heap spans the range the architecture reserves via <ir0/arch_mm.h>. */
 #define SIMPLE_HEAP_START (mm_kernel_heap_start())
 #define SIMPLE_HEAP_SIZE (mm_kernel_heap_size())
 #define SIMPLE_HEAP_END (SIMPLE_HEAP_START + SIMPLE_HEAP_SIZE)
 
-/* Initialize the allocator */
-void alloc_init(void);
-
-void *alloc(size_t size);
-
-void alloc_free(void *ptr);
-
-void alloc_stats(size_t *total, size_t *used, size_t *allocs);
-
-void alloc_coalesce_stats(size_t *forward, size_t *backward);
-
+/* heap_init() is public and declared in <ir0/kmem.h>. */
+void *heap_alloc(size_t size);
+void heap_free(void *ptr);
+void heap_stats(size_t *total, size_t *used, size_t *allocs);
+void heap_coalesce_stats(size_t *forward, size_t *backward);

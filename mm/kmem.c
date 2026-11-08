@@ -29,7 +29,7 @@ void *kmalloc(size_t size)
 		return NULL;
 	if (mm_diag_fault_hit("kmem.alloc"))
 		return NULL;
-	return alloc(size);
+	return heap_alloc(size);
 }
 
 void *kcalloc(size_t n, size_t size)
@@ -63,7 +63,7 @@ void *kmalloc_aligned(size_t size, size_t alignment)
 	    ir0_add_overflow(size, padding, &total_size))
 		return NULL;
 
-	raw_ptr = alloc(total_size);
+	raw_ptr = heap_alloc(total_size);
 	if (!raw_ptr)
 		return NULL;
 
@@ -79,7 +79,7 @@ void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 		return;
 	if (unlikely(!kmem_ptr_in_heap(ptr)))
 		panicex("kfree: pointer out of heap range", PANIC_MEM, file, line, caller);
-	alloc_free(ptr);
+	heap_free(ptr);
 }
 
 void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller)
@@ -88,10 +88,5 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 		return;
 	if (unlikely(!kmem_ptr_in_heap(ptr)))
 		panicex("kfree_aligned: pointer out of heap range", PANIC_MEM, file, line, caller);
-	alloc_free(((void **)ptr)[-1]);
-}
-
-void heap_init(void)
-{
-	alloc_init();
+	heap_free(((void **)ptr)[-1]);
 }

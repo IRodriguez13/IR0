@@ -139,18 +139,18 @@ void __attribute__((weak)) process_unmap_user_pages_all(address_space_root_t roo
 	(void)reclaim_stats;
 }
 
-void *__attribute__((weak)) alloc(size_t n)
+void *__attribute__((weak)) heap_alloc(size_t n)
 {
 	(void)n;
 	return NULL;
 }
 
-void __attribute__((weak)) alloc_free(void *p)
+void __attribute__((weak)) heap_free(void *p)
 {
 	(void)p;
 }
 
-void __attribute__((weak)) alloc_init(void)
+void __attribute__((weak)) heap_init(void)
 {
 }
 

@@ -30,7 +30,7 @@
 #include <mm/paging.h>
 #include <config.h>
 #include <pmm.h>
-#include <mm/allocator.h>
+#include <ir0/arch_mm.h>
 
 #include "switch_diag.h"
 #include "tss.h"
@@ -49,7 +49,7 @@ static int arch_va_in_kstack_window(uint64_t v)
 
 /*
  * Pointer-class kernel VA (not a small syscall retval). Mid-syscall saves leave
- * kmalloc identity (SIMPLE_HEAP) in callee-saved regs; the old check only
+ * kmalloc identity (kernel heap) in callee-saved regs; the old check only
  * caught the high kstack window, so heap RAX/RBP survived into ring-3
  * (desk re-login: read() "returned" ~0x1a8120 → SEGV in ir0_read_line).
  */
@@ -59,7 +59,8 @@ static int arch_va_kernel_ptr_leak(uint64_t v)
 		return 0;
 	if (arch_va_in_kstack_window(v))
 		return 1;
-	if (v >= (uint64_t)SIMPLE_HEAP_START && v < (uint64_t)SIMPLE_HEAP_END)
+	if (v >= (uint64_t)mm_kernel_heap_start() &&
+	    v < (uint64_t)(mm_kernel_heap_start() + mm_kernel_heap_size()))
 		return 1;
 	if (v >= 0xffff800000000000ULL)
 		return 1;

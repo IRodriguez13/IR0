@@ -10,7 +10,7 @@
 
 #include "process_internal.h"
 #include <ir0/files_struct.h>
-#include <mm/allocator.h>
+#include <ir0/arch_mm.h>
 #include <string.h>
 
 int files_struct_live(const files_struct_t *f)
@@ -20,10 +20,10 @@ int files_struct_live(const files_struct_t *f)
 
 	if (!f)
 		return 0;
-	if (p < (uintptr_t)SIMPLE_HEAP_START)
+	if (p < mm_kernel_heap_start())
 		return 0;
 	end = p + sizeof(*f);
-	if (end < p || end > (uintptr_t)SIMPLE_HEAP_END)
+	if (end < p || end > mm_kernel_heap_start() + mm_kernel_heap_size())
 		return 0;
 	if (f->magic != IR0_FILES_MAGIC || f->refcount <= 0)
 		return 0;
