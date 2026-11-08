@@ -25,10 +25,19 @@
 #define SYS_wait4		260
 #define SYS_mmap		222
 #define SYS_rt_sigaction	134
+#define SYS_rt_sigprocmask	135
+#define SYS_kill		129
+#define SYS_rt_sigreturn	139
+#define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
 #define SIGILL			4
 #define SIGTRAP			5
+#define SIGKILL			9
 #define SIGSEGV			11
+#define SIGTERM			15
+#define SIGABRT			6
+#define SIG_BLOCK		0
+#define SIG_UNBLOCK		1
 #define PROT_READ		0x1
 #define PROT_WRITE		0x2
 #define MAP_PRIVATE		0x02
@@ -129,11 +138,60 @@ struct sigaction {
 	unsigned long sa_mask;
 };
 
+void nolibc_restore_rt(void);
+
+/* Like musl: every handler returns through an rt_sigreturn trampoline. */
+__asm__(
+	".global nolibc_restore_rt\n"
+	".type nolibc_restore_rt, %function\n"
+	"nolibc_restore_rt:\n"
+	"	mov	x8, #139\n"
+	"	svc	#0\n"
+);
+
 static int sigaction(int sig, const struct sigaction *act,
 		     struct sigaction *old)
 {
-	return (int)syscall(SYS_rt_sigaction, sig, (long)act, (long)old,
-			    (long)sizeof(act->sa_mask));
+	struct sigaction ksa;
+
+	if (!act)
+		return (int)syscall(SYS_rt_sigaction, sig, 0, (long)old,
+				    (long)sizeof(ksa.sa_mask));
+	ksa = *act;
+	ksa.sa_flags |= SA_RESTORER;
+	ksa.sa_restorer = nolibc_restore_rt;
+	return (int)syscall(SYS_rt_sigaction, sig, (long)&ksa, (long)old,
+			    (long)sizeof(ksa.sa_mask));
+}
+
+typedef unsigned long sigset_t;
+
+static int sigemptyset(sigset_t *set)
+{
+	*set = 0;
+	return 0;
+}
+
+static int sigaddset(sigset_t *set, int sig)
+{
+	*set |= 1UL << (sig - 1);
+	return 0;
+}
+
+static int sigprocmask(int how, const sigset_t *set, sigset_t *old)
+{
+	return (int)syscall(SYS_rt_sigprocmask, how, (long)set, (long)old,
+			    (long)sizeof(*set));
+}
+
+static int getpid(void)
+{
+	return (int)syscall(SYS_getpid);
+}
+
+static int kill(int pid, int sig)
+{
+	return (int)syscall(SYS_kill, pid, sig);
 }
 
 static void *mmap(void *addr, size_t len, int prot, int flags, int fd,

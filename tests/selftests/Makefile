@@ -16,6 +16,8 @@ PANIC_NESTED_SRC := kernel/panic_nested.c
 PANIC_NESTED_BIN := $(BUILD_DIR)/panic_nested
 FAULT_SIGNALS_SRC := kernel/fault_signals.c
 FAULT_SIGNALS_BIN := $(BUILD_DIR)/fault_signals
+SIGNAL_SEMANTICS_SRC := kernel/signal_semantics.c
+SIGNAL_SEMANTICS_BIN := $(BUILD_DIR)/signal_semantics
 SWAPON_SRC := syscall/swapon.c
 SWAPON_BIN := $(BUILD_DIR)/swapon
 KSFT_INC := -I$(CURDIR)
@@ -46,9 +48,9 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 	-nostdlib -L$(X86_MUSL_LIB) -lc $(X86_MUSL_LIB)/crtn.o
 endif
 
-.PHONY: all openat identity swapon fault panic_nested fault_signals clean
+.PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics clean
 
-all: openat identity swapon fault panic_nested fault_signals
+all: openat identity swapon fault panic_nested fault_signals signal_semantics
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -86,6 +88,18 @@ $(SWAPON_BIN): $(SWAPON_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest swapon"
 	@$(CC) $(CFLAGS) -o $@ $(SWAPON_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+signal_semantics: $(SIGNAL_SEMANTICS_BIN)
+
+$(SIGNAL_SEMANTICS_BIN): $(SIGNAL_SEMANTICS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest signal_semantics"
+	@$(CC) $(CFLAGS) -o $@ $(SIGNAL_SEMANTICS_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
