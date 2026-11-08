@@ -28,6 +28,16 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_STUB = ROOT / "setup/pid1/init_hostshare_exec"
 PAYLOAD_NAME = "ir0_payload"
 DEFAULT_LOG = Path(tempfile.gettempdir()) / "ktm-userdev-run.log"
+# MINIX v1 superblock starts at byte 1024; s_magic is its 16-bit field at +16.
+MINIX_SB_MAGIC_OFFSET = 1024 + 16
+MINIX_V1_MAGIC = (0x137F).to_bytes(2, "little")
+
+
+def is_minix_v1(path: Path) -> bool:
+    """True when ``path`` carries a MINIX v1 superblock (magic 0x137F)."""
+    with path.open("rb") as fp:
+        fp.seek(MINIX_SB_MAGIC_OFFSET)
+        return fp.read(2) == MINIX_V1_MAGIC
 
 
 def main() -> int:
@@ -201,7 +211,22 @@ def main() -> int:
         if prebuilt_disk is not None and own_disk:
             shutil.copy2(prebuilt_disk, disk)
         elif prebuilt_disk is None:
-            shutil.copy2(base, disk)
+            # scripts/create_disk.sh leaves disk.img blank for the kernel to
+            # format on first boot; the stub needs a MINIX root to land on.
+            if is_minix_v1(base):
+                shutil.copy2(base, disk)
+            else:
+                with disk.open("wb") as fp:
+                    fp.truncate(base.stat().st_size)
+                subprocess.check_call(
+                    [
+                        sys.executable,
+                        "scripts/inject_init_minix.py",
+                        "--format-large",
+                        str(disk),
+                    ],
+                    cwd=str(ROOT),
+                )
         # Replace PID1 on a work copy: empty kernel disk.img (stub or payload)
         # or a packed ISD disk (--legacy-disk-init runs the case as /sbin/init).
         if prebuilt_disk is None or args.legacy_disk_init:
