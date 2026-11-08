@@ -95,7 +95,8 @@ tests/ktm/userdev/ktm_*_case
 /tmp/ktest.log
 nohup.out
 arch/x86-64/asm/interrupt/isr_stubs_64.asm
-toolchain/
+# Directory or a worktree symlink to the main checkout's toolchain.
+/toolchain
 
 # headers_install default output (Makefile: DESTDIR=build/uapi-install)
 build/uapi-install/

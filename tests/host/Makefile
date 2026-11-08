@@ -98,7 +98,10 @@ KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
 TEST_BIN   = ir0_test_suite
 
-IR0_ISD_ROOT ?= $(abspath $(KERNEL_ROOT)/../ISD)
+# Sibling ISD checkout. A linked worktree (../IR0-wt/<topic>) has no sibling,
+# so fall back to the one next to the main checkout.
+IR0_MAIN_ROOT := $(abspath $(dir $(shell git -C $(KERNEL_ROOT) rev-parse --path-format=absolute --git-common-dir 2>/dev/null)))
+IR0_ISD_ROOT ?= $(abspath $(firstword $(wildcard $(KERNEL_ROOT)/../ISD $(IR0_MAIN_ROOT)/../ISD) $(KERNEL_ROOT)/../ISD))
 # Backward-compatible override name; the maintained userspace is ISD.
 IR0_USERSPACE_ROOT ?= $(IR0_ISD_ROOT)
 MATRIX_CAPTURE_CFLAGS = $(BASE_CFLAGS) -I$(IR0_USERSPACE_ROOT)/smoke

@@ -67,8 +67,9 @@ prepare()
 	if [ -f "$root/.config" ]; then
 		cp "$root/.config" "$dir/.config"
 	fi
-	if [ -d "$root/toolchain" ]; then
-		ln -s "$root/toolchain" "$dir/toolchain"
+	# A worktree's own toolchain symlink may already be in the copy.
+	if [ -d "$root/toolchain" ] && [ ! -e "$dir/toolchain" ]; then
+		ln -s "$(cd "$root/toolchain" && pwd -P)" "$dir/toolchain"
 	fi
 }
 
@@ -86,10 +87,15 @@ prepare "$work/patched"
 # Host tests find the sibling ISD checkout relative to the tree
 # (tests/host/Makefile: $(KERNEL_ROOT)/../ISD); a throwaway tree has no
 # sibling, so pass the caller's ISD explicitly when it exists.
+# A linked worktree has no sibling either: fall back to the ISD next to the
+# main checkout (git common dir).
 isd_root=${IR0_ISD_ROOT:-}
-if [ -z "$isd_root" ] && [ -d "$root/../ISD" ]; then
-	isd_root=$(cd "$root/../ISD" && pwd -P)
-fi
+main_root=$(dirname "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)")
+for cand in "$root/../ISD" "$main_root/../ISD"; do
+	if [ -z "$isd_root" ] && [ -d "$cand" ]; then
+		isd_root=$(cd "$cand" && pwd -P)
+	fi
+done
 
 run()
 {
