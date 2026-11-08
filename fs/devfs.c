@@ -519,12 +519,12 @@ int devfs_register_device(const char *name, const devfs_ops_t *ops, uint32_t mod
     if (num_dev_nodes >= MAX_DEV_NODES)
         return -1;
     
-    devfs_node_t *node = kmalloc_try(sizeof(devfs_node_t));
+    devfs_node_t *node = kmalloc(sizeof(devfs_node_t));
     if (!node)
         return -1;
 
     size_t name_len = strlen(name);
-    char *name_copy = kmalloc_try(name_len + 1);
+    char *name_copy = kmalloc(name_len + 1);
     if (!name_copy)
     {
         kfree(node);

@@ -301,7 +301,7 @@ static char *exec_strdup_kern(const char *s)
     if (!s)
         return NULL;
     n = strlen(s) + 1;
-    d = kmalloc_try(n);
+    d = kmalloc(n);
     if (!d)
         return NULL;
     memcpy(d, s, n);
@@ -337,7 +337,7 @@ static char **exec_build_shebang_argv(const char *interp, const char *iarg,
     if (origc == 256)
         return NULL;
 
-    nv = kmalloc_try((size_t)(origc + 4) * sizeof(char *));
+    nv = kmalloc((size_t)(origc + 4) * sizeof(char *));
     if (!nv)
         return NULL;
 
@@ -1106,8 +1106,8 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     }
     
     /* Switch to process page directory temporarily (after kernel heap allocs) */
-    uint64_t *argv_ptrs = (uint64_t *)kmalloc_try((argc + 1) * sizeof(uint64_t));
-    uint64_t *envp_ptrs = (uint64_t *)kmalloc_try((envc + 1) * sizeof(uint64_t));
+    uint64_t *argv_ptrs = (uint64_t *)kmalloc((argc + 1) * sizeof(uint64_t));
+    uint64_t *envp_ptrs = (uint64_t *)kmalloc((envc + 1) * sizeof(uint64_t));
 
     if (!argv_ptrs || !envp_ptrs)
     {

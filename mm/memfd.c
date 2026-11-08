@@ -137,7 +137,7 @@ int ir0_memfd_ftruncate(struct ir0_memfd *m, size_t length)
 		m->size = length;
 		return 0;
 	}
-	nf = kmalloc_try(need * sizeof(uintptr_t));
+	nf = kmalloc(need * sizeof(uintptr_t));
 	if (!nf)
 		return -ENOMEM;
 	memset(nf, 0, need * sizeof(uintptr_t));

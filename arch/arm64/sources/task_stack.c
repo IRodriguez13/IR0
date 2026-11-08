@@ -15,7 +15,7 @@ int process_kernel_stack_alloc(process_t *p)
 	if (p->kstack_base)
 		return 0;
 
-	base = kmalloc_aligned_try(IR0_PROC_KSTACK_SIZE, 16);
+	base = kmalloc_aligned(IR0_PROC_KSTACK_SIZE, 16);
 	if (!base)
 		return -ENOMEM;
 	memset(base, 0, IR0_PROC_KSTACK_SIZE);

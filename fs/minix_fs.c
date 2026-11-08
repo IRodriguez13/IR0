@@ -428,7 +428,7 @@ int minix_fs_init(void)
 
   if (!minix_fs.inode_bitmap)
   {
-    minix_fs.inode_bitmap = kmalloc_try(MINIX_BLOCK_SIZE);
+    minix_fs.inode_bitmap = kmalloc(MINIX_BLOCK_SIZE);
     if (!minix_fs.inode_bitmap)
       return -1;
   }
@@ -439,7 +439,7 @@ int minix_fs_init(void)
     kfree(minix_fs.zone_bitmap);
     minix_fs.zone_bitmap = NULL;
   }
-  minix_fs.zone_bitmap = kmalloc_try(zmap_bytes);
+  minix_fs.zone_bitmap = kmalloc(zmap_bytes);
   if (!minix_fs.zone_bitmap)
     return -1;
 
@@ -519,13 +519,13 @@ int minix_fs_format(void)
   // Inicializar bitmaps
   if (!minix_fs.inode_bitmap)
   {
-    minix_fs.inode_bitmap = kmalloc_try(MINIX_BLOCK_SIZE);
+    minix_fs.inode_bitmap = kmalloc(MINIX_BLOCK_SIZE);
     if (!minix_fs.inode_bitmap)
       return -1;
   }
   if (!minix_fs.zone_bitmap)
   {
-    minix_fs.zone_bitmap = kmalloc_try(MINIX_BLOCK_SIZE);
+    minix_fs.zone_bitmap = kmalloc(MINIX_BLOCK_SIZE);
     if (!minix_fs.zone_bitmap)
       return -1;
   }

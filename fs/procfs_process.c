@@ -89,7 +89,7 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 
 	if (proc->saved_cmdline && proc->saved_cmdline_len > 0)
 	{
-		snap->cmdline_copy = kmalloc_try(proc->saved_cmdline_len);
+		snap->cmdline_copy = kmalloc(proc->saved_cmdline_len);
 		if (snap->cmdline_copy)
 		{
 			memcpy(snap->cmdline_copy, proc->saved_cmdline,

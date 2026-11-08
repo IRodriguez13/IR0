@@ -636,7 +636,7 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
     return -EMFILE;
   }
 
-  bind = (pseudo_fd_bind_t *)kmalloc_try(sizeof(*bind));
+  bind = (pseudo_fd_bind_t *)kmalloc(sizeof(*bind));
   if (!bind)
   {
     (void)pseudo_fs_release_ops(ops, ctx, dynamic);

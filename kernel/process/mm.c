@@ -301,7 +301,7 @@ struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_list)
 
 	for (walk = parent_list; walk; walk = walk->next)
 	{
-		struct mmap_region *node = kmalloc_try(sizeof(*node));
+		struct mmap_region *node = kmalloc(sizeof(*node));
 
 		if (!node)
 		{

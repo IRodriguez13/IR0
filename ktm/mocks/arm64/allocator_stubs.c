@@ -7,15 +7,11 @@
 static uint8_t g_heap[8192] __attribute__((aligned(16)));
 static size_t g_heap_off;
 
-void *__kmalloc_checked(size_t n, const char *file, int line,
-			const char *caller)
+void *kmalloc(size_t n)
 {
 	const size_t align = 16;
 	size_t off;
 
-	(void)file;
-	(void)line;
-	(void)caller;
 	off = (g_heap_off + align - 1U) & ~(align - 1U);
 	if (off > sizeof(g_heap) || n > sizeof(g_heap) - off)
 		return NULL;

@@ -37,7 +37,7 @@ static void vma_free_list(struct mmap_region *head)
 static struct mmap_region *vma_push(struct mmap_region *head, void *addr,
 				    size_t length)
 {
-	struct mmap_region *r = kmalloc_try(sizeof(*r));
+	struct mmap_region *r = kmalloc(sizeof(*r));
 
 	if (!r)
 		return NULL;
@@ -73,7 +73,7 @@ static int scenario_mm_vma_run(ktm_context_t *ctx)
 	/* Shallow clone of the list (fork mmap_list intent). */
 	for (walk = list; walk; walk = walk->next)
 	{
-		struct mmap_region *node = kmalloc_try(sizeof(*node));
+		struct mmap_region *node = kmalloc(sizeof(*node));
 
 		KTM_REQUIRE(node != NULL);
 		*node = *walk;

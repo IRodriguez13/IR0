@@ -236,7 +236,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
 
 static int64_t sys_getdents_common(int fd, void *dirent, size_t count, int legacy_layout)
 {
-  struct getdents_scratch *scr = kmalloc_try(sizeof(*scr));
+  struct getdents_scratch *scr = kmalloc(sizeof(*scr));
   int64_t rc;
 
   if (!scr)

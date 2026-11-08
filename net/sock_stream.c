@@ -333,7 +333,7 @@ static size_t sock_stream_queue_write(struct sock_stream *s,
 		}
 		irq_restore(flags);
 
-		chunk = kmalloc_try(sizeof(*chunk));
+		chunk = kmalloc(sizeof(*chunk));
 		if (!chunk) break;
 		memset(chunk, 0, sizeof(*chunk));
 		flags = irq_save();

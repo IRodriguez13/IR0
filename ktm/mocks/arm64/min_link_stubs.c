@@ -154,18 +154,16 @@ void __attribute__((weak)) alloc_init(void)
 {
 }
 
-void *__attribute__((weak)) kmalloc_aligned_try(size_t n, size_t align)
+void *__attribute__((weak)) kmalloc_aligned(size_t n, size_t align)
 {
 	(void)n;
 	(void)align;
 	return NULL;
 }
 
-void *__attribute__((weak)) __kmalloc_checked(size_t n, const char *f, int l)
+void *__attribute__((weak)) kmalloc(size_t n)
 {
 	(void)n;
-	(void)f;
-	(void)l;
 	return NULL;
 }
 

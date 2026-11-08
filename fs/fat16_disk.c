@@ -561,7 +561,7 @@ static int fat16_zero_cluster(struct fat16_vol *v, uint16_t cluster)
 	uint8_t *buf;
 	int ret;
 
-	buf = (uint8_t *)kmalloc_try(bytes);
+	buf = (uint8_t *)kmalloc(bytes);
 	if (!buf)
 		return -ENOMEM;
 	memset(buf, 0, bytes);
@@ -577,7 +577,7 @@ static int fat16_read_root_raw(struct fat16_vol *v, uint8_t **buf_out, uint32_t 
 	uint8_t *buf;
 	int ret;
 
-	buf = (uint8_t *)kmalloc_try(root_bytes);
+	buf = (uint8_t *)kmalloc(root_bytes);
 	if (!buf)
 		return -ENOMEM;
 	ret = fat16_read_sectors(v,
@@ -624,7 +624,7 @@ static int fat16_load_dir_buf(struct fat16_vol *v, int is_root, uint16_t dir_clu
 		if (nclusters == 0)
 			return -ENOENT;
 		total = nclusters * cluster_bytes;
-		buf = (uint8_t *)kmalloc_try(total);
+		buf = (uint8_t *)kmalloc(total);
 		if (!buf)
 			return -ENOMEM;
 		c = dir_cluster;
@@ -906,7 +906,7 @@ static int fat16_read_file(struct fat16_vol *v, const struct fat16_dirent *de,
 
 	cluster = de->cluster_lo;
 	cluster_bytes = (uint32_t)v->sectors_per_cluster * 512U;
-	cluster_buf = (uint8_t *)kmalloc_try(cluster_bytes);
+	cluster_buf = (uint8_t *)kmalloc(cluster_bytes);
 	if (!cluster_buf)
 		return -ENOMEM;
 
@@ -1059,7 +1059,7 @@ static int fat16_write_file(struct fat16_vol *v, struct fat16_ent_ref *ref,
 
 	cluster = ref->de.cluster_lo;
 	cluster_bytes = (uint32_t)v->sectors_per_cluster * 512U;
-	cluster_buf = (uint8_t *)kmalloc_try(cluster_bytes);
+	cluster_buf = (uint8_t *)kmalloc(cluster_bytes);
 	if (!cluster_buf)
 		return -ENOMEM;
 	skip = (size_t)offset;
@@ -1111,7 +1111,7 @@ static int fat16_init_subdir(struct fat16_vol *v, uint16_t cluster, uint16_t par
 	struct fat16_dirent *dotdot;
 	int ret;
 
-	buf = (uint8_t *)kmalloc_try(bytes);
+	buf = (uint8_t *)kmalloc(bytes);
 	if (!buf)
 		return -ENOMEM;
 	memset(buf, 0, bytes);
@@ -1536,7 +1536,7 @@ int fat16_disk_link(const char *oldpath, const char *newpath)
 	if (oldref.de.size == 0)
 		return 0;
 
-	data = (uint8_t *)kmalloc_try(oldref.de.size);
+	data = (uint8_t *)kmalloc(oldref.de.size);
 	if (!data)
 		return -ENOMEM;
 	ret = fat16_read_file(ov, &oldref.de, data, oldref.de.size, &nread, 0);

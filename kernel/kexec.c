@@ -94,7 +94,7 @@ int64_t sys_kexec_load(unsigned long entry, unsigned long nr_segments,
 	}
 
 	kexec_clear();
-	dst = (uint8_t *)kmalloc_try(total);
+	dst = (uint8_t *)kmalloc(total);
 	if (!dst)
 		return -ENOMEM;
 

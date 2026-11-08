@@ -593,7 +593,7 @@ void devfs_register_disk_topology(void)
             if (disk_part_ctx_used >= DEV_PART_MAX_NODES)
                 return;
 
-            char *nm = kmalloc_try(28);
+            char *nm = kmalloc(28);
             if (!nm)
                 break;
             snprintf(nm, 28u, "hd%c%u",

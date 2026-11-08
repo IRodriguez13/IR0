@@ -381,7 +381,7 @@ static int ip_send_fragment(struct net_device *dev, ip4_addr_t dest_ip,
         return -EMSGSIZE;
     size_t fragment_len = ip_header_len + len;
     
-    uint8_t *fragment = kmalloc_try(fragment_len);
+    uint8_t *fragment = kmalloc(fragment_len);
     if (!fragment)
         return -1;
     
@@ -540,7 +540,7 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
     /* If packet fits in one fragment, send normally */
     if (total_len <= dev->mtu - sizeof(struct eth_header))
     {
-        uint8_t *ip_packet = kmalloc_try(total_len);
+        uint8_t *ip_packet = kmalloc(total_len);
         if (!ip_packet)
             return -1;
 
@@ -782,7 +782,7 @@ int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway
     }
     
     /* Create new route entry */
-    route = kmalloc_try(sizeof(struct ip_route_entry));
+    route = kmalloc(sizeof(struct ip_route_entry));
     if (!route)
         return -1;
     

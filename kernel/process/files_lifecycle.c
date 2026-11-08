@@ -32,7 +32,7 @@ int files_struct_live(const files_struct_t *f)
 
 files_struct_t *files_create(void)
 {
-	files_struct_t *f = kmalloc_try(sizeof(*f));
+	files_struct_t *f = kmalloc(sizeof(*f));
 
 	if (!f)
 		return NULL;

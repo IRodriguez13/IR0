@@ -176,7 +176,7 @@ static int ext2_write_metadata(struct ext2_vol *v)
 	memcpy(sector, &v->super, sizeof(v->super));
 	if (ir0_block_write_by_name(v->blk_name, 2, 2, sector))
 		return -EIO;
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 	ret = ext2_read_block(v, v->gd_block, buf);
@@ -206,7 +206,7 @@ static int ext2_read_inode(struct ext2_vol *v, uint32_t ino, struct ext2_inode *
 	block = v->inode_table_block + (index * v->inode_size) / v->block_size;
 	offset = (index * v->inode_size) % v->block_size;
 
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 	ret = ext2_read_block(v, block, buf);
@@ -230,7 +230,7 @@ static int ext2_write_inode(struct ext2_vol *v, uint32_t ino,
 	index = ino - 1;
 	block = v->inode_table_block + (index * v->inode_size) / v->block_size;
 	offset = (index * v->inode_size) % v->block_size;
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 	ret = ext2_read_block(v, block, buf);
@@ -267,7 +267,7 @@ static int ext2_inode_block(struct ext2_vol *v, const struct ext2_inode *inode,
 		*block = 0;
 		return 0;
 	}
-	table = kmalloc_try(v->block_size);
+	table = kmalloc(v->block_size);
 	if (!table)
 		return -ENOMEM;
 	ret = ext2_read_block(v, inode->i_block[EXT2_IND_BLOCK], table);
@@ -300,7 +300,7 @@ static int ext2_inode_ensure_block(struct ext2_vol *v,
 		return ret;
 	}
 	index -= EXT2_NDIR_BLOCKS;
-	table = kmalloc_try(v->block_size);
+	table = kmalloc(v->block_size);
 	if (!table)
 		return -ENOMEM;
 	if (inode->i_block[EXT2_IND_BLOCK] == 0)
@@ -398,7 +398,7 @@ static int ext2_lookup(struct ext2_vol *v, uint32_t dir_ino, const char *name,
 	if ((ino.i_mode & 0xF000) != 0x4000)
 		return -ENOTDIR;
 
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 
@@ -575,7 +575,7 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 	if (count > (size_t)(ino.i_size - (uint32_t)offset))
 		count = (size_t)(ino.i_size - (uint32_t)offset);
 
-	block_buf = kmalloc_try(v->block_size);
+	block_buf = kmalloc(v->block_size);
 	if (!block_buf)
 		return -ENOMEM;
 
@@ -640,7 +640,7 @@ static int ext2_readdir_path(const char *path, struct vfs_dirent *entries, int m
 	if ((ino.i_mode & 0xF000) != 0x4000)
 		return -ENOTDIR;
 
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 
@@ -697,7 +697,7 @@ static int ext2_bitmap_allocate(struct ext2_vol *v, uint32_t bitmap_block,
 	uint32_t bit;
 	int ret;
 
-	bitmap = kmalloc_try(v->block_size);
+	bitmap = kmalloc(v->block_size);
 	if (!bitmap)
 		return -ENOMEM;
 	ret = ext2_read_block(v, bitmap_block, bitmap);
@@ -732,7 +732,7 @@ static int ext2_bitmap_free(struct ext2_vol *v, uint32_t bitmap_block,
 	if (number == 0)
 		return -EINVAL;
 	bit = number - 1;
-	bitmap = kmalloc_try(v->block_size);
+	bitmap = kmalloc(v->block_size);
 	if (!bitmap)
 		return -ENOMEM;
 	ret = ext2_read_block(v, bitmap_block, bitmap);
@@ -804,7 +804,7 @@ static void ext2_free_all_inode_blocks(struct ext2_vol *v,
 			(void)ext2_free_block(v, inode->i_block[i]);
 	if (inode->i_block[EXT2_IND_BLOCK])
 	{
-		uint32_t *table = kmalloc_try(v->block_size);
+		uint32_t *table = kmalloc(v->block_size);
 
 		if (table && ext2_read_block(v, inode->i_block[EXT2_IND_BLOCK],
 					     table) == 0)
@@ -831,7 +831,7 @@ static int ext2_dir_add(struct ext2_vol *v, uint32_t dir_ino,
 	ret = ext2_read_inode(v, dir_ino, &dir);
 	if (ret != 0)
 		return ret;
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 	for (index = 0; index < EXT2_NDIR_BLOCKS; index++)
@@ -907,7 +907,7 @@ static int ext2_dir_remove(struct ext2_vol *v, uint32_t dir_ino,
 	ret = ext2_read_inode(v, dir_ino, &dir);
 	if (ret != 0)
 		return ret;
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 	for (index = 0; index < EXT2_NDIR_BLOCKS && dir.i_block[index]; index++)
@@ -995,7 +995,7 @@ static int ext2_create_common(const char *path, mode_t mode, int directory)
 		inode.i_block[0] = new_block;
 		inode.i_size = v->block_size;
 		inode.i_blocks = v->block_size / 512;
-		block = kmalloc_try(v->block_size);
+		block = kmalloc(v->block_size);
 		if (!block)
 		{
 			ret = -ENOMEM;
@@ -1146,7 +1146,7 @@ static int ext2_rmdir_path(const char *path)
 		return ret;
 	if ((inode.i_mode & EXT2_S_IFMT) != EXT2_S_IFDIR)
 		return -ENOTDIR;
-	buf = kmalloc_try(v->block_size);
+	buf = kmalloc(v->block_size);
 	if (!buf)
 		return -ENOMEM;
 	for (i = 0; i < EXT2_NDIR_BLOCKS && inode.i_block[i]; i++)
@@ -1330,7 +1330,7 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 		max_size = UINT32_MAX;
 	if ((uint64_t)offset > max_size || count > max_size - (uint64_t)offset)
 		return -EFBIG;
-	block_buf = kmalloc_try(v->block_size);
+	block_buf = kmalloc(v->block_size);
 	if (!block_buf)
 		return -ENOMEM;
 	ret = 0;
@@ -1419,7 +1419,7 @@ static int ext2_truncate_path(const char *path, size_t length)
 	}
 	if (inode.i_block[EXT2_IND_BLOCK])
 	{
-		uint32_t *table = kmalloc_try(v->block_size);
+		uint32_t *table = kmalloc(v->block_size);
 		uint32_t first = keep > EXT2_NDIR_BLOCKS ?
 			keep - EXT2_NDIR_BLOCKS : 0;
 		int any = 0;
@@ -1552,7 +1552,7 @@ int ext2_disk_mount(const char *dev, const char *mount_dir)
 	/* Group descriptor follows superblock block. */
 	{
 		uint32_t gd_block = slot->first_data_block + 1;
-		uint8_t *gbuf = kmalloc_try(slot->block_size);
+		uint8_t *gbuf = kmalloc(slot->block_size);
 
 		if (!gbuf)
 			return -ENOMEM;

@@ -8,245 +8,80 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: kmem.c
- * Description: IR0 kernel source/header file
+ * Description: Kernel heap API (kmalloc/kfree) on top of the mm heap backend
  */
 
-// SPDX-License-Identifier: GPL-3.0-only
-/**
- * IR0 Kernel — Core system software
- * Copyright (C) 2025  Iván Rodriguez
- *
- * This file is part of the IR0 Operating System.
- * Distributed under the terms of the GNU General Public License v3.0.
- * See the LICENSE file in the project root for full license information.
- *
- * File: kmem.c
- * Description: Kernel heap allocator with automatic debug tracking
- */
 #include <ir0/kmem.h>
 #include <mm/allocator.h>
 #include <ir0/oops.h>
 #include <ir0/mm_diag.h>
 #include <ir0/overflow.h>
-#include <config.h>
 
-/* Compiler optimization hints */
-#define likely(x) __builtin_expect(!!(x), 1)
-#define unlikely(x) __builtin_expect(!!(x), 0)
-
-/**
- * __kmalloc_impl - Internal implementation of kernel memory allocation
- * Pure implementation without validation - called by checked wrapper
- */
-static void *__kmalloc_impl(size_t size)
+static int kmem_ptr_in_heap(const void *ptr)
 {
-	if (unlikely(size == 0))
-		return NULL;
-
-	return alloc(size);
+	return (uintptr_t)ptr >= SIMPLE_HEAP_START &&
+	       (uintptr_t)ptr < SIMPLE_HEAP_END;
 }
 
-/**
- * __kfree_impl - Internal implementation of kernel memory free
- * Pure implementation without validation - called by checked wrapper
- */
-static void __kfree_impl(void *ptr)
+void *kmalloc(size_t size)
 {
-	if (likely(ptr))
-		alloc_free(ptr);
-}
-
-/**
- * __kmalloc_aligned_impl - Internal implementation of aligned allocation
- * Pure implementation without validation - called by checked wrapper
- */
-static void *__kmalloc_aligned_impl(size_t size, size_t alignment)
-{
-	size_t total_size;
-	size_t padding;
-
-	if (size == 0 || alignment == 0)
-		return NULL;
-
-	/* Ensure alignment is power of 2 */
-	if ((alignment & (alignment - 1)) != 0)
-		return NULL;
-
-	/* Allocate extra space to ensure we can align. */
-	if (ir0_add_overflow(alignment - 1, sizeof(void *), &padding) ||
-	    ir0_add_overflow(size, padding, &total_size))
-		return NULL;
-	void *raw_ptr = __kmalloc_impl(total_size);
-	if (!raw_ptr)
-		return NULL;
-
-	/* Calculate aligned address */
-	uintptr_t raw_addr = (uintptr_t)raw_ptr;
-	uintptr_t aligned_addr = (raw_addr + sizeof(void *) + alignment - 1) & ~(alignment - 1);
-	void *aligned_ptr = (void *)aligned_addr;
-
-	/* Store original pointer just before aligned address */
-	void **orig_ptr_storage = (void **)aligned_ptr - 1;
-	*orig_ptr_storage = raw_ptr;
-
-	return aligned_ptr;
-}
-
-/**
- * __kfree_aligned_impl - Internal implementation of aligned free
- * Pure implementation without validation - called by checked wrapper
- */
-static void __kfree_aligned_impl(void *ptr)
-{
-	if (!ptr)
-		return;
-
-	/* Get original pointer stored before aligned address */
-	void **orig_ptr_storage = (void **)ptr - 1;
-	void *orig_ptr = *orig_ptr_storage;
-
-	/* Free the original allocation */
-	__kfree_impl(orig_ptr);
-}
-
-
-/**
- * __kmalloc_checked - Checked wrapper for kmalloc with automatic debug tracking
- * Validates parameters and calls implementation
- */
-void *__kmalloc_checked(size_t size, const char *file, int line, const char *caller)
-{
-	if (unlikely(size == 0)) {
-		panicex("kmalloc: size is 0", PANIC_MEM, file, line, caller);
-	}
-
-	if (unlikely(size > SIMPLE_HEAP_SIZE)) {
-		panicex("kmalloc: size too large (possible overflow)", PANIC_MEM, file, line, caller);
-	}
-
-	void *ptr = __kmalloc_impl(size);
-
-	if (unlikely(!ptr)) {
-		panicex("kmalloc: out of memory", PANIC_OUT_OF_MEMORY, file, line, caller);
-	}
-
-	return ptr;
-}
-
-/*
- * kmalloc_try - Like kmalloc but returns NULL on invalid size, overflow, or OOM.
- */
-void *kmalloc_try(size_t size)
-{
-	if (unlikely(size == 0))
-		return NULL;
-	if (unlikely(size > SIMPLE_HEAP_SIZE))
+	if (unlikely(size == 0 || size > SIMPLE_HEAP_SIZE))
 		return NULL;
 	if (mm_diag_fault_hit("kmem.alloc"))
 		return NULL;
-	return __kmalloc_impl(size);
+	return alloc(size);
 }
 
-void *kmalloc_aligned_try(size_t size, size_t alignment)
+/*
+ * The block is over-allocated by alignment - 1 plus one pointer; the raw
+ * heap pointer is stored in the word just below the aligned address so
+ * kfree_aligned() can hand it back to the backend.
+ */
+void *kmalloc_aligned(size_t size, size_t alignment)
 {
-	if (unlikely(size == 0))
-		return NULL;
-	if (unlikely(alignment == 0))
+	size_t total_size;
+	size_t padding;
+	uintptr_t aligned_addr;
+	void *raw_ptr;
+
+	if (unlikely(size == 0 || alignment == 0))
 		return NULL;
 	if (unlikely((alignment & (alignment - 1)) != 0))
 		return NULL;
 	if (unlikely(size > SIMPLE_HEAP_SIZE))
 		return NULL;
-	return __kmalloc_aligned_impl(size, alignment);
+	if (ir0_add_overflow(alignment - 1, sizeof(void *), &padding) ||
+	    ir0_add_overflow(size, padding, &total_size))
+		return NULL;
+
+	raw_ptr = alloc(total_size);
+	if (!raw_ptr)
+		return NULL;
+
+	aligned_addr = ((uintptr_t)raw_ptr + sizeof(void *) + alignment - 1) &
+		       ~(alignment - 1);
+	((void **)aligned_addr)[-1] = raw_ptr;
+	return (void *)aligned_addr;
 }
 
-/**
- * __kfree_checked - Checked wrapper for kfree with automatic debug tracking
- * Validates parameters and calls implementation
- */
 void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 {
-	if (unlikely(!ptr)) {
-		/* Linux allows free(NULL) - it's a no-op
-		 * This is POSIX-compliant behavior: free(NULL) does nothing
-		 * We allow it silently for compatibility and to avoid breaking code
-		 * that relies on this behavior
-		 */
+	if (unlikely(!ptr))
 		return;
-	}
-
-	/* Validate that the pointer is within heap range */
-	if (unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
-	             (uintptr_t)ptr >= SIMPLE_HEAP_END)) {
+	if (unlikely(!kmem_ptr_in_heap(ptr)))
 		panicex("kfree: pointer out of heap range", PANIC_MEM, file, line, caller);
-	}
-
-	__kfree_impl(ptr);
+	alloc_free(ptr);
 }
 
-/**
- * __kmalloc_aligned_checked - Checked wrapper for aligned allocation
- * Validates parameters and calls implementation
- */
-void *__kmalloc_aligned_checked(size_t size, size_t alignment,
-                               const char *file, int line, const char *caller)
-{
-	if (unlikely(size == 0)) 
-	{
-		panicex("kmalloc_aligned: size is 0", PANIC_MEM, file, line, caller);
-	}
-
-	if (unlikely(alignment == 0)) 
-	{
-		panicex("kmalloc_aligned: alignment is 0", PANIC_MEM, file, line, caller);
-	}
-
-	/* Ensure alignment is power of 2 */
-	if (unlikely((alignment & (alignment - 1)) != 0)) 
-	{
-		panicex("kmalloc_aligned: alignment not power of 2", PANIC_MEM, file, line, caller);
-	}
-
-	if (unlikely(size > SIMPLE_HEAP_SIZE)) 
-	{
-		panicex("kmalloc_aligned: size too large", PANIC_MEM, file, line, caller);
-	}
-
-	void *ptr = __kmalloc_aligned_impl(size, alignment);
-
-	if (unlikely(!ptr)) 
-	{
-		panicex("kmalloc_aligned: out of memory", PANIC_OUT_OF_MEMORY, file, line, caller);
-	}
-
-	return ptr;
-}
-
-/**
- * __kfree_aligned_checked - Checked wrapper for aligned free
- * Validates parameters and calls implementation
- */
 void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller)
 {
-	if (unlikely(!ptr)) 
-	{
-		/* Allow NULL like regular kfree */
+	if (unlikely(!ptr))
 		return;
-	}
-
-	/* Validate that the pointer is within heap range */
-	if (unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
-	             (uintptr_t)ptr >= SIMPLE_HEAP_END)) 
-	{
+	if (unlikely(!kmem_ptr_in_heap(ptr)))
 		panicex("kfree_aligned: pointer out of heap range", PANIC_MEM, file, line, caller);
-	}
-
-	__kfree_aligned_impl(ptr);
+	alloc_free(((void **)ptr)[-1]);
 }
 
-/**
- * heap_init - initialize kernel heap allocator
- */
 void heap_init(void)
 {
 	alloc_init();

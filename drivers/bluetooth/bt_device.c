@@ -55,7 +55,7 @@ int bt_device_init(void)
         return ret;
     
     /* Allocate device manager */
-    bt_manager = (struct bt_device_manager *)kmalloc_try(sizeof(struct bt_device_manager));
+    bt_manager = (struct bt_device_manager *)kmalloc(sizeof(struct bt_device_manager));
     if (!bt_manager)
         return -ENOMEM;
     
@@ -348,7 +348,7 @@ int bt_proc_devices_read(char *buffer, size_t count)
     if (!buffer || count == 0)
         return -EINVAL;
 
-    devices = kmalloc_try(sizeof(*devices) * 32);
+    devices = kmalloc(sizeof(*devices) * 32);
     if (!devices)
         return -ENOMEM;
 

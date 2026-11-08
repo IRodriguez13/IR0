@@ -46,7 +46,7 @@ static int scenario_process_reclaim_exit_run(ktm_context_t *ctx)
 		process_t *child;
 		pid_t pid;
 
-		child = kmalloc_try(sizeof(process_t));
+		child = kmalloc(sizeof(process_t));
 		KTM_REQUIRE(child != NULL);
 		memset(child, 0, sizeof(*child));
 		pid = process_get_next_pid();

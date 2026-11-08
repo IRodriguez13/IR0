@@ -338,7 +338,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   if (validate_userspace_buffer(user_fds, nfds * sizeof(struct pollfd)) != 0)
     return -EFAULT;
 
-  struct pollfd *kfds = (struct pollfd *)kmalloc_try(nfds * sizeof(struct pollfd));
+  struct pollfd *kfds = (struct pollfd *)kmalloc(nfds * sizeof(struct pollfd));
   if (!kfds)
     return -ENOMEM;
   if (copy_from_user(kfds, user_fds, nfds * sizeof(struct pollfd)) != 0) {
@@ -1984,7 +1984,7 @@ int64_t sys_syslog(int type, char *bufp, int len)
 			return -EINVAL;
 		if (len > IR0_SYSLOG_BUF_CAP)
 			len = IR0_SYSLOG_BUF_CAP;
-		kbuf = (char *)kmalloc_try((size_t)len);
+		kbuf = (char *)kmalloc((size_t)len);
 		if (!kbuf)
 			return -ENOMEM;
 		n = klog_read_records(kbuf, (size_t)len);

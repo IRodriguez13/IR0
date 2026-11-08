@@ -36,7 +36,7 @@ static int scenario_mm_cow_fork_run(ktm_context_t *ctx)
 	KTM_REQUIRE(ktm_snapshot_take(&before) == 0);
 	frames_before = before.used_frames;
 
-	child = kmalloc_try(sizeof(process_t));
+	child = kmalloc(sizeof(process_t));
 	KTM_REQUIRE(child != NULL);
 	memset(child, 0, sizeof(*child));
 	pid = process_get_next_pid();

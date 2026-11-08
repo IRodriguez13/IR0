@@ -200,7 +200,7 @@ static int hs_readdir(const char *path, struct vfs_dirent *entries, int max)
 	if (!rel || !entries || max <= 0)
 		return -EINVAL;
 
-	buf = kmalloc_try(sizeof(*buf) * 64);
+	buf = kmalloc(sizeof(*buf) * 64);
 	if (!buf)
 		return -ENOMEM;
 

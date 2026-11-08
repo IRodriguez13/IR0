@@ -22,7 +22,7 @@ mm_struct_t *mm_create(void)
 {
 	mm_struct_t *mm;
 
-	mm = kmalloc_try(sizeof(*mm));
+	mm = kmalloc(sizeof(*mm));
 	if (!mm)
 		return NULL;
 

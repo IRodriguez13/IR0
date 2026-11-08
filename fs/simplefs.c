@@ -704,7 +704,7 @@ static int simplefs_write_common(const char *fs_name, const char *path, const vo
 
     if (new_size > e->size)
     {
-        new_data = (uint8_t *)kmalloc_try(new_size);
+        new_data = (uint8_t *)kmalloc(new_size);
         if (!new_data)
             return -ENOMEM;
         if (e->data)
@@ -811,7 +811,7 @@ static int simplefs_truncate_common(const char *fs_name, const char *path, size_
         return 0;
     }
 
-    new_data = (uint8_t *)kmalloc_try(length);
+    new_data = (uint8_t *)kmalloc(length);
     if (!new_data)
         return -ENOMEM;
     if (e->data)

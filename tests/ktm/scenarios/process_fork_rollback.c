@@ -37,7 +37,7 @@ static int scenario_process_fork_rollback_run(ktm_context_t *ctx)
 	 *   process.fork_mmap_clone, process.fork_files,
 	 *   process.fork_arch_child, process.fork_enqueue
 	 */
-	child = kmalloc_try(sizeof(process_t));
+	child = kmalloc(sizeof(process_t));
 	KTM_REQUIRE(child != NULL);
 	memset(child, 0, sizeof(*child));
 	pid = process_get_next_pid();

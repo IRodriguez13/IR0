@@ -43,7 +43,7 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	if ((uint32_t)process_live_count() >= process_limit_get())
 		return NULL;
 
-	child = kmalloc_try(sizeof(process_t));
+	child = kmalloc(sizeof(process_t));
 	if (!child)
 		return NULL;
 

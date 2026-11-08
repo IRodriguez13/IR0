@@ -566,7 +566,7 @@ static int v9p_write(uint32_t fid, uint64_t offset, const void *data, uint32_t c
 	if (count > (uint32_t)V9P_BUF_SIZE - 16u)
 		return -EFBIG;
 
-	body = kmalloc_try(V9P_BUF_SIZE);
+	body = kmalloc(V9P_BUF_SIZE);
 	if (!body)
 		return -ENOMEM;
 
@@ -1173,7 +1173,7 @@ int virtio_9p_readdir(const char *relpath, virtio_9p_dirent_t *entries, int max)
 	if (!g_ready || !entries || max <= 0)
 		return -EINVAL;
 
-	buf = kmalloc_try(V9P_READ_CHUNK);
+	buf = kmalloc(V9P_READ_CHUNK);
 	if (!buf)
 		return -ENOMEM;
 

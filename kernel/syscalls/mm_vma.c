@@ -139,7 +139,7 @@ int mm_detach_vma_range(uintptr_t start, uintptr_t end)
 	}
 	if (need_split)
 	{
-		spare = kmalloc_try(sizeof(*spare));
+		spare = kmalloc(sizeof(*spare));
 		if (!spare)
 			return -ENOMEM;
 	}
@@ -243,7 +243,7 @@ int mm_apply_vma_prot(uintptr_t start, uintptr_t end, int prot)
 
 	while (need > 0)
 	{
-		struct mmap_region *node = kmalloc_try(sizeof(*node));
+		struct mmap_region *node = kmalloc(sizeof(*node));
 
 		if (!node)
 		{

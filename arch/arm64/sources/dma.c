@@ -56,7 +56,7 @@ void *dma_alloc(size_t size, uintptr_t *phys)
 		return NULL;
 	if (size > SIZE_MAX - 63U)
 		return NULL;
-	va = kmalloc_aligned_try((size + 63U) & ~63U, 64);
+	va = kmalloc_aligned((size + 63U) & ~63U, 64);
 	if (!va)
 		return NULL;
 	memset(va, 0, size);

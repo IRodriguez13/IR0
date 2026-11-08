@@ -176,7 +176,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      */
     size_t frame_len = sizeof(struct eth_header) + len;
     LOG_DEBUG_FMT("NET", "net_send: Allocating frame buffer, frame_len=%d", (int)frame_len);
-    uint8_t *frame = kmalloc_try(frame_len);
+    uint8_t *frame = kmalloc(frame_len);
 
     if (!frame)
     {

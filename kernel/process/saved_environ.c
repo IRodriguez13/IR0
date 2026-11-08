@@ -55,7 +55,7 @@ static int process_saved_nul_blob_set(char **dst, size_t *dst_len,
 	if (total == 0)
 		return 0;
 
-	*dst = kmalloc_try(total);
+	*dst = kmalloc(total);
 	if (!*dst)
 		return -ENOMEM;
 
@@ -105,7 +105,7 @@ int process_saved_environ_clone(process_t *dst, const process_t *src)
 	if (!src->saved_environ || src->saved_environ_len == 0)
 		return 0;
 
-	dst->saved_environ = kmalloc_try(src->saved_environ_len);
+	dst->saved_environ = kmalloc(src->saved_environ_len);
 	if (!dst->saved_environ)
 		return -ENOMEM;
 
@@ -148,7 +148,7 @@ int process_saved_cmdline_clone(process_t *dst, const process_t *src)
 	if (!src->saved_cmdline || src->saved_cmdline_len == 0)
 		return 0;
 
-	dst->saved_cmdline = kmalloc_try(src->saved_cmdline_len);
+	dst->saved_cmdline = kmalloc(src->saved_cmdline_len);
 	if (!dst->saved_cmdline)
 		return -ENOMEM;
 

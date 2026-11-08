@@ -611,10 +611,10 @@ devfs_text_snap_t *devfs_text_snap_capture(uint32_t device_id)
 	else
 		return NULL;
 
-	snap = (devfs_text_snap_t *)kmalloc_try(sizeof(*snap));
+	snap = (devfs_text_snap_t *)kmalloc(sizeof(*snap));
 	if (!snap)
 		return NULL;
-	snap->buf = (char *)kmalloc_try(len + 1);
+	snap->buf = (char *)kmalloc(len + 1);
 	if (!snap->buf)
 	{
 		kfree(snap);

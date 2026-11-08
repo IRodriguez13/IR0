@@ -39,7 +39,7 @@ struct vfs_file *vfs_file_alloc(const char *path, int flags)
 {
 	struct vfs_file *f;
 
-	f = kmalloc_try(sizeof(*f));
+	f = kmalloc(sizeof(*f));
 	if (!f)
 		return NULL;
 	memset(f, 0, sizeof(*f));

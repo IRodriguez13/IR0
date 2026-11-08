@@ -250,10 +250,10 @@ int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count)
 	owner_pid_size = total_frames * sizeof(int32_t);
 	frame_ref_size = total_frames * sizeof(uint32_t);
 
-	bitmap = kmalloc_try(bitmap_size);
-	owner_classes = kmalloc_try(total_frames * sizeof(uint8_t));
-	owner_pids = kmalloc_try(owner_pid_size);
-	frame_refs = kmalloc_try(frame_ref_size);
+	bitmap = kmalloc(bitmap_size);
+	owner_classes = kmalloc(total_frames * sizeof(uint8_t));
+	owner_pids = kmalloc(owner_pid_size);
+	frame_refs = kmalloc(frame_ref_size);
 	if (!bitmap || !owner_classes || !owner_pids || !frame_refs)
 	{
 		if (bitmap)

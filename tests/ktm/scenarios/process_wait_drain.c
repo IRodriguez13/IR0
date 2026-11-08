@@ -45,7 +45,7 @@ static int scenario_process_wait_drain_run(ktm_context_t *ctx)
 	ktm_assert_batch_begin("process.wait_drain");
 	for (i = 0; i < WAIT_DRAIN_N; i++)
 	{
-		kids[i] = kmalloc_try(sizeof(process_t));
+		kids[i] = kmalloc(sizeof(process_t));
 		KTM_REQUIRE(kids[i] != NULL);
 		memset(kids[i], 0, sizeof(*kids[i]));
 		pids[i] = process_get_next_pid();

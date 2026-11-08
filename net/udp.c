@@ -156,7 +156,7 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
         uint16_t received_checksum = udp->checksum;
         ip4_addr_t dest_ip = rx_ctx ? rx_ctx->dest_addr : 0;
         uint16_t calculated_checksum;
-        uint8_t *udp_scratch = kmalloc_try(packet_len);
+        uint8_t *udp_scratch = kmalloc(packet_len);
 
         if (!udp_scratch)
         {
@@ -236,7 +236,7 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
     size_t udp_header_len = sizeof(struct udp_header);
     size_t total_len = udp_header_len + len;
     
-    uint8_t *udp_packet = kmalloc_try(total_len);
+    uint8_t *udp_packet = kmalloc(total_len);
     if (!udp_packet)
         return -1;
     
@@ -300,7 +300,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
     }
     
     /* Create new handler entry */
-    struct udp_port_handler *new_handler = kmalloc_try(sizeof(struct udp_port_handler));
+    struct udp_port_handler *new_handler = kmalloc(sizeof(struct udp_port_handler));
     if (!new_handler)
     {
         udp_irq_restore(irq_flags);

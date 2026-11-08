@@ -103,9 +103,9 @@ void ktest_sock_stream_segmented_queue(void)
 	KASSERT_EQ(sock_stream_socketpair(&sender, &receiver), 0);
 	if (!sender || !receiver)
 		goto out;
-	source = kmalloc_try(KTEST_STREAM_BYTES);
-	result = kmalloc_try(KTEST_STREAM_BYTES);
-	peek = kmalloc_try(KTEST_PEEK_BYTES);
+	source = kmalloc(KTEST_STREAM_BYTES);
+	result = kmalloc(KTEST_STREAM_BYTES);
+	peek = kmalloc(KTEST_PEEK_BYTES);
 	KASSERT(source && result && peek);
 	if (!source || !result || !peek)
 		goto out;

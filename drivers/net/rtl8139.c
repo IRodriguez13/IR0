@@ -310,7 +310,7 @@ static int32_t rtl8139_hw_init(void)
                  rtl8139_mac[3], rtl8139_mac[4], rtl8139_mac[5]);
 
     /* Initialize RX buffer */
-    rtl8139_rx_buffer = (uint8_t *)kmalloc_try(RTL8139_RX_BUF_SIZE + RTL8139_RX_BUF_PADDING);
+    rtl8139_rx_buffer = (uint8_t *)kmalloc(RTL8139_RX_BUF_SIZE + RTL8139_RX_BUF_PADDING);
     if (!rtl8139_rx_buffer)
     {
         LOG_ERROR("RTL8139", "Failed to allocate RX buffer");
@@ -329,7 +329,7 @@ static int32_t rtl8139_hw_init(void)
     for (i = 0; i < 4; i++)
     {
         /* Allocate TX buffer - kmalloc should return aligned memory, but verify */
-        rtl8139_tx_buffers[i] = (uint8_t *)kmalloc_try(RTL8139_MAX_TX_SIZE);
+        rtl8139_tx_buffers[i] = (uint8_t *)kmalloc(RTL8139_MAX_TX_SIZE);
         if (!rtl8139_tx_buffers[i])
         {
             LOG_ERROR("RTL8139", "Failed to allocate TX buffer");
@@ -1023,7 +1023,7 @@ static void rtl8139_process_rx_packets(void)
                      */
                     if (length > (uint16_t)sizeof(merge_stack))
                     {
-                        merge_heap = (uint8_t *)kmalloc_try(length);
+                        merge_heap = (uint8_t *)kmalloc(length);
                         if (!merge_heap)
                         {
                             rtl8139_dev.rx_dropped++;

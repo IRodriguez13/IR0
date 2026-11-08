@@ -107,7 +107,7 @@ int hci_uart_init(uint16_t uart_base)
     if (hci_uart_instance)
         return 0;
 
-    hci_uart_instance = (struct hci_uart *)kmalloc_try(sizeof(struct hci_uart));
+    hci_uart_instance = (struct hci_uart *)kmalloc(sizeof(struct hci_uart));
     if (!hci_uart_instance)
         return -ENOMEM;
 

@@ -30,7 +30,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 
 	klog_debug_fmt("KERN", "SERIAL: spawn: begin %s", name);
 	
-	proc = kmalloc_try(sizeof(process_t));
+	proc = kmalloc(sizeof(process_t));
 	if (!proc) {
 		klog_debug("KERN", "[ERROR] Failed to allocate process structure\n");
 		return -ENOMEM;
@@ -187,7 +187,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	else
 	{
 		/* Kernel mode: allocate from kernel heap (existing behavior) */
-		void *kstack = kmalloc_try(0x2000);
+		void *kstack = kmalloc(0x2000);
 
 		if (!kstack)
 		{

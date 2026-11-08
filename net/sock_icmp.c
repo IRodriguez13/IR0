@@ -94,7 +94,7 @@ static void sock_icmp_rx_enqueue_locked(struct sock_icmp *sock, ip4_addr_t src_i
 	if (!sock || !data || len == 0 || len > SOCK_ICMP_PKT_MAX)
 		return;
 
-	pkt = kmalloc_try(sizeof(*pkt));
+	pkt = kmalloc(sizeof(*pkt));
 	if (!pkt)
 		return;
 
@@ -208,7 +208,7 @@ struct sock_icmp *sock_icmp_create(void)
 #else
 	struct sock_icmp *sock;
 
-	sock = kmalloc_try(sizeof(*sock));
+	sock = kmalloc(sizeof(*sock));
 	if (!sock)
 		return NULL;
 	memset(sock, 0, sizeof(*sock));

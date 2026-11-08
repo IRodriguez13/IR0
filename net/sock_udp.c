@@ -111,7 +111,7 @@ static void sock_udp_rx_enqueue(struct sock_udp *sock, ip4_addr_t src_ip,
 	if (!sock || !data || len == 0 || len > SOCK_UDP_PKT_MAX)
 		return;
 
-	pkt = kmalloc_try(sizeof(*pkt));
+	pkt = kmalloc(sizeof(*pkt));
 	if (!pkt)
 		return;
 
@@ -177,7 +177,7 @@ struct sock_udp *sock_udp_create(void)
 #else
 	struct sock_udp *sock;
 
-	sock = kmalloc_try(sizeof(*sock));
+	sock = kmalloc(sizeof(*sock));
 	if (!sock)
 		return NULL;
 	memset(sock, 0, sizeof(*sock));

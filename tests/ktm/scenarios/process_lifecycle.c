@@ -49,7 +49,7 @@ static int scenario_process_lifecycle_run(ktm_context_t *ctx)
 	 * Synthetic zombie: allocate a process_t, link it, destroy via
 	 * process_destroy (reap path). Avoids needing a scheduled child.
 	 */
-	child = kmalloc_try(sizeof(process_t));
+	child = kmalloc(sizeof(process_t));
 	KTM_REQUIRE(child != NULL);
 	memset(child, 0, sizeof(*child));
 	pid = process_get_next_pid();

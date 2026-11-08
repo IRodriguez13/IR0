@@ -435,7 +435,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     query_len += 2;
     
     /* Create query state */
-    struct dns_query_state *query = kmalloc_try(sizeof(struct dns_query_state));
+    struct dns_query_state *query = kmalloc(sizeof(struct dns_query_state));
     if (!query)
         return 0;
     

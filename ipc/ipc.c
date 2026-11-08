@@ -73,7 +73,7 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
     if (!wq || !proc)
         return;
 
-    wait_queue_node_t *node = kmalloc_try(sizeof(wait_queue_node_t));
+    wait_queue_node_t *node = kmalloc(sizeof(wait_queue_node_t));
     if (!node)
         return;
 
@@ -242,7 +242,7 @@ int ring_buffer_init(ring_buffer_t *rb, size_t size)
 
     /* A channel is user-triggerable; exhaustion must fail the create path,
      * not turn an ordinary IPC allocation into a kernel panic. */
-    rb->buffer = kmalloc_try(size);
+    rb->buffer = kmalloc(size);
     if (!rb->buffer)
         return -1;
 
@@ -331,7 +331,7 @@ size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len)
 
 ipc_channel_t *ipc_channel_create(uint32_t id)
 {
-    ipc_channel_t *channel = kmalloc_try(sizeof(ipc_channel_t));
+    ipc_channel_t *channel = kmalloc(sizeof(ipc_channel_t));
     if (!channel)
         return NULL;
 

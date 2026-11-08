@@ -263,7 +263,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 		file_pos += (off_t)chunk;
 	}
 
-	region = kmalloc_try(sizeof(struct mmap_region));
+	region = kmalloc(sizeof(struct mmap_region));
 	if (!region)
 	{
 		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
@@ -625,7 +625,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           }
         }
         
-        struct mmap_region *region = kmalloc_try(sizeof(struct mmap_region));
+        struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
         if (!region)
         {
           for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
@@ -729,7 +729,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 	  return SYSCALL_PTR_ERR(-mapped_len);
 	map_len = (size_t)mapped_len;
 
-	region = kmalloc_try(sizeof(struct mmap_region));
+	region = kmalloc(sizeof(struct mmap_region));
 	if (!region)
 	{
 	  for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
@@ -938,7 +938,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   }
 
   /* Create mapping entry */
-  struct mmap_region *region = kmalloc_try(sizeof(struct mmap_region));
+  struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
   if (!region)
   {
       /* Failed to allocate region entry - unmap pages */

@@ -1193,7 +1193,7 @@ static int exec_env_clone_from_saved(process_t *proc, char *kernel_envp[256],
 		if (len >= rem)
 			break;
 
-		copy = (char *)kmalloc_try(len + 1);
+		copy = (char *)kmalloc(len + 1);
 		if (!copy)
 			return -ENOMEM;
 
@@ -1290,7 +1290,7 @@ int64_t sys_exec(const char *pathname,
         break;
       }
 
-      char *arg_str = (char *)kmalloc_try(256);
+      char *arg_str = (char *)kmalloc(256);
       if (!arg_str)
       {
         rc_vec = -ENOMEM;
@@ -1348,7 +1348,7 @@ int64_t sys_exec(const char *pathname,
         break;
       }
 
-      char *env_str = (char *)kmalloc_try(256);
+      char *env_str = (char *)kmalloc(256);
       if (!env_str)
       {
         rc_vec = -ENOMEM;
@@ -1428,7 +1428,7 @@ int64_t sys_exec(const char *pathname,
 
     /*
      * Heap census on refusal: exec loads the whole image with
-     * kmalloc_try(), so -ENOMEM means either the heap is genuinely full
+     * kmalloc(), so -ENOMEM means either the heap is genuinely full
      * (a leak) or no contiguous block that size is left (fragmentation).
      * The used figure separates the two.
      */

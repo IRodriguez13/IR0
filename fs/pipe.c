@@ -36,7 +36,7 @@ pipe_t *pipe_create(void)
 	if (KTM_FAULT_HIT("pipe.create"))
 		return NULL;
 
-	pipe = kmalloc_try(sizeof(pipe_t));
+	pipe = kmalloc(sizeof(pipe_t));
 	if (!pipe)
 		return NULL;
 

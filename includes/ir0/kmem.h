@@ -8,48 +8,46 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: kmem.h
- * Description: IR0 kernel source/header file
+ * Description: Kernel heap allocation API (kmalloc/kfree)
  */
 
 #pragma once
-#include <stdint.h>
-#include <stddef.h>
 
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// Checked wrappers with debug info
-void *__kmalloc_checked(size_t size, const char *file, int line, const char *caller);
-void __kfree_checked(void *ptr, const char *file, int line, const char *caller);
-void *__kmalloc_aligned_checked(size_t size, size_t alignment,
-                               const char *file, int line, const char *caller);
-void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller);
-
 void heap_init(void);
 
-/* Allocation that returns NULL on failure (no panic). */
-void *kmalloc_try(size_t size);
-void *kmalloc_aligned_try(size_t size, size_t alignment);
+/*
+ * kmalloc - allocate @size bytes of zero-filled kernel heap memory.
+ * Returns NULL when @size is 0, exceeds the heap, or the heap is exhausted;
+ * callers handle NULL. Release with kfree().
+ */
+void *kmalloc(size_t size);
 
+/*
+ * kmalloc_aligned - kmalloc() whose result is aligned to @alignment, a
+ * power of two. Returns NULL on a zero or non-power-of-two alignment.
+ * Release with kfree_aligned(), never kfree().
+ */
+void *kmalloc_aligned(size_t size, size_t alignment);
 
+void __kfree_checked(void *ptr, const char *file, int line, const char *caller);
+void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller);
 
 #ifdef __cplusplus
 }
 #endif
 
-// Automatic debug tracking macros - capture caller location transparently
-#define kmalloc(size) \
-    __kmalloc_checked((size), __FILE__, __LINE__, __func__)
-
+/*
+ * kfree / kfree_aligned - release memory from kmalloc() / kmalloc_aligned().
+ * NULL is a no-op; a pointer outside the heap panics naming the call site.
+ */
 #define kfree(ptr) \
-    __kfree_checked((ptr), __FILE__, __LINE__, __func__)
-
-#define kmalloc_aligned(size, alignment) \
-    __kmalloc_aligned_checked((size), (alignment), __FILE__, __LINE__, __func__)
+	__kfree_checked((ptr), __FILE__, __LINE__, __func__)
 
 #define kfree_aligned(ptr) \
-    __kfree_aligned_checked((ptr), __FILE__, __LINE__, __func__)
-
-
+	__kfree_aligned_checked((ptr), __FILE__, __LINE__, __func__)

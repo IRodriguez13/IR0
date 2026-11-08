@@ -809,7 +809,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     if (!ft)
         return -ENODEV;
 
-    struct vfs_mount *m = kmalloc_try(sizeof(*m));
+    struct vfs_mount *m = kmalloc(sizeof(*m));
     if (!m)
         return -ENOMEM;
 
@@ -1811,7 +1811,7 @@ static int rmdir_recursive_impl(const char *path, int depth)
         struct vfs_dirent entries[32];
         char full[MAX_PATH];
         char resolved[MAX_PATH];
-    } *scr = kmalloc_try(sizeof(*scr));
+    } *scr = kmalloc(sizeof(*scr));
     struct vfs_ops *ops;
     size_t nlen;
     int n;
@@ -2106,7 +2106,7 @@ int vfs_read_file(const char *path, void **data, size_t *size)
         return 0;
     }
 
-    buf = kmalloc_try(fsize);
+    buf = kmalloc(fsize);
     if (!buf)
     {
         /* Audit is usually off; this path decides whether an -ENOMEM from

@@ -1106,7 +1106,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
     return -EFBIG;
   }
 
-  *data = kmalloc_try(*size);
+  *data = kmalloc(*size);
   if (!*data)
   {
     return -ENOMEM; // Memory allocation failed
