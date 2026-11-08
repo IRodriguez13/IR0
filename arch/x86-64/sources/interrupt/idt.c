@@ -103,7 +103,8 @@ void idt_init64(void)
     idt_set_gate64(0, (uint64_t)isr0_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
     idt_set_gate64(1, (uint64_t)isr1_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
     idt_set_gate64(2, (uint64_t)isr2_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
-    idt_set_gate64(3, (uint64_t)isr3_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
+    /* #BP is user-callable (int3 -> SIGTRAP), as in Linux. */
+    idt_set_gate64(3, (uint64_t)isr3_64, 0x08, IDT_TYPE_TRAP_USER, 0);
     idt_set_gate64(4, (uint64_t)isr4_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
     idt_set_gate64(5, (uint64_t)isr5_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
     idt_set_gate64(6, (uint64_t)isr6_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);

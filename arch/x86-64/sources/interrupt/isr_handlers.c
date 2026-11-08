@@ -361,6 +361,9 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
             case 0:  /* Divide by Zero */
                 signal_to_send = SIGFPE;
                 break;
+            case 3:  /* Breakpoint (int3) */
+                signal_to_send = SIGTRAP;
+                break;
             case 4:  /* Overflow */
                 signal_to_send = SIGFPE;
                 break;
@@ -396,8 +399,6 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 	    struct ir0_fault fault;
 
 	    x86_fault_from_frame(&fault, interrupt_number, stack);
-	    ir0_log_user_fault(&fault, (unsigned int)current->task.pid,
-			       current->comm);
             klog_notice_fmt("ISR",
                             "user_exception int=%llx -> sig=%x pid=%x rip=%llx cs=%llx err=%llx",
                             (unsigned long long)interrupt_number,
@@ -406,7 +407,13 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
                             (unsigned long long)stack[2],
                             (unsigned long long)stack[3],
                             (unsigned long long)stack[1]);
-            send_signal(current->task.pid, signal_to_send);
+            /*
+             * Deliver on this frame now, as #PF does. Queuing with
+             * send_signal() returned to the faulting instruction before the
+             * handler ran (a SIGILL handler livelocked on ud2) and dropped
+             * signals to PID 1.
+             */
+            force_sig_fault(signal_to_send, &fault, stack);
             return;
         }
 

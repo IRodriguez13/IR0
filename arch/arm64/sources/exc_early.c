@@ -203,30 +203,25 @@ static void arm64_abort_to_common_mm(uint64_t esr, uint64_t *frame)
 }
 
 /*
- * EL0 synchronous exception that is neither a syscall nor an abort:
- * terminate the task with the Linux signal for that class
- * (arch/arm64/kernel/traps.c). Returning would replay the instruction
- * forever.
+ * EL0 synchronous exception that is neither a syscall nor an abort: raise
+ * the Linux signal for its class (arch/arm64/kernel/traps.c). A handler runs
+ * on @frame; without one the task dies, since returning would replay the
+ * instruction forever.
  */
-static void arm64_el0_fault_kill(uint64_t esr)
+static void arm64_el0_fault_signal(uint64_t esr, uint64_t *frame)
 {
 	process_t *p = current_process;
 	struct ir0_fault fault;
 	uint64_t far;
-	uint64_t elr;
-	uint64_t spsr;
-	uint64_t sp_el0;
 	int sig;
 
 	__asm__ volatile("mrs %0, far_el1" : "=r"(far));
-	__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
-	__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
-	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
-	arm64_fault_from_esr(&fault, esr, elr, sp_el0, far, spsr);
+	arm64_fault_from_esr(&fault, esr, frame[ARM64_EXC_IDX_ELR],
+			     frame[ARM64_EXC_IDX_SP], far,
+			     frame[ARM64_EXC_IDX_SPSR]);
 
 	if (!p || p->mode != USER_MODE)
 		panic("arm64: EL0 exception without a user task");
-	ir0_log_user_fault(&fault, (unsigned int)p->task.pid, p->comm);
 
 	if (fault.kind == IR0_FAULT_BREAKPOINT)
 		sig = SIGTRAP;
@@ -234,7 +229,7 @@ static void arm64_el0_fault_kill(uint64_t esr)
 		sig = SIGBUS;
 	else
 		sig = SIGILL;
-	signal_exit_current(sig);
+	force_sig_fault(sig, &fault, frame);
 }
 
 void arm64_exc_sync_lower(uint64_t *frame)
@@ -275,7 +270,7 @@ void arm64_exc_sync_lower(uint64_t *frame)
 		if (ec == ESR_EC_IABT_LOWER || ec == ESR_EC_DABT_LOWER)
 			arm64_abort_to_common_mm(esr, frame);
 		else
-			arm64_el0_fault_kill(esr);
+			arm64_el0_fault_signal(esr, frame);
 		return;
 	}
 
