@@ -456,6 +456,76 @@ def check_drivers_ir0_block_dev_only():
     return errors
 
 
+SINGLE_DECL_TREES = (
+    "arch", "block", "drivers", "fs", "includes", "ipc", "kernel", "ktm",
+    "mm", "net", "sched", "sound", "tests/ktm",
+)
+_DECL_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+_DECL_PP_RE = re.compile(r"^[ \t]*#(?:[^\n]*\\\n)*[^\n]*", re.M)
+_DECL_PROTO_RE = re.compile(
+    r"^(?:extern\s+)?[A-Za-z_][\w\s\*]*?\b([A-Za-z_]\w*)\s*\([^()]*\)"
+    r"\s*(?:__attribute__\s*\(\(.*\)\)\s*)*$",
+    re.S,
+)
+
+
+def _header_prototypes(text: str) -> set[str]:
+    """Names of non-static function prototypes at file scope of a header."""
+    text = _DECL_PP_RE.sub("", _DECL_COMMENT_RE.sub(" ", text))
+    names: set[str] = set()
+    depth = 0
+    stmt: list[str] = []
+    for ch in text:
+        if ch == "{":
+            depth += 1
+            stmt.clear()
+        elif ch == "}":
+            depth = max(depth - 1, 0)
+            stmt.clear()
+        elif depth == 0 and ch == ";":
+            decl = " ".join("".join(stmt).split())
+            stmt.clear()
+            if (not decl or decl.startswith(("static", "typedef"))
+                    or "(*" in decl.replace(" ", "")):
+                continue
+            match = _DECL_PROTO_RE.match(decl)
+            if match:
+                names.add(match.group(1))
+        elif depth == 0:
+            stmt.append(ch)
+    return names
+
+
+def check_single_header_declarations():
+    """Each kernel function is declared in exactly one header.
+
+    Private headers include their includes/ir0 facade (or the owning sibling
+    header) instead of re-declaring it, so prototypes cannot drift apart.
+    """
+    errors = []
+    owners: dict[str, list[str]] = {}
+    for tree in SINGLE_DECL_TREES:
+        for fpath in iter_c_files(ROOT / tree):
+            if fpath.suffix != ".h":
+                continue
+            try:
+                text = read_file_text(fpath)
+            except OSError as exc:
+                errors.append(f"[read-error] {fpath}: {exc}")
+                continue
+            rel = str(rel_to_root(fpath))
+            for name in _header_prototypes(text):
+                owners.setdefault(name, []).append(rel)
+    for name in sorted(owners):
+        if len(owners[name]) > 1:
+            errors.append(
+                f"[duplicate-declaration] {name}: "
+                + ", ".join(sorted(owners[name]))
+                + " (keep one owner header; include it elsewhere)"
+            )
+    return errors
+
+
 def check_drivers_no_arch_includes():
     errors = []
     base = ROOT / "drivers"
@@ -2491,6 +2561,7 @@ def main():
     errors.extend(check_portable_trees_no_kernel_headers())
     errors.extend(check_drivers_ir0_block_dev_only())
     errors.extend(check_drivers_no_arch_includes())
+    errors.extend(check_single_header_declarations())
     errors.extend(check_kernel_no_driver_includes())
     errors.extend(check_kernel_no_direct_arch_portable())
     errors.extend(check_fs_no_mm_includes())

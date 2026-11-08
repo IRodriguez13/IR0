@@ -81,6 +81,7 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 | `portable-no-kernel-header` | `fs/`, `mm/`, `net/`, `drivers/` | Sin `#include <kernel/...>` |
 | `driver-block-dev-facade` | `drivers/` | Sin `#include <drivers/storage/block_dev.h>` crudo; **`ir0/block_dev.h`** |
 | `drivers-no-arch` | `drivers/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
+| `duplicate-declaration` | Todos los headers del kernel | Cada prototipo vive en un único header; los headers privados incluyen su fachada **`ir0/*`** en vez de copiarla |
 | `kernel-no-driver-include` | `kernel/` (árbol completo) | Sin `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | Sin `#include <arch/common/arch_portable.h>`; **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Fuera de `drivers/bluetooth/` | Sin `#include <bluetooth/...>` |
