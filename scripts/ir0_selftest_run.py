@@ -200,6 +200,15 @@ def main() -> int:
     if rc != 0:
         print(f"ir0-selftest: QEMU failed rc={rc} log={log}", file=sys.stderr)
         return rc
+    if args.expected_panic:
+        # The panic stops userspace before KTAP can report; the done tags
+        # matched above are the verdict. A "not ok" printed first still fails.
+        text = log.read_text(errors="replace")
+        if any(line.strip().startswith("not ok") for line in text.splitlines()):
+            print(f"ir0-selftest: failed before panic log={log}", file=sys.stderr)
+            return 1
+        print("ir0-selftest: expected panic reached")
+        return 0
     return run([sys.executable, str(tap), str(log)], timeout=15)
 
 
