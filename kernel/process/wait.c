@@ -164,8 +164,9 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 			*status_ptr = status_val;
 			copy_ok = 1;
 		}
-		else if (copy_to_user_in_mm(process_pgd(parent), 0, status_ptr,
-					    &status_val, sizeof(int)) == 0)
+		else if (copy_to_user_mm(process_pgd(parent),
+					 (uintptr_t)status_ptr, &status_val,
+					 sizeof(int)) == 0)
 		{
 			copy_ok = 1;
 		}

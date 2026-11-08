@@ -1093,7 +1093,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
         pmm_free_frame(phys);
         return -ENOMEM;
       }
-      if (zero_user_mm(root, page, PAGE_SIZE_4KB) != 0)
+      if (clear_user_mm(root, page, PAGE_SIZE_4KB) != 0)
       {
         (void)unmap_page_in_directory(root, page);
         return -EFAULT;

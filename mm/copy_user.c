@@ -148,7 +148,7 @@ int clear_user(void *dst, size_t n)
 	if (!current || !process_pgd(current))
 		return -EFAULT;
 
-	if (zero_user_mm(process_pgd(current), (uintptr_t)dst, n) != 0)
+	if (clear_user_mm(process_pgd(current), (uintptr_t)dst, n) != 0)
 		return -EFAULT;
 	return 0;
 }

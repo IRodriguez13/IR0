@@ -12,12 +12,13 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/page_table_pool.h>
-#include "paging.h"
-#include <string.h>
-#include <mm/pmm.h>
+#include <ir0/copy_user.h>
+#include <ir0/cpu.h>
+#include <ir0/mm_alloc.h>
 #include <ir0/tlb_sync.h>
-#include <ir0/arch_cpu.h>
+#include <mm/pmm.h>
+#include <string.h>
+#include "paging.h"
 #include "paging_internal.h"
 
 /*
@@ -98,15 +99,15 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 	return 0;
 }
 
-int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
-                                     const void *src, size_t n)
+int copy_to_user_mm(address_space_root_t root, uintptr_t dst, const void *src,
+		    size_t n)
 {
     const uint8_t *s = src;
 
     if (n == 0)
         return 0;
     if (!root || !src || !mm_user_va_ok(dst, n))
-        return -1;
+        return -EFAULT;
 
     while (n > 0)
     {
@@ -116,7 +117,7 @@ int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
         size_t chunk;
 
         if (paging_resolve_user_page(root, page, 1, &phys) != 0)
-            return -1;
+            return -EFAULT;
         off = dst & (uintptr_t)PAGE_OFFSET_MASK;
         chunk = (size_t)(PAGE_SIZE_4KB - off);
         if (chunk > n)
@@ -137,15 +138,15 @@ int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
     return 0;
 }
 
-int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
-                                       void *dst, size_t n)
+int copy_from_user_mm(address_space_root_t root, uintptr_t src, void *dst,
+		      size_t n)
 {
     uint8_t *d = dst;
 
     if (n == 0)
         return 0;
     if (!root || !dst || !mm_user_va_ok(src, n))
-        return -1;
+        return -EFAULT;
 
     while (n > 0)
     {
@@ -155,7 +156,7 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
         size_t chunk;
 
         if (paging_resolve_user_page(root, page, 0, &phys) != 0)
-            return -1;
+            return -EFAULT;
         off = src & (uintptr_t)PAGE_OFFSET_MASK;
         chunk = (size_t)(PAGE_SIZE_4KB - off);
         if (chunk > n)
@@ -176,13 +177,12 @@ int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
     return 0;
 }
 
-int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
-				  size_t n)
+int clear_user_mm(address_space_root_t root, uintptr_t dst, size_t n)
 {
     if (n == 0)
         return 0;
     if (!root || !mm_user_va_ok(dst, n))
-        return -1;
+        return -EFAULT;
 
     while (n > 0)
     {
@@ -192,7 +192,7 @@ int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
         size_t chunk;
 
         if (paging_resolve_user_page(root, page, 1, &phys) != 0)
-            return -1;
+            return -EFAULT;
         off = dst & (uintptr_t)PAGE_OFFSET_MASK;
         chunk = (size_t)(PAGE_SIZE_4KB - off);
         if (chunk > n)

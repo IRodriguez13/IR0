@@ -49,15 +49,15 @@ void ktest_usercopy_explicit_mm_range_contract(void)
 	/* Empty copies never dereference either endpoint or require an mm. */
 	KASSERT_EQ(copy_to_user_mm(NULL, 0, NULL, 0), 0);
 	KASSERT_EQ(copy_from_user_mm(NULL, 0, NULL, 0), 0);
-	KASSERT_EQ(zero_user_mm(NULL, 0, 0), 0);
+	KASSERT_EQ(clear_user_mm(NULL, 0, 0), 0);
 
 	/* Reject wraparound and ranges crossing the ISA-owned user window. */
 	KASSERT(copy_to_user_mm(invalid_root, upper - 1, &byte, 2) != 0);
 	KASSERT(copy_from_user_mm(invalid_root, upper - 1, &byte, 2) != 0);
-	KASSERT(zero_user_mm(invalid_root, upper - 1, 2) != 0);
+	KASSERT(clear_user_mm(invalid_root, upper - 1, 2) != 0);
 	KASSERT(copy_to_user_mm(invalid_root, UINTPTR_MAX - 1, &byte, 4) != 0);
 	KASSERT(copy_from_user_mm(invalid_root, UINTPTR_MAX - 1, &byte, 4) != 0);
-	KASSERT(zero_user_mm(invalid_root, UINTPTR_MAX - 1, 4) != 0);
+	KASSERT(clear_user_mm(invalid_root, UINTPTR_MAX - 1, 4) != 0);
 
 	/* Kernel-mode harness exercises the bounded C-string semantics. */
 	KASSERT(current_process != NULL);

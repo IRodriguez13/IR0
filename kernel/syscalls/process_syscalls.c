@@ -684,10 +684,9 @@ void process_exit_robust_list(process_t *p)
 
 	if (p->mode == USER_MODE)
 	{
-		copy_ret = copy_from_user_in_mm(process_pgd(p),
-						p == current_process,
-						&kh, p->robust_list,
-						sizeof(kh));
+		copy_ret = copy_from_user_mm(process_pgd(p),
+					     (uintptr_t)p->robust_list, &kh,
+					     sizeof(kh));
 		if (copy_ret != 0)
 		{
 			p->robust_list = NULL;

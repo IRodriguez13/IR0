@@ -12,7 +12,7 @@
  *
  * Contract: never memcpy/memset/strncpy or direct dereference of a userspace
  * pointer. Always copy_to_user / copy_from_user / clear_user (or
- * copy_*_user_mm / *_region_in_directory for a non-current mm). KERNEL_MODE
+ * copy_*_user_mm for a non-current mm). KERNEL_MODE
  * bypass is only for dbgshell/ktest.
  */
 
@@ -91,72 +91,17 @@ static inline int access_ok(const void *addr, size_t size)
 	})
 
 /*
- * Cross-mm copies (Linux access_remote_vm / access_process_vm analogue).
- * Walk @root instead of switching address-space root + memcpy.
- * Implemented in mm/paging.c; declared here so syscalls need not
- * include <mm/paging.h> for the uaccess contract alone.
- *
- * Prefer copy_to_user_mm / copy_from_user_mm / zero_user_mm.
- * *_region_in_directory remain as the implementation names.
+ * Copies against an explicit address space (Linux access_remote_vm analogue)
+ * for callers that must reach a process other than current, or a root that
+ * is not active yet: ELF load, signal frames, exit/wait bookkeeping.
+ * They walk @root and break COW like a write fault; only user-accessible
+ * leaves inside the ISA user VA window are touched.
+ * Returns: 0 on success, -EFAULT on error.
  */
-int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
-				     const void *src, size_t n);
-int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
-				       void *dst, size_t n);
-int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst,
-				  size_t n);
-
-static inline int copy_to_user_mm(address_space_root_t root, uintptr_t dst,
-				  const void *src, size_t n)
-{
-	return copy_to_user_region_in_directory(root, dst, src, n);
-}
-
-static inline int copy_from_user_mm(address_space_root_t root, uintptr_t src, void *dst,
-				    size_t n)
-{
-	return copy_from_user_region_in_directory(root, src, dst, n);
-}
-
-static inline int zero_user_mm(address_space_root_t root, uintptr_t dst, size_t n)
-{
-	return zero_user_region_in_directory(root, dst, n);
-}
-
-/*
- * Copy against a specific mm. @current_as != 0 uses the active process
- * (copy_to/from_user). Otherwise walk @root. Rejects non-user VAs first.
- */
-static inline int copy_to_user_in_mm(address_space_root_t root, int current_as,
-				     void *udst, const void *ksrc, size_t n)
-{
-	if (n == 0)
-		return 0;
-	if (!udst || !ksrc)
-		return -EFAULT;
-	if (!is_user_address(udst, n))
-		return -EFAULT;
-	if (current_as)
-		return copy_to_user(udst, ksrc, n);
-	if (!root)
-		return -EFAULT;
-	return copy_to_user_mm(root, (uintptr_t)udst, ksrc, n);
-}
-
-static inline int copy_from_user_in_mm(address_space_root_t root, int current_as,
-				       void *kdst, const void *usrc, size_t n)
-{
-	if (n == 0)
-		return 0;
-	if (!kdst || !usrc)
-		return -EFAULT;
-	if (!is_user_address(usrc, n))
-		return -EFAULT;
-	if (current_as)
-		return copy_from_user(kdst, usrc, n);
-	if (!root)
-		return -EFAULT;
-	return copy_from_user_mm(root, (uintptr_t)usrc, kdst, n);
-}
+int copy_to_user_mm(address_space_root_t root, uintptr_t dst, const void *src,
+		    size_t n);
+int copy_from_user_mm(address_space_root_t root, uintptr_t src, void *dst,
+		      size_t n);
+int clear_user_mm(address_space_root_t root, uintptr_t dst, size_t n);
 
 #endif /* _IR0_COPY_USER_H */

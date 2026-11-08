@@ -33,9 +33,8 @@ static void product_clear_child_tid(process_t *dying)
 	dying->set_tid_ptr = NULL;
 	if (dying->mode == USER_MODE)
 	{
-		if (copy_to_user_in_mm(process_pgd(dying),
-				       dying == current_process, tidptr, &zero,
-				       sizeof(zero)) == 0)
+		if (copy_to_user_mm(process_pgd(dying), (uintptr_t)tidptr,
+				    &zero, sizeof(zero)) == 0)
 			(void)ir0_futex_wake(tidptr, 1);
 	}
 	else if (process_validate_userspace_buffer(tidptr, sizeof(zero)) == 0)

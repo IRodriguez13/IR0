@@ -758,7 +758,7 @@ static int elf_process_zero_segment(void *opaque, uint64_t vaddr, uint64_t lengt
 
 	if (biased < vaddr || length > (uint64_t)(size_t)-1)
 		return -1;
-	return zero_user_mm(context->address_space_root, biased, (size_t)length);
+	return clear_user_mm(context->address_space_root, biased, (size_t)length);
 }
 
 static int elf_load_segments(elf64_header_t *header, uint8_t *file_data, size_t file_size,

@@ -754,7 +754,7 @@ def check_usercopy_no_raw_user_touch():
             if fpath.name == "signals.c" and cr3_memcpy_re.search(line):
                 errors.append(
                     f"[usercopy-signals] {rel}:{idx}: "
-                    f"memcpy((void *) forbidden; use copy_to_user_region_in_directory"
+                    f"memcpy((void *) forbidden; use copy_to_user_mm"
                 )
 
     return errors
