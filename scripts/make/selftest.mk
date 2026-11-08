@@ -116,3 +116,35 @@ ir0-selftest-panic-nested-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_P
 	@echo "✓ ir0-selftest-panic-nested-arm64"
 
 ir0-selftest-panic-nested: ir0-selftest-panic-nested-x86 ir0-selftest-panic-nested-arm64
+
+IR0_SELFTEST_X86_FAULT_SIGNALS := $(KERNEL_ROOT)/build/selftests/x86_64/fault_signals
+IR0_SELFTEST_ARM64_FAULT_SIGNALS := $(KERNEL_ROOT)/build/selftests/arm64/fault_signals
+
+.PHONY: ir0-selftest-fault-signals-x86 ir0-selftest-fault-signals-arm64 \
+	ir0-selftest-fault-signals
+
+$(IR0_SELFTEST_X86_FAULT_SIGNALS): tests/selftests/kernel/fault_signals.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 fault_signals
+
+$(IR0_SELFTEST_ARM64_FAULT_SIGNALS): tests/selftests/kernel/fault_signals.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 fault_signals
+
+ir0-selftest-fault-signals-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_FAULT_SIGNALS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_FAULT_SIGNALS) \
+		--done "ok 4 breakpoint_runs_sigtrap_handler" \
+		--log $(HOST_TMP)/ir0-selftest-x86-fault-signals.log
+	@echo "✓ ir0-selftest-fault-signals-x86"
+
+ir0-selftest-fault-signals-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_FAULT_SIGNALS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_FAULT_SIGNALS) \
+		--done "ok 4 breakpoint_runs_sigtrap_handler" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-fault-signals.log
+	@echo "✓ ir0-selftest-fault-signals-arm64"
+
+ir0-selftest-fault-signals: ir0-selftest-fault-signals-x86 ir0-selftest-fault-signals-arm64

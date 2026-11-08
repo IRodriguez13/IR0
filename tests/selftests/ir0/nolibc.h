@@ -24,7 +24,10 @@
 #define SYS_clone		220
 #define SYS_wait4		260
 #define SYS_mmap		222
+#define SYS_rt_sigaction	134
 #define SIGCHLD			17
+#define SIGILL			4
+#define SIGTRAP			5
 #define SIGSEGV			11
 #define PROT_READ		0x1
 #define PROT_WRITE		0x2
@@ -116,6 +119,21 @@ static void _exit(int code)
 	nolibc_svc(SYS_exit, code, 0, 0, 0);
 	for (;;)
 		;
+}
+
+/* Kernel rt_sigaction(2) layout (asm-generic). */
+struct sigaction {
+	void (*sa_handler)(int);
+	unsigned long sa_flags;
+	void (*sa_restorer)(void);
+	unsigned long sa_mask;
+};
+
+static int sigaction(int sig, const struct sigaction *act,
+		     struct sigaction *old)
+{
+	return (int)syscall(SYS_rt_sigaction, sig, (long)act, (long)old,
+			    (long)sizeof(act->sa_mask));
 }
 
 static void *mmap(void *addr, size_t len, int prot, int flags, int fd,
