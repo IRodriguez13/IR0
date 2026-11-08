@@ -32,6 +32,15 @@ void *kmalloc(size_t size)
 	return alloc(size);
 }
 
+void *kcalloc(size_t n, size_t size)
+{
+	size_t bytes;
+
+	if (ir0_mul_overflow(n, size, &bytes))
+		return NULL;
+	return kmalloc(bytes);
+}
+
 /*
  * The block is over-allocated by alignment - 1 plus one pointer; the raw
  * heap pointer is stored in the word just below the aligned address so

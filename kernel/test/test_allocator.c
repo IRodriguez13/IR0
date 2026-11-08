@@ -8,13 +8,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_allocator.c
- * Description: IR0 kernel source/header file
- */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 Kernel - Tests del allocator/heap (sin proceso)
- * kmalloc/kfree; se ejecutan al boot tras heap_init().
+ * Description: Boot-time kernel heap tests (kmalloc/kcalloc/kfree), run
+ *              after heap_init() without a process context.
  */
 
 #include "test/ktest_harness.h"
@@ -24,6 +19,7 @@
 #include <ir0/pmm.h>
 #include <ir0/reclaim.h>
 #include <mm/allocator.h>
+#include <stdint.h>
 #include <string.h>
 
 void ktest_allocator(void)
@@ -58,6 +54,21 @@ void ktest_allocator(void)
 		alloc_coalesce_stats(NULL, &backward_after);
 		KASSERT_EQ(backward_after, backward_before + 1);
 		kfree(guard);
+	}
+
+	{
+		uint32_t *arr = kcalloc(16, sizeof(*arr));
+		size_t i;
+
+		KASSERT(arr != NULL);
+		if (arr)
+		{
+			for (i = 0; i < 16; i++)
+				KASSERT_EQ(arr[i], 0);
+			kfree(arr);
+		}
+		KASSERT(kcalloc(SIZE_MAX / 2 + 1, 2) == NULL);
+		KASSERT(kmalloc(0) == NULL);
 	}
 
 	{

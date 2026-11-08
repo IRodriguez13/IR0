@@ -338,7 +338,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   if (validate_userspace_buffer(user_fds, nfds * sizeof(struct pollfd)) != 0)
     return -EFAULT;
 
-  struct pollfd *kfds = (struct pollfd *)kmalloc(nfds * sizeof(struct pollfd));
+  struct pollfd *kfds = (struct pollfd *)kcalloc(nfds, sizeof(struct pollfd));
   if (!kfds)
     return -ENOMEM;
   if (copy_from_user(kfds, user_fds, nfds * sizeof(struct pollfd)) != 0) {

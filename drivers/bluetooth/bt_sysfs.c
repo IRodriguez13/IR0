@@ -101,7 +101,7 @@ int bt_sysfs_topology_neighbors_read(char *buf, size_t count)
     if (!buf || count == 0)
         return -EINVAL;
 
-    devices = kmalloc(sizeof(*devices) * 32);
+    devices = kcalloc(32, sizeof(*devices));
     if (!devices)
         return -ENOMEM;
 

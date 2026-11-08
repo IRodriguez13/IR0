@@ -29,6 +29,12 @@ void heap_init(void);
 void *kmalloc(size_t size);
 
 /*
+ * kcalloc - kmalloc() for an array of @n elements of @size bytes.
+ * Returns NULL when n * size overflows size_t. Release with kfree().
+ */
+void *kcalloc(size_t n, size_t size);
+
+/*
  * kmalloc_aligned - kmalloc() whose result is aligned to @alignment, a
  * power of two. Returns NULL on a zero or non-power-of-two alignment.
  * Release with kfree_aligned(), never kfree().

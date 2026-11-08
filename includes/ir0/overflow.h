@@ -12,6 +12,7 @@
  * freestanding mode for every integer type used by IR0.
  */
 #define ir0_add_overflow(a, b, result) __builtin_add_overflow((a), (b), (result))
+#define ir0_mul_overflow(a, b, result) __builtin_mul_overflow((a), (b), (result))
 
 static inline int ir0_off_add_size_overflow(off_t base, size_t delta,
                                              off_t *result)

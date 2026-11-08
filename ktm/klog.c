@@ -380,7 +380,7 @@ int klog_promote_normal_ring(void)
 
 	if (g_record_capacity != KLOG_EARLY_RECORDS)
 		return 0;
-	normal = kmalloc(sizeof(*normal) * KLOG_NORMAL_RECORDS);
+	normal = kcalloc(KLOG_NORMAL_RECORDS, sizeof(*normal));
 	if (!normal)
 		return -1;
 	memset(normal, 0, sizeof(*normal) * KLOG_NORMAL_RECORDS);

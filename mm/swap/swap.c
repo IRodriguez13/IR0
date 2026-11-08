@@ -157,7 +157,7 @@ int ir0_swap_area_install(const char *path, int kind, int flags, dev_t dev,
 	memset(slot, 0, sizeof(*slot));
 	bitmap_bytes = ((size_t)last_page + 1U + 7U) / 8U;
 	slot->bitmap = kmalloc(bitmap_bytes);
-	slot->refs = kmalloc(((size_t)last_page + 1U) * sizeof(uint16_t));
+	slot->refs = kcalloc((size_t)last_page + 1U, sizeof(uint16_t));
 	slot->state = kmalloc((size_t)last_page + 1U);
 	if (!slot->bitmap || !slot->refs || !slot->state)
 	{

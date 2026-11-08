@@ -348,7 +348,7 @@ int bt_proc_devices_read(char *buffer, size_t count)
     if (!buffer || count == 0)
         return -EINVAL;
 
-    devices = kmalloc(sizeof(*devices) * 32);
+    devices = kcalloc(32, sizeof(*devices));
     if (!devices)
         return -ENOMEM;
 

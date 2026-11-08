@@ -45,7 +45,7 @@ private:
     
 public:
     ResourceGuard(size_t size) : size_(size) {
-        resource_ = static_cast<T*>(kmalloc(size * sizeof(T)));
+        resource_ = static_cast<T*>(kcalloc(size, sizeof(T)));
         if (!resource_) {
             log_error("ResourceGuard", "Allocation failed");
         }

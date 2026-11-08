@@ -42,6 +42,15 @@ void *kmalloc(size_t size)
 	return calloc(1, size);
 }
 
+void *kcalloc(size_t n, size_t size)
+{
+	size_t bytes;
+
+	if (__builtin_mul_overflow(n, size, &bytes))
+		return NULL;
+	return kmalloc(bytes);
+}
+
 void *kmalloc_aligned(size_t size, size_t alignment)
 {
 	void *p = NULL;
