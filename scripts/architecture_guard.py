@@ -2505,6 +2505,13 @@ ERRNO_DEFINE_RE = re.compile(
     r"^\s*#\s*define\s+(E[A-Z0-9_]+)\b", re.MULTILINE
 )
 
+# Retired duplicates of the <ir0/kmem.h> API and the mm-private heap backend.
+KMEM_RETIRED_RE = re.compile(
+    r"\b(kmalloc_try|kmalloc_aligned_try|krealloc|all_realloc|"
+    r"__kmalloc_checked|__kmalloc_aligned_checked|__krealloc_checked)\b"
+)
+HEAP_BACKEND_INCLUDE_RE = re.compile(r'#\s*include\s*[<"](?:mm/)?allocator\.h[>"]')
+
 
 def check_errno_has_single_catalog():
     """Reject subsystem-local copies of canonical Linux errno names."""
@@ -2550,6 +2557,44 @@ def check_common_mm_uses_tlb_sync():
                     f"[mm-tlb-sync] {rel_to_root(path)}:{lineno}: "
                     "use mm_tlb_sync_page/all with the affected address-space root"
                 )
+    return errors
+
+
+def check_kmem_single_api():
+    """One kernel heap API (<ir0/kmem.h>); the heap backend stays in mm/."""
+    errors = []
+    backend_users = {
+        Path("kernel/test/test_allocator.c"),
+    }
+    for base in (
+        ROOT / "arch",
+        ROOT / "drivers",
+        ROOT / "fs",
+        ROOT / "includes",
+        ROOT / "ipc",
+        ROOT / "kernel",
+        ROOT / "ktm",
+        ROOT / "mm",
+        ROOT / "net",
+        ROOT / "sched",
+        ROOT / "sound",
+        ROOT / "tests",
+    ):
+        for path in iter_c_files(base):
+            rel = rel_to_root(path)
+            for lineno, line in enumerate(read_file_text(path).splitlines(), 1):
+                match = KMEM_RETIRED_RE.search(line)
+                if match:
+                    errors.append(
+                        f"[kmem-single-api] {rel}:{lineno}: {match.group(1)} "
+                        "was retired; use kmalloc/kcalloc/kmalloc_aligned/kfree"
+                    )
+                if (HEAP_BACKEND_INCLUDE_RE.search(line) and
+                        rel.parts[0] != "mm" and rel not in backend_users):
+                    errors.append(
+                        f"[kmem-single-api] {rel}:{lineno}: the heap backend "
+                        "header is mm-private; include <ir0/kmem.h>"
+                    )
     return errors
 
 
@@ -2622,6 +2667,7 @@ def main():
     errors.extend(check_sysv_shm_is_network_independent())
     errors.extend(check_common_mm_uses_tlb_sync())
     errors.extend(check_errno_has_single_catalog())
+    errors.extend(check_kmem_single_api())
 
     if errors:
         print("[arch-guard] FAILED")
