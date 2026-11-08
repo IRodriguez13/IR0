@@ -67,10 +67,28 @@ extern const char *_ktest_current_name;
 	} \
 } while (0)
 
+/*
+ * Operands of different signedness are compared by mathematical value, like
+ * C++20 std::cmp_equal/cmp_less: the sign is tracked on its own and the bits
+ * are compared as unsigned long long. Plain ==/< would convert the signed
+ * side to unsigned first, so (uint64_t)~0 == -1 would pass, and every enum or
+ * literal operand of an unsigned value warned under -Wsign-compare. Integer
+ * operands up to 64 bits.
+ */
+#define KTEST_IS_SIGNED(x) ((__typeof__(x))-1 < (__typeof__(x))1)
+#define KTEST_IS_NEG(x) (KTEST_IS_SIGNED(x) && \
+	 (unsigned long long)(long long)(x) >> 63)
+#define KTEST_INT_EQ(x, y) \
+	(KTEST_IS_NEG(x) == KTEST_IS_NEG(y) && \
+	 (unsigned long long)(x) == (unsigned long long)(y))
+#define KTEST_INT_LT(x, y) \
+	(KTEST_IS_NEG(x) != KTEST_IS_NEG(y) ? KTEST_IS_NEG(x) : \
+	 (unsigned long long)(x) < (unsigned long long)(y))
+
 #define KASSERT_EQ(a, b) do { \
 	__typeof__(a) _ktest_a = (a); \
 	__typeof__(b) _ktest_b = (b); \
-	if (_ktest_a != _ktest_b) { \
+	if (!KTEST_INT_EQ(_ktest_a, _ktest_b)) { \
 		klog_info_fmt("KTEST", \
 			      "[KTEST] ASSERT_EQ failed: %s != %s (line %u) " \
 			      "left=0x%llx right=0x%llx", \
@@ -84,7 +102,7 @@ extern const char *_ktest_current_name;
 #define KASSERT_GE(a, b) do { \
 	__typeof__(a) _ktest_a = (a); \
 	__typeof__(b) _ktest_b = (b); \
-	if (_ktest_a < _ktest_b) { \
+	if (KTEST_INT_LT(_ktest_a, _ktest_b)) { \
 		klog_info_fmt("KTEST", \
 			      "[KTEST] ASSERT_GE failed: %s >= %s (line %u) " \
 			      "left=0x%llx right=0x%llx", \
@@ -98,7 +116,7 @@ extern const char *_ktest_current_name;
 #define KASSERT_GT(a, b) do { \
 	__typeof__(a) _ktest_a = (a); \
 	__typeof__(b) _ktest_b = (b); \
-	if (_ktest_a <= _ktest_b) { \
+	if (!KTEST_INT_LT(_ktest_b, _ktest_a)) { \
 		klog_info_fmt("KTEST", \
 			      "[KTEST] ASSERT_GT failed: %s > %s (line %u) " \
 			      "left=0x%llx right=0x%llx", \
