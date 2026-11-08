@@ -2545,6 +2545,41 @@ def check_errno_has_single_catalog():
     return errors
 
 
+RETIRED_UACCESS_RE = re.compile(
+    r"\b(validate_userspace_buffer|validate_userspace_string|"
+    r"process_validate_userspace_buffer|is_user_address(_checked)?|"
+    r"copy_from_user_cstring|copy_(to|from)_user_in_mm|zero_user_mm|"
+    r"(copy_to|copy_from|zero)_user_region_in_directory|VALIDATE_BUFFER)\b"
+)
+
+
+def check_uaccess_single_api():
+    """Keep one user-pointer API: access_ok + copy_*_user (+ _mm, strncpy)."""
+    errors = []
+    for base in (
+        ROOT / "arch",
+        ROOT / "drivers",
+        ROOT / "fs",
+        ROOT / "includes",
+        ROOT / "ipc",
+        ROOT / "kernel",
+        ROOT / "ktm",
+        ROOT / "mm",
+        ROOT / "net",
+        ROOT / "sched",
+    ):
+        for path in iter_c_files(base):
+            for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                match = RETIRED_UACCESS_RE.search(line)
+                if match:
+                    errors.append(
+                        f"[uaccess-single-api] {rel_to_root(path)}:{lineno}: "
+                        f"{match.group(1)} is retired; use access_ok / "
+                        f"copy_*_user / strncpy_from_user / copy_*_user_mm"
+                    )
+    return errors
+
+
 def check_common_mm_uses_tlb_sync():
     """Keep root ownership policy out of ISA-local TLB mechanisms."""
     errors = []
@@ -2668,6 +2703,7 @@ def main():
     errors.extend(check_common_mm_uses_tlb_sync())
     errors.extend(check_errno_has_single_catalog())
     errors.extend(check_kmem_single_api())
+    errors.extend(check_uaccess_single_api())
 
     if errors:
         print("[arch-guard] FAILED")
