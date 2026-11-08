@@ -13,7 +13,8 @@
 > longer make goals. Current gates are `make kernel-tests` (in-kernel battery plus KTM
 > boot suite), `make ctr`, and `make test-fast`; the `scripts/ktm_*.py` and
 > `scripts/ktm_userdev_*.sh` helpers remain available for manual runs against an
-> ISD-built disk.
+> ISD-built disk. `ktm-userdev-cow-run`, `ktm-userdev-fork-storm-run` and
+> `smoke-mm-cow-lazy` are goals again (`scripts/make/ktm-userdev.mk`).
 
 KTM is IR0’s **canonical kernel test and diagnostic plane**: typed events, checkpoints,
 snapshots, in-kernel scenarios, `/dev/ktm` for userspace-driven cases, and host runners

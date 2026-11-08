@@ -93,14 +93,14 @@ ISD repository; the kernel Makefile no longer proxies those package targets.
 | Area | Gate |
 |------|------|
 | Fork / wait depth | `ktm-userdev-fork-storm-run` |
-| Exec drain | `ktm-userdev-exec-drain-virtfs-run` |
-| PID1 `_exit` | `ktm-userdev-init-exit-drain-virtfs-run` |
-| POSIX pseudo-fs | `ktm-userdev-posix-pseudofs-virtfs-run` |
-| Input deterministic | `ktm-userdev-input-det-virtfs-run` |
-| BusyBox manifest | `ktm-userdev-busybox-manifest-run` |
-| Doom IWAD | `ktm-userdev-doom-55d-run` (alias; requires `KTM_DOOMGENERIC_OK`) |
-| COW data-plane | `smoke-mm-cow-lazy` |
-| Product PID1 | `smoke-runit-boot` |
+| COW page + MAP_FIXED split | `ktm-userdev-cow-run` |
+| COW data-plane, lazy brk/mmap | `smoke-mm-cow-lazy` |
+| Kernel battery + KTM boot suite | `kernel-tests` |
+
+The exec-drain, PID1 `_exit`, pseudo-fs, input, BusyBox manifest, Doom and
+`smoke-runit-boot` goals were removed in 2480a5dd; their cases remain under
+`tests/ktm/userdev/` and `setup/pid1/` for manual runs with
+`scripts/ktm_userdev_runner.py`.
 
 ## Host logs
 

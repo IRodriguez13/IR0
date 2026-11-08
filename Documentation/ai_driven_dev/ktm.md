@@ -62,18 +62,17 @@ Makefile puts `-Iktm/include` **before** `-Iincludes/ir0` so `<ktm.h>` is not sh
 ## Gates
 
 ```bash
-make -s ktm-run              # boot suite: lifecycle, pipe, cow_fork, exec, fork_rollback, …
-make -s ktm-userdev-run      # fork_wait_signal via /dev/ktm
-make -s ktm-userdev-fork-storm-run  # real fork depth (≥ wait_drain/reclaim boot)
-make -s ktm-userdev-fork-storm-virtfs-run  # same + virtio-9p artifact on host
-make -s ktm-userdev-exec-drain-virtfs-run  # exec-drain + 9p (f41true inject)
-make -s ktm-userdev-reap-drain-virtfs-run  # reap-drain + 9p
-make -s ktm-userdev-posix-pseudofs-virtfs-run
-make -s ktm-userdev-input-det-virtfs-run
-make -s smoke-nic-reach                        # F8-1 NIC + 9p
-make -s smoke-hostshare-9p   # virtio-9p MVP (/mnt/host)
-make -s arch-guard           # forbids [FASE in kernel trees
+make -s kernel-tests                 # in-kernel battery + KTM boot suite (lifecycle, pipe, cow_fork, exec, …)
+make -s ktm-userdev-cow-run          # cow_touch via /dev/ktm (fork COW page, MAP_FIXED split)
+make -s ktm-userdev-fork-storm-run   # real fork/exit/wait depth, no process or frame leak
+make -s smoke-mm-cow-lazy            # lazy brk + lazy mmap + fork COW A-D
+make -s arch-guard                   # forbids [FASE in kernel trees
 ```
+
+The rest of the old `ktm-run` / `ktm-userdev-*` / `smoke-*` catalog was
+removed in 2480a5dd. The cases under `tests/ktm/userdev/` still run by hand
+through `scripts/ktm_userdev_runner.py`; a case gets a goal in
+`scripts/make/ktm-userdev.mk` once it passes on the current tree.
 
 **Virtio for testing:** QEMU `-virtfs` / virtio-9p mounts a host directory at guest `/mnt/host`.
 KTM cases may write result files there (`ktm_fork_storm.txt`, `ktm_exec_drain.txt`,
