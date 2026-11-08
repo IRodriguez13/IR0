@@ -51,7 +51,7 @@ The feature branch itself (`feat/…`, `fix/…`) follows
 ## Delete internal branches after merge and push
 
 Once the feature branch is merged into the integration branch (`dev`)
-**and** that branch is pushed with the maintainer's OK:
+**and** `dev` is pushed to both remotes (`ir0-integration-flow.md`):
 
 1. Confirm every internal branch is contained:
    `git branch --merged dev` must list it, or its commits must be in
