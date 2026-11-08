@@ -11,7 +11,7 @@
 #include "console_font.h"
 #include <config.h>
 #if CONFIG_ENABLE_VBE
-#include <drivers/video/vbe.h>
+#include <ir0/vbe.h>
 #endif
 #include <ir0/serial_io.h>
 #include <stdbool.h>

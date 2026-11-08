@@ -18,7 +18,7 @@
  * Typewriter/Teletype effect for console output
  */
 
-#include "typewriter.h"
+#include <ir0/typewriter.h>
 #include "console.h"
 #include "console_renderer.h"
 #include <ir0/vga.h>

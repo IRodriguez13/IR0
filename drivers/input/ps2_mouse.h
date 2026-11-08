@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <ir0/ps2_mouse.h>
 
 // PS/2 Controller ports
 #define PS2_DATA_PORT           0x60
@@ -91,46 +92,6 @@
 #define PS2_MOUSE_X_OVERFLOW    0x40
 #define PS2_MOUSE_Y_OVERFLOW    0x80
 
-// Mouse types
-typedef enum {
-    PS2_MOUSE_TYPE_STANDARD = 0x00,
-    PS2_MOUSE_TYPE_WHEEL = 0x03,
-    PS2_MOUSE_TYPE_5BUTTON = 0x04
-} ps2_mouse_type_t;
-
-// Mouse state structure
-typedef struct {
-    int32_t x;
-    int32_t y;
-    int8_t wheel;
-    bool left_button;
-    bool right_button;
-    bool middle_button;
-    bool button4;
-    bool button5;
-    bool has_wheel;
-    bool has_5buttons;
-    uint8_t resolution;
-    uint8_t sample_rate;
-    ps2_mouse_type_t type;
-    bool initialized;
-} ps2_mouse_state_t;
-
-// Mouse packet structure
-typedef struct {
-    uint8_t flags;
-    int16_t delta_x;
-    int16_t delta_y;
-    int8_t delta_wheel;
-    uint8_t extra_buttons;
-} ps2_mouse_packet_t;
-
-// Function prototypes
-bool ps2_mouse_init(void);
-void ps2_mouse_shutdown(void);
-bool ps2_mouse_is_available(void);
-ps2_mouse_state_t* ps2_mouse_get_state(void);
-
 // Mouse control
 bool ps2_mouse_enable(void);
 bool ps2_mouse_disable(void);
@@ -138,16 +99,10 @@ bool ps2_mouse_reset(void);
 bool ps2_mouse_set_defaults(void);
 
 // Configuration
-bool ps2_mouse_set_sample_rate(uint8_t rate);
 bool ps2_mouse_set_resolution(uint8_t resolution);
 bool ps2_mouse_set_scaling_2_1(void);
 bool ps2_mouse_set_scaling_1_1(void);
 
-/* Data handling — feed_byte is the only entry for AUX controller bytes. */
-void ps2_mouse_feed_byte(uint8_t data);
-void ps2_mouse_handle_interrupt(void); /* drains i8042 via keyboard_poll demux */
-bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet);
-bool ps2_mouse_packet_available(void);
 void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet);
 
 // Low-level functions

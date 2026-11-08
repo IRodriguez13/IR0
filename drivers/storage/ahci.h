@@ -16,11 +16,9 @@
 
 #include <ir0/mm.h>
 #include <stdint.h>
+#include <ir0/ahci_api.h>
 
 void ahci_probe(void);
-
-/* Map ABAR into @root (supervisor, cache-disable). No-op if not probed. */
-void ahci_map_mmio_in_directory(address_space_root_t root);
 
 int ahci_disk_present(void);
 uint64_t ahci_sector_count(void);

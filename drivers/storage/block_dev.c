@@ -6,25 +6,9 @@
  * This module delegates to the blockdev facade for compatibility.
  */
 
-#include "block_dev.h"
+#include <ir0/block_dev.h>
 #include <ir0/blockdev.h>
 #include <string.h>
-
-int block_dev_register(const char *name, const block_dev_ops_t *ops, uint8_t dev_id)
-{
-	(void)name;
-	(void)ops;
-	(void)dev_id;
-	return -1;
-}
-
-const block_dev_ops_t *block_dev_get(const char *name, uint8_t *dev_id_out)
-{
-	(void)name;
-	if (dev_id_out)
-		*dev_id_out = 0;
-	return NULL;
-}
 
 bool block_dev_read_sectors(const char *name, uint32_t lba, uint8_t n, void *buf)
 {

@@ -23,7 +23,7 @@
  * Description: Multi-language driver initialization and hardware driver init
  */
 
-#include "init_drv.h"
+#include <ir0/init_drv.h>
 #include <ir0/driver_bootstrap.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
@@ -72,10 +72,6 @@
 
 static int g_registry_ready = 0;
 static int g_bootstrap_done = 0;
-
-#if CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK
-void ata_block_register(void);
-#endif
 
 static int boot_init_ps2_controller(void)
 {

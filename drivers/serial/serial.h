@@ -14,6 +14,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <ir0/serial_io.h>
 
 /* Serial port definitions */
 #define SERIAL_PORT_COM1        0x3F8
@@ -52,19 +53,3 @@
 /* Baud rate divisors */
 #define SERIAL_BAUD_38400       0x03    /* 115200 / 38400 = 3 */
 
-/* ========================================================================== */
-/* PUBLIC API                                                                 */
-/* ========================================================================== */
-
-void serial_init(void);
-void serial_putchar(char c);
-void serial_print(const char *str);
-void serial_print_hex32(uint32_t num);
-void serial_print_hex64(uint64_t num);
-char serial_read_char(void);
-
-/*
- * serial_try_read_char - Non-blocking read from COM1.
- * Returns 0..255 on success, -1 if no byte is available.
- */
-int serial_try_read_char(void);

@@ -16,7 +16,7 @@
  * IR0 Kernel - Driver bootstrap orchestration
  */
 
-#include "driver_bootstrap.h"
+#include <ir0/driver_bootstrap.h>
 #include <ir0/logging.h>
 #include <stddef.h>
 

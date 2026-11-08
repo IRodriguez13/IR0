@@ -25,7 +25,4 @@ int block_dev_count(void);
 const char *block_dev_name_at(int index);
 const char *block_dev_legacy_name(uint8_t disk_id);
 
-/* Deprecated — drivers register via ir0_block_register(). */
-int block_dev_register(const char *name, const void *ops, uint8_t dev_id);
-
 #endif /* IR0_FACADE_BLOCK_DEV_H */

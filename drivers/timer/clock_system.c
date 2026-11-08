@@ -29,7 +29,7 @@
 #include <ir0/process.h>
 #include "pit/pit.h"
 #include "rtc/rtc.h"
-#include "clock_system.h"
+#include <ir0/clock.h>
 
 /* Global clock state */
 static clock_state_t clock_state;

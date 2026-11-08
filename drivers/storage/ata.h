@@ -89,6 +89,9 @@ bool ata_wait_drq(uint8_t drive);
 void ata_reset_drive(uint8_t drive);
 bool ata_get_device_info(uint8_t drive, ata_device_info_t *out);
 
+/* Register the detected ATA disks with the blockdev facade. */
+void ata_block_register(void);
+
 // Helper functions
 uint64_t ata_get_size(uint8_t drive);
 const char* ata_get_model(uint8_t drive);
