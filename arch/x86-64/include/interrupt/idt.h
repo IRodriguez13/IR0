@@ -42,16 +42,6 @@ void idt_early_install64(void);
 
 void isr_handler64(uint64_t interrupt_number, uint64_t *stack);
 
-void pic_remap64(void);
-void pic_send_eoi64(uint8_t irq);
-
-void keyboard_handler64(void);
-void keyboard_init(void);
-
-char keyboard_buffer_get(void);
-int keyboard_buffer_has_data(void);
-void keyboard_buffer_clear(void);
-
 extern void isr0_64(void);
 extern void isr1_64(void);
 extern void isr2_64(void);

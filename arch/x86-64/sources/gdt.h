@@ -58,6 +58,6 @@ void update_gdt_tss(uint64_t tss_addr);
 
 void gdt_set_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran);
 
-void gdt_install();
+void gdt_install(void);
 
 void gdt_set_tss(uint64_t base, uint16_t limit);
