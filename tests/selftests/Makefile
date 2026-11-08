@@ -18,6 +18,8 @@ FAULT_SIGNALS_SRC := kernel/fault_signals.c
 FAULT_SIGNALS_BIN := $(BUILD_DIR)/fault_signals
 SIGNAL_SEMANTICS_SRC := kernel/signal_semantics.c
 SIGNAL_SEMANTICS_BIN := $(BUILD_DIR)/signal_semantics
+UACCESS_KERNEL_ADDR_SRC := kernel/uaccess_kernel_addr.c
+UACCESS_KERNEL_ADDR_BIN := $(BUILD_DIR)/uaccess_kernel_addr
 SWAPON_SRC := syscall/swapon.c
 SWAPON_BIN := $(BUILD_DIR)/swapon
 KSFT_INC := -I$(CURDIR)
@@ -48,9 +50,11 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 	-nostdlib -L$(X86_MUSL_LIB) -lc $(X86_MUSL_LIB)/crtn.o
 endif
 
-.PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics clean
+.PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
+	uaccess_kernel_addr clean
 
-all: openat identity swapon fault panic_nested fault_signals signal_semantics
+all: openat identity swapon fault panic_nested fault_signals signal_semantics \
+	uaccess_kernel_addr
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -100,6 +104,18 @@ $(SIGNAL_SEMANTICS_BIN): $(SIGNAL_SEMANTICS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUI
 	fi
 	@echo "  CC      $(ARCH) selftest signal_semantics"
 	@$(CC) $(CFLAGS) -o $@ $(SIGNAL_SEMANTICS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+uaccess_kernel_addr: $(UACCESS_KERNEL_ADDR_BIN)
+
+$(UACCESS_KERNEL_ADDR_BIN): $(UACCESS_KERNEL_ADDR_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest uaccess_kernel_addr"
+	@$(CC) $(CFLAGS) -o $@ $(UACCESS_KERNEL_ADDR_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

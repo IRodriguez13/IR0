@@ -180,3 +180,34 @@ ir0-selftest-signal-semantics-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM
 	@echo "✓ ir0-selftest-signal-semantics-arm64"
 
 ir0-selftest-signal-semantics: ir0-selftest-signal-semantics-x86 ir0-selftest-signal-semantics-arm64
+
+IR0_SELFTEST_X86_UACCESS_KERNEL_ADDR := $(KERNEL_ROOT)/build/selftests/x86_64/uaccess_kernel_addr
+IR0_SELFTEST_ARM64_UACCESS_KERNEL_ADDR := $(KERNEL_ROOT)/build/selftests/arm64/uaccess_kernel_addr
+
+.PHONY: ir0-selftest-uaccess-x86 ir0-selftest-uaccess-arm64 ir0-selftest-uaccess
+
+$(IR0_SELFTEST_X86_UACCESS_KERNEL_ADDR): tests/selftests/kernel/uaccess_kernel_addr.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 uaccess_kernel_addr
+
+$(IR0_SELFTEST_ARM64_UACCESS_KERNEL_ADDR): tests/selftests/kernel/uaccess_kernel_addr.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 uaccess_kernel_addr
+
+ir0-selftest-uaccess-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_UACCESS_KERNEL_ADDR)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_UACCESS_KERNEL_ADDR) \
+		--done "ok 3 clock_gettime_to_kernel_addr_efault" \
+		--log $(HOST_TMP)/ir0-selftest-x86-uaccess.log
+	@echo "✓ ir0-selftest-uaccess-x86"
+
+ir0-selftest-uaccess-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_UACCESS_KERNEL_ADDR)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_UACCESS_KERNEL_ADDR) \
+		--done "ok 3 clock_gettime_to_kernel_addr_efault" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-uaccess.log
+	@echo "✓ ir0-selftest-uaccess-arm64"
+
+ir0-selftest-uaccess: ir0-selftest-uaccess-x86 ir0-selftest-uaccess-arm64
