@@ -10,31 +10,14 @@
  * Description: Kernel-mode faults: uaccess faults kill the task, anything else panics.
  */
 
-#include <stdint.h>
-#include <string.h>
-#include <config.h>
+
+
+
 #include <ir0/vga.h>
-#include <ir0/paging.h>
 #include <ir0/oops.h>
-#include <ir0/cpu.h>
-#include <ir0/cpu.h>
-#include <ir0/tlb_sync.h>
-#include <ir0/page_fault.h>
 #include <ir0/process.h>
-#include <ir0/mm_alloc.h>
-#include <ir0/pmm.h>
-#include <ir0/oom.h>
-#include <ir0/signals.h>
-#include <ir0/copy_user.h>
-#include <ir0/arch_task.h>
 #include <ir0/logging.h>
-#include <ir0/mm_diag.h>
-#include <ir0/page_fault.h>
-#include <ir0/arch_pf_debug.h>
-#include <ir0/arch_mm.h>
 #include <mm/paging.h>
-#include <ir0/abi/mmap_contract.h>
-#include <ir0/swap.h>
 #include "page_fault_internal.h"
 
 void pf_kernel_fault(const struct page_fault_info *info, uint64_t fault_addr)
