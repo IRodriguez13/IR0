@@ -38,9 +38,6 @@
 #define VBE_PREMAPPED_END   0xFE000000ULL
 #define VBE_LOW_IDENTITY_END 0x2000000ULL
 
-/* Supervisor mapping window installed in each process root. */
-#define VBE_SUPERVISOR_MAP_MAX (4U * 1024U * 1024U)
-
 /*
  * Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor,
  * 2=no framebuffer, 3=bad geometry or range, 4=map_fail).
@@ -270,18 +267,17 @@ uint32_t vbe_get_fb_size(void)
  * @root: translation root that receives supervisor RW mappings.
  *
  * Kernel console writes go through the PA==VA framebuffer pointer, so every
- * address space the kernel runs in needs the framebuffer pages.
+ * address space the kernel runs in needs all of the framebuffer pages. The
+ * size was already bounded by VBE_FB_MAX_SIZE in vbe_init_from_boot().
  */
 int vbe_map_supervisor(address_space_root_t root)
 {
     uint64_t base = vbe_state.framebuffer_addr;
-    uint32_t size = vbe_state.fb_size;
+    uint64_t size = vbe_state.fb_size;
 
     if (!root || !vbe_state.initialized || base == 0 || size == 0)
         return 0;
-    if (size > VBE_SUPERVISOR_MAP_MAX)
-        size = VBE_SUPERVISOR_MAP_MAX;
-    for (uint32_t off = 0; off < size; off += 4096U)
+    for (uint64_t off = 0; off < size; off += 4096U)
     {
         if (map_page_in_directory(root, base + off, base + off,
                                   PAGE_PRESENT | PAGE_RW) != 0)
