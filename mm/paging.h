@@ -17,7 +17,7 @@
 #include <stddef.h>
 #include <ir0/mm.h>
 #include <ir0/arch_mm.h>
-
+#include <ir0/copy_user.h>
 
 #define PAGE_PRESENT IR0_MM_MAP_PRESENT
 #define PAGE_RW IR0_MM_MAP_WRITE
@@ -36,7 +36,6 @@
 
 /* Semantic mapping request; the ISA backend chooses its executable encoding. */
 #define PAGE_EXEC IR0_MM_MAP_EXEC
-
 
 #define PAGE_SIZE_4KB (4 * 1024)
 #define PAGE_SIZE_2MB (2 * 1024 * 1024)
@@ -189,13 +188,6 @@ int map_supervisor_identity_low(address_space_root_t root, uint64_t start, uint6
 int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start, uint64_t end);
 /* Supervisor-only 2 MiB uncached, non-executable identity for MMIO windows. */
 int map_supervisor_device_2mb(address_space_root_t root, uint64_t start, uint64_t end);
-
-/* Copy/zero user VAs via page-table walk (kernel address-space root, no user address-space root switch) */
-int copy_to_user_region_in_directory(address_space_root_t root, uintptr_t dst,
-                                     const void *src, size_t n);
-int copy_from_user_region_in_directory(address_space_root_t root, uintptr_t src,
-                                       void *dst, size_t n);
-int zero_user_region_in_directory(address_space_root_t root, uintptr_t dst, size_t n);
 
 /* Change final permissions of already mapped user pages without remapping. */
 int protect_user_region_in_directory(address_space_root_t root, uintptr_t start,

@@ -27,6 +27,7 @@
 #include <ir0/open_flags.h>
 #include <ir0/ktm/klog.h>
 #include <stdint.h>
+#include <kernel/test/test_runner.h>
 
 /*
  * In-kernel ktest open flags — sys_open() translates Linux/musl ABI via
@@ -107,7 +108,5 @@ extern const char *_ktest_current_name;
 		_ktest_failed = 1; \
 	} \
 } while (0)
-
-int kernel_test_run_all(void);
 
 #endif

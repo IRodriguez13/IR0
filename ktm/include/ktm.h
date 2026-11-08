@@ -17,9 +17,10 @@
 #include <config.h>
 #include <ir0/ktm/klog.h>
 #include <stdint.h>
+#include <ir0/ktm/event.h>
+#include <kernel/test/test_runner.h>
 
 struct process;
-
 
 #ifndef KTM_FILE
 #define KTM_FILE \
@@ -139,9 +140,6 @@ void ktm_flight_dump_last(uint32_t max_events);
 
 #if defined(CONFIG_KTM_EVENTS) && CONFIG_KTM_EVENTS
 
-void ktm_event_emit(const char *tag);
-void ktm_event_emit_pid(const char *tag, uint32_t pid);
-
 #define KTM_EVENT(tag)           ktm_event_emit(tag)
 #define KTM_EVENT_PID(tag, pid)  ktm_event_emit_pid((tag), (uint32_t)(pid))
 
@@ -251,4 +249,3 @@ static inline void ktm_sched_gate_check_before_sched(const char *caller)
 #define KASSERT_GT KTM_ASSERT_GT
 #endif
 
-int kernel_test_run_all(void);

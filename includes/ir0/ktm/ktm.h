@@ -24,7 +24,6 @@
 
 void ktm_core_init(void);
 int ktm_invariants_run(uint32_t mask);
-void ktm_suite_reset(void);
 
 #define KTM_INV_PROCESS  (1u << 0)
 #define KTM_INV_FRAMES   (1u << 1)

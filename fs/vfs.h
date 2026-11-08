@@ -22,6 +22,7 @@
 #include <ir0/types.h>
 #include <ir0/vfs_backend.h>
 #include <ir0/vfs_file.h>
+#include <ir0/statfs.h>
 
 struct vfs_dirent;
 
@@ -96,12 +97,10 @@ int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset);
 int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset);
 int vfs_close(struct vfs_file *f);
 off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence);
-void vfs_file_acquire(struct vfs_file *f);
 
 /* Path operations */
 int vfs_stat(const char *path, stat_t *buf);
 struct ir0_statfs;
-int vfs_statfs(const char *path, struct ir0_statfs *buf);
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 int vfs_rmdir(const char *path);

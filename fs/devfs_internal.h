@@ -49,6 +49,7 @@
 #include "vfs.h"
 #include <ir0/pty_devfs.h>
 #include <string.h>
+#include <ir0/devfs.h>
 
 #define PTY_BUF_SIZE 1024
 #define DEVFS_PTY_VFS_TAG 0x50545900u
@@ -108,7 +109,6 @@ int dev_net_pid_has_ready_ping(pid_t pid);
 void devfs_register_disk_topology(void);
 
 pid_t devfs_current_pid(void);
-int devfs_register_node(devfs_node_t *node);
 
 int pty_ring_pop(struct pty_ring *r, char *dst, size_t n);
 int64_t dev_pts_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);

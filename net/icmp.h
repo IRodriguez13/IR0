@@ -63,8 +63,6 @@ struct icmp_echo_payload
 
 /* ICMP Protocol API */
 int icmp_init(void);
-int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip, 
-                           uint16_t id, uint16_t seq, const void *data, size_t len);
 void icmp_receive_handler(struct net_device *dev, const void *data, 
                            size_t len, void *priv);
 
@@ -75,9 +73,4 @@ uint16_t icmp_checksum(const void *data, size_t len);
 bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
                           uint8_t *ttl_out, size_t *payload_bytes_out, 
                           ip4_addr_t *reply_ip_out);
-bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,
-                               uint8_t *ttl_out, size_t *payload_bytes_out,
-                               ip4_addr_t *reply_ip_out);
-bool icmp_has_ready_echo_result(uint16_t id);
-uint16_t icmp_allocate_echo_seq(void);
 
