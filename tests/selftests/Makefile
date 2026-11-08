@@ -28,8 +28,11 @@ KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
 X86_MUSL_LIB ?= /usr/lib/x86_64-linux-musl
-ARM64_MUSL_CC := $(KERNEL_ROOT)/toolchain/aarch64-linux-musl/bin/aarch64-linux-musl-gcc
-ARM64_MUSL_CC_ALT := $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
+# A linked worktree has no toolchain/; worktree.mk falls back to the main
+# checkout's.
+include $(KERNEL_ROOT)/scripts/make/worktree.mk
+ARM64_MUSL_CC := $(IR0_TOOLCHAIN_DIR)/aarch64-linux-musl/bin/aarch64-linux-musl-gcc
+ARM64_MUSL_CC_ALT := $(IR0_TOOLCHAIN_DIR)/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc
 ARM64_CC ?= $(shell \
 	if test -x "$(ARM64_MUSL_CC)"; then echo "$(ARM64_MUSL_CC)"; \
 	elif test -x "$(ARM64_MUSL_CC_ALT)"; then echo "$(ARM64_MUSL_CC_ALT)"; \

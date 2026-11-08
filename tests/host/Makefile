@@ -103,8 +103,8 @@ TEST_BIN   = ir0_test_suite
 
 # Sibling ISD checkout. A linked worktree (../IR0-wt/<topic>) has no sibling,
 # so fall back to the one next to the main checkout.
-IR0_MAIN_ROOT := $(abspath $(dir $(shell git -C $(KERNEL_ROOT) rev-parse --path-format=absolute --git-common-dir 2>/dev/null)))
-IR0_ISD_ROOT ?= $(abspath $(firstword $(wildcard $(KERNEL_ROOT)/../ISD $(IR0_MAIN_ROOT)/../ISD) $(KERNEL_ROOT)/../ISD))
+include $(KERNEL_ROOT)/scripts/make/worktree.mk
+IR0_ISD_ROOT ?= $(call ir0_local_path,../ISD)
 # Backward-compatible override name; the maintained userspace is ISD.
 IR0_USERSPACE_ROOT ?= $(IR0_ISD_ROOT)
 MATRIX_CAPTURE_CFLAGS = $(BASE_CFLAGS) -I$(IR0_USERSPACE_ROOT)/smoke
