@@ -33,6 +33,7 @@
 #define SIGILL			4
 #define SIGTRAP			5
 #define SIGKILL			9
+#define SIGUSR1			10
 #define SIGSEGV			11
 #define SIGTERM			15
 #define SIGABRT			6
@@ -176,6 +177,11 @@ static int sigaddset(sigset_t *set, int sig)
 {
 	*set |= 1UL << (sig - 1);
 	return 0;
+}
+
+static int sigismember(const sigset_t *set, int sig)
+{
+	return (*set >> (sig - 1)) & 1UL ? 1 : 0;
 }
 
 static int sigprocmask(int how, const sigset_t *set, sigset_t *old)

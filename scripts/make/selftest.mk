@@ -211,3 +211,36 @@ ir0-selftest-uaccess-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_UACCES
 	@echo "✓ ir0-selftest-uaccess-arm64"
 
 ir0-selftest-uaccess: ir0-selftest-uaccess-x86 ir0-selftest-uaccess-arm64
+
+IR0_SELFTEST_X86_SIGNAL_RETURN := $(KERNEL_ROOT)/build/selftests/x86_64/signal_return
+IR0_SELFTEST_ARM64_SIGNAL_RETURN := $(KERNEL_ROOT)/build/selftests/arm64/signal_return
+
+.PHONY: ir0-selftest-signal-return-x86 ir0-selftest-signal-return-arm64 \
+	ir0-selftest-signal-return
+
+$(IR0_SELFTEST_X86_SIGNAL_RETURN): tests/selftests/kernel/signal_return.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 signal_return
+
+$(IR0_SELFTEST_ARM64_SIGNAL_RETURN): tests/selftests/kernel/signal_return.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 signal_return
+
+# A handler that returns resumes the interrupted code (rt_sigreturn).
+ir0-selftest-signal-return-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SIGNAL_RETURN)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SIGNAL_RETURN) \
+		--done "ok 1 handler_returns_through_sa_restorer" \
+		--log $(HOST_TMP)/ir0-selftest-x86-signal-return.log
+	@echo "✓ ir0-selftest-signal-return-x86"
+
+ir0-selftest-signal-return-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SIGNAL_RETURN)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SIGNAL_RETURN) \
+		--done "ok 1 handler_returns_through_sa_restorer" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-signal-return.log
+	@echo "✓ ir0-selftest-signal-return-arm64"
+
+ir0-selftest-signal-return: ir0-selftest-signal-return-x86 ir0-selftest-signal-return-arm64
