@@ -139,3 +139,31 @@ void test_vbe_supervisor_map_covers_framebuffer(void)
 
 	TEST_END();
 }
+
+/*
+ * The x86-64 boot tables pre-map only 4 MiB at 0xFD000000 (two 2 MiB pages
+ * in boot_x64.asm). A 16000 KiB framebuffer at that address must still get
+ * every page past the first 4 MiB mapped into the kernel root.
+ */
+void test_vbe_boot_premapped_window_is_4mib(void)
+{
+	struct ir0_boot_framebuffer fb;
+	const uint64_t base = 0xFD000000ULL;
+	const uint64_t size = 2560ULL * 4ULL * 1600ULL;
+
+	TEST_BEGIN("vbe_boot_premapped_window_is_4mib");
+
+	map_reset();
+	fb = fb32(base, 2560, 1600, 2560 * 4);
+	ASSERT_EQ(vbe_init_from_boot(&fb), 0);
+	ASSERT(g_map_calls != 0UL);
+	ASSERT_EQ(g_map_last, base + size - 4096ULL);
+
+	/* A mode that fits the boot window needs no extra mappings. */
+	map_reset();
+	fb = fb32(base, 1280, 800, 1280 * 4);
+	ASSERT_EQ(vbe_init_from_boot(&fb), 0);
+	ASSERT_EQ(g_map_calls, 0UL);
+
+	TEST_END();
+}
