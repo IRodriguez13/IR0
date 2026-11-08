@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <ir0/boot_memory.h>
 #include <ir0/platform_ops.h>
 #include <ir0/platform_resource.h>
 #include <stddef.h>
@@ -95,7 +96,8 @@ struct arm64_board_boot_info
 	struct ir0_phys_range reserved[ARM64_BOOT_RESERVED_RANGES_MAX];
 	uint32_t usable_range_count;
 	struct ir0_phys_range usable[ARM64_BOOT_USABLE_RANGES_MAX];
-	struct ir0_phys_range framebuffer;
+	/* DTB simple-framebuffer: reg range plus mode (width 0 = no mode). */
+	struct ir0_boot_framebuffer framebuffer;
 	char bootargs[ARM64_BOOTARGS_MAX];
 	uint64_t initrd_start;
 	uint64_t initrd_end;

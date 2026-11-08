@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: boot_info_platform.c
- * Description: ARM64 FDT memory, chosen, and reservation parsing.
+ * Description: ARM64 FDT memory, chosen, reservation and framebuffer parsing.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,6 +15,65 @@
 #include "boot_info_private.h"
 
 #include <stdint.h>
+
+/*
+ * simple-framebuffer "format" strings (Linux
+ * Documentation/devicetree/bindings/display/simple-framebuffer.yaml) and the
+ * pixel layout each one names. Alpha and padding bits are not drawn.
+ */
+struct arm64_simplefb_format
+{
+	const char *name;
+	uint8_t bpp;
+	uint8_t red_pos;
+	uint8_t red_size;
+	uint8_t green_pos;
+	uint8_t green_size;
+	uint8_t blue_pos;
+	uint8_t blue_size;
+};
+
+static const struct arm64_simplefb_format g_simplefb_formats[] = {
+	{ "r5g6b5", 16U, 11U, 5U, 5U, 6U, 0U, 5U },
+	{ "x1r5g5b5", 16U, 10U, 5U, 5U, 5U, 0U, 5U },
+	{ "a1r5g5b5", 16U, 10U, 5U, 5U, 5U, 0U, 5U },
+	{ "r8g8b8", 24U, 16U, 8U, 8U, 8U, 0U, 8U },
+	{ "x8r8g8b8", 32U, 16U, 8U, 8U, 8U, 0U, 8U },
+	{ "a8r8g8b8", 32U, 16U, 8U, 8U, 8U, 0U, 8U },
+	{ "x8b8g8r8", 32U, 0U, 8U, 8U, 8U, 16U, 8U },
+	{ "a8b8g8r8", 32U, 0U, 8U, 8U, 8U, 16U, 8U },
+	{ "x2r10g10b10", 32U, 20U, 10U, 10U, 10U, 0U, 10U },
+	{ "a2r10g10b10", 32U, 20U, 10U, 10U, 10U, 0U, 10U },
+};
+
+/* Decode a simple-framebuffer "format"; unknown formats leave bpp at 0. */
+static void framebuffer_set_format(struct ir0_boot_framebuffer *fb,
+				   const volatile uint8_t *value,
+				   uint32_t length)
+{
+	uint32_t i;
+
+	for (i = 0U; i < sizeof(g_simplefb_formats) /
+			     sizeof(g_simplefb_formats[0]); i++)
+	{
+		const struct arm64_simplefb_format *format =
+		    &g_simplefb_formats[i];
+
+		if (!arm64_fdt_string_list_has(value, length, format->name))
+		{
+			continue;
+		}
+		fb->bpp = format->bpp;
+		fb->type = IR0_BOOT_FB_TYPE_RGB;
+		fb->red_pos = format->red_pos;
+		fb->red_size = format->red_size;
+		fb->green_pos = format->green_pos;
+		fb->green_size = format->green_size;
+		fb->blue_pos = format->blue_pos;
+		fb->blue_size = format->blue_size;
+		return;
+	}
+}
 
 static int node_is_memory(const volatile uint8_t *name, uint32_t length)
 {
@@ -261,6 +320,35 @@ int arm64_boot_parse_platform(struct arm64_boot_parse_context *context,
 				    arm64_fdt_read_cells(value, address_cells);
 				info->framebuffer.size = arm64_fdt_read_cells(
 				    value + address_cells * 4U, size_cells);
+			}
+			else if (framebuffer_depth == depth &&
+				 property_length == 4U &&
+				 arm64_fdt_prop_name_is(&view, name_offset,
+							"width"))
+			{
+				info->framebuffer.width = arm64_fdt_read_be32(value);
+			}
+			else if (framebuffer_depth == depth &&
+				 property_length == 4U &&
+				 arm64_fdt_prop_name_is(&view, name_offset,
+							"height"))
+			{
+				info->framebuffer.height =
+				    arm64_fdt_read_be32(value);
+			}
+			else if (framebuffer_depth == depth &&
+				 property_length == 4U &&
+				 arm64_fdt_prop_name_is(&view, name_offset,
+							"stride"))
+			{
+				info->framebuffer.pitch = arm64_fdt_read_be32(value);
+			}
+			else if (framebuffer_depth == depth &&
+				 arm64_fdt_prop_name_is(&view, name_offset,
+							"format"))
+			{
+				framebuffer_set_format(&info->framebuffer, value,
+						       property_length);
 			}
 			else if (reserved_child_depth == depth &&
 				 arm64_fdt_prop_name_is(&view, name_offset, "reg"))

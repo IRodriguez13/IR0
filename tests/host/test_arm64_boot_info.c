@@ -394,3 +394,106 @@ void test_arm64_boot_info_genet_fdt(void)
 	ASSERT_EQ(info->genet_mac[0], (uint8_t)0xdc);
 	TEST_END();
 }
+
+/*
+ * Firmware simple-framebuffer node with its mode. Strings offsets:
+ * 0 #address-cells, 15 #size-cells, 27 reg, 31 compatible, 42 width,
+ * 48 height, 55 stride, 62 format.
+ */
+static size_t build_simplefb_fdt(uint8_t *fdt, size_t capacity,
+				 const char *format)
+{
+	static const char strings[] =
+		"#address-cells\0#size-cells\0reg\0compatible\0width\0"
+		"height\0stride\0format\0";
+	static const char fb_compat[] = "simple-framebuffer";
+	const size_t struct_off = 56U;
+	size_t off = struct_off;
+	size_t strings_off;
+
+	memset(fdt, 0, capacity);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "");
+	off = append_prop_u32(fdt, off, 0U, 2U);
+	off = append_prop_u32(fdt, off, 15U, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "memory@0");
+	off = append_be32(fdt, off, 3U);
+	off = append_be32(fdt, off, 16U);
+	off = append_be32(fdt, off, 27U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x40000000U);
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 1U);
+	off = append_name(fdt, off, "framebuffer@3e000000");
+	off = append_prop_bytes(fdt, off, 31U, fb_compat,
+				(uint32_t)sizeof(fb_compat));
+	off = append_be32(fdt, off, 3U);
+	off = append_be32(fdt, off, 16U);
+	off = append_be32(fdt, off, 27U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x3e000000U);
+	off = append_be32(fdt, off, 0U);
+	off = append_be32(fdt, off, 0x7e9000U);
+	off = append_prop_u32(fdt, off, 42U, 1920U);
+	off = append_prop_u32(fdt, off, 48U, 1080U);
+	off = append_prop_u32(fdt, off, 55U, 7680U);
+	off = append_prop_bytes(fdt, off, 62U, format,
+				(uint32_t)strlen(format) + 1U);
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 2U);
+	off = append_be32(fdt, off, 9U);
+	strings_off = off;
+	memcpy(fdt + strings_off, strings, sizeof(strings));
+	off += sizeof(strings);
+
+	put_be32(fdt, 0xd00dfeedU);
+	put_be32(fdt + 4, (uint32_t)off);
+	put_be32(fdt + 8, (uint32_t)struct_off);
+	put_be32(fdt + 12, (uint32_t)strings_off);
+	put_be32(fdt + 16, 40U);
+	put_be32(fdt + 32, (uint32_t)sizeof(strings));
+	put_be32(fdt + 36, (uint32_t)(strings_off - struct_off));
+	return off;
+}
+
+void test_arm64_boot_info_simplefb_mode(void)
+{
+	uint8_t fdt[512] __attribute__((aligned(8)));
+	const struct ir0_boot_framebuffer *fb;
+
+	TEST_BEGIN("arm64 DTB simple-framebuffer mode");
+
+	build_simplefb_fdt(fdt, sizeof(fdt), "a8r8g8b8");
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)fdt) == 0);
+	fb = &arm64_board_boot_info()->framebuffer;
+	ASSERT(fb->base == 0x3e000000ULL);
+	ASSERT(fb->size == 0x7e9000ULL);
+	ASSERT_EQ(fb->width, 1920U);
+	ASSERT_EQ(fb->height, 1080U);
+	ASSERT_EQ(fb->pitch, 7680U);
+	ASSERT_EQ(fb->bpp, 32U);
+	ASSERT_EQ(fb->type, IR0_BOOT_FB_TYPE_RGB);
+	ASSERT_EQ(fb->red_pos, 16U);
+	ASSERT_EQ(fb->green_pos, 8U);
+	ASSERT_EQ(fb->blue_pos, 0U);
+	ASSERT_EQ(fb->blue_size, 8U);
+
+	build_simplefb_fdt(fdt, sizeof(fdt), "r5g6b5");
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)fdt) == 0);
+	fb = &arm64_board_boot_info()->framebuffer;
+	ASSERT_EQ(fb->bpp, 16U);
+	ASSERT_EQ(fb->red_pos, 11U);
+	ASSERT_EQ(fb->green_size, 6U);
+
+	/* An unknown format keeps the range but no usable pixel layout. */
+	build_simplefb_fdt(fdt, sizeof(fdt), "y8u8v8");
+	ASSERT(arm64_fdt_boot_info_init((uintptr_t)fdt) == 0);
+	fb = &arm64_board_boot_info()->framebuffer;
+	ASSERT(fb->base == 0x3e000000ULL);
+	ASSERT_EQ(fb->bpp, 0U);
+
+	TEST_END();
+}

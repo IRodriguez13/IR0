@@ -115,6 +115,7 @@ extern void test_swap_header_and_areas(void);
 extern void test_bcmgenet_register_contract(void);
 extern void test_dma_irq_contract(void);
 extern void test_arm64_boot_info_genet_fdt(void);
+extern void test_arm64_boot_info_simplefb_mode(void);
 
 static void (*test_functions[])(void) = {
 	test_harness_smoke,
@@ -184,6 +185,7 @@ static void (*test_functions[])(void) = {
 	test_bpath_fold,
 	test_arm64_boot_info_fdt_contract,
 	test_arm64_boot_info_genet_fdt,
+	test_arm64_boot_info_simplefb_mode,
 	test_arm64_syscall_decode_contract,
 	test_x86_syscall_decode_contract,
 	test_syscall_handler_table_contract,

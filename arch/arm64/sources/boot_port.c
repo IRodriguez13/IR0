@@ -122,9 +122,19 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 		snapshot->initrd.base = boot->initrd_start;
 		snapshot->initrd.size = boot->initrd_end - boot->initrd_start;
 	}
-	/* DTB simple-framebuffer: address range only; no mode yet (width 0). */
-	snapshot->framebuffer.base = boot->framebuffer.base;
-	snapshot->framebuffer.size = boot->framebuffer.size;
+	/*
+	 * DTB simple-framebuffer. Without a complete mode (width, height,
+	 * stride and a known format) only the address range is handed on and
+	 * width stays 0, so the video backend leaves the console on serial.
+	 */
+	snapshot->framebuffer = boot->framebuffer;
+	if (boot->framebuffer.width == 0 || boot->framebuffer.height == 0 ||
+	    boot->framebuffer.pitch == 0 || boot->framebuffer.bpp == 0)
+	{
+		snapshot->framebuffer.width = 0;
+		snapshot->framebuffer.height = 0;
+		snapshot->framebuffer.pitch = 0;
+	}
 	for (i = 0; i < IR0_BOOT_CMDLINE_MAX - 1U &&
 		    boot->bootargs[i] != '\0'; i++)
 		snapshot->cmdline[i] = boot->bootargs[i];
