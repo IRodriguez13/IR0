@@ -40,6 +40,7 @@ static struct {
 	block_header_t *free_list;
 	size_t total_allocated;
 	size_t total_freed;
+	size_t live_allocs;             /* Blocks currently handed out */
 	size_t coalesce_forward_count;  /* Debug: count forward coalesces */
 	size_t coalesce_backward_count; /* Debug: count backward coalesces */
 	int initialized;
@@ -139,6 +140,7 @@ void heap_init(void)
 	allocator.heap_size = SIMPLE_HEAP_SIZE;
 	allocator.total_allocated = 0;
 	allocator.total_freed = 0;
+	allocator.live_allocs = 0;
 	allocator.coalesce_forward_count = 0;
 	allocator.coalesce_backward_count = 0;
 
@@ -319,6 +321,7 @@ void *heap_alloc(size_t size)
 			 * This helps track heap usage patterns and detect memory leaks.
 			 */
 			allocator.total_allocated += current->size;
+			allocator.live_allocs++;
 
 			/* Return pointer to user data (after header).
 			 * The caller sees only the data portion and must not access
@@ -384,6 +387,7 @@ void heap_free(void *ptr)
 	footer->is_free = 1;
 
 	allocator.total_freed += block->size;
+	allocator.live_allocs--;
 
 #if DEBUG_MEMORY_ALLOCATOR
 	klog_print("[FREE] Memory freed\n");
@@ -460,7 +464,7 @@ void heap_stats(size_t *total, size_t *used, size_t *allocs)
 	if (used)
 		*used = allocator.total_allocated - allocator.total_freed;
 	if (allocs)
-		*allocs = allocator.total_allocated;
+		*allocs = allocator.live_allocs;
 
 #if DEBUG_MEMORY_STATS
 	klog_print("[ALLOCATOR STATS]\n");
