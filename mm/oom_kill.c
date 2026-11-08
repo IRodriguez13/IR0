@@ -169,8 +169,6 @@ int oom_handle_alloc_failure(struct process *current, const char *site)
 
     if (!current || current->mode != USER_MODE)
         return -ENOMEM;
-    if (ir0_panic_in_progress())
-        return -ENOMEM;
     if (cpu_local()->irq_depth != 0U)
         return -ENOMEM;
 

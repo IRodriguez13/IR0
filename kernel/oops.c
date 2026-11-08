@@ -28,6 +28,14 @@
 #include <ir0/oops_port.h>
 #include <mm/paging.h>
 
+/*
+ * Set by panicex(). Private to this file: a fault taken while it is set must
+ * still reach panicex(), whose nested branch keeps the primary frame and
+ * halts; callers never test it themselves.
+ */
+static volatile int in_panic = 0;
+static volatile int panicex_tag_done;
+
 /* Exception frame captured before panicex (CPU fault site, not reporter). */
 static struct
 {
@@ -61,7 +69,20 @@ void panic_note_exception_frame(unsigned vector, unsigned long long err,
 	 * fault address and falsely makes every panic look like a stack #DF.
 	 */
 	if (panic_exc_frame.valid)
+	{
+		/* Name the nested exception; panicex() halts on its nested branch. */
+		if (in_panic)
+		{
+			klog_print("\nCLASSIFY NESTED_CPU_EXCEPTION_DURING_PANIC vector=");
+			klog_hex64((uint64_t)vector);
+			klog_print(" rip=");
+			klog_hex64((uint64_t)rip);
+			klog_print(" rsp=");
+			klog_hex64((uint64_t)rsp);
+			klog_print("\n");
+		}
 		return;
+	}
 
 	panic_exc_frame.valid = 1;
 	panic_exc_frame.stack_overflow = stack_overflow ? 1 : 0;
@@ -225,14 +246,6 @@ static const char *panic_level_name(panic_level_t level)
     return panic_level_names[level];
 }
 
-/* Double panic guard - prevents infinite recursion if panic handler itself fails */
-static volatile int in_panic = 0;
-static volatile int panicex_tag_done;
-
-int ir0_panic_in_progress(void)
-{
-	return in_panic != 0;
-}
 
 /* Forward declarations for helper functions */
 static void dump_process_context(void);

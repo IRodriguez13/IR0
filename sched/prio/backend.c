@@ -19,6 +19,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
+#include <ir0/problems.h>
 #include <string.h>
 
 typedef struct prio_task

@@ -33,7 +33,6 @@ extern "C" {
 #endif
 
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
-int ir0_panic_in_progress(void);
 /*
  * Record the CPU exception frame before panicex so the banner can show the
  * fault site (RIP/RSP) instead of only the panic reporter (__func__).
@@ -69,15 +68,6 @@ void dump_registers(void);
 
 #define PANIC(msg) \
     panicex((msg), PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__)
-
-// Macros for better panic message tunning
-#define BUG_ON(condition) \
-    do { \
-        if (unlikely(condition)) \
-        { \
-            panicex("BUG_ON: " #condition, PANIC_KERNEL_BUG, __FILE__, __LINE__, __func__); \
-        } \
-    } while(0)
 
 /* For testing */
 #define ASSERT(condition) \

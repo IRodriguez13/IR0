@@ -606,6 +606,7 @@ LIB_OBJS = \
     kernel/logging.o \
     kernel/boot_log_hostshare.o \
     kernel/oops.o \
+    kernel/problems.o \
     kernel/irq_dispatch.o \
     kernel/signals.o \
     fs/pipe.o \

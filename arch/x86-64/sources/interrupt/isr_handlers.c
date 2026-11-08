@@ -147,9 +147,6 @@ static void isr_contract_single_check(uint64_t interrupt_number, uint64_t *stack
     if (!stack || interrupt_number >= 32)
         return;
 
-    if (ir0_panic_in_progress())
-        return;
-
     marker_b = iretq_checkpoint_buf[8];
     expected_rip = iretq_checkpoint_buf[9];
     expected_cs = iretq_checkpoint_buf[10];
@@ -244,24 +241,6 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
         uint64_t fault_rip = stack[2];
         uint64_t fault_cs = stack[3];
         uint64_t fault_rsp = stack[5];
-
-	/*
-	 * Nested CPU exception while panicex is already running (typically
-	 * #DF after a primary #PF). Do not start a second panic banner that
-	 * greps as a fresh DOUBLE FAULT — halt quietly; primary frame kept.
-	 */
-	if (ir0_panic_in_progress())
-	{
-		klog_print("\nCLASSIFY NESTED_CPU_EXCEPTION_DURING_PANIC int=");
-		klog_hex64(interrupt_number);
-		klog_print(" rip=");
-		klog_hex64(fault_rip);
-		klog_print(" rsp=");
-		klog_hex64(fault_rsp);
-		klog_print("\nPRIMARY_FAULT_FRAME_KEPT\n");
-		for (;;)
-			cpu_halt();
-	}
 
         klog_debug_fmt("ISR", "[ISR] int=%llx current=%llx cr3=%llx rip=%llx cs=%llx rsp=%llx ss=%llx frame=%llx user=%llx", (unsigned long long)(interrupt_number), (unsigned long long)((uint64_t)(uintptr_t)current), (unsigned long long)paging_current_address_space(), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), (unsigned long long)(stack[6]), (unsigned long long)((uint64_t)(uintptr_t)stack), (unsigned long long)(user));
 

@@ -44,12 +44,6 @@ void pf_kernel_fault(const struct page_fault_info *info, uint64_t fault_addr)
 	int write = info->write;
 	int user = info->user;
 
-	if (ir0_panic_in_progress())
-	{
-		cpu_relax();
-		return;
-	}
-
 	if (mm_user_va_ok((uintptr_t)fault_addr, 1))
 	{
 		current = process_get_current();

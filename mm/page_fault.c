@@ -60,7 +60,7 @@ static void pf_audit_classify(uint64_t *stack,
 	int in_vma = 0;
 	int in_userspace_range = 0;
 
-	if (!info || ir0_panic_in_progress())
+	if (!info)
 		return;
 
 	fault_addr = (uint64_t)info->address;
@@ -290,12 +290,6 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 				process_get_current());
 	pf_debug_memmove_fault(stack, (uint64_t)info->address, info,
 			       process_get_current());
-
-	if (ir0_panic_in_progress())
-	{
-		cpu_relax();
-		return;
-	}
 
 	fault_addr = (uint64_t)info->address;
 	not_present = !info->present;
