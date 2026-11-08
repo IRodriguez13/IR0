@@ -15,6 +15,7 @@
 #include "test/ktest_harness.h"
 #include <ir0/boot_memory.h>
 #include <ir0/kmem.h>
+#include <ir0/mm_port.h>
 #include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
 #include <ir0/reclaim.h>
@@ -83,6 +84,45 @@ void ktest_allocator(void)
 		KASSERT_EQ(mm_reclaim_run(1, &result), 0);
 		KASSERT_EQ(result.reclaimed_pages, 1);
 	}
+
+	KTEST_END();
+}
+
+/*
+ * /proc/meminfo and /sys/kernel/mm print the third heap statistic as
+ * SlabAllocs: the number of live heap allocations, not a byte count.
+ */
+void ktest_allocator_stats(void)
+{
+	size_t used_before;
+	size_t used_mid;
+	size_t used_after;
+	size_t allocs_before;
+	size_t allocs_mid;
+	size_t allocs_after;
+	void *a;
+	void *b;
+	void *c;
+
+	KTEST_BEGIN("allocator_stats");
+
+	ir0_mm_alloc_stats(NULL, &used_before, &allocs_before);
+	a = kmalloc(1000);
+	b = kmalloc(1000);
+	c = kmalloc(1000);
+	KASSERT(a != NULL);
+	KASSERT(b != NULL);
+	KASSERT(c != NULL);
+	ir0_mm_alloc_stats(NULL, &used_mid, &allocs_mid);
+	kfree(a);
+	kfree(b);
+	kfree(c);
+	ir0_mm_alloc_stats(NULL, &used_after, &allocs_after);
+
+	KASSERT(used_mid >= used_before + 3 * 1000);
+	KASSERT_EQ(used_after, used_before);
+	KASSERT_EQ(allocs_mid, allocs_before + 3);
+	KASSERT_EQ(allocs_after, allocs_before);
 
 	KTEST_END();
 }
