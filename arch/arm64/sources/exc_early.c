@@ -213,7 +213,6 @@ static void arm64_el0_fault_signal(uint64_t esr, uint64_t *frame)
 	process_t *p = current_process;
 	struct ir0_fault fault;
 	uint64_t far;
-	int sig;
 
 	__asm__ volatile("mrs %0, far_el1" : "=r"(far));
 	arm64_fault_from_esr(&fault, esr, frame[ARM64_EXC_IDX_ELR],
@@ -223,13 +222,7 @@ static void arm64_el0_fault_signal(uint64_t esr, uint64_t *frame)
 	if (!p || p->mode != USER_MODE)
 		panic("arm64: EL0 exception without a user task");
 
-	if (fault.kind == IR0_FAULT_BREAKPOINT)
-		sig = SIGTRAP;
-	else if (fault.kind == IR0_FAULT_ALIGNMENT)
-		sig = SIGBUS;
-	else
-		sig = SIGILL;
-	force_sig_fault(sig, &fault, frame);
+	force_sig_fault(fault_signal(&fault), &fault, frame);
 }
 
 void arm64_exc_sync_lower(uint64_t *frame)

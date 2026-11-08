@@ -14,6 +14,7 @@
 
 #include <ir0/fault.h>
 #include <ir0/page_fault.h>
+#include <ir0/signals.h>
 #include <string.h>
 
 void ir0_fault_from_page_fault(struct ir0_fault *fault,
@@ -35,6 +36,19 @@ void ir0_fault_from_page_fault(struct ir0_fault *fault,
 	fault->present = info->present;
 	fault->write = info->write;
 	fault->exec = info->exec;
+}
+
+int fault_signal(const struct ir0_fault *fault)
+{
+	switch (fault ? fault->kind : IR0_FAULT_OTHER)
+	{
+	case IR0_FAULT_BREAKPOINT:
+		return SIGTRAP;
+	case IR0_FAULT_ALIGNMENT:
+		return SIGBUS;
+	default:
+		return SIGILL;
+	}
 }
 
 const char *ir0_fault_kind_name(enum ir0_fault_kind kind)

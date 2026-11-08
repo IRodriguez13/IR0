@@ -54,5 +54,12 @@ struct ir0_fault
 void ir0_fault_from_page_fault(struct ir0_fault *fault,
 			       const struct page_fault_info *info);
 
+/*
+ * Signal a user task receives for a synchronous non-abort exception of
+ * @fault's class (Linux arch traps: undefined instruction, breakpoint,
+ * alignment, ...). Aborts go through the MM fault path instead.
+ */
+int fault_signal(const struct ir0_fault *fault);
+
 /* Stable upper-case name for logs ("PAGE_FAULT", "INVALID_OPCODE", ...). */
 const char *ir0_fault_kind_name(enum ir0_fault_kind kind);
