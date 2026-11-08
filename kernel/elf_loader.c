@@ -44,6 +44,7 @@
 #include <config.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/vdso.h>
+#include <ir0/sigtramp.h>
 #include <ir0/abi/elf_interp_contract.h>
 #include <ir0/errno.h>
 #include <ir0/elf64_image.h>
@@ -1031,6 +1032,9 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
     {
         klog_debug("ELF", "SERIAL: ELF: vDSO map failed (continuing without AT_SYSINFO_EHDR)\n");
     }
+    /* -ENOSYS: the ISA requires SA_RESTORER (x86-64), nothing to map. */
+    if (sigtramp_map(process) < 0 && sigtramp_addr() != 0)
+        klog_debug("ELF", "sigreturn trampoline map failed");
 
     (void)builder_tag;
 

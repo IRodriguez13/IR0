@@ -21,6 +21,7 @@
 #include <ir0/kmem.h>
 #include <ir0/task_ops.h>
 #include <ir0/signal_irq.h>
+#include <ir0/sigtramp.h>
 #include <ir0/signal_syscall_resume.h>
 #include <ir0/tls.h>
 #include <ir0/fault.h>
@@ -618,6 +619,34 @@ static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
 	return user_sp;
 }
 
+/*
+ * Return address for @sig's handler: SA_RESTORER when the caller supplied
+ * one, otherwise the kernel trampoline (Linux arm64 vDSO sigtramp). 0 when
+ * the ISA requires SA_RESTORER and none was given (Linux x86-64).
+ */
+static uint64_t signal_handler_restorer(process_t *p, int sig)
+{
+	void (*fn)(void) = p->signal_restorer[sig];
+
+	if (!fn)
+		return sigtramp_addr();
+	if (!mm_user_va_ok((uintptr_t)fn, sizeof(void *)))
+		return 0;
+	return (uint64_t)(uintptr_t)fn;
+}
+
+/*
+ * Linux force_sigsegv(): a handler frame that cannot be set up becomes
+ * SIGSEGV. Failing to set up SIGSEGV itself, or having no SIGSEGV handler,
+ * terminates the task.
+ */
+static void signal_force_segv(process_t *p, int sig)
+{
+	if (sig == SIGSEGV || !signals_has_user_handler(p, SIGSEGV))
+		signal_exit_current(SIGSEGV);
+	p->signal_pending |= SIGNAL_MASK(SIGSEGV);
+}
+
 /**
  * handle_signals - Handle pending signals
  * Called by scheduler before switching to process
@@ -801,7 +830,6 @@ void handle_signals(void)
                         uint64_t user_sp;
                         uint64_t frame_addr;
                         uint64_t restorer;
-                        void (*restorer_fn)(void);
 
                         /*
                          * Nested catchable delivery while a sigframe is already
@@ -982,18 +1010,17 @@ void handle_signals(void)
                             continue;
                         }
 
-                        restorer_fn = current->signal_restorer[sig];
-                        if (!restorer_fn ||
-                            !mm_user_va_ok((uintptr_t)restorer_fn,
-                                            sizeof(void *)))
+                        restorer = signal_handler_restorer(current, sig);
+                        if (restorer == 0)
                         {
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%x reason=no_restorer",
                                           (unsigned)sig);
                             process_saved_context_clear(current);
-                            break;
+                            current->signal_pending &= ~SIGNAL_MASK(sig);
+                            signal_force_segv(current, sig);
+                            continue;
                         }
-                        restorer = (uint64_t)(uintptr_t)restorer_fn;
 
                         frame.handler = handler;
                         frame.signum = sig;

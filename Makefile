@@ -417,6 +417,7 @@ KERNEL_OBJS = \
     kernel/process/mm.o \
     kernel/process/signals.o \
     kernel/vdso.o \
+    kernel/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
 	kernel/cpu_topology.o \
