@@ -596,6 +596,7 @@ MEMORY_OBJS = \
 	mm/page_fault_user.o \
 	mm/page_fault_cow.o \
 	mm/page_fault_kernel.o \
+	mm/page_fault_diag.o \
 	mm/swap/swap_header.o \
 	mm/swap/swap.o \
 	mm/swap/swap_io.o \
@@ -607,6 +608,7 @@ LIB_OBJS = \
     kernel/boot_log_hostshare.o \
     kernel/oops.o \
     kernel/problems.o \
+    kernel/fault.o \
     kernel/irq_dispatch.o \
     kernel/signals.o \
     fs/pipe.o \

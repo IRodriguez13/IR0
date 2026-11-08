@@ -16,16 +16,11 @@
 #include <ir0/vga.h>
 #include <ir0/console_backend.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/arch_task.h>
-#include <stdint.h>
 #include <ir0/cpu.h>
 #include <ir0/clock.h>
-#include <ir0/arch_io.h>
-#include <stddef.h>
 #include <string.h>
-#include <config.h>
-#include <ir0/copy_user.h>
 #include <ir0/oops_port.h>
+#include <ir0/fault.h>
 #include <mm/paging.h>
 
 /*
@@ -36,70 +31,58 @@
 static volatile int in_panic = 0;
 static volatile int panicex_tag_done;
 
-/* Exception frame captured before panicex (CPU fault site, not reporter). */
+/* Fault captured before panicex (CPU fault site, not the reporter). */
 static struct
 {
 	int valid;
 	int stack_overflow;
-	unsigned vector;
 	uint32_t pid;
-	uint64_t err;
-	uint64_t rip;
-	uint64_t cs;
-	uint64_t rflags;
-	uint64_t rsp;
-	uint64_t ss;
-	uint64_t cr2; /* frozen at note time — nested #DF must not rewrite */
+	struct ir0_fault fault; /* addr frozen at note time; nested faults keep it */
 	char comm[16];
 } panic_exc_frame;
 
-void panic_note_exception_frame(unsigned vector, unsigned long long err,
-				unsigned long long rip, unsigned long long cs,
-				unsigned long long rflags,
-				unsigned long long rsp, unsigned long long ss,
-				int stack_overflow, unsigned int pid,
-				const char *comm)
+int ir0_fault_sp_in_kstack_guard(uintptr_t sp)
+{
+	uint64_t in_slot;
+
+	if ((uint64_t)sp < IR0_KSTACK_VA_BASE)
+		return 0;
+	/* The bottom page of every kstack slot is the unmapped guard. */
+	in_slot = ((uint64_t)sp - IR0_KSTACK_VA_BASE) %
+		  (uint64_t)IR0_KSTACK_SLOT_SIZE;
+	return in_slot < (uint64_t)PAGE_SIZE_4KB;
+}
+
+void panic_note_fault(const struct ir0_fault *fault, unsigned int pid,
+		      const char *comm)
 {
 	size_t i;
 
+	if (!fault)
+		return;
 	/*
-	 * Keep the first (primary) frame. Nested #DF during panic dump must
-	 * not replace a kernel #PF / #GP site with dump_stack_trace's RIP.
-	 * Also freeze CR2 here: reading CR2 later in panicex sees the nested
-	 * fault address and falsely makes every panic look like a stack #DF.
+	 * Keep the first (primary) fault: a nested fault during the panic
+	 * dump must not replace the kernel fault site with the dumper's own.
 	 */
 	if (panic_exc_frame.valid)
 	{
 		/* Name the nested exception; panicex() halts on its nested branch. */
 		if (in_panic)
 		{
-			klog_print("\nCLASSIFY NESTED_CPU_EXCEPTION_DURING_PANIC vector=");
-			klog_hex64((uint64_t)vector);
-			klog_print(" rip=");
-			klog_hex64((uint64_t)rip);
-			klog_print(" rsp=");
-			klog_hex64((uint64_t)rsp);
+			klog_print("\nCLASSIFY NESTED_CPU_EXCEPTION_DURING_PANIC kind=");
+			klog_print(ir0_fault_kind_name(fault->kind));
+			klog_print(" ip=");
+			klog_hex64((uint64_t)fault->ip);
+			klog_print(" sp=");
+			klog_hex64((uint64_t)fault->sp);
 			klog_print("\n");
 		}
 		return;
 	}
 
 	panic_exc_frame.valid = 1;
-	panic_exc_frame.stack_overflow = stack_overflow ? 1 : 0;
-	panic_exc_frame.vector = vector;
-	panic_exc_frame.err = err;
-	panic_exc_frame.rip = rip;
-	panic_exc_frame.cs = cs;
-	panic_exc_frame.rflags = rflags;
-	panic_exc_frame.rsp = rsp;
-	panic_exc_frame.ss = ss;
-	/*
-	 * CR2 is only defined for #PF (vector 14). Freezing live CR2 on #UD/#GP/#DF
-	 * reprints a stale userspace address and makes every panic look like an
-	 * MM fault (false positive).
-	 */
-	panic_exc_frame.cr2 =
-		(vector == 14) ? (uint64_t)read_fault_address() : 0;
+	panic_exc_frame.fault = *fault;
+	panic_exc_frame.stack_overflow = ir0_fault_sp_in_kstack_guard(fault->sp);
 	panic_exc_frame.pid = pid;
 	panic_exc_frame.comm[0] = '\0';
 	if (comm)
@@ -112,98 +95,94 @@ void panic_note_exception_frame(unsigned vector, unsigned long long err,
 
 unsigned long long ir0_panic_fault_rsp(void)
 {
-	return panic_exc_frame.valid ? panic_exc_frame.rsp : 0;
+	return panic_exc_frame.valid ? panic_exc_frame.fault.sp : 0;
 }
 
-void ir0_log_user_fault_frame(unsigned vector, unsigned long long cr2,
-			      unsigned long long err, unsigned long long rip,
-			      unsigned long long cs, unsigned long long rsp,
-			      int present, int write, int exec,
-			      unsigned int pid, const char *comm)
+void ir0_log_user_fault(const struct ir0_fault *fault, unsigned int pid,
+			const char *comm)
 {
-	const char *classify = "USER_FAULT";
+	const char *classify;
 	process_t *cur = process_get_current();
-	unsigned char opc = 0;
-	unsigned long long retaddr = 0;
-	int have_opc = 0;
-	int have_ret = 0;
+	uintptr_t addr;
+
+	if (!fault)
+		return;
+	addr = fault->addr;
 
 	/*
-	 * present/write/exec are page-fault error bits. For #GP/#UD they are
-	 * always passed as 0 from the ISR — do not mislabel as USER_NOT_PRESENT.
+	 * present/write/exec describe page faults only; other kinds name the
+	 * exception class instead of being mislabeled USER_NOT_PRESENT.
 	 */
-	if (vector == 13)
-		classify = "USER_GENERAL_PROTECTION";
-	else if (vector == 12)
-		classify = "USER_STACK_SEGMENT";
-	else if (vector == 6)
-		classify = "USER_INVALID_OPCODE";
-	else if (vector == 0 || vector == 4 || vector == 19)
-		classify = "USER_ARITHMETIC";
-	else if (cr2 >= (unsigned long long)USER_STACK_TOP &&
-		 cr2 < (unsigned long long)USER_STACK_TOP + (unsigned long long)PAGE_SIZE_4KB)
-		classify = "USER_STACK_TOP_OVERRUN";
-	else if (cr2 >= (unsigned long long)IR0_KSTACK_VA_BASE &&
-		 cr2 < (unsigned long long)IR0_KSTACK_VA_BASE +
-			   (unsigned long long)IR0_KSTACK_MAX_SLOTS *
-				   (unsigned long long)IR0_KSTACK_SLOT_SIZE)
-		classify = "USER_TOUCHED_KSTACK_VA";
-	else if (!present)
-		classify = "USER_NOT_PRESENT";
-	else if (write)
-		classify = "USER_PROT_WRITE";
-	else if (exec)
-		classify = "USER_PROT_EXEC";
-	else
-		classify = "USER_PROT_READ";
-
-	/*
-	 * Peek opcode + [rsp] return address when the faulting mm is current.
-	 * #GP: also detect musl a_crash / abort fallback (endbr64; hlt).
-	 * #PF: retaddr identifies the caller (e.g. setjmp site → lineedit/ash).
-	 */
-	if ((vector == 13 || vector == 14) && cur && process_pgd(cur))
+	switch (fault->kind)
 	{
-		if (vector == 13 &&
-		    copy_from_user_mm(process_pgd(cur),
-						      (uintptr_t)rip, &opc, 1) == 0)
-		{
-			have_opc = 1;
-			if (opc == 0xf4)
-				classify = "USER_ABORT_HLT";
-		}
-		if (copy_from_user_mm(process_pgd(cur),
-						       (uintptr_t)rsp, &retaddr,
-						       sizeof(retaddr)) == 0)
-			have_ret = 1;
+	case IR0_FAULT_PROTECTION:
+		classify = "USER_GENERAL_PROTECTION";
+		break;
+	case IR0_FAULT_STACK_SEGMENT:
+		classify = "USER_STACK_SEGMENT";
+		break;
+	case IR0_FAULT_ILLEGAL_INSN:
+		classify = "USER_INVALID_OPCODE";
+		break;
+	case IR0_FAULT_ARITHMETIC:
+		classify = "USER_ARITHMETIC";
+		break;
+	case IR0_FAULT_ALIGNMENT:
+		classify = "USER_ALIGNMENT";
+		break;
+	case IR0_FAULT_BREAKPOINT:
+		classify = "USER_BREAKPOINT";
+		break;
+	case IR0_FAULT_PAGE:
+		if (addr >= (uintptr_t)USER_STACK_TOP &&
+		    addr < (uintptr_t)USER_STACK_TOP + PAGE_SIZE_4KB)
+			classify = "USER_STACK_TOP_OVERRUN";
+		else if ((uint64_t)addr >= IR0_KSTACK_VA_BASE &&
+			 (uint64_t)addr < IR0_KSTACK_VA_BASE +
+				 (uint64_t)IR0_KSTACK_MAX_SLOTS *
+					 (uint64_t)IR0_KSTACK_SLOT_SIZE)
+			classify = "USER_TOUCHED_KSTACK_VA";
+		else if (!fault->present)
+			classify = "USER_NOT_PRESENT";
+		else if (fault->write)
+			classify = "USER_PROT_WRITE";
+		else if (fault->exec)
+			classify = "USER_PROT_EXEC";
+		else
+			classify = "USER_PROT_READ";
+		break;
+	default:
+		classify = "USER_FAULT";
+		break;
 	}
+
+	/* ISA extras (instruction / return-address peeks) may refine it. */
+	classify = ir0_oops_user_fault_extra(fault, cur, classify);
 
 	/*
 	 * INFO (not only NOTICE): default profile keeps INFO+; greppable even
 	 * if NOTICE mirroring is quieted. No panic / no page-table walks.
 	 */
 	klog_info_fmt("FAULT",
-		      "USER_FAULT_FRAME vector=%x cr2=%llx err=%llx rip=%llx "
-		      "cs=%llx rsp=%llx",
-		      (unsigned)vector, (unsigned long long)cr2,
-		      (unsigned long long)err, (unsigned long long)rip,
-		      (unsigned long long)cs, (unsigned long long)rsp);
+		      "USER_FAULT_FRAME kind=%s hw=%x addr=%llx syndrome=%llx "
+		      "ip=%llx sp=%llx",
+		      ir0_fault_kind_name(fault->kind), fault->hw_code,
+		      (unsigned long long)addr,
+		      (unsigned long long)fault->syndrome,
+		      (unsigned long long)fault->ip,
+		      (unsigned long long)fault->sp);
 	if (cur)
 		klog_info_fmt("FAULT",
-			      "USER_FAULT_FRAME rdi=%llx rsi=%llx",
+			      "USER_FAULT_FRAME arg0=%llx arg1=%llx",
 			      (unsigned long long)task_get_arg0(&cur->task),
 			      (unsigned long long)task_get_arg1(&cur->task));
 	klog_info_fmt("FAULT",
 		      "USER_FAULT_FRAME pid=%x comm=%s present=%x write=%x "
 		      "exec=%x CLASSIFY %s",
-		      (unsigned)pid, comm && comm[0] ? comm : "(none)",
-		      (unsigned)(present ? 1 : 0), (unsigned)(write ? 1 : 0),
-		      (unsigned)(exec ? 1 : 0), classify);
-	if (have_opc || have_ret)
-		klog_info_fmt("FAULT",
-			      "USER_FAULT_FRAME opc=%x ret=%llx",
-			      (unsigned)(have_opc ? opc : 0),
-			      (unsigned long long)(have_ret ? retaddr : 0));
+		      pid, comm && comm[0] ? comm : "(none)",
+		      (unsigned)(fault->present ? 1 : 0),
+		      (unsigned)(fault->write ? 1 : 0),
+		      (unsigned)(fault->exec ? 1 : 0), classify);
 	/* Raw tag for harnesses that strip klog prefixes. */
 	klog_print("USER_FAULT_FRAME\n");
 }
@@ -455,45 +434,34 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     if (panic_exc_frame.valid)
     {
 	klog_print("--- FAULT FRAME (cause) ---\n");
-	klog_print("vector=");
-	klog_hex32(panic_exc_frame.vector);
-	klog_print(" err=");
-	klog_hex64(panic_exc_frame.err);
+	klog_print("kind=");
+	klog_print(ir0_fault_kind_name(panic_exc_frame.fault.kind));
+	klog_print(" hw=");
+	klog_hex32(panic_exc_frame.fault.hw_code);
+	klog_print(" syndrome=");
+	klog_hex64(panic_exc_frame.fault.syndrome);
 	klog_print("\n");
-	klog_print("fault_rip=");
-	klog_hex64(panic_exc_frame.rip);
-	klog_print(" fault_cs=");
-	klog_hex64(panic_exc_frame.cs);
+	klog_print("fault_ip=");
+	klog_hex64((uint64_t)panic_exc_frame.fault.ip);
+	klog_print(" fault_sp=");
+	klog_hex64((uint64_t)panic_exc_frame.fault.sp);
 	klog_print("\n");
-	klog_print("fault_rsp=");
-	klog_hex64(panic_exc_frame.rsp);
-	klog_print(" fault_ss=");
-	klog_hex64(panic_exc_frame.ss);
-	klog_print("\n");
-	klog_print("fault_rflags=");
-	klog_hex64(panic_exc_frame.rflags);
-	klog_print("\n");
-	klog_print("cr2=");
-	if (panic_exc_frame.vector == 14)
+	if (panic_exc_frame.fault.kind == IR0_FAULT_PAGE)
 	{
-		klog_hex64(panic_exc_frame.cr2);
-		klog_print(" (frozen at #PF note)\n");
+		klog_print("fault_addr=");
+		klog_hex64((uint64_t)panic_exc_frame.fault.addr);
+		klog_print(" (frozen at fault note)\n");
 	}
-	else
-		klog_print("n/a (not a #PF; do not trust live CR2)\n");
+	/* ISA register names (x86 rip/cs/rflags, ARM64 pc/esr/spsr). */
+	ir0_oops_show_fault_regs(&panic_exc_frame.fault);
 	klog_print("pid=");
 	klog_hex32(panic_exc_frame.pid);
 	klog_print(" comm=");
 	klog_print(panic_exc_frame.comm[0] ? panic_exc_frame.comm : "(none)");
 	klog_print("\n");
-	if (panic_exc_frame.vector == 8)
-		klog_print("CLASSIFY PRIMARY_VECTOR_DOUBLE_FAULT\n");
-	else if (panic_exc_frame.vector == 14)
-		klog_print("CLASSIFY PRIMARY_VECTOR_PAGE_FAULT\n");
-	else if (panic_exc_frame.vector == 13)
-		klog_print("CLASSIFY PRIMARY_VECTOR_GENERAL_PROTECTION\n");
-	else if (panic_exc_frame.vector == 6)
-		klog_print("CLASSIFY PRIMARY_VECTOR_INVALID_OPCODE\n");
+	klog_print("CLASSIFY PRIMARY_VECTOR_");
+	klog_print(ir0_fault_kind_name(panic_exc_frame.fault.kind));
+	klog_print("\n");
 	if (panic_exc_frame.stack_overflow)
 		klog_print("CLASSIFY KERNEL_STACK_OVERFLOW\n");
 	klog_print("--- panic site (reporter, not cause) ---\n");

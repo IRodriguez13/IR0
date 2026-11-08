@@ -12,9 +12,11 @@
 #include <ir0/task.h>
 #include <ir0/klog.h>
 #include <ir0/oops.h>
+#include <ir0/fault.h>
 #include <ir0/paging.h>
 #include <ir0/vga.h>
 #include <config.h>
+#include <string.h>
 
 #include "switch_diag.h"
 
@@ -192,18 +194,17 @@ void switch_report_bad_ret(uint64_t rip, task_t *task)
 			(unsigned long long)rsp,
 			(unsigned long long)((uint64_t)(uintptr_t)task),
 			(unsigned)(p ? (uint32_t)p->task.pid : 0));
-	print("[CTX] CLASSIFY KERNEL_RET_BAD_RIP rip=");
-	print_hex64(rip);
-	print(" cs=");
-	print_hex64(cs);
-	print(" pid=");
-	print_hex((uintptr_t)(p ? (uint32_t)p->task.pid : 0));
-	print("\n");
+	{
+		struct ir0_fault fault;
 
-	panic_note_exception_frame(
-		0 /* software */, 0, rip, cs, 0, rsp, 0, 0,
-		p ? (uint32_t)p->task.pid : 0,
-		p ? p->comm : "(none)");
+		/* Software-detected: no CPU exception, so kind stays OTHER. */
+		memset(&fault, 0, sizeof(fault));
+		fault.ip = (uintptr_t)rip;
+		fault.sp = (uintptr_t)rsp;
+		fault.code_seg = cs;
+		panic_note_fault(&fault, p ? (unsigned int)p->task.pid : 0,
+				 p ? p->comm : "(none)");
+	}
 
 	panicex("kernel_ret RIP not in .text", PANIC_KERNEL_BUG, __FILE__, __LINE__,
 		__func__);

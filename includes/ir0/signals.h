@@ -172,6 +172,26 @@ int send_signal_pgrp(int32_t pgid, int signal);
  */
 void signal_exit_current(int sig) __attribute__((noreturn));
 
+struct ir0_fault;
+
+/**
+ * signal_deliver_fault - Report a synchronous fault of the current task and
+ * hand @sig to its user handler.
+ * @irq_frame: ISA exception frame to redirect into the handler, or NULL to
+ *             queue @sig for delivery on the next return to userspace.
+ *
+ * Logs USER_FAULT_FRAME first. Returns 1 when a handler will run, 0 when
+ * the default action applies (the caller then calls signal_exit_current()).
+ */
+int signal_deliver_fault(int sig, const struct ir0_fault *fault,
+			 void *irq_frame);
+
+/**
+ * force_sig_fault - Synchronous fault: run the handler or apply the default
+ * action. Returns only when a handler will run (Linux force_sig_fault()).
+ */
+void force_sig_fault(int sig, const struct ir0_fault *fault, void *irq_frame);
+
 /**
  * handle_signals - Low-level pending-signal engine for current process.
  *

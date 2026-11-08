@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include <stdint.h>
+
 /* Semantic panic levels */
 typedef enum
 {
@@ -33,28 +35,27 @@ extern "C" {
 #endif
 
 void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
+struct ir0_fault;
+
 /*
- * Record the CPU exception frame before panicex so the banner can show the
- * fault site (RIP/RSP) instead of only the panic reporter (__func__).
- * Also seeds dump_stack_trace() to unwind from fault_rsp when set.
+ * Record the CPU fault before panicex so the banner shows the fault site
+ * (ip/sp) instead of only the panic reporter (__func__). The first fault
+ * wins: a nested fault during the dump is only named, never recorded.
  */
-void panic_note_exception_frame(unsigned vector, unsigned long long err,
-				unsigned long long rip, unsigned long long cs,
-				unsigned long long rflags,
-				unsigned long long rsp, unsigned long long ss,
-				int stack_overflow, unsigned int pid,
-				const char *comm);
+void panic_note_fault(const struct ir0_fault *fault, unsigned int pid,
+		      const char *comm);
 unsigned long long ir0_panic_fault_rsp(void);
+
+/* 1 when @sp sits in the unmapped guard page of a kernel stack slot. */
+int ir0_fault_sp_in_kstack_guard(uintptr_t sp);
+
 /*
- * Greppable userspace fault line for session smokes (NOTICE). Safe during
- * IRQ; does not panic. Emit before SIGSEGV delivery so handler/kill paths
- * still leave a huntable banner (not only CONSOLE_SESSION_SEGV).
+ * Greppable userspace fault line for session smokes (USER_FAULT_FRAME).
+ * Safe during IRQ; does not panic. Emitted before the signal is delivered
+ * or the task is killed.
  */
-void ir0_log_user_fault_frame(unsigned vector, unsigned long long cr2,
-			      unsigned long long err, unsigned long long rip,
-			      unsigned long long cs, unsigned long long rsp,
-			      int present, int write, int exec,
-			      unsigned int pid, const char *comm);
+void ir0_log_user_fault(const struct ir0_fault *fault, unsigned int pid,
+			const char *comm);
 void dump_stack_trace(void);
 void dump_registers(void);
 

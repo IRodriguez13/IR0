@@ -97,6 +97,7 @@ ARM64_PROCESS_BACKEND_OBJS = \
 	arch/arm64/sources/irq.o \
 	arch/arm64/sources/page_fault.o \
 	arch/arm64/sources/pf_debug.o \
+	arch/arm64/sources/oops_port.o \
 	arch/arm64/sources/user_mode.o \
 	arch/arm64/sources/acpi_pm_stub.o
 

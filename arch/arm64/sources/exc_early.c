@@ -33,30 +33,15 @@
 #include <ir0/page_fault.h>
 #include <ir0/tls.h>
 #include <asm/exc_frame.h>
-
-
-/* ESR_EL1: EC 0x15 = SVC instruction from AArch64. */
-#define ESR_EC_SHIFT 26
-#define ESR_EC_MASK  0x3FUL
-#define ESR_EC_SVC64 0x15UL
-#define ESR_EC_FPASIMD 0x07UL /* trapped FP/SIMD access */
-#define ESR_EC_IABT_LOWER 0x20UL
-#define ESR_EC_PC_ALIGN 0x22UL
-#define ESR_EC_SP_ALIGN 0x26UL
-#define ESR_EC_DABT_LOWER 0x24UL
-#define ESR_EC_IABT_CUR 0x21UL
-#define ESR_EC_DABT_CUR 0x25UL
-#define ESR_EC_BRK64 0x3CUL
+#include <asm/esr.h>
+#include <ir0/fault.h>
+#include <kernel/syscalls/syscall_dispatch.h>
 
 /* PSCI 0.2 (SMC Calling Convention) — QEMU virt uses HVC conduit at EL1. */
 #define PSCI_0_2_FN_SYSTEM_OFF   0x84000008UL
 #define PSCI_0_2_FN_SYSTEM_RESET 0x84000009UL
 
 extern char ir0_el1_vectors[];
-
-int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
-			 uint64_t arg3, uint64_t arg4, uint64_t arg5,
-			 uint64_t arg6);
 
 static volatile int g_timer_irq_seen;
 static int g_el0_svc_tagged;
@@ -129,12 +114,12 @@ void arm64_exc_sync_el1(void)
 	uint64_t esr;
 
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
-	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_SVC64)
+	if (esr_ec(esr) == ESR_EC_SVC64)
 	{
 		ir0_boot_smoke("ARM64_VBAR_OK");
 	}
-	else if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_IABT_CUR ||
-		 ((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) == ESR_EC_DABT_CUR)
+	else if (esr_ec(esr) == ESR_EC_IABT_CUR ||
+		 esr_ec(esr) == ESR_EC_DABT_CUR)
 	{
 		/* Kernel abort: uaccess SIGSEGV or panic, decided by common MM. */
 		arm64_abort_to_common_mm(esr, NULL);
@@ -153,6 +138,18 @@ void arm64_exc_sync_el1(void)
 		pl011_puts("_FAR_");
 		exc_put_hex64(far);
 		pl011_putc('\n');
+		{
+			struct ir0_fault fault;
+			process_t *p = current_process;
+			uint64_t spsr;
+			uint64_t sp;
+
+			__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
+			__asm__ volatile("mov %0, sp" : "=r"(sp));
+			arm64_fault_from_esr(&fault, esr, elr, sp, far, spsr);
+			panic_note_fault(&fault, p ? (unsigned int)p->task.pid : 0,
+					 p ? p->comm : "(none)");
+		}
 		panic("arm64: unhandled EL1 synchronous exception");
 	}
 }
@@ -214,29 +211,29 @@ static void arm64_abort_to_common_mm(uint64_t esr, uint64_t *frame)
 static void arm64_el0_fault_kill(uint64_t esr)
 {
 	process_t *p = current_process;
-	uint64_t ec = (esr >> ESR_EC_SHIFT) & ESR_EC_MASK;
+	struct ir0_fault fault;
 	uint64_t far;
 	uint64_t elr;
+	uint64_t spsr;
 	uint64_t sp_el0;
 	int sig;
 
 	__asm__ volatile("mrs %0, far_el1" : "=r"(far));
 	__asm__ volatile("mrs %0, elr_el1" : "=r"(elr));
+	__asm__ volatile("mrs %0, spsr_el1" : "=r"(spsr));
 	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
-	/* Vector 6 = invalid-opcode class in the shared fault log. */
-	ir0_log_user_fault_frame(6U, far, esr, elr, 0, sp_el0, 0, 0, 0,
-				 p ? (unsigned)p->task.pid : 0U,
-				 p ? p->comm : "(none)");
-
-	if (ec == ESR_EC_BRK64)
-		sig = SIGTRAP;
-	else if (ec == ESR_EC_PC_ALIGN || ec == ESR_EC_SP_ALIGN)
-		sig = SIGBUS;
-	else
-		sig = SIGILL;
+	arm64_fault_from_esr(&fault, esr, elr, sp_el0, far, spsr);
 
 	if (!p || p->mode != USER_MODE)
 		panic("arm64: EL0 exception without a user task");
+	ir0_log_user_fault(&fault, (unsigned int)p->task.pid, p->comm);
+
+	if (fault.kind == IR0_FAULT_BREAKPOINT)
+		sig = SIGTRAP;
+	else if (fault.kind == IR0_FAULT_ALIGNMENT)
+		sig = SIGBUS;
+	else
+		sig = SIGILL;
 	signal_exit_current(sig);
 }
 
@@ -246,9 +243,9 @@ void arm64_exc_sync_lower(uint64_t *frame)
 	int64_t ret;
 
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
-	if (((esr >> ESR_EC_SHIFT) & ESR_EC_MASK) != ESR_EC_SVC64)
+	if (esr_ec(esr) != ESR_EC_SVC64)
 	{
-		uint64_t ec = (esr >> ESR_EC_SHIFT) & ESR_EC_MASK;
+		uint64_t ec = esr_ec(esr);
 
 		if (ec == ESR_EC_FPASIMD)
 		{

@@ -15,22 +15,16 @@
 #include <ir0/signals.h>
 #include <ir0/console.h>
 #include <ir0/abi/signal_contract.h>
-#include <ir0/process.h>
 #include <ir0/sched.h>
-#include <ir0/ktm/klog.h>
-#include <ir0/debug_runtime.h>
 #include <ir0/clock.h>
-#include <ir0/copy_user.h>
 #include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/task_ops.h>
 #include <ir0/signal_irq.h>
 #include <ir0/signal_syscall_resume.h>
-#include <ir0/paging.h>
 #include <ir0/tls.h>
-#include <ir0/arch_task.h>
-#include <ir0/arch_mm.h>
-#include <ir0/errno.h>
+#include <ir0/fault.h>
+#include <ir0/oops.h>
 #include <config.h>
 #include <kernel/process.h>
 #include <string.h>
@@ -311,6 +305,37 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 #endif
 
 	return 1;
+}
+
+int signal_deliver_fault(int sig, const struct ir0_fault *fault,
+			 void *irq_frame)
+{
+	process_t *p = current_process;
+
+	if (!p || p->mode != USER_MODE)
+		panic("fault signal without a user task");
+	ir0_log_user_fault(fault, (unsigned int)p->task.pid, p->comm);
+
+	/*
+	 * With a frame the faulting context is redirected into the handler
+	 * now; replaying the instruction first would fault again.
+	 */
+	if (irq_frame)
+		return signals_deliver_from_irq_frame(p, sig, irq_frame,
+						      fault ? fault->addr : 0);
+	if (signals_has_user_handler(p, sig))
+	{
+		p->signal_pending |= SIGNAL_MASK(sig);
+		return 1;
+	}
+	return 0;
+}
+
+void force_sig_fault(int sig, const struct ir0_fault *fault, void *irq_frame)
+{
+	if (signal_deliver_fault(sig, fault, irq_frame))
+		return;
+	signal_exit_current(sig);
 }
 
 void signals_reset_on_exec(process_t *p)

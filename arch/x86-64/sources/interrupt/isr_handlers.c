@@ -17,6 +17,7 @@
 #include <ir0/vga.h>
 #include <ir0/signals.h>
 #include <ir0/oops.h>
+#include <ir0/fault.h>
 #include <ir0/ktm/stack_watch.h>
 #include <ir0/ktm/klog.h>
 #include <asm/debug_trap.h>
@@ -190,6 +191,59 @@ static int is_user_exception_frame(uint64_t *stack)
     return ((stack[3] & 0x3U) == 0x3U);
 }
 
+/*
+ * Decode the CPU exception frame [int_no, err, RIP, CS, RFLAGS, RSP, SS]
+ * into the portable fault description.
+ */
+static void x86_fault_from_frame(struct ir0_fault *fault,
+				 uint64_t interrupt_number,
+				 const uint64_t *stack)
+{
+	memset(fault, 0, sizeof(*fault));
+	fault->hw_code = (unsigned int)interrupt_number;
+	fault->syndrome = stack[1];
+	fault->ip = (uintptr_t)stack[2];
+	fault->code_seg = stack[3];
+	fault->status = stack[4];
+	fault->sp = (uintptr_t)stack[5];
+	fault->stack_seg = stack[6];
+	switch (interrupt_number)
+	{
+	case 0:  /* #DE */
+	case 4:  /* #OF */
+	case 16: /* #MF */
+	case 19: /* #XM */
+		fault->kind = IR0_FAULT_ARITHMETIC;
+		break;
+	case 3:
+		fault->kind = IR0_FAULT_BREAKPOINT;
+		break;
+	case 6:
+		fault->kind = IR0_FAULT_ILLEGAL_INSN;
+		break;
+	case 8:
+		fault->kind = IR0_FAULT_DOUBLE;
+		break;
+	case 11: /* #NP */
+	case 13: /* #GP */
+		fault->kind = IR0_FAULT_PROTECTION;
+		break;
+	case 12:
+		fault->kind = IR0_FAULT_STACK_SEGMENT;
+		break;
+	case 14:
+		fault->kind = IR0_FAULT_PAGE;
+		fault->addr = read_fault_address();
+		break;
+	case 17:
+		fault->kind = IR0_FAULT_ALIGNMENT;
+		break;
+	default:
+		fault->kind = IR0_FAULT_OTHER;
+		break;
+	}
+}
+
 static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack);
 
 /*
@@ -341,17 +395,11 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 	 */
         if (is_user_exception_frame(stack) && current && signal_to_send != 0)
         {
-	    uintptr_t cr2 = 0;
+	    struct ir0_fault fault;
 
-	    if (interrupt_number == 14)
-		    cr2 = read_fault_address();
-	    ir0_log_user_fault_frame(
-		    (unsigned)interrupt_number, (unsigned long long)cr2,
-		    (unsigned long long)stack[1], (unsigned long long)stack[2],
-		    (unsigned long long)stack[3], (unsigned long long)stack[5],
-		    0, 0, 0,
-		    (unsigned)((uint32_t)current->task.pid),
-		    current->comm);
+	    x86_fault_from_frame(&fault, interrupt_number, stack);
+	    ir0_log_user_fault(&fault, (unsigned int)current->task.pid,
+			       current->comm);
             klog_notice_fmt("ISR",
                             "user_exception int=%llx -> sig=%x pid=%x rip=%llx cs=%llx err=%llx",
                             (unsigned long long)interrupt_number,
@@ -369,88 +417,31 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 	 * panicex(__func__) only names the reporter; FAULT FRAME is the cause.
 	 */
 	{
-		uint64_t fault_err = stack[1];
-		uint64_t fault_rip = stack[2];
-		uint64_t fault_cs = stack[3];
-		uint64_t fault_rflags = stack[4];
-		uint64_t fault_rsp = stack[5];
-		uint64_t fault_ss = stack[6];
-		int stack_overflow = 0;
+		struct ir0_fault fault;
+		int stack_overflow;
 		panic_level_t level = PANIC_KERNEL_BUG;
-		const char *vec_name = "CPU_EXCEPTION";
 		const char *msg;
 
-		if (fault_rsp >= IR0_KSTACK_VA_BASE)
-		{
-			uint64_t off = fault_rsp - IR0_KSTACK_VA_BASE;
-			uint64_t in_slot = off % (uint64_t)IR0_KSTACK_SLOT_SIZE;
-
-			/*
-			 * Bottom PAGE of each kstack slot is unmapped guard.
-			 * RSP there (or barely into the stack) means overflow
-			 * or failed exception delivery → typically escalates to #DF.
-			 */
-			if (in_slot < (uint64_t)PAGE_SIZE_4KB)
-				stack_overflow = 1;
-		}
-
-		switch ((unsigned)interrupt_number)
-		{
-		case 0:
-			vec_name = "DIVIDE_ERROR";
-			break;
-		case 6:
-			vec_name = "INVALID_OPCODE";
-			break;
-		case 8:
-			vec_name = "DOUBLE_FAULT";
+		x86_fault_from_frame(&fault, interrupt_number, stack);
+		/*
+		 * RSP in the unmapped guard page at the bottom of a kstack slot
+		 * means overflow or failed exception delivery (usually then #DF).
+		 */
+		stack_overflow = ir0_fault_sp_in_kstack_guard(fault.sp);
+		if (interrupt_number == 8)
 			level = stack_overflow ? PANIC_STACK_OVERFLOW
 					       : PANIC_HARDWARE_FAULT;
-			break;
-		case 13:
-			vec_name = "GENERAL_PROTECTION";
-			break;
-		case 14:
-			vec_name = "PAGE_FAULT";
-			break;
-		default:
-			break;
-		}
-		if (stack_overflow && interrupt_number != 8)
+		else if (stack_overflow)
 			level = PANIC_STACK_OVERFLOW;
-
-		print("[ISR64] int=");
-		print_hex64(interrupt_number);
-		print(" (");
-		print(vec_name);
-		print(") current=");
-		print_hex64((uint64_t)(uintptr_t)current);
-		print(" user=");
-		print_hex((uintptr_t)is_user_exception_frame(stack));
-		print(" cs=");
-		print_hex64(fault_cs);
-		print(" rip=");
-		print_hex64(fault_rip);
-		print(" err=");
-		print_hex64(fault_err);
-		print(" rsp=");
-		print_hex64(fault_rsp);
-		print("\n");
-
 		if (stack_overflow)
-		{
 			klog_notice_fmt("ISR",
 					"CLASSIFY KERNEL_STACK_OVERFLOW "
 					"fault_rsp=%llx in_kstack_va",
-					(unsigned long long)fault_rsp);
-		}
+					(unsigned long long)fault.sp);
 
-		panic_note_exception_frame(
-			(unsigned)interrupt_number, fault_err, fault_rip,
-			fault_cs, fault_rflags, fault_rsp, fault_ss,
-			stack_overflow,
-			current ? (uint32_t)current->task.pid : 0,
-			current ? current->comm : "(none)");
+		panic_note_fault(&fault,
+				 current ? (unsigned int)current->task.pid : 0,
+				 current ? current->comm : "(none)");
 
 		if (interrupt_number == 8)
 			msg = "DOUBLE FAULT — see FAULT FRAME (fault_rip/rsp); "
