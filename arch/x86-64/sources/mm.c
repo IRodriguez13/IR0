@@ -150,7 +150,7 @@ int mm_map_platform_supervisor(address_space_root_t root)
 {
 #if CONFIG_ENABLE_VBE
 	uint32_t off;
-	uint32_t fb_phys;
+	uint64_t fb_phys;
 	uint32_t fb_size;
 
 	if (root && video_backend_is_available())
@@ -163,7 +163,7 @@ int mm_map_platform_supervisor(address_space_root_t root)
 				fb_size = 4U * 1024U * 1024U;
 			for (off = 0; off < fb_size; off += PAGE_SIZE_4KB)
 			{
-				uint64_t address = (uint64_t)fb_phys + off;
+				uint64_t address = fb_phys + off;
 
 				if (map_page_in_directory(root, address, address,
 							  PAGE_PRESENT |

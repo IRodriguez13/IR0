@@ -26,13 +26,28 @@
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
 
-/* Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor, 2=no framebuffer, 3=bad_dims, 4=map_fail) */
+/*
+ * Largest framebuffer accepted from firmware. 8K at 32 bpp is ~127 MiB; a
+ * bigger descriptor is corrupt and would make us map unrelated memory.
+ */
+#define VBE_FB_MAX_SIZE (512ULL * 1024ULL * 1024ULL)
+
+/* Pre-mapped GRUB framebuffer window in the x86-64 boot page tables. */
+#define VBE_PREMAPPED_START 0xFD000000ULL
+#define VBE_PREMAPPED_END   0xFE000000ULL
+#define VBE_LOW_IDENTITY_END 0x2000000ULL
+
+/*
+ * Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor,
+ * 2=no framebuffer, 3=bad geometry or range, 4=map_fail).
+ */
 int vbe_fail_reason;
 
 /* Global VBE state: linear framebuffer described by the boot snapshot. */
 static struct {
     bool initialized;
-    uint32_t framebuffer_addr;
+    uint64_t framebuffer_addr;
+    uint32_t fb_size;
     uint32_t width;
     uint32_t height;
     uint32_t pitch;
@@ -62,11 +77,13 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
         return -1;
     }
 
-    uint32_t fb_phys = (uint32_t)(bfb->base & 0xFFFFFFFF);
+    uint64_t fb_phys = bfb->base;
     uint32_t pitch = bfb->pitch;
     uint32_t w = bfb->width;
     uint32_t h = bfb->height;
     uint8_t bpp = bfb->bpp;
+    uint64_t fb_size;
+    uint64_t fb_end;
 
     if (w == 0 || h == 0 || bpp == 0)
     {
@@ -75,35 +92,44 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     }
 
     /*
-     * Map framebuffer if above 32MB (boot only maps 0-32MB).
-     * 0xFD000000 is typical for GRUB. Map enough for full screen.
+     * Size the mapping in 64 bits: pitch * h and base + size used to wrap
+     * in 32 bits, which skipped the mapping or mapped the wrong frames.
      */
-    uint32_t fb_size = pitch * h;
+    fb_size = (uint64_t)pitch * h;
+    if ((uint64_t)pitch * 8U < (uint64_t)w * bpp || fb_size > VBE_FB_MAX_SIZE)
+    {
+        vbe_fail_reason = 3;
+        return -1;
+    }
     if (fb_size < 4096)
         fb_size = 4096;
-    fb_size = (fb_size + 4095) & ~4095;
+    fb_size = (fb_size + 4095U) & ~4095ULL;
+    fb_end = fb_phys + fb_size;
+    if (fb_end < fb_phys || (uint64_t)(uintptr_t)(fb_end - 1U) != fb_end - 1U)
+    {
+        vbe_fail_reason = 3;
+        return -1;
+    }
 
     /*
-     * Framebuffer above 32MB needs mapping. Boot tables pre-map 0xFD000000-0xFE000000 (4MB).
-     * If outside that range, use map_page (requires kmalloc for new page tables).
+     * Boot tables identity-map the low 32 MiB and the GRUB window; anything
+     * else needs map_page (which may allocate page tables).
      */
-    if (fb_phys >= 0x2000000)  /* Above 32MB */
+    if (fb_phys >= VBE_LOW_IDENTITY_END &&
+        (fb_phys < VBE_PREMAPPED_START || fb_end > VBE_PREMAPPED_END))
     {
-        uint32_t fb_end = fb_phys + fb_size;
-        if (fb_phys < 0xFD000000 || fb_end > 0xFE000000)
+        for (uint64_t off = 0; off < fb_size; off += 4096)
         {
-            for (uint32_t off = 0; off < fb_size; off += 4096)
+            if (map_page(fb_phys + off, fb_phys + off, PAGE_PRESENT | PAGE_RW) != 0)
             {
-                if (map_page(fb_phys + off, fb_phys + off, PAGE_PRESENT | PAGE_RW) != 0)
-                {
-                    vbe_fail_reason = 4;  /* map_page failed */
-                    return -1;
-                }
+                vbe_fail_reason = 4;  /* map_page failed */
+                return -1;
             }
         }
     }
 
     vbe_state.framebuffer_addr = fb_phys;
+    vbe_state.fb_size = (uint32_t)fb_size;
     vbe_state.width = w;
     vbe_state.height = h;
     vbe_state.pitch = pitch;
@@ -118,8 +144,7 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     vbe_state.fb = (uint8_t *)(uintptr_t)fb_phys;
     vbe_state.initialized = true;
 
-    resource_register_mmio((uint64_t)fb_phys, (uint64_t)fb_phys + fb_size - 1,
-                           "vbe_fb");
+    resource_register_mmio(fb_phys, fb_end - 1U, "vbe_fb");
 
     return 0;
 }
@@ -142,6 +167,7 @@ int vbe_init(void)
     vbe_state.width = 80;
     vbe_state.height = 25;
     vbe_state.pitch = 160;
+    vbe_state.fb_size = 4096;
     vbe_state.bpp = 16;
     vbe_state.fb = (uint8_t *)(uintptr_t)0xB8000;
     vbe_state.initialized = true;
@@ -223,7 +249,7 @@ uint8_t *vbe_get_fb(void)
     return vbe_state.initialized ? vbe_state.fb : NULL;
 }
 
-uint32_t vbe_get_fb_phys(void)
+uint64_t vbe_get_fb_phys(void)
 {
     return vbe_state.initialized ? vbe_state.framebuffer_addr : 0;
 }
@@ -232,10 +258,7 @@ uint32_t vbe_get_fb_size(void)
 {
     if (!vbe_state.initialized)
         return 0;
-    uint32_t size = vbe_state.pitch * vbe_state.height;
-    if (size < 4096)
-        size = 4096;
-    return (size + 4095) & ~4095;
+    return vbe_state.fb_size;
 }
 
 // Check if VBE is available

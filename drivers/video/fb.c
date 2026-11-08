@@ -144,8 +144,8 @@ void ir0_fb_boot_direct_draw(void)
     }
 
     klog_info_fmt("FB_BOOT",
-                  "phys=0x%x w=0x%x h=0x%x bpp=0x%x pitch=0x%x",
-                  (unsigned)info.fb_phys, (unsigned)info.width,
+                  "phys=0x%llx w=0x%x h=0x%x bpp=0x%x pitch=0x%x",
+                  (unsigned long long)info.fb_phys, (unsigned)info.width,
                   (unsigned)info.height, (unsigned)info.bpp,
                   (unsigned)info.pitch);
 

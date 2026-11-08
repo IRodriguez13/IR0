@@ -18,7 +18,7 @@ struct ir0_fb_info
     uint32_t pitch;
     uint32_t bpp;
     uint32_t fb_size;
-    uint32_t fb_phys;
+    uint64_t fb_phys;
 };
 
 bool ir0_fb_is_available(void);

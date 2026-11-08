@@ -95,6 +95,7 @@ extern void test_utsname_linux_abi(void);
 extern void test_fd_resource_contract(void);
 extern void test_pmm_banked_physical_layout(void);
 extern void test_boot_memory_normalization(void);
+extern void test_vbe_boot_framebuffer_bounds(void);
 extern void test_no_mmu_policy_contract(void);
 extern void test_cpu_topology_up_contract(void);
 extern void test_percpu_up_contract(void);
@@ -188,6 +189,7 @@ static void (*test_functions[])(void) = {
 	test_fd_resource_contract,
 	test_pmm_banked_physical_layout,
 	test_boot_memory_normalization,
+	test_vbe_boot_framebuffer_bounds,
 	test_no_mmu_policy_contract,
 	test_cpu_topology_up_contract,
 	test_percpu_up_contract,

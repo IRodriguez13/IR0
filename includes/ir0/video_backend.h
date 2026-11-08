@@ -25,5 +25,5 @@ int video_backend_fail_reason(void);
 bool video_backend_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp);
 uint8_t *video_backend_get_fb(void);
 uint32_t video_backend_get_pitch(void);
-uint32_t video_backend_get_fb_phys(void);
+uint64_t video_backend_get_fb_phys(void);
 uint32_t video_backend_get_fb_size(void);

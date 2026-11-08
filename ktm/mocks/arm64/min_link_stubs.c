@@ -117,7 +117,7 @@ bool __attribute__((weak)) video_backend_is_available(void)
 	return false;
 }
 
-uint32_t __attribute__((weak)) video_backend_get_fb_phys(void)
+uint64_t __attribute__((weak)) video_backend_get_fb_phys(void)
 {
 	return 0;
 }

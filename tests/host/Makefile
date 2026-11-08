@@ -66,6 +66,7 @@ TEST_SRCS += test_cpu_topology.c
 TEST_SRCS += test_percpu.c
 TEST_SRCS += test_tlb_sync.c
 TEST_SRCS += test_swap.c test_bcmgenet.c test_dma_irq.c
+TEST_SRCS += test_vbe_boot.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -89,6 +90,7 @@ KERNEL_HOST_OBJS += host_fd_resource.o
 KERNEL_HOST_OBJS += host_cpu_topology.o
 KERNEL_HOST_OBJS += host_percpu.o
 KERNEL_HOST_OBJS += host_tlb_sync.o
+KERNEL_HOST_OBJS += host_vbe.o
 KERNEL_HOST_OBJS += host_swap_header.o host_swap.o host_swap_reclaim.o host_dma.o host_irq_dispatch.o
 KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
 	host_ktm_video_mock.o host_ktm_audio_mock.o \
@@ -125,6 +127,9 @@ host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/mm/pmm.h
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<
 
 host_boot_memory.o: $(KERNEL_ROOT)/mm/boot_memory.c
+	$(KERNEL_CC)
+
+host_vbe.o: $(KERNEL_ROOT)/drivers/video/vbe.c
 	$(KERNEL_CC)
 
 host_alloc_policy.o: $(KERNEL_ROOT)/mm/alloc_policy.c

@@ -30,7 +30,7 @@ void vbe_print_at(uint32_t x, uint32_t y, const char *str, uint32_t fg,
 bool vbe_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp);
 uint32_t vbe_get_pitch(void);
 uint8_t *vbe_get_fb(void);
-uint32_t vbe_get_fb_phys(void);
+uint64_t vbe_get_fb_phys(void);
 uint32_t vbe_get_fb_size(void);
 bool vbe_is_available(void);
 uint32_t vbe_rgb_to_pixel(uint8_t r, uint8_t g, uint8_t b);

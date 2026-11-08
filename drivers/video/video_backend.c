@@ -91,7 +91,7 @@ uint32_t video_backend_get_pitch(void)
 #endif
 }
 
-uint32_t video_backend_get_fb_phys(void)
+uint64_t video_backend_get_fb_phys(void)
 {
 #if CONFIG_ENABLE_VBE
     return vbe_get_fb_phys();

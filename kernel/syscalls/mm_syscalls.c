@@ -564,7 +564,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       if (device_id == 15U)
       {
         struct ir0_fb_info fb_info;
-        uint32_t fb_phys;
+        uint64_t fb_phys;
         uint32_t fb_size;
 
         if (!ir0_fb_get_info(&fb_info))
@@ -634,7 +634,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
         {
           uintptr_t v = virt_addr + off;
-          uintptr_t p = (uintptr_t)fb_phys + off_u + off;
+          uint64_t p = fb_phys + off_u + off;
           if (map_page_in_directory(process_pgd(current_process), v, p, page_flags) != 0)
           {
             /* Rollback: unmap already mapped pages */
