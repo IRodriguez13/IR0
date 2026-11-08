@@ -112,3 +112,30 @@ void test_vbe_boot_framebuffer_bounds(void)
 
 	TEST_END();
 }
+
+/*
+ * Every process root must map the whole framebuffer: a 2560x1600x32 mode is
+ * 16000 KiB, and clipping the supervisor mapping to 4 MiB left the bottom
+ * three quarters of the screen unmapped once a user root was active.
+ */
+void test_vbe_supervisor_map_covers_framebuffer(void)
+{
+	static uint64_t root_storage[512];
+	struct ir0_boot_framebuffer fb;
+	const uint64_t base = 0xE0000000ULL;
+	const uint64_t size = 2560ULL * 4ULL * 1600ULL;
+
+	TEST_BEGIN("vbe_supervisor_map_covers_framebuffer");
+
+	fb = fb32(base, 2560, 1600, 2560 * 4);
+	ASSERT_EQ(vbe_init_from_boot(&fb), 0);
+	ASSERT_EQ((uint64_t)vbe_get_fb_size(), size);
+
+	g_root_map_last = 0;
+	g_root_map_calls = 0;
+	ASSERT_EQ(vbe_map_supervisor(root_storage), 0);
+	ASSERT_EQ(g_root_map_calls, (unsigned long)(size / 4096ULL));
+	ASSERT_EQ(g_root_map_last, base + size - 4096ULL);
+
+	TEST_END();
+}
