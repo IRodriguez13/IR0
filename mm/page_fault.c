@@ -250,11 +250,7 @@ void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	 * Linux wait status must be WIFSIGNALED(SIGSEGV), not exited(139).
 	 * Ash prints "Segmentation fault" only when exit_signal is set.
 	 */
-	if (!process_signal_default_kill(p, SIGSEGV))
-	{
-		p->exit_signal = SIGSEGV;
-		process_exit(0);
-	}
+	signal_exit_current(SIGSEGV);
 }
 
 void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)

@@ -164,6 +164,15 @@ int send_signal(int pid, int signal);
 int send_signal_pgrp(int32_t pgid, int signal);
 
 /**
+ * signal_exit_current - Terminate the current task by @sig (default action).
+ *
+ * The single exit path for a fatal signal: wait(2) reports
+ * WIFSIGNALED(@sig). Callers decide that no handler applies; this never
+ * returns.
+ */
+void signal_exit_current(int sig) __attribute__((noreturn));
+
+/**
  * handle_signals - Low-level pending-signal engine for current process.
  *
  * Subsystems that are about to return to userspace should use

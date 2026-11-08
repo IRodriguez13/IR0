@@ -46,6 +46,15 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 	return 1;
 }
 
+void signal_exit_current(int sig)
+{
+	process_t *self = current_process;
+
+	self->signal_pending &= ~SIGNAL_MASK(sig);
+	self->exit_signal = sig;
+	process_exit(0);
+}
+
 int process_signal_default_kill(process_t *dying, int sig)
 {
 	if (!dying || dying->state == PROCESS_ZOMBIE)
@@ -58,11 +67,7 @@ int process_signal_default_kill(process_t *dying, int sig)
 	 * away. A dead task must never reach an ISA userspace-return path.
 	 */
 	if (dying == current_process)
-	{
-		dying->signal_pending &= ~SIGNAL_MASK(sig);
-		dying->exit_signal = sig;
-		process_exit(0);
-	}
+		signal_exit_current(sig);
 
 	process_pre_zombie_teardown(dying);
 

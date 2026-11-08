@@ -55,11 +55,7 @@ void pf_kernel_fault(const struct page_fault_info *info, uint64_t fault_addr)
 			      (unsigned long long)info->ip);
 		if (current && current->mode == USER_MODE)
 		{
-			if (!process_signal_default_kill(current, SIGSEGV))
-			{
-				current->exit_signal = SIGSEGV;
-				process_exit(0);
-			}
+			signal_exit_current(SIGSEGV);
 		}
 		panic("Unhandled kernel page fault (uaccess, no user task)");
 	}

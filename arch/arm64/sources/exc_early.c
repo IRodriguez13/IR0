@@ -237,11 +237,7 @@ static void arm64_el0_fault_kill(uint64_t esr)
 
 	if (!p || p->mode != USER_MODE)
 		panic("arm64: EL0 exception without a user task");
-	if (!process_signal_default_kill(p, sig))
-	{
-		p->exit_signal = sig;
-		process_exit(0);
-	}
+	signal_exit_current(sig);
 }
 
 void arm64_exc_sync_lower(uint64_t *frame)

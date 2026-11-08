@@ -654,12 +654,7 @@ void handle_signals(void)
 			  (unsigned)((uint32_t)current->task.pid),
 			  current->comm[0] ? current->comm : "(none)");
 	    klog_print("USER_FAULT_FRAME\n");
-            if (!process_signal_default_kill(current, SIGSEGV))
-            {
-                current->signal_pending &= ~SIGNAL_MASK(SIGSEGV);
-                current->exit_signal = SIGSEGV;
-                process_exit(0);
-            }
+            signal_exit_current(SIGSEGV);
             return;
         }
     }
@@ -671,12 +666,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGFPE received (arithmetic error), terminating process");
 #endif
-            if (!process_signal_default_kill(current, SIGFPE))
-            {
-                current->signal_pending &= ~SIGNAL_MASK(SIGFPE);
-                current->exit_signal = SIGFPE;
-                process_exit(0);
-            }
+            signal_exit_current(SIGFPE);
             return;
         }
     }
@@ -688,12 +678,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGILL received (illegal instruction), terminating process");
 #endif
-            if (!process_signal_default_kill(current, SIGILL))
-            {
-                current->signal_pending &= ~SIGNAL_MASK(SIGILL);
-                current->exit_signal = SIGILL;
-                process_exit(0);
-            }
+            signal_exit_current(SIGILL);
             return;
         }
     }
@@ -705,12 +690,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGBUS received (bus error), terminating process");
 #endif
-            if (!process_signal_default_kill(current, SIGBUS))
-            {
-                current->signal_pending &= ~SIGNAL_MASK(SIGBUS);
-                current->exit_signal = SIGBUS;
-                process_exit(0);
-            }
+            signal_exit_current(SIGBUS);
             return;
         }
     }
@@ -740,10 +720,7 @@ void handle_signals(void)
                           "[SIGTERM_AUDIT] default terminate pid=0x%x exit_signal=15",
                           (unsigned)current->task.pid);
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGTERM);
-            current->exit_signal = SIGTERM;
-            process_exit(0);
-            return;
+            signal_exit_current(SIGTERM);
         }
     }
 
@@ -763,10 +740,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGINT received, terminating process");
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGINT);
-            current->exit_signal = SIGINT;
-            process_exit(0);
-            return;
+            signal_exit_current(SIGINT);
         }
         /* else: fall through to userspace handler delivery below */
     }
@@ -780,10 +754,7 @@ void handle_signals(void)
         else if (!signals_has_user_handler(current, SIGHUP))
         {
             klog_info("SIGNAL", "SIGHUP received, terminating process");
-            current->signal_pending &= ~SIGNAL_MASK(SIGHUP);
-            current->exit_signal = SIGHUP;
-            process_exit(0);
-            return;
+            signal_exit_current(SIGHUP);
         }
     }
 
@@ -798,10 +769,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
             klog_info("SIGNAL", "SIGQUIT received, terminating process");
 #endif
-            current->signal_pending &= ~SIGNAL_MASK(SIGQUIT);
-            current->exit_signal = SIGQUIT;
-            process_exit(0);
-            return;
+            signal_exit_current(SIGQUIT);
         }
     }
 
@@ -810,10 +778,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
         klog_info("SIGNAL", "SIGABRT received, terminating process");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGABRT);
-        current->exit_signal = SIGABRT;
-        process_exit(0);
-        return;
+        signal_exit_current(SIGABRT);
     }
 
     /*
@@ -834,10 +799,7 @@ void handle_signals(void)
         }
         else if (!signals_has_user_handler(current, SIGPIPE))
         {
-            current->signal_pending &= ~SIGNAL_MASK(SIGPIPE);
-            current->exit_signal = SIGPIPE;
-            process_exit(0);
-            return;
+            signal_exit_current(SIGPIPE);
         }
         /* else: fall through to userspace handler delivery below */
     }
@@ -958,10 +920,7 @@ void handle_signals(void)
                             if (sig == SIGSEGV || sig == SIGBUS ||
                                 sig == SIGILL || sig == SIGFPE)
                             {
-                                current->signal_pending &= ~SIGNAL_MASK(sig);
-                                current->exit_signal = sig;
-                                process_exit(0);
-                                return;
+                                signal_exit_current(sig);
                             }
                             continue;
                         }
@@ -1085,10 +1044,7 @@ void handle_signals(void)
                             if (sig == SIGSEGV || sig == SIGBUS ||
                                 sig == SIGILL || sig == SIGFPE)
                             {
-                                current->signal_pending &= ~SIGNAL_MASK(sig);
-                                current->exit_signal = sig;
-                                process_exit(0);
-                                return;
+                                signal_exit_current(sig);
                             }
                             continue;
                         }
@@ -1102,10 +1058,7 @@ void handle_signals(void)
                             if (sig == SIGSEGV || sig == SIGBUS ||
                                 sig == SIGILL || sig == SIGFPE)
                             {
-                                current->signal_pending &= ~SIGNAL_MASK(sig);
-                                current->exit_signal = sig;
-                                process_exit(0);
-                                return;
+                                signal_exit_current(sig);
                             }
                             continue;
                         }
