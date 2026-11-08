@@ -154,13 +154,6 @@ void __attribute__((weak)) alloc_init(void)
 {
 }
 
-void *__attribute__((weak)) all_realloc(void *p, size_t n)
-{
-	(void)p;
-	(void)n;
-	return NULL;
-}
-
 void *__attribute__((weak)) kmalloc_aligned_try(size_t n, size_t align)
 {
 	(void)n;

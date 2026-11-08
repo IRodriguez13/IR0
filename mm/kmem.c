@@ -38,7 +38,7 @@
  * __kmalloc_impl - Internal implementation of kernel memory allocation
  * Pure implementation without validation - called by checked wrapper
  */
-void *__kmalloc_impl(size_t size)
+static void *__kmalloc_impl(size_t size)
 {
 	if (unlikely(size == 0))
 		return NULL;
@@ -50,32 +50,17 @@ void *__kmalloc_impl(size_t size)
  * __kfree_impl - Internal implementation of kernel memory free
  * Pure implementation without validation - called by checked wrapper
  */
-void __kfree_impl(void *ptr)
+static void __kfree_impl(void *ptr)
 {
 	if (likely(ptr))
 		alloc_free(ptr);
 }
 
 /**
- * __krealloc_impl - Internal implementation of kernel memory reallocation
- * Pure implementation without validation - called by checked wrapper
- */
-void *__krealloc_impl(void *ptr, size_t size)
-{
-	if (unlikely(size == 0))
-	{
-		__kfree_impl(ptr);
-		return NULL;
-	}
-
-	return all_realloc(ptr, size);
-}
-
-/**
  * __kmalloc_aligned_impl - Internal implementation of aligned allocation
  * Pure implementation without validation - called by checked wrapper
  */
-void *__kmalloc_aligned_impl(size_t size, size_t alignment)
+static void *__kmalloc_aligned_impl(size_t size, size_t alignment)
 {
 	size_t total_size;
 	size_t padding;
@@ -111,7 +96,7 @@ void *__kmalloc_aligned_impl(size_t size, size_t alignment)
  * __kfree_aligned_impl - Internal implementation of aligned free
  * Pure implementation without validation - called by checked wrapper
  */
-void __kfree_aligned_impl(void *ptr)
+static void __kfree_aligned_impl(void *ptr)
 {
 	if (!ptr)
 		return;
@@ -200,38 +185,6 @@ void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 }
 
 /**
- * __krealloc_checked - Checked wrapper for krealloc with automatic debug tracking
- * Validates parameters and calls implementation
- */
-void *__krealloc_checked(void *ptr, size_t new_size, 
-                        const char *file, int line, const char *caller)
-{
-	if (unlikely(new_size == 0)) {
-		/* realloc(ptr, 0) is equivalent to free(ptr) */
-		__kfree_checked(ptr, file, line, caller);
-		return NULL;
-	}
-
-	if (unlikely(new_size > SIMPLE_HEAP_SIZE)) {
-		panicex("krealloc: new_size too large", PANIC_MEM, file, line, caller);
-	}
-
-	/* Validate existing pointer if not NULL */
-	if (ptr && unlikely((uintptr_t)ptr < SIMPLE_HEAP_START || 
-	                    (uintptr_t)ptr >= SIMPLE_HEAP_END)) {
-		panicex("krealloc: invalid pointer", PANIC_MEM, file, line, caller);
-	}
-
-	void *new_ptr = __krealloc_impl(ptr, new_size);
-
-	if (unlikely(!new_ptr)) {
-		panicex("krealloc: out of memory", PANIC_OUT_OF_MEMORY, file, line, caller);
-	}
-
-	return new_ptr;
-}
-
-/**
  * __kmalloc_aligned_checked - Checked wrapper for aligned allocation
  * Validates parameters and calls implementation
  */
@@ -297,20 +250,4 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 void heap_init(void)
 {
 	alloc_init();
-}
-
-/**
- * kmem_stats - print kernel memory statistics
- * Only active when DEBUG_MEMORY_STATS is enabled
- */
-void kmem_stats(void)
-{
-#if DEBUG_MEMORY_STATS
-	size_t total, used, allocs;
-	alloc_stats(&total, &used, &allocs);
-	/* Stats are printed by alloc_stats when DEBUG_MEMORY_STATS is on */
-#else
-	/* No-op when debug is disabled */
-	(void)0;
-#endif
 }

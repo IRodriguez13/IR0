@@ -365,36 +365,6 @@ void *alloc(size_t size)
 	return NULL; /* Out of memory */
 }
 
-void *all_realloc(void *ptr, size_t new_size)
-{
-	if (!ptr)
-		return alloc(new_size);
-
-	if (new_size == 0) {
-		alloc_free(ptr);
-		return NULL;
-	}
-
-	/* Get old block size */
-	block_header_t *old_block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
-	size_t old_size = old_block->size - sizeof(block_header_t) - sizeof(block_footer_t);
-
-	/* Allocate new block */
-	void *new_ptr = alloc(new_size);
-	if (!new_ptr)
-		return NULL;
-
-	/* Copy data (use smaller of old/new size) */
-	size_t copy_size = (old_size < new_size) ? old_size : new_size;
-	for (size_t i = 0; i < copy_size; i++)
-		((char *)new_ptr)[i] = ((char *)ptr)[i];
-
-	/* Free old block */
-	alloc_free(ptr);
-
-	return new_ptr;
-}
-
 /* FREE WITH O(1) BIDIRECTIONAL COALESCING                                   */
 
 void alloc_free(void *ptr)
