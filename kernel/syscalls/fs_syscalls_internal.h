@@ -52,7 +52,6 @@
 #include <d1_12_read_diag.h>
 #include <ir0/sysfs.h>
 #include <ir0/uio.h>
-#include <ir0/validation.h>
 #include <ir0/utimens.h>
 #include <ir0/vfs.h>
 #include <ir0/elf_loader.h>

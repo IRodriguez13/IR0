@@ -158,7 +158,7 @@ int proc_ps_read(char *buf, size_t count)
 	int n;
 	int i;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -489,7 +489,7 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	const char *state_paren = "unknown";
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -555,7 +555,7 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 	uint64_t rss = 0;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -629,7 +629,7 @@ int proc_pid_maps_read(char *buf, size_t count, pid_t pid)
 	int len = 0;
 	int n;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -699,7 +699,7 @@ int proc_pid_statm_read(char *buf, size_t count, pid_t pid)
 	uint64_t rss = 0;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -744,7 +744,7 @@ int proc_pid_oom_score_adj_read(char *buf, size_t count, pid_t pid)
 	proc_fs_snap_t snap;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -832,7 +832,7 @@ int proc_pid_oom_score_read(char *buf, size_t count, pid_t pid)
 	uint64_t score;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -942,7 +942,7 @@ int proc_pid_fd_link_target_read(char *buf, size_t count, pid_t pid, int fd_num)
 	proc_fd_snap_t snap;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 
 	if (!proc_fd_snap_acquire(pid, &snap))
@@ -970,7 +970,7 @@ int proc_pid_exe_link_target_read(char *buf, size_t count, pid_t pid)
 	unsigned long irqf;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 
 	irqf = irq_save();
@@ -1065,7 +1065,7 @@ int proc_pid_environ_read(char *buf, size_t count, pid_t pid)
 	unsigned long irqf;
 	int live_len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 
 	memset(buf, 0, count);
@@ -1171,7 +1171,7 @@ int proc_cmdline_read(char *buf, size_t count, pid_t pid)
 	proc_fs_snap_t snap;
 	size_t n;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 
 	memset(buf, 0, count);

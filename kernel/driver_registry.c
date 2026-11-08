@@ -28,7 +28,6 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/klog.h>
-#include <ir0/validation.h>
 #include <string.h>
 #include <stdbool.h>
 
@@ -452,7 +451,7 @@ void ir0_driver_boot_emit_probe_results(void)
  */
 int ir0_driver_list_to_buffer(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;

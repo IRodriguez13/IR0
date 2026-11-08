@@ -39,7 +39,6 @@
 #include <ir0/boot_memory.h>
 #include <ir0/arch_cpu.h>
 #include <fs/vfs.h>
-#include <ir0/validation.h>
 #include <ir0/copy_user.h>
 #include <ir0/resource_registry.h>
 #include <ir0/pseudo_fs.h>

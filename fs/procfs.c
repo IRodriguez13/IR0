@@ -260,7 +260,7 @@ int proc_read(int fd, char *buf, size_t count, off_t offset)
 /* Write to /proc — syscall uses fd_table binds; legacy global fds retired. */
 int proc_write(int fd, const char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -EINVAL;
 
     if (count == 0)

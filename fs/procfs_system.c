@@ -32,7 +32,7 @@ int proc_meminfo_read(char *buf, size_t count)
 	uint64_t free_kb;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -109,7 +109,7 @@ int proc_uptime_read(char *buf, size_t count)
 	unsigned idle_frac;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -160,7 +160,7 @@ int proc_stat_read(char *buf, size_t count)
 	time_t btime;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -225,7 +225,7 @@ int proc_version_read(char *buf, size_t count)
 {
     char uname_ver[64];
 
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     ir0_utsname_fill_version(uname_ver, sizeof(uname_ver));
@@ -247,7 +247,7 @@ int proc_boot_cmdline_read(char *buf, size_t count)
     size_t n;
     size_t i;
 
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
 
     cmdline = boot_memory_cmdline();
@@ -311,7 +311,7 @@ static void proc_cpuinfo_flags_from_cpuid(uint32_t edx, uint32_t ecx, char *out,
 /* Generate /proc/cpuinfo content - all fields from silicon (CPUID) where available */
 int proc_cpuinfo_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
 
     memset(buf, 0, count);
@@ -384,7 +384,7 @@ int proc_loadavg_read(char *buf, size_t count)
 	int last_pid = 0;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -471,7 +471,7 @@ static void proc_format_size(uint64_t sectors, char *out, size_t out_size, int *
  */
 int proc_blockdevices_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
@@ -539,7 +539,7 @@ int proc_blockdevices_read(char *buf, size_t count)
 /* /proc/filesystems: raw data only. One line per fs: type\tname (type=nodev or empty) */
 int proc_filesystems_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
@@ -572,7 +572,7 @@ int proc_filesystems_read(char *buf, size_t count)
 /* /proc/partitions: raw data only. One line per device: major\tminor\tblocks_1k\tname */
 int proc_partitions_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
@@ -619,7 +619,7 @@ int proc_partitions_read(char *buf, size_t count)
 /* /proc/mounts: one line per VFS mount — device path fstype ro|rw 0 0 */
 int proc_mounts_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
@@ -694,7 +694,7 @@ static int irq_collect_cb(uint8_t irq, const char *name, void *ctx)
 /* /proc/interrupts: raw data only. One line per IRQ: irq\tname */
 int proc_interrupts_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     struct irq_collect_ctx ctx = { .buf = buf, .count = count, .off = 0, .n = 0 };
@@ -758,7 +758,7 @@ int proc_iomem_read(char *buf, size_t count)
 	uint64_t ram_end_incl;
 	int n;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -798,7 +798,7 @@ int proc_kmsg_read(char *buf, size_t count)
 {
     int n;
 
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     n = klog_read_records(buf, count);
@@ -840,7 +840,7 @@ static int ioport_cb(uint16_t start, uint16_t end, const char *name, void *ctx)
 
 int proc_ioports_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     struct ioport_ctx ctx = { .buf = buf, .count = count, .off = 0 };
@@ -859,7 +859,7 @@ int proc_modules_read(char *buf, size_t count)
 /* /proc/timer_list: raw data only. One line: timer\tname\tfrequency\ttick_count\tuptime_sec\tuptime_ms */
 int proc_timer_list_read(char *buf, size_t count)
 {
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     clock_stats_t stats;

@@ -9,7 +9,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/boot_firmware_sysfs.h>
-#include <ir0/validation.h>
 
 #include <string.h>
 
@@ -46,7 +45,7 @@ int sys_firmware_ir0_protocol_read_reg(char *buf, size_t count)
 	const struct ir0_boot_firmware_sysfs_snapshot *s;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	s = boot_fw_snap_get();
@@ -66,7 +65,7 @@ int sys_firmware_ir0_bootloader_read_reg(char *buf, size_t count)
 	const struct ir0_boot_firmware_sysfs_snapshot *s;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	s = boot_fw_snap_get();
@@ -86,7 +85,7 @@ int sys_firmware_ir0_cmdline_read_reg(char *buf, size_t count)
 	const struct ir0_boot_firmware_sysfs_snapshot *s;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	s = boot_fw_snap_get();
@@ -111,7 +110,7 @@ int sys_firmware_ir0_framebuffer_read_reg(char *buf, size_t count)
 	const struct ir0_boot_firmware_sysfs_snapshot *s;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	s = boot_fw_snap_get();
@@ -132,7 +131,7 @@ int sys_firmware_ir0_boot_detail_read_reg(char *buf, size_t count)
 	const struct ir0_boot_firmware_sysfs_snapshot *s;
 	int len;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	s = boot_fw_snap_get();

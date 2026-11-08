@@ -18,7 +18,7 @@
 int proc_netinfo_read(char *buf, size_t count)
 {
 #if CONFIG_ENABLE_NETWORKING
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     struct net_device *dev = net_get_devices();
@@ -47,7 +47,7 @@ int proc_netinfo_read(char *buf, size_t count)
     if (off < count) buf[off] = '\0';
     return (int)off;
 #else
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     return 0;
@@ -61,7 +61,7 @@ int proc_netinfo_read(char *buf, size_t count)
 int proc_net_dev_read(char *buf, size_t count)
 {
 #if CONFIG_ENABLE_NETWORKING
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     size_t off = 0;
@@ -134,7 +134,7 @@ int proc_net_dev_read(char *buf, size_t count)
 
     return (int)off;
 #else
-    if (VALIDATE_BUFFER(buf, count) != 0)
+    if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
     return 0;
@@ -358,7 +358,7 @@ static int proc_net_socktable_start(char *buf, size_t count, const char *header,
 {
 	int n;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	memset(c, 0, sizeof(*c));
@@ -443,7 +443,7 @@ int proc_net_route_read(char *buf, size_t count)
 	int n;
 	int walked = 0;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
@@ -501,7 +501,7 @@ int proc_net_route_read(char *buf, size_t count)
 
 	return (int)ctx.off;
 #else
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	return 0;

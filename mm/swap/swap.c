@@ -13,7 +13,6 @@
 #include <ir0/kmem.h>
 #include <ir0/reclaim.h>
 #include <ir0/swap.h>
-#include <ir0/validation.h>
 #include <string.h>
 
 static struct ir0_swap_area g_areas[IR0_SWAP_MAX_AREAS];
@@ -388,7 +387,7 @@ int ir0_swap_format_proc(char *buf, size_t count)
 	size_t off;
 	unsigned i;
 
-	if (VALIDATE_BUFFER(buf, count) != 0)
+	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 	if (count <= sizeof(hdr))
