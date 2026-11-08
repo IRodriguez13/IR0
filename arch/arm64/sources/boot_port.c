@@ -116,6 +116,7 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 	{
 		snapshot->firmware.base = boot->fdt_pa;
 		snapshot->firmware.size = boot->fdt_size;
+		snapshot->dtb = snapshot->firmware;
 	}
 	if (boot->initrd_start != 0 && boot->initrd_end > boot->initrd_start)
 	{
@@ -139,7 +140,8 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 		    boot->bootargs[i] != '\0'; i++)
 		snapshot->cmdline[i] = boot->bootargs[i];
 	snapshot->cmdline[i] = '\0';
-	snapshot->synthetic_memory = !boot->fdt_valid;
+	snapshot->memory_map = boot->fdt_valid ? IR0_BOOT_MEMORY_MAP_FIRMWARE :
+					   IR0_BOOT_MEMORY_MAP_BUILTIN;
 	snapshot->valid = 1;
 	if (boot->fdt_valid)
 		ir0_boot_smoke("ARM64_DTB_USABLE_MEMORY_OK");

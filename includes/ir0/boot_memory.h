@@ -44,6 +44,14 @@ struct ir0_boot_framebuffer
 	uint8_t blue_size;
 };
 
+/* Where the usable-RAM inventory in the snapshot came from. */
+enum ir0_boot_memory_map
+{
+	IR0_BOOT_MEMORY_MAP_BUILTIN = 0, /* no firmware data: built-in range */
+	IR0_BOOT_MEMORY_MAP_FIRMWARE_SIZE, /* firmware reported only a size */
+	IR0_BOOT_MEMORY_MAP_FIRMWARE, /* firmware map (Multiboot mmap, DTB) */
+};
+
 struct ir0_boot_snapshot
 {
 	struct ir0_phys_range usable[IR0_BOOT_MEMORY_MAX_BANKS];
@@ -58,9 +66,11 @@ struct ir0_boot_snapshot
 	 * (Linux: boot_params.acpi_rsdp_addr); 0 when the platform has none.
 	 */
 	uint64_t acpi_rsdp;
+	/* Flattened devicetree handed over by the firmware; size 0 if none. */
+	struct ir0_phys_range dtb;
+	enum ir0_boot_memory_map memory_map;
 	char cmdline[IR0_BOOT_CMDLINE_MAX];
 	int valid;
-	int synthetic_memory;
 };
 
 int boot_memory_snapshot_init(uintptr_t firmware_handle);

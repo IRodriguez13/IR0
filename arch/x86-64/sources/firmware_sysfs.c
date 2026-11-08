@@ -3,13 +3,12 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: firmware_sysfs.c
- * Description: x86_64 Multiboot handoff snapshot for sysfs firmware ir0 nodes.
+ * Description: x86_64 Multiboot-only fields for the sysfs firmware ir0 nodes.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/boot_firmware_sysfs.h>
-#include <ir0/boot_memory.h>
 #include <ir0/boot_params.h>
 #include <ir0/multiboot.h>
 
@@ -43,60 +42,28 @@ static size_t copy_phys_cstr_trunc(uint32_t phys, char *dst, size_t dst_sz,
 	return i;
 }
 
+/* Multiboot 1 only fields: loader name and the raw info block summary. */
 void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snapshot *snap)
 {
 	const struct multiboot_info *mb = NULL;
 	const struct ir0_boot_params *params;
-	const struct ir0_boot_snapshot *snapshot;
-	uint32_t addr_lo;
 
 	if (!snap)
 		return;
 
-	snapshot = boot_memory_snapshot();
 	params = get_boot_params();
 	if (params->protocol == IR0_BOOT_PROTOCOL_MULTIBOOT1 && params->info)
 		mb = (const struct multiboot_info *)(uintptr_t)params->info;
-	if (!mb || !snapshot)
+	if (!mb)
 	{
-		snprintf(snap->protocol, sizeof(snap->protocol), "multiboot1");
 		snprintf(snap->boot_detail, sizeof(snap->boot_detail),
 			 "multiboot_valid=0\nreason=no_info_pointer\n");
 		return;
 	}
 
-	snap->multiboot_valid = 1;
-	snap->multiboot_flags = (uint64_t)mb->flags;
-	snprintf(snap->protocol, sizeof(snap->protocol), "multiboot1");
-
 	if ((mb->flags & MULTIBOOT_FLAG_LOADER_NAME) && mb->boot_loader_name)
 		copy_phys_cstr_trunc(mb->boot_loader_name, snap->bootloader,
 				    sizeof(snap->bootloader), 255);
-	else
-		snprintf(snap->bootloader, sizeof(snap->bootloader), "unavailable");
-
-	snprintf(snap->cmdline, sizeof(snap->cmdline), "%s",
-		 snapshot->cmdline);
-
-	if (mb->flags & MULTIBOOT_FLAG_FB)
-	{
-		uint64_t fb_pa;
-
-		fb_pa = mb->framebuffer_addr;
-		addr_lo = (uint32_t)(fb_pa & 0xFFFFFFFFu);
-		(void)addr_lo;
-		snprintf(snap->framebuffer, sizeof(snap->framebuffer),
-			 "addr=0x%llx pitch=%u width=%u height=%u bpp=%u type=%u",
-			 (unsigned long long)fb_pa, (unsigned)mb->framebuffer_pitch,
-			 (unsigned)mb->framebuffer_width,
-			 (unsigned)mb->framebuffer_height,
-			 (unsigned)mb->framebuffer_bpp,
-			 (unsigned)mb->framebuffer_type);
-	}
-	else
-	{
-		snprintf(snap->framebuffer, sizeof(snap->framebuffer), "unavailable");
-	}
 
 	snprintf(snap->boot_detail, sizeof(snap->boot_detail),
 		 "multiboot_valid=1\n"

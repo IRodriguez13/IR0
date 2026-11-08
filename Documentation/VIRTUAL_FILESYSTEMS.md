@@ -241,7 +241,7 @@ and backed by handlers in `fs/sysfs.c`.
 - `/sys/class/net` and `/sys/class/net/<iface>/...` (dynamic per interface)
 - `/sys/class/bluetooth/hci0/{address,state}`,
   `/sys/class/bluetooth/{topology/neighbors,sessions}`
-- `/sys/firmware/ir0/{protocol,bootloader,cmdline,framebuffer,boot_detail}` —
+- `/sys/firmware/ir0/{protocol,bootloader,cmdline,memory_map,framebuffer,acpi_rsdp,dtb,boot_detail}` —
   boot/firmware snapshot (see [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md))
 
 ### Notes

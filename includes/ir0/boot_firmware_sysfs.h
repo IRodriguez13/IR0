@@ -21,20 +21,27 @@ extern "C" {
 #define IR0_BOOT_FW_SYSFS_LINE  512U
 #define IR0_BOOT_FW_SYSFS_DETAIL 1024U
 
+/*
+ * Text of each /sys/firmware/ir0 node. Common code fills the ISA-neutral
+ * fields from the typed boot record and the boot snapshot; the architecture
+ * adds only what its protocol alone knows (bootloader, boot_detail). An
+ * empty field reads as "unavailable" (cmdline: an empty line).
+ */
 struct ir0_boot_firmware_sysfs_snapshot
 {
 	char protocol[IR0_BOOT_FW_SYSFS_STR];
 	char bootloader[IR0_BOOT_FW_SYSFS_STR];
 	char cmdline[IR0_BOOT_FW_SYSFS_STR];
+	char memory_map[IR0_BOOT_FW_SYSFS_STR];
 	char framebuffer[IR0_BOOT_FW_SYSFS_LINE];
+	char acpi_rsdp[IR0_BOOT_FW_SYSFS_STR];
+	char dtb[IR0_BOOT_FW_SYSFS_STR];
 	char boot_detail[IR0_BOOT_FW_SYSFS_DETAIL];
-	uint64_t multiboot_flags;
-	int multiboot_valid;
 };
 
 /*
- * Architecture fills @snap from firmware handoff (Multiboot pointer, DTB parse, …).
- * Default weak implementation leaves portable defaults ("unknown", empty strings).
+ * Architecture adds the protocol-specific fields (bootloader name,
+ * boot_detail lines). Default weak implementation leaves them empty.
  */
 void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snapshot *snap);
 

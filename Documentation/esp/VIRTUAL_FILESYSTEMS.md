@@ -71,7 +71,7 @@ Los dirents numéricos (PID) van **antes** que el registry estático porque
 
 ### Endpoints comunes (resumen; canónico en inglés)
 
-- `/sys/firmware/ir0/{protocol,bootloader,cmdline,framebuffer,boot_detail}` —
+- `/sys/firmware/ir0/{protocol,bootloader,cmdline,memory_map,framebuffer,acpi_rsdp,dtb,boot_detail}` —
   instantánea firmware/arranque (ver [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md))
 
 ### Notas

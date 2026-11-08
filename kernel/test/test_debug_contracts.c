@@ -195,20 +195,45 @@ void ktest_sysfs_hostname_contract(void)
 
 void ktest_sysfs_firmware_ir0_contract(void)
 {
+	const struct ir0_boot_snapshot *boot;
 	char pbuf[128];
+	char lbuf[512];
 	char dbuf[1536];
 
 	KTEST_BEGIN("sysfs_firmware_ir0_contract");
 
 	ir0_boot_firmware_sysfs_init();
+	boot = boot_memory_snapshot();
+	KASSERT(boot != NULL);
 
+	/* Every ISA entry hands a typed protocol; none boots as unknown. */
 	KASSERT_GT(sys_firmware_ir0_protocol_read_reg(pbuf, sizeof(pbuf)), 0);
-	KASSERT(contains_text(pbuf, "unknown") || contains_text(pbuf, "multiboot1") ||
-		contains_text(pbuf, "fdt") || contains_text(pbuf, "dtb_invalid"));
+	KASSERT(strcmp(pbuf, "multiboot1\n") == 0 || strcmp(pbuf, "fdt\n") == 0);
+
+	KASSERT_GT(sys_firmware_ir0_memory_map_read_reg(pbuf, sizeof(pbuf)), 0);
+	KASSERT(strcmp(pbuf, "firmware\n") == 0 ||
+		strcmp(pbuf, "firmware-size\n") == 0 ||
+		strcmp(pbuf, "builtin\n") == 0);
+
+	/* The cmdline node mirrors the snapshot cmdline the kernel parsed. */
+	KASSERT_GT(sys_firmware_ir0_cmdline_read_reg(lbuf, sizeof(lbuf)), 0);
+	KASSERT(strncmp(lbuf, boot_memory_cmdline(),
+			strlen(boot_memory_cmdline())) == 0);
+	KASSERT(lbuf[strlen(boot_memory_cmdline())] == '\n');
+
+	KASSERT_GT(sys_firmware_ir0_acpi_rsdp_read_reg(pbuf, sizeof(pbuf)), 0);
+	KASSERT(boot->acpi_rsdp != 0 ? contains_text(pbuf, "0x") :
+		strcmp(pbuf, "unavailable\n") == 0);
+	KASSERT_GT(sys_firmware_ir0_dtb_read_reg(lbuf, sizeof(lbuf)), 0);
+	KASSERT(boot->dtb.size != 0 ? contains_text(lbuf, "addr=0x") :
+		strcmp(lbuf, "unavailable\n") == 0);
+
+	KASSERT_GT(sys_firmware_ir0_framebuffer_read_reg(lbuf, sizeof(lbuf)), 0);
+	if (boot->framebuffer.width != 0)
+		KASSERT(contains_text(lbuf, "width="));
 
 	KASSERT_GT(sys_firmware_ir0_boot_detail_read_reg(dbuf, sizeof(dbuf)), 0);
-	KASSERT(contains_text(dbuf, "unavailable") ||
-		contains_text(dbuf, "multiboot_valid") ||
+	KASSERT(contains_text(dbuf, "multiboot_valid") ||
 		contains_text(dbuf, "fdt_valid"));
 
 	KTEST_END();

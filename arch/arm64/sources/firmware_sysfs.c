@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: firmware_sysfs.c
- * Description: ARM64 firmware/DTB snapshot for the IR0 firmware sysfs node.
+ * Description: ARM64 DTB-only fields for the IR0 firmware sysfs nodes.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -73,30 +73,9 @@ void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snaps
 
 	b = arm64_board_boot_info();
 	if (!b)
-	{
-		snprintf(snap->protocol, sizeof(snap->protocol), "unknown");
 		return;
-	}
-
-	if (b->fdt_valid)
-		snprintf(snap->protocol, sizeof(snap->protocol), "fdt");
-	else
-		snprintf(snap->protocol, sizeof(snap->protocol), "dtb_invalid");
 
 	snprintf(snap->bootloader, sizeof(snap->bootloader), "firmware-dtb-handoff");
-	snprintf(snap->cmdline, sizeof(snap->cmdline), "%s", b->bootargs);
-
-	if (b->framebuffer.size != 0U)
-	{
-		snprintf(snap->framebuffer, sizeof(snap->framebuffer),
-			 "addr=0x%llx size=0x%llx",
-			 (unsigned long long)b->framebuffer.base,
-			 (unsigned long long)b->framebuffer.size);
-	}
-	else
-	{
-		snprintf(snap->framebuffer, sizeof(snap->framebuffer), "unavailable");
-	}
 
 	snprintf(snap->boot_detail, sizeof(snap->boot_detail),
 		 "fdt_valid=%d\n"

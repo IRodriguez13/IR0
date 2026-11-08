@@ -261,20 +261,21 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 	{
 		if (x86_snapshot_parse_mmap(snapshot, info) != 0)
 			return -EINVAL;
+		snapshot->memory_map = IR0_BOOT_MEMORY_MAP_FIRMWARE;
 	}
 	else if ((info->flags & MULTIBOOT_FLAG_MEM) && info->mem_upper != 0)
 	{
 		if (x86_snapshot_add_usable(snapshot, 0x100000U,
 					    (uint64_t)info->mem_upper * 1024U) != 0)
 			return -EINVAL;
-		snapshot->synthetic_memory = 1;
+		snapshot->memory_map = IR0_BOOT_MEMORY_MAP_FIRMWARE_SIZE;
 	}
 	else
 	{
 		if (x86_snapshot_add_usable(snapshot, PMM_PHYS_BASE,
 					    PMM_PHYS_SIZE) != 0)
 			return -EINVAL;
-		snapshot->synthetic_memory = 1;
+		snapshot->memory_map = IR0_BOOT_MEMORY_MAP_BUILTIN;
 	}
 
 	if ((info->flags & MULTIBOOT_FLAG_CMDLINE) && info->cmdline != 0 &&
