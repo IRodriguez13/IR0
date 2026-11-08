@@ -31,6 +31,11 @@ def main() -> int:
     parser.add_argument("--log", required=True)
     parser.add_argument("--timeout", type=int, default=90)
     parser.add_argument(
+        "--expected-panic",
+        action="store_true",
+        help="The selftest ends in a kernel panic (allow panic text on x86_64)",
+    )
+    parser.add_argument(
         "--done",
         default="",
         help="KTAP success tag (default from binary basename)",
@@ -100,6 +105,7 @@ def main() -> int:
                     "12",
                     "--mem",
                     "256M",
+                    *(["--expected-panic"] if args.expected_panic else []),
                     "--done",
                     done_tag,
                     "--",

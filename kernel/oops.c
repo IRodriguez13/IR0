@@ -214,8 +214,16 @@ static const char *panic_level_names[] =
         "ASSERTION FAILED",
         "MEMORY ERROR",
         "TESTING",
-        "RUNNING OUT PROCESS"
+        "RUNNING OUT PROCESS",
+        "TESTING NESTED FAULT"
     };
+
+static const char *panic_level_name(panic_level_t level)
+{
+    if ((unsigned)level >= sizeof(panic_level_names) / sizeof(panic_level_names[0]))
+        return "UNKNOWN";
+    return panic_level_names[level];
+}
 
 /* Double panic guard - prevents infinite recursion if panic handler itself fails */
 static volatile int in_panic = 0;
@@ -301,7 +309,7 @@ static void panic_print_final_screen(const char *message, panic_level_t level,
 	snprintf(linebuf, sizeof(linebuf), "Origin: %s:%d (%s)\n",
 		 file ? file : "unknown", line, caller ? caller : "unknown");
 	print_screen_only(linebuf);
-	snprintf(linebuf, sizeof(linebuf), "Level: %s\n", panic_level_names[level]);
+	snprintf(linebuf, sizeof(linebuf), "Level: %s\n", panic_level_name(level));
 	print_screen_only(linebuf);
 	snprintf(linebuf, sizeof(linebuf), "Uptime: %s\n\n", uptime);
 	print_screen_only(linebuf);
@@ -366,6 +374,15 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
         klog_smoke("PANICEX_VGA_SERIAL_OK");
     }
 
+    /*
+     * Test only: take a kernel page fault while panicking so the nested
+     * path is exercised (Linux lkdtm style). The address is in the
+     * unmapped upper half on x86-64 and in the disabled TTBR1 range on
+     * ARM64, so both ISAs see a kernel-mode fault on a kernel address.
+     */
+    if (level == PANIC_TEST_NESTED_FAULT)
+        *(volatile uint64_t *)(uintptr_t)0xFFFF800000000000ULL = 0;
+
     /* Disable interrupts immediately - we can't handle any more events safely.
      * The system is in an inconsistent state and any interrupt could cause
      * further corruption or triple faults.
@@ -416,7 +433,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 	klog_print(" s\n");
     }
     klog_print("Panic Level: ");
-    klog_print(panic_level_names[level]);
+    klog_print(panic_level_name(level));
     klog_print("\n");
     /*
      * FAULT FRAME is the CPU exception site (cause). Source/Caller below are

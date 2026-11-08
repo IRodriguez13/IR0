@@ -191,7 +191,8 @@ int sys_kernel_panic_read_reg(char *buf, size_t count)
 /**
  * sys_kernel_panic_write_reg - force a kernel panic on demand.
  *
- * Any non-empty write triggers panicex() at TESTING level. This is the only
+ * Any non-empty write triggers panicex() at TESTING level; "nested" also
+ * faults inside the panic path. This is the only
  * on-demand panic path (no NMI handler, no boot self-test), so it also lets
  * smokes exercise the panic banner / FB screen path. Never returns.
  */
@@ -200,6 +201,10 @@ int sys_kernel_panic_write_reg(const char *buf, size_t count)
     if (!buf || count == 0)
         return -EINVAL;
 
+    /* "nested": also fault inside the panic path (nested-fault selftest). */
+    if (count >= 6 && memcmp(buf, "nested", 6) == 0)
+        panicex("forced nested-fault panic via /sys/kernel/panic",
+                PANIC_TEST_NESTED_FAULT, __FILE__, __LINE__, __func__);
     panicex("forced panic via /sys/kernel/panic", TESTING,
             __FILE__, __LINE__, __func__);
     return (int)count; /* not reached */

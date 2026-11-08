@@ -83,3 +83,36 @@ ir0-selftest-fault-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_FAULT)
 	@echo "✓ ir0-selftest-fault-arm64"
 
 ir0-selftest-fault: ir0-selftest-fault-x86 ir0-selftest-fault-arm64
+
+IR0_SELFTEST_X86_PANIC_NESTED := $(KERNEL_ROOT)/build/selftests/x86_64/panic_nested
+IR0_SELFTEST_ARM64_PANIC_NESTED := $(KERNEL_ROOT)/build/selftests/arm64/panic_nested
+
+.PHONY: ir0-selftest-panic-nested-x86 ir0-selftest-panic-nested-arm64 \
+	ir0-selftest-panic-nested
+
+$(IR0_SELFTEST_X86_PANIC_NESTED): tests/selftests/kernel/panic_nested.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 panic_nested
+
+$(IR0_SELFTEST_ARM64_PANIC_NESTED): tests/selftests/kernel/panic_nested.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 panic_nested
+
+# A fault taken while panicking must end in panicex's nested branch.
+ir0-selftest-panic-nested-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PANIC_NESTED)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 --expected-panic \
+		--binary $(IR0_SELFTEST_X86_PANIC_NESTED) \
+		--done PANICEX_DOUBLE_FAULT_SAFE_OK \
+		--log $(HOST_TMP)/ir0-selftest-x86-panic-nested.log
+	@echo "✓ ir0-selftest-panic-nested-x86"
+
+ir0-selftest-panic-nested-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PANIC_NESTED)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 --expected-panic \
+		--binary $(IR0_SELFTEST_ARM64_PANIC_NESTED) \
+		--done PANICEX_DOUBLE_FAULT_SAFE_OK \
+		--log $(HOST_TMP)/ir0-selftest-arm64-panic-nested.log
+	@echo "✓ ir0-selftest-panic-nested-arm64"
+
+ir0-selftest-panic-nested: ir0-selftest-panic-nested-x86 ir0-selftest-panic-nested-arm64

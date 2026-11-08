@@ -23,7 +23,9 @@ typedef enum
     PANIC_ASSERT_FAILED = 4,   /* Assertion failure */
     PANIC_MEM = 5,             /* Memory operation error (null ptr, invalid access, etc.) */
     TESTING = 6,
-    RUNNING_OUT_PROCESS = 7
+    RUNNING_OUT_PROCESS = 7,
+    /* Test only (/sys/kernel/panic "nested"): fault inside panicex. */
+    PANIC_TEST_NESTED_FAULT = 8
 } panic_level_t;
 
 #ifdef __cplusplus

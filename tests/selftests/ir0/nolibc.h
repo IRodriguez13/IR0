@@ -13,6 +13,7 @@
 
 #define AT_FDCWD		-100
 #define O_RDONLY		0
+#define O_WRONLY		1
 #define SYS_write		64
 #define SYS_close		57
 #define SYS_exit		93
@@ -73,6 +74,11 @@ static long nolibc_call(long nr, long a, long b, long c, long d, ...)
 static ssize_t write(int fd, const void *buf, size_t count)
 {
 	return (ssize_t)syscall(SYS_write, fd, (long)buf, (long)count, 0);
+}
+
+static int open(const char *path, int flags)
+{
+	return (int)syscall(SYS_openat, AT_FDCWD, (long)path, flags, 0);
 }
 
 static long nolibc_svc6(long nr, long a, long b, long c, long d, long e,
