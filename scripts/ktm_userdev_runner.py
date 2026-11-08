@@ -49,7 +49,7 @@ def main() -> int:
     ap.add_argument(
         "--mem",
         default="256M",
-        help="QEMU guest RAM (default 256M; capped at 2G or 25% of host RAM)",
+        help="QEMU guest RAM (default 256M; capped at 2G or 25%% of host RAM)",
     )
     ap.add_argument(
         "--init",
