@@ -48,24 +48,13 @@
 #include <ir0/sock_stream.h>
 #include <ir0/sock_icmp.h>
 #include <kernel/syscalls/process_syscalls.h>
-
-extern void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
-			      uint64_t *blocked_readers, uint64_t *blocked_writers);
-extern void pipe_wake_all(pipe_t *pipe);
-extern void pipe_purge_waiters_for_process(process_t *proc);
-extern void ipc_purge_waiters_for_process(process_t *proc);
-extern void epoll_acquire(void *epoll_state);
-extern void epoll_release(void *epoll_state);
-extern int64_t process_close_fd(process_t *proc, int fd);
-
-extern process_t *current_process;
-extern process_t *process_list;
+#include <kernel/syscalls/epoll_syscalls.h>
+#include <kernel/syscalls/io_syscalls.h>
+#include <ir0/ipc.h>
 
 /* Global PID/process-list ownership; distinct from per-process object state. */
 uint64_t process_registry_lock(void);
 void process_registry_unlock(uint64_t irq_flags);
-void process_registry_reset(void);
-void process_registry_insert(process_t *process);
 void process_registry_install_if_empty(process_t *process);
 
 typedef struct
@@ -106,26 +95,12 @@ void process_fork_destroy_child_mm(process_t *child);
 void process_fork_free_mmap_list(process_t *child);
 
 /* wait.c */
-void process_reparent_children(process_t *dying_parent);
 void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 				  int parent_state_before);
 void wait_exit_audit_classify_user_frame(const char *tag, process_t *p);
 void wait_exit_audit_process_wait_block(pid_t wait_pid, int *status);
 void wait_exit_audit_process_wait_reap(pid_t reaped_pid, int status_val, int *status);
-void process_wait_wake_blocked_parent(process_t *parent, process_t *child);
 
 /* core.c — shared with wait status copy */
 int process_validate_userspace_buffer(const void *buf, size_t size);
 
-/* exit.c */
-void process_pre_zombie_teardown(process_t *dying);
-void process_notify_parent_of_exit(process_t *dying);
-
-/* resources.c */
-void process_resources_release_on_exit(process_t *dying);
-
-/* signals.c */
-int process_signal_is_default_fatal(process_t *p, int sig);
-
-/* process_syscalls.c — robust futex list on exit */
-void process_exit_robust_list(process_t *p);

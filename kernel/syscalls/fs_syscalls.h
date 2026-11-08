@@ -17,6 +17,7 @@
 #include <ir0/types.h>
 #include <stddef.h>
 #include <ir0/uio.h>
+#include "process_syscalls.h"
 
 struct stat;
 typedef struct stat stat_t;
@@ -49,4 +50,3 @@ int64_t sys_flock(int fd, int operation);
 int64_t sys_fchdir(int fd);
 int64_t sys_getdents(int fd, void *dirent, size_t count);
 int64_t sys_getdents64(int fd, void *dirent, size_t count);
-int64_t sys_setsid(void);

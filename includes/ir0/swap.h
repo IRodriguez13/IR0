@@ -86,6 +86,3 @@ int ir0_swap_try_reclaim(uint64_t target, uint64_t *reclaimed);
 
 void ir0_swap_get_stats(struct ir0_swap_stats *out);
 int ir0_swap_format_proc(char *buf, size_t count);
-
-int64_t sys_swapon(const char *user_path, int flags);
-int64_t sys_swapoff(const char *user_path);

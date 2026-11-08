@@ -23,6 +23,3 @@ int64_t sys_getitimer(int which, struct itimerval *curr_value);
 int64_t sys_setitimer(int which, const struct itimerval *new_value,
 		      struct itimerval *old_value);
 int64_t sys_alarm(unsigned int seconds);
-
-/* Called from clock_tick — fire ITIMER_REAL → SIGALRM. */
-void process_itimer_tick(uint64_t now_ms);

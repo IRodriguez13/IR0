@@ -19,8 +19,7 @@
 #include <stdint.h>
 #include <ir0/pipe.h>
 #include "validate_user.h"
-
-fd_entry_t *get_process_fd_table(void);
+#include "io_syscalls.h"
 
 /*
  * Lowest free descriptor at or above @from, or -1 when the table is full.
@@ -44,10 +43,6 @@ static inline int fd_alloc_lowest(fd_entry_t *fd_table, int from)
 	}
 	return -1;
 }
-void ensure_devfs_init(void);
-int stdio_is_redirected(fd_entry_t *fd_table, int fd);
-int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need);
-void fd_slot_note_created(fd_entry_t *entry);
 
 /* Resolve user path against dirfd (Linux openat/fstatat subset). */
 int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,

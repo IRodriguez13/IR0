@@ -798,6 +798,7 @@ pid_t process_get_ppid(void);
 process_t *process_get_current(void);
 void process_save_user_exception_frame(void *frame);
 process_t *get_process_list(void);
+/* Called from clock_tick — fire ITIMER_REAL → SIGALRM. */
 void process_itimer_tick(uint64_t now_ms);
 pid_t process_get_next_pid(void);
 pid_t process_last_assigned_pid(void);
