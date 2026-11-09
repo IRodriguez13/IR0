@@ -50,6 +50,7 @@ root=$(cd "$(dirname "$0")/.." && pwd -P)
 git -C "$root" rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null ||
 	{ echo "baseline_compare: unknown BASE_REF $base_ref" >&2; exit 2; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/ir0-baseline.XXXXXX")
+main_root=$(dirname "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)")
 
 cleanup()
 {
@@ -67,10 +68,14 @@ prepare()
 	if [ -f "$root/.config" ]; then
 		cp "$root/.config" "$dir/.config"
 	fi
-	# A worktree's own toolchain symlink may already be in the copy.
-	if [ -d "$root/toolchain" ] && [ ! -e "$dir/toolchain" ]; then
-		ln -s "$(cd "$root/toolchain" && pwd -P)" "$dir/toolchain"
-	fi
+	# A worktree's own toolchain symlink may already be in the copy. A
+	# linked worktree has none: use the main checkout's (worktree.mk does
+	# the same, but needs git, which an archived tree lacks).
+	for cand in "$root/toolchain" "$main_root/toolchain"; do
+		if [ -d "$cand" ] && [ ! -e "$dir/toolchain" ]; then
+			ln -s "$(cd "$cand" && pwd -P)" "$dir/toolchain"
+		fi
+	done
 }
 
 mkdir -p "$work/base" "$work/patched"
@@ -90,7 +95,6 @@ prepare "$work/patched"
 # A linked worktree has no sibling either: fall back to the ISD next to the
 # main checkout (git common dir).
 isd_root=${IR0_ISD_ROOT:-}
-main_root=$(dirname "$(git -C "$root" rev-parse --path-format=absolute --git-common-dir)")
 for cand in "$root/../ISD" "$main_root/../ISD"; do
 	if [ -z "$isd_root" ] && [ -d "$cand" ]; then
 		isd_root=$(cd "$cand" && pwd -P)
