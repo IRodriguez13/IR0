@@ -135,7 +135,7 @@ ir0-selftest-fault-signals-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_FAUL
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_FAULT_SIGNALS) \
-		--done "ok 4 breakpoint_runs_sigtrap_handler" \
+		--done "ok 5 segv_handler_returns_to_faulting_store" \
 		--log $(HOST_TMP)/ir0-selftest-x86-fault-signals.log
 	@echo "✓ ir0-selftest-fault-signals-x86"
 
@@ -143,7 +143,7 @@ ir0-selftest-fault-signals-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_FAULT_SIGNALS) \
-		--done "ok 4 breakpoint_runs_sigtrap_handler" \
+		--done "ok 5 segv_handler_returns_to_faulting_store" \
 		--log $(HOST_TMP)/ir0-selftest-arm64-fault-signals.log
 	@echo "✓ ir0-selftest-fault-signals-arm64"
 

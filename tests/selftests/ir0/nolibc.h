@@ -41,12 +41,14 @@
 #define SYS_socketpair		199
 #define SYS_sendto		206
 #define SYS_recvfrom		207
+#define SA_SIGINFO		0x00000004UL
 #define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
 #define SIGILL			4
 #define SIGTRAP			5
 #define SIGKILL			9
 #define SIGUSR1			10
+#define SIGBUS			7
 #define SIGSEGV			11
 #define SIGTERM			15
 #define SIGABRT			6
@@ -227,6 +229,21 @@ static int kill(int pid, int sig)
 {
 	return (int)syscall(SYS_kill, pid, sig);
 }
+
+/* Linux siginfo_t (128 bytes): three ints, then the 8-byte aligned union. */
+typedef struct
+{
+	int si_signo;
+	int si_errno;
+	int si_code;
+	union
+	{
+		char __pad[128 - 4 * sizeof(int)];
+		void *si_addr;
+	} __si_fields;
+} siginfo_t;
+
+#define si_addr __si_fields.si_addr
 
 static void *mmap(void *addr, size_t len, int prot, int flags, int fd,
 		  long off)
