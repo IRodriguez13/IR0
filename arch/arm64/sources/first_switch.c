@@ -10,7 +10,7 @@
 #include <arch/common/arch_portable.h>
 #include <ir0/oops.h>
 #include <ir0/arch_cpu.h>
-#include <sched/task.h>
+#include <ir0/task.h>
 #include <ir0/process.h>
 #include "switch_early.h"
 

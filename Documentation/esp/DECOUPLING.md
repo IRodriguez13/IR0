@@ -34,7 +34,7 @@ fuente). Persisten backends (`video_backend`, `console_backend`) con includes in
 Ver tabla detallada en `Documentation/DECOUPLING.md`. Áreas cubiertas: disco (`blockdev` /
 `ir0_block_*`), consola (`console_backend`), MM opaco (`mm_port`), tiempo (`clock`, `rtc`),
 red (`net`), entrada (`input_backend`), vídeo, `klog`, modelo de drivers (`driver`,
-`driver_bootstrap`, `init_drv`), **scheduler (`sched.h`; `scheduler_api.h` es alias),
+`driver_bootstrap`, `init_drv`), **scheduler (`sched.h`),
 recursos (`resource_registry`), tabla pseudo-fs (`pseudo_fs.h`), credenciales, power
 (`platform_ops`), y vistas de proceso (`process.h`).
 

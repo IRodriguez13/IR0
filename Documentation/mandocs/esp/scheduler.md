@@ -49,7 +49,6 @@ ni un wrapper que incluya el runqueue de RR.
 
 - Callers → solo `<ir0/sched.h>`.
 - Un backend no incluye el runqueue de otro.
-- `scheduler_api.h` es alias de compatibilidad.
 - Sin `iretq` inline en código sched portable.
 
 ## 5. Relaciones

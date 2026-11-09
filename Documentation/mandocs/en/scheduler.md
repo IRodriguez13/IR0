@@ -72,7 +72,6 @@ peer runqueue internals.
 - Backends must not include peer runqueue headers (priority must not include
   `sched/rr/backend.h`).
 - No inline `iretq` in portable sched code.
-- `scheduler_api.h` is a compat alias of `sched.h`.
 
 ## 6. Relations to other subsystems
 

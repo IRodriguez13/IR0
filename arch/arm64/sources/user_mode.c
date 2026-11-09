@@ -14,7 +14,7 @@
 #include <ir0/arch_task.h>
 #include <ir0/tls.h>
 #include <ir0/boot_log.h>
-#include <sched/task.h>
+#include <ir0/task.h>
 
 #include <stdint.h>
 

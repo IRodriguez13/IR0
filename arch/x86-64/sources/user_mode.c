@@ -16,7 +16,7 @@
 #include <ir0/vga.h>
 #include <ir0/oops.h>
 #include <ir0/ktm/klog.h>
-#include <sched/task.h>
+#include <ir0/task.h>
 #include <arch/common/arch_portable.h>
 #include <ir0/process.h>
 #include <ir0/paging.h>

@@ -19,7 +19,6 @@ de backend configurada desde Kconfig.
   [`sched/rr/backend.h`](../../sched/rr/backend.h) y
   [`sched/prio/backend.h`](../../sched/prio/backend.h) exportan una tabla cada uno.
 - Switch compartido: [`sched/sched_switch.c`](../../sched/sched_switch.c).
-- Compat: `scheduler_api.h` solo redirige a `<ir0/sched.h>`.
 
 ### Políticas
 

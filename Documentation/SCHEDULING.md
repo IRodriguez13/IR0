@@ -23,8 +23,6 @@ configured from Kconfig.
   Backends must not `#include` or call each other's private symbols.
 - Shared switch helper: [`sched/sched_switch.c`](../sched/sched_switch.c)
   (`sched_context_switch_to`) — not a runqueue API.
-- Compat: `includes/ir0/scheduler_api.h` and `sched/scheduler_api.h` only
-  `#include <ir0/sched.h>`.
 
 ### Policies
 
