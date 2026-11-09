@@ -46,6 +46,8 @@ int fault_signal(const struct ir0_fault *fault)
 		return SIGTRAP;
 	case IR0_FAULT_ALIGNMENT:
 		return SIGBUS;
+	case IR0_FAULT_ARITHMETIC:
+		return SIGFPE;
 	default:
 		return SIGILL;
 	}
