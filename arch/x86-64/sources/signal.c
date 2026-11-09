@@ -169,8 +169,11 @@ uint64_t irq_frame_sp(const uint64_t *frame)
 
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 				    uint64_t new_rsp, uint64_t info_addr,
-				    uint64_t uctx_addr, int sa_siginfo)
+				    uint64_t uctx_addr, int sa_siginfo,
+				    uint64_t restorer)
 {
+	/* The handler's `ret` pops @restorer from SIGFRAME_RETURN_SLOT. */
+	(void)restorer;
 	if (!frame || !handler)
 		return;
 

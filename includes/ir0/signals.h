@@ -90,8 +90,8 @@ typedef struct
 #define SEGV_MAPERR   1
 
 /*
- * siginfo_t — Linux/musl layout (128 bytes on x86-64).
- * Only fault fields used by D1.2 SIGSEGV delivery.
+ * siginfo_t — Linux/musl layout: 128 bytes, the union starts at offset 16
+ * (__ARCH_SI_PREAMBLE_SIZE on 64-bit). Only the fault fields are used.
  */
 typedef struct
 {
@@ -100,13 +100,15 @@ typedef struct
 	int si_code;
 	union
 	{
-		char _pad[128 - 3 * (int)sizeof(int)];
+		char _pad[128 - 4 * (int)sizeof(int)];
 		struct
 		{
 			void *si_addr;
 		} _sigfault;
 	} _sifields;
 } siginfo_t;
+
+_Static_assert(sizeof(siginfo_t) == 128, "siginfo_t must match Linux");
 
 /**
  * struct sigaction — Linux rt_sigaction layout (musl-compatible size).
@@ -126,7 +128,8 @@ struct sigaction {
 
 /**
  * struct sigframe - Signal frame on userspace stack
- * Complete context saved when signal handler is invoked.
+ * Complete context saved when signal handler is invoked; rt_sigreturn reads
+ * it back from the handler's SP.
  *
  * Layout on stack (low→high): [return slot][sigframe…]. The return slot is
  * SIGFRAME_RETURN_SLOT bytes: the 8-byte restorer on x86-64, empty on arm64
@@ -145,6 +148,12 @@ struct sigframe {
      * rt_sigreturn restores this; also used if userspace abandons the frame.
      */
     uint64_t oldmask;
+    siginfo_t info;           /* SA_SIGINFO second argument */
+    /*
+     * SA_SIGINFO third argument. Zeroed: IR0 does not lay out a Linux
+     * ucontext_t yet, so handlers cannot edit the resumed context.
+     */
+    unsigned char ucontext[128];
 };
 
 _Static_assert((sizeof(struct sigframe) % 16) == 0,

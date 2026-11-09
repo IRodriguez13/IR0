@@ -28,12 +28,32 @@
 #include <ir0/oops.h>
 #include <config.h>
 #include <kernel/process.h>
+#include <stddef.h>
 #include <string.h>
 #include <ktm.h>
 
-static int signal_sp_in_stack(process_t *p, uint64_t sp);
-static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
-				       uint64_t *frame_addr_out);
+/* Where signal_setup_frame() left the handler frame. */
+struct signal_frame_setup
+{
+	uint64_t sp;        /* handler entry SP (bottom of the return slot) */
+	uint64_t restorer;  /* handler return address */
+	uint64_t info_addr; /* &frame->info */
+	uint64_t uctx_addr; /* &frame->ucontext */
+};
+
+/* Why signal_setup_frame() could not build a frame (log tags). */
+enum signal_frame_error
+{
+	SIGFRAME_OK = 0,
+	SIGFRAME_BAD_SP,
+	SIGFRAME_NO_RESTORER,
+	SIGFRAME_COPY,
+};
+
+static int signal_setup_frame(process_t *p, int sig,
+			      const struct sigcontext *ctx,
+			      uint64_t fault_addr,
+			      struct signal_frame_setup *out);
 
 static int signal_rip_is_registered_handler(process_t *p, uint64_t rip)
 {
@@ -156,11 +176,8 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 {
 	void (*handler)(int);
 	struct sigcontext *ctx;
-	uint64_t new_rsp;
-	uint64_t info_addr;
-	uint64_t uctx_addr;
+	struct signal_frame_setup setup;
 	uint32_t sa_flags;
-	siginfo_t info;
 
 	if (!signals_has_user_handler(p, sig))
 		return 0;
@@ -189,6 +206,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	if (!ctx)
 		return 0;
 
+	memset(ctx, 0, sizeof(*ctx));
 	signal_fill_sigcontext_from_irq_frame(ctx, frame);
 	if (signal_rip_is_registered_handler(p, sigcontext_ip(ctx)))
 	{
@@ -211,68 +229,26 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	}
 
 	/*
-	 * Same stack-band policy as handle_signals(): never build the
-	 * handler frame in the canary / near USER_STACK_TOP (STACK_TOP_OVERRUN).
+	 * Linux setup_rt_frame() then force_sigsegv() on failure: the frame
+	 * is what lets the handler return (rt_sigreturn reads it back), so a
+	 * fault whose frame cannot be built ends the task by SIGSEGV.
 	 */
+	if (signal_setup_frame(p, sig, ctx, fault_addr, &setup) != SIGFRAME_OK)
 	{
-		uint64_t frame_addr;
-
-		new_rsp = signal_pick_handler_sp(p, irq_frame_sp(frame),
-						 &frame_addr);
-		if (new_rsp == 0)
-		{
-			process_saved_context_clear(p);
-			return 0;
-		}
-		(void)frame_addr;
+		process_saved_context_clear(p);
+		signal_exit_current(SIGSEGV);
 	}
 
-	info_addr = 0;
-	uctx_addr = 0;
-
-	if (sa_flags & SA_SIGINFO)
-	{
-		char uctx_zero[128];
-
-		memset(&info, 0, sizeof(info));
-		info.si_signo = sig;
-		info.si_errno = 0;
-		info.si_code = SEGV_MAPERR;
-		info._sifields._sigfault.si_addr = (void *)(uintptr_t)fault_addr;
-
-		info_addr = new_rsp - 128;
-		uctx_addr = info_addr - 128;
-		info_addr &= ~0xFULL;
-		uctx_addr &= ~0xFULL;
-
-		if (uctx_addr < 0x400000UL ||
-		    !signal_sp_in_stack(p, uctx_addr))
-		{
-			process_saved_context_clear(p);
-			return 0;
-		}
-
-		memset(uctx_zero, 0, sizeof(uctx_zero));
-		if (copy_to_user_mm(process_pgd(p), info_addr,
-						     &info, sizeof(info)) != 0 ||
-		    copy_to_user_mm(process_pgd(p), uctx_addr,
-						     uctx_zero,
-						     sizeof(uctx_zero)) != 0)
-		{
-			process_saved_context_clear(p);
-			return 0;
-		}
-	}
-
-	signal_redirect_irq_frame(frame, (void *)handler, sig, new_rsp,
-				       info_addr, uctx_addr,
-				       (sa_flags & SA_SIGINFO) ? 1 : 0);
+	signal_redirect_irq_frame(frame, (void *)handler, sig, setup.sp,
+				  setup.info_addr, setup.uctx_addr,
+				  (sa_flags & SA_SIGINFO) ? 1 : 0,
+				  setup.restorer);
 	process_save_user_exception_frame(frame);
 
 	if (sa_flags & SA_RESETHAND)
 		p->signal_handlers[sig] = SIG_DFL;
 
-	p->signal_frame_sp = new_rsp;
+	p->signal_frame_sp = setup.sp;
 	signals_apply_handler_mask(p, sig, sa_flags);
 	p->signal_pending &= ~SIGNAL_MASK(sig);
 
@@ -284,7 +260,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		      (unsigned long long)sigcontext_ip(ctx),
 		      (unsigned long long)(uintptr_t)handler,
 		      (unsigned)((sa_flags & SA_SIGINFO) ? 1U : 0U),
-		      (unsigned long long)new_rsp);
+		      (unsigned long long)setup.sp);
 #endif
 
 #if defined(CONFIG_KTM_FLIGHT) && CONFIG_KTM_FLIGHT
@@ -630,6 +606,69 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
 }
 
 /*
+ * signal_setup_frame - Write @sig's handler frame for the interrupted
+ * context @ctx to the user stack (Linux setup_rt_frame()).
+ *
+ * The one frame writer for every delivery: asynchronous signals and
+ * synchronous CPU faults. Below the frame sits the return slot holding
+ * the restorer on ISAs that return through the stack; rt_sigreturn finds
+ * the frame at the handler's SP after the handler returns. @fault_addr is
+ * the si_addr reported to an SA_SIGINFO handler.
+ *
+ * Returns SIGFRAME_OK and fills @out, or why no frame was written.
+ */
+static int signal_setup_frame(process_t *p, int sig,
+			      const struct sigcontext *ctx,
+			      uint64_t fault_addr,
+			      struct signal_frame_setup *out)
+{
+	struct sigframe frame;
+	uint64_t frame_addr;
+	uint64_t user_sp;
+	uint64_t restorer;
+
+	user_sp = signal_pick_handler_sp(p, sigcontext_sp(ctx), &frame_addr);
+	if (user_sp == 0)
+		return SIGFRAME_BAD_SP;
+	restorer = signal_handler_restorer(p, sig);
+	if (restorer == 0)
+		return SIGFRAME_NO_RESTORER;
+
+	memset(&frame, 0, sizeof(frame));
+	frame.handler = p->signal_handlers[sig];
+	frame.signum = sig;
+	frame.ctx = *ctx;
+	/*
+	 * rt_sigsuspend publishes the pre-suspend mask in signal_mask_saved
+	 * before delivery. The handler must restore that mask, not the
+	 * temporary one.
+	 */
+	frame.oldmask = p->signal_mask_saved_valid
+		? (uint64_t)p->signal_mask_saved
+		: (uint64_t)p->signal_mask;
+	frame.info.si_signo = sig;
+	if (fault_addr != 0)
+	{
+		frame.info.si_code = SEGV_MAPERR;
+		frame.info._sifields._sigfault.si_addr =
+			(void *)(uintptr_t)fault_addr;
+	}
+
+	if (copy_to_user_mm(process_pgd(p), frame_addr, &frame,
+			    sizeof(frame)) != 0 ||
+	    (SIGFRAME_RETURN_SLOT != 0 &&
+	     copy_to_user_mm(process_pgd(p), user_sp, &restorer,
+			     SIGFRAME_RETURN_SLOT) != 0))
+		return SIGFRAME_COPY;
+
+	out->sp = user_sp;
+	out->restorer = restorer;
+	out->info_addr = frame_addr + offsetof(struct sigframe, info);
+	out->uctx_addr = frame_addr + offsetof(struct sigframe, ucontext);
+	return SIGFRAME_OK;
+}
+
+/*
  * Linux force_sigsegv(): a handler frame that cannot be set up becomes
  * SIGSEGV. Failing to set up SIGSEGV itself, or having no SIGSEGV handler,
  * terminates the task.
@@ -818,9 +857,8 @@ void handle_signals(void)
                     if (current->mode == USER_MODE)
                     {
                         struct sigcontext *ctx;
-                        struct sigframe frame;
+                        struct signal_frame_setup setup;
                         uint64_t user_sp;
-                        uint64_t frame_addr;
                         uint64_t restorer;
 
                         /*
@@ -989,10 +1027,12 @@ void handle_signals(void)
                             continue;
                         }
 
-                        user_sp = signal_pick_handler_sp(current,
-                            sigcontext_sp(ctx), &frame_addr);
-                        if (user_sp == 0)
+                        switch (signal_setup_frame(current, sig, ctx, 0,
+                                                   &setup))
                         {
+                        case SIGFRAME_OK:
+                            break;
+                        case SIGFRAME_BAD_SP:
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%x reason=bad_sp",
                                           (unsigned)sig);
@@ -1000,11 +1040,7 @@ void handle_signals(void)
                             current->signal_handlers[sig] = SIG_DFL;
                             current->signal_pending &= ~SIGNAL_MASK(sig);
                             continue;
-                        }
-
-                        restorer = signal_handler_restorer(current, sig);
-                        if (restorer == 0)
-                        {
+                        case SIGFRAME_NO_RESTORER:
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%x reason=no_restorer",
                                           (unsigned)sig);
@@ -1012,34 +1048,15 @@ void handle_signals(void)
                             current->signal_pending &= ~SIGNAL_MASK(sig);
                             signal_force_segv(current, sig);
                             continue;
-                        }
-
-                        frame.handler = handler;
-                        frame.signum = sig;
-                        frame.ctx = *ctx;
-                        /*
-                         * rt_sigsuspend publishes the pre-suspend mask in
-                         * signal_mask_saved before delivery. The handler must
-                         * restore that mask, not the temporary one.
-                         */
-                        frame.oldmask = current->signal_mask_saved_valid
-                            ? (uint64_t)current->signal_mask_saved
-                            : (uint64_t)current->signal_mask;
-
-                        if (copy_to_user_mm(
-				    process_pgd(current), frame_addr, &frame,
-				    sizeof(struct sigframe)) != 0 ||
-			    (SIGFRAME_RETURN_SLOT != 0 &&
-			     copy_to_user_mm(
-				    process_pgd(current), user_sp, &restorer,
-				    SIGFRAME_RETURN_SLOT) != 0))
-                        {
+                        default:
                             klog_info_fmt("SIGNAL",
                                           "DELIVER_ABORT sig=%d reason=copy",
                                           sig);
                             process_saved_context_clear(current);
-                            break;
+                            goto out;
                         }
+                        user_sp = setup.sp;
+                        restorer = setup.restorer;
 
                         current->signal_frame_sp = user_sp;
 
@@ -1126,7 +1143,9 @@ void handle_signals(void)
         }
     }
     
+out:
     /* SIGALRM, SIGUSR1, SIGUSR2, SIGTRAP - handled above or default */
+    return;
 }
 
 int signals_prepare_user_return(process_t *p)

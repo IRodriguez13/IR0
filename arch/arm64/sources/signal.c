@@ -157,7 +157,8 @@ uint64_t irq_frame_sp(const uint64_t *frame)
 
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 				    uint64_t new_rsp, uint64_t info_addr,
-				    uint64_t uctx_addr, int sa_siginfo)
+				    uint64_t uctx_addr, int sa_siginfo,
+				    uint64_t restorer)
 {
 	uint64_t elr = (uint64_t)(uintptr_t)handler;
 
@@ -176,6 +177,9 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 		frame[1] = 0;
 		frame[2] = 0;
 	}
+
+	/* Linux arm64 setup_return(): the handler returns into x30. */
+	frame[30] = restorer;
 
 	/* vectors.S restores ELR/SP_EL0 from the frame on eret. */
 	frame[ARM64_EXC_IDX_ELR] = elr;

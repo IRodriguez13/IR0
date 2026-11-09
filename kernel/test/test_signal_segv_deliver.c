@@ -7,7 +7,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_signal_segv_deliver.c
- * Description: ktest — SIGSEGV delivery from synthetic IRQ frame
+ * Description: ktest — SIGSEGV delivery from synthetic IRQ frame writes the
+ *              handler frame rt_sigreturn reads back.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -16,13 +17,66 @@
 #include <config.h>
 #include <ir0/signals.h>
 #include <ir0/signal_irq.h>
+#include <ir0/abi/signal_contract.h>
+#include <ir0/copy_user.h>
+#include <ir0/paging.h>
 #include <ir0/process.h>
 #include <ir0/kmem.h>
 #include <ir0/task_ops.h>
 #include <stdint.h>
+#include <string.h>
+#include "process.h"
+
+/*
+ * User stack band the test gives the holder process (a kernel thread whose
+ * own stack layout is its kernel stack): delivery places the frame here.
+ */
+#define KTEST_SIGFRAME_WINDOW 0x8000UL
+
+/*
+ * Map the unmapped pages of the stack band so the frame can be written;
+ * @mapped records which ones to drop again.
+ */
+static void ktest_sigframe_window_map(address_space_root_t root,
+				      uint8_t *mapped, unsigned pages)
+{
+	uintptr_t base = USER_STACK_TOP - KTEST_SIGFRAME_WINDOW;
+	unsigned i;
+
+	for (i = 0; i < pages; i++)
+	{
+		uintptr_t va = base + (uintptr_t)i * PAGE_SIZE_4KB;
+
+		mapped[i] = 0;
+		if (is_page_mapped_in_directory(root, va, NULL))
+			continue;
+		if (map_user_region_in_directory(root, va, PAGE_SIZE_4KB,
+						 PAGE_USER | PAGE_RW) == 0)
+			mapped[i] = 1;
+	}
+}
+
+static void ktest_sigframe_window_unmap(address_space_root_t root,
+					const uint8_t *mapped, unsigned pages)
+{
+	uintptr_t base = USER_STACK_TOP - KTEST_SIGFRAME_WINDOW;
+	unsigned i;
+
+	for (i = 0; i < pages; i++)
+		if (mapped[i])
+			(void)unmap_page_in_directory(
+				root, base + (uintptr_t)i * PAGE_SIZE_4KB);
+}
 
 void ktest_signal_segv_deliver_irq_frame(void)
 {
+	uint8_t mapped[KTEST_SIGFRAME_WINDOW / PAGE_SIZE_4KB];
+	uintptr_t restorer = 0x00450100UL;
+	struct sigframe user_frame;
+	uint64_t ret_slot;
+	uint64_t handler_sp;
+	uint64_t saved_stack_start;
+	uint64_t saved_stack_size;
 	uint64_t stub[32];
 	uint64_t *frame;
 	void *handler = (void *)(uintptr_t)0x00450000UL;
@@ -76,6 +130,8 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	saved_enter_pending = process_signal_enter_pending(p) != 0;
 	saved_last_delivered = p->signal_last_delivered;
 	saved_frame_sp = p->signal_frame_sp;
+	saved_stack_start = process_stack_start(p);
+	saved_stack_size = process_stack_size(p);
 
 	frame = stub + 15;
 
@@ -83,7 +139,8 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	p->signal_handlers[SIGSEGV] = (void (*)(int))handler;
 	p->signal_sa_flags[SIGSEGV] = 0;
 	p->signal_sa_mask[SIGSEGV] = 0;
-	p->signal_restorer[SIGSEGV] = NULL;
+	/* x86-64 has no kernel trampoline: Linux needs SA_RESTORER. */
+	p->signal_restorer[SIGSEGV] = (void (*)(void))restorer;
 	p->signal_mask = 0;
 	p->signal_ignored = 0;
 	p->signal_pending = 0;
@@ -105,6 +162,10 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	frame[-1] = 0x11111111UL;
 
 	KASSERT(signals_has_user_handler(p, SIGSEGV));
+	process_set_stack_layout(p, USER_STACK_TOP - KTEST_SIGFRAME_WINDOW,
+				 KTEST_SIGFRAME_WINDOW);
+	ktest_sigframe_window_map(process_pgd(p), mapped,
+				  (unsigned)sizeof(mapped));
 
 	delivered = signals_deliver_from_irq_frame(p, SIGSEGV, frame,
 						   fault_addr);
@@ -114,6 +175,25 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	KASSERT(process_saved_context_present(p));
 	KASSERT(sigcontext_ip(process_saved_context_peek(p)) ==
 		0x004422E3UL);
+
+	/* The handler returns through rt_sigreturn: the frame is on the stack. */
+	handler_sp = irq_frame_sp(frame);
+	memset(&user_frame, 0, sizeof(user_frame));
+	ret_slot = 0;
+	KASSERT_EQ(copy_from_user_mm(process_pgd(p),
+				     handler_sp + SIGFRAME_RETURN_SLOT,
+				     &user_frame, sizeof(user_frame)), 0);
+	KASSERT_EQ(user_frame.signum, SIGSEGV);
+	KASSERT(sigcontext_ip(&user_frame.ctx) == 0x004422E3UL);
+	KASSERT(sigcontext_sp(&user_frame.ctx) == 0x7FFFEB38UL);
+	if (SIGFRAME_RETURN_SLOT != 0)
+	{
+		KASSERT_EQ(copy_from_user_mm(process_pgd(p), handler_sp,
+					     &ret_slot, sizeof(ret_slot)), 0);
+		KASSERT(ret_slot == (uint64_t)restorer);
+	}
+	ktest_sigframe_window_unmap(process_pgd(p), mapped,
+				    (unsigned)sizeof(mapped));
 
 	process_saved_context_clear(p);
 
@@ -134,6 +214,7 @@ void ktest_signal_segv_deliver_irq_frame(void)
 		process_signal_enter_pending_clear(p);
 	p->signal_last_delivered = saved_last_delivered;
 	p->signal_frame_sp = saved_frame_sp;
+	process_set_stack_layout(p, saved_stack_start, saved_stack_size);
 	if (saved_context)
 		KASSERT(process_saved_context_attach(p, saved_context) == 0);
 

@@ -49,11 +49,16 @@ void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 
 /*
  * Point the IRQ return path at @handler with SysV args (sig / info / ucontext).
- * @new_rsp must already be computed by portable policy.
+ * @new_rsp must already be computed by portable policy, with the signal
+ * frame written above it. @restorer is the handler's return address: an
+ * ISA that returns through a link register (arm64 x30) sets it in @frame;
+ * one that returns through the stack slot portable code fills ignores it
+ * (x86-64).
  */
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 				    uint64_t new_rsp, uint64_t info_addr,
-				    uint64_t uctx_addr, int sa_siginfo);
+				    uint64_t uctx_addr, int sa_siginfo,
+				    uint64_t restorer);
 
 /* Read user SP from an IRQ frame (for stack-window policy). */
 uint64_t irq_frame_sp(const uint64_t *frame);
