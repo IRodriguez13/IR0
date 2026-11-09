@@ -1,40 +1,48 @@
 # IR0 Scheduling
 
-> **Última verificación:** 2026-11-07
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`,
-> `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`,
-> `sched/sched_switch.c`, `sched/sched_resched.c`,
+> **Última verificación:** 2026-11-09
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`,
+> `sched/rr.c`, `sched/prio.c`,
 > `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`
 
-IR0 scheduling is selected through a portable facade and a backend ops table
-configured from Kconfig.
+IR0 scheduling is one core plus one policy file chosen at build time from
+Kconfig. There is no run-time dispatch.
 
 ## Selection Model
 
-- Portable API: [`includes/ir0/sched.h`](../includes/ir0/sched.h) (`sched_add`,
-  `schedule`, `sched_count_runnable`, …).
-- Dispatch: [`sched/sched.c`](../sched/sched.c) calls `sched_backend_active()` and
-  nowhere names a concrete policy.
-- Selection: [`sched/backend_select.c`](../sched/backend_select.c) maps
-  `CONFIG_SCHEDULER_POLICY` to the active ops table at build time.
-- Backend ops: [`sched/backend.h`](../sched/backend.h) is the private contract;
-  [`sched/rr/backend.h`](../sched/rr/backend.h) and
-  [`sched/prio/backend.h`](../sched/prio/backend.h) export one table each.
-  Backends must not `#include` or call each other's private symbols.
-- Shared switch helper: [`sched/sched_switch.c`](../sched/sched_switch.c)
-  (`sched_context_switch_to`) — not a runqueue API.
+- Portable API: [`includes/ir0/sched.h`](../includes/ir0/sched.h):
+  `schedule()`, `sched_switch_to()`, `sched_take_resched()`, `sched_add()`,
+  `sched_remove()`, `sched_promote()`, `sched_count_runnable()`,
+  `sched_policy_name()`, `sched_selftest()`.
+- Core: [`sched/core.c`](../sched/core.c) owns `schedule()` (pick, then
+  switch), the context switch and the reschedule check.
+- Policy contract: [`sched/core.h`](../sched/core.h) (private to `sched/`).
+  A policy implements the queue operations of `<ir0/sched.h>` plus
+  `sched_pick_next()`. Policies never include or call each other.
+- Runqueue lock: `rq_lock()` / `rq_unlock()` in `sched/core.h`. On UP they
+  mask local interrupts; see "Multi-CPU boundary" below.
 
 ### Policies
 
-| `CONFIG_SCHEDULER_POLICY` | Name (`sched_policy_name`) | Backend object |
+| `CONFIG_SCHEDULER_POLICY` | Name (`sched_policy_name`) | Policy object |
 |---------------------------|-----------------------------------|----------------|
-| `0` | `round_robin` | `sched/rr/backend.o` |
-| `1` | `cfs` | **Same RR backend object** (honest alias — no CFS runqueue) |
-| `2` (defconfig) | `priority` | `sched/prio/backend.o` only |
+| `0` | `round_robin` | `sched/rr.o` |
+| `1` | `cfs` | **Same RR object** (honest alias — no CFS runqueue) |
+| `2` (defconfig) | `priority` | `sched/prio.o` only |
 
-The priority backend reports its boot selftest through `ops->selftest`;
-`kernel/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL` without
-referencing a policy symbol.
+The Makefile links exactly one policy object. `sched_selftest()` checks the
+priority bands (round robin has nothing to check and returns 0);
+`kernel/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
+
+### Multi-CPU boundary
+
+IR0 is UP. Everything that only exists with several CPUs (CPU bring-up,
+IPIs, per-CPU areas, cross-CPU calls, runqueue load balancing) belongs in a
+top-level `smp/` directory, created with the first real multi-CPU code. The
+scheduler core and the policies only see `rq_lock()` / `rq_unlock()`; an SMP
+build implements that pair with the per-CPU runqueue spinlock from `smp/`
+without touching `sched/`. Today's `kernel/percpu.c` is single-CPU storage
+and stays in `kernel/`.
 
 ## Blocking syscalls (poll / pause / nanosleep)
 
@@ -46,10 +54,7 @@ Blocked waiters use `process_arm_kernel_syscall_sleep` + `PROCESS_BLOCKED` and
 - Idle steps call `kernel_idle_poll_nosched()` so wake checks (`poll_wake_check_nosched`,
   stdin, pipes) **do not** nest `schedule`; the wait loop owns a single yield.
 
-IRQ timer path uses `poll_wake_check_nosched` + deferred resched (`sched_resched.c`).
-IRQ preempt that already saved the user iretq frame sets
-`sched_context_switch_skip_prev_save()` so `switch_context_x64` does not overwrite it
-with mid-ISR kernel CS/RIP (Class B close).
+IRQ timer path uses `poll_wake_check_nosched` + deferred resched (`sched_take_resched()`).
 
 ## Class B
 
@@ -58,22 +63,21 @@ See [`KTM.md`](KTM.md) (Class B context). Product repair: `IR0_CLASS_B_REPAIR=1`
 ## Runtime Characteristics
 
 - Scheduling integrates with process and signal handling.
-- Queue mutation paths are IRQ-serialized per backend.
+- Queue mutation paths are serialized by `rq_lock()`.
 - Context-switch assembly remains architecture-specific behind
   **`first_switch_to`** and **`switch_to`** (ISA asm private).
 
 ## Strengths
 
-- Portable callers never include `<sched/backend.h>`, `<sched/rr/backend.h>`, or
-  peer backends.
-- Policy iteration is ops-table / Makefile object selection.
-- Priority bands are a real separate backend (not a wrapper of RR headers).
+- Portable callers never include `sched/` headers.
+- Policy selection is Makefile object selection.
+- Priority bands are a real separate policy (not a wrapper of RR).
 - Blocked syscall sleeps yield without nested schedule storms.
 
 ## Weak Points
 
-- Policy `1` is not a fair CFS runqueue — name only until a real CFS backend
-  registers its own ops without including RR.
+- Policy `1` is not a fair CFS runqueue — name only until a real CFS policy
+  file implements the `sched/core.h` contract.
 - SMP-oriented scheduling is not the current baseline.
 - Timer preemption in IRQ remains gated / deferred (see mandocs).
 

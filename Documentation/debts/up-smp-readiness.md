@@ -12,10 +12,11 @@ independent CPUs, not to claim that IRQ masking is an SMP lock.
   state.  ARM ALL publishes idle/init/clone through `process_registry_insert()`
   (`ARM64_PROCESS_REGISTRY_OK`).  SMP replacement: make the compatibility
   symbol read-only or remove it after all readers use the CPU-local accessor.
-- `sched/runqueue_lock.c` owns serialization for RR, priority and context
-  selection.  Its UP backend masks local IRQs and deliberately refuses an SMP
-  build.  SMP replacement is localized here, followed by per-CPU runqueue
-  storage; policy backends must not call `irq_save()` directly.
+- `rq_lock()` / `rq_unlock()` in `sched/core.h` own serialization for the
+  scheduler core and the linked policy.  The UP implementation masks local
+  IRQs.  SMP replacement: the per-CPU runqueue spinlock implemented in
+  `smp/`, followed by per-CPU runqueue storage; `sched/` code must not call
+  `irq_save()` directly (arch-guard `scheduler-runqueue-lock`).
 - `mm/pmm.c`, `mm/paging.c` and `mm/page_fault.c` have critical regions that
   mask local IRQs while mutating page metadata or PTE state.  SMP replacement:
   frame allocator and address-space locks.  Common MM now requests coherence

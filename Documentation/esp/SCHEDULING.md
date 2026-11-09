@@ -1,32 +1,31 @@
 # Scheduling en IR0
 
-> **Última verificación:** 2026-11-07
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`,
-> `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`,
-> `sched/sched_switch.c`, `kernel/time/clock_wait.c`
+> **Última verificación:** 2026-11-09
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`,
+> `sched/rr.c`, `sched/prio.c`, `kernel/time/clock_wait.c`
 > **Canónico (inglés):** [`../SCHEDULING.md`](../SCHEDULING.md)
 
-El scheduling en IR0 se selecciona por una fachada portable y una tabla de ops
-de backend configurada desde Kconfig.
+El scheduling en IR0 es un núcleo más un archivo de política elegido en
+compilación desde Kconfig. No hay despacho en tiempo de ejecución.
 
 ## Modelo de selección
 
 - API portable: [`includes/ir0/sched.h`](../../includes/ir0/sched.h).
-- Despacho: [`sched/sched.c`](../../sched/sched.c) llama `sched_backend_active()`.
-- Selección: [`sched/backend_select.c`](../../sched/backend_select.c) mapea
-  `CONFIG_SCHEDULER_POLICY` a la tabla activa en compilación.
-- Ops de backend: [`sched/backend.h`](../../sched/backend.h) es el contrato privado;
-  [`sched/rr/backend.h`](../../sched/rr/backend.h) y
-  [`sched/prio/backend.h`](../../sched/prio/backend.h) exportan una tabla cada uno.
-- Switch compartido: [`sched/sched_switch.c`](../../sched/sched_switch.c).
+- Núcleo: [`sched/core.c`](../../sched/core.c) (`schedule()`, cambio de contexto,
+  `sched_take_resched()`).
+- Contrato privado: [`sched/core.h`](../../sched/core.h). La política implementa
+  las operaciones de cola de `<ir0/sched.h>` y `sched_pick_next()`.
+- Lock de runqueue: `rq_lock()` / `rq_unlock()`; en UP enmascaran IRQs. Todo lo
+  multi-CPU (arranque de CPUs, IPIs, áreas per-CPU, llamadas cruzadas, balanceo)
+  va en `smp/`, que implementará ese par sin tocar `sched/`.
 
 ### Políticas
 
 | `CONFIG_SCHEDULER_POLICY` | Nombre | Objeto |
 |---------------------------|--------|--------|
-| `0` | `round_robin` | `sched/rr/backend.o` |
+| `0` | `round_robin` | `sched/rr.o` |
 | `1` | `cfs` | Mismo objeto RR (alias honesto, sin `cfs_sched.c`) |
-| `2` (defconfig) | `priority` | `sched/prio/backend.o` |
+| `2` (defconfig) | `priority` | `sched/prio.o` |
 
 ## Syscalls bloqueantes (poll / pause / nanosleep)
 

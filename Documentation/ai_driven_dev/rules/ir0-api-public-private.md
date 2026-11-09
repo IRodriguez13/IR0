@@ -31,12 +31,14 @@ Si la función **por detrás** usa asm/intrinsics de ISA, el nombre público deb
 
 ## Anti-acoplamiento (caso sched)
 
-Backends (RR, priority, futuros) **no** incluyen ni llaman privados del peer. Eligen `next` → `sched_context_switch_to` → `switch_to`. Ops table / facade; no includes cruzados.
+Las políticas (RR, priority, futuras) **no** incluyen ni llaman privados de otra. `CONFIG_SCHEDULER_POLICY` enlaza **un** archivo de política (`sched/rr.c` o `sched/prio.c`) que implementa el contrato fijo de `sched/core.h` con funciones planas; nada de tabla de ops en runtime para una elección de compilación. La política elige `next`; el núcleo (`sched/core.c`) cambia de contexto.
 
 ```text
-❌ BAD:  sched/prio/backend.c → #include "../rr/backend.h"
-✅ GOOD: priority → sched_context_switch_to(next) → switch_to(prev, next)
+❌ BAD:  sched/prio.c → #include "rr.h"; struct *_ops con un solo backend enlazado
+✅ GOOD: schedule() → sched_pick_next() (política) → sched_switch_to(next) → switch_to(prev, next)
 ```
+
+Todo lo que solo existe con varias CPUs (arranque de CPUs, IPIs, áreas per-CPU, llamadas cruzadas, balanceo de carga) vive en `smp/`. El núcleo del scheduler usa solo `rq_lock()` / `rq_unlock()`; hoy (UP) es `irq_save`/`irq_restore` en `sched/core.h` y `smp/` lo implementará.
 
 ## Polimorfismo ISA — todo camino con asm específico
 
@@ -59,7 +61,7 @@ Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm`.
 ### Context switch (canónico)
 
 - Pública: `switch_to` en `includes/ir0/context.h`.
-- Sched interna: `sched_context_switch_to` → `switch_to`.
+- Sched interna: `sched_switch_to` (`sched/core.c`) → `switch_to`.
 - ISA privada: `switch_context_x64` / `switch_context_arm64` solo en el dispatcher.
 - Entrada ring 3: `switch_to_user` / `switch_to_user_task` — mismo polimorfismo, otro contrato; no mezclar con `switch_to`.
 
@@ -81,7 +83,6 @@ Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm`.
 ## Excepciones
 
 - Bring-up freestanding (`arch/arm64/sources/board_boot_min.c`, etc.): asm/backend directo OK si el file header dice **no producción**.
-- Shared `sched_switch.*` / `*_ops` entre backends: OK; no runqueues cruzadas.
 
 ## Al añadir API
 

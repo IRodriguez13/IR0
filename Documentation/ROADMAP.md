@@ -51,7 +51,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | Transition path **irinit → runit** (irinit removed; runit-only) | Done | `build-runit`, `load-userspace-runit`, `smoke-runit-boot`; fail-fast retired targets |
 | **runit** boots and supervises services | Done | `make smoke-tier1` → `smoke-runit-boot` |
 | **BusyBox ash** interactive on `/dev/console` | Done | `smoke-runit-ash-interactive` |
-| Scheduler policy fix (preempt / RR promotion) | Done | `sched/sched_resched.c`, boot log in `kernel/main.c` |
+| Scheduler policy fix (preempt / RR promotion) | Done | `sched/core.c` (`sched_take_resched`), boot log in `kernel/main.c` |
 | Facade includes unified (`<ir0/...>` for kernel/mm/fs/sched/net) | Done | `arch-guard` `ir0-facade-include` |
 | **`SCHEDULER_POLICY` in menuconfig** | Documented | `setup/Kconfig` help text |
 | **`sys_select` (__NR 23)** | Done | `kernel/syscalls.c`, `includes/ir0/select.h` |

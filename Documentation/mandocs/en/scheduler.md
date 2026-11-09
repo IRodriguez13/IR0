@@ -1,7 +1,7 @@
 # IR0 Scheduler
 
-> **Última verificación:** 2026-11-07
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`, `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`
+> **Última verificación:** 2026-11-09
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`, `sched/rr.c`, `sched/prio.c`
 
 | Field | Value |
 |-------|-------|
@@ -10,12 +10,12 @@
 | Status | stable |
 | Depends on | process, memory |
 | Man page | IR0-scheduler (section 7) |
-| Primary sources | `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`, `sched/sched_switch.c`, `arch/common/arch_portable.h` (`first_switch_to`), `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
+| Primary sources | `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`, `sched/rr.c`, `sched/prio.c`, `arch/common/arch_portable.h` (`first_switch_to`), `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
 
 ## 1. Overview
 
-IR0 schedules runnable processes through a **portable facade** and a
-**backend ops table** selected by `CONFIG_SCHEDULER_POLICY`.
+IR0 schedules runnable processes through a **portable facade**, one
+**scheduler core** and **one policy file** linked by `CONFIG_SCHEDULER_POLICY`.
 Default defconfig uses **priority bands** (`CONFIG_SCHEDULER_POLICY=2`).
 Round-robin (`0`) and CFS-name alias (`1`) remain available. Scheduling is
 **single-CPU** oriented; timer-driven preemption is currently deferred in the
@@ -30,30 +30,26 @@ Portable backend code must **not** embed `iretq` / ISA entry frames.
 | Piece | Role |
 |-------|------|
 | `includes/ir0/sched.h` | Portable API (no `<sched/…>` includes) |
-| `sched/sched.c` | Portable facade; dispatches add/remove/schedule/count/promote via `sched_backend_active()` |
-| `sched/backend.h` | Private ops struct shared by all policies |
-| `sched/backend_select.c` | Compile-time policy selection |
-| `sched/rr/backend.c` / `sched/prio/backend.c` | Policy implementations; each exports one table through its own `backend.h` |
-| `sched/sched_switch.c` | Shared `sched_context_switch_to` (not a runqueue) |
-| `sched/sched_resched.c` | IRQ/TTY/user-return resched helpers |
-| `sched/prio/backend.c` | Default priority bands when `CONFIG_SCHEDULER_POLICY=2` |
-| `sched/rr/backend.c` | Ready list for policy `0` or `1` |
+| `sched/core.c` | `schedule()`, `sched_switch_to()`, `sched_take_resched()` |
+| `sched/core.h` | Private core/policy contract (`sched_pick_next`, `rq_lock`/`rq_unlock`) |
+| `sched/prio.c` | Default priority bands when `CONFIG_SCHEDULER_POLICY=2` |
+| `sched/rr.c` | Ready list for policy `0` or `1` |
 | `process_t::state` | `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE` |
 | `first_switch_to` | First user/kernel entry (arch-owned) |
 | `switch_to.c` | Later switches → `switch_context_x64` / ARM path |
 
-**Policy `1` (name `cfs`):** uses the **RR backend object** with a different
+**Policy `1` (name `cfs`):** uses the **RR policy object** with a different
 policy name. There is no `cfs_sched.c` and no fake CFS wrapper that includes
 peer runqueue internals.
 
 ## 3. Data flow
 
-**`schedule()` (via ops):**
+**`schedule()`:**
 
-1. CLI (IRQ-safe) inside the active backend.
+1. `sched_pick_next()` takes `rq_lock()` inside the linked policy.
 2. If queue empty → return (idle loop handles HLT).
 3. Pick next runnable; skip `ZOMBIE` and `BLOCKED`.
-4. Call `sched_context_switch_to(next)`.
+4. The core calls `sched_switch_to(next)`.
 5. First switch: `first_switch_to(next)`.
 6. Later: `switch_to(&prev->task, &next->task)`.
 
@@ -69,8 +65,8 @@ peer runqueue internals.
 ## 5. Subsystem boundaries
 
 - Portable code calls `sched_*` only via `includes/ir0/sched.h`.
-- Backends must not include peer runqueue headers (priority must not include
-  `sched/rr/backend.h`).
+- Policies must not include or call each other; both implement
+  `sched/core.h`.
 - No inline `iretq` in portable sched code.
 
 ## 6. Relations to other subsystems
@@ -91,6 +87,7 @@ peer runqueue internals.
 
 ## 8. Future
 
-- Real CFS fair backend registering its own ops (no RR include).
+- Real CFS fair policy file implementing `sched/core.h` (no RR include).
 - Re-enable timer quantum preemption when iretq path is hardened.
-- SMP runqueues — not implemented.
+- SMP runqueues — not implemented; multi-CPU code goes to `smp/` and
+  implements `rq_lock()` / `rq_unlock()`.

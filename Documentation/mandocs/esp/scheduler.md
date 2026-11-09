@@ -1,7 +1,7 @@
 # Planificador de IR0
 
-> **Última verificación:** 2026-11-07
-> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend.h`, `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`
+> **Última verificación:** 2026-11-09
+> **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`, `sched/rr.c`, `sched/prio.c`
 
 | Campo | Valor |
 |-------|-------|
@@ -10,12 +10,12 @@
 | Estado | stable |
 | Depende de | process, memory |
 | Página man | IR0-scheduler (sección 7) |
-| Fuentes principales | `includes/ir0/sched.h`, `sched/sched.c`, `sched/backend_select.c`, `sched/rr/backend.c`, `sched/prio/backend.c`, `sched/sched_switch.c`, `arch/common/arch_portable.h`, `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
+| Fuentes principales | `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`, `sched/rr.c`, `sched/prio.c`, `arch/common/arch_portable.h`, `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
 
 ## 1. Visión general
 
-IR0 planifica procesos mediante una **fachada portable** y una **tabla de ops**
-seleccionada por `CONFIG_SCHEDULER_POLICY`. El defconfig usa **bandas de
+IR0 planifica procesos mediante una **fachada portable**, un **núcleo** y
+**un archivo de política** enlazado según `CONFIG_SCHEDULER_POLICY`. El defconfig usa **bandas de
 prioridad** (`=2`). Round-robin (`0`) y el alias de nombre CFS (`1`) siguen
 disponibles. Planificación **un CPU**; preemption por timer diferida.
 
@@ -27,28 +27,24 @@ El código portable **no** embebe `iretq`.
 | Pieza | Rol |
 |-------|-----|
 | `includes/ir0/sched.h` | API portable (sin `<sched/…>`) |
-| `sched/sched.c` | Fachada portable; despacho vía `sched_backend_active()` |
-| `sched/backend.h` | Contrato privado de ops |
-| `sched/backend_select.c` | Selección de política en compilación |
-| `sched/rr/backend.c` / `sched/prio/backend.c` | Implementaciones; una tabla por política vía su propio `backend.h` |
-| `sched/sched_switch.c` | `sched_context_switch_to` compartido |
-| `sched/sched_resched.c` | Helpers de resched (IRQ/TTY/retorno a user) |
-| `sched/prio/backend.c` | Backend por defecto (policy 2) |
-| `sched/rr/backend.c` | Lista de listos (policy 0 / 1) |
+| `sched/core.c` | `schedule()`, `sched_switch_to()`, `sched_take_resched()` |
+| `sched/core.h` | Contrato privado núcleo/política (`sched_pick_next`, `rq_lock`/`rq_unlock`) |
+| `sched/prio.c` | Política por defecto (policy 2) |
+| `sched/rr.c` | Lista de listos (policy 0 / 1) |
 | `first_switch_to` | Primera entrada (propiedad de arch) |
 
-**Policy `1` (`cfs`):** mismo objeto backend que RR; no existe `cfs_sched.c`
+**Policy `1` (`cfs`):** mismo objeto de política que RR; no existe `cfs_sched.c`
 ni un wrapper que incluya el runqueue de RR.
 
 ## 3. Flujo
 
-`schedule()` → ops del backend → pick → `sched_context_switch_to` →
+`schedule()` → `sched_pick_next()` de la política → `sched_switch_to` →
 `first_switch_to` / `switch_to`.
 
 ## 4. Límites del subsistema
 
 - Callers → solo `<ir0/sched.h>`.
-- Un backend no incluye el runqueue de otro.
+- Una política no incluye ni llama a otra; ambas implementan `sched/core.h`.
 - Sin `iretq` inline en código sched portable.
 
 ## 5. Relaciones
