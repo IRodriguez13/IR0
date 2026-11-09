@@ -87,9 +87,14 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 	 */
 	if (!pte || !pte_user(*pte))
 		return -1;
-	if (write && !pte_write(*pte) && pte_cow(*pte))
+	/*
+	 * A write needs a page the process could write itself: writable, or
+	 * COW (broken here like a write fault). Read-only pages, including
+	 * image pages a fork shares without COW, fail like Linux uaccess.
+	 */
+	if (write && !pte_write(*pte))
 	{
-		if (paging_cow_break_leaf(root, pte, page) != 0)
+		if (!pte_cow(*pte) || paging_cow_break_leaf(root, pte, page) != 0)
 			return -1;
 		pte = paging_get_pte(root, page);
 		if (!pte || !mm_pte_present(*pte) || !pte_write(*pte))

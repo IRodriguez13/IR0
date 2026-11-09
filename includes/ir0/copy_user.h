@@ -112,8 +112,9 @@ int access_ok_mapped(const void *addr, size_t size);
  * Copies against an explicit address space (Linux access_remote_vm analogue)
  * for callers that must reach a process other than current, or a root that
  * is not active yet: ELF load, signal frames, exit/wait bookkeeping.
- * They walk @root and break COW like a write fault; only user-accessible
- * leaves inside the ISA user VA window are touched.
+ * They walk @root; only user-accessible leaves inside the ISA user VA window
+ * are touched, and a write needs a writable leaf or a COW one, which it
+ * breaks like a write fault. Fill a mapping before making it read-only.
  * Returns: 0 on success, -EFAULT on error.
  */
 int copy_to_user_mm(address_space_root_t root, uintptr_t dst, const void *src,
