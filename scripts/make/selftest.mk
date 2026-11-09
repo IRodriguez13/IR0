@@ -308,3 +308,35 @@ ir0-selftest-path-too-long-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@echo "✓ ir0-selftest-path-too-long-arm64"
 
 ir0-selftest-path-too-long: ir0-selftest-path-too-long-x86 ir0-selftest-path-too-long-arm64
+IR0_SELFTEST_X86_UACCESS_READONLY := $(KERNEL_ROOT)/build/selftests/x86_64/uaccess_readonly
+IR0_SELFTEST_ARM64_UACCESS_READONLY := $(KERNEL_ROOT)/build/selftests/arm64/uaccess_readonly
+
+.PHONY: ir0-selftest-uaccess-readonly-x86 ir0-selftest-uaccess-readonly-arm64 \
+	ir0-selftest-uaccess-readonly
+
+$(IR0_SELFTEST_X86_UACCESS_READONLY): tests/selftests/kernel/uaccess_readonly.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 uaccess_readonly
+
+$(IR0_SELFTEST_ARM64_UACCESS_READONLY): tests/selftests/kernel/uaccess_readonly.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 uaccess_readonly
+
+# A syscall result is never written into a read-only user page.
+ir0-selftest-uaccess-readonly-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_UACCESS_READONLY)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_UACCESS_READONLY) \
+		--done "ok 3 fork_child_read_into_shared_rodata_efault" \
+		--log $(HOST_TMP)/ir0-selftest-x86-uaccess-readonly.log
+	@echo "✓ ir0-selftest-uaccess-readonly-x86"
+
+ir0-selftest-uaccess-readonly-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_UACCESS_READONLY)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_UACCESS_READONLY) \
+		--done "ok 3 fork_child_read_into_shared_rodata_efault" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-uaccess-readonly.log
+	@echo "✓ ir0-selftest-uaccess-readonly-arm64"
+
+ir0-selftest-uaccess-readonly: ir0-selftest-uaccess-readonly-x86 ir0-selftest-uaccess-readonly-arm64

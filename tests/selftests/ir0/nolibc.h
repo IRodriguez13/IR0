@@ -14,6 +14,7 @@
 #define AT_FDCWD		-100
 #define O_RDONLY		0
 #define O_WRONLY		1
+#define SYS_read		63
 #define SYS_write		64
 #define SYS_close		57
 #define SYS_exit		93
@@ -24,6 +25,7 @@
 #define SYS_clone		220
 #define SYS_wait4		260
 #define SYS_mmap		222
+#define SYS_mprotect		226
 #define SYS_rt_sigaction	134
 #define SYS_rt_sigprocmask	135
 #define SYS_kill		129
@@ -93,6 +95,11 @@ static long nolibc_call(long nr, long a, long b, long c, long d, ...)
 /* ## eats the comma when the selftest passes only the syscall number. */
 #define syscall(nr, ...) nolibc_call((nr), ##__VA_ARGS__, 0L, 0L, 0L, 0L)
 
+static ssize_t read(int fd, void *buf, size_t count)
+{
+	return (ssize_t)syscall(SYS_read, fd, (long)buf, (long)count, 0);
+}
+
 static ssize_t write(int fd, const void *buf, size_t count)
 {
 	return (ssize_t)syscall(SYS_write, fd, (long)buf, (long)count, 0);
@@ -101,6 +108,11 @@ static ssize_t write(int fd, const void *buf, size_t count)
 static int open(const char *path, int flags)
 {
 	return (int)syscall(SYS_openat, AT_FDCWD, (long)path, flags, 0);
+}
+
+static int close(int fd)
+{
+	return (int)syscall(SYS_close, fd);
 }
 
 static long nolibc_svc6(long nr, long a, long b, long c, long d, long e,
@@ -269,6 +281,11 @@ static ssize_t send(int fd, const void *buf, size_t len, int flags)
 static ssize_t recv(int fd, void *buf, size_t len, int flags)
 {
 	return recvfrom(fd, buf, len, flags, 0, 0);
+}
+
+static int mprotect(void *addr, size_t len, int prot)
+{
+	return (int)syscall(SYS_mprotect, (long)addr, (long)len, prot);
 }
 
 unsigned char nolibc_stack[8192] __attribute__((aligned(16))) = { 1 };
