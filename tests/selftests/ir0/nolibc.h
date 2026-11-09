@@ -38,9 +38,7 @@
 #define SYS_kill		129
 #define SYS_rt_sigreturn	139
 #define SYS_socket		198
-#define SYS_socketpair		199
 #define SYS_sendto		206
-#define SYS_recvfrom		207
 #define SA_SIGINFO		0x00000004UL
 #define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
@@ -59,9 +57,7 @@
 #define MAP_PRIVATE		0x02
 #define MAP_ANONYMOUS		0x20
 #define MAP_FAILED		((void *)-1)
-#define AF_UNIX			1
 #define AF_INET			2
-#define SOCK_STREAM		1
 #define SOCK_DGRAM		2
 #define MSG_DONTWAIT		0x40
 #define WIFSIGNALED(s)		(((s) & 0x7f) != 0 && ((s) & 0x7f) != 0x7f)
