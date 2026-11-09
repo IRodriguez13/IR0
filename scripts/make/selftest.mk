@@ -71,6 +71,7 @@ ir0-selftest-fault-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_FAULT)
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_FAULT) \
 		--done "ok 3 segv_child_killed" \
+		--expect-log "USER_FAULT_FRAME kind=PAGE_FAULT hw=e " \
 		--log $(HOST_TMP)/ir0-selftest-x86-fault.log
 	@echo "✓ ir0-selftest-fault-x86"
 
@@ -79,6 +80,7 @@ ir0-selftest-fault-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_FAULT)
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_FAULT) \
 		--done "ok 3 segv_child_killed" \
+		--expect-log "USER_FAULT_FRAME kind=PAGE_FAULT hw=24 " \
 		--log $(HOST_TMP)/ir0-selftest-arm64-fault.log
 	@echo "✓ ir0-selftest-fault-arm64"
 

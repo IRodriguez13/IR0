@@ -43,6 +43,12 @@ def main() -> int:
         default="",
         help="KTAP success tag (default from binary basename)",
     )
+    parser.add_argument(
+        "--expect-log",
+        action="append",
+        default=[],
+        help="Substring the serial log must contain (repeatable)",
+    )
     args = parser.parse_args()
 
     binary = Path(args.binary)
@@ -203,6 +209,16 @@ def main() -> int:
     if rc != 0:
         print(f"ir0-selftest: QEMU failed rc={rc} log={log}", file=sys.stderr)
         return rc
+    if args.expect_log:
+        missing = set(args.expect_log)
+        for line in safety.iter_log_lines(log):
+            missing = {want for want in missing if want not in line}
+            if not missing:
+                break
+        if missing:
+            for want in sorted(missing):
+                print(f"ir0-selftest: log lacks {want!r} log={log}", file=sys.stderr)
+            return 1
     if args.expected_panic:
         # The panic stops userspace before KTAP can report; the done tags
         # matched above are the verdict. A "not ok" printed first still fails.
