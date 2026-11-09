@@ -26,6 +26,13 @@
 #define SYS_wait4		260
 #define SYS_mmap		222
 #define SYS_mprotect		226
+#define SYS_pipe2		59
+#define SYS_socketpair		199
+#define SYS_recvfrom		207
+#define AF_UNIX			1
+#define SOCK_STREAM		1
+#define SOCK_NONBLOCK		04000
+#define O_NONBLOCK		04000
 #define SYS_rt_sigaction	134
 #define SYS_rt_sigprocmask	135
 #define SYS_kill		129
@@ -286,6 +293,11 @@ static ssize_t recv(int fd, void *buf, size_t len, int flags)
 static int mprotect(void *addr, size_t len, int prot)
 {
 	return (int)syscall(SYS_mprotect, (long)addr, (long)len, prot);
+}
+
+static int pipe2(int fds[2], int flags)
+{
+	return (int)syscall(SYS_pipe2, (long)fds, flags);
 }
 
 unsigned char nolibc_stack[8192] __attribute__((aligned(16))) = { 1 };
