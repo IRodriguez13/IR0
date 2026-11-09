@@ -22,6 +22,7 @@ void ktest_allocator_stats(void);
 void ktest_pmm_skips_reserved_ranges(void);
 void ktest_path(void);
 void ktest_string(void);
+void ktest_log_fmt_follows_klog_level(void);
 void ktest_syscall_getpid(void);
 void ktest_syscall_open_close(void);
 void ktest_syscall_proc_read(void);

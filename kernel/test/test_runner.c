@@ -44,6 +44,7 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_pmm_skips_reserved_ranges, "pmm_skips_reserved_ranges", 0 },
 	{ ktest_path, "path", 0 },
 	{ ktest_string, "string", 0 },
+	{ ktest_log_fmt_follows_klog_level, "log_fmt_follows_klog_level", 0 },
 	{ ktest_syscall_getpid, "syscall_getpid", 1 },
 	{ ktest_syscall_open_close, "syscall_open_close", 1 },
 	{ ktest_syscall_proc_read, "syscall_proc_read", 1 },

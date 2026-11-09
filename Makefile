@@ -569,6 +569,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_allocator.o \
 	kernel/test/test_path.o \
 	kernel/test/test_string.o \
+	kernel/test/test_logging.o \
 	kernel/test/test_ktm_sched.o \
 	kernel/test/test_sock_stream.o \
 	kernel/test/test_mmap_null_placement.o \
