@@ -81,7 +81,7 @@ void kernel_idle_poll(void)
 	if (ir0_console_take_resched())
 		woke = 1;
 	if (woke)
-		sched_schedule_next();
+		schedule();
 }
 
 /* kernel_idle_loop lives in kernel/process/idle.c (includes/ir0/idle.h). */

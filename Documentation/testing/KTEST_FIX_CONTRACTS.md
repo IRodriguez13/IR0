@@ -77,7 +77,7 @@ not call through a non-NULL hook.
 
 | Symbol | Where it runs | Contract |
 |--------|---------------|----------|
-| `ir0_futex_before_sleep` | Start of a blocked `ir0_futex_wait`, before `sched_schedule_next` | May mark the task `PROCESS_READY`. Must not call `ir0_futex_wait`. |
+| `ir0_futex_before_sleep` | Start of a blocked `ir0_futex_wait`, before `schedule` | May mark the task `PROCESS_READY`. Must not call `ir0_futex_wait`. |
 | `ipc_sleep_recheck_probe` | After `wait_queue_add`, before the ring is checked again | Must not sleep or schedule. |
 | `paging_unmap_test_hook` | First thing in `unmap_page_in_directory` (`mm/paging.c`), both ISAs | Return `-EOPNOTSUPP` to fall through to the table walker. Any other value is the unmap result and the walker does not run. |
 

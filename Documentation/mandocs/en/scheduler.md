@@ -48,7 +48,7 @@ peer runqueue internals.
 
 ## 3. Data flow
 
-**`sched_schedule_next()` (via ops):**
+**`schedule()` (via ops):**
 
 1. CLI (IRQ-safe) inside the active backend.
 2. If queue empty → return (idle loop handles HLT).
@@ -57,7 +57,7 @@ peer runqueue internals.
 5. First switch: `first_switch_to(next)`.
 6. Later: `switch_to(&prev->task, &next->task)`.
 
-**Wake paths** set `PROCESS_READY` and may call `sched_schedule_next`
+**Wake paths** set `PROCESS_READY` and may call `schedule`
 (poll/sleep/stdin/pipe/IPC).
 
 ## 4. Responsibilities
@@ -77,7 +77,7 @@ peer runqueue internals.
 
 | Neighbor | Interaction |
 |----------|---------------|
-| Process | `sched_add_process` / `sched_remove_process` on spawn/exit |
+| Process | `sched_add` / `sched_remove` on spawn/exit |
 | Syscalls | Block in handler; wake from idle poll |
 | Timer | PIT quantum counting (preemption hook deferred) |
 | Arch | `first_switch_to`, `switch_context_x64` / ARM |
@@ -85,7 +85,7 @@ peer runqueue internals.
 ## 7. Invariants
 
 1. `process_t` begins with embedded `task_t` at offset 0.
-2. Duplicate `sched_add_process` is idempotent.
+2. Duplicate `sched_add` is idempotent.
 3. Zombies are skipped by pickers.
 4. First entry always goes through the arch facade.
 

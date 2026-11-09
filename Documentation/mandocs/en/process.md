@@ -62,7 +62,7 @@ fd table, credentials, cwd, signal state, and mmap list. Creation paths include
        → spawn_user → new PML4
        → elf_load_segments (map + copy under kernel CR3)
        → elf_setup_stack (argc/argv/envp)
-       → sched_add_process → return pid
+       → sched_add → return pid
 ```
 
 **fork:**

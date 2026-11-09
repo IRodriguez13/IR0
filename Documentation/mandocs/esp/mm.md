@@ -52,7 +52,7 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
 2. Fase 1: mapear todo PT_LOAD con `map_user_region_in_directory` bajo **CR3 kernel**.
 3. Fase 2: copiar bytes de segmento / zero BSS vía acceso a frame físico.
 4. `elf_setup_stack` — argc/argv/envp en pila de usuario.
-5. `sched_add_process`.
+5. `sched_add`.
 
 **`sys_brk`:** extiende desde `USER_HEAP_BASE` hasta `USER_HEAP_MAX_SIZE` (tope 256 MiB).
 

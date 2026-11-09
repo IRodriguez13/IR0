@@ -49,7 +49,7 @@ POSIX musl depende de fork/execve y wait4.
        → spawn_user → nuevo PML4
        → elf_load_segments (map + copy bajo CR3 kernel)
        → elf_setup_stack (argc/argv/envp)
-       → sched_add_process → retornar pid
+       → sched_add → retornar pid
 ```
 
 **fork:**

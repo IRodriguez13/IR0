@@ -761,8 +761,8 @@ static int poll_wake_do(void)
       if (w->proc->state == PROCESS_BLOCKED)
       {
         process_set_sched_state(w->proc, PROCESS_READY);
-        sched_add_process(w->proc);
-        sched_promote_process(w->proc);
+        sched_add(w->proc);
+        sched_promote(w->proc);
       }
       woke = 1;
     }
@@ -840,8 +840,8 @@ void syscall_wake_blocked_on_child(process_t *parent)
 	if (was_blocked || wait_armed)
 	{
 		process_set_sched_state(parent, PROCESS_READY);
-		sched_add_process(parent);
-		sched_promote_process(parent);
+		sched_add(parent);
+		sched_promote(parent);
 	}
 }
 
@@ -1058,7 +1058,7 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 		 * O_NONBLOCK. Yield and let the caller retry pipe_write/read.
 		 */
 		enable_interrupts();
-		sched_schedule_next();
+		schedule();
 		ret = 0;
 		goto out;
 	}
@@ -1134,7 +1134,7 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 			process_arm_kernel_syscall_sleep(proc);
 
 		enable_interrupts();
-		sched_schedule_next();
+		schedule();
 
 		if (signals_pause_should_interrupt(proc))
 		{
@@ -1209,7 +1209,7 @@ void pipe_wake_all(pipe_t *pipe)
 				if (proc->mode == USER_MODE)
 					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
-				sched_promote_process(proc);
+				sched_promote(proc);
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -1225,7 +1225,7 @@ void pipe_wake_all(pipe_t *pipe)
 				if (proc->mode == USER_MODE)
 					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
-				sched_promote_process(proc);
+				sched_promote(proc);
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -1258,7 +1258,7 @@ void pipe_wake_check(void)
 				if (proc->mode == USER_MODE)
 					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
-				sched_promote_process(proc);
+				sched_promote(proc);
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -1274,7 +1274,7 @@ void pipe_wake_check(void)
 				if (proc->mode == USER_MODE)
 					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
-				sched_promote_process(proc);
+				sched_promote(proc);
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;

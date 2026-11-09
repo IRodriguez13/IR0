@@ -62,19 +62,7 @@ void sched_switch_to(process_t *next)
 	rq_unlock(irq_flags);
 }
 
-void sched_adopt_running_context(process_t *running)
-{
-	unsigned long irq_flags;
-
-	irq_flags = rq_lock();
-	process_set_current(running);
-	sched_has_running_context = running != NULL;
-	if (running)
-		process_set_sched_state(running, PROCESS_RUNNING);
-	rq_unlock(irq_flags);
-}
-
-void sched_schedule_next(void)
+void schedule(void)
 {
 	process_t *next = sched_pick_next();
 
@@ -82,16 +70,7 @@ void sched_schedule_next(void)
 		sched_switch_to(next);
 }
 
-void sched_try_preempt_blocked(void)
-{
-	if (!current_process || current_process->state != PROCESS_BLOCKED)
-		return;
-	if (sched_count_runnable() == 0)
-		return;
-	sched_schedule_next();
-}
-
-int sched_user_return_take_switch(void)
+int sched_take_resched(void)
 {
 	if (!current_process || current_process->state == PROCESS_BLOCKED)
 		return 0;
@@ -100,10 +79,4 @@ int sched_user_return_take_switch(void)
 	if (!clock_take_sched_resched_pending())
 		return 0;
 	return 1;
-}
-
-void sched_need_resched_user_return(void)
-{
-	if (sched_user_return_take_switch())
-		sched_schedule_next();
 }

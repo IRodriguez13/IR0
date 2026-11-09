@@ -492,7 +492,7 @@ static int tty_sleep_for_input(void)
 					full_hits, (unsigned int)proc->task.pid);
 		enable_interrupts();
 		kernel_idle_poll();
-		sched_schedule_next();
+		schedule();
 		return 0;
 	}
 
@@ -545,7 +545,7 @@ static int tty_sleep_for_input(void)
 		 */
 		tty_sleep_depth--;
 		enable_interrupts();
-		sched_schedule_next();
+		schedule();
 		tty_sleep_depth++;
 
 		if (proc->state != PROCESS_BLOCKED)
@@ -617,7 +617,7 @@ void ir0_console_keypress(char c)
 			input_kbd_resync_modifiers();
 			tty_deliver_sig(SIGINT);
 			/*
-			 * Never sched_schedule_next() here: keypress runs under
+			 * Never schedule() here: keypress runs under
 			 * IRQ1. Wake + tty_need_resched; ISR / idle_poll switch.
 			 */
 			(void)ir0_console_wake_readers();
@@ -933,7 +933,7 @@ int ir0_console_wake_readers(void)
 		process_set_sched_state(reader, PROCESS_READY);
 		d1_16_tty_state_transition(reader, prev_state, PROCESS_READY);
 		/* Prefer woken TTY reader on the next schedule. */
-		sched_promote_process(reader);
+		sched_promote(reader);
 		last_pid = (uint32_t)reader->task.pid;
 		tty_read_waiters[i] = NULL;
 		woke = 1;

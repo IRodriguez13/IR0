@@ -45,7 +45,7 @@ void ir0_utsname_fill_version(char *dst, size_t n)
 	else
 		cpu_mode = "UP";
 
-	sched_name = sched_active_policy_name();
+	sched_name = sched_policy_name();
 	if (sched_name && strcmp(sched_name, "priority") == 0)
 		sched_label = "Priority";
 	else

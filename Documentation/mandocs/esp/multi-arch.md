@@ -59,7 +59,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 **Context switch (producto x86):**
 
 ```text
-  sched_schedule_next → first_switch_to(next)   # primera entrada
+  schedule → first_switch_to(next)   # primera entrada
                      → switch_to(prev, next)    # posteriores
 ```
 

@@ -53,7 +53,7 @@ void stdin_wake_check(void)
 	if (!stdin_wake_check_nosched())
 		return;
 	/*
-	 * Never sched_schedule_next() from here: keyboard IRQ calls this while
+	 * Never schedule() from here: keyboard IRQ calls this while
 	 * current may be userspace or idle. Mid-IRQ switch_to saves [rsp] into
 	 * prev->task.rip (kernel C / stack junk) → later kernel_ret/#UD into
 	 * BSS (desk panic after top/TTY). Defer via resched flags; ISR exit

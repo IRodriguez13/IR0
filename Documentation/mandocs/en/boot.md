@@ -59,7 +59,7 @@ GRUB → boot_x64.asm
               → "kernel core initialization complete"
               → [CONFIG_KTM] suite → "KTM validation complete"
               → "system ready for userspace" + kexecve("/sbin/init")
-              → sched_schedule_next → ring 3
+              → schedule → ring 3
 ```
 
 **Early IDT:** installed immediately after TSS in `early_init_x86_64()` so a
@@ -88,7 +88,7 @@ instead of triple-faulting silently. `irq_init()` installs the full table later.
 | Drivers | `init_all_drivers` before `vfs_init_root` block check |
 | VFS | Root mount uses `CONFIG_ROOT_BLOCK_DEVICE`, `CONFIG_ROOT_FILESYSTEM` |
 | Process | `process_init` before first `kexecve` |
-| Scheduler | First user task entered via `sched_schedule_next` |
+| Scheduler | First user task entered via `schedule` |
 | Klog | [`KLOG.md`](../../KLOG.md) — phases, sinks, `/proc/kmsg` |
 
 ## 7. Visual maps
@@ -107,7 +107,7 @@ Mermaid source: `Documentation/mandocs/diagrams/boot.mmd`
 1. Multiboot magic must be `0x2BADB002` or boot halts with `"MN"` on VGA.
 2. PMM pool (`0x2000000`–`0x3000000`) must not overlap kernel heap (`0x800000`–`0x2000000`).
 3. `sti` runs only after IDT/PIC and syscall tables are initialized.
-4. If `sched_schedule_next` returns after init handoff, `kmain` panics.
+4. If `schedule` returns after init handoff, `kmain` panics.
 5. No separate kernel higher-half VA; boot identity map serves kernel and early user.
 6. Framed klog starts with the BOOT banner; every record carries `#sequence` and
    boot phase; timestamps stay `[    ?.???]` until monotonic clock

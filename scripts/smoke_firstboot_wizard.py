@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Interactive firstboot wizard smoke (HMP): username + password Confirm.
 
-Repro for #UD when sched_schedule_next ran under keyboard IRQ on Enter.
+Repro for #UD when schedule ran under keyboard IRQ on Enter.
 PASS: FIRSTBOOT_OK or login prompt without KERNEL PANIC / #UD.
 """
 

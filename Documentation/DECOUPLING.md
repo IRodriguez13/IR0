@@ -122,7 +122,7 @@ specific driver implementation file:
 | Syscalls ABI | `syscall*.h`, `copy_user.h` | Arch-specific stubs |
 | Driver model | `driver.h`, `driver_bootstrap.h`, `init_drv.h` | Registry, boot order (opaque headers) |
 | Power | `platform_ops.h` | `kernel/power/power_manag.c` |
-| Scheduler | **`sched.h`** | Process/timer/IRQ → `sched_schedule_next()` |
+| Scheduler | **`sched.h`** | Process/timer/IRQ → `schedule()` |
 | IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not arch interrupt backend headers from portable/drivers |
 | UP spinlock | **`spinlock.h`** (`ir0_spinlock_t`; irq-save on UP) | Hot paths e.g. `kernel/lib/pipe.c` read/write |
 | Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/page_fault.c` calls; impl in `arch/*/sources/pf_debug.c` |

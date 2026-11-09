@@ -80,7 +80,7 @@ static int prio_already_queued(process_t *proc)
 	return 0;
 }
 
-void sched_add_process(process_t *proc)
+void sched_add(process_t *proc)
 {
 	prio_task_t *node;
 	prio_band_t *band;
@@ -124,7 +124,7 @@ void sched_add_process(process_t *proc)
 	rq_unlock(irq_flags);
 }
 
-void sched_remove_process(process_t *proc)
+void sched_remove(process_t *proc)
 {
 	prio_task_t *cur;
 	prio_task_t *prev;
@@ -279,7 +279,7 @@ int sched_count_runnable(void)
 	return count;
 }
 
-void sched_promote_process(process_t *proc)
+void sched_promote(process_t *proc)
 {
 	int b;
 	prio_task_t *walk;
@@ -327,16 +327,16 @@ int sched_selftest(void)
 	lo.task.pid = 9001;
 	hi.task.pid = 9002;
 
-	sched_add_process(&lo);
-	sched_add_process(&hi);
+	sched_add(&lo);
+	sched_add(&hi);
 
 	irq_flags = rq_lock();
 	pick = priority_pick_next();
 	if (pick != &hi)
 	{
 		rq_unlock(irq_flags);
-		sched_remove_process(&lo);
-		sched_remove_process(&hi);
+		sched_remove(&lo);
+		sched_remove(&hi);
 		return -1;
 	}
 	for (i = 0; i < PRIO_PREFERRED_RUNS + 2; i++)
@@ -347,8 +347,8 @@ int sched_selftest(void)
 	}
 	rq_unlock(irq_flags);
 
-	sched_remove_process(&lo);
-	sched_remove_process(&hi);
+	sched_remove(&lo);
+	sched_remove(&hi);
 
 	if (!saw_lo)
 		return -1;
@@ -357,7 +357,7 @@ int sched_selftest(void)
 	return 0;
 }
 
-const char *sched_active_policy_name(void)
+const char *sched_policy_name(void)
 {
 	return "priority";
 }

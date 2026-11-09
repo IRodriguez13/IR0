@@ -52,7 +52,7 @@ PML4s for user processes.
 2. Phase 1: map all PT_LOAD with `map_user_region_in_directory` under **kernel CR3**.
 3. Phase 2: copy segment bytes / zero BSS via physical frame access.
 4. `elf_setup_stack` — argc/argv/envp on user stack.
-5. `sched_add_process`.
+5. `sched_add`.
 
 **`sys_brk`:** extends from `USER_HEAP_BASE` up to `USER_HEAP_MAX_SIZE` (256 MiB cap).
 

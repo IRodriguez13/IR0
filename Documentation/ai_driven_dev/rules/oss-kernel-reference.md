@@ -41,7 +41,7 @@ When fixing **memory/paging faults**, **syscall/ring-3 bring-up**, **scheduler/c
 - **Linux** `arch/x86/kernel/process.c` — `context_switch` + `switch_mm`.
 - **FreeBSD/NetBSD** `mi_switch`, `pmap_activate` on thread switch.
 
-Do not `sched_add_process()` until PT_LOAD, stack, and arch entry state are ready.
+Do not `sched_add()` until PT_LOAD, stack, and arch entry state are ready.
 
 ## Syscalls & ring 3
 

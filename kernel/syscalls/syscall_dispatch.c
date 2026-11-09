@@ -617,10 +617,10 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
        * scratch: a peer task's syscall resets that stack to the top and would
        * clobber our saved pt_regs, corrupting user registers on resume.
        */
-      if (sched_user_return_take_switch())
+      if (sched_take_resched())
       {
         process_arm_coop_resched_resume(current_process, (uint64_t)r);
-        sched_schedule_next();
+        schedule();
         /*
          * Control only returns here when no switch actually occurred (a
          * coop-resumed task re-enters in user mode, not at this call site).
@@ -637,7 +637,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     {
       if (current_process && current_process->mode == USER_MODE)
         process_arm_kernel_syscall_sleep(current_process);
-      sched_need_resched_user_return();
+      if (sched_take_resched())
+        schedule();
     }
   }
 

@@ -42,7 +42,7 @@ ni un wrapper que incluya el runqueue de RR.
 
 ## 3. Flujo
 
-`sched_schedule_next()` → ops del backend → pick → `sched_context_switch_to` →
+`schedule()` → ops del backend → pick → `sched_context_switch_to` →
 `first_switch_to` / `switch_to`.
 
 ## 4. Límites del subsistema
@@ -55,7 +55,7 @@ ni un wrapper que incluya el runqueue de RR.
 
 | Vecino | Interacción |
 |--------|-------------|
-| Process | `sched_add_process` / `sched_remove_process` |
+| Process | `sched_add` / `sched_remove` |
 | Syscalls | Bloqueo; wake desde idle poll |
 | Timer | Quantum PIT (preemption diferida) |
 | Arch | First switch + ASM |

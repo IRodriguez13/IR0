@@ -56,7 +56,7 @@ GRUB → boot_x64.asm
               → syscall_init + syscalls_init
               → irq_init + ir0_boot_port_unmask_irqs + sti
               → fase USERSPACE: kexecve("/sbin/init")
-              → sched_schedule_next → ring 3
+              → schedule → ring 3
 ```
 
 ## 4. Responsabilidades
@@ -81,7 +81,7 @@ GRUB → boot_x64.asm
 | Drivers | `init_all_drivers` antes del chequeo de bloque en `vfs_init_root` |
 | VFS | Montaje raíz usa `CONFIG_ROOT_BLOCK_DEVICE`, `CONFIG_ROOT_FILESYSTEM` |
 | Process | `process_init` antes del primer `kexecve` |
-| Scheduler | Primera tarea de usuario entra vía `sched_schedule_next` |
+| Scheduler | Primera tarea de usuario entra vía `schedule` |
 
 ## 7. Mapas visuales
 
@@ -99,7 +99,7 @@ Fuente Mermaid: `Documentation/mandocs/diagrams/boot.mmd`
 1. La magia Multiboot debe ser `0x2BADB002` o el arranque se detiene con `"MN"` en VGA.
 2. El pool PMM (`0x2000000`–`0x3000000`) no debe solaparse con el heap del kernel (`0x800000`–`0x2000000`).
 3. `sti` solo corre tras init de IDT/PIC y tablas de syscall.
-4. Si `sched_schedule_next` retorna tras el handoff de init, `kmain` entra en pánico.
+4. Si `schedule` retorna tras el handoff de init, `kmain` entra en pánico.
 5. No hay VA separada de kernel en higher-half; el mapa de identidad de arranque sirve a kernel y usuario temprano.
 
 ## 9. Consejos de depuración

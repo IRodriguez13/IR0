@@ -41,7 +41,7 @@ process without invoking user handlers; full POSIX semantics are not complete.
        → send_signal(target, sig)
        → signal_pending |= mask
 
-  sched_schedule_next (outgoing RUNNING task)
+  schedule (outgoing RUNNING task)
        → handle_signals()
             ├─ SIGKILL → process_exit
             ├─ SIGSTOP → PROCESS_BLOCKED

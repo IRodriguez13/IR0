@@ -77,7 +77,7 @@ void ktest_tty_canon_block_wake(void)
 	KASSERT_GT(pid, 0);
 
 	for (i = 0; i < 50000 && !ir0_console_has_blocked_reader(); i++)
-		sched_schedule_next();
+		schedule();
 
 	KASSERT(ir0_console_has_blocked_reader());
 
@@ -85,7 +85,7 @@ void ktest_tty_canon_block_wake(void)
 
 	for (i = 0; i < 200000 && !tty_ktest_done; i++)
 	{
-		sched_schedule_next();
+		schedule();
 		kernel_idle_poll();
 	}
 

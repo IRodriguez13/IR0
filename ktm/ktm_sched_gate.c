@@ -38,7 +38,7 @@ void ktm_sched_gate_check_before_sched(const char *caller)
 	klog_warn_fmt("KTM",
 		      "[KTM][SCHED_GATE] sched from IRQ without contract caller=%s",
 		      caller ? caller : "?");
-	ktm_fail_at("SCHED_GATE", "sched_schedule_next from IRQ", KTM_FILE, __LINE__);
+	ktm_fail_at("SCHED_GATE", "schedule from IRQ", KTM_FILE, __LINE__);
 }
 
 #endif /* IR0_KERNEL_TESTS */

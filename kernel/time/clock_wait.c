@@ -43,8 +43,8 @@ static void ir0_clock_wait_wake_process(process_t *proc)
 		return;
 
 	process_set_sched_state(proc, PROCESS_READY);
-	sched_add_process(proc);
-	sched_promote_process(proc);
+	sched_add(proc);
+	sched_promote(proc);
 }
 
 void ir0_clock_wait_arm(process_t *proc, uint64_t deadline_ms)
@@ -109,7 +109,7 @@ static void ir0_clock_wait_idle_step(void)
 		cpu_idle();
 		/*
 		 * Nosched wakes only — block_until / service_runqueue issue one
-		 * sched_schedule_next per loop. Nested schedule from
+		 * schedule per loop. Nested schedule from
 		 * poll_wake_check/stdin_wake_check caused Class B on desk.
 		 */
 		kernel_idle_poll_nosched();
@@ -130,7 +130,7 @@ void ir0_clock_wait_service_runqueue(void)
 {
 	ir0_clock_wait_idle_step();
 	if (ir0_clock_should_yield_runqueue(current_process))
-		sched_schedule_next();
+		schedule();
 }
 
 int ir0_clock_wait_block_until(uint64_t deadline_ms)
@@ -152,7 +152,7 @@ int ir0_clock_wait_block_until(uint64_t deadline_ms)
 	{
 		ir0_clock_wait_idle_step();
 		if (ir0_clock_should_yield_runqueue(proc))
-			sched_schedule_next();
+			schedule();
 
 		if (proc->state != PROCESS_BLOCKED)
 			break;

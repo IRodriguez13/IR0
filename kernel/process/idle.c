@@ -39,7 +39,7 @@ void kernel_idle_loop(void)
 		if (g_idle_ops.poll)
 			g_idle_ops.poll();
 		if (sched_count_runnable() > 1)
-			sched_schedule_next();
+			schedule();
 		else if (g_idle_ops.on_quiescent)
 			g_idle_ops.on_quiescent();
 		else

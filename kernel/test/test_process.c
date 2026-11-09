@@ -76,7 +76,7 @@ void ktest_wait4_status(void)
 	KASSERT(child != NULL);
 	process_mark_zombie(child);
 	child->exit_code = 42;
-	sched_remove_process(child);
+	sched_remove(child);
 
 	waited = process_wait(pid, &status, 0);
 	KASSERT_EQ(waited, pid);
@@ -114,7 +114,7 @@ static void ktest_wait4_specific_scenario(void)
 	KASSERT(child_b != NULL);
 	process_mark_zombie(child_b);
 	child_b->exit_code = 20;
-	sched_remove_process(child_b);
+	sched_remove(child_b);
 
 	process_wait_blocked_set(current_process);
 	process_wait_target_pid_set(current_process, pid_a);
@@ -128,7 +128,7 @@ static void ktest_wait4_specific_scenario(void)
 	KASSERT(child_a != NULL);
 	process_mark_zombie(child_a);
 	child_a->exit_code = 10;
-	sched_remove_process(child_a);
+	sched_remove(child_a);
 
 	KASSERT(process_find_by_pid(pid_b) != NULL);
 	status = -1;
@@ -234,7 +234,7 @@ void ktest_wait4_minus_one_reaps_any_child(void)
 	KASSERT(child_b != NULL);
 	process_mark_zombie(child_b);
 	child_b->exit_code = 20;
-	sched_remove_process(child_b);
+	sched_remove(child_b);
 
 	status = -1;
 	KASSERT_EQ(process_wait((pid_t)-1, &status, 0), pid_b);
@@ -250,7 +250,7 @@ void ktest_wait4_minus_one_reaps_any_child(void)
 		{
 			process_mark_zombie(child_a);
 			child_a->exit_code = 10;
-			sched_remove_process(child_a);
+			sched_remove(child_a);
 			KASSERT_EQ(process_wait(pid_a, NULL, 0), pid_a);
 		}
 	}
@@ -270,7 +270,7 @@ void ktest_wait4_specific_no_leak_after_destroy(void)
 	KASSERT(child != NULL);
 	process_mark_zombie(child);
 	child->exit_code = 7;
-	sched_remove_process(child);
+	sched_remove(child);
 
 	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KASSERT(process_find_by_pid(pid) == NULL);
@@ -296,7 +296,7 @@ void ktest_wait4_wnohang_specific(void)
 	/* WNOHANG must leave the child alive, but the test must reap it. */
 	process_mark_zombie(child);
 	child->exit_code = 10;
-	sched_remove_process(child);
+	sched_remove(child);
 	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KASSERT(process_find_by_pid(pid) == NULL);
 	KTEST_END();
@@ -315,7 +315,7 @@ void ktest_wait4_wnohang_echild_after_reap(void)
 	KASSERT(child != NULL);
 	process_mark_zombie(child);
 	child->exit_code = 5;
-	sched_remove_process(child);
+	sched_remove(child);
 
 	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KASSERT(process_find_by_pid(pid) == NULL);
@@ -340,7 +340,7 @@ void ktest_kill_sigterm_wait_status(void)
 	process_mark_zombie(child);
 	child->exit_signal = SIGTERM;
 	child->exit_code = 0;
-	sched_remove_process(child);
+	sched_remove(child);
 
 	waited = process_wait(pid, &status, 0);
 	KASSERT_EQ(waited, pid);
@@ -363,7 +363,7 @@ void ktest_kill_sigterm_wait_status(void)
 	{
 		process_mark_zombie(child);
 		child->exit_code = 0;
-		sched_remove_process(child);
+		sched_remove(child);
 	}
 	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KTEST_END();
@@ -410,10 +410,10 @@ void ktest_wait4_pgrp(void)
 
 	process_mark_zombie(child_same);
 	child_same->exit_code = 10;
-	sched_remove_process(child_same);
+	sched_remove(child_same);
 	process_mark_zombie(child_other);
 	child_other->exit_code = 20;
-	sched_remove_process(child_other);
+	sched_remove(child_other);
 
 	status = -1;
 	KASSERT_EQ(process_wait(0, &status, 0), pid_same);

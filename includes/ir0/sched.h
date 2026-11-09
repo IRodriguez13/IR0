@@ -18,21 +18,25 @@
 
 typedef struct process process_t;
 
-void sched_add_process(process_t *proc);
-void sched_remove_process(process_t *proc);
-void sched_schedule_next(void);
+/* Run the next task the policy picks; returns when this task runs again. */
+void schedule(void);
+
+/* Switch to @next directly (the exit path hands the CPU to idle). */
 void sched_switch_to(process_t *next);
-const char *sched_active_policy_name(void);
-int sched_count_runnable(void);
-void sched_promote_process(process_t *proc);
-int sched_selftest(void);
 
 /*
- * Adopt a context that firmware or an early harness is already executing.
- * Passing NULL restores the normal first-switch contract.
+ * Consume the timer's reschedule request. Returns 1 when the request was
+ * pending and another task can run; the caller then calls schedule().
  */
-void sched_adopt_running_context(process_t *running);
+int sched_take_resched(void);
 
-void sched_try_preempt_blocked(void);
-int sched_user_return_take_switch(void);
-void sched_need_resched_user_return(void);
+/* Runqueue membership, implemented by the linked policy. */
+void sched_add(process_t *proc);
+void sched_remove(process_t *proc);
+/* Make @proc READY and the policy's next candidate. */
+void sched_promote(process_t *proc);
+int sched_count_runnable(void);
+
+const char *sched_policy_name(void);
+/* Policy self-check at boot; 0 when it holds. */
+int sched_selftest(void);

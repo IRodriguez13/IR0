@@ -42,7 +42,7 @@ no está terminada.
        → send_signal(target, sig)
        → signal_pending |= mask
 
-  sched_schedule_next (tarea RUNNING saliente)
+  schedule (tarea RUNNING saliente)
        → handle_signals()
             ├─ SIGKILL → process_exit
             ├─ SIGSTOP → PROCESS_BLOCKED

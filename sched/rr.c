@@ -38,7 +38,7 @@ static rr_task_t *rr_current = NULL;
 #define RR_MAX_PICK_ATTEMPTS 100
 
 /**
- * sched_add_process - Add a process to the round-robin scheduler
+ * sched_add - Add a process to the round-robin scheduler
  * @proc: Process to add (must be valid and not already in scheduler)
  *
  * Inserts a new process into the round-robin queue at the tail,
@@ -56,7 +56,7 @@ static rr_task_t *rr_current = NULL;
  *
  * Thread safety: NOT thread-safe - caller must ensure mutual exclusion
  */
-void sched_add_process(process_t *proc)
+void sched_add(process_t *proc)
 {
 	rr_task_t *scan;
 	rr_task_t *node;
@@ -126,7 +126,7 @@ void sched_add_process(process_t *proc)
 }
 
 /**
- * sched_remove_process - Remove a process from the round-robin scheduler
+ * sched_remove - Remove a process from the round-robin scheduler
  * @proc: Process to remove (must be valid and in scheduler)
  *
  * Removes a process from the scheduler queue. This is used when a process
@@ -144,7 +144,7 @@ void sched_add_process(process_t *proc)
  *
  * Thread safety: NOT thread-safe - caller must ensure mutual exclusion
  */
-void sched_remove_process(process_t *proc)
+void sched_remove(process_t *proc)
 {
 	rr_task_t *current;
 	rr_task_t *prev;
@@ -273,7 +273,7 @@ int sched_count_runnable(void)
 	return count;
 }
 
-void sched_promote_process(process_t *proc)
+void sched_promote(process_t *proc)
 {
 	rr_task_t *walk;
 	rr_task_t *prev = NULL;
@@ -304,7 +304,7 @@ void sched_promote_process(process_t *proc)
 	rq_unlock(irq_flags);
 }
 
-const char *sched_active_policy_name(void)
+const char *sched_policy_name(void)
 {
 	/* Policy 1 is an honest CFS name alias over the round-robin queue. */
 	return CONFIG_SCHEDULER_POLICY == 1 ? "cfs" : "round_robin";

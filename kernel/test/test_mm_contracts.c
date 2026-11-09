@@ -345,7 +345,7 @@ void ktest_reclaim_freed_page_tables_safely(void)
 
 	process_mark_zombie(child);
 	child->exit_code = 0;
-	sched_remove_process(child);
+	sched_remove(child);
 	KASSERT_EQ(process_wait(pid, NULL, 0), pid);
 	KTEST_END();
 }

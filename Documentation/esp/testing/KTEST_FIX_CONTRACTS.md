@@ -77,7 +77,7 @@ caminos de producción no pasan por un gancho distinto de `NULL`.
 
 | Símbolo | Dónde corre | Contrato |
 |---------|-------------|----------|
-| `ir0_futex_before_sleep` | Al empezar un `ir0_futex_wait` bloqueado, antes de `sched_schedule_next` | Puede marcar la tarea `PROCESS_READY`. No debe llamar a `ir0_futex_wait`. |
+| `ir0_futex_before_sleep` | Al empezar un `ir0_futex_wait` bloqueado, antes de `schedule` | Puede marcar la tarea `PROCESS_READY`. No debe llamar a `ir0_futex_wait`. |
 | `ipc_sleep_recheck_probe` | Después de `wait_queue_add`, antes de volver a mirar el ring | No debe dormir ni planificar. |
 | `paging_unmap_test_hook` | Lo primero en `unmap_page_in_directory` (`mm/paging.c`), ambas ISAs | Devolver `-EOPNOTSUPP` para caer al walker de tablas. Cualquier otro valor es el resultado del unmap y el walker no corre. |
 

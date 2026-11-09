@@ -233,7 +233,7 @@ void boot_runtime(void)
 		klog_smoke("SCHED_POLICY_OK");
 	else
 		klog_smoke("SCHED_POLICY_FAIL");
-	klog_info_fmt("SCHED", "SCHED_POLICY=%s", sched_active_policy_name());
+	klog_info_fmt("SCHED", "SCHED_POLICY=%s", sched_policy_name());
 
 	syscall_init();
 	syscalls_init();
@@ -341,7 +341,7 @@ static void handoff_attach_console(void *context)
 static void handoff_schedule(void *context)
 {
 	(void)context;
-	sched_schedule_next();
+	schedule();
 }
 
 void boot_enter_userspace(void)
@@ -369,5 +369,5 @@ void boot_enter_userspace(void)
 		log_error("BOOT", "FAILED to load /sbin/init");
 		panic("Failed to load /sbin/init");
 	}
-	panic("sched_schedule_next returned after userspace init");
+	panic("schedule returned after userspace init");
 }

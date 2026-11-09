@@ -67,7 +67,7 @@ int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 					ir0_futex_before_sleep(proc);
 				if (proc->state != PROCESS_BLOCKED)
 					break;
-				sched_schedule_next();
+				schedule();
 				if (proc->state != PROCESS_BLOCKED)
 					break;
 				kernel_idle_poll();

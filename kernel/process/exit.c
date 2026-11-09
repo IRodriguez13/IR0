@@ -71,7 +71,7 @@ __attribute__((noreturn)) void process_exit(int code)
 	 * The process structure remains in memory as a zombie until reaped
 	 * by the parent (via wait()), but it will not consume CPU time.
 	 */
-	sched_remove_process(dying);
+	sched_remove(dying);
 
 	/*
 	 * kmain keeps the kernel idle task off the RR queue while PID 1 runs;
@@ -85,7 +85,7 @@ __attribute__((noreturn)) void process_exit(int code)
 			if (p->mode == KERNEL_MODE && p->state != PROCESS_ZOMBIE &&
 			    strncmp(p->comm, "idle", sizeof(p->comm)) == 0)
 			{
-				sched_add_process(p);
+				sched_add(p);
 				if (sched_count_runnable() <= 1)
 				{
 					sched_switch_to(p);
@@ -101,7 +101,7 @@ __attribute__((noreturn)) void process_exit(int code)
 	 * The zombie process remains in memory with its exit code for the
 	 * parent to retrieve via wait().
 	 */
-	sched_schedule_next();
+	schedule();
 
 	/* No runnable task: halt forever; never resume an exited user context. */
 	for (;;)
@@ -123,6 +123,6 @@ int process_exit_guest(int code)
 	process_pre_zombie_teardown(dying);
 	process_lifecycle_publish_exit(dying, code);
 	process_notify_parent_of_exit(dying);
-	sched_remove_process(dying);
+	sched_remove(dying);
 	return 1;
 }

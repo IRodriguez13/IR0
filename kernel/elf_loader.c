@@ -953,7 +953,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
      * spawn() enqueues the task; keep it off the run queue until PT_LOAD
      * segments and stack are fully initialized (timer IRQ may preempt kmain).
      */
-    sched_remove_process(process);
+    sched_remove(process);
 
     /* Set up user mode execution */
     /* spawn() already set up the process structure correctly */
@@ -1468,7 +1468,7 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
          * spawn_user() already queued this process; drop it from the scheduler
          * and free the struct so we do not run a half-loaded image.
          */
-        sched_remove_process(process);
+        sched_remove(process);
         (void)process_remove_from_list(process);
         process_destroy(process);
         kfree(process);
@@ -1488,7 +1488,7 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     }
     task_set_ip(&process->task, user_ip);
 
-    sched_add_process(process);
+    sched_add(process);
 
     /* Step 6: Clean up file data */
     kfree(file_data);

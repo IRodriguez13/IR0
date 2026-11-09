@@ -146,8 +146,8 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 		 * returning to userspace with the block-time placeholder result.
 		 */
 		process_set_sched_state(parent, PROCESS_READY);
-		sched_add_process(parent);
-		sched_promote_process(parent);
+		sched_add(parent);
+		sched_promote(parent);
 		return;
 	}
 
@@ -176,8 +176,8 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 			process_wait_resume_child_pid_set(parent, 0);
 			parent->syscall_resume_rax = (uint64_t)(int64_t)(-EFAULT);
 			process_set_sched_state(parent, PROCESS_READY);
-			sched_add_process(parent);
-			sched_promote_process(parent);
+			sched_add(parent);
+			sched_promote(parent);
 			return;
 		}
 	}
@@ -188,8 +188,8 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	process_wait_resume_child_pid_set(parent, child->task.pid);
 	parent->syscall_resume_rax = (uint64_t)child->task.pid;
 	process_set_sched_state(parent, PROCESS_READY);
-	sched_add_process(parent);
-	sched_promote_process(parent);
+	sched_add(parent);
+	sched_promote(parent);
 }
 
 void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)

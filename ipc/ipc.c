@@ -124,7 +124,7 @@ process_t *wait_queue_wake_one(wait_queue_t *wq)
     if (proc)
     {
         process_set_sched_state(proc, PROCESS_READY);
-        sched_add_process(proc);
+        sched_add(proc);
     }
 
     return proc;
@@ -153,7 +153,7 @@ void wait_queue_wake_all(wait_queue_t *wq)
         if (node->process)
         {
             process_set_sched_state(node->process, PROCESS_READY);
-            sched_add_process(node->process);
+            sched_add(node->process);
         }
         kfree(node);
         node = next;
@@ -555,7 +555,7 @@ static void ipc_channel_sleep(ipc_channel_t *channel, wait_queue_t *wq,
 		return;
 	}
 	if (current_process->state == PROCESS_BLOCKED)
-		sched_schedule_next();
+		schedule();
 }
 
 ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)

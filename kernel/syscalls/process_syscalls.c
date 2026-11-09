@@ -827,9 +827,9 @@ int64_t sys_setpriority(int which, int who, int prio)
 	if (band != target->sched_prio)
 	{
 		/* Re-queue so the band change takes effect on the next pick. */
-		sched_remove_process(target);
+		sched_remove(target);
 		target->sched_prio = band;
-		sched_add_process(target);
+		sched_add(target);
 	}
 	return 0;
 }

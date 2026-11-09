@@ -253,7 +253,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	process_registry_insert(proc);
 
 	/* Add to scheduler */
-	sched_add_process(proc);
+	sched_add(proc);
 
 	return proc->task.pid;
 

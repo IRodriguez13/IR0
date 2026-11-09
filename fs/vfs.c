@@ -114,7 +114,7 @@ static void vfs_fs_op_acquire(void)
 			cpu_relax();
 			continue;
 		}
-		sched_schedule_next();
+		schedule();
 	}
 }
 

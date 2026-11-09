@@ -32,7 +32,7 @@ def classify(text: str) -> list[tuple[str, str, str]]:
             "SCHED_BLOCKED_NO_PREEMPT",
             "medium",
             "Runnable task exists but blocked waiter was not preempted — "
-            "check sched_try_preempt_blocked and rr_promote_process.",
+            "check the policy pick (sched/rr.c, sched/prio.c) and sched_promote().",
         ))
 
     # Legacy gate tag: only when panic/context lifetime broke, not on every IRQ.
@@ -66,7 +66,7 @@ def classify(text: str) -> list[tuple[str, str, str]]:
             "medium",
             "Parent entered wait4 after fork but child never printed hi — "
             "check timer IRQ preempt (sched_irq_may_preempt PIT) and "
-            "rr_promote_process(child) after fork.",
+            "sched_promote(child) after fork.",
         ))
 
     if "TTY_CANON_LINE_READY" in text and not has_read_ok:

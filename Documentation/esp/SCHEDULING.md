@@ -32,7 +32,7 @@ de backend configurada desde Kconfig.
 
 Los waiters usan `process_arm_kernel_syscall_sleep` + `clock_wait`. En el idle
 del wait se llama `kernel_idle_poll_nosched()` para que los wakes no aniden
-`sched_schedule_next` (el loop del syscall es el único yield). Detalle: canónico EN.
+`schedule` (el loop del syscall es el único yield). Detalle: canónico EN.
 
 ## Class B
 

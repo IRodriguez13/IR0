@@ -62,7 +62,7 @@ NEON.
 **Context switch (product x86):**
 
 ```text
-  sched_schedule_next → first_switch_to(next)   # first entry
+  schedule → first_switch_to(next)   # first entry
                      → switch_to(prev, next)    # later
 ```
 

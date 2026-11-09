@@ -153,7 +153,7 @@ void process_fork_wake_pending(process_t *parent)
 
 	parent->fork_pending_child = NULL;
 	process_set_sched_state(child, PROCESS_READY);
-	sched_add_process(child);
+	sched_add(child);
 }
 
 void process_fork_abort_pending_on_exit(process_t *parent)
@@ -177,7 +177,7 @@ void process_fork_abort_pending_on_exit(process_t *parent)
 	 * race). Linux still runs the child; reparent happens separately.
 	 */
 	process_set_sched_state(child, PROCESS_READY);
-	sched_add_process(child);
+	sched_add(child);
 }
 
 static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
@@ -195,7 +195,7 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 			parent->fork_pending_child = NULL;
 
 		if (child->state == PROCESS_READY || child->state == PROCESS_RUNNING)
-			sched_remove_process(child);
+			sched_remove(child);
 		(void)process_remove_from_list(child);
 	}
 
@@ -450,8 +450,8 @@ void process_vfork_complete(process_t *child)
 
 	if (parent && was_blocked)
 	{
-		sched_add_process(parent);
-		sched_promote_process(parent);
+		sched_add(parent);
+		sched_promote(parent);
 	}
 }
 
@@ -569,14 +569,14 @@ pid_t vfork_process(void *child_stack)
 	}
 
 	process_set_sched_state(child, PROCESS_READY);
-	sched_add_process(child);
+	sched_add(child);
 	process_set_sched_state(parent, PROCESS_BLOCKED);
 	if (parent->mode == USER_MODE)
 		process_arm_kernel_syscall_sleep(parent);
 
 	while (process_vfork_parent_blocked(parent) &&
 	       parent->state == PROCESS_BLOCKED)
-		sched_schedule_next();
+		schedule();
 
 	KTM_CHECKPOINT(KTM_CP_PROCESS_FORK);
 	return child_pid;

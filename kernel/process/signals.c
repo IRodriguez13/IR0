@@ -77,7 +77,7 @@ int process_signal_default_kill(process_t *dying, int sig)
 	dying->signal_pending &= ~SIGNAL_MASK(sig);
 	dying->exit_signal = sig;
 	process_lifecycle_publish_exit(dying, 0);
-	sched_remove_process(dying);
+	sched_remove(dying);
 
 #if IR0_DEBUG_PROC
 	klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] process_signal_default_kill pid=%x sig=%x wait_status=%x", (unsigned)((uint32_t)dying->task.pid), (unsigned)((uint32_t)sig), (unsigned)((uint32_t)process_child_wait_status_word(dying)));
