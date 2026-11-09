@@ -40,12 +40,9 @@ static void context_prepare_next(task_t *next)
 
 	if (task_mm_root(next) == 0 && process_pgd(next_proc))
 		task_set_mm_root(next, (uint64_t)(uintptr_t)process_pgd(next_proc));
-	/* The freestanding bring-up image owns its temporary TTBR roots. */
-#if !defined(IR0_FREESTANDING_BOOT)
 	if (task_mm_root(next))
 		mm_prepare_root_activation(
 			(address_space_root_t)task_mm_root(next));
-#endif
 	set_current_kernel_stack(next_proc);
 	cpu_local_set_kernel_stack(next_proc->kstack_top);
 	set_tls(process_tls_get(next_proc));
@@ -64,12 +61,8 @@ void switch_to(task_t *prev, task_t *next)
 	if (prev)
 		switch_save_user_rsp(task_to_process(prev));
 	context_prepare_next(next);
-#if !defined(IR0_FREESTANDING_BOOT)
 	if (context_try_resume_user_frame(prev, next))
 		return;
 	context_prepare_kernel_resume(next);
-#else
-	/* The staged boot image deliberately omits the process-resume state machine. */
-#endif
 	context_backend_switch(prev, next);
 }
