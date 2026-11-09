@@ -83,7 +83,7 @@ void boot_early(uintptr_t firmware_handle)
 		console_backend_clear(0x0F);
 }
 
-void boot_memory_serial(uintptr_t firmware_handle)
+void boot_memory_serial(void)
 {
 	/*
 	 * The architecture facade supplies reserved-free RAM banks. x86 currently
@@ -141,13 +141,9 @@ void boot_memory_serial(uintptr_t firmware_handle)
 
 			if (!boot_memory_snapshot())
 				log_info("BOOT", "Firmware snapshot unavailable");
-#else
-			(void)firmware_handle;
 #endif
 		}
 	}
-#else
-	(void)firmware_handle;
 #endif
 
 	log_subsystem_ok("CORE");

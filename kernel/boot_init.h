@@ -20,7 +20,7 @@
 void boot_early(uintptr_t firmware_handle);
 
 /* PMM, logging, serial, version banner, platform/hypervisor note. */
-void boot_memory_serial(uintptr_t firmware_handle);
+void boot_memory_serial(void);
 
 /* Selectable drivers, root block check, VFS root, bare-metal sentinel. */
 void boot_drivers_rootfs(void);

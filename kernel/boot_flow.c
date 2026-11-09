@@ -27,7 +27,7 @@ void ir0_kernel_boot(uintptr_t firmware_handle)
 void ir0_kernel_boot(uintptr_t firmware_handle)
 {
 	boot_early(firmware_handle);
-	boot_memory_serial(firmware_handle);
+	boot_memory_serial();
 	boot_drivers_rootfs();
 	boot_runtime();
 	boot_diagnostics();
