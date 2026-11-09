@@ -89,6 +89,7 @@ extern void test_bpath_fold(void);
 extern void test_arm64_boot_info_fdt_contract(void);
 extern void test_arm64_syscall_decode_contract(void);
 extern void test_fault_signal_linux_classes(void);
+extern void test_fault_signal_x86_classes(void);
 extern void test_x86_syscall_decode_contract(void);
 extern void test_syscall_handler_table_contract(void);
 extern void test_architecture_guard_py(void);
@@ -189,6 +190,7 @@ static void (*test_functions[])(void) = {
 	test_arm64_boot_info_simplefb_mode,
 	test_arm64_syscall_decode_contract,
 	test_fault_signal_linux_classes,
+	test_fault_signal_x86_classes,
 	test_x86_syscall_decode_contract,
 	test_syscall_handler_table_contract,
 	test_architecture_guard_py,
