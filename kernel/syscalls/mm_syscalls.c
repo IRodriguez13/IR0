@@ -225,8 +225,12 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	if (prot & PROT_EXEC)
 		page_flags |= PAGE_EXEC;
 
+	/*
+	 * Fill through a writable mapping, then apply @prot: the uaccess copy
+	 * only writes into user pages the process could write itself.
+	 */
 	if (map_user_region_in_directory(process_pgd(proc), virt_addr, map_len,
-					 page_flags) != 0)
+					 PAGE_USER | PAGE_RW) != 0)
 		return SYSCALL_PTR_ERR(ENOMEM);
 
 	vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
@@ -261,6 +265,15 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 		}
 		copied += chunk;
 		file_pos += (off_t)chunk;
+	}
+
+	if (page_flags != (PAGE_USER | PAGE_RW) &&
+	    protect_user_region_in_directory(process_pgd(proc), virt_addr,
+					     map_len, page_flags) != 0)
+	{
+		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
+			unmap_page_in_directory(process_pgd(proc), virt_addr + off);
+		return SYSCALL_PTR_ERR(ENOMEM);
 	}
 
 	region = kmalloc(sizeof(struct mmap_region));
@@ -1088,15 +1101,12 @@ int sys_mprotect(void *addr, size_t len, int prot)
       phys = pmm_alloc_frame();
       if (phys == 0)
         return -ENOMEM;
+      /* Zero before mapping: @prot may leave the page read-only. */
+      paging_zero_phys_page(phys);
       if (map_page_in_directory(root, page, phys, page_flags) != 0)
       {
         pmm_free_frame(phys);
         return -ENOMEM;
-      }
-      if (clear_user_mm(root, page, PAGE_SIZE_4KB) != 0)
-      {
-        (void)unmap_page_in_directory(root, page);
-        return -EFAULT;
       }
       tlb_invalidate_page((uintptr_t)page);
       saw_present = 1;
