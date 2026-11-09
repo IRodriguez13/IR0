@@ -42,12 +42,21 @@ int fault_signal(const struct ir0_fault *fault)
 {
 	switch (fault ? fault->kind : IR0_FAULT_OTHER)
 	{
-	case IR0_FAULT_BREAKPOINT:
-		return SIGTRAP;
+	case IR0_FAULT_PAGE:
+	case IR0_FAULT_PROTECTION:
+		return SIGSEGV;
+	case IR0_FAULT_STACK_SEGMENT:
+	case IR0_FAULT_SEGMENT_NOT_PRESENT:
 	case IR0_FAULT_ALIGNMENT:
 		return SIGBUS;
+	case IR0_FAULT_BREAKPOINT:
+		return SIGTRAP;
 	case IR0_FAULT_ARITHMETIC:
 		return SIGFPE;
+	case IR0_FAULT_DOUBLE:
+		return 0;
+	case IR0_FAULT_ILLEGAL_INSN:
+	case IR0_FAULT_OTHER:
 	default:
 		return SIGILL;
 	}
@@ -63,6 +72,8 @@ const char *ir0_fault_kind_name(enum ir0_fault_kind kind)
 		return "GENERAL_PROTECTION";
 	case IR0_FAULT_STACK_SEGMENT:
 		return "STACK_SEGMENT";
+	case IR0_FAULT_SEGMENT_NOT_PRESENT:
+		return "SEGMENT_NOT_PRESENT";
 	case IR0_FAULT_ILLEGAL_INSN:
 		return "INVALID_OPCODE";
 	case IR0_FAULT_ARITHMETIC:

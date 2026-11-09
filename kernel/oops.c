@@ -121,6 +121,9 @@ void ir0_log_user_fault(const struct ir0_fault *fault, unsigned int pid,
 	case IR0_FAULT_STACK_SEGMENT:
 		classify = "USER_STACK_SEGMENT";
 		break;
+	case IR0_FAULT_SEGMENT_NOT_PRESENT:
+		classify = "USER_SEGMENT_NOT_PRESENT";
+		break;
 	case IR0_FAULT_ILLEGAL_INSN:
 		classify = "USER_INVALID_OPCODE";
 		break;

@@ -205,15 +205,17 @@ static void x86_fault_from_frame(struct ir0_fault *fault,
 	fault->status = stack[4];
 	fault->sp = (uintptr_t)stack[5];
 	fault->stack_seg = stack[6];
+	/* Classes follow Linux arch/x86/kernel/traps.c; fault_signal() maps them. */
 	switch (interrupt_number)
 	{
 	case 0:  /* #DE */
-	case 4:  /* #OF */
+	case 9:  /* coprocessor segment overrun */
 	case 16: /* #MF */
 	case 19: /* #XM */
 		fault->kind = IR0_FAULT_ARITHMETIC;
 		break;
-	case 3:
+	case 1:  /* #DB not consumed by the debug-trap backend */
+	case 3:  /* #BP */
 		fault->kind = IR0_FAULT_BREAKPOINT;
 		break;
 	case 6:
@@ -222,9 +224,15 @@ static void x86_fault_from_frame(struct ir0_fault *fault,
 	case 8:
 		fault->kind = IR0_FAULT_DOUBLE;
 		break;
-	case 11: /* #NP */
+	case 4:  /* #OF */
+	case 5:  /* #BR */
+	case 10: /* #TS */
 	case 13: /* #GP */
+	case 21: /* #CP */
 		fault->kind = IR0_FAULT_PROTECTION;
+		break;
+	case 11:
+		fault->kind = IR0_FAULT_SEGMENT_NOT_PRESENT;
 		break;
 	case 12:
 		fault->kind = IR0_FAULT_STACK_SEGMENT;
@@ -340,7 +348,8 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
     if (interrupt_number < 32)
     {
         process_t *current = process_get_current();
-        int signal_to_send = 0;
+        struct ir0_fault fault;
+        int signal_to_send;
 
         if (interrupt_number == 14)
         {
@@ -353,52 +362,16 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
             gpf_audit_from_isr(stack);
         }
 
-        /* Map CPU exceptions to signals for user-space faults.
-	 * #DF (8) is never a recoverable userspace signal — IST fatal only.
-	 */
-        switch (interrupt_number)
-        {
-            case 0:  /* Divide by Zero */
-                signal_to_send = SIGFPE;
-                break;
-            case 3:  /* Breakpoint (int3) */
-                signal_to_send = SIGTRAP;
-                break;
-            case 4:  /* Overflow */
-                signal_to_send = SIGFPE;
-                break;
-            case 6:  /* Invalid Opcode */
-                signal_to_send = SIGILL;
-                break;
-            case 11: /* Segment Not Present */
-                signal_to_send = SIGSEGV;
-                break;
-            case 13: /* General Protection Fault */
-                signal_to_send = SIGSEGV;
-                break;
-            case 14: /* Page Fault — handled above; keep for clarity */
-                signal_to_send = SIGSEGV;
-                break;
-            case 19: /* SIMD FPU Exception */
-                signal_to_send = SIGFPE;
-                break;
-            case 8:  /* Double Fault — fall through to kernel panic path */
-                signal_to_send = 0;
-                break;
-            default:
-                signal_to_send = SIGSEGV;
-                break;
-        }
+	x86_fault_from_frame(&fault, interrupt_number, stack);
+	/* One class -> signal mapping for every ISA; #DF maps to none. */
+	signal_to_send = fault_signal(&fault);
 
 	/*
 	 * Kernel CPU exceptions are fatal. User-mode faults become signals.
-	 * #DF (vector 8) always uses IST1 and never returns as SIGSEGV.
+	 * #DF (vector 8) always uses IST1 and never returns as a signal.
 	 */
         if (is_user_exception_frame(stack) && current && signal_to_send != 0)
         {
-	    struct ir0_fault fault;
-
-	    x86_fault_from_frame(&fault, interrupt_number, stack);
             klog_notice_fmt("ISR",
                             "user_exception int=%llx -> sig=%x pid=%x rip=%llx cs=%llx err=%llx",
                             (unsigned long long)interrupt_number,
@@ -422,12 +395,10 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 	 * panicex(__func__) only names the reporter; FAULT FRAME is the cause.
 	 */
 	{
-		struct ir0_fault fault;
 		int stack_overflow;
 		panic_level_t level = PANIC_KERNEL_BUG;
 		const char *msg;
 
-		x86_fault_from_frame(&fault, interrupt_number, stack);
 		/*
 		 * RSP in the unmapped guard page at the bottom of a kstack slot
 		 * means overflow or failed exception delivery (usually then #DF).

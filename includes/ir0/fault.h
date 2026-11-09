@@ -25,13 +25,14 @@ enum ir0_fault_kind
 {
 	IR0_FAULT_OTHER = 0,
 	IR0_FAULT_PAGE,           /* translation or permission fault on an access */
-	IR0_FAULT_PROTECTION,     /* x86 #GP / #NP */
+	IR0_FAULT_PROTECTION,     /* x86 #GP/#TS/#BR/#OF/#CP */
 	IR0_FAULT_STACK_SEGMENT,  /* x86 #SS */
 	IR0_FAULT_ILLEGAL_INSN,   /* x86 #UD, ARM64 undefined / unknown EC */
-	IR0_FAULT_ARITHMETIC,     /* x86 #DE/#OF/#XM, ARM64 FP trap */
+	IR0_FAULT_ARITHMETIC,     /* x86 #DE/#MF/#XM, ARM64 FP trap */
 	IR0_FAULT_ALIGNMENT,      /* ARM64 PC/SP alignment, x86 #AC */
-	IR0_FAULT_BREAKPOINT,     /* ARM64 BRK, x86 #BP */
+	IR0_FAULT_BREAKPOINT,     /* ARM64 BRK, x86 #BP/#DB */
 	IR0_FAULT_DOUBLE,         /* x86 #DF: never recoverable */
+	IR0_FAULT_SEGMENT_NOT_PRESENT, /* x86 #NP */
 };
 
 struct ir0_fault
@@ -55,9 +56,11 @@ void ir0_fault_from_page_fault(struct ir0_fault *fault,
 			       const struct page_fault_info *info);
 
 /*
- * Signal a user task receives for a synchronous non-abort exception of
- * @fault's class (Linux arch traps: undefined instruction, breakpoint,
- * alignment, ...). Aborts go through the MM fault path instead.
+ * Signal a user task receives for a synchronous exception of @fault's
+ * class, the one mapping for every ISA (Linux arch/x86/kernel/traps.c,
+ * arch/arm64/kernel/traps.c). Page faults that the MM fault path cannot
+ * resolve are SIGSEGV. Returns 0 for a class that is never a user signal
+ * (x86 #DF): the caller treats the fault as fatal to the kernel.
  */
 int fault_signal(const struct ir0_fault *fault);
 
