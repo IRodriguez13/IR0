@@ -183,6 +183,10 @@ void pf_user_write_present(const struct page_fault_info *info,
 	if (pinned)
 		pmm_frame_put(old_phys);
 	mm_tlb_sync_page(process_pgd(current), (uintptr_t)vaddr_aligned);
+	/* The copied frame may hold code: same rule as a fresh exec mapping. */
+	if (map_flags & PAGE_EXEC)
+		paging_sync_icache_user(process_pgd(current),
+					(uintptr_t)vaddr_aligned, PAGE_SIZE_4KB);
 	irq_restore(irq_flags);
 	return;
 }

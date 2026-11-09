@@ -68,6 +68,9 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 		return -1;
 	}
 	mm_tlb_sync_page(root, vaddr & (uintptr_t)PAGE_FRAME_MASK);
+	if (map_flags & PAGE_EXEC)
+		paging_sync_icache_user(root, vaddr & (uintptr_t)PAGE_FRAME_MASK,
+					PAGE_SIZE_4KB);
 	irq_restore(irq_flags);
 	return 0;
 }

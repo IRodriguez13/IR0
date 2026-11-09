@@ -16,6 +16,7 @@
 #include "paging.h"
 #include "paging_internal.h"
 #include <string.h>
+#include <ir0/cacheflush.h>
 #include <mm/pmm.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/swap.h>
@@ -634,7 +635,39 @@ int protect_user_region_in_directory(address_space_root_t root,
 					!!(page_flags & PAGE_EXEC));
 		mm_tlb_sync_page(root, page);
 	}
+	if (flags & PAGE_EXEC)
+		paging_sync_icache_user(root, start, length);
 	return 0;
+}
+
+void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
+			     size_t length)
+{
+	uintptr_t saved;
+	uintptr_t page;
+	uintptr_t end;
+
+	if (!ICACHE_NEEDS_SYNC || !root || length == 0 ||
+	    start > UINTPTR_MAX - length)
+		return;
+	end = start + length;
+
+	paging_phys_map_begin(&saved);
+	for (page = start & (uintptr_t)PAGE_FRAME_MASK; page < end;
+	     page += PAGE_SIZE_4KB)
+	{
+		uint64_t *pte = paging_get_pte(root, page);
+		uintptr_t phys;
+
+		if (pte && mm_pte_present(*pte) && pte_user(*pte))
+		{
+			phys = mm_pte_phys(*pte);
+			flush_icache_range(phys, phys + PAGE_SIZE_4KB);
+		}
+		if (page > UINTPTR_MAX - PAGE_SIZE_4KB)
+			break;
+	}
+	paging_phys_map_end(saved);
 }
 
 paging_unmap_test_hook_fn paging_unmap_test_hook;

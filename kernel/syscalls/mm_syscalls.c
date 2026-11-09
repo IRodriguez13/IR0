@@ -266,6 +266,9 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 		copied += chunk;
 		file_pos += (off_t)chunk;
 	}
+	/* File code copied into an executable mapping (ld.so loading a DSO). */
+	if (prot & PROT_EXEC)
+		paging_sync_icache_user(process_pgd(proc), virt_addr, map_len);
 
 	if (page_flags != (PAGE_USER | PAGE_RW) &&
 	    protect_user_region_in_directory(process_pgd(proc), virt_addr,

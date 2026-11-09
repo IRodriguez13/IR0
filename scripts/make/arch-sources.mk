@@ -26,6 +26,7 @@ ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/elf_policy.o \
 	arch/x86-64/sources/syscall_frame.o \
 	arch/x86-64/sources/signal.o \
+	arch/x86-64/sources/cacheflush.o \
 	arch/x86-64/sources/context.o \
 	arch/x86-64/sources/switch_diag.o \
 	arch/x86-64/sources/mm.o \
@@ -92,6 +93,7 @@ ARM64_PROCESS_BACKEND_OBJS = \
 	arch/arm64/sources/task_stack.o \
 	arch/arm64/sources/syscall_frame.o \
 	arch/arm64/sources/signal.o \
+	arch/arm64/sources/cacheflush.o \
 	arch/arm64/sources/context.o \
 	arch/arm64/sources/mm.o \
 	arch/arm64/sources/irq.o \

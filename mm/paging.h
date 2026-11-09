@@ -189,9 +189,21 @@ int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start, uint6
 /* Supervisor-only 2 MiB uncached, non-executable identity for MMIO windows. */
 int map_supervisor_device_2mb(address_space_root_t root, uint64_t start, uint64_t end);
 
-/* Change final permissions of already mapped user pages without remapping. */
+/*
+ * Change final permissions of already mapped user pages without remapping.
+ * Granting PAGE_EXEC also syncs the instruction cache (paging_sync_icache_user).
+ */
 int protect_user_region_in_directory(address_space_root_t root, uintptr_t start,
 				     size_t length, uint64_t flags);
+
+/*
+ * The kernel wrote instructions into the mapped user pages of
+ * [start, start + length) through their physical alias: make them visible
+ * to instruction fetch (Linux __sync_icache_dcache() on set_pte_at()).
+ * Unmapped pages are skipped. No-op where the instruction cache is coherent.
+ */
+void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
+			     size_t length);
 
 struct process;
 
