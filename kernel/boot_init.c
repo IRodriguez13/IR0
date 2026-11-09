@@ -103,7 +103,6 @@ void boot_memory_serial(void)
 
 	ir0_boot_port_serial_before_logging();
 
-	logging_init();
 	(void)klog_promote_normal_ring();
 	ir0_driver_registry_init();
 	ir0_boot_port_serial_after_driver_registry();

@@ -631,7 +631,6 @@ MEMORY_OBJS = \
 
 LIB_OBJS = \
     drivers/char/vga.o \
-    kernel/logging.o \
     kernel/boot_log_hostshare.o \
     kernel/oops.o \
     kernel/problems.o \

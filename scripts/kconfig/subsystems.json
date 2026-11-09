@@ -99,7 +99,6 @@
       "files": {
         "x86-64": [
           "drivers/char/vga.c",
-          "kernel/logging.c",
           "kernel/oops.c",
           "kernel/signals.c",
           "fs/pipe.c",
