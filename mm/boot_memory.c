@@ -297,34 +297,53 @@ static size_t boot_memory_protected_ranges(struct ir0_phys_range *ranges)
 int boot_memory_get_allocatable_ranges(struct ir0_phys_range *ranges,
 				       size_t capacity, size_t *count)
 {
-	struct ir0_phys_range usable[IR0_BOOT_MEMORY_MAX_BANKS];
-	struct ir0_phys_range reserved[IR0_BOOT_MEMORY_MAX_RESERVATIONS];
-	size_t usable_count;
-	size_t reserved_count;
+	struct ir0_phys_range current[IR0_BOOT_MEMORY_MAX_BANKS];
+	struct ir0_phys_range next[IR0_BOOT_MEMORY_MAX_BANKS];
+	struct ir0_phys_range protected_ranges[BOOT_MEMORY_MAX_PROTECTED];
+	size_t current_count;
+	size_t protected_count;
+	size_t done;
+	size_t i;
 	int ret;
 
-	ret = boot_memory_get_usable_ranges(usable, IR0_BOOT_MEMORY_MAX_BANKS,
-					    &usable_count);
+	if (!ranges || !count)
+		return -EINVAL;
+	ret = boot_memory_get_usable_ranges(current, IR0_BOOT_MEMORY_MAX_BANKS,
+					    &current_count);
 	if (ret != 0)
 		return ret;
-	ret = boot_memory_get_reserved_ranges(reserved,
-					      IR0_BOOT_MEMORY_MAX_RESERVATIONS,
-					      &reserved_count);
-	if (ret != 0)
-		return ret;
-	if (reserved_count == 0)
+	if (g_boot_snapshot.reserved_count > IR0_BOOT_MEMORY_MAX_RESERVATIONS)
+		return -EINVAL;
+	/*
+	 * Linux memblock_reserve()s the kernel image, the initrd and the FDT
+	 * before memblock frees pages to the buddy allocator. Do the same:
+	 * the PMM only sees RAM that nothing else owns.
+	 */
+	protected_count = boot_memory_protected_ranges(protected_ranges);
+	for (done = 0; done < protected_count;)
 	{
-		size_t i;
+		size_t chunk = protected_count - done;
+		size_t next_count;
 
-		if (usable_count > capacity)
-			return -ENOSPC;
-		for (i = 0; i < usable_count; i++)
-			ranges[i] = usable[i];
-		*count = usable_count;
-		return 0;
+		if (chunk > IR0_BOOT_MEMORY_MAX_RESERVATIONS)
+			chunk = IR0_BOOT_MEMORY_MAX_RESERVATIONS;
+		ret = boot_memory_exclude_reserved(current, current_count,
+						   &protected_ranges[done], chunk,
+						   next, IR0_BOOT_MEMORY_MAX_BANKS,
+						   &next_count);
+		if (ret != 0)
+			return ret;
+		for (i = 0; i < next_count; i++)
+			current[i] = next[i];
+		current_count = next_count;
+		done += chunk;
 	}
-	return boot_memory_exclude_reserved(usable, usable_count, reserved,
-					    reserved_count, ranges, capacity, count);
+	if (current_count > capacity)
+		return -ENOSPC;
+	for (i = 0; i < current_count; i++)
+		ranges[i] = current[i];
+	*count = current_count;
+	return 0;
 }
 
 int boot_memory_init_pmm(void)
