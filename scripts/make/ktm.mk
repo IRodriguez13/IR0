@@ -164,7 +164,7 @@ health: kernel-analyze kernel-text-budget
 	@echo ""
 	@echo "✓ health passed (kernel-analyze, kernel-text-budget, kernel-memsafe, kernel-tests)"
 
-# Daily .config matrix. ctr uses build-matrix-min (seven cases, six kernel
+# Daily .config matrix. ctr uses build-matrix-min (eight cases, seven kernel
 # rebuilds). build-matrix-full adds the scheduler, split-storage, USB and
 # Bluetooth rebuilds for CI. Both restore the caller's .config on every
 # exit path. ARCH=x86_64 is forced so a caller's ARCH=arm64 cannot poison
@@ -229,6 +229,10 @@ build-matrix-run:
 	$(MAKE) defconfig >/dev/null; \
 	python3 scripts/kconfig/menuconfig.py --set KTM_CONSOLE_MOCK=y KTM_INPUT_MOCK=y KTM_VIDEO_MOCK=y KTM_AUDIO_MOCK=y KTM_MM_PORT_MOCK=y KTM_PLATFORM_MOCK=y KTM_BLOCK_FAKE=y >/dev/null; \
 	$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
+	echo "  MATRIX  boot debug chatter (-Werror)"; \
+	$(MAKE) defconfig >/dev/null; \
+	python3 scripts/kconfig/menuconfig.py --set DEBUG_BOOT=y >/dev/null; \
+	$(MAKE) -s ARCH=x86_64 IR0_WERROR=1 kernel-x64.bin >/dev/null; \
 	if [ "$(IR0_MATRIX_TIER)" = full ]; then \
 		echo "  MATRIX  storage core without block layer"; \
 		$(MAKE) defconfig >/dev/null; \

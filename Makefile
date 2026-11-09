@@ -1465,6 +1465,11 @@ endif
 # the artifact from ARCH/BOARD: x86 ISO, ARM64 product kernel, or board kernel8.img.
 ir0: CFLAGS += -Werror
 
+# IR0_WERROR=1 applies the same -Werror to any kernel goal (build matrix).
+ifeq ($(IR0_WERROR),1)
+CFLAGS += -Werror
+endif
+
 # Auto-run the host dependency check when menuconfig asks for it.
 ifeq ($(CONFIG_TOOL_AUTO_RUN_DEPTEST),y)
 IR0_PRECHECK_TARGETS := check-env
