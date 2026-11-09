@@ -244,3 +244,35 @@ ir0-selftest-signal-return-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@echo "✓ ir0-selftest-signal-return-arm64"
 
 ir0-selftest-signal-return: ir0-selftest-signal-return-x86 ir0-selftest-signal-return-arm64
+
+IR0_SELFTEST_X86_SOCK_ZERO_LEN := $(KERNEL_ROOT)/build/selftests/x86_64/sock_zero_len
+IR0_SELFTEST_ARM64_SOCK_ZERO_LEN := $(KERNEL_ROOT)/build/selftests/arm64/sock_zero_len
+
+.PHONY: ir0-selftest-sock-zero-len-x86 ir0-selftest-sock-zero-len-arm64 ir0-selftest-sock-zero-len
+
+$(IR0_SELFTEST_X86_SOCK_ZERO_LEN): tests/selftests/syscall/sock_zero_len.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sock_zero_len
+
+$(IR0_SELFTEST_ARM64_SOCK_ZERO_LEN): tests/selftests/syscall/sock_zero_len.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sock_zero_len
+
+# A zero-length send/recv is a no-op that succeeds, not -ENOMEM.
+ir0-selftest-sock-zero-len-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SOCK_ZERO_LEN)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SOCK_ZERO_LEN) \
+		--done "ok 5 dgram_sendto_zero_len_returns_0" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sock-zero-len.log
+	@echo "✓ ir0-selftest-sock-zero-len-x86"
+
+ir0-selftest-sock-zero-len-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SOCK_ZERO_LEN)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SOCK_ZERO_LEN) \
+		--done "ok 5 dgram_sendto_zero_len_returns_0" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sock-zero-len.log
+	@echo "✓ ir0-selftest-sock-zero-len-arm64"
+
+ir0-selftest-sock-zero-len: ir0-selftest-sock-zero-len-x86 ir0-selftest-sock-zero-len-arm64

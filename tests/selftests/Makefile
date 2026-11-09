@@ -24,6 +24,8 @@ SIGNAL_RETURN_SRC := kernel/signal_return.c
 SIGNAL_RETURN_BIN := $(BUILD_DIR)/signal_return
 SWAPON_SRC := syscall/swapon.c
 SWAPON_BIN := $(BUILD_DIR)/swapon
+SOCK_ZERO_LEN_SRC := syscall/sock_zero_len.c
+SOCK_ZERO_LEN_BIN := $(BUILD_DIR)/sock_zero_len
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -56,10 +58,10 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
-	uaccess_kernel_addr signal_return clean
+	uaccess_kernel_addr signal_return sock_zero_len clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
-	uaccess_kernel_addr signal_return
+	uaccess_kernel_addr signal_return sock_zero_len
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -169,6 +171,18 @@ $(FAULT_BIN): $(FAULT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest fault"
 	@$(CC) $(CFLAGS) -o $@ $(FAULT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+sock_zero_len: $(SOCK_ZERO_LEN_BIN)
+
+$(SOCK_ZERO_LEN_BIN): $(SOCK_ZERO_LEN_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sock_zero_len"
+	@$(CC) $(CFLAGS) -o $@ $(SOCK_ZERO_LEN_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

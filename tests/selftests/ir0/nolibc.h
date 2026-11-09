@@ -28,6 +28,10 @@
 #define SYS_rt_sigprocmask	135
 #define SYS_kill		129
 #define SYS_rt_sigreturn	139
+#define SYS_socket		198
+#define SYS_socketpair		199
+#define SYS_sendto		206
+#define SYS_recvfrom		207
 #define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
 #define SIGILL			4
@@ -44,6 +48,11 @@
 #define MAP_PRIVATE		0x02
 #define MAP_ANONYMOUS		0x20
 #define MAP_FAILED		((void *)-1)
+#define AF_UNIX			1
+#define AF_INET			2
+#define SOCK_STREAM		1
+#define SOCK_DGRAM		2
+#define MSG_DONTWAIT		0x40
 #define WIFSIGNALED(s)		(((s) & 0x7f) != 0 && ((s) & 0x7f) != 0x7f)
 #define WTERMSIG(s)		((s) & 0x7f)
 #define WIFEXITED(s)		(((s) & 0x7f) == 0)
@@ -214,6 +223,53 @@ static void *mmap(void *addr, size_t len, int prot, int flags, int fd,
 	return (void *)ret;
 }
 
+/* Six-argument syscalls (sendto, recvfrom) with the libc errno convention. */
+static long nolibc_call6(long nr, long a, long b, long c, long d, long e,
+			 long f)
+{
+	long ret = nolibc_svc6(nr, a, b, c, d, e, f);
+
+	if (ret < 0 && ret > -4096)
+	{
+		errno = (int)(-ret);
+		return -1;
+	}
+	return ret;
+}
+
+static int socket(int domain, int type, int protocol)
+{
+	return (int)syscall(SYS_socket, domain, type, protocol);
+}
+
+static int socketpair(int domain, int type, int protocol, int sv[2])
+{
+	return (int)syscall(SYS_socketpair, domain, type, protocol, (long)sv);
+}
+
+static ssize_t sendto(int fd, const void *buf, size_t len, int flags,
+		      const void *addr, unsigned int addrlen)
+{
+	return (ssize_t)nolibc_call6(SYS_sendto, fd, (long)buf, (long)len,
+				     flags, (long)addr, (long)addrlen);
+}
+
+static ssize_t recvfrom(int fd, void *buf, size_t len, int flags, void *addr,
+			unsigned int *addrlen)
+{
+	return (ssize_t)nolibc_call6(SYS_recvfrom, fd, (long)buf, (long)len,
+				     flags, (long)addr, (long)addrlen);
+}
+
+static ssize_t send(int fd, const void *buf, size_t len, int flags)
+{
+	return sendto(fd, buf, len, flags, 0, 0);
+}
+
+static ssize_t recv(int fd, void *buf, size_t len, int flags)
+{
+	return recvfrom(fd, buf, len, flags, 0, 0);
+}
 
 unsigned char nolibc_stack[8192] __attribute__((aligned(16))) = { 1 };
 
