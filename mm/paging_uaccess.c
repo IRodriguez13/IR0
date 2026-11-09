@@ -79,7 +79,12 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 	if (!root || !phys_out)
 		return -1;
 	pte = paging_get_pte(root, page);
-	if (!pte || !mm_pte_present(*pte))
+	/*
+	 * Only user-accessible leaves count: the low user VA window also holds
+	 * supervisor identity pages (x86_64 keyboard ring), and a syscall must
+	 * not read or write them on behalf of userspace.
+	 */
+	if (!pte || !pte_user(*pte))
 		return -1;
 	if (write && !pte_write(*pte) && pte_cow(*pte))
 	{
