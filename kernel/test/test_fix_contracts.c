@@ -25,6 +25,7 @@
 #include <ir0/futex.h>
 #include <ir0/ipc.h>
 #include <ir0/kmem.h>
+#include <ir0/mm_port.h>
 #include <ir0/mman.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
@@ -594,12 +595,22 @@ void ktest_user_root_identity_maps_pmm(void)
 	KTEST_END();
 }
 
+/* Free a scratch root built with kmalloc_aligned() and its table levels. */
+static void scratch_root_release(address_space_root_t root)
+{
+	paging_reclaim_user_tables(root);
+	kfree_aligned(root);
+}
+
 void ktest_unmap_splits_2mb_leaf(void)
 {
 	address_space_root_t root;
 	const uintptr_t base = 0x200000UL;
+	size_t allocs_before;
+	size_t allocs_after;
 
 	KTEST_BEGIN("unmap_splits_2mb_leaf");
+	ir0_mm_alloc_stats(NULL, NULL, &allocs_before);
 	root = kmalloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
 	KASSERT(root != NULL);
 	if (!root)
@@ -615,6 +626,9 @@ void ktest_unmap_splits_2mb_leaf(void)
 	KASSERT_EQ(is_page_mapped_in_directory(root, base, NULL), 0);
 	KASSERT_EQ(is_page_mapped_in_directory(root, base + PAGE_SIZE_4KB, NULL), 1);
 	KASSERT(paging_get_pte(root, base + PAGE_SIZE_4KB) != NULL);
+	scratch_root_release(root);
+	ir0_mm_alloc_stats(NULL, NULL, &allocs_after);
+	KASSERT_EQ(allocs_after, allocs_before);
 	KTEST_END();
 }
 
@@ -624,8 +638,11 @@ void ktest_map_replaced_frame_is_released(void)
 	uintptr_t first;
 	uintptr_t second;
 	const uint64_t va = 0x800000UL;
+	size_t allocs_before;
+	size_t allocs_after;
 
 	KTEST_BEGIN("map_replaced_frame_is_released");
+	ir0_mm_alloc_stats(NULL, NULL, &allocs_before);
 	root = kmalloc_aligned(PAGE_SIZE_4KB, PAGE_SIZE_4KB);
 	KASSERT(root != NULL);
 	if (!root)
@@ -641,6 +658,11 @@ void ktest_map_replaced_frame_is_released(void)
 	KASSERT(first != second);
 	if (first == 0 || second == 0)
 	{
+		if (first)
+			pmm_free_frame(first);
+		if (second)
+			pmm_free_frame(second);
+		scratch_root_release(root);
 		KTEST_END();
 		return;
 	}
@@ -654,6 +676,9 @@ void ktest_map_replaced_frame_is_released(void)
 	KASSERT_EQ(pmm_frame_refcount(second), 1u);
 	KASSERT_EQ(unmap_page_in_directory(root, va), 0);
 	KASSERT_EQ(pmm_frame_refcount(second), 0u);
+	scratch_root_release(root);
+	ir0_mm_alloc_stats(NULL, NULL, &allocs_after);
+	KASSERT_EQ(allocs_after, allocs_before);
 	KTEST_END();
 }
 
