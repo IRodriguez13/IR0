@@ -296,18 +296,11 @@ typedef struct process
 	uint8_t fork_resync_syscall_stack;
 
 	/*
-	 * Cooperative in-syscall reschedule (syscall-insn / musl tasks).
 	 * syscall_frame_fresh: this entry captured a valid Linux pt_regs in
-	 *   syscall_frame (set only by process_capture_syscall_frame_at_entry,
-	 *   i.e. the `syscall` insn path; int 0x80 tasks leave it 0).
-	 * coop_resched_resume: the pending resume was armed by a cooperative
-	 *   reschedule (not wait4), so the resume path must skip the zombie reap.
-	 * Both let a time-sliced task resume via a fresh saved syscall frame
-	 * instead of kernel_ret on the single shared global syscall stack, whose
-	 * frame a peer task's syscall would clobber from the top.
+	 * syscall_frame (set only by process_capture_syscall_frame_at_entry,
+	 * i.e. the `syscall` insn path; int 0x80 tasks leave it 0).
 	 */
 	uint8_t syscall_frame_fresh;
-	uint8_t coop_resched_resume;
 	/*
 	 * Class B close: a kernel-return resume was requested while the saved task
 	 * IP was still userspace — do not change privilege state until the backend
@@ -584,8 +577,6 @@ void process_restore_user_task_segments(process_t *p);
  */
 int process_context_user_resume_eligible(const process_t *p);
 
-void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax);
-void process_arm_coop_resched_resume(process_t *p, uint64_t rax);
 void process_clear_in_thread_syscall_block(process_t *p);
 void process_reset_blocked_syscall_state(process_t *p);
 /* "arm" = prepare/enable a resume path (English verb), not ARM64. */
@@ -761,7 +752,6 @@ void process_wait_state_clear(process_t *p);
  * Reap a zombie child when resuming a blocked wait4 syscall.
  * Must run after the child has finished process_exit(), before returning to user.
  */
-void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid);
 
 /* spawn() — explicit-mode process creation (kernel vs user). */
 pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode);

@@ -12,27 +12,16 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/context.h>
 #include <ir0/context_backend.h>
 #include <ir0/task.h>
-#include <ir0/arch_task.h>
 #include <ir0/process.h>
+#include <ir0/switch.h>
 #include <asm/process_ctx_invariant.h>
 #include <asm/context.h>
-#include <ir0/arch_port.h>
-#include <ir0/ktm/deferred.h>
-#include <ir0/arch_cpu.h>
-#include <ir0/klog.h>
-#include <ir0/debug_runtime.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/oops.h>
 #include <ir0/ktm/fault.h>
-#include <mm/paging.h>
-#include <config.h>
-#include <pmm.h>
 #include <ir0/arch_mm.h>
 
-#include "switch_diag.h"
 #include "tss.h"
 
 extern uint64_t kernel_syscall_stack_top;
@@ -130,24 +119,6 @@ void x86_prepare_task_user_return(process_t *proc)
 	arch_repair_user_gprs_from_syscall_frame(proc, &proc->task);
 }
 
-int context_backend_resumes_user_frame(void)
-{
-	/* Syscalls run on the shared kernel_syscall_stack (syscall_64.asm). */
-	return 1;
-}
-
-int context_backend_checkpoint(task_t *prev)
-{
-	if (!prev)
-		return 0;
-	return switch_context_x64(prev, NULL);
-}
-
-void context_backend_prepare_user_frame(struct process *proc, task_t *task)
-{
-	arch_repair_user_gprs_from_syscall_frame((process_t *)proc, task);
-}
-
 uint64_t context_backend_user_return_value(const struct process *proc,
 					       const task_t *task)
 {
@@ -160,21 +131,6 @@ uint64_t context_backend_user_return_value(const struct process *proc,
 	if (rax == 0 && task && !arch_va_kernel_ptr_leak(task_get_retval(task)))
 		rax = task_get_retval(task);
 	return rax;
-}
-
-void context_backend_trace_user_frame_resume(struct process *prev,
-						     struct process *next,
-						     task_t *task)
-{
-	process_t *prev_proc = (process_t *)prev;
-	process_t *next_proc = (process_t *)next;
-
-	switch_audit_user_frame_resume(prev_proc, next_proc, task);
-#if IR0_DEBUG_WAIT
-	klog_info("WAIT", "CLASSIFY RESUME_GATE_USES_NEXT_FIXED");
-	klog_debug("WAIT", "CTX resume_path=switch_to_user_task");
-#endif
-	switch_trace_user_frame_resume(prev_proc, next_proc, task);
 }
 
 void context_backend_prepare_kernel_resume(task_t *task)

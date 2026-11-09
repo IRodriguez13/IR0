@@ -2026,7 +2026,6 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
     current_process->syscall_resume_rax = resume_rax;
     current_process->syscall_frame_fresh = 1;
     current_process->irq_frame_saved = 1;
-    current_process->coop_resched_resume = 0;
     current_process->want_kernel_ret = 0;
     current_process->kernel_syscall_sleep = 0;
     process_kernel_sleep_interrupted_clear(current_process);
@@ -2058,7 +2057,6 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
                                       signal_sigcontext_return_value(restore_ctx));
   process_restore_user_task_segments(current_process);
   current_process->irq_frame_saved = 0;
-  current_process->coop_resched_resume = 0;
   current_process->want_kernel_ret = 0;
   current_process->syscall_frame_fresh = 0;
   process_signal_enter_pending_clear(current_process);

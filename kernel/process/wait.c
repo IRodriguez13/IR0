@@ -192,43 +192,6 @@ void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 	sched_promote(parent);
 }
 
-void process_reap_zombie_on_wait_resume(process_t *parent, pid_t child_pid)
-{
-	process_t *child;
-	size_t used_frames_before = 0;
-	size_t used_frames_after = 0;
-
-	if (!parent || child_pid <= 0)
-		return;
-
-	if (!process_wait_child_matches_blocked_target(parent, child_pid))
-	{
-		return;
-	}
-
-	child = process_find_by_pid(child_pid);
-	if (!child || child->state != PROCESS_ZOMBIE ||
-	    child->ppid != parent->task.pid)
-		return;
-
-
-	pmm_stats(NULL, &used_frames_before, NULL);
-	process_reap_zombie_child(child);
-	pmm_stats(NULL, &used_frames_after, NULL);
-	if (IR0_DEBUG_PROC)
-	{
-		if (used_frames_after >= used_frames_before)
-			klog_debug_fmt("KERN", "%llx", (unsigned long long)((uint64_t)(used_frames_after - used_frames_before)));
-		else
-			klog_debug_fmt("KERN", "%llx sign=%s", (unsigned long long)((uint64_t)(used_frames_before - used_frames_after)), used_frames_after <= used_frames_before ? "-" : "+");
-		klog_debug("WAIT",
-			   used_frames_after <= used_frames_before
-			       ? "CLASSIFY PMM_RECLAIM_ON_WAIT_OK"
-			       : "CLASSIFY PMM_RECLAIM_ON_WAIT_PARTIAL");
-	}
-	paging_ir0_mm_checkpoint("wait-resume-after", (int32_t)parent->task.pid);
-}
-
 /* First zombie child of @parent matching the wait4 @pid selector, or NULL. */
 static process_t *wait_find_matching_zombie(process_t *parent, pid_t pid)
 {
@@ -365,7 +328,6 @@ int process_wait(pid_t pid, int *status, int options)
 		{
 			wait_exit_audit_process_wait_block(pid, status);
 			process_wait_state_arm(current_process, pid, active_opts, status);
-			current_process->coop_resched_resume = 0;
 			current_process->syscall_resume_rax = 0;
 			task_set_retval(&current_process->task, 0);
 			/*

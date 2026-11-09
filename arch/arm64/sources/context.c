@@ -12,13 +12,11 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/task.h>
-#include <ir0/arch_task.h>
-#include <ir0/arch_cpu.h>
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
-#include <stdint.h>
-#include <config.h>
+#include <ir0/switch.h>
+#include <ir0/task.h>
+
 #include "switch_early.h"
 
 /*
@@ -56,24 +54,6 @@ void context_backend_switch(task_t *prev, task_t *next)
 	switch_context_arm64(prev, next);
 }
 
-int context_backend_resumes_user_frame(void)
-{
-	/* Each task traps on its own kernel stack (switch_to_user sets SP_EL1). */
-	return 0;
-}
-
-int context_backend_checkpoint(task_t *prev)
-{
-	(void)prev;
-	return 0;
-}
-
-void context_backend_prepare_user_frame(struct process *proc, task_t *task)
-{
-	(void)proc;
-	(void)task;
-}
-
 uint64_t context_backend_user_return_value(const struct process *proc,
 					       const task_t *task)
 {
@@ -81,15 +61,6 @@ uint64_t context_backend_user_return_value(const struct process *proc,
 
 	(void)task;
 	return resume_proc ? resume_proc->syscall_resume_rax : 0;
-}
-
-void context_backend_trace_user_frame_resume(struct process *prev,
-						     struct process *next,
-						     task_t *task)
-{
-	(void)prev;
-	(void)next;
-	(void)task;
 }
 
 void context_backend_prepare_kernel_resume(task_t *task)

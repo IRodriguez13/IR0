@@ -14,10 +14,7 @@
 
 #include "process_internal.h"
 #include <ir0/arch_debug.h>
-#include <ir0/context.h>
 #include <ir0/task_ops.h>
-#include <ir0/syscall_frame.h>
-#include <ir0/mm.h>
 
 static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
 				  arch_task_syscall_frame_t *out)
@@ -55,50 +52,10 @@ int process_context_user_resume_eligible(const process_t *p)
 		return 0;
 
 	if ((process_wait_blocked(p) || process_wait_target_pid(p) != 0) &&
-	    process_wait_resume_child_pid(p) <= 0 && !p->coop_resched_resume)
+	    process_wait_resume_child_pid(p) <= 0)
 		return 0;
 
 	return 1;
-}
-
-/*
- * A wait has not produced the child that completes it yet.  This is process
- * state, not an x86 kernel-return condition; ISAs consume the classification
- * through process_context_resume_route().
- */
-int process_context_waits_for_child(const process_t *p)
-{
-	if (!p)
-		return 0;
-
-	return (process_wait_blocked(p) || process_wait_target_pid(p) != 0) &&
-	       process_wait_resume_child_pid(p) <= 0 &&
-	       !p->coop_resched_resume;
-}
-
-/*
- * Decide the next logical continuation from generic task state.  The result
- * intentionally does not validate a saved frame and does not activate an
- * address space: those operations are ISA/backend responsibilities.
- */
-enum context_resume_route process_context_resume_route(const process_t *p)
-{
-	if (!p || p->mode != USER_MODE)
-		return CONTEXT_RESUME_SWITCH;
-
-	if (process_context_waits_for_child(p))
-		return CONTEXT_RESUME_KERNEL;
-
-	if (!p->irq_frame_saved)
-		return CONTEXT_RESUME_SWITCH;
-
-	if (!p->coop_resched_resume &&
-	    (p->kernel_syscall_sleep || p->syscall_resume_rax == 0) &&
-	    !(process_wait_blocked(p) &&
-	      process_wait_resume_child_pid(p) > 0))
-		return CONTEXT_RESUME_KERNEL;
-
-	return CONTEXT_RESUME_USER_FRAME;
 }
 
 uint64_t process_list_count(void)
@@ -275,34 +232,6 @@ void process_syscall_restore_exit_regs(uint64_t *stack_r9_slot)
 	syscall_restore_exit_regs(current_process, stack_r9_slot);
 }
 
-void process_arm_blocked_syscall_resume(process_t *p, uint64_t rax)
-{
-	if (!p || p->mode != USER_MODE)
-		return;
-
-	process_apply_syscall_frame_to_task(&p->task, &p->syscall_frame, rax);
-	p->syscall_resume_rax = rax;
-	p->irq_frame_saved = 1;
-}
-
-/*
- * process_arm_coop_resched_resume - Arm a cooperative in-syscall reschedule to
- * resume via the saved syscall frame instead of the kernel continuation on the
- * shared syscall stack. Unlike wait4, there is no zombie child to reap,
- * so coop_resched_resume tells switch_to to skip the reap step.
- * Only valid for syscall-insn tasks (syscall_frame_fresh).
- */
-void process_arm_coop_resched_resume(process_t *p, uint64_t rax)
-{
-	if (!p || p->mode != USER_MODE)
-		return;
-
-	process_apply_syscall_frame_to_task(&p->task, &p->syscall_frame, rax);
-	p->syscall_resume_rax = rax;
-	p->coop_resched_resume = 1;
-	p->irq_frame_saved = 1;
-}
-
 /*
  * process_clear_in_thread_syscall_block - Drop irq_frame_saved after blocking
  * syscalls that resume inside the syscall handler (poll/pipe read loops), not
@@ -315,7 +244,6 @@ void process_clear_in_thread_syscall_block(process_t *p)
 
 	p->irq_frame_saved = 0;
 	p->poll_resume_via_arch = 0;
-	p->coop_resched_resume = 0;
 	p->want_kernel_ret = 0;
 	p->kernel_syscall_sleep = 0;
 	process_kernel_sleep_interrupted_clear(p);
@@ -329,7 +257,6 @@ void process_reset_blocked_syscall_state(process_t *p)
 
 	p->irq_frame_saved = 0;
 	p->poll_resume_via_arch = 0;
-	p->coop_resched_resume = 0;
 	p->want_kernel_ret = 0;
 	p->kernel_syscall_sleep = 0;
 	process_kernel_sleep_interrupted_clear(p);

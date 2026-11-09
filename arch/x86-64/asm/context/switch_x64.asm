@@ -1,6 +1,6 @@
 ; SPDX-License-Identifier: GPL-3.0-only
 ;
-; Raw x86-64 context mechanics. Portable resume policy lives in sched/switch.
+; Raw x86-64 context mechanics behind context_backend_switch().
 
 global switch_context_x64
 global iretq_checkpoint_buf
@@ -111,8 +111,10 @@ section .text
 ;
 ; switch_context_x64(task_t *current, task_t *new)
 ;
-; Save all register state into *current, load from *new, iretq to new task.
-; On null pointers, returns to caller without switching.
+; Save all register state into *current, load from *new and continue it
+; (kernel continuation, or iretq for a task whose saved state is a user
+; frame, e.g. a fork child). current=NULL skips the save (first transfer);
+; new=NULL returns without switching.
 ;
 ; task_t offsets (from kernel/scheduler/task.h):
 ;   0x00 rax, 0x08 rbx, 0x10 rcx, 0x18 rdx, 0x20 rsi, 0x28 rdi,
@@ -122,21 +124,12 @@ section .text
 ;   0xB0 cr3
 ;
 switch_context_x64:
-    ; next=NULL is a save-only continuation checkpoint used before a direct
-    ; user transfer. It returns 0 now and 1 when that context is resumed.
     test rsi, rsi
-    jnz .have_next
-    test rdi, rdi
     jz .skip
-    jmp .save_current
-
-    ; rdi=NULL: user IRQ frame already in prev->task (skip clobbering save).
-.have_next:
     test rdi, rdi
     jz .load_only
 
     ; ---- Save current context (rdi = &current->task) ----
-.save_current:
 
     mov [rdi + 0x00], rax
     mov [rdi + 0x08], rbx
@@ -208,12 +201,6 @@ switch_context_x64:
     add rsp, 8
     pop rsi
     pop rdi
-
-    test rsi, rsi
-    jnz .load_only
-    mov qword [rdi + 0x00], 1
-    xor eax, eax
-    ret
 
 .load_only:
     ; ---- Load new context (rsi = &new->task) ----

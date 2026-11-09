@@ -1666,7 +1666,7 @@ def check_includes_ir0_no_c_sources():
 ARCH_PUBLIC_CALL_RE = re.compile(r"\barch_[a-z_][a-z0-9_]*\s*\(")
 CONTEXT_BACKEND_INCLUDE_ALLOW = {
     "sched/switch/context_switch.c",
-    "sched/switch/context_user_resume.c",
+    "sched/switch/kernel_resume.c",
     "arch/x86-64/sources/context.c",
     "arch/arm64/sources/context.c",
 }
@@ -1739,7 +1739,7 @@ def check_context_backend_include_boundary():
             if CONTEXT_BACKEND_INCLUDE_RE.search(line):
                 errors.append(
                     f"[context-backend-boundary] {rel_s}:{idx}: "
-                    "only sched/switch/context_user_resume.c or an ISA backend may include context_backend.h"
+                    "only sched/switch/ or an ISA backend may include context_backend.h"
                 )
     return errors
 

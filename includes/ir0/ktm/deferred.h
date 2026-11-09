@@ -43,7 +43,6 @@
 /* Kinds of deferred observation. Extend rather than overloading @a0..@a2. */
 enum ktm_deferred_kind
 {
-	KTM_DEFERRED_RESUME_GATE = 1,
 	KTM_DEFERRED_PAGE_FAULT = 2,
 	KTM_DEFERRED_STACK_LOW = 3
 };

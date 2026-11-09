@@ -19,20 +19,7 @@ struct process;
  * checkpoint, stack handoff, and frame repair.
  */
 void context_backend_switch(task_t *prev, task_t *next);
-int context_backend_checkpoint(task_t *prev);
-void context_backend_prepare_user_frame(struct process *proc, task_t *task);
 uint64_t context_backend_user_return_value(const struct process *proc,
                                            const task_t *task);
-void context_backend_trace_user_frame_resume(struct process *prev,
-                                             struct process *next,
-                                             task_t *task);
 void context_backend_prepare_kernel_resume(task_t *task);
 void context_backend_inject_kernel_return_fault(task_t *task);
-
-/*
- * Non-zero when a task blocked in a syscall cannot keep its kernel
- * continuation and must be resumed from its saved user frame (x86-64 runs
- * syscalls on one shared stack). ISAs with a kernel stack per task (ARM64,
- * Linux on every ISA) return 0 and always resume the kernel continuation.
- */
-int context_backend_resumes_user_frame(void);

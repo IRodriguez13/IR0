@@ -12,14 +12,12 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include "switch_internal.h"
 #include <ir0/arch_mm.h>
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
-#include <ir0/task.h>
-#include <ir0/arch_task.h>
 #include <ir0/process.h>
 #include <ir0/percpu.h>
-#include <ir0/switch.h>
 #include <ir0/tls.h>
 
 /*
@@ -58,8 +56,6 @@ void context_prepare_first(struct process *next)
 void switch_to(task_t *prev, task_t *next)
 {
 	context_prepare_next(next);
-	if (context_try_resume_user_frame(prev, next))
-		return;
 	context_prepare_kernel_resume(next);
 	context_backend_switch(prev, next);
 }

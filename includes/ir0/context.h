@@ -21,33 +21,6 @@
 
 struct process;
 
-/*
- * Semantic route selected from generic process state.  It does not describe
- * an ISA return instruction or a register layout; those remain backend work.
- */
-enum context_resume_route {
-	CONTEXT_RESUME_SWITCH = 0,
-	CONTEXT_RESUME_KERNEL,
-	CONTEXT_RESUME_USER_FRAME,
-};
-
-int process_context_waits_for_child(const struct process *proc);
-enum context_resume_route process_context_resume_route(const struct process *proc);
-
-/* Reconcile portable blocked-syscall state before an ISA context transfer. */
-enum context_resume_route context_prepare_resume_route(task_t *next);
-int context_try_resume_user_frame(task_t *prev, task_t *next);
-void context_prepare_kernel_resume(task_t *next);
-void context_finalize_kernel_resume(task_t *next);
-void context_repair_kernel_return_state(task_t *next);
-
-/* Prepare/finish portable process state around a backend user-frame return. */
-void context_prepare_user_frame_resume(task_t *next);
-void context_finish_user_frame_resume(struct process *proc);
-
-/* Complete the portable user-frame resume route; returns only after a checkpoint. */
-int context_resume_user_frame(task_t *prev, task_t *next);
-
 void switch_to(task_t *prev, task_t *next);
 
 /*

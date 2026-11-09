@@ -14,7 +14,6 @@
 
 #include <ir0/ktm/deferred.h>
 #include <ir0/ktm/event.h>
-#include <ir0/klog.h>
 
 struct ktm_deferred_row
 {
@@ -62,11 +61,6 @@ void ktm_deferred_flush(void)
 
 		switch (row->kind)
 		{
-		case KTM_DEFERRED_RESUME_GATE:
-			ktm_event_emit4(KTM_EVENT_CTX_USER_IRET,
-					KTM_SUBSYS_SCHED, (uint64_t)row->pid,
-					row->a0, row->a1, row->a2);
-			break;
 		case KTM_DEFERRED_PAGE_FAULT:
 			ktm_event_emit4(KTM_EVENT_PAGE_FAULT, KTM_SUBSYS_MM,
 					(uint64_t)row->pid, row->a0, row->a1,

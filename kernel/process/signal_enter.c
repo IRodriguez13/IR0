@@ -89,7 +89,7 @@ void process_kernel_sleep_interrupted_clear(process_t *p)
 
 void process_kernel_sleep_interrupted_backup_frame(process_t *p)
 {
-	if (!p || p->coop_resched_resume)
+	if (!p)
 		return;
 
 	if (p->kernel_syscall_sleep)

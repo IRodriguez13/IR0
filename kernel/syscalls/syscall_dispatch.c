@@ -600,7 +600,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
       process_signal_enter_pending_clear(current_process);
       process_restore_user_task_segments(current_process);
       current_process->irq_frame_saved = 0;
-      current_process->coop_resched_resume = 0;
       current_process->want_kernel_ret = 0;
       tls_restore_current();
       switch_to_user_task(&current_process->task);
