@@ -177,9 +177,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
 		    sig == SIGFPE)
 		{
-			p->signal_pending &= ~SIGNAL_MASK(sig);
-			p->exit_signal = sig;
-			process_exit(0);
+			signal_exit_current(sig);
 		}
 		return 0;
 	}
@@ -198,9 +196,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
 		    sig == SIGFPE)
 		{
-			p->signal_pending &= ~SIGNAL_MASK(sig);
-			p->exit_signal = sig;
-			process_exit(0);
+			signal_exit_current(sig);
 		}
 		return 0;
 	}
@@ -209,9 +205,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
 		    sig == SIGFPE)
 		{
-			p->signal_pending &= ~SIGNAL_MASK(sig);
-			p->exit_signal = sig;
-			process_exit(0);
+			signal_exit_current(sig);
 		}
 		return 0;
 	}
@@ -683,9 +677,7 @@ void handle_signals(void)
 #if DEBUG_PROCESS
         klog_info("SIGNAL", "SIGKILL received, terminating process");
 #endif
-        current->signal_pending &= ~SIGNAL_MASK(SIGKILL);
-        process_exit(-1);
-        return; /* Never returns */
+        signal_exit_current(SIGKILL);
     }
 
     /* SIGSTOP - stop process (cannot be caught) */
