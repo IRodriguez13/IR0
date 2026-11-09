@@ -207,7 +207,8 @@ smoke-arm64-product-log: kernel-arm64-product.bin
 			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
 			-display none -no-reboot 2>/dev/null && \
 		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-smoke.log && \
-		echo "✓ smoke-arm64-product-log (ARM64_PRODUCT_BOOT_HANDOFF)"; \
+		grep -q 'PMM_RESERVED_RANGES_OK' $(HOST_TMP)/arm64-product-smoke.log && \
+		echo "✓ smoke-arm64-product-log (ARM64_PRODUCT_BOOT_HANDOFF, PMM_RESERVED_RANGES_OK)"; \
 	fi
 
 .PHONY: smoke-arm64-bpivot-product

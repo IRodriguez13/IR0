@@ -106,3 +106,10 @@ int boot_memory_get_allocatable_ranges(struct ir0_phys_range *ranges,
 
 /* Initialize the generic PMM from the normalized platform inventory. */
 int boot_memory_init_pmm(void);
+
+/*
+ * Count the PMM frames that overlap a range the kernel still uses (firmware
+ * reservations, DTB, initrd, kernel heap). 0 when the PMM can never hand one
+ * out; -ENODEV before the snapshot and the PMM exist.
+ */
+int boot_memory_check_pmm(void);

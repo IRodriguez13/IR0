@@ -89,6 +89,17 @@ void ktest_allocator(void)
 }
 
 /*
+ * The PMM must never own a frame the kernel keeps using: firmware
+ * reservations, the DTB, the initrd or the fixed kernel heap window.
+ */
+void ktest_pmm_skips_reserved_ranges(void)
+{
+	KTEST_BEGIN("pmm_skips_reserved_ranges");
+	KASSERT_EQ(boot_memory_check_pmm(), 0);
+	KTEST_END();
+}
+
+/*
  * /proc/meminfo and /sys/kernel/mm print the third heap statistic as
  * SlabAllocs: the number of live heap allocations, not a byte count.
  */

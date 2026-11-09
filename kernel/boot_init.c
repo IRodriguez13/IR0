@@ -115,6 +115,10 @@ void boot_memory_serial(void)
 
 	klog_set_boot_phase(KLOG_BOOT_MEMORY);
 	klog_info("PMM", "physical memory manager online");
+	if (boot_memory_check_pmm() == 0)
+		ir0_boot_smoke("PMM_RESERVED_RANGES_OK");
+	else
+		ir0_boot_smoke("PMM_RESERVED_RANGES_OVERLAP");
 	klog_set_boot_phase(KLOG_BOOT_PLATFORM);
 	ir0_boot_log_platform_hypervisor();
 

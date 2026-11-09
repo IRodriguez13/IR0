@@ -8,6 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/arch_mm.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
 #include <ir0/errno.h>
@@ -15,6 +16,9 @@
 
 #include <stdint.h>
 #include <string.h>
+
+/* Snapshot reservations plus the DTB, the initrd and the kernel heap. */
+#define BOOT_MEMORY_MAX_PROTECTED (IR0_BOOT_MEMORY_MAX_RESERVATIONS + 3U)
 
 static struct ir0_boot_snapshot g_boot_snapshot;
 
@@ -249,6 +253,47 @@ int boot_memory_get_reserved_ranges(struct ir0_phys_range *ranges,
 	return 0;
 }
 
+static int ranges_intersect(uint64_t base, uint64_t size,
+			    const struct ir0_phys_range *range)
+{
+	return range->size != 0 && base < range->base + range->size &&
+	       range->base < base + size;
+}
+
+static void protected_add(struct ir0_phys_range *ranges, size_t *count,
+			  uint64_t base, uint64_t size)
+{
+	if (size == 0 || base > UINT64_MAX - size ||
+	    *count >= BOOT_MEMORY_MAX_PROTECTED)
+		return;
+	ranges[*count].base = base;
+	ranges[*count].size = size;
+	(*count)++;
+}
+
+/*
+ * Physical ranges the kernel keeps using after the PMM goes live: every
+ * firmware/arch reservation, the devicetree blob, the initrd and the
+ * fixed kernel heap window.
+ */
+static size_t boot_memory_protected_ranges(struct ir0_phys_range *ranges)
+{
+	size_t count = 0;
+	size_t i;
+
+	for (i = 0; i < g_boot_snapshot.reserved_count &&
+		    i < IR0_BOOT_MEMORY_MAX_RESERVATIONS; i++)
+		protected_add(ranges, &count, g_boot_snapshot.reserved[i].base,
+			      g_boot_snapshot.reserved[i].size);
+	protected_add(ranges, &count, g_boot_snapshot.dtb.base,
+		      g_boot_snapshot.dtb.size);
+	protected_add(ranges, &count, g_boot_snapshot.initrd.base,
+		      g_boot_snapshot.initrd.size);
+	protected_add(ranges, &count, (uint64_t)mm_kernel_heap_start(),
+		      (uint64_t)mm_kernel_heap_size());
+	return count;
+}
+
 int boot_memory_get_allocatable_ranges(struct ir0_phys_range *ranges,
 				       size_t capacity, size_t *count)
 {
@@ -292,4 +337,36 @@ int boot_memory_init_pmm(void)
 					       &count) != 0)
 		return -ENODEV;
 	return pmm_init_ranges(ranges, count);
+}
+
+int boot_memory_check_pmm(void)
+{
+	struct ir0_phys_range protected_ranges[BOOT_MEMORY_MAX_PROTECTED];
+	size_t protected_count;
+	size_t frames;
+	size_t frame;
+	int overlaps = 0;
+
+	if (!g_boot_snapshot.valid)
+		return -ENODEV;
+	frames = pmm_total_frames();
+	if (frames == 0)
+		return -ENODEV;
+	protected_count = boot_memory_protected_ranges(protected_ranges);
+	for (frame = 0; frame < frames; frame++)
+	{
+		uint64_t phys = (uint64_t)pmm_frame_phys(frame);
+		size_t i;
+
+		for (i = 0; i < protected_count; i++)
+		{
+			if (ranges_intersect(phys, PMM_FRAME_SIZE,
+					     &protected_ranges[i]))
+			{
+				overlaps++;
+				break;
+			}
+		}
+	}
+	return overlaps;
 }

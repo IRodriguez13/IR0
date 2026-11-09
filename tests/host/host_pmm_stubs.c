@@ -27,6 +27,17 @@ int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
 	return 0;
 }
 
+/* No heap window on the host: boot_memory protects only the snapshot. */
+uintptr_t mm_kernel_heap_start(void)
+{
+	return 0;
+}
+
+size_t mm_kernel_heap_size(void)
+{
+	return 0;
+}
+
 pid_t process_get_pid(void)
 {
 	return -1;
