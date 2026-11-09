@@ -79,15 +79,6 @@ long strncpy_from_user(char *dst, const char *src, long count);
  */
 int access_ok(const void *addr, size_t size);
 
-/**
- * access_ok_mapped - access_ok() plus every page present in the current mm
- *
- * For a syscall that consumes data before it copies it out (pipe, socket
- * and file reads), so a bad destination fails before anything is lost.
- * Returns: 1 if valid, 0 otherwise.
- */
-int access_ok_mapped(const void *addr, size_t size);
-
 /*
  * Scalar helpers (Linux-shaped). Evaluate to 0 on success, -EFAULT on fault.
  * @ptr is a userspace pointer; @x is a kernel lvalue / rvalue.

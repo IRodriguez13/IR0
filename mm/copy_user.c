@@ -35,30 +35,6 @@ int access_ok(const void *addr, size_t size)
 	return mm_user_va_ok((uintptr_t)addr, size);
 }
 
-int access_ok_mapped(const void *addr, size_t size)
-{
-	process_t *current = process_get_current();
-	uintptr_t start = (uintptr_t)addr;
-	uintptr_t page;
-
-	if (uaccess_kernel(current))
-		return 1;
-	if (!mm_user_va_ok(start, size))
-		return 0;
-	if (!current || !process_pgd(current))
-		return 0;
-
-	for (page = start & ~(uintptr_t)(PAGE_SIZE_4KB - 1); page < start + size;
-	     page += PAGE_SIZE_4KB)
-	{
-		if (is_page_mapped_in_directory(process_pgd(current), page,
-						NULL) != 1)
-			return 0;
-	}
-
-	return 1;
-}
-
 int copy_to_user(void *dst, const void *src, size_t n)
 {
 	process_t *current = process_get_current();

@@ -527,21 +527,16 @@ int64_t sys_read(int fd, void *buf, size_t count)
       sock_stream_is(fd_table[fd].vfs_file))
   {
     struct sock_stream *ss = (struct sock_stream *)fd_table[fd].vfs_file;
-    char kernel_read_buf[PAGE_SIZE_4KB];
-    size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
     int nb = (fd_table[fd].flags & O_NONBLOCK) != 0;
     ssize_t n;
 
     /*
-     * Validate the destination before dequeuing: a failed copy_to_user()
-     * must not drop socket bytes (Linux read(2) EFAULT contract).
+     * sock_stream_recv_user() dequeues only what reached @buf, so a bad
+     * destination fails with -EFAULT and the bytes stay queued.
      */
-    if (!access_ok_mapped(buf, read_size))
-      return -EFAULT;
-
     for (;;)
     {
-      n = sock_stream_recv_flags(ss, kernel_read_buf, read_size, 0);
+      n = sock_stream_recv_user(ss, buf, count, 0);
       if (n != -EAGAIN)
 	break;
       if (nb)
@@ -555,10 +550,6 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	  return sleep_ret;
       }
     }
-    if (n < 0)
-      return n;
-    if (n > 0 && copy_to_user(buf, kernel_read_buf, (size_t)n) != 0)
-      return -EFAULT;
     return n;
   }
 
@@ -655,12 +646,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
 
       if (chunk > sizeof(kernel_read_buf))
         chunk = sizeof(kernel_read_buf);
-      /*
-       * Validate the destination before consuming file data. A failed
-       * copy_to_user() must not advance f_pos (Linux read(2) contract).
-       */
-      if (!access_ok_mapped((char *)buf + total, chunk))
-        return total > 0 ? (int64_t)total : -EFAULT;
+      /* A failed copy_to_user() rewinds f_pos (Linux read(2) contract). */
       pos_before = vfs_file->pos;
       ret = vfs_read(vfs_file, kernel_read_buf, chunk);
       if (ret < 0)

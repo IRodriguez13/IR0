@@ -527,8 +527,6 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		return -ESRCH;
 	if (!buf)
 		return -EINVAL;
-	if (!access_ok(buf, len))
-		return -EFAULT;
 
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
@@ -536,64 +534,40 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		uint64_t deadline = 0;
 		uint64_t rto;
 
+		/* Dequeues only what reached @buf: a bad @buf keeps the bytes. */
 		nb = sock_nonblock_fd(fd, flags);
-		kbuf = sock_bounce_alloc(len);
-		if (!kbuf)
-			return -ENOMEM;
 		rto = sock_stream_get_timeout_ms(ss, 1);
 		if (rto > 0)
 			deadline = clock_get_uptime_milliseconds() + rto;
 		for (;;)
 		{
-			n = sock_stream_recv_flags(ss, kbuf, len, flags);
+			n = sock_stream_recv_user(ss, buf, len, flags);
 			if (n != -EAGAIN)
 				break;
 			if (nb)
-			{
-				kfree(kbuf);
 				return -EAGAIN;
-			}
 			if (deadline && clock_get_uptime_milliseconds() >= deadline)
-			{
-				kfree(kbuf);
 				return -EAGAIN; /* Linux SO_RCVTIMEO → EAGAIN */
-			}
 			if (signals_pause_should_interrupt(current_process))
-			{
-				kfree(kbuf);
 				return -EINTR;
-			}
 			{
 				int64_t sleep_ret = syscall_sleep_ms_locked(20);
 
 				if (sleep_ret < 0)
-				{
-					kfree(kbuf);
 					return sleep_ret;
-				}
 			}
 			ss = sock_stream_fd_lookup(fd);
 			if (!ss)
-			{
-				kfree(kbuf);
 				return -EBADF;
-			}
 		}
-		if (n < 0)
-		{
-			kfree(kbuf);
-			return n;
-		}
-		if (n > 0 && copy_to_user(buf, kbuf, (size_t)n) != 0)
-		{
-			kfree(kbuf);
-			return -EFAULT;
-		}
-		kfree(kbuf);
 		(void)src_addr;
 		(void)addrlen;
 		return n;
 	}
+
+	/* Datagram sockets below still consume before copying out. */
+	if (!access_ok(buf, len))
+		return -EFAULT;
 
 	if (addrlen)
 	{

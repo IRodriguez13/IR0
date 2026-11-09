@@ -2548,7 +2548,7 @@ def check_errno_has_single_catalog():
 
 
 RETIRED_UACCESS_RE = re.compile(
-    r"\b(validate_userspace_buffer|validate_userspace_string|"
+    r"\b(access_ok_mapped|validate_userspace_buffer|validate_userspace_string|"
     r"process_validate_userspace_buffer|is_user_address(_checked)?|"
     r"copy_from_user_cstring|copy_(to|from)_user_in_mm|zero_user_mm|"
     r"(copy_to|copy_from|zero)_user_region_in_directory|VALIDATE_BUFFER)\b"

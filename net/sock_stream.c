@@ -13,6 +13,7 @@
 #include <ir0/types.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
+#include <ir0/copy_user.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/arch_cpu.h>
 #include "log.h"
@@ -355,20 +356,34 @@ static size_t sock_stream_queue_write(struct sock_stream *s,
 	return written;
 }
 
+/*
+ * Dequeue up to @len bytes into @dst, a kernel buffer, or a user buffer
+ * when @to_user is set. Like Linux unix_stream_read_generic(), a byte
+ * leaves the queue only once it reached @dst: a user copy that faults
+ * stops there, and *@fault reports it.
+ */
 static size_t sock_stream_queue_read(struct sock_stream *s, char *dst,
-				     size_t len, int peek)
+				     size_t len, int peek, int to_user,
+				     int *fault)
 {
 	struct ss_chunk *chunk, *free_head = NULL, *free_tail = NULL;
 	unsigned long flags;
 	size_t copied = 0;
 
+	*fault = 0;
 	flags = irq_save();
 	chunk = s->rx_head;
 	while (chunk && copied < len) {
 		size_t available = chunk->end - chunk->start;
 		size_t take = len - copied;
 		if (take > available) take = available;
-		memcpy(dst + copied, chunk->data + chunk->start, take);
+		if (!to_user)
+			memcpy(dst + copied, chunk->data + chunk->start, take);
+		else if (copy_to_user(dst + copied, chunk->data + chunk->start,
+				      take) != 0) {
+			*fault = 1;
+			break;
+		}
 		copied += take;
 		if (peek) {
 			chunk = chunk->next;
@@ -1011,11 +1026,16 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 	return (ssize_t)i;
 }
 
-ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags)
+/* Bounce size for a user read from the wire TCP backend. */
+#define SS_WIRE_USER_BOUNCE 512
+
+static ssize_t sock_stream_recv_common(struct sock_stream *s, void *buf,
+				       size_t len, int flags, int to_user)
 {
 	size_t i;
 	char *dst = buf;
 	int peek = (flags & MSG_PEEK) != 0;
+	int fault;
 
 	if (!s || (s->state != SS_CONNECTED && s->state != SS_CONNECTING) || !buf)
 		return -EINVAL;
@@ -1031,6 +1051,7 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 	}
 	if (s->wire_tcp)
 	{
+		char bounce[SS_WIRE_USER_BOUNCE];
 		int ret;
 		uint32_t ack;
 
@@ -1040,10 +1061,19 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 					s->wire_peer_port, s->wire_local_port);
 		if (ack)
 			s->wire_ack = ack;
+		/*
+		 * The wire backend dequeues as it copies and has no peek: a
+		 * user read goes through a bounce buffer, and a faulting user
+		 * copy loses those bytes.
+		 */
+		if (to_user && len > sizeof(bounce))
+			len = sizeof(bounce);
 		ret = tcp_wire_recv((ip4_addr_t)s->wire_peer_ip, s->wire_peer_port,
-				   s->wire_local_port, buf, len);
+				   s->wire_local_port, to_user ? bounce : buf, len);
 		if (ret < 0)
 			return ret;
+		if (to_user && ret > 0 && copy_to_user(buf, bounce, (size_t)ret) != 0)
+			return -EFAULT;
 		return (ssize_t)ret;
 	}
 #endif
@@ -1053,7 +1083,9 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 	/* Linux copies nothing and reports 0 once data is queued. */
 	if (len == 0 && s->queued_bytes > 0)
 		return 0;
-	i = sock_stream_queue_read(s, dst, len, peek);
+	i = sock_stream_queue_read(s, dst, len, peek, to_user, &fault);
+	if (i == 0 && fault)
+		return -EFAULT;
 	if (i == 0 && (!s->peer || s->peer->shut_wr))
 		return 0;
 	if (i == 0)
@@ -1061,6 +1093,17 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 	if (i > 0)
 		poll_wake_check();
 	return (ssize_t)i;
+}
+
+ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags)
+{
+	return sock_stream_recv_common(s, buf, len, flags, 0);
+}
+
+ssize_t sock_stream_recv_user(struct sock_stream *s, void *ubuf, size_t len,
+			      int flags)
+{
+	return sock_stream_recv_common(s, ubuf, len, flags, 1);
 }
 
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)

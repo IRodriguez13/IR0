@@ -40,6 +40,14 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr, uint16_
 ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len);
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len);
 ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags);
+/*
+ * sock_stream_recv_user - recv into a user buffer for recv/read syscalls.
+ * Bytes are dequeued only once copied (Linux unix_stream_read_generic): a
+ * bad @ubuf gives -EFAULT with the queue untouched, a fault after some bytes
+ * returns that short count.
+ */
+ssize_t sock_stream_recv_user(struct sock_stream *s, void *ubuf, size_t len,
+			      int flags);
 int sock_stream_set_reuseaddr(struct sock_stream *s, int on);
 int sock_stream_get_reuseaddr(const struct sock_stream *s);
 int sock_stream_take_so_error(struct sock_stream *s);
