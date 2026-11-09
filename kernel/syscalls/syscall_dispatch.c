@@ -606,32 +606,16 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
       switch_to_user_task(&current_process->task);
     }
 
+    /*
+     * Pending reschedule at the exit edge (Linux exit_to_user_mode): the
+     * task sleeps in schedule() on its own kernel stack and returns @r
+     * through the normal exit path when it runs again.
+     */
     if (current_process && current_process->mode == USER_MODE &&
         current_process->syscall_frame_fresh)
     {
-      /*
-       * Cooperative in-syscall reschedule for syscall-insn (musl) tasks.
-       * Resume THIS task from its saved syscall frame through the full
-       * userspace-return route, never
-       * via kernel_ret on the single shared global syscall stack / user_rsp_save
-       * scratch: a peer task's syscall resets that stack to the top and would
-       * clobber our saved pt_regs, corrupting user registers on resume.
-       */
       if (sched_take_resched())
-      {
-        process_arm_coop_resched_resume(current_process, (uint64_t)r);
         schedule();
-        /*
-         * Control only returns here when no switch actually occurred (a
-         * coop-resumed task re-enters in user mode, not at this call site).
-         * Disarm so a later real switch is not misrouted through the resume.
-         */
-        if (current_process)
-        {
-          current_process->irq_frame_saved = 0;
-          current_process->coop_resched_resume = 0;
-        }
-      }
     }
     else
     {
