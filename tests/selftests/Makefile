@@ -26,6 +26,8 @@ SWAPON_SRC := syscall/swapon.c
 SWAPON_BIN := $(BUILD_DIR)/swapon
 SOCK_ZERO_LEN_SRC := syscall/sock_zero_len.c
 SOCK_ZERO_LEN_BIN := $(BUILD_DIR)/sock_zero_len
+PATH_TOO_LONG_SRC := syscall/path_too_long.c
+PATH_TOO_LONG_BIN := $(BUILD_DIR)/path_too_long
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -58,10 +60,10 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
-	uaccess_kernel_addr signal_return sock_zero_len clean
+	uaccess_kernel_addr signal_return sock_zero_len path_too_long clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
-	uaccess_kernel_addr signal_return sock_zero_len
+	uaccess_kernel_addr signal_return sock_zero_len path_too_long
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -183,6 +185,18 @@ $(SOCK_ZERO_LEN_BIN): $(SOCK_ZERO_LEN_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR
 	fi
 	@echo "  CC      $(ARCH) selftest sock_zero_len"
 	@$(CC) $(CFLAGS) -o $@ $(SOCK_ZERO_LEN_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+path_too_long: $(PATH_TOO_LONG_BIN)
+
+$(PATH_TOO_LONG_BIN): $(PATH_TOO_LONG_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest path_too_long"
+	@$(CC) $(CFLAGS) -o $@ $(PATH_TOO_LONG_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

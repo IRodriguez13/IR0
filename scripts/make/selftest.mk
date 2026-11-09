@@ -276,3 +276,35 @@ ir0-selftest-sock-zero-len-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@echo "✓ ir0-selftest-sock-zero-len-arm64"
 
 ir0-selftest-sock-zero-len: ir0-selftest-sock-zero-len-x86 ir0-selftest-sock-zero-len-arm64
+
+IR0_SELFTEST_X86_PATH_TOO_LONG := $(KERNEL_ROOT)/build/selftests/x86_64/path_too_long
+IR0_SELFTEST_ARM64_PATH_TOO_LONG := $(KERNEL_ROOT)/build/selftests/arm64/path_too_long
+
+.PHONY: ir0-selftest-path-too-long-x86 ir0-selftest-path-too-long-arm64 ir0-selftest-path-too-long
+
+$(IR0_SELFTEST_X86_PATH_TOO_LONG): tests/selftests/syscall/path_too_long.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 path_too_long
+
+$(IR0_SELFTEST_ARM64_PATH_TOO_LONG): tests/selftests/syscall/path_too_long.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 path_too_long
+
+# A path longer than PATH_MAX fails with ENAMETOOLONG, not EFAULT.
+ir0-selftest-path-too-long-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PATH_TOO_LONG)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PATH_TOO_LONG) \
+		--done "ok 2 newfstatat_path_max_enametoolong" \
+		--log $(HOST_TMP)/ir0-selftest-x86-path-too-long.log
+	@echo "✓ ir0-selftest-path-too-long-x86"
+
+ir0-selftest-path-too-long-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PATH_TOO_LONG)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PATH_TOO_LONG) \
+		--done "ok 2 newfstatat_path_max_enametoolong" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-path-too-long.log
+	@echo "✓ ir0-selftest-path-too-long-arm64"
+
+ir0-selftest-path-too-long: ir0-selftest-path-too-long-x86 ir0-selftest-path-too-long-arm64
