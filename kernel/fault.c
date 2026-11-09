@@ -29,6 +29,7 @@ void ir0_fault_from_page_fault(struct ir0_fault *fault,
 	fault->addr = info->address;
 	fault->ip = info->ip;
 	fault->sp = info->sp;
+	fault->hw_code = info->hw_code;
 	fault->syndrome = info->syndrome;
 	fault->status = info->status;
 	fault->code_seg = info->code_seg;

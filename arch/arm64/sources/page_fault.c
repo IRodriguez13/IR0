@@ -51,6 +51,7 @@ int page_fault_decode(struct page_fault_info *out, uint64_t errcode,
 	out->address = (uintptr_t)far;
 	out->ip = (uintptr_t)elr;
 	out->sp = (uintptr_t)sp_el0;
+	out->hw_code = (unsigned int)ec;
 	out->syndrome = errcode;
 	out->status = spsr;
 	out->code_seg = 0;

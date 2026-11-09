@@ -22,6 +22,7 @@ struct page_fault_info
 	uintptr_t address;
 	uintptr_t ip;
 	uintptr_t sp;
+	unsigned int hw_code; /* ISA exception code: x86 vector 14, ARM64 ESR.EC */
 	uint64_t syndrome;  /* ISA fault code: x86 #PF error code, ARM64 ESR_EL1 */
 	uint64_t status;    /* interrupted flags: x86 RFLAGS, ARM64 SPSR_EL1 */
 	uint64_t code_seg;  /* x86 CS; 0 on ISAs without segmentation */
