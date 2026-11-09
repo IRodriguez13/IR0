@@ -57,9 +57,6 @@ void context_prepare_first(struct process *next)
 
 void switch_to(task_t *prev, task_t *next)
 {
-	/* Preserve the outgoing user-stack shadow before selecting @next's stack. */
-	if (prev)
-		switch_save_user_rsp(task_to_process(prev));
 	context_prepare_next(next);
 	if (context_try_resume_user_frame(prev, next))
 		return;

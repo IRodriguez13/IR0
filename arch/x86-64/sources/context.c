@@ -36,7 +36,6 @@
 #include "tss.h"
 
 extern uint64_t kernel_syscall_stack_top;
-extern uint64_t user_rsp_save;
 
 static void arch_fixup_user_task_for_iretq(process_t *proc);
 
@@ -211,15 +210,6 @@ void set_current_kernel_stack(struct process *p)
 
 	kernel_syscall_stack_top = proc->kstack_top;
 	tss_set_rsp0(proc->kstack_top);
-	user_rsp_save = proc->saved_user_rsp;
-}
-
-void switch_save_user_rsp(struct process *prev)
-{
-	process_t *proc = (process_t *)prev;
-
-	if (proc)
-		proc->saved_user_rsp = user_rsp_save;
 }
 
 static void arch_fixup_user_task_for_iretq(process_t *proc)

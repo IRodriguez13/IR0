@@ -42,18 +42,6 @@ void set_current_kernel_stack(struct process *p)
 	(void)proc;
 }
 
-void switch_save_user_rsp(struct process *prev)
-{
-	process_t *proc = (process_t *)prev;
-	uint64_t sp_el0;
-
-	if (!proc)
-		return;
-
-	__asm__ volatile("mrs %0, sp_el0" : "=r"(sp_el0));
-	proc->saved_user_rsp = sp_el0;
-}
-
 /*
  * Every switch is kernel to kernel on the task's own stack (Linux
  * cpu_switch_to). Returning to EL0 always goes through the task's exception

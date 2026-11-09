@@ -15,7 +15,6 @@
 struct process;
 
 void set_current_kernel_stack(struct process *p);
-void switch_save_user_rsp(struct process *prev);
 
 /*
  * switch_report_bad_ret — invalid kernel continuation outside executable text.

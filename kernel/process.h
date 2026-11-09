@@ -338,12 +338,10 @@ typedef struct process
 	/*
 	 * Per-process kernel stack (IR0_PROC_KSTACK_SIZE). Mapped supervisor-only
 	 * at IR0_KSTACK_VA_BASE+slot (not kmalloc identity). kstack_top feeds
-	 * kernel_syscall_stack_top and TSS.rsp0. saved_user_rsp shadows the
-	 * global user_rsp_save across context switches.
+	 * kernel_syscall_stack_top and TSS.rsp0.
 	 */
 	void *kstack_base;
 	uint64_t kstack_top;
-	uint64_t saved_user_rsp;
 
 	/*
 	 * Priority-band scheduler (CONFIG_SCHEDULER_POLICY==2): 0 = lowest,

@@ -74,7 +74,6 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	child->fork_pending_child = NULL;
 	child->kstack_base = NULL;
 	child->kstack_top = 0;
-	child->saved_user_rsp = 0;
 
 	/* Kstack mapping follows child address-space-root creation. */
 
@@ -226,7 +225,6 @@ static void fork_child_set_user_stack(process_t *child, void *stack)
 
 	sp = (uint64_t)(uintptr_t)stack;
 	syscall_frame_set_sp(&child->syscall_frame, sp);
-	child->saved_user_rsp = sp;
 	task_set_sp(&child->task, sp);
 	task_clear_frame_pointer(&child->task);
 }

@@ -13,9 +13,12 @@
 ;
 ; Stack discipline:
 ;   The syscall instruction does NOT switch RSP automatically (unlike int 0x80,
-;   which uses TSS.RSP0). Linux/BSD use SWAPGS + per-CPU; IR0 single-CPU uses a
-;   global dedicated syscall kernel stack to avoid running the kernel on the
-;   user stack (which can cross unmapped user pages and panic).
+;   which uses TSS.RSP0). Linux uses SWAPGS + per-CPU; IR0 single-CPU loads
+;   the current task's kernel stack top from kernel_syscall_stack_top (set on
+;   every context switch). user_rsp_save is only scratch for the two
+;   instructions before the user RSP is pushed (IF is masked by SFMASK); the
+;   exit path restores the user RSP from that pushed slot, so a task that
+;   slept inside the syscall returns with its own value (Linux pt_regs->sp).
 ;
 ; Violating ABI corrupts user computation across any syscall whose caller keeps
 ; a live value in those registers (e.g. musl _Fork keeps the TLS pointer in
@@ -30,10 +33,9 @@ extern tls_restore_current
 section .bss
 align 16
 kernel_syscall_stack_base:
-    resb 8192                          ; 8 KiB dedicated syscall kernel stack
+    resb 8192                          ; 8 KiB boot syscall kernel stack
 kernel_syscall_stack_end:
 
-global user_rsp_save
 user_rsp_save:           resq 1
 
 section .data
@@ -127,7 +129,7 @@ syscall_insn_entry_asm:
     pop r15
     pop r11               ; user RFLAGS (sysret loads into RFLAGS)
     pop rcx               ; user RIP    (sysret loads into RIP)
-    add rsp, 8            ; drop the user RSP shadow pushed in Stage 1
+    ; [rsp] = user RSP pushed in Stage 1; reloaded right before sysret.
 
     ; ---- Stage 7: restore user DS/ES (sysret doesn't reload them) ----
     ;
@@ -150,10 +152,8 @@ syscall_insn_entry_asm:
     push rdi
     push r8
     push r9
-    push r10
-    sub rsp, 8                  ; 10 pushes = 80 bytes; keep 16-byte align
+    push r10                    ; user RSP slot + 9 pushes = 80 bytes: aligned
     call tls_restore_current
-    add rsp, 8
     pop r10
     pop r9
     pop r8
@@ -164,7 +164,7 @@ syscall_insn_entry_asm:
     pop rcx
     pop rax
 
-    mov rsp, [rel user_rsp_save]
+    mov rsp, [rsp]              ; user RSP from this task's own frame
 
     ; Force IF in R11. Shared syscall stack / cli save can leave IF=0 and
     ; sysret would return ash with IRQs masked (dead keyboard after login).

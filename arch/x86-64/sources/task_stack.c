@@ -84,7 +84,6 @@ int process_kernel_stack_alloc(process_t *p)
 
 	p->kstack_base = (void *)va;
 	p->kstack_top = va + (uint64_t)IR0_PROC_KSTACK_SIZE;
-	p->saved_user_rsp = 0;
 	return 0;
 
 rollback:
@@ -112,5 +111,4 @@ void process_kernel_stack_free(process_t *p)
 	}
 	p->kstack_base = NULL;
 	p->kstack_top = 0;
-	p->saved_user_rsp = 0;
 }
