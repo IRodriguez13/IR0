@@ -197,6 +197,16 @@ static int sock_nonblock_fd(int fd, int flags)
 	return 0;
 }
 
+/*
+ * Kernel bounce buffer for a send/recv payload. A zero length is a valid
+ * call (Linux: a stream reports 0, a datagram socket sends an empty
+ * datagram), so it still gets a buffer: kmalloc(0) returns NULL.
+ */
+static uint8_t *sock_bounce_alloc(size_t len)
+{
+	return kmalloc(len ? len : 1);
+}
+
 int64_t sys_socket(int domain, int type, int protocol)
 {
 	int fd;
@@ -426,7 +436,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	{
 		ssize_t n;
 
-		kbuf = kmalloc(len);
+		kbuf = sock_bounce_alloc(len);
 		if (!kbuf)
 			return -ENOMEM;
 		if (copy_from_user(kbuf, buf, len) != 0)
@@ -452,7 +462,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	icmp = sock_icmp_fd_lookup(fd);
 	if (icmp)
 	{
-		kbuf = kmalloc(len);
+		kbuf = sock_bounce_alloc(len);
 		if (!kbuf)
 			return -ENOMEM;
 		if (copy_from_user(kbuf, buf, len) != 0)
@@ -472,7 +482,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	if (!sock)
 		return -ENOTSOCK;
 
-	kbuf = kmalloc(len);
+	kbuf = sock_bounce_alloc(len);
 	if (!kbuf)
 		return -ENOMEM;
 	if (copy_from_user(kbuf, buf, len) != 0)
@@ -527,7 +537,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		uint64_t rto;
 
 		nb = sock_nonblock_fd(fd, flags);
-		kbuf = kmalloc(len);
+		kbuf = sock_bounce_alloc(len);
 		if (!kbuf)
 			return -ENOMEM;
 		rto = sock_stream_get_timeout_ms(ss, 1);
@@ -602,7 +612,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 	if (icmp)
 	{
 		nb = sock_nonblock_fd(fd, flags);
-		kbuf = kmalloc(len);
+		kbuf = sock_bounce_alloc(len);
 		if (!kbuf)
 			return -ENOMEM;
 
@@ -684,7 +694,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		return -ENOTSOCK;
 
 	nb = sock_nonblock_fd(fd, flags);
-	kbuf = kmalloc(len);
+	kbuf = sock_bounce_alloc(len);
 	if (!kbuf)
 		return -ENOMEM;
 

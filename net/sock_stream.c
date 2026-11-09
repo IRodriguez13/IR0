@@ -1050,6 +1050,9 @@ ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int
 
 	if (s->shut_rd)
 		return 0;
+	/* Linux copies nothing and reports 0 once data is queued. */
+	if (len == 0 && s->queued_bytes > 0)
+		return 0;
 	i = sock_stream_queue_read(s, dst, len, peek);
 	if (i == 0 && (!s->peer || s->peer->shut_wr))
 		return 0;
