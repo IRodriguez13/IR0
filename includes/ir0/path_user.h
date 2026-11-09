@@ -10,6 +10,18 @@
 #include <ir0/utimens.h>
 
 /*
+ * copy_path_from_user - Copy a NUL-terminated path from userspace, the IR0
+ * analogue of Linux getname().
+ * @dst: kernel buffer of @size bytes
+ * @user_path: userspace source
+ * @size: capacity of @dst, including the NUL
+ *
+ * Returns: the path length (without the NUL); -EFAULT on a bad or unmapped
+ * source; -ENAMETOOLONG when no NUL fits in @size bytes.
+ */
+long copy_path_from_user(char *dst, const char *user_path, size_t size);
+
+/*
  * ir0_resolve_kpath_at - Resolve kernel-side path against dirfd + chroot.
  * Absolute paths: mapped under @root (host-absolute jail).
  * Relative paths: join @cwd (AT_FDCWD only); not forced under root (Linux).

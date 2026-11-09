@@ -9,6 +9,22 @@
 #include <ir0/errno.h>
 #include <ir0/utimens.h>
 
+long copy_path_from_user(char *dst, const char *user_path, size_t size)
+{
+    long len;
+
+    if (!dst || !user_path || size == 0)
+        return -EFAULT;
+
+    /* strncpy_from_user() returns its limit when the name has no NUL in it. */
+    len = strncpy_from_user(dst, user_path, (long)size);
+    if (len < 0)
+        return len;
+    if ((size_t)len == size)
+        return -ENAMETOOLONG;
+    return len;
+}
+
 int ir0_resolve_kpath_at(int dirfd, const char *path, char *resolved,
                          size_t resolved_sz, const char *cwd,
                          const char *root)
@@ -48,9 +64,9 @@ int ir0_resolve_user_path_at(int dirfd, const char *user_path, char *resolved,
     if (!user_path || !resolved || resolved_sz == 0)
         return -EFAULT;
 
-    len = strncpy_from_user(path_copy, user_path, sizeof(path_copy));
-    if (len < 0 || (size_t)len == sizeof(path_copy))
-        return -EFAULT;
+    len = copy_path_from_user(path_copy, user_path, sizeof(path_copy));
+    if (len < 0)
+        return (int)len;
 
     return ir0_resolve_kpath_at(dirfd, path_copy, resolved, resolved_sz, cwd,
                                 root);

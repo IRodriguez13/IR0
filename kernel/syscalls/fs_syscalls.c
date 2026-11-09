@@ -130,9 +130,9 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
     return -ESRCH;
   if (!user_path || !resolved || resolved_sz == 0)
     return -EFAULT;
-  len = strncpy_from_user(path_copy, user_path, sizeof(path_copy));
-  if (len < 0 || (size_t)len == sizeof(path_copy))
-    return -EFAULT;
+  len = copy_path_from_user(path_copy, user_path, sizeof(path_copy));
+  if (len < 0)
+    return (int)len;
 
   if (path_copy[0] == '/')
   {
@@ -802,9 +802,9 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (!access_ok(pathname, 256))
     return -EFAULT;
 
-  len = strncpy_from_user(path_copy, pathname, sizeof(path_copy));
-  if (len < 0 || (size_t)len == sizeof(path_copy))
-    return -EFAULT;
+  len = copy_path_from_user(path_copy, pathname, sizeof(path_copy));
+  if (len < 0)
+    return len;
 
   plen = 0;
   while (path_copy[plen] && plen < sizeof(path_copy))
