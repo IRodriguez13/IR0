@@ -29,6 +29,9 @@
 #define SYS_pipe2		59
 #define SYS_socketpair		199
 #define SYS_recvfrom		207
+#define SYS_nanosleep		101
+#define SYS_clock_gettime	113
+#define CLOCK_MONOTONIC		1
 #define AF_UNIX			1
 #define SOCK_STREAM		1
 #define SOCK_NONBLOCK		04000
@@ -311,6 +314,21 @@ static int mprotect(void *addr, size_t len, int prot)
 static int pipe2(int fds[2], int flags)
 {
 	return (int)syscall(SYS_pipe2, (long)fds, flags);
+}
+
+struct timespec {
+	long tv_sec;
+	long tv_nsec;
+};
+
+static int nanosleep(const struct timespec *req, struct timespec *rem)
+{
+	return (int)syscall(SYS_nanosleep, (long)req, (long)rem);
+}
+
+static int clock_gettime(int clk, struct timespec *ts)
+{
+	return (int)syscall(SYS_clock_gettime, clk, (long)ts);
 }
 
 unsigned char nolibc_stack[8192] __attribute__((aligned(16))) = { 1 };
