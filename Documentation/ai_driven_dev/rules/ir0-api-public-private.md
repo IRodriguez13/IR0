@@ -63,6 +63,21 @@ Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm`.
 - ISA privada: `switch_context_x64` / `switch_context_arm64` solo en el dispatcher.
 - Entrada ring 3: `switch_to_user` / `switch_to_user_task` — mismo polimorfismo, otro contrato; no mezclar con `switch_to`.
 
+## Operations validate themselves (minimal variants)
+
+- The operation validates internally; callers do not pre-validate.
+  `copy_{to,from}_user`, `strncpy_from_user` and the `_mm` variants walk
+  the page tables and return `-EFAULT`: a syscall copies and returns that
+  error, it does not call `access_ok()` first.
+- At most one public predicate per contract, for the cases where nothing is
+  copied (Linux `access_ok`). No `*_mapped`, `*_checked` or similar parallel
+  public functions for one behavior.
+- Where a syscall consumes or changes state before it copies out (socket,
+  pipe or file reads), restructure it Linux-style: copy first, consume only
+  what reached userspace, instead of validating ahead.
+- Retired names are rejected by `scripts/architecture_guard.py`
+  (`[uaccess-single-api]` lists them) so they do not come back.
+
 ## Excepciones
 
 - Bring-up freestanding (`arch/arm64/sources/board_boot_min.c`, etc.): asm/backend directo OK si el file header dice **no producción**.
