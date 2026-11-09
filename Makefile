@@ -496,10 +496,7 @@ KERNEL_OBJS = \
     fs/fd_resource_legacy.o \
     ktm/klog.o \
     ktm/d1_13_malloc_pf_diag.o \
-	sched/sched.o \
-	sched/runqueue_lock.o \
-	sched/sched_switch.o \
-    sched/sched_resched.o \
+	sched/core.o \
     sched/switch/context_switch.o \
     sched/switch/context_user_resume.o \
     $(CONSOLE_BACKEND_OBJ)
@@ -581,14 +578,14 @@ KERNEL_TEST_OBJS = \
 	ktm/ktm_sched_gate.o
 
 
-# Scheduler backend selection from menuconfig (ops via <ir0/sched.h>).
-# Policy 1 (CFS) is an honest RR alias — same backend object, different policy name.
+# Scheduler policy from menuconfig: link exactly one policy file
+# (sched/core.h). Policy 1 (CFS) is an honest RR alias — same object,
+# different policy name.
 ifeq ($(CONFIG_SCHEDULER_POLICY),2)
-SCHED_BACKEND_OBJS = sched/prio/backend.o
+KERNEL_OBJS += sched/prio.o
 else
-SCHED_BACKEND_OBJS = sched/rr/backend.o
+KERNEL_OBJS += sched/rr.o
 endif
-KERNEL_OBJS += sched/backend_select.o $(SCHED_BACKEND_OBJS)
 
 ifeq ($(ARCH),arm64)
 KERNEL_OBJS += arch/arm64/sources/boot_arch.o

@@ -77,7 +77,6 @@ extern void test_arch_task_contract(void);
 extern void test_pseudo_fs_contract(void);
 extern void test_mm_mirror_contract(void);
 extern void test_netdev_contract(void);
-extern void test_sched_backend_contract(void);
 extern void test_block_backend_contract(void);
 extern void test_usercopy_no_raw_user_touch(void);
 extern void test_elf64_image_contract(void);
@@ -176,7 +175,6 @@ static void (*test_functions[])(void) = {
 	test_pseudo_fs_contract,
 	test_mm_mirror_contract,
 	test_netdev_contract,
-	test_sched_backend_contract,
 	test_block_backend_contract,
 	test_usercopy_no_raw_user_touch,
 	test_elf64_image_contract,

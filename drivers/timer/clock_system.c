@@ -606,7 +606,7 @@ void clock_tick(void)
     ir0_clock_wait_fire_due(clock_get_uptime_milliseconds());
     (void)poll_wake_check_nosched();
 
-    /* Scheduler tick accounting (preempt deferred — see sched_resched.c). */
+    /* Scheduler tick accounting (preempt deferred — see sched/core.c). */
     clock_state.scheduler_tick_counter++;
     if (clock_state.scheduler_tick_counter >= clock_state.scheduler_ticks_per_quantum)
     {

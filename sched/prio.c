@@ -12,13 +12,9 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process.h"
-#include "../backend.h"
-#include "../sched_switch.h"
-#include "../runqueue_lock.h"
-#include <ir0/arch_port.h>
+#include "core.h"
+#include <ir0/process.h>
 #include <ir0/kmem.h>
-#include <ir0/oops.h>
 #include <ir0/problems.h>
 #include <string.h>
 
@@ -52,16 +48,6 @@ static int prio_preferred_band = -1;
 static unsigned prio_preferred_runs;
 static int prio_relief_band = -1;
 
-static inline uint64_t prio_irq_save(void)
-{
-	return sched_runqueue_lock();
-}
-
-static inline void prio_irq_restore(uint64_t flags)
-{
-	sched_runqueue_unlock(flags);
-}
-
 static int prio_clamp(int prio)
 {
 	if (prio < 0)
@@ -94,11 +80,11 @@ static int prio_already_queued(process_t *proc)
 	return 0;
 }
 
-void priority_add_process(process_t *proc)
+void sched_add_process(process_t *proc)
 {
 	prio_task_t *node;
 	prio_band_t *band;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 	int b;
 
 	if (!proc)
@@ -115,12 +101,12 @@ void priority_add_process(process_t *proc)
 	node->next = NULL;
 	b = prio_band_of(proc);
 
-	irq_flags = prio_irq_save();
+	irq_flags = rq_lock();
 
 	if (prio_already_queued(proc))
 	{
 		process_set_sched_state(proc, PROCESS_READY);
-		prio_irq_restore(irq_flags);
+		rq_unlock(irq_flags);
 		kfree(node);
 		return;
 	}
@@ -135,20 +121,20 @@ void priority_add_process(process_t *proc)
 	}
 
 	process_set_sched_state(proc, PROCESS_READY);
-	prio_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
-void priority_remove_process(process_t *proc)
+void sched_remove_process(process_t *proc)
 {
 	prio_task_t *cur;
 	prio_task_t *prev;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 	int b;
 
 	if (!proc)
 		return;
 
-	irq_flags = prio_irq_save();
+	irq_flags = rq_lock();
 
 	for (b = 0; b < IR0_SCHED_PRIO_BANDS; b++)
 	{
@@ -170,7 +156,7 @@ void priority_remove_process(process_t *proc)
 					prio_bands[b].curr = cur->next;
 
 				kfree(cur);
-				prio_irq_restore(irq_flags);
+				rq_unlock(irq_flags);
 				return;
 			}
 			prev = cur;
@@ -178,7 +164,7 @@ void priority_remove_process(process_t *proc)
 		}
 	}
 
-	prio_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
 static process_t *priority_pick_from_band(int b)
@@ -261,26 +247,22 @@ static process_t *priority_pick_next(void)
 	return next;
 }
 
-void priority_schedule_next(void)
+process_t *sched_pick_next(void)
 {
 	process_t *next;
-	uint64_t irq_flags = prio_irq_save();
+	unsigned long irq_flags = rq_lock();
 
 	next = priority_pick_next();
-	prio_irq_restore(irq_flags);
-
-	if (!next)
-		return;
-
-	sched_context_switch_to(next);
+	rq_unlock(irq_flags);
+	return next;
 }
 
-int priority_count_runnable(void)
+int sched_count_runnable(void)
 {
 	int b;
 	int count = 0;
 	prio_task_t *walk;
-	uint64_t irq_flags = prio_irq_save();
+	unsigned long irq_flags = rq_lock();
 
 	for (b = 0; b < IR0_SCHED_PRIO_BANDS; b++)
 	{
@@ -293,21 +275,21 @@ int priority_count_runnable(void)
 		}
 	}
 
-	prio_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 	return count;
 }
 
-void priority_promote_process(process_t *proc)
+void sched_promote_process(process_t *proc)
 {
 	int b;
 	prio_task_t *walk;
 	prio_task_t *prev = NULL;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
 	if (!proc)
 		return;
 
-	irq_flags = prio_irq_save();
+	irq_flags = rq_lock();
 	b = prio_band_of(proc);
 	for (walk = prio_bands[b].head; walk; walk = walk->next)
 	{
@@ -320,21 +302,21 @@ void priority_promote_process(process_t *proc)
 		}
 		prev = walk;
 	}
-	prio_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
 /*
  * Boot selftest: higher band must be picked before a lower band when both READY.
  * Uses stack-backed process_t stubs (never scheduled for real).
  */
-int priority_sched_selftest(void)
+int sched_selftest(void)
 {
 	process_t lo;
 	process_t hi;
 	process_t *pick;
 	int saw_lo = 0;
 	int i;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
 	memset(&lo, 0, sizeof(lo));
 	memset(&hi, 0, sizeof(hi));
@@ -345,16 +327,16 @@ int priority_sched_selftest(void)
 	lo.task.pid = 9001;
 	hi.task.pid = 9002;
 
-	priority_add_process(&lo);
-	priority_add_process(&hi);
+	sched_add_process(&lo);
+	sched_add_process(&hi);
 
-	irq_flags = prio_irq_save();
+	irq_flags = rq_lock();
 	pick = priority_pick_next();
 	if (pick != &hi)
 	{
-		prio_irq_restore(irq_flags);
-		priority_remove_process(&lo);
-		priority_remove_process(&hi);
+		rq_unlock(irq_flags);
+		sched_remove_process(&lo);
+		sched_remove_process(&hi);
 		return -1;
 	}
 	for (i = 0; i < PRIO_PREFERRED_RUNS + 2; i++)
@@ -363,53 +345,19 @@ int priority_sched_selftest(void)
 		if (pick == &lo)
 			saw_lo = 1;
 	}
-	prio_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 
-	priority_remove_process(&lo);
-	priority_remove_process(&hi);
+	sched_remove_process(&lo);
+	sched_remove_process(&hi);
 
 	if (!saw_lo)
 		return -1;
-	if (priority_count_runnable() != 0)
+	if (sched_count_runnable() != 0)
 		return -1;
 	return 0;
 }
 
-static void priority_reset(void)
+const char *sched_active_policy_name(void)
 {
-	int band;
-	uint64_t irq_flags = prio_irq_save();
-
-	for (band = 0; band < IR0_SCHED_PRIO_BANDS; band++)
-	{
-		prio_task_t *walk = prio_bands[band].head;
-
-		prio_bands[band].head = NULL;
-		prio_bands[band].tail = NULL;
-		prio_bands[band].curr = NULL;
-		prio_irq_restore(irq_flags);
-		while (walk)
-		{
-			prio_task_t *next = walk->next;
-
-			kfree(walk);
-			walk = next;
-		}
-		irq_flags = prio_irq_save();
-	}
-	prio_preferred_band = -1;
-	prio_preferred_runs = 0;
-	prio_relief_band = -1;
-	prio_irq_restore(irq_flags);
+	return "priority";
 }
-
-const struct ir0_sched_ops sched_prio_ops = {
-	.add = priority_add_process,
-	.remove = priority_remove_process,
-	.schedule_next = priority_schedule_next,
-	.count_runnable = priority_count_runnable,
-	.promote = priority_promote_process,
-	.reset = priority_reset,
-	.selftest = priority_sched_selftest,
-	.name = "priority",
-};

@@ -6,50 +6,35 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: sched_switch.c
- * Description: Shared context-switch path for scheduler backends.
+ * File: core.c
+ * Description: Scheduler core: pick the next task, switch to it, reschedule.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "sched_switch.h"
-#include "runqueue_lock.h"
-
-#include <ir0/arch_port.h>
+#include "core.h"
 #include <ir0/clock.h>
 #include <ir0/context.h>
-#include <ir0/switch.h>
 #include <ir0/oops.h>
-#include <ir0/sched.h>
 #include <ir0/percpu.h>
-#include <stdint.h>
+#include <ir0/process.h>
 
 static int sched_has_running_context;
 
-static inline uint64_t sched_switch_irq_save(void)
-{
-	return sched_runqueue_lock();
-}
-
-static inline void sched_switch_irq_restore(uint64_t flags)
-{
-	sched_runqueue_unlock(flags);
-}
-
-void sched_context_switch_to(process_t *next)
+void sched_switch_to(process_t *next)
 {
 	process_t *prev;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
 	if (!next)
 		return;
 
-	irq_flags = sched_switch_irq_save();
+	irq_flags = rq_lock();
 	prev = current_process;
 
 	if (sched_has_running_context && prev == next)
 	{
-		sched_switch_irq_restore(irq_flags);
+		rq_unlock(irq_flags);
 		return;
 	}
 
@@ -74,17 +59,51 @@ void sched_context_switch_to(process_t *next)
 		switch_to(&prev->task, &next->task);
 	}
 
-	sched_switch_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
 void sched_adopt_running_context(process_t *running)
 {
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
-	irq_flags = sched_switch_irq_save();
+	irq_flags = rq_lock();
 	process_set_current(running);
 	sched_has_running_context = running != NULL;
 	if (running)
 		process_set_sched_state(running, PROCESS_RUNNING);
-	sched_switch_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
+}
+
+void sched_schedule_next(void)
+{
+	process_t *next = sched_pick_next();
+
+	if (next)
+		sched_switch_to(next);
+}
+
+void sched_try_preempt_blocked(void)
+{
+	if (!current_process || current_process->state != PROCESS_BLOCKED)
+		return;
+	if (sched_count_runnable() == 0)
+		return;
+	sched_schedule_next();
+}
+
+int sched_user_return_take_switch(void)
+{
+	if (!current_process || current_process->state == PROCESS_BLOCKED)
+		return 0;
+	if (sched_count_runnable() <= 1)
+		return 0;
+	if (!clock_take_sched_resched_pending())
+		return 0;
+	return 1;
+}
+
+void sched_need_resched_user_return(void)
+{
+	if (sched_user_return_take_switch())
+		sched_schedule_next();
 }

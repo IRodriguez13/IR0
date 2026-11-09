@@ -40,7 +40,6 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_contract.c \
 	test_mm_mirror_contract.c \
 	test_netdev_contract.c \
-	test_sched_backend_contract.c \
 	test_block_backend_contract.c \
 	test_usercopy_contract.c \
 	test_elf64_image.c \

@@ -1854,10 +1854,10 @@ def check_scheduler_user_return_boundary():
 
 
 def check_scheduler_runqueue_lock_boundary():
-    """Scheduler policy code must not bypass the runqueue ownership facade."""
+    """Scheduler core and policy code take the runqueue lock, never raw IRQ masking."""
     errors = []
     sched_tree = ROOT / "sched"
-    owner = sched_tree / "runqueue_lock.c"
+    owner = sched_tree / "core.h"
     raw_irq = re.compile(r"\birq_(?:save|restore)\s*\(")
 
     for path in sched_tree.rglob("*"):
@@ -1867,7 +1867,7 @@ def check_scheduler_runqueue_lock_boundary():
             if raw_irq.search(line):
                 errors.append(
                     f"[scheduler-runqueue-lock] {rel_to_root(path)}:{line_no}: "
-                    "use sched_runqueue_lock/unlock"
+                    "use rq_lock/rq_unlock (sched/core.h)"
                 )
     return errors
 

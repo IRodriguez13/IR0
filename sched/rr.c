@@ -12,16 +12,10 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process.h"
-#include "../backend.h"
-#include "../sched_switch.h"
-#include "../runqueue_lock.h"
-#include <config.h>
+#include "core.h"
+#include <ir0/process.h>
 #include <ir0/kmem.h>
-#include <ir0/oops.h>
 #include <ir0/problems.h>
-#include <ir0/arch_port.h>
-#include <stdint.h>
 
 /*
  * Ready list is singly linked (head -> ... -> tail, next=NULL). Advance wraps
@@ -43,22 +37,8 @@ static rr_task_t *rr_current = NULL;
  */
 #define RR_MAX_PICK_ATTEMPTS 100
 
-/*
- * UP scheduler critical sections:
- * serialize scheduler queue mutations against timer IRQ scheduling.
- */
-static inline uint64_t rr_irq_save(void)
-{
-	return sched_runqueue_lock();
-}
-
-static inline void rr_irq_restore(uint64_t flags)
-{
-	sched_runqueue_unlock(flags);
-}
-
 /**
- * rr_add_process - Add a process to the round-robin scheduler
+ * sched_add_process - Add a process to the round-robin scheduler
  * @proc: Process to add (must be valid and not already in scheduler)
  *
  * Inserts a new process into the round-robin queue at the tail,
@@ -76,11 +56,11 @@ static inline void rr_irq_restore(uint64_t flags)
  *
  * Thread safety: NOT thread-safe - caller must ensure mutual exclusion
  */
-void rr_add_process(process_t *proc)
+void sched_add_process(process_t *proc)
 {
 	rr_task_t *scan;
 	rr_task_t *node;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
 	/* Sanity check - prevent adding NULL processes.
 	 * This is a defensive check for API misuse.
@@ -107,7 +87,7 @@ void rr_add_process(process_t *proc)
 	node->process = proc;
 	node->next = NULL;
 
-	irq_flags = rr_irq_save();
+	irq_flags = rq_lock();
 
 	/* Insert at tail of the singly-linked ready list.
 	 * If queue is empty, initialize head and tail to point to new node.
@@ -120,7 +100,7 @@ void rr_add_process(process_t *proc)
 		{
 			/* Process already queued: only ensure READY state. */
 			process_set_sched_state(proc, PROCESS_READY);
-			rr_irq_restore(irq_flags);
+			rq_unlock(irq_flags);
 			kfree(node);
 			return;
 		}
@@ -142,11 +122,11 @@ void rr_add_process(process_t *proc)
 	 * State machine: NEW -> READY -> RUNNING -> READY -> ...
 	 */
 	process_set_sched_state(proc, PROCESS_READY);
-	rr_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
 /**
- * rr_remove_process - Remove a process from the round-robin scheduler
+ * sched_remove_process - Remove a process from the round-robin scheduler
  * @proc: Process to remove (must be valid and in scheduler)
  *
  * Removes a process from the scheduler queue. This is used when a process
@@ -164,16 +144,16 @@ void rr_add_process(process_t *proc)
  *
  * Thread safety: NOT thread-safe - caller must ensure mutual exclusion
  */
-void rr_remove_process(process_t *proc)
+void sched_remove_process(process_t *proc)
 {
 	rr_task_t *current;
 	rr_task_t *prev;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 	
 	if (!proc)
 		return;
 
-	irq_flags = rr_irq_save();
+	irq_flags = rq_lock();
 	
 	/* Find the scheduler node containing this process */
 	current = rr_head;
@@ -211,7 +191,7 @@ void rr_remove_process(process_t *proc)
 			
 			/* Free scheduler node */
 			kfree(current);
-			rr_irq_restore(irq_flags);
+			rq_unlock(irq_flags);
 			return;
 		}
 		
@@ -223,22 +203,22 @@ void rr_remove_process(process_t *proc)
 			break;
 	}
 
-	rr_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
 /**
- * rr_schedule_next - Select and switch to next process in round-robin order
+ * sched_pick_next - Select the next process in round-robin order
  */
-void rr_schedule_next(void)
+process_t *sched_pick_next(void)
 {
 	process_t *next = NULL;
-	uint64_t irq_flags = rr_irq_save();
+	unsigned long irq_flags = rq_lock();
 	int attempts = 0;
 
 	if (!rr_head)
 	{
-		rr_irq_restore(irq_flags);
-		return;
+		rq_unlock(irq_flags);
+		return NULL;
 	}
 
 	if (!rr_current)
@@ -260,25 +240,25 @@ void rr_schedule_next(void)
 	if (!rr_current || !next || next->state == PROCESS_ZOMBIE ||
 	    next->state == PROCESS_BLOCKED)
 	{
-		rr_irq_restore(irq_flags);
-		return;
+		rq_unlock(irq_flags);
+		return NULL;
 	}
 
 	BUG_ON(!next);
-	rr_irq_restore(irq_flags);
-	sched_context_switch_to(next);
+	rq_unlock(irq_flags);
+	return next;
 }
 
-int rr_count_runnable(void)
+int sched_count_runnable(void)
 {
 	rr_task_t *walk;
 	int count = 0;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
 	if (!rr_head)
 		return 0;
 
-	irq_flags = rr_irq_save();
+	irq_flags = rq_lock();
 	walk = rr_head;
 	do
 	{
@@ -289,26 +269,26 @@ int rr_count_runnable(void)
 		walk = walk->next;
 	} while (walk && walk != rr_head);
 
-	rr_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 	return count;
 }
 
-void rr_promote_process(process_t *proc)
+void sched_promote_process(process_t *proc)
 {
 	rr_task_t *walk;
 	rr_task_t *prev = NULL;
-	uint64_t irq_flags;
+	unsigned long irq_flags;
 
 	if (!proc || !rr_head)
 		return;
 
-	irq_flags = rr_irq_save();
+	irq_flags = rq_lock();
 	for (walk = rr_head; walk; walk = walk->next)
 	{
 		if (walk->process == proc)
 		{
 			/*
-			 * rr_schedule_next() advances the cursor before selecting.
+			 * sched_pick_next() advances the cursor before selecting.
 			 * Point at the predecessor so the promoted task is the next
 			 * candidate.  Pointing at @walk skipped the very task that the
 			 * wake path intended to run.
@@ -321,40 +301,17 @@ void rr_promote_process(process_t *proc)
 		if (walk->next == rr_head)
 			break;
 	}
-	rr_irq_restore(irq_flags);
+	rq_unlock(irq_flags);
 }
 
-void rr_reset(void)
+const char *sched_active_policy_name(void)
 {
-	rr_task_t *walk;
-	uint64_t irq_flags = rr_irq_save();
-
-	walk = rr_head;
-	rr_head = NULL;
-	rr_tail = NULL;
-	rr_current = NULL;
-	rr_irq_restore(irq_flags);
-	while (walk)
-	{
-		rr_task_t *next = walk->next;
-
-		kfree(walk);
-		walk = next;
-	}
+	/* Policy 1 is an honest CFS name alias over the round-robin queue. */
+	return CONFIG_SCHEDULER_POLICY == 1 ? "cfs" : "round_robin";
 }
 
-const struct ir0_sched_ops sched_rr_ops = {
-	.add = rr_add_process,
-	.remove = rr_remove_process,
-	.schedule_next = rr_schedule_next,
-	.count_runnable = rr_count_runnable,
-	.promote = rr_promote_process,
-	.reset = rr_reset,
-	.selftest = NULL,
-#if CONFIG_SCHEDULER_POLICY == 1 && !defined(IR0_SCHED_EARLY_RR)
-	/* Policy 1 is an honest CFS name alias over the RR backend. */
-	.name = "cfs",
-#else
-	.name = "round_robin",
-#endif
-};
+/* FIFO rotation has no ordering invariant to check at boot. */
+int sched_selftest(void)
+{
+	return 0;
+}
