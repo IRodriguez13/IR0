@@ -409,3 +409,36 @@ ir0-selftest-blocking-sleep-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64
 	@echo "✓ ir0-selftest-blocking-sleep-arm64"
 
 ir0-selftest-blocking-sleep: ir0-selftest-blocking-sleep-x86 ir0-selftest-blocking-sleep-arm64
+
+IR0_SELFTEST_X86_COW_MPROTECT := $(KERNEL_ROOT)/build/selftests/x86_64/cow_mprotect
+IR0_SELFTEST_ARM64_COW_MPROTECT := $(KERNEL_ROOT)/build/selftests/arm64/cow_mprotect
+
+.PHONY: ir0-selftest-cow-mprotect-x86 ir0-selftest-cow-mprotect-arm64 \
+	ir0-selftest-cow-mprotect
+
+$(IR0_SELFTEST_X86_COW_MPROTECT): tests/selftests/mm/cow_mprotect.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 cow_mprotect
+
+$(IR0_SELFTEST_ARM64_COW_MPROTECT): tests/selftests/mm/cow_mprotect.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 cow_mprotect
+
+# mprotect(PROT_READ) on a copy-on-write page after fork denies writes.
+ir0-selftest-cow-mprotect-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_COW_MPROTECT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_COW_MPROTECT) \
+		--done "ok 3 cow_store_after_prot_write_private" \
+		--log $(HOST_TMP)/ir0-selftest-x86-cow-mprotect.log
+	@echo "✓ ir0-selftest-cow-mprotect-x86"
+
+ir0-selftest-cow-mprotect-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_COW_MPROTECT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_COW_MPROTECT) \
+		--done "ok 3 cow_store_after_prot_write_private" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-cow-mprotect.log
+	@echo "✓ ir0-selftest-cow-mprotect-arm64"
+
+ir0-selftest-cow-mprotect: ir0-selftest-cow-mprotect-x86 ir0-selftest-cow-mprotect-arm64

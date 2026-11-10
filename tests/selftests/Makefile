@@ -34,6 +34,8 @@ PATH_TOO_LONG_SRC := syscall/path_too_long.c
 PATH_TOO_LONG_BIN := $(BUILD_DIR)/path_too_long
 BLOCKING_SLEEP_SRC := kernel/blocking_sleep.c
 BLOCKING_SLEEP_BIN := $(BUILD_DIR)/blocking_sleep
+COW_MPROTECT_SRC := mm/cow_mprotect.c
+COW_MPROTECT_BIN := $(BUILD_DIR)/cow_mprotect
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -67,11 +69,11 @@ endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep clean
+	sock_zero_len path_too_long blocking_sleep cow_mprotect clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep
+	sock_zero_len path_too_long blocking_sleep cow_mprotect
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -241,6 +243,18 @@ $(BLOCKING_SLEEP_BIN): $(BLOCKING_SLEEP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_D
 	fi
 	@echo "  CC      $(ARCH) selftest blocking_sleep"
 	@$(CC) $(CFLAGS) -o $@ $(BLOCKING_SLEEP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+cow_mprotect: $(COW_MPROTECT_BIN)
+
+$(COW_MPROTECT_BIN): $(COW_MPROTECT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest cow_mprotect"
+	@$(CC) $(CFLAGS) -o $@ $(COW_MPROTECT_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
