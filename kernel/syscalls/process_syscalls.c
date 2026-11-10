@@ -1637,56 +1637,6 @@ int64_t sys_kill(pid_t pid, int signal)
   return 0;
 }
 
-/**
- * sys_sigaction - Set signal action (POSIX sigaction)
- * @signum: Signal number
- * @act: New signal action (can be NULL)
- * @oldact: Old signal action (can be NULL, output)
- *
- * Returns: 0 on success, -1 on error
- */
-int64_t sys_sigaction(int signum, const struct sigaction *act, struct sigaction *oldact)
-{
-  if (!current_process)
-    return -ESRCH;
-
-  /* Validate signal number */
-  if (signum < 1 || signum >= _NSIG)
-    return -EINVAL;
-
-  /* Signals that cannot be caught */
-  if (signum == SIGKILL || signum == SIGSTOP)
-    return -EINVAL;
-
-  /* Save old action if requested */
-  if (oldact)
-  {
-    /* Validate oldact is in userspace (for USER_MODE processes) */
-    if (!access_ok(oldact, sizeof(struct sigaction)))
-      return -EFAULT;
-
-    oldact->sa_handler = current_process->signal_handlers[signum];
-    ir0_sigset_set_low32(&oldact->sa_mask, current_process->signal_mask);
-    oldact->sa_flags = 0;
-    oldact->sa_restorer = NULL;
-  }
-
-  /* Set new action if provided */
-  if (act)
-  {
-    /* Validate act is in userspace (for USER_MODE processes) */
-    if (!access_ok((const void *)act, sizeof(struct sigaction)))
-      return -EFAULT;
-
-    /* Register new handler */
-    if (register_signal_handler(signum, act->sa_handler) != 0)
-      return -EFAULT;
-
-    current_process->signal_sa_mask[signum] = ir0_sigset_low32(&act->sa_mask);
-  }
-
-  return 0;
-}
 /*
  * sys_prctl — Linux prctl(2), no_new_privs subset.
  * PR_SET_NO_NEW_PRIVS is one-way: once set it cannot be cleared, and it makes

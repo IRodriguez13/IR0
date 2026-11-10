@@ -78,8 +78,6 @@ int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage);
 int64_t sys_waitpid(pid_t pid, int *status, int options);
 int64_t sys_kill(pid_t pid, int signal);
-int64_t sys_sigaction(int signum, const struct sigaction *act,
-		      struct sigaction *oldact);
 int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 		  unsigned long arg4, unsigned long arg5);
 int64_t sys_arch_prctl(int code, unsigned long addr);
