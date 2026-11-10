@@ -27,11 +27,12 @@ compilación desde Kconfig. No hay despacho en tiempo de ejecución.
 | `1` | `cfs` | Mismo objeto RR (alias honesto, sin `cfs_sched.c`) |
 | `2` (defconfig) | `priority` | `sched/prio.o` |
 
-## Syscalls bloqueantes (poll / pause / nanosleep)
+## Syscalls bloqueantes y señales
 
-Los waiters usan `process_arm_kernel_syscall_sleep` + `clock_wait`. En el idle
-del wait se llama `kernel_idle_poll_nosched()` para que los wakes no aniden
-`schedule` (el loop del syscall es el único yield). Detalle: canónico EN.
+Una syscall bloqueante duerme en su propia pila de kernel (`PROCESS_BLOCKED` +
+`schedule()`); si `signal_pending()`, devuelve `-ERESTARTSYS` / `-EINTR`, y la
+salida de syscall (`exit_to_user_mode` → `do_signal`) reinicia la llamada o
+entra al handler a través del frame de la syscall. Detalle: canónico EN.
 
 ## Class B
 

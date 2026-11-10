@@ -28,7 +28,7 @@ fd table, credentials, cwd, signal state, and mmap list. Creation paths include
   uid/gid/euid/egid/umask
   mmap_list
   signal_pending, signal_handlers[], signal_mask
-  syscall_user_frame, irq_frame_saved (blocked syscall resume)
+  syscall_frame (pt_regs of the current syscall)
   state: READY | RUNNING | BLOCKED | ZOMBIE
 ```
 
@@ -135,7 +135,7 @@ Lifecycle:
 4. Child returns 0 from fork via `task.rax`; parent gets child pid.
 5. CLOEXEC honored on exec via `process_exec_close_cloexec`.
 6. **`wait4(pid, NULL, …)`** — parent may omit status pointer; kernel still blocks and resumes correctly.
-7. **Blocking `wait4` (options=0)** — blocks with ring-0 CS via `process_arm_kernel_syscall_sleep`; resume must use `switch_context_x64` **kernel_ret** into `process_wait`, not user `iretq` with placeholder `rax=0`.
+7. **Blocking `wait4` (options=0)** — sleeps in `process_wait()` on its own kernel stack; a caught signal ends it with `-ERESTARTSYS`.
 
 ## 9. Debugging tips
 

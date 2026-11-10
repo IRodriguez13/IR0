@@ -12,10 +12,11 @@
 ## 1. Visión general
 
 IR0 implementa un subconjunto de señales POSIX: bitmask pending, handlers, mask,
-`kill`, `rt_sigaction`, `rt_sigprocmask` y `rt_sigreturn`. La entrega corre desde
-`handle_signals()` durante el cambio de contexto. Muchas acciones por defecto
-terminan el proceso sin invocar handlers de usuario; la semántica POSIX completa
-no está terminada.
+`kill`, `rt_sigaction`, `rt_sigprocmask`, `rt_sigsuspend` y `rt_sigreturn`. La
+entrega sigue a Linux: una syscall bloqueada que ve `signal_pending()` devuelve
+`-ERESTARTSYS` (o `-ERESTARTNOHAND` / `-EINTR`), y la salida de syscall corre
+`do_signal()`: acciones por defecto, reinicio o `EINTR` según `SA_RESTART`, y
+entrada al handler a través del frame de la syscall.
 
 ## 2. Arquitectura interna
 
@@ -31,7 +32,8 @@ no está terminada.
 | Función | Rol |
 |---------|-----|
 | `send_signal` | Pone bit pending en proceso destino |
-| `handle_signals` | Entrega en cambio de contexto |
+| `signal_pending` | ¿Debe terminar un sueño interrumpible? |
+| `do_signal` | Salida de syscall: defaults, reinicio / EINTR, handler |
 | `register_signal_handler` | Instala handler; rechaza SIGKILL/SIGSTOP |
 | Syscalls | `sys_kill`, `sys_sigaction`, `sys_rt_sigprocmask`, `sys_sigreturn` |
 
@@ -42,8 +44,8 @@ no está terminada.
        → send_signal(target, sig)
        → signal_pending |= mask
 
-  schedule (tarea RUNNING saliente)
-       → handle_signals()
+  salida de syscall (exit_to_user_mode)
+       → do_signal()
             ├─ SIGKILL → process_exit
             ├─ SIGSTOP → PROCESS_BLOCKED
             ├─ SIGSEGV/FPE/ILL/BUS → process_exit (sin handler usuario)
@@ -54,7 +56,7 @@ no está terminada.
 Mapa ASCII:
 
 ```text
-  origen ──► máscara pending ──► handle_signals (en switch)
+  origen ──► máscara pending ──► do_signal (salida de syscall)
                                     │
                     ┌───────────────┼───────────────┐
                     ▼               ▼               ▼
@@ -80,7 +82,7 @@ Mapa ASCII:
 
 | Vecino | Interacción |
 |--------|-------------|
-| Scheduler | `handle_signals` antes de cambio de contexto |
+| Scheduler | nunca entrega señales |
 | Process | exit envía SIGCHLD al padre |
 | Syscalls | sigreturn restaura `task_t` desde frame guardado |
 | Interrupts | mapeo excepción → señal |
@@ -110,7 +112,7 @@ Mapa ASCII:
 ## 9. Consejos de depuración
 
 - musl puede esperar `SA_RESTORER` — no implementado (gap T1).
-- Señales durante syscalls bloqueadas: parcial vía `irq_frame_saved` / captura frame syscall.
+- Señales durante syscalls bloqueadas: `-ERESTARTSYS` + `do_signal()` en la salida (modelo Linux).
 - Preempt timer deshabilitado — entrega ligada a puntos schedule explícitos.
 
 ## 10. Roadmap futuro

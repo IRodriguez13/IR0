@@ -16,7 +16,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 | Area | Change | Evidence |
 |------|--------|----------|
 | **pipe write** | ≤ `PIPE_BUF` atomic (wait if no room); blocking `sys_write` completes full count | `kernel/lib/pipe.c`, `fs_syscalls.c` |
-| **SIGPIPE** | Queue unless `SIG_IGN`; respect mask; default terminate via `handle_signals` | `fs_syscalls.c`, `signals.c` |
+| **SIGPIPE** | Queue unless `SIG_IGN`; respect mask; default terminate via `do_signal` at the syscall exit | `fs_syscalls.c`, `signals.c` |
 | **pipe_wait** | Writer waits for `write_need` free bytes (no busy-spin); full waiter table yields | `io_syscalls.c` |
 | **IRQ signal SP** | `signals_deliver_from_irq_frame` uses `signal_pick_handler_sp` + TOP margin | `kernel/lib/signals.c` |
 | **Rootfs `/tmp`** | MINIX pack applies mode `1777` after inject mkdir (was `0755`) | ISD `scripts/pack-minix.sh` |

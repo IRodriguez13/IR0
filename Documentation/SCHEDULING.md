@@ -3,7 +3,8 @@
 > **Última verificación:** 2026-11-09
 > **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`,
 > `sched/rr.c`, `sched/prio.c`,
-> `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`
+> `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`,
+> `kernel/syscalls/syscall_dispatch.c`, `kernel/signals.c`
 
 IR0 scheduling is one core plus one policy file chosen at build time from
 Kconfig. There is no run-time dispatch.
@@ -44,17 +45,26 @@ build implements that pair with the per-CPU runqueue spinlock from `smp/`
 without touching `sched/`. Today's `kernel/percpu.c` is single-CPU storage
 and stays in `kernel/`.
 
-## Blocking syscalls (poll / pause / nanosleep)
+## Blocking syscalls and signals
 
-Blocked waiters use `process_arm_kernel_syscall_sleep` + `PROCESS_BLOCKED` and
-[`kernel/time/clock_wait.c`](../kernel/time/clock_wait.c):
+A blocking syscall sleeps on its own kernel stack (Linux `wait_event`):
+it sets `PROCESS_BLOCKED`, re-tests its condition and `signal_pending()`,
+and calls `schedule()`. A wake source sets `PROCESS_READY`; so does
+`send_signal()` for a blocked target. A sleep ended by a signal returns
+`-ERESTARTSYS` (read/write on pipes and ttys, wait4, futex),
+`-ERESTARTNOHAND` (pause, rt_sigsuspend) or `-EINTR` (nanosleep with the
+remaining time, poll, select).
 
-- `ir0_clock_wait_block_until` — nanosleep / `poll(NULL,0,timeout)`.
-- `ir0_clock_wait_service_runqueue` — poll/pause loops.
-- Idle steps call `kernel_idle_poll_nosched()` so wake checks (`poll_wake_check_nosched`,
-  stdin, pipes) **do not** nest `schedule`; the wait loop owns a single yield.
+The syscall exit (`exit_to_user_mode()` in `syscall_dispatch.c`, Linux
+`syscall_exit_to_user_mode()`) stores the result in the task's syscall
+frame, sleeps in `schedule()` when a reschedule is pending, and calls
+`do_signal()`: it restarts the call (`syscall_frame_restart()`) or turns it
+into `EINTR` per `SA_RESTART`, and points the frame at the handler. The ISA
+exit then returns through that frame (`syscall_restore_exit_regs()`).
 
-IRQ timer path uses `poll_wake_check_nosched` + deferred resched (`sched_take_resched()`).
+Sleep loops still poll the clock and idle hooks through
+[`kernel/time/clock_wait.c`](../kernel/time/clock_wait.c)
+(`ir0_clock_wait_block_until`, `ir0_clock_wait_service_runqueue`).
 
 ## Class B
 

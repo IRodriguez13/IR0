@@ -125,9 +125,8 @@ the kernel repair path and the host invariant remain:
 | KTM Class B scenario (manual) | inject + `KERNEL_RETURN_FRAME_REPAIR` + `KTM_CLASS_B_OK` |
 | `make -C tests/host run` | `test_class_b_ctx_invariant` |
 
-Impl: `sched/switch/context_switch.c`, `process_arm_kernel_syscall_sleep` /
-`want_kernel_ret`, `sched_context_switch_take_skip_prev_save` (IRQ preempt must not
-overwrite a saved user iretq frame). Host fixtures: `tests/mocks/sched/class_b.h`.
+Impl: `sched/switch/kernel_resume.c` (repair) and the x86 KTM inject hook.
+Host fixtures: `tests/mocks/sched/class_b.h`.
 
 ### Serial protocol (grep-friendly)
 

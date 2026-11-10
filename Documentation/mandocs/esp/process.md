@@ -29,7 +29,7 @@ POSIX musl depende de fork/execve y wait4.
   uid/gid/euid/egid/umask
   mmap_list
   signal_pending, signal_handlers[], signal_mask
-  syscall_user_frame, irq_frame_saved (resume syscall bloqueada)
+  syscall_frame (pt_regs de la syscall en curso)
   state: READY | RUNNING | BLOCKED | ZOMBIE
 ```
 
@@ -122,7 +122,7 @@ Ciclo de vida:
 4. Hijo retorna 0 desde fork vía `task.rax`; parent obtiene pid del hijo.
 5. CLOEXEC respetado en exec vía `process_exec_close_cloexec`.
 6. **`wait4(pid, NULL, …)`** — el padre puede omitir `status`; el kernel bloquea y reanuda el frame de syscall correctamente.
-7. **`wait4` bloqueante (options=0)** — bloqueo con `process_arm_kernel_syscall_sleep` (CS ring-0); la reanudación debe usar **kernel_ret** de vuelta a `process_wait`, no `iretq` user con `rax=0`. `ret=0` solo con WNOHANG si hay hijos vivos sin zombie.
+7. **`wait4` bloqueante (options=0)** — duerme en `process_wait()` sobre su propia pila de kernel; una señal capturada lo termina con `-ERESTARTSYS`. `ret=0` solo con WNOHANG si hay hijos vivos sin zombie.
 
 ## 9. Consejos de depuración
 

@@ -12,9 +12,11 @@
 ## 1. Overview
 
 IR0 implements a subset of POSIX signals: pending bitmask, handlers, mask,
-`kill`, `rt_sigaction`, `rt_sigprocmask`, and `rt_sigreturn`. Delivery runs
-from `handle_signals()` during context switch. Many default actions exit the
-process without invoking user handlers; full POSIX semantics are not complete.
+`kill`, `rt_sigaction`, `rt_sigprocmask`, `rt_sigsuspend` and `rt_sigreturn`.
+Delivery follows Linux: a blocked syscall that sees `signal_pending()` returns
+`-ERESTARTSYS` (or `-ERESTARTNOHAND` / `-EINTR`), and the syscall exit runs
+`do_signal()`, which applies default actions, restarts the call or turns it
+into `EINTR`, and sets the task's syscall frame up to enter the handler.
 
 ## 2. Internal architecture
 
@@ -29,10 +31,11 @@ process without invoking user handlers; full POSIX semantics are not complete.
 
 | Function | Role |
 |----------|------|
-| `send_signal` | Set pending bit on target process |
-| `handle_signals` | Deliver on context switch |
+| `send_signal` | Set pending bit on target process; wake a blocked target |
+| `signal_pending` | Must an interruptible sleep end? (Linux `signal_pending()`) |
+| `do_signal` | Syscall exit: default actions, restart / EINTR, handler entry |
 | `register_signal_handler` | Install handler; reject SIGKILL/SIGSTOP |
-| Syscalls | `sys_kill`, `sys_sigaction`, `sys_rt_sigprocmask`, `sys_sigreturn` |
+| Syscalls | `sys_kill`, `sys_rt_sigaction`, `sys_rt_sigprocmask`, `sys_rt_sigsuspend`, `sys_sigreturn` |
 
 ## 3. Data flow
 
@@ -41,19 +44,20 @@ process without invoking user handlers; full POSIX semantics are not complete.
        → send_signal(target, sig)
        → signal_pending |= mask
 
-  schedule (outgoing RUNNING task)
-       → handle_signals()
-            ├─ SIGKILL → process_exit
-            ├─ SIGSTOP → PROCESS_BLOCKED
-            ├─ SIGSEGV/FPE/ILL/BUS → process_exit (no user handler)
-            ├─ SIGTERM/INT/QUIT/ABRT → process_exit
-            └─ custom handler → build sigframe on user stack, redirect RIP/RSP
+  blocked syscall: signal_pending() → return -ERESTARTSYS / -EINTR
+
+  syscall exit (exit_to_user_mode → do_signal)
+       ├─ SIGKILL / uncaught default-terminate → signal_exit_current
+       ├─ SIGSTOP → sleep until SIGCONT
+       ├─ caught: -ERESTARTSYS restarts under SA_RESTART, else EINTR;
+       │          sigframe on the user stack, syscall frame enters the handler
+       └─ none:   -ERESTART* restarts the syscall
 ```
 
 ASCII:
 
 ```text
-  source ──► pending mask ──► handle_signals (on switch)
+  source ──► pending mask ──► do_signal (syscall exit)
                                     │
                     ┌───────────────┼───────────────┐
                     ▼               ▼               ▼
@@ -79,7 +83,7 @@ ASCII:
 
 | Neighbor | Interaction |
 |----------|---------------|
-| Scheduler | `handle_signals` before context switch |
+| Scheduler | never delivers; `schedule()` only sleeps and wakes |
 | Process | exit sends SIGCHLD to parent |
 | Syscalls | sigreturn restores `task_t` from saved frame |
 | Interrupts | exception → signal mapping |
@@ -104,8 +108,9 @@ ASCII:
    `signals_deliver_from_irq_frame`) with `SIGNAL_HANDLER_TOP_MARGIN` below
    `USER_STACK_TOP` so delivery does not land in the canary / overrun page.
 4. `sa_flags` stores `SA_RESTART` / `SA_SIGINFO` / `SA_RESTORER` on `rt_sigaction`.
-   Restart applies to syscalls that snap a blocked frame (`sigreturn_blocked_syscall`).
-   `select` / `poll` / `pselect6` / `rt_sigsuspend` do not restart (Linux).
+   `-ERESTARTSYS` (read, write, wait4, futex) restarts under `SA_RESTART`;
+   `pause` / `rt_sigsuspend` return `-ERESTARTNOHAND` (EINTR when a handler
+   runs); `nanosleep`, `poll` and `select` return `EINTR` (Linux).
 5. `act->sa_mask` overwrites entire process mask on sigaction.
 6. Linux/musl `sigset_t` places signal N in bit (N-1). The syscall ABI
    converts with `linux_sigword_to_ir0` / `ir0_sigword_to_linux` so
@@ -114,12 +119,13 @@ ASCII:
 ## 9. Debugging tips
 
 - musl `SA_RESTORER` is stored; restorer trampoline is not a full musl port.
-- Signals during blocked syscalls: `kernel_syscall_sleep` + `rt_sigreturn` resume.
-- Timer preemption disabled — delivery tied to explicit schedule points.
+- Asynchronous signals are delivered at the syscall exit only; a task
+  that never makes a syscall sees them at its next one.
+- `rt_sigreturn` copies the frame from the user stack pointer only.
 
 ## 10. Future roadmap
 
-- Broader `SA_RESTART` (connect/accept and other blocking sites).
+- `-ERESTARTSYS` at the remaining polling sleeps (sockets, devfs).
 - Process groups, `kill(0)`, permission checks on send.
 - Reset signal state on exec (POSIX).
 - `pause`, `sigsuspend`, `signalfd`, `inotify`.

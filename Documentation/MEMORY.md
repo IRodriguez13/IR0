@@ -41,7 +41,7 @@ process isolation.
 - Faults in `[USER_STACK_TOP, USER_STACK_TOP+4K)` classify as `STACK_TOP_OVERRUN`
   (see [`KTM.md`](KTM.md) §7.3). **Do not** reintroduce soft-grow past TOP; do not
   treat enlarging `USER_STACK_SIZE` as the primary fix for `addr=7ffff000`.
-- User signal delivery (`handle_signals` and `signals_deliver_from_irq_frame`)
+- User signal delivery (`do_signal` and `signals_deliver_from_irq_frame`)
   places frames via `signal_pick_handler_sp()` with `SIGNAL_HANDLER_TOP_MARGIN`
   (`includes/ir0/abi/signal_contract.h`) so frames stay out of the canary band.
 - Gate: `make smoke-pipeline-stress` (0× `STACK_TOP_OVERRUN` on that path);
