@@ -42,6 +42,8 @@ INIT_EXIT_SRC := kernel/init_exit.c
 INIT_EXIT_BIN := $(BUILD_DIR)/init_exit
 SIGNAL_RESTART_SRC := kernel/signal_restart.c
 SIGNAL_RESTART_BIN := $(BUILD_DIR)/signal_restart
+SIGRETURN_BAD_FRAME_SRC := kernel/sigreturn_bad_frame.c
+SIGRETURN_BAD_FRAME_BIN := $(BUILD_DIR)/sigreturn_bad_frame
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -75,11 +77,11 @@ endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit signal_restart clean
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit signal_restart sigreturn_bad_frame clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit signal_restart
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit signal_restart sigreturn_bad_frame
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -297,6 +299,18 @@ $(SIGNAL_RESTART_BIN): $(SIGNAL_RESTART_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_D
 	fi
 	@echo "  CC      $(ARCH) selftest signal_restart"
 	@$(CC) $(CFLAGS) -o $@ $(SIGNAL_RESTART_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+sigreturn_bad_frame: $(SIGRETURN_BAD_FRAME_BIN)
+
+$(SIGRETURN_BAD_FRAME_BIN): $(SIGRETURN_BAD_FRAME_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sigreturn_bad_frame"
+	@$(CC) $(CFLAGS) -o $@ $(SIGRETURN_BAD_FRAME_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

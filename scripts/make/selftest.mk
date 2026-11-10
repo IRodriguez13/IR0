@@ -546,3 +546,37 @@ ir0-selftest-signal-restart-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64
 	@echo "✓ ir0-selftest-signal-restart-arm64"
 
 ir0-selftest-signal-restart: ir0-selftest-signal-restart-x86 ir0-selftest-signal-restart-arm64
+
+IR0_SELFTEST_X86_SIGRETURN_BAD_FRAME := $(KERNEL_ROOT)/build/selftests/x86_64/sigreturn_bad_frame
+IR0_SELFTEST_ARM64_SIGRETURN_BAD_FRAME := $(KERNEL_ROOT)/build/selftests/arm64/sigreturn_bad_frame
+
+.PHONY: ir0-selftest-sigreturn-bad-frame-x86 ir0-selftest-sigreturn-bad-frame-arm64 \
+	ir0-selftest-sigreturn-bad-frame
+
+$(IR0_SELFTEST_X86_SIGRETURN_BAD_FRAME): tests/selftests/kernel/sigreturn_bad_frame.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sigreturn_bad_frame
+
+$(IR0_SELFTEST_ARM64_SIGRETURN_BAD_FRAME): tests/selftests/kernel/sigreturn_bad_frame.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sigreturn_bad_frame
+
+# rt_sigreturn copies its frame from the user stack pointer only; a frame
+# that cannot be copied in ends the task with SIGSEGV.
+ir0-selftest-sigreturn-bad-frame-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SIGRETURN_BAD_FRAME)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SIGRETURN_BAD_FRAME) \
+		--done "ok 2 kernel_frame_refused" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sigreturn-bad-frame.log
+	@echo "✓ ir0-selftest-sigreturn-bad-frame-x86"
+
+ir0-selftest-sigreturn-bad-frame-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SIGRETURN_BAD_FRAME)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SIGRETURN_BAD_FRAME) \
+		--done "ok 2 kernel_frame_refused" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sigreturn-bad-frame.log
+	@echo "✓ ir0-selftest-sigreturn-bad-frame-arm64"
+
+ir0-selftest-sigreturn-bad-frame: ir0-selftest-sigreturn-bad-frame-x86 ir0-selftest-sigreturn-bad-frame-arm64
