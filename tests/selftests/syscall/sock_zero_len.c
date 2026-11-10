@@ -6,7 +6,8 @@
  * Description: send/sendto/recv with a zero length succeed and move no data
  *              (Linux: a stream reports 0 and keeps its queue, a datagram
  *              socket sends an empty datagram). A zero length needs no
- *              buffer: a NULL one is not an error.
+ *              buffer: a NULL one is not an error. Datagrams to
+ *              127.0.0.1 reach the local socket bound to that port.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -35,6 +36,8 @@ struct probe_sockaddr_in
 /* 127.0.0.1:9 (discard), both in network byte order on little endian. */
 #define PROBE_LOOPBACK_BE 0x0100007FU
 #define PROBE_PORT9_BE 0x0900U
+/* 127.0.0.1:7777, the port of the receiving datagram socket. */
+#define PROBE_PORT7777_BE 0x611EU
 
 static int ok_ret(long ret, long want)
 {
@@ -49,12 +52,14 @@ int main(void)
 {
 	static const char byte = 'x';
 	struct probe_sockaddr_in sin = { 0 };
+	struct probe_sockaddr_in rx_sin = { 0 };
 	char buf[4] = { 0, 0, 0, 0 };
 	int sv[2] = { -1, -1 };
 	long ret;
 	int udp;
+	int udp_rx;
 
-	ksft_set_plan(8);
+	ksft_set_plan(9);
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
 	ksft_test_result(ok_ret(ret, 0), "socketpair_stream");
@@ -97,5 +102,20 @@ int main(void)
 	ret = udp < 0 ? -1 : sendto(udp, 0, 0, 0, (const void *)&sin,
 				    sizeof(sin));
 	ksft_test_result(ok_ret(ret, 0), "dgram_sendto_null_zero_len_returns_0");
+
+	errno = 0;
+	udp_rx = socket(AF_INET, SOCK_DGRAM, 0);
+	rx_sin.family = AF_INET;
+	rx_sin.port_be = PROBE_PORT7777_BE;
+	rx_sin.addr_be = PROBE_LOOPBACK_BE;
+	ret = udp_rx < 0 ? -1 : bind(udp_rx, (const void *)&rx_sin,
+				     sizeof(rx_sin));
+	if (ret == 0)
+		ret = sendto(udp, "ab", 2, 0, (const void *)&rx_sin,
+			     sizeof(rx_sin));
+	if (ret == 2)
+		ret = recv(udp_rx, buf, sizeof(buf), MSG_DONTWAIT);
+	ksft_test_result(ok_ret(ret, 2) && buf[0] == 'a' && buf[1] == 'b',
+			 "dgram_loopback_roundtrip");
 	return ksft_exit();
 }

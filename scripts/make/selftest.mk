@@ -265,7 +265,7 @@ ir0-selftest-sock-zero-len-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SOCK
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_SOCK_ZERO_LEN) \
-		--done "ok 8 dgram_sendto_null_zero_len_returns_0" \
+		--done "ok 9 dgram_loopback_roundtrip" \
 		--log $(HOST_TMP)/ir0-selftest-x86-sock-zero-len.log
 	@echo "✓ ir0-selftest-sock-zero-len-x86"
 
@@ -273,7 +273,7 @@ ir0-selftest-sock-zero-len-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_SOCK_ZERO_LEN) \
-		--done "ok 8 dgram_sendto_null_zero_len_returns_0" \
+		--done "ok 9 dgram_loopback_roundtrip" \
 		--log $(HOST_TMP)/ir0-selftest-arm64-sock-zero-len.log
 	@echo "✓ ir0-selftest-sock-zero-len-arm64"
 

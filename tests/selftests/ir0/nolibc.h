@@ -45,6 +45,7 @@
 #define SYS_rt_sigreturn	139
 #define SYS_socket		198
 #define SYS_sendto		206
+#define SYS_bind		200
 #define SA_SIGINFO		0x00000004UL
 #define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
@@ -283,6 +284,11 @@ static int socket(int domain, int type, int protocol)
 static int socketpair(int domain, int type, int protocol, int sv[2])
 {
 	return (int)syscall(SYS_socketpair, domain, type, protocol, (long)sv);
+}
+
+static int bind(int fd, const void *addr, unsigned int addrlen)
+{
+	return (int)syscall(SYS_bind, fd, (long)addr, addrlen);
 }
 
 static ssize_t sendto(int fd, const void *buf, size_t len, int flags,
