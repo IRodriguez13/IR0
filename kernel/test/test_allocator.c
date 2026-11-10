@@ -14,6 +14,8 @@
 
 #include "test/ktest_harness.h"
 #include <ir0/boot_memory.h>
+#include <ir0/clock.h>
+#include <ir0/cpu.h>
 #include <ir0/kmem.h>
 #include <ir0/mm_port.h>
 #include <ir0/page_table_pool.h>
@@ -22,6 +24,14 @@
 #include <mm/allocator.h>
 #include <stdint.h>
 #include <string.h>
+
+/* Bound for one calibration wait: far beyond any sane tick period. */
+#define HEAP_TICK_SPIN_LIMIT 400000000UL
+#define HEAP_LOCKED_TICKS 4
+
+static int heap_hook_armed;
+static unsigned long heap_hook_spins;
+static uint64_t heap_hook_ticks;
 
 void ktest_allocator(void)
 {
@@ -134,6 +144,68 @@ void ktest_allocator_stats(void)
 	KASSERT_EQ(used_after, used_before);
 	KASSERT_EQ(allocs_mid, allocs_before + 3);
 	KASSERT_EQ(allocs_after, allocs_before);
+
+	KTEST_END();
+}
+
+/*
+ * Spin until the tick count moves or @limit iterations pass; returns the
+ * iterations spent. Calibration and the hook use the same loop, so a count
+ * measured with IRQs on spans the same wall time inside the hook.
+ */
+static unsigned long heap_spin_ticks(unsigned long limit)
+{
+	uint64_t start = clock_get_tick_count();
+	unsigned long n;
+
+	for (n = 0; n < limit; n++)
+	{
+		if (clock_get_tick_count() != start)
+			break;
+		cpu_relax();
+	}
+	return n;
+}
+
+void heap_locked_test_hook(void)
+{
+	uint64_t start;
+	unsigned long i;
+
+	if (!heap_hook_armed)
+		return;
+	heap_hook_armed = 0;
+	start = clock_get_tick_count();
+	for (i = 0; i < HEAP_LOCKED_TICKS; i++)
+		(void)heap_spin_ticks(heap_hook_spins);
+	heap_hook_ticks = clock_get_tick_count() - start;
+}
+
+/*
+ * kmalloc/kfree run from IRQ and network paths, so the heap critical
+ * section must mask IRQs: a timer IRQ must not be taken inside it. The
+ * hook spins about HEAP_LOCKED_TICKS tick periods (calibrated with IRQs
+ * on) inside heap_alloc's critical section; the tick count must not move.
+ */
+void ktest_heap_masks_irqs(void)
+{
+	void *p;
+
+	KTEST_BEGIN("heap_masks_irqs");
+
+	/* Align to a tick edge, then time one full period with IRQs on. */
+	(void)heap_spin_ticks(HEAP_TICK_SPIN_LIMIT);
+	heap_hook_spins = heap_spin_ticks(HEAP_TICK_SPIN_LIMIT);
+	KASSERT(heap_hook_spins > 0);
+	KASSERT(heap_hook_spins < HEAP_TICK_SPIN_LIMIT);
+
+	heap_hook_ticks = 0;
+	heap_hook_armed = 1;
+	p = kmalloc(32);
+	heap_hook_armed = 0;
+	KASSERT(p != NULL);
+	kfree(p);
+	KASSERT_EQ(heap_hook_ticks, 0);
 
 	KTEST_END();
 }

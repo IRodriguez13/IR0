@@ -27,3 +27,9 @@ void *heap_alloc(size_t size);
 void heap_free(void *ptr);
 void heap_stats(size_t *total, size_t *used, size_t *allocs);
 void heap_coalesce_stats(size_t *forward, size_t *backward);
+
+/*
+ * Only the test kernel defines this hook; heap_alloc calls it from inside
+ * its critical section so a ktest can prove the section masks IRQs.
+ */
+void heap_locked_test_hook(void) __attribute__((weak));

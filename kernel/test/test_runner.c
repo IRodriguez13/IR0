@@ -41,6 +41,7 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_resource_procfs_visibility, "resource_procfs_visibility", 1 },
 	{ ktest_allocator, "allocator", 0 },
 	{ ktest_allocator_stats, "allocator_stats", 0 },
+	{ ktest_heap_masks_irqs, "heap_masks_irqs", 0 },
 	{ ktest_pmm_skips_reserved_ranges, "pmm_skips_reserved_ranges", 0 },
 	{ ktest_path, "path", 0 },
 	{ ktest_string, "string", 0 },
