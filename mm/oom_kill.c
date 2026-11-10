@@ -16,15 +16,12 @@
 
 #include <ir0/oom.h>
 #include <ir0/reclaim.h>
-#include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/pmm.h>
 #include <ir0/percpu.h>
-#include <ir0/signals.h>
 #include <ir0/cpu.h>
 #include <ir0/logging.h>
 #include <string.h>
-#include <stdint.h>
 
 static uint64_t oom_kills;
 /*

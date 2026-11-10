@@ -20,6 +20,8 @@
 #include <ir0/pmm.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/swap.h>
+#include <ir0/tlb.h>
+
 /*
  * Boot/kernel address-space root with full PMM identity. Pinned once before
  * any process mm. Used like Linux kmap for physical page copy/zero
@@ -32,7 +34,6 @@ void paging_pin_kernel_address_space(uintptr_t root)
 		return;
 	paging_kernel_root = root;
 }
-#include <ir0/arch_cpu.h>
 
 static int page_table_is_empty(const uint64_t *table)
 {

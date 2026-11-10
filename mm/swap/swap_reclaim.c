@@ -8,17 +8,12 @@
  */
 
 #include "swap_internal.h"
-
 #include <ir0/abi/mmap_contract.h>
-#include <ir0/arch_mm.h>
-#include <ir0/errno.h>
-#include <ir0/kmem.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/process.h>
 #include <ir0/swap.h>
 #include <ir0/tlb_sync.h>
-#include <string.h>
 
 #ifndef TEST_HOST
 

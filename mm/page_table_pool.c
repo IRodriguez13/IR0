@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
 #include <ir0/reclaim.h>

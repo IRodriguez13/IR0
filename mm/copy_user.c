@@ -11,7 +11,6 @@
  */
 
 #include <ir0/copy_user.h>
-#include <ir0/mm.h>
 #include "process.h"
 #include <ir0/paging.h>
 #include <string.h>

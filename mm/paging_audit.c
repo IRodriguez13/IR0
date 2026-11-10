@@ -12,7 +12,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <config.h>
 #include <ir0/process.h>
 #include <ir0/paging.h>
 #include <string.h>

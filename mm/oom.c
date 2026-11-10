@@ -9,7 +9,6 @@
 
 #include <ir0/oom.h>
 #include <ir0/errno.h>
-#include <stdint.h>
 
 static uint64_t oom_adjustment_pages(uint64_t total_pages, unsigned adjustment)
 {

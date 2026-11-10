@@ -15,13 +15,9 @@
 #include <ir0/pmm.h>
 #include <ir0/boot_memory.h>
 #include <ir0/kmem.h>
-#include <ir0/klog.h>
 #include <ir0/process.h>
-#include <ir0/debug_runtime.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <ir0/oops.h>
-#include <config.h>
-#include <stdint.h>
 
 /* INTERNAL STATE                                                            */
 

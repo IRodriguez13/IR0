@@ -14,7 +14,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <config.h>
 #include <ir0/logging.h>
 #include <ir0/mm_diag.h>
 #include <ir0/oops.h>

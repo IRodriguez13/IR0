@@ -9,7 +9,6 @@
 
 #include <ir0/reclaim.h>
 #include <ir0/errno.h>
-#include <stdint.h>
 
 #define IR0_RECLAIMER_MAX 16
 

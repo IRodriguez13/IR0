@@ -13,7 +13,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/mm_port.h>
-
 #include <mm/allocator.h>
 #include <ir0/pmm.h>
 

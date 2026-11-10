@@ -13,8 +13,6 @@
 #include <ir0/boot_port.h>
 #include <ir0/errno.h>
 #include <ir0/pmm.h>
-
-#include <stdint.h>
 #include <string.h>
 
 /* Snapshot reservations plus the DTB, the initrd and the kernel heap. */

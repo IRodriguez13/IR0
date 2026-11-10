@@ -8,7 +8,6 @@
  */
 
 #include "swap_internal.h"
-
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/reclaim.h>

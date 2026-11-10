@@ -8,8 +8,6 @@
  */
 
 #include "swap_internal.h"
-
-#include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/swap.h>
 

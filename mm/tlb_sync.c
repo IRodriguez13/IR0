@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Common TLB-coherence policy; ISAs provide local invalidation mechanics. */
 
-#include <config.h>
 #include <ir0/tlb.h>
 #include <ir0/tlb_sync.h>
 

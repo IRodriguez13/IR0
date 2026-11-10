@@ -10,18 +10,15 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/memfd.h>
-#include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
-#include <ir0/copy_user.h>
 #include <ir0/paging.h>
 #include <ir0/mm_alloc.h>
 #include <ir0/pmm.h>
 #include <ir0/fcntl.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <ir0/overflow.h>
 #include <string.h>
-#include <ir0/files_struct.h>
 
 #define MEMFD_MAX 16
 #define MEMFD_MAX_PAGES 1024

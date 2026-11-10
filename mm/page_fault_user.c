@@ -12,7 +12,6 @@
 
 #include <ir0/cpu.h>
 #include <ir0/tlb_sync.h>
-#include <ir0/process.h>
 #include <ir0/mm_alloc.h>
 #include <ir0/pmm.h>
 #include <ir0/oom.h>
