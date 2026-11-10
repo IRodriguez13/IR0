@@ -13,11 +13,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/page_table_pool.h>
-#include "paging.h"
+#include <ir0/paging.h>
 #include "paging_internal.h"
 #include <string.h>
 #include <ir0/cacheflush.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/swap.h>
 /*

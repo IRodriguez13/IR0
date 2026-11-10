@@ -12,7 +12,7 @@
 #include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
 #include <ir0/errno.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 
 #include <stdint.h>
 #include <string.h>

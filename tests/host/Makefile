@@ -128,7 +128,7 @@ host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 host_kmem_stub.o: host_kmem_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/mm/pmm.h
+host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/includes/ir0/pmm.h
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<
 
 host_boot_memory.o: $(KERNEL_ROOT)/mm/boot_memory.c

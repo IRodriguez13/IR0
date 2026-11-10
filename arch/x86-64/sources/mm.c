@@ -19,7 +19,7 @@
 #include <ir0/pmm.h>
 #include <ir0/video_backend.h>
 #include <ir0/ahci_api.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <string.h>
 
 uintptr_t mm_kernel_heap_start(void)

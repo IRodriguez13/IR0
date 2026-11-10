@@ -13,7 +13,7 @@
 #include <ir0/process.h>
 #include "scenarios.h"
 #include <string.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <kernel/process.h>
 
 #define PT_CHURN_ROUNDS 32

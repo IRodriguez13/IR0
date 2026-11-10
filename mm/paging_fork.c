@@ -13,8 +13,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
-#include "paging.h"
-#include <mm/pmm.h>
+#include <ir0/paging.h>
+#include <ir0/pmm.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/swap.h>
 #include "paging_internal.h"

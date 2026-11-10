@@ -1,17 +1,247 @@
 /**
  * IR0 Kernel — Core system software
- * Copyright (C) 2026  Iván Rodriguez
+ * Copyright (C) 2025-2026  Iván Rodriguez
  *
  * This file is part of the IR0 Operating System.
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
  * File: paging.h
- * Description: IR0 — paging / user mmap facade (implementation in mm/)
+ * Description: Page tables, mappings and user-region helpers
+ *              (implementation in mm/paging*.c).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <mm/paging.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <ir0/mm.h>
+#include <ir0/arch_mm.h>
+#include <ir0/copy_user.h>
+
+#define PAGE_PRESENT IR0_MM_MAP_PRESENT
+#define PAGE_RW IR0_MM_MAP_WRITE
+#define PAGE_USER IR0_MM_MAP_USER
+#define PAGE_WRITETHROUGH IR0_MM_MAP_WRITETHROUGH
+#define PAGE_CACHE_DISABLE IR0_MM_MAP_NOCACHE
+#define PAGE_ACCESSED IR0_MM_MAP_ACCESSED
+#define PAGE_DIRTY IR0_MM_MAP_DIRTY
+#define PAGE_SIZE_2MB_FLAG IR0_MM_MAP_LARGE
+#define PAGE_GLOBAL IR0_MM_MAP_GLOBAL
+/*
+ * Software-available PTE bit 9 (ignored by hardware). Marks a present user
+ * page that was shared read-only at fork and must break on write.
+ */
+#define PAGE_COW IR0_MM_MAP_COW
+
+/* Semantic mapping request; the ISA backend chooses its executable encoding. */
+#define PAGE_EXEC IR0_MM_MAP_EXEC
+
+#define PAGE_SIZE_4KB (4 * 1024)
+#define PAGE_SIZE_2MB (2 * 1024 * 1024)
+#define PAGE_SIZE_1GB (1024 * 1024 * 1024)
+
+/* Physical frame: align/strip low page-offset bits from an address. */
+#define PAGE_FRAME_MASK     (~0xFFFULL)
+
+/* Byte offset inside a 4 KiB frame. */
+#define PAGE_OFFSET_MASK    (PAGE_SIZE_4KB - 1U)
+
+/*
+ * Low 12 PTE flag bits accepted by mm_make_leaf_pte(). PAGE_EXEC lives in
+ * bit 52 and is passed to that helper separately.
+ */
+#define PAGE_MAP_FLAGS_MASK 0xFFFULL
+
+/**
+ * Enable paging (sets CR0.PG bit)
+ */
+void enable_paging(void);
+
+/**
+ * Complete paging setup: configure tables and enable paging
+ * This function handles all paging configuration from C code
+ */
+void setup_and_enable_paging(void);
+
+/**
+ * Load page directory root via mm_activate (ISA-neutral).
+ */
+void paging_activate_address_space(uintptr_t root);
+
+/**
+ * Get current page directory root via mm_current_root.
+ */
+uintptr_t paging_current_address_space(void);
+
+/** Pin the boot/kernel address-space root once. Never overwrite. */
+void paging_pin_kernel_address_space(uintptr_t root);
+
+/** Boot/kernel address-space root with PMM identity, or zero if not pinned. */
+uintptr_t paging_kernel_address_space(void);
+
+/**
+ * Synchronize ISA-defined shared kernel mappings from the pinned boot root
+ * into @root. Safe no-op if @root is NULL or is the boot root itself.
+ */
+void paging_sync_kernel_mappings(address_space_root_t root);
+
+/** Copy one 4KiB frame via pinned boot address-space root (COW / phys access). */
+void paging_copy_phys_page(uintptr_t dst_phys, uintptr_t src_phys);
+
+/**
+ * Replace the shared frame of the user COW page at @vaddr with a private
+ * copy, mapped writable when @writable is set and read-only otherwise.
+ * Returns 0, or -1 when the page is not a user COW page or memory is short.
+ */
+int paging_cow_unshare(address_space_root_t root, uintptr_t vaddr, int writable);
+
+/** Zero one 4KiB frame via pinned boot address-space root (clear_highpage). */
+void paging_zero_phys_page(uintptr_t phys);
+void paging_poison_phys_page(uintptr_t phys, uint8_t pattern);
+
+/**
+ * Check if paging is enabled
+ */
+int is_paging_enabled(void);
+
+/**
+ * Map a virtual address to a physical address
+ * Note: This is a simple implementation for testing
+ */
+int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
+
+/**
+ * Map a virtual address to a physical address in a specific page directory
+ * @root: address-space root table address (page directory)
+ * @virt_addr: Virtual address to map
+ * @phys_addr: Physical address to map to
+ * @flags: Page flags (PAGE_USER, PAGE_RW, etc.)
+ * Returns: 0 on success, -1 on failure
+ */
+int map_page_in_directory(address_space_root_t root, uint64_t virt_addr, uint64_t phys_addr, uint64_t flags);
+int paging_install_pte(address_space_root_t root, uintptr_t virt_addr, uint64_t pte);
+
+/**
+ * Check if a virtual address is mapped in a page directory
+ * @root: address-space root table address (page directory)
+ * @virt_addr: Virtual address to check
+ * @flags_out: Optional output for page flags (can be NULL)
+ * Returns: 1 if mapped (including 2 MiB/1 GiB leaves), 0 if not mapped, -1 on error
+ */
+int is_page_mapped_in_directory(address_space_root_t root, uint64_t virt_addr, uint64_t *flags_out);
+
+/**
+ * Walk 4-level paging to the PTE for @a vaddr in @a root.
+ * Returns NULL if any level is missing or a huge page is encountered.
+ * The returned pointer is valid even when the leaf PTE is not present.
+ */
+uint64_t *paging_get_pte(address_space_root_t root, uintptr_t vaddr);
+
+/*
+ * Split a PD-level 2MiB leaf covering @vaddr into 512×4KiB supervisor leaves
+ * so paging_get_pte / COW can see a PTE. No-op if already 4KiB.
+ */
+int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr);
+
+/**
+ * Unmap a 4KB page in an explicit page directory (address-space root root).
+ * Does not assume current address-space root matches @root.
+ */
+int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr);
+
+/*
+ * Test double consulted first by unmap_page_in_directory(). NULL in
+ * production. Return -EOPNOTSUPP to fall through to the table walker; any
+ * other value is the unmap result and the walker does not run.
+ */
+typedef int (*paging_unmap_test_hook_fn)(address_space_root_t root,
+					 uintptr_t virt_addr);
+extern paging_unmap_test_hook_fn paging_unmap_test_hook;
+
+/*
+ * ktest-only: poison a page table just before it is freed, so a walk that
+ * keeps reading through a stale pointer is detected. Off by default.
+ */
+void paging_test_poison_freed_tables(int enable);
+
+/**
+ * Unmap a virtual address in the current address space (current address-space root)
+ */
+int unmap_page(uint64_t virt_addr);
+
+/* Map user page with U/S=1 */
+int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags);
+
+/* Map user region in current page directory */
+int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
+
+/* Map user region in a specific page directory */
+int map_user_region_in_directory(address_space_root_t root, uintptr_t virtual_start, size_t size, uint64_t flags);
+
+/*
+ * Map a supervisor-only identity region with 4 KiB pages (not boot 2 MiB huge
+ * pages). User mappings added later override overlapping VAs (e.g. ELF at
+ * 0x400000). Required so IRQ/syscall handlers and TSS RSP0 work under
+ * process address-space root while the kernel image lives in low canonical memory.
+ */
+int map_supervisor_identity_low(address_space_root_t root, uint64_t start, uint64_t end);
+
+/*
+ * Supervisor-only 2 MiB identity map (PD-level PS). Use for heap/PMM ranges that
+ * do not overlap the user ELF load window (0x400000); COW break uses memcpy via
+ * physical VA under process address-space root.
+ */
+int map_supervisor_identity_2mb(address_space_root_t root, uint64_t start, uint64_t end);
+/* Supervisor-only 2 MiB uncached, non-executable identity for MMIO windows. */
+int map_supervisor_device_2mb(address_space_root_t root, uint64_t start, uint64_t end);
+
+/*
+ * Change final permissions of already mapped user pages without remapping.
+ * Granting PAGE_EXEC also syncs the instruction cache (paging_sync_icache_user).
+ */
+int protect_user_region_in_directory(address_space_root_t root, uintptr_t start,
+				     size_t length, uint64_t flags);
+
+/*
+ * The kernel wrote instructions into the mapped user pages of
+ * [start, start + length) through their physical alias: make them visible
+ * to instruction fetch (Linux __sync_icache_dcache() on set_pte_at()).
+ * Unmapped pages are skipped. No-op where the instruction cache is coherent.
+ */
+void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
+			     size_t length);
+
+struct process;
+
+/**
+ * Copy memory from parent process to child process
+ * Used for fork() implementation
+ */
+int copy_process_memory(struct process *parent, struct process *child);
+void paging_reclaim_user_tables(address_space_root_t root);
+
+/*
+ * IR0 MM frame/PT bookkeeping: emit page-table/frame balance counters tagged by phase.
+ */
+void paging_ir0_mm_note_root_created(uintptr_t root_phys);
+void paging_ir0_mm_note_root_freed(uintptr_t root_phys);
+void paging_ir0_mm_checkpoint(const char *tag, int32_t pid);
+void paging_ir0_mm_category_stats(uint64_t *user_alloc, uint64_t *user_free,
+                                  uint64_t *pt_alloc, uint64_t *pt_free,
+                                  uint64_t *kernel_alloc, uint64_t *kernel_free);
+void paging_steady_state_audit(const char *tag, uint64_t frames_baseline,
+                              uint64_t mm_created, uint64_t mm_destroyed);
+
+typedef enum
+{
+    PAGING_OOM_BOOT_FATAL = 0,
+    PAGING_OOM_KERNEL_FATAL = 1,
+    PAGING_OOM_USER_RECOVERABLE = 2
+} paging_oom_class_t;
+
+void paging_oom_note(const char *site, paging_oom_class_t cls);
+void paging_oom_audit(const char *tag);
+paging_oom_class_t paging_oom_classify_current(void);

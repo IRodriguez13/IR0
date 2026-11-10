@@ -2777,6 +2777,44 @@ def print_register_name_baseline():
         print(f"{rel} {ident}")
 
 
+# mm/pmm.h and mm/paging.h moved into their <ir0/...> facades. The old paths
+# remain only as forwarders for the files listed here; the list only shrinks.
+RETIRED_MM_HEADER_RE = re.compile(
+    r'^\s*#\s*include\s*(?:<mm/(pmm|paging)\.h>|"(pmm|paging)\.h")')
+RETIRED_MM_HEADER_USERS = frozenset({
+    "mm/page_fault_cow.c",
+    "mm/paging_uaccess.c",
+})
+
+
+def check_retired_mm_headers():
+    """PMM and paging are declared once, in <ir0/pmm.h> and <ir0/paging.h>."""
+    errors = []
+    users: set[str] = set()
+    for tree in SINGLE_DECL_TREES:
+        for fpath in iter_c_files(ROOT / tree):
+            rel = str(rel_to_root(fpath))
+            if rel in ("mm/pmm.h", "mm/paging.h"):
+                continue
+            for lineno, line in enumerate(read_file_text(fpath).splitlines(), 1):
+                match = RETIRED_MM_HEADER_RE.match(line)
+                if not match:
+                    continue
+                users.add(rel)
+                if rel not in RETIRED_MM_HEADER_USERS:
+                    name = match.group(1) or match.group(2)
+                    errors.append(
+                        f"[retired-mm-header] {rel}:{lineno}: include "
+                        f"<ir0/{name}.h> instead"
+                    )
+    for rel in sorted(RETIRED_MM_HEADER_USERS - users):
+        errors.append(
+            f"[retired-mm-header] {rel} no longer uses the old path; drop it "
+            "from RETIRED_MM_HEADER_USERS (and the forwarder once empty)"
+        )
+    return errors
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -2849,6 +2887,7 @@ def main():
     errors.extend(check_kmem_single_api())
     errors.extend(check_uaccess_single_api())
     errors.extend(check_portable_no_register_names())
+    errors.extend(check_retired_mm_headers())
 
     if errors:
         print("[arch-guard] FAILED")

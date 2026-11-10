@@ -16,7 +16,7 @@
 #include <ir0/mm_alloc.h>
 #include <ir0/pmm.h>
 #include <ir0/oom.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/swap.h>
 #include "page_fault_internal.h"

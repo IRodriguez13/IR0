@@ -15,7 +15,7 @@
 #include <ir0/mm_port.h>
 
 #include <mm/allocator.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 
 void ir0_mm_pmm_stats(size_t *total_frames, size_t *used_frames,
 		      size_t *free_frames)

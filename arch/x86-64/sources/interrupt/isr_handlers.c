@@ -28,7 +28,7 @@
 #include <ir0/arch_io.h>
 #include <config.h>
 #include <ir0/input_backend.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <string.h>
 #include <interrupt/keyboard.h>
 #include <drivers/timer/pit/pit.h>

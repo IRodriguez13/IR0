@@ -21,8 +21,8 @@
 #include <stdint.h>
 #include <string.h>
 #include <ir0/kmem.h>
-#include <mm/pmm.h>
-#include <mm/paging.h>
+#include <ir0/pmm.h>
+#include <ir0/paging.h>
 #include <ir0/arch_port.h>
 #include <ir0/arch_info.h>
 #include <config.h>

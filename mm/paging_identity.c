@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "paging.h"
+#include <ir0/paging.h>
 #include "paging_internal.h"
 
 /*

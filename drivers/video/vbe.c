@@ -22,7 +22,7 @@
 #include <ir0/vga.h>
 #include <ir0/boot_memory.h>
 #include <string.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
 #include <ir0/errno.h>

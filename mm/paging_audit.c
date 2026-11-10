@@ -14,10 +14,10 @@
 
 #include <config.h>
 #include <ir0/process.h>
-#include "paging.h"
+#include <ir0/paging.h>
 #include <string.h>
 #include <ir0/kmem.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 #include "paging_internal.h"
 
 uint64_t ir0_mm_root_created;

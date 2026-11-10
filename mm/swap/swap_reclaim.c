@@ -18,7 +18,6 @@
 #include <ir0/process.h>
 #include <ir0/swap.h>
 #include <ir0/tlb_sync.h>
-#include <mm/paging.h>
 #include <string.h>
 
 #ifndef TEST_HOST

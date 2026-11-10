@@ -22,7 +22,7 @@
 #include <ir0/mm_range.h>
 #include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include <string.h>
 
 #include "mmu.h"

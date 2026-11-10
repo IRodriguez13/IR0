@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <ir0/cpu.h>
 
-/* Match mm/paging.h leaf/table descriptor bits (x86-64 4K). */
+/* Match <ir0/paging.h> leaf/table descriptor bits (x86-64 4K). */
 #define X86_PTE_PRESENT   0x1ULL
 #define X86_PTE_RW        0x2ULL
 #define X86_PTE_USER      0x4ULL

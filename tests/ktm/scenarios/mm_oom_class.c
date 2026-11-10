@@ -9,7 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ktm_internal.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include "scenarios.h"
 
 static int scenario_mm_oom_class_run(ktm_context_t *ctx)

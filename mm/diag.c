@@ -26,7 +26,7 @@
 #include <ir0/ktm/user_canary.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include "page_fault_internal.h"
 
 int mm_diag_fault_hit(const char *name)

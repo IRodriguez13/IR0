@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "pmm.h"
+#include <ir0/pmm.h>
 #include <ir0/boot_memory.h>
 #include <ir0/kmem.h>
 #include <ir0/klog.h>

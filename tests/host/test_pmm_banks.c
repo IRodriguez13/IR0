@@ -7,7 +7,7 @@
 #include <ir0/errno.h>
 #include <ir0/mm_alloc.h>
 #include <ir0/reclaim.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 
 void host_kmem_fail_after(long successful_allocations);
 

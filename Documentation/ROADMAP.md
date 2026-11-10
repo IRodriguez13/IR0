@@ -141,7 +141,7 @@ Deferred: **IR0-system** (release manifest pinning kernel + userspace + desktop 
 
 | Item | Status | Paths |
 |------|--------|-------|
-| PMM frame refcount | Done | `mm/pmm.c`, `mm/pmm.h` |
+| PMM frame refcount | Done | `mm/pmm.c`, `includes/ir0/pmm.h` |
 | Fork share RO + `#PF` break | Done | `mm/paging.c`, `arch/x86-64/sources/fault.c` |
 | FASE40 A/B/C/D | **Pass** | `make smoke-mm-cow-lazy` / legacy `smoke-userspace-fork-mem` |
 | **`wait4(pid, NULL, …)` POSIX** | Fixed | `process_wait_wake_blocked_parent` |

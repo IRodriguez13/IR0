@@ -21,7 +21,7 @@
 #include <string.h>
 #include <ir0/oops_port.h>
 #include <ir0/fault.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 
 /*
  * Set by panicex(). Private to this file: a fault taken while it is set must

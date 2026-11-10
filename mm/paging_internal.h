@@ -9,7 +9,7 @@
  * File: paging_internal.h
  * Description: Internal facade shared by the mm/paging*.c units (page-table
  *              core, user copies, fork, identity maps, accounting). Not a
- *              public API: other subsystems use mm/paging.h and ir0/ facades.
+ *              public API: other subsystems use <ir0/paging.h> and other ir0/ facades.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
