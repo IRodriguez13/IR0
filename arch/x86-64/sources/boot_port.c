@@ -256,9 +256,7 @@ int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 	    x86_snapshot_add_reserved(snapshot, 0, 0x100000U) != 0 ||
 	    kernel_end <= 0x100000U ||
 	    x86_snapshot_add_reserved(snapshot, 0x100000U,
-				      kernel_end - 0x100000U) != 0 ||
-	    x86_snapshot_add_reserved(snapshot, 0x00800000U,
-				      0x01800000U) != 0)
+				      kernel_end - 0x100000U) != 0)
 		return -EINVAL;
 
 	if (info->flags & MULTIBOOT_FLAG_MMAP)
