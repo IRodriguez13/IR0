@@ -25,15 +25,17 @@ ARM64_BOARD_CFLAGS := -DIR0_ARM64_BOARD_QEMU_VIRT=1
 ARM64_BOARD := qemu-virt
 endif
 
-# Repo-local musl cross toolchain (scripts/setup_musl_aarch64.sh). Fall back to
-# a tiny CRT-less ET_EXEC when musl CRT is unavailable (blob-only; product link
-# still uses libgcc via the root Makefile).
+# Repo-local musl cross toolchain (scripts/setup_musl_aarch64.sh). A linked
+# worktree has no toolchain/; worktree.mk falls back to the main checkout's.
+# Fall back to a tiny CRT-less ET_EXEC when musl CRT is unavailable
+# (blob-only; product link still uses libgcc via the root Makefile).
+include $(KERNEL_ROOT)/scripts/make/worktree.mk
 MUSL_CC_AARCH64 ?= $(shell \
 	command -v aarch64-linux-musl-gcc 2>/dev/null || \
-	(test -x $(KERNEL_ROOT)/toolchain/aarch64-linux-musl/bin/aarch64-linux-musl-gcc && \
-		echo $(KERNEL_ROOT)/toolchain/aarch64-linux-musl/bin/aarch64-linux-musl-gcc) || \
-	(test -x $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc && \
-		echo $(KERNEL_ROOT)/toolchain/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc) || \
+	(test -x $(IR0_TOOLCHAIN_DIR)/aarch64-linux-musl/bin/aarch64-linux-musl-gcc && \
+		echo $(IR0_TOOLCHAIN_DIR)/aarch64-linux-musl/bin/aarch64-linux-musl-gcc) || \
+	(test -x $(IR0_TOOLCHAIN_DIR)/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc && \
+		echo $(IR0_TOOLCHAIN_DIR)/aarch64-linux-musl-cross/bin/aarch64-linux-musl-gcc) || \
 	true)
 MUSL_AARCH64_HELLO := $(KERNEL_ROOT)/build/hello_aarch64
 
