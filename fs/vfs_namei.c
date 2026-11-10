@@ -71,10 +71,11 @@ int vfs_mkdir(const char *path, int mode)
         return -EROFS;
 
     char parent[MAX_PATH];
-    if (vfs_parent_dir(path, parent, sizeof(parent)) == 0)
-        if (strcmp(parent, "/") != 0)
-            if (!ir0_check_file_access(parent, ACCESS_WRITE))
-                return -EACCES;
+    ret = vfs_lookup_parent(path, parent, sizeof(parent));
+    if (ret != 0)
+        return ret;
+    if (strcmp(parent, "/") != 0 && !ir0_check_file_access(parent, ACCESS_WRITE))
+        return -EACCES;
 
     if (strcmp(path, "/") == 0)
         return -EEXIST;

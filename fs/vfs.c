@@ -474,3 +474,23 @@ int vfs_parent_dir(const char *path, char *out, size_t out_sz)
     out[len] = '\0';
     return 0;
 }
+
+/**
+ * Look up the directory that will hold the new name @path, as Linux does
+ * before it checks permissions: a missing parent is ENOENT and a parent
+ * that is not a directory is ENOTDIR. The parent path is left in @out.
+ */
+int vfs_lookup_parent(const char *path, char *out, size_t out_sz)
+{
+    stat_t st;
+    int ret = vfs_parent_dir(path, out, out_sz);
+
+    if (ret != 0)
+        return ret;
+    ret = vfs_stat(out, &st);
+    if (ret != 0)
+        return ret;
+    if (!S_ISDIR(st.st_mode))
+        return -ENOTDIR;
+    return 0;
+}
