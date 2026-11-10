@@ -15,7 +15,6 @@
 #include "allocator.h"
 #include <ir0/kmem.h>
 #include <ir0/klog.h>
-#include <ir0/oops.h>
 #include <ir0/overflow.h>
 #include <ir0/spinlock.h>
 #include <config.h>
@@ -434,28 +433,18 @@ int heap_block_check(const void *ptr)
 	return ret;
 }
 
-/* Caller holds heap_lock. */
-static void heap_free_locked(void *ptr)
+/* Caller holds heap_lock. Frees nothing unless @ptr is a live block. */
+static int heap_free_locked(void *ptr)
 {
 	block_header_t *block = NULL;
 	int check;
 
 	if (!allocator.initialized)
-		return;
+		return HEAP_BLOCK_BAD;
 
 	check = heap_block_check_locked(ptr, &block);
-	if (check == HEAP_BLOCK_BAD)
-	{
-		klog_print("[ALLOC] BUG: Out of bounds allocation!!");
-		panicex("Out of bounds allocation", 0, __FILE__, __LINE__, "heap_free()");
-		return;
-	}
-	if (check == HEAP_BLOCK_FREE)
-	{
-		klog_print("[ALLOC] BUG: double-free detected\n");
-		panicex("double-free detected", 0, __FILE__, __LINE__, "heap_free()");
-		return;
-	}
+	if (check != HEAP_BLOCK_OK)
+		return check;
 
 	/* Mark as free */
 	block->is_free = 1;
@@ -531,17 +520,20 @@ static void heap_free_locked(void *ptr)
 		allocator.free_list->prev = block;
 
 	allocator.free_list = block;
+	return HEAP_BLOCK_OK;
 }
 
-void heap_free(void *ptr)
+int heap_free(void *ptr)
 {
 	unsigned long irq_flags;
+	int ret;
 
 	if (!ptr)
-		return;
+		return HEAP_BLOCK_OK;
 	irq_flags = ir0_spin_lock_irqsave(&heap_lock);
-	heap_free_locked(ptr);
+	ret = heap_free_locked(ptr);
 	ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
+	return ret;
 }
 
 /* STATISTICS                                                                */

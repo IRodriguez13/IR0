@@ -73,13 +73,26 @@ void *kmalloc_aligned(size_t size, size_t alignment)
 	return (void *)aligned_addr;
 }
 
+/* A bad block is reported at the kfree call site, not inside the heap. */
+static void kmem_free_or_panic(void *raw, const char *file, int line,
+			       const char *caller)
+{
+	int ret = heap_free(raw);
+
+	if (likely(ret == HEAP_BLOCK_OK))
+		return;
+	panicex(ret == HEAP_BLOCK_FREE ? "kfree: double free" :
+					 "kfree: not a heap block",
+		PANIC_MEM, file, line, caller);
+}
+
 void __kfree_checked(void *ptr, const char *file, int line, const char *caller)
 {
 	if (unlikely(!ptr))
 		return;
 	if (unlikely(!kmem_ptr_in_heap(ptr)))
 		panicex("kfree: pointer out of heap range", PANIC_MEM, file, line, caller);
-	heap_free(ptr);
+	kmem_free_or_panic(ptr, file, line, caller);
 }
 
 void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *caller)
@@ -88,5 +101,5 @@ void __kfree_aligned_checked(void *ptr, const char *file, int line, const char *
 		return;
 	if (unlikely(!kmem_ptr_in_heap(ptr)))
 		panicex("kfree_aligned: pointer out of heap range", PANIC_MEM, file, line, caller);
-	heap_free(((void **)ptr)[-1]);
+	kmem_free_or_panic(((void **)ptr)[-1], file, line, caller);
 }

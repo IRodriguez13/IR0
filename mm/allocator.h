@@ -24,15 +24,19 @@
 
 /* heap_init() is public and declared in <ir0/kmem.h>. */
 void *heap_alloc(size_t size);
-void heap_free(void *ptr);
-
-/* heap_block_check() results. */
+/* heap_block_check() and heap_free() results. */
 #define HEAP_BLOCK_OK 0
 #define HEAP_BLOCK_BAD (-1)  /* not the start of a heap block */
 #define HEAP_BLOCK_FREE (-2) /* a block that is already free */
 
 /* Classify @ptr without freeing it or panicking. */
 int heap_block_check(const void *ptr);
+
+/*
+ * Free @ptr when it is a live block; otherwise free nothing and return the
+ * heap_block_check() result so the caller can report its own call site.
+ */
+int heap_free(void *ptr);
 void heap_stats(size_t *total, size_t *used, size_t *allocs);
 void heap_coalesce_stats(size_t *forward, size_t *backward);
 
