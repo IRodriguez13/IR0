@@ -32,8 +32,9 @@ int ir0_resolve_kpath_at(int dirfd, const char *path, char *resolved,
     if (!path || !resolved || resolved_sz == 0)
         return -EINVAL;
 
+    /* Linux getname(): an empty name is ENOENT unless AT_EMPTY_PATH. */
     if (path[0] == '\0')
-        return -EINVAL;
+        return -ENOENT;
 
     if (path[0] == '/')
     {

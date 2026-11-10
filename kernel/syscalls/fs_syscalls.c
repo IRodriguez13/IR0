@@ -133,6 +133,8 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
   len = copy_path_from_user(path_copy, user_path, sizeof(path_copy));
   if (len < 0)
     return (int)len;
+  if (path_copy[0] == '\0')
+    return -ENOENT;
 
   if (path_copy[0] == '/')
   {
@@ -789,7 +791,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   char resolved_path[256];
   int ir0_flags;
   int linux_open_flags = flags;
-  size_t plen;
   long len;
   int path_rc;
 
@@ -806,11 +807,8 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (len < 0)
     return len;
 
-  plen = 0;
-  while (path_copy[plen] && plen < sizeof(path_copy))
-    plen++;
-  if (plen == 0 || plen >= sizeof(path_copy))
-    return -EINVAL;
+  if (len == 0)
+    return -ENOENT;
 
   ir0_flags = linux_open_flags_to_ir0(flags);
   ir0_open_flags_log_translation(flags, ir0_flags);

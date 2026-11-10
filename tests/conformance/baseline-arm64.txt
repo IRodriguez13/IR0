@@ -10,7 +10,7 @@ dir_openat_dirfd FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_
 fd_fcntl_flags FAIL  # F_SETFL drops O_APPEND (red: fs_setfl_append_sticks)
 fs_ftruncate TCONF  # ftruncate is ENOSYS
 fs_lseek_whence FAIL  # lseek on a pipe succeeds, Linux ESPIPE (red: fs_lseek_pipe_espipe)
-fs_open_errors FAIL  # openat("") is EINVAL, Linux ENOENT (red: fs_empty_path_enoent)
+fs_open_errors FAIL  # openat("f/x") on a regular file f is ENOENT, Linux ENOTDIR
 fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
 fs_unlink_open_file TCONF  # pread64 is ENOSYS
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
@@ -27,7 +27,7 @@ proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: si
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
-stat_empty_path FAIL  # newfstatat("") is EINVAL, Linux ENOENT (red: fs_empty_path_enoent)
+stat_empty_path FAIL  # newfstatat("f/x") on a regular file f is ENOENT, Linux ENOTDIR
 stat_fifo_and_dir FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 stat_fstat_regular FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 stat_hardlink TCONF  # linkat is ENOSYS

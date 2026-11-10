@@ -238,6 +238,7 @@ int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
   char resolved[256];
   stat_t kst;
   int64_t rc;
+  char first;
 
   if (!current_process || !buf)
     return -EFAULT;
@@ -246,7 +247,18 @@ int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
     return -EFAULT;
 
   memset(&kst, 0, sizeof(kst));
-  rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  /* Linux vfs_fstatat(): AT_EMPTY_PATH with "" describes dirfd itself. */
+  if ((flags & IR0_AT_EMPTY_PATH) &&
+      copy_from_user(&first, pathname, sizeof(first)) == 0 && first == '\0')
+  {
+    if (dirfd != IR0_AT_FDCWD)
+      return sys_fstat(dirfd, buf);
+    rc = fs_resolve_at_empty(dirfd, resolved, sizeof(resolved));
+  }
+  else
+  {
+    rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  }
   if (rc != 0)
     return rc;
 
@@ -395,7 +407,7 @@ static int fs_resolve_fchmodat_path(int dirfd, const char *pathname, char *resol
   if (path_copy[0] == '\0')
   {
     if (!(flags & IR0_AT_EMPTY_PATH))
-      return -EINVAL;
+      return -ENOENT;
     return fs_resolve_at_empty(dirfd, resolved, resolved_sz);
   }
 
