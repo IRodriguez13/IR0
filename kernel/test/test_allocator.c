@@ -209,3 +209,53 @@ void ktest_heap_masks_irqs(void)
 
 	KTEST_END();
 }
+
+/*
+ * kfree must recognise what is not a live kmalloc block: a kmalloc_aligned
+ * pointer, an interior pointer, and a stale pointer whose old header a
+ * coalesce absorbed and a later allocation zeroed (is_free reads 0 there,
+ * so the plain double-free check passes it).
+ */
+void ktest_heap_block_check(void)
+{
+	uint8_t *interior;
+	void *aligned;
+	void *a;
+	void *b;
+	void *c;
+	void *guard;
+
+	KTEST_BEGIN("heap_block_check");
+
+	a = kmalloc(64);
+	b = kmalloc(64);
+	guard = kmalloc(64);
+	KASSERT(a != NULL);
+	KASSERT(b != NULL);
+	KASSERT(guard != NULL);
+	KASSERT_EQ(heap_block_check(a), HEAP_BLOCK_OK);
+	KASSERT_EQ(heap_block_check(b), HEAP_BLOCK_OK);
+
+	/* b coalesces into a; the merged block heads the free list. */
+	kfree(a);
+	KASSERT_EQ(heap_block_check(a), HEAP_BLOCK_FREE);
+	kfree(b);
+	c = kmalloc(150);
+	KASSERT(c == a);
+	KASSERT_EQ(heap_block_check(c), HEAP_BLOCK_OK);
+	KASSERT_EQ(heap_block_check(b), HEAP_BLOCK_BAD);
+	kfree(c);
+	kfree(guard);
+
+	interior = kmalloc(256);
+	KASSERT(interior != NULL);
+	KASSERT_EQ(heap_block_check(interior + 64), HEAP_BLOCK_BAD);
+	kfree(interior);
+
+	aligned = kmalloc_aligned(64, 64);
+	KASSERT(aligned != NULL);
+	KASSERT_EQ(heap_block_check(aligned), HEAP_BLOCK_BAD);
+	kfree_aligned(aligned);
+
+	KTEST_END();
+}

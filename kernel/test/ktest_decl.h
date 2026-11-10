@@ -20,6 +20,7 @@ void ktest_resource_procfs_visibility(void);
 void ktest_allocator(void);
 void ktest_allocator_stats(void);
 void ktest_heap_masks_irqs(void);
+void ktest_heap_block_check(void);
 void ktest_pmm_skips_reserved_ranges(void);
 void ktest_path(void);
 void ktest_string(void);
