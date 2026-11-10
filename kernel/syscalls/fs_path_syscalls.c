@@ -41,8 +41,12 @@
 #include <ir0/syscall.h>
 #include <ir0/memfd.h>
 #include <ir0/posix_shm.h>
+#include <ir0/kmem.h>
 #include <stddef.h>
 #include <string.h>
+
+/* Linux strndup_user(.., PATH_MAX) for the mount(2) source and type. */
+#define MOUNT_STRING_MAX 4096
 
 static void process_cwd_ensure_absolute(process_t *proc)
 {
@@ -55,33 +59,43 @@ static void process_cwd_ensure_absolute(process_t *proc)
 }
 
 /*
- * Linux mount(2): mount(source, target, fstype, flags, data).
- * Remount: flags & MS_REMOUNT — source/fstype/data ignored (man7 mount.2).
- * Legacy IR0 recovery still accepts mount("remount", path, "ro"|"rw", 0, NULL).
+ * Linux copy_mount_string(): strndup_user(@ustr, PATH_MAX). A NULL string
+ * stays NULL; one with no NUL in its first PATH_MAX bytes is -EINVAL.
  */
-int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
-		  unsigned long flags, const void *data)
+static int mount_copy_string(const char *ustr, char **out)
+{
+  char *k;
+  long len;
+
+  *out = NULL;
+  if (!ustr)
+    return 0;
+  k = kmalloc(MOUNT_STRING_MAX);
+  if (!k)
+    return -ENOMEM;
+  len = strncpy_from_user(k, ustr, MOUNT_STRING_MAX);
+  if (len < 0 || len == MOUNT_STRING_MAX)
+  {
+    kfree(k);
+    return len < 0 ? (int)len : -EINVAL;
+  }
+  *out = k;
+  return 0;
+}
+
+/* sys_mount() after the source and type strings reached the kernel. */
+static int64_t mount_strings(const char *dev_copy, const char *mountpoint,
+                             const char *fstype, unsigned long flags)
 {
   char mountpoint_resolved[256];
-  char dev_copy[256];
   char dev_resolved[256];
-  char fstype_buf[32];
   const char *mount_path;
   const char *dev_path;
   const char *mount_fstype;
   int dev_is_pseudo = 0;
-  long len;
   int rc;
 
-  (void)data;
-
-  if (!current_process)
-    return -ESRCH;
-
   if (!mountpoint)
-    return -EFAULT;
-
-  if (!access_ok(mountpoint, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(mountpoint, mountpoint_resolved,
@@ -95,29 +109,10 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   if (flags & IR0_MS_REMOUNT)
     return vfs_remount(mount_path, flags);
 
-  if (!dev)
+  if (!dev_copy)
     return -EFAULT;
 
-  if (!access_ok(dev, 256))
-    return -EFAULT;
-  if (fstype && !access_ok(fstype, 32))
-    return -EFAULT;
-
-  len = strncpy_from_user(dev_copy, dev, sizeof(dev_copy));
-  if (len < 0 || (size_t)len == sizeof(dev_copy))
-    return -EFAULT;
-
-  if (fstype)
-  {
-    len = strncpy_from_user(fstype_buf, fstype, sizeof(fstype_buf));
-    if (len < 0 || (size_t)len == sizeof(fstype_buf))
-      return -EFAULT;
-    mount_fstype = fstype_buf[0] ? fstype_buf : CONFIG_ROOT_FILESYSTEM;
-  }
-  else
-  {
-    mount_fstype = CONFIG_ROOT_FILESYSTEM;
-  }
+  mount_fstype = fstype && fstype[0] ? fstype : CONFIG_ROOT_FILESYSTEM;
 
   /* tmpfs / 9p accept pseudo device strings (none, mount_tag, …). */
   if (strcmp(mount_fstype, "tmpfs") == 0 &&
@@ -212,6 +207,37 @@ int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
   }
 
   return 0;
+}
+
+/*
+ * Linux mount(2): mount(source, target, fstype, flags, data).
+ * Remount: flags & MS_REMOUNT — source/fstype/data ignored (man7 mount.2).
+ * Legacy IR0 recovery still accepts mount("remount", path, "ro"|"rw", 0, NULL).
+ *
+ * As in Linux ksys_mount(), the type and the source are copied before the
+ * target is looked up.
+ */
+int64_t sys_mount(const char *dev, const char *mountpoint, const char *fstype,
+		  unsigned long flags, const void *data)
+{
+  char *fstype_k;
+  char *dev_k;
+  int64_t rc;
+
+  (void)data;
+
+  if (!current_process)
+    return -ESRCH;
+
+  rc = mount_copy_string(fstype, &fstype_k);
+  if (rc != 0)
+    return rc;
+  rc = mount_copy_string(dev, &dev_k);
+  if (rc == 0)
+    rc = mount_strings(dev_k, mountpoint, fstype_k, flags);
+  kfree(dev_k);
+  kfree(fstype_k);
+  return rc;
 }
 
 int64_t sys_umount(const char *target, int flags)

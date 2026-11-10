@@ -257,12 +257,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     if (strcmp(resolved_fstype, "ramfs") == 0)
         resolved_fstype = "tmpfs";
 
-    for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
-    {
-        if (strcmp(existing->path, mount_path) == 0)
-            return -EBUSY;
-    }
-
+    /* Linux do_new_mount(): an unknown type is -ENODEV before anything else. */
     struct vfs_fstype *ft = NULL;
     for (struct vfs_fstype *t = fs_types; t; t = t->next) {
         if (strcmp(t->name, resolved_fstype) == 0) {
@@ -272,6 +267,12 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     }
     if (!ft)
         return -ENODEV;
+
+    for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
+    {
+        if (strcmp(existing->path, mount_path) == 0)
+            return -EBUSY;
+    }
 
     struct vfs_mount *m = kmalloc(sizeof(*m));
     if (!m)
