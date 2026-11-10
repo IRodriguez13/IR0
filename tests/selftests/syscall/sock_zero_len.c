@@ -36,6 +36,8 @@ struct probe_sockaddr_in
 /* 127.0.0.1:9 (discard), both in network byte order on little endian. */
 #define PROBE_LOOPBACK_BE 0x0100007FU
 #define PROBE_PORT9_BE 0x0900U
+/* errno(3) EAGAIN; nolibc has no <errno.h>. */
+#define LINUX_EAGAIN 11
 /* 127.0.0.1:7777, the port of the receiving datagram socket. */
 #define PROBE_PORT7777_BE 0x611EU
 
@@ -59,7 +61,7 @@ int main(void)
 	int udp;
 	int udp_rx;
 
-	ksft_set_plan(9);
+	ksft_set_plan(11);
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
 	ksft_test_result(ok_ret(ret, 0), "socketpair_stream");
@@ -117,5 +119,25 @@ int main(void)
 		ret = recv(udp_rx, buf, sizeof(buf), MSG_DONTWAIT);
 	ksft_test_result(ok_ret(ret, 2) && buf[0] == 'a' && buf[1] == 'b',
 			 "dgram_loopback_roundtrip");
+
+	/* An empty datagram is a datagram: it is sent and received as 0. */
+	errno = 0;
+	ret = sendto(udp, &byte, 0, 0, (const void *)&rx_sin, sizeof(rx_sin));
+	if (ret == 0)
+		ret = recv(udp_rx, buf, sizeof(buf), MSG_DONTWAIT);
+	ksft_test_result(ok_ret(ret, 0), "dgram_empty_datagram_received");
+
+	/* A zero-length read still consumes the datagram (truncated). */
+	errno = 0;
+	ret = sendto(udp, "ab", 2, 0, (const void *)&rx_sin, sizeof(rx_sin));
+	if (ret == 2)
+		ret = recv(udp_rx, buf, 0, MSG_DONTWAIT);
+	if (ret == 0)
+	{
+		ret = recv(udp_rx, buf, sizeof(buf), MSG_DONTWAIT);
+		if (ret == -1 && errno == LINUX_EAGAIN)
+			ret = 0;
+	}
+	ksft_test_result(ok_ret(ret, 0), "dgram_recv_zero_len_consumes");
 	return ksft_exit();
 }
