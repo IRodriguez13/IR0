@@ -14,7 +14,6 @@
 
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
-#include <ir0/switch.h>
 #include <ir0/task.h>
 
 #include "switch_early.h"
@@ -47,7 +46,7 @@ void set_current_kernel_stack(struct process *p)
  * outgoing task keeps its kernel continuation. SP_EL0 is restored from the
  * exception frame (asm/exc_frame.h), not programmed here.
  */
-void context_backend_switch(task_t *prev, task_t *next)
+void __switch_to(task_t *prev, task_t *next)
 {
 	if (!next)
 		return;

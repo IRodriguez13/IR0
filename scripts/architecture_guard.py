@@ -1668,7 +1668,9 @@ CONTEXT_BACKEND_INCLUDE_ALLOW = {
     "sched/switch/context_switch.c",
     "sched/switch/kernel_resume.c",
     "arch/x86-64/sources/context.c",
+    "arch/x86-64/sources/user_mode.c",
     "arch/arm64/sources/context.c",
+    "arch/arm64/sources/first_switch.c",
 }
 
 PORTABLE_NO_ARCH_CALL_TREES = [

@@ -64,8 +64,12 @@ See [`KTM.md`](KTM.md) (Class B context). Product repair: `IR0_CLASS_B_REPAIR=1`
 
 - Scheduling integrates with process and signal handling.
 - Queue mutation paths are serialized by `rq_lock()`.
-- Context-switch assembly remains architecture-specific behind
-  **`first_switch_to`** and **`switch_to`** (ISA asm private).
+- Context switch follows Linux: `schedule()` → `sched_switch_to()` →
+  `switch_to(prev, next)` → arch `__switch_to()`. Every task sleeps on its
+  own kernel stack and continues when `switch_to()` returns; userspace is
+  re-entered only through the task's syscall/exception exit (first run:
+  `switch_to_user_task()`, Linux `ret_from_fork`). `switch_to(NULL, next)`
+  is the first transfer from boot.
 
 ## Strengths
 

@@ -19,7 +19,8 @@ IR0 planifica procesos mediante una **fachada portable**, un **núcleo** y
 prioridad** (`=2`). Round-robin (`0`) y el alias de nombre CFS (`1`) siguen
 disponibles. Planificación **un CPU**; preemption por timer diferida.
 
-La primera transferencia pasa por `first_switch_to(next)`.
+La primera transferencia es `switch_to(NULL, next)`, que delega en el hook
+de arquitectura `first_switch_to()`.
 El código portable **no** embebe `iretq`.
 
 ## 2. Arquitectura interna
@@ -31,7 +32,9 @@ El código portable **no** embebe `iretq`.
 | `sched/core.h` | Contrato privado núcleo/política (`sched_pick_next`, `rq_lock`/`rq_unlock`) |
 | `sched/prio.c` | Política por defecto (policy 2) |
 | `sched/rr.c` | Lista de listos (policy 0 / 1) |
-| `first_switch_to` | Primera entrada (propiedad de arch) |
+| `sched/switch/context_switch.c` | `switch_to(prev, next)` → `__switch_to()` de la arquitectura |
+| `sched/switch/kernel_resume.c` | Estado de syscall bloqueada + recuperación Class B |
+| `sched/switch/diag.c` | `switch_trace()`: tags CTX CLASSIFY |
 
 **Policy `1` (`cfs`):** mismo objeto de política que RR; no existe `cfs_sched.c`
 ni un wrapper que incluya el runqueue de RR.
@@ -39,7 +42,8 @@ ni un wrapper que incluya el runqueue de RR.
 ## 3. Flujo
 
 `schedule()` → `sched_pick_next()` de la política → `sched_switch_to` →
-`first_switch_to` / `switch_to`.
+`switch_to(NULL, next)` (primera vez) / `switch_to(prev, next)`, que vuelve
+cuando `prev` corre otra vez sobre su propia pila de kernel.
 
 ## 4. Límites del subsistema
 

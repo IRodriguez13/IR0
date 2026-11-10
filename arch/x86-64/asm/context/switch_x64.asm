@@ -1,6 +1,6 @@
 ; SPDX-License-Identifier: GPL-3.0-only
 ;
-; Raw x86-64 context mechanics behind context_backend_switch().
+; Raw x86-64 context mechanics behind __switch_to().
 
 global switch_context_x64
 global iretq_checkpoint_buf

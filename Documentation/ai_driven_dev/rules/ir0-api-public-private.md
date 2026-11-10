@@ -60,10 +60,13 @@ Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm`.
 
 ### Context switch (canónico)
 
-- Pública: `switch_to` en `includes/ir0/context.h`.
-- Sched interna: `sched_switch_to` (`sched/core.c`) → `switch_to`.
-- ISA privada: `switch_context_x64` / `switch_context_arm64` solo en el dispatcher.
-- Entrada ring 3: `switch_to_user` / `switch_to_user_task` — mismo polimorfismo, otro contrato; no mezclar con `switch_to`.
+Modelo Linux: cada tarea duerme en su propia pila de kernel y `switch_to()` vuelve cuando la tarea corre otra vez; se vuelve a userspace solo por la salida normal de syscall/excepción (o, en la primera corrida, por `switch_to_user_task`, como `ret_from_fork`). Nada de reparchear frames de usuario para "reanudar" syscalls.
+
+- Pública (`includes/ir0/context.h`): `switch_to(prev, next)` (prev == NULL: primera transferencia, no vuelve), `switch_to_user_task`, `switch_to_user`.
+- Sched interna: `schedule()` → `sched_switch_to(next)` (`sched/core.c`) → `switch_to`.
+- Hooks de arquitectura (`includes/ir0/context_backend.h`, solo `sched/switch/` y `arch/`): `__switch_to`, `first_switch_to`, `set_current_kernel_stack` y los tres hooks de recuperación Class B.
+- ISA privada: `switch_context_x64` / `switch_context_arm64` solo detrás de `__switch_to`.
+- Sin `#if` ni nombres de registros en `sched/switch/`; los diagnósticos van por `switch_trace()` (`sched/switch/diag.c`).
 
 ## Operations validate themselves (minimal variants)
 

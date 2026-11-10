@@ -15,7 +15,6 @@
 #include <ir0/context_backend.h>
 #include <ir0/task.h>
 #include <ir0/process.h>
-#include <ir0/switch.h>
 #include <asm/process_ctx_invariant.h>
 #include <asm/context.h>
 #include <ir0/ktm/klog.h>
@@ -209,7 +208,7 @@ static void arch_fixup_user_task_for_iretq(process_t *proc)
 	process_apply_syscall_frame_to_task(&proc->task, sf, task_get_retval(&proc->task));
 }
 
-void context_backend_switch(task_t *prev, task_t *next)
+void __switch_to(task_t *prev, task_t *next)
 {
 	process_t *next_proc = next ? task_to_process(next) : NULL;
 

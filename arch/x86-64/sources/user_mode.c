@@ -22,6 +22,7 @@
 #include <ir0/paging.h>
 #include <ir0/tlb.h>
 #include <asm/context.h>
+#include <ir0/context_backend.h>
 
 #define USER_CANON_MIN 0x00400000ULL
 #define USER_CANON_MAX 0x00007FFFFFFFFFFFULL

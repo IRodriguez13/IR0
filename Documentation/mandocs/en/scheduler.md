@@ -10,7 +10,7 @@
 | Status | stable |
 | Depends on | process, memory |
 | Man page | IR0-scheduler (section 7) |
-| Primary sources | `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`, `sched/rr.c`, `sched/prio.c`, `arch/common/arch_portable.h` (`first_switch_to`), `sched/switch/switch_x64.asm`, `drivers/timer/clock_system.c` |
+| Primary sources | `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`, `sched/rr.c`, `sched/prio.c`, `sched/switch/context_switch.c`, `includes/ir0/context_backend.h`, `arch/x86-64/asm/context/switch_x64.asm`, `drivers/timer/clock_system.c` |
 
 ## 1. Overview
 
@@ -22,7 +22,8 @@ Round-robin (`0`) and CFS-name alias (`1`) remain available. Scheduling is
 PIT handler.
 
 The first transfer into a newly runnable task goes through
-`first_switch_to(next)` (x86: `user_mode.c`; ARM: `first_switch.c`).
+`switch_to(NULL, next)`, which hands over to the arch hook
+`first_switch_to()` (x86: `user_mode.c`; ARM: `first_switch.c`).
 Portable backend code must **not** embed `iretq` / ISA entry frames.
 
 ## 2. Internal architecture
@@ -35,8 +36,9 @@ Portable backend code must **not** embed `iretq` / ISA entry frames.
 | `sched/prio.c` | Default priority bands when `CONFIG_SCHEDULER_POLICY=2` |
 | `sched/rr.c` | Ready list for policy `0` or `1` |
 | `process_t::state` | `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE` |
-| `first_switch_to` | First user/kernel entry (arch-owned) |
-| `switch_to.c` | Later switches → `switch_context_x64` / ARM path |
+| `sched/switch/context_switch.c` | `switch_to(prev, next)` → arch `__switch_to()` |
+| `sched/switch/kernel_resume.c` | Blocked-syscall bookkeeping + Class B recovery before the continuation runs |
+| `sched/switch/diag.c` | `switch_trace()`: the CTX CLASSIFY tags |
 
 **Policy `1` (name `cfs`):** uses the **RR policy object** with a different
 policy name. There is no `cfs_sched.c` and no fake CFS wrapper that includes
@@ -50,8 +52,9 @@ peer runqueue internals.
 2. If queue empty → return (idle loop handles HLT).
 3. Pick next runnable; skip `ZOMBIE` and `BLOCKED`.
 4. The core calls `sched_switch_to(next)`.
-5. First switch: `first_switch_to(next)`.
-6. Later: `switch_to(&prev->task, &next->task)`.
+5. First switch: `switch_to(NULL, &next->task)` (does not return).
+6. Later: `switch_to(&prev->task, &next->task)`; it returns when @prev runs
+   again, on its own kernel stack.
 
 **Wake paths** set `PROCESS_READY` and may call `schedule`
 (poll/sleep/stdin/pipe/IPC).
@@ -76,7 +79,7 @@ peer runqueue internals.
 | Process | `sched_add` / `sched_remove` on spawn/exit |
 | Syscalls | Block in handler; wake from idle poll |
 | Timer | PIT quantum counting (preemption hook deferred) |
-| Arch | `first_switch_to`, `switch_context_x64` / ARM |
+| Arch | `__switch_to`, `first_switch_to`, `set_current_kernel_stack` |
 
 ## 7. Invariants
 

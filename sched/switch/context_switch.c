@@ -46,16 +46,14 @@ static void context_prepare_next(task_t *next)
 	set_tls(process_tls_get(next_proc));
 }
 
-void context_prepare_first(struct process *next)
-{
-	if (!next)
-		return;
-	context_prepare_next(&next->task);
-}
-
 void switch_to(task_t *prev, task_t *next)
 {
 	context_prepare_next(next);
+	if (!prev)
+	{
+		first_switch_to(task_to_process(next));
+		return;
+	}
 	context_prepare_kernel_resume(next);
-	context_backend_switch(prev, next);
+	__switch_to(prev, next);
 }

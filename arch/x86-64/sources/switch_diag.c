@@ -12,7 +12,7 @@
 #include <ir0/klog.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
-#include <ir0/switch.h>
+#include <asm/context.h>
 #include <string.h>
 
 /* Called from switch_x64.asm when kernel_ret RIP is outside kernel .text. */

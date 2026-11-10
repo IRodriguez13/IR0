@@ -48,8 +48,7 @@ void sched_switch_to(process_t *next)
 	if (!sched_has_running_context)
 	{
 		sched_has_running_context = 1;
-		context_prepare_first(next);
-		first_switch_to(next);
+		switch_to(NULL, &next->task);
 		panic("Returned from first context switch");
 	}
 
