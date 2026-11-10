@@ -1845,25 +1845,20 @@ int64_t sys_getrlimit(unsigned int resource, void *rlim)
 
 /**
  * sys_sigreturn - Return from signal handler (rt_sigreturn)
- * @ctx: Ignored on the musl/Linux x86-64 path (see below)
  *
  * Restores CPU state saved at signal delivery. Never returns on success.
  *
- * Linux x86-64: musl __restore_rt is just
+ * Linux rt_sigreturn takes no argument: musl __restore_rt is just
  *   mov $__NR_rt_sigreturn, %eax; syscall
- * with no sigcontext* in rdi. The kernel finds the rt_sigframe from the
- * user stack pointer (after the handler's `ret` into the restorer, RSP
- * points at our struct sigframe). Prefer that user copy; fall back to the
- * kernel cache only if the stack frame is unreadable.
+ * and the handler's return leaves the user stack pointer at our struct
+ * sigframe. The frame is copied from there and from nowhere else; a frame
+ * that cannot be copied in or does not validate ends in SIGSEGV.
  */
-int64_t sys_sigreturn(struct sigcontext *ctx)
+int64_t sys_sigreturn(void)
 {
   struct sigframe user_frame;
-  struct sigcontext restore_copy;
-  struct sigcontext *restore_ctx;
+  struct sigcontext *restore_ctx = &user_frame.ctx;
   uint64_t user_sp;
-  int from_user = 0;
-  int from_cache = 0;
 
   if (!current_process)
     return -ESRCH;
@@ -1872,34 +1867,13 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
     return 0;
 
   user_sp = process_syscall_sp(current_process);
-  if (user_sp >= 0x400000UL &&
-      access_ok((const void *)(uintptr_t)user_sp,
-				sizeof(user_frame)) &&
-      copy_from_user(&user_frame, (const void *)(uintptr_t)user_sp,
-		     sizeof(user_frame)) == 0)
+  if (copy_from_user(&user_frame, (const void *)(uintptr_t)user_sp,
+		     sizeof(user_frame)) != 0)
   {
-    restore_ctx = &user_frame.ctx;
-    from_user = 1;
-  }
-  else
-  {
-    restore_ctx = process_saved_context_peek(current_process);
-    if (!restore_ctx)
-    {
-      if (!ctx ||
-          !access_ok(ctx, sizeof(struct sigcontext)))
-        return -EFAULT;
-      restore_ctx = ctx;
-    }
-    else
-      from_cache = 1;
-
-    /* process_saved_context_clear() releases the cached context below. */
-    if (from_cache)
-    {
-      restore_copy = *restore_ctx;
-      restore_ctx = &restore_copy;
-    }
+    process_saved_context_clear(current_process);
+    current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);
+    handle_signals();
+    return -EFAULT;
   }
 
   if (!signal_sigcontext_validate_and_sanitize(restore_ctx))
@@ -1911,14 +1885,9 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
   }
 
   process_saved_context_clear(current_process);
-  if (from_user)
-  {
-    current_process->signal_mask = (uint32_t)user_frame.oldmask;
-    current_process->signal_mask_saved_valid = 0;
-    current_process->signal_frame_sp = 0;
-  }
-  else
-    signals_on_sigreturn(current_process);
+  current_process->signal_mask = (uint32_t)user_frame.oldmask;
+  current_process->signal_mask_saved_valid = 0;
+  current_process->signal_frame_sp = 0;
 
   /*
    * Blocked syscall interrupted by signal: resume from kernel_sleep_syscall_frame
@@ -2010,7 +1979,7 @@ int64_t sys_sigreturn(struct sigcontext *ctx)
   current_process->want_kernel_ret = 0;
   current_process->syscall_frame_fresh = 0;
   process_signal_enter_pending_clear(current_process);
-  if (from_user && user_frame.signum > 0 && user_frame.signum < _NSIG)
+  if (user_frame.signum > 0 && user_frame.signum < _NSIG)
     ir0_console_after_tty_read_signal(user_frame.signum);
   process_signal_last_delivered_clear(current_process);
   tls_restore_current();
