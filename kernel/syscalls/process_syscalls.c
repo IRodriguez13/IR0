@@ -120,6 +120,7 @@ int64_t sys_getgroups(int size, gid_t *list)
 
 int64_t sys_setgroups(size_t size, const gid_t *list)
 {
+	gid_t groups[IR0_NGROUPS_MAX];
 	size_t i;
 
 	if (!current_process)
@@ -128,19 +129,18 @@ int64_t sys_setgroups(size_t size, const gid_t *list)
 		return -EPERM;
 	if (size > IR0_NGROUPS_MAX)
 		return -EINVAL;
-	if (size > 0 && !list)
+	/* Copy the whole list first: a fault part-way must change nothing. */
+	if (size > 0 && copy_from_user(groups, list, size * sizeof(gid_t)) != 0)
 		return -EFAULT;
-	if (size > 0 &&
-	    !access_ok(list, size * sizeof(gid_t)))
-		return -EFAULT;
-
+	/* Linux groups_from_user: (gid_t)-1 is not a valid group. */
 	for (i = 0; i < size; i++)
 	{
-		gid_t g;
-		if (copy_from_user(&g, &list[i], sizeof(g)) != 0)
-			return -EFAULT;
-		current_process->groups[i] = g;
+		if (groups[i] == (gid_t)-1)
+			return -EINVAL;
 	}
+
+	for (i = 0; i < size; i++)
+		current_process->groups[i] = groups[i];
 	current_process->ngroups = (uint8_t)size;
 	if (size == 0)
 	{
