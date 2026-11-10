@@ -370,26 +370,57 @@ void *heap_alloc(size_t size)
 
 /* FREE WITH O(1) BIDIRECTIONAL COALESCING                                   */
 
+/*
+ * Classify @ptr as the start of a live heap block, a free block or not a
+ * block at all. Caller holds heap_lock; *@out gets the header when OK.
+ */
+static int heap_block_check_locked(const void *ptr, block_header_t **out)
+{
+	block_header_t *block;
+
+	block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
+	if ((void *)block < allocator.heap_start ||
+	    (void *)block >= allocator.heap_end)
+		return HEAP_BLOCK_BAD;
+	if (block->is_free)
+		return HEAP_BLOCK_FREE;
+	*out = block;
+	return HEAP_BLOCK_OK;
+}
+
+int heap_block_check(const void *ptr)
+{
+	block_header_t *block;
+	unsigned long irq_flags;
+	int ret = HEAP_BLOCK_BAD;
+
+	if (!ptr)
+		return HEAP_BLOCK_BAD;
+	irq_flags = ir0_spin_lock_irqsave(&heap_lock);
+	if (allocator.initialized)
+		ret = heap_block_check_locked(ptr, &block);
+	ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
+	return ret;
+}
+
 /* Caller holds heap_lock. */
 static void heap_free_locked(void *ptr)
 {
+	block_header_t *block = NULL;
+	int check;
+
 	if (!allocator.initialized)
 		return;
 
-	/* Get block header */
-	block_header_t *block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
-
-	/* Validate block is within heap bounds */
-	if ((void *)block < allocator.heap_start || (void *)block >= allocator.heap_end)
-    {
+	check = heap_block_check_locked(ptr, &block);
+	if (check == HEAP_BLOCK_BAD)
+	{
 		klog_print("[ALLOC] BUG: Out of bounds allocation!!");
 		panicex("Out of bounds allocation", 0, __FILE__, __LINE__, "heap_free()");
 		return;
 	}
-
-	/* Detect double-free: block is already on the free list */
-	if (block->is_free)
-    {
+	if (check == HEAP_BLOCK_FREE)
+	{
 		klog_print("[ALLOC] BUG: double-free detected\n");
 		panicex("double-free detected", 0, __FILE__, __LINE__, "heap_free()");
 		return;
