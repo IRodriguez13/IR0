@@ -15,46 +15,26 @@
 #include "io_syscalls.h"
 #include <ir0/fd_resource.h>
 #include "syscalls_glue.h"
-#include "epoll_syscalls.h"
-#include <kernel/syscalls.h>
-#include <ir0/process.h>
-#include <ir0/copy_user.h>
-#include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/poll.h>
-#include <ir0/select.h>
-#include <ir0/time.h>
 #include <ir0/console.h>
 #include <ir0/devfs.h>
-#include <ir0/pty_devfs.h>
 #include <ir0/sched.h>
-#include <ktm.h>
-#include <ir0/fcntl.h>
 #include <ir0/fd_dispatch.h>
 #include <ir0/io_async.h>
 #include <ir0/clock.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/clock_wait.h>
-#include <ir0/signals.h>
 #include <ir0/syscall.h>
-#include <ir0/arch_port.h>
 #include <ir0/cpu.h>
-#include <ir0/paging.h>
-#include <config.h>
-
-#include <ir0/memfd.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
-#include <ir0/sock_udp.h>
 #include <ir0/sock_stream.h>
 #include <ir0/sock_icmp.h>
 #include <ir0/sock_inet_ioctl.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/fd_get.h>
-#include <ir0/pipe.h>
 #include <ir0/pipe_fd.h>
-#include <string.h>
-#include <ir0/kernel.h>
 
 static int devfs_initialized;
 

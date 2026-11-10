@@ -2764,7 +2764,6 @@ INCLUDE_LAYOUT_BASELINE = frozenset({
     "duplicate drivers/virtio/virtio_9p.c <ir0/ktm/klog.h>",
     "duplicate fs/devfs.c <ir0/arch_cpu.h>",
     "duplicate fs/devfs_internal.h <string.h>",
-    "duplicate kernel/syscalls/syscall_dispatch.c <config.h>",
     "duplicate ktm/klog.c <ir0/clock.h>",
 })
 

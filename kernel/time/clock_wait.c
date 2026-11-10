@@ -15,7 +15,6 @@
 #include <ir0/clock_wait.h>
 #include <ir0/clock.h>
 #include <ir0/process.h>
-#include <ir0/errno.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
 #include <ir0/arch_port.h>

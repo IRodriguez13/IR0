@@ -14,22 +14,18 @@
 
 #include <ir0/signals.h>
 #include <ir0/console.h>
-#include <ir0/abi/signal_contract.h>
 #include <ir0/sched.h>
 #include <ir0/clock.h>
 #include <ir0/paging.h>
 #include <ir0/kmem.h>
-#include <ir0/task_ops.h>
 #include <ir0/signal_irq.h>
 #include <ir0/sigtramp.h>
-#include <ir0/tls.h>
 #include <ir0/fault.h>
 #include <ir0/oops.h>
-#include <config.h>
 #include <kernel/process.h>
-#include <stddef.h>
 #include <string.h>
 #include <ktm.h>
+#include <config.h>
 
 /* Where signal_setup_frame() left the handler frame. */
 struct signal_frame_setup

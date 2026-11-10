@@ -16,9 +16,6 @@
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
-#include <ir0/errno.h>
-#include <ir0/copy_user.h>
-#include <string.h>
 #include <ir0/kernel.h>
 
 #define IR0_FUTEX_MAX_WAITERS 64

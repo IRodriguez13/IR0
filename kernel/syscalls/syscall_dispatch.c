@@ -14,45 +14,28 @@
 
 #include "syscall_dispatch.h"
 #include <ir0/ktm/user_canary.h>
-#include <config.h>
-#include "process.h"
-#include <kernel/syscalls.h>
 #include "fs_syscalls.h"
 #include "fs_path_syscalls.h"
 #include "mm_syscalls.h"
 #include "socket_syscalls.h"
-#include "process_syscalls.h"
 #include "io_syscalls.h"
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
-#include <ir0/syscall_id.h>
 #include <ir0/syscall_table.h>
 #include <ir0/kexec.h>
-#include <ir0/signals.h>
-#include <ir0/futex.h>
-#include <ir0/sock_udp.h>
-#include <ir0/clone.h>
-#include <ir0/utsname.h>
 #include <ir0/console_backend.h>
 #include <ir0/input_backend.h>
-#include <ir0/serial_io.h>
-#include <ir0/errno.h>
-#include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/abi/mmap_contract.h>
-#include <ir0/arch_port.h>
 #include <ir0/cpu.h>
 #include <ir0/sysv_shm.h>
 #include <ir0/memfd.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
-#include <ir0/time.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <d1_12_read_diag.h>
 #include <config.h>
-#include <stddef.h>
-#include <stdint.h>
 
 /* Wrappers to adapt IR0 handlers to uniform 6-arg signature */
 #define WRAP0(h) \
