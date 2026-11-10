@@ -24,6 +24,7 @@
 typedef struct block_header {
 	size_t size;               /* Size of this block (including header AND footer) */
 	int is_free;               /* 1 if free, 0 if allocated */
+	uint32_t magic;            /* heap_block_magic(this header) */
 	struct block_header *next; /* Next block in free list */
 	struct block_header *prev; /* Previous block in free list */
 } block_header_t;
@@ -49,6 +50,21 @@ static struct {
 
 /* kmalloc/kfree run from IRQ and network paths: every list walk is locked. */
 static ir0_spinlock_t heap_lock;
+
+/*
+ * Keyed by the header address, so a header read out of user data, an
+ * interior pointer or a header copied elsewhere does not match. Fits in
+ * the padding after is_free: the header stays 32 bytes.
+ */
+#define HEAP_BLOCK_MAGIC 0x1e0b10c5U
+
+_Static_assert(sizeof(block_header_t) % 16 == 0,
+	       "heap blocks hand out 16-byte aligned pointers");
+
+static inline uint32_t heap_block_magic(const block_header_t *header)
+{
+	return (uint32_t)((uintptr_t)header >> 4) ^ HEAP_BLOCK_MAGIC;
+}
 
 /* Get footer from header */
 static inline block_footer_t *get_footer(block_header_t *header)
@@ -128,6 +144,7 @@ static inline void set_block(block_header_t *header, size_t size, int is_free)
 {
 	header->size = size;
 	header->is_free = is_free;
+	header->magic = heap_block_magic(header);
 
 	block_footer_t *footer = get_footer(header);
 	footer->size = size;
@@ -378,9 +395,23 @@ static int heap_block_check_locked(const void *ptr, block_header_t **out)
 {
 	block_header_t *block;
 
+	block_footer_t *footer;
+	uintptr_t end = (uintptr_t)allocator.heap_end;
+
+	if (((uintptr_t)ptr & 15U) != 0U)
+		return HEAP_BLOCK_BAD;
 	block = (block_header_t *)((char *)ptr - sizeof(block_header_t));
 	if ((void *)block < allocator.heap_start ||
 	    (void *)block >= allocator.heap_end)
+		return HEAP_BLOCK_BAD;
+	if (block->magic != heap_block_magic(block))
+		return HEAP_BLOCK_BAD;
+	if (block->size < sizeof(block_header_t) + sizeof(block_footer_t) ||
+	    (block->size & 15U) != 0U ||
+	    block->size > end - (uintptr_t)block)
+		return HEAP_BLOCK_BAD;
+	footer = get_footer(block);
+	if (footer->size != block->size || footer->is_free != block->is_free)
 		return HEAP_BLOCK_BAD;
 	if (block->is_free)
 		return HEAP_BLOCK_FREE;
@@ -453,6 +484,7 @@ static void heap_free_locked(void *ptr)
 
 		/* Merge: extend current block to include next block */
 		size_t new_size = block->size + next_block->size;
+		next_block->magic = 0; /* absorbed: no longer a block */
 		set_block(block, new_size, 1);
 
 		allocator.coalesce_forward_count++;
@@ -477,6 +509,7 @@ static void heap_free_locked(void *ptr)
 
 		/* Merge: extend previous block to include current block */
 		size_t new_size = prev_block->size + block->size;
+		block->magic = 0; /* absorbed: no longer a block */
 		set_block(prev_block, new_size, 1);
 
 		/* Current block is now merged into prev_block */
