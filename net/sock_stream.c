@@ -1037,7 +1037,9 @@ static ssize_t sock_stream_recv_common(struct sock_stream *s, void *buf,
 	int peek = (flags & MSG_PEEK) != 0;
 	int fault;
 
-	if (!s || (s->state != SS_CONNECTED && s->state != SS_CONNECTING) || !buf)
+	/* A user buffer is checked by the copy; a zero length needs none. */
+	if (!s || (s->state != SS_CONNECTED && s->state != SS_CONNECTING) ||
+	    (!buf && !to_user))
 		return -EINVAL;
 
 #if CONFIG_ENABLE_NETWORKING

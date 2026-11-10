@@ -426,9 +426,9 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 
 	if (!current_process)
 		return -ESRCH;
-	if (!buf)
-		return -EINVAL;
-	if (!access_ok(buf, len))
+
+	/* Linux import_ubuf(): a zero length needs no buffer, NULL included. */
+	if (len && !access_ok(buf, len))
 		return -EFAULT;
 
 	ss = sock_stream_fd_lookup(fd);
@@ -525,8 +525,6 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 
 	if (!current_process)
 		return -ESRCH;
-	if (!buf)
-		return -EINVAL;
 
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
@@ -566,7 +564,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 	}
 
 	/* Datagram sockets below still consume before copying out. */
-	if (!access_ok(buf, len))
+	if (len && !access_ok(buf, len))
 		return -EFAULT;
 
 	if (addrlen)
