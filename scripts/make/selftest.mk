@@ -511,3 +511,38 @@ ir0-selftest-setgroups-efault-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM
 	@echo "✓ ir0-selftest-setgroups-efault-arm64"
 
 ir0-selftest-setgroups-efault: ir0-selftest-setgroups-efault-x86 ir0-selftest-setgroups-efault-arm64
+
+IR0_SELFTEST_X86_SIGNAL_RESTART := $(KERNEL_ROOT)/build/selftests/x86_64/signal_restart
+IR0_SELFTEST_ARM64_SIGNAL_RESTART := $(KERNEL_ROOT)/build/selftests/arm64/signal_restart
+
+.PHONY: ir0-selftest-signal-restart-x86 ir0-selftest-signal-restart-arm64 \
+	ir0-selftest-signal-restart
+
+$(IR0_SELFTEST_X86_SIGNAL_RESTART): tests/selftests/kernel/signal_restart.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 signal_restart
+
+$(IR0_SELFTEST_ARM64_SIGNAL_RESTART): tests/selftests/kernel/signal_restart.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 signal_restart
+
+# A caught signal ends a blocked syscall as on Linux: read and wait4 restart
+# with SA_RESTART and fail with EINTR without it; nanosleep reports the
+# time left.
+ir0-selftest-signal-restart-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SIGNAL_RESTART)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SIGNAL_RESTART) \
+		--done "ok 4 nanosleep_eintr_reports_remaining" \
+		--log $(HOST_TMP)/ir0-selftest-x86-signal-restart.log
+	@echo "✓ ir0-selftest-signal-restart-x86"
+
+ir0-selftest-signal-restart-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SIGNAL_RESTART)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SIGNAL_RESTART) \
+		--done "ok 4 nanosleep_eintr_reports_remaining" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-signal-restart.log
+	@echo "✓ ir0-selftest-signal-restart-arm64"
+
+ir0-selftest-signal-restart: ir0-selftest-signal-restart-x86 ir0-selftest-signal-restart-arm64

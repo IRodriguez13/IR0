@@ -40,6 +40,8 @@ SETGROUPS_EFAULT_SRC := syscall/setgroups_efault.c
 SETGROUPS_EFAULT_BIN := $(BUILD_DIR)/setgroups_efault
 INIT_EXIT_SRC := kernel/init_exit.c
 INIT_EXIT_BIN := $(BUILD_DIR)/init_exit
+SIGNAL_RESTART_SRC := kernel/signal_restart.c
+SIGNAL_RESTART_BIN := $(BUILD_DIR)/signal_restart
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -73,11 +75,11 @@ endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit clean
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit signal_restart clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit signal_restart
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -283,6 +285,18 @@ $(SETGROUPS_EFAULT_BIN): $(SETGROUPS_EFAULT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUI
 	fi
 	@echo "  CC      $(ARCH) selftest setgroups_efault"
 	@$(CC) $(CFLAGS) -o $@ $(SETGROUPS_EFAULT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+signal_restart: $(SIGNAL_RESTART_BIN)
+
+$(SIGNAL_RESTART_BIN): $(SIGNAL_RESTART_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest signal_restart"
+	@$(CC) $(CFLAGS) -o $@ $(SIGNAL_RESTART_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
