@@ -37,10 +37,18 @@ int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 		  const struct page_fault_info *info);
 
-/* Diagnostics only; no policy decisions (page_fault_diag.c). */
-void pf_diag_audit(const struct page_fault_info *info);
+/*
+ * Diagnostic hooks (mm/diag.c). They only report; the fault policy above
+ * decides. @stack is the opaque ISA frame, decoded only by arch hooks.
+ */
+struct ir0_fault;
+void pf_diag_fault_entry(const struct page_fault_info *info, uint64_t *stack);
 void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 		       const struct page_fault_info *info);
+void pf_diag_kernel_uaccess(const struct ir0_fault *fault, unsigned int pid,
+			    const char *comm);
+void pf_diag_kernel_fault(const struct ir0_fault *fault,
+			  const struct page_fault_info *info, unsigned int pid);
 
 /* Fault classes, called by mm_page_fault_handle(). */
 void pf_user_not_present(const struct page_fault_info *info, uint64_t *stack,

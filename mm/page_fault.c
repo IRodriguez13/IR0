@@ -14,8 +14,6 @@
 
 #include <ir0/oops.h>
 #include <ir0/fault.h>
-#include <ir0/mm_diag.h>
-#include <ir0/arch_pf_debug.h>
 #include "page_fault_internal.h"
 
 void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
@@ -50,42 +48,16 @@ void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)
 	int not_present;
 	int write;
 	int user;
-	int insn_fetch;
 
 	if (!info)
 		return;
 
-	pf_diag_audit(info);
-	pf_debug_stack_adjacent(stack, (uint64_t)info->address, info,
-				process_get_current());
-	pf_debug_memmove_fault(stack, (uint64_t)info->address, info,
-			       process_get_current());
+	pf_diag_fault_entry(info, stack);
 
 	fault_addr = (uint64_t)info->address;
 	not_present = !info->present;
 	write = info->write;
 	user = info->user;
-	insn_fetch = info->exec;
-
-	/*
-	 * Recorded, not emitted: this runs on every demand-paging fault, so
-	 * formatting or event emission here would dominate the path it
-	 * measures. The rows only reach the ring on a dump, which is what
-	 * turns a later crash into a fault history instead of a single
-	 * address.
-	 */
-	{
-		process_t *pf_cur = process_get_current();
-
-		mm_diag_record_page_fault(
-			pf_cur ? (uint32_t)pf_cur->task.pid : 0,
-			fault_addr,
-			(uint64_t)(unsigned)((not_present ? 1U : 0U) |
-					    (write ? 2U : 0U) |
-					    (user ? 4U : 0U) |
-					    (insn_fetch ? 8U : 0U)),
-			(uint64_t)info->ip);
-	}
 
 	if (user && not_present)
 	{

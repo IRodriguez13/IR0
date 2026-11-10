@@ -380,7 +380,6 @@ KERNEL_OBJS = \
 	arch/common/oops_port.o \
 	kernel/boot_flow.o \
 	kernel/kernel_wiring.o \
-	kernel/mm_diag.o \
 	kernel/boot_init.o \
 	kernel/boot_firmware_sysfs.o \
 	kernel/boot_params.o \
@@ -613,7 +612,7 @@ MEMORY_OBJS = \
 	mm/page_fault_user.o \
 	mm/page_fault_cow.o \
 	mm/page_fault_kernel.o \
-	mm/page_fault_diag.o \
+	mm/diag.o \
 	mm/swap/swap_header.o \
 	mm/swap/swap.o \
 	mm/swap/swap_io.o \

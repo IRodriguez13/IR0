@@ -6,9 +6,10 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: page_fault_diag.c
- * Description: Page-fault diagnostics (PF_AUDIT and the fatal-SIGSEGV dump),
- *              kept out of the fault policy in page_fault*.c.
+ * File: diag.c
+ * Description: MM diagnostics over KTM: page-fault audit and history, the
+ *              fatal-SIGSEGV dump, kernel-fault reports and fault injection.
+ *              Policy code in mm/ calls these hooks and never logs itself.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -16,10 +17,25 @@
 #include <config.h>
 #include <ir0/logging.h>
 #include <ir0/mm_diag.h>
+#include <ir0/oops.h>
+#include <ir0/fault.h>
+#include <ir0/arch_pf_debug.h>
+#include <ir0/ktm/deferred.h>
+#include <ir0/ktm/event.h>
+#include <ir0/ktm/fault.h>
+#include <ir0/ktm/user_canary.h>
+#include <ktm.h>
+#include <ktm_probe_diag.h>
 #include <mm/paging.h>
 #include "page_fault_internal.h"
 
-void pf_diag_audit(const struct page_fault_info *info)
+int mm_diag_fault_hit(const char *name)
+{
+	return KTM_FAULT_HIT(name);
+}
+
+static void pf_diag_audit(const struct page_fault_info *info)
+
 {
 #if !DEBUG_PAGE_FAULTS
 	(void)info;
@@ -28,9 +44,9 @@ void pf_diag_audit(const struct page_fault_info *info)
 	process_t *current = process_get_current();
 	uint64_t fault_addr;
 	int not_present;
-	uint64_t fault_rip;
-	uint64_t fault_cs;
-	uint64_t fault_rsp;
+	uint64_t fault_ip;
+	uint64_t fault_code_seg;
+	uint64_t fault_sp;
 	uint64_t *pte = NULL;
 	uint64_t pte_flags = 0;
 	int mapped = 0;
@@ -42,9 +58,9 @@ void pf_diag_audit(const struct page_fault_info *info)
 
 	fault_addr = (uint64_t)info->address;
 	not_present = !info->present;
-	fault_rip = (uint64_t)info->ip;
-	fault_cs = info->code_seg;
-	fault_rsp = (uint64_t)info->sp;
+	fault_ip = (uint64_t)info->ip;
+	fault_code_seg = info->code_seg;
+	fault_sp = (uint64_t)info->sp;
 
 	if (current && process_pgd(current))
 	{
@@ -59,7 +75,7 @@ void pf_diag_audit(const struct page_fault_info *info)
 		 (pf_mmap_region_for(current, fault_addr) != NULL);
 	in_userspace_range = mm_user_va_ok((uintptr_t)fault_addr, 1);
 
-	log_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_rip), (unsigned long long)(fault_cs), (unsigned long long)(fault_rsp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
+	log_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_ip), (unsigned long long)(fault_code_seg), (unsigned long long)(fault_sp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
 	log_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_mmap_region_for(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
 
@@ -73,15 +89,41 @@ void pf_diag_audit(const struct page_fault_info *info)
 	else if (info->user && not_present && in_vma)
 		log_debug("PF", "CLASSIFY USER_PF_SHOULD_BE_HANDLED");
 
-	if (!info->user && fault_rip != 0)
-		log_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_rip));
+	if (!info->user && fault_ip != 0)
+		log_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_ip));
 #endif /* DEBUG_PAGE_FAULTS */
+}
+
+void pf_diag_fault_entry(const struct page_fault_info *info, uint64_t *stack)
+{
+	process_t *current = process_get_current();
+	uint64_t fault_addr = (uint64_t)info->address;
+
+	pf_diag_audit(info);
+	pf_debug_stack_adjacent(stack, fault_addr, info, current);
+	pf_debug_memmove_fault(stack, fault_addr, info, current);
+
+	/*
+	 * Recorded, not emitted: this runs on every demand-paging fault, so
+	 * formatting or event emission here would dominate the path it
+	 * measures. The rows only reach the ring on a dump, which is what
+	 * turns a later crash into a fault history instead of a single
+	 * address.
+	 */
+	ktm_deferred_record(KTM_DEFERRED_PAGE_FAULT,
+			    current ? (uint32_t)current->task.pid : 0,
+			    fault_addr,
+			    (uint64_t)(unsigned)((info->present ? 0U : 1U) |
+						(info->write ? 2U : 0U) |
+						(info->user ? 4U : 0U) |
+						(info->exec ? 8U : 0U)),
+			    (uint64_t)info->ip);
 }
 
 void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 		       const struct page_fault_info *info)
 {
-	mm_diag_probe_user_fault(p, fault_addr, info ? info->ip : 0);
+	ktm_probe_diag_pf(p, fault_addr, info ? info->ip : 0);
 
 	/*
 	 * Unhandled segv: the process is already dead, so the ring is worth
@@ -138,7 +180,11 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 					(unsigned long long)sp_words[3]);
 	}
 
-	mm_diag_dump_user_segv(p, (uint64_t)USER_STACK_TOP);
+	ktm_user_canary_check(process_pgd(p), (uint64_t)USER_STACK_TOP,
+			      (uint32_t)p->task.pid, "segv");
+	ktm_event_ring_dump(48, (1U << KTM_SUBSYS_IPC) |
+			    (1U << KTM_SUBSYS_SCHED) |
+			    (1U << KTM_SUBSYS_MM));
 
 	/*
 	 * NOTICE (not DEBUG): smoke-mm-cow-lazy greps this on serial; default
@@ -215,4 +261,39 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 					(unsigned long long)(uint64_t)mr->flags,
 					(unsigned long long)(uint64_t)(uintptr_t)mr->hint_addr);
 	}
+}
+
+void pf_diag_kernel_uaccess(const struct ir0_fault *fault, unsigned int pid,
+			    const char *comm)
+{
+	/*
+	 * USER_FAULT_FRAME is logged at INFO so session smokes see the fault
+	 * site, not only CONSOLE_SESSION_SEGV; they also grep the CLASSIFY tag.
+	 */
+	ir0_log_user_fault(fault, pid, comm);
+	log_info_fmt("PF",
+		     "CLASSIFY KERNEL_UACCESS_FAULT addr=%llx write=%x "
+		     "pid=%x ip=%llx",
+		     (unsigned long long)fault->addr,
+		     (unsigned)(fault->write ? 1 : 0), pid,
+		     (unsigned long long)fault->ip);
+}
+
+void pf_diag_kernel_fault(const struct ir0_fault *fault,
+			  const struct page_fault_info *info, unsigned int pid)
+{
+	uint64_t fault_addr = (uint64_t)fault->addr;
+
+	log_error_fmt("PF",
+		      "kernel_pf addr=%llx write=%x user=%x present=%x ip=%llx "
+		      "sp=%llx pid=%x",
+		      (unsigned long long)fault_addr,
+		      (unsigned)(fault->write ? 1 : 0),
+		      (unsigned)(info->user ? 1 : 0),
+		      (unsigned)(fault->present ? 1 : 0),
+		      (unsigned long long)fault->ip,
+		      (unsigned long long)fault->sp, pid);
+	if (fault_addr >= (uint64_t)(intptr_t)-4095)
+		log_error_fmt("PF", "addr looks like ERR_PTR(-errno) errno=%llx",
+			      (unsigned long long)(-(intptr_t)fault_addr));
 }

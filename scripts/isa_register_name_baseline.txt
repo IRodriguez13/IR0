@@ -104,7 +104,4 @@ ktm/ktm_panic_class.c rip_in_userspace
 ktm/ktm_probe_diag.c fault_rip
 ktm/ktm_probe_diag.c rip
 ktm/stack_watch.c rsp
-mm/page_fault_diag.c fault_cs
-mm/page_fault_diag.c fault_rip
-mm/page_fault_diag.c fault_rsp
 sched/switch/kernel_resume.c syscall_resume_rax
