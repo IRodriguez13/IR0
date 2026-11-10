@@ -28,6 +28,8 @@
 #define SOCK_UDP_PKT_MAX    1472
 #define SOCK_UDP_RECV_MS    30000
 #define MSG_DONTWAIT        0x40
+#define SOCK_UDP_LOOPBACK_NET  127U
+#define SOCK_UDP_LOOPBACK_ADDR 0x7F000001U /* 127.0.0.1, host order */
 
 struct sock_udp_rx_pkt
 {
@@ -156,6 +158,36 @@ static void sock_udp_rx_from_net(struct net_device *dev, ip4_addr_t src_ip,
 	if (!owner)
 		return;
 	sock_udp_rx_enqueue(owner, src_ip, src_port, data, len);
+}
+
+/*
+ * Loopback (Linux 127.0.0.0/8 via lo): queue the datagram on the socket
+ * bound to @dest_port, as if it had arrived from 127.0.0.1:@src_port.
+ * With no socket on that port the datagram is dropped; an unconnected
+ * sender sees no error (the ICMP port-unreachable reaches only connected
+ * sockets on Linux).
+ */
+static void sock_udp_loopback(uint16_t src_port, uint16_t dest_port,
+			      const void *data, size_t len)
+{
+	struct sock_udp *dst;
+	uint64_t flags;
+
+	flags = sock_irq_save();
+	for (dst = sock_bound_list; dst; dst = dst->bound_next)
+	{
+		if (dst->bound && dst->local_port == dest_port)
+			break;
+	}
+	if (dst)
+		dst->refcount++;
+	sock_irq_restore(flags);
+	if (!dst)
+		return;
+
+	sock_udp_rx_enqueue(dst, htonl(SOCK_UDP_LOOPBACK_ADDR), src_port, data,
+			    len);
+	sock_udp_release(dst);
 }
 
 static int sock_udp_install_port_handler(struct sock_udp *sock, uint16_t port)
@@ -379,6 +411,12 @@ int sock_udp_sendto(struct sock_udp *sock, uint32_t dest_ip_be, uint16_t dest_po
 	ret = sock_udp_ensure_port(sock);
 	if (ret < 0)
 		return ret;
+
+	if ((ntohl(dest_ip) >> 24) == SOCK_UDP_LOOPBACK_NET)
+	{
+		sock_udp_loopback(sock->local_port, dest_port_host, data, len);
+		return (int)len;
+	}
 
 	dev = net_get_devices();
 	if (!dev)
