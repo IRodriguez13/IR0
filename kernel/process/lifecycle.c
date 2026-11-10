@@ -3,13 +3,27 @@
 
 #include <kernel/process.h>
 #include <ir0/errno.h>
+#include <ir0/oops.h>
+#include <string.h>
 
+/*
+ * Every exit (return, exit_group, fatal signal) publishes here. Nothing can
+ * adopt the orphans of init, so its death stops the system as on Linux
+ * (find_child_reaper), reporting the wait status it would have produced.
+ */
 void process_lifecycle_publish_exit(process_t *process, int code)
 {
+	char msg[48];
+
 	if (!process)
 		return;
 	process_mark_zombie(process);
 	process->exit_code = process->exit_signal == 0 ? code : 0;
+	if (process->task.pid != 1)
+		return;
+	snprintf(msg, sizeof(msg), "Attempted to kill init! exitcode=0x%08x",
+		 (unsigned int)process_lifecycle_wait_status(process));
+	panic(msg);
 }
 
 int process_lifecycle_wait_status(const process_t *child)
