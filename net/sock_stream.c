@@ -527,32 +527,36 @@ void sock_stream_release(struct sock_stream *s)
 	poll_wake_check();
 }
 
-static int unix_name_equal(const struct sock_stream *a, const char *path,
-			   size_t path_len, int is_abstract)
+static int unix_name_equal(const struct sock_stream *a,
+			   const struct sock_unix_addr *addr)
 {
 	if (!a || a->family != IR0_AF_UNIX)
 		return 0;
-	if (a->is_abstract != is_abstract)
+	if (a->is_abstract != addr->is_abstract)
 		return 0;
-	if (a->path_len != path_len)
+	if (a->path_len != addr->key_len)
 		return 0;
-	return memcmp(a->path, path, path_len) == 0;
+	return memcmp(a->path, addr->key, addr->key_len) == 0;
 }
 
-int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path_len,
-			    int is_abstract)
+static int unix_addr_valid(const struct sock_unix_addr *addr)
+{
+	if (!addr || addr->key_len == 0 || addr->key_len >= SS_PATH)
+		return 0;
+	return addr->is_abstract || addr->key[0] != '\0';
+}
+
+int sock_stream_bind_unix(struct sock_stream *s, const struct sock_unix_addr *addr)
 {
 	int i;
 
-	if (!s || !path || path_len == 0 || path_len >= SS_PATH)
-		return -EINVAL;
-	if (!is_abstract && path[0] == '\0')
+	if (!s || !unix_addr_valid(addr))
 		return -EINVAL;
 	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].family == IR0_AF_UNIX &&
 		    g_socks[i].state != SS_IDLE &&
-		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
+		    unix_name_equal(&g_socks[i], addr))
 		{
 			/*
 			 * SO_REUSEADDR MVP: steal name from a peer that is only
@@ -569,19 +573,12 @@ int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path
 			return -EADDRINUSE;
 		}
 	}
-	memcpy(s->path, path, path_len);
-	s->path[path_len] = '\0';
-	s->path_len = path_len;
-	s->is_abstract = is_abstract ? 1 : 0;
+	memcpy(s->path, addr->key, addr->key_len);
+	s->path[addr->key_len] = '\0';
+	s->path_len = addr->key_len;
+	s->is_abstract = addr->is_abstract ? 1 : 0;
 	s->state = SS_BOUND;
 	return 0;
-}
-
-int sock_stream_bind_unix(struct sock_stream *s, const char *path)
-{
-	if (!path)
-		return -EINVAL;
-	return sock_stream_bind_unix_n(s, path, strlen(path), 0);
 }
 
 int sock_stream_get_unix_name(const struct sock_stream *s, char *path_out, size_t path_cap,
@@ -696,15 +693,15 @@ int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_ou
 	return 0;
 }
 
-int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t path_len,
-			       int is_abstract)
+int sock_stream_connect_unix(struct sock_stream *s,
+			     const struct sock_unix_addr *addr)
 {
 	int i;
 	struct sock_stream *lst = NULL;
 	struct sock_stream *acc;
 	enum ss_state old_state;
 
-	if (!s || !path || path_len == 0 || path_len >= SS_PATH)
+	if (!s || !unix_addr_valid(addr))
 		return -EINVAL;
 	if (s->state == SS_CONNECTED)
 		return -EISCONN;
@@ -714,7 +711,7 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
 		if (g_socks[i].in_use && g_socks[i].state == SS_LISTEN &&
-		    unix_name_equal(&g_socks[i], path, path_len, is_abstract))
+		    unix_name_equal(&g_socks[i], addr))
 		{
 			lst = &g_socks[i];
 			break;
@@ -751,13 +748,6 @@ int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t p
 	}
 	poll_wake_check();
 	return 0;
-}
-
-int sock_stream_connect_unix(struct sock_stream *s, const char *path)
-{
-	if (!path)
-		return -EINVAL;
-	return sock_stream_connect_unix_n(s, path, strlen(path), 0);
 }
 
 struct sock_stream *sock_stream_accept(struct sock_stream *s)

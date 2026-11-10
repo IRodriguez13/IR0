@@ -23,15 +23,26 @@
 
 struct sock_stream;
 
+#define SOCK_UNIX_PATH_MAX 108
+
+/*
+ * An AF_UNIX address. @key finds the socket: the resolved path of a
+ * pathname address, or the bytes of an abstract name (leading NUL
+ * included).
+ */
+struct sock_unix_addr
+{
+	char key[SOCK_UNIX_PATH_MAX];
+	size_t key_len;
+	int is_abstract;
+};
+
 struct sock_stream *sock_stream_create(int family);
 void sock_stream_release(struct sock_stream *s);
-int sock_stream_bind_unix(struct sock_stream *s, const char *path);
-int sock_stream_bind_unix_n(struct sock_stream *s, const char *path, size_t path_len,
-			    int is_abstract);
+int sock_stream_bind_unix(struct sock_stream *s, const struct sock_unix_addr *addr);
 int sock_stream_listen(struct sock_stream *s, int backlog);
-int sock_stream_connect_unix(struct sock_stream *s, const char *path);
-int sock_stream_connect_unix_n(struct sock_stream *s, const char *path, size_t path_len,
-			       int is_abstract);
+int sock_stream_connect_unix(struct sock_stream *s,
+			     const struct sock_unix_addr *addr);
 struct sock_stream *sock_stream_accept(struct sock_stream *s);
 int sock_stream_bind_inet(struct sock_stream *s, uint16_t port);
 int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port);

@@ -78,16 +78,45 @@ static int64_t unix_fill_sockaddr(struct sock_stream *ss, struct sockaddr *addr,
 	return 0;
 }
 
-static size_t sock_strnlen(const char *s, size_t max)
+/*
+ * Read a user sockaddr_un and fill in the key that finds its socket: the
+ * path resolved against the caller's cwd and root, or the abstract name.
+ */
+static int unix_addr_get(const struct sockaddr *uaddr, socklen_t addrlen,
+			 struct sock_unix_addr *ua)
 {
-	size_t i;
+	struct sockaddr_un sun;
+	char resolved[256];
+	size_t plen;
+	int rc;
 
-	for (i = 0; i < max; i++)
+	memset(&sun, 0, sizeof(sun));
+	memset(ua, 0, sizeof(*ua));
+	if (copy_from_user(&sun, uaddr,
+			   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
+		return -EFAULT;
+	plen = (size_t)addrlen - sizeof(sun.sun_family);
+	if (plen >= sizeof(sun.sun_path))
+		plen = sizeof(sun.sun_path) - 1;
+	if (sun.sun_path[0] == '\0')
 	{
-		if (s[i] == '\0')
-			return i;
+		memcpy(ua->key, sun.sun_path, plen);
+		ua->key_len = plen;
+		ua->is_abstract = 1;
+		return 0;
 	}
-	return max;
+	sun.sun_path[plen] = '\0';
+	rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, sun.sun_path, resolved,
+				  sizeof(resolved), current_process->cwd,
+				  current_process->root);
+	if (rc != 0)
+		return rc;
+	plen = strlen(resolved);
+	if (plen >= sizeof(ua->key))
+		return -EINVAL;
+	memcpy(ua->key, resolved, plen + 1);
+	ua->key_len = plen;
+	return 0;
 }
 
 static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
@@ -344,59 +373,41 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 			return -EFAULT;
 		if (family == AF_UNIX)
 		{
-			struct sockaddr_un sun;
-			char resolved[256];
-			size_t plen;
-			int abs;
+			struct sock_unix_addr ua;
 			int rc;
 
-			if (addrlen < sizeof(sun.sun_family) + 1)
+			if (addrlen < offsetof(struct sockaddr_un, sun_path) + 1)
 				return -EINVAL;
-			memset(&sun, 0, sizeof(sun));
-			if (copy_from_user(&sun, addr,
-					   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
-				return -EFAULT;
-			abs = (sun.sun_path[0] == '\0');
-			plen = (size_t)addrlen - sizeof(sun.sun_family);
-			if (plen >= sizeof(sun.sun_path))
-				plen = sizeof(sun.sun_path) - 1;
-			if (!abs)
+			rc = unix_addr_get(addr, addrlen, &ua);
+			if (rc != 0)
+				return rc;
+			if (ua.is_abstract)
+				return sock_stream_bind_unix(ss, &ua);
+			rc = named_socket_create(ua.key, 0777);
+			if (rc != 0)
 			{
-				plen = sock_strnlen(sun.sun_path, plen);
-				rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, sun.sun_path,
-						       resolved, sizeof(resolved),
-						       current_process->cwd,
-						       current_process->root);
-				if (rc != 0)
-					return rc;
-				rc = named_socket_create(resolved, 0777);
-				if (rc != 0)
-				{
-					if (rc == -EADDRINUSE)
-						log_warn("AF_UNIX", "socket node already exists");
-					else if (rc == -EINVAL)
-						log_warn("AF_UNIX", "socket node invalid path");
-					else if (rc == -ENAMETOOLONG)
-						log_warn("AF_UNIX", "socket node path too long");
-					else
-						log_warn("AF_UNIX", "socket node create failed");
-					return rc;
-				}
-				rc = sock_stream_bind_unix_n(ss, resolved,
-							    strlen(resolved), 0);
-				if (rc != 0)
-				{
-					(void)named_socket_unlink(resolved);
-					if (rc == -EINVAL)
-						log_warn("AF_UNIX", "transport bind invalid path");
-					else if (rc == -EADDRINUSE)
-						log_warn("AF_UNIX", "transport address in use");
-					else
-						log_warn("AF_UNIX", "transport bind failed");
-				}
+				if (rc == -EADDRINUSE)
+					log_warn("AF_UNIX", "socket node already exists");
+				else if (rc == -EINVAL)
+					log_warn("AF_UNIX", "socket node invalid path");
+				else if (rc == -ENAMETOOLONG)
+					log_warn("AF_UNIX", "socket node path too long");
+				else
+					log_warn("AF_UNIX", "socket node create failed");
 				return rc;
 			}
-			return sock_stream_bind_unix_n(ss, sun.sun_path, plen, 1);
+			rc = sock_stream_bind_unix(ss, &ua);
+			if (rc != 0)
+			{
+				(void)named_socket_unlink(ua.key);
+				if (rc == -EINVAL)
+					log_warn("AF_UNIX", "transport bind invalid path");
+				else if (rc == -EADDRINUSE)
+					log_warn("AF_UNIX", "transport address in use");
+				else
+					log_warn("AF_UNIX", "transport bind failed");
+			}
+			return rc;
 		}
 		if (family == AF_INET)
 		{
@@ -766,33 +777,12 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 			return -EFAULT;
 		if (family == AF_UNIX)
 		{
-			struct sockaddr_un sun;
-			char resolved[256];
-			size_t plen;
-			int abs;
-			int rc;
+			struct sock_unix_addr ua;
+			int rc = unix_addr_get(addr, addrlen, &ua);
 
-			memset(&sun, 0, sizeof(sun));
-			if (copy_from_user(&sun, addr,
-					   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
-				return -EFAULT;
-			abs = (sun.sun_path[0] == '\0');
-			plen = (size_t)addrlen - sizeof(sun.sun_family);
-			if (plen >= sizeof(sun.sun_path))
-				plen = sizeof(sun.sun_path) - 1;
-			if (!abs)
-			{
-				plen = sock_strnlen(sun.sun_path, plen);
-				rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, sun.sun_path,
-						       resolved, sizeof(resolved),
-						       current_process->cwd,
-						       current_process->root);
-				if (rc != 0)
-					return rc;
-				return sock_stream_connect_unix_n(ss, resolved,
-								 strlen(resolved), 0);
-			}
-			return sock_stream_connect_unix_n(ss, sun.sun_path, plen, 1);
+			if (rc != 0)
+				return rc;
+			return sock_stream_connect_unix(ss, &ua);
 		}
 		if (family == AF_INET)
 		{

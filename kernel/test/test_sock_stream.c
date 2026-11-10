@@ -13,9 +13,11 @@
 #include <ir0/kmem.h>
 #include <ir0/socket.h>
 #include <ir0/sock_stream.h>
+#include <string.h>
 
 #define KTEST_STREAM_BYTES (64U * 1024U + 37U)
 #define KTEST_PEEK_BYTES   5003U
+#define KTEST_SOCK_PATH    "/ktest.sock"
 
 void ktest_sock_stream_accept_fifo_backlog(void)
 {
@@ -26,9 +28,14 @@ void ktest_sock_stream_accept_fifo_backlog(void)
 	struct sock_stream *accepted_a = NULL;
 	struct sock_stream *accepted_b = NULL;
 	struct sock_stream *accepted_c = NULL;
+	struct sock_unix_addr addr;
 	char byte = 0;
 
 	KTEST_BEGIN("sock_stream_accept_fifo_backlog");
+
+	memset(&addr, 0, sizeof(addr));
+	memcpy(addr.key, KTEST_SOCK_PATH, sizeof(KTEST_SOCK_PATH));
+	addr.key_len = sizeof(KTEST_SOCK_PATH) - 1;
 
 	listener = sock_stream_create(IR0_AF_UNIX);
 	client_a = sock_stream_create(IR0_AF_UNIX);
@@ -38,11 +45,11 @@ void ktest_sock_stream_accept_fifo_backlog(void)
 	if (!listener || !client_a || !client_b || !client_c)
 		goto out;
 
-	KASSERT_EQ(sock_stream_bind_unix(listener, "/ktest.sock"), 0);
+	KASSERT_EQ(sock_stream_bind_unix(listener, &addr), 0);
 	KASSERT_EQ(sock_stream_listen(listener, 2), 0);
-	KASSERT_EQ(sock_stream_connect_unix(client_a, "/ktest.sock"), 0);
-	KASSERT_EQ(sock_stream_connect_unix(client_b, "/ktest.sock"), 0);
-	KASSERT_EQ(sock_stream_connect_unix(client_c, "/ktest.sock"),
+	KASSERT_EQ(sock_stream_connect_unix(client_a, &addr), 0);
+	KASSERT_EQ(sock_stream_connect_unix(client_b, &addr), 0);
+	KASSERT_EQ(sock_stream_connect_unix(client_c, &addr),
 		   -ECONNREFUSED);
 	KASSERT(sock_stream_poll_readable(listener));
 
@@ -64,7 +71,7 @@ void ktest_sock_stream_accept_fifo_backlog(void)
 	KASSERT(sock_stream_accept(listener) == NULL);
 
 	/* A failed full-backlog connect must leave the client reusable. */
-	KASSERT_EQ(sock_stream_connect_unix(client_c, "/ktest.sock"), 0);
+	KASSERT_EQ(sock_stream_connect_unix(client_c, &addr), 0);
 	accepted_c = sock_stream_accept(listener);
 	KASSERT(accepted_c != NULL);
 
