@@ -1,0 +1,65 @@
+# LTP testcases the conformance runner executes when LTP_SRC is given.
+# Format: <binary> <directory under testcases/kernel/syscalls/>
+# Same areas as the IR0 cases: file I/O, fd ops, stat, dirs, pipes,
+# fork/exec/wait, signals, mm, time, AF_UNIX sockets.
+# Binary names must fit a MINIX v1 directory entry (14 bytes).
+
+open01 open
+open02 open
+openat01 openat
+read01 read
+read02 read
+write01 write
+write02 write
+lseek01 lseek
+lseek02 lseek
+pread01 pread
+pwrite01 pwrite
+readv01 readv
+writev01 writev
+ftruncate01 ftruncate
+close01 close
+close02 close
+dup01 dup
+dup02 dup
+dup201 dup2
+dup301 dup3
+fcntl01 fcntl
+fcntl02 fcntl
+fstat02 fstat
+stat01 stat
+lstat01 lstat
+statx01 statx
+access01 access
+mkdir02 mkdir
+rmdir01 rmdir
+getdents01 getdents
+chdir04 chdir
+getcwd01 getcwd
+unlink05 unlink
+rename01 rename
+pipe01 pipe
+pipe02 pipe
+pipe2_01 pipe2
+fork01 fork
+execve01 execve
+wait401 wait4
+waitpid01 waitpid
+kill02 kill
+sigaction01 sigaction
+rt_sigaction01 rt_sigaction
+sigprocmask01 sigprocmask
+sigpending02 sigpending
+mmap01 mmap
+mmap02 mmap
+munmap01 munmap
+mprotect01 mprotect
+brk01 brk
+madvise01 madvise
+clock_getres01 clock_getres
+nanosleep01 nanosleep
+gettimeofday01 gettimeofday
+socket01 socket
+socketpair01 socketpair
+bind01 bind
+connect01 connect

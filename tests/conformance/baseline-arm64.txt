@@ -1,0 +1,50 @@
+# Known non-PASS conformance cases on arm64 (IR0 dev 629036ef).
+# Format: <case> <PASS|FAIL|TCONF|BROK>  # why. Unlisted cases must PASS.
+# A case that starts passing is reported as FIXED: remove its line.
+# See Documentation/conformance.md.
+
+dir_chdir_getcwd FAIL  # getcwd returns strlen, Linux strlen+1 (red: fs_getcwd_counts_nul)
+dir_getdents64 FAIL  # getdents64 omits . and .. (red: fs_getdents64_lists_dot_entries)
+dir_mkdir_rmdir FAIL  # mkdirat with a missing parent is EACCES, Linux ENOENT (red: fs_mkdir_missing_parent_enoent)
+dir_openat_dirfd FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
+fd_fcntl_flags FAIL  # F_SETFL drops O_APPEND (red: fs_setfl_append_sticks)
+fs_ftruncate TCONF  # ftruncate is ENOSYS
+fs_lseek_whence FAIL  # lseek on a pipe succeeds, Linux ESPIPE (red: fs_lseek_pipe_espipe)
+fs_open_errors FAIL  # openat("") is EINVAL, Linux ENOENT (red: fs_empty_path_enoent)
+fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
+fs_unlink_open_file TCONF  # pread64 is ENOSYS
+mm_madvise_dontneed TCONF  # madvise is ENOSYS
+mm_mmap_access_mode TCONF  # file-backed mmap is ENOSYS
+mm_mmap_einval FAIL  # mmap without MAP_PRIVATE/MAP_SHARED succeeds (red: mm_mmap_requires_private_or_shared)
+mm_mmap_file_private TCONF  # file-backed mmap is ENOSYS
+mm_mmap_file_shared TCONF  # file-backed mmap is ENOSYS
+mm_mmap_huge_enomem FAIL  # 1 TiB mmap is EINVAL, Linux ENOMEM (red: mm_mmap_huge_enomem)
+mm_mprotect_readonly FAIL  # PROT_NONE page stays readable (red: mm_prot_none_faults)
+mm_munmap_then_segv FAIL  # munmap of an unmapped range is EINVAL, Linux 0 (red: mm_munmap_hole_succeeds)
+mm_shared_anon_fork FAIL  # MAP_SHARED|MAP_ANONYMOUS is not shared across fork (red: mm_shared_anon_survives_fork)
+proc_exec_errors FAIL  # execve of a non-executable file is ENOENT, Linux EACCES (red: fs_execve_non_executable_eacces)
+proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: sig_wait4_bad_options_einval)
+sig_block_pending TCONF  # rt_sigpending is ENOSYS
+sig_handler_runs FAIL  # arm64 handler gets signum 0 (red: sig_handler_gets_signum)
+sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
+sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
+sig_nanosleep_eintr FAIL  # nanosleep is not interrupted by a caught signal (red: sig_nanosleep_eintr_from_other_process)
+sig_resethand FAIL  # SA_RESETHAND is ignored (red: sig_sa_resethand_resets)
+sig_sigchld_on_exit FAIL  # arm64 handler gets signum 0 (red: sig_handler_gets_signum)
+sig_sigsuspend FAIL  # rt_sigsuspend returns 0, Linux EINTR (red: sig_sigsuspend_returns_eintr)
+sock_bind_errors FAIL  # binding a bound AF_UNIX socket succeeds (red: sock_bind_twice_einval)
+sock_connect_errors FAIL  # connect to a missing path is ECONNREFUSED, Linux ENOENT (red: sock_connect_missing_path_enoent)
+sock_create_errors FAIL  # unknown family is EPROTOTYPE, Linux EAFNOSUPPORT (red: sock_bad_family_eafnosupport)
+sock_dgram_bound_sendto FAIL  # AF_UNIX SOCK_DGRAM bind is EINVAL (red: sock_unix_dgram_supported)
+sock_getsockname FAIL  # getsockname does not return the bound path (red: sock_getsockname_returns_path)
+sock_not_a_socket FAIL  # sendto on a pipe is EINVAL, Linux ENOTSOCK (red: sock_send_non_socket_enotsock)
+sock_pair_dgram_boundaries FAIL  # AF_UNIX SOCK_DGRAM socketpair is EPROTOTYPE (red: sock_unix_dgram_supported)
+stat_empty_path FAIL  # newfstatat("") is EINVAL, Linux ENOENT (red: fs_empty_path_enoent)
+stat_fifo_and_dir FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
+stat_fstat_regular FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
+stat_hardlink TCONF  # linkat is ENOSYS
+stat_statx TCONF  # statx is ENOSYS
+stat_symlink FAIL  # AT_SYMLINK_NOFOLLOW stat of a symlink is ENOENT (red: fs_lstat_symlink)
+stat_umask FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
+time_clock_getres TCONF  # clock_getres is ENOSYS
+time_clock_gettime FAIL  # CLOCK_PROCESS_CPUTIME_ID is EINVAL; arm64 CLOCK_REALTIME is not set from the RTC (red: time_clock_process_cputime, time_realtime_from_rtc)

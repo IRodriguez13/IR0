@@ -33,7 +33,8 @@ IR0_RUN_MODE := $(firstword $(filter $(IR0_RUN_MODES),$(MAKECMDGOALS)))
 # CONFIG_ARCH_X86_64=y — without forcing ARCH=arm64, arm64-* prerequisites are
 # undefined and fail opaquely).
 IR0_GOAL_ARM64_PRODUCT := $(firstword $(filter \
-	kernel-arm64% smoke-arm64% arm64-% ir0-selftest%-arm64,$(MAKECMDGOALS)))
+	kernel-arm64% smoke-arm64% arm64-% ir0-selftest%-arm64 \
+	ir0-conformance-arm64 ir0-fuzz-arm64,$(MAKECMDGOALS)))
 
 IR0_ARM64_PRODUCT ?= n
 
@@ -1357,6 +1358,7 @@ load-init:
 -include scripts/make/ktm.mk
 -include scripts/make/ktm-userdev.mk
 -include scripts/make/selftest.mk
+-include scripts/make/conformance.mk
 -include scripts/make/clean.mk
 
 .PHONY: arch-guard

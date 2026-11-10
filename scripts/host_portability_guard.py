@@ -51,6 +51,7 @@ SCOPE_GLOBS = (
     "scripts/host_portable.sh",
     "scripts/init_boot_capture.py",
     "scripts/inject_init_minix.py",
+    "scripts/ir0_conformance.py",
     "scripts/ir0_selftest_run.py",
     "scripts/ir0_selftest_tap.py",
     "scripts/ir0-clip.sh",
