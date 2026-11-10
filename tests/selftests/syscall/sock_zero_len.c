@@ -5,7 +5,8 @@
  * File: sock_zero_len.c
  * Description: send/sendto/recv with a zero length succeed and move no data
  *              (Linux: a stream reports 0 and keeps its queue, a datagram
- *              socket sends an empty datagram).
+ *              socket sends an empty datagram). A zero length needs no
+ *              buffer: a NULL one is not an error.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -53,7 +54,7 @@ int main(void)
 	long ret;
 	int udp;
 
-	ksft_set_plan(5);
+	ksft_set_plan(8);
 
 	ret = socketpair(AF_UNIX, SOCK_STREAM, 0, sv);
 	ksft_test_result(ok_ret(ret, 0), "socketpair_stream");
@@ -80,5 +81,21 @@ int main(void)
 	ret = udp < 0 ? -1 : sendto(udp, &byte, 0, 0, (const void *)&sin,
 				    sizeof(sin));
 	ksft_test_result(ok_ret(ret, 0), "dgram_sendto_zero_len_returns_0");
+
+	errno = 0;
+	ret = send(sv[0], 0, 0, 0);
+	ksft_test_result(ok_ret(ret, 0), "stream_send_null_zero_len_returns_0");
+
+	errno = 0;
+	(void)send(sv[0], &byte, 1, 0);
+	ret = recv(sv[1], 0, 0, MSG_DONTWAIT);
+	ksft_test_result(ok_ret(ret, 0) &&
+			 recv(sv[1], buf, 1, MSG_DONTWAIT) == 1,
+			 "stream_recv_null_zero_len_returns_0");
+
+	errno = 0;
+	ret = udp < 0 ? -1 : sendto(udp, 0, 0, 0, (const void *)&sin,
+				    sizeof(sin));
+	ksft_test_result(ok_ret(ret, 0), "dgram_sendto_null_zero_len_returns_0");
 	return ksft_exit();
 }
