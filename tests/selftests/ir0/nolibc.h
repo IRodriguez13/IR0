@@ -26,6 +26,9 @@
 #define SYS_wait4		260
 #define SYS_mmap		222
 #define SYS_mprotect		226
+#define SYS_munmap		215
+#define SYS_getgroups		158
+#define SYS_setgroups		159
 #define SYS_pipe2		59
 #define SYS_socketpair		199
 #define SYS_recvfrom		207
@@ -309,6 +312,11 @@ static ssize_t recv(int fd, void *buf, size_t len, int flags)
 static int mprotect(void *addr, size_t len, int prot)
 {
 	return (int)syscall(SYS_mprotect, (long)addr, (long)len, prot);
+}
+
+static int munmap(void *addr, size_t len)
+{
+	return (int)syscall(SYS_munmap, (long)addr, (long)len);
 }
 
 static int pipe2(int fds[2], int flags)

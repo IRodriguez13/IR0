@@ -442,3 +442,36 @@ ir0-selftest-cow-mprotect-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_C
 	@echo "✓ ir0-selftest-cow-mprotect-arm64"
 
 ir0-selftest-cow-mprotect: ir0-selftest-cow-mprotect-x86 ir0-selftest-cow-mprotect-arm64
+
+IR0_SELFTEST_X86_SETGROUPS_EFAULT := $(KERNEL_ROOT)/build/selftests/x86_64/setgroups_efault
+IR0_SELFTEST_ARM64_SETGROUPS_EFAULT := $(KERNEL_ROOT)/build/selftests/arm64/setgroups_efault
+
+.PHONY: ir0-selftest-setgroups-efault-x86 ir0-selftest-setgroups-efault-arm64 \
+	ir0-selftest-setgroups-efault
+
+$(IR0_SELFTEST_X86_SETGROUPS_EFAULT): tests/selftests/syscall/setgroups_efault.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 setgroups_efault
+
+$(IR0_SELFTEST_ARM64_SETGROUPS_EFAULT): tests/selftests/syscall/setgroups_efault.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 setgroups_efault
+
+# A setgroups list that faults part-way changes no group.
+ir0-selftest-setgroups-efault-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SETGROUPS_EFAULT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SETGROUPS_EFAULT) \
+		--done "ok 1 setgroups_crossing_unmapped_page_efault" \
+		--log $(HOST_TMP)/ir0-selftest-x86-setgroups-efault.log
+	@echo "✓ ir0-selftest-setgroups-efault-x86"
+
+ir0-selftest-setgroups-efault-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SETGROUPS_EFAULT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SETGROUPS_EFAULT) \
+		--done "ok 1 setgroups_crossing_unmapped_page_efault" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-setgroups-efault.log
+	@echo "✓ ir0-selftest-setgroups-efault-arm64"
+
+ir0-selftest-setgroups-efault: ir0-selftest-setgroups-efault-x86 ir0-selftest-setgroups-efault-arm64

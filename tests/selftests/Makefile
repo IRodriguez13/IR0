@@ -36,6 +36,8 @@ BLOCKING_SLEEP_SRC := kernel/blocking_sleep.c
 BLOCKING_SLEEP_BIN := $(BUILD_DIR)/blocking_sleep
 COW_MPROTECT_SRC := mm/cow_mprotect.c
 COW_MPROTECT_BIN := $(BUILD_DIR)/cow_mprotect
+SETGROUPS_EFAULT_SRC := syscall/setgroups_efault.c
+SETGROUPS_EFAULT_BIN := $(BUILD_DIR)/setgroups_efault
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -69,11 +71,11 @@ endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect clean
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -255,6 +257,18 @@ $(COW_MPROTECT_BIN): $(COW_MPROTECT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest cow_mprotect"
 	@$(CC) $(CFLAGS) -o $@ $(COW_MPROTECT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+setgroups_efault: $(SETGROUPS_EFAULT_BIN)
+
+$(SETGROUPS_EFAULT_BIN): $(SETGROUPS_EFAULT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest setgroups_efault"
+	@$(CC) $(CFLAGS) -o $@ $(SETGROUPS_EFAULT_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
