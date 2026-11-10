@@ -1117,6 +1117,19 @@ int sys_mprotect(void *addr, size_t len, int prot)
     }
 
     saw_present = 1;
+    /*
+     * PAGE_COW means "writable once copied": without PROT_WRITE a store
+     * must fault and uaccess must fail, not copy the page. Take the private
+     * copy now so the page stays exclusive if PROT_WRITE comes back.
+     */
+    if (!(prot & PROT_WRITE) && pte_cow(*pte))
+    {
+      if (paging_cow_unshare(root, page, 0) != 0)
+        return -ENOMEM;
+      pte = paging_get_pte(root, page);
+      if (!pte || !pte_present(*pte))
+        return -ENOMEM;
+    }
     phys = mm_pte_phys(*pte);
     /*
      * Keep the software COW bit and the hardware access bits. A shared

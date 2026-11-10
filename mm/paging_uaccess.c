@@ -27,27 +27,31 @@
  * access (same as paging_copy_phys_page / paging_zero_phys_page).
  */
 
-/**
- * Kernel writes via PA identity must not touch RO+COW shared frames (that
- * bypasses hardware WP and corrupts the sibling mm). Break COW like #PF.
+/*
+ * Give the COW page at @vaddr a private copy of its shared frame, mapped
+ * writable or read-only. Kernel writes via PA identity must not touch a
+ * RO+COW shared frame (that bypasses hardware WP and corrupts the sibling
+ * mm), and mprotect without PROT_WRITE must stop a later write from copying.
  */
-static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
-				 uintptr_t vaddr)
+int paging_cow_unshare(address_space_root_t root, uintptr_t vaddr, int writable)
 {
+	uintptr_t page = vaddr & (uintptr_t)PAGE_FRAME_MASK;
+	uint64_t *pte;
 	uint64_t entry;
 	uintptr_t old_phys;
 	uintptr_t new_phys;
 	uint64_t map_flags;
 	unsigned long irq_flags;
 
-	if (!pte || !pte_present(*pte))
+	if (!root)
 		return -1;
-	if (pte_write(*pte))
-		return 0;
-	if (!pte_cow(*pte) || !pte_user(*pte))
-		return -1;
-
 	irq_flags = irq_save();
+	pte = paging_get_pte(root, page);
+	if (!pte || !pte_present(*pte) || !pte_cow(*pte) || !pte_user(*pte))
+	{
+		irq_restore(irq_flags);
+		return -1;
+	}
 	entry = *pte;
 	old_phys = mm_pte_phys(entry);
 	new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
@@ -57,20 +61,21 @@ static int paging_cow_break_leaf(address_space_root_t root, uint64_t *pte,
 		return -1;
 	}
 	paging_copy_phys_page(new_phys, old_phys);
-	map_flags = mm_pte_mapping_flags(entry) | PAGE_USER | PAGE_RW;
-	map_flags &= ~(PAGE_COW | PAGE_GLOBAL);
+	map_flags = mm_pte_mapping_flags(entry) | PAGE_USER;
+	map_flags &= ~(PAGE_COW | PAGE_GLOBAL | PAGE_RW);
+	if (writable)
+		map_flags |= PAGE_RW;
 	if (mm_pte_executable(entry))
 		map_flags |= PAGE_EXEC;
-	if (map_page_in_directory(root, vaddr & (uintptr_t)PAGE_FRAME_MASK, new_phys, map_flags) != 0)
+	if (map_page_in_directory(root, page, new_phys, map_flags) != 0)
 	{
 		pmm_free_frame(new_phys);
 		irq_restore(irq_flags);
 		return -1;
 	}
-	mm_tlb_sync_page(root, vaddr & (uintptr_t)PAGE_FRAME_MASK);
+	mm_tlb_sync_page(root, page);
 	if (map_flags & PAGE_EXEC)
-		paging_sync_icache_user(root, vaddr & (uintptr_t)PAGE_FRAME_MASK,
-					PAGE_SIZE_4KB);
+		paging_sync_icache_user(root, page, PAGE_SIZE_4KB);
 	irq_restore(irq_flags);
 	return 0;
 }
@@ -97,7 +102,7 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 	 */
 	if (write && !pte_write(*pte))
 	{
-		if (!pte_cow(*pte) || paging_cow_break_leaf(root, pte, page) != 0)
+		if (paging_cow_unshare(root, page, 1) != 0)
 			return -1;
 		pte = paging_get_pte(root, page);
 		if (!pte || !mm_pte_present(*pte) || !pte_write(*pte))

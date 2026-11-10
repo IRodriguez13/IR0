@@ -89,6 +89,13 @@ void paging_sync_kernel_mappings(address_space_root_t root);
 /** Copy one 4KiB frame via pinned boot address-space root (COW / phys access). */
 void paging_copy_phys_page(uintptr_t dst_phys, uintptr_t src_phys);
 
+/**
+ * Replace the shared frame of the user COW page at @vaddr with a private
+ * copy, mapped writable when @writable is set and read-only otherwise.
+ * Returns 0, or -1 when the page is not a user COW page or memory is short.
+ */
+int paging_cow_unshare(address_space_root_t root, uintptr_t vaddr, int writable);
+
 /** Zero one 4KiB frame via pinned boot address-space root (clear_highpage). */
 void paging_zero_phys_page(uintptr_t phys);
 void paging_poison_phys_page(uintptr_t phys, uint8_t pattern);
