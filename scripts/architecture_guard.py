@@ -39,6 +39,10 @@ Checks:
     use #if* on compiler ISA or CONFIG_ARCH_* tokens; use build-selected
     backends or IR0_LEGACY_PC_IO (includes/ir0/driver_backend.h). Ignore
     // line comments when matching (avoids flagging examples in comments).
+26) Include layout: a C/H file includes each header once, and every #include
+    comes before the first function definition (no late includes).
+    `--self-test` injects both violations into scratch files and checks that
+    the layout check reports them.
 """
 
 from functools import lru_cache
@@ -48,6 +52,7 @@ import json
 import os
 import sys
 import re
+import tempfile
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -2815,7 +2820,132 @@ def check_retired_mm_headers():
     return errors
 
 
+INCLUDE_LAYOUT_TREES = SINGLE_DECL_TREES
+_LAYOUT_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"][^>"]+[>"])')
+_LAYOUT_ALLMAN_HEAD_RE = re.compile(r"\)\s*(?:__attribute__\s*\(\(.*\)\)\s*)*$")
+_LAYOUT_KR_HEAD_RE = re.compile(r"^[A-Za-z_][^;=#]*\)\s*\{\s*$")
+
+# Existing offenders, keyed "<kind> <path> <header>". Fix the file and drop
+# its entry; an entry whose violation is gone fails the guard so the list
+# only shrinks.
+INCLUDE_LAYOUT_BASELINE = frozenset({
+    "duplicate drivers/net/rtl8139.c <ir0/ktm/klog.h>",
+    "duplicate drivers/net/virtio_net.c <ir0/cpu.h>",
+    "duplicate drivers/virtio/virtio_9p.c <ir0/cpu.h>",
+    "duplicate drivers/virtio/virtio_9p.c <ir0/ktm/klog.h>",
+    "duplicate fs/devfs.c <ir0/arch_cpu.h>",
+    "duplicate fs/devfs_internal.h <string.h>",
+    "duplicate fs/vfs.c <ir0/arch_cpu.h>",
+    "duplicate kernel/syscalls/syscall_dispatch.c <config.h>",
+    "duplicate ktm/klog.c <ir0/clock.h>",
+})
+
+
+def include_layout_violations(text: str) -> list[tuple[str, str, int]]:
+    """Return (kind, header, line) for duplicate and late #include lines.
+
+    Comments are blanked first, keeping line numbers. A function body starts
+    at an Allman "{" line under a ")" head, or at a K&R "...) {" line; an
+    include after that point is late.
+    """
+    text = _DECL_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    seen: set[str] = set()
+    found: list[tuple[str, str, int]] = []
+    in_body = False
+    prev = ""
+    for lineno, line in enumerate(text.split("\n"), start=1):
+        match = _LAYOUT_INCLUDE_RE.match(line)
+        if match:
+            header = match.group(1)
+            if in_body:
+                found.append(("late", header, lineno))
+            if header in seen:
+                found.append(("duplicate", header, lineno))
+            seen.add(header)
+            continue
+        if not in_body:
+            allman = (line.rstrip() == "{"
+                      and not prev.lstrip().startswith("#")
+                      and _LAYOUT_ALLMAN_HEAD_RE.search(prev))
+            if allman or _LAYOUT_KR_HEAD_RE.match(line):
+                in_body = True
+        if line.strip():
+            prev = line.rstrip()
+    return found
+
+
+def check_include_layout(paths=None, baseline=INCLUDE_LAYOUT_BASELINE):
+    """Each header is included once, and before the first function body."""
+    errors = []
+    hit: set[str] = set()
+    whole_tree = paths is None
+    if whole_tree:
+        paths = [p for tree in INCLUDE_LAYOUT_TREES
+                 for p in iter_c_files(ROOT / tree)]
+    for fpath in paths:
+        try:
+            text = read_file_text(fpath)
+        except OSError as exc:
+            errors.append(f"[read-error] {fpath}: {exc}")
+            continue
+        rel = str(rel_to_root(fpath))
+        for kind, header, lineno in include_layout_violations(text):
+            key = f"{kind} {rel} {header}"
+            if key in baseline:
+                hit.add(key)
+                continue
+            where = ("after the first function definition; move it to the "
+                     "include block" if kind == "late"
+                     else "already included above; drop this line")
+            errors.append(f"[include-layout] {rel}:{lineno}: {header} {where}")
+    if whole_tree:
+        for key in sorted(baseline - hit):
+            errors.append(
+                f"[include-layout] stale baseline entry '{key}': the file "
+                "is fixed, remove the entry"
+            )
+    return errors
+
+
+def self_test_include_layout() -> list[str]:
+    """Inject each layout violation into a scratch file; the check must fire."""
+    cases = {
+        "clean.c": ("#include <a.h>\n#include \"b.h\"\n\n"
+                    "/* #include <a.h> in a comment */\n"
+                    "static const int t[] =\n{\n\t1,\n};\n\n"
+                    "int f(void)\n{\n\treturn t[0];\n}\n", []),
+        "dup.c": ("#include <a.h>\n#include <b.h>\n#include <a.h>\n\n"
+                  "int f(void)\n{\n\treturn 0;\n}\n",
+                  [("duplicate", "<a.h>", 3)]),
+        "late_allman.c": ("#include <a.h>\n\nint f(void)\n{\n\treturn 0;\n}\n"
+                          "\n#include <b.h>\n",
+                          [("late", "<b.h>", 8)]),
+        "late_kr.h": ("#pragma once\nstatic inline int f(int x) {\n"
+                      "\treturn x;\n}\n#include \"c.h\"\n",
+                      [("late", "\"c.h\"", 5)]),
+    }
+    failures = []
+    with tempfile.TemporaryDirectory(prefix="ir0-layout-") as tmp:
+        for name, (text, expected) in cases.items():
+            path = Path(tmp) / name
+            path.write_text(text, encoding="utf-8")
+            got = include_layout_violations(path.read_text(encoding="utf-8"))
+            if got != expected:
+                failures.append(f"{name}: expected {expected}, got {got}")
+    return failures
+
+
 def main():
+    if "--self-test" in sys.argv[1:]:
+        failures = self_test_include_layout()
+        if failures:
+            print("[arch-guard] self-test FAILED")
+            for failure in failures:
+                print(" -", failure)
+            return 1
+        print("[arch-guard] self-test OK (include-layout)")
+        return 0
+
     errors = []
     errors.extend(check_forbidden_includes())
     errors.extend(check_facades())
@@ -2888,6 +3018,7 @@ def main():
     errors.extend(check_uaccess_single_api())
     errors.extend(check_portable_no_register_names())
     errors.extend(check_retired_mm_headers())
+    errors.extend(check_include_layout())
 
     if errors:
         print("[arch-guard] FAILED")

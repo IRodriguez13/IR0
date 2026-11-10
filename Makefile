@@ -1354,6 +1354,7 @@ load-init:
 
 .PHONY: arch-guard
 arch-guard:
+	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py --self-test
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
 # Host↔guest clipboard via 9p dennis (.ir0/clipboard → guest ir0-paste)
