@@ -38,6 +38,8 @@ COW_MPROTECT_SRC := mm/cow_mprotect.c
 COW_MPROTECT_BIN := $(BUILD_DIR)/cow_mprotect
 SETGROUPS_EFAULT_SRC := syscall/setgroups_efault.c
 SETGROUPS_EFAULT_BIN := $(BUILD_DIR)/setgroups_efault
+INIT_EXIT_SRC := kernel/init_exit.c
+INIT_EXIT_BIN := $(BUILD_DIR)/init_exit
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -71,11 +73,11 @@ endif
 
 .PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault clean
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
-	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault
+	sock_zero_len path_too_long blocking_sleep cow_mprotect setgroups_efault init_exit
 
 $(BUILD_DIR):
 	@mkdir -p $@
@@ -185,6 +187,18 @@ $(FAULT_SIGNALS_BIN): $(FAULT_SIGNALS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR
 	fi
 	@echo "  CC      $(ARCH) selftest fault_signals"
 	@$(CC) $(CFLAGS) -o $@ $(FAULT_SIGNALS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+init_exit: $(INIT_EXIT_BIN)
+
+$(INIT_EXIT_BIN): $(INIT_EXIT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest init_exit"
+	@$(CC) $(CFLAGS) -o $@ $(INIT_EXIT_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

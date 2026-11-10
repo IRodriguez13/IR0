@@ -119,6 +119,41 @@ ir0-selftest-panic-nested-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_P
 
 ir0-selftest-panic-nested: ir0-selftest-panic-nested-x86 ir0-selftest-panic-nested-arm64
 
+IR0_SELFTEST_X86_INIT_EXIT := $(KERNEL_ROOT)/build/selftests/x86_64/init_exit
+IR0_SELFTEST_ARM64_INIT_EXIT := $(KERNEL_ROOT)/build/selftests/arm64/init_exit
+
+.PHONY: ir0-selftest-init-exit-x86 ir0-selftest-init-exit-arm64 \
+	ir0-selftest-init-exit
+
+$(IR0_SELFTEST_X86_INIT_EXIT): tests/selftests/kernel/init_exit.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 init_exit
+
+$(IR0_SELFTEST_ARM64_INIT_EXIT): tests/selftests/kernel/init_exit.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 init_exit
+
+# The death of PID 1 panics with the wait status of its exit, as on Linux.
+ir0-selftest-init-exit-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_INIT_EXIT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 --expected-panic \
+		--binary $(IR0_SELFTEST_X86_INIT_EXIT) \
+		--done "Attempted to kill init! exitcode=0x00002a00" \
+		--expect-log "ok 1 selftest_runs_as_init" \
+		--log $(HOST_TMP)/ir0-selftest-x86-init-exit.log
+	@echo "✓ ir0-selftest-init-exit-x86"
+
+ir0-selftest-init-exit-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_INIT_EXIT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 --expected-panic \
+		--binary $(IR0_SELFTEST_ARM64_INIT_EXIT) \
+		--done "Attempted to kill init! exitcode=0x00002a00" \
+		--expect-log "ok 1 selftest_runs_as_init" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-init-exit.log
+	@echo "✓ ir0-selftest-init-exit-arm64"
+
+ir0-selftest-init-exit: ir0-selftest-init-exit-x86 ir0-selftest-init-exit-arm64
+
 IR0_SELFTEST_X86_FAULT_SIGNALS := $(KERNEL_ROOT)/build/selftests/x86_64/fault_signals
 IR0_SELFTEST_ARM64_FAULT_SIGNALS := $(KERNEL_ROOT)/build/selftests/arm64/fault_signals
 
