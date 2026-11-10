@@ -33,8 +33,6 @@ El código portable **no** embebe `iretq`.
 | `sched/prio.c` | Política por defecto (policy 2) |
 | `sched/rr.c` | Lista de listos (policy 0 / 1) |
 | `sched/switch/context_switch.c` | `switch_to(prev, next)` → `__switch_to()` de la arquitectura |
-| `sched/switch/kernel_resume.c` | Estado de syscall bloqueada + recuperación Class B |
-| `sched/switch/diag.c` | `switch_trace()`: tags CTX CLASSIFY |
 
 **Policy `1` (`cfs`):** mismo objeto de política que RR; no existe `cfs_sched.c`
 ni un wrapper que incluya el runqueue de RR.

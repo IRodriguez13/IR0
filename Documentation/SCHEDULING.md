@@ -66,10 +66,6 @@ Sleep loops still poll the clock and idle hooks through
 [`kernel/time/clock_wait.c`](../kernel/time/clock_wait.c)
 (`ir0_clock_wait_block_until`, `ir0_clock_wait_service_runqueue`).
 
-## Class B
-
-See [`KTM.md`](KTM.md) (Class B context). Product repair: `IR0_CLASS_B_REPAIR=1`.
-
 ## Runtime Characteristics
 
 - Scheduling integrates with process and signal handling.
@@ -99,4 +95,3 @@ See [`KTM.md`](KTM.md) (Class B context). Product repair: `IR0_CLASS_B_REPAIR=1`
 
 - Mandocs: [`mandocs/en/scheduler.md`](mandocs/en/scheduler.md)
 - Decoupling map: [`DECOUPLING.md`](DECOUPLING.md)
-- Class B gates: `make -C tests/host run` (`test_class_b_ctx_invariant`) and the KTM Class B scenario.

@@ -70,9 +70,3 @@ uint64_t irq_frame_sp(const uint64_t *frame);
  * leaves @sf alone (x86-64).
  */
 void signal_set_return(arch_syscall_frame_t *sf, uint64_t restorer);
-
-/* Async delivery: set IP/SP and first arg for a user signal handler.
- * Syscall return register (x0/rax) must stay 0 on entry; signum only in arg0.
- */
-void signal_prepare_task_handler(task_t *t, void *handler, int sig,
-				      uint64_t frame_sp);

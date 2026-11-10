@@ -52,8 +52,3 @@ void __switch_to(task_t *prev, task_t *next)
 		return;
 	switch_context_arm64(prev, next);
 }
-
-void context_backend_inject_kernel_return_fault(task_t *task)
-{
-	(void)task;
-}

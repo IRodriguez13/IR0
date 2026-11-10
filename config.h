@@ -256,14 +256,6 @@
 #define USER_CODE_SEL       0x1B
 #define USER_DATA_SEL       0x23
 
-/*
- * Class B safety net in switch_to: KERNEL_CS + user RIP → apply syscall_frame.
- * Set IR0_CLASS_B_REPAIR=0 (CFLAGS) for deterministic KTM inject repro of
- * KERNEL_RET_BAD_RIP. Default on for product/desk builds.
- */
-#ifndef IR0_CLASS_B_REPAIR
-#define IR0_CLASS_B_REPAIR 1
-#endif
 #define RFLAGS_IF           0x202
 /*
  * PMM frame pool: physical [32 MiB, 512 MiB). Must stay below USER_MMAP_START

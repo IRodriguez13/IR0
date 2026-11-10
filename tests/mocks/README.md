@@ -12,8 +12,6 @@ documentation of KTM inject scenarios. Not linked into the production kernel.
 ```text
 tests/mocks/
   README.md                 This file
-  sched/
-    class_b.h               Class B (KERNEL_CS + user RIP) sample selectors/RIPs
 ```
 
 Add new domains as `tests/mocks/<subsystem>/…` (e.g. `mm/`, `vfs/`, `ipc/`).
@@ -23,9 +21,8 @@ Add new domains as `tests/mocks/<subsystem>/…` (e.g. `mm/`, `vfs/`, `ipc/`).
 | Put here | Examples |
 |----------|----------|
 | Fixture constants / builders | Sample `cs`/`rip` pairs, fake `syscall_frame` seeds |
-| Linux-like pt_regs contract | Class B illegal; entry must not sync user RIP → task |
 | Shared host-only helpers | Pure inline helpers included by several `test_*.c` |
-| Documented inject shapes | Values mirroring `KTM_FAULT_HIT("sched.class_b_arm_window")` |
+| Documented inject shapes | Values mirroring a `KTM_FAULT_HIT(...)` site |
 
 ## What does **not** belong here
 
@@ -41,7 +38,7 @@ Add new domains as `tests/mocks/<subsystem>/…` (e.g. `mm/`, `vfs/`, `ipc/`).
 `tests/host/Makefile` adds `-I$(KERNEL_ROOT)/tests/mocks` so tests can:
 
 ```c
-#include <sched/class_b.h>
+#include <<subsystem>/<fixture>.h>
 ```
 
 Prefer thin headers (inline / macros). Avoid pulling full `process_t` unless a

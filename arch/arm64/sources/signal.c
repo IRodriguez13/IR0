@@ -192,16 +192,3 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	if (sf)
 		sf->x30 = restorer;
 }
-
-void signal_prepare_task_handler(task_t *t, void *handler, int sig,
-				      uint64_t frame_sp)
-{
-	if (!t || !handler)
-		return;
-
-	task_set_sp(t, frame_sp);
-	task_set_ip(t, (uint64_t)(uintptr_t)handler);
-	task_set_arg0(t, (uint64_t)(uint32_t)sig);
-	t->arch.x1 = 0;
-	t->arch.x2 = 0;
-}

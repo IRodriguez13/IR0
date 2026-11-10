@@ -104,7 +104,7 @@ static void ir0_clock_wait_idle_step(void)
 		/*
 		 * Nosched wakes only — block_until / service_runqueue issue one
 		 * schedule per loop. Nested schedule from
-		 * poll_wake_check/stdin_wake_check caused Class B on desk.
+		 * poll_wake_check/stdin_wake_check re-entered the scheduler.
 		 */
 		kernel_idle_poll_nosched();
 		if (clock_get_uptime_milliseconds() != t0)

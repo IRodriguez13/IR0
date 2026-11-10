@@ -63,7 +63,7 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
   `copy_*_user_mm`, `*_region_in_directory`, multi-ISA `mm_user_va_ok`,
   arch-guard tags, `KERNEL_UACCESS_FAULT` (Spanish: `esp/uaccess.md`).
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
-- `SCHEDULING.md`: scheduler selection, blocked poll/pause yield, Class B.
+- `SCHEDULING.md`: scheduler selection, blocking syscalls and signals.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
 - `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
 - `fase58e-ash-interactive-console.md`: interactive BusyBox ash on `/dev/console`

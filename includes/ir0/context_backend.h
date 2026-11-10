@@ -24,6 +24,3 @@ void first_switch_to(struct process *next);
 
 /* Point the CPU's kernel-entry stack at @p's kernel stack. */
 void set_current_kernel_stack(struct process *p);
-
-/* KTM: forge a Class B return state on @task (sched/switch/kernel_resume.c). */
-void context_backend_inject_kernel_return_fault(task_t *task);

@@ -18,7 +18,7 @@ El directorio `tests/` centraliza todo lo que compila y ejecuta tests. El kernel
 
 ## Estructura de `tests/`
 
-- **tests/mocks/** — Fixtures / estado sintético reutilizable (Class B, etc.); ver `tests/mocks/README.md`. No son stubs de link.
+- **tests/mocks/** — Fixtures / estado sintético reutilizable; ver `tests/mocks/README.md`. No son stubs de link.
 - **tests/host/** — Suite host (`make -C tests/host run`); `host_*_stub.c` = stubs de link; tests incluyen mocks vía `-Itests/mocks`.
 - **tests/kernel_memsafe/** — Código del kernel compilado para el host (con dependencias mínimas/stubs) y ejecutado bajo Valgrind para comprobar estado de memoria en esas rutas.
 - **tests/ktm/** — Escenarios in-kernel KTM (`scenarios/`), pilotos userspace (`userdev/`) y helper `lib/`; ver `tests/ktm/README.md`. Internals del módulo en `ktm/`.

@@ -1370,14 +1370,18 @@ RETIRED_SIGNAL_RESUME_RE = re.compile(
     r"wait_resume_child_pid|signal_enter_pending|signal_defer_catchable|"
     r"signal_last_delivered|kernel_sleep_interrupted|syscall_block_nr|"
     r"syscall_interrupted|process_after_task_save|"
-    r"process_clear_in_thread_syscall_block)\b"
+    r"process_clear_in_thread_syscall_block|"
+    r"context_prepare_kernel_resume|IR0_CLASS_B_REPAIR|"
+    r"context_backend_inject_kernel_return_fault|"
+    r"process_task_kernel_return_state_bad|KTM_EVENT_CTX_USER_IRET)\b"
 )
 
 
 def check_signal_resume_retired():
     """Signals follow Linux: blocked syscalls return -ERESTARTSYS/-EINTR and
     the syscall exit (do_signal) restarts them or enters the handler. The
-    blocked-syscall resume machinery it replaced must not come back."""
+    blocked-syscall resume machinery it replaced, and the Class B repair of
+    the states that machinery produced, must not come back."""
     errors = []
     for base in (
         ROOT / "arch",
@@ -1600,7 +1604,6 @@ def check_includes_ir0_no_c_sources():
 ARCH_PUBLIC_CALL_RE = re.compile(r"\barch_[a-z_][a-z0-9_]*\s*\(")
 CONTEXT_BACKEND_INCLUDE_ALLOW = {
     "sched/switch/context_switch.c",
-    "sched/switch/kernel_resume.c",
     "arch/x86-64/sources/context.c",
     "arch/x86-64/sources/user_mode.c",
     "arch/arm64/sources/context.c",

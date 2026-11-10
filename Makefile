@@ -497,8 +497,6 @@ KERNEL_OBJS = \
     ktm/d1_13_malloc_pf_diag.o \
 	sched/core.o \
     sched/switch/context_switch.o \
-    sched/switch/kernel_resume.o \
-    sched/switch/diag.o \
     $(CONSOLE_BACKEND_OBJ)
 
 ifeq ($(CONFIG_KTM),y)

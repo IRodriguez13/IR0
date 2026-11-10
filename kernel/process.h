@@ -512,8 +512,6 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 void process_restore_user_task_segments(process_t *p);
 
 
-/* Reject a kernel-mode return state whose instruction pointer is user-owned. */
-int process_task_kernel_return_state_bad(const task_t *t);
 void fork_ret_emit_pre_return(void);
 void fork_restore_emit_pre_iretq(void);
 void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw);

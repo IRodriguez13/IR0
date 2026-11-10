@@ -37,8 +37,6 @@ Portable backend code must **not** embed `iretq` / ISA entry frames.
 | `sched/rr.c` | Ready list for policy `0` or `1` |
 | `process_t::state` | `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE` |
 | `sched/switch/context_switch.c` | `switch_to(prev, next)` → arch `__switch_to()` |
-| `sched/switch/kernel_resume.c` | Blocked-syscall bookkeeping + Class B recovery before the continuation runs |
-| `sched/switch/diag.c` | `switch_trace()`: the CTX CLASSIFY tags |
 
 **Policy `1` (name `cfs`):** uses the **RR policy object** with a different
 policy name. There is no `cfs_sched.c` and no fake CFS wrapper that includes

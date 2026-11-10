@@ -113,21 +113,6 @@ Rules of thumb:
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
   `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.
 
-### Class B context (KERNEL_CS + userspace RIP)
-
-Illegal pairing for `kernel_ret`: task CS is ring-0 but RIP looks like userspace.
-Product default `IR0_CLASS_B_REPAIR=1` (`config.h`) repairs from `syscall_frame` when
-possible. The `smoke-class-b-*` make targets were removed with the QA catalog;
-the kernel repair path and the host invariant remain:
-
-| Gate | Expect |
-|------|--------|
-| KTM Class B scenario (manual) | inject + `KERNEL_RETURN_FRAME_REPAIR` + `KTM_CLASS_B_OK` |
-| `make -C tests/host run` | `test_class_b_ctx_invariant` |
-
-Impl: `sched/switch/kernel_resume.c` (repair) and the x86 KTM inject hook.
-Host fixtures: `tests/mocks/sched/class_b.h`.
-
 ### Serial protocol (grep-friendly)
 
 Examples emitted by scenarios / userdev:
@@ -410,11 +395,10 @@ read fault one page above the user stack.
 `ktm_event_ring_dump()` selects newest-first **under a per-type quota**
 (a quarter of the budget per event type, then a backfill pass).
 
-Without it a dump is useless whenever one type dominates. `KTM_EVENT_CTX_USER_IRET`
-fires on every return to ring 3, and `ktm_deferred_flush()` replays its backlog
-at the head of the ring just before the walk, so a segfault dump came out as 48
-identical resume-gate rows with the page faults and pipe transitions that explain
-the crash already evicted.
+Without it a dump is useless whenever one type dominates: `ktm_deferred_flush()`
+replays its backlog at the head of the ring just before the walk, and a frequent
+event type would evict the page faults and pipe transitions that explain a
+crash.
 
 Source: `ktm/event_ring.c` (`g_dump_selected`, `g_dump_type_count`).
 

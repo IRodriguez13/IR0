@@ -229,11 +229,6 @@ void task_apply_user_segments(task_t *t)
 	(void)t;
 }
 
-void task_apply_kernel_segments(task_t *t)
-{
-	(void)t;
-}
-
 uint64_t *task_retval_slot_addr(task_t *t)
 {
 	return t ? &t->arch.x0 : NULL;

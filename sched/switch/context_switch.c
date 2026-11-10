@@ -12,7 +12,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "switch_internal.h"
 #include <ir0/arch_mm.h>
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
@@ -54,6 +53,5 @@ void switch_to(task_t *prev, task_t *next)
 		first_switch_to(task_to_process(next));
 		return;
 	}
-	context_prepare_kernel_resume(next);
 	__switch_to(prev, next);
 }

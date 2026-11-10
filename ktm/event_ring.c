@@ -155,10 +155,9 @@ void ktm_event_ring_dump(size_t max_events, uint32_t subsys_mask)
 	 * Select newest-first under a per-type quota.
 	 *
 	 * Taking the newest N outright makes the dump useless whenever one
-	 * type dominates: the resume gate fires on every return to ring 3, and
-	 * ktm_deferred_flush() above replays its backlog at the head, so a
-	 * segfault dump came out as 48 identical CTX_USER_IRET rows with the
-	 * page faults and pipe transitions that explain the crash pushed out.
+	 * type dominates (ktm_deferred_flush() above replays its backlog at the
+	 * head), pushing out the page faults and pipe transitions that explain
+	 * a crash.
 	 * Capping each type keeps room for the rare events, which are the
 	 * informative ones. A second pass backfills from whatever is left so a
 	 * quiet ring still fills the budget.

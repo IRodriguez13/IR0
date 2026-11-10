@@ -25,14 +25,6 @@ static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
 	*out = *sf;
 }
 
-int process_task_kernel_return_state_bad(const task_t *t)
-{
-	if (!t)
-		return 0;
-	return !task_return_state_is_user(t) &&
-	       mm_user_va_ok((uintptr_t)task_get_ip(t), 1);
-}
-
 uint64_t process_list_count(void)
 {
 	process_t *p;

@@ -34,13 +34,6 @@ Una syscall bloqueante duerme en su propia pila de kernel (`PROCESS_BLOCKED` +
 salida de syscall (`exit_to_user_mode` → `do_signal`) reinicia la llamada o
 entra al handler a través del frame de la syscall. Detalle: canónico EN.
 
-## Class B
-
-Par CS ring-0 + RIP userspace ilegal para `kernel_ret`. Producto:
-`IR0_CLASS_B_REPAIR=1`. Gates actuales: escenario KTM Class B (manual) y
-`make -C tests/host run` (`test_class_b_ctx_invariant`). Los targets
-`smoke-class-b-*` se eliminaron con el catálogo QA. Ver [`../KTM.md`](../KTM.md).
-
 ## Características runtime
 
 - Integración con procesos y señales.

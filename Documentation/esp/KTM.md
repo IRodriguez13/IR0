@@ -59,7 +59,7 @@ Detalle canónico: [`../KTM.md`](../KTM.md) (Logging layers).
 | Capa | Rol |
 |------|-----|
 | **klog** | Eventos humanos `[ts] [LEVEL] [COMP]` — `<ir0/ktm/klog.h>`; banner BOOT primero vía `ir0_boot_serial_ready()` (misma API en toda ISA) |
-| **KTM** | Transporte `KTM\|…`; `ASSERT_BATCH` colapsa loops felices; Class B gates |
+| **KTM** | Transporte `KTM\|…`; `ASSERT_BATCH` colapsa loops felices |
 | **runit tags** | `ir0_smoke_tag()` — mismo rol que `klog_smoke` para autokill |
 | **QEMU host** | `*.qemu-stderr` separado del log serial del guest |
 

@@ -26,7 +26,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
 	test_path_chroot.c \
-	test_ktm_sched_contract.c test_class_b_ctx_invariant.c test_musl_cred_abi.c \
+	test_ktm_sched_contract.c test_musl_cred_abi.c \
 	test_credential_saved_ids.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_syscall_restart_abi.c test_mmap_null_placement.c \
 	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_elf_interp_abi.c test_early_rootfs_abi.c test_early_cpio_abi.c test_early_process_abi.c test_early_elf_stack_abi.c test_early_mm_abi.c test_blockdev_facade.c \
