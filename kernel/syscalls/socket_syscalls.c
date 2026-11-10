@@ -127,6 +127,24 @@ static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 	return fd;
 }
 
+/*
+ * net/socket.c sockfd_lookup(): a descriptor that is not open is EBADF,
+ * one that is open but not a socket is ENOTSOCK.
+ */
+static int sock_fd_check(int fd)
+{
+	fd_entry_t *fd_table;
+
+	if (!current_process || fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+		return -EBADF;
+	fd_table = get_process_fd_table();
+	if (!fd_table[fd].in_use)
+		return -EBADF;
+	if (!fd_table[fd].is_socket)
+		return -ENOTSOCK;
+	return 0;
+}
+
 static struct sock_udp *sock_fd_lookup(int fd)
 {
 	fd_entry_t *fd_table;
@@ -297,6 +315,7 @@ int64_t sys_socket(int domain, int type, int protocol)
 
 int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sock_udp *sock;
 	int ret;
@@ -310,6 +329,9 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 
 	if (!current_process)
 		return -ESRCH;
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	if (!addr || addrlen < 2)
 		return -EINVAL;
 
@@ -415,6 +437,7 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 		   const struct sockaddr *dest_addr, socklen_t addrlen)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sockaddr_in sin;
 	struct sock_udp *sock;
@@ -439,6 +462,9 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	if (len && !access_ok(buf, len))
 		return -EFAULT;
 
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
 	{
@@ -510,6 +536,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		     struct sockaddr *src_addr, socklen_t *addrlen)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sock_udp *sock;
 	struct sock_icmp *icmp;
@@ -534,6 +561,9 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 	if (!current_process)
 		return -ESRCH;
 
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
 	{
@@ -707,6 +737,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 
 int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sock_udp *sock;
 	int ret;
@@ -720,6 +751,9 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 
 	if (!current_process)
 		return -ESRCH;
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	if (!addr || addrlen < 2)
 		return -EINVAL;
 
@@ -794,6 +828,7 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 
 int64_t sys_listen(int fd, int backlog)
 {
+	int err;
 	struct sock_stream *ss;
 
 #if !CONFIG_ENABLE_NETWORKING
@@ -803,6 +838,9 @@ int64_t sys_listen(int fd, int backlog)
 #endif
 	if (!current_process)
 		return -ESRCH;
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
@@ -816,6 +854,7 @@ int64_t sys_accept(int fd, struct sockaddr *addr, socklen_t *addrlen)
 
 int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sock_stream *child;
 	int nfd;
@@ -834,6 +873,9 @@ int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
 		return -EINVAL;
 
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 	{
@@ -1138,6 +1180,7 @@ no_buffer:
 
 ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 {
+	int err;
 	struct msghdr msg;
 	struct sock_stream *ss;
 	struct sock_stream *peer;
@@ -1160,6 +1203,9 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 	(void)flags;
 	if (!current_process || !umsg)
 		return -EFAULT;
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	if (copy_from_user(&msg, umsg, sizeof(msg)) != 0)
 		return -EFAULT;
 	ss = sock_stream_fd_lookup(fd);
@@ -1261,6 +1307,7 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 
 ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 {
+	int err;
 	struct msghdr msg;
 	struct sock_stream *ss;
 	struct iovec iov_stack[8];
@@ -1283,6 +1330,9 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	scm_rights_ensure_dtor();
 	if (!current_process || !umsg)
 		return -EFAULT;
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	if (copy_from_user(&msg, umsg, sizeof(msg)) != 0)
 		return -EFAULT;
 	ss = sock_stream_fd_lookup(fd);
@@ -1476,6 +1526,7 @@ recv_payload:
 
 int64_t sys_shutdown(int fd, int how)
 {
+	int err;
 	struct sock_stream *ss;
 
 #if !CONFIG_ENABLE_NETWORKING
@@ -1485,6 +1536,9 @@ int64_t sys_shutdown(int fd, int how)
 #endif
 	if (!current_process)
 		return -ESRCH;
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
@@ -1493,6 +1547,7 @@ int64_t sys_shutdown(int fd, int how)
 
 int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
+	int err;
 	struct sock_stream *ss;
 
 #if !CONFIG_ENABLE_NETWORKING
@@ -1501,6 +1556,9 @@ int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	(void)addrlen;
 	return -ENOSYS;
 #endif
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
@@ -1509,6 +1567,7 @@ int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
 
 int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sock_stream *peer;
 
@@ -1518,6 +1577,9 @@ int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	(void)addrlen;
 	return -ENOSYS;
 #endif
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
@@ -1530,6 +1592,7 @@ int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
 int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 		       socklen_t optlen)
 {
+	int err;
 	struct sock_stream *ss;
 	struct sock_icmp *icmp;
 	int val = 0;
@@ -1542,6 +1605,9 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 	(void)optlen;
 	return -ENOSYS;
 #endif
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	ss = sock_stream_fd_lookup(fd);
 	icmp = sock_icmp_fd_lookup(fd);
 
@@ -1643,6 +1709,7 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 int64_t sys_getsockopt(int fd, int level, int optname, void *optval,
 		       socklen_t *optlen)
 {
+	int err;
 	struct sock_stream *ss;
 	socklen_t len;
 	int val;
@@ -1655,6 +1722,9 @@ int64_t sys_getsockopt(int fd, int level, int optname, void *optval,
 	(void)optlen;
 	return -ENOSYS;
 #endif
+	err = sock_fd_check(fd);
+	if (err < 0)
+		return err;
 	if (!optval || !optlen)
 		return -EFAULT;
 	if (copy_from_user(&len, optlen, sizeof(len)) != 0)
