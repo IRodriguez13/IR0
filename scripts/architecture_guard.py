@@ -2637,6 +2637,146 @@ def check_kmem_single_api():
     return errors
 
 
+# ISA register names in portable identifiers (rsp, rip, rax, cr3, esr, ...).
+# Portable code speaks ip / sp / retval / root; register names live in arch/
+# and in the ISA-specific uapi/context headers. Existing offenders are frozen
+# in REGISTER_NAME_BASELINE as "<path> <identifier>" pairs: a new pair fails,
+# a fixed pair is only reported, so concurrent cleanups never break the gate.
+REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
+REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
+                       "mm", "net", "sched")
+REGISTER_NAME_ISA_HEADERS = frozenset(
+    {
+        "arch_syscall_frame_arm64.h",
+        "arch_syscall_frame_x86_64.h",
+        "arch_task_context_arm64.h",
+        "arch_task_context_x86_64.h",
+        "asm_offsets.h",
+        "sigcontext_arm64.h",
+        "sigcontext_x86_64.h",
+        "syscall_arm64.h",
+        "syscall_x86_64.h",
+    }
+)
+REGISTER_NAME_PARTS = frozenset(
+    {
+        "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
+        "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15",
+        "rflags", "eflags", "cr0", "cr2", "cr3", "cr4", "pml4",
+        "iretq", "sysret", "esr", "elr", "spsr", "ttbr0", "ttbr1", "x30",
+    }
+)
+# "cs"/"ss" also abbreviate sock_stream etc.; they name a segment register
+# only next to a CPU-context word (task_get_cs, fault_cs, frame_ss).
+REGISTER_SEGMENT_PARTS = frozenset({"cs", "ss"})
+REGISTER_SEGMENT_CONTEXT = frozenset({"task", "fault", "frame"})
+_REGISTER_IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+_C_COMMENT_RE = re.compile(r"/\*.*?\*/", re.S)
+_C_LINE_COMMENT_RE = re.compile(r"//[^\n]*")
+_C_STRING_RE = re.compile(r'"(?:\\.|[^"\\\n])*"' + r"|'(?:\\.|[^'\\\n])*'")
+
+
+def _register_name_identifiers(text: str) -> dict[str, int]:
+    """Map each register-named identifier in C *text* to its first line."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    found: dict[str, int] = {}
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith("#include"):
+            continue
+        for match in _REGISTER_IDENT_RE.finditer(line):
+            ident = match.group(0)
+            parts = ident.lower().split("_")
+            segment = (any(p in REGISTER_SEGMENT_PARTS for p in parts) and
+                       any(p in REGISTER_SEGMENT_CONTEXT for p in parts))
+            if segment or any(p in REGISTER_NAME_PARTS for p in parts):
+                found.setdefault(ident, lineno)
+    return found
+
+
+def _load_register_name_baseline() -> set[tuple[str, str]]:
+    entries: set[tuple[str, str]] = set()
+    if not REGISTER_NAME_BASELINE.exists():
+        return entries
+    for raw in REGISTER_NAME_BASELINE.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if len(parts) != 2:
+            raise ValueError(f"bad register-name baseline line: {raw!r}")
+        entries.add((parts[0], parts[1]))
+    return entries
+
+
+def register_name_violations() -> dict[tuple[str, str], int]:
+    """Return {(path, identifier): line} for the portable trees."""
+    violations: dict[tuple[str, str], int] = {}
+    for tree in REGISTER_NAME_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            if path.name in REGISTER_NAME_ISA_HEADERS:
+                continue
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            if "/mocks/arm64/" in rel or "/mocks/x86" in rel:
+                continue
+            for ident, lineno in _register_name_identifiers(
+                    read_file_text(path)).items():
+                violations[(rel, ident)] = lineno
+    return violations
+
+
+def _register_name_self_test() -> list[str]:
+    """Prove the scanner flags an injected name and honours comments."""
+    errors = []
+    sample = (
+        "/* rip in a comment is fine */\n"
+        "static int ok(const char *s) { return s[0] == 'r'; }\n"
+        "uint64_t user_ip; const char *t = \"rsp=%llx\";\n"
+        "uint64_t saved_rsp;\n"
+        "static inline uint16_t task_get_cs(void);\n"
+        "int cs; int css_count; int ss_state;\n"
+    )
+    found = _register_name_identifiers(sample)
+    if set(found) != {"saved_rsp", "task_get_cs"}:
+        errors.append(
+            "[portable-no-register-names] self-test: expected "
+            f"saved_rsp and task_get_cs, scanner found {sorted(found)}"
+        )
+    if found.get("saved_rsp") != 4:
+        errors.append(
+            "[portable-no-register-names] self-test: wrong line for saved_rsp"
+        )
+    return errors
+
+
+def check_portable_no_register_names():
+    """Reject new ISA register names in portable identifiers."""
+    errors = _register_name_self_test()
+    baseline = _load_register_name_baseline()
+    for (rel, ident), lineno in sorted(register_name_violations().items()):
+        if (rel, ident) in baseline:
+            continue
+        errors.append(
+            f"[portable-no-register-names] {rel}:{lineno}: {ident} names an "
+            "ISA register; use ip/sp/retval/arg/root accessors and keep "
+            "registers in arch/"
+        )
+    return errors
+
+
+def print_register_name_baseline():
+    print("# Register names in portable identifiers (ratchet: no new pairs).")
+    print("# Format: <path> <identifier>")
+    print("# Regenerate: python3 scripts/architecture_guard.py "
+          "--print-register-baseline")
+    for rel, ident in sorted(register_name_violations()):
+        print(f"{rel} {ident}")
+
+
 def main():
     errors = []
     errors.extend(check_forbidden_includes())
@@ -2708,6 +2848,7 @@ def main():
     errors.extend(check_errno_has_single_catalog())
     errors.extend(check_kmem_single_api())
     errors.extend(check_uaccess_single_api())
+    errors.extend(check_portable_no_register_names())
 
     if errors:
         print("[arch-guard] FAILED")
@@ -2721,4 +2862,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--print-register-baseline" in sys.argv[1:]:
+        print_register_name_baseline()
+        sys.exit(0)
     sys.exit(main())
