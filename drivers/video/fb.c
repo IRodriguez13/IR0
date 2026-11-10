@@ -80,8 +80,8 @@ int64_t ir0_fb_write_bytes(size_t offset, const void *buf, size_t count)
     if (!fb)
         return -ENODEV;
 
-    if (count > (size_t)info.fb_size - offset)
-        count = (size_t)info.fb_size - offset;
+    if ((uint64_t)count > info.fb_size - offset)
+        count = (size_t)(info.fb_size - offset);
     memcpy(fb + offset, buf, count);
     return (int64_t)count;
 }

@@ -122,7 +122,7 @@ uint64_t __attribute__((weak)) video_backend_get_fb_phys(void)
 	return 0;
 }
 
-uint32_t __attribute__((weak)) video_backend_get_fb_size(void)
+uint64_t __attribute__((weak)) video_backend_get_fb_size(void)
 {
 	return 0;
 }

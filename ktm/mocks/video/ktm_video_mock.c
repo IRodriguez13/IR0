@@ -29,7 +29,7 @@ static uint32_t g_height = 480;
 static uint32_t g_bpp = 32;
 static uint32_t g_pitch = 640u * 4u;
 static uint64_t g_fb_phys = 0xFD000000u;
-static uint32_t g_fb_size = KTM_VIDEO_MOCK_FB_SIZE;
+static uint64_t g_fb_size = KTM_VIDEO_MOCK_FB_SIZE;
 
 void ktm_video_mock_reset(void)
 {
@@ -79,7 +79,7 @@ void ktm_video_mock_set_fb_phys(uint64_t phys)
 	g_fb_phys = phys;
 }
 
-void ktm_video_mock_set_fb_size(uint32_t size)
+void ktm_video_mock_set_fb_size(uint64_t size)
 {
 	g_fb_size = size;
 }
@@ -140,7 +140,7 @@ uint64_t video_backend_get_fb_phys(void)
 	return g_fb_phys;
 }
 
-uint32_t video_backend_get_fb_size(void)
+uint64_t video_backend_get_fb_size(void)
 {
 	return g_fb_size;
 }

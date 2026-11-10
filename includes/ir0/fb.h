@@ -17,7 +17,7 @@ struct ir0_fb_info
     uint32_t height;
     uint32_t pitch;
     uint32_t bpp;
-    uint32_t fb_size;
+    uint64_t fb_size;
     uint64_t fb_phys;
 };
 

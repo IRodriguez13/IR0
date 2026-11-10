@@ -562,7 +562,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       {
         struct ir0_fb_info fb_info;
         uint64_t fb_phys;
-        uint32_t fb_size;
+        uint64_t fb_size;
 
         if (!ir0_fb_get_info(&fb_info))
           return SYSCALL_PTR_ERR(ENODEV);
@@ -572,11 +572,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
         if (fb_phys == 0 || fb_size == 0)
           return SYSCALL_PTR_ERR(ENODEV);
 
-        if (offset < 0 || (uint64_t)offset >= (uint64_t)fb_size)
+        if (offset < 0 || (uint64_t)offset >= fb_size)
           return SYSCALL_PTR_ERR(EINVAL);
 
         uint64_t off_u = (uint64_t)offset;
-        uint64_t rem = (uint64_t)fb_size - off_u;
+        uint64_t rem = fb_size - off_u;
         size_t map_len = length;
 
         if ((uint64_t)map_len > rem)

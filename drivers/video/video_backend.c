@@ -100,7 +100,7 @@ uint64_t video_backend_get_fb_phys(void)
 #endif
 }
 
-uint32_t video_backend_get_fb_size(void)
+uint64_t video_backend_get_fb_size(void)
 {
 #if CONFIG_ENABLE_VBE
     return vbe_get_fb_size();

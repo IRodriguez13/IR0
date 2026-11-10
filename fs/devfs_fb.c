@@ -112,7 +112,11 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
          * Use 0 so the userspace offset is always 0.
          */
         fix.smem_start = 0;
-        fix.smem_len = info.fb_size;
+        /*
+         * smem_len is 32-bit in the Linux ABI; vbe caps the framebuffer at
+         * 512 MiB, so the size always fits.
+         */
+        fix.smem_len = (uint32_t)info.fb_size;
         fix.type = FB_TYPE_PACKED_PIXELS;
         fix.visual = FB_VISUAL_TRUECOLOR;
         fix.line_length = info.pitch;

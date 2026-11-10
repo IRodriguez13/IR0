@@ -32,7 +32,7 @@ bool vbe_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp);
 uint32_t vbe_get_pitch(void);
 uint8_t *vbe_get_fb(void);
 uint64_t vbe_get_fb_phys(void);
-uint32_t vbe_get_fb_size(void);
+uint64_t vbe_get_fb_size(void);
 bool vbe_is_available(void);
 int vbe_map_supervisor(address_space_root_t root);
 uint32_t vbe_rgb_to_pixel(uint8_t r, uint8_t g, uint8_t b);

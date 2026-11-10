@@ -44,7 +44,7 @@ int vbe_fail_reason;
 static struct {
     bool initialized;
     uint64_t framebuffer_addr;
-    uint32_t fb_size;
+    uint64_t fb_size;
     uint32_t width;
     uint32_t height;
     uint32_t pitch;
@@ -125,7 +125,7 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     }
 
     vbe_state.framebuffer_addr = fb_phys;
-    vbe_state.fb_size = (uint32_t)fb_size;
+    vbe_state.fb_size = fb_size;
     vbe_state.width = w;
     vbe_state.height = h;
     vbe_state.pitch = pitch;
@@ -250,7 +250,7 @@ uint64_t vbe_get_fb_phys(void)
     return vbe_state.initialized ? vbe_state.framebuffer_addr : 0;
 }
 
-uint32_t vbe_get_fb_size(void)
+uint64_t vbe_get_fb_size(void)
 {
     if (!vbe_state.initialized)
         return 0;
