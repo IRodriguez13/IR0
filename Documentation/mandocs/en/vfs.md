@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | memory, syscalls, filesystems |
 | Man page | IR0-vfs (section 7) |
-| Primary sources | `fs/vfs.c`, `fs/vfs.h`, `fs/ramtab.c`, `includes/ir0/vfs_backend.h`, `includes/ir0/bpath.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
+| Primary sources | `fs/vfs.c`, `fs/vfs_mount.c`, `fs/vfs_file.c`, `fs/vfs_namei.c`, `fs/vfs.h`, `fs/ramtab.c`, `includes/ir0/vfs_backend.h`, `includes/ir0/bpath.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
 
 ## 1. Overview
 
@@ -40,7 +40,7 @@ owns them. Staged pipe/unix tables are under `ipc/`. See
 | `struct vfs_file` | Per-open handle: path copy, `pos`, flags, ref_count |
 | `struct vfs_ops` | Backend contract in `includes/ir0/vfs_backend.h` |
 
-Global state in `fs/vfs.c`:
+Global state in `fs/vfs_mount.c`:
 
 - `fs_types` — linked list of registered filesystem drivers.
 - `mounts` — linked list of mount entries (newest first).

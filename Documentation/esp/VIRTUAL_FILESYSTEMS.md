@@ -2,7 +2,7 @@
 
 > **Última verificación:** 2026-11-06
 > **Fuente de verdad:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.h`,
-> `fs/vfs.c` (`vfs_statfs`), `includes/ir0/statfs.h`,
+> `fs/vfs_mount.c` (`vfs_statfs`), `includes/ir0/statfs.h`,
 > [`VIRTUAL_FILESYSTEMS.md`](../VIRTUAL_FILESYSTEMS.md) (canónico en inglés)
 
 Este documento se enfoca en pseudo-filesystems expuestos por VFS.
@@ -101,7 +101,7 @@ sysfs /sys sysfs rw 0 0
 devtmpfs /dev devtmpfs rw 0 0
 ```
 
-`vfs_statfs()` (`fs/vfs.c`) reconoce esos prefijos antes de `find_mount()` y
+`vfs_statfs()` (`fs/vfs_mount.c`) reconoce esos prefijos antes de `vfs_find_mount()` y
 devuelve el magic de Linux con cero bloques. Sin ese chequeo `find_mount()`
 atribuiría `/proc` al montaje raíz y `df` lo mostraría con el tamaño del disco;
 los cero bloques además hacen que `df` los omita sin `-a`.

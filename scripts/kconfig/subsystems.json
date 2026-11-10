@@ -59,6 +59,9 @@
       "files": {
         "x86-64": [
           "fs/vfs.c",
+          "fs/vfs_mount.c",
+          "fs/vfs_file.c",
+          "fs/vfs_namei.c",
           "fs/minix_fs.c",
           "fs/minix_inode.c",
           "fs/minix_dir.c",

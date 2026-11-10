@@ -11,7 +11,9 @@ tmpfs de producto.
 
 ## Capas Activas
 
-1. `fs/vfs.c`: resolucion de paths, dispatch de mounts y flujo open/read/write.
+1. `fs/vfs*.c`: nucleo y dispatch al backend (`vfs.c`), tabla de montajes
+   (`vfs_mount.c`), archivos abiertos (`vfs_file.c`) y operaciones de path
+   (`vfs_namei.c`).
 2. Backends:
    - persistente: `minix`
    - en memoria: `tmpfs`

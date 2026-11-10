@@ -89,7 +89,7 @@ struct vfs_ops {
 };
 
 /*
- * VFS path helpers (implemented in fs/vfs.c) — syscalls must use these,
+ * VFS path helpers (implemented in fs/vfs*.c) — syscalls must use these,
  * never backend-specific minix_* or fat_* symbols.
  *
  * vfs_pread / vfs_pwrite: explicit offset; does not advance vfs_file->pos.

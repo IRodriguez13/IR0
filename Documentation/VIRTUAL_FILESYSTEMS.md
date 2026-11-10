@@ -4,7 +4,7 @@
 > **Source of truth:** `fs/procfs.c`, `fs/sysfs.c`, `fs/devfs.c`, `fs/heartfs.c`,
 > `fs/pseudo_fs_registry.c`, `fs/pseudo_fs_nodes.c`,
 > `kernel/syscalls/mm_syscalls.c` (`sys_sysinfo`),
-> `fs/vfs.c` (`vfs_statfs`), `includes/ir0/statfs.h`,
+> `fs/vfs_mount.c` (`vfs_statfs`), `includes/ir0/statfs.h`,
 > `kernel/test/test_procfs.c` (`procfs_pid_maps` ktest),
 > [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md),
 > [`KLOG.md`](KLOG.md) (`/proc/kmsg`, `/dev/kmsg`)
@@ -190,7 +190,7 @@ sysfs /sys sysfs rw 0 0
 devtmpfs /dev devtmpfs rw 0 0
 ```
 
-`vfs_statfs()` (`fs/vfs.c`) matches those prefixes before `find_mount()` and
+`vfs_statfs()` (`fs/vfs_mount.c`) matches those prefixes before `vfs_find_mount()` and
 reports the Linux magic (`PROC_SUPER_MAGIC`, `SYSFS_MAGIC`, `TMPFS_MAGIC` for
 devfs, as devtmpfs) with zero blocks. Without that match `find_mount()` would
 attribute `/proc` to the root mount and `df` would print it with the size of

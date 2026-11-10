@@ -12,7 +12,9 @@ provide concrete operations.
 
 ## Active Layers
 
-1. `fs/vfs.c`: path resolution, mount dispatch, open/read/write/chmod/chown flow.
+1. `fs/vfs*.c`: VFS core and backend dispatch (`vfs.c`), mount table
+   (`vfs_mount.c`), open files (`vfs_file.c`) and path operations
+   (`vfs_namei.c`).
 2. `fs/ramtab.c`: bounded in-memory names used by the staged ARM adapter until a
    VFS mount owns the path (not a `vfs_fstype`). Staged pipe/unix tables live
    in `ipc/`, not here. See [`EARLY_FOLD.md`](EARLY_FOLD.md).
