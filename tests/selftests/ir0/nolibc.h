@@ -46,6 +46,7 @@
 #define SYS_socket		198
 #define SYS_sendto		206
 #define SYS_bind		200
+#define SYS_mount		40
 #define SA_SIGINFO		0x00000004UL
 #define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
@@ -313,6 +314,13 @@ static ssize_t send(int fd, const void *buf, size_t len, int flags)
 static ssize_t recv(int fd, void *buf, size_t len, int flags)
 {
 	return recvfrom(fd, buf, len, flags, 0, 0);
+}
+
+static int mount(const char *source, const char *target, const char *fstype,
+		 unsigned long flags, const void *data)
+{
+	return (int)nolibc_call6(SYS_mount, (long)source, (long)target,
+				 (long)fstype, (long)flags, (long)data, 0);
 }
 
 static int mprotect(void *addr, size_t len, int prot)

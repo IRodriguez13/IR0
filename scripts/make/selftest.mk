@@ -292,12 +292,13 @@ $(IR0_SELFTEST_ARM64_PATH_TOO_LONG): tests/selftests/syscall/path_too_long.c \
 		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
 	@$(MAKE) -C tests/selftests ARCH=arm64 path_too_long
 
-# A path longer than PATH_MAX fails with ENAMETOOLONG, not EFAULT.
+# A path longer than PATH_MAX fails with ENAMETOOLONG, not EFAULT; mount(2)
+# strings longer than PATH_MAX fail with EINVAL.
 ir0-selftest-path-too-long-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PATH_TOO_LONG)
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_PATH_TOO_LONG) \
-		--done "ok 2 newfstatat_path_max_enametoolong" \
+		--done "ok 6 mount_fstype_unknown_enodev" \
 		--log $(HOST_TMP)/ir0-selftest-x86-path-too-long.log
 	@echo "✓ ir0-selftest-path-too-long-x86"
 
@@ -305,7 +306,7 @@ ir0-selftest-path-too-long-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_PATH_TOO_LONG) \
-		--done "ok 2 newfstatat_path_max_enametoolong" \
+		--done "ok 6 mount_fstype_unknown_enodev" \
 		--log $(HOST_TMP)/ir0-selftest-arm64-path-too-long.log
 	@echo "✓ ir0-selftest-path-too-long-arm64"
 
