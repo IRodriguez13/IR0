@@ -68,6 +68,8 @@
 #define L2_INDEX(va)     (((va) >> 21) & 0x1FFUL)
 
 #define MMIO_L2_POOL_MAX 8
+/* L3 tables for framebuffer blocks: 8 x 2 MiB covers a 1920x1080x32 mode. */
+#define FB_L3_POOL_MAX   8
 #define DEVICE_BLOCK_MAX 64
 
 /*
@@ -80,6 +82,8 @@ static uint64_t g_l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t g_l2_mmio[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
 static int g_l2_mmio_l1[MMIO_L2_POOL_MAX];
+static uint64_t g_l3_fb[FB_L3_POOL_MAX][PTE_ENTRIES]
+	__attribute__((aligned(PAGE_SIZE)));
 
 /* Every Device block installed so far, replayed into each user root. */
 static uint64_t g_device_blocks[DEVICE_BLOCK_MAX];
@@ -107,6 +111,13 @@ static uint64_t pte_block_dram(uint64_t pa)
 	/* EL1 RW, kernel-executable, never executable at EL0. */
 	return PTE_TYPE_BLOCK | ((uint64_t)ATTR_NORMAL << PTE_ATTR_SHIFT) |
 	       PTE_SH_INNER | PTE_AF | PTE_UXN | (pa & PTE_BLOCK_MASK);
+}
+
+static uint64_t pte_page_kernel(uint64_t pa, unsigned attr)
+{
+	/* L3 page descriptor: bits[1:0] = 0b11. */
+	return PTE_TYPE_TABLE | ((uint64_t)attr << PTE_ATTR_SHIFT) |
+	       PTE_SH_INNER | PTE_AF | PTE_UXN | (pa & PTE_ADDR_MASK);
 }
 
 static void zero_table(uint64_t *tbl)
@@ -216,6 +227,51 @@ static int install_device_block(uint64_t block)
 	return 0;
 }
 
+/*
+ * The firmware framebuffer is scanout memory: map its pages Normal
+ * non-cacheable (write-combining) before anything draws. Inside the DRAM
+ * window the 2 MiB blocks it touches become static L3 tables, so the rest of
+ * each block keeps the cacheable type and nothing needs the PMM this early.
+ * A framebuffer outside DRAM is MMIO and gets Device blocks.
+ */
+static void map_framebuffer(const struct arm64_board_boot_info *boot)
+{
+	uint64_t base;
+	uint64_t end;
+	uint64_t block;
+	unsigned used = 0;
+	unsigned i;
+
+	if (!boot || boot->framebuffer.size == 0U)
+		return;
+	base = boot->framebuffer.base & ~(PAGE_SIZE - 1U);
+	end = boot->framebuffer.base + boot->framebuffer.size;
+	if (end < base || end > UINT64_MAX - (PAGE_SIZE - 1U))
+		return;
+	end = (end + PAGE_SIZE - 1U) & ~(PAGE_SIZE - 1U);
+	if (base < g_dram_base || end > g_dram_end)
+	{
+		for (block = base & ~(BLOCK_2M - 1U); block < end; block += BLOCK_2M)
+			if (install_device_block(block) != 0)
+				return;
+		return;
+	}
+	for (block = base & ~(BLOCK_2M - 1U); block < end && used < FB_L3_POOL_MAX;
+	     block += BLOCK_2M)
+	{
+		uint64_t *l3 = g_l3_fb[used++];
+
+		for (i = 0; i < PTE_ENTRIES; i++)
+		{
+			uint64_t pa = block + (uint64_t)i * PAGE_SIZE;
+
+			l3[i] = pte_page_kernel(pa, (pa >= base && pa < end) ?
+						    ATTR_NORMAL_NC : ATTR_NORMAL);
+		}
+		g_l2_dram[L2_INDEX(block)] = pte_table((uint64_t)(uintptr_t)l3);
+	}
+}
+
 static void build_idmap(void)
 {
 	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
@@ -240,6 +296,7 @@ static void build_idmap(void)
 	g_l1[L1_INDEX(g_dram_base)] = pte_table((uint64_t)(uintptr_t)g_l2_dram);
 	g_l0[0] = pte_table((uint64_t)(uintptr_t)g_l1);
 	(void)install_device_block(uart_block);
+	map_framebuffer(boot);
 }
 
 static void mmu_configure_and_enable(uint64_t ttbr0)

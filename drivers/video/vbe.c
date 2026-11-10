@@ -27,12 +27,19 @@
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
 #include <ir0/errno.h>
+#include <ir0/tlb.h>
 
 /*
  * Largest framebuffer accepted from firmware. 8K at 32 bpp is ~127 MiB; a
  * bigger descriptor is corrupt and would make us map unrelated memory.
  */
 #define VBE_FB_MAX_SIZE (512ULL * 1024ULL * 1024ULL)
+
+/*
+ * Scanout memory is shared with the display engine: never map it cacheable
+ * (Linux maps fbdev memory with pgprot_writecombine()).
+ */
+#define VBE_FB_MAP_FLAGS (PAGE_PRESENT | PAGE_RW | PAGE_WRITECOMBINE)
 
 /*
  * Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor,
@@ -116,12 +123,14 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     {
         for (uint64_t off = 0; off < fb_size; off += 4096)
         {
-            if (map_page(fb_phys + off, fb_phys + off, PAGE_PRESENT | PAGE_RW) != 0)
+            if (map_page(fb_phys + off, fb_phys + off, VBE_FB_MAP_FLAGS) != 0)
             {
                 vbe_fail_reason = 4;  /* map_page failed */
                 return -1;
             }
         }
+        /* The range may have been covered by a cacheable RAM block. */
+        tlb_invalidate_all();
     }
 
     vbe_state.framebuffer_addr = fb_phys;
@@ -275,7 +284,7 @@ int vbe_map_supervisor(address_space_root_t root)
     for (uint64_t off = 0; off < size; off += 4096U)
     {
         if (map_page_in_directory(root, base + off, base + off,
-                                  PAGE_PRESENT | PAGE_RW) != 0)
+                                  VBE_FB_MAP_FLAGS) != 0)
             return -ENOMEM;
     }
     return 0;

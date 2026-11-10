@@ -627,7 +627,8 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
             return SYSCALL_PTR_ERR(ENOMEM);
         }
         
-        uint64_t page_flags = PAGE_USER | PAGE_RW;
+        /* Linux fb_mmap(): scanout memory is mapped write-combining. */
+        uint64_t page_flags = PAGE_USER | PAGE_RW | PAGE_WRITECOMBINE;
         for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
         {
           uintptr_t v = virt_addr + off;
