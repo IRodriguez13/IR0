@@ -25,13 +25,8 @@ mm_shared_anon_fork FAIL  # MAP_SHARED|MAP_ANONYMOUS is not shared across fork (
 proc_exec_errors FAIL  # execve of a non-executable file is ENOENT, Linux EACCES (red: fs_execve_non_executable_eacces)
 proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: sig_wait4_bad_options_einval)
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
-sig_handler_runs FAIL  # arm64 handler gets signum 0 (red: sig_handler_gets_signum)
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
-sig_nanosleep_eintr FAIL  # nanosleep is not interrupted by a caught signal (red: sig_nanosleep_eintr_from_other_process)
-sig_resethand FAIL  # SA_RESETHAND is ignored (red: sig_sa_resethand_resets)
-sig_sigchld_on_exit FAIL  # arm64 handler gets signum 0 (red: sig_handler_gets_signum)
-sig_sigsuspend FAIL  # rt_sigsuspend returns 0, Linux EINTR (red: sig_sigsuspend_returns_eintr)
 sock_bind_errors FAIL  # binding a bound AF_UNIX socket succeeds (red: sock_bind_twice_einval)
 sock_connect_errors FAIL  # connect to a missing path is ECONNREFUSED, Linux ENOENT (red: sock_connect_missing_path_enoent)
 sock_create_errors FAIL  # unknown family is EPROTOTYPE, Linux EAFNOSUPPORT (red: sock_bad_family_eafnosupport)
