@@ -12,9 +12,10 @@
 
 #include <stdint.h>
 
-__attribute__((weak)) void ir0_boot_arch_firmware_early(uintptr_t firmware_handle)
+__attribute__((weak)) void ir0_boot_arch_firmware_early(
+	const struct ir0_boot_params *params)
 {
-	(void)firmware_handle;
+	(void)params;
 }
 
 __attribute__((weak)) void ir0_boot_arch_userspace_handoff_smoke(void)

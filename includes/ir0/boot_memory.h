@@ -73,7 +73,9 @@ struct ir0_boot_snapshot
 	int valid;
 };
 
-int boot_memory_snapshot_init(uintptr_t firmware_handle);
+struct ir0_boot_params;
+
+int boot_memory_snapshot_init(const struct ir0_boot_params *params);
 const struct ir0_boot_snapshot *boot_memory_snapshot(void);
 const char *boot_memory_cmdline(void);
 int boot_memory_range_is_reserved(uintptr_t base, size_t size);

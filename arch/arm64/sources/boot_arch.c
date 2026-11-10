@@ -17,12 +17,12 @@
 #include "boot_common.h"
 #endif
 
-void ir0_boot_arch_firmware_early(uintptr_t firmware_handle)
+void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params)
 {
 #if !defined(IR0_FREESTANDING_BOOT)
-	arm64_platform_setup_for_portable_boot(firmware_handle);
+	arm64_platform_setup_for_portable_boot(params);
 #else
-	(void)firmware_handle;
+	(void)params;
 #endif
 }
 

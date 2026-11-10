@@ -94,13 +94,13 @@ void ir0_boot_port_params(uintptr_t firmware_handle,
 #endif
 }
 
-int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
+int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 				struct ir0_boot_snapshot *snapshot)
 {
 	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
 	size_t i;
 
-	(void)firmware_handle;
+	(void)params;
 	if (!snapshot || !boot ||
 	    boot->usable_range_count == 0 ||
 	    boot->usable_range_count > IR0_BOOT_MEMORY_MAX_BANKS ||

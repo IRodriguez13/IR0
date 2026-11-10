@@ -61,14 +61,10 @@
 
 #include <ir0/boot_port.h>
 
-void boot_early(uintptr_t firmware_handle)
+void boot_early(const struct ir0_boot_params *params)
 {
-#if !CONFIG_ENABLE_VBE
-	(void)firmware_handle;
-#endif
-
-	ir0_boot_arch_firmware_early(firmware_handle);
-	(void)boot_memory_snapshot_init(firmware_handle);
+	ir0_boot_arch_firmware_early(params);
+	(void)boot_memory_snapshot_init(params);
 	ir0_boot_firmware_sysfs_init();
 	ir0_cmdline_apply_log_profile();
 	early_init();

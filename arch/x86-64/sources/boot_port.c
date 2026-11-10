@@ -235,14 +235,18 @@ void ir0_boot_port_params(uintptr_t firmware_handle,
 	params->info = firmware_handle;
 }
 
-int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
+int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 				struct ir0_boot_snapshot *snapshot)
 {
 	const struct multiboot_info *info;
 	uint64_t kernel_end = (uint64_t)(uintptr_t)_end;
+	uintptr_t firmware_handle;
 
-	if (!snapshot ||
-	    !x86_boot_pointer_range(firmware_handle, sizeof(*info)))
+	if (!snapshot || !params ||
+	    params->protocol != IR0_BOOT_PROTOCOL_MULTIBOOT1)
+		return -EINVAL;
+	firmware_handle = (uintptr_t)params->info;
+	if (!x86_boot_pointer_range(firmware_handle, sizeof(*info)))
 		return -EINVAL;
 	info = (const struct multiboot_info *)firmware_handle;
 	snapshot->firmware.base = firmware_handle;

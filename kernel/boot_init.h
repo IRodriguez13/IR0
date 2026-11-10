@@ -17,7 +17,9 @@
 #include <stdint.h>
 
 /* Early arch + heap + console (before serial banner). */
-void boot_early(uintptr_t firmware_handle);
+struct ir0_boot_params;
+
+void boot_early(const struct ir0_boot_params *params);
 
 /* PMM, logging, serial, version banner, platform/hypervisor note. */
 void boot_memory_serial(void);

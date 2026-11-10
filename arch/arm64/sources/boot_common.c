@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "boot_common.h"
+#include <ir0/boot_params.h>
 #include "mmu.h"
 #include "exc_early.h"
 #include "pl011.h"
@@ -112,16 +113,16 @@ static void arm64_board_capture_and_heap(uintptr_t firmware_handle)
 	arm64_board_apply_platform();
 }
 
-void arm64_platform_setup_for_portable_boot(uintptr_t firmware_handle)
+void arm64_platform_setup_for_portable_boot(const struct ir0_boot_params *params)
 {
 	const struct arm64_board_boot_info *boot_info;
 
-	arm64_board_capture_and_heap(firmware_handle);
+	arm64_board_capture_and_heap((uintptr_t)params->info);
 	/*
 	 * Snapshot firmware RAM while the MMU is still off. After TTBR0 is
 	 * loaded, boot_info BSS must not be the only copy of the inventory.
 	 */
-	(void)boot_memory_snapshot_init(firmware_handle);
+	(void)boot_memory_snapshot_init(params);
 
 	pl011_init();
 

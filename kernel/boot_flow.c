@@ -8,25 +8,21 @@
  */
 
 #include <ir0/boot_flow.h>
-
-#include <stdint.h>
-
-#if defined(IR0_FREESTANDING_BOOT)
-void ir0_kernel_boot(uintptr_t firmware_handle)
-{
-	ir0_boot_freestanding(firmware_handle);
-}
-#else
-
+#include <ir0/boot_params.h>
 #include <ir0/arch_port.h>
 #include <ir0/sched.h>
 #include <ir0/kernel.h>
-
 #include "boot_init.h"
 
-void ir0_kernel_boot(uintptr_t firmware_handle)
+#if defined(IR0_FREESTANDING_BOOT)
+void ir0_kernel_boot(const struct ir0_boot_params *params)
 {
-	boot_early(firmware_handle);
+	ir0_boot_freestanding((uintptr_t)params->info);
+}
+#else
+void ir0_kernel_boot(const struct ir0_boot_params *params)
+{
+	boot_early(params);
 	boot_memory_serial();
 	boot_drivers_rootfs();
 	boot_runtime();

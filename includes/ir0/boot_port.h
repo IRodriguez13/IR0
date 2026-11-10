@@ -26,7 +26,8 @@ extern "C" {
  */
 void ir0_boot_port_params(uintptr_t firmware_handle,
 			  struct ir0_boot_params *params);
-int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
+/* Fill the neutral memory/firmware snapshot from the typed handoff. */
+int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 				struct ir0_boot_snapshot *snapshot);
 
 void ir0_boot_port_serial_before_logging(void);

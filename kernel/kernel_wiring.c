@@ -20,5 +20,5 @@ void kmain(uintptr_t firmware_handle)
 
 	ir0_boot_port_params(firmware_handle, &params);
 	set_boot_params(&params);
-	ir0_kernel_boot((uintptr_t)params.info);
+	ir0_kernel_boot(get_boot_params());
 }

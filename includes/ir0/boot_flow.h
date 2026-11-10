@@ -11,11 +11,10 @@
 
 #include <stdint.h>
 
-/**
- * Firmware/bootloader opaque handle (physical pointer width):
- * x86-64 Multiboot info physical address, ARM64 DTB pointer in x0, etc.
- */
-void ir0_kernel_boot(uintptr_t firmware_handle);
+struct ir0_boot_params;
+
+/* Run the boot sequence from the typed handoff recorded by kmain(). */
+void ir0_kernel_boot(const struct ir0_boot_params *params);
 
 /*
  * When IR0_FREESTANDING_BOOT: portable policy is ir0_kernel_boot() →

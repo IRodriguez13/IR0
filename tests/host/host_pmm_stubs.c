@@ -3,15 +3,16 @@
 
 #include <ir0/arch_mm.h>
 #include <ir0/boot_memory.h>
+#include <ir0/boot_params.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
 
 process_t *current_process;
 
-int ir0_boot_port_snapshot_fill(uintptr_t firmware_handle,
+int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 				struct ir0_boot_snapshot *snapshot)
 {
-	if (firmware_handle != 1 || !snapshot)
+	if (!params || params->info != 1 || !snapshot)
 		return -1;
 	snapshot->usable[0].base = 0x10000U;
 	snapshot->usable[0].size = 0x8000U;

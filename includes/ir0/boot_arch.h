@@ -12,17 +12,19 @@
 
 #include <stdint.h>
 
+struct ir0_boot_params;
+
 #ifdef __cplusplus
 extern "C"
 {
 #endif
 
 /**
- * Run before heap and portable console: firmware handle (Multiboot, DTB, …),
- * MMU/board prep when the portable policy needs it. No-op on ISAs that fold
- * this into assembly bootstrap.
+ * Run before heap and portable console with the typed boot handoff
+ * (Multiboot, DTB, …): MMU/board prep when the portable policy needs it.
+ * No-op on ISAs that fold this into assembly bootstrap.
  */
-void ir0_boot_arch_firmware_early(uintptr_t firmware_handle);
+void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params);
 
 /**
  * Optional smoke tag immediately before init handoff / first schedule to EL0.
