@@ -17,6 +17,7 @@
 #include <ir0/klog.h>
 #include <ir0/oops.h>
 #include <ir0/overflow.h>
+#include <ir0/spinlock.h>
 #include <config.h>
 
 /* Block header - at the start of each block */
@@ -45,6 +46,9 @@ static struct {
 	size_t coalesce_backward_count; /* Debug: count backward coalesces */
 	int initialized;
 } allocator = {0};
+
+/* kmalloc/kfree run from IRQ and network paths: every list walk is locked. */
+static ir0_spinlock_t heap_lock;
 
 /* Get footer from header */
 static inline block_footer_t *get_footer(block_header_t *header)
@@ -181,7 +185,8 @@ void heap_init(void)
  * - Fragmentation: Moderate (first-fit can create small free blocks)
  *
  * Thread safety:
- * - NOT thread-safe - caller must ensure mutual exclusion
+ * - heap_lock (IRQs masked) covers the free list and statistics; the new
+ *   block is zeroed after the lock is dropped
  * - Called from interrupt context - must not sleep
  *
  * Returns: Pointer to allocated memory, or NULL on failure (OOM)
@@ -190,13 +195,7 @@ void *heap_alloc(size_t size)
 {
 	size_t total_size;
 	size_t metadata_size;
-
-	/* Initialize allocator on first use - lazy initialization pattern.
-	 * This allows the allocator to be used early in boot before full
-	 * initialization is complete.
-	 */
-	if (!allocator.initialized)
-		heap_init();
+	unsigned long irq_flags;
 
 	/* Zero-sized allocations are invalid - return NULL.
 	 * This simplifies the implementation by avoiding edge cases.
@@ -218,8 +217,16 @@ void *heap_alloc(size_t size)
 	    ir0_add_overflow(total_size, (size_t)15, &total_size))
 		return NULL;
 	total_size &= ~(size_t)15;
+
+	irq_flags = ir0_spin_lock_irqsave(&heap_lock);
+	/* Lazy init lets the heap serve allocations early in boot. */
+	if (!allocator.initialized)
+		heap_init();
 	if (total_size > allocator.heap_size)
+	{
+		ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
 		return NULL;
+	}
 
 	/* Search free list using first-fit algorithm.
 	 * First-fit is simple and works well for kernel workloads where
@@ -332,6 +339,8 @@ void *heap_alloc(size_t size)
 			 */
 			void *ptr = (char *)current + sizeof(block_header_t);
 
+			ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
+
 			/* Zero allocated memory for security.
 			 * Prevents information leakage from previously freed blocks
 			 * containing sensitive data (passwords, keys, etc).
@@ -350,6 +359,7 @@ void *heap_alloc(size_t size)
 		}
 		current = current->next;
 	}
+	ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
 
 #if DEBUG_MEMORY_ALLOCATOR
 	klog_print("[ALLOC] FAILED: no suitable block\n");
@@ -360,9 +370,10 @@ void *heap_alloc(size_t size)
 
 /* FREE WITH O(1) BIDIRECTIONAL COALESCING                                   */
 
-void heap_free(void *ptr)
+/* Caller holds heap_lock. */
+static void heap_free_locked(void *ptr)
 {
-	if (!ptr || !allocator.initialized)
+	if (!allocator.initialized)
 		return;
 
 	/* Get block header */
@@ -458,16 +469,30 @@ void heap_free(void *ptr)
 	allocator.free_list = block;
 }
 
+void heap_free(void *ptr)
+{
+	unsigned long irq_flags;
+
+	if (!ptr)
+		return;
+	irq_flags = ir0_spin_lock_irqsave(&heap_lock);
+	heap_free_locked(ptr);
+	ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
+}
+
 /* STATISTICS                                                                */
 
 void heap_stats(size_t *total, size_t *used, size_t *allocs)
 {
+	unsigned long irq_flags = ir0_spin_lock_irqsave(&heap_lock);
+
 	if (total)
 		*total = allocator.heap_size;
 	if (used)
 		*used = allocator.total_allocated - allocator.total_freed;
 	if (allocs)
 		*allocs = allocator.live_allocs;
+	ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
 
 #if DEBUG_MEMORY_STATS
 	klog_print("[ALLOCATOR STATS]\n");
@@ -480,8 +505,11 @@ void heap_stats(size_t *total, size_t *used, size_t *allocs)
 
 void heap_coalesce_stats(size_t *forward, size_t *backward)
 {
+	unsigned long irq_flags = ir0_spin_lock_irqsave(&heap_lock);
+
 	if (forward)
 		*forward = allocator.coalesce_forward_count;
 	if (backward)
 		*backward = allocator.coalesce_backward_count;
+	ir0_spin_unlock_irqrestore(&heap_lock, irq_flags);
 }

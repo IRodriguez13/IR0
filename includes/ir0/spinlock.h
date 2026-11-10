@@ -41,3 +41,21 @@ static inline void ir0_spin_unlock(ir0_spinlock_t *lock)
 {
 	irq_restore(lock->flags);
 }
+
+/*
+ * Linux spin_lock_irqsave: the caller keeps the saved IRQ state, so the
+ * lock nests and works from IRQ context (ir0_spin_lock stores the state in
+ * the lock, which a nested holder would overwrite).
+ */
+static inline unsigned long ir0_spin_lock_irqsave(ir0_spinlock_t *lock)
+{
+	(void)lock;
+	return irq_save();
+}
+
+static inline void ir0_spin_unlock_irqrestore(ir0_spinlock_t *lock,
+					      unsigned long flags)
+{
+	(void)lock;
+	irq_restore(flags);
+}
