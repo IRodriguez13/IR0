@@ -213,6 +213,30 @@ smoke-arm64-product-log: kernel-arm64-product.bin
 		echo "✓ smoke-arm64-product-log (ARM64_PRODUCT_BOOT_HANDOFF, PMM_RESERVED_RANGES_OK)"; \
 	fi
 
+# A DTB simple-framebuffer inside RAM (Raspberry Pi firmware carve-out
+# shape) must come up as the console before the PMM exists. The DTBs are
+# rewritten on every run under HOST_TMP.
+.PHONY: smoke-arm64-simplefb
+smoke-arm64-simplefb: kernel-arm64-product.bin
+	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
+		echo "⊘ smoke-arm64-simplefb SKIP (qemu-system-aarch64 not in PATH)"; \
+	else \
+		timeout 20 qemu-system-aarch64 \
+			-M $(ARM64_QEMU_MACHINE),dumpdtb=$(HOST_TMP)/arm64-virt.dtb \
+			-cpu cortex-a57 -m 256M -display none >/dev/null 2>&1; \
+		python3 tests/arm64/add_simplefb_dtb.py $(HOST_TMP)/arm64-virt.dtb \
+			$(HOST_TMP)/arm64-simplefb.dtb && \
+		echo "  SMOKE   ARM64 simple-framebuffer console..." && \
+		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-simplefb-smoke.log \
+			--timeout 45 --stale-sec 15 --mem 256M --expected-panic \
+			--done CONSOLE_FB_BACKEND_ENABLED -- \
+			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
+			-m 256M -kernel kernel-arm64-product.img \
+			-dtb $(HOST_TMP)/arm64-simplefb.dtb \
+			-nographic -serial mon:stdio -display none -no-reboot && \
+		echo "✓ smoke-arm64-simplefb (CONSOLE_FB_BACKEND_ENABLED)"; \
+	fi
+
 .PHONY: smoke-arm64-bpivot-product
 smoke-arm64-bpivot-product: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/make_test_cpio.py
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
