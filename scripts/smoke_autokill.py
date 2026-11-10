@@ -215,6 +215,12 @@ def line_is_syscall(line: str) -> bool:
     return any(re.search(p, line) for p in SYSCALL_LINE_RES)
 
 
+def note_success_tags(state: MonitorState, text: str) -> None:
+    for tag in state.success_tags:
+        if tag in text:
+            state.seen_success.add(tag)
+
+
 def ingest_lines(state: MonitorState, new_text: str) -> None:
     if not new_text:
         return
@@ -240,18 +246,21 @@ def ingest_lines(state: MonitorState, new_text: str) -> None:
             state.last_tag = line.strip()
         if line_is_syscall(line):
             state.last_syscall = line.strip()
-        if not state.matched_fail:
+        # Fail patterns judge only what the guest printed before the success
+        # tags completed: a selftest runs as PID 1, and the kernel panics
+        # when init returns right after its last "ok" line.
+        if not state.matched_fail and not success_satisfied(state):
             for pat in state.fail_res:
                 if pat.search(line):
                     state.matched_fail = line.strip()
                     break
+        # Lines are joined without separators so a tag the serial split
+        # across lines still matches; the tail is bounded.
+        state.scan_tail = (state.scan_tail + line)[-TAG_TAIL_CHARS:]
+        note_success_tags(state, state.scan_tail)
 
-    # Bounded overlap so a success tag split across reads still matches.
-    flat = data.replace("\r", "").replace("\n", "")
-    state.scan_tail = (state.scan_tail + flat)[-TAG_TAIL_CHARS:]
-    for tag in state.success_tags:
-        if tag in state.scan_tail:
-            state.seen_success.add(tag)
+    # A tag at the end of a partial line can already complete the run.
+    note_success_tags(state, (state.scan_tail + state.pending)[-TAG_TAIL_CHARS:])
 
 
 def read_new_log(state: MonitorState) -> None:
