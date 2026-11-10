@@ -95,8 +95,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	uint32_t saved_pending;
 	uint32_t saved_mask_saved;
 	uint8_t saved_mask_saved_valid;
-	uint8_t saved_enter_pending;
-	uint8_t saved_last_delivered;
 	uint64_t saved_frame_sp;
 
 	KTEST_BEGIN("signal_segv_deliver_irq_frame");
@@ -127,8 +125,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	saved_pending = p->signal_pending;
 	saved_mask_saved = p->signal_mask_saved;
 	saved_mask_saved_valid = p->signal_mask_saved_valid;
-	saved_enter_pending = process_signal_enter_pending(p) != 0;
-	saved_last_delivered = p->signal_last_delivered;
 	saved_frame_sp = p->signal_frame_sp;
 	saved_stack_start = process_stack_start(p);
 	saved_stack_size = process_stack_size(p);
@@ -208,11 +204,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	p->signal_pending = saved_pending;
 	p->signal_mask_saved = saved_mask_saved;
 	p->signal_mask_saved_valid = saved_mask_saved_valid;
-	if (saved_enter_pending)
-		process_signal_enter_pending_set(p);
-	else
-		process_signal_enter_pending_clear(p);
-	p->signal_last_delivered = saved_last_delivered;
 	p->signal_frame_sp = saved_frame_sp;
 	process_set_stack_layout(p, saved_stack_start, saved_stack_size);
 	if (saved_context)

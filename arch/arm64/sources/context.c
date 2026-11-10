@@ -53,20 +53,6 @@ void __switch_to(task_t *prev, task_t *next)
 	switch_context_arm64(prev, next);
 }
 
-uint64_t context_backend_user_return_value(const struct process *proc,
-					       const task_t *task)
-{
-	const process_t *resume_proc = (const process_t *)proc;
-
-	(void)task;
-	return resume_proc ? resume_proc->syscall_resume_rax : 0;
-}
-
-void context_backend_prepare_kernel_resume(task_t *task)
-{
-	(void)task;
-}
-
 void context_backend_inject_kernel_return_fault(task_t *task)
 {
 	(void)task;

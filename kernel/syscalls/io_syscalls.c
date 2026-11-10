@@ -105,12 +105,13 @@ static int poll_wait_kernel(struct pollfd *kfds, unsigned int nfds,
 	w->woken = 0;
 	w->ready_count = 0;
 	current_process->poll_waiter = w;
-	process_arm_kernel_syscall_sleep(current_process);
 	process_set_sched_state(current_process, PROCESS_BLOCKED);
 	(void)poll_wake_do();
 
-	while (current_process->state == PROCESS_BLOCKED)
+	while (current_process->state == PROCESS_BLOCKED &&
+	       !signal_pending(current_process))
 		ir0_clock_wait_service_runqueue();
+	process_set_sched_state(current_process, PROCESS_READY);
 
 	process_restore_user_task_segments(current_process);
 	ready = w->ready_count;
@@ -123,11 +124,8 @@ static int poll_wait_kernel(struct pollfd *kfds, unsigned int nfds,
 	w->woken = 0;
 	w->ready_count = 0;
 
-	if (current_process->syscall_interrupted)
-	{
-		current_process->syscall_interrupted = 0;
+	if (ready == 0 && signal_pending(current_process))
 		return -EINTR;
-	}
 	return ready;
 }
 
@@ -326,7 +324,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 
         if (ret < 0)
           return ret;
-        if (current_process->signal_pending != 0)
+        if (signal_pending(current_process))
           return -EINTR;
       }
     }
@@ -382,7 +380,6 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
   w->woken = 0;
   w->ready_count = 0;
   current_process->poll_waiter = w;
-  process_arm_kernel_syscall_sleep(current_process);
   process_set_sched_state(current_process, PROCESS_BLOCKED);
 
   /*
@@ -394,18 +391,15 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
    */
   (void)poll_wake_do();
 
-  while (current_process->state == PROCESS_BLOCKED)
-  {
+  while (current_process->state == PROCESS_BLOCKED &&
+         !signal_pending(current_process))
     ir0_clock_wait_service_runqueue();
-    if (current_process->state != PROCESS_BLOCKED)
-      break;
-  }
+  process_set_sched_state(current_process, PROCESS_READY);
 
   process_restore_user_task_segments(current_process);
 
-  if (current_process->syscall_interrupted)
+  if (signal_pending(current_process) && w && w->ready_count <= 0)
   {
-    current_process->syscall_interrupted = 0;
     if (w)
     {
       kfree(w->kfds);
@@ -513,12 +507,6 @@ int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
   return ret;
 }
 
-static int io_signal_deliverable(void)
-{
-  if (!current_process)
-    return 0;
-  return (current_process->signal_pending & ~current_process->signal_mask) != 0;
-}
 
 /**
  * io_select_timeout_ms - select(2) core with kernel timeout_ms.
@@ -539,7 +527,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
   if (!current_process)
     return -ESRCH;
-  if (io_signal_deliverable())
+  if (signal_pending(current_process))
     return -EINTR;
   /*
    * nfds is max_fd+1 (Linux/X11 often MaxClients=256), not the count of
@@ -592,7 +580,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
         if (ret < 0)
           return ret;
-        if (io_signal_deliverable())
+        if (signal_pending(current_process))
           return -EINTR;
       }
     }
@@ -601,7 +589,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
       if (slept < 0)
         return slept;
-      if (io_signal_deliverable())
+      if (signal_pending(current_process))
         return -EINTR;
       return 0;
     }
@@ -639,7 +627,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
         if (ret < 0)
           return ret;
-        if (io_signal_deliverable())
+        if (signal_pending(current_process))
           return -EINTR;
       }
     }
@@ -648,7 +636,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
       if (slept < 0)
         return slept;
-      if (io_signal_deliverable())
+      if (signal_pending(current_process))
         return -EINTR;
       return 0;
     }
@@ -665,7 +653,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
     if (timeout_ms >= 0 && expire != (uint64_t)-1 &&
         clock_get_uptime_milliseconds() >= expire)
       break;
-    if (io_signal_deliverable())
+    if (signal_pending(current_process))
       return -EINTR;
 
 	ready = poll_wait_kernel(pfds, npoll, expire);
@@ -822,14 +810,12 @@ void io_async_notify_device(uint32_t device_id)
 void syscall_wake_blocked_on_child(process_t *parent)
 {
 	int was_blocked;
-	int wait_armed;
 
 	if (!parent)
 		return;
 
 	was_blocked = (parent->state == PROCESS_BLOCKED);
-	wait_armed = (parent->irq_frame_saved && !parent->poll_waiter);
-	if (!was_blocked && !wait_armed && !parent->poll_waiter)
+	if (!was_blocked && !parent->poll_waiter)
 		return;
 
 	ir0_clock_wait_disarm(parent);
@@ -837,54 +823,12 @@ void syscall_wake_blocked_on_child(process_t *parent)
 	if (parent->poll_waiter)
 		(void)poll_wake_do();
 
-	if (was_blocked || wait_armed)
+	if (was_blocked)
 	{
 		process_set_sched_state(parent, PROCESS_READY);
 		sched_add(parent);
 		sched_promote(parent);
 	}
-}
-
-/*
- * syscall_poll_finish_blocked_resume - Copy poll revents and set syscall retval.
- * Called from switch_to IRQ resume with the parent's address-space root active.
- */
-void syscall_poll_finish_blocked_resume(process_t *proc)
-{
-	struct poll_waiter *w;
-	int ready;
-
-	if (!proc)
-		return;
-
-	w = (struct poll_waiter *)proc->poll_waiter;
-	if (!w || !w->kfds)
-		return;
-
-	ready = w->ready_count;
-	if (ready < 0)
-		ready = poll_check_ready_for(proc, w->kfds, w->nfds);
-	if (ready < 0)
-		ready = 0;
-
-	if (w->user_fds && process_pgd(proc))
-	{
-		if (copy_to_user_mm(process_pgd(proc),
-						     (uintptr_t)w->user_fds,
-						     w->kfds,
-						     w->nfds * sizeof(struct pollfd)) != 0)
-			ready = -EFAULT;
-	}
-
-	kfree(w->kfds);
-	w->proc = NULL;
-	w->kfds = NULL;
-	w->user_fds = NULL;
-	w->nfds = 0;
-	w->woken = 0;
-	w->ready_count = 0;
-	proc->poll_waiter = NULL;
-	proc->poll_resume_via_arch = 0;
 }
 
 /**
@@ -899,29 +843,15 @@ int64_t sys_pause(void)
   {
     /*
      * prepare_to_wait: BLOCKED before the pending-signal test, so a
-     * signal racing the sleep cannot be clobbered back to BLOCKED.
+     * signal racing the sleep sets READY instead of being lost.
      */
     process_set_sched_state(current_process, PROCESS_BLOCKED);
-    if (signals_pause_should_interrupt(current_process))
-    {
-      process_set_sched_state(current_process, PROCESS_READY);
-      handle_signals();
-      return -EINTR;
-    }
-
-    process_arm_kernel_syscall_sleep(current_process);
-    while (current_process->state == PROCESS_BLOCKED)
-    {
-      /* Same wait_event ordering as rt_sigsuspend: the condition, not just
-       * the sleep state, ends the wait. Otherwise a signal landing between
-       * the test above and the arm is republished as BLOCKED and lost. */
-      if (signals_pause_should_interrupt(current_process))
-        break;
-      ir0_clock_wait_service_runqueue();
-      if (current_process->state != PROCESS_BLOCKED)
-        break;
-    }
+    if (signal_pending(current_process))
+      break;
+    ir0_clock_wait_service_runqueue();
   }
+  process_set_sched_state(current_process, PROCESS_READY);
+  return -ERESTARTNOHAND;
 }
 
 /**
@@ -929,40 +859,45 @@ int64_t sys_pause(void)
  * @req: Requested sleep duration (seconds + nanoseconds)
  * @rem: Remaining time if interrupted (optional, can be NULL)
  *
- * Blocks the process until the requested time has elapsed.
- * Resolution is limited to clock tick (~1ms). EINTR not yet implemented.
+ * Blocks the process until the requested time has elapsed (at clock-tick
+ * resolution, ~1ms) or a caught signal interrupts it.
  */
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
   struct timespec kreq;
   struct timespec krem;
+  uint64_t deadline;
+  uint64_t now;
+  int64_t ret;
 
   if (!current_process || !req)
     return -EFAULT;
   if (copy_from_user(&kreq, req, sizeof(kreq)) != 0)
     return -EFAULT;
-  if (rem && !access_ok(rem, sizeof(struct timespec)))
-    return -EFAULT;
-
-  /* Convert to milliseconds; clamp tv_nsec to 0-999999999 */
-  int64_t sec = kreq.tv_sec;
-  long nsec = kreq.tv_nsec;
-  if (sec < 0 || nsec < 0 || nsec > 999999999)
+  if (kreq.tv_sec < 0 || kreq.tv_nsec < 0 || kreq.tv_nsec > 999999999)
     return -EINVAL;
 
-  uint64_t ms = (uint64_t)sec * 1000UL + (uint64_t)(nsec / 1000000);
-  int64_t ret = syscall_sleep_ms_locked(ms);
-
-  if (ret < 0)
+  /* Millisecond clock: round the request up so the sleep is never short. */
+  deadline = clock_get_uptime_milliseconds() + (uint64_t)kreq.tv_sec * 1000UL +
+             (uint64_t)(kreq.tv_nsec + 999999) / 1000000;
+  ret = ir0_clock_wait_block_until(deadline);
+  if (ret != -EINTR)
     return ret;
+
+  /*
+   * signal(7): nanosleep is never restarted. It fails with EINTR and
+   * reports the unslept time.
+   */
   if (rem)
   {
-    krem.tv_sec = 0;
-    krem.tv_nsec = 0;
+    now = clock_get_uptime_milliseconds();
+    now = deadline > now ? deadline - now : 0;
+    krem.tv_sec = (time_t)(now / 1000);
+    krem.tv_nsec = (long)(now % 1000) * 1000000L;
     if (copy_to_user(rem, &krem, sizeof(krem)) != 0)
       return -EFAULT;
   }
-  return 0;
+  return -EINTR;
 }
 
 #define MAX_PIPE_WAITERS 32
@@ -1075,10 +1010,7 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 		pipe_ktm_note_read_sleep(pipe);
 
 	/*
-	 * Portable in-syscall sleep (same contract as tty/poll):
-	 * process_arm_kernel_syscall_sleep only. Do NOT arm
-	 * process_arm_blocked_syscall_resume(..., 0) — that is wait4/user-iret
-	 * and triggers x86-only arch_switch rax==0 special-casing.
+	 * The task sleeps in schedule() on its own kernel stack.
 	 *
 	 * Lost-wakeup (Linux wait_event / prepare_to_wait): set BLOCKED
 	 * (TASK_INTERRUPTIBLE) *before* re-checking the pipe condition, then
@@ -1096,11 +1028,9 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 		/* prepare_to_wait: TASK_INTERRUPTIBLE before condition check */
 		process_set_sched_state(proc, PROCESS_BLOCKED);
 
-		if (signals_pause_should_interrupt(proc))
+		if (signal_pending(proc))
 		{
 			process_set_sched_state(proc, PROCESS_READY);
-			if (proc->mode == USER_MODE)
-				process_restore_user_task_segments(proc);
 			if (pipe_waiters[slot].proc == proc)
 			{
 				pipe_waiters[slot].proc = NULL;
@@ -1108,7 +1038,7 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 				pipe_waiters[slot].waiting_read = 0;
 				pipe_waiters[slot].write_need = 0;
 			}
-			ret = -EINTR;
+			ret = -ERESTARTSYS;
 			goto out;
 		}
 
@@ -1129,22 +1059,12 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 			}
 		}
 
-		/* Arm only when we will schedule (finish_wait clears via restore). */
-		if (proc->mode == USER_MODE)
-			process_arm_kernel_syscall_sleep(proc);
-
 		enable_interrupts();
 		schedule();
 
-		if (signals_pause_should_interrupt(proc))
+		if (signal_pending(proc))
 		{
 			process_set_sched_state(proc, PROCESS_READY);
-			/*
-			 * Preserve kernel_syscall_sleep until signal delivery snapshots
-			 * the blocked entry frame. Clearing it here makes rt_sigreturn
-			 * restore rax=0 (false EOF) instead of applying EINTR/SA_RESTART.
-			 * The signal-return path owns the eventual cleanup.
-			 */
 			if (pipe_waiters[slot].proc == proc)
 			{
 				pipe_waiters[slot].proc = NULL;
@@ -1152,16 +1072,13 @@ int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need
 				pipe_waiters[slot].waiting_read = 0;
 				pipe_waiters[slot].write_need = 0;
 			}
-			ret = -EINTR;
+			ret = -ERESTARTSYS;
 			goto out;
 		}
 
 		if (proc->state != PROCESS_BLOCKED)
 			break;
 	}
-
-	if (proc->mode == USER_MODE)
-		process_restore_user_task_segments(proc);
 
 	if (waiting_read)
 		pipe_ktm_note_read_wake(pipe);
@@ -1199,15 +1116,11 @@ void pipe_wake_all(pipe_t *pipe)
 			{
 				pipe_ktm_note_read_wake(pipe);
 				/*
-				 * In-syscall resume only (matches tty wake). Do not
-				 * stage a user read here — conflicts with kernel sleep.
 				 * Clear the waiter slot here; pipe_wait rechecks the
 				 * pipe condition after setting BLOCKED so a close that
 				 * raced the emptiness check still completes (EOF).
 				 */
 				proc = w->proc;
-				if (proc->mode == USER_MODE)
-					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
 				w->proc = NULL;
@@ -1222,8 +1135,6 @@ void pipe_wake_all(pipe_t *pipe)
 			{
 				pipe_ktm_note_write_wake(pipe);
 				proc = w->proc;
-				if (proc->mode == USER_MODE)
-					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
 				w->proc = NULL;
@@ -1255,8 +1166,6 @@ void pipe_wake_check(void)
 			{
 				pipe_ktm_note_read_wake(pipe);
 				proc = w->proc;
-				if (proc->mode == USER_MODE)
-					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
 				w->proc = NULL;
@@ -1271,8 +1180,6 @@ void pipe_wake_check(void)
 			{
 				pipe_ktm_note_write_wake(pipe);
 				proc = w->proc;
-				if (proc->mode == USER_MODE)
-					proc->irq_frame_saved = 0;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
 				w->proc = NULL;

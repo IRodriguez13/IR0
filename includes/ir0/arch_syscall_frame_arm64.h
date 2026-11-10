@@ -60,6 +60,7 @@ typedef struct arch_syscall_frame
 	uint64_t sp;
 	uint64_t elr;
 	uint64_t spsr;
+	uint64_t orig_x0; /* first argument, kept for a restart */
 } arch_syscall_frame_t;
 
 _Static_assert(offsetof(arch_syscall_frame_t, x30) == 30 * sizeof(uint64_t),
@@ -156,7 +157,24 @@ static inline void syscall_frame_set_arg(arch_syscall_frame_t *sf,
 	}
 }
 
-static inline void syscall_frame_arm_restart(arch_syscall_frame_t *sf)
+/* The syscall return register (x0, also the first argument). */
+static inline uint64_t syscall_frame_return(const arch_syscall_frame_t *sf)
 {
-	(void)sf;
+	return sf->x0;
+}
+
+static inline void syscall_frame_set_return(arch_syscall_frame_t *sf,
+					    uint64_t value)
+{
+	sf->x0 = value;
+}
+
+/*
+ * Linux arm64 restart: back over the 4-byte svc with the first argument in
+ * x0 again (x8 still holds the number), so returning re-issues the call.
+ */
+static inline void syscall_frame_restart(arch_syscall_frame_t *sf)
+{
+	sf->elr -= 4;
+	sf->x0 = sf->orig_x0;
 }

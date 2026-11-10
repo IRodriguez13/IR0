@@ -117,9 +117,8 @@ static int devfs_disk_prepare_io(const devfs_entry_t *entry, off_t offset,
 
 static int devfs_disk_read_interrupted(void)
 {
-    if (current_process && signals_pause_should_interrupt(current_process))
+    if (current_process && signal_pending(current_process))
     {
-        handle_signals();
         return 1;
     }
     return 0;

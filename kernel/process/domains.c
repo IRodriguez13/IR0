@@ -60,10 +60,7 @@ int process_signals_clone(process_t *dst, const process_t *src)
 		dst->signal_restorer[i] = src->signal_restorer[i];
 	}
 	process_saved_context_init(dst);
-	process_signal_enter_pending_init(dst);
-	process_signal_defer_catchable_clear(dst);
-	process_signal_last_delivered_clear(dst);
-	process_kernel_sleep_interrupted_clear(dst);
+	dst->restore_sigmask = 0;
 	return 0;
 }
 

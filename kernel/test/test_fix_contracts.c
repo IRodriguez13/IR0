@@ -377,6 +377,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	uint32_t saved_mask;
 	uint32_t saved_ignored;
 	uint64_t zero_mask = 0;
+	arch_syscall_frame_t saved_regs;
 	int64_t rc;
 
 	KTEST_BEGIN("rt_sigsuspend_consumes_pending");
@@ -394,18 +395,29 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	saved_ignored = p->signal_ignored;
 
 	/*
-	 * Address 2 is neither SIG_DFL nor SIG_IGN nor a user pointer.
-	 * Delivery clears the pending bit instead of killing the task.
-	 * Returning with the bit still set is the ash spin.
+	 * A pending SIGUSR1 ends the suspend at once with the temporary mask
+	 * installed and the caller's parked for the syscall exit. Address 2
+	 * is neither SIG_DFL nor SIG_IGN nor a user pointer: the exit's
+	 * do_signal() drops it instead of killing the task, settles the
+	 * restart code and puts the caller's mask back. Returning with the
+	 * bit still set is the ash spin.
 	 */
+	saved_regs = p->syscall_frame;
 	p->signal_handlers[SIGUSR1] = (void (*)(int))(uintptr_t)2;
 	p->signal_ignored &= ~SIGNAL_MASK(SIGUSR1);
 	p->signal_pending = SIGNAL_MASK(SIGUSR1);
 	rc = sys_rt_sigsuspend((const sigset_t *)&zero_mask, sizeof(zero_mask));
-	KASSERT_EQ(rc, (int64_t)-EINTR);
+	KASSERT_EQ(rc, (int64_t)-ERESTARTNOHAND);
+	KASSERT_EQ(p->signal_mask, 0u);
+	KASSERT_EQ((unsigned)p->restore_sigmask, 1u);
+	KASSERT_EQ(p->saved_sigmask, saved_mask);
+
+	syscall_frame_set_return(&p->syscall_frame, (uint64_t)rc);
+	do_signal(p);
 	KASSERT_EQ(p->signal_pending & SIGNAL_MASK(SIGUSR1), (uint32_t)0);
 	KASSERT_EQ(p->signal_mask, saved_mask);
-	KASSERT_EQ((unsigned)p->signal_mask_saved_valid, 0u);
+	KASSERT_EQ((unsigned)p->restore_sigmask, 0u);
+	p->syscall_frame = saved_regs;
 
 	p->signal_handlers[SIGUSR1] = saved_handler;
 	p->signal_pending = saved_pending;
@@ -417,9 +429,10 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 static int futex_word;
 static int futex_drop_wake;
 
-static void futex_ready_on_sleep(process_t *proc)
+/* A blocked SIGUSR1 would not count; an unblocked one interrupts. */
+static void futex_signal_on_sleep(process_t *proc)
 {
-	proc->syscall_interrupted = 1;
+	proc->signal_pending |= SIGNAL_MASK(SIGUSR1);
 	process_set_sched_state(proc, PROCESS_READY);
 }
 
@@ -427,13 +440,14 @@ static void futex_drop_on_sleep(process_t *proc)
 {
 	ir0_futex_drop_process(proc);
 	futex_drop_wake = ir0_futex_wake(&futex_word, 1);
-	proc->syscall_interrupted = 1;
-	process_set_sched_state(proc, PROCESS_READY);
+	futex_signal_on_sleep(proc);
 }
 
 void ktest_futex_interrupted_wait_frees_slot(void)
 {
 	int rc;
+	uint32_t saved_pending;
+	uint32_t saved_mask;
 
 	KTEST_BEGIN("futex_interrupted_wait_frees_slot");
 	KASSERT(current_process != NULL);
@@ -444,10 +458,15 @@ void ktest_futex_interrupted_wait_frees_slot(void)
 	}
 
 	futex_word = 0;
-	ir0_futex_before_sleep = futex_ready_on_sleep;
+	saved_pending = current_process->signal_pending;
+	saved_mask = current_process->signal_mask;
+	current_process->signal_mask &= ~SIGNAL_MASK(SIGUSR1);
+	ir0_futex_before_sleep = futex_signal_on_sleep;
 	rc = ir0_futex_wait(current_process, &futex_word, 0);
 	ir0_futex_before_sleep = NULL;
-	KASSERT_EQ(rc, -EINTR);
+	current_process->signal_pending = saved_pending;
+	current_process->signal_mask = saved_mask;
+	KASSERT_EQ(rc, -ERESTARTSYS);
 	KASSERT_EQ(ir0_futex_wake(&futex_word, 1), 0);
 	KTEST_END();
 }
@@ -455,6 +474,8 @@ void ktest_futex_interrupted_wait_frees_slot(void)
 void ktest_futex_exit_drop_frees_slot(void)
 {
 	int rc;
+	uint32_t saved_pending;
+	uint32_t saved_mask;
 
 	KTEST_BEGIN("futex_exit_drop_frees_slot");
 	KASSERT(current_process != NULL);
@@ -466,10 +487,15 @@ void ktest_futex_exit_drop_frees_slot(void)
 
 	futex_word = 0;
 	futex_drop_wake = -1;
+	saved_pending = current_process->signal_pending;
+	saved_mask = current_process->signal_mask;
+	current_process->signal_mask &= ~SIGNAL_MASK(SIGUSR1);
 	ir0_futex_before_sleep = futex_drop_on_sleep;
 	rc = ir0_futex_wait(current_process, &futex_word, 0);
 	ir0_futex_before_sleep = NULL;
-	KASSERT_EQ(rc, -EINTR);
+	current_process->signal_pending = saved_pending;
+	current_process->signal_mask = saved_mask;
+	KASSERT_EQ(rc, -ERESTARTSYS);
 	KASSERT_EQ(futex_drop_wake, 0);
 	KASSERT_EQ(ir0_futex_wake(&futex_word, 1), 0);
 	KTEST_END();

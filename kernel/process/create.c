@@ -220,10 +220,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	proc->signal_mask = 0;
 	proc->signal_ignored = 0;
 	process_saved_context_init(proc);
-	process_signal_enter_pending_init(proc);
-	process_signal_defer_catchable_clear(proc);
-	process_signal_last_delivered_clear(proc);
-	process_kernel_sleep_interrupted_clear(proc);
+	proc->restore_sigmask = 0;
 	for (int i = 0; i < _NSIG; i++)
 	{
 		proc->signal_handlers[i] = SIG_DFL;

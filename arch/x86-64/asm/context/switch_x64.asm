@@ -10,7 +10,6 @@ extern fork_flow_set_tf
 extern fork_restore_audit
 extern _etext
 extern switch_report_bad_ret
-extern process_after_task_save
 
 ; Single source: includes/ir0/asm_offsets.h ↔ asm_offsets.inc
 %include "includes/ir0/asm_offsets.inc"
@@ -192,15 +191,6 @@ switch_context_x64:
 
     mov rax, cr3
     mov [rdi + TASK_ARCH_CR3_OFFSET], rax
-
-    ; Class B close: honour want_kernel_ret now that rip/cs are kernel from save.
-    push rdi
-    push rsi
-    sub rsp, 8
-    call process_after_task_save
-    add rsp, 8
-    pop rsi
-    pop rdi
 
 .load_only:
     ; ---- Load new context (rsi = &new->task) ----

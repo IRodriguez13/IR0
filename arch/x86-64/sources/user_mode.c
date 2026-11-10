@@ -137,9 +137,6 @@ void switch_to_user_task(const task_t *task)
     if (!task)
         panic("switch_to_user_task: null task");
 
-    if (current_process && &current_process->task == task)
-        x86_prepare_task_user_return(current_process);
-
     if (current_process && process_mm_root(current_process))
 	    paging_activate_address_space(
 		    (uintptr_t)process_mm_root(current_process));

@@ -15,6 +15,7 @@
 #include <ir0/futex.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
+#include <ir0/signals.h>
 #include <ir0/errno.h>
 #include <ir0/copy_user.h>
 #include <string.h>
@@ -79,11 +80,8 @@ int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 			 * task still owns the slot: wake may have reused it.
 			 */
 			futex_slot_release_if_mine(i, proc);
-			if (proc->syscall_interrupted)
-			{
-				proc->syscall_interrupted = 0;
-				return -EINTR;
-			}
+			if (signal_pending(proc))
+				return -ERESTARTSYS;
 			return 0;
 		}
 	}

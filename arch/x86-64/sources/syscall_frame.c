@@ -47,34 +47,38 @@ void syscall_capture_frame_at_entry(struct process *p,
 	sf->r10 = frame_base[-4];
 	sf->r8 = frame_base[-5];
 	sf->r9 = frame_base[-6];
-	p->syscall_frame_fresh = 1;
+	sf->rax = frame_base[-7];
+	sf->orig_rax = sf->rax;
 	process_sync_task_user_ip_from_syscall_frame(p);
 }
 
-void syscall_restore_exit_regs(struct process *p,
-					    uint64_t *stack_r9_slot)
+/*
+ * @exit_frame is the syscall_64.asm stack from the r9 slot up: r9 r8 r10
+ * rdx rsi rdi rbx rbp r12 r13 r14 r15 rflags rip rsp.
+ */
+void syscall_restore_exit_regs(struct process *p, uint64_t *exit_frame)
 {
 	const syscall_user_frame_t *sf;
 
-	if (!stack_r9_slot || !p || p->mode != USER_MODE)
+	if (!exit_frame || !p || p->mode != USER_MODE)
 		return;
 
 	sf = &p->syscall_frame;
-	stack_r9_slot[0] = sf->r9;
-	stack_r9_slot[1] = sf->r8;
-	stack_r9_slot[2] = sf->r10;
-	stack_r9_slot[3] = sf->rdx;
-	stack_r9_slot[4] = sf->rsi;
-	stack_r9_slot[5] = sf->rdi;
-	stack_r9_slot[6] = sf->rbx;
-	stack_r9_slot[7] = sf->rbp;
-	stack_r9_slot[8] = sf->r12;
-	stack_r9_slot[9] = sf->r13;
-	stack_r9_slot[10] = sf->r14;
-	stack_r9_slot[11] = sf->r15;
-	stack_r9_slot[12] = sf->rflags;
-	stack_r9_slot[13] = sf->rip;
-	p->fork_resync_syscall_stack = 0;
+	exit_frame[0] = sf->r9;
+	exit_frame[1] = sf->r8;
+	exit_frame[2] = sf->r10;
+	exit_frame[3] = sf->rdx;
+	exit_frame[4] = sf->rsi;
+	exit_frame[5] = sf->rdi;
+	exit_frame[6] = sf->rbx;
+	exit_frame[7] = sf->rbp;
+	exit_frame[8] = sf->r12;
+	exit_frame[9] = sf->r13;
+	exit_frame[10] = sf->r14;
+	exit_frame[11] = sf->r15;
+	exit_frame[12] = sf->rflags;
+	exit_frame[13] = sf->rip;
+	exit_frame[14] = sf->rsp;
 }
 
 int exception_frame_is_user(const void *opaque_frame)

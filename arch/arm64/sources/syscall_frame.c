@@ -39,6 +39,7 @@ void syscall_capture_frame_at_entry(struct process *p,
 
 	sf = &p->syscall_frame;
 	arm64_copy_exc_gprs(sf, frame_base);
+	sf->orig_x0 = sf->x0;
 
 	elr = frame_base[ARM64_EXC_IDX_ELR];
 	spsr = frame_base[ARM64_EXC_IDX_SPSR];
@@ -49,25 +50,23 @@ void syscall_capture_frame_at_entry(struct process *p,
 		sf->elr = rip_hw;
 	sf->spsr = spsr;
 	sf->sp = sp_el0;
-	p->syscall_frame_fresh = 1;
 	process_sync_task_user_ip_from_syscall_frame(p);
 }
 
-void syscall_restore_exit_regs(struct process *p,
-					    uint64_t *stack_r9_slot)
+void syscall_restore_exit_regs(struct process *p, uint64_t *exit_frame)
 {
 	const arch_syscall_frame_t *sf;
 
-	if (!stack_r9_slot || !p || p->mode != USER_MODE)
+	if (!exit_frame || !p || p->mode != USER_MODE)
 		return;
 
 	sf = &p->syscall_frame;
-	memcpy(stack_r9_slot, &sf->x0, 31 * sizeof(uint64_t));
+	memcpy(exit_frame, &sf->x0, 31 * sizeof(uint64_t));
 
-	/* @stack_r9_slot is the exception frame base; eret reloads these. */
-	stack_r9_slot[ARM64_EXC_IDX_ELR] = sf->elr;
-	stack_r9_slot[ARM64_EXC_IDX_SPSR] = sf->spsr;
-	stack_r9_slot[ARM64_EXC_IDX_SP] = sf->sp;
+	/* @exit_frame is the exception frame base; eret reloads these. */
+	exit_frame[ARM64_EXC_IDX_ELR] = sf->elr;
+	exit_frame[ARM64_EXC_IDX_SPSR] = sf->spsr;
+	exit_frame[ARM64_EXC_IDX_SP] = sf->sp;
 }
 
 int exception_frame_is_user(const void *opaque_frame)

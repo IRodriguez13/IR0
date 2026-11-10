@@ -37,6 +37,8 @@ typedef struct arch_syscall_frame
 	uint64_t r10;
 	uint64_t r8;
 	uint64_t r9;
+	uint64_t rax;      /* return value; the syscall number at entry */
+	uint64_t orig_rax; /* syscall number, kept for a restart */
 } arch_syscall_frame_t;
 
 static inline uint64_t syscall_frame_ip(const arch_syscall_frame_t *sf)
@@ -128,12 +130,24 @@ static inline void syscall_frame_set_arg(arch_syscall_frame_t *sf,
 	}
 }
 
-/*
- * Frame capture records RIP after the 2-byte x86-64 syscall insn (0f 05).
- * SA_RESTART must rewind to the insn, not return with rax=__NR_* as result.
- */
-static inline void syscall_frame_arm_restart(arch_syscall_frame_t *sf)
+/* The syscall return register (Linux pt_regs ax). */
+static inline uint64_t syscall_frame_return(const arch_syscall_frame_t *sf)
 {
-	if (sf && sf->rip >= 2)
-		sf->rip -= 2;
+	return sf->rax;
+}
+
+static inline void syscall_frame_set_return(arch_syscall_frame_t *sf,
+					    uint64_t value)
+{
+	sf->rax = value;
+}
+
+/*
+ * Linux x86 restart: back over the 2-byte syscall instruction (0f 05) with
+ * the syscall number in rax again, so returning re-issues the call.
+ */
+static inline void syscall_frame_restart(arch_syscall_frame_t *sf)
+{
+	sf->rip -= 2;
+	sf->rax = sf->orig_rax;
 }

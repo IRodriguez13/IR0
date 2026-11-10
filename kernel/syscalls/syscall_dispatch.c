@@ -42,7 +42,6 @@
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/arch_port.h>
 #include <ir0/cpu.h>
-#include <ir0/context.h>
 #include <ir0/sysv_shm.h>
 #include <ir0/memfd.h>
 #include <ir0/eventfd.h>
@@ -475,6 +474,40 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SHMGET] = wrap_sys_shmget;
 }
 
+/*
+ * exit_to_user_mode - Last work before a syscall returns to userspace
+ * (Linux syscall_exit_to_user_mode()). The result goes into the task's
+ * syscall frame, a pending reschedule sleeps in schedule() on this stack,
+ * and pending signals may turn the frame into a restart or a handler entry.
+ * The syscall exit then returns through that frame; the value returned
+ * here is the frame's return register.
+ */
+static int64_t exit_to_user_mode(process_t *p, enum ir0_syscall_id id,
+				 int64_t r)
+{
+  syscall_frame_set_return(&p->syscall_frame, (uint64_t)r);
+  if (sched_take_resched())
+    schedule();
+  do_signal(p);
+
+  /*
+   * Linux-style fork exit: wake the child once the parent's result is in
+   * its frame, with interrupts off through the return so the timer cannot
+   * run the child first (UP). vfork does not come here: its child already
+   * ran while the parent was blocked inside vfork_process().
+   */
+  if ((id == IR0_SYSCALL_FORK || id == IR0_SYSCALL_CLONE) &&
+      p->fork_pending_child)
+  {
+    disable_interrupts();
+    process_fork_wake_pending(p);
+  }
+
+  /* The ISA exit restores any required segment state. */
+  process_restore_user_task_segments(p);
+  return (int64_t)syscall_frame_return(&p->syscall_frame);
+}
+
 /**
  * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
  * @syscall_num: Native Linux ABI syscall number for the active ISA
@@ -490,12 +523,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   enum ir0_syscall_id syscall_id;
 
   syscall_id = syscall_decode_number(syscall_num);
-
-  if (current_process)
-    process_capture_syscall_frame(current_process);
-
-  if (current_process && current_process->mode == USER_MODE)
-    current_process->syscall_entry_nr = (uint32_t)syscall_num;
 
   /*
    * Linux: longjmp from a handler skips rt_sigreturn. Drop stale kernel
@@ -513,7 +540,11 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   }
 
   if (syscall_id == IR0_SYSCALL_UNKNOWN)
+  {
+    if (current_process && current_process->mode == USER_MODE)
+      return exit_to_user_mode(current_process, syscall_id, -ENOSYS);
     return -ENOSYS;
+  }
 
   KTM_TRACE_SYSCALL_ENTER((uint32_t)syscall_num);
   if (current_process && current_process->mode == USER_MODE)
@@ -544,96 +575,8 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
       syscall_id == IR0_SYSCALL_READ)
     d1_12_read_diag_syscall_post(current_process, r);
 
-  /*
-   * Publish the completed return value before signal delivery.  A signal
-   * arriving at this exit edge interrupted userspace *after* the syscall;
-   * its sigcontext must therefore preserve @r, not manufacture -EINTR.
-   * Genuinely blocked syscalls use kernel_sleep_syscall_frame instead.
-   */
   if (current_process && current_process->mode == USER_MODE)
-    current_process->syscall_resume_rax = (uint64_t)r;
-
-  /* Deliver only at a proven exit-to-user edge on this task's own stack. */
-  if (current_process && current_process->mode == USER_MODE)
-  {
-    signals_prepare_user_return(current_process);
-    /* The value above is capture-only; arch resume owns this field later. */
-    current_process->syscall_resume_rax = 0;
-  }
-
-  if ((syscall_id == IR0_SYSCALL_FORK || syscall_id == IR0_SYSCALL_CLONE) &&
-      current_process && current_process->fork_pending_child)
-  {
-    /*
-     * Mark ring-0 before waking the child so a timer-deferred schedule
-     * resumes via the kernel continuation, not a userspace return with stale IP.
-     * IRQs off first: otherwise arm leaves KERNEL_CS+user RIP while the timer
-     * can still preempt and schedule the parent as next (desk #UD class).
-     * vfork does not use this path: the child already ran while the parent
-     * was blocked inside vfork_process().
-     */
-    if (current_process->mode == USER_MODE)
-    {
-      disable_interrupts();
-      process_arm_kernel_syscall_sleep(current_process);
-    }
-
-    /*
-     * Linux-style fork exit: wake child after parent retval is in rax, then
-     * keep interrupts disabled through the ISA return so the timer cannot run
-     * the child first (UP).
-     */
-    disable_interrupts();
-    process_fork_wake_pending(current_process);
-  }
-  else
-  {
-    /*
-     * Signal handler armed during this syscall (e.g. SIGALRM in recvfrom):
-     * A fast syscall return would ignore the staged task IP and resume after
-     * the syscall. Use the full saved-frame route into the signal handler.
-     */
-    if (current_process && current_process->mode == USER_MODE &&
-        process_saved_context_present(current_process) &&
-        process_signal_enter_pending(current_process))
-    {
-      process_signal_enter_pending_clear(current_process);
-      process_restore_user_task_segments(current_process);
-      current_process->irq_frame_saved = 0;
-      current_process->want_kernel_ret = 0;
-      tls_restore_current();
-      switch_to_user_task(&current_process->task);
-    }
-
-    /*
-     * Pending reschedule at the exit edge (Linux exit_to_user_mode): the
-     * task sleeps in schedule() on its own kernel stack and returns @r
-     * through the normal exit path when it runs again.
-     */
-    if (current_process && current_process->mode == USER_MODE &&
-        current_process->syscall_frame_fresh)
-    {
-      if (sched_take_resched())
-        schedule();
-    }
-    else
-    {
-      if (current_process && current_process->mode == USER_MODE)
-        process_arm_kernel_syscall_sleep(current_process);
-      if (sched_take_resched())
-        schedule();
-    }
-  }
-
-  /*
-   * Restore user segments in task_t only after any in-syscall schedule
-   * completes; the ISA exit path restores any required segment state.
-   */
-  if (current_process && current_process->mode == USER_MODE)
-    process_restore_user_task_segments(current_process);
-
-  if (current_process && current_process->mode == USER_MODE)
-    signal_note_syscall_return(current_process, r);
+    r = exit_to_user_mode(current_process, syscall_id, r);
 
   return r;
 }

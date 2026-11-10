@@ -38,7 +38,7 @@ extern void test_class_b_ctx_invariant_matrix(void);
 extern void test_musl_mmap_contract(void);
 extern void test_mmap_null_placement(void);
 extern void test_signal_rt_sigaction_abi(void);
-extern void test_sigreturn_sleep_eintr_frame_abi(void);
+extern void test_syscall_restart_frame_abi(void);
 extern void test_elf_initial_brk_abi(void);
 extern void test_elf_local_reloc_abi(void);
 extern void test_elf_interp_abi(void);
@@ -136,7 +136,7 @@ static void (*test_functions[])(void) = {
 	test_musl_mmap_contract,
 	test_mmap_null_placement,
 	test_signal_rt_sigaction_abi,
-	test_sigreturn_sleep_eintr_frame_abi,
+	test_syscall_restart_frame_abi,
 	test_elf_initial_brk_abi,
 	test_elf_local_reloc_abi,
 	test_elf_interp_abi,

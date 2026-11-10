@@ -68,19 +68,6 @@ void process_wait_status_ptr_set(process_t *p, int *status_ptr)
 		p->wait_status_ptr = status_ptr;
 }
 
-pid_t process_wait_resume_child_pid(const process_t *p)
-{
-	if (!p)
-		return 0;
-	return p->wait_resume_child_pid;
-}
-
-void process_wait_resume_child_pid_set(process_t *p, pid_t pid)
-{
-	if (p)
-		p->wait_resume_child_pid = pid;
-}
-
 void process_wait_state_init(process_t *p)
 {
 	if (!p)
@@ -89,7 +76,6 @@ void process_wait_state_init(process_t *p)
 	p->wait_blocked = 0;
 	p->wait_target_pid = 0;
 	p->wait_options = 0;
-	p->wait_resume_child_pid = 0;
 }
 
 void process_wait_state_arm(process_t *p, pid_t pid, int options, int *status_ptr)
@@ -100,17 +86,9 @@ void process_wait_state_arm(process_t *p, pid_t pid, int options, int *status_pt
 	p->wait_blocked = 1;
 	p->wait_target_pid = pid;
 	p->wait_options = options;
-	p->wait_resume_child_pid = 0;
-	/*
-	 * Blocked in wait4: defer catchable user-handler delivery until the
-	 * syscall returns (Linux wait_event_interruptible). Prevents SIGCHLD
-	 * to run's musl handler while kernel_sleep on waitpid → rip=user stack.
-	 */
-	process_signal_defer_catchable_set(p);
 }
 
 void process_wait_state_clear(process_t *p)
 {
-	process_signal_defer_catchable_clear(p);
 	process_wait_state_init(p);
 }

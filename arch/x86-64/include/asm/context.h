@@ -3,11 +3,6 @@
 
 #include <stdint.h>
 
-struct process;
-
-/* Repair the x86 iretq image immediately before a direct user return. */
-void x86_prepare_task_user_return(struct process *proc);
-
 struct task;
 
 /* asm/context/switch_x64.asm */

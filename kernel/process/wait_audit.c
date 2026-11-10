@@ -16,7 +16,7 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 		return;
 	ip = task_get_ip(&p->task);
 	sp = task_get_sp(&p->task);
-	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s ip=%llx sp=%llx return_user=%llx status=%llx retval=%llx address_space=%llx irq_saved=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)ip, (unsigned long long)sp, (unsigned long long)task_return_state_is_user(&p->task), (unsigned long long)task_get_flags(&p->task), (unsigned long long)task_get_retval(&p->task), (unsigned long long)process_mm_root(p), (unsigned long long)p->irq_frame_saved);
+	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s ip=%llx sp=%llx return_user=%llx status=%llx retval=%llx address_space=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)ip, (unsigned long long)sp, (unsigned long long)task_return_state_is_user(&p->task), (unsigned long long)task_get_flags(&p->task), (unsigned long long)task_get_retval(&p->task), (unsigned long long)process_mm_root(p));
 	if (!mm_user_va_ok((uintptr_t)ip, 1))
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
 	if (!mm_user_va_ok((uintptr_t)sp, 1))
@@ -38,8 +38,6 @@ void wait_exit_audit_process_exit(process_t *dying, process_t *parent,
 	klog_debug("WAIT", "[WAIT_EXIT_AUDIT][process_exit] child retains task/MM until reap");
 	if (parent)
 		wait_exit_audit_classify_user_frame("parent-at-child-exit", parent);
-	if (dying->irq_frame_saved)
-		klog_debug("WAIT", "CLASSIFY EXIT_FREED_PARENT_RESOURCE note=child_irq_saved_stale_may_misroute_resume");
 #endif
 }
 

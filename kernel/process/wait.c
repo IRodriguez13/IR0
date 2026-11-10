@@ -132,61 +132,11 @@ int process_wait_prepare_child_wake(const process_t *parent,
 void process_wait_wake_blocked_parent(process_t *parent, process_t *child)
 {
 	int status_val;
-	int *status_ptr;
 
 	if (process_wait_prepare_child_wake(parent, child, &status_val) != 0)
 		return;
 
-
-	if (!parent->irq_frame_saved)
-	{
-		/*
-		 * Blocked via process_arm_kernel_syscall_sleep: retain the kernel
-		 * continuation so switch_to resumes inside process_wait, rather than
-		 * returning to userspace with the block-time placeholder result.
-		 */
-		process_set_sched_state(parent, PROCESS_READY);
-		sched_add(parent);
-		sched_promote(parent);
-		return;
-	}
-
-	status_ptr = process_wait_status_ptr_peek(parent);
-	if (!status_ptr)
-		status_ptr = (int *)(uintptr_t)process_syscall_arg(parent, 1);
-
-	if (status_ptr)
-	{
-		int copy_ok = 0;
-
-		if (parent->mode == KERNEL_MODE)
-		{
-			*status_ptr = status_val;
-			copy_ok = 1;
-		}
-		else if (copy_to_user_mm(process_pgd(parent),
-					 (uintptr_t)status_ptr, &status_val,
-					 sizeof(int)) == 0)
-		{
-			copy_ok = 1;
-		}
-
-		if (!copy_ok)
-		{
-			process_wait_resume_child_pid_set(parent, 0);
-			parent->syscall_resume_rax = (uint64_t)(int64_t)(-EFAULT);
-			process_set_sched_state(parent, PROCESS_READY);
-			sched_add(parent);
-			sched_promote(parent);
-			return;
-		}
-	}
-
-#if IR0_DEBUG_PROC
-	klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] wait_wake parent=%x child=%x status=%x rax=%x", (unsigned)((uint32_t)parent->task.pid), (unsigned)((uint32_t)child->task.pid), (unsigned)((uint32_t)status_val), (unsigned)((uint32_t)child->task.pid));
-#endif
-	process_wait_resume_child_pid_set(parent, child->task.pid);
-	parent->syscall_resume_rax = (uint64_t)child->task.pid;
+	/* The woken wait4 reaps @child itself on its own stack. */
 	process_set_sched_state(parent, PROCESS_READY);
 	sched_add(parent);
 	sched_promote(parent);
@@ -283,9 +233,6 @@ int process_wait(pid_t pid, int *status, int options)
 					return -EFAULT;
 			}
 			process_wait_state_clear(current_process);
-			process_clear_in_thread_syscall_block(current_process);
-			current_process->syscall_resume_rax = 0;
-			task_set_retval(&current_process->task, (uint64_t)(uint32_t)reaped_pid);
 			/*
 			 * wait(2) consumed this child exit (Linux waitpid). Drop stale
 			 * SIGCHLD pending when no zombies remain — otherwise
@@ -305,7 +252,7 @@ int process_wait(pid_t pid, int *status, int options)
 			{
 				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=echild parent=%x target=%x ret=ECHILD\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
 			}
-			process_reset_blocked_syscall_state(current_process);
+			process_wait_state_clear(current_process);
 			return -ECHILD;
 		}
 
@@ -316,7 +263,7 @@ int process_wait(pid_t pid, int *status, int options)
 			{
 				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=%x target=%x ret=0 status_write=no\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
 			}
-			process_reset_blocked_syscall_state(current_process);
+			process_wait_state_clear(current_process);
 			return 0;
 		}
 
@@ -328,18 +275,6 @@ int process_wait(pid_t pid, int *status, int options)
 		{
 			wait_exit_audit_process_wait_block(pid, status);
 			process_wait_state_arm(current_process, pid, active_opts, status);
-			current_process->syscall_resume_rax = 0;
-			task_set_retval(&current_process->task, 0);
-			/*
-			 * Same contract as pipe/TTY/poll: kernel continuation only.
-			 * Do NOT call process_arm_blocked_syscall_resume() —
-			 * that stages a userspace return with irq_frame_saved and,
-			 * combined with deferred want_kernel_ret / skip-save, creates
-			 * an invalid mixed return state while a child blocks
-			 * on stdin (desk: ash wait4 + hexdump).
-			 */
-			current_process->irq_frame_saved = 0;
-			process_arm_kernel_syscall_sleep(current_process);
 			wait_exit_audit_classify_user_frame("parent-after-wait-arm",
 							    current_process);
 		}
@@ -372,17 +307,28 @@ int process_wait(pid_t pid, int *status, int options)
 		process_irq_restore(irq_flags);
 		if (zombie)
 			continue;
+		/*
+		 * wait_event_interruptible: a caught signal ends the wait, and
+		 * the syscall exit restarts it under SA_RESTART or fails it with
+		 * EINTR. Checked after BLOCKED is published, so a signal sent
+		 * in between has already set READY.
+		 */
+		if (signal_pending(current_process))
+		{
+			process_set_sched_state(current_process, PROCESS_READY);
+			process_wait_state_clear(current_process);
+			return -ERESTARTSYS;
+		}
 
 		while (current_process->state == PROCESS_BLOCKED)
 		{
 			/*
-			 * wait_event ordering: a child exiting between the
-			 * scan above and process_arm_kernel_syscall_sleep()
-			 * sets READY, which the arm then republishes as
-			 * BLOCKED. Watching only the state left the shell
-			 * asleep with its pipeline stages already zombies.
+			 * wait_event ordering: the condition, not just the
+			 * sleep state, ends the wait. The loop above rescans
+			 * for the zombie and the signal.
 			 */
-			if (wait_find_matching_zombie(current_process, pid))
+			if (wait_find_matching_zombie(current_process, pid) ||
+			    signal_pending(current_process))
 			{
 				/*
 				 * Unlike the sigsuspend/pause loops, the reap
@@ -397,10 +343,5 @@ int process_wait(pid_t pid, int *status, int options)
 			if (current_process->state != PROCESS_BLOCKED)
 				break;
 		}
-		/*
-		 * Keep the kernel continuation until process_wait returns; the syscall
-		 * exit path restores userspace state. Restoring it here could return
-		 * with the block-time zero placeholder (wait4_block_reap flake).
-		 */
 	}
 }

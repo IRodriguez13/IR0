@@ -32,10 +32,6 @@ void process_pre_zombie_teardown(process_t *dying)
 	if (!dying)
 		return;
 
-	dying->irq_frame_saved = 0;
-	process_signal_defer_catchable_clear(dying);
-	process_signal_last_delivered_clear(dying);
-	process_kernel_sleep_interrupted_clear(dying);
 	process_reap_zombies(dying);
 	process_reparent_children(dying);
 	process_resources_release_on_exit(dying);

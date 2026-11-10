@@ -569,8 +569,6 @@ pid_t vfork_process(void *child_stack)
 	process_set_sched_state(child, PROCESS_READY);
 	sched_add(child);
 	process_set_sched_state(parent, PROCESS_BLOCKED);
-	if (parent->mode == USER_MODE)
-		process_arm_kernel_syscall_sleep(parent);
 
 	while (process_vfork_parent_blocked(parent) &&
 	       parent->state == PROCESS_BLOCKED)

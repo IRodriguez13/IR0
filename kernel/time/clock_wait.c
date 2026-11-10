@@ -17,6 +17,7 @@
 #include <ir0/process.h>
 #include <ir0/errno.h>
 #include <ir0/sched.h>
+#include <ir0/signals.h>
 #include <ir0/arch_port.h>
 #include <ir0/kernel.h>
 
@@ -71,13 +72,7 @@ void ir0_clock_wait_fire_due(uint64_t now_ms)
 
 	for (p = process_list; p; p = p->next)
 	{
-		/*
-		 * An armed clock wait owns its deadline even when irq_frame_saved
-		 * describes how the blocked syscall must resume.  Treating that
-		 * resume metadata as a different wake source stranded timed socket
-		 * reads with only idle runnable.  poll_waiter is the actual separate
-		 * readiness owner and remains excluded here.
-		 */
+		/* poll_waiter owns its own timeout (poll_wake_do). */
 		if (p->poll_waiter)
 			continue;
 		if (!p->clock_wait_armed)
@@ -136,40 +131,41 @@ void ir0_clock_wait_service_runqueue(void)
 int ir0_clock_wait_block_until(uint64_t deadline_ms)
 {
 	process_t *proc;
+	int ret = 0;
 
 	proc = current_process;
 	if (!proc)
 		return -ESRCH;
 
-	if (clock_get_uptime_milliseconds() >= deadline_ms)
-		return 0;
-
 	ir0_clock_wait_arm(proc, deadline_ms);
-	process_set_sched_state(proc, PROCESS_BLOCKED);
-	process_arm_kernel_syscall_sleep(proc);
-
-	while (proc->state == PROCESS_BLOCKED)
+	for (;;)
 	{
-		ir0_clock_wait_idle_step();
-		if (ir0_clock_should_yield_runqueue(proc))
-			schedule();
-
-		if (proc->state != PROCESS_BLOCKED)
+		/*
+		 * prepare_to_wait: BLOCKED before the tests, so a signal or the
+		 * deadline firing in between sets READY instead of being lost.
+		 * Only the deadline or a signal ends the sleep; any other wake
+		 * goes back to sleep.
+		 */
+		process_set_sched_state(proc, PROCESS_BLOCKED);
+		if (clock_get_uptime_milliseconds() >= deadline_ms)
 			break;
-		if (sched_count_runnable() == 0)
-			cpu_idle();
+		if (signal_pending(proc))
+		{
+			ret = -EINTR;
+			break;
+		}
+		if (!proc->clock_wait_armed)
+			ir0_clock_wait_arm(proc, deadline_ms);
+
+		ir0_clock_wait_idle_step();
+		if (proc->state == PROCESS_BLOCKED &&
+		    ir0_clock_should_yield_runqueue(proc))
+			schedule();
 	}
 
+	process_set_sched_state(proc, PROCESS_READY);
 	ir0_clock_wait_disarm(proc);
-	process_restore_user_task_segments(proc);
-
-	if (proc->syscall_interrupted)
-	{
-		proc->syscall_interrupted = 0;
-		return -EINTR;
-	}
-
-	return 0;
+	return ret;
 }
 
 void sleep_wake_check(void)

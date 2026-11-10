@@ -17,9 +17,6 @@ void switch_trace(enum switch_trace_event event)
 {
 	switch (event)
 	{
-	case SWITCH_TRACE_KERNEL_RETURN_WAIT_DEMOTE:
-		klog_info("CTX", "CLASSIFY KERNEL_RETURN_WAIT_DEMOTE");
-		break;
 	case SWITCH_TRACE_KERNEL_RETURN_FRAME_REPAIR:
 		klog_info("CTX", "CLASSIFY KERNEL_RETURN_FRAME_REPAIR");
 		break;

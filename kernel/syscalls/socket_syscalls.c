@@ -546,7 +546,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 				return -EAGAIN;
 			if (deadline && clock_get_uptime_milliseconds() >= deadline)
 				return -EAGAIN; /* Linux SO_RCVTIMEO → EAGAIN */
-			if (signals_pause_should_interrupt(current_process))
+			if (signal_pending(current_process))
 				return -EINTR;
 			{
 				int64_t sleep_ret = syscall_sleep_ms_locked(20);
@@ -599,14 +599,9 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 				kfree(kbuf);
 				return -EAGAIN;
 			}
-			if (signals_pause_should_interrupt(current_process))
+			if (signal_pending(current_process))
 			{
-				handle_signals();
 				kfree(kbuf);
-				/*
-				 * Leave signal_enter_pending for syscall_dispatch
-				 * (same as tcp_wire_connect interrupt).
-				 */
 				return -EINTR;
 			}
 			{
@@ -618,9 +613,8 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 					return sleep_ret;
 				}
 			}
-			if (signals_pause_should_interrupt(current_process))
+			if (signal_pending(current_process))
 			{
-				handle_signals();
 				kfree(kbuf);
 				return -EINTR;
 			}
@@ -853,7 +847,7 @@ int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags
 			break;
 		if (sock_nonblock_fd(fd, 0) || (flags & SOCK_NONBLOCK))
 			return -EAGAIN;
-		if (signals_pause_should_interrupt(current_process))
+		if (signal_pending(current_process))
 			return -EINTR;
 #if CONFIG_ENABLE_NETWORKING
 		net_stack_poll();
@@ -1392,7 +1386,7 @@ recv_payload:
 			/* Linux may return an already received prefix immediately. */
 			if (total > 0 || got_rights || nonblock)
 				break;
-			if (signals_pause_should_interrupt(current_process))
+			if (signal_pending(current_process))
 			{
 				kfree(kbuf);
 				scm_close_installed_fds(installed_fds,

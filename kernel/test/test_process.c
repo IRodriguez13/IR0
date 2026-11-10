@@ -91,14 +91,10 @@ void ktest_wait4_status(void)
  */
 static void ktest_wait4_specific_scenario(void)
 {
-	int saved_irq_frame_saved = current_process->irq_frame_saved;
 	int saved_wait_blocked = process_wait_blocked(current_process);
 	pid_t saved_wait_target = process_wait_target_pid(current_process);
 	int saved_wait_options = process_wait_options(current_process);
 	int *saved_wait_status = process_wait_status_ptr_peek(current_process);
-	pid_t saved_wait_resume = process_wait_resume_child_pid(current_process);
-	int saved_defer_catchable =
-		process_signal_defer_catchable(current_process);
 	pid_t pid_a;
 	pid_t pid_b;
 	process_t *child_a;
@@ -118,11 +114,9 @@ static void ktest_wait4_specific_scenario(void)
 
 	process_wait_blocked_set(current_process);
 	process_wait_target_pid_set(current_process, pid_a);
-	current_process->irq_frame_saved = 1;
 	KASSERT_EQ(process_wait_child_matches_blocked_target(current_process, pid_b), 0);
 	KASSERT_EQ(process_wait_child_matches_blocked_target(current_process, pid_a), 1);
 	process_wait_state_clear(current_process);
-	current_process->irq_frame_saved = 0;
 
 	child_a = process_find_by_pid(pid_a);
 	KASSERT(child_a != NULL);
@@ -140,7 +134,6 @@ static void ktest_wait4_specific_scenario(void)
 	KASSERT(process_find_by_pid(pid_b) == NULL);
 
 	/* process_wait() cleared the contract; put the caller's state back. */
-	current_process->irq_frame_saved = saved_irq_frame_saved;
 	if (saved_wait_blocked)
 		process_wait_blocked_set(current_process);
 	else
@@ -148,59 +141,41 @@ static void ktest_wait4_specific_scenario(void)
 	process_wait_target_pid_set(current_process, saved_wait_target);
 	process_wait_options_set(current_process, saved_wait_options);
 	process_wait_status_ptr_set(current_process, saved_wait_status);
-	process_wait_resume_child_pid_set(current_process, saved_wait_resume);
-	if (saved_defer_catchable)
-		process_signal_defer_catchable_set(current_process);
-	else
-		process_signal_defer_catchable_clear(current_process);
 }
 
 void ktest_wait4_specific_reaps_requested_child(void)
 {
-	int saved_irq_frame_saved;
 	int saved_wait_blocked;
 	pid_t saved_wait_target;
 	int saved_wait_options;
 	int *saved_wait_status;
-	pid_t saved_wait_resume;
-	int saved_defer_catchable;
 	int sentinel_status;
 
 	KTEST_BEGIN("wait4_specific_reaps_requested_child");
 
-	saved_irq_frame_saved = current_process->irq_frame_saved;
 	saved_wait_blocked = process_wait_blocked(current_process);
 	saved_wait_target = process_wait_target_pid(current_process);
 	saved_wait_options = process_wait_options(current_process);
 	saved_wait_status = process_wait_status_ptr_peek(current_process);
-	saved_wait_resume = process_wait_resume_child_pid(current_process);
-	saved_defer_catchable = process_signal_defer_catchable(current_process);
 
 	/*
 	 * Install a distinctive wait state and require the scenario to put it
 	 * back.  Without this check the test would still pass while leaving the
 	 * holder blocked/targeted or dropping a saved syscall frame.
 	 */
-	current_process->irq_frame_saved = 1;
 	process_wait_blocked_set(current_process);
 	process_wait_target_pid_set(current_process, 0x7FFF);
 	process_wait_options_set(current_process, WNOHANG);
 	process_wait_status_ptr_set(current_process, &sentinel_status);
-	process_wait_resume_child_pid_set(current_process, 0x7FFE);
-	process_signal_defer_catchable_set(current_process);
 
 	ktest_wait4_specific_scenario();
 
-	KASSERT_EQ(current_process->irq_frame_saved, 1);
 	KASSERT_EQ(process_wait_blocked(current_process), 1);
 	KASSERT_EQ(process_wait_target_pid(current_process), 0x7FFF);
 	KASSERT_EQ(process_wait_options(current_process), WNOHANG);
 	KASSERT(process_wait_status_ptr_peek(current_process) == &sentinel_status);
-	KASSERT_EQ(process_wait_resume_child_pid(current_process), 0x7FFE);
-	KASSERT_EQ(process_signal_defer_catchable(current_process), 1);
 
 	/* Restore the holder exactly as it was before the test. */
-	current_process->irq_frame_saved = saved_irq_frame_saved;
 	if (saved_wait_blocked)
 		process_wait_blocked_set(current_process);
 	else
@@ -208,11 +183,6 @@ void ktest_wait4_specific_reaps_requested_child(void)
 	process_wait_target_pid_set(current_process, saved_wait_target);
 	process_wait_options_set(current_process, saved_wait_options);
 	process_wait_status_ptr_set(current_process, saved_wait_status);
-	process_wait_resume_child_pid_set(current_process, saved_wait_resume);
-	if (saved_defer_catchable)
-		process_signal_defer_catchable_set(current_process);
-	else
-		process_signal_defer_catchable_clear(current_process);
 
 	KTEST_END();
 }
@@ -336,7 +306,7 @@ void ktest_kill_sigterm_wait_status(void)
 	child = process_find_by_pid(pid);
 	KASSERT(child != NULL);
 
-	/* Simulate SIGTERM death encoding (same path as handle_signals + wait4). */
+	/* Simulate SIGTERM death encoding (same path as a default-terminate signal + wait4). */
 	process_mark_zombie(child);
 	child->exit_signal = SIGTERM;
 	child->exit_code = 0;

@@ -33,31 +33,6 @@ int process_task_kernel_return_state_bad(const task_t *t)
 	       mm_user_va_ok((uintptr_t)task_get_ip(t), 1);
 }
 
-/*
- * process_context_user_resume_eligible - Common policy for a task which may
- * leave the kernel on its next context activation.
- *
- * The scheduler and process layer own this decision.  Architecture backends
- * own the machine frame validation and the actual privilege transition.  In
- * particular, a positive result does not authorize an ISA to fabricate a
- * return frame: it merely says that no generic blocked-syscall state requires
- * execution to continue in the kernel.
- */
-int process_context_user_resume_eligible(const process_t *p)
-{
-	if (!p || p->mode != USER_MODE)
-		return 0;
-
-	if (p->kernel_syscall_sleep || p->want_kernel_ret || p->irq_frame_saved)
-		return 0;
-
-	if ((process_wait_blocked(p) || process_wait_target_pid(p) != 0) &&
-	    process_wait_resume_child_pid(p) <= 0)
-		return 0;
-
-	return 1;
-}
-
 uint64_t process_list_count(void)
 {
 	process_t *p;
@@ -199,20 +174,11 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 
 	if (!p || p->mode != USER_MODE)
 		return;
-	if (!task_cs_is_user(&p->task) || p->want_kernel_ret)
+	if (!task_cs_is_user(&p->task))
 		return;
 
 	sf = &p->syscall_frame;
 	task_sync_syscall_soft_mirror(&p->task, sf);
-}
-
-void process_capture_syscall_frame(process_t *p)
-{
-	/*
-	 * Capture is at syscall entry (syscall_capture_frame_at_entry).
-	 * Dispatch still calls this; keep it as a documented no-op.
-	 */
-	(void)p;
 }
 
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
@@ -227,150 +193,9 @@ void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_
 	task_apply_syscall_frame(task, &arch_sf, rax);
 }
 
-void process_syscall_restore_exit_regs(uint64_t *stack_r9_slot)
+void process_syscall_restore_exit_regs(uint64_t *exit_frame)
 {
-	syscall_restore_exit_regs(current_process, stack_r9_slot);
-}
-
-/*
- * process_clear_in_thread_syscall_block - Drop irq_frame_saved after blocking
- * syscalls that resume inside the syscall handler (poll/pipe read loops), not
- * via switch_to_user_task.
- */
-void process_clear_in_thread_syscall_block(process_t *p)
-{
-	if (!p)
-		return;
-
-	p->irq_frame_saved = 0;
-	p->poll_resume_via_arch = 0;
-	p->want_kernel_ret = 0;
-	p->kernel_syscall_sleep = 0;
-	process_kernel_sleep_interrupted_clear(p);
-	p->syscall_block_nr = 0;
-}
-
-void process_reset_blocked_syscall_state(process_t *p)
-{
-	if (!p)
-		return;
-
-	p->irq_frame_saved = 0;
-	p->poll_resume_via_arch = 0;
-	p->want_kernel_ret = 0;
-	p->kernel_syscall_sleep = 0;
-	process_kernel_sleep_interrupted_clear(p);
-	p->syscall_resume_rax = 0;
-	p->syscall_entry_nr = 0;
-	p->syscall_block_nr = 0;
-	p->syscall_frame_fresh = 0;
-	p->syscall_interrupted = 0;
-	process_wait_state_init(p);
-	p->poll_waiter = NULL;
-	p->clock_wait_armed = 0;
-	p->clock_wait_deadline_ms = IR0_CLOCK_WAIT_DISARMED;
-}
-
-static void process_apply_kernel_ret_segments(process_t *p)
-{
-	task_apply_kernel_segments(&p->task);
-}
-
-void process_kernel_sleep_capture_syscall_frame(process_t *p)
-{
-	if (!p || !p->syscall_frame_fresh)
-		return;
-
-	p->kernel_sleep_syscall_frame = p->syscall_frame;
-	p->syscall_block_nr = p->syscall_entry_nr;
-	/*
-	 * wait4(-1) is valid; only normalize read(0) snapshots so a stale
-	 * block frame cannot restart login read with rdi=-1 → #PF at ~0x3f.
-	 */
-	if (p->syscall_block_nr == 0u &&
-	    (int64_t)syscall_frame_arg(&p->kernel_sleep_syscall_frame, 0) < 0)
-		syscall_frame_set_arg(&p->kernel_sleep_syscall_frame, 0, 0);
-}
-
-/*
- * process_arm_kernel_syscall_sleep - Prepare a blocked syscall for
- * kernel-continuation resume after the context save, rather than via a stale
- * userspace instruction pointer.
- *
- * Name: "arm" is the English verb (prepare/enable), not the ARM ISA.
- *
- * User registers live in syscall_frame (pt_regs). If the saved task IP still
- * names userspace, only request the kernel continuation; never combine a
- * kernel return classification with that stale IP. The ISA save hook records
- * its current continuation state, then process_after_task_save clears the
- * request. If the IP is already kernel text, apply the kernel return state now.
- */
-void process_arm_kernel_syscall_sleep(process_t *p)
-{
-	if (!p || p->mode != USER_MODE)
-		return;
-
-	/*
-	 * Outlives want_kernel_ret, which process_after_task_save clears once
-	 * the segments are applied. The resume gate runs later still and needs
-	 * to know this task must re-enter its syscall rather than return directly
-	 * to userspace.
-	 */
-	p->kernel_syscall_sleep = 1;
-
-	/*
-	 * Snapshot the syscall entry frame at block time. Delivery must not
-	 * trust syscall_frame later — kstack GPR residue and handler redirect
-	 * can leave rdi=-1 and double keystrokes after SIGCHLD (line editor).
-	 */
-	if (p->syscall_frame_fresh)
-		process_kernel_sleep_capture_syscall_frame(p);
-	else if (p->syscall_block_nr != 0u &&
-		 p->syscall_block_nr != p->syscall_entry_nr)
-	{
-		/*
-		 * Prior syscall left a stale block snap (e.g. wait4) while we
-		 * block again in read — drop it so sigreturn cannot restart
-		 * the wrong syscall.
-		 */
-		memset(&p->kernel_sleep_syscall_frame, 0,
-		       sizeof(p->kernel_sleep_syscall_frame));
-		p->syscall_block_nr = 0;
-	}
-
-	if (mm_user_va_ok((uintptr_t)task_get_ip(&p->task), 1))
-	{
-		p->want_kernel_ret = 1;
-		return;
-	}
-
-	process_apply_kernel_ret_segments(p);
-	p->want_kernel_ret = 0;
-}
-
-/*
- * process_after_task_save - Linux-like post-switch save epilogue.
- *
- * Called by an ISA save hook after the outgoing task context is captured.
- * Honour want_kernel_ret so the next resume takes the kernel continuation,
- * not a userspace-return path with a stale frame.
- */
-void process_after_task_save(task_t *prev)
-{
-	process_t *p;
-
-	if (!prev)
-		return;
-
-	p = task_to_process(prev);
-	if (!p || p->mode != USER_MODE || !p->want_kernel_ret)
-		return;
-
-	if (mm_user_va_ok((uintptr_t)task_get_ip(prev), 1))
-		return;
-
-	process_apply_kernel_ret_segments(p);
-	p->want_kernel_ret = 0;
+	syscall_restore_exit_regs(current_process, exit_frame);
 }
 
 void process_restore_user_task_segments(process_t *p)
@@ -378,7 +203,5 @@ void process_restore_user_task_segments(process_t *p)
 	if (!p || p->mode != USER_MODE)
 		return;
 
-	p->want_kernel_ret = 0;
-	p->kernel_syscall_sleep = 0;
 	task_apply_user_segments(&p->task);
 }

@@ -32,12 +32,11 @@ void ktm_ctx_snapshot(const process_t *p, const char *reason)
 	 * printed the tail fields as garbage.
 	 */
 	klog_debug_fmt("KTM",
-		       "[KTM][CTX] reason=%s pid=%x comm=%s state=%llx irq_saved=%llx",
+		       "[KTM][CTX] reason=%s pid=%x comm=%s state=%llx",
 		       reason ? reason : "(null)",
 		       (unsigned)(uint32_t)p->task.pid,
 		       p->comm[0] ? p->comm : "(none)",
-		       (unsigned long long)(uint64_t)p->state,
-		       (unsigned long long)(uint64_t)p->irq_frame_saved);
+		       (unsigned long long)(uint64_t)p->state);
 	klog_debug_fmt("KTM",
 		       "[KTM][CTX] pid=%x rip=%llx rsp=%llx cs=%llx cr3=%llx poll=%llx",
 		       (unsigned)(uint32_t)p->task.pid,

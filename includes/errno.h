@@ -151,4 +151,13 @@
 #define ERFKILL		132	/* Operation not possible due to RF-kill */
 #define EHWPOISON	133	/* Memory page has hardware error */
 
+/*
+ * Kernel-internal results of an interrupted syscall (Linux
+ * include/linux/errno.h). The syscall exit turns them into a restart or
+ * EINTR; userspace never sees them.
+ */
+#define ERESTARTSYS	512	/* restart unless a handler without SA_RESTART runs */
+#define ERESTARTNOINTR	513	/* always restart */
+#define ERESTARTNOHAND	514	/* restart only if no handler runs */
+
 #endif /* _ERRNO_H */

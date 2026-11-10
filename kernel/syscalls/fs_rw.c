@@ -141,12 +141,11 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 	  if (n > step)
 	    n = step;
 	  if (current_process &&
-	      signals_pause_should_interrupt(current_process))
+	      signal_pending(current_process))
 	  {
-	    handle_signals();
 	    if (done > 0)
 	      return (int64_t)done;
-	    return -EINTR;
+	    return -ERESTARTSYS;
 	  }
 	  console_backend_write(str + done, n, color);
 	  done += n;
@@ -187,8 +186,8 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       {
 	if (nb)
 	  return total > 0 ? (int64_t)total : -EAGAIN;
-	if (signals_pause_should_interrupt(current_process))
-	  return total > 0 ? (int64_t)total : -EINTR;
+	if (signal_pending(current_process))
+	  return total > 0 ? (int64_t)total : -ERESTARTSYS;
 	{
 	  int64_t sleep_ret = syscall_sleep_ms_locked(20);
 
@@ -251,7 +250,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 	   */
 	  if (!(current_process->signal_ignored & SIGNAL_MASK(SIGPIPE)))
 	    current_process->signal_pending |= SIGNAL_MASK(SIGPIPE);
-	  handle_signals();
 	  return total > 0 ? (int64_t)total : -EPIPE;
 	}
 	if (ret != -EAGAIN)
@@ -262,34 +260,23 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 	{
 	  if (!(current_process->signal_ignored & SIGNAL_MASK(SIGPIPE)))
 	    current_process->signal_pending |= SIGNAL_MASK(SIGPIPE);
-	  handle_signals();
 	  return total > 0 ? (int64_t)total : -EPIPE;
 	}
-	if (signals_pause_should_interrupt(current_process))
-	{
-	  handle_signals();
-	  return total > 0 ? (int64_t)total : -EINTR;
-	}
+	if (signal_pending(current_process))
+	  return total > 0 ? (int64_t)total : -ERESTARTSYS;
 	{
 	  int wait_ret = pipe_wait(current_process, pipe, 0,
 				     chunk - off);
 
-	  if (wait_ret == -EINTR)
-	  {
-	    handle_signals();
-	    return total > 0 ? (int64_t)total : -EINTR;
-	  }
+	  if (wait_ret == -ERESTARTSYS)
+	    return total > 0 ? (int64_t)total : -ERESTARTSYS;
 	  if (wait_ret != 0)
 	    return total > 0 ? (int64_t)total : -EAGAIN;
 	}
-	if (signals_pause_should_interrupt(current_process))
-	{
-	  handle_signals();
-	  return total > 0 ? (int64_t)total : -EINTR;
-	}
+	if (signal_pending(current_process))
+	  return total > 0 ? (int64_t)total : -ERESTARTSYS;
       }
     }
-    process_clear_in_thread_syscall_block(current_process);
     return (int64_t)total;
   }
 
@@ -433,8 +420,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	  if (ret != 0 || nb ||
 	      devfs_pty_master_can_read(fd_table[fd].vfs_file))
 	    break;
-	  if (signals_pause_should_interrupt(current_process))
-	    return -EINTR;
+	  if (signal_pending(current_process))
+	    return -ERESTARTSYS;
 	  {
 	    int64_t sleep_ret = syscall_sleep_ms_locked(20);
 
@@ -468,8 +455,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	    if (ret != 0 || nb || !node->ops->can_read ||
 	        node->ops->can_read(&node->entry, current_process->task.pid))
 	      break;
-	    if (signals_pause_should_interrupt(current_process))
-	      return -EINTR;
+	    if (signal_pending(current_process))
+	      return -ERESTARTSYS;
 	    {
 	      int64_t sleep_ret = syscall_sleep_ms_locked(20);
 
@@ -541,8 +528,8 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	break;
       if (nb)
 	return -EAGAIN;
-      if (signals_pause_should_interrupt(current_process))
-	return -EINTR;
+      if (signal_pending(current_process))
+	return -ERESTARTSYS;
       {
 	int64_t sleep_ret = syscall_sleep_ms_locked(20);
 
@@ -587,7 +574,6 @@ int64_t sys_read(int fd, void *buf, size_t count)
           pipe_unread(pipe, kernel_read_buf, (size_t)ret);
           return -EFAULT;
         }
-        process_clear_in_thread_syscall_block(current_process);
         return ret;
       }
       if (ret != -EAGAIN)
@@ -603,27 +589,18 @@ int64_t sys_read(int fd, void *buf, size_t count)
        * cases together, as Linux pipe_read does under the pipe mutex —
        * buffered data first, EOF only on an empty pipe with no writers.
        */
-      if (signals_pause_should_interrupt(current_process))
-      {
-	handle_signals();
-	return -EINTR;
-      }
+      if (signal_pending(current_process))
+        return -ERESTARTSYS;
       {
 	int wait_ret = pipe_wait(current_process, pipe, 1, 0);
 
-	if (wait_ret == -EINTR)
-	{
-	  handle_signals();
-	  return -EINTR;
-	}
+	if (wait_ret == -ERESTARTSYS)
+	  return -ERESTARTSYS;
 	if (wait_ret != 0)
 	  return -EAGAIN;
       }
-      if (signals_pause_should_interrupt(current_process))
-      {
-	handle_signals();
-	return -EINTR;
-      }
+      if (signal_pending(current_process))
+        return -ERESTARTSYS;
     }
   }
 

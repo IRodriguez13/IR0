@@ -202,7 +202,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 			(unsigned)(p->signal_ignored));
 	log_info_fmt("PF",
 			"[PF] segv diag pid=%x arg0=%llx arg1=%llx sp=%llx "
-			"sigframe_sp=%llx mask_saved=%x enter_pend=%x "
+			"sigframe_sp=%llx mask_saved=%x "
 			"saved_ctx=%x\n",
 			(unsigned)((uint32_t)p->task.pid),
 			(unsigned long long)task_get_arg0(&p->task),
@@ -210,7 +210,6 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 			(unsigned long long)(info ? info->sp : 0ULL),
 			(unsigned long long)p->signal_frame_sp,
 			(unsigned)(p->signal_mask_saved_valid ? 1U : 0U),
-			(unsigned)(process_signal_enter_pending(p) ? 1U : 0U),
 			(unsigned)(process_saved_context_present(p) ? 1U : 0U));
 
 	/*

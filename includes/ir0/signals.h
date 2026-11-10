@@ -49,6 +49,7 @@ typedef struct process process_t;
 #define SIGUSR1  10   /* User-defined signal 1 */
 #define SIGUSR2  12   /* User-defined signal 2 */
 #define SIGPIPE  13   /* Write on a pipe with no readers (Linux signal(7)) */
+#define SIGURG   23   /* Urgent data on a socket (default: ignore) */
 #define SIGWINCH 28   /* Window size change (TTY) */
 #define SIGIO    29   /* I/O readiness notification (F_SETOWN/O_ASYNC) */
 
@@ -204,38 +205,23 @@ int signal_deliver_fault(int sig, const struct ir0_fault *fault,
 void force_sig_fault(int sig, const struct ir0_fault *fault, void *irq_frame);
 
 /**
- * handle_signals - Low-level pending-signal engine for current process.
+ * do_signal - Signal work on the way out of a syscall (Linux
+ * arch_do_signal_or_restart()).
+ * @p: the current task; its syscall frame holds the syscall's result
  *
- * Subsystems that are about to return to userspace should use
- * signals_prepare_user_return() instead. Blocking syscall implementations may
- * call this engine after their own interruption-state checks.
+ * Applies default actions, then either sets the frame up to enter the next
+ * caught signal's handler, or restarts an interrupted syscall. A result of
+ * -ERESTARTSYS / -ERESTARTNOHAND / -ERESTARTNOINTR is settled here: the
+ * call restarts or fails with EINTR, never reaching userspace as such.
  */
-void handle_signals(void);
-
-/**
- * signals_prepare_user_return - Run signal work at a proven user-return edge.
- * @p: process executing on the current kernel stack
- *
- * This is the portable exit-to-user facade. It deliberately rejects a process
- * other than current_process, so scheduler/ISA switch code cannot deliver a
- * signal to an incoming task while still executing on the outgoing stack.
- *
- * Returns 1 when a userspace handler was armed, 0 otherwise.
- */
-int signals_prepare_user_return(process_t *p);
+void do_signal(process_t *p);
 
 /*
- * True when @p has a pending signal that should interrupt pause(2) or run
- * handle_signals() even if the signal is blocked in signal_mask (default
- * termination for SIGKILL / SIGTERM).
+ * signal_pending - @p has a signal that must end an interruptible sleep
+ * (Linux signal_pending()). Blocking syscalls test it after setting
+ * PROCESS_BLOCKED and return -ERESTARTSYS (or -EINTR) when it is set.
  */
-int signals_pause_should_interrupt(process_t *p);
-
-/*
- * True when pending signal work exists for @p (includes default
- * SIGTERM/SIGKILL even if blocked in signal_mask).
- */
-int signals_should_handle_on_run(process_t *p);
+int signal_pending(process_t *p);
 
 /**
  * register_signal_handler - Register a signal handler for current process
@@ -281,11 +267,6 @@ void signals_try_abandon_sigframe(process_t *p);
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 				   uint64_t fault_addr);
 
-/*
- * While a user handler runs with saved sigreturn context, keep the syscall
- * return register (x0/rax) in sync with nested syscalls — never the signum.
- */
-void signal_note_syscall_return(process_t *p, int64_t ret);
 
 /*
  * Linux/musl place signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.

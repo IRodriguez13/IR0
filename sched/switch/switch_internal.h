@@ -13,13 +13,12 @@
 
 #include <ir0/task.h>
 
-/* Settle @next's blocked-syscall state before its kernel continuation runs. */
+/* Class B recovery for @next before its kernel continuation runs. */
 void context_prepare_kernel_resume(task_t *next);
 
 /* Events the switch path reports; tag text lives in diag.c. */
 enum switch_trace_event
 {
-	SWITCH_TRACE_KERNEL_RETURN_WAIT_DEMOTE,
 	SWITCH_TRACE_KERNEL_RETURN_FRAME_REPAIR,
 	SWITCH_TRACE_KERNEL_RETURN_UNREPAIRED_DEMOTE,
 };

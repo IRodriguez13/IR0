@@ -28,6 +28,7 @@
 global syscall_insn_entry_asm
 extern syscall_dispatch
 extern process_capture_syscall_frame_at_entry
+extern process_syscall_restore_exit_regs
 extern tls_restore_current
 
 section .bss
@@ -112,6 +113,16 @@ syscall_insn_entry_asm:
     call syscall_dispatch
     add rsp, 8            ; drop stack arg slot
     ; rax = retval; C call clobbered volatile regs (we'll restore from stack).
+
+    ; ---- Stage 5b: return through the task's syscall frame ----
+    ;
+    ; The frame captured at entry is this task's pt_regs: a restart or a
+    ; signal handler set up on the way out lives there. Write it back over
+    ; the saved slots (r9 .. user RSP) before they are popped.
+    push rax
+    lea rdi, [rsp + 8]
+    call process_syscall_restore_exit_regs
+    pop rax
 
     ; ---- Stage 6: restore user GPR per Linux syscall ABI ----
     pop r9

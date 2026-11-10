@@ -37,10 +37,11 @@ void syscall_capture_frame_at_entry(struct process *p,
 						 uint64_t rip_hw);
 
 /*
- * Write process->syscall_frame back onto the syscall exit stack (RESTORE_ALL).
+ * Write process->syscall_frame back onto the ISA syscall exit frame, so the
+ * return to userspace resumes whatever the frame holds after the syscall
+ * (its result, a restart, or a signal handler).
  */
-void syscall_restore_exit_regs(struct process *p,
-					    uint64_t *stack_r9_slot);
+void syscall_restore_exit_regs(struct process *p, uint64_t *exit_frame);
 
 /* Classify an opaque ISA exception frame without exposing its layout. */
 int exception_frame_is_user(const void *frame);

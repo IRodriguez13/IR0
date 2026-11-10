@@ -504,7 +504,6 @@ static int tty_sleep_for_input(void)
 		if (ir0_console_input_ready())
 		{
 			tty_waiter_remove(proc);
-			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "input_ready");
 			tty_sleep_depth--;
 			return 1;
@@ -515,20 +514,12 @@ static int tty_sleep_for_input(void)
 		{
 			tty_irq_restore(flags);
 			tty_waiter_remove(proc);
-			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "input_ready_irq");
 			tty_sleep_depth--;
 			return 1;
 		}
 
 		prev_state = proc->state;
-		/*
-		 * Stay in the syscall (kernel_ret), do not arm user-iretq with
-		 * rax=0. Staging a user frame here caused login to hang after
-		 * Enter: echo ran, but read() never returned → no Password:.
-		 */
-		if (proc->mode == USER_MODE)
-			process_arm_kernel_syscall_sleep(proc);
 		if (proc->state != PROCESS_READY)
 		{
 			process_set_sched_state(proc, PROCESS_BLOCKED);
@@ -554,7 +545,6 @@ static int tty_sleep_for_input(void)
 				d1_16_tty_state_transition(proc, PROCESS_BLOCKED,
 							   proc->state);
 			tty_waiter_remove(proc);
-			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "woke");
 			tty_sleep_depth--;
 			return 1;
@@ -574,7 +564,6 @@ static int tty_sleep_for_input(void)
 			d1_16_tty_state_transition(proc, prev_state,
 						   PROCESS_READY);
 			tty_waiter_remove(proc);
-			process_clear_in_thread_syscall_block(proc);
 			d1_16_tty_read_resume(proc, "poll_ready");
 			tty_sleep_depth--;
 			return 1;
@@ -727,8 +716,8 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 				return (int64_t)bytes_read;
 		}
 
-		if (current_process && signals_should_handle_on_run(current_process))
-			return -EINTR;
+		if (current_process && signal_pending(current_process))
+			return -ERESTARTSYS;
 
 		if (tty_icanon_on())
 		{
@@ -753,8 +742,8 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 			if (vmin == 0 && vtime == 0)
 			{
 				if (current_process &&
-				    signals_should_handle_on_run(current_process))
-					return -EINTR;
+				    signal_pending(current_process))
+					return -ERESTARTSYS;
 				return 0;
 			}
 			if (vmin == 0 && vtime > 0)
@@ -767,8 +756,8 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 					if (input_kbd_has_data())
 						break;
 					if (current_process &&
-					    signals_should_handle_on_run(current_process))
-						return -EINTR;
+					    signal_pending(current_process))
+						return -ERESTARTSYS;
 					(void)ir0_clock_wait_block_until(deadline);
 				}
 				continue;
@@ -922,13 +911,7 @@ int ir0_console_wake_readers(void)
 			tty_read_waiters[i] = NULL;
 			continue;
 		}
-		/*
-		 * Async wake: mark READY only. Do not clear want_kernel_ret
-		 * (process_after_task_save still needs it). Do not
-		 * process_clear_in_thread_syscall_block here.
-		 */
-		if (reader->mode == USER_MODE)
-			reader->irq_frame_saved = 0;
+		/* Async wake: mark READY; the reader drains on its own stack. */
 		prev_state = reader->state;
 		process_set_sched_state(reader, PROCESS_READY);
 		d1_16_tty_state_transition(reader, prev_state, PROCESS_READY);

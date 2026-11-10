@@ -27,11 +27,9 @@ void ktm_invariant_process(const process_t *p, const char *tag)
 	}
 
 	klog_debug_fmt("KTM",
-		       "[KTM][PROC] tag=%s pid=%x state=%llx irq_saved=%llx poll_resume_arch=%llx poll_waiter=%llx",
+		       "[KTM][PROC] tag=%s pid=%x state=%llx poll_waiter=%llx",
 		       tag ? tag : "?", (unsigned)(uint32_t)p->task.pid,
 		       (unsigned long long)(uint64_t)p->state,
-		       (unsigned long long)(uint64_t)p->irq_frame_saved,
-		       (unsigned long long)(uint64_t)p->poll_resume_via_arch,
 		       (unsigned long long)(uint64_t)(uintptr_t)p->poll_waiter);
 }
 

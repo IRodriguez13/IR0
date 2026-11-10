@@ -1362,121 +1362,50 @@ def check_process_saved_context_accessor():
     return errors
 
 
-PROCESS_SIGNAL_ENTER_RE = re.compile(
-    r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)->signal_enter_pending\b"
+RETIRED_SIGNAL_RESUME_RE = re.compile(
+    r"\b(handle_signals|signals_prepare_user_return|"
+    r"signals_pause_should_interrupt|signals_should_handle_on_run|"
+    r"signal_note_syscall_return|kernel_syscall_sleep|want_kernel_ret|"
+    r"syscall_resume_rax|kernel_sleep_syscall_frame|irq_frame_saved|"
+    r"wait_resume_child_pid|signal_enter_pending|signal_defer_catchable|"
+    r"signal_last_delivered|kernel_sleep_interrupted|syscall_block_nr|"
+    r"syscall_interrupted|process_after_task_save|"
+    r"process_clear_in_thread_syscall_block)\b"
 )
 
-PROCESS_SIGNAL_ENTER_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
-    ROOT / "kernel" / "process" / "signal_enter.c",
-    ROOT / "kernel" / "process" / "create.c",
-    ROOT / "kernel" / "process" / "domains.c",
-}
 
-
-def check_process_signal_enter_accessor():
-    """Fail if code touches process->signal_enter_pending outside signal paths."""
+def check_signal_resume_retired():
+    """Signals follow Linux: blocked syscalls return -ERESTARTSYS/-EINTR and
+    the syscall exit (do_signal) restarts them or enters the handler. The
+    blocked-syscall resume machinery it replaced must not come back."""
     errors = []
-    trees = [
-        ROOT / "kernel",
-        ROOT / "mm",
+    for base in (
+        ROOT / "arch",
+        ROOT / "drivers",
         ROOT / "fs",
+        ROOT / "includes",
+        ROOT / "ipc",
+        ROOT / "kernel",
+        ROOT / "ktm",
+        ROOT / "mm",
         ROOT / "net",
         ROOT / "sched",
-        ROOT / "includes" / "ir0",
-        ROOT / "ktm",
-        ROOT / "interrupt",
-        ROOT / "drivers",
-    ]
-    for base in trees:
-        if not base.is_dir():
-            continue
-        for fpath in iter_c_files(base):
-            if fpath in PROCESS_SIGNAL_ENTER_ALLOWLIST:
-                continue
-            if fpath.suffix not in (".c", ".h"):
-                continue
-            try:
-                rel = rel_to_root(fpath)
-            except ValueError:
-                continue
-            try:
-                lines = read_file_text(fpath).splitlines()
-            except Exception as exc:
-                errors.append(f"[read-error] {fpath}: {exc}")
-                continue
-            for idx, line in enumerate(lines, 1):
-                if _line_is_comment_only(line):
-                    continue
-                if PROCESS_SIGNAL_ENTER_RE.search(line):
+    ):
+        for path in iter_c_files(base):
+            for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
+                match = RETIRED_SIGNAL_RESUME_RE.search(line)
+                if match:
                     errors.append(
-                        f"[process-signal-enter-accessor] {rel}:{idx}: "
-                        f"no direct process->signal_enter_pending "
-                        f"(use process_signal_enter_pending_*): {line.strip()}"
-                    )
-    return errors
-
-
-PROCESS_SIGNAL_DEFER_RE = re.compile(
-    r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)->signal_defer_catchable\b"
-)
-
-PROCESS_SIGNAL_DEFER_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
-    ROOT / "kernel" / "process" / "signal_enter.c",
-    ROOT / "kernel" / "process" / "create.c",
-    ROOT / "kernel" / "process" / "domains.c",
-    ROOT / "kernel" / "process" / "exit.c",
-}
-
-
-def check_process_signal_defer_accessor():
-    """Fail if code touches process->signal_defer_catchable outside signal paths."""
-    errors = []
-    trees = [
-        ROOT / "kernel",
-        ROOT / "mm",
-        ROOT / "fs",
-        ROOT / "net",
-        ROOT / "sched",
-        ROOT / "includes" / "ir0",
-        ROOT / "ktm",
-        ROOT / "interrupt",
-        ROOT / "drivers",
-    ]
-    for base in trees:
-        if not base.is_dir():
-            continue
-        for fpath in iter_c_files(base):
-            if fpath in PROCESS_SIGNAL_DEFER_ALLOWLIST:
-                continue
-            if fpath.suffix not in (".c", ".h"):
-                continue
-            try:
-                rel = rel_to_root(fpath)
-            except ValueError:
-                continue
-            try:
-                lines = read_file_text(fpath).splitlines()
-            except Exception as exc:
-                errors.append(f"[read-error] {fpath}: {exc}")
-                continue
-            for idx, line in enumerate(lines, 1):
-                if _line_is_comment_only(line):
-                    continue
-                if PROCESS_SIGNAL_DEFER_RE.search(line):
-                    errors.append(
-                        f"[process-signal-defer-accessor] {rel}:{idx}: "
-                        f"no direct process->signal_defer_catchable "
-                        f"(use process_signal_defer_catchable_*): {line.strip()}"
+                        f"[signal-resume-retired] {rel_to_root(path)}:{lineno}: "
+                        f"{match.group(1)} is retired; block with "
+                        f"signal_pending() and return -ERESTARTSYS / -EINTR"
                     )
     return errors
 
 
 PROCESS_WAIT_FIELD_RE = re.compile(
     r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)->"
-    r"(wait_blocked|wait_target_pid|wait_options|wait_status_ptr|"
-    r"wait_resume_child_pid)\b"
+    r"(wait_blocked|wait_target_pid|wait_options|wait_status_ptr)\b"
 )
 
 PROCESS_WAIT_FIELD_ALLOWLIST = {
@@ -1839,7 +1768,7 @@ def check_scheduler_user_return_boundary():
         if path.suffix not in {".c", ".h"}:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if re.search(r"\bhandle_signals\s*\(", text):
+        if re.search(r"\bdo_signal\s*\(", text):
             errors.append(
                 f"{rel_to_root(path)}: scheduler must not deliver signals; "
                 "use the exit-to-user facade"
@@ -2202,7 +2131,6 @@ def check_common_syscall_policy_uses_semantic_ids():
     errors = []
     targets = (
         ROOT / "kernel" / "syscalls" / "syscall_dispatch.c",
-        ROOT / "includes" / "ir0" / "signal_syscall_resume.h",
     )
     forbidden = re.compile(r"\b__NR_[A-Za-z0-9_]+|syscall_linux\.h")
 
@@ -2476,6 +2404,7 @@ ASM_C_EXTERN_ALLOW = {
     "arch/x86-64/asm/entry/syscall_64.asm": {
         "syscall_dispatch",
         "process_capture_syscall_frame_at_entry",
+        "process_syscall_restore_exit_regs",
         "tls_restore_current",
     },
     "arch/x86-64/asm/entry/syscall_int80.asm": {"syscall_dispatch"},
@@ -2984,8 +2913,7 @@ def main():
     errors.extend(check_portable_no_task_arch_fields())
     errors.extend(check_process_pgd_accessor())
     errors.extend(check_process_saved_context_accessor())
-    errors.extend(check_process_signal_enter_accessor())
-    errors.extend(check_process_signal_defer_accessor())
+    errors.extend(check_signal_resume_retired())
     errors.extend(check_process_wait_state_accessor())
     errors.extend(check_syscall_frame_accessor())
     errors.extend(check_asm_offsets_sync())

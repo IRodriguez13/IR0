@@ -413,7 +413,6 @@ KERNEL_OBJS = \
     kernel/process/wait_state.o \
     kernel/process/saved_context.o \
     kernel/process/saved_environ.o \
-    kernel/process/signal_enter.o \
     kernel/process/fdtable_init.o \
     kernel/process/fdtable.o \
     kernel/process/pseudo_fd_bind.o \
@@ -565,7 +564,6 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_path.o \
 	kernel/test/test_string.o \
 	kernel/test/test_logging.o \
-	kernel/test/test_ktm_sched.o \
 	kernel/test/test_sock_stream.o \
 	kernel/test/test_mmap_null_placement.o \
 	kernel/test/test_mm_contracts.o \

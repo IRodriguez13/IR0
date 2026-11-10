@@ -289,5 +289,6 @@ void arm64_exc_sync_lower(uint64_t *frame)
 	ret = syscall_dispatch(frame[8], frame[0], frame[1], frame[2],
 			       frame[3], frame[4], frame[5]);
 	frame[0] = (uint64_t)ret;
+	process_syscall_restore_exit_regs(frame);
 	tls_restore_current();
 }

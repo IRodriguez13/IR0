@@ -204,9 +204,7 @@ typedef struct process
 	
 	/* Poll: waiter activo mientras el proceso está bloqueado en poll() */
 	void *poll_waiter;
-	uint8_t poll_resume_via_arch;
 	uint8_t clock_wait_armed;
-	uint8_t syscall_interrupted;
 	uint64_t clock_wait_deadline_ms;
 
 	/*
@@ -230,6 +228,13 @@ typedef struct process
 	 */
 	uint32_t signal_mask_saved;
 	uint8_t signal_mask_saved_valid;
+	/*
+	 * Linux TIF_RESTORE_SIGMASK: rt_sigsuspend runs with a temporary mask
+	 * and parks the caller's mask here. The handler frame saves it, or the
+	 * syscall exit puts it back when no handler runs.
+	 */
+	uint32_t saved_sigmask;
+	uint8_t restore_sigmask;
 	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER / musl) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	struct sigcontext *saved_context;  /* Kernel cache of interrupted GPRs */
@@ -240,48 +245,23 @@ typedef struct process
 	 */
 	uint64_t signal_frame_sp;
 	/*
-	 * Set when a userspace handler frame is armed; cleared on the first
-	 * switch_to_user_task into that handler. saved_context must stay until
-	 * rt_sigreturn — without this flag, nested syscalls in the handler
-	 * (sendto/setitimer from BusyBox ping SIGALRM) re-enter the handler.
+	 * The user registers of the current syscall (Linux pt_regs): captured
+	 * at entry, written back at exit, edited in between for a restart or
+	 * a signal handler.
 	 */
-	uint8_t signal_enter_pending;
-	/*
-	 * Catchable signal last delivered to a user handler (for SA_RESTART on
-	 * rt_sigreturn after kernel_sleep_interrupted). Cleared on sigreturn.
-	 */
-	uint8_t signal_last_delivered;
-	/*
-	 * When set, handle_signals() leaves catchable user handlers pending
-	 * (no sigframe / signal_enter_pending). Interruptible waits (e.g.
-	 * tcp_wire_connect) can map SIGALRM → -ETIMEDOUT instead of jumping
-	 * into BusyBox die-from-handler (exit from SIGALRM SEGVs on repeat).
-	 */
-	uint8_t signal_defer_catchable;
-
-	/* Linux syscall insn frame (for fork child / blocked syscall return). */
 	arch_syscall_frame_t syscall_frame;
-	uint64_t syscall_resume_rax;
+	int *wait_status_ptr;    /* userspace wait4 status word while blocked */
 	/*
-	 * Linux syscall nr at the current syscall entry (dispatch). Used for
-	 * SA_RESTART resume after signal delivery on a kernel_syscall_sleep block.
-	 */
-	uint32_t syscall_entry_nr;
-	uint32_t syscall_block_nr;
-	uint8_t irq_frame_saved; /* blocked syscall: resume via switch_to_user_task */
-	int *wait_status_ptr;    /* userspace wait4 status word while irq_frame_saved */
-	/*
-	 * wait4 blocked-syscall contract (D1.17): while irq_frame_saved from wait4,
+	 * wait4 blocked-syscall contract (D1.17): while blocked in wait4,
 	 * wait_target_pid holds the pid argument:
 	 *   >0  specific child; -1 any child; 0 same process group;
 	 *   < -1 process group whose id is -pid.
-	 * Wake/resume/reap paths must honour this — never complete wait4(pid>0) for
-	 * another child, even if syscall_resume_rax was stale or mis-set.
+	 * Wake/reap paths must honour this — never complete wait4(pid>0) for
+	 * another child.
 	 */
 	uint8_t wait_blocked;
 	pid_t wait_target_pid;
 	int wait_options;
-	pid_t wait_resume_child_pid;
 
 	/*
 	 * Child blocked off runqueue until parent completes fork syscall return
@@ -289,44 +269,6 @@ typedef struct process
 	 * the ISA completes its userspace return).
 	 */
 	struct process *fork_pending_child;
-	/*
-	 * Parent: rewrite syscall_insn_entry stack slots from syscall_frame once
-	 * after fork (global syscall stack can clobber saves during fork()).
-	 */
-	uint8_t fork_resync_syscall_stack;
-
-	/*
-	 * syscall_frame_fresh: this entry captured a valid Linux pt_regs in
-	 * syscall_frame (set only by process_capture_syscall_frame_at_entry,
-	 * i.e. the `syscall` insn path; int 0x80 tasks leave it 0).
-	 */
-	uint8_t syscall_frame_fresh;
-	/*
-	 * Class B close: a kernel-return resume was requested while the saved task
-	 * IP was still userspace — do not change privilege state until the backend
-	 * has saved the kernel stack pointer (see process_after_task_save /
-	 * process_arm_kernel_syscall_sleep).
-	 */
-	uint8_t want_kernel_ret;
-
-	/*
-	 * Sleeping inside a syscall that must resume in the kernel and retry
-	 * its operation (pipe, tty, poll). The resume gate used to infer this
-	 * from syscall_resume_rax == 0, but that field is leftover state from
-	 * whatever blocking syscall ran last: a non-zero residue sent a woken
-	 * pipe reader back to userspace through its stale entry frame, so the
-	 * read was never retried and userspace saw a short read while bytes
-	 * sat in the pipe. Cleared when the task returns to user segments.
-	 */
-	uint8_t kernel_syscall_sleep;
-
-	/*
-	 * Set when a catchable handler is delivered while kernel_syscall_sleep
-	 * (blocked TTY/pipe/poll in kernel). rt_sigreturn must restore the backed-up
-	 * syscall_frame and re-enter the syscall from a clean user pt_regs site.
-	 */
-	uint8_t kernel_sleep_interrupted;
-	arch_syscall_frame_t kernel_sleep_syscall_frame;
 
 	/*
 	 * Per-process kernel stack (IR0_PROC_KSTACK_SIZE). Mapped supervisor-only
@@ -561,29 +503,14 @@ static inline void process_syscall_set_arg(process_t *p, unsigned n, uint64_t v)
 		syscall_frame_set_arg(&p->syscall_frame, n, v);
 }
 
-void process_capture_syscall_frame(process_t *p);
 void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw);
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
                                          uint64_t rax);
-/* Soft syscall-frame→task mirror; no-op while a kernel return is armed. */
+/* Soft syscall-frame→task mirror while the task state is a user one. */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
 
-/*
- * Portable resume-policy predicate.  It answers only whether process state
- * permits a return to userspace; an ISA backend must still validate and
- * restore its own saved frame before performing that return.
- */
-int process_context_user_resume_eligible(const process_t *p);
-
-void process_clear_in_thread_syscall_block(process_t *p);
-void process_reset_blocked_syscall_state(process_t *p);
-/* "arm" = prepare/enable a resume path (English verb), not ARM64. */
-void process_arm_kernel_syscall_sleep(process_t *p);
-void process_kernel_sleep_capture_syscall_frame(process_t *p);
-/* After the ISA switch saved prev, honour the pending kernel return. */
-void process_after_task_save(task_t *prev);
 
 /* Reject a kernel-mode return state whose instruction pointer is user-owned. */
 int process_task_kernel_return_state_bad(const task_t *t);
@@ -709,23 +636,6 @@ void process_saved_context_init(process_t *p);
 int process_saved_context_attach(process_t *p, struct sigcontext *ctx);
 void process_saved_context_clear(process_t *p);
 
-int process_signal_enter_pending(const process_t *p);
-void process_signal_enter_pending_set(process_t *p);
-void process_signal_enter_pending_clear(process_t *p);
-void process_signal_enter_pending_init(process_t *p);
-
-int process_signal_defer_catchable(const process_t *p);
-void process_signal_defer_catchable_set(process_t *p);
-void process_signal_defer_catchable_clear(process_t *p);
-void process_signal_last_delivered_set(process_t *p, int sig);
-int process_signal_last_delivered(const process_t *p);
-void process_signal_last_delivered_clear(process_t *p);
-
-void process_kernel_sleep_interrupted_clear(process_t *p);
-void process_kernel_sleep_interrupted_backup_frame(process_t *p);
-
-int process_kernel_sleep_interrupted(const process_t *p);
-
 void process_saved_environ_clear(process_t *p);
 int process_saved_environ_set(process_t *p, char *const envp[]);
 int process_saved_environ_clone(process_t *dst, const process_t *src);
@@ -742,8 +652,6 @@ int process_wait_options(const process_t *p);
 void process_wait_options_set(process_t *p, int options);
 int *process_wait_status_ptr_peek(process_t *p);
 void process_wait_status_ptr_set(process_t *p, int *status_ptr);
-pid_t process_wait_resume_child_pid(const process_t *p);
-void process_wait_resume_child_pid_set(process_t *p, pid_t pid);
 void process_wait_state_init(process_t *p);
 void process_wait_state_arm(process_t *p, pid_t pid, int options, int *status_ptr);
 void process_wait_state_clear(process_t *p);
@@ -778,7 +686,7 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
  */
 void process_fork_wake_pending(process_t *parent);
 void process_fork_abort_pending_on_exit(process_t *parent);
-void process_syscall_restore_exit_regs(uint64_t *stack_r9_slot);
+void process_syscall_restore_exit_regs(uint64_t *exit_frame);
 
 
 pid_t process_get_pid(void);

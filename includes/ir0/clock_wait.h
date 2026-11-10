@@ -25,8 +25,9 @@ void ir0_clock_wait_disarm(struct process *proc);
 void ir0_clock_wait_fire_due(uint64_t now_ms);
 
 /*
- * Block current task until @deadline_ms (monotonic ms) or early wake.
- * Returns 0, -EINTR if syscall_interrupted, -ESRCH without current_process.
+ * Block current task until @deadline_ms (monotonic ms) or a signal.
+ * Returns 0 at the deadline, -EINTR when signal_pending(), -ESRCH without
+ * current_process.
  */
 int ir0_clock_wait_block_until(uint64_t deadline_ms);
 

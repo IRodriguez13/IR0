@@ -183,7 +183,7 @@ static int named_fifo_open_wait_peer(pipe_t *pipe, int end, int ir0_flags)
       return 0;
     }
 
-    if (signals_pause_should_interrupt(current_process))
+    if (signal_pending(current_process))
       return -EINTR;
 
     {

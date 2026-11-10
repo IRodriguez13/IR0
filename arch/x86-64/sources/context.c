@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: context.c
- * Description: x86-64 switch_to implementation (TSS, syscall resume, iretq).
+ * Description: x86-64 __switch_to and kernel-entry stack (TSS) hooks.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -24,118 +24,6 @@
 #include "tss.h"
 
 extern uint64_t kernel_syscall_stack_top;
-
-static void arch_fixup_user_task_for_iretq(process_t *proc);
-
-static int arch_va_in_kstack_window(uint64_t v)
-{
-	return v >= IR0_KSTACK_VA_BASE &&
-	       v < IR0_KSTACK_VA_BASE +
-		   (uint64_t)IR0_KSTACK_MAX_SLOTS * IR0_KSTACK_SLOT_SIZE;
-}
-
-/*
- * Pointer-class kernel VA (not a small syscall retval). Mid-syscall saves leave
- * kmalloc identity (kernel heap) in callee-saved regs; the old check only
- * caught the high kstack window, so heap RAX/RBP survived into ring-3
- * (desk re-login: read() "returned" ~0x1a8120 → SEGV in ir0_read_line).
- */
-static int arch_va_kernel_ptr_leak(uint64_t v)
-{
-	if (v == 0)
-		return 0;
-	if (arch_va_in_kstack_window(v))
-		return 1;
-	if (v >= (uint64_t)mm_kernel_heap_start() &&
-	    v < (uint64_t)(mm_kernel_heap_start() + mm_kernel_heap_size()))
-		return 1;
-	if (v >= 0xffff800000000000ULL)
-		return 1;
-	return 0;
-}
-
-/*
- * Ring-3 resume invariant: no GPR handed to user may be a kernel pointer.
- * A task saved mid-syscall keeps kernel callee-saved values; any path that
- * flips CS back to user without reapplying the entry frame would leak them.
- */
-static int arch_task_user_gprs_leak(const task_t *t)
-{
-	return arch_va_kernel_ptr_leak(t->arch.rbp) ||
-	       arch_va_kernel_ptr_leak(t->arch.rbx) ||
-	       arch_va_kernel_ptr_leak(t->arch.r12) ||
-	       arch_va_kernel_ptr_leak(t->arch.r13) ||
-	       arch_va_kernel_ptr_leak(t->arch.r14) ||
-	       arch_va_kernel_ptr_leak(t->arch.r15) ||
-	       arch_va_kernel_ptr_leak(t->arch.rax);
-}
-
-/*
- * Reapply syscall_frame before user iretq when callee-saved GPRs still carry
- * kernel-stack residue.  Never run on kernel_syscall_sleep / want_kernel_ret:
- * those tasks resume via kernel_ret inside the syscall handler, not iretq with
- * task.arch GPRs (TTY read + SIGCHLD was spamming USER_RESUME_KSTACK_GPR_LEAK
- * and occasionally pushing a user frame onto a kernel_ret waiter → login #PF).
- */
-static int arch_will_resume_user_iretq(const process_t *proc, const task_t *task)
-{
-	if (!task || !process_context_user_resume_eligible(proc))
-		return 0;
-	if (!task_cs_is_user(task))
-		return 0;
-	if (!process_rip_in_user_range(task_get_ip(task)))
-		return 0;
-	return 1;
-}
-
-static void arch_repair_user_gprs_from_syscall_frame(process_t *proc,
-						     task_t *task)
-{
-	uint64_t rax;
-
-	if (!proc || !task || proc->mode != USER_MODE)
-		return;
-	if (proc->kernel_syscall_sleep || proc->want_kernel_ret)
-		return;
-	if (!proc->syscall_frame_fresh || !task_cs_is_user(task))
-		return;
-	if (!arch_task_user_gprs_leak(task))
-		return;
-
-	rax = proc->syscall_resume_rax;
-	if (rax == 0 && !arch_va_kernel_ptr_leak(task_get_retval(task)))
-		rax = task_get_retval(task);
-	klog_debug("CTX", "CLASSIFY USER_RESUME_KSTACK_GPR_LEAK");
-	process_apply_syscall_frame_to_task(task, &proc->syscall_frame, rax);
-}
-
-void x86_prepare_task_user_return(process_t *proc)
-{
-	if (!proc || proc->mode != USER_MODE)
-		return;
-	if (proc->kernel_syscall_sleep || proc->want_kernel_ret)
-		return;
-	arch_repair_user_gprs_from_syscall_frame(proc, &proc->task);
-}
-
-uint64_t context_backend_user_return_value(const struct process *proc,
-					       const task_t *task)
-{
-	const process_t *resume_proc = (const process_t *)proc;
-	uint64_t rax;
-
-	if (!resume_proc)
-		return 0;
-	rax = resume_proc->syscall_resume_rax;
-	if (rax == 0 && task && !arch_va_kernel_ptr_leak(task_get_retval(task)))
-		rax = task_get_retval(task);
-	return rax;
-}
-
-void context_backend_prepare_kernel_resume(task_t *task)
-{
-	arch_fixup_user_task_for_iretq(task ? task_to_process(task) : NULL);
-}
 
 void context_backend_inject_kernel_return_fault(task_t *task)
 {
@@ -167,53 +55,7 @@ void set_current_kernel_stack(struct process *p)
 	tss_set_rsp0(proc->kstack_top);
 }
 
-static void arch_fixup_user_task_for_iretq(process_t *proc)
-{
-	const syscall_user_frame_t *sf;
-	uint64_t rip;
-
-	if (!proc || proc->mode != USER_MODE)
-		return;
-
-	/*
-	 * Blocked syscalls (TTY read, pipe, poll) resume in-kernel via
-	 * kernel_ret — do not rewrite task.arch to the syscall entry frame.
-	 */
-	if (proc->kernel_syscall_sleep || proc->want_kernel_ret)
-		return;
-
-	/*
-	 * wait4 blocked via process_arm_kernel_syscall_sleep: task_get_cs(task) is ring-0
-	 * and resume must use switch_context_x64 kernel_ret into process_wait,
-	 * not syscall_frame user iretq with placeholder rax=0.
-	 */
-	if (proc->wait_blocked && !proc->irq_frame_saved)
-		return;
-
-	if (proc->wait_target_pid != 0 && proc->wait_resume_child_pid <= 0 &&
-	    !proc->irq_frame_saved)
-		return;
-
-	if ((task_get_cs(&proc->task) & 3u) == 0)
-		return;
-
-	rip = task_get_ip(&proc->task);
-	if (rip >= 0x00400000ULL && rip <= 0x00007FFFFFFFFFFFULL)
-		return;
-
-	sf = &proc->syscall_frame;
-	if (!process_rip_in_user_range(process_syscall_ip(proc)))
-		return;
-
-	process_apply_syscall_frame_to_task(&proc->task, sf, task_get_retval(&proc->task));
-}
-
 void __switch_to(task_t *prev, task_t *next)
 {
-	process_t *next_proc = next ? task_to_process(next) : NULL;
-
-	if (next_proc && arch_will_resume_user_iretq(next_proc, next))
-		arch_repair_user_gprs_from_syscall_frame(next_proc, next);
-
 	switch_context_x64(prev, next);
 }
