@@ -813,6 +813,10 @@ NET_OBJS = \
     net/icmp.o \
     net/udp.o \
     net/tcp.o \
+    net/tcp_output.o \
+    net/tcp_cc.o \
+    net/tcp_listen.o \
+    net/tcp_input.o \
     net/dhcp.o \
     net/dns.o
 NET_DRIVER_OBJS = \
