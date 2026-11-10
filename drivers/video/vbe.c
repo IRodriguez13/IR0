@@ -22,6 +22,7 @@
 #include <ir0/vga.h>
 #include <ir0/boot_memory.h>
 #include <string.h>
+#include <ir0/arch_mm.h>
 #include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
@@ -32,14 +33,6 @@
  * bigger descriptor is corrupt and would make us map unrelated memory.
  */
 #define VBE_FB_MAX_SIZE (512ULL * 1024ULL * 1024ULL)
-
-/*
- * Pre-mapped GRUB framebuffer window in the x86-64 boot page tables: two
- * 2 MiB pages at 0xFD000000 (pd_fb in arch/x86-64/asm/boot/boot_x64.asm).
- */
-#define VBE_PREMAPPED_START 0xFD000000ULL
-#define VBE_PREMAPPED_END   0xFD400000ULL
-#define VBE_LOW_IDENTITY_END 0x2000000ULL
 
 /*
  * Diagnostic: reason for vbe_init_from_boot failure (0=none, 1=no descriptor,
@@ -116,11 +109,10 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     }
 
     /*
-     * Boot tables identity-map the low 32 MiB and the GRUB window; anything
-     * else needs map_page (which may allocate page tables).
+     * Pages the boot page tables do not already identity-map need map_page
+     * (which may allocate page tables); the ISA knows its boot layout.
      */
-    if (fb_phys >= VBE_LOW_IDENTITY_END &&
-        (fb_phys < VBE_PREMAPPED_START || fb_end > VBE_PREMAPPED_END))
+    if (!mm_boot_identity_covers(fb_phys, fb_size))
     {
         for (uint64_t off = 0; off < fb_size; off += 4096)
         {

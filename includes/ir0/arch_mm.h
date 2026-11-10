@@ -42,6 +42,12 @@ void mm_enable_translation(void);
 int mm_translation_enabled(void);
 int mm_translation_ready(void);
 
+/*
+ * Nonzero when the boot page tables already identity-map [@phys, @phys +
+ * @size) for the kernel, so a driver need not map_page() it again.
+ */
+int mm_boot_identity_covers(uint64_t phys, uint64_t size);
+
 /* Whether the backend can encode the common large identity-map leaf. */
 int mm_large_identity_supported(void);
 

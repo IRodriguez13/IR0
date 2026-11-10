@@ -165,5 +165,11 @@ void test_vbe_boot_premapped_window_is_4mib(void)
 	ASSERT_EQ(vbe_init_from_boot(&fb), 0);
 	ASSERT_EQ(g_map_calls, 0UL);
 
+	/* Nor does one inside the low 32 MiB the boot tables identity-map. */
+	map_reset();
+	fb = fb32(0x01000000ULL, 640, 480, 640 * 4);
+	ASSERT_EQ(vbe_init_from_boot(&fb), 0);
+	ASSERT_EQ(g_map_calls, 0UL);
+
 	TEST_END();
 }

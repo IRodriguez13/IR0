@@ -9,6 +9,7 @@ ARCH_OBJS_COMMON = \
 ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/firmware_sysfs.o \
 	arch/x86-64/sources/boot_port.o \
+	arch/x86-64/sources/boot_identity.o \
 	arch/x86-64/sources/oops_port.o \
 	arch/x86-64/sources/debug.o \
 	arch/x86-64/sources/debug_trap.o \
@@ -70,7 +71,8 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/gic_v2.o \
 	arch/arm64/sources/bcm2836_irq.o \
 	arch/arm64/sources/syscall_decode.o \
-	arch/arm64/sources/elf_policy.o
+	arch/arm64/sources/elf_policy.o \
+	arch/arm64/sources/boot_identity.o
 
 # Portable kernel: ir0/cpu.h + irq.h facades (replaces freestanding_stubs subset).
 ARM64_INTERFACE_OBJS_PRODUCT = \

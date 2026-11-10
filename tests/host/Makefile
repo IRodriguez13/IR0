@@ -91,7 +91,7 @@ KERNEL_HOST_OBJS += host_fd_resource.o
 KERNEL_HOST_OBJS += host_cpu_topology.o
 KERNEL_HOST_OBJS += host_percpu.o
 KERNEL_HOST_OBJS += host_tlb_sync.o
-KERNEL_HOST_OBJS += host_vbe.o
+KERNEL_HOST_OBJS += host_vbe.o host_x86_boot_identity.o
 KERNEL_HOST_OBJS += host_fault.o
 KERNEL_HOST_OBJS += host_swap_header.o host_swap.o host_swap_reclaim.o host_dma.o host_irq_dispatch.o
 KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
@@ -135,6 +135,9 @@ host_boot_memory.o: $(KERNEL_ROOT)/mm/boot_memory.c
 	$(KERNEL_CC)
 
 host_vbe.o: $(KERNEL_ROOT)/drivers/video/vbe.c
+	$(KERNEL_CC)
+
+host_x86_boot_identity.o: $(KERNEL_ROOT)/arch/x86-64/sources/boot_identity.c
 	$(KERNEL_CC)
 
 host_alloc_policy.o: $(KERNEL_ROOT)/mm/alloc_policy.c
