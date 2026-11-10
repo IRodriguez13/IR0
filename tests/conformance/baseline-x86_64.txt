@@ -28,7 +28,6 @@ sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
 sock_bind_errors FAIL  # binding a bound AF_UNIX socket succeeds (red: sock_bind_twice_einval)
 sock_connect_errors FAIL  # connect to a missing path is ECONNREFUSED, Linux ENOENT (red: sock_connect_missing_path_enoent)
-sock_create_errors FAIL  # unknown family is EPROTOTYPE, Linux EAFNOSUPPORT (red: sock_bad_family_eafnosupport)
 sock_dgram_bound_sendto FAIL  # AF_UNIX SOCK_DGRAM bind is EINVAL (red: sock_unix_dgram_supported)
 sock_getsockname FAIL  # getsockname does not return the bound path (red: sock_getsockname_returns_path)
 sock_not_a_socket FAIL  # sendto on a pipe is EINVAL, Linux ENOTSOCK (red: sock_send_non_socket_enotsock)

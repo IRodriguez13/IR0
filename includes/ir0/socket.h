@@ -28,6 +28,7 @@
 #define SOCK_CLOEXEC   0x80000
 #define SOCK_NONBLOCK  0x800
 #define SOCK_TYPE_MASK 0xf
+#define SOCK_MAX       11 /* first type number past SOCK_PACKET */
 
 #define SOL_SOCKET  1
 #define SO_ERROR    4

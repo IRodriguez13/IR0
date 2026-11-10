@@ -44,8 +44,6 @@
 #include <config.h>
 #include <string.h>
 
-#define IPPROTO_UDP 17
-
 static int64_t unix_fill_sockaddr(struct sock_stream *ss, struct sockaddr *addr,
 				  socklen_t *addrlen)
 {
@@ -207,11 +205,49 @@ static uint8_t *sock_bounce_alloc(size_t len)
 	return kmalloc(len ? len : 1);
 }
 
+/*
+ * The checks socket(2) and socketpair(2) share, in Linux order: the flag
+ * bits (__sys_socket), the family and the type range (__sock_create), then
+ * the family's protocol and type (unix_create, inet_create).
+ */
+static int sock_create_check(int domain, int type, int protocol)
+{
+	int base = type & SOCK_TYPE_MASK;
+
+	if (type & ~(SOCK_TYPE_MASK | SOCK_CLOEXEC | SOCK_NONBLOCK))
+		return -EINVAL;
+	if (domain != AF_UNIX && domain != AF_INET)
+		return -EAFNOSUPPORT;
+	if (base >= SOCK_MAX)
+		return -EINVAL;
+	if (domain == AF_UNIX)
+	{
+		if (protocol != 0 && protocol != AF_UNIX)
+			return -EPROTONOSUPPORT;
+		if (base != SOCK_STREAM && base != SOCK_DGRAM)
+			return -ESOCKTNOSUPPORT;
+		return 0;
+	}
+	switch (base)
+	{
+	case SOCK_STREAM:
+		return protocol == 0 || protocol == IPPROTO_TCP ?
+			0 : -EPROTONOSUPPORT;
+	case SOCK_DGRAM:
+		return protocol == 0 || protocol == IPPROTO_UDP ?
+			0 : -EPROTONOSUPPORT;
+	case SOCK_RAW:
+		return protocol == 0 || protocol == IPPROTO_ICMP ?
+			0 : -EPROTONOSUPPORT;
+	default:
+		return -ESOCKTNOSUPPORT;
+	}
+}
+
 int64_t sys_socket(int domain, int type, int protocol)
 {
-	int fd;
-	int type_flags = type;
 	int base = type & SOCK_TYPE_MASK;
+	int ret;
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)domain;
@@ -222,68 +258,40 @@ int64_t sys_socket(int domain, int type, int protocol)
 
 	if (!current_process)
 		return -ESRCH;
+	ret = sock_create_check(domain, type, protocol);
+	if (ret < 0)
+		return ret;
 
-	if (base == SOCK_STREAM && (domain == AF_UNIX || domain == AF_INET))
+	if (base == SOCK_STREAM)
 	{
 		struct sock_stream *ss;
 
-		if (protocol != 0 && protocol != 6) /* IPPROTO_TCP */
-			return -EPROTONOSUPPORT;
 		ss = sock_stream_create(domain == AF_UNIX ? IR0_AF_UNIX : IR0_AF_INET);
 		if (!ss)
 			return -ENOMEM;
-		fd = sock_alloc_fd_flags(ss, 1, type_flags);
-		return fd < 0 ? fd : fd;
+		return sock_alloc_fd_flags(ss, 1, type);
 	}
 
 	if (base == SOCK_RAW)
 	{
-		struct sock_icmp *icmp;
+		struct sock_icmp *icmp = sock_icmp_create();
 
-		if (domain != AF_INET)
-			return -EAFNOSUPPORT;
-		if (protocol != 0 && protocol != IPPROTO_ICMP)
-			return -EPROTONOSUPPORT;
-		icmp = sock_icmp_create();
 		if (!icmp)
 			return -ENOMEM;
-		fd = sock_alloc_fd_flags(icmp, 0, type_flags);
-		return fd;
+		return sock_alloc_fd_flags(icmp, 0, type);
 	}
 
-	if (base != SOCK_DGRAM)
-		return -EPROTOTYPE;
-
 	/*
-	 * AF_UNIX SOCK_DGRAM: musl if_nametoindex()/if_indextoname() open
+	 * SOCK_DGRAM. AF_UNIX: musl if_nametoindex()/if_indextoname() open
 	 * AF_UNIX datagram sockets solely for SIOCGIFINDEX/SIOCGIFNAME.
 	 * Reuse a UDP sock object as an ioctl control fd (no wire I/O).
 	 */
-	if (domain == AF_UNIX)
-	{
-		struct sock_udp *sock;
-
-		if (protocol != 0)
-			return -EPROTONOSUPPORT;
-		sock = sock_udp_create();
-		if (!sock)
-			return -ENOMEM;
-		fd = sock_alloc_fd_flags(sock, 0, type_flags);
-		return fd;
-	}
-
-	if (domain != AF_INET)
-		return -EAFNOSUPPORT;
-	if (protocol != 0 && protocol != IPPROTO_UDP)
-		return -EPROTONOSUPPORT;
-
 	{
 		struct sock_udp *sock = sock_udp_create();
 
 		if (!sock)
 			return -ENOMEM;
-		fd = sock_alloc_fd_flags(sock, 0, type_flags);
-		return fd;
+		return sock_alloc_fd_flags(sock, 0, type);
 	}
 }
 
@@ -888,14 +896,18 @@ int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
 
 	if (!current_process)
 		return -ESRCH;
+	if (type & ~(SOCK_TYPE_MASK | SOCK_CLOEXEC | SOCK_NONBLOCK))
+		return -EINVAL;
 	if (!sv)
 		return -EFAULT;
+	ret = sock_create_check(domain, type, protocol);
+	if (ret < 0)
+		return ret;
+	/* inet_stream_ops and inet_dgram_ops have no socketpair. */
 	if (domain != AF_UNIX)
-		return -EAFNOSUPPORT;
+		return -EOPNOTSUPP;
 	if ((type & SOCK_TYPE_MASK) != SOCK_STREAM)
 		return -EPROTOTYPE;
-	if (protocol != 0)
-		return -EPROTONOSUPPORT;
 
 	ret = sock_stream_socketpair(&a, &b);
 	if (ret < 0)
