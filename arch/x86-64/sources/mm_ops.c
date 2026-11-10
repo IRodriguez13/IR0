@@ -221,9 +221,15 @@ uint64_t mm_make_table_pte(uintptr_t phys, int user)
 	return e;
 }
 
+/*
+ * IR0_MM_MAP_WRITECOMBINE needs a PAT write-combining slot, which IR0 does
+ * not program; the MTRRs keep typing the framebuffer BAR, so the bit is
+ * dropped instead of landing in a software-available PTE bit.
+ */
 uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 {
-	uint64_t e = ((uint64_t)phys & X86_PTE_PFN_MASK) | (flags12 & 0xFFFULL) |
+	uint64_t e = ((uint64_t)phys & X86_PTE_PFN_MASK) |
+		     (flags12 & 0xFFFULL & ~IR0_MM_MAP_WRITECOMBINE) |
 		     X86_PTE_PRESENT;
 
 	if (!exec)

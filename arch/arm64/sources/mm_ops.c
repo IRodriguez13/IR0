@@ -34,6 +34,7 @@
 /* MAIR_EL1 slots programmed by mmu.c. */
 #define A64_MAIR_DEVICE   0U
 #define A64_MAIR_NORMAL   1U
+#define A64_MAIR_NORMAL_NC 2U
 #define A64_PTE_SW_COW    (1ULL << 55)
 #define A64_PTE_PFN_MASK  0x0000FFFFFFFFF000ULL
 #define A64_INDEX_MASK    0x1FFUL
@@ -206,6 +207,8 @@ uint64_t mm_pte_mapping_flags(uint64_t e)
 		flags |= IR0_MM_MAP_EXEC;
 	if ((e & A64_PTE_ATTR_MASK) == A64_PTE_ATTR(A64_MAIR_DEVICE))
 		flags |= IR0_MM_MAP_NOCACHE;
+	else if ((e & A64_PTE_ATTR_MASK) == A64_PTE_ATTR(A64_MAIR_NORMAL_NC))
+		flags |= IR0_MM_MAP_WRITECOMBINE;
 	if (e & A64_PTE_AF)
 		flags |= IR0_MM_MAP_ACCESSED;
 	/*
@@ -236,7 +239,8 @@ uint64_t mm_make_table_pte(uintptr_t phys, int user)
 /*
  * Stage-1 leaf descriptor (ARM DDI 0487, D8.3). An L3 page needs bits[1:0] =
  * 0b11; an L1/L2 block uses 0b01. Normal memory takes the inner-shareable
- * write-back MAIR slot, IR0_MM_MAP_NOCACHE the Device-nGnRnE slot. Like Linux,
+ * write-back MAIR slot, IR0_MM_MAP_NOCACHE the Device-nGnRnE slot and
+ * IR0_MM_MAP_WRITECOMBINE the Normal non-cacheable slot. Like Linux,
  * EL0 mappings are never executable at EL1 (PXN) and kernel mappings are
  * never executable at EL0 (UXN).
  */
@@ -248,6 +252,8 @@ uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 		e |= A64_PTE_TABLE;
 	if (flags12 & IR0_MM_MAP_NOCACHE)
 		e |= A64_PTE_ATTR(A64_MAIR_DEVICE);
+	else if (flags12 & IR0_MM_MAP_WRITECOMBINE)
+		e |= A64_PTE_ATTR(A64_MAIR_NORMAL_NC) | A64_PTE_SH_INNER;
 	else
 		e |= A64_PTE_ATTR(A64_MAIR_NORMAL) | A64_PTE_SH_INNER;
 	if (flags12 & IR0_MM_MAP_USER)

@@ -47,8 +47,10 @@
 /* MAIR_EL1 slots; arch/arm64/sources/mm_ops.c encodes the same indices. */
 #define ATTR_DEVICE      0
 #define ATTR_NORMAL      1
+#define ATTR_NORMAL_NC   2
 #define MAIR_ATTR_DEVICE 0x00UL /* Device-nGnRnE */
 #define MAIR_ATTR_NORMAL 0xffUL /* Normal, inner/outer write-back */
+#define MAIR_ATTR_NORMAL_NC 0x44UL /* Normal, inner/outer non-cacheable */
 
 /* TCR_EL1: T0SZ=16 (48-bit VA, walk starts at L0), 4 KiB granule. */
 #define TCR_T0SZ_48      16UL
@@ -247,7 +249,8 @@ static void mmu_configure_and_enable(uint64_t ttbr0)
 	uint64_t sctlr;
 
 	mair = (MAIR_ATTR_DEVICE << (8 * ATTR_DEVICE)) |
-	       (MAIR_ATTR_NORMAL << (8 * ATTR_NORMAL));
+	       (MAIR_ATTR_NORMAL << (8 * ATTR_NORMAL)) |
+	       (MAIR_ATTR_NORMAL_NC << (8 * ATTR_NORMAL_NC));
 	__asm__ volatile("msr mair_el1, %0" :: "r"(mair) : "memory");
 
 	tcr = TCR_T0SZ_48 | TCR_IRGN0_WBWA | TCR_ORGN0_WBWA | TCR_SH0_INNER |

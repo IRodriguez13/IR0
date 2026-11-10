@@ -28,6 +28,12 @@
 #define IR0_MM_MAP_LARGE         (1ULL << 7)
 #define IR0_MM_MAP_GLOBAL        (1ULL << 8)
 #define IR0_MM_MAP_COW           (1ULL << 9)
+/*
+ * Write-combining memory for framebuffers (Linux pgprot_writecombine): the
+ * backend picks a non-cacheable, bufferable type (ARM64 Normal-NC). Backends
+ * without such a type keep their default encoding.
+ */
+#define IR0_MM_MAP_WRITECOMBINE  (1ULL << 10)
 #define IR0_MM_MAP_EXEC          (1ULL << 52)
 
 /* Kernel heap region supplied by the active architecture memory layout. */
