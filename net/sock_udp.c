@@ -110,7 +110,8 @@ static void sock_udp_rx_enqueue(struct sock_udp *sock, ip4_addr_t src_ip,
 	struct sock_udp_rx_pkt *pkt;
 	uint64_t flags;
 
-	if (!sock || !data || len == 0 || len > SOCK_UDP_PKT_MAX)
+	/* len == 0 is an empty datagram, queued like any other. */
+	if (!sock || !data || len > SOCK_UDP_PKT_MAX)
 		return;
 
 	pkt = kmalloc(sizeof(*pkt));
@@ -395,10 +396,9 @@ int sock_udp_sendto(struct sock_udp *sock, uint32_t dest_ip_be, uint16_t dest_po
 	ip4_addr_t dest_ip = dest_ip_be;
 	int ret;
 
+	/* A zero length sends an empty datagram (Linux). */
 	if (!sock || !data)
 		return -EINVAL;
-	if (len == 0)
-		return 0;
 	if (len > SOCK_UDP_PKT_MAX)
 		return -EMSGSIZE;
 
@@ -447,10 +447,9 @@ ssize_t sock_udp_recvfrom(struct sock_udp *sock, void *buf, size_t len, int flag
 	bool nonblock = (flags & MSG_DONTWAIT) != 0;
 	size_t copy_len;
 
+	/* A zero length still dequeues the next datagram (truncated). */
 	if (!sock || !buf)
 		return -EINVAL;
-	if (len == 0)
-		return 0;
 
 	start = clock_get_uptime_milliseconds();
 	for (;;)
