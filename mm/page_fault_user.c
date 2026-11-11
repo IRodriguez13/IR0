@@ -61,23 +61,6 @@ int pf_addr_in_stack(process_t *p, uint64_t fa)
 	return (fa >= lo && fa < hi);
 }
 
-struct mmap_region *pf_mmap_region_for(process_t *p, uint64_t fa)
-{
-	struct mmap_region *r;
-
-	if (!p)
-		return NULL;
-	for (r = process_mmap_list(p); r != NULL; r = r->next)
-	{
-		uintptr_t base = (uintptr_t)r->addr;
-		uint64_t end = base + (uint64_t)r->length;
-
-		if (fa >= (uint64_t)base && fa < end)
-			return r;
-	}
-	return NULL;
-}
-
 /*
  * Linux do_anonymous_page only inside a VMA. IR0 also sees present+!USER
  * identity leaves after a 2MiB PDE split (sibling slots stay PA==VA).
@@ -89,7 +72,7 @@ int pf_addr_may_promote_identity(process_t *p, uint64_t fa)
 	if (!p)
 		return 0;
 	if (pf_addr_in_heap(p, fa) || pf_addr_in_stack(p, fa) ||
-	    pf_mmap_region_for(p, fa) != NULL)
+	    find_vma(p, fa) != NULL)
 		return 1;
 	/*
 	 * Brk cursor may lag heap_start bookkeeping; identity below heap_end
@@ -211,7 +194,7 @@ void pf_user_not_present(const struct page_fault_info *info, uint64_t *stack,
 					  (uintptr_t)(fault_addr & ~0xFFFULL));
 		if (swap_pte && mm_pte_is_swap(*swap_pte))
 		{
-			swap_mr = pf_mmap_region_for(current, fault_addr);
+			swap_mr = find_vma(current, fault_addr);
 			if (swap_mr)
 			{
 				map_flags = PAGE_USER;
@@ -232,7 +215,7 @@ void pf_user_not_present(const struct page_fault_info *info, uint64_t *stack,
 	{
 		struct mmap_region *mr;
 
-		mr = pf_mmap_region_for(current, fault_addr);
+		mr = find_vma(current, fault_addr);
 		if (mr != NULL)
 		{
 			if ((mr->flags & IR0_MAP_ANONYMOUS) == 0)

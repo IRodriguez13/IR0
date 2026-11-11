@@ -32,6 +32,22 @@ static bool process_va_ranges_overlap(uintptr_t a_start, size_t a_len,
 	return a_start < b_end && b_start < a_end;
 }
 
+struct mmap_region *find_vma(process_t *proc, uintptr_t addr)
+{
+	struct mmap_region *r;
+
+	if (!proc)
+		return NULL;
+	for (r = process_mmap_list(proc); r != NULL; r = r->next)
+	{
+		uintptr_t base = (uintptr_t)r->addr;
+
+		if (addr >= base && addr - base < r->length)
+			return r;
+	}
+	return NULL;
+}
+
 bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t length)
 {
 	struct mmap_region *r;

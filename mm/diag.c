@@ -71,12 +71,12 @@ static void pf_diag_audit(const struct page_fault_info *info)
 
 	in_vma = pf_addr_in_heap(current, fault_addr) ||
 		 pf_addr_in_stack(current, fault_addr) ||
-		 (pf_mmap_region_for(current, fault_addr) != NULL);
+		 (find_vma(current, fault_addr) != NULL);
 	in_userspace_range = mm_user_va_ok((uintptr_t)fault_addr, 1);
 
 	log_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_ip), (unsigned long long)(fault_code_seg), (unsigned long long)(fault_sp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
-	log_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_mmap_region_for(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
+	log_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(find_vma(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
 
 	if (!info->user && in_userspace_range)
 		log_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR addr_in_userspace=1");
@@ -236,7 +236,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 
 	/* Locate the fault against the address space: heap vs mmap vs neither. */
 	{
-		struct mmap_region *mr = pf_mmap_region_for(p, fault_addr);
+		struct mmap_region *mr = find_vma(p, fault_addr);
 
 		/*
 		 * Split across two records: klog_notice_fmt drops arguments

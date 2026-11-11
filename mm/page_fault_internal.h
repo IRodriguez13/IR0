@@ -25,7 +25,6 @@
 /* VMA lookups and anonymous page provisioning (page_fault_user.c). */
 int pf_addr_in_heap(process_t *p, uint64_t fa);
 int pf_addr_in_stack(process_t *p, uint64_t fa);
-struct mmap_region *pf_mmap_region_for(process_t *p, uint64_t fa);
 int pf_addr_may_promote_identity(process_t *p, uint64_t fa);
 void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
 			 uint64_t map_flags, uint64_t *stack,
