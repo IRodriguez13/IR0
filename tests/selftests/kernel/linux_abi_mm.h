@@ -8,5 +8,7 @@ CONF_CASE(mm_shared_anon_survives_fork)
 CONF_CASE(time_clock_process_cputime)
 CONF_CASE(time_realtime_from_rtc)
 CONF_CASE(mm_unmapped_segv_handler_kills_task)
-/* Last: on IR0 arm64 it hangs the guest. */
+CONF_CASE(mm_fork_ro_page_stays_private)
+/* Last: on IR0 arm64 they stop the guest. */
 CONF_CASE(mm_mmap_fixed_over_kernel_pages_is_harmless)
+CONF_CASE(mm_munmap_over_kernel_pages_is_harmless)

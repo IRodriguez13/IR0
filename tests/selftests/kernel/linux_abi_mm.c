@@ -159,6 +159,34 @@ static void unmap_own_handler(void)
 	*(volatile char *)0 = 1;
 }
 
+/* A read-only page of the image (.rodata), shared by fork. */
+static const char ro_page[RT_PAGE] __attribute__((aligned(RT_PAGE))) = { 'P' };
+
+/*
+ * mm/mprotect.c + do_wp_page(): a page fork() shares read-only stays private
+ * to each process. Making it writable in the child must not let the child
+ * write the parent's frame.
+ */
+int mm_fork_ro_page_stays_private(void)
+{
+	int status = 0;
+	unsigned long page = (unsigned long)ro_page;
+	long pid = rt_fork();
+
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		if (S3(SYS_mprotect, page, PG, PROT_READ | PROT_WRITE) != 0)
+			rt_exit(60);
+		*(volatile char *)page = 'C';
+		rt_exit(0);
+	}
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	EXPECT(RT_EXITED(status) ? RT_EXITCODE(status) : -1, 0);
+	EXPECT(*(volatile const char *)page, 'P');
+	return CONF_PASS;
+}
+
 static void map_over_supervisor_page(void)
 {
 	long a = S6(SYS_mmap, RT_SUPERVISOR_ADDR, PG, PROT_READ | PROT_WRITE,
@@ -193,6 +221,16 @@ int mm_unmapped_segv_handler_kills_task(void)
 }
 
 /*
+ * A mapping of the process inside the range keeps munmap from rejecting it
+ * as empty: mmap(NULL) lands below the stack, within 1 GiB of the address.
+ */
+static void unmap_supervisor_range(void)
+{
+	(void)map_anon(PROT_READ | PROT_WRITE, MAP_PRIVATE);
+	(void)S2(SYS_munmap, RT_SUPERVISOR_ADDR, 1UL << 30);
+}
+
+/*
  * The kernel pages IR0 maps into every process root (arm64: the
  * identity-mapped heap at 0x40800000; x86_64: 0x500000) are not user VMAs:
  * mmap(2) MAP_FIXED over them must leave the kernel running. On Linux the
@@ -201,6 +239,18 @@ int mm_unmapped_segv_handler_kills_task(void)
 int mm_mmap_fixed_over_kernel_pages_is_harmless(void)
 {
 	CHECK(in_child(map_over_supervisor_page));
+	CHECK(kernel_alive());
+	return CONF_PASS;
+}
+
+/*
+ * Same contract for munmap(2): unmapping a range that covers those kernel
+ * pages (the fuzzer's munmap(0x40800000, 1 GiB) on arm64) must leave the
+ * kernel running. On IR0 arm64 the guest stops.
+ */
+int mm_munmap_over_kernel_pages_is_harmless(void)
+{
+	CHECK(in_child(unmap_supervisor_range));
 	CHECK(kernel_alive());
 	return CONF_PASS;
 }
