@@ -713,7 +713,8 @@ int64_t sys_getcwd(char *buf, size_t size)
   if (copy_to_user(buf, visible, len + 1) != 0)
     return -EFAULT;
 
-  return (int64_t)len;
+  /* Linux sys_getcwd() returns the length including the NUL. */
+  return (int64_t)(len + 1);
 }
 
 int64_t sys_chroot(const char *path)
