@@ -37,6 +37,7 @@
 #include <ir0/sched.h>
 #include <ir0/signal_irq.h>
 #include <ir0/task_ops.h>
+#include <ir0/wait.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
@@ -1452,10 +1453,15 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
     /* Read the wait arguments from the syscall frame (pt_regs). */
     wait_pid = (pid_t)process_syscall_arg(current_process, 0);
     wait_opts = (int)process_syscall_arg(current_process, 2);
-    process_wait_options_set(current_process, wait_opts);
     pid = wait_pid;
     options = wait_opts;
   }
+
+  /* Linux kernel_wait4(): unknown option bits fail before any lookup. */
+  if ((unsigned int)options & ~(unsigned int)WAIT4_VALID_OPTIONS)
+    return -EINVAL;
+  if (current_process->mode == USER_MODE)
+    process_wait_options_set(current_process, options);
 
   if (IR0_DEBUG_WAIT)
   {

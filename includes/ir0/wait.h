@@ -20,6 +20,12 @@
 #define WNOHANG 1
 #endif
 
+/* wait4(2) option bits Linux accepts (kernel/exit.c kernel_wait4()). */
+#define WAIT4_VALID_OPTIONS \
+	(WNOHANG | 0x00000002 /* WUNTRACED */ | 0x00000008 /* WCONTINUED */ | \
+	 0x20000000 /* __WNOTHREAD */ | 0x40000000 /* __WALL */ | \
+	 0x80000000U /* __WCLONE */)
+
 #ifndef WIFEXITED
 #define WIFEXITED(status)   (((status) & 0x7f) == 0)
 #endif
