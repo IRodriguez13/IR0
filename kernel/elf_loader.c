@@ -1645,14 +1645,16 @@ struct exec_setid
 /*
  * DAC on exec. vfs_read_file() enforces nothing, so without this an
  * unprivileged task could load (and with set-user-ID bits, gain the identity
- * of) a binary it has no execute permission on. Root keeps the bypass it has
- * everywhere else in ir0_access_from_stat().
+ * of) a binary it has no execute permission on. As in Linux
+ * generic_permission(), root bypasses the owner/group/other split but still
+ * needs at least one execute bit, and only a regular file can be executed
+ * (do_open_execat()).
  */
 static int exec_permission_denied(const process_t *proc, const char *path)
 {
 	stat_t st;
 
-	if (!proc || proc->euid == ROOT_UID)
+	if (!proc)
 		return 0;
 
 	/*
@@ -1665,6 +1667,10 @@ static int exec_permission_denied(const process_t *proc, const char *path)
 	 */
 	if (vfs_stat(path, &st) != 0)
 		return 0;
+	if (!S_ISREG(st.st_mode))
+		return 1;
+	if (proc->euid == ROOT_UID)
+		return (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0;
 
 	return ir0_check_file_access(path, ACCESS_EXEC) ? 0 : 1;
 }

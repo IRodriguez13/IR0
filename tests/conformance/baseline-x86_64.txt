@@ -17,7 +17,6 @@ mm_mmap_huge_enomem FAIL  # 1 TiB mmap is EINVAL, Linux ENOMEM (red: mm_mmap_hug
 mm_mprotect_readonly FAIL  # PROT_NONE page stays readable (red: mm_prot_none_faults)
 mm_munmap_then_segv FAIL  # munmap of an unmapped range is EINVAL, Linux 0 (red: mm_munmap_hole_succeeds)
 mm_shared_anon_fork FAIL  # MAP_SHARED|MAP_ANONYMOUS is not shared across fork (red: mm_shared_anon_survives_fork)
-proc_exec_errors FAIL  # execve of a non-executable file is ENOENT, Linux EACCES (red: fs_execve_non_executable_eacces)
 proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: sig_wait4_bad_options_einval)
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
