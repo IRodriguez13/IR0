@@ -330,6 +330,8 @@ static int probe(int argc, char **argv)
 		return S2(SYS_fcntl, v, F_GETFD) >= 0 ? 0 : 1;
 	if (rt_streq(argv[2], "argv"))
 		return argc == 5 && rt_streq(argv[4], "last") ? 0 : 1;
+	if (rt_streq(argv[2], "arglen"))
+		return argc == 5 && (long)rt_strlen(argv[4]) == v ? 0 : 1;
 	return 98;
 }
 

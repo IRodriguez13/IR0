@@ -18,6 +18,12 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
+#define WAIT_MS 5000L
+/* fs/exec.c: one string, NUL included, may be 32 pages long. */
+#define MAX_ARG_STRLEN (32L * 4096L)
+
+static char g_arg[MAX_ARG_STRLEN + 1];
+
 /* fs/namei.c getname_flags(): an empty path is ENOENT without AT_EMPTY_PATH. */
 int fs_empty_path_enoent(void)
 {
@@ -140,5 +146,96 @@ int fs_stat_layout_matches_isa(void)
 	EXPECT(st.st_mode & 07777, 0640);
 	EXPECT(st.st_nlink, 1);
 	EXPECT(st.st_size, 3);
+	return CONF_PASS;
+}
+
+/* A regular file used as a directory component is ENOTDIR, not ENOENT. */
+int fs_file_component_enotdir(void)
+{
+	struct stat st;
+	long fd = conf_creat("f", 0);
+
+	CHECK(fd >= 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "f/x", O_RDONLY, 0), ENOTDIR);
+	EXPECT_ERR(S4(SYS_newfstatat, AT_FDCWD, "f/x", &st, 0), ENOTDIR);
+	return CONF_PASS;
+}
+
+/* rmdir(2) / unlinkat(AT_REMOVEDIR) refuse a non-empty directory. */
+int fs_rmdir_nonempty_enotempty(void)
+{
+	long fd;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	fd = conf_creat("d/f", 0);
+	CHECK(fd >= 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "d", AT_REMOVEDIR), ENOTEMPTY);
+	fd = S4(SYS_openat, AT_FDCWD, "d/f", O_RDONLY, 0);
+	CHECK(fd >= 0);
+	return CONF_PASS;
+}
+
+static void fill_arg(long len)
+{
+	long i;
+
+	for (i = 0; i < len; i++)
+		g_arg[i] = 'a';
+	g_arg[len] = '\0';
+}
+
+/* execve(2): an argument longer than 255 bytes reaches the new image. */
+int fs_execve_long_arg(void)
+{
+	char num[24];
+	char *argv[6];
+	int status = 0;
+	long pid;
+	long ret;
+
+	fill_arg(1000);
+	num[0] = '\0';
+	rt_catn(num, sizeof(num), 1000);
+	argv[0] = (char *)conf_self;
+	argv[1] = (char *)"--probe";
+	argv[2] = (char *)"arglen";
+	argv[3] = num;
+	argv[4] = g_arg;
+	argv[5] = 0;
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		ret = S3(SYS_execve, conf_self, argv, 0);
+		rt_exit(ret == -EFAULT ? 122 : 121);
+	}
+	EXPECT(conf_child_status(pid, &status, WAIT_MS), pid);
+	CHECK(RT_EXITED(status));
+	EXPECT(RT_EXITCODE(status), 0);
+	return CONF_PASS;
+}
+
+/*
+ * fs/exec.c copy_strings(): a string over MAX_ARG_STRLEN, or vectors larger
+ * than the argument space, are E2BIG. 64 strings of 128 KiB exceed the
+ * limit Linux derives from any stack rlimit (at most 6 MiB).
+ */
+int fs_execve_e2big(void)
+{
+	char *argv[66];
+	int i;
+
+	fill_arg(MAX_ARG_STRLEN);
+	argv[0] = (char *)conf_self;
+	argv[1] = g_arg;
+	argv[2] = 0;
+	EXPECT_ERR(S3(SYS_execve, conf_self, argv, 0), E2BIG);
+
+	fill_arg(MAX_ARG_STRLEN - 1);
+	for (i = 1; i < 65; i++)
+		argv[i] = g_arg;
+	argv[65] = 0;
+	EXPECT_ERR(S3(SYS_execve, conf_self, argv, 0), E2BIG);
 	return CONF_PASS;
 }
