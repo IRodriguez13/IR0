@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 #include <config.h>
+#include <ir0/delay.h>
 #include <ir0/types.h>
 #include "timer.h"
 
@@ -60,6 +61,21 @@ time_t clock_get_current_time(void)
 }
 
 #endif
+
+/* Generic-timer delay: CNTPCT_EL0 runs at CNTFRQ_EL0 on every core. */
+void udelay(unsigned long us)
+{
+	uint64_t frq = g_cntfrq;
+	uint64_t start;
+	uint64_t ticks;
+
+	if (frq == 0)
+		__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
+	ticks = ((uint64_t)us * frq + 999999U) / 1000000U;
+	start = timer_read();
+	while (timer_read() - start < ticks)
+		;
+}
 
 void timer_set_frequency(uint32_t hz)
 {

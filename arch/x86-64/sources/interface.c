@@ -14,6 +14,7 @@
 #include "arch_interface.h"
 #include <arch/common/arch_portable.h>
 #include <ir0/cpu.h>
+#include <ir0/delay.h>
 #include <ir0/early_clock.h>
 #include <ir0/oops.h>
 #include <stddef.h>
@@ -130,6 +131,17 @@ void outb(uint16_t port, uint8_t value)
 void io_wait(void)
 {
 	outb(0x80, 0);
+}
+
+/*
+ * No calibrated TSC yet: an I/O cycle on the unused POST port takes about a
+ * microsecond on ISA-compatible hardware (Linux slow_down_io). Emulators
+ * may retire it faster; callers only need a short bounded delay.
+ */
+void udelay(unsigned long us)
+{
+	while (us--)
+		io_wait();
 }
 
 uint16_t inw(uint16_t port)
