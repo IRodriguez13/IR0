@@ -1486,26 +1486,30 @@ int64_t sys_waitpid(pid_t pid, int *status, int options)
   return sys_wait4(pid, status, options, NULL);
 }
 
-/**
- * sys_kill - Send a signal to a process
- * @pid: Target process ID
- * @signal: Signal number to send
- *
- * Returns: 0 on success, -1 on error
- */
-/* kill / legacy sigaction. */
+/* kill(2) permission (Linux check_kill_permission(), uid subset). */
+static int kill_permitted(const process_t *target)
+{
+  return current_process->euid == 0 ||
+         current_process->euid == target->uid ||
+         current_process->euid == target->suid;
+}
 
+/*
+ * sys_kill - Linux kill(2). pid > 0 names one process; 0 and < -1 name a
+ * process group; -1 names every user process except init and the caller
+ * (Linux kill_something_info()). Kernel tasks never receive signals.
+ */
 int64_t sys_kill(pid_t pid, int signal)
 {
   process_t *target;
   process_t *scan;
   pid_t pgid;
-  int delivered = 0;
+  int count = 0;
+  int sent = 0;
+  int self = 0;
 
   if (!current_process)
     return -ESRCH;
-
-  /* Validate signal number */
   if (signal < 0 || signal >= _NSIG)
     return -EINVAL;
 
@@ -1514,46 +1518,51 @@ int64_t sys_kill(pid_t pid, int signal)
     target = process_find_by_pid(pid);
     if (!target)
       return -ESRCH;
-    if (current_process->euid != 0 &&
-        current_process->euid != target->uid &&
-        current_process->euid != target->suid)
+    if (!kill_permitted(target))
       return -EPERM;
     if (send_signal(pid, signal) != 0)
       return -ESRCH;
-    delivered = 1;
+    return 0;
   }
-  else
+
+  if (pid == INT32_MIN)
+    return -ESRCH;
+  pgid = (pid == 0) ? current_process->pgid : -pid;
+  for (scan = process_list; scan; scan = scan->next)
   {
-    /* Linux kill(2): 0 selects caller's pgrp; <-1 selects -pid. */
-    if (pid == INT32_MIN)
-      return -ESRCH;
-    pgid = (pid == 0) ? current_process->pgid : -pid;
-    for (scan = process_list; scan; scan = scan->next)
+    if (scan->mode != USER_MODE)
+      continue;
+    if (pid == -1)
     {
-      if ((pid != -1 && scan->pgid != pgid) || scan->task.pid == 1)
+      if (scan->task.pid <= 1 || scan->tgid == current_process->tgid)
         continue;
-      if (current_process->euid != 0 &&
-          current_process->euid != scan->uid &&
-          current_process->euid != scan->suid)
-        continue;
-      if (send_signal(scan->task.pid, signal) == 0)
-        delivered++;
     }
-    if (delivered == 0)
-      return -ESRCH;
+    else if (scan->pgid != pgid)
+      continue;
+    count++;
+    if (!kill_permitted(scan))
+      continue;
+    /* The caller last: a fatal signal to itself does not return. */
+    if (scan == current_process)
+    {
+      self = 1;
+      continue;
+    }
+    /* A zombie still counts and takes the signal as a no-op (Linux). */
+    if (process_is_zombie(scan) || send_signal(scan->task.pid, signal) == 0)
+      sent++;
   }
 
-#if IR0_DEBUG_PROC
-  {
-    process_t *target = process_find_by_pid(pid);
-
-    if (target)
-    {
-      klog_debug_fmt("SIGNAL", "[SIGTERM_AUDIT] sys_kill pid=%x sig=%x pending=%x state=%x", (unsigned)((uint32_t)pid), (unsigned)((uint32_t)signal), (unsigned)(target->signal_pending), (unsigned)((uint32_t)target->state));
-    }
-  }
-#endif
-
+  /*
+   * kill(-1) succeeds once any process qualified, even if permission was
+   * refused for all of them; a process group needs one delivery.
+   */
+  if (count == 0)
+    return -ESRCH;
+  if (self && send_signal(current_process->task.pid, signal) == 0)
+    sent++;
+  if (sent == 0 && pid != -1)
+    return -EPERM;
   return 0;
 }
 
