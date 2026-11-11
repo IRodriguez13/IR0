@@ -55,9 +55,7 @@ struct sock_stream
 	int fd_refs; /* close/fork: free slot only when last fd drops */
 	int family;
 	enum ss_state state;
-	char path[SS_PATH];
-	size_t path_len;
-	int is_abstract;
+	struct sock_unix_addr addr; /* key_len 0: unbound */
 	uint16_t port;
 	struct sock_stream *peer;
 	struct sock_stream *listener;
@@ -532,11 +530,11 @@ static int unix_name_equal(const struct sock_stream *a,
 {
 	if (!a || a->family != IR0_AF_UNIX)
 		return 0;
-	if (a->is_abstract != addr->is_abstract)
+	if (a->addr.is_abstract != addr->is_abstract)
 		return 0;
-	if (a->path_len != addr->key_len)
+	if (a->addr.key_len != addr->key_len)
 		return 0;
-	return memcmp(a->path, addr->key, addr->key_len) == 0;
+	return memcmp(a->addr.key, addr->key, addr->key_len) == 0;
 }
 
 static int unix_addr_valid(const struct sock_unix_addr *addr)
@@ -565,41 +563,23 @@ int sock_stream_bind_unix(struct sock_stream *s, const struct sock_unix_addr *ad
 			if (s->reuseaddr && g_socks[i].state == SS_BOUND &&
 			    &g_socks[i] != s)
 			{
-				g_socks[i].path_len = 0;
-				g_socks[i].path[0] = '\0';
-				g_socks[i].is_abstract = 0;
+				memset(&g_socks[i].addr, 0, sizeof(g_socks[i].addr));
 				continue;
 			}
 			return -EADDRINUSE;
 		}
 	}
-	memcpy(s->path, addr->key, addr->key_len);
-	s->path[addr->key_len] = '\0';
-	s->path_len = addr->key_len;
-	s->is_abstract = addr->is_abstract ? 1 : 0;
+	s->addr = *addr;
+	s->addr.key[addr->key_len] = '\0';
 	s->state = SS_BOUND;
 	return 0;
 }
 
-int sock_stream_get_unix_name(const struct sock_stream *s, char *path_out, size_t path_cap,
-			      size_t *path_len_out, int *is_abstract_out)
+const struct sock_unix_addr *sock_stream_unix_addr(const struct sock_stream *s)
 {
-	if (!s || s->family != IR0_AF_UNIX)
-		return -EINVAL;
-	if (path_len_out)
-		*path_len_out = s->path_len;
-	if (is_abstract_out)
-		*is_abstract_out = s->is_abstract;
-	if (path_out && path_cap > 0)
-	{
-		size_t n = s->path_len;
-
-		if (n >= path_cap)
-			n = path_cap - 1;
-		memcpy(path_out, s->path, n);
-		path_out[n] = '\0';
-	}
-	return 0;
+	if (!s || s->family != IR0_AF_UNIX || s->addr.key_len == 0)
+		return NULL;
+	return &s->addr;
 }
 
 int sock_stream_shutdown(struct sock_stream *s, int how)
@@ -725,13 +705,7 @@ int sock_stream_connect_unix(struct sock_stream *s,
 	if (!acc)
 		return -ENOMEM;
 	/* Accepted endpoint inherits listener bind name (Linux getsockname/peer). */
-	if (lst->path_len > 0 && lst->path_len < SS_PATH)
-	{
-		memcpy(acc->path, lst->path, lst->path_len);
-		acc->path[lst->path_len] = '\0';
-		acc->path_len = lst->path_len;
-		acc->is_abstract = lst->is_abstract;
-	}
+	acc->addr = lst->addr;
 	acc->state = SS_CONNECTED;
 	acc->peer = s;
 	s->state = SS_CONNECTED;
@@ -1233,10 +1207,10 @@ int sock_stream_unix_walk(int (*cb)(const struct sock_stream_unix_snap *s,
 		snap.refcnt = (unsigned)(s->fd_refs > 0 ? s->fd_refs : 1);
 		snap.type = 1; /* SOCK_STREAM */
 		snap.st = sock_stream_linux_st(s->state);
-		snap.path_len = s->path_len;
-		snap.is_abstract = s->is_abstract;
-		if (s->path_len > 0 && s->path_len < sizeof(snap.path))
-			memcpy(snap.path, s->path, s->path_len);
+		snap.path_len = s->addr.key_len;
+		snap.is_abstract = s->addr.is_abstract;
+		if (s->addr.key_len < sizeof(snap.path))
+			memcpy(snap.path, s->addr.key, s->addr.key_len);
 		if (cb(&snap, ctx) != 0)
 			return -1;
 	}

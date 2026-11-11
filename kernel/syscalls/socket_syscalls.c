@@ -45,40 +45,6 @@
 #include <config.h>
 #include <string.h>
 
-static int64_t unix_fill_sockaddr(struct sock_stream *ss, struct sockaddr *addr,
-				  socklen_t *addrlen)
-{
-	struct sockaddr_un sun;
-	socklen_t want;
-	socklen_t have;
-	size_t plen = 0;
-	int abs = 0;
-	char path[108];
-
-	if (!current_process || !addr || !addrlen)
-		return -EFAULT;
-	if (copy_from_user(&want, addrlen, sizeof(want)) != 0)
-		return -EFAULT;
-	if (sock_stream_family(ss) != IR0_AF_UNIX)
-		return -EOPNOTSUPP;
-	memset(path, 0, sizeof(path));
-	(void)sock_stream_get_unix_name(ss, path, sizeof(path), &plen, &abs);
-	memset(&sun, 0, sizeof(sun));
-	sun.sun_family = AF_UNIX;
-	if (plen > sizeof(sun.sun_path))
-		plen = sizeof(sun.sun_path);
-	memcpy(sun.sun_path, path, plen);
-	have = (socklen_t)(sizeof(sun.sun_family) + plen);
-	if (want > have)
-		want = have;
-	if (want > 0 && copy_to_user(addr, &sun, want) != 0)
-		return -EFAULT;
-	if (copy_to_user(addrlen, &have, sizeof(have)) != 0)
-		return -EFAULT;
-	(void)abs;
-	return 0;
-}
-
 /* Linux struct sockaddr_storage: the largest address a syscall copies in. */
 union sock_kaddr
 {
@@ -122,13 +88,20 @@ static int unix_addr_get(union sock_kaddr *k, socklen_t len,
 	plen = len - offsetof(struct sockaddr_un, sun_path);
 	if (plen == 0 || k->sun.sun_path[0] == '\0')
 	{
+		if (plen >= sizeof(ua->key))
+			return -EINVAL;
 		memcpy(ua->key, k->sun.sun_path, plen);
 		ua->key_len = plen;
 		ua->is_abstract = 1;
+		memcpy(ua->sun_path, k->sun.sun_path, plen);
+		ua->sun_len = len;
 		return 0;
 	}
 	/* sun_path may fill all 108 bytes; the union has room for the NUL. */
 	k->raw[len] = '\0';
+	plen = strlen(k->sun.sun_path);
+	memcpy(ua->sun_path, k->sun.sun_path, plen);
+	ua->sun_len = offsetof(struct sockaddr_un, sun_path) + plen + 1;
 	rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, k->sun.sun_path, resolved,
 				  sizeof(resolved), current_process->cwd,
 				  current_process->root);
@@ -139,6 +112,38 @@ static int unix_addr_get(union sock_kaddr *k, socklen_t len,
 		return -ENAMETOOLONG;
 	memcpy(ua->key, resolved, plen + 1);
 	ua->key_len = plen;
+	return 0;
+}
+
+/*
+ * unix_getname() + move_addr_to_user(): copy at most *@addrlen bytes of
+ * the address @ua (family only when NULL: unbound) and store its full
+ * length in *@addrlen.
+ */
+static int64_t unix_fill_sockaddr(const struct sock_unix_addr *ua,
+				  struct sockaddr *addr, socklen_t *addrlen)
+{
+	union sock_kaddr k;
+	socklen_t want;
+	socklen_t have = offsetof(struct sockaddr_un, sun_path);
+
+	if (copy_from_user(&want, addrlen, sizeof(want)) != 0)
+		return -EFAULT;
+	if ((int)want < 0)
+		return -EINVAL;
+	memset(&k, 0, sizeof(k));
+	k.sun.sun_family = AF_UNIX;
+	if (ua)
+	{
+		memcpy(k.sun.sun_path, ua->sun_path, sizeof(ua->sun_path));
+		have = (socklen_t)ua->sun_len;
+	}
+	if (want > have)
+		want = have;
+	if (want > 0 && copy_to_user(addr, &k, want) != 0)
+		return -EFAULT;
+	if (copy_to_user(addrlen, &have, sizeof(have)) != 0)
+		return -EFAULT;
 	return 0;
 }
 
@@ -166,13 +171,11 @@ static int unix_find_check(const struct sock_unix_addr *ua)
 static int unix_bind_path_check(struct sock_stream *ss, const char *path)
 {
 	char parent[SOCK_UNIX_PATH_MAX];
-	size_t bound = 0;
 	stat_t st;
 	char *slash;
 	int rc;
 
-	(void)sock_stream_get_unix_name(ss, NULL, 0, &bound, NULL);
-	if (bound)
+	if (sock_stream_unix_addr(ss))
 		return -EINVAL;
 	memcpy(parent, path, strlen(path) + 1);
 	slash = strrchr(parent, '/');
@@ -1575,7 +1578,9 @@ int64_t sys_getsockname(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	ss = sock_stream_fd_lookup(fd);
 	if (!ss)
 		return -ENOTSOCK;
-	return unix_fill_sockaddr(ss, addr, addrlen);
+	if (sock_stream_family(ss) != IR0_AF_UNIX)
+		return -EOPNOTSUPP;
+	return unix_fill_sockaddr(sock_stream_unix_addr(ss), addr, addrlen);
 }
 
 int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
@@ -1599,7 +1604,9 @@ int64_t sys_getpeername(int fd, struct sockaddr *addr, socklen_t *addrlen)
 	peer = sock_stream_get_peer(ss);
 	if (!peer)
 		return -ENOTCONN;
-	return unix_fill_sockaddr(peer, addr, addrlen);
+	if (sock_stream_family(peer) != IR0_AF_UNIX)
+		return -EOPNOTSUPP;
+	return unix_fill_sockaddr(sock_stream_unix_addr(peer), addr, addrlen);
 }
 
 int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,

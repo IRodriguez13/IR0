@@ -28,13 +28,17 @@ struct sock_stream;
 /*
  * An AF_UNIX address. @key finds the socket: the resolved path of a
  * pathname address, or the bytes of an abstract name (leading NUL
- * included).
+ * included). @sun_path and @sun_len are the address as the caller gave
+ * it, which getsockname() reports: @sun_len counts the family and, for a
+ * pathname, the terminating NUL (Linux unix_mkname_bsd()).
  */
 struct sock_unix_addr
 {
 	char key[SOCK_UNIX_PATH_MAX];
 	size_t key_len;
 	int is_abstract;
+	char sun_path[SOCK_UNIX_PATH_MAX];
+	size_t sun_len;
 };
 
 struct sock_stream *sock_stream_create(int family);
@@ -79,8 +83,11 @@ int sock_stream_rights_count(const struct sock_stream *s);
 void sock_stream_set_rights_dtor(void (*dtor)(void *entry, size_t sz));
 
 int sock_stream_shutdown(struct sock_stream *s, int how);
-int sock_stream_get_unix_name(const struct sock_stream *s, char *path_out, size_t path_cap,
-			      size_t *path_len_out, int *is_abstract_out);
+/*
+ * The address @s is bound to (an accepted socket: its listener's). Returns
+ * NULL for a socket that has none, as an unbound or non-AF_UNIX socket.
+ */
+const struct sock_unix_addr *sock_stream_unix_addr(const struct sock_stream *s);
 int sock_stream_poll_readable(const struct sock_stream *s);
 int sock_stream_poll_writable(const struct sock_stream *s);
 int sock_stream_family(const struct sock_stream *s);
