@@ -381,6 +381,25 @@ int sock_udp_connect(struct sock_udp *sock, uint32_t peer_ip_be,
 #endif
 }
 
+int sock_udp_peer(struct sock_udp *sock, uint32_t *peer_ip_be,
+		  uint16_t *peer_port_host)
+{
+	uint64_t flags;
+	int ret = -EDESTADDRREQ;
+
+	if (!sock)
+		return -EINVAL;
+	flags = sock_irq_save();
+	if (sock->connected)
+	{
+		*peer_ip_be = sock->peer_ip_be;
+		*peer_port_host = sock->peer_port;
+		ret = 0;
+	}
+	sock_irq_restore(flags);
+	return ret;
+}
+
 int sock_udp_sendto(struct sock_udp *sock, uint32_t dest_ip_be, uint16_t dest_port_host,
 		    const void *data, size_t len)
 {

@@ -487,7 +487,8 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 {
 	int err;
 	struct sock_stream *ss;
-	struct sockaddr_in sin;
+	union sock_kaddr k;
+	uint16_t port;
 	struct sock_udp *sock;
 	struct sock_icmp *icmp;
 	uint8_t *kbuf;
@@ -534,16 +535,24 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 		return n;
 	}
 
-	if (!dest_addr || addrlen < sizeof(struct sockaddr_in))
-		return -EINVAL;
-	if (copy_from_user(&sin, dest_addr, sizeof(sin)) != 0)
-		return -EFAULT;
-	if (sin.sin_family != AF_INET)
-		return -EAFNOSUPPORT;
+	/* udp_sendmsg(): with no address the connected peer is the target. */
+	memset(&k, 0, sizeof(k));
+	if (dest_addr)
+	{
+		err = sock_addr_copy(&k, dest_addr, addrlen);
+		if (err < 0)
+			return err;
+		if (addrlen < sizeof(struct sockaddr_in))
+			return -EINVAL;
+		if (k.sin.sin_family != AF_INET)
+			return -EAFNOSUPPORT;
+	}
 
 	icmp = sock_icmp_fd_lookup(fd);
 	if (icmp)
 	{
+		if (!dest_addr)
+			return -EDESTADDRREQ;
 		kbuf = sock_bounce_alloc(len);
 		if (!kbuf)
 			return -ENOMEM;
@@ -552,7 +561,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 			kfree(kbuf);
 			return -EFAULT;
 		}
-		ret = sock_icmp_sendto(icmp, sin.sin_addr, kbuf, len);
+		ret = sock_icmp_sendto(icmp, k.sin.sin_addr, kbuf, len);
 		kfree(kbuf);
 		if (ret < 0)
 			return ret;
@@ -563,6 +572,14 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	sock = sock_fd_lookup(fd);
 	if (!sock)
 		return -ENOTSOCK;
+	if (!dest_addr)
+	{
+		err = sock_udp_peer(sock, &k.sin.sin_addr, &port);
+		if (err < 0)
+			return err;
+	}
+	else
+		port = ntohs(k.sin.sin_port);
 
 	kbuf = sock_bounce_alloc(len);
 	if (!kbuf)
@@ -573,7 +590,7 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 		return -EFAULT;
 	}
 
-	ret = sock_udp_sendto(sock, sin.sin_addr, ntohs(sin.sin_port), kbuf, len);
+	ret = sock_udp_sendto(sock, k.sin.sin_addr, port, kbuf, len);
 	kfree(kbuf);
 	if (ret < 0)
 		return ret;
