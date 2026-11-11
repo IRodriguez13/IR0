@@ -25,6 +25,6 @@ sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
 stat_hardlink TCONF  # linkat is ENOSYS
 stat_statx TCONF  # statx is ENOSYS
-stat_symlink FAIL  # AT_SYMLINK_NOFOLLOW stat of a symlink is ENOENT (red: fs_lstat_symlink)
+stat_symlink FAIL  # openat(O_NOFOLLOW) of a symlink opens the target, Linux ELOOP
 time_clock_getres TCONF  # clock_getres is ENOSYS
 time_clock_gettime FAIL  # CLOCK_PROCESS_CPUTIME_ID is EINVAL; arm64 CLOCK_REALTIME is not set from the RTC (red: time_clock_process_cputime, time_realtime_from_rtc)

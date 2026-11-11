@@ -29,7 +29,7 @@ stat_fifo_and_dir FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat
 stat_fstat_regular FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 stat_hardlink TCONF  # linkat is ENOSYS
 stat_statx TCONF  # statx is ENOSYS
-stat_symlink FAIL  # AT_SYMLINK_NOFOLLOW stat of a symlink is ENOENT (red: fs_lstat_symlink)
+stat_symlink FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 stat_umask FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 time_clock_getres TCONF  # clock_getres is ENOSYS
 time_clock_gettime FAIL  # CLOCK_PROCESS_CPUTIME_ID is EINVAL; arm64 CLOCK_REALTIME is not set from the RTC (red: time_clock_process_cputime, time_realtime_from_rtc)

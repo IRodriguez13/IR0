@@ -88,6 +88,13 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
     if (rc != -ENOENT)
         return rc;
 
+    /* Symlinks on filesystems without a symlink op (lstat semantics). */
+    rc = named_symlink_stat(path, st);
+    if (rc == 0)
+        return 0;
+    if (rc != -ENOENT)
+        return rc;
+
     rc = vfs_stat(path, st);
     if (rc == 0 && S_ISREG(st->st_mode) &&
         named_fifo_path_must_be_fifo(path))
