@@ -14,15 +14,33 @@
 
 #include "conf.h"
 
+#include <sys/socket.h>
 #include <time.h>
+
+extern void rt_restore(void);
 
 static volatile int g_hits;
 static volatile int g_sig;
+static volatile int g_usr2_hits;
 
 static void on_signal(int sig)
 {
 	g_sig = sig;
 	g_hits++;
+}
+
+static void on_usr2(int sig)
+{
+	(void)sig;
+	g_usr2_hits++;
+}
+
+/* Raises SIGUSR2 while sa_mask keeps it blocked until rt_sigreturn. */
+static void on_usr1_raise_usr2(int sig)
+{
+	(void)sig;
+	g_hits++;
+	(void)S2(SYS_kill, S0(SYS_getpid), SIGUSR2);
 }
 
 /* kernel/signal.c sigprocmask(): SIGKILL and SIGSTOP are never blocked. */
@@ -133,5 +151,87 @@ int sig_handler_gets_signum(void)
 	EXPECT(S2(SYS_kill, S0(SYS_getpid), SIGUSR2), 0);
 	EXPECT(g_hits, 1);
 	EXPECT(g_sig, SIGUSR2);
+	return CONF_PASS;
+}
+
+/*
+ * signal(7) SA_RESTART: a read(2) on a stream socket interrupted by a
+ * handler is restarted (unix_stream_read_generic(): -ERESTARTSYS).
+ */
+int sig_socket_read_restarts(void)
+{
+	long parent = S0(SYS_getpid);
+	int sv[2];
+	int status = 0;
+	char c = 0;
+	long pid;
+
+	EXPECT(rt_sigaction(SIGUSR1, on_signal, SA_RESTART, 0), 0);
+	EXPECT(S4(SYS_socketpair, AF_UNIX, SOCK_STREAM, 0, sv), 0);
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		rt_sleep_ms(100);
+		if (S2(SYS_kill, parent, SIGUSR1) != 0)
+			rt_exit(1);
+		rt_sleep_ms(100);
+		rt_exit(S3(SYS_write, sv[1], "x", 1) == 1 ? 0 : 2);
+	}
+	EXPECT(S3(SYS_read, sv[0], &c, 1), 1);
+	EXPECT(c, 'x');
+	EXPECT(g_hits, 1);
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	return CONF_PASS;
+}
+
+/*
+ * A signal that becomes deliverable when rt_sigreturn restores the mask
+ * runs on rt_sigreturn's way out (Linux exit_to_user_mode()), before the
+ * interrupted code executes another instruction.
+ */
+int sig_sigreturn_delivers_unmasked(void)
+{
+	struct ksigaction act;
+	long ret;
+	int seen;
+
+	EXPECT(rt_sigaction(SIGUSR2, on_usr2, 0, 0), 0);
+	act.handler = on_usr1_raise_usr2;
+	act.flags = SA_RESTORER;
+	act.restorer = rt_restore;
+	act.mask = SIGBIT(SIGUSR2);
+	EXPECT(S4(SYS_rt_sigaction, SIGUSR1, &act, 0, sizeof(act.mask)), 0);
+	ret = S2(SYS_kill, S0(SYS_getpid), SIGUSR1);
+	seen = g_usr2_hits;
+	EXPECT(ret, 0);
+	EXPECT(g_hits, 1);
+	EXPECT(seen, 1);
+	return CONF_PASS;
+}
+
+/*
+ * signal(7): a fatal signal ends a task that never enters the kernel. The
+ * child spins in userspace; only the timer interrupt returns to it.
+ * On a kernel without interrupt-return preemption the spinning child
+ * keeps the only CPU and the guest stops.
+ */
+int sig_kill_cpu_bound_child(void)
+{
+	static volatile unsigned long spin;
+	int status = 0;
+	long pid;
+
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		for (;;)
+			spin++;
+	}
+	rt_sleep_ms(100);
+	EXPECT(S2(SYS_kill, pid, SIGTERM), 0);
+	EXPECT(conf_child_status(pid, &status, 3000), pid);
+	CHECK(RT_SIGNALED(status) && RT_TERMSIG(status) == SIGTERM);
 	return CONF_PASS;
 }
