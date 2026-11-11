@@ -476,6 +476,39 @@ int vfs_parent_dir(const char *path, char *out, size_t out_sz)
 }
 
 /**
+ * Classify a failed lookup of @path the way the Linux path walk does: the
+ * first component that is missing makes it ENOENT, but a component that
+ * exists and is not a directory, with more of the path after it, makes it
+ * ENOTDIR. Only called once a lookup has failed, so the walk is off the
+ * fast path.
+ */
+int vfs_lookup_error(const char *path)
+{
+    char prefix[MAX_PATH];
+    const char *p;
+    stat_t st;
+
+    if (!path || path[0] != '/')
+        return -ENOENT;
+    for (p = strchr(path + 1, '/'); p; p = strchr(p + 1, '/'))
+    {
+        size_t len = (size_t)(p - path);
+        struct vfs_ops *ops;
+
+        if (len >= sizeof(prefix))
+            return -ENAMETOOLONG;
+        memcpy(prefix, path, len);
+        prefix[len] = '\0';
+        ops = vfs_ops_for_path(prefix);
+        if (!ops || !ops->stat || vfs_ops_stat(ops, prefix, &st) != 0)
+            return -ENOENT;
+        if (!S_ISDIR(st.st_mode))
+            return -ENOTDIR;
+    }
+    return -ENOENT;
+}
+
+/**
  * Look up the directory that will hold the new name @path, as Linux does
  * before it checks permissions: a missing parent is ENOENT and a parent
  * that is not a directory is ENOTDIR. The parent path is left in @out.

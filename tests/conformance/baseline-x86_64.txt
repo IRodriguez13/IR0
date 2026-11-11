@@ -5,7 +5,7 @@
 
 dir_mkdir_rmdir FAIL  # unlinkat(AT_REMOVEDIR) removes a non-empty directory, Linux ENOTEMPTY
 fs_ftruncate TCONF  # ftruncate is ENOSYS
-fs_open_errors FAIL  # openat("f/x") on a regular file f is ENOENT, Linux ENOTDIR
+fs_open_errors FAIL  # openat(".", O_WRONLY) succeeds, Linux EISDIR
 fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
 fs_unlink_open_file TCONF  # pread64 is ENOSYS
 mm_madvise_dontneed TCONF  # madvise is ENOSYS

@@ -62,6 +62,7 @@ struct vfs_ops *vfs_ops_for_path(const char *path);
 int vfs_check_dir_traverse(const char *path);
 int vfs_parent_dir(const char *path, char *out, size_t out_sz);
 int vfs_lookup_parent(const char *path, char *out, size_t out_sz);
+int vfs_lookup_error(const char *path);
 
 /* Mount table lookups (vfs_mount.c). */
 struct vfs_mount *vfs_find_mount(const char *path);

@@ -58,7 +58,10 @@ int vfs_stat(const char *path, stat_t *buf)
     if (!ops || !ops->stat)
         return -ENODEV;
     memset(buf, 0, sizeof(*buf));
-    return vfs_ops_stat(ops, path, buf);
+    ret = vfs_ops_stat(ops, path, buf);
+    if (ret == -ENOENT)
+        ret = vfs_lookup_error(path);
+    return ret;
 }
 
 int vfs_mkdir(const char *path, int mode)

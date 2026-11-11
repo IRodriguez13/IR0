@@ -165,8 +165,9 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         int accmode = flags & IR0_O_ACCMODE;
         stat_t st;
 
-        if (!ops->stat || vfs_ops_stat(ops, path, &st) != 0)
-            return -ENOENT;
+        ret = vfs_stat(path, &st);
+        if (ret != 0)
+            return ret == -ENOTDIR ? ret : -ENOENT;
 
         if (accmode == IR0_O_RDONLY || accmode == IR0_O_RDWR)
             acc |= 0x1;
