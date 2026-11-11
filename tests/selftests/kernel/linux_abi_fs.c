@@ -265,3 +265,28 @@ int fs_open_directory_on_file_enotdir(void)
 		   ENOTDIR);
 	return CONF_PASS;
 }
+
+/* unlink(2) of a directory is EISDIR and leaves it in place. */
+int fs_unlink_dir_eisdir(void)
+{
+	struct stat st;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "d", 0), EISDIR);
+	EXPECT(S4(SYS_newfstatat, AT_FDCWD, "d", &st, 0), 0);
+	CHECK(S_ISDIR(st.st_mode));
+	return CONF_PASS;
+}
+
+/* open(2): a directory opens only read-only; O_CREAT never replaces it. */
+int fs_open_dir_for_write_eisdir(void)
+{
+	struct stat st;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "d", O_WRONLY, 0), EISDIR);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "d", O_RDWR | O_CREAT, 0644), EISDIR);
+	EXPECT(S4(SYS_newfstatat, AT_FDCWD, "d", &st, 0), 0);
+	CHECK(S_ISDIR(st.st_mode));
+	return CONF_PASS;
+}
