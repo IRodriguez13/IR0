@@ -122,13 +122,9 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 
         target_exists = (ops->stat && vfs_ops_stat(ops, path, &st) == 0) ? 1 : 0;
 
-        if (target_exists && S_ISDIR(st.st_mode) && !(flags & IR0_O_DIRECTORY))
-        {
-            ret = vfs_rmdir_recursive(path);
-            if (ret != 0)
-                return ret;
-            target_exists = 0;
-        }
+        /* open(2): O_CREAT never replaces a directory; it is EISDIR. */
+        if (target_exists && S_ISDIR(st.st_mode))
+            return -EISDIR;
 
         if (!target_exists)
         {
@@ -138,12 +134,6 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
                 mode_t fmode = mode & 07777;
 
                 ret = vfs_ops_create(ops, path, fmode);
-                if (ret == -EISDIR)
-                {
-                    ret = vfs_rmdir_recursive(path);
-                    if (ret == 0)
-                        ret = vfs_ops_create(ops, path, fmode);
-                }
                 if (ret != 0)
                     return ret;
                 if (DEBUG_VFS)
@@ -168,6 +158,9 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         ret = vfs_stat(path, &st);
         if (ret != 0)
             return ret == -ENOTDIR ? ret : -ENOENT;
+        /* open(2): a directory opens read-only. */
+        if (S_ISDIR(st.st_mode) && accmode != IR0_O_RDONLY)
+            return -EISDIR;
 
         if (accmode == IR0_O_RDONLY || accmode == IR0_O_RDWR)
             acc |= 0x1;

@@ -326,10 +326,8 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
   if (posix_shm_path_is(resolved))
     return posix_shm_try_unlink(resolved);
 
-  rc = vfs_unlink(resolved);
-  if (rc == -EISDIR)
-    return vfs_rmdir_recursive(resolved);
-  return rc;
+  /* unlink(2) of a directory is EISDIR; only rmdir removes one. */
+  return vfs_unlink(resolved);
 }
 
 int64_t sys_renameat(int olddirfd, const char *oldpath,

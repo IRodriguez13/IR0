@@ -3,9 +3,7 @@
 # A case that starts passing is reported as FIXED: remove its line.
 # See Documentation/conformance.md.
 
-dir_mkdir_rmdir FAIL  # unlinkat(dir, 0) removes the directory, Linux EISDIR
 fs_ftruncate TCONF  # ftruncate is ENOSYS
-fs_open_errors FAIL  # openat(".", O_WRONLY) succeeds, Linux EISDIR
 fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
 fs_unlink_open_file TCONF  # pread64 is ENOSYS
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
