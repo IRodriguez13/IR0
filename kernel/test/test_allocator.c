@@ -15,7 +15,6 @@
 #include "test/ktest_harness.h"
 #include <ir0/boot_memory.h>
 #include <ir0/clock.h>
-#include <ir0/cpu.h>
 #include <ir0/kmem.h>
 #include <ir0/mm_port.h>
 #include <ir0/page_table_pool.h>
@@ -149,9 +148,11 @@ void ktest_allocator_stats(void)
 }
 
 /*
- * Spin until the tick count moves or @limit iterations pass; returns the
- * iterations spent. Calibration and the hook use the same loop, so a count
- * measured with IRQs on spans the same wall time inside the hook.
+ * Read the tick count until it moves or @limit reads pass; returns the
+ * reads spent. The test needs the CPU held on purpose (it simulates a long
+ * heap critical section), so this is a bounded loop of clock reads, not a
+ * wait. Calibration and the hook use the same loop, so a count measured
+ * with IRQs on spans the same wall time inside the hook.
  */
 static unsigned long heap_spin_ticks(unsigned long limit)
 {
@@ -162,7 +163,6 @@ static unsigned long heap_spin_ticks(unsigned long limit)
 	{
 		if (clock_get_tick_count() != start)
 			break;
-		cpu_relax();
 	}
 	return n;
 }
