@@ -3,11 +3,10 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: linux_abi_sock.c
- * Description: RED selftest (fails on dev 11a72171, not wired into any gate):
- *              socket syscalls that diverge from Linux, found by the
- *              conformance harness (Documentation/conformance.md). One case
- *              per bug; each passes on Linux. Run by
- *              make ir0-selftest-red-sock-{x86,arm64}.
+ * Description: Selftest: socket syscalls that diverged from Linux, found by
+ *              the conformance harness (Documentation/conformance.md). One
+ *              case per fixed bug; each passes on Linux and on IR0. Run by
+ *              make ir0-selftest-sock-abi-{x86,arm64}.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
