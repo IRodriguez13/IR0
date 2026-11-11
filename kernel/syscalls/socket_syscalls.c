@@ -143,6 +143,23 @@ static int unix_addr_get(union sock_kaddr *k, socklen_t len,
 }
 
 /*
+ * unix_find_bsd(): a pathname must exist (ENOENT) and be a socket
+ * (ECONNREFUSED) before the socket bound to it is looked up.
+ */
+static int unix_find_check(const struct sock_unix_addr *ua)
+{
+	stat_t st;
+	int rc;
+
+	if (ua->is_abstract)
+		return 0;
+	rc = ir0_stat_path_routed(ua->key, &st);
+	if (rc != 0)
+		return rc;
+	return S_ISSOCK(st.st_mode) ? 0 : -ECONNREFUSED;
+}
+
+/*
  * unix_bind_bsd(): the socket must be unbound (EINVAL), the parent
  * directory must exist, and the name must be free (EADDRINUSE).
  */
@@ -789,28 +806,27 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 		return -EINVAL;
 
 	ss = sock_stream_fd_lookup(fd);
+	if (ss && sock_stream_family(ss) == IR0_AF_UNIX)
+	{
+		struct sock_unix_addr ua;
+
+		err = unix_addr_get(&k, addrlen, &ua);
+		if (err < 0)
+			return err;
+		err = unix_find_check(&ua);
+		if (err < 0)
+			return err;
+		return sock_stream_connect_unix(ss, &ua);
+	}
 	if (ss)
 	{
-		uint16_t family = k.sa.sa_family;
-
-		if (family == AF_UNIX)
-		{
-			struct sock_unix_addr ua;
-			int rc = unix_addr_get(&k, addrlen, &ua);
-
-			if (rc != 0)
-				return rc;
-			return sock_stream_connect_unix(ss, &ua);
-		}
-		if (family == AF_INET)
-		{
-			if (addrlen < sizeof(struct sockaddr_in))
-				return -EINVAL;
-			return sock_stream_connect_inet_flags(ss, k.sin.sin_addr,
-							      ntohs(k.sin.sin_port),
-							      sock_nonblock_fd(fd, 0));
-		}
-		return -EAFNOSUPPORT;
+		if (addrlen < sizeof(struct sockaddr_in))
+			return -EINVAL;
+		if (k.sin.sin_family != AF_INET)
+			return -EAFNOSUPPORT;
+		return sock_stream_connect_inet_flags(ss, k.sin.sin_addr,
+						      ntohs(k.sin.sin_port),
+						      sock_nonblock_fd(fd, 0));
 	}
 
 	if (addrlen < sizeof(struct sockaddr_in))
