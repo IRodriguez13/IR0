@@ -799,6 +799,54 @@ int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr)
 	return 0;
 }
 
+/*
+ * Linux zap_page_range(): drop every 4 KiB leaf (present or swapped out) in
+ * [start, end). Absent subtrees are skipped whole, so unmapping a sparse or
+ * empty range does not walk it page by page. The caller has checked that
+ * the range holds no kernel leaf.
+ */
+void unmap_user_region_in_directory(address_space_root_t root, uintptr_t start,
+				    uintptr_t end)
+{
+	size_t entries = mm_table_entries();
+	uintptr_t va = start & (uintptr_t)PAGE_FRAME_MASK;
+
+	if (!root || entries == 0)
+		return;
+
+	while (va < end)
+	{
+		size_t idx[4];
+		uint64_t *table = root;
+		uintptr_t span = PAGE_SIZE_4KB;
+		uintptr_t next;
+		int level;
+
+		for (level = 0; level < 3; level++)
+			span *= entries;
+		mm_va_indices(va, idx);
+		for (level = 0; level < 4; level++)
+		{
+			uint64_t entry = table[idx[level]];
+
+			if (level == 3)
+			{
+				if (entry != 0)
+					(void)unmap_page_in_directory(root, va);
+				break;
+			}
+			if (!mm_pte_present(entry) || paging_entry_large(entry))
+				break;
+			table = paging_entry_table(entry);
+			span /= entries;
+		}
+		next = (va & ~(span - 1)) + span;
+		if (next <= va)
+			break;
+		va = next;
+	}
+}
+
 /**
  * Unmap a single 4KB page in the current address space
  */

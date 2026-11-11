@@ -154,6 +154,13 @@ int paging_ensure_4k_leaf(address_space_root_t root, uintptr_t vaddr);
 int unmap_page_in_directory(address_space_root_t root, uintptr_t virt_addr);
 
 /*
+ * Unmap every user page (present or swapped out) in [@start, @end) of @root,
+ * skipping unmapped subtrees. Holes are not an error (munmap(2)).
+ */
+void unmap_user_region_in_directory(address_space_root_t root, uintptr_t start,
+				    uintptr_t end);
+
+/*
  * Test double consulted first by unmap_page_in_directory(). NULL in
  * production. Return -EOPNOTSUPP to fall through to the table walker; any
  * other value is the unmap result and the walker does not run.

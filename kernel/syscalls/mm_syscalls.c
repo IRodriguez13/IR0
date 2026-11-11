@@ -1039,11 +1039,14 @@ int sys_munmap(void *addr, size_t length)
   detached = mm_detach_vma_range(start_page, end_page);
   if (detached < 0)
     return detached;
-  if (detached == 0)
-    return -EINVAL; /* Not found */
 
-  for (uintptr_t page = start_page; page < end_page; page += PAGE_SIZE_4KB)
-    (void)unmap_page_in_directory(process_pgd(current_process), page);
+  /*
+   * Linux munmap(2): any page of the user range goes, VMA or not (ELF
+   * image pages are not in the mmap list), and a range with no mapping
+   * at all is not an error.
+   */
+  unmap_user_region_in_directory(process_pgd(current_process), start_page,
+                                 end_page);
 
   KTM_CHECKPOINT(KTM_CP_MM_UNMAP);
   paging_ir0_mm_checkpoint("munmap-after",
