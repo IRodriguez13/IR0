@@ -245,7 +245,7 @@ in its group, so it cannot hide the others.
 | N3 | bind | sock_bind_errors / sock_bind_twice_einval | bound socket → EINVAL | 0 | both | kernel/syscalls/socket_syscalls.c:290 |
 | N4 | connect | sock_connect_errors / sock_connect_missing_path_enoent | missing path → ENOENT | ECONNREFUSED | both | kernel/syscalls/socket_syscalls.c:708 |
 | N5 | getsockname | sock_getsockname / sock_getsockname_returns_path | bound path | other path | both | kernel/syscalls/socket_syscalls.c:1490 |
-| N6 | socketpair/bind SOCK_DGRAM | sock_pair_dgram_boundaries, sock_dgram_bound_sendto / sock_unix_dgram_supported, sock_unix_dgram_send_recv | AF_UNIX datagrams | EPROTOTYPE / EINVAL | both | kernel/syscalls/socket_syscalls.c (no AF_UNIX DGRAM) |
+| N6 | socketpair/bind SOCK_DGRAM | sock_pair_dgram_boundaries, sock_dgram_bound_sendto / sock_unix_dgram_supported, sock_unix_dgram_send_recv, sock_unix_dgram_msg | AF_UNIX datagrams | EPROTOTYPE / EINVAL | both | kernel/syscalls/socket_syscalls.c (no AF_UNIX DGRAM) |
 | N7 | bind | sock_bind_errors / sock_bind_null_addr_efault | NULL address → EFAULT | EINVAL | both | kernel/syscalls/socket_syscalls.c `sys_bind` |
 | N8 | bind | sock_bind_errors / sock_bind_missing_dir_enoent | missing parent directory → ENOENT | 0 | both | kernel/syscalls/socket_syscalls.c `sys_bind` |
 | N9 | sendto (UDP) | — / sock_udp_send_uses_peer | no address: connected peer, else EDESTADDRREQ | EINVAL | both | kernel/syscalls/socket_syscalls.c `sys_sendto` |

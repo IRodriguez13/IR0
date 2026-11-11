@@ -16,6 +16,7 @@
 
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <sys/un.h>
 
 static unsigned int unix_addr(struct sockaddr_un *a, const char *path)
@@ -142,6 +143,33 @@ int sock_unix_dgram_send_recv(void)
 	EXPECT(S6(SYS_recvfrom, s, buf, sizeof(buf), MSG_DONTWAIT, 0, 0), 0);
 	EXPECT_ERR(S6(SYS_recvfrom, s, buf, sizeof(buf), MSG_DONTWAIT, 0, 0),
 		   EAGAIN);
+	return CONF_PASS;
+}
+
+/* unix_dgram_sendmsg()/recvmsg(): gather, scatter and MSG_TRUNC. */
+int sock_unix_dgram_msg(void)
+{
+	char a[3];
+	char b[8];
+	char out0[] = "abc";
+	char out1[] = "defg";
+	struct iovec out[2] = { { out0, 3 }, { out1, 4 } };
+	struct iovec in[2] = { { a, sizeof(a) }, { b, 2 } };
+	struct msghdr m;
+	int sv[2];
+
+	EXPECT(S4(SYS_socketpair, AF_UNIX, SOCK_DGRAM, 0, sv), 0);
+	rt_fill(&m, 0, sizeof(m));
+	m.msg_iov = out;
+	m.msg_iovlen = 2;
+	EXPECT(S3(SYS_sendmsg, sv[0], &m, 0), 7);
+	rt_fill(&m, 0, sizeof(m));
+	m.msg_iov = in;
+	m.msg_iovlen = 2;
+	EXPECT(S3(SYS_recvmsg, sv[1], &m, 0), 5);
+	CHECK(rt_memeq(a, "abc", 3) && rt_memeq(b, "de", 2));
+	CHECK(m.msg_flags & MSG_TRUNC);
+	EXPECT_ERR(S3(SYS_recvmsg, sv[1], &m, MSG_DONTWAIT), EAGAIN);
 	return CONF_PASS;
 }
 
