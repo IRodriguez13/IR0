@@ -4,7 +4,6 @@
 # See Documentation/conformance.md.
 
 dir_mkdir_rmdir FAIL  # unlinkat(dir, 0) removes the directory, Linux EISDIR
-dir_openat_dirfd FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 fs_ftruncate TCONF  # ftruncate is ENOSYS
 fs_open_errors FAIL  # arm64 open flags use the x86_64 values: O_DIRECTORY is lost
 fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
@@ -22,11 +21,8 @@ proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: si
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
-stat_fifo_and_dir FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
-stat_fstat_regular FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 stat_hardlink TCONF  # linkat is ENOSYS
 stat_statx TCONF  # statx is ENOSYS
-stat_symlink FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
-stat_umask FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
+stat_symlink FAIL  # openat(O_NOFOLLOW) of a symlink opens the target, Linux ELOOP
 time_clock_getres TCONF  # clock_getres is ENOSYS
 time_clock_gettime FAIL  # CLOCK_PROCESS_CPUTIME_ID is EINVAL; arm64 CLOCK_REALTIME is not set from the RTC (red: time_clock_process_cputime, time_realtime_from_rtc)

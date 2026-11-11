@@ -7,49 +7,42 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_stat_user_abi.c
- * Description: Host test — musl x86_64 struct stat userspace layout size
+ * Description: Host test — per-ISA Linux struct stat layouts for syscall copies
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test_harness.h"
+#include <stddef.h>
 #include <stdint.h>
 
-/* Mirror of includes/ir0/stat_user.h (avoid kernel types.h on host). */
-struct musl_x64_stat_abi
-{
-	uint64_t st_dev;
-	uint64_t st_ino;
-	unsigned long st_nlink;
-	unsigned st_mode;
-	unsigned st_uid;
-	unsigned st_gid;
-	unsigned __pad0;
-	uint64_t st_rdev;
-	int64_t st_size;
-	int64_t st_blksize;
-	int64_t st_blocks;
-	struct
-	{
-		int64_t tv_sec;
-		int64_t tv_nsec;
-	} st_atim;
-	struct
-	{
-		int64_t tv_sec;
-		int64_t tv_nsec;
-	} st_mtim;
-	struct
-	{
-		int64_t tv_sec;
-		int64_t tv_nsec;
-	} st_ctim;
-	int64_t __unused[3];
-};
+/*
+ * Both ISA layouts behind includes/ir0/stat_user.h, renamed so one host
+ * object can compare them with the Linux uapi offsets.
+ */
+#define ir0_user_stat ir0_user_stat_x86_64
+#include "../../arch/x86-64/include/asm/stat.h"
+#undef ir0_user_stat
+#define ir0_user_stat ir0_user_stat_arm64
+#include "../../arch/arm64/include/asm/stat.h"
+#undef ir0_user_stat
 
 void test_stat_user_abi(void)
 {
 	TEST_BEGIN("stat_user_abi");
-	ASSERT(sizeof(struct musl_x64_stat_abi) == 144U);
+	/* arch/x86/include/uapi/asm/stat.h */
+	ASSERT(sizeof(struct ir0_user_stat_x86_64) == 144U);
+	ASSERT(offsetof(struct ir0_user_stat_x86_64, st_nlink) == 16U);
+	ASSERT(offsetof(struct ir0_user_stat_x86_64, st_mode) == 24U);
+	ASSERT(offsetof(struct ir0_user_stat_x86_64, st_size) == 48U);
+	ASSERT(offsetof(struct ir0_user_stat_x86_64, st_atim) == 72U);
+	/* include/uapi/asm-generic/stat.h (arm64) */
+	ASSERT(sizeof(struct ir0_user_stat_arm64) == 128U);
+	ASSERT(offsetof(struct ir0_user_stat_arm64, st_mode) == 16U);
+	ASSERT(offsetof(struct ir0_user_stat_arm64, st_nlink) == 20U);
+	ASSERT(offsetof(struct ir0_user_stat_arm64, st_size) == 48U);
+	ASSERT(offsetof(struct ir0_user_stat_arm64, st_blksize) == 56U);
+	ASSERT(offsetof(struct ir0_user_stat_arm64, st_blocks) == 64U);
+	ASSERT(offsetof(struct ir0_user_stat_arm64, st_atim) == 72U);
 	TEST_END();
 }

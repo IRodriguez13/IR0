@@ -24,13 +24,13 @@ void ir0_stat_to_user(const stat_t *kst, struct ir0_user_stat *ust)
     memset(ust, 0, sizeof(*ust));
     ust->st_dev = (uint64_t)kst->st_dev;
     ust->st_ino = (uint64_t)kst->st_ino;
-    ust->st_nlink = (unsigned long)kst->st_nlink;
-    ust->st_mode = (unsigned)kst->st_mode;
-    ust->st_uid = (unsigned)kst->st_uid;
-    ust->st_gid = (unsigned)kst->st_gid;
+    ust->st_mode = (uint32_t)kst->st_mode;
+    ust->st_nlink = kst->st_nlink;
+    ust->st_uid = (uint32_t)kst->st_uid;
+    ust->st_gid = (uint32_t)kst->st_gid;
     ust->st_rdev = (uint64_t)kst->st_rdev;
     ust->st_size = (int64_t)kst->st_size;
-    ust->st_blksize = (int64_t)kst->st_blksize;
+    ust->st_blksize = kst->st_blksize;
     ust->st_blocks = (int64_t)kst->st_blocks;
     ust->st_atim.tv_sec = (int64_t)kst->st_atime;
     ust->st_mtim.tv_sec = (int64_t)kst->st_mtime;

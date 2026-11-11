@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: stat_user.h
- * Description: Linux x86_64 / musl struct stat layout for syscall ABI copies
+ * Description: Linux uapi struct stat for syscall ABI copies (per ISA)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -18,41 +18,10 @@
 #include <ir0/stat.h>
 
 /*
- * musl arch/x86_64/bits/stat.h — field order differs from kernel stat_t.
- * Source: musl 1.2.x uapi (st_nlink before st_mode; timespec timestamps).
+ * struct ir0_user_stat is the ISA's Linux uapi struct stat: x86_64 has its
+ * own layout, arm64 the asm-generic one. The build selects it.
  */
-struct ir0_user_stat
-{
-    uint64_t st_dev;
-    uint64_t st_ino;
-    unsigned long st_nlink;
-
-    unsigned st_mode;
-    unsigned st_uid;
-    unsigned st_gid;
-    unsigned __pad0;
-    uint64_t st_rdev;
-    int64_t st_size;
-    int64_t st_blksize;
-    int64_t st_blocks;
-
-    struct
-    {
-        int64_t tv_sec;
-        int64_t tv_nsec;
-    } st_atim;
-    struct
-    {
-        int64_t tv_sec;
-        int64_t tv_nsec;
-    } st_mtim;
-    struct
-    {
-        int64_t tv_sec;
-        int64_t tv_nsec;
-    } st_ctim;
-    int64_t __unused[3];
-};
+#include <asm/stat.h>
 
 #define IR0_USER_STAT_SIZE ((unsigned)sizeof(struct ir0_user_stat))
 
