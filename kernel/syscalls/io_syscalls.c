@@ -441,7 +441,7 @@ int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
     return -EINVAL;
 
   *saved_mask = current_process->signal_mask;
-  current_process->signal_mask = new_mask;
+  set_current_blocked(new_mask);
   *applied = 1;
   return 0;
 }

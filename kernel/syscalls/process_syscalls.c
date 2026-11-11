@@ -380,7 +380,8 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 		if (register_signal_handler(signum, kact.sa_handler) != 0)
 			return -EFAULT;
 		current_process->signal_sa_mask[signum] =
-			rt_sigaction_mask_from_sigset(&kact.sa_mask, sigsetsize);
+			rt_sigaction_mask_from_sigset(&kact.sa_mask, sigsetsize) &
+			~SIGNAL_UNBLOCKABLE;
 		current_process->signal_sa_flags[signum] = (uint32_t)kact.sa_flags;
 		current_process->signal_restorer[signum] =
 			(kact.sa_flags & SA_RESTORER) ? kact.sa_restorer : NULL;
@@ -393,6 +394,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 			   size_t sigsetsize)
 {
 	sigset_t kset;
+	uint32_t oldmask;
 	uint32_t newmask;
 	uint64_t legacy64;
 
@@ -401,60 +403,55 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 	if (sigsetsize != sizeof(sigset_t) && sigsetsize != sizeof(uint64_t))
 		return -EINVAL;
 
-	if (oldset)
+	/*
+	 * Linux sigprocmask(): read the new set, apply it, and only then
+	 * report the old one, so a bad @how leaves *oldset untouched.
+	 */
+	oldmask = current_process->signal_mask;
+	if (set)
 	{
-		sigset_t kold;
-
 		if (sigsetsize == sizeof(uint64_t))
 		{
-			if (!access_ok(oldset, sizeof(uint64_t)))
+			if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
 				return -EFAULT;
-			legacy64 = (uint64_t)ir0_sigword_to_linux(current_process->signal_mask);
+			newmask = linux_sigword_to_ir0((uint32_t)legacy64);
+		}
+		else
+		{
+			if (copy_from_user(&kset, set, sizeof(kset)) != 0)
+				return -EFAULT;
+			newmask = ir0_sigset_low32(&kset);
+		}
+		switch (how)
+		{
+		case SIG_BLOCK:
+			set_current_blocked(oldmask | newmask);
+			break;
+		case SIG_UNBLOCK:
+			set_current_blocked(oldmask & ~newmask);
+			break;
+		case SIG_SETMASK:
+			set_current_blocked(newmask);
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	if (oldset)
+	{
+		if (sigsetsize == sizeof(uint64_t))
+		{
+			legacy64 = (uint64_t)ir0_sigword_to_linux(oldmask);
 			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
 				return -EFAULT;
 		}
 		else
 		{
-			if (!access_ok(oldset, sizeof(sigset_t)))
-				return -EFAULT;
-			ir0_sigset_set_low32(&kold, current_process->signal_mask);
-			if (copy_to_user(oldset, &kold, sizeof(kold)) != 0)
+			ir0_sigset_set_low32(&kset, oldmask);
+			if (copy_to_user(oldset, &kset, sizeof(kset)) != 0)
 				return -EFAULT;
 		}
-	}
-
-	if (!set)
-		return 0;
-
-	if (sigsetsize == sizeof(uint64_t))
-	{
-		if (!access_ok(set, sizeof(uint64_t)))
-			return -EFAULT;
-		if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
-			return -EFAULT;
-		newmask = linux_sigword_to_ir0((uint32_t)legacy64);
-	}
-	else
-	{
-		if (!access_ok(set, sizeof(sigset_t)))
-			return -EFAULT;
-		if (copy_from_user(&kset, set, sizeof(kset)) != 0)
-			return -EFAULT;
-		newmask = ir0_sigset_low32(&kset);
-	}
-	switch (how)
-	{
-	case SIG_BLOCK:
-		current_process->signal_mask |= newmask;
-		break;
-	case SIG_UNBLOCK:
-		current_process->signal_mask &= ~newmask;
-		break;
-	case SIG_SETMASK:
-		current_process->signal_mask = newmask;
-		break;
-	default:
-		return -EINVAL;
 	}
 	return 0;
 }
@@ -492,8 +489,7 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 		return -EFAULT;
 
 	saved_mask = current_process->signal_mask;
-	current_process->signal_mask =
-		rt_sigaction_mask_from_sigset(&kset, sigsetsize);
+	set_current_blocked(rt_sigaction_mask_from_sigset(&kset, sigsetsize));
 
 	for (;;)
 	{
@@ -1796,7 +1792,7 @@ int64_t sys_sigreturn(void)
   }
 
   process_saved_context_clear(current_process);
-  current_process->signal_mask = (uint32_t)user_frame.oldmask;
+  set_current_blocked((uint32_t)user_frame.oldmask);
   current_process->signal_mask_saved_valid = 0;
   current_process->signal_frame_sp = 0;
 

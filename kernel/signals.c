@@ -878,6 +878,11 @@ static int handle_signal(process_t *p, int sig)
 	return 1;
 }
 
+void set_current_blocked(uint32_t mask)
+{
+	current_process->signal_mask = mask & ~SIGNAL_UNBLOCKABLE;
+}
+
 void do_signal(process_t *p)
 {
 	int sig = signal_pending(p) ? get_signal(p) : 0;

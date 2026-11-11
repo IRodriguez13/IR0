@@ -13,7 +13,6 @@ mm_mmap_file_shared TCONF  # file-backed mmap is ENOSYS
 proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: sig_wait4_bad_options_einval)
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
-sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
 stat_hardlink TCONF  # linkat is ENOSYS
 stat_statx TCONF  # statx is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS

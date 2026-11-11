@@ -56,6 +56,9 @@ typedef struct process process_t;
 /* Signal bitmask helpers */
 #define SIGNAL_MASK(sig) (1U << (sig))
 
+/* Never blocked, caught or ignored (Linux sigdelsetmask(SIGKILL|SIGSTOP)). */
+#define SIGNAL_UNBLOCKABLE (SIGNAL_MASK(SIGKILL) | SIGNAL_MASK(SIGSTOP))
+
 /* Maximum signal number */
 #define _NSIG 32
 
@@ -222,6 +225,13 @@ void do_signal(process_t *p);
  * PROCESS_BLOCKED and return -ERESTARTSYS (or -EINTR) when it is set.
  */
 int signal_pending(process_t *p);
+
+/**
+ * set_current_blocked - Install @mask as the current task's blocked set
+ * (Linux set_current_blocked()). SIGKILL and SIGSTOP are dropped from it:
+ * every path that takes a mask from userspace goes through here.
+ */
+void set_current_blocked(uint32_t mask);
 
 /**
  * register_signal_handler - Register a signal handler for current process
