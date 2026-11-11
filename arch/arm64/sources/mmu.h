@@ -40,5 +40,11 @@ int arm64_mmu_map_device_block(uint64_t pa);
  */
 int arm64_mmu_map_supervisor(address_space_root_t root);
 
+/*
+ * Nonzero when [va, va + size) meets the supervisor identity of the user
+ * roots: the DRAM window or a Device block recorded so far.
+ */
+int arm64_mmu_supervisor_overlaps(uintptr_t va, size_t size);
+
 /* Add Device blocks recorded after @root was created. Idempotent. */
 int arm64_mmu_sync_supervisor(address_space_root_t root);

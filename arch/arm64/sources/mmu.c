@@ -25,6 +25,7 @@
 #include <arch/common/arch_portable.h>
 #include <arm64_board.h>
 #include <ir0/errno.h>
+#include <ir0/mm_range.h>
 #include <ir0/paging.h>
 #include <stdint.h>
 
@@ -424,6 +425,20 @@ int arm64_mmu_map_supervisor(address_space_root_t root)
 	if (map_supervisor_identity_2mb(root, g_dram_base, g_dram_end) != 0)
 		return -ENOMEM;
 	return map_device_blocks(root, 0);
+}
+
+int arm64_mmu_supervisor_overlaps(uintptr_t va, size_t size)
+{
+	unsigned i;
+
+	if (mm_range_overlaps(va, size, g_dram_base, g_dram_end - g_dram_base))
+		return 1;
+	for (i = 0; i < g_device_count; i++)
+	{
+		if (mm_range_overlaps(va, size, g_device_blocks[i], BLOCK_2M))
+			return 1;
+	}
+	return 0;
 }
 
 int arm64_mmu_sync_supervisor(address_space_root_t root)

@@ -81,6 +81,18 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 				mm_user_va_end());
 }
 
+/*
+ * Every root identity-maps all of DRAM (kernel image, heap, page tables and
+ * other PMM frames) and the Device blocks: a user page over any of them
+ * would hide kernel memory from the kernel itself while that root runs.
+ */
+int mm_user_range_mappable(uintptr_t addr, size_t size)
+{
+	if (!mm_user_va_ok(addr, size))
+		return 0;
+	return !arm64_mmu_supervisor_overlaps(addr, size);
+}
+
 address_space_root_t mm_create_user_root(void)
 {
 	address_space_root_t root;

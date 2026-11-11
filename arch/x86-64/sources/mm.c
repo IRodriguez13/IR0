@@ -22,6 +22,9 @@
 #include <ir0/paging.h>
 #include <string.h>
 
+/* Supervisor 4 KiB identity around the keyboard ring, below the 2 MiB map. */
+#define X86_SUPERVISOR_KBD_END 0x00600000UL
+
 uintptr_t mm_kernel_heap_start(void)
 {
 	return 0x00800000UL;
@@ -82,12 +85,27 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
 				mm_user_va_end());
 }
 
+/*
+ * The low identity of every root holds the keyboard ring IRQs fill and the
+ * kernel heap. The rest of it (the ELF/brk seam at 6 MiB, the PMM window)
+ * is split and taken over by user pages on demand, as before.
+ */
+int mm_user_range_mappable(uintptr_t addr, size_t size)
+{
+	if (!mm_user_va_ok(addr, size))
+		return 0;
+	if (mm_range_overlaps(addr, size, KEYBOARD_BUFFER_ADDR,
+			      X86_SUPERVISOR_KBD_END - KEYBOARD_BUFFER_ADDR))
+		return 0;
+	return !mm_range_overlaps(addr, size, mm_kernel_heap_start(),
+				  mm_kernel_heap_size());
+}
+
 address_space_root_t mm_create_user_root(void)
 {
 	address_space_root_t root;
 	uintptr_t kernel_root_phys;
 	address_space_root_t kernel_root;
-	const uint64_t supervisor_kbd_end = 0x00600000UL;
 
 	root = (address_space_root_t)page_table_frame_alloc(
 		MM_ALLOC_DIRECT_RECLAIM);
@@ -116,8 +134,8 @@ address_space_root_t mm_create_user_root(void)
 	 */
 	if (map_supervisor_identity_low(root, 0, mm_user_va_start()) != 0 ||
 	    map_supervisor_identity_low(root, KEYBOARD_BUFFER_ADDR,
-					supervisor_kbd_end) != 0 ||
-	    map_supervisor_identity_2mb(root, supervisor_kbd_end,
+					X86_SUPERVISOR_KBD_END) != 0 ||
+	    map_supervisor_identity_2mb(root, X86_SUPERVISOR_KBD_END,
 					PMM_PHYS_BASE + PMM_PHYS_SIZE) != 0 ||
 	    mm_map_platform_supervisor(root) != 0)
 	{

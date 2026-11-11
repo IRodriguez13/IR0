@@ -155,7 +155,7 @@ static uintptr_t mm_find_free_va(address_space_root_t root, process_t *proc,
 		if (hint < USER_MMAP_START ||
 		    hint + length > USER_MMAP_END || hint + length < hint)
 			return 0;
-		if (!mm_user_va_ok((uintptr_t)hint, length))
+		if (!mm_user_range_mappable(hint, length))
 			return 0;
 		if (proc && process_user_va_range_overlaps(proc, hint, length))
 			return 0;
@@ -591,7 +591,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
           uintptr_t hint_addr = (uintptr_t)addr;
           if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
             return SYSCALL_PTR_ERR(EINVAL);
-          if (!mm_user_va_ok((uintptr_t)addr, map_len))
+          if (!mm_user_range_mappable(hint_addr, map_len))
             return SYSCALL_PTR_ERR(EFAULT);
           int mapped = is_page_mapped_in_directory(process_pgd(current_process), hint_addr, NULL);
           if (mapped == 1)
@@ -721,7 +721,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
 	  if ((hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
 	    return SYSCALL_PTR_ERR(EINVAL);
-	  if (!mm_user_va_ok((uintptr_t)addr, map_len))
+	  if (!mm_user_range_mappable(hint_addr, map_len))
 	    return SYSCALL_PTR_ERR(EFAULT);
 	  if (is_page_mapped_in_directory(process_pgd(current_process),
 					  hint_addr, NULL) == 1)
@@ -803,12 +803,12 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
                             process_pgd(current_process));
       return ret;
     }
-    if (hint_addr < (uintptr_t)PMM_PHYS_BASE &&
-	hint_addr + length > mm_kernel_heap_start())
+    /* Linux: a fixed range outside the user address space is ENOMEM. */
+    if (!mm_user_range_mappable(hint_addr, length))
     {
-      ret = SYSCALL_PTR_ERR(EINVAL);
-      mmap_audit_log_return("map-fixed-kernel-heap", ret, hint_addr, length, 0,
-			    process_pgd(current_process));
+      ret = SYSCALL_PTR_ERR(ENOMEM);
+      mmap_audit_log_return("map-fixed-kernel-range", ret, hint_addr, length,
+			    0, process_pgd(current_process));
       return ret;
     }
 
@@ -848,7 +848,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
            hint_addr >= USER_MMAP_START &&
            hint_addr + length <= USER_MMAP_END &&
            hint_addr + length >= hint_addr &&
-           mm_user_va_ok((uintptr_t)addr, length))
+           mm_user_range_mappable(hint_addr, length))
   {
     bool collision = false;
 
@@ -1000,10 +1000,6 @@ int sys_munmap(void *addr, size_t length)
   if (!addr || length == 0)
     return -EINVAL;
 
-  /* Validate address is in userspace */
-  if (!mm_user_va_ok((uintptr_t)addr, length))
-    return -EFAULT;
-
   if (length > SIZE_MAX - (PAGE_SIZE_4KB - 1))
     return -EINVAL;
 
@@ -1013,6 +1009,10 @@ int sys_munmap(void *addr, size_t length)
   if (start_page > UINTPTR_MAX - aligned_length)
     return -EINVAL;
   end_page = start_page + aligned_length;
+
+  /* Linux: munmap outside the user address space is EINVAL. */
+  if (!mm_user_range_mappable(start_page, aligned_length))
+    return -EINVAL;
 
   paging_ir0_mm_checkpoint("munmap-before", (int32_t)process_get_pid());
 
@@ -1083,6 +1083,10 @@ int sys_mprotect(void *addr, size_t len, int prot)
   range_end = (((uintptr_t)addr + len) + PAGE_SIZE_4KB - 1) &
 	      (uintptr_t)PAGE_FRAME_MASK;
   root = process_pgd(current_process);
+
+  /* Linux: mprotect outside the user address space is ENOMEM. */
+  if (!mm_user_range_mappable(range_start, range_end - range_start))
+    return -ENOMEM;
 
   map_flags = PAGE_USER;
   if (prot & PROT_WRITE)

@@ -49,3 +49,11 @@ void mm_copy_kernel_half(address_space_root_t dst_root,
  * Returns 1 if [addr, addr+size) is a canonical user range for this arch.
  */
 int mm_user_va_ok(uintptr_t addr, size_t size);
+
+/*
+ * Nonzero when userspace may map, unmap or reprotect [addr, addr + size):
+ * inside the user window and clear of the kernel pages the ISA keeps in
+ * every process root (Linux: below TASK_SIZE). mmap(2), munmap(2) and
+ * mprotect(2) use this; pointer checks keep using mm_user_va_ok().
+ */
+int mm_user_range_mappable(uintptr_t addr, size_t size);

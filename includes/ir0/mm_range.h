@@ -32,3 +32,15 @@ static inline int mm_user_range_ok(uintptr_t address, size_t size,
 		return 0;
 	return 1;
 }
+
+/*
+ * Nonzero when [address, address + size) meets [base, base + length).
+ * Callers have already checked that the first range does not wrap.
+ */
+static inline int mm_range_overlaps(uintptr_t address, size_t size,
+				    uintptr_t base, uint64_t length)
+{
+	if (size == 0 || length == 0)
+		return 0;
+	return address < base + length && base < address + size;
+}
