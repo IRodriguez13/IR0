@@ -19,7 +19,7 @@
 
 #define PROCESS_ENVIRON_MAX (128U * 1024U)
 #define PROCESS_ENVIRON_VARS_MAX 256
-#define PROCESS_CMDLINE_MAX (64U * 1024U)
+#define PROCESS_CMDLINE_MAX (128U * 1024U) /* execve argument space */
 #define PROCESS_CMDLINE_ARGS_MAX 256
 
 static int process_saved_nul_blob_set(char **dst, size_t *dst_len,

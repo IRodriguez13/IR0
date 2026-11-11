@@ -1110,47 +1110,147 @@ static int exec_path_is_proc_self_exe(const char *path)
 }
 
 /*
+ * Linux fs/exec.c copy_strings(): one string, NUL included, may be
+ * MAX_ARG_STRLEN (32 pages) long, and argv and envp share a bounded
+ * argument space; overflowing either is E2BIG. IR0's space is 128 KiB so
+ * the copies also fit the saved /proc cmdline and environ blobs. Each
+ * string is its own heap block: the loader frees them once the new image
+ * holds them (exec_replace_current() does not return on success).
+ */
+#define EXEC_ARG_STRLEN_MAX (32L * 4096L)
+#define EXEC_ARG_SPACE (128L * 1024L)
+#define EXEC_ARG_SLOTS 256
+
+struct exec_args
+{
+  char *argv[EXEC_ARG_SLOTS];
+  char *envp[EXEC_ARG_SLOTS];
+  long used;
+};
+
+/* Length of the user string @u, or @max when it has no NUL within @max. */
+static long exec_strnlen_user(const char *u, long max)
+{
+  char chunk[128];
+  long len = 0;
+
+  while (len < max)
+  {
+    long want = max - len;
+    long n;
+
+    if (want > (long)sizeof(chunk))
+      want = (long)sizeof(chunk);
+    n = strncpy_from_user(chunk, u + len, want);
+    if (n < 0)
+      return n;
+    len += n;
+    if (n < want)
+      return len;
+  }
+  return max;
+}
+
+/* Charge @len bytes plus the NUL to the argument space and copy them. */
+static char *exec_args_store(struct exec_args *args, const char *src,
+                             long len, int from_user)
+{
+  char *dst;
+
+  if (len >= EXEC_ARG_SPACE - args->used)
+    return NULL;
+  dst = kmalloc((size_t)len + 1);
+  if (!dst)
+    return NULL;
+  if (from_user)
+  {
+    if (copy_from_user(dst, src, (size_t)len) != 0)
+    {
+      kfree(dst);
+      return NULL;
+    }
+  }
+  else
+  {
+    memcpy(dst, src, (size_t)len);
+  }
+  dst[len] = '\0';
+  args->used += len + 1;
+  return dst;
+}
+
+static void exec_args_release(struct exec_args *args)
+{
+  int i;
+
+  for (i = 0; i < EXEC_ARG_SLOTS && args->argv[i]; i++)
+    kfree(args->argv[i]);
+  for (i = 0; i < EXEC_ARG_SLOTS && args->envp[i]; i++)
+    kfree(args->envp[i]);
+}
+
+/*
+ * Copy the NULL-terminated user vector @uvec into @out. Returns the count
+ * or -EFAULT / -E2BIG / -ENOMEM.
+ */
+static int exec_copy_strings(struct exec_args *args, char *const *uvec,
+                             char **out)
+{
+  int i;
+
+  for (i = 0; i < EXEC_ARG_SLOTS - 1; i++)
+  {
+    const char *uptr;
+    long limit;
+    long len;
+
+    if (copy_from_user(&uptr, (const char *)uvec + i * sizeof(char *),
+                       sizeof(uptr)) != 0)
+      return -EFAULT;
+    if (!uptr)
+      return i;
+    limit = EXEC_ARG_SPACE - args->used;
+    if (limit > EXEC_ARG_STRLEN_MAX)
+      limit = EXEC_ARG_STRLEN_MAX;
+    len = exec_strnlen_user(uptr, limit);
+    if (len < 0)
+      return (int)len;
+    if (len == limit)
+      return -E2BIG;
+    out[i] = exec_args_store(args, uptr, len, 1);
+    if (!out[i])
+      return -ENOMEM;
+  }
+  return -E2BIG;
+}
+
+/*
  * Linux execve(2): envp == NULL → inherit the caller's environment.
  * IR0 stores the post-exec blob in saved_environ; rebuild a kernel vector.
  */
-static int exec_env_clone_from_saved(process_t *proc, char *kernel_envp[256],
-				     int *envc_out)
+static int exec_env_from_saved(const process_t *proc, struct exec_args *args)
 {
-	const char *walk;
-	size_t rem;
-	int i;
+  const char *walk = proc->saved_environ;
+  size_t rem = walk ? proc->saved_environ_len : 0;
+  int i;
 
-	if (!proc || !envc_out)
-		return -EINVAL;
+  for (i = 0; i < EXEC_ARG_SLOTS - 1 && rem > 0; i++)
+  {
+    size_t len = 0;
 
-	*envc_out = 0;
-	if (!proc->saved_environ || proc->saved_environ_len == 0)
-		return 0;
-
-	walk = proc->saved_environ;
-	rem = proc->saved_environ_len;
-	for (i = 0; i < 255 && rem > 0; i++)
-	{
-		size_t len = 0;
-		char *copy;
-
-		while (len < rem && walk[len] != '\0')
-			len++;
-		if (len >= rem)
-			break;
-
-		copy = (char *)kmalloc(len + 1);
-		if (!copy)
-			return -ENOMEM;
-
-		memcpy(copy, walk, len + 1);
-		kernel_envp[i] = copy;
-		walk += len + 1;
-		rem -= len + 1;
-	}
-
-	*envc_out = i;
-	return 0;
+    while (len < rem && walk[len] != '\0')
+      len++;
+    if (len >= rem)
+      break;
+    if ((long)len >= EXEC_ARG_SPACE - args->used)
+      return -E2BIG;
+    args->envp[i] = exec_args_store(args, walk, (long)len, 0);
+    if (!args->envp[i])
+      return -ENOMEM;
+    walk += len + 1;
+    rem -= len + 1;
+  }
+  return i;
 }
 
 /* execve / execveat. */
@@ -1192,158 +1292,36 @@ int64_t sys_exec(const char *pathname,
     path_to_use = current_process->exe_path;
   }
 
-  /* argv/envp are NULL-terminated vectors; only validate the first slot here.
-   * Each slot and string is then copied with copy_from_user() /
-   * strncpy_from_user(), which fail with -EFAULT on unmapped pages.
-   */
-  if (argv && !access_ok(argv, sizeof(char *)))
-    return -EFAULT;
-  if (envp && !access_ok(envp, sizeof(char *)))
-    return -EFAULT;
-
-  /* Copy argv and envp from userspace if provided */
-  char *kernel_argv[256] = {NULL};
-  char *kernel_envp[256] = {NULL};
-  char *const *envp_for_exec = NULL;
-  int argc_kept = 0;
-  int envc_kept = 0;
-  int rc_vec = 0;
-
-  if (argv)
-  {
-    int i;
-    for (i = 0; i < 256; i++)
-    {
-      const void *slot = (const char *)argv + i * sizeof(char *);
-      char *user_ptr = NULL;
-
-      if (copy_from_user(&user_ptr, slot, sizeof(char *)) != 0)
-      {
-        rc_vec = -EFAULT;
-        break;
-      }
-      if (user_ptr == NULL)
-        break;  /* end of vector */
-
-      char *arg_str = (char *)kmalloc(256);
-      if (!arg_str)
-      {
-        rc_vec = -ENOMEM;
-        break;
-      }
-      /* Stop at NUL — fixed 256-byte copies EFAULT when heap strings sit
-       * near an unmapped page (doas prepenv/asprintf). */
-      long arg_len = strncpy_from_user(arg_str, user_ptr, 256);
-
-      if (arg_len < 0 || arg_len == 256)
-      {
-        kfree(arg_str);
-        rc_vec = -EFAULT;
-        break;
-      }
-      kernel_argv[i] = arg_str;
-      argc_kept = i + 1;
-    }
-    if (rc_vec)
-    {
-      for (int j = 0; j < argc_kept; j++)
-        kfree(kernel_argv[j]);
-      return rc_vec;
-    }
-    if (i == 256)
-    {
-      for (int j = 0; j < argc_kept; j++)
-        kfree(kernel_argv[j]);
-      return -E2BIG;
-    }
-  }
-
-  if (envp)
-  {
-    int i;
-    for (i = 0; i < 256; i++)
-    {
-      const void *slot = (const char *)envp + i * sizeof(char *);
-      char *user_ptr = NULL;
-
-      if (copy_from_user(&user_ptr, slot, sizeof(char *)) != 0)
-      {
-        rc_vec = -EFAULT;
-        break;
-      }
-      if (user_ptr == NULL)
-        break;
-
-      char *env_str = (char *)kmalloc(256);
-      if (!env_str)
-      {
-        rc_vec = -ENOMEM;
-        break;
-      }
-      long env_len = strncpy_from_user(env_str, user_ptr, 256);
-
-      if (env_len < 0 || env_len == 256)
-      {
-        kfree(env_str);
-        rc_vec = -EFAULT;
-        break;
-      }
-      kernel_envp[i] = env_str;
-      envc_kept = i + 1;
-    }
-    if (rc_vec)
-    {
-      for (int j = 0; j < argc_kept; j++)
-        kfree(kernel_argv[j]);
-      for (int j = 0; j < envc_kept; j++)
-        kfree(kernel_envp[j]);
-      return rc_vec;
-    }
-    if (i == 256)
-    {
-      for (int j = 0; j < argc_kept; j++)
-        kfree(kernel_argv[j]);
-      for (int j = 0; j < envc_kept; j++)
-        kfree(kernel_envp[j]);
-      return -E2BIG;
-    }
-    envp_for_exec = (char *const *)kernel_envp;
-  }
-  else if (current_process)
-  {
-    rc_vec = exec_env_clone_from_saved(current_process, kernel_envp, &envc_kept);
-    if (rc_vec < 0)
-    {
-      for (int j = 0; j < argc_kept; j++)
-        kfree(kernel_argv[j]);
-      return rc_vec;
-    }
-    if (envc_kept > 0)
-      envp_for_exec = (char *const *)kernel_envp;
-  }
-
+  struct exec_args args;
   int64_t result;
+
+  memset(&args, 0, sizeof(args));
+  result = argv ? exec_copy_strings(&args, argv, args.argv) : 0;
+  if (result >= 0)
+    result = envp ? exec_copy_strings(&args, envp, args.envp) :
+                    exec_env_from_saved(current_process, &args);
+  if (result < 0)
+  {
+    exec_args_release(&args);
+    return result;
+  }
 
   if (current_process->mode == USER_MODE)
   {
     ktm_probe_diag_execve(current_process, path_to_use);
     KTM_CHECKPOINT(KTM_CP_PROCESS_EXEC);
-    result = exec_replace_current(path_to_use,
-                                  argv ? (char *const *)kernel_argv : NULL,
-                                  envp_for_exec);
+    result = exec_replace_current(path_to_use, argv ? args.argv : NULL,
+                                  args.envp);
   }
   else
   {
-    result = kexecve(path_to_use,
-                     argv ? (char *const *)kernel_argv : NULL,
-                     envp_for_exec);
+    result = kexecve(path_to_use, argv ? args.argv : NULL, args.envp);
   }
-
-  /* Clean up copied strings */
-  for (int i = 0; i < 256 && kernel_argv[i]; i++)
-    kfree(kernel_argv[i]);
-  for (int i = 0; i < 256 && kernel_envp[i]; i++)
-    kfree(kernel_envp[i]);
+  /*
+   * A successful exec_replace_current() does not return: the loader freed
+   * the strings. Anything that returns here left them to us.
+   */
+  exec_args_release(&args);
 
   /*
    * A refused exec used to return to ring 3 with nothing in the log, so a
