@@ -112,6 +112,8 @@ int sig_kill_all_spares_caller(void)
 	CHECK(victim >= 0);
 	if (victim == 0)
 	{
+		/* fork(2) inherits the handler: the victim must die by default. */
+		(void)rt_sigaction(SIGUSR1, SIG_DFL, 0, 0);
 		for (;;)
 			rt_sleep_ms(1000);
 	}
