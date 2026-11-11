@@ -27,8 +27,6 @@ proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: si
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_stop_not_blockable)
-sock_dgram_bound_sendto FAIL  # AF_UNIX SOCK_DGRAM bind is EINVAL (red: sock_unix_dgram_supported)
-sock_pair_dgram_boundaries FAIL  # AF_UNIX SOCK_DGRAM socketpair is EPROTOTYPE (red: sock_unix_dgram_supported)
 stat_empty_path FAIL  # newfstatat("") is EINVAL, Linux ENOENT (red: fs_empty_path_enoent)
 stat_fifo_and_dir FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 stat_fstat_regular FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)

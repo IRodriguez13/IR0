@@ -8,6 +8,7 @@
  */
 
 #include "fs_syscalls_internal.h"
+#include "socket_syscalls.h"
 
 static void ash_smoke_read_trace(int fd, int64_t ret)
 {
@@ -56,10 +57,26 @@ static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
   return NULL;
 }
 
+/* An AF_UNIX datagram socket: write(2) is send(2), one datagram per call. */
+static int fd_is_unix_dgram(int fd)
+{
+  fd_entry_t *fdt;
+
+  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    return 0;
+  fdt = get_process_fd_table();
+  return fdt && fdt[fd].in_use && fdt[fd].is_socket &&
+	 sock_stream_is(fdt[fd].vfs_file) &&
+	 sock_stream_type(fdt[fd].vfs_file) == IR0_SOCK_DGRAM;
+}
+
 int64_t sys_write(int fd, const void *buf, size_t count)
 {
   if (!current_process)
     return -ESRCH;
+  /* Even an empty write sends an (empty) datagram, as on Linux. */
+  if (fd_is_unix_dgram(fd))
+    return sys_sendto(fd, buf, count, 0, NULL, 0);
   if (count == 0)
     return 0;  /* POSIX: write with count 0 returns 0 */
   if (!buf)
@@ -523,7 +540,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
      */
     for (;;)
     {
-      n = sock_stream_recv_user(ss, buf, count, 0);
+      n = sock_stream_recv_user(ss, buf, count, 0, NULL);
       if (n != -EAGAIN)
 	break;
       if (nb)

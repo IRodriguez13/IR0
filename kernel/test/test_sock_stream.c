@@ -37,10 +37,10 @@ void ktest_sock_stream_accept_fifo_backlog(void)
 	memcpy(addr.key, KTEST_SOCK_PATH, sizeof(KTEST_SOCK_PATH));
 	addr.key_len = sizeof(KTEST_SOCK_PATH) - 1;
 
-	listener = sock_stream_create(IR0_AF_UNIX);
-	client_a = sock_stream_create(IR0_AF_UNIX);
-	client_b = sock_stream_create(IR0_AF_UNIX);
-	client_c = sock_stream_create(IR0_AF_UNIX);
+	listener = sock_stream_create(IR0_AF_UNIX, IR0_SOCK_STREAM);
+	client_a = sock_stream_create(IR0_AF_UNIX, IR0_SOCK_STREAM);
+	client_b = sock_stream_create(IR0_AF_UNIX, IR0_SOCK_STREAM);
+	client_c = sock_stream_create(IR0_AF_UNIX, IR0_SOCK_STREAM);
 	KASSERT(listener && client_a && client_b && client_c);
 	if (!listener || !client_a || !client_b || !client_c)
 		goto out;
@@ -107,7 +107,7 @@ void ktest_sock_stream_segmented_queue(void)
 
 	KTEST_BEGIN("sock_stream_segmented_queue");
 
-	KASSERT_EQ(sock_stream_socketpair(&sender, &receiver), 0);
+	KASSERT_EQ(sock_stream_socketpair(IR0_SOCK_STREAM, &sender, &receiver), 0);
 	if (!sender || !receiver)
 		goto out;
 	source = kmalloc(KTEST_STREAM_BYTES);
@@ -125,7 +125,8 @@ void ktest_sock_stream_segmented_queue(void)
 	KASSERT_EQ(sock_stream_buf_count(receiver), (int)KTEST_STREAM_BYTES);
 	KASSERT(sock_stream_poll_readable(receiver));
 
-	n = sock_stream_recv_flags(receiver, peek, KTEST_PEEK_BYTES, MSG_PEEK);
+	n = sock_stream_recv_flags(receiver, peek, KTEST_PEEK_BYTES, MSG_PEEK,
+				   NULL);
 	KASSERT_EQ(n, (ssize_t)KTEST_PEEK_BYTES);
 	KASSERT_EQ(sock_stream_buf_count(receiver), (int)KTEST_STREAM_BYTES);
 	for (offset = 0; offset < KTEST_PEEK_BYTES; offset++)

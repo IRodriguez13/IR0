@@ -44,6 +44,7 @@
 #define IP_MULTICAST_IF 32
 
 #define MSG_PEEK     0x2
+#define MSG_TRUNC    0x20
 #define MSG_DONTWAIT 0x40
 
 #define SHUT_RD   0

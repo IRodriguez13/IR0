@@ -17,6 +17,7 @@
 #define IR0_AF_UNIX 1
 #define IR0_AF_INET 2
 #define IR0_SOCK_STREAM 1
+#define IR0_SOCK_DGRAM 2
 
 #define SOCK_STREAM_RIGHTS_MAX 4
 #define SOCK_STREAM_RIGHTS_ENTRY_SIZE 320
@@ -41,7 +42,8 @@ struct sock_unix_addr
 	size_t sun_len;
 };
 
-struct sock_stream *sock_stream_create(int family);
+/* @type: IR0_SOCK_STREAM, or IR0_SOCK_DGRAM (AF_UNIX only). */
+struct sock_stream *sock_stream_create(int family, int type);
 void sock_stream_release(struct sock_stream *s);
 int sock_stream_bind_unix(struct sock_stream *s, const struct sock_unix_addr *addr);
 int sock_stream_listen(struct sock_stream *s, int backlog);
@@ -53,16 +55,27 @@ int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port
 int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr, uint16_t port,
 				   int nonblock);
 ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len);
+/*
+ * Send one datagram to @dest, or to the connected peer when @dest is NULL
+ * (unix_dgram_sendmsg()). -ENOTCONN without a peer, -EAGAIN while the
+ * receiver's queue is full. On a stream socket, same as sock_stream_send().
+ */
+ssize_t sock_stream_sendto(struct sock_stream *s,
+			   const struct sock_unix_addr *dest,
+			   const void *buf, size_t len);
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len);
-ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags);
+/* Kernel-buffer receive; @from as for sock_stream_recv_user(). */
+ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags,
+			       struct sock_unix_addr *from);
 /*
  * sock_stream_recv_user - recv into a user buffer for recv/read syscalls.
  * Bytes are dequeued only once copied (Linux unix_stream_read_generic): a
  * bad @ubuf gives -EFAULT with the queue untouched, a fault after some bytes
- * returns that short count.
+ * returns that short count. A datagram socket returns one whole datagram
+ * and, when @from is not NULL, its sender's address (sun_len 0: unbound).
  */
 ssize_t sock_stream_recv_user(struct sock_stream *s, void *ubuf, size_t len,
-			      int flags);
+			      int flags, struct sock_unix_addr *from);
 int sock_stream_set_reuseaddr(struct sock_stream *s, int on);
 int sock_stream_get_reuseaddr(const struct sock_stream *s);
 int sock_stream_take_so_error(struct sock_stream *s);
@@ -72,7 +85,8 @@ int sock_stream_is(const void *ptr);
 /* Address in g_socks[] even if already released (magic cleared). */
 int sock_stream_is_slot(const void *ptr);
 void sock_stream_acquire(struct sock_stream *s);
-int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out);
+int sock_stream_socketpair(int type, struct sock_stream **a_out,
+			   struct sock_stream **b_out);
 
 int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, size_t sz);
 int sock_stream_rights_push_batch(struct sock_stream *recv_side,
@@ -91,6 +105,7 @@ const struct sock_unix_addr *sock_stream_unix_addr(const struct sock_stream *s);
 int sock_stream_poll_readable(const struct sock_stream *s);
 int sock_stream_poll_writable(const struct sock_stream *s);
 int sock_stream_family(const struct sock_stream *s);
+int sock_stream_type(const struct sock_stream *s);
 int sock_stream_buf_space(const struct sock_stream *peer_of_sender);
 int sock_stream_buf_count(const struct sock_stream *s);
 int sock_stream_is_recv_shutdown(const struct sock_stream *s);

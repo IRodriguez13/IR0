@@ -3,7 +3,8 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: sock_stream.c
- * Description: AF_UNIX pathname + TCP loopback + guest-net (10.0.2.x) stream MVP.
+ * Description: AF_UNIX stream and datagram sockets (pathname and abstract
+ *              names), TCP loopback and guest-net (10.0.2.x) streams.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -32,12 +33,29 @@
 #define SS_CHUNK_SIZE 4096U
 #define SS_QUEUE_MAX  (1024U * 1024U)
 #define SS_PATH 108
+/*
+ * AF_UNIX datagrams (net/unix/af_unix.c): one message may not exceed the
+ * default send buffer less its overhead (EMSGSIZE), and a receiver queues
+ * at most SS_DGRAM_QLEN of them before senders wait (EAGAIN).
+ */
+#define SS_DGRAM_MAX  (212992U - 32U)
+#define SS_DGRAM_QLEN 64U
 
 struct ss_chunk {
 	struct ss_chunk *next;
 	unsigned start;
 	unsigned end;
 	char data[SS_CHUNK_SIZE];
+};
+
+/* One queued datagram and the address of the socket that sent it. */
+struct ss_dgram
+{
+	struct ss_dgram *next;
+	size_t len;
+	size_t from_len;
+	char from[SS_PATH];
+	char data[];
 };
 
 enum ss_state
@@ -54,6 +72,7 @@ struct sock_stream
 	int in_use;
 	int fd_refs; /* close/fork: free slot only when last fd drops */
 	int family;
+	int type; /* IR0_SOCK_STREAM or IR0_SOCK_DGRAM */
 	enum ss_state state;
 	struct sock_unix_addr addr; /* key_len 0: unbound */
 	uint16_t port;
@@ -67,6 +86,10 @@ struct sock_stream
 	struct ss_chunk *rx_head;
 	struct ss_chunk *rx_tail;
 	unsigned queued_bytes;
+	struct ss_dgram *dg_head; /* IR0_SOCK_DGRAM receive queue */
+	struct ss_dgram *dg_tail;
+	unsigned dg_count;
+	uint8_t peer_gone; /* datagram peer closed: next send ECONNREFUSED */
 	uint8_t wire_tcp;
 	uint8_t shut_rd;
 	uint8_t shut_wr;
@@ -172,6 +195,11 @@ int sock_stream_family(const struct sock_stream *s)
 	return s ? s->family : 0;
 }
 
+int sock_stream_type(const struct sock_stream *s)
+{
+	return s ? s->type : 0;
+}
+
 int sock_stream_buf_count(const struct sock_stream *s)
 {
 	return s ? (int)s->queued_bytes : 0;
@@ -233,6 +261,8 @@ int sock_stream_poll_readable(const struct sock_stream *s)
 
 	if (!s)
 		return 0;
+	if (s->type == IR0_SOCK_DGRAM)
+		return s->dg_head || s->shut_rd;
 	if (s->state == SS_LISTEN && s->accept_head)
 		return 1;
 	if (s->state == SS_CONNECTING)
@@ -265,6 +295,9 @@ int sock_stream_poll_writable(const struct sock_stream *s)
 
 	if (!s)
 		return 0;
+	if (s->type == IR0_SOCK_DGRAM)
+		return !s->shut_wr &&
+		       (!s->peer || s->peer->dg_count < SS_DGRAM_QLEN);
 	if (s->state == SS_CONNECTING)
 	{
 		(void)sock_stream_wire_progress(mut);
@@ -442,7 +475,7 @@ void sock_stream_acquire(struct sock_stream *s)
 	irq_restore(irq_flags);
 }
 
-struct sock_stream *sock_stream_create(int family)
+struct sock_stream *sock_stream_create(int family, int type)
 {
 	int i;
 
@@ -457,6 +490,7 @@ struct sock_stream *sock_stream_create(int family)
 			g_socks[i].in_use = 1;
 			g_socks[i].fd_refs = 1;
 			g_socks[i].family = family;
+			g_socks[i].type = type;
 			g_socks[i].magic = SS_MAGIC;
 			g_socks[i].state = SS_IDLE;
 			return &g_socks[i];
@@ -464,6 +498,41 @@ struct sock_stream *sock_stream_create(int family)
 	}
 	log_warn("SOCKET", "stream socket table exhausted");
 	return NULL;
+}
+
+/*
+ * Drop the receive queue of a datagram socket that is going away, and
+ * disconnect the datagram sockets connected to it: their next send is
+ * ECONNREFUSED, as when Linux finds the peer SOCK_DEAD.
+ */
+static void sock_stream_dgram_release(struct sock_stream *s)
+{
+	struct ss_dgram *dg;
+	unsigned long irq_flags;
+	int i;
+
+	irq_flags = irq_save();
+	dg = s->dg_head;
+	s->dg_head = NULL;
+	s->dg_tail = NULL;
+	s->dg_count = 0;
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
+	{
+		if (g_socks[i].in_use && g_socks[i].peer == s &&
+		    g_socks[i].type == IR0_SOCK_DGRAM)
+		{
+			g_socks[i].peer = NULL;
+			g_socks[i].peer_gone = 1;
+		}
+	}
+	irq_restore(irq_flags);
+	while (dg)
+	{
+		struct ss_dgram *next = dg->next;
+
+		kfree(dg);
+		dg = next;
+	}
 }
 
 void sock_stream_release(struct sock_stream *s)
@@ -513,6 +582,8 @@ void sock_stream_release(struct sock_stream *s)
 		sock_stream_release(queued);
 		queued = next;
 	}
+	if (s->type == IR0_SOCK_DGRAM)
+		sock_stream_dgram_release(s);
 	if (s->peer && s->peer->peer == s)
 		s->peer->peer = NULL;
 	sock_stream_rights_clear(s);
@@ -646,7 +717,8 @@ static int sock_stream_accept_enqueue(struct sock_stream *listener,
 	return 0;
 }
 
-int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_out)
+int sock_stream_socketpair(int type, struct sock_stream **a_out,
+			   struct sock_stream **b_out)
 {
 	struct sock_stream *a;
 	struct sock_stream *b;
@@ -654,10 +726,10 @@ int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_ou
 	if (!a_out || !b_out)
 		return -EINVAL;
 
-	a = sock_stream_create(IR0_AF_UNIX);
+	a = sock_stream_create(IR0_AF_UNIX, type);
 	if (!a)
 		return -ENOMEM;
-	b = sock_stream_create(IR0_AF_UNIX);
+	b = sock_stream_create(IR0_AF_UNIX, type);
 	if (!b)
 	{
 		sock_stream_release(a);
@@ -673,6 +745,39 @@ int sock_stream_socketpair(struct sock_stream **a_out, struct sock_stream **b_ou
 	return 0;
 }
 
+/* The socket that owns @addr (bound or listening), or NULL. */
+static struct sock_stream *unix_find_bound(const struct sock_unix_addr *addr)
+{
+	int i;
+
+	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
+	{
+		struct sock_stream *o = &g_socks[i];
+
+		if (o->in_use && (o->state == SS_BOUND || o->state == SS_LISTEN) &&
+		    unix_name_equal(o, addr))
+			return o;
+	}
+	return NULL;
+}
+
+/*
+ * unix_find_other() for a datagram target: the owner must exist
+ * (ECONNREFUSED) and be a datagram socket (EPROTOTYPE).
+ */
+static struct sock_stream *unix_find_dgram(const struct sock_unix_addr *addr,
+					   int *err)
+{
+	struct sock_stream *o = unix_find_bound(addr);
+
+	*err = 0;
+	if (!o)
+		*err = -ECONNREFUSED;
+	else if (o->type != IR0_SOCK_DGRAM)
+		*err = -EPROTOTYPE;
+	return *err ? NULL : o;
+}
+
 int sock_stream_connect_unix(struct sock_stream *s,
 			     const struct sock_unix_addr *addr)
 {
@@ -683,10 +788,26 @@ int sock_stream_connect_unix(struct sock_stream *s,
 
 	if (!s || !unix_addr_valid(addr))
 		return -EINVAL;
+	if (s->type == IR0_SOCK_DGRAM)
+	{
+		/* unix_dgram_connect(): only this side records the peer. */
+		int err;
+		struct sock_stream *other = unix_find_dgram(addr, &err);
+
+		if (!other)
+			return err;
+		s->peer = other;
+		s->peer_gone = 0;
+		return 0;
+	}
 	if (s->state == SS_CONNECTED)
 		return -EISCONN;
 	if (s->state != SS_IDLE && s->state != SS_BOUND)
 		return -EINVAL;
+	lst = unix_find_bound(addr);
+	if (lst && lst->type != s->type)
+		return -EPROTOTYPE;
+	lst = NULL;
 	old_state = s->state;
 	for (i = 0; i < CONFIG_STREAM_SOCKET_CAPACITY; i++)
 	{
@@ -701,7 +822,7 @@ int sock_stream_connect_unix(struct sock_stream *s,
 	{
 		return -ECONNREFUSED;
 	}
-	acc = sock_stream_create(IR0_AF_UNIX);
+	acc = sock_stream_create(IR0_AF_UNIX, IR0_SOCK_STREAM);
 	if (!acc)
 		return -ENOMEM;
 	/* Accepted endpoint inherits listener bind name (Linux getsockname/peer). */
@@ -760,7 +881,7 @@ struct sock_stream *sock_stream_accept(struct sock_stream *s)
 					   &local_port, &seq, &ack);
 		if (ret < 0)
 			return NULL;
-		child = sock_stream_create(IR0_AF_INET);
+		child = sock_stream_create(IR0_AF_INET, IR0_SOCK_STREAM);
 		if (!child)
 			return NULL;
 		child->state = SS_CONNECTED;
@@ -922,7 +1043,7 @@ int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,
 	}
 	if (!lst)
 		return -ECONNREFUSED;
-	acc = sock_stream_create(IR0_AF_INET);
+	acc = sock_stream_create(IR0_AF_INET, IR0_SOCK_STREAM);
 	if (!acc)
 		return -ENOMEM;
 	acc->state = SS_CONNECTED;
@@ -948,6 +1069,8 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 	size_t i;
 	const char *src = buf;
 
+	if (s && s->type == IR0_SOCK_DGRAM)
+		return sock_stream_sendto(s, NULL, buf, len);
 	if (!s || (s->state != SS_CONNECTED && s->state != SS_CONNECTING) || !buf)
 		return -EINVAL;
 
@@ -990,17 +1113,145 @@ ssize_t sock_stream_send(struct sock_stream *s, const void *buf, size_t len)
 	return (ssize_t)i;
 }
 
+ssize_t sock_stream_sendto(struct sock_stream *s,
+			   const struct sock_unix_addr *dest,
+			   const void *buf, size_t len)
+{
+	struct sock_stream *other;
+	struct ss_dgram *dg;
+	unsigned long irq_flags;
+	int err;
+
+	if (!s || (len && !buf))
+		return -EINVAL;
+	if (s->type != IR0_SOCK_DGRAM)
+		return sock_stream_send(s, buf, len);
+	if (s->shut_wr)
+		return -EPIPE;
+	if (len > SS_DGRAM_MAX)
+		return -EMSGSIZE;
+	if (dest)
+	{
+		other = unix_find_dgram(dest, &err);
+		if (!other)
+			return err;
+		/* unix_may_send(): a receiver connected elsewhere refuses us. */
+		if (other->peer && other->peer != s)
+			return -EPERM;
+	}
+	else
+	{
+		other = s->peer;
+		if (!other)
+		{
+			if (!s->peer_gone)
+				return -ENOTCONN;
+			s->peer_gone = 0;
+			return -ECONNREFUSED;
+		}
+	}
+	if (other->shut_rd)
+		return -EPIPE;
+	dg = kmalloc(sizeof(*dg) + (len ? len : 1));
+	if (!dg)
+		return -ENOBUFS;
+	memset(dg, 0, sizeof(*dg));
+	dg->len = len;
+	if (s->addr.key_len)
+	{
+		memcpy(dg->from, s->addr.sun_path, sizeof(dg->from));
+		dg->from_len = s->addr.sun_len;
+	}
+	if (len)
+		memcpy(dg->data, buf, len);
+	irq_flags = irq_save();
+	if (!other->in_use || other->dg_count >= SS_DGRAM_QLEN ||
+	    other->queued_bytes + len > SS_QUEUE_MAX)
+	{
+		int full = other->in_use;
+
+		irq_restore(irq_flags);
+		kfree(dg);
+		return full ? -EAGAIN : -ECONNREFUSED;
+	}
+	if (other->dg_tail)
+		other->dg_tail->next = dg;
+	else
+		other->dg_head = dg;
+	other->dg_tail = dg;
+	other->dg_count++;
+	other->queued_bytes += (unsigned)len;
+	irq_restore(irq_flags);
+	poll_wake_check();
+	return (ssize_t)len;
+}
+
+/*
+ * unix_dgram_recvmsg(): take the whole next datagram. A short @len
+ * truncates it (the rest is lost); MSG_TRUNC reports its full length and
+ * MSG_PEEK leaves it queued. A user copy that faults keeps it queued.
+ */
+static ssize_t sock_stream_dgram_recv(struct sock_stream *s, char *dst,
+				      size_t len, int flags, int to_user,
+				      struct sock_unix_addr *from)
+{
+	struct ss_dgram *dg;
+	unsigned long irq_flags;
+	size_t n;
+
+	irq_flags = irq_save();
+	dg = s->dg_head;
+	if (!dg)
+	{
+		irq_restore(irq_flags);
+		return s->shut_rd ? 0 : -EAGAIN;
+	}
+	n = len < dg->len ? len : dg->len;
+	if (n && to_user && copy_to_user(dst, dg->data, n) != 0)
+	{
+		irq_restore(irq_flags);
+		return -EFAULT;
+	}
+	if (n && !to_user)
+		memcpy(dst, dg->data, n);
+	if (from)
+	{
+		memset(from, 0, sizeof(*from));
+		memcpy(from->sun_path, dg->from, sizeof(dg->from));
+		from->sun_len = dg->from_len;
+	}
+	if (flags & MSG_TRUNC)
+		n = dg->len;
+	if (flags & MSG_PEEK)
+	{
+		irq_restore(irq_flags);
+		return (ssize_t)n;
+	}
+	s->dg_head = dg->next;
+	if (!s->dg_head)
+		s->dg_tail = NULL;
+	s->dg_count--;
+	s->queued_bytes -= (unsigned)dg->len;
+	irq_restore(irq_flags);
+	kfree(dg);
+	poll_wake_check();
+	return (ssize_t)n;
+}
+
 /* Bounce size for a user read from the wire TCP backend. */
 #define SS_WIRE_USER_BOUNCE 512
 
 static ssize_t sock_stream_recv_common(struct sock_stream *s, void *buf,
-				       size_t len, int flags, int to_user)
+				       size_t len, int flags, int to_user,
+				       struct sock_unix_addr *from)
 {
 	size_t i;
 	char *dst = buf;
 	int peek = (flags & MSG_PEEK) != 0;
 	int fault;
 
+	if (s && s->type == IR0_SOCK_DGRAM)
+		return sock_stream_dgram_recv(s, dst, len, flags, to_user, from);
 	/* A user buffer is checked by the copy; a zero length needs none. */
 	if (!s || (s->state != SS_CONNECTED && s->state != SS_CONNECTING) ||
 	    (!buf && !to_user))
@@ -1061,20 +1312,21 @@ static ssize_t sock_stream_recv_common(struct sock_stream *s, void *buf,
 	return (ssize_t)i;
 }
 
-ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags)
+ssize_t sock_stream_recv_flags(struct sock_stream *s, void *buf, size_t len, int flags,
+			       struct sock_unix_addr *from)
 {
-	return sock_stream_recv_common(s, buf, len, flags, 0);
+	return sock_stream_recv_common(s, buf, len, flags, 0, from);
 }
 
 ssize_t sock_stream_recv_user(struct sock_stream *s, void *ubuf, size_t len,
-			      int flags)
+			      int flags, struct sock_unix_addr *from)
 {
-	return sock_stream_recv_common(s, ubuf, len, flags, 1);
+	return sock_stream_recv_common(s, ubuf, len, flags, 1, from);
 }
 
 ssize_t sock_stream_recv(struct sock_stream *s, void *buf, size_t len)
 {
-	return sock_stream_recv_flags(s, buf, len, 0);
+	return sock_stream_recv_flags(s, buf, len, 0, NULL);
 }
 
 int sock_stream_set_reuseaddr(struct sock_stream *s, int on)
@@ -1205,7 +1457,7 @@ int sock_stream_unix_walk(int (*cb)(const struct sock_stream_unix_snap *s,
 		memset(&snap, 0, sizeof(snap));
 		snap.inode = (unsigned long)(uintptr_t)s;
 		snap.refcnt = (unsigned)(s->fd_refs > 0 ? s->fd_refs : 1);
-		snap.type = 1; /* SOCK_STREAM */
+		snap.type = (uint8_t)s->type;
 		snap.st = sock_stream_linux_st(s->state);
 		snap.path_len = s->addr.key_len;
 		snap.is_abstract = s->addr.is_abstract;

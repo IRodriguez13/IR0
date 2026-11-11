@@ -136,7 +136,7 @@ static int64_t unix_fill_sockaddr(const struct sock_unix_addr *ua,
 	if (ua)
 	{
 		memcpy(k.sun.sun_path, ua->sun_path, sizeof(ua->sun_path));
-		have = (socklen_t)ua->sun_len;
+		have = (socklen_t)ua->sun_len; /* 0: a datagram's unbound sender */
 	}
 	if (want > have)
 		want = have;
@@ -318,6 +318,64 @@ static int sock_nonblock_fd(int fd, int flags)
 }
 
 /*
+ * The destination of an AF_UNIX datagram: none (the connected peer) when
+ * the caller gave no address, else the named socket, which must exist.
+ */
+static int unix_dgram_dest(const struct sockaddr *uaddr, socklen_t len,
+			   struct sock_unix_addr *ua,
+			   const struct sock_unix_addr **dest)
+{
+	union sock_kaddr k;
+	int err;
+
+	*dest = NULL;
+	if (!uaddr || len == 0)
+		return 0;
+	err = sock_addr_copy(&k, uaddr, len);
+	if (err < 0)
+		return err;
+	err = unix_addr_get(&k, len, ua);
+	if (err < 0)
+		return err;
+	err = unix_find_check(ua);
+	if (err < 0)
+		return err;
+	*dest = ua;
+	return 0;
+}
+
+/*
+ * Queue one datagram from the kernel buffer @kbuf, waiting while the
+ * receiver's queue is full unless the socket or @flags say not to.
+ */
+static ssize_t unix_dgram_send(int fd, struct sock_stream *ss,
+			       const struct sock_unix_addr *dest,
+			       const void *kbuf, size_t len, int flags)
+{
+	ssize_t n;
+
+	for (;;)
+	{
+		n = sock_stream_sendto(ss, dest, kbuf, len);
+		if (n != -EAGAIN)
+			return n;
+		if (sock_nonblock_fd(fd, flags))
+			return -EAGAIN;
+		if (signal_pending(current_process))
+			return -EINTR;
+		{
+			int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+			if (sleep_ret < 0)
+				return sleep_ret;
+		}
+		ss = sock_stream_fd_lookup(fd);
+		if (!ss)
+			return -EBADF;
+	}
+}
+
+/*
  * Kernel bounce buffer for a send/recv payload. A zero length is a valid
  * call (Linux: a stream reports 0, a datagram socket sends an empty
  * datagram), so it still gets a buffer: kmalloc(0) returns NULL.
@@ -384,11 +442,13 @@ int64_t sys_socket(int domain, int type, int protocol)
 	if (ret < 0)
 		return ret;
 
-	if (base == SOCK_STREAM)
+	if (domain == AF_UNIX || base == SOCK_STREAM)
 	{
 		struct sock_stream *ss;
 
-		ss = sock_stream_create(domain == AF_UNIX ? IR0_AF_UNIX : IR0_AF_INET);
+		ss = sock_stream_create(domain == AF_UNIX ? IR0_AF_UNIX : IR0_AF_INET,
+					base == SOCK_STREAM ? IR0_SOCK_STREAM :
+							      IR0_SOCK_DGRAM);
 		if (!ss)
 			return -ENOMEM;
 		return sock_alloc_fd_flags(ss, 1, type);
@@ -403,11 +463,6 @@ int64_t sys_socket(int domain, int type, int protocol)
 		return sock_alloc_fd_flags(icmp, 0, type);
 	}
 
-	/*
-	 * SOCK_DGRAM. AF_UNIX: musl if_nametoindex()/if_indextoname() open
-	 * AF_UNIX datagram sockets solely for SIOCGIFINDEX/SIOCGIFNAME.
-	 * Reuse a UDP sock object as an ioctl control fd (no wire I/O).
-	 */
 	{
 		struct sock_udp *sock = sock_udp_create();
 
@@ -515,6 +570,23 @@ ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
 	if (err < 0)
 		return err;
 	ss = sock_stream_fd_lookup(fd);
+	if (ss && sock_stream_type(ss) == IR0_SOCK_DGRAM)
+	{
+		struct sock_unix_addr ua;
+		const struct sock_unix_addr *dest;
+		ssize_t n;
+
+		err = unix_dgram_dest(dest_addr, addrlen, &ua, &dest);
+		if (err < 0)
+			return err;
+		kbuf = sock_bounce_alloc(len);
+		if (!kbuf)
+			return -ENOMEM;
+		n = copy_from_user(kbuf, buf, len) != 0 ? -EFAULT :
+			unix_dgram_send(fd, ss, dest, kbuf, len, flags);
+		kfree(kbuf);
+		return n;
+	}
 	if (ss)
 	{
 		ssize_t n;
@@ -632,6 +704,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
 	{
+		struct sock_unix_addr from;
 		uint64_t deadline = 0;
 		uint64_t rto;
 
@@ -642,7 +715,7 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 			deadline = clock_get_uptime_milliseconds() + rto;
 		for (;;)
 		{
-			n = sock_stream_recv_user(ss, buf, len, flags);
+			n = sock_stream_recv_user(ss, buf, len, flags, &from);
 			if (n != -EAGAIN)
 				break;
 			if (nb)
@@ -661,8 +734,14 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 			if (!ss)
 				return -EBADF;
 		}
-		(void)src_addr;
-		(void)addrlen;
+		/* unix_dgram_recvmsg(): the sender's name, empty if unbound. */
+		if (n >= 0 && src_addr && addrlen &&
+		    sock_stream_type(ss) == IR0_SOCK_DGRAM)
+		{
+			err = (int)unix_fill_sockaddr(&from, src_addr, addrlen);
+			if (err < 0)
+				return err;
+		}
 		return n;
 	}
 
@@ -981,10 +1060,8 @@ int64_t sys_socketpair(int domain, int type, int protocol, int *sv)
 	/* inet_stream_ops and inet_dgram_ops have no socketpair. */
 	if (domain != AF_UNIX)
 		return -EOPNOTSUPP;
-	if ((type & SOCK_TYPE_MASK) != SOCK_STREAM)
-		return -EPROTOTYPE;
-
-	ret = sock_stream_socketpair(&a, &b);
+	ret = sock_stream_socketpair((type & SOCK_TYPE_MASK) == SOCK_STREAM ?
+				     IR0_SOCK_STREAM : IR0_SOCK_DGRAM, &a, &b);
 	if (ret < 0)
 		return ret;
 
@@ -1211,6 +1288,168 @@ no_buffer:
 	return -ENOBUFS;
 }
 
+/* Copy in a msghdr's iovec array and add up its length. */
+static int unix_dgram_iov(const struct msghdr *msg, struct iovec *iov,
+			  size_t *total)
+{
+	size_t i;
+
+	*total = 0;
+	if (msg->msg_iovlen > 8)
+		return -EMSGSIZE;
+	if (msg->msg_iovlen &&
+	    (!msg->msg_iov ||
+	     copy_from_user(iov, msg->msg_iov,
+			    msg->msg_iovlen * sizeof(*iov)) != 0))
+		return -EFAULT;
+	for (i = 0; i < msg->msg_iovlen; i++)
+	{
+		if (iov[i].iov_len > SIZE_MAX / 2 - *total)
+			return -EINVAL;
+		*total += iov[i].iov_len;
+	}
+	return 0;
+}
+
+/*
+ * sendmsg(2) on an AF_UNIX datagram socket: the iovecs gathered into one
+ * datagram for msg_name, or for the peer. Ancillary data is not supported
+ * on datagram sockets yet (EOPNOTSUPP).
+ */
+static ssize_t unix_dgram_sendmsg(int fd, struct sock_stream *ss,
+				  const struct msghdr *msg, int flags)
+{
+	struct iovec iov[8];
+	struct sock_unix_addr ua;
+	const struct sock_unix_addr *dest;
+	uint8_t *kbuf;
+	size_t total;
+	size_t off = 0;
+	size_t i;
+	ssize_t n;
+	int err;
+
+	if (msg->msg_controllen > 0)
+		return -EOPNOTSUPP;
+	err = unix_dgram_iov(msg, iov, &total);
+	if (err < 0)
+		return err;
+	err = unix_dgram_dest(msg->msg_name, msg->msg_namelen, &ua, &dest);
+	if (err < 0)
+		return err;
+	kbuf = sock_bounce_alloc(total);
+	if (!kbuf)
+		return -ENOMEM;
+	for (i = 0; i < msg->msg_iovlen; i++)
+	{
+		if (iov[i].iov_len &&
+		    copy_from_user(kbuf + off, iov[i].iov_base, iov[i].iov_len) != 0)
+		{
+			kfree(kbuf);
+			return -EFAULT;
+		}
+		off += iov[i].iov_len;
+	}
+	n = unix_dgram_send(fd, ss, dest, kbuf, total, flags);
+	kfree(kbuf);
+	return n;
+}
+
+/*
+ * recvmsg(2) on an AF_UNIX datagram socket: one datagram scattered over
+ * the iovecs, the sender in msg_name and MSG_TRUNC in msg_flags when the
+ * iovecs were too short (unix_dgram_recvmsg()).
+ */
+static ssize_t unix_dgram_recvmsg(int fd, struct sock_stream *ss,
+				  struct msghdr *umsg, struct msghdr *msg,
+				  int flags)
+{
+	struct iovec iov[8];
+	struct sock_unix_addr from;
+	union sock_kaddr k;
+	uint8_t *kbuf;
+	size_t total;
+	size_t copied;
+	size_t off = 0;
+	size_t i;
+	ssize_t n;
+	int err;
+
+	err = unix_dgram_iov(msg, iov, &total);
+	if (err < 0)
+		return err;
+	kbuf = sock_bounce_alloc(total);
+	if (!kbuf)
+		return -ENOMEM;
+	for (;;)
+	{
+		n = sock_stream_recv_flags(ss, kbuf, total, flags | MSG_TRUNC,
+					   &from);
+		if (n != -EAGAIN)
+			break;
+		if (sock_nonblock_fd(fd, flags))
+			break;
+		if (signal_pending(current_process))
+		{
+			n = -EINTR;
+			break;
+		}
+		{
+			int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+			if (sleep_ret < 0)
+			{
+				n = sleep_ret;
+				break;
+			}
+		}
+		ss = sock_stream_fd_lookup(fd);
+		if (!ss)
+		{
+			n = -EBADF;
+			break;
+		}
+	}
+	if (n < 0)
+	{
+		kfree(kbuf);
+		return n;
+	}
+	copied = (size_t)n < total ? (size_t)n : total;
+	for (i = 0; i < msg->msg_iovlen && off < copied; i++)
+	{
+		size_t take = copied - off;
+
+		if (take > iov[i].iov_len)
+			take = iov[i].iov_len;
+		if (take && copy_to_user(iov[i].iov_base, kbuf + off, take) != 0)
+		{
+			kfree(kbuf);
+			return -EFAULT;
+		}
+		off += take;
+	}
+	kfree(kbuf);
+	if (msg->msg_name)
+	{
+		size_t want = msg->msg_namelen;
+
+		memset(&k, 0, sizeof(k));
+		k.sun.sun_family = AF_UNIX;
+		memcpy(k.sun.sun_path, from.sun_path, sizeof(from.sun_path));
+		if (want > from.sun_len)
+			want = from.sun_len;
+		if (want && copy_to_user(msg->msg_name, &k, want) != 0)
+			return -EFAULT;
+		msg->msg_namelen = (socklen_t)from.sun_len;
+	}
+	msg->msg_controllen = 0;
+	msg->msg_flags = (size_t)n > total ? MSG_TRUNC : 0;
+	if (copy_to_user(umsg, msg, sizeof(*msg)) != 0)
+		return -EFAULT;
+	return (flags & MSG_TRUNC) ? n : (ssize_t)copied;
+}
+
 ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 {
 	int err;
@@ -1246,6 +1485,8 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 		return -ENOTSOCK;
 	if (sock_stream_family(ss) != IR0_AF_UNIX)
 		return -EOPNOTSUPP;
+	if (sock_stream_type(ss) == IR0_SOCK_DGRAM)
+		return unix_dgram_sendmsg(fd, ss, &msg, flags);
 	peer = sock_stream_get_peer(ss);
 	if (!peer)
 		return -ENOTCONN;
@@ -1373,6 +1614,8 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 		return -ENOTSOCK;
 	if (sock_stream_family(ss) != IR0_AF_UNIX)
 		return -EOPNOTSUPP;
+	if (sock_stream_type(ss) == IR0_SOCK_DGRAM)
+		return unix_dgram_recvmsg(fd, ss, umsg, &msg, flags);
 	nonblock = sock_nonblock_fd(fd, flags);
 	iovlen = msg.msg_iovlen;
 	if (iovlen > 8)
@@ -1475,7 +1718,7 @@ recv_payload:
 		for (;;)
 		{
 			n = sock_stream_recv_flags(ss, kbuf,
-						   iov_stack[i].iov_len, flags);
+						   iov_stack[i].iov_len, flags, NULL);
 			if (n != -EAGAIN)
 				break;
 			/* Linux may return an already received prefix immediately. */
@@ -1773,7 +2016,8 @@ int64_t sys_getsockopt(int fd, int level, int optname, void *optval,
 		return -ENOPROTOOPT;
 	if (optname == SO_TYPE)
 	{
-		val = SOCK_STREAM;
+		val = sock_stream_type(ss) == IR0_SOCK_DGRAM ? SOCK_DGRAM :
+							      SOCK_STREAM;
 		if (len < sizeof(val))
 			return -EINVAL;
 		if (copy_to_user(optval, &val, sizeof(val)) != 0)
