@@ -45,6 +45,7 @@
 #define LINUX_O_DIRECTORY 0x010000U
 #define LINUX_O_NOFOLLOW  0x020000U
 #define LINUX_O_CLOEXEC   0x080000U
+#define LINUX_O_ASYNC     0x002000U /* stored as is: no IR0 bit collides */
 
 /**
  * linux_open_flags_to_ir0 - Translate Linux/musl open flags to IR0 VFS flags.
@@ -52,6 +53,13 @@
  * Returns: IR0_O_* bitmask suitable for vfs_open and fd_table->flags.
  */
 int linux_open_flags_to_ir0(int linux_flags);
+
+/**
+ * ir0_open_flags_to_linux - Translate IR0 status flags back to the Linux ABI.
+ * @ir0_flags: fd_table->flags (IR0_O_* plus LINUX_O_ASYNC).
+ * Returns: access mode and status flags as F_GETFL reports them.
+ */
+int ir0_open_flags_to_linux(int ir0_flags);
 
 /**
  * ir0_open_flags_ok_for_vfs - Reject leaked Linux ABI status bits.

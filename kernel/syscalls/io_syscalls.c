@@ -1592,19 +1592,28 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     ret = 0;
     break;
   case F_GETFL:
-    ret = e->flags;
+    ret = ir0_open_flags_to_linux(e->flags);
     break;
   case F_SETFL:
     /*
      * Linux: preserve O_ACCMODE; only status flags are mutable.
      * Clobbering access mode broke BusyBox less (ndelay_on made flags become
      * O_NONBLOCK alone). O_ASYNC is implemented for device fasync delivery.
+     * @arg uses the Linux encoding; fd_table->flags the IR0 one.
      */
     {
       int keep = e->flags & O_ACCMODE;
-      int settable = (int)arg & (O_APPEND | O_NONBLOCK | O_ASYNC);
+      int settable = linux_open_flags_to_ir0((int)arg) &
+                     (IR0_O_APPEND | IR0_O_NONBLOCK);
 
-      e->flags = keep | settable;
+      e->flags = keep | settable | ((int)arg & O_ASYNC);
+      /* O_APPEND lives in the open file, shared by every dup of it. */
+      if (fd_entry_file(e))
+      {
+        struct vfs_file *f = (struct vfs_file *)e->vfs_file;
+
+        f->flags = (f->flags & ~IR0_O_APPEND) | (settable & IR0_O_APPEND);
+      }
     }
     ret = 0;
     break;

@@ -29,6 +29,20 @@ int linux_open_flags_to_ir0(int linux_flags)
     return ir0;
 }
 
+int ir0_open_flags_to_linux(int ir0_flags)
+{
+    int linux_flags = ir0_flags & IR0_O_ACCMODE;
+
+    if (ir0_flags & IR0_O_APPEND)
+        linux_flags |= (int)LINUX_O_APPEND;
+    if (ir0_flags & IR0_O_NONBLOCK)
+        linux_flags |= (int)LINUX_O_NONBLOCK;
+    if (ir0_flags & (int)LINUX_O_ASYNC)
+        linux_flags |= (int)LINUX_O_ASYNC;
+
+    return linux_flags;
+}
+
 int ir0_open_flags_ok_for_vfs(int flags)
 {
     uint32_t f = (uint32_t)flags;

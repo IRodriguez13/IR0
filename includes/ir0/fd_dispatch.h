@@ -37,6 +37,14 @@ static inline int fd_entry_socket(const fd_entry_t *e)
 	return fd_entry_live(e) && e->is_socket && e->vfs_file != NULL;
 }
 
+/* The slot's vfs_file is a struct vfs_file (a path-backed file). */
+static inline int fd_entry_file(const fd_entry_t *e)
+{
+	return fd_entry_live(e) && e->vfs_file != NULL && !e->is_pipe &&
+	       !e->is_socket && !e->is_pseudo && !e->is_devfs && !e->is_epoll &&
+	       !e->is_memfd && !e->is_eventfd && !e->is_timerfd;
+}
+
 static inline fd_entry_t *fd_table_slot(fd_entry_t *table, int fd)
 {
 	if (!table || fd < 0 || fd >= MAX_FDS_PER_PROCESS)
