@@ -295,8 +295,9 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
   if (rc != 0)
     return rc;
 
+  /* rmdir(2): only an empty directory goes; never the tree under it. */
   if (flags & AT_REMOVEDIR)
-    return vfs_rmdir_recursive(resolved);
+    return vfs_rmdir(resolved);
 
   rc = named_symlink_unlink(resolved);
   if (rc == 0)

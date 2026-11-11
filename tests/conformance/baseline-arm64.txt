@@ -3,7 +3,7 @@
 # A case that starts passing is reported as FIXED: remove its line.
 # See Documentation/conformance.md.
 
-dir_mkdir_rmdir FAIL  # unlinkat(AT_REMOVEDIR) removes a non-empty directory, Linux ENOTEMPTY
+dir_mkdir_rmdir FAIL  # unlinkat(dir, 0) removes the directory, Linux EISDIR
 dir_openat_dirfd FAIL  # arm64 struct stat uses the x86_64 layout (red: fs_stat_layout_matches_isa)
 fs_ftruncate TCONF  # ftruncate is ENOSYS
 fs_open_errors FAIL  # arm64 open flags use the x86_64 values: O_DIRECTORY is lost
