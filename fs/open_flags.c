@@ -25,6 +25,8 @@ int linux_open_flags_to_ir0(int linux_flags)
         ir0 |= IR0_O_DIRECTORY;
     if (linux_flags & (int)LINUX_O_CLOEXEC)
         ir0 |= IR0_O_CLOEXEC;
+    if (linux_flags & (int)LINUX_O_NOFOLLOW)
+        ir0 |= IR0_O_NOFOLLOW;
 
     return ir0;
 }

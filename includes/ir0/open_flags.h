@@ -31,6 +31,7 @@
 #define IR0_O_TRUNC     0x0400
 #define IR0_O_DIRECTORY 0x0200000
 #define IR0_O_CLOEXEC   0x80000
+#define IR0_O_NOFOLLOW  0x1000
 
 /*
  * Linux open(2) status flag bits (uapi). Must not appear in flags passed

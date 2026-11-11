@@ -338,7 +338,15 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
 
   flags = ir0_flags;
 
-  if (!(ir0_flags & O_DIRECTORY))
+  /* open(2) O_NOFOLLOW: a symlink as the last component is ELOOP. */
+  if (ir0_flags & IR0_O_NOFOLLOW)
+  {
+    stat_t lst;
+
+    if (ir0_stat_path_routed(path_to_use, &lst) == 0 && S_ISLNK(lst.st_mode))
+      return -ELOOP;
+  }
+  else if (!(ir0_flags & O_DIRECTORY))
   {
     path_rc = ir0_follow_named_symlinks(path_to_use, 256,
                                         IR0_SYMLINK_FOLLOW_MAX);
