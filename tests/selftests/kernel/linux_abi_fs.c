@@ -239,3 +239,29 @@ int fs_execve_e2big(void)
 	EXPECT_ERR(S3(SYS_execve, conf_self, argv, 0), E2BIG);
 	return CONF_PASS;
 }
+
+/* open(2) O_NOFOLLOW: a symlink as the last component is ELOOP. */
+int fs_open_nofollow_eloop(void)
+{
+	long fd = conf_creat("target", "x");
+
+	CHECK(fd >= 0);
+	EXPECT(S3(SYS_symlinkat, "target", AT_FDCWD, "link"), 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "link", O_RDONLY | O_NOFOLLOW, 0),
+		   ELOOP);
+	return CONF_PASS;
+}
+
+/*
+ * open(2) O_DIRECTORY on a regular file is ENOTDIR. The flag value is per
+ * ISA (x86_64 0200000, arm64 040000).
+ */
+int fs_open_directory_on_file_enotdir(void)
+{
+	long fd = conf_creat("f", 0);
+
+	CHECK(fd >= 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "f", O_RDONLY | O_DIRECTORY, 0),
+		   ENOTDIR);
+	return CONF_PASS;
+}
