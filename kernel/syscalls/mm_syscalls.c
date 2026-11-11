@@ -506,6 +506,20 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     return ret;
   }
 
+  /* Linux do_mmap(): the mapping type is MAP_SHARED or MAP_PRIVATE. */
+  switch (flags & MAP_TYPE)
+  {
+  case MAP_SHARED:
+  case MAP_PRIVATE:
+  case MAP_SHARED_VALIDATE:
+    break;
+  default:
+    ret = SYSCALL_PTR_ERR(EINVAL);
+    mmap_audit_log_return("bad-map-type", ret, 0, 0, 0,
+                          process_pgd(current_process));
+    return ret;
+  }
+
   /* Validate offset alignment for file mappings */
   if (!(flags & MAP_ANONYMOUS))
   {
