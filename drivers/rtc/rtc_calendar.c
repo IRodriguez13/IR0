@@ -74,6 +74,46 @@ time_t rtc_fields_to_unix(const rtc_time_t *rt)
 	       (rt->second < 60 ? rt->second : 0);
 }
 
+/*
+ * Convert seconds since 1970-01-01 UTC to civil fields, for RTCs that count
+ * seconds (ARM PL031). Inverse of rtc_fields_to_unix(); days to civil date
+ * after H. Hinnant's days_from_civil algorithm.
+ */
+void rtc_unix_to_fields(time_t t, rtc_time_t *rt)
+{
+	int64_t days;
+	int64_t secs;
+	int64_t era;
+	int64_t doe;
+	int64_t yoe;
+	int64_t doy;
+	int64_t mp;
+	int64_t year;
+
+	if (!rt)
+		return;
+	if (t < 0)
+		t = 0;
+	days = (int64_t)t / 86400;
+	secs = (int64_t)t % 86400;
+
+	days += 719468; /* shift the epoch to 0000-03-01 */
+	era = days / 146097;
+	doe = days - era * 146097;
+	yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+	mp = (5 * doy + 2) / 153;
+	year = yoe + era * 400;
+
+	memset(rt, 0, sizeof(*rt));
+	rt->day = (uint8_t)(doy - (153 * mp + 2) / 5 + 1);
+	rt->month = (uint8_t)(mp < 10 ? mp + 3 : mp - 9);
+	rt->year = (uint16_t)(year + (rt->month <= 2 ? 1 : 0));
+	rt->hour = (uint8_t)(secs / 3600);
+	rt->minute = (uint8_t)((secs % 3600) / 60);
+	rt->second = (uint8_t)(secs % 60);
+}
+
 void rtc_apply_cmos_format(rtc_time_t *time, uint8_t status_b)
 {
 	uint8_t hour_raw;

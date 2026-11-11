@@ -18,4 +18,3 @@ sig_kill_stop_uncatchable FAIL  # SIGKILL/SIGSTOP can be blocked (red: sig_kill_
 stat_hardlink TCONF  # linkat is ENOSYS
 stat_statx TCONF  # statx is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
-time_clock_gettime FAIL  # CLOCK_PROCESS_CPUTIME_ID is EINVAL; arm64 CLOCK_REALTIME is not set from the RTC (red: time_clock_process_cputime, time_realtime_from_rtc)

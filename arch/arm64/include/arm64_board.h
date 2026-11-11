@@ -90,6 +90,8 @@ struct arm64_board_boot_info
 	int rp1_present;
 	enum arm64_uart_model console_uart;
 	struct ir0_phys_range console_mmio;
+	/* ARM PL031 real-time clock (QEMU virt), size 0 when absent. */
+	struct ir0_phys_range rtc_mmio;
 	uint32_t memory_range_count;
 	struct ir0_phys_range memory[ARM64_BOOT_MEMORY_RANGES_MAX];
 	uint32_t reserved_range_count;

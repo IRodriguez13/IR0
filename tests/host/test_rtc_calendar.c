@@ -45,6 +45,23 @@ void test_rtc_calendar(void)
 	t.day = 1;
 	ASSERT_EQ(rtc_civil_year(&t), 2026);
 
+	/* Seconds-counting RTCs (PL031): the inverse round-trips. */
+	rtc_unix_to_fields(1785067200L, &t);
+	ASSERT_EQ(t.year, 2026);
+	ASSERT_EQ(t.month, 7);
+	ASSERT_EQ(t.day, 26);
+	ASSERT_EQ(t.hour, 12);
+	ASSERT_EQ(rtc_fields_to_unix(&t), 1785067200L);
+	rtc_unix_to_fields(1709164800L + 3661L, &t);
+	ASSERT_EQ(t.month, 2);
+	ASSERT_EQ(t.day, 29);
+	ASSERT_EQ(t.minute, 1);
+	ASSERT_EQ(rtc_fields_to_unix(&t), 1709164800L + 3661L);
+	rtc_unix_to_fields(0, &t);
+	ASSERT_EQ(t.year, 1970);
+	ASSERT_EQ(t.month, 1);
+	ASSERT_EQ(t.day, 1);
+
 	/* Leap day 2024-02-29 */
 	memset(&t, 0, sizeof(t));
 	t.century = 20;

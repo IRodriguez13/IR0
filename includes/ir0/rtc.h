@@ -41,6 +41,8 @@ uint8_t rtc_bcd_to_binary(uint8_t bcd);
 /* Resolve century + year (or full year) to a Gregorian year ≥ 1970. */
 uint16_t rtc_civil_year(const rtc_time_t *rt);
 time_t rtc_fields_to_unix(const rtc_time_t *rt);
+/* Seconds since the epoch (UTC) to civil fields with a full .year. */
+void rtc_unix_to_fields(time_t t, rtc_time_t *rt);
 void rtc_apply_cmos_format(rtc_time_t *time, uint8_t status_b);
 
 void rtc_get_time_string(char *buffer, size_t buffer_size);

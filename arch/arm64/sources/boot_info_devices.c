@@ -33,6 +33,7 @@ struct arm64_fdt_device_node
 	int cpu;
 	int psci;
 	int pl011;
+	int pl031;
 	int genet;
 	int disabled;
 	const volatile uint8_t *interrupts_value;
@@ -220,6 +221,34 @@ static int finish_console(struct arm64_board_boot_info *info,
 	return 0;
 }
 
+/*
+ * First enabled "arm,pl031" node: the wall-clock source. A malformed node
+ * only leaves the board without an RTC; it never fails the boot parse.
+ */
+static int finish_rtc(struct arm64_board_boot_info *info,
+		      const struct arm64_fdt_device_node *nodes, uint32_t depth)
+{
+	const struct arm64_fdt_device_node *node = &nodes[depth - 1U];
+	uint32_t tuple_cells;
+
+	if (!node->pl031 || node->disabled || info->rtc_mmio.size != 0U)
+		return 0;
+	tuple_cells = node->reg_address_cells + node->reg_size_cells;
+	if (node->reg_value == NULL || node->reg_address_cells == 0U ||
+	    node->reg_address_cells > 2U || node->reg_size_cells == 0U ||
+	    node->reg_size_cells > 2U || node->reg_length < tuple_cells * 4U)
+		return 0;
+	info->rtc_mmio.base =
+	    arm64_fdt_read_cells(node->reg_value, node->reg_address_cells);
+	info->rtc_mmio.size = arm64_fdt_read_cells(
+	    node->reg_value + node->reg_address_cells * 4U,
+	    node->reg_size_cells);
+	if (translate_address(nodes, depth - 1U, &info->rtc_mmio.base,
+			      info->rtc_mmio.size) != 0)
+		info->rtc_mmio.size = 0U;
+	return 0;
+}
+
 static int finish_irq_controller(struct arm64_board_boot_info *info,
 				 const struct arm64_fdt_device_node *nodes,
 				 uint32_t depth)
@@ -404,6 +433,7 @@ int arm64_boot_parse_devices(struct arm64_boot_parse_context *context,
 			    view.structure + name_start, offset - name_start,
 			    "psci");
 			node->pl011 = 0;
+			node->pl031 = 0;
 			node->genet = 0;
 			node->disabled = 0;
 			node->interrupts_value = NULL;
@@ -423,6 +453,7 @@ int arm64_boot_parse_devices(struct arm64_boot_parse_context *context,
 		{
 			if (depth == 0U ||
 			    finish_console(info, nodes, depth) != 0 ||
+			    finish_rtc(info, nodes, depth) != 0 ||
 			    finish_irq_controller(info, nodes, depth) != 0 ||
 			    finish_genet(info, nodes, depth) != 0)
 			{
@@ -499,6 +530,11 @@ int arm64_boot_parse_devices(struct arm64_boot_parse_context *context,
 					value, property_length, "arm,pl011"))
 				{
 					node->pl011 = 1;
+				}
+				if (arm64_fdt_string_list_has(
+					value, property_length, "arm,pl031"))
+				{
+					node->pl031 = 1;
 				}
 				if (arm64_fdt_string_list_has(
 					value, property_length,
