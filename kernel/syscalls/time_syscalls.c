@@ -137,6 +137,26 @@ int64_t sys_gettimeofday(struct timeval *tv, void *tz)
 	return 0;
 }
 
+/*
+ * CPU time in milliseconds: clock_tick() charges one tick, one millisecond,
+ * to the running task (utime or stime). CLOCK_PROCESS_CPUTIME_ID sums the
+ * whole thread group, CLOCK_THREAD_CPUTIME_ID only the caller.
+ */
+static uint64_t cputime_ms(const process_t *self, int whole_group)
+{
+	const process_t *p;
+	uint64_t ms = 0;
+
+	if (!whole_group)
+		return self->utime + self->stime;
+	for (p = process_list; p; p = p->next)
+	{
+		if (p->tgid == self->tgid)
+			ms += p->utime + p->stime;
+	}
+	return ms;
+}
+
 int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 {
 	uint64_t uptime_ms;
@@ -173,6 +193,14 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	{
 		kts.tv_sec = (time_t)(uptime_ms / 1000);
 		kts.tv_nsec = (long)((uptime_ms % 1000) * 1000000UL);
+	}
+	else if (clock_id == 2 || clock_id == 3)
+	{
+		/* CLOCK_PROCESS_CPUTIME_ID (2), CLOCK_THREAD_CPUTIME_ID (3). */
+		uint64_t cpu_ms = cputime_ms(current_process, clock_id == 2);
+
+		kts.tv_sec = (time_t)(cpu_ms / 1000);
+		kts.tv_nsec = (long)((cpu_ms % 1000) * 1000000UL);
 	}
 	else
 	{
