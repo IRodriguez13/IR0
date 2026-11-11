@@ -1423,7 +1423,9 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     goto out;
   }
 
-  if (e->is_devfs && devfs_is_ptmx_device(e->dev_device_id))
+  /* Linux no_llseek: pipes, FIFOs, sockets and the ptmx have no offset. */
+  if (e->is_pipe || e->is_socket ||
+      (e->is_devfs && devfs_is_ptmx_device(e->dev_device_id)))
   {
     ret = -ESPIPE;
     goto out;

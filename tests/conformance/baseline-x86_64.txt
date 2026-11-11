@@ -8,7 +8,6 @@ dir_getdents64 FAIL  # getdents64 omits . and .. (red: fs_getdents64_lists_dot_e
 dir_mkdir_rmdir FAIL  # unlinkat(AT_REMOVEDIR) removes a non-empty directory, Linux ENOTEMPTY
 fd_fcntl_flags FAIL  # F_SETFL drops O_APPEND (red: fs_setfl_append_sticks)
 fs_ftruncate TCONF  # ftruncate is ENOSYS
-fs_lseek_whence FAIL  # lseek on a pipe succeeds, Linux ESPIPE (red: fs_lseek_pipe_espipe)
 fs_open_errors FAIL  # openat("f/x") on a regular file f is ENOENT, Linux ENOTDIR
 fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
 fs_unlink_open_file TCONF  # pread64 is ENOSYS
