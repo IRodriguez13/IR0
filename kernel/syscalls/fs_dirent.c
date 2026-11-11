@@ -36,6 +36,8 @@ struct linux_dirent64 {
  * guests on ls /proc under GTK (-no-shutdown looked like a freeze).
  */
 #define GETDENTS_BATCH_MAX 24
+#define GETDENTS_RESOLVED_MAX 512
+#define GETDENTS_DOT_PATH_MAX 256
 
 /* Directory entry types (Linux DT_* subset) */
 #define DT_UNKNOWN 0
@@ -134,6 +136,40 @@ static void getdents_entry_meta(const char *dir_path, const struct vfs_dirent *e
   }
 }
 
+/*
+ * Linux dcache_readdir() emits "." and ".." first; IR0 backends do not list
+ * them, so the syscall synthesizes them as the first two cookies.
+ */
+#define GETDENTS_DOT_ENTRIES 2
+
+static void getdents_dot_meta(const char *dir_path, const stat_t *dir_st,
+                              int dotdot, uint64_t *ino, uint8_t *dtype)
+{
+  char parent[GETDENTS_DOT_PATH_MAX];
+  const char *slash;
+  stat_t parent_st;
+
+  *dtype = DT_DIR;
+  *ino = dir_st->st_ino ? (uint64_t)dir_st->st_ino : 1U;
+  if (!dotdot)
+    return;
+
+  slash = strrchr(dir_path, '/');
+  if (!slash || slash == dir_path ||
+      (size_t)(slash - dir_path) >= sizeof(parent))
+  {
+    parent[0] = '/';
+    parent[1] = '\0';
+  }
+  else
+  {
+    memcpy(parent, dir_path, (size_t)(slash - dir_path));
+    parent[slash - dir_path] = '\0';
+  }
+  if (ir0_stat_path_routed(parent, &parent_st) >= 0 && parent_st.st_ino)
+    *ino = (uint64_t)parent_st.st_ino;
+}
+
 static int getdents_visible_count(const struct vfs_dirent *entries, int entry_count)
 {
   int visible = 0;
@@ -209,7 +245,6 @@ static const char *fs_fd_resolved_dir_path(int fd, char *buf, size_t bufsz)
   return buf;
 }
 
-#define GETDENTS_RESOLVED_MAX 512
 #define GETDENTS_KBUF_MAX 4096
 
 /*
@@ -293,7 +328,8 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
   if (entry_count < 0)
     return entry_count;
 
-  visible_count = getdents_visible_count(entries, entry_count);
+  visible_count = GETDENTS_DOT_ENTRIES +
+                  getdents_visible_count(entries, entry_count);
 
   start_cookie = (size_t)fd_table[fd].offset;
   if (start_cookie >= (size_t)visible_count)
@@ -305,15 +341,21 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
   {
     int visible_idx = 0;
 
-    for (int i = 0; i < entry_count; i++)
+    /* i < 0 walks the synthesized "." (-2) and ".." (-1). */
+    for (int i = -GETDENTS_DOT_ENTRIES; i < entry_count; i++)
     {
+      const char *name;
       size_t name_len;
       size_t reclen;
       uint64_t ino;
       uint8_t dtype;
 
-      if (getdents_skip_name(entries[i].name))
+      if (i < 0)
+        name = (i == -GETDENTS_DOT_ENTRIES) ? "." : "..";
+      else if (getdents_skip_name(entries[i].name))
         continue;
+      else
+        name = entries[i].name;
 
       if ((size_t)visible_idx < start_cookie)
       {
@@ -321,8 +363,11 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
         continue;
       }
 
-      name_len = strlen(entries[i].name) + 1;
-      getdents_entry_meta(dir_path, &entries[i], visible_idx, &ino, &dtype);
+      name_len = strlen(name) + 1;
+      if (i < 0)
+        getdents_dot_meta(dir_path, &st, i == -1, &ino, &dtype);
+      else
+        getdents_entry_meta(dir_path, &entries[i], visible_idx, &ino, &dtype);
 
       if (legacy_layout)
         reclen = linux_dirent_reclen(name_len);
@@ -341,7 +386,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
         dent->d_ino = ino;
         dent->d_off = (int64_t)(start_cookie + returned + 1);
         dent->d_reclen = (unsigned short)reclen;
-        memcpy(dent->d_name, entries[i].name, name_len);
+        memcpy(dent->d_name, name, name_len);
         ((char *)dent)[reclen - 1U] = (char)dtype;
       }
       else
@@ -354,7 +399,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
         dent->d_off = (int64_t)(start_cookie + returned + 1);
         dent->d_reclen = (unsigned short)reclen;
         dent->d_type = dtype;
-        memcpy(dent->d_name, entries[i].name, name_len);
+        memcpy(dent->d_name, name, name_len);
       }
 
       buf_offset += reclen;
