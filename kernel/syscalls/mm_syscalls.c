@@ -488,10 +488,11 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     return ret;
   }
 
+  /* Linux: a length the address space cannot hold is ENOMEM. */
   if (length > (USER_MMAP_END - USER_MMAP_START) || length > (1UL << 28))
   {
     klog_debug("KERN", "SERIAL: mmap: length exceeds user mmap arena\n");
-    ret = SYSCALL_PTR_ERR(EINVAL);
+    ret = SYSCALL_PTR_ERR(ENOMEM);
     mmap_audit_log_return("length-too-large", ret, 0, 0, 0,
                           process_pgd(current_process));
     return ret;
