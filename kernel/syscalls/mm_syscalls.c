@@ -1170,6 +1170,15 @@ int sys_mprotect(void *addr, size_t len, int prot)
      * parent's frame instead of copying it.
      */
     page_flags |= mm_pte_mapping_flags(*pte) & (PAGE_COW | PAGE_DIRTY | PAGE_ACCESSED);
+    /*
+     * A frame fork() shares read-only (image text, RELRO, .rodata) still
+     * belongs to the other process too: PROT_WRITE makes it copy-on-write,
+     * never writable in place (Linux do_wp_page). MAP_SHARED pages are
+     * shared on purpose and stay writable.
+     */
+    if ((page_flags & PAGE_RW) && pmm_frame_refcount(phys) > 1 &&
+        !vma_is_shared(current_process, page))
+      page_flags |= PAGE_COW;
     if ((page_flags & PAGE_COW) && (page_flags & PAGE_RW))
       page_flags &= ~PAGE_RW;
     if (map_page_in_directory(root, page, phys, page_flags) != 0)
