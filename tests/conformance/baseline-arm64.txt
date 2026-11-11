@@ -5,7 +5,7 @@
 
 dir_mkdir_rmdir FAIL  # unlinkat(dir, 0) removes the directory, Linux EISDIR
 fs_ftruncate TCONF  # ftruncate is ENOSYS
-fs_open_errors FAIL  # arm64 open flags use the x86_64 values: O_DIRECTORY is lost
+fs_open_errors FAIL  # openat(".", O_WRONLY) succeeds, Linux EISDIR
 fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
 fs_unlink_open_file TCONF  # pread64 is ENOSYS
 mm_madvise_dontneed TCONF  # madvise is ENOSYS

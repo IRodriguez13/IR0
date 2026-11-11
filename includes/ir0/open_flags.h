@@ -15,6 +15,7 @@
 #define _IR0_OPEN_FLAGS_H
 
 #include <stdint.h>
+#include <asm/fcntl.h>
 
 /* File access modes (same numeric values as Linux/musl accmode) */
 #define IR0_O_RDONLY    0x0000
@@ -32,8 +33,9 @@
 #define IR0_O_CLOEXEC   0x80000
 
 /*
- * Linux x86-64 open(2) status flag bits (musl/glibc uapi).
- * Must not appear in flags passed to vfs_open after translation.
+ * Linux open(2) status flag bits (uapi). Must not appear in flags passed
+ * to vfs_open after translation. O_DIRECTORY, O_NOFOLLOW and O_LARGEFILE
+ * differ per ISA and come from the build-selected <asm/fcntl.h>.
  */
 #define LINUX_O_CREAT     0x0040U
 #define LINUX_O_EXCL      0x0080U
@@ -41,9 +43,6 @@
 #define LINUX_O_TRUNC     0x0200U
 #define LINUX_O_APPEND    0x0400U
 #define LINUX_O_NONBLOCK  0x0800U
-#define LINUX_O_LARGEFILE 0x8000U
-#define LINUX_O_DIRECTORY 0x010000U
-#define LINUX_O_NOFOLLOW  0x020000U
 #define LINUX_O_CLOEXEC   0x080000U
 #define LINUX_O_ASYNC     0x002000U /* stored as is: no IR0 bit collides */
 
