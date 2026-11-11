@@ -37,6 +37,7 @@
 #include <ir0/vfs.h>
 #include <ir0/memfd.h>
 #include <ir0/named_socket.h>
+#include <ir0/path_routed.h>
 #include <ir0/path_user.h>
 #include <ir0/logging.h>
 #include <ir0/devfs.h>
@@ -78,44 +79,98 @@ static int64_t unix_fill_sockaddr(struct sock_stream *ss, struct sockaddr *addr,
 	return 0;
 }
 
+/* Linux struct sockaddr_storage: the largest address a syscall copies in. */
+union sock_kaddr
+{
+	struct sockaddr sa;
+	struct sockaddr_in sin;
+	struct sockaddr_un sun;
+	uint8_t raw[128];
+};
+
 /*
- * Read a user sockaddr_un and fill in the key that finds its socket: the
- * path resolved against the caller's cwd and root, or the abstract name.
+ * net/socket.c move_addr_to_kernel(): a length past sockaddr_storage is
+ * EINVAL, an unreadable address EFAULT. The tail past @len reads as zero.
  */
-static int unix_addr_get(const struct sockaddr *uaddr, socklen_t addrlen,
+static int sock_addr_copy(union sock_kaddr *k, const struct sockaddr *uaddr,
+			  socklen_t len)
+{
+	memset(k, 0, sizeof(*k));
+	if (len > sizeof(k->raw))
+		return -EINVAL;
+	if (len && copy_from_user(k->raw, uaddr, len) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+/*
+ * unix_validate_addr() and unix_mkname_bsd(): check a copied sockaddr_un
+ * and fill in the key that finds its socket, the path resolved against
+ * the caller's cwd and root or the abstract name.
+ */
+static int unix_addr_get(union sock_kaddr *k, socklen_t len,
 			 struct sock_unix_addr *ua)
 {
-	struct sockaddr_un sun;
 	char resolved[256];
 	size_t plen;
 	int rc;
 
-	memset(&sun, 0, sizeof(sun));
 	memset(ua, 0, sizeof(*ua));
-	if (copy_from_user(&sun, uaddr,
-			   addrlen < sizeof(sun) ? addrlen : sizeof(sun)) != 0)
-		return -EFAULT;
-	plen = (size_t)addrlen - sizeof(sun.sun_family);
-	if (plen >= sizeof(sun.sun_path))
-		plen = sizeof(sun.sun_path) - 1;
-	if (sun.sun_path[0] == '\0')
+	if (len < offsetof(struct sockaddr_un, sun_path) ||
+	    len > sizeof(struct sockaddr_un) || k->sun.sun_family != AF_UNIX)
+		return -EINVAL;
+	plen = len - offsetof(struct sockaddr_un, sun_path);
+	if (plen == 0 || k->sun.sun_path[0] == '\0')
 	{
-		memcpy(ua->key, sun.sun_path, plen);
+		memcpy(ua->key, k->sun.sun_path, plen);
 		ua->key_len = plen;
 		ua->is_abstract = 1;
 		return 0;
 	}
-	sun.sun_path[plen] = '\0';
-	rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, sun.sun_path, resolved,
+	/* sun_path may fill all 108 bytes; the union has room for the NUL. */
+	k->raw[len] = '\0';
+	rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, k->sun.sun_path, resolved,
 				  sizeof(resolved), current_process->cwd,
 				  current_process->root);
 	if (rc != 0)
 		return rc;
 	plen = strlen(resolved);
 	if (plen >= sizeof(ua->key))
-		return -EINVAL;
+		return -ENAMETOOLONG;
 	memcpy(ua->key, resolved, plen + 1);
 	ua->key_len = plen;
+	return 0;
+}
+
+/*
+ * unix_bind_bsd(): the socket must be unbound (EINVAL), the parent
+ * directory must exist, and the name must be free (EADDRINUSE).
+ */
+static int unix_bind_path_check(struct sock_stream *ss, const char *path)
+{
+	char parent[SOCK_UNIX_PATH_MAX];
+	size_t bound = 0;
+	stat_t st;
+	char *slash;
+	int rc;
+
+	(void)sock_stream_get_unix_name(ss, NULL, 0, &bound, NULL);
+	if (bound)
+		return -EINVAL;
+	memcpy(parent, path, strlen(path) + 1);
+	slash = strrchr(parent, '/');
+	if (!slash)
+		return -ENOENT;
+	if (slash == parent)
+		slash++;
+	*slash = '\0';
+	rc = ir0_stat_path_routed(parent, &st);
+	if (rc != 0)
+		return rc;
+	if (!S_ISDIR(st.st_mode))
+		return -ENOTDIR;
+	if (ir0_stat_path_routed(path, &st) == 0)
+		return -EADDRINUSE;
 	return 0;
 }
 
@@ -344,10 +399,11 @@ int64_t sys_socket(int domain, int type, int protocol)
 
 int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
-	int err;
+	union sock_kaddr k;
 	struct sock_stream *ss;
+	struct sock_icmp *icmp;
 	struct sock_udp *sock;
-	int ret;
+	int err;
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
@@ -361,88 +417,49 @@ int64_t sys_bind(int fd, const struct sockaddr *addr, socklen_t addrlen)
 	err = sock_fd_check(fd);
 	if (err < 0)
 		return err;
-	if (!addr || addrlen < 2)
-		return -EINVAL;
+	err = sock_addr_copy(&k, addr, addrlen);
+	if (err < 0)
+		return err;
 
 	ss = sock_stream_fd_lookup(fd);
-	if (ss)
+	if (ss && sock_stream_family(ss) == IR0_AF_UNIX)
 	{
-		uint16_t family = 0;
+		struct sock_unix_addr ua;
 
-		if (copy_from_user(&family, addr, sizeof(family)) != 0)
-			return -EFAULT;
-		if (family == AF_UNIX)
-		{
-			struct sock_unix_addr ua;
-			int rc;
-
-			if (addrlen < offsetof(struct sockaddr_un, sun_path) + 1)
-				return -EINVAL;
-			rc = unix_addr_get(addr, addrlen, &ua);
-			if (rc != 0)
-				return rc;
-			if (ua.is_abstract)
-				return sock_stream_bind_unix(ss, &ua);
-			rc = named_socket_create(ua.key, 0777);
-			if (rc != 0)
-			{
-				if (rc == -EADDRINUSE)
-					log_warn("AF_UNIX", "socket node already exists");
-				else if (rc == -EINVAL)
-					log_warn("AF_UNIX", "socket node invalid path");
-				else if (rc == -ENAMETOOLONG)
-					log_warn("AF_UNIX", "socket node path too long");
-				else
-					log_warn("AF_UNIX", "socket node create failed");
-				return rc;
-			}
-			rc = sock_stream_bind_unix(ss, &ua);
-			if (rc != 0)
-			{
-				(void)named_socket_unlink(ua.key);
-				if (rc == -EINVAL)
-					log_warn("AF_UNIX", "transport bind invalid path");
-				else if (rc == -EADDRINUSE)
-					log_warn("AF_UNIX", "transport address in use");
-				else
-					log_warn("AF_UNIX", "transport bind failed");
-			}
-			return rc;
-		}
-		if (family == AF_INET)
-		{
-			struct sockaddr_in sin;
-
-			if (addrlen < sizeof(sin))
-				return -EINVAL;
-			if (copy_from_user(&sin, addr, sizeof(sin)) != 0)
-				return -EFAULT;
-			return sock_stream_bind_inet(ss, ntohs(sin.sin_port));
-		}
-		return -EAFNOSUPPORT;
-	}
-
-	{
-		struct sock_icmp *icmp;
-		struct sockaddr_in sin;
-
-		if (addrlen < sizeof(struct sockaddr_in))
+		/* An empty name would autobind on Linux: not supported. */
+		if (addrlen <= offsetof(struct sockaddr_un, sun_path))
 			return -EINVAL;
-		if (copy_from_user(&sin, addr, sizeof(sin)) != 0)
-			return -EFAULT;
-		if (sin.sin_family != AF_INET)
-			return -EAFNOSUPPORT;
-
-		icmp = sock_icmp_fd_lookup(fd);
-		if (icmp)
-			return sock_icmp_bind(icmp, sin.sin_addr);
-
-		sock = sock_fd_lookup(fd);
-		if (!sock)
-			return -ENOTSOCK;
-		ret = sock_udp_bind(sock, ntohs(sin.sin_port));
-		return ret;
+		err = unix_addr_get(&k, addrlen, &ua);
+		if (err < 0)
+			return err;
+		if (ua.is_abstract)
+			return sock_stream_bind_unix(ss, &ua);
+		err = unix_bind_path_check(ss, ua.key);
+		if (err < 0)
+			return err;
+		err = named_socket_create(ua.key, 0777);
+		if (err < 0)
+			return err;
+		err = sock_stream_bind_unix(ss, &ua);
+		if (err < 0)
+			(void)named_socket_unlink(ua.key);
+		return err;
 	}
+
+	/* inet_bind(): a short address is EINVAL, another family EAFNOSUPPORT. */
+	if (addrlen < sizeof(struct sockaddr_in))
+		return -EINVAL;
+	if (k.sin.sin_family != AF_INET)
+		return -EAFNOSUPPORT;
+	if (ss)
+		return sock_stream_bind_inet(ss, ntohs(k.sin.sin_port));
+	icmp = sock_icmp_fd_lookup(fd);
+	if (icmp)
+		return sock_icmp_bind(icmp, k.sin.sin_addr);
+	sock = sock_fd_lookup(fd);
+	if (!sock)
+		return -ENOTSOCK;
+	return sock_udp_bind(sock, ntohs(k.sin.sin_port));
 }
 
 ssize_t sys_sendto(int fd, const void *buf, size_t len, int flags,
@@ -749,9 +766,9 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 {
 	int err;
+	union sock_kaddr k;
 	struct sock_stream *ss;
 	struct sock_udp *sock;
-	int ret;
 
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
@@ -765,20 +782,21 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 	err = sock_fd_check(fd);
 	if (err < 0)
 		return err;
-	if (!addr || addrlen < 2)
+	err = sock_addr_copy(&k, addr, addrlen);
+	if (err < 0)
+		return err;
+	if (addrlen < 2)
 		return -EINVAL;
 
 	ss = sock_stream_fd_lookup(fd);
 	if (ss)
 	{
-		uint16_t family = 0;
+		uint16_t family = k.sa.sa_family;
 
-		if (copy_from_user(&family, addr, sizeof(family)) != 0)
-			return -EFAULT;
 		if (family == AF_UNIX)
 		{
 			struct sock_unix_addr ua;
-			int rc = unix_addr_get(addr, addrlen, &ua);
+			int rc = unix_addr_get(&k, addrlen, &ua);
 
 			if (rc != 0)
 				return rc;
@@ -786,34 +804,23 @@ int64_t sys_connect(int fd, const struct sockaddr *addr, socklen_t addrlen)
 		}
 		if (family == AF_INET)
 		{
-			struct sockaddr_in sin;
-
-			if (addrlen < sizeof(sin))
+			if (addrlen < sizeof(struct sockaddr_in))
 				return -EINVAL;
-			if (copy_from_user(&sin, addr, sizeof(sin)) != 0)
-				return -EFAULT;
-			return sock_stream_connect_inet_flags(ss, sin.sin_addr,
-							      ntohs(sin.sin_port),
+			return sock_stream_connect_inet_flags(ss, k.sin.sin_addr,
+							      ntohs(k.sin.sin_port),
 							      sock_nonblock_fd(fd, 0));
 		}
 		return -EAFNOSUPPORT;
 	}
 
-	{
-		struct sockaddr_in sin;
-
-		if (addrlen < sizeof(struct sockaddr_in))
-			return -EINVAL;
-		if (copy_from_user(&sin, addr, sizeof(sin)) != 0)
-			return -EFAULT;
-		if (sin.sin_family != AF_INET)
-			return -EAFNOSUPPORT;
-		sock = sock_fd_lookup(fd);
-		if (!sock)
-			return -ENOTSOCK;
-		ret = sock_udp_connect(sock, sin.sin_addr, ntohs(sin.sin_port));
-		return ret;
-	}
+	if (addrlen < sizeof(struct sockaddr_in))
+		return -EINVAL;
+	if (k.sin.sin_family != AF_INET)
+		return -EAFNOSUPPORT;
+	sock = sock_fd_lookup(fd);
+	if (!sock)
+		return -ENOTSOCK;
+	return sock_udp_connect(sock, k.sin.sin_addr, ntohs(k.sin.sin_port));
 }
 
 int64_t sys_listen(int fd, int backlog)
