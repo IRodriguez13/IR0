@@ -402,12 +402,6 @@ int sock_udp_sendto(struct sock_udp *sock, uint32_t dest_ip_be, uint16_t dest_po
 	if (len > SOCK_UDP_PKT_MAX)
 		return -EMSGSIZE;
 
-	if (sock->connected)
-	{
-		dest_ip_be = sock->peer_ip_be;
-		dest_port_host = sock->peer_port;
-	}
-
 	ret = sock_udp_ensure_port(sock);
 	if (ret < 0)
 		return ret;

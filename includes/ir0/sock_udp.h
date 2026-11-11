@@ -27,6 +27,7 @@ void sock_udp_release(struct sock_udp *sock);
 int sock_udp_bind(struct sock_udp *sock, uint16_t port_host);
 int sock_udp_connect(struct sock_udp *sock, uint32_t peer_ip_be,
 		     uint16_t peer_port_host);
+/* Send to @dest_ip_be:@dest_port_host, connected or not (udp_sendmsg()). */
 int sock_udp_sendto(struct sock_udp *sock, uint32_t dest_ip_be, uint16_t dest_port_host,
 		    const void *data, size_t len);
 ssize_t sock_udp_recvfrom(struct sock_udp *sock, void *buf, size_t len, int flags,
