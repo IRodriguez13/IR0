@@ -355,7 +355,6 @@ ipc_channel_t *ipc_channel_create(uint32_t id)
     wait_queue_init(&channel->read_queue);
     wait_queue_init(&channel->write_queue);
 
-    channel->lock = 0;
     channel->ref_count = 0;
     channel->next = NULL;
 
@@ -504,24 +503,6 @@ void ipc_channel_unref(ipc_channel_t *channel)
     if (destroy)
         ipc_channel_destroy(channel);
 }
-
-/* Legacy busy-wait channel lock — unused; channel I/O uses ir0_spinlock (UP). */
-#if 0
-static void ipc_lock(ipc_channel_t *channel)
-{
-    if (!channel)
-        return;
-    while (__sync_lock_test_and_set(&channel->lock, 1))
-        cpu_relax();
-}
-
-static void ipc_unlock(ipc_channel_t *channel)
-{
-    if (!channel)
-        return;
-    __sync_lock_release(&channel->lock);
-}
-#endif
 
 /*
  * Enqueue, then look again before sleeping. The channel critical section is

@@ -81,7 +81,6 @@ typedef struct ipc_channel
 	semaphore_t sem_write;
 	wait_queue_t read_queue;
 	wait_queue_t write_queue;
-	volatile uint8_t lock;
 	int ref_count;
 	struct ipc_channel *next;
 } ipc_channel_t;
