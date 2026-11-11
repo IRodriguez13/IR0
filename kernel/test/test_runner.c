@@ -149,6 +149,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_futex_interrupted_wait_frees_slot,
 	  "futex_interrupted_wait_frees_slot", 1 },
 	{ ktest_futex_exit_drop_frees_slot, "futex_exit_drop_frees_slot", 1 },
+	{ ktest_futex_pending_signal_skips_sleep,
+	  "futex_pending_signal_skips_sleep", 1 },
 	{ ktest_ipc_read_rechecks_after_enqueue,
 	  "ipc_read_rechecks_after_enqueue", 1 },
 	{ ktest_ipc_wait_queue_tail_survives_exit_purge,

@@ -101,6 +101,7 @@ void ktest_pipe_read_efault_keeps_bytes(void);
 void ktest_rt_sigsuspend_consumes_pending(void);
 void ktest_futex_interrupted_wait_frees_slot(void);
 void ktest_futex_exit_drop_frees_slot(void);
+void ktest_futex_pending_signal_skips_sleep(void);
 void ktest_ipc_read_rechecks_after_enqueue(void);
 void ktest_ipc_wait_queue_tail_survives_exit_purge(void);
 void ktest_ipc_ring_buffer_oom_is_recoverable(void);

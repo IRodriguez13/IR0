@@ -501,6 +501,51 @@ void ktest_futex_exit_drop_frees_slot(void)
 	KTEST_END();
 }
 
+static int futex_presleep_calls;
+
+/* Counts sleeps; READY keeps a task that did sleep from blocking forever. */
+static void futex_count_sleep(process_t *proc)
+{
+	futex_presleep_calls++;
+	process_set_sched_state(proc, PROCESS_READY);
+}
+
+/*
+ * A signal that is already pending when the wait starts must end it
+ * before the task sleeps: send_signal() only wakes a task it finds
+ * BLOCKED, so a waiter that sleeps first would miss it.
+ */
+void ktest_futex_pending_signal_skips_sleep(void)
+{
+	int rc;
+	uint32_t saved_pending;
+	uint32_t saved_mask;
+
+	KTEST_BEGIN("futex_pending_signal_skips_sleep");
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	futex_word = 0;
+	futex_presleep_calls = 0;
+	saved_pending = current_process->signal_pending;
+	saved_mask = current_process->signal_mask;
+	current_process->signal_mask &= ~SIGNAL_MASK(SIGUSR1);
+	current_process->signal_pending |= SIGNAL_MASK(SIGUSR1);
+	ir0_futex_before_sleep = futex_count_sleep;
+	rc = ir0_futex_wait(current_process, &futex_word, 0);
+	ir0_futex_before_sleep = NULL;
+	current_process->signal_pending = saved_pending;
+	current_process->signal_mask = saved_mask;
+	KASSERT_EQ(rc, -ERESTARTSYS);
+	KASSERT_EQ(futex_presleep_calls, 0);
+	KASSERT_EQ(ir0_futex_wake(&futex_word, 1), 0);
+	KTEST_END();
+}
+
 static void ipc_fill_on_sleep(ipc_channel_t *channel)
 {
 	char byte = 'Z';

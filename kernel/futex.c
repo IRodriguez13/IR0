@@ -16,73 +16,81 @@
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
-#include <ir0/kernel.h>
 
 #define IR0_FUTEX_MAX_WAITERS 64
 
-struct ir0_futex_slot
+/*
+ * A waiter lives on the sleeping task's kernel stack (Linux futex_q). The
+ * table only points at it; wake and exit unhook the pointer.
+ */
+struct ir0_futex_waiter
 {
 	process_t *proc;
 	int *uaddr;
-	int val;
-	uint8_t in_use;
+	int woken;
 };
 
-static struct ir0_futex_slot futex_waiters[IR0_FUTEX_MAX_WAITERS];
+static struct ir0_futex_waiter *futex_waiters[IR0_FUTEX_MAX_WAITERS];
 
 void (*ir0_futex_before_sleep)(process_t *proc);
 
-static void futex_slot_release_if_mine(int slot, process_t *proc)
-{
-	if (slot < 0 || slot >= IR0_FUTEX_MAX_WAITERS || !proc)
-		return;
-	if (!futex_waiters[slot].in_use || futex_waiters[slot].proc != proc)
-		return;
-	futex_waiters[slot].in_use = 0;
-	futex_waiters[slot].proc = NULL;
-	futex_waiters[slot].uaddr = NULL;
-}
-
+/*
+ * ir0_futex_wait - Sleep until ir0_futex_wake() on @uaddr or a signal.
+ *
+ * The caller has checked *uaddr == @val. Returns 0 when woken, -EAGAIN when
+ * every waiter slot is taken, -ERESTARTSYS when a signal ends the wait.
+ */
 int ir0_futex_wait(process_t *proc, int *uaddr, int val)
 {
-	int i;
+	struct ir0_futex_waiter w;
+	int slot;
+	int ret;
 
+	(void)val;
 	if (!proc || !uaddr)
 		return -EINVAL;
 
-	for (i = 0; i < IR0_FUTEX_MAX_WAITERS; i++)
+	for (slot = 0; slot < IR0_FUTEX_MAX_WAITERS; slot++)
 	{
-		if (!futex_waiters[i].in_use)
-		{
-			futex_waiters[i].proc = proc;
-			futex_waiters[i].uaddr = uaddr;
-			futex_waiters[i].val = val;
-			futex_waiters[i].in_use = 1;
-			process_set_sched_state(proc, PROCESS_BLOCKED);
-			while (proc->state == PROCESS_BLOCKED)
-			{
-				if (ir0_futex_before_sleep)
-					ir0_futex_before_sleep(proc);
-				if (proc->state != PROCESS_BLOCKED)
-					break;
-				schedule();
-				if (proc->state != PROCESS_BLOCKED)
-					break;
-				kernel_idle_poll();
-			}
-			/*
-			 * futex_wake already clears the slot. Any other exit
-			 * (signal, console) leaves it occupied, and the next
-			 * waiter eventually gets -EAGAIN. Release only if this
-			 * task still owns the slot: wake may have reused it.
-			 */
-			futex_slot_release_if_mine(i, proc);
-			if (signal_pending(proc))
-				return -ERESTARTSYS;
-			return 0;
-		}
+		if (!futex_waiters[slot])
+			break;
 	}
-	return -EAGAIN;
+	if (slot == IR0_FUTEX_MAX_WAITERS)
+		return -EAGAIN;
+
+	w.proc = proc;
+	w.uaddr = uaddr;
+	w.woken = 0;
+	futex_waiters[slot] = &w;
+
+	for (;;)
+	{
+		/*
+		 * prepare_to_wait: BLOCKED before the tests, so a wake or a
+		 * signal that lands in between sets READY instead of being lost.
+		 */
+		process_set_sched_state(proc, PROCESS_BLOCKED);
+		if (w.woken)
+		{
+			ret = 0;
+			break;
+		}
+		if (signal_pending(proc))
+		{
+			ret = -ERESTARTSYS;
+			break;
+		}
+		if (ir0_futex_before_sleep)
+			ir0_futex_before_sleep(proc);
+		/* A wake since the tests already made us READY: test again. */
+		if (proc->state == PROCESS_BLOCKED)
+			schedule();
+	}
+
+	process_set_sched_state(proc, PROCESS_READY);
+	if (futex_waiters[slot] == &w)
+		futex_waiters[slot] = NULL;
+	return ret;
 }
 
 int ir0_futex_wake(int *uaddr, int count)
@@ -95,14 +103,13 @@ int ir0_futex_wake(int *uaddr, int count)
 
 	for (i = 0; i < IR0_FUTEX_MAX_WAITERS && woke < count; i++)
 	{
-		if (!futex_waiters[i].in_use)
+		struct ir0_futex_waiter *w = futex_waiters[i];
+
+		if (!w || w->uaddr != uaddr)
 			continue;
-		if (futex_waiters[i].uaddr != uaddr)
-			continue;
-		if (futex_waiters[i].proc)
-			process_set_sched_state(futex_waiters[i].proc, PROCESS_READY);
-		futex_waiters[i].in_use = 0;
-		futex_waiters[i].proc = NULL;
+		futex_waiters[i] = NULL;
+		w->woken = 1;
+		process_set_sched_state(w->proc, PROCESS_READY);
 		woke++;
 	}
 	return woke;
@@ -116,10 +123,7 @@ void ir0_futex_drop_process(process_t *proc)
 		return;
 	for (i = 0; i < IR0_FUTEX_MAX_WAITERS; i++)
 	{
-		if (futex_waiters[i].in_use && futex_waiters[i].proc == proc)
-		{
-			futex_waiters[i].in_use = 0;
-			futex_waiters[i].proc = NULL;
-		}
+		if (futex_waiters[i] && futex_waiters[i]->proc == proc)
+			futex_waiters[i] = NULL;
 	}
 }

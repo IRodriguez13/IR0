@@ -23,7 +23,8 @@ int ir0_futex_wake(int *uaddr, int count);
 void ir0_futex_drop_process(struct process *proc);
 
 /*
- * Called once per blocked wait, before the task sleeps. NULL outside ktest.
- * The hook may mark the task READY. It must not call ir0_futex_wait.
+ * Called right before a waiter sleeps in schedule(), after it found no wake
+ * and no pending signal. NULL outside ktest. The hook may mark the task
+ * READY or post a signal. It must not call ir0_futex_wait.
  */
 extern void (*ir0_futex_before_sleep)(struct process *proc);
