@@ -18,6 +18,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/arch_io.h>
 #include <ir0/cpu.h>
+#include <ir0/delay.h>
 #include <drivers/dma/dma.h>
 #include <ir0/kmem.h>
 #include <drivers/timer/pit/pit.h>
@@ -40,7 +41,7 @@ static sb16_state_t sb16_state = {0};
 #define SB16_DSP_MAX_RATE_HZ      45454u
 #define SB16_DSP_TIME_BASE_HZ     1000000u
 #define SB16_DSP_COUNTER_BASE     256u
-#define SB16_RESET_SPIN_LIMIT     10000u
+#define SB16_RESET_PULSE_US       10u
 #define SB16_SELFTEST_RATE_HZ     11025u
 #define SB16_SELFTEST_SPIN_LIMIT  200000u
 static uint8_t sb16_pcm_buf[2][SB16_PCM_BUF_MAX]
@@ -144,11 +145,8 @@ bool sb16_reset_dsp(void)
     /* Write 1 to reset port */
     outb(SB16_RESET_PORT, 1);
     
-    /* Wait 3 microseconds (or more to be safe) */
-    for (volatile unsigned spin = 0; spin < SB16_RESET_SPIN_LIMIT; spin++)
-    {
-        cpu_relax();
-    }
+    /* The DSP needs a reset pulse of at least 3 us. */
+    udelay(SB16_RESET_PULSE_US);
 
     /* Write 0 to reset port */
     outb(SB16_RESET_PORT, 0);
@@ -220,9 +218,9 @@ static bool sb16_dsp_ready_write_hot(void)
     while (timeout--)
     {
         /* READ_STATUS bit7 clear => DSP ready for write (HWRM). */
+        /* Each status read is an ISA bus cycle; it bounds the poll. */
         if (!(inb(SB16_READ_STATUS) & 0x80))
             return true;
-        cpu_relax();
     }
     return false;
 }
