@@ -93,7 +93,7 @@ static int paging_resolve_user_page(address_space_root_t root, uintptr_t page,
 	 * supervisor identity pages (x86_64 keyboard ring), and a syscall must
 	 * not read or write them on behalf of userspace.
 	 */
-	if (!pte || !pte_user(*pte))
+	if (!pte || !pte_user(*pte) || pte_protnone(*pte))
 		return -1;
 	/*
 	 * A write needs a page the process could write itself: writable, or

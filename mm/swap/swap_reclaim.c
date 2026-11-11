@@ -101,7 +101,9 @@ int ir0_swap_out_page(process_t *proc, uintptr_t va)
 		return -ENOMEM;
 	va &= ~(uintptr_t)(PAGE_SIZE_4KB - 1U);
 	pte = paging_get_pte(process_pgd(proc), va);
-	if (!pte || !mm_pte_present(*pte) || !pte_user(*pte))
+	/* A PROT_NONE page would come back accessible: keep it resident. */
+	if (!pte || !mm_pte_present(*pte) || !pte_user(*pte) ||
+	    pte_protnone(*pte))
 		return -ENOENT;
 	phys = mm_pte_phys(*pte);
 	if (pmm_frame_refcount(phys) != 1)

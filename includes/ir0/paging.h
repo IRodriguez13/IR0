@@ -36,6 +36,7 @@
  * page that was shared read-only at fork and must break on write.
  */
 #define PAGE_COW IR0_MM_MAP_COW
+#define PAGE_PROTNONE IR0_MM_MAP_PROTNONE
 
 /* Semantic mapping request; the ISA backend chooses its executable encoding. */
 #define PAGE_EXEC IR0_MM_MAP_EXEC

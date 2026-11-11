@@ -23,6 +23,8 @@
 #define X86_PTE_RW        0x2ULL
 #define X86_PTE_USER      0x4ULL
 #define X86_PTE_LARGE     0x80ULL
+/* Software bit 11: PROT_NONE user page, mapped supervisor-only. */
+#define X86_PTE_PROTNONE  0x800ULL
 #define X86_PTE_NX        (1ULL << 63)
 #define X86_PTE_PFN_MASK  0x000FFFFFFFFFF000ULL
 #define X86_INDEX_MASK    0x1FFUL
@@ -202,6 +204,8 @@ uint64_t mm_pte_mapping_flags(uint64_t e)
 
 	if (mm_pte_executable(e))
 		flags |= IR0_MM_MAP_EXEC;
+	if (e & X86_PTE_PROTNONE)
+		flags |= IR0_MM_MAP_USER | IR0_MM_MAP_PROTNONE;
 	return flags;
 }
 
@@ -234,6 +238,8 @@ uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 
 	if (!exec)
 		e |= X86_PTE_NX;
+	if (flags12 & IR0_MM_MAP_PROTNONE)
+		e = (e & ~(X86_PTE_USER | X86_PTE_RW)) | X86_PTE_NX;
 	return e;
 }
 

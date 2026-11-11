@@ -34,6 +34,14 @@
  * without such a type keep their default encoding.
  */
 #define IR0_MM_MAP_WRITECOMBINE  (1ULL << 10)
+/*
+ * PROT_NONE user page (Linux _PAGE_PROTNONE): the leaf keeps its frame and
+ * stays present for the kernel's bookkeeping, but userspace cannot read,
+ * write or execute it. The backend encodes it inaccessible to user mode and
+ * reports it back as IR0_MM_MAP_USER | IR0_MM_MAP_PROTNONE, so fork, unmap
+ * and exit treat it as the process page it is.
+ */
+#define IR0_MM_MAP_PROTNONE      (1ULL << 11)
 #define IR0_MM_MAP_EXEC          (1ULL << 52)
 
 /* Kernel heap region supplied by the active architecture memory layout. */
@@ -102,6 +110,12 @@ static inline int pte_write(uint64_t e)
 static inline int pte_cow(uint64_t e)
 {
 	return (mm_pte_mapping_flags(e) & IR0_MM_MAP_COW) != 0;
+}
+
+static inline int pte_protnone(uint64_t e)
+{
+	return mm_pte_present(e) &&
+	       (mm_pte_mapping_flags(e) & IR0_MM_MAP_PROTNONE) != 0;
 }
 
 uint64_t mm_make_table_pte(uintptr_t phys, int user);

@@ -1111,6 +1111,9 @@ int sys_mprotect(void *addr, size_t len, int prot)
     map_flags |= PAGE_RW;
   if (prot & PROT_EXEC)
     map_flags |= PAGE_EXEC;
+  /* Keep the frame, deny every user access (Linux PAGE_NONE). */
+  if (prot == PROT_NONE)
+    map_flags |= PAGE_PROTNONE;
 
   for (uintptr_t page = range_start; page < range_end; page += PAGE_SIZE_4KB)
   {
@@ -1121,9 +1124,15 @@ int sys_mprotect(void *addr, size_t len, int prot)
     pte = paging_get_pte(root, page);
     if (!pte || !pte_present(*pte))
     {
-      /* Gaps only OK when covering a known mmap region (lazy anon). */
-      if (!matched)
+      /*
+       * Gaps only OK when covering a known mmap region (lazy anon). A
+       * PROT_NONE gap stays empty: the VMA already denies access.
+       */
+      if (!matched || prot == PROT_NONE)
+      {
+        saw_present |= matched != NULL;
         continue;
+      }
       phys = pmm_alloc_frame();
       if (phys == 0)
         return -ENOMEM;

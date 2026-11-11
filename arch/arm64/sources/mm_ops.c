@@ -36,6 +36,8 @@
 #define A64_MAIR_NORMAL   1U
 #define A64_MAIR_NORMAL_NC 2U
 #define A64_PTE_SW_COW    (1ULL << 55)
+/* Software bit 56: PROT_NONE user page, mapped EL1-only, never executable. */
+#define A64_PTE_SW_PROTNONE (1ULL << 56)
 #define A64_PTE_PFN_MASK  0x0000FFFFFFFFF000ULL
 #define A64_INDEX_MASK    0x1FFUL
 #define A64_SCTLR_M       (1ULL << 0)
@@ -197,8 +199,10 @@ uint64_t mm_pte_mapping_flags(uint64_t e)
 		flags |= IR0_MM_MAP_PRESENT;
 	if (!(e & A64_PTE_AP_RO))
 		flags |= IR0_MM_MAP_WRITE;
-	if (e & A64_PTE_AP_EL0)
+	if (e & (A64_PTE_AP_EL0 | A64_PTE_SW_PROTNONE))
 		flags |= IR0_MM_MAP_USER;
+	if (e & A64_PTE_SW_PROTNONE)
+		flags |= IR0_MM_MAP_PROTNONE;
 	if (!(e & A64_PTE_NG))
 		flags |= IR0_MM_MAP_GLOBAL;
 	if (e & A64_PTE_SW_COW)
@@ -256,6 +260,12 @@ uint64_t mm_make_leaf_pte(uintptr_t phys, uint64_t flags12, int exec)
 		e |= A64_PTE_ATTR(A64_MAIR_NORMAL_NC) | A64_PTE_SH_INNER;
 	else
 		e |= A64_PTE_ATTR(A64_MAIR_NORMAL) | A64_PTE_SH_INNER;
+	if (flags12 & IR0_MM_MAP_PROTNONE)
+	{
+		e |= A64_PTE_SW_PROTNONE | A64_PTE_NG | A64_PTE_AP_RO |
+		     A64_PTE_UXN | A64_PTE_PXN;
+		return e;
+	}
 	if (flags12 & IR0_MM_MAP_USER)
 	{
 		e |= A64_PTE_AP_EL0 | A64_PTE_NG | A64_PTE_PXN;
