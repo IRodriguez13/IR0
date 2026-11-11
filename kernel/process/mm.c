@@ -14,6 +14,7 @@
 
 #include "process_internal.h"
 #include <ir0/mm.h>
+#include <ir0/mman.h>
 
 static bool process_va_ranges_overlap(uintptr_t a_start, size_t a_len,
 				      uintptr_t b_start, size_t b_len)
@@ -46,6 +47,13 @@ struct mmap_region *find_vma(process_t *proc, uintptr_t addr)
 			return r;
 	}
 	return NULL;
+}
+
+int vma_is_shared(process_t *proc, uintptr_t addr)
+{
+	struct mmap_region *vma = find_vma(proc, addr);
+
+	return vma && (vma->flags & MAP_SHARED);
 }
 
 bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t length)

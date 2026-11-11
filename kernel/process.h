@@ -745,6 +745,8 @@ void process_exec_close_cloexec(process_t *p);
 bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t length);
 /* The mmap(2) region of @proc that contains @addr, or NULL (Linux find_vma). */
 struct mmap_region *find_vma(process_t *proc, uintptr_t addr);
+/* Nonzero when @addr lies in a MAP_SHARED region of @proc. */
+int vma_is_shared(process_t *proc, uintptr_t addr);
 
 uint64_t process_list_count(void);
 uint64_t process_list_count_user(void);

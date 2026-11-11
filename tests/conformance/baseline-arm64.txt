@@ -11,7 +11,6 @@ mm_mmap_access_mode TCONF  # file-backed mmap is ENOSYS
 mm_mmap_einval FAIL  # mmap without MAP_PRIVATE/MAP_SHARED succeeds (red: mm_mmap_requires_private_or_shared)
 mm_mmap_file_private TCONF  # file-backed mmap is ENOSYS
 mm_mmap_file_shared TCONF  # file-backed mmap is ENOSYS
-mm_shared_anon_fork FAIL  # MAP_SHARED|MAP_ANONYMOUS is not shared across fork (red: mm_shared_anon_survives_fork)
 proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: sig_wait4_bad_options_einval)
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS

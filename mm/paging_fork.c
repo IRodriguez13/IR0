@@ -27,7 +27,8 @@
  * Two phases so a failed fork never mutates the parent address space:
  *
  * 1. Map each present PAGE_USER 4KB leaf into the child (share PFN via
- *    pmm_frame_get). Child PTEs for formerly writable pages are RO+PAGE_COW.
+ *    pmm_frame_get). Child PTEs for formerly writable private pages are
+ *    RO+PAGE_COW; pages of a MAP_SHARED region keep their permissions.
  * 2. Only after all child maps succeed, mark the same pages RO+COW in
  *    the parent and flush TLB.
  *
@@ -120,7 +121,8 @@ int copy_process_memory(struct process *parent, struct process *child)
 					flags = mm_pte_mapping_flags(page_entry);
                     flags &= ~PAGE_GLOBAL;
                     flags |= PAGE_USER;
-                    if (was_writable || pte_cow(page_entry))
+                    if ((was_writable || pte_cow(page_entry)) &&
+                        !vma_is_shared(parent, virt_addr))
                     {
                         flags &= ~PAGE_RW;
                         flags |= PAGE_COW;
@@ -168,11 +170,18 @@ int copy_process_memory(struct process *parent, struct process *child)
 				for (i1 = 0; i1 < entries; i1++)
                 {
                     uint64_t page_entry = level3_table[i1];
+					size_t idx[4];
 
                     if (!mm_pte_present(page_entry) ||
                         !pte_user(page_entry) ||
                         !pte_write(page_entry))
                         continue;
+					idx[0] = i4;
+					idx[1] = i3;
+					idx[2] = i2;
+					idx[3] = i1;
+					if (vma_is_shared(parent, mm_va_from_indices(idx)))
+						continue;
 
 					mm_pte_mark_cow(&level3_table[i1]);
                 }
