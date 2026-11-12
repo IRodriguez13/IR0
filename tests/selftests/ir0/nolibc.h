@@ -34,6 +34,10 @@
 #define SYS_recvfrom		207
 #define SYS_nanosleep		101
 #define SYS_clock_gettime	113
+#define SYS_ppoll		73
+#define SYS_futex		98
+#define SYS_gettid		178
+#define POLLIN			0x001
 #define CLOCK_MONOTONIC		1
 #define AF_UNIX			1
 #define SOCK_STREAM		1
@@ -351,6 +355,19 @@ static int nanosleep(const struct timespec *req, struct timespec *rem)
 static int clock_gettime(int clk, struct timespec *ts)
 {
 	return (int)syscall(SYS_clock_gettime, clk, (long)ts);
+}
+
+struct pollfd {
+	int fd;
+	short events;
+	short revents;
+};
+
+static int ppoll(struct pollfd *fds, unsigned long nfds,
+		 const struct timespec *tmo, const sigset_t *sigmask)
+{
+	return (int)nolibc_call6(SYS_ppoll, (long)fds, (long)nfds, (long)tmo,
+				 (long)sigmask, (long)sizeof(sigset_t), 0);
 }
 
 unsigned char nolibc_stack[8192] __attribute__((aligned(16))) = { 1 };

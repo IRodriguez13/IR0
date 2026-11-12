@@ -446,6 +446,40 @@ ir0-selftest-blocking-sleep-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64
 
 ir0-selftest-blocking-sleep: ir0-selftest-blocking-sleep-x86 ir0-selftest-blocking-sleep-arm64
 
+IR0_SELFTEST_X86_SLEEP_YIELDS := $(KERNEL_ROOT)/build/selftests/x86_64/sleep_yields
+IR0_SELFTEST_ARM64_SLEEP_YIELDS := $(KERNEL_ROOT)/build/selftests/arm64/sleep_yields
+
+.PHONY: ir0-selftest-sleep-yields-x86 ir0-selftest-sleep-yields-arm64 \
+	ir0-selftest-sleep-yields
+
+$(IR0_SELFTEST_X86_SLEEP_YIELDS): tests/selftests/kernel/sleep_yields.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sleep_yields
+
+$(IR0_SELFTEST_ARM64_SLEEP_YIELDS): tests/selftests/kernel/sleep_yields.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sleep_yields
+
+# A task sleeping in the kernel gives the CPU away: timed sleeps (nanosleep,
+# a ppoll timeout) charge the sleeper no system time in /proc/self/stat.
+ir0-selftest-sleep-yields-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SLEEP_YIELDS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SLEEP_YIELDS) \
+		--done "ok 2 ppoll_timeout_charges_no_cpu" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sleep-yields.log
+	@echo "✓ ir0-selftest-sleep-yields-x86"
+
+ir0-selftest-sleep-yields-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SLEEP_YIELDS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SLEEP_YIELDS) \
+		--done "ok 2 ppoll_timeout_charges_no_cpu" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sleep-yields.log
+	@echo "✓ ir0-selftest-sleep-yields-arm64"
+
+ir0-selftest-sleep-yields: ir0-selftest-sleep-yields-x86 ir0-selftest-sleep-yields-arm64
+
 IR0_SELFTEST_X86_COW_MPROTECT := $(KERNEL_ROOT)/build/selftests/x86_64/cow_mprotect
 IR0_SELFTEST_ARM64_COW_MPROTECT := $(KERNEL_ROOT)/build/selftests/arm64/cow_mprotect
 
