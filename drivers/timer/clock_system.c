@@ -23,6 +23,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/sched.h>
 #include <ir0/clock_wait.h>
+#include <ir0/delay.h>
 #include <ir0/poll.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/rtc.h>
@@ -347,23 +348,22 @@ uint32_t clock_get_timer_frequency(void)
     return clock_state.timer_frequency;
 }
 
-/* Sleep functions */
+/*
+ * clock_sleep - Sleep at least @milliseconds (Linux msleep_interruptible).
+ *
+ * A task sleeps in the clock wait until the timer wakes it; a pending
+ * signal ends the sleep early with -EINTR. Before the first task exists
+ * there is nothing to sleep in, so it is a bounded udelay().
+ */
 int clock_sleep(uint32_t milliseconds)
 {
-    /* Simple implementation using ticks */
-    uint32_t ticks = (milliseconds * clock_state.timer_frequency) / 1000;
-    return clock_sleep_ticks(ticks);
-}
-
-int clock_sleep_ticks(uint32_t ticks)
-{
-    uint32_t start_ticks = clock_state.tick_count;
-    while ((clock_state.tick_count - start_ticks) < ticks) 
-    {
-        /* Wait for ticks to increment */
-        cpu_idle();
-    }
-    return 0;
+	if (!current_process)
+	{
+		udelay((unsigned long)milliseconds * 1000UL);
+		return 0;
+	}
+	return ir0_clock_wait_block_until(clock_get_uptime_milliseconds() +
+					  milliseconds);
 }
 
 /* Alarm functions */

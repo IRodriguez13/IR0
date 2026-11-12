@@ -119,8 +119,11 @@ int32_t clock_get_timezone_offset(void);
 clock_timer_t clock_get_active_timer(void);
 uint32_t clock_get_timer_frequency(void);
 
+/*
+ * Sleep at least @milliseconds; 0, or -EINTR when a signal ended it.
+ * Without a current task (early boot) it is a bounded udelay().
+ */
 int clock_sleep(uint32_t milliseconds);
-int clock_sleep_ticks(uint32_t ticks);
 
 int clock_set_alarm(uint32_t seconds, clock_alarm_callback_t callback, void *data);
 void clock_cancel_all_alarms(void);
