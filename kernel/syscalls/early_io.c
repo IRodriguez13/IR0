@@ -340,14 +340,14 @@ static int64_t early_sleep_timeout(struct early_syscall_context *context,
 	const struct early_user_services *user;
 	const struct early_time_services *ops;
 	struct timespec value;
-	uint64_t frequency, seconds_ticks, nanosecond_ticks, delta, start;
+	uint64_t frequency, seconds_ticks, nanosecond_ticks, delta;
 
 	if (!timeout)
 		return 0;
 	if (!context || !(services_all = context->services) ||
 	    !(user = services_all->user) || !user->copy_from_user ||
 	    !(ops = services_all->time) || !ops->counter_read ||
-	    !ops->counter_frequency || !ops->cpu_relax)
+	    !ops->counter_frequency || !ops->sleep)
 		return 0;
 	if (user->copy_from_user(&value, timeout, sizeof(value)) != 0)
 		return -EFAULT;
@@ -362,9 +362,7 @@ static int64_t early_sleep_timeout(struct early_syscall_context *context,
 	delta = seconds_ticks + nanosecond_ticks;
 	if (!delta)
 		return 0;
-	start = ops->counter_read();
-	while (ops->counter_read() - start < delta)
-		ops->cpu_relax();
+	ops->sleep(delta);
 	return 0;
 }
 
@@ -539,12 +537,11 @@ static void early_io_sleep_ms(struct early_syscall_context *context, int ms)
 	const struct early_syscall_services *all;
 	const struct early_time_services *ops;
 	uint64_t hz;
-	uint64_t start;
 	uint64_t delta;
 
 	if (ms <= 0 || !context || !(all = context->services) ||
 	    !(ops = all->time) || !ops->counter_read || !ops->counter_frequency ||
-	    !ops->cpu_relax)
+	    !ops->sleep)
 		return;
 	hz = ops->counter_frequency();
 	if (!hz)
@@ -552,9 +549,7 @@ static void early_io_sleep_ms(struct early_syscall_context *context, int ms)
 	delta = ((uint64_t)ms * hz) / 1000ULL;
 	if (!delta)
 		delta = 1;
-	start = ops->counter_read();
-	while (ops->counter_read() - start < delta)
-		ops->cpu_relax();
+	ops->sleep(delta);
 }
 
 static int64_t early_epoll_pwait(struct early_syscall_context *context,

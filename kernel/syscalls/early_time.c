@@ -46,10 +46,10 @@ static int64_t sleep_timespec_user(void *opaque, uint64_t request)
 	const struct early_user_services *user = services_all ? services_all->user : 0;
 	const struct early_time_services *ops = services_all ? services_all->time : 0;
 	struct timespec value;
-	uint64_t frequency, seconds_ticks, nanosecond_ticks, delta, start;
+	uint64_t frequency, seconds_ticks, nanosecond_ticks, delta;
 
 	if (!user || !user->copy_from_user || !ops || !ops->counter_read ||
-	    !ops->counter_frequency || !ops->cpu_relax)
+	    !ops->counter_frequency || !ops->sleep)
 		return -ENOSYS;
 	if (user->copy_from_user(&value, request, sizeof(value)) != 0)
 		return -EFAULT;
@@ -68,9 +68,7 @@ static int64_t sleep_timespec_user(void *opaque, uint64_t request)
 		return -EINVAL;
 	if (!delta)
 		delta = 1;
-	start = ops->counter_read();
-	while (ops->counter_read() - start < delta)
-		ops->cpu_relax();
+	ops->sleep(delta);
 	return 0;
 }
 

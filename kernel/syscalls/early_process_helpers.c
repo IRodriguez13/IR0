@@ -224,7 +224,7 @@ static int64_t early_futex_sleep_timeout(struct early_syscall_context *context,
 	const struct early_time_services *ops;
 	const struct early_user_services *user;
 	struct timespec ts;
-	uint64_t frequency, delta, start;
+	uint64_t frequency, delta;
 
 	if (clockid != 0 && clockid != 1)
 		return -EINVAL;
@@ -236,17 +236,14 @@ static int64_t early_futex_sleep_timeout(struct early_syscall_context *context,
 		return -EINVAL;
 	if (ts.tv_sec == 0 && ts.tv_nsec == 0)
 		return -ETIMEDOUT;
-	if (ops && ops->counter_read && ops->counter_frequency &&
-	    ops->cpu_relax)
+	if (ops && ops->counter_frequency && ops->sleep)
 	{
 		frequency = ops->counter_frequency();
 		if (frequency)
 		{
 			delta = (uint64_t)ts.tv_sec * frequency +
 				((uint64_t)ts.tv_nsec * frequency) / 1000000000ULL;
-			start = ops->counter_read();
-			while (ops->counter_read() - start < delta)
-				ops->cpu_relax();
+			ops->sleep(delta);
 		}
 	}
 	return -ETIMEDOUT;

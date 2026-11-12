@@ -32,7 +32,8 @@ struct early_time_services
 {
 	uint64_t (*counter_read)(void);
 	uint64_t (*counter_frequency)(void);
-	void (*cpu_relax)(void);
+	/* Sleep at least @ticks of counter_read(); the provider blocks. */
+	void (*sleep)(uint64_t ticks);
 	void (*note)(enum early_syscall_event event);
 };
 
