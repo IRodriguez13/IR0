@@ -471,7 +471,7 @@ static int64_t exit_to_user_mode(process_t *p, enum ir0_syscall_id id,
   syscall_frame_set_return(&p->syscall_frame, (uint64_t)r);
   if (sched_take_resched())
     schedule();
-  do_signal(p);
+  do_signal(p, NULL);
 
   /*
    * Linux-style fork exit: wake the child once the parent's result is in

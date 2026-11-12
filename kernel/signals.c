@@ -795,13 +795,15 @@ static void syscall_restart_or_eintr(arch_syscall_frame_t *regs, int handler,
 }
 
 /*
- * handle_signal - Make @p return from its syscall into @sig's handler
- * (Linux handle_signal()). The interrupted state, with the syscall's
- * settled result, goes into the handler frame for rt_sigreturn, and the
- * syscall frame enters the handler. Returns 1 when the handler runs, 0
- * when the signal stays pending (a handler frame is already live).
+ * handle_signal - Make @p return to userspace into @sig's handler (Linux
+ * handle_signal()). The interrupted state goes into the handler frame for
+ * rt_sigreturn: @interrupted when the caller has the full user context
+ * (rt_sigreturn), otherwise the syscall frame with the syscall's settled
+ * result. The syscall frame then enters the handler. Returns 1 when the
+ * handler runs, 0 when the signal stays pending (a handler frame is live).
  */
-static int handle_signal(process_t *p, int sig)
+static int handle_signal(process_t *p, int sig,
+			 const struct sigcontext *interrupted)
 {
 	arch_syscall_frame_t *regs = &p->syscall_frame;
 	void (*handler)(int) = p->signal_handlers[sig];
@@ -821,7 +823,8 @@ static int handle_signal(process_t *p, int sig)
 		return 0;
 	}
 
-	syscall_restart_or_eintr(regs, 1, (sa_flags & SA_RESTART) != 0);
+	if (!interrupted)
+		syscall_restart_or_eintr(regs, 1, (sa_flags & SA_RESTART) != 0);
 
 	ctx = kmalloc(sizeof(*ctx));
 	if (!ctx)
@@ -830,8 +833,11 @@ static int handle_signal(process_t *p, int sig)
 		p->signal_pending &= ~SIGNAL_MASK(sig);
 		return 0;
 	}
-	signal_fill_sigcontext_from_syscall_frame(ctx, regs,
-						  syscall_frame_return(regs));
+	if (interrupted)
+		*ctx = *interrupted;
+	else
+		signal_fill_sigcontext_from_syscall_frame(ctx, regs,
+							  syscall_frame_return(regs));
 
 	if (signal_rip_is_registered_handler(p, sigcontext_ip(ctx)) ||
 	    process_saved_context_attach(p, ctx) != 0)
@@ -883,14 +889,15 @@ void set_current_blocked(uint32_t mask)
 	current_process->signal_mask = mask & ~SIGNAL_UNBLOCKABLE;
 }
 
-void do_signal(process_t *p)
+void do_signal(process_t *p, const struct sigcontext *interrupted)
 {
 	int sig = signal_pending(p) ? get_signal(p) : 0;
 
-	if (sig && handle_signal(p, sig))
+	if (sig && handle_signal(p, sig, interrupted))
 		return;
 
-	syscall_restart_or_eintr(&p->syscall_frame, 0, 0);
+	if (!interrupted)
+		syscall_restart_or_eintr(&p->syscall_frame, 0, 0);
 	if (p->restore_sigmask)
 	{
 		p->signal_mask = p->saved_sigmask;

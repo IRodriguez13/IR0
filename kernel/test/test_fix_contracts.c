@@ -413,7 +413,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	KASSERT_EQ(p->saved_sigmask, saved_mask);
 
 	syscall_frame_set_return(&p->syscall_frame, (uint64_t)rc);
-	do_signal(p);
+	do_signal(p, NULL);
 	KASSERT_EQ(p->signal_pending & SIGNAL_MASK(SIGUSR1), (uint32_t)0);
 	KASSERT_EQ(p->signal_mask, saved_mask);
 	KASSERT_EQ((unsigned)p->restore_sigmask, 0u);

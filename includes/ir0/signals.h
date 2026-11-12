@@ -211,13 +211,16 @@ void force_sig_fault(int sig, const struct ir0_fault *fault, void *irq_frame);
  * do_signal - Signal work on the way out of a syscall (Linux
  * arch_do_signal_or_restart()).
  * @p: the current task; its syscall frame holds the syscall's result
+ * @interrupted: NULL at a syscall exit. rt_sigreturn passes the context it
+ *               restored: that is the state a handler frame saves, and no
+ *               syscall result is settled or restarted.
  *
  * Applies default actions, then either sets the frame up to enter the next
  * caught signal's handler, or restarts an interrupted syscall. A result of
  * -ERESTARTSYS / -ERESTARTNOHAND / -ERESTARTNOINTR is settled here: the
  * call restarts or fails with EINTR, never reaching userspace as such.
  */
-void do_signal(process_t *p);
+void do_signal(process_t *p, const struct sigcontext *interrupted);
 
 /*
  * signal_pending - @p has a signal that must end an interruptible sleep

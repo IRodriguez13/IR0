@@ -1819,6 +1819,11 @@ int64_t sys_sigreturn(void)
   task_load_sigcontext(&current_process->task, restore_ctx);
   signal_fill_syscall_frame_from_sigcontext(&current_process->syscall_frame,
                                             restore_ctx);
+  /*
+   * Linux exit_to_user_mode() after rt_sigreturn: a signal the restored
+   * mask unblocks runs now, saving the restored context in its frame.
+   */
+  do_signal(current_process, restore_ctx);
   process_apply_syscall_frame_to_task(&current_process->task,
                                       &current_process->syscall_frame,
                                       signal_sigcontext_return_value(restore_ctx));
