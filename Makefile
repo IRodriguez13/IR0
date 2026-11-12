@@ -622,6 +622,7 @@ LIB_OBJS = \
     kernel/fault.o \
     kernel/irq_dispatch.o \
     kernel/signals.o \
+    kernel/signal_diag.o \
     fs/pipe.o \
     mm/copy_user.o \
     fs/open_flags.o \

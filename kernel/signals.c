@@ -24,8 +24,7 @@
 #include <ir0/oops.h>
 #include <kernel/process.h>
 #include <string.h>
-#include <ktm.h>
-#include <config.h>
+#include "signal_diag.h"
 
 /* Where signal_setup_frame() left the handler frame. */
 struct signal_frame_setup
@@ -133,13 +132,7 @@ void signals_try_abandon_sigframe(process_t *p)
 	if (usp != 0 && usp <= frame_sp + sizeof(struct sigframe) + 128UL)
 		return;
 
-	klog_info_fmt("SIGNAL",
-		      "SIGFRAME_ABANDON pid=%x usp=%llx frame_sp=%llx "
-		      "mask_saved=%x",
-		      (unsigned)((uint32_t)p->task.pid),
-		      (unsigned long long)usp,
-		      (unsigned long long)frame_sp,
-		      (unsigned)(p->signal_mask_saved_valid ? 1U : 0U));
+	signal_trace(SIGNAL_TRACE_ABANDON, p, 0, usp, frame_sp, 0);
 
 	process_saved_context_clear(p);
 	/*
@@ -255,28 +248,8 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	signals_apply_handler_mask(p, sig, sa_flags);
 	p->signal_pending &= ~SIGNAL_MASK(sig);
 
-#if SIGNAL_DELIVER_LOG
-	klog_info_fmt("SIGNAL",
-		      "[SIGNAL][DELIVER] pid=0x%x sig=0x%x cr2=0x%llx rip=0x%llx handler=0x%llx sa_siginfo=0x%x rsp=0x%llx",
-		      (unsigned)p->task.pid, (unsigned)sig,
-		      (unsigned long long)fault_addr,
-		      (unsigned long long)sigcontext_ip(ctx),
-		      (unsigned long long)(uintptr_t)handler,
-		      (unsigned)((sa_flags & SA_SIGINFO) ? 1U : 0U),
-		      (unsigned long long)setup.sp);
-#endif
-
-#if defined(CONFIG_KTM_FLIGHT) && CONFIG_KTM_FLIGHT
-	{
-		uint32_t pid = (uint32_t)p->task.pid;
-
-		KTM_FLIGHT(KTM_FL_PF_USER, pid, (uint32_t)fault_addr,
-			   (uint32_t)(fault_addr >> 32),
-			   (uint32_t)sigcontext_ip(ctx));
-		KTM_FLIGHT(KTM_FL_SIGNAL_DELIVER, (uint32_t)sig, pid,
-			   (uint32_t)(uintptr_t)handler, 0);
-	}
-#endif
+	signal_trace(SIGNAL_TRACE_DELIVER_FAULT, p, sig, fault_addr,
+		     sigcontext_ip(ctx), (uint64_t)(uintptr_t)handler);
 
 	return 1;
 }
@@ -396,13 +369,7 @@ int send_signal(int pid, int signal)
     if (signal == 0)
 	return 0;
 
-#if IR0_DEBUG_PROC
-    klog_info_fmt("SIGNAL",
-                  "[SIGTERM_AUDIT] send_signal pid=0x%x sig=0x%x pending=0x%x mask=0x%x state=0x%x",
-                  (unsigned)pid, (unsigned)signal,
-                  (unsigned)proc->signal_pending, (unsigned)proc->signal_mask,
-                  (unsigned)proc->state);
-#endif
+    signal_trace(SIGNAL_TRACE_SEND, proc, signal, 0, 0, 0);
 
     /*
      * Linux: signals to PID 1 are discarded unless init installed a handler
@@ -442,16 +409,8 @@ int send_signal(int pid, int signal)
 	process_set_sched_state(proc, PROCESS_READY);
 	sched_promote(proc);
 	clock_request_sched_resched();
-#if IR0_DEBUG_PROC
-	klog_info_fmt("SIGNAL",
-		      "[SIGTERM_AUDIT] wake pid=0x%x state=READY promote=1",
-		      (unsigned)pid);
-#endif
+	signal_trace(SIGNAL_TRACE_WAKE, proc, signal, 0, 0, 0);
     }
-
-#if DEBUG_PROCESS
-    klog_info("SIGNAL", "Sent signal to process");
-#endif
 
     return 0;
 }
@@ -716,18 +675,7 @@ static int get_signal(process_t *p)
 		    signals_has_user_handler(p, sig))
 			continue;
 		if (sig == SIGSEGV)
-		{
-			/*
-			 * Pending-bit kill without a live fault frame (kill(2)
-			 * from another path): greppable tag for session smokes.
-			 */
-			klog_info_fmt("FAULT",
-				      "USER_FAULT_FRAME CLASSIFY SIGNAL_KILL_SIGSEGV "
-				      "pid=%x comm=%s",
-				      (unsigned)((uint32_t)p->task.pid),
-				      p->comm[0] ? p->comm : "(none)");
-			klog_print("USER_FAULT_FRAME\n");
-		}
+			signal_trace(SIGNAL_TRACE_KILL_SEGV, p, sig, 0, 0, 0);
 		signal_exit_current(sig);
 	}
 
