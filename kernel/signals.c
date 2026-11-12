@@ -309,6 +309,20 @@ void signals_reset_on_exec(process_t *p)
 	}
 }
 
+/* Default action Ign (Linux sig_kernel_ignore()). */
+static int signal_default_ignored(int sig)
+{
+	return sig == SIGCHLD || sig == SIGWINCH || sig == SIGCONT ||
+	       sig == SIGURG;
+}
+
+/* Default action Stop (Linux sig_kernel_stop()). */
+static int signal_default_stops(int sig)
+{
+	return sig == SIGSTOP || sig == SIGTSTP || sig == SIGTTIN ||
+	       sig == SIGTTOU;
+}
+
 /*
  * signal_pending - @p has a signal that must end an interruptible sleep
  * (Linux signal_pending()): pending and not blocked, or SIGKILL. Ignored
@@ -335,8 +349,7 @@ int signal_pending(process_t *p)
 		if (!(deliverable & SIGNAL_MASK(sig)))
 			continue;
 		if (caught ? signal_delivery_blocked_nested(p)
-			   : (sig == SIGCHLD || sig == SIGWINCH ||
-			      sig == SIGCONT || sig == SIGURG))
+			   : signal_default_ignored(sig))
 			deliverable &= ~SIGNAL_MASK(sig);
 	}
 	return deliverable != 0;
@@ -640,9 +653,11 @@ static int signal_is_fault(int sig)
  * get_signal - Apply the default actions of @p's pending signals (Linux
  * get_signal()) and return the next one whose user handler must run, or 0.
  *
- * SIGKILL and an uncaught default-terminate signal end the task here;
- * SIGSTOP sleeps until SIGCONT. Ignored signals are dropped and blocked
- * ones stay pending. BusyBox ash relies on this: it catches SIGINT and may
+ * SIGKILL and every uncaught signal whose default action is Term or Core
+ * end the task here (the fault signals first); SIGSTOP and an uncaught
+ * SIGTSTP/SIGTTIN/SIGTTOU sleep until SIGCONT. Ignored signals, and
+ * uncaught ones whose default is Ign, are dropped; blocked ones stay
+ * pending. BusyBox ash relies on this: it catches SIGINT and may
  * raise() it after a foreground job, and a blocked SIGTERM must not kill it.
  */
 static int get_signal(process_t *p)
@@ -694,9 +709,24 @@ static int get_signal(process_t *p)
 			p->signal_pending &= ~bit;
 			continue;
 		}
-		if ((p->signal_mask & bit) || !handler || handler == SIG_DFL ||
-		    handler == SIG_IGN)
+		if (p->signal_mask & bit)
 			continue;
+		if (handler == SIG_IGN || (handler == SIG_DFL &&
+					   signal_default_ignored(sig)))
+		{
+			p->signal_pending &= ~bit;
+			continue;
+		}
+		if (handler == SIG_DFL && signal_default_stops(sig))
+		{
+			p->signal_pending &= ~bit;
+			process_set_sched_state(p, PROCESS_BLOCKED);
+			schedule();
+			continue;
+		}
+		/* Every other default action terminates (signal(7) Term/Core). */
+		if (handler == SIG_DFL)
+			signal_exit_current(sig);
 		if (!mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
 		{
 			/* A handler outside userspace falls back to the default. */

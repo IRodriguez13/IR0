@@ -42,6 +42,9 @@ typedef struct process process_t;
 #define SIGCHLD  17   /* Child process terminated or stopped */
 #define SIGSTOP  19   /* Stop process (cannot be caught) */
 #define SIGCONT  18   /* Continue if stopped */
+#define SIGTSTP  20   /* Stop typed at terminal */
+#define SIGTTIN  21   /* Terminal input for background process */
+#define SIGTTOU  22   /* Terminal output for background process */
 
 /* Other */
 #define SIGABRT   6   /* Abort signal (from abort()) */
