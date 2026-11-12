@@ -3,6 +3,7 @@
 CONF_CASE(mm_mmap_requires_private_or_shared)
 CONF_CASE(mm_mmap_huge_enomem)
 CONF_CASE(mm_munmap_hole_succeeds)
+CONF_CASE(mm_munmap_unaligned_einval)
 CONF_CASE(mm_prot_none_faults)
 CONF_CASE(mm_shared_anon_survives_fork)
 CONF_CASE(time_clock_process_cputime)

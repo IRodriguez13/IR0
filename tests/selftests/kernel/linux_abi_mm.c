@@ -80,6 +80,18 @@ int mm_munmap_hole_succeeds(void)
 	return CONF_PASS;
 }
 
+/* munmap(2): an address that is not page-aligned is EINVAL. */
+int mm_munmap_unaligned_einval(void)
+{
+	long a = map_anon(PROT_READ | PROT_WRITE, MAP_PRIVATE);
+
+	CHECK(a > 0);
+	EXPECT_ERR(S2(SYS_munmap, a + 1, PG), EINVAL);
+	*(volatile char *)a = 1; /* the page must still be mapped */
+	EXPECT(S2(SYS_munmap, a, PG), 0);
+	return CONF_PASS;
+}
+
 /* mprotect(2) PROT_NONE: any access faults with SIGSEGV. */
 int mm_prot_none_faults(void)
 {
