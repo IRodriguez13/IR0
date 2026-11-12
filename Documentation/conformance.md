@@ -23,9 +23,8 @@ make ir0-fuzz-x86 SEED=1 COUNT=2000
 make ir0-fuzz-arm64 SEED=7 COUNT=5000
 make ir0-fuzz-x86 SEED=6 COUNT=5000 BATCH=11 TRACE=1   # replay one batch
 
-make ir0-selftest-red-{signals,mm}-{x86,arm64}  # red selftests (fail today)
-make ir0-selftest-sock-abi-{x86,arm64}           # former red sock group, green
-make ir0-selftest-fs-abi-{x86,arm64}             # former red fs group, green
+make ir0-selftest-red-signals-{x86,arm64}           # red selftests (fail today)
+make ir0-selftest-{sock,mm,fs}-abi-{x86,arm64}      # former red groups, green
 ```
 
 Set `HOST_TMP=$(mktemp -d)` to keep the logs and summaries private. Every

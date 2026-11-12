@@ -3,11 +3,11 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: linux_abi_mm.c
- * Description: RED selftest (fails on dev 629036ef, not wired into any gate):
- *              memory-mapping and clock behavior that diverges from Linux,
- *              found by the conformance harness (Documentation/conformance.md).
- *              One case per bug; each passes on Linux. Run by
- *              make ir0-selftest-red-mm-{x86,arm64}.
+ * Description: Selftest: memory-mapping and clock behavior that diverged
+ *              from Linux, found by the conformance harness
+ *              (Documentation/conformance.md). One case per fixed bug; each
+ *              passes on Linux and on IR0. Run by
+ *              make ir0-selftest-mm-abi-{x86,arm64}.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -246,7 +246,7 @@ static void unmap_supervisor_range(void)
  * The kernel pages IR0 maps into every process root (arm64: the
  * identity-mapped heap at 0x40800000; x86_64: 0x500000) are not user VMAs:
  * mmap(2) MAP_FIXED over them must leave the kernel running. On Linux the
- * range is plain user address space. On IR0 arm64 the guest hangs.
+ * range is plain user address space. The IR0 arm64 guest used to hang.
  */
 int mm_mmap_fixed_over_kernel_pages_is_harmless(void)
 {
@@ -258,7 +258,7 @@ int mm_mmap_fixed_over_kernel_pages_is_harmless(void)
 /*
  * Same contract for munmap(2): unmapping a range that covers those kernel
  * pages (the fuzzer's munmap(0x40800000, 1 GiB) on arm64) must leave the
- * kernel running. On IR0 arm64 the guest stops.
+ * kernel running. The IR0 arm64 guest used to stop.
  */
 int mm_munmap_over_kernel_pages_is_harmless(void)
 {
