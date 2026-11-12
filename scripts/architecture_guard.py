@@ -43,6 +43,11 @@ Checks:
     comes before the first function definition (no late includes).
     `--self-test` injects both violations into scratch files and checks that
     the layout check reports them.
+27) No busy-wait primitive: cpu_relax() is retired, the terminal halt
+    cpu_halt() is called only from the panic / power-off / kexec paths and
+    declared only in <ir0/oops_port.h>, and the idle wake-polling names
+    (kernel_idle_poll, process_idle_bind, ...) stay gone. The check runs an
+    injected-violation self-test first.
 """
 
 from functools import lru_cache
@@ -2690,6 +2695,83 @@ def _register_name_self_test() -> list[str]:
     return errors
 
 
+# Terminal halt: the only callers of cpu_halt() (Linux stop_this_cpu users).
+TERMINAL_HALT_CALLERS = frozenset((
+    "kernel/oops.c",
+    "kernel/kexec.c",
+    "kernel/power/power_manag.c",
+))
+TERMINAL_HALT_HEADER = "includes/ir0/oops_port.h"
+RETIRED_WAIT_RE = re.compile(
+    r"\b(cpu_relax|kernel_idle_poll|kernel_idle_poll_nosched|"
+    r"process_idle_bind|process_idle_services|pipe_wake_check|"
+    r"sleep_wake_check|ir0_clock_wait_service_runqueue|"
+    r"ir0_clock_wait_service_clockevents|clock_sleep_ticks)\b"
+)
+CPU_HALT_RE = re.compile(r"\bcpu_halt\s*\(")
+BUSY_WAIT_TREES = ("arch", "drivers", "fs", "includes", "ipc", "kernel",
+                   "ktm", "mm", "net", "sched", "sound", "cpp", "tests")
+
+
+def busy_wait_violations(rel: str, text: str) -> list[tuple[int, str]]:
+    """Return (line, message) for each busy-wait rule *text* (at *rel*) breaks."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    found = []
+    in_arch = rel.startswith("arch/")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = RETIRED_WAIT_RE.search(line)
+        if match:
+            found.append((lineno, f"{match.group(1)} is retired; sleep on a "
+                          "wait queue, clock_sleep() or udelay()"))
+        if not CPU_HALT_RE.search(line):
+            continue
+        is_decl = line.rstrip().endswith(";") and line.lstrip().startswith("void")
+        if is_decl and rel != TERMINAL_HALT_HEADER:
+            found.append((lineno, f"cpu_halt() is declared only in "
+                          f"{TERMINAL_HALT_HEADER}"))
+        elif not is_decl and not in_arch and rel not in TERMINAL_HALT_CALLERS:
+            found.append((lineno, "cpu_halt() is the terminal halt of panic / "
+                          "power-off / kexec; it is never a way to wait"))
+    return found
+
+
+def _busy_wait_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "fs/clean.c": ("/* cpu_relax() in a comment is fine */\n"
+                       "static const char *m = \"cpu_halt()\";\n", []),
+        "fs/relax.c": ("void f(void)\n{\n\twhile (busy)\n\t\tcpu_relax();\n}\n",
+                       [4]),
+        "net/halt.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", [3]),
+        "kernel/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
+        "includes/ir0/cpu.h": ("void cpu_halt(void);\n", [1]),
+        "kernel/boot.c": ("\tkernel_idle_poll();\n", [1]),
+    }
+    failures = []
+    for rel, (text, expected) in cases.items():
+        got = [line for line, _ in busy_wait_violations(rel, text)]
+        if got != expected:
+            failures.append(f"[no-busy-wait] self-test {rel}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_busy_wait_primitives():
+    """Reject retired busy-wait names and cpu_halt() outside terminal paths."""
+    errors = _busy_wait_self_test()
+    for tree in BUSY_WAIT_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            for lineno, msg in busy_wait_violations(rel, read_file_text(path)):
+                errors.append(f"[no-busy-wait] {rel}:{lineno}: {msg}")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers."""
     errors = _register_name_self_test()
@@ -2867,13 +2949,13 @@ def self_test_include_layout() -> list[str]:
 
 def main():
     if "--self-test" in sys.argv[1:]:
-        failures = self_test_include_layout()
+        failures = self_test_include_layout() + _busy_wait_self_test()
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
                 print(" -", failure)
             return 1
-        print("[arch-guard] self-test OK (include-layout)")
+        print("[arch-guard] self-test OK (include-layout, no-busy-wait)")
         return 0
 
     errors = []
@@ -2946,6 +3028,7 @@ def main():
     errors.extend(check_kmem_single_api())
     errors.extend(check_uaccess_single_api())
     errors.extend(check_portable_no_register_names())
+    errors.extend(check_no_busy_wait_primitives())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_include_layout())
 
