@@ -1012,13 +1012,14 @@ int sys_munmap(void *addr, size_t length)
 
   if (!current_process)
     return -ESRCH;
-  if (!addr || length == 0)
+  /* Linux __vm_munmap(): the address must be page-aligned. */
+  if (!addr || length == 0 || ((uintptr_t)addr & (PAGE_SIZE_4KB - 1)) != 0)
     return -EINVAL;
 
   if (length > SIZE_MAX - (PAGE_SIZE_4KB - 1))
     return -EINVAL;
 
-  /* Align to page boundaries */
+  /* Round the length up to whole pages. */
   start_page = (uintptr_t)addr & (uintptr_t)PAGE_FRAME_MASK;
   aligned_length = (length + PAGE_SIZE_4KB - 1) & (size_t)PAGE_FRAME_MASK;
   if (start_page > UINTPTR_MAX - aligned_length)

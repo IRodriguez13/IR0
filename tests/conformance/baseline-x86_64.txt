@@ -8,7 +8,6 @@ fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
 fs_unlink_open_file TCONF  # pread64 is ENOSYS
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 mm_mmap_access_mode TCONF  # file-backed mmap is ENOSYS
-mm_mmap_einval FAIL  # mmap without MAP_PRIVATE/MAP_SHARED succeeds (red: mm_mmap_requires_private_or_shared)
 mm_mmap_file_private TCONF  # file-backed mmap is ENOSYS
 mm_mmap_file_shared TCONF  # file-backed mmap is ENOSYS
 proc_wait_echild FAIL  # wait4 with bad options is ECHILD, Linux EINVAL (red: sig_wait4_bad_options_einval)
