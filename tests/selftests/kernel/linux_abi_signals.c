@@ -211,6 +211,32 @@ int sig_sigreturn_delivers_unmasked(void)
 }
 
 /*
+ * signal(7): every signal without a handler whose default action is not
+ * Ign or Stop terminates the task, SIGPROF and SIGSYS included.
+ */
+int sig_default_action_terminates(void)
+{
+	static const int sigs[] = { SIGPROF, SIGSYS, SIGXCPU, SIGVTALRM };
+	unsigned int i;
+
+	for (i = 0; i < sizeof(sigs) / sizeof(sigs[0]); i++)
+	{
+		int status = 0;
+		long pid = rt_fork();
+
+		CHECK(pid >= 0);
+		if (pid == 0)
+		{
+			(void)S2(SYS_kill, S0(SYS_getpid), sigs[i]);
+			rt_exit(0);
+		}
+		EXPECT(conf_child_status(pid, &status, 2000), pid);
+		CHECK(RT_SIGNALED(status) && RT_TERMSIG(status) == sigs[i]);
+	}
+	return CONF_PASS;
+}
+
+/*
  * signal(7): a fatal signal ends a task that never enters the kernel. The
  * child spins in userspace; only the timer interrupt returns to it.
  * On a kernel without interrupt-return preemption the spinning child

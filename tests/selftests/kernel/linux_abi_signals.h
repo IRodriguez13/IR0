@@ -9,5 +9,6 @@ CONF_CASE(sig_handler_gets_signum)
 CONF_CASE(sig_kill_all_spares_caller)
 CONF_CASE(sig_socket_read_restarts)
 CONF_CASE(sig_sigreturn_delivers_unmasked)
+CONF_CASE(sig_default_action_terminates)
 /* Last: without interrupt-return preemption it hangs the guest. */
 CONF_CASE(sig_kill_cpu_bound_child)
