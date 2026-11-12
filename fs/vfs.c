@@ -17,25 +17,30 @@
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
 #include <ir0/cpu.h>
+#include <ir0/ipc.h>
+#include <ir0/problems.h>
 #include <ir0/sched.h>
 #include <ir0/process.h>
 #include <string.h>
 #include "vfs_internal.h"
 
 /*
- * MINIX find_inode() returns a pointer to a static inode. Concurrent
- * vfs_stat / vfs_read / vfs_read_file (ls+stat vs execve of BusyBox)
- * filled struct stat from the wrong inode and tore ELF images.
- *
- * One fs_ops critical section at a time. Waiters schedule; IRQs stay
- * enabled so ATA PIO still uses its own irq_save per command.
+ * One fs_ops critical section at a time: a sleeping lock (Linux mutex).
+ * A contender queues itself BLOCKED and sleeps in schedule(); release
+ * wakes the queue. IRQs stay enabled so ATA PIO still uses its own
+ * irq_save per command.
  *
  * Recursive: vfs_open -> vfs_truncate, vfs_utimens -> vfs_stat,
  * vfs_read_file -> ops->stat/read, same task.
+ *
+ * Before the first task exists there is a single boot context, which is
+ * the owner of any busy lock; contention without a current task means the
+ * holder can never run again, so it is a bug, not a wait.
  */
 static int vfs_fs_op_busy;
 static int vfs_fs_op_depth;
 static const void *vfs_fs_op_owner;
+static wait_queue_t vfs_fs_op_waiters;
 
 static const void *vfs_fs_op_self(void)
 {
@@ -66,13 +71,12 @@ void vfs_fs_op_acquire(void)
 			irq_restore(flags);
 			return;
 		}
+		BUG_ON(!current_process);
+		/* Queued and BLOCKED under the mask: release cannot slip by. */
+		wait_queue_add(&vfs_fs_op_waiters, current_process);
 		irq_restore(flags);
-		if (!current_process)
-		{
-			cpu_relax();
-			continue;
-		}
-		schedule();
+		if (current_process->state == PROCESS_BLOCKED)
+			schedule();
 	}
 }
 
@@ -90,6 +94,7 @@ void vfs_fs_op_release(void)
 	vfs_fs_op_owner = NULL;
 	vfs_fs_op_depth = 0;
 	irq_restore(flags);
+	wait_queue_wake_all(&vfs_fs_op_waiters);
 }
 
 int vfs_ops_stat(struct vfs_ops *ops, const char *path, stat_t *st)
