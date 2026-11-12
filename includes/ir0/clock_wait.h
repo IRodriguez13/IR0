@@ -30,6 +30,3 @@ void ir0_clock_wait_fire_due(uint64_t now_ms);
  * current_process.
  */
 int ir0_clock_wait_block_until(uint64_t deadline_ms);
-
-/* Legacy name used from clock_tick / idle loops. */
-void sleep_wake_check(void);

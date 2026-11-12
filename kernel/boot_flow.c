@@ -11,7 +11,7 @@
 #include <ir0/boot_params.h>
 #include <ir0/arch_port.h>
 #include <ir0/sched.h>
-#include <ir0/kernel.h>
+#include <ir0/idle.h>
 #include "boot_init.h"
 
 #if defined(IR0_FREESTANDING_BOOT)
@@ -29,10 +29,6 @@ void ir0_kernel_boot(const struct ir0_boot_params *params)
 	boot_diagnostics();
 	boot_enter_userspace();
 
-	for (;;)
-	{
-		kernel_idle_poll();
-		cpu_idle();
-	}
+	kernel_idle_loop();
 }
 #endif

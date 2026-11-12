@@ -44,7 +44,6 @@ static process_t *tty_read_waiters[IR0_TTY_MAX_READ_WAITERS];
 static struct ir0_termios tty_termios;
 static int tty_termios_ready;
 static int tty_userspace_attached;
-static int tty_need_resched;
 /* Foreground pgrp for /dev/console (TIOCSPGRP); 0 → signal TTY waiters only. */
 static int32_t console_fg_pgid;
 static pid_t console_ctty_sid;
@@ -543,7 +542,7 @@ void ir0_console_keypress(char c)
 			tty_deliver_sig(SIGINT);
 			/*
 			 * Never schedule() here: keypress runs under
-			 * IRQ1. Wake + tty_need_resched; ISR / idle_poll switch.
+			 * IRQ1. Wake only; the reader runs at the next schedule().
 			 */
 			(void)ir0_console_wake_readers();
 			return;
@@ -568,7 +567,7 @@ void ir0_console_keypress(char c)
 			 * Wake waiters only. Scheduling from IRQ1 (keyboard →
 			 * keypress) corrupted prev RIP → #UD into .bss /
 			 * process_t during firstboot password Confirm.
-			 * syscall-return / idle_poll paths pick READY.
+			 * the next schedule() picks the READY reader.
 			 */
 			(void)ir0_console_wake_readers();
 		}
@@ -860,25 +859,9 @@ int ir0_console_wake_readers(void)
 	}
 
 	if (woke)
-	{
-		tty_need_resched = 1;
 		d1_16_tty_wake(waiters_before, woke, last_pid);
-	}
 
 	return woke;
-}
-
-int ir0_console_take_resched(void)
-{
-	int v = tty_need_resched;
-
-	tty_need_resched = 0;
-	return v;
-}
-
-int ir0_console_resched_pending(void)
-{
-	return tty_need_resched;
 }
 
 int ir0_console_poll(void)

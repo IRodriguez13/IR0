@@ -141,7 +141,7 @@ arm64-all-objs-probe: arm64-portable-compile
 		rm -f $(HOST_TMP)/ir0-arm64-probe-$$$$.o; \
 	done; \
 	if [ $$fail -eq 0 ]; then \
-		for src in kernel/main.c fs/open_flags.c \
+		for src in sched/idle.c fs/open_flags.c \
 			kernel/errno.c kernel/process/credentials.c \
 			arch/arm64/sources/switch.c \
 			kernel/time/clock_wait.c kernel/driver_registry.c \

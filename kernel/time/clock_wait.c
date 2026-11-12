@@ -105,8 +105,3 @@ int ir0_clock_wait_block_until(uint64_t deadline_ms)
 	ir0_clock_wait_disarm(proc);
 	return ret;
 }
-
-void sleep_wake_check(void)
-{
-	ir0_clock_wait_fire_due(clock_get_uptime_milliseconds());
-}

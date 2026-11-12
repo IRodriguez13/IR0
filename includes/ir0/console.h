@@ -94,8 +94,6 @@ void tty_flush_input(void);
 int tty_input_bytes_available(void);
 
 int ir0_console_wake_readers(void);
-int ir0_console_take_resched(void);
-int ir0_console_resched_pending(void);
 int ir0_console_poll(void);
 int ir0_console_has_blocked_reader(void);
 struct process;

@@ -21,7 +21,3 @@
  * x86-64: Multiboot info address (legacy ebx); may be 0.
  */
 void kmain(uintptr_t firmware_handle);
-
-/* Idle-time polling of console, pipes and network (kernel/main.c). */
-void kernel_idle_poll(void);
-void kernel_idle_poll_nosched(void);

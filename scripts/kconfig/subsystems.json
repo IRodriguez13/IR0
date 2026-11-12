@@ -7,7 +7,7 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "kernel/main.c",
+          "sched/idle.c",
           "kernel/process.c",
           "kernel/syscalls.c",
           "kernel/elf_loader.c",

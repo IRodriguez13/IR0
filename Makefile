@@ -375,7 +375,6 @@ IR0_DISK ?= disk.img
 # KERNEL OBJECTS 
 
 KERNEL_OBJS = \
-	kernel/main.o \
 	arch/common/boot_arch.o \
 	arch/common/boot_port.o \
 	arch/common/oops_port.o \
@@ -404,7 +403,6 @@ KERNEL_OBJS = \
     kernel/process/parent.o \
     kernel/process/resources.o \
     kernel/process/exit_bind.o \
-    kernel/process/idle.o \
     kernel/process/cwd.o \
     kernel/process/vfs_file.o \
     kernel/process/exit.o \
@@ -496,6 +494,7 @@ KERNEL_OBJS = \
     ktm/klog.o \
     ktm/d1_13_malloc_pf_diag.o \
 	sched/core.o \
+    sched/idle.o \
     sched/switch/context_switch.o \
     $(CONSOLE_BACKEND_OBJ)
 
@@ -987,7 +986,7 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/main.o build/test/kernel/boot_init.o \
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot_init.o \
 	build/test/kernel/boot_flow.o build/test/kernel/kernel_wiring.o
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
@@ -999,7 +998,7 @@ KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-ALL_OBJS_TEST = $(filter-out kernel/main.o kernel/boot_init.o kernel/boot_flow.o \
+ALL_OBJS_TEST = $(filter-out kernel/boot_init.o kernel/boot_flow.o \
 	kernel/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
 	arch/common/oops_port.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
@@ -1147,8 +1146,8 @@ kernel-x64-userspace.iso: kernel-x64.iso
 
 # Kernel con tests in-kernel (solo al hacer make tests / kernel-tests)
 # config.h documents IR0_KERNEL_TESTS; Makefile ensures it for this target.
-# kmain must be compiled with that flag: a leftover kernel-x64.bin main.o
-# would skip kernel_test_run_all() and make kernel-tests time out.
+# The boot entry objects (boot_init, boot_flow, kernel_wiring) must be built
+# with that flag: production objects would skip kernel_test_run_all().
 kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@echo "  LD      $@ (with in-kernel tests)"
 	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)

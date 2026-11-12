@@ -1126,51 +1126,6 @@ void pipe_wake_all(pipe_t *pipe)
 	}
 }
 
-void pipe_wake_check(void)
-{
-	unsigned int i;
-
-	for (i = 0; i < MAX_PIPE_WAITERS; i++)
-	{
-		struct pipe_waiter *w = &pipe_waiters[i];
-		pipe_t *pipe;
-		process_t *proc;
-
-		if (!w->proc || !w->pipe)
-			continue;
-
-		pipe = w->pipe;
-		if (w->waiting_read)
-		{
-			if (pipe->count > 0 || pipe->writers <= 0)
-			{
-				pipe_ktm_note_read_wake(pipe);
-				proc = w->proc;
-				process_set_sched_state(proc, PROCESS_READY);
-				sched_promote(proc);
-				w->proc = NULL;
-				w->pipe = NULL;
-				w->waiting_read = 0;
-				w->write_need = 0;
-			}
-		}
-		else
-		{
-			if (pipe_writer_ready(pipe, w->write_need))
-			{
-				pipe_ktm_note_write_wake(pipe);
-				proc = w->proc;
-				process_set_sched_state(proc, PROCESS_READY);
-				sched_promote(proc);
-				w->proc = NULL;
-				w->pipe = NULL;
-				w->waiting_read = 0;
-				w->write_need = 0;
-			}
-		}
-	}
-}
-
 void pipe_purge_waiters_for_process(process_t *proc)
 {
 	unsigned int i;

@@ -261,7 +261,7 @@ void keyboard_poll_ps2(void)
 		int claimed = 0;
 
 		/*
-		 * Claim the byte atomically. kernel_idle_poll() drains the
+		 * Claim the byte atomically. The idle task drains the
 		 * controller with interrupts enabled, so IRQ1 can land between
 		 * the status test and the data read; the byte is consumed by
 		 * the handler and this read returns the i8042's last byte
@@ -317,6 +317,8 @@ void keyboard_poll_ps2(void)
 		}
 		keyboard_feed_scancode(data);
 	}
+	/* Producer side of the tty/stdin wait: wake readers of new input. */
+	stdin_wake_check();
 }
 
 void keyboard_handler64(void)
@@ -330,7 +332,6 @@ void keyboard_handler64(void)
 	}
 
 	keyboard_poll_ps2();
-	stdin_wake_check();
 }
 
 static void keyboard_feed_scancode(uint8_t scancode)

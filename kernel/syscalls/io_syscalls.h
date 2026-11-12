@@ -56,6 +56,5 @@ int64_t sys_pipe2(int pipefd[2], int flags);
 int64_t sys_syslog(int type, char *bufp, int len);
 int stdio_is_redirected(fd_entry_t *fd_table, int fd);
 int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need);
-void pipe_wake_check(void);
 void pipe_wake_all(pipe_t *pipe);
 void pipe_purge_waiters_for_process(process_t *proc);
