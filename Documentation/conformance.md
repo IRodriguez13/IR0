@@ -190,7 +190,7 @@ The tables below list every FAIL.
 | ISA | Seed / count | Result |
 |-----|--------------|--------|
 | x86_64 | 1 / 2000, 2 / 5000, 4 / 5000 | Healthy. No leaked errno, every unassigned syscall `-ENOSYS` |
-| x86_64 | 3, 5, 6 / 5000 | Guest stops after `kill(-1, sig)` (bug K1) |
+| x86_64 | 3, 5, 6 / 5000 | Guest stops after `kill(-1, sig)` (bug K1). After the K1 and S9 fixes seeds 3 and 5 / 2000 are healthy |
 | arm64 | 1, 3 / 5000 | Guest stops after `munmap(0x40800000, ...)` (bug M9) |
 | arm64 | 2 / 5000 | Guest stops after `mmap(0x40800000, MAP_FIXED, ...)` (bug M9) |
 | arm64 | 6 / 5000 | Guest stops after `kill(-1, sig)` (bug K1) |
@@ -231,13 +231,17 @@ in its group, so it cannot hide the others.
 | F13 | openat O_NOFOLLOW | stat_symlink / fs_open_nofollow_eloop | symlink → ELOOP | opens the target | both | kernel/syscalls/fs_syscalls.c `sys_open_vfs_resolved` |
 | F14 | openat O_DIRECTORY | fs_open_errors / fs_open_directory_on_file_enotdir | arm64 values (040000) → ENOTDIR | x86_64 values, flag lost | arm64 | includes/ir0/open_flags.h |
 | F15 | unlinkat, openat on a directory | fs_open_errors, dir_mkdir_rmdir / fs_unlink_dir_eisdir, fs_open_dir_for_write_eisdir | EISDIR | tree removed / fd / replaced by a file | both | kernel/syscalls/fs_meta.c, fs/vfs_file.c |
-| S1 | rt_sigprocmask | sig_kill_stop_uncatchable / sig_kill_stop_not_blockable | SIGKILL/SIGSTOP never blocked | blocked | both | kernel/syscalls/process_syscalls.c `sys_rt_sigprocmask` |
+| S1 | rt_sigprocmask | sig_kill_stop_uncatchable / sig_kill_stop_not_blockable | SIGKILL/SIGSTOP never blocked | **fixed**: every user mask goes through `set_current_blocked()` | both | kernel/signals.c `set_current_blocked` |
 | S2 | rt_sigaction SA_RESETHAND | sig_resethand / sig_sa_resethand_resets | handler is SIG_DFL after delivery | old handler reported | both | kernel/signals.c:248 vs `sys_rt_sigaction` storage |
 | S3 | rt_sigsuspend | sig_sigsuspend / sig_sigsuspend_returns_eintr | -EINTR | 0 | both | kernel/syscalls/process_syscalls.c `sys_rt_sigsuspend` |
 | S4 | nanosleep | sig_nanosleep_eintr / sig_nanosleep_eintr_from_other_process | caught signal from another process → EINTR | sleeps the full time | both | kernel/syscalls/io_syscalls.c `sys_nanosleep` (wakeup on signal) |
-| S5 | wait4 | proc_wait_echild / sig_wait4_bad_options_einval | bad options → EINVAL | ECHILD | both | kernel/syscalls/process_syscalls.c `sys_wait4` |
+| S5 | wait4 | proc_wait_echild / sig_wait4_bad_options_einval | bad options → EINVAL | **fixed** (`WAIT4_VALID_OPTIONS`) | both | kernel/syscalls/process_syscalls.c `sys_wait4` |
 | S6 | signal delivery | sig_handler_runs, sig_sigchld_on_exit / sig_handler_gets_signum | handler x0 = signal number | 0 | arm64 | arch/arm64 signal frame setup (`signal_redirect_irq_frame`) |
-| K1 | kill(-1, sig) | fuzzer / sig_kill_all_spares_caller | skips init and the caller | signals the caller, then the guest stops | both | kernel/syscalls/process_syscalls.c:1606-1620 `sys_kill` (walks every process, incl. the caller and kernel tasks) |
+| K1 | kill(-1, sig) | fuzzer / sig_kill_all_spares_caller | skips init, the caller and kernel tasks | **fixed** (Linux `kill_something_info()`) | both | kernel/syscalls/process_syscalls.c `sys_kill` |
+| S7 | read on a stream socket | sig_socket_read_restarts | SA_RESTART restarts the read | **fixed**: polling sleeps return `-ERESTARTSYS` | both | kernel/syscalls/io_syscalls.c `syscall_sleep_ms_locked` |
+| S8 | rt_sigreturn | sig_sigreturn_delivers_unmasked | a signal the restored mask unblocks runs before the interrupted code | **fixed**: `do_signal()` on rt_sigreturn's way out | both | kernel/signals.c `do_signal` |
+| S9 | default actions | sig_default_action_terminates | SIGPROF/SIGSYS/SIGXCPU/SIGVTALRM terminate | **fixed**; before, they stayed pending and blocking syscalls restarted forever (fuzzer x86_64 seed 3 batch 8) | both | kernel/signals.c `get_signal` |
+| S10 | asynchronous delivery | sig_kill_cpu_bound_child (last: hangs the guest) | SIGTERM kills a child spinning in userspace | open: no preemption or signal delivery on the interrupt return to userspace; the spinner keeps the only CPU | both | arch IRQ exit (x86 `isr_handler64`, arm64 `arm64_exc_irq_el1`); needs per-task FP/SIMD state in `__switch_to` first |
 | M1 | mmap | mm_mmap_einval / mm_mmap_requires_private_or_shared | no MAP_PRIVATE/SHARED → EINVAL | succeeds | both | kernel/syscalls/mm_syscalls.c `sys_mmap` |
 | M2 | mmap | mm_mmap_huge_enomem / mm_mmap_huge_enomem | 1 TiB → ENOMEM | EINVAL | both | kernel/syscalls/mm_syscalls.c `sys_mmap` |
 | M3 | munmap | mm_munmap_then_segv / mm_munmap_hole_succeeds | unmapped range → 0 | EINVAL | both | kernel/syscalls/mm_vma.c |

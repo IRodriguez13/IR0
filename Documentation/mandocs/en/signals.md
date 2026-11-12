@@ -102,7 +102,10 @@ ASCII:
 ## 8. Important invariants
 
 1. SIGKILL/SIGSTOP cannot be caught or ignored.
-2. `sys_kill`: only `pid > 0`; no process groups or `kill(-1)`.
+2. `sys_kill`: `pid > 0`, process groups (`0`, `< -1`) and `kill(-1)`, which
+   spares init, the caller and kernel tasks (Linux `kill_something_info()`).
+   SIGKILL/SIGSTOP never enter a mask: every user-supplied mask goes through
+   `set_current_blocked()`.
 3. User handler needs valid user stack in [0x400000, 0x7FFFFFFFFFFF], 16-byte aligned.
    Frames are placed by `signal_pick_handler_sp()` (also used from
    `signals_deliver_from_irq_frame`) with `SIGNAL_HANDLER_TOP_MARGIN` below
@@ -119,13 +122,22 @@ ASCII:
 ## 9. Debugging tips
 
 - musl `SA_RESTORER` is stored; restorer trampoline is not a full musl port.
-- Asynchronous signals are delivered at the syscall exit only; a task
-  that never makes a syscall sees them at its next one.
+- Asynchronous signals are delivered at the syscall exit and on
+  rt_sigreturn's way out (`do_signal(p, restored_ctx)`), not yet on an
+  interrupt return: a task that never makes a syscall sees them at its
+  next one, and on UP it is not preempted either.
+- An uncaught signal takes its full signal(7) default: Ign drops it, Stop
+  (STOP, TSTP, TTIN, TTOU) sleeps until SIGCONT, everything else ends the
+  task.
+- Diagnostics go through `signal_trace()` (`kernel/signal_diag.c`);
+  `kernel/signals.c` has no inline klog/KTM.
 - `rt_sigreturn` copies the frame from the user stack pointer only.
 
 ## 10. Future roadmap
 
-- `-ERESTARTSYS` at the remaining polling sleeps (sockets, devfs).
+- Interrupt-return delivery and preemption (needs per-task FP/SIMD state).
+- Socket paths that test `signal_pending()` before sleeping still return
+  `-EINTR`; the shared polling sleep returns `-ERESTARTSYS`.
 - Process groups, `kill(0)`, permission checks on send.
 - Reset signal state on exec (POSIX).
 - `pause`, `sigsuspend`, `signalfd`, `inotify`.
