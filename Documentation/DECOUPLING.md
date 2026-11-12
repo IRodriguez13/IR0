@@ -39,7 +39,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
 | User VA window | **`mm_user_va_ok(addr, size)`** ([`mm.h`](../../includes/ir0/mm.h)); ISA bodies in `arch/*/sources/mm.c`. |
 | Usercopy | **`copy_to/from_user` / `clear_user`** (current mm); **`copy_*_user_mm` / `clear_user_mm`** (explicit root); **`access_ok`** is the only user-pointer check ([`copy_user.h`](../../includes/ir0/copy_user.h)). Never CR3+`memcpy` to user VA. Full contract: [`uaccess.md`](uaccess.md). |
-| IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`cpu_relax`**, **`smp_mb`**, **`timer_read`** ([`cpu.h`](../../includes/ir0/cpu.h), [`irq.h`](../../includes/ir0/irq.h), [`arch_mm.h`](../../includes/ir0/arch_mm.h)). No `arch_` prefix on new hot-path facades. |
+| IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`udelay`**, **`smp_mb`**, **`timer_read`** ([`cpu.h`](../../includes/ir0/cpu.h), [`irq.h`](../../includes/ir0/irq.h), [`arch_mm.h`](../../includes/ir0/arch_mm.h)). No `arch_` prefix on new hot-path facades. |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |
 
 ### Architecture guard rules (`scripts/architecture_guard.py`)
@@ -66,7 +66,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `kernel-no-driver-include` | `kernel/` (whole tree) | No `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
-| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`cpu_relax`/`smp_mb`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). Allowlist: `syscall_x86_64.h` / `syscall_arm64.h`. |
+| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). Allowlist: `syscall_x86_64.h` / `syscall_arm64.h`. |
 | `usercopy-no-cr3-memcpy` | `kernel/syscalls/**`, `kernel/lib/signals.c` | No `load_page_directory` + raw `memcpy((void *)` / `memset((void *)` in the same function; use **`copy_*_user` / region helpers** ([`uaccess.md`](uaccess.md)). |
 | `usercopy-signals` | `kernel/lib/signals.c` | No `memcpy((void *)` (signal frame must use region copy). |
 | `usercopy-sys-uname` | `sys_uname` | No `memset(buf` / `strncpy(buf->`; bounce + **`copy_to_user`**. |

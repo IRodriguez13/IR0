@@ -85,7 +85,7 @@ ASCII:
 | Neighbor | Interaction |
 |----------|---------------|
 | Process | fd table `is_pipe`, `pipe_end`, `vfs_file` holds `pipe_t*` |
-| Scheduler | block on empty/full; `pipe_wake_check` from idle |
+| Scheduler | block on empty/full; producers wake with `pipe_wake_all` |
 | Syscalls | blocked read may resume via saved syscall frame |
 | fs_syscalls | read/write branches before VFS |
 

@@ -2,6 +2,7 @@
 
 > **Última verificación:** 2026-11-09
 > **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`,
+> `sched/idle.c`, `kernel/futex.c`,
 > `sched/rr.c`, `sched/prio.c`,
 > `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`,
 > `kernel/syscalls/syscall_dispatch.c`, `kernel/signals.c`
@@ -62,9 +63,27 @@ frame, sleeps in `schedule()` when a reschedule is pending, and calls
 into `EINTR` per `SA_RESTART`, and points the frame at the handler. The ISA
 exit then returns through that frame (`syscall_restore_exit_regs()`).
 
-Sleep loops still poll the clock and idle hooks through
-[`kernel/time/clock_wait.c`](../kernel/time/clock_wait.c)
-(`ir0_clock_wait_block_until`, `ir0_clock_wait_service_runqueue`).
+No sleeper polls. The producer wakes it: the timer IRQ fires clock and
+poll timeouts ([`kernel/time/clock_wait.c`](../kernel/time/clock_wait.c),
+`ir0_clock_wait_fire_due()` from `clock_tick()`), pipe I/O and close call
+`pipe_wake_all()`, the keyboard path wakes tty and stdin readers,
+`ir0_futex_wake()` wakes futex waiters (the waiter lives on the sleeper's
+kernel stack, Linux `futex_q`). Locks that may sleep (the VFS fs-op lock)
+queue the contender on a wait queue. `clock_sleep()` is the
+`msleep_interruptible()` of drivers; `udelay()` (`<ir0/delay.h>`) is the
+bounded hardware delay.
+
+## Idle task
+
+[`sched/idle.c`](../sched/idle.c) runs `kernel_idle_loop()`: enable IRQs,
+poll the devices that may not interrupt (NIC, Bluetooth HCI UART, PS/2;
+builds without networking or Bluetooth link no-op stubs, so there is no
+`#if`), run a woken task if one is READY, otherwise halt in `cpu_idle()`
+until the next interrupt. Sleeping tasks never run the idle poll.
+
+`cpu_relax()` is retired. The only low-power stop besides `cpu_idle()` is
+the terminal `cpu_halt()` in `<ir0/oops_port.h>` (panic, failed power-off,
+returning kexec); arch-guard `[no-busy-wait]` rejects any other caller.
 
 ## Runtime Characteristics
 

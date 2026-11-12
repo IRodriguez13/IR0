@@ -21,7 +21,7 @@ Spanish mirror: [`esp/LINUX_SHAPED.md`](esp/LINUX_SHAPED.md).
 |------|-----|----------|
 | x86-64 syscall ABI (`rax`/`rdi`…, `-errno`) | musl / BusyBox / man pages are the spec | `kernel/syscalls/` |
 | Usercopy layering | Current mm vs explicit pgd; never CR3+`memcpy` | `copy_user.h` |
-| Simple public names (`copy_to_user`, `switch_to`, `cpu_relax`) | Portable code must not say `arch_*` on hot paths | `includes/ir0/*.h` |
+| Simple public names (`copy_to_user`, `switch_to`, `udelay`) | Portable code must not say `arch_*` on hot paths | `includes/ir0/*.h` |
 | Observable contracts | Don't break userspace; classify before patching ports | `scripts/linux_abi/contracts.json` |
 | Error returns (`0` or `-errno`) | Same as Linux internal APIs | `includes/ir0/errno.h` |
 
@@ -42,7 +42,7 @@ the domain header, not the umbrella.
 
 | Domain | Header | Public names |
 |--------|--------|--------------|
-| CPU identity / relax / timer extras | `cpu.h`, `cpu_info.h` | `cpu_relax`, `cpuid` (portable), `timer_read` |
+| CPU identity / delay / timer extras | `cpu.h`, `cpu_info.h`, `delay.h` | `udelay`, `cpuid` (portable), `timer_read` |
 | IRQ | `irq.h` | `irq_save`, `irq_restore`, `enable_interrupts` |
 | I/O ports | `arch_io.h` | `inb`, `outb`, … |
 | MM / paging activate | `arch_mm.h` | `mm_activate`, `arch_mm_copy_kernel_half` |

@@ -178,7 +178,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `get_pit_ticks` (`drivers/timer/pit/pit.h`) | only in `pit.c` | PRIVATE |
 | `rtc_write_register`, `rtc_get_time_string`, `rtc_get_date_string` (`rtc.h`) | 0 | DELETE |
 | `delay_ms` (`ir0/vga.h`!) | 0 | DELETE (and it never belonged in vga.h) |
-| `ir0_clock_wait_service_clockevents` (`clock_wait.h`) | 0 | DELETE |
+| `ir0_clock_wait_service_clockevents` (`clock_wait.h`) | 0 | DONE (deleted with the clock-wait idle step) |
 | `minix_now_seconds` (13), `pseudo_fs_stat_now` (16), `clock_now_ticks` (erfs, 5) | private | fs-local "now" wrappers; MERGE INTO `clock_get_current_time` |
 
 ### 1.6 Process and fd lookup

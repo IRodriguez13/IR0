@@ -36,7 +36,7 @@ TTY stdin path separately. PS/2 mouse adds `EV_REL`/`EV_KEY` events when
        └─ keyboard_buffer_add(ascii)              → /dev/console stdin path
 
   Mouse IRQ → input_mouse_handle_interrupt → keyboard_poll_ps2 (shared i8042)
-  Idle poll → kernel_idle_poll → input_kbd_poll_ps2 → keyboard_poll_ps2
+  Idle task → idle_poll (sched/idle.c) → input_kbd_poll_ps2 → keyboard_poll_ps2 → stdin_wake_check
 
   read(/dev/events0) → ir0_input_read_event → dequeue (batch up to 16 events)
   poll → devfs_events0_can_read → ir0_input_poll()

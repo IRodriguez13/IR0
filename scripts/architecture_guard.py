@@ -17,7 +17,7 @@ Checks:
 11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
-    use simple facades in includes/ir0/cpu.h (cpu_relax, smp_mb, inb, …).
+    use simple facades in includes/ir0/cpu.h (smp_mb, inb, udelay, …).
     Allowlist: syscall_x86_64.h / syscall_arm64.h only. Empty barrier OK.
 14) Portable trees must not hardcode userspace RIPs (0x402B*) or read CR2
     / emit iretq/sysret mnemonics outside arch/ (use arch_page_fault /
@@ -1049,7 +1049,7 @@ def _is_empty_compiler_barrier(line: str) -> bool:
 
 
 def check_portable_no_isa_asm():
-    """Fail if portable trees embed ISA mnemonics; use cpu_relax/smp_mb/…"""
+    """Fail if portable trees embed ISA mnemonics; use smp_mb/udelay/…"""
     errors = []
     for base in PORTABLE_ISA_TREES:
         if not base.is_dir():
@@ -1081,7 +1081,7 @@ def check_portable_no_isa_asm():
                 if PORTABLE_ISA_ASM_RE.search(line):
                     errors.append(
                         f"[portable-no-isa-asm] {rel}:{idx}: use simple "
-                        f"facades (cpu_relax/smp_mb/inb/timer_read/…); "
+                        f"facades (smp_mb/udelay/inb/timer_read/…); "
                         f"no ISA asm: {line.strip()}"
                     )
     return errors

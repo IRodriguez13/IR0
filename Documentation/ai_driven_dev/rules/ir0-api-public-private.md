@@ -10,7 +10,7 @@ Complementa `kernel-architecture-rigor.md` y el facade rule de `ir0-userspace-mo
 
 | Capa | Dónde | Nombre | Quién consume |
 |------|--------|--------|---------------|
-| **Pública (facade)** | `includes/ir0/*.h` | **Simple y estable** (`switch_to`, `copy_from_user`, `cpu_relax`, `load_gdt`) | Cualquier subsistema portable |
+| **Pública (facade)** | `includes/ir0/*.h` | **Simple y estable** (`switch_to`, `copy_from_user`, `smp_mb`, `load_gdt`) | Cualquier subsistema portable |
 | **API de subsistema** | header del módulo o `includes/ir0/<subsys>.h` acotado | Puede ser más verbosa (`posix_shm_try_unlink`) | Solo el glue de ese dominio — **no** backends rivales |
 | **Privada** | `static`, `.c` local, `sched/*.h`, `arch/<isa>/` | Libre; sufijos `_x64` / `_arm64` OK | Solo el propio backend / ISA |
 
@@ -21,8 +21,8 @@ Fuera de implementación: consumir APIs públicas solo vía `#include <ir0/...>`
 Si la función **por detrás** usa asm/intrinsics de ISA, el nombre público debe ser **simple**: sin prefijo `arch_`, sin sufijo de ISA, sin “load_x86_…”. El build (`ARCH_*`) elige la implementación.
 
 ```text
-❌ BAD:  arch_context_switch(), arch_load_x86_gdt(), arch_cpu_relax()
-✅ GOOD: switch_to(), load_gdt(), cpu_relax()
+❌ BAD:  arch_context_switch(), arch_load_x86_gdt(), arch_smp_mb()
+✅ GOOD: switch_to(), load_gdt(), smp_mb()
 ```
 
 - **Prohibido** en API **nueva**: prefijo `arch_` para hot paths portables.
@@ -46,7 +46,7 @@ Todo lo que solo existe con varias CPUs (arranque de CPUs, IPIs, áreas per-CPU,
 
 | Capa | Obligación |
 |------|------------|
-| **Facade** | Nombre simple (`switch_to`, `cpu_relax`, `smp_mb`, `inb`, …). Portable solo llama esto. |
+| **Facade** | Nombre simple (`switch_to`, `smp_mb`, `udelay`, `inb`, …). Portable solo llama esto. |
 | **Dispatcher** | Elige impl por `ARCH_*` / Kconfig. |
 | **Impl ISA** | Asm/C bajo `arch/<isa>/` o `sched/switch/switch_<isa>.*`. |
 

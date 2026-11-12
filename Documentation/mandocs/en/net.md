@@ -89,7 +89,7 @@ Facade: `includes/ir0/net.h`, `net/tcp.h`. When `CONFIG_ENABLE_NETWORKING=0`,
        → ARP handler OR ip_receive → ICMP/UDP/TCP wire handlers
 ```
 
-**Idle:** `kernel_idle_poll()` → `net_stack_poll()` per registered device.
+**Idle:** the idle task (`sched/idle.c`) calls `net_stack_poll()` per registered device. ARP and DHCP waits poll the NIC and sleep `clock_sleep()` between polls.
 
 ASCII:
 
