@@ -31,15 +31,5 @@ void ir0_clock_wait_fire_due(uint64_t now_ms);
  */
 int ir0_clock_wait_block_until(uint64_t deadline_ms);
 
-/*
- * Advance clockevents only (safe from any syscall, including wait4 WNOHANG).
- */
-void ir0_clock_wait_service_clockevents(void);
-
-/*
- * Clockevents + runqueue rotation (blocking syscalls: poll, nanosleep, pause).
- */
-void ir0_clock_wait_service_runqueue(void);
-
 /* Legacy name used from clock_tick / idle loops. */
 void sleep_wake_check(void);

@@ -339,7 +339,7 @@ int process_wait(pid_t pid, int *status, int options)
 							PROCESS_READY);
 				break;
 			}
-			ir0_clock_wait_service_runqueue();
+			schedule();
 			if (current_process->state != PROCESS_BLOCKED)
 				break;
 		}

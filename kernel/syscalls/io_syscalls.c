@@ -90,7 +90,7 @@ static int poll_wait_kernel(struct pollfd *kfds, unsigned int nfds,
 
 	while (current_process->state == PROCESS_BLOCKED &&
 	       !signal_pending(current_process))
-		ir0_clock_wait_service_runqueue();
+		schedule();
 	process_set_sched_state(current_process, PROCESS_READY);
 
 	process_restore_user_task_segments(current_process);
@@ -373,7 +373,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 
   while (current_process->state == PROCESS_BLOCKED &&
          !signal_pending(current_process))
-    ir0_clock_wait_service_runqueue();
+    schedule();
   process_set_sched_state(current_process, PROCESS_READY);
 
   process_restore_user_task_segments(current_process);
@@ -828,7 +828,7 @@ int64_t sys_pause(void)
     process_set_sched_state(current_process, PROCESS_BLOCKED);
     if (signal_pending(current_process))
       break;
-    ir0_clock_wait_service_runqueue();
+    schedule();
   }
   process_set_sched_state(current_process, PROCESS_READY);
   return -ERESTARTNOHAND;

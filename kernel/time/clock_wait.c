@@ -17,25 +17,9 @@
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
-#include <ir0/arch_port.h>
-#include <ir0/kernel.h>
 
 extern process_t *process_list;
 extern process_t *current_process;
-
-/*
- * Yield the CPU from a syscall sleep loop when another task can run.
- * A BLOCKED waiter is not counted in sched_count_runnable(), so "> 1"
- * never triggers for pause(2) with only the parent READY — fork/pause/kill
- * would deadlock with the child spinning as current_process.
- */
-static int ir0_clock_should_yield_runqueue(process_t *self)
-{
-	if (self && self->state == PROCESS_BLOCKED)
-		return sched_count_runnable() >= 1;
-
-	return sched_count_runnable() > 1;
-}
 
 static void ir0_clock_wait_wake_process(process_t *proc)
 {
@@ -84,49 +68,6 @@ void ir0_clock_wait_fire_due(uint64_t now_ms)
 	}
 }
 
-/*
- * ir0_clock_wait_idle_step - Wait for PIT/clockevent; emulate one tick if starved.
- *
- * QEMU + cooperative peers may run for stretches without a hardware tick while
- * IF=1; advance clock_tick() once so ir0_clock_wait_fire_due() can unblock waiters.
- */
-static void ir0_clock_wait_idle_step(void)
-{
-	uint64_t t0;
-	unsigned int i;
-
-	t0 = clock_get_uptime_milliseconds();
-	enable_interrupts();
-
-	for (i = 0; i < 32; i++)
-	{
-		cpu_idle();
-		/*
-		 * Nosched wakes only — block_until / service_runqueue issue one
-		 * schedule per loop. Nested schedule from
-		 * poll_wake_check/stdin_wake_check re-entered the scheduler.
-		 */
-		kernel_idle_poll_nosched();
-		if (clock_get_uptime_milliseconds() != t0)
-			break;
-	}
-
-	if (clock_get_uptime_milliseconds() == t0)
-		clock_tick();
-}
-
-void ir0_clock_wait_service_clockevents(void)
-{
-	ir0_clock_wait_idle_step();
-}
-
-void ir0_clock_wait_service_runqueue(void)
-{
-	ir0_clock_wait_idle_step();
-	if (ir0_clock_should_yield_runqueue(current_process))
-		schedule();
-}
-
 int ir0_clock_wait_block_until(uint64_t deadline_ms)
 {
 	process_t *proc;
@@ -156,10 +97,8 @@ int ir0_clock_wait_block_until(uint64_t deadline_ms)
 		if (!proc->clock_wait_armed)
 			ir0_clock_wait_arm(proc, deadline_ms);
 
-		ir0_clock_wait_idle_step();
-		if (proc->state == PROCESS_BLOCKED &&
-		    ir0_clock_should_yield_runqueue(proc))
-			schedule();
+		/* The timer IRQ (ir0_clock_wait_fire_due) wakes us. */
+		schedule();
 	}
 
 	process_set_sched_state(proc, PROCESS_READY);

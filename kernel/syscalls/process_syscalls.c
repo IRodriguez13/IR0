@@ -18,7 +18,6 @@
 #include <ir0/acpi_pm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
-#include <ir0/clock_wait.h>
 #include <ir0/clone.h>
 #include <ir0/console.h>
 #include <ir0/copy_user.h>
@@ -505,7 +504,7 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 		process_set_sched_state(current_process, PROCESS_BLOCKED);
 		if (signal_pending(current_process))
 			break;
-		ir0_clock_wait_service_runqueue();
+		schedule();
 	}
 	process_set_sched_state(current_process, PROCESS_READY);
 
