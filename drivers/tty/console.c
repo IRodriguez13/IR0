@@ -25,7 +25,6 @@
 #include <ir0/errno.h>
 #include <ir0/input_backend.h>
 #include <ir0/video_console.h>
-#include <ir0/kernel.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
@@ -46,7 +45,6 @@ static struct ir0_termios tty_termios;
 static int tty_termios_ready;
 static int tty_userspace_attached;
 static int tty_need_resched;
-static int tty_sleep_depth;
 /* Foreground pgrp for /dev/console (TIOCSPGRP); 0 → signal TTY waiters only. */
 static int32_t console_fg_pgid;
 static pid_t console_ctty_sid;
@@ -461,114 +459,52 @@ static int tty_waiter_register(process_t *p)
 }
 
 /*
- * Linux-like prepare_to_wait: register on the TTY wait queue, re-check the
- * canonical line under IRQ mask, then block.  Without the re-check, a keyboard
- * IRQ can complete the line and wake the reader between registration and
- * PROCESS_BLOCKED, leaving the task blocked with no waiter and data ready.
+ * Sleep until input is ready or a signal is pending (Linux
+ * wait_event_interruptible on the tty read queue). The waiter registers
+ * and marks itself BLOCKED under the IRQ mask before testing for input, so
+ * a keyboard IRQ that completes the line in between makes it READY instead
+ * of being lost. ir0_console_wake_readers() unhooks a woken waiter; the
+ * loop registers again when another reader drained the input first.
+ * Returns 0 when the waiter table was full (the caller retries).
  */
 static int tty_sleep_for_input(void)
 {
 	process_t *proc = current_process;
 	uint64_t flags;
-	int blocked_once = 0;
 	int prev_state;
+	int ready;
 
 	if (!proc)
 		return 0;
 
-	if (!tty_waiter_register(proc))
-	{
-		/*
-		 * Table full. Returning here without draining left
-		 * tty_read_kernel spinning: it never polled the keyboard and
-		 * never yielded, so getty printed its prompt and then ignored
-		 * every keystroke. Make progress instead of busy-looping.
-		 */
-		static unsigned int full_hits;
-
-		if (++full_hits <= 8)
-			klog_notice_fmt("TTY",
-					"[TTY] read-waiter table full (n=%u pid=%u)\n",
-					full_hits, (unsigned int)proc->task.pid);
-		enable_interrupts();
-		kernel_idle_poll();
-		schedule();
-		return 0;
-	}
-
 	d1_16_tty_read_block(proc, tty_waiter_count(), "tty_input");
-	tty_sleep_depth++;
-
 	for (;;)
 	{
-		if (ir0_console_input_ready())
-		{
-			tty_waiter_remove(proc);
-			d1_16_tty_read_resume(proc, "input_ready");
-			tty_sleep_depth--;
-			return 1;
-		}
-
 		flags = tty_irq_save();
-		if (ir0_console_input_ready())
+		if (!tty_waiter_register(proc))
 		{
 			tty_irq_restore(flags);
-			tty_waiter_remove(proc);
-			d1_16_tty_read_resume(proc, "input_ready_irq");
-			tty_sleep_depth--;
-			return 1;
+			klog_notice_fmt("TTY", "[TTY] read-waiter table full (pid=%u)\n",
+					(unsigned int)proc->task.pid);
+			/* Back off one tick on the clock, then retry the read. */
+			(void)ir0_clock_wait_block_until(
+				clock_get_uptime_milliseconds() + 1);
+			return 0;
 		}
-
 		prev_state = proc->state;
-		if (proc->state != PROCESS_READY)
-		{
-			process_set_sched_state(proc, PROCESS_BLOCKED);
-			blocked_once = 1;
-			d1_16_tty_state_transition(proc, prev_state,
-						   PROCESS_BLOCKED);
-		}
+		process_set_sched_state(proc, PROCESS_BLOCKED);
+		ready = ir0_console_input_ready() || signal_pending(proc);
 		tty_irq_restore(flags);
-
-		/*
-		 * Depth must be 0 while switched out. A global depth left >0
-		 * after schedule made IRQ1 think it was nested in tty_sleep and
-		 * skip scheduling the woken ash reader (dead shell keyboard).
-		 */
-		tty_sleep_depth--;
-		enable_interrupts();
+		if (ready)
+			break;
+		d1_16_tty_state_transition(proc, prev_state, PROCESS_BLOCKED);
 		schedule();
-		tty_sleep_depth++;
-
-		if (proc->state != PROCESS_BLOCKED)
-		{
-			if (blocked_once)
-				d1_16_tty_state_transition(proc, PROCESS_BLOCKED,
-							   proc->state);
-			tty_waiter_remove(proc);
-			d1_16_tty_read_resume(proc, "woke");
-			tty_sleep_depth--;
-			return 1;
-		}
-
-		/*
-		 * All tasks blocked: RR has no idle thread yet, so poll PS/2 and
-		 * wake TTY waiters from syscall context (QEMU GTK often skips IRQ1).
-		 */
-		enable_interrupts();
-		kernel_idle_poll();
-
-		if (ir0_console_input_ready())
-		{
-			prev_state = proc->state;
-			process_set_sched_state(proc, PROCESS_READY);
-			d1_16_tty_state_transition(proc, prev_state,
-						   PROCESS_READY);
-			tty_waiter_remove(proc);
-			d1_16_tty_read_resume(proc, "poll_ready");
-			tty_sleep_depth--;
-			return 1;
-		}
 	}
+
+	process_set_sched_state(proc, PROCESS_READY);
+	tty_waiter_remove(proc);
+	d1_16_tty_read_resume(proc, "woke");
+	return 1;
 }
 
 void tty_input_char(char c)
@@ -943,16 +879,6 @@ int ir0_console_take_resched(void)
 int ir0_console_resched_pending(void)
 {
 	return tty_need_resched;
-}
-
-int ir0_console_in_tty_sleep(void)
-{
-	return tty_sleep_depth > 0;
-}
-
-int ir0_console_timer_resched_pending(void)
-{
-	return 0;
 }
 
 int ir0_console_poll(void)

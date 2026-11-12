@@ -17,7 +17,6 @@
 #include <ir0/console.h>
 #include <ir0/sched.h>
 #include <string.h>
-#include <ir0/kernel.h>
 
 static volatile int tty_ktest_done;
 static volatile int64_t tty_ktest_result;
@@ -83,11 +82,9 @@ void ktest_tty_canon_block_wake(void)
 
 	tty_ktest_inject_line("echo hi\n");
 
+	/* The injected line wakes the reader; scheduling lets it run. */
 	for (i = 0; i < 200000 && !tty_ktest_done; i++)
-	{
 		schedule();
-		kernel_idle_poll();
-	}
 
 	KASSERT(tty_ktest_done);
 	KASSERT_EQ(tty_ktest_result, 8);
