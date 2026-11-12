@@ -82,6 +82,8 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
 
     ir0_spin_lock(&lock);
     if (wait_queue_contains(wq, proc)) {
+        /* Still queued from an earlier pass (e.g. a signal woke it). */
+        process_set_sched_state(proc, PROCESS_BLOCKED);
         ir0_spin_unlock(&lock);
         kfree(node);
         return;
