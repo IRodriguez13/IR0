@@ -379,7 +379,8 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 			if (ret < 0)
 			{
 				epoll_wait_leave(ep);
-				return ret;
+				/* Linux ep_poll(): EINTR, never a restart. */
+				return ret == -ERESTARTSYS ? -EINTR : ret;
 			}
 		}
 	}

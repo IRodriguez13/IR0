@@ -110,7 +110,11 @@ static int poll_wait_kernel(struct pollfd *kfds, unsigned int nfds,
 }
 
 /*
- * syscall_sleep_ms_locked - Block current task for @ms (kernel-side, no user copy).
+ * syscall_sleep_ms_locked - Block the current task for @ms between polls of
+ * a blocking syscall's condition. A signal ends the sleep with -ERESTARTSYS
+ * (Linux wait_event_interruptible()): the syscall exit restarts the call
+ * under SA_RESTART or fails it with EINTR. Callers whose Linux counterpart
+ * never restarts (poll, select, epoll_wait) report -EINTR themselves.
  */
 int64_t syscall_sleep_ms_locked(uint64_t ms)
 {
@@ -124,6 +128,8 @@ int64_t syscall_sleep_ms_locked(uint64_t ms)
 
 	now = clock_get_uptime_milliseconds();
 	ret = ir0_clock_wait_block_until(now + ms);
+	if (ret == -EINTR)
+		return -ERESTARTSYS;
 	if (ret < 0)
 		return ret;
 	return 0;
@@ -303,12 +309,16 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
         int64_t ret = syscall_sleep_ms_locked(1000);
 
         if (ret < 0)
-          return ret;
+          return ret == -ERESTARTSYS ? -EINTR : ret;
         if (signal_pending(current_process))
           return -EINTR;
       }
     }
-    return syscall_sleep_ms_locked((uint64_t)timeout_ms);
+    {
+      int64_t slept = syscall_sleep_ms_locked((uint64_t)timeout_ms);
+
+      return slept == -ERESTARTSYS ? -EINTR : slept;
+    }
   }
 
   if (!user_fds)
@@ -559,7 +569,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
         int64_t ret = syscall_sleep_ms_locked(1000);
 
         if (ret < 0)
-          return ret;
+          return ret == -ERESTARTSYS ? -EINTR : ret;
         if (signal_pending(current_process))
           return -EINTR;
       }
@@ -568,7 +578,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
       int64_t slept = syscall_sleep_ms_locked((uint64_t)timeout_ms);
 
       if (slept < 0)
-        return slept;
+        return slept == -ERESTARTSYS ? -EINTR : slept;
       if (signal_pending(current_process))
         return -EINTR;
       return 0;
@@ -606,7 +616,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
         int64_t ret = syscall_sleep_ms_locked(1000);
 
         if (ret < 0)
-          return ret;
+          return ret == -ERESTARTSYS ? -EINTR : ret;
         if (signal_pending(current_process))
           return -EINTR;
       }
@@ -615,7 +625,7 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
       int64_t slept = syscall_sleep_ms_locked((uint64_t)timeout_ms);
 
       if (slept < 0)
-        return slept;
+        return slept == -ERESTARTSYS ? -EINTR : slept;
       if (signal_pending(current_process))
         return -EINTR;
       return 0;
