@@ -3,12 +3,10 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: linux_abi_fs.c
- * Description: RED selftest (fails on dev 629036ef, not wired into any gate):
- *              file and path syscalls that diverge from Linux, found by the
- *              conformance harness (Documentation/conformance.md). One case
- *              per bug; each passes on Linux. Built with the conformance
- *              runner (tests/conformance) and run by
- *              make ir0-selftest-red-fs-{x86,arm64}.
+ * Description: Selftest: file and path syscalls that diverged from Linux,
+ *              found by the conformance harness (Documentation/conformance.md).
+ *              One case per fixed bug; each passes on Linux and on IR0. Run
+ *              by make ir0-selftest-fs-abi-{x86,arm64}.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

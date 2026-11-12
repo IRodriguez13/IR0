@@ -23,8 +23,9 @@ make ir0-fuzz-x86 SEED=1 COUNT=2000
 make ir0-fuzz-arm64 SEED=7 COUNT=5000
 make ir0-fuzz-x86 SEED=6 COUNT=5000 BATCH=11 TRACE=1   # replay one batch
 
-make ir0-selftest-red-{fs,signals,mm}-{x86,arm64}  # red selftests (fail today)
-make ir0-selftest-sock-abi-{x86,arm64}                  # former red sock group, green
+make ir0-selftest-red-{signals,mm}-{x86,arm64}  # red selftests (fail today)
+make ir0-selftest-sock-abi-{x86,arm64}           # former red sock group, green
+make ir0-selftest-fs-abi-{x86,arm64}             # former red fs group, green
 ```
 
 Set `HOST_TMP=$(mktemp -d)` to keep the logs and summaries private. Every
@@ -225,6 +226,12 @@ in its group, so it cannot hide the others.
 | F7 | getcwd | dir_chdir_getcwd / fs_getcwd_counts_nul | returns strlen+1 | strlen | both | kernel/syscalls/fs_path_syscalls.c:690 `sys_getcwd` |
 | F8 | execve | proc_exec_errors / fs_execve_non_executable_eacces | file without x bit → EACCES | ENOENT | both | kernel/syscalls/process_syscalls.c `sys_execveat` |
 | F9 | fstat / fstatat | stat_fstat_regular, stat_umask, stat_fifo_and_dir, dir_openat_dirfd / fs_stat_layout_matches_isa | asm-generic `struct stat` on arm64 | x86_64 layout (mode reads as nlink) | arm64 | includes/ir0/stat.h (one layout for both ISAs) |
+| F10 | openat, newfstatat | fs_open_errors, stat_empty_path / fs_file_component_enotdir | regular file as a path component → ENOTDIR | ENOENT | both | fs/vfs_namei.c `vfs_stat`, fs/vfs_file.c `vfs_open` |
+| F11 | unlinkat AT_REMOVEDIR | dir_mkdir_rmdir / fs_rmdir_nonempty_enotempty | non-empty → ENOTEMPTY | tree removed | both | kernel/syscalls/fs_meta.c `sys_unlinkat` |
+| F12 | execve | — / fs_execve_long_arg, fs_execve_e2big | strings up to MAX_ARG_STRLEN; overflow → E2BIG | 256-byte copies, EFAULT | both | kernel/syscalls/process_syscalls.c `sys_exec` |
+| F13 | openat O_NOFOLLOW | stat_symlink / fs_open_nofollow_eloop | symlink → ELOOP | opens the target | both | kernel/syscalls/fs_syscalls.c `sys_open_vfs_resolved` |
+| F14 | openat O_DIRECTORY | fs_open_errors / fs_open_directory_on_file_enotdir | arm64 values (040000) → ENOTDIR | x86_64 values, flag lost | arm64 | includes/ir0/open_flags.h |
+| F15 | unlinkat, openat on a directory | fs_open_errors, dir_mkdir_rmdir / fs_unlink_dir_eisdir, fs_open_dir_for_write_eisdir | EISDIR | tree removed / fd / replaced by a file | both | kernel/syscalls/fs_meta.c, fs/vfs_file.c |
 | S1 | rt_sigprocmask | sig_kill_stop_uncatchable / sig_kill_stop_not_blockable | SIGKILL/SIGSTOP never blocked | blocked | both | kernel/syscalls/process_syscalls.c `sys_rt_sigprocmask` |
 | S2 | rt_sigaction SA_RESETHAND | sig_resethand / sig_sa_resethand_resets | handler is SIG_DFL after delivery | old handler reported | both | kernel/signals.c:248 vs `sys_rt_sigaction` storage |
 | S3 | rt_sigsuspend | sig_sigsuspend / sig_sigsuspend_returns_eintr | -EINTR | 0 | both | kernel/syscalls/process_syscalls.c `sys_rt_sigsuspend` |
@@ -263,3 +270,7 @@ make ir0-conformance-<isa>               # reports FIXED: drop the baseline line
 
 When every case of a red group passes on both ISAs, the group can move into
 the regular selftest gates.
+
+F1-F15 are fixed on both ISAs: their cases form the green group
+`make ir0-selftest-fs-abi-{x86,arm64}`, and their conformance cases left
+the baselines.

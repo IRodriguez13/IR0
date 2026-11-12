@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* Case list for linux_abi_fs.c (RED: fails on dev 629036ef). */
+/* Case list for linux_abi_fs.c (green: make ir0-selftest-fs-abi). */
 CONF_CASE(fs_empty_path_enoent)
 CONF_CASE(fs_mkdir_missing_parent_enoent)
 CONF_CASE(fs_lseek_pipe_espipe)

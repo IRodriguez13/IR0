@@ -673,3 +673,28 @@ ir0-selftest-sock-abi-arm64: kernel-arm64-product.bin
 	@echo "✓ ir0-selftest-sock-abi-arm64"
 
 ir0-selftest-sock-abi: ir0-selftest-sock-abi-x86 ir0-selftest-sock-abi-arm64
+
+# File and path syscalls checked against Linux (tests/selftests/kernel/linux_abi_fs.c,
+# one case per fixed divergence). Built with the conformance runner, which
+# fails the target unless every case listed in linux_abi_fs.h passes.
+IR0_SELFTEST_FS_ABI_RUN := python3 $(KERNEL_ROOT)/scripts/ir0_conformance.py run \
+	--mode conformance --timeout 300 \
+	--cases $(KERNEL_ROOT)/tests/selftests/kernel/linux_abi_fs.h
+
+.PHONY: ir0-selftest-fs-abi-x86 ir0-selftest-fs-abi-arm64 ir0-selftest-fs-abi
+
+ir0-selftest-fs-abi-x86: kernel-x64-userspace.iso
+	@$(MAKE) -C tests/conformance ARCH=x86_64 red RED=linux_abi_fs
+	@$(IR0_SELFTEST_FS_ABI_RUN) --arch x86_64 \
+		--binary $(KERNEL_ROOT)/build/selftests/x86_64/linux_abi_fs \
+		--log $(HOST_TMP)/ir0-selftest-x86-fs-abi.log
+	@echo "✓ ir0-selftest-fs-abi-x86"
+
+ir0-selftest-fs-abi-arm64: kernel-arm64-product.bin
+	@$(MAKE) -C tests/conformance ARCH=arm64 stub red RED=linux_abi_fs
+	@$(IR0_SELFTEST_FS_ABI_RUN) --arch arm64 \
+		--binary $(KERNEL_ROOT)/build/selftests/arm64/linux_abi_fs \
+		--log $(HOST_TMP)/ir0-selftest-arm64-fs-abi.log
+	@echo "✓ ir0-selftest-fs-abi-arm64"
+
+ir0-selftest-fs-abi: ir0-selftest-fs-abi-x86 ir0-selftest-fs-abi-arm64
