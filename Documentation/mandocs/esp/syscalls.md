@@ -12,8 +12,8 @@
 ## 1. Visión general
 
 Los programas de usuario alcanzan el kernel mediante syscalls numeradas al estilo
-Linux en x86-64. Coexisten dos mecanismos de entrada: legacy **`int 0x80`**
-(ABI de laboratorio histórica) y la instrucción **`syscall`** (ABI musl). El despacho está
+Linux en x86-64. La única entrada es la instrucción **`syscall`**
+(ABI musl); `int $0x80` desde usuario es `#GP` → SIGSEGV. El despacho está
 centralizado en `syscall_dispatch()` con una tabla de handlers `__NR_*`. La I/O
 de ficheros está separada en `fs_syscalls.c`; la mayoría de handlers restantes
 permanecen en el monolítico `syscalls.c`.
@@ -22,7 +22,6 @@ permanecen en el monolítico `syscalls.c`.
 
 | Pieza | Rol |
 |-------|-----|
-| `syscall_entry_64.asm` | int 0x80: args en rax, rbx, rcx, rdx, rsi, rdi |
 | `syscall_insn_entry_64.asm` | insn syscall Linux: rdi, rsi, rdx, r10, r8, r9; kstack 8 KiB |
 | `syscall_dispatch` | Chequeo de límites, lookup en tabla, invocar handler |
 | `init_syscall_table` | Conecta `__NR_*` → `wrap_sys_*` (incluye familia socket) |

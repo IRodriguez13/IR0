@@ -148,12 +148,6 @@ ISR_NOERRCODE 45  ; FPU
 ISR_NOERRCODE 46  ; ATA1
 ISR_NOERRCODE 47  ; ATA2
 
-; Stub para syscall (interrupción 0x80)
-global isr128_64
-extern syscall_entry_asm
-isr128_64:
-    jmp syscall_entry_asm   
-
 ; Handler común para todas las interrupciones
 isr_common_stub_64:
     ; Guardar todos los registros

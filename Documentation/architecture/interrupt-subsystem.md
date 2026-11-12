@@ -160,15 +160,13 @@ void idt_set_gate64(uint8_t num, uint64_t handler,
 
 ### System Call
 ```
-1. User code executes: int 0x80
-2. CPU looks up handler in IDT (entry 128)
-3. CPU switches to kernel stack
-4. CPU jumps to syscall_entry_asm
-5. syscall_entry_asm extracts arguments
-6. syscall_entry_asm calls syscall_handler()
-7. syscall_handler() dispatches to sys_*()
-8. Return value placed in RAX
-9. iretq returns to user mode
+1. User code executes the syscall instruction (number in rax,
+   arguments in rdi, rsi, rdx, r10, r8, r9)
+2. CPU jumps to the LSTAR entry, syscall_insn_entry_asm
+3. The entry switches to the task's kernel stack and captures the frame
+4. syscall_dispatch() runs the handler, then exit_to_user_mode()
+5. Return value placed in RAX; sysretq (or iretq) returns to user mode
+(int 0x80 has no user gate: from userspace it is #GP, SIGSEGV.)
 ```
 
 ## IDT Entry Format (x86-64)

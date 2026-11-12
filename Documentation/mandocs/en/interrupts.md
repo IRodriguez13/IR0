@@ -13,7 +13,7 @@
 
 x86-64 interrupt handling uses a 256-entry IDT, dual 8259 PIC (IRQ 0–15 → vectors
 32–47), assembly stubs, and C handlers in `isr_handler64`. Syscalls enter via
-**int 0x80** (legacy lab ABI) and **`syscall` insn** (musl/Linux ABI). CPU
+the **`syscall` insn** only (musl/Linux ABI); `int $0x80` is `#GP`. CPU
 exceptions map to signals for user tasks or panic for kernel faults.
 
 ## 2. Internal architecture
@@ -23,7 +23,6 @@ exceptions map to signals for user tasks or panic for kernel faults.
 | IDT | `arch/x86-64/sources/interrupt/idt.c` — 256 gates, `#DF` uses IST1 |
 | PIC | `arch/x86-64/sources/interrupt/pic.c` — remap bases 0x20/0x28, mask/unmask, EOI |
 | Stubs | `isr_stubs_64.asm` → `isr_common_stub_64` → `isr_handler64` |
-| Syscall int | `syscall_entry_64.asm` — IDT 0x80 / vector 128 jmp to entry |
 | Syscall insn | `syscall_insn_entry_64.asm` — LSTAR, 8 KiB kstack |
 | Page fault | `fault.c` — demand-fill or SIGSEGV |
 
@@ -38,15 +37,6 @@ exceptions map to signals for user tasks or panic for kernel faults.
        ──► device handler (timer/keyboard/mouse/net)
        ──► pic_send_eoi64
        ──► iretq
-```
-
-**int 0x80 syscall:**
-
-```text
-  int $0x80 ──► syscall_entry_asm
-       ──► map int 0x80 regs → Linux C ABI
-       ──► syscall_dispatch()
-       ──► iretq (user segments 0x23)
 ```
 
 **Handled IRQs in switch:**
@@ -69,7 +59,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
 ## 5. Subsystem boundaries
 
 - Portable code must not arch interrupt backend headers — use facades and arch_port.
-- Vector 128 handler in C is no-op; real int 0x80 jumps directly to syscall asm.
+- Vector 0x80 has the kernel-only default gate: `int $0x80` from userspace is `#GP`.
 - No APIC/IOAPIC primary path — legacy PIC only.
 
 ## 6. Relations to other subsystems
@@ -93,7 +83,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
          │
    ┌─────┼─────┬──────────┐
    ▼     ▼     ▼          ▼
-  exc   IRQ0  IRQ1    int 0x80 / syscall
+  exc   IRQ0  IRQ1     syscall insn
    │     │     │          │
    ▼     ▼     ▼          ▼
  fault  PIT  kbd      syscall_dispatch
@@ -101,7 +91,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
 
 ## 8. Important invariants
 
-1. User-callable gate: syscall only (DPL=3 on vector 0x80).
+1. User-callable gate: `int3` only (DPL=3 on vector 3); syscalls use the `syscall` insn.
 2. HW exceptions with error code: vectors 8, 10–14, 17.
 3. `#PF` user: demand-fill heap/mmap or SIGSEGV + exit.
 4. `#PF` kernel: panic.

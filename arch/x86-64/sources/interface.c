@@ -23,7 +23,6 @@
 #include <string.h>
 #include <config.h>
 #include <ir0/irq.h>
-#include <interrupt/idt.h> /* idt_set_gate64 for syscall int 0x80 */
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
@@ -327,13 +326,12 @@ void ir0_boot_port_unmask_irqs(void)
 void syscall_init(void)
 {
     /*
-     * IDT gate 0x80: int $0x80 → syscall_entry_asm (debug_bins ABI).
-     * MSR LSTAR: syscall insn → syscall_insn_entry_asm (Linux/musl ABI).
+     * MSR LSTAR: syscall insn → syscall_insn_entry_asm (Linux/musl ABI),
+     * the only syscall entry. Vector 0x80 keeps the kernel-only default
+     * gate, so int $0x80 from userspace is #GP → SIGSEGV, as on a Linux
+     * x86-64 kernel without IA32 emulation.
      */
-    extern void syscall_entry_asm(void);
     extern void syscall_insn_entry_asm(void);
-
-    idt_set_gate64(0x80, (uint64_t)syscall_entry_asm, 0x08, 0xEE, 0);
 
     {
         /*

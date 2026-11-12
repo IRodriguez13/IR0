@@ -430,12 +430,6 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
 	}
     }
 
-    /* Manejar syscall (0x80) */
-    if (interrupt_number == 128)
-    {
-        return;
-    }
-
     /* Manejar IRQs del PIC (32-47) */
     if (interrupt_number >= 32 && interrupt_number <= 47)
     {

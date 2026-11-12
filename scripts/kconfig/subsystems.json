@@ -86,7 +86,6 @@
           "arch/x86-64/sources/user_mode.c",
           "arch/x86-64/sources/fault.c",
           "arch/x86-64/asm/boot/boot_x64.asm",
-          "arch/x86-64/asm/entry/syscall_int80.asm",
           "arch/x86-64/sources/interface.c",
           "arch/x86-64/asm/context/switch_x64.asm"
         ],

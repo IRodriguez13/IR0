@@ -17,7 +17,7 @@
 
 /* Present, DPL=0, 64-bit interrupt gate (type 1110) */
 #define IDT_TYPE_INTERRUPT_GATE 0x8E
-/* Present, DPL=3, 64-bit interrupt gate (user may invoke e.g. int 0x80) */
+/* Present, DPL=3, 64-bit interrupt gate (user may invoke int3) */
 #define IDT_TYPE_TRAP_USER      0xEE
 
 struct idt_entry64 idt[256];
@@ -97,7 +97,6 @@ void idt_init64(void)
     extern void isr45_64(void);
     extern void isr46_64(void);
     extern void isr47_64(void);
-    extern void isr128_64(void); /* Syscall vector 0x80 (unused stub) */
 
     /* Exceptions 0-31: DPL=0 (kernel only) */
     idt_set_gate64(0, (uint64_t)isr0_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
@@ -151,9 +150,6 @@ void idt_init64(void)
     idt_set_gate64(45, (uint64_t)isr45_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
     idt_set_gate64(46, (uint64_t)isr46_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
     idt_set_gate64(47, (uint64_t)isr47_64, 0x08, IDT_TYPE_INTERRUPT_GATE, 0);
-
-    extern void syscall_entry_asm(void);
-    idt_set_gate64(128, (uint64_t)syscall_entry_asm, 0x08, IDT_TYPE_TRAP_USER, 0); 
 
     klog_info("IDT", "x86-64 IDT initialized");
 }

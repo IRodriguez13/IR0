@@ -41,7 +41,6 @@ ARCH_OBJS_X86_64 = \
 	arch/x86-64/vdso/blob.o \
 	arch/x86-64/vdso/vdso_blob_embed.o \
 	arch/x86-64/asm/boot/boot_x64.o \
-	arch/x86-64/asm/entry/syscall_int80.o \
 	arch/x86-64/asm/entry/syscall_64.o \
 	arch/x86-64/asm/context/switch_x64.o
 

@@ -12,8 +12,8 @@
 ## 1. Overview
 
 User programs reach the kernel through Linux-numbered syscalls on x86-64.
-Two entry mechanisms coexist: legacy **`int 0x80`** (historical lab ABI) and the
-**`syscall` instruction** (musl ABI). Dispatch is centralized in
+The only entry is the **`syscall` instruction** (musl ABI); `int $0x80` from
+userspace is `#GP` → SIGSEGV, as on Linux without IA32 emulation. Dispatch is centralized in
 `syscall_dispatch()` with a table of `__NR_*` handlers. File I/O is split into
 `fs_syscalls.c`; most other handlers remain in the monolithic `syscalls.c`.
 
@@ -21,7 +21,6 @@ Two entry mechanisms coexist: legacy **`int 0x80`** (historical lab ABI) and the
 
 | Piece | Role |
 |-------|------|
-| `syscall_entry_64.asm` | int 0x80: args in rax, rbx, rcx, rdx, rsi, rdi |
 | `syscall_insn_entry_64.asm` | Linux syscall insn: rdi, rsi, rdx, r10, r8, r9; 8 KiB kstack |
 | `syscall_dispatch` | Bounds check, table lookup, invoke handler |
 | `init_syscall_table` | Wires `__NR_*` → `wrap_sys_*` (incl. socket family) |

@@ -2417,7 +2417,6 @@ ASM_C_EXTERN_ALLOW = {
         "process_syscall_restore_exit_regs",
         "tls_restore_current",
     },
-    "arch/x86-64/asm/entry/syscall_int80.asm": {"syscall_dispatch"},
     "arch/x86-64/asm/context/switch_x64.asm": {
         "fork_ret_emit_pre_return",
         "fork_ret_pre_regs",
