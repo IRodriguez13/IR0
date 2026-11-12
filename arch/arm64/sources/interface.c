@@ -15,6 +15,7 @@
 #include <ir0/irq.h>
 #include <ir0/arch_types.h>
 #include <ir0/oops.h>
+#include <ir0/oops_port.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -78,11 +79,6 @@ void io_wait(void)
 {
 }
 
-void cpu_relax(void)
-{
-	__asm__ volatile("yield" ::: "memory");
-}
-
 void smp_mb(void)
 {
 	__asm__ volatile("dsb ish" ::: "memory");
@@ -99,9 +95,11 @@ void cpu_idle(void)
 	cpu_wait();
 }
 
+/* Terminal halt for panic and failed power-off (<ir0/oops_port.h>). */
 void cpu_halt(void)
 {
-	cpu_wait();
+	for (;;)
+		cpu_wait();
 }
 
 void early_init(void)

@@ -15,6 +15,7 @@
 #include "power_manag.h"
 
 #include <ir0/arch_port.h>
+#include <ir0/oops_port.h>
 #include <ir0/platform_ops.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/vfs.h>
@@ -51,8 +52,7 @@ void kernel_system_shutdown(enum ir0_system_action action)
 	ops = ir0_platform_ops_get();
 	if (!ops)
 	{
-		for (;;)
-			cpu_halt();
+		cpu_halt();
 	}
 
 	switch (action)
@@ -73,6 +73,5 @@ void kernel_system_shutdown(enum ir0_system_action action)
 	}
 
 	/* Unreachable if platform callbacks are correct. */
-	for (;;)
-		cpu_halt();
+	cpu_halt();
 }

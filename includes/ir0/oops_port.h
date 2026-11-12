@@ -19,6 +19,16 @@ struct process;
 
 void ir0_oops_dump_arch_extra(void);
 
+/*
+ * Stop this CPU for good in its low-power wait (hlt / wfi); interrupts
+ * keep the state the caller left. Private to the terminal paths: panic,
+ * a failed power-off or reboot, and a kexec entry that returned. Never a
+ * way to wait: a lock that may sleep is a mutex, an event wait is a wait
+ * queue, a time wait is clock_sleep() or udelay(). arch-guard rejects
+ * other callers.
+ */
+void cpu_halt(void) __attribute__((noreturn));
+
 /* Print @fault's ISA-specific registers under the portable FAULT FRAME. */
 void ir0_oops_show_fault_regs(const struct ir0_fault *fault);
 

@@ -18,7 +18,7 @@
 #include <ir0/kmem.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/credentials.h>
-#include <ir0/cpu.h>
+#include <ir0/oops_port.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -166,6 +166,5 @@ void ir0_kexec_execute(void)
 
 	fn = (void (*)(void))(uintptr_t)g_entry;
 	fn();
-	for (;;)
-		cpu_halt();
+	cpu_halt();
 }

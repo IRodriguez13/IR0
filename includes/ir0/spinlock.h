@@ -21,7 +21,7 @@
  * UP (default): mask IRQs for the critical section — same contract as the
  * legacy ipc_irq_save / pipe refcount paths.
  *
- * SMP (future): per-lock atomic owner + cpu_relax; not wired yet.
+ * SMP (future): per-lock atomic owner; not wired yet.
  */
 #if defined(CONFIG_SMP) && CONFIG_SMP
 #error "ir0_spinlock: SMP backend not implemented — use UP build for now"

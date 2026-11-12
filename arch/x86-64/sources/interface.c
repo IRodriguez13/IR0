@@ -17,6 +17,7 @@
 #include <ir0/delay.h>
 #include <ir0/early_clock.h>
 #include <ir0/oops.h>
+#include <ir0/oops_port.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -170,11 +171,6 @@ void outl(uint16_t port, uint32_t value)
 	__asm__ volatile("outl %0, %1" : : "a"(value), "Nd"(port));
 }
 
-void cpu_relax(void)
-{
-	__asm__ volatile("pause");
-}
-
 void smp_mb(void)
 {
 	__asm__ volatile("mfence" ::: "memory");
@@ -268,16 +264,18 @@ void cpu_idle(void)
 {
     /*
      * Safe halt: IRQs must be on or hlt never wakes (no IRQ1 → dead TTY
-     * after ash blocks and the idle task runs). clock_wait already sti'd
-     * before idle; kernel_idle_loop did not — force it here.
+     * after ash blocks and the idle task runs). The idle loop enables
+     * them too; keep the halt safe for any caller.
      */
     enable_interrupts();
     cpu_wait();
 }
 
+/* Terminal halt for panic and failed power-off (<ir0/oops_port.h>). */
 void cpu_halt(void)
 {
-    cpu_wait();
+	for (;;)
+		cpu_wait();
 }
 
 /**

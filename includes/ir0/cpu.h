@@ -21,7 +21,6 @@
  * Prefer these over legacy arch_* from new/portable call sites.
  */
 
-void cpu_relax(void);
 void smp_mb(void);
 
 void enable_interrupts(void);
@@ -34,7 +33,6 @@ void disable_interrupts(void);
 unsigned long irq_save(void);
 void irq_restore(unsigned long flags);
 
-void cpu_halt(void);
 void cpu_idle(void);
 
 /*

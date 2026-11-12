@@ -355,8 +355,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
         klog_fatal("OOPS", "PRIMARY_FAULT_FRAME_KEPT (ignore nested vector as cause)");
         klog_smoke("PANICEX_DOUBLE_FAULT_SAFE_OK");
         klog_smoke("PANIC_HANDLER_NO_USERPTR_DEREF_OK");
-        for (;;)
-            cpu_halt();
+        cpu_halt();
         return;
     }
 
@@ -510,8 +509,7 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
     goto sleep;
 
     sleep:
-        for (;;)
-            cpu_halt();
+        cpu_halt();
 }
 
 /**
