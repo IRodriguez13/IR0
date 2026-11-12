@@ -480,6 +480,40 @@ ir0-selftest-sleep-yields-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_S
 
 ir0-selftest-sleep-yields: ir0-selftest-sleep-yields-x86 ir0-selftest-sleep-yields-arm64
 
+IR0_SELFTEST_X86_FUTEX := $(KERNEL_ROOT)/build/selftests/x86_64/futex
+IR0_SELFTEST_ARM64_FUTEX := $(KERNEL_ROOT)/build/selftests/arm64/futex
+
+.PHONY: ir0-selftest-futex-x86 ir0-selftest-futex-arm64 \
+	ir0-selftest-futex
+
+$(IR0_SELFTEST_X86_FUTEX): tests/selftests/kernel/futex.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 futex
+
+$(IR0_SELFTEST_ARM64_FUTEX): tests/selftests/kernel/futex.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 futex
+
+# futex(2) wait/wake as on Linux, including a thread woken by its sibling and
+# a wait ended by a caught signal (EINTR).
+ir0-selftest-futex-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_FUTEX)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_FUTEX) \
+		--done "ok 4 signal_interrupts_wait" \
+		--log $(HOST_TMP)/ir0-selftest-x86-futex.log
+	@echo "✓ ir0-selftest-futex-x86"
+
+ir0-selftest-futex-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_FUTEX)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_FUTEX) \
+		--done "ok 4 signal_interrupts_wait" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-futex.log
+	@echo "✓ ir0-selftest-futex-arm64"
+
+ir0-selftest-futex: ir0-selftest-futex-x86 ir0-selftest-futex-arm64
+
 IR0_SELFTEST_X86_COW_MPROTECT := $(KERNEL_ROOT)/build/selftests/x86_64/cow_mprotect
 IR0_SELFTEST_ARM64_COW_MPROTECT := $(KERNEL_ROOT)/build/selftests/arm64/cow_mprotect
 
