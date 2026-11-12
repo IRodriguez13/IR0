@@ -447,67 +447,58 @@ static void dhcp_udp_handler(struct net_device *dev, ip4_addr_t src_ip, uint16_t
     dhcp_irq_restore(flags);
 }
 
+/*
+ * Wait for the reply the RX handler records: poll the NIC, then sleep one
+ * interval on the clock (clock_sleep), until @timeout_ms. A signal ends
+ * the wait. Returns 0 on an OFFER.
+ */
 static int dhcp_wait_offer(uint32_t timeout_ms)
 {
     uint64_t start = clock_get_uptime_milliseconds();
-    uint64_t last_poll = start;
 
-    while (clock_get_uptime_milliseconds() - start < timeout_ms)
+    for (;;)
     {
-        uint64_t flags = dhcp_irq_save();
-        int ready = dhcp_state.offer_ready;
+        uint64_t flags;
+        int ready;
+
+        net_poll();
+        flags = dhcp_irq_save();
+        ready = dhcp_state.offer_ready;
         dhcp_irq_restore(flags);
         if (ready)
-        {
             return 0;
-        }
-
-        uint64_t now = clock_get_uptime_milliseconds();
-        if (now - last_poll >= DHCP_POLL_INTERVAL_MS)
-        {
-            net_poll();
-            last_poll = now;
-        }
-
-        for (volatile int spin = 0; spin < 4000; spin++)
-            cpu_relax();
+        if (clock_get_uptime_milliseconds() - start >= timeout_ms)
+            return -1;
+        if (clock_sleep(DHCP_POLL_INTERVAL_MS) < 0)
+            return -1;
     }
-
-    return -1;
 }
 
+/* Same wait for the ACK; a NAK fails it. */
 static int dhcp_wait_ack(uint32_t timeout_ms)
 {
     uint64_t start = clock_get_uptime_milliseconds();
-    uint64_t last_poll = start;
 
-    while (clock_get_uptime_milliseconds() - start < timeout_ms)
+    for (;;)
     {
-        uint64_t flags = dhcp_irq_save();
-        int ack = dhcp_state.ack_ready;
-        int nak = dhcp_state.nak_ready;
+        uint64_t flags;
+        int ack;
+        int nak;
+
+        net_poll();
+        flags = dhcp_irq_save();
+        ack = dhcp_state.ack_ready;
+        nak = dhcp_state.nak_ready;
         dhcp_irq_restore(flags);
         if (nak)
-        {
             return -1;
-        }
         if (ack)
-        {
             return 0;
-        }
-
-        uint64_t now = clock_get_uptime_milliseconds();
-        if (now - last_poll >= DHCP_POLL_INTERVAL_MS)
-        {
-            net_poll();
-            last_poll = now;
-        }
-
-        for (volatile int spin = 0; spin < 4000; spin++)
-            cpu_relax();
+        if (clock_get_uptime_milliseconds() - start >= timeout_ms)
+            return -1;
+        if (clock_sleep(DHCP_POLL_INTERVAL_MS) < 0)
+            return -1;
     }
-
-    return -1;
 }
 
 static void dhcp_apply_config(struct dhcp_offer_data *offer)

@@ -41,6 +41,7 @@
  */
 #define ARP_RESOLVE_TIMEOUT_MS 2000  /* 2 seconds per attempt */
 #define ARP_RESOLVE_RETRIES 3        /* 3 attempts before giving up */
+#define ARP_POLL_INTERVAL_MS 10      /* sleep between NIC polls */
 
 /* Maximum ARP cache entries; oldest (tail) is evicted when full */
 #define MAX_ARP_ENTRIES 64
@@ -585,139 +586,51 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         return 0;
     }
     
-    /* Cache miss: need to send ARP request and wait for reply. This is the
-     * slow path - we'll block here for up to (ARP_RESOLVE_TIMEOUT_MS * ARP_RESOLVE_RETRIES)
-     * milliseconds waiting for a response. We poll the network driver during
-     * the wait to ensure ARP replies are processed promptly.
+    /* Cache miss: send a request and wait for the reply, up to
+     * ARP_RESOLVE_TIMEOUT_MS per attempt. Between polls of the NIC the
+     * caller sleeps on the clock (clock_sleep), so other tasks run; a
+     * signal aborts the resolution.
      */
     LOG_INFO_FMT("ARP", "IP " IP4_FMT " not in cache, attempting resolution", IP4_ARGS(ntohl(ip)));
-    
+
     for (int retry = 0; retry < ARP_RESOLVE_RETRIES; retry++)
     {
+        uint64_t start_time;
+
         if (retry > 0)
         {
-            LOG_INFO_FMT("ARP", "Retry %d/%d for IP " IP4_FMT, 
+            LOG_INFO_FMT("ARP", "Retry %d/%d for IP " IP4_FMT,
                         retry, ARP_RESOLVE_RETRIES, IP4_ARGS(ntohl(ip)));
         }
-        
-        /* Send ARP request */
+
         arp_send_request(dev, ip);
-        
-        /* Wait for ARP reply with timeout */
-        uint64_t start_time = clock_get_uptime_milliseconds();
-        uint64_t timeout_ms = ARP_RESOLVE_TIMEOUT_MS;
+        start_time = clock_get_uptime_milliseconds();
 
-        int check_count = 0;
-        int max_checks = (timeout_ms / 10) + 10; /* Safety limit */
-
-        while (check_count < max_checks)
+        for (;;)
         {
-            uint64_t current_time = clock_get_uptime_milliseconds();
-            uint64_t elapsed = 0;
+            uint64_t elapsed = clock_get_uptime_milliseconds() - start_time;
 
-            /* Check for overflow */
-            if (current_time >= start_time)
-            {
-                elapsed = current_time - start_time;
-            }
-            else
-            {
-                LOG_WARNING("ARP", "Timer overflow detected!");
-                elapsed = timeout_ms + 1; /* Force exit */
-            }
-
-            /* Check timeout */
-            if (elapsed >= timeout_ms)
-            {
-                LOG_INFO_FMT("ARP", "Timeout reached: elapsed=%d ms >= timeout=%d ms",
-                            (int)elapsed, (int)timeout_ms);
-                break;
-            }
-            
-            /* CRITICAL: Poll network stack for received packets */
-            /* This processes packets through the full stack: Ethernet -> IP -> ARP */
-            /* Using net_poll() instead of rtl8139_poll() ensures full stack processing */
-            {
-                net_poll();
-            }
-            
-            /* Check if entry appeared in cache (ARP reply received) */
+            /* Process received frames: Ethernet -> IP -> ARP. */
+            net_poll();
             if (arp_lookup_mac(ip, mac) == 0)
             {
                 LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved after %d ms (attempt %d)",
                             IP4_ARGS(ntohl(ip)), (int)elapsed, retry + 1);
-                LOG_INFO_FMT("ARP", "Resolved MAC: %02x:%02x:%02x:%02x:%02x:%02x",
-                            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
                 return 0;
             }
-            
-            check_count++;
-            
-            /* Reduced logging: only log every 50 checks (every ~500ms) to reduce VGA clutter */
-            if ((check_count % 50) == 0)
+            if (elapsed >= ARP_RESOLVE_TIMEOUT_MS)
+                break;
+            if (clock_sleep(ARP_POLL_INTERVAL_MS) < 0)
             {
-                uint64_t now = clock_get_uptime_milliseconds();
-                uint64_t elapsed_check = (now >= start_time) ? (now - start_time) : 0;
-                /* Use serial only for verbose logging */
-                extern void klog_print(const char *);
-                extern void klog_hex32(uint32_t);
-                klog_print("[ARP] Loop check #");
-                klog_hex32((uint32_t)check_count);
-                klog_print(", elapsed=");
-                klog_hex32((uint32_t)elapsed_check);
-                klog_print(" ms\n");
+                LOG_INFO("ARP", "Resolution interrupted by a signal");
+                return -1;
             }
-            
-            /* Small delay to allow interrupts to be processed */
-            /* Instead of clock_sleep() which uses hlt (can block forever),
-             * we do a small busy-wait loop that checks the timer periodically.
-             * CRITICAL: We must enable interrupts during the delay to allow
-             * timer interrupts to be processed and update the clock.
-             */
-            uint64_t delay_start = clock_get_uptime_milliseconds();
-            uint64_t delay_target = delay_start + 10; /* 10ms delay */
-            int delay_iterations = 0;
-            
-            /* Enable interrupts during delay to allow timer to advance */
-            enable_interrupts();
-            
-            /* Busy-wait checking timer periodically */
-            while (clock_get_uptime_milliseconds() < delay_target)
-            {
-                delay_iterations++;
-                /* Check every ~1000 iterations to avoid excessive timer calls */
-                if ((delay_iterations % 1000) == 0)
-                {
-                    /* If timer hasn't advanced, break to avoid infinite loop */
-                    if (clock_get_uptime_milliseconds() == delay_start && delay_iterations > 10000)
-                    {
-                        LOG_WARNING("ARP", "Timer not advancing during delay, breaking delay loop");
-                        break;
-                    }
-                }
-                /* Small CPU pause to reduce power consumption and allow interrupts */
-                cpu_relax();
-            }
-            
-            /* Keep interrupts enabled to allow RX interrupts to be processed */
-            /* Note: We don't disable interrupts here because we need RX interrupts
-             * from the network card to process ARP replies. The ARP resolution
-             * loop is already protected by checking the cache entry atomically.
-             */
         }
-        
-        uint64_t elapsed = clock_get_uptime_milliseconds() - start_time;
-        LOG_WARNING_FMT("ARP", "Timeout waiting for ARP reply after %d ms (attempt %d/%d, checks=%d)",
-                       (int)elapsed, retry + 1, ARP_RESOLVE_RETRIES, check_count);
-        
-        /* Check if we should continue with next retry */
-        if (retry < ARP_RESOLVE_RETRIES - 1)
-        {
-            LOG_INFO_FMT("ARP", "Continuing to next retry... (retry %d/%d)", 
-                        retry + 2, ARP_RESOLVE_RETRIES);
-        }
+
+        LOG_WARNING_FMT("ARP", "Timeout waiting for ARP reply after %d ms (attempt %d/%d)",
+                       ARP_RESOLVE_TIMEOUT_MS, retry + 1, ARP_RESOLVE_RETRIES);
     }
-    
+
     LOG_ERROR_FMT("ARP", "Failed to resolve IP " IP4_FMT " after %d attempts",
                  IP4_ARGS(ntohl(ip)), ARP_RESOLVE_RETRIES);
     return -1;
