@@ -103,7 +103,7 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
   buf->st_ctime = inode.i_time;
   buf->st_mode = inode.i_mode;
 
-  if (kstrcmp(pathname, "/") == 0 && klog_trace_enabled(KLOG_TRACE_VFS_STAT))
+  if (strcmp(pathname, "/") == 0 && klog_trace_enabled(KLOG_TRACE_VFS_STAT))
     klog_trace_fmt("MINIX", "stat('%s') OK ino=%u mode=0x%x", pathname, inode_num, buf->st_mode);
   return 0;
 }

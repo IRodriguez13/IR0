@@ -51,14 +51,6 @@ size_t strlen(const char *str)
     return len;
 }
 
-size_t kstrlen(const char *s)
-{
-    const char *p = s;
-    while (*p)
-        p++;
-    return p - s;
-}
-
 /**
  * __kstrncpy_impl - Internal implementation of kernel string copy
  * Pure implementation without validation - called by checked wrapper
@@ -84,29 +76,6 @@ char *__kstrncpy_checked(char *dest, const char *src, size_t n,
         panicex("null pointer in kstrncpy", PANIC_MEM, file, line, caller);
 
     return __kstrncpy_impl(dest, src, n);
-}
-
-int kstrcmp(const char *s1, const char *s2)
-{
-    while (*s1 && (*s1 == *s2))
-    {
-        s1++;
-        s2++;
-    }
-    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
-}
-
-int kstrncmp(const char *s1, const char *s2, size_t n)
-{
-    while (n && *s1 && (*s1 == *s2))
-    {
-        s1++;
-        s2++;
-        n--;
-    }
-    if (n == 0)
-        return 0;
-    return *(const unsigned char *)s1 - *(const unsigned char *)s2;
 }
 
 /**
@@ -232,17 +201,6 @@ char *strncpy(char *dest, const char *src, size_t n)
         *d++ = '\0';
         n--;
     }
-    return dest;
-}
-
-char *strcat(char *dest, const char *src)
-{
-    char *d = dest;
-    while (*d != '\0')
-        d++;
-    while ((*d++ = *src++) != '\0')
-        ;
-
     return dest;
 }
 
@@ -398,95 +356,12 @@ int memcmp(const void *ptr1, const void *ptr2, size_t num)
 }
 
 // ===============================================================================
-// STRING TOKENIZATION
-// ===============================================================================
-
-static char *strtok_str = NULL;
-
-char *strtok(char *str, const char *delim)
-{
-    return strtok_r(str, delim, &strtok_str);
-}
-
-char *strtok_r(char *str, const char *delim, char **saveptr)
-{
-    if (str != NULL)
-    {
-        *saveptr = str;
-    }
-
-    if (*saveptr == NULL)
-    {
-        return NULL;
-    }
-
-    // Skip leading delimiters
-    while (**saveptr != '\0' && strchr(delim, **saveptr) != NULL)
-    {
-        (*saveptr)++;
-    }
-
-    if (**saveptr == '\0')
-    {
-        return NULL;
-    }
-
-    char *token = *saveptr;
-
-    // Find end of token
-    while (**saveptr != '\0' && strchr(delim, **saveptr) == NULL)
-    {
-        (*saveptr)++;
-    }
-
-    if (**saveptr != '\0')
-    {
-        **saveptr = '\0';
-        (*saveptr)++;
-    }
-
-    return token;
-}
-
-// ===============================================================================
 // STRING CONVERSION FUNCTIONS
 // ===============================================================================
 
 int atoi(const char *str)
 {
     int result = 0;
-    int sign = 1;
-
-    // Skip whitespace
-    while (*str == ' ' || *str == '\t' || *str == '\n')
-    {
-        str++;
-    }
-
-    // Handle sign
-    if (*str == '-')
-    {
-        sign = -1;
-        str++;
-    }
-    else if (*str == '+')
-    {
-        str++;
-    }
-
-    // Convert digits
-    while (*str >= '0' && *str <= '9')
-    {
-        result = result * 10 + (*str - '0');
-        str++;
-    }
-
-    return sign * result;
-}
-
-long atol(const char *str)
-{
-    long result = 0;
     int sign = 1;
 
     // Skip whitespace
@@ -734,15 +609,6 @@ int snprintf(char *str, size_t size, const char *format, ...)
     return result;
 }
 
-int sprintf(char *str, const char *format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    int result = vsnprintf(str, (size_t)-1, format, args);
-    va_end(args);
-    return result;
-}
-
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 {
     if (str == NULL || format == NULL || size == 0)
@@ -930,62 +796,6 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 
     *ptr = '\0';
     return ptr - str;
-}
-
-// ===============================================================================
-// CHARACTER CLASSIFICATION
-// ===============================================================================
-
-int isdigit(int c)
-{
-    return (c >= '0' && c <= '9');
-}
-
-int isalpha(int c)
-{
-    return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'));
-}
-
-int isalnum(int c)
-{
-    return (isalpha(c) || isdigit(c));
-}
-
-int isspace(int c)
-{
-    return (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
-}
-
-int isupper(int c)
-{
-    return (c >= 'A' && c <= 'Z');
-}
-
-int islower(int c)
-{
-    return (c >= 'a' && c <= 'z');
-}
-
-// ===============================================================================
-// CHARACTER CONVERSION
-// ===============================================================================
-
-int toupper(int c)
-{
-    if (islower(c))
-    {
-        return c - 'a' + 'A';
-    }
-    return c;
-}
-
-int tolower(int c)
-{
-    if (isupper(c))
-    {
-        return c - 'A' + 'a';
-    }
-    return c;
 }
 
 // ===============================================================================

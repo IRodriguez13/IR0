@@ -22,18 +22,11 @@
 // STRING FUNCTIONS
 // ===============================================================================
 
-// Basic string functions
 size_t strlen(const char *str);
-
-// Kernel-specific string functions
-size_t kstrlen(const char *s);
-int kstrcmp(const char *s1, const char *s2);
-int kstrncmp(const char *s1, const char *s2, size_t n);
 int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
 char *strcpy(char *dest, const char *src);
 char *strncpy(char *dest, const char *src, size_t n);
-char *strcat(char *dest, const char *src);
 char *strncat(char *dest, const char *src, size_t n);
 
 // String search functions
@@ -70,32 +63,14 @@ char *__kstrncpy_checked(char *dst, const char *src, size_t n,
 #define kstrncpy(dst, src, n) \
     __kstrncpy_checked((dst), (src), (n), __FILE__, __LINE__, __func__)
 
-// String tokenization
-char *strtok(char *str, const char *delim);
-char *strtok_r(char *str, const char *delim, char **saveptr);
-
 // String conversion functions
 int atoi(const char *str);
-long atol(const char *str);
 unsigned long strtoul(const char *str, char **endptr, int base);
 long strtol(const char *str, char **endptr, int base);
 char *itoa(int value, char *str, int base);
 
 // String formatting
 int snprintf(char *str, size_t size, const char *format, ...);
-int sprintf(char *str, const char *format, ...);
 int vsnprintf(char *str, size_t size, const char *format, va_list ap);
-
-// Character classification
-int isdigit(int c);
-int isalpha(int c);
-int isalnum(int c);
-int isspace(int c);
-int isupper(int c);
-int islower(int c);
-
-// Character conversion
-int toupper(int c);
-int tolower(int c);
 
 #endif // STRING_H

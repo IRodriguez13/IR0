@@ -16,12 +16,12 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -ENODEV;
   }
 
-  if (!path || kstrlen(path) == 0)
+  if (!path || strlen(path) == 0)
   {
     return -EINVAL;
   }
 
-  if (kstrcmp(path, "/") == 0)
+  if (strcmp(path, "/") == 0)
   {
     return -EEXIST;
   }
@@ -48,7 +48,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
 
     for (bi = 0; blocked[bi]; bi++)
     {
-      if (kstrcmp(dirname, blocked[bi]) == 0)
+      if (strcmp(dirname, blocked[bi]) == 0)
         return -EEXIST;
     }
   }
@@ -282,9 +282,9 @@ int minix_fs_ls(const char *path, bool detailed)
       }
       safe_name[k] = '\0';
 
-      if (kstrcmp(safe_name, ".") == 0)
+      if (strcmp(safe_name, ".") == 0)
         continue;
-      if (kstrcmp(safe_name, "..") == 0)
+      if (strcmp(safe_name, "..") == 0)
         continue;
 
       if (safe_name[0] == '\0')
@@ -354,13 +354,13 @@ int minix_fs_rm(const char *path)
   if (ir0_swap_path_busy(path))
     return -ETXTBSY;
 
-  if (!path || kstrlen(path) == 0)
+  if (!path || strlen(path) == 0)
   {
     typewriter_vga_print("Error: No file path specified\n", 0x0C);
     return -EINVAL;
   }
 
-  if (kstrcmp(path, "/") == 0)
+  if (strcmp(path, "/") == 0)
   {
     typewriter_vga_print("Error: Cannot remove root directory\n", 0x0C);
     return -EPERM;
@@ -457,7 +457,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
     return -ENODEV;
   }
 
-  if (!oldpath || !newpath || kstrlen(oldpath) == 0 || kstrlen(newpath) == 0)
+  if (!oldpath || !newpath || strlen(oldpath) == 0 || strlen(newpath) == 0)
   {
     typewriter_vga_print("Error: Invalid path specified\n", 0x0C);
     return -EINVAL;
@@ -584,7 +584,7 @@ int minix_fs_rmdir(const char *path)
     return -EINVAL;
   }
 
-  if (kstrcmp(path, "/") == 0)
+  if (strcmp(path, "/") == 0)
   {
     typewriter_vga_print("Error: Cannot remove root directory\n", 0x0C);
     return -EPERM;
@@ -633,8 +633,8 @@ int minix_fs_rmdir(const char *path)
       }
 
       // Only allow . and ..
-      if (kstrcmp(entries[j].name, ".") != 0 &&
-          kstrcmp(entries[j].name, "..") != 0)
+      if (strcmp(entries[j].name, ".") != 0 &&
+          strcmp(entries[j].name, "..") != 0)
       {
         is_empty = false;
         break;
@@ -708,7 +708,7 @@ int minix_fs_rmdir_force(const char *path)
     return -1;
   }
 
-  if (kstrcmp(path, "/") == 0)
+  if (strcmp(path, "/") == 0)
   {
     typewriter_vga_print("Error: Cannot remove root directory\n", 0x0C);
     return -1;

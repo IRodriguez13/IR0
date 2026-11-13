@@ -28,3 +28,14 @@ init_clock clock_system_init()
 rtc_get_date_string rtc_read_time() and snprintf()
 rtc_get_time_string rtc_read_time() and snprintf()
 rtc_write_register (nothing; the kernel never writes the RTC)
+
+# Strings (includes/string.h): one libc-named implementation per behavior.
+# Unbounded or non-reentrant helpers stay out; plain libc names that were
+# only dead (atol, the ctype set) may return when a caller needs them.
+kstrcmp strcmp()
+kstrlen strlen()
+kstrncmp strncmp()
+sprintf snprintf()
+strcat strncat() or snprintf()
+strtok strchr() / a local parser (strtok is not reentrant)
+strtok_r strchr() / a local parser

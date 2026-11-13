@@ -85,7 +85,7 @@ int minix_lookup(const char *pathname, minix_inode_t *out, uint16_t *ino_out)
   if (!pathname || !out || !ino_out || !minix_fs.initialized)
     return -EINVAL;
 
-  if (kstrcmp(pathname, "/") == 0)
+  if (strcmp(pathname, "/") == 0)
   {
     int read_result = minix_read_inode(MINIX_ROOT_INODE, &cached_root_inode);
 
@@ -220,7 +220,7 @@ uint16_t minix_fs_find_dir_entry(const minix_inode_t *dir_inode,
       char ename[MINIX_NAME_LEN + 1];
 
       minix_dirent_name(&entries[j], ename);
-      if (kstrcmp(ename, name) == 0)
+      if (strcmp(ename, name) == 0)
       {
         return entries[j].inode;
       }
@@ -406,7 +406,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
    * Classic MINIX v1: name field is 14 bytes (may be unterminated if full).
    * Reject only names longer than MINIX_NAME_LEN (not >=).
    */
-  size_t name_len = kstrlen(filename);
+  size_t name_len = strlen(filename);
   if (name_len == 0 || name_len > MINIX_NAME_LEN)
   {
     return -EINVAL; // Invalid filename length
@@ -436,7 +436,7 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
     for (int i = 0; i < num_entries; i++)
     {
       // Check for duplicate filename
-      if (entries[i].inode != 0 && kstrncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0)
+      if (entries[i].inode != 0 && strncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0)
       {
         return -EEXIST; // Entry with this name already exists
       }
@@ -548,7 +548,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
         continue; // Skip empty entries
       }
 
-      if (kstrncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0)
+      if (strncmp(entries[i].name, filename, MINIX_NAME_LEN) == 0)
       {
         // Found the entry, mark it as free
         entries[i].inode = 0;

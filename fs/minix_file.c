@@ -896,7 +896,7 @@ int minix_fs_write_file_len(const char *path, const void *content, size_t conten
 
 int minix_fs_write_file(const char *path, const char *content)
 {
-  size_t content_size = content ? kstrlen(content) : 0;
+  size_t content_size = content ? strlen(content) : 0;
 
   return minix_fs_write_file_len(path, content, content_size);
 }
@@ -925,7 +925,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   if (!path || *path == '\0')
     return -EINVAL;
 
-  if (kstrcmp(path, "/") == 0)
+  if (strcmp(path, "/") == 0)
     return -EINVAL;
 
   if (!minix_root_block_present())
@@ -962,7 +962,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   if (!(parent_inode.i_mode & MINIX_IFDIR))
     return -ENOTDIR;
 
-  if (kstrlen(filename) > MINIX_NAME_LEN)
+  if (strlen(filename) > MINIX_NAME_LEN)
     return -ENAMETOOLONG;
 
   existing = minix_fs_find_dir_entry(&parent_inode, filename);
