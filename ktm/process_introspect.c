@@ -15,7 +15,7 @@
 #include <ir0/process_introspect.h>
 
 #include <ir0/fd_types.h>
-#include "process.h"
+#include <ir0/process.h>
 
 extern process_t *process_list;
 

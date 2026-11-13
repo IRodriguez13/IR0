@@ -676,7 +676,7 @@ LIB_OBJS = \
     kernel/elf64_image.o \
     kernel/early_elf_stack.o \
     $(MM_PORT_OBJ) \
-    kernel/process/process_introspect.o \
+    ktm/process_introspect.o \
     drivers/rtc/rtc_calendar.o \
     $(VIDEO_BACKEND_OBJ) \
     $(INPUT_BACKEND_OBJ) \
