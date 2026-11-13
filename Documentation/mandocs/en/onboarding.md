@@ -62,8 +62,7 @@ ARM64 builds use positional goals:
 ```bash
 make ir0 arm64
 make run arm64
-make ir0 arm64 rpi4
-make run arm64 rpi4
+make ir0 arm64 rpi5    # compile/link only; boards do not run under QEMU
 ```
 
 ### Optional boot log on the host
@@ -90,7 +89,7 @@ serial tag `BOOT_LOG_HOSTSHARE_OK`.
 ## 5. Subsystem boundaries
 
 - Do not add agent one-shot smokes to the root Makefile.
-- Do not claim Raspberry Pi images are SD-flashable (lab UART / stub only).
+- Do not claim Raspberry Pi builds boot: they only compile and link.
 - Mandocs document **implemented** behavior; aspirational items only in §10.
 
 ## 6. Relations to other subsystems
@@ -118,7 +117,7 @@ serial tag `BOOT_LOG_HOSTSHARE_OK`.
 ## 8. Important invariants
 
 1. Official first boot = **desktop x86-64 under QEMU**.
-2. ARM64 boards are lab targets; `rpi5` remains a compile stub.
+2. Raspberry Pi board builds compile and link the product kernel; they do not boot.
 3. Boot-log hostshare is **opt-in** (`CONFIG_BOOT_LOG_HOSTSHARE`); `make run`
    stays clean by default.
 4. Facade headers under `includes/ir0/` are **not** all covered by mandocs — see

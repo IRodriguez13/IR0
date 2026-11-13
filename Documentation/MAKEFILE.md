@@ -26,9 +26,8 @@ under `scripts/make/`:
 
 | Fragment | Contents |
 |----------|----------|
-| `arch-sources.mk` | Architecture object inventories and freestanding exceptions |
-| `arm64.mk` | ARM64 boot/aggregate/board build graph (parsed only for `ARCH=arm64`) |
-| `arm64-board.mk` | RPi3/4/5 `kernel8.img` packaging (ARM64 only) |
+| `arch-sources.mk` | Architecture object inventories |
+| `arm64.mk` | ARM64 product link, board selection and smokes (parsed only for `ARCH=arm64`) |
 | `clean.mk` | `make clean` |
 | `docs.mk` | Man pages and docs helpers |
 | `host-portable.mk` | POSIX host helpers (`HOST_TMP`) |
@@ -108,9 +107,9 @@ default subsystems to **enabled** (bring-up friendly).
 | Target | Output |
 |--------|--------|
 | `make onboard` | First contributor build: host check → `defconfig` only if `.config` is absent → `kernel-x64.iso` → `test-fast` |
-| `make ir0` | x86-64: `kernel-x64.iso`. ARM64: `kernel-arm64.bin`. Board: `build/arm64-<board>/kernel8.img` |
+| `make ir0` | x86-64: `kernel-x64.iso`. ARM64: `kernel-arm64.bin` |
 | `make ir0 arm64` | ARM64 product kernel (`kernel-arm64.bin` ← `kernel-arm64-product.bin` + common-core compile + provider audit) |
-| `make ir0 arm64 rpi4` | RPi4 `kernel8.img` plus its ELF twin |
+| `make ir0 arm64 rpi5` | The same product kernel compiled for a Raspberry Pi board (`rpi3`/`rpi4`/`rpi5`); a compile/link gate, not a bootable board image |
 | `make all` | Same artifact as `ir0`, without the `-Werror` policy |
 | `make kernel-x64.bin` | Linked x86-64 ELF only |
 | `make kernel-x64.iso` | Bootable GRUB ISO |
@@ -122,8 +121,11 @@ default subsystems to **enabled** (bring-up friendly).
 when a third-party compiler introduces a warning you need to inspect first.
 When `CONFIG_TOOL_AUTO_RUN_DEPTEST=y`, `ir0` runs `check-env` first.
 
-ARM64 board images also emit `build/arm64-<board>/kernel8.img`, which is what QEMU's
-raspi machines consume.
+A board word only changes the board macros (`IR0_ARM64_BOARD_*`). The sources
+that test them rebuild when the board changes (`build/arm64-board` stamp), so
+`make ir0 arm64 rpi5` and `make ir0 arm64` can alternate without `make clean`.
+The former `-min` board images (`kernel-arm64-<board>-min.bin`,
+`build/arm64-<board>/kernel8.img`) are retired.
 
 ### Run (QEMU)
 
@@ -137,10 +139,10 @@ touches ISD.
 | `make run debug` | Guest-error/int log + monitor on telnet `127.0.0.1:1234` |
 | `make run fullscreen` | GTK full screen |
 | `make run gdb` | Wait for GDB on localhost:1234 |
-| `make run arm64 rpi4` | Boot `build/arm64-rpi4/kernel8.img` |
 
 `run` boots the artifact from the last `make ir0` when the command line does
-not name an architecture. A board word alone (`make run rpi4`) selects ARM64.
+not name an architecture. A board word alone selects ARM64; Raspberry Pi boards
+are build-only, so `make run` refuses them.
 `make run x86-64` forces x86 after an ARM build.
 
 On x86-64 the disk is the ISD profile root (`PROFILE=minimal` by default,
@@ -166,8 +168,8 @@ that image is missing. `DISK=none` boots the kernel with no root disk.
 | `make tests` | Build the in-kernel test kernel, kernel-memsafe harness and host tests |
 
 Optional ARM64 QEMU checks (require `qemu-system-aarch64` where noted): see
-`make smoke-arm64-hypervisor-log`, `smoke-arm64-rpi3-boot`, `smoke-arm64-rpi4-boot`
-in `scripts/make/arm64.mk` / `arm64-board.mk`.
+`make smoke-arm64-hypervisor-log`, `smoke-arm64-product-log` and the other
+`smoke-arm64-*` targets in `scripts/make/arm64.mk`.
 
 The catalog (`scripts/test_catalog.yaml`) lists only public gates that still
 exist. `make test` opens the picker; `SUITE=<id>` runs suites non-interactively.
@@ -220,7 +222,7 @@ The Makefile builds `ALL_OBJS` from layered fragments:
 - **Arch:** `arch/x86-64/` or `arch/arm64/` selected by `ARCH`
 - **Drivers:** gated by `CONFIG_ENABLE_*` and `CONFIG_INIT_*`
 - **Generated:** `version.o`, kconfig headers
-- **ARM64:** `scripts/make/arm64.mk` and `scripts/make/arm64-board.mk`
+- **ARM64:** `scripts/make/arm64.mk`
 
 There is no userspace coupling in the object list: the kernel never compiles or
 links ISD packages. Userspace images come from the sibling ISD repository and

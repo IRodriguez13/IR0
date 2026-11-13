@@ -74,6 +74,13 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | Cred contract ktest | Done | `ktest_cred_access_contract`, `make smoke-multiuser-perms` |
 | **Hardening oleada (perm + lifecycle + ktest ABI + ATA size)** | Done | [`HARDENING.md`](HARDENING.md), gates 2026-06-23 |
 
+### ARM64 board images and guard ledger (2026-11-12)
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| Board `-min` images + `IR0_FREESTANDING_BOOT` | Retired | `make ir0 arm64 rpi5` builds the product link for the board (compile/link only) |
+| `[portable-no-register-names]` ledger | Strict | stale lines fail `arch-guard`; 88 pairs left in `scripts/isa_register_name_baseline.txt` |
+
 ### Swap, selftests, RPi4 GENET (2026-11-07)
 
 | Item | Status | Evidence |

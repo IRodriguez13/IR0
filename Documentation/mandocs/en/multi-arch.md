@@ -18,14 +18,15 @@ IR0 separates portable kernel code from architecture backends under `arch/`.
 `kernel-arm64.bin`, a copy after `arm64-common-core-compile` +
 `arm64-provider-audit`) links the same **`$(ALL_OBJS)`** set as x86 — no x86-only
 drivers in that link, but the surface is the common kernel, not a second
-“stub OS”. Tiny board `-min` images (`kernel-arm64-<board>-min.bin`,
-`scripts/make/arm64-board.mk`) keep a **freestanding** bring-up path for
-firmware load addresses. **musl aarch64 userspace + ISD AArch64 packaging**
+“stub OS”. A board word (`make ir0 arm64 rpi5`) builds that same kernel with
+the board's macros; it is a compile/link gate, not a bootable board image (the
+former freestanding `-min` board images are retired). **musl aarch64 userspace +
+ISD AArch64 packaging**
 remain the open toolchain/product gap (not the kernel link step).
 
 The historical F7 QEMU virt sequence (MMU → VBAR → EL0 scaffolding) is still
 useful context below; product boot today goes through the shared `ir0_kernel_boot`
-path with `IR0_FREESTANDING_BOOT` **off** for `kernel-arm64-product.bin`.
+path, the only ARM64 boot path.
 
 Boot CFLAGS include `-mgeneral-regs-only` so early EL1 code does not trap on
 NEON.
@@ -40,7 +41,7 @@ NEON.
 | Common interface | `arch/*/sources/interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | boot, IDT/PIC impl, user mode, syscalls |
-| arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; product link `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` boards = freestanding bring-up |
+| arm64 | `arch/arm64/sources/` | VBAR+GIC via `irq_*`; `arch_switch`/`arch_mm` TTBR0; product link `kernel-arm64-product.bin` = **`$(ALL_OBJS)`** for every board |
 | Context switch | `switch_to` → ISA-private backend | portable dispatcher in `sched/switch/context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` in Makefile | `ARCH_OBJS_ARM64` includes `switch_early.S` |
 
@@ -82,7 +83,7 @@ NEON.
 - `arch/` implements hooks declared in `arch_portable.h` / `arch_port.h`.
 - Portable code selects behavior via `CONFIG_*` and facades, not `#ifdef` in `fs/`.
 - Makefile gates object lists per `ARCH=x86-64|arm64`.
-- Board `-min` / old freestanding smokes must not be read as “full musl product on ARM64”.
+- A board build (`make ir0 arm64 rpi5`) compiles and links; it is not evidence of a board boot.
 
 ## 5. Subsystem boundaries
 
@@ -114,9 +115,9 @@ NEON.
      ┌─────┴─────┐
      ▼           ▼
   x86-64      arm64
-  (full ISO)  (product ALL_OBJS + -min bring-up + probes)
+  (full ISO)  (product ALL_OBJS + probes)
      │           │
-  boot/syscall  ir0_kernel_boot / -min board_boot_min
+  boot/syscall  ir0_kernel_boot
   switch_x64    switch + MMU / GIC
 ```
 
@@ -142,8 +143,8 @@ Porting checklist:
    emits the same `[BOOT] IR0 kernel <ver>` banner first; ISA detail uses
    COMP `ARCH`, stage tags COMP `SMOKE` (`includes/ir0/boot_log.h`).
 7. **ARM64 board is compile-time** (`arch/arm64/include/arm64_board.h`, `ARM64_BOARD=` /
-   Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU
-   `raspi4b`), `rpi5` (UART stub — no RP1 yet). No DTB parse yet.
+   Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`),
+   `rpi5` (firmware PL011 — no RP1 yet). Only `qemu-virt` boots under QEMU.
 
 ## 9. Debugging tips
 
@@ -156,8 +157,8 @@ Porting checklist:
   optional **SKIP** when missing).
 - arm64 portable compile probe: `make arm64-portable-compile` (curated objs — **not** a link).
 - spot-check: `make arm64-all-objs-probe` (MEMORY + KERNEL sample compile-only).
-- arm64 boards: `make smoke-arm64-rpi4-boot` (QEMU `raspi4b` or **SKIP** if machine
-  missing); `make arm64-rpi5-compile` (stub strings only). See `scripts/make/arm64-board.mk`.
+- arm64 boards: `make ir0 arm64 rpi5` (product kernel compiled and linked for the
+  board; no QEMU run). See the board selection in `scripts/make/arm64.mk`.
 
 ## 10. Future roadmap
 

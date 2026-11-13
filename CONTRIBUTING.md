@@ -105,7 +105,7 @@ Patch formatting: OK
 ```
 
 Comandos exactos corridos (no “compila en el IDE”). Si una suite se salta
-(p. ej. sin `raspi4b` en QEMU), decilo.
+(p. ej. sin `qemu-system-aarch64`), decilo.
 
 ## Principios de entrada (qué copiamos de kernels de producción)
 

@@ -8,7 +8,7 @@ Esta alineado con el Makefile raiz y menuconfig actuales.
 - `make ir0`: construye el artefacto por defecto para `ARCH`/`BOARD`.
   - x86-64 → `kernel-x64.iso`
   - `arm64` → `kernel-arm64.bin`
-  - `arm64 rpi4` → `build/arm64-rpi4/kernel8.img`
+  - `arm64 rpi5` → el mismo `kernel-arm64.bin` compilado para esa placa (solo compila/linkea)
 - `make ir0 arm64`: agregado ARM64 para QEMU `virt`.
 - `make kernel-x64.bin`: compila y linkea solo el kernel.
 - `make kernel-arm64.bin`: agregado ARM64 qemu-virt (fuerza `ARCH=arm64` si se
@@ -24,7 +24,6 @@ Esta alineado con el Makefile raiz y menuconfig actuales.
 - `make run debug`: log guest-error/int + monitor QEMU.
 - `make run fullscreen`: GTK pantalla completa.
 - `make run gdb`: arranca QEMU esperando GDB en localhost:1234.
-- `make run arm64 rpi4`: arranca `build/arm64-rpi4/kernel8.img`.
 
 `run` nunca compila. Resuelve el artefacto desde `ARCH`/`BOARD` y falla si no
 existe. `DISK=…` adjunta una imagen de usuarios; `DISK=none` evita adjuntarla.
@@ -62,8 +61,8 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
   herramientas (`Documentation/DECOUPLING.md`).
 
 No hay gran catalogo QA de smokes en el Makefile raiz. Siguen unos pocos
-checks QEMU ARM64 (`smoke-arm64-hypervisor-log`, `smoke-arm64-rpi3-boot`,
-`smoke-arm64-rpi4-boot` en `scripts/make/arm64*.mk`). Los nombres de smokes
+checks QEMU ARM64 (`smoke-arm64-hypervisor-log`, `smoke-arm64-product-log` y
+los demás `smoke-arm64-*` en `scripts/make/arm64.mk`). Los nombres de smokes
 de oleadas viejas en documentos de release siguen sin ser entrada de build.
 `build-matrix-full` es el superconjunto de CI de `build-matrix-min`.
 

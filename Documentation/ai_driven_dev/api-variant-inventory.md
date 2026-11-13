@@ -141,10 +141,9 @@ Private duplicates of public helpers: `drivers/timer/hpet/find_hpet.c:18`
 static `memcmp`, `drivers/timer/acpi/acpi_pm.c:82` `acpi_memcmp`,
 `kernel/syscalls/socket_syscalls.c:83` `sock_strnlen` (add one public
 `strnlen`), `kernel/elf_loader.c:297` `exec_strdup_kern` (add `kstrdup` only
-if a second user appears). `arch/arm64/sources/portable_string.c` and
-`freestanding_stubs.c` re-implement `strlen/memcpy/memset/strncpy` for
-bring-up images (allowed exception if the file header says "not production";
-verify).
+if a second user appears). The ARM64 freestanding string copies
+(`portable_string.c`, `freestanding_stubs.c`) left with the board `-min`
+images.
 
 ### 1.4 Locks and IRQ save/restore
 
@@ -325,17 +324,19 @@ Clean (no conditionals): `sched/core.c`, `sched/core.h`, `sched/rr.c`,
 
 Guarded since this branch: `scripts/architecture_guard.py`
 `[portable-no-register-names]` with the ledger
-`scripts/isa_register_name_baseline.txt` (107 `<path> <identifier>` pairs:
-59 in core trees, 48 in `ktm/`). ISA-specific headers
+`scripts/isa_register_name_baseline.txt` (88 `<path> <identifier>` pairs:
+31 in core trees, 57 in `ktm/`). The ledger only shrinks: arch-guard fails on
+a new pair and on a listed pair whose identifier is gone, so a branch that
+fixes an offender deletes its line in the same commit. ISA-specific headers
 (`arch_syscall_frame_*.h`, `arch_task_context_*.h`, `sigcontext_*.h`,
 `syscall_{x86_64,arm64}.h`, `asm_offsets.h`) are exempt. `drivers/` is not
 scanned (hardware register vocabulary, and HCI "rsp" = response).
 
 | Location | Identifier / concept | Neutral replacement |
 |----------|----------------------|---------------------|
-| `kernel/process.h:264` + 10 files (`core.c`, `signal_enter.c`, `wait.c`, `signals.c`, `process_syscalls.c`, `syscall_dispatch.c`, `sched/switch/kernel_resume.c`, arch `context.c` x2, `kernel/test/test_ktm_sched.c`) | `syscall_resume_rax` | `syscall_retval` (IN FLIGHT: `refactor/blocking-linux` may delete it) |
-| `includes/ir0/signal_syscall_resume.h:91-111`, `kernel/syscalls/process_syscalls.c:1982-2026` | `resume_rax` | delete with the header (blocking rework) |
-| `includes/ir0/syscall_frame.h:37`, `:43`; `kernel/process.h:565`, `:781`; `kernel/process/core.c:186-232` | `rip_hw`, `stack_r9_slot`, `rax` params (`process_capture_syscall_frame_at_entry`, `process_syscall_restore_exit_regs`) | `entry_ip`, `exit_frame`; the r9-slot contract belongs in `arch/x86-64` |
+| `kernel/process.h:264` + 10 files (`core.c`, `signal_enter.c`, `wait.c`, `signals.c`, `process_syscalls.c`, `syscall_dispatch.c`, `sched/switch/kernel_resume.c`, arch `context.c` x2, `kernel/test/test_ktm_sched.c`) | `syscall_resume_rax` | **Gone** (blocking rework); ledger lines removed |
+| `includes/ir0/signal_syscall_resume.h:91-111`, `kernel/syscalls/process_syscalls.c:1982-2026` | `resume_rax` | **Gone** (blocking rework); ledger lines removed |
+| `includes/ir0/syscall_frame.h:37`, `:43`; `kernel/process.h:565`, `:781`; `kernel/process/core.c:186-232` | `rip_hw`, `rax` params (`stack_r9_slot` is gone) (`process_capture_syscall_frame_at_entry`, `process_syscall_restore_exit_regs`) | `entry_ip`, `exit_frame`; the r9-slot contract belongs in `arch/x86-64` |
 | `includes/ir0/task_ops.h:34` | `rax` param of `task_apply_syscall_frame` | `retval` |
 | `kernel/process.h:591-594` | `fork_restore_emit_pre_iretq`, `fork_ret_first_syscall_entry(rax_hw, rip_hw, rsp_hw)`, `fork_flow_note_kernel_entry(rip_hw, ...)` | `fork_trace_before_user_return`, `(retval, ip, sp)`; these are arch hook prototypes and could move to an arch hook header |
 | `includes/ir0/arch_task.h:22-25` (+ `IR0_TASK_{GET,SET}_{CS,SS}`, `task_cs_is_user`) | x86 segment accessors in the portable task facade | move to an x86-private header; users are `arch/x86-64/*` and `ktm/ktm_ctx_snapshot.c`; `task_cs_is_user` -> `task_is_user_mode` |

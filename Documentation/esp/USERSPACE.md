@@ -90,7 +90,7 @@ el kernel elige `ARCH` y, en ARM64, `BOARD`.
 
 ## ARM64
 
-ARM64 QEMU es un target de **kernel** (`qemu-virt`, imágenes RPi3/4/5). **ISD**
+ARM64 QEMU es un target de **kernel** (`qemu-virt`; RPi3/4/5 sólo compilan). **ISD**
 separa usuarios por ISA en **`out/<ARCH>/`** (véase `ISD/mk/paths.mk`, p. ej.
 `out/x86_64/`, `out/aarch64/`). Construís el disco aarch64 desde el checkout
 ISD y lo adjuntás al kernel ARM64:

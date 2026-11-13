@@ -52,7 +52,7 @@ Mismo núcleo; demos HAB + DESK; **AST** = visión larga post-DESK. Detalle can�
 
 ## ARM64 — estado honesto
 
-Bring-up freestanding en QEMU virt **sí**; port de OS **no**. Detalle en el inglés.  
+Kernel de producto en QEMU virt **sí** (las placas RPi sólo compilan y linkean); port de OS **no**. Detalle en el inglés.  
 
 ## T3
 

@@ -1,6 +1,6 @@
 # IR0 Setup and Bootstrap
 
-This document covers reproducible kernel builds, ISO/board image creation, and
+This document covers reproducible kernel builds, ISO creation, and
 QEMU execution. It intentionally excludes smoke harnesses and internal phase
 naming.
 
@@ -45,12 +45,12 @@ Rust (`rustc` / `cargo` / nightly `rust-src` via [rustup](https://rustup.rs)) is
 **optional**. It is required only when `.config` has
 `CONFIG_ENABLE_EXAMPLE_DRIVERS=y` (off in `make defconfig`).
 
-### Required for ARM64 (`make ir0 arm64`, board images)
+### Required for ARM64 (`make ir0 arm64`, board builds)
 
 | Tool | Purpose |
 |------|---------|
-| `aarch64-linux-gnu-gcc` / `ld` | Freestanding ARM64 images |
-| `qemu-system-aarch64` | QEMU `virt` and Raspberry Pi machines |
+| `aarch64-linux-gnu-gcc` / `ld` | ARM64 kernel |
+| `qemu-system-aarch64` | QEMU `virt` |
 
 ```bash
 sudo apt install gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu qemu-system-arm
@@ -159,18 +159,18 @@ ARM64:
 
 ```bash
 make ir0 arm64             # kernel-arm64.bin (QEMU virt aggregate)
-make ir0 arm64 rpi4        # kernel-arm64-rpi4-min.bin + build/arm64-rpi4/kernel8.img
-make ir0 arm64 rpi3        # RPi3 image
-make ir0 arm64 rpi5        # RPi5 image
+make ir0 arm64 rpi5        # kernel-arm64.bin compiled for rpi5 (also rpi3, rpi4)
 ```
+
+A board build compiles and links the same product kernel with that board's
+macros. It is a build gate, not a bootable board image; only `qemu-virt` runs
+under QEMU.
 
 Artifacts:
 
 - `kernel-x64.bin` — x86-64 kernel ELF
 - `kernel-x64.iso` — bootable ISO
 - `kernel-arm64.bin` — validated ARM64 aggregate for QEMU `virt`
-- `kernel-arm64-<board>-min.bin` — ELF twin for a board
-- `build/arm64-<board>/kernel8.img` — raw Raspberry Pi firmware image
 - `disk.img` — optional userspace disk, created only when you ask for it
 
 `make ir0` adds `-Werror`; `make all` builds the same artifact without that
@@ -194,7 +194,6 @@ make run                    # GTK window + serial
 | `make run fullscreen` | GTK full screen |
 | `make run gdb` | Wait for GDB on `localhost:1234` |
 | `make run arm64` | QEMU `virt`, PL011 serial |
-| `make run arm64 rpi4` | QEMU `raspi4b` with `build/arm64-rpi4/kernel8.img` |
 
 Runtime variables:
 
@@ -286,7 +285,6 @@ No additional visual tuning is documented here; this section describes current b
 | `/sbin/init` not found at boot | No disk attached; pass `DISK=…` or run `make load-init` |
 | Blank GUI, serial OK | QEMU display focus, or the guest has no graphical userspace |
 | `qemu-system-aarch64` missing | Install `qemu-system-arm` (provides aarch64) |
-| ARM64 board machine missing | Upgrade QEMU; `raspi5b` needs a recent release |
 | `musl cross compiler not found` | Install `musl-tools` or set `MUSL_CC` (external userspace builds) |
 
 ## See Also

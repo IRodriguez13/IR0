@@ -16,15 +16,15 @@ IR0 separa código portable del kernel de backends de arquitectura bajo `arch/`.
 **x86-64** es el objetivo de producción (ISO, userspace musl, ruta syscall
 completa). **arm64** tiene kernel de producto portable: `kernel-arm64-product.bin`
 (y `kernel-arm64.bin`, copia tras `arm64-common-core-compile` +
-`arm64-provider-audit`) enlaza el mismo **`$(ALL_OBJS)`** que x86. Las imágenes
-`-min` por placa (`kernel-arm64-<board>-min.bin`, `scripts/make/arm64-board.mk`)
-mantienen un camino **freestanding** para direcciones de carga del firmware.
-El hueco abierto es **musl aarch64 + empaquetado rootfs ISD**, no el paso de link
+`arm64-provider-audit`) enlaza el mismo **`$(ALL_OBJS)`** que x86. Una palabra de
+placa (`make ir0 arm64 rpi5`) compila ese mismo kernel con las macros de la placa;
+es un gate de compilación/link, no una imagen booteable (las imágenes `-min`
+freestanding por placa se retiraron). El hueco abierto es **musl aarch64 + empaquetado rootfs ISD**, no el paso de link
 del kernel.
 
 La secuencia histórica F7 en QEMU virt (MMU → VBAR → EL0) sigue siendo contexto
-útil abajo; el arranque de producto hoy usa la cadena compartida `ir0_kernel_boot`
-con `IR0_FREESTANDING_BOOT` **apagado** en `kernel-arm64-product.bin`.
+útil abajo; el arranque de producto hoy usa la cadena compartida `ir0_kernel_boot`,
+el único camino de arranque ARM64.
 
 CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 temprano.
 
@@ -37,7 +37,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 | sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | uapi Linux en ambas ISA |
 | Interfaz común | `arch/*/sources/interface.c` | Despacho cross-arch |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | IDT/PIC impl + userspace |
-| arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; link producto `kernel-arm64-product.bin` = **`$(ALL_OBJS)`**; `-min` = freestanding |
+| arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; link producto `kernel-arm64-product.bin` = **`$(ALL_OBJS)`** en toda placa |
 | Context switch | `switch_to` → backend privado por ISA | dispatcher en `sched/switch/context_switch.c` |
 | Config | `setup/Kconfig`, `ARCH=` en Makefile | `ARCH_OBJS_ARM64` incluye `switch_early.S` |
 
@@ -79,7 +79,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 - `arch/` implementa hooks declarados en `arch_portable.h` / `arch_port.h`.
 - Código portable selecciona comportamiento vía `CONFIG_*` y fachadas, no `#ifdef` en `fs/`.
 - Makefile condiciona listas de objetos por `ARCH=x86-64|arm64`.
-- Imágenes `-min` / smokes freestanding viejos no equivalen a “musl producto completo en ARM64”.
+- Un build de placa (`make ir0 arm64 rpi5`) compila y linkea; no prueba un arranque en la placa.
 
 ## 5. Límites del subsistema
 
@@ -111,9 +111,9 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
      ┌─────┴─────┐
      ▼           ▼
   x86-64      arm64
-  (ISO completo)  (producto ALL_OBJS + -min + probes)
+  (ISO completo)  (producto ALL_OBJS + probes)
      │           │
-  boot/syscall  ir0_kernel_boot / board_boot_min -min
+  boot/syscall  ir0_kernel_boot
   switch_x64    switch + MMU / GIC
 ```
 
@@ -139,8 +139,8 @@ Checklist de porting:
    emite primero el banner `[BOOT] IR0 kernel <ver>`; detalle ISA en COMP
    `ARCH`, tags de etapa en COMP `SMOKE` (`includes/ir0/boot_log.h`).
 7. **Board ARM64 en compile-time** (`includes/ir0/arm64_board.h`, `ARM64_BOARD=` /
-   Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`, QEMU
-   `raspi4b`), `rpi5` (UART stub — sin RP1 aún). Sin parseo DTB todavía.
+   Kconfig): `qemu-virt` (PL011 `0x09000000`), `rpi4` (PL011 `0xfe201000`),
+   `rpi5` (PL011 de firmware — sin RP1 aún). Sólo `qemu-virt` arranca en QEMU.
 
 ## 9. Consejos de depuración
 
@@ -153,8 +153,8 @@ Checklist de porting:
   **SKIP** si falta).
 - Compile portable: `make arm64-portable-compile` (objs curados — **no** es un link).
 - Probe: `make arm64-all-objs-probe` (MEMORY + muestra KERNEL compile-only).
-- Boards: `make smoke-arm64-rpi4-boot` (QEMU `raspi4b` o **SKIP** si no hay máquina);
-  `make arm64-rpi5-compile` (solo strings stub). Ver `scripts/make/arm64-board.mk`.
+- Boards: `make ir0 arm64 rpi5` (kernel de producto compilado y linkeado para la
+  placa; sin corrida QEMU). Ver la selección de placa en `scripts/make/arm64.mk`.
 
 ## 10. Hoja de ruta futura
 

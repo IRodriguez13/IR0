@@ -243,11 +243,11 @@ Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
 | Gap | Today |
 |-----|--------|
 | Product SVC table | Done — product SVC → `syscall_dispatch`; selftests `openat`/`identity` |
-| Staged adapter | Freestanding bring-up still uses `early_*`; filtered out of product link |
+| Staged adapter | Freestanding bring-up retired (no `-min` board images, no `IR0_FREESTANDING_BOOT`); only the product link remains |
 | ISD AArch64 | no `rootfs/arch/aarch64` pack |
 | User MM (mmap / fork / COW) | **Done.** User roots are 4-level 48-bit tables built by common `mm/paging.c` (`arch/arm64/sources/mmu.c`, `mm.c`); EL0/EL1 aborts enter `mm_page_fault_handle`. Proof: `make ir0-selftest-fault-arm64` 3/3 (was 0/3 with `ENOMEM`). |
 | FP/SIMD context | **Open on both ISAs.** No FP/SIMD register save on context switch (x86 and ARM64). |
-| Board beyond QEMU virt | virt + rpi4 UART QEMU; rpi5 compile stub — not hardware userspace |
+| Board beyond QEMU virt | QEMU virt boots; `make ir0 arm64 rpi3\|rpi4\|rpi5` compiles and links the product kernel — no board boot, not hardware userspace |
 
 **Rough maturity:** early CPU privilege bring-up (**not** “ARM port ~done”). Treat F7 as
 closed for that slice; track real port as **F7b** above.

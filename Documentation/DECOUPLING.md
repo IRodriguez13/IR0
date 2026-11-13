@@ -202,8 +202,8 @@ pattern); treat explicit `n` as the compile-out signal.
 
 | Aspect | x86-64 | ARM64 |
 |--------|--------|-------|
-| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-product.bin` / `kernel-arm64.bin` = the same portable **`$(ALL_OBJS)`** product link (validated by `arm64-common-core-compile` + `arm64-provider-audit`). Board `kernel-arm64-<board>-min.bin` images are tiny freestanding bring-ups (`scripts/make/arm64-board.mk`), not the product kernel. |
-| **Boot** | Multiboot → full kernel bring-up. | Product path: shared `ir0_kernel_boot` chain (no `IR0_FREESTANDING_BOOT`). `-min` board images still use freestanding flags for firmware load addresses. |
+| **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-product.bin` / `kernel-arm64.bin` = the same portable **`$(ALL_OBJS)`** product link (validated by `arm64-common-core-compile` + `arm64-provider-audit`). A board goal (`make ir0 arm64 rpi5`) builds this same link with the board's macros. |
+| **Boot** | Multiboot → full kernel bring-up. | Shared `ir0_kernel_boot` chain, the only ARM64 boot path (the freestanding `-min` board images are retired). |
 | **Userspace** | musl / BusyBox / TCC / Doom on x86 via ISD. | Staged EL0 on QEMU virt (`make ir0 arm64`). ISD has **no** AArch64 rootfs pack yet. |
 | **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`EARLY_FOLD.md`](EARLY_FOLD.md). Not an ISD product boot. |
 

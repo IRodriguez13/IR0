@@ -8,7 +8,7 @@ It is aligned with the current root Makefile and menuconfig behavior.
 - `make ir0`: build the default artifact for `ARCH`/`BOARD`.
   - x86-64 → `kernel-x64.iso`
   - `arm64` → `kernel-arm64.bin`
-  - `arm64 rpi4` → `build/arm64-rpi4/kernel8.img`
+  - `arm64 rpi5` → the same `kernel-arm64.bin` compiled for that board (compile/link only)
 - `make ir0 arm64`: ARM64 QEMU `virt` aggregate.
 - `make kernel-x64.bin`: build and link the kernel only.
 - `make kernel-arm64.bin`: ARM64 qemu-virt aggregate (forces `ARCH=arm64` when
@@ -24,7 +24,6 @@ It is aligned with the current root Makefile and menuconfig behavior.
 - `make run debug`: guest-error/int logging plus QEMU monitor.
 - `make run fullscreen`: GTK full screen.
 - `make run gdb`: start QEMU waiting for GDB on localhost:1234.
-- `make run arm64 rpi4`: boot `build/arm64-rpi4/kernel8.img`.
 
 `run` never builds. It resolves the artifact from `ARCH`/`BOARD` and refuses to
 start when it is missing. `DISK=…` attaches a userspace image; `DISK=none` opts
@@ -65,8 +64,8 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
   exports (same-toolchain rebuild comparison); see `Documentation/DECOUPLING.md`.
 
 There is no large QA smoke catalog in the root Makefile. A **small** set of
-ARM64 QEMU checks remains (`smoke-arm64-hypervisor-log`, `smoke-arm64-rpi3-boot`,
-`smoke-arm64-rpi4-boot` in `scripts/make/arm64*.mk`). Historical wave-era smoke
+ARM64 QEMU checks remains (`smoke-arm64-hypervisor-log`, `smoke-arm64-product-log`
+and the other `smoke-arm64-*` targets in `scripts/make/arm64.mk`). Historical wave-era smoke
 names in old docs are still not entry points.
 `build-matrix-full` is the CI superset of `build-matrix-min`.
 

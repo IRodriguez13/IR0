@@ -13,6 +13,15 @@ Detalle: [`../releases/IR0_0.0.1_RC4.md`](../releases/IR0_0.0.1_RC4.md).
 
 ## [Sin publicar]
 
+### Retiro de las imágenes -min de placa ARM64 (2026-11-12)
+
+- Se quitaron las imágenes freestanding de placa (`kernel-arm64-rpi{3,4,5}-min.bin`,
+  `kernel8.img`), sus smokes y probes, y `IR0_FREESTANDING_BOOT` /
+  `IR0_KLOG_COMPILE_OUT`. `make ir0 arm64 rpi5` compila y linkea el kernel de
+  producto con las macros de la placa.
+- `[portable-no-register-names]` falla con una línea vieja del ledger: el ledger
+  sólo se achica.
+
 ### Goals ARM64 + smoke de hipervisor (2026-11-06)
 
 - Goals `kernel-arm64*`, `smoke-arm64*` y `arm64-*` fuerzan `ARCH=arm64` para

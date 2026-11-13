@@ -83,10 +83,6 @@ Modelo Linux: cada tarea duerme en su propia pila de kernel y `switch_to()` vuel
 - Retired names are rejected by `scripts/architecture_guard.py`
   (`[uaccess-single-api]` lists them) so they do not come back.
 
-## Excepciones
-
-- Bring-up freestanding (`arch/arm64/sources/board_boot_min.c`, etc.): asm/backend directo OK si el file header dice **no producción**.
-
 ## Al añadir API
 
 1. ¿≥2 subsistemas o contrato estable? → facade `includes/ir0/`, **nombre simple**.

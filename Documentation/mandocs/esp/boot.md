@@ -127,7 +127,7 @@ Build: `make ir0` (kernel ISO); usuarios: construí `disk.img` con ISD y usá
 ## 10. Hoja de ruta futura
 
 - Arranque temprano ARM64 usa `ir0_boot_*` portable + `arm64_board` (`qemu-virt` /
-  `rpi4` / stub `rpi5`). UART RPi4 min: `make run arm64 rpi4`. Hello sin CRT
+  `rpi4` / `rpi5`); las placas RPi sólo compilan y linkean. Hello sin CRT
   musl: fallback freestanding en `musl-aarch64-hello`.
 - Arranque SMP/APIC-first no es primario (`CONFIG_ENABLE_SMP=0`).
 - Mapa higher-half del kernel no implementado (solo mapa bajo de identidad).

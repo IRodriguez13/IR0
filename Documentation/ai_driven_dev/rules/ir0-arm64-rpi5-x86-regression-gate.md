@@ -32,9 +32,10 @@ make -s kernel-x64.bin
 make -s -C tests/host run
 ```
 
-Use `make -s ctr` as the aggregate x86_64 gate; add the ARM64 builds above. A
-RPi5 compile stub proves only board selection and
-linkage; it is never evidence of hardware boot or common-kernel userspace.
+Use `make -s ctr` as the aggregate x86_64 gate; add the ARM64 builds above.
+`make ir0 arm64 rpi5` compiles and links the product kernel with the RPi5 board
+macros; it proves board selection and linkage only, never hardware boot or
+common-kernel userspace. There is no separate freestanding board image.
 
 If boot, MM, exceptions, signals, syscalls, scheduling, or shared drivers changed,
 also run the x86_64 QEMU product boot gate before commit. ARM64 success is not enough:

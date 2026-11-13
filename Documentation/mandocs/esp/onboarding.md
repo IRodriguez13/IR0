@@ -63,8 +63,7 @@ ARM64 usa goals posicionales:
 ```bash
 make ir0 arm64
 make run arm64
-make ir0 arm64 rpi4
-make run arm64 rpi4
+make ir0 arm64 rpi5    # sólo compila/linkea; las placas no corren en QEMU
 ```
 
 ### Boot log opcional en el host
@@ -89,7 +88,7 @@ serial `BOOT_LOG_HOSTSHARE_OK`.
 ## 5. Límites del subsistema
 
 - No meter smokes one-shot de agente en el Makefile raíz.
-- No reclamar imágenes RPi flasheables (lab UART / stub).
+- No reclamar que los builds RPi arrancan: sólo compilan y linkean.
 - Mandocs documentan lo **implementado**; aspiracional solo en §10.
 
 ## 6. Relaciones con otros subsistemas
@@ -117,8 +116,8 @@ serial `BOOT_LOG_HOSTSHARE_OK`.
 ## 8. Invariantes importantes
 
 1. Primer boot oficial = **desktop x86-64 bajo QEMU**.
-2. Las boards ARM64 son objetivos de laboratorio; `rpi5` sigue siendo stub de
-   compilación.
+2. Los builds de placa Raspberry Pi compilan y linkean el kernel de producto;
+   no arrancan.
 3. Boot log hostshare es **opt-in** (`CONFIG_BOOT_LOG_HOSTSHARE`); `make run`
    queda limpio por defecto.
 4. Las facades en `includes/ir0/` **no** están todas documentadas — ver INDEX.

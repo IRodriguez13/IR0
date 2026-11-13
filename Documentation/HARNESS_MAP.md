@@ -58,16 +58,14 @@ names exist; there is no `IR0_LEGACY_SMOKE` gate.
 | KTM inventory | `make test-fast` / `make ktm-manifest` |
 | x86-64 product | `make ir0` / `make run [gui\|console\|debug]` |
 | ARM64 product kernel | `make ir0 arm64` / `make run arm64 console` |
-| Raspberry Pi image | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |
+| Raspberry Pi build (compile/link only) | `make ir0 arm64 rpi3` (or `rpi4`, `rpi5`) |
 | Userspace KTAP selftests | `make ir0-selftest-x86` / `make ir0-selftest-arm64` / `make ir0-selftest-identity` |
 
-**Optional QEMU smokes (small set, `scripts/make/arm64*.mk`):**
+**Optional QEMU smokes (small set, `scripts/make/arm64.mk`):**
 
 | Target | What it checks |
 |--------|----------------|
 | `make smoke-arm64-hypervisor-log` | Serial: `[HYPERVISOR]` line (FDT/CPUID path) + `ARM64_BOOT_OK` (runs `kernel-arm64-product.bin`) |
-| `make smoke-arm64-rpi3-boot` | Raspberry Pi 3 model in QEMU |
-| `make smoke-arm64-rpi4-boot` | Raspberry Pi 4 model when QEMU provides `raspi4b` |
 
 Userspace package builds (BusyBox, runit, TinyCC and ISD images) belong to the
 ISD repository; the kernel Makefile no longer proxies those package targets.

@@ -106,9 +106,8 @@ Rules of thumb:
   `[#n] [phase] [ts] [INFO] [VFS] CLASSIFY VFS_FS_CONTRACT_ACTIVE`.
 - **Boot banner is the first framed serial line on every ISA.** Call
   `ir0_boot_serial_ready()` after UART/serial init (`includes/ir0/boot_log.h`).
-  Product kernels route through `klog_boot_hold` + `klog_event(BOOT_BANNER, …)`;
-  board `-min` bring-up images (`kernel-arm64-*-min.bin`, `IR0_FREESTANDING_BOOT`) still emit the same layout
-  via `arch/common/boot_log.c` (with `#sequence` + `EARLY_ARCH`).
+  Every kernel routes it through `klog_boot_hold` + `klog_event(BOOT_BANNER, …)`
+  in `arch/common/boot_log.c`.
 - `CONFIG_KTM=n`: klog + `/proc/kmsg` still work (covered by host/ktest runs).
 - `CONFIG_KTM_SERIAL_VERBOSE` (default **n**): when off, product/desk boots omit noisy
   `CHECKPOINT` / `PROBE` / optional `KTM|LOG` mirrors; ASSERT / SUITE / smoke tags still emit.

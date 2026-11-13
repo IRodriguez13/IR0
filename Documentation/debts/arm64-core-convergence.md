@@ -100,15 +100,15 @@ embeds and the `el0_entry` workload in `vectors.S`) was deleted on
   Destination: rename out of "early".
 - `arch/arm64/sources/virtio_blk_early.c`; product CPIO/`vda` block provider.
   Destination: the common virtio block driver over `drivers/virtio/virtio_mmio.c`.
-- `arch/arm64/sources/freestanding_stubs.c`; board `-min` images only.
 - `irq_portable_stubs.c`; compile probe only; forbidden as a product provider.
 
 ### Boot-only assets and harnesses
 
 - `entry.S`, `vectors.S`, `early.c`; owner: ARM boot; destination: keep,
   later `arch/arm64/boot/`.
-- `board_boot_min.c` + `entry_board_min.S`; owner: board contract harness;
-  destination: ARM tests; must never be linked into the product image.
+- The board `-min` images (`board_boot_min.c`, `entry_board_min.S`,
+  `freestanding_stubs.c`, `linker_rpi.ld`) and `IR0_FREESTANDING_BOOT` were
+  retired on 2026-11-12; `make ir0 arm64 <board>` builds the product link.
 
 ## Ordered convergence
 

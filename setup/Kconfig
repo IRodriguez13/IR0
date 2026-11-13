@@ -22,7 +22,7 @@ menu "Architecture"
           This port is scaffolded and intended for incremental bring-up.
 
     choice
-        prompt "ARM64 board (freestanding / early boot)"
+        prompt "ARM64 board"
         depends on ARCH_ARM64
         default ARM64_BOARD_QEMU_VIRT
         help
@@ -37,7 +37,7 @@ menu "Architecture"
         config ARM64_BOARD_RPI4
             bool "Raspberry Pi 4 (PL011 @ 0xfe201000)"
             help
-              QEMU -M raspi4b / BCM2711 UART0. Min smoke only; full GIC/SD later.
+              BCM2711 UART0. Product kernel compile/link only; full GIC/SD later.
 
         config ARM64_BOARD_RPI5
             bool "Raspberry Pi 5 (UART stub — RP1 TBD)"

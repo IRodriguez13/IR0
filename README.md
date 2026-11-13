@@ -11,7 +11,7 @@
 
   IR0 is an operating-system kernel (GPL-3.0). Primary bring-up target is
   **x86-64** under QEMU (Multiboot, GRUB, VFS/MINIX, ELF userspace); **ARM64**
-  covers QEMU `virt` and Raspberry Pi 3/4/5 board images. Version string:
+  boots under QEMU `virt` and compiles for Raspberry Pi 3/4/5. Version string:
   **`0.0.1-rc6`** (last pre-release before `v0.0.1` final).
 
 ## Kernel and userspace
@@ -22,7 +22,7 @@ lives in the sibling [`ISD`](https://github.com/IRodriguez13/ISD) repository.
 
 | Layer | Role |
 |-------|------|
-| **IR0** (this tree) | mechanisms, drivers, UAPI, kernel ISO / board images |
+| **IR0** (this tree) | mechanisms, drivers, UAPI, kernel ISO / ARM64 kernel image |
 | **ISD** (separate repo) | packages, services, rootfs, `disk.img` |
 
 The IR0 Makefile does **not** clone, build, or pack ISD. `make run` only boots
@@ -98,8 +98,7 @@ ARM64:
 ```bash
 make ir0 arm64          # QEMU virt aggregate
 make run arm64          # serial console
-make ir0 arm64 rpi4     # build/arm64-rpi4/kernel8.img
-make run arm64 rpi4     # boot the board image
+make ir0 arm64 rpi5     # same kernel built for a Raspberry Pi (compile/link only)
 ```
 
 To boot a userspace disk built by ISD:
@@ -159,8 +158,9 @@ includes UDP/ICMP, **AF_UNIX** streams, and lab-grade TCP — not a full Interne
 stack or production NIC story. Optional userspace demos (BusyBox `ash`, X11,
 doomgeneric on `/dev/fb0`) come from ISD.
 
-**ARM64:** early bring-up and board scaffolding (QEMU `virt`, RPi3/4/5 UART
-images). Not a flashable appliance and not feature-parity with x86.
+**ARM64:** the common product kernel boots under QEMU `virt`; Raspberry Pi 3/4/5
+builds compile and link only. Not a flashable appliance and not feature-parity
+with x86.
 
 **Non-goals today:** SMP, desktop-class userspace, or “better than Linux.”
 Near-term focus is open, rebuildable appliance profiles with a thin Makefile

@@ -15,7 +15,7 @@ a userspace image that someone else built.
 | Lives in **IR0** | Lives in **ISD** |
 |------------------|------------------|
 | Kernel, drivers, UAPI (`includes/uapi/`) | Packages, services, rootfs, profiles |
-| Kernel ISO / ARM64 board images | `out/<arch>/images/<profile>/disk.img` |
+| Kernel ISO / ARM64 kernel image | `out/<arch>/images/<profile>/disk.img` |
 | QEMU launcher (`scripts/run_qemu.sh`) | `.isdconfig` extras, stage/pack scripts |
 
 **Hard rule:** the IR0 Makefile does not clone, build, or pack ISD. There are no
@@ -92,7 +92,7 @@ kernel selects `ARCH` and, on ARM64, `BOARD`.
 
 ## ARM64
 
-ARM64 QEMU is a **kernel** target (`qemu-virt`, RPi3/4/5 board images). **ISD**
+ARM64 QEMU is a **kernel** target (`qemu-virt`; RPi3/4/5 builds compile only). **ISD**
 keeps one userspace tree per ISA under **`out/<ARCH>/`** (see sibling
 `ISD/mk/paths.mk`: e.g. `out/x86_64/`, `out/aarch64/`). Build the AArch64 disk
 from the ISD checkout, then attach it when running the ARM64 kernel:

@@ -22,6 +22,17 @@ Notes: [`releases/IR0_0.0.1_RC4.md`](releases/IR0_0.0.1_RC4.md), [`releases/NETW
 
 ## [Unreleased]
 
+### ARM64 board -min images retired (2026-11-12)
+
+- Removed the freestanding board images (`kernel-arm64-rpi{3,4,5}-min.bin`,
+  `build/arm64-<board>/kernel8.img`), their smokes (`smoke-arm64-rpi3-boot`,
+  `smoke-arm64-rpi4-boot`) and probes (`arm64-rpi{3,4,5}-compile`), and the
+  `IR0_FREESTANDING_BOOT` / `IR0_KLOG_COMPILE_OUT` configurations.
+- `make ir0 arm64 rpi5` (also `rpi3`, `rpi4`) now builds the product kernel with
+  the board's macros; it is a compile/link gate. `make run` refuses RPi boards.
+- `arch-guard` `[portable-no-register-names]` fails on a stale ledger line, so
+  `scripts/isa_register_name_baseline.txt` can only shrink.
+
 ### ARM64 build goals + hypervisor smoke (2026-11-06)
 
 - Make goals `kernel-arm64*`, `smoke-arm64*`, and `arm64-*` force `ARCH=arm64`
