@@ -113,7 +113,7 @@ Mapa ASCII:
 
 - musl puede esperar `SA_RESTORER` — no implementado (gap T1).
 - Señales durante syscalls bloqueadas: `-ERESTARTSYS` + `do_signal()` en la salida (modelo Linux).
-- Preempt timer deshabilitado — entrega ligada a puntos schedule explícitos.
+- Las señales asíncronas también se entregan al volver de una interrupción a userspace (`kernel/entry.c`).
 
 ## 10. Roadmap futuro
 

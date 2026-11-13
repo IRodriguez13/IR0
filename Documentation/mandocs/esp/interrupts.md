@@ -67,7 +67,7 @@ señales para tareas de usuario o panic para fallos en kernel.
 
 | Vecino | Interacción |
 |--------|-------------|
-| Timer | IRQ0 → PIT → quantum del planificador (preempt `#if 0`) |
+| Timer | IRQ0 → PIT → quantum del planificador; preemption al volver a userspace |
 | TTY/Input | IRQ1 teclado, IRQ12 ratón |
 | Net | IRQ NIC → rtl8139 |
 | Scheduler | contexto IRQ no debe HLT |

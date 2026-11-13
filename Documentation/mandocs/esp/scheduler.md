@@ -17,7 +17,7 @@
 IR0 planifica procesos mediante una **fachada portable**, un **núcleo** y
 **un archivo de política** enlazado según `CONFIG_SCHEDULER_POLICY`. El defconfig usa **bandas de
 prioridad** (`=2`). Round-robin (`0`) y el alias de nombre CFS (`1`) siguen
-disponibles. Planificación **un CPU**; preemption por timer diferida.
+disponibles. Planificación **un CPU**; una tarea en userspace se desaloja al vencer el quantum, en el retorno de la interrupción (`irqentry_exit_to_user_mode()`).
 
 La primera transferencia es `switch_to(NULL, next)`, que delega en el hook
 de arquitectura `first_switch_to()`.
@@ -55,11 +55,11 @@ cuando `prev` corre otra vez sobre su propia pila de kernel.
 |--------|-------------|
 | Process | `sched_add` / `sched_remove` |
 | Syscalls | Bloqueo; wake desde idle poll |
-| Timer | Quantum PIT (preemption diferida) |
+| Timer | Quantum PIT; preemption al volver a userspace |
 | Arch | First switch + ASM |
 
 ## 6. Hoja de ruta
 
 - CFS fair real con ops propias.
-- Preemption por quantum de timer.
+- Preemption dentro del kernel (una syscall conserva la CPU hasta dormir).
 - SMP — no implementado.

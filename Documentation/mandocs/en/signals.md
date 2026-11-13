@@ -122,10 +122,10 @@ ASCII:
 ## 9. Debugging tips
 
 - musl `SA_RESTORER` is stored; restorer trampoline is not a full musl port.
-- Asynchronous signals are delivered at the syscall exit and on
-  rt_sigreturn's way out (`do_signal(p, restored_ctx)`), not yet on an
-  interrupt return: a task that never makes a syscall sees them at its
-  next one, and on UP it is not preempted either.
+- Asynchronous signals are delivered at the syscall exit, on
+  rt_sigreturn's way out (`do_signal(p, restored_ctx)`) and on the
+  interrupt return to userspace (`irqentry_exit_to_user_mode()`,
+  `kernel/entry.c`), so a task spinning without syscalls still gets them.
 - An uncaught signal takes its full signal(7) default: Ign drops it, Stop
   (STOP, TSTP, TTIN, TTOU) sleeps until SIGCONT, everything else ends the
   task.
@@ -135,7 +135,6 @@ ASCII:
 
 ## 10. Future roadmap
 
-- Interrupt-return delivery and preemption (needs per-task FP/SIMD state).
 - Socket paths that test `signal_pending()` before sleeping still return
   `-EINTR`; the shared polling sleep returns `-ERESTARTSYS`.
 - Process groups, `kill(0)`, permission checks on send.

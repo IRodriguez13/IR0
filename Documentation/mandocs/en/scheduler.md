@@ -18,8 +18,9 @@ IR0 schedules runnable processes through a **portable facade**, one
 **scheduler core** and **one policy file** linked by `CONFIG_SCHEDULER_POLICY`.
 Default defconfig uses **priority bands** (`CONFIG_SCHEDULER_POLICY=2`).
 Round-robin (`0`) and CFS-name alias (`1`) remain available. Scheduling is
-**single-CPU** oriented; timer-driven preemption is currently deferred in the
-PIT handler.
+**single-CPU** oriented. A task running in userspace is preempted at the
+timer quantum on the interrupt return (`irqentry_exit_to_user_mode()`); a
+task running in the kernel is not.
 
 The first transfer into a newly runnable task goes through
 `switch_to(NULL, next)`, which hands over to the arch hook
@@ -89,6 +90,6 @@ peer runqueue internals.
 ## 8. Future
 
 - Real CFS fair policy file implementing `sched/core.h` (no RR include).
-- Re-enable timer quantum preemption when iretq path is hardened.
+- Kernel preemption (a task inside a syscall keeps the CPU until it sleeps).
 - SMP runqueues — not implemented; multi-CPU code goes to `smp/` and
   implements `rq_lock()` / `rq_unlock()`.

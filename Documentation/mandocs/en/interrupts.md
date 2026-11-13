@@ -66,7 +66,7 @@ exceptions map to signals for user tasks or panic for kernel faults.
 
 | Neighbor | Interaction |
 |----------|---------------|
-| Timer | IRQ0 → PIT → scheduler quantum (preempt `#if 0`) |
+| Timer | IRQ0 → PIT → scheduler quantum; preemption on the return to userspace |
 | TTY/Input | IRQ1 keyboard, IRQ12 mouse |
 | Net | NIC IRQ → rtl8139 |
 | Scheduler | IRQ context must not HLT |

@@ -15,6 +15,7 @@
 #include <interrupt/pic.h>
 #include <interrupt/io.h>
 #include <ir0/vga.h>
+#include <ir0/entry.h>
 #include <ir0/signals.h>
 #include <ir0/oops.h>
 #include <ir0/fault.h>
@@ -269,6 +270,9 @@ void isr_handler64(uint64_t interrupt_number, uint64_t *stack)
     isr_handler64_dispatch(interrupt_number, stack);
     ktm_irq_nest_exit();
     (void)cpu_local_irq_leave();
+    /* Device interrupts from ring 3: preemption and signals (Linux irqentry). */
+    if (interrupt_number >= 32 && stack && is_user_exception_frame(stack))
+        irqentry_exit_to_user_mode(stack);
 }
 
 static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)

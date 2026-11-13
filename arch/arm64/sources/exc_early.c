@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
+#include <ir0/entry.h>
 #include <ir0/clock.h>
 #include <ir0/oops.h>
 #include <ir0/signals.h>
@@ -154,7 +155,7 @@ void arm64_exc_sync_el1(void)
 	}
 }
 
-void arm64_exc_irq_el1(void)
+void arm64_exc_irq_el1(uint64_t *frame)
 {
 	uint32_t iar = arm64_irq_backend_ack();
 	uint32_t irq = iar & 0x3ffU;
@@ -187,6 +188,9 @@ void arm64_exc_irq_el1(void)
 	}
 
 	(void)cpu_local_irq_leave();
+	/* SPSR.M[3:0] == EL0t: preemption and signals (Linux irqentry). */
+	if ((frame[ARM64_EXC_IDX_SPSR] & 0xfU) == 0)
+		irqentry_exit_to_user_mode(frame);
 }
 
 /*

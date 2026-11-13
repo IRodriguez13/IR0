@@ -29,7 +29,7 @@ void arm64_exc_sync_el1(void);
  *  When the scheduling smoke is active, uses the portable scheduler facade and
  *  re-arms the oneshot timer.
  */
-void arm64_exc_irq_el1(void);
+void arm64_exc_irq_el1(uint64_t *frame);
 
 /** Nonzero after first handled timer IRQ (boot poll). */
 int arm64_timer_irq_seen(void);

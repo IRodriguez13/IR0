@@ -178,7 +178,7 @@ exc_sync_lower:
 	exc_entry_frame arm64_exc_sync_lower
 
 exc_irq_el1h:
-	exc_entry arm64_exc_irq_el1
+	exc_entry_frame arm64_exc_irq_el1
 
 exc_unhandled:
 	b	exc_unhandled

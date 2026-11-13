@@ -56,6 +56,15 @@ and calls `schedule()`. A wake source sets `PROCESS_READY`; so does
 `-ERESTARTNOHAND` (pause, rt_sigsuspend) or `-EINTR` (nanosleep with the
 remaining time, poll, select).
 
+An interrupt that came from userspace runs the same exit work
+(`irqentry_exit_to_user_mode()` in [`kernel/entry.c`](../kernel/entry.c),
+Linux `irqentry_exit_to_user_mode()`), called by the ISA after the EOI and
+`cpu_local_irq_leave()` (x86 `isr_handler64`, arm64 `arm64_exc_irq_el1`):
+a pending reschedule sleeps in `schedule()` (a task spinning in userspace
+is preempted at the timer quantum), and a deliverable signal goes through
+`do_signal()` with the interrupted context, then the task returns through
+its full user state as `rt_sigreturn` does.
+
 The syscall exit (`exit_to_user_mode()` in `syscall_dispatch.c`, Linux
 `syscall_exit_to_user_mode()`) stores the result in the task's syscall
 frame, sleeps in `schedule()` when a reschedule is pending, and calls
@@ -117,7 +126,6 @@ returning kexec); arch-guard `[no-busy-wait]` rejects any other caller.
 - Policy `1` is not a fair CFS runqueue — name only until a real CFS policy
   file implements the `sched/core.h` contract.
 - SMP-oriented scheduling is not the current baseline.
-- Timer preemption in IRQ remains gated / deferred (see mandocs).
 
 ## Related
 
