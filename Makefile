@@ -511,6 +511,7 @@ KERNEL_OBJS = \
     drivers/core/resource_registry.o \
     ipc/ipc.o \
     kernel/futex/futex.o \
+    kernel/futex/syscalls.o \
     net/net_compat.o \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \

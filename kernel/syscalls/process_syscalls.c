@@ -25,7 +25,6 @@
 #include <ir0/cred_transition.h>
 #include <ir0/credentials.h>
 #include <ir0/elf_loader.h>
-#include <ir0/futex.h>
 #include <ir0/kexec.h>
 #include <ir0/kmem.h>
 #include <ir0/ktm/checkpoint.h>
@@ -46,12 +45,6 @@
 /* prctl(2) options (Linux include/uapi/linux/prctl.h) */
 #define PR_SET_NO_NEW_PRIVS 38
 #define PR_GET_NO_NEW_PRIVS 39
-
-#define FUTEX_WAIT 0
-#define FUTEX_WAKE 1
-
-
-#define IR0_ROBUST_LIST_SIZE 24
 
 /* Credentials, supplementary groups, and Linux setreuid/setresuid ABI. */
 
@@ -549,102 +542,6 @@ int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig)
 	if (send_signal(tid, sig) != 0)
 		return -ESRCH;
 	return 0;
-}
-
-struct robust_list_head
-{
-	void *list;
-	long futex_offset;
-	void *list_op_pending;
-};
-
-/* Robust futex list (set_robust_list / get_robust_list / exit walk). */
-
-int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
-{
-	if (!current_process)
-		return -ESRCH;
-
-	if (len != sizeof(struct robust_list_head))
-		return -EINVAL;
-
-	if (head && current_process->mode == USER_MODE)
-	{
-		if (!access_ok(head, sizeof(struct robust_list_head)))
-			return -EFAULT;
-	}
-
-	current_process->robust_list = head;
-	return 0;
-}
-
-int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
-			    size_t *len_ptr)
-{
-	process_t *target = current_process;
-	struct robust_list_head *head;
-	size_t len = sizeof(struct robust_list_head);
-
-	if (!current_process)
-		return -ESRCH;
-	if (pid != 0 && pid != (int)current_process->task.pid)
-		return -ESRCH;
-	if (!head_ptr || !len_ptr)
-		return -EFAULT;
-
-	/* Linux get_robust_list(): the length is written first. */
-	head = target->robust_list;
-	if (copy_to_user(len_ptr, &len, sizeof(len)) != 0)
-		return -EFAULT;
-	if (copy_to_user(head_ptr, &head, sizeof(head)) != 0)
-		return -EFAULT;
-	return 0;
-}
-
-/**
- * Best-effort robust futex exit: wake one waiter on the pending/list head
- * word if present (Linux FUTEX_OWNER_DIED subset deferred to full walk).
- */
-void process_exit_robust_list(process_t *p)
-{
-	struct robust_list_head kh;
-	int *uaddr;
-	int uval;
-	int copy_ret;
-
-	if (!p || !p->robust_list)
-		return;
-
-	if (p->mode == USER_MODE)
-	{
-		copy_ret = copy_from_user_mm(process_pgd(p),
-					     (uintptr_t)p->robust_list, &kh,
-					     sizeof(kh));
-		if (copy_ret != 0)
-		{
-			p->robust_list = NULL;
-			return;
-		}
-	}
-	else
-	{
-		kh = *p->robust_list;
-	}
-
-	uaddr = (int *)kh.list_op_pending;
-	if (!uaddr)
-		uaddr = (int *)kh.list;
-	/*
-	 * Linux handle_futex_death(): read the futex word through the dying
-	 * task's mm first; a word it cannot read wakes nobody.
-	 */
-	if (uaddr && p->mode == USER_MODE &&
-	    copy_from_user_mm(process_pgd(p), (uintptr_t)uaddr, &uval,
-			      sizeof(uval)) == 0)
-		(void)ir0_futex_wake(uaddr, 1);
-
-	p->robust_list = NULL;
-	klog_smoke("ROBUST_LIST_EXIT_OK");
 }
 
 /* Session, process group, personality, and nice. */
@@ -1562,7 +1459,7 @@ int64_t sys_kill(pid_t pid, int signal)
  * PR_SET_NO_NEW_PRIVS is one-way: once set it cannot be cleared, and it makes
  * every later execve ignore set-user-ID / set-group-ID bits.
  */
-/* prctl, futex, rlimit, getrandom. */
+/* prctl, set_tid_address, rlimit, getrandom. */
 
 int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
                   unsigned long arg4, unsigned long arg5)
@@ -1636,44 +1533,6 @@ int64_t sys_set_tid_address(int *tidptr)
   current_process->set_tid_ptr = tidptr;
   return (int64_t)current_process->task.pid;
 }
-int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
-                  int *uaddr2, int val3)
-{
-  int cur;
-  int cmd;
-
-  (void)timeout;
-  (void)uaddr2;
-  (void)val3;
-
-  if (!current_process)
-    return -ESRCH;
-
-  cmd = op & 0x7f; /* strip FUTEX_PRIVATE_FLAG / CLOCK_REALTIME bits */
-
-  /*
-   * FUTEX_WAKE reads nothing at @uaddr, so it checks the range itself;
-   * FUTEX_WAIT's copy does. Linux do_futex(): an unknown op is ENOSYS.
-   */
-  if (cmd == FUTEX_WAKE)
-  {
-    if (uaddr && !access_ok(uaddr, sizeof(int)))
-      return -EFAULT;
-    return (int64_t)ir0_futex_wake(uaddr, val);
-  }
-
-  if (cmd == FUTEX_WAIT)
-  {
-    if (copy_from_user(&cur, uaddr, sizeof(cur)) != 0)
-      return -EFAULT;
-    if (cur != val)
-      return -EAGAIN;
-    return (int64_t)ir0_futex_wait(current_process, uaddr, val);
-  }
-
-  return -ENOSYS;
-}
-
 /*
  * sys_getrandom - Non-cryptographic entropy for musl bring-up.
  */

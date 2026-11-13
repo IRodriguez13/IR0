@@ -22,6 +22,9 @@ int ir0_futex_wait(struct process *proc, int *uaddr, int val);
 int ir0_futex_wake(int *uaddr, int count);
 void ir0_futex_drop_process(struct process *proc);
 
+/* Exit: wake one waiter on @proc's robust list (kernel/futex/syscalls.c). */
+void process_exit_robust_list(struct process *proc);
+
 /*
  * Called right before a waiter sleeps in schedule(), after it found no wake
  * and no pending signal. NULL outside ktest. The hook may mark the task
