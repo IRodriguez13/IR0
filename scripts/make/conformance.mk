@@ -88,7 +88,7 @@ ir0-fuzz-arm64: kernel-arm64-product.bin
 
 # Red selftests: one target per area and ISA. Empty while every group is
 # fixed; a fixed group moves to IR0_ABI_SELFTESTS (scripts/make/selftest.mk).
-IR0_RED_SELFTESTS := uaccess
+IR0_RED_SELFTESTS :=
 
 define ir0_red_selftest
 .PHONY: ir0-selftest-red-$(1)-x86 ir0-selftest-red-$(1)-arm64
