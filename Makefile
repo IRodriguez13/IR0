@@ -643,10 +643,10 @@ LIB_OBJS = \
     kernel/problems/oops.o \
     kernel/problems/problems.o \
     kernel/problems/fault.o \
-    kernel/irq_dispatch.o \
+    kernel/irq/irq_dispatch.o \
     kernel/signals/signals.o \
     kernel/signals/signal_diag.o \
-    kernel/entry.o \
+    kernel/irq/entry.o \
     fs/pipe.o \
     mm/uaccess/copy_user.o \
     fs/open_flags.o \

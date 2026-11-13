@@ -315,7 +315,7 @@ conditionals:
 Clean (no conditionals): `sched/core.c`, `sched/core.h`, `sched/rr.c`,
 `sched/prio.c`, `sched/switch/*`, `kernel/problems/fault.c`, `kernel/signals/sigtramp.c`,
 `kernel/process/signal_enter.c`, `saved_context.c`, `mm.c`, `mm_struct.c`,
-`idle.c`, `kernel/irq_dispatch.c`, `mm/page_fault.c`, `page_fault_user.c`,
+`idle.c`, `kernel/irq/irq_dispatch.c`, `mm/page_fault.c`, `page_fault_user.c`,
 `page_fault_kernel.c`, `page_fault_cow.c`, `mm/paging.c`, `mm/copy_user.c`,
 `mm/paging_uaccess.c`, `kernel/time/clock_wait.c`.
 
@@ -374,7 +374,7 @@ frame patching (x86 "blocked syscall frame" model) and
 Clean: `sched/*`, `sched/switch/context_switch.c`, `kernel_resume.c` (go
 through `switch_trace()` in `sched/switch/diag.c`), `mm/page_fault.c`,
 `mm/page_fault_user.c`, `mm/paging.c`, `kernel/problems/fault.c`, `kernel/signals/sigtramp.c`,
-`kernel/process/signal_enter.c`, `kernel/irq_dispatch.c`.
+`kernel/process/signal_enter.c`, `kernel/irq/irq_dispatch.c`.
 
 ---
 

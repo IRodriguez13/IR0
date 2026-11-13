@@ -222,7 +222,7 @@ host_swap_reclaim.o: $(KERNEL_ROOT)/mm/swap/swap_reclaim.c
 host_dma.o: $(KERNEL_ROOT)/arch/x86-64/sources/dma.c
 	$(KERNEL_CC)
 
-host_irq_dispatch.o: $(KERNEL_ROOT)/kernel/irq_dispatch.c
+host_irq_dispatch.o: $(KERNEL_ROOT)/kernel/irq/irq_dispatch.c
 	$(KERNEL_CC)
 
 host_net_dev.o: $(KERNEL_ROOT)/net/dev.c

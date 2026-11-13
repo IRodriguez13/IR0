@@ -67,7 +67,7 @@ and calls `schedule()`. A wake source sets `PROCESS_READY`; so does
 remaining time, poll, select).
 
 An interrupt that came from userspace runs the same exit work
-(`irqentry_exit_to_user_mode()` in [`kernel/entry.c`](../kernel/entry.c),
+(`irqentry_exit_to_user_mode()` in [`kernel/irq/entry.c`](../kernel/irq/entry.c),
 Linux `irqentry_exit_to_user_mode()`), called by the ISA after the EOI and
 `cpu_local_irq_leave()` (x86 `isr_handler64`, arm64 `arm64_exc_irq_el1`):
 a pending reschedule sleeps in `schedule()` (a task spinning in userspace

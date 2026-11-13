@@ -125,7 +125,7 @@ ASCII:
 - Asynchronous signals are delivered at the syscall exit, on
   rt_sigreturn's way out (`do_signal(p, restored_ctx)`) and on the
   interrupt return to userspace (`irqentry_exit_to_user_mode()`,
-  `kernel/entry.c`), so a task spinning without syscalls still gets them.
+  `kernel/irq/entry.c`), so a task spinning without syscalls still gets them.
 - An uncaught signal takes its full signal(7) default: Ign drops it, Stop
   (STOP, TSTP, TTIN, TTOU) sleeps until SIGCONT, everything else ends the
   task.
