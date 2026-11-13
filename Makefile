@@ -443,8 +443,8 @@ KERNEL_OBJS = \
     kernel/signals/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
-	kernel/cpu_topology.o \
-	kernel/percpu.o \
+	smp/cpu_topology.o \
+	smp/percpu.o \
     kernel/process/credentials.o \
     kernel/power/power_manag.o \
     kernel/power/kexec.o \

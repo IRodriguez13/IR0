@@ -207,6 +207,7 @@ DIRS_BLUETOOTH_INCLUDE_SCAN = [
     ROOT / "includes",
     ROOT / "interrupt",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "mm",
     ROOT / "net",
 ]
@@ -228,6 +229,7 @@ PORTABLE_DIRS_MM_NET_NO_ARCH = [
 PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "fs",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "mm",
     ROOT / "net",
     ROOT / "drivers",
@@ -469,7 +471,7 @@ def check_drivers_ir0_block_dev_only():
 
 SINGLE_DECL_TREES = (
     "arch", "block", "drivers", "fs", "includes", "ipc", "kernel", "ktm",
-    "mm", "net", "sched", "sound", "tests/ktm",
+    "mm", "net", "sched", "smp", "sound", "tests/ktm",
 )
 _DECL_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 _DECL_PP_RE = re.compile(r"^[ \t]*#(?:[^\n]*\\\n)*[^\n]*", re.M)
@@ -808,6 +810,7 @@ def check_ktm_no_fase_serial():
     fase_re = re.compile(r"\[FASE")
     scan_roots = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "drivers",
@@ -853,6 +856,7 @@ def check_klog_serial_print_allowlist():
     serial_re = re.compile(r"\bserial_print\s*\(")
     scan_roots = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "drivers",
@@ -962,6 +966,7 @@ PORTABLE_ISA_ASM_RE = re.compile(
 PORTABLE_ISA_TREES = (
     ROOT / "arch" / "common",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "net",
     ROOT / "includes" / "ir0",
     ROOT / "mm",
@@ -975,6 +980,7 @@ PORTABLE_ISA_ALLOWLIST: set[Path] = set()
 # ISA firmware headers must not leak into portable policy trees.
 PORTABLE_NO_ISA_FIRMWARE_TREES = (
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "fs",
     ROOT / "mm",
     ROOT / "net",
@@ -1268,6 +1274,7 @@ def check_process_pgd_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1325,6 +1332,7 @@ def check_process_saved_context_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1391,6 +1399,7 @@ def check_signal_resume_retired():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
         ROOT / "net",
@@ -1424,6 +1433,7 @@ def check_process_wait_state_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1487,6 +1497,7 @@ def check_syscall_frame_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1614,6 +1625,7 @@ CONTEXT_BACKEND_INCLUDE_ALLOW = {
 PORTABLE_NO_ARCH_CALL_TREES = [
     ROOT / "mm",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "fs",
     ROOT / "net",
     ROOT / "sched",
@@ -1894,7 +1906,7 @@ def check_common_c_has_no_isa_conditionals():
     )
     roots = (ROOT / "drivers", ROOT / "fs", ROOT / "interrupt",
              ROOT / "kernel", ROOT / "ktm", ROOT / "mm", ROOT / "net",
-             ROOT / "sched", ROOT / "ipc")
+             ROOT / "sched", ROOT / "smp", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -1990,7 +2002,7 @@ def check_portable_task_api_has_no_x86_register_aliases():
     errors = []
     forbidden = re.compile(r"\btask_(?:get|set)_(?:rdi|rsi|rdx)\s*\(")
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "ipc")
+             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -2026,8 +2038,8 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
     }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers",
-             ROOT / "ipc")
+             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "fs",
+             ROOT / "drivers", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -2104,7 +2116,7 @@ def check_common_elf_uses_isa_policy():
         r"R_AARCH64_[A-Z0-9_]+)\b"
     )
     paths = [ROOT / "kernel", ROOT / "mm", ROOT / "fs", ROOT / "net", ROOT / "sched",
-             ROOT / "ipc"]
+             ROOT / "smp", ROOT / "ipc"]
 
     for base in paths:
         for path in iter_c_files(base):
@@ -2318,6 +2330,7 @@ def check_ktm_mock_boundaries():
         ROOT / "drivers",
         ROOT / "fs",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "net",
         ROOT / "sched",
@@ -2471,6 +2484,7 @@ def check_errno_has_single_catalog():
         ROOT / "interrupt",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "net",
         ROOT / "sched",
@@ -2530,6 +2544,7 @@ def check_uaccess_single_api():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
         ROOT / "net",
@@ -2589,6 +2604,7 @@ def check_kmem_single_api():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
         ROOT / "net",
@@ -2622,7 +2638,7 @@ def check_kmem_single_api():
 # branch that fixes an offender deletes its line in the same commit.
 REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
 REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
-                       "mm", "net", "sched")
+                       "mm", "net", "sched", "smp")
 REGISTER_NAME_ISA_HEADERS = frozenset(
     {
         "arch_syscall_frame_arm64.h",
@@ -2783,7 +2799,7 @@ RETIRED_WAIT_RE = re.compile(
 )
 CPU_HALT_RE = re.compile(r"\bcpu_halt\s*\(")
 BUSY_WAIT_TREES = ("arch", "drivers", "fs", "includes", "ipc", "kernel",
-                   "ktm", "mm", "net", "sched", "sound", "cpp", "tests")
+                   "ktm", "mm", "net", "sched", "smp", "sound", "cpp", "tests")
 
 
 def busy_wait_violations(rel: str, text: str) -> list[tuple[int, str]]:

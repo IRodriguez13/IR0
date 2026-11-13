@@ -201,10 +201,10 @@ host_syscall_table.o: $(KERNEL_ROOT)/kernel/syscalls/syscall_table.c \
 host_fd_resource.o: $(KERNEL_ROOT)/fs/fd_resource.c
 	$(KERNEL_CC)
 
-host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
+host_cpu_topology.o: $(KERNEL_ROOT)/smp/cpu_topology.c
 	$(KERNEL_CC)
 
-host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
+host_percpu.o: $(KERNEL_ROOT)/smp/percpu.c
 	$(KERNEL_CC)
 
 host_tlb_sync.o: $(KERNEL_ROOT)/mm/paging/tlb_sync.c
