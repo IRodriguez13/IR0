@@ -2021,6 +2021,7 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/abi/signal_contract.h":
             "#include <asm/signal_contract.h>",
         "includes/ir0/cacheflush.h": "#include <asm/cacheflush.h>",
+        "includes/ir0/atomic.h": "#include <asm/atomic.h>",
         "includes/ir0/stat_user.h": "#include <asm/stat.h>",
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
     }

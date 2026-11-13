@@ -20,7 +20,8 @@
 /*
  * UP (default): mask IRQs for the critical section.
  *
- * SMP (future): per-lock atomic owner; not wired yet.
+ * SMP (future): a per-lock word taken with test_and_set_bit_lock() and
+ * released with clear_bit_unlock() from <ir0/atomic.h>; not wired yet.
  */
 #if defined(CONFIG_SMP) && CONFIG_SMP
 #error "ir0_spinlock: SMP backend not implemented — use UP build for now"
