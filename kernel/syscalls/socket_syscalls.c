@@ -1594,7 +1594,7 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 	ssize_t total = 0;
 	uint8_t ctrl[256];
 	size_t ctrl_used = 0;
-	int got_rights = 0;
+	size_t rights = 0;
 	int installed_fds[SOCK_STREAM_RIGHTS_MAX];
 	size_t installed_fd_count = 0;
 	int nonblock;
@@ -1630,6 +1630,10 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 		    copy_from_user(iov_stack, msg.msg_iov, iovlen * sizeof(struct iovec)) != 0)
 			return -EFAULT;
 	}
+	/*
+	 * Linux import_iovec(): a buffer outside userspace is EFAULT before
+	 * the receive waits for data it could never take.
+	 */
 	for (i = 0; i < iovlen; i++)
 	{
 		if (iov_stack[i].iov_len != 0 &&
@@ -1638,31 +1642,77 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 					       iov_stack[i].iov_len)))
 			return -EFAULT;
 	}
-	if (sock_stream_rights_count(ss) > 0 && msg.msg_control && msg.msg_controllen > 0)
+	if (sock_stream_rights_count(ss) > 0 && msg.msg_control &&
+	    msg.msg_controllen > 0)
 	{
-		fd_entry_t ents[SOCK_STREAM_RIGHTS_MAX];
-		size_t n_pop = 0;
-		size_t pending = (size_t)sock_stream_rights_count(ss);
 		size_t max_fit;
-		size_t fi;
-		struct cmsghdr *cmsg;
-		int *fdp;
-		size_t need;
 
-		if (pending > SOCK_STREAM_RIGHTS_MAX)
-			pending = SOCK_STREAM_RIGHTS_MAX;
+		rights = (size_t)sock_stream_rights_count(ss);
+		if (rights > SOCK_STREAM_RIGHTS_MAX)
+			rights = SOCK_STREAM_RIGHTS_MAX;
 		max_fit = (msg.msg_controllen >= IR0_CMSG_SPACE(sizeof(int)))
 			? ((msg.msg_controllen - IR0_CMSG_ALIGN(sizeof(struct cmsghdr))) /
 			   sizeof(int))
 			: 0;
-		if (max_fit > SOCK_STREAM_RIGHTS_MAX)
-			max_fit = SOCK_STREAM_RIGHTS_MAX;
-		if (pending > max_fit)
-			pending = max_fit;
-		if (pending == 0)
+		if (rights > max_fit)
+			rights = max_fit;
+		if (rights == 0 ||
+		    IR0_CMSG_SPACE(rights * sizeof(int)) > sizeof(ctrl) ||
+		    IR0_CMSG_SPACE(rights * sizeof(int)) > msg.msg_controllen)
 			return -ENOBUFS;
+	}
 
-		for (fi = 0; fi < pending; fi++)
+	/*
+	 * unix_stream_read_generic(): the payload first, dequeued only once it
+	 * reached userspace; a fault leaves data and rights queued.
+	 */
+	for (i = 0; i < iovlen; i++)
+	{
+		ssize_t n;
+
+		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
+			continue;
+		for (;;)
+		{
+			n = sock_stream_recv_user(ss, iov_stack[i].iov_base,
+						  iov_stack[i].iov_len, flags, NULL);
+			if (n != -EAGAIN)
+				break;
+			/* Linux may return an already received prefix immediately. */
+			if (total > 0 || rights > 0 || nonblock)
+				break;
+			if (signal_pending(current_process))
+				return -EINTR;
+			{
+				int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+				if (sleep_ret < 0)
+					return sleep_ret;
+			}
+			ss = sock_stream_fd_lookup(fd);
+			if (!ss)
+				return -EBADF;
+		}
+		if (n < 0)
+		{
+			if (total > 0 || (n == -EAGAIN && rights > 0))
+				break;
+			return n;
+		}
+		total += n;
+		if ((size_t)n < iov_stack[i].iov_len)
+			break;
+	}
+
+	/* Then the descriptors that rode with it (scm_recv_unix()). */
+	if (rights > 0)
+	{
+		fd_entry_t ents[SOCK_STREAM_RIGHTS_MAX];
+		struct cmsghdr *cmsg;
+		int *fdp;
+		size_t fi;
+
+		for (fi = 0; fi < rights; fi++)
 		{
 			memset(&ents[fi], 0, sizeof(ents[fi]));
 			if (sock_stream_rights_pop(ss, &ents[fi], sizeof(ents[fi])) != 0)
@@ -1678,106 +1728,21 @@ ssize_t sys_recvmsg(int fd, struct msghdr *umsg, int flags)
 				return err;
 			}
 			installed_fd_count++;
-			n_pop++;
 		}
-		if (n_pop == 0)
-			goto recv_payload;
-
-		need = IR0_CMSG_SPACE(n_pop * sizeof(int));
-		if (need > sizeof(ctrl) || need > msg.msg_controllen)
+		if (installed_fd_count > 0)
 		{
-			while (n_pop > 0)
-			{
-				n_pop--;
-				(void)sys_close(installed_fds[n_pop]);
-			}
-			return -ENOBUFS;
+			ctrl_used = IR0_CMSG_SPACE(installed_fd_count * sizeof(int));
+			memset(ctrl, 0, ctrl_used);
+			cmsg = (struct cmsghdr *)ctrl;
+			cmsg->cmsg_len = IR0_CMSG_LEN(installed_fd_count * sizeof(int));
+			cmsg->cmsg_level = SOL_SOCKET;
+			cmsg->cmsg_type = SCM_RIGHTS;
+			fdp = (int *)IR0_CMSG_DATA(cmsg);
+			for (fi = 0; fi < installed_fd_count; fi++)
+				fdp[fi] = installed_fds[fi];
 		}
-		memset(ctrl, 0, need);
-		cmsg = (struct cmsghdr *)ctrl;
-		cmsg->cmsg_len = IR0_CMSG_LEN(n_pop * sizeof(int));
-		cmsg->cmsg_level = SOL_SOCKET;
-		cmsg->cmsg_type = SCM_RIGHTS;
-		fdp = (int *)IR0_CMSG_DATA(cmsg);
-		for (fi = 0; fi < n_pop; fi++)
-			fdp[fi] = installed_fds[fi];
-		ctrl_used = need;
-		got_rights = 1;
 	}
-recv_payload:
-	for (i = 0; i < iovlen; i++)
-	{
-		uint8_t *kbuf;
-		ssize_t n;
-
-		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
-			continue;
-		kbuf = kmalloc(iov_stack[i].iov_len);
-		if (!kbuf)
-		{
-			scm_close_installed_fds(installed_fds,
-						installed_fd_count);
-			return -ENOMEM;
-		}
-		for (;;)
-		{
-			n = sock_stream_recv_flags(ss, kbuf,
-						   iov_stack[i].iov_len, flags, NULL);
-			if (n != -EAGAIN)
-				break;
-			/* Linux may return an already received prefix immediately. */
-			if (total > 0 || got_rights || nonblock)
-				break;
-			if (signal_pending(current_process))
-			{
-				kfree(kbuf);
-				scm_close_installed_fds(installed_fds,
-							installed_fd_count);
-				return -EINTR;
-			}
-			{
-				int64_t sleep_ret = syscall_sleep_ms_locked(20);
-
-				if (sleep_ret < 0)
-				{
-					kfree(kbuf);
-					scm_close_installed_fds(installed_fds,
-							installed_fd_count);
-					return sleep_ret;
-				}
-			}
-			ss = sock_stream_fd_lookup(fd);
-			if (!ss)
-			{
-				kfree(kbuf);
-				scm_close_installed_fds(installed_fds,
-							installed_fd_count);
-				return -EBADF;
-			}
-		}
-		if (n < 0)
-		{
-			kfree(kbuf);
-			if (total > 0 || got_rights)
-				break;
-			scm_close_installed_fds(installed_fds,
-						installed_fd_count);
-			return n;
-		}
-		if (n > 0 &&
-		    copy_to_user(iov_stack[i].iov_base, kbuf, (size_t)n) != 0)
-		{
-			kfree(kbuf);
-			scm_close_installed_fds(installed_fds,
-						installed_fd_count);
-			return -EFAULT;
-		}
-		kfree(kbuf);
-		total += n;
-		if ((size_t)n < iov_stack[i].iov_len)
-			break;
-	}
-	if (got_rights && msg.msg_control)
+	if (ctrl_used > 0)
 	{
 		if (copy_to_user(msg.msg_control, ctrl, ctrl_used) != 0)
 		{
@@ -1800,7 +1765,6 @@ recv_payload:
 		if (copy_to_user(umsg, &msg, sizeof(msg)) != 0)
 			return -EFAULT;
 	}
-	(void)got_rights;
 	return total;
 }
 
