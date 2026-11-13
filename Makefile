@@ -447,7 +447,7 @@ KERNEL_OBJS = \
 	kernel/percpu.o \
     kernel/process/credentials.o \
     kernel/power/power_manag.o \
-    kernel/kexec.o \
+    kernel/power/kexec.o \
     kernel/syscalls.o \
     kernel/syscalls/fs_syscalls.o \
     kernel/syscalls/fs_rw.o \

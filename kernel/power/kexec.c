@@ -7,7 +7,7 @@
  *
  * References:
  * - Linux man7 kexec_load(2)
- * - Linux kernel/kexec.c (segment cap, arch flags)
+ * - Linux kernel/power/kexec.c (segment cap, arch flags)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
