@@ -238,3 +238,50 @@ int sock_udp_sendto_overrides_peer(void)
 		   EAGAIN);
 	return CONF_PASS;
 }
+
+/*
+ * unix_stream_sendmsg() + unix_stream_read_generic(): SCM_RIGHTS passes a
+ * descriptor; the receiver gets a new fd for the same pipe.
+ */
+int sock_unix_stream_scm_rights(void)
+{
+	char ctl[CMSG_SPACE(sizeof(int))];
+	char buf[2];
+	struct msghdr m;
+	struct iovec v;
+	struct cmsghdr *c;
+	int sv[2];
+	int p[2];
+	int got = -1;
+
+	EXPECT(S4(SYS_socketpair, AF_UNIX, SOCK_STREAM, 0, sv), 0);
+	EXPECT(S2(SYS_pipe2, p, 0), 0);
+	rt_fill(&m, 0, sizeof(m));
+	rt_fill(ctl, 0, sizeof(ctl));
+	v.iov_base = "x";
+	v.iov_len = 1;
+	m.msg_iov = &v;
+	m.msg_iovlen = 1;
+	m.msg_control = ctl;
+	m.msg_controllen = sizeof(ctl);
+	c = CMSG_FIRSTHDR(&m);
+	c->cmsg_level = SOL_SOCKET;
+	c->cmsg_type = SCM_RIGHTS;
+	c->cmsg_len = CMSG_LEN(sizeof(int));
+	rt_copy(CMSG_DATA(c), &p[1], sizeof(int));
+	EXPECT(S3(SYS_sendmsg, sv[0], &m, 0), 1);
+
+	rt_fill(ctl, 0, sizeof(ctl));
+	v.iov_base = buf;
+	v.iov_len = sizeof(buf);
+	m.msg_controllen = sizeof(ctl);
+	EXPECT(S3(SYS_recvmsg, sv[1], &m, MSG_DONTWAIT), 1);
+	c = CMSG_FIRSTHDR(&m);
+	CHECK(c != 0 && c->cmsg_type == SCM_RIGHTS);
+	rt_copy(&got, CMSG_DATA(c), sizeof(int));
+	CHECK(got >= 0 && got != p[1]);
+	EXPECT(S3(SYS_write, got, "y", 1), 1);
+	EXPECT(S3(SYS_read, p[0], buf, 1), 1);
+	CHECK(buf[0] == 'y');
+	return CONF_PASS;
+}
