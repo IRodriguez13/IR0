@@ -18,7 +18,7 @@ Checks:
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (smp_mb, inb, udelay, …).
-    Allowlist: syscall_x86_64.h / syscall_arm64.h only. Empty barrier OK.
+    Empty barrier OK.
 14) Portable trees must not hardcode userspace RIPs (0x402B*) or read CR2
     / emit iretq/sysret mnemonics outside arch/ (use arch_page_fault /
     arch_fork facades).
@@ -967,10 +967,7 @@ PORTABLE_ISA_TREES = (
     ROOT / "fs",
     ROOT / "ipc",
 )
-PORTABLE_ISA_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "syscall_x86_64.h",
-    ROOT / "includes" / "ir0" / "syscall_arm64.h",
-}
+PORTABLE_ISA_ALLOWLIST: set[Path] = set()
 
 # ISA firmware headers must not leak into portable policy trees.
 PORTABLE_NO_ISA_FIRMWARE_TREES = (
@@ -2632,8 +2629,6 @@ REGISTER_NAME_ISA_HEADERS = frozenset(
         "asm_offsets.h",
         "sigcontext_arm64.h",
         "sigcontext_x86_64.h",
-        "syscall_arm64.h",
-        "syscall_x86_64.h",
     }
 )
 REGISTER_NAME_PARTS = frozenset(
