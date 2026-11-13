@@ -80,12 +80,6 @@ static int signal_rip_is_registered_handler(process_t *p, uint64_t rip)
 	return 0;
 }
 
-/* One handler frame at a time: a live one is ended by rt_sigreturn. */
-static int signal_delivery_blocked_nested(process_t *p)
-{
-	return process_saved_context_present(p);
-}
-
 /*
  * The mask a handler frame saves (Linux sigmask_to_save()): the caller's own
  * mask while rt_sigsuspend runs with a temporary one.
@@ -147,7 +141,6 @@ void signals_try_abandon_sigframe(process_t *p)
 
 	signal_trace(SIGNAL_TRACE_ABANDON, p, 0, usp, frame_sp, 0);
 
-	process_saved_context_clear(p);
 	/*
 	 * Restore pre-delivery mask. Strict Linux leaves the handler mask
 	 * after longjmp(); with a full sa_mask (ash sigfillset) that would
@@ -184,7 +177,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 				   uint64_t fault_addr)
 {
 	void (*handler)(int);
-	struct sigcontext *ctx;
+	struct sigcontext ctx;
 	struct signal_frame_setup setup;
 	uint32_t sa_flags;
 
@@ -193,43 +186,13 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	if (!frame || p->mode != USER_MODE)
 		return 0;
 
-	/*
-	 * Already in a userspace handler: a nested SEGV must not replace the
-	 * outer saved context (that dropped the interrupted setjmp site and
-	 * left rdi=signum on resume). Treat nested fault as fatal.
-	 */
-	if (signal_delivery_blocked_nested(p))
-	{
-		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
-		    sig == SIGFPE)
-		{
-			signal_exit_current(sig);
-		}
-		return 0;
-	}
-
 	handler = p->signal_handlers[sig];
 	sa_flags = p->signal_sa_flags[sig];
 
-	ctx = kmalloc(sizeof(*ctx));
-	if (!ctx)
-		return 0;
-
-	memset(ctx, 0, sizeof(*ctx));
-	signal_fill_sigcontext_from_irq_frame(ctx, frame);
-	if (signal_rip_is_registered_handler(p, sigcontext_ip(ctx)))
+	memset(&ctx, 0, sizeof(ctx));
+	signal_fill_sigcontext_from_irq_frame(&ctx, frame);
+	if (signal_rip_is_registered_handler(p, sigcontext_ip(&ctx)))
 	{
-		kfree(ctx);
-		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
-		    sig == SIGFPE)
-		{
-			signal_exit_current(sig);
-		}
-		return 0;
-	}
-	if (process_saved_context_attach(p, ctx) != 0)
-	{
-		kfree(ctx);
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
 		    sig == SIGFPE)
 		{
@@ -243,11 +206,8 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	 * is what lets the handler return (rt_sigreturn reads it back), so a
 	 * fault whose frame cannot be built ends the task by SIGSEGV.
 	 */
-	if (signal_setup_frame(p, sig, ctx, fault_addr, &setup) != SIGFRAME_OK)
-	{
-		process_saved_context_clear(p);
+	if (signal_setup_frame(p, sig, &ctx, fault_addr, &setup) != SIGFRAME_OK)
 		signal_exit_current(SIGSEGV);
-	}
 
 	signal_redirect_irq_frame(frame, (void *)handler, sig, setup.sp,
 				  setup.info_addr, setup.uctx_addr,
@@ -263,7 +223,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	p->signal_pending &= ~SIGNAL_MASK(sig);
 
 	signal_trace(SIGNAL_TRACE_DELIVER_FAULT, p, sig, fault_addr,
-		     sigcontext_ip(ctx), (uint64_t)(uintptr_t)handler);
+		     sigcontext_ip(&ctx), (uint64_t)(uintptr_t)handler);
 
 	return 1;
 }
@@ -305,7 +265,6 @@ void signals_reset_on_exec(process_t *p)
 
 	if (!p)
 		return;
-	process_saved_context_clear(p);
 	p->signal_pending = 0;
 	p->signal_mask = 0;
 	p->signal_ignored = 0;
@@ -342,7 +301,6 @@ static int signal_default_stops(int sig)
  * (Linux signal_pending()): pending and not blocked, or SIGKILL. Ignored
  * signals do not count, nor do those whose default action is to ignore
  * them (SIGCHLD, SIGWINCH, SIGCONT, SIGURG) while they have no handler.
- * While a handler frame is live, caught signals wait for its rt_sigreturn.
  */
 int signal_pending(process_t *p)
 {
@@ -362,8 +320,7 @@ int signal_pending(process_t *p)
 
 		if (!(deliverable & SIGNAL_MASK(sig)))
 			continue;
-		if (caught ? signal_delivery_blocked_nested(p)
-			   : signal_default_ignored(sig))
+		if (!caught && signal_default_ignored(sig))
 			deliverable &= ~SIGNAL_MASK(sig);
 	}
 	return deliverable != 0;
@@ -792,7 +749,9 @@ static void syscall_restart_or_eintr(arch_syscall_frame_t *regs, int handler,
  * rt_sigreturn: @interrupted when the caller has the full user context
  * (rt_sigreturn), otherwise the syscall frame with the syscall's settled
  * result. The syscall frame then enters the handler. Returns 1 when the
- * handler runs, 0 when the signal stays pending (a handler frame is live).
+ * handler runs, 0 when it does not (no frame could be built). Handlers
+ * nest: a signal not blocked while a handler runs gets its own frame below
+ * the running handler's.
  */
 static int handle_signal(process_t *p, int sig,
 			 const struct sigcontext *interrupted)
@@ -801,58 +760,28 @@ static int handle_signal(process_t *p, int sig,
 	void (*handler)(int) = p->signal_handlers[sig];
 	uint32_t sa_flags = p->signal_sa_flags[sig];
 	struct signal_frame_setup setup;
-	struct sigcontext *ctx;
-
-	/*
-	 * Nested delivery while a handler frame is live is refused until
-	 * rt_sigreturn: a nested synchronous fault is fatal, anything else
-	 * waits pending.
-	 */
-	if (signal_delivery_blocked_nested(p))
-	{
-		if (signal_is_fault(sig))
-			signal_exit_current(sig);
-		return 0;
-	}
+	struct sigcontext ctx;
 
 	if (!interrupted)
 		syscall_restart_or_eintr(regs, 1, (sa_flags & SA_RESTART) != 0);
 
-	ctx = kmalloc(sizeof(*ctx));
-	if (!ctx)
-	{
-		p->signal_handlers[sig] = SIG_DFL;
-		p->signal_pending &= ~SIGNAL_MASK(sig);
-		return 0;
-	}
 	if (interrupted)
-		*ctx = *interrupted;
+		ctx = *interrupted;
 	else
-		signal_fill_sigcontext_from_syscall_frame(ctx, regs,
+		signal_fill_sigcontext_from_syscall_frame(&ctx, regs,
 							  syscall_frame_return(regs));
 
-	if (signal_rip_is_registered_handler(p, sigcontext_ip(ctx)) ||
-	    process_saved_context_attach(p, ctx) != 0)
+	if (signal_rip_is_registered_handler(p, sigcontext_ip(&ctx)))
 	{
-		kfree(ctx);
 		if (signal_is_fault(sig))
 			signal_exit_current(sig);
 		p->signal_pending &= ~SIGNAL_MASK(sig);
 		return 0;
 	}
 
-	switch (signal_setup_frame(p, sig, ctx, 0, &setup))
+	if (signal_setup_frame(p, sig, &ctx, 0, &setup) != SIGFRAME_OK)
 	{
-	case SIGFRAME_OK:
-		break;
-	case SIGFRAME_NO_RESTORER:
-		process_saved_context_clear(p);
-		p->signal_pending &= ~SIGNAL_MASK(sig);
-		signal_force_segv(p, sig);
-		return 0;
-	default:
 		/* Linux force_sigsegv(): no frame, no handler. */
-		process_saved_context_clear(p);
 		p->signal_pending &= ~SIGNAL_MASK(sig);
 		signal_force_segv(p, sig);
 		return 0;

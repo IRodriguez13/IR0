@@ -23,7 +23,7 @@
  *   - does NOT free page tables, kernel stack, or process_t
  * process_destroy() (reaper only):
  *   - release FDs again (idempotent clears), unmap user pages if owns_pml4,
- *     reclaim translation tables, free mmap_list, saved_context, kernel stack
+ *     reclaim translation tables, free mmap_list, kernel stack
  *   - caller frees process_t after remove-from-list
  */
 

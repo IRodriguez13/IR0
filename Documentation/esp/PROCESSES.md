@@ -23,7 +23,9 @@ credenciales en forma incremental.
 - Tabla de file descriptors y directorio de trabajo.
 - Credenciales: `uid/gid/euid/egid` y `umask`.
 - Estado de señales pendientes y metadata de salida.
-- **`saved_context`:** copia kernel del contexto CPU para `rt_sigreturn`; acceso solo vía `process_saved_context_*()` (`kernel/process/saved_context.c`).
+- Sin copia en el kernel del contexto de usuario interrumpido: la entrega lo
+  escribe en el `struct sigframe` de usuario y `rt_sigreturn(2)` lo restaura
+  sólo desde ahí. Los handlers se anidan como en Linux.
 
 ## Exit, reparent, wait
 

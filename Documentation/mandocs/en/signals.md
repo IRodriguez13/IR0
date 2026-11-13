@@ -26,7 +26,6 @@ into `EINTR`, and sets the task's syscall frame up to enter the handler.
   signal_pending (uint32_t bitmask)
   signal_handlers[_NSIG]  (_NSIG = 32)
   signal_mask, signal_ignored
-  saved_context (for sigreturn)
 ```
 
 | Function | Role |

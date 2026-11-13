@@ -26,7 +26,6 @@ entrada al handler a través del frame de la syscall.
   signal_pending (bitmask uint32_t)
   signal_handlers[_NSIG]  (_NSIG = 32)
   signal_mask, signal_ignored
-  saved_context (para sigreturn)
 ```
 
 | Función | Rol |

@@ -199,3 +199,11 @@ net_unregister_device unregister_netdev()
 bcmgenet_init (nothing; drivers/net/net_drivers.c probes bcmgenet_driver)
 rtl8139_init (nothing; drivers/net/net_drivers.c probes rtl8139_driver)
 virtio_net_init (nothing; drivers/net/net_drivers.c probes virtio_net_driver)
+
+# Signals: rt_sigreturn restores only from the user sigframe and handlers
+# nest, so there is no kernel-side copy of the interrupted context.
+process_saved_context_attach (nothing; the user sigframe holds the context)
+process_saved_context_clear (nothing; the user sigframe holds the context)
+process_saved_context_init (nothing; the user sigframe holds the context)
+process_saved_context_peek (nothing; the user sigframe holds the context)
+process_saved_context_present (nothing; handlers nest)

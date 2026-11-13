@@ -1311,62 +1311,6 @@ def check_process_pgd_accessor():
     return errors
 
 
-PROCESS_SAVED_CONTEXT_RE = re.compile(
-    r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)->saved_context\b"
-)
-
-PROCESS_SAVED_CONTEXT_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "process.h",
-    ROOT / "kernel" / "process" / "saved_context.c",
-    ROOT / "kernel" / "process" / "create.c",
-    ROOT / "kernel" / "process" / "domains.c",
-}
-
-
-def check_process_saved_context_accessor():
-    """Fail if code touches process->saved_context outside signal/process paths."""
-    errors = []
-    trees = [
-        ROOT / "kernel",
-        ROOT / "smp",
-        ROOT / "mm",
-        ROOT / "fs",
-        ROOT / "net",
-        ROOT / "sched",
-        ROOT / "includes" / "ir0",
-        ROOT / "ktm",
-        ROOT / "interrupt",
-        ROOT / "drivers",
-    ]
-    for base in trees:
-        if not base.is_dir():
-            continue
-        for fpath in iter_c_files(base):
-            if fpath in PROCESS_SAVED_CONTEXT_ALLOWLIST:
-                continue
-            if fpath.suffix not in (".c", ".h"):
-                continue
-            try:
-                rel = rel_to_root(fpath)
-            except ValueError:
-                continue
-            try:
-                lines = read_file_text(fpath).splitlines()
-            except Exception as exc:
-                errors.append(f"[read-error] {fpath}: {exc}")
-                continue
-            for idx, line in enumerate(lines, 1):
-                if _line_is_comment_only(line):
-                    continue
-                if PROCESS_SAVED_CONTEXT_RE.search(line):
-                    errors.append(
-                        f"[process-saved-context-accessor] {rel}:{idx}: "
-                        f"no direct process->saved_context "
-                        f"(use signal/process helpers): {line.strip()}"
-                    )
-    return errors
-
-
 RETIRED_SIGNAL_RESUME_RE = re.compile(
     r"\b(handle_signals|signals_prepare_user_return|"
     r"signals_pause_should_interrupt|signals_should_handle_on_run|"
@@ -3243,7 +3187,6 @@ def main():
     errors.extend(check_portable_no_isa_firmware_headers())
     errors.extend(check_portable_no_task_arch_fields())
     errors.extend(check_process_pgd_accessor())
-    errors.extend(check_process_saved_context_accessor())
     errors.extend(check_signal_resume_retired())
     errors.extend(check_process_wait_state_accessor())
     errors.extend(check_syscall_frame_accessor())

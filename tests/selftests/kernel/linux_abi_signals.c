@@ -22,6 +22,7 @@ extern void rt_restore(void);
 static volatile int g_hits;
 static volatile int g_sig;
 static volatile int g_usr2_hits;
+static volatile int g_nested_seen;
 
 static void on_signal(int sig)
 {
@@ -41,6 +42,15 @@ static void on_usr1_raise_usr2(int sig)
 	(void)sig;
 	g_hits++;
 	(void)S2(SYS_kill, S0(SYS_getpid), SIGUSR2);
+}
+
+/* Raises an unblocked SIGUSR2 and records whether its handler already ran. */
+static void on_usr1_nest_usr2(int sig)
+{
+	(void)sig;
+	g_hits++;
+	(void)S2(SYS_kill, S0(SYS_getpid), SIGUSR2);
+	g_nested_seen = g_usr2_hits;
 }
 
 /* kernel/signal.c sigprocmask(): SIGKILL and SIGSTOP are never blocked. */
@@ -259,5 +269,22 @@ int sig_kill_cpu_bound_child(void)
 	EXPECT(S2(SYS_kill, pid, SIGTERM), 0);
 	EXPECT(conf_child_status(pid, &status, 3000), pid);
 	CHECK(RT_SIGNALED(status) && RT_TERMSIG(status) == SIGTERM);
+	return CONF_PASS;
+}
+
+/*
+ * signal(7): handlers nest. A signal that is not blocked while a handler
+ * runs is delivered on that handler's next return to user mode
+ * (exit_to_user_mode_loop()), inside the outer handler, not after its
+ * rt_sigreturn.
+ */
+int sig_nested_handler_runs(void)
+{
+	EXPECT(rt_sigaction(SIGUSR2, on_usr2, 0, 0), 0);
+	EXPECT(rt_sigaction(SIGUSR1, on_usr1_nest_usr2, 0, 0), 0);
+	EXPECT(S2(SYS_kill, S0(SYS_getpid), SIGUSR1), 0);
+	EXPECT(g_hits, 1);
+	EXPECT(g_nested_seen, 1);
+	EXPECT(g_usr2_hits, 1);
 	return CONF_PASS;
 }

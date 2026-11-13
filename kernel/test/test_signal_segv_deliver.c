@@ -86,7 +86,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	process_mode_t saved_mode;
 	void (*saved_handler)(int);
 	void (*saved_restorer)(void);
-	struct sigcontext *saved_context;
 	uint32_t saved_sa_flags;
 	uint32_t saved_sa_mask;
 	uint32_t saved_mask;
@@ -116,7 +115,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	saved_mode = p->mode;
 	saved_handler = p->signal_handlers[SIGSEGV];
 	saved_restorer = p->signal_restorer[SIGSEGV];
-	saved_context = process_saved_context_peek(p);
 	saved_sa_flags = p->signal_sa_flags[SIGSEGV];
 	saved_sa_mask = p->signal_sa_mask[SIGSEGV];
 	saved_mask = p->signal_mask;
@@ -142,7 +140,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	p->signal_mask_saved = 0;
 	p->signal_mask_saved_valid = 0;
 	p->signal_frame_sp = 0;
-	process_saved_context_init(p);
 
 	frame[0] = 14;
 	frame[1] = 4;
@@ -167,9 +164,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	KASSERT_EQ(delivered, 1);
 	KASSERT(frame[2] == (uint64_t)(uintptr_t)handler);
 	KASSERT(frame[-7] == (uint64_t)SIGSEGV);
-	KASSERT(process_saved_context_present(p));
-	KASSERT(sigcontext_ip(process_saved_context_peek(p)) ==
-		0x004422E3UL);
 
 	/* The handler returns through rt_sigreturn: the frame is on the stack. */
 	handler_sp = irq_frame_sp(frame);
@@ -190,8 +184,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	ktest_sigframe_window_unmap(process_pgd(p), mapped,
 				    (unsigned)sizeof(mapped));
 
-	process_saved_context_clear(p);
-
 	p->task = saved_task;
 	p->mode = saved_mode;
 	p->signal_handlers[SIGSEGV] = saved_handler;
@@ -205,8 +197,6 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	p->signal_mask_saved_valid = saved_mask_saved_valid;
 	p->signal_frame_sp = saved_frame_sp;
 	process_set_stack_layout(p, saved_stack_start, saved_stack_size);
-	if (saved_context)
-		KASSERT(process_saved_context_attach(p, saved_context) == 0);
 
 	KTEST_END();
 }

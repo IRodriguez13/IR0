@@ -2,8 +2,8 @@
 
 > **Last verified:** 2026-09-02
 > **Source of truth:** `kernel/process/exit.c`, `kernel/process/wait.c`,
-> `kernel/process/saved_context.c`, `kernel/syscalls/process_syscalls.c`,
-> `kernel/lib/signals.c`, [`uaccess.md`](uaccess.md),
+> `kernel/syscalls/process_syscalls.c`, `kernel/signals/signals.c`,
+> `kernel/signals/syscalls.c`, [`uaccess.md`](uaccess.md),
 > [`releases/PROCESS_LIFECYCLE_SPEC.md`](releases/PROCESS_LIFECYCLE_SPEC.md)
 
 IR0 process handling centers on practical lifecycle management plus incremental
@@ -23,16 +23,18 @@ Unix credential semantics.
 - File descriptor table and working directory.
 - Credentials: `uid/gid/euid/egid` and `umask`.
 - Pending signal state and termination metadata.
-- **`saved_context`:** kernel copy of user CPU state for `rt_sigreturn(2)` after a handler runs. Access only via `process_saved_context_{peek,attach,clear,init}` in `kernel/process/saved_context.c` (`arch-guard` blocks direct `->saved_context` elsewhere).
+- No kernel copy of the interrupted user context: delivery writes it into
+  the user `struct sigframe`, and `rt_sigreturn(2)` restores it only from
+  there.
 
-## Signal return context (`saved_context`)
+## Signal return context
 
-| API | Role |
-|-----|------|
-| `process_saved_context_attach(p, ctx)` | Replace any prior copy; owns `ctx` until clear |
-| `process_saved_context_peek(p)` | Read-only for `sys_sigreturn` restore |
-| `process_saved_context_clear(p)` | `kfree` + NULL (exec exit, sigreturn, TCP SIGALRM cleanup) |
-| `process_saved_context_init(p)` | NULL on fork/create/clone without allocation |
+`handle_signal()` / `signals_deliver_from_irq_frame()`
+(`kernel/signals/signals.c`) build the handler frame on the user stack;
+`sys_sigreturn()` (`kernel/signals/syscalls.c`) copies it back and
+validates it, and a frame that cannot be read or does not validate ends in
+SIGSEGV. Handlers nest as in Linux: a signal that is not blocked while a
+handler runs gets its own frame below the running handler's.
 
 `signal_enter_pending` (separate field) gates syscall exit into the handler frame; see `kernel/syscalls/syscall_dispatch.c` and `kernel/lib/signals.c`.
 

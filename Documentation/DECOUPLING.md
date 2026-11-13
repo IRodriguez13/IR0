@@ -127,7 +127,7 @@ specific driver implementation file:
 | IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not arch interrupt backend headers from portable/drivers |
 | UP spinlock | **`spinlock.h`** (`ir0_spinlock_t`; irq-save on UP) | Hot paths e.g. `kernel/lib/pipe.c` read/write |
 | Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/fault/page_fault.c` calls; impl in `arch/*/sources/pf_debug.c` |
-| Signal sigreturn ctx | `process_saved_context_*()` in `process.h` | Only `kernel/process/saved_context.c` may touch `->saved_context` |
+| Signal sigreturn ctx | user `struct sigframe` only | No kernel copy; `process_saved_context_*` are retired names (`scripts/retired_api_names.txt`) |
 | Context switch | **`context.h`** | `switch_to` / kernel stack handoff |
 | MM root layout | **`arch_mm.h`** | User/kernel half of page-table root |
 | Resources | `resource_registry.h` | IRQ / I/O port registration from drivers |

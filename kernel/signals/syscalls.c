@@ -391,12 +391,10 @@ int64_t sys_sigreturn(void)
 	    !signal_sigcontext_validate_and_sanitize(restore_ctx))
 	{
 		/* Linux force_sig(SIGSEGV), delivered on the way out. */
-		process_saved_context_clear(current_process);
 		current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);
 		return -EFAULT;
 	}
 
-	process_saved_context_clear(current_process);
 	set_current_blocked((uint32_t)user_frame.oldmask);
 	current_process->signal_mask_saved_valid = 0;
 	current_process->signal_frame_sp = 0;

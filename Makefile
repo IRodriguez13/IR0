@@ -432,7 +432,6 @@ KERNEL_OBJS = \
     kernel/process/wait.o \
     kernel/process/wait_audit.o \
     kernel/process/wait_state.o \
-    kernel/process/saved_context.o \
     kernel/process/saved_environ.o \
     fs/fdtable_init.o \
     fs/fdtable.o \

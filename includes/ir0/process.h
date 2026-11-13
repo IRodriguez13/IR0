@@ -238,7 +238,6 @@ typedef struct process
 	uint8_t restore_sigmask;
 	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER / musl) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
-	struct sigcontext *saved_context;  /* Kernel cache of interrupted GPRs */
 	/*
 	 * Handler entry RSP (points at restorer slot). Non-zero while a
 	 * userspace sigframe may still be live. Cleared on rt_sigreturn or
@@ -629,15 +628,6 @@ void process_reparent_children(process_t *dying_parent);
 int process_signal_is_default_fatal(process_t *p, int sig);
 int process_signal_default_kill(process_t *target, int signal);
 
-struct sigcontext *process_saved_context_peek(const process_t *p);
-int process_saved_context_present(const process_t *p);
-void process_saved_context_init(process_t *p);
-/*
- * Store @ctx as the process's sigreturn context.  On success the process
- * owns it; on failure the caller keeps ownership and must free it.
- */
-int process_saved_context_attach(process_t *p, struct sigcontext *ctx);
-void process_saved_context_clear(process_t *p);
 
 void process_saved_environ_clear(process_t *p);
 int process_saved_environ_set(process_t *p, char *const envp[]);

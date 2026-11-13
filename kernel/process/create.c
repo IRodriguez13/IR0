@@ -219,7 +219,6 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	proc->signal_pending = 0;
 	proc->signal_mask = 0;
 	proc->signal_ignored = 0;
-	process_saved_context_init(proc);
 	proc->restore_sigmask = 0;
 	for (int i = 0; i < _NSIG; i++)
 	{

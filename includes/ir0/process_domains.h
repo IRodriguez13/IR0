@@ -29,7 +29,7 @@ struct process;
 int process_cred_clone(struct process *dst, const struct process *src);
 
 /*
- * Signal handlers/masks — value clone; pending cleared; saved_context not copied.
+ * Signal handlers/masks — value clone; pending cleared.
  * May not sleep. Returns 0 or -errno.
  */
 int process_signals_clone(struct process *dst, const struct process *src);
