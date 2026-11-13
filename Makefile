@@ -417,7 +417,7 @@ KERNEL_OBJS = \
     kernel/process/create.o \
     kernel/process/cred_groups.o \
     kernel/process/domains.o \
-    kernel/process/mm_struct.o \
+    mm/mm_struct.o \
     fs/files_lifecycle.o \
     fs/files_struct.o \
     kernel/process/fork.o \
@@ -437,7 +437,7 @@ KERNEL_OBJS = \
     fs/fdtable_init.o \
     fs/fdtable.o \
     fs/pseudo_fd_bind.o \
-    kernel/process/mm.o \
+    mm/process_mm.o \
     kernel/signals/default_action.o \
     kernel/vdso.o \
     kernel/signals/sigtramp.o \

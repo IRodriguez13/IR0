@@ -1260,7 +1260,7 @@ PROCESS_PGD_FIELD_RE = re.compile(
 
 PROCESS_PGD_ALLOWLIST = {
     ROOT / "includes" / "ir0" / "process.h",
-    ROOT / "kernel" / "process" / "mm_struct.c",
+    ROOT / "mm" / "mm_struct.c",
     ROOT / "includes" / "ir0" / "mm_struct.h",
 }
 
@@ -2087,7 +2087,7 @@ def check_common_address_space_contracts():
         "mm/shmem/memfd.c",
         "ipc/sysv_shm.c",
         "kernel/vdso.c",
-        "kernel/process/mm_struct.c",
+        "mm/mm_struct.c",
         "ktm/user_canary.c",
     )
 

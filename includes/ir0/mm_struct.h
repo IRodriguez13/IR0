@@ -84,3 +84,27 @@ int process_mm_owns_tables(const struct process *p);
 
 /* 1 if process has an mm object (required for user address space). */
 int process_mm_ok(const struct process *p);
+
+/* Page and table counts of one user address-space teardown. */
+typedef struct
+{
+	uint64_t mapped_pages;
+	uint64_t freed_pages;
+	uint64_t missing_pages;
+	uint64_t level1_present;
+	uint64_t level2_present;
+	uint64_t level3_present;
+	uint64_t leaf_present;
+	uint64_t root_freed;
+	uint64_t level1_freed;
+	uint64_t level2_freed;
+	uint64_t level3_freed;
+	uint64_t leaf_freed;
+} process_reclaim_stats_t;
+
+/* mm/process_mm.c: address-space teardown and fork copy. */
+void process_unmap_user_pages_all(address_space_root_t root,
+				  process_reclaim_stats_t *stats);
+struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_list);
+void process_fork_destroy_child_mm(struct process *child);
+void process_fork_free_mmap_list(struct process *child);
