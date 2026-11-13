@@ -182,7 +182,7 @@ struct input_event {
 #define BTN_SIDE    0x113
 #define BTN_EXTRA   0x114
 
-/* Push event from keyboard IRQ (kernel/input_events.c) */
+/* Push event from keyboard IRQ (drivers/input/input_events.c) */
 void input_event_push(uint16_t type, uint16_t code, int32_t value);
 
 /*

@@ -1,5 +1,5 @@
 > **Última verificación:** 2026-07-25
-> **Fuente de verdad:** `includes/ir0/input.h`, `kernel/input_events.c`, consumers in Doom / smokes
+> **Fuente de verdad:** `includes/ir0/input.h`, `drivers/input/input_events.c`, consumers in Doom / smokes
 
 # Debt: `/dev/events0` lacks `device_id`
 
