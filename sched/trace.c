@@ -1,10 +1,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * File: sched_trace.c
+ * File: trace.c
  * Description: ISA-neutral process scheduler transition instrumentation.
  */
 
-#include "process_internal.h"
+#include <ir0/process.h>
 #include <ir0/ktm/event.h>
 
 void process_sched_state_trace(const process_t *p, process_state_t prev,
