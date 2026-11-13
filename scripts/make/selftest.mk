@@ -684,11 +684,12 @@ ir0-selftest-fpsimd: ir0-selftest-fpsimd-x86 ir0-selftest-fpsimd-arm64
 
 # Linux ABI groups whose red cases are all fixed (tests/selftests/kernel/
 # linux_abi_<group>.c, one case per fixed divergence): sock (socket
-# syscalls), mm (memory mapping and clocks) and fs (file and path
-# syscalls). Built with the conformance
+# syscalls), mm (memory mapping and clocks), fs (file and path syscalls)
+# and signals (delivery, masks and default actions). Built with the
+# conformance
 # runner, which fails the target unless every case listed in
 # linux_abi_<group>.h passes.
-IR0_ABI_SELFTESTS := sock mm fs
+IR0_ABI_SELFTESTS := sock mm fs signals
 IR0_ABI_SELFTEST_RUN := python3 $(KERNEL_ROOT)/scripts/ir0_conformance.py run \
 	--mode conformance --timeout 300
 

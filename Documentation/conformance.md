@@ -23,8 +23,8 @@ make ir0-fuzz-x86 SEED=1 COUNT=2000
 make ir0-fuzz-arm64 SEED=7 COUNT=5000
 make ir0-fuzz-x86 SEED=6 COUNT=5000 BATCH=11 TRACE=1   # replay one batch
 
-make ir0-selftest-red-signals-{x86,arm64}           # red selftests (fail today)
-make ir0-selftest-{sock,mm,fs}-abi-{x86,arm64}      # former red groups, green
+make ir0-selftest-red-<group>-{x86,arm64}           # red selftests (none open)
+make ir0-selftest-{sock,mm,fs,signals}-abi-{x86,arm64}  # former red groups, green
 ```
 
 Set `HOST_TMP=$(mktemp -d)` to keep the logs and summaries private. Every
@@ -241,7 +241,7 @@ in its group, so it cannot hide the others.
 | S7 | read on a stream socket | sig_socket_read_restarts | SA_RESTART restarts the read | **fixed**: polling sleeps return `-ERESTARTSYS` | both | kernel/syscalls/io_syscalls.c `syscall_sleep_ms_locked` |
 | S8 | rt_sigreturn | sig_sigreturn_delivers_unmasked | a signal the restored mask unblocks runs before the interrupted code | **fixed**: `do_signal()` on rt_sigreturn's way out | both | kernel/signals.c `do_signal` |
 | S9 | default actions | sig_default_action_terminates | SIGPROF/SIGSYS/SIGXCPU/SIGVTALRM terminate | **fixed**; before, they stayed pending and blocking syscalls restarted forever (fuzzer x86_64 seed 3 batch 8) | both | kernel/signals.c `get_signal` |
-| S10 | asynchronous delivery | sig_kill_cpu_bound_child (last: hangs the guest) | SIGTERM kills a child spinning in userspace | open: no preemption or signal delivery on the interrupt return to userspace; the spinner keeps the only CPU | both | arch IRQ exit (x86 `isr_handler64`, arm64 `arm64_exc_irq_el1`); needs per-task FP/SIMD state in `__switch_to` first |
+| S10 | asynchronous delivery | sig_kill_cpu_bound_child | SIGTERM kills a child spinning in userspace | **fixed**: preemption and `do_signal()` on the interrupt return to userspace (`irqentry_exit_to_user_mode()`, kernel/entry.c), on top of per-task FP/SIMD state; before, the spinner kept the only CPU and the guest stopped | both | arch IRQ exit (x86 `isr_handler64`, arm64 `arm64_exc_irq_el1`) |
 | M1 | mmap | mm_mmap_einval / mm_mmap_requires_private_or_shared | no MAP_PRIVATE/SHARED → EINVAL | succeeds | both | kernel/syscalls/mm_syscalls.c `sys_mmap` |
 | M2 | mmap | mm_mmap_huge_enomem / mm_mmap_huge_enomem | 1 TiB → ENOMEM | EINVAL | both | kernel/syscalls/mm_syscalls.c `sys_mmap` |
 | M3 | munmap | mm_munmap_then_segv / mm_munmap_hole_succeeds | unmapped range → 0 | EINVAL | both | kernel/syscalls/mm_vma.c |
@@ -276,7 +276,9 @@ the regular selftest gates.
 
 F1-F15 are fixed on both ISAs: their cases form the green group
 `make ir0-selftest-fs-abi-{x86,arm64}`, and their conformance cases left
-the baselines.
+the baselines. Every case of `linux_abi_signals` (S1-S10, K1) passes on
+both ISAs, so it is the green group `make ir0-selftest-signals-abi-{x86,arm64}`
+and there is no open red group.
 
 The file-system leftovers found while fixing them are fixed too, each with
 a case in the same group (checked on a Linux 7.0 host):

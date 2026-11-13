@@ -5,7 +5,7 @@
 #
 #   make ir0-conformance-x86 | ir0-conformance-arm64      [LTP_SRC=<ltp tree>]
 #   make ir0-fuzz-x86 | ir0-fuzz-arm64 SEED=<n> COUNT=<n> [BATCH=<b> TRACE=1]
-#   make ir0-selftest-red-signals-{x86,arm64}
+#   make ir0-selftest-red-<group>-{x86,arm64}
 #
 # Every guest boots through scripts/ir0_conformance.py -> smoke_qemu_run.sh
 # (256 MiB guest, hard timeout, stale-output window, process-group kill).
@@ -86,8 +86,9 @@ ir0-fuzz-arm64: kernel-arm64-product.bin
 		--summary $(HOST_TMP)/ir0-fuzz-arm64-s$(SEED).json
 	@echo "✓ ir0-fuzz-arm64 seed=$(SEED) count=$(COUNT)"
 
-# Red selftests: one target per area and ISA.
-IR0_RED_SELFTESTS := signals
+# Red selftests: one target per area and ISA. Empty while every group is
+# fixed; a fixed group moves to IR0_ABI_SELFTESTS (scripts/make/selftest.mk).
+IR0_RED_SELFTESTS :=
 
 define ir0_red_selftest
 .PHONY: ir0-selftest-red-$(1)-x86 ir0-selftest-red-$(1)-arm64
