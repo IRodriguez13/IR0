@@ -113,8 +113,10 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_poll: return IR0_SYSCALL_POLL;
 	case __NR_ppoll: return IR0_SYSCALL_PPOLL;
 	case __NR_prctl: return IR0_SYSCALL_PRCTL;
+	case __NR_pread64: return IR0_SYSCALL_PREAD64;
 	case __NR_prlimit64: return IR0_SYSCALL_PRLIMIT64;
 	case __NR_pselect6: return IR0_SYSCALL_PSELECT6;
+	case __NR_pwrite64: return IR0_SYSCALL_PWRITE64;
 	case __NR_read: return IR0_SYSCALL_READ;
 	case __NR_readlink: return IR0_SYSCALL_READLINK;
 	case __NR_readlinkat: return IR0_SYSCALL_READLINKAT;

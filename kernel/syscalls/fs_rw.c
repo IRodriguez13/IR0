@@ -715,3 +715,136 @@ int64_t sys_readv(int fd, const struct iovec *iov, int iovcnt)
 
   return total;
 }
+
+/*
+ * The open file behind @e for pread64/pwrite64, or NULL when the fd has no
+ * file position (pipes, sockets, eventfd, timerfd, epoll, devices, pseudo
+ * files, memfd): Linux returns ESPIPE for those (no FMODE_PREAD).
+ */
+static struct vfs_file *fs_rw_positional_file(const fd_entry_t *e)
+{
+  if (e->is_pipe || e->is_socket || e->is_pseudo || e->is_epoll ||
+      e->is_memfd || e->is_eventfd || e->is_timerfd || e->is_devfs)
+    return NULL;
+  return (struct vfs_file *)e->vfs_file;
+}
+
+/* pread64(2): read at @offset without moving the file position. */
+int64_t sys_pread64(int fd, void *buf, size_t count, off_t offset)
+{
+  char *kbuf;
+  struct vfs_file *f;
+  ir0_fd_t h;
+  size_t total = 0;
+  int64_t ret;
+
+  if (!current_process)
+    return -ESRCH;
+  ret = ir0_fd_get(current_process, fd, &h);
+  if (ret != 0)
+    return ret;
+  f = fs_rw_positional_file(h.entry);
+  if (!f)
+    ret = -ESPIPE;
+  else if (offset < 0)
+    ret = -EINVAL;
+  else if ((h.entry->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
+    ret = -EBADF;
+  if (ret != 0 || count == 0)
+    goto out;
+
+  kbuf = kmalloc(PAGE_SIZE_4KB);
+  if (!kbuf)
+  {
+    ret = -ENOMEM;
+    goto out;
+  }
+  while (total < count)
+  {
+    size_t chunk = count - total;
+    int n;
+
+    if (chunk > PAGE_SIZE_4KB)
+      chunk = PAGE_SIZE_4KB;
+    n = vfs_pread(f, kbuf, chunk, offset + (off_t)total);
+    if (n < 0)
+    {
+      ret = n;
+      break;
+    }
+    if (n > 0 && copy_to_user((char *)buf + total, kbuf, (size_t)n) != 0)
+    {
+      ret = -EFAULT;
+      break;
+    }
+    total += (size_t)n;
+    if ((size_t)n < chunk)
+      break;
+  }
+  kfree(kbuf);
+  if (total > 0)
+    ret = (int64_t)total;
+out:
+  ir0_fd_put(&h);
+  return ret;
+}
+
+/* pwrite64(2): write at @offset without moving the file position. */
+int64_t sys_pwrite64(int fd, const void *buf, size_t count, off_t offset)
+{
+  char *kbuf;
+  struct vfs_file *f;
+  ir0_fd_t h;
+  size_t total = 0;
+  int64_t ret;
+
+  if (!current_process)
+    return -ESRCH;
+  ret = ir0_fd_get(current_process, fd, &h);
+  if (ret != 0)
+    return ret;
+  f = fs_rw_positional_file(h.entry);
+  if (!f)
+    ret = -ESPIPE;
+  else if (offset < 0)
+    ret = -EINVAL;
+  else if ((h.entry->flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
+    ret = -EBADF;
+  if (ret != 0 || count == 0)
+    goto out;
+
+  kbuf = kmalloc(PAGE_SIZE_4KB);
+  if (!kbuf)
+  {
+    ret = -ENOMEM;
+    goto out;
+  }
+  while (total < count)
+  {
+    size_t chunk = count - total;
+    int n;
+
+    if (chunk > PAGE_SIZE_4KB)
+      chunk = PAGE_SIZE_4KB;
+    if (copy_from_user(kbuf, (const char *)buf + total, chunk) != 0)
+    {
+      ret = -EFAULT;
+      break;
+    }
+    n = vfs_pwrite(f, kbuf, chunk, offset + (off_t)total);
+    if (n < 0)
+    {
+      ret = n;
+      break;
+    }
+    total += (size_t)n;
+    if ((size_t)n < chunk)
+      break;
+  }
+  kfree(kbuf);
+  if (total > 0)
+    ret = (int64_t)total;
+out:
+  ir0_fd_put(&h);
+  return ret;
+}

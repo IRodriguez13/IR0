@@ -106,6 +106,8 @@ WRAP3(sys_read, int, void *, size_t)
 WRAP3(sys_write, int, const void *, size_t)
 WRAP3(sys_readv, int, const struct iovec *, int)
 WRAP3(sys_writev, int, const struct iovec *, int)
+WRAP4(sys_pread64, int, void *, size_t, off_t)
+WRAP4(sys_pwrite64, int, const void *, size_t, off_t)
 WRAP3(sys_open, const char *, int, mode_t)
 WRAP1(sys_close, int)
 WRAP3(sys_waitpid, pid_t, int *, int)
@@ -379,8 +381,10 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_POLL] = wrap_sys_poll;
   syscall_semantic_table[IR0_SYSCALL_PPOLL] = wrap_sys_ppoll;
   syscall_semantic_table[IR0_SYSCALL_PRCTL] = wrap_sys_prctl;
+  syscall_semantic_table[IR0_SYSCALL_PREAD64] = wrap_sys_pread64;
   syscall_semantic_table[IR0_SYSCALL_PRLIMIT64] = wrap_sys_prlimit64;
   syscall_semantic_table[IR0_SYSCALL_PSELECT6] = wrap_sys_pselect6;
+  syscall_semantic_table[IR0_SYSCALL_PWRITE64] = wrap_sys_pwrite64;
   syscall_semantic_table[IR0_SYSCALL_READ] = wrap_sys_read;
   syscall_semantic_table[IR0_SYSCALL_READLINK] = wrap_sys_readlink;
   syscall_semantic_table[IR0_SYSCALL_READLINKAT] = wrap_sys_readlinkat;

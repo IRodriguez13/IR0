@@ -4,8 +4,7 @@
 # See Documentation/conformance.md.
 
 fs_ftruncate TCONF  # ftruncate is ENOSYS
-fs_pread_pwrite TCONF  # pread64/pwrite64 are ENOSYS
-fs_unlink_open_file TCONF  # pread64 is ENOSYS
+fs_unlink_open_file FAIL  # an unlinked file cannot be read through an fd still open on it (path-based VFS)
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 mm_mmap_access_mode TCONF  # file-backed mmap is ENOSYS
 mm_mmap_file_private TCONF  # file-backed mmap is ENOSYS
