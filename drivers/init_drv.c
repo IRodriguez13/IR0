@@ -41,7 +41,7 @@
 #endif
 #include <drivers/storage/ahci.h>
 #include <drivers/storage/nvme.h>
-#include <ir0/block_dev.h>
+#include <ir0/blockdev.h>
 #include <drivers/serial/serial.h>
 #include <ir0/resource_registry.h>
 #include <ir0/driver_backend.h>

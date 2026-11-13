@@ -688,7 +688,6 @@ DRIVER_OBJS = \
     drivers/timer/hpet/find_hpet.o \
     drivers/timer/acpi/acpi_pm.o \
     drivers/timer/lapic/lapic.o \
-    drivers/storage/block_dev.o \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \

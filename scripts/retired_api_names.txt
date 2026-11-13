@@ -80,3 +80,13 @@ typewriter_is_enabled_for_commands (nothing)
 typewriter_print typewriter_print_char()
 typewriter_print_uint32 typewriter_print_char()
 uint_to_hex snprintf("%lx")
+
+# Block devices: one facade, <ir0/blockdev.h> (ir0_block_*).
+BLOCK_DEV_SECTOR_SIZE struct ir0_block_info.sector_size
+block_dev_count ir0_block_count()
+block_dev_get_sector_count ir0_block_sector_count_by_name()
+block_dev_is_present ir0_block_name_is_present()
+block_dev_legacy_name ir0_block_legacy_name()
+block_dev_name_at ir0_block_name_at()
+block_dev_read_sectors ir0_block_read_by_name()
+block_dev_write_sectors ir0_block_write_by_name()

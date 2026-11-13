@@ -10,7 +10,7 @@ Checks:
 4) Files under fs/ must not use #include <arch/...>; use includes/ir0/* facades instead.
 5) fs/, mm/, net/, drivers/: no #include <kernel/*.h> (no whitelist).
 6) mm/, net/, sched/: no #include <arch/...>.
-7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/block_dev.h.
+7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/blockdev.h.
 8) Paths outside drivers/bluetooth/ must not #include bluetooth/...
 9) drivers/: no #include <arch/...> (use ir0/arch_port.h).
 10) kernel/: no #include <drivers/...> (whole tree).
@@ -92,7 +92,7 @@ FORBIDDEN_PATHS = [
 REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "driver.h",
     ROOT / "includes" / "ir0" / "driver_bootstrap.h",
-    ROOT / "includes" / "ir0" / "block_dev.h",
+    ROOT / "includes" / "ir0" / "blockdev.h",
     ROOT / "includes" / "ir0" / "partition.h",
     ROOT / "includes" / "ir0" / "arch_port.h",
     ROOT / "includes" / "ir0" / "mm_port.h",
