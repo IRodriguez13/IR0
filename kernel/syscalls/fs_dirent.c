@@ -31,11 +31,14 @@ struct linux_dirent64 {
 #define LINUX_DIRENT64_NAME_OFF ((size_t)offsetof(struct linux_dirent64, d_name))
 
 /*
- * Keep batch modest: each vfs_dirent is large (path-sized name). 64 × that
- * plus a 4K bounce buffer blew most of IR0_PROC_KSTACK_SIZE and hung/paused
- * guests on ls /proc under GTK (-no-shutdown looked like a freeze).
+ * The backends list a directory from its first entry, so every call reads
+ * the listing again and resumes at the fd's cookie. The listing goes on
+ * the heap (each vfs_dirent carries a path-sized name), starting at
+ * GETDENTS_LIST_FIRST entries and doubling while the backend fills it, up
+ * to GETDENTS_LIST_MAX entries (about 1 MiB).
  */
-#define GETDENTS_BATCH_MAX 24
+#define GETDENTS_LIST_FIRST 64
+#define GETDENTS_LIST_MAX 4096
 #define GETDENTS_RESOLVED_MAX 512
 #define GETDENTS_DOT_PATH_MAX 256
 
@@ -261,9 +264,41 @@ static const char *fs_fd_resolved_dir_path(int fd, char *buf, size_t bufsz)
 struct getdents_scratch
 {
   char resolved_dir[GETDENTS_RESOLVED_MAX];
-  struct vfs_dirent entries[GETDENTS_BATCH_MAX];
   char kernel_buf[GETDENTS_KBUF_MAX];
 };
+
+/*
+ * getdents_list - Read the whole listing of @dir_path into a heap array.
+ * Returns the entry count with *@out set (the caller kfree()s it), or
+ * -errno with *@out NULL.
+ */
+static int getdents_list(const char *dir_path, struct vfs_dirent **out)
+{
+  int cap = GETDENTS_LIST_FIRST;
+
+  *out = NULL;
+  for (;;)
+  {
+    struct vfs_dirent *ents = kmalloc((size_t)cap * sizeof(*ents));
+    int n;
+
+    if (!ents)
+      return -ENOMEM;
+    n = ir0_getdents_path_routed(dir_path, ents, cap);
+    if (n < 0)
+    {
+      kfree(ents);
+      return n;
+    }
+    if (n < cap || cap >= GETDENTS_LIST_MAX)
+    {
+      *out = ents;
+      return n;
+    }
+    kfree(ents);
+    cap *= 2;
+  }
+}
 
 static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
                                     int legacy_layout,
@@ -282,24 +317,22 @@ static int64_t sys_getdents_common(int fd, void *dirent, size_t count, int legac
   return rc;
 }
 
+static int64_t getdents_emit(int fd, void *dirent, size_t count,
+                             int legacy_layout, struct getdents_scratch *scr,
+                             const char *dir_path, const stat_t *dir_st,
+                             const struct vfs_dirent *entries,
+                             int entry_count);
+
 static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
                                     int legacy_layout,
                                     struct getdents_scratch *scr)
 {
   fd_entry_t *fd_table;
-  char *const resolved_dir = scr->resolved_dir;
   const char *dir_path;
   stat_t st;
-  struct vfs_dirent *const entries = scr->entries;
+  struct vfs_dirent *entries;
   int entry_count;
-  int visible_count;
-  size_t start_cookie;
-  size_t returned;
-  size_t user_budget;
-  size_t user_off;
-  char *const kernel_buf = scr->kernel_buf;
-  size_t buf_offset;
-  int64_t copy_size;
+  int64_t rc;
 
   if (!current_process)
     return -ESRCH;
@@ -314,7 +347,8 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
       !fd_table[fd].in_use)
     return -EBADF;
 
-  dir_path = fs_fd_resolved_dir_path(fd, resolved_dir, GETDENTS_RESOLVED_MAX);
+  dir_path = fs_fd_resolved_dir_path(fd, scr->resolved_dir,
+                                     GETDENTS_RESOLVED_MAX);
   if (!dir_path)
     return -EBADF;
 
@@ -324,9 +358,32 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
   if (!S_ISDIR(st.st_mode))
     return -ENOTDIR;
 
-  entry_count = ir0_getdents_path_routed(dir_path, entries, GETDENTS_BATCH_MAX);
+  entry_count = getdents_list(dir_path, &entries);
   if (entry_count < 0)
     return entry_count;
+
+  rc = getdents_emit(fd, dirent, count, legacy_layout, scr, dir_path, &st,
+                     entries, entry_count);
+  kfree(entries);
+  return rc;
+}
+
+/* Encode the entries from the fd's cookie on and copy them to @dirent. */
+static int64_t getdents_emit(int fd, void *dirent, size_t count,
+                             int legacy_layout, struct getdents_scratch *scr,
+                             const char *dir_path, const stat_t *dir_st,
+                             const struct vfs_dirent *entries,
+                             int entry_count)
+{
+  fd_entry_t *fd_table = get_process_fd_table();
+  int visible_count;
+  size_t start_cookie;
+  size_t returned;
+  size_t user_budget;
+  size_t user_off;
+  char *const kernel_buf = scr->kernel_buf;
+  size_t buf_offset;
+  int64_t copy_size;
 
   visible_count = GETDENTS_DOT_ENTRIES +
                   getdents_visible_count(entries, entry_count);
@@ -365,7 +422,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
 
       name_len = strlen(name) + 1;
       if (i < 0)
-        getdents_dot_meta(dir_path, &st, i == -1, &ino, &dtype);
+        getdents_dot_meta(dir_path, dir_st, i == -1, &ino, &dtype);
       else
         getdents_entry_meta(dir_path, &entries[i], visible_idx, &ino, &dtype);
 
