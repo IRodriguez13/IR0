@@ -593,7 +593,6 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
  * @pathname: Path to directory to remove
  *
  * POSIX: only removes empty directories (ENOTEMPTY if non-empty).
- * Avoids vfs_rmdir_recursive to prevent VM hang on disk I/O.
  *
  * Returns: 0 on success, negative error code on failure
  */

@@ -56,10 +56,6 @@ void test_named_fifo_supervise(void)
 		"/etc/runit/sv/console/supervise/control"));
 	ASSERT(named_fifo_is_runsv_supervise_path(
 		"/etc/runit/sv/logger/log/supervise/ok"));
-	ASSERT(named_fifo_is_runsv_supervise_regular_path(
-		"/etc/runit/sv/console/supervise/pid.new"));
-	ASSERT(named_fifo_is_runsv_supervise_regular_path(
-		"/etc/runit/sv/logger/supervise/lock"));
 	ASSERT(!named_fifo_is_runsv_supervise_path(
 		"/etc/runit/sv/console/supervise/pid"));
 	ASSERT(!named_fifo_is_runsv_supervise_path(

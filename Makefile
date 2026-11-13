@@ -630,7 +630,6 @@ LIB_OBJS = \
     fs/named_fifo.o \
     fs/named_socket.o \
     fs/named_devnode.o \
-    fs/supervise_path.o \
     fs/named_symlink.o \
     fs/path_user.o \
     fs/path_routed.o \

@@ -34,7 +34,6 @@
 #include <ir0/posix_shm.h>
 #include <ir0/fd_dispatch.h>
 #include <ir0/fd_get.h>
-#include <ir0/supervise_path.h>
 #include <ir0/path_user.h>
 #include <ir0/permissions.h>
 #include <ir0/pipe.h>

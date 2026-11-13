@@ -104,8 +104,6 @@ struct ir0_statfs;
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);
 int vfs_rmdir(const char *path);
-int vfs_rmdir_recursive(const char *path);
-int vfs_clear_stale_for_regular_file(const char *path);
 int vfs_link(const char *oldpath, const char *newpath);
 int vfs_rename(const char *oldpath, const char *newpath);
 int vfs_symlink(const char *target, const char *linkpath);

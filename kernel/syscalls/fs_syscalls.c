@@ -10,77 +10,27 @@
 #include "fs_syscalls_internal.h"
 
 
-static int mknod_prepare_fifo_path(char *resolved, size_t resolved_sz)
+/*
+ * mknod(2) never replaces anything: an existing path is EEXIST, whatever
+ * is there. ir0_stat_path_routed() sees the named FIFOs, sockets, device
+ * nodes and symlinks as well as the VFS.
+ */
+static int mknod_check_free(const char *resolved)
 {
   stat_t st;
-  stat_t vst;
-  int rc;
-  int have_named;
 
-  rc = ir0_follow_named_symlinks(resolved, resolved_sz, IR0_SYMLINK_FOLLOW_MAX);
-  if (rc != 0)
-    return rc;
-
-  {
-    char norm[256];
-
-    if (normalize_path(resolved, norm, sizeof(norm)) != 0)
-      return -ENAMETOOLONG;
-    strncpy(resolved, norm, resolved_sz - 1);
-    resolved[resolved_sz - 1] = '\0';
-  }
-
-  have_named = (named_fifo_stat(resolved, &st) == 0);
-  if (have_named && vfs_stat(resolved, &vst) != 0)
-    return 0;
-
-  rc = vfs_clear_stale_for_regular_file(resolved);
-  if (rc != 0)
-    return rc;
-
-  if (vfs_stat(resolved, &st) == 0)
-  {
-    if (S_ISDIR(st.st_mode))
-      rc = vfs_rmdir_recursive(resolved);
-    else
-      rc = vfs_unlink(resolved);
-    if (rc != 0)
-      return rc;
-  }
-
+  if (ir0_stat_path_routed(resolved, &st) == 0)
+    return -EEXIST;
   return 0;
-}
-
-static void mknod_purge_vfs_shadow(const char *path)
-{
-  stat_t st;
-
-  while (vfs_stat(path, &st) == 0)
-  {
-    if (S_ISDIR(st.st_mode))
-    {
-      if (vfs_rmdir_recursive(path) != 0)
-        break;
-    }
-    else if (vfs_unlink(path) != 0)
-      break;
-  }
 }
 
 static int64_t mknod_create_named_fifo(const char *resolved, mode_t mode)
 {
-  int rc;
-
   if (!current_process)
     return -ESRCH;
-  rc = named_fifo_create_owned(resolved, mode,
-                               (uid_t)current_process->euid,
-                               (gid_t)current_process->egid);
-  if (rc != 0)
-    return rc;
-
-  mknod_purge_vfs_shadow(resolved);
-  return 0;
+  return named_fifo_create_owned(resolved, mode,
+                                 (uid_t)current_process->euid,
+                                 (gid_t)current_process->egid);
 }
 
 static int fs_dirfd_base_path(int dirfd, char *base, size_t base_sz)
@@ -354,31 +304,11 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       return path_rc;
   }
 
-  {
-    int prep_rc = ir0_supervise_prepare_open(path_to_use, ir0_flags);
-
-    if (prep_rc != 0)
-      return prep_rc;
-  }
-
-  if (named_fifo_path_must_be_fifo(path_to_use))
-  {
-    stat_t vst;
-    char prep[256];
-
-    if (vfs_stat(path_to_use, &vst) == 0 && S_ISREG(vst.st_mode))
-      vfs_clear_stale_for_regular_file(path_to_use);
-    if (!named_fifo_lookup(path_to_use))
-    {
-      strncpy(prep, path_to_use, sizeof(prep) - 1);
-      prep[sizeof(prep) - 1] = '\0';
-      if (mknod_prepare_fifo_path(prep, sizeof(prep)) == 0 &&
-          named_fifo_create_owned(prep, 0600,
-                                  (uid_t)current_process->euid,
-                                  (gid_t)current_process->egid) == 0)
-        mknod_purge_vfs_shadow(prep);
-    }
-  }
+  /* /run/initctl and runsv supervise/control get their FIFO on first open. */
+  if (named_fifo_path_must_be_fifo(path_to_use) &&
+      !named_fifo_lookup(path_to_use) &&
+      mknod_check_free(path_to_use) == 0)
+    (void)mknod_create_named_fifo(path_to_use, 0600);
 
   if (named_fifo_lookup(path_to_use))
   {
@@ -948,7 +878,7 @@ int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
   if ((mode & S_IFMT) != S_IFIFO)
     return mknod_create_device(resolved, mode, dev);
 
-  rc = mknod_prepare_fifo_path(resolved, sizeof(resolved));
+  rc = mknod_check_free(resolved);
   if (rc != 0)
     return rc;
 
@@ -982,7 +912,7 @@ int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
   if ((mode & S_IFMT) != S_IFIFO)
     return mknod_create_device(resolved, mode, dev);
 
-  rc = mknod_prepare_fifo_path(resolved, sizeof(resolved));
+  rc = mknod_check_free(resolved);
   if (rc != 0)
     return rc;
 

@@ -57,42 +57,6 @@ struct named_fifo_entry
 
 static struct named_fifo_entry named_fifos[NAMED_FIFO_MAX];
 
-int named_fifo_is_runsv_supervise_regular_path(const char *path)
-{
-    static const char *suffixes[] = {
-        "/supervise/pid",
-        "/supervise/pid.new",
-        "/supervise/lock",
-        "/supervise/stat",
-        "/supervise/stat.new",
-        "/supervise/status",
-        "/supervise/status.new",
-        "/log/supervise/pid",
-        "/log/supervise/pid.new",
-        "/log/supervise/lock",
-        "/log/supervise/stat",
-        "/log/supervise/stat.new",
-        "/log/supervise/status",
-        "/log/supervise/status.new",
-        NULL
-    };
-    size_t plen;
-    int i;
-
-    if (!path)
-        return 0;
-
-    plen = strlen(path);
-    for (i = 0; suffixes[i]; i++)
-    {
-        size_t slen = strlen(suffixes[i]);
-
-        if (plen >= slen && strcmp(path + plen - slen, suffixes[i]) == 0)
-            return 1;
-    }
-    return 0;
-}
-
 int named_fifo_is_runsv_supervise_path(const char *path)
 {
     static const char *suffixes[] = {

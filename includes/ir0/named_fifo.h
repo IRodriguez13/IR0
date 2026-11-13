@@ -19,7 +19,6 @@
 #include <ir0/pipe.h>
 
 int named_fifo_is_runsv_supervise_path(const char *path);
-int named_fifo_is_runsv_supervise_regular_path(const char *path);
 int named_fifo_path_must_be_fifo(const char *path);
 int named_fifo_create(const char *path, mode_t mode);
 int named_fifo_create_owned(const char *path, mode_t mode, uid_t uid, gid_t gid);
