@@ -61,3 +61,9 @@ int process_files_share(struct process *child, struct process *parent);
 
 /* fork: duplicate table into child's private files_struct. Returns 0 or -errno. */
 int process_files_clone(struct process *child, struct process *parent);
+
+/* fs/fdtable.c: close every fd of @p on exit/destroy (@pipe_trace_op tags pipe traces). */
+void process_release_fds(struct process *p, const char *pipe_trace_op);
+
+/* fs/fdtable.c: copy @parent's fd entries into @child's table. Returns 0 or -errno. */
+int process_duplicate_fd_table(struct process *parent, struct process *child);

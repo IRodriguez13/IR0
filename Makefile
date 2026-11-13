@@ -418,25 +418,25 @@ KERNEL_OBJS = \
     kernel/process/cred_groups.o \
     kernel/process/domains.o \
     kernel/process/mm_struct.o \
-    kernel/process/files_lifecycle.o \
-    kernel/process/files_struct.o \
+    fs/files_lifecycle.o \
+    fs/files_struct.o \
     kernel/process/fork.o \
     kernel/process/exec.o \
     kernel/process/lifecycle.o \
     kernel/process/parent.o \
     kernel/process/resources.o \
     kernel/process/exit_bind.o \
-    kernel/process/cwd.o \
-    kernel/process/vfs_file.o \
+    fs/cwd.o \
+    fs/file_table.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
     kernel/process/wait_audit.o \
     kernel/process/wait_state.o \
     kernel/process/saved_context.o \
     kernel/process/saved_environ.o \
-    kernel/process/fdtable_init.o \
-    kernel/process/fdtable.o \
-    kernel/process/pseudo_fd_bind.o \
+    fs/fdtable_init.o \
+    fs/fdtable.o \
+    fs/pseudo_fd_bind.o \
     kernel/process/mm.o \
     kernel/signals/default_action.o \
     kernel/vdso.o \

@@ -306,7 +306,7 @@ def check_semantic_tls_contract():
 
 def check_process_fd_lifecycle_boundary():
     errors = []
-    for rel in ("kernel/process/files_struct.c", "kernel/process/fdtable.c"):
+    for rel in ("fs/files_struct.c", "fs/fdtable.c"):
         fpath = ROOT / rel
         for idx, line in enumerate(
             read_file_text(fpath).splitlines(),

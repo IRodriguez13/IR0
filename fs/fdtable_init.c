@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process_internal.h"
+#include <ir0/process.h>
 #include <string.h>
 
 void process_init_fd_table(process_t *process)

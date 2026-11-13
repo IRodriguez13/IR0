@@ -73,10 +73,6 @@ typedef struct
 	uint64_t leaf_freed;
 } process_reclaim_stats_t;
 
-/* fdtable.c */
-void process_release_fds(process_t *p, const char *pipe_trace_op);
-int process_duplicate_fd_table(process_t *parent, process_t *child);
-
 /* mm.c */
 void process_unmap_user_pages_all(address_space_root_t root,
 				  process_reclaim_stats_t *stats);

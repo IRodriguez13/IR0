@@ -12,7 +12,10 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process_internal.h"
+#include <ir0/process.h>
+#include <ir0/files_struct.h>
+#include <ir0/oops.h>
+#include <string.h>
 #include <stddef.h>
 #include <ir0/fd_get.h>
 #include <ir0/fd_install.h>

@@ -18,12 +18,12 @@
  *   kernel/process/create.c    — spawn
  *   kernel/process/domains.c   — mm/files attach
  *   kernel/process/mm_struct.c — address-space domain
- *   kernel/process/files_struct.c — fd-table domain
+ *   fs/files_struct.c — fd-table domain
  *   kernel/process/fork.c      — fork + rollback
  *   kernel/process/exec.c      — CLOEXEC on exec
  *   kernel/process/exit.c      — exit → zombie, destroy on reap
  *   kernel/process/wait.c      — wait/reap/reparent
- *   kernel/process/fdtable.c   — fd table lifecycle
+ *   fs/fdtable.c   — fd table lifecycle
  *   kernel/process/mm.c        — address space helpers
  *   kernel/signals/default_action.c   — default-fatal signals
  *
