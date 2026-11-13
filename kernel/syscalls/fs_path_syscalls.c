@@ -871,19 +871,23 @@ int64_t sys_ftruncate(int fd, off_t length)
   if (!fd_table || !fd_table[fd].in_use)
     return -EBADF;
 
-  /* Pseudo /proc|/sys|/heart binds are not truncatable regular files. */
-  if (fd_table[fd].is_pseudo)
-    return -EBADF;
+  /*
+   * Linux do_ftruncate(): only a regular file open for writing; anything
+   * else (read-only fd, pipe, socket, pseudo file, directory) is EINVAL.
+   */
+  if ((fd_table[fd].flags & IR0_O_ACCMODE) == IR0_O_RDONLY)
+    return -EINVAL;
 
   if (fd_table[fd].is_memfd && fd_table[fd].vfs_file)
     return ir0_memfd_ftruncate((struct ir0_memfd *)fd_table[fd].vfs_file,
 			       (size_t)length);
 
-  if (fd_table[fd].is_pipe || fd_table[fd].is_socket)
-    return -EBADF;
+  if (fd_table[fd].is_pseudo || fd_table[fd].is_pipe ||
+      fd_table[fd].is_socket)
+    return -EINVAL;
 
   if (fd <= 2 && !fd_table[fd].vfs_file && !fd_table[fd].is_devfs)
-    return -EBADF;
+    return -EINVAL;
 
   path = fd_table[fd].path;
   if (!path || path[0] != '/')
@@ -892,7 +896,7 @@ int64_t sys_ftruncate(int fd, off_t length)
   if (vfs_stat(path, &st) != 0)
     return -EBADF;
 
-  if (S_ISDIR(st.st_mode))
+  if (!S_ISREG(st.st_mode))
     return -EINVAL;
 
   return vfs_truncate(path, (size_t)length);
