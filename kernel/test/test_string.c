@@ -39,25 +39,8 @@ void ktest_string(void)
 	KASSERT(strcmp("abc", "ab") > 0);
 
 	/*
-	 * itoa(0) used to emit an empty string (and read an uninitialized
-	 * local); negative decimal input indexed digits[] with a negative
-	 * remainder. Pin the full contract, including INT_MIN.
-	 */
-	KASSERT(strcmp(itoa(0, buf, 10), "0") == 0);
-	KASSERT(strcmp(itoa(7, buf, 10), "7") == 0);
-	KASSERT(strcmp(itoa(42, buf, 10), "42") == 0);
-	KASSERT(strcmp(itoa(-42, buf, 10), "-42") == 0);
-	KASSERT(strcmp(itoa(-2147483647 - 1, buf, 10), "-2147483648") == 0);
-	KASSERT(strcmp(itoa(255, buf, 16), "ff") == 0);
-	KASSERT(strcmp(itoa(-1, buf, 16), "ffffffff") == 0);
-	KASSERT(strcmp(itoa(8, buf, 2), "1000") == 0);
-	KASSERT(strcmp(itoa(35, buf, 36), "z") == 0);
-	KASSERT(strcmp(itoa(1, buf, 1), "") == 0);
-	KASSERT(strcmp(itoa(1, buf, 37), "") == 0);
-
-	/*
-	 * snprintf("%d") is the decimal formatter every caller uses; pin the
-	 * same contract as itoa, including INT_MIN (negating it overflows).
+	 * snprintf("%d") is the one decimal formatter; pin its contract,
+	 * including INT_MIN (negating it overflows).
 	 */
 	snprintf(buf, sizeof(buf), "%d", 0);
 	KASSERT(strcmp(buf, "0") == 0);

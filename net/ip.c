@@ -305,32 +305,26 @@ void ip_receive_handler(struct net_device *dev, const void *data,
         const uint8_t *icmp_data = (const uint8_t *)data + header_len;
         uint8_t icmp_type = icmp_data[0];
         uint8_t icmp_code = icmp_data[1];
-        klog_print("[IP] RX ICMP: type=");
-        char type_str[16];
-        itoa((int)icmp_type, type_str, 10);
-        klog_print(type_str);
-        klog_print(" code=");
-        char code_str[16];
-        itoa((int)icmp_code, code_str, 10);
-        klog_print(code_str);
+        char line[96];
+        size_t n;
+
+        n = (size_t)snprintf(line, sizeof(line),
+                             "[IP] RX ICMP: type=%d code=%d",
+                             (int)icmp_type, (int)icmp_code);
         if (icmp_type == 0)
         {
-            klog_print(" (ECHO_REPLY)");
+            n += (size_t)snprintf(line + n, sizeof(line) - n, " (ECHO_REPLY)");
             /* Dump ICMP header for Echo Reply */
             if (len >= header_len + 8)
             {
                 uint16_t icmp_id = (icmp_data[4] << 8) | icmp_data[5];
                 uint16_t icmp_seq = (icmp_data[6] << 8) | icmp_data[7];
-                klog_print(" id=");
-                char id_str[16];
-                itoa((int)icmp_id, id_str, 10);
-                klog_print(id_str);
-                klog_print(" seq=");
-                char seq_str[16];
-                itoa((int)icmp_seq, seq_str, 10);
-                klog_print(seq_str);
+
+                snprintf(line + n, sizeof(line) - n, " id=%d seq=%d",
+                         (int)icmp_id, (int)icmp_seq);
             }
         }
+        klog_print(line);
         klog_print("\n");
     }
 #endif

@@ -32,6 +32,8 @@ rtc_write_register (nothing; the kernel never writes the RTC)
 # Strings (includes/string.h): one libc-named implementation per behavior.
 # Unbounded or non-reentrant helpers stay out; plain libc names that were
 # only dead (atol, the ctype set) may return when a caller needs them.
+acpi_memcmp memcmp()
+itoa snprintf()
 __kmemcpy_checked memcpy()
 __kmemcpy_impl memcpy()
 __kmemset_checked memset()

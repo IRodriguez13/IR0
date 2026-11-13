@@ -29,6 +29,7 @@
 #include <ir0/arch_port.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define ACPI_SLP_EN            (1u << 13)
 /* Early boot identity map covers 0..48MiB; above that we map on demand. */
@@ -78,20 +79,6 @@ static uint8_t g_s3_typ_b;
 static int g_s5_ok;
 static int g_s3_ok;
 static int g_acpi_pm_ready;
-
-static int acpi_memcmp(const void *a, const void *b, size_t n)
-{
-	const unsigned char *pa = a;
-	const unsigned char *pb = b;
-	size_t i;
-
-	for (i = 0; i < n; i++)
-	{
-		if (pa[i] != pb[i])
-			return (int)pa[i] - (int)pb[i];
-	}
-	return 0;
-}
 
 static int acpi_checksum_ok(const void *p, size_t n)
 {
@@ -187,7 +174,7 @@ static int acpi_parse_sx_from_dsdt(uint32_t dsdt_phys, char digit,
 	if (!phys_safe(dsdt_phys, sizeof(*hdr)))
 		return -1;
 	hdr = (acpi_sdt_header_t *)(uintptr_t)dsdt_phys;
-	if (acpi_memcmp(hdr->signature, "DSDT", 4) != 0)
+	if (memcmp(hdr->signature, "DSDT", 4) != 0)
 		return -1;
 	len = hdr->length;
 	if (len < sizeof(*hdr) + 8 || len > ACPI_MAP_MAX_BYTES)
@@ -277,7 +264,7 @@ static int fadt_accept(uint64_t phys)
 	if (!phys_safe(phys, sizeof(*fadt)))
 		return -1;
 	fadt = (acpi_fadt_t *)(uintptr_t)phys;
-	if (acpi_memcmp(fadt->header.signature, "FACP", 4) != 0)
+	if (memcmp(fadt->header.signature, "FACP", 4) != 0)
 		return -1;
 	if (fadt->header.length < sizeof(*fadt))
 		return -1;
@@ -311,7 +298,7 @@ static int scan_rsdt_for_fadt(uint32_t rsdt_phys)
 	if (!phys_safe(rsdt_phys, sizeof(*rsdt)))
 		return -1;
 	rsdt = (acpi_sdt_header_t *)(uintptr_t)rsdt_phys;
-	if (acpi_memcmp(rsdt->signature, "RSDT", 4) != 0)
+	if (memcmp(rsdt->signature, "RSDT", 4) != 0)
 		return -1;
 	if (rsdt->length < sizeof(*rsdt) + 4)
 		return -1;
@@ -339,7 +326,7 @@ static int scan_xsdt_for_fadt(uint64_t xsdt_phys)
 	if (!phys_safe(xsdt_phys, sizeof(*xsdt)))
 		return -1;
 	xsdt = (acpi_sdt_header_t *)(uintptr_t)xsdt_phys;
-	if (acpi_memcmp(xsdt->signature, "XSDT", 4) != 0)
+	if (memcmp(xsdt->signature, "XSDT", 4) != 0)
 		return -1;
 	if (xsdt->length < sizeof(*xsdt) + 8)
 		return -1;

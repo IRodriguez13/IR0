@@ -44,7 +44,6 @@ int memcmp(const void *ptr1, const void *ptr2, size_t num);
 int atoi(const char *str);
 unsigned long strtoul(const char *str, char **endptr, int base);
 long strtol(const char *str, char **endptr, int base);
-char *itoa(int value, char *str, int base);
 
 // String formatting
 int snprintf(char *str, size_t size, const char *format, ...);
