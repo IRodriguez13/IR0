@@ -8,7 +8,6 @@
       "files": {
         "x86-64": [
           "sched/idle.c",
-          "kernel/process.c",
           "kernel/syscalls.c",
           "kernel/elf_loader.c",
           "sched/core.c",

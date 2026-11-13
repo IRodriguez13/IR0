@@ -21,7 +21,7 @@ iretq_checkpoint_buf:
 fork_flow_set_tf:
     resb 1
 
-; fork_restore_audit_t offsets (must match kernel/process.c)
+; fork_restore_audit_t offsets (blob size: arch/x86-64/sources/fork_asm_hooks.c)
 %define FRA_magic                  0
 %define FRA_task_ptr               8
 %define FRA_rax_slot_addr          16

@@ -28,7 +28,7 @@
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/driver.h>
-#include <kernel/elf_loader.h>
+#include <ir0/elf_loader.h>
 #include <ir0/clock.h>
 #include <ir0/init_drv.h>
 #include <ir0/blockdev.h>

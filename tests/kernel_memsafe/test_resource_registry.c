@@ -17,7 +17,7 @@
  */
 
 #include "kernel_memsafe_harness.h"
-#include "resource_registry.h"
+#include <ir0/resource_registry.h>
 #include <string.h>
 
 static int count_irqs;
