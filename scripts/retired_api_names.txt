@@ -134,3 +134,7 @@ process_irq_restore ir0_spin_unlock_irqrestore() on the structure's lock
 process_irq_save ir0_spin_lock_irqsave() on the structure's lock
 ir0_spin_lock ir0_spin_lock_irqsave() (the old form kept the IRQ state in the lock and could not nest)
 ir0_spin_unlock ir0_spin_unlock_irqrestore()
+reclaim_lock ir0_spin_lock_irqsave(&reclaimer_lock)
+reclaim_unlock ir0_spin_unlock_irqrestore(&reclaimer_lock)
+swap_lock ir0_spin_lock_irqsave(&swap_area_lock)
+swap_unlock ir0_spin_unlock_irqrestore(&swap_area_lock)

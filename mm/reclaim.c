@@ -9,54 +9,48 @@
 
 #include <ir0/reclaim.h>
 #include <ir0/errno.h>
+#include <ir0/spinlock.h>
 
 #define IR0_RECLAIMER_MAX 16
 
 static const struct ir0_reclaimer *reclaimers[IR0_RECLAIMER_MAX];
 static uint32_t reclaimer_count;
-static uint8_t registry_lock;
+/* Guards the reclaimer table. */
+static ir0_spinlock_t reclaimer_lock;
+/* One reclaim pass at a time; a nested caller gets -EBUSY (try-lock). */
 static uint8_t reclaim_active;
-
-static void reclaim_lock(uint8_t *lock)
-{
-    while (__atomic_test_and_set(lock, __ATOMIC_ACQUIRE))
-        __asm__ volatile("" ::: "memory");
-}
-
-static void reclaim_unlock(uint8_t *lock)
-{
-    __atomic_clear(lock, __ATOMIC_RELEASE);
-}
 
 int mm_reclaimer_register(const struct ir0_reclaimer *reclaimer)
 {
+    unsigned long irq_flags;
     uint32_t i;
 
     if (!reclaimer || !reclaimer->name || !reclaimer->name[0] ||
         !reclaimer->scan)
         return -EINVAL;
 
-    reclaim_lock(&registry_lock);
+    irq_flags = ir0_spin_lock_irqsave(&reclaimer_lock);
     for (i = 0; i < reclaimer_count; i++)
     {
         if (reclaimers[i] == reclaimer)
         {
-            reclaim_unlock(&registry_lock);
+            ir0_spin_unlock_irqrestore(&reclaimer_lock, irq_flags);
             return -EEXIST;
         }
     }
     if (reclaimer_count >= IR0_RECLAIMER_MAX)
     {
-        reclaim_unlock(&registry_lock);
+        ir0_spin_unlock_irqrestore(&reclaimer_lock, irq_flags);
         return -ENOSPC;
     }
     reclaimers[reclaimer_count++] = reclaimer;
-    reclaim_unlock(&registry_lock);
+    ir0_spin_unlock_irqrestore(&reclaimer_lock, irq_flags);
     return 0;
 }
 
 int mm_reclaim_run(uint64_t target_pages, struct ir0_reclaim_result *result)
 {
+    unsigned long irq_flags;
     const struct ir0_reclaimer *snapshot[IR0_RECLAIMER_MAX];
     struct ir0_reclaim_result local = {0};
     uint32_t count;
@@ -68,11 +62,11 @@ int mm_reclaim_run(uint64_t target_pages, struct ir0_reclaim_result *result)
     if (__atomic_test_and_set(&reclaim_active, __ATOMIC_ACQUIRE))
         return -EBUSY;
 
-    reclaim_lock(&registry_lock);
+    irq_flags = ir0_spin_lock_irqsave(&reclaimer_lock);
     count = reclaimer_count;
     for (i = 0; i < count; i++)
         snapshot[i] = reclaimers[i];
-    reclaim_unlock(&registry_lock);
+    ir0_spin_unlock_irqrestore(&reclaimer_lock, irq_flags);
 
     for (i = 0; i < count && local.reclaimed_pages < target_pages; i++)
     {

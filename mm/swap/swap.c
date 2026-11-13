@@ -12,22 +12,13 @@
 #include <ir0/kmem.h>
 #include <ir0/reclaim.h>
 #include <ir0/swap.h>
+#include <ir0/spinlock.h>
 #include <string.h>
 
 static struct ir0_swap_area g_areas[IR0_SWAP_MAX_AREAS];
-static uint8_t g_lock;
+/* Guards g_areas (bitmaps, reference counts, in-use counts). */
+static ir0_spinlock_t swap_area_lock;
 static int g_inited;
-
-static void swap_lock(void)
-{
-	while (__atomic_test_and_set(&g_lock, __ATOMIC_ACQUIRE))
-		__asm__ volatile("" ::: "memory");
-}
-
-static void swap_unlock(void)
-{
-	__atomic_clear(&g_lock, __ATOMIC_RELEASE);
-}
 
 static int prio_from_flags(int flags)
 {
@@ -114,6 +105,7 @@ int ir0_swap_area_install(const char *path, int kind, int flags, dev_t dev,
 			  const struct ir0_swap_extent *extents, size_t nextent,
 			  uint32_t last_page)
 {
+	unsigned long irq_flags;
 	struct ir0_swap_area *slot = NULL;
 	size_t bitmap_bytes;
 	unsigned i;
@@ -129,12 +121,12 @@ int ir0_swap_area_install(const char *path, int kind, int flags, dev_t dev,
 	if (dev == 0)
 		return -ENODEV;
 
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	for (i = 0; i < IR0_SWAP_MAX_AREAS; i++)
 	{
 		if (g_areas[i].used && strcmp(g_areas[i].path, path) == 0)
 		{
-			swap_unlock();
+			ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 			return -EBUSY;
 		}
 	}
@@ -148,7 +140,7 @@ int ir0_swap_area_install(const char *path, int kind, int flags, dev_t dev,
 	}
 	if (!slot)
 	{
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return -EPERM;
 	}
 
@@ -160,7 +152,7 @@ int ir0_swap_area_install(const char *path, int kind, int flags, dev_t dev,
 	if (!slot->bitmap || !slot->refs || !slot->state)
 	{
 		area_free_meta(slot);
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return -ENOMEM;
 	}
 	memset(slot->bitmap, 0, bitmap_bytes);
@@ -176,49 +168,51 @@ int ir0_swap_area_install(const char *path, int kind, int flags, dev_t dev,
 	memcpy(slot->extents, extents, nextent * sizeof(*extents));
 	strncpy(slot->path, path, sizeof(slot->path) - 1U);
 	slot->used = 1;
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	return 0;
 }
 
 int ir0_swap_area_remove(const char *path)
 {
+	unsigned long irq_flags;
 	unsigned i;
 	int rc;
 
 	if (!path)
 		return -EINVAL;
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	for (i = 0; i < IR0_SWAP_MAX_AREAS; i++)
 	{
 		if (!g_areas[i].used || strcmp(g_areas[i].path, path) != 0)
 			continue;
 		if (g_areas[i].inuse != 0)
 		{
-			swap_unlock();
+			ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 			rc = ir0_swap_drain_area(i);
-			swap_lock();
+			irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 			if (rc < 0 && g_areas[i].inuse != 0)
 			{
-				swap_unlock();
+				ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 				return rc;
 			}
 		}
 		area_free_meta(&g_areas[i]);
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return 0;
 	}
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	return -EINVAL;
 }
 
 int ir0_swap_path_busy(const char *path)
 {
+	unsigned long irq_flags;
 	unsigned i;
 	int busy = 0;
 
 	if (!path)
 		return 0;
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	for (i = 0; i < IR0_SWAP_MAX_AREAS; i++)
 	{
 		if (g_areas[i].used && strcmp(g_areas[i].path, path) == 0)
@@ -227,12 +221,13 @@ int ir0_swap_path_busy(const char *path)
 			break;
 		}
 	}
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	return busy;
 }
 
 int ir0_swap_slot_alloc(unsigned *type, uint64_t *offset)
 {
+	unsigned long irq_flags;
 	int best_prio = -1;
 	unsigned best = IR0_SWAP_MAX_AREAS;
 	unsigned i;
@@ -240,7 +235,7 @@ int ir0_swap_slot_alloc(unsigned *type, uint64_t *offset)
 
 	if (!type || !offset)
 		return -EINVAL;
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	for (i = 0; i < IR0_SWAP_MAX_AREAS; i++)
 	{
 		if (!g_areas[i].used)
@@ -253,7 +248,7 @@ int ir0_swap_slot_alloc(unsigned *type, uint64_t *offset)
 	}
 	if (best == IR0_SWAP_MAX_AREAS)
 	{
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return -ENOSPC;
 	}
 	for (page = 1; page <= g_areas[best].last_page; page++)
@@ -265,46 +260,48 @@ int ir0_swap_slot_alloc(unsigned *type, uint64_t *offset)
 			g_areas[best].inuse++;
 			*type = best;
 			*offset = page;
-			swap_unlock();
+			ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 			return 0;
 		}
 	}
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	return -ENOSPC;
 }
 
 int ir0_swap_slot_get(unsigned type, uint64_t offset)
 {
+	unsigned long irq_flags;
 	if (type >= IR0_SWAP_MAX_AREAS || !g_areas[type].used)
 		return -EINVAL;
 	if (offset == 0 || offset > g_areas[type].last_page)
 		return -EINVAL;
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	if (!bitmap_test(g_areas[type].bitmap, (uint32_t)offset))
 	{
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return -ENOENT;
 	}
 	if (g_areas[type].refs[offset] == 0xffff)
 	{
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return -ENOMEM;
 	}
 	g_areas[type].refs[offset]++;
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	return 0;
 }
 
 int ir0_swap_slot_put(unsigned type, uint64_t offset)
 {
+	unsigned long irq_flags;
 	if (type >= IR0_SWAP_MAX_AREAS || !g_areas[type].used)
 		return -EINVAL;
 	if (offset == 0 || offset > g_areas[type].last_page)
 		return -EINVAL;
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	if (g_areas[type].refs[offset] == 0)
 	{
-		swap_unlock();
+		ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 		return -EINVAL;
 	}
 	g_areas[type].refs[offset]--;
@@ -314,7 +311,7 @@ int ir0_swap_slot_put(unsigned type, uint64_t offset)
 		if (g_areas[type].inuse > 0)
 			g_areas[type].inuse--;
 	}
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	return 0;
 }
 
@@ -327,12 +324,13 @@ int ir0_swap_slot_busy(unsigned type)
 
 void ir0_swap_get_stats(struct ir0_swap_stats *out)
 {
+	unsigned long irq_flags;
 	unsigned i;
 
 	if (!out)
 		return;
 	memset(out, 0, sizeof(*out));
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	for (i = 0; i < IR0_SWAP_MAX_AREAS; i++)
 	{
 		if (!g_areas[i].used)
@@ -341,7 +339,7 @@ void ir0_swap_get_stats(struct ir0_swap_stats *out)
 		out->totalswap_pages += g_areas[i].last_page;
 		out->freeswap_pages += g_areas[i].last_page - g_areas[i].inuse;
 	}
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 }
 
 static size_t swap_append(char *buf, size_t cap, size_t off, const char *s)
@@ -381,6 +379,7 @@ static size_t swap_append_int(char *buf, size_t cap, size_t off, int value)
 
 int ir0_swap_format_proc(char *buf, size_t count)
 {
+	unsigned long irq_flags;
 	static const char hdr[] =
 		"Filename\t\tType\t\tSize\t\tUsed\t\tPriority\n";
 	size_t off;
@@ -397,7 +396,7 @@ int ir0_swap_format_proc(char *buf, size_t count)
 	}
 	memcpy(buf, hdr, sizeof(hdr) - 1U);
 	off = sizeof(hdr) - 1U;
-	swap_lock();
+	irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
 	for (i = 0; i < IR0_SWAP_MAX_AREAS && off + 80U < count; i++)
 	{
 		const char *type;
@@ -418,7 +417,7 @@ int ir0_swap_format_proc(char *buf, size_t count)
 		off = swap_append_int(buf, count, off, g_areas[i].prio);
 		off = swap_append(buf, count, off, "\n");
 	}
-	swap_unlock();
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 	if (off >= count)
 		off = count - 1U;
 	buf[off] = '\0';
