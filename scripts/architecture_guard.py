@@ -2905,6 +2905,91 @@ def check_retired_mm_headers():
     return errors
 
 
+# Retired public API names (one API per behavior). Every converged family
+# lists its deleted variants in RETIRED_API_LEDGER as "<name> <use instead>";
+# the name may not come back anywhere in kernel C sources (comments and
+# string literals excluded). The ledger is strict: a malformed or duplicate
+# line fails the guard instead of being ignored.
+RETIRED_API_LEDGER = ROOT / "scripts" / "retired_api_names.txt"
+RETIRED_API_TREES = ("arch", "block", "drivers", "fs", "includes", "ipc",
+                     "kernel", "ktm", "mm", "net", "sched", "sound")
+_RETIRED_API_LINE_RE = re.compile(r"^([A-Za-z_]\w*)\s+(\S.*)$")
+
+
+def load_retired_api_ledger(text: str) -> tuple[dict[str, str], list[str]]:
+    """Parse the ledger; return ({name: replacement}, errors)."""
+    names: dict[str, str] = {}
+    errors = []
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _RETIRED_API_LINE_RE.match(line)
+        if not match:
+            errors.append(f"[retired-api] ledger line {lineno}: expected "
+                          f"'<name> <use instead>', got '{line}'")
+            continue
+        name, hint = match.groups()
+        if name in names:
+            errors.append(f"[retired-api] ledger line {lineno}: duplicate "
+                          f"entry '{name}'")
+            continue
+        names[name] = hint
+    return names, errors
+
+
+def retired_api_violations(text: str, names: dict[str, str]) -> list[tuple[int, str]]:
+    """Return (line, name) for each retired name used in C *text*."""
+    if not names:
+        return []
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    pattern = re.compile(r"\b(" + "|".join(sorted(map(re.escape, names))) + r")\b")
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for match in pattern.finditer(line):
+            found.append((lineno, match.group(1)))
+    return found
+
+
+def _retired_api_self_test() -> list[str]:
+    """Inject retired names and ledger defects; the scanner must catch them."""
+    errors = []
+    names, ledger_errors = load_retired_api_ledger(
+        "# comment\nold_api new_api\nold_api again\nbroken\n")
+    if names != {"old_api": "new_api"} or len(ledger_errors) != 2:
+        errors.append("[retired-api] self-test: ledger parser accepted a "
+                      f"duplicate or malformed line: {ledger_errors}")
+    sample = ("/* old_api() in a comment is fine */\n"
+              "static const char *m = \"old_api\";\n"
+              "int old_api_ok(void);\n"
+              "\told_api(1);\n")
+    got = retired_api_violations(sample, names)
+    if got != [(4, "old_api")]:
+        errors.append(f"[retired-api] self-test: expected [(4, 'old_api')], "
+                      f"got {got}")
+    return errors
+
+
+def check_retired_api_names():
+    """Reject every name listed in the retired-API ledger."""
+    errors = _retired_api_self_test()
+    names, ledger_errors = load_retired_api_ledger(
+        read_file_text(RETIRED_API_LEDGER))
+    errors.extend(ledger_errors)
+    for tree in RETIRED_API_TREES:
+        for path in iter_c_files(ROOT / tree):
+            rel = rel_to_root(path)
+            for lineno, name in retired_api_violations(read_file_text(path),
+                                                       names):
+                errors.append(
+                    f"[retired-api] {rel}:{lineno}: {name} was retired; "
+                    f"use {names[name]}"
+                )
+    return errors
+
+
 INCLUDE_LAYOUT_TREES = SINGLE_DECL_TREES
 _LAYOUT_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"][^>"]+[>"])')
 _LAYOUT_ALLMAN_HEAD_RE = re.compile(r"\)\s*(?:__attribute__\s*\(\(.*\)\)\s*)*$")
@@ -3103,6 +3188,7 @@ def main():
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
     errors.extend(check_retired_mm_headers())
+    errors.extend(check_retired_api_names())
     errors.extend(check_include_layout())
 
     if errors:

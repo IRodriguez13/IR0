@@ -1,0 +1,7 @@
+# Retired kernel API names: "<name> <use instead>".
+#
+# Checked by scripts/architecture_guard.py [retired-api]: a listed name may
+# not appear in kernel C sources (arch block drivers fs includes ipc kernel
+# ktm mm net sched sound). Append the names a convergence deletes in the
+# same commit; never delete a line to bring a name back.
+
