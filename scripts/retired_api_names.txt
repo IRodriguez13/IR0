@@ -5,3 +5,26 @@
 # ktm mm net sched sound). Append the names a convergence deletes in the
 # same commit; never delete a line to bring a name back.
 
+# Time and clock (includes/ir0/clock.h, early_clock.h, early_time.h, rtc.h)
+clock_cancel_all_alarms (nothing; the alarm list had no users)
+clock_get_active_timer clock_get_stats()
+clock_get_scheduler_quantum (nothing; the quantum is fixed at boot)
+clock_get_timezone_offset (nothing; the kernel clock is UTC)
+clock_get_uptime_seconds clock_get_uptime_milliseconds() / 1000
+clock_print_stats /proc/timer_info (clock_get_stats)
+clock_sched_resched_pending_peek clock_take_sched_resched_pending()
+clock_set_alarm a timer on the clock wait (ir0_clock_wait_*)
+clock_set_current_time (nothing; CLOCK_REALTIME comes from the RTC)
+clock_set_scheduler_quantum (nothing; the quantum is fixed at boot)
+clock_set_timezone_offset (nothing; the kernel clock is UTC)
+delay_ms udelay() or clock_sleep()
+detect_best_clock clock_system_init()
+early_clock_quality early_clock_available()
+early_time_smoke_ok the early_time_services note() hook
+get_current_timer_type clock_get_stats()
+get_pit_ticks clock_get_tick_count()
+get_system_time clock_get_uptime_milliseconds()
+init_clock clock_system_init()
+rtc_get_date_string rtc_read_time() and snprintf()
+rtc_get_time_string rtc_read_time() and snprintf()
+rtc_write_register (nothing; the kernel never writes the RTC)

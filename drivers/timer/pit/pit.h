@@ -27,6 +27,5 @@
 #define PIT_BASE_FREC   1193180
 
 void init_PIT(uint32_t frequency);
-uint32_t get_pit_ticks(void);
 void increment_pit_ticks(void);
 

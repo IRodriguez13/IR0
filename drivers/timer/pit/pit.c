@@ -39,20 +39,8 @@ static ir0_driver_info_t pit_info = {
     .language = IR0_DRIVER_LANG_C
 };
 
-/* Global variable for PIT ticks */
-uint64_t pit_ticks = 0;
-
-
-static uint32_t ticks = 0;
-
-uint32_t get_pit_ticks(void)
-{
-    return ticks;
-}
-
 void increment_pit_ticks(void)
 {
-	ticks++;
 	clock_note_irq();
 	extern void clock_tick(void);
 	clock_tick();

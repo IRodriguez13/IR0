@@ -19,18 +19,9 @@
 
 #include <stdint.h>
 
-typedef enum
-{
-	EARLY_CLOCK_UNAVAILABLE = 0,
-	EARLY_CLOCK_RAW = 1,
-	EARLY_CLOCK_CALIBRATED = 2,
-	EARLY_CLOCK_MONOTONIC = 3
-} early_clock_quality_t;
-
 /*
  * Earliest ordered counter before PIT/HPET calibration.
- * EARLY_CLOCK_RAW ticks are not wall-clock until clock_is_ready().
+ * Raw ticks, not wall-clock time, until clock_is_ready().
  */
 int early_clock_available(void);
 uint64_t early_clock_read(void);
-early_clock_quality_t early_clock_quality(void);

@@ -68,11 +68,6 @@ uint64_t early_clock_read(void)
 	return timer_read();
 }
 
-early_clock_quality_t early_clock_quality(void)
-{
-	return early_clock_available() ? EARLY_CLOCK_RAW : EARLY_CLOCK_UNAVAILABLE;
-}
-
 void io_wait(void)
 {
 }

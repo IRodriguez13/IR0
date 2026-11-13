@@ -89,8 +89,3 @@ uint8_t rtc_read_register(uint8_t reg)
 	return inb(RTC_DATA_REG);
 }
 
-void rtc_write_register(uint8_t reg, uint8_t value)
-{
-	outb(RTC_ADDRESS_REG, reg);
-	outb(RTC_DATA_REG, value);
-}

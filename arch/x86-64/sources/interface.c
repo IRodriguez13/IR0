@@ -113,12 +113,6 @@ uint64_t early_clock_read(void)
 	return ((uint64_t)hi << 32) | lo;
 }
 
-early_clock_quality_t early_clock_quality(void)
-{
-	return early_clock_available() ? EARLY_CLOCK_RAW
-				       : EARLY_CLOCK_UNAVAILABLE;
-}
-
 void outb(uint16_t port, uint8_t value)
 {
     #if MINGW_BUILD

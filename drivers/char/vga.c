@@ -410,16 +410,6 @@ void print_uint32(uint32_t num)
     }
 }
 
-void delay_ms(uint32_t ms)
-{
-    /* Delay simple usando loops */
-    /* Aproximadamente 1ms por cada 100,000 iteraciones */
-    for (volatile uint32_t i = 0; i < ms * 100000; i++)
-    {
-        __asm__ volatile("" ::: "memory");
-    }
-}
-
 /* Función para convertir uint a hex string */
 void uint_to_hex(uintptr_t value, char *hex_str)
 {

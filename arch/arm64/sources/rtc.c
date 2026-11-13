@@ -58,8 +58,3 @@ uint8_t rtc_read_register(uint8_t reg)
 	return 0xff;
 }
 
-void rtc_write_register(uint8_t reg, uint8_t value)
-{
-	(void)reg;
-	(void)value;
-}

@@ -25,10 +25,6 @@ static int clock_supported(uint64_t clock_id)
 	       clock_id == CLOCK_BOOTTIME;
 }
 
-static int g_nanosleep_ok;
-static int g_clock_gettime_ok;
-static int g_gettimeofday_ok;
-static int g_clock_nanosleep_ok;
 static struct itimerval g_itimer[3];
 static int64_t g_realtime_off;
 static int64_t g_realtime_nsec;
@@ -104,7 +100,6 @@ static int64_t early_clock_gettime(void *opaque, uint64_t clock_id,
 	}
 	if (user->copy_to_user(output, &value, sizeof(value)) != 0)
 		return -EFAULT;
-	g_clock_gettime_ok = 1;
 	if (ops->note)
 		ops->note(EARLY_SYSCALL_CLOCK_GETTIME_OK);
 	return 0;
@@ -135,7 +130,6 @@ static int64_t early_gettimeofday(void *opaque, uint64_t output)
 	}
 	if (user->copy_to_user(output, &value, sizeof(value)) != 0)
 		return -EFAULT;
-	g_gettimeofday_ok = 1;
 	if (ops->note)
 		ops->note(EARLY_SYSCALL_GETTIMEOFDAY_OK);
 	return 0;
@@ -153,10 +147,8 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 	switch (id) {
 	case IR0_SYSCALL_NANOSLEEP:
 		result = sleep_timespec_user(opaque, a0);
-		if (!result) {
-			g_nanosleep_ok = 1;
-			if (ops && ops->note) ops->note(EARLY_SYSCALL_NANOSLEEP_OK);
-		}
+		if (!result && ops && ops->note)
+			ops->note(EARLY_SYSCALL_NANOSLEEP_OK);
 		return result;
 	case IR0_SYSCALL_CLOCK_SETTIME:
 	{
@@ -315,10 +307,8 @@ static int64_t early_time_syscall(void *opaque, enum ir0_syscall_id id,
 		if (!clock_supported(a0)) return -EINVAL;
 		(void)a1; (void)a3;
 		result = sleep_timespec_user(opaque, a2);
-		if (!result) {
-			g_clock_nanosleep_ok = 1;
-			if (ops && ops->note) ops->note(EARLY_SYSCALL_CLOCK_NANOSLEEP_OK);
-		}
+		if (!result && ops && ops->note)
+			ops->note(EARLY_SYSCALL_CLOCK_NANOSLEEP_OK);
 		return result;
 	case IR0_SYSCALL_GETTIMEOFDAY:
 		(void)a1;
@@ -414,12 +404,6 @@ int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec)
 	g_realtime_off = sec - now;
 	g_realtime_nsec = nsec;
 	return 0;
-}
-
-int early_time_smoke_ok(void)
-{
-	return g_nanosleep_ok && g_clock_gettime_ok && g_gettimeofday_ok &&
-	       g_clock_nanosleep_ok;
 }
 
 static const enum ir0_syscall_id g_time_syscalls[] = {
