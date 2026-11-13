@@ -78,13 +78,6 @@ void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root)
 	}
 }
 
-int mm_user_va_ok(uintptr_t addr, size_t size)
-{
-	/* ELF load floor … canonical low half (matches historical copy_user). */
-	return mm_user_range_ok(addr, size, mm_user_va_start(),
-				mm_user_va_end());
-}
-
 /*
  * The low identity of every root holds the keyboard ring IRQs fill and the
  * kernel heap. The rest of it (the ELF/brk seam at 6 MiB, the PMM window)
@@ -92,7 +85,8 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
  */
 int mm_user_range_mappable(uintptr_t addr, size_t size)
 {
-	if (!mm_user_va_ok(addr, size))
+	if (!mm_user_range_ok(addr, size, mm_user_va_start(),
+			      mm_user_va_end()))
 		return 0;
 	if (mm_range_overlaps(addr, size, KEYBOARD_BUFFER_ADDR,
 			      X86_SUPERVISOR_KBD_END - KEYBOARD_BUFFER_ADDR))

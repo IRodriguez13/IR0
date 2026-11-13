@@ -12,9 +12,9 @@
  *
  * Contract: never memcpy/memset/strncpy or direct dereference of a userspace
  * pointer. Always copy_to_user / copy_from_user / clear_user (or
- * copy_*_user_mm for a non-current mm), after access_ok() when a pointer
- * is checked ahead of the copy. Kernel threads (dbgshell/ktest) pass kernel
- * buffers through the same calls.
+ * copy_*_user_mm for a non-current mm); each validates its range and
+ * returns -EFAULT, so callers do not check the pointer first. Kernel
+ * threads (dbgshell/ktest) pass kernel buffers through the same calls.
  */
 
 #ifndef _IR0_COPY_USER_H
@@ -73,8 +73,10 @@ long strncpy_from_user(char *dst, const char *src, long count);
  * window; mapping and permissions are checked by the copy itself. Kernel
  * threads (KERNEL_MODE: dbgshell, ktest) pass kernel buffers to syscalls and
  * always pass, as copy_{to,from}_user() accept them.
- * Address ranges that are not copied through (mmap hints, signal handlers,
- * TLS bases) use mm_user_va_ok() from <ir0/mm.h>.
+ * It is the one public user-pointer predicate: use it only where nothing
+ * is copied (a stored pointer, a futex wake, a buffer that a later wait
+ * fills); a copy validates its own range. Mapping ranges use
+ * mm_user_range_mappable() from <ir0/mm.h>.
  * Returns: 1 if valid, 0 otherwise.
  */
 int access_ok(const void *addr, size_t size);

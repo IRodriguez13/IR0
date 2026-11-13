@@ -2496,6 +2496,29 @@ RETIRED_UACCESS_RE = re.compile(
 )
 
 
+# The user-window arithmetic behind access_ok() and the copies: mm-private
+# (mm/user_va.h). Outside mm/ a pointer is checked with access_ok() and a
+# mapping range with mm_user_range_mappable().
+MM_PRIVATE_UACCESS_RE = re.compile(r"\b(mm_user_va_ok)\b")
+
+
+def uaccess_violations(rel: str, text: str) -> list[tuple[int, str]]:
+    """Return (line, message) for each user-pointer API rule *text* breaks."""
+    out = []
+    in_mm = rel.startswith("mm/")
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = RETIRED_UACCESS_RE.search(line)
+        if match:
+            out.append((lineno, f"{match.group(1)} is retired; use access_ok / "
+                        f"copy_*_user / strncpy_from_user / copy_*_user_mm"))
+        match = MM_PRIVATE_UACCESS_RE.search(line)
+        if match and not in_mm:
+            out.append((lineno, f"{match.group(1)} is mm-private; use "
+                        f"access_ok (pointer) or mm_user_range_mappable "
+                        f"(mapping range)"))
+    return out
+
+
 def check_uaccess_single_api():
     """Keep one user-pointer API: access_ok + copy_*_user (+ _mm, strncpy)."""
     errors = []
@@ -2512,14 +2535,28 @@ def check_uaccess_single_api():
         ROOT / "sched",
     ):
         for path in iter_c_files(base):
-            for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
-                match = RETIRED_UACCESS_RE.search(line)
-                if match:
-                    errors.append(
-                        f"[uaccess-single-api] {rel_to_root(path)}:{lineno}: "
-                        f"{match.group(1)} is retired; use access_ok / "
-                        f"copy_*_user / strncpy_from_user / copy_*_user_mm"
-                    )
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            for lineno, msg in uaccess_violations(rel, read_file_text(path)):
+                errors.append(f"[uaccess-single-api] {rel}:{lineno}: {msg}")
+    return errors
+
+
+def _uaccess_self_test() -> list[str]:
+    """Prove the scanner flags injected uses and allows mm/ its helper."""
+    errors = []
+    sample = (
+        "static int ok(void *p) { return access_ok(p, 4); }\n"
+        "int bad(uintptr_t a) { return mm_user_va_ok(a, 1); }\n"
+        "int old(void *p) { return access_ok_mapped(p, 1); }\n"
+    )
+    got = [line for line, _ in uaccess_violations("kernel/x.c", sample)]
+    if got != [2, 3]:
+        errors.append(f"[uaccess-single-api] self-test: kernel/x.c flagged "
+                      f"lines {got}, expected [2, 3]")
+    got = [line for line, _ in uaccess_violations("mm/x.c", sample)]
+    if got != [3]:
+        errors.append(f"[uaccess-single-api] self-test: mm/x.c flagged "
+                      f"lines {got}, expected [3]")
     return errors
 
 
@@ -2984,14 +3021,14 @@ def self_test_include_layout() -> list[str]:
 def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
-                    _register_name_self_test())
+                    _register_name_self_test() + _uaccess_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
                 print(" -", failure)
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
-              "portable-no-register-names)")
+              "portable-no-register-names, uaccess-single-api)")
         return 0
 
     errors = []

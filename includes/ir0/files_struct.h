@@ -39,7 +39,7 @@ typedef struct files_struct
 /*
  * True if @f is a live kernel files_struct. Rejects NULL, non-heap pointers
  * (garbage like 0x220000000b), bad magic, and dead refcount before any
- * fd_table[] load. IR0 kmalloc uses identity heap — do not use mm_user_va_ok.
+ * fd_table[] load. IR0 kmalloc uses identity heap — do not use access_ok().
  */
 int files_struct_live(const files_struct_t *f);
 

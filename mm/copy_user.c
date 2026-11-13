@@ -14,6 +14,7 @@
 #include "process.h"
 #include <ir0/paging.h>
 #include <string.h>
+#include "user_va.h"
 
 /*
  * Kernel threads (KERNEL_MODE: dbgshell, ktest harness) call syscalls with

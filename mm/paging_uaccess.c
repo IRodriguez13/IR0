@@ -20,6 +20,7 @@
 #include <string.h>
 #include "paging.h"
 #include "paging_internal.h"
+#include "user_va.h"
 
 /*
  * Copy or zero user memory via mapped physical frames. Process address-space root may omit

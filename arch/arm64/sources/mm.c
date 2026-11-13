@@ -75,12 +75,6 @@ void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root)
 	/* No shared kernel half: the supervisor identity is per root (mmu.c). */
 }
 
-int mm_user_va_ok(uintptr_t addr, size_t size)
-{
-	return mm_user_range_ok(addr, size, mm_user_va_start(),
-				mm_user_va_end());
-}
-
 /*
  * Every root identity-maps all of DRAM (kernel image, heap, page tables and
  * other PMM frames) and the Device blocks: a user page over any of them
@@ -88,7 +82,8 @@ int mm_user_va_ok(uintptr_t addr, size_t size)
  */
 int mm_user_range_mappable(uintptr_t addr, size_t size)
 {
-	if (!mm_user_va_ok(addr, size))
+	if (!mm_user_range_ok(addr, size, mm_user_va_start(),
+			      mm_user_va_end()))
 		return 0;
 	return !arm64_mmu_supervisor_overlaps(addr, size);
 }
