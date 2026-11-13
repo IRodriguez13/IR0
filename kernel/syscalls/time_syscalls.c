@@ -162,10 +162,7 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	uint64_t uptime_ms;
 	struct timespec kts;
 
-	if (!current_process || !tp)
-		return -EFAULT;
-
-  if (!access_ok(tp, sizeof(struct timespec)))
+	if (!current_process)
 		return -EFAULT;
 
 	uptime_ms = clock_get_uptime_milliseconds();
@@ -207,7 +204,8 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 		return -EINVAL;
 	}
 
-	if (copy_to_user(tp, &kts, sizeof(kts)) != 0)
+	/* Linux: an unknown clock is EINVAL before @tp is looked at. */
+	if (!tp || copy_to_user(tp, &kts, sizeof(kts)) != 0)
 		return -EFAULT;
 	return 0;
 }
