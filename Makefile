@@ -165,7 +165,7 @@ endif
 # production facade implementation at link time; product defconfigs keep every
 # KTM_*_MOCK option disabled. `scripts/architecture_guard.py` rejects a mock
 # enabled without CONFIG_KTM.
-CONSOLE_BACKEND_OBJ := kernel/console_backend.o
+CONSOLE_BACKEND_OBJ := drivers/tty/console_backend.o
 MM_PORT_OBJ := mm/alloc/mm_port.o
 VIDEO_BACKEND_OBJ := drivers/video/video_backend.o
 INPUT_BACKEND_OBJ := drivers/input/input_backend.o
@@ -666,7 +666,7 @@ LIB_OBJS = \
     drivers/tty/console.o \
     drivers/input/ps2_set1.o \
     drivers/input/ps2_mouse_pkt.o \
-    kernel/ash_smoke.o \
+    drivers/tty/ash_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
     fs/utimens.o \

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: console_backend.h
- * Description: Console output facade — no drivers/ includes (impl in kernel/console_backend.c).
+ * Description: Console output facade — no drivers/ includes (impl in drivers/tty/console_backend.c).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

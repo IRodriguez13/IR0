@@ -103,7 +103,7 @@ PROCESS_BLOCKED → sched_schedule_next()
 | TTY wait + echo | `includes/ir0/console.c` | `tty_sleep_for_input`, `ir0_console_keypress`, canon echo |
 | Keyboard | `arch/x86-64/sources/interrupt/keyboard.c` | PS/2 poll, `keyboard_buffer_add`, userspace diag tags |
 | Stdin syscall | `kernel/syscalls.c` | `syscalls_read_stdio_stdin` → `ir0_console_read`; poll wait poll |
-| Console draw | `kernel/console_backend.c`, `drivers/video/*` | FB handoff, `typewriter_vga_print_char` |
+| Console draw | `drivers/tty/console_backend.c`, `drivers/video/*` | FB handoff, `typewriter_vga_print_char` |
 | devfs console | `fs/devfs.c` | `/dev/console`, `/dev/tty`, termios ioctl |
 | PID 1 | `setup/pid1/irinit.c` | Attach stdio to `/dev/console`, spawn `ash -i` |
 | BusyBox config | `ISD/packages/busybox/fase50_minimal.config` | `FEATURE_EDITING=n`, `ASH_JOB_CONTROL=n` |
