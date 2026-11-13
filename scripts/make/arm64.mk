@@ -151,7 +151,7 @@ arm64-all-objs-probe: arm64-portable-compile
 		for src in sched/idle.c fs/open_flags.c \
 			kernel/errno.c kernel/process/credentials.c \
 			arch/arm64/sources/switch.c \
-			kernel/time/clock_wait.c kernel/driver_registry.c \
+			kernel/time/clock_wait.c drivers/core/driver_registry.c \
 			mm/uaccess/copy_user.c \
 			kernel/futex.c \
 			net/net_compat.c; do \

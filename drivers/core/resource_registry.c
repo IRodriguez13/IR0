@@ -7,7 +7,7 @@
  * Data comes only from driver registration; no hardcoded tables here.
  */
 
-#include "resource_registry.h"
+#include <ir0/resource_registry.h>
 #include <string.h>
 
 #define MAX_IRQ_ENTRIES    16

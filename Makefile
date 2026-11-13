@@ -507,8 +507,8 @@ KERNEL_OBJS = \
     ipc/posix_shm.o \
     kernel/input_events.o \
     kernel/elf_loader.o \
-    kernel/driver_registry.o \
-    kernel/resource_registry.o \
+    drivers/core/driver_registry.o \
+    drivers/core/resource_registry.o \
     ipc/ipc.o \
     kernel/futex.o \
     net/net_compat.o \

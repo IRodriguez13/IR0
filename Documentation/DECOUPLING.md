@@ -150,7 +150,7 @@ Implementations may include drivers from `.c` adapters (`input_backend.c`,
 
 | Mechanism | Types / APIs | Purpose |
 |-----------|----------------|---------|
-| **Driver registry** | `ir0_driver_ops_t`, `ir0_register_driver()` | Lifecycle + generic I/O; see `kernel/driver_registry.c`. |
+| **Driver registry** | `ir0_driver_ops_t`, `ir0_register_driver()` | Lifecycle + generic I/O; see `drivers/core/driver_registry.c`. |
 | **Block devices** | `ir0_block_ops` / `ir0_block_register()` | Sector I/O; ATA/AHCI/virtio register via facade. |
 | **Filesystems** | `struct vfs_ops`, `vfs_fstype` | Mountable FS plugins (`minix_fs.c`, `tmpfs.c`, `simplefs.c`, …). |
 | **Character devices** | `devfs_ops_t`, `devfs_register_node()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
