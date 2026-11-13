@@ -10,7 +10,8 @@
 #
 # Environment:
 #   ARCH=x86-64|arm64       target architecture (default: .config / x86-64)
-#   BOARD=qemu-virt|rpi3|rpi4|rpi5   ARM64 board (default: qemu-virt)
+#   BOARD=qemu-virt          ARM64 board (default: qemu-virt; Raspberry Pi
+#                           boards are build-only)
 #   IR0_PRODUCT=path        explicit product (default: per ARCH/BOARD)
 #   DISK=path|none          raw root disk (x86 IDE; arm64 virt virtio-blk "vda")
 #                           default: ISD profile image when present, else disk.img (x86
@@ -34,7 +35,6 @@ Boots the artifact already built for ARCH/BOARD. It never invokes make.
 Build it first with:
   make ir0 x86-64
   make ir0 arm64
-  make ir0 arm64 rpi4
 EOF
 }
 
@@ -82,7 +82,12 @@ esac
 if [ "$ARCH" = arm64 ]; then
 	BOARD="${BOARD:-qemu-virt}"
 	case "$BOARD" in
-	qemu-virt | rpi3 | rpi4 | rpi5) ;;
+	qemu-virt) ;;
+	rpi3 | rpi4 | rpi5)
+		echo "✗ run: BOARD=$BOARD is build-only (make ir0 arm64 $BOARD)" >&2
+		echo "  QEMU runs the qemu-virt product kernel: make run arm64" >&2
+		exit 2
+		;;
 	*)
 		echo "✗ run: unsupported BOARD=$BOARD" >&2
 		echo "  valid: qemu-virt, rpi3, rpi4, rpi5" >&2
@@ -95,13 +100,9 @@ fi
 
 # Product resolution. qemu-virt boots the raw Linux Image so QEMU's
 # bootloader passes the DTB in x0. An ELF -kernel leaves x0 clear.
-# Board images are raw kernel8.img files for QEMU's raspi machines.
 if [ -z "$PRODUCT" ]; then
 	if [ "$ARCH" = arm64 ]; then
-		case "$BOARD" in
-		rpi3 | rpi4 | rpi5) PRODUCT="kernel-arm64-$BOARD-min.bin" ;;
-		*) PRODUCT="kernel-arm64.img" ;;
-		esac
+		PRODUCT="kernel-arm64.img"
 	else
 		PRODUCT="kernel-x64.iso"
 	fi
@@ -111,17 +112,10 @@ case "$PRODUCT" in
 *) PRODUCT="$ROOT/$PRODUCT" ;;
 esac
 
-if [ "$ARCH" = arm64 ] && [ "$BOARD" != qemu-virt ]; then
-	board_img="$ROOT/build/arm64-$BOARD/kernel8.img"
-	if [ -f "$board_img" ]; then
-		PRODUCT="$board_img"
-	fi
-fi
-
 if [ ! -f "$PRODUCT" ]; then
 	echo "✗ run: product not built: $PRODUCT" >&2
 	if [ "$ARCH" = arm64 ]; then
-		echo "  build it: make ir0 arm64 ${BOARD:+$BOARD}" >&2
+		echo "  build it: make ir0 arm64" >&2
 	else
 		echo "  build it: make ir0 x86-64" >&2
 	fi
@@ -186,8 +180,7 @@ if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = x86-64 ]; then
 	fi
 fi
 # ARM64 qemu-virt: optional virtio-blk (kernel registers vda; early rootfs can bind /init from disk).
-if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = arm64 ] &&
-	[ "$BOARD" = qemu-virt ]; then
+if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = arm64 ]; then
 	resolve_isd_root_disk || true
 	if [ -z "$DISK" ] && [ -f "$ROOT/disk.img" ]; then
 		DISK=$ROOT/disk.img
@@ -218,12 +211,7 @@ fi
 
 # Validate the machine before QEMU prints a wall of text.
 if [ "$ARCH" = arm64 ]; then
-	case "$BOARD" in
-	qemu-virt) MACHINE=virt ;;
-	rpi3) MACHINE=raspi3b ;;
-	rpi4) MACHINE=raspi4b ;;
-	rpi5) MACHINE=raspi5b ;;
-	esac
+	MACHINE=virt
 	if ! "$qemu" -machine help 2>/dev/null | awk '{print $1}' | grep -qx "$MACHINE"; then
 		echo "✗ run: $qemu has no '$MACHINE' machine" >&2
 		echo "  available ARM machines:" >&2
@@ -236,19 +224,17 @@ set -- -m "$MEM"
 
 if [ "$ARCH" = arm64 ]; then
 	set -- "$@" -M "$MACHINE" -kernel "$PRODUCT" -no-reboot
-	if [ "$MACHINE" = virt ]; then
-		set -- "$@" -cpu cortex-a57
-		# Modern virtio-mmio. A NIC is enough for the probe; a block
-		# device is only present when the caller passes one.
-		set -- "$@" -global virtio-mmio.force-legacy=false
-		if [ -n "$DISK" ]; then
-			set -- "$@" -drive "file=$DISK,format=raw,if=none,id=ir0_root" \
-				-device virtio-blk-device,drive=ir0_root
-		fi
-		if [ "${IR0_NET:-1}" != 0 ]; then
-			set -- "$@" -netdev user,id=net0 \
-				-device virtio-net-device,netdev=net0
-		fi
+	set -- "$@" -cpu cortex-a57
+	# Modern virtio-mmio. A NIC is enough for the probe; a block
+	# device is only present when the caller passes one.
+	set -- "$@" -global virtio-mmio.force-legacy=false
+	if [ -n "$DISK" ]; then
+		set -- "$@" -drive "file=$DISK,format=raw,if=none,id=ir0_root" \
+			-device virtio-blk-device,drive=ir0_root
+	fi
+	if [ "${IR0_NET:-1}" != 0 ]; then
+		set -- "$@" -netdev user,id=net0 \
+			-device virtio-net-device,netdev=net0
 	fi
 	case "$MODE" in
 	gdb)

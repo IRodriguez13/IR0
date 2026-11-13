@@ -4,7 +4,6 @@
 #
 # Products and checks:
 #   kernel-arm64.bin / kernel-arm64-product.bin   portable product link ($(ALL_OBJS))
-#   kernel-arm64-<board>-min.bin                  tiny board bring-up (scripts/make/arm64-board.mk)
 #   arm64-common-core-compile                     compile-only contract for portable TUs
 #   arm64-provider-audit                         nm policy on the product ELF
 #
@@ -24,6 +23,21 @@ else
 ARM64_BOARD_CFLAGS := -DIR0_ARM64_BOARD_QEMU_VIRT=1
 ARM64_BOARD := qemu-virt
 endif
+
+# Objects live next to their sources, so the sources that test a board macro
+# must rebuild when the selected board changes (`make ir0 arm64 rpi5` followed
+# by `make ir0 arm64`). The stamp only changes when the board does.
+ARM64_BOARD_STAMP := build/arm64-board
+ARM64_BOARD_STAMP_OLD := $(shell cat $(ARM64_BOARD_STAMP) 2>/dev/null)
+ifneq ($(ARM64_BOARD_STAMP_OLD),$(ARM64_BOARD))
+$(shell mkdir -p build && echo $(ARM64_BOARD) > $(ARM64_BOARD_STAMP))
+endif
+ARM64_BOARD_OBJS := $(patsubst %.c,%.o,$(shell grep -l 'IR0_ARM64_BOARD_' \
+	arch/arm64/sources/*.c 2>/dev/null))
+$(ARM64_BOARD_OBJS): $(ARM64_BOARD_STAMP)
+$(ARM64_BOARD_STAMP):
+	@mkdir -p $(@D)
+	@echo $(ARM64_BOARD) > $@
 
 # Repo-local musl cross toolchain (scripts/setup_musl_aarch64.sh). A linked
 # worktree has no toolchain/; worktree.mk falls back to the main checkout's.
@@ -61,19 +75,13 @@ $(MUSL_AARCH64_HELLO): setup/pid1/hello_aarch64.c setup/pid1/hello_aarch64_frees
 	@echo "✓ hello_aarch64 → $@ (ET_EXEC @ 0x43000000)"
 
 # Freestanding-ish flags for compile-only probes and the ARM64 common-core
-# contract (no IR0_FREESTANDING_BOOT — retired alongside kernel-arm64-boot.bin).
+# contract.
 ARM64_COMMON_CORE_COMPILE_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
 	$(ARM64_BOARD_CFLAGS) \
 	-I. -Iarch/arm64/include -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0 \
 	-ffunction-sections -fdata-sections \
 	-DCONFIG_ENABLE_FS_MINIX=0 -DCONFIG_ENABLE_FS_SIMPLEFS=0 \
 	-DCONFIG_ENABLE_FS_FAT16=0 -DCONFIG_ENABLE_FS_EXT2=0
-
-# Board -min images (scripts/make/arm64-board.mk): tiny freestanding link @ firmware load address.
-ARM64_BOOT_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
-	-DIR0_FREESTANDING_BOOT=1 $(ARM64_BOARD_CFLAGS) \
-	-I. -Iarch/arm64/include -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0
-ARM64_BOOT_ASFLAGS = -ffreestanding -nostdlib -mgeneral-regs-only
 
 # QEMU virt: pin GICv2 (default may be v3 — product path uses the same GIC backend).
 ARM64_QEMU_MACHINE = virt,gic-version=2

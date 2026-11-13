@@ -240,9 +240,6 @@ ISO_DIR = iso
 # Targets
 ifeq ($(ARCH),arm64)
 DEFAULT_BUILD_TARGET := kernel-arm64.bin
-ifneq ($(filter rpi3 rpi4 rpi5,$(BOARD)),)
-DEFAULT_BUILD_TARGET := build/arm64-$(BOARD)/kernel8.img
-endif
 else
 DEFAULT_BUILD_TARGET := kernel-x64.iso
 endif
@@ -251,12 +248,11 @@ endif
 # expands them.
 -include scripts/make/host-portable.mk
 
-# ARM64: QEMU smokes, board -min images, and hello blob helpers. Parse only for
+# ARM64: board selection, QEMU smokes and hello blob helpers. Parse only for
 # ARCH=arm64 so x86 builds never pay for it.
 ifeq ($(ARCH),arm64)
 ARM64_BOARD := $(BOARD)
 -include scripts/make/arm64.mk
--include scripts/make/arm64-board.mk
 # Board macros (qemu-virt vs rpi*) — required by portable sources such as
 # arch/arm64/sources/boot_info.c for DTB fallbacks.
 CFLAGS += $(ARM64_BOARD_CFLAGS)
@@ -1120,15 +1116,6 @@ kernel-arm64-product.bin: $(ALL_OBJS) arch/arm64/linker.ld
 	@echo "  OBJCOPY kernel-arm64-product.img (Linux Image; QEMU sets x0 to the DTB)"
 	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64-product.img
 
-# Raspberry Pi firmware loads a raw kernel8.img at 0x80000.
-ifneq ($(filter rpi3 rpi4 rpi5,$(BOARD)),)
-build/arm64-$(BOARD)/kernel8.img: kernel-arm64-$(BOARD)-min.bin
-	@mkdir -p $(@D)
-	@echo "  OBJCOPY $< → $@"
-	@aarch64-linux-gnu-objcopy -O binary $< $@
-	@echo "✓ Board image ready: $@"
-endif
-
 # Create ISO
 kernel-x64.iso: kernel-x64.bin arch/x86-64/grub.cfg
 	@echo "  ISO     $@"
@@ -1261,7 +1248,8 @@ endif
 # ============================================
 
 # `ir0` is the single build entry point. It compiles with -Werror and selects
-# the artifact from ARCH/BOARD: x86 ISO, ARM64 product kernel, or board kernel8.img.
+# the artifact from ARCH: x86 ISO or ARM64 product kernel. On ARM64, BOARD
+# selects the board macros the product kernel is compiled with.
 ir0: CFLAGS += -Werror
 
 # IR0_WERROR=1 applies the same -Werror to any kernel goal (build matrix).
@@ -1287,7 +1275,7 @@ ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
 # `run` launches an artifact that is already on disk. It never builds.
 # With no arch/board on the command line it reuses build/last-product.env,
 # written by the last `make ir0`, so `make run console` boots the ISA just
-# compiled. A board word alone (`make run rpi4`) implies arm64.
+# compiled. A board word alone implies arm64; only qemu-virt has a QEMU run.
 # x86 attaches the ISD profile root (PROFILE=minimal unless overridden).
 #
 #   make run                 GUI (x86) / serial (ARM64)
@@ -1295,7 +1283,6 @@ ir0: $(IR0_PRECHECK_TARGETS) $(DEFAULT_BUILD_TARGET)
 #   make run debug           QEMU guest-error/int log + monitor
 #   make run fullscreen      GTK full screen
 #   make run gdb             wait for GDB on localhost:1234
-#   make run arm64 rpi4      board image under build/arm64-rpi4/
 #   make run x86-64          force x86 even after an ARM build
 RUN_MODE := $(or $(IR0_RUN_MODE),gui)
 
@@ -1461,7 +1448,7 @@ help:
 	@echo "  make smoke-arm64-hypervisor-log  QEMU virt: HYPERVISOR line + ARM64_BOOT_OK (product)"
 	@echo "  make smoke-arm64-product-log     QEMU virt: kernel-arm64-product.bin handoff tag"
 	@echo "  make smoke-arm64-product-usermode-log  QEMU: handoff + first EL0 syscall (init)"
-	@echo "  make ir0 arm64 rpi4          ARM64 board image (rpi3|rpi4|rpi5)"
+	@echo "  make ir0 arm64 rpi5          ARM64 product kernel built for a board (rpi3|rpi4|rpi5)"
 	@echo "  make defconfig               Write setup/defconfig → .config"
 	@echo "  make menuconfig              Configuration TUI (MENUCONFIG_LANG=es)"
 	@echo "  make clean                   Remove objects, images and generated headers"
@@ -1469,7 +1456,6 @@ help:
 	@echo "Run (launches an already built artifact; never builds):"
 	@echo "  make run                     Last built ISA; GUI on x86, serial on ARM64"
 	@echo "  make run console             -nographic, same ISA"
-	@echo "  make run rpi4                ARM64 Raspberry Pi 4 image"
 	@echo "  make run x86-64              x86 with the ISD userspace disk"
 	@echo "  make run debug|fullscreen|gdb"
 	@echo ""

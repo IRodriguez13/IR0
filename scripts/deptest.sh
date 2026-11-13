@@ -519,7 +519,7 @@ need_arm64() {
 	fi
 	if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
 		report_issue "qemu-system-aarch64" required \
-			"  Needed for ARM smokes (virt / raspi4b when available)." \
+			"  Needed for ARM smokes (QEMU virt)." \
 			"qemu-system-arm" "qemu-system-aarch64" "qemu-system-aarch64"
 	else
 		_qv=$(qemu-system-aarch64 --version 2>&1 | _head -1 || true)
@@ -528,13 +528,6 @@ need_arm64() {
 			report_issue "qemu-system-aarch64" present_but_unusable \
 				"  Binary exists but '-machine help' failed." \
 				"qemu-system-arm" "qemu-system-aarch64" "qemu-system-aarch64"
-		elif [ "${_which}" = "hub" ] || [ "${_which}" = "rpi4" ]; then
-			if qemu-system-aarch64 -machine help 2>/dev/null | _grep -q '^raspi4b[[:space:]]'; then
-				ok_line "QEMU machine raspi4b (emulation lab)"
-			else
-				report_issue "qemu raspi4b" optional \
-					"  No raspi4b machine — smoke-arm64-rpi4-boot will SKIP; image still builds."
-			fi
 		fi
 	fi
 	echo ""
@@ -564,11 +557,11 @@ userspace)
 	;;
 hub)
 	need_arm64 hub
-	NEXT="make ir0 arm64 rpi4    # UART min lab — not SD-flashable OS"
+	NEXT="make ir0 arm64 rpi4    # product kernel built for rpi4 (compile/link only)"
 	;;
 watch)
 	need_arm64 watch
-	NEXT="make ir0 arm64 rpi5    # compile stub only"
+	NEXT="make ir0 arm64 rpi5    # product kernel built for rpi5 (compile/link only)"
 	;;
 all)
 	need_desktop

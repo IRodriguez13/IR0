@@ -73,7 +73,7 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/elf_policy.o \
 	arch/arm64/sources/boot_identity.o
 
-# Portable kernel: ir0/cpu.h + irq.h facades (replaces freestanding_stubs subset).
+# Portable kernel: ir0/cpu.h + irq.h facades.
 ARM64_INTERFACE_OBJS_PRODUCT = \
 	arch/arm64/sources/interface.o
 
@@ -117,8 +117,6 @@ ARM64_PRODUCT_STORAGE_OBJS = \
 ARM64_FIRST_SWITCH_OBJS = \
 	arch/arm64/sources/first_switch.o \
 	arch/arm64/sources/switch.o
-
-# ktm/mocks/arm64/min_link_stubs.c is not part of ARCH_OBJS_ARM64.
 
 $(ARCH_COMMON_BOOT_LOG_OBJ): arch/common/boot_log.c
 	@mkdir -p $(@D)

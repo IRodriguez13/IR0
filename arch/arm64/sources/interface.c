@@ -4,9 +4,6 @@
  *
  * File: interface.c
  * Description: ARM64 implementation of the portable architecture interface (cpu.h, irq.h).
- *
- * The freestanding image links freestanding_stubs.c for a minimal subset; the
- * portable/product kernel uses this TU instead.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
