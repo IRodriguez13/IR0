@@ -749,22 +749,17 @@ ssize_t sys_recvfrom(int fd, void *buf, size_t len, int flags,
 		return n;
 	}
 
-	/* Datagram sockets below still consume before copying out. */
+	/*
+	 * Linux import_ubuf(): the UDP/ICMP backends below dequeue before the
+	 * copy, so a buffer outside userspace is EFAULT before a datagram is
+	 * taken. The source address is written after the receive, and a
+	 * fault there loses the datagram, as in Linux move_addr_to_user().
+	 */
 	if (len && !access_ok(buf, len))
 		return -EFAULT;
 
-	if (addrlen)
-	{
-		if (!access_ok(addrlen, sizeof(socklen_t)))
-			return -EFAULT;
-		if (copy_from_user(&out_len, addrlen, sizeof(socklen_t)) != 0)
-			return -EFAULT;
-	}
-	if (src_addr && out_len > 0)
-	{
-		if (!access_ok(src_addr, out_len))
-			return -EFAULT;
-	}
+	if (addrlen && copy_from_user(&out_len, addrlen, sizeof(socklen_t)) != 0)
+		return -EFAULT;
 
 	icmp = sock_icmp_fd_lookup(fd);
 	if (icmp)
