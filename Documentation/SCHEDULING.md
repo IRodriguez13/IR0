@@ -100,8 +100,10 @@ returning kexec); arch-guard `[no-busy-wait]` rejects any other caller.
   registers always belong to the current task: the arch `__switch_to()`
   saves them into the outgoing task and loads the incoming one's
   (eager switching, `arch/<isa>/sources/fpu.c` behind
-  `<ir0/fpu_backend.h>`). A fork child starts with its parent's registers
-  and `execve` resets them (`fpu_flush_thread()`).
+  `<ir0/fpu_backend.h>`). A fork child starts with its parent's registers,
+  `execve` resets them (`fpu_flush_thread()`), and the signal frame keeps
+  the interrupted registers for `rt_sigreturn` (x86-64: the FXSAVE image;
+  arm64: an `fpsimd_context` record).
 
 ## Strengths
 

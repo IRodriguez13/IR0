@@ -16,6 +16,7 @@
 #include <ir0/arch_task.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
+#include <ir0/fpu_backend.h>
 #include <asm/debug_trap.h>
 #include <config.h>
 #include <string.h>
@@ -67,6 +68,8 @@ int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx)
         ctx->rsp < 0x00400000ULL || ctx->rsp > 0x00007FFFFFFFFFFFULL)
         return 0;
 
+    if (!fpu_sanitize_sigcontext(ctx))
+        return 0;
     ctx->rflags = ir0_rflags_sanitize_user(ctx->rflags | 2ULL | RFLAGS_IF);
 #if defined(USER_CODE_SEL) && defined(USER_DATA_SEL)
     ctx->cs = (uint64_t)USER_CODE_SEL;
@@ -103,6 +106,7 @@ void signal_fill_sigcontext_from_syscall_frame(struct sigcontext *ctx,
 	ctx->cs = (uint64_t)USER_CODE_SEL;
 	ctx->ss = (uint64_t)USER_DATA_SEL;
 #endif
+	fpu_save_sigcontext(ctx);
 }
 
 void signal_fill_syscall_frame_from_sigcontext(struct arch_syscall_frame *sf,
@@ -160,6 +164,7 @@ void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 	ctx->rflags = frame[4];
 	ctx->rsp = frame[5];
 	ctx->ss = frame[6];
+	fpu_save_sigcontext(ctx);
 }
 
 uint64_t irq_frame_sp(const uint64_t *frame)
@@ -177,6 +182,7 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 	if (!frame || !handler)
 		return;
 
+	fpu_signal_enter();
 	frame[2] = (uint64_t)(uintptr_t)handler;
 	frame[5] = new_rsp;
 	frame[-7] = (uint64_t)(uint32_t)sig;
@@ -197,4 +203,5 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	/* The handler's `ret` pops the restorer from SIGFRAME_RETURN_SLOT. */
 	(void)sf;
 	(void)restorer;
+	fpu_signal_enter();
 }

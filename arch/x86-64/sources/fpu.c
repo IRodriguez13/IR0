@@ -16,6 +16,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
+#include <ir0/signals.h>
 #include <ir0/fpu_backend.h>
 #include <string.h>
 
@@ -91,4 +92,33 @@ void fpu_flush_thread(task_t *task)
 	task->arch.fpu_valid = 0;
 	if (task_is_current(task))
 		fxrstor(&fpu_init_state);
+}
+
+void fpu_save_sigcontext(struct sigcontext *ctx)
+{
+	if (ctx)
+		fxsave(&ctx->fpstate);
+}
+
+void fpu_signal_enter(void)
+{
+	fxrstor(&fpu_init_state);
+}
+
+int fpu_sanitize_sigcontext(struct sigcontext *ctx)
+{
+	if (!ctx)
+		return 0;
+	ctx->fpstate.mxcsr &= fpu_mxcsr_mask;
+	return 1;
+}
+
+void fpu_load_sigcontext(task_t *task, const struct sigcontext *ctx)
+{
+	if (!task || !ctx)
+		return;
+	task->arch.fpu = ctx->fpstate;
+	task->arch.fpu_valid = 1;
+	if (task_is_current(task))
+		fxrstor(&task->arch.fpu);
 }

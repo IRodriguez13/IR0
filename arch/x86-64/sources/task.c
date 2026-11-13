@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/task_ops.h>
+#include <ir0/fpu_backend.h>
 #include <asm/debug_trap.h>
 #include <config.h>
 
@@ -79,6 +80,7 @@ void task_load_sigcontext(task_t *t, const struct sigcontext *ctx)
 	t->arch.rflags = ctx->rflags;
 	t->arch.rsp = ctx->rsp;
 	t->arch.ss = (uint16_t)ctx->ss;
+	fpu_load_sigcontext(t, ctx);
 }
 
 void task_save_user_exception_frame(task_t *t, const void *opaque_frame)

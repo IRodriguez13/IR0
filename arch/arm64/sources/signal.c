@@ -18,6 +18,7 @@
 #include <ir0/arch_task.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
+#include <ir0/fpu_backend.h>
 #include <stdint.h>
 #include <asm/exc_frame.h>
 #include <string.h>
@@ -48,7 +49,8 @@ int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx)
     if (!ctx || ctx->pc < 0x00400000ULL ||
         ctx->pc > 0x0000FFFFFFFFFFFFULL ||
         ctx->sp < 0x00400000ULL || ctx->sp > 0x0000FFFFFFFFFFFFULL ||
-        (ctx->pc & 3ULL) != 0 || (ctx->sp & 15ULL) != 0)
+        (ctx->pc & 3ULL) != 0 || (ctx->sp & 15ULL) != 0 ||
+        !fpu_sanitize_sigcontext(ctx))
         return 0;
 
     /* Preserve userspace NZCV only; force EL0t and drop privileged PSTATE. */
@@ -98,6 +100,7 @@ void signal_fill_sigcontext_from_syscall_frame(struct sigcontext *ctx,
 	ctx->sp = sf->sp;
 	ctx->pc = sf->elr;
 	ctx->pstate = sf->spsr;
+	fpu_save_sigcontext(ctx);
 }
 
 void signal_fill_syscall_frame_from_sigcontext(struct arch_syscall_frame *sf,
@@ -148,6 +151,7 @@ void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 	ctx->pc = elr;
 	ctx->pstate = spsr;
 	ctx->sp = sp_el0;
+	fpu_save_sigcontext(ctx);
 }
 
 uint64_t irq_frame_sp(const uint64_t *frame)
@@ -165,6 +169,7 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 	if (!frame || !handler)
 		return;
 
+	fpu_signal_enter();
 	/* AAPCS64: x0=signum, x1=siginfo*, x2=ucontext* for SA_SIGINFO. */
 	frame[0] = (uint64_t)(uint32_t)sig;
 	if (sa_siginfo)
@@ -191,4 +196,5 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	/* Linux arm64 setup_return(): regs[30] = sigtramp. */
 	if (sf)
 		sf->x30 = restorer;
+	fpu_signal_enter();
 }

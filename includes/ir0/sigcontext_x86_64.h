@@ -65,4 +65,9 @@ struct sigcontext
 	uint64_t rflags;
 	uint64_t rsp;
 	uint64_t ss;
+	/*
+	 * FP/SIMD state of the interrupted code. Linux points uc_mcontext.fpstate
+	 * at a separate area; IR0's frame carries the image inline.
+	 */
+	struct _fpstate_64 fpstate;
 };

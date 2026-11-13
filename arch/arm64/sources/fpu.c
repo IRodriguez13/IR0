@@ -16,7 +16,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
+#include <ir0/signals.h>
 #include <ir0/fpu_backend.h>
+#include <string.h>
 
 /* CPACR_EL1.FPEN = 0b11: FP/SIMD does not trap at EL0 or EL1. */
 #define CPACR_EL1_FPEN (3UL << 20)
@@ -122,4 +124,54 @@ void fpu_flush_thread(task_t *task)
 	task->arch.fpsimd = fpsimd_init_state;
 	if (task_is_current(task))
 		fpsimd_load(&fpsimd_init_state);
+}
+
+/* Linux preserve_fpsimd_context(): the first record of __reserved. */
+void fpu_save_sigcontext(struct sigcontext *ctx)
+{
+	struct fpsimd_context *rec;
+	struct user_fpsimd_state live;
+
+	if (!ctx)
+		return;
+	fpsimd_save(&live);
+	rec = (struct fpsimd_context *)ctx->__reserved;
+	rec->head.magic = FPSIMD_MAGIC;
+	rec->head.size = sizeof(*rec);
+	rec->fpsr = live.fpsr;
+	rec->fpcr = live.fpcr;
+	memcpy(rec->vregs, live.vregs, sizeof(rec->vregs));
+	/* The next record header stays zero: the list terminator. */
+	memset(ctx->__reserved + sizeof(*rec), 0, sizeof(struct _aarch64_ctx));
+}
+
+void fpu_signal_enter(void)
+{
+}
+
+int fpu_sanitize_sigcontext(struct sigcontext *ctx)
+{
+	const struct fpsimd_context *rec;
+
+	if (!ctx)
+		return 0;
+	rec = (const struct fpsimd_context *)ctx->__reserved;
+	return rec->head.magic == FPSIMD_MAGIC &&
+	       rec->head.size == sizeof(*rec);
+}
+
+/* Linux restore_fpsimd_context(). */
+void fpu_load_sigcontext(task_t *task, const struct sigcontext *ctx)
+{
+	const struct fpsimd_context *rec;
+
+	if (!task || !ctx)
+		return;
+	rec = (const struct fpsimd_context *)ctx->__reserved;
+	memcpy(task->arch.fpsimd.vregs, rec->vregs,
+	       sizeof(task->arch.fpsimd.vregs));
+	task->arch.fpsimd.fpsr = rec->fpsr;
+	task->arch.fpsimd.fpcr = rec->fpcr;
+	if (task_is_current(task))
+		fpsimd_load(&task->arch.fpsimd);
 }

@@ -15,6 +15,7 @@
 #include <ir0/task_ops.h>
 #include <ir0/arch_task.h>
 #include <ir0/signals.h>
+#include <ir0/fpu_backend.h>
 #include <asm/exc_frame.h>
 #include <string.h>
 
@@ -113,6 +114,7 @@ void task_load_sigcontext(task_t *t, const struct sigcontext *ctx)
 	t->arch.sp_el0 = ctx->sp;
 	t->arch.elr_el1 = ctx->pc;
 	t->arch.spsr_el1 = ctx->pstate;
+	fpu_load_sigcontext(t, ctx);
 }
 
 void task_save_user_exception_frame(task_t *t, const void *opaque_frame)
