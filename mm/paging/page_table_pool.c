@@ -8,6 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/atomic.h>
 #include <ir0/cpu.h>
 #include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
@@ -17,7 +18,7 @@
 
 static uintptr_t cached_frames[PAGE_TABLE_CACHE_FRAMES];
 static size_t cached_count;
-static int reclaimer_state;
+static atomic_t reclaimer_state;
 
 static uint64_t page_table_cache_count(void *context)
 {
@@ -68,17 +69,14 @@ static const struct ir0_reclaimer page_table_reclaimer = {
 
 static void page_table_pool_register_reclaimer(void)
 {
-	int expected = 0;
-
-	if (__atomic_load_n(&reclaimer_state, __ATOMIC_ACQUIRE) == 2)
+	if (atomic_read_acquire(&reclaimer_state) == 2)
 		return;
-	if (!__atomic_compare_exchange_n(&reclaimer_state, &expected, 1, 0,
-					 __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+	if (atomic_cmpxchg(&reclaimer_state, 0, 1) != 0)
 		return;
 	if (mm_reclaimer_register(&page_table_reclaimer) == 0)
-		__atomic_store_n(&reclaimer_state, 2, __ATOMIC_RELEASE);
+		atomic_set_release(&reclaimer_state, 2);
 	else
-		__atomic_store_n(&reclaimer_state, 0, __ATOMIC_RELEASE);
+		atomic_set_release(&reclaimer_state, 0);
 }
 
 uintptr_t page_table_frame_alloc(mm_alloc_context_t context)

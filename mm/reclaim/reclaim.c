@@ -8,6 +8,7 @@
  */
 
 #include <ir0/reclaim.h>
+#include <ir0/atomic.h>
 #include <ir0/errno.h>
 #include <ir0/spinlock.h>
 
@@ -18,7 +19,7 @@ static uint32_t reclaimer_count;
 /* Guards the reclaimer table. */
 static ir0_spinlock_t reclaimer_lock;
 /* One reclaim pass at a time; a nested caller gets -EBUSY (try-lock). */
-static uint8_t reclaim_active;
+static unsigned long reclaim_active;
 
 int mm_reclaimer_register(const struct ir0_reclaimer *reclaimer)
 {
@@ -59,7 +60,7 @@ int mm_reclaim_run(uint64_t target_pages, struct ir0_reclaim_result *result)
 
     if (!result || target_pages == 0)
         return -EINVAL;
-    if (__atomic_test_and_set(&reclaim_active, __ATOMIC_ACQUIRE))
+    if (test_and_set_bit_lock(0, &reclaim_active))
         return -EBUSY;
 
     irq_flags = ir0_spin_lock_irqsave(&reclaimer_lock);
@@ -99,6 +100,6 @@ int mm_reclaim_run(uint64_t target_pages, struct ir0_reclaim_result *result)
     }
 
     *result = local;
-    __atomic_clear(&reclaim_active, __ATOMIC_RELEASE);
+    clear_bit_unlock(0, &reclaim_active);
     return 0;
 }
