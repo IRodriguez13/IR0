@@ -91,8 +91,6 @@ int64_t sys_getgroups(int size, gid_t *list)
 
 	if (!list || size < 0)
 		return -EINVAL;
-	if (!access_ok(list, (size_t)size * sizeof(gid_t)))
-		return -EFAULT;
 	if (size < (int)n)
 		return -EINVAL;
 
@@ -141,8 +139,6 @@ static int cred_copy_out_u32(void *uptr, uint32_t value)
 {
 	if (!uptr)
 		return 0;
-	if (!access_ok(uptr, sizeof(value)))
-		return -EFAULT;
 	if (copy_to_user(uptr, &value, sizeof(value)) != 0)
 		return -EFAULT;
 	return 0;
@@ -359,8 +355,6 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 
 	if (oldact)
 	{
-		if (!access_ok(oldact, user_bytes))
-			return -EFAULT;
 		memset(&kold, 0, sizeof(kold));
 		kold.sa_handler = current_process->signal_handlers[signum];
 		rt_sigaction_mask_to_sigset(&kold.sa_mask, sigsetsize,
@@ -373,8 +367,6 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 
 	if (act)
 	{
-		if (!access_ok(act, user_bytes))
-			return -EFAULT;
 		memset(&kact, 0, sizeof(kact));
 		if (copy_from_user(&kact, act, user_bytes) != 0)
 			return -EFAULT;
@@ -484,8 +476,6 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 	memset(&kset, 0, sizeof(kset));
 	copy_bytes = (sigsetsize == sizeof(uint64_t)) ? sizeof(uint64_t)
 						      : sizeof(sigset_t);
-	if (!access_ok((void *)mask, copy_bytes))
-		return -EFAULT;
 	if (copy_from_user(&kset, mask, copy_bytes) != 0)
 		return -EFAULT;
 
@@ -600,15 +590,12 @@ int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
 		return -ESRCH;
 	if (!head_ptr || !len_ptr)
 		return -EFAULT;
-	if (!access_ok(head_ptr, sizeof(*head_ptr)))
-		return -EFAULT;
-	if (!access_ok(len_ptr, sizeof(*len_ptr)))
-		return -EFAULT;
 
+	/* Linux get_robust_list(): the length is written first. */
 	head = target->robust_list;
-	if (copy_to_user(head_ptr, &head, sizeof(head)) != 0)
-		return -EFAULT;
 	if (copy_to_user(len_ptr, &len, sizeof(len)) != 0)
+		return -EFAULT;
+	if (copy_to_user(head_ptr, &head, sizeof(head)) != 0)
 		return -EFAULT;
 	return 0;
 }
@@ -1261,9 +1248,6 @@ int64_t sys_exec(const char *pathname,
     return -EFAULT;
   }
 
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-
   /* Unix-style: resolve relative against cwd; absolute under chroot. */
   char resolved_path[256];
   const char *path_to_use = pathname;
@@ -1621,8 +1605,6 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
   {
     if (addr == 0)
       return -EINVAL;
-    if (!access_ok((void *)(uintptr_t)addr, sizeof(uint64_t)))
-      return -EFAULT;
     fsbase = process_tls_get(current_process);
     if (copy_to_user((void *)(uintptr_t)addr, &fsbase, sizeof(uint64_t)) != 0)
       return -EFAULT;
@@ -1699,9 +1681,6 @@ int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags)
   if (buflen == 0)
     return 0;
 
-  if (!access_ok(buf, buflen))
-    return -EFAULT;
-
   seed = clock_get_uptime_milliseconds() ^
          ((uint64_t)current_process->task.pid << 32);
 
@@ -1746,8 +1725,6 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
 
   if (old_limit)
   {
-    if (!access_ok(old_limit, 16))
-      return -EFAULT;
     lim[0] = target->rlimits[resource].rlim_cur;
     lim[1] = target->rlimits[resource].rlim_max;
     if (copy_to_user(old_limit, lim, 16) != 0)
@@ -1756,8 +1733,6 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
 
   if (new_limit)
   {
-    if (!access_ok((void *)new_limit, 16))
-      return -EFAULT;
     if (copy_from_user(lim, new_limit, 16) != 0)
       return -EFAULT;
     if (lim[0] > lim[1])
