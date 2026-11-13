@@ -101,7 +101,7 @@
       "files": {
         "x86-64": [
           "drivers/char/vga.c",
-          "kernel/oops.c",
+          "kernel/problems/oops.c",
           "kernel/signals/signals.c",
           "fs/pipe.c",
           "mm/uaccess/copy_user.c",

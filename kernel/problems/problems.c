@@ -9,7 +9,7 @@
  * File: problems.c
  * Description: BUG/BUG_ON/OOPS reporters. They only classify the report and
  *              hand it to panicex(); halting, the banner and nested faults
- *              stay in kernel/oops.c.
+ *              stay in kernel/problems/oops.c.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -640,9 +640,9 @@ MEMORY_OBJS = \
 LIB_OBJS = \
     drivers/char/vga.o \
     kernel/boot_log_hostshare.o \
-    kernel/oops.o \
-    kernel/problems.o \
-    kernel/fault.o \
+    kernel/problems/oops.o \
+    kernel/problems/problems.o \
+    kernel/problems/fault.o \
     kernel/irq_dispatch.o \
     kernel/signals/signals.o \
     kernel/signals/signal_diag.o \

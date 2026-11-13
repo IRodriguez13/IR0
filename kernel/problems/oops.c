@@ -11,7 +11,7 @@
  * Description: IR0 kernel source/header file
  */
 
-#include "process.h"
+#include <ir0/process.h>
 #include <ir0/oops.h>
 #include <ir0/vga.h>
 #include <ir0/console_backend.h>
