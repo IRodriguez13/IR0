@@ -35,6 +35,8 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/fd_get.h>
 #include <ir0/pipe_fd.h>
+#include <ir0/memfd.h>
+#include <ir0/overflow.h>
 
 static int devfs_initialized;
 
@@ -1396,6 +1398,40 @@ int64_t sys_close(int fd)
   return ret;
 }
 
+/* Linux SEEK_MAX: whence values lseek(2) knows (SEEK_SET .. SEEK_HOLE). */
+#define LSEEK_WHENCE_MAX 4
+
+/*
+ * Linux generic_file_llseek_size() for an fd whose position lives in the
+ * fd entry: move it relative to the start, the position or @size.
+ */
+static int64_t fd_entry_seek(fd_entry_t *e, off_t size, off_t offset, int whence)
+{
+  off_t base;
+  off_t pos;
+
+  switch (whence)
+  {
+  case SEEK_SET:
+    base = 0;
+    break;
+  case SEEK_CUR:
+    base = (off_t)e->offset;
+    break;
+  case SEEK_END:
+    base = size;
+    break;
+  default:
+    return -EINVAL;
+  }
+  if (ir0_add_overflow(base, offset, &pos))
+    return -EOVERFLOW;
+  if (pos < 0)
+    return -EINVAL;
+  e->offset = (uint64_t)pos;
+  return pos;
+}
+
 int64_t sys_lseek(int fd, off_t offset, int whence)
 {
   ir0_fd_t h;
@@ -1441,6 +1477,23 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
     goto out;
   }
 
+  /*
+   * eventfd, timerfd and epoll use Linux noop_llseek: the position stays 0.
+   * Their vfs_file is the object itself, not a struct vfs_file.
+   */
+  if (e->is_eventfd || e->is_timerfd || e->is_epoll)
+  {
+    ret = (whence < 0 || whence > LSEEK_WHENCE_MAX) ? -EINVAL : 0;
+    goto out;
+  }
+
+  /* A memfd seeks like a regular file over its current size. */
+  if (e->is_memfd)
+  {
+    ret = fd_entry_seek(e, (off_t)ir0_memfd_size(e->vfs_file), offset, whence);
+    goto out;
+  }
+
   if (fd <= 2 && !fd_entry_is_redirected(e))
   {
     if (whence == SEEK_SET)
@@ -1482,28 +1535,7 @@ int64_t sys_lseek(int fd, off_t offset, int whence)
       ret = -EBADF;
       goto out;
     }
-    switch (whence)
-    {
-    case SEEK_SET:
-      new_offset = offset;
-      break;
-    case SEEK_CUR:
-      new_offset = (off_t)e->offset + offset;
-      break;
-    case SEEK_END:
-      new_offset = st.st_size + offset;
-      break;
-    default:
-      ret = -EINVAL;
-      goto out;
-    }
-    if (new_offset < 0)
-    {
-      ret = -EINVAL;
-      goto out;
-    }
-    e->offset = (uint64_t)new_offset;
-    ret = new_offset;
+    ret = fd_entry_seek(e, st.st_size, offset, whence);
   }
 
 out:
