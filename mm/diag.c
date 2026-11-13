@@ -20,14 +20,12 @@
 #include <ir0/fault.h>
 #include <ir0/arch_pf_debug.h>
 #include <ir0/ktm/deferred.h>
-#include <ir0/ktm/event.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/ktm/user_canary.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <ir0/paging.h>
 #include <mm/fault/page_fault_internal.h>
-#include <mm/uaccess/user_va.h>
 
 int mm_diag_fault_hit(const char *name)
 {

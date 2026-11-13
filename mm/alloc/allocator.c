@@ -14,10 +14,8 @@
 
 #include "allocator.h"
 #include <ir0/kmem.h>
-#include <ir0/klog.h>
 #include <ir0/overflow.h>
 #include <ir0/spinlock.h>
-#include <config.h>
 
 /* Block header - at the start of each block */
 typedef struct block_header {
