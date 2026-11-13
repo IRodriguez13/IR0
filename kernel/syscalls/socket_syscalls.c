@@ -1464,7 +1464,8 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 	struct iovec iov_stack[8];
 	fd_entry_t staged_rights[SOCK_STREAM_RIGHTS_MAX];
 	size_t staged_count = 0;
-	int rights_published = 0;
+	uint8_t *kbuf = NULL;
+	size_t len = 0;
 	size_t iovlen;
 	size_t i;
 	ssize_t total = 0;
@@ -1503,72 +1504,77 @@ ssize_t sys_sendmsg(int fd, const struct msghdr *umsg, int flags)
 		    copy_from_user(iov_stack, msg.msg_iov, iovlen * sizeof(struct iovec)) != 0)
 			return -EFAULT;
 	}
+	/*
+	 * Linux import_iovec(): a buffer outside userspace is EFAULT before
+	 * anything else is looked at.
+	 */
 	for (i = 0; i < iovlen; i++)
 	{
-		if (iov_stack[i].iov_len != 0 &&
-		    (!iov_stack[i].iov_base ||
-		     !access_ok(iov_stack[i].iov_base,
-					       iov_stack[i].iov_len)))
+		if (iov_stack[i].iov_len == 0)
+			continue;
+		if (!iov_stack[i].iov_base ||
+		    !access_ok(iov_stack[i].iov_base, iov_stack[i].iov_len))
 			return -EFAULT;
+		if (iov_stack[i].iov_len > SIZE_MAX - len)
+			return -EINVAL;
+		len += iov_stack[i].iov_len;
+	}
+	/*
+	 * unix_stream_sendmsg(): the payload is copied in before anything is
+	 * queued, so a faulting iovec sends nothing.
+	 */
+	if (len > 0)
+	{
+		size_t off = 0;
+
+		kbuf = kmalloc(len);
+		if (!kbuf)
+			return -ENOMEM;
+		for (i = 0; i < iovlen; i++)
+		{
+			if (iov_stack[i].iov_len == 0)
+				continue;
+			if (copy_from_user(kbuf + off, iov_stack[i].iov_base,
+					   iov_stack[i].iov_len) != 0)
+			{
+				kfree(kbuf);
+				return -EFAULT;
+			}
+			off += iov_stack[i].iov_len;
+		}
 	}
 	if (msg.msg_controllen > 0)
 	{
 		int ret;
 
 		if (msg.msg_controllen > sizeof(ctrl) || !msg.msg_control)
-			return -ENOBUFS;
-		if (copy_from_user(ctrl, msg.msg_control, msg.msg_controllen) != 0)
-			return -EFAULT;
-		memset(staged_rights, 0, sizeof(staged_rights));
-		ret = scm_stage_rights(peer, ctrl, msg.msg_controllen,
-				       staged_rights, &staged_count);
-		if (ret < 0)
-			return ret;
-	}
-	for (i = 0; i < iovlen; i++)
-	{
-		uint8_t *kbuf;
-		ssize_t n;
-
-		if (!iov_stack[i].iov_base || iov_stack[i].iov_len == 0)
-			continue;
-		kbuf = kmalloc(iov_stack[i].iov_len);
-		if (!kbuf)
+			ret = -ENOBUFS;
+		else if (copy_from_user(ctrl, msg.msg_control,
+					msg.msg_controllen) != 0)
+			ret = -EFAULT;
+		else
 		{
-			scm_discard_staged(staged_rights, staged_count);
-			return -ENOMEM;
+			memset(staged_rights, 0, sizeof(staged_rights));
+			ret = scm_stage_rights(peer, ctrl, msg.msg_controllen,
+					       staged_rights, &staged_count);
 		}
-		if (copy_from_user(kbuf, iov_stack[i].iov_base, iov_stack[i].iov_len) != 0)
+		if (ret < 0)
 		{
 			kfree(kbuf);
-			scm_discard_staged(staged_rights, staged_count);
-			return -EFAULT;
+			return ret;
 		}
-		n = sock_stream_send(ss, kbuf, iov_stack[i].iov_len);
-		kfree(kbuf);
-		if (n < 0)
-		{
-			scm_discard_staged(staged_rights, staged_count);
-			return n;
-		}
-		if (n > 0 && staged_count > 0 && !rights_published)
-		{
-			int ret = sock_stream_rights_push_batch(peer, staged_rights,
-							staged_count,
-							sizeof(staged_rights[0]));
-
-			if (ret < 0)
-			{
-				scm_discard_staged(staged_rights, staged_count);
-				return ret;
-			}
-			rights_published = 1;
-		}
-		total += n;
-		if ((size_t)n < iov_stack[i].iov_len)
-			break;
 	}
-	if (staged_count > 0 && !rights_published)
+	if (len > 0)
+	{
+		total = sock_stream_send(ss, kbuf, len);
+		kfree(kbuf);
+		if (total < 0)
+		{
+			scm_discard_staged(staged_rights, staged_count);
+			return total;
+		}
+	}
+	if (staged_count > 0)
 	{
 		int ret = sock_stream_rights_push_batch(peer, staged_rights,
 							staged_count,
