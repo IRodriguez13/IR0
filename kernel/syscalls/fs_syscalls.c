@@ -737,10 +737,6 @@ int64_t sys_open(const char *pathname, int flags, mode_t mode)
   if (!pathname)
     return -EFAULT;
 
-  /* Validate pathname is in userspace (for USER_MODE processes) */
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-
   len = copy_path_from_user(path_copy, pathname, sizeof(path_copy));
   if (len < 0)
     return len;
@@ -778,8 +774,6 @@ int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode)
   if (!current_process)
     return -ESRCH;
   if (!pathname)
-    return -EFAULT;
-  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -859,9 +853,6 @@ int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-
   if ((mode & S_IFMT) != S_IFIFO &&
       (mode & S_IFMT) != S_IFCHR &&
       (mode & S_IFMT) != S_IFBLK)
@@ -892,9 +883,6 @@ int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
   int rc;
 
   if (!current_process || !pathname)
-    return -EFAULT;
-
-  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   if ((mode & S_IFMT) != S_IFIFO &&

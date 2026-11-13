@@ -339,9 +339,6 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
   if (!dirent || count == 0)
     return -EINVAL;
 
-  if (!access_ok(dirent, count))
-    return -EFAULT;
-
   fd_table = get_process_fd_table();
   if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
       !fd_table[fd].in_use)

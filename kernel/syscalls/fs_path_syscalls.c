@@ -250,9 +250,6 @@ int64_t sys_umount(const char *target, int flags)
   if (!target)
     return -EFAULT;
 
-  if (!access_ok(target, 256))
-    return -EFAULT;
-
   if (flags != 0)
     return -EINVAL;
 
@@ -331,9 +328,6 @@ int64_t sys_mkdir(const char *pathname, mode_t mode)
   if (!pathname)
     return -EFAULT;
 
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                             current_process->cwd, current_process->root);
   if (rc != 0)
@@ -350,8 +344,6 @@ int64_t sys_mkdirat(int dirfd, const char *pathname, mode_t mode)
   if (!current_process)
     return -ESRCH;
   if (!pathname)
-    return -EFAULT;
-  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
@@ -370,9 +362,6 @@ int64_t sys_chmod(const char *path, mode_t mode)
   char resolved[256];
   const char *path_to_use = path;
   int rc;
-
-  if (!access_ok(path, 256))
-    return -EFAULT;
 
   rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
                              current_process->cwd, current_process->root);
@@ -397,8 +386,6 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
   int rc;
 
   if (!current_process || !path)
-    return -EFAULT;
-  if (!access_ok(path, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
@@ -475,11 +462,6 @@ int64_t sys_rename(const char *oldpath, const char *newpath)
   if (!current_process || !oldpath || !newpath)
     return -EFAULT;
 
-  if (!access_ok(oldpath, 256))
-    return -EFAULT;
-  if (!access_ok(newpath, 256))
-    return -EFAULT;
-
   rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
                              current_process->cwd, current_process->root);
   if (rc != 0)
@@ -511,9 +493,6 @@ int64_t sys_uname(struct utsname *buf)
   struct utsname kbuf;
 
   if (!current_process || !buf)
-    return -EFAULT;
-
-  if (!access_ok(buf, sizeof(struct utsname)))
     return -EFAULT;
 
   ir0_utsname_fill_version(version, sizeof(version));
@@ -550,9 +529,6 @@ int64_t sys_access(const char *pathname, int mode)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                              current_process->cwd, current_process->root);
   if (rc != 0)
@@ -582,8 +558,6 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
   masked_flags = flags & ~(IR0_AT_EACCESS | IR0_AT_SYMLINK_NOFOLLOW);
   if (masked_flags != 0)
     return -EINVAL;
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
@@ -622,9 +596,6 @@ int64_t sys_rmdir(const char *pathname)
   int rc;
 
   if (!current_process || !pathname)
-    return -EFAULT;
-
-  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -692,9 +663,6 @@ int64_t sys_chdir(const char *pathname)
   if (!current_process || !pathname)
     return -EFAULT;
 
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                              current_process->cwd, current_process->root);
   if (rc != 0)
@@ -709,9 +677,6 @@ int64_t sys_getcwd(char *buf, size_t size)
   size_t len;
 
   if (!current_process || !buf || size == 0)
-    return -EFAULT;
-
-  if (!access_ok(buf, size))
     return -EFAULT;
 
   process_cwd_ensure_absolute(current_process);
@@ -748,9 +713,6 @@ int64_t sys_chroot(const char *path)
 
   if (!ir0_cred_is_root())
     return -EPERM;
-
-  if (!access_ok(path, 256))
-    return -EFAULT;
 
   rc = ir0_resolve_user_path(path, resolved, sizeof(resolved),
                              current_process->cwd, current_process->root);
@@ -803,9 +765,6 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
     if (dirfd != IR0_AT_FDCWD)
       return -ENOSYS;
 
-    if (!access_ok(pathname, 256))
-      return -EFAULT;
-
     rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                               current_process->cwd, current_process->root);
     if (rc != 0)
@@ -814,8 +773,6 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
 
   if (times)
   {
-    if (!access_ok(times, sizeof(ktimes)))
-      return -EFAULT;
     if (copy_from_user(ktimes, times, sizeof(ktimes)) != 0)
       return -EFAULT;
     return ir0_utimensat_path(resolved, ktimes, flags);
@@ -830,9 +787,6 @@ int64_t sys_unlink(const char *pathname)
   int rc;
 
   if (!current_process || !pathname)
-    return -EFAULT;
-
-  if (!access_ok(pathname, 256))
     return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
@@ -861,9 +815,6 @@ int64_t sys_truncate(const char *pathname, off_t length)
     return -EFAULT;
   if (length < 0)
     return -EINVAL;
-
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                             current_process->cwd, current_process->root);
@@ -930,8 +881,6 @@ int64_t sys_statfs(const char *pathname, void *buf)
 
 	if (!current_process || !pathname || !buf)
 		return -EFAULT;
-	if (!access_ok(buf, sizeof(kst)))
-		return -EFAULT;
 
 	rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
 				   current_process->cwd, current_process->root);
@@ -954,8 +903,6 @@ int64_t sys_fstatfs(int fd, void *buf)
 	int rc;
 
 	if (!current_process || !buf)
-		return -EFAULT;
-	if (!access_ok(buf, sizeof(kst)))
 		return -EFAULT;
 	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
 		return -EBADF;

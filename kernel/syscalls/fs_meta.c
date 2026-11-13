@@ -23,10 +23,6 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
     return -EFAULT;
   if (bufsiz == 0)
     return -EINVAL;
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
-  if (!access_ok(buf, bufsiz))
-    return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
@@ -99,8 +95,6 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
   len = copy_path_from_user(target_copy, target, sizeof(target_copy));
   if (len < 0)
     return (int)len;
-  if (!access_ok(linkpath, 256))
-    return -EFAULT;
 
   rc = ir0_resolve_path_at(linkdirfd, linkpath, link_resolved,
                            sizeof(link_resolved));
@@ -216,9 +210,6 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   int64_t rc;
 
   if (!current_process || !pathname || !buf)
-    return -EFAULT;
-
-  if (!access_ok(buf, IR0_USER_STAT_SIZE))
     return -EFAULT;
 
   memset(&kst, 0, sizeof(kst));
@@ -398,8 +389,6 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
     return -EFAULT;
   if (flags & ~AT_REMOVEDIR)
     return -EINVAL;
-  if (!access_ok(pathname, 256))
-    return -EFAULT;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
   if (rc != 0)
@@ -448,10 +437,6 @@ int64_t sys_renameat(int olddirfd, const char *oldpath,
   int rc;
 
   if (!current_process || !oldpath || !newpath)
-    return -EFAULT;
-  if (!access_ok(oldpath, 256))
-    return -EFAULT;
-  if (!access_ok(newpath, 256))
     return -EFAULT;
 
   rc = ir0_resolve_path_at(olddirfd, oldpath, old_resolved, sizeof(old_resolved));
