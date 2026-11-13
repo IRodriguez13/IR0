@@ -14,7 +14,7 @@ coupling still exists. It complements `DRIVERS.md`, `MAKEFILE.md`, `TOOLING.md`,
   through `includes/ir0/*` rather than including `drivers/*` or `arch/*` directly where
   possible.
 - **Callbacks / ops tables:** Drivers and pluggable backends expose behavior through function
-  pointers (`ir0_driver_ops_t`, `block_dev_ops_t`, `vfs_ops`, `devfs_ops_t`, bootstrap
+  pointers (`ir0_driver_ops_t`, `ir0_block_ops`, `vfs_ops`, `devfs_ops_t`, bootstrap
   hooks) registered at startup.
 - **Config-driven composition:** Optional subsystems are selected via `CONFIG_*` symbols wired
   through `setup/Kconfig`, `setup/defconfig`, `Makefile` object lists, and
@@ -59,7 +59,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `fs-no-mm-include` | `fs/` | No `#include <mm/...>`; use **`ir0/mm_port.h`** or narrower facades |
 | `mm-net-no-arch-include` | `mm/`, `net/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
 | `portable-no-kernel-header` | `fs/`, `mm/`, `net/`, `drivers/` | No `#include <kernel/...>` |
-| `driver-block-dev-facade` | `drivers/` | No raw `#include <drivers/storage/block_dev.h>`; use **`ir0/block_dev.h`** |
+| `driver-block-dev-facade` | `drivers/` | No raw `#include <drivers/storage/block_dev.h>`; use **`ir0/blockdev.h`** |
 | `drivers-no-arch` | `drivers/` | No `#include <arch/...>`; use **`ir0/arch_port.h`** |
 | `c-file-prototype` | All kernel `.c` files | No non-static prototype at file scope; declare it in the owner's header (asm entry points included) |
 | `duplicate-declaration` | All kernel headers | A function prototype lives in exactly one header; private headers include their **`ir0/*`** facade instead of copying it |
@@ -109,7 +109,7 @@ specific driver implementation file:
 | Area | Facade header(s) | Typical consumer |
 |------|------------------|------------------|
 | CPU / ISA queries for pseudo-fs | `arch_port.h` | **`fs/`** (`/proc` CPU text; wraps `arch_portable.h`) |
-| Block I/O | `blockdev.h` (`ir0_block_*`; `block_dev.h` compat) | `fs/` (Minix/FAT/ext2/devfs) |
+| Block I/O | `blockdev.h` (`ir0_block_*`) | `fs/` (Minix/FAT/ext2/devfs) |
 | Partitions | `partition.h` | `fs/devfs.c`, proc/sys helpers |
 | Console output | `console_backend.h` | `fs/` (no `vga.h` in `fs/`) |
 | MM stats (opaque) | `mm_port.h` | `fs/procfs.c` |
@@ -142,8 +142,8 @@ REQUIRED façades under `includes/ir0/*.h` must not `#include <drivers/…>`,
 `arch_port.h` pulls `arch_io.h` + `arch_cpu.h` (no `<arch/…>`). Canonical
 `task_t` lives in `ir0/task.h`; `ir0/context.h` includes it.
 Implementations may include drivers from `.c` adapters (`input_backend.c`,
-`blockdev.c`, …). `mm_port.h` is opaque (no `<mm/…>`). Prefer `blockdev.h` /
-`ir0_block_*` over legacy `block_dev_*` names in new `fs/` code.
+`blockdev.c`, …). `mm_port.h` is opaque (no `<mm/…>`). Block I/O goes through `blockdev.h`
+(`ir0_block_*`); the old `block_dev_*` names are retired.
 
 ## Registration and callback patterns
 
@@ -152,7 +152,7 @@ Implementations may include drivers from `.c` adapters (`input_backend.c`,
 | **Driver registry** | `ir0_driver_ops_t`, `ir0_register_driver()` | Lifecycle + generic I/O; see `kernel/driver_registry.c`. |
 | **Block devices** | `ir0_block_ops` / `ir0_block_register()` | Sector I/O; ATA/AHCI/virtio register via facade. |
 | **Filesystems** | `struct vfs_ops`, `vfs_fstype` | Mountable FS plugins (`minix_fs.c`, `tmpfs.c`, `simplefs.c`, …). |
-| **Character devices** | `devfs_ops_t`, `devfs_register_device()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
+| **Character devices** | `devfs_ops_t`, `devfs_register_node()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
 | **Bootstrap** | `driver_boot_init_fn`, `driver_bootstrap_register()` | Staged early init wired from `drivers/init_drv.c` with `CONFIG_INIT_*`. |
 | **Resources** | `resource_register_irq`, `resource_register_ioport` | Naming / tracking; drivers include [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h). |
 
@@ -253,7 +253,7 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 
 ## Testing and menuconfig ergonomics
 
-- **Unit / harness:** ops tables (`block_dev_*`, vfs, devfs) are natural seam for fake
+- **Unit / harness:** ops tables (`ir0_block_ops`, vfs, devfs) are natural seam for fake
   backends; keep tests on the façade side where possible.
 - **Integration:** rely on `build-matrix-*`, `runtime-*` checks from the Makefile as
   exercised in CTR.
@@ -267,7 +267,7 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
 |------|------|
 | `includes/ir0/driver.h` | `ir0_driver_ops_t` and registry API |
 | `drivers/driver_bootstrap.c` | Bootstrap callback list |
-| `drivers/storage/block_dev.h` | `block_dev_ops_t` |
+| `includes/ir0/blockdev.h` | `ir0_block_ops` and the block API |
 | `fs/vfs.h` | `vfs_ops` / fstype registration |
 | `includes/ir0/arch_port.h` | Arch-neutral CPU/I/O façade (no `<arch/…>` includes) |
 | `includes/ir0/task.h` / `context.h` | Canonical `task_t` + context-switch decls |

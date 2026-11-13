@@ -44,7 +44,7 @@ Ver IR0-vfs para el diagrama del router en dos etapas.
 ## 3. Flujo de datos
 
 ```text
-  open("/etc/passwd")     → VFS → minix → block_dev → ATA
+  open("/etc/passwd")     → VFS → minix → ir0_block → ATA
   open("/tmp/x")          → VFS → tmpfs → inode RAM
   open("/hostshare/...")  → VFS → 9p → virtio_9p_* (TSYMLINK/TREADLINK/…)
   open("/proc/meminfo")   → proc_open → pseudo_fs o generador procfs
@@ -59,7 +59,7 @@ Ver IR0-vfs para el diagrama del router en dos etapas.
   ┌─────────────┬──────────┬─────────────────────┐
   │ Prefijo     │ Respaldo │ ¿Hardware?          │
   ├─────────────┼──────────┼─────────────────────┤
-  │ / (minix)   │ disco    │ sí (block_dev)      │
+  │ / (minix)   │ disco    │ sí (ir0_block)      │
   │ /tmp tmpfs  │ RAM      │ no                  │
   │ /hostshare  │ virtio-9p│ sí (QEMU virtfs)    │
   │ /proc       │ generado │ no                  │
@@ -91,7 +91,7 @@ Ver IR0-vfs para el diagrama del router en dos etapas.
 | VFS | minix/tmpfs/9p registrados en `vfs_init` |
 | Drivers | nodos devfs para disco, red, fb, input; virtio-9p PCI |
 | Process | directorios pid proc; mapas owner fd para fds pseudo |
-| Block | minix LBA vía `ir0/block_dev.h` |
+| Block | minix LBA vía `ir0/blockdev.h` |
 
 ## 7. Mapas visuales
 

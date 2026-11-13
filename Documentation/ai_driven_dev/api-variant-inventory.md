@@ -122,28 +122,29 @@ Header `includes/ir0/copy_user.h` (`mm/copy_user.c`, `mm/paging_uaccess.c`).
 | Handler / restorer / sigcontext IP checks (no copy, Linux `access_ok`) | `kernel/signals.c:169,603,849,977,988,1188` | use `access_ok` |
 | mmap/munmap/mprotect/brk/futex/prctl ranges | `kernel/syscalls/mm_syscalls.c:158,594,723,798,850,1003,1059`, `mm_brk.c:88`, `process_syscalls.c:704,1734` | use `access_ok` (Linux checks `TASK_SIZE`/`access_ok` here) |
 
-### 1.3 Strings and memory helpers
+### 1.3 Strings and memory helpers — DONE (lane S, `refactor/inventory-lanes`)
 
 Header `includes/string.h` (`includes/string.c`).
 
 | Symbol | Calls | Verdict |
 |--------|------:|---------|
 | `strlen strcmp strncmp strcpy strncpy strchr strrchr strstr memset memcpy memmove memcmp snprintf vsnprintf` | 6-492 | KEEP (libc names) |
-| `kstrlen` / `kstrcmp` / `kstrncmp` | 7 / 13 / 2 | MERGE INTO `strlen` / `strcmp` / `strncmp` (duplicates) |
-| `kmemset` / `kmemcpy` / `kstrncpy` (macros over `__k*_checked` and `__k*_impl`) | 22 / 25 / 10 | MERGE INTO `memset` / `memcpy` / `strncpy` (a parallel "checked" family for the same behavior; if the bounds diagnostics are wanted, put them inside the one function under a debug config) |
-| `__kmemset_impl __kmemcpy_impl __kstrncpy_impl __k*_checked` | 1 each | DELETE with the above |
-| `strcat`, `sprintf`, `strtok`, `atol`, `isalnum`, `isspace`, `toupper`, `tolower` | 0 | DELETE (dead) |
-| `strncat`, `strtok_r`, `strtoul`, `strtol`, `isdigit`, `isalpha`, `isupper`, `islower` | 1-2 | KEEP (tiny libc surface) or DELETE where the single caller can use another |
-| `itoa` | 16 (2 files) | MERGE INTO `snprintf` |
+| `kstrlen` / `kstrcmp` / `kstrncmp` | 7 / 13 / 2 | DONE: merged into `strlen` / `strcmp` / `strncmp` |
+| `kmemset` / `kmemcpy` / `kstrncpy` (macros over `__k*_checked` and `__k*_impl`) | 22 / 25 / 10 | DONE: merged into `memset` / `memcpy` / `strncpy` |
+| `__kmemset_impl __kmemcpy_impl __kstrncpy_impl __k*_checked` | 1 each | DONE: deleted |
+| `strcat`, `sprintf`, `strtok`, `atol`, `isalnum`, `isspace`, `toupper`, `tolower` | 0 | DONE: deleted (with `strtok_r` and the rest of the ctype set, all dead) |
+| `strncat`, `strtoul`, `strtol` | 1-2 | KEEP (libc surface with callers) |
+| `itoa` | 16 (2 files) | DONE: merged into `snprintf` (which had the same INT_MIN bug; fixed red/green) |
 | `atoi` | 12 | KEEP |
 
-Private duplicates of public helpers: `drivers/timer/hpet/find_hpet.c:18`
-static `memcmp`, `drivers/timer/acpi/acpi_pm.c:82` `acpi_memcmp`,
-`kernel/syscalls/socket_syscalls.c:83` `sock_strnlen` (add one public
-`strnlen`), `kernel/elf_loader.c:297` `exec_strdup_kern` (add `kstrdup` only
-if a second user appears). The ARM64 freestanding string copies
-(`portable_string.c`, `freestanding_stubs.c`) left with the board `-min`
-images.
+Private duplicates of public helpers: `find_hpet.c` static `memcmp` and
+`acpi_memcmp` — DONE (call `memcmp`). `sock_strnlen` was already gone at
+`bc3e0e15`, so no public `strnlen` is needed yet. Still open:
+`kernel/elf_loader.c` `exec_strdup_kern` (add `kstrdup` only if a second
+user appears) and `kernel/early_elf_stack.c` `cstr_len` (a NULL-tolerant
+`strlen`; the file is also built for host tests). The ARM64 freestanding
+string copies (`portable_string.c`, `freestanding_stubs.c`) left with the
+board `-min` images.
 
 ### 1.4 Locks and IRQ save/restore
 
@@ -151,14 +152,14 @@ images.
 |--------|--------|------:|---------|
 | `irq_save` / `irq_restore` | `ir0/cpu.h` (arch `mm_ops.c`) | 74 / 111 | KEEP (Linux `local_irq_save`); the restore surplus is multiple-return paths |
 | `enable_interrupts` / `disable_interrupts` | `ir0/cpu.h` | 14 / 7 | KEEP |
-| `ir0_spin_lock` / `ir0_spin_unlock` (`ir0_spinlock_t`) | `ir0/spinlock.h` | 29 / 41 | KEEP as the lock API; rename to `spin_lock_irqsave`-style later |
+| `ir0_spin_lock_irqsave` / `ir0_spin_unlock_irqrestore` (`ir0_spinlock_t`) | `ir0/spinlock.h` | — | KEEP: the one lock API. DONE: `ir0_spin_lock` / `ir0_spin_unlock` (IRQ state stored in the lock, could not nest; callers used per-function stack locks) retired |
 | `rq_lock` / `rq_unlock` | `sched/core.h` | 13 / 21 | KEEP (documented SMP seam) |
 | `process_registry_lock` / `unlock` | `kernel/process/process_internal.h` | 14 / 18 | KEEP (named lock with a real owner) |
-| Per-file `X_irq_save` / `X_irq_restore` one-line wrappers around `irq_save`: `tcp` (25/49), `arp` (9/17), `sock` (`sock_udp.c`, 9/13), `icmp` (7/12), `sock_icmp` (9/11), `dns` (9/10), `dhcp` (7/8), `udp` (4/7), `named_fifo` (5/11), `named_devnode` (6/11), `process_irq_*` (11/19), `tty` (3/3), `rtl8139` (3/4), `pmm_lock` (11/17) | private | ~280 sites | MERGE INTO `ir0_spin_lock` on a per-subsystem `ir0_spinlock_t` (that gives SMP a real lock object) or plain `irq_save`. `named_fifo.c` / `named_devnode.c` also carry a `#ifdef TEST_HOST` copy of the wrapper: use the host stub of `irq_save` instead |
-| `swap_lock` (`mm/swap/swap.c`), `reclaim_lock` (`mm/reclaim.c`) | private test-and-set spinners | 10 / 3 | MERGE INTO `ir0_spin_lock` (two more hand-rolled lock types) |
-| `ipc_lock` / `ipc_unlock` (`ipc/ipc.c:510`) | `#if 0` dead code | 0 | DELETE |
+| Per-file `X_irq_save` / `X_irq_restore` one-line wrappers (`tcp`, `arp`, `sock`, `icmp`, `sock_icmp`, `dns`, `dhcp`, `udp`, `named_fifo`, `named_devnode`, `process_irq_*`, `tty`, `rtl8139`, `pmm_lock`) | private | ~280 sites | DONE: one `ir0_spinlock_t` per protected structure (`tcp_lock` shared through `tcp_internal.h`; `wait.c` uses `process_registry_lock`); the TEST_HOST copies are gone |
+| `swap_lock` (`mm/swap/swap.c`), `reclaim_lock` (`mm/reclaim.c`) | private test-and-set spinners | 10 / 3 | DONE: `swap_area_lock` / `reclaimer_lock` (`reclaim_active` stays as a try-lock) |
+| `ipc_lock` / `ipc_unlock` (`ipc/ipc.c:510`) | `#if 0` dead code | 0 | DONE (gone before `bc3e0e15`; `ipc_lock` is now the ipc.c lock object) |
 
-### 1.5 Time and clock getters
+### 1.5 Time and clock getters — lane T1 DONE
 
 Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 
@@ -167,18 +168,18 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `clock_get_uptime_milliseconds` | 88 | KEEP as the monotonic getter (rename `ktime_get_ms`-style later) |
 | `clock_get_tick_count` | 8 | KEEP (scheduler tick) |
 | `clock_get_current_time` | 14 | KEEP (realtime) |
-| `clock_get_uptime_seconds`, `get_system_time` | 0 | DELETE (derivable aliases) |
-| `init_clock`, `detect_best_clock`, `get_current_timer_type`, `clock_set_current_time`, `clock_set_timezone_offset`, `clock_get_timezone_offset`, `clock_get_active_timer`, `clock_set_alarm`, `clock_cancel_all_alarms`, `clock_set_scheduler_quantum`, `clock_get_scheduler_quantum`, `clock_sched_resched_pending_peek`, `clock_print_stats` | 0 | DELETE (13 dead public entry points) |
+| `clock_get_uptime_seconds`, `get_system_time` | 0 | DONE: deleted |
+| `init_clock`, `detect_best_clock`, `get_current_timer_type`, `clock_set_current_time`, `clock_set_timezone_offset`, `clock_get_timezone_offset`, `clock_get_active_timer`, `clock_set_alarm`, `clock_cancel_all_alarms`, `clock_set_scheduler_quantum`, `clock_get_scheduler_quantum`, `clock_sched_resched_pending_peek`, `clock_print_stats` | 0 | DONE: deleted with the alarm list; `clock_state_t` is private to `clock_system.c` |
 | `clock_take_sched_resched_pending` / `clock_request_sched_resched` | 1 / 3 | KEEP (one pair) |
-| `clock_sleep` / `clock_sleep_ticks` | 1 / 1 | MERGE (one sleep, unit as parameter) or move to `clock_wait.h` |
+| `clock_sleep` / `clock_sleep_ticks` | 1 / 1 | DONE before `bc3e0e15` (`clock_sleep_ticks` retired) |
 | `timer_read` (`ir0/cpu.h`, arch) | 4 | KEEP (raw arch counter) |
-| `early_clock_read` / `early_clock_available` / `early_clock_quality` (`early_clock.h`) | 1 / 3 / 0 | KEEP the first two (pre-timer klog stamps); DELETE `early_clock_quality` |
-| `early_time_smoke_ok` (`early_time.h`) | 0 | DELETE |
-| `get_pit_ticks` (`drivers/timer/pit/pit.h`) | only in `pit.c` | PRIVATE |
-| `rtc_write_register`, `rtc_get_time_string`, `rtc_get_date_string` (`rtc.h`) | 0 | DELETE |
-| `delay_ms` (`ir0/vga.h`!) | 0 | DELETE (and it never belonged in vga.h) |
+| `early_clock_read` / `early_clock_available` / `early_clock_quality` (`early_clock.h`) | 1 / 3 / 0 | KEEP the first two (pre-timer klog stamps); DONE: `early_clock_quality` deleted |
+| `early_time_smoke_ok` (`early_time.h`) | 0 | DONE: deleted |
+| `get_pit_ticks` (`drivers/timer/pit/pit.h`) | 0 | DONE: deleted with its counter |
+| `rtc_write_register`, `rtc_get_time_string`, `rtc_get_date_string` (`rtc.h`) | 0 | DONE: deleted |
+| `delay_ms` (`ir0/vga.h`!) | 0 | DONE: deleted |
 | `ir0_clock_wait_service_clockevents` (`clock_wait.h`) | 0 | DONE (deleted with the clock-wait idle step) |
-| `minix_now_seconds` (13), `pseudo_fs_stat_now` (16), `clock_now_ticks` (erfs, 5) | private | fs-local "now" wrappers; MERGE INTO `clock_get_current_time` |
+| `minix_now_seconds` (13), `pseudo_fs_stat_now` (16), `clock_now_ticks` (erfs, 5) | private | T2 OPEN: `minix_now_seconds` is a pure alias, MERGE INTO `clock_get_current_time` (fs/ is owned by the fs data-loss work; do it after that lands). `pseudo_fs_stat_now` fills three stat fields: KEEP. `clock_now_ticks` reads the early rootfs's own simulated clock, not the kernel clock: KEEP, rename `erfs_clock_now` (namespace) |
 
 ### 1.6 Process and fd lookup
 
@@ -238,23 +239,23 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | Wrapper header | `kernel/log.h` (only `#include <ir0/logging.h>`) | 2 includers | DELETE |
 | Boot log (`ir0/boot_log.h`, `arch/common/boot_log.c`) | `ir0_boot_{info,notice,warn,info_hex64,arch,smoke}` | 1-72 | KEEP (pre-klog serial channel), but `ir0_boot_smoke` (72) vs `klog_smoke` (111) are two smoke-tag emitters: MERGE |
 | Serial (`ir0/serial_io.h`) | `serial_print`, `serial_print_hex32/64`, `serial_putchar` | 28 / 3 / 2 / 12 | KEEP as the driver; callers outside `ktm/klog.c`, panic and boot should log via klog (allowlist exists: `check_klog_serial_print_allowlist`) |
-| Screen print (`ir0/vga.h`) | `print` (inline, 48), `print_colored`, `print_error/warning/success`, `print_hex*`, `print_uint*`, `print_int32`, `print_screen_only` | 0-48 | Console output, not logging: see 1.10. `print_hex32`, `print_hex8`, `print_hex`, `set_cursor_pos` have 0 callers: DELETE |
+| Screen print (`ir0/vga.h`) | `print` (inline), `print_colored`, `print_screen_only` | — | Console output, not logging: see 1.10 (the other `print_*` are DONE: deleted) |
 
 ### 1.9 Driver and device registration
 
 | Symbol | Header | Calls | Verdict |
 |--------|--------|------:|---------|
 | `ir0_register_driver` | `ir0/driver.h` | 11 | KEEP |
-| `ir0_unregister_driver`, `ir0_find_driver`, `ir0_driver_get_state`, `ir0_driver_shutdown_all`, `ir0_register_simple_driver` (inline) | `ir0/driver.h` | 0 | DELETE (or keep `unregister` if hot-unplug is planned) |
+| `ir0_unregister_driver`, `ir0_find_driver`, `ir0_driver_get_state`, `ir0_driver_shutdown_all`, `ir0_register_simple_driver` (inline), `IR0_DEFINE_DRIVER` / `IR0_DRIVER_INIT` / `IR0_DRIVER_PROBE` | `ir0/driver.h` | 0 | DONE: deleted |
 | `ir0_driver_registry_is_initialized` | `ir0/driver.h` | 1 | PRIVATE |
 | `driver_bootstrap_register` | `ir0/driver_bootstrap.h` | 11 (1 file) | KEEP (boot ordering) but PRIVATE to `drivers/init_drv.c` |
-| `init_all_drivers` / `drivers_init` | `ir0/init_drv.h` | 1 / 0 | DELETE `drivers_init` ("compat entrypoint", no callers) |
+| `init_all_drivers` / `drivers_init` | `ir0/init_drv.h` | 1 / 0 | DONE: `drivers_init` deleted |
 | `ir0_bluetooth_register_driver` | `ir0/bluetooth.h` | — | MERGE into `ir0_register_driver` with a bus type, or justify |
 | `register_multilang_example_drivers` | `drivers/multilang_drivers.h` | — | DELETE if example-only |
 | `ir0_block_register` / `ir0_block_lookup_by_name` / `ir0_block_get_info` | `ir0/blockdev.h` | 8 / 13 / 6 | KEEP |
-| `block_dev_*` (`ir0/block_dev.h`, 7 functions keyed by name) | `ir0/block_dev.h` | `get_sector_count` 0 | Two block facades (`block_dev.h` includes `blockdev.h`): MERGE `block_dev_*` into `ir0_block_*`; `ir0_block_unregister_for_test` 0 callers |
+| `block_dev_*` (`ir0/block_dev.h`, 7 functions keyed by name) | `ir0/block_dev.h` | — | DONE: merged into `ir0_block_*`; `block_dev.[ch]` deleted. `ir0_block_unregister_for_test` is used by the host test: KEEP |
 | `devfs_register_node` | `ir0/devfs.h` | 5 | KEEP |
-| `devfs_register_device` / `devfs_unregister_device` | `ir0/devfs.h` | 0 | DELETE |
+| `devfs_register_device` / `devfs_unregister_device` | `ir0/devfs.h` | 0 | DONE: deleted |
 | `devfs_find_node` / `_by_id` / `_by_rdev` | `ir0/devfs.h` | 3 / 5 / 2 | three lookups: KEEP `_by_rdev` (Linux key) and path lookup; `_by_id` is already fenced by a guard |
 | `ensure_devfs_init` (def in `io_syscalls.c`) | `ir0/devfs.h` | 11 | DELETE: lazy-init guard sprinkled over callers; init devfs once at boot |
 | `resource_register_*` / `resource_unregister_*` / `resource_foreach_*` | `ir0/resource_registry.h` | 3-10 | KEEP |
@@ -266,11 +267,11 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | Symbol group | Header | Verdict |
 |--------------|--------|---------|
 | tty core: `tty_read_kernel`, `tty_write_kernel`, `tty_ioctl_termios_kernel`, `tty_flush_input`, `tty_input_char`, `tty_input_bytes_available` | `ir0/console.h` | KEEP |
-| `ir0_console_*` (35 functions in the same header) | `ir0/console.h` | Overlaps the tty set: `ir0_console_flush_input` vs `ir0_console_flush_input_session` vs `tty_flush_input`; `ir0_console_read` / `ir0_console_write` vs `tty_read_kernel` / `tty_write_kernel`. DELETE the 0-caller ones: `ir0_console_resched_pending`, `ir0_console_in_tty_sleep`, `ir0_console_timer_resched_pending`, `ir0_console_drain_echo`, `ir0_console_isatty`, `ir0_console_fill_termios`, `ir0_console_set_termios`. `ir0_console_after_tty_read_signal` / `ir0_console_after_signal_abandon` exist only for the blocked-syscall frame patching: DELETE with the blocking rework |
+| `ir0_console_*` (35 functions in the same header) | `ir0/console.h` | Overlaps the tty set: `ir0_console_flush_input` vs `ir0_console_flush_input_session` vs `tty_flush_input`; `ir0_console_read` / `ir0_console_write` vs `tty_read_kernel` / `tty_write_kernel`. DONE: the 0-caller ones are deleted (`ir0_console_drain_echo`, `_isatty`, `_fill_termios`, `_set_termios`; the three `*_resched_pending` / `in_tty_sleep` were already gone) and `ir0_console_term_{width,height}` are static. `ir0_console_after_tty_read_signal` / `ir0_console_after_signal_abandon` exist only for the blocked-syscall frame patching: DELETE with the blocking rework |
 | `console_backend_*` | `ir0/console_backend.h` | KEEP as the backend contract; 0 callers: `console_backend_fb_scale`, `show_cursor`, `cursor_x`, `set_tty_serial_mirror`, `typewriter_init` |
 | `console_*` (video console cells) | `ir0/video_console.h` | KEEP (driver-private set) |
-| `typewriter_*` | `ir0/typewriter.h` | 0 callers: `typewriter_get_mode`, `typewriter_print`, `typewriter_print_uint32`, `typewriter_enable_for_commands`, `typewriter_is_enabled_for_commands` -> DELETE |
-| `print`, `putchar`, `print_colored`, `print_screen_only`, `print_error/warning/success`, `print_hex*`, `print_uint*`, `print_int32`, `console_puts` | `ir0/vga.h` | One screen-output path is enough: KEEP `console_backend_write` (or `print`) and MERGE the rest. `ir0/vga.h:19` also defines `LOG_OK` / `LOG_WARN` / `LOG_ERR` screen macros, a third `LOG_*` family next to the logging aliases |
+| `typewriter_*` | `ir0/typewriter.h` | DONE: the five 0-caller functions are deleted |
+| `print`, `putchar`, `print_colored`, `print_screen_only`, `print_error/warning/success`, `print_hex*`, `print_uint*`, `print_int32`, `console_puts` | `ir0/vga.h` | DONE: one path, `print` (`console_puts`) / `print_colored` / panic-only `print_screen_only`; numbers go through `snprintf`. The color shorthands, the number printers and `LOG_OK/WARN/ERR` are deleted. Open: `print` is still an inline alias of `console_puts` (retire one name together with `ktm/klog.c`) |
 
 ### 1.11 Allocation
 
@@ -459,30 +460,30 @@ part, `fs_meta.c`, `fs_path_syscalls.c`, `fs_syscalls.c`, `time_syscalls.c`,
 
 **Lane S — strings (files: `includes/string.[ch]`, their callers)**
 
-14. **S1.** `kstrlen/kstrcmp/kstrncmp` -> libc names; delete dead
+14. **S1. DONE.** `kstrlen/kstrcmp/kstrncmp` -> libc names; delete dead
     `strcat/sprintf/strtok/atol/isalnum/isspace/toupper/tolower`.
-15. **S2.** `kmemset/kmemcpy/kstrncpy` checked family -> one function each.
-16. **S3.** Private `memcmp`/`acpi_memcmp`/`sock_strnlen` -> public
+15. **S2. DONE.** `kmemset/kmemcpy/kstrncpy` checked family -> one function each.
+16. **S3. DONE** (except `exec_strdup_kern`, `cstr_len`). Private `memcmp`/`acpi_memcmp`/`sock_strnlen` -> public
     `memcmp`/`strnlen`; `itoa` -> `snprintf`.
 
 **Lane K — locks (files: `net/*.c`, `fs/named_*.c`, `drivers/tty/console.c`,
 `drivers/net/rtl8139.c`, `mm/pmm.c`, `mm/swap/swap.c`, `mm/reclaim.c`,
 `ipc/ipc.c`)**
 
-17. **K1.** Per-file `X_irq_save` wrappers -> `ir0_spinlock_t` per
+17. **K1. DONE.** Per-file `X_irq_save` wrappers -> `ir0_spinlock_t` per
     subsystem (one commit per file; net files after `refactor/net-fs-split`).
-18. **K2.** `swap_lock`/`reclaim_lock` -> `ir0_spinlock_t`; delete the
+18. **K2. DONE.** `swap_lock`/`reclaim_lock` -> `ir0_spinlock_t`; delete the
     `#if 0` `ipc_lock`.
 
 **Lane T — time (files: `includes/ir0/clock.h`, `drivers/timer/*`,
 `early_*`, `rtc`)**
 
-19. **T1.** Delete the 13 dead `clock_*` entry points plus
+19. **T1. DONE.** Delete the 13 dead `clock_*` entry points plus
     `get_system_time`, `clock_get_uptime_seconds`, `early_clock_quality`,
     `early_time_smoke_ok`, `rtc_write_register`, `rtc_get_*_string`,
     `delay_ms`, `ir0_clock_wait_service_clockevents`; make `get_pit_ticks`
     private.
-20. **T2.** fs-local "now" helpers -> `clock_get_current_time`.
+20. **T2. OPEN** (see 1.5; `minix_now_seconds` waits for the fs work). fs-local "now" helpers -> `clock_get_current_time`.
 
 **Lane M — mm map/alloc (files: `mm/paging.[ch]`, `mm/pmm.[ch]`,
 `includes/ir0/paging.h`, `tlb.h`, `mm_syscalls.c`, `ipc/sysv_shm.c`,
@@ -510,15 +511,15 @@ overlaps U3/net-fs-split, run after them)**
 **Lane V — drivers/console/devfs (files: `drivers/`, `includes/ir0/{driver,
 init_drv,block_dev,devfs,console,console_backend,typewriter,vga}.h`)**
 
-27. **V1.** Delete 0-caller registration and console entry points listed in
+27. **V1. DONE.** Delete 0-caller registration and console entry points listed in
     1.9 and 1.10 (`drivers_init`, `ir0_unregister_driver`,
     `ir0_find_driver`, `ir0_driver_get_state`, `ir0_driver_shutdown_all`,
     `ir0_register_simple_driver`, `devfs_{,un}register_device`, 7
     `ir0_console_*`, 5 `typewriter_*`, dead `print_hex*`, the vga.h
     `LOG_OK/LOG_WARN/LOG_ERR` macros if unused).
-28. **V2.** `block_dev_*` -> `ir0_block_*`; `ensure_devfs_init` -> boot-time
+28. **V2. DONE** for `block_dev_*`; `ensure_devfs_init` OPEN (defined in `io_syscalls.c`, owned by the uaccess work). `block_dev_*` -> `ir0_block_*`; `ensure_devfs_init` -> boot-time
     init.
-29. **V3.** One screen-output path (vga `print*` family).
+29. **V3. DONE.** One screen-output path (vga `print*` family).
 
 **Lane G — signals API shape (after `refactor/blocking-linux`)**
 
@@ -533,3 +534,22 @@ init_drv,block_dev,devfs,console,console_backend,typewriter,vga}.h`)**
 Suggested first wave in parallel (no shared files, no concurrent-branch
 conflict): U1 (rt_sigaction part), L1 (drivers/ and fs/ slices), R1, S1,
 T1, V1, K2.
+
+---
+
+## 7. Closed lanes and the retired-API ledger
+
+Lanes T1, S1-S3, V1-V3 and K1-K2 were closed on `refactor/inventory-lanes`
+(from `dev` at `bc3e0e15`). Every deleted public name is listed in
+`scripts/retired_api_names.txt` and rejected by `make arch-guard`
+(`[retired-api]`, comments and string literals excluded; a malformed or
+duplicate ledger line also fails). A later convergence appends its names in
+the same commit.
+
+| Lane | Public entry points before | After |
+|------|----------------------------|-------|
+| T1 time | `clock.h` 36 functions + alarm/state types; `early_clock_quality`, `early_time_smoke_ok`, `rtc_write_register`, `rtc_get_{time,date}_string`, `get_pit_ticks`, `delay_ms` | `clock.h` 20 functions, `clock_state_t` private; the rest deleted |
+| S strings | `strlen` + `kstrlen`, `strcmp` + `kstrcmp`, `strncmp` + `kstrncmp`, `memset` + `kmemset` (+2 hidden), `memcpy` + `kmemcpy` (+2), `strncpy` + `kstrncpy` (+2), `snprintf` + `itoa` + `sprintf`, 8 dead ctype, `strcat`, `strtok[_r]`, `atol`, 2 private `memcmp` | one libc name each; `snprintf` is the one formatter (INT_MIN fixed) |
+| V drivers/console | 5 dead registry functions + 3 macros, `drivers_init`, 2 dead devfs, 4 dead `ir0_console_*` (+2 made static), 5 dead `typewriter_*`, two block facades (`block_dev_*` 7 + `ir0_block_*`), 11 screen printers + 3 `LOG_*` macros | `ir0_register_driver`, `init_all_drivers`, `devfs_register_node`, `ir0_block_*`, `print` / `print_colored` / `print_screen_only` |
+| K locks | `ir0_spin_lock` (non-nesting) + `ir0_spin_lock_irqsave`, 14 private `X_irq_save` wrapper pairs, 2 test-and-set spinners, per-function stack locks in pipe/ipc/input_events | `ir0_spin_lock_irqsave` / `ir0_spin_unlock_irqrestore` on one `ir0_spinlock_t` per protected structure (plus the named `process_registry_lock` and `rq_lock`) |
+

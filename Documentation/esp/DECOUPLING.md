@@ -20,14 +20,14 @@ en SVC. `kernel-arm64-product.bin` / `kernel-arm64.bin` enlaza **`$(ALL_OBJS)`**
 - **Facades:** Las capas superiores (`fs/` y rutas de syscalls) deben usar `includes/ir0/*`
   antes que incluir directamente `drivers/*` o `arch/*`.
 - **Callbacks / tablas de operaciones:** Los drivers exponen comportamiento mediante punteros
-  a función (`ir0_driver_ops_t`, `block_dev_ops_t`, `vfs_ops`, `devfs_ops_t`, bootstrap).
+  a función (`ir0_driver_ops_t`, `ir0_block_ops`, `vfs_ops`, `devfs_ops_t`, bootstrap).
 - **Configuración:** Subsistemas opcionales mediante `CONFIG_*` en `setup/Kconfig`, `.config`,
   `Makefile` y `scripts/kconfig/menuconfig.py`.
 
 Gran parte de `kernel/`, `mm/` y `net/` enruta ya **serial** y **reloj** vía `ir0/serial_io.h` y
 `ir0/clock.h`. `fs/` usa `ir0/arch_port.h` para consultas de CPU (sin `#include <arch/...>` en el
 fuente). Persisten backends (`video_backend`, `console_backend`) con includes internos a drivers;
-`kernel/main.c` ya usa `ir0/init_drv.h`, `ir0/block_dev.h` e `ir0/bluetooth.h` en el idle loop.
+`kernel/main.c` ya usa `ir0/init_drv.h`, `ir0/blockdev.h` e `ir0/bluetooth.h` en el idle loop.
 
 ## Inventario de fachadas (`includes/ir0/`)
 
@@ -79,7 +79,7 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 | `fs-no-mm-include` | `fs/` | Sin `#include <mm/...>`; usar **`ir0/mm_port.h`** u otras fachadas |
 | `mm-net-no-arch-include` | `mm/`, `net/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
 | `portable-no-kernel-header` | `fs/`, `mm/`, `net/`, `drivers/` | Sin `#include <kernel/...>` |
-| `driver-block-dev-facade` | `drivers/` | Sin `#include <drivers/storage/block_dev.h>` crudo; **`ir0/block_dev.h`** |
+| `driver-block-dev-facade` | `drivers/` | Sin `#include <drivers/storage/block_dev.h>` crudo; **`ir0/blockdev.h`** |
 | `drivers-no-arch` | `drivers/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |
 | `c-file-prototype` | Todos los `.c` del kernel | Sin prototipos no-static a nivel de archivo; se declaran en el header del dueño (incluidos los entry points en asm) |
 | `duplicate-declaration` | Todos los headers del kernel | Cada prototipo vive en un único header; los headers privados incluyen su fachada **`ir0/*`** en vez de copiarla |
@@ -98,7 +98,7 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 | Caso | API preferida |
 |------|----------------|
 | Driver opcional en boot | `driver_boot_init_fn` + `CONFIG_INIT_*` |
-| Almacenamiento en bloque | `block_dev_ops_t` registrado por nombre |
+| Almacenamiento en bloque | `ir0_block_ops` registrado con `ir0_block_register()` |
 | Nodo `/dev` | `devfs_ops_t` por nodo |
 | Filesystem montable | `struct vfs_ops` + fstype |
 | NIC de red | vtable `struct net_device` en `ir0/net.h` |
@@ -124,7 +124,7 @@ inglés en `DECOUPLING.md` y en `TOOLING.md`.
 
 ## Rutas relacionadas en el código
 
-`includes/ir0/driver.h`, `drivers/driver_bootstrap.c`, `drivers/storage/block_dev.h`,
+`includes/ir0/driver.h`, `drivers/driver_bootstrap.c`, `includes/ir0/blockdev.h`,
 `fs/vfs.h`, `includes/ir0/devfs.h`, `setup/Kconfig`, `Makefile`.
 
 ---
