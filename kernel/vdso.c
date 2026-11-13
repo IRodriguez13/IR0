@@ -15,7 +15,7 @@
 #include <ir0/vdso.h>
 #include <ir0/arch_elf.h>
 #include <ir0/elf64_image.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <ir0/paging.h>
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>

@@ -7,7 +7,7 @@
 #include <ir0/oops.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/cpu.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <string.h>
 
 extern uint8_t fork_flow_set_tf;

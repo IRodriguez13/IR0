@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <kernel/syscalls.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include "fs_path_syscalls.h"
 #include "syscalls_glue.h"
 #include <config.h>

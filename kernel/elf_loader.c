@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process.h"
+#include <ir0/process.h>
 #include <ir0/arch_task.h>
 #include <ir0/arch_elf.h>
 #include <ir0/task_ops.h>
@@ -23,7 +23,6 @@
 #include <ir0/kmem.h>
 #include <fs/vfs.h>
 #include <ir0/ktm/klog.h>
-#include <kernel/process.h>
 #include <ir0/pmm.h>
 #include <ir0/copy_user.h>
 #include <ir0/mm_struct.h>

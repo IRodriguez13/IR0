@@ -13,7 +13,6 @@
 #include <ir0/process.h>
 #include "scenarios.h"
 #include <string.h>
-#include <kernel/process.h>
 
 #define WAIT_DRAIN_N 64
 

@@ -14,7 +14,7 @@
  */
 
 #include "signal_diag.h"
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <ktm.h>
 
 #ifndef SIGNAL_DELIVER_LOG

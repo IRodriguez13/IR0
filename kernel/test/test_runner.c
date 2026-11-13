@@ -16,7 +16,7 @@
 #include "test/ktest_decl.h"
 #include <ir0/ktm/klog.h>
 #include <ir0/serial_io.h>
-#include "process.h"
+#include <ir0/process.h>
 #include <stddef.h>
 
 int _ktest_failed;

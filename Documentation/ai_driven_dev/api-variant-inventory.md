@@ -56,7 +56,7 @@ Header `includes/ir0/signals.h` (defs in `kernel/signals/signals.c` unless noted
 | `signals_deliver_from_irq_frame(p, sig, frame, ...)` | Deliver from an IRQ frame | 2 | KEEP until the IRQ return path is unified |
 | `signal_note_syscall_return(p, ret)` | Restart bookkeeping | 1 | PRIVATE (blocking branch) |
 | `linux_sigword_to_ir0` / `ir0_sigword_to_linux` / `ir0_sigset_low32` / `ir0_sigset_set_low32` | sigset conversions (inline) | 2-4 | KEEP, one pair is enough: MERGE `*_sigword_*` into the `sigset_*low32` pair |
-| `process_signal_default_kill` / `process_signal_is_default_fatal` (`kernel/process.h`) | Fatal default action for kill(2) | 3 / 3 | KEEP private to process/ (not in a public header) |
+| `process_signal_default_kill` / `process_signal_is_default_fatal` (`includes/ir0/process.h`) | Fatal default action for kill(2) | 3 / 3 | KEEP private to process/ (not in a public header) |
 | `oom_kill_process` (`includes/ir0/oom.h`) | OOM victim kill | 4 | KEEP (separate policy) |
 
 Hand-posted signals that bypass `send_signal` (one API rule):
@@ -185,12 +185,12 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 
 | Symbol | Header | Calls | Verdict |
 |--------|--------|------:|---------|
-| `current_process` (global) | `kernel/process.h` | 1176 | KEEP (Linux `current`) |
-| `process_get_current()` | `kernel/process.h` | 27 | MERGE INTO `current_process` (accessor alias) |
-| `process_get_pid()` / `process_get_ppid()` | `kernel/process.h` | 6 / 2 | DELETE (aliases of `current_process->task.pid` / `->ppid`) |
-| `process_find_by_pid` | `kernel/process.h` | 56 | KEEP (Linux `find_task_by_vpid`) |
-| `process_find_child_of` | `kernel/process.h` | 2 | KEEP (wait) or PRIVATE |
-| `get_process_list` | `kernel/process.h` | 2 | PRIVATE (registry iteration should be one `for_each_process`) |
+| `current_process` (global) | `includes/ir0/process.h` | 1176 | KEEP (Linux `current`) |
+| `process_get_current()` | `includes/ir0/process.h` | 27 | MERGE INTO `current_process` (accessor alias) |
+| `process_get_pid()` / `process_get_ppid()` | `includes/ir0/process.h` | 6 / 2 | DELETE (aliases of `current_process->task.pid` / `->ppid`) |
+| `process_find_by_pid` | `includes/ir0/process.h` | 56 | KEEP (Linux `find_task_by_vpid`) |
+| `process_find_child_of` | `includes/ir0/process.h` | 2 | KEEP (wait) or PRIVATE |
+| `get_process_list` | `includes/ir0/process.h` | 2 | PRIVATE (registry iteration should be one `for_each_process`) |
 | `get_process_fd_table()` (def in `io_syscalls.c`) | `ir0/files_struct.h` | 48 | MERGE INTO `ir0_fd_get`: raw table pointer plus 38 open-coded `fd < 0 || fd >= MAX_FDS_PER_PROCESS || !in_use` checks in 17 files (`socket_syscalls.c` 6, `fs_meta.c` 5, `fs_path_syscalls.c` 4, ...) |
 | `ir0_fd_get` / `ir0_fd_put` | `ir0/fd_get.h` | 8 / 11 | KEEP (Linux `fdget`/`fdput`); it is the one validated lookup |
 | `ir0_fd_install_product` | `ir0/fd_install.h` | 0 | DELETE |
@@ -335,14 +335,14 @@ scanned (hardware register vocabulary, and HCI "rsp" = response).
 
 | Location | Identifier / concept | Neutral replacement |
 |----------|----------------------|---------------------|
-| `kernel/process.h:264` + 10 files (`core.c`, `signal_enter.c`, `wait.c`, `signals.c`, `process_syscalls.c`, `syscall_dispatch.c`, `sched/switch/kernel_resume.c`, arch `context.c` x2, `kernel/test/test_ktm_sched.c`) | `syscall_resume_rax` | **Gone** (blocking rework); ledger lines removed |
+| `includes/ir0/process.h:264` + 10 files (`core.c`, `signal_enter.c`, `wait.c`, `signals.c`, `process_syscalls.c`, `syscall_dispatch.c`, `sched/switch/kernel_resume.c`, arch `context.c` x2, `kernel/test/test_ktm_sched.c`) | `syscall_resume_rax` | **Gone** (blocking rework); ledger lines removed |
 | `includes/ir0/signal_syscall_resume.h:91-111`, `kernel/syscalls/process_syscalls.c:1982-2026` | `resume_rax` | **Gone** (blocking rework); ledger lines removed |
-| `includes/ir0/syscall_frame.h:37`, `:43`; `kernel/process.h:565`, `:781`; `kernel/process/core.c:186-232` | `rip_hw`, `rax` params (`stack_r9_slot` is gone) (`process_capture_syscall_frame_at_entry`, `process_syscall_restore_exit_regs`) | `entry_ip`, `exit_frame`; the r9-slot contract belongs in `arch/x86-64` |
+| `includes/ir0/syscall_frame.h:37`, `:43`; `includes/ir0/process.h:565`, `:781`; `kernel/process/core.c:186-232` | `rip_hw`, `rax` params (`stack_r9_slot` is gone) (`process_capture_syscall_frame_at_entry`, `process_syscall_restore_exit_regs`) | `entry_ip`, `exit_frame`; the r9-slot contract belongs in `arch/x86-64` |
 | `includes/ir0/task_ops.h:34` | `rax` param of `task_apply_syscall_frame` | `retval` |
-| `kernel/process.h:591-594` | `fork_restore_emit_pre_iretq`, `fork_ret_first_syscall_entry(rax_hw, rip_hw, rsp_hw)`, `fork_flow_note_kernel_entry(rip_hw, ...)` | `fork_trace_before_user_return`, `(retval, ip, sp)`; these are arch hook prototypes and could move to an arch hook header |
+| `includes/ir0/process.h:591-594` | `fork_restore_emit_pre_iretq`, `fork_ret_first_syscall_entry(rax_hw, rip_hw, rsp_hw)`, `fork_flow_note_kernel_entry(rip_hw, ...)` | `fork_trace_before_user_return`, `(retval, ip, sp)`; these are arch hook prototypes and could move to an arch hook header |
 | `includes/ir0/arch_task.h:22-25` (+ `IR0_TASK_{GET,SET}_{CS,SS}`, `task_cs_is_user`) | x86 segment accessors in the portable task facade | move to an x86-private header; users are `arch/x86-64/*` and `ktm/ktm_ctx_snapshot.c`; `task_cs_is_user` -> `task_is_user_mode` |
 | `includes/ir0/fault.h:47`, `includes/ir0/page_fault.h:28`, `kernel/problems/fault.c:35`, `mm/page_fault_diag.c:31-77` | `code_seg` field ("x86 CS"), `fault_cs/fault_rip/fault_rsp` | drop `code_seg` from the neutral fault (arch `show_regs` hook prints it); `fault_ip/fault_sp` (mm diag branch is moving this file) |
-| `kernel/process.h:116` | `fs_base` union member (x86 TLS register) | `arch_thread.tls_base` only (the comment already says so) |
+| `includes/ir0/process.h:116` | `fs_base` union member (x86 TLS register) | `arch_thread.tls_base` only (the comment already says so) |
 | `includes/ir0/oops.h:47`, `kernel/problems/oops.c:96` | `ir0_panic_fault_rsp()` | `panic_fault_sp()` |
 | `includes/ir0/signal_irq.h:59` | `new_rsp` param | `new_sp` |
 | `includes/ir0/ktm/stack_watch.h:20`, `ktm/stack_watch.c` | `ktm_stack_watch(uint64_t rsp)` | `sp` |
@@ -500,7 +500,7 @@ part, `fs_meta.c`, `fs_path_syscalls.c`, `fs_syscalls.c`, `time_syscalls.c`,
     `mm_prepare_root_activation`; make `mm_activate` arch-private.
 24. **M4.** `acpi_pm.c` root decoding -> `map_page_in_directory`.
 
-**Lane F — process/fd lookup (files: `kernel/process.h`, fd users;
+**Lane F — process/fd lookup (files: `includes/ir0/process.h`, fd users;
 overlaps U3/net-fs-split, run after them)**
 
 25. **F1.** `process_get_current/pid/ppid` -> `current_process`.

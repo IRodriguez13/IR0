@@ -297,7 +297,7 @@ switch_context_x64:
 
     ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x140).
     ; task is at offset 0 of process_t, so r11 (=&task) doubles as process_t*.
-    ; Guarded by _Static_assert in kernel/process.h.
+    ; Guarded by _Static_assert in includes/ir0/process.h.
     push rax
     push rcx
     push rdx
@@ -443,7 +443,7 @@ switch_to_user_task_asm:
 
     ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x140).
     ; task is at offset 0 of process_t, so r11 doubles as process_t*.
-    ; Guarded by _Static_assert in kernel/process.h.
+    ; Guarded by _Static_assert in includes/ir0/process.h.
     push rax
     push rcx
     push rdx

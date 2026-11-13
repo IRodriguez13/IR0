@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <config.h>

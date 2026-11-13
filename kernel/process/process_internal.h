@@ -18,7 +18,7 @@
 #include <ir0/debug_runtime.h>
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <config.h>
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>

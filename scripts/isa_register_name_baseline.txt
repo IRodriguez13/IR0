@@ -24,11 +24,11 @@ kernel/elf_loader.c task_cr3_entry
 kernel/elf_loader.c task_rip_final
 kernel/elf_loader.c task_rsp_final
 kernel/problems/oops.c ir0_panic_fault_rsp
-kernel/process.h fork_restore_emit_pre_iretq
-kernel/process.h rax
-kernel/process.h rax_hw
-kernel/process.h rip_hw
-kernel/process.h rsp_hw
+includes/ir0/process.h fork_restore_emit_pre_iretq
+includes/ir0/process.h rax
+includes/ir0/process.h rax_hw
+includes/ir0/process.h rip_hw
+includes/ir0/process.h rsp_hw
 kernel/process/core.c rax
 kernel/process/core.c rip_hw
 kernel/process/core.c task_cs_is_user

@@ -20,7 +20,7 @@
 #include <ir0/signal_irq.h>
 #include <ir0/task_ops.h>
 #include <ir0/tls.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 
 void irqentry_exit_to_user_mode(void *frame)
 {

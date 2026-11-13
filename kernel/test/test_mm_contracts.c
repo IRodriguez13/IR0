@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
-#include "process.h"
+#include <ir0/process.h>
 #include "process/process_internal.h"
 #include "syscalls.h"
 #include <ir0/abi/mmap_contract.h>
@@ -22,7 +22,6 @@
 #include <ir0/paging.h>
 #include <ir0/page_fault.h>
 #include <ir0/pmm.h>
-#include <ir0/process.h>
 #include <ir0/sched.h>
 #include <stdint.h>
 #include <string.h>

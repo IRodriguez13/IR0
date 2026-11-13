@@ -158,13 +158,9 @@ PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
 
 KERNEL_HEADER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]kernel/')
 
-# ARCH-STAB: thin passthrough headers pending API-only split (see DECOUPLING.md).
-FACADE_KERNEL_INCLUDE_ALLOWLIST = frozenset(
-    {
-        # process_t still leaks from kernel/process.h — split in a later oleada.
-        "includes/ir0/process.h",
-    }
-)
+# Facade headers allowed to pass a kernel/ header through. Empty: <ir0/process.h>
+# is the process header itself, not a passthrough to kernel/process.h.
+FACADE_KERNEL_INCLUDE_ALLOWLIST: frozenset[str] = frozenset()
 
 DRIVER_BLOCK_DEV_RAW_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s*[<"]drivers/storage/block_dev\.h[>"]'
@@ -1263,7 +1259,7 @@ PROCESS_PGD_FIELD_RE = re.compile(
 )
 
 PROCESS_PGD_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
+    ROOT / "includes" / "ir0" / "process.h",
     ROOT / "kernel" / "process" / "mm_struct.c",
     ROOT / "includes" / "ir0" / "mm_struct.h",
 }
@@ -1320,7 +1316,7 @@ PROCESS_SAVED_CONTEXT_RE = re.compile(
 )
 
 PROCESS_SAVED_CONTEXT_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
+    ROOT / "includes" / "ir0" / "process.h",
     ROOT / "kernel" / "process" / "saved_context.c",
     ROOT / "kernel" / "process" / "create.c",
     ROOT / "kernel" / "process" / "domains.c",
@@ -1423,7 +1419,7 @@ PROCESS_WAIT_FIELD_RE = re.compile(
 )
 
 PROCESS_WAIT_FIELD_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
+    ROOT / "includes" / "ir0" / "process.h",
     ROOT / "kernel" / "process" / "wait_state.c",
 }
 

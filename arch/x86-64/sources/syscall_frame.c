@@ -16,7 +16,7 @@
 #include <ir0/arch_task.h>
 #include <ir0/task_ops.h>
 #include <ir0/errno.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <config.h>
 
 void syscall_capture_frame_at_entry(struct process *p,

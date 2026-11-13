@@ -25,7 +25,6 @@
 #include <ir0/task_ops.h>
 #include <stdint.h>
 #include <string.h>
-#include "process.h"
 
 /*
  * User stack band the test gives the holder process (a kernel thread whose

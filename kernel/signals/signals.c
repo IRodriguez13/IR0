@@ -24,7 +24,7 @@
 #include <ir0/sigtramp.h>
 #include <ir0/fault.h>
 #include <ir0/oops.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <string.h>
 #include "signal_diag.h"
 

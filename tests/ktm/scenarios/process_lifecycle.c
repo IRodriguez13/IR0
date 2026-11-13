@@ -14,7 +14,6 @@
 #include <ir0/process.h>
 #include "scenarios.h"
 #include <string.h>
-#include <kernel/process.h>
 
 extern process_t *process_list;
 
