@@ -809,9 +809,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
 
   if ((flags & MAP_FIXED) != 0)
   {
-    if (addr == NULL ||
-        (hint_addr & (PAGE_SIZE_4KB - 1)) != 0 ||
-        !mm_user_va_ok((uintptr_t)addr, length))
+    if (addr == NULL || (hint_addr & (PAGE_SIZE_4KB - 1)) != 0)
     {
       ret = SYSCALL_PTR_ERR(EINVAL);
       mmap_audit_log_return("map-fixed-bad-addr", ret, 0, 0, 0,
@@ -1075,9 +1073,6 @@ int sys_mprotect(void *addr, size_t len, int prot)
 
   if ((prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC)) != 0)
     return -EINVAL;
-
-  if (!mm_user_va_ok((uintptr_t)addr, len))
-    return -EFAULT;
 
   /*
    * Linux allows mprotect on any mapped VA (including ELF LOAD segments).
