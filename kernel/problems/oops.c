@@ -93,7 +93,7 @@ void panic_note_fault(const struct ir0_fault *fault, unsigned int pid,
 	}
 }
 
-unsigned long long ir0_panic_fault_rsp(void)
+unsigned long long ir0_panic_fault_sp(void)
 {
 	return panic_exc_frame.valid ? panic_exc_frame.fault.sp : 0;
 }

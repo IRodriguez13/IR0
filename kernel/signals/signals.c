@@ -62,11 +62,11 @@ static int signal_code_addr_ok(const void *addr)
 				mm_user_va_start(), mm_user_va_end());
 }
 
-static int signal_rip_is_registered_handler(process_t *p, uint64_t rip)
+static int signal_ip_is_registered_handler(process_t *p, uint64_t ip)
 {
 	int i;
 
-	if (!p || rip < 0x1000ul)
+	if (!p || ip < 0x1000ul)
 		return 0;
 	for (i = 1; i < _NSIG; i++)
 	{
@@ -74,7 +74,7 @@ static int signal_rip_is_registered_handler(process_t *p, uint64_t rip)
 
 		if (!h || h == SIG_DFL || h == SIG_IGN)
 			continue;
-		if ((uint64_t)(uintptr_t)h == rip)
+		if ((uint64_t)(uintptr_t)h == ip)
 			return 1;
 	}
 	return 0;
@@ -191,7 +191,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 
 	memset(&ctx, 0, sizeof(ctx));
 	signal_fill_sigcontext_from_irq_frame(&ctx, frame);
-	if (signal_rip_is_registered_handler(p, sigcontext_ip(&ctx)))
+	if (signal_ip_is_registered_handler(p, sigcontext_ip(&ctx)))
 	{
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
 		    sig == SIGFPE)
@@ -771,7 +771,7 @@ static int handle_signal(process_t *p, int sig,
 		signal_fill_sigcontext_from_syscall_frame(&ctx, regs,
 							  syscall_frame_return(regs));
 
-	if (signal_rip_is_registered_handler(p, sigcontext_ip(&ctx)))
+	if (signal_ip_is_registered_handler(p, sigcontext_ip(&ctx)))
 	{
 		if (signal_is_fault(sig))
 			signal_exit_current(sig);

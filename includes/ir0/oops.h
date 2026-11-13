@@ -44,7 +44,7 @@ struct ir0_fault;
  */
 void panic_note_fault(const struct ir0_fault *fault, unsigned int pid,
 		      const char *comm);
-unsigned long long ir0_panic_fault_rsp(void);
+unsigned long long ir0_panic_fault_sp(void);
 
 /* 1 when @sp sits in the unmapped guard page of a kernel stack slot. */
 int ir0_fault_sp_in_kstack_guard(uintptr_t sp);

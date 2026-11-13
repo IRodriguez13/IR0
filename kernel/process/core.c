@@ -150,10 +150,10 @@ process_t *process_find_by_pid(pid_t pid)
  * process_capture_syscall_frame_at_entry - Snapshot user GPRs at syscall entry.
  * Layout decode is ISA-private (arch_syscall_frame).
  */
-void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw)
+void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t ip)
 {
 	syscall_capture_frame_at_entry(current_process, frame_base,
-						    rip_hw);
+						    ip);
 }
 
 /*
@@ -174,7 +174,7 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 }
 
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
-                                         uint64_t rax)
+                                         uint64_t ret)
 {
 	arch_task_syscall_frame_t arch_sf;
 
@@ -182,7 +182,7 @@ void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_
 		return;
 
 	syscall_frame_to_arch(sf, &arch_sf);
-	task_apply_syscall_frame(task, &arch_sf, rax);
+	task_apply_syscall_frame(task, &arch_sf, ret);
 }
 
 void process_syscall_restore_exit_regs(uint64_t *exit_frame)

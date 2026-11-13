@@ -1509,11 +1509,11 @@ int kexecve(const char *path, char *const argv[], char *const envp[])
 static struct
 {
 	uint64_t mm_entry;
-	uint64_t task_cr3_entry;
-	uint64_t active_cr3_entry;
-	uint64_t entry_rip;
-	uint64_t task_rip_final;
-	uint64_t task_rsp_final;
+	uint64_t task_root_entry;
+	uint64_t active_root_entry;
+	uint64_t entry_ip;
+	uint64_t task_ip_final;
+	uint64_t task_sp_final;
 	int unmapped;
 	int segments_loaded;
 	int stack_ready;
@@ -1538,17 +1538,17 @@ static void exec_commit_emit(const char *point, int64_t errno_val,
 				exec_commit_ctx.mm_entry)
 			   ? "1"
 			   : "0",
-		       (unsigned long long)(exec_commit_ctx.task_cr3_entry),
+		       (unsigned long long)(exec_commit_ctx.task_root_entry),
 		       (unsigned long long)(proc ? process_mm_root(proc) : 0),
 		       (unsigned long long)paging_current_address_space(),
 		       (point && strcmp(point, "before-userswitch") == 0)
 			   ? "switch_to_user_asm"
 			   : "not_yet",
-		       (unsigned long long)(exec_commit_ctx.entry_rip),
+		       (unsigned long long)(exec_commit_ctx.entry_ip),
 		       (unsigned long long)(proc ? task_get_ip(&proc->task)
-						 : exec_commit_ctx.task_rip_final),
+						 : exec_commit_ctx.task_ip_final),
 		       (unsigned long long)(proc ? task_get_sp(&proc->task)
-						 : exec_commit_ctx.task_rsp_final),
+						 : exec_commit_ctx.task_sp_final),
 		       exec_commit_ctx.unmapped ? "1" : "0",
 		       exec_commit_ctx.segments_loaded ? "1" : "0",
 		       exec_commit_ctx.stack_ready ? "1" : "0");
@@ -1790,8 +1790,8 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
 
     memset(&exec_commit_ctx, 0, sizeof(exec_commit_ctx));
     exec_commit_ctx.mm_entry = (uint64_t)(uintptr_t)process_pgd(proc);
-    exec_commit_ctx.task_cr3_entry = process_mm_root(proc);
-    exec_commit_ctx.active_cr3_entry = paging_current_address_space();
+    exec_commit_ctx.task_root_entry = process_mm_root(proc);
+    exec_commit_ctx.active_root_entry = paging_current_address_space();
 
     paging_ir0_mm_checkpoint("exec-before", (int32_t)proc->task.pid);
     pmm_stats(&total_frames_before, &used_frames_before, NULL);
@@ -2027,7 +2027,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     proc->exe_path[sizeof(proc->exe_path) - 1] = '\0';
 
     task_set_ip(&proc->task, header->e_entry);
-    exec_commit_ctx.entry_rip = header->e_entry;
+    exec_commit_ctx.entry_ip = header->e_entry;
     task_set_user_segments(&proc->task);
     task_set_flags(&proc->task, task_initial_user_status());
 
@@ -2045,8 +2045,8 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     }
     task_set_ip(&proc->task, user_ip);
     exec_commit_ctx.stack_ready = 1;
-    exec_commit_ctx.task_rip_final = task_get_ip(&proc->task);
-    exec_commit_ctx.task_rsp_final = task_get_sp(&proc->task);
+    exec_commit_ctx.task_ip_final = task_get_ip(&proc->task);
+    exec_commit_ctx.task_sp_final = task_get_sp(&proc->task);
     elf_trace_entry_stack_layout(proc, header, at_phdr, at_base, "after-setup-stack");
 
     kfree(file_data);

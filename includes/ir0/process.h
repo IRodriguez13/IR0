@@ -503,9 +503,9 @@ static inline void process_syscall_set_arg(process_t *p, unsigned n, uint64_t v)
 		syscall_frame_set_arg(&p->syscall_frame, n, v);
 }
 
-void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t rip_hw);
+void process_capture_syscall_frame_at_entry(uint64_t *frame_base, uint64_t ip);
 void process_apply_syscall_frame_to_task(task_t *task, const syscall_user_frame_t *sf,
-                                         uint64_t rax);
+                                         uint64_t ret);
 /* Soft syscall-frame→task mirror while the task state is a user one. */
 void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
@@ -514,9 +514,9 @@ void process_restore_user_task_segments(process_t *p);
 
 void fork_ret_emit_pre_return(void);
 void fork_restore_emit_pre_iretq(void);
-void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw);
+void fork_ret_first_syscall_entry(uint64_t nr, uint64_t ip, uint64_t sp);
 int fork_flow_note_debug_exception(uint64_t *stack);
-void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall);
+void fork_flow_note_kernel_entry(uint64_t ip, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
 void process_pre_zombie_teardown(process_t *dying);
 void process_notify_parent_of_exit(process_t *dying);
