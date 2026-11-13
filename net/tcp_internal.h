@@ -14,6 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/arch_port.h>
+#include <ir0/spinlock.h>
 #include "tcp.h"
 
 #define TCP_WIRE_TIMEOUT_MS 5000U
@@ -125,15 +126,8 @@ extern struct tcp_wire_outbound tcp_wire_out;
 extern struct tcp_wire_listener tcp_wire_listeners[TCP_WIRE_LISTEN_MAX];
 extern struct tcp_wire_inbound tcp_wire_inbound_conns[TCP_WIRE_CONN_MAX];
 
-static inline uint64_t tcp_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void tcp_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+/* Guards the tcp_wire_* connection state above (defined in tcp.c). */
+extern ir0_spinlock_t tcp_lock;
 /* Segment output (tcp_output.c). */
 int tcp_send_raw(struct net_device *dev, ip4_addr_t dest_ip,
 		 const struct tcp_header *hdr, const void *payload,

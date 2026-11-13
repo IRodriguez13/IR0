@@ -18,30 +18,11 @@
 #include <ir0/types.h>
 #include <ir0/arch_port.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 #define NAMED_DEVNODE_MAX 32
 
-#ifdef TEST_HOST
-static inline uint64_t named_devnode_irq_save(void)
-{
-	return 0;
-}
-
-static inline void named_devnode_irq_restore(uint64_t flags)
-{
-	(void)flags;
-}
-#else
-static inline uint64_t named_devnode_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void named_devnode_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
-#endif
+static ir0_spinlock_t named_devnode_lock;
 
 struct named_devnode_entry
 {
@@ -87,11 +68,11 @@ int named_devnode_create(const char *path, mode_t mode, dev_t rdev)
 	if (normalize_path(path, norm, sizeof(norm)) != 0)
 		return -ENAMETOOLONG;
 
-	irq_flags = named_devnode_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&named_devnode_lock);
 
 	if (named_devnode_find(norm))
 	{
-		named_devnode_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 		return -EEXIST;
 	}
 
@@ -105,7 +86,7 @@ int named_devnode_create(const char *path, mode_t mode, dev_t rdev)
 	}
 	if (!slot)
 	{
-		named_devnode_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 		return -ENOSPC;
 	}
 
@@ -115,7 +96,7 @@ int named_devnode_create(const char *path, mode_t mode, dev_t rdev)
 	slot->rdev = rdev;
 	slot->in_use = 1;
 
-	named_devnode_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 	return 0;
 }
 
@@ -127,11 +108,11 @@ int named_devnode_stat(const char *path, stat_t *buf)
 	if (!path || !buf)
 		return -EINVAL;
 
-	irq_flags = named_devnode_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&named_devnode_lock);
 	e = named_devnode_find(path);
 	if (!e)
 	{
-		named_devnode_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 		return -ENOENT;
 	}
 
@@ -139,7 +120,7 @@ int named_devnode_stat(const char *path, stat_t *buf)
 	buf->st_mode = e->mode;
 	buf->st_rdev = e->rdev;
 	buf->st_nlink = 1;
-	named_devnode_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 	return 0;
 }
 
@@ -151,17 +132,17 @@ int named_devnode_unlink(const char *path)
 	if (!path)
 		return -EINVAL;
 
-	irq_flags = named_devnode_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&named_devnode_lock);
 	e = named_devnode_find(path);
 	if (!e)
 	{
-		named_devnode_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 		return -ENOENT;
 	}
 
 	e->in_use = 0;
 	e->path[0] = '\0';
-	named_devnode_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 	return 0;
 }
 
@@ -173,11 +154,11 @@ int named_devnode_lookup(const char *path, mode_t *mode, dev_t *rdev)
 	if (!path)
 		return -EINVAL;
 
-	irq_flags = named_devnode_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&named_devnode_lock);
 	e = named_devnode_find(path);
 	if (!e)
 	{
-		named_devnode_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 		return -ENOENT;
 	}
 
@@ -185,6 +166,6 @@ int named_devnode_lookup(const char *path, mode_t *mode, dev_t *rdev)
 		*mode = e->mode;
 	if (rdev)
 		*rdev = e->rdev;
-	named_devnode_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&named_devnode_lock, irq_flags);
 	return 0;
 }

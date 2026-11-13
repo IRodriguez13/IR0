@@ -25,6 +25,7 @@
 #include <ir0/logging.h>
 #include <ir0/arch_port.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 /* UDP Protocol registration */
 static struct net_protocol udp_proto;
@@ -40,15 +41,7 @@ struct udp_port_handler {
 
 static struct udp_port_handler *udp_handlers = NULL;
 
-static inline uint64_t udp_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void udp_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t udp_lock;
 
 /**
  * udp_checksum - Calculate UDP checksum (pseudo-header + UDP header + data)
@@ -182,7 +175,7 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
     struct udp_port_handler *handler = NULL;
     void (*handler_fn)(struct net_device *, ip4_addr_t, uint16_t, const void *, size_t, void *) = NULL;
     void *handler_priv = NULL;
-    uint64_t irq_flags = udp_irq_save();
+    uint64_t irq_flags = ir0_spin_lock_irqsave(&udp_lock);
     handler = udp_handlers;
     while (handler)
     {
@@ -195,7 +188,7 @@ void udp_receive_handler(struct net_device *dev, const void *data, size_t len, v
         handler = handler->next;
     }
 
-    udp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
     if (handler_fn)
     {
         /* Extract payload (after UDP header) */
@@ -281,7 +274,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
                                                           uint16_t src_port, const void *data, size_t len,
                                                           void *priv), void *priv)
 {
-    uint64_t irq_flags = udp_irq_save();
+    uint64_t irq_flags = ir0_spin_lock_irqsave(&udp_lock);
 
     /* Check if handler already exists for this port */
     struct udp_port_handler *existing = udp_handlers;
@@ -292,7 +285,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
             /* Update existing handler */
             existing->handler = handler;
             existing->priv = priv;
-            udp_irq_restore(irq_flags);
+            ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
             LOG_INFO_FMT("UDP", "Updated handler for port %d", (int)port);
             return;
         }
@@ -303,7 +296,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
     struct udp_port_handler *new_handler = kmalloc(sizeof(struct udp_port_handler));
     if (!new_handler)
     {
-        udp_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
         return;
     }
     
@@ -312,14 +305,14 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
     new_handler->priv = priv;
     new_handler->next = udp_handlers;
     udp_handlers = new_handler;
-    udp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
     LOG_INFO_FMT("UDP", "Registered handler for UDP port %d", (int)port);
 }
 
 void udp_unregister_handler(uint16_t port)
 {
     struct udp_port_handler **pp;
-    uint64_t irq_flags = udp_irq_save();
+    uint64_t irq_flags = ir0_spin_lock_irqsave(&udp_lock);
 
     for (pp = &udp_handlers; *pp; pp = &(*pp)->next)
     {
@@ -329,13 +322,13 @@ void udp_unregister_handler(uint16_t port)
 
             *pp = dead->next;
             kfree(dead);
-            udp_irq_restore(irq_flags);
+            ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
             LOG_INFO_FMT("UDP", "Unregistered handler for port %d", (int)port);
             return;
         }
     }
 
-    udp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
 }
 
 /**

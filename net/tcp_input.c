@@ -50,7 +50,7 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 	payload = (const uint8_t *)data + hdr_len;
 	payload_len = len - hdr_len;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_wire_pending.active && !tcp_wire_pending.synack_seen &&
 	    tcp_wire_pending.local_port == dest_port &&
 	    tcp_wire_pending.peer_port == src_port &&
@@ -61,7 +61,7 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 		tcp_wire_pending.synack_seen = 1;
 		tcp_wire_pending.peer_ack = seq + 1;
 		tcp_wire_pending.peer_window = window ? window : 8192;
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		(void)poll_wake_check_nosched();
 		return;
 	}
@@ -117,7 +117,7 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 				tcp_wire_out.cwnd_print_pending = 0;
 			if (print_sack)
 				tcp_wire_out.sack_print_pending = 0;
-			tcp_irq_restore(f);
+			ir0_spin_unlock_irqrestore(&tcp_lock, f);
 			if (print_cwnd)
 				klog_print("F8_TCP_WIRE_CWND_OK\n");
 			if (print_sack)
@@ -127,7 +127,7 @@ void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
 		}
 		return;
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	/* Inbound SYN to a registered listener (host→guest). */
 	if ((flags & TCP_FLAG_SYN) && !(flags & TCP_FLAG_ACK))

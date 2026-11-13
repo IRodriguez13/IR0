@@ -20,30 +20,11 @@
 #include <ir0/types.h>
 #include <ir0/arch_port.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 #define NAMED_FIFO_MAX 128
 
-#ifdef TEST_HOST
-static inline uint64_t named_fifo_irq_save(void)
-{
-    return 0;
-}
-
-static inline void named_fifo_irq_restore(uint64_t flags)
-{
-    (void)flags;
-}
-#else
-static inline uint64_t named_fifo_irq_save(void)
-{
-    return (uint64_t)irq_save();
-}
-
-static inline void named_fifo_irq_restore(uint64_t flags)
-{
-    irq_restore((unsigned long)flags);
-}
-#endif
+static ir0_spinlock_t named_fifo_lock;
 
 struct named_fifo_entry
 {
@@ -123,11 +104,11 @@ int named_fifo_create_owned(const char *path, mode_t mode, uid_t uid, gid_t gid)
     if (!path || path[0] != '/')
         return -EINVAL;
 
-    irq_flags = named_fifo_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&named_fifo_lock);
 
     if (named_fifo_find(path))
     {
-        named_fifo_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
         return 0;
     }
 
@@ -158,14 +139,14 @@ int named_fifo_create_owned(const char *path, mode_t mode, uid_t uid, gid_t gid)
     }
     if (!slot)
     {
-        named_fifo_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
         return -ENOSPC;
     }
 
     pipe = pipe_create();
     if (!pipe)
     {
-        named_fifo_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
         return -ENOMEM;
     }
     /* Inode owns pipe_t until unlink/recycle (see pipe_close_end). */
@@ -174,7 +155,7 @@ int named_fifo_create_owned(const char *path, mode_t mode, uid_t uid, gid_t gid)
     if (normalize_path(path, slot->path, sizeof(slot->path)) != 0)
     {
         pipe_abort_unopened(pipe);
-        named_fifo_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
         return -ENAMETOOLONG;
     }
     slot->pipe = pipe;
@@ -182,7 +163,7 @@ int named_fifo_create_owned(const char *path, mode_t mode, uid_t uid, gid_t gid)
     slot->uid = uid;
     slot->gid = gid;
     slot->in_use = 1;
-    named_fifo_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
     return 0;
 }
 
@@ -199,11 +180,11 @@ int named_fifo_stat(const char *path, stat_t *buf)
     if (!path || !buf)
         return -EINVAL;
 
-    irq_flags = named_fifo_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&named_fifo_lock);
     e = named_fifo_find(path);
     if (!e)
     {
-        named_fifo_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
         return -ENOENT;
     }
 
@@ -212,7 +193,7 @@ int named_fifo_stat(const char *path, stat_t *buf)
     buf->st_nlink = 1;
     buf->st_uid = e->uid;
     buf->st_gid = e->gid;
-    named_fifo_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
     return 0;
 }
 
@@ -231,11 +212,11 @@ int named_fifo_unlink(const char *path)
     struct named_fifo_entry *e;
     uint64_t irq_flags;
 
-    irq_flags = named_fifo_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&named_fifo_lock);
     e = named_fifo_find(path);
     if (!e)
     {
-        named_fifo_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
         return -ENOENT;
     }
 
@@ -251,6 +232,6 @@ int named_fifo_unlink(const char *path)
     e->in_use = 0;
     e->path[0] = '\0';
     e->pipe = NULL;
-    named_fifo_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&named_fifo_lock, irq_flags);
     return 0;
 }

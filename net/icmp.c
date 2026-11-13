@@ -19,6 +19,7 @@
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 /* Macros for IP address formatting (matching ARP/IP) */
 #define IP4_FMT "%d.%d.%d.%d"
@@ -99,15 +100,7 @@ static void icmp_pending_append_locked(struct icmp_pending_echo *entry)
     tail->next = entry;
 }
 
-static inline uint64_t icmp_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void icmp_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t icmp_lock;
 
 /**
  * icmp_checksum - Calculate ICMP packet checksum (RFC 792)
@@ -310,7 +303,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                          (int)id, (int)seq, IP4_ARGS(ntohl(src_ip)));
             
             /* Search for matching pending echo request */
-            uint64_t irq_flags = icmp_irq_save();
+            uint64_t irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
             struct icmp_pending_echo *echo = pending_echos;
             uint64_t now = clock_get_uptime_milliseconds();
             icmp_pending_cleanup_expired_locked(now);
@@ -340,7 +333,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                                 (int)payload_bytes, IP4_ARGS(ntohl(src_ip)), (int)seq, (int)ttl, (int)rtt);
                     
                     /* Keep it pending until userspace consumes via NET_GET_PING_RESULT. */
-                    icmp_irq_restore(irq_flags);
+                    ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
                     break;
                 }
                 
@@ -353,7 +346,7 @@ void icmp_receive_handler(struct net_device *dev, const void *data,
                             (int)id, (int)seq);
             }
             if (echo == NULL)
-                icmp_irq_restore(irq_flags);
+                ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
             break;
         }
 
@@ -480,7 +473,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     struct icmp_pending_echo *pending = kmalloc(sizeof(struct icmp_pending_echo));
     if (pending)
     {
-        uint64_t irq_flags = icmp_irq_save();
+        uint64_t irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
         uint64_t now = clock_get_uptime_milliseconds();
         icmp_pending_cleanup_expired_locked(now);
         pending->id = id;
@@ -494,7 +487,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
         pending->reply_ip = 0;
         pending->next = NULL;
         icmp_pending_append_locked(pending);
-        icmp_irq_restore(irq_flags);
+        ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
         
         LOG_INFO_FMT("ICMP", "Tracking echo request: id=%d, seq=%d", (int)id, (int)seq);
     }
@@ -529,7 +522,7 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
     if (!rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
         return false;
 
-    irq_flags = icmp_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
     now = clock_get_uptime_milliseconds();
     icmp_pending_cleanup_expired_locked(now);
     struct icmp_pending_echo *echo = pending_echos;
@@ -546,20 +539,20 @@ bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
                 *payload_bytes_out = echo->payload_bytes;
                 *reply_ip_out = echo->reply_ip;
                 icmp_pending_remove_locked(prev, echo);
-                icmp_irq_restore(irq_flags);
+                ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
                 return true;
             }
             else
             {
                 /* Still pending */
-                icmp_irq_restore(irq_flags);
+                ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
                 return false;
             }
         }
         prev = echo;
         echo = echo->next;
     }
-    icmp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
     /* Not found */
     return false;
 }
@@ -576,7 +569,7 @@ bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out
     if (!seq_out || !rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
         return false;
 
-    irq_flags = icmp_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
     now = clock_get_uptime_milliseconds();
     icmp_pending_cleanup_expired_locked(now);
     echo = pending_echos;
@@ -591,14 +584,14 @@ bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out
             *payload_bytes_out = echo->payload_bytes;
             *reply_ip_out = echo->reply_ip;
             icmp_pending_remove_locked(prev, echo);
-            icmp_irq_restore(irq_flags);
+            ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
             return true;
         }
         prev = echo;
         echo = echo->next;
     }
 
-    icmp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
     return false;
 }
 
@@ -608,7 +601,7 @@ bool icmp_has_ready_echo_result(uint16_t id)
     uint64_t now;
     struct icmp_pending_echo *echo;
 
-    irq_flags = icmp_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
     now = clock_get_uptime_milliseconds();
     icmp_pending_cleanup_expired_locked(now);
     echo = pending_echos;
@@ -616,12 +609,12 @@ bool icmp_has_ready_echo_result(uint16_t id)
     {
         if (echo->id == id && echo->resolved)
         {
-            icmp_irq_restore(irq_flags);
+            ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
             return true;
         }
         echo = echo->next;
     }
-    icmp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
     return false;
 }
 
@@ -630,11 +623,11 @@ uint16_t icmp_allocate_echo_seq(void)
     uint64_t irq_flags;
     uint16_t seq;
 
-    irq_flags = icmp_irq_save();
+    irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
     seq = icmp_echo_seq_counter++;
     if (icmp_echo_seq_counter == 0)
         icmp_echo_seq_counter = 1;
-    icmp_irq_restore(irq_flags);
+    ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
     return seq;
 }
 

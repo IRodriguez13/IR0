@@ -21,6 +21,7 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/oops.h>
+#include <ir0/spinlock.h>
 #include <ir0/cpu.h>  /* For ASSERT and panicex */
 #include <ir0/resource_registry.h>
 #include <ir0/clock.h>
@@ -153,34 +154,26 @@ static int rtl8139_recover_tx_path(void)
     return 1;
 }
 
-static inline uint64_t rtl8139_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void rtl8139_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t rtl8139_lock;
 
 static bool rtl8139_try_enter_rx(void)
 {
-    uint64_t flags = rtl8139_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&rtl8139_lock);
     if (rtl8139_rx_processing)
     {
-        rtl8139_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&rtl8139_lock, flags);
         return false;
     }
     rtl8139_rx_processing = 1;
-    rtl8139_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&rtl8139_lock, flags);
     return true;
 }
 
 static void rtl8139_leave_rx(void)
 {
-    uint64_t flags = rtl8139_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&rtl8139_lock);
     rtl8139_rx_processing = 0;
-    rtl8139_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&rtl8139_lock, flags);
 }
 
 static ir0_driver_ops_t rtl8139_ops = {

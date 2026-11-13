@@ -20,6 +20,7 @@
 
 static struct net_protocol tcp_proto;
 
+ir0_spinlock_t tcp_lock;
 struct tcp_pending_conn tcp_wire_pending;
 /*
  * Serialize outbound connect: single tcp_wire_pending/tcp_wire_out
@@ -49,10 +50,10 @@ struct tcp_wire_outbound tcp_wire_out;
 
 static void tcp_pending_clear(void)
 {
-	uint64_t f = tcp_irq_save();
+	uint64_t f = ir0_spin_lock_irqsave(&tcp_lock);
 
 	memset(&tcp_wire_pending, 0, sizeof(tcp_wire_pending));
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 }
 
 void tcp_wire_on_process_exit(uint32_t pid)
@@ -67,7 +68,7 @@ void tcp_wire_on_process_exit(uint32_t pid)
 static void tcp_pending_set(ip4_addr_t peer_ip, uint16_t peer_port,
 			    uint16_t local_port, uint32_t local_seq)
 {
-	uint64_t f = tcp_irq_save();
+	uint64_t f = ir0_spin_lock_irqsave(&tcp_lock);
 
 	memset(&tcp_wire_pending, 0, sizeof(tcp_wire_pending));
 	tcp_wire_pending.active = 1;
@@ -77,7 +78,7 @@ static void tcp_pending_set(ip4_addr_t peer_ip, uint16_t peer_port,
 	tcp_wire_pending.local_seq = local_seq;
 	tcp_wire_pending.deadline_ms =
 		clock_get_uptime_milliseconds() + TCP_WIRE_TIMEOUT_MS;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 }
 
 static void tcp_out_clear(void)
@@ -112,7 +113,7 @@ int tcp_wire_recv(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	if (!buf || len == 0)
 		return -EINVAL;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	/* Outbound client association (guest→host). */
 	if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 	    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
@@ -121,7 +122,7 @@ int tcp_wire_recv(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		{
 			int fin = tcp_wire_out.peer_fin;
 
-			tcp_irq_restore(f);
+			ir0_spin_unlock_irqrestore(&tcp_lock, f);
 			return fin ? 0 : -EAGAIN;
 		}
 		n = tcp_wire_out.rx_len - tcp_wire_out.rx_off;
@@ -134,21 +135,21 @@ int tcp_wire_recv(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 			tcp_wire_out.rx_off = 0;
 			tcp_wire_out.rx_len = 0;
 		}
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return (int)n;
 	}
 
 	c = tcp_inbound_find(peer_ip, peer_port, local_port);
 	if (!c || !c->taken)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return -EPIPE;
 	}
 	if (c->rx_off >= c->rx_len)
 	{
 		int fin = c->peer_fin;
 
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		/* Peer FIN + drained RX → EOF; otherwise would-block. */
 		return fin ? 0 : -EAGAIN;
 	}
@@ -162,7 +163,7 @@ int tcp_wire_recv(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		c->rx_off = 0;
 		c->rx_len = 0;
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return (int)n;
 }
 
@@ -173,14 +174,14 @@ uint32_t tcp_wire_peer_ack(ip4_addr_t peer_ip, uint16_t peer_port,
 	struct tcp_wire_inbound *c;
 	uint32_t ack = 0;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 	    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
 		ack = tcp_wire_out.ack_to_peer;
 	c = tcp_inbound_find(peer_ip, peer_port, local_port);
 	if (c && c->taken)
 		ack = c->peer_ack;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return ack;
 }
 
@@ -202,7 +203,7 @@ static int tcp_wire_activate_outbound(ip4_addr_t peer_ip, uint16_t peer_port,
 	if (ret != 0)
 		return -EIO;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	memset(&tcp_wire_out, 0, sizeof(tcp_wire_out));
 	tcp_wire_out.active = 1;
 	tcp_wire_out.peer_ip = peer_ip;
@@ -222,7 +223,7 @@ static int tcp_wire_activate_outbound(ip4_addr_t peer_ip, uint16_t peer_port,
 		tcp_wire_out.peer_cc_mode = 1;
 		tcp_wire_out.drop_next_tx = 1;
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return 0;
 }
 
@@ -273,11 +274,11 @@ int tcp_wire_connect_poll(ip4_addr_t peer_ip, uint16_t peer_port,
 		return -EINVAL;
 
 	net_stack_poll();
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (!tcp_wire_pending.active || tcp_wire_pending.local_port != local_port ||
 	    tcp_wire_pending.peer_port != peer_port || tcp_wire_pending.peer_ip != peer_ip)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 		    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
 		{
@@ -292,7 +293,7 @@ int tcp_wire_connect_poll(ip4_addr_t peer_ip, uint16_t peer_port,
 	peer_ack = tcp_wire_pending.peer_ack;
 	peer_window = tcp_wire_pending.peer_window;
 	deadline = tcp_wire_pending.deadline_ms;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	if (!seen)
 	{
@@ -322,19 +323,19 @@ int tcp_wire_poll_readable(ip4_addr_t peer_ip, uint16_t peer_port,
 	int ready = 0;
 	struct tcp_wire_inbound *c;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 	    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
 	{
 		if (tcp_wire_out.rx_off < tcp_wire_out.rx_len || tcp_wire_out.peer_fin)
 			ready = 1;
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return ready;
 	}
 	c = tcp_inbound_find(peer_ip, peer_port, local_port);
 	if (c && c->taken && (c->rx_off < c->rx_len || c->peer_fin))
 		ready = 1;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return ready;
 }
 
@@ -344,7 +345,7 @@ int tcp_wire_poll_writable(ip4_addr_t peer_ip, uint16_t peer_port,
 	uint64_t f;
 	int ready = 0;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 	    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
 	{
@@ -354,7 +355,7 @@ int tcp_wire_poll_writable(ip4_addr_t peer_ip, uint16_t peer_port,
 		else
 			ready = 1;
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return ready;
 }
 
@@ -365,14 +366,14 @@ int tcp_wire_peer_fin(ip4_addr_t peer_ip, uint16_t peer_port,
 	int fin = 0;
 	struct tcp_wire_inbound *c;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 	    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
 		fin = tcp_wire_out.peer_fin;
 	c = tcp_inbound_find(peer_ip, peer_port, local_port);
 	if (c && c->taken && c->peer_fin)
 		fin = 1;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return fin;
 }
 
@@ -490,11 +491,11 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	if (!dev)
 		return -ENETUNREACH;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (!tcp_wire_out.active || tcp_wire_out.local_port != local_port ||
 	    tcp_wire_out.peer_port != peer_port || tcp_wire_out.peer_ip != peer_ip)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		tcp_build_header(&hdr, local_port, peer_port, *seq_io, ack_peer,
 				 TCP_FLAG_PSH | TCP_FLAG_ACK);
 		ret = tcp_send_raw(dev, peer_ip, &hdr, data, len);
@@ -520,7 +521,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		send_len = TCP_WIRE_TX_MAX;
 	if (send_len == 0)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return -EAGAIN;
 	}
 
@@ -547,11 +548,11 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	if (!tcp_wire_out.window_ok_logged && tcp_wire_out.peer_window > 0)
 	{
 		tcp_wire_out.window_ok_logged = 1;
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		klog_print("F8_TCP_WIRE_WINDOW_OK\n");
 	}
 	else
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	for (i = 0; i < tcp_wire_out.sb_count; i++)
 	{
@@ -574,14 +575,14 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		uint16_t win;
 		unsigned j;
 
-		f = tcp_irq_save();
+		f = ir0_spin_lock_irqsave(&tcp_lock);
 		una = tcp_wire_out.snd_una;
 		win = tcp_wire_out.peer_window ? tcp_wire_out.peer_window : 8192;
 		for (j = 0; j < 3U; j++)
 			tcp_out_note_ack(una, win);
 		tcp_out_note_sack_block(tcp_wire_out.unpaid_seq,
 					tcp_wire_out.unpaid_seq + tcp_wire_out.unpaid_len);
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	}
 
 	/* RTO-ish: poll for peer ACK; retransmit hole/outstanding up to REXMIT_MAX. */
@@ -591,12 +592,12 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		int do_fast;
 
 		net_stack_poll();
-		f = tcp_irq_save();
+		f = ir0_spin_lock_irqsave(&tcp_lock);
 		unpaid = tcp_wire_out.unpaid_len;
 		do_fast = tcp_wire_out.fast_rexmit_pending;
 		if (do_fast)
 			tcp_wire_out.fast_rexmit_pending = 0;
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		if (unpaid == 0)
 			break;
 
@@ -620,7 +621,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 					return -EIO;
 			}
 			rexmit++;
-			f = tcp_irq_save();
+			f = ir0_spin_lock_irqsave(&tcp_lock);
 			tcp_wire_out.rexmit_total++;
 			{
 				int print_dup = tcp_wire_out.dupack_print_pending;
@@ -633,7 +634,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 					tcp_wire_out.sack_print_pending = 0;
 				if (print_reno)
 					tcp_wire_out.reno_recovery_print_pending = 0;
-				tcp_irq_restore(f);
+				ir0_spin_unlock_irqrestore(&tcp_lock, f);
 				if (print_dup)
 					klog_print("F8_TCP_WIRE_DUPACK_OK\n");
 				if (print_sack)
@@ -646,7 +647,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	}
 
 	*seq_io = seq + (uint32_t)send_len;
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	tcp_wire_out.snd_nxt = *seq_io;
 	tcp_sb_clear();
 	if (rexmit > 0 && !tcp_wire_out.rexmit_ok_logged)
@@ -654,14 +655,14 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 		int peer_cc = tcp_wire_out.peer_cc_mode;
 
 		tcp_wire_out.rexmit_ok_logged = 1;
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		if (peer_cc)
 			klog_print("F8_TCP_PEER_REXMIT_OK\n");
 		else
 			klog_print("F8_TCP_WIRE_REXMIT_OK\n");
 	}
 	else
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	return (int)send_len;
 }
@@ -685,14 +686,14 @@ void tcp_wire_close(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 			net_stack_poll();
 	}
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_wire_out.active && tcp_wire_out.local_port == local_port &&
 	    tcp_wire_out.peer_port == peer_port && tcp_wire_out.peer_ip == peer_ip)
 		tcp_out_clear();
 	c = tcp_inbound_find(peer_ip, peer_port, local_port);
 	if (c)
 		tcp_inbound_free(c);
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 }
 
 int tcp_init(void)

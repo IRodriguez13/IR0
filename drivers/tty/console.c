@@ -31,6 +31,7 @@
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 /* TCGETS/TCSETS use the Linux x86-64 kernel termios prefix (NCCS=19). */
 _Static_assert(sizeof(struct ir0_termios) == 36,
@@ -369,15 +370,7 @@ static int tty_canon_feed(char c)
 	return 0;
 }
 
-static inline uint64_t tty_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void tty_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t tty_lock;
 
 static int tty_waiter_count(void)
 {
@@ -479,10 +472,10 @@ static int tty_sleep_for_input(void)
 	d1_16_tty_read_block(proc, tty_waiter_count(), "tty_input");
 	for (;;)
 	{
-		flags = tty_irq_save();
+		flags = ir0_spin_lock_irqsave(&tty_lock);
 		if (!tty_waiter_register(proc))
 		{
-			tty_irq_restore(flags);
+			ir0_spin_unlock_irqrestore(&tty_lock, flags);
 			klog_notice_fmt("TTY", "[TTY] read-waiter table full (pid=%u)\n",
 					(unsigned int)proc->task.pid);
 			/* Back off one tick on the clock, then retry the read. */
@@ -493,7 +486,7 @@ static int tty_sleep_for_input(void)
 		prev_state = proc->state;
 		process_set_sched_state(proc, PROCESS_BLOCKED);
 		ready = ir0_console_input_ready() || signal_pending(proc);
-		tty_irq_restore(flags);
+		ir0_spin_unlock_irqrestore(&tty_lock, flags);
 		if (ready)
 			break;
 		d1_16_tty_state_transition(proc, prev_state, PROCESS_BLOCKED);

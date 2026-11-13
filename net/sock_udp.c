@@ -23,6 +23,7 @@
 #include <config.h>
 #include <string.h>
 #include "udp.h"
+#include <ir0/spinlock.h>
 
 #define SOCK_UDP_RX_MAX     32
 #define SOCK_UDP_PKT_MAX    1472
@@ -59,15 +60,7 @@ static struct sock_udp *sock_bound_list;
 static uint16_t sock_next_ephemeral = 32768;
 #endif
 
-static inline uint64_t sock_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void sock_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t sock_udp_lock;
 
 #if CONFIG_ENABLE_NETWORKING
 static bool sock_port_in_use(uint16_t port)
@@ -124,7 +117,7 @@ static void sock_udp_rx_enqueue(struct sock_udp *sock, ip4_addr_t src_ip,
 	memcpy(pkt->data, data, len);
 	pkt->next = NULL;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	while (sock->rx_count >= SOCK_UDP_RX_MAX && sock->rx_head)
 	{
 		struct sock_udp_rx_pkt *drop = sock->rx_head;
@@ -146,7 +139,7 @@ static void sock_udp_rx_enqueue(struct sock_udp *sock, ip4_addr_t src_ip,
 		sock->rx_tail = pkt;
 	}
 	sock->rx_count++;
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 }
 
 static void sock_udp_rx_from_net(struct net_device *dev, ip4_addr_t src_ip,
@@ -174,7 +167,7 @@ static void sock_udp_loopback(uint16_t src_port, uint16_t dest_port,
 	struct sock_udp *dst;
 	uint64_t flags;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	for (dst = sock_bound_list; dst; dst = dst->bound_next)
 	{
 		if (dst->bound && dst->local_port == dest_port)
@@ -182,7 +175,7 @@ static void sock_udp_loopback(uint16_t src_port, uint16_t dest_port,
 	}
 	if (dst)
 		dst->refcount++;
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 	if (!dst)
 		return;
 
@@ -225,9 +218,9 @@ void sock_udp_acquire(struct sock_udp *sock)
 
 	if (!sock)
 		return;
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	sock->refcount++;
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 }
 
 static void sock_udp_free_rx(struct sock_udp *sock)
@@ -286,16 +279,16 @@ void sock_udp_release(struct sock_udp *sock)
 	if (sock_icmp_is(sock))
 		return;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	refs = --sock->refcount;
 	if (refs > 0)
 	{
-		sock_irq_restore(flags);
+		ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 		return;
 	}
 
 	sock_udp_unbind_locked(sock);
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 
 	sock_udp_free_rx(sock);
 	kfree(sock);
@@ -318,14 +311,14 @@ int sock_udp_bind(struct sock_udp *sock, uint16_t port_host)
 	if (sock_port_in_use(port_host))
 		return -EADDRINUSE;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	if (sock->bound)
 	{
-		sock_irq_restore(flags);
+		ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 		return -EINVAL;
 	}
 	ret = sock_udp_install_port_handler(sock, port_host);
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 	return ret;
 #endif
 }
@@ -346,14 +339,14 @@ static int sock_udp_ensure_port(struct sock_udp *sock)
 	if (port == 0)
 		return -EADDRINUSE;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	if (sock->bound)
 	{
-		sock_irq_restore(flags);
+		ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 		return 0;
 	}
 	ret = sock_udp_install_port_handler(sock, port);
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 	return ret;
 }
 #endif
@@ -372,11 +365,11 @@ int sock_udp_connect(struct sock_udp *sock, uint32_t peer_ip_be,
 	if (!sock || peer_port_host == 0)
 		return -EINVAL;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	sock->peer_ip_be = peer_ip_be;
 	sock->peer_port = peer_port_host;
 	sock->connected = true;
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 	return 0;
 #endif
 }
@@ -389,14 +382,14 @@ int sock_udp_peer(struct sock_udp *sock, uint32_t *peer_ip_be,
 
 	if (!sock)
 		return -EINVAL;
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	if (sock->connected)
 	{
 		*peer_ip_be = sock->peer_ip_be;
 		*peer_port_host = sock->peer_port;
 		ret = 0;
 	}
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 	return ret;
 }
 
@@ -467,7 +460,7 @@ ssize_t sock_udp_recvfrom(struct sock_udp *sock, void *buf, size_t len, int flag
 	start = clock_get_uptime_milliseconds();
 	for (;;)
 	{
-		flags_irq = sock_irq_save();
+		flags_irq = ir0_spin_lock_irqsave(&sock_udp_lock);
 		if (sock->rx_head)
 		{
 			pkt = sock->rx_head;
@@ -476,7 +469,7 @@ ssize_t sock_udp_recvfrom(struct sock_udp *sock, void *buf, size_t len, int flag
 				sock->rx_tail = NULL;
 			sock->rx_count--;
 		}
-		sock_irq_restore(flags_irq);
+		ir0_spin_unlock_irqrestore(&sock_udp_lock, flags_irq);
 
 		if (pkt)
 			break;
@@ -512,7 +505,7 @@ int sock_udp_walk(int (*cb)(const struct sock_udp_snap *s, void *ctx), void *ctx
 	if (!cb)
 		return -EINVAL;
 
-	flags = sock_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_udp_lock);
 	for (s = sock_bound_list; s; s = s->bound_next)
 	{
 		if (!s->bound)
@@ -535,10 +528,10 @@ int sock_udp_walk(int (*cb)(const struct sock_udp_snap *s, void *ctx), void *ctx
 		snap.inode = (unsigned long)(uintptr_t)s;
 		if (cb(&snap, ctx) != 0)
 		{
-			sock_irq_restore(flags);
+			ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 			return -1;
 		}
 	}
-	sock_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_udp_lock, flags);
 	return 0;
 }

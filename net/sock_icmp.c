@@ -21,6 +21,7 @@
 #include <ir0/arch_port.h>
 #include <config.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 #if CONFIG_ENABLE_NETWORKING
 #include "ip.h"
@@ -55,15 +56,7 @@ struct sock_icmp
 
 static struct sock_icmp *sock_icmp_open_list;
 
-static inline uint64_t sock_icmp_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void sock_icmp_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t sock_icmp_lock;
 
 int sock_icmp_is(const void *ptr)
 {
@@ -79,9 +72,9 @@ int sock_icmp_poll_readable(struct sock_icmp *sock)
 
 	if (!sock || !sock_icmp_is(sock))
 		return 0;
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	ready = sock->rx_head != NULL;
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 	return ready;
 }
 
@@ -130,10 +123,10 @@ static void sock_icmp_list_add(struct sock_icmp *sock)
 {
 	uint64_t flags;
 
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	sock->list_next = sock_icmp_open_list;
 	sock_icmp_open_list = sock;
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 }
 #endif
 
@@ -142,7 +135,7 @@ static void sock_icmp_list_remove(struct sock_icmp *sock)
 	struct sock_icmp **pp;
 	uint64_t flags;
 
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	for (pp = &sock_icmp_open_list; *pp; pp = &(*pp)->list_next)
 	{
 		if (*pp == sock)
@@ -152,7 +145,7 @@ static void sock_icmp_list_remove(struct sock_icmp *sock)
 		}
 	}
 	sock->list_next = NULL;
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 }
 
 void sock_icmp_rx_deliver(uint32_t src_ip_be, uint32_t dst_ip_be, uint8_t ttl,
@@ -194,10 +187,10 @@ void sock_icmp_rx_deliver(uint32_t src_ip_be, uint32_t dst_ip_be, uint8_t ttl,
 	ip->checksum = ip_checksum(ip, sizeof(struct ip_header));
 	memcpy(wire + sizeof(struct ip_header), icmp_data, icmp_len);
 
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	for (s = sock_icmp_open_list; s; s = s->list_next)
 		sock_icmp_rx_enqueue_locked(s, src_ip, wire, total);
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 #endif
 }
 
@@ -225,9 +218,9 @@ void sock_icmp_acquire(struct sock_icmp *sock)
 
 	if (!sock)
 		return;
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	sock->refcount++;
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 }
 
 static void sock_icmp_free_rx(struct sock_icmp *sock)
@@ -256,11 +249,11 @@ void sock_icmp_release(struct sock_icmp *sock)
 	if (!sock_icmp_is(sock))
 		return;
 
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	refs = --sock->refcount;
 	if (refs > 0)
 	{
-		sock_icmp_irq_restore(flags);
+		ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 		return;
 	}
 	/*
@@ -271,7 +264,7 @@ void sock_icmp_release(struct sock_icmp *sock)
 	 */
 	sock_icmp_list_remove(sock);
 	sock->magic = 0;
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 
 	sock_icmp_free_rx(sock);
 	kfree(sock);
@@ -405,7 +398,7 @@ ssize_t sock_icmp_recvfrom(struct sock_icmp *sock, void *buf, size_t len,
 	start = clock_get_uptime_milliseconds();
 	for (;;)
 	{
-		flags_irq = sock_icmp_irq_save();
+		flags_irq = ir0_spin_lock_irqsave(&sock_icmp_lock);
 		if (sock->rx_head)
 		{
 			pkt = sock->rx_head;
@@ -414,7 +407,7 @@ ssize_t sock_icmp_recvfrom(struct sock_icmp *sock, void *buf, size_t len,
 				sock->rx_tail = NULL;
 			sock->rx_count--;
 		}
-		sock_icmp_irq_restore(flags_irq);
+		ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags_irq);
 
 		if (pkt)
 			break;
@@ -449,7 +442,7 @@ int sock_icmp_walk(int (*cb)(const struct sock_icmp_snap *s, void *ctx),
 	if (!cb)
 		return -EINVAL;
 
-	flags = sock_icmp_irq_save();
+	flags = ir0_spin_lock_irqsave(&sock_icmp_lock);
 	for (s = sock_icmp_open_list; s; s = s->list_next)
 	{
 		if (!sock_icmp_is(s))
@@ -460,10 +453,10 @@ int sock_icmp_walk(int (*cb)(const struct sock_icmp_snap *s, void *ctx),
 		snap.refcnt = (unsigned)(s->refcount > 0 ? s->refcount : 1);
 		if (cb(&snap, ctx) != 0)
 		{
-			sock_icmp_irq_restore(flags);
+			ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 			return -1;
 		}
 	}
-	sock_icmp_irq_restore(flags);
+	ir0_spin_unlock_irqrestore(&sock_icmp_lock, flags);
 	return 0;
 }

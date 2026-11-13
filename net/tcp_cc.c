@@ -396,28 +396,28 @@ static void tcp_out_run_recovery_selftest(struct net_device *dev, ip4_addr_t pee
 	if (tcp_wire_out.recovery_selftest_done)
 		return;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	tcp_wire_out.recovery_selftest_done = 1;
 	save_nxt = tcp_wire_out.snd_nxt;
 	seq = save_nxt;
 	tcp_sb_clear();
 	if (tcp_sb_add(seg0, sizeof(seg0) - 1U, seq) != 0)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 	seq += (uint32_t)(sizeof(seg0) - 1U);
 	if (tcp_sb_add(seg1, sizeof(seg1) - 1U, seq) != 0)
 	{
 		tcp_sb_clear();
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 	seq += (uint32_t)(sizeof(seg1) - 1U);
 	if (tcp_sb_add(seg2, sizeof(seg2) - 1U, seq) != 0)
 	{
 		tcp_sb_clear();
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 	end2 = seq + (uint32_t)(sizeof(seg2) - 1U);
@@ -426,15 +426,15 @@ static void tcp_out_run_recovery_selftest(struct net_device *dev, ip4_addr_t pee
 	tcp_wire_out.sb[1].sent = 1; /* middle seg lost on wire */
 	tcp_wire_out.sb[2].sent = 1;
 	tcp_wire_out.snd_una = tcp_wire_out.sb[0].seq + tcp_wire_out.sb[0].len;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	tcp_out_note_sack_block(tcp_wire_out.sb[2].seq, end2);
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (!tcp_wire_out.in_recovery)
 		tcp_out_enter_recovery();
 	tcp_wire_out.fast_rexmit_pending = 1;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	if (tcp_sb_find_hole() != NULL)
 	{
@@ -446,12 +446,12 @@ static void tcp_out_run_recovery_selftest(struct net_device *dev, ip4_addr_t pee
 		}
 	}
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	tcp_sb_clear();
 	tcp_wire_out.dup_ack_count = 0;
 	tcp_wire_out.fast_rexmit_pending = 0;
 	tcp_wire_out.snd_nxt = save_nxt;
 	tcp_out_exit_recovery();
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 }
 #endif /* synthetic recovery selftest */

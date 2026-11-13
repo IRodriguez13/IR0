@@ -105,10 +105,10 @@ int tcp_wire_listen_register(uint16_t port)
 	if (port == 0)
 		return -EINVAL;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_listener_find(port) >= 0)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return 0;
 	}
 	for (i = 0; i < TCP_WIRE_LISTEN_MAX; i++)
@@ -117,11 +117,11 @@ int tcp_wire_listen_register(uint16_t port)
 		{
 			tcp_wire_listeners[i].active = 1;
 			tcp_wire_listeners[i].port = port;
-			tcp_irq_restore(f);
+			ir0_spin_unlock_irqrestore(&tcp_lock, f);
 			return 0;
 		}
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return -ENOMEM;
 }
 
@@ -130,7 +130,7 @@ void tcp_wire_listen_unregister(uint16_t port)
 	uint64_t f;
 	int i;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	for (i = 0; i < TCP_WIRE_LISTEN_MAX; i++)
 	{
 		if (tcp_wire_listeners[i].active && tcp_wire_listeners[i].port == port)
@@ -142,7 +142,7 @@ void tcp_wire_listen_unregister(uint16_t port)
 		    !tcp_wire_inbound_conns[i].taken)
 			tcp_inbound_free(&tcp_wire_inbound_conns[i]);
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 }
 
 int tcp_wire_accept_take(uint16_t listen_port, ip4_addr_t *peer_ip,
@@ -155,7 +155,7 @@ int tcp_wire_accept_take(uint16_t listen_port, ip4_addr_t *peer_ip,
 	if (!peer_ip || !peer_port || !local_port || !seq_out || !ack_out)
 		return -EINVAL;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	for (i = 0; i < TCP_WIRE_CONN_MAX; i++)
 	{
 		struct tcp_wire_inbound *c = &tcp_wire_inbound_conns[i];
@@ -169,11 +169,11 @@ int tcp_wire_accept_take(uint16_t listen_port, ip4_addr_t *peer_ip,
 			*local_port = c->local_port;
 			*seq_out = c->local_seq;
 			*ack_out = c->peer_ack;
-			tcp_irq_restore(f);
+			ir0_spin_unlock_irqrestore(&tcp_lock, f);
 			return 0;
 		}
 	}
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 	return -EAGAIN;
 }
 
@@ -186,10 +186,10 @@ void tcp_handle_listen_syn(struct net_device *dev, ip4_addr_t src_ip,
 	uint32_t isn;
 	uint64_t f;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	if (tcp_listener_find(dest_port) < 0)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 	c = tcp_inbound_find(src_ip, src_port, dest_port);
@@ -204,19 +204,19 @@ void tcp_handle_listen_syn(struct net_device *dev, ip4_addr_t src_ip,
 			uint32_t syn_seq = c->local_seq - 1;
 
 			c->peer_ack = seq + 1;
-			tcp_irq_restore(f);
+			ir0_spin_unlock_irqrestore(&tcp_lock, f);
 			tcp_build_header(&hdr, dest_port, src_port, syn_seq,
 					 seq + 1, TCP_FLAG_SYN | TCP_FLAG_ACK);
 			(void)tcp_send_raw(dev, src_ip, &hdr, NULL, 0);
 			return;
 		}
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 	c = tcp_inbound_alloc();
 	if (!c)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 	isn = (uint32_t)(clock_get_uptime_milliseconds() * 2654435761u) | 1u;
@@ -228,7 +228,7 @@ void tcp_handle_listen_syn(struct net_device *dev, ip4_addr_t src_ip,
 	c->established = 0;
 	c->taken = 0;
 	c->peer_fin = 0;
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	tcp_build_header(&hdr, dest_port, src_port, isn, seq + 1,
 			 TCP_FLAG_SYN | TCP_FLAG_ACK);
@@ -247,18 +247,18 @@ void tcp_handle_inbound(struct net_device *dev, ip4_addr_t src_ip,
 	uint32_t local_seq;
 	int need_ack;
 
-	f = tcp_irq_save();
+	f = ir0_spin_lock_irqsave(&tcp_lock);
 	c = tcp_inbound_find(src_ip, src_port, dest_port);
 	if (!c)
 	{
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 
 	if (flags & TCP_FLAG_RST)
 	{
 		tcp_inbound_free(c);
-		tcp_irq_restore(f);
+		ir0_spin_unlock_irqrestore(&tcp_lock, f);
 		return;
 	}
 
@@ -288,7 +288,7 @@ void tcp_handle_inbound(struct net_device *dev, ip4_addr_t src_ip,
 	next_ack = c->peer_ack;
 	local_seq = c->local_seq;
 	need_ack = (payload_len > 0) || (flags & TCP_FLAG_FIN);
-	tcp_irq_restore(f);
+	ir0_spin_unlock_irqrestore(&tcp_lock, f);
 
 	if (need_ack)
 	{

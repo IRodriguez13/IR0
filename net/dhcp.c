@@ -20,6 +20,7 @@
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 #define DHCP_CLIENT_PORT 68
 #define DHCP_SERVER_PORT 67
@@ -95,22 +96,14 @@ struct dhcp_runtime_state
 static struct dhcp_runtime_state dhcp_state;
 static int dhcp_handler_registered;
 
-static inline uint64_t dhcp_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void dhcp_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t dhcp_lock;
 
 static void dhcp_state_reset_for_xid(uint32_t xid)
 {
-    uint64_t flags = dhcp_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&dhcp_lock);
     memset(&dhcp_state, 0, sizeof(dhcp_state));
     dhcp_state.xid = xid;
-    dhcp_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
 }
 
 static int dhcp_append_option_u8(uint8_t **opt, uint8_t *end, uint8_t code, uint8_t value)
@@ -399,10 +392,10 @@ static void dhcp_udp_handler(struct net_device *dev, ip4_addr_t src_ip, uint16_t
         return;
     }
 
-    uint64_t flags = dhcp_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&dhcp_lock);
     if (xid != dhcp_state.xid)
     {
-        dhcp_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
         return;
     }
 
@@ -444,7 +437,7 @@ static void dhcp_udp_handler(struct net_device *dev, ip4_addr_t src_ip, uint16_t
     {
         dhcp_state.nak_ready = 1;
     }
-    dhcp_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
 }
 
 /*
@@ -462,9 +455,9 @@ static int dhcp_wait_offer(uint32_t timeout_ms)
         int ready;
 
         net_poll();
-        flags = dhcp_irq_save();
+        flags = ir0_spin_lock_irqsave(&dhcp_lock);
         ready = dhcp_state.offer_ready;
-        dhcp_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
         if (ready)
             return 0;
         if (clock_get_uptime_milliseconds() - start >= timeout_ms)
@@ -486,10 +479,10 @@ static int dhcp_wait_ack(uint32_t timeout_ms)
         int nak;
 
         net_poll();
-        flags = dhcp_irq_save();
+        flags = ir0_spin_lock_irqsave(&dhcp_lock);
         ack = dhcp_state.ack_ready;
         nak = dhcp_state.nak_ready;
-        dhcp_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
         if (nak)
             return -1;
         if (ack)
@@ -583,9 +576,9 @@ int dhcp_init(void)
         struct dhcp_offer_data offer;
         memset(&offer, 0, sizeof(offer));
         {
-            uint64_t flags = dhcp_irq_save();
+            uint64_t flags = ir0_spin_lock_irqsave(&dhcp_lock);
             offer = dhcp_state.offer;
-            dhcp_irq_restore(flags);
+            ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
         }
 
         if (offer.yiaddr == 0 || offer.server_id == 0)
@@ -606,9 +599,9 @@ int dhcp_init(void)
         }
 
         {
-            uint64_t flags = dhcp_irq_save();
+            uint64_t flags = ir0_spin_lock_irqsave(&dhcp_lock);
             offer = dhcp_state.offer;
-            dhcp_irq_restore(flags);
+            ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
         }
 
         dhcp_apply_config(&offer);

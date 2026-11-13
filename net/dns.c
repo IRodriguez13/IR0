@@ -29,6 +29,7 @@
 #include <ir0/arch_port.h>
 #include <stdbool.h>
 #include <string.h>
+#include <ir0/spinlock.h>
 
 /* DNS Header Structure (RFC 1035) */
 struct dns_header {
@@ -73,15 +74,7 @@ static uint16_t dns_client_port = 5353;  /* Ephemeral port for DNS queries */
 static bool dns_handler_registered = false;
 static ip4_addr_t dns_default_server = 0;
 
-static inline uint64_t dns_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void dns_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
+static ir0_spinlock_t dns_lock;
 
 static struct dns_query_state *dns_pending_find_locked(uint16_t id)
 {
@@ -102,10 +95,10 @@ static void dns_pending_add(struct dns_query_state *query)
     if (!query)
         return;
 
-    flags = dns_irq_save();
+    flags = ir0_spin_lock_irqsave(&dns_lock);
     query->next = pending_queries;
     pending_queries = query;
-    dns_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&dns_lock, flags);
 }
 
 static void dns_pending_remove_locked(struct dns_query_state *query)
@@ -134,9 +127,9 @@ static void dns_pending_remove_locked(struct dns_query_state *query)
 
 static void dns_pending_remove(struct dns_query_state *query)
 {
-    uint64_t flags = dns_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
     dns_pending_remove_locked(query);
-    dns_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&dns_lock, flags);
 }
 
 /* Helper: Encode domain name for DNS (convert "example.com" to length-prefixed format) */
@@ -352,17 +345,17 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     }
 
     {
-        uint64_t flags = dns_irq_save();
+        uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
         struct dns_query_state *query = dns_pending_find_locked(id);
         if (!query)
         {
-            dns_irq_restore(flags);
+            ir0_spin_unlock_irqrestore(&dns_lock, flags);
             LOG_WARNING_FMT("DNS", "DNS response id=%d not matched", (int)id);
             return;
         }
         query->result = resolved_ip;
         query->resolved = true;
-        dns_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&dns_lock, flags);
     }
 }
 
@@ -401,9 +394,9 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     struct dns_header *header = (struct dns_header *)query_buf;
     uint16_t query_id;
     {
-        uint64_t flags = dns_irq_save();
+        uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
         query_id = dns_query_id_counter++;
-        dns_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&dns_lock, flags);
     }
     header->id = htons(query_id);
     header->flags = htons(DNS_FLAG_RD);  /* Recursion Desired */
@@ -452,13 +445,13 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     /* Register handler for DNS responses if not already registered */
     if (!dns_handler_registered)
     {
-        uint64_t flags = dns_irq_save();
+        uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
         if (!dns_handler_registered)
         {
             udp_register_handler(dns_client_port, dns_response_handler, NULL);
             dns_handler_registered = true;
         }
-        dns_irq_restore(flags);
+        ir0_spin_unlock_irqrestore(&dns_lock, flags);
     }
     
     /* Send DNS query */
@@ -551,14 +544,14 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         {
             bool resolved_now = false;
             ip4_addr_t resolved_ip = 0;
-            uint64_t flags = dns_irq_save();
+            uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
             if (query->resolved)
             {
                 resolved_now = true;
                 resolved_ip = query->result;
                 dns_pending_remove_locked(query);
             }
-            dns_irq_restore(flags);
+            ir0_spin_unlock_irqrestore(&dns_lock, flags);
 
             if (resolved_now)
             {
@@ -588,9 +581,9 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
 
 void dns_set_default_server(ip4_addr_t dns_server_ip)
 {
-    uint64_t flags = dns_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
     dns_default_server = dns_server_ip;
-    dns_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&dns_lock, flags);
 
     if (dns_server_ip != 0)
     {
@@ -601,9 +594,9 @@ void dns_set_default_server(ip4_addr_t dns_server_ip)
 ip4_addr_t dns_get_default_server(void)
 {
     ip4_addr_t server;
-    uint64_t flags = dns_irq_save();
+    uint64_t flags = ir0_spin_lock_irqsave(&dns_lock);
     server = dns_default_server;
-    dns_irq_restore(flags);
+    ir0_spin_unlock_irqrestore(&dns_lock, flags);
     return server;
 }
 
