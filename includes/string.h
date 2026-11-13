@@ -40,29 +40,6 @@ void *memcpy(void *dest, const void *src, size_t num);
 void *memmove(void *dest, const void *src, size_t num);
 int memcmp(const void *ptr1, const void *ptr2, size_t num);
 
-// Kernel-specific memory functions - Internal implementations
-void *__kmemset_impl(void *s, int c, size_t n);
-void *__kmemcpy_impl(void *dest, const void *src, size_t n);
-char *__kstrncpy_impl(char *dest, const char *src, size_t n);
-
-// Kernel-specific memory functions - Checked wrappers with debug info
-void *__kmemset_checked(void *dst, int c, size_t n,
-                       const char *file, int line, const char *caller);
-void *__kmemcpy_checked(void *dst, const void *src, size_t n,
-                       const char *file, int line, const char *caller);
-char *__kstrncpy_checked(char *dst, const char *src, size_t n,
-                        const char *file, int line, const char *caller);
-
-// Automatic debug tracking macros - capture caller location transparently
-#define kmemset(dst, c, n) \
-    __kmemset_checked((dst), (c), (n), __FILE__, __LINE__, __func__)
-
-#define kmemcpy(dst, src, n) \
-    __kmemcpy_checked((dst), (src), (n), __FILE__, __LINE__, __func__)
-
-#define kstrncpy(dst, src, n) \
-    __kstrncpy_checked((dst), (src), (n), __FILE__, __LINE__, __func__)
-
 // String conversion functions
 int atoi(const char *str);
 unsigned long strtoul(const char *str, char **endptr, int base);

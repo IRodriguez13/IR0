@@ -26,7 +26,6 @@
 
 #include "string.h"
 #include "stdarg.h"
-#include <ir0/oops.h>
 
 /* Compiler optimization hints */
 #define likely(x) __builtin_expect(!!(x), 1)
@@ -49,86 +48,6 @@ size_t strlen(const char *str)
         len++;
 
     return len;
-}
-
-/**
- * __kstrncpy_impl - Internal implementation of kernel string copy
- * Pure implementation without validation - called by checked wrapper
- */
-char *__kstrncpy_impl(char *dest, const char *src, size_t n)
-{
-    size_t i;
-    for (i = 0; i < n && src[i] != '\0'; i++)
-        dest[i] = src[i];
-    for (; i < n; i++)
-        dest[i] = '\0';
-    return dest;
-}
-
-/**
- * __kstrncpy_checked - Checked wrapper with automatic debug tracking
- * Validates parameters and calls implementation
- */
-char *__kstrncpy_checked(char *dest, const char *src, size_t n,
-                        const char *file, int line, const char *caller)
-{
-    if (unlikely(!dest || !src))
-        panicex("null pointer in kstrncpy", PANIC_MEM, file, line, caller);
-
-    return __kstrncpy_impl(dest, src, n);
-}
-
-/**
- * __kmemset_impl - Internal implementation of kernel memset
- * Pure implementation without validation - called by checked wrapper
- */
-void *__kmemset_impl(void *s, int c, size_t n)
-{
-    unsigned char *p = s;
-    while (n-- > 0)
-        *p++ = (unsigned char)c;
-    return s;
-}
-
-/**
- * __kmemset_checked - Checked wrapper with automatic debug tracking
- * Validates parameters and calls implementation
- */
-void *__kmemset_checked(void *dst, int c, size_t n,
-                       const char *file, int line, const char *caller)
-{
-    if (unlikely(!dst))
-        panicex("null destination pointer in kmemset", PANIC_MEM, file, line, caller);
-
-    return __kmemset_impl(dst, c, n);
-}
-
-/**
- * __kmemcpy_impl - Internal implementation of kernel memcpy
- * Pure implementation without validation - called by checked wrapper
- */
-void *__kmemcpy_impl(void *dest, const void *src, size_t n)
-{
-    char *d = dest;
-    const char *s = src;
-    while (n-- > 0)
-    {
-        *d++ = *s++;
-    }
-    return dest;
-}
-
-/**
- * __kmemcpy_checked - Checked wrapper with automatic debug tracking
- * Validates parameters and calls implementation
- */
-void *__kmemcpy_checked(void *dst, const void *src, size_t n,
-                       const char *file, int line, const char *caller)
-{
-    if (unlikely(!dst || !src))
-        panicex("null pointer in kmemcpy", PANIC_MEM, file, line, caller);
-
-    return __kmemcpy_impl(dst, src, n);
 }
 
 /**

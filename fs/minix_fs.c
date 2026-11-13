@@ -369,9 +369,9 @@ static int minix_fs_ensure_root_inode(void)
       if (entries[0].inode == 0)
       {
         entries[0].inode = MINIX_ROOT_INODE;
-        kstrncpy(entries[0].name, ".", MINIX_NAME_LEN);
+        strncpy(entries[0].name, ".", MINIX_NAME_LEN);
         entries[1].inode = MINIX_ROOT_INODE;
-        kstrncpy(entries[1].name, "..", MINIX_NAME_LEN);
+        strncpy(entries[1].name, "..", MINIX_NAME_LEN);
         if (minix_write_block(root.i_zone[0], dir_block) != 0)
           return -1;
       }
@@ -393,7 +393,7 @@ int minix_fs_init(void)
     log_debug_fmt("MINIX", "superblock read failed, formatting");
     return minix_fs_format();
   }
-  kmemcpy(&minix_fs.superblock, block_buffer, sizeof(minix_superblock_t));
+  memcpy(&minix_fs.superblock, block_buffer, sizeof(minix_superblock_t));
   log_info_fmt("MINIX", "superblock read OK magic=0x%x", minix_fs.superblock.s_magic);
 
   /* Check magic number */
@@ -496,7 +496,7 @@ int minix_fs_format(void)
   // REAL MINIX FILESYSTEM CREATION
 
   // Initialize superblock
-  kmemset(&minix_fs.superblock, 0, sizeof(minix_superblock_t));
+  memset(&minix_fs.superblock, 0, sizeof(minix_superblock_t));
   minix_fs.superblock.s_magic = MINIX_SUPER_MAGIC;
   minix_fs.superblock.s_ninodes = 64;    // Small but real
   minix_fs.superblock.s_nzones = 1024;   // 1MB of data
@@ -509,8 +509,8 @@ int minix_fs_format(void)
 
   /* Write superblock (block-sized to match on-disk layout) */
   uint8_t sb_block[MINIX_BLOCK_SIZE];
-  kmemset(sb_block, 0, sizeof(sb_block));
-  kmemcpy(sb_block, &minix_fs.superblock, sizeof(minix_superblock_t));
+  memset(sb_block, 0, sizeof(sb_block));
+  memcpy(sb_block, &minix_fs.superblock, sizeof(minix_superblock_t));
   if (minix_write_block(1, sb_block) != 0)
   {
     return -1;
@@ -530,11 +530,11 @@ int minix_fs_format(void)
       return -1;
   }
 
-  kmemset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
+  memset(minix_fs.inode_bitmap, 0, MINIX_BLOCK_SIZE);
   
   // CRITICAL: Initialize zone bitmap with 0xFF (all bits = 1 = all zones FREE)
   // In MINIX: bit=0 means USED, bit=1 means FREE
-  kmemset(minix_fs.zone_bitmap, 0xFF, MINIX_BLOCK_SIZE);
+  memset(minix_fs.zone_bitmap, 0xFF, MINIX_BLOCK_SIZE);
 
   // Mark inode 1 as used (root directory)
   // In MINIX bitmap: bit 1 is inode 1, bit 0 is unused or reserved
@@ -560,7 +560,7 @@ int minix_fs_format(void)
 
   // Create root inode
   minix_inode_t root_inode;
-  kmemset(&root_inode, 0, sizeof(minix_inode_t));
+  memset(&root_inode, 0, sizeof(minix_inode_t));
   root_inode.i_mode = MINIX_IFDIR | MINIX_IRWXU | MINIX_IRGRP | MINIX_IROTH;
   root_inode.i_uid = 0;
   root_inode.i_size = 2 * sizeof(minix_dir_entry_t); // . and .. entries
@@ -596,17 +596,17 @@ int minix_fs_format(void)
 
   // Create root directory with . and .. entries
   uint8_t root_dir_block[MINIX_BLOCK_SIZE];
-  kmemset(root_dir_block, 0, MINIX_BLOCK_SIZE);
+  memset(root_dir_block, 0, MINIX_BLOCK_SIZE);
 
   minix_dir_entry_t *entries = (minix_dir_entry_t *)root_dir_block;
 
   // Entry "."
   entries[0].inode = 1; // Root inode
-  kstrncpy(entries[0].name, ".", MINIX_NAME_LEN);
+  strncpy(entries[0].name, ".", MINIX_NAME_LEN);
 
   // Entry ".."
   entries[1].inode = 1; // Root inode (parent of root is root)
-  kstrncpy(entries[1].name, "..", MINIX_NAME_LEN);
+  strncpy(entries[1].name, "..", MINIX_NAME_LEN);
 
   // Write root directory
   if (minix_write_block(minix_fs.superblock.s_firstdatazone, root_dir_block) !=

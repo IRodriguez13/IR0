@@ -75,7 +75,7 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
     return -EINVAL;
   }
 
-  kmemset(buf, 0, sizeof(*buf));
+  memset(buf, 0, sizeof(*buf));
   rc = minix_lookup(pathname, &inode, &inode_num);
   if (rc != 0)
   {

@@ -60,7 +60,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
     return -ENOENT;
   }
 
-  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (!(parent_inode.i_mode & MINIX_IFDIR))
   {
@@ -98,7 +98,7 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   }
 
   minix_inode_t new_inode;
-  kmemset(&new_inode, 0, sizeof(minix_inode_t));
+  memset(&new_inode, 0, sizeof(minix_inode_t));
 
   // Apply umask to mode
   {
@@ -129,18 +129,18 @@ int minix_fs_mkdir(const char *path, mode_t mode)
 
   // Add . entry (self)
   entries[0].inode = new_inode_num;
-  kstrncpy(entries[0].name, ".", MINIX_NAME_LEN);
+  strncpy(entries[0].name, ".", MINIX_NAME_LEN);
 
   // Add .. entry (parent)
   entries[1].inode = parent_inode_num;
-  kstrncpy(entries[1].name, "..", MINIX_NAME_LEN);
+  strncpy(entries[1].name, "..", MINIX_NAME_LEN);
 
   // Clear remaining entries
   size_t max_entries = MINIX_BLOCK_SIZE / sizeof(minix_dir_entry_t);
   for (size_t i = 2; i < max_entries; i++)
   {
     entries[i].inode = 0;
-    kmemset(entries[i].name, 0, MINIX_NAME_LEN);
+    memset(entries[i].name, 0, MINIX_NAME_LEN);
   }
 
   if (minix_write_block(zone, block_buffer) != 0)
@@ -242,7 +242,7 @@ int minix_fs_ls(const char *path, bool detailed)
   }
 
   minix_inode_t dir_inode_copy;
-  kmemcpy(&dir_inode_copy, dir_inode, sizeof(minix_inode_t));
+  memcpy(&dir_inode_copy, dir_inode, sizeof(minix_inode_t));
 
   if (detailed)
   {
@@ -407,7 +407,7 @@ int minix_fs_rm(const char *path)
   }
 
   minix_inode_t parent_inode;
-  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (minix_fs_remove_dir_entry(&parent_inode, filename) != 0)
   {
@@ -481,7 +481,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   }
 
   minix_inode_t old_inode;
-  kmemcpy(&old_inode, old_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&old_inode, old_inode_ptr, sizeof(minix_inode_t));
 
   // Cannot create hard link to a directory
   if (old_inode.i_mode & MINIX_IFDIR)
@@ -528,7 +528,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
   }
 
   minix_inode_t parent_inode;
-  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   // Verify parent is a directory
   if (!(parent_inode.i_mode & MINIX_IFDIR))
@@ -657,7 +657,7 @@ int minix_fs_rmdir(const char *path)
     return -ENOENT;
 
   minix_inode_t parent_inode;
-  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (minix_fs_remove_dir_entry(&parent_inode, dirname) != 0)
     return -EIO;
@@ -762,7 +762,7 @@ int minix_fs_rmdir_force(const char *path)
   }
 
   minix_inode_t parent_inode;
-  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (minix_fs_remove_dir_entry(&parent_inode, dirname) != 0)
   {

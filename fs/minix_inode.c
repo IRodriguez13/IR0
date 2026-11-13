@@ -57,7 +57,7 @@ int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
     return -1;
   }
 
-  kmemcpy(inode, block_buffer + inode_offset, sizeof(minix_inode_t));
+  memcpy(inode, block_buffer + inode_offset, sizeof(minix_inode_t));
   return 0;
 }
 
@@ -95,13 +95,13 @@ int minix_lookup(const char *pathname, minix_inode_t *out, uint16_t *ino_out)
       return -EIO;
     }
     root_inode_cached = true;
-    kmemcpy(out, &cached_root_inode, sizeof(*out));
+    memcpy(out, &cached_root_inode, sizeof(*out));
     *ino_out = MINIX_ROOT_INODE;
     minix_last_resolved_ino = MINIX_ROOT_INODE;
     return 0;
   }
 
-  kstrncpy(path_copy, pathname, sizeof(path_copy) - 1);
+  strncpy(path_copy, pathname, sizeof(path_copy) - 1);
   path_copy[sizeof(path_copy) - 1] = '\0';
 
   if (minix_read_inode(MINIX_ROOT_INODE, &current_inode) != 0)
@@ -113,7 +113,7 @@ int minix_lookup(const char *pathname, minix_inode_t *out, uint16_t *ino_out)
 
   if (*token == '\0')
   {
-    kmemcpy(out, &current_inode, sizeof(*out));
+    memcpy(out, &current_inode, sizeof(*out));
     *ino_out = current_inode_num;
     minix_last_resolved_ino = current_inode_num;
     return 0;
@@ -160,7 +160,7 @@ int minix_lookup(const char *pathname, minix_inode_t *out, uint16_t *ino_out)
     }
   }
 
-  kmemcpy(out, &current_inode, sizeof(*out));
+  memcpy(out, &current_inode, sizeof(*out));
   *ino_out = current_inode_num;
   minix_last_resolved_ino = current_inode_num;
   return 0;
@@ -180,7 +180,7 @@ uint16_t minix_fs_get_inode_number(const char *pathname)
 
   if (minix_lookup(pathname, &tmp, &ino) != 0)
     return 0;
-  kmemcpy(&cached_result_inode, &tmp, sizeof(tmp));
+  memcpy(&cached_result_inode, &tmp, sizeof(tmp));
   return ino;
 }
 
@@ -269,7 +269,7 @@ int minix_fs_write_inode(uint16_t inode_num, const minix_inode_t *inode)
   }
 
   // Copiar el inode al buffer
-  kmemcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
+  memcpy(block_buffer + inode_offset, inode, sizeof(minix_inode_t));
 
   // Escribir el bloque actualizado
   if (minix_write_block(inode_block, block_buffer) != 0)
@@ -342,7 +342,7 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
     size_t i;
 
     /* Relative path → treat as under root. Caller buffer ≥ MINIX_NAME_LEN+1. */
-    kstrncpy(parent_path, "/", 2);
+    strncpy(parent_path, "/", 2);
     for (i = 0; i < MINIX_NAME_LEN && pathname[i]; i++)
       filename[i] = pathname[i];
     filename[i] = '\0';
@@ -354,13 +354,13 @@ int minix_fs_split_path(const char *pathname, char *parent_path,
   if (last_slash == pathname)
   {
     // Es el directorio raíz
-    kstrncpy(parent_path, "/", 2);
+    strncpy(parent_path, "/", 2);
   }
   else
   {
     // Copiar la parte del directorio padre
     size_t parent_len = last_slash - pathname;
-    kstrncpy(parent_path, pathname, parent_len);
+    strncpy(parent_path, pathname, parent_len);
     parent_path[parent_len] = '\0';
   }
 
@@ -446,9 +446,9 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
       {
         // Initialize the entry
         entries[i].inode = inode_num;
-        kmemcpy(entries[i].name, filename, name_len);
+        memcpy(entries[i].name, filename, name_len);
         if (name_len < MINIX_NAME_LEN)
-          kmemset(entries[i].name + name_len, 0, MINIX_NAME_LEN - name_len);
+          memset(entries[i].name + name_len, 0, MINIX_NAME_LEN - name_len);
 
         // Write the updated block back
         if (minix_write_block(zone, block_buffer) != 0)
@@ -486,9 +486,9 @@ int minix_fs_add_dir_entry(minix_inode_t *parent_inode, const char *filename,
 
       // Add the new entry as the first one
       entries[0].inode = inode_num;
-      kmemcpy(entries[0].name, filename, name_len);
+      memcpy(entries[0].name, filename, name_len);
       if (name_len < MINIX_NAME_LEN)
-        kmemset(entries[0].name + name_len, 0, MINIX_NAME_LEN - name_len);
+        memset(entries[0].name + name_len, 0, MINIX_NAME_LEN - name_len);
 
       // Write the new zone
       if (minix_write_block(new_zone, block_buffer) != 0)
@@ -552,7 +552,7 @@ int minix_fs_remove_dir_entry(minix_inode_t *parent_inode, const char *filename)
       {
         // Found the entry, mark it as free
         entries[i].inode = 0;
-        kmemset(entries[i].name, 0, MINIX_NAME_LEN);
+        memset(entries[i].name, 0, MINIX_NAME_LEN);
         entry_found = true;
         break;
       }

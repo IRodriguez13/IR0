@@ -134,7 +134,7 @@ static void minix_klog_print_blob(const char *label, const void *content, size_t
   n = content_size;
   if (n >= sizeof(scratch))
     n = sizeof(scratch) - 1;
-  kmemcpy(scratch, content, n);
+  memcpy(scratch, content, n);
   scratch[n] = '\0';
   klog_print(scratch);
   if (content_size > n)
@@ -259,7 +259,7 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
 			ind_zone = minix_alloc_zone();
 			if (ind_zone == 0)
 				return -ENOSPC;
-			kmemset(indirect_buffer, 0, MINIX_BLOCK_SIZE);
+			memset(indirect_buffer, 0, MINIX_BLOCK_SIZE);
 			if (minix_write_block(ind_zone, indirect_buffer) != 0)
 			{
 				minix_free_zone(ind_zone);
@@ -321,7 +321,7 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
 			dind_zone = minix_alloc_zone();
 			if (dind_zone == 0)
 				return -ENOSPC;
-			kmemset(dind_buffer, 0, MINIX_BLOCK_SIZE);
+			memset(dind_buffer, 0, MINIX_BLOCK_SIZE);
 			if (minix_write_block(dind_zone, dind_buffer) != 0)
 			{
 				minix_free_zone(dind_zone);
@@ -344,7 +344,7 @@ static int minix_inode_zone_at(minix_inode_t *inode, uint16_t inode_num,
 			ind_zone = minix_alloc_zone();
 			if (ind_zone == 0)
 				return -ENOSPC;
-			kmemset(ind_buffer, 0, MINIX_BLOCK_SIZE);
+			memset(ind_buffer, 0, MINIX_BLOCK_SIZE);
 			if (minix_write_block(ind_zone, ind_buffer) != 0)
 			{
 				minix_free_zone(ind_zone);
@@ -573,13 +573,13 @@ static int minix_inode_zero_range(minix_inode_t *inode, uint16_t inode_num,
 
     if (block_off == 0 && chunk == MINIX_BLOCK_SIZE)
     {
-      kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
+      memset(block_buffer, 0, MINIX_BLOCK_SIZE);
     }
     else
     {
       if (minix_read_block(disk_zone, block_buffer) != 0)
-        kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
-      kmemset(block_buffer + block_off, 0, chunk);
+        memset(block_buffer, 0, MINIX_BLOCK_SIZE);
+      memset(block_buffer + block_off, 0, chunk);
     }
 
     if (minix_write_block(disk_zone, block_buffer) != 0)
@@ -663,7 +663,7 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
 
     if (disk_zone == 0)
     {
-      kmemset(dst, 0, chunk);
+      memset(dst, 0, chunk);
     }
     else if (block_off == 0 && chunk == MINIX_BLOCK_SIZE &&
              ((uintptr_t)dst & 1U) == 0U)
@@ -675,7 +675,7 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
     {
       if (minix_read_block(disk_zone, block_buffer) != 0)
         return -EIO;
-      kmemcpy(dst, block_buffer + block_off, chunk);
+      memcpy(dst, block_buffer + block_off, chunk);
     }
 
     dst += chunk;
@@ -779,8 +779,8 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
     else
     {
       if (minix_read_block(disk_zone, block_buffer) != 0)
-        kmemset(block_buffer, 0, MINIX_BLOCK_SIZE);
-      kmemcpy(block_buffer + block_off, src, chunk);
+        memset(block_buffer, 0, MINIX_BLOCK_SIZE);
+      memcpy(block_buffer + block_off, src, chunk);
       if (minix_write_block(disk_zone, block_buffer) != 0)
         return -EIO;
     }
@@ -944,7 +944,7 @@ int minix_fs_touch(const char *path, mode_t mode)
     {
       minix_inode_t inode_copy;
 
-      kmemcpy(&inode_copy, existing_inode, sizeof(minix_inode_t));
+      memcpy(&inode_copy, existing_inode, sizeof(minix_inode_t));
       minix_fs_write_inode(inode_num, &inode_copy);
     }
     return 0;
@@ -957,7 +957,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   parent_inode_ptr = minix_fs_find_inode(parent_path);
   if (!parent_inode_ptr)
     return -ENOENT;
-  kmemcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
+  memcpy(&parent_inode, parent_inode_ptr, sizeof(minix_inode_t));
 
   if (!(parent_inode.i_mode & MINIX_IFDIR))
     return -ENOTDIR;
@@ -979,7 +979,7 @@ int minix_fs_touch(const char *path, mode_t mode)
     return -EIO;
   }
 
-  kmemset(&new_inode, 0, sizeof(new_inode));
+  memset(&new_inode, 0, sizeof(new_inode));
 
   /* Apply umask to mode */
   {
@@ -994,7 +994,7 @@ int minix_fs_touch(const char *path, mode_t mode)
   new_inode.i_size = 0;
   new_inode.i_time = minix_now_seconds();
   new_inode.i_nlinks = 1;
-  kmemset(new_inode.i_zone, 0, sizeof(new_inode.i_zone));
+  memset(new_inode.i_zone, 0, sizeof(new_inode.i_zone));
 
   if (minix_fs_write_inode(new_inode_num, &new_inode) != 0)
   {
@@ -1158,7 +1158,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
                           : (*size - bytes_read);
       exec_read_trace_minix_block("direct", i, disk_block, disk_block, lba,
                                   file_offset, bytes_to_copy, bytes_to_copy);
-      kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+      memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
       bytes_read += bytes_to_copy;
     }
   }
@@ -1223,7 +1223,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
           exec_read_trace_minix_block("indirect", i, disk_block, disk_block,
                                       lba, file_offset, bytes_to_copy,
                                       bytes_to_copy);
-          kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+          memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
           bytes_read += bytes_to_copy;
         }
       }
@@ -1289,7 +1289,7 @@ int minix_fs_read_file(const char *path, void **data, size_t *size)
           bytes_to_copy = (*size - bytes_read > MINIX_BLOCK_SIZE)
                               ? MINIX_BLOCK_SIZE
                               : (*size - bytes_read);
-          kmemcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
+          memcpy(buffer + bytes_read, block_buffer, bytes_to_copy);
           bytes_read += bytes_to_copy;
           (void)file_offset;
         }
