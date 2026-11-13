@@ -284,7 +284,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `heap_alloc` / `heap_free` (`mm/allocator.h`) | mm-private | 3 / 5 | KEEP private (guarded by `[kmem-single-api]`) |
 | `dma_alloc` / `dma_free` / `dma_sync_for_*` / `dma_map_mmio` | `ir0/dma.h` | 2 / 2 / 3 / 1 | KEEP (Linux names, both arches) |
 | `mm_alloc_frame(ctx)` | `ir0/mm_alloc.h` | 9 | KEEP as the one frame allocator (adds direct reclaim) |
-| `pmm_alloc_frame` | `mm/pmm.h` | 12 | PRIVATE to mm: non-mm users (`kernel/syscalls/mm_syscalls.c`, `ipc/sysv_shm.c`, `arch/x86-64/sources/task_stack.c`) skip reclaim; `mm/pmm.h` is also included by `kernel/elf_loader.c` and `kernel/boot_init.c` |
+| `pmm_alloc_frame` | `mm/pmm.h` | 12 | PRIVATE to mm: non-mm users (`kernel/syscalls/mm_syscalls.c`, `ipc/sysv_shm.c`, `arch/x86-64/sources/task_stack.c`) skip reclaim; `mm/pmm.h` is also included by `kernel/elf_loader.c` and `kernel/boot/boot_init.c` |
 | `pmm_free_frame` vs `pmm_frame_put` | `mm/pmm.h` | 17 / 10 | MERGE: `pmm_free_frame` is literally `pmm_frame_put` |
 | `pmm_init` | `mm/pmm.h` | 0 | DELETE (`pmm_init_ranges` is used) |
 | `page_table_frame_alloc` / `_free` | `ir0/page_table_pool.h` | 4 / 6 | KEEP (dedicated pool) |

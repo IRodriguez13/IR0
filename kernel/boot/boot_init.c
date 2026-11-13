@@ -50,12 +50,12 @@
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
 #include <ir0/ipc.h>
-#include "syscalls.h"
+#include <kernel/syscalls.h>
 #include <ir0/sched.h>
-#include "process.h"
+#include <ir0/process.h>
 #include <ir0/idle.h>
 #include <ir0/process_exit.h>
-#include "rootfs_base.h"
+#include <ir0/rootfs_base.h>
 #include "boot_init.h"
 
 #include <ir0/boot_port.h>

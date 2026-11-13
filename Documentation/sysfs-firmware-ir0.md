@@ -1,7 +1,7 @@
 # sysfs — `/sys/firmware/ir0/*`
 
 > **Last verified:** 2026-11-08  
-> **Source of truth:** `includes/ir0/boot_firmware_sysfs.h`, `kernel/boot_firmware_sysfs.c`,  
+> **Source of truth:** `includes/ir0/boot_firmware_sysfs.h`, `kernel/boot/boot_firmware_sysfs.c`,  
 > `arch/*/sources/firmware_sysfs.c`, `fs/pseudo_fs_nodes.c`
 
 IR0 exposes a best-effort firmware/boot snapshot under the sysfs pseudo-fs.
@@ -19,7 +19,7 @@ IR0 exposes a best-effort firmware/boot snapshot under the sysfs pseudo-fs.
 | `dtb` | Flattened devicetree range (`addr=0x… size=0x…`) when the firmware passed one, else `unavailable`. |
 | `boot_detail` | Multi-line architecture-specific detail (Multiboot flags and mem fields on x86_64; FDT, CPU, IRQ and memory banks on ARM64). |
 
-Common code (`kernel/boot_firmware_sysfs.c`) fills every node except
+Common code (`kernel/boot/boot_firmware_sysfs.c`) fills every node except
 `bootloader` and `boot_detail` from the typed boot record
 (`includes/ir0/boot_params.h`) and the neutral boot snapshot
 (`includes/ir0/boot_memory.h`); the architecture backends add only those two.

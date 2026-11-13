@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-07-24
 > **Source of truth:** `includes/ir0/klog_event.h`, `ktm/klog.c`, `ktm/include/klog.h`,
-> `kernel/cmdline.c`, `arch/common/boot_log.c`,
+> `kernel/boot/cmdline.c`, `arch/common/boot_log.c`,
 > `arch/*/sources/interface.c` (`arch_early_clock_*`), `fs/procfs.c` (`proc_kmsg_read`),
 > `fs/devfs.c` (`dev_kmsg_*`), `includes/ir0/boot_log_hostshare.c`, `kernel/main.c`
 
@@ -21,7 +21,7 @@ optional observer of the same stream; `CONFIG_KTM=n` keeps klog, serial, console
 
 - **Kconfig:** `LOG_PROFILE_{QUIET,NORMAL,DEBUG,TRACE}` (product default: normal).
 - **Runtime:** Multiboot cmdline `ir0.loglevel=quiet|normal|debug|trace` and
-  `ir0.trace=open_abi,vfs` (see `kernel/cmdline.c`, `arch/x86-64/grub.cfg`).
+  `ir0.trace=open_abi,vfs` (see `kernel/boot/cmdline.c`, `arch/x86-64/grub.cfg`).
 - **`klog_smoke()`** always emits (autokill tags) regardless of profile.
 - Legacy `LOG_*` macros share the same global threshold as `klog_*`.
 

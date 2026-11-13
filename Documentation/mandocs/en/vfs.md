@@ -197,7 +197,7 @@ diagnostics — acceptable for T0 but not ideal long term.
 | Process | Per-process `cwd`; fd table; proc-specific `/proc/[pid]/` context |
 | Drivers | devfs ops → block, net, fb, input via facades |
 | Config | `CONFIG_ENABLE_FS_*`, `CONFIG_ROOT_FILESYSTEM`, `CONFIG_ROOT_BLOCK_DEVICE` |
-| Root layout | `kernel/rootfs_base.c` creates `/dev`, `/proc`, … dirs on MINIX via `vfs_mkdir` |
+| Root layout | `kernel/boot/rootfs_base.c` creates `/dev`, `/proc`, … dirs on MINIX via `vfs_mkdir` |
 
 ## 7. Visual maps
 

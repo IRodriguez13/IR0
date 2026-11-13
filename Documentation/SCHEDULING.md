@@ -34,7 +34,7 @@ Kconfig. There is no run-time dispatch.
 
 The Makefile links exactly one policy object. `sched_selftest()` checks the
 priority bands (round robin has nothing to check and returns 0);
-`kernel/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
+`kernel/boot/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
 
 ### Multi-CPU boundary
 

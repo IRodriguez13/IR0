@@ -401,14 +401,14 @@ KERNEL_OBJS = \
 	arch/common/boot_arch.o \
 	arch/common/boot_port.o \
 	arch/common/oops_port.o \
-	kernel/boot_flow.o \
-	kernel/kernel_wiring.o \
-	kernel/boot_init.o \
-	kernel/boot_firmware_sysfs.o \
-	kernel/boot_params.o \
-	kernel/init_handoff.o \
-    kernel/cmdline.o \
-    kernel/rootfs_base.o \
+	kernel/boot/boot_flow.o \
+	kernel/boot/kernel_wiring.o \
+	kernel/boot/boot_init.o \
+	kernel/boot/boot_firmware_sysfs.o \
+	kernel/boot/boot_params.o \
+	kernel/boot/init_handoff.o \
+    kernel/boot/cmdline.o \
+    kernel/boot/rootfs_base.o \
     kernel/process/registry.o \
 	kernel/process/registry_lock.o \
     kernel/process/limits.o \
@@ -639,7 +639,7 @@ MEMORY_OBJS = \
 
 LIB_OBJS = \
     drivers/char/vga.o \
-    kernel/boot_log_hostshare.o \
+    kernel/boot/boot_log_hostshare.o \
     kernel/problems/oops.o \
     kernel/problems/problems.o \
     kernel/problems/fault.o \
@@ -662,7 +662,7 @@ LIB_OBJS = \
     fs/path_user.o \
     fs/path_routed.o \
     kernel/utsname_info.o \
-    kernel/version_stamp.o \
+    kernel/boot/version_stamp.o \
     drivers/tty/console.o \
     drivers/input/ps2_set1.o \
     drivers/input/ps2_mouse_pkt.o \
@@ -1010,8 +1010,8 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot_init.o \
-	build/test/kernel/boot_flow.o build/test/kernel/kernel_wiring.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o \
+	build/test/kernel/boot/boot_flow.o build/test/kernel/boot/kernel_wiring.o
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
 KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
@@ -1022,8 +1022,8 @@ KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-ALL_OBJS_TEST = $(filter-out kernel/boot_init.o kernel/boot_flow.o \
-	kernel/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
+ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o kernel/boot/boot_flow.o \
+	kernel/boot/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
 	arch/common/oops_port.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \

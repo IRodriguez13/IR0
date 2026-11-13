@@ -6,7 +6,7 @@
  * kexecve("/sbin/init") and from the debug init hierarchy helper.
  */
 
-#include "rootfs_base.h"
+#include <ir0/rootfs_base.h>
 #include <config.h>
 #include <ir0/permissions.h>
 #include <ir0/errno.h>
