@@ -2867,14 +2867,12 @@ def print_register_name_baseline():
         print(f"{rel} {ident}")
 
 
-# mm/pmm.h and mm/paging.h moved into their <ir0/...> facades. The old paths
-# remain only as forwarders for the files listed here; the list only shrinks.
+# mm/pmm.h and mm/paging.h moved into their <ir0/...> facades and the old
+# forwarders are gone. The ledger stays empty; a file listed here may keep the
+# old spelling until it migrates (the list only shrinks).
 RETIRED_MM_HEADER_RE = re.compile(
     r'^\s*#\s*include\s*(?:<mm/(pmm|paging)\.h>|"(pmm|paging)\.h")')
-RETIRED_MM_HEADER_USERS = frozenset({
-    "mm/page_fault_cow.c",
-    "mm/paging_uaccess.c",
-})
+RETIRED_MM_HEADER_USERS: frozenset[str] = frozenset()
 
 
 def check_retired_mm_headers():
@@ -2884,8 +2882,6 @@ def check_retired_mm_headers():
     for tree in SINGLE_DECL_TREES:
         for fpath in iter_c_files(ROOT / tree):
             rel = str(rel_to_root(fpath))
-            if rel in ("mm/pmm.h", "mm/paging.h"):
-                continue
             for lineno, line in enumerate(read_file_text(fpath).splitlines(), 1):
                 match = RETIRED_MM_HEADER_RE.match(line)
                 if not match:
@@ -2900,7 +2896,7 @@ def check_retired_mm_headers():
     for rel in sorted(RETIRED_MM_HEADER_USERS - users):
         errors.append(
             f"[retired-mm-header] {rel} no longer uses the old path; drop it "
-            "from RETIRED_MM_HEADER_USERS (and the forwarder once empty)"
+            "from RETIRED_MM_HEADER_USERS"
         )
     return errors
 

@@ -17,7 +17,7 @@
 #include <ir0/pmm.h>
 #include <ir0/oom.h>
 #include <ir0/logging.h>
-#include <mm/paging.h>
+#include <ir0/paging.h>
 #include "page_fault_internal.h"
 
 void pf_user_write_present(const struct page_fault_info *info,

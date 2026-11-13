@@ -16,9 +16,9 @@
 #include <ir0/cpu.h>
 #include <ir0/mm_alloc.h>
 #include <ir0/tlb_sync.h>
-#include <mm/pmm.h>
+#include <ir0/pmm.h>
 #include <string.h>
-#include "paging.h"
+#include <ir0/paging.h>
 #include "paging_internal.h"
 #include "user_va.h"
 
