@@ -55,6 +55,19 @@ void ktest_string(void)
 	KASSERT(strcmp(itoa(1, buf, 1), "") == 0);
 	KASSERT(strcmp(itoa(1, buf, 37), "") == 0);
 
+	/*
+	 * snprintf("%d") is the decimal formatter every caller uses; pin the
+	 * same contract as itoa, including INT_MIN (negating it overflows).
+	 */
+	snprintf(buf, sizeof(buf), "%d", 0);
+	KASSERT(strcmp(buf, "0") == 0);
+	snprintf(buf, sizeof(buf), "%d", -42);
+	KASSERT(strcmp(buf, "-42") == 0);
+	snprintf(buf, sizeof(buf), "%d", -2147483647 - 1);
+	KASSERT(strcmp(buf, "-2147483648") == 0);
+	snprintf(buf, sizeof(buf), "%x", -1);
+	KASSERT(strcmp(buf, "ffffffff") == 0);
+
 	for (int i = 0; i < (int)sizeof(src); i++)
 		src[i] = (char)(i + 1);
 

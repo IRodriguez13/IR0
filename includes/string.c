@@ -419,6 +419,7 @@ static int int_to_string(int value, char *str, int base)
 {
     int i = 0;
     int is_negative = 0;
+    unsigned int magnitude = (unsigned int)value;
 
     if (value == 0)
     {
@@ -430,14 +431,15 @@ static int int_to_string(int value, char *str, int base)
     if (value < 0 && base == 10)
     {
         is_negative = 1;
-        value = -value;
+        /* -(INT_MIN) overflows; negate in unsigned arithmetic. */
+        magnitude = 0u - (unsigned int)value;
     }
 
-    while (value != 0)
+    while (magnitude != 0)
     {
-        int rem = value % base;
-        str[i++] = (rem > 9) ? (rem - 10) + 'a' : rem + '0';
-        value = value / base;
+        unsigned int rem = magnitude % (unsigned int)base;
+        str[i++] = (rem > 9) ? (char)(rem - 10 + 'a') : (char)(rem + '0');
+        magnitude /= (unsigned int)base;
     }
 
     if (is_negative)
