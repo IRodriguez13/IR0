@@ -2579,8 +2579,9 @@ def check_kmem_single_api():
 # ISA register names in portable identifiers (rsp, rip, rax, cr3, esr, ...).
 # Portable code speaks ip / sp / retval / root; register names live in arch/
 # and in the ISA-specific uapi/context headers. Existing offenders are frozen
-# in REGISTER_NAME_BASELINE as "<path> <identifier>" pairs: a new pair fails,
-# a fixed pair is only reported, so concurrent cleanups never break the gate.
+# in REGISTER_NAME_BASELINE as "<path> <identifier>" pairs. The ledger only
+# shrinks: a new pair fails, and so does a pair whose identifier is gone, so a
+# branch that fixes an offender deletes its line in the same commit.
 REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
 REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
                        "mm", "net", "sched")
@@ -2668,8 +2669,30 @@ def register_name_violations() -> dict[tuple[str, str], int]:
     return violations
 
 
+def register_name_errors(violations: dict[tuple[str, str], int],
+                         baseline: set[tuple[str, str]]) -> list[str]:
+    """Report pairs missing from the ledger and ledger lines that are gone."""
+    errors = []
+    for (rel, ident), lineno in sorted(violations.items()):
+        if (rel, ident) in baseline:
+            continue
+        errors.append(
+            f"[portable-no-register-names] {rel}:{lineno}: {ident} names an "
+            "ISA register; use ip/sp/retval/arg/root accessors and keep "
+            "registers in arch/"
+        )
+    for rel, ident in sorted(baseline - set(violations)):
+        errors.append(
+            f"[portable-no-register-names] stale ledger entry '{rel} {ident}': "
+            f"the identifier is gone; delete the line from "
+            f"{rel_to_root(REGISTER_NAME_BASELINE)}"
+        )
+    return errors
+
+
 def _register_name_self_test() -> list[str]:
-    """Prove the scanner flags an injected name and honours comments."""
+    """Prove the scanner flags an injected name and honours comments, and
+    that the ledger rejects both a new pair and a stale line."""
     errors = []
     sample = (
         "/* rip in a comment is fine */\n"
@@ -2689,6 +2712,23 @@ def _register_name_self_test() -> list[str]:
         errors.append(
             "[portable-no-register-names] self-test: wrong line for saved_rsp"
         )
+    live = {("fs/a.c", "saved_rsp"): 4}
+    cases = (
+        ("clean", live, {("fs/a.c", "saved_rsp")}, []),
+        ("new pair", {**live, ("fs/b.c", "frame_rip"): 7},
+         {("fs/a.c", "saved_rsp")}, ["fs/b.c:7: frame_rip"]),
+        ("stale line", live,
+         {("fs/a.c", "saved_rsp"), ("fs/a.c", "old_rax")},
+         ["stale ledger entry 'fs/a.c old_rax'"]),
+    )
+    for name, violations, baseline, expected in cases:
+        got = register_name_errors(violations, baseline)
+        if len(got) != len(expected) or not all(
+                want in err for want, err in zip(expected, got)):
+            errors.append(
+                f"[portable-no-register-names] self-test {name}: expected "
+                f"{expected}, got {got}"
+            )
     return errors
 
 
@@ -2770,23 +2810,20 @@ def check_no_busy_wait_primitives():
 
 
 def check_portable_no_register_names():
-    """Reject new ISA register names in portable identifiers."""
-    errors = _register_name_self_test()
-    baseline = _load_register_name_baseline()
-    for (rel, ident), lineno in sorted(register_name_violations().items()):
-        if (rel, ident) in baseline:
-            continue
-        errors.append(
-            f"[portable-no-register-names] {rel}:{lineno}: {ident} names an "
-            "ISA register; use ip/sp/retval/arg/root accessors and keep "
-            "registers in arch/"
-        )
-    return errors
+    """Reject new ISA register names in portable identifiers and stale
+    ledger lines."""
+    return _register_name_self_test() + register_name_errors(
+        register_name_violations(), _load_register_name_baseline())
 
 
 def print_register_name_baseline():
-    print("# Register names in portable identifiers (ratchet: no new pairs).")
+    print("# Register names in portable identifiers: frozen offenders.")
     print("# Format: <path> <identifier>")
+    print("# The ledger only shrinks. arch-guard fails on a pair that is not "
+          "listed")
+    print("# and on a listed pair whose identifier is gone: a branch that "
+          "fixes an")
+    print("# offender deletes its line here in the same commit.")
     print("# Regenerate: python3 scripts/architecture_guard.py "
           "--print-register-baseline")
     for rel, ident in sorted(register_name_violations()):
@@ -2946,13 +2983,15 @@ def self_test_include_layout() -> list[str]:
 
 def main():
     if "--self-test" in sys.argv[1:]:
-        failures = self_test_include_layout() + _busy_wait_self_test()
+        failures = (self_test_include_layout() + _busy_wait_self_test() +
+                    _register_name_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
                 print(" -", failure)
             return 1
-        print("[arch-guard] self-test OK (include-layout, no-busy-wait)")
+        print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
+              "portable-no-register-names)")
         return 0
 
     errors = []

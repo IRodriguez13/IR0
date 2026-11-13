@@ -1,5 +1,8 @@
-# Register names in portable identifiers (ratchet: no new pairs).
+# Register names in portable identifiers: frozen offenders.
 # Format: <path> <identifier>
+# The ledger only shrinks. arch-guard fails on a pair that is not listed
+# and on a listed pair whose identifier is gone: a branch that fixes an
+# offender deletes its line here in the same commit.
 # Regenerate: python3 scripts/architecture_guard.py --print-register-baseline
 includes/ir0/arch_task.h IR0_TASK_GET_CS
 includes/ir0/arch_task.h IR0_TASK_GET_SS
