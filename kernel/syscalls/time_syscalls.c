@@ -114,8 +114,6 @@ int64_t sys_gettimeofday(struct timeval *tv, void *tz)
 
 	if (!current_process || !tv)
 		return -EFAULT;
-	if (!access_ok(tv, sizeof(struct timeval)))
-		return -EFAULT;
 
 	uptime_ms = clock_get_uptime_milliseconds();
 	if (clock_realtime_available())
@@ -221,8 +219,6 @@ int64_t sys_getitimer(int which, struct itimerval *curr_value)
 		return -EINVAL;
 	if (!curr_value)
 		return -EFAULT;
-	if (!access_ok(curr_value, sizeof(struct itimerval)))
-		return -EFAULT;
 
 	now = clock_get_uptime_milliseconds();
 	itimer_fill_old(current_process, now, &old);
@@ -250,8 +246,6 @@ int64_t sys_setitimer(int which, const struct itimerval *new_value,
 
 	if (old_value)
 	{
-		if (!access_ok(old_value, sizeof(struct itimerval)))
-			return -EFAULT;
 		if (copy_to_user(old_value, &old, sizeof(old)) != 0)
 			return -EFAULT;
 	}
@@ -259,8 +253,6 @@ int64_t sys_setitimer(int which, const struct itimerval *new_value,
 	if (!new_value)
 		return 0;
 
-	if (!access_ok((void *)new_value, sizeof(struct itimerval)))
-		return -EFAULT;
 	if (copy_from_user(&kval, new_value, sizeof(kval)) != 0)
 		return -EFAULT;
 
