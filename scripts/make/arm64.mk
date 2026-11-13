@@ -153,7 +153,7 @@ arm64-all-objs-probe: arm64-portable-compile
 			arch/arm64/sources/switch.c \
 			kernel/time/clock_wait.c drivers/core/driver_registry.c \
 			mm/uaccess/copy_user.c \
-			kernel/futex.c \
+			kernel/futex/futex.c \
 			net/net_compat.c; do \
 			echo "  CC      $$src (KERNEL probe)"; \
 			if ! aarch64-linux-gnu-gcc $(ARM64_COMMON_CORE_COMPILE_CFLAGS) -DARCH_ARM64=1 \

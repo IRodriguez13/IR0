@@ -2,7 +2,7 @@
 
 > **Última verificación:** 2026-11-09
 > **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`,
-> `sched/idle.c`, `kernel/futex.c`,
+> `sched/idle.c`, `kernel/futex/futex.c`,
 > `sched/rr.c`, `sched/prio.c`,
 > `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`,
 > `kernel/syscalls/syscall_dispatch.c`, `kernel/signals/signals.c`
