@@ -50,3 +50,33 @@ sprintf snprintf()
 strcat strncat() or snprintf()
 strtok strchr() / a local parser (strtok is not reentrant)
 strtok_r strchr() / a local parser
+
+# Drivers, devfs and console (driver.h, init_drv.h, devfs.h, console.h,
+# typewriter.h, vga.h): entry points without callers.
+IR0_DEFINE_DRIVER ir0_register_driver()
+IR0_DRIVER_INIT a plain int32_t init function
+IR0_DRIVER_PROBE a plain int32_t probe function
+LOG_ERR klog_error()
+LOG_WARN klog_warn()
+devfs_register_device devfs_register_node()
+devfs_unregister_device (nothing; devfs nodes are static)
+drivers_init init_all_drivers()
+ir0_console_drain_echo (nothing; echo is synchronous)
+ir0_console_fill_termios tty_ioctl_termios_kernel(TCGETS)
+ir0_console_isatty (nothing; the console is always a tty)
+ir0_console_set_termios tty_ioctl_termios_kernel(TCSETSW)
+ir0_driver_get_state ir0_driver_boot_counts()
+ir0_driver_shutdown_all the driver's ops.shutdown from the power path
+ir0_find_driver ir0_register_driver() handle
+ir0_register_simple_driver ir0_register_driver()
+ir0_unregister_driver (nothing; drivers are not unloaded)
+print_hex print() with snprintf("%lx")
+print_hex32 print() with snprintf("%08x")
+print_hex8 print() with snprintf("%02x")
+set_cursor_pos (nothing; the console owns the cursor)
+typewriter_enable_for_commands typewriter_set_mode()
+typewriter_get_mode (nothing; the mode is write-only)
+typewriter_is_enabled_for_commands (nothing)
+typewriter_print typewriter_print_char()
+typewriter_print_uint32 typewriter_print_char()
+uint_to_hex snprintf("%lx")

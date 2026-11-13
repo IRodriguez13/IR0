@@ -105,9 +105,7 @@ devfs_node_t *devfs_find_node_by_id(uint32_t device_id);
 /* Node carrying a given Linux (major,minor); NULL when none claims it. */
 devfs_node_t *devfs_find_node_by_rdev(uint32_t rdev);
 int devfs_register_node(devfs_node_t *node);
-int devfs_register_device(const char *name, const devfs_ops_t *ops, uint32_t mode);
 int devfs_chown_path(const char *path, uid_t owner, gid_t group);
-int devfs_unregister_device(const char *name);
 int devfs_fd_can_read(uint32_t device_id, pid_t pid);
 int devfs_fd_can_write(uint32_t device_id, pid_t pid);
 

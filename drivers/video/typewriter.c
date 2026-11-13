@@ -173,21 +173,6 @@ void typewriter_set_mode(typewriter_mode_t mode)
     current_mode = mode;
 }
 
-typewriter_mode_t typewriter_get_mode(void)
-{
-    return current_mode;
-}
-
-void typewriter_enable_for_commands(int enable)
-{
-    command_output_enabled = enable;
-}
-
-int typewriter_is_enabled_for_commands(void)
-{
-    return command_output_enabled;
-}
-
 void typewriter_print_char(char c)
 {
     /* If typewriter is disabled, print normally */
@@ -217,46 +202,6 @@ void typewriter_print_char(char c)
                 break;
         }
         typewriter_delay(delay);
-    }
-}
-
-void typewriter_print(const char *str)
-{
-    if (!str) return;
-    
-    /* If typewriter is disabled, print normally */
-    if (current_mode == TYPEWRITER_DISABLED || !command_output_enabled) {
-        print(str);
-        return;
-    }
-    
-    /* Print character by character with delay */
-    while (*str) {
-        typewriter_print_char(*str);
-        str++;
-    }
-}
-
-void typewriter_print_uint32(uint32_t num)
-{
-    char buffer[16];
-    int pos = 0;
-    
-    /* Handle zero case */
-    if (num == 0) {
-        typewriter_print_char('0');
-        return;
-    }
-    
-    /* Convert number to string (reverse order) */
-    while (num > 0) {
-        buffer[pos++] = '0' + (num % 10);
-        num /= 10;
-    }
-    
-    /* Print in correct order */
-    for (int i = pos - 1; i >= 0; i--) {
-        typewriter_print_char(buffer[i]);
     }
 }
 

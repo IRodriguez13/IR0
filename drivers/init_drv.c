@@ -272,12 +272,3 @@ void init_all_drivers(void)
     }
 }
 
-void drivers_init(void)
-{
-    /*
-     * Compat entrypoint:
-     * keep existing callers working while centralizing all init in init_all_drivers().
-     */
-    init_all_drivers();
-}
-

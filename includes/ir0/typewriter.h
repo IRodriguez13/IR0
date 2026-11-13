@@ -31,15 +31,10 @@ typedef enum
 
 void typewriter_init(void);
 void typewriter_set_mode(typewriter_mode_t mode);
-typewriter_mode_t typewriter_get_mode(void);
-void typewriter_print(const char *str);
 void typewriter_print_char(char c);
-void typewriter_print_uint32(uint32_t num);
 void typewriter_vga_print(const char *str, uint8_t color);
 void typewriter_vga_print_char(char c, uint8_t color);
 void typewriter_show_cursor(uint8_t color);
 int typewriter_cursor_x(void);
 void typewriter_console_scroll(int delta);
 void typewriter_console_clear(uint8_t color);
-void typewriter_enable_for_commands(int enable);
-int typewriter_is_enabled_for_commands(void);

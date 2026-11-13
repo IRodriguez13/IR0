@@ -900,11 +900,6 @@ void ir0_console_input_enqueue(char c)
 	tty_input_char(c);
 }
 
-void ir0_console_drain_echo(void)
-{
-	(void)0;
-}
-
 void ir0_console_on_userspace_attach(void)
 {
 	if (tty_userspace_attached)
@@ -930,12 +925,7 @@ int64_t ir0_console_write(const void *kbuf, size_t count, uint8_t color)
 	return tty_write_kernel((const char *)kbuf, count, color);
 }
 
-int ir0_console_isatty(void)
-{
-	return 1;
-}
-
-int ir0_console_term_width(void)
+static int ir0_console_term_width(void)
 {
 	int w;
 
@@ -945,7 +935,7 @@ int ir0_console_term_width(void)
 	return w > 0 ? w : 80;
 }
 
-int ir0_console_term_height(void)
+static int ir0_console_term_height(void)
 {
 	int h;
 
@@ -1001,11 +991,6 @@ int ir0_console_ioctl_winsize_set(void *user_arg)
 	return 0;
 }
 
-int ir0_console_fill_termios(struct ir0_termios *out)
-{
-	return tty_ioctl_termios_kernel(IR0_CONSOLE_TCGETS, out);
-}
-
 /*
  * Restore cooked+echo after password entry / exec. Dropped ECHO or ICANON
  * leaves ash looking dead (no echo, lines never finish).
@@ -1019,16 +1004,6 @@ void ir0_console_reset_cooked_echo(void)
 				IR0_LFLAG_ECHONL);
 	tty_termios_ready = 1;
 	input_kbd_resync_modifiers();
-}
-
-int ir0_console_set_termios(const struct ir0_termios *in)
-{
-	struct ir0_termios tmp;
-
-	if (!in)
-		return -EINVAL;
-	tmp = *in;
-	return tty_ioctl_termios_kernel(IR0_CONSOLE_TCSETSW, &tmp);
 }
 
 void ir0_console_flush_input(void)

@@ -9,7 +9,6 @@
  * Initialize driver registry / multi-language registration.
  * Call after heap_init() and before hardware driver init.
  */
-void drivers_init(void);
 
 /**
  * Initialize all registered hardware drivers (IRQ/I/O registration).

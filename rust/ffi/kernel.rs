@@ -149,9 +149,7 @@ extern "C" {
         info: *const DriverInfo,
         ops: *const DriverOps
     ) -> *mut c_void;  // Returns ir0_driver_t*
-    
-    pub fn ir0_unregister_driver(driver: *mut c_void) -> i32;
-    pub fn ir0_find_driver(name: *const u8) -> *mut c_void;
+
 }
 
 // DRIVER INTERFACE

@@ -99,30 +99,6 @@ typedef struct ir0_driver ir0_driver_t;
  */
 ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,    const ir0_driver_ops_t* ops);
 
-/**
- * Unregister a driver from the kernel
- * 
- * @param driver Driver handle
- * @return 0 on success, negative on error
- */
-int32_t ir0_unregister_driver(ir0_driver_t* driver);
-
-/**
- * Find a driver by name
- * 
- * @param name Driver name
- * @return Driver handle or NULL if not found
- */
-ir0_driver_t* ir0_find_driver(const char* name);
-
-/**
- * Get driver state
- * 
- * @param driver Driver handle
- * @return Driver state
- */
-ir0_driver_state_t ir0_driver_get_state(ir0_driver_t* driver);
-
 int ir0_driver_list_to_buffer(char *buf, size_t count);
 
 /**
@@ -145,67 +121,5 @@ void ir0_driver_boot_emit_probe_results(void);
  */
 void ir0_driver_registry_init(void);
 int ir0_driver_registry_is_initialized(void);
-
-/**
- * Call each registered driver's ops.shutdown (best-effort).
- * Does not unregister or free drivers — used on system poweroff/reboot/halt.
- */
-void ir0_driver_shutdown_all(void);
-
-// SIMPLIFIED REGISTRATION API (for simple drivers)
-
-/**
- * Register a simple driver (C compatibility)
- * 
- * @param name Driver name (must be unique)
- * @param ops Driver operations
- * @return 0 on success, negative on error
- */
-static inline int32_t ir0_register_simple_driver(const char* name, 
-                                                  const ir0_driver_ops_t* ops)
-{
-    ir0_driver_info_t info = {
-        .name = name,
-        .version = "1.0",
-        .author = "Unknown",
-        .description = "IR0 Driver",
-        .language = IR0_DRIVER_LANG_C
-    };
-    
-    ir0_driver_t* drv = ir0_register_driver(&info, ops);
-    return drv ? IR0_DRIVER_OK : IR0_DRIVER_ERR;
-}
-
-// HELPER MACROS
-
-/**
- * Define a driver with automatic registration
- * Usage:
- *   IR0_DEFINE_DRIVER(my_driver, "My Driver", &my_ops);
- */
-#define IR0_DEFINE_DRIVER(var_name, drv_name, drv_ops) \
-    static ir0_driver_t* var_name = NULL; \
-    static void __attribute__((constructor)) var_name##_init(void) { \
-        ir0_driver_info_t info = { \
-            .name = drv_name, \
-            .version = "1.0", \
-            .author = "IR0 Team", \
-            .description = drv_name, \
-            .language = IR0_DRIVER_LANG_C \
-        }; \
-        var_name = ir0_register_driver(&info, drv_ops); \
-    }
-
-/**
- * Driver initialization macro (for easy init function creation)
- */
-#define IR0_DRIVER_INIT(func_name) \
-    int32_t func_name(void)
-
-/**
- * Driver probe macro
- */
-#define IR0_DRIVER_PROBE(func_name) \
-    int32_t func_name(void* device)
 
 #endif // IR0_DRIVER_H

@@ -244,17 +244,6 @@ void clear_screen()
 #endif
 }
 
-/* Función para printf básico (sin implementar aquí, pero la idea) */
-void set_cursor_pos(int x, int y)
-{
-    if (x >= 0 && x < VGA_WIDTH && y >= 0 && y < VGA_HEIGHT)
-    {
-        cursor_x = x;
-        cursor_y = y;
-        cursor_pos = y * VGA_WIDTH + x;
-    }
-}
-
 void print_error(const char *str) // Utilizo un puntero al array de chars porque es más rápido que referenciar el string sólo (qu tambien es un array de chars, pero que recibe la direcc al primer elemento en ese caso)
 {
     print_colored(str, VGA_COLOR_RED, VGA_COLOR_BLACK);
@@ -303,30 +292,6 @@ void print_hex64(uint64_t val)
         buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
     }
     buffer[16] = '\0';
-    print(buffer);
-}
-
-void print_hex32(uint32_t val)
-{
-    char buffer[9];
-    for (int i = 0; i < 8; i++)
-    {
-        uint8_t nibble = (val >> ((7 - i) * 4)) & 0xF;
-        buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
-    }
-    buffer[8] = '\0';
-    print(buffer);
-}
-
-void print_hex8(uint8_t val)
-{
-    char buffer[3];
-    for (int i = 0; i < 2; i++)
-    {
-        uint8_t nibble = (val >> ((1 - i) * 4)) & 0xF;
-        buffer[i] = (nibble < 10) ? ('0' + nibble) : ('A' + nibble - 10);
-    }
-    buffer[2] = '\0';
     print(buffer);
 }
 
@@ -410,33 +375,3 @@ void print_uint32(uint32_t num)
     }
 }
 
-/* Función para convertir uint a hex string */
-void uint_to_hex(uintptr_t value, char *hex_str)
-{
-	static const char hex_chars[] = "0123456789ABCDEF";
-	/*
-	 * Full pointer width (16 nibbles on LP64). The old 8-nibble path
-	 * truncated CR2/RIP so ERR_PTR(-errno) looked like FFFFFFBE instead
-	 * of FFFFFFFFFFFFFFBE.
-	 */
-	const int nibbles = (int)(sizeof(uintptr_t) * 2);
-	int i = 0;
-	int j;
-
-	for (j = nibbles - 1; j >= 0; j--)
-	{
-		uint8_t nibble = (uint8_t)((value >> (j * 4)) & 0xF);
-
-		hex_str[i++] = hex_chars[nibble];
-	}
-	hex_str[i] = '\0';
-}
-
-/* Función para imprimir valores hexadecimales */
-void print_hex(uintptr_t value)
-{
-	char hex_str[20];
-
-	uint_to_hex(value, hex_str);
-	print(hex_str);
-}

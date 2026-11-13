@@ -103,19 +103,13 @@ void ir0_console_input_enqueue(char c);
 void ir0_console_keypress(char c);
 int ir0_console_input_ready(void);
 int ir0_console_store_key_in_ring(void);
-void ir0_console_drain_echo(void);
 void ir0_console_on_userspace_attach(void);
 int ir0_console_in_userspace(void);
 
 int64_t ir0_console_read(void *kbuf, size_t count, int nonblock);
 int64_t ir0_console_write(const void *kbuf, size_t count, uint8_t color);
-int ir0_console_isatty(void);
-int ir0_console_term_width(void);
-int ir0_console_term_height(void);
 int ir0_console_ioctl_winsize(void *user_arg);
 int ir0_console_ioctl_winsize_set(void *user_arg);
-int ir0_console_fill_termios(struct ir0_termios *out);
-int ir0_console_set_termios(const struct ir0_termios *in);
 void ir0_console_reset_cooked_echo(void);
 void ir0_console_flush_input(void);
 /* Userspace TCFLSH: drop pending LD input and resync the PS/2 decoder so a

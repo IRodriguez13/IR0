@@ -16,8 +16,6 @@
 #include <stdint.h>
 
 #define LOG_OK(msg)    print_success("[OK] " msg "\n")
-#define LOG_WARN(msg)  print_warning("[!] " msg "\n")
-#define LOG_ERR(msg)   print_error("[X] " msg "\n")
 
 
 /* Cursor compartido para salida coherente entre print() y typewriter/shell */
@@ -126,15 +124,6 @@ void clear_screen();
  */
 void scroll();
 
-/*
- * Posiciona el cursor en coordenadas específicas.
- * Valida que las coordenadas estén dentro de los límites de pantalla.
- * 
- * @param x: Columna destino (0-79)
- * @param y: Fila destino (0-24)
- */
-void set_cursor_pos(int x, int y);
-
 // ============ FUNCIONES DE CONVENIENCIA ============
 
 /*
@@ -161,22 +150,6 @@ void print_hex_compact(uint32_t num);
 void print_hex64(uint64_t val);
 
 /*
- * Imprime un entero de 32 bits en hexadecimal.
- * Útil para debugging y logging de direcciones de memoria.
- * 
- * @param num: Número a imprimir en hex
- */
-void print_hex32(uint32_t num);
-
-/*
- * Imprime un entero de 8 bits en hexadecimal.
- * Útil para debugging y logging de valores pequeños.
- * 
- * @param num: Número a imprimir en hex
- */
-void print_hex8(uint8_t num);
-
-/*
  * Imprime un entero de 64 bits sin signo.
  * Útil para debugging y logging de interrupciones.
  * 
@@ -200,5 +173,3 @@ void print_int32(int32_t num);
  */
 void print_uint32(uint32_t num);
 
-void print_hex(uintptr_t value);
-void uint_to_hex(uintptr_t value, char *hex_str);
