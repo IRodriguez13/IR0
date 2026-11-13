@@ -16,6 +16,13 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC 1
+#endif
+#ifndef MFD_CLOEXEC
+#define MFD_CLOEXEC 1U
+#endif
+
 #define WAIT_MS 5000L
 /* fs/exec.c: one string, NUL included, may be 32 pages long. */
 #define MAX_ARG_STRLEN (32L * 4096L)
@@ -286,5 +293,305 @@ int fs_open_dir_for_write_eisdir(void)
 	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "d", O_RDWR | O_CREAT, 0644), EISDIR);
 	EXPECT(S4(SYS_newfstatat, AT_FDCWD, "d", &st, 0), 0);
 	CHECK(S_ISDIR(st.st_mode));
+	return CONF_PASS;
+}
+
+/* Create @name with @data and close it. */
+static int make_file(const char *name, const char *data)
+{
+	long fd = conf_creat(name, data);
+
+	if (fd < 0)
+		return (int)fd;
+	return (int)S1(SYS_close, fd);
+}
+
+/* Nonzero when @name exists (lstat semantics). */
+static int exists(const char *name)
+{
+	struct stat st;
+
+	return S4(SYS_newfstatat, AT_FDCWD, name, &st, AT_SYMLINK_NOFOLLOW) == 0;
+}
+
+/* Read up to @cap bytes of @name; returns the count or -errno. */
+static long read_file(const char *name, char *buf, long cap)
+{
+	long fd = S4(SYS_openat, AT_FDCWD, name, O_RDONLY, 0);
+	long n;
+
+	if (fd < 0)
+		return fd;
+	n = S3(SYS_read, fd, buf, cap);
+	(void)S1(SYS_close, fd);
+	return n;
+}
+
+/*
+ * rename(2): a file over a directory is EISDIR, and the directory and its
+ * contents stay. IR0 deleted the directory tree and renamed the file in.
+ */
+int fs_rename_file_over_dir_eisdir(void)
+{
+	EXPECT(make_file("f", "x"), 0);
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	EXPECT(make_file("d/keep", "data"), 0);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "f", AT_FDCWD, "d"), EISDIR);
+	CHECK(exists("d/keep"));
+	CHECK(exists("f"));
+	return CONF_PASS;
+}
+
+/* rename(2): a directory over a non-directory is ENOTDIR. */
+int fs_rename_dir_over_file_enotdir(void)
+{
+	char buf[8];
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	EXPECT(make_file("f", "data"), 0);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "d", AT_FDCWD, "f"), ENOTDIR);
+	EXPECT(read_file("f", buf, sizeof(buf)), 4);
+	CHECK(exists("d"));
+	return CONF_PASS;
+}
+
+/* rename(2): a directory over a non-empty directory is ENOTEMPTY. */
+int fs_rename_dir_over_nonempty_dir_enotempty(void)
+{
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "a", 0755), 0);
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "b", 0755), 0);
+	EXPECT(make_file("b/keep", "data"), 0);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "a", AT_FDCWD, "b"), ENOTEMPTY);
+	CHECK(exists("b/keep"));
+	CHECK(exists("a"));
+	return CONF_PASS;
+}
+
+/* rename(2) of a file onto itself succeeds and changes nothing. */
+int fs_rename_onto_itself_keeps_file(void)
+{
+	char buf[8];
+
+	EXPECT(make_file("f", "data"), 0);
+	EXPECT(S4(SYS_renameat, AT_FDCWD, "f", AT_FDCWD, "f"), 0);
+	EXPECT(read_file("f", buf, sizeof(buf)), 4);
+	CHECK(rt_memeq(buf, "data", 4));
+	return CONF_PASS;
+}
+
+/*
+ * mknod(2) over an existing path is EEXIST, whatever is there. IR0 removed
+ * the file or the whole directory tree to make room for the FIFO.
+ */
+int fs_mknod_existing_eexist(void)
+{
+	char buf[8];
+	struct stat st;
+
+	EXPECT(make_file("f", "data"), 0);
+	EXPECT_ERR(S4(SYS_mknodat, AT_FDCWD, "f", S_IFIFO | 0600, 0), EEXIST);
+	EXPECT(read_file("f", buf, sizeof(buf)), 4);
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	EXPECT(make_file("d/keep", "data"), 0);
+	EXPECT_ERR(S4(SYS_mknodat, AT_FDCWD, "d", S_IFIFO | 0600, 0), EEXIST);
+	CHECK(exists("d/keep"));
+	EXPECT(S4(SYS_mknodat, AT_FDCWD, "p", S_IFIFO | 0600, 0), 0);
+	EXPECT_ERR(S4(SYS_mknodat, AT_FDCWD, "p", S_IFIFO | 0600, 0), EEXIST);
+	EXPECT(S4(SYS_newfstatat, AT_FDCWD, "p", &st, AT_SYMLINK_NOFOLLOW), 0);
+	CHECK(S_ISFIFO(st.st_mode));
+	return CONF_PASS;
+}
+
+/*
+ * lseek(2) on eventfd, timerfd and epoll fds: Linux gives them
+ * noop_llseek, which leaves the position at 0. IR0 treated the objects as
+ * regular files and wrote the offset into them.
+ */
+int fs_lseek_anon_fds_noop(void)
+{
+	struct { long sec; long nsec; } ts[2] = { { 0, 0 }, { 0, 0 } };
+	unsigned long v = 3;
+	long fds[3];
+	int i;
+
+	OK(fds[0], S2(SYS_eventfd2, 0, 0));
+	OK(fds[1], S2(SYS_timerfd_create, CLOCK_MONOTONIC, 0));
+	OK(fds[2], S1(SYS_epoll_create1, 0));
+	for (i = 0; i < 3; i++)
+	{
+		EXPECT(S3(SYS_lseek, fds[i], 5, SEEK_SET), 0);
+		EXPECT(S3(SYS_lseek, fds[i], 7, SEEK_CUR), 0);
+		EXPECT(S3(SYS_lseek, fds[i], 0, SEEK_END), 0);
+	}
+	EXPECT(S3(SYS_write, fds[0], &v, sizeof(v)), (long)sizeof(v));
+	v = 0;
+	EXPECT(S3(SYS_read, fds[0], &v, sizeof(v)), (long)sizeof(v));
+	EXPECT(v, 3);
+	EXPECT(S4(SYS_timerfd_gettime, fds[1], ts, 0, 0), 0);
+	return CONF_PASS;
+}
+
+/* lseek(2) on a memfd moves the position like on a regular file. */
+int fs_lseek_memfd_like_file(void)
+{
+	long fd;
+
+	OK(fd, S2(SYS_memfd_create, "m", MFD_CLOEXEC));
+	EXPECT(S2(SYS_ftruncate, fd, 100), 0);
+	EXPECT(S3(SYS_lseek, fd, 10, SEEK_SET), 10);
+	EXPECT(S3(SYS_lseek, fd, 5, SEEK_CUR), 15);
+	EXPECT(S3(SYS_lseek, fd, -1, SEEK_END), 99);
+	EXPECT(S3(SYS_lseek, fd, 0, SEEK_CUR), 99);
+	EXPECT_ERR(S3(SYS_lseek, fd, -200, SEEK_CUR), EINVAL);
+	return CONF_PASS;
+}
+
+#define MANY_FILES 70
+
+/* getdents64(2) returns every entry of a large directory across calls. */
+int fs_getdents64_lists_all_entries(void)
+{
+	unsigned char seen[MANY_FILES];
+	char name[16];
+	char buf[512];
+	long fd;
+	long n;
+	long off;
+	int count = 0;
+	int i;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "d", 0755), 0);
+	for (i = 0; i < MANY_FILES; i++)
+	{
+		name[0] = '\0';
+		rt_cat(name, sizeof(name), "d/f");
+		rt_catn(name, sizeof(name), i);
+		EXPECT(make_file(name, 0), 0);
+		seen[i] = 0;
+	}
+	OK(fd, S4(SYS_openat, AT_FDCWD, "d", O_RDONLY | O_DIRECTORY, 0));
+	while ((n = S3(SYS_getdents64, fd, buf, sizeof(buf))) > 0)
+	{
+		for (off = 0; off < n;)
+		{
+			struct dirent *d = (struct dirent *)(buf + off);
+
+			if (d->d_reclen == 0)
+				break;
+			if (d->d_name[0] == 'f')
+			{
+				i = (int)rt_atol(d->d_name + 1);
+				CHECK(i >= 0 && i < MANY_FILES && !seen[i]);
+				seen[i] = 1;
+				count++;
+			}
+			off += d->d_reclen;
+		}
+	}
+	EXPECT(n, 0);
+	EXPECT(count, MANY_FILES);
+	return CONF_PASS;
+}
+
+/* pread64(2) / pwrite64(2) use the given offset and leave the position. */
+int fs_pread_pwrite_at_offset(void)
+{
+	char buf[8];
+	long fd;
+
+	OK(fd, conf_creat("f", 0));
+	EXPECT(S4(SYS_pwrite64, fd, "abcd", 4, 20), 4);
+	EXPECT(S3(SYS_lseek, fd, 0, SEEK_CUR), 0);
+	rt_fill(buf, 'x', sizeof(buf));
+	EXPECT(S4(SYS_pread64, fd, buf, 4, 10), 4);
+	CHECK(buf[0] == 0 && buf[3] == 0);
+	EXPECT(S4(SYS_pread64, fd, buf, sizeof(buf), 20), 4);
+	CHECK(rt_memeq(buf, "abcd", 4));
+	EXPECT(S4(SYS_pread64, fd, buf, 4, 100), 0);
+	EXPECT_ERR(S4(SYS_pread64, fd, buf, 1, -1), EINVAL);
+	return CONF_PASS;
+}
+
+/* pread64(2) on a pipe is ESPIPE. */
+int fs_pread_pipe_espipe(void)
+{
+	char buf[4];
+	int p[2];
+
+	EXPECT(S2(SYS_pipe2, p, 0), 0);
+	EXPECT_ERR(S4(SYS_pread64, p[0], buf, 1, 0), ESPIPE);
+	EXPECT_ERR(S4(SYS_pwrite64, p[1], "x", 1, 0), ESPIPE);
+	return CONF_PASS;
+}
+
+/* ftruncate(2) grows with zeros and shrinks; a read-only fd is EINVAL. */
+int fs_ftruncate_resizes(void)
+{
+	struct stat st;
+	char buf[4];
+	long fd;
+	long ro;
+
+	OK(fd, conf_creat("f", "hello"));
+	EXPECT(S2(SYS_ftruncate, fd, 64), 0);
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_size, 64);
+	rt_fill(buf, 'x', sizeof(buf));
+	EXPECT(S4(SYS_pread64, fd, buf, sizeof(buf), 32), (long)sizeof(buf));
+	CHECK(buf[0] == 0 && buf[3] == 0);
+	EXPECT(S2(SYS_ftruncate, fd, 2), 0);
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_size, 2);
+	EXPECT_ERR(S2(SYS_ftruncate, fd, -1), EINVAL);
+	OK(ro, S4(SYS_openat, AT_FDCWD, "f", O_RDONLY, 0));
+	EXPECT_ERR(S2(SYS_ftruncate, ro, 0), EINVAL);
+	return CONF_PASS;
+}
+
+/* linkat(2) adds a name for the same file; st_nlink counts both. */
+int fs_linkat_hardlink(void)
+{
+	struct stat st;
+	char buf[8];
+
+	EXPECT(make_file("a", "data"), 0);
+	EXPECT(S5(SYS_linkat, AT_FDCWD, "a", AT_FDCWD, "b", 0), 0);
+	EXPECT(S4(SYS_newfstatat, AT_FDCWD, "b", &st, 0), 0);
+	EXPECT(st.st_nlink, 2);
+	EXPECT_ERR(S5(SYS_linkat, AT_FDCWD, "a", AT_FDCWD, "b", 0), EEXIST);
+	EXPECT_ERR(S5(SYS_linkat, AT_FDCWD, "a", AT_FDCWD, "c", 0x8000), EINVAL);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "a", 0), 0);
+	EXPECT(read_file("b", buf, sizeof(buf)), 4);
+	CHECK(rt_memeq(buf, "data", 4));
+	return CONF_PASS;
+}
+
+/*
+ * statx(2) fills struct statx: stx_mask at 0, stx_nlink at 16, stx_mode
+ * at 28, stx_size at 40.
+ */
+int fs_statx_basic(void)
+{
+	unsigned char sx[256];
+	unsigned long size;
+	unsigned int mask;
+	unsigned int nlink;
+	unsigned short mode;
+
+	EXPECT(make_file("f", "hello"), 0);
+	EXPECT(S5(SYS_statx, AT_FDCWD, "f", 0, 0x7ffU, sx), 0);
+	rt_copy(&mask, sx, sizeof(mask));
+	rt_copy(&nlink, sx + 16, sizeof(nlink));
+	rt_copy(&mode, sx + 28, sizeof(mode));
+	rt_copy(&size, sx + 40, sizeof(size));
+	CHECK((mask & 0x7ffU) == 0x7ffU);
+	EXPECT(nlink, 1);
+	CHECK(S_ISREG(mode));
+	EXPECT((long)size, 5);
+	EXPECT(S5(SYS_statx, AT_FDCWD, ".", 0, 0x7ffU, sx), 0);
+	rt_copy(&mode, sx + 28, sizeof(mode));
+	CHECK(S_ISDIR(mode));
+	EXPECT_ERR(S5(SYS_statx, AT_FDCWD, "missing", 0, 0x7ffU, sx), ENOENT);
+	EXPECT_ERR(S5(SYS_statx, AT_FDCWD, "f", 0x80000000U, 0x7ffU, sx), EINVAL);
 	return CONF_PASS;
 }
