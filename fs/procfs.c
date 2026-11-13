@@ -104,9 +104,8 @@ static int proc_readdir_fill_live_pids(struct vfs_dirent *entries, int max_entri
  * /proc/pid      — one dirent per live PID
  * /proc/pid/N    — status, cmdline, stat
  *
- * Digit PIDs must come first: sys_getdents uses GETDENTS_BATCH_MAX (24) and
- * truncates; BusyBox top/ps scan only numeric dirents then open /proc/N/stat.
- * Filling the batch with static registry names alone yields "no process info".
+ * Digit PIDs come first so a caller that fills @entries to @max_entries still
+ * sees them: BusyBox top/ps scan only numeric dirents, then open /proc/N/stat.
  */
 int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 {

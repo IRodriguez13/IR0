@@ -277,3 +277,20 @@ the regular selftest gates.
 F1-F15 are fixed on both ISAs: their cases form the green group
 `make ir0-selftest-fs-abi-{x86,arm64}`, and their conformance cases left
 the baselines.
+
+The file-system leftovers found while fixing them are fixed too, each with
+a case in the same group (checked on a Linux 7.0 host):
+
+| # | Syscall | Case | Linux | IR0 before |
+|---|---------|------|-------|------------|
+| F16 | renameat | fs_rename_file_over_dir_eisdir, fs_rename_dir_over_file_enotdir, fs_rename_dir_over_nonempty_dir_enotempty, fs_rename_onto_itself_keeps_file | EISDIR / ENOTDIR / ENOTEMPTY / no-op | target tree removed; a file renamed onto itself lost |
+| F17 | mknodat | fs_mknod_existing_eexist | EEXIST | file or directory tree at the path removed |
+| F18 | lseek | fs_lseek_anon_fds_noop, fs_lseek_memfd_like_file | eventfd/timerfd/epoll: noop_llseek (0); memfd: file seek | object overwritten as a `struct vfs_file`; memfd ENOSYS |
+| F19 | getdents64 | fs_getdents64_lists_all_entries | every entry | first 24 backend entries |
+| F20 | pread64, pwrite64, linkat, statx | fs_pread_pwrite_at_offset, fs_pread_pipe_espipe, fs_linkat_hardlink, fs_statx_basic | implemented | ENOSYS |
+| F21 | ftruncate | fs_ftruncate_resizes | read-only fd: EINVAL | file truncated |
+
+Conformance after them: 91 PASS, 1 FAIL, 7 TCONF on both ISAs. The FAIL is
+`fs_unlink_open_file`: the VFS is path-based, so an fd whose file was
+unlinked can no longer read it. The x86_64 guest disk uses the large MINIX
+layout (2048 inodes) so a case can fill a directory.
