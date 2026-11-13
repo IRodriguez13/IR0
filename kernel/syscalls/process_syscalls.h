@@ -53,7 +53,6 @@ int64_t sys_getpriority(int which, int who);
 int64_t sys_setpgid(pid_t pid, pid_t pgid);
 void process_cred_init_groups(process_t *p);
 int process_cred_in_group(const process_t *p, gid_t gid);
-void process_reset_signals_on_exec(process_t *p);
 
 int64_t sys_exit(int exit_code);
 int64_t sys_exit_group(int exit_code);

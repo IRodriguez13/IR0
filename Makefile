@@ -647,6 +647,7 @@ LIB_OBJS = \
     kernel/irq/irq_dispatch.o \
     kernel/signals/signals.o \
     kernel/signals/signal_diag.o \
+    kernel/signals/syscalls.o \
     kernel/irq/entry.o \
     fs/pipe.o \
     mm/uaccess/copy_user.o \
