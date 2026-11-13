@@ -649,6 +649,39 @@ ir0-selftest-sigreturn-bad-frame-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_
 
 ir0-selftest-sigreturn-bad-frame: ir0-selftest-sigreturn-bad-frame-x86 ir0-selftest-sigreturn-bad-frame-arm64
 
+IR0_SELFTEST_X86_FPSIMD := $(KERNEL_ROOT)/build/selftests/x86_64/fpsimd
+IR0_SELFTEST_ARM64_FPSIMD := $(KERNEL_ROOT)/build/selftests/arm64/fpsimd
+
+.PHONY: ir0-selftest-fpsimd-x86 ir0-selftest-fpsimd-arm64 ir0-selftest-fpsimd
+
+$(IR0_SELFTEST_X86_FPSIMD): tests/selftests/kernel/fpsimd.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 fpsimd
+
+$(IR0_SELFTEST_ARM64_FPSIMD): tests/selftests/kernel/fpsimd.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 fpsimd
+
+# FP/SIMD registers are per-task: they survive context switches, a fork
+# child inherits them and a signal handler cannot corrupt them.
+ir0-selftest-fpsimd-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_FPSIMD)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_FPSIMD) \
+		--done "ok 4 signal_handler_keeps_fpsimd" \
+		--log $(HOST_TMP)/ir0-selftest-x86-fpsimd.log
+	@echo "✓ ir0-selftest-fpsimd-x86"
+
+ir0-selftest-fpsimd-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_FPSIMD)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_FPSIMD) \
+		--done "ok 4 signal_handler_keeps_fpsimd" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-fpsimd.log
+	@echo "✓ ir0-selftest-fpsimd-arm64"
+
+ir0-selftest-fpsimd: ir0-selftest-fpsimd-x86 ir0-selftest-fpsimd-arm64
+
 # Linux ABI groups whose red cases are all fixed (tests/selftests/kernel/
 # linux_abi_<group>.c, one case per fixed divergence): sock (socket
 # syscalls), mm (memory mapping and clocks) and fs (file and path
