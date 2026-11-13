@@ -96,10 +96,12 @@ def arm64_cpio(init: Path, out: Path) -> None:
 
 
 def x86_disk(init: Path, out: Path, ltp_dir: Path | None) -> int:
+    # The large layout (2048 inodes, 64 MiB of zones) leaves room for cases
+    # that fill a directory; the default one has 64 inodes in all.
     with out.open("wb") as fp:
-        fp.truncate(32 * 1024 * 1024)
+        fp.truncate(64 * 1024 * 1024)
     inject = [sys.executable, str(ROOT / "scripts" / "inject_init_minix.py")]
-    if run_cmd([*inject, "--format", str(out)], 60) != 0:
+    if run_cmd([*inject, "--format-large", str(out)], 60) != 0:
         return 1
     if run_cmd([*inject, str(out), str(init), "sbin/init"], 60) != 0:
         return 1
