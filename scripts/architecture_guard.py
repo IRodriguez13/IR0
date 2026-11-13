@@ -48,6 +48,9 @@ Checks:
     declared only in <ir0/oops_port.h>, and the idle wake-polling names
     (kernel_idle_poll, process_idle_bind, ...) stay gone. The check runs an
     injected-violation self-test first.
+28) No raw atomics: __atomic_*, __sync_* and inline asm appear only under
+    arch/ and in includes/asm-generic/atomic.h; portable code uses
+    <ir0/atomic.h>. Empty exception ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -2842,6 +2845,88 @@ def check_no_busy_wait_primitives():
     return errors
 
 
+# Atomic instructions and inline asm belong to arch/ or to the atomics
+# backend. Portable code calls <ir0/atomic.h> (atomic_t, cmpxchg, bit locks,
+# barrier()) and the <ir0/cpu.h> facades; it never spells __atomic_*,
+# __sync_* or asm itself. RAW_ATOMIC_LEDGER lists reviewed exceptions as
+# "<path>" lines; it starts empty and only shrinks.
+RAW_ATOMIC_RE = re.compile(
+    r"\b(__atomic_[a-z_]+|__sync_[a-z_]+)\s*\(|"
+    r"\b(__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
+    r"\s*\(")
+RAW_ATOMIC_TREES = ("block", "cpp", "drivers", "fs", "includes", "ipc",
+                    "kernel", "ktm", "mm", "net", "sched", "sound")
+RAW_ATOMIC_BACKEND = "includes/asm-generic/atomic.h"
+RAW_ATOMIC_LEDGER: frozenset[str] = frozenset()
+
+
+def raw_atomic_violations(rel: str, text: str) -> list[tuple[int, str]]:
+    """Return (line, name) for each raw atomic or asm use in *text*."""
+    if rel.startswith("arch/") or rel == RAW_ATOMIC_BACKEND:
+        return []
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = RAW_ATOMIC_RE.search(line)
+        if match:
+            found.append((lineno, match.group(1) or match.group(2)))
+    return found
+
+
+def _raw_atomic_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "mm/clean.c": ("/* __atomic_load_n() and asm(\"\") in a comment */\n"
+                       "static const char *m = \"__sync_lock_release(\";\n"
+                       "#define X __ATOMIC_RELAXED\n"
+                       "\tbarrier();\n\ttest_and_set_bit_lock(0, &f);\n",
+                       []),
+        "mm/flag.c": ("\tif (__atomic_test_and_set(&f, __ATOMIC_ACQUIRE))\n"
+                      "\t\treturn;\n\t__atomic_clear(&f, 0);\n", [1, 3]),
+        "net/lock.c": ("\twhile (__sync_lock_test_and_set(&b, 1))\n", [1]),
+        "drivers/delay.c": ("\t__asm__ volatile(\"\" ::: \"memory\");\n"
+                            "\tasm (\"pause\");\n", [1, 2]),
+        "includes/ir0/x.h": ("register long x8 __asm__(\"x8\") = n;\n", [1]),
+        "arch/x86-64/sources/cpu.c": ("\t__asm__ volatile(\"hlt\");\n", []),
+        RAW_ATOMIC_BACKEND: ("\treturn __atomic_load_n(p, 0);\n", []),
+    }
+    failures = []
+    for rel, (text, expected) in cases.items():
+        got = [line for line, _ in raw_atomic_violations(rel, text)]
+        if got != expected:
+            failures.append(f"[no-raw-atomics] self-test {rel}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_raw_atomics():
+    """Reject __atomic_*, __sync_* and inline asm outside arch/ and the
+    atomics backend; stale ledger entries fail too."""
+    errors = _raw_atomic_self_test()
+    hit: set[str] = set()
+    for tree in RAW_ATOMIC_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            found = raw_atomic_violations(rel, read_file_text(path))
+            if found and rel in RAW_ATOMIC_LEDGER:
+                hit.add(rel)
+                continue
+            for lineno, name in found:
+                errors.append(
+                    f"[no-raw-atomics] {rel}:{lineno}: {name} outside arch/; "
+                    "use <ir0/atomic.h> (atomic_t, cmpxchg, "
+                    "test_and_set_bit_lock, barrier) or an arch facade")
+    for rel in sorted(RAW_ATOMIC_LEDGER - hit):
+        errors.append(f"[no-raw-atomics] {rel} is clean; drop it from "
+                      "RAW_ATOMIC_LEDGER")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3098,14 +3183,16 @@ def self_test_include_layout() -> list[str]:
 def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
-                    _register_name_self_test() + _uaccess_self_test())
+                    _register_name_self_test() + _uaccess_self_test() +
+                    _raw_atomic_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
                 print(" -", failure)
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
-              "portable-no-register-names, uaccess-single-api)")
+              "portable-no-register-names, uaccess-single-api, "
+              "no-raw-atomics)")
         return 0
 
     errors = []
@@ -3179,6 +3266,7 @@ def main():
     errors.extend(check_uaccess_single_api())
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
+    errors.extend(check_no_raw_atomics())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_include_layout())
