@@ -25,7 +25,7 @@
  *   kernel/process/wait.c      — wait/reap/reparent
  *   kernel/process/fdtable.c   — fd table lifecycle
  *   kernel/process/mm.c        — address space helpers
- *   kernel/process/signals.c   — default-fatal signals
+ *   kernel/signals/default_action.c   — default-fatal signals
  *
  * Teardown policy (exit vs destroy): see kernel/process/exit.c and
  * Documentation/mandocs/en/process.md.

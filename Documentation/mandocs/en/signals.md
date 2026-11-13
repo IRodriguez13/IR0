@@ -129,8 +129,8 @@ ASCII:
 - An uncaught signal takes its full signal(7) default: Ign drops it, Stop
   (STOP, TSTP, TTIN, TTOU) sleeps until SIGCONT, everything else ends the
   task.
-- Diagnostics go through `signal_trace()` (`kernel/signal_diag.c`);
-  `kernel/signals.c` has no inline klog/KTM.
+- Diagnostics go through `signal_trace()` (`kernel/signals/signal_diag.c`);
+  `kernel/signals/signals.c` has no inline klog/KTM.
 - `rt_sigreturn` copies the frame from the user stack pointer only.
 
 ## 10. Future roadmap

@@ -4,7 +4,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: signal_diag.h
- * Description: Signal delivery trace hook (private to kernel/signals.c).
+ * Description: Signal delivery trace hook (private to kernel/signals/signals.c).
  */
 
 #pragma once

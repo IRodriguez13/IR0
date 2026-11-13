@@ -6,13 +6,16 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: signals.c
+ * File: default_action.c
  * Description: Default-fatal signal delivery into process exit/zombie path.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process_internal.h"
+#include <ir0/process.h>
+#include <ir0/sched.h>
+#include <ir0/signals.h>
+#include <ir0/ktm/klog.h>
 
 int process_signal_is_default_fatal(process_t *p, int sig)
 {

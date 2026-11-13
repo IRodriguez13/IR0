@@ -438,9 +438,9 @@ KERNEL_OBJS = \
     kernel/process/fdtable.o \
     kernel/process/pseudo_fd_bind.o \
     kernel/process/mm.o \
-    kernel/process/signals.o \
+    kernel/signals/default_action.o \
     kernel/vdso.o \
-    kernel/sigtramp.o \
+    kernel/signals/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
 	kernel/cpu_topology.o \
@@ -644,8 +644,8 @@ LIB_OBJS = \
     kernel/problems.o \
     kernel/fault.o \
     kernel/irq_dispatch.o \
-    kernel/signals.o \
-    kernel/signal_diag.o \
+    kernel/signals/signals.o \
+    kernel/signals/signal_diag.o \
     kernel/entry.o \
     fs/pipe.o \
     mm/uaccess/copy_user.o \

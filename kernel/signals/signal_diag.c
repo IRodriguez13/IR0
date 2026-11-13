@@ -9,7 +9,7 @@
  *
  * File: signal_diag.c
  * Description: Signal trace hook: klog tags and KTM flight records for
- *              kernel/signals.c. Tags consumed by smokes stay stable
+ *              kernel/signals/signals.c. Tags consumed by smokes stay stable
  *              (SIGFRAME_ABANDON, USER_FAULT_FRAME ... SIGNAL_KILL_SIGSEGV).
  */
 

@@ -32,8 +32,8 @@ kernel/process.h rsp_hw
 kernel/process/core.c rax
 kernel/process/core.c rip_hw
 kernel/process/core.c task_cs_is_user
-kernel/signals.c rip
-kernel/signals.c signal_rip_is_registered_handler
+kernel/signals/signals.c rip
+kernel/signals/signals.c signal_rip_is_registered_handler
 kernel/syscalls/fs_path_syscalls.c rflags
 ktm/d1_12_read_diag.c fault_rip
 ktm/d1_12_read_diag.c magic_rax

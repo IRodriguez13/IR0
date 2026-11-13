@@ -146,7 +146,7 @@ x86-64 window (code): `0x00400000` … `0x00007FFFFFFFFFFF` in
 
 | Area | File | Pattern now |
 |------|------|-------------|
-| Signal frames / `siginfo` | `kernel/signals.c` | `copy_to_user_mm(process_pgd(p), …)` |
+| Signal frames / `siginfo` | `kernel/signals/signals.c` | `copy_to_user_mm(process_pgd(p), …)` |
 | `uname` | `kernel/syscalls/fs_path_syscalls.c` | kernel `struct utsname` + `copy_to_user` |
 | `gettimeofday` | `kernel/syscalls/time_syscalls.c` | bounce + `copy_to_user` |
 | `nanosleep` rem | `kernel/syscalls/io_syscalls.c` | `copy_from_user` / `copy_to_user` |
