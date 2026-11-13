@@ -17,9 +17,9 @@ void wait_exit_audit_classify_user_frame(const char *tag, process_t *p)
 	ip = task_get_ip(&p->task);
 	sp = task_get_sp(&p->task);
 	klog_debug_fmt("WAIT", "[WAIT_EXIT_AUDIT][FRAME] tag=%s pid=%x comm=%s ip=%llx sp=%llx return_user=%llx status=%llx retval=%llx address_space=%llx", tag ? tag : "(null)", (unsigned)((uint32_t)p->task.pid), p->comm, (unsigned long long)ip, (unsigned long long)sp, (unsigned long long)task_return_state_is_user(&p->task), (unsigned long long)task_get_flags(&p->task), (unsigned long long)task_get_retval(&p->task), (unsigned long long)process_mm_root(p));
-	if (!mm_user_va_ok((uintptr_t)ip, 1))
+	if (ip < mm_user_va_start() || ip >= mm_user_va_end())
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RIP");
-	if (!mm_user_va_ok((uintptr_t)sp, 1))
+	if (sp < mm_user_va_start() || sp >= mm_user_va_end())
 		klog_debug("WAIT", "CLASSIFY PARENT_IRET_FRAME_BAD_RSP");
 	if (!task_return_state_is_user(&p->task))
 		klog_debug("WAIT", "CLASSIFY PARENT_RETURN_STATE_NOT_USER");

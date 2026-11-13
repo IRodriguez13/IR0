@@ -13,7 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/signals.h>
+#include <ir0/arch_mm.h>
 #include <ir0/console.h>
+#include <ir0/mm_range.h>
 #include <ir0/sched.h>
 #include <ir0/clock.h>
 #include <ir0/paging.h>
@@ -48,6 +50,17 @@ static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
 			      uint64_t fault_addr,
 			      struct signal_frame_setup *out);
+
+/*
+ * A handler or restorer is a code address in the task's user window. It is
+ * never copied through, and kernel-mode callers (ktest) must not widen it,
+ * so this is the window arithmetic, not access_ok().
+ */
+static int signal_code_addr_ok(const void *addr)
+{
+	return mm_user_range_ok((uintptr_t)addr, sizeof(void *),
+				mm_user_va_start(), mm_user_va_end());
+}
 
 static int signal_rip_is_registered_handler(process_t *p, uint64_t rip)
 {
@@ -162,7 +175,7 @@ int signals_has_user_handler(process_t *p, int sig)
 	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
 		return 0;
 	if (p->mode == USER_MODE &&
-	    !mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
+	    !signal_code_addr_ok((const void *)handler))
 		return 0;
 	return 1;
 }
@@ -558,7 +571,7 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
 
 	if (!fn)
 		return sigtramp_addr();
-	if (!mm_user_va_ok((uintptr_t)fn, sizeof(void *)))
+	if (!signal_code_addr_ok((const void *)fn))
 		return 0;
 	return (uint64_t)(uintptr_t)fn;
 }
@@ -727,7 +740,7 @@ static int get_signal(process_t *p)
 		/* Every other default action terminates (signal(7) Term/Core). */
 		if (handler == SIG_DFL)
 			signal_exit_current(sig);
-		if (!mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
+		if (!signal_code_addr_ok((const void *)handler))
 		{
 			/* A handler outside userspace falls back to the default. */
 			p->signal_handlers[sig] = SIG_DFL;
@@ -902,7 +915,7 @@ int register_signal_handler(int signal, void (*handler)(int))
     /* Validate handler is in userspace (for USER_MODE processes) */
     if (current->mode == USER_MODE && handler != SIG_DFL && handler != SIG_IGN)
     {
-        if (!mm_user_va_ok((uintptr_t)handler, sizeof(void *)))
+        if (!signal_code_addr_ok((const void *)handler))
             return -1; /* Invalid handler address */  
     }
     

@@ -16,6 +16,7 @@
 #include <string.h>
 #include <ktm_probe_diag.h>
 #include <ir0/acpi_pm.h>
+#include <ir0/arch_mm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
 #include <ir0/clone.h>
@@ -608,6 +609,7 @@ void process_exit_robust_list(process_t *p)
 {
 	struct robust_list_head kh;
 	int *uaddr;
+	int uval;
 	int copy_ret;
 
 	if (!p || !p->robust_list)
@@ -632,8 +634,13 @@ void process_exit_robust_list(process_t *p)
 	uaddr = (int *)kh.list_op_pending;
 	if (!uaddr)
 		uaddr = (int *)kh.list;
+	/*
+	 * Linux handle_futex_death(): read the futex word through the dying
+	 * task's mm first; a word it cannot read wakes nobody.
+	 */
 	if (uaddr && p->mode == USER_MODE &&
-	    mm_user_va_ok((uintptr_t)uaddr, sizeof(int)))
+	    copy_from_user_mm(process_pgd(p), (uintptr_t)uaddr, &uval,
+			      sizeof(uval)) == 0)
 		(void)ir0_futex_wake(uaddr, 1);
 
 	p->robust_list = NULL;
@@ -1594,7 +1601,8 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
      * used as the TLS pointer installed FS=0xffffffffffffffe2; the next
      * TCB store then #PF'd the session shell at that address.
      */
-    if (addr != 0 && !mm_user_va_ok((uintptr_t)addr, 1))
+    if (addr != 0 &&
+        (addr < mm_user_va_start() || addr >= mm_user_va_end()))
       return -EPERM;
     process_tls_set(current_process, (uint64_t)addr);
     set_tls((uint64_t)addr);
