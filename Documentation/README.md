@@ -60,7 +60,7 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `ARM64_STACK_MODEL.md`: EL0→EL1 exception frame vs **SP_EL1**, **SPSel**, `set_current_kernel_stack` (Spanish: `esp/ARM64_STACK_MODEL.md`).
 - [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md): `/sys/firmware/ir0/*` boot snapshot (Spanish: [`esp/sysfs-firmware-ir0.md`](esp/sysfs-firmware-ir0.md)).
 - `uaccess.md`: **kernel↔userspace copy frontier** — `copy_*_user`,
-  `copy_*_user_mm`, `*_region_in_directory`, multi-ISA `mm_user_va_ok`,
+  `copy_*_user_mm`, `*_region_in_directory`, the single `access_ok` predicate,
   arch-guard tags, `KERNEL_UACCESS_FAULT` (Spanish: `esp/uaccess.md`).
 - `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
 - `SCHEDULING.md`: scheduler selection, blocking syscalls and signals.

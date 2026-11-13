@@ -261,6 +261,15 @@ in its group, so it cannot hide the others.
 | N8 | bind | sock_bind_errors / sock_bind_missing_dir_enoent | missing parent directory → ENOENT | 0 | both | kernel/syscalls/socket_syscalls.c `sys_bind` |
 | N9 | sendto (UDP) | — / sock_udp_send_uses_peer | no address: connected peer, else EDESTADDRREQ | EINVAL | both | kernel/syscalls/socket_syscalls.c `sys_sendto` |
 | N10 | sendto (UDP) | — / sock_udp_sendto_overrides_peer | explicit address wins over the peer | peer port, explicit IP | both | net/sock_udp.c `sock_udp_sendto` |
+| N11 | sendmsg SCM_RIGHTS | — / sock_unix_stream_scm_rights | descriptor delivered | EINVAL (`fd_entry_t` outgrew the rights slot) | both | **fixed**: includes/ir0/sock_stream.h, build-time size assert |
+| U1 | pipe2 | — / uaccess_pipe2_flags_before_copy | bad flags → EINVAL before the array | EFAULT | both | **fixed**: kernel/syscalls/io_syscalls.c |
+| U2 | wait4 | — / uaccess_wait4_bad_status_reaps | child reaped, then EFAULT | child left a zombie | both | **fixed**: kernel/process/wait.c |
+| U3 | clock_gettime | — / uaccess_clock_gettime_clock_first | unknown clock → EINVAL | EFAULT | both | **fixed**: kernel/syscalls/time_syscalls.c |
+| U4 | futex | — / uaccess_futex_unknown_op_enosys | unknown op → ENOSYS | EFAULT | both | **fixed**: kernel/syscalls/process_syscalls.c |
+| U5 | recvmsg (stream) | — / uaccess_recvmsg_fault_keeps_data_and_rights | a faulting copy keeps data and SCM_RIGHTS | both lost | both | **fixed**: payload via `sock_stream_recv_user()`, rights after it |
+| U6 | sendmsg (stream) | — / uaccess_sendmsg_fault_sends_nothing | a faulting iovec sends nothing | earlier iovecs sent | both | **fixed**: payload copied in before queuing |
+| U7 | recvfrom (UDP) | — / uaccess_recvfrom_bad_addr_consumes | datagram consumed, then EFAULT | datagram kept | both | **fixed**: kernel/syscalls/socket_syscalls.c |
+| U8 | mmap MAP_FIXED, mprotect | — / uaccess_mmap_fixed_beyond_user_enomem, uaccess_mprotect_beyond_user_enomem | beyond user space → ENOMEM | EINVAL / EFAULT | both | **fixed**: kernel/syscalls/mm_syscalls.c (`mm_user_range_mappable()` decides) |
 
 ### Red/green workflow for the owner of a bug
 

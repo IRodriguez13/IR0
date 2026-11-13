@@ -37,7 +37,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | Signals / sigcontext | ISA layouts in [`sigcontext_x86_64.h`](../../includes/ir0/sigcontext_x86_64.h) / [`sigcontext_arm64.h`](../../includes/ir0/sigcontext_arm64.h); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
 | Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
-| User VA window | **`mm_user_va_ok(addr, size)`** ([`mm.h`](../../includes/ir0/mm.h)); ISA bodies in `arch/*/sources/mm.c`. |
+| User VA window | **`access_ok(addr, size)`** ([`copy_user.h`](../../includes/ir0/copy_user.h)) for pointers, `mm_user_range_mappable()` ([`mm.h`](../../includes/ir0/mm.h)) for mapping ranges; the window bounds live in `arch/*/sources/mm.c`. |
 | Usercopy | **`copy_to/from_user` / `clear_user`** (current mm); **`copy_*_user_mm` / `clear_user_mm`** (explicit root); **`access_ok`** is the only user-pointer check ([`copy_user.h`](../../includes/ir0/copy_user.h)). Never CR3+`memcpy` to user VA. Full contract: [`uaccess.md`](uaccess.md). |
 | IRQ / MM / TLB | Simple names: **`irq_save`/`irq_restore`**, **`mm_activate`**, **`tlb_invalidate_*`**, **`udelay`**, **`smp_mb`**, **`timer_read`** ([`cpu.h`](../../includes/ir0/cpu.h), [`irq.h`](../../includes/ir0/irq.h), [`arch_mm.h`](../../includes/ir0/arch_mm.h)). No `arch_` prefix on new hot-path facades. |
 | **`fs/`** vs `arch/` | No `#include <arch/...>` in `fs/`; use **`includes/ir0/arch_port.h`** (`scripts/architecture_guard.py` enforces). |

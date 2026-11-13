@@ -64,7 +64,7 @@ Direct user-return repair is ISA-private. The x86 implementation lives behind
 | Current mm | `copy_to_user` / `copy_from_user` / `clear_user` / `strncpy_from_user` | same names |
 | Explicit root (callers) | `copy_to_user_mm` / `copy_from_user_mm` / `clear_user_mm` | `access_remote_vm` / `access_process_vm` |
 | Pointer check | `access_ok` | `access_ok` |
-| VA window | `mm_user_va_ok` | arch `TASK_SIZE` |
+| VA window | `mm_user_va_ok` (mm-private, `mm/user_va.h`) | arch `TASK_SIZE` |
 
 Rule: callers prefer `copy_*_user` or `copy_*_user_mm`. Do not assume
 `active_cr3` when the target is another process. Full contract:

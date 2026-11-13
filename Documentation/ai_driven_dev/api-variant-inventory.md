@@ -97,7 +97,7 @@ Header `includes/ir0/copy_user.h` (`mm/copy_user.c`, `mm/paging_uaccess.c`).
 | `copy_to_user_mm` / `copy_from_user_mm` / `clear_user_mm` | 28 / 14 / 5 | KEEP (remote-mm variant, Linux `access_remote_vm` role) |
 | `put_user` / `get_user` (macros) | 0 / 0 | DELETE or start using; today they are dead aliases |
 | `access_ok` | 97 | KEEP as the single public predicate, but see the call-site classes below |
-| `mm_user_va_ok` (`includes/ir0/mm.h`, arch-defined) | 34 | MERGE: second public predicate for the same contract (`access_ok` is `mm_user_va_ok` plus the kernel-thread pass). Make it mm-internal (`mm/` + arch backends) and route the remaining callers through `access_ok` or a semantic helper |
+| `mm_user_va_ok` (`includes/ir0/mm.h`, arch-defined) | 34 | DONE (`refactor/uaccess-single-check`): mm-private in `mm/user_va.h`, guarded. Was MERGE: second public predicate for the same contract (`access_ok` is `mm_user_va_ok` plus the kernel-thread pass). Make it mm-internal (`mm/` + arch backends) and route the remaining callers through `access_ok` or a semantic helper |
 | `mm_user_range_ok` (`includes/ir0/mm_range.h`, inline) | 2 (both arch `mm.c`) | PRIVATE: it is the arithmetic behind `mm_user_va_ok`; move to an arch-shared private header |
 | `copy_path_from_user`, `ir0_resolve_user_path[_at]`, `ir0_resolve_kpath_at` (`path_user.h`) | 5 / 25 / 7 | KEEP `copy_path_from_user` (Linux `getname`) + one resolver; `ir0_resolve_user_path` vs `_at` is a MERGE (AT_FDCWD parameter) |
 | `ir0_stat_to_user` / `ir0_copy_stat_to_user` (`stat_user.h`) | 1 / 4 | MERGE into one `cp_new_stat`-style function |

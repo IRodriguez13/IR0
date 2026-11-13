@@ -4,7 +4,7 @@
 > Capas `copy_*_user_mm`: ver [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 
 > **Fuente de verdad:** `includes/ir0/copy_user.h`, `mm/copy_user.c`,  
-> `includes/ir0/mm.h` (`mm_user_va_ok`), `arch/*/sources/mm.c`,
+> `mm/user_va.h` (`mm_user_va_ok`, privado de mm), `arch/*/sources/mm.c`,
 > `mm/paging_uaccess.c` (`copy_*_user_mm`, `clear_user_mm`),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
 > (`check_usercopy_no_raw_user_touch`), `tests/host/test_usercopy_contract.c`,  
@@ -41,7 +41,7 @@ flowchart TB
     CU["includes/ir0/copy_user.h<br/>access_ok copy_to/from_user clear_user<br/>strncpy_from_user get_user put_user"]
   end
   subgraph isa [Ventana VA por ISA]
-    VA["mm_user_va_ok()<br/>arch/*/sources/mm.c"]
+    VA["mm_user_va_ok() (mm/user_va.h)<br/>límites: arch/*/sources/mm.c"]
   end
   subgraph mm [Walk MM portable]
     REG["copy_*_user_mm clear_user_mm<br/>solo hojas user<br/>COW break en write"]
@@ -60,9 +60,12 @@ flowchart TB
    - `copy_to_user_mm` / `copy_from_user_mm` / `clear_user_mm` solo cuando el
      destino no es el mm actual (carga ELF, frames de señal, exit/wait de otro
      proceso).
-   - Un puntero validado antes de copiar usa `access_ok(addr, n)`; no hay otro
-     validador. Rangos que nunca se copian (mmap/munmap/mprotect, brk, handler
-     de señal, base TLS) usan `mm_user_va_ok()`.
+   - La copia valida su propio rango y devuelve `-EFAULT`; una syscall copia
+     y devuelve ese error, no llama antes a `access_ok()`.
+   - `access_ok(addr, n)` es el único predicado público de punteros user,
+     para los casos sin copia (ver la versión en inglés). Los rangos de
+     mapeo (mmap/munmap/mprotect, brk) usan `mm_user_range_mappable()`.
+     `mm_user_va_ok()` es privado de `mm/`; arch-guard lo rechaza afuera.
 3. **Nunca** `load_page_directory(user_pgd)` + `memcpy((void *)user_va, …)`.
    Ese patrón mató ash post-login: write a PTE presente RO / COW con `cs=8` →
    `KERNEL_UACCESS_FAULT`.
@@ -70,7 +73,7 @@ flowchart TB
    rellenar en stack kernel y un `copy_to_user`.
 5. Los hilos del kernel (`KERNEL_MODE`: dbgshell, ktest) llaman syscalls con
    buffers del kernel. Una sola regla estática en `mm/copy_user.c`
-   (`uaccess_kernel()`) hace que `access_ok()`, `access_ok_mapped()` y las
+   (`uaccess_kernel()`) hace que `access_ok()` y las
    copias los acepten. El modo se fija en spawn, se hereda en fork y exec
    exige `USER_MODE`: ningún puntero ring-3 pasa por esa regla.
 6. El walk toca solo hojas **accesibles a user** (`pte_user`). La ventana VA
@@ -85,7 +88,6 @@ Comentario de contrato: [`includes/ir0/copy_user.h`](../../includes/ir0/copy_use
 | API | Rol |
 |-----|-----|
 | `access_ok(addr, n)` | Única validación de puntero user: ventana VA (hilos del kernel pasan) |
-| `access_ok_mapped(addr, n)` | `access_ok` + todas las páginas presentes; para lecturas que consumen datos antes de copiar |
 | `copy_to_user` / `copy_from_user` | Proceso actual → `copy_*_user_mm` sobre su raíz |
 | `clear_user` | Cero vía `clear_user_mm` |
 | `strncpy_from_user(dst, src, n)` | Semántica Linux: largo, `n` si no entra el NUL, o `-EFAULT` |
@@ -101,13 +103,13 @@ vía soportada para romper COW en un write iniciado por el kernel.
 |------|------------------|-----------------|
 | Contrato + macros | `includes/ir0/copy_user.h` | Misma API en toda ISA |
 | Glue portable | `mm/copy_user.c` | Regla de hilos del kernel, `access_ok`, dispatch a `_mm` |
-| Ventana VA | `mm_user_va_ok` en `arch/*/sources/mm.c` | Rango user canónico por ISA |
+| Ventana VA | `mm_user_va_ok` en `mm/user_va.h` (privado de mm); límites en `arch/*/sources/mm.c` | Rango user canónico por ISA |
 | COW / walk PTE | `mm/paging_uaccess.c` | Hoja user, RO / COW break |
 | Arm64 early | MM early / helpers existentes | Debe pasar por nombres `copy_*_user`; **sin reclamar COW** hasta paridad |
 
 **Cómo aislar un bug de ISA:**
 
-1. `mm_user_va_ok` rechaza un rango user válido → política VA en **arch**.
+1. `mm_user_va_ok` rechaza un rango user válido → límites VA en **arch**.
 2. Rango OK pero region/`-EFAULT` / COW mal → **`mm/`**.
 3. Ninguno: el caller bypasseó el facade → **caller portable**.
 4. Arm64 early sin COW: no inventar una segunda API con otro nombre.

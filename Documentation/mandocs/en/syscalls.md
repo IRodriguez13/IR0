@@ -69,7 +69,7 @@ userspace is `#GP` → SIGSEGV, as on Linux without IA32 emulation. Dispatch is 
 Canonical contract: [`Documentation/uaccess.md`](../../uaccess.md).
 
 1. If `KERNEL_MODE` process (dbgshell / embedded only): plain `memcpy` bypass.
-2. Else validate with `mm_user_va_ok` (ISA window via `arch/*/sources/mm.c`).
+2. Else the copy (`copy_*_user`, `strncpy_from_user`) validates the ISA window itself.
 3. Copy via `copy_*_region_in_directory(process_pgd(current), …)` (COW-safe).
 4. Never `load_page_directory` + raw `memcpy` to a user VA — that classifies as
    `KERNEL_UACCESS_FAULT` at runtime and fails `arch-guard` for signals/syscalls P0.
