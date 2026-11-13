@@ -192,7 +192,7 @@ int process_wait(pid_t pid, int *status, int options)
 			: options;
 		found_child = 0;
 		zombie = NULL;
-		irq_flags = process_irq_save();
+		irq_flags = process_registry_lock();
 
 		for (p = process_list; p; p = p->next) {
 			if (p->ppid != current_process->task.pid)
@@ -214,7 +214,7 @@ int process_wait(pid_t pid, int *status, int options)
 
 			status_val = process_child_wait_status_word(zombie);
 			reaped_pid = zombie->task.pid;
-			process_irq_restore(irq_flags);
+			process_registry_unlock(irq_flags);
 
 			process_reap_zombie_child(zombie);
 			wait_exit_audit_process_wait_reap(reaped_pid, status_val, status);
@@ -245,7 +245,7 @@ int process_wait(pid_t pid, int *status, int options)
 
 		if (!found_child)
 		{
-			process_irq_restore(irq_flags);
+			process_registry_unlock(irq_flags);
 			if (IR0_DEBUG_WAIT)
 			{
 				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=echild parent=%x target=%x ret=ECHILD\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
@@ -256,7 +256,7 @@ int process_wait(pid_t pid, int *status, int options)
 
 		if (active_opts & WNOHANG)
 		{
-			process_irq_restore(irq_flags);
+			process_registry_unlock(irq_flags);
 			if (IR0_DEBUG_WAIT)
 			{
 				klog_debug_fmt("WAIT", "[WAIT4_WNOHANG_AUDIT] path=wnohang_alive parent=%x target=%x ret=0 status_write=no\n", (unsigned)((uint32_t)current_process->task.pid), (unsigned)((uint32_t)pid));
@@ -302,7 +302,7 @@ int process_wait(pid_t pid, int *status, int options)
 		 */
 		if (!zombie)
 			process_set_sched_state(current_process, PROCESS_BLOCKED);
-		process_irq_restore(irq_flags);
+		process_registry_unlock(irq_flags);
 		if (zombie)
 			continue;
 		/*

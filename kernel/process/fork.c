@@ -24,6 +24,9 @@
 #include <ir0/ktm/fault.h>
 #include <ir0/syscall_frame.h>
 #include <string.h>
+#include <ir0/spinlock.h>
+
+static ir0_spinlock_t fork_link_lock;
 
 /*
  * Transactional child construction — no memcpy(process_t). Each domain is
@@ -163,10 +166,10 @@ void process_fork_abort_pending_on_exit(process_t *parent)
 	if (!parent)
 		return;
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&fork_link_lock);
 	child = parent->fork_pending_child;
 	parent->fork_pending_child = NULL;
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&fork_link_lock, irq_flags);
 
 	if (!child)
 		return;
@@ -398,18 +401,18 @@ int process_vfork_link(process_t *parent, process_t *child)
 	if (!parent || !child)
 		return -EINVAL;
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&fork_link_lock);
 	for (i = 0; i < VFORK_LINK_MAX; i++)
 	{
 		if (!vfork_links[i].parent && !vfork_links[i].child)
 		{
 			vfork_links[i].parent = parent;
 			vfork_links[i].child = child;
-			process_irq_restore(irq_flags);
+			ir0_spin_unlock_irqrestore(&fork_link_lock, irq_flags);
 			return 0;
 		}
 	}
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&fork_link_lock, irq_flags);
 	return -EAGAIN;
 }
 
@@ -428,11 +431,11 @@ void process_vfork_complete(process_t *child)
 	if (!child)
 		return;
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&fork_link_lock);
 	link = vfork_link_find_child(child);
 	if (!link)
 	{
-		process_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&fork_link_lock, irq_flags);
 		return;
 	}
 	parent = link->parent;
@@ -444,7 +447,7 @@ void process_vfork_complete(process_t *child)
 		was_blocked = 1;
 		process_set_sched_state(parent, PROCESS_READY);
 	}
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&fork_link_lock, irq_flags);
 
 	if (parent && was_blocked)
 	{
@@ -467,14 +470,14 @@ void process_mm_release_on_exit(process_t *dying)
 	if (vfork_link_find_child(dying))
 		process_vfork_complete(dying);
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&fork_link_lock);
 	link = vfork_link_find_parent(dying);
 	if (link)
 	{
 		link->parent = NULL;
 		link->child = NULL;
 	}
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&fork_link_lock, irq_flags);
 
 	/*
 	 * Linux kernel/exit.c exit_mm(): drop current->mm before mmput, and

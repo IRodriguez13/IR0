@@ -18,6 +18,7 @@
 #include <ir0/process.h>
 #include <ir0/cpu.h>
 #include <ir0/oops.h>
+#include <ir0/spinlock.h>
 
 /* INTERNAL STATE                                                            */
 
@@ -51,15 +52,8 @@ static uint32_t *pmm_frame_refs;
 static uint64_t pmm_diag_double_free;
 static uint32_t pmm_diag_events;
 
-static inline unsigned long pmm_lock(void)
-{
-	return irq_save();
-}
-
-static inline void pmm_unlock(unsigned long flags)
-{
-	irq_restore(flags);
-}
+/* Guards the frame bitmap, reference counts and statistics. */
+static ir0_spinlock_t pmm_lock;
 
 static void pmm_panic_mem(const char *msg)
 {
@@ -311,7 +305,7 @@ uintptr_t pmm_alloc_frame(void)
 	if (!pmm.initialized)
 		return 0;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	/* First-fit from search hint, then wrap [0, hint) */
 	{
@@ -347,7 +341,7 @@ uintptr_t pmm_alloc_frame(void)
 		}
 	}
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 
 	if (ret == 0)
 	{
@@ -367,17 +361,17 @@ void pmm_frame_get(uintptr_t phys_addr)
 	if (pmm_frame_index(phys_addr, &frame_index) != 0)
 		return;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (!bitmap_test(frame_index))
 	{
-		pmm_unlock(irq_flags);
+		ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 		return;
 	}
 
 	if (!pmm_frame_refs)
 	{
-		pmm_unlock(irq_flags);
+		ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 		return;
 	}
 
@@ -387,7 +381,7 @@ void pmm_frame_get(uintptr_t phys_addr)
 	pmm_frame_refs[frame_index]++;
 	pmm_owner_on_get_locked(frame_index);
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 }
 
 void pmm_frame_put(uintptr_t phys_addr)
@@ -403,12 +397,12 @@ void pmm_frame_put(uintptr_t phys_addr)
 		return;
 	}
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (!bitmap_test(frame_index))
 	{
 		pmm_diag_double_free++;
-		pmm_unlock(irq_flags);
+		ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 		pmm_panic_mem("PMM: double free detected");
 		return;
 	}
@@ -417,7 +411,7 @@ void pmm_frame_put(uintptr_t phys_addr)
 	{
 		if (pmm_frame_refs[frame_index] == 0)
 		{
-			pmm_unlock(irq_flags);
+			ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 			pmm_panic_mem("PMM: put with zero refcount on used frame");
 			return;
 		}
@@ -425,7 +419,7 @@ void pmm_frame_put(uintptr_t phys_addr)
 		if (pmm_frame_refs[frame_index] > 1)
 		{
 			pmm_frame_refs[frame_index]--;
-			pmm_unlock(irq_flags);
+			ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 			return;
 		}
 
@@ -440,7 +434,7 @@ void pmm_frame_put(uintptr_t phys_addr)
 	if (pmm_diag_events < 2048U && IR0_DEBUG_PMM)
 		pmm_diag_events++;
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 
 #if DEBUG_PMM
 	klog_print("[PMM] Freed frame\n");
@@ -456,12 +450,12 @@ unsigned pmm_frame_refcount(uintptr_t phys_addr)
 	if (pmm_frame_index(phys_addr, &frame_index) != 0)
 		return 0;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (bitmap_test(frame_index) && pmm_frame_refs)
 		refs = (unsigned)pmm_frame_refs[frame_index];
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 	return refs;
 }
 
@@ -474,17 +468,17 @@ void pmm_frame_set_owner_class(uintptr_t phys_addr, pmm_owner_class_t cls,
 	if (pmm_frame_index(phys_addr, &frame_index) != 0)
 		return;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (!bitmap_test(frame_index))
 	{
-		pmm_unlock(irq_flags);
+		ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 		return;
 	}
 
 	pmm_owner_set_locked(frame_index, cls, pid);
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 }
 
 pmm_owner_class_t pmm_frame_owner_class(uintptr_t phys_addr)
@@ -496,12 +490,12 @@ pmm_owner_class_t pmm_frame_owner_class(uintptr_t phys_addr)
 	if (pmm_frame_index(phys_addr, &frame_index) != 0)
 		return PMM_OWNER_NONE;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (bitmap_test(frame_index) && pmm_owner_class_tab)
 		cls = (pmm_owner_class_t)pmm_owner_class_tab[frame_index];
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 	return cls;
 }
 
@@ -527,7 +521,7 @@ void pmm_stats(size_t *total_frames, size_t *used_frames, size_t *free_frames)
 	if (!pmm.initialized)
 		return;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (total_frames)
 		*total_frames = pmm.total_frames;
@@ -538,7 +532,7 @@ void pmm_stats(size_t *total_frames, size_t *used_frames, size_t *free_frames)
 	if (free_frames)
 		*free_frames = pmm.total_frames - pmm.used_frames;
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 
 #if DEBUG_PMM
 	klog_print("[PMM STATS]\n");
@@ -557,7 +551,7 @@ void pmm_owner_audit(uint64_t *orphan_frames, uint64_t *double_free,
 	if (!pmm.initialized)
 		return;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (pmm_owner_class_tab)
 	{
@@ -592,7 +586,7 @@ void pmm_owner_audit(uint64_t *orphan_frames, uint64_t *double_free,
 	if (alive_owner_missing)
 		*alive_owner_missing = alive_missing;
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 }
 
 int pmm_frame_is_used(size_t frame_index)
@@ -603,9 +597,9 @@ int pmm_frame_is_used(size_t frame_index)
 	if (!pmm.initialized || frame_index >= pmm.total_frames)
 		return 0;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 	used = bitmap_test(frame_index) ? 1 : 0;
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 	return used;
 }
 
@@ -618,7 +612,7 @@ int32_t pmm_frame_owner(size_t frame_index)
 	    !pmm_frame_owner_pid)
 		return -1;
 
-	irq_flags = pmm_lock();
+	irq_flags = ir0_spin_lock_irqsave(&pmm_lock);
 
 	if (bitmap_test(frame_index) && pmm_owner_class_tab &&
 	    pmm_owner_class_tab[frame_index] == PMM_OWNER_USER &&
@@ -627,7 +621,7 @@ int32_t pmm_frame_owner(size_t frame_index)
 		owner = pmm_frame_owner_pid[frame_index];
 	}
 
-	pmm_unlock(irq_flags);
+	ir0_spin_unlock_irqrestore(&pmm_lock, irq_flags);
 	return owner;
 }
 

@@ -17,6 +17,9 @@
 #include <ir0/errno.h>
 #include <ir0/tlb.h>
 #include <string.h>
+#include <ir0/spinlock.h>
+
+static ir0_spinlock_t mm_struct_lock;
 
 mm_struct_t *mm_create(void)
 {
@@ -38,9 +41,9 @@ mm_struct_t *mm_get(mm_struct_t *mm)
 	if (!mm)
 		return NULL;
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&mm_struct_lock);
 	mm->refcount++;
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&mm_struct_lock, irq_flags);
 	return mm;
 }
 
@@ -52,17 +55,17 @@ void mm_put(mm_struct_t *mm)
 	if (!mm)
 		return;
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&mm_struct_lock);
 	if (mm->refcount <= 0)
 	{
-		process_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&mm_struct_lock, irq_flags);
 		panic("mm_put: refcount underflow");
 		return;
 	}
 
 	mm->refcount--;
 	last = (mm->refcount == 0);
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&mm_struct_lock, irq_flags);
 
 	if (!last)
 		return;
@@ -97,9 +100,9 @@ int mm_users(const mm_struct_t *mm)
 	if (!mm)
 		return 0;
 
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&mm_struct_lock);
 	n = mm->refcount;
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&mm_struct_lock, irq_flags);
 	return n;
 }
 

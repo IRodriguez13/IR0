@@ -129,3 +129,6 @@ tty_irq_restore ir0_spin_unlock_irqrestore(&tty_lock)
 tty_irq_save ir0_spin_lock_irqsave(&tty_lock)
 udp_irq_restore ir0_spin_unlock_irqrestore(&udp_lock)
 udp_irq_save ir0_spin_lock_irqsave(&udp_lock)
+pmm_unlock ir0_spin_unlock_irqrestore(&pmm_lock)
+process_irq_restore ir0_spin_unlock_irqrestore() on the structure's lock
+process_irq_save ir0_spin_lock_irqsave() on the structure's lock

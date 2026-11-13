@@ -12,6 +12,9 @@
 #include <ir0/files_struct.h>
 #include <ir0/arch_mm.h>
 #include <string.h>
+#include <ir0/spinlock.h>
+
+static ir0_spinlock_t files_struct_lock;
 
 int files_struct_live(const files_struct_t *f)
 {
@@ -48,9 +51,9 @@ files_struct_t *files_get(files_struct_t *f)
 
 	if (!files_struct_live(f))
 		return NULL;
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&files_struct_lock);
 	f->refcount++;
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&files_struct_lock, irq_flags);
 	return f;
 }
 
@@ -61,16 +64,16 @@ void files_put(files_struct_t *f)
 
 	if (!files_struct_live(f))
 		return;
-	irq_flags = process_irq_save();
+	irq_flags = ir0_spin_lock_irqsave(&files_struct_lock);
 	if (f->refcount <= 0)
 	{
-		process_irq_restore(irq_flags);
+		ir0_spin_unlock_irqrestore(&files_struct_lock, irq_flags);
 		panic("files_put: refcount underflow");
 		return;
 	}
 	f->refcount--;
 	last = (f->refcount == 0);
-	process_irq_restore(irq_flags);
+	ir0_spin_unlock_irqrestore(&files_struct_lock, irq_flags);
 	if (!last)
 		return;
 	f->magic = IR0_FILES_MAGIC_DEAD;

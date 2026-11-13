@@ -73,16 +73,6 @@ typedef struct
 	uint64_t leaf_freed;
 } process_reclaim_stats_t;
 
-static inline uint64_t process_irq_save(void)
-{
-	return (uint64_t)irq_save();
-}
-
-static inline void process_irq_restore(uint64_t flags)
-{
-	irq_restore((unsigned long)flags);
-}
-
 /* fdtable.c */
 void process_release_fds(process_t *p, const char *pipe_trace_op);
 int process_duplicate_fd_table(process_t *parent, process_t *child);
