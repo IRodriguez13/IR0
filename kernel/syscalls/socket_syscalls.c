@@ -54,6 +54,10 @@ union sock_kaddr
 	uint8_t raw[128];
 };
 
+/* A staged SCM_RIGHTS descriptor travels as one opaque rights entry. */
+_Static_assert(sizeof(fd_entry_t) <= SOCK_STREAM_RIGHTS_ENTRY_SIZE,
+	       "fd_entry_t outgrew SOCK_STREAM_RIGHTS_ENTRY_SIZE");
+
 /*
  * net/socket.c move_addr_to_kernel(): a length past sockaddr_storage is
  * EINVAL, an unreadable address EFAULT. The tail past @len reads as zero.

@@ -20,7 +20,11 @@
 #define IR0_SOCK_DGRAM 2
 
 #define SOCK_STREAM_RIGHTS_MAX 4
-#define SOCK_STREAM_RIGHTS_ENTRY_SIZE 320
+/*
+ * One queued SCM_RIGHTS descriptor: an opaque copy of the sender's
+ * fd_entry_t. socket_syscalls.c asserts that the entry fits.
+ */
+#define SOCK_STREAM_RIGHTS_ENTRY_SIZE 384
 
 struct sock_stream;
 
