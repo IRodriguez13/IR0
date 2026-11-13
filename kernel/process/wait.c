@@ -210,13 +210,7 @@ int process_wait(pid_t pid, int *status, int options)
 		if (zombie) {
 			int status_val;
 			pid_t reaped_pid;
-
-			if (status && current_process->mode == USER_MODE &&
-			    !access_ok(status, sizeof(int)))
-			{
-				process_irq_restore(irq_flags);
-				return -EFAULT;
-			}
+			int ret = 0;
 
 			status_val = process_child_wait_status_word(zombie);
 			reaped_pid = zombie->task.pid;
@@ -225,12 +219,16 @@ int process_wait(pid_t pid, int *status, int options)
 			process_reap_zombie_child(zombie);
 			wait_exit_audit_process_wait_reap(reaped_pid, status_val, status);
 
+			/*
+			 * Linux kernel_wait4(): the child is reaped first; a
+			 * status word that cannot be written is then EFAULT.
+			 */
 			if (status)
 			{
 				if (current_process->mode == KERNEL_MODE)
 					*status = status_val;
 				else if (copy_to_user(status, &status_val, sizeof(int)) != 0)
-					return -EFAULT;
+					ret = -EFAULT;
 			}
 			process_wait_state_clear(current_process);
 			/*
@@ -242,7 +240,7 @@ int process_wait(pid_t pid, int *status, int options)
 			if (!wait_find_matching_zombie(current_process, (pid_t)-1))
 				current_process->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
 
-			return reaped_pid;
+			return ret ? ret : reaped_pid;
 		}
 
 		if (!found_child)
