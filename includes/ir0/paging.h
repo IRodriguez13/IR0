@@ -8,7 +8,7 @@
  *
  * File: paging.h
  * Description: Page tables, mappings and user-region helpers
- *              (implementation in mm/paging*.c).
+ *              (implementation in mm/paging/paging*.c).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -67,6 +67,7 @@ Review the diff under `Documentation/ai_driven_dev/` before committing.
 | `ir0-userspace-first-linux-abi.md` | always | Linux ground truth before userspace patches |
 | `ir0-api-public-private.md` | always | Facade naming; anti cross-coupling |
 | `ir0-scale-within-patterns.md` | always | Keep growing, but new code enters with the common-core patterns and their guards |
+| `ir0-source-layout.md` | always | Subsystems hold only generic code in per-responsibility subdirectories; ISA code (asm, atomics, barriers, MMU) lives in `arch/` behind Linux-named facades |
 | `ir0-smoke-behavior-validation.md` | always | QEMU smoke guards and multi-trial |
 | `ir0-ktm-instrumentation.md` | on demand | KTM tags and panic metadata |
 | `ir0-ktm-first-validation.md` | always | Prefer KTM guest checks; area goals for COW/fork/MM |

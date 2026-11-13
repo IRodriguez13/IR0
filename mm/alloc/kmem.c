@@ -12,7 +12,7 @@
  */
 
 #include <ir0/kmem.h>
-#include <mm/allocator.h>
+#include <mm/alloc/allocator.h>
 #include <ir0/oops.h>
 #include <ir0/mm_diag.h>
 #include <ir0/overflow.h>

@@ -66,7 +66,8 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `kernel-no-driver-include` | `kernel/` (whole tree) | No `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
-| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). Allowlist: `syscall_x86_64.h` / `syscall_arm64.h`. |
+| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). The user syscall stubs live in `arch/<isa>/include/asm/syscall_user.h`. |
+| `no-raw-atomics` | `block/`, `cpp/`, `drivers/`, `fs/`, `includes/`, `ipc/`, `kernel/`, `ktm/`, `mm/`, `net/`, `sched/`, `sound/` | No `__atomic_*`, `__sync_*` or inline asm outside `arch/` and `includes/asm-generic/atomic.h`; use **`<ir0/atomic.h>`** (`atomic_t`, `cmpxchg`, `test_and_set_bit_lock`, `barrier`). Empty exception ledger, injected-violation self-test. |
 | `usercopy-no-cr3-memcpy` | `kernel/syscalls/**`, `kernel/lib/signals.c` | No `load_page_directory` + raw `memcpy((void *)` / `memset((void *)` in the same function; use **`copy_*_user` / region helpers** ([`uaccess.md`](uaccess.md)). |
 | `usercopy-signals` | `kernel/lib/signals.c` | No `memcpy((void *)` (signal frame must use region copy). |
 | `usercopy-sys-uname` | `sys_uname` | No `memset(buf` / `strncpy(buf->`; bounce + **`copy_to_user`**. |
@@ -125,7 +126,7 @@ specific driver implementation file:
 | Scheduler | **`sched.h`** | Process/timer/IRQ → `schedule()` |
 | IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not arch interrupt backend headers from portable/drivers |
 | UP spinlock | **`spinlock.h`** (`ir0_spinlock_t`; irq-save on UP) | Hot paths e.g. `kernel/lib/pipe.c` read/write |
-| Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/page_fault.c` calls; impl in `arch/*/sources/pf_debug.c` |
+| Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/fault/page_fault.c` calls; impl in `arch/*/sources/pf_debug.c` |
 | Signal sigreturn ctx | `process_saved_context_*()` in `process.h` | Only `kernel/process/saved_context.c` may touch `->saved_context` |
 | Context switch | **`context.h`** | `switch_to` / kernel stack handoff |
 | MM root layout | **`arch_mm.h`** | User/kernel half of page-table root |
@@ -133,7 +134,7 @@ specific driver implementation file:
 | VFS-backed devices | `devfs.h`, `procfs.h`, `sysfs.h` | Virtual filesystems |
 | Pseudo-fs registry | `pseudo_fs.h` | Longest-prefix table for `/proc` / `/sys` nodes |
 | Credential helpers | `credentials.h` | **`kernel/process/credentials.c`** (`ir0_current_cred`, PID, access checks without pulling `kernel/*.h`) |
-| `process_t` / task globals | `process.h` | `/proc`, `mm/paging.c` fork paths needing struct layout |
+| `process_t` / task globals | `process.h` | `/proc`, `mm/paging/paging.c` fork paths needing struct layout |
 | Bluetooth façade | `bluetooth.h` | `ir0_bluetooth_poll`, `ir0_bluetooth_register_driver` without `drivers/bluetooth/*.c` callers |
 
 REQUIRED façades under `includes/ir0/*.h` must not `#include <drivers/…>`,

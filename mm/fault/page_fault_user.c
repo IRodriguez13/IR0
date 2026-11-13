@@ -19,7 +19,7 @@
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/swap.h>
 #include "page_fault_internal.h"
-#include "user_va.h"
+#include <mm/uaccess/user_va.h>
 
 int pf_addr_in_heap(process_t *p, uint64_t fa)
 {
@@ -64,7 +64,7 @@ int pf_addr_in_stack(process_t *p, uint64_t fa)
 
 /*
  * Linux do_anonymous_page only inside a VMA. IR0 also sees present+!USER
- * identity leaves after a 2MiB PDE split (sibling slots stay PA==VA).
+ * identity leaves after a 2 MiB block split (sibling slots stay PA==VA).
  */
 int pf_addr_may_promote_identity(process_t *p, uint64_t fa)
 {

@@ -128,10 +128,10 @@ host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 host_kmem_stub.o: host_kmem_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
-host_pmm.o: $(KERNEL_ROOT)/mm/pmm.c $(KERNEL_ROOT)/includes/ir0/pmm.h
+host_pmm.o: $(KERNEL_ROOT)/mm/alloc/pmm.c $(KERNEL_ROOT)/includes/ir0/pmm.h
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<
 
-host_boot_memory.o: $(KERNEL_ROOT)/mm/boot_memory.c
+host_boot_memory.o: $(KERNEL_ROOT)/mm/boot/boot_memory.c
 	$(KERNEL_CC)
 
 host_vbe.o: $(KERNEL_ROOT)/drivers/video/vbe.c
@@ -140,16 +140,16 @@ host_vbe.o: $(KERNEL_ROOT)/drivers/video/vbe.c
 host_x86_boot_identity.o: $(KERNEL_ROOT)/arch/x86-64/sources/boot_identity.c
 	$(KERNEL_CC)
 
-host_alloc_policy.o: $(KERNEL_ROOT)/mm/alloc_policy.c
+host_alloc_policy.o: $(KERNEL_ROOT)/mm/alloc/alloc_policy.c
 	$(KERNEL_CC)
 
-host_no_mmu.o: $(KERNEL_ROOT)/mm/no_mmu.c
+host_no_mmu.o: $(KERNEL_ROOT)/mm/nommu/no_mmu.c
 	$(KERNEL_CC)
 
-host_oom.o: $(KERNEL_ROOT)/mm/oom.c
+host_oom.o: $(KERNEL_ROOT)/mm/reclaim/oom.c
 	$(KERNEL_CC)
 
-host_reclaim.o: $(KERNEL_ROOT)/mm/reclaim.c
+host_reclaim.o: $(KERNEL_ROOT)/mm/reclaim/reclaim.c
 	$(KERNEL_CC)
 
 host_pipe_fd_stub.o: host_pipe_fd_stub.c
@@ -199,7 +199,7 @@ host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
 host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
 	$(KERNEL_CC)
 
-host_tlb_sync.o: $(KERNEL_ROOT)/mm/tlb_sync.c
+host_tlb_sync.o: $(KERNEL_ROOT)/mm/paging/tlb_sync.c
 	$(KERNEL_CC)
 
 host_swap_header.o: $(KERNEL_ROOT)/mm/swap/swap_header.c

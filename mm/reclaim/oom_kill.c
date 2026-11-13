@@ -15,6 +15,7 @@
  */
 
 #include <ir0/oom.h>
+#include <ir0/atomic.h>
 #include <ir0/reclaim.h>
 #include <ir0/process.h>
 #include <ir0/pmm.h>
@@ -23,12 +24,12 @@
 #include <ir0/logging.h>
 #include <string.h>
 
-static uint64_t oom_kills;
+static atomic64_t oom_kills;
 /*
  * Re-entrancy guard: the kill path frees address spaces and can touch the
  * allocator again. A nested OOM event must not run a second victim election.
  */
-static uint8_t oom_scan_active;
+static unsigned long oom_scan_active;
 
 static void oom_candidate_project(const process_t *process,
                                   struct ir0_oom_candidate *out)
@@ -57,7 +58,7 @@ static void oom_candidate_project(const process_t *process,
 
 uint64_t oom_kill_count(void)
 {
-    return __atomic_load_n(&oom_kills, __ATOMIC_RELAXED);
+    return (uint64_t)atomic64_read(&oom_kills);
 }
 
 int oom_kill_process(struct process *victim, const char *reason)
@@ -79,7 +80,7 @@ int oom_kill_process(struct process *victim, const char *reason)
                     "[OOM] kill pid=%d comm=%s reason=%s",
                     pid, victim->comm[0] ? victim->comm : "(none)",
                     reason ? reason : "unknown");
-    __atomic_add_fetch(&oom_kills, 1, __ATOMIC_RELAXED);
+    atomic64_add(1, &oom_kills);
 
     /*
      * send_signal() owns default-fatal delivery: for a foreign task it tears
@@ -88,7 +89,7 @@ int oom_kill_process(struct process *victim, const char *reason)
      */
     if (send_signal(pid, SIGKILL) != 0)
     {
-        __atomic_sub_fetch(&oom_kills, 1, __ATOMIC_RELAXED);
+        atomic64_sub(1, &oom_kills);
         return -ESRCH;
     }
     return 0;
@@ -104,7 +105,7 @@ int oom_out_of_memory(struct process *origin, const char *reason)
     int found = 0;
     int pid;
 
-    if (__atomic_test_and_set(&oom_scan_active, __ATOMIC_ACQUIRE))
+    if (test_and_set_bit_lock(0, &oom_scan_active))
         return -EBUSY;
 
     total = (uint64_t)pmm_total_frames();
@@ -124,7 +125,7 @@ int oom_out_of_memory(struct process *origin, const char *reason)
                         "[OOM] no eligible victim (origin=%d reason=%s)",
                         origin ? (int)origin->task.pid : -1,
                         reason ? reason : "unknown");
-        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
+        clear_bit_unlock(0, &oom_scan_active);
         return -ESRCH;
     }
 
@@ -136,7 +137,7 @@ int oom_out_of_memory(struct process *origin, const char *reason)
     process = process_find_by_pid(pid);
     if (!process)
     {
-        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
+        clear_bit_unlock(0, &oom_scan_active);
         return -ESRCH;
     }
 
@@ -148,13 +149,13 @@ int oom_out_of_memory(struct process *origin, const char *reason)
      */
     if (process == current_process)
     {
-        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
+        clear_bit_unlock(0, &oom_scan_active);
         return oom_kill_process(process, reason);
     }
     {
         int rc = oom_kill_process(process, reason);
 
-        __atomic_clear(&oom_scan_active, __ATOMIC_RELEASE);
+        clear_bit_unlock(0, &oom_scan_active);
         return rc;
     }
 }

@@ -246,7 +246,7 @@ in its group, so it cannot hide the others.
 | M2 | mmap | mm_mmap_huge_enomem / mm_mmap_huge_enomem | 1 TiB → ENOMEM | EINVAL | both | kernel/syscalls/mm_syscalls.c `sys_mmap` |
 | M3 | munmap | mm_munmap_then_segv / mm_munmap_hole_succeeds | unmapped range → 0 | EINVAL | both | kernel/syscalls/mm_vma.c |
 | M4 | mprotect PROT_NONE | mm_mprotect_readonly / mm_prot_none_faults | read faults (SIGSEGV) | readable | both | kernel/syscalls/mm_syscalls.c `sys_mprotect` / PTE encoding |
-| M5 | mmap MAP_SHARED anon | mm_shared_anon_fork / mm_shared_anon_survives_fork | shared with the child | copied (COW) | both | mm/paging_fork.c (fork copies shared VMAs as private) |
+| M5 | mmap MAP_SHARED anon | mm_shared_anon_fork / mm_shared_anon_survives_fork | shared with the child | copied (COW) | both | mm/paging/paging_fork.c (fork copies shared VMAs as private) |
 | M6 | clock_gettime | time_clock_gettime / time_clock_process_cputime | CLOCK_PROCESS_CPUTIME_ID works | EINVAL | both | kernel/syscalls/time_syscalls.c:140 |
 | M7 | clock_gettime | time_clock_gettime / time_realtime_from_rtc | REALTIME from RTC | near 0 | arm64 | arch/arm64/sources/rtc.c, drivers/timer/clock_system.c |
 | M8 | munmap of an ELF text page | mm_unmapped_segv_handler_kills_task | page unmapped; a fault whose handler is gone kills with SIGSEGV | munmap fails (child exit 60), the handler keeps running | both | kernel/syscalls/mm_vma.c (ELF image pages are not unmappable VMAs) |

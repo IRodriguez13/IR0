@@ -18,7 +18,7 @@ Checks:
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (smp_mb, inb, udelay, …).
-    Allowlist: syscall_x86_64.h / syscall_arm64.h only. Empty barrier OK.
+    Empty barrier OK.
 14) Portable trees must not hardcode userspace RIPs (0x402B*) or read CR2
     / emit iretq/sysret mnemonics outside arch/ (use arch_page_fault /
     arch_fork facades).
@@ -48,6 +48,9 @@ Checks:
     declared only in <ir0/oops_port.h>, and the idle wake-polling names
     (kernel_idle_poll, process_idle_bind, ...) stay gone. The check runs an
     injected-violation self-test first.
+28) No raw atomics: __atomic_*, __sync_* and inline asm appear only under
+    arch/ and in includes/asm-generic/atomic.h; portable code uses
+    <ir0/atomic.h>. Empty exception ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -967,10 +970,7 @@ PORTABLE_ISA_TREES = (
     ROOT / "fs",
     ROOT / "ipc",
 )
-PORTABLE_ISA_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "syscall_x86_64.h",
-    ROOT / "includes" / "ir0" / "syscall_arm64.h",
-}
+PORTABLE_ISA_ALLOWLIST: set[Path] = set()
 
 # ISA firmware headers must not leak into portable policy trees.
 PORTABLE_NO_ISA_FIRMWARE_TREES = (
@@ -2021,6 +2021,7 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/abi/signal_contract.h":
             "#include <asm/signal_contract.h>",
         "includes/ir0/cacheflush.h": "#include <asm/cacheflush.h>",
+        "includes/ir0/atomic.h": "#include <asm/atomic.h>",
         "includes/ir0/stat_user.h": "#include <asm/stat.h>",
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
     }
@@ -2055,7 +2056,7 @@ def check_common_paging_uses_neutral_roots():
     )
 
     # Every unit of the split paging core (paging.c, paging_*.c, headers).
-    for fpath in sorted((ROOT / "mm").glob("paging*.[ch]")):
+    for fpath in sorted((ROOT / "mm").rglob("paging*.[ch]")):
         relative = fpath.relative_to(ROOT).as_posix()
         for idx, line in enumerate(
             read_file_text(fpath).splitlines(), 1
@@ -2075,7 +2076,7 @@ def check_common_address_space_contracts():
     contracts = (
         "includes/ir0/memfd.h",
         "includes/ir0/ktm/user_canary.h",
-        "mm/memfd.c",
+        "mm/shmem/memfd.c",
         "ipc/sysv_shm.c",
         "kernel/vdso.c",
         "kernel/process/mm_struct.c",
@@ -2453,7 +2454,7 @@ KMEM_RETIRED_RE = re.compile(
     r"\b(kmalloc_try|kmalloc_aligned_try|krealloc|all_realloc|"
     r"__kmalloc_checked|__kmalloc_aligned_checked|__krealloc_checked)\b"
 )
-HEAP_BACKEND_INCLUDE_RE = re.compile(r'#\s*include\s*[<"](?:mm/)?allocator\.h[>"]')
+HEAP_BACKEND_INCLUDE_RE = re.compile(r'#\s*include\s*[<"](?:mm/(?:alloc/)?)?allocator\.h[>"]')
 
 
 def check_errno_has_single_catalog():
@@ -2497,7 +2498,7 @@ RETIRED_UACCESS_RE = re.compile(
 
 
 # The user-window arithmetic behind access_ok() and the copies: mm-private
-# (mm/user_va.h). Outside mm/ a pointer is checked with access_ok() and a
+# (mm/uaccess/user_va.h). Outside mm/ a pointer is checked with access_ok() and a
 # mapping range with mm_user_range_mappable().
 MM_PRIVATE_UACCESS_RE = re.compile(r"\b(mm_user_va_ok)\b")
 
@@ -2563,7 +2564,7 @@ def _uaccess_self_test() -> list[str]:
 def check_common_mm_uses_tlb_sync():
     """Keep root ownership policy out of ISA-local TLB mechanisms."""
     errors = []
-    for path in (ROOT / "mm").glob("*.c"):
+    for path in sorted((ROOT / "mm").rglob("*.c")):
         if path.name == "tlb_sync.c":
             continue
         for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
@@ -2631,8 +2632,6 @@ REGISTER_NAME_ISA_HEADERS = frozenset(
         "asm_offsets.h",
         "sigcontext_arm64.h",
         "sigcontext_x86_64.h",
-        "syscall_arm64.h",
-        "syscall_x86_64.h",
     }
 )
 REGISTER_NAME_PARTS = frozenset(
@@ -2846,6 +2845,88 @@ def check_no_busy_wait_primitives():
     return errors
 
 
+# Atomic instructions and inline asm belong to arch/ or to the atomics
+# backend. Portable code calls <ir0/atomic.h> (atomic_t, cmpxchg, bit locks,
+# barrier()) and the <ir0/cpu.h> facades; it never spells __atomic_*,
+# __sync_* or asm itself. RAW_ATOMIC_LEDGER lists reviewed exceptions as
+# "<path>" lines; it starts empty and only shrinks.
+RAW_ATOMIC_RE = re.compile(
+    r"\b(__atomic_[a-z_]+|__sync_[a-z_]+)\s*\(|"
+    r"\b(__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
+    r"\s*\(")
+RAW_ATOMIC_TREES = ("block", "cpp", "drivers", "fs", "includes", "ipc",
+                    "kernel", "ktm", "mm", "net", "sched", "sound")
+RAW_ATOMIC_BACKEND = "includes/asm-generic/atomic.h"
+RAW_ATOMIC_LEDGER: frozenset[str] = frozenset()
+
+
+def raw_atomic_violations(rel: str, text: str) -> list[tuple[int, str]]:
+    """Return (line, name) for each raw atomic or asm use in *text*."""
+    if rel.startswith("arch/") or rel == RAW_ATOMIC_BACKEND:
+        return []
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = RAW_ATOMIC_RE.search(line)
+        if match:
+            found.append((lineno, match.group(1) or match.group(2)))
+    return found
+
+
+def _raw_atomic_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "mm/clean.c": ("/* __atomic_load_n() and asm(\"\") in a comment */\n"
+                       "static const char *m = \"__sync_lock_release(\";\n"
+                       "#define X __ATOMIC_RELAXED\n"
+                       "\tbarrier();\n\ttest_and_set_bit_lock(0, &f);\n",
+                       []),
+        "mm/flag.c": ("\tif (__atomic_test_and_set(&f, __ATOMIC_ACQUIRE))\n"
+                      "\t\treturn;\n\t__atomic_clear(&f, 0);\n", [1, 3]),
+        "net/lock.c": ("\twhile (__sync_lock_test_and_set(&b, 1))\n", [1]),
+        "drivers/delay.c": ("\t__asm__ volatile(\"\" ::: \"memory\");\n"
+                            "\tasm (\"pause\");\n", [1, 2]),
+        "includes/ir0/x.h": ("register long x8 __asm__(\"x8\") = n;\n", [1]),
+        "arch/x86-64/sources/cpu.c": ("\t__asm__ volatile(\"hlt\");\n", []),
+        RAW_ATOMIC_BACKEND: ("\treturn __atomic_load_n(p, 0);\n", []),
+    }
+    failures = []
+    for rel, (text, expected) in cases.items():
+        got = [line for line, _ in raw_atomic_violations(rel, text)]
+        if got != expected:
+            failures.append(f"[no-raw-atomics] self-test {rel}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_raw_atomics():
+    """Reject __atomic_*, __sync_* and inline asm outside arch/ and the
+    atomics backend; stale ledger entries fail too."""
+    errors = _raw_atomic_self_test()
+    hit: set[str] = set()
+    for tree in RAW_ATOMIC_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            found = raw_atomic_violations(rel, read_file_text(path))
+            if found and rel in RAW_ATOMIC_LEDGER:
+                hit.add(rel)
+                continue
+            for lineno, name in found:
+                errors.append(
+                    f"[no-raw-atomics] {rel}:{lineno}: {name} outside arch/; "
+                    "use <ir0/atomic.h> (atomic_t, cmpxchg, "
+                    "test_and_set_bit_lock, barrier) or an arch facade")
+    for rel in sorted(RAW_ATOMIC_LEDGER - hit):
+        errors.append(f"[no-raw-atomics] {rel} is clean; drop it from "
+                      "RAW_ATOMIC_LEDGER")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -2867,14 +2948,12 @@ def print_register_name_baseline():
         print(f"{rel} {ident}")
 
 
-# mm/pmm.h and mm/paging.h moved into their <ir0/...> facades. The old paths
-# remain only as forwarders for the files listed here; the list only shrinks.
+# mm/pmm.h and mm/paging.h moved into their <ir0/...> facades and the old
+# forwarders are gone. The ledger stays empty; a file listed here may keep the
+# old spelling until it migrates (the list only shrinks).
 RETIRED_MM_HEADER_RE = re.compile(
     r'^\s*#\s*include\s*(?:<mm/(pmm|paging)\.h>|"(pmm|paging)\.h")')
-RETIRED_MM_HEADER_USERS = frozenset({
-    "mm/page_fault_cow.c",
-    "mm/paging_uaccess.c",
-})
+RETIRED_MM_HEADER_USERS: frozenset[str] = frozenset()
 
 
 def check_retired_mm_headers():
@@ -2884,8 +2963,6 @@ def check_retired_mm_headers():
     for tree in SINGLE_DECL_TREES:
         for fpath in iter_c_files(ROOT / tree):
             rel = str(rel_to_root(fpath))
-            if rel in ("mm/pmm.h", "mm/paging.h"):
-                continue
             for lineno, line in enumerate(read_file_text(fpath).splitlines(), 1):
                 match = RETIRED_MM_HEADER_RE.match(line)
                 if not match:
@@ -2900,7 +2977,7 @@ def check_retired_mm_headers():
     for rel in sorted(RETIRED_MM_HEADER_USERS - users):
         errors.append(
             f"[retired-mm-header] {rel} no longer uses the old path; drop it "
-            "from RETIRED_MM_HEADER_USERS (and the forwarder once empty)"
+            "from RETIRED_MM_HEADER_USERS"
         )
     return errors
 
@@ -3106,14 +3183,16 @@ def self_test_include_layout() -> list[str]:
 def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
-                    _register_name_self_test() + _uaccess_self_test())
+                    _register_name_self_test() + _uaccess_self_test() +
+                    _raw_atomic_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
                 print(" -", failure)
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
-              "portable-no-register-names, uaccess-single-api)")
+              "portable-no-register-names, uaccess-single-api, "
+              "no-raw-atomics)")
         return 0
 
     errors = []
@@ -3187,6 +3266,7 @@ def main():
     errors.extend(check_uaccess_single_api())
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
+    errors.extend(check_no_raw_atomics())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_include_layout())

@@ -20,14 +20,12 @@
 #include <ir0/fault.h>
 #include <ir0/arch_pf_debug.h>
 #include <ir0/ktm/deferred.h>
-#include <ir0/ktm/event.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/ktm/user_canary.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <ir0/paging.h>
-#include "page_fault_internal.h"
-#include "user_va.h"
+#include <mm/fault/page_fault_internal.h>
 
 int mm_diag_fault_hit(const char *name)
 {
@@ -156,7 +154,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 				(unsigned long long)(fault_addr - (uint64_t)USER_STACK_TOP));
 
 		/*
-		 * The fault RIP lands inside the libc block copy, so it names
+		 * The fault ip lands inside the libc block copy, so it names
 		 * memcpy and not whoever asked for the bad length. Snapshot the
 		 * top of the user stack instead: musl's x86-64 memcpy pushes
 		 * nothing, so the first word is the caller's return address.

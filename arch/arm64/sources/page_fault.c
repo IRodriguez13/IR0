@@ -8,7 +8,7 @@
  *
  * File: page_fault.c
  * Description: ARM64 instruction/data abort decode for the common MM fault
- *              handler (mm/page_fault.c).
+ *              handler (mm/fault/page_fault.c).
  *
  * Reference: ARM DDI 0487 D17.2.40 (ESR_EL1 ISS for aborts) and Linux
  * arch/arm64/mm/fault.c (is_el0_instruction_abort, is_write_abort,

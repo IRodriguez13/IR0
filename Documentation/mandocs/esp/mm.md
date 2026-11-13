@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | boot, process, syscalls |
 | Página man | ir0-mm (sección 7) |
-| Fuentes principales | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/elf_loader.c`, `arch/x86-64/sources/fault.c` |
+| Fuentes principales | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/elf_loader.c`, `arch/x86-64/sources/fault.c` |
 
 > **Última verificación:** 2026-07-10  
 > **Fuente de verdad:** `copy_process_memory`, `pmm_frame_get`/`put`, `fault.c`, `make smoke-mm-cow-lazy`
@@ -23,10 +23,10 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
 
 | Capa | Archivo | Rol |
 |------|---------|-----|
-| PMM | `mm/pmm.c` | Bitmap 4 KiB + refcount (`pmm_alloc_frame`, `pmm_frame_get`/`put`) |
-| Heap | `mm/allocator.c` | Allocador boundary-tag en `0x800000`, 24 MiB |
-| kmem | `mm/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
-| Paging | `mm/paging.c` | `map_page_in_directory`, share-on-fork (`PAGE_COW`), auditoría OOM |
+| PMM | `mm/alloc/pmm.c` | Bitmap 4 KiB + refcount (`pmm_alloc_frame`, `pmm_frame_get`/`put`) |
+| Heap | `mm/alloc/allocator.c` | Allocador boundary-tag en `0x800000`, 24 MiB |
+| kmem | `mm/alloc/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
+| Paging | `mm/paging/paging.c` | `map_page_in_directory`, share-on-fork (`PAGE_COW`), auditoría OOM |
 | Fault | `arch/x86-64/sources/fault.c` | Lazy heap/stack; break-COW en write fault |
 | Syscalls | `kernel/syscalls/mm_syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
 | ELF | `kernel/elf_loader.c` | PT_LOAD vía `map_user_region_in_directory` |

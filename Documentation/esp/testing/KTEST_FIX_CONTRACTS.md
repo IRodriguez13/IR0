@@ -5,7 +5,7 @@
 > `kernel/test/test_mm_contracts.c`, `kernel/test/test_debug_contracts.c`,
 > `kernel/test/test_runner.c`,
 > `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
-> `kernel/futex.c`, `ipc/ipc.c`, `mm/page_fault.c`, `mm/paging.c`,
+> `kernel/futex.c`, `ipc/ipc.c`, `mm/fault/page_fault.c`, `mm/paging/paging.c`,
 > `arch/x86-64/sources/mm.c`, `arch/arm64/sources/mm.c`
 
 Canónico en inglés: [`../../testing/KTEST_FIX_CONTRACTS.md`](../../testing/KTEST_FIX_CONTRACTS.md).
@@ -79,7 +79,7 @@ caminos de producción no pasan por un gancho distinto de `NULL`.
 |---------|-------------|----------|
 | `ir0_futex_before_sleep` | Al empezar un `ir0_futex_wait` bloqueado, antes de `schedule` | Puede marcar la tarea `PROCESS_READY`. No debe llamar a `ir0_futex_wait`. |
 | `ipc_sleep_recheck_probe` | Después de `wait_queue_add`, antes de volver a mirar el ring | No debe dormir ni planificar. |
-| `paging_unmap_test_hook` | Lo primero en `unmap_page_in_directory` (`mm/paging.c`), ambas ISAs | Devolver `-EOPNOTSUPP` para caer al walker de tablas. Cualquier otro valor es el resultado del unmap y el walker no corre. |
+| `paging_unmap_test_hook` | Lo primero en `unmap_page_in_directory` (`mm/paging/paging.c`), ambas ISAs | Devolver `-EOPNOTSUPP` para caer al walker de tablas. Cualquier otro valor es el resultado del unmap y el walker no corre. |
 
 El caso `MAP_FIXED` devuelve `-EIO` para una dirección y `-EOPNOTSUPP` para
 el resto. `is_page_mapped_in_directory` no consulta el gancho, así que la

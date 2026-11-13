@@ -8,7 +8,7 @@
  *
  * File: pmm.h
  * Description: Physical memory manager: 4 KiB frame allocator, frame
- *              refcounts and ownership (implementation in mm/pmm.c).
+ *              refcounts and ownership (implementation in mm/alloc/pmm.c).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

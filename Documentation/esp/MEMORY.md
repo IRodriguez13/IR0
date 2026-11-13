@@ -20,11 +20,30 @@ aislamiento de procesos.
 - Forensics x86 bajo `DEBUG_D1_DIAG` en `arch/x86-64/sources/pf_debug.c`.
 - COW sin cambio de contrato; gate: `make smoke-mm-cow-lazy`.
 
+## Organización del código
+
+`mm/` contiene sólo código portable, agrupado por responsabilidad; las
+instrucciones de MMU, TLB y atomics viven en `arch/<isa>/` detrás de
+`<ir0/arch_mm.h>`, `<ir0/tlb.h>` y `<ir0/atomic.h>`.
+
+| Directorio | Responsabilidad |
+|------------|-----------------|
+| `mm/alloc/` | Frames físicos (PMM), asignación acotada, heap del kernel, fachada de estadísticas |
+| `mm/boot/` | Inventario de memoria del firmware y entrega al PMM |
+| `mm/fault/` | Demand-zero, ruptura de COW, SIGSEGV y fallos del kernel |
+| `mm/paging/` | Walker de tablas, fork, identity maps, pool de tablas, política de TLB |
+| `mm/uaccess/` | `access_ok`, `copy_{to,from}_user`, copias a usuario seguras con COW |
+| `mm/reclaim/` | Registro de reclaimers, política y killer OOM |
+| `mm/swap/` | Áreas de swap, E/S y reclaimer de swap |
+| `mm/shmem/` | Objetos de `memfd_create` |
+| `mm/nommu/` | Política de espacio de direcciones directo sin MMU |
+| `mm/` (`diag.c`) | Hooks de `<ir0/mm_diag.h>` |
+
 ## Capas Principales
 
-- `mm/pmm.c`: tracking y asignacion de frames fisicos.
-- `mm/allocator.c` y `includes/ir0/kmem.h`: asignador dinamico del kernel.
-- `mm/paging.c`: mapeo virtual y setup de tablas de paginas.
+- `mm/alloc/pmm.c`: tracking y asignacion de frames fisicos.
+- `mm/alloc/allocator.c` y `includes/ir0/kmem.h`: asignador dinamico del kernel.
+- `mm/paging/paging.c`: mapeo virtual y setup de tablas de paginas.
 
 ## Modelo Operativo
 

@@ -75,10 +75,10 @@ OBJS += interrupt/arch/keyboard.o
 OBJS += drivers/IO/ps2.o
 
 # Subsystem: MEMORY (4 files)
-OBJS += mm/allocator.o
-OBJS += mm/paging.o
-OBJS += mm/kmem.o
-OBJS += mm/pmm.o
+OBJS += mm/alloc/allocator.o
+OBJS += mm/paging/paging.o
+OBJS += mm/alloc/kmem.o
+OBJS += mm/alloc/pmm.o
 
 # Subsystem: DMA (1 files)
 OBJS += drivers/dma/dma.o

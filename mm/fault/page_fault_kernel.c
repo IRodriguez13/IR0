@@ -13,7 +13,7 @@
 #include <ir0/oops.h>
 #include <ir0/fault.h>
 #include "page_fault_internal.h"
-#include "user_va.h"
+#include <mm/uaccess/user_va.h>
 
 void pf_kernel_fault(const struct page_fault_info *info, uint64_t fault_addr)
 {

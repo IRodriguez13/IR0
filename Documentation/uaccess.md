@@ -1,9 +1,9 @@
 # Kernel ↔ userspace copy frontier (uaccess)
 
 > **Last verified:** 2026-11-13  
-> **Source of truth:** `includes/ir0/copy_user.h`, `mm/copy_user.c`,  
-> `mm/user_va.h` (`mm_user_va_ok`, mm-private), `arch/*/sources/mm.c`,
-> `mm/paging_uaccess.c` (`copy_*_user_mm`, `clear_user_mm`),
+> **Source of truth:** `includes/ir0/copy_user.h`, `mm/uaccess/copy_user.c`,  
+> `mm/uaccess/user_va.h` (`mm_user_va_ok`, mm-private), `arch/*/sources/mm.c`,
+> `mm/uaccess/paging_uaccess.c` (`copy_*_user_mm`, `clear_user_mm`),
 > [`LINUX_SHAPED.md`](LINUX_SHAPED.md),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
 > (`check_usercopy_no_raw_user_touch`), `tests/host/test_usercopy_contract.c`,  
@@ -42,7 +42,7 @@ flowchart TB
     CU["includes/ir0/copy_user.h<br/>access_ok copy_to/from_user clear_user<br/>strncpy_from_user get_user put_user"]
   end
   subgraph isa [Per-ISA VA window]
-    VA["mm_user_va_ok() (mm/user_va.h)<br/>bounds: arch/*/sources/mm.c"]
+    VA["mm_user_va_ok() (mm/uaccess/user_va.h)<br/>bounds: arch/*/sources/mm.c"]
   end
   subgraph mm [Portable MM walk]
     REG["copy_*_user_mm clear_user_mm<br/>user leaves only<br/>COW break on write"]
@@ -75,7 +75,7 @@ flowchart TB
 4. Bounce buffers are preferred for small structs (`utsname`, `timeval`,
    `timespec`): fill on the kernel stack, then one `copy_to_user`.
 5. Kernel threads (`KERNEL_MODE`: dbgshell, ktest) call syscalls with kernel
-   buffers. One static rule in `mm/copy_user.c` (`uaccess_kernel()`) lets
+   buffers. One static rule in `mm/uaccess/copy_user.c` (`uaccess_kernel()`) lets
    `access_ok()` and the copies accept them. A process
    mode is fixed at spawn, inherited by fork, and exec requires `USER_MODE`,
    so no ring-3 pointer is ever checked under it.
@@ -118,7 +118,7 @@ public bounds `mm_user_va_start()` / `mm_user_va_end()`, because
 | `get_user` / `put_user` | Scalar macros over `copy_*_user` |
 | `copy_to_user_mm` / `copy_from_user_mm` / `clear_user_mm` | Explicit root (Linux `access_process_vm` analogue) |
 
-The `_mm` walks live in [`mm/paging_uaccess.c`](../mm/paging_uaccess.c) and
+The `_mm` walks live in [`mm/uaccess/paging_uaccess.c`](../mm/paging_uaccess.c) and
 perform COW-aware page walks. That is the **only** supported way to break COW
 on a kernel-initiated user write.
 
@@ -127,9 +127,9 @@ on a kernel-initiated user write.
 | Layer | Tree path | Responsibility |
 |-------|-----------|----------------|
 | Contract + macros | `includes/ir0/copy_user.h` | Same API on every ISA |
-| Portable glue | `mm/copy_user.c` | Kernel-thread rule, `access_ok`, dispatch to the `_mm` walks |
-| VA window | `mm_user_va_ok` in `mm/user_va.h` (mm-private), bounds `mm_user_va_start()` / `mm_user_va_end()` in `arch/*/sources/mm.c` | ISA canonical user range |
-| COW / PTE walk | `mm/paging_uaccess.c` | User leaf check, RO / COW break |
+| Portable glue | `mm/uaccess/copy_user.c` | Kernel-thread rule, `access_ok`, dispatch to the `_mm` walks |
+| VA window | `mm_user_va_ok` in `mm/uaccess/user_va.h` (mm-private), bounds `mm_user_va_start()` / `mm_user_va_end()` in `arch/*/sources/mm.c` | ISA canonical user range |
+| COW / PTE walk | `mm/uaccess/paging_uaccess.c` | User leaf check, RO / COW break |
 | Arm64 early | early MM / `arm64_mmu_user_buf_ok` where still used | Must still go through `copy_*_user` names; **no COW claim** until portable MM matches |
 
 **How to isolate an ISA bug:**

@@ -20,7 +20,7 @@
  *
  * Boot uses 2 MiB huge pages in address-space root[0]; inheriting that tree blocks user
  * ELF at 0x400000. Each process instead gets fresh 4 KiB supervisor mappings
- * for the low identity range so timer IRQ (TSS RSP0) and syscall entry can
+ * for the low identity range so IRQ and syscall entry (kernel stack) can
  * run with process address-space root loaded (Linux/BSD: kernel always reachable from user mm).
  */
 int map_supervisor_identity_low(address_space_root_t root, uint64_t start,
@@ -37,7 +37,7 @@ int map_supervisor_identity_low(address_space_root_t root, uint64_t start,
     for (va = start; va < end; va += PAGE_SIZE_4KB)
     {
         /*
-         * IRQ/syscall entry runs kernel text under process address-space root; omit NX on
+         * IRQ/syscall entry runs kernel text under process address-space root; omit execute-never on
          * the identity map (Linux keeps kernel text executable in every mm).
          */
         if (map_page_in_directory(root, va, va,
@@ -49,7 +49,7 @@ int map_supervisor_identity_low(address_space_root_t root, uint64_t start,
 }
 
 /*
- * map_supervisor_identity_2mb - 2 MiB supervisor identity (PD-level PS bit)
+ * map_supervisor_identity_2mb - 2 MiB supervisor identity (level-2 block entry)
  *
  * Cheaper than 4 KiB walks for the kernel heap and PMM frame pool. Callers must
  * not overlap [0x400000, 0x600000): a 2 MiB slot there would block user ELF.
@@ -165,7 +165,7 @@ void paging_reclaim_user_tables(address_space_root_t root)
                 if (!mm_pte_present(level2_entry))
                     continue;
 
-                /* Supervisor 2 MiB identity: drop PDE only (PFN is not a PT). */
+                /* Supervisor 2 MiB block: drop the entry only (not a table). */
                 if (paging_entry_large(level2_entry))
                 {
                     level2_table[i2] = 0;

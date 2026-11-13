@@ -10,6 +10,7 @@
  */
 
 #include "tcp.h"
+#include <ir0/atomic.h>
 #include <ir0/logging.h>
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>
@@ -26,7 +27,7 @@ struct tcp_pending_conn tcp_wire_pending;
  * Serialize outbound connect: single tcp_wire_pending/tcp_wire_out
  * (parallel wget → EINVAL).
  */
-static volatile int g_tcp_connect_busy;
+static unsigned long g_tcp_connect_busy;
 static uint32_t g_tcp_connect_owner;
 
 static int tcp_consume_connect_sigalrm(void)
@@ -58,11 +59,11 @@ static void tcp_pending_clear(void)
 
 void tcp_wire_on_process_exit(uint32_t pid)
 {
-	if (!g_tcp_connect_busy || g_tcp_connect_owner != pid)
+	if (!test_bit(0, &g_tcp_connect_busy) || g_tcp_connect_owner != pid)
 		return;
 	tcp_pending_clear();
 	g_tcp_connect_owner = 0;
-	__sync_lock_release(&g_tcp_connect_busy);
+	clear_bit_unlock(0, &g_tcp_connect_busy);
 }
 
 static void tcp_pending_set(ip4_addr_t peer_ip, uint16_t peer_port,
@@ -398,7 +399,7 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 	 * leave the lock wedged for later nc/wget.
 	 */
 	wait_deadline = clock_get_uptime_milliseconds() + TCP_WIRE_TIMEOUT_MS;
-	while (__sync_lock_test_and_set(&g_tcp_connect_busy, 1))
+	while (test_and_set_bit_lock(0, &g_tcp_connect_busy))
 	{
 		if (tcp_consume_connect_sigalrm())
 		{
@@ -417,7 +418,7 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 	if (ret < 0)
 	{
 		g_tcp_connect_owner = 0;
-		__sync_lock_release(&g_tcp_connect_busy);
+		clear_bit_unlock(0, &g_tcp_connect_busy);
 		return ret;
 	}
 	*local_port_out = lport;
@@ -433,7 +434,7 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 		if (ret != -EAGAIN)
 		{
 			g_tcp_connect_owner = 0;
-			__sync_lock_release(&g_tcp_connect_busy);
+			clear_bit_unlock(0, &g_tcp_connect_busy);
 			return ret;
 		}
 
@@ -442,7 +443,7 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 		{
 			tcp_pending_clear();
 			g_tcp_connect_owner = 0;
-			__sync_lock_release(&g_tcp_connect_busy);
+			clear_bit_unlock(0, &g_tcp_connect_busy);
 			return -ETIMEDOUT;
 		}
 
@@ -450,7 +451,7 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 		{
 			tcp_pending_clear();
 			g_tcp_connect_owner = 0;
-			__sync_lock_release(&g_tcp_connect_busy);
+			clear_bit_unlock(0, &g_tcp_connect_busy);
 			return -ETIMEDOUT;
 		}
 
@@ -459,7 +460,7 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 		{
 			tcp_pending_clear();
 			g_tcp_connect_owner = 0;
-			__sync_lock_release(&g_tcp_connect_busy);
+			clear_bit_unlock(0, &g_tcp_connect_busy);
 			return -EINTR;
 		}
 

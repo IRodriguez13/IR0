@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: page_fault_internal.h
- * Description: Internal facade of the mm/page_fault*.c units (dispatcher,
+ * Description: Internal facade of the mm/fault/page_fault*.c units (dispatcher,
  *              user faults, COW write faults, kernel faults). Not public.
  */
 

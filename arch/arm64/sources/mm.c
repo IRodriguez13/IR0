@@ -10,7 +10,7 @@
  * Description: ARM64 address-space policy for the common MM.
  *
  * User roots are 4-level 48-bit TTBR0 tables built and walked by the common
- * mm/paging.c code through the descriptor encoders in mm_ops.c, exactly as on
+ * mm/paging/paging.c code through the descriptor encoders in mm_ops.c, exactly as on
  * x86-64. Each root carries a supervisor identity map (DRAM window and Device
  * blocks, see mmu.c) so exception entry runs with the process root loaded.
  * There is no TTBR1 higher-half kernel yet.

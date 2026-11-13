@@ -16,7 +16,7 @@ kernel APIs.
 | input | `drivers/input/input_backend.c` | `KTM_INPUT_MOCK` |
 | video | `drivers/video/video_backend.c` | `KTM_VIDEO_MOCK` |
 | audio | `sound/audio_backend.c` | `KTM_AUDIO_MOCK` |
-| mm stats | `mm/mm_port.c` | `KTM_MM_PORT_MOCK` |
+| mm stats | `mm/alloc/mm_port.c` | `KTM_MM_PORT_MOCK` |
 | platform ops | none (selected at runtime) | `KTM_PLATFORM_MOCK` |
 
 The first five replace the production object at link time. `KTM_PLATFORM_MOCK`

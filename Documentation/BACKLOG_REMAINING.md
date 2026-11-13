@@ -79,7 +79,7 @@
 |------|-------|
 | SB16 DMA-safe playback + IRQ5 | `smoke-sb16-probe`; `sound_blaster.c`, `isr_handlers.c` |
 | `fd_can_write_for` without `current_process` swap | `io_syscalls.c`; host poll contracts unchanged 43/43 |
-| PF soft-grow removed | `mm/page_fault.c` |
+| PF soft-grow removed | `mm/fault/page_fault.c` |
 | `ir0_spinlock` + pipe hot path | `includes/ir0/spinlock.h`, `pipe.c` |
 | `saved_context` accessors + arch-guard | `saved_context.c`, `architecture_guard.py` |
 | `pf_debug_*` in arch tree | `pf_debug.c` (x86/arm64) |
@@ -245,7 +245,7 @@ Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
 | Product SVC table | Done — product SVC → `syscall_dispatch`; selftests `openat`/`identity` |
 | Staged adapter | Freestanding bring-up retired (no `-min` board images, no `IR0_FREESTANDING_BOOT`); only the product link remains |
 | ISD AArch64 | no `rootfs/arch/aarch64` pack |
-| User MM (mmap / fork / COW) | **Done.** User roots are 4-level 48-bit tables built by common `mm/paging.c` (`arch/arm64/sources/mmu.c`, `mm.c`); EL0/EL1 aborts enter `mm_page_fault_handle`. Proof: `make ir0-selftest-fault-arm64` 3/3 (was 0/3 with `ENOMEM`). |
+| User MM (mmap / fork / COW) | **Done.** User roots are 4-level 48-bit tables built by common `mm/paging/paging.c` (`arch/arm64/sources/mmu.c`, `mm.c`); EL0/EL1 aborts enter `mm_page_fault_handle`. Proof: `make ir0-selftest-fault-arm64` 3/3 (was 0/3 with `ENOMEM`). |
 | FP/SIMD context | **Open on both ISAs.** No FP/SIMD register save on context switch (x86 and ARM64). |
 | Board beyond QEMU virt | QEMU virt boots; `make ir0 arm64 rpi3\|rpi4\|rpi5` compiles and links the product kernel — no board boot, not hardware userspace |
 
@@ -275,7 +275,7 @@ before EL0. COM1 `serial.o` excluded when `ARCH=arm64`; `serial.c` x86-guarded.
 `tlb_invalidate_*` / `irq_save|restore` in `arch_portable`; x86 + ARM64
 `mm_ops.c`. Portable callers (`mm/paging` wrappers, `mm_syscalls`, `rr_sched`,
 `process_irq_*`) no longer embed `%%cr3`/`invlpg`/`pushfq`. PTE walker still x86
-in `mm/paging.c`. Portable **kernel** link on ARM64 is **`$(ALL_OBJS)`** today;
+in `mm/paging/paging.c`. Portable **kernel** link on ARM64 is **`$(ALL_OBJS)`** today;
 **musl aarch64 userspace** packaging remains the open gap.
 
 **F8b irq/MM residual sweep (2026-07-12):** Mechanical migration — `pushfq`/`cli`/`popfq`
@@ -286,7 +286,7 @@ in `mm/paging.c`. Portable **kernel** link on ARM64 is **`$(ALL_OBJS)`** today;
 real `__asm__` pushfq/cr3/invlpg (oops diagnostic + walker + process ABI deferred).
 Proof: `kernel-x64.bin` + `arch-guard` + `build-matrix-min` + `tests/host` +
 `smoke-stream-sock` + `smoke-arm64-syscall`. Remaining debt: PTE walker / `%%cr0`/`%%cr4`
-in `mm/paging.c`; `task.cr3` / fork frames / `switch_x64.asm`.
+in `mm/paging/paging.c`; `task.cr3` / fork frames / `switch_x64.asm`.
 
 **F7c (2026-07-12):** EL0 Linux-ish SVC ABI (`x8` nr) — getpid/write/exit + one 4 KiB EL0-RW
 page @ `0x42000000`. Proof: `make smoke-arm64-syscall` → `ARM64_EL0_PAGE_OK` +
@@ -299,12 +299,12 @@ linked in freestanding image). ARCH-5: `tests/host` `arch_irq_facade_nested`. Pr
 walker / process ABI / ALL_OBJS/musl; TCC gate separate (see stab notes).
 
 **Pack B / W10b partial + F7e (2026-07-12):** `mm_read_ctrl0` / `write_ctrl0` / `read_ctrl1`
-(x86 CR0/CR4; ARM SCTLR_EL1 / 0) — `mm/paging.c` no longer embeds `%%cr0`/`%%cr4`. F7e
+(x86 CR0/CR4; ARM SCTLR_EL1 / 0) — `mm/paging/paging.c` no longer embeds `%%cr0`/`%%cr4`. F7e
 `clock_gettime(CLOCK_MONOTONIC)` → `ARM64_CLOCK_GETTIME_OK`. arch-guard
 `[portable-no-isa-asm]` bans pushfq/`%%cr3`/invlpg in portable trees (allowlist `oops.c`).
 Product gates (no master merge this wave): `smoke-tcc-power-halt`,
 `IR0_LEGACY_SMOKE=1 smoke-fase55b-doom-stub`, `smoke-posix-depth` + CTR/cow/arm64. Remaining:
-PTE walker algorithm still x86 in `mm/paging.c`; process ABI; ALL_OBJS/musl.
+PTE walker algorithm still x86 in `mm/paging/paging.c`; process ABI; ALL_OBJS/musl.
 
 **Pack C / walker indices + F7f (2026-07-12):** `mm_va_indices` + `mm_pte_present` /
 `large` / `phys`; walk paths in `paging_get_pte` / `is_page_mapped` / `map_page_in_directory` /
@@ -322,7 +322,7 @@ musl aarch64 product rootfs (kernel **`$(ALL_OBJS)`** link is no longer the gate
 
 **Pack E / process MM-root + INTERRUPT wall + probe (2026-07-12):**
 `task_mm_root` / `process_mm_root` accessors (field `cr3` @ +0xB0 unchanged for asm).
-`mm/paging.c` residual present-checks → `mm_pte_present`. Makefile
+`mm/paging/paging.c` residual present-checks → `mm_pte_present`. Makefile
 `INTERRUPT_OBJS_ARM64` = `irq_portable_stubs.o` (no `lidt` / `isr_stubs_64`).
 `make arm64-all-objs-probe`: MEMORY_OBJS compile OK under ARM64_BOOT_CFLAGS;
 full KERNEL_OBJS + drivers now link as **`kernel-arm64-product.bin`**

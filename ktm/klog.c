@@ -15,6 +15,7 @@
 #include <stdarg.h>
 #include <stddef.h>
 #include <string.h>
+#include <ir0/atomic.h>
 #include <ir0/early_clock.h>
 #include <ir0/clock.h>
 #include <ir0/ktm/klog.h>
@@ -37,9 +38,9 @@ static int g_boot_hold = 1;
 static klog_record_t g_records[KLOG_EARLY_RECORDS];
 static klog_record_t *g_record_ring = g_records;
 static size_t g_record_capacity = KLOG_EARLY_RECORDS;
-static uint64_t g_record_sequence;
-static size_t g_record_head;
-static size_t g_record_count;
+static atomic64_t g_record_sequence;
+static atomic64_t g_record_head;
+static atomic64_t g_record_count;
 static klog_boot_phase_t g_boot_phase = KLOG_BOOT_EARLY_ARCH;
 
 void klog_boot_hold(int on)
@@ -338,11 +339,10 @@ static klog_record_t *klog_capture_record(klog_level_t level,
 	klog_record_t *record;
 	size_t slot;
 
-	slot = __atomic_fetch_add(&g_record_head, 1, __ATOMIC_RELAXED);
+	slot = (size_t)atomic64_fetch_add(1, &g_record_head);
 	record = &g_record_ring[slot % g_record_capacity];
 	memset(record, 0, sizeof(*record));
-	record->sequence = __atomic_add_fetch(&g_record_sequence, 1,
-					     __ATOMIC_RELAXED);
+	record->sequence = (uint64_t)atomic64_add_return(1, &g_record_sequence);
 	record->event_id = event_id;
 	record->subsystem = subsystem;
 	record->severity = (uint8_t)level;
@@ -365,8 +365,8 @@ static klog_record_t *klog_capture_record(klog_level_t level,
 	}
 	strncpy(record->component, component, sizeof(record->component) - 1);
 	strncpy(record->message, message, sizeof(record->message) - 1);
-	if (g_record_count < g_record_capacity)
-		__atomic_add_fetch(&g_record_count, 1, __ATOMIC_RELAXED);
+	if ((size_t)atomic64_read(&g_record_count) < g_record_capacity)
+		atomic64_add(1, &g_record_count);
 	return record;
 }
 
@@ -384,20 +384,20 @@ int klog_promote_normal_ring(void)
 	if (!normal)
 		return -1;
 	memset(normal, 0, sizeof(*normal) * KLOG_NORMAL_RECORDS);
-	count = g_record_count;
-	head = g_record_head;
+	count = (size_t)atomic64_read(&g_record_count);
+	head = (size_t)atomic64_read(&g_record_head);
 	start = head > count ? head - count : 0;
 	for (i = 0; i < count; i++)
 		normal[i] = g_record_ring[(start + i) % g_record_capacity];
 	g_record_ring = normal;
 	g_record_capacity = KLOG_NORMAL_RECORDS;
-	g_record_head = count;
+	atomic64_set(&g_record_head, (int64_t)count);
 	return 0;
 }
 
 size_t klog_record_count(void)
 {
-	return g_record_count;
+	return (size_t)atomic64_read(&g_record_count);
 }
 
 int klog_read_records(char *buf, size_t size)
@@ -410,8 +410,8 @@ int klog_read_records(char *buf, size_t size)
 
 	if (!buf || size == 0)
 		return -1;
-	count = g_record_count;
-	head = g_record_head;
+	count = (size_t)atomic64_read(&g_record_count);
+	head = (size_t)atomic64_read(&g_record_head);
 	start = head > count ? head - count : 0;
 	for (i = 0; i < count && off + 1 < size; i++)
 	{

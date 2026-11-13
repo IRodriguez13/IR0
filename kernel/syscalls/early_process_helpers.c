@@ -9,6 +9,7 @@
 
 #include "early_process_internal.h"
 
+#include <ir0/atomic.h>
 #include <stdint.h>
 
 void ep_early_set_current_pid(int64_t pid)
@@ -1117,7 +1118,7 @@ static int64_t early_membarrier(int cmd, int flags)
 	    cmd == IR0_EARLY_MEMBARRIER_CMD_PRIVATE_EXPEDITED ||
 	    cmd == IR0_EARLY_MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED)
 	{
-		__asm__ volatile("" ::: "memory");
+		barrier();
 		return 0;
 	}
 	return -EINVAL;

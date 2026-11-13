@@ -3,9 +3,9 @@
 > **Última verificación:** 2026-11-08  
 > Capas `copy_*_user_mm`: ver [`../LINUX_SHAPED.md`](../LINUX_SHAPED.md).
 
-> **Fuente de verdad:** `includes/ir0/copy_user.h`, `mm/copy_user.c`,  
-> `mm/user_va.h` (`mm_user_va_ok`, privado de mm), `arch/*/sources/mm.c`,
-> `mm/paging_uaccess.c` (`copy_*_user_mm`, `clear_user_mm`),  
+> **Fuente de verdad:** `includes/ir0/copy_user.h`, `mm/uaccess/copy_user.c`,  
+> `mm/uaccess/user_va.h` (`mm_user_va_ok`, privado de mm), `arch/*/sources/mm.c`,
+> `mm/uaccess/paging_uaccess.c` (`copy_*_user_mm`, `clear_user_mm`),  
 > `kernel/lib/signals.c`, `scripts/architecture_guard.py`  
 > (`check_usercopy_no_raw_user_touch`), `tests/host/test_usercopy_contract.c`,  
 > `scripts/smoke_session_soak.py` (FATAL incluye `KERNEL_UACCESS_FAULT`)
@@ -41,7 +41,7 @@ flowchart TB
     CU["includes/ir0/copy_user.h<br/>access_ok copy_to/from_user clear_user<br/>strncpy_from_user get_user put_user"]
   end
   subgraph isa [Ventana VA por ISA]
-    VA["mm_user_va_ok() (mm/user_va.h)<br/>límites: arch/*/sources/mm.c"]
+    VA["mm_user_va_ok() (mm/uaccess/user_va.h)<br/>límites: arch/*/sources/mm.c"]
   end
   subgraph mm [Walk MM portable]
     REG["copy_*_user_mm clear_user_mm<br/>solo hojas user<br/>COW break en write"]
@@ -72,7 +72,7 @@ flowchart TB
 4. Preferir bounce para structs chicos (`utsname`, `timeval`, `timespec`):
    rellenar en stack kernel y un `copy_to_user`.
 5. Los hilos del kernel (`KERNEL_MODE`: dbgshell, ktest) llaman syscalls con
-   buffers del kernel. Una sola regla estática en `mm/copy_user.c`
+   buffers del kernel. Una sola regla estática en `mm/uaccess/copy_user.c`
    (`uaccess_kernel()`) hace que `access_ok()` y las
    copias los acepten. El modo se fija en spawn, se hereda en fork y exec
    exige `USER_MODE`: ningún puntero ring-3 pasa por esa regla.
@@ -94,7 +94,7 @@ Comentario de contrato: [`includes/ir0/copy_user.h`](../../includes/ir0/copy_use
 | `get_user` / `put_user` | Macros escalares sobre `copy_*_user` |
 | `copy_*_user_mm` / `clear_user_mm` | Raíz explícita (análogo a `access_process_vm`) |
 
-Implementación con COW: [`mm/paging_uaccess.c`](../../mm/paging_uaccess.c). Es la **única**
+Implementación con COW: [`mm/uaccess/paging_uaccess.c`](../../mm/paging_uaccess.c). Es la **única**
 vía soportada para romper COW en un write iniciado por el kernel.
 
 ## Layout multi-ISA (aislar fallos por arquitectura)
@@ -102,9 +102,9 @@ vía soportada para romper COW en un write iniciado por el kernel.
 | Capa | Ruta en el árbol | Responsabilidad |
 |------|------------------|-----------------|
 | Contrato + macros | `includes/ir0/copy_user.h` | Misma API en toda ISA |
-| Glue portable | `mm/copy_user.c` | Regla de hilos del kernel, `access_ok`, dispatch a `_mm` |
-| Ventana VA | `mm_user_va_ok` en `mm/user_va.h` (privado de mm); límites en `arch/*/sources/mm.c` | Rango user canónico por ISA |
-| COW / walk PTE | `mm/paging_uaccess.c` | Hoja user, RO / COW break |
+| Glue portable | `mm/uaccess/copy_user.c` | Regla de hilos del kernel, `access_ok`, dispatch a `_mm` |
+| Ventana VA | `mm_user_va_ok` en `mm/uaccess/user_va.h` (privado de mm); límites en `arch/*/sources/mm.c` | Rango user canónico por ISA |
+| COW / walk PTE | `mm/uaccess/paging_uaccess.c` | Hoja user, RO / COW break |
 | Arm64 early | MM early / helpers existentes | Debe pasar por nombres `copy_*_user`; **sin reclamar COW** hasta paridad |
 
 **Cómo aislar un bug de ISA:**

@@ -16,7 +16,6 @@
 #include <ir0/boot_memory.h>
 #include <ir0/kmem.h>
 #include <ir0/process.h>
-#include <ir0/cpu.h>
 #include <ir0/oops.h>
 #include <ir0/spinlock.h>
 

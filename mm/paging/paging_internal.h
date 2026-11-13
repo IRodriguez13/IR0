@@ -7,9 +7,10 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: paging_internal.h
- * Description: Internal facade shared by the mm/paging*.c units (page-table
- *              core, user copies, fork, identity maps, accounting). Not a
- *              public API: other subsystems use <ir0/paging.h> and other ir0/ facades.
+ * Description: Internal facade shared by the paging units (page-table core,
+ *              fork, identity maps, accounting in mm/paging/ and the user
+ *              copies in mm/uaccess/paging_uaccess.c). Not a public API:
+ *              other subsystems use <ir0/paging.h> and other ir0/ facades.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -65,7 +66,7 @@ void paging_phys_map_end(uintptr_t saved_root);
 
 /*
  * Linux mm/x86: pte_pfn(), pud_page() — extract the physical pointer from a
- * descriptor without software/NX bits (via mm_pte_phys).
+ * descriptor without software/execute-never bits (via mm_pte_phys).
  */
 static inline uintptr_t paging_entry_pfn(uint64_t entry)
 {

@@ -53,10 +53,10 @@ Todo lo que solo existe con varias CPUs (arranque de CPUs, IPIs, áreas per-CPU,
 ### Prohibido en código portable
 
 - Labels de una sola ISA (`switch_context_x64`, …).
-- `__asm__` / inline asm ISA en `kernel/`, `fs/`, `mm/`, `net/`, `sched` backends, `drivers/`, `includes/ir0/*.c` (salvo barrier vacío `asm volatile("" ::: "memory")`).
+- `__asm__` / inline asm, `__atomic_*` o `__sync_*` en `kernel/`, `fs/`, `mm/`, `net/`, `sched` backends, `drivers/`, `ktm/`, `includes/ir0/` (barrera de compilador: `barrier()`; atomics: `<ir0/atomic.h>`). Ver `ir0-source-layout.md`.
 - Hot path “solo x86” sin facade + stub/impl para las demás ISA.
 
-Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm`.
+Enforcement: `scripts/architecture_guard.py` → `check_portable_no_isa_asm` y `check_no_raw_atomics`.
 
 ### Context switch (canónico)
 

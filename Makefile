@@ -166,7 +166,7 @@ endif
 # KTM_*_MOCK option disabled. `scripts/architecture_guard.py` rejects a mock
 # enabled without CONFIG_KTM.
 CONSOLE_BACKEND_OBJ := kernel/console_backend.o
-MM_PORT_OBJ := mm/mm_port.o
+MM_PORT_OBJ := mm/alloc/mm_port.o
 VIDEO_BACKEND_OBJ := drivers/video/video_backend.o
 INPUT_BACKEND_OBJ := drivers/input/input_backend.o
 AUDIO_BACKEND_OBJ := sound/audio_backend.o
@@ -474,7 +474,7 @@ KERNEL_OBJS = \
     net/sock_stream.o \
     net/sock_inet_ioctl.o \
     ipc/sysv_shm.o \
-    mm/memfd.o \
+    mm/shmem/memfd.o \
     fs/eventfd.o \
     fs/timerfd.o \
     ipc/posix_shm.o \
@@ -584,26 +584,26 @@ KERNEL_OBJS += arch/arm64/sources/boot_arch.o
 endif
 
 MEMORY_OBJS = \
-	mm/allocator.o \
-	mm/alloc_policy.o \
-	mm/boot_memory.o \
-	mm/no_mmu.o \
-	mm/oom.o \
-	mm/oom_kill.o \
-	mm/page_table_pool.o \
-	mm/reclaim.o \
-	mm/paging.o \
-	mm/paging_uaccess.o \
-	mm/paging_fork.o \
-	mm/paging_identity.o \
-	mm/paging_audit.o \
-	mm/tlb_sync.o \
-	mm/pmm.o \
-	mm/kmem.o \
-	mm/page_fault.o \
-	mm/page_fault_user.o \
-	mm/page_fault_cow.o \
-	mm/page_fault_kernel.o \
+	mm/alloc/allocator.o \
+	mm/alloc/alloc_policy.o \
+	mm/boot/boot_memory.o \
+	mm/nommu/no_mmu.o \
+	mm/reclaim/oom.o \
+	mm/reclaim/oom_kill.o \
+	mm/paging/page_table_pool.o \
+	mm/reclaim/reclaim.o \
+	mm/paging/paging.o \
+	mm/uaccess/paging_uaccess.o \
+	mm/paging/paging_fork.o \
+	mm/paging/paging_identity.o \
+	mm/paging/paging_audit.o \
+	mm/paging/tlb_sync.o \
+	mm/alloc/pmm.o \
+	mm/alloc/kmem.o \
+	mm/fault/page_fault.o \
+	mm/fault/page_fault_user.o \
+	mm/fault/page_fault_cow.o \
+	mm/fault/page_fault_kernel.o \
 	mm/diag.o \
 	mm/swap/swap_header.o \
 	mm/swap/swap.o \
@@ -621,7 +621,7 @@ LIB_OBJS = \
     kernel/signal_diag.o \
     kernel/entry.o \
     fs/pipe.o \
-    mm/copy_user.o \
+    mm/uaccess/copy_user.o \
     fs/open_flags.o \
     fs/bpath.o \
     fs/bpivot.o \
