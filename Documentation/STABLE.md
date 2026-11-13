@@ -174,8 +174,8 @@ These items were tracked as partial, WIP, or hardening backlog. They are **close
 
 | Item | Paths | Proof |
 |------|-------|-------|
-| PMM frame refcount | `mm/pmm.c` (`pmm_frame_get`/`put`) | FASE40 + ktests |
-| Fork COW (share + WP break) | `mm/paging.c`, `arch/x86-64/sources/fault.c` | `smoke-mm-cow-lazy` (real since `62cc512`) |
+| PMM frame refcount | `mm/alloc/pmm.c` (`pmm_frame_get`/`put`) | FASE40 + ktests |
+| Fork COW (share + WP break) | `mm/paging/paging.c`, `arch/x86-64/sources/fault.c` | `smoke-mm-cow-lazy` (real since `62cc512`) |
 | Lazy anon `mmap` | `CONFIG_LAZY_ANON_MMAP` | same smoke |
 | Lazy `brk` | `CONFIG_LAZY_BRK_HEAP` | same smoke |
 | ELF PT_LOAD VMA metadata | `kernel/elf_loader.c`, `process_user_vma_prot()` | exec + mmap ktests |

@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | boot, process, syscalls |
 | Man page | IR0-memory (section 7) |
-| Primary sources | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `mm/oom.c`, `mm/oom_kill.c`, `mm/page_fault.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
+| Primary sources | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `mm/reclaim/oom.c`, `mm/reclaim/oom_kill.c`, `mm/fault/page_fault.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
 
 ## 1. Overview
 
@@ -20,12 +20,12 @@ PML4s for user processes.
 
 | Layer | File | Role |
 |-------|------|------|
-| PMM | `mm/pmm.c` | 4 KiB frame bitmap (`pmm_alloc_frame`, `pmm_free_frame`) |
-| Heap | `mm/allocator.c` | Boundary-tag allocator at `0x800000`, 24 MiB |
-| kmem | `mm/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
-| Paging | `mm/paging.c` | `map_page_in_directory`, user/supervisor maps, OOM audit |
-| OOM policy | `mm/oom.c` | Pure badness/eligibility and deterministic victim ordering |
-| OOM killer | `mm/oom_kill.c` | Registry walk, `SIGKILL`, retry hook (`oom_handle_alloc_failure`) |
+| PMM | `mm/alloc/pmm.c` | 4 KiB frame bitmap (`pmm_alloc_frame`, `pmm_free_frame`) |
+| Heap | `mm/alloc/allocator.c` | Boundary-tag allocator at `0x800000`, 24 MiB |
+| kmem | `mm/alloc/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
+| Paging | `mm/paging/paging.c` | `map_page_in_directory`, user/supervisor maps, OOM audit |
+| OOM policy | `mm/reclaim/oom.c` | Pure badness/eligibility and deterministic victim ordering |
+| OOM killer | `mm/reclaim/oom_kill.c` | Registry walk, `SIGKILL`, retry hook (`oom_handle_alloc_failure`) |
 | Syscalls | `kernel/syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
 | ELF | `kernel/elf_loader.c` | PT_LOAD via `map_user_region_in_directory` |
 
@@ -114,7 +114,7 @@ PML4s for user processes.
    and `oom_score_adj > -1000`. Badness is resident pages + page-table pages,
    scaled by `oom_score_adj`; the allocating task is marked origin and wins
    selection.
-5. User allocation failure (`mm/page_fault.c`) runs `mm_reclaim_run` first.
+5. User allocation failure (`mm/fault/page_fault.c`) runs `mm_reclaim_run` first.
    If that frees pages, the fault retries without a kill. Otherwise it elects
    one victim and retries once, as Linux `__alloc_pages_slowpath` does after
    direct reclaim.

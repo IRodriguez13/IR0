@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | boot, process, syscalls |
 | Página man | IR0-memory (sección 7) |
-| Fuentes principales | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `mm/oom.c`, `mm/oom_kill.c`, `mm/page_fault.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
+| Fuentes principales | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `mm/reclaim/oom.c`, `mm/reclaim/oom_kill.c`, `mm/fault/page_fault.c`, `kernel/syscalls.c`, `kernel/elf_loader.c` |
 
 ## 1. Visión general
 
@@ -20,12 +20,12 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
 
 | Capa | Archivo | Rol |
 |------|---------|-----|
-| PMM | `mm/pmm.c` | Bitmap de frames 4 KiB (`pmm_alloc_frame`, `pmm_free_frame`) |
-| Heap | `mm/allocator.c` | Allocador boundary-tag en `0x800000`, 24 MiB |
-| kmem | `mm/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
-| Paging | `mm/paging.c` | `map_page_in_directory`, mapas user/supervisor, auditoría OOM |
-| Política OOM | `mm/oom.c` | Badness/eligibilidad pura y orden determinista de víctimas |
-| Killer OOM | `mm/oom_kill.c` | Recorrido del registro, `SIGKILL`, hook de reintento (`oom_handle_alloc_failure`) |
+| PMM | `mm/alloc/pmm.c` | Bitmap de frames 4 KiB (`pmm_alloc_frame`, `pmm_free_frame`) |
+| Heap | `mm/alloc/allocator.c` | Allocador boundary-tag en `0x800000`, 24 MiB |
+| kmem | `mm/alloc/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
+| Paging | `mm/paging/paging.c` | `map_page_in_directory`, mapas user/supervisor, auditoría OOM |
+| Política OOM | `mm/reclaim/oom.c` | Badness/eligibilidad pura y orden determinista de víctimas |
+| Killer OOM | `mm/reclaim/oom_kill.c` | Recorrido del registro, `SIGKILL`, hook de reintento (`oom_handle_alloc_failure`) |
 | Syscalls | `kernel/syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
 | ELF | `kernel/elf_loader.c` | PT_LOAD vía `map_user_region_in_directory` |
 
@@ -114,7 +114,7 @@ ambos VAs canónicas bajas con PML4s separados para procesos de usuario.
    `pid > 1` y `oom_score_adj > -1000`. La badness es páginas residentes +
    páginas de tablas, escalada por `oom_score_adj`; la tarea que asigna se
    marca como origen y gana la selección.
-5. El fallo de asignación user (`mm/page_fault.c`) corre `mm_reclaim_run`
+5. El fallo de asignación user (`mm/fault/page_fault.c`) corre `mm_reclaim_run`
    primero. Si libera páginas, el fallo reintenta sin matar. Si no, elige una
    víctima y reintenta una vez, como Linux `__alloc_pages_slowpath` tras el
    reclaim directo.

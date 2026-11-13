@@ -2,7 +2,7 @@
 
 > **Last verified:** 2026-11-06
 > **Source of truth:** `includes/ir0/ktm/*`, `ktm/*.c`, `ktm/include/klog.h`,
-> `mm/page_fault.c`, `scripts/smoke_session_soak.py`,
+> `mm/fault/page_fault.c`, `scripts/smoke_session_soak.py`,
 > `includes/ir0/klog_event.h`, [`KLOG.md`](KLOG.md),
 > `tests/ktm/`, `setup/Kconfig` (`CONFIG_KTM*`), `scripts/ktm_*.py`,
 > `scripts/ktm_userdev_runit_run.sh`, `scripts/smoke_autokill.py`,
@@ -425,7 +425,7 @@ A fault in the page immediately above `USER_STACK_TOP` is logged as
 pointer; it is in fact the first address past the top of the stack, which means
 something walked off the end of the initial image.
 
-Source: `mm/page_fault.c` (`pf_user_segv`).
+Source: `mm/fault/page_fault.c` (`pf_user_segv`).
 
 ### 7.4 Soak harness
 

@@ -17,7 +17,7 @@ independent CPUs, not to claim that IRQ masking is an SMP lock.
   IRQs.  SMP replacement: the per-CPU runqueue spinlock implemented in
   `smp/`, followed by per-CPU runqueue storage; `sched/` code must not call
   `irq_save()` directly (arch-guard `scheduler-runqueue-lock`).
-- `mm/pmm.c`, `mm/paging.c` and `mm/page_fault.c` have critical regions that
+- `mm/alloc/pmm.c`, `mm/paging/paging.c` and `mm/fault/page_fault.c` have critical regions that
   mask local IRQs while mutating page metadata or PTE state.  SMP replacement:
   frame allocator and address-space locks.  Common MM now requests coherence
   through `mm_tlb_sync_page/all(root, ...)`; its UP backend invalidates only an

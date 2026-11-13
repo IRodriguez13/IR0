@@ -7,10 +7,10 @@
 | Status | stable |
 | Depends on | boot, process, syscalls |
 | Man page | ir0-mm (section 7) |
-| Primary sources | `mm/pmm.c`, `mm/paging.c`, `mm/allocator.c`, `mm/kmem.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/elf_loader.c`, `arch/x86-64/sources/fault.c` |
+| Primary sources | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/elf_loader.c`, `arch/x86-64/sources/fault.c` |
 
 > **Last verified:** 2026-07-10  
-> **Source of truth:** `mm/paging.c` (`copy_process_memory`), `mm/pmm.c` (`pmm_frame_get`/`put`), `arch/x86-64/sources/fault.c`, `make smoke-mm-cow-lazy`
+> **Source of truth:** `mm/paging/paging.c` (`copy_process_memory`), `mm/alloc/pmm.c` (`pmm_frame_get`/`put`), `arch/x86-64/sources/fault.c`, `make smoke-mm-cow-lazy`
 
 ## 1. Overview
 
@@ -23,10 +23,10 @@ PML4s for user processes.
 
 | Layer | File | Role |
 |-------|------|------|
-| PMM | `mm/pmm.c` | 4 KiB frame bitmap + per-frame refcount (`pmm_alloc_frame`, `pmm_frame_get`/`put`, `pmm_free_frame` ≡ put) |
-| Heap | `mm/allocator.c` | Boundary-tag allocator at `0x800000`, 24 MiB |
-| kmem | `mm/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
-| Paging | `mm/paging.c` | `map_page_in_directory`, fork share-on-fork (`PAGE_COW`), OOM audit |
+| PMM | `mm/alloc/pmm.c` | 4 KiB frame bitmap + per-frame refcount (`pmm_alloc_frame`, `pmm_frame_get`/`put`, `pmm_free_frame` ≡ put) |
+| Heap | `mm/alloc/allocator.c` | Boundary-tag allocator at `0x800000`, 24 MiB |
+| kmem | `mm/alloc/kmem.c` | `kmalloc`/`kfree` → `alloc()` |
+| Paging | `mm/paging/paging.c` | `map_page_in_directory`, fork share-on-fork (`PAGE_COW`), OOM audit |
 | Fault | `arch/x86-64/sources/fault.c` | Lazy heap/stack fill; write-fault COW break |
 | Syscalls | `kernel/syscalls/mm_syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap`, `sys_mprotect` |
 | ELF | `kernel/elf_loader.c` | PT_LOAD via `map_user_region_in_directory` |

@@ -1,7 +1,7 @@
 # IR0 Memory Subsystem
 
 > **Last verified:** 2026-11-07  
-> **Source of truth:** `mm/pmm.c`, `mm/paging.c`, `mm/page_fault.c`,  
+> **Source of truth:** `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/fault/page_fault.c`,  
 > `mm/swap/`, `includes/ir0/swap.h`, `arch/x86-64/sources/pf_debug.c`,
 > `Documentation/mandocs/en/mm.md`, `Documentation/uaccess.md`,  
 > `make smoke-mm-cow-lazy`, `tests/host` swap contracts, `ktest_swap_header_and_area`
@@ -11,12 +11,31 @@ process isolation.
 
 ## Core Layers
 
-- `mm/pmm.c`: physical page frame tracking, allocation, and per-frame refcount
+- `mm/alloc/pmm.c`: physical page frame tracking, allocation, and per-frame refcount
   (`pmm_frame_get` / `pmm_frame_put`; `pmm_free_frame` drops one reference).
-- `mm/allocator.c` plus `includes/ir0/kmem.h`: kernel dynamic allocator.
-- `mm/paging.c`: virtual mapping, page-table setup, fork share-on-fork (`PAGE_COW`).
-- `mm/page_fault.c`: portable demand-zero, anon mmap, write-fault COW break, SIGSEGV policy.
+- `mm/alloc/allocator.c` plus `includes/ir0/kmem.h`: kernel dynamic allocator.
+- `mm/paging/paging.c`: virtual mapping, page-table setup, fork share-on-fork (`PAGE_COW`).
+- `mm/fault/page_fault.c`: portable demand-zero, anon mmap, write-fault COW break, SIGSEGV policy.
 - `arch/x86-64/sources/pf_debug.c`: optional `DEBUG_D1_DIAG` register-frame forensics (`pf_debug_stack_adjacent`, `pf_debug_memmove_fault`); arm64 stubs in `arch/arm64/sources/pf_debug.c`.
+
+## Source Layout
+
+`mm/` holds only portable code, grouped by responsibility; MMU, TLB and
+atomic instructions live under `arch/<isa>/` behind `<ir0/arch_mm.h>`,
+`<ir0/tlb.h>` and `<ir0/atomic.h>`.
+
+| Directory | Files | Responsibility |
+|-----------|-------|----------------|
+| `mm/alloc/` | `pmm.c`, `alloc_policy.c`, `allocator.[ch]`, `kmem.c`, `mm_port.c` | Physical frames, bounded frame allocation, kernel heap, stats facade |
+| `mm/boot/` | `boot_memory.c` | Firmware memory inventory and PMM handoff |
+| `mm/fault/` | `page_fault*.c`, `page_fault_internal.h` | Demand-zero, COW break, SIGSEGV and kernel-fault policy |
+| `mm/paging/` | `paging*.c`, `paging_internal.h`, `page_table_pool.c`, `tlb_sync.c` | Page-table walker, fork sharing, identity maps, table pool, TLB policy |
+| `mm/uaccess/` | `copy_user.c`, `paging_uaccess.c`, `user_va.h` | `access_ok`, `copy_{to,from}_user`, COW-safe user copies |
+| `mm/reclaim/` | `reclaim.c`, `oom.c`, `oom_kill.c` | Reclaimer registry, OOM policy and killer |
+| `mm/swap/` | `swap*.c` | Swap areas, swap I/O and the swap reclaimer |
+| `mm/shmem/` | `memfd.c` | `memfd_create` objects |
+| `mm/nommu/` | `no_mmu.c` | Direct address-space policy for no-MMU targets |
+| `mm/` | `diag.c` | `<ir0/mm_diag.h>` hooks (fault reports, fault injection) |
 
 ## Operational Model
 
