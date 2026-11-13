@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "process_internal.h"
+#include <ir0/process.h>
 #include <ir0/kmem.h>
 #include <string.h>
 

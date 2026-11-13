@@ -432,13 +432,13 @@ KERNEL_OBJS = \
     kernel/process/wait.o \
     kernel/process/wait_audit.o \
     kernel/process/wait_state.o \
-    kernel/process/saved_environ.o \
+    kernel/exec/saved_environ.o \
     fs/fdtable_init.o \
     fs/fdtable.o \
     fs/pseudo_fd_bind.o \
     mm/process_mm.o \
     kernel/signals/default_action.o \
-    kernel/vdso.o \
+    kernel/exec/vdso.o \
     kernel/signals/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
@@ -505,7 +505,7 @@ KERNEL_OBJS = \
     fs/timerfd.o \
     ipc/posix_shm.o \
     drivers/input/input_events.o \
-    kernel/elf_loader.o \
+    kernel/exec/elf_loader.o \
     drivers/core/driver_registry.o \
     drivers/core/resource_registry.o \
     ipc/ipc.o \
@@ -671,11 +671,11 @@ LIB_OBJS = \
     drivers/video/fb.o \
     drivers/input/input.o \
     fs/utimens.o \
-    kernel/exec_read_trace.o \
+    kernel/exec/exec_read_trace.o \
     fs/mount_prefix.o \
     block/blockdev.o \
-    kernel/elf64_image.o \
-    kernel/early_elf_stack.o \
+    kernel/exec/elf64_image.o \
+    kernel/exec/early_elf_stack.o \
     $(MM_PORT_OBJ) \
     ktm/process_introspect.o \
     drivers/rtc/rtc_calendar.o \

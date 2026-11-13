@@ -2030,7 +2030,7 @@ def check_common_address_space_contracts():
         "includes/ir0/ktm/user_canary.h",
         "mm/shmem/memfd.c",
         "ipc/sysv_shm.c",
-        "kernel/vdso.c",
+        "kernel/exec/vdso.c",
         "mm/mm_struct.c",
         "ktm/user_canary.c",
     )

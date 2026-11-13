@@ -55,6 +55,7 @@ Criterio del mantenedor para todo el kernel. Complementa
   |---------------|-----------------|
   | `kernel/process/` | ciclo de vida: registro, create, fork, exec (CLOEXEC), exit, wait, credenciales, límites |
   | `kernel/signals/` | entrega, frame de usuario, acción por defecto, trampolín, syscalls de señales y su hook de diag |
+  | `kernel/exec/` | carga de ELF, pila de entrada, vDSO, caché environ/cmdline de exec |
   | `kernel/boot/` | secuencia de arranque, parámetros, cmdline, rootfs base, handoff a init |
   | `kernel/problems/` | BUG/OOPS, panic y descripción neutral de faults |
   | `kernel/irq/` | tabla portable de IRQs y trabajo al volver a usuario desde una IRQ |

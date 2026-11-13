@@ -111,7 +111,7 @@ No adjuntes un **`x86_64`** `disk.img` a un boot ARM64.
 
 ### Scripts con shebang (`#!`)
 
-`execve` / `exec_replace_current` en `kernel/elf_loader.c` reconocen una línea
+`execve` / `exec_replace_current` en `kernel/exec/elf_loader.c` reconocen una línea
 `#!` antes de validar ELF: ruta del intérprete, argumento opcional y luego la
 ruta del script agregada a `argv`. La recursión está limitada a 4; archivos no
 ELF sin shebang válido devuelven `-ENOEXEC`.
