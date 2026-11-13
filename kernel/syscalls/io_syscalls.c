@@ -1738,14 +1738,14 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
   if (!current_process)
     return -ESRCH;
 
-  if (!pipefd)
-    return -EFAULT;
-
-  if (!access_ok(pipefd, sizeof(int) * 2))
-    return -EFAULT;
-
+  /*
+   * Linux do_pipe2(): flags first; @pipefd is checked by the copy-out
+   * below, which releases both new descriptors when it faults.
+   */
   if (flags & ~(O_NONBLOCK | O_CLOEXEC))
     return -EINVAL;
+  if (!pipefd)
+    return -EFAULT;
 
   if (flags & O_NONBLOCK)
   {
