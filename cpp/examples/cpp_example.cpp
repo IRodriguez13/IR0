@@ -210,7 +210,7 @@ extern "C" {
     #include <ir0/kmem.h>
     #include <ir0/logging.h>
     #include <ir0/driver.h>
-    #include <ir0/vga.h>  // For print_success
+    #include <ir0/vga.h>  // For print_colored
 }
 
 namespace ir0 {
@@ -308,12 +308,12 @@ IR0_API int32_t cpp_example_test_raii() {
             buffer[i] = static_cast<uint8_t>(i & 0xFF);
         }
         
-        print_success("[CPPExample] RAII test: buffer allocated and used\n");
+        print_colored("[CPPExample] RAII test: buffer allocated and used\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
         
         // ResourceGuard automatically frees in destructor when exiting scope
     }
     
-    print_success("[CPPExample] RAII test: resource automatically freed\n");
+    print_colored("[CPPExample] RAII test: resource automatically freed\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
     return IR0_DRIVER_OK;
 }
 

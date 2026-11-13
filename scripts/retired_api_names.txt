@@ -90,3 +90,15 @@ block_dev_legacy_name ir0_block_legacy_name()
 block_dev_name_at ir0_block_name_at()
 block_dev_read_sectors ir0_block_read_by_name()
 block_dev_write_sectors ir0_block_write_by_name()
+
+# Screen output (vga.h): print / print_colored / print_screen_only only;
+# numbers go through snprintf() first.
+LOG_OK print_colored(VGA_COLOR_GREEN)
+print_error print_colored(VGA_COLOR_RED)
+print_hex64 snprintf("%016lX") and print()
+print_hex_compact snprintf("0x%X") and print()
+print_int32 snprintf("%d") and print()
+print_success print_colored(VGA_COLOR_GREEN)
+print_uint32 snprintf("%u") and print()
+print_uint64 snprintf("%lu") and print()
+print_warning print_colored(VGA_COLOR_YELLOW)

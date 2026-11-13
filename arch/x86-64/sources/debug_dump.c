@@ -16,6 +16,7 @@
 #include <ir0/vga.h>
 #include <ir0/ktm/klog.h>
 #include <stdint.h>
+#include <string.h>
 
 void dump_registers(void)
 {
@@ -23,6 +24,7 @@ void dump_registers(void)
 	uint64_t r8, r9, r10, r11, r12, r13, r14, r15;
 	uint64_t rflags, rip;
 	uint64_t cr0, cr2, cr3, cr4;
+	char line[48];
 
 	__asm__ volatile(
 		"movq %%rax, %0\n"
@@ -77,18 +79,12 @@ void dump_registers(void)
 		       (unsigned long long)cr3, (unsigned long long)cr4);
 
 	print_colored("--- REGISTER DUMP (64-bit) ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-	print("RAX: ");
-	print_hex64(rax);
-	print("  ");
-	print("RBX: ");
-	print_hex64(rbx);
-	print("\n");
-	print("RIP: ");
-	print_hex64(rip);
-	print("  ");
-	print("RSP: ");
-	print_hex64(rsp);
-	print("\n");
+	snprintf(line, sizeof(line), "RAX: %016lX  RBX: %016lX\n",
+		 (unsigned long)rax, (unsigned long)rbx);
+	print(line);
+	snprintf(line, sizeof(line), "RIP: %016lX  RSP: %016lX\n",
+		 (unsigned long)rip, (unsigned long)rsp);
+	print(line);
 
 }
 
@@ -105,5 +101,5 @@ void dump_stack_trace(void)
 	klog_print("\n--- STACK TRACE ---\n");
 	klog_print("STACK_TRACE_DISABLED (panic-safe)\n");
 	print_colored("--- STACK TRACE ---\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
-	print_warning("STACK_TRACE_DISABLED\n");
+	print_colored("STACK_TRACE_DISABLED\n", VGA_COLOR_YELLOW, VGA_COLOR_BLACK);
 }

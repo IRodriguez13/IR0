@@ -73,7 +73,7 @@ void lapic_init_timer(void)
     /* Cargar el contador inicial */
     lapic_write(LAPIC_TIMER_INIT_COUNT, 10000000); /* este valor define frecuencia */
 
-    print_success("[LAPIC] Temporizador local configurado.\n");
+    print_colored("[LAPIC] Temporizador local configurado.\n", VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 }
 
 int lapic_available(void)

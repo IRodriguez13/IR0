@@ -15,6 +15,7 @@
 #include <ir0/oops.h>
 #include <drivers/timer/pit/pit.h> // para outb, inb 
 #include <vga.h>
+#include <string.h>
 
 #define HPET_GENERAL_CAPABILITY       0x00
 #define HPET_GENERAL_CONFIGURATION    0x10
@@ -42,6 +43,8 @@ void hpet_set_address(void* addr)
 
 void hpet_init()
 {
+    char line[32];
+
      if (hpet_mmio_base == NULL) 
        
      panic("HPET address not set before hpet_init");
@@ -64,9 +67,8 @@ void hpet_init()
     // Convertir a Hz: (1e15 fs / periodo en fs = Hz)
     uint64_t freq_hz = 1000000000000000ULL / clock_period_fs;
 
-    print("HPET Frequency: ");
-    print_hex_compact(freq_hz);
-    print("\n");
+    snprintf(line, sizeof(line), "HPET Frequency: 0x%X\n", (uint32_t)freq_hz);
+    print(line);
 
     // 4. Configurar el Timer 0 como periódico, con interrupciones habilitadas
     uint64_t config = 0;
@@ -89,5 +91,6 @@ void hpet_init()
 
     *((volatile uint64_t*)((uint8_t*)hpet_base + HPET_GENERAL_CONFIGURATION)) = gen_config;
 
-    LOG_OK("[HPET] Inicializado con interrupciones periódicas en IRQ0.\n");
+    print_colored("[OK] [HPET] Inicializado con interrupciones periódicas en IRQ0.\n\n",
+                  VGA_COLOR_GREEN, VGA_COLOR_BLACK);
 }

@@ -15,7 +15,6 @@
 
 #include <stdint.h>
 
-#define LOG_OK(msg)    print_success("[OK] " msg "\n")
 
 
 /* Cursor compartido para salida coherente entre print() y typewriter/shell */
@@ -47,9 +46,11 @@ extern int cursor_pos;
 // ============ FUNCIONES BÁSICAS DE IMPRESIÓN ============
 
 /*
- * console_puts — low-level VGA/FB string output (typewriter/backend path).
- * Kernel logging must use kprintf()/klog_* from <ir0/ktm/klog.h>.
- * print() remains an alias for console UI callers (not the logging hub).
+ * Screen output: one path. console_puts()/print() write a string through
+ * putchar(); print_colored() is the same path with a temporary color, and
+ * print_screen_only() is the panic variant (no serial, ignores the
+ * userspace gate). Format numbers with snprintf() first. Kernel logging
+ * goes through klog_* from <ir0/ktm/klog.h>, not through these.
  */
 void console_puts(const char *str);
 static inline void print(const char *str)
@@ -123,53 +124,3 @@ void clear_screen();
  * limpia la última línea y ajusta cursor_y.
  */
 void scroll();
-
-// ============ FUNCIONES DE CONVENIENCIA ============
-
-/*
- * Imprime mensaje de error en rojo.
- * Útil para debugging y logging de interrupciones.
- */
-void print_error(const char *str);
-
-/*
- * Imprime mensaje de advertencia en amarillo.
- */
-void print_warning(const char *str);
-
-/*
- * Imprime mensaje de éxito en verde.
- */
-void print_success(const char *str);
-
-/*
-* Me va a servir para poder imprimir direcciones de memo 
-*/
-void print_hex_compact(uint32_t num);
-
-void print_hex64(uint64_t val);
-
-/*
- * Imprime un entero de 64 bits sin signo.
- * Útil para debugging y logging de interrupciones.
- * 
- * @param num: Número a imprimir
- */
-void print_uint64(uint64_t num);
-
-/*
- * Imprime un entero de 32 bits con signo.
- * Útil para debugging y logging.
- * 
- * @param num: Número a imprimir
- */
-void print_int32(int32_t num);
-
-/*
- * Imprime un entero de 32 bits sin signo.
- * Útil para debugging y logging.
- * 
- * @param num: Número a imprimir
- */
-void print_uint32(uint32_t num);
-
