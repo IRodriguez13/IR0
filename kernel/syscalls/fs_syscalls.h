@@ -33,6 +33,8 @@ int64_t sys_openat(int dirfd, const char *pathname, int flags, mode_t mode);
 int64_t sys_stat(const char *pathname, stat_t *buf);
 int64_t sys_fstat(int fd, stat_t *buf);
 int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags);
+int64_t sys_statx(int dirfd, const char *pathname, int flags,
+                  unsigned int mask, void *buf);
 int64_t sys_unlinkat(int dirfd, const char *pathname, int flags);
 int64_t sys_renameat(int olddirfd, const char *oldpath,
                      int newdirfd, const char *newpath);

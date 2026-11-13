@@ -158,6 +158,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_socketpair: return IR0_SYSCALL_SOCKETPAIR;
 	case __NR_stat: return IR0_SYSCALL_STAT;
 	case __NR_statfs: return IR0_SYSCALL_STATFS;
+	case __NR_statx: return IR0_SYSCALL_STATX;
 	case __NR_symlink: return IR0_SYSCALL_SYMLINK;
 	case __NR_symlinkat: return IR0_SYSCALL_SYMLINKAT;
 	case __NR_sync: return IR0_SYSCALL_SYNC;

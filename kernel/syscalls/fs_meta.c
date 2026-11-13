@@ -121,16 +121,14 @@ static int64_t do_symlinkat(const char *target, int linkdirfd,
   return named_symlink_create(link_resolved, target_copy);
 }
 
-int64_t sys_fstat(int fd, stat_t *buf)
+/* fstat(2) into a kernel stat_t. */
+static int64_t fs_fstat_kernel(int fd, stat_t *kst_out)
 {
   stat_t kst;
   int64_t rc;
 
-  if (!current_process || !buf)
-    return -EFAULT;
-
-  if (!access_ok(buf, IR0_USER_STAT_SIZE))
-    return -EFAULT;
+  if (!current_process)
+    return -ESRCH;
 
   if (fd < 0)
     return -EBADF;
@@ -143,12 +141,8 @@ int64_t sys_fstat(int fd, stat_t *buf)
     {
       pseudo_fd_bind_t *bind = (pseudo_fd_bind_t *)fdt[fd].vfs_file;
 
-      rc = pseudo_fs_ops_stat((const pseudo_fs_ops_t *)bind->ops, bind->ctx, &kst);
-      if (rc != 0)
-	return rc;
-      if (ir0_copy_stat_to_user(buf, &kst) != 0)
-	return -EFAULT;
-      return 0;
+      return pseudo_fs_ops_stat((const pseudo_fs_ops_t *)bind->ops,
+                                bind->ctx, kst_out);
     }
   }
 
@@ -198,6 +192,18 @@ int64_t sys_fstat(int fd, stat_t *buf)
       return rc;
   }
 
+  *kst_out = kst;
+  return 0;
+}
+
+int64_t sys_fstat(int fd, stat_t *buf)
+{
+  stat_t kst;
+  int64_t rc;
+
+  rc = fs_fstat_kernel(fd, &kst);
+  if (rc != 0)
+    return rc;
   if (ir0_copy_stat_to_user(buf, &kst) != 0)
     return -EFAULT;
   return 0;
@@ -231,28 +237,25 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
 }
 
 /*
- * sys_newfstatat - Linux newfstatat(2) subset.
+ * fstatat(2) into a kernel stat_t: AT_EMPTY_PATH with "" describes dirfd
+ * itself (Linux vfs_fstatat()), AT_SYMLINK_NOFOLLOW the link itself.
  */
-int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
+static int64_t fs_fstatat_kernel(int dirfd, const char *pathname, int flags,
+                                 stat_t *kst)
 {
   char resolved[256];
-  stat_t kst;
   int64_t rc;
   char first;
 
-  if (!current_process || !buf)
-    return -EFAULT;
+  if (!current_process)
+    return -ESRCH;
 
-  if (!access_ok(buf, IR0_USER_STAT_SIZE))
-    return -EFAULT;
-
-  memset(&kst, 0, sizeof(kst));
-  /* Linux vfs_fstatat(): AT_EMPTY_PATH with "" describes dirfd itself. */
+  memset(kst, 0, sizeof(*kst));
   if ((flags & IR0_AT_EMPTY_PATH) &&
       copy_from_user(&first, pathname, sizeof(first)) == 0 && first == '\0')
   {
     if (dirfd != IR0_AT_FDCWD)
-      return sys_fstat(dirfd, buf);
+      return fs_fstat_kernel(dirfd, kst);
     rc = fs_resolve_at_empty(dirfd, resolved, sizeof(resolved));
   }
   else
@@ -270,11 +273,118 @@ int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
       return rc;
   }
 
-  rc = ir0_stat_path_routed(resolved, &kst);
+  return ir0_stat_path_routed(resolved, kst);
+}
 
+/*
+ * sys_newfstatat - Linux newfstatat(2) subset.
+ */
+int64_t sys_newfstatat(int dirfd, const char *pathname, stat_t *buf, int flags)
+{
+  stat_t kst;
+  int64_t rc;
+
+  rc = fs_fstatat_kernel(dirfd, pathname, flags, &kst);
   if (rc != 0)
     return rc;
   if (ir0_copy_stat_to_user(buf, &kst) != 0)
+    return -EFAULT;
+  return 0;
+}
+
+/* Linux struct statx (include/uapi/linux/stat.h), 256 bytes. */
+struct statx_timestamp_user
+{
+  int64_t tv_sec;
+  uint32_t tv_nsec;
+  int32_t reserved;
+};
+
+struct statx_user
+{
+  uint32_t stx_mask;
+  uint32_t stx_blksize;
+  uint64_t stx_attributes;
+  uint32_t stx_nlink;
+  uint32_t stx_uid;
+  uint32_t stx_gid;
+  uint16_t stx_mode;
+  uint16_t spare0;
+  uint64_t stx_ino;
+  uint64_t stx_size;
+  uint64_t stx_blocks;
+  uint64_t stx_attributes_mask;
+  struct statx_timestamp_user stx_atime;
+  struct statx_timestamp_user stx_btime;
+  struct statx_timestamp_user stx_ctime;
+  struct statx_timestamp_user stx_mtime;
+  uint32_t stx_rdev_major;
+  uint32_t stx_rdev_minor;
+  uint32_t stx_dev_major;
+  uint32_t stx_dev_minor;
+  uint64_t spare2[14];
+};
+
+_Static_assert(sizeof(struct statx_user) == 256, "struct statx is 256 bytes");
+
+#define STATX_BASIC_STATS 0x7ffU
+#define STATX_RESERVED 0x80000000U
+#define STATX_AT_NO_AUTOMOUNT 0x800
+#define STATX_AT_SYNC_TYPE 0x6000
+
+/* Linux new_decode_dev(): the major/minor halves of a dev_t. */
+static uint32_t statx_dev_major(uint64_t dev)
+{
+  return (uint32_t)((dev >> 8) & 0xfffU);
+}
+
+static uint32_t statx_dev_minor(uint64_t dev)
+{
+  return (uint32_t)((dev & 0xffU) | ((dev >> 12) & 0xfff00U));
+}
+
+/*
+ * sys_statx - statx(2): the fstatat() lookup, reported in struct statx.
+ * Every basic field is filled whatever @mask asks (Linux may return more
+ * than requested); birth time is not available.
+ */
+int64_t sys_statx(int dirfd, const char *pathname, int flags,
+                  unsigned int mask, void *buf)
+{
+  struct statx_user sx;
+  stat_t kst;
+  int64_t rc;
+
+  if (flags & ~(IR0_AT_SYMLINK_NOFOLLOW | STATX_AT_NO_AUTOMOUNT |
+                IR0_AT_EMPTY_PATH | STATX_AT_SYNC_TYPE))
+    return -EINVAL;
+  if ((flags & STATX_AT_SYNC_TYPE) == STATX_AT_SYNC_TYPE)
+    return -EINVAL;
+  if (mask & STATX_RESERVED)
+    return -EINVAL;
+
+  rc = fs_fstatat_kernel(dirfd, pathname, flags, &kst);
+  if (rc != 0)
+    return rc;
+
+  memset(&sx, 0, sizeof(sx));
+  sx.stx_mask = STATX_BASIC_STATS;
+  sx.stx_blksize = (uint32_t)kst.st_blksize;
+  sx.stx_nlink = (uint32_t)kst.st_nlink;
+  sx.stx_uid = (uint32_t)kst.st_uid;
+  sx.stx_gid = (uint32_t)kst.st_gid;
+  sx.stx_mode = (uint16_t)kst.st_mode;
+  sx.stx_ino = (uint64_t)kst.st_ino;
+  sx.stx_size = (uint64_t)kst.st_size;
+  sx.stx_blocks = (uint64_t)kst.st_blocks;
+  sx.stx_atime.tv_sec = (int64_t)kst.st_atime;
+  sx.stx_ctime.tv_sec = (int64_t)kst.st_ctime;
+  sx.stx_mtime.tv_sec = (int64_t)kst.st_mtime;
+  sx.stx_rdev_major = statx_dev_major((uint64_t)kst.st_rdev);
+  sx.stx_rdev_minor = statx_dev_minor((uint64_t)kst.st_rdev);
+  sx.stx_dev_major = statx_dev_major((uint64_t)kst.st_dev);
+  sx.stx_dev_minor = statx_dev_minor((uint64_t)kst.st_dev);
+  if (copy_to_user(buf, &sx, sizeof(sx)) != 0)
     return -EFAULT;
   return 0;
 }

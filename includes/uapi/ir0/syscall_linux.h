@@ -188,6 +188,7 @@
 #define __NR_unlinkat        263
 #define __NR_renameat        264
 #define __NR_linkat          265
+#define __NR_statx           332
 #define __NR_utimensat       280
 #define __NR_exit_group   231
 

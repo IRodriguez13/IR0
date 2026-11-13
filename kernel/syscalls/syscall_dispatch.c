@@ -181,6 +181,7 @@ WRAP1(sys_set_tid_address, int *)
 WRAP3(sys_fcntl, int, int, unsigned long)
 WRAP4(sys_openat, int, const char *, int, mode_t)
 WRAP4(sys_newfstatat, int, const char *, stat_t *, int)
+WRAP5(sys_statx, int, const char *, int, unsigned int, void *)
 WRAP2(sys_clock_gettime, int, struct timespec *)
 WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
@@ -414,6 +415,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SETSID] = wrap_sys_setsid;
   syscall_semantic_table[IR0_SYSCALL_SETUID] = wrap_sys_setuid;
   syscall_semantic_table[IR0_SYSCALL_STAT] = wrap_sys_stat;
+  syscall_semantic_table[IR0_SYSCALL_STATX] = wrap_sys_statx;
   syscall_semantic_table[IR0_SYSCALL_STATFS] = wrap_sys_statfs;
   syscall_semantic_table[IR0_SYSCALL_SYMLINK] = wrap_sys_symlink;
   syscall_semantic_table[IR0_SYSCALL_SYMLINKAT] = wrap_sys_symlinkat;
