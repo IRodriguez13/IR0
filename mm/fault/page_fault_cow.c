@@ -46,7 +46,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 	 */
 	irq_flags = irq_save();
 	/*
-	 * Write into an unsplit 2MiB PDE: paging_get_pte returns NULL
+	 * Write into an unsplit 2 MiB block: paging_get_pte returns NULL
 	 * (logged as pte=0). Split first; COW still requires USER|COW.
 	 */
 	if (paging_ensure_4k_leaf(process_pgd(current),
@@ -62,7 +62,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 	}
 	pte = paging_get_pte(process_pgd(current), vaddr_aligned);
 	/*
-	 * After huge-PDE break, slots are pte_none (Linux). Demand-zero
+	 * After a 2 MiB block split, slots are pte_none (Linux). Demand-zero
 	 * inside heap/stack/mmap — same as !present path above.
 	 */
 	if (!pte || !pte_present(*pte))
@@ -130,7 +130,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 	 * place. A undercounted pmm_frame_get after fork (or a raced
 	 * sibling) would otherwise leave the parent mapped RO+COW to
 	 * the same phys while the child writes through a RW PTE,
-	 * corrupting the parent's .data/.bss (seen as RIP/addr=0 SEGV
+	 * corrupting the parent's .data/.bss (seen as ip/addr=0 SEGV
 	 * in multi-fork ash/pipeline smokes).
 	 */
 	new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);

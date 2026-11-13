@@ -124,7 +124,7 @@ void paging_sync_kernel_mappings(address_space_root_t root)
 void paging_activate_address_space(uintptr_t root)
 {
 	/*
-	 * Switch while RSP may sit on a per-task kstack: ensure this mm still
+	 * Switch while the stack may sit on a per-task kstack: ensure this mm still
 	 * links the ISA-defined shared translation subtree (new kstack slots).
 	 */
 	if (root)
@@ -354,7 +354,7 @@ static uint64_t alloc_page_table(int level)
 }
 
 /*
- * Split a 2 MiB PDE to 512×4 KiB leaves so a USER PTE can be installed.
+ * Split a 2 MiB block entry to 512×4 KiB leaves so a USER PTE can be installed.
  *
  * Linux huge-break: untouched slots are pte_none. Below PMM_PHYS_BASE keep
  * supervisor identity (kmalloc). In the PMM window use pte_none — kstacks
@@ -459,7 +459,7 @@ uint64_t *paging_get_or_create_table(address_space_root_t root,
 
 		/*
 		 * Linux: table entries use _KERNPG_TABLE / pgtable flags only — never
-		 * NX on non-leaf levels.  Encode via mm_make_table_pte.
+		 * execute-never on non-leaf levels.  Encode via mm_make_table_pte.
 		 */
 		parent[index] = mm_make_table_pte((uintptr_t)phys_addr, user);
 		return (uint64_t *)paging_entry_pfn(phys_addr);
@@ -557,7 +557,7 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 		}
 	}
 
-	/* Flush TLB — skip invlpg: mapping runs under kernel address-space root and foreign
+	/* Flush TLB — skip the local invalidate: mapping runs under kernel address-space root and foreign
 	 * user VAs may be absent from the active page tables; address-space root reload on
 	 * context switch flushes user TLB entries anyway.
 	 */
