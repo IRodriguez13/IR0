@@ -17,7 +17,7 @@
 #pragma once
 
 /* process_t.fs_base — switch_x64.asm PROC_FS_BASE_OFFSET */
-#define IR0_PROC_FS_BASE_OFFSET 0x140
+#define IR0_PROC_FS_BASE_OFFSET 0x350
 
 /* task_t.arch field offsets (arch_task_context_x86_64 layout) */
 #define IR0_TASK_ARCH_RIP_OFFSET 0x80

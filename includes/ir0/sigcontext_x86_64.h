@@ -17,6 +17,28 @@
 #include <stdint.h>
 
 /*
+ * Linux struct _fpstate_64: the 512-byte FXSAVE image (x87, MXCSR and
+ * xmm0..xmm15). FXSAVE/FXRSTOR need it 16-byte aligned.
+ */
+struct _fpstate_64
+{
+	uint16_t cwd;
+	uint16_t swd;
+	uint16_t twd;
+	uint16_t fop;
+	uint64_t rip;
+	uint64_t rdp;
+	uint32_t mxcsr;
+	uint32_t mxcsr_mask;
+	uint32_t st_space[32];
+	uint32_t xmm_space[64];
+	uint32_t reserved2[12];
+	uint32_t reserved3[12];
+} __attribute__((aligned(16)));
+
+_Static_assert(sizeof(struct _fpstate_64) == 512, "FXSAVE image is 512 bytes");
+
+/*
  * Portable code must not open these fields — use arch_task_load/store_sigcontext
  * and arch_signal_* helpers only.
  */

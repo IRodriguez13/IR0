@@ -16,6 +16,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <ir0/sigcontext_x86_64.h>
 
 typedef struct arch_task_context
 {
@@ -55,6 +56,13 @@ typedef struct arch_task_context
 	uint64_t dr3;      /* +0xD8 */
 	uint64_t dr6;      /* +0xE0 */
 	uint64_t dr7;      /* +0xE8 */
+	/*
+	 * User FP/SIMD registers while the task is switched out (Linux
+	 * thread.fpu). fpu_valid == 0 means the initial state: a zeroed task
+	 * starts with the FNINIT control word and the default MXCSR.
+	 */
+	uint64_t fpu_valid;
+	struct _fpstate_64 fpu;
 } arch_task_context_t;
 
 _Static_assert(offsetof(arch_task_context_t, rip) == 0x80,

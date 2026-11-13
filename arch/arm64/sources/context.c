@@ -15,6 +15,7 @@
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
 #include <ir0/task.h>
+#include <ir0/fpu_backend.h>
 
 #include "switch_early.h"
 
@@ -50,5 +51,6 @@ void __switch_to(task_t *prev, task_t *next)
 {
 	if (!next)
 		return;
+	fpu_switch(prev, next);
 	switch_context_arm64(prev, next);
 }

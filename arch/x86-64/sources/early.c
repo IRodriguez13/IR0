@@ -25,6 +25,7 @@
 #include <arch/x86-64/sources/tss.h>
 #include <ir0/irq.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/fpu_backend.h>
 #include <interrupt/idt.h> /* idt_early_install64 only */
 
 /*
@@ -65,6 +66,7 @@ void early_init_x86_64(void)
     idt_early_install64();
 
     arch_enable_sse_x86_64();
+    fpu_init();
     
     klog_info("ARCH", "x86-64 early init: GDT, TSS, and early IDT");
 }

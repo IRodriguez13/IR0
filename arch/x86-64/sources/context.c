@@ -14,6 +14,7 @@
 
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
+#include <ir0/fpu_backend.h>
 #include <asm/context.h>
 
 #include "tss.h"
@@ -33,5 +34,6 @@ void set_current_kernel_stack(struct process *p)
 
 void __switch_to(task_t *prev, task_t *next)
 {
+	fpu_switch(prev, next);
 	switch_context_x64(prev, next);
 }

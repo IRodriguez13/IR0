@@ -29,6 +29,7 @@ ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/signal.o \
 	arch/x86-64/sources/cacheflush.o \
 	arch/x86-64/sources/context.o \
+	arch/x86-64/sources/fpu.o \
 	arch/x86-64/sources/switch_diag.o \
 	arch/x86-64/sources/mm.o \
 	arch/x86-64/sources/irq.o \
@@ -95,6 +96,7 @@ ARM64_PROCESS_BACKEND_OBJS = \
 	arch/arm64/sources/signal.o \
 	arch/arm64/sources/cacheflush.o \
 	arch/arm64/sources/context.o \
+	arch/arm64/sources/fpu.o \
 	arch/arm64/sources/mm.o \
 	arch/arm64/sources/irq.o \
 	arch/arm64/sources/page_fault.o \

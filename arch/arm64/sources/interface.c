@@ -13,6 +13,7 @@
 #include <ir0/arch_types.h>
 #include <ir0/oops.h>
 #include <ir0/oops_port.h>
+#include <ir0/fpu_backend.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -104,6 +105,7 @@ void early_init(void)
 	extern void early_init_arm64(void);
 
 	early_init_arm64();
+	fpu_init();
 }
 
 void interrupt_init(void)

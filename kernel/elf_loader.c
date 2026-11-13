@@ -35,6 +35,7 @@
 #include <ir0/input_backend.h>
 #include <ir0/paging.h>
 #include <ir0/tls.h>
+#include <ir0/fpu.h>
 #include <ir0/context.h>
 #include <ir0/chmod.h>
 #include <ir0/credentials.h>
@@ -1988,6 +1989,8 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
      */
     if (proc == current_process)
 	    set_tls(0);
+    /* Linux flush_thread(): the new image starts with clean FP/SIMD state. */
+    fpu_flush_thread(&proc->task);
     process_set_stack_layout(proc, USER_STACK_TOP - USER_STACK_SIZE,
 			     USER_STACK_SIZE);
 

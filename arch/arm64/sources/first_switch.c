@@ -13,6 +13,7 @@
 #include <ir0/context_backend.h>
 #include <ir0/task.h>
 #include <ir0/process.h>
+#include <ir0/fpu_backend.h>
 #include "switch_early.h"
 
 void first_switch_to(struct process *next)
@@ -22,6 +23,7 @@ void first_switch_to(struct process *next)
 
 	if (!p)
 		panic("first_switch_to: null process");
+	fpu_switch(NULL, &p->task);
 
 	root = process_mm_root(p);
 	if (!root)

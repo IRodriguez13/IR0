@@ -16,6 +16,7 @@
 #include <ir0/fork.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/errno.h>
+#include <ir0/fpu_backend.h>
 
 int fork_prepare_parent_return(struct process *parent, pid_t child_pid)
 {
@@ -41,6 +42,9 @@ int fork_prepare_child_return(struct process *child, struct process *parent)
 		return 0;
 	/* The child starts fresh: never resume the parent's kernel continuation. */
 	child->task.arch.kctx_valid = 0;
+	/* Linux copy_thread(): the child starts with the parent's registers. */
+	if (parent && parent == current_process)
+		fpu_copy_current(&child->task);
 
 	if (parent && parent->mode == USER_MODE)
 		process_apply_syscall_frame_to_task(&child->task,

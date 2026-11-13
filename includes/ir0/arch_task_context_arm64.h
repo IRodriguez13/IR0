@@ -17,6 +17,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/*
+ * Linux struct user_fpsimd_state: v0..v31, FPSR and FPCR. All zero is the
+ * initial state (round to nearest, no exception traps).
+ */
+struct user_fpsimd_state
+{
+	__uint128_t vregs[32];
+	uint32_t fpsr;
+	uint32_t fpcr;
+	uint32_t __reserved[2];
+};
+
 typedef struct arch_task_context
 {
 	uint64_t x0;
@@ -62,6 +74,9 @@ typedef struct arch_task_context
 	uint64_t kctx[13];
 	/* Non-zero once kctx holds a real continuation of this task. */
 	uint64_t kctx_valid;
+	/* User FP/SIMD registers while the task is switched out (Linux
+	 * thread.uw.fpsimd_state). */
+	struct user_fpsimd_state fpsimd;
 } arch_task_context_t;
 
 #define ARM64_KCTX_LR 11

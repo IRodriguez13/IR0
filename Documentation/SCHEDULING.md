@@ -95,6 +95,13 @@ returning kexec); arch-guard `[no-busy-wait]` rejects any other caller.
   re-entered only through the task's syscall/exception exit (first run:
   `switch_to_user_task()`, Linux `ret_from_fork`). `switch_to(NULL, next)`
   is the first transfer from boot.
+- FP/SIMD registers are per-task state (Linux x86 `fpu`, arm64
+  `fpsimd`). The kernel is built without FP/SIMD code, so the live
+  registers always belong to the current task: the arch `__switch_to()`
+  saves them into the outgoing task and loads the incoming one's
+  (eager switching, `arch/<isa>/sources/fpu.c` behind
+  `<ir0/fpu_backend.h>`). A fork child starts with its parent's registers
+  and `execve` resets them (`fpu_flush_thread()`).
 
 ## Strengths
 
