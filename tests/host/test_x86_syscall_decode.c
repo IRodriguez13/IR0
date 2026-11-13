@@ -31,6 +31,7 @@ void test_x86_syscall_decode_contract(void)
 	       IR0_SYSCALL_PREAD64);
 	ASSERT(x86_test_syscall_decode_number(__NR_pwrite64) ==
 	       IR0_SYSCALL_PWRITE64);
+	ASSERT(x86_test_syscall_decode_number(__NR_linkat) == IR0_SYSCALL_LINKAT);
 	ASSERT(x86_test_syscall_decode_number(UINT64_MAX) == IR0_SYSCALL_UNKNOWN);
 	for (number = 0; number < __NR_syscall_max; number++)
 	{
@@ -44,6 +45,6 @@ void test_x86_syscall_decode_contract(void)
 		decoded++;
 	}
 	/* Keep the native ABI catalog and its regression test in lockstep. */
-	ASSERT(decoded == 166);
+	ASSERT(decoded == 167);
 	TEST_END();
 }

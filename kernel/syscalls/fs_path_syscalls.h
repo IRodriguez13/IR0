@@ -29,6 +29,8 @@ int64_t sys_mkdirat(int dirfd, const char *pathname, mode_t mode);
 int64_t sys_chmod(const char *path, mode_t mode);
 int64_t sys_chown(const char *path, uid_t owner, gid_t group);
 int64_t sys_link(const char *oldpath, const char *newpath);
+int64_t sys_linkat(int olddirfd, const char *oldpath, int newdirfd,
+                   const char *newpath, int flags);
 int64_t sys_rename(const char *oldpath, const char *newpath);
 int64_t sys_uname(struct utsname *buf);
 int64_t sys_access(const char *pathname, int mode);

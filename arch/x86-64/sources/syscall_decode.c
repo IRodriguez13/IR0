@@ -90,6 +90,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_keymap_set: return IR0_SYSCALL_EXTENSION_KEYMAP_SET;
 	case __NR_kill: return IR0_SYSCALL_KILL;
 	case __NR_link: return IR0_SYSCALL_LINK;
+	case __NR_linkat: return IR0_SYSCALL_LINKAT;
 	case __NR_listen: return IR0_SYSCALL_LISTEN;
 	case __NR_lseek: return IR0_SYSCALL_LSEEK;
 	case __NR_lstat: return IR0_SYSCALL_LSTAT;

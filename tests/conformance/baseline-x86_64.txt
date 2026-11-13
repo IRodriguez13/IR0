@@ -10,6 +10,5 @@ mm_mmap_file_private TCONF  # file-backed mmap is ENOSYS
 mm_mmap_file_shared TCONF  # file-backed mmap is ENOSYS
 sig_block_pending TCONF  # rt_sigpending is ENOSYS
 sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
-stat_hardlink TCONF  # linkat is ENOSYS
 stat_statx TCONF  # statx is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS

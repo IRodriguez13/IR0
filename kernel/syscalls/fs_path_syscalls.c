@@ -412,31 +412,51 @@ int64_t sys_chown(const char *path, uid_t owner, gid_t group)
   return ir0_chown_path_routed(resolved, owner, group);
 }
 
-int64_t sys_link(const char *oldpath, const char *newpath)
+/* linkat(2) flag bits (linux/fcntl.h). */
+#define LINKAT_AT_SYMLINK_FOLLOW 0x400
+#define LINKAT_AT_EMPTY_PATH 0x1000
+
+/*
+ * sys_linkat - linkat(2): give the file at @oldpath a second name. Without
+ * AT_SYMLINK_FOLLOW a symlink is linked itself. AT_EMPTY_PATH needs
+ * CAP_DAC_READ_SEARCH, which nobody has here, so an empty path stays
+ * ENOENT as on Linux without the capability.
+ */
+int64_t sys_linkat(int olddirfd, const char *oldpath, int newdirfd,
+                   const char *newpath, int flags)
 {
   char old_resolved[256];
   char new_resolved[256];
   int rc;
 
-  if (!current_process || !oldpath || !newpath)
-    return -EFAULT;
+  if (!current_process)
+    return -ESRCH;
+  if (flags & ~(LINKAT_AT_SYMLINK_FOLLOW | LINKAT_AT_EMPTY_PATH))
+    return -EINVAL;
 
-  if (!access_ok(oldpath, 256))
-    return -EFAULT;
-  if (!access_ok(newpath, 256))
-    return -EFAULT;
-
-  rc = ir0_resolve_user_path(oldpath, old_resolved, sizeof(old_resolved),
-                             current_process->cwd, current_process->root);
+  rc = ir0_resolve_path_at(olddirfd, oldpath, old_resolved,
+                           sizeof(old_resolved));
   if (rc != 0)
     return rc;
+  if (flags & LINKAT_AT_SYMLINK_FOLLOW)
+  {
+    rc = ir0_follow_named_symlinks(old_resolved, sizeof(old_resolved),
+                                   IR0_SYMLINK_FOLLOW_MAX);
+    if (rc != 0)
+      return rc;
+  }
 
-  rc = ir0_resolve_user_path(newpath, new_resolved, sizeof(new_resolved),
-                             current_process->cwd, current_process->root);
+  rc = ir0_resolve_path_at(newdirfd, newpath, new_resolved,
+                           sizeof(new_resolved));
   if (rc != 0)
     return rc;
 
   return vfs_link(old_resolved, new_resolved);
+}
+
+int64_t sys_link(const char *oldpath, const char *newpath)
+{
+  return sys_linkat(IR0_AT_FDCWD, oldpath, IR0_AT_FDCWD, newpath, 0);
 }
 
 /**

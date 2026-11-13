@@ -112,6 +112,7 @@ WRAP3(sys_open, const char *, int, mode_t)
 WRAP1(sys_close, int)
 WRAP3(sys_waitpid, pid_t, int *, int)
 WRAP2(sys_link, const char *, const char *)
+WRAP5(sys_linkat, int, const char *, int, const char *, int)
 WRAP3(sys_readlink, const char *, char *, size_t)
 WRAP4(sys_readlinkat, int, const char *, char *, size_t)
 WRAP2(sys_symlink, const char *, const char *)
@@ -359,6 +360,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_EXTENSION_KEYMAP_SET] = wrap_keymap_set;
   syscall_semantic_table[IR0_SYSCALL_KILL] = wrap_sys_kill;
   syscall_semantic_table[IR0_SYSCALL_LINK] = wrap_sys_link;
+  syscall_semantic_table[IR0_SYSCALL_LINKAT] = wrap_sys_linkat;
   syscall_semantic_table[IR0_SYSCALL_LSEEK] = wrap_sys_lseek;
   syscall_semantic_table[IR0_SYSCALL_LSTAT] = wrap_sys_stat;
   syscall_semantic_table[IR0_SYSCALL_MEMFD_CREATE] = wrap_sys_memfd_create;
