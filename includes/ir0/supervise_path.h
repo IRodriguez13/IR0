@@ -20,9 +20,6 @@
 /* Clear stale MINIX node before open on supervise regular files (pid.new, lock, …). */
 int ir0_supervise_prepare_open(const char *path, int ir0_flags);
 
-/* Clear stale node before renameat on supervise regular paths. */
-int ir0_supervise_prepare_rename(const char *path);
-
 /*
  * Stat overlay: if @vfs_st is a wrong-type VFS node on a supervise FIFO path,
  * remove it so named_fifo_stat can succeed.

@@ -57,11 +57,6 @@ int ir0_supervise_prepare_open(const char *path, int ir0_flags)
   return 0;
 }
 
-int ir0_supervise_prepare_rename(const char *path)
-{
-  return ir0_supervise_clear_stale_regular(path);
-}
-
 int ir0_supervise_clear_stale_if_not_fifo(const char *path, const stat_t *vfs_st)
 {
   if (!path || !vfs_st)

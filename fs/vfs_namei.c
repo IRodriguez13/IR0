@@ -17,7 +17,6 @@
 #include "vfs.h"
 #include <ir0/path.h>
 #include <ir0/kmem.h>
-#include <ir0/named_fifo.h>
 #include <ir0/permissions.h>
 #include <ir0/credentials.h>
 #include <ir0/process.h>
@@ -183,6 +182,30 @@ int vfs_readlink(const char *path, char *buf, size_t buflen)
     return vfs_ops_readlink(ops, path, buf, buflen);
 }
 
+/* Nonzero when the directory @path lists any entry besides "." and "..". */
+static int vfs_dir_has_entries(const char *path)
+{
+    struct vfs_dirent *ents = kmalloc(3 * sizeof(*ents));
+    int n;
+    int i;
+    int found = 0;
+
+    if (!ents)
+        return -ENOMEM;
+    n = vfs_readdir(path, ents, 3);
+    for (i = 0; i < n && !found; i++)
+        found = strcmp(ents[i].name, ".") != 0 && strcmp(ents[i].name, "..") != 0;
+    kfree(ents);
+    return n < 0 ? n : found;
+}
+
+/*
+ * vfs_rename - Linux rename(2) within one mount. An existing target is
+ * replaced only by an object of the same kind: a non-directory over a
+ * directory is EISDIR, a directory over a non-directory ENOTDIR, and a
+ * directory over a non-empty directory ENOTEMPTY. Two names for the same
+ * file leave both in place.
+ */
 int vfs_rename(const char *oldpath, const char *newpath)
 {
     int ret = vfs_validate_path(oldpath);
@@ -193,32 +216,12 @@ int vfs_rename(const char *oldpath, const char *newpath)
         return -ESRCH;
 
     stat_t st_old;
-    int retry_rename;
+    stat_t st_new;
+    int have_new;
+    struct vfs_ops *ops;
 
     if (vfs_stat(oldpath, &st_old) != 0)
         return -ENOENT;
-
-    retry_rename = 0;
-    if (S_ISDIR(st_old.st_mode))
-    {
-        if (named_fifo_is_runsv_supervise_regular_path(oldpath))
-        {
-            ret = vfs_clear_stale_for_regular_file(oldpath);
-            if (ret != 0)
-                return ret;
-            retry_rename = 1;
-        }
-        else
-            return -EISDIR;
-    }
-
-    if (retry_rename)
-    {
-        if (vfs_stat(oldpath, &st_old) != 0)
-            return -ENOENT;
-        if (S_ISDIR(st_old.st_mode))
-            return -EISDIR;
-    }
 
     if (!ir0_check_file_access(oldpath, ACCESS_READ | ACCESS_WRITE))
         return -EACCES;
@@ -233,27 +236,39 @@ int vfs_rename(const char *oldpath, const char *newpath)
     if (m_old != m_new)
         return -EXDEV;
 
-    stat_t st_new;
-
-    if (vfs_stat(newpath, &st_new) == 0)
+    have_new = vfs_stat(newpath, &st_new) == 0;
+    if (have_new)
     {
+        if (strcmp(oldpath, newpath) == 0 ||
+            (st_old.st_ino != 0 && st_old.st_ino == st_new.st_ino &&
+             st_old.st_dev == st_new.st_dev))
+            return 0;
+        if (S_ISDIR(st_old.st_mode) && !S_ISDIR(st_new.st_mode))
+            return -ENOTDIR;
+        if (!S_ISDIR(st_old.st_mode) && S_ISDIR(st_new.st_mode))
+            return -EISDIR;
         if (S_ISDIR(st_new.st_mode))
         {
-            ret = vfs_rmdir_recursive(newpath);
+            ret = vfs_dir_has_entries(newpath);
             if (ret != 0)
-                return ret;
-        }
-        else
-        {
-            ret = vfs_unlink(newpath);
-            if (ret != 0)
-                return ret;
+                return ret < 0 ? ret : -ENOTEMPTY;
         }
     }
 
-    struct vfs_ops *ops = vfs_ops_for_path(oldpath);
+    ops = vfs_ops_for_path(oldpath);
     if (!ops)
         return -ENOSYS;
+    /* link + unlink cannot move a directory; only a backend rename can. */
+    if (S_ISDIR(st_old.st_mode) && !ops->rename)
+        return -EISDIR;
+
+    if (have_new)
+    {
+        ret = S_ISDIR(st_new.st_mode) ? vfs_rmdir(newpath) : vfs_unlink(newpath);
+        if (ret != 0)
+            return ret;
+    }
+
     if (ops->rename)
         return vfs_ops_rename(ops, oldpath, newpath);
     if (!ops->link)

@@ -351,17 +351,14 @@ int64_t sys_renameat(int olddirfd, const char *oldpath,
   if (rc != 0)
     return rc;
 
+  rc = vfs_rename(old_resolved, new_resolved);
+  if (rc != 0)
+    return rc;
+
+  /* The target name now belongs to the renamed file. */
   (void)named_fifo_unlink(new_resolved);
   (void)named_symlink_unlink(new_resolved);
-
-  rc = ir0_supervise_prepare_rename(old_resolved);
-  if (rc != 0)
-    return rc;
-  rc = ir0_supervise_prepare_rename(new_resolved);
-  if (rc != 0)
-    return rc;
-
-  return vfs_rename(old_resolved, new_resolved);
+  return 0;
 }
 
 int64_t sys_readlink(const char *pathname, char *buf, size_t bufsiz)
