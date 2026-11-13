@@ -25,7 +25,7 @@
  * - Barriers: smp_mb(), smp_rmb(), smp_wmb() in ir0/cpu.h backends
  * - Topology: cpu_id() / cpu_online_* in ir0/cpu.h; no raw APIC/GIC from mm/fs/net
  * - Critical sections: ir0/spinlock.h → irq_save/restore today; CONFIG_SMP path = atomics + IPI
- * - Cross-CPU MM: TLB flush via arch facade after pmap update (see mm/tlb_sync.c)
+ * - Cross-CPU MM: TLB flush via arch facade after pmap update (see mm/paging/tlb_sync.c)
  * - Drivers: register through ir0/driver.h / block_dev / netdev tables — no arch/ in fs/
  *
  * CONFIG_ENABLE_SMP (version.h): build gate only — runtime SMP-safe paths must

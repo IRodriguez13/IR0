@@ -19,7 +19,7 @@
 #include <ir0/pmm.h>
 #include <string.h>
 #include <ir0/paging.h>
-#include "paging_internal.h"
+#include <mm/paging/paging_internal.h>
 #include "user_va.h"
 
 /*

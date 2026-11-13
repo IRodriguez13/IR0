@@ -638,7 +638,7 @@ menu "Debugging"
         depends on KTM
         default n
         help
-          Links ktm/mocks/mm/ktm_mm_port_mock.c instead of mm/mm_port.c.
+          Links ktm/mocks/mm/ktm_mm_port_mock.c instead of mm/alloc/mm_port.c.
           Supplies deterministic PMM/allocator numbers for /proc tests.
           Never enable in products.
 

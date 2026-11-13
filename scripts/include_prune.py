@@ -18,7 +18,7 @@ always redundant.
 
 Run from the repository root of a tree that is not building anything else:
 
-    python3 scripts/include_prune.py mm/paging_uaccess.c kernel/syscalls/mm_vma.c
+    python3 scripts/include_prune.py mm/uaccess/paging_uaccess.c kernel/syscalls/mm_vma.c
 """
 
 from __future__ import annotations

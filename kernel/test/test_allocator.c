@@ -20,7 +20,7 @@
 #include <ir0/page_table_pool.h>
 #include <ir0/pmm.h>
 #include <ir0/reclaim.h>
-#include <mm/allocator.h>
+#include <mm/alloc/allocator.h>
 #include <stdint.h>
 #include <string.h>
 

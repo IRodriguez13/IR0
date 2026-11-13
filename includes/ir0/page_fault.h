@@ -47,7 +47,7 @@ int page_fault_decode(struct page_fault_info *out, uint64_t errcode,
 		      void *irq_frame);
 
 /*
- * Portable demand paging, COW, and SIGSEGV policy (mm/page_fault.c).
+ * Portable demand paging, COW, and SIGSEGV policy (mm/fault/page_fault.c).
  * irq_frame is ISA-specific; required for signal delivery on x86-64.
  */
 void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame);

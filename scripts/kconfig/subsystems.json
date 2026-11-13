@@ -25,10 +25,10 @@
       "architectures": ["x86-64", "arm32"],
       "files": {
         "x86-64": [
-          "mm/allocator.c",
-          "mm/paging.c",
-          "mm/kmem.c",
-          "mm/pmm.c"
+          "mm/alloc/allocator.c",
+          "mm/paging/paging.c",
+          "mm/alloc/kmem.c",
+          "mm/alloc/pmm.c"
         ],
         "arm32": []
       },
@@ -104,7 +104,7 @@
           "kernel/oops.c",
           "kernel/signals.c",
           "fs/pipe.c",
-          "mm/copy_user.c",
+          "mm/uaccess/copy_user.c",
           "includes/string.c"
         ],
         "arm32": []

@@ -2055,7 +2055,7 @@ def check_common_paging_uses_neutral_roots():
     )
 
     # Every unit of the split paging core (paging.c, paging_*.c, headers).
-    for fpath in sorted((ROOT / "mm").glob("paging*.[ch]")):
+    for fpath in sorted((ROOT / "mm").rglob("paging*.[ch]")):
         relative = fpath.relative_to(ROOT).as_posix()
         for idx, line in enumerate(
             read_file_text(fpath).splitlines(), 1
@@ -2075,7 +2075,7 @@ def check_common_address_space_contracts():
     contracts = (
         "includes/ir0/memfd.h",
         "includes/ir0/ktm/user_canary.h",
-        "mm/memfd.c",
+        "mm/shmem/memfd.c",
         "ipc/sysv_shm.c",
         "kernel/vdso.c",
         "kernel/process/mm_struct.c",
@@ -2453,7 +2453,7 @@ KMEM_RETIRED_RE = re.compile(
     r"\b(kmalloc_try|kmalloc_aligned_try|krealloc|all_realloc|"
     r"__kmalloc_checked|__kmalloc_aligned_checked|__krealloc_checked)\b"
 )
-HEAP_BACKEND_INCLUDE_RE = re.compile(r'#\s*include\s*[<"](?:mm/)?allocator\.h[>"]')
+HEAP_BACKEND_INCLUDE_RE = re.compile(r'#\s*include\s*[<"](?:mm/(?:alloc/)?)?allocator\.h[>"]')
 
 
 def check_errno_has_single_catalog():
@@ -2497,7 +2497,7 @@ RETIRED_UACCESS_RE = re.compile(
 
 
 # The user-window arithmetic behind access_ok() and the copies: mm-private
-# (mm/user_va.h). Outside mm/ a pointer is checked with access_ok() and a
+# (mm/uaccess/user_va.h). Outside mm/ a pointer is checked with access_ok() and a
 # mapping range with mm_user_range_mappable().
 MM_PRIVATE_UACCESS_RE = re.compile(r"\b(mm_user_va_ok)\b")
 
@@ -2563,7 +2563,7 @@ def _uaccess_self_test() -> list[str]:
 def check_common_mm_uses_tlb_sync():
     """Keep root ownership policy out of ISA-local TLB mechanisms."""
     errors = []
-    for path in (ROOT / "mm").glob("*.c"):
+    for path in sorted((ROOT / "mm").rglob("*.c")):
         if path.name == "tlb_sync.c":
             continue
         for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):

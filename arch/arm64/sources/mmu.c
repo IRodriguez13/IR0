@@ -10,7 +10,7 @@
  * Description: ARM64 boot MMU. Builds the 4-level 48-bit TTBR0 identity map
  *              used before the first process and supplies the supervisor
  *              identity (DRAM + Device blocks) of every user root. User
- *              mappings are owned by the common page-table walker (mm/paging.c)
+ *              mappings are owned by the common page-table walker (mm/paging/paging.c)
  *              through the mm_ops descriptor encoders.
  *
  * Reference: Linux arch/arm64/kernel/head.S (idmap), arch/arm64/mm/proc.S

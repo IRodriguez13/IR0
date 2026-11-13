@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: fault.c
- * Description: x86-64 CPU exception entry; #PF decode dispatches to mm/page_fault.c.
+ * Description: x86-64 CPU exception entry; #PF decode dispatches to mm/fault/page_fault.c.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -60,7 +60,7 @@ int process_oom_score_adj_get(const struct process *process);
 int process_oom_score_adj_set(struct process *process, int adjustment);
 
 /*
- * Kernel integration (mm/oom_kill.c). The policy above is pure and stays
+ * Kernel integration (mm/reclaim/oom_kill.c). The policy above is pure and stays
  * host-testable; these entry points own candidate collection, victim
  * signalling and the OOM event counters.
  *

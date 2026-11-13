@@ -7,9 +7,10 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: paging_internal.h
- * Description: Internal facade shared by the mm/paging*.c units (page-table
- *              core, user copies, fork, identity maps, accounting). Not a
- *              public API: other subsystems use <ir0/paging.h> and other ir0/ facades.
+ * Description: Internal facade shared by the paging units (page-table core,
+ *              fork, identity maps, accounting in mm/paging/ and the user
+ *              copies in mm/uaccess/paging_uaccess.c). Not a public API:
+ *              other subsystems use <ir0/paging.h> and other ir0/ facades.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

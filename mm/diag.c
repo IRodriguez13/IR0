@@ -26,8 +26,8 @@
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <ir0/paging.h>
-#include "page_fault_internal.h"
-#include "user_va.h"
+#include <mm/fault/page_fault_internal.h>
+#include <mm/uaccess/user_va.h>
 
 int mm_diag_fault_hit(const char *name)
 {
