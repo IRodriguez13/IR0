@@ -17,6 +17,9 @@
 #include <config.h>
 #include <ir0/files_struct.h>
 
+/* Guards pipe ids, end counts and ring state. */
+static ir0_spinlock_t pipe_lock;
+
 static uint64_t pipe_stats_created;
 static uint64_t pipe_stats_destroyed;
 static uint64_t pipe_next_id = 1;
@@ -42,11 +45,11 @@ pipe_t *pipe_create(void)
 
 	memset(pipe, 0, sizeof(*pipe));
 	{
-		ir0_spinlock_t lock;
+		unsigned long irq_flags;
 
-		ir0_spin_lock(&lock);
+		irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 		pipe->pipe_id = pipe_next_id++;
-		ir0_spin_unlock(&lock);
+		ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 	}
 	pipe_stats_created++;
 	ktm_event_emit4(KTM_EVENT_PIPE_CREATE, KTM_SUBSYS_IPC, pipe->pipe_id, 0, 0, 0);
@@ -59,7 +62,7 @@ pipe_t *pipe_create(void)
  */
 void pipe_acquire_end(pipe_t *pipe, int end)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
 	if (!pipe)
 		return;
@@ -67,7 +70,7 @@ void pipe_acquire_end(pipe_t *pipe, int end)
 	if (end != 0 && end != 1)
 		return;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	pipe->fd_refs++;
 	if (end == 0)
 	{
@@ -81,7 +84,7 @@ void pipe_acquire_end(pipe_t *pipe, int end)
 		if (pipe->named)
 			pipe->closed_write = 0;
 	}
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 	ktm_event_emit4(KTM_EVENT_PIPE_END_ACQUIRE, KTM_SUBSYS_IPC,
 			pipe->pipe_id, (uint64_t)(uint32_t)end,
@@ -98,7 +101,7 @@ void pipe_acquire_end(pipe_t *pipe, int end)
 
 int pipe_named_peer_is_open(pipe_t *pipe, int end)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 	int peer;
 
 	if (!pipe || !pipe->named)
@@ -106,25 +109,25 @@ int pipe_named_peer_is_open(pipe_t *pipe, int end)
 	if (end != 0 && end != 1)
 		return 0;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	if (end == 0)
 		peer = (pipe->writers > 0);
 	else
 		peer = (pipe->readers > 0);
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 	return peer;
 }
 
 void pipe_acquire(pipe_t *pipe)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
 	if (!pipe)
 		return;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	pipe->fd_refs++;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 }
 
 int pipe_read(pipe_t *pipe, void *buf, size_t count)
@@ -142,9 +145,9 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 	 * with the pipe mutex; IR0 IPC uses ir0_spinlock (UP: irq-save).
 	 * Bounded by PIPE_SIZE (4 KiB), so the hold time stays comparable.
 	 */
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	size_t to_read;
 	char *dest = (char *)buf;
 	size_t bytes_read = 0;
@@ -157,7 +160,7 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 		writers_snapshot = (uint32_t)pipe->writers;
 		readers_snapshot = (uint32_t)pipe->readers;
 		count_snapshot = pipe->count;
-		ir0_spin_unlock(&lock);
+		ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 		if ((int)writers_snapshot <= 0)
 		{
@@ -187,7 +190,7 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 	pipe->count -= bytes_read;
 	writers_snapshot = (uint32_t)pipe->writers;
 	count_snapshot = pipe->count;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 	ktm_event_emit4(KTM_EVENT_PIPE_READ, KTM_SUBSYS_IPC, pipe->pipe_id,
 			(uint64_t)bytes_read,
@@ -198,7 +201,7 @@ int pipe_read(pipe_t *pipe, void *buf, size_t count)
 
 int pipe_unread(pipe_t *pipe, const void *buf, size_t count)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 	const char *src;
 	size_t space;
 	size_t n;
@@ -208,7 +211,7 @@ int pipe_unread(pipe_t *pipe, const void *buf, size_t count)
 		return -EINVAL;
 
 	src = (const char *)buf;
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	space = PIPE_SIZE - pipe->count;
 	n = (count < space) ? count : space;
 	/*
@@ -222,7 +225,7 @@ int pipe_unread(pipe_t *pipe, const void *buf, size_t count)
 		pipe->buffer[pipe->read_pos] = src[i - 1];
 	}
 	pipe->count += n;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 	return (int)n;
 }
 
@@ -232,9 +235,9 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 		return -EINVAL;
 
 	/* Same critical section as pipe_read: see the comment there. */
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	size_t space;
 	size_t to_write;
 	const char *src = (const char *)buf;
@@ -248,7 +251,7 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 		readers_snapshot = (uint32_t)pipe->readers;
 		writers_snapshot = (uint32_t)pipe->writers;
 		count_snapshot = pipe->count;
-		ir0_spin_unlock(&lock);
+		ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 		ktm_event_emit4(KTM_EVENT_PIPE_EPIPE, KTM_SUBSYS_IPC, pipe->pipe_id,
 				(uint64_t)readers_snapshot,
@@ -260,7 +263,7 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 	space = PIPE_SIZE - pipe->count;
 	if (space == 0)
 	{
-		ir0_spin_unlock(&lock);
+		ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 		return -EAGAIN;
 	}
 
@@ -272,7 +275,7 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 	 */
 	if (count <= (size_t)PIPE_BUF && space < count)
 	{
-		ir0_spin_unlock(&lock);
+		ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 		return -EAGAIN;
 	}
 
@@ -288,7 +291,7 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 	pipe->count += bytes_written;
 	readers_snapshot = (uint32_t)pipe->readers;
 	count_snapshot = pipe->count;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 	ktm_event_emit4(KTM_EVENT_PIPE_WRITE, KTM_SUBSYS_IPC, pipe->pipe_id,
 			(uint64_t)bytes_written,
@@ -300,16 +303,16 @@ int pipe_write(pipe_t *pipe, const void *buf, size_t count)
 
 static void pipe_try_destroy(pipe_t *pipe)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 	int destroy = 0;
 
 	if (!pipe)
 		return;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	if (pipe->fd_refs == 0 && pipe->wait_refs == 0 && !pipe->named)
 		destroy = 1;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 	if (!destroy)
 		return;
@@ -320,27 +323,27 @@ static void pipe_try_destroy(pipe_t *pipe)
 
 void pipe_wait_enter(pipe_t *pipe)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
 	if (!pipe)
 		return;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	pipe->wait_refs++;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 }
 
 void pipe_wait_leave(pipe_t *pipe)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
 	if (!pipe)
 		return;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	if (pipe->wait_refs > 0)
 		pipe->wait_refs--;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 	pipe_try_destroy(pipe);
 }
@@ -348,7 +351,7 @@ void pipe_wait_leave(pipe_t *pipe)
 void pipe_close_end(pipe_t *pipe, int end)
 {
 	int last_fd = 0;
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
 	if (!pipe)
 		return;
@@ -356,7 +359,7 @@ void pipe_close_end(pipe_t *pipe, int end)
 	if (end != 0 && end != 1)
 		return;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
 	if (end == 0)
 	{
 		if (pipe->readers > 0)
@@ -377,7 +380,7 @@ void pipe_close_end(pipe_t *pipe, int end)
 		pipe->fd_refs--;
 		last_fd = (pipe->fd_refs == 0);
 	}
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
 
 	ktm_event_emit4(KTM_EVENT_PIPE_END_CLOSE, KTM_SUBSYS_IPC, pipe->pipe_id,
 			(uint64_t)(uint32_t)end,

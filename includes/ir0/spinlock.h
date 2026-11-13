@@ -18,8 +18,7 @@
 #include <config.h>
 
 /*
- * UP (default): mask IRQs for the critical section — same contract as the
- * legacy ipc_irq_save / pipe refcount paths.
+ * UP (default): mask IRQs for the critical section.
  *
  * SMP (future): per-lock atomic owner; not wired yet.
  */
@@ -27,26 +26,17 @@
 #error "ir0_spinlock: SMP backend not implemented — use UP build for now"
 #endif
 
+/*
+ * One lock object per protected structure, so an SMP backend has something
+ * to spin on. On UP the object carries no state: the IRQ state lives with
+ * the holder (Linux spin_lock_irqsave), so the lock nests and works from
+ * IRQ context.
+ */
 typedef struct
 {
-	unsigned long flags;
+	unsigned char unused;
 } ir0_spinlock_t;
 
-static inline void ir0_spin_lock(ir0_spinlock_t *lock)
-{
-	lock->flags = irq_save();
-}
-
-static inline void ir0_spin_unlock(ir0_spinlock_t *lock)
-{
-	irq_restore(lock->flags);
-}
-
-/*
- * Linux spin_lock_irqsave: the caller keeps the saved IRQ state, so the
- * lock nests and works from IRQ context (ir0_spin_lock stores the state in
- * the lock, which a nested holder would overwrite).
- */
 static inline unsigned long ir0_spin_lock_irqsave(ir0_spinlock_t *lock)
 {
 	(void)lock;

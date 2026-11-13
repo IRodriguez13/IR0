@@ -27,6 +27,9 @@
 #include <ir0/arch_port.h>
 #include <ir0/spinlock.h>
 
+/* Guards the channel table and message queues. */
+static ir0_spinlock_t ipc_lock;
+
 static ipc_channel_t *ipc_channels = NULL;  /* Linked list of all channels */
 static uint32_t next_channel_id = 1;
 static ipc_channel_t *ipc_channel_find_locked(uint32_t id)
@@ -68,7 +71,7 @@ void wait_queue_init(wait_queue_t *wq)
 
 void wait_queue_add(wait_queue_t *wq, process_t *proc)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
     if (!wq || !proc)
         return;
@@ -80,11 +83,11 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
     node->process = proc;
     node->next = NULL;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     if (wait_queue_contains(wq, proc)) {
         /* Still queued from an earlier pass (e.g. a signal woke it). */
         process_set_sched_state(proc, PROCESS_BLOCKED);
-        ir0_spin_unlock(&lock);
+        ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
         kfree(node);
         return;
     }
@@ -99,26 +102,26 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
 
     /* Mark process as blocked */
     process_set_sched_state(proc, PROCESS_BLOCKED);
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
 process_t *wait_queue_wake_one(wait_queue_t *wq)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     wait_queue_node_t *node;
     process_t *proc;
 
     if (!wq || !wq->head)
         return NULL;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     node = wq->head;
     wq->head = node->next;
     
     if (!wq->head)
         wq->tail = NULL;
 
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
     proc = node->process;
     kfree(node);
 
@@ -134,18 +137,18 @@ process_t *wait_queue_wake_one(wait_queue_t *wq)
 
 void wait_queue_wake_all(wait_queue_t *wq)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     wait_queue_node_t *node;
     wait_queue_node_t *pending;
 
     if (!wq)
         return;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     pending = wq->head;
     wq->head = NULL;
     wq->tail = NULL;
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 
     node = pending;
     while (node)
@@ -164,14 +167,14 @@ void wait_queue_wake_all(wait_queue_t *wq)
 
 static void wait_queue_remove_process(wait_queue_t *wq, process_t *proc)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     wait_queue_node_t *prev;
     wait_queue_node_t *cur;
 
     if (!wq || !proc)
         return;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     prev = NULL;
     cur = wq->head;
     while (cur)
@@ -187,25 +190,25 @@ static void wait_queue_remove_process(wait_queue_t *wq, process_t *proc)
              * NULL even though head still held a waiter. */
             if (wq->tail == cur)
                 wq->tail = prev;
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             kfree(cur);
             return;
         }
         prev = cur;
         cur = cur->next;
     }
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
 void ipc_purge_waiters_for_process(process_t *proc)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     ipc_channel_t *channel;
 
     if (!proc)
         return;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     channel = ipc_channels;
     while (channel)
     {
@@ -213,7 +216,7 @@ void ipc_purge_waiters_for_process(process_t *proc)
         wait_queue_remove_process(&channel->write_queue, proc);
         channel = channel->next;
     }
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
 void semaphore_init(semaphore_t *sem, int initial_count)
@@ -384,11 +387,11 @@ void ipc_channel_destroy(ipc_channel_t *channel)
 
 ipc_channel_t *ipc_channel_find(uint32_t id)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     ipc_channel_t *channel = ipc_channel_find_locked(id);
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
     return channel;
 }
 
@@ -398,12 +401,12 @@ ipc_channel_t *ipc_channel_find(uint32_t id)
  */
 static uint32_t ipc_get_next_available_id(void)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     /* Find next available ID by checking if ID exists */
     uint32_t candidate_id = next_channel_id;
     
     /* Try up to 65536 IDs (avoid infinite loop) */
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     for (uint32_t attempts = 0; attempts < 65536; attempts++)
     {
         if (ipc_channel_find_locked(candidate_id) == NULL)
@@ -413,7 +416,7 @@ static uint32_t ipc_get_next_available_id(void)
             {
                 next_channel_id = candidate_id + 1;
             }
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             return candidate_id;
         }
         candidate_id++;
@@ -421,18 +424,18 @@ static uint32_t ipc_get_next_available_id(void)
     
     /* Fallback: return current next_channel_id */
     candidate_id = next_channel_id++;
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
     return candidate_id;
 }
 
 ipc_channel_t *ipc_channel_get_or_create(uint32_t id)
 {
     ipc_channel_t *channel;
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     channel = ipc_channel_find_locked(id);
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
     if (channel)
         return channel;
 
@@ -440,11 +443,11 @@ ipc_channel_t *ipc_channel_get_or_create(uint32_t id)
     if (!channel)
         return NULL;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     {
         ipc_channel_t *existing = ipc_channel_find_locked(id);
         if (existing) {
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             ipc_channel_destroy(channel);
             return existing;
         }
@@ -456,7 +459,7 @@ ipc_channel_t *ipc_channel_get_or_create(uint32_t id)
         if (id >= next_channel_id)
             next_channel_id = id + 1;
     }
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 
     return channel;
 }
@@ -468,23 +471,23 @@ uint32_t ipc_allocate_channel_id(void)
 
 void ipc_channel_ref(ipc_channel_t *channel)
 {
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
     if (!channel)
         return;
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     channel->ref_count++;
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
 void ipc_channel_unref(ipc_channel_t *channel)
 {
     int destroy = 0;
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
     if (!channel)
         return;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
     channel->ref_count--;
 
     /* Auto-destroy when no references left */
@@ -501,7 +504,7 @@ void ipc_channel_unref(ipc_channel_t *channel)
         }
         destroy = 1;
     }
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
     if (destroy)
         ipc_channel_destroy(channel);
 }
@@ -517,19 +520,19 @@ void (*ipc_sleep_recheck_probe)(ipc_channel_t *channel);
 static void ipc_channel_sleep(ipc_channel_t *channel, wait_queue_t *wq,
 			      int for_read)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 	int proceed;
 
 	wait_queue_add(wq, current_process);
 	if (ipc_sleep_recheck_probe)
 		ipc_sleep_recheck_probe(channel);
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
 	if (for_read)
 		proceed = !ring_buffer_empty(&channel->rb) || channel->writers <= 0;
 	else
 		proceed = !ring_buffer_full(&channel->rb) || channel->readers <= 0;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 
 	if (proceed)
 	{
@@ -544,7 +547,7 @@ static void ipc_channel_sleep(ipc_channel_t *channel, wait_queue_t *wq,
 ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
 {
     size_t bytes_read = 0;
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
     if (!channel || !buf || count == 0)
         return -1;
@@ -556,12 +559,12 @@ ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
 
     for (;;)
     {
-        ir0_spin_lock(&lock);
+        irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
 
         if (!ring_buffer_empty(&channel->rb))
         {
             bytes_read = ring_buffer_read(&channel->rb, buf, count);
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             if (bytes_read > 0)
                 wait_queue_wake_one(&channel->write_queue);
             break;
@@ -569,11 +572,11 @@ ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
 
         if (channel->writers <= 0)
         {
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             break;
         }
 
-        ir0_spin_unlock(&lock);
+        ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
         ipc_channel_sleep(channel, &channel->read_queue, 1);
     }
 
@@ -585,7 +588,7 @@ ssize_t ipc_channel_read(ipc_channel_t *channel, void *buf, size_t count)
 ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
 {
     size_t bytes_written = 0;
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
     if (!channel || !buf || count == 0)
         return -1;
@@ -597,12 +600,12 @@ ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
 
     for (;;)
     {
-        ir0_spin_lock(&lock);
+        irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
 
         if (!ring_buffer_full(&channel->rb))
         {
             bytes_written = ring_buffer_write(&channel->rb, buf, count);
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             if (bytes_written > 0)
                 wait_queue_wake_one(&channel->read_queue);
             break;
@@ -610,11 +613,11 @@ ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
 
         if (channel->readers <= 0)
         {
-            ir0_spin_unlock(&lock);
+            ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
             break;
         }
 
-        ir0_spin_unlock(&lock);
+        ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
         ipc_channel_sleep(channel, &channel->write_queue, 0);
     }
 

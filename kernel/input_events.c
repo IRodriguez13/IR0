@@ -26,6 +26,9 @@
 #include <ir0/spinlock.h>
 #include <ir0/poll.h>
 
+/* Guards the input event ring. */
+static ir0_spinlock_t input_events_lock;
+
 /* Ring buffer: 64 input_event entries */
 #define INPUT_EVENT_QUEUE_SIZE 64
 static struct input_event event_queue[INPUT_EVENT_QUEUE_SIZE];
@@ -50,23 +53,23 @@ void input_event_wake_readers(void)
 
 void input_events_reader_open(void)
 {
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
 	events_readers++;
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 }
 
 void input_events_reader_close(void)
 {
 	int do_flush = 0;
-	ir0_spinlock_t lock;
+	unsigned long irq_flags;
 
-	ir0_spin_lock(&lock);
+	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
 	if (events_readers > 0)
 		events_readers--;
 	do_flush = (events_readers == 0);
-	ir0_spin_unlock(&lock);
+	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 	if (do_flush)
 	{
 		/*
@@ -105,19 +108,19 @@ void input_event_push(uint16_t type, uint16_t code, int32_t value)
 size_t input_event_read(struct input_event *buf, size_t count)
 {
     size_t n = 0;
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
     if (!buf || count == 0)
         return 0;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
     while (n < count && ev_tail != ev_head)
     {
         buf[n] = event_queue[ev_tail];
         ev_tail = (ev_tail + 1) % INPUT_EVENT_QUEUE_SIZE;
         n++;
     }
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
     return n;
 }
 
@@ -130,12 +133,12 @@ size_t input_event_queue_depth(void)
 {
     size_t head;
     size_t tail;
-    ir0_spinlock_t lock;
+    unsigned long irq_flags;
 
-    ir0_spin_lock(&lock);
+    irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
     head = ev_head;
     tail = ev_tail;
-    ir0_spin_unlock(&lock);
+    ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 
     if (head >= tail)
     {
