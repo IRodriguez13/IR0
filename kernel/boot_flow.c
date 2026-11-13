@@ -14,12 +14,6 @@
 #include <ir0/idle.h>
 #include "boot_init.h"
 
-#if defined(IR0_FREESTANDING_BOOT)
-void ir0_kernel_boot(const struct ir0_boot_params *params)
-{
-	ir0_boot_freestanding((uintptr_t)params->info);
-}
-#else
 void ir0_kernel_boot(const struct ir0_boot_params *params)
 {
 	boot_early(params);
@@ -31,4 +25,3 @@ void ir0_kernel_boot(const struct ir0_boot_params *params)
 
 	kernel_idle_loop();
 }
-#endif

@@ -14,70 +14,11 @@
 
 #include <ir0/boot_log.h>
 #include <ir0/cpu_info.h>
-#include <ir0/serial_io.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/version.h>
 
 #include <stddef.h>
 #include <string.h>
-
-#ifndef IR0_FREESTANDING_BOOT
-#include <ir0/ktm/klog.h>
-#endif
-
-#ifdef IR0_FREESTANDING_BOOT
-/* Hold serial until banner — matches klog_boot_hold default. */
-static int g_boot_hold = 1;
-static uint64_t g_boot_sequence;
-
-static void boot_append(char *buf, size_t size, size_t *offset, const char *text)
-{
-	size_t i;
-
-	if (!buf || !offset || !text || size == 0)
-		return;
-	for (i = 0; text[i] && *offset + 1 < size; i++)
-		buf[(*offset)++] = text[i];
-	buf[*offset] = '\0';
-}
-
-static void boot_emit_raw(const char *level, const char *comp, const char *msg)
-{
-	char line[384];
-	char digits[24];
-	unsigned digit_count = 0;
-	size_t off = 0;
-	uint64_t sequence;
-
-	if (g_boot_hold)
-		return;
-	if (!level)
-		level = "INFO";
-	if (!comp)
-		comp = "?";
-	if (!msg)
-		msg = "";
-
-	sequence = ++g_boot_sequence;
-	do
-	{
-		digits[digit_count++] = (char)('0' + (sequence % 10));
-		sequence /= 10;
-	} while (sequence && digit_count < sizeof(digits));
-	boot_append(line, sizeof(line), &off, "[#");
-	while (digit_count > 0 && off + 1 < sizeof(line))
-		line[off++] = digits[--digit_count];
-	line[off] = '\0';
-	boot_append(line, sizeof(line), &off,
-		    "] [EARLY_ARCH] [    ?.???] [");
-	boot_append(line, sizeof(line), &off, level);
-	boot_append(line, sizeof(line), &off, "] [");
-	boot_append(line, sizeof(line), &off, comp);
-	boot_append(line, sizeof(line), &off, "] ");
-	boot_append(line, sizeof(line), &off, msg);
-	boot_append(line, sizeof(line), &off, "\n");
-	serial_print(line);
-}
-#endif
 
 enum boot_log_level {
 	BOOT_LOG_INFO,
@@ -88,7 +29,6 @@ enum boot_log_level {
 static void boot_event(enum boot_log_level level, const char *component,
 			       const char *message)
 {
-#ifndef IR0_FREESTANDING_BOOT
 	static const klog_level_t klog_levels[] = {
 		KLOG_LEVEL_INFO,
 		KLOG_LEVEL_NOTICE,
@@ -96,27 +36,13 @@ static void boot_event(enum boot_log_level level, const char *component,
 	};
 
 	klog_event(KLOG_EVENT_BOOT_INFO, 0, klog_levels[level], component, message);
-#else
-	static const char *const level_names[] = {
-		"INFO",
-		"NOTICE",
-		"WARN",
-	};
-
-	boot_emit_raw(level_names[level], component, message);
-#endif
 }
 
 void ir0_boot_serial_ready(void)
 {
-#ifndef IR0_FREESTANDING_BOOT
 	klog_boot_hold(0);
 	klog_event(KLOG_EVENT_BOOT_BANNER, 0, KLOG_LEVEL_INFO, "BOOT",
 		   "IR0 kernel " IR0_VERSION_STRING);
-#else
-	g_boot_hold = 0;
-	boot_emit_raw("INFO", "BOOT", "IR0 kernel " IR0_VERSION_STRING);
-#endif
 }
 
 void ir0_boot_info(const char *component, const char *message)
@@ -165,11 +91,7 @@ void ir0_boot_arch(const char *message)
 
 void ir0_boot_smoke(const char *tag)
 {
-#ifndef IR0_FREESTANDING_BOOT
 	klog_smoke(tag);
-#else
-	boot_emit_raw("INFO", "SMOKE", tag ? tag : "?");
-#endif
 }
 
 void ir0_boot_log_platform_hypervisor(void)

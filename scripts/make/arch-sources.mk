@@ -81,7 +81,6 @@ ARM64_INTERFACE_OBJS_PRODUCT = \
 ARM64_PRODUCT_ENTRY_OBJS = \
 	arch/arm64/sources/mmu.o \
 	arch/arm64/sources/exc_early.o \
-	arch/arm64/sources/portable_string.o \
 	arch/arm64/asm/entry/vectors.o
 
 # Architecture implementations of the generic process, MM and context facade.

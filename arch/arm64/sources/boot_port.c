@@ -28,9 +28,7 @@
 #include <rootfs_base.h>
 #endif
 
-#if !defined(IR0_FREESTANDING_BOOT)
 extern volatile uintptr_t arm64_firmware_fdt;
-#endif
 
 #if defined(IR0_ARM64_PRODUCT_KERNEL)
 #define ARM64_DISK_INIT_MAX (128UL * 1024UL)
@@ -86,12 +84,8 @@ void ir0_boot_port_params(uintptr_t firmware_handle,
 			  struct ir0_boot_params *params)
 {
 	params->protocol = IR0_BOOT_PROTOCOL_FDT;
-#if defined(IR0_FREESTANDING_BOOT)
-	params->info = firmware_handle;
-#else
 	(void)firmware_handle;
 	params->info = (uintptr_t)arm64_firmware_fdt;
-#endif
 }
 
 int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,

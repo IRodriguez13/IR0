@@ -13,17 +13,11 @@
 
 #include <stdint.h>
 
-#if !defined(IR0_FREESTANDING_BOOT)
 #include "boot_common.h"
-#endif
 
 void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params)
 {
-#if !defined(IR0_FREESTANDING_BOOT)
 	arm64_platform_setup_for_portable_boot(params);
-#else
-	(void)params;
-#endif
 }
 
 void ir0_boot_arch_userspace_handoff_smoke(void)

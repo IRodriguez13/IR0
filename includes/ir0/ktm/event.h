@@ -95,7 +95,7 @@ typedef struct ktm_event
 	uint64_t arg3;
 } ktm_event_t;
 
-#if CONFIG_KTM && !defined(IR0_FREESTANDING_BOOT)
+#if CONFIG_KTM
 void ktm_event_emit4(uint16_t type, uint16_t subsystem,
 		     uint64_t arg0, uint64_t arg1, uint64_t arg2, uint64_t arg3);
 #else

@@ -131,7 +131,6 @@ REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "sources" / "mm_ops.c",
     ROOT / "arch" / "arm64" / "sources" / "gic_v2.c",
     ROOT / "arch" / "arm64" / "sources" / "timer.c",
-    ROOT / "arch" / "arm64" / "sources" / "portable_string.c",
     ROOT / "arch" / "arm64" / "asm" / "entry" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "early.c",
     ROOT / "arch" / "arm64" / "sources" / "interrupts.c",
@@ -847,8 +846,6 @@ def check_klog_serial_print_allowlist():
         "includes/ir0/serial_io.h",
         "arch/arm64/sources/serial.c",
         "tests/host/host_serial_stub.c",
-        # Freestanding early boot (IR0_FREESTANDING_BOOT) before klog hub exists.
-        "arch/common/boot_log.c",
     }
     serial_re = re.compile(r"\bserial_print\s*\(")
     scan_roots = [

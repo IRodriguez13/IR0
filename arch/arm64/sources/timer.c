@@ -15,7 +15,6 @@
 #include <stdint.h>
 #include <config.h>
 #include <ir0/delay.h>
-#include <ir0/types.h>
 #include "timer.h"
 
 static uint64_t g_cntfrq;
@@ -37,30 +36,6 @@ uint64_t timer_read(void)
 	__asm__ volatile("mrs %0, cntpct_el0" : "=r"(pct));
 	return pct;
 }
-
-#if defined(IR0_FREESTANDING_BOOT)
-
-uint64_t clock_get_tick_count(void)
-{
-	uint64_t counter = timer_read();
-	uint64_t frequency = timer_get_frequency();
-
-	if (frequency == 0)
-		return 0;
-	return (counter / frequency) * CONFIG_TICK_RATE_HZ +
-	       ((counter % frequency) * CONFIG_TICK_RATE_HZ) / frequency;
-}
-
-time_t clock_get_current_time(void)
-{
-	uint64_t frequency = timer_get_frequency();
-
-	if (frequency == 0)
-		return 0;
-	return (time_t)(timer_read() / frequency);
-}
-
-#endif
 
 /* Generic-timer delay: CNTPCT_EL0 runs at CNTFRQ_EL0 on every core. */
 void udelay(unsigned long us)

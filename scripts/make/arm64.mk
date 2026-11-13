@@ -102,8 +102,7 @@ ARM64_PORTABLE_OBJS = \
 	arch/arm64/sources/irq_backend.o \
 	arch/arm64/sources/irq.o \
 	arch/arm64/sources/interrupts.o \
-	arch/arm64/sources/timer.o \
-	arch/arm64/sources/portable_string.o
+	arch/arm64/sources/timer.o
 
 .PHONY: arm64-slice-compile arm64-portable-compile arm64-all-objs-probe
 arm64-slice-compile:
@@ -129,7 +128,7 @@ arm64-portable-compile: arm64-slice-compile
 	@aarch64-linux-gnu-gcc $(ARM64_COMMON_CORE_COMPILE_CFLAGS) -c \
 		arch/arm64/sources/irq_portable_stubs.c \
 		-o arch/arm64/sources/irq_portable_stubs.o
-	@echo "✓ arm64-portable-compile OK (slice+pl011+serial+gic+timer+portable_string+irq stubs)"
+	@echo "✓ arm64-portable-compile OK (slice+pl011+serial+gic+timer+irq stubs)"
 
 # Pack E: probe MEMORY_OBJS for ARCH=arm64 (compile-only). Not a full ALL_OBJS link.
 arm64-all-objs-probe: arm64-portable-compile
@@ -202,7 +201,7 @@ smoke-arm64-hypervisor-log: kernel-arm64-product.bin
 		echo "✓ smoke-arm64-hypervisor-log (HYPERVISOR line + ARM64_BOOT_OK)"; \
 	fi
 
-# Portable product kernel (ir0_kernel_boot, no IR0_FREESTANDING_BOOT): tag before /sbin/init handoff.
+# Portable product kernel (ir0_kernel_boot): tag before /sbin/init handoff.
 .PHONY: smoke-arm64-product-log
 smoke-arm64-product-log: kernel-arm64-product.bin
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \

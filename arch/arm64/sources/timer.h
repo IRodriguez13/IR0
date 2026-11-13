@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: timer.h
- * Description: ARM64 arch timer hooks for freestanding boot / scaffold.
+ * Description: ARM64 generic-timer hooks.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

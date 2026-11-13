@@ -1106,7 +1106,7 @@ kernel-arm64.bin: kernel-arm64-product.bin arm64-common-core-compile arm64-provi
 	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64.img
 	@echo "✓ Kernel image ready: $@"
 
-# Portable ARM64 kernel: same ir0_kernel_boot chain as x86 (no IR0_FREESTANDING_BOOT).
+# Portable ARM64 kernel: same ir0_kernel_boot chain as x86.
 # `make kernel-arm64-product.bin` forces ARCH=arm64 via goal detection.
 kernel-arm64-product.bin: $(ALL_OBJS) arch/arm64/linker.ld
 	@echo "  LD      $@"
