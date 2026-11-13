@@ -1659,13 +1659,18 @@ int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
   if (!current_process)
     return -ESRCH;
 
-  if (uaddr && !access_ok(uaddr, sizeof(int)))
-    return -EFAULT;
-
   cmd = op & 0x7f; /* strip FUTEX_PRIVATE_FLAG / CLOCK_REALTIME bits */
 
+  /*
+   * FUTEX_WAKE reads nothing at @uaddr, so it checks the range itself;
+   * FUTEX_WAIT's copy does. Linux do_futex(): an unknown op is ENOSYS.
+   */
   if (cmd == FUTEX_WAKE)
+  {
+    if (uaddr && !access_ok(uaddr, sizeof(int)))
+      return -EFAULT;
     return (int64_t)ir0_futex_wake(uaddr, val);
+  }
 
   if (cmd == FUTEX_WAIT)
   {
