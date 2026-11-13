@@ -675,15 +675,13 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	{
 		int tid = (int)child_pid;
 
-		if (access_ok(parent_tid, sizeof(tid)))
-			(void)copy_to_user(parent_tid, &tid, sizeof(tid));
+		(void)copy_to_user(parent_tid, &tid, sizeof(tid));
 	}
 	if (flags & CLONE_CHILD_SETTID && child_tid)
 	{
 		int tid = (int)child_pid;
 
-		if (access_ok(child_tid, sizeof(tid)))
-			(void)copy_to_user(child_tid, &tid, sizeof(tid));
+		(void)copy_to_user(child_tid, &tid, sizeof(tid));
 	}
 	if (flags & CLONE_CHILD_CLEARTID && child_tid)
 		child->set_tid_ptr = child_tid;
