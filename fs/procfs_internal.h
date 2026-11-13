@@ -31,7 +31,7 @@
 #include <ir0/credentials.h>
 #include <config.h>
 #include <ir0/version.h>
-#include <ir0/utsname_info.h>
+#include <ir0/utsname.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <ir0/partition.h>

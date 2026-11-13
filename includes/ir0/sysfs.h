@@ -31,7 +31,7 @@ bool is_sys_path(const char *path);
 int sysfs_stat(const char *path, stat_t *st);
 int sysfs_is_virtual_subdir(const char *path);
 
-/* kernel/utsname_info.c reads the hostname and the online CPU count. */
+/* kernel/utsname.c reads the hostname and the online CPU count. */
 int sys_kernel_hostname_read_reg(char *buf, size_t count);
 /* Count of CPUs currently marked online in sysfs (at least 1). */
 int sys_devices_cpu_online_count(void);

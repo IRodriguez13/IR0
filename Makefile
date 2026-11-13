@@ -661,7 +661,7 @@ LIB_OBJS = \
     fs/named_symlink.o \
     fs/path_user.o \
     fs/path_routed.o \
-    kernel/utsname_info.o \
+    kernel/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
     drivers/input/ps2_set1.o \
