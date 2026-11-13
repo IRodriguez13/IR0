@@ -325,8 +325,6 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 
   if (!user_fds)
     return -EFAULT;
-  if (!access_ok(user_fds, nfds * sizeof(struct pollfd)))
-    return -EFAULT;
 
   struct pollfd *kfds = (struct pollfd *)kcalloc(nfds, sizeof(struct pollfd));
   if (!kfds)
@@ -538,22 +536,16 @@ int64_t io_select_timeout_ms(int nfds, fd_set *user_r, fd_set *user_w,
 
   if (user_r)
   {
-    if (!access_ok(user_r, sizeof(fd_set)))
-      return -EFAULT;
     if (copy_from_user(&kr, user_r, sizeof(fd_set)) != 0)
       return -EFAULT;
   }
   if (user_w)
   {
-    if (!access_ok(user_w, sizeof(fd_set)))
-      return -EFAULT;
     if (copy_from_user(&kw, user_w, sizeof(fd_set)) != 0)
       return -EFAULT;
   }
   if (user_e)
   {
-    if (!access_ok(user_e, sizeof(fd_set)))
-      return -EFAULT;
     if (copy_from_user(&ke, user_e, sizeof(fd_set)) != 0)
       return -EFAULT;
   }
@@ -693,8 +685,6 @@ int64_t sys_select(int nfds, fd_set *user_r, fd_set *user_w, fd_set *user_e,
 
   if (user_tv)
   {
-    if (!access_ok(user_tv, sizeof(tv)))
-      return -EFAULT;
     if (copy_from_user(&tv, user_tv, sizeof(tv)) != 0)
       return -EFAULT;
     if (tv.tv_sec < 0 || tv.tv_usec < 0 || tv.tv_usec >= 1000000)
