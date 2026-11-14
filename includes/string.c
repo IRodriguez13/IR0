@@ -312,84 +312,98 @@ int atoi(const char *str)
 
 unsigned long strtoul(const char *str, char **endptr, int base)
 {
+    const char *start = str;
     unsigned long result = 0;
-    int sign = 1;
+    const unsigned long max = ~0UL;
+    int negative = 0;
+    int converted = 0;
 
-    // Skip whitespace
+    if (!str)
+    {
+        if (endptr)
+            *endptr = NULL;
+        return 0;
+    }
+
     while (*str == ' ' || *str == '\t' || *str == '\n')
+        str++;
+
+    if (*str == '-' || *str == '+')
     {
+        negative = *str == '-';
         str++;
     }
 
-    // Handle sign
-    if (*str == '-')
+    if (base != 0 && (base < 2 || base > 36))
     {
-        sign = -1;
-        str++;
-    }
-    else if (*str == '+')
-    {
-        str++;
+        if (endptr)
+            *endptr = (char *)start;
+        return 0;
     }
 
-    // Handle base
     if (base == 0)
     {
-        if (*str == '0')
+        base = *str == '0' ? 8 : 10;
+        if (str[0] == '0' && (str[1] == 'x' || str[1] == 'X'))
         {
-            str++;
-            if (*str == 'x' || *str == 'X')
+            int digit = str[2] >= '0' && str[2] <= '9'
+                            ? str[2] - '0'
+                            : (str[2] >= 'a' && str[2] <= 'f')
+                                  ? str[2] - 'a' + 10
+                                  : (str[2] >= 'A' && str[2] <= 'F')
+                                        ? str[2] - 'A' + 10
+                                        : -1;
+
+            if (digit >= 0)
             {
                 base = 16;
-                str++;
+                str += 2;
             }
-            else
-            {
-                base = 8;
-            }
-        }
-        else
-        {
-            base = 10;
         }
     }
+    else if (base == 16 && str[0] == '0' &&
+             (str[1] == 'x' || str[1] == 'X'))
+    {
+        int digit = str[2] >= '0' && str[2] <= '9'
+                        ? str[2] - '0'
+                        : (str[2] >= 'a' && str[2] <= 'f')
+                              ? str[2] - 'a' + 10
+                              : (str[2] >= 'A' && str[2] <= 'F')
+                                    ? str[2] - 'A' + 10
+                                    : -1;
 
-    // Convert digits
-    while (*str != '\0')
+        if (digit >= 0)
+            str += 2;
+    }
+
+    while (*str)
     {
         int digit;
+
         if (*str >= '0' && *str <= '9')
-        {
             digit = *str - '0';
-        }
         else if (*str >= 'a' && *str <= 'z')
-        {
             digit = *str - 'a' + 10;
-        }
         else if (*str >= 'A' && *str <= 'Z')
-        {
             digit = *str - 'A' + 10;
-        }
         else
-        {
             break;
-        }
 
         if (digit >= base)
-        {
             break;
-        }
 
-        result = result * base + digit;
+        converted = 1;
+        if (result > (max - (unsigned long)digit) / (unsigned long)base)
+            result = max;
+        else
+            result = result * (unsigned long)base + (unsigned long)digit;
         str++;
     }
 
-    if (endptr != NULL)
-    {
-        *endptr = (char *)str;
-    }
+    if (endptr)
+        *endptr = (char *)(converted ? str : start);
 
-    return sign * result;
+    return negative ? 0UL - result : result;
 }
 
 long strtol(const char *str, char **endptr, int base)

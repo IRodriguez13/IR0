@@ -72,5 +72,20 @@ void ktest_string(void)
 	for (int i = 0; i < 31; i++)
 		KASSERT_EQ((unsigned char)src[i], (unsigned char)(i + 1));
 
+	{
+		char *end;
+		const char invalid_prefix[] = "0x";
+
+		KASSERT_EQ(strtoul("0x2a", &end, 0), 42UL);
+		KASSERT(*end == '\0');
+		KASSERT_EQ(strtoul("19", &end, 8), 1UL);
+		KASSERT(*end == '9');
+		KASSERT_EQ(strtoul(invalid_prefix, &end, 0), 0UL);
+		KASSERT(end == invalid_prefix + 1);
+		KASSERT_EQ(strtoul("999999999999999999999999999999", &end, 10),
+			   ~0UL);
+		KASSERT(*end == '\0');
+	}
+
 	KTEST_END();
 }
