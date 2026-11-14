@@ -83,6 +83,7 @@ void ktest_copy_to_user_cow_break_drops_old_once(void);
 void ktest_mprotect_updates_maps(void);
 void ktest_reclaim_freed_page_tables_safely(void);
 void ktest_signal_segv_deliver_irq_frame(void);
+void ktest_saved_context_attach_keeps_caller_ownership(void);
 void ktest_brk_post_exec(void);
 void ktest_brk_linux_fail_returns_current(void);
 void ktest_tty_canon_read_immediate(void);

@@ -229,6 +229,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	}
 	if (process_saved_context_attach(p, ctx) != 0)
 	{
+		kfree(ctx);
 		if (sig == SIGSEGV || sig == SIGBUS || sig == SIGILL ||
 		    sig == SIGFPE)
 		{

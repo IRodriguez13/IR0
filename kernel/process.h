@@ -631,6 +631,10 @@ int process_signal_default_kill(process_t *target, int signal);
 struct sigcontext *process_saved_context_peek(const process_t *p);
 int process_saved_context_present(const process_t *p);
 void process_saved_context_init(process_t *p);
+/*
+ * Store @ctx as the process's sigreturn context.  On success the process
+ * owns it; on failure the caller keeps ownership and must free it.
+ */
 int process_saved_context_attach(process_t *p, struct sigcontext *ctx);
 void process_saved_context_clear(process_t *p);
 

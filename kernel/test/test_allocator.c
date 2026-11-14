@@ -23,6 +23,8 @@
 #include <mm/alloc/allocator.h>
 #include <stdint.h>
 #include <string.h>
+#include "process.h"
+#include <ir0/signals.h>
 
 /* Bound for one calibration wait: far beyond any sane tick period. */
 #define HEAP_TICK_SPIN_LIMIT 400000000UL
@@ -256,6 +258,65 @@ void ktest_heap_block_check(void)
 	KASSERT(aligned != NULL);
 	KASSERT_EQ(heap_block_check(aligned), HEAP_BLOCK_BAD);
 	kfree_aligned(aligned);
+
+	KTEST_END();
+}
+
+/*
+ * process_saved_context_attach() either stores @ctx or reports failure; the
+ * caller owns @ctx in both cases.  Freeing a rejected context inside attach
+ * made handle_signal() kfree the same pointer a second time.
+ */
+void ktest_saved_context_attach_keeps_caller_ownership(void)
+{
+	struct sigcontext *saved_context;
+	struct sigcontext *held;
+	struct sigcontext *rejected;
+	process_t *p;
+
+	KTEST_BEGIN("saved_context_attach_keeps_caller_ownership");
+
+	KASSERT(current_process != NULL);
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+	p = current_process;
+	saved_context = process_saved_context_peek(p);
+	process_saved_context_init(p);
+
+	held = kmalloc(sizeof(*held));
+	rejected = kmalloc(sizeof(*rejected));
+	KASSERT(held != NULL);
+	KASSERT(rejected != NULL);
+	if (!held || !rejected)
+	{
+		if (held)
+			kfree(held);
+		if (rejected)
+			kfree(rejected);
+		if (saved_context)
+			KASSERT(process_saved_context_attach(p, saved_context) == 0);
+		KTEST_END();
+		return;
+	}
+	memset(held, 0, sizeof(*held));
+	memset(rejected, 0, sizeof(*rejected));
+
+	KASSERT_EQ(process_saved_context_attach(p, held), 0);
+	KASSERT_EQ(heap_block_check(held), HEAP_BLOCK_OK);
+
+	/* An armed outer context is refused; @rejected stays caller-owned. */
+	KASSERT(process_saved_context_attach(p, rejected) != 0);
+	KASSERT_EQ(heap_block_check(rejected), HEAP_BLOCK_OK);
+
+	process_saved_context_clear(p);
+	if (heap_block_check(rejected) == HEAP_BLOCK_OK)
+		kfree(rejected);
+
+	if (saved_context)
+		KASSERT(process_saved_context_attach(p, saved_context) == 0);
 
 	KTEST_END();
 }

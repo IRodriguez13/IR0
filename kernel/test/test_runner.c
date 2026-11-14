@@ -123,6 +123,8 @@ static const struct ktest_case ktest_cases[] = {
 	  "reclaim_freed_page_tables_safely", 1 },
 	{ ktest_signal_segv_deliver_irq_frame,
 	  "signal_segv_deliver_irq_frame", 1 },
+	{ ktest_saved_context_attach_keeps_caller_ownership,
+	  "saved_context_attach_keeps_caller_ownership", 1 },
 	{ ktest_brk_post_exec, "brk_post_exec", 1 },
 	{ ktest_brk_linux_fail_returns_current,
 	  "brk_linux_fail_returns_current", 1 },

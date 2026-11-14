@@ -36,21 +36,18 @@ void process_saved_context_init(process_t *p)
 int process_saved_context_attach(process_t *p, struct sigcontext *ctx)
 {
 	if (!p || !ctx)
-	{
-		if (ctx)
-			kfree(ctx);
 		return -1;
-	}
 	/*
 	 * Never silently replace an armed outer context: that dropped the
 	 * real interrupt site and left rdi=signum for the next sigreturn
 	 * (BusyBox ash setjmp → #PF at addr 2).
+	 *
+	 * The caller owns @ctx on every path, including this refusal, so a
+	 * failed attach never frees it: the two delivery paths release the
+	 * context themselves and freeing here double-freed it.
 	 */
 	if (p->saved_context)
-	{
-		kfree(ctx);
 		return -1;
-	}
 	p->saved_context = ctx;
 	return 0;
 }
