@@ -57,9 +57,12 @@ static uint16_t tcp_checksum(const void *tcp_pkt, size_t len,
 
 static ip4_addr_t tcp_src_ip(struct net_device *dev)
 {
-	ip4_addr_t src_ip = ip_local_addr;
+	struct ip_config cfg;
+	ip4_addr_t src_ip;
 	ip4_addr_t iface_ip;
 
+	ip_get_config(&cfg);
+	src_ip = cfg.addr;
 	if (dev && arp_get_interface_ip(dev, &iface_ip) == 0)
 		src_ip = iface_ip;
 	return src_ip;

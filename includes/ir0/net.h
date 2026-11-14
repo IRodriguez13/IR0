@@ -146,7 +146,22 @@ struct ping_result {
     ip4_addr_t reply_ip;  /* IP address that replied */
 };
 
-/* Shared IPv4 runtime configuration exposed to networking control paths. */
+/* IPv4 interface configuration, network byte order. Owned by net/ip.c. */
+struct ip_config
+{
+	ip4_addr_t addr;
+	ip4_addr_t netmask;
+	ip4_addr_t gateway;
+};
+
+void ip_get_config(struct ip_config *cfg);
+void ip_set_config(const struct ip_config *cfg);
+
+/*
+ * The storage behind ip_get_config()/ip_set_config(). Only fs/devfs_net.c
+ * and fs/procfs_net.c still touch it directly; they move to the accessors
+ * with FS-3, and then these become static to net/ip.c.
+ */
 extern ip4_addr_t ip_local_addr;
 extern ip4_addr_t ip_netmask;
 extern ip4_addr_t ip_gateway;

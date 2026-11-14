@@ -1388,7 +1388,12 @@ int sock_stream_inet_walk(int (*cb)(const struct sock_stream_inet_snap *s,
 
 		memset(&snap, 0, sizeof(snap));
 #if CONFIG_ENABLE_NETWORKING
-		snap.local_ip = (uint32_t)ip_local_addr;
+		{
+			struct ip_config cfg;
+
+			ip_get_config(&cfg);
+			snap.local_ip = (uint32_t)cfg.addr;
+		}
 #else
 		snap.local_ip = 0;
 #endif

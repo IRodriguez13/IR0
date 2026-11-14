@@ -26,10 +26,6 @@
 #include <net/dns.h>
 #include <net/arp.h>
 
-ip4_addr_t ip_local_addr __attribute__((weak));
-ip4_addr_t ip_netmask __attribute__((weak));
-ip4_addr_t ip_gateway __attribute__((weak));
-
 __attribute__((weak)) void net_stack_poll(void)
 {
 }

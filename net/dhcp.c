@@ -497,29 +497,33 @@ static int dhcp_wait_ack(uint32_t timeout_ms)
 
 static void dhcp_apply_config(struct dhcp_offer_data *offer)
 {
+    struct ip_config cfg;
+
     if (!offer || offer->yiaddr == 0)
     {
         return;
     }
 
-    ip_local_addr = offer->yiaddr;
+    ip_get_config(&cfg);
+    cfg.addr = offer->yiaddr;
     if (offer->subnet_mask != 0)
     {
-        ip_netmask = offer->subnet_mask;
+        cfg.netmask = offer->subnet_mask;
     }
     if (offer->router != 0)
     {
-        ip_gateway = offer->router;
+        cfg.gateway = offer->router;
     }
+    ip_set_config(&cfg);
 
-    arp_set_my_ip(ip_local_addr);
+    arp_set_my_ip(cfg.addr);
 
     {
         struct net_device *dev = net_get_devices();
 
         while (dev)
         {
-            arp_set_interface_ip(dev, ip_local_addr);
+            arp_set_interface_ip(dev, cfg.addr);
             dev = dev->next;
         }
     }
@@ -532,9 +536,9 @@ static void dhcp_apply_config(struct dhcp_offer_data *offer)
     }
 
     LOG_INFO_FMT("DHCP", "Lease applied: ip=" IP4_FMT ", mask=" IP4_FMT ", gw=" IP4_FMT ", dns=" IP4_FMT ", lease_s=%d",
-                 IP4_ARGS(ntohl(ip_local_addr)),
-                 IP4_ARGS(ntohl(ip_netmask)),
-                 IP4_ARGS(ntohl(ip_gateway)),
+                 IP4_ARGS(ntohl(cfg.addr)),
+                 IP4_ARGS(ntohl(cfg.netmask)),
+                 IP4_ARGS(ntohl(cfg.gateway)),
                  IP4_ARGS(ntohl(offer->dns_server)),
                  (int)offer->lease_time_s);
 }

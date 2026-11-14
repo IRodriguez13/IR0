@@ -122,14 +122,20 @@ static ip4_addr_t sock_sockaddr_in_addr(const struct ir0_sockaddr *sa)
 
 static ip4_addr_t sock_dev_ip(struct net_device *dev)
 {
+	struct ip_config cfg;
+
 	(void)dev;
-	return ip_local_addr;
+	ip_get_config(&cfg);
+	return cfg.addr;
 }
 
 static ip4_addr_t sock_dev_netmask(struct net_device *dev)
 {
+	struct ip_config cfg;
+
 	(void)dev;
-	return ip_netmask;
+	ip_get_config(&cfg);
+	return cfg.netmask;
 }
 
 static ip4_addr_t sock_dev_bcast(struct net_device *dev)
@@ -146,10 +152,13 @@ static ip4_addr_t sock_dev_bcast(struct net_device *dev)
 
 static void sock_apply_iface_ip(struct net_device *dev)
 {
+	struct ip_config cfg;
+
 	if (!dev)
 		return;
-	arp_set_my_ip(ip_local_addr);
-	(void)arp_set_interface_ip(dev, ip_local_addr);
+	ip_get_config(&cfg);
+	arp_set_my_ip(cfg.addr);
+	(void)arp_set_interface_ip(dev, cfg.addr);
 	(void)ip_routes_seed_from_globals();
 }
 
@@ -333,6 +342,7 @@ static int sock_siocsif_one(uint64_t request, void *arg)
 {
 	struct ir0_ifreq ifr;
 	struct net_device *dev;
+	struct ip_config cfg;
 	ip4_addr_t ip;
 
 	if (!arg)
@@ -352,12 +362,15 @@ static int sock_siocsif_one(uint64_t request, void *arg)
 			dev->flags |= IFF_RUNNING;
 		break;
 	case IR0_SIOCSIFADDR:
-		ip = sock_sockaddr_in_addr(&ifr.ifr_ifru.addr);
-		ip_local_addr = ip;
+		ip_get_config(&cfg);
+		cfg.addr = sock_sockaddr_in_addr(&ifr.ifr_ifru.addr);
+		ip_set_config(&cfg);
 		sock_apply_iface_ip(dev);
 		break;
 	case IR0_SIOCSIFNETMASK:
-		ip_netmask = sock_sockaddr_in_addr(&ifr.ifr_ifru.addr);
+		ip_get_config(&cfg);
+		cfg.netmask = sock_sockaddr_in_addr(&ifr.ifr_ifru.addr);
+		ip_set_config(&cfg);
 		sock_apply_iface_ip(dev);
 		break;
 	case IR0_SIOCSIFBRDADDR:
@@ -368,7 +381,11 @@ static int sock_siocsif_one(uint64_t request, void *arg)
 		/* Point-to-point peer — store as gateway hint when non-zero. */
 		ip = sock_sockaddr_in_addr(&ifr.ifr_ifru.addr);
 		if (ip)
-			ip_gateway = ip;
+		{
+			ip_get_config(&cfg);
+			cfg.gateway = ip;
+			ip_set_config(&cfg);
+		}
 		break;
 	case IR0_SIOCSIFMTU:
 		if (ifr.ifr_ifru.mtu < 68 || ifr.ifr_ifru.mtu > 65535)
@@ -410,7 +427,13 @@ static int sock_sioc_rt(uint64_t request, void *arg)
 	if (request == IR0_SIOCADDRT)
 	{
 		if (gw)
-			ip_gateway = gw;
+		{
+			struct ip_config cfg;
+
+			ip_get_config(&cfg);
+			cfg.gateway = gw;
+			ip_set_config(&cfg);
+		}
 		ret = ip_route_add(dst, mask, gw);
 		return (ret == 0) ? 0 : -ENOMEM;
 	}

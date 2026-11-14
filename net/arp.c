@@ -498,7 +498,9 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
     }
     
     /* Check if this is our default IP */
-    if (ip == my_ip || ip == ip_local_addr)
+    struct ip_config cfg;
+    ip_get_config(&cfg);
+    if (ip == my_ip || ip == cfg.addr)
     {
         /* This is our own IP, use our MAC */
         if (dev)

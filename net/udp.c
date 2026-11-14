@@ -247,7 +247,9 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
     memcpy(udp_packet + udp_header_len, data, len);
     
     /* Calculate checksum (requires source IP) */
-    ip4_addr_t src_ip = ip_local_addr;
+    struct ip_config cfg;
+    ip_get_config(&cfg);
+    ip4_addr_t src_ip = cfg.addr;
     ip4_addr_t interface_ip;
     if (arp_get_interface_ip(dev, &interface_ip) == 0)
     {

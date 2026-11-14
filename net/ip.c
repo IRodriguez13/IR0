@@ -27,6 +27,24 @@ ip4_addr_t ip_local_addr = 0;  /* Will be set during initialization */
 ip4_addr_t ip_netmask = 0;
 ip4_addr_t ip_gateway = 0;     /* Default gateway (for backward compatibility) */
 
+void ip_get_config(struct ip_config *cfg)
+{
+	if (!cfg)
+		return;
+	cfg->addr = ip_local_addr;
+	cfg->netmask = ip_netmask;
+	cfg->gateway = ip_gateway;
+}
+
+void ip_set_config(const struct ip_config *cfg)
+{
+	if (!cfg)
+		return;
+	ip_local_addr = cfg->addr;
+	ip_netmask = cfg->netmask;
+	ip_gateway = cfg->gateway;
+}
+
 /* Simple routing table entry */
 struct ip_route_entry {
     ip4_addr_t dest_network;
