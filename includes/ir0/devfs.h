@@ -60,17 +60,6 @@ typedef struct devfs_node
 	uint64_t ref_count;
 } devfs_node_t;
 
-// Standard device nodes
-extern devfs_node_t dev_null;
-extern devfs_node_t dev_zero;
-extern devfs_node_t dev_console;
-extern devfs_node_t dev_tty;
-extern devfs_node_t dev_audio;
-extern devfs_node_t dev_mouse;
-extern devfs_node_t dev_net;
-extern devfs_node_t dev_disk;
-extern devfs_node_t dev_kmsg;
-
 /*
  * Finite text snapshots for /dev/net and /dev/kmsg (per-open, refcounted).
  * Captured at open; read honors offset and returns 0 at EOF.
@@ -118,35 +107,9 @@ int devfs_readdir_subdir(const char *path, struct vfs_dirent *entries,
 /* Per-syscall: O_NONBLOCK for shared console/tty read ops. */
 void devfs_set_read_nonblock(int nonblock);
 
-// Standard device implementations
-int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_null_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
-
-int64_t dev_zero_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_zero_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
-
-int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
 int dev_console_is_graphics(void);
 
-int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
-
-// Audio device operations
-int64_t dev_audio_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
-int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
-
-// Mouse device operations  
-int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
-
-// Network device operations
-int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
-int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
-int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
-
-// Disk device operations
+// Disk device operations (also driven by the in-kernel contract tests)
 int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
 int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
 int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);

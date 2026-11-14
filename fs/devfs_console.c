@@ -320,7 +320,7 @@ int dev_console_is_graphics(void)
     return console_display_mode == KD_GRAPHICS;
 }
 
-int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+static int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     char message[97];
     size_t n;
@@ -338,7 +338,7 @@ int64_t dev_kmsg_write(devfs_entry_t *entry, const void *buf, size_t count, off_
     return (int64_t)count;
 }
 
-int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+static int64_t dev_kmsg_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
 	/*
 	 * Legacy ops path — preferred open path uses per-open text snap.

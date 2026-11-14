@@ -14,7 +14,7 @@
 
 #include <ir0/pseudo_fs.h>
 #include <ir0/heartfs.h>
-#include <ir0/sysfs.h>
+#include "sysfs_internal.h"
 #include <ir0/procfs.h>
 #include <ir0/process.h>
 #include <ir0/fd_types.h>

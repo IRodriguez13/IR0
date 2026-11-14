@@ -33,7 +33,7 @@
  */
 
 #include "procfs.h"
-#include <ir0/sysfs.h>
+#include "sysfs_internal.h"
 #include <ir0/process.h>
 #include <ir0/process_limits.h>
 #include <ir0/stat.h>

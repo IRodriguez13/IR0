@@ -30,7 +30,7 @@ static int dev_mouse_can_read(devfs_entry_t *entry, pid_t pid)
 	return input_mouse_packet_available() ? 1 : 0;
 }
 #endif
-int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+static int64_t dev_mouse_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
 #if CONFIG_ENABLE_MOUSE
     uint8_t packet[3];
@@ -104,7 +104,7 @@ static int64_t dev_mouse_write(devfs_entry_t *entry, const void *buf,
 #endif
 }
 
-int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+static int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
 #if CONFIG_ENABLE_MOUSE
     (void)entry;

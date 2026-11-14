@@ -97,7 +97,7 @@ static const devfs_ops_t disk_ops = {
     .ioctl = dev_disk_ioctl,
 };
 
-devfs_node_t dev_net = {
+static devfs_node_t dev_net = {
     .entry = { .name = "net", .mode = 0660, .device_id = 8 },
     .ops = &net_ops,
     .ref_count = 0

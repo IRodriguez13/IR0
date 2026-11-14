@@ -9,28 +9,28 @@
 
 #include "devfs_internal.h"
 
-int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+static int64_t dev_null_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)buf; (void)count; (void)offset;
     /* Always returns EOF */
     return 0;
 }
 
-int64_t dev_null_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+static int64_t dev_null_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)buf; (void)offset;
     /* Accepts all data, discards it */
     return count;
 }
 
-int64_t dev_zero_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+static int64_t dev_zero_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)offset;
     memset(buf, 0, count);
     return count;
 }
 
-int64_t dev_zero_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+static int64_t dev_zero_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)buf; (void)offset;
     return count;

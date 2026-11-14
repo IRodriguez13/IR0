@@ -83,6 +83,14 @@ extern struct pty_pair g_ptys[DEVFS_PTY_MAX];
 extern devfs_node_t dev_pts_nodes[DEVFS_PTY_MAX];
 
 /* Device nodes owned by the split /dev backend files. */
+extern devfs_node_t dev_null;
+extern devfs_node_t dev_zero;
+extern devfs_node_t dev_console;
+extern devfs_node_t dev_tty;
+extern devfs_node_t dev_kmsg;
+extern devfs_node_t dev_audio;
+extern devfs_node_t dev_mouse;
+extern devfs_node_t dev_disk;
 extern devfs_node_t dev_tty0;
 extern devfs_node_t dev_tty1;
 extern devfs_node_t dev_stdin;
@@ -102,9 +110,14 @@ extern devfs_node_t dev_bluetooth_hci0;
 
 /* Cross-file helpers for the split /dev backend. */
 int devfs_console_can_read(devfs_entry_t *entry, pid_t pid);
+int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
+int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
 int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 void devfs_input_init(void);
 
+int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
+int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
+int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 int dev_net_pid_has_ready_ping(pid_t pid);
 void devfs_register_disk_topology(void);
 

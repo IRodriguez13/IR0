@@ -21,7 +21,7 @@ static struct audio_format audio_pcm_format = {
 };
 #endif
 
-int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
+static int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset)
 {
     (void)entry;
     (void)offset;
@@ -44,7 +44,7 @@ int64_t dev_audio_write(devfs_entry_t *entry, const void *buf, size_t count, off
 #endif
 }
 
-int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+static int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 {
     (void)entry;
 #if CONFIG_ENABLE_SOUND
@@ -127,7 +127,7 @@ int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 #endif
 }
 
-int64_t dev_audio_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+static int64_t dev_audio_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
 {
     (void)entry; (void)buf; (void)count; (void)offset;
     /*

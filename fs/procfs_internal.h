@@ -5,7 +5,8 @@
  *
  * File: procfs_internal.h
  * Description: Private shared state and helpers for the split /proc backend.
- *              Not a public ABI; only fs/procfs*.c include this header.
+ *              Not a public ABI; only fs/procfs*.c and fs/pseudo_fs_nodes.c
+ *              (which binds the readers to their paths) include this header.
  */
 
 #pragma once
@@ -68,5 +69,40 @@ int proc_fd_snap_acquire(pid_t pid, proc_fd_snap_t *snap);
 const char *proc_parse_path(const char *path, pid_t *pid_out);
 void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 
-/* /proc/mounts reader (procfs_system.c), bound by pseudo_fs_nodes.c. */
+/* /proc file readers, bound to their paths by pseudo_fs_nodes.c. */
+int proc_meminfo_read(char *buf, size_t count);
+int proc_ps_read(char *buf, size_t count);
+int proc_status_read(char *buf, size_t count, pid_t pid);
+int proc_cmdline_read(char *buf, size_t count, pid_t pid);
+int proc_pid_stat_read(char *buf, size_t count, pid_t pid);
+int proc_pid_maps_read(char *buf, size_t count, pid_t pid);
+int proc_pid_statm_read(char *buf, size_t count, pid_t pid);
+int proc_pid_oom_score_adj_read(char *buf, size_t count, pid_t pid);
+int proc_pid_oom_score_adj_write(pid_t pid, const char *buf, size_t count);
+int proc_pid_oom_score_read(char *buf, size_t count, pid_t pid);
+int proc_pid_fd_link_target_read(char *buf, size_t count, pid_t pid, int fd_num);
+int proc_uptime_read(char *buf, size_t count);
+int proc_stat_read(char *buf, size_t count);
+int proc_version_read(char *buf, size_t count);
+int proc_boot_cmdline_read(char *buf, size_t count);
+int proc_cpuinfo_read(char *buf, size_t count);
+int proc_blockdevices_read(char *buf, size_t count);
+int proc_netinfo_read(char *buf, size_t count);
+int proc_drivers_read(char *buf, size_t count);
+int proc_loadavg_read(char *buf, size_t count);
+int proc_filesystems_read(char *buf, size_t count);
+int proc_partitions_read(char *buf, size_t count);
+int proc_interrupts_read(char *buf, size_t count);
+int proc_iomem_read(char *buf, size_t count);
+int proc_ioports_read(char *buf, size_t count);
+int proc_modules_read(char *buf, size_t count);
+int proc_timer_list_read(char *buf, size_t count);
+int proc_net_dev_read(char *buf, size_t count);
+int proc_net_route_read(char *buf, size_t count);
+int proc_net_tcp_read(char *buf, size_t count);
+int proc_net_udp_read(char *buf, size_t count);
+int proc_net_raw_read(char *buf, size_t count);
+int proc_net_unix_read(char *buf, size_t count);
+int proc_kmsg_read(char *buf, size_t count);
+int proc_swaps_read(char *buf, size_t count);
 int proc_mounts_read(char *buf, size_t count);

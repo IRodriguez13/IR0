@@ -964,7 +964,7 @@ int proc_pid_fd_link_target_read(char *buf, size_t count, pid_t pid, int fd_num)
 	return len;
 }
 
-int proc_pid_exe_link_target_read(char *buf, size_t count, pid_t pid)
+static int proc_pid_exe_link_target_read(char *buf, size_t count, pid_t pid)
 {
 	process_t *proc;
 	unsigned long irqf;

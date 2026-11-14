@@ -16,6 +16,7 @@ static int scenario_vfs_devfs_run(ktm_context_t *ctx)
 {
 	ktm_system_snapshot_t before;
 	ktm_system_snapshot_t after;
+	devfs_node_t *node;
 	int64_t ret;
 
 	(void)ctx;
@@ -23,9 +24,11 @@ static int scenario_vfs_devfs_run(ktm_context_t *ctx)
 
 	ensure_devfs_init();
 	KTM_CHECKPOINT(KTM_CP_VFS_MOUNT);
-	ret = devfs_open_node(&dev_null, 0);
+	node = devfs_find_node("/dev/null");
+	KTM_REQUIRE(node != NULL);
+	ret = devfs_open_node(node, 0);
 	KTM_V1_ASSERT_TRUE(ret == 0);
-	ret = devfs_close_node(&dev_null);
+	ret = devfs_close_node(node);
 	KTM_V1_ASSERT_TRUE(ret == 0);
 	KTM_CHECKPOINT(KTM_CP_VFS_UMOUNT);
 

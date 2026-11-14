@@ -4,7 +4,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/sysfs.h>
+#include <fs/sysfs_internal.h>
 #include <ir0/errno.h>
 #include <stdint.h>
 
