@@ -100,39 +100,8 @@ static inline bool minix_is_reg(const minix_inode_t *inode)
     return (inode->i_mode & MINIX_IFMT) == MINIX_IFREG;
 }
 
-// Verificar si un inode es un dispositivo de caracteres
-static inline bool minix_is_chr(const minix_inode_t *inode)
-{
-    return (inode->i_mode & MINIX_IFMT) == MINIX_IFCHR;
-}
-
-// Verificar si un inode es un dispositivo de bloques
-static inline bool minix_is_blk(const minix_inode_t *inode)
-{
-    return (inode->i_mode & MINIX_IFMT) == MINIX_IFBLK;
-}
-
-// Obtener permisos de usuario
-static inline uint16_t minix_get_uid_perms(const minix_inode_t *inode)
-{
-    return (inode->i_mode & MINIX_IRWXU) >> 6;
-}
-
-// Obtener permisos de grupo
-static inline uint16_t minix_get_gid_perms(const minix_inode_t *inode)
-{
-    return (inode->i_mode & MINIX_IRWXG) >> 3;
-}
-
-// Obtener permisos de otros
-static inline uint16_t minix_get_oth_perms(const minix_inode_t *inode)
-{
-    return inode->i_mode & MINIX_IRWXO;
-}
-
 
 // Filesystem availability check
-bool minix_fs_is_available(void);
 bool minix_fs_is_working(void);
 
 /*
@@ -145,22 +114,16 @@ int minix_fs_register(void);
 int minix_fs_init(void);
 int minix_fs_format(void);
 int minix_fs_mkdir(const char *path, mode_t mode);
-int minix_fs_ls(const char *path, bool detailed);
-
-int minix_fs_cat(const char *path);
 int minix_fs_write_file_len(const char *path, const void *content, size_t content_size);
 int minix_fs_write_file(const char *path, const char *content);
-int minix_fs_read_file(const char *path, void **data, size_t *size);
 int minix_fs_touch(const char *path, mode_t mode);
 int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);
-int minix_fs_rmdir_force(const char *path);
 int minix_fs_stat(const char *pathname, stat_t *buf);
 /* Fill Linux-compatible statfs for the mounted MINIX volume. */
 int minix_fs_statfs(struct ir0_statfs *buf);
 int minix_fs_chown(const char *path, uid_t owner, gid_t group);
 int minix_fs_link(const char *oldpath, const char *newpath);
-void minix_fs_cleanup(void);
 
 // Operaciones de inodes
 /* Returns static storage. Copy immediately; prefer a VFS-serialized caller. */
@@ -190,5 +153,3 @@ void minix_mark_zone_used(uint32_t zone_num);
 
 // Operaciones de inodes (bitmap)
 uint32_t minix_alloc_inode(void);
-void minix_mark_inode_used(uint32_t inode_num);
-void minix_mark_inode_free(uint32_t inode_num);

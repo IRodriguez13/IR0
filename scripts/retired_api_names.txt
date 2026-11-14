@@ -138,3 +138,19 @@ reclaim_lock ir0_spin_lock_irqsave(&reclaimer_lock)
 reclaim_unlock ir0_spin_unlock_irqrestore(&reclaimer_lock)
 swap_lock ir0_spin_lock_irqsave(&swap_area_lock)
 swap_unlock ir0_spin_unlock_irqrestore(&swap_area_lock)
+
+# MINIX backend (fs/minix_fs.h): the kernel-shell commands and helpers left
+# without callers once the VFS took over. The backend only serves vfs_ops.
+minix_fs_cat (nothing; userspace cat reads through the VFS)
+minix_fs_cleanup (nothing; the root filesystem is never unmounted)
+minix_fs_is_available minix_fs_is_working()
+minix_fs_ls (nothing; userspace ls uses getdents64)
+minix_fs_read_file vfs_read_file() (the VFS read path)
+minix_fs_rmdir_force minix_fs_rmdir() through vfs_rmdir()
+minix_get_gid_perms (nothing; permissions go through <ir0/permissions.h>)
+minix_get_oth_perms (nothing; permissions go through <ir0/permissions.h>)
+minix_get_uid_perms (nothing; permissions go through <ir0/permissions.h>)
+minix_is_blk S_ISBLK() on the stat mode
+minix_is_chr S_ISCHR() on the stat mode
+minix_mark_inode_free minix_fs_free_inode()
+minix_mark_inode_used minix_alloc_inode()

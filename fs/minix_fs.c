@@ -155,28 +155,6 @@ int minix_write_block(uint32_t block_num, const void *buffer)
 	return 0;
 }
 
-void minix_mark_inode_used(uint32_t inode_num)
-{
-  if (inode_num >= MINIX_MAX_INODES)
-    return;
-
-  uint32_t byte = inode_num / 8;
-  uint32_t bit = inode_num % 8;
-
-  minix_fs.inode_bitmap[byte] |= (1 << bit);
-}
-
-void minix_mark_inode_free(uint32_t inode_num)
-{
-  if (inode_num >= MINIX_MAX_INODES)
-    return;
-
-  uint32_t byte = inode_num / 8;
-  uint32_t bit = inode_num % 8;
-
-  minix_fs.inode_bitmap[byte] &= ~(1 << bit);
-}
-
 bool minix_is_zone_free(uint32_t zone_num)
 {
   uint32_t byte_index;
@@ -312,11 +290,6 @@ int minix_sync_inode_bitmap(void)
 // ===============================================================================
 // PUBLIC FUNCTIONS IMPLEMENTATION
 // ===============================================================================
-
-bool minix_fs_is_available(void)
-{
-  return minix_root_block_present();
-}
 
 bool minix_fs_is_working(void)
 {
@@ -653,14 +626,6 @@ int minix_fs_format(void)
   klog_print("SERIAL: minix_fs_format: test files created successfully\n");
 
   return 0;
-}
-
-void minix_fs_cleanup(void)
-{
-  if (minix_fs.initialized)
-  {
-    minix_fs.initialized = false;
-  }
 }
 
 static struct vfs_ops minix_fs_ops = {
