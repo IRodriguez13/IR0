@@ -67,7 +67,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
 | `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). The user syscall stubs live in `arch/<isa>/include/asm/syscall_user.h`. |
-| `no-raw-atomics` | `block/`, `cpp/`, `drivers/`, `fs/`, `includes/`, `ipc/`, `kernel/`, `ktm/`, `mm/`, `net/`, `sched/`, `sound/` | No `__atomic_*`, `__sync_*` or inline asm outside `arch/` and `includes/asm-generic/atomic.h`; use **`<ir0/atomic.h>`** (`atomic_t`, `cmpxchg`, `test_and_set_bit_lock`, `barrier`). Empty exception ledger, injected-violation self-test. |
+| `no-raw-atomics` | `block/`, `cpp/`, `drivers/`, `fs/`, `includes/`, `ipc/`, `kernel/`, `ktm/`, `mm/`, `net/`, `sched/`, `smp/`, `sound/` | No `__atomic_*`, `__sync_*` or inline asm outside `arch/` and `includes/asm-generic/atomic.h`; use **`<ir0/atomic.h>`** (`atomic_t`, `cmpxchg`, `test_and_set_bit_lock`, `barrier`). Empty exception ledger, injected-violation self-test. |
 | `usercopy-no-cr3-memcpy` | `kernel/syscalls/**`, `kernel/lib/signals.c` | No `load_page_directory` + raw `memcpy((void *)` / `memset((void *)` in the same function; use **`copy_*_user` / region helpers** ([`uaccess.md`](uaccess.md)). |
 | `usercopy-signals` | `kernel/lib/signals.c` | No `memcpy((void *)` (signal frame must use region copy). |
 | `usercopy-sys-uname` | `sys_uname` | No `memset(buf` / `strncpy(buf->`; bounce + **`copy_to_user`**. |

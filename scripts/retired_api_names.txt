@@ -2,7 +2,7 @@
 #
 # Checked by scripts/architecture_guard.py [retired-api]: a listed name may
 # not appear in kernel C sources (arch block drivers fs includes ipc kernel
-# ktm mm net sched sound). Append the names a convergence deletes in the
+# ktm mm net sched smp sound). Append the names a convergence deletes in the
 # same commit; never delete a line to bring a name back.
 
 # Time and clock (includes/ir0/clock.h, early_clock.h, early_time.h, rtc.h)

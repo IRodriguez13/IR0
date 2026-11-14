@@ -2811,7 +2811,7 @@ RAW_ATOMIC_RE = re.compile(
     r"\b(__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
     r"\s*\(")
 RAW_ATOMIC_TREES = ("block", "cpp", "drivers", "fs", "includes", "ipc",
-                    "kernel", "ktm", "mm", "net", "sched", "sound")
+                    "kernel", "ktm", "mm", "net", "sched", "smp", "sound")
 RAW_ATOMIC_BACKEND = "includes/asm-generic/atomic.h"
 RAW_ATOMIC_LEDGER: frozenset[str] = frozenset()
 
@@ -2945,7 +2945,7 @@ def check_retired_mm_headers():
 # line fails the guard instead of being ignored.
 RETIRED_API_LEDGER = ROOT / "scripts" / "retired_api_names.txt"
 RETIRED_API_TREES = ("arch", "block", "drivers", "fs", "includes", "ipc",
-                     "kernel", "ktm", "mm", "net", "sched", "sound")
+                     "kernel", "ktm", "mm", "net", "sched", "smp", "sound")
 _RETIRED_API_LINE_RE = re.compile(r"^([A-Za-z_]\w*)\s+(\S.*)$")
 
 
