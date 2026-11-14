@@ -9,17 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Order matters: net stack bundle before single net/* lines.
+# net/ headers are private to net/: there is no facade to rewrite them to.
 SUBST = [
-    (
-        re.compile(
-            r"#include\s*<net/ip\.h>\s*\n"
-            r"#include\s*<net/icmp\.h>\s*\n"
-            r"#include\s*<net/dns\.h>\s*\n"
-            r"#include\s*<net/arp\.h>\s*\n"
-        ),
-        "#include <ir0/net_stack.h>\n",
-    ),
     (re.compile(r'#include\s*"scheduler_api\.h"'), "#include <ir0/sched.h>"),
     (re.compile(r'#include\s*"copy_user\.h"'), "#include <ir0/copy_user.h>"),
     (re.compile(r'#include\s*"signals\.h"'), "#include <ir0/signals.h>"),
@@ -31,10 +22,6 @@ SUBST = [
     (re.compile(r"#include\s*<fs/vfs\.h>"), "#include <ir0/vfs.h>"),
     (re.compile(r"#include\s*<sched/task\.h>"), "#include <ir0/task.h>"),
     (re.compile(r"#include\s*<sched/scheduler_api\.h>"), "#include <ir0/sched.h>"),
-    (re.compile(r"#include\s*<net/ip\.h>"), "#include <ir0/net_stack.h>"),
-    (re.compile(r"#include\s*<net/icmp\.h>"), "#include <ir0/net_stack.h>"),
-    (re.compile(r"#include\s*<net/dns\.h>"), "#include <ir0/net_stack.h>"),
-    (re.compile(r"#include\s*<net/arp\.h>"), "#include <ir0/net_stack.h>"),
 ]
 
 SCAN = [
@@ -57,19 +44,6 @@ DROP_LINES = {
 }
 
 
-def dedupe_net_stack(text: str) -> str:
-    lines = text.splitlines(keepends=True)
-    out = []
-    seen_net_stack = False
-    for line in lines:
-        if line.strip() == "#include <ir0/net_stack.h>":
-            if seen_net_stack:
-                continue
-            seen_net_stack = True
-        out.append(line)
-    return "".join(out)
-
-
 def process(path: Path) -> bool:
     if path.resolve() in FACADE_HDRS:
         return False
@@ -83,7 +57,6 @@ def process(path: Path) -> bool:
         text = drop.sub("", text)
     for pat, repl in SUBST:
         text = pat.sub(repl, text)
-    text = dedupe_net_stack(text)
     if text != orig:
         path.write_text(text, encoding="utf-8")
         return True

@@ -174,3 +174,6 @@ sys_kernel_process_live_count process_live_count()
 sysfs_open pseudo_fs_acquire_path()
 sysfs_read pseudo_fs_ops_read()
 sysfs_write pseudo_fs_ops_write()
+# Networking (includes/ir0/net.h, net/*.h, drivers/net/*.h): net/ headers are
+# private to net/; everything else uses <ir0/net.h> and <ir0/sock_*.h>.
+net_stack <ir0/net.h> (net/ files include the net/*.h header they use)
