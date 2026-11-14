@@ -14,8 +14,7 @@
 #ifndef STDARG_H
 #define STDARG_H
 
-// Use GCC builtins for variable arguments
-// This is required for x86-64 System V ABI which passes arguments in registers
+/* Compiler builtins preserve the active target ABI's variadic calling rules. */
 typedef __builtin_va_list va_list;
 
 #define va_start(ap, last) __builtin_va_start(ap, last)

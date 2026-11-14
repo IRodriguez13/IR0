@@ -11,13 +11,10 @@
  * Description: IR0 kernel source/header file
  */
 
-// Por ahora las repito antes de hacer refactor por cuestiones de economía y ver qué necesito de las libs std.
-
 #ifndef _STDDEF_H
 #define _STDDEF_H
 
 /* Standard definitions for IR0 Kernel - Freestanding implementation */
-/* Architecture-aware definitions */
 
 /* NULL pointer constant */
 #ifndef NULL
@@ -28,18 +25,12 @@
 #endif
 #endif
 
-/* Architecture-dependent size and pointer difference types */
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(__aarch64__)
-    /* 64-bit architecture */
-    typedef unsigned long size_t;
-    typedef long ptrdiff_t;
-#elif defined(__i386__) || defined(_M_IX86)
-    /* 32-bit architecture */
-    typedef unsigned int size_t;
-    typedef int ptrdiff_t;
-#else
-    #error "Unsupported architecture for size_t and ptrdiff_t"
+/* These fundamental types are properties of the compiler ABI, not an ISA. */
+#if !defined(__SIZE_TYPE__) || !defined(__PTRDIFF_TYPE__)
+#error "Compiler does not provide size or pointer-difference types"
 #endif
+typedef __SIZE_TYPE__ size_t;
+typedef __PTRDIFF_TYPE__ ptrdiff_t;
 
 /* wchar_t - wide character type */
 #ifndef __cplusplus
