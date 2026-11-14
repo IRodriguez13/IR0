@@ -16,6 +16,7 @@
 #include "dns.h"
 #include "ip.h"
 #include "udp.h"
+#include "net_internal.h"
 #include <ir0/logging.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>

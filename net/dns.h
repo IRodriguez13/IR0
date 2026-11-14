@@ -42,4 +42,5 @@
 
 /* DNS API */
 int dns_init(void);
+void dns_set_default_server(ip4_addr_t dns_server_ip);
 

@@ -12,6 +12,8 @@
  */
 
 #include "arp.h"
+#include "ip.h"
+#include "net_internal.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/klog.h>
@@ -297,7 +299,7 @@ int arp_init(void)
     
     /* Set default IP (should be configurable per interface) */
     /* QEMU user mode networking default: 10.0.2.15 */
-    my_ip = make_ip4_addr(10, 0, 2, 15);
+    my_ip = ip_make_addr(10, 0, 2, 15);
     
     int ret = net_register_protocol(&arp_proto);
     if (ret == 0)

@@ -58,6 +58,10 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
 void ip_receive_handler(struct net_device *dev, const void *data,
                         size_t len, void *priv);
 
+/* Route table changes (SIOCADDRT/SIOCDELRT and the boot seed). */
+int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway);
+int ip_route_del(ip4_addr_t dest_network, ip4_addr_t netmask);
+
 /* IP Address Utilities */
 static inline ip4_addr_t ip_make_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {

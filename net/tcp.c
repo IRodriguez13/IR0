@@ -10,6 +10,7 @@
  */
 
 #include "tcp.h"
+#include "net_internal.h"
 #include <ir0/atomic.h>
 #include <ir0/logging.h>
 #include <ir0/clock.h>

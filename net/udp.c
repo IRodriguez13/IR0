@@ -21,6 +21,7 @@
 
 #include "udp.h"
 #include "ip.h"
+#include "net_internal.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/arch_port.h>

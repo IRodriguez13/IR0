@@ -17,6 +17,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/net.h>
+#include "ip.h"
 #include <string.h>
 
 #define IR0_IFNAMSIZ 16

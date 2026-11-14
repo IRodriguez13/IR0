@@ -13,6 +13,7 @@
 
 #include "icmp.h"
 #include "ip.h"
+#include "net_internal.h"
 #include <ir0/sock_icmp.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>

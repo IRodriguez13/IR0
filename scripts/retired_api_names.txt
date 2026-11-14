@@ -182,6 +182,7 @@ bcmgenet_mdio_write_cmd (nothing; the driver only reads the PHY)
 icmp_get_echo_result icmp_get_next_echo_result()
 IP_HEADER_LEN IP_IHL() * 4
 ip_format_addr IP4_FMT and IP4_ARGS() with snprintf()
+make_ip4_addr ip_make_addr() (net/ip.h)
 net_stack_get_stats the per-device net_device.get_stats op
 net_unregister_protocol (nothing; protocols are registered once at boot)
 rtl8139_get_mac (nothing; the MAC lives in net_device.mac)

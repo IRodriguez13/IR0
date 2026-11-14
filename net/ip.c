@@ -14,7 +14,7 @@
 
 #include "ip.h"
 #include "arp.h"
-#include "net.h"
+#include "net_internal.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/errno.h>

@@ -37,6 +37,7 @@
 #include "tcp.h"
 #include "dhcp.h"
 #include "dns.h"
+#include "net_internal.h"
 #include <ir0/net.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
