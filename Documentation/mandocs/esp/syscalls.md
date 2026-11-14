@@ -50,8 +50,8 @@ permanecen en el monolítico `syscalls.c`.
   syscall_dispatch(nr, args...)
         │
         ├─ __NR_open ──► sys_open (fs_syscalls.c)
-        │                    ├─ /proc → proc_open
-        │                    ├─ /sys  → sysfs_open
+        │                    ├─ /proc → pseudo_bind_file_fd
+        │                    ├─ /sys  → pseudo_bind_file_fd
         │                    ├─ /dev  → ruta devfs
         │                    └─ else  → vfs_open
         ├─ __NR_read/write ──► rama por tipo fd (devfs/sysfs/pipe/vfs)

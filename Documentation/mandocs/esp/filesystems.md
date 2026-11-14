@@ -47,8 +47,8 @@ Ver IR0-vfs para el diagrama del router en dos etapas.
   open("/etc/passwd")     → VFS → minix → ir0_block → ATA
   open("/tmp/x")          → VFS → tmpfs → inode RAM
   open("/hostshare/...")  → VFS → 9p → virtio_9p_* (TSYMLINK/TREADLINK/…)
-  open("/proc/meminfo")   → proc_open → pseudo_fs o generador procfs
-  open("/sys/...")        → sysfs_open → ops registry
+  open("/proc/meminfo")   → pseudo_fs_acquire_path → lector procfs
+  open("/sys/...")        → pseudo_fs_acquire_path → ops registry
   open("/dev/console")    → devfs_find_node → console_ops → ir0_console_*
   open("/dev/fb0")        → devfs → ruta mmap fb en sys_mmap
 ```

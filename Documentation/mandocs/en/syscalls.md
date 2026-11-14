@@ -49,8 +49,8 @@ userspace is `#GP` → SIGSEGV, as on Linux without IA32 emulation. Dispatch is 
   syscall_dispatch(nr, args...)
         │
         ├─ __NR_open ──► sys_open (fs_syscalls.c)
-        │                    ├─ /proc → proc_open
-        │                    ├─ /sys  → sysfs_open
+        │                    ├─ /proc → pseudo_bind_file_fd
+        │                    ├─ /sys  → pseudo_bind_file_fd
         │                    ├─ /dev  → devfs path
         │                    └─ else  → vfs_open
         ├─ __NR_read/write ──► fd type branch (devfs/sysfs/pipe/vfs)

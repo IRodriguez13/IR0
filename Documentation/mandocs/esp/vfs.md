@@ -74,10 +74,10 @@ Tablas longest-prefix para nodos `/proc` y `/sys`, registrados al init desde
 
 ### Modelo de fd en syscalls (`kernel/syscalls/fs_syscalls.c`)
 
-La tabla de fd del proceso usa **rangos reservados** para aperturas pseudo:
+Las aperturas pseudo se asocian en la tabla de fd del proceso:
 
-- `/proc` → `proc_open()` → fd en rango proc
-- `/sys` → `sysfs_open()`
+- `/proc`, `/sys` → `pseudo_bind_file_fd()` → `pseudo_fs_acquire_path()`;
+  la entrada del fd queda marcada `is_pseudo`
 - `/dev/...` → `devfs_find_node()` + `devfs_open_node()`
 
 Resto de rutas: resolución contra `cwd` con `ir0_resolve_kpath_at()`, luego
@@ -102,8 +102,10 @@ Resto de rutas: resolución contra `cwd` con `ir0_resolve_kpath_at()`, luego
 ### Ruta B — `/proc/meminfo`
 
 1. `is_proc_path()` verdadero en `sys_open`.
-2. `proc_open()` — registry o lógica procfs.
-3. Fd en rango proc; `read`/`write` posteriores no pasan por ops de montaje VFS.
+2. `pseudo_bind_file_fd()` — `pseudo_fs_acquire_path()` encuentra el nodo del
+   registry (estático o dinámico) que `pseudo_fs_nodes.c` asoció al lector procfs.
+3. La entrada del fd queda marcada `is_pseudo`; `read`/`write` van a las ops del
+   nodo (`pseudo_fs_ops_read/write`) sin pasar por ops de montaje VFS.
 
 ### Ruta C — `/dev/console`
 

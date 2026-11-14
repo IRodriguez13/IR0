@@ -77,10 +77,10 @@ Longest-prefix tables for `/proc` and `/sys` nodes registered at init from
 
 ### Syscall-side fd model (`kernel/syscalls/fs_syscalls.c`)
 
-Process fd table uses **reserved ranges** for pseudo opens:
+Pseudo opens are bound in the process fd table:
 
-- `/proc` → `proc_open()` → fd in proc range
-- `/sys` → `sysfs_open()`
+- `/proc`, `/sys` → `pseudo_bind_file_fd()` → `pseudo_fs_acquire_path()`;
+  the fd entry is marked `is_pseudo`
 - `/dev/...` → `devfs_find_node()` + `devfs_open_node()`
 
 All other paths: resolve against `cwd` via `ir0_resolve_kpath_at()`, then `vfs_open()`.
@@ -104,8 +104,10 @@ All other paths: resolve against `cwd` via `ir0_resolve_kpath_at()`, then `vfs_o
 ### Path B — `/proc/meminfo`
 
 1. `is_proc_path()` true in `sys_open`.
-2. `proc_open()` — may use `pseudo_fs_registry` match or procfs-specific logic.
-3. Returns fd in proc fd range; subsequent `read`/`write` bypass VFS mount ops.
+2. `pseudo_bind_file_fd()` — `pseudo_fs_acquire_path()` finds the registry
+   node (static or dynamic) that `pseudo_fs_nodes.c` bound to the procfs reader.
+3. The fd entry is marked `is_pseudo`; `read`/`write` go to the node's ops
+   (`pseudo_fs_ops_read/write`) and bypass VFS mount ops.
 
 ### Path C — `/dev/console`
 
