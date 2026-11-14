@@ -98,6 +98,38 @@ void ktest_string(void)
 	KASSERT(memmove(src, src, sizeof(src)) == src);
 	KASSERT(memcmp(src, dst, sizeof(src)) == 0);
 
+	/* Word paths must not touch bytes outside the requested range. */
+	{
+		unsigned char area[24];
+		int i;
+
+		for (i = 0; i < (int)sizeof(area); i++)
+			area[i] = 0xa5;
+		memset(area + 3, 0x5a, 10);
+		for (i = 0; i < 3; i++)
+			KASSERT_EQ(area[i], 0xa5);
+		for (i = 3; i < 13; i++)
+			KASSERT_EQ(area[i], 0x5a);
+		for (i = 13; i < (int)sizeof(area); i++)
+			KASSERT_EQ(area[i], 0xa5);
+	}
+	{
+		unsigned char guarded_src[24];
+		unsigned char guarded_dst[24];
+		int i;
+
+		for (i = 0; i < (int)sizeof(guarded_src); i++)
+			guarded_src[i] = (unsigned char)(0x30 + i);
+		memset(guarded_dst, 0xa5, sizeof(guarded_dst));
+		KASSERT(memcpy(guarded_dst + 5, guarded_src + 2, 11) ==
+			guarded_dst + 5);
+		KASSERT(memcmp(guarded_dst + 5, guarded_src + 2, 11) == 0);
+		for (i = 0; i < 5; i++)
+			KASSERT_EQ(guarded_dst[i], 0xa5);
+		for (i = 16; i < (int)sizeof(guarded_dst); i++)
+			KASSERT_EQ(guarded_dst[i], 0xa5);
+	}
+
 	{
 		char *end;
 		const char invalid_prefix[] = "0x";

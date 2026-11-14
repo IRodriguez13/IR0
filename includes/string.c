@@ -31,6 +31,22 @@
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
+/* One byte per lane, used by the word-at-a-time helpers. */
+typedef unsigned long __attribute__((may_alias)) word_t;
+#define WORD_BYTES sizeof(word_t)
+#define WORD_ONES (~(word_t)0 / 0xff)
+#define WORD_HIGHS (WORD_ONES << 7)
+
+/*
+ * True when at least one byte of the word is zero.  The classic
+ * (word - 0x01..) & ~word & 0x80.. test only inspects lanes whose
+ * subtraction did not borrow across the byte boundary.
+ */
+static inline int word_has_zero(word_t word)
+{
+    return ((word - WORD_ONES) & ~word & WORD_HIGHS) != 0;
+}
+
 /**
  * strlen - calculate length of string
  * @str: string to measure
@@ -39,15 +55,31 @@
  */
 size_t strlen(const char *str)
 {
-    size_t len = 0;
+    const char *p = str;
 
     if (unlikely(!str))
         return 0;
 
-    while (str[len] != '\0')
-        len++;
+    /* Align first so a word load never crosses a page boundary. */
+    while ((uintptr_t)p & (WORD_BYTES - 1))
+    {
+        if (*p == '\0')
+            return (size_t)(p - str);
+        p++;
+    }
 
-    return len;
+    for (;;)
+    {
+        word_t word = *(const word_t *)p;
+
+        if (word_has_zero(word))
+        {
+            while (*p != '\0')
+                p++;
+            return (size_t)(p - str);
+        }
+        p += WORD_BYTES;
+    }
 }
 
 /**
@@ -109,31 +141,32 @@ char *strcpy(char *dest, const char *src)
 
 char *strncpy(char *dest, const char *src, size_t n)
 {
-    char *d = dest;
-    while (n > 0 && *src != '\0')
+    size_t len = strlen(src);
+
+    if (len >= n)
     {
-        *d++ = *src++;
-        n--;
+        if (n > 0)
+            memcpy(dest, src, n);
     }
-    while (n > 0)
+    else
     {
-        *d++ = '\0';
-        n--;
+        memcpy(dest, src, len);
+        memset(dest + len, '\0', n - len);
     }
+
     return dest;
 }
 
 char *strncat(char *dest, const char *src, size_t n)
 {
-    char *d = dest;
-    while (*d != '\0')
-        d++;
-    while (n > 0 && *src != '\0')
-    {
-        *d++ = *src++;
-        n--;
-    }
-    *d = '\0';
+    size_t dest_len = strlen(dest);
+    size_t src_len = strlen(src);
+
+    if (src_len > n)
+        src_len = n;
+
+    memcpy(dest + dest_len, src, src_len);
+    dest[dest_len + src_len] = '\0';
     return dest;
 }
 
@@ -212,10 +245,28 @@ char *strstr(const char *haystack, const char *needle)
 void *memset(void *ptr, int value, size_t num)
 {
     unsigned char *p = (unsigned char *)ptr;
-    while (num-- > 0)
+    unsigned char byte = (unsigned char)value;
+    word_t word;
+
+    if (num == 0)
+        return ptr;
+
+    while (num > 0 && ((uintptr_t)p & (WORD_BYTES - 1)))
     {
-        *p++ = (unsigned char)value;
+        *p++ = byte;
+        num--;
     }
+
+    word = (word_t)byte * WORD_ONES;
+    while (num >= WORD_BYTES)
+    {
+        *(word_t *)p = word;
+        p += WORD_BYTES;
+        num -= WORD_BYTES;
+    }
+    while (num-- > 0)
+        *p++ = byte;
+
     return ptr;
 }
 
@@ -223,10 +274,35 @@ void *memcpy(void *dest, const void *src, size_t num)
 {
     unsigned char *d = (unsigned char *)dest;
     const unsigned char *s = (const unsigned char *)src;
-    while (num-- > 0)
+
+    if (num == 0)
+        return dest;
+
+    /*
+     * Word copies need both pointers aligned.  Walk a matching offset
+     * down to the next word boundary, then copy whole words; a pair with
+     * different offsets stays on the byte path.
+     */
+    if (((uintptr_t)d & (WORD_BYTES - 1)) ==
+        ((uintptr_t)s & (WORD_BYTES - 1)))
     {
-        *d++ = *s++;
+        while (num > 0 && ((uintptr_t)d & (WORD_BYTES - 1)))
+        {
+            *d++ = *s++;
+            num--;
+        }
+        while (num >= WORD_BYTES)
+        {
+            *(word_t *)d = *(const word_t *)s;
+            d += WORD_BYTES;
+            s += WORD_BYTES;
+            num -= WORD_BYTES;
+        }
     }
+
+    while (num-- > 0)
+        *d++ = *s++;
+
     return dest;
 }
 
@@ -242,6 +318,11 @@ void *memmove(void *dest, const void *src, size_t num)
 
     if (d < s)
     {
+        /* Disjoint ranges keep the faster memcpy paths; subtraction
+         * avoids overflowing the end address. */
+        if ((uintptr_t)s - (uintptr_t)d >= num)
+            return memcpy(dest, src, num);
+
         while (num-- > 0)
         {
             *d++ = *s++;
@@ -249,6 +330,9 @@ void *memmove(void *dest, const void *src, size_t num)
     }
     else
     {
+        if ((uintptr_t)d - (uintptr_t)s >= num)
+            return memcpy(dest, src, num);
+
         d += num;
         s += num;
         while (num-- > 0)
@@ -264,6 +348,36 @@ int memcmp(const void *ptr1, const void *ptr2, size_t num)
 {
     const unsigned char *p1 = (const unsigned char *)ptr1;
     const unsigned char *p2 = (const unsigned char *)ptr2;
+    word_t w1;
+    word_t w2;
+
+    /*
+     * Equal offsets can be aligned together; after that the byte loop
+     * only sees the head and tail.  A differing result falls through to
+     * the byte loop from the first mismatching word.
+     */
+    if (((uintptr_t)p1 & (WORD_BYTES - 1)) ==
+        ((uintptr_t)p2 & (WORD_BYTES - 1)))
+    {
+        while (num > 0 && ((uintptr_t)p1 & (WORD_BYTES - 1)))
+        {
+            if (*p1 != *p2)
+                return *p1 - *p2;
+            p1++;
+            p2++;
+            num--;
+        }
+        while (num >= WORD_BYTES)
+        {
+            w1 = *(const word_t *)p1;
+            w2 = *(const word_t *)p2;
+            if (w1 != w2)
+                break;
+            p1 += WORD_BYTES;
+            p2 += WORD_BYTES;
+            num -= WORD_BYTES;
+        }
+    }
 
     while (num-- > 0)
     {
