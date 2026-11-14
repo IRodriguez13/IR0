@@ -107,7 +107,6 @@ devfs_node_t *devfs_find_node_by_rdev(uint32_t rdev);
 int devfs_register_node(devfs_node_t *node);
 int devfs_chown_path(const char *path, uid_t owner, gid_t group);
 int devfs_fd_can_read(uint32_t device_id, pid_t pid);
-int devfs_fd_can_write(uint32_t device_id, pid_t pid);
 
 int64_t devfs_open_node(devfs_node_t *node, int flags);
 int64_t devfs_close_node(devfs_node_t *node);

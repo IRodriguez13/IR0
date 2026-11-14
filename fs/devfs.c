@@ -82,14 +82,6 @@ int devfs_fd_can_read(uint32_t device_id, pid_t pid)
         node && node->ops ? node->ops->can_read : NULL, node, pid);
 }
 
-int devfs_fd_can_write(uint32_t device_id, pid_t pid)
-{
-    devfs_node_t *node = devfs_find_node_by_id(device_id);
-
-    return devfs_poll_default(
-        node && node->ops ? node->ops->can_write : NULL, node, pid);
-}
-
 static const devfs_ops_t net_ops = {
     .read = dev_net_read,
     .write = dev_net_write,

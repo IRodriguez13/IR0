@@ -346,24 +346,6 @@ const pseudo_fs_entry_t *pseudo_fs_lookup(const char *full_path)
     return pseudo_fs_lookup_table(g_heart_entries, g_heart_count, full_path);
 }
 
-const pseudo_fs_entry_t *pseudo_fs_find_by_fd(int fd)
-{
-    const pseudo_fs_entry_t *hit;
-
-    if (pseudo_fs_find_dynamic_by_fd(fd))
-        return (const pseudo_fs_entry_t *)(uintptr_t)1;
-
-    hit = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
-    if (hit)
-        return hit;
-
-    hit = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
-    if (hit)
-        return hit;
-
-    return pseudo_fs_find_by_fd_table(g_heart_entries, g_heart_count, fd);
-}
-
 void pseudo_fs_reset(void)
 {
     for (int i = 0; i < PSEUDO_FS_MAX_DYNAMIC; i++)
@@ -384,16 +366,6 @@ void pseudo_fs_reset(void)
     g_sys_count = 0;
     g_heart_count = 0;
     g_dyn_reg_count = 0;
-}
-
-int pseudo_fs_proc_init(void)
-{
-    return 0;
-}
-
-int pseudo_fs_sys_init(void)
-{
-    return 0;
 }
 
 int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
@@ -458,31 +430,6 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
     return (int64_t)to_copy;
 }
 
-int64_t pseudo_fs_write_fd(int fd, const char *buf, size_t count)
-{
-    const pseudo_fs_entry_t *entry;
-    const pseudo_fs_dynamic_open_t *dyn;
-
-    dyn = pseudo_fs_find_dynamic_by_fd(fd);
-    if (dyn)
-    {
-        if (!dyn->ops || !dyn->ops->write)
-            return -EBADF;
-
-        return dyn->ops->write(dyn->ctx, buf, count);
-    }
-
-    entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
-    if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
-    if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_heart_entries, g_heart_count, fd);
-    if (!entry || !entry->ops || !entry->ops->write)
-        return -EBADF;
-
-    return entry->ops->write(entry->ctx, buf, count);
-}
-
 void pseudo_fs_stat_now(stat_t *st)
 {
     time_t now;
@@ -494,37 +441,6 @@ void pseudo_fs_stat_now(stat_t *st)
     st->st_atime = now;
     st->st_mtime = now;
     st->st_ctime = now;
-}
-
-int pseudo_fs_stat_fd(int fd, stat_t *st)
-{
-    const pseudo_fs_entry_t *entry;
-    pseudo_fs_dynamic_open_t *dyn;
-
-    if (!st)
-        return -EINVAL;
-
-    dyn = (pseudo_fs_dynamic_open_t *)pseudo_fs_find_dynamic_by_fd(fd);
-    if (dyn)
-    {
-        if (!dyn->ops || !dyn->ops->stat)
-            return -EBADF;
-
-        return dyn->ops->stat(dyn->ctx, st);
-    }
-
-    entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
-    if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
-    if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_heart_entries, g_heart_count, fd);
-    if (!entry)
-        return -ENOENT;
-
-    if (entry->ops && entry->ops->stat)
-        return entry->ops->stat(entry->ctx, st);
-
-    return pseudo_fs_stat_path(entry->full_path, st);
 }
 
 int pseudo_fs_stat_path(const char *full_path, stat_t *st)

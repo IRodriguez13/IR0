@@ -154,3 +154,23 @@ minix_is_blk S_ISBLK() on the stat mode
 minix_is_chr S_ISCHR() on the stat mode
 minix_mark_inode_free minix_fs_free_inode()
 minix_mark_inode_used minix_alloc_inode()
+
+# Pseudo filesystems (devfs.h, procfs.h, sysfs.h, pseudo_fs.h): the
+# fd-number API from before files were bound in the process fd table.
+devfs_fd_can_write the node's ops->can_write through the fd's devfs node
+proc_get_offset the fd table entry's offset
+proc_getdents proc_readdir()
+proc_open pseudo_fs_acquire_path()
+proc_read pseudo_fs_ops_read()
+proc_set_offset the fd table entry's offset
+proc_write pseudo_fs_ops_write()
+pseudo_fs_find_by_fd pseudo_fs_lookup()
+pseudo_fs_proc_init pseudo_fs_nodes_register_all()
+pseudo_fs_stat_fd pseudo_fs_ops_stat()
+pseudo_fs_sys_init pseudo_fs_nodes_register_all()
+pseudo_fs_write_fd pseudo_fs_ops_write()
+sys_class_net_attr_read_reg sys_class_net_attr_read_named()
+sys_kernel_process_live_count process_live_count()
+sysfs_open pseudo_fs_acquire_path()
+sysfs_read pseudo_fs_ops_read()
+sysfs_write pseudo_fs_ops_write()

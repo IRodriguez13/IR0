@@ -20,13 +20,6 @@ bool is_proc_path(const char *path)
     return strncmp(path, "/proc/", 6) == 0;
 }
 
-/* Legacy virtual-fd offset maps removed — offsets live in process fd_table. */
-off_t proc_get_offset(int fd)
-{
-    (void)fd;
-    return 0;
-}
-
 static int proc_readdir_add(struct vfs_dirent *entries, int max_entries, int n,
                             const char *name, uint8_t type)
 {
@@ -191,113 +184,6 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
     }
 
     return -ENOTDIR;
-}
-
-/* Legacy fd-based getdents — kept for transitional callers; prefer proc_readdir. */
-int proc_getdents(int fd, void *dirent_buf, size_t count)
-{
-    (void)fd;
-    (void)dirent_buf;
-    (void)count;
-    return -EBADF;
-}
-
-/* Legacy virtual-fd offset maps removed — offsets live in process fd_table. */
-void proc_set_offset(int fd, off_t offset)
-{
-    (void)fd;
-    (void)offset;
-}
-
-/* Open /proc — no longer assigns global virtual fds (use fd_table binds). */
-int proc_open(const char *path, int flags)
-{
-    pid_t pid;
-    const char *filename;
-
-    (void)flags;
-
-    if (!is_proc_path(path))
-        return -EINVAL;
-
-    pseudo_fs_nodes_register_all();
-
-    filename = proc_parse_path(path, &pid);
-    if (!filename)
-        return -ENOENT;
-
-    /* Files: opened only via pseudo_bind_file_fd (registry / dynamic). */
-    if (strcmp(filename, "status") == 0 || strcmp(filename, "cmdline") == 0 ||
-        (strcmp(filename, "stat") == 0 && pid > 0))
-        return -ENOENT;
-
-    if (strcmp(filename, "pid_dir") == 0 || strcmp(filename, "pid_subdir") == 0 ||
-        strcmp(filename, "self_link") == 0)
-        return -EISDIR;
-
-    /* Static registry nodes also use bind path, not this helper. */
-    return -ENOENT;
-}
-
-/* Read from /proc file — syscall path uses process fd_table is_pseudo binds. */
-int proc_read(int fd, char *buf, size_t count, off_t offset)
-{
-	(void)fd;
-	(void)buf;
-	(void)count;
-	(void)offset;
-	return -EBADF;
-}
-
-/*
- * proc_write - Write to /proc file entry
- *
- * Most /proc nodes are read-only. Writable paths are explicit (e.g.
- * /proc/bluetooth/scan). Writes under /proc/sys/ are not implemented and
- * return -EOPNOTSUPP.
- */
-/* Write to /proc — syscall uses fd_table binds; legacy global fds retired. */
-int proc_write(int fd, const char *buf, size_t count)
-{
-    if (!buf || count == 0)
-        return -EINVAL;
-
-    if (count == 0)
-        return 0;
-
-    if (fd < 1000)
-        return -EBADF;
-
-    switch (fd)
-    {
-        default:
-            /*
-             * Resolve path from the opener's fd table; writes under the
-             * proc/sys virtual tree are not supported (no sysctl knobs in-tree).
-             */
-            {
-                if (!current_process)
-                    return -ESRCH;
-
-                if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
-                    return -EBADF;
-
-                const char *path = NULL;
-                fd_entry_t *fdt = process_fd_table(current_process);
-
-                if (fdt && fdt[fd].in_use)
-                    path = fdt[fd].path;
-
-                if (!path || strncmp(path, "/proc/", 6) != 0)
-                    return -EACCES;
-
-                path += 6;
-                if (strncmp(path, "sys/", 4) == 0)
-                    return -EOPNOTSUPP;
-
-                return -EACCES;
-            }
-    }
 }
 
 /* Get stat for /proc file */

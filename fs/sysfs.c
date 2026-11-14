@@ -247,11 +247,6 @@ uint32_t sys_kernel_max_processes_limit(void)
     return process_limit_get();
 }
 
-int sys_kernel_process_live_count(void)
-{
-    return process_live_count();
-}
-
 /**
  * sys_kernel_max_processes_write - Write maximum processes to /sys/kernel/max_processes
  * @buf: Buffer containing new value
@@ -724,15 +719,6 @@ int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 	return len;
 }
 
-int sys_class_net_attr_read_reg(char *buf, size_t count, unsigned attr)
-{
-	struct net_device *dev = net_get_devices();
-
-	if (!dev || !dev->name)
-		return 0;
-	return sys_class_net_attr_read_named(buf, count, dev->name, attr);
-}
-
 static int sys_net_dirent_exists(struct vfs_dirent *entries, int n,
 				 const char *name)
 {
@@ -843,15 +829,6 @@ int sys_class_net_list_read_reg(char *buf, size_t count)
 	return 0;
 }
 
-int sys_class_net_attr_read_reg(char *buf, size_t count, unsigned attr)
-{
-	(void)attr;
-	if (!buf || count == 0)
-		return -EINVAL;
-	buf[0] = '\0';
-	return 0;
-}
-
 int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 				  unsigned attr)
 {
@@ -891,37 +868,6 @@ int sys_class_net_path_has_children(const char *path)
 	return 0;
 }
 #endif
-
-/* Open /sys — no virtual fds; callers must use pseudo_bind_file_fd. */
-int sysfs_open(const char *path, int flags)
-{
-    (void)flags;
-
-    if (!is_sys_path(path))
-        return -EINVAL;
-
-    pseudo_fs_nodes_register_all();
-    return -ENOENT;
-}
-
-/* Read from /sys — syscall path uses process fd_table is_pseudo binds. */
-int sysfs_read(int fd, char *buf, size_t count, off_t offset)
-{
-	(void)fd;
-	(void)buf;
-	(void)count;
-	(void)offset;
-	return -EBADF;
-}
-
-/* Write to /sys — syscall path uses process fd_table is_pseudo binds. */
-int sysfs_write(int fd, const char *buf, size_t count)
-{
-	(void)fd;
-	(void)buf;
-	(void)count;
-	return -EBADF;
-}
 
 /* Get stat for /sys file */
 int sysfs_stat(const char *path, stat_t *st)

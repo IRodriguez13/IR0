@@ -29,43 +29,11 @@
 #include <ir0/types.h>
 #include <ir0/vfs.h>
 
-/* /proc entry types */
-typedef enum {
-    PROC_TYPE_FILE,
-    PROC_TYPE_DIR
-} proc_type_t;
-
-/* /proc entry structure
- *
- * Legacy note: current dispatch in fs/procfs.c uses FD-based open/read/write
- * handlers, not a populated proc_entry tree. New endpoints should register
- * through the internal procfs table helpers in fs/procfs.c until tree dispatch
- * is unified with devfs_ops_t-style registration.
- */
-typedef struct proc_entry {
-    char name[64];
-    proc_type_t type;
-    int (*read_func)(char *buf, size_t count);
-    int (*write_func)(const char *buf, size_t count);
-    struct proc_entry *children;
-    int child_count;
-} proc_entry_t;
-
 /* /proc filesystem interface */
 bool is_proc_path(const char *path);
-int proc_open(const char *path, int flags);
-int proc_read(int fd, char *buf, size_t count, off_t offset);
-int proc_write(int fd, const char *buf, size_t count);
 int proc_stat(const char *path, stat_t *st);
 int proc_access_path(const char *path, uid_t euid);
 int proc_pid_get_owner(pid_t pid, uid_t *uid, gid_t *gid);
-
-/* Offset management for /proc files */
-off_t proc_get_offset(int fd);
-void proc_set_offset(int fd, off_t offset);
-
-/* /proc/pid directory — legacy fd-based (deprecated; prefer proc_readdir). */
-int proc_getdents(int fd, void *dirent_buf, size_t count);
 
 /* Path-based readdir for /proc, /proc/pid, /proc/pid/N (vfs_dirent batch). */
 int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries);

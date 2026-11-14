@@ -61,15 +61,10 @@ int pseudo_fs_register_dynamic(const char *mount_prefix,
                                pseudo_fs_dynamic_match_fn match,
                                const pseudo_fs_ops_t *ops);
 const pseudo_fs_entry_t *pseudo_fs_lookup(const char *full_path);
-const pseudo_fs_entry_t *pseudo_fs_find_by_fd(int fd);
-int pseudo_fs_proc_init(void);
-int pseudo_fs_sys_init(void);
 void pseudo_fs_reset(void);
 void pseudo_fs_nodes_register_all(void);
 
 int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset);
-int64_t pseudo_fs_write_fd(int fd, const char *buf, size_t count);
-int pseudo_fs_stat_fd(int fd, stat_t *st);
 int64_t pseudo_fs_open_path(const char *full_path, int flags, int *out_fd);
 int64_t pseudo_fs_close_fd(int fd);
 int pseudo_fs_stat_path(const char *full_path, stat_t *st);
