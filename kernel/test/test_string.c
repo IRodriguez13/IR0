@@ -51,6 +51,29 @@ void ktest_string(void)
 	snprintf(buf, sizeof(buf), "%x", -1);
 	KASSERT(strcmp(buf, "ffffffff") == 0);
 
+	/*
+	 * Width, precision, and left alignment: devfs prints "%-20s".
+	 * Every field is bounded by the destination size as well.
+	 */
+	snprintf(buf, sizeof(buf), "[%-20s]", "hda");
+	KASSERT(strcmp(buf, "[hda                 ]") == 0);
+	snprintf(buf, sizeof(buf), "[%20s]", "hda");
+	KASSERT(strcmp(buf, "[                 hda]") == 0);
+	snprintf(buf, sizeof(buf), "%.3s", "abcdef");
+	KASSERT(strcmp(buf, "abc") == 0);
+	snprintf(buf, sizeof(buf), "%8.3s", "abcdef");
+	KASSERT(strcmp(buf, "     abc") == 0);
+	snprintf(buf, sizeof(buf), "%-8.3s", "abcdef");
+	KASSERT(strcmp(buf, "abc     ") == 0);
+	snprintf(buf, sizeof(buf), "%5c", 'Z');
+	KASSERT(strcmp(buf, "    Z") == 0);
+	snprintf(buf, sizeof(buf), "%08d", -42);
+	KASSERT(strcmp(buf, "-0000042") == 0);
+	snprintf(buf, sizeof(buf), "100%%");
+	KASSERT(strcmp(buf, "100%") == 0);
+	snprintf(buf, sizeof(buf), "%");
+	KASSERT(strcmp(buf, "%") == 0);
+
 	for (int i = 0; i < (int)sizeof(src); i++)
 		src[i] = (char)(i + 1);
 

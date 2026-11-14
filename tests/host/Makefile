@@ -68,7 +68,11 @@ TEST_SRCS += test_swap.c test_bcmgenet.c test_dma_irq.c
 TEST_SRCS += test_vbe_boot.c
 TEST_SRCS += test_acpi_rsdp.c
 TEST_SRCS += test_fault_signal.c
+# The freestanding string library is compiled into the host suite under
+# ir0_* names so width/precision and alignment fast paths are unit-tested.
+TEST_SRCS += test_kernel_string.c
 KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
+	host_kernel_string.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
 	host_open_flags.o host_bpath.o host_bpivot_stub.o \
@@ -127,6 +131,9 @@ host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 
 host_kmem_stub.o: host_kmem_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
+
+host_kernel_string.o: kernel_string_wrapper.c $(KERNEL_ROOT)/includes/string.c
+	$(KERNEL_CC)
 
 host_pmm.o: $(KERNEL_ROOT)/mm/alloc/pmm.c $(KERNEL_ROOT)/includes/ir0/pmm.h
 	$(CC) $(KERNEL_CFLAGS) -DIR0_DEBUG_PMM=0 -c -o $@ $<

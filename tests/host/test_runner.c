@@ -112,6 +112,13 @@ extern void test_audio_backend_mock_contract(void);
 extern void test_mm_port_mock_contract(void);
 extern void test_platform_mock_contract(void);
 extern void test_swap_header_and_areas(void);
+extern void test_kernel_string_printf_width(void);
+extern void test_kernel_string_length(void);
+extern void test_kernel_string_memset(void);
+extern void test_kernel_string_memcpy(void);
+extern void test_kernel_string_memmove(void);
+extern void test_kernel_string_memcmp(void);
+extern void test_kernel_string_copy_pad(void);
 extern void test_bcmgenet_register_contract(void);
 extern void test_dma_irq_contract(void);
 extern void test_arm64_boot_info_genet_fdt(void);
@@ -213,6 +220,13 @@ static void (*test_functions[])(void) = {
 	test_mm_port_mock_contract,
 	test_platform_mock_contract,
 	test_swap_header_and_areas,
+	test_kernel_string_printf_width,
+	test_kernel_string_length,
+	test_kernel_string_memset,
+	test_kernel_string_memcpy,
+	test_kernel_string_memmove,
+	test_kernel_string_memcmp,
+	test_kernel_string_copy_pad,
 	test_bcmgenet_register_contract,
 	test_dma_irq_contract,
 	NULL

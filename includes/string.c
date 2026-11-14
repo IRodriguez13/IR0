@@ -420,57 +420,6 @@ long strtol(const char *str, char **endptr, int base)
 // STRING FORMATTING
 // ===============================================================================
 
-static void reverse_string(char *str, int length)
-{
-    int start = 0;
-    int end = length - 1;
-    while (start < end)
-    {
-        char temp = str[start];
-        str[start] = str[end];
-        str[end] = temp;
-        start++;
-        end--;
-    }
-}
-
-static int int_to_string(int value, char *str, int base)
-{
-    int i = 0;
-    int is_negative = 0;
-    unsigned int magnitude = (unsigned int)value;
-
-    if (value == 0)
-    {
-        str[i++] = '0';
-        str[i] = '\0';
-        return i;
-    }
-
-    if (value < 0 && base == 10)
-    {
-        is_negative = 1;
-        /* -(INT_MIN) overflows; negate in unsigned arithmetic. */
-        magnitude = 0u - (unsigned int)value;
-    }
-
-    while (magnitude != 0)
-    {
-        unsigned int rem = magnitude % (unsigned int)base;
-        str[i++] = (rem > 9) ? (char)(rem - 10 + 'a') : (char)(rem + '0');
-        magnitude /= (unsigned int)base;
-    }
-
-    if (is_negative)
-    {
-        str[i++] = '-';
-    }
-
-    str[i] = '\0';
-    reverse_string(str, i);
-    return i;
-}
-
 /* Full-width unsigned — used by %u/%x and %l / %ll modifiers. */
 static int u64_to_string(uint64_t value, char *str, int base, int upper)
 {
@@ -501,20 +450,6 @@ static int u64_to_string(uint64_t value, char *str, int base, int upper)
 		str[i] = rev[n - 1 - i];
 	str[n] = '\0';
 	return n;
-}
-
-static int i64_to_string(int64_t value, char *str)
-{
-	if (value < 0)
-	{
-		uint64_t mag = (value == (int64_t)((uint64_t)1 << 63))
-				   ? ((uint64_t)1 << 63)
-				   : (uint64_t)(-value);
-
-		str[0] = '-';
-		return 1 + u64_to_string(mag, str + 1, 10, 0);
-	}
-	return u64_to_string((uint64_t)value, str, 10, 0);
 }
 
 static int pointer_to_string(uintptr_t value, char *str)
@@ -549,6 +484,117 @@ int snprintf(char *str, size_t size, const char *format, ...)
     return result;
 }
 
+/*
+ * Emit a text field with its width padding.  Every write is bounded by
+ * *remaining, so a caller may pass any width and the buffer stays intact.
+ */
+static char *emit_text(char *ptr, size_t *remaining, const char *text,
+                       size_t len, int width, int left, char pad)
+{
+    size_t pad_len = width > (int)len ? (size_t)(width - (int)len) : 0;
+    size_t i;
+
+    if (!left)
+    {
+        for (i = 0; i < pad_len && *remaining > 0; i++)
+        {
+            *ptr++ = pad;
+            (*remaining)--;
+        }
+    }
+
+    if (len > *remaining)
+        len = *remaining;
+    if (len > 0)
+    {
+        memcpy(ptr, text, len);
+        ptr += len;
+        *remaining -= len;
+    }
+
+    if (left)
+    {
+        for (i = 0; i < pad_len && *remaining > 0; i++)
+        {
+            *ptr++ = ' ';
+            (*remaining)--;
+        }
+    }
+
+    return ptr;
+}
+
+/*
+ * Emit an integer with sign, precision, zero padding, and width.  Digits
+ * arrive most-significant first and without a sign.
+ */
+static char *emit_number(char *ptr, size_t *remaining, const char *digits,
+                         int ndigits, int negative, int width, int precision,
+                         int zero, int left)
+{
+    int zeros = 0;
+    int total;
+    int pad;
+    int i;
+
+    /* "%.0d" of zero prints nothing. */
+    if (precision >= 0 && ndigits == 1 && digits[0] == '0' && precision == 0)
+        ndigits = 0;
+
+    if (precision > ndigits)
+        zeros = precision - ndigits;
+    else if (zero && !left)
+    {
+        int need = width - (negative ? 1 : 0) - ndigits;
+
+        if (need > 0)
+            zeros = need;
+    }
+
+    total = (negative ? 1 : 0) + zeros + ndigits;
+    pad = (!left && width > total) ? width - total : 0;
+
+    if (!left)
+    {
+        for (i = 0; i < pad && *remaining > 0; i++)
+        {
+            *ptr++ = ' ';
+            (*remaining)--;
+        }
+    }
+    if (negative && *remaining > 0)
+    {
+        *ptr++ = '-';
+        (*remaining)--;
+    }
+    for (i = 0; i < zeros && *remaining > 0; i++)
+    {
+        *ptr++ = '0';
+        (*remaining)--;
+    }
+    if (ndigits > 0)
+    {
+        size_t n = (size_t)ndigits < *remaining ? (size_t)ndigits : *remaining;
+
+        if (n > 0)
+        {
+            memcpy(ptr, digits, n);
+            ptr += n;
+            *remaining -= n;
+        }
+    }
+    if (left)
+    {
+        for (i = 0; i < pad && *remaining > 0; i++)
+        {
+            *ptr++ = ' ';
+            (*remaining)--;
+        }
+    }
+
+    return ptr;
+}
+
 int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 {
     if (str == NULL || format == NULL || size == 0)
@@ -561,177 +607,208 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 
     while (*format != '\0' && remaining > 0)
     {
-        if (*format == '%')
+        if (*format != '%')
         {
-            format++;
-            int width = 0;
-            char pad = ' ';
-            if (*format == '0')
+            *ptr++ = *format++;
+            remaining--;
+            continue;
+        }
+
+        format++;
+        int width = 0;
+        int precision = -1;
+        int left = 0;
+        int zero = 0;
+
+        for (;;)
+        {
+            if (*format == '-')
             {
-                pad = '0';
+                left = 1;
                 format++;
             }
-            while (*format >= '0' && *format <= '9')
+            else if (*format == '0')
             {
-                width = width * 10 + (*format - '0');
-                format++;
-            }
-
-            /* Length: l / ll (and z as size_t). Missing these → literal "lu"/"lx". */
-            int long_count = 0;
-            int is_size_t = 0;
-
-            if (*format == 'z')
-            {
-                is_size_t = 1;
+                zero = 1;
                 format++;
             }
             else
             {
-                while (*format == 'l' && long_count < 2)
-                {
-                    long_count++;
-                    format++;
-                }
+                break;
             }
+        }
 
-            switch (*format)
-            {
-            case 'd':
-            case 'i':
-            {
-                char num_str[32];
-                int len;
+        while (*format >= '0' && *format <= '9')
+        {
+            if (width < 1000000)
+                width = width * 10 + (*format - '0');
+            format++;
+        }
 
-                if (long_count >= 2)
-                    len = i64_to_string(va_arg(ap, long long), num_str);
-                else if (long_count == 1)
-                    len = i64_to_string((int64_t)va_arg(ap, long), num_str);
-                else
-                    len = int_to_string(va_arg(ap, int), num_str, 10);
-                while (width > len && remaining > 0)
-                {
-                    *ptr++ = pad;
-                    remaining--;
-                    width--;
-                }
-                if (len > (int)remaining) len = (int)remaining;
-                memcpy(ptr, num_str, len);
-                ptr += len;
-                remaining -= len;
-                break;
-            }
-            case 'u':
+        if (*format == '.')
+        {
+            format++;
+            precision = 0;
+            while (*format >= '0' && *format <= '9')
             {
-                char num_str[32];
-                uint64_t value;
-                int len;
+                if (precision < 1000000)
+                    precision = precision * 10 + (*format - '0');
+                format++;
+            }
+        }
 
-                if (is_size_t)
-                    value = (uint64_t)va_arg(ap, size_t);
-                else if (long_count >= 2)
-                    value = (uint64_t)va_arg(ap, unsigned long long);
-                else if (long_count == 1)
-                    value = (uint64_t)va_arg(ap, unsigned long);
-                else
-                    value = (uint64_t)va_arg(ap, unsigned int);
-                len = u64_to_string(value, num_str, 10, 0);
-                while (width > len && remaining > 0)
-                {
-                    *ptr++ = pad;
-                    remaining--;
-                    width--;
-                }
-                if (len > (int)remaining) len = (int)remaining;
-                memcpy(ptr, num_str, len);
-                ptr += len;
-                remaining -= len;
-                break;
-            }
-            case 'x':
-            case 'X':
-            {
-                char num_str[32];
-                uint64_t value;
-                int upper = (*format == 'X');
-                int len;
+        /* Length: l / ll (and z as size_t). Missing these → literal "lu"/"lx". */
+        int long_count = 0;
+        int is_size_t = 0;
 
-                if (is_size_t)
-                    value = (uint64_t)va_arg(ap, size_t);
-                else if (long_count >= 2)
-                    value = (uint64_t)va_arg(ap, unsigned long long);
-                else if (long_count == 1)
-                    value = (uint64_t)va_arg(ap, unsigned long);
-                else
-                    value = (uint64_t)va_arg(ap, unsigned int);
-                len = u64_to_string(value, num_str, 16, upper);
-                while (width > len && remaining > 0)
-                {
-                    *ptr++ = pad;
-                    remaining--;
-                    width--;
-                }
-                if (len > (int)remaining) len = (int)remaining;
-                memcpy(ptr, num_str, len);
-                ptr += len;
-                remaining -= len;
-                break;
-            }
-            case 'p':
-            {
-                uintptr_t value = (uintptr_t)va_arg(ap, void *);
-                char ptr_str[2 + (sizeof(uintptr_t) * 2) + 1];
-                int len = pointer_to_string(value, ptr_str);
-                while (width > len && remaining > 0)
-                {
-                    *ptr++ = pad;
-                    remaining--;
-                    width--;
-                }
-                if (len > (int)remaining) len = (int)remaining;
-                memcpy(ptr, ptr_str, len);
-                ptr += len;
-                remaining -= len;
-                break;
-            }
-            case 's':
-            {
-                char *s = va_arg(ap, char *);
-                if (s == NULL) s = "(null)";
-                int len = strlen(s);
-                if (len > (int)remaining) len = (int)remaining;
-                memcpy(ptr, s, len);
-                ptr += len;
-                remaining -= len;
-                break;
-            }
-            case 'c':
-            {
-                char c = (char)va_arg(ap, int);
-                if (remaining > 0)
-                {
-                    *ptr++ = c;
-                    remaining--;
-                }
-                break;
-            }
-            case '%':
-            {
-                if (remaining > 0)
-                {
-                    *ptr++ = '%';
-                    remaining--;
-                }
-                break;
-            }
-            }
+        if (*format == 'z')
+        {
+            is_size_t = 1;
+            format++;
         }
         else
         {
-            *ptr++ = *format;
-            remaining--;
+            while (*format == 'l' && long_count < 2)
+            {
+                long_count++;
+                format++;
+            }
         }
-        format++;
+
+        switch (*format)
+        {
+        case 'd':
+        case 'i':
+        {
+            char num_str[32];
+            int64_t value;
+            uint64_t magnitude;
+            int negative;
+            int len;
+
+            if (long_count >= 2)
+                value = va_arg(ap, long long);
+            else if (long_count == 1)
+                value = va_arg(ap, long);
+            else
+                value = va_arg(ap, int);
+
+            negative = value < 0;
+            /* Negate in unsigned arithmetic: -INT64_MIN overflows. */
+            magnitude = negative ? (uint64_t)(-(value + 1)) + 1u
+                                 : (uint64_t)value;
+            len = u64_to_string(magnitude, num_str, 10, 0);
+            ptr = emit_number(ptr, &remaining, num_str, len, negative,
+                              width, precision, zero, left);
+            break;
+        }
+        case 'u':
+        {
+            char num_str[32];
+            uint64_t value;
+            int len;
+
+            if (is_size_t)
+                value = (uint64_t)va_arg(ap, size_t);
+            else if (long_count >= 2)
+                value = (uint64_t)va_arg(ap, unsigned long long);
+            else if (long_count == 1)
+                value = (uint64_t)va_arg(ap, unsigned long);
+            else
+                value = (uint64_t)va_arg(ap, unsigned int);
+            len = u64_to_string(value, num_str, 10, 0);
+            ptr = emit_number(ptr, &remaining, num_str, len, 0,
+                              width, precision, zero, left);
+            break;
+        }
+        case 'x':
+        case 'X':
+        {
+            char num_str[32];
+            uint64_t value;
+            int upper = (*format == 'X');
+            int len;
+
+            if (is_size_t)
+                value = (uint64_t)va_arg(ap, size_t);
+            else if (long_count >= 2)
+                value = (uint64_t)va_arg(ap, unsigned long long);
+            else if (long_count == 1)
+                value = (uint64_t)va_arg(ap, unsigned long);
+            else
+                value = (uint64_t)va_arg(ap, unsigned int);
+            len = u64_to_string(value, num_str, 16, upper);
+            ptr = emit_number(ptr, &remaining, num_str, len, 0,
+                              width, precision, zero, left);
+            break;
+        }
+        case 'p':
+        {
+            uintptr_t value = (uintptr_t)va_arg(ap, void *);
+            char ptr_str[2 + (sizeof(uintptr_t) * 2) + 1];
+            int len = pointer_to_string(value, ptr_str);
+
+            ptr = emit_text(ptr, &remaining, ptr_str, (size_t)len,
+                            width, left, ' ');
+            break;
+        }
+        case 's':
+        {
+            const char *s = va_arg(ap, const char *);
+            size_t len;
+
+            if (s == NULL)
+                s = "(null)";
+            len = strlen(s);
+            if (precision >= 0 && (size_t)precision < len)
+                len = (size_t)precision;
+            ptr = emit_text(ptr, &remaining, s, len, width, left, ' ');
+            break;
+        }
+        case 'c':
+        {
+            char c = (char)va_arg(ap, int);
+
+            ptr = emit_text(ptr, &remaining, &c, 1, width, left, ' ');
+            break;
+        }
+        case '%':
+        {
+            if (remaining > 0)
+            {
+                *ptr++ = '%';
+                remaining--;
+            }
+            break;
+        }
+        case '\0':
+        {
+            /* Trailing '%' in the format string. */
+            if (remaining > 0)
+            {
+                *ptr++ = '%';
+                remaining--;
+            }
+            break;
+        }
+        default:
+        {
+            if (remaining > 0)
+            {
+                *ptr++ = '%';
+                remaining--;
+            }
+            if (remaining > 0)
+            {
+                *ptr++ = *format;
+                remaining--;
+            }
+            break;
+        }
+        }
+
+        if (*format != '\0')
+            format++;
     }
 
     *ptr = '\0';
