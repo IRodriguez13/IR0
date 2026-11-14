@@ -23,6 +23,7 @@
 #include <ir0/page_fault.h>
 #include <ir0/pmm.h>
 #include <ir0/sched.h>
+#include <ir0/mm_range.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -44,6 +45,9 @@ void ktest_usercopy_explicit_mm_range_contract(void)
 	char byte = 0;
 
 	KTEST_BEGIN("usercopy_explicit_mm_range_contract");
+
+	/* A wrapping firmware range is fail-closed, never treated as disjoint. */
+	KASSERT(mm_range_overlaps(UINTPTR_MAX - 2, 1, UINTPTR_MAX - 1, 2));
 
 	/* Empty copies never dereference either endpoint or require an mm. */
 	KASSERT_EQ(copy_to_user_mm(NULL, 0, NULL, 0), 0);
