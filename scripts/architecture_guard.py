@@ -3076,8 +3076,6 @@ _LAYOUT_KR_HEAD_RE = re.compile(r"^[A-Za-z_][^;=#]*\)\s*\{\s*$")
 # its entry; an entry whose violation is gone fails the guard so the list
 # only shrinks.
 INCLUDE_LAYOUT_BASELINE = frozenset({
-    "duplicate drivers/net/rtl8139.c <ir0/ktm/klog.h>",
-    "duplicate drivers/net/virtio_net.c <ir0/cpu.h>",
     "duplicate drivers/virtio/virtio_9p.c <ir0/cpu.h>",
     "duplicate drivers/virtio/virtio_9p.c <ir0/ktm/klog.h>",
     "duplicate fs/devfs.c <ir0/arch_cpu.h>",
