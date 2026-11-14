@@ -11,6 +11,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <ir0/overflow.h>
 
 /*
  * Validate the half-open range [address, address + size) against the
@@ -40,7 +41,16 @@ static inline int mm_user_range_ok(uintptr_t address, size_t size,
 static inline int mm_range_overlaps(uintptr_t address, size_t size,
 				    uintptr_t base, uint64_t length)
 {
+	uintptr_t address_end;
+	uintptr_t base_end;
+
 	if (size == 0 || length == 0)
 		return 0;
-	return address < base + length && base < address + size;
+
+	/* A malformed range must not make an MMIO/RAM overlap disappear. */
+	if (ir0_add_overflow(address, size, &address_end) ||
+	    ir0_add_overflow(base, (uintptr_t)length, &base_end))
+		return 1;
+
+	return address < base_end && base < address_end;
 }
