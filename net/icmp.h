@@ -63,8 +63,3 @@ struct icmp_echo_payload
 
 /* ICMP Protocol API */
 int icmp_init(void);
-void icmp_receive_handler(struct net_device *dev, const void *data, 
-                           size_t len, void *priv);
-
-/* ICMP Checksum Calculation */
-uint16_t icmp_checksum(const void *data, size_t len);

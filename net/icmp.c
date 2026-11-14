@@ -116,7 +116,7 @@ static ir0_spinlock_t icmp_lock;
  * @len: Length of ICMP packet in bytes
  * @return: 16-bit checksum in network byte order
  */
-uint16_t icmp_checksum(const void *data, size_t len)
+static uint16_t icmp_checksum(const void *data, size_t len)
 {
     const uint16_t *words = (const uint16_t *)data;
     uint32_t sum = 0;
@@ -163,8 +163,8 @@ uint16_t icmp_checksum(const void *data, size_t len)
  * @len: Length of ICMP packet
  * @priv: Private data (unused, provided for protocol handler signature compatibility)
  */
-void icmp_receive_handler(struct net_device *dev, const void *data, 
-                           size_t len, void *priv)
+static void icmp_receive_handler(struct net_device *dev, const void *data,
+                                 size_t len, void *priv)
 {
     const struct ip_rx_context *rx_ctx = (const struct ip_rx_context *)priv;
     ip4_addr_t src_ip = rx_ctx ? rx_ctx->src_addr : 0;

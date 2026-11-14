@@ -154,7 +154,6 @@ struct net_device *net_get_devices(void);
 
 /* Protocol Registration API */
 int net_register_protocol(struct net_protocol *proto);
-struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype);
 struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto);
 
 /* Protocol to Driver */

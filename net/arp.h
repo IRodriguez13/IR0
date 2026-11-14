@@ -41,20 +41,8 @@ struct arp_header {
     uint32_t target_ip;
 } __attribute__((packed));
 
-/* ARP Cache Entry */
-struct arp_cache_entry {
-    ip4_addr_t ip;
-    mac_addr_t mac;
-    uint64_t timestamp;            /* Cache entry timestamp (milliseconds) */
-    struct arp_cache_entry *next;
-};
-
 /* Public API */
 int arp_init(void);
 int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac);
-struct arp_cache_entry *arp_lookup(ip4_addr_t ip);
-void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac);
-void arp_send_request(struct net_device *dev, ip4_addr_t target_ip);
-void arp_print_cache(void);
 int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip);  /* Get IP for interface */
 

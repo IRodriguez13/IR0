@@ -47,6 +47,14 @@
 /* Maximum ARP cache entries; oldest (tail) is evicted when full */
 #define MAX_ARP_ENTRIES 64
 
+/* ARP Cache Entry */
+struct arp_cache_entry {
+    ip4_addr_t ip;
+    mac_addr_t mac;
+    uint64_t timestamp;            /* Cache entry timestamp (milliseconds) */
+    struct arp_cache_entry *next;
+};
+
 /* ARP Cache: a simple linked list of IP-to-MAC mappings. This is a basic
  * implementation - production systems might use a hash table for O(1) lookups,
  * but for small networks (typical home/office), linear search is acceptable.
@@ -74,6 +82,9 @@ static struct net_protocol arp_proto;
 static const uint8_t broadcast_mac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 static ir0_spinlock_t arp_lock;
+
+static void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac);
+static void arp_print_cache(void);
 
 static int arp_lookup_mac(ip4_addr_t ip, mac_addr_t mac_out)
 {
@@ -303,64 +314,6 @@ int arp_init(void)
     return ret;
 }
 
-/**
- * arp_lookup - Look up MAC address for a given IP in the ARP cache
- *
- * This function searches the ARP cache for an IP-to-MAC mapping. During the
- * search, it also performs cache maintenance by removing expired entries
- * (entries older than ARP_CACHE_TIMEOUT_MS). This lazy expiration keeps the
- * cache clean without needing a separate cleanup thread.
- *
- * The function uses linear search through a linked list. For small networks,
- * this is efficient enough. For larger networks with many entries, a hash table
- * would provide O(1) lookups instead of O(n).
- *
- * @ip: IP address to look up (in network byte order)
- * @return: ARP cache entry if found and valid, NULL if not found or expired
- */
-struct arp_cache_entry *arp_lookup(ip4_addr_t ip)
-{
-    uint64_t now = clock_get_uptime_milliseconds();
-    uint64_t flags = ir0_spin_lock_irqsave(&arp_lock);
-    struct arp_cache_entry *entry = arp_cache;
-    struct arp_cache_entry *prev = NULL;
-    
-    while (entry)
-    {
-        /* Check if entry has expired. We do lazy expiration - expired entries
-         * are removed during lookup rather than by a separate cleanup thread.
-         * This is simpler and avoids needing timers or background tasks.
-         */
-        if (now - entry->timestamp > ARP_CACHE_TIMEOUT_MS)
-        {
-            /* Remove expired entry */
-            struct arp_cache_entry *next = entry->next;
-            if (prev)
-            {
-                prev->next = next;
-            }
-            else
-            {
-                arp_cache = next;
-            }
-            kfree(entry);
-            entry = next;
-            continue;
-        }
-        
-        if (entry->ip == ip)
-        {
-            ir0_spin_unlock_irqrestore(&arp_lock, flags);
-            return entry;
-        }
-        
-        prev = entry;
-        entry = entry->next;
-    }
-    ir0_spin_unlock_irqrestore(&arp_lock, flags);
-    return NULL;
-}
-
 /* Remove the tail entry (oldest insert for prepend-only list) */
 static void arp_cache_remove_oldest(void)
 {
@@ -400,7 +353,7 @@ static void arp_cache_remove_oldest(void)
  * @ip: IP address (in network byte order)
  * @mac: MAC address (6 bytes)
  */
-void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
+static void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
 {
     uint64_t flags;
     struct arp_cache_entry *entry;
@@ -410,9 +363,8 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
         return;
 
     flags = ir0_spin_lock_irqsave(&arp_lock);
-    /* Check if entry already exists. arp_lookup() will return NULL if the
-     * entry doesn't exist or has expired. If it exists, we update it rather
-     * than creating a duplicate.
+    /* If the entry already exists, update it rather than creating a
+     * duplicate.
      */
     entry = arp_cache;
     while (entry)
@@ -468,7 +420,7 @@ void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
  * @dev: Network device to send on
  * @target_ip: IP address to resolve
  */
-void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
+static void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
 {
     LOG_INFO_FMT("ARP", "Sending ARP request for IP " IP4_FMT, IP4_ARGS(ntohl(target_ip)));
     
@@ -632,7 +584,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
 /**
  * arp_print_cache - Print all entries in ARP cache
  */
-void arp_print_cache(void)
+static void arp_print_cache(void)
 {
     uint64_t flags;
     struct arp_cache_entry *entry;

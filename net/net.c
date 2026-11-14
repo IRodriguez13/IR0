@@ -51,6 +51,8 @@
 static struct net_device *devices = NULL;
 static struct net_protocol *protocols = NULL;
 
+static struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype);
+
 /**
  * net_register_device - Register a network interface with the networking layer
  *
@@ -469,7 +471,7 @@ int net_register_protocol(struct net_protocol *proto)
  * @ethertype: Ethernet type in host byte order (e.g., ETHERTYPE_ARP, ETHERTYPE_IP)
  * @return: Protocol structure if found, NULL otherwise
  */
-struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype)
+static struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype)
 {
     struct net_protocol *curr = protocols;
     while (curr)

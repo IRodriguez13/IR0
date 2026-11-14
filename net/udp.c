@@ -118,7 +118,7 @@ uint16_t udp_checksum(const void *data, size_t len, ip4_addr_t src_ip, ip4_addr_
  * @len: Length of UDP packet
  * @priv: Private data (unused, provided for protocol handler signature compatibility)
  */
-void udp_receive_handler(struct net_device *dev, const void *data, size_t len, void *priv)
+static void udp_receive_handler(struct net_device *dev, const void *data, size_t len, void *priv)
 {
     const struct ip_rx_context *rx_ctx = (const struct ip_rx_context *)priv;
     

@@ -177,6 +177,7 @@ sysfs_write pseudo_fs_ops_write()
 # Networking (includes/ir0/net.h, net/*.h, drivers/net/*.h): net/ headers are
 # private to net/; everything else uses <ir0/net.h> and <ir0/sock_*.h>.
 net_stack <ir0/net.h> (net/ files include the net/*.h header they use)
+arp_lookup (nothing; arp_resolve() checks the cache)
 bcmgenet_mdio_write_cmd (nothing; the driver only reads the PHY)
 icmp_get_echo_result icmp_get_next_echo_result()
 IP_HEADER_LEN IP_IHL() * 4

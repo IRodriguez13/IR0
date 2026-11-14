@@ -84,6 +84,11 @@ static uint32_t rtl8139_recover_suppressed;
 static int32_t rtl8139_hw_init(void);
 static void rtl8139_check_tx_completion(void);
 static int rtl8139_find_free_tx_descriptor(void);
+static void rtl8139_handle_interrupt(void);
+static void rtl8139_poll(void);
+static int rtl8139_get_irq_line(void);
+static void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
+                              uint64_t *rx_errs, uint64_t *tx_errs);
 
 /*
  * Force-recover TX path when descriptors appear wedged.
@@ -502,7 +507,7 @@ static void rtl8139_advance_rx_read_offset(uint16_t raw_length)
  * Return: 0 on success, -1 if parameters are invalid, all TX descriptors are
  * busy, or the TX buffer for the chosen descriptor is missing.
  */
-int rtl8139_send(void *data, size_t len)
+static int rtl8139_send(void *data, size_t len)
 {
     /* Basic parameter validation */
     if (!data || len == 0 || len > RTL8139_MAX_TX_SIZE || !rtl8139_io_base)
@@ -1111,7 +1116,7 @@ static void rtl8139_process_rx_packets(void)
  * It reads the interrupt status register, processes packets, and passes
  * them to the network stack via net_receive().
  */
-void rtl8139_handle_interrupt(void)
+static void rtl8139_handle_interrupt(void)
 {
     if (!rtl8139_io_base || !rtl8139_rx_buffer)
     {
@@ -1193,7 +1198,7 @@ void rtl8139_handle_interrupt(void)
  * without relying on interrupts. Useful for debugging or when interrupts
  * are not working properly.
  */
-void rtl8139_poll(void)
+static void rtl8139_poll(void)
 {
     if (!rtl8139_io_base || !rtl8139_rx_buffer)
     {
@@ -1244,13 +1249,13 @@ void rtl8139_poll(void)
     rtl8139_check_tx_completion();
 }
 
-int rtl8139_get_irq_line(void)
+static int rtl8139_get_irq_line(void)
 {
     return rtl8139_irq_line;
 }
 
-void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
-                        uint64_t *rx_errs, uint64_t *tx_errs)
+static void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
+                              uint64_t *rx_errs, uint64_t *tx_errs)
 {
     if (!rx_pkts || !tx_pkts || !rx_errs || !tx_errs)
         return;
