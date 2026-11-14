@@ -22,14 +22,6 @@
 #include <string.h>
 #include <ir0/spinlock.h>
 
-/* Macros for IP address formatting (matching ARP/IP) */
-#define IP4_FMT "%d.%d.%d.%d"
-#define IP4_ARGS(ip) \
-    (int)((ip >> 24) & 0xFF), \
-    (int)((ip >> 16) & 0xFF), \
-    (int)((ip >> 8) & 0xFF), \
-    (int)(ip & 0xFF)
-
 /* ICMP Protocol registration */
 static struct net_protocol icmp_proto;
 

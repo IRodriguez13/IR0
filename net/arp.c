@@ -22,14 +22,6 @@
 #include <string.h>
 #include <ir0/spinlock.h>
 
-/* Macros for IP address formatting */
-#define IP4_FMT "%d.%d.%d.%d"
-#define IP4_ARGS(ip) \
-    (int)((ip >> 24) & 0xFF), \
-    (int)((ip >> 16) & 0xFF), \
-    (int)((ip >> 8) & 0xFF), \
-    (int)(ip & 0xFF)
-
 /* ARP Cache timeout: entries expire after 5 minutes. This matches typical
  * Linux behavior - ARP cache entries are considered stale after a few minutes
  * to handle cases where hosts change MAC addresses or move to different
