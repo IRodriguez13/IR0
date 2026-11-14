@@ -50,24 +50,16 @@ typedef uint32_t uint_fast16_t;
 typedef uint32_t uint_fast32_t;
 typedef uint64_t uint_fast64_t;
 
-/* Architecture-dependent pointer types */
-#if defined(__x86_64__) || defined(__amd64__) || defined(_M_X64) || defined(__aarch64__)
-    /* 64-bit architecture */
-    typedef long          intptr_t;
-    typedef unsigned long uintptr_t;
-    #define INTPTR_MIN  (-9223372036854775807L - 1)
-    #define INTPTR_MAX  (9223372036854775807L)
-    #define UINTPTR_MAX (18446744073709551615UL)
-#elif defined(__i386__) || defined(_M_IX86)
-    /* 32-bit architecture */
-    typedef int           intptr_t;
-    typedef unsigned int  uintptr_t;
-    #define INTPTR_MIN  (-2147483647 - 1)
-    #define INTPTR_MAX  (2147483647)
-    #define UINTPTR_MAX (4294967295U)
-#else
-    #error "Unsupported architecture for pointer types"
+/* Pointer-sized types come from the compiler ABI, not an ISA allow-list. */
+#if !defined(__INTPTR_TYPE__) || !defined(__UINTPTR_TYPE__) || \
+    !defined(__INTPTR_MAX__) || !defined(__UINTPTR_MAX__)
+#error "Compiler does not provide pointer-sized integer types"
 #endif
+typedef __INTPTR_TYPE__  intptr_t;
+typedef __UINTPTR_TYPE__ uintptr_t;
+#define INTPTR_MIN  (-__INTPTR_MAX__ - 1)
+#define INTPTR_MAX  __INTPTR_MAX__
+#define UINTPTR_MAX __UINTPTR_MAX__
 
 /* Greatest-width integer types */
 typedef long long          intmax_t;
