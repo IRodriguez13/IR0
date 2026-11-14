@@ -131,19 +131,6 @@ static void sock_stream_rights_clear(struct sock_stream *s)
 	s->rights_n = 0;
 }
 
-int sock_stream_rights_push(struct sock_stream *recv_side, const void *entry, size_t sz)
-{
-	if (!recv_side || !entry || sz == 0 || sz > SOCK_STREAM_RIGHTS_ENTRY_SIZE)
-		return -EINVAL;
-	if (recv_side->rights_n >= SOCK_STREAM_RIGHTS_MAX)
-		return -ENOBUFS;
-	memset(recv_side->rights[recv_side->rights_n], 0, SOCK_STREAM_RIGHTS_ENTRY_SIZE);
-	memcpy(recv_side->rights[recv_side->rights_n], entry, sz);
-	recv_side->rights_n++;
-	poll_wake_check();
-	return 0;
-}
-
 int sock_stream_rights_push_batch(struct sock_stream *recv_side,
 				  const void *entries, size_t count,
 				  size_t entry_sz)
@@ -210,11 +197,6 @@ int sock_stream_buf_space(const struct sock_stream *peer_of_sender)
 	if (!peer_of_sender)
 		return 0;
 	return (int)(SS_QUEUE_MAX - peer_of_sender->queued_bytes);
-}
-
-int sock_stream_is_recv_shutdown(const struct sock_stream *s)
-{
-	return s && s->shut_rd;
 }
 
 struct sock_stream *sock_stream_get_peer(struct sock_stream *s)
@@ -951,11 +933,6 @@ static int sock_stream_is_local_listener(uint16_t port)
 			return 1;
 	}
 	return 0;
-}
-
-int sock_stream_connect_inet(struct sock_stream *s, uint32_t addr, uint16_t port)
-{
-	return sock_stream_connect_inet_flags(s, addr, port, 0);
 }
 
 int sock_stream_connect_inet_flags(struct sock_stream *s, uint32_t addr,

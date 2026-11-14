@@ -16,7 +16,6 @@
 #include <ir0/net.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
 
 /* IPv4 Header Structure (RFC 791) */
 struct ip_header
@@ -36,7 +35,6 @@ struct ip_header
 /* IP Header Macros */
 #define IP_VERSION(ip) ((ip->version_ihl >> 4) & 0x0F)
 #define IP_IHL(ip) (ip->version_ihl & 0x0F)
-#define IP_HEADER_LEN(ip) (IP_IHL(ip) * 4)
 #define IP_FLAGS(ip) ((ntohs(ip->flags_frag_off) >> 13) & 0x07)
 #define IP_FRAG_OFFSET(ip) (ntohs(ip->flags_frag_off) & 0x1FFF)
 
@@ -64,28 +62,6 @@ void ip_receive_handler(struct net_device *dev, const void *data,
 static inline ip4_addr_t ip_make_addr(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {
     return htonl((a << 24) | (b << 16) | (c << 8) | d);
-}
-
-static inline void ip_format_addr(ip4_addr_t ip, char *buf, size_t buf_len)
-{
-    /* Format IP address as "XXX.XXX.XXX.XXX" string
-     * @ip: IP address in network byte order
-     * @buf: Output buffer for formatted string
-     * @buf_len: Size of output buffer (must be at least 16 bytes)
-     */
-    if (!buf || buf_len < 16)
-        return;
-    
-    /* Extract bytes from IP address (network byte order) */
-    uint32_t host = ntohl(ip);
-    uint8_t b1 = (host >> 24) & 0xFF;
-    uint8_t b2 = (host >> 16) & 0xFF;
-    uint8_t b3 = (host >> 8) & 0xFF;
-    uint8_t b4 = host & 0xFF;
-    
-    /* Format as "XXX.XXX.XXX.XXX" */
-    /* Note: snprintf is declared in <string.h> */
-    snprintf(buf, buf_len, "%d.%d.%d.%d", b1, b2, b3, b4);
 }
 
 /* IP Checksum Calculation */

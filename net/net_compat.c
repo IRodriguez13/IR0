@@ -55,19 +55,6 @@ __attribute__((weak)) int net_stack_handle_irq(uint8_t irq)
     return 0;
 }
 
-__attribute__((weak)) void net_stack_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
-                                               uint64_t *rx_errs, uint64_t *tx_errs)
-{
-    if (rx_pkts)
-        *rx_pkts = 0;
-    if (tx_pkts)
-        *tx_pkts = 0;
-    if (rx_errs)
-        *rx_errs = 0;
-    if (tx_errs)
-        *tx_errs = 0;
-}
-
 __attribute__((weak)) void net_poll(void)
 {
 }
@@ -88,19 +75,6 @@ __attribute__((weak)) int icmp_send_echo_request(struct net_device *dev, ip4_add
     (void)data;
     (void)len;
     return -1;
-}
-
-__attribute__((weak)) bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out,
-                                                uint8_t *ttl_out, size_t *payload_bytes_out,
-                                                ip4_addr_t *reply_ip_out)
-{
-    (void)id;
-    (void)seq;
-    (void)rtt_out;
-    (void)ttl_out;
-    (void)payload_bytes_out;
-    (void)reply_ip_out;
-    return false;
 }
 
 __attribute__((weak)) bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,

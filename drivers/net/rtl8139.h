@@ -100,6 +100,5 @@ int rtl8139_send(void *data, size_t len);
 void rtl8139_handle_interrupt(void);
 void rtl8139_poll(void);  /* Poll for received packets (fallback when interrupts don't work) */
 int rtl8139_get_irq_line(void);
-void rtl8139_get_mac(uint8_t mac[6]);
 void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
                         uint64_t *rx_errs, uint64_t *tx_errs);

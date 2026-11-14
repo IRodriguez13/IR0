@@ -455,37 +455,6 @@ int net_register_protocol(struct net_protocol *proto)
 }
 
 /**
- * Unregister a network protocol handler
- * @proto: Protocol registration structure
- */
-void net_unregister_protocol(struct net_protocol *proto)
-{
-    if (!proto || !protocols)
-        return;
-
-    if (protocols == proto)
-    {
-        protocols = proto->next;
-        klog_info_fmt("NET", "Unregistered protocol: %s",
-                      proto->name ? proto->name : "(null)");
-        return;
-    }
-
-    struct net_protocol *curr = protocols;
-    while (curr->next)
-    {
-        if (curr->next == proto)
-        {
-            curr->next = proto->next;
-            klog_info_fmt("NET", "Unregistered protocol: %s",
-                          proto->name ? proto->name : "(null)");
-            return;
-        }
-        curr = curr->next;
-    }
-}
-
-/**
  * net_find_protocol_by_ethertype - Find protocol handler by EtherType (Layer 2)
  *
  * This function searches the registered protocols list for a handler matching
@@ -691,33 +660,4 @@ int net_stack_handle_irq(uint8_t irq)
         dev = dev->next;
     }
     return handled;
-}
-
-void net_stack_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
-                         uint64_t *rx_errs, uint64_t *tx_errs)
-{
-    uint64_t rx_total = 0;
-    uint64_t tx_total = 0;
-    uint64_t rx_err_total = 0;
-    uint64_t tx_err_total = 0;
-    struct net_device *dev = devices;
-
-    while (dev)
-    {
-        if (dev->get_stats)
-        {
-            uint64_t drx = 0, dtx = 0, drxe = 0, dtxe = 0;
-            dev->get_stats(dev, &drx, &dtx, &drxe, &dtxe);
-            rx_total += drx;
-            tx_total += dtx;
-            rx_err_total += drxe;
-            tx_err_total += dtxe;
-        }
-        dev = dev->next;
-    }
-
-    if (rx_pkts) *rx_pkts = rx_total;
-    if (tx_pkts) *tx_pkts = tx_total;
-    if (rx_errs) *rx_errs = rx_err_total;
-    if (tx_errs) *tx_errs = tx_err_total;
 }

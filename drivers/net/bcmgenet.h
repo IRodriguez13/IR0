@@ -107,14 +107,6 @@ static inline uint32_t bcmgenet_mdio_read_cmd(uint32_t phy, uint32_t reg)
 	       ((reg & 0x1fU) << MDIO_REG_SHIFT);
 }
 
-static inline uint32_t bcmgenet_mdio_write_cmd(uint32_t phy, uint32_t reg,
-					       uint16_t value)
-{
-	return MDIO_START_BUSY | MDIO_WR |
-	       ((phy & 0x1fU) << MDIO_PMD_SHIFT) |
-	       ((reg & 0x1fU) << MDIO_REG_SHIFT) | value;
-}
-
 static inline uint32_t bcmgenet_dma_ctrl_enable(unsigned ring)
 {
 	return DMA_EN | (1U << (DMA_RING_BUF_EN_SHIFT + ring));

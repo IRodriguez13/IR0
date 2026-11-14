@@ -499,64 +499,6 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     return ret;
 }
 
-/**
- * icmp_get_echo_result - Get result of a pending echo request (for dbgshell)
- * This function allows dbgshell to check if a ping has received a response
- * and get the result data to display it.
- * 
- * @id: ICMP echo ID
- * @seq: ICMP echo sequence number
- * @rtt_out: Output parameter for round-trip time (milliseconds)
- * @ttl_out: Output parameter for TTL
- * @payload_bytes_out: Output parameter for payload size
- * @reply_ip_out: Output parameter for reply IP address
- * @return: true if reply received, false if still pending or not found
- */
-bool icmp_get_echo_result(uint16_t id, uint16_t seq, uint64_t *rtt_out, 
-                          uint8_t *ttl_out, size_t *payload_bytes_out, 
-                          ip4_addr_t *reply_ip_out)
-{
-    uint64_t irq_flags;
-    uint64_t now;
-
-    if (!rtt_out || !ttl_out || !payload_bytes_out || !reply_ip_out)
-        return false;
-
-    irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
-    now = clock_get_uptime_milliseconds();
-    icmp_pending_cleanup_expired_locked(now);
-    struct icmp_pending_echo *echo = pending_echos;
-    struct icmp_pending_echo *prev = NULL;
-    
-    while (echo)
-    {
-        if (echo->id == id && echo->seq == seq)
-        {
-            if (echo->resolved)
-            {
-                *rtt_out = echo->rtt;
-                *ttl_out = echo->ttl;
-                *payload_bytes_out = echo->payload_bytes;
-                *reply_ip_out = echo->reply_ip;
-                icmp_pending_remove_locked(prev, echo);
-                ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
-                return true;
-            }
-            else
-            {
-                /* Still pending */
-                ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
-                return false;
-            }
-        }
-        prev = echo;
-        echo = echo->next;
-    }
-    ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
-    /* Not found */
-    return false;
-}
-
 bool icmp_get_next_echo_result(uint16_t id, uint16_t *seq_out, uint64_t *rtt_out,
                                uint8_t *ttl_out, size_t *payload_bytes_out,
                                ip4_addr_t *reply_ip_out)

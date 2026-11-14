@@ -11,6 +11,7 @@
 #include "ip.h"
 #include "arp.h"
 #include <ir0/kmem.h>
+#include <string.h>
 #include "tcp_internal.h"
 
 static uint16_t tcp_checksum(const void *tcp_pkt, size_t len,

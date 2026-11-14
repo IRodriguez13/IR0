@@ -154,7 +154,6 @@ struct net_device *net_get_devices(void);
 
 /* Protocol Registration API */
 int net_register_protocol(struct net_protocol *proto);
-void net_unregister_protocol(struct net_protocol *proto);
 struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype);
 struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto);
 
@@ -175,8 +174,6 @@ void net_stack_poll(void);
 /* Driver-agnostic IRQ and stats helpers for kernel core callsites */
 int net_stack_get_irq_line(void);
 int net_stack_handle_irq(uint8_t irq);
-void net_stack_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
-                         uint64_t *rx_errs, uint64_t *tx_errs);
 
 /* Ping result structure for syscalls */
 struct ping_result {

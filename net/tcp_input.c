@@ -13,6 +13,7 @@
 #include "ip.h"
 #include <ir0/klog.h>
 #include <ir0/poll.h>
+#include <string.h>
 #include "tcp_internal.h"
 
 void tcp_receive_handler(struct net_device *dev, const void *data, size_t len,
