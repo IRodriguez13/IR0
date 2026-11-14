@@ -17,7 +17,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/arch_cpu.h>
-#include "log.h"
+#include <ir0/logging.h>
 #include <config.h>
 #include <string.h>
 #include <ir0/poll.h>
