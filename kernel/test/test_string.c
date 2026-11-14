@@ -37,6 +37,10 @@ void ktest_string(void)
 	KASSERT(strcmp("b", "a") > 0);
 	KASSERT(strcmp("ab", "abc") < 0);
 	KASSERT(strcmp("abc", "ab") > 0);
+	KASSERT_EQ(atoi("2147483647"), INT32_MAX);
+	KASSERT_EQ(atoi("-2147483648"), INT32_MIN);
+	KASSERT_EQ(atoi("999999999999999999999"), INT32_MAX);
+	KASSERT_EQ(atoi("-999999999999999999999"), INT32_MIN);
 
 	/*
 	 * snprintf("%d") is the one decimal formatter; pin its contract,

@@ -399,7 +399,8 @@ int memcmp(const void *ptr1, const void *ptr2, size_t num)
 
 int atoi(const char *str)
 {
-    int result = 0;
+    unsigned int result = 0;
+    unsigned int limit;
     int sign = 1;
 
     // Skip whitespace
@@ -419,14 +420,27 @@ int atoi(const char *str)
         str++;
     }
 
+    limit = sign < 0 ? (unsigned int)INT32_MAX + 1U : (unsigned int)INT32_MAX;
+
     // Convert digits
     while (*str >= '0' && *str <= '9')
     {
-        result = result * 10 + (*str - '0');
+        unsigned int digit = (unsigned int)(*str - '0');
+
+        if (result > (limit - digit) / 10U)
+            return sign < 0 ? INT32_MIN : INT32_MAX;
+        result = result * 10U + digit;
         str++;
     }
 
-    return sign * result;
+    if (sign < 0)
+    {
+        if (result == (unsigned int)INT32_MAX + 1U)
+            return INT32_MIN;
+        return -(int)result;
+    }
+
+    return (int)result;
 }
 
 unsigned long strtoul(const char *str, char **endptr, int base)
