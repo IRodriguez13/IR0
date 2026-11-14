@@ -17,7 +17,6 @@
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <ir0/mm_struct.h>
-#include <ir0/errno.h>
 #include <ir0/tlb.h>
 #include <string.h>
 #include <ir0/spinlock.h>

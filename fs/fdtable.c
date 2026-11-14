@@ -16,7 +16,6 @@
 #include <ir0/files_struct.h>
 #include <ir0/oops.h>
 #include <string.h>
-#include <stddef.h>
 #include <ir0/fd_get.h>
 #include <ir0/fd_install.h>
 #include <ir0/fd_resource.h>

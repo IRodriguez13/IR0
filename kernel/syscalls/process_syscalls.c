@@ -16,11 +16,9 @@
 #include <string.h>
 #include <ktm_probe_diag.h>
 #include <ir0/acpi_pm.h>
-#include <ir0/arch_mm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
 #include <ir0/clone.h>
-#include <ir0/console.h>
 #include <ir0/copy_user.h>
 #include <ir0/cred_transition.h>
 #include <ir0/credentials.h>
@@ -35,8 +33,6 @@
 #include <ir0/permissions.h>
 #include <ir0/power_manag.h>
 #include <ir0/sched.h>
-#include <ir0/signal_irq.h>
-#include <ir0/task_ops.h>
 #include <ir0/wait.h>
 
 #define ARCH_SET_FS 0x1002

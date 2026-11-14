@@ -16,7 +16,6 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/files_struct.h>
 #include <ir0/fd_resource.h>
-#include <ir0/errno.h>
 #include <string.h>
 
 static int process_files_acquire_entries(files_struct_t *f)

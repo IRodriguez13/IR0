@@ -13,13 +13,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/signals.h>
-#include <ir0/arch_mm.h>
 #include <ir0/console.h>
 #include <ir0/mm_range.h>
 #include <ir0/sched.h>
 #include <ir0/clock.h>
 #include <ir0/paging.h>
-#include <ir0/kmem.h>
 #include <ir0/signal_irq.h>
 #include <ir0/sigtramp.h>
 #include <ir0/fault.h>
