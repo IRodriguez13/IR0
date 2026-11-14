@@ -207,3 +207,9 @@ process_saved_context_clear (nothing; the user sigframe holds the context)
 process_saved_context_init (nothing; the user sigframe holds the context)
 process_saved_context_peek (nothing; the user sigframe holds the context)
 process_saved_context_present (nothing; handlers nest)
+
+# Exec read trace: the MINIX whole-file read it traced is gone.
+exec_read_trace_minix_block (nothing; minix_fs_read_file was deleted)
+exec_read_trace_minix_eio (nothing; minix_fs_read_file was deleted)
+exec_read_trace_minix_file_begin (nothing; minix_fs_read_file was deleted)
+exec_read_trace_minix_zones (nothing; minix_fs_read_file was deleted)
