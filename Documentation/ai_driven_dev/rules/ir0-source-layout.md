@@ -49,6 +49,22 @@ Criterio del mantenedor para todo el kernel. Complementa
   | `mm/reclaim/` | registro de reclaimers y OOM killer |
   | `mm/swap/`, `mm/shmem/`, `mm/nommu/` | swap, memfd, política sin MMU |
 
+  Y `kernel/`:
+
+  | Subdirectorio | Responsabilidad |
+  |---------------|-----------------|
+  | `kernel/process/` | ciclo de vida: registro, create, fork, exec (CLOEXEC), exit, wait, credenciales, límites |
+  | `kernel/signals/` | entrega, frame de usuario, acción por defecto, trampolín, syscalls de señales y su hook de diag |
+  | `kernel/boot/` | secuencia de arranque, parámetros, cmdline, rootfs base, handoff a init |
+  | `kernel/problems/` | BUG/OOPS, panic y descripción neutral de faults |
+  | `kernel/irq/` | tabla portable de IRQs y trabajo al volver a usuario desde una IRQ |
+  | `kernel/futex/` | colas de futex y sus syscalls (robust list incluida) |
+  | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado, reboot y kexec |
+  | `kernel/syscalls/` | tabla de syscalls y el resto de los syscalls (partición pendiente) |
+
+  Lo multi-CPU vive en `smp/` (nivel superior); las tablas de fds y
+  `struct file` en `fs/`; `mm_struct` y el espacio de direcciones del
+  proceso en `mm/`; los registros de drivers en `drivers/core/`.
 - El nivel superior del subsistema queda para lo transversal (p. ej.
   `mm/diag.c`, los hooks de `<ir0/mm_diag.h>`).
 - Los headers privados (`*_internal.h`) viajan con sus archivos. Entre
