@@ -436,6 +436,7 @@ unsigned long strtoul(const char *str, char **endptr, int base)
     const unsigned long max = ~0UL;
     int negative = 0;
     int converted = 0;
+    int overflow = 0;
 
     if (!str)
     {
@@ -513,7 +514,10 @@ unsigned long strtoul(const char *str, char **endptr, int base)
 
         converted = 1;
         if (result > (max - (unsigned long)digit) / (unsigned long)base)
+        {
             result = max;
+            overflow = 1;
+        }
         else
             result = result * (unsigned long)base + (unsigned long)digit;
         str++;
@@ -522,7 +526,10 @@ unsigned long strtoul(const char *str, char **endptr, int base)
     if (endptr)
         *endptr = (char *)(converted ? str : start);
 
-    return negative ? 0UL - result : result;
+    if (negative && !overflow)
+        return 0UL - result;
+
+    return result;
 }
 
 long strtol(const char *str, char **endptr, int base)

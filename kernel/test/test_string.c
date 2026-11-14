@@ -143,6 +143,9 @@ void ktest_string(void)
 		KASSERT_EQ(strtoul("999999999999999999999999999999", &end, 10),
 			   ~0UL);
 		KASSERT(*end == '\0');
+		KASSERT_EQ(strtoul("-999999999999999999999999999999", &end, 10),
+			   ~0UL);
+		KASSERT(*end == '\0');
 	}
 
 	KTEST_END();
