@@ -46,7 +46,7 @@ red-green|green-green) ;;
 *) echo "baseline_compare: --expect must be red-green or green-green" >&2; exit 2 ;;
 esac
 
-root=$(cd "$(dirname "$0")/.." && pwd -P)
+root=$(CDPATH= cd "$(dirname "$0")/.." && pwd -P)
 git -C "$root" rev-parse --verify --quiet "$base_ref^{commit}" >/dev/null ||
 	{ echo "baseline_compare: unknown BASE_REF $base_ref" >&2; exit 2; }
 work=$(mktemp -d "${TMPDIR:-/tmp}/ir0-baseline.XXXXXX")
@@ -97,7 +97,7 @@ prepare "$work/patched"
 isd_root=${IR0_ISD_ROOT:-}
 for cand in "$root/../ISD" "$main_root/../ISD"; do
 	if [ -z "$isd_root" ] && [ -d "$cand" ]; then
-		isd_root=$(cd "$cand" && pwd -P)
+		isd_root=$(CDPATH= cd "$cand" && pwd -P)
 	fi
 done
 
