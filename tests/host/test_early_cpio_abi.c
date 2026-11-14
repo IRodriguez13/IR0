@@ -31,6 +31,7 @@ void test_early_cpio_abi(void)
 	struct ir0_early_cpio_member mem;
 	char norm[16];
 	uint32_t parsed;
+	uint64_t aligned;
 	unsigned i;
 
 	TEST_BEGIN("early_cpio_abi");
@@ -40,7 +41,9 @@ void test_early_cpio_abi(void)
 	ASSERT(!ir0_early_cpio_magic((const uint8_t *)"070707"));
 	ASSERT(ir0_early_cpio_hex8((const uint8_t *)"000012ac", &parsed));
 	ASSERT_EQ(parsed, 0x12ac);
-	ASSERT_EQ(ir0_early_cpio_align4(110 + 5), 116);
+	ASSERT(ir0_early_cpio_align4(110 + 5, &aligned));
+	ASSERT_EQ(aligned, 116);
+	ASSERT(!ir0_early_cpio_align4(UINT64_MAX - 1, &aligned));
 	ASSERT_EQ(ir0_early_cpio_normalize("./init", norm, sizeof(norm)), 5);
 	ASSERT_STR_EQ(norm, "/init");
 	ASSERT_EQ(ir0_early_cpio_normalize("tmp", norm, sizeof(norm)), 4);

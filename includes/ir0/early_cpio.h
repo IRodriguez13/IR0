@@ -64,9 +64,12 @@ static inline int ir0_early_cpio_magic(const uint8_t *src)
 	return src[5] == '1' || src[5] == '2';
 }
 
-static inline uint32_t ir0_early_cpio_align4(uint32_t n)
+static inline int ir0_early_cpio_align4(uint64_t n, uint64_t *out)
 {
-	return (n + 3U) & ~3U;
+	if (!out || n > UINT64_MAX - 3U)
+		return 0;
+	*out = (n + 3U) & ~3ULL;
+	return 1;
 }
 
 static inline unsigned ir0_early_cpio_normalize(const char *in, char *out,
@@ -139,7 +142,7 @@ static inline int ir0_early_cpio_next(const uint8_t *buf, uint64_t cap,
 		return 0;
 	while (off < cap && buf[off] == 0)
 		off++;
-	if (off + IR0_EARLY_CPIO_HEADER > cap)
+	if (off > cap - IR0_EARLY_CPIO_HEADER)
 		return 0;
 	if (!ir0_early_cpio_magic(buf + off))
 		return -1;
@@ -150,12 +153,14 @@ static inline int ir0_early_cpio_next(const uint8_t *buf, uint64_t cap,
 	if (namesize == 0 || namesize > 4096)
 		return -1;
 	name_off = off + IR0_EARLY_CPIO_HEADER;
-	if (name_off + namesize > cap)
+	if ((uint64_t)namesize > cap - name_off)
 		return -1;
-	data_off = ir0_early_cpio_align4((uint32_t)(name_off + namesize));
-	if (data_off + filesize > cap)
+	if (!ir0_early_cpio_align4(name_off + namesize, &data_off))
 		return -1;
-	next = ir0_early_cpio_align4((uint32_t)(data_off + filesize));
+	if ((uint64_t)filesize > cap - data_off)
+		return -1;
+	if (!ir0_early_cpio_align4(data_off + filesize, &next))
+		return -1;
 	out->mode = mode;
 	out->filesize = filesize;
 	out->namesize = namesize;
