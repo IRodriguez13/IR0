@@ -21,6 +21,7 @@
 
 #include "udp.h"
 #include "ip.h"
+#include "arp.h"
 #include "net_internal.h"
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
@@ -247,7 +248,6 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
     
     /* Calculate checksum (requires source IP) */
     ip4_addr_t src_ip = ip_local_addr;
-    extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
     ip4_addr_t interface_ip;
     if (arp_get_interface_ip(dev, &interface_ip) == 0)
     {

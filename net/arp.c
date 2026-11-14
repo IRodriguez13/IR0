@@ -484,14 +484,10 @@ static void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
  */
 int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
 {
-    /* Don't try to resolve our own IP address - use our MAC directly */
-    extern ip4_addr_t ip_local_addr;
-    
-    /* Check if this is our interface-specific IP */
+    /* Our own interface address resolves to our MAC directly. */
     ip4_addr_t interface_ip = 0;
     if (dev)
     {
-        extern int arp_get_interface_ip(struct net_device *dev, ip4_addr_t *ip_out);
         if (arp_get_interface_ip(dev, &interface_ip) == 0 && ip == interface_ip)
         {
             /* This is our interface IP, use our MAC */

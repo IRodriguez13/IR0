@@ -9,6 +9,7 @@
 
 #include <config.h>
 #include <ir0/driver_backend.h>
+#include <ir0/net.h>
 #if CONFIG_DRV_NIC_RTL8139
 #include <drivers/net/rtl8139.h>
 #endif

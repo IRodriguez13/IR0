@@ -124,6 +124,8 @@ void net_receive(struct net_device *dev, const void *data, size_t len);
 
 /* Network Stack Initialization */
 int init_net_stack(void);
+/* Probe the configured NIC drivers (drivers/net/net_drivers.c). */
+int net_stack_probe_drivers(void);
 int net_stack_post_irq_init(void);
 
 /* Network Polling (for receiving packets when not actively waiting) */

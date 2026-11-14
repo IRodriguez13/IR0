@@ -541,12 +541,9 @@ int init_net_stack(void)
      * and set up interrupt handlers. If hardware isn't present, drivers
      * gracefully return without registering devices.
      */
+    if (net_stack_probe_drivers() != 0)
     {
-        extern int net_stack_probe_drivers(void) __attribute__((weak));
-        if (net_stack_probe_drivers && net_stack_probe_drivers() != 0)
-        {
-            LOG_WARNING("NET", "Some network drivers failed to probe");
-        }
+        LOG_WARNING("NET", "Some network drivers failed to probe");
     }
     
     /* Initialize network protocols in dependency order. ARP must come before
