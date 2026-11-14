@@ -71,6 +71,9 @@ void ktest_string(void)
 	KASSERT(memmove(src, src + 1, 31) == src);
 	for (int i = 0; i < 31; i++)
 		KASSERT_EQ((unsigned char)src[i], (unsigned char)(i + 1));
+	KASSERT(memcpy(dst, src, sizeof(src)) == dst);
+	KASSERT(memmove(src, src, sizeof(src)) == src);
+	KASSERT(memcmp(src, dst, sizeof(src)) == 0);
 
 	{
 		char *end;

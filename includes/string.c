@@ -235,6 +235,11 @@ void *memmove(void *dest, const void *src, size_t num)
     unsigned char *d = (unsigned char *)dest;
     const unsigned char *s = (const unsigned char *)src;
 
+    if (num == 0 || d == s)
+    {
+        return dest;
+    }
+
     if (d < s)
     {
         while (num-- > 0)
