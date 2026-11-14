@@ -38,8 +38,12 @@ and no claim of arbitrary Internet reachability. Wire teardown is honest FIN/ACK
 | NIC | `drivers/net/rtl8139.c` | Probe, TX/RX ring, IRQ hook |
 | Control | `fs/devfs.c` | `/dev/net` device_id 8, ioctl 0x3001–0x3004 |
 
-Facade: `includes/ir0/net.h`, `net/tcp.h`. When `CONFIG_ENABLE_NETWORKING=0`,
-`net/net_compat.c` provides weak stubs.
+Facade: `includes/ir0/net.h` (devices, IRQ/poll hooks, the IPv4
+configuration through `ip_get_config()` / `ip_set_config()`, and the
+`/dev/net` helpers) and `net/tcp.h`. The other `net/*.h` headers, including
+`net/net_internal.h` (protocol registration and `net_send`), are private to
+`net/`. When `CONFIG_ENABLE_NETWORKING=0`, `net/net_compat.c` provides weak
+stubs for the hooks called from outside the stack.
 
 ## 3. Data flow
 

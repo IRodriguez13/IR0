@@ -38,8 +38,12 @@ honesto + EOF en guest (`recv` devuelve 0 tras FIN del peer y RX drenado).
 | NIC | `drivers/net/rtl8139.c` | Probe, anillo TX/RX, hook IRQ |
 | Control | `fs/devfs.c` | `/dev/net` device_id 8, ioctl 0x3001–0x3004 |
 
-Fachada: `includes/ir0/net.h`, `net/tcp.h`. Con `CONFIG_ENABLE_NETWORKING=0`,
-`net/net_compat.c` proporciona stubs débiles.
+Fachada: `includes/ir0/net.h` (dispositivos, hooks de IRQ/poll, la
+configuración IPv4 vía `ip_get_config()` / `ip_set_config()` y los helpers de
+`/dev/net`) y `net/tcp.h`. Los demás headers `net/*.h`, incluido
+`net/net_internal.h` (registro de protocolos y `net_send`), son privados de
+`net/`. Con `CONFIG_ENABLE_NETWORKING=0`, `net/net_compat.c` proporciona stubs
+débiles para los hooks que se llaman desde fuera del stack.
 
 ## 3. Flujo de datos
 

@@ -260,7 +260,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `ensure_devfs_init` (def in `io_syscalls.c`) | `ir0/devfs.h` | 11 | DELETE: lazy-init guard sprinkled over callers; init devfs once at boot |
 | `resource_register_*` / `resource_unregister_*` / `resource_foreach_*` | `ir0/resource_registry.h` | 3-10 | KEEP |
 | fs registration (`vfs_register_fs` + `minix_fs_register`, `tmpfs_register`, `fat16_fs_register`, `ext2_fs_register`, `hostshare_9p_register`, `simplefs_register` + `simplefs_engine_register`) | fs-private headers | — | KEEP `vfs_register_fs`; the per-fs `*_register` wrappers are fine if each only calls it; `simplefs` has two |
-| `net_register_device` / `net_register_protocol` | `ir0/net.h` | — | KEEP |
+| `net_register_device` / `net_register_protocol` | `ir0/net.h` / `net/net_internal.h` | — | KEEP; protocol registration is private to net/ (NET-3) |
 
 ### 1.10 Console and tty output
 
