@@ -48,6 +48,8 @@ static inline int mm_range_overlaps(uintptr_t address, size_t size,
 		return 0;
 
 	/* A malformed range must not make an MMIO/RAM overlap disappear. */
+	if (length > (uint64_t)UINTPTR_MAX)
+		return 1;
 	if (ir0_add_overflow(address, size, &address_end) ||
 	    ir0_add_overflow(base, (uintptr_t)length, &base_end))
 		return 1;
