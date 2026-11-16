@@ -86,16 +86,6 @@ void sb16_shutdown(void);
 bool sb16_reset_dsp(void);
 uint16_t sb16_get_dsp_version(void);
 
-// Volume control
-uint8_t sb16_get_master_volume(void);
-void sb16_set_pcm_volume(uint8_t volume);
-uint8_t sb16_get_pcm_volume(void);
-
-bool sb16_is_speaker_on(void);
-
-int sb16_pause_playback(void);
-int sb16_resume_playback(void);
-
 // Low-level DSP functions
 bool sb16_dsp_write(uint8_t data);
 uint8_t sb16_dsp_read(void);
@@ -107,6 +97,5 @@ void sb16_mixer_write(uint8_t reg, uint8_t data);
 
 // DMA setup
 void sb16_setup_dma_8bit(uint32_t buffer_addr, uint16_t length);
-void sb16_setup_dma_16bit(uint32_t buffer_addr, uint16_t length);
 
 #endif // SOUND_BLASTER_H
