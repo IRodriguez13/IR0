@@ -88,4 +88,3 @@ int bt_hci_ioctl(unsigned int cmd, unsigned long arg);
 /* Proc filesystem operations */
 int bt_proc_devices_read(char *buffer, size_t count);
 int bt_proc_scan_read(char *buffer, size_t count);
-int bt_proc_scan_write(const char *command);
