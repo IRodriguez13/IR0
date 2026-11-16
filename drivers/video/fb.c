@@ -86,7 +86,7 @@ int64_t ir0_fb_write_bytes(size_t offset, const void *buf, size_t count)
     return (int64_t)count;
 }
 
-int ir0_fb_write_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
+static int ir0_fb_write_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h,
                       uint32_t pixel)
 {
     struct ir0_fb_info info;

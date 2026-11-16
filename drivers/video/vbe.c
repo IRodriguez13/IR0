@@ -209,7 +209,7 @@ void vbe_putpixel(uint32_t x, uint32_t y, uint32_t color)
 }
 
 // Draw character at position
-void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg __attribute__((unused)))
+static void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg __attribute__((unused)))
 {
     if (!vbe_state.initialized) return;
     if (x >= vbe_state.width || y >= vbe_state.height) return;

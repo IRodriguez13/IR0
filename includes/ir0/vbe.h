@@ -25,7 +25,6 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *fb);
 int vbe_init(void);
 void vbe_clear(uint32_t color);
 void vbe_putpixel(uint32_t x, uint32_t y, uint32_t color);
-void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg);
 void vbe_print_at(uint32_t x, uint32_t y, const char *str, uint32_t fg,
 		  uint32_t bg);
 bool vbe_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp);
