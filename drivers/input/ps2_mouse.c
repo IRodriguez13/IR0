@@ -298,11 +298,6 @@ static bool ps2_mouse_set_scaling_2_1(void)
     return ps2_mouse_send_command(PS2_MOUSE_SET_SCALING_2_1);
 }
 
-bool ps2_mouse_set_scaling_1_1(void)
-{
-    return ps2_mouse_send_command(PS2_MOUSE_SET_SCALING_1_1);
-}
-
 void ps2_mouse_feed_byte(uint8_t data)
 {
 	struct ps2_mouse_pkt assembled;
@@ -346,15 +341,6 @@ void ps2_mouse_feed_byte(uint8_t data)
 	}
 	/* /dev/mouse and evdev readers may be asleep in select/poll. */
 	input_event_wake_readers();
-}
-
-void ps2_mouse_handle_interrupt(void)
-{
-	/*
-	 * Legacy entry: full i8042 demux lives in keyboard_poll_ps2 so IRQ1
-	 * cannot steal AUX bytes. IRQ12 calls input_mouse_handle_interrupt →
-	 * the same demux.
-	 */
 }
 
 bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet)
@@ -526,11 +512,6 @@ static bool ps2_mouse_send_command_with_data(uint8_t command, uint8_t data)
     ps2_controller_write_data(data);
 
     return ps2_mouse_wait_ack();
-}
-
-uint8_t ps2_mouse_read_data(void)
-{
-    return ps2_controller_read_data();
 }
 
 static bool ps2_mouse_wait_ack(void)

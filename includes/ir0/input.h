@@ -222,7 +222,6 @@ struct ir0_input_caps {
     int supports_mouse_motion;
 };
 
-int ir0_input_is_available(void);
 int ir0_input_poll(void);
 int ir0_input_read_event(struct ir0_input_event *ev);
 void ir0_input_get_caps(struct ir0_input_caps *caps);

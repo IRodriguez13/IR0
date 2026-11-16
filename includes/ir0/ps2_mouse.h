@@ -54,7 +54,6 @@ typedef struct
 bool ps2_mouse_init(void);
 bool ps2_mouse_is_available(void);
 ps2_mouse_state_t *ps2_mouse_get_state(void);
-void ps2_mouse_handle_interrupt(void);
 void ps2_mouse_feed_byte(uint8_t data);
 bool ps2_mouse_set_sample_rate(uint8_t rate);
 bool ps2_mouse_packet_available(void);

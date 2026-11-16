@@ -9,15 +9,6 @@
 #include <config.h>
 #include <string.h>
 
-int ir0_input_is_available(void)
-{
-    /*
-     * Keyboard IRQ path + event queue are part of baseline x86 bring-up.
-     * Runtime event availability is polled separately via ir0_input_poll().
-     */
-    return 1;
-}
-
 int ir0_input_poll(void)
 {
     return input_event_has_data() ? 1 : 0;

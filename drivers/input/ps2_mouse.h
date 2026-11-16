@@ -91,7 +91,3 @@
 #define PS2_MOUSE_Y_SIGN        0x20
 #define PS2_MOUSE_X_OVERFLOW    0x40
 #define PS2_MOUSE_Y_OVERFLOW    0x80
-
-bool ps2_mouse_set_scaling_1_1(void);
-
-uint8_t ps2_mouse_read_data(void);
