@@ -107,8 +107,6 @@ extern uint64_t ep_g_altstack_sp;
 extern uint64_t ep_g_altstack_size;
 extern int ep_g_altstack_flags;
 
-void ep_early_set_current_pid(int64_t pid);
-void ep_early_publish_creds(void);
 int64_t ep_early_process_syscall(void *opaque, enum ir0_syscall_id id,
 				 uint64_t a0, uint64_t a1, uint64_t a2,
 				 uint64_t a3, uint64_t a4, uint64_t a5);
