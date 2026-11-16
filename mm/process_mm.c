@@ -188,14 +188,6 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 	return resident;
 }
 
-uint64_t process_count_resident_user_pages(const process_t *p)
-{
-	if (!p || !p->mm)
-		return 0;
-
-	return mm_count_resident_user_pages(p->mm);
-}
-
 /*
  * Drop every present user mapping below the architecture's user-root slots so PMM
  * frames are returned and the address space can be discarded safely while

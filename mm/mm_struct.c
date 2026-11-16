@@ -126,32 +126,6 @@ void process_mm_bind(process_t *p, mm_struct_t *mm)
 				 (uint64_t)(uintptr_t)mm->page_directory);
 }
 
-int process_mm_adopt_active(process_t *p, int owns_tables)
-{
-	mm_struct_t *mm;
-	uintptr_t root;
-
-	if (!p)
-		return -EINVAL;
-
-	root = mm_current_root();
-	if (!root)
-		return -EINVAL;
-	if (p->mm)
-	{
-		if ((uintptr_t)process_pgd(p) == root)
-			return 0;
-		return -EBUSY;
-	}
-
-	mm = mm_create();
-	if (!mm)
-		return -ENOMEM;
-	mm_init_root(mm, (uint64_t *)root, owns_tables);
-	process_mm_bind(p, mm);
-	return 0;
-}
-
 int process_mm_share(process_t *child, process_t *parent)
 {
 	mm_struct_t *mm;

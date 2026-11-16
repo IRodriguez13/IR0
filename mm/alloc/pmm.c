@@ -285,17 +285,6 @@ int pmm_init_ranges(const struct ir0_phys_range *ranges, size_t count)
 	return 0;
 }
 
-void pmm_init(uintptr_t mem_start, size_t mem_size)
-{
-	const struct ir0_phys_range range = {
-		.base = mem_start,
-		.size = mem_size,
-	};
-
-	(void)pmm_init_ranges(&range, 1);
-}
-
-
 uintptr_t pmm_alloc_frame(void)
 {
 	unsigned long irq_flags;

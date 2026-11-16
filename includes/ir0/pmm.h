@@ -19,7 +19,6 @@
 #include <stdint.h>
 #include <stddef.h>
 
-
 /* Physical frame size (4KB pages) */
 #define PMM_FRAME_SIZE 4096
 #define PMM_MAX_MEMORY_BANKS 32U
@@ -37,7 +36,6 @@ typedef enum
 	PMM_OWNER_PAGE_TABLE,
 } pmm_owner_class_t;
 
-
 /**
  * pmm_init - Initialize Physical Memory Manager
  * @mem_start: Start of physical memory region to manage
@@ -46,7 +44,6 @@ typedef enum
  * Initializes the PMM with a bitmap covering the specified memory region.
  * The bitmap itself is allocated from kernel heap via kmalloc.
  */
-void pmm_init(uintptr_t mem_start, size_t mem_size);
 
 /*
  * Initialize from reserved-free physical RAM banks.  Frames are indexed

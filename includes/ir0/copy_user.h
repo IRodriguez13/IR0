@@ -49,7 +49,6 @@ int copy_from_user(void *dst, const void *src, size_t n);
  * clear_user - Zero @n bytes at userspace @dst (COW-safe via region walk).
  * Returns: 0 on success, -EFAULT on error.
  */
-int clear_user(void *dst, size_t n);
 
 /**
  * strncpy_from_user - Copy a NUL-terminated string from userspace (Linux).

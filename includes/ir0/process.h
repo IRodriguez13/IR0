@@ -716,7 +716,6 @@ int process_remove_from_list(process_t *target);
  * Used for /proc/[pid]/stat rss (Linux reports pages, not bytes). Read-only
  * walk; 2 MiB huge leaves count as 512 pages each.
  */
-uint64_t process_count_resident_user_pages(const process_t *p);
 
 /* Page-table walk; @mm must be held alive (mm_get) for the duration of the call. */
 uint64_t mm_count_resident_user_pages(const mm_struct_t *mm);
