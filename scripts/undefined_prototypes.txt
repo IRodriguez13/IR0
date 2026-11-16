@@ -1,0 +1,7 @@
+# Prototypes declared in a project header with no definition in the tree:
+# "<name> <header> <reason>".
+#
+# Checked by scripts/architecture_guard.py [undefined-prototype]. Every other
+# such prototype fails the guard. An entry whose prototype is gone or now
+# defined fails too, so this list only shrinks. Delete the prototype instead
+# of adding a line here, unless another change owns that header right now.

@@ -51,6 +51,12 @@ Checks:
 28) No raw atomics: __atomic_*, __sync_* and inline asm appear only under
     arch/ and in includes/asm-generic/atomic.h; portable code uses
     <ir0/atomic.h>. Empty exception ledger; injected-violation self-test.
+29) No undefined prototypes: every function a project header declares is
+    defined somewhere in the tree (C, C++, Rust or an assembly label,
+    macro-generated labels included). Exceptions live in
+    scripts/undefined_prototypes.txt, which only shrinks; Linux UAPI headers
+    and the userspace wrapper header are not scanned. Injected-violation
+    self-test.
 """
 
 from functools import lru_cache
@@ -3025,6 +3031,153 @@ def check_retired_api_names():
     return errors
 
 
+# Every function a project header declares has a definition somewhere in the
+# tree (C, C++, Rust, or an assembly label, macro-generated labels included).
+# A prototype with no definition is dead surface that hides a link error until
+# someone calls it. Entries in UNDEFINED_PROTOTYPE_LEDGER ("<name> <header>
+# <reason>") may stay while the work that owns their header lands; an entry
+# whose prototype is gone or now defined fails the guard, so the list only
+# shrinks. Userspace wrapper headers are not kernel API (SYS-6 moves them).
+UNDEFINED_PROTOTYPE_LEDGER = ROOT / "scripts" / "undefined_prototypes.txt"
+UNDEFINED_PROTOTYPE_SKIP = (
+    "includes/uapi/",
+    "includes/ir0/syscall.h",
+)
+_UNDEFINED_PROTOTYPE_SKIP_RE = re.compile(r"^arch/[^/]+/include/uapi/")
+DEFINITION_TREES = SINGLE_DECL_TREES + ("cpp", "rust")
+_C_DEFINITION_RE = re.compile(
+    r"\b([A-Za-z_]\w*)\s*\([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*\)\s*"
+    r"(?:__attribute__\s*\(\([^;{]*?\)\)\s*)*\{"
+)
+_RUST_DEFINITION_RE = re.compile(r"\bfn\s+([A-Za-z_]\w*)\s*[(<]")
+_ASM_LABEL_RE = re.compile(r"^[ \t]*([A-Za-z_.%\\][\w.%\\{}()]*)[ \t]*:", re.M)
+_ASM_MACRO_ARG_RE = re.compile(r"%\{?\w+\}?|\\\(\)|\\\w+")
+_UNDEFINED_LEDGER_LINE_RE = re.compile(r"^([A-Za-z_]\w*)\s+(\S+)\s+(\S.*)$")
+
+
+def defined_function_names(rel: str, text: str) -> tuple[set[str], list[re.Pattern]]:
+    """Return (names, label templates) a source file defines.
+
+    C/C++ definitions are "name(...) {" after comments are blanked. Assembly
+    labels written inside macros ("isr%1_64:", "entry_\\n:") become templates
+    in which every macro argument matches any identifier fragment.
+    """
+    if rel.endswith(".rs"):
+        return set(_RUST_DEFINITION_RE.findall(text)), []
+    if rel.endswith((".S", ".s", ".asm")):
+        names: set[str] = set()
+        templates = []
+        for label in _ASM_LABEL_RE.findall(text):
+            if _ASM_MACRO_ARG_RE.search(label):
+                parts = _ASM_MACRO_ARG_RE.split(label)
+                templates.append(re.compile(r"\w*".join(map(re.escape, parts))))
+            else:
+                names.add(label)
+        return names, templates
+    text = _DECL_COMMENT_RE.sub(" ", text)
+    return set(_C_DEFINITION_RE.findall(text)), []
+
+
+def load_undefined_prototype_ledger(text: str) -> tuple[dict[str, str], list[str]]:
+    """Parse the ledger; return ({name: header}, errors)."""
+    names: dict[str, str] = {}
+    errors = []
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _UNDEFINED_LEDGER_LINE_RE.match(line)
+        if not match:
+            errors.append(f"[undefined-prototype] ledger line {lineno}: "
+                          f"expected '<name> <header> <reason>', got '{line}'")
+            continue
+        name, header, _reason = match.groups()
+        if name in names:
+            errors.append(f"[undefined-prototype] ledger line {lineno}: "
+                          f"duplicate entry '{name}'")
+            continue
+        names[name] = header
+    return names, errors
+
+
+def undefined_prototypes(headers: dict[str, str],
+                         sources: dict[str, str]) -> list[tuple[str, str]]:
+    """Return sorted (header, name) for prototypes no source defines."""
+    defined: set[str] = set()
+    templates: list[re.Pattern] = []
+    for rel, text in sources.items():
+        names, tmpl = defined_function_names(rel, text)
+        defined |= names
+        templates.extend(tmpl)
+    found = []
+    for rel, text in headers.items():
+        for name in _header_prototypes(text):
+            if name in defined or any(t.fullmatch(name) for t in templates):
+                continue
+            found.append((rel, name))
+    return sorted(found)
+
+
+def _undefined_prototype_self_test() -> list[str]:
+    """Inject an undefined prototype and ledger defects; the check must fire."""
+    errors = []
+    names, ledger_errors = load_undefined_prototype_ledger(
+        "# c\nold_fn a.h owner\nold_fn a.h again\nbroken\n")
+    if names != {"old_fn": "a.h"} or len(ledger_errors) != 2:
+        errors.append("[undefined-prototype] self-test: ledger parser "
+                      f"accepted a duplicate or malformed line: {ledger_errors}")
+    headers = {"a.h": "int used(void);\nint ghost(int x);\n"
+                      "void isr7_64(void);\nint rs_fn(void);\n"
+                      "static inline int inl(void) { return 0; }\n"}
+    sources = {
+        "a.c": "/* int ghost(int x) { } */\nint used(void)\n{\n\treturn 0;\n}\n",
+        "b.asm": "%macro ISR 1\nglobal isr%1_64\nisr%1_64:\n\tiretq\n%endmacro\n",
+        "c.rs": "pub extern \"C\" fn rs_fn() -> i32 { 0 }\n",
+    }
+    got = undefined_prototypes(headers, sources)
+    if got != [("a.h", "ghost")]:
+        errors.append("[undefined-prototype] self-test: expected "
+                      f"[('a.h', 'ghost')], got {got}")
+    return errors
+
+
+def check_undefined_prototypes():
+    """Reject a project-header prototype that nothing in the tree defines."""
+    errors = _undefined_prototype_self_test()
+    ledger, ledger_errors = load_undefined_prototype_ledger(
+        read_file_text(UNDEFINED_PROTOTYPE_LEDGER))
+    errors.extend(ledger_errors)
+    headers: dict[str, str] = {}
+    sources: dict[str, str] = {}
+    for tree in DEFINITION_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+            for name in sorted(filenames):
+                path = Path(dirpath) / name
+                rel = str(rel_to_root(path))
+                if name.endswith(".h"):
+                    if (tree in SINGLE_DECL_TREES
+                            and not rel.startswith(UNDEFINED_PROTOTYPE_SKIP)
+                            and not _UNDEFINED_PROTOTYPE_SKIP_RE.match(rel)):
+                        headers[rel] = read_file_text(path)
+                elif name.endswith((".c", ".cpp", ".rs", ".S", ".s", ".asm")):
+                    sources[rel] = read_file_text(path)
+    seen: set[str] = set()
+    for rel, name in undefined_prototypes(headers, sources):
+        if ledger.get(name) == rel:
+            seen.add(name)
+            continue
+        errors.append(f"[undefined-prototype] {rel}: {name} is declared but "
+                      "never defined; delete the prototype")
+    for name in sorted(set(ledger) - seen):
+        errors.append(f"[undefined-prototype] stale ledger entry '{name}': "
+                      "the prototype is gone or defined, remove the entry")
+    return errors
+
+
 INCLUDE_LAYOUT_TREES = SINGLE_DECL_TREES
 _LAYOUT_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"][^>"]+[>"])')
 _LAYOUT_ALLMAN_HEAD_RE = re.compile(r"\)\s*(?:__attribute__\s*\(\(.*\)\)\s*)*$")
@@ -3140,7 +3293,8 @@ def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
                     _register_name_self_test() + _uaccess_self_test() +
-                    _raw_atomic_self_test())
+                    _raw_atomic_self_test() +
+                    _undefined_prototype_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3148,7 +3302,7 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics)")
+              "no-raw-atomics, undefined-prototype)")
         return 0
 
     errors = []
@@ -3224,6 +3378,7 @@ def main():
     errors.extend(check_no_raw_atomics())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
+    errors.extend(check_undefined_prototypes())
     errors.extend(check_include_layout())
 
     if errors:
