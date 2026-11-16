@@ -49,7 +49,6 @@ int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_
 int virtio_9p_write_file(const char *relpath, const void *buf, size_t len);
 int virtio_9p_write_at(const char *relpath, const void *buf, size_t len, uint64_t offset);
 int virtio_9p_truncate(const char *relpath, uint64_t length);
-int virtio_9p_read_file(const char *relpath, void *buf, size_t maxlen);
 int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
 		      size_t *got_out);
 int virtio_9p_mkdir(const char *relpath, uint32_t mode);

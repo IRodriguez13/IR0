@@ -1257,54 +1257,6 @@ int virtio_9p_readdir(const char *relpath, virtio_9p_dirent_t *entries, int max)
 	return n;
 }
 
-int virtio_9p_read_file(const char *relpath, void *buf, size_t maxlen)
-{
-	uint32_t fid = 3;
-	uint64_t off = 0;
-	size_t total = 0;
-	int rc;
-
-	if (!g_ready || !relpath || !buf)
-		return -EINVAL;
-
-	rc = v9p_walk_path(fid, relpath);
-	if (rc < 0)
-		return rc;
-	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
-	if (rc < 0)
-	{
-		(void)v9p_clunk(fid);
-		return rc;
-	}
-
-	while (total < maxlen)
-	{
-		uint32_t want;
-		uint32_t got = 0;
-
-		want = (uint32_t)(maxlen - total);
-		if (want > V9P_READ_CHUNK)
-			want = V9P_READ_CHUNK;
-		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
-		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
-			return rc;
-		}
-		if (got == 0)
-			break;
-		total += got;
-		off += got;
-		if (got < want)
-			break;
-	}
-
-	(void)v9p_clunk(fid);
-	if (total > (size_t)0x7fffffff)
-		return -EFBIG;
-	return (int)total;
-}
-
 int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
 		      size_t *got_out)
 {
