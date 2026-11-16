@@ -82,20 +82,5 @@ typedef struct {
 
 // Function prototypes
 bool sb16_init(void);
-void sb16_shutdown(void);
-bool sb16_reset_dsp(void);
-uint16_t sb16_get_dsp_version(void);
-
-// Low-level DSP functions
-bool sb16_dsp_write(uint8_t data);
-uint8_t sb16_dsp_read(void);
-bool sb16_dsp_ready_write(void);
-bool sb16_dsp_ready_read(void);
-
-// Mixer functions
-void sb16_mixer_write(uint8_t reg, uint8_t data);
-
-// DMA setup
-void sb16_setup_dma_8bit(uint32_t buffer_addr, uint16_t length);
 
 #endif // SOUND_BLASTER_H

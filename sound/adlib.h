@@ -36,9 +36,4 @@
 
 /* Function prototypes */
 bool adlib_init(void);
-void adlib_shutdown(void);
 bool adlib_is_available(void);
-void adlib_write(uint8_t reg, uint8_t value);
-uint8_t adlib_read(uint8_t reg);
-bool adlib_detect(void);
-
