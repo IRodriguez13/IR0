@@ -17,11 +17,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-
-size_t get_page_size(void);
 uint32_t get_cpu_id(void);
 uint32_t get_cpu_count(void);
-uint32_t get_cpu_mode(void);
 int get_cpu_vendor(char *vendor_buf);
 int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
 int get_cpuid_max_leaf(uint32_t *max_leaf);
