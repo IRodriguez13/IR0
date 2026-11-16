@@ -15,8 +15,6 @@
 
 #include <stdint.h>
 
-
-
 /* Cursor compartido para salida coherente entre print() y typewriter/shell */
 extern int cursor_pos;
 
@@ -68,7 +66,6 @@ static inline void print(const char *str)
  * 
  * @param c: Carácter a imprimir
  */
-void putchar(char c);
 
 /*
  * Escribe en la consola (FB/VGA) sin mirror a serial y sin respetar el gate
@@ -86,7 +83,6 @@ void print_screen_only(const char *str);
  * @param x: Columna (0-79)
  * @param y: Fila (0-24)
  */
-void putchar_at(char c, unsigned char color, int x, int y);
 
 // ============ FUNCIONES DE COLOR ============
 
@@ -98,7 +94,6 @@ void putchar_at(char c, unsigned char color, int x, int y);
  * @param bg: Color de fondo (0-15)
  * @return: Byte de atributo de color
  */
-unsigned char make_color(unsigned char fg, unsigned char bg);
 
 /*
  * Imprime texto con colores específicos sin afectar el color global.
