@@ -10,7 +10,7 @@
  * Sources: virtio 0.9.5 legacy PCI; virtio-net header; IR0 virtio_9p vring layout.
  */
 
-#include "virtio_net.h"
+#include "net_drivers.h"
 
 #include <config.h>
 #if CONFIG_DRV_NIC_VIRTIO_NET
@@ -320,7 +320,7 @@ static const struct net_device_ops virtio_net_ops = {
 	.ndo_poll_controller = virtio_net_netdev_poll,
 };
 
-int virtio_net_init(void)
+static int virtio_net_probe(void)
 {
 	uint8_t bus, slot;
 	uint32_t bar0;
@@ -406,11 +406,9 @@ fail:
 	return rc < 0 ? rc : -ENOMEM;
 }
 
-#else /* !CONFIG_DRV_NIC_VIRTIO_NET */
+const struct net_driver virtio_net_driver = {
+	.name = "virtio-net",
+	.probe = virtio_net_probe,
+};
 
-int virtio_net_init(void)
-{
-	return -ENODEV;
-}
-
-#endif
+#endif /* CONFIG_DRV_NIC_VIRTIO_NET */

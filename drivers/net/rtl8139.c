@@ -14,6 +14,7 @@
 #include <ir0/netdevice.h>
 #include <ir0/irq.h>
 #include "rtl8139.h"
+#include "net_drivers.h"
 #include <stdbool.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/arch_io.h>
@@ -226,15 +227,21 @@ static int find_rtl8139(uint8_t *bus, uint8_t *slot)
     return -1;
 }
 
-/**
- * rtl8139_init - register RTL8139 driver
+/*
+ * rtl8139_probe - register with the driver registry, whose init callback
+ * (rtl8139_hw_init) finds the PCI function and registers eth0.
  */
-int rtl8139_init(void)
+static int rtl8139_probe(void)
 {
     LOG_INFO("RTL8139", "Registering RTL8139 driver...");
     ir0_register_driver(&rtl8139_info, &rtl8139_ops);
     return 0;
 }
+
+const struct net_driver rtl8139_driver = {
+    .name = "rtl8139",
+    .probe = rtl8139_probe,
+};
 
 static int32_t rtl8139_hw_init(void)
 {

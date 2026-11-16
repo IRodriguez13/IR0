@@ -93,6 +93,3 @@
 
 /* Receive Status bits (from packet header) */
 #define RTL8139_RX_STAT_ROK     (1 << 0) /* Receive OK */
-
-/* Public API */
-int rtl8139_init(void);

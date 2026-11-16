@@ -12,6 +12,7 @@
  */
 
 #include "bcmgenet.h"
+#include "net_drivers.h"
 
 #include <config.h>
 #include <arm64_board.h>
@@ -326,7 +327,7 @@ static int genet_hw_init(struct net_device *dev)
 	return 0;
 }
 
-int bcmgenet_init(void)
+static int bcmgenet_probe(void)
 {
 	const struct arm64_board_boot_info *info = arm64_board_boot_info();
 	struct net_device *dev;
@@ -402,3 +403,8 @@ int bcmgenet_init(void)
 		klog_info("GENET", "GENET_PROBE_NOLINK");
 	return 0;
 }
+
+const struct net_driver bcmgenet_driver = {
+	.name = "bcmgenet",
+	.probe = bcmgenet_probe,
+};

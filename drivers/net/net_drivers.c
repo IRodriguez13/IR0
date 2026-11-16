@@ -4,44 +4,54 @@
  * Copyright (C) 2025  Iván Rodriguez
  *
  * File: net_drivers.c
- * Description: Network driver probe registry.
+ * Description: The NIC driver table and its probe loop.
+ *
+ * Adding a NIC: implement struct net_device_ops in drivers/net/<card>.c,
+ * export one const struct net_driver from it (declared in net_drivers.h),
+ * and list it here under its Kconfig symbol. Nothing outside drivers/net
+ * changes.
  */
 
-#include <config.h>
-#include <ir0/driver_backend.h>
-#include <ir0/net.h>
-#if CONFIG_DRV_NIC_RTL8139
-#include <drivers/net/rtl8139.h>
-#endif
-#if CONFIG_DRV_NIC_VIRTIO_NET && IR0_LEGACY_PC_IO
-#include <drivers/net/virtio_net.h>
-#endif
-#if CONFIG_DRV_NIC_BCMGENET
-#include <drivers/net/bcmgenet.h>
-#endif
+#include "net_drivers.h"
 
+#include <ir0/driver_backend.h>
+#include <ir0/logging.h>
+#include <ir0/net.h>
+#include <stddef.h>
+
+/*
+ * Probe order: PCI cards on the legacy PC platform, firmware/device-tree
+ * described cards elsewhere.
+ */
+static const struct net_driver *const net_drivers[] = {
+#if IR0_LEGACY_PC_IO
+#if CONFIG_DRV_NIC_VIRTIO_NET
+	&virtio_net_driver,
+#endif
+#if CONFIG_DRV_NIC_RTL8139
+	&rtl8139_driver,
+#endif
+#else
+#if CONFIG_DRV_NIC_BCMGENET
+	&bcmgenet_driver,
+#endif
+#endif
+	NULL,
+};
+
+/*
+ * Probe every configured driver. An absent or failed card never stops the
+ * stack: each driver logs its own outcome.
+ */
 int net_stack_probe_drivers(void)
 {
-	int ret = 0;
+	const struct net_driver *const *drv;
 
-#if !IR0_LEGACY_PC_IO
-#if CONFIG_DRV_NIC_BCMGENET
-	(void)bcmgenet_init();
-#endif
-	return ret;
-#else
-
-#if CONFIG_DRV_NIC_VIRTIO_NET
-	if (virtio_net_init() != 0)
+	for (drv = net_drivers; *drv; drv++)
 	{
-		/* Absent is OK when QEMU only presents rtl8139. */
-	}
-#endif
-#if CONFIG_DRV_NIC_RTL8139
-	if (rtl8139_init() != 0)
-		ret = -1;
-#endif
+		int rc = (*drv)->probe();
 
-	return ret;
-#endif
+		LOG_DEBUG_FMT("NET", "probe %s: %d", (*drv)->name, rc);
+	}
+	return 0;
 }
