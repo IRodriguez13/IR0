@@ -91,45 +91,6 @@ void irq_restore(unsigned long flags)
 	__asm__ volatile("pushq %0; popfq" :: "r"(flags) : "memory", "cc");
 }
 
-static uint64_t mm_read_ctrl0(void)
-{
-	uint64_t v;
-
-	__asm__ volatile("mov %%cr0, %0" : "=r"(v));
-	return v;
-}
-
-static void mm_write_ctrl0(uint64_t value)
-{
-	__asm__ volatile("mov %0, %%cr0" :: "r"(value) : "memory");
-}
-
-static uint64_t mm_read_ctrl1(void)
-{
-	uint64_t value;
-
-	__asm__ volatile("mov %%cr4, %0" : "=r"(value));
-	return value;
-}
-
-void mm_enable_translation(void)
-{
-	uint64_t cr0 = mm_read_ctrl0();
-
-	cr0 |= X86_CR0_PG | X86_CR0_WP;
-	mm_write_ctrl0(cr0);
-}
-
-int mm_translation_enabled(void)
-{
-	return (mm_read_ctrl0() & X86_CR0_PG) != 0;
-}
-
-int mm_translation_ready(void)
-{
-	return (mm_read_ctrl1() & X86_CR4_PAE) != 0;
-}
-
 void mm_va_indices(uintptr_t va, size_t idx[4])
 {
 	idx[0] = ((uint64_t)va >> 39) & X86_INDEX_MASK;

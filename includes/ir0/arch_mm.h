@@ -52,10 +52,6 @@ size_t mm_kernel_heap_size(void);
 uintptr_t mm_user_va_start(void);
 uintptr_t mm_user_va_end(void);
 
-void mm_enable_translation(void);
-int mm_translation_enabled(void);
-int mm_translation_ready(void);
-
 /*
  * Nonzero when the boot page tables already identity-map [@phys, @phys +
  * @size) for the kernel, so a driver need not map_page() it again.
