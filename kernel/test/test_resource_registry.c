@@ -19,7 +19,7 @@
  */
 
 #include "test/ktest_harness.h"
-#include "resource_registry.h"
+#include <ir0/resource_registry.h>
 #include "syscalls.h"
 #include <stddef.h>
 #include <string.h>

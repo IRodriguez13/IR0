@@ -101,7 +101,7 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 | Almacenamiento en bloque | `ir0_block_ops` registrado con `ir0_block_register()` |
 | Nodo `/dev` | `devfs_ops_t` por nodo |
 | Filesystem montable | `struct vfs_ops` + fstype |
-| NIC de red | vtable `struct net_device` en `ir0/net.h` |
+| NIC de red | `struct net_device` + `const struct net_device_ops` en `ir0/netdevice.h`; los drivers sólo exportan una entrada `struct net_driver` |
 | Bluetooth hacia VFS | funciones `ir0_bt_*` |
 | Archivo `/proc` o `/sys` | tabla FD en `fs/procfs.c` / `fs/sysfs.c` (legacy) |
 

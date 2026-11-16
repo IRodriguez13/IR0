@@ -8,17 +8,15 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: utsname.h
- * Description: IR0 kernel source/header file
+ * Description: struct utsname (Linux new_utsname ABI for uname(2)) and the
+ *              runtime fillers of its version and nodename fields
+ *              (kernel/utsname.c).
  */
 
-/* SPDX-License-Identifier: GPL-3.0-only */
-/**
- * IR0 - utsname structure (Linux/musl uname compatibility)
- *
- * Matches Linux struct utsname for uname(2) syscall.
- */
 #ifndef _IR0_UTSNAME_H
 #define _IR0_UTSNAME_H
+
+#include <stddef.h>
 
 #define _UTSNAME_LENGTH 65
 
@@ -64,5 +62,14 @@ static inline void ir0_utsname_init(struct utsname *value,
 
 _Static_assert(sizeof(struct utsname) == 390,
 	       "Linux new_utsname ABI must contain six 65-byte fields");
+
+/*
+ * Fill version string: "<UP|SMP> <RR|Priority>" from online CPUs and
+ * active scheduler policy (not compile-time macros alone).
+ */
+void ir0_utsname_fill_version(char *dst, size_t n);
+
+/* Fill nodename from /sys/kernel/hostname registry (no trailing newline). */
+void ir0_utsname_fill_nodename(char *dst, size_t n);
 
 #endif /* _IR0_UTSNAME_H */

@@ -53,6 +53,7 @@
 #include <ir0/ktm/stack_watch.h>
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
+#include <ir0/netdevice.h>
 #endif
 
 #define SYS_BUFFER_SIZE 4096
@@ -594,7 +595,7 @@ int sys_class_net_list_read_reg(char *buf, size_t count)
 	if (!buf || count == 0)
 		return -EINVAL;
 	memset(buf, 0, count);
-	dev = net_get_devices();
+	dev = first_net_device();
 	while (dev && off + 2 < count)
 	{
 		int n = snprintf(buf + off, count - off, "%s\n",
@@ -607,7 +608,7 @@ int sys_class_net_list_read_reg(char *buf, size_t count)
 			break;
 		}
 		off += (size_t)n;
-		dev = dev->next;
+		dev = next_net_device(dev);
 	}
 	return (int)off;
 }
@@ -618,12 +619,12 @@ static struct net_device *sys_class_net_find_dev(const char *ifname)
 
 	if (!ifname || !ifname[0])
 		return NULL;
-	dev = net_get_devices();
+	dev = first_net_device();
 	while (dev)
 	{
 		if (dev->name && strcmp(dev->name, ifname) == 0)
 			return dev;
-		dev = dev->next;
+		dev = next_net_device(dev);
 	}
 	return NULL;
 }
@@ -660,8 +661,6 @@ int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 				  unsigned attr)
 {
 	struct net_device *dev;
-	uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
-	uint64_t rxb = 0, txb = 0;
 	int len = 0;
 
 	if (!buf || count == 0 || !ifname)
@@ -671,11 +670,6 @@ int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 	if (!dev)
 		return -ENOENT;
 
-	if (dev->get_stats)
-		dev->get_stats(dev, &rxp, &txp, &rxe, &txe);
-	if (dev->get_byte_stats)
-		dev->get_byte_stats(dev, &rxb, &txb);
-
 	switch (attr)
 	{
 	case SYS_NET_ATTR_NAME:
@@ -683,9 +677,9 @@ int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 		break;
 	case SYS_NET_ATTR_ADDRESS:
 		len = snprintf(buf, count, "%02x:%02x:%02x:%02x:%02x:%02x\n",
-			       (unsigned)dev->mac[0], (unsigned)dev->mac[1],
-			       (unsigned)dev->mac[2], (unsigned)dev->mac[3],
-			       (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+			       (unsigned)dev->dev_addr[0], (unsigned)dev->dev_addr[1],
+			       (unsigned)dev->dev_addr[2], (unsigned)dev->dev_addr[3],
+			       (unsigned)dev->dev_addr[4], (unsigned)dev->dev_addr[5]);
 		break;
 	case SYS_NET_ATTR_MTU:
 		len = snprintf(buf, count, "%u\n", (unsigned)dev->mtu);
@@ -695,16 +689,16 @@ int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 			       (dev->flags & IFF_UP) ? "up" : "down");
 		break;
 	case SYS_NET_ATTR_RX_PACKETS:
-		len = snprintf(buf, count, "%llu\n", (unsigned long long)rxp);
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)dev->stats.rx_packets);
 		break;
 	case SYS_NET_ATTR_TX_PACKETS:
-		len = snprintf(buf, count, "%llu\n", (unsigned long long)txp);
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)dev->stats.tx_packets);
 		break;
 	case SYS_NET_ATTR_RX_BYTES:
-		len = snprintf(buf, count, "%llu\n", (unsigned long long)rxb);
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)dev->stats.rx_bytes);
 		break;
 	case SYS_NET_ATTR_TX_BYTES:
-		len = snprintf(buf, count, "%llu\n", (unsigned long long)txb);
+		len = snprintf(buf, count, "%llu\n", (unsigned long long)dev->stats.tx_bytes);
 		break;
 	default:
 		return -ENOENT;
@@ -762,7 +756,7 @@ int sys_class_net_collect_children(const char *dir_path,
 
 	if (strcmp(norm, "/sys/class/net") == 0)
 	{
-		dev = net_get_devices();
+		dev = first_net_device();
 		while (dev && n < max_entries)
 		{
 			if (dev->name && !sys_net_dirent_exists(entries, n, dev->name))
@@ -773,7 +767,7 @@ int sys_class_net_collect_children(const char *dir_path,
 				entries[n].type = DT_DIR;
 				n++;
 			}
-			dev = dev->next;
+			dev = next_net_device(dev);
 		}
 		return n;
 	}

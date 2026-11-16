@@ -398,7 +398,7 @@ latter still defined in `arch/x86-64/sources/fork_asm_hooks.c:51`).
 ISA concepts in generic process code: `process_restore_user_task_segments`
 (`kernel/process/core.c:193-198`) -> `task_apply_user_segments` (x86
 segments, called from the syscall exit, `syscall_dispatch.c:498`);
-4-level page-table walks in `kernel/process/mm.c:86-290`
+4-level page-table walks in `mm/process_mm.c:86-290`
 (`process_pt_child`, nested `i4/i3/i2` loops, 14 PTE-helper calls).
 
 ### 3.3 Responsibility leaks
@@ -418,8 +418,8 @@ segments, called from the syscall exit, `syscall_dispatch.c:498`);
   `ir0_cred_is_root()`, `early_process_is_root()`. `get_current_uid/gid`
   (`fs/permissions.c:25,34`) have 0 callers next to `ir0_current_cred()`.
 - **mm work in process:** page-table walkers and counters in
-  `kernel/process/mm.c`; `mm_struct` lifecycle in
-  `kernel/process/mm_struct.c` (Linux keeps both in `mm/` and
+  `mm/process_mm.c`; `mm_struct` lifecycle in
+  `mm/mm_struct.c` (Linux keeps both in `mm/` and
   `kernel/fork.c` only calls them); `find_vma`/`vma_is_shared` are declared
   in `kernel/process.h` and used by mm (6/2). `mm/paging_fork.c:100,136`
   declares `extern process_unmap_user_pages_all(...)` inside a function to
@@ -448,7 +448,7 @@ segments, called from the syscall exit, `syscall_dispatch.c:498`);
 | PRC-1 | Split `kernel/process.h`: the owner-only symbols (up to 54, minus what tests need) to `process_internal.h`, delete the 16 unused, then make `ir0/process.h` a real facade (`current`, lookup, state, accessors) instead of a re-export | medium | L |
 | PRC-2 | Encapsulate the distinctive fields: `struct cred` + `current_cred()` for ids, an `fs_struct` (cwd/root) owned by process, accessors for `comm`, itimers in time, stack bounds via arch-neutral accessors | medium | L |
 | PRC-3 | One credential/permission API: keep `ir0_current_cred()` and one stat-based check (Linux `generic_permission`) in fs; delete `is_root`, `get_current_uid/gid`, `check_file_access`, `ir0_check_file_access`; merge `credentials.h`, `permissions.h`, `cred_transition.h` into one header | low | S |
-| PRC-4 | Move page-table walking (`kernel/process/mm.c`) and `mm_struct` (`mm_struct.c`, `mm_struct.h`) into `mm/` | medium | M |
+| PRC-4 | Move page-table walking (`mm/process_mm.c`) and `mm_struct` (`mm_struct.c`, `mm_struct.h`) into `mm/` | medium | M |
 | PRC-5 | One fd-table owner: `files_struct` API in process, defs out of `io_syscalls.c`; `vfs_file.c` to fs (lane F2) | medium | M |
 | PRC-6 | Replace `exit_bind.c` name-calls with resource release on file close plus one tty session-exit hook; drop the `net/tcp.h` include and the `#if` | medium | M |
 | PRC-7 | Move arch->process hook prototypes out of `kernel/process.h` into one arch-hook header with neutral names; delete the two unused ones (shrinks the register-name ledger) | low | S |
@@ -584,8 +584,8 @@ fs/early/ or init/   (whatever Q1 keeps of erfs)
 ## 5. mm *(subdirectories in flight)*
 
 Files: `mm/` (30 files + `mm/swap/`, 6837 lines). mm-related code
-outside `mm/`: `kernel/syscalls/mm_*.c`, `kernel/process/mm.c`,
-`kernel/process/mm_struct.c`, `drivers/timer/acpi/acpi_pm.c:112-134`.
+outside `mm/`: `kernel/syscalls/mm_*.c`, `mm/process_mm.c`,
+`mm/mm_struct.c`, `drivers/timer/acpi/acpi_pm.c:112-134`.
 
 ### 5.1 Public interface
 
@@ -618,13 +618,13 @@ outside `mm/`: `kernel/syscalls/mm_*.c`, `kernel/process/mm.c`,
 encoding (`mm_pte_present`, `mm_pte_phys`, `mm_pte_mapping_flags`,
 `mm_pte_executable`, `mm_make_*_pte`, `pte_present/user/write/cow/protnone`,
 `mm_va_indices`, `mm_table_entries`, ...). The PTE part is used outside mm
-by `kernel/syscalls/mm_syscalls.c` (24 calls), `kernel/process/mm.c` (14)
+by `kernel/syscalls/mm_syscalls.c` (24 calls), `mm/process_mm.c` (14)
 and `mm_vma.c` (1). `tlb.h` (`mm_activate`, `mm_current_root`,
 `tlb_invalidate_page`, `tlb_invalidate_all`) is consumed by syscalls (2),
 video (1), time (1), process (1): `mm_activate` is still public (lane M3).
 
 ISA-shaped generic code: 4-level walks (`mm/paging_fork.c:61-160`,
-`kernel/process/mm.c`), fixed 4 KiB masks (`paging.h:49-58`
+`mm/process_mm.c`), fixed 4 KiB masks (`paging.h:49-58`
 `PAGE_FRAME_MASK ~0xFFF`), and the `PAGE_*` alias layer
 (`paging.h:24-46`, every flag has two names: `PAGE_RW` = `IR0_MM_MAP_WRITE`).
 Hand-rolled atomics in `oom_kill.c`, `page_table_pool.c`, `reclaim.c`
@@ -648,7 +648,7 @@ Hand-rolled atomics in `oom_kill.c`, `page_table_pool.c`, `reclaim.c`
 
 | ID | Proposal | Risk | Size |
 |----|----------|------|------|
-| MM-1 | Move `mm_syscalls.c`, `mm_vma.c`, `mm_brk.c` and `kernel/process/mm.c` walkers into `mm/` (`mm/mmap.c`, `mm/vma.c`, `mm/brk.c`, `mm/walk.c`); then the PTE section of `arch_mm.h` becomes mm-private (an `asm/pgtable.h`-style header only `mm/` and `arch/` include) | medium | L |
+| MM-1 | Move `mm_syscalls.c`, `mm_vma.c`, `mm_brk.c` and `mm/process_mm.c` walkers into `mm/` (`mm/mmap.c`, `mm/vma.c`, `mm/brk.c`, `mm/walk.c`); then the PTE section of `arch_mm.h` becomes mm-private (an `asm/pgtable.h`-style header only `mm/` and `arch/` include) | medium | L |
 | MM-2 | Finish lanes M1-M4 (dead `setup_and_enable_paging`, `unmap_page`, `pmm_init`; `pmm_alloc_frame` callers -> `mm_alloc_frame`; `mm_activate` private; `acpi_pm` root decode) | low | S |
 | MM-3 | Make the owner-only headers private (`tlb_sync.h`, `mm_diag.h`, `reclaim.h`, `no_mmu.h`) and the owner-only symbols of `paging.h`, `pmm.h`, `swap.h`, `boot_memory.h` static or mm-internal | low | S |
 | MM-4 | Atomics through the facade *(in flight)* | low | S |

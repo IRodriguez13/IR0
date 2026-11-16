@@ -165,7 +165,7 @@ endif
 # production facade implementation at link time; product defconfigs keep every
 # KTM_*_MOCK option disabled. `scripts/architecture_guard.py` rejects a mock
 # enabled without CONFIG_KTM.
-CONSOLE_BACKEND_OBJ := kernel/console_backend.o
+CONSOLE_BACKEND_OBJ := drivers/tty/console_backend.o
 MM_PORT_OBJ := mm/alloc/mm_port.o
 VIDEO_BACKEND_OBJ := drivers/video/video_backend.o
 INPUT_BACKEND_OBJ := drivers/input/input_backend.o
@@ -273,6 +273,33 @@ headers_install:
 	@cp -a $(UAPI_DIR)/. $(DESTDIR)/usr/include/
 	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -name '*.h' | wc -l) headers)"
 
+# Stable IR0↔ISD bridge.  ISD resolves these paths instead of guessing layout
+# inside this tree; keep the names synchronized with IR0_ISD_INTERFACE.
+ir0-minix-inject-path:
+	@printf '%s\n' "$(KERNEL_ROOT)/scripts/inject_init_minix.py"
+
+ir0-verify-minix-path:
+	@printf '%s\n' "$(KERNEL_ROOT)/scripts/verify_minix_rootfs.py"
+
+# Standalone filesystem-verification entry points for automation.  They are
+# intentionally explicit about format and image path, so a caller cannot
+# accidentally validate a MINIX image with the EXT2 verifier (or vice versa).
+IR0_ROOTFS_DISK ?=
+IR0_ROOTFS_PATHS ?= sbin/init bin/busybox etc/passwd var/lib/ir0
+IR0_ROOTFS_FORMAT ?= minix
+
+verify-ext2-rootfs:
+	@test -n "$(IR0_ROOTFS_DISK)" || { echo "usage: make verify-ext2-rootfs IR0_ROOTFS_DISK=IMAGE.ext2 [IR0_ROOTFS_PATHS='…']" >&2; exit 2; }
+	@$(KERNEL_ROOT)/scripts/verify_ext2_rootfs.sh "$(IR0_ROOTFS_DISK)" $(IR0_ROOTFS_PATHS)
+
+verify-rootfs:
+	@test -n "$(IR0_ROOTFS_DISK)" || { echo "usage: make verify-rootfs IR0_ROOTFS_DISK=IMAGE IR0_ROOTFS_FORMAT=minix|ext2 [IR0_ROOTFS_PATHS='…']" >&2; exit 2; }
+	@case "$(IR0_ROOTFS_FORMAT)" in \
+		minix) python3 "$(KERNEL_ROOT)/scripts/verify_minix_rootfs.py" "$(IR0_ROOTFS_DISK)" $(IR0_ROOTFS_PATHS) ;; \
+		ext2) $(KERNEL_ROOT)/scripts/verify_ext2_rootfs.sh "$(IR0_ROOTFS_DISK)" $(IR0_ROOTFS_PATHS) ;; \
+		*) echo "✗ unknown IR0_ROOTFS_FORMAT=$(IR0_ROOTFS_FORMAT) (expected minix or ext2)" >&2; exit 2 ;; \
+	esac
+
 menuconfig:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py $(if $(MENUCONFIG_LANG),--lang $(MENUCONFIG_LANG),)
 
@@ -374,53 +401,52 @@ KERNEL_OBJS = \
 	arch/common/boot_arch.o \
 	arch/common/boot_port.o \
 	arch/common/oops_port.o \
-	kernel/boot_flow.o \
-	kernel/kernel_wiring.o \
-	kernel/boot_init.o \
-	kernel/boot_firmware_sysfs.o \
-	kernel/boot_params.o \
-	kernel/init_handoff.o \
-    kernel/cmdline.o \
-    kernel/rootfs_base.o \
+	kernel/boot/boot_flow.o \
+	kernel/boot/kernel_wiring.o \
+	kernel/boot/boot_init.o \
+	kernel/boot/boot_firmware_sysfs.o \
+	kernel/boot/boot_params.o \
+	kernel/boot/init_handoff.o \
+    kernel/boot/cmdline.o \
+    kernel/boot/rootfs_base.o \
     kernel/process/registry.o \
 	kernel/process/registry_lock.o \
     kernel/process/limits.o \
     kernel/process/core.o \
-    kernel/process/sched_trace.o \
+    sched/trace.o \
     kernel/process/create.o \
     kernel/process/cred_groups.o \
     kernel/process/domains.o \
-    kernel/process/mm_struct.o \
-    kernel/process/files_lifecycle.o \
-    kernel/process/files_struct.o \
+    mm/mm_struct.o \
+    fs/files_lifecycle.o \
+    fs/files_struct.o \
     kernel/process/fork.o \
     kernel/process/exec.o \
     kernel/process/lifecycle.o \
     kernel/process/parent.o \
     kernel/process/resources.o \
     kernel/process/exit_bind.o \
-    kernel/process/cwd.o \
-    kernel/process/vfs_file.o \
+    fs/cwd.o \
+    fs/file_table.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
     kernel/process/wait_audit.o \
     kernel/process/wait_state.o \
-    kernel/process/saved_context.o \
-    kernel/process/saved_environ.o \
-    kernel/process/fdtable_init.o \
-    kernel/process/fdtable.o \
-    kernel/process/pseudo_fd_bind.o \
-    kernel/process/mm.o \
-    kernel/process/signals.o \
-    kernel/vdso.o \
-    kernel/sigtramp.o \
+    kernel/exec/saved_environ.o \
+    fs/fdtable_init.o \
+    fs/fdtable.o \
+    fs/pseudo_fd_bind.o \
+    mm/process_mm.o \
+    kernel/signals/default_action.o \
+    kernel/exec/vdso.o \
+    kernel/signals/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
-	kernel/cpu_topology.o \
-	kernel/percpu.o \
+	smp/cpu_topology.o \
+	smp/percpu.o \
     kernel/process/credentials.o \
     kernel/power/power_manag.o \
-    kernel/kexec.o \
+    kernel/power/kexec.o \
     kernel/syscalls.o \
     kernel/syscalls/fs_syscalls.o \
     kernel/syscalls/fs_rw.o \
@@ -478,12 +504,13 @@ KERNEL_OBJS = \
     fs/eventfd.o \
     fs/timerfd.o \
     ipc/posix_shm.o \
-    kernel/input_events.o \
-    kernel/elf_loader.o \
-    kernel/driver_registry.o \
-    kernel/resource_registry.o \
+    drivers/input/input_events.o \
+    kernel/exec/elf_loader.o \
+    drivers/core/driver_registry.o \
+    drivers/core/resource_registry.o \
     ipc/ipc.o \
-    kernel/futex.o \
+    kernel/futex/futex.o \
+    kernel/futex/syscalls.o \
     net/net_compat.o \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
@@ -612,14 +639,15 @@ MEMORY_OBJS = \
 
 LIB_OBJS = \
     drivers/char/vga.o \
-    kernel/boot_log_hostshare.o \
-    kernel/oops.o \
-    kernel/problems.o \
-    kernel/fault.o \
-    kernel/irq_dispatch.o \
-    kernel/signals.o \
-    kernel/signal_diag.o \
-    kernel/entry.o \
+    kernel/boot/boot_log_hostshare.o \
+    kernel/problems/oops.o \
+    kernel/problems/problems.o \
+    kernel/problems/fault.o \
+    kernel/irq/irq_dispatch.o \
+    kernel/signals/signals.o \
+    kernel/signals/signal_diag.o \
+    kernel/signals/syscalls.o \
+    kernel/irq/entry.o \
     fs/pipe.o \
     mm/uaccess/copy_user.o \
     fs/open_flags.o \
@@ -634,22 +662,22 @@ LIB_OBJS = \
     fs/named_symlink.o \
     fs/path_user.o \
     fs/path_routed.o \
-    kernel/utsname_info.o \
-    kernel/version_stamp.o \
+    kernel/utsname.o \
+    kernel/boot/version_stamp.o \
     drivers/tty/console.o \
     drivers/input/ps2_set1.o \
     drivers/input/ps2_mouse_pkt.o \
-    kernel/ash_smoke.o \
+    drivers/tty/ash_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
     fs/utimens.o \
-    kernel/exec_read_trace.o \
+    kernel/exec/exec_read_trace.o \
     fs/mount_prefix.o \
     block/blockdev.o \
-    kernel/elf64_image.o \
-    kernel/early_elf_stack.o \
+    kernel/exec/elf64_image.o \
+    kernel/exec/early_elf_stack.o \
     $(MM_PORT_OBJ) \
-    kernel/process/process_introspect.o \
+    ktm/process_introspect.o \
     drivers/rtc/rtc_calendar.o \
     $(VIDEO_BACKEND_OBJ) \
     $(INPUT_BACKEND_OBJ) \
@@ -800,6 +828,7 @@ DISK_OBJS = \
 ifneq ($(CONFIG_ENABLE_NETWORKING),n)
 NET_OBJS = \
     net/net.o \
+    net/dev.o \
     net/arp.o \
     net/ip.o \
     net/icmp.o \
@@ -982,8 +1011,8 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot_init.o \
-	build/test/kernel/boot_flow.o build/test/kernel/kernel_wiring.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o \
+	build/test/kernel/boot/boot_flow.o build/test/kernel/boot/kernel_wiring.o
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
 KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
@@ -994,8 +1023,8 @@ KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-ALL_OBJS_TEST = $(filter-out kernel/boot_init.o kernel/boot_flow.o \
-	kernel/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
+ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o kernel/boot/boot_flow.o \
+	kernel/boot/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
 	arch/common/oops_port.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
@@ -1615,7 +1644,7 @@ test-drivers-clean:
 	menuconfig defconfig \
 	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
 	sync-menuconfig-defconfig-check \
-	headers_install check-env \
+	headers_install ir0-minix-inject-path ir0-verify-minix-path verify-ext2-rootfs verify-rootfs check-env \
 	unibuild unibuild-cpp unibuild-rust unibuild-clean \
 	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
 	format analyze compile-commands disasm stack-usage print-build-objects build-graph-audit \

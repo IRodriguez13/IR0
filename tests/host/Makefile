@@ -98,6 +98,7 @@ KERNEL_HOST_OBJS += host_tlb_sync.o
 KERNEL_HOST_OBJS += host_vbe.o host_x86_boot_identity.o
 KERNEL_HOST_OBJS += host_fault.o
 KERNEL_HOST_OBJS += host_swap_header.o host_swap.o host_swap_reclaim.o host_dma.o host_irq_dispatch.o
+KERNEL_HOST_OBJS += host_net_dev.o
 KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
 	host_ktm_video_mock.o host_ktm_audio_mock.o \
 	host_ktm_mm_port_mock.o host_ktm_platform_mock.o
@@ -200,10 +201,10 @@ host_syscall_table.o: $(KERNEL_ROOT)/kernel/syscalls/syscall_table.c \
 host_fd_resource.o: $(KERNEL_ROOT)/fs/fd_resource.c
 	$(KERNEL_CC)
 
-host_cpu_topology.o: $(KERNEL_ROOT)/kernel/cpu_topology.c
+host_cpu_topology.o: $(KERNEL_ROOT)/smp/cpu_topology.c
 	$(KERNEL_CC)
 
-host_percpu.o: $(KERNEL_ROOT)/kernel/percpu.c
+host_percpu.o: $(KERNEL_ROOT)/smp/percpu.c
 	$(KERNEL_CC)
 
 host_tlb_sync.o: $(KERNEL_ROOT)/mm/paging/tlb_sync.c
@@ -221,7 +222,10 @@ host_swap_reclaim.o: $(KERNEL_ROOT)/mm/swap/swap_reclaim.c
 host_dma.o: $(KERNEL_ROOT)/arch/x86-64/sources/dma.c
 	$(KERNEL_CC)
 
-host_irq_dispatch.o: $(KERNEL_ROOT)/kernel/irq_dispatch.c
+host_irq_dispatch.o: $(KERNEL_ROOT)/kernel/irq/irq_dispatch.c
+	$(KERNEL_CC)
+
+host_net_dev.o: $(KERNEL_ROOT)/net/dev.c
 	$(KERNEL_CC)
 
 host_ktm_console_mock.o: $(KERNEL_ROOT)/ktm/mocks/console/ktm_console_mock.c
@@ -256,7 +260,7 @@ host_x86_elf_policy.o: $(KERNEL_ROOT)/arch/x86-64/sources/elf_policy.c
 		-Delf_local_reloc_value=x86_test_elf_local_reloc_value \
 		-c -o $@ $<
 
-host_fault.o: $(KERNEL_ROOT)/kernel/fault.c $(KERNEL_ROOT)/includes/ir0/fault.h
+host_fault.o: $(KERNEL_ROOT)/kernel/problems/fault.c $(KERNEL_ROOT)/includes/ir0/fault.h
 	$(KERNEL_CC)
 
 test_arm64_syscall_decode.o: test_arm64_syscall_decode.c \
@@ -282,10 +286,10 @@ host_pipe.o: $(KERNEL_ROOT)/fs/pipe.c
 host_blockdev.o: $(KERNEL_ROOT)/block/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
-host_elf64_image.o: $(KERNEL_ROOT)/kernel/elf64_image.c
+host_elf64_image.o: $(KERNEL_ROOT)/kernel/exec/elf64_image.c
 	$(KERNEL_CC)
 
-host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/early_elf_stack.c
+host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/exec/early_elf_stack.c
 	$(KERNEL_CC)
 
 host_early_mm.o: $(KERNEL_ROOT)/kernel/syscalls/early_mm.c

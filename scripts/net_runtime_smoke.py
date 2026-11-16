@@ -122,7 +122,7 @@ def main() -> int:
         return 1
 
     hard_fail_patterns = [
-        r"net_send: dev->send returned -1",
+        r"net_send: ndo_start_xmit returned -1",
         r"Failed to send IP packet",
         r"RX read_offset out of bounds",
         r"panic|kernel panic",

@@ -18,7 +18,7 @@
 #include <ir0/debug_runtime.h>
 #include <ir0/devfs.h>
 #include <ir0/pseudo_fs.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <config.h>
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>
@@ -56,33 +56,6 @@
 uint64_t process_registry_lock(void);
 void process_registry_unlock(uint64_t irq_flags);
 void process_registry_install_if_empty(process_t *process);
-
-typedef struct
-{
-	uint64_t mapped_pages;
-	uint64_t freed_pages;
-	uint64_t missing_pages;
-	uint64_t level1_present;
-	uint64_t level2_present;
-	uint64_t level3_present;
-	uint64_t leaf_present;
-	uint64_t root_freed;
-	uint64_t level1_freed;
-	uint64_t level2_freed;
-	uint64_t level3_freed;
-	uint64_t leaf_freed;
-} process_reclaim_stats_t;
-
-/* fdtable.c */
-void process_release_fds(process_t *p, const char *pipe_trace_op);
-int process_duplicate_fd_table(process_t *parent, process_t *child);
-
-/* mm.c */
-void process_unmap_user_pages_all(address_space_root_t root,
-				  process_reclaim_stats_t *stats);
-struct mmap_region *process_clone_mmap_list(struct mmap_region *parent_list);
-void process_fork_destroy_child_mm(process_t *child);
-void process_fork_free_mmap_list(process_t *child);
 
 /* wait.c */
 void wait_exit_audit_process_exit(process_t *dying, process_t *parent,

@@ -5,7 +5,7 @@
 > `kernel/test/test_mm_contracts.c`, `kernel/test/test_debug_contracts.c`,
 > `kernel/test/test_runner.c`,
 > `includes/ir0/futex.h`, `includes/ir0/ipc.h`, `includes/ir0/arch_mm.h`,
-> `kernel/futex.c`, `ipc/ipc.c`, `mm/fault/page_fault.c`, `mm/paging/paging.c`,
+> `kernel/futex/futex.c`, `ipc/ipc.c`, `mm/fault/page_fault.c`, `mm/paging/paging.c`,
 > `arch/x86-64/sources/mm.c`, `arch/arm64/sources/mm.c`
 
 Canónico en inglés: [`../../testing/KTEST_FIX_CONTRACTS.md`](../../testing/KTEST_FIX_CONTRACTS.md).

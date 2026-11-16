@@ -2,10 +2,10 @@
 
 > **Última verificación:** 2026-11-09
 > **Fuente de verdad:** `includes/ir0/sched.h`, `sched/core.h`, `sched/core.c`,
-> `sched/idle.c`, `kernel/futex.c`,
+> `sched/idle.c`, `kernel/futex/futex.c`,
 > `sched/rr.c`, `sched/prio.c`,
 > `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`,
-> `kernel/syscalls/syscall_dispatch.c`, `kernel/signals.c`
+> `kernel/syscalls/syscall_dispatch.c`, `kernel/signals/signals.c`
 
 IR0 scheduling is one core plus one policy file chosen at build time from
 Kconfig. There is no run-time dispatch.
@@ -34,17 +34,27 @@ Kconfig. There is no run-time dispatch.
 
 The Makefile links exactly one policy object. `sched_selftest()` checks the
 priority bands (round robin has nothing to check and returns 0);
-`kernel/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
+`kernel/boot/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
 
 ### Multi-CPU boundary
 
 IR0 is UP. Everything that only exists with several CPUs (CPU bring-up,
-IPIs, per-CPU areas, cross-CPU calls, runqueue load balancing) belongs in a
-top-level `smp/` directory, created with the first real multi-CPU code. The
-scheduler core and the policies only see `rq_lock()` / `rq_unlock()`; an SMP
-build implements that pair with the per-CPU runqueue spinlock from `smp/`
-without touching `sched/`. Today's `kernel/percpu.c` is single-CPU storage
-and stays in `kernel/`.
+IPIs, per-CPU areas, cross-CPU calls, runqueue load balancing) lives in
+the top-level `smp/` directory. Today it holds the single-CPU
+implementations of the per-CPU interfaces, so that their SMP versions
+replace files in `smp/` and nothing else:
+
+| File | Interface | UP behavior |
+|------|-----------|-------------|
+| `smp/cpu_topology.c` | `<ir0/cpu.h>` CPU masks and `cpu_id()` | one possible/present/online CPU |
+| `smp/percpu.c` | `<ir0/percpu.h>` `cpu_local()` | one static `struct ir0_cpu_local` |
+
+Both files refuse to build with `CONFIG_SMP` until an SMP backend exists.
+The scheduler core and the policies only see `rq_lock()` / `rq_unlock()`
+(`sched/core.h`, local interrupt masking on UP); an SMP build implements
+that pair with the per-CPU runqueue spinlock from `smp/` without touching
+`sched/`. ISA details of CPU bring-up and IPIs stay under `arch/<isa>/`
+behind `smp/` interfaces.
 
 ## Blocking syscalls and signals
 
@@ -57,7 +67,7 @@ and calls `schedule()`. A wake source sets `PROCESS_READY`; so does
 remaining time, poll, select).
 
 An interrupt that came from userspace runs the same exit work
-(`irqentry_exit_to_user_mode()` in [`kernel/entry.c`](../kernel/entry.c),
+(`irqentry_exit_to_user_mode()` in [`kernel/irq/entry.c`](../kernel/irq/entry.c),
 Linux `irqentry_exit_to_user_mode()`), called by the ISA after the EOI and
 `cpu_local_irq_leave()` (x86 `isr_handler64`, arm64 `arm64_exc_irq_el1`):
 a pending reschedule sleeps in `schedule()` (a task spinning in userspace

@@ -12,7 +12,7 @@ kernel APIs.
 
 | Family | Production object replaced | CONFIG option |
 | --- | --- | --- |
-| console | `kernel/console_backend.c` | `KTM_CONSOLE_MOCK` |
+| console | `drivers/tty/console_backend.c` | `KTM_CONSOLE_MOCK` |
 | input | `drivers/input/input_backend.c` | `KTM_INPUT_MOCK` |
 | video | `drivers/video/video_backend.c` | `KTM_VIDEO_MOCK` |
 | audio | `sound/audio_backend.c` | `KTM_AUDIO_MOCK` |

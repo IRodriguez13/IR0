@@ -10,7 +10,6 @@
 #pragma once
 
 #include <kernel/syscalls.h>
-#include <kernel/process.h>
 #include "fs_syscalls.h"
 #include "fs_path_syscalls.h"
 #include "syscalls_glue.h"

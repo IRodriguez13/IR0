@@ -26,7 +26,6 @@ into `EINTR`, and sets the task's syscall frame up to enter the handler.
   signal_pending (uint32_t bitmask)
   signal_handlers[_NSIG]  (_NSIG = 32)
   signal_mask, signal_ignored
-  saved_context (for sigreturn)
 ```
 
 | Function | Role |
@@ -125,12 +124,12 @@ ASCII:
 - Asynchronous signals are delivered at the syscall exit, on
   rt_sigreturn's way out (`do_signal(p, restored_ctx)`) and on the
   interrupt return to userspace (`irqentry_exit_to_user_mode()`,
-  `kernel/entry.c`), so a task spinning without syscalls still gets them.
+  `kernel/irq/entry.c`), so a task spinning without syscalls still gets them.
 - An uncaught signal takes its full signal(7) default: Ign drops it, Stop
   (STOP, TSTP, TTIN, TTOU) sleeps until SIGCONT, everything else ends the
   task.
-- Diagnostics go through `signal_trace()` (`kernel/signal_diag.c`);
-  `kernel/signals.c` has no inline klog/KTM.
+- Diagnostics go through `signal_trace()` (`kernel/signals/signal_diag.c`);
+  `kernel/signals/signals.c` has no inline klog/KTM.
 - `rt_sigreturn` copies the frame from the user stack pointer only.
 
 ## 10. Future roadmap

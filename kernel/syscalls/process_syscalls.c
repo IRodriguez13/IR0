@@ -16,16 +16,13 @@
 #include <string.h>
 #include <ktm_probe_diag.h>
 #include <ir0/acpi_pm.h>
-#include <ir0/arch_mm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
 #include <ir0/clone.h>
-#include <ir0/console.h>
 #include <ir0/copy_user.h>
 #include <ir0/cred_transition.h>
 #include <ir0/credentials.h>
 #include <ir0/elf_loader.h>
-#include <ir0/futex.h>
 #include <ir0/kexec.h>
 #include <ir0/kmem.h>
 #include <ir0/ktm/checkpoint.h>
@@ -36,8 +33,6 @@
 #include <ir0/permissions.h>
 #include <ir0/power_manag.h>
 #include <ir0/sched.h>
-#include <ir0/signal_irq.h>
-#include <ir0/task_ops.h>
 #include <ir0/wait.h>
 
 #define ARCH_SET_FS 0x1002
@@ -46,12 +41,6 @@
 /* prctl(2) options (Linux include/uapi/linux/prctl.h) */
 #define PR_SET_NO_NEW_PRIVS 38
 #define PR_GET_NO_NEW_PRIVS 39
-
-#define FUTEX_WAIT 0
-#define FUTEX_WAKE 1
-
-
-#define IR0_ROBUST_LIST_SIZE 24
 
 /* Credentials, supplementary groups, and Linux setreuid/setresuid ABI. */
 
@@ -69,11 +58,6 @@ int process_cred_in_group(const process_t *p, gid_t gid)
 			return 1;
 	}
 	return 0;
-}
-
-void process_reset_signals_on_exec(process_t *p)
-{
-	signals_reset_on_exec(p);
 }
 
 int64_t sys_getgroups(int size, gid_t *list)
@@ -289,362 +273,6 @@ int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid)
 	if (ret < 0)
 		return ret;
 	return cred_copy_out_u32(sgid, sg);
-}
-
-/* rt_sigaction / rt_sigprocmask / rt_sigsuspend / tkill. */
-
-static uint32_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigsetsize)
-{
-	uint64_t legacy64;
-
-	if (sigsetsize == sizeof(uint64_t))
-	{
-		if (!set)
-			return 0;
-		memcpy(&legacy64, set, sizeof(legacy64));
-		return linux_sigword_to_ir0((uint32_t)legacy64);
-	}
-	return ir0_sigset_low32(set);
-}
-
-static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint32_t mask)
-{
-	uint64_t legacy64;
-
-	if (!set)
-		return;
-
-	if (sigsetsize == sizeof(uint64_t))
-	{
-		legacy64 = (uint64_t)ir0_sigword_to_linux(mask);
-		memcpy(set, &legacy64, sizeof(legacy64));
-		return;
-	}
-	ir0_sigset_set_low32(set, mask);
-}
-
-/*
- * Linux/musl may pass sigsetsize=8; user buffers are sized for the uapi layout,
- * not for IR0 internal struct sigaction.  Copy handler + flags + restorer +
- * mask64 (32 bytes), never sizeof(struct sigaction).
- */
-static size_t rt_sigaction_user_copy_size(size_t sigsetsize)
-{
-	if (sigsetsize == sizeof(uint64_t))
-		return offsetof(struct sigaction, sa_mask) + sizeof(uint64_t);
-	return sizeof(struct sigaction);
-}
-
-int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
-			 struct sigaction *oldact, size_t sigsetsize)
-{
-	struct sigaction kact;
-	struct sigaction kold;
-	size_t user_bytes;
-
-	if (!current_process)
-		return -ESRCH;
-	if (signum < 1 || signum >= _NSIG)
-		return -EINVAL;
-	if (signum == SIGKILL || signum == SIGSTOP)
-		return -EINVAL;
-	/* sigsetsize=8 (uapi compact) or sizeof(sigset_t); anything else -EINVAL. */
-	if (sigsetsize != sizeof(sigset_t) && sigsetsize != sizeof(uint64_t))
-		return -EINVAL;
-
-	user_bytes = rt_sigaction_user_copy_size(sigsetsize);
-
-	if (oldact)
-	{
-		memset(&kold, 0, sizeof(kold));
-		kold.sa_handler = current_process->signal_handlers[signum];
-		rt_sigaction_mask_to_sigset(&kold.sa_mask, sigsetsize,
-					    current_process->signal_sa_mask[signum]);
-		kold.sa_flags = (unsigned long)current_process->signal_sa_flags[signum];
-		kold.sa_restorer = current_process->signal_restorer[signum];
-		if (copy_to_user(oldact, &kold, user_bytes) != 0)
-			return -EFAULT;
-	}
-
-	if (act)
-	{
-		memset(&kact, 0, sizeof(kact));
-		if (copy_from_user(&kact, act, user_bytes) != 0)
-			return -EFAULT;
-		if (register_signal_handler(signum, kact.sa_handler) != 0)
-			return -EFAULT;
-		current_process->signal_sa_mask[signum] =
-			rt_sigaction_mask_from_sigset(&kact.sa_mask, sigsetsize) &
-			~SIGNAL_UNBLOCKABLE;
-		current_process->signal_sa_flags[signum] = (uint32_t)kact.sa_flags;
-		current_process->signal_restorer[signum] =
-			(kact.sa_flags & SA_RESTORER) ? kact.sa_restorer : NULL;
-	}
-
-	return 0;
-}
-
-int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
-			   size_t sigsetsize)
-{
-	sigset_t kset;
-	uint32_t oldmask;
-	uint32_t newmask;
-	uint64_t legacy64;
-
-	if (!current_process)
-		return -ESRCH;
-	if (sigsetsize != sizeof(sigset_t) && sigsetsize != sizeof(uint64_t))
-		return -EINVAL;
-
-	/*
-	 * Linux sigprocmask(): read the new set, apply it, and only then
-	 * report the old one, so a bad @how leaves *oldset untouched.
-	 */
-	oldmask = current_process->signal_mask;
-	if (set)
-	{
-		if (sigsetsize == sizeof(uint64_t))
-		{
-			if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
-				return -EFAULT;
-			newmask = linux_sigword_to_ir0((uint32_t)legacy64);
-		}
-		else
-		{
-			if (copy_from_user(&kset, set, sizeof(kset)) != 0)
-				return -EFAULT;
-			newmask = ir0_sigset_low32(&kset);
-		}
-		switch (how)
-		{
-		case SIG_BLOCK:
-			set_current_blocked(oldmask | newmask);
-			break;
-		case SIG_UNBLOCK:
-			set_current_blocked(oldmask & ~newmask);
-			break;
-		case SIG_SETMASK:
-			set_current_blocked(newmask);
-			break;
-		default:
-			return -EINVAL;
-		}
-	}
-
-	if (oldset)
-	{
-		if (sigsetsize == sizeof(uint64_t))
-		{
-			legacy64 = (uint64_t)ir0_sigword_to_linux(oldmask);
-			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
-				return -EFAULT;
-		}
-		else
-		{
-			ir0_sigset_set_low32(&kset, oldmask);
-			if (copy_to_user(oldset, &kset, sizeof(kset)) != 0)
-				return -EFAULT;
-		}
-	}
-	return 0;
-}
-
-/*
- * sys_rt_sigsuspend - Linux rt_sigsuspend(2): replace mask and wait for signal.
- * Always returns -EINTR when a non-blocked signal is pending (musl sigsuspend).
- */
-int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
-{
-	sigset_t kset;
-	uint32_t saved_mask;
-	size_t copy_bytes;
-
-	if (!current_process)
-		return -ESRCH;
-	/*
-	 * sigsetsize=8 (uapi compact) or sizeof(sigset_t), same contract as
-	 * rt_sigaction above. musl passes _NSIG/8 = 8, the kernel sigset width
-	 * on x86-64, while the userspace type is 128 bytes: demanding the
-	 * latter rejected every call with -EINVAL, so ash's wait-for-SIGCHLD
-	 * never blocked and it re-issued the syscall forever (observed 320k
-	 * back-to-back calls, pipeline children left unreaped).
-	 */
-	if (!mask ||
-	    (sigsetsize != sizeof(sigset_t) && sigsetsize != sizeof(uint64_t)))
-		return -EINVAL;
-
-	memset(&kset, 0, sizeof(kset));
-	copy_bytes = (sigsetsize == sizeof(uint64_t)) ? sizeof(uint64_t)
-						      : sizeof(sigset_t);
-	if (copy_from_user(&kset, mask, copy_bytes) != 0)
-		return -EFAULT;
-
-	saved_mask = current_process->signal_mask;
-	set_current_blocked(rt_sigaction_mask_from_sigset(&kset, sigsetsize));
-
-	for (;;)
-	{
-		/*
-		 * prepare_to_wait: mark BLOCKED before testing for a signal, so
-		 * one sent in between sets READY instead of being lost.
-		 */
-		process_set_sched_state(current_process, PROCESS_BLOCKED);
-		if (signal_pending(current_process))
-			break;
-		schedule();
-	}
-	process_set_sched_state(current_process, PROCESS_READY);
-
-	/*
-	 * Linux sigsuspend + set_restore_sigmask(): the handler runs with the
-	 * temporary mask still installed and its frame saves the caller's;
-	 * the syscall exit puts that back when no handler runs.
-	 */
-	current_process->saved_sigmask = saved_mask;
-	current_process->restore_sigmask = 1;
-	return -ERESTARTNOHAND;
-}
-
-/*
- * sys_tkill — Linux tkill(2) (x86-64 NR 200). musl raise()/abort() use this
- * rather than kill(2) or tgkill(2). Without it, abort() sees -ENOSYS and falls
- * through to a_crash() (hlt) → #GP delivered as SIGSEGV.
- */
-int64_t sys_tkill(pid_t tid, int sig)
-{
-	process_t *p;
-
-	if (!current_process)
-		return -ESRCH;
-	if (sig < 0 || sig >= _NSIG)
-		return -EINVAL;
-	if (tid <= 0)
-		return -EINVAL;
-
-	p = process_find_by_pid(tid);
-	if (!p)
-		return -ESRCH;
-	if (sig == 0)
-		return 0;
-	if (send_signal(tid, sig) != 0)
-		return -ESRCH;
-	return 0;
-}
-
-int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig)
-{
-	process_t *p;
-
-	if (!current_process)
-		return -ESRCH;
-	if (sig < 0 || sig >= _NSIG)
-		return -EINVAL;
-
-	p = process_find_by_pid(tid);
-	if (!p || p->tgid != tgid)
-		return -ESRCH;
-	if (sig == 0)
-		return 0;
-	if (send_signal(tid, sig) != 0)
-		return -ESRCH;
-	return 0;
-}
-
-struct robust_list_head
-{
-	void *list;
-	long futex_offset;
-	void *list_op_pending;
-};
-
-/* Robust futex list (set_robust_list / get_robust_list / exit walk). */
-
-int64_t sys_set_robust_list(struct robust_list_head *head, size_t len)
-{
-	if (!current_process)
-		return -ESRCH;
-
-	if (len != sizeof(struct robust_list_head))
-		return -EINVAL;
-
-	if (head && current_process->mode == USER_MODE)
-	{
-		if (!access_ok(head, sizeof(struct robust_list_head)))
-			return -EFAULT;
-	}
-
-	current_process->robust_list = head;
-	return 0;
-}
-
-int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,
-			    size_t *len_ptr)
-{
-	process_t *target = current_process;
-	struct robust_list_head *head;
-	size_t len = sizeof(struct robust_list_head);
-
-	if (!current_process)
-		return -ESRCH;
-	if (pid != 0 && pid != (int)current_process->task.pid)
-		return -ESRCH;
-	if (!head_ptr || !len_ptr)
-		return -EFAULT;
-
-	/* Linux get_robust_list(): the length is written first. */
-	head = target->robust_list;
-	if (copy_to_user(len_ptr, &len, sizeof(len)) != 0)
-		return -EFAULT;
-	if (copy_to_user(head_ptr, &head, sizeof(head)) != 0)
-		return -EFAULT;
-	return 0;
-}
-
-/**
- * Best-effort robust futex exit: wake one waiter on the pending/list head
- * word if present (Linux FUTEX_OWNER_DIED subset deferred to full walk).
- */
-void process_exit_robust_list(process_t *p)
-{
-	struct robust_list_head kh;
-	int *uaddr;
-	int uval;
-	int copy_ret;
-
-	if (!p || !p->robust_list)
-		return;
-
-	if (p->mode == USER_MODE)
-	{
-		copy_ret = copy_from_user_mm(process_pgd(p),
-					     (uintptr_t)p->robust_list, &kh,
-					     sizeof(kh));
-		if (copy_ret != 0)
-		{
-			p->robust_list = NULL;
-			return;
-		}
-	}
-	else
-	{
-		kh = *p->robust_list;
-	}
-
-	uaddr = (int *)kh.list_op_pending;
-	if (!uaddr)
-		uaddr = (int *)kh.list;
-	/*
-	 * Linux handle_futex_death(): read the futex word through the dying
-	 * task's mm first; a word it cannot read wakes nobody.
-	 */
-	if (uaddr && p->mode == USER_MODE &&
-	    copy_from_user_mm(process_pgd(p), (uintptr_t)uaddr, &uval,
-			      sizeof(uval)) == 0)
-		(void)ir0_futex_wake(uaddr, 1);
-
-	p->robust_list = NULL;
-	klog_smoke("ROBUST_LIST_EXIT_OK");
 }
 
 /* Session, process group, personality, and nice. */
@@ -1477,92 +1105,12 @@ int64_t sys_waitpid(pid_t pid, int *status, int options)
   return sys_wait4(pid, status, options, NULL);
 }
 
-/* kill(2) permission (Linux check_kill_permission(), uid subset). */
-static int kill_permitted(const process_t *target)
-{
-  return current_process->euid == 0 ||
-         current_process->euid == target->uid ||
-         current_process->euid == target->suid;
-}
-
-/*
- * sys_kill - Linux kill(2). pid > 0 names one process; 0 and < -1 name a
- * process group; -1 names every user process except init and the caller
- * (Linux kill_something_info()). Kernel tasks never receive signals.
- */
-int64_t sys_kill(pid_t pid, int signal)
-{
-  process_t *target;
-  process_t *scan;
-  pid_t pgid;
-  int count = 0;
-  int sent = 0;
-  int self = 0;
-
-  if (!current_process)
-    return -ESRCH;
-  if (signal < 0 || signal >= _NSIG)
-    return -EINVAL;
-
-  if (pid > 0)
-  {
-    target = process_find_by_pid(pid);
-    if (!target)
-      return -ESRCH;
-    if (!kill_permitted(target))
-      return -EPERM;
-    if (send_signal(pid, signal) != 0)
-      return -ESRCH;
-    return 0;
-  }
-
-  if (pid == INT32_MIN)
-    return -ESRCH;
-  pgid = (pid == 0) ? current_process->pgid : -pid;
-  for (scan = process_list; scan; scan = scan->next)
-  {
-    if (scan->mode != USER_MODE)
-      continue;
-    if (pid == -1)
-    {
-      if (scan->task.pid <= 1 || scan->tgid == current_process->tgid)
-        continue;
-    }
-    else if (scan->pgid != pgid)
-      continue;
-    count++;
-    if (!kill_permitted(scan))
-      continue;
-    /* The caller last: a fatal signal to itself does not return. */
-    if (scan == current_process)
-    {
-      self = 1;
-      continue;
-    }
-    /* A zombie still counts and takes the signal as a no-op (Linux). */
-    if (process_is_zombie(scan) || send_signal(scan->task.pid, signal) == 0)
-      sent++;
-  }
-
-  /*
-   * kill(-1) succeeds once any process qualified, even if permission was
-   * refused for all of them; a process group needs one delivery.
-   */
-  if (count == 0)
-    return -ESRCH;
-  if (self && send_signal(current_process->task.pid, signal) == 0)
-    sent++;
-  if (sent == 0 && pid != -1)
-    return -EPERM;
-  return 0;
-}
-
 /*
  * sys_prctl — Linux prctl(2), no_new_privs subset.
  * PR_SET_NO_NEW_PRIVS is one-way: once set it cannot be cleared, and it makes
  * every later execve ignore set-user-ID / set-group-ID bits.
  */
-/* prctl, futex, rlimit, getrandom. */
+/* prctl, set_tid_address, rlimit, getrandom. */
 
 int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
                   unsigned long arg4, unsigned long arg5)
@@ -1636,44 +1184,6 @@ int64_t sys_set_tid_address(int *tidptr)
   current_process->set_tid_ptr = tidptr;
   return (int64_t)current_process->task.pid;
 }
-int64_t sys_futex(int *uaddr, int op, int val, const struct timespec *timeout,
-                  int *uaddr2, int val3)
-{
-  int cur;
-  int cmd;
-
-  (void)timeout;
-  (void)uaddr2;
-  (void)val3;
-
-  if (!current_process)
-    return -ESRCH;
-
-  cmd = op & 0x7f; /* strip FUTEX_PRIVATE_FLAG / CLOCK_REALTIME bits */
-
-  /*
-   * FUTEX_WAKE reads nothing at @uaddr, so it checks the range itself;
-   * FUTEX_WAIT's copy does. Linux do_futex(): an unknown op is ENOSYS.
-   */
-  if (cmd == FUTEX_WAKE)
-  {
-    if (uaddr && !access_ok(uaddr, sizeof(int)))
-      return -EFAULT;
-    return (int64_t)ir0_futex_wake(uaddr, val);
-  }
-
-  if (cmd == FUTEX_WAIT)
-  {
-    if (copy_from_user(&cur, uaddr, sizeof(cur)) != 0)
-      return -EFAULT;
-    if (cur != val)
-      return -EAGAIN;
-    return (int64_t)ir0_futex_wait(current_process, uaddr, val);
-  }
-
-  return -ENOSYS;
-}
-
 /*
  * sys_getrandom - Non-cryptographic entropy for musl bring-up.
  */
@@ -1758,67 +1268,4 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
 int64_t sys_getrlimit(unsigned int resource, void *rlim)
 {
   return sys_prlimit64(0, resource, NULL, rlim);
-}
-
-/**
- * sys_sigreturn - Return from signal handler (rt_sigreturn)
- *
- * Restores CPU state saved at signal delivery. Never returns on success.
- *
- * Linux rt_sigreturn takes no argument: musl __restore_rt is just
- *   mov $__NR_rt_sigreturn, %eax; syscall
- * and the handler's return leaves the user stack pointer at our struct
- * sigframe. The frame is copied from there and from nowhere else; a frame
- * that cannot be copied in or does not validate ends in SIGSEGV.
- */
-int64_t sys_sigreturn(void)
-{
-  struct sigframe user_frame;
-  struct sigcontext *restore_ctx = &user_frame.ctx;
-  uint64_t user_sp;
-
-  if (!current_process)
-    return -ESRCH;
-
-  if (current_process->mode != USER_MODE)
-    return 0;
-
-  user_sp = process_syscall_sp(current_process);
-  if (copy_from_user(&user_frame, (const void *)(uintptr_t)user_sp,
-		     sizeof(user_frame)) != 0 ||
-      !signal_sigcontext_validate_and_sanitize(restore_ctx))
-  {
-    /* Linux force_sig(SIGSEGV), delivered on the way out. */
-    process_saved_context_clear(current_process);
-    current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);
-    return -EFAULT;
-  }
-
-  process_saved_context_clear(current_process);
-  set_current_blocked((uint32_t)user_frame.oldmask);
-  current_process->signal_mask_saved_valid = 0;
-  current_process->signal_frame_sp = 0;
-
-  /*
-   * Every register comes back, rcx/r11 included, so return through the
-   * full user-state path rather than the syscall exit. The syscall frame
-   * follows the restored context.
-   */
-  task_load_sigcontext(&current_process->task, restore_ctx);
-  signal_fill_syscall_frame_from_sigcontext(&current_process->syscall_frame,
-                                            restore_ctx);
-  /*
-   * Linux exit_to_user_mode() after rt_sigreturn: a signal the restored
-   * mask unblocks runs now, saving the restored context in its frame.
-   */
-  do_signal(current_process, restore_ctx);
-  process_apply_syscall_frame_to_task(&current_process->task,
-                                      &current_process->syscall_frame,
-                                      signal_sigcontext_return_value(restore_ctx));
-  process_restore_user_task_segments(current_process);
-  if (user_frame.signum > 0 && user_frame.signum < _NSIG)
-    ir0_console_after_tty_read_signal(user_frame.signum);
-  tls_restore_current();
-  switch_to_user_task(&current_process->task);
-  return 0;
 }

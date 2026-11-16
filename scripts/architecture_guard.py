@@ -158,13 +158,9 @@ PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
 
 KERNEL_HEADER_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]kernel/')
 
-# ARCH-STAB: thin passthrough headers pending API-only split (see DECOUPLING.md).
-FACADE_KERNEL_INCLUDE_ALLOWLIST = frozenset(
-    {
-        # process_t still leaks from kernel/process.h — split in a later oleada.
-        "includes/ir0/process.h",
-    }
-)
+# Facade headers allowed to pass a kernel/ header through. Empty: <ir0/process.h>
+# is the process header itself, not a passthrough to kernel/process.h.
+FACADE_KERNEL_INCLUDE_ALLOWLIST: frozenset[str] = frozenset()
 
 DRIVER_BLOCK_DEV_RAW_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s*[<"]drivers/storage/block_dev\.h[>"]'
@@ -207,6 +203,7 @@ DIRS_BLUETOOTH_INCLUDE_SCAN = [
     ROOT / "includes",
     ROOT / "interrupt",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "mm",
     ROOT / "net",
 ]
@@ -228,6 +225,7 @@ PORTABLE_DIRS_MM_NET_NO_ARCH = [
 PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "fs",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "mm",
     ROOT / "net",
     ROOT / "drivers",
@@ -304,7 +302,7 @@ def check_semantic_tls_contract():
 
 def check_process_fd_lifecycle_boundary():
     errors = []
-    for rel in ("kernel/process/files_struct.c", "kernel/process/fdtable.c"):
+    for rel in ("fs/files_struct.c", "fs/fdtable.c"):
         fpath = ROOT / rel
         for idx, line in enumerate(
             read_file_text(fpath).splitlines(),
@@ -469,7 +467,7 @@ def check_drivers_ir0_block_dev_only():
 
 SINGLE_DECL_TREES = (
     "arch", "block", "drivers", "fs", "includes", "ipc", "kernel", "ktm",
-    "mm", "net", "sched", "sound", "tests/ktm",
+    "mm", "net", "sched", "smp", "sound", "tests/ktm",
 )
 _DECL_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 _DECL_PP_RE = re.compile(r"^[ \t]*#(?:[^\n]*\\\n)*[^\n]*", re.M)
@@ -808,6 +806,7 @@ def check_ktm_no_fase_serial():
     fase_re = re.compile(r"\[FASE")
     scan_roots = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "drivers",
@@ -853,6 +852,7 @@ def check_klog_serial_print_allowlist():
     serial_re = re.compile(r"\bserial_print\s*\(")
     scan_roots = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "drivers",
@@ -962,6 +962,7 @@ PORTABLE_ISA_ASM_RE = re.compile(
 PORTABLE_ISA_TREES = (
     ROOT / "arch" / "common",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "net",
     ROOT / "includes" / "ir0",
     ROOT / "mm",
@@ -975,6 +976,7 @@ PORTABLE_ISA_ALLOWLIST: set[Path] = set()
 # ISA firmware headers must not leak into portable policy trees.
 PORTABLE_NO_ISA_FIRMWARE_TREES = (
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "fs",
     ROOT / "mm",
     ROOT / "net",
@@ -1257,8 +1259,8 @@ PROCESS_PGD_FIELD_RE = re.compile(
 )
 
 PROCESS_PGD_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
-    ROOT / "kernel" / "process" / "mm_struct.c",
+    ROOT / "includes" / "ir0" / "process.h",
+    ROOT / "mm" / "mm_struct.c",
     ROOT / "includes" / "ir0" / "mm_struct.h",
 }
 
@@ -1268,6 +1270,7 @@ def check_process_pgd_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1308,61 +1311,6 @@ def check_process_pgd_accessor():
     return errors
 
 
-PROCESS_SAVED_CONTEXT_RE = re.compile(
-    r"(?<![.\w])([A-Za-z_][A-Za-z0-9_]*)->saved_context\b"
-)
-
-PROCESS_SAVED_CONTEXT_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
-    ROOT / "kernel" / "process" / "saved_context.c",
-    ROOT / "kernel" / "process" / "create.c",
-    ROOT / "kernel" / "process" / "domains.c",
-}
-
-
-def check_process_saved_context_accessor():
-    """Fail if code touches process->saved_context outside signal/process paths."""
-    errors = []
-    trees = [
-        ROOT / "kernel",
-        ROOT / "mm",
-        ROOT / "fs",
-        ROOT / "net",
-        ROOT / "sched",
-        ROOT / "includes" / "ir0",
-        ROOT / "ktm",
-        ROOT / "interrupt",
-        ROOT / "drivers",
-    ]
-    for base in trees:
-        if not base.is_dir():
-            continue
-        for fpath in iter_c_files(base):
-            if fpath in PROCESS_SAVED_CONTEXT_ALLOWLIST:
-                continue
-            if fpath.suffix not in (".c", ".h"):
-                continue
-            try:
-                rel = rel_to_root(fpath)
-            except ValueError:
-                continue
-            try:
-                lines = read_file_text(fpath).splitlines()
-            except Exception as exc:
-                errors.append(f"[read-error] {fpath}: {exc}")
-                continue
-            for idx, line in enumerate(lines, 1):
-                if _line_is_comment_only(line):
-                    continue
-                if PROCESS_SAVED_CONTEXT_RE.search(line):
-                    errors.append(
-                        f"[process-saved-context-accessor] {rel}:{idx}: "
-                        f"no direct process->saved_context "
-                        f"(use signal/process helpers): {line.strip()}"
-                    )
-    return errors
-
-
 RETIRED_SIGNAL_RESUME_RE = re.compile(
     r"\b(handle_signals|signals_prepare_user_return|"
     r"signals_pause_should_interrupt|signals_should_handle_on_run|"
@@ -1391,6 +1339,7 @@ def check_signal_resume_retired():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
         ROOT / "net",
@@ -1414,7 +1363,7 @@ PROCESS_WAIT_FIELD_RE = re.compile(
 )
 
 PROCESS_WAIT_FIELD_ALLOWLIST = {
-    ROOT / "kernel" / "process.h",
+    ROOT / "includes" / "ir0" / "process.h",
     ROOT / "kernel" / "process" / "wait_state.c",
 }
 
@@ -1424,6 +1373,7 @@ def check_process_wait_state_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1487,6 +1437,7 @@ def check_syscall_frame_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
         ROOT / "net",
@@ -1614,6 +1565,7 @@ CONTEXT_BACKEND_INCLUDE_ALLOW = {
 PORTABLE_NO_ARCH_CALL_TREES = [
     ROOT / "mm",
     ROOT / "kernel",
+    ROOT / "smp",
     ROOT / "fs",
     ROOT / "net",
     ROOT / "sched",
@@ -1894,7 +1846,7 @@ def check_common_c_has_no_isa_conditionals():
     )
     roots = (ROOT / "drivers", ROOT / "fs", ROOT / "interrupt",
              ROOT / "kernel", ROOT / "ktm", ROOT / "mm", ROOT / "net",
-             ROOT / "sched", ROOT / "ipc")
+             ROOT / "sched", ROOT / "smp", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -1990,7 +1942,7 @@ def check_portable_task_api_has_no_x86_register_aliases():
     errors = []
     forbidden = re.compile(r"\btask_(?:get|set)_(?:rdi|rsi|rdx)\s*\(")
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "ipc")
+             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -2026,8 +1978,8 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
     }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "fs", ROOT / "drivers",
-             ROOT / "ipc")
+             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "fs",
+             ROOT / "drivers", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -2078,8 +2030,8 @@ def check_common_address_space_contracts():
         "includes/ir0/ktm/user_canary.h",
         "mm/shmem/memfd.c",
         "ipc/sysv_shm.c",
-        "kernel/vdso.c",
-        "kernel/process/mm_struct.c",
+        "kernel/exec/vdso.c",
+        "mm/mm_struct.c",
         "ktm/user_canary.c",
     )
 
@@ -2104,7 +2056,7 @@ def check_common_elf_uses_isa_policy():
         r"R_AARCH64_[A-Z0-9_]+)\b"
     )
     paths = [ROOT / "kernel", ROOT / "mm", ROOT / "fs", ROOT / "net", ROOT / "sched",
-             ROOT / "ipc"]
+             ROOT / "smp", ROOT / "ipc"]
 
     for base in paths:
         for path in iter_c_files(base):
@@ -2318,6 +2270,7 @@ def check_ktm_mock_boundaries():
         ROOT / "drivers",
         ROOT / "fs",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "net",
         ROOT / "sched",
@@ -2471,6 +2424,7 @@ def check_errno_has_single_catalog():
         ROOT / "interrupt",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "mm",
         ROOT / "net",
         ROOT / "sched",
@@ -2530,6 +2484,7 @@ def check_uaccess_single_api():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
         ROOT / "net",
@@ -2589,6 +2544,7 @@ def check_kmem_single_api():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
         ROOT / "net",
@@ -2622,7 +2578,7 @@ def check_kmem_single_api():
 # branch that fixes an offender deletes its line in the same commit.
 REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
 REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
-                       "mm", "net", "sched")
+                       "mm", "net", "sched", "smp")
 REGISTER_NAME_ISA_HEADERS = frozenset(
     {
         "arch_syscall_frame_arm64.h",
@@ -2770,8 +2726,8 @@ def _register_name_self_test() -> list[str]:
 
 # Terminal halt: the only callers of cpu_halt() (Linux stop_this_cpu users).
 TERMINAL_HALT_CALLERS = frozenset((
-    "kernel/oops.c",
-    "kernel/kexec.c",
+    "kernel/problems/oops.c",
+    "kernel/power/kexec.c",
     "kernel/power/power_manag.c",
 ))
 TERMINAL_HALT_HEADER = "includes/ir0/oops_port.h"
@@ -2783,7 +2739,7 @@ RETIRED_WAIT_RE = re.compile(
 )
 CPU_HALT_RE = re.compile(r"\bcpu_halt\s*\(")
 BUSY_WAIT_TREES = ("arch", "drivers", "fs", "includes", "ipc", "kernel",
-                   "ktm", "mm", "net", "sched", "sound", "cpp", "tests")
+                   "ktm", "mm", "net", "sched", "smp", "sound", "cpp", "tests")
 
 
 def busy_wait_violations(rel: str, text: str) -> list[tuple[int, str]]:
@@ -2818,7 +2774,7 @@ def _busy_wait_self_test() -> list[str]:
         "fs/relax.c": ("void f(void)\n{\n\twhile (busy)\n\t\tcpu_relax();\n}\n",
                        [4]),
         "net/halt.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", [3]),
-        "kernel/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
+        "kernel/problems/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
         "includes/ir0/cpu.h": ("void cpu_halt(void);\n", [1]),
         "kernel/boot.c": ("\tkernel_idle_poll();\n", [1]),
     }
@@ -2855,7 +2811,7 @@ RAW_ATOMIC_RE = re.compile(
     r"\b(__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
     r"\s*\(")
 RAW_ATOMIC_TREES = ("block", "cpp", "drivers", "fs", "includes", "ipc",
-                    "kernel", "ktm", "mm", "net", "sched", "sound")
+                    "kernel", "ktm", "mm", "net", "sched", "smp", "sound")
 RAW_ATOMIC_BACKEND = "includes/asm-generic/atomic.h"
 RAW_ATOMIC_LEDGER: frozenset[str] = frozenset()
 
@@ -2989,7 +2945,7 @@ def check_retired_mm_headers():
 # line fails the guard instead of being ignored.
 RETIRED_API_LEDGER = ROOT / "scripts" / "retired_api_names.txt"
 RETIRED_API_TREES = ("arch", "block", "drivers", "fs", "includes", "ipc",
-                     "kernel", "ktm", "mm", "net", "sched", "sound")
+                     "kernel", "ktm", "mm", "net", "sched", "smp", "sound")
 _RETIRED_API_LINE_RE = re.compile(r"^([A-Za-z_]\w*)\s+(\S.*)$")
 
 
@@ -3231,7 +3187,6 @@ def main():
     errors.extend(check_portable_no_isa_firmware_headers())
     errors.extend(check_portable_no_task_arch_fields())
     errors.extend(check_process_pgd_accessor())
-    errors.extend(check_process_saved_context_accessor())
     errors.extend(check_signal_resume_retired())
     errors.extend(check_process_wait_state_accessor())
     errors.extend(check_syscall_frame_accessor())

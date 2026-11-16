@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | drivers, syscalls, devfs |
 | Man page | IR0-tty (section 7) |
-| Primary sources | `includes/ir0/console.c`, `includes/ir0/pty_devfs.h`, `kernel/console_backend.c`, `fs/devfs.c`, `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/video/console_renderer.c` |
+| Primary sources | `includes/ir0/console.c`, `includes/ir0/pty_devfs.h`, `drivers/tty/console_backend.c`, `fs/devfs.c`, `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/video/console_renderer.c` |
 
 > **Last verified:** 2026-09-18
 
@@ -26,7 +26,7 @@ Input arrives from the PS/2 keyboard path; output goes through
 | Layer | File | Role |
 |-------|------|------|
 | Line discipline | `includes/ir0/console.c` | canonical buffer, echo, termios |
-| Backend | `kernel/console_backend.c` | serial + typewriter dispatch |
+| Backend | `drivers/tty/console_backend.c` | serial + typewriter dispatch |
 | devfs | `fs/devfs.c` | `/dev/console` (id 3), `/dev/tty` (4), PTY multiplex, stdio aliases |
 | PTY facade | `includes/ir0/pty_devfs.h` | `/dev/ptmx` (43), `/dev/pts/0..7` (48–55), `DEVFS_PTY_MAX=8` |
 | Keyboard | `arch/x86-64/sources/interrupt/keyboard.c` | scancode → ASCII + input events |

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /** IR0 Kernel — ISA-neutral process lifecycle transitions. */
 
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <ir0/errno.h>
 #include <ir0/oops.h>
 #include <string.h>

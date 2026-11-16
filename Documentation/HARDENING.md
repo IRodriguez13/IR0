@@ -38,7 +38,7 @@ This document tracks **post-milestone sanitization** (not new features). Each sp
 | **MM soft-grow** | Removed heap/stack implicit +1 page on fault past VMA top | `mm/fault/page_fault.c` |
 | **IPC lock facade** | `includes/ir0/spinlock.h` on pipe read/write hot path | `kernel/lib/pipe.c` |
 | **PF debug portable** | x86 `pf_debug_*` moved to `arch/x86-64/sources/pf_debug.c` | `arch-guard` (no `arch_*` from `mm/`) |
-| **saved_context** | `kernel/process/saved_context.c` + arch-guard on `->saved_context` | `scripts/architecture_guard.py` |
+| **saved_context** | Retired: `rt_sigreturn` restores only from the user sigframe; the accessor names are in `scripts/retired_api_names.txt` | `scripts/architecture_guard.py` `[retired-api]` |
 
 **Gates:** `kernel-x64.bin`, `arch-guard`, `build-matrix-min`, `tests/host` 43/43, `smoke-sb16-probe`.
 

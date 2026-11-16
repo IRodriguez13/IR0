@@ -65,62 +65,7 @@ typedef uint32_t ip4_addr_t;
 /* MAC Address type */
 typedef uint8_t mac_addr_t[6];
 
-/* --- Networking Abstraction Layer --- */
-
-/*
- * Linux uapi netdevice flags (include/uapi/linux/if.h).
- * BusyBox ifconfig/route interpret these bits; IR0 must match.
- */
-#define IFF_UP          0x1
-#define IFF_BROADCAST   0x2
-#define IFF_DEBUG       0x4
-#define IFF_LOOPBACK    0x8
-#define IFF_POINTOPOINT 0x10
-#define IFF_NOTRAILERS  0x20
-#define IFF_RUNNING     0x40
-#define IFF_NOARP       0x80
-#define IFF_PROMISC     0x100
-#define IFF_ALLMULTI    0x200
-#define IFF_MULTICAST   0x1000
-
-struct net_device
-{
-    const char *name;
-    mac_addr_t mac;
-    uint32_t flags;
-    size_t mtu;
-    void *priv; /* Driver private data */
-
-    /* Driver operations */
-    int (*send)(struct net_device *dev, void *data, size_t len);
-    void (*poll)(struct net_device *dev);
-    int (*get_irq_line)(struct net_device *dev);
-    int (*handle_irq)(struct net_device *dev, uint8_t irq);
-    void (*get_stats)(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
-                      uint64_t *rx_errs, uint64_t *tx_errs);
-    /* Optional; NULL → sysfs reports 0 bytes (packets may still be non-zero). */
-    void (*get_byte_stats)(struct net_device *dev, uint64_t *rx_bytes,
-			   uint64_t *tx_bytes);
-
-    /*
-     * Receive counters exported by /proc/net/dev. rx_dropped and rx_multicast
-     * are maintained by the core receive path; rx_fifo_errors is driver owned
-     * (hardware FIFO/ring overrun), left at 0 by drivers that cannot detect it.
-     */
-    uint64_t rx_dropped;
-    uint64_t rx_fifo_errors;
-    uint64_t rx_multicast;
-
-    struct net_device *next;
-};
-
-/* Core Networking API */
-int net_register_device(struct net_device *dev);
-void net_unregister_device(struct net_device *dev);
-struct net_device *net_get_devices(void);
-
-/* Driver to Protocol */
-void net_receive(struct net_device *dev, const void *data, size_t len);
+struct net_device;
 
 /* Network Stack Initialization */
 int init_net_stack(void);
@@ -128,11 +73,17 @@ int init_net_stack(void);
 int net_stack_probe_drivers(void);
 int net_stack_post_irq_init(void);
 
-/* Network Polling (for receiving packets when not actively waiting) */
-void net_poll(void);
+/*
+ * Run every device's ndo_poll_controller: receive without waiting for an
+ * interrupt (idle loop, protocol waits).
+ */
 void net_stack_poll(void);
 
-/* Driver-agnostic IRQ and stats helpers for kernel core callsites */
+/*
+ * x86 PIC bridge until its ISR calls irq_dispatch(): the first NIC IRQ line
+ * to unmask, and the per-interrupt hook that dispatches NIC lines and polls
+ * the devices that have none.
+ */
 int net_stack_get_irq_line(void);
 int net_stack_handle_irq(uint8_t irq);
 

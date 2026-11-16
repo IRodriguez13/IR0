@@ -602,7 +602,7 @@ menu "Debugging"
         default n
         help
           Links ktm/mocks/console/ktm_console_mock.c instead of
-          kernel/console_backend.c. Records console output and exercises
+          drivers/tty/console_backend.c. Records console output and exercises
           framebuffer/serial-mirror branches without touching VGA or COM1.
           Never enable in product images.
 

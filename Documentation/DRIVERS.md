@@ -7,7 +7,7 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 
 ## Registry and Bootstrap
 
-- Registry API: `includes/ir0/driver.h`, implementation in `kernel/driver_registry.c`.
+- Registry API: `includes/ir0/driver.h`, implementation in `drivers/core/driver_registry.c`.
 - Bootstrap orchestration: `drivers/init_drv.c` and `drivers/driver_bootstrap.c`.
 - `init_all_drivers()` is the single runtime entry point for staged init.
 - Config-selected boot drivers are gated by `CONFIG_INIT_*` options.

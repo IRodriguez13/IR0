@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
-#include "process.h"
+#include <ir0/process.h>
 #include "syscalls.h"
 #include <ir0/arch_cpu.h>
 #include <ir0/errno.h>

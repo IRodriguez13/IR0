@@ -11,7 +11,7 @@
  * Description: Current-task credential accessors and path access checks.
  */
 
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <fs/vfs.h>
 #include <ir0/credentials.h>
 #include <ir0/path_routed.h>

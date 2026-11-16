@@ -195,7 +195,7 @@ diagnóstico — aceptable en T0, no ideal a largo plazo.
 | Proceso | `cwd` por proceso; tabla fd; contexto `/proc/[pid]/` |
 | Drivers | ops devfs → block, net, fb, input vía facades |
 | Config | `CONFIG_ENABLE_FS_*`, `CONFIG_ROOT_*` |
-| Layout root | `kernel/rootfs_base.c` crea `/dev`, `/proc`, … con `vfs_mkdir` |
+| Layout root | `kernel/boot/rootfs_base.c` crea `/dev`, `/proc`, … con `vfs_mkdir` |
 
 ## 7. Mapas visuales
 

@@ -7,7 +7,7 @@
 | Status | stable (product: runit only; dbgshell removed) |
 | Depends on | memory, drivers, vfs, process |
 | Man page | IR0-boot (section 7) |
-| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
+| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/exec/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Overview
 
@@ -25,12 +25,12 @@ dbgshell / `debug_bins/` path was **removed** (2026-07-25); see
 | Loader entry | Multiboot check, PAE, long mode | `arch/x86-64/asm/boot_x64.asm` |
 | Early CPU | GDT, TSS, SSE, **early IDT** | `arch/x86-64/sources/early.c`, `arch/x86-64/sources/interrupt/early_idt.c`, `arch/x86-64/asm/interrupt/early_idt_stubs.asm` |
 | Kernel entry | Orchestration + boot phases | `kernel/main.c` (`kmain`) |
-| Log profile | Kconfig + `ir0.loglevel=` cmdline | `kernel/cmdline.c` |
+| Log profile | Kconfig + `ir0.loglevel=` cmdline | `kernel/boot/cmdline.c` |
 | Event core | `klog_record` + early clock | `ktm/klog.c`, `arch_early_clock_*` |
 | Drivers | Staged bootstrap + probe events | `drivers/init_drv.c` |
 | Root FS | Mount table init | `fs/vfs.c` (`vfs_init_root`) |
 | Bare-metal milestone | `/etc/ir0-baremetal-booted` | `kernel/main.c` (post-VFS) |
-| Userspace | ELF load + schedule | `kernel/elf_loader.c` (`kexecve`) |
+| Userspace | ELF load + schedule | `kernel/exec/elf_loader.c` (`kexecve`) |
 
 **Early paging (`boot_x64.asm`):** identity map 0–48 MiB with 2 MiB pages;
 optional framebuffer window at `0xFD000000`. Stack at `0x8FF00`; Multiboot info

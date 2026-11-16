@@ -67,7 +67,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
 | `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). The user syscall stubs live in `arch/<isa>/include/asm/syscall_user.h`. |
-| `no-raw-atomics` | `block/`, `cpp/`, `drivers/`, `fs/`, `includes/`, `ipc/`, `kernel/`, `ktm/`, `mm/`, `net/`, `sched/`, `sound/` | No `__atomic_*`, `__sync_*` or inline asm outside `arch/` and `includes/asm-generic/atomic.h`; use **`<ir0/atomic.h>`** (`atomic_t`, `cmpxchg`, `test_and_set_bit_lock`, `barrier`). Empty exception ledger, injected-violation self-test. |
+| `no-raw-atomics` | `block/`, `cpp/`, `drivers/`, `fs/`, `includes/`, `ipc/`, `kernel/`, `ktm/`, `mm/`, `net/`, `sched/`, `smp/`, `sound/` | No `__atomic_*`, `__sync_*` or inline asm outside `arch/` and `includes/asm-generic/atomic.h`; use **`<ir0/atomic.h>`** (`atomic_t`, `cmpxchg`, `test_and_set_bit_lock`, `barrier`). Empty exception ledger, injected-violation self-test. |
 | `usercopy-no-cr3-memcpy` | `kernel/syscalls/**`, `kernel/lib/signals.c` | No `load_page_directory` + raw `memcpy((void *)` / `memset((void *)` in the same function; use **`copy_*_user` / region helpers** ([`uaccess.md`](uaccess.md)). |
 | `usercopy-signals` | `kernel/lib/signals.c` | No `memcpy((void *)` (signal frame must use region copy). |
 | `usercopy-sys-uname` | `sys_uname` | No `memset(buf` / `strncpy(buf->`; bounce + **`copy_to_user`**. |
@@ -127,7 +127,7 @@ specific driver implementation file:
 | IRQ subsystem | **`irq.h`** | Boot IDT/PIC/GIC + keyboard poll; not arch interrupt backend headers from portable/drivers |
 | UP spinlock | **`spinlock.h`** (`ir0_spinlock_t`; irq-save on UP) | Hot paths e.g. `kernel/lib/pipe.c` read/write |
 | Page-fault debug | **`arch_pf_debug.h`** (`pf_debug_*`; x86 frame layout) | `mm/fault/page_fault.c` calls; impl in `arch/*/sources/pf_debug.c` |
-| Signal sigreturn ctx | `process_saved_context_*()` in `process.h` | Only `kernel/process/saved_context.c` may touch `->saved_context` |
+| Signal sigreturn ctx | user `struct sigframe` only | No kernel copy; `process_saved_context_*` are retired names (`scripts/retired_api_names.txt`) |
 | Context switch | **`context.h`** | `switch_to` / kernel stack handoff |
 | MM root layout | **`arch_mm.h`** | User/kernel half of page-table root |
 | Resources | `resource_registry.h` | IRQ / I/O port registration from drivers |
@@ -150,7 +150,7 @@ Implementations may include drivers from `.c` adapters (`input_backend.c`,
 
 | Mechanism | Types / APIs | Purpose |
 |-----------|----------------|---------|
-| **Driver registry** | `ir0_driver_ops_t`, `ir0_register_driver()` | Lifecycle + generic I/O; see `kernel/driver_registry.c`. |
+| **Driver registry** | `ir0_driver_ops_t`, `ir0_register_driver()` | Lifecycle + generic I/O; see `drivers/core/driver_registry.c`. |
 | **Block devices** | `ir0_block_ops` / `ir0_block_register()` | Sector I/O; ATA/AHCI/virtio register via facade. |
 | **Filesystems** | `struct vfs_ops`, `vfs_fstype` | Mountable FS plugins (`minix_fs.c`, `tmpfs.c`, `simplefs.c`, …). |
 | **Character devices** | `devfs_ops_t`, `devfs_register_node()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
@@ -165,7 +165,7 @@ Implementations may include drivers from `.c` adapters (`input_backend.c`,
 | Block storage | `ir0_block_*` registered by name |
 | `/dev` node I/O | `devfs_ops_t` per node |
 | Mountable filesystem | `struct vfs_ops` + fstype registration |
-| Network NIC | `struct net_device` vtable in `ir0/net.h` |
+| Network NIC | `struct net_device` + `const struct net_device_ops` in `ir0/netdevice.h`; drivers export only a `struct net_driver` table entry |
 | Bluetooth to VFS | `ir0_bt_*` facade functions |
 | `/proc` or `/sys` file | FD dispatch in `fs/procfs.c` / `fs/sysfs.c` (legacy) |
 

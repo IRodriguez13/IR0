@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | boot, process, syscalls |
 | Man page | ir0-mm (section 7) |
-| Primary sources | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/elf_loader.c`, `arch/x86-64/sources/fault.c` |
+| Primary sources | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/exec/elf_loader.c`, `arch/x86-64/sources/fault.c` |
 
 > **Last verified:** 2026-07-10  
 > **Source of truth:** `mm/paging/paging.c` (`copy_process_memory`), `mm/alloc/pmm.c` (`pmm_frame_get`/`put`), `arch/x86-64/sources/fault.c`, `make smoke-mm-cow-lazy`
@@ -29,7 +29,7 @@ PML4s for user processes.
 | Paging | `mm/paging/paging.c` | `map_page_in_directory`, fork share-on-fork (`PAGE_COW`), OOM audit |
 | Fault | `arch/x86-64/sources/fault.c` | Lazy heap/stack fill; write-fault COW break |
 | Syscalls | `kernel/syscalls/mm_syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap`, `sys_mprotect` |
-| ELF | `kernel/elf_loader.c` | PT_LOAD via `map_user_region_in_directory` |
+| ELF | `kernel/exec/elf_loader.c` | PT_LOAD via `map_user_region_in_directory` |
 
 **Fixed layout (`config.h` / boot):**
 

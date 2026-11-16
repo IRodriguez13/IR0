@@ -21,7 +21,7 @@ iretq_checkpoint_buf:
 fork_flow_set_tf:
     resb 1
 
-; fork_restore_audit_t offsets (must match kernel/process.c)
+; fork_restore_audit_t offsets (blob size: arch/x86-64/sources/fork_asm_hooks.c)
 %define FRA_magic                  0
 %define FRA_task_ptr               8
 %define FRA_rax_slot_addr          16
@@ -297,7 +297,7 @@ switch_context_x64:
 
     ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x140).
     ; task is at offset 0 of process_t, so r11 (=&task) doubles as process_t*.
-    ; Guarded by _Static_assert in kernel/process.h.
+    ; Guarded by _Static_assert in includes/ir0/process.h.
     push rax
     push rcx
     push rdx
@@ -443,7 +443,7 @@ switch_to_user_task_asm:
 
     ; FASE 18: restore IA32_FS_BASE from process_t->fs_base (offset 0x140).
     ; task is at offset 0 of process_t, so r11 doubles as process_t*.
-    ; Guarded by _Static_assert in kernel/process.h.
+    ; Guarded by _Static_assert in includes/ir0/process.h.
     push rax
     push rcx
     push rdx

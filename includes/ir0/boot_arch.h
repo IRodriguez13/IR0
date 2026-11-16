@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_arch.h
- * Description: Portable boot hooks — ISA implements without #ifdef in kernel/boot_init.c.
+ * Description: Portable boot hooks — ISA implements without #ifdef in kernel/boot/boot_init.c.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

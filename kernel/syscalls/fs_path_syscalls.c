@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <kernel/syscalls.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include "fs_path_syscalls.h"
 #include "syscalls_glue.h"
 #include <config.h>
@@ -34,7 +34,6 @@
 #include <ir0/utimens.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/utsname.h>
-#include <ir0/utsname_info.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
 #include <ir0/statfs.h>

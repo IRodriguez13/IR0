@@ -25,7 +25,7 @@
 #include <ir0/bpivot.h>
 #include <ir0/copy_user.h>
 #include <ir0/early_rootfs.h>
-#include <rootfs_base.h>
+#include <ir0/rootfs_base.h>
 #endif
 
 extern volatile uintptr_t arm64_firmware_fdt;

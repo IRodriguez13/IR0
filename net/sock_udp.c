@@ -19,6 +19,7 @@
 #include <ir0/errno.h>
 #include <ir0/clock.h>
 #include <ir0/net.h>
+#include <ir0/netdevice.h>
 #include <ir0/arch_port.h>
 #include <config.h>
 #include <string.h>
@@ -424,7 +425,7 @@ int sock_udp_sendto(struct sock_udp *sock, uint32_t dest_ip_be, uint16_t dest_po
 		return (int)len;
 	}
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (!dev)
 		return -ENETUNREACH;
 

@@ -12,7 +12,7 @@ CFLAGS    := -Wall -Wextra -g -I. -I$(KERNEL_ROOT) \
 	-idirafter $(KERNEL_ROOT)/kernel -idirafter $(KERNEL_ROOT)/includes
 LDFLAGS   =
 
-KERNEL_SRC = $(KERNEL_ROOT)/kernel/resource_registry.c
+KERNEL_SRC = $(KERNEL_ROOT)/drivers/core/resource_registry.c
 KERNEL_OBJ = resource_registry.o
 TEST_SRCS  = runner.c test_resource_registry.c
 TEST_OBJS  = $(TEST_SRCS:.c=.o)

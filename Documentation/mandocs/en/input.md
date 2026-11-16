@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | interrupts, tty, drivers |
 | Man page | IR0-input (section 7) |
-| Primary sources | `kernel/input_events.c`, `includes/ir0/input.c`, `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/input/ps2_mouse.c`, `fs/devfs.c` |
+| Primary sources | `drivers/input/input_events.c`, `includes/ir0/input.c`, `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/input/ps2_mouse.c`, `fs/devfs.c` |
 
 ## 1. Overview
 

@@ -97,9 +97,6 @@ int copy_process_memory(struct process *parent, struct process *child)
                             paging_install_pte(child_root, virt_addr,
                                                page_entry) != 0)
                         {
-                            extern void process_unmap_user_pages_all(
-                                address_space_root_t root, void *reclaim_stats);
-
                             (void)ir0_swap_drop_pte(page_entry);
                             process_unmap_user_pages_all(child_root, NULL);
                             return -1;
@@ -133,9 +130,6 @@ int copy_process_memory(struct process *parent, struct process *child)
                     if (map_page_in_directory(child_root, virt_addr,
                                               parent_phys, flags) != 0)
                     {
-                        extern void process_unmap_user_pages_all(
-                            address_space_root_t root, void *reclaim_stats);
-
                         process_unmap_user_pages_all(child_root, NULL);
                         return -1;
                     }

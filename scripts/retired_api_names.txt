@@ -2,7 +2,7 @@
 #
 # Checked by scripts/architecture_guard.py [retired-api]: a listed name may
 # not appear in kernel C sources (arch block drivers fs includes ipc kernel
-# ktm mm net sched sound). Append the names a convergence deletes in the
+# ktm mm net sched smp sound). Append the names a convergence deletes in the
 # same commit; never delete a line to bring a name back.
 
 # Time and clock (includes/ir0/clock.h, early_clock.h, early_time.h, rtc.h)
@@ -183,9 +183,33 @@ icmp_get_echo_result icmp_get_next_echo_result()
 IP_HEADER_LEN IP_IHL() * 4
 ip_format_addr IP4_FMT and IP4_ARGS() with snprintf()
 make_ip4_addr ip_make_addr() (net/ip.h)
-net_stack_get_stats the per-device net_device.get_stats op
+net_stack_get_stats the per-device net_device.stats counters
 net_unregister_protocol (nothing; protocols are registered once at boot)
-rtl8139_get_mac (nothing; the MAC lives in net_device.mac)
+rtl8139_get_mac (nothing; the MAC lives in net_device.dev_addr)
 sock_stream_connect_inet sock_stream_connect_inet_flags()
 sock_stream_is_recv_shutdown (nothing; it had no callers)
 sock_stream_rights_push sock_stream_rights_push_batch()
+# NIC class API (includes/ir0/netdevice.h): every driver fills one
+# struct net_device and its net_device_ops; callers never see a driver.
+net_get_devices first_net_device() / for_each_netdev() / dev_get_by_name()
+net_poll net_stack_poll()
+net_receive netif_rx()
+net_register_device alloc_etherdev() + register_netdev()
+net_unregister_device unregister_netdev()
+bcmgenet_init (nothing; drivers/net/net_drivers.c probes bcmgenet_driver)
+rtl8139_init (nothing; drivers/net/net_drivers.c probes rtl8139_driver)
+virtio_net_init (nothing; drivers/net/net_drivers.c probes virtio_net_driver)
+
+# Signals: rt_sigreturn restores only from the user sigframe and handlers
+# nest, so there is no kernel-side copy of the interrupted context.
+process_saved_context_attach (nothing; the user sigframe holds the context)
+process_saved_context_clear (nothing; the user sigframe holds the context)
+process_saved_context_init (nothing; the user sigframe holds the context)
+process_saved_context_peek (nothing; the user sigframe holds the context)
+process_saved_context_present (nothing; handlers nest)
+
+# Exec read trace: the MINIX whole-file read it traced is gone.
+exec_read_trace_minix_block (nothing; minix_fs_read_file was deleted)
+exec_read_trace_minix_eio (nothing; minix_fs_read_file was deleted)
+exec_read_trace_minix_file_begin (nothing; minix_fs_read_file was deleted)
+exec_read_trace_minix_zones (nothing; minix_fs_read_file was deleted)

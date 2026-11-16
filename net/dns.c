@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ir0/spinlock.h>
+#include <ir0/netdevice.h>
 
 /* DNS Header Structure (RFC 1035) */
 struct dns_header {
@@ -379,7 +380,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     }
     
     /* Get network device */
-    struct net_device *dev = net_get_devices();
+    struct net_device *dev = first_net_device();
     if (!dev)
     {
         LOG_ERROR("DNS", "No network device available");
@@ -536,7 +537,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
          */
         if (current_time - last_poll_time >= poll_interval_ms)
         {
-            net_poll();
+            net_stack_poll();
             last_poll_time = current_time;
         }
         
@@ -615,7 +616,7 @@ int dns_init(void)
      */
     
     /* Get network device */
-    struct net_device *dev = net_get_devices();
+    struct net_device *dev = first_net_device();
     if (!dev)
     {
         LOG_WARNING("DNS", "No network device available, DNS will work when device is registered");

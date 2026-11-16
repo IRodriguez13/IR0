@@ -26,6 +26,7 @@
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/net.h>
+#include <ir0/netdevice.h>
 #include <ir0/process_limits.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
@@ -294,13 +295,28 @@ void ktest_sysfs_max_processes_contract(void)
 	KTEST_END();
 }
 
+#if CONFIG_ENABLE_NETWORKING
+static int ktest_netdev_xmit(struct net_device *dev, const void *frame,
+			     size_t len)
+{
+	(void)dev;
+	(void)frame;
+	(void)len;
+	return 0;
+}
+
+static const struct net_device_ops ktest_netdev_ops = {
+	.ndo_start_xmit = ktest_netdev_xmit,
+};
+#endif
+
 void ktest_proc_netinfo_contract(void)
 {
 	KTEST_BEGIN("proc_netinfo_contract");
 
 	int64_t fd = sys_open("/proc/netinfo", O_RDONLY, 0);
 #if CONFIG_ENABLE_NETWORKING
-	struct net_device fake;
+	struct net_device *fake = alloc_etherdev(0);
 	char buf[256];
 	int64_t n;
 	const char *line;
@@ -313,14 +329,21 @@ void ktest_proc_netinfo_contract(void)
 	 * empty read proves nothing.  Register a fake device (unregistered
 	 * before returning) and require its exact tab-separated row.
 	 */
-	memset(&fake, 0, sizeof(fake));
-	fake.name = "ktest0";
-	fake.mtu = 1500;
-	fake.flags = IFF_UP | IFF_RUNNING | IFF_BROADCAST;
-	fake.mac[0] = 0x02;
-	fake.mac[5] = 0x01;
+	KASSERT(fake != NULL);
+	if (!fake)
+	{
+		if (fd > 0)
+			sys_close((int)fd);
+		KTEST_END();
+		return;
+	}
+	fake->name = "ktest0";
+	fake->dev_addr[0] = 0x02;
+	fake->dev_addr[5] = 0x01;
+	fake->netdev_ops = &ktest_netdev_ops;
 
-	KASSERT_EQ(net_register_device(&fake), 0);
+	KASSERT_EQ(register_netdev(fake), 0);
+	KASSERT_EQ(dev_open(fake), 0);
 	KASSERT_GT(fd, 0);
 	if (fd > 0)
 	{
@@ -347,7 +370,8 @@ void ktest_proc_netinfo_contract(void)
 		}
 		KASSERT(found);
 	}
-	net_unregister_device(&fake);
+	unregister_netdev(fake);
+	free_netdev(fake);
 
 	/* The row must disappear once the device is gone. */
 	fd = sys_open("/proc/netinfo", O_RDONLY, 0);

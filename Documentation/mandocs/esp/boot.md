@@ -7,7 +7,7 @@
 | Estado | stable (producto: solo runit; dbgshell eliminado) |
 | Depende de | memory, drivers, vfs, process |
 | Página man | IR0-boot (sección 7) |
-| Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
+| Fuentes principales | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/exec/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Visión general
 
@@ -30,7 +30,7 @@ habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit desde
 | Drivers | Bootstrap por etapas + probe events | `drivers/init_drv.c` |
 | FS raíz | Init de tabla de montajes | `fs/vfs.c` (`vfs_init_root`) |
 | Milestone bare-metal | `/etc/ir0-baremetal-booted` | `kernel/main.c` (post-VFS) |
-| Userspace | Carga ELF + schedule | `kernel/elf_loader.c` (`kexecve`) |
+| Userspace | Carga ELF + schedule | `kernel/exec/elf_loader.c` (`kexecve`) |
 
 **Paginación temprana (`boot_x64.asm`):** mapa de identidad 0–48 MiB con páginas
 de 2 MiB; ventana opcional de framebuffer en `0xFD000000`. Pila en `0x8FF00`;

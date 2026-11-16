@@ -59,7 +59,6 @@ int process_signals_clone(process_t *dst, const process_t *src)
 		dst->signal_sa_mask[i] = src->signal_sa_mask[i];
 		dst->signal_restorer[i] = src->signal_restorer[i];
 	}
-	process_saved_context_init(dst);
 	dst->restore_sigmask = 0;
 	return 0;
 }

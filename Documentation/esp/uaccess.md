@@ -121,7 +121,7 @@ Ventana x86-64: `0x00400000` … `0x00007FFFFFFFFFFF` en
 
 | Área | Archivo | Patrón actual |
 |------|---------|---------------|
-| Frames / `siginfo` | `kernel/signals.c` | `copy_to_user_mm(process_pgd(p), …)` |
+| Frames / `siginfo` | `kernel/signals/signals.c` | `copy_to_user_mm(process_pgd(p), …)` |
 | `uname` | `kernel/syscalls/fs_path_syscalls.c` | `utsname` kernel + `copy_to_user` |
 | `gettimeofday` | `kernel/syscalls/time_syscalls.c` | bounce + `copy_to_user` |
 | `nanosleep` rem | `kernel/syscalls/io_syscalls.c` | `copy_from_user` / `copy_to_user` |

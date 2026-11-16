@@ -101,7 +101,6 @@ void process_destroy(process_t *process)
 	    kstack != INIT_DEBUG_STACK_BASE)
 		kfree((void *)(uintptr_t)kstack);
 
-	process_saved_context_clear(process);
 	process_saved_environ_clear(process);
 	process_saved_cmdline_clear(process);
 

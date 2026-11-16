@@ -8,11 +8,10 @@
       "files": {
         "x86-64": [
           "sched/idle.c",
-          "kernel/process.c",
           "kernel/syscalls.c",
-          "kernel/elf_loader.c",
+          "kernel/exec/elf_loader.c",
           "sched/core.c",
-          "kernel/driver_registry.c"
+          "drivers/core/driver_registry.c"
         ],
         "arm32": []
       },
@@ -101,8 +100,8 @@
       "files": {
         "x86-64": [
           "drivers/char/vga.c",
-          "kernel/oops.c",
-          "kernel/signals.c",
+          "kernel/problems/oops.c",
+          "kernel/signals/signals.c",
           "fs/pipe.c",
           "mm/uaccess/copy_user.c",
           "includes/string.c"

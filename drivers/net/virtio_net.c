@@ -10,7 +10,7 @@
  * Sources: virtio 0.9.5 legacy PCI; virtio-net header; IR0 virtio_9p vring layout.
  */
 
-#include "virtio_net.h"
+#include "net_drivers.h"
 
 #include <config.h>
 #if CONFIG_DRV_NIC_VIRTIO_NET
@@ -21,7 +21,7 @@
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
-#include <ir0/net.h>
+#include <ir0/netdevice.h>
 #include <string.h>
 
 #define PCI_CONFIG_ADDRESS 0xCF8
@@ -93,12 +93,7 @@ static struct vn_queue g_tx;
 static uint8_t *g_rx_bufs[VN_RX_SLOTS];
 static uint8_t *g_tx_hdr;
 static uint8_t *g_tx_pkt;
-static struct net_device g_dev;
-static uint64_t g_rx_pkts;
-static uint64_t g_tx_pkts;
-static uint64_t g_rx_bytes;
-static uint64_t g_tx_bytes;
-static uint64_t g_tx_errs;
+static struct net_device *g_dev;
 
 static uint32_t pci_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t off)
 {
@@ -259,21 +254,20 @@ static void virtio_net_poll_rx(void)
 		}
 
 		buf = g_rx_bufs[id];
-		g_rx_pkts++;
-		g_rx_bytes += (uint64_t)(len - VN_HDR_LEN);
-		net_receive(&g_dev, buf + VN_HDR_LEN, len - VN_HDR_LEN);
+		g_dev->stats.rx_packets++;
+		g_dev->stats.rx_bytes += (uint64_t)(len - VN_HDR_LEN);
+		netif_rx(g_dev, buf + VN_HDR_LEN, len - VN_HDR_LEN);
 		rx_post((uint16_t)id);
 	}
 }
 
-static int virtio_net_send(struct net_device *dev, void *data, size_t len)
+static int virtio_net_send(struct net_device *dev, const void *data, size_t len)
 {
 	uint16_t avail;
 	uint16_t d0 = 0;
 	uint16_t d1 = 1;
 	int spins;
 
-	(void)dev;
 	if (!g_ready || !data || len == 0 || len > VN_PKT_MAX)
 		return -1;
 
@@ -304,12 +298,12 @@ static int virtio_net_send(struct net_device *dev, void *data, size_t len)
 		{
 			g_tx.last_used++;
 			(void)vp_inb(VIRTIO_PCI_ISR);
-			g_tx_pkts++;
-			g_tx_bytes += (uint64_t)len;
+			dev->stats.tx_packets++;
+			dev->stats.tx_bytes += (uint64_t)len;
 			return 0;
 		}
 	}
-	g_tx_errs++;
+	dev->stats.tx_errors++;
 	LOG_DEBUG("VIRTIO_NET", "TX notify timeout");
 	return -1;
 }
@@ -320,45 +314,13 @@ static void virtio_net_netdev_poll(struct net_device *dev)
 	virtio_net_poll_rx();
 }
 
-static int virtio_net_get_irq(struct net_device *dev)
-{
-	(void)dev;
-	return -1;
-}
+static const struct net_device_ops virtio_net_ops = {
+	.ndo_start_xmit = virtio_net_send,
+	.ndo_set_mac_address = eth_mac_addr,
+	.ndo_poll_controller = virtio_net_netdev_poll,
+};
 
-static int virtio_net_handle_irq(struct net_device *dev, uint8_t irq)
-{
-	(void)dev;
-	(void)irq;
-	virtio_net_poll_rx();
-	return 0;
-}
-
-static void virtio_net_get_stats(struct net_device *dev, uint64_t *rx_pkts,
-				 uint64_t *tx_pkts, uint64_t *rx_errs, uint64_t *tx_errs)
-{
-	(void)dev;
-	if (rx_pkts)
-		*rx_pkts = g_rx_pkts;
-	if (tx_pkts)
-		*tx_pkts = g_tx_pkts;
-	if (rx_errs)
-		*rx_errs = 0;
-	if (tx_errs)
-		*tx_errs = g_tx_errs;
-}
-
-static void virtio_net_get_byte_stats(struct net_device *dev, uint64_t *rx_bytes,
-				      uint64_t *tx_bytes)
-{
-	(void)dev;
-	if (rx_bytes)
-		*rx_bytes = g_rx_bytes;
-	if (tx_bytes)
-		*tx_bytes = g_tx_bytes;
-}
-
-int virtio_net_init(void)
+static int virtio_net_probe(void)
 {
 	uint8_t bus, slot;
 	uint32_t bar0;
@@ -421,18 +383,16 @@ int virtio_net_init(void)
 	for (i = 0; i < VN_RX_SLOTS && i < g_rx.qsz; i++)
 		rx_post((uint16_t)i);
 
-	memset(&g_dev, 0, sizeof(g_dev));
-	g_dev.name = "virt0";
-	memcpy(g_dev.mac, g_mac, 6);
-	g_dev.mtu = 1500;
-	g_dev.flags = IFF_UP | IFF_RUNNING | IFF_BROADCAST;
-	g_dev.send = virtio_net_send;
-	g_dev.poll = virtio_net_netdev_poll;
-	g_dev.get_irq_line = virtio_net_get_irq;
-	g_dev.handle_irq = virtio_net_handle_irq;
-	g_dev.get_stats = virtio_net_get_stats;
-	g_dev.get_byte_stats = virtio_net_get_byte_stats;
-	net_register_device(&g_dev);
+	g_dev = alloc_etherdev(0);
+	if (!g_dev)
+	{
+		rc = -ENOMEM;
+		goto fail;
+	}
+	g_dev->name = "virt0";
+	memcpy(g_dev->dev_addr, g_mac, ETH_ALEN);
+	g_dev->netdev_ops = &virtio_net_ops;
+	register_netdev(g_dev);
 
 	g_ready = 1;
 	LOG_INFO_FMT("VIRTIO_NET", "ready MAC %02x:%02x:%02x:%02x:%02x:%02x",
@@ -445,11 +405,9 @@ fail:
 	return rc < 0 ? rc : -ENOMEM;
 }
 
-#else /* !CONFIG_DRV_NIC_VIRTIO_NET */
+const struct net_driver virtio_net_driver = {
+	.name = "virtio-net",
+	.probe = virtio_net_probe,
+};
 
-int virtio_net_init(void)
-{
-	return -ENODEV;
-}
-
-#endif
+#endif /* CONFIG_DRV_NIC_VIRTIO_NET */

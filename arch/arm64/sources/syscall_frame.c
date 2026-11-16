@@ -15,7 +15,7 @@
 #include <ir0/syscall_frame.h>
 #include <ir0/arch_task.h>
 #include <ir0/errno.h>
-#include <kernel/process.h>
+#include <ir0/process.h>
 #include <stddef.h>
 #include <asm/exc_frame.h>
 #include <string.h>

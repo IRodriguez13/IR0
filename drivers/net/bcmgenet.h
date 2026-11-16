@@ -128,5 +128,3 @@ static inline uint32_t bcmgenet_ring_buf_size(uint32_t desc_count,
 {
 	return (desc_count << 16) | (buf_len & 0xffffU);
 }
-
-int bcmgenet_init(void);

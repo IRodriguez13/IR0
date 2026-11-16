@@ -8,6 +8,7 @@
  */
 
 #include "devfs_internal.h"
+#include <ir0/netdevice.h>
 
 #if CONFIG_ENABLE_NETWORKING
 
@@ -35,7 +36,7 @@ int dev_net_pid_has_ready_ping(pid_t pid)
 
 static int64_t dev_net_send_ping(ip4_addr_t dest_ip)
 {
-    struct net_device *dev = net_get_devices();
+    struct net_device *dev = first_net_device();
     pid_t pid;
     uint16_t id;
     uint16_t seq;
@@ -64,11 +65,11 @@ static void dev_net_apply_config(const dev_net_config_values_t *config)
     ip_netmask = config->netmask;
     ip_gateway = config->gateway;
     arp_set_my_ip(config->ip);
-    dev = net_get_devices();
+    dev = first_net_device();
     while (dev)
     {
         arp_set_interface_ip(dev, config->ip);
-        dev = dev->next;
+        dev = next_net_device(dev);
     }
     (void)ip_routes_seed_from_globals();
 }
@@ -452,7 +453,7 @@ static size_t dev_net_build_text(char *out, size_t out_len)
 	if (!out || out_len == 0)
 		return 0;
 
-	net_poll();
+	net_stack_poll();
 	pid = ir0_current_pid();
 	id = (uint16_t)(pid & 0xFFFF);
 
@@ -480,7 +481,7 @@ static size_t dev_net_build_text(char *out, size_t out_len)
 	if (n > 0 && (size_t)n < out_len - off)
 		off += (size_t)n;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	while (dev && off < out_len - 1)
 	{
 		char flags[32];
@@ -501,13 +502,13 @@ static size_t dev_net_build_text(char *out, size_t out_len)
 		n = snprintf(out + off, out_len - off,
 			     "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
 			     dev->name ? dev->name : "", (unsigned)dev->mtu, flags,
-			     (unsigned)dev->mac[0], (unsigned)dev->mac[1],
-			     (unsigned)dev->mac[2], (unsigned)dev->mac[3],
-			     (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+			     (unsigned)dev->dev_addr[0], (unsigned)dev->dev_addr[1],
+			     (unsigned)dev->dev_addr[2], (unsigned)dev->dev_addr[3],
+			     (unsigned)dev->dev_addr[4], (unsigned)dev->dev_addr[5]);
 		if (n <= 0 || (size_t)n >= out_len - off)
 			break;
 		off += (size_t)n;
-		dev = dev->next;
+		dev = next_net_device(dev);
 	}
 
 	if (off < out_len)
