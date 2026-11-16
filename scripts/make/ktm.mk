@@ -54,6 +54,7 @@ test-fast: kernel-x64.bin arch-guard
 	@python3 scripts/ktm_syscall_manifest.py --tier1 || true
 	@$(MAKE) -s ktm-adoption-guard
 	@$(MAKE) -s host-portability-guard
+	@$(MAKE) -s uapi-check
 	@echo "✓ test-fast complete (tier-1 manifest gaps are informational)"
 
 agent-fast: test-fast kernel-tests

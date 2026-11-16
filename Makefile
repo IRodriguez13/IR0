@@ -275,6 +275,11 @@ headers_install:
 	@for d in $(UAPI_DIRS); do cp -a $$d/. $(DESTDIR)/usr/include/ || exit 1; done
 	@echo "✓ headers_install ARCH=$(ARCH) → $(DESTDIR)/usr/include ($$(find $(UAPI_DIRS) -name '*.h' | wc -l) headers)"
 
+# Compile every exported header for every ISA against the installed tree
+# only, and check asm/unistd.h against the syscall decoder (part of test-fast).
+uapi-check:
+	@python3 $(KERNEL_ROOT)/scripts/uapi_check.py
+
 # Stable IR0↔ISD bridge.  ISD resolves these paths instead of guessing layout
 # inside this tree; keep the names synchronized with IR0_ISD_INTERFACE.
 ir0-minix-inject-path:

@@ -1,0 +1,42 @@
+# Linux UAPI headers that `make headers_install` must export for every ISA.
+# One header per line; `scripts/uapi_check.py` compiles one probe TU for each
+# against the installed tree only (no host /usr/include/linux).  Add a header
+# here when an unmodified Linux userspace package needs it.
+#
+# Exported before the BusyBox 1.36.1 probe (ISD ir0_full.config):
+linux/apm_bios.h
+linux/fb.h
+linux/kd.h
+linux/keyboard.h
+linux/types.h
+linux/vt.h
+# Needed by BusyBox 1.36.1 (ISD ir0_full.config):
+asm/types.h
+asm/unistd.h
+linux/capability.h
+linux/filter.h
+linux/fs.h
+linux/hdreg.h
+linux/i2c.h
+linux/if.h
+linux/if_arp.h
+linux/if_slip.h
+linux/if_tun.h
+linux/if_vlan.h
+linux/input.h
+linux/major.h
+linux/netlink.h
+linux/random.h
+linux/sockios.h
+linux/version.h
+linux/watchdog.h
+mtd/mtd-user.h
+mtd/ubi-user.h
+# Found by the ISD BusyBox build once the headers above existed:
+linux/fd.h
+linux/if_bonding.h
+linux/loop.h
+linux/mii.h
+linux/raid/md_u.h
+linux/rtnetlink.h
+linux/wireless.h
