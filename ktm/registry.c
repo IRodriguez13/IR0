@@ -83,7 +83,7 @@ int ktm_probe_run(const char *name, ktm_writer_t *writer)
 	return -1;
 }
 
-void ktm_registry_init(void)
+static void ktm_registry_init(void)
 {
 	if (g_inited)
 		return;

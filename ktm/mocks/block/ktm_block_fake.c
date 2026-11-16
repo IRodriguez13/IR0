@@ -17,6 +17,8 @@
 #include <ktm_mock_block.h>
 #include <string.h>
 
+static void ktm_block_fake_reset_reads(void);
+
 #define KTM_FAKE_SECTORS 8u
 #define KTM_FAKE_SECTOR_SIZE 512u
 #define KTM_FAKE_EIO_ON_READ 3u
@@ -110,7 +112,7 @@ void ktm_block_fake_teardown(void)
 	g_read_count = 0;
 }
 
-void ktm_block_fake_reset_reads(void)
+static void ktm_block_fake_reset_reads(void)
 {
 	g_read_count = 0;
 }

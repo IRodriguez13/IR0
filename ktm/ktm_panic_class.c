@@ -17,6 +17,8 @@
 #include <ir0/ktm/klog.h>
 #include <string.h>
 
+static void ktm_panic_class_emit(const char *klass);
+
 #define USER_RIP_LO    0x00400000ULL
 #define USER_RIP_HI    0x00007FFFFFFFFFFFULL
 
@@ -119,7 +121,7 @@ static const char *classify_by_message(const char *message)
 	return klass;
 }
 
-void ktm_classify_kernel_panic_ex(const char *message, int panic_level,
+static void ktm_classify_kernel_panic_ex(const char *message, int panic_level,
 				  const char *file, unsigned int line,
 				  const char *caller)
 {
@@ -150,7 +152,7 @@ void ktm_classify_kernel_panic(const char *message)
 	ktm_classify_kernel_panic_ex(message, KTM_PL_KERNEL_BUG, NULL, 0, NULL);
 }
 
-void ktm_panic_class_emit(const char *klass)
+static void ktm_panic_class_emit(const char *klass)
 {
 	klog_debug_fmt("KTM", "[KTM][PANIC_CLASS] %s", klass ? klass : "UNKNOWN");
 }

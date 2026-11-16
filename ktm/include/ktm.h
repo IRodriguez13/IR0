@@ -74,14 +74,9 @@ static inline void ktm_fail_at(const char *kind, const char *expr,
 /* Context snapshot + panic class (CONFIG_KTM / always declared)             */
 /* ------------------------------------------------------------------------- */
 
-void ktm_panic_class_emit(const char *klass);
-
 void ktm_panic_site_emit(const char *file, unsigned int line, const char *caller,
 			 const char *message);
 void ktm_classify_kernel_panic(const char *message);
-void ktm_classify_kernel_panic_ex(const char *message, int panic_level,
-				  const char *file, unsigned int line,
-				  const char *caller);
 
 void ktm_classify_user_fault(struct process *proc, uint64_t fault_addr,
 			     uint64_t fault_rip, uint64_t fault_cs);
@@ -248,4 +243,3 @@ static inline void ktm_sched_gate_check_before_sched(const char *caller)
 #ifndef KASSERT_GT
 #define KASSERT_GT KTM_ASSERT_GT
 #endif
-

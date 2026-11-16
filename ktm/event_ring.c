@@ -52,7 +52,7 @@ uint64_t ktm_now_ticks(void)
 	return g_seq; /* monotonic enough for v1 ordering */
 }
 
-int32_t ktm_current_pid(void)
+static int32_t ktm_current_pid(void)
 {
 	return ir0_proc_current_pid();
 }

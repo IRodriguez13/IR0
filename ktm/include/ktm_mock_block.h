@@ -20,5 +20,4 @@
 
 int ktm_block_fake_setup(void);
 void ktm_block_fake_teardown(void);
-void ktm_block_fake_reset_reads(void);
 unsigned ktm_block_fake_read_count(void);

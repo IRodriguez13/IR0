@@ -59,7 +59,7 @@ klog_boot_phase_t klog_get_boot_phase(void)
 	return g_boot_phase;
 }
 
-const char *klog_boot_phase_string(klog_boot_phase_t phase)
+static const char *klog_boot_phase_string(klog_boot_phase_t phase)
 {
 	switch (phase)
 	{
@@ -460,7 +460,7 @@ void klog_event(uint32_t event_id, uint16_t subsystem, uint8_t severity,
 		g_protocol_mirror(level, component, message);
 }
 
-void klog_emit(klog_level_t level, const char *component, const char *message)
+static void klog_emit(klog_level_t level, const char *component, const char *message)
 {
 	klog_event(0, 0, (uint8_t)level, component, message);
 }
@@ -607,7 +607,7 @@ int kprintf_level(klog_level_t level, const char *comp, const char *fmt, ...)
 	return n;
 }
 
-int kvprintf(const char *fmt, va_list ap)
+static int kvprintf(const char *fmt, va_list ap)
 {
 	char buf[512];
 	int n;

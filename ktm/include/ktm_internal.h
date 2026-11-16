@@ -21,10 +21,8 @@ struct ktm_writer
 	size_t used;
 };
 
-void ktm_registry_init(void);
 void ktm_klog_init(void);
 ktm_context_t *ktm_current_context(void);
 void ktm_set_current_context(ktm_context_t *ctx);
 
 uint64_t ktm_now_ticks(void);
-int32_t ktm_current_pid(void);
