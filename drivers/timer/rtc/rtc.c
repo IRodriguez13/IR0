@@ -17,6 +17,8 @@
 #include <ir0/arch_port.h>
 #include <string.h>
 
+static uint8_t rtc_read_register(uint8_t reg);
+
 /* Wait until CMOS is not mid-update (Status A UIP clear). Bounded spin. */
 static void rtc_wait_uip_clear(void)
 {
@@ -83,7 +85,7 @@ int rtc_read_time(rtc_time_t *time)
 	return 0;
 }
 
-uint8_t rtc_read_register(uint8_t reg)
+static uint8_t rtc_read_register(uint8_t reg)
 {
 	outb(RTC_ADDRESS_REG, reg);
 	return inb(RTC_DATA_REG);
