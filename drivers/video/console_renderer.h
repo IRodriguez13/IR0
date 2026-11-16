@@ -13,5 +13,3 @@ void console_renderer_reset(uint8_t color);
 void console_renderer_putchar(char c, uint8_t color);
 void console_renderer_show_cursor(uint8_t color);
 int console_renderer_get_cursor_x(void);
-int console_renderer_get_cursor_y(void);
-void console_renderer_import_cursor_pos(int cols);

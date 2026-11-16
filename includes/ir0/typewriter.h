@@ -31,7 +31,6 @@ typedef enum
 
 void typewriter_init(void);
 void typewriter_set_mode(typewriter_mode_t mode);
-void typewriter_print_char(char c);
 void typewriter_vga_print(const char *str, uint8_t color);
 void typewriter_vga_print_char(char c, uint8_t color);
 void typewriter_show_cursor(uint8_t color);

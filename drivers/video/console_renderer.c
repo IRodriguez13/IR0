@@ -635,22 +635,3 @@ int console_renderer_get_cursor_x(void)
 	return cursor_pos % cols;
 }
 
-int console_renderer_get_cursor_y(void)
-{
-	extern int cursor_pos;
-	int cols = render_cols();
-
-	if (cols <= 0)
-		return 0;
-	return cursor_pos / cols;
-}
-
-void console_renderer_import_cursor_pos(int cols)
-{
-	extern int cursor_pos;
-
-	if (cols <= 0)
-		return;
-	if (cursor_pos < 0)
-		cursor_pos = 0;
-}

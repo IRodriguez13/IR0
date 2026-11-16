@@ -174,38 +174,6 @@ void typewriter_set_mode(typewriter_mode_t mode)
     current_mode = mode;
 }
 
-void typewriter_print_char(char c)
-{
-    /* If typewriter is disabled, print normally */
-    if (current_mode == TYPEWRITER_DISABLED || !command_output_enabled) {
-        char temp[2] = {c, 0};
-        print(temp);
-        return;
-    }
-    
-    /* Print the character */
-    char temp[2] = {c, 0};
-    print(temp);
-    
-    /* Add delay based on mode (except for newlines and spaces for better flow) */
-    if (c != '\n' && c != ' ') {
-        uint32_t delay;
-        switch (current_mode) {
-            case TYPEWRITER_FAST:
-                delay = TYPEWRITER_DELAY_FAST;
-                break;
-            case TYPEWRITER_SLOW:
-                delay = TYPEWRITER_DELAY_SLOW;
-                break;
-            case TYPEWRITER_NORMAL:
-            default:
-                delay = TYPEWRITER_DELAY_NORMAL;
-                break;
-        }
-        typewriter_delay(delay);
-    }
-}
-
 /* Shell /dev/console output — unified renderer (single cursor_pos). */
 void typewriter_vga_print_char(char c, uint8_t color)
 {

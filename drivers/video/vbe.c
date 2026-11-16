@@ -180,57 +180,6 @@ int vbe_init(void)
 #endif
 }
 
-// Clear screen with color
-void vbe_clear(uint32_t color)
-{
-    if (!vbe_state.initialized) return;
-    
-    // For VGA text mode, clear with spaces
-    uint16_t *fb = (uint16_t*)vbe_state.fb;
-    uint16_t entry = (uint16_t)' ' | ((uint16_t)color << 8);
-    
-    for (uint32_t i = 0; i < vbe_state.width * vbe_state.height; i++)
-    {
-        fb[i] = entry;
-    }
-}
-
-// Put pixel (for graphics mode)
-void vbe_putpixel(uint32_t x, uint32_t y, uint32_t color)
-{
-    if (!vbe_state.initialized) return;
-    if (x >= vbe_state.width || y >= vbe_state.height) return;
-    
-    if (vbe_state.bpp == 32)
-    {
-        uint8_t *row = (uint8_t *)vbe_state.fb + y * vbe_state.pitch;
-        ((uint32_t *)row)[x] = color;
-    }
-}
-
-// Draw character at position
-static void vbe_putchar(uint32_t x, uint32_t y, char c, uint32_t fg, uint32_t bg __attribute__((unused)))
-{
-    if (!vbe_state.initialized) return;
-    if (x >= vbe_state.width || y >= vbe_state.height) return;
-    
-    uint16_t *fb = (uint16_t*)vbe_state.fb;
-    uint16_t entry = (uint16_t)c | ((uint16_t)fg << 8);
-    fb[y * vbe_state.width + x] = entry;
-}
-
-// Print string at position
-void vbe_print_at(uint32_t x, uint32_t y, const char *str, uint32_t fg, uint32_t bg)
-{
-    if (!vbe_state.initialized || !str) return;
-    
-    uint32_t col = x;
-    while (*str && col < vbe_state.width)
-    {
-        vbe_putchar(col++, y, *str++, fg, bg);
-    }
-}
-
 bool vbe_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp)
 {
     if (!vbe_state.initialized)

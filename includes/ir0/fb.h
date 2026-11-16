@@ -29,6 +29,5 @@ int64_t ir0_fb_write_bytes(size_t offset, const void *buf, size_t count);
  * ir0_fb_boot_direct_draw - Paint RGB bands on the linear framebuffer before
  * userspace starts. Serial tag: FB_BOOT_DIRECT_DRAW_OK
  */
-void ir0_fb_boot_direct_draw(void);
 
 #endif /* _IR0_FB_H */
