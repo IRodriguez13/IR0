@@ -165,7 +165,7 @@ Implementations may include drivers from `.c` adapters (`input_backend.c`,
 | Block storage | `ir0_block_*` registered by name |
 | `/dev` node I/O | `devfs_ops_t` per node |
 | Mountable filesystem | `struct vfs_ops` + fstype registration |
-| Network NIC | `struct net_device` vtable in `ir0/net.h` |
+| Network NIC | `struct net_device` + `const struct net_device_ops` in `ir0/netdevice.h`; drivers export only a `struct net_driver` table entry |
 | Bluetooth to VFS | `ir0_bt_*` facade functions |
 | `/proc` or `/sys` file | FD dispatch in `fs/procfs.c` / `fs/sysfs.c` (legacy) |
 
