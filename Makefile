@@ -273,6 +273,33 @@ headers_install:
 	@cp -a $(UAPI_DIR)/. $(DESTDIR)/usr/include/
 	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -name '*.h' | wc -l) headers)"
 
+# Stable IR0↔ISD bridge.  ISD resolves these paths instead of guessing layout
+# inside this tree; keep the names synchronized with IR0_ISD_INTERFACE.
+ir0-minix-inject-path:
+	@printf '%s\n' "$(KERNEL_ROOT)/scripts/inject_init_minix.py"
+
+ir0-verify-minix-path:
+	@printf '%s\n' "$(KERNEL_ROOT)/scripts/verify_minix_rootfs.py"
+
+# Standalone filesystem-verification entry points for automation.  They are
+# intentionally explicit about format and image path, so a caller cannot
+# accidentally validate a MINIX image with the EXT2 verifier (or vice versa).
+IR0_ROOTFS_DISK ?=
+IR0_ROOTFS_PATHS ?= sbin/init bin/busybox etc/passwd var/lib/ir0
+IR0_ROOTFS_FORMAT ?= minix
+
+verify-ext2-rootfs:
+	@test -n "$(IR0_ROOTFS_DISK)" || { echo "usage: make verify-ext2-rootfs IR0_ROOTFS_DISK=IMAGE.ext2 [IR0_ROOTFS_PATHS='…']" >&2; exit 2; }
+	@$(KERNEL_ROOT)/scripts/verify_ext2_rootfs.sh "$(IR0_ROOTFS_DISK)" $(IR0_ROOTFS_PATHS)
+
+verify-rootfs:
+	@test -n "$(IR0_ROOTFS_DISK)" || { echo "usage: make verify-rootfs IR0_ROOTFS_DISK=IMAGE IR0_ROOTFS_FORMAT=minix|ext2 [IR0_ROOTFS_PATHS='…']" >&2; exit 2; }
+	@case "$(IR0_ROOTFS_FORMAT)" in \
+		minix) python3 "$(KERNEL_ROOT)/scripts/verify_minix_rootfs.py" "$(IR0_ROOTFS_DISK)" $(IR0_ROOTFS_PATHS) ;; \
+		ext2) $(KERNEL_ROOT)/scripts/verify_ext2_rootfs.sh "$(IR0_ROOTFS_DISK)" $(IR0_ROOTFS_PATHS) ;; \
+		*) echo "✗ unknown IR0_ROOTFS_FORMAT=$(IR0_ROOTFS_FORMAT) (expected minix or ext2)" >&2; exit 2 ;; \
+	esac
+
 menuconfig:
 	@python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py $(if $(MENUCONFIG_LANG),--lang $(MENUCONFIG_LANG),)
 
@@ -1615,7 +1642,7 @@ test-drivers-clean:
 	menuconfig defconfig \
 	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
 	sync-menuconfig-defconfig-check \
-	headers_install check-env \
+	headers_install ir0-minix-inject-path ir0-verify-minix-path verify-ext2-rootfs verify-rootfs check-env \
 	unibuild unibuild-cpp unibuild-rust unibuild-clean \
 	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
 	format analyze compile-commands disasm stack-usage print-build-objects build-graph-audit \
