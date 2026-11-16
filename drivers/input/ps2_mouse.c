@@ -23,6 +23,26 @@
 #include <ir0/ps2_mouse_pkt.h>
 #include <ir0/console.h>
 
+static void ps2_mouse_shutdown(void);
+static bool ps2_mouse_enable(void);
+static bool ps2_mouse_disable(void);
+static bool ps2_mouse_reset(void);
+static bool ps2_mouse_set_defaults(void);
+static bool ps2_mouse_set_resolution(uint8_t resolution);
+static bool ps2_mouse_set_scaling_2_1(void);
+static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet);
+static bool ps2_mouse_send_command(uint8_t command);
+static bool ps2_mouse_send_command_with_data(uint8_t command, uint8_t data);
+static bool ps2_mouse_wait_ack(void);
+static bool ps2_controller_wait_input(void);
+static bool ps2_controller_wait_output(void);
+static void ps2_controller_write_command(uint8_t command);
+static void ps2_controller_write_data(uint8_t data);
+static uint8_t ps2_controller_read_data(void);
+static ps2_mouse_type_t ps2_mouse_detect_type(void);
+static bool ps2_mouse_enable_wheel(void);
+static bool ps2_mouse_enable_5buttons(void);
+
 /* Global mouse state */
 static ps2_mouse_state_t mouse_state = {0};
 static struct ps2_mouse_pkt_state pkt_state;
@@ -180,7 +200,7 @@ bool ps2_mouse_init(void)
     return drv != NULL;
 }
 
-void ps2_mouse_shutdown(void)
+static void ps2_mouse_shutdown(void)
 {
     if (!mouse_state.initialized)
     {
@@ -206,17 +226,17 @@ ps2_mouse_state_t *ps2_mouse_get_state(void)
     return &mouse_state;
 }
 
-bool ps2_mouse_enable(void)
+static bool ps2_mouse_enable(void)
 {
     return ps2_mouse_send_command(PS2_MOUSE_ENABLE);
 }
 
-bool ps2_mouse_disable(void)
+static bool ps2_mouse_disable(void)
 {
     return ps2_mouse_send_command(PS2_MOUSE_DISABLE);
 }
 
-bool ps2_mouse_reset(void)
+static bool ps2_mouse_reset(void)
 {
     if (!ps2_mouse_send_command(PS2_MOUSE_RESET))
     {
@@ -248,7 +268,7 @@ bool ps2_mouse_reset(void)
     return true;
 }
 
-bool ps2_mouse_set_defaults(void)
+static bool ps2_mouse_set_defaults(void)
 {
     return ps2_mouse_send_command(PS2_MOUSE_SET_DEFAULTS);
 }
@@ -263,7 +283,7 @@ bool ps2_mouse_set_sample_rate(uint8_t rate)
     return false;
 }
 
-bool ps2_mouse_set_resolution(uint8_t resolution)
+static bool ps2_mouse_set_resolution(uint8_t resolution)
 {
     if (ps2_mouse_send_command_with_data(PS2_MOUSE_SET_RESOLUTION, resolution))
     {
@@ -273,7 +293,7 @@ bool ps2_mouse_set_resolution(uint8_t resolution)
     return false;
 }
 
-bool ps2_mouse_set_scaling_2_1(void)
+static bool ps2_mouse_set_scaling_2_1(void)
 {
     return ps2_mouse_send_command(PS2_MOUSE_SET_SCALING_2_1);
 }
@@ -373,7 +393,7 @@ bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet)
     return true;
 }
 
-void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
+static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
 {
     bool prev_left;
     bool prev_right;
@@ -475,7 +495,7 @@ void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
     }
 }
 
-bool ps2_mouse_send_command(uint8_t command)
+static bool ps2_mouse_send_command(uint8_t command)
 {
     /* Send command to mouse via controller */
     ps2_controller_write_command(PS2_CMD_WRITE_PORT2);
@@ -489,7 +509,7 @@ bool ps2_mouse_send_command(uint8_t command)
     return ps2_mouse_wait_ack();
 }
 
-bool ps2_mouse_send_command_with_data(uint8_t command, uint8_t data)
+static bool ps2_mouse_send_command_with_data(uint8_t command, uint8_t data)
 {
     if (!ps2_mouse_send_command(command))
     {
@@ -513,7 +533,7 @@ uint8_t ps2_mouse_read_data(void)
     return ps2_controller_read_data();
 }
 
-bool ps2_mouse_wait_ack(void)
+static bool ps2_mouse_wait_ack(void)
 {
     if (!ps2_controller_wait_output())
     {
@@ -523,7 +543,7 @@ bool ps2_mouse_wait_ack(void)
     return ps2_controller_read_data() == PS2_MOUSE_ACK;
 }
 
-bool ps2_controller_wait_input(void)
+static bool ps2_controller_wait_input(void)
 {
     int timeout = 1000;
     while (timeout-- > 0)
@@ -540,7 +560,7 @@ bool ps2_controller_wait_input(void)
     return false;
 }
 
-bool ps2_controller_wait_output(void)
+static bool ps2_controller_wait_output(void)
 {
     int timeout = 1000;
     while (timeout-- > 0)
@@ -557,25 +577,25 @@ bool ps2_controller_wait_output(void)
     return false;
 }
 
-void ps2_controller_write_command(uint8_t command)
+static void ps2_controller_write_command(uint8_t command)
 {
     ps2_controller_wait_input();
     outb(PS2_COMMAND_PORT, command);
 }
 
-void ps2_controller_write_data(uint8_t data)
+static void ps2_controller_write_data(uint8_t data)
 {
     ps2_controller_wait_input();
     outb(PS2_DATA_PORT, data);
 }
 
-uint8_t ps2_controller_read_data(void)
+static uint8_t ps2_controller_read_data(void)
 {
     ps2_controller_wait_output();
     return inb(PS2_DATA_PORT);
 }
 
-ps2_mouse_type_t ps2_mouse_detect_type(void)
+static ps2_mouse_type_t ps2_mouse_detect_type(void)
 {
     /* Try to enable wheel mouse mode */
     if (ps2_mouse_enable_wheel())
@@ -591,7 +611,7 @@ ps2_mouse_type_t ps2_mouse_detect_type(void)
     return PS2_MOUSE_TYPE_STANDARD;
 }
 
-bool ps2_mouse_enable_wheel(void)
+static bool ps2_mouse_enable_wheel(void)
 {
     /* Magic sequence to enable wheel: 200, 100, 80 */
     if (!ps2_mouse_set_sample_rate(PS2_MOUSE_WHEEL_SEQUENCE_1))
@@ -621,7 +641,7 @@ bool ps2_mouse_enable_wheel(void)
     return ps2_controller_read_data() == PS2_MOUSE_ID_WHEEL;
 }
 
-bool ps2_mouse_enable_5buttons(void)
+static bool ps2_mouse_enable_5buttons(void)
 {
     /* Magic sequence to enable 5-button mode: 200, 200, 80 */
     if (!ps2_mouse_set_sample_rate(PS2_MOUSE_5BTN_SEQUENCE_1))

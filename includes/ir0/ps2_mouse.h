@@ -52,7 +52,6 @@ typedef struct
 } ps2_mouse_packet_t;
 
 bool ps2_mouse_init(void);
-void ps2_mouse_shutdown(void);
 bool ps2_mouse_is_available(void);
 ps2_mouse_state_t *ps2_mouse_get_state(void);
 void ps2_mouse_handle_interrupt(void);
