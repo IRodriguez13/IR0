@@ -191,7 +191,7 @@ int vfs_register_fs(struct vfs_fstype *fs)
     return 0;
 }
 
-int vfs_init(void)
+static int vfs_init(void)
 {
     fs_types = NULL;
     mounts   = NULL;

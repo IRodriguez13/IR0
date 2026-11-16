@@ -60,7 +60,7 @@ static void timerfd_tick(struct ir0_timerfd *t)
 		poll_wake_check();
 }
 
-int ir0_timerfd_is(const void *ptr)
+static int ir0_timerfd_is(const void *ptr)
 {
 	const struct ir0_timerfd *t = ptr;
 	uintptr_t base = (uintptr_t)&g_tfd[0];

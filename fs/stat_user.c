@@ -16,7 +16,7 @@
 #include <ir0/copy_user.h>
 #include <string.h>
 
-void ir0_stat_to_user(const stat_t *kst, struct ir0_user_stat *ust)
+static void ir0_stat_to_user(const stat_t *kst, struct ir0_user_stat *ust)
 {
     if (!kst || !ust)
         return;

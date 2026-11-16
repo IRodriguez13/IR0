@@ -41,4 +41,3 @@ int fat16_disk_write(const char *path, const void *buf, size_t count,
 int fat16_disk_truncate(const char *path, size_t length);
 
 /* ktest: validate BPB layout from a 512-byte boot sector image */
-int fat16_disk_probe_bpb(const uint8_t sector[512], uint16_t *bytes_per_sector_out);

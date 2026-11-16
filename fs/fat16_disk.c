@@ -162,7 +162,7 @@ static int fat16_write_sector(struct fat16_vol *v, uint32_t rel_lba, const void 
 	return fat16_write_sectors(v, rel_lba, 1, buf);
 }
 
-int fat16_disk_probe_bpb(const uint8_t sector[512], uint16_t *bytes_per_sector_out)
+static int fat16_disk_probe_bpb(const uint8_t sector[512], uint16_t *bytes_per_sector_out)
 {
 	uint16_t bps;
 	uint16_t fat_sectors;

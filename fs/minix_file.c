@@ -695,7 +695,7 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   return 0;
 }
 
-int minix_fs_write_file_len(const char *path, const void *content, size_t content_size)
+static int minix_fs_write_file_len(const char *path, const void *content, size_t content_size)
 {
   uint16_t inode_num;
   minix_inode_t file_inode;

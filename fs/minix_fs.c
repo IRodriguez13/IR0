@@ -54,7 +54,7 @@ uint32_t minix_now_seconds(void)
 	return (uint32_t)clock_get_current_time();
 }
 
-size_t minix_zmap_bytes(void)
+static size_t minix_zmap_bytes(void)
 {
 	uint16_t blocks = minix_fs.superblock.s_zmap_blocks;
 
@@ -175,7 +175,7 @@ bool minix_is_zone_free(uint32_t zone_num)
   return (minix_fs.zone_bitmap[byte_index] & (1U << bit_index)) != 0;
 }
 
-void minix_mark_zone_used(uint32_t zone_num)
+static void minix_mark_zone_used(uint32_t zone_num)
 {
   uint32_t byte_index;
   uint32_t bit_index;
@@ -291,7 +291,7 @@ int minix_sync_inode_bitmap(void)
 // PUBLIC FUNCTIONS IMPLEMENTATION
 // ===============================================================================
 
-bool minix_fs_is_working(void)
+static bool minix_fs_is_working(void)
 {
     return minix_fs.initialized;
 }
@@ -355,7 +355,7 @@ static int minix_fs_ensure_root_inode(void)
   return 0;
 }
 
-int minix_fs_init(void)
+static int minix_fs_init(void)
 {
   /* FORCE REAL DISK USAGE - In QEMU, disk is always available */
 

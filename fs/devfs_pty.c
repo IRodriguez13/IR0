@@ -55,7 +55,7 @@ void *devfs_pty_vfs_mark(int slot)
 	return (void *)(uintptr_t)(DEVFS_PTY_VFS_TAG + (unsigned)slot);
 }
 
-int devfs_pty_vfs_slot(const void *vfs_file)
+static int devfs_pty_vfs_slot(const void *vfs_file)
 {
 	uintptr_t v = (uintptr_t)vfs_file;
 

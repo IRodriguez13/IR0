@@ -39,7 +39,7 @@ void ramtab_set_rehome_observer(void (*fn)(int old_id, int new_id))
 	g_rehome = fn;
 }
 
-int ramtab_eq(const char *left, const char *right)
+static int ramtab_eq(const char *left, const char *right)
 {
 	unsigned i;
 
@@ -81,7 +81,7 @@ int ramtab_parent(const char *path, char *parent, unsigned cap)
 	return 1;
 }
 
-const char *ramtab_basename(const char *path)
+static const char *ramtab_basename(const char *path)
 {
 	unsigned i = 0;
 	unsigned last = 0;

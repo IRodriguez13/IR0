@@ -33,7 +33,7 @@ struct ir0_eventfd
 
 static struct ir0_eventfd g_efd[EFD_MAX];
 
-int ir0_eventfd_is(const void *ptr)
+static int ir0_eventfd_is(const void *ptr)
 {
 	const struct ir0_eventfd *e = ptr;
 	uintptr_t base = (uintptr_t)&g_efd[0];

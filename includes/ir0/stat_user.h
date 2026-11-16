@@ -25,6 +25,4 @@
 
 #define IR0_USER_STAT_SIZE ((unsigned)sizeof(struct ir0_user_stat))
 
-void ir0_stat_to_user(const stat_t *kst, struct ir0_user_stat *ust);
-
 int ir0_copy_stat_to_user(void *user_buf, const stat_t *kst);

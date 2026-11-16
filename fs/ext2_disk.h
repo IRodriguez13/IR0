@@ -15,4 +15,3 @@
 #pragma once
 
 int ext2_fs_register(void);
-int ext2_disk_mount(const char *dev, const char *mount_dir);

@@ -25,7 +25,6 @@ int64_t sys_timerfd_create(int clockid, int flags);
 int64_t sys_timerfd_settime(int fd, int flags, const struct itimerspec *new_value,
 			    struct itimerspec *old_value);
 int64_t sys_timerfd_gettime(int fd, struct itimerspec *curr_value);
-int ir0_timerfd_is(const void *ptr);
 int64_t ir0_timerfd_read(struct ir0_timerfd *t, void *buf, size_t count, int nonblock);
 int ir0_timerfd_poll_readable(struct ir0_timerfd *t);
 void ir0_timerfd_acquire(struct ir0_timerfd *t);

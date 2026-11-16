@@ -75,7 +75,6 @@ struct vfs_dirent {
 #define DT_LNK     10
 
 /* Lifecycle */
-int vfs_init(void);
 int vfs_register_fs(struct vfs_fstype *fs);
 int vfs_mount(const char *dev, const char *path, const char *fstype);
 int vfs_umount(const char *path);
