@@ -63,7 +63,7 @@ static bool wait_queue_contains(wait_queue_t *wq, process_t *proc)
 
 
 
-void wait_queue_init(wait_queue_t *wq)
+static void wait_queue_init(wait_queue_t *wq)
 {
     wq->head = NULL;
     wq->tail = NULL;
@@ -105,7 +105,7 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
     ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
-process_t *wait_queue_wake_one(wait_queue_t *wq)
+static process_t *wait_queue_wake_one(wait_queue_t *wq)
 {
     unsigned long irq_flags;
     wait_queue_node_t *node;
@@ -219,7 +219,7 @@ void ipc_purge_waiters_for_process(process_t *proc)
     ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
-void semaphore_init(semaphore_t *sem, int initial_count)
+static void semaphore_init(semaphore_t *sem, int initial_count)
 {
     if (!sem)
         return;
@@ -259,7 +259,7 @@ int ring_buffer_init(ring_buffer_t *rb, size_t size)
     return 0;
 }
 
-void ring_buffer_destroy(ring_buffer_t *rb)
+static void ring_buffer_destroy(ring_buffer_t *rb)
 {
     if (!rb)
         return;
@@ -270,26 +270,26 @@ void ring_buffer_destroy(ring_buffer_t *rb)
     }
 }
 
-size_t ring_buffer_available_write(ring_buffer_t *rb)
+static size_t ring_buffer_available_write(ring_buffer_t *rb)
 {
     if (!rb)
         return 0;
     return rb->size - rb->count;
 }
 
-size_t ring_buffer_available_read(ring_buffer_t *rb)
+static size_t ring_buffer_available_read(ring_buffer_t *rb)
 {
     if (!rb)
         return 0;
     return rb->count;
 }
 
-bool ring_buffer_empty(ring_buffer_t *rb)
+static bool ring_buffer_empty(ring_buffer_t *rb)
 {
     return !rb || rb->count == 0;
 }
 
-bool ring_buffer_full(ring_buffer_t *rb)
+static bool ring_buffer_full(ring_buffer_t *rb)
 {
     return !rb || rb->count >= rb->size;
 }
@@ -312,7 +312,7 @@ size_t ring_buffer_write(ring_buffer_t *rb, const void *data, size_t len)
     return to_write;
 }
 
-size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len)
+static size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len)
 {
     if (!rb || !data || len == 0)
         return 0;

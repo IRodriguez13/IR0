@@ -17,4 +17,3 @@
 int posix_shm_path_is(const char *path);
 int64_t posix_shm_try_open(const char *path, int flags, mode_t mode);
 int posix_shm_try_unlink(const char *path);
-void posix_shm_ensure_dir(void);

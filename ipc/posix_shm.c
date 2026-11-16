@@ -30,7 +30,7 @@ struct posix_shm_slot
 static struct posix_shm_slot g_shm[POSIX_SHM_MAX];
 static int g_dir_ready;
 
-void posix_shm_ensure_dir(void)
+static void posix_shm_ensure_dir(void)
 {
 	g_dir_ready = 1;
 }
