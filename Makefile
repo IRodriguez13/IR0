@@ -264,14 +264,18 @@ all: $(DEFAULT_BUILD_TARGET)
 # Only includes/uapi leaves the kernel tree: a userspace package that needs a
 # private kernel header is a broken boundary, not a missing include path.
 UAPI_DIR = $(KERNEL_ROOT)/includes/uapi
+UAPI_ARCH = $(if $(filter x86-64 x86_64 amd64,$(ARCH)),x86_64,$(if $(filter arm64 aarch64,$(ARCH)),arm64,$(ARCH)))
 # Default: staged under build/ (ignored) so the repo root is not littered with
 # usr/include. Override with DESTDIR=/ for a FHS-style system install.
 DESTDIR ?= $(KERNEL_ROOT)/build/uapi-install
 
 headers_install:
 	@mkdir -p $(DESTDIR)/usr/include
-	@cp -a $(UAPI_DIR)/. $(DESTDIR)/usr/include/
-	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -name '*.h' | wc -l) headers)"
+	@for directory in $(UAPI_DIR)/*; do name=$${directory##*/}; test "$$name" = arch || test "$$name" = ir0 || test "$$name" = LINUX_UAPI_SNAPSHOT || cp -a "$$directory" $(DESTDIR)/usr/include/; done
+	@cp -a $(UAPI_DIR)/ir0 $(DESTDIR)/usr/include/
+	@test ! -d $(UAPI_DIR)/arch/$(UAPI_ARCH)/asm || { mkdir -p $(DESTDIR)/usr/include/asm; cp -a $(UAPI_DIR)/arch/$(UAPI_ARCH)/asm/. $(DESTDIR)/usr/include/asm/; }
+	@for header in $(UAPI_DIR)/asm-generic/*.h; do base=$${header##*/}; test -e $(DESTDIR)/usr/include/asm/$$base || printf '%s\n' '#include <asm-generic/'$$base'>' > $(DESTDIR)/usr/include/asm/$$base; done
+	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -path '$(UAPI_DIR)/arch' -prune -o -path '$(UAPI_DIR)/arch/*' -prune -o -type f -print | wc -l) headers; arch=$(UAPI_ARCH))"
 
 # Stable IR0↔ISD bridge.  ISD resolves these paths instead of guessing layout
 # inside this tree; keep the names synchronized with IR0_ISD_INTERFACE.

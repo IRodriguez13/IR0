@@ -9,6 +9,15 @@ Programs we want to run define the kernel surface. IR0 grows Linux-compatible
 ABI (`/dev/fb0`, evdev, AF_UNIX, SysV shm, `/proc/loadavg`, …). ISD packages
 upstream clients **without** IR0-specific source patches.
 
+## Public headers
+
+`make headers_install` exports the versioned Linux-shaped UAPI snapshot in
+`includes/uapi/`, selecting `asm/` for the requested ISA. It is intentionally
+independent of `/usr/include` on the build host. Kernel features may return
+`ENOSYS` or `ENOTTY` until implemented, but source compatibility must never be
+faked by borrowing an unrelated host ABI. Maintainers refresh the snapshot with
+`scripts/import_linux_uapi.sh /path/to/linux-source` and review the result.
+
 ## Host / guest inspectors
 
 | Tool | Where | Role |
