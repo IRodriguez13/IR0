@@ -12,7 +12,6 @@ The Architecture Subsystem provides architecture-specific implementations and ab
 - **Features**:
   - **arch_interface.h/c**: Common architecture interface definitions
   - **arch_awareness.h**: Architecture detection and capabilities
-  - **common_paging.h**: Common paging structures and definitions
   - **idt.h**: Common interrupt descriptor table definitions
 
 #### 2. x86-32 Architecture (`x86-32/`)
@@ -439,7 +438,6 @@ El Subsistema de Arquitectura proporciona implementaciones y abstracciones espec
 - **Características**:
   - **arch_interface.h/c**: Definiciones de interfaz común de arquitectura
   - **arch_awareness.h**: Detección y capacidades de arquitectura
-  - **common_paging.h**: Estructuras y definiciones comunes de paginación
   - **idt.h**: Definiciones comunes de tabla de descriptores de interrupción
 
 #### 2. Arquitectura x86-32 (`x86-32/`)
