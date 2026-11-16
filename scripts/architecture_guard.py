@@ -1876,7 +1876,9 @@ def check_common_headers_have_only_data_model_isa_conditionals():
         r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|__arm__|"
         r"ARCH_X86|ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
     )
-    allowed = {"includes/stdint.h", "includes/stddef.h"}
+    # linux/sockios.h is verbatim Linux UAPI: its x32 test selects the
+    # userspace SIOCGSTAMP value and never reaches kernel code paths.
+    allowed = {"includes/stdint.h", "includes/stddef.h", "includes/uapi/linux/sockios.h"}
 
     for root in (ROOT / "includes", ROOT / "setup"):
         if not root.is_dir():
