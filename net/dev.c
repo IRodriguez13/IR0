@@ -22,6 +22,10 @@
 #include <string.h>
 
 /* Private area alignment after struct net_device (Linux NETDEV_ALIGN). */
+/* dev->state bits (Linux enum netdev_state_t). */
+#define LINK_STATE_START	(1UL << 0)	/* dev_open() done */
+#define LINK_STATE_NOCARRIER	(1UL << 1)	/* driver: no link */
+
 #define NETDEV_ALIGN	32U
 #define NETDEV_PRIV_OFFSET \
 	((sizeof(struct net_device) + NETDEV_ALIGN - 1U) & ~(size_t)(NETDEV_ALIGN - 1U))
@@ -131,19 +135,93 @@ struct net_device *dev_get_by_name(const char *name)
 	return NULL;
 }
 
+/* IFF_RUNNING follows "up with a carrier" (Linux dev_get_flags()). */
+static void dev_update_running(struct net_device *dev)
+{
+	if (netif_running(dev) && netif_carrier_ok(dev))
+		dev->flags |= IFF_RUNNING;
+	else
+		dev->flags &= ~IFF_RUNNING;
+}
+
+void netif_carrier_on(struct net_device *dev)
+{
+	dev->state &= ~LINK_STATE_NOCARRIER;
+	dev_update_running(dev);
+}
+
+void netif_carrier_off(struct net_device *dev)
+{
+	dev->state |= LINK_STATE_NOCARRIER;
+	dev_update_running(dev);
+}
+
+bool netif_carrier_ok(const struct net_device *dev)
+{
+	return (dev->state & LINK_STATE_NOCARRIER) == 0;
+}
+
+bool netif_running(const struct net_device *dev)
+{
+	return (dev->state & LINK_STATE_START) != 0;
+}
+
 /**
- * dev_change_flags - apply interface flags from SIOCSIFFLAGS or /dev/net
+ * dev_open - bring @dev up: start the hardware (ndo_open) and set IFF_UP
  *
- * An interface that is up is reported running.
+ * Return: 0, or the driver's ndo_open error (the device stays down).
  */
-int dev_change_flags(struct net_device *dev, unsigned int flags)
+int dev_open(struct net_device *dev)
+{
+	int rc;
+
+	if (!dev)
+		return -EINVAL;
+	if (netif_running(dev))
+		return 0;
+	if (dev->netdev_ops && dev->netdev_ops->ndo_open)
+	{
+		rc = dev->netdev_ops->ndo_open(dev);
+		if (rc < 0)
+			return rc;
+	}
+	dev->state |= LINK_STATE_START;
+	dev->flags |= IFF_UP;
+	dev_update_running(dev);
+	return 0;
+}
+
+/* dev_close - quiesce the hardware (ndo_stop) and clear IFF_UP. */
+int dev_close(struct net_device *dev)
 {
 	if (!dev)
 		return -EINVAL;
-	dev->flags = flags;
-	if (flags & IFF_UP)
-		dev->flags |= IFF_RUNNING;
+	if (!netif_running(dev))
+		return 0;
+	if (dev->netdev_ops && dev->netdev_ops->ndo_stop)
+		(void)dev->netdev_ops->ndo_stop(dev);
+	dev->state &= ~LINK_STATE_START;
+	dev->flags &= ~IFF_UP;
+	dev_update_running(dev);
 	return 0;
+}
+
+/**
+ * dev_change_flags - apply interface flags from SIOCSIFFLAGS or /dev/net
+ *
+ * IFF_UP opens or closes the device; IFF_RUNNING is the core's and is
+ * ignored from the caller; every other bit is stored as given.
+ */
+int dev_change_flags(struct net_device *dev, unsigned int flags)
+{
+	const unsigned int core = IFF_UP | IFF_RUNNING;
+
+	if (!dev)
+		return -EINVAL;
+	dev->flags = (flags & ~core) | (dev->flags & core);
+	if (flags & IFF_UP)
+		return dev_open(dev);
+	return dev_close(dev);
 }
 
 int dev_set_mtu(struct net_device *dev, int new_mtu)

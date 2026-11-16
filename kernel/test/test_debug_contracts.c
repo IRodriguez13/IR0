@@ -338,12 +338,12 @@ void ktest_proc_netinfo_contract(void)
 		return;
 	}
 	fake->name = "ktest0";
-	fake->flags = IFF_UP | IFF_RUNNING | IFF_BROADCAST;
 	fake->dev_addr[0] = 0x02;
 	fake->dev_addr[5] = 0x01;
 	fake->netdev_ops = &ktest_netdev_ops;
 
 	KASSERT_EQ(register_netdev(fake), 0);
+	KASSERT_EQ(dev_open(fake), 0);
 	KASSERT_GT(fd, 0);
 	if (fd > 0)
 	{

@@ -10,13 +10,15 @@
  * struct net_device_ops and registers it with register_netdev(). Protocols,
  * socket ioctls and the pseudo filesystems use only this header: they never
  * call a driver. An operation a card does not have is a NULL op, and the core
- * answers for it (dev_set_mac_address() returns -EOPNOTSUPP), so callers never test which driver is behind a device.
+ * answers for it (dev_set_mac_address() returns -EOPNOTSUPP, dev_open() has
+ * nothing to start), so callers never test which driver is behind a device.
  */
 
 #pragma once
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 #define ETH_ALEN	6
 #define ETH_MIN_MTU	68
@@ -63,6 +65,9 @@ struct net_device_stats
  * Driver operations. ndo_start_xmit is mandatory; every other op is optional
  * and NULL means the card does not have it.
  *
+ * @ndo_open:            start the hardware when the interface goes up.
+ *                       NULL: the probe already left it running.
+ * @ndo_stop:            quiesce the hardware when the interface goes down.
  * @ndo_start_xmit:      send one complete Ethernet frame (header included).
  *                       The frame belongs to the caller once this returns.
  *                       Returns 0 or a negative errno.
@@ -76,6 +81,8 @@ struct net_device_stats
  */
 struct net_device_ops
 {
+	int (*ndo_open)(struct net_device *dev);
+	int (*ndo_stop)(struct net_device *dev);
 	int (*ndo_start_xmit)(struct net_device *dev, const void *frame,
 			      size_t len);
 	int (*ndo_set_mac_address)(struct net_device *dev, const uint8_t *addr);
@@ -86,9 +93,10 @@ struct net_device
 {
 	const char *name;
 	uint8_t dev_addr[ETH_ALEN];
-	unsigned int flags;		/* IFF_* */
+	unsigned int flags;		/* IFF_*; IFF_UP/IFF_RUNNING owned by the core */
 	unsigned int mtu;
 	int irq;			/* line from irq_request(), or -1 */
+	unsigned long state;		/* link state, see netif_* */
 	struct net_device_stats stats;
 	const struct net_device_ops *netdev_ops;
 	struct net_device *next;
@@ -104,7 +112,19 @@ void unregister_netdev(struct net_device *dev);
 /* Receive path: a driver hands every received Ethernet frame to the stack. */
 void netif_rx(struct net_device *dev, const void *frame, size_t len);
 
+/*
+ * Link state, as in Linux: the driver reports the carrier, dev_open() and
+ * dev_close() bring the interface up and down, and IFF_RUNNING means up
+ * with a carrier. A new device has a carrier until its driver says not.
+ */
+void netif_carrier_on(struct net_device *dev);
+void netif_carrier_off(struct net_device *dev);
+bool netif_carrier_ok(const struct net_device *dev);
+bool netif_running(const struct net_device *dev);
+
 /* Administrative control (SIOCSIF*, /dev/net, in-kernel autoconfiguration). */
+int dev_open(struct net_device *dev);
+int dev_close(struct net_device *dev);
 int dev_change_flags(struct net_device *dev, unsigned int flags);
 int dev_set_mtu(struct net_device *dev, int new_mtu);
 int dev_set_mac_address(struct net_device *dev, const uint8_t *addr);

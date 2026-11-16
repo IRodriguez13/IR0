@@ -452,6 +452,8 @@ struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
  */
 int init_net_stack(void)
 {
+    struct net_device *dev;
+
     LOG_INFO("NET", "Initializing network stack");
     
     /* Initialize network drivers first. These register net_device structures
@@ -463,6 +465,12 @@ int init_net_stack(void)
     {
         LOG_WARNING("NET", "Some network drivers failed to probe");
     }
+
+    /* In-kernel IP autoconfiguration brings every probed interface up,
+     * as Linux ipconfig does before it configures them.
+     */
+    for_each_netdev(dev)
+        (void)dev_open(dev);
     
     /* Initialize network protocols in dependency order. ARP must come before
      * IP because IP uses ARP to resolve MAC addresses. IP must come before

@@ -385,8 +385,8 @@ static int32_t rtl8139_hw_init(void)
 
     /*
      * MSR bit2 is LinkFail (datasheet / QEMU): 0 = link OK, 1 = down.
-     * QEMU user-net keeps the link up; inverted polarity left eth0 without
-     * IFF_UP so plain `ifconfig` (no -a) printed nothing.
+     * QEMU user-net keeps the link up; inverted polarity reported no
+     * carrier, so eth0 never showed RUNNING.
      */
     uint8_t msr = inb(rtl8139_io_base + RTL8139_REG_MSR);
     bool link_ok = (msr & RTL8139_MSR_LINKB) == 0;
@@ -403,11 +403,12 @@ static int32_t rtl8139_hw_init(void)
     rtl8139_dev->netdev_ops = &rtl8139_netdev_ops;
     if (link_ok)
     {
-        rtl8139_dev->flags |= IFF_UP | IFF_RUNNING;
+        netif_carrier_on(rtl8139_dev);
         LOG_INFO("RTL8139", "Link is UP");
     }
     else
     {
+        netif_carrier_off(rtl8139_dev);
         LOG_WARNING("RTL8139", "Link is DOWN");
     }
 

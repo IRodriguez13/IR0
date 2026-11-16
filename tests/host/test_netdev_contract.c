@@ -6,7 +6,8 @@
  * File: test_netdev_contract.c
  * Description: netdev_contract_suite — the network device class core
  *              (net/dev.c) against fake drivers: registration, lookup,
- *              optional ops, MTU range, IRQ dispatch and polling.
+ *              optional ops, MTU range, IRQ dispatch, polling and link
+ *              state.
  */
 
 #include "test_harness_ir0.h"
@@ -18,6 +19,8 @@
 
 static int g_poll_calls;
 static int g_irq_calls;
+static int g_open_rc;
+static int g_stop_calls;
 
 static int fake_xmit(struct net_device *dev, const void *frame, size_t len)
 {
@@ -40,6 +43,19 @@ static void fake_irq(uint32_t irq, void *data)
 	g_irq_calls++;
 }
 
+static int fake_open(struct net_device *dev)
+{
+	(void)dev;
+	return g_open_rc;
+}
+
+static int fake_stop(struct net_device *dev)
+{
+	(void)dev;
+	g_stop_calls++;
+	return 0;
+}
+
 /* A card with every optional op missing. */
 static const struct net_device_ops minimal_ops = {
 	.ndo_start_xmit = fake_xmit,
@@ -50,6 +66,13 @@ static const struct net_device_ops polled_ops = {
 	.ndo_start_xmit = fake_xmit,
 	.ndo_set_mac_address = eth_mac_addr,
 	.ndo_poll_controller = fake_poll,
+};
+
+/* A card that starts and stops its hardware with the interface. */
+static const struct net_device_ops stateful_ops = {
+	.ndo_open = fake_open,
+	.ndo_stop = fake_stop,
+	.ndo_start_xmit = fake_xmit,
 };
 
 void test_netdev_contract(void)
@@ -143,6 +166,54 @@ void test_netdev_contract(void)
 	ASSERT_EQ(net_stack_get_irq_line(), -1);
 	free_netdev(a);
 	free_netdev(b);
+	TEST_END();
+
+	TEST_BEGIN("netdev_down_is_not_running");
+	/* BusyBox "ifconfig eth0 down": SIOCSIFFLAGS with the read flags
+	 * minus IFF_UP, so IFF_RUNNING comes back from userspace. */
+	a = alloc_etherdev(0);
+	ASSERT(a != NULL);
+	a->name = "fake2";
+	a->netdev_ops = &minimal_ops;
+	ASSERT_EQ(dev_change_flags(a, IFF_UP | IFF_BROADCAST), 0);
+	ASSERT(a->flags & IFF_UP);
+	ASSERT(a->flags & IFF_RUNNING);
+	ASSERT_EQ(dev_change_flags(a, IFF_BROADCAST | IFF_RUNNING), 0);
+	ASSERT(!(a->flags & IFF_UP));
+	ASSERT(!(a->flags & IFF_RUNNING));
+	ASSERT(a->flags & IFF_BROADCAST);
+	free_netdev(a);
+	TEST_END();
+
+	TEST_BEGIN("netdev_carrier_and_open");
+	a = alloc_etherdev(0);
+	ASSERT(a != NULL);
+	a->name = "fake3";
+	a->netdev_ops = &stateful_ops;
+	ASSERT(netif_carrier_ok(a));
+	ASSERT(!netif_running(a));
+	netif_carrier_off(a);
+	g_open_rc = -EIO;
+	ASSERT_EQ(dev_open(a), -EIO);
+	ASSERT(!netif_running(a));
+	ASSERT(!(a->flags & IFF_UP));
+	g_open_rc = 0;
+	ASSERT_EQ(dev_open(a), 0);
+	ASSERT(netif_running(a));
+	ASSERT(a->flags & IFF_UP);
+	ASSERT(!(a->flags & IFF_RUNNING));
+	netif_carrier_on(a);
+	ASSERT(a->flags & IFF_RUNNING);
+	netif_carrier_off(a);
+	ASSERT(!(a->flags & IFF_RUNNING));
+	netif_carrier_on(a);
+	g_stop_calls = 0;
+	ASSERT_EQ(dev_close(a), 0);
+	ASSERT_EQ(g_stop_calls, 1);
+	ASSERT(!(a->flags & (IFF_UP | IFF_RUNNING)));
+	ASSERT_EQ(dev_close(a), 0);
+	ASSERT_EQ(g_stop_calls, 1);
+	free_netdev(a);
 	TEST_END();
 
 	TEST_BEGIN("network_byte_order_contract");

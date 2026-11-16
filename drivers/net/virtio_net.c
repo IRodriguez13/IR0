@@ -391,7 +391,6 @@ static int virtio_net_probe(void)
 	}
 	g_dev->name = "virt0";
 	memcpy(g_dev->dev_addr, g_mac, ETH_ALEN);
-	g_dev->flags = IFF_UP | IFF_RUNNING | IFF_BROADCAST;
 	g_dev->netdev_ops = &virtio_net_ops;
 	register_netdev(g_dev);
 

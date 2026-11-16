@@ -387,9 +387,10 @@ static int bcmgenet_probe(void)
 
 	dev->name = "eth0";
 	memcpy(dev->dev_addr, g_genet->mac, ETH_ALEN);
-	dev->flags = IFF_BROADCAST | IFF_RUNNING;
 	if (g_genet->link_up)
-		dev->flags |= IFF_UP;
+		netif_carrier_on(dev);
+	else
+		netif_carrier_off(dev);
 	dev->netdev_ops = &genet_netdev_ops;
 	if (register_netdev(dev) != 0)
 	{
