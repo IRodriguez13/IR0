@@ -87,7 +87,7 @@ bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t leng
 	return false;
 }
 
-uint64_t *process_pt_child(uint64_t *table, size_t index)
+static uint64_t *process_pt_child(uint64_t *table, size_t index)
 {
 	if (!mm_pte_present(table[index]))
 		return NULL;

@@ -130,7 +130,7 @@ int boot_memory_normalize_ranges(const struct ir0_phys_range *input,
 	return 0;
 }
 
-int boot_memory_get_usable_ranges(struct ir0_phys_range *ranges,
+static int boot_memory_get_usable_ranges(struct ir0_phys_range *ranges,
 				  size_t capacity, size_t *count)
 {
 	struct ir0_phys_range raw[IR0_BOOT_MEMORY_MAX_BANKS];

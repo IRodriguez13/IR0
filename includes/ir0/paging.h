@@ -60,7 +60,6 @@
 /**
  * Enable paging (sets CR0.PG bit)
  */
-void enable_paging(void);
 
 /**
  * Complete paging setup: configure tables and enable paging
@@ -107,7 +106,6 @@ void paging_poison_phys_page(uintptr_t phys, uint8_t pattern);
 /**
  * Check if paging is enabled
  */
-int is_paging_enabled(void);
 
 /**
  * Map a virtual address to a physical address

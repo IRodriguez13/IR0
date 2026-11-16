@@ -33,7 +33,6 @@ struct ir0_oom_candidate
     int16_t score_adj;
 };
 
-int oom_candidate_eligible(const struct ir0_oom_candidate *candidate);
 uint64_t oom_candidate_badness(const struct ir0_oom_candidate *candidate,
                                uint64_t total_pages);
 
@@ -69,8 +68,6 @@ int process_oom_score_adj_set(struct process *process, int adjustment);
  * killed, so the caller retries the allocation once. Killing the current
  * task does not return. The pre-patch hook was oom_out_of_memory() directly.
  */
-int oom_kill_process(struct process *victim, const char *reason);
-int oom_out_of_memory(struct process *origin, const char *reason);
 int oom_handle_alloc_failure(struct process *current, const char *site);
 uint64_t oom_kill_count(void);
 

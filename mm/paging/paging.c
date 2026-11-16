@@ -22,6 +22,8 @@
 #include <ir0/swap.h>
 #include <ir0/tlb.h>
 
+static int is_paging_enabled(void);
+
 /*
  * Boot/kernel address-space root with full PMM identity. Pinned once before
  * any process mm. Used like Linux kmap for physical page copy/zero
@@ -86,7 +88,7 @@ void ir0_mm_free_table_frame(uint64_t frame, int level)
 }
 
 
-void enable_paging(void)
+static void enable_paging(void)
 {
 	mm_enable_translation();
 	paging_pin_kernel_address_space(paging_current_address_space());
@@ -197,7 +199,7 @@ void paging_poison_phys_page(uintptr_t phys, uint8_t pattern)
 	paging_phys_map_end(saved);
 }
 
-int is_paging_enabled(void)
+static int is_paging_enabled(void)
 {
 	return mm_translation_enabled();
 }

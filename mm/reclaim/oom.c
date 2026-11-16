@@ -23,7 +23,7 @@ static uint64_t oom_adjustment_pages(uint64_t total_pages, unsigned adjustment)
     return whole + remainder;
 }
 
-int oom_candidate_eligible(const struct ir0_oom_candidate *candidate)
+static int oom_candidate_eligible(const struct ir0_oom_candidate *candidate)
 {
     const uint32_t required = IR0_OOM_CANDIDATE_USER |
                               IR0_OOM_CANDIDATE_ALIVE |

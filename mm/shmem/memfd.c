@@ -38,7 +38,7 @@ struct ir0_memfd
 
 static struct ir0_memfd g_memfd[MEMFD_MAX];
 
-int ir0_memfd_is(const void *ptr)
+static int ir0_memfd_is(const void *ptr)
 {
 	const struct ir0_memfd *m = ptr;
 	uintptr_t base = (uintptr_t)&g_memfd[0];

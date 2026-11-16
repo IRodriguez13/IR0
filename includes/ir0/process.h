@@ -511,7 +511,6 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
 
-
 void fork_ret_emit_pre_return(void);
 void fork_restore_emit_pre_iretq(void);
 void fork_ret_first_syscall_entry(uint64_t nr, uint64_t ip, uint64_t sp);
@@ -628,7 +627,6 @@ void process_reparent_children(process_t *dying_parent);
 int process_signal_is_default_fatal(process_t *p, int sig);
 int process_signal_default_kill(process_t *target, int signal);
 
-
 void process_saved_environ_clear(process_t *p);
 int process_saved_environ_set(process_t *p, char *const envp[]);
 int process_saved_environ_clone(process_t *dst, const process_t *src);
@@ -681,7 +679,6 @@ void process_fork_wake_pending(process_t *parent);
 void process_fork_abort_pending_on_exit(process_t *parent);
 void process_syscall_restore_exit_regs(uint64_t *exit_frame);
 
-
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);
 process_t *process_get_current(void);
@@ -694,8 +691,6 @@ pid_t process_last_assigned_pid(void);
 void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 process_t *process_find_child_of(pid_t ppid);
-
-
 
 address_space_root_t process_mm_create_root(void);
 void process_init_fd_table(process_t *process);
@@ -715,8 +710,6 @@ int process_kernel_stack_alloc(process_t *p);
 void process_kernel_stack_free(process_t *p);
 void process_unmap_user_address_space(process_t *p);
 int process_remove_from_list(process_t *target);
-
-uint64_t *process_pt_child(uint64_t *table, size_t index);
 
 /*
  * Count present 4 KiB-equivalent user leaf pages under @p's page tables.

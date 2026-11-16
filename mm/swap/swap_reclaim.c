@@ -86,7 +86,7 @@ int ir0_swap_drop_pte(uint64_t pte)
 	return ir0_swap_slot_put(type, offset);
 }
 
-int ir0_swap_out_page(process_t *proc, uintptr_t va)
+static int ir0_swap_out_page(process_t *proc, uintptr_t va)
 {
 	uint64_t *pte;
 	uintptr_t phys;
