@@ -84,7 +84,7 @@ binaries into it as part of the kernel build.
 | Target | Role |
 |--------|------|
 | `make run DISK=…` | Boot the kernel ISO with an ISD-built userspace disk |
-| `make headers_install DESTDIR=…` | Export public UAPI (`includes/uapi/`) for an external userspace build |
+| `make headers_install DESTDIR=… [arm64]` | Export public UAPI (`includes/uapi/` + `arch/<isa>/include/uapi/`) for an external userspace build |
 | `make check-env PROFILE=userspace` | Host toolchain used by external ISD builds |
 | `make ir0` | Kernel ISO only (no userspace) |
 
