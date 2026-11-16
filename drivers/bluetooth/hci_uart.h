@@ -79,7 +79,6 @@ int hci_uart_send_command(const uint8_t *cmd, size_t len);
  * 
  * Returns: Number of bytes sent on success, negative error on failure
  */
-int hci_uart_send_acl(const uint8_t *data, size_t len);
 
 /**
  * hci_uart_receive_event - Receive HCI event packet
@@ -103,7 +102,6 @@ int hci_uart_receive_event(uint8_t *event, size_t max_len);
  * 
  * Returns: Number of bytes received on success, 0 if no data, negative error on failure
  */
-int hci_uart_receive_acl(uint8_t *data, size_t max_len);
 
 /**
  * hci_uart_is_data_available - Check if data is available for reading
@@ -117,7 +115,3 @@ bool hci_uart_is_data_available(void);
  * 
  * Returns: Pointer to HCI UART instance, NULL if not initialized
  */
-struct hci_uart *hci_uart_get_instance(void);
-
-
-

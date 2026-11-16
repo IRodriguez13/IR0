@@ -20,7 +20,6 @@ int ir0_bluetooth_register_driver(void);
 
 int ir0_bt_proc_devices_read(char *buffer, size_t count);
 int ir0_bt_proc_scan_read(char *buffer, size_t count);
-int ir0_bt_proc_scan_write(const char *command);
 
 int ir0_bt_sysfs_hci0_address_read(char *buf, size_t count);
 int ir0_bt_sysfs_hci0_state_read(char *buf, size_t count);

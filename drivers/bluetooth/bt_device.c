@@ -106,14 +106,6 @@ void bt_scan_state_sync(void)
 }
 
 /**
- * bt_device_get_manager - Get device manager instance
- */
-struct bt_device_manager *bt_device_get_manager(void)
-{
-    return bt_manager;
-}
-
-/**
  * bt_hci_open - Open HCI device
  */
 int bt_hci_open(void)

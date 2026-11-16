@@ -141,28 +141,6 @@ int hci_uart_send_command(const uint8_t *cmd, size_t len)
 }
 
 /**
- * hci_uart_send_acl - Send HCI ACL data packet
- */
-int hci_uart_send_acl(const uint8_t *data, size_t len)
-{
-    uint16_t base;
-
-    if (!hci_uart_instance || !hci_uart_instance->initialized)
-        return -ENODEV;
-
-    if (!data || len == 0)
-        return -EINVAL;
-
-    base = hci_uart_instance->uart_base;
-    outb(base + SERIAL_DATA_REG, HCI_PACKET_TYPE_ACL_DATA);
-
-    for (size_t i = 0; i < len; i++)
-        outb(base + SERIAL_DATA_REG, data[i]);
-
-    return (int)len;
-}
-
-/**
  * hci_uart_receive_event - Receive HCI event packet
  */
 int hci_uart_receive_event(uint8_t *event, size_t max_len)
@@ -195,64 +173,6 @@ int hci_uart_receive_event(uint8_t *event, size_t max_len)
 }
 
 /**
- * hci_uart_receive_acl - Receive HCI ACL data packet
- */
-int hci_uart_receive_acl(uint8_t *data, size_t max_len)
-{
-    if (!hci_uart_instance || !hci_uart_instance->initialized)
-        return -ENODEV;
-
-    if (!data || max_len == 0)
-        return -EINVAL;
-
-    if (!hci_uart_is_data_available())
-        return 0;
-
-    {
-        uint8_t packet_type;
-
-        if (!hci_uart_try_read_byte(&packet_type))
-            return 0;
-
-        if (packet_type != HCI_PACKET_TYPE_ACL_DATA)
-            return -EINVAL;
-    }
-
-    if (max_len < 4)
-        return -EINVAL;
-
-    for (int i = 0; i < 4; i++)
-    {
-        uint8_t byte;
-
-        if (!hci_uart_try_read_byte(&byte))
-            return -EAGAIN;
-
-        data[i] = byte;
-    }
-
-    {
-        uint16_t data_len = (uint16_t)data[2] | ((uint16_t)data[3] << 8);
-        size_t total_len = 4 + data_len;
-
-        if (total_len > max_len)
-            total_len = max_len;
-
-        for (size_t i = 4; i < total_len; i++)
-        {
-            uint8_t byte;
-
-            if (!hci_uart_try_read_byte(&byte))
-                return -EAGAIN;
-
-            data[i] = byte;
-        }
-
-        return (int)total_len;
-    }
-}
-
-/**
  * hci_uart_is_data_available - Check if data is available
  */
 bool hci_uart_is_data_available(void)
@@ -267,10 +187,3 @@ bool hci_uart_is_data_available(void)
     return (inb(hci_uart_instance->uart_base + SERIAL_LINE_STATUS_REG) & 0x01) != 0;
 }
 
-/**
- * hci_uart_get_instance - Get HCI UART instance
- */
-struct hci_uart *hci_uart_get_instance(void)
-{
-    return hci_uart_instance;
-}
