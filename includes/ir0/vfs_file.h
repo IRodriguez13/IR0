@@ -42,6 +42,3 @@ struct ir0_vfs_file_ops
 	void (*acquire)(struct vfs_file *f);
 	int (*put)(struct vfs_file *f);
 };
-
-const struct ir0_vfs_file_ops *ir0_vfs_file_product(void);
-const struct fd_resource_ops *ir0_vfs_file_resource_ops(void);

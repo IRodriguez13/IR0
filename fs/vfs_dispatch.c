@@ -15,14 +15,6 @@
 
 static struct vfs_ops *g_ops;
 
-int vfs_dispatch_bind(struct vfs_ops *ops)
-{
-	if (!ops || !ops->stat || !ops->read)
-		return -EINVAL;
-	g_ops = ops;
-	return 0;
-}
-
 struct vfs_ops *vfs_dispatch_ops(const char *path)
 {
 	if (!path || path[0] != '/' || !g_ops)

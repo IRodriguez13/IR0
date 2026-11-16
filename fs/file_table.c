@@ -86,39 +86,3 @@ int vfs_file_put(struct vfs_file *f)
 	return vfs_file_put_last(f, NULL);
 }
 
-static int vfs_file_resource_acquire(fd_entry_t *entry)
-{
-	if (!entry || !entry->vfs_file)
-		return -EINVAL;
-	vfs_file_acquire((struct vfs_file *)entry->vfs_file);
-	return 0;
-}
-
-static void vfs_file_resource_release(fd_entry_t *entry)
-{
-	if (!entry || !entry->vfs_file)
-		return;
-	(void)vfs_file_put((struct vfs_file *)entry->vfs_file);
-}
-
-static const fd_resource_ops_t g_vfs_file_resource_ops = {
-	"vfs_file",
-	vfs_file_resource_acquire,
-	vfs_file_resource_release,
-};
-
-static const struct ir0_vfs_file_ops g_vfs_file_ops = {
-	.alloc = vfs_file_alloc,
-	.acquire = vfs_file_acquire,
-	.put = vfs_file_put,
-};
-
-const struct ir0_vfs_file_ops *ir0_vfs_file_product(void)
-{
-	return &g_vfs_file_ops;
-}
-
-const struct fd_resource_ops *ir0_vfs_file_resource_ops(void)
-{
-	return &g_vfs_file_resource_ops;
-}
