@@ -22,6 +22,7 @@
 #include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
+#include <ir0/netdevice.h>
 
 #define DHCP_CLIENT_PORT 68
 #define DHCP_SERVER_PORT 67
@@ -157,7 +158,7 @@ static size_t dhcp_build_payload(uint8_t *buffer, size_t buffer_len, const struc
     hdr->yiaddr = 0;
     hdr->siaddr = 0;
     hdr->giaddr = 0;
-    memcpy(hdr->chaddr, dev->mac, 6);
+    memcpy(hdr->chaddr, dev->dev_addr, 6);
 
     uint8_t *opt = buffer + sizeof(struct dhcp_bootp_header);
     uint8_t *opt_end = buffer + buffer_len;
@@ -181,7 +182,7 @@ static size_t dhcp_build_payload(uint8_t *buffer, size_t buffer_len, const struc
     *opt++ = DHCP_OPTION_CLIENT_ID;
     *opt++ = 7;
     *opt++ = DHCP_HTYPE_ETHERNET;
-    memcpy(opt, dev->mac, 6);
+    memcpy(opt, dev->dev_addr, 6);
     opt += 6;
 
     if (msg_type == DHCP_MSG_REQUEST)
@@ -455,7 +456,7 @@ static int dhcp_wait_offer(uint32_t timeout_ms)
         uint64_t flags;
         int ready;
 
-        net_poll();
+        net_stack_poll();
         flags = ir0_spin_lock_irqsave(&dhcp_lock);
         ready = dhcp_state.offer_ready;
         ir0_spin_unlock_irqrestore(&dhcp_lock, flags);
@@ -479,7 +480,7 @@ static int dhcp_wait_ack(uint32_t timeout_ms)
         int ack;
         int nak;
 
-        net_poll();
+        net_stack_poll();
         flags = ir0_spin_lock_irqsave(&dhcp_lock);
         ack = dhcp_state.ack_ready;
         nak = dhcp_state.nak_ready;
@@ -519,13 +520,10 @@ static void dhcp_apply_config(struct dhcp_offer_data *offer)
     arp_set_my_ip(cfg.addr);
 
     {
-        struct net_device *dev = net_get_devices();
+        struct net_device *dev;
 
-        while (dev)
-        {
+        for_each_netdev(dev)
             arp_set_interface_ip(dev, cfg.addr);
-            dev = dev->next;
-        }
     }
 
     (void)ip_routes_seed_from_globals();
@@ -545,7 +543,7 @@ static void dhcp_apply_config(struct dhcp_offer_data *offer)
 
 int dhcp_init(void)
 {
-    struct net_device *dev = net_get_devices();
+    struct net_device *dev = first_net_device();
     if (!dev)
     {
         LOG_WARNING("DHCP", "No network device available, skipping DHCP");

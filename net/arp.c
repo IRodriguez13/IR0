@@ -21,6 +21,7 @@
 #include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
+#include <ir0/netdevice.h>
 
 /* ARP Cache timeout: entries expire after 5 minutes. This matches typical
  * Linux behavior - ARP cache entries are considered stale after a few minutes
@@ -241,7 +242,7 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
             reply->opcode = htons(ARP_OP_REPLY);
             
             /* Sender (us): use interface-specific IP if available, else default */
-            memcpy(reply->sender_mac, dev->mac, 6);
+            memcpy(reply->sender_mac, dev->dev_addr, 6);
             reply->sender_ip = (interface_ip != 0) ? interface_ip : my_ip;
             
             /* Target (request sender) */
@@ -433,7 +434,7 @@ static void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
     request->opcode = htons(ARP_OP_REQUEST);
     
     /* Sender (us): prefer per-interface IP when configured */
-    memcpy(request->sender_mac, dev->mac, 6);
+    memcpy(request->sender_mac, dev->dev_addr, 6);
     {
         ip4_addr_t sender_ip = my_ip;
         ip4_addr_t if_ip;
@@ -491,7 +492,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         if (arp_get_interface_ip(dev, &interface_ip) == 0 && ip == interface_ip)
         {
             /* This is our interface IP, use our MAC */
-            memcpy(mac, dev->mac, 6);
+            memcpy(mac, dev->dev_addr, 6);
             LOG_INFO_FMT("ARP", "IP " IP4_FMT " is our interface IP, using our MAC", IP4_ARGS(ntohl(ip)));
             return 0;
         }
@@ -505,7 +506,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         /* This is our own IP, use our MAC */
         if (dev)
         {
-            memcpy(mac, dev->mac, 6);
+            memcpy(mac, dev->dev_addr, 6);
             LOG_INFO_FMT("ARP", "IP " IP4_FMT " is our own IP, using our MAC", IP4_ARGS(ntohl(ip)));
             return 0;
         }
@@ -548,7 +549,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
             uint64_t elapsed = clock_get_uptime_milliseconds() - start_time;
 
             /* Process received frames: Ethernet -> IP -> ARP. */
-            net_poll();
+            net_stack_poll();
             if (arp_lookup_mac(ip, mac) == 0)
             {
                 LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved after %d ms (attempt %d)",

@@ -17,6 +17,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>
 #include <ir0/net.h>
+#include <ir0/netdevice.h>
 #include "ip.h"
 #include <string.h>
 
@@ -82,7 +83,6 @@ static int g_ip_broadcast_set;
 
 static struct net_device *sock_find_dev(const char *name)
 {
-	struct net_device *dev;
 	char nbuf[IR0_IFNAMSIZ + 1];
 	size_t i;
 
@@ -93,14 +93,7 @@ static struct net_device *sock_find_dev(const char *name)
 		nbuf[i] = name[i];
 	nbuf[i] = '\0';
 
-	dev = net_get_devices();
-	while (dev)
-	{
-		if (dev->name && strcmp(dev->name, nbuf) == 0)
-			return dev;
-		dev = dev->next;
-	}
-	return NULL;
+	return dev_get_by_name(nbuf);
 }
 
 static void sock_fill_sockaddr_in(struct ir0_sockaddr *sa, ip4_addr_t ip_be)
@@ -175,11 +168,11 @@ static int sock_siocgifconf(void *arg)
 	if (copy_from_user(&ifc, arg, sizeof(ifc)) != 0)
 		return -EFAULT;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	while (dev)
 	{
 		need += (int)sizeof(struct ir0_ifreq);
-		dev = dev->next;
+		dev = next_net_device(dev);
 	}
 
 	ubuf = ifc.ifc_ifcu.ifcu_buf;
@@ -191,7 +184,7 @@ static int sock_siocgifconf(void *arg)
 		return 0;
 	}
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	while (dev && written + (int)sizeof(struct ir0_ifreq) <= ifc.ifc_len)
 	{
 		struct ir0_ifreq ifr;
@@ -209,7 +202,7 @@ static int sock_siocgifconf(void *arg)
 		if (copy_to_user(ubuf + written, &ifr, sizeof(ifr)) != 0)
 			return -EFAULT;
 		written += (int)sizeof(ifr);
-		dev = dev->next;
+		dev = next_net_device(dev);
 	}
 
 	ifc.ifc_len = written;
@@ -238,7 +231,7 @@ static int sock_siocgifname(void *arg)
 		return -ENODEV;
 
 	idx = 1;
-	dev = net_get_devices();
+	dev = first_net_device();
 	while (dev)
 	{
 		if (idx == want)
@@ -259,7 +252,7 @@ static int sock_siocgifname(void *arg)
 			return 0;
 		}
 		idx++;
-		dev = dev->next;
+		dev = next_net_device(dev);
 	}
 	return -ENODEV;
 }
@@ -308,17 +301,17 @@ static int sock_siocgif_one(uint64_t request, void *arg)
 	case IR0_SIOCGIFHWADDR:
 		memset(&ifr.ifr_ifru.addr, 0, sizeof(ifr.ifr_ifru.addr));
 		ifr.ifr_ifru.addr.sa_family = IR0_ARPHRD_ETHER;
-		memcpy(ifr.ifr_ifru.addr.sa_data, dev->mac, 6);
+		memcpy(ifr.ifr_ifru.addr.sa_data, dev->dev_addr, 6);
 		break;
 	case IR0_SIOCGIFINDEX:
 		idx = 1;
 		{
-			struct net_device *d = net_get_devices();
+			struct net_device *d = first_net_device();
 
 			while (d && d != dev)
 			{
 				idx++;
-				d = d->next;
+				d = next_net_device(d);
 			}
 		}
 		ifr.ifr_ifru.ivalue = idx;
@@ -357,10 +350,7 @@ static int sock_siocsif_one(uint64_t request, void *arg)
 	switch (request)
 	{
 	case IR0_SIOCSIFFLAGS:
-		dev->flags = (uint32_t)(unsigned short)ifr.ifr_ifru.flags;
-		if (dev->flags & IFF_UP)
-			dev->flags |= IFF_RUNNING;
-		break;
+		return dev_change_flags(dev, (unsigned short)ifr.ifr_ifru.flags);
 	case IR0_SIOCSIFADDR:
 		ip_get_config(&cfg);
 		cfg.addr = sock_sockaddr_in_addr(&ifr.ifr_ifru.addr);
@@ -388,13 +378,10 @@ static int sock_siocsif_one(uint64_t request, void *arg)
 		}
 		break;
 	case IR0_SIOCSIFMTU:
-		if (ifr.ifr_ifru.mtu < 68 || ifr.ifr_ifru.mtu > 65535)
-			return -EINVAL;
-		dev->mtu = (size_t)ifr.ifr_ifru.mtu;
-		break;
+		return dev_set_mtu(dev, ifr.ifr_ifru.mtu);
 	case IR0_SIOCSIFHWADDR:
-		memcpy(dev->mac, ifr.ifr_ifru.addr.sa_data, 6);
-		break;
+		return dev_set_mac_address(dev,
+					   (const uint8_t *)ifr.ifr_ifru.addr.sa_data);
 	case IR0_SIOCSIFMETRIC:
 		g_if_metric = ifr.ifr_ifru.ivalue;
 		break;

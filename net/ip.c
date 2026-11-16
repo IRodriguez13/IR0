@@ -21,6 +21,7 @@
 #include <ir0/klog.h>
 #include <ir0/clock.h>
 #include <string.h>
+#include <ir0/netdevice.h>
 
 /* IP Configuration (default values) */
 ip4_addr_t ip_local_addr = 0;  /* Will be set during initialization */
@@ -704,16 +705,15 @@ int ip_init(void)
     arp_set_my_ip(ip_local_addr);
     
     /* Configure interface IP for all registered network devices */
-    struct net_device *dev = net_get_devices();
-    
-    while (dev)
+    struct net_device *dev;
+
+    for_each_netdev(dev)
     {
         if (arp_set_interface_ip(dev, ip_local_addr) == 0)
         {
             LOG_INFO_FMT("IP", "Configured interface IP " IP4_FMT " for device %s",
                         IP4_ARGS(ntohl(ip_local_addr)), dev->name);
         }
-        dev = dev->next;
     }
 
     LOG_INFO_FMT("IP", "Initializing IPv4 with address " IP4_FMT, IP4_ARGS(ntohl(ip_local_addr)));

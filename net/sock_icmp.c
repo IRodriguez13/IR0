@@ -18,6 +18,7 @@
 #include <ir0/errno.h>
 #include <ir0/clock.h>
 #include <ir0/net.h>
+#include <ir0/netdevice.h>
 #include <ir0/arch_port.h>
 #include <config.h>
 #include <string.h>
@@ -291,8 +292,6 @@ int sock_icmp_set_ttl(struct sock_icmp *sock, int ttl)
 int sock_icmp_set_bind_device(struct sock_icmp *sock, const char *name, size_t len)
 {
 	size_t n;
-	struct net_device *d;
-	int found = 0;
 
 	if (!sock || !sock_icmp_is(sock))
 		return -EINVAL;
@@ -307,17 +306,7 @@ int sock_icmp_set_bind_device(struct sock_icmp *sock, const char *name, size_t l
 	memcpy(sock->bind_dev, name, n);
 	sock->bind_dev[n] = '\0';
 
-	d = net_get_devices();
-	while (d)
-	{
-		if (d->name && strcmp(d->name, sock->bind_dev) == 0)
-		{
-			found = 1;
-			break;
-		}
-		d = d->next;
-	}
-	if (!found)
+	if (!dev_get_by_name(sock->bind_dev))
 	{
 		sock->bind_dev[0] = '\0';
 		return -ENODEV;
@@ -347,22 +336,15 @@ int sock_icmp_sendto(struct sock_icmp *sock, uint32_t dest_ip_be,
 	if (len > SOCK_ICMP_PKT_MAX)
 		return -EMSGSIZE;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (!dev)
 		return -ENETUNREACH;
 	if (sock->bind_dev[0])
 	{
-		struct net_device *d = net_get_devices();
+		struct net_device *d = dev_get_by_name(sock->bind_dev);
 
-		while (d)
-		{
-			if (d->name && strcmp(d->name, sock->bind_dev) == 0)
-			{
-				dev = d;
-				break;
-			}
-			d = d->next;
-		}
+		if (d)
+			dev = d;
 	}
 
 	ttl = sock->ttl ? sock->ttl : 64;

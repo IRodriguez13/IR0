@@ -98,6 +98,7 @@ KERNEL_HOST_OBJS += host_tlb_sync.o
 KERNEL_HOST_OBJS += host_vbe.o host_x86_boot_identity.o
 KERNEL_HOST_OBJS += host_fault.o
 KERNEL_HOST_OBJS += host_swap_header.o host_swap.o host_swap_reclaim.o host_dma.o host_irq_dispatch.o
+KERNEL_HOST_OBJS += host_net_dev.o
 KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
 	host_ktm_video_mock.o host_ktm_audio_mock.o \
 	host_ktm_mm_port_mock.o host_ktm_platform_mock.o
@@ -222,6 +223,9 @@ host_dma.o: $(KERNEL_ROOT)/arch/x86-64/sources/dma.c
 	$(KERNEL_CC)
 
 host_irq_dispatch.o: $(KERNEL_ROOT)/kernel/irq_dispatch.c
+	$(KERNEL_CC)
+
+host_net_dev.o: $(KERNEL_ROOT)/net/dev.c
 	$(KERNEL_CC)
 
 host_ktm_console_mock.o: $(KERNEL_ROOT)/ktm/mocks/console/ktm_console_mock.c

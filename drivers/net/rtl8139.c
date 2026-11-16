@@ -11,7 +11,8 @@
  * Description: RTL8139 network card driver implementation
  */
 
-#include <ir0/net.h>
+#include <ir0/netdevice.h>
+#include <ir0/irq.h>
 #include "rtl8139.h"
 #include <stdbool.h>
 #include <ir0/ktm/klog.h>
@@ -37,7 +38,6 @@
 
 /* Global driver state */
 static uint16_t rtl8139_io_base = 0;
-static int rtl8139_irq_line = -1;
 static uint8_t *rtl8139_rx_buffer = NULL;
 static uint8_t *rtl8139_tx_buffers[4] = {NULL, NULL, NULL, NULL}; /* 4 TX descriptors */
 static uint32_t rtl8139_current_tx_descriptor = 0;
@@ -50,19 +50,6 @@ static volatile uint8_t rtl8139_rx_processing = 0;
 static volatile uint32_t rtl8139_tx_in_flight = 0;  /* Counter of TX packets currently being DMA'd */
 static volatile uint32_t rtl8139_tx_descriptor_own_state[4] = {1, 1, 1, 1};  /* 1 = host owns (idle) */
 
-/*
- * Packet and error counters for /proc/net/dev and diagnostics.
- * Updated from RX processing, TX completion, and interrupt status.
- */
-static struct rtl8139_counters {
-    uint64_t rx_packets;
-    uint64_t tx_packets;
-    uint64_t rx_bytes;
-    uint64_t tx_bytes;
-    uint64_t rx_errors;
-    uint64_t tx_errors;
-} rtl8139_counters;
-
 /* Packet lengths queued per TX descriptor (added to tx_bytes on TOK). */
 static uint32_t rtl8139_tx_pending_len[4];
 
@@ -73,7 +60,11 @@ static uint32_t rtl8139_tx_pending_len[4];
 static uint64_t rtl8139_tx_desc_start_tick[4];
 static uint8_t rtl8139_tx_timeout_latched[4];
 
-static struct net_device rtl8139_dev;
+/*
+ * The registered device. Its stats count packets, bytes and errors from RX
+ * processing, TX completion and interrupt status for /proc/net/dev.
+ */
+static struct net_device *rtl8139_dev;
 
 /* Rate-limit full TX ring recover (ms-scale via timer ticks). */
 static uint64_t rtl8139_last_full_recover_tick;
@@ -85,9 +76,6 @@ static void rtl8139_check_tx_completion(void);
 static int rtl8139_find_free_tx_descriptor(void);
 static void rtl8139_handle_interrupt(void);
 static void rtl8139_poll(void);
-static int rtl8139_get_irq_line(void);
-static void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
-                              uint64_t *rx_errs, uint64_t *tx_errs);
 
 /*
  * Force-recover TX path when descriptors appear wedged.
@@ -193,15 +181,16 @@ static ir0_driver_info_t rtl8139_info = {
     .language = IR0_DRIVER_LANG_C
 };
 
-/* Forward declarations for net_device ops */
-static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len);
+/* net_device ops and the IRQ handler */
+static void rtl8139_irq(uint32_t irq, void *data);
+static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t len);
 static void rtl8139_netdev_poll(struct net_device *dev);
-static int rtl8139_netdev_get_irq_line(struct net_device *dev);
-static int rtl8139_netdev_handle_irq(struct net_device *dev, uint8_t irq);
-static void rtl8139_netdev_get_stats(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
-                                     uint64_t *rx_errs, uint64_t *tx_errs);
-static void rtl8139_netdev_get_byte_stats(struct net_device *dev, uint64_t *rx_bytes,
-					  uint64_t *tx_bytes);
+
+static const struct net_device_ops rtl8139_netdev_ops = {
+    .ndo_start_xmit = rtl8139_netdev_send,
+    .ndo_set_mac_address = eth_mac_addr,
+    .ndo_poll_controller = rtl8139_netdev_poll,
+};
 
 /* PCI configuration space access */
 static uint32_t pci_config_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset)
@@ -262,7 +251,6 @@ static int32_t rtl8139_hw_init(void)
 
     LOG_INFO_FMT("RTL8139", "Found device at PCI %d:%d", (int)bus, (int)slot);
 
-    memset(&rtl8139_counters, 0, sizeof(rtl8139_counters));
     memset(rtl8139_tx_desc_start_tick, 0, sizeof(rtl8139_tx_desc_start_tick));
     memset(rtl8139_tx_timeout_latched, 0, sizeof(rtl8139_tx_timeout_latched));
 
@@ -384,7 +372,6 @@ static int32_t rtl8139_hw_init(void)
     /* Read PCI Interrupt Line to get actual IRQ */
     uint32_t pci_int_line = pci_config_read(bus, slot, 0, PCI_REG_INTERRUPT_LINE);
     uint8_t irq = (uint8_t)(pci_int_line & 0xFF);
-    rtl8139_irq_line = (int)irq;
     LOG_INFO_FMT("RTL8139", "PCI Interrupt Line (IRQ): %d", (int)irq);
     resource_register_irq(irq, "rtl8139");
     resource_register_ioport(rtl8139_io_base, (uint16_t)(rtl8139_io_base + 0x40), "rtl8139");
@@ -398,29 +385,30 @@ static int32_t rtl8139_hw_init(void)
     bool link_ok = (msr & RTL8139_MSR_LINKB) == 0;
 
     /* Register with network stack */
-    memset(&rtl8139_dev, 0, sizeof(rtl8139_dev));
-    rtl8139_dev.name = "eth0";
-    memcpy(rtl8139_dev.mac, rtl8139_mac, 6);
-    rtl8139_dev.mtu = 1500; /* Standard Ethernet MTU */
-    rtl8139_dev.flags = IFF_BROADCAST;
+    rtl8139_dev = alloc_etherdev(0);
+    if (!rtl8139_dev)
+    {
+        LOG_ERROR("RTL8139", "Failed to allocate net_device");
+        goto init_fail;
+    }
+    rtl8139_dev->name = "eth0";
+    memcpy(rtl8139_dev->dev_addr, rtl8139_mac, ETH_ALEN);
+    rtl8139_dev->netdev_ops = &rtl8139_netdev_ops;
     if (link_ok)
     {
-        rtl8139_dev.flags |= IFF_UP | IFF_RUNNING;
+        rtl8139_dev->flags |= IFF_UP | IFF_RUNNING;
         LOG_INFO("RTL8139", "Link is UP");
     }
     else
     {
         LOG_WARNING("RTL8139", "Link is DOWN");
     }
-    
-    rtl8139_dev.send = rtl8139_netdev_send;
-    rtl8139_dev.poll = rtl8139_netdev_poll;
-    rtl8139_dev.get_irq_line = rtl8139_netdev_get_irq_line;
-    rtl8139_dev.handle_irq = rtl8139_netdev_handle_irq;
-    rtl8139_dev.get_stats = rtl8139_netdev_get_stats;
-    rtl8139_dev.get_byte_stats = rtl8139_netdev_get_byte_stats;
 
-    net_register_device(&rtl8139_dev);
+    register_netdev(rtl8139_dev);
+
+    /* PIC lines only; 0xFF and above mean "no line" in PCI config space. */
+    if (irq < 16 && irq_request(irq, rtl8139_irq, rtl8139_dev, "rtl8139") == 0)
+        rtl8139_dev->irq = irq;
 
     LOG_INFO("RTL8139", "Initialization successful.");
     return 0;
@@ -440,7 +428,6 @@ init_fail:
         rtl8139_rx_buffer = NULL;
     }
     rtl8139_io_base = 0;
-    rtl8139_irq_line = -1;
     return -1;
 }
 
@@ -483,7 +470,7 @@ static void rtl8139_force_release_busy_tx_descriptors(void)
             {
                 rtl8139_tx_in_flight--;
             }
-            rtl8139_counters.tx_errors++;
+            rtl8139_dev->stats.tx_errors++;
             LOG_DEBUG_FMT("RTL8139", "Force-released busy TX descriptor %d", i);
         }
     }
@@ -506,7 +493,7 @@ static void rtl8139_advance_rx_read_offset(uint16_t raw_length)
  * Return: 0 on success, -1 if parameters are invalid, all TX descriptors are
  * busy, or the TX buffer for the chosen descriptor is missing.
  */
-static int rtl8139_send(void *data, size_t len)
+static int rtl8139_send(const void *data, size_t len)
 {
     /* Basic parameter validation */
     if (!data || len == 0 || len > RTL8139_MAX_TX_SIZE || !rtl8139_io_base)
@@ -655,7 +642,7 @@ static void rtl8139_check_tx_completion(void)
                 uint64_t elapsed = now - rtl8139_tx_desc_start_tick[i];
                 if (elapsed > (uint64_t)hz &&
                     !rtl8139_tx_timeout_latched[i]) {
-                    rtl8139_counters.tx_errors++;
+                    rtl8139_dev->stats.tx_errors++;
                     rtl8139_tx_timeout_latched[i] = 1;
                     LOG_WARNING_FMT("RTL8139", "TX descriptor %d stalled >1s (timeout)", i);
 
@@ -682,11 +669,11 @@ static void rtl8139_check_tx_completion(void)
             rtl8139_tx_timeout_latched[i] = 0;
             if (tsd & RTL8139_TSD_TOK)
             {
-                rtl8139_counters.tx_packets++;
-                rtl8139_counters.tx_bytes += rtl8139_tx_pending_len[i];
+                rtl8139_dev->stats.tx_packets++;
+                rtl8139_dev->stats.tx_bytes += rtl8139_tx_pending_len[i];
             }
             else
-                rtl8139_counters.tx_errors++;
+                rtl8139_dev->stats.tx_errors++;
             rtl8139_tx_pending_len[i] = 0;
 
             if (rtl8139_tx_in_flight > 0)
@@ -705,14 +692,14 @@ static void rtl8139_check_tx_completion(void)
 
 /**
  * rtl8139_netdev_send - Network device send wrapper
- * @dev: Network device structure (unused, kept for API compatibility)
+ * @dev: Network device structure (unused: the driver has one device)
  * @data: Pointer to data buffer to send
  * @len: Length of data to send
  * 
  * This wrapper adapts the net_device API to the rtl8139_send() function.
  * It provides the interface expected by the network stack.
  */
-static int rtl8139_netdev_send(struct net_device *dev, void *data, size_t len)
+static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t len)
 {
     
 #if KERNEL_DEBUG
@@ -795,37 +782,11 @@ static void rtl8139_netdev_poll(struct net_device *dev)
     rtl8139_poll();
 }
 
-static int rtl8139_netdev_get_irq_line(struct net_device *dev)
+static void rtl8139_irq(uint32_t irq, void *data)
 {
-    (void)dev;
-    return rtl8139_get_irq_line();
-}
-
-static int rtl8139_netdev_handle_irq(struct net_device *dev, uint8_t irq)
-{
-    (void)dev;
-    int line = rtl8139_get_irq_line();
-    if (line < 0 || line >= 16 || line != (int)irq)
-        return 0;
+    (void)irq;
+    (void)data;
     rtl8139_handle_interrupt();
-    return 1;
-}
-
-static void rtl8139_netdev_get_stats(struct net_device *dev, uint64_t *rx_pkts, uint64_t *tx_pkts,
-                                     uint64_t *rx_errs, uint64_t *tx_errs)
-{
-    (void)dev;
-    rtl8139_get_stats(rx_pkts, tx_pkts, rx_errs, tx_errs);
-}
-
-static void rtl8139_netdev_get_byte_stats(struct net_device *dev, uint64_t *rx_bytes,
-					  uint64_t *tx_bytes)
-{
-    (void)dev;
-    if (rx_bytes)
-        *rx_bytes = rtl8139_counters.rx_bytes;
-    if (tx_bytes)
-        *tx_bytes = rtl8139_counters.tx_bytes;
 }
 
 /*
@@ -955,7 +916,7 @@ static void rtl8139_process_rx_packets(void)
 
         if (length < 4)
         {
-            rtl8139_counters.rx_errors++;
+            rtl8139_dev->stats.rx_errors++;
             LOG_WARNING_FMT("RTL8139", "Invalid RX length (too small): %d (must be >= 4), discarding packet", length);
             /* Invalid length cannot be advanced safely: resync to current writer. */
             rtl8139_rx_read_offset = current_write;
@@ -964,7 +925,7 @@ static void rtl8139_process_rx_packets(void)
 
         if (length > (RTL8139_RX_BUF_SIZE - 4))
         {
-            rtl8139_counters.rx_errors++;
+            rtl8139_dev->stats.rx_errors++;
             LOG_WARNING_FMT("RTL8139", "Invalid RX length (too large): %d, resyncing RX ring", length);
             rtl8139_rx_read_offset = current_write;
             break;
@@ -972,7 +933,7 @@ static void rtl8139_process_rx_packets(void)
 
         if (!(status & RTL8139_RX_STAT_ROK))
         {
-            rtl8139_counters.rx_errors++;
+            rtl8139_dev->stats.rx_errors++;
             LOG_WARNING_FMT("RTL8139", "RX status error 0x%04x, skipping frame len=%u", status, (unsigned)length);
             rtl8139_advance_rx_read_offset(length);
             continue;
@@ -986,7 +947,7 @@ static void rtl8139_process_rx_packets(void)
         /* Check if packet length is valid */
         if (packet_len == 0 || packet_len > RTL8139_RX_BUF_SIZE)
         {
-            rtl8139_counters.rx_errors++;
+            rtl8139_dev->stats.rx_errors++;
             LOG_WARNING_FMT("RTL8139", "Invalid packet length after header subtraction: raw_len=%d, pkt_len=%d, discarding", 
                            length, packet_len);
             rtl8139_advance_rx_read_offset(length);
@@ -1022,7 +983,7 @@ static void rtl8139_process_rx_packets(void)
                         merge_heap = (uint8_t *)kmalloc(length);
                         if (!merge_heap)
                         {
-                            rtl8139_dev.rx_dropped++;
+                            rtl8139_dev->stats.rx_dropped++;
                             LOG_WARNING_FMT("RTL8139", "RX wrap: kmalloc(%u) failed, skipping packet", (unsigned int)length);
                             merge_buf = NULL;
                         }
@@ -1069,9 +1030,9 @@ static void rtl8139_process_rx_packets(void)
 #endif
                     
                     /* Pass Ethernet frame without trailing CRC */
-                    net_receive(&rtl8139_dev, packet_data, packet_len);
-                    rtl8139_counters.rx_packets++;
-                    rtl8139_counters.rx_bytes += packet_len;
+                    netif_rx(rtl8139_dev, packet_data, packet_len);
+                    rtl8139_dev->stats.rx_packets++;
+                    rtl8139_dev->stats.rx_bytes += packet_len;
                     packet_count++;
                 }
 
@@ -1080,7 +1041,7 @@ static void rtl8139_process_rx_packets(void)
             }
             else
             {
-                rtl8139_counters.rx_errors++;
+                rtl8139_dev->stats.rx_errors++;
                 LOG_WARNING_FMT("RTL8139", "Invalid packet length: %d", packet_len);
             }
         }
@@ -1113,7 +1074,7 @@ static void rtl8139_process_rx_packets(void)
  * 
  * This function processes received packets from the RTL8139 RX buffer.
  * It reads the interrupt status register, processes packets, and passes
- * them to the network stack via net_receive().
+ * them to the network stack via netif_rx().
  */
 static void rtl8139_handle_interrupt(void)
 {
@@ -1139,8 +1100,8 @@ static void rtl8139_handle_interrupt(void)
     {
         if (isr & (RTL8139_INT_RXOVW | RTL8139_INT_FIFOOVW))
         {
-            rtl8139_counters.rx_errors++;
-            rtl8139_dev.rx_fifo_errors++;
+            rtl8139_dev->stats.rx_errors++;
+            rtl8139_dev->stats.rx_fifo_errors++;
             LOG_WARNING_FMT("RTL8139", "RX overflow ISR=0x%x — draining ring",
                             (unsigned)isr);
         }
@@ -1153,12 +1114,12 @@ static void rtl8139_handle_interrupt(void)
 
     if (isr & RTL8139_INT_RER)
     {
-        rtl8139_counters.rx_errors++;
+        rtl8139_dev->stats.rx_errors++;
         LOG_DEBUG("RTL8139", "RX error interrupt");
     }
     if (isr & RTL8139_INT_TER)
     {
-        rtl8139_counters.tx_errors++;
+        rtl8139_dev->stats.tx_errors++;
         LOG_DEBUG("RTL8139", "TX error interrupt");
     }
     if (isr & RTL8139_INT_PUN)
@@ -1246,27 +1207,4 @@ static void rtl8139_poll(void)
     
     /* CRITICAL: Check TX completion during polling */
     rtl8139_check_tx_completion();
-}
-
-static int rtl8139_get_irq_line(void)
-{
-    return rtl8139_irq_line;
-}
-
-static void rtl8139_get_stats(uint64_t *rx_pkts, uint64_t *tx_pkts,
-                              uint64_t *rx_errs, uint64_t *tx_errs)
-{
-    if (!rx_pkts || !tx_pkts || !rx_errs || !tx_errs)
-        return;
-    if (!rtl8139_io_base) {
-        *rx_pkts = 0;
-        *tx_pkts = 0;
-        *rx_errs = 0;
-        *tx_errs = 0;
-        return;
-    }
-    *rx_pkts = rtl8139_counters.rx_packets;
-    *tx_pkts = rtl8139_counters.tx_packets;
-    *rx_errs = rtl8139_counters.rx_errors;
-    *tx_errs = rtl8139_counters.tx_errors;
 }

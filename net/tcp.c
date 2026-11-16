@@ -19,6 +19,7 @@
 #include <ir0/poll.h>
 #include <string.h>
 #include "tcp_internal.h"
+#include <ir0/netdevice.h>
 
 static struct net_protocol tcp_proto;
 
@@ -196,7 +197,7 @@ static int tcp_wire_activate_outbound(ip4_addr_t peer_ip, uint16_t peer_port,
 	int ret;
 	uint64_t f;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (!dev)
 		return -ENETUNREACH;
 
@@ -241,7 +242,7 @@ int tcp_wire_connect_start(ip4_addr_t peer_ip, uint16_t peer_port,
 	if (!local_port_out || peer_port == 0)
 		return -EINVAL;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (!dev)
 		return -ENETUNREACH;
 
@@ -489,7 +490,7 @@ int tcp_wire_send(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	if (!seq_io || !data || len == 0)
 		return -EINVAL;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (!dev)
 		return -ENETUNREACH;
 
@@ -678,7 +679,7 @@ void tcp_wire_close(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 	uint64_t f;
 	struct tcp_wire_inbound *c;
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (dev)
 	{
 		tcp_build_header(&hdr, local_port, peer_port, seq, ack_peer,

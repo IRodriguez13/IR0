@@ -8,6 +8,7 @@
  */
 
 #include "procfs_internal.h"
+#include <ir0/netdevice.h>
 
 
 /*
@@ -21,7 +22,7 @@ int proc_netinfo_read(char *buf, size_t count)
     if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
-    struct net_device *dev = net_get_devices();
+    struct net_device *dev = first_net_device();
     if (!dev)
         return 0;
     size_t off = 0;
@@ -37,12 +38,12 @@ int proc_netinfo_read(char *buf, size_t count)
         int n = snprintf(buf + off, count - off,
                          "%s\t%u\t%s\t%02x:%02x:%02x:%02x:%02x:%02x\n",
                          dev->name ? dev->name : "", (unsigned)dev->mtu, flags,
-                         (unsigned)dev->mac[0], (unsigned)dev->mac[1], (unsigned)dev->mac[2],
-                         (unsigned)dev->mac[3], (unsigned)dev->mac[4], (unsigned)dev->mac[5]);
+                         (unsigned)dev->dev_addr[0], (unsigned)dev->dev_addr[1], (unsigned)dev->dev_addr[2],
+                         (unsigned)dev->dev_addr[3], (unsigned)dev->dev_addr[4], (unsigned)dev->dev_addr[5]);
         if (n < 0) break;
         if (n >= (int)(count - off)) n = (int)(count - off) - 1;
         off += (size_t)n;
-        dev = dev->next;
+        dev = next_net_device(dev);
     }
     if (off < count) buf[off] = '\0';
     return (int)off;
@@ -81,11 +82,9 @@ int proc_net_dev_read(char *buf, size_t count)
     }
     off = (size_t)n;
 
-    struct net_device *dev = net_get_devices();
+    struct net_device *dev = first_net_device();
     while (dev && off < count - 1)
     {
-        uint64_t rxp = 0, txp = 0, rxe = 0, txe = 0;
-        uint64_t rxb = 0, txb = 0;
         char rxp_str[24];
         char rxe_str[24];
         char txp_str[24];
@@ -96,20 +95,15 @@ int proc_net_dev_read(char *buf, size_t count)
         char rxf_str[24];
         char rxm_str[24];
 
-        if (dev->get_stats)
-            dev->get_stats(dev, &rxp, &txp, &rxe, &txe);
-        if (dev->get_byte_stats)
-            dev->get_byte_stats(dev, &rxb, &txb);
-
-        proc_u64_to_dec(rxb, rxb_str, sizeof(rxb_str));
-        proc_u64_to_dec(rxp, rxp_str, sizeof(rxp_str));
-        proc_u64_to_dec(rxe, rxe_str, sizeof(rxe_str));
-        proc_u64_to_dec(txb, txb_str, sizeof(txb_str));
-        proc_u64_to_dec(txp, txp_str, sizeof(txp_str));
-        proc_u64_to_dec(txe, txe_str, sizeof(txe_str));
-        proc_u64_to_dec(dev->rx_dropped, rxd_str, sizeof(rxd_str));
-        proc_u64_to_dec(dev->rx_fifo_errors, rxf_str, sizeof(rxf_str));
-        proc_u64_to_dec(dev->rx_multicast, rxm_str, sizeof(rxm_str));
+        proc_u64_to_dec(dev->stats.rx_bytes, rxb_str, sizeof(rxb_str));
+        proc_u64_to_dec(dev->stats.rx_packets, rxp_str, sizeof(rxp_str));
+        proc_u64_to_dec(dev->stats.rx_errors, rxe_str, sizeof(rxe_str));
+        proc_u64_to_dec(dev->stats.tx_bytes, txb_str, sizeof(txb_str));
+        proc_u64_to_dec(dev->stats.tx_packets, txp_str, sizeof(txp_str));
+        proc_u64_to_dec(dev->stats.tx_errors, txe_str, sizeof(txe_str));
+        proc_u64_to_dec(dev->stats.rx_dropped, rxd_str, sizeof(rxd_str));
+        proc_u64_to_dec(dev->stats.rx_fifo_errors, rxf_str, sizeof(rxf_str));
+        proc_u64_to_dec(dev->stats.multicast, rxm_str, sizeof(rxm_str));
         /*
          * bytes packets errs drop fifo frame compressed multicast | tx...
          * RX frame/compressed and every TX column past errs stay 0: no driver
@@ -129,7 +123,7 @@ int proc_net_dev_read(char *buf, size_t count)
             return (int)(count - 1);
         }
         off += (size_t)n;
-        dev = dev->next;
+        dev = next_net_device(dev);
     }
 
     return (int)off;
@@ -457,7 +451,7 @@ int proc_net_route_read(char *buf, size_t count)
 		return (int)(count - 1);
 	}
 
-	dev = net_get_devices();
+	dev = first_net_device();
 	if (dev && dev->name && dev->name[0])
 		ifname = dev->name;
 

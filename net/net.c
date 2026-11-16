@@ -14,18 +14,17 @@
  * hardware network drivers (Layer 2 - Data Link) with network protocols
  * (Layer 3+ - Network and above). The design follows a layered architecture:
  *
- *   Layer 1 (Physical): Hardware NICs (RTL8139 driver)
+ *   Layer 1 (Physical): NIC drivers behind <ir0/netdevice.h> (net/dev.c)
  *   Layer 2 (Data Link): Ethernet frames, MAC addressing
  *   Layer 3 (Network): IP protocol (IPv4)
  *   Layer 4+ (Transport/Application): ICMP, UDP (DNS client over UDP)
  *
  * The abstraction provides:
- * - Device registration: NICs register themselves as net_device structures
  * - Protocol registration: Protocols (ARP, IP, ICMP) register handlers
  * - Frame encapsulation: net_send() wraps payloads in Ethernet headers
- * - Protocol demultiplexing: net_receive() routes frames to protocol handlers
+ * - Protocol demultiplexing: netif_rx() routes frames to protocol handlers
  *
- * The key design is polymorphism: drivers expose a common net_device interface,
+ * The key design is polymorphism: drivers implement struct net_device_ops,
  * and protocols register handlers that get called when frames arrive. This
  * allows adding new drivers or protocols without modifying existing code.
  */
@@ -39,94 +38,18 @@
 #include "dns.h"
 #include "net_internal.h"
 #include <ir0/net.h>
+#include <ir0/netdevice.h>
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/klog.h>
 #include <string.h>
 
-/* Global device and protocol lists. These linked lists maintain all registered
- * network interfaces and protocol handlers. Devices are registered by NIC drivers
- * during initialization, and protocols register themselves when their init()
- * functions are called (typically during init_net_stack()).
+/* Registered protocol handlers. Protocols register themselves when their
+ * init() functions run during init_net_stack(). Devices live in net/dev.c.
  */
-static struct net_device *devices = NULL;
 static struct net_protocol *protocols = NULL;
 
 static struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype);
-
-/**
- * net_register_device - Register a network interface with the networking layer
- *
- * Network drivers call this function during initialization to register their
- * device with the networking subsystem. Once registered, the device becomes
- * available for sending and receiving packets through the net_send() and
- * net_receive() functions. The device structure must remain valid for the
- * lifetime of the driver.
- *
- * This function maintains a linked list of registered devices. Duplicate
- * registrations are silently ignored (idempotent). The list is not protected
- * by locks, so registration should happen during driver initialization before
- * interrupts are enabled.
- *
- * @dev: Pointer to net_device structure (must persist for device lifetime)
- * @return: 0 on success (or if already registered), -1 on error
- */
-int net_register_device(struct net_device *dev)
-{
-    if (!dev)
-        return -1;
-
-    /* Check if already registered - prevents double registration if driver
-     * init is called multiple times. This makes registration idempotent.
-     */
-    struct net_device *curr = devices;
-    while (curr)
-    {
-        if (curr == dev)
-        {
-            klog_info_fmt("NET", "Device already registered: %s",
-                          dev->name ? dev->name : "(null)");
-            return 0;
-        }
-        curr = curr->next;
-    }
-
-    /* Add to front of device list. This is O(1) insertion, and lookup
-     * order doesn't matter for our use case. If we had many devices,
-     * we might want to hash by name or maintain a sorted list.
-     */
-    dev->next = devices;
-    devices = dev;
-
-    klog_info_fmt("NET", "Registered device: %s",
-                  dev->name ? dev->name : "(null)");
-
-    return 0;
-}
-
-void net_unregister_device(struct net_device *dev)
-{
-    if (!dev || !devices)
-        return;
-
-    if (devices == dev)
-    {
-        devices = dev->next;
-        return;
-    }
-
-    struct net_device *curr = devices;
-    while (curr->next)
-    {
-        if (curr->next == dev)
-        {
-            curr->next = dev->next;
-            return;
-        }
-        
-        curr = curr->next;
-    }
-}
 
 /**
  * net_send - Send an Ethernet frame through a network device
@@ -142,7 +65,7 @@ void net_unregister_device(struct net_device *dev)
  *   2. Allocate buffer for complete frame (header + payload)
  *   3. Fill Ethernet header (dest MAC, src MAC, EtherType)
  *   4. Copy payload after header
- *   5. Call device's send callback (driver handles hardware transmission)
+ *   5. Call the device's ndo_start_xmit (driver handles hardware transmission)
  *   6. Free frame buffer
  *
  * Note: The frame buffer is allocated and freed here, not by the driver.
@@ -161,10 +84,10 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
     LOG_DEBUG_FMT("NET", "net_send: dev=%p, ethertype=0x%04x, payload=%p, len=%d",
                   dev, ethertype, payload, (int)len);
     
-    if (!dev || !dev->send || !payload || len > dev->mtu)
+    if (!dev || !payload || len > dev->mtu)
     {
-        LOG_ERROR_FMT("NET", "net_send: Invalid parameters (dev=%p, send=%p, payload=%p, len=%d, mtu=%d)",
-                     dev, dev ? dev->send : NULL, payload, (int)len, dev ? (int)dev->mtu : 0);
+        LOG_ERROR_FMT("NET", "net_send: Invalid parameters (dev=%p, payload=%p, len=%d, mtu=%d)",
+                     dev, payload, (int)len, dev ? (int)dev->mtu : 0);
         return -1;
     }
 
@@ -195,7 +118,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      */
     struct eth_header *eth = (struct eth_header *)frame;
     memcpy(eth->dest, dest_mac, 6);
-    memcpy(eth->src, dev->mac, 6);
+    memcpy(eth->src, dev->dev_addr, ETH_ALEN);
     eth->type = htons(ethertype);
     LOG_DEBUG_FMT("NET", "net_send: Ethernet header filled, copying %d bytes of payload", (int)len);
 
@@ -203,7 +126,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      * packets here. The driver will transmit the entire frame including header.
      */
     memcpy(frame + sizeof(struct eth_header), payload, len);
-    LOG_DEBUG("NET", "net_send: Payload copied, calling dev->send");
+    LOG_DEBUG("NET", "net_send: Payload copied, calling ndo_start_xmit");
     
     /* Verify frame length is reasonable before passing to driver.
      * This sanity check prevents buffer overflows if len was corrupted.
@@ -221,8 +144,8 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      * - Triggering hardware transmission
      * The frame must be fully transmitted or queued before this returns.
      */
-    int ret = dev->send(dev, frame, frame_len);
-    LOG_DEBUG_FMT("NET", "net_send: dev->send returned %d, freeing frame buffer", ret);
+    int ret = dev->netdev_ops->ndo_start_xmit(dev, frame, frame_len);
+    LOG_DEBUG_FMT("NET", "net_send: ndo_start_xmit returned %d, freeing frame buffer", ret);
 
     /* Free frame buffer. The driver must have copied/DMA'd the frame by now.
      * If the driver needs to keep the frame (e.g., for retransmission), it
@@ -234,7 +157,7 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
 }
 
 /**
- * net_receive - Process a received Ethernet frame and route to protocol handler
+ * netif_rx - Process a received Ethernet frame and route to protocol handler
  *
  * Network drivers call this function when they receive a frame from hardware.
  * This function performs Layer 2 demultiplexing: it examines the EtherType
@@ -259,12 +182,12 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
  * @data: Pointer to received Ethernet frame (must include header + payload)
  * @len: Total frame length (header + payload)
  */
-void net_receive(struct net_device *dev, const void *data, size_t len)
+void netif_rx(struct net_device *dev, const void *data, size_t len)
 {
     if (!dev || !data || len < sizeof(struct eth_header))
     {
         if (dev)
-            dev->rx_dropped++;
+            dev->stats.rx_dropped++;
         LOG_WARNING_FMT("NET", "Invalid packet: dev=%p, data=%p, len=%d", dev, data, (int)len);
         return;
     }
@@ -284,10 +207,10 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     bool is_multicast = !is_broadcast && (eth->dest[0] & 0x01) == 0x01;
     
     bool is_for_us = is_broadcast || 
-                     (memcmp(eth->dest, dev->mac, 6) == 0);
+                     (memcmp(eth->dest, dev->dev_addr, ETH_ALEN) == 0);
 
     if (is_multicast)
-        dev->rx_multicast++;
+        dev->stats.multicast++;
     
     /* FILTER: Drop multicast packets early if they're not for us and not ARP/IP protocols we handle.
      * This prevents spam from mDNS, SSDP, IPv6 neighbor discovery, etc.
@@ -299,7 +222,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     if (is_multicast && !is_for_us && type != ETHERTYPE_ARP)
     {
         /* Drop multicast IPv6 and non-ARP multicast IPv4 silently */
-        dev->rx_dropped++;
+        dev->stats.rx_dropped++;
         /* Log only occasionally to avoid spam (every 100th packet) */
         static int multicast_drop_count = 0;
         multicast_drop_count++;
@@ -371,7 +294,7 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
     }
     else
     {
-        dev->rx_dropped++;
+        dev->stats.rx_dropped++;
         /* CRITICAL: Log ARP packets even if handler not found (shouldn't happen) */
         if (type == ETHERTYPE_ARP)
         {
@@ -392,11 +315,6 @@ void net_receive(struct net_device *dev, const void *data, size_t len)
                        (unsigned)type);
         #endif
     }
-}
-
-struct net_device *net_get_devices(void)
-{
-    return devices;
 }
 
 /* --- Protocol Registration System --- */
@@ -461,7 +379,7 @@ int net_register_protocol(struct net_protocol *proto)
  * net_find_protocol_by_ethertype - Find protocol handler by EtherType (Layer 2)
  *
  * This function searches the registered protocols list for a handler matching
- * the given EtherType. Used by net_receive() to route incoming Ethernet frames
+ * the given EtherType. Used by netif_rx() to route incoming Ethernet frames
  * to the correct protocol handler. EtherTypes identify Layer 2 protocols like
  * ARP (0x0806) and IP (0x0800).
  *
@@ -518,7 +436,7 @@ struct net_protocol *net_find_protocol_by_ipproto(uint8_t ipproto)
  * subsystem. It must be called during kernel boot before any network operations
  * can be performed. The initialization order is critical:
  *
- *   1. Network driver (RTL8139): Register hardware device
+ *   1. NIC drivers: probe and register their devices
  *   2. ARP protocol: Must initialize before IP (IP needs ARP for MAC resolution)
  *   3. IP protocol: Must initialize before ICMP (ICMP is carried over IP)
  *   4. ICMP protocol: Depends on IP for packet delivery
@@ -604,60 +522,4 @@ int net_stack_post_irq_init(void)
     }
 
     return 0;
-}
-
-/**
- * net_poll - Poll network devices for incoming packets
- * 
- * This function should be called periodically to ensure the kernel receives
- * incoming packets even when not actively waiting for responses. This is
- * necessary because the polling mechanism only activates when waiting for
- * specific responses (e.g., ARP replies).
- * 
- * This function polls all registered network devices to check for incoming
- * packets. It should be called from a periodic timer or main loop.
- */
-void net_poll(void)
-{
-    struct net_device *dev = devices;
-    while (dev)
-    {
-        if (dev->poll)
-            dev->poll(dev);
-        dev = dev->next;
-    }
-}
-
-void net_stack_poll(void)
-{
-    net_poll();
-}
-
-int net_stack_get_irq_line(void)
-{
-    struct net_device *dev = devices;
-    while (dev)
-    {
-        if (dev->get_irq_line)
-        {
-            int irq = dev->get_irq_line(dev);
-            if (irq >= 0)
-                return irq;
-        }
-        dev = dev->next;
-    }
-    return -1;
-}
-
-int net_stack_handle_irq(uint8_t irq)
-{
-    int handled = 0;
-    struct net_device *dev = devices;
-    while (dev)
-    {
-        if (dev->handle_irq && dev->handle_irq(dev, irq) > 0)
-            handled = 1;
-        dev = dev->next;
-    }
-    return handled;
 }

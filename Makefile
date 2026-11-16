@@ -827,6 +827,7 @@ DISK_OBJS = \
 ifneq ($(CONFIG_ENABLE_NETWORKING),n)
 NET_OBJS = \
     net/net.o \
+    net/dev.o \
     net/arp.o \
     net/ip.o \
     net/icmp.o \

@@ -183,9 +183,16 @@ icmp_get_echo_result icmp_get_next_echo_result()
 IP_HEADER_LEN IP_IHL() * 4
 ip_format_addr IP4_FMT and IP4_ARGS() with snprintf()
 make_ip4_addr ip_make_addr() (net/ip.h)
-net_stack_get_stats the per-device net_device.get_stats op
+net_stack_get_stats the per-device net_device.stats counters
 net_unregister_protocol (nothing; protocols are registered once at boot)
-rtl8139_get_mac (nothing; the MAC lives in net_device.mac)
+rtl8139_get_mac (nothing; the MAC lives in net_device.dev_addr)
 sock_stream_connect_inet sock_stream_connect_inet_flags()
 sock_stream_is_recv_shutdown (nothing; it had no callers)
 sock_stream_rights_push sock_stream_rights_push_batch()
+# NIC class API (includes/ir0/netdevice.h): every driver fills one
+# struct net_device and its net_device_ops; callers never see a driver.
+net_get_devices first_net_device() / for_each_netdev() / dev_get_by_name()
+net_poll net_stack_poll()
+net_receive netif_rx()
+net_register_device alloc_etherdev() + register_netdev()
+net_unregister_device unregister_netdev()
