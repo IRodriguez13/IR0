@@ -31,6 +31,8 @@
 #include <ir0/serial_io.h>
 #include <stdint.h>
 
+static int hci_set_event_mask(const uint8_t *mask);
+
 /* Helper: Get uptime in milliseconds */
 static uint32_t hci_get_uptime_ms(void)
 {
@@ -439,7 +441,7 @@ int hci_read_bd_addr(bd_addr_t addr)
 /**
  * hci_set_event_mask - Set HCI event mask
  */
-int hci_set_event_mask(const uint8_t *mask)
+static int hci_set_event_mask(const uint8_t *mask)
 {
     uint8_t status;
 

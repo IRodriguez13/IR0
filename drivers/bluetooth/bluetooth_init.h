@@ -43,7 +43,6 @@ int bluetooth_init(void);
  * 
  * Cleans up all Bluetooth components and frees resources.
  */
-void bluetooth_cleanup(void);
 
 /**
  * bluetooth_is_initialized - Check if Bluetooth is initialized

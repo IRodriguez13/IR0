@@ -30,6 +30,8 @@
 #include <ir0/logging.h>
 #include <ir0/driver.h>
 
+static void bluetooth_cleanup(void);
+
 /* Bluetooth subsystem state */
 static bool bluetooth_initialized = false;
 
@@ -117,7 +119,7 @@ int bluetooth_init(void)
 /**
  * bluetooth_cleanup - Cleanup Bluetooth subsystem
  */
-void bluetooth_cleanup(void)
+static void bluetooth_cleanup(void)
 {
     if (!bluetooth_initialized) {
         return;
