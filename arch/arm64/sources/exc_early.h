@@ -41,7 +41,5 @@ int arm64_timer_irq_seen(void);
 void arm64_exc_sync_lower(uint64_t *frame);
 
 /** PSCI SYSTEM_OFF via HVC (QEMU virt). */
-void arm64_psci_system_off(void);
 
 /** PSCI SYSTEM_RESET via HVC (QEMU virt). */
-void arm64_psci_system_reset(void);

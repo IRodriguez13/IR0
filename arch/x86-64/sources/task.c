@@ -27,34 +27,6 @@ uint64_t task_initial_kernel_status(void)
 	return RFLAGS_IF;
 }
 
-void task_store_sigcontext(struct sigcontext *ctx, const task_t *t)
-{
-	if (!ctx || !t)
-		return;
-
-	ctx->r15 = t->arch.r15;
-	ctx->r14 = t->arch.r14;
-	ctx->r13 = t->arch.r13;
-	ctx->r12 = t->arch.r12;
-	ctx->rbp = t->arch.rbp;
-	ctx->rbx = t->arch.rbx;
-	ctx->r11 = t->arch.r11;
-	ctx->r10 = t->arch.r10;
-	ctx->r9 = t->arch.r9;
-	ctx->r8 = t->arch.r8;
-	ctx->rax = t->arch.rax;
-	ctx->rcx = t->arch.rcx;
-	ctx->rdx = t->arch.rdx;
-	ctx->rsi = t->arch.rsi;
-	ctx->rdi = t->arch.rdi;
-	ctx->orig_rax = 0;
-	ctx->rip = t->arch.rip;
-	ctx->cs = t->arch.cs;
-	ctx->rflags = t->arch.rflags;
-	ctx->rsp = t->arch.rsp;
-	ctx->ss = t->arch.ss;
-}
-
 void task_load_sigcontext(task_t *t, const struct sigcontext *ctx)
 {
 	if (!t || !ctx)
@@ -199,7 +171,3 @@ void task_apply_user_segments(task_t *t)
 	task_set_user_segments(t);
 }
 
-uint64_t *task_retval_slot_addr(task_t *t)
-{
-	return t ? &t->arch.rax : NULL;
-}

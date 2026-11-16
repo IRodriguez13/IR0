@@ -13,5 +13,3 @@
 
 #pragma once
 #include <stdint.h>
-
-void syscall_handler_c(void);

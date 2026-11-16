@@ -52,9 +52,3 @@ int rtc_read_time(rtc_time_t *time)
 	return 0;
 }
 
-uint8_t rtc_read_register(uint8_t reg)
-{
-	(void)reg;
-	return 0xff;
-}
-

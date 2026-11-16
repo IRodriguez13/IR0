@@ -67,11 +67,6 @@ static int ir0_debug_fork_singlestep_active(void)
 #endif
 }
 
-uint64_t ir0_rflags_clear_tf(uint64_t rflags)
-{
-	return rflags & ~IR0_RFLAGS_TF;
-}
-
 uint64_t ir0_rflags_sanitize_user(uint64_t rflags)
 {
 	uint64_t out;

@@ -50,11 +50,6 @@ uintptr_t read_fault_address(void)
 	return (uintptr_t)far;
 }
 
-arch_addr_t get_fault_address(void)
-{
-	return (arch_addr_t)read_fault_address();
-}
-
 int early_clock_available(void)
 {
 	uint64_t frq;
@@ -199,36 +194,6 @@ uint64_t debug_reg_read(unsigned int regno)
 {
 	(void)regno;
 	return 0;
-}
-
-uint8_t mmio_read8(arch_addr_t addr)
-{
-	return *(volatile uint8_t *)(uintptr_t)addr;
-}
-
-void mmio_write8(arch_addr_t addr, uint8_t value)
-{
-	*(volatile uint8_t *)(uintptr_t)addr = value;
-}
-
-uint16_t mmio_read16(arch_addr_t addr)
-{
-	return *(volatile uint16_t *)(uintptr_t)addr;
-}
-
-void mmio_write16(arch_addr_t addr, uint16_t value)
-{
-	*(volatile uint16_t *)(uintptr_t)addr = value;
-}
-
-uint32_t mmio_read32(arch_addr_t addr)
-{
-	return *(volatile uint32_t *)(uintptr_t)addr;
-}
-
-void mmio_write32(arch_addr_t addr, uint32_t value)
-{
-	*(volatile uint32_t *)(uintptr_t)addr = value;
 }
 
 /*

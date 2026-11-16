@@ -63,32 +63,6 @@ int arm64_timer_irq_seen(void)
 	return g_timer_irq_seen;
 }
 
-static void psci_hvc(uint64_t fn)
-{
-	register uint64_t x0 __asm__("x0") = fn;
-
-	__asm__ volatile("hvc #0" : "+r"(x0) :: "memory", "x1", "x2", "x3");
-}
-
-void arm64_psci_system_off(void)
-{
-	ir0_boot_smoke("ARM64_PSCI_OFF");
-	psci_hvc(PSCI_0_2_FN_SYSTEM_OFF);
-	for (;;)
-	{
-		__asm__ volatile("wfi" ::: "memory");
-	}
-}
-
-void arm64_psci_system_reset(void)
-{
-	psci_hvc(PSCI_0_2_FN_SYSTEM_RESET);
-	for (;;)
-	{
-		__asm__ volatile("wfi" ::: "memory");
-	}
-}
-
 int arm64_vbar_early_install(void)
 {
 	uint64_t vbar = (uint64_t)(uintptr_t)ir0_el1_vectors;

@@ -78,11 +78,6 @@ uintptr_t read_fault_address(void)
     #endif
 }
 
-arch_addr_t get_fault_address(void)
-{
-	return (arch_addr_t)read_fault_address();
-}
-
 const char *get_arch_name(void)
 {
     return "x86-64 (amd64)";

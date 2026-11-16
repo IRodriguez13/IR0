@@ -21,7 +21,6 @@
 void ir0_debug_trap_init(void);
 
 uint64_t ir0_rflags_sanitize_user(uint64_t rflags);
-uint64_t ir0_rflags_clear_tf(uint64_t rflags);
 
 /*
  * Handle #DB in user mode: clear stray TF/DR state unless single-step is

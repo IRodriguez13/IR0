@@ -361,23 +361,3 @@ void ir0_platform_ops_set(const struct ir0_platform_ops *ops)
 		g_platform_ops = ops;
 }
 
-void system_halt(void)
-{
-	ir0_platform_ops_get()->halt();
-	for (;;)
-		cpu_wait();
-}
-
-void system_reboot(void)
-{
-	ir0_platform_ops_get()->reboot();
-	for (;;)
-		cpu_wait();
-}
-
-void system_poweroff(void)
-{
-	ir0_platform_ops_get()->poweroff();
-	for (;;)
-		cpu_wait();
-}

@@ -13,7 +13,6 @@
 #include <stdint.h>
 
 void tls_set_base(uint64_t base);
-uint64_t tls_get_base(void);
 void tls_restore_current(void);
 
 static inline void set_tls(uint64_t base)

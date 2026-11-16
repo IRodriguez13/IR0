@@ -18,10 +18,6 @@ void fork_ret_emit_pre_return(void)
 {
 }
 
-void fork_restore_emit_pre_iretq(void)
-{
-}
-
 void fork_ret_first_syscall_entry(uint64_t rax_hw, uint64_t rip_hw, uint64_t rsp_hw)
 {
 	(void)rax_hw;
@@ -35,9 +31,3 @@ int fork_flow_note_debug_exception(uint64_t *stack)
 	return 0;
 }
 
-void fork_flow_note_kernel_entry(uint64_t rip_hw, uint64_t nr, int from_syscall)
-{
-	(void)rip_hw;
-	(void)nr;
-	(void)from_syscall;
-}

@@ -22,7 +22,3 @@ int ir0_acpi_pm_try_suspend(void)
 	return -EINVAL;
 }
 
-int ir0_acpi_pm_s3_ok(void)
-{
-	return 0;
-}

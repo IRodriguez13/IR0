@@ -29,5 +29,3 @@ int hypervisor_vendor(char *buf, size_t n);
 uint32_t get_cpu_clflush_size(void);
 
 void timer_init(void);
-void timer_set_frequency(uint32_t hz);
-uint32_t timer_get_frequency(void);

@@ -31,50 +31,6 @@ uint64_t task_initial_kernel_status(void)
 	return 0x5U;
 }
 
-void task_store_sigcontext(struct sigcontext *ctx, const task_t *t)
-{
-	if (!ctx || !t)
-		return;
-
-	memset(ctx, 0, sizeof(*ctx));
-	ctx->fault_address = 0;
-	ctx->regs[0] = t->arch.x0;
-	ctx->regs[1] = t->arch.x1;
-	ctx->regs[2] = t->arch.x2;
-	ctx->regs[3] = t->arch.x3;
-	ctx->regs[4] = t->arch.x4;
-	ctx->regs[5] = t->arch.x5;
-	ctx->regs[6] = t->arch.x6;
-	ctx->regs[7] = t->arch.x7;
-	ctx->regs[8] = t->arch.x8;
-	ctx->regs[9] = t->arch.x9;
-	ctx->regs[10] = t->arch.x10;
-	ctx->regs[11] = t->arch.x11;
-	ctx->regs[12] = t->arch.x12;
-	ctx->regs[13] = t->arch.x13;
-	ctx->regs[14] = t->arch.x14;
-	ctx->regs[15] = t->arch.x15;
-	ctx->regs[16] = t->arch.x16;
-	ctx->regs[17] = t->arch.x17;
-	ctx->regs[18] = t->arch.x18;
-	ctx->regs[19] = t->arch.x19;
-	ctx->regs[20] = t->arch.x20;
-	ctx->regs[21] = t->arch.x21;
-	ctx->regs[22] = t->arch.x22;
-	ctx->regs[23] = t->arch.x23;
-	ctx->regs[24] = t->arch.x24;
-	ctx->regs[25] = t->arch.x25;
-	ctx->regs[26] = t->arch.x26;
-	ctx->regs[27] = t->arch.x27;
-	ctx->regs[28] = t->arch.x28;
-	ctx->regs[29] = t->arch.x29;
-	ctx->regs[30] = t->arch.x30;
-	ctx->sp = t->arch.sp_el0;
-	ctx->pc = t->arch.elr_el1;
-	ctx->pstate = t->arch.spsr_el1;
-	/* __reserved zeroed by memset — null _aarch64_ctx terminator. */
-}
-
 void task_load_sigcontext(task_t *t, const struct sigcontext *ctx)
 {
 	if (!t || !ctx)
@@ -231,7 +187,3 @@ void task_apply_user_segments(task_t *t)
 	(void)t;
 }
 
-uint64_t *task_retval_slot_addr(task_t *t)
-{
-	return t ? &t->arch.x0 : NULL;
-}

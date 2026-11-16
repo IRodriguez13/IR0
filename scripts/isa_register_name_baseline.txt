@@ -17,7 +17,6 @@ includes/ir0/ktm/stack_watch.h rsp
 includes/ir0/signal_irq.h new_rsp
 includes/ir0/syscall_frame.h rip_hw
 includes/ir0/task_ops.h rax
-includes/ir0/process.h fork_restore_emit_pre_iretq
 kernel/process/core.c task_cs_is_user
 kernel/syscalls/fs_path_syscalls.c rflags
 ktm/d1_12_read_diag.c fault_rip

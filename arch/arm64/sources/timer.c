@@ -52,20 +52,6 @@ void udelay(unsigned long us)
 		;
 }
 
-void timer_set_frequency(uint32_t hz)
-{
-	g_hz = hz;
-}
-
-uint32_t timer_get_frequency(void)
-{
-	if (g_hz != 0)
-	{
-		return g_hz;
-	}
-	return (uint32_t)g_cntfrq;
-}
-
 /** Returns 0 if CNTFRQ looks sane for smoke tag ARM64_TIMER_OK. */
 int arch_timer_smoke_ok(void)
 {

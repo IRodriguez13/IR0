@@ -211,19 +211,6 @@ void tls_set_base(uint64_t base)
 #endif
 }
 
-uint64_t tls_get_base(void)
-{
-#if MINGW_BUILD
-    return 0;
-#else
-    uint32_t lo;
-    uint32_t hi;
-
-    __asm__ volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(MSR_IA32_FS_BASE));
-    return ((uint64_t)hi << 32) | (uint64_t)lo;
-#endif
-}
-
 /*
  * tls_restore_current - Re-install the current task TLS base before ring 3.
  *
@@ -237,6 +224,3 @@ void tls_restore_current(void)
 		tls_set_base(process_tls_get(current_process));
 }
 
-[[maybe_unused]]void syscall_handler_c(void)
-{
-}
