@@ -24,5 +24,3 @@ struct ktm_writer
 void ktm_klog_init(void);
 ktm_context_t *ktm_current_context(void);
 void ktm_set_current_context(ktm_context_t *ctx);
-
-uint64_t ktm_now_ticks(void);

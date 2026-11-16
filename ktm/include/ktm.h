@@ -74,13 +74,6 @@ static inline void ktm_fail_at(const char *kind, const char *expr,
 /* Context snapshot + panic class (CONFIG_KTM / always declared)             */
 /* ------------------------------------------------------------------------- */
 
-void ktm_panic_site_emit(const char *file, unsigned int line, const char *caller,
-			 const char *message);
-void ktm_classify_kernel_panic(const char *message);
-
-void ktm_classify_user_fault(struct process *proc, uint64_t fault_addr,
-			     uint64_t fault_rip, uint64_t fault_cs);
-
 void ktm_ctx_snapshot(const struct process *p, const char *reason);
 
 /* ------------------------------------------------------------------------- */
@@ -98,7 +91,6 @@ void ktm_ctx_snapshot(const struct process *p, const char *reason);
 
 void ktm_flight_record(uint16_t type, uint32_t a0, uint32_t a1,
 		       uint32_t a2, uint32_t a3);
-void ktm_flight_dump(void);
 void ktm_flight_dump_last(uint32_t max_events);
 
 #if defined(CONFIG_KTM_FLIGHT) && CONFIG_KTM_FLIGHT
@@ -180,10 +172,6 @@ void ktm_invariant_process(const struct process *p, const char *tag);
 	klog_debug("KTM", tag); \
 } while (0)
 
-void ktm_sched_gate_enter_irq(void);
-void ktm_sched_gate_leave_irq(void);
-void ktm_sched_gate_check_before_sched(const char *caller);
-
 #else /* !IR0_KERNEL_TESTS */
 
 #define KTM_INVARIANT(proc, cond)        ((void)0)
@@ -191,13 +179,6 @@ void ktm_sched_gate_check_before_sched(const char *caller);
 #define KTM_PROBE(cond, tag)             ((void)0)
 #define KTM_PROBE_CTX(proc, cond, tag)   ((void)0)
 #define KTM_TRACE(tag)                   ((void)0)
-
-static inline void ktm_sched_gate_enter_irq(void) { }
-static inline void ktm_sched_gate_leave_irq(void) { }
-static inline void ktm_sched_gate_check_before_sched(const char *caller)
-{
-	(void)caller;
-}
 
 #endif /* IR0_KERNEL_TESTS */
 

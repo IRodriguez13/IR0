@@ -101,16 +101,6 @@ void ktm_console_mock_set_cursor_x(int x)
 	g_cursor_x = x;
 }
 
-void ktm_console_mock_set_printk_to_screen(int on)
-{
-	g_printk_to_screen = on ? 1 : 0;
-}
-
-void ktm_console_mock_set_serial_mirror(int on)
-{
-	g_serial_mirror = on ? 1 : 0;
-}
-
 void console_backend_init(void)
 {
 	g_init_calls++;

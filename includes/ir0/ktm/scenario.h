@@ -36,6 +36,4 @@ int ktm_scenario_run(const char *name);
 void ktm_scenarios_run_boot(void);
 void ktm_scenarios_register_builtins(void);
 
-unsigned ktm_suite_pass_count(void);
-unsigned ktm_suite_fail_count(void);
 void ktm_suite_reset(void);

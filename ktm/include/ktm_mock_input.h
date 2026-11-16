@@ -25,8 +25,6 @@ void ktm_input_mock_set_mouse_sensitivity_result(int result);
 void ktm_input_mock_set_mouse_state(const ir0_mouse_state_t *state);
 void ktm_input_mock_queue_key(char c);
 void ktm_input_mock_queue_mouse_packet(const uint8_t packet[3]);
-void ktm_input_mock_set_layout(int layout);
-void ktm_input_mock_set_console_mode(int mode);
 
 /* Observed state. */
 int ktm_input_mock_mouse_interrupts(void);

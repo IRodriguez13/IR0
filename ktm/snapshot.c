@@ -69,15 +69,3 @@ int ktm_snapshot_take(ktm_system_snapshot_t *out)
 	return 0;
 }
 
-void ktm_snapshot_diff(const ktm_system_snapshot_t *before,
-		       const ktm_system_snapshot_t *after,
-		       ktm_snapshot_delta_t *delta)
-{
-	if (!before || !after || !delta)
-		return;
-	delta->used_frames = (int64_t)after->used_frames - (int64_t)before->used_frames;
-	delta->processes = (int64_t)after->processes - (int64_t)before->processes;
-	delta->zombies = (int64_t)after->zombies - (int64_t)before->zombies;
-	delta->open_fds = (int64_t)after->open_fds - (int64_t)before->open_fds;
-	delta->pipes = (int64_t)after->pipes - (int64_t)before->pipes;
-}

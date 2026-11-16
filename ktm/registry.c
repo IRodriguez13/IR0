@@ -34,14 +34,6 @@ void ktm_write_u64(ktm_writer_t *w, const char *key, uint64_t value)
 	(void)w;
 }
 
-void ktm_write_cstr(ktm_writer_t *w, const char *key, const char *value)
-{
-	if (!w)
-		return;
-	ktm_transport_emit("PROBE", key ? key : "?", value ? value : "");
-	(void)w;
-}
-
 int ktm_probe_register(const char *name, ktm_probe_fn fn, void *ctx)
 {
 	int i;

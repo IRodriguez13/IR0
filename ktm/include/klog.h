@@ -67,7 +67,6 @@ typedef enum
  * Prefer klog_* / kprintf_level for [ts][LEVEL][COMP] lines.
  */
 int kprintf(const char *fmt, ...);
-int kprintf_level(klog_level_t level, const char *comp, const char *fmt, ...);
 
 /* Smoke/autokill tags (token preserved as substring). */
 void klog_smoke(const char *tag);

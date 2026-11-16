@@ -52,11 +52,6 @@ void ktm_audio_mock_set_play_result(int result)
 	g_play_result = result;
 }
 
-void ktm_audio_mock_set_volume(uint8_t volume)
-{
-	g_volume = volume;
-}
-
 bool audio_backend_is_available(void)
 {
 	return g_available != 0;

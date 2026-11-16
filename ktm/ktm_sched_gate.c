@@ -14,31 +14,3 @@
 
 #include <ktm.h>
 #include <ir0/ktm/klog.h>
-
-#ifdef IR0_KERNEL_TESTS
-
-static volatile unsigned int ktm_irq_nest;
-
-void ktm_sched_gate_enter_irq(void)
-{
-	ktm_irq_nest++;
-}
-
-void ktm_sched_gate_leave_irq(void)
-{
-	if (ktm_irq_nest > 0)
-		ktm_irq_nest--;
-}
-
-void ktm_sched_gate_check_before_sched(const char *caller)
-{
-	if (ktm_irq_nest == 0)
-		return;
-
-	klog_warn_fmt("KTM",
-		      "[KTM][SCHED_GATE] sched from IRQ without contract caller=%s",
-		      caller ? caller : "?");
-	ktm_fail_at("SCHED_GATE", "schedule from IRQ", KTM_FILE, __LINE__);
-}
-
-#endif /* IR0_KERNEL_TESTS */

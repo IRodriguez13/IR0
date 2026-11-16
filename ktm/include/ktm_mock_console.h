@@ -23,8 +23,6 @@ void ktm_console_mock_reset(void);
 void ktm_console_mock_set_framebuffer(int on);
 void ktm_console_mock_set_fb_scale(int scale);
 void ktm_console_mock_set_cursor_x(int x);
-void ktm_console_mock_set_printk_to_screen(int on);
-void ktm_console_mock_set_serial_mirror(int on);
 
 /* Observed state. */
 size_t ktm_console_mock_write_bytes(void);

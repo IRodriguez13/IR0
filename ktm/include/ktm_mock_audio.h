@@ -21,7 +21,6 @@ void ktm_audio_mock_reset(void);
 
 void ktm_audio_mock_set_available(int on);
 void ktm_audio_mock_set_play_result(int result);
-void ktm_audio_mock_set_volume(uint8_t volume);
 
 int ktm_audio_mock_play_calls(void);
 size_t ktm_audio_mock_last_count(void);

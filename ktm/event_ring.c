@@ -47,11 +47,6 @@ void ktm_set_current_context(ktm_context_t *ctx)
 	g_ctx = ctx;
 }
 
-uint64_t ktm_now_ticks(void)
-{
-	return g_seq; /* monotonic enough for v1 ordering */
-}
-
 static int32_t ktm_current_pid(void)
 {
 	return ir0_proc_current_pid();

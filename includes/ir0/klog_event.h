@@ -67,11 +67,9 @@ typedef struct klog_record
 } klog_record_t;
 
 void klog_set_boot_phase(klog_boot_phase_t phase);
-klog_boot_phase_t klog_get_boot_phase(void);
 void klog_event(uint32_t event_id, uint16_t subsystem, uint8_t severity,
 		const char *component, const char *message);
 
 /* Promote the 256-record early ring after the heap is online. */
 int klog_promote_normal_ring(void);
-size_t klog_record_count(void);
 int klog_read_records(char *buf, size_t size);

@@ -33,6 +33,3 @@ typedef struct ktm_snapshot_delta
 } ktm_snapshot_delta_t;
 
 int ktm_snapshot_take(ktm_system_snapshot_t *out);
-void ktm_snapshot_diff(const ktm_system_snapshot_t *before,
-		       const ktm_system_snapshot_t *after,
-		       ktm_snapshot_delta_t *delta);

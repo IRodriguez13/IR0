@@ -84,11 +84,6 @@ void ktm_flight_record(uint16_t type, uint32_t a0, uint32_t a1,
 	slot->a3 = a3;
 }
 
-void ktm_flight_dump(void)
-{
-	ktm_flight_dump_last(0);
-}
-
 void ktm_flight_dump_last(uint32_t max_events)
 {
 	uint32_t count;
@@ -137,10 +132,6 @@ void ktm_flight_record(uint16_t type, uint32_t a0, uint32_t a1,
 	(void)a1;
 	(void)a2;
 	(void)a3;
-}
-
-void ktm_flight_dump(void)
-{
 }
 
 void ktm_flight_dump_last(uint32_t max_events)

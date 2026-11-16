@@ -54,11 +54,6 @@ void klog_set_boot_phase(klog_boot_phase_t phase)
 		g_boot_phase = phase;
 }
 
-klog_boot_phase_t klog_get_boot_phase(void)
-{
-	return g_boot_phase;
-}
-
 static const char *klog_boot_phase_string(klog_boot_phase_t phase)
 {
 	switch (phase)
@@ -395,11 +390,6 @@ int klog_promote_normal_ring(void)
 	return 0;
 }
 
-size_t klog_record_count(void)
-{
-	return (size_t)atomic64_read(&g_record_count);
-}
-
 int klog_read_records(char *buf, size_t size)
 {
 	size_t count;
@@ -590,21 +580,6 @@ void klog_fatal_fmt(const char *component, const char *format, ...)
 	va_start(args, format);
 	klog_vfmt(KLOG_LEVEL_FATAL, component, format, args);
 	va_end(args);
-}
-
-int kprintf_level(klog_level_t level, const char *comp, const char *fmt, ...)
-{
-	va_list args;
-	char message[512];
-	int n;
-
-	if (level < g_klog_level)
-		return 0;
-	va_start(args, fmt);
-	n = vsnprintf(message, sizeof(message), fmt, args);
-	va_end(args);
-	klog_emit(level, comp ? comp : "KERN", message);
-	return n;
 }
 
 static int kvprintf(const char *fmt, va_list ap)

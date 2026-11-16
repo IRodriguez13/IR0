@@ -63,17 +63,11 @@ ktm/include/d1_13_malloc_pf_diag.h rdi
 ktm/include/d1_13_malloc_pf_diag.h rdx
 ktm/include/d1_13_malloc_pf_diag.h rip
 ktm/include/d1_13_malloc_pf_diag.h rsi
-ktm/include/ktm.h fault_cs
-ktm/include/ktm.h fault_rip
 ktm/include/ktm_probe_diag.h fault_rip
 ktm/include/ktm_probe_diag.h rip
 ktm/ktm_ctx_snapshot.c task_get_cs
 ktm/ktm_panic_class.c USER_RIP_HI
 ktm/ktm_panic_class.c USER_RIP_LO
-ktm/ktm_panic_class.c fault_cs
-ktm/ktm_panic_class.c fault_rip
-ktm/ktm_panic_class.c rip
-ktm/ktm_panic_class.c rip_in_userspace
 ktm/ktm_probe_diag.c fault_rip
 ktm/ktm_probe_diag.c rip
 ktm/stack_watch.c rsp
