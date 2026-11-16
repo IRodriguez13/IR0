@@ -55,7 +55,6 @@
 /* Global PID/process-list ownership; distinct from per-process object state. */
 uint64_t process_registry_lock(void);
 void process_registry_unlock(uint64_t irq_flags);
-void process_registry_install_if_empty(process_t *process);
 
 /* wait.c */
 void wait_exit_audit_process_exit(process_t *dying, process_t *parent,

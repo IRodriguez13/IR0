@@ -906,7 +906,6 @@ int early_rootfs_cpio_bpath_fold(void);
 int early_rootfs_ready(void);
 int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_block(int fd);
-int early_rootfs_console_ready(void);
 int early_rootfs_fd_is_console(int fd);
 int early_rootfs_fd_discards_write(int fd);
 int early_rootfs_fd_is_pipe_write(int fd);

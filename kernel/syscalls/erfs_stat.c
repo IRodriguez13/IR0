@@ -9,21 +9,6 @@
 
 #include "erfs_internal.h"
 
-int early_rootfs_console_ready(void)
-{
-	struct ir0_early_stat64 st;
-
-	if (!g_ready)
-		return 0;
-	if (ir0_early_rootfs_path_node("/dev") != IR0_EARLY_ROOTFS_DEV)
-		return 0;
-	if (ir0_early_rootfs_path_node("/dev/console") != IR0_EARLY_ROOTFS_CONSOLE)
-		return 0;
-	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_CONSOLE, 0, &st);
-	return st.st_mode == IR0_EARLY_ROOTFS_MODE_CHR &&
-	       st.st_rdev == IR0_EARLY_ROOTFS_CONSOLE_RDEV;
-}
-
 int64_t early_rootfs_faccessat(int dirfd, uint64_t path, int flags)
 {
 	char pbuf[32];

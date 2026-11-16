@@ -25,18 +25,6 @@ int copy_user_cstr(uint64_t upath, char *buf, unsigned bufsz)
 	return 0;
 }
 
-int strings_equal(const char *left, const char *right)
-{
-	if (!left || !right)
-		return 0;
-	while (*left && *left == *right)
-	{
-		left++;
-		right++;
-	}
-	return *left == *right;
-}
-
 int slot_from_fd(int fd)
 {
 	unsigned idx;

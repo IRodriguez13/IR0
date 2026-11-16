@@ -889,19 +889,6 @@ static uint64_t fd_slot_destroyed;
 static uint64_t fd_slot_blocked_readers;
 static uint64_t fd_slot_blocked_writers;
 
-void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
-		       uint64_t *blocked_readers, uint64_t *blocked_writers)
-{
-	if (created)
-		*created = fd_slot_created;
-	if (destroyed)
-		*destroyed = fd_slot_destroyed;
-	if (blocked_readers)
-		*blocked_readers = fd_slot_blocked_readers;
-	if (blocked_writers)
-		*blocked_writers = fd_slot_blocked_writers;
-}
-
 void fd_slot_note_created(fd_entry_t *entry)
 {
 	/* A native provider keeps its explicit lifecycle; legacy descriptors bind
