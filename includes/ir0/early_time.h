@@ -16,4 +16,3 @@
 
 extern const struct syscall_context_provider early_time_provider;
 int64_t early_time_realtime_offset(void);
-int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec);

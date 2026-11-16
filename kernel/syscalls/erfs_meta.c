@@ -555,7 +555,7 @@ int64_t early_rootfs_openat2(int dirfd, uint64_t path, uint64_t how,
 	return early_rootfs_openat(dirfd, path, (int)blob[0]);
 }
 
-int early_rootfs_want_creds(int fd)
+static int early_rootfs_want_creds(int fd)
 {
 	int uid = unix_id_of_fd(fd);
 	int pair = sock_pair_of_fd(fd);

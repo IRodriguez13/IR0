@@ -7,6 +7,8 @@
 #include <ir0/time.h>
 
 #include <ir0/errno.h>
+
+static int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec);
 #define CLOCK_REALTIME 0UL
 #define CLOCK_MONOTONIC 1UL
 #define CLOCK_MONOTONIC_RAW 4UL
@@ -386,7 +388,7 @@ int64_t early_time_realtime_offset(void)
 	return g_realtime_off;
 }
 
-int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec)
+static int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec)
 {
 	const struct early_syscall_services *services_all = services(opaque);
 	const struct early_time_services *ops = services_all ? services_all->time : 0;

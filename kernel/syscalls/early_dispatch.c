@@ -6,7 +6,7 @@
 
 #include <ir0/early_syscall.h>
 
-int early_syscall_dispatch_init(
+static int early_syscall_dispatch_init(
 	struct early_syscall_dispatch *dispatch,
 	const struct syscall_context_provider *const *providers,
 	unsigned int provider_count)

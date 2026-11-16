@@ -96,10 +96,6 @@ struct early_syscall_dispatch
 	int state;
 };
 
-int early_syscall_dispatch_init(
-	struct early_syscall_dispatch *dispatch,
-	const struct syscall_context_provider *const *providers,
-	unsigned int provider_count);
 int64_t early_syscall_dispatch_invoke(
 	struct early_syscall_dispatch *dispatch,
 	struct early_syscall_context *context,

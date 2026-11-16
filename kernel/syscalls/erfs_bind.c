@@ -151,7 +151,7 @@ int64_t product_xfer(int fd, uint64_t buffer, uint64_t count, int write)
 	return n;
 }
 
-void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
+static void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 		       const struct early_user_services *user)
 {
 	unsigned i;

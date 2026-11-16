@@ -15,7 +15,7 @@
 #include "process_internal.h"
 #include <ir0/ktm/checkpoint.h>
 
-int process_reap_detach_zombie(process_t *child)
+static int process_reap_detach_zombie(process_t *child)
 {
 	int removed;
 
@@ -116,7 +116,7 @@ int process_child_wait_status_word(const process_t *child)
 	return process_lifecycle_wait_status(child);
 }
 
-int process_wait_prepare_child_wake(const process_t *parent,
+static int process_wait_prepare_child_wake(const process_t *parent,
 				    const process_t *child, int *status_word)
 {
 	if (!parent || !child || !status_word)

@@ -21,6 +21,8 @@
 #include <ir0/clock.h>
 #include <ir0/ktm/klog.h>
 
+static int stdin_wake_check_nosched(void);
+
 #define MAX_STDIN_WAITERS 8
 static process_t *stdin_waiters[MAX_STDIN_WAITERS];
 
@@ -62,7 +64,7 @@ void stdin_wake_check(void)
 	clock_request_sched_resched();
 }
 
-int stdin_wake_check_nosched(void)
+static int stdin_wake_check_nosched(void)
 {
 	int woke_stdin = 0;
 	int woke_tty = 0;

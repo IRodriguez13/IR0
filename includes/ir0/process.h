@@ -604,8 +604,6 @@ static inline int process_is_alive(const process_t *p)
  */
 int process_wait_child_matches_blocked_target(const process_t *parent,
 					      pid_t child_pid);
-int process_wait_prepare_child_wake(const process_t *parent,
-				    const process_t *child, int *status_word);
 void process_wait_wake_blocked_parent(process_t *parent, process_t *child);
 
 /* Linux wait status word for a zombie (exit << 8 or WTERMSIG). */
@@ -643,7 +641,6 @@ int process_wait_options(const process_t *p);
 void process_wait_options_set(process_t *p, int options);
 int *process_wait_status_ptr_peek(process_t *p);
 void process_wait_status_ptr_set(process_t *p, int *status_ptr);
-void process_wait_state_init(process_t *p);
 void process_wait_state_arm(process_t *p, pid_t pid, int options, int *status_ptr);
 void process_wait_state_clear(process_t *p);
 
@@ -698,7 +695,6 @@ void process_init_fd_table(process_t *process);
 /* Process lifecycle management */
 void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
 int process_has_zombie_child(const process_t *parent);
-int process_reap_detach_zombie(process_t *child);
 void process_reap_zombie_child(process_t *child);
 void process_destroy(process_t *p);
 

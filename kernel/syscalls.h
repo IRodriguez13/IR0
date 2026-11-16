@@ -52,4 +52,3 @@ void syscalls_init(void);
 /* Poll: desbloquea procesos que esperan en poll() cuando hay datos o timeout */
 /* read(0): desbloquea procesos esperando teclado cuando hay datos */
 void stdin_wake_check(void);
-int stdin_wake_check_nosched(void);

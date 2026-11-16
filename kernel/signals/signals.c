@@ -109,7 +109,7 @@ static void signals_restore_handler_mask(process_t *p)
 	p->signal_mask_saved_valid = 0;
 }
 
-void signals_on_sigreturn(process_t *p)
+static void signals_on_sigreturn(process_t *p)
 {
 	signals_restore_handler_mask(p);
 	if (p)

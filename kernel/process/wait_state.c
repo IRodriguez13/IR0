@@ -68,7 +68,7 @@ void process_wait_status_ptr_set(process_t *p, int *status_ptr)
 		p->wait_status_ptr = status_ptr;
 }
 
-void process_wait_state_init(process_t *p)
+static void process_wait_state_init(process_t *p)
 {
 	if (!p)
 		return;

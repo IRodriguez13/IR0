@@ -935,7 +935,7 @@ void fd_slot_note_created(fd_entry_t *entry)
 	fd_slot_created++;
 }
 
-void fd_slot_note_destroyed(void)
+static void fd_slot_note_destroyed(void)
 {
 	fd_slot_destroyed++;
 }

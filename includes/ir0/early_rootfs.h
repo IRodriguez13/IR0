@@ -894,8 +894,6 @@ static inline uint64_t ir0_early_elf64_image_bytes(const uint8_t *hdr,
 	return size;
 }
 
-void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
-		       const struct early_user_services *user);
 int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 				uint64_t buffer_len,
 				const struct early_user_services *user);
@@ -1080,6 +1078,5 @@ int64_t early_rootfs_pidfd_getfd(int target);
 int64_t early_rootfs_faccessat2(int dirfd, uint64_t path, int mode, int flags);
 int64_t early_rootfs_openat2(int dirfd, uint64_t path, uint64_t how,
 			     uint64_t usize);
-int early_rootfs_want_creds(int fd);
 int early_rootfs_take_creds(int fd, int32_t *pid, int32_t *uid, int32_t *gid);
 int64_t early_rootfs_send_creds(int fd, int32_t pid, int32_t uid, int32_t gid);
