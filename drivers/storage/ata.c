@@ -22,6 +22,10 @@
 #include <stdint.h>
 #include <fs/vfs.h>
 
+static void ata_reset_drive(uint8_t drive);
+static bool ata_identify_drive(uint8_t drive);
+static bool ata_wait_ready(uint8_t drive);
+
 #define ATA_WAIT_LOOPS 50000
 #define ATA_MAX_RETRY  3
 
@@ -397,7 +401,7 @@ bool ata_is_available(void)
     return false;
 }
 
-void ata_reset_drive(uint8_t drive) 
+static void ata_reset_drive(uint8_t drive) 
 {
     uint16_t status_port = ata_get_status_port(drive);
     uint16_t drive_head_port = ata_get_drive_head_port(drive);
@@ -420,7 +424,7 @@ void ata_reset_drive(uint8_t drive)
     ata_wait_ready(drive);
 }
 
-bool ata_identify_drive(uint8_t drive) 
+static bool ata_identify_drive(uint8_t drive) 
 {
     
     uint16_t status_port = ata_get_status_port(drive);
@@ -529,7 +533,7 @@ bool ata_identify_drive(uint8_t drive)
     return true;
 }
 
-bool ata_wait_ready(uint8_t drive)
+static bool ata_wait_ready(uint8_t drive)
 {
 	int loops = 0;
 	uint8_t status = 0;
@@ -552,7 +556,7 @@ static bool ata_wait_ready_probe(uint8_t drive)
 	return ata_poll_not_busy(drive, &loops, &status) == ATA_POLL_OK;
 }
 
-bool ata_wait_drq(uint8_t drive)
+static bool ata_wait_drq(uint8_t drive)
 {
 	int loops = 0;
 	uint8_t status = 0;
