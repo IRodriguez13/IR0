@@ -34,4 +34,3 @@ int ir0_acpi_pm_try_poweroff(void);
 int ir0_acpi_pm_try_suspend(void);
 
 /** Non-zero if DSDT _S3_ SLP_TYP was parsed. */
-int ir0_acpi_pm_s3_ok(void);

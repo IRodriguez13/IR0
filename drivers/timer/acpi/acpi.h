@@ -16,9 +16,7 @@
 #include <stdint.h>
 #include <stddef.h>
 
-
 /* HPET description table behind the boot snapshot RSDP, or NULL. */
-void *find_hpet_table(void);
 
 typedef struct 
 {
