@@ -32,14 +32,3 @@ uint64_t ata_get_size(uint8_t drive) {
     return 0;
 }
 
-const char* ata_get_model(uint8_t drive) {
-    static const char* unknown = "UNKNOWN";
-    if (drive >= 4 || !ata_drives_present[drive]) return unknown;
-    return ata_devices[drive].model;
-}
-
-const char* ata_get_serial(uint8_t drive) {
-    static const char* unknown = "UNKNOWN";
-    if (drive >= 4 || !ata_drives_present[drive]) return unknown;
-    return ata_devices[drive].serial;
-}

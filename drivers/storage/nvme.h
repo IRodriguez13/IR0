@@ -15,5 +15,3 @@
 #include <stdint.h>
 
 void nvme_probe(void);
-int nvme_disk_present(void);
-uint64_t nvme_sector_count(void);

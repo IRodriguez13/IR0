@@ -259,16 +259,6 @@ bool ata_drives_present[4] = {false, false, false, false};
 // Parsed device info array (filled during identify)
 ata_device_info_t ata_devices[4] = {{0}};
 
-bool ata_get_device_info(uint8_t drive, ata_device_info_t *out)
-{
-    if (drive >= 4 || !out)
-        return false;
-    if (!ata_devices[drive].present)
-        return false;
-    *out = ata_devices[drive];
-    return true;
-}
-
 // Get port base for drive
 static uint16_t ata_get_port_base(uint8_t drive) 
 {
@@ -386,19 +376,6 @@ void ata_init(void)
         resource_register_irq(15, "ata15");
         resource_register_ioport(ATA_SECONDARY_DATA, ATA_SECONDARY_COMMAND, "ata secondary");
     }
-}
-
-bool ata_is_available(void) 
-{
-    // Check if any drive is present
-    for (int i = 0; i < 4; i++) 
-    {
-        if (ata_drives_present[i]) 
-        {
-            return true;
-        }
-    }
-    return false;
 }
 
 static void ata_reset_drive(uint8_t drive) 

@@ -488,16 +488,6 @@ static int nvme_controller_init(struct nvme_ctrl *c)
 	return 0;
 }
 
-int nvme_disk_present(void)
-{
-	return g_nvme.ready;
-}
-
-uint64_t nvme_sector_count(void)
-{
-	return g_nvme.ready ? g_nvme.nsectors : 0;
-}
-
 void nvme_probe(void)
 {
 	uint8_t bus, slot, func;

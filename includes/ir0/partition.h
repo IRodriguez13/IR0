@@ -35,8 +35,6 @@ typedef struct
 #define MAX_TOTAL_PARTITIONS (MAX_PARTITIONS_PER_DISK * MAX_DISKS)
 
 int read_partition_table(uint8_t disk_id);
-int is_gpt_disk(uint8_t disk_id);
-const char *get_partition_type(uint8_t system_id);
 int get_partition_count(uint8_t disk_id);
 int get_partition_info(uint8_t disk_id, uint8_t partition_num, partition_info_t *info);
 int partition_nth_on_disk(uint8_t disk_id, unsigned ordinal, partition_info_t *info);

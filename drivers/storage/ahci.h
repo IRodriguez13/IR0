@@ -19,6 +19,3 @@
 #include <ir0/ahci_api.h>
 
 void ahci_probe(void);
-
-int ahci_disk_present(void);
-uint64_t ahci_sector_count(void);
