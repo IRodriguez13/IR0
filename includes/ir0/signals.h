@@ -248,7 +248,6 @@ int register_signal_handler(int signal, void (*handler)(int));
  *
  * Returns: 0 on success, -1 on error
  */
-int signal_ignore(int signal);
 
 /*
  * Returns 1 if @sig has a deliverable userspace handler (not DFL/IGN/blocked).

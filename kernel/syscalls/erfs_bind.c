@@ -54,11 +54,6 @@ const struct ir0_bpath_ops *ir0_bpath_bound(void)
 	return g_bpath;
 }
 
-int early_rootfs_bpath_used(void)
-{
-	return g_bpath_used;
-}
-
 int bpath_live(void)
 {
 	stat_t st;
@@ -200,18 +195,6 @@ static void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
 	g_init_from_block = 0;
 	g_ready = (init_blob != 0 && init_len > 0 && user &&
 		   user->copy_from_user && user->copy_to_user);
-}
-
-const uint8_t *early_rootfs_init_blob(uint64_t *length)
-{
-	if (length)
-		*length = g_blob_len;
-	return g_blob;
-}
-
-int early_rootfs_init_from_block(void)
-{
-	return g_init_from_block;
 }
 
 int early_rootfs_cpio_ready(void)

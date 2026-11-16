@@ -81,21 +81,6 @@ static int process_wait_pid_matches_child(pid_t wait_pid,
 	return process_lifecycle_child_matches(parent, child, wait_pid);
 }
 
-int process_has_zombie_child(const process_t *parent)
-{
-	process_t *p;
-
-	if (!parent)
-		return 0;
-
-	for (p = process_list; p; p = p->next)
-	{
-		if (p->ppid == parent->task.pid && p->state == PROCESS_ZOMBIE)
-			return 1;
-	}
-	return 0;
-}
-
 int process_wait_child_matches_blocked_target(const process_t *parent,
 					    pid_t child_pid)
 {

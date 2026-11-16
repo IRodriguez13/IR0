@@ -4,4 +4,3 @@
 #include <ir0/syscall_table.h>
 
 extern const struct syscall_context_provider early_io_provider;
-int early_io_smoke_ok(void);

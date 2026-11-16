@@ -36,7 +36,6 @@ struct ir0_task_cred
 
 const struct ir0_task_cred *ir0_current_cred(void);
 pid_t ir0_current_pid(void);
-mode_t ir0_current_umask(void);
 int ir0_cred_is_root(void);
 
 bool ir0_check_file_access(const char *path, int mode);

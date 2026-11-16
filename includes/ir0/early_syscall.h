@@ -95,11 +95,3 @@ struct early_syscall_dispatch
 	/* 0 = uninitialized, 1 = ready, negative = permanent failure. */
 	int state;
 };
-
-int64_t early_syscall_dispatch_invoke(
-	struct early_syscall_dispatch *dispatch,
-	struct early_syscall_context *context,
-	const struct syscall_context_provider *const *providers,
-	unsigned int provider_count, enum ir0_syscall_id id,
-	uint64_t a0, uint64_t a1, uint64_t a2,
-	uint64_t a3, uint64_t a4, uint64_t a5);

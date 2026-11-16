@@ -17,4 +17,3 @@
 /* Reference an epoll instance held by an fd (kernel/syscalls/epoll_syscalls.c). */
 void epoll_acquire(void *epoll_state);
 void epoll_release(void *epoll_state);
-void epoll_release_fd(void *epoll_state);

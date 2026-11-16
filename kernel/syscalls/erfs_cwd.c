@@ -43,19 +43,6 @@ void early_publish_root(void)
 		g_cwd_ops->set_root(early_root_string());
 }
 
-void early_rootfs_bind_cwd(const struct ir0_cwd_ops *ops)
-{
-	g_cwd_ops = ops;
-	g_cwd_used = 0;
-	early_publish_cwd();
-	early_publish_root();
-}
-
-int early_rootfs_cwd_used(void)
-{
-	return g_cwd_used;
-}
-
 int64_t early_rootfs_chdir(uint64_t path)
 {
 	char pbuf[32];
@@ -202,35 +189,6 @@ int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count)
 			return -EFAULT;
 		return (int64_t)written;
 	}
-}
-
-int early_rootfs_dents_ready(void)
-{
-	uint8_t rec[32];
-	unsigned i;
-	unsigned n;
-
-	if (!g_ready)
-		return 0;
-	n = ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_ROOT);
-	if (n != 5 || ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_DEV) != 6 ||
-	    ir0_early_rootfs_dir_count(IR0_EARLY_ROOTFS_TMP) != 2)
-		return 0;
-	for (i = 0; i < n; i++)
-	{
-		struct ir0_early_dirent_spec spec;
-		unsigned reclen;
-
-		spec = ir0_early_rootfs_dir_entry(IR0_EARLY_ROOTFS_ROOT, i);
-		if (!spec.name)
-			return 0;
-		reclen = ir0_early_dirent64_pack(rec, sizeof(rec), spec.ino,
-						(int64_t)(i + 1), spec.type,
-						spec.name);
-		if (reclen < 20)
-			return 0;
-	}
-	return 1;
 }
 
 int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size)

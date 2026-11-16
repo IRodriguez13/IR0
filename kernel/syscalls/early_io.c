@@ -1103,7 +1103,3 @@ const struct syscall_context_provider early_io_provider = {
 	.handler = early_io_syscall,
 };
 
-int early_io_smoke_ok(void)
-{
-	return g_write_ok;
-}

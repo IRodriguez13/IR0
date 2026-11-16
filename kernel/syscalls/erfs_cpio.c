@@ -187,7 +187,3 @@ int early_rootfs_cpio_bpath_fold(void)
 					      -ENOENT;
 }
 
-int early_rootfs_bpivot_done(void)
-{
-	return ir0_bpivot_cpio_fold_done();
-}

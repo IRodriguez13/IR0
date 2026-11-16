@@ -520,9 +520,6 @@ __attribute__((noreturn)) void process_exit(int code);
 void process_pre_zombie_teardown(process_t *dying);
 void process_notify_parent_of_exit(process_t *dying);
 void process_resources_release_on_exit(process_t *dying);
-void process_guest_install(process_t *guest);
-void process_guest_rearm(process_t *guest);
-int process_exit_guest(int code);
 int process_wait(pid_t pid, int *status, int options);
 
 /*
@@ -694,7 +691,6 @@ void process_init_fd_table(process_t *process);
 
 /* Process lifecycle management */
 void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
-int process_has_zombie_child(const process_t *parent);
 void process_reap_zombie_child(process_t *child);
 void process_destroy(process_t *p);
 
@@ -730,9 +726,6 @@ bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t leng
 struct mmap_region *find_vma(process_t *proc, uintptr_t addr);
 /* Nonzero when @addr lies in a MAP_SHARED region of @proc. */
 int vma_is_shared(process_t *proc, uintptr_t addr);
-
-uint64_t process_list_count(void);
-uint64_t process_list_count_user(void);
 
 extern process_t *current_process;
 extern process_t *process_list;

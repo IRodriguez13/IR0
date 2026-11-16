@@ -33,5 +33,4 @@ struct ir0_syscall_identity_ops
 			      uint32_t gid, uint32_t egid);
 };
 
-const struct ir0_syscall_identity_ops *ir0_syscall_identity_product(void);
 extern const struct syscall_context_provider ir0_product_identity_provider;

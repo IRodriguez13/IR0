@@ -46,7 +46,6 @@ struct ir0_bpath_ops
 };
 
 void early_rootfs_bind_bpath(const struct ir0_bpath_ops *ops);
-int early_rootfs_bpath_used(void);
 int ir0_bpath_is_reserved_early(const char *path);
 int ir0_bpath_is_foldable(const char *path);
 int ir0_bpath_is_tmp(const char *path);

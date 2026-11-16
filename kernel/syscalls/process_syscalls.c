@@ -44,22 +44,6 @@
 
 /* Credentials, supplementary groups, and Linux setreuid/setresuid ABI. */
 
-int process_cred_in_group(const process_t *p, gid_t gid)
-{
-	uint8_t i;
-
-	if (!p)
-		return 0;
-	if ((gid_t)p->egid == gid)
-		return 1;
-	for (i = 0; i < p->ngroups; i++)
-	{
-		if (p->groups[i] == gid)
-			return 1;
-	}
-	return 0;
-}
-
 int64_t sys_getgroups(int size, gid_t *list)
 {
 	uint8_t n;

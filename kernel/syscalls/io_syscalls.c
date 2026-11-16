@@ -789,30 +789,6 @@ void io_async_notify_device(uint32_t device_id)
   }
 }
 
-void syscall_wake_blocked_on_child(process_t *parent)
-{
-	int was_blocked;
-
-	if (!parent)
-		return;
-
-	was_blocked = (parent->state == PROCESS_BLOCKED);
-	if (!was_blocked && !parent->poll_waiter)
-		return;
-
-	ir0_clock_wait_disarm(parent);
-
-	if (parent->poll_waiter)
-		(void)poll_wake_do();
-
-	if (was_blocked)
-	{
-		process_set_sched_state(parent, PROCESS_READY);
-		sched_add(parent);
-		sched_promote(parent);
-	}
-}
-
 /**
  * sys_pause - Wait until a signal arrives (POSIX pause(2)).
  */

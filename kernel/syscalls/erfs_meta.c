@@ -10,55 +10,6 @@
 
 #include "erfs_internal.h"
 
-int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
-				uint64_t size)
-{
-	static const char proc_self_exe[] = "/proc/self/exe";
-	static const char init_target[] = "/init";
-	char pbuf[32];
-	uint64_t n = sizeof(init_target) - 1U;
-
-	if (!g_ready)
-		return -ENOENT;
-	if (dirfd != IR0_EARLY_ROOTFS_AT_FDCWD && slot_from_fd(dirfd) < 0)
-		return -EBADF;
-	if (!copy_user_cstr(path, pbuf, sizeof(pbuf)))
-		return -EFAULT;
-	if (!join_under_cwd(pbuf, sizeof(pbuf)))
-		return -ENAMETOOLONG;
-	apply_chroot(pbuf, sizeof(pbuf));
-	if (!strings_equal(pbuf, proc_self_exe))
-	{
-		int fsid = ramtab_find(pbuf);
-		enum ir0_early_rootfs_node node = lookup_user_path(pbuf);
-
-		if (node == IR0_EARLY_ROOTFS_SYMLINK && fsid >= 0)
-		{
-			uint64_t have = ramtab_table()[fsid].size;
-
-			if (have > size)
-				have = size;
-			if (have > 0 && (!g_user || !g_user->copy_to_user ||
-					 g_user->copy_to_user(buffer,
-							      ramtab_table()[fsid].data ?
-								      ramtab_table()[fsid].data :
-								      ramtab_table()[fsid].own,
-							      have) != 0))
-				return -EFAULT;
-			return (int64_t)have;
-		}
-		if (node != IR0_EARLY_ROOTFS_NONE)
-			return -EINVAL;
-		return -ENOENT;
-	}
-	if (size < n)
-		n = size;
-	if (n > 0 && (!g_user || !g_user->copy_to_user ||
-		      g_user->copy_to_user(buffer, init_target, n) != 0))
-		return -EFAULT;
-	return (int64_t)n;
-}
-
 int64_t early_rootfs_symlinkat(uint64_t target, int newdirfd, uint64_t linkpath)
 {
 	char tbuf[RAMTAB_NAME];
@@ -741,24 +692,3 @@ int64_t early_rootfs_statx(int dirfd, uint64_t path, int flags, uint32_t mask,
 	return 0;
 }
 
-int early_rootfs_smoke_init(void)
-{
-	int fd;
-	struct ir0_early_stat64 st;
-
-	if (!g_ready || !g_blob || g_blob_len < 4 || !early_rootfs_console_ready())
-		return -1;
-	fd = alloc_fd(IR0_EARLY_ROOTFS_INIT);
-	if (fd < 0)
-		return -1;
-	ir0_early_rootfs_fill_stat(IR0_EARLY_ROOTFS_INIT, g_blob_len, &st);
-	if (st.st_mode != IR0_EARLY_ROOTFS_MODE_REG || st.st_size <= 0 ||
-	    g_blob[0] != 0x7f || g_blob[1] != 'E' || g_blob[2] != 'L' ||
-	    g_blob[3] != 'F')
-	{
-		early_rootfs_close(fd);
-		return -1;
-	}
-	early_rootfs_close(fd);
-	return 0;
-}
