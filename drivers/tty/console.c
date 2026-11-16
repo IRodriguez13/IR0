@@ -33,6 +33,8 @@
 #include <string.h>
 #include <ir0/spinlock.h>
 
+static void tty_flush_input(void);
+
 /* TCGETS/TCSETS use the Linux x86-64 kernel termios prefix (NCCS=19). */
 _Static_assert(sizeof(struct ir0_termios) == 36,
 	       "ir0_termios must match Linux uapi termios for TCGETS");
@@ -499,7 +501,7 @@ static int tty_sleep_for_input(void)
 	return 1;
 }
 
-void tty_input_char(char c)
+static void tty_input_char(char c)
 {
 	ir0_console_keypress(c);
 }
@@ -587,7 +589,7 @@ int ir0_console_store_key_in_ring(void)
 	return tty_icanon_on() ? 0 : 1;
 }
 
-int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
+static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 {
 	size_t bytes_read = 0;
 
@@ -696,7 +698,7 @@ int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 	}
 }
 
-int64_t tty_write_kernel(const char *kbuf, size_t count, uint8_t color)
+static int64_t tty_write_kernel(const char *kbuf, size_t count, uint8_t color)
 {
 	size_t i;
 
@@ -794,7 +796,7 @@ int tty_input_bytes_available(void)
 	return 0;
 }
 
-void tty_flush_input(void)
+static void tty_flush_input(void)
 {
 	/*
 	 * Line discipline only. The keyboard ring is the raw (!ICANON) readq;
