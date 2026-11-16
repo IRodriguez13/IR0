@@ -228,18 +228,6 @@ static void semaphore_init(semaphore_t *sem, int initial_count)
     wait_queue_init(&sem->wait_queue);
 }
 
-void semaphore_up(semaphore_t *sem)
-{
-    if (!sem)
-        return;
-
-    sem->count++;
-
-    /* Wake up one waiting process */
-    wait_queue_wake_one(&sem->wait_queue);
-}
-
-
 int ring_buffer_init(ring_buffer_t *rb, size_t size)
 {
     if (!rb || size == 0)
@@ -383,16 +371,6 @@ void ipc_channel_destroy(ipc_channel_t *channel)
     ring_buffer_destroy(&channel->rb);
 
     kfree(channel);
-}
-
-ipc_channel_t *ipc_channel_find(uint32_t id)
-{
-    unsigned long irq_flags;
-
-    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
-    ipc_channel_t *channel = ipc_channel_find_locked(id);
-    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
-    return channel;
 }
 
 /**

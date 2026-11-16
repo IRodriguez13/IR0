@@ -48,8 +48,6 @@ typedef struct semaphore
 	wait_queue_t wait_queue;
 } semaphore_t;
 
-void semaphore_up(semaphore_t *sem);
-
 typedef struct ring_buffer
 {
 	uint8_t *buffer;
@@ -78,7 +76,6 @@ typedef struct ipc_channel
 
 ipc_channel_t *ipc_channel_create(uint32_t id);
 void ipc_channel_destroy(ipc_channel_t *channel);
-ipc_channel_t *ipc_channel_find(uint32_t id);
 ipc_channel_t *ipc_channel_get_or_create(uint32_t id);
 uint32_t ipc_allocate_channel_id(void);
 
