@@ -148,5 +148,4 @@ int arm64_board_prepare_memory(uintptr_t kernel_base, size_t kernel_size);
 void arm64_board_log_arch(void);
 
 /* Populated when FDT parsing sees hypervisor / guest compatible strings. */
-int arm64_board_hypervisor_present(void);
 int arm64_board_hypervisor_vendor(char *buf, size_t n);

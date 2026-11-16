@@ -10,6 +10,8 @@
 #include <ir0/process.h>
 #include <string.h>
 
+static void ir0_debug_clear_dr6_dr7(void);
+
 extern uint8_t fork_flow_set_tf;
 
 static void debug_trap_tag_once(const char *tag)
@@ -47,7 +49,7 @@ void ir0_debug_trap_init(void)
 	debug_trap_tag_once("STEP_C_DEBUG_TRAP_GATING_OK");
 }
 
-int ir0_debug_single_step_active(void)
+static int ir0_debug_single_step_active(void)
 {
 #if IR0_ENABLE_SINGLE_STEP
 	return 1;
@@ -56,7 +58,7 @@ int ir0_debug_single_step_active(void)
 #endif
 }
 
-int ir0_debug_fork_singlestep_active(void)
+static int ir0_debug_fork_singlestep_active(void)
 {
 #if IR0_ENABLE_FORK_SINGLESTEP_TRACE
 	return 1;
@@ -85,13 +87,13 @@ uint64_t ir0_rflags_sanitize_user(uint64_t rflags)
 	return out;
 }
 
-void ir0_debug_clear_dr6_dr7(void)
+static void ir0_debug_clear_dr6_dr7(void)
 {
 	debug_reg_write(6, 0);
 	debug_reg_write(7, 0);
 }
 
-void ir0_debug_read_dr6_dr7(uint64_t *dr6, uint64_t *dr7)
+static void ir0_debug_read_dr6_dr7(uint64_t *dr6, uint64_t *dr7)
 {
 	if (dr6)
 		*dr6 = debug_reg_read(6);

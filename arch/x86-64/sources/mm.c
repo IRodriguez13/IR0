@@ -22,6 +22,8 @@
 #include <ir0/paging.h>
 #include <string.h>
 
+static int mm_map_platform_supervisor(address_space_root_t root);
+
 /* Supervisor 4 KiB identity around the keyboard ring, below the 2 MiB map. */
 #define X86_SUPERVISOR_KBD_END 0x00600000UL
 
@@ -157,7 +159,7 @@ void mm_prepare_root_activation(address_space_root_t root)
 		paging_sync_kernel_mappings(root);
 }
 
-int mm_map_platform_supervisor(address_space_root_t root)
+static int mm_map_platform_supervisor(address_space_root_t root)
 {
 	if (video_backend_map_supervisor(root) != 0)
 		return -ENOMEM;

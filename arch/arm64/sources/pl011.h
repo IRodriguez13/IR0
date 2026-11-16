@@ -17,6 +17,5 @@
 #include <stdint.h>
 
 void pl011_init(void);
-void pl011_init_at(uintptr_t base);
 void pl011_putc(char c);
 void pl011_puts(const char *s);

@@ -49,7 +49,7 @@ void update_gdt_tss(uint64_t tss_addr)
     e->reserved = 0;
 }
 
-void gdt_set_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
+static void gdt_set_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uint8_t gran)
 {
     struct gdt_entry *e = &gdt_table.entries[index];
     e->limit = limit & 0xFFFF;
@@ -60,7 +60,7 @@ void gdt_set_entry(int index, uint32_t base, uint32_t limit, uint8_t access, uin
     e->base_high = (base >> 24) & 0xFF;
 }
 
-void gdt_set_tss(uint64_t base, uint16_t limit)
+static void gdt_set_tss(uint64_t base, uint16_t limit)
 {
     struct gdt_tss_entry *e = &gdt_table.tss_entry;
     e->limit = limit;
