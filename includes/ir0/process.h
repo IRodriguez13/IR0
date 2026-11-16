@@ -29,8 +29,8 @@
 #include <ir0/files_struct.h>
 #include <ir0/errno.h>
 
-/* waitpid / wait4 options and status inspection (POSIX-style) */
-#define WNOHANG 1
+/* waitpid / wait4 options (Linux UAPI) and status inspection */
+#include <linux/wait.h>
 
 #define WEXITSTATUS(s) (((s) >> 8) & 0xFF)
 #define WIFEXITED(s) (((s) & 0x7F) == 0)
