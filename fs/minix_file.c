@@ -13,28 +13,6 @@
 // FUNCIÓN PARA ESCRIBIR CONTENIDO A ARCHIVOS
 // ===============================================================================
 
-static void minix_klog_print_blob(const char *label, const void *content, size_t content_size)
-{
-  char scratch[128];
-  size_t n;
-
-  klog_print(label);
-  if (!content || content_size == 0)
-  {
-    klog_print("(empty)\n");
-    return;
-  }
-  n = content_size;
-  if (n >= sizeof(scratch))
-    n = sizeof(scratch) - 1;
-  memcpy(scratch, content, n);
-  scratch[n] = '\0';
-  klog_print(scratch);
-  if (content_size > n)
-    klog_print("...");
-  klog_print("\n");
-}
-
 static void minix_inode_free_indirect_block(uint32_t ind_zone)
 {
 	int i;
@@ -693,105 +671,6 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   if (written_count)
     *written_count = count;
   return 0;
-}
-
-static int minix_fs_write_file_len(const char *path, const void *content, size_t content_size)
-{
-  uint16_t inode_num;
-  minix_inode_t file_inode;
-  int ret;
-
-  klog_print("SERIAL: minix_fs_write_file called\n");
-
-  if (!minix_fs.initialized)
-  {
-    klog_print("SERIAL: minix_fs_write_file: filesystem not initialized\n");
-    return -1;
-  }
-
-  if (!path)
-  {
-    klog_print("SERIAL: minix_fs_write_file: path is NULL\n");
-    return -1;
-  }
-
-  if (content_size > 0 && !content)
-  {
-    klog_print("SERIAL: minix_fs_write_file: content is NULL\n");
-    return -1;
-  }
-
-  klog_print("SERIAL: minix_fs_write_file: path=");
-  klog_print(path);
-  minix_klog_print_blob(" content=", content, content_size);
-
-  if (!minix_root_block_present())
-  {
-    klog_print("SERIAL: write: disk not available\n");
-    return -EIO;
-  }
-
-  inode_num = minix_fs_get_inode_number(path);
-  if (inode_num == 0)
-  {
-    if (minix_fs_touch(path, 0644) != 0)
-    {
-      klog_print("SERIAL: Error: Could not create file ");
-      klog_print(path);
-      klog_print("\n");
-      return -1;
-    }
-
-    inode_num = minix_fs_get_inode_number(path);
-    if (inode_num == 0)
-      return -1;
-  }
-
-  if (minix_read_inode(inode_num, &file_inode) != 0)
-  {
-    klog_print("SERIAL: Error: Could not read inode from disk\n");
-    return -1;
-  }
-
-  if (file_inode.i_mode & MINIX_IFDIR)
-  {
-    klog_print("SERIAL: Error: Cannot write to directory\n");
-    return -1;
-  }
-
-  if (content_size == 0)
-  {
-    minix_inode_free_all_zones(&file_inode);
-    file_inode.i_size = 0;
-    file_inode.i_time = minix_now_seconds();
-    if (minix_fs_write_inode(inode_num, &file_inode) != 0)
-      return -1;
-    return 0;
-  }
-
-  minix_inode_free_all_zones(&file_inode);
-  file_inode.i_size = 0;
-  if (minix_fs_write_inode(inode_num, &file_inode) != 0)
-    return -1;
-
-  ret = minix_fs_pwrite_at(path, content, content_size, 0, NULL);
-  if (ret != 0)
-    return -1;
-
-  klog_print("SERIAL: File '");
-  klog_print(path);
-  klog_print("' written successfully (");
-  klog_hex32((uint32_t)content_size);
-  klog_print(" bytes)\n");
-
-  return 0;
-}
-
-int minix_fs_write_file(const char *path, const char *content)
-{
-  size_t content_size = content ? strlen(content) : 0;
-
-  return minix_fs_write_file_len(path, content, content_size);
 }
 
 /**

@@ -39,6 +39,5 @@
 
 // Function declarations
 int chmod(const char *path, mode_t mode);
-int parse_mode(const char *mode_str);
 
 #endif

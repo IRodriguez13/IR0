@@ -24,7 +24,6 @@ struct vfs_dirent;
 struct ir0_statfs;
 
 /* TMPFS API functions for VFS integration */
-bool tmpfs_is_available(void);
 int tmpfs_create_file(const char *path, mode_t mode);
 int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_count, off_t offset);
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset);

@@ -111,13 +111,6 @@ int ramtab_find(const char *path)
 	return -1;
 }
 
-struct ramtab_ent *ramtab_get(int idx)
-{
-	if (idx < 0 || idx >= RAMTAB_MAX || !g_tab[idx].used)
-		return 0;
-	return &g_tab[idx];
-}
-
 struct ramtab_ent *ramtab_table(void)
 {
 	return g_tab;

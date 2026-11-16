@@ -103,7 +103,6 @@ int minix_fs_register(void);
 
 int minix_fs_format(void);
 int minix_fs_mkdir(const char *path, mode_t mode);
-int minix_fs_write_file(const char *path, const char *content);
 int minix_fs_touch(const char *path, mode_t mode);
 int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);

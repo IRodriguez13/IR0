@@ -407,11 +407,6 @@ int tmpfs_register(void)
 
 /* TMPFS API functions for VFS integration */
 
-bool tmpfs_is_available(void)
-{
-    return num_tmpfs_instances > 0;
-}
-
 tmpfs_inode_t *tmpfs_find_inode(const char *path)
 {
     tmpfs_data_t *tmpfs = tmpfs_get_instance_for_path(path);

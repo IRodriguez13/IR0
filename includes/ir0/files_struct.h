@@ -66,4 +66,3 @@ int process_files_clone(struct process *child, struct process *parent);
 void process_release_fds(struct process *p, const char *pipe_trace_op);
 
 /* fs/fdtable.c: copy @parent's fd entries into @child's table. Returns 0 or -errno. */
-int process_duplicate_fd_table(struct process *parent, struct process *child);

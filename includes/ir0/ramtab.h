@@ -43,7 +43,6 @@ int ramtab_body(int idx);
 void ramtab_rehome(int fsid);
 int ramtab_add(const char *path, uint32_t mode, uint32_t size,
 	       const uint8_t *data, int writable);
-struct ramtab_ent *ramtab_get(int idx);
 struct ramtab_ent *ramtab_table(void);
 int ramtab_child_count(const char *dir);
 int ramtab_child_at(const char *dir, int which,

@@ -118,18 +118,6 @@ int pipe_named_peer_is_open(pipe_t *pipe, int end)
 	return peer;
 }
 
-void pipe_acquire(pipe_t *pipe)
-{
-	unsigned long irq_flags;
-
-	if (!pipe)
-		return;
-
-	irq_flags = ir0_spin_lock_irqsave(&pipe_lock);
-	pipe->fd_refs++;
-	ir0_spin_unlock_irqrestore(&pipe_lock, irq_flags);
-}
-
 int pipe_read(pipe_t *pipe, void *buf, size_t count)
 {
 	if (!pipe || !buf)
@@ -439,28 +427,3 @@ void pipe_abort_unopened(pipe_t *pipe)
 	kfree(pipe);
 }
 
-void pipe_ipc_lifecycle_audit(void)
-{
-	uint64_t created = 0;
-	uint64_t destroyed = 0;
-	uint64_t fd_created = 0;
-	uint64_t fd_destroyed = 0;
-	uint64_t blocked_readers = 0;
-	uint64_t blocked_writers = 0;
-	int pipe_ok;
-	int fd_ok;
-
-	pipe_stats_get(&created, &destroyed);
-	fd_slot_stats_get(&fd_created, &fd_destroyed, &blocked_readers,
-			  &blocked_writers);
-
-	pipe_ok = (created == destroyed);
-	fd_ok = (fd_created == fd_destroyed);
-
-	ktm_event_emit4(KTM_EVENT_CHECKPOINT, KTM_SUBSYS_IPC,
-			pipe_ok ? 1ULL : 0ULL,
-			fd_ok ? 1ULL : 0ULL,
-			created, destroyed);
-	(void)blocked_readers;
-	(void)blocked_writers;
-}
