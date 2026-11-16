@@ -184,13 +184,20 @@ host_arm64_boot_info_platform.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info_pla
 host_arm64_boot_info_devices.o: $(KERNEL_ROOT)/arch/arm64/sources/boot_info_devices.c
 	$(KERNEL_CC)
 
+# Syscall-number consumers see exactly one ISA's exported <asm/unistd.h>.
+host_x86_syscall_decode.o test_x86_syscall_decode.o test_musl_cred_abi.o: \
+	BASE_CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include/uapi
+host_arm64_syscall_decode.o: BASE_CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/include/uapi
+
 host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c \
-	$(KERNEL_ROOT)/includes/ir0/syscall_id.h
+	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
+	$(KERNEL_ROOT)/arch/arm64/include/uapi/asm/unistd.h
 	$(KERNEL_CC)
 
 host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
-	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h
+	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h \
+	$(KERNEL_ROOT)/arch/x86-64/include/uapi/asm/unistd.h
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
 

@@ -261,17 +261,19 @@ endif
 all: $(DEFAULT_BUILD_TARGET)
 
 # Public userspace ABI export (Linux `make headers_install` equivalent).
-# Only includes/uapi leaves the kernel tree: a userspace package that needs a
-# private kernel header is a broken boundary, not a missing include path.
-UAPI_DIR = $(KERNEL_ROOT)/includes/uapi
+# Only the uapi trees leave the kernel: includes/uapi (ISA-neutral) and
+# arch/$(ARCH)/include/uapi (asm/ of the selected ISA, e.g.
+# `make headers_install arm64`).  A userspace package that needs a private
+# kernel header is a broken boundary, not a missing include path.
+UAPI_DIRS = $(KERNEL_ROOT)/includes/uapi $(KERNEL_ROOT)/arch/$(ARCH)/include/uapi
 # Default: staged under build/ (ignored) so the repo root is not littered with
 # usr/include. Override with DESTDIR=/ for a FHS-style system install.
 DESTDIR ?= $(KERNEL_ROOT)/build/uapi-install
 
 headers_install:
 	@mkdir -p $(DESTDIR)/usr/include
-	@cp -a $(UAPI_DIR)/. $(DESTDIR)/usr/include/
-	@echo "✓ headers_install → $(DESTDIR)/usr/include ($$(find $(UAPI_DIR) -name '*.h' | wc -l) headers)"
+	@for d in $(UAPI_DIRS); do cp -a $$d/. $(DESTDIR)/usr/include/ || exit 1; done
+	@echo "✓ headers_install ARCH=$(ARCH) → $(DESTDIR)/usr/include ($$(find $(UAPI_DIRS) -name '*.h' | wc -l) headers)"
 
 # Stable IR0↔ISD bridge.  ISD resolves these paths instead of guessing layout
 # inside this tree; keep the names synchronized with IR0_ISD_INTERFACE.
@@ -336,6 +338,7 @@ CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
 # Public userspace ABI (exported by `make headers_install`).
 CFLAGS += -I$(KERNEL_ROOT)/includes/uapi
+CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include/uapi
 CFLAGS += -I$(KERNEL_ROOT)/ktm/include
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
@@ -1512,7 +1515,7 @@ help:
 	@echo "  make analyze                 cppcheck on kernel trees when installed"
 	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
 	@echo "  make unibuild FILE=fs/tmpfs.c"
-	@echo "  make headers_install         Export includes/uapi to DESTDIR (default: build/uapi-install)"
+	@echo "  make headers_install [arm64] Export the UAPI to DESTDIR (default: build/uapi-install)"
 	@echo "  make create-disk [FS=minix] [SIZE=200]"
 	@echo "  make delete-disk | disk-reset | load-init"
 	@echo ""
@@ -1644,7 +1647,7 @@ test-drivers-clean:
 	menuconfig defconfig \
 	sync-menuconfig sync-menuconfig-defconfig sync-menuconfig-check \
 	sync-menuconfig-defconfig-check \
-	headers_install ir0-minix-inject-path ir0-verify-minix-path verify-ext2-rootfs verify-rootfs check-env \
+	headers_install uapi-check ir0-minix-inject-path ir0-verify-minix-path verify-ext2-rootfs verify-rootfs check-env \
 	unibuild unibuild-cpp unibuild-rust unibuild-clean \
 	en-ext-drv dis-ext-drv test-driver-rust test-driver-cpp test-drivers test-drivers-clean \
 	format analyze compile-commands disasm stack-usage print-build-objects build-graph-audit \

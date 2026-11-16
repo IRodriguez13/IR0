@@ -69,14 +69,14 @@ if [ "$ARCH" = arm64 ]; then
 	CXX="${CXX:-aarch64-linux-gnu-g++}"
 	ASM="${ASM:-aarch64-linux-gnu-gcc}"
 	ARCH_FLAGS="-mgeneral-regs-only -DARCH_ARM64"
-	ARCH_INC="-I$ROOT/arch/arm64/include"
+	ARCH_INC="-I$ROOT/arch/arm64/include -I$ROOT/arch/arm64/include/uapi"
 	ASM_FLAGS="-c"
 else
 	CC="${CC:-gcc}"
 	CXX="${CXX:-g++}"
 	ASM="${ASM:-nasm}"
 	ARCH_FLAGS="-m64 -mcmodel=large -mno-red-zone -mno-mmx -mno-sse -mno-sse2 -DARCH_X86_64 -DARCH_X86"
-	ARCH_INC="-I$ROOT/arch/x86-64/include"
+	ARCH_INC="-I$ROOT/arch/x86-64/include -I$ROOT/arch/x86-64/include/uapi"
 	ASM_FLAGS="-f elf64 -I$ROOT/"
 fi
 
