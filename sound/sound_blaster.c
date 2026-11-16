@@ -327,38 +327,6 @@ static int sb16_program_rate(uint32_t sample_rate)
     return 0;
 }
 
-/*
- * sb16_create_sample - Allocate buffer, copy PCM data, fill sample struct.
- * Caller's data is copied; buffer stays valid until sb16_destroy_sample.
- */
-int sb16_create_sample(sb16_sample_t *sample, uint8_t *data, uint32_t size,
-                       uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample)
-{
-    if (!sample || !data || size == 0)
-        return -1;
-    uint8_t *buf = (uint8_t *)kmalloc(size);
-    if (!buf)
-        return -1;
-    memcpy(buf, data, size);
-    sample->data = buf;
-    sample->size = size;
-    sample->sample_rate = sample_rate;
-    sample->channels = channels;
-    sample->bits_per_sample = bits_per_sample;
-    sample->format = (bits_per_sample == 16) ? SB16_FORMAT_16BIT_MONO : SB16_FORMAT_8BIT_MONO;
-    sample->is_playing = false;
-    return 0;
-}
-
-void sb16_destroy_sample(sb16_sample_t *sample)
-{
-    if (sample && sample->data)
-    {
-        kfree(sample->data);
-        sample->data = NULL;
-    }
-}
-
 int sb16_play_pcm(const void *data, uint32_t size, uint32_t sample_rate)
 {
     unsigned long irq_flags;
@@ -415,31 +383,6 @@ fail:
     sb16_hw_playing = false;
     irq_restore(irq_flags);
     return -1;
-}
-
-/*
- * sb16_play_sample - Legacy API: copy into ping-pong buffer (no heap UAF).
- */
-int sb16_play_sample(sb16_sample_t *sample)
-{
-    int ret;
-
-    if (!sample || !sample->data || sample->size == 0)
-        return -1;
-    ret = sb16_play_pcm(sample->data, sample->size, sample->sample_rate);
-    sample->is_playing = (ret == 0);
-    return ret;
-}
-
-int sb16_stop_playback(void)
-{
-    sb16_reclaim_playback();
-    return 0;
-}
-
-bool sb16_is_playing(void)
-{
-    return sb16_hw_playing;
 }
 
 /*

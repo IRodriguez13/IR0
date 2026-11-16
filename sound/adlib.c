@@ -186,12 +186,3 @@ static void adlib_shutdown(void)
     LOG_INFO("ADLIB", "Adlib OPL2 shutdown");
 }
 
-/**
- * adlib_is_available - Check if Adlib is available
- * @return: true if initialized and available, false otherwise
- */
-bool adlib_is_available(void)
-{
-    return adlib_initialized;
-}
-

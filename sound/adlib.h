@@ -36,4 +36,3 @@
 
 /* Function prototypes */
 bool adlib_init(void);
-bool adlib_is_available(void);
