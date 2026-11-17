@@ -91,41 +91,13 @@ static int tty_isig_on(void)
 }
 
 /*
- * Deliver INTR/QUIT to the console foreground group, or to blocked readers
- * when job-control has not installed a fg pgid yet (ash without tcsetpgrp).
+ * Linux __isig() (drivers/tty/n_tty.c): VINTR and VQUIT signal the
+ * terminal's foreground process group, and nobody when it has none.
  */
 static void tty_deliver_sig(int sig)
 {
-	int i;
-	int n = 0;
-
-	if (console_fg_pgid > 1)
-		n = send_signal_pgrp(console_fg_pgid, sig);
-
-	/*
-	 * Blocked stdin readers (hexdump, cat, ash lineedit) must see VINTR even
-	 * when console_fg_pgid lags tcsetpgrp after SIGCHLD or a short-lived fg
-	 * job — Linux job control can leave the tty waiter outside a stale pgid.
-	 */
-	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
-	{
-		process_t *w = tty_read_waiters[i];
-
-		if (!w || w->task.pid <= 1)
-			continue;
-		if (send_signal((int)w->task.pid, sig) == 0)
-			n++;
-	}
-
-	if (n > 0)
-		return;
-
-	/*
-	 * No fg pgrp and no blocked tty readers: deliver to the running task
-	 * (e.g. cat busy in write, not read).
-	 */
-	if (current_process && current_process->task.pid > 1)
-		(void)send_signal((int)current_process->task.pid, sig);
+	if (console_fg_pgid > 0)
+		(void)send_signal_pgrp(console_fg_pgid, sig);
 }
 
 int ir0_console_set_fg_pgid(int32_t pgid)
