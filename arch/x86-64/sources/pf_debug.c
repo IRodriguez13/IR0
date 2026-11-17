@@ -19,7 +19,6 @@
 #include <ir0/process.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/abi/mmap_contract.h>
-#include <d1_13_malloc_pf_diag.h>
 
 #if DEBUG_D1_DIAG
 
@@ -151,45 +150,11 @@ void pf_debug_stack_adjacent(uint64_t *frame, uint64_t fault_addr,
 	klog_debug_fmt("KERN", "[D1.10][VMA] guard_gap=[%llx,%llx) unmapped\n=== [D1.10][PF_STACK_ADJ] end ===\n\n", (unsigned long long)((uint64_t)guard_lo), (unsigned long long)((uint64_t)stack_lo));
 }
 
-void pf_debug_memmove_fault(uint64_t *frame, uint64_t fault_addr,
-				const struct page_fault_info *info,
-				process_t *p)
-{
-	uint64_t rip;
-	uint64_t rcx;
-	uint64_t rdx;
-	uint64_t rsi;
-	uint64_t rdi;
-
-	if (!frame || !p || !info || !info->user)
-		return;
-
-	rip = frame[2];
-	if (rip < 0x4422B0ULL || rip > 0x442320ULL)
-		return;
-
-	rcx = frame[-2];
-	rdx = frame[-3];
-	rsi = frame[-6];
-	rdi = frame[-7];
-	d1_13_malloc_pf_diag(p, fault_addr, rip, rdi, rsi, rdx, rcx);
-}
-
 #else
 
 void pf_debug_stack_adjacent(uint64_t *frame, uint64_t fault_addr,
 				 const struct page_fault_info *info,
 				 process_t *p)
-{
-	(void)frame;
-	(void)fault_addr;
-	(void)info;
-	(void)p;
-}
-
-void pf_debug_memmove_fault(uint64_t *frame, uint64_t fault_addr,
-				const struct page_fault_info *info,
-				process_t *p)
 {
 	(void)frame;
 	(void)fault_addr;

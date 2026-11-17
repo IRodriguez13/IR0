@@ -22,7 +22,3 @@
 void pf_debug_stack_adjacent(uint64_t *arch_frame, uint64_t fault_addr,
 			     const struct page_fault_info *info,
 			     process_t *p);
-
-void pf_debug_memmove_fault(uint64_t *arch_frame, uint64_t fault_addr,
-			    const struct page_fault_info *info,
-			    process_t *p);

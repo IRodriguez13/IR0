@@ -14,7 +14,6 @@
 
 #include "process_syscalls.h"
 #include <string.h>
-#include <ktm_probe_diag.h>
 #include <ir0/acpi_pm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
@@ -898,7 +897,6 @@ int64_t sys_exec(const char *pathname,
 
   if (current_process->mode == USER_MODE)
   {
-    ktm_probe_diag_execve(current_process, path_to_use);
     KTM_CHECKPOINT(KTM_CP_PROCESS_EXEC);
     result = exec_replace_current(path_to_use, argv ? args.argv : NULL,
                                   args.envp);

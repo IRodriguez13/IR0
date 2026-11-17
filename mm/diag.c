@@ -23,7 +23,6 @@
 #include <ir0/ktm/fault.h>
 #include <ir0/ktm/user_canary.h>
 #include <ktm.h>
-#include <ktm_probe_diag.h>
 #include <ir0/paging.h>
 #include <mm/fault/page_fault_internal.h>
 
@@ -99,7 +98,6 @@ void pf_diag_fault_entry(const struct page_fault_info *info, uint64_t *stack)
 
 	pf_diag_audit(info);
 	pf_debug_stack_adjacent(stack, fault_addr, info, current);
-	pf_debug_memmove_fault(stack, fault_addr, info, current);
 
 	/*
 	 * Recorded, not emitted: this runs on every demand-paging fault, so
@@ -121,8 +119,6 @@ void pf_diag_fault_entry(const struct page_fault_info *info, uint64_t *stack)
 void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 		       const struct page_fault_info *info)
 {
-	ktm_probe_diag_pf(p, fault_addr, info ? info->ip : 0);
-
 	/*
 	 * Unhandled segv: the process is already dead, so the ring is worth
 	 * more on serial than in memory. Dumping here means every smoke gets

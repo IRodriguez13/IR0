@@ -552,24 +552,6 @@ menu "Debugging"
           Records the last 256 typed kernel events (syscalls, sched, panic)
           and dumps them on panic/assert for post-mortem analysis.
 
-    config KTM_PROBE_DIAG
-        bool "KTM musl probe path diagnostics (D1.3 smoke)"
-        depends on KTM
-        default n
-        help
-          Verbose [PROBE] serial timeline for /bin/sh MM/signal syscalls and
-          VMA/PTE dump on user #PF at musl arena. Temporary bring-up aid;
-          disable after D1.3 closes.
-
-    config KTM_MALLOC_FORENSICS
-        bool "KTM mallocng/memmove PF forensics (D1.14)"
-        depends on KTM
-        default n
-        help
-          On musl memmove page faults ([D1.14] tags): dump mapped pages around
-          rdi/rsi, candidate chunk header words, and read correlation. Disable
-          for minimal serial noise after ash smoke is stable.
-
     config KTM_TEST
         bool "KTM scenarios + suite runner (source of truth tests)"
         depends on KTM
