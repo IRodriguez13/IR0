@@ -197,7 +197,7 @@ diagnostics — acceptable for T0 but not ideal long term.
 
 | Neighbor | Interaction |
 |----------|-------------|
-| Syscalls | `fs_syscalls.c` front door; `kernel/syscalls.c` still holds monolithic dispatch |
+| Syscalls | `fs_syscalls.c` front door; `kernel/syscalls/syscall_dispatch.c` holds the dispatch table |
 | MM | `kmalloc` for mounts and `vfs_file`; ELF loader uses `vfs_read_file` |
 | Process | Per-process `cwd`; fd table; proc-specific `/proc/[pid]/` context |
 | Drivers | devfs ops → block, net, fb, input via facades |
@@ -281,7 +281,7 @@ Common failures:
 - Unified VFS registration for proc/dev/sys as true mount types (today: dual router).
 - Full mount namespace per process; bind mounts.
 - Rich permission model (ACLs, default ACLs on tmpfs).
-- Split `kernel/syscalls.c` — new FS logic should land in `fs_syscalls.c` or helpers under `includes/ir0/`.
+- New FS syscall logic lands in `kernel/syscalls/fs_*.c` (toward `fs/`, Q2) or helpers under `includes/ir0/`.
 - Move VFS diagnostics off `vga.h`/`serial_io.h` to logging facade only.
 
 **Tradeoffs accepted:**

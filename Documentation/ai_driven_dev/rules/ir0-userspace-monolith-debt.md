@@ -8,7 +8,8 @@ Apply to all fixes toward real userspace (init, musl, BusyBox, syscalls, exec, r
 
 ## Monolith split (debt — do not expand)
 
-- `kernel/syscalls.c` (~4800 lines) must shrink over time, not grow.
+- `kernel/syscalls/` must shrink toward the owner subsystems (Q2), not grow;
+  the old `kernel/syscalls.c` monolith is gone.
 - Target layout (incremental, not big-bang):
   - `kernel/syscalls/fs_syscalls.c`
   - `kernel/syscalls/process_syscalls.c`

@@ -32,7 +32,7 @@ de userspace principal.
 | Facade PTY | `includes/ir0/pty_devfs.h` | `/dev/ptmx` (43), `/dev/pts/0..7` (48–55), `DEVFS_PTY_MAX=8` |
 | Teclado | `arch/x86-64/sources/interrupt/keyboard.c` | scancode → ASCII + eventos input |
 | Renderer | `drivers/video/console_renderer.c` | celdas 80×25, CSI/SGR, escala FB |
-| Syscalls | `kernel/syscalls.c` | `ir0_console_read`, poll wake, keymap |
+| Syscalls | `kernel/syscalls/stdin.c` | lectura de stdin sin redirigir (`ir0_console_read`), despertar de lectores stdin/tty por teclado |
 
 **termios por defecto:** ICANON | ECHO | ECHOE | ISIG, ICRNL, OPOST|ONLCR, VMIN=1, VTIME=0.
 

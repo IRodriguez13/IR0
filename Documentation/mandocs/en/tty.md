@@ -31,7 +31,7 @@ Input arrives from the PS/2 keyboard path; output goes through
 | PTY facade | `includes/ir0/pty_devfs.h` | `/dev/ptmx` (43), `/dev/pts/0..7` (48–55), `DEVFS_PTY_MAX=8` |
 | Keyboard | `arch/x86-64/sources/interrupt/keyboard.c` | scancode → ASCII + input events |
 | Renderer | `drivers/video/console_renderer.c` | 80×25 cells, CSI/SGR, FB scale |
-| Syscalls | `kernel/syscalls.c` | `ir0_console_read`, poll wake, keymap |
+| Syscalls | `kernel/syscalls/stdin.c` | unredirected stdin read (`ir0_console_read`), keyboard wake of stdin/tty readers |
 
 **Default termios:** ICANON | ECHO | ECHOE | ISIG, ICRNL, OPOST|ONLCR, VMIN=1, VTIME=0.
 

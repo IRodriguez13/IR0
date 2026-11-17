@@ -72,7 +72,7 @@ drivers. Las reglas ejecutadas por `scripts/architecture_guard.py` están tabula
 
 | Etiqueta | Ámbito | Regla |
 |----------|--------|-------|
-| `forbidden-include` | `fs/`, `kernel/syscalls.c` | Sin `#include <drivers/...>` |
+| `forbidden-include` | `fs/`, `kernel/syscalls/` | Sin `#include <drivers/...>` |
 | `missing-facade` | `includes/ir0/` | Deben existir las fachadas requeridas (`arch_port.h`, `mm_port.h`, …) |
 | `portable-no-interrupt-arch` | `fs/`, `kernel/`, `mm/`, `net/` | Sin cabeceras del backend de interrupciones de arch |
 | `fs-no-direct-arch` | `fs/` | Sin `#include <arch/...>`; usar **`ir0/arch_port.h`** |

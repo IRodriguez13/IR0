@@ -7,16 +7,16 @@
 | Estado | stable |
 | Depende de | vfs, process, memory |
 | Página man | IR0-syscalls (sección 7) |
-| Fuentes principales | `kernel/syscalls.c`, `kernel/syscalls/{fs_syscalls,socket_syscalls,syscall_dispatch}.c`, `arch/x86-64/asm/syscall_*.asm`, `includes/ir0/syscall*.h`, `includes/ir0/copy_user.c` |
+| Fuentes principales | `kernel/syscalls/{syscall_dispatch,fs_syscalls,socket_syscalls,stdin}.c`, `arch/x86-64/asm/syscall_*.asm`, `includes/ir0/syscall*.h`, `includes/ir0/copy_user.c` |
 
 ## 1. Visión general
 
 Los programas de usuario alcanzan el kernel mediante syscalls numeradas al estilo
 Linux en x86-64. La única entrada es la instrucción **`syscall`**
 (ABI musl); `int $0x80` desde usuario es `#GP` → SIGSEGV. El despacho está
-centralizado en `syscall_dispatch()` con una tabla de handlers `__NR_*`. La I/O
-de ficheros está separada en `fs_syscalls.c`; la mayoría de handlers restantes
-permanecen en el monolítico `syscalls.c`.
+centralizado en `syscall_dispatch()` con una tabla de handlers `__NR_*` que
+llena `syscalls_init()` (`syscall_dispatch.c`). Los handlers viven en archivos
+por dominio bajo `kernel/syscalls/` (`fs_*`, `mm_*`, `io_*`, `process_*`, `socket_*`, ...).
 
 ## 2. Arquitectura interna
 
@@ -85,7 +85,8 @@ Contrato canónico: [`Documentation/esp/uaccess.md`](../../esp/uaccess.md)
 
 ## 5. Límites del subsistema
 
-- `kernel/syscalls.c` no debe crecer sin plan de split (`fs_syscalls.c`, submódulos futuros).
+- `kernel/` tiene un solo archivo suelto, `kernel/main.c`; el código de syscalls
+  va a su archivo por dominio bajo `kernel/syscalls/` y, según Q2, hacia su dueño.
 - Sin `#include <drivers/...>` en rutas syscall portables (architecture_guard).
 - Syscalls de socket cableadas (`socket_syscalls.c`): stream **AF_UNIX** +
   `socketpair`, y **AF_INET** `SOCK_STREAM` al camino TCP wire. Otros
@@ -140,7 +141,8 @@ Referencia: tabla syscalls x86-64 Linux, musl `arch/x86_64/syscall_arch.h`.
   `LINUX_REBOOT_CMD_KEXEC` → `REBOOT_KEXEC_LOADED` si hay `kexec_load`, si no `REBOOT_KEXEC_STUB`;
   `LINUX_REBOOT_CMD_SW_SUSPEND` → `SYSTEM_S3_ENTER` + soft `SYSTEM_S3_RESUME_OK`.
 - `sys_kexec_load` (246): hasta 4 segmentos en RAM kernel; payload mágico `IR0KEXEC` para smoke.
-- Split del monolito: glue restante en `syscalls.c`; process/mm/io/socket ya partidos.
+- Llevar las implementaciones de syscalls a su subsistema dueño (Q2); sólo la
+  entrada y el dispatch quedan en un directorio común.
 - Resolución fd completa `openat`/`*at`.
 - Opciones socket / datagram / profundidad TCP Internet (ver techo en `IR0-net`).
 - ARM64: `syscall_entry_arm64` retorna -1 (stub).

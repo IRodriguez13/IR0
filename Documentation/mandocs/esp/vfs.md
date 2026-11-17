@@ -275,7 +275,7 @@ Fallos frecuentes:
 - Registro VFS unificado para proc/dev/sys como montajes reales (hoy: router dual).
 - Namespace de montajes por proceso; bind mounts.
 - Modelo de permisos rico (ACLs).
-- Split de `kernel/syscalls.c` — lógica FS nueva en `fs_syscalls.c` o `includes/ir0/`.
+- Lógica FS nueva de syscalls en `kernel/syscalls/fs_*.c` (hacia `fs/`, Q2) o `includes/ir0/`.
 - Sacar diagnóstico VFS de `vga.h`/`serial_io.h`.
 
 **Tradeoffs aceptados:**

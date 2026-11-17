@@ -29,7 +29,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 
 | Area | Mechanism |
 |------|-----------|
-| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/*/sources/interface.c`); portable [`kernel/syscalls.c`](../../kernel/syscalls.c) does not include `arch/x86-64/include/interrupt/idt.h`. |
+| Syscall ISA hook | **`syscall_init()`** (x86‑64 installs int `0x80` trap to assembly stub in `arch/*/sources/interface.c`); portable [`kernel/syscalls/`](../../kernel/syscalls/) does not include `arch/x86-64/include/interrupt/idt.h`. |
 | Staged syscall dispatch | **`early_syscall_dispatch_invoke()`** owns provider registration and semantic-ID dispatch in common C. Narrow `user/time/console/vfs/process/mm` ops groups prevent a monolithic early facade. ISA code owns ABI decoding, exception return, machine layout and early mechanisms. |
 | Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); x86-only iretq repair stays behind `<asm/context.h>`. New portable code includes the domain header ([`context.h`](../../includes/ir0/context.h)). [`arch_cpu.h`](../../includes/ir0/arch_cpu.h) is a compatibility umbrella only (does **not** include `cpu.h`). |
 | Context switch | **`switch_to(prev, next)`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); first entry **`first_switch_to`**. Portable policy is in `sched/switch/context_switch.c`; ISA backends stay in `arch/*/sources/`. |
@@ -47,7 +47,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 
 | Tag | Scope | Rule |
 |-----|-------|------|
-| `forbidden-include` | `fs/`, `kernel/syscalls.c` | No `#include <drivers/...>` |
+| `forbidden-include` | `fs/`, `kernel/syscalls/` | No `#include <drivers/...>` |
 | `missing-facade` | `includes/ir0/` | Required façade headers exist (`arch_port.h`, `mm_port.h`, `sched.h`, `task.h`, …) |
 | `facade-no-drivers-include` | `includes/ir0/*.h` | No `#include <drivers/…>` |
 | `facade-no-arch-include` | `includes/ir0/*.h` | No `#include <arch/…>` |
@@ -102,7 +102,7 @@ Use this to compare before/after refactors **with the same toolchain**; bytecode
        drivers/, arch/, interrupt/
 ```
 
-**Policy (CTR):** In `fs/*` and `kernel/syscalls.c`, avoid adding direct
+**Policy (CTR):** In `fs/*` and `kernel/syscalls/`, avoid adding direct
 `#include <drivers/...>`. Prefer extending facades under `includes/ir0/`.
 
 ## Facade inventory (`includes/ir0/`)

@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | memory, boot, devfs |
 | Man page | IR0-graphics (section 7) |
-| Primary sources | `kernel/video_backend.c`, `drivers/video/vbe.c`, `includes/ir0/fb.c`, `fs/devfs.c`, `kernel/syscalls.c`, `setup/doom/doomgeneric_ir0.c` |
+| Primary sources | `kernel/video_backend.c`, `drivers/video/vbe.c`, `includes/ir0/fb.c`, `fs/devfs.c`, `kernel/syscalls/mm_syscalls.c`, `setup/doom/doomgeneric_ir0.c` |
 
 ## 1. Overview
 
@@ -24,7 +24,7 @@ scale). DoomGeneric is the reference T2 client: open fb0 + events0 + mmap.
 | Hardware | `drivers/video/vbe.c` | Multiboot fb init, VGA 0xB8000 fallback |
 | FB API | `includes/ir0/fb.c` | Availability check, var/fix screeninfo |
 | devfs | `fs/devfs.c` | `/dev/fb0` device_id **15**, ioctl FBIO* |
-| mmap | `kernel/syscalls.c` | Special case maps physical FB pages |
+| mmap | `kernel/syscalls/mm_syscalls.c` | Special case maps physical FB pages |
 | Console draw | `drivers/video/console_renderer.c` | CSI/SGR, cells to FB or VGA |
 | Client | `setup/doom/doomgeneric_ir0.c` | T2 userspace blit loop |
 

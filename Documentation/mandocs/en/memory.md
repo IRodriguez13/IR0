@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | boot, process, syscalls |
 | Man page | IR0-memory (section 7) |
-| Primary sources | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `mm/reclaim/oom.c`, `mm/reclaim/oom_kill.c`, `mm/fault/page_fault.c`, `kernel/syscalls.c`, `kernel/exec/elf_loader.c` |
+| Primary sources | `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/alloc/allocator.c`, `mm/alloc/kmem.c`, `mm/reclaim/oom.c`, `mm/reclaim/oom_kill.c`, `mm/fault/page_fault.c`, `kernel/syscalls/mm_syscalls.c`, `kernel/exec/elf_loader.c` |
 
 ## 1. Overview
 
@@ -26,7 +26,7 @@ PML4s for user processes.
 | Paging | `mm/paging/paging.c` | `map_page_in_directory`, user/supervisor maps, OOM audit |
 | OOM policy | `mm/reclaim/oom.c` | Pure badness/eligibility and deterministic victim ordering |
 | OOM killer | `mm/reclaim/oom_kill.c` | Registry walk, `SIGKILL`, retry hook (`oom_handle_alloc_failure`) |
-| Syscalls | `kernel/syscalls.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
+| Syscalls | `kernel/syscalls/mm_syscalls.c`, `mm_brk.c` | `sys_mmap`, `sys_brk`, `sys_munmap` |
 | ELF | `kernel/exec/elf_loader.c` | PT_LOAD via `map_user_region_in_directory` |
 
 **Fixed layout (`config.h` / boot):**
