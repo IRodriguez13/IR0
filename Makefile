@@ -672,8 +672,6 @@ LIB_OBJS = \
     kernel/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
-    drivers/input/ps2_set1.o \
-    drivers/input/ps2_mouse_pkt.o \
     drivers/tty/ash_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
@@ -690,13 +688,6 @@ LIB_OBJS = \
     $(INPUT_BACKEND_OBJ) \
     $(AUDIO_BACKEND_OBJ) \
     includes/string.o
-
-# ARM64 virtio keyboard has no i8042 — drop PS/2 scan-code tables.
-ifeq ($(ARCH),arm64)
-LIB_OBJS_PRODUCT := $(filter-out drivers/input/ps2_set1.o drivers/input/ps2_mouse_pkt.o,$(LIB_OBJS))
-else
-LIB_OBJS_PRODUCT := $(LIB_OBJS)
-endif
 
 INTERRUPT_OBJS_X86_64 = \
     arch/x86-64/sources/interrupt/idt.o \
@@ -716,13 +707,7 @@ endif
 
 DRIVER_OBJS = \
     drivers/driver_bootstrap.o \
-    drivers/input/ps2.o \
-    drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
-    drivers/timer/hpet/hpet.o \
-    drivers/timer/hpet/find_hpet.o \
-    drivers/timer/acpi/acpi_pm.o \
-    drivers/timer/lapic/lapic.o \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
@@ -732,22 +717,6 @@ DRIVER_OBJS = \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
-
-# COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial.c (PL011).
-ifneq ($(ARCH),arm64)
-DRIVER_OBJS += drivers/serial/serial.o
-DRIVER_OBJS += drivers/timer/rtc/rtc.o
-endif
-
-# ARM64: drop PS/2 + legacy x86 timer probes (virt uses GIC + arch timer).
-ifeq ($(ARCH),arm64)
-DRIVER_OBJS := $(filter-out drivers/input/ps2.o \
-	drivers/timer/pit/pit.o \
-	drivers/timer/hpet/hpet.o \
-	drivers/timer/hpet/find_hpet.o \
-	drivers/timer/acpi/acpi_pm.o \
-	drivers/timer/lapic/lapic.o,$(DRIVER_OBJS))
-endif
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
 
@@ -849,21 +818,6 @@ NET_OBJS = \
     net/dns.o
 NET_DRIVER_OBJS = \
     drivers/net/net_drivers.o
-ifneq ($(CONFIG_DRV_NIC_RTL8139),n)
-ifeq ($(ARCH),x86-64)
-NET_DRIVER_OBJS += drivers/net/rtl8139.o
-endif
-endif
-ifneq ($(CONFIG_DRV_NIC_VIRTIO_NET),n)
-ifeq ($(ARCH),x86-64)
-NET_DRIVER_OBJS += drivers/net/virtio_net.o
-endif
-endif
-ifeq ($(ARCH),arm64)
-ifneq ($(CONFIG_DRV_NIC_BCMGENET),n)
-NET_DRIVER_OBJS += drivers/net/bcmgenet.o
-endif
-endif
 else
 NET_OBJS =
 NET_DRIVER_OBJS =
@@ -900,17 +854,6 @@ else
 USB_OBJS =
 endif
 
-
-# PS/2 mouse
-ifneq ($(CONFIG_ENABLE_MOUSE),n)
-MOUSE_OBJS = drivers/input/ps2_mouse.o
-else
-MOUSE_OBJS =
-endif
-
-ifeq ($(ARCH),arm64)
-MOUSE_OBJS :=
-endif
 
 # PC speaker
 ifneq ($(CONFIG_ENABLE_PC_SPEAKER),n)
@@ -958,6 +901,14 @@ endif
 # Architecture source inventories.
 -include scripts/make/arch-sources.mk
 
+# Platform devices: each ISA names the platform it boots on, and that
+# platform's fragment lists its device objects (PLATFORM_OBJS). A new platform
+# is a new registry entry and file, never a branch here.
+PLATFORM_x86-64 := pc
+PLATFORM_arm64 := dt
+PLATFORM := $(PLATFORM_$(ARCH))
+include scripts/make/platform/$(PLATFORM).mk
+
 ifeq ($(ARCH),arm64)
 CFLAGS += -DIR0_ARM64_PRODUCT_KERNEL=1
 # Avoid libgcc LSE init that calls glibc __getauxval.
@@ -1004,11 +955,11 @@ CFLAGS += -include $(KERNEL_ROOT)/config.h
 endif
 
 # All objects (kernel sin tests in-kernel)
-ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS_PRODUCT) $(INTERRUPT_OBJS) \
-           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
+ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+           $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
            $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-           $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
+           $(USB_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
            $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
            $(STORAGE_NVME_OBJS)
 
@@ -1035,10 +986,10 @@ ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o kernel/boot/boot_flow.o \
 	arch/common/oops_port.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
-                $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
+                $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-                $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
+                $(USB_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
                 $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
            $(STORAGE_NVME_OBJS)
 
