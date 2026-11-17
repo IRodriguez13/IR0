@@ -313,8 +313,11 @@ int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
         return -ESRCH;
 
     stat_t st;
-    if (vfs_stat(path, &st) != 0 ||
-        generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+    if (vfs_stat(path, &st) != 0)
+        return -EACCES;
+    if ((st.st_mode & S_IFMT) != 0 && !S_ISDIR(st.st_mode))
+        return -ENOTDIR;
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
         return -EACCES;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);

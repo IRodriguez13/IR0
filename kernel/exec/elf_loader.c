@@ -1668,8 +1668,6 @@ static int exec_permission_denied(const process_t *proc, const char *path)
 		return 0;
 	if (!S_ISREG(st.st_mode))
 		return 1;
-	if (proc->euid == ROOT_UID)
-		return (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0;
 
 	return generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0;
 }

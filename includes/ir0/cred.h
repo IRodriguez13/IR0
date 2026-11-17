@@ -65,9 +65,11 @@ int ir0_cred_is_root(void);
 
 /*
  * generic_permission - may @cred access the object @st describes with
- * @mask (ACCESS_*)? Unix permission bits against the effective IDs and the
- * supplementary groups; root may do anything. Returns 0 or -EACCES (also
- * for a NULL argument). Implemented in fs/permissions.c; the caller looks
+ * @mask (ACCESS_*)? Linux fs/namei.c rules: the owner bits for the owner,
+ * the group bits for a member of the file group (effective or
+ * supplementary), else the other bits; root may read and write anything
+ * and search any directory, but execute a file only when it has an exec
+ * bit. Returns 0 or -EACCES (also for a NULL argument). Implemented in fs/permissions.c; the caller looks
  * the object up (vfs_stat(), ir0_stat_path_routed()) and passes
  * ir0_current_cred(), or a copy with the real IDs for access(2).
  */

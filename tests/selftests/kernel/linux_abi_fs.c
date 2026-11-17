@@ -607,6 +607,9 @@ int fs_statx_basic(void)
 #define DAC_UID 1000
 #define DAC_GID 100
 #define DAC_GROUP 200
+#define DAC_X_OK 1
+#define DAC_W_OK 2
+#define DAC_R_OK 4
 
 /* Become DAC_UID/DAC_GID with @group (if nonzero) as the only extra group. */
 static int dac_become_user(unsigned int group)
@@ -642,6 +645,38 @@ static int dac_make(const char *path, int is_dir, unsigned int mode,
 	if (S5(SYS_fchownat, AT_FDCWD, path, 0, gid, 0) != 0)
 		return -1;
 	return S4(SYS_fchmodat, AT_FDCWD, path, mode, 0) == 0 ? 0 : -1;
+}
+
+/*
+ * CAP_DAC_OVERRIDE: root reads and writes anything and searches any
+ * directory, but executes a non-directory only when it has an exec bit.
+ */
+int fs_access_root_exec_needs_x_bit(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("f", 0, 0644, 0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_faccessat, AT_FDCWD, "f", DAC_X_OK, 0), EACCES);
+	EXPECT(S4(SYS_fchmodat, AT_FDCWD, "f", 0000, 0), 0);
+	EXPECT(S4(SYS_faccessat, AT_FDCWD, "f", DAC_R_OK | DAC_W_OK, 0), 0);
+	EXPECT(S4(SYS_fchmodat, AT_FDCWD, "f", 0001, 0), 0);
+	EXPECT(S4(SYS_faccessat, AT_FDCWD, "f", DAC_X_OK, 0), 0);
+	EXPECT(dac_make("d", 1, 0000, 0), 0);
+	EXPECT(S4(SYS_faccessat, AT_FDCWD, "d", DAC_X_OK, 0), 0);
+	return CONF_PASS;
+}
+
+/*
+ * acl_permission_check(): a supplementary group that owns the file selects
+ * the group bits, even when they deny what the other bits would allow.
+ */
+int fs_supplementary_group_selects_group_bits(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("f", 0, 0604, DAC_GROUP) != 0 ||
+	    dac_become_user(DAC_GROUP) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "f", O_RDONLY, 0), EACCES);
+	EXPECT_ERR(S4(SYS_faccessat, AT_FDCWD, "f", DAC_R_OK, 0), EACCES);
+	return CONF_PASS;
 }
 
 /* A supplementary group grants search on a directory its group owns. */

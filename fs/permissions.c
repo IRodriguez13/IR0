@@ -20,73 +20,60 @@
  * task, set-id transitions on exec and these permission checks.
  */
 
-static bool dac_class_allows(const stat_t *st, int mode, uid_t euid,
-                             gid_t egid)
+/* in_group_p(): @gid is the effective group or a supplementary group. */
+static bool cred_in_group(const struct ir0_task_cred *cred, gid_t gid)
 {
-    uint16_t file_mode;
-    uint32_t file_uid;
-    uint32_t file_gid;
+    int i;
 
-    if (euid == ROOT_UID)
+    if (cred->egid == gid)
         return true;
-
-    file_mode = st->st_mode;
-    file_uid = st->st_uid;
-    file_gid = st->st_gid;
-
-    if (euid == file_uid)
+    for (i = 0; cred->groups && i < cred->ngroups; i++)
     {
-        if ((mode & ACCESS_READ) && !(file_mode & S_IRUSR))
-            return false;
-        if ((mode & ACCESS_WRITE) && !(file_mode & S_IWUSR))
-            return false;
-        if ((mode & ACCESS_EXEC) && !(file_mode & S_IXUSR))
-            return false;
-        return true;
+        if (cred->groups[i] == gid)
+            return true;
     }
-
-    if (egid == file_gid)
-    {
-        if ((mode & ACCESS_READ) && !(file_mode & S_IRGRP))
-            return false;
-        if ((mode & ACCESS_WRITE) && !(file_mode & S_IWGRP))
-            return false;
-        if ((mode & ACCESS_EXEC) && !(file_mode & S_IXGRP))
-            return false;
-        return true;
-    }
-
-    if ((mode & ACCESS_READ) && !(file_mode & S_IROTH))
-        return false;
-    if ((mode & ACCESS_WRITE) && !(file_mode & S_IWOTH))
-        return false;
-    if ((mode & ACCESS_EXEC) && !(file_mode & S_IXOTH))
-        return false;
-
-    return true;
+    return false;
 }
 
 int generic_permission(const struct ir0_task_cred *cred, const stat_t *st,
                        int mask)
 {
-    int i;
+    unsigned int rwx;
+    unsigned int want;
 
     if (!cred || !st)
         return -EACCES;
 
-    if (dac_class_allows(st, mask, cred->euid, cred->egid))
+    /*
+     * acl_permission_check(): the first class that matches decides. The
+     * owner gets the owner bits and a member of the file group the group
+     * bits, even when the other bits would allow more.
+     */
+    if (cred->euid == st->st_uid)
+        rwx = (st->st_mode >> 6) & 7;
+    else if (cred_in_group(cred, st->st_gid))
+        rwx = (st->st_mode >> 3) & 7;
+    else
+        rwx = st->st_mode & 7;
+
+    want = 0;
+    if (mask & ACCESS_READ)
+        want |= 4;
+    if (mask & ACCESS_WRITE)
+        want |= 2;
+    if (mask & ACCESS_EXEC)
+        want |= 1;
+    if (!(want & ~rwx))
         return 0;
 
-    if (!cred->groups)
-        return -EACCES;
-
-    for (i = 0; i < cred->ngroups; i++)
-    {
-        if (cred->groups[i] == cred->egid)
-            continue;
-        if (dac_class_allows(st, mask, cred->euid, cred->groups[i]))
-            return 0;
-    }
+    /*
+     * CAP_DAC_OVERRIDE: root reads, writes and searches anything, but
+     * executes a non-directory only when one of its exec bits is set.
+     */
+    if (cred->euid == ROOT_UID &&
+        (!(mask & ACCESS_EXEC) || S_ISDIR(st->st_mode) ||
+         (st->st_mode & (S_IXUSR | S_IXGRP | S_IXOTH))))
+        return 0;
 
     return -EACCES;
 }

@@ -365,11 +365,13 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     stat_t st;
 
-    if (ir0_stat_path_routed(path_to_use, &st) != 0 ||
-        generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
-    {
+    if (ir0_stat_path_routed(path_to_use, &st) != 0)
       return -EACCES;
-    }
+    /* The lookup fails on a non-directory before any permission check. */
+    if (!S_ISDIR(st.st_mode))
+      return -ENOTDIR;
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+      return -EACCES;
   }
   else if (flags & O_CREAT)
   {
