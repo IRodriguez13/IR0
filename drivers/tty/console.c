@@ -1027,24 +1027,12 @@ void ir0_console_flush_input_session(void)
 	}
 }
 
-void ir0_console_after_tty_read_signal(int signo)
-{
-	(void)signo;
-	/*
-	 * PS/2 modifier state must not leak across any signal that interrupted
-	 * a console read (SIGCHLD after ./a.out, SIGINT, SIGQUIT). Without this,
-	 * VINTR stops working until session restart (hexdump | grep, ^C dead).
-	 */
-	input_kbd_resync_modifiers();
-	if (signo == SIGINT || signo == SIGQUIT)
-		tty_flush_input();
-}
-
 void ir0_console_after_signal_abandon(void)
 {
 	/*
 	 * BusyBox ash: raise_interrupt() longjmps without rt_sigreturn
 	 * (SIGFRAME_ABANDON). Same hygiene as VINTR on a cooked tty.
 	 */
-	ir0_console_after_tty_read_signal(SIGINT);
+	input_kbd_resync_modifiers();
+	tty_flush_input();
 }

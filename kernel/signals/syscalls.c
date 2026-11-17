@@ -16,7 +16,6 @@
 
 #include <kernel/syscalls/process_syscalls.h>
 #include <string.h>
-#include <ir0/console.h>
 #include <ir0/context.h>
 #include <ir0/copy_user.h>
 #include <ir0/sched.h>
@@ -416,8 +415,6 @@ int64_t sys_sigreturn(void)
 					    &current_process->syscall_frame,
 					    signal_sigcontext_return_value(restore_ctx));
 	process_restore_user_task_segments(current_process);
-	if (user_frame.signum > 0 && user_frame.signum < _NSIG)
-		ir0_console_after_tty_read_signal(user_frame.signum);
 	tls_restore_current();
 	switch_to_user_task(&current_process->task);
 	return 0;

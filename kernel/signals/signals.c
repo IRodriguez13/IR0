@@ -798,8 +798,6 @@ static int handle_signal(process_t *p, int sig,
 	signals_apply_handler_mask(p, sig, sa_flags);
 	p->restore_sigmask = 0;
 	p->signal_pending &= ~SIGNAL_MASK(sig);
-	if (sig == SIGCHLD)
-		ir0_console_after_tty_read_signal(SIGCHLD);
 	return 1;
 }
 
