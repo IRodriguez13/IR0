@@ -3,7 +3,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: fs/minix_dir.c
+ * File: fs/minix/minix_dir.c
  * Description: MINIX directory operations: mkdir/rmdir/unlink/link/ls/readdir.
  */
 

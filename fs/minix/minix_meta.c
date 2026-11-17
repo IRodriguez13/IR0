@@ -3,7 +3,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: fs/minix_meta.c
+ * File: fs/minix/minix_meta.c
  * Description: MINIX metadata operations: stat/statfs/chmod/chown/utimens.
  */
 

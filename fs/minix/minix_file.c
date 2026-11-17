@@ -3,7 +3,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: fs/minix_file.c
+ * File: fs/minix/minix_file.c
  * Description: MINIX file data path: zone mapping, read/write/truncate.
  */
 

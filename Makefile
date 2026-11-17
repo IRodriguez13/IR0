@@ -763,31 +763,31 @@ FS_OBJS = \
     fs/devfs_net.o \
     fs/devfs_block.o \
     fs/sysfs.o \
-    fs/hostshare_9p.o
+    fs/9p/hostshare_9p.o
 
 ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
-FS_OBJS += fs/minix_fs.o
-FS_OBJS += fs/minix_inode.o
-FS_OBJS += fs/minix_dir.o
-FS_OBJS += fs/minix_file.o
-FS_OBJS += fs/minix_meta.o
+FS_OBJS += fs/minix/minix_fs.o
+FS_OBJS += fs/minix/minix_inode.o
+FS_OBJS += fs/minix/minix_dir.o
+FS_OBJS += fs/minix/minix_file.o
+FS_OBJS += fs/minix/minix_meta.o
 endif
 
 ifneq ($(CONFIG_ENABLE_FS_TMPFS),n)
-FS_OBJS += fs/tmpfs.o
+FS_OBJS += fs/tmpfs/tmpfs.o
 endif
 
 ifneq ($(CONFIG_ENABLE_FS_SIMPLEFS),n)
-FS_OBJS += fs/simplefs.o
+FS_OBJS += fs/simplefs/simplefs.o
 endif
 
 ifneq ($(CONFIG_ENABLE_FS_FAT16),n)
-FS_OBJS += fs/fat16_fs.o
-FS_OBJS += fs/fat16_disk.o
+FS_OBJS += fs/fat16/fat16_fs.o
+FS_OBJS += fs/fat16/fat16_disk.o
 endif
 
 ifneq ($(CONFIG_ENABLE_FS_EXT2),n)
-FS_OBJS += fs/ext2_disk.o
+FS_OBJS += fs/ext2/ext2_disk.o
 endif
 
 DISK_OBJS = \
@@ -1398,7 +1398,7 @@ help:
 	@echo "  make format                  clang-format tracked C/H, skip toolchain/ and setup/"
 	@echo "  make analyze                 cppcheck on kernel trees when installed"
 	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
-	@echo "  make unibuild FILE=fs/tmpfs.c"
+	@echo "  make unibuild FILE=fs/tmpfs/tmpfs.c"
 	@echo "  make headers_install [arm64] Export the UAPI to DESTDIR (default: build/uapi-install)"
 	@echo "  make create-disk [FS=minix] [SIZE=200]"
 	@echo "  make delete-disk | disk-reset | load-init"
@@ -1429,7 +1429,7 @@ define run-unibuild
 		FILE_ARG="$$FILTERED"; \
 	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: FILE is required (example: make $@ FILE=fs/tmpfs.c)"; \
+		echo "Error: FILE is required (example: make $@ FILE=fs/tmpfs/tmpfs.c)"; \
 		exit 2; \
 	fi; \
 	$(KERNEL_ROOT)/scripts/unibuild.sh $(1) $$FILE_ARG
@@ -1446,7 +1446,7 @@ unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \
 		echo "Error: FILE parameter required"; \
 		echo "Usage: make unibuild-clean <source_file>"; \
-		echo "Example: make unibuild-clean fs/tmpfs.c"; \
+		echo "Example: make unibuild-clean fs/tmpfs/tmpfs.c"; \
 		exit 1; \
 	fi
 	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"

@@ -17,7 +17,7 @@
 #include "../errno.h"
 #include "../../drivers/storage/partition.h"
 #include "../../fs/devfs_internal.h"
-#include "../../fs/tmpfs.h"
+#include "../../fs/tmpfs/tmpfs.h"
 #include <config.h>
 #include <ir0/acpi_pm.h>
 #include <ir0/acpi_rsdp.h>

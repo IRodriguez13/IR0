@@ -328,7 +328,7 @@ def alloc_zone(f, sb):
 
 
 def dir_zone_list(inode):
-    """Direct directory zones (MINIX v1 i_zone[0..6]); matches fs/minix_fs.c."""
+    """Direct directory zones (MINIX v1 i_zone[0..6]); matches fs/minix/minix_fs.c."""
     return [z for z in inode["zones"][:7] if z]
 
 

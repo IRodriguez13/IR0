@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "vfs.h"
+#include <fs/vfs.h>
 #include "tmpfs.h"
 #include <ir0/kmem.h>
 #include <errno.h>

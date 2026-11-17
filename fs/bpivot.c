@@ -14,7 +14,7 @@
 #include <ir0/stat.h>
 #include <ir0/vfs.h>
 
-#include "tmpfs.h"
+#include "tmpfs/tmpfs.h"
 #include <string.h>
 
 static int g_bpivot_mounts;

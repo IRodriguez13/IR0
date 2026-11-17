@@ -250,7 +250,7 @@ menu "Filesystems"
         bool "EXT2 filesystem (on-disk root and mounts)"
         default y
         help
-          Bounded EXT2 backend for persistent volumes (fs/ext2_disk.c): the
+          Bounded EXT2 backend for persistent volumes (fs/ext2/ext2_disk.c): the
           ext2 product root and ext2 mounts on ATA block devices.
 
 endmenu

@@ -23,7 +23,7 @@ usage: scripts/unibuild.sh [-cpp|-rust] FILE [FILE...]
 
 C and C++ files compile in parallel. Objects are written next to each source.
 Examples:
-  make unibuild FILE="fs/tmpfs.c fs/vfs.c"
+  make unibuild FILE="fs/tmpfs/tmpfs.c fs/vfs.c"
   make unibuild-cpp FILE=cpp/examples/cpp_example.cpp
   make unibuild-rust FILE=rust/drivers/rust_simple_driver.rs
 EOF

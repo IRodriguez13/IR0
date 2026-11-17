@@ -102,7 +102,7 @@ def dir_entries(f, inode):
     if (inode["mode"] & IFMT) != IFDIR:
         return []
     out = []
-    # Direct zones only (i_zone[0..6]) — same as fs/minix_fs.c / inject_init_minix.
+    # Direct zones only (i_zone[0..6]) — same as fs/minix/minix_fs.c / inject_init_minix.
     for z in inode["zones"][:7]:
         if not z:
             continue

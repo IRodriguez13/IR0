@@ -5,13 +5,13 @@
  *
  * File: minix_fs_internal.h
  * Description: Private state and helpers for the split MINIX backend.
- *              Not a public ABI; only fs/minix_*.c include this header.
+ *              Not a public ABI; only fs/minix/minix_*.c include this header.
  */
 
 #pragma once
 
 #include "minix_fs.h"
-#include "vfs.h"
+#include <fs/vfs.h>
 #include <ir0/logging.h>
 #include <ir0/blockdev.h>
 #include <ir0/klog.h>
@@ -71,7 +71,7 @@ int minix_lookup(const char *pathname, minix_inode_t *out, uint16_t *ino_out);
 void minix_inode_truncate_zones(minix_inode_t *inode, uint16_t inode_num,
                                 size_t old_size, size_t new_size);
 
-/* VFS backend entry points defined outside fs/minix_fs.c. */
+/* VFS backend entry points defined outside fs/minix/minix_fs.c. */
 int minix_create(const char *path, mode_t mode);
 int minix_truncate(const char *path, size_t length);
 int minix_fs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);

@@ -3,7 +3,7 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: fs/minix_inode.c
+ * File: fs/minix/minix_inode.c
  * Description: MINIX inode lookup/allocation and directory-entry primitives.
  */
 

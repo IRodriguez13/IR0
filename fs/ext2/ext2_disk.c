@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "ext2_disk.h"
-#include "vfs.h"
+#include <fs/vfs.h>
 #include <ir0/blockdev.h>
 #include <ir0/clock.h>
 #include <ir0/cred.h>

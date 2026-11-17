@@ -8,7 +8,7 @@
  */
 
 #include <ir0/kmem.h>
-#include "vfs.h"
+#include <fs/vfs.h>
 #include <ir0/errno.h>
 #include <ir0/virtio_9p.h>
 #include <string.h>

@@ -15,20 +15,20 @@
 
 #include "vfs.h"
 #if CONFIG_ENABLE_FS_MINIX
-#include "minix_fs.h"
+#include "minix/minix_fs.h"
 #endif
 #if CONFIG_ENABLE_FS_TMPFS
-#include "tmpfs.h"
-#include "hostshare_9p.h"
+#include "tmpfs/tmpfs.h"
+#include "9p/hostshare_9p.h"
 #endif
 #if CONFIG_ENABLE_FS_SIMPLEFS
-#include "simplefs.h"
+#include "simplefs/simplefs.h"
 #endif
 #if CONFIG_ENABLE_FS_FAT16
-#include "fat16_fs.h"
+#include "fat16/fat16_fs.h"
 #endif
 #if CONFIG_ENABLE_FS_EXT2
-#include "ext2_disk.h"
+#include "ext2/ext2_disk.h"
 #endif
 #include <ir0/kmem.h>
 #include <ir0/cred.h>

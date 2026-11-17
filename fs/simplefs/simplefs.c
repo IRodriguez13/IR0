@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "vfs.h"
+#include <fs/vfs.h>
 #include "simplefs.h"
 #include <config.h>
 #include <ir0/kmem.h>
@@ -25,7 +25,7 @@
 #include <string.h>
 
 #if CONFIG_ENABLE_FS_FAT16
-#include "fat16_disk.h"
+#include <fs/fat16/fat16_disk.h>
 #endif
 
 #define SIMPLEFS_MAX_STORES 16

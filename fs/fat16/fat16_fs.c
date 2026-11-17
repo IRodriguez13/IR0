@@ -12,7 +12,7 @@
  */
 
 #include "fat16_fs.h"
-#include "simplefs.h"
+#include <fs/simplefs/simplefs.h>
 
 int fat16_fs_register(void)
 {
