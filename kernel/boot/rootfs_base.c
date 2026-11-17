@@ -31,7 +31,6 @@ void ir0_rootfs_prepare_userspace_base(void)
 		"/usr/include/bits",
 		"/usr/lib",
 		"/usr/share",
-		"/usr/share/doom",
 		"/usr/ken",
 		"/usr/ken/games",
 		"/heart",
