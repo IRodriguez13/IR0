@@ -7,7 +7,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: named_fifo.c
- * Description: In-memory named FIFO nodes for runsv supervise paths
+ * Description: In-memory FIFO nodes made by mknod(2)/mkfifo(3) on
+ *              filesystems that cannot store S_IFIFO inodes
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -37,43 +38,6 @@ struct named_fifo_entry
 };
 
 static struct named_fifo_entry named_fifos[NAMED_FIFO_MAX];
-
-int named_fifo_is_runsv_supervise_path(const char *path)
-{
-    static const char *suffixes[] = {
-        "/supervise/control",
-        "/supervise/ok",
-        "/log/supervise/control",
-        "/log/supervise/ok",
-        NULL
-    };
-    size_t plen;
-    int i;
-
-    if (!path)
-        return 0;
-
-    plen = strlen(path);
-    for (i = 0; suffixes[i]; i++)
-    {
-        size_t slen = strlen(suffixes[i]);
-
-        if (plen >= slen && strcmp(path + plen - slen, suffixes[i]) == 0)
-            return 1;
-    }
-    return 0;
-}
-
-int named_fifo_path_must_be_fifo(const char *path)
-{
-    if (!path)
-        return 0;
-    if (strcmp(path, "/run/initctl") == 0)
-        return 1;
-    if (strcmp(path, "/run/openrc/init.ctl") == 0)
-        return 1;
-    return named_fifo_is_runsv_supervise_path(path);
-}
 
 static struct named_fifo_entry *named_fifo_find(const char *path)
 {

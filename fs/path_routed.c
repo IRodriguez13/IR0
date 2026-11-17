@@ -74,7 +74,7 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
     if (rc != -ENOENT)
         return rc;
 
-    /* In-memory runsv FIFOs (mknod S_IFIFO) are not VFS nodes. */
+    /* In-memory FIFOs (mknod S_IFIFO) are not VFS nodes. */
     rc = named_fifo_stat(path, st);
     if (rc == 0)
         return 0;
@@ -95,17 +95,7 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
     if (rc != -ENOENT)
         return rc;
 
-    rc = vfs_stat(path, st);
-    if (rc == 0 && S_ISREG(st->st_mode) &&
-        named_fifo_path_must_be_fifo(path))
-    {
-        /*
-         * Stale regular file on disk (ext2 cannot store IFIFO) blocked
-         * sysvinit mkfifo(/run/initctl) and runsv supervise paths.
-         */
-        return -ENOENT;
-    }
-    return rc;
+    return vfs_stat(path, st);
 }
 
 int ir0_stat_path_routed_follow(const char *path, stat_t *st)

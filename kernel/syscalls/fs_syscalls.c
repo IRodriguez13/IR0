@@ -304,12 +304,6 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       return path_rc;
   }
 
-  /* /run/initctl and runsv supervise/control get their FIFO on first open. */
-  if (named_fifo_path_must_be_fifo(path_to_use) &&
-      !named_fifo_lookup(path_to_use) &&
-      mknod_check_free(path_to_use) == 0)
-    (void)mknod_create_named_fifo(path_to_use, 0600);
-
   if (named_fifo_lookup(path_to_use))
   {
     path_rc = ir0_open_access_path_routed(path_to_use, ir0_flags,
