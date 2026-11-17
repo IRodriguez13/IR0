@@ -18,17 +18,11 @@
 #include <asm/signal_contract.h>
 
 /*
- * Bytes kept free below USER_STACK_TOP for alternate signal frames when the
- * interrupted SP is missing or too deep. Must exceed sigframe + musl redzone
- * + libc work in handlers (clock_gettime, printf). Too small (e.g. 2 KiB)
- * places handlers against the KTM canary and causes STACK_TOP_OVERRUN at
- * 7ffff000 under interactive ash.
- */
-#define SIGNAL_HANDLER_TOP_MARGIN 0x4000UL
-
-/*
  * Bytes reserved just below the sigframe for the handler's return address
  * (the restorer). Zero when the ISA returns through a link register.
  */
 #define SIGFRAME_RETURN_SLOT IR0_ARCH_SIGFRAME_RETURN_SLOT
+
+/* Bytes below the interrupted SP the frame must not touch (ABI red zone). */
+#define SIGFRAME_RED_ZONE IR0_ARCH_SIGFRAME_RED_ZONE
 

@@ -398,104 +398,29 @@ int send_signal_pgrp(int32_t pgid, int signal)
 }
 
 /*
- * Pick a mapped user stack slot for [return slot][sigframe] + handler redzone.
- * The return slot holds the restorer on ISAs whose handlers return with a
- * stack pop (SIGFRAME_RETURN_SLOT); it is empty on link-register ISAs.
- * When the interrupted SP is near the stack guard (deep call chain in
- * recvfrom → ping), placing the frame below saved SP lands in unmapped
- * pages and syscalls from the handler (clock_gettime in SIGALRM) fail with
- * -EFAULT.
+ * Linux get_sigframe() (arch/x86/kernel/signal.c, arch/arm64/kernel/
+ * signal.c) without SA_ONSTACK: the frame goes just below the interrupted
+ * stack pointer, past the ABI red zone, whatever mapping that pointer is
+ * in (the main stack, a thread stack from mmap(2)). Below the frame sits
+ * the return slot on ISAs whose handlers return with a stack pop; the
+ * handler starts with SP there. A frame that cannot be written makes the
+ * copy fail and the task gets SIGSEGV, as with force_sigsegv().
  *
- * Stale syscall_frame SP (outside the process stack VMA) must not be used —
- * BusyBox ping after exec can interrupt with bogus sp≈0xffa… and unmapped
- * handler locals.
+ * Returns the handler's SP and the frame address, or 0 when the stack
+ * pointer is too low to hold a frame at all.
  */
-static int signal_sp_in_stack(process_t *p, uint64_t sp)
-{
-	uint64_t lo;
-	uint64_t hi;
-
-	if (!p || sp == 0)
-		return 0;
-
-	lo = process_stack_start(p);
-	hi = lo + process_stack_size(p);
-	if (lo == 0 || hi <= lo)
-	{
-		lo = USER_STACK_BASE;
-		hi = USER_STACK_TOP;
-	}
-
-	return sp >= lo + 16 && sp < hi;
-}
-
-static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
+static uint64_t signal_pick_handler_sp(uint64_t saved_sp,
 				       uint64_t *frame_addr_out)
 {
-	uint64_t stack_lo;
-	uint64_t stack_hi;
-	uint64_t user_sp;
 	uint64_t frame_addr;
-	uint64_t min_sp;
 
-	if (!p || !frame_addr_out)
+	if (saved_sp < SIGFRAME_RED_ZONE + sizeof(struct sigframe) +
+			       SIGFRAME_RETURN_SLOT + 16UL)
 		return 0;
-
-	stack_lo = process_stack_start(p);
-	stack_hi = stack_lo + process_stack_size(p);
-	if (stack_lo == 0 || stack_hi <= stack_lo)
-	{
-		stack_lo = USER_STACK_BASE;
-		stack_hi = USER_STACK_TOP;
-	}
-
-	saved_sp &= ~0xFUL;
-	min_sp = stack_lo + 2048UL;
-
-	if (!signal_sp_in_stack(p, saved_sp))
-		saved_sp = 0;
-
-	user_sp = saved_sp;
-	if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
-		user_sp = 0;
-
-	/*
-	 * Deep call chain left SP near USER_STACK_TOP: building the frame below
-	 * saved SP still runs the handler in the canary band (STACK_TOP_OVERRUN).
-	 */
-	if (user_sp != 0 && user_sp > stack_hi - SIGNAL_HANDLER_TOP_MARGIN)
-		user_sp = 0;
-
-	if (user_sp == 0 || user_sp < min_sp)
-	{
-		uint64_t margin = SIGNAL_HANDLER_TOP_MARGIN;
-
-		if (margin + sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT +
-		    2048UL > (stack_hi - stack_lo))
-			margin = (stack_hi - stack_lo) / 4;
-
-		user_sp = (stack_hi - margin) & ~0xFUL;
-		if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT +
-			      min_sp)
-			return 0;
-	}
-	else
-	{
-		if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
-			return 0;
-	}
-
-	user_sp -= sizeof(struct sigframe);
-	frame_addr = user_sp;
-	user_sp -= SIGFRAME_RETURN_SLOT;
-
-	if (user_sp < min_sp || frame_addr + sizeof(struct sigframe) > stack_hi)
-		return 0;
-	if (user_sp < 0x400000UL || user_sp > 0x7FFFFFFFFFFFUL)
-		return 0;
-
+	frame_addr = (saved_sp - SIGFRAME_RED_ZONE - sizeof(struct sigframe)) &
+		     ~0xFUL;
 	*frame_addr_out = frame_addr;
-	return user_sp;
+	return frame_addr - SIGFRAME_RETURN_SLOT;
 }
 
 /*
@@ -536,7 +461,7 @@ static int signal_setup_frame(process_t *p, int sig,
 	uint64_t user_sp;
 	uint64_t restorer;
 
-	user_sp = signal_pick_handler_sp(p, sigcontext_sp(ctx), &frame_addr);
+	user_sp = signal_pick_handler_sp(sigcontext_sp(ctx), &frame_addr);
 	if (user_sp == 0)
 		return SIGFRAME_BAD_SP;
 	restorer = signal_handler_restorer(p, sig);
