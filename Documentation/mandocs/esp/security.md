@@ -22,7 +22,7 @@ kernel: el kernel aplica los bits set-user-ID/set-group-ID en `execve` y el
 userspace de producto (`ISD`) trae **OpenDoas** con
 `permit persist :wheel as root`. La syscall específica `sudo_auth` (404) y sus
 contraseñas hardcodeadas se eliminaron; el número queda retirado en
-`includes/uapi/ir0/syscall_linux.h`.
+`arch/x86-64/include/uapi/asm/unistd_ir0.h` (vía `<ir0/syscall_linux.h>`).
 
 ## 2. Arquitectura interna
 

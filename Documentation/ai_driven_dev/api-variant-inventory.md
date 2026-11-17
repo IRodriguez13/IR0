@@ -328,9 +328,10 @@ Guarded since this branch: `scripts/architecture_guard.py`
 `scripts/isa_register_name_baseline.txt` (88 `<path> <identifier>` pairs:
 31 in core trees, 57 in `ktm/`). The ledger only shrinks: arch-guard fails on
 a new pair and on a listed pair whose identifier is gone, so a branch that
-fixes an offender deletes its line in the same commit. ISA-specific headers
-(`arch_syscall_frame_*.h`, `arch_task_context_*.h`, `sigcontext_*.h`,
-`syscall_{x86_64,arm64}.h`, `asm_offsets.h`) are exempt. `drivers/` is not
+fixes an offender deletes its line in the same commit. The ISA layouts
+(`asm/syscall_frame.h`, `asm/task_context.h`, `asm/sigcontext.h`,
+`asm/asm_offsets.h`) live in `arch/<isa>/include/asm/`, outside the scanned
+trees, so no header is exempt. `drivers/` is not
 scanned (hardware register vocabulary, and HCI "rsp" = response).
 
 | Location | Identifier / concept | Neutral replacement |

@@ -85,6 +85,13 @@ Criterio del mantenedor para todo el kernel. Complementa
   `__sync_*` y `asm`/`__asm__` fuera de `arch/` y de
   `includes/asm-generic/atomic.h`, con auto-test de violación inyectada. Su
   ledger de excepciones (`RAW_ATOMIC_LEDGER`) está vacío y sólo se achica.
+- `[isa-named-header]`: rechaza headers bajo `includes/` cuyo path nombra una
+  ISA (`*_x86_64.h`, `*_arm64.h`, `x86/`); el layout de cada ISA va en
+  `arch/<isa>/include/asm/` con nombre neutro y se incluye como `<asm/...>`.
+- `[no-syscall-stubs]`: rechaza asm inline que entra al kernel (`syscall`,
+  `sysenter`, `int $0x80`, `svc #0`) fuera de `arch/` y de los árboles de
+  userspace (`userspace/`, `setup/pid1/`, `tests/selftests/`,
+  `tests/conformance/`, `scripts/linux_abi/workloads/`).
 - `[portable-no-isa-asm]`, `[portable-no-register-names]` y
   `[paging-neutral-root]` cubren mnemónicos, registros y vocabulario x86 en
   código común.

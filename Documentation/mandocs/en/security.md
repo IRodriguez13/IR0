@@ -21,7 +21,8 @@ Privilege elevation is **userspace policy**, not a kernel service: the kernel
 enforces set-user-ID/set-group-ID bits on `execve`, and the product userspace
 (`ISD`) ships **OpenDoas** with `permit persist :wheel as root`. The
 old IR0-specific `sudo_auth` syscall (404) and its hardcoded passwords were
-removed; the number is retired in `includes/uapi/ir0/syscall_linux.h`.
+removed; the number is retired in `arch/x86-64/include/uapi/asm/unistd_ir0.h`
+(reached through `<ir0/syscall_linux.h>`).
 
 ## 2. Internal architecture
 
