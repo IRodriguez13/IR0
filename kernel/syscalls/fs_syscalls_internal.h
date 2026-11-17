@@ -9,7 +9,7 @@
 
 #pragma once
 
-#include <kernel/syscalls.h>
+#include <kernel/syscalls/syscalls.h>
 #include "fs_syscalls.h"
 #include "fs_path_syscalls.h"
 #include "syscalls_glue.h"

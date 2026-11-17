@@ -17,6 +17,7 @@
 #include <stdint.h>
 
 void syscall_table_init(void);
+void syscalls_init(void);
 int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 			 uint64_t arg3, uint64_t arg4, uint64_t arg5,
 			 uint64_t arg6);

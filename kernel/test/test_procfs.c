@@ -17,7 +17,7 @@
  */
 
 #include "test/ktest_harness.h"
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/process.h>
 #include <kernel/syscalls/fs_syscalls.h>
 #include <ir0/abi/mmap_contract.h>

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: syscalls.h
- * Description: IR0 kernel source/header file
+ * Description: Syscall handler headers in one include; the stdin wake hook
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -23,13 +23,13 @@
 #include <ir0/utsname.h>
 #include <ir0/signals.h>
 #include <ir0/clock_wait.h>
-#include "syscalls/process_syscalls.h"
-#include "syscalls/mm_syscalls.h"
-#include "syscalls/io_syscalls.h"
-#include "syscalls/fs_path_syscalls.h"
-#include "syscalls/fs_syscalls.h"
-#include "syscalls/time_syscalls.h"
-#include "syscalls/syscall_dispatch.h"
+#include "process_syscalls.h"
+#include "mm_syscalls.h"
+#include "io_syscalls.h"
+#include "fs_path_syscalls.h"
+#include "fs_syscalls.h"
+#include "time_syscalls.h"
+#include "syscall_dispatch.h"
 
 /* Forward declarations */
 struct stat;
@@ -46,9 +46,5 @@ typedef struct pipe pipe_t;
 
 /* Memory management — see mm_syscalls.h */
 
-/* System functions */
-void syscalls_init(void);
-
-/* Poll: desbloquea procesos que esperan en poll() cuando hay datos o timeout */
-/* read(0): desbloquea procesos esperando teclado cuando hay datos */
+/* Wake stdin and tty readers when keyboard input arrives (keyboard IRQ). */
 void stdin_wake_check(void);

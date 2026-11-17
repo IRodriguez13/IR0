@@ -3,7 +3,7 @@
 IR0 architecture guardrails.
 
 Checks:
-1) No direct <drivers/...> includes inside fs/* and kernel/syscalls.c.
+1) No direct <drivers/...> includes inside fs/* and kernel/syscalls/.
 2) Required facade headers for subsystem decoupling exist.
 3) Portable trees (fs/kernel/mm/net) must not include arch interrupt headers
    (#include <interrupt/...> or <arch/.../interrupt/...>);
@@ -108,7 +108,7 @@ SKIP_DIR_NAMES = frozenset(
 
 FORBIDDEN_PATHS = [
     ROOT / "fs",
-    ROOT / "kernel" / "syscalls.c",
+    ROOT / "kernel" / "syscalls",
 ]
 
 REQUIRED_FACADES = [

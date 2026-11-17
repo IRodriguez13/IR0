@@ -14,7 +14,7 @@
 
 #include "test/ktest_harness.h"
 #include <ir0/process.h>
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <kernel/syscalls/fs_path_syscalls.h>
 #include <kernel/syscalls/fs_syscalls.h>
 #include <kernel/syscalls/socket_syscalls.h>

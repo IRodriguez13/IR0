@@ -453,7 +453,7 @@ KERNEL_OBJS = \
     kernel/process/credentials.o \
     kernel/power/power_manag.o \
     kernel/kexec/kexec.o \
-    kernel/syscalls.o \
+    kernel/syscalls/stdin.o \
     kernel/syscalls/fs_syscalls.o \
     kernel/syscalls/fs_rw.o \
     kernel/syscalls/fs_meta.o \
@@ -729,7 +729,7 @@ $(HEART_SRC_BLOB): \
 		$(KERNEL_ROOT)/includes/ir0/sock_stream.h \
 		$(KERNEL_ROOT)/includes/ir0/ahci_api.h \
 		$(KERNEL_ROOT)/arch/common/arch_portable.h \
-		$(KERNEL_ROOT)/kernel/syscalls.c
+		$(KERNEL_ROOT)/kernel/syscalls/syscall_dispatch.c
 	@python3 $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		--root $(KERNEL_ROOT) --out $(HEART_SRC_BLOB)
 

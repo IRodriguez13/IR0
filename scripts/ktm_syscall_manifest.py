@@ -19,7 +19,6 @@ SYSCALL_HEADERS = (
     ROOT / "arch/x86-64/include/uapi/asm/unistd_ir0.h",
 )
 SYSCALL_DISPATCH_C = ROOT / "kernel/syscalls/syscall_dispatch.c"
-SYSCALLS_C = ROOT / "kernel/syscalls.c"  # legacy fallback if dispatch not split yet
 X86_DECODE_C = ROOT / "arch/x86-64/sources/syscall_decode.c"
 
 TIER1_BUSYBOX = {
@@ -147,7 +146,7 @@ def main() -> int:
     args = parser.parse_args()
 
     names = parse_nr_define(SYSCALL_HEADERS)
-    dispatch_path = SYSCALL_DISPATCH_C if SYSCALL_DISPATCH_C.is_file() else SYSCALLS_C
+    dispatch_path = SYSCALL_DISPATCH_C
     wired = parse_wired_table(dispatch_path)
     semantic_errors: list[str] = []
     if X86_DECODE_C.is_file():

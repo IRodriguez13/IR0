@@ -15,7 +15,7 @@
 
 #include "test/ktest_harness.h"
 #include "test/ktest_decl.h"
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
 #include <ir0/stat.h>

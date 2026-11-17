@@ -7,12 +7,11 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: syscalls.c
- * Description: Syscall bootstrap glue (dispatch lives in kernel/syscalls/)
+ * File: stdin.c
+ * Description: Unredirected stdin read and the keyboard wake of its readers
  */
 
 #include "syscalls.h"
-#include "syscalls/syscall_dispatch.h"
 #include <ir0/console.h>
 #include <ir0/copy_user.h>
 #include <ir0/input_backend.h>
@@ -86,21 +85,4 @@ static int stdin_wake_check_nosched(void)
 	}
 
 	return (woke_stdin || woke_tty) ? 1 : 0;
-}
-
-void syscalls_init(void)
-{
-	process_t *real_current;
-	process_t *real_list;
-
-	syscall_table_init();
-	klog_info("SYSCALL", "syscalls_init: using REAL process management");
-
-	real_current = current_process;
-	real_list = get_process_list();
-
-	klog_debug_fmt("SYSCALL", "Real current_process = %x",
-		       (unsigned)(uintptr_t)real_current);
-	klog_debug_fmt("SYSCALL", "Real process_list = %x",
-		       (unsigned)(uintptr_t)real_list);
 }

@@ -14,7 +14,7 @@
 
 #include "test/ktest_harness.h"
 #include "test/ktest_decl.h"
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include "../../drivers/storage/partition.h"
 #include "../../fs/devfs_internal.h"
 #include "../../fs/tmpfs/tmpfs.h"

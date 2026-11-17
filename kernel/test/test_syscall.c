@@ -17,7 +17,7 @@
  */
 
 #include "test/ktest_harness.h"
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/fcntl.h>
 #include <string.h>
 
