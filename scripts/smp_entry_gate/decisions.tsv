@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Interface-review decisions Q1-Q15 (maintainer, 2026-11-17) and their status.
+# Read by scripts/smp_entry_gate.py; rendered into
+# Documentation/ai_driven_dev/smp-entry-gate.md by
+# `python3 scripts/smp_entry_gate.py --sync-doc`.
+# Columns (tab-separated): id, status (DONE|PARTIAL|OPEN), decision, evidence.
+Q1	OPEN	(a) Retire the early rootfs world (erfs*, early_*, product_*, ramtab, bpath/bpivot) once the common VFS/process path boots both ISAs from the block image.	29 erfs*/early_*/product_* sources remain in kernel/syscalls/.
+Q2	PARTIAL	(a) Each syscall implementation lives in its owner (fs/, mm/, net/, kernel/signals/, ...); only entry and dispatch stay in kernel/entry/.	futex, signal and kexec syscalls live with their owners; the rest stay in kernel/syscalls/; no kernel/entry/ yet.
+Q3	OPEN	(a) Pseudo filesystems become full vfs_fstype mounts with inode and file operations; the named_* side tables become inodes of the parent filesystem.	fs/pseudo_fs_registry.c, fs/path_routed.c and fs/named_*.c remain.
+Q4	OPEN	(a) Platform device drivers live in drivers/<class>/ for both ISAs; arch/ keeps only CPU, MMU and entry code.	arch/arm64/sources/ still holds pl011.c, gic_v2.c, bcm2836_irq.c, rtc.c and serial.c.
+Q5	OPEN	(b) Arch facades take Linux topic names (asm/io.h, asm/pgtable.h, asm/tlbflush.h, asm/processor.h); includes/ir0/ keeps only portable APIs.	10 includes/ir0/arch_*.h headers remain.
+Q6	OPEN	(b) Exec and ELF loading move to fs/exec.c and fs/binfmt_elf.c (Linux); the kernel never knows which userspace program runs.	Exec is in kernel/exec/; the userspace-name scan of this gate (criterion 2) still finds hits.
+Q7	OPEN	(a) The logger moves to kernel/printk/ and the logging.h aliases (lane L1) are retired.	klog is in ktm/klog.c; includes/ir0/logging.h remains.
+Q8	OPEN	Three console layers: tty, console, video driver.	DRV-3 not started; drivers/tty/ is being reworked by UPROG-1.
+Q9	PARTIAL	(a) mm_struct and the VMAs are owned by mm/.	mm/mm_struct.c is in mm/; the VMA list, mmap and brk are in kernel/syscalls/mm_*.c.
+Q10	OPEN	Rename includes/ir0/wait.h (wait-status macros) to wait_status.h, freeing wait.h for wait queues (X-7).	includes/ir0/wait.h is unchanged.
+Q11	PARTIAL	Target kernel/{entry,signal,process,time,irq,panic,printk} plus lib/; kernel/main.c stays and is the only loose file in kernel/.	Loose-file rule done and guarded ([kernel-loose-files]); lib/ exists; kernel/entry/, kernel/printk/ and the panic directory are open.
+Q12	OPEN	(b) Block devices are handles with one name lookup; every device class plugs into one class API with ops and feature flags, as the NIC class does.	Block API still takes names; other classes do not follow the NIC pattern yet.
+Q13	OPEN	(b) Drivers register through an explicit registration table that is part of the common driver contract.	Registration is runtime driver_bootstrap_register() calls from arch/x86-64/sources/boot_drivers.c, not a table under a common contract.
+Q14	OPEN	Delete the IR0-only syscalls (console_scroll, console_clear, keymap_set, keymap_get) in favour of Linux ioctls and escape sequences.	All four are still wired in kernel/syscalls/syscall_dispatch.c.
+Q15	OPEN	No weak symbols: required arch hooks fail at link time through a port-contract header; optional generic implementations are chosen explicitly by the build registry; new ISAs start from arch/template/.	Weak definitions remain in arch/common/{boot_arch,boot_port,oops_port}.c, drivers/virtio/virtio_mmio.c, kernel/boot/boot_firmware_sysfs.c, mm/alloc/allocator.h and net/net_compat.c; no arch/template/.

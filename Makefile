@@ -1244,6 +1244,12 @@ arch-guard:
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py --self-test
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
+# SMP entry gate (Documentation/ai_driven_dev/smp-entry-gate.md): PASS/FAIL/
+# UNKNOWN per criterion, non-zero while SMP work must wait. Not in test-fast.
+.PHONY: smp-entry-gate
+smp-entry-gate:
+	@python3 $(KERNEL_ROOT)/scripts/smp_entry_gate.py
+
 # Host↔guest clipboard via 9p dennis (.ir0/clipboard → guest ir0-paste)
 # HELP
 
@@ -1361,6 +1367,7 @@ help:
 	@echo "  make kernel-tests            In-kernel tests in QEMU"
 	@echo "  make ctr                     Merge gate (includes the daily matrix)"
 	@echo "  make arch-guard              Architecture boundary"
+	@echo "  make smp-entry-gate          SMP entry gate (non-zero until SMP may start)"
 	@echo "  make build-matrix-min        Daily .config matrix"
 	@echo "  make build-matrix-full       Daily matrix plus CI cases"
 	@echo "  make test                    Test TUI"
