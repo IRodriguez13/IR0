@@ -62,6 +62,14 @@ Checks:
     (inb/outb/inw/outw/inl/outl, ins*/outs*, io_wait) is called or defined
     only under arch/x86-64/ and in the sources scripts/make/platform/pc.mk
     builds. No ledger; injected-violation self-test.
+31) Domain isolation: a member of an isolated domain (today each
+    filesystem in fs/<name>/ with its scripts/make/fs/<name>.mk) includes
+    no header of another member, uses no symbol another member defines and
+    tests no CONFIG_ENABLE_FS_<other> / CONFIG_FS_<other>; the domain core
+    (files directly in fs/, scripts/make/fs.mk) tests no member CONFIG
+    symbol and includes no member header. New domains (net/ protocols,
+    drivers/ classes) are one DomainSpec. No ledger; injected-violation
+    self-test.
 """
 
 from functools import lru_cache
@@ -3151,6 +3159,231 @@ def check_legacy_pc_io():
     return errors
 
 
+# Domain isolation. Some subsystems are a core plus independent members:
+# filesystems in fs/<name>/ around the VFS core in fs/, later network
+# protocols and driver classes. A member knows only the shared APIs (the
+# core, permissions, memory, block class, common helpers), never another
+# member: it includes no header of another member, calls or references no
+# symbol another member defines, and tests no configuration symbol of
+# another member. The core selects no member by configuration: the build
+# registers members (scripts/make/fs/<name>.mk) and the core iterates the
+# registry. A member is a subdirectory of the domain root; files directly in
+# the root are the core. To isolate another domain, add a DomainSpec.
+class DomainSpec:
+    def __init__(self, name, root, member_config_re, fragments, core_extra,
+                 not_members=()):
+        self.name = name                # report tag suffix
+        self.root = root                # "fs": members are fs/<m>/
+        # One capture group: the member token of a member config symbol.
+        self.member_config_re = re.compile(member_config_re)
+        self.fragments = fragments      # "scripts/make/fs": <m>.mk each
+        self.core_extra = core_extra    # more core files (the registry .mk)
+        self.not_members = frozenset(not_members)
+
+
+DOMAINS = (
+    DomainSpec("fs", "fs", r"\bCONFIG_(?:ENABLE_)?FS_([A-Z0-9_]+)\b",
+               "scripts/make/fs", ("scripts/make/fs.mk",)),
+)
+
+DOMAIN_SOURCE_SUFFIXES = (".c", ".h", ".S", ".mk")
+_DOMAIN_INCLUDE_RE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*[<"]([^>"]+)[>"]',
+                                re.M)
+# Top-level definitions a member exports: functions and initialized objects
+# (a filesystem's struct vfs_fstype). static and extern lines are skipped.
+_DOMAIN_FUNC_DEF_RE = re.compile(
+    r"^(?P<head>[A-Za-z_][\w \t\*]*?)\b(?P<name>[A-Za-z_]\w*)[ \t]*"
+    r"\((?P<args>[^;{}()]*(?:\([^;{}()]*\)[^;{}()]*)*)\)\s*\{", re.M)
+_DOMAIN_OBJ_DEF_RE = re.compile(
+    r"^(?P<head>[A-Za-z_][\w \t\*]*?)\b(?P<name>[A-Za-z_]\w*)[ \t]*"
+    r"(?:\[[^\]\n]*\])?[ \t]*=", re.M)
+_DOMAIN_IDENT_RE = re.compile(r"\b[A-Za-z_]\w*\b")
+
+
+def _domain_token(member: str) -> str:
+    return re.sub(r"\W", "_", member.upper())
+
+
+def _domain_strip(rel: str, text: str) -> str:
+    """Blank comments and strings, keeping line numbers."""
+    if rel.endswith(".mk") or rel.endswith("Makefile"):
+        return re.sub(r"#[^\n]*", "", text)
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    return _C_STRING_RE.sub('""', text)
+
+
+def _domain_exports(rel: str, text: str) -> set[str]:
+    if not rel.endswith(".c"):
+        return set()
+    names = set()
+    for regex in (_DOMAIN_FUNC_DEF_RE, _DOMAIN_OBJ_DEF_RE):
+        for match in regex.finditer(text):
+            words = match.group("head").split()
+            if not words or words[0] in ("static", "extern", "return",
+                                         "else", "typedef"):
+                continue
+            names.add(match.group("name"))
+    return names
+
+
+def domain_violations(spec: DomainSpec,
+                      files: dict[str, str]) -> list[tuple[str, int, str]]:
+    """Return (path, line, message) for every isolation break in @files,
+    a map from repository-relative path to text."""
+    root = spec.root + "/"
+    frag = spec.fragments + "/"
+    member_of: dict[str, str] = {}
+    core: list[str] = []
+    for rel in files:
+        if rel.startswith(root):
+            parts = rel[len(root):].split("/")
+            if len(parts) == 1:
+                core.append(rel)
+            elif parts[0] not in spec.not_members:
+                member_of[rel] = parts[0]
+        elif rel.startswith(frag) and rel.endswith(".mk"):
+            member_of[rel] = rel[len(frag):-len(".mk")]
+        elif rel in spec.core_extra:
+            core.append(rel)
+    members = sorted(set(member_of.values()))
+    stripped = {rel: _domain_strip(rel, files[rel])
+                for rel in list(member_of) + core}
+
+    exported: dict[str, set[str]] = {m: set() for m in members}
+    for rel, member in member_of.items():
+        exported[member] |= _domain_exports(rel, stripped[rel])
+    owner: dict[str, str] = {}
+    for member, names in exported.items():
+        for name in names:
+            # A name two members both define is nobody's to borrow.
+            owner[name] = "" if name in owner else member
+
+    def other_include(path: str, member: Optional[str]) -> Optional[str]:
+        for other in members:
+            if other == member:
+                continue
+            if (path.startswith(f"{root}{other}/") or
+                    path.startswith(f"{other}/") or
+                    f"../{other}/" in path):
+                return other
+        return None
+
+    found = []
+    for rel in sorted(member_of):
+        member = member_of[rel]
+        token = _domain_token(member)
+        raw = files[rel]
+        for lineno, line in enumerate(stripped[rel].splitlines(), 1):
+            for match in spec.member_config_re.finditer(line):
+                if match.group(1) != token:
+                    found.append((rel, lineno,
+                                  f"{member} tests {match.group(0)}, the "
+                                  "configuration of another member"))
+            for match in _DOMAIN_IDENT_RE.finditer(line):
+                other = owner.get(match.group(0))
+                if other and other != member:
+                    found.append((rel, lineno,
+                                  f"{member} uses {match.group(0)}, defined "
+                                  f"by {other}"))
+        for match in _DOMAIN_INCLUDE_RE.finditer(raw):
+            other = other_include(match.group(1), member)
+            if other:
+                lineno = raw.count("\n", 0, match.start()) + 1
+                found.append((rel, lineno,
+                              f"{member} includes {match.group(1)} of "
+                              f"{other}"))
+    for rel in sorted(core):
+        for lineno, line in enumerate(stripped[rel].splitlines(), 1):
+            for match in spec.member_config_re.finditer(line):
+                found.append((rel, lineno,
+                              f"the {spec.name} core tests "
+                              f"{match.group(0)}; members are selected by "
+                              f"{spec.fragments}/<member>.mk and registered"))
+        raw = files[rel]
+        for match in _DOMAIN_INCLUDE_RE.finditer(raw):
+            other = other_include(match.group(1), None)
+            if other:
+                lineno = raw.count("\n", 0, match.start()) + 1
+                found.append((rel, lineno,
+                              f"the {spec.name} core includes "
+                              f"{match.group(1)} of {other}"))
+    found.sort(key=lambda item: (item[0], item[1], item[2]))
+    return found
+
+
+def _domain_files(spec: DomainSpec) -> dict[str, str]:
+    files = {}
+    for base in (ROOT / spec.root, ROOT / spec.fragments):
+        if not base.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+            for name in sorted(filenames):
+                if name.endswith(DOMAIN_SOURCE_SUFFIXES):
+                    path = Path(dirpath) / name
+                    files[str(rel_to_root(path)).replace("\\", "/")] = \
+                        read_file_text(path)
+    for rel in spec.core_extra:
+        if (ROOT / rel).is_file():
+            files[rel] = read_file_text(ROOT / rel)
+    return files
+
+
+def _domain_isolation_self_test() -> list[str]:
+    """Inject each kind of break; the scanner must report exactly those."""
+    spec = DOMAINS[0]
+    files = {
+        "fs/minix/a.c": ("#include <fs/vfs.h>\n"
+                         "#include <fs/tmpfs/tmpfs.h>\n"
+                         "#include \"../fat16/fat16_disk.h\"\n"
+                         "#include \"minix.h\"\n"),
+        "fs/minix/b.c": ("int minix_read(void)\n{\n"
+                         "\treturn tmpfs_lookup(1) + minix_local(2);\n}\n"
+                         "/* tmpfs_lookup() in a comment is fine */\n"
+                         "static const char *s = \"tmpfs_lookup\";\n"
+                         "\tp = &fat16_fs_type;\n"
+                         "\tq = tmpfs_private(3);\n"),
+        "fs/minix/c.c": ("#if CONFIG_ENABLE_FS_FAT16\n#endif\n"
+                         "#if CONFIG_ENABLE_FS_MINIX\n#endif\n"
+                         "int minix_local(int x)\n{\n\treturn x;\n}\n"),
+        "fs/tmpfs/t.c": ("int tmpfs_lookup(int x)\n{\n\treturn x;\n}\n"
+                         "static int tmpfs_private(int x)\n{\n\treturn x;\n}\n"
+                         "struct vfs_fstype tmpfs_fs_type = {\n};\n"),
+        "fs/fat16/f.c": "struct vfs_fstype fat16_fs_type = {\n};\n",
+        "fs/9p/p.c": "#if CONFIG_FS_9P\n#endif\n",
+        "fs/vfs_x.c": ("/* CONFIG_ENABLE_FS_TMPFS in a comment */\n"
+                       "#if CONFIG_ENABLE_FS_TMPFS\n#endif\n"
+                       "#include \"minix/minix_fs.h\"\n"),
+        "scripts/make/fs/fat16.mk": ("# CONFIG_ENABLE_FS_TMPFS in a comment\n"
+                                     "fs-obj-$(CONFIG_ENABLE_FS_FAT16) += f.o\n"
+                                     "fs-obj-$(CONFIG_ENABLE_FS_TMPFS) += g.o\n"),
+        "scripts/make/fs.mk": "include $(FS_FRAGMENTS)\n",
+    }
+    expected = [
+        ("fs/minix/a.c", 2), ("fs/minix/a.c", 3),
+        ("fs/minix/b.c", 3), ("fs/minix/b.c", 7),
+        ("fs/minix/c.c", 1),
+        ("fs/vfs_x.c", 2), ("fs/vfs_x.c", 4),
+        ("scripts/make/fs/fat16.mk", 3),
+    ]
+    got = [(rel, line) for rel, line, _ in domain_violations(spec, files)]
+    if got != expected:
+        return [f"[domain-isolation] self-test: expected {expected}, got {got}"]
+    return []
+
+
+def check_domain_isolation():
+    """Members of an isolated domain (fs/<name>/) never reach another
+    member, and the domain core selects no member by configuration."""
+    errors = _domain_isolation_self_test()
+    for spec in DOMAINS:
+        for rel, lineno, message in domain_violations(spec,
+                                                      _domain_files(spec)):
+            errors.append(f"[domain-isolation] {rel}:{lineno}: {message}")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3554,7 +3787,8 @@ def main():
                     _register_name_self_test() + _uaccess_self_test() +
                     _raw_atomic_self_test() +
                     _undefined_prototype_self_test() +
-                    _legacy_pc_self_test())
+                    _legacy_pc_self_test() +
+                    _domain_isolation_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3562,7 +3796,8 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics, undefined-prototype, legacy-pc-io)")
+              "no-raw-atomics, undefined-prototype, legacy-pc-io, "
+              "domain-isolation)")
         return 0
 
     errors = []
@@ -3639,6 +3874,7 @@ def main():
     errors.extend(check_no_isa_named_headers())
     errors.extend(check_no_syscall_stubs())
     errors.extend(check_legacy_pc_io())
+    errors.extend(check_domain_isolation())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
