@@ -719,3 +719,145 @@ int fs_setgroups_empty_drops_root_group(void)
 	EXPECT(S2(SYS_getgroups, 0, 0), 0);
 	return CONF_PASS;
 }
+
+/* Hand @path to DAC_UID:DAC_GID. */
+static int dac_give(const char *path)
+{
+	return S5(SYS_fchownat, AT_FDCWD, path, DAC_UID, DAC_GID, 0) == 0 ?
+		0 : -1;
+}
+
+/*
+ * may_delete(): unlink and rmdir need write and search on the parent
+ * directory, never write on the victim. A writable file in a directory the
+ * user cannot write stays, a read-only file in the user's own directory
+ * goes. The directory check comes before the type check (EACCES, not
+ * EISDIR) and covers a FIFO too.
+ */
+int fs_unlink_needs_parent_write(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("ro", 1, 0755, 0) != 0 ||
+	    dac_make("ro/f", 0, 0666, 0) != 0 ||
+	    dac_make("ro/d", 1, 0777, 0) != 0 ||
+	    S4(SYS_mknodat, AT_FDCWD, "ro/p", S_IFIFO | 0666, 0) != 0 ||
+	    dac_make("own", 1, 0755, DAC_GID) != 0 || dac_give("own") != 0 ||
+	    dac_make("own/f", 0, 0444, 0) != 0 ||
+	    dac_make("own/d", 1, 0555, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/f", 0), EACCES);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/p", 0), EACCES);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/d", 0), EACCES);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/d", AT_REMOVEDIR), EACCES);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "own/f", 0), 0);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "own/d", AT_REMOVEDIR), 0);
+	return CONF_PASS;
+}
+
+/*
+ * check_sticky(): in a sticky (+t) directory only the owner of the victim,
+ * the owner of the directory or root removes a name, write permission on
+ * the directory notwithstanding. The denial is EPERM, not EACCES.
+ */
+int fs_sticky_dir_restricts_delete(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("t", 1, 01777, 0) != 0 ||
+	    dac_make("t/f", 0, 0666, 0) != 0 ||
+	    dac_make("t/d", 1, 0777, 0) != 0 ||
+	    dac_make("t/mine", 0, 0644, DAC_GID) != 0 ||
+	    dac_give("t/mine") != 0 ||
+	    dac_make("ut", 1, 01777, DAC_GID) != 0 || dac_give("ut") != 0 ||
+	    dac_make("ut/f", 0, 0644, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), EPERM);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "t/d", AT_REMOVEDIR), EPERM);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/mine", 0), 0);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "ut/f", 0), 0);
+	return CONF_PASS;
+}
+
+/*
+ * may_create(): a new name (mkdir, mknod, link, symlink, open with
+ * O_CREAT) needs write and search on the parent; write without search is
+ * not enough. An existing name is EEXIST before the directory check, and
+ * O_CREAT on an existing file does not look at the directory.
+ */
+int fs_create_needs_parent_write_search(void)
+{
+	long fd;
+
+	if (S0(SYS_geteuid) != 0 || dac_make("ro", 1, 0755, 0) != 0 ||
+	    dac_make("ro/mine", 0, 0644, DAC_GID) != 0 ||
+	    dac_give("ro/mine") != 0 ||
+	    dac_make("wo", 1, 0200, DAC_GID) != 0 || dac_give("wo") != 0 ||
+	    dac_make("f", 0, 0644, DAC_GID) != 0 || dac_give("f") != 0 ||
+	    dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S3(SYS_mkdirat, AT_FDCWD, "wo/d", 0755), EACCES);
+	EXPECT_ERR(S3(SYS_mkdirat, AT_FDCWD, "ro", 0755), EEXIST);
+	EXPECT_ERR(S3(SYS_mkdirat, AT_FDCWD, "ro/d", 0755), EACCES);
+	EXPECT_ERR(S4(SYS_mknodat, AT_FDCWD, "ro/p", S_IFIFO | 0644, 0),
+		   EACCES);
+	EXPECT_ERR(S3(SYS_symlinkat, "f", AT_FDCWD, "ro/l"), EACCES);
+	EXPECT_ERR(S5(SYS_linkat, AT_FDCWD, "f", AT_FDCWD, "wo/l", 0), EACCES);
+	EXPECT_ERR(S5(SYS_linkat, AT_FDCWD, "f", AT_FDCWD, "ro/l", 0), EACCES);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "ro/c", O_WRONLY | O_CREAT, 0644),
+		   EACCES);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "ro/mine", O_WRONLY | O_CREAT, 0644));
+	EXPECT(S1(SYS_close, fd), 0);
+	return CONF_PASS;
+}
+
+/*
+ * rename(2) deletes a name in the old directory and creates one (or
+ * replaces one) in the new: both directories need write and search, the
+ * file itself needs nothing, a sticky directory keeps names the user does
+ * not own (EPERM), and a directory moved to another parent needs write on
+ * itself to update "..".
+ */
+int fs_rename_needs_parent_write(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("ro", 1, 0755, 0) != 0 ||
+	    dac_make("ro/f", 0, 0666, 0) != 0 ||
+	    dac_make("own", 1, 0755, DAC_GID) != 0 || dac_give("own") != 0 ||
+	    dac_make("own/f", 0, 0444, 0) != 0 ||
+	    dac_make("own/d", 1, 0755, 0) != 0 ||
+	    dac_make("own2", 1, 0755, DAC_GID) != 0 || dac_give("own2") != 0 ||
+	    dac_make("t", 1, 01777, 0) != 0 ||
+	    dac_make("t/f", 0, 0666, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "ro/f", AT_FDCWD, "own/x"),
+		   EACCES);
+	EXPECT(S4(SYS_renameat, AT_FDCWD, "own/f", AT_FDCWD, "own/g"), 0);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "own/g", AT_FDCWD, "ro/g"),
+		   EACCES);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "t/f", AT_FDCWD, "own/t"),
+		   EPERM);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "own/g", AT_FDCWD, "t/f"),
+		   EPERM);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "own/d", AT_FDCWD, "own2/d"),
+		   EACCES);
+	return CONF_PASS;
+}
+
+/*
+ * opendir needs read on the directory, not search: a 0711 directory does
+ * not open for listing, a 0744 one opens and lists its entries, while the
+ * files in it stay out of reach without search.
+ */
+int fs_opendir_needs_read(void)
+{
+	char buf[512];
+	long fd;
+
+	if (S0(SYS_geteuid) != 0 || dac_make("x", 1, 0711, 0) != 0 ||
+	    dac_make("r", 1, 0744, 0) != 0 ||
+	    dac_make("r/f", 0, 0644, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "x", O_RDONLY | O_DIRECTORY, 0),
+		   EACCES);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "r", O_RDONLY | O_DIRECTORY, 0));
+	CHECK(S3(SYS_getdents64, fd, buf, sizeof(buf)) > 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "r/f", O_RDONLY, 0), EACCES);
+	return CONF_PASS;
+}

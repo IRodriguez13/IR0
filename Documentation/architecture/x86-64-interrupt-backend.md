@@ -18,4 +18,5 @@ Makefile).
 | arm64 | `arch/arm64/sources/irq.c` → VBAR + `gic_v2` (never links this tree) |
 
 Do **not** include these backend headers from `kernel/`, `fs/`, `mm/`, `net/`,
-`drivers/`, or `sched/`. Use `ir0/irq.h` and `ir0/arch_io.h`.
+`drivers/`, or `sched/`. Use `ir0/irq.h`; PC platform drivers that need port
+I/O include `<asm/io.h>`.

@@ -17,6 +17,7 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <stdbool.h>
+#include <asm/io.h>
 
 static void adlib_shutdown(void);
 

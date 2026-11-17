@@ -15,11 +15,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* KEXEC_ARCH: this ISA's value (Linux include/uapi/linux/kexec.h). */
+#include <asm/kexec.h>
+
 #define KEXEC_ON_CRASH		0x00000001ul
 #define KEXEC_PRESERVE_CONTEXT	0x00000002ul
 #define KEXEC_ARCH_MASK		0xffff0000ul
 #define KEXEC_ARCH_DEFAULT	(0ul << 16)
 #define KEXEC_ARCH_X86_64	(62ul << 16)
+#define KEXEC_ARCH_AARCH64	(183ul << 16)
 #define KEXEC_SEGMENT_MAX	4
 
 struct kexec_segment

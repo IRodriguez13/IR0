@@ -14,6 +14,7 @@
 
 #include <stdint.h>
 #include <config.h>
+#include <ir0/clock.h>
 #include <ir0/delay.h>
 #include "timer.h"
 
@@ -27,6 +28,13 @@ void timer_init(void)
 	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
 	g_cntfrq = frq;
 	g_hz = (uint32_t)frq;
+}
+
+/* The tick IRQ is armed later by arch_timer_periodic_arm(); no PC timer runs. */
+clock_timer_t clock_timer_init(void)
+{
+	timer_init();
+	return CLOCK_TIMER_NONE;
 }
 
 uint64_t timer_read(void)

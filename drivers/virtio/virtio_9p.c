@@ -4,7 +4,9 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: virtio_9p.c
- * Description: Minimal virtio-pci legacy + 9P2000.L for QEMU host directory share.
+ * Description: 9P2000.L client over a legacy virtio queue for the QEMU host
+ *              directory share. The transport that reaches the device (PC:
+ *              virtio_9p_pci.c) sets up the queue and starts the client.
  *
  * Smoke expects:
  *   -fsdev local,id=ir0fs,path=...,security_model=none
@@ -16,8 +18,6 @@
 
 #include "virtio_9p.h"
 
-#include <ir0/arch_io.h>
-#include <ir0/cpu.h>
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
@@ -25,29 +25,6 @@
 #include <string.h>
 #include <stddef.h>
 #include <ir0/ktm/klog.h>
-
-#define PCI_CONFIG_ADDRESS 0xCF8
-#define PCI_CONFIG_DATA    0xCFC
-#define PCI_ENABLE_BIT     0x80000000U
-
-#define VIRTIO_VENDOR      0x1AF4
-#define VIRTIO_DEV_9P      0x1009
-
-#define VIRTIO_PCI_HOST_FEATURES 0
-#define VIRTIO_PCI_GUEST_FEATURES 4
-#define VIRTIO_PCI_QUEUE_PFN     8
-#define VIRTIO_PCI_QUEUE_NUM     12
-#define VIRTIO_PCI_QUEUE_SEL     14
-#define VIRTIO_PCI_QUEUE_NOTIFY  16
-#define VIRTIO_PCI_STATUS        18
-#define VIRTIO_PCI_ISR           19
-#define VIRTIO_PCI_CONFIG        20
-
-#define VIRTIO_STATUS_ACK        1
-#define VIRTIO_STATUS_DRIVER     2
-#define VIRTIO_STATUS_DRIVER_OK  4
-#define VIRTIO_STATUS_FEATURES_OK 8
-#define VIRTIO_STATUS_FAILED     128
 
 #define VRING_DESC_F_NEXT  1
 #define VRING_DESC_F_WRITE 2
@@ -130,7 +107,7 @@ struct vring_used_elem
 	uint32_t len;
 };
 
-static uint16_t g_iobase;
+static const struct virtio_9p_transport *g_transport;
 static int g_ready;
 static uint16_t g_qsz;
 static uint16_t g_last_used_idx;
@@ -147,52 +124,6 @@ static struct vring_used_elem *g_used_ring;
 static uint8_t *g_req;
 static uint8_t *g_resp;
 static void *g_vring_mem;
-
-static uint32_t pci_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t off)
-{
-	uint32_t addr = PCI_ENABLE_BIT | ((uint32_t)bus << 16) | ((uint32_t)slot << 11) |
-			((uint32_t)func << 8) | (off & 0xFCu);
-	outl(PCI_CONFIG_ADDRESS, addr);
-	return inl(PCI_CONFIG_DATA);
-}
-
-static void pci_write(uint8_t bus, uint8_t slot, uint8_t func, uint8_t off, uint32_t val)
-{
-	uint32_t addr = PCI_ENABLE_BIT | ((uint32_t)bus << 16) | ((uint32_t)slot << 11) |
-			((uint32_t)func << 8) | (off & 0xFCu);
-	outl(PCI_CONFIG_ADDRESS, addr);
-	outl(PCI_CONFIG_DATA, val);
-}
-
-static void vp_outb(uint16_t off, uint8_t v)
-{
-	outb((uint16_t)(g_iobase + off), v);
-}
-
-static void vp_outw(uint16_t off, uint16_t v)
-{
-	outw((uint16_t)(g_iobase + off), v);
-}
-
-static void vp_outl(uint16_t off, uint32_t v)
-{
-	outl((uint16_t)(g_iobase + off), v);
-}
-
-static uint8_t vp_inb(uint16_t off)
-{
-	return inb((uint16_t)(g_iobase + off));
-}
-
-static uint16_t vp_inw(uint16_t off)
-{
-	return inw((uint16_t)(g_iobase + off));
-}
-
-static uint32_t vp_inl(uint16_t off)
-{
-	return inl((uint16_t)(g_iobase + off));
-}
 
 static void p9_put8(uint8_t **p, uint8_t v)
 {
@@ -279,7 +210,7 @@ static int v9p_exchange(uint32_t req_len, uint32_t *resp_len)
 	*g_avail_idx = (uint16_t)(avail_idx + 1);
 	smp_mb();
 
-	vp_outw(VIRTIO_PCI_QUEUE_NOTIFY, 0);
+	g_transport->notify();
 
 	for (spins = 0; spins < 2000000; spins++)
 	{
@@ -290,7 +221,7 @@ static int v9p_exchange(uint32_t req_len, uint32_t *resp_len)
 			if (resp_len)
 				*resp_len = g_used_ring[u].len;
 			g_last_used_idx++;
-			(void)vp_inb(VIRTIO_PCI_ISR);
+			g_transport->ack_interrupt();
 			return 0;
 		}
 	}
@@ -1306,28 +1237,7 @@ int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t off
 	return 0;
 }
 
-static int find_virtio_9p(uint8_t *bus, uint8_t *slot)
-{
-	uint16_t b;
-	uint8_t s;
-
-	for (b = 0; b < 256; b++)
-	{
-		for (s = 0; s < 32; s++)
-		{
-			uint32_t id = pci_read((uint8_t)b, s, 0, 0);
-			if ((id & 0xFFFF) == VIRTIO_VENDOR && (id >> 16) == VIRTIO_DEV_9P)
-			{
-				*bus = (uint8_t)b;
-				*slot = s;
-				return 0;
-			}
-		}
-	}
-	return -1;
-}
-
-static int setup_vring(uint16_t qsz)
+int virtio_9p_setup_queue(uint16_t qsz, uintptr_t *pfn)
 {
 	size_t desc_sz;
 	size_t avail_sz;
@@ -1365,66 +1275,16 @@ static int setup_vring(uint16_t qsz)
 		return -ENOMEM;
 	memset(g_req, 0, V9P_BUF_SIZE);
 	memset(g_resp, 0, V9P_BUF_SIZE);
+	/* Queue PFN: physical page of descriptor table (identity map). */
+	*pfn = (uintptr_t)g_desc >> 12;
 	return 0;
 }
 
-int virtio_9p_init(void)
+int virtio_9p_start(const struct virtio_9p_transport *transport)
 {
-	uint8_t bus, slot;
-	uint32_t bar0;
-	uint32_t cmd;
-	uint16_t qsz;
-	uintptr_t pfn;
 	int rc;
 
-	g_ready = 0;
-	if (find_virtio_9p(&bus, &slot) != 0)
-	{
-		klog_smoke("HOSTSHARE_9P_ABSENT");
-		return -ENODEV;
-	}
-
-	cmd = pci_read(bus, slot, 0, 0x04);
-	pci_write(bus, slot, 0, 0x04, cmd | 0x5); /* IO + BusMaster */
-
-	bar0 = pci_read(bus, slot, 0, 0x10);
-	if (!(bar0 & 1))
-	{
-		klog_smoke("HOSTSHARE_9P_NO_IOBAR");
-		return -ENODEV;
-	}
-	g_iobase = (uint16_t)(bar0 & ~0x3u);
-
-	vp_outb(VIRTIO_PCI_STATUS, 0);
-	vp_outb(VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACK);
-	vp_outb(VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACK | VIRTIO_STATUS_DRIVER);
-
-	(void)vp_inl(VIRTIO_PCI_HOST_FEATURES);
-	vp_outl(VIRTIO_PCI_GUEST_FEATURES, 0);
-
-	vp_outw(VIRTIO_PCI_QUEUE_SEL, 0);
-	qsz = vp_inw(VIRTIO_PCI_QUEUE_NUM);
-	if (qsz == 0 || qsz > V9P_QUEUE_MAX)
-	{
-		klog_smoke("HOSTSHARE_9P_BAD_QSZ");
-		vp_outb(VIRTIO_PCI_STATUS, VIRTIO_STATUS_FAILED);
-		return -EINVAL;
-	}
-
-	rc = setup_vring(qsz);
-	if (rc < 0)
-	{
-		vp_outb(VIRTIO_PCI_STATUS, VIRTIO_STATUS_FAILED);
-		return rc;
-	}
-
-	/* Queue PFN: physical page of descriptor table (identity map). */
-	pfn = (uintptr_t)g_desc >> 12;
-	vp_outl(VIRTIO_PCI_QUEUE_PFN, (uint32_t)pfn);
-
-	vp_outb(VIRTIO_PCI_STATUS,
-		VIRTIO_STATUS_ACK | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_DRIVER_OK);
-
+	g_transport = transport;
 	g_last_used_idx = 0;
 	g_ready = 1;
 

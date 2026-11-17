@@ -7,9 +7,9 @@
  *
  * Each architecture translates its raw entry argument (the Multiboot info
  * pointer in RDI on x86-64, the DTB pointer in x0 on ARM64) into this
- * neutral form in ir0_boot_port_params(); kmain() records it once with
- * set_boot_params(). Code that needs the raw protocol block checks
- * @protocol before interpreting @info.
+ * neutral form in ir0_boot_port_params(); kmain()'s firmware step records
+ * it once with set_boot_params(). Code that needs the raw protocol block
+ * checks @protocol before interpreting @info.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

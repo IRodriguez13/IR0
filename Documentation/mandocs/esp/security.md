@@ -77,6 +77,10 @@ Mapa ASCII:
 ## 4. Responsabilidades
 
 - VFS: `check_dir_traverse` exige execute en cada componente de path (no root).
+- VFS: un nombre nuevo (`may_create`) exige escritura y búsqueda en el padre;
+  borrarlo o renombrarlo (`may_delete`) también, y en un directorio sticky (+t)
+  sólo el dueño del fichero, el dueño del directorio o root pueden (EPERM).
+  Listar un directorio exige lectura sobre él.
 - chmod: root o dueño del fichero en syscall + frontera VFS.
 - chown: solo root en VFS; backend minix también solo root.
 - mount/umount: credencial root requerida.
@@ -124,6 +128,8 @@ Mapa ASCII:
 
 - Comandos debug `whoami`, `id` muestran ids efectivos.
 - `-EACCES` en traverse: falta execute en componente directorio.
+- `-EACCES` en unlink/rename/create: falta escritura o búsqueda en el directorio padre.
+- `-EPERM` en unlink/rename: directorio sticky y el llamador no es dueño ni del fichero ni del directorio.
 - `-EPERM` en mount/chown: necesita euid root.
 
 ## 10. Roadmap futuro

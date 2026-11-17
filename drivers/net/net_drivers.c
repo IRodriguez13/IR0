@@ -8,36 +8,15 @@
  *
  * Adding a NIC: implement struct net_device_ops in drivers/net/<card>.c,
  * export one const struct net_driver from it (declared in net_drivers.h),
- * and list it here under its Kconfig symbol. Nothing outside drivers/net
- * changes.
+ * and list it in the platform's table (net_drivers_<platform>.c) under its
+ * Kconfig symbol. Nothing outside drivers/net changes.
  */
 
 #include "net_drivers.h"
 
-#include <ir0/driver_backend.h>
 #include <ir0/logging.h>
 #include <ir0/net.h>
 #include <stddef.h>
-
-/*
- * Probe order: PCI cards on the legacy PC platform, firmware/device-tree
- * described cards elsewhere.
- */
-static const struct net_driver *const net_drivers[] = {
-#if IR0_LEGACY_PC_IO
-#if CONFIG_DRV_NIC_VIRTIO_NET
-	&virtio_net_driver,
-#endif
-#if CONFIG_DRV_NIC_RTL8139
-	&rtl8139_driver,
-#endif
-#else
-#if CONFIG_DRV_NIC_BCMGENET
-	&bcmgenet_driver,
-#endif
-#endif
-	NULL,
-};
 
 /*
  * Probe every configured driver. An absent or failed card never stops the

@@ -23,7 +23,7 @@ freestanding por placa se retiraron). El hueco abierto es **musl aarch64 + empaq
 del kernel.
 
 La secuencia histórica F7 en QEMU virt (MMU → VBAR → EL0) sigue siendo contexto
-útil abajo; el arranque de producto hoy usa la cadena compartida `ir0_kernel_boot`,
+útil abajo; el arranque de producto hoy usa el `kmain()` compartido (`kernel/main.c`),
 el único camino de arranque ARM64.
 
 CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 temprano.
@@ -113,7 +113,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
   x86-64      arm64
   (ISO completo)  (producto ALL_OBJS + probes)
      │           │
-  boot/syscall  ir0_kernel_boot
+  boot/syscall  kmain
   switch_x64    switch + MMU / GIC
 ```
 

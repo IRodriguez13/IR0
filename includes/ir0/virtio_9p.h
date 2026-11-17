@@ -42,7 +42,6 @@ struct virtio_9p_statfs
 	uint32_t namelen;
 };
 
-int virtio_9p_init(void);
 int virtio_9p_statfs(struct virtio_9p_statfs *out);
 int virtio_9p_ready(void);
 int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out);

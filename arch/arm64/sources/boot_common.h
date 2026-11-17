@@ -9,7 +9,7 @@
 
 /**
  * DTB capture, identity MMU, IRQ controller map, generic timer, VBAR and
- * optional virtio-blk. Called from boot_arch.c before ir0_kernel_boot().
+ * optional virtio-blk. Called from boot_arch.c in kmain()'s firmware step.
  */
 struct ir0_boot_params;
 

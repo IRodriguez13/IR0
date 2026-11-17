@@ -28,16 +28,7 @@ void irq_controller_init(void)
 	(void)arm64_irq_backend_init();
 }
 
-void irq_keyboard_init(void)
-{
-	/* No PS/2 on virt/rpi path yet. */
-}
-
 void irq_unmask_line(unsigned irq)
 {
 	(void)arm64_irq_backend_enable((uint32_t)irq);
-}
-
-void irq_keyboard_poll_ps2(void)
-{
 }

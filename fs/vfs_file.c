@@ -107,19 +107,8 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 
     if (flags & IR0_O_CREAT)
     {
-        char parent[MAX_PATH];
         stat_t st;
         int target_exists;
-
-        if (vfs_parent_dir(path, parent, sizeof(parent)) == 0)
-        {
-            if (!ops->stat || vfs_ops_stat(ops, parent, &st) != 0)
-                return -ENOENT;
-            if (vfs_stat(parent, &st) != 0 ||
-                generic_permission(ir0_current_cred(), &st,
-                                   ACCESS_WRITE) != 0)
-                return -EACCES;
-        }
 
         target_exists = (ops->stat && vfs_ops_stat(ops, path, &st) == 0) ? 1 : 0;
 
@@ -129,6 +118,10 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 
         if (!target_exists)
         {
+            /* Only a new file changes the parent directory. */
+            ret = may_create(path);
+            if (ret != 0)
+                return ret;
             if (ops->create)
             {
                 /* open(2): the caller's mode is authoritative, 0000 included. */

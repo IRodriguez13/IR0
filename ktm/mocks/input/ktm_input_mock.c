@@ -96,6 +96,17 @@ void ktm_input_mock_queue_mouse_packet(const uint8_t packet[3])
 	g_packet_count++;
 }
 
+/* The mock replaces the whole facade: drivers that register are not used. */
+void input_register_keyboard(const struct input_keyboard_ops *ops)
+{
+	(void)ops;
+}
+
+void input_register_mouse(const struct input_mouse_ops *ops)
+{
+	(void)ops;
+}
+
 void input_mouse_handle_interrupt(void)
 {
 	g_mouse_interrupts++;

@@ -18,8 +18,8 @@
  */
 #include <stdint.h>
 #include <stdbool.h>
-#include <ir0/driver_backend.h>
 #include <ir0/vga.h>
+#include <ir0/video_console.h>
 #include <ir0/boot_memory.h>
 #include <string.h>
 #include <ir0/arch_mm.h>
@@ -156,28 +156,27 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
 
 int vbe_init(void)
 {
-    /* Fallback: if the firmware gave no framebuffer, use VGA text (80x25) */
+    const struct console_text_screen *text = console_text_screen();
+
+    /*
+     * Fallback: if the firmware gave no framebuffer, expose the platform's
+     * text-mode screen (PC: VGA text, 80x25). A platform without one has
+     * nothing to fall back to.
+     */
     if (vbe_state.initialized)
         return 0;
+    if (!text)
+        return -1;
 
-#if !IR0_LEGACY_PC_IO
-    /*
-     * PC VGA text MMIO is not present without legacy PC I/O. Installing this
-     * fallback marks vbe "initialized" and can lure console paths into
-     * touching 0xB8000 (sync abort storm from EL1 on ARM).
-     */
-    return -1;
-#else
-    vbe_state.framebuffer_addr = 0xB8000;
-    vbe_state.width = 80;
-    vbe_state.height = 25;
-    vbe_state.pitch = 160;
+    vbe_state.framebuffer_addr = (uintptr_t)text->cells;
+    vbe_state.width = (uint32_t)text->cols;
+    vbe_state.height = (uint32_t)text->rows;
+    vbe_state.pitch = (uint32_t)text->cols * 2U;
     vbe_state.fb_size = 4096;
     vbe_state.bpp = 16;
-    vbe_state.fb = (uint8_t *)(uintptr_t)0xB8000;
+    vbe_state.fb = (uint8_t *)(uintptr_t)text->cells;
     vbe_state.initialized = true;
     return 0;
-#endif
 }
 
 bool vbe_get_info(uint32_t *width, uint32_t *height, uint32_t *bpp)

@@ -38,6 +38,40 @@ typedef struct ir0_mouse_state
 	bool initialized;
 } ir0_mouse_state_t;
 
+/*
+ * Keyboard and mouse drivers register their operations; the facade below
+ * forwards to them and reports no device while none is registered.
+ */
+struct input_keyboard_ops
+{
+	char (*get)(void);
+	int (*has_data)(void);
+	void (*clear)(void);
+	/* Drop half-decoded scancode state (momentary mods + E0/E1). */
+	void (*all_keys_up)(void);
+	/* Drain the controller when its IRQ may have been missed. */
+	void (*poll)(void);
+	int (*set_layout)(int layout);
+	int (*get_layout)(void);
+	const char *(*get_layout_name)(int layout);
+	int (*set_console_mode)(int mode);
+	int (*get_console_mode)(void);
+};
+
+struct input_mouse_ops
+{
+	void (*feed_byte)(uint8_t data);
+	bool (*is_available)(void);
+	bool (*get_state)(ir0_mouse_state_t *out);
+	bool (*set_sample_rate)(uint8_t rate);
+	bool (*packet_available)(void);
+	/* One standard three-byte PS/2 packet; returns its length or 0. */
+	int (*read_packet)(uint8_t packet[3]);
+};
+
+void input_register_keyboard(const struct input_keyboard_ops *ops);
+void input_register_mouse(const struct input_mouse_ops *ops);
+
 void input_mouse_handle_interrupt(void);
 /* One AUX byte from i8042 (never fed to the keyboard decoder). */
 void input_mouse_feed_byte(uint8_t data);

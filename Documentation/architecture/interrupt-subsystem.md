@@ -7,9 +7,10 @@
 Interrupt handling, exception management, and hardware interrupt routing.
 
 **Portable entry (product):** call `irq_tables_init` / `irq_controller_init` /
-`irq_keyboard_init` / `irq_unmask_line` / `irq_keyboard_poll_ps2` via
-`#include <ir0/irq.h>`. Do **not** include arch interrupt backend headers from
-`kernel/`, `fs/`, `mm/`, `net/`, or drivers — port I/O is `ir0/arch_io.h`.
+`irq_unmask_line` via `#include <ir0/irq.h>`. Do **not** include arch interrupt
+backend headers from `kernel/`, `fs/`, `mm/`, `net/`, or drivers. Port I/O is
+x86 `<asm/io.h>`, used only by x86 code and the PC platform drivers. The i8042
+keyboard registers with `input_register_keyboard()` from `keyboard_init()`.
 
 **Implementation today:** x86-64 IDT/PIC/ISR live under
 `arch/x86-64/{sources,include,asm}/interrupt/` and are wired by

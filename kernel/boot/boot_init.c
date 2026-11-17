@@ -7,7 +7,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: boot_init.c
- * Description: Boot-phase implementations; kmain only sequences these calls.
+ * Description: Boot steps (logging, smokes, optional parts); kmain() in
+ *              kernel/main.c only sequences these calls.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -27,14 +28,11 @@
 #include <ir0/arch_info.h>
 #include <config.h>
 #include <ir0/version.h>
-#include <ir0/driver.h>
 #include <ir0/elf_loader.h>
 #include <ir0/clock.h>
 #include <ir0/init_drv.h>
 #include <ir0/blockdev.h>
-#if CONFIG_ENABLE_SOUND
-#include <ir0/sound_blaster.h>
-#endif
+#include <ir0/audio_backend.h>
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
@@ -56,16 +54,27 @@
 #include <ir0/idle.h>
 #include <ir0/process_exit.h>
 #include <ir0/rootfs_base.h>
+#include <ir0/boot_params.h>
+#include <ir0/boot_port.h>
 #include "boot_init.h"
 
-#include <ir0/boot_port.h>
-
-void boot_early(const struct ir0_boot_params *params)
+void boot_firmware_init(uintptr_t firmware_handle)
 {
+	struct ir0_boot_params handoff = { 0 };
+	const struct ir0_boot_params *params;
+
+	ir0_boot_port_params(firmware_handle, &handoff);
+	set_boot_params(&handoff);
+	params = get_boot_params();
+
 	ir0_boot_arch_firmware_early(params);
 	(void)boot_memory_snapshot_init(params);
 	ir0_boot_firmware_sysfs_init();
 	ir0_cmdline_apply_log_profile();
+}
+
+void boot_console_init(void)
+{
 	early_init();
 	heap_init();
 
@@ -78,7 +87,7 @@ void boot_early(const struct ir0_boot_params *params)
 		console_backend_clear(0x0F);
 }
 
-void boot_memory_serial(void)
+void boot_memory_init(void)
 {
 	/*
 	 * The architecture facade supplies reserved-free RAM banks. x86 currently
@@ -95,11 +104,16 @@ void boot_memory_serial(void)
 	 * holes (Linux kmap / copy_user_highpage analogue).
 	 */
 	paging_pin_kernel_address_space(paging_current_address_space());
+}
 
+void boot_log_init(void)
+{
 	ir0_boot_port_serial_before_logging();
-
 	(void)klog_promote_normal_ring();
-	ir0_driver_registry_init();
+}
+
+void boot_serial_init(void)
+{
 	ir0_boot_port_serial_after_driver_registry();
 
 	klog_set_boot_phase(KLOG_BOOT_EARLY_ARCH);
@@ -147,11 +161,14 @@ void boot_memory_serial(void)
 	log_subsystem_ok("CORE");
 }
 
-void boot_drivers_rootfs(void)
+void boot_drivers_init(void)
 {
 	klog_set_boot_phase(KLOG_BOOT_DRIVERS);
 	init_all_drivers();
+}
 
+void boot_rootfs_init(void)
+{
 	klog_set_boot_phase(KLOG_BOOT_STORAGE);
 	if (!ir0_block_name_is_present(CONFIG_ROOT_BLOCK_DEVICE))
 	{
@@ -204,16 +221,22 @@ void boot_drivers_rootfs(void)
 	ir0_boot_port_maybe_seed_init_from_embedded();
 }
 
-void boot_runtime(void)
+void boot_process_init(void)
 {
 	process_init();
 	ir0_swap_init();
 	process_exit_bind_product();
 	log_subsystem_ok("PROCESSES");
+}
 
+void boot_ipc_init(void)
+{
 	ipc_init();
 	log_subsystem_ok("IPC");
+}
 
+void boot_clock_init(void)
+{
 	klog_set_boot_phase(KLOG_BOOT_TIME);
 	clock_system_init();
 	klog_info("CLOCK", "monotonic clock online");
@@ -222,19 +245,22 @@ void boot_runtime(void)
 	else
 		klog_smoke("SCHED_POLICY_FAIL");
 	klog_info_fmt("SCHED", "SCHED_POLICY=%s", sched_policy_name());
+}
 
+void boot_syscalls_init(void)
+{
 	syscall_init();
 	syscalls_init();
 	log_subsystem_ok("SYSCALLS");
+}
 
+void boot_irq_init(void)
+{
 	klog_set_boot_phase(KLOG_BOOT_INTERRUPTS);
 	irq_init();
 	ir0_boot_port_unmask_irqs();
 	enable_interrupts();
-#if CONFIG_ENABLE_SOUND
-	if (sb16_is_available())
-		sb16_post_irq_selftest();
-#endif
+	audio_backend_post_irq_selftest();
 #if DEBUG_BOOT
 	log_info("BOOT", "Interrupts enabled globally (sti)");
 #endif

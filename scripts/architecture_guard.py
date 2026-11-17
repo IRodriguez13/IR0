@@ -37,7 +37,7 @@ Checks:
     canonical catalog through <errno.h> or <ir0/errno.h>.
 25) Portable .c under drivers/fs/kernel/mm/net/sched/ipc/ktm/interrupt must not
     use #if* on compiler ISA or CONFIG_ARCH_* tokens; use build-selected
-    backends or IR0_LEGACY_PC_IO (includes/ir0/driver_backend.h). Ignore
+    backends or platform objects (scripts/make/platform/<platform>.mk). Ignore
     // line comments when matching (avoids flagging examples in comments).
 26) Include layout: a C/H file includes each header once, and every #include
     comes before the first function definition (no late includes).
@@ -57,6 +57,11 @@ Checks:
     scripts/undefined_prototypes.txt, which only shrinks; Linux UAPI headers
     and the userspace wrapper header are not scanned. Injected-violation
     self-test.
+30) Legacy PC is a platform, not a branch: no #if/#ifdef/#define names
+    IR0_LEGACY_PC_IO or another PC-platform switch, and port I/O
+    (inb/outb/inw/outw/inl/outl, ins*/outs*, io_wait) is called or defined
+    only under arch/x86-64/ and in the sources scripts/make/platform/pc.mk
+    builds. No ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -1838,7 +1843,6 @@ def _cpp_directive_not_in_trailing_comment(line: str) -> Optional[str]:
 def check_common_c_has_no_isa_conditionals():
     """Select ISA implementations by objects/facades, never inside common C."""
     errors = []
-    # IR0_LEGACY_PC_IO is the Makefile-selected legacy PC class gate (drivers, etc.).
     isa_token = (
         r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|ARCH_X86|"
         r"ARCH_ARM64|ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
@@ -1864,7 +1868,7 @@ def check_common_c_has_no_isa_conditionals():
                     errors.append(
                         f"[common-c-no-isa-conditional] "
                         f"{rel_to_root(fpath)}:{idx}: select an object or "
-                        f"facade backend (use IR0_LEGACY_PC_IO for PC-only paths): "
+                        f"facade backend (PC-only code: scripts/make/platform/pc.mk): "
                         f"{line.strip()}"
                     )
     return errors
@@ -1963,10 +1967,29 @@ def check_portable_task_api_has_no_x86_register_aliases():
     return errors
 
 
+def platform_object_sources(platform):
+    """C sources of the objects scripts/make/platform/<platform>.mk lists."""
+    path = ROOT / "scripts" / "make" / "platform" / f"{platform}.mk"
+    if not path.is_file():
+        return set()
+    return {m.group(1) + ".c"
+            for m in re.finditer(r"([\w./-]+)\.o\b", read_file_text(path))}
+
+
+# x86 headers a PC platform driver may include: port I/O, MSRs, CPUID.
+PC_PLATFORM_ASM_INCLUDE = re.compile(
+    r'^\s*#\s*include\s*<asm/(?:io|msr|processor|debugreg)\.h>')
+
+
 def check_portable_code_has_no_private_asm_headers():
-    """Allow only reviewed layout-selection gateways into private asm headers."""
+    """Allow only reviewed layout-selection gateways into private asm headers.
+
+    The PC platform's device drivers (scripts/make/platform/pc.mk) build
+    only on x86-64 and may include the x86 port-I/O, MSR and CPUID headers.
+    """
     errors = []
     private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
+    pc_sources = platform_object_sources("pc")
     selection_gateways = {
         "includes/ir0/task.h": "#include <asm/task_context.h>",
         "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
@@ -1979,6 +2002,7 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/atomic.h": "#include <asm/atomic.h>",
         "includes/ir0/stat_user.h": "#include <asm/stat.h>",
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
+        "includes/ir0/kexec.h": "#include <asm/kexec.h>",
     }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
              ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "fs",
@@ -1994,6 +2018,8 @@ def check_portable_code_has_no_private_asm_headers():
                 if private_include.search(line):
                     rel = str(rel_to_root(fpath))
                     if selection_gateways.get(rel) == line.strip():
+                        continue
+                    if rel in pc_sources and PC_PLATFORM_ASM_INCLUDE.search(line):
                         continue
                     errors.append(
                         f"[portable-no-private-asm-header] "
@@ -2718,7 +2744,7 @@ def _register_name_self_test() -> list[str]:
 # Terminal halt: the only callers of cpu_halt() (Linux stop_this_cpu users).
 TERMINAL_HALT_CALLERS = frozenset((
     "kernel/problems/oops.c",
-    "kernel/power/kexec.c",
+    "kernel/kexec/kexec.c",
     "kernel/power/power_manag.c",
 ))
 TERMINAL_HALT_HEADER = "includes/ir0/oops_port.h"
@@ -3032,6 +3058,99 @@ def check_no_syscall_stubs():
     return errors
 
 
+# The PC is a platform: its devices build from scripts/make/platform/pc.mk and
+# generic code reaches them through facades the platform registers. A
+# preprocessor switch for "legacy PC" hardware (the retired IR0_LEGACY_PC_IO
+# or a successor) brings the branch back, and port I/O outside x86 code and
+# the PC platform sources means generic code, or another ISA, touches PC
+# hardware. No ledger: nothing is left.
+LEGACY_PC_MACROS = ("IR0_LEGACY_PC_IO", "CONFIG_LEGACY_PC", "CONFIG_PLATFORM_PC",
+                    "CONFIG_X86_PC", "CONFIG_HAS_IOPORT", "HAS_IOPORT")
+LEGACY_PC_DIRECTIVE_RE = re.compile(
+    r"^\s*#\s*(?:if|ifdef|ifndef|elif|define)\b.*\b("
+    + "|".join(LEGACY_PC_MACROS) + r")\b")
+PORT_IO_RE = re.compile(
+    r"\b(inb|outb|inw|outw|inl|outl|insb|insw|insl|outsb|outsw|outsl|"
+    r"io_wait)\s*\(")
+PORT_IO_ALLOWED = ("arch/x86-64/",)
+LEGACY_PC_TREES = SINGLE_DECL_TREES + ("cpp",)
+
+
+def legacy_pc_violations(rel: str, text: str,
+                         pc_sources: set[str]) -> list[tuple[int, str]]:
+    """Return (line, name) for each legacy-PC switch or stray port I/O."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    port_io_ok = rel.startswith(PORT_IO_ALLOWED) or rel in pc_sources
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = LEGACY_PC_DIRECTIVE_RE.search(line)
+        if match:
+            found.append((lineno, match.group(1)))
+            continue
+        match = PORT_IO_RE.search(line)
+        if match and not port_io_ok:
+            found.append((lineno, match.group(1)))
+    return found
+
+
+def _legacy_pc_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    pc_sources = {"drivers/storage/ata.c"}
+    cases = {
+        "drivers/char/vga.c": ("#if IR0_LEGACY_PC_IO\n\tvga[i] = c;\n"
+                               "#elif !defined(CONFIG_HAS_IOPORT)\n#endif\n",
+                               [1, 3]),
+        "includes/ir0/x.h": ("#ifndef IR0_LEGACY_PC_IO\n"
+                             "#define IR0_LEGACY_PC_IO 0\n#endif\n", [1, 2]),
+        "drivers/net/x.c": ("\toutb(0x3f8, c);\n\tv = inl(PCI_DATA);\n"
+                            "\tio_wait();\n", [1, 2, 3]),
+        "arch/arm64/sources/interface.c": ("uint8_t inb(uint16_t port)\n{\n"
+                                           "\treturn 0;\n}\n", [1]),
+        "kernel/clean.c": ("/* #if IR0_LEGACY_PC_IO and outb(0x80, 0) */\n"
+                           "// inb(0x64);\n"
+                           "static const char *m = \"outw(\";\n"
+                           "\tsb_inbox(1);\n\tkeyboard_inb_count++;\n", []),
+        "arch/x86-64/sources/pic.c": ("\toutb(0x20, 0x11);\n", []),
+        "drivers/storage/ata.c": ("\tstatus = inb(ATA_STATUS);\n", []),
+    }
+    failures = []
+    for rel, (text, expected) in cases.items():
+        got = [line for line, _ in legacy_pc_violations(rel, text, pc_sources)]
+        if got != expected:
+            failures.append(f"[legacy-pc-io] self-test {rel}: expected lines "
+                            f"{expected}, got {got}")
+    return failures
+
+
+def check_legacy_pc_io():
+    """Reject legacy-PC preprocessor switches anywhere and port I/O outside
+    arch/x86-64/ and the PC platform sources."""
+    errors = _legacy_pc_self_test()
+    pc_sources = platform_object_sources("pc")
+    for tree in LEGACY_PC_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            for lineno, name in legacy_pc_violations(
+                    rel, read_file_text(path), pc_sources):
+                if name in LEGACY_PC_MACROS:
+                    errors.append(
+                        f"[legacy-pc-io] {rel}:{lineno}: {name} switches PC "
+                        "hardware in the preprocessor; list the PC code in "
+                        "scripts/make/platform/pc.mk and reach it through a "
+                        "facade the platform registers")
+                else:
+                    errors.append(
+                        f"[legacy-pc-io] {rel}:{lineno}: port I/O {name}() "
+                        "outside arch/x86-64/ and the PC platform sources "
+                        "(scripts/make/platform/pc.mk)")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3328,7 +3447,6 @@ _LAYOUT_KR_HEAD_RE = re.compile(r"^[A-Za-z_][^;=#]*\)\s*\{\s*$")
 # its entry; an entry whose violation is gone fails the guard so the list
 # only shrinks.
 INCLUDE_LAYOUT_BASELINE = frozenset({
-    "duplicate drivers/virtio/virtio_9p.c <ir0/cpu.h>",
     "duplicate drivers/virtio/virtio_9p.c <ir0/ktm/klog.h>",
     "duplicate fs/devfs.c <ir0/arch_cpu.h>",
     "duplicate fs/devfs_internal.h <string.h>",
@@ -3435,7 +3553,8 @@ def main():
         failures = (self_test_include_layout() + _busy_wait_self_test() +
                     _register_name_self_test() + _uaccess_self_test() +
                     _raw_atomic_self_test() +
-                    _undefined_prototype_self_test())
+                    _undefined_prototype_self_test() +
+                    _legacy_pc_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3443,7 +3562,7 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics, undefined-prototype)")
+              "no-raw-atomics, undefined-prototype, legacy-pc-io)")
         return 0
 
     errors = []
@@ -3519,6 +3638,7 @@ def main():
     errors.extend(check_no_raw_atomics())
     errors.extend(check_no_isa_named_headers())
     errors.extend(check_no_syscall_stubs())
+    errors.extend(check_legacy_pc_io())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())

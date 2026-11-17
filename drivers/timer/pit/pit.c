@@ -12,12 +12,14 @@
  */
 
 #include "pit.h"
+#include <config.h>
 #include <ir0/oops.h>
 #include <arch_interface.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/clock.h>
 #include <ir0/resource_registry.h>
+#include <asm/io.h>
 
 /* Driver registration structures */
 static int32_t pit_hw_init(void)
@@ -65,4 +67,10 @@ void init_PIT(uint32_t frequency)
 
     resource_register_irq(0, "timer");
     resource_register_ioport(PIT_REG_CHAN0, PIT_REG_COMMAND, "timer0");
+}
+
+clock_timer_t clock_timer_init(void)
+{
+	init_PIT(CONFIG_TICK_RATE_HZ);
+	return CLOCK_TIMER_PIT;
 }

@@ -110,6 +110,10 @@ guard does not see it. **27 uses in 8 generic files**:
 Proposal (X-1): split each into a per-platform file selected by the build
 (or by a platform driver registering itself), then add
 `IR0_LEGACY_PC_IO` to the guard's ISA-macro list.
+*Done:* the macro and `driver_backend.h` are gone; PC devices build from
+`scripts/make/platform/pc.mk` and register with the class facades
+(clock, console text screen, input, audio, NIC table, boot entries via
+`ir0_boot_arch_drivers()`); arch-guard `[legacy-pc-io]`.
 
 ### 0.5 arm64 implements x86 primitives with invented values
 
@@ -124,6 +128,11 @@ defconfig turns them off; `setup/configs/hub-rpi4.defconfig:24,26` enables
 Bluetooth and the mouse). Proposal (X-4): move MSR/CPUID/debug-register
 and port I/O into an x86-only `asm/` header; drivers that need them become
 x86-only objects; arm64 gets no stub.
+*Done for port I/O, MSR, CPUID and debug registers:* x86
+`asm/{io,msr,processor,debugreg}.h`; the port-I/O drivers (PC speaker,
+SB16/Adlib/ISA DMA, ATA/AHCI/NVMe, USB host, virtio-9p PCI transport,
+Bluetooth over COM) build only on the PC platform; the twelve arm64 stubs
+are deleted.
 
 ### 0.6 Prototypes with no definition and no caller
 

@@ -409,8 +409,7 @@ KERNEL_OBJS = \
 	arch/common/boot_arch.o \
 	arch/common/boot_port.o \
 	arch/common/oops_port.o \
-	kernel/boot/boot_flow.o \
-	kernel/boot/kernel_wiring.o \
+	kernel/main.o \
 	kernel/boot/boot_init.o \
 	kernel/boot/boot_firmware_sysfs.o \
 	kernel/boot/boot_params.o \
@@ -453,7 +452,7 @@ KERNEL_OBJS = \
 	smp/percpu.o \
     kernel/process/credentials.o \
     kernel/power/power_manag.o \
-    kernel/power/kexec.o \
+    kernel/kexec/kexec.o \
     kernel/syscalls.o \
     kernel/syscalls/fs_syscalls.o \
     kernel/syscalls/fs_rw.o \
@@ -672,8 +671,6 @@ LIB_OBJS = \
     kernel/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
-    drivers/input/ps2_set1.o \
-    drivers/input/ps2_mouse_pkt.o \
     drivers/tty/ash_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
@@ -690,13 +687,6 @@ LIB_OBJS = \
     $(INPUT_BACKEND_OBJ) \
     $(AUDIO_BACKEND_OBJ) \
     includes/string.o
-
-# ARM64 virtio keyboard has no i8042 — drop PS/2 scan-code tables.
-ifeq ($(ARCH),arm64)
-LIB_OBJS_PRODUCT := $(filter-out drivers/input/ps2_set1.o drivers/input/ps2_mouse_pkt.o,$(LIB_OBJS))
-else
-LIB_OBJS_PRODUCT := $(LIB_OBJS)
-endif
 
 INTERRUPT_OBJS_X86_64 = \
     arch/x86-64/sources/interrupt/idt.o \
@@ -716,13 +706,7 @@ endif
 
 DRIVER_OBJS = \
     drivers/driver_bootstrap.o \
-    drivers/input/ps2.o \
-    drivers/timer/pit/pit.o \
     drivers/timer/clock_system.o \
-    drivers/timer/hpet/hpet.o \
-    drivers/timer/hpet/find_hpet.o \
-    drivers/timer/acpi/acpi_pm.o \
-    drivers/timer/lapic/lapic.o \
     drivers/storage/fs_types.o \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
@@ -732,22 +716,6 @@ DRIVER_OBJS = \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
-
-# COM1 16550 only on x86; ARM64 uses arch/arm64/sources/serial.c (PL011).
-ifneq ($(ARCH),arm64)
-DRIVER_OBJS += drivers/serial/serial.o
-DRIVER_OBJS += drivers/timer/rtc/rtc.o
-endif
-
-# ARM64: drop PS/2 + legacy x86 timer probes (virt uses GIC + arch timer).
-ifeq ($(ARCH),arm64)
-DRIVER_OBJS := $(filter-out drivers/input/ps2.o \
-	drivers/timer/pit/pit.o \
-	drivers/timer/hpet/hpet.o \
-	drivers/timer/hpet/find_hpet.o \
-	drivers/timer/acpi/acpi_pm.o \
-	drivers/timer/lapic/lapic.o,$(DRIVER_OBJS))
-endif
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
 
@@ -849,97 +817,10 @@ NET_OBJS = \
     net/dns.o
 NET_DRIVER_OBJS = \
     drivers/net/net_drivers.o
-ifneq ($(CONFIG_DRV_NIC_RTL8139),n)
-ifeq ($(ARCH),x86-64)
-NET_DRIVER_OBJS += drivers/net/rtl8139.o
-endif
-endif
-ifneq ($(CONFIG_DRV_NIC_VIRTIO_NET),n)
-ifeq ($(ARCH),x86-64)
-NET_DRIVER_OBJS += drivers/net/virtio_net.o
-endif
-endif
-ifeq ($(ARCH),arm64)
-ifneq ($(CONFIG_DRV_NIC_BCMGENET),n)
-NET_DRIVER_OBJS += drivers/net/bcmgenet.o
-endif
-endif
 else
 NET_OBJS =
 NET_DRIVER_OBJS =
 endif
-
-# Sound (Sound Blaster 16 + Adlib OPL2 + ISA DMA)
-ifneq ($(CONFIG_ENABLE_SOUND),n)
-SOUND_OBJS = \
-    sound/sound_blaster.o \
-    sound/adlib.o \
-    drivers/dma/dma.o
-else
-SOUND_OBJS =
-endif
-
-# Bluetooth (HCI-UART transport + device manager)
-ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
-BLUETOOTH_OBJS = \
-    drivers/bluetooth/hci_uart.o \
-    drivers/bluetooth/hci_core.o \
-    drivers/bluetooth/bluetooth_iface.o \
-    drivers/bluetooth/bt_device.o \
-    drivers/bluetooth/bt_sysfs.o \
-    drivers/bluetooth/bluetooth_init.o
-else
-BLUETOOTH_OBJS = \
-    drivers/bluetooth/bluetooth_iface_stub.o
-endif
-
-# USB host scaffold (PCI scan)
-ifneq ($(CONFIG_ENABLE_USB_HOST),n)
-USB_OBJS = drivers/usb/usb_host.o
-else
-USB_OBJS =
-endif
-
-
-# PS/2 mouse
-ifneq ($(CONFIG_ENABLE_MOUSE),n)
-MOUSE_OBJS = drivers/input/ps2_mouse.o
-else
-MOUSE_OBJS =
-endif
-
-ifeq ($(ARCH),arm64)
-MOUSE_OBJS :=
-endif
-
-# PC speaker
-ifneq ($(CONFIG_ENABLE_PC_SPEAKER),n)
-PC_SPEAKER_OBJS = drivers/char/pc_speaker.o
-else
-PC_SPEAKER_OBJS =
-endif
-
-# ATA core / block layer
-ifneq ($(CONFIG_ENABLE_STORAGE_ATA),n)
-STORAGE_ATA_OBJS = \
-    drivers/storage/ata.o \
-    drivers/storage/ata_helpers.o
-else
-STORAGE_ATA_OBJS =
-endif
-
-ifneq ($(CONFIG_ENABLE_STORAGE_ATA),n)
-ifneq ($(CONFIG_ENABLE_STORAGE_ATA_BLOCK),n)
-STORAGE_ATA_BLOCK_OBJS = drivers/storage/ata_block.o
-else
-STORAGE_ATA_BLOCK_OBJS =
-endif
-else
-STORAGE_ATA_BLOCK_OBJS =
-endif
-
-STORAGE_AHCI_OBJS = drivers/storage/ahci.o
-STORAGE_NVME_OBJS = drivers/storage/nvme.o
 
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
@@ -957,6 +838,14 @@ endif
 
 # Architecture source inventories.
 -include scripts/make/arch-sources.mk
+
+# Platform devices: each ISA names the platform it boots on, and that
+# platform's fragment lists its device objects (PLATFORM_OBJS). A new platform
+# is a new registry entry and file, never a branch here.
+PLATFORM_x86-64 := pc
+PLATFORM_arm64 := dt
+PLATFORM := $(PLATFORM_$(ARCH))
+include scripts/make/platform/$(PLATFORM).mk
 
 ifeq ($(ARCH),arm64)
 CFLAGS += -DIR0_ARM64_PRODUCT_KERNEL=1
@@ -1004,13 +893,10 @@ CFLAGS += -include $(KERNEL_ROOT)/config.h
 endif
 
 # All objects (kernel sin tests in-kernel)
-ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS_PRODUCT) $(INTERRUPT_OBJS) \
-           $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
+ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+           $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
-           $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-           $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
-           $(STORAGE_NVME_OBJS)
+           $(NET_OBJS) $(NET_DRIVER_OBJS) $(VBE_OBJS)
 
 ifeq ($(ARCH),arm64)
 ALL_OBJS := $(filter-out cpp/runtime/compat.o,$(ALL_OBJS))
@@ -1018,8 +904,7 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o \
-	build/test/kernel/boot/boot_flow.o build/test/kernel/boot/kernel_wiring.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
 KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
@@ -1030,17 +915,14 @@ KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o kernel/boot/boot_flow.o \
-	kernel/boot/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
+ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o \
+	arch/common/boot_arch.o arch/common/boot_port.o \
 	arch/common/oops_port.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
-                $(DRIVER_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
+                $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
-                $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-                $(USB_OBJS) $(MOUSE_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
-           $(STORAGE_NVME_OBJS)
+                $(NET_OBJS) $(NET_DRIVER_OBJS) $(VBE_OBJS)
 
 AUTOCONF_HDR := $(KERNEL_ROOT)/includes/generated/autoconf.h
 ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
@@ -1141,7 +1023,7 @@ kernel-arm64.bin: kernel-arm64-product.bin arm64-common-core-compile arm64-provi
 	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64.img
 	@echo "✓ Kernel image ready: $@"
 
-# Portable ARM64 kernel: same ir0_kernel_boot chain as x86.
+# Portable ARM64 kernel: same kmain() boot sequence as x86.
 # `make kernel-arm64-product.bin` forces ARCH=arm64 via goal detection.
 kernel-arm64-product.bin: $(ALL_OBJS) arch/arm64/linker.ld
 	@echo "  LD      $@"
@@ -1169,8 +1051,7 @@ kernel-x64-userspace.iso: kernel-x64.iso
 
 # Kernel con tests in-kernel (solo al hacer make tests / kernel-tests)
 # config.h documents IR0_KERNEL_TESTS; Makefile ensures it for this target.
-# The boot entry objects (boot_init, boot_flow, kernel_wiring) must be built
-# with that flag: production objects would skip kernel_test_run_all().
+# The boot step object (boot_init) must be built with that flag: production objects would skip kernel_test_run_all().
 kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@echo "  LD      $@ (with in-kernel tests)"
 	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)
@@ -1271,7 +1152,6 @@ endif
 
 ifeq ($(ARCH),x86-64)
 CFLAGS += -DARCH_X86_64 -DARCH_X86
-CFLAGS += -DIR0_LEGACY_PC_IO=1
 QEMU = qemu-system-x86_64
 else
 CFLAGS += -DARCH_ARM64 $(ARM64_BOARD_CFLAGS)

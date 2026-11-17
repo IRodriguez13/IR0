@@ -21,6 +21,7 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <string.h>
+#include <asm/io.h>
 
 /* Compiler optimization hints */
 #define likely(x)	__builtin_expect(!!(x), 1)

@@ -19,9 +19,11 @@
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/input.h>
+#include <ir0/input_backend.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/ps2_mouse_pkt.h>
 #include <ir0/console.h>
+#include <asm/io.h>
 
 static void ps2_mouse_shutdown(void);
 static bool ps2_mouse_enable(void);
@@ -193,9 +195,12 @@ static ir0_driver_info_t mouse_info = {
 /**
  * ps2_mouse_init - register PS/2 mouse driver
  */
+static const struct input_mouse_ops ps2_mouse_input_ops;
+
 bool ps2_mouse_init(void)
 {
     LOG_INFO("PS2_MOUSE", "Registering PS/2 Mouse driver...");
+    input_register_mouse(&ps2_mouse_input_ops);
     ir0_driver_t* drv = ir0_register_driver(&mouse_info, &mouse_ops);
     return drv != NULL;
 }
@@ -651,3 +656,46 @@ static bool ps2_mouse_enable_5buttons(void)
 
     return ps2_controller_read_data() == PS2_MOUSE_ID_5BUTTON;
 }
+
+static bool ps2_mouse_input_state(ir0_mouse_state_t *out)
+{
+	if (!ps2_mouse_is_available())
+		return false;
+	out->x = mouse_state.x;
+	out->y = mouse_state.y;
+	out->wheel = mouse_state.wheel;
+	out->left_button = mouse_state.left_button;
+	out->right_button = mouse_state.right_button;
+	out->middle_button = mouse_state.middle_button;
+	out->button4 = mouse_state.button4;
+	out->button5 = mouse_state.button5;
+	out->has_wheel = mouse_state.has_wheel;
+	out->has_5buttons = mouse_state.has_5buttons;
+	out->resolution = mouse_state.resolution;
+	out->sample_rate = mouse_state.sample_rate;
+	out->type = (uint8_t)mouse_state.type;
+	out->initialized = mouse_state.initialized;
+	return true;
+}
+
+/* Linux /dev/mouse compatibility: one standard three-byte PS/2 packet. */
+static int ps2_mouse_input_packet(uint8_t packet[3])
+{
+	ps2_mouse_packet_t source;
+
+	if (!ps2_mouse_packet_available() || !ps2_mouse_read_packet(&source))
+		return 0;
+	packet[0] = (uint8_t)(source.flags | 0x08u);
+	packet[1] = (uint8_t)source.delta_x;
+	packet[2] = (uint8_t)source.delta_y;
+	return 3;
+}
+
+static const struct input_mouse_ops ps2_mouse_input_ops = {
+	.feed_byte = ps2_mouse_feed_byte,
+	.is_available = ps2_mouse_is_available,
+	.get_state = ps2_mouse_input_state,
+	.set_sample_rate = ps2_mouse_set_sample_rate,
+	.packet_available = ps2_mouse_packet_available,
+	.read_packet = ps2_mouse_input_packet,
+};

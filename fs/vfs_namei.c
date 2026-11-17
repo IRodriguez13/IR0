@@ -17,6 +17,7 @@
 #include "vfs.h"
 #include <ir0/path.h>
 #include <ir0/kmem.h>
+#include <ir0/chmod.h>
 #include <ir0/cred.h>
 #include <ir0/process.h>
 #include <string.h>
@@ -43,6 +44,38 @@ int vfs_stat(const char *path, stat_t *buf)
     return ret;
 }
 
+/*
+ * may_create - Linux fs/namei.c may_create(): may the caller add the name
+ * @path? A new name changes the parent directory: it needs search on
+ * every directory on the way and write and search on the parent, which
+ * must exist (ENOENT) and be a directory (ENOTDIR). The caller has
+ * checked that the name is free: in Linux EEXIST comes first.
+ */
+int may_create(const char *path)
+{
+    const struct ir0_task_cred *cred = ir0_current_cred();
+    char parent[MAX_PATH];
+    stat_t dir;
+    int ret;
+
+    if (!cred)
+        return -ESRCH;
+    ret = vfs_check_dir_traverse(path);
+    if (ret != 0)
+        return ret;
+    ret = vfs_parent_dir(path, parent, sizeof(parent));
+    if (ret != 0)
+        return ret;
+    ret = vfs_stat(parent, &dir);
+    if (ret != 0)
+        return ret;
+    if ((dir.st_mode & S_IFMT) != 0 && !S_ISDIR(dir.st_mode))
+        return -ENOTDIR;
+    if (generic_permission(cred, &dir, ACCESS_WRITE | ACCESS_EXEC) != 0)
+        return -EACCES;
+    return 0;
+}
+
 int vfs_mkdir(const char *path, int mode)
 {
     int ret = vfs_validate_path(path);
@@ -57,10 +90,6 @@ int vfs_mkdir(const char *path, int mode)
     ret = vfs_lookup_parent(path, parent, sizeof(parent));
     if (ret != 0)
         return ret;
-    if (strcmp(parent, "/") != 0 &&
-        (vfs_stat(parent, &st) != 0 ||
-         generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0))
-        return -EACCES;
 
     if (strcmp(path, "/") == 0)
         return -EEXIST;
@@ -68,10 +97,53 @@ int vfs_mkdir(const char *path, int mode)
     if (vfs_stat(path, &st) == 0 && (st.st_mode & S_IFMT) != 0)
         return -EEXIST;
 
+    ret = may_create(path);
+    if (ret != 0)
+        return ret;
+
     struct vfs_ops *ops = vfs_ops_for_path(path);
     if (!ops || !ops->mkdir)
         return -ENOSYS;
     return vfs_ops_mkdir(ops, path, (mode_t)mode);
+}
+
+/*
+ * may_delete - Linux fs/namei.c may_delete(): may the caller remove the
+ * name @path, which refers to @victim? Removing a name changes the parent
+ * directory, never the victim: it needs search on every directory on the
+ * way and write and search on the parent. In a sticky (+t) parent only
+ * the owner of the victim, the owner of the parent or root may remove it
+ * (check_sticky(), EPERM). Last, @victim must be a directory when @isdir
+ * is set (ENOTDIR) and must not be one otherwise (EISDIR).
+ */
+int may_delete(const char *path, const stat_t *victim, bool isdir)
+{
+    const struct ir0_task_cred *cred = ir0_current_cred();
+    char parent[MAX_PATH];
+    stat_t dir;
+    int ret;
+
+    if (!cred)
+        return -ESRCH;
+    ret = vfs_check_dir_traverse(path);
+    if (ret != 0)
+        return ret;
+    ret = vfs_parent_dir(path, parent, sizeof(parent));
+    if (ret != 0)
+        return ret;
+    ret = vfs_stat(parent, &dir);
+    if (ret != 0)
+        return ret;
+    if (generic_permission(cred, &dir, ACCESS_WRITE | ACCESS_EXEC) != 0)
+        return -EACCES;
+    if ((dir.st_mode & S_ISVTX) && cred->euid != ROOT_UID &&
+        cred->euid != victim->st_uid && cred->euid != dir.st_uid)
+        return -EPERM;
+    if (isdir && !S_ISDIR(victim->st_mode))
+        return -ENOTDIR;
+    if (!isdir && S_ISDIR(victim->st_mode))
+        return -EISDIR;
+    return 0;
 }
 
 int vfs_unlink(const char *path)
@@ -89,11 +161,9 @@ int vfs_unlink(const char *path)
     if (vfs_stat(path, &st) != 0)
         return -ENOENT;
 
-    if (S_ISDIR(st.st_mode))
-        return -EISDIR;
-
-    if (generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
-        return -EACCES;
+    ret = may_delete(path, &st, false);
+    if (ret != 0)
+        return ret;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);
     if (!ops || !ops->unlink)
@@ -116,14 +186,11 @@ int vfs_link(const char *oldpath, const char *newpath)
     if (generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
         return -EACCES;
 
-    char parent[MAX_PATH];
-    if (vfs_parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (vfs_stat(parent, &st) != 0 ||
-            generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
-            return -EACCES;
-
     if (vfs_stat(newpath, &st) == 0)
         return -EEXIST;
+    ret = may_create(newpath);
+    if (ret != 0)
+        return ret;
 
     struct vfs_ops *ops = vfs_ops_for_path(oldpath);
     if (!ops || !ops->link)
@@ -143,6 +210,9 @@ int vfs_symlink(const char *target, const char *linkpath)
         return ret;
     if (!ir0_current_cred())
         return -ESRCH;
+    ret = may_create(linkpath);
+    if (ret != 0)
+        return ret;
     ops = vfs_ops_for_path(linkpath);
     if (!ops || !ops->symlink)
         return -ENOSYS;
@@ -165,17 +235,25 @@ int vfs_readlink(const char *path, char *buf, size_t buflen)
     return vfs_ops_readlink(ops, path, buf, buflen);
 }
 
-/* Nonzero when the directory @path lists any entry besides "." and "..". */
+/*
+ * Nonzero when the directory @path lists any entry besides "." and "..".
+ * It asks the backend directly: replacing a directory needs no read
+ * permission on it.
+ */
 static int vfs_dir_has_entries(const char *path)
 {
-    struct vfs_dirent *ents = kmalloc(3 * sizeof(*ents));
+    struct vfs_ops *ops = vfs_ops_for_path(path);
+    struct vfs_dirent *ents;
     int n;
     int i;
     int found = 0;
 
+    if (!ops || !ops->readdir)
+        return -ENOSYS;
+    ents = kmalloc(3 * sizeof(*ents));
     if (!ents)
         return -ENOMEM;
-    n = vfs_readdir(path, ents, 3);
+    n = vfs_ops_readdir(ops, path, ents, 3);
     for (i = 0; i < n && !found; i++)
         found = strcmp(ents[i].name, ".") != 0 && strcmp(ents[i].name, "..") != 0;
     kfree(ents);
@@ -188,6 +266,12 @@ static int vfs_dir_has_entries(const char *path)
  * directory is EISDIR, a directory over a non-directory ENOTDIR, and a
  * directory over a non-empty directory ENOTEMPTY. Two names for the same
  * file leave both in place.
+ *
+ * Permissions follow vfs_rename() in fs/namei.c: the old name is deleted
+ * and the new one created, or deleted first when it exists, each with the
+ * check of its own directory (may_delete(), may_create()); the file itself
+ * needs nothing. A directory that moves to another parent also needs
+ * write on itself, for its ".." entry.
  */
 int vfs_rename(const char *oldpath, const char *newpath)
 {
@@ -201,21 +285,13 @@ int vfs_rename(const char *oldpath, const char *newpath)
     stat_t st_old;
     stat_t st_new;
     int have_new;
+    bool isdir;
+    char old_parent[MAX_PATH];
+    char new_parent[MAX_PATH];
     struct vfs_ops *ops;
 
     if (vfs_stat(oldpath, &st_old) != 0)
         return -ENOENT;
-
-    if (generic_permission(ir0_current_cred(), &st_old,
-                           ACCESS_READ | ACCESS_WRITE) != 0)
-        return -EACCES;
-
-    char parent[MAX_PATH];
-    if (vfs_parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (vfs_stat(parent, &st_new) != 0 ||
-            generic_permission(ir0_current_cred(), &st_new,
-                               ACCESS_WRITE) != 0)
-            return -EACCES;
 
     struct vfs_mount *m_old = vfs_find_mount(oldpath);
     struct vfs_mount *m_new = vfs_find_mount(newpath);
@@ -223,22 +299,37 @@ int vfs_rename(const char *oldpath, const char *newpath)
         return -EXDEV;
 
     have_new = vfs_stat(newpath, &st_new) == 0;
-    if (have_new)
+    if (have_new &&
+        (strcmp(oldpath, newpath) == 0 ||
+         (st_old.st_ino != 0 && st_old.st_ino == st_new.st_ino &&
+          st_old.st_dev == st_new.st_dev)))
+        return 0;
+
+    isdir = S_ISDIR(st_old.st_mode);
+    ret = may_delete(oldpath, &st_old, isdir);
+    if (ret != 0)
+        return ret;
+    ret = have_new ? may_delete(newpath, &st_new, isdir) : may_create(newpath);
+    if (ret != 0)
+        return ret;
+    if (isdir)
     {
-        if (strcmp(oldpath, newpath) == 0 ||
-            (st_old.st_ino != 0 && st_old.st_ino == st_new.st_ino &&
-             st_old.st_dev == st_new.st_dev))
-            return 0;
-        if (S_ISDIR(st_old.st_mode) && !S_ISDIR(st_new.st_mode))
-            return -ENOTDIR;
-        if (!S_ISDIR(st_old.st_mode) && S_ISDIR(st_new.st_mode))
-            return -EISDIR;
-        if (S_ISDIR(st_new.st_mode))
-        {
-            ret = vfs_dir_has_entries(newpath);
-            if (ret != 0)
-                return ret < 0 ? ret : -ENOTEMPTY;
-        }
+        ret = vfs_parent_dir(oldpath, old_parent, sizeof(old_parent));
+        if (ret == 0)
+            ret = vfs_parent_dir(newpath, new_parent, sizeof(new_parent));
+        if (ret != 0)
+            return ret;
+        if (strcmp(old_parent, new_parent) != 0 &&
+            generic_permission(ir0_current_cred(), &st_old,
+                               ACCESS_WRITE) != 0)
+            return -EACCES;
+    }
+
+    if (have_new && S_ISDIR(st_new.st_mode))
+    {
+        ret = vfs_dir_has_entries(newpath);
+        if (ret != 0)
+            return ret < 0 ? ret : -ENOTEMPTY;
     }
 
     ops = vfs_ops_for_path(oldpath);
@@ -281,21 +372,10 @@ int vfs_rmdir(const char *path)
     stat_t st;
     if (vfs_stat(norm, &st) != 0)
         return -ENOENT;
-    if (!S_ISDIR(st.st_mode))
-        return -ENOTDIR;
 
-    ret = vfs_check_dir_traverse(norm);
+    ret = may_delete(norm, &st, true);
     if (ret != 0)
         return ret;
-
-    char parent[MAX_PATH];
-    if (vfs_parent_dir(norm, parent, sizeof(parent)) == 0)
-    {
-        if (vfs_stat(parent, &st) != 0 ||
-            generic_permission(ir0_current_cred(), &st,
-                               ACCESS_WRITE | ACCESS_EXEC) != 0)
-            return -EACCES;
-    }
 
     struct vfs_ops *ops = vfs_ops_for_path(norm);
     if (!ops || !ops->rmdir)
@@ -317,7 +397,8 @@ int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
         return -EACCES;
     if ((st.st_mode & S_IFMT) != 0 && !S_ISDIR(st.st_mode))
         return -ENOTDIR;
-    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+    /* Listing a directory reads it; search only lets a path go through. */
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
         return -EACCES;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);

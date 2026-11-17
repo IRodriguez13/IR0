@@ -9,6 +9,7 @@
 #include <ir0/cpu.h>
 #include <ir0/process.h>
 #include <string.h>
+#include <asm/debugreg.h>
 
 static void ir0_debug_clear_dr6_dr7(void);
 

@@ -63,10 +63,6 @@ uint64_t early_clock_read(void)
 	return timer_read();
 }
 
-void io_wait(void)
-{
-}
-
 void smp_mb(void)
 {
 	__asm__ volatile("dsb ish" ::: "memory");
@@ -120,80 +116,6 @@ void ir0_boot_port_unmask_irqs(void)
 void syscall_init(void)
 {
 	/* SVC from EL0 is handled in exc_early.c; VBAR installed at irq_tables_init(). */
-}
-
-uint8_t inb(uint16_t port)
-{
-	(void)port;
-	return 0;
-}
-
-void outb(uint16_t port, uint8_t value)
-{
-	(void)port;
-	(void)value;
-}
-
-uint16_t inw(uint16_t port)
-{
-	(void)port;
-	return 0;
-}
-
-void outw(uint16_t port, uint16_t value)
-{
-	(void)port;
-	(void)value;
-}
-
-uint32_t inl(uint16_t port)
-{
-	(void)port;
-	return 0;
-}
-
-void outl(uint16_t port, uint32_t value)
-{
-	(void)port;
-	(void)value;
-}
-
-void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
-	   uint32_t *edx)
-{
-	(void)leaf;
-	if (eax)
-		*eax = 0;
-	if (ebx)
-		*ebx = 0;
-	if (ecx)
-		*ecx = 0;
-	if (edx)
-		*edx = 0;
-}
-
-uint64_t rdmsr(uint32_t msr)
-{
-	(void)msr;
-	return 0;
-}
-
-void wrmsr(uint32_t msr, uint64_t value)
-{
-	(void)msr;
-	(void)value;
-}
-
-void debug_reg_write(unsigned int regno, uint64_t value)
-{
-	(void)regno;
-	(void)value;
-}
-
-uint64_t debug_reg_read(unsigned int regno)
-{
-	(void)regno;
-	return 0;
 }
 
 /*

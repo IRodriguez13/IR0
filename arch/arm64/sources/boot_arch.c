@@ -20,6 +20,16 @@ void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params)
 	arm64_platform_setup_for_portable_boot(params);
 }
 
+/*
+ * QEMU virt and the Raspberry Pi boards register no bootstrap drivers: the
+ * GIC, PL011, PL031, generic timer and virtio-mmio block device are brought
+ * up by the early platform setup, and the bcmgenet NIC is listed in
+ * drivers/net/net_drivers_dt.c.
+ */
+void ir0_boot_arch_drivers(void)
+{
+}
+
 void ir0_boot_arch_userspace_handoff_smoke(void)
 {
 #if defined(IR0_ARM64_PRODUCT_KERNEL)

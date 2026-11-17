@@ -12,7 +12,6 @@
  */
 
 #include <interrupt/idt.h>
-#include <interrupt/io.h>
 #include <ir0/ktm/klog.h>
 
 /* Present, DPL=0, 64-bit interrupt gate (type 1110) */

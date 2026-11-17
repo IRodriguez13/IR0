@@ -7,7 +7,7 @@
  *
  * References:
  * - Linux man7 kexec_load(2)
- * - Linux kernel/power/kexec.c (segment cap, arch flags)
+ * - Linux kernel/kexec.c (segment cap, arch flags)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -65,7 +65,7 @@ int64_t sys_kexec_load(unsigned long entry, unsigned long nr_segments,
 		return -EINVAL;
 
 	arch = flags & KEXEC_ARCH_MASK;
-	if (arch != KEXEC_ARCH_DEFAULT && arch != KEXEC_ARCH_X86_64)
+	if (arch != KEXEC_ARCH_DEFAULT && arch != KEXEC_ARCH)
 		return -EINVAL;
 
 	if (nr_segments == 0 || nr_segments > KEXEC_SEGMENT_MAX)

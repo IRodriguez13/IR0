@@ -52,6 +52,16 @@ void ktm_audio_mock_set_play_result(int result)
 	g_play_result = result;
 }
 
+/* The mock replaces the whole facade: a registered device is not used. */
+void audio_register_device(const struct audio_ops *ops)
+{
+	(void)ops;
+}
+
+void audio_backend_post_irq_selftest(void)
+{
+}
+
 bool audio_backend_is_available(void)
 {
 	return g_available != 0;

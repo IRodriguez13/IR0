@@ -56,11 +56,13 @@ Criterio del mantenedor para todo el kernel. Complementa
   | `kernel/process/` | ciclo de vida: registro, create, fork, exec (CLOEXEC), exit, wait, credenciales, límites |
   | `kernel/signals/` | entrega, frame de usuario, acción por defecto, trampolín, syscalls de señales y su hook de diag |
   | `kernel/exec/` | carga de ELF, pila de entrada, vDSO, caché environ/cmdline de exec |
-  | `kernel/boot/` | secuencia de arranque, parámetros, cmdline, rootfs base, handoff a init |
+  | `kernel/main.c` | `kmain()`: el orden de arranque de cada subsistema, una llamada por paso (único archivo suelto previsto en `kernel/`) |
+  | `kernel/boot/` | pasos de arranque que llama `kmain()`, parámetros, cmdline, rootfs base, handoff a init |
   | `kernel/problems/` | BUG/OOPS, panic y descripción neutral de faults |
   | `kernel/irq/` | tabla portable de IRQs y trabajo al volver a usuario desde una IRQ |
   | `kernel/futex/` | colas de futex y sus syscalls (robust list incluida) |
-  | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado, reboot y kexec |
+  | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado y reboot |
+  | `kernel/kexec/` | `kexec_load` y el salto a la imagen cargada (como execve, para el kernel) |
   | `kernel/syscalls/` | tabla de syscalls y el resto de los syscalls (partición pendiente) |
 
   Lo multi-CPU vive en `smp/` (nivel superior); las tablas de fds y
@@ -92,6 +94,12 @@ Criterio del mantenedor para todo el kernel. Complementa
   `sysenter`, `int $0x80`, `svc #0`) fuera de `arch/` y de los árboles de
   userspace (`userspace/`, `setup/pid1/`, `tests/selftests/`,
   `tests/conformance/`, `scripts/linux_abi/workloads/`).
+- `[legacy-pc-io]`: el PC es una plataforma, no una rama. Rechaza
+  `#if`/`#ifdef`/`#define` con `IR0_LEGACY_PC_IO` u otro switch de PC y el
+  port I/O (`inb`/`outb`/…, `io_wait`) fuera de `arch/x86-64/` y de los
+  fuentes que lista `scripts/make/platform/pc.mk`. Cada ISA nombra su
+  plataforma (`PLATFORM_x86-64 := pc`, `PLATFORM_arm64 := dt`) y el build
+  incluye un único `scripts/make/platform/<plataforma>.mk`.
 - `[portable-no-isa-asm]`, `[portable-no-register-names]` y
   `[paging-neutral-root]` cubren mnemónicos, registros y vocabulario x86 en
   código común.

@@ -4,7 +4,7 @@
  * Copyright (C) 2025  Iván Rodriguez
  *
  * File: console.c
- * Description: Unified VGA text + VBE framebuffer console.
+ * Description: Unified text-mode screen + VBE framebuffer console.
  */
 
 #include "console.h"
@@ -17,7 +17,6 @@
 #include <stdbool.h>
 #include <string.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/driver_backend.h>
 
 static int use_fb = 0;
 static int fb_console_cols = CONSOLE_WIDTH;
@@ -33,9 +32,8 @@ static int fb_origin_y;
 /* Glyph+color shadow so the software cursor can restore column 0 after CR/LF. */
 static uint16_t cell_shadow[CONSOLE_MAX_HEIGHT][CONSOLE_MAX_WIDTH];
 
-#if IR0_LEGACY_PC_IO
-#define VGA_BUF ((volatile uint16_t *)0xB8000)
-#endif
+/* Text-mode screen the platform registered; NULL when it has none. */
+static const struct console_text_screen *text_screen;
 
 static int shadow_rows(void)
 {
@@ -100,32 +98,55 @@ static void shadow_clear(uint8_t color)
 	}
 }
 
-#if IR0_LEGACY_PC_IO
-static void put_cell_vga(int row, int col, char c, uint8_t color)
+void console_set_text_screen(const struct console_text_screen *screen)
 {
-	if (row < 0 || row >= CONSOLE_HEIGHT || col < 0 || col >= CONSOLE_WIDTH)
+	text_screen = screen;
+}
+
+const struct console_text_screen *console_text_screen(void)
+{
+	return text_screen;
+}
+
+static void put_cell_text(int row, int col, char c, uint8_t color)
+{
+	if (!text_screen)
 		return;
-	VGA_BUF[row * CONSOLE_WIDTH + col] = (uint16_t)((color << 8) | (uint8_t)c);
+	if (row < 0 || row >= text_screen->rows || col < 0 || col >= text_screen->cols)
+		return;
+	text_screen->cells[row * text_screen->cols + col] =
+		(uint16_t)((color << 8) | (uint8_t)c);
 }
 
-static void scroll_up_vga(uint8_t clear_color)
+static void scroll_up_text(uint8_t clear_color)
 {
+	volatile uint16_t *cells;
+	int cols;
+	int total;
 	int i;
 
-	for (i = 0; i < (CONSOLE_HEIGHT - 1) * CONSOLE_WIDTH; i++)
-		VGA_BUF[i] = VGA_BUF[i + CONSOLE_WIDTH];
-	for (i = (CONSOLE_HEIGHT - 1) * CONSOLE_WIDTH; i < CONSOLE_HEIGHT * CONSOLE_WIDTH; i++)
-		VGA_BUF[i] = (uint16_t)((clear_color << 8) | ' ');
+	if (!text_screen)
+		return;
+	cells = text_screen->cells;
+	cols = text_screen->cols;
+	total = cols * text_screen->rows;
+	for (i = 0; i < total - cols; i++)
+		cells[i] = cells[i + cols];
+	for (; i < total; i++)
+		cells[i] = (uint16_t)((clear_color << 8) | ' ');
 }
 
-static void clear_vga(uint8_t color)
+static void clear_text(uint8_t color)
 {
+	int total;
 	int i;
 
-	for (i = 0; i < CONSOLE_WIDTH * CONSOLE_HEIGHT; i++)
-		VGA_BUF[i] = (uint16_t)((color << 8) | ' ');
+	if (!text_screen)
+		return;
+	total = text_screen->cols * text_screen->rows;
+	for (i = 0; i < total; i++)
+		text_screen->cells[i] = (uint16_t)((color << 8) | ' ');
 }
-#endif
 
 #if CONFIG_ENABLE_VBE
 /*
@@ -413,18 +434,8 @@ void console_draw_cell(int row, int col, char c, uint8_t color)
 {
 	if (use_fb)
 		put_cell_fb(row, col, c, color);
-#if IR0_LEGACY_PC_IO
 	else
-		put_cell_vga(row, col, c, color);
-#else
-	else
-	{
-		(void)row;
-		(void)col;
-		(void)c;
-		(void)color;
-	}
-#endif
+		put_cell_text(row, col, c, color);
 }
 
 void console_put_cell(int row, int col, char c, uint8_t color)
@@ -450,10 +461,8 @@ void console_scroll_up(uint8_t clear_color)
 	shadow_scroll_up(clear_color);
 	if (use_fb)
 		scroll_up_fb(clear_color);
-#if IR0_LEGACY_PC_IO
 	else
-		scroll_up_vga(clear_color);
-#endif
+		scroll_up_text(clear_color);
 }
 
 void console_clear(uint8_t color)
@@ -461,10 +470,8 @@ void console_clear(uint8_t color)
 	shadow_clear(color);
 	if (use_fb)
 		clear_fb(color);
-#if IR0_LEGACY_PC_IO
 	else
-		clear_vga(color);
-#endif
+		clear_text(color);
 }
 
 void console_init(void)

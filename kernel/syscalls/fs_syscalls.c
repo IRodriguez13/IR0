@@ -370,7 +370,12 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     /* The lookup fails on a non-directory before any permission check. */
     if (!S_ISDIR(st.st_mode))
       return -ENOTDIR;
-    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+    /*
+     * opendir(3) reads the directory: it needs read, while search is the
+     * path walk's business. Opening one for write is EISDIR (vfs_open()).
+     */
+    if ((flags & O_ACCMODE) == O_RDONLY &&
+        generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
       return -EACCES;
   }
   else if (flags & O_CREAT)
@@ -510,9 +515,6 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
     return -ENOTDIR;
   access_rc = ir0_open_access_path_routed(path, ir0_flags,
                                           ir0_current_cred());
-  if (access_rc != 0)
-    return access_rc;
-  access_rc = generic_permission(ir0_current_cred(), &st, ACCESS_EXEC);
   if (access_rc != 0)
     return access_rc;
 
@@ -847,6 +849,25 @@ static int64_t mknod_create_device(const char *resolved, unsigned int mode,
                               (dev_t)dev);
 }
 
+/*
+ * mknodat(2) on a resolved path: an existing name is EEXIST, then the
+ * parent must take a new name (may_create()), then the node is made.
+ */
+static int64_t mknod_resolved(const char *resolved, unsigned int mode,
+                              unsigned int dev)
+{
+  int rc = mknod_check_free(resolved);
+
+  if (rc != 0)
+    return rc;
+  rc = may_create(resolved);
+  if (rc != 0)
+    return rc;
+  if ((mode & S_IFMT) != S_IFIFO)
+    return mknod_create_device(resolved, mode, dev);
+  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+}
+
 int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
 {
   char resolved[256];
@@ -868,14 +889,7 @@ int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
   if (rc != 0)
     return rc;
 
-  if ((mode & S_IFMT) != S_IFIFO)
-    return mknod_create_device(resolved, mode, dev);
-
-  rc = mknod_check_free(resolved);
-  if (rc != 0)
-    return rc;
-
-  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+  return mknod_resolved(resolved, mode, dev);
 }
 
 int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
@@ -899,12 +913,5 @@ int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
   if (rc != 0)
     return rc;
 
-  if ((mode & S_IFMT) != S_IFIFO)
-    return mknod_create_device(resolved, mode, dev);
-
-  rc = mknod_check_free(resolved);
-  if (rc != 0)
-    return rc;
-
-  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+  return mknod_resolved(resolved, mode, dev);
 }
