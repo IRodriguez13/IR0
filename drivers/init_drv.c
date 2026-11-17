@@ -31,34 +31,7 @@
 #include <string.h>
 #include <config.h>
 #include <drivers/multilang_drivers.h>
-#if CONFIG_ENABLE_PC_SPEAKER
-#include <drivers/char/pc_speaker.h>
-#endif
-#if CONFIG_ENABLE_STORAGE_ATA
-#include <drivers/storage/ata.h>
-#endif
-#include <drivers/storage/ahci.h>
-#include <drivers/storage/nvme.h>
-#include <ir0/blockdev.h>
-#include <drivers/serial/serial.h>
-#include <ir0/resource_registry.h>
 #include <ir0/boot_arch.h>
-
-#if CONFIG_ENABLE_SOUND
-#include <sound/sound_blaster.h>
-#include <sound/adlib.h>
-#include <drivers/dma/dma.h>
-#endif
-
-#if CONFIG_ENABLE_BLUETOOTH
-#include <ir0/bluetooth.h>
-#endif
-
-#if CONFIG_ENABLE_USB_HOST
-#include <ir0/usb_host.h>
-#endif
-
-#include <drivers/virtio/virtio_9p.h>
 
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
@@ -66,42 +39,6 @@
 
 static int g_registry_ready = 0;
 static int g_bootstrap_done = 0;
-
-static int boot_init_pc_speaker(void)
-{
-#if CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER
-    pc_speaker_init();
-#endif
-    return 0;
-}
-
-static int boot_init_sound(void)
-{
-#if CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS
-    sb16_init();
-    adlib_init();
-    resource_register_ioport(DMA1_PORT_START, DMA1_PORT_END, "dma1");
-#endif
-    return 0;
-}
-
-static int boot_init_storage_ata(void)
-{
-#if CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA
-    ata_init();
-#endif
-    return 0;
-}
-
-static int boot_init_storage_block(void)
-{
-#if CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK
-    ata_block_register();
-#endif
-    ahci_probe();
-    nvme_probe();
-    return 0;
-}
 
 static int boot_init_network(void)
 {
@@ -112,51 +49,12 @@ static int boot_init_network(void)
 #endif
 }
 
-static int boot_init_bluetooth(void)
-{
-#if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
-    return ir0_bluetooth_register_driver();
-#else
-    return 0;
-#endif
-}
-
-static int boot_init_usb_host(void)
-{
-#if CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST
-    return ir0_usb_host_init();
-#else
-    return 0;
-#endif
-}
-
-static int boot_init_hostshare_9p(void)
-{
-	/* Optional: absent without QEMU -virtfs; non-fatal for normal boots. */
-	(void)virtio_9p_pci_probe();
-	return 0;
-}
-
 static void register_bootstrap_plan(void)
 {
     driver_bootstrap_reset();
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "pc_speaker", boot_init_pc_speaker,
-                              (CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER));
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "hostshare_9p", boot_init_hostshare_9p,
-			      1);
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_core", boot_init_storage_ata,
-                              (CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA));
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_block", boot_init_storage_block,
-                              (CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK));
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_AUDIO, "sound_stack", boot_init_sound,
-                              (CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "network_stack", boot_init_network,
                               (CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK));
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "bluetooth_stack", boot_init_bluetooth,
-                              (CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER));
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "usb_host", boot_init_usb_host,
-                              (CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST));
-    /* Platform devices (PC: i8042 keyboard and PS/2 mouse). */
+    /* Platform devices (PC: i8042, ISA sound, ATA/AHCI/NVMe, virtio-9p, ...). */
     ir0_boot_arch_drivers();
 }
 

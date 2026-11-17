@@ -4,7 +4,8 @@
 # devices (GIC, PL011, PL031, generic timer, virtio-mmio) live in
 # scripts/make/arch-sources.mk; this list holds the optional device drivers.
 
-PLATFORM_OBJS =
+# No Bluetooth transport on these boards yet: the interface reports -ENOSYS.
+PLATFORM_OBJS = drivers/bluetooth/bluetooth_iface_stub.o
 
 ifneq ($(CONFIG_ENABLE_NETWORKING),n)
 PLATFORM_OBJS += drivers/net/net_drivers_dt.o

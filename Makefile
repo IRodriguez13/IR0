@@ -716,7 +716,6 @@ DRIVER_OBJS = \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
-	drivers/virtio/virtio_9p_pci.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
@@ -824,67 +823,6 @@ NET_OBJS =
 NET_DRIVER_OBJS =
 endif
 
-# Sound (Sound Blaster 16 + Adlib OPL2 + ISA DMA)
-ifneq ($(CONFIG_ENABLE_SOUND),n)
-SOUND_OBJS = \
-    sound/sound_blaster.o \
-    sound/adlib.o \
-    drivers/dma/dma.o
-else
-SOUND_OBJS =
-endif
-
-# Bluetooth (HCI-UART transport + device manager)
-ifneq ($(CONFIG_ENABLE_BLUETOOTH),n)
-BLUETOOTH_OBJS = \
-    drivers/bluetooth/hci_uart.o \
-    drivers/bluetooth/hci_core.o \
-    drivers/bluetooth/bluetooth_iface.o \
-    drivers/bluetooth/bt_device.o \
-    drivers/bluetooth/bt_sysfs.o \
-    drivers/bluetooth/bluetooth_init.o
-else
-BLUETOOTH_OBJS = \
-    drivers/bluetooth/bluetooth_iface_stub.o
-endif
-
-# USB host scaffold (PCI scan)
-ifneq ($(CONFIG_ENABLE_USB_HOST),n)
-USB_OBJS = drivers/usb/usb_host.o
-else
-USB_OBJS =
-endif
-
-
-# PC speaker
-ifneq ($(CONFIG_ENABLE_PC_SPEAKER),n)
-PC_SPEAKER_OBJS = drivers/char/pc_speaker.o
-else
-PC_SPEAKER_OBJS =
-endif
-
-# ATA core / block layer
-ifneq ($(CONFIG_ENABLE_STORAGE_ATA),n)
-STORAGE_ATA_OBJS = \
-    drivers/storage/ata.o \
-    drivers/storage/ata_helpers.o
-else
-STORAGE_ATA_OBJS =
-endif
-
-ifneq ($(CONFIG_ENABLE_STORAGE_ATA),n)
-ifneq ($(CONFIG_ENABLE_STORAGE_ATA_BLOCK),n)
-STORAGE_ATA_BLOCK_OBJS = drivers/storage/ata_block.o
-else
-STORAGE_ATA_BLOCK_OBJS =
-endif
-else
-STORAGE_ATA_BLOCK_OBJS =
-endif
-
-STORAGE_AHCI_OBJS = drivers/storage/ahci.o
-STORAGE_NVME_OBJS = drivers/storage/nvme.o
-
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
 VBE_OBJS = drivers/video/vbe.o
@@ -959,10 +897,7 @@ endif
 ALL_OBJS = $(KERNEL_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
            $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
            $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
-           $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-           $(USB_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-           $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
-           $(STORAGE_NVME_OBJS)
+           $(NET_OBJS) $(NET_DRIVER_OBJS) $(VBE_OBJS)
 
 ifeq ($(ARCH),arm64)
 ALL_OBJS := $(filter-out cpp/runtime/compat.o,$(ALL_OBJS))
@@ -989,10 +924,7 @@ ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o kernel/boot/boot_flow.o \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
-                $(NET_OBJS) $(NET_DRIVER_OBJS) $(SOUND_OBJS) $(BLUETOOTH_OBJS) \
-                $(USB_OBJS) $(VBE_OBJS) $(PC_SPEAKER_OBJS) \
-                $(STORAGE_ATA_OBJS) $(STORAGE_ATA_BLOCK_OBJS) $(STORAGE_AHCI_OBJS) \
-           $(STORAGE_NVME_OBJS)
+                $(NET_OBJS) $(NET_DRIVER_OBJS) $(VBE_OBJS)
 
 AUTOCONF_HDR := $(KERNEL_ROOT)/includes/generated/autoconf.h
 ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
