@@ -400,7 +400,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	 * is neither SIG_DFL nor SIG_IGN nor a user pointer: the exit's
 	 * do_signal() drops it instead of killing the task, settles the
 	 * restart code and puts the caller's mask back. Returning with the
-	 * bit still set is the ash spin.
+	 * bit still set would make every later rt_sigsuspend return at once.
 	 */
 	saved_regs = p->syscall_frame;
 	p->signal_handlers[SIGUSR1] = (void (*)(int))(uintptr_t)2;

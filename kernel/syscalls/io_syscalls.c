@@ -298,7 +298,7 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
     return -EINVAL;
 
   /*
-   * Linux: poll(NULL, 0, timeout) is a millisecond sleep (runsvdir iopause).
+   * Linux: poll(NULL, 0, timeout) is a millisecond sleep (poll(2)).
    */
   if (nfds == 0)
   {
@@ -1209,7 +1209,7 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
     goto out;
   }
 
-  /* AF_INET socket: Linux SIOCGIF* for BusyBox ifconfig (read-only). */
+  /* AF_INET socket: Linux SIOCGIF* (netdevice(7), read-only). */
   if (e->is_socket)
   {
     ret = sock_inet_ioctl(request, arg);
@@ -1596,9 +1596,10 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     break;
   case F_SETFL:
     /*
-     * Linux: preserve O_ACCMODE; only status flags are mutable.
-     * Clobbering access mode broke BusyBox less (ndelay_on made flags become
-     * O_NONBLOCK alone). O_ASYNC is implemented for device fasync delivery.
+     * Linux fcntl(2) F_SETFL: preserve O_ACCMODE; only the status flags
+     * change (setting O_NONBLOCK must not turn a read fd into O_RDONLY|
+     * O_NONBLOCK of nothing). O_ASYNC is implemented for device fasync
+     * delivery.
      * @arg uses the Linux encoding; fd_table->flags the IR0 one.
      */
     {
@@ -1793,7 +1794,7 @@ int64_t sys_pipe2(int pipefd[2], int flags)
 }
 
 /*
- * Linux syslog(2) / klogctl — enough for BusyBox dmesg (SIZE_BUFFER + READ_ALL).
+ * Linux syslog(2) / klogctl — SYSLOG_ACTION_SIZE_BUFFER and READ_ALL.
  * Ring content comes from klog_read_records (same as /proc/kmsg).
  */
 #define IR0_SYSLOG_CLOSE          0

@@ -1194,10 +1194,11 @@ int sys_mprotect(void *addr, size_t len, int prot)
 /*
  * sysinfo(2) — memory, load and uptime in one struct.
  *
- * BusyBox `free` and `uptime` read this syscall, not /proc. While it was
- * missing they got -ENOSYS and printed whatever their uninitialised struct
- * happened to hold: gigabytes of RAM on a machine with megabytes, and an
- * uptime of weeks. Layout and units follow sysinfo(2) (post Linux 2.3.48):
+ * Programs that report memory and uptime may read this syscall instead of
+ * /proc. While it was missing they got -ENOSYS and showed whatever their
+ * uninitialised struct held: gigabytes of RAM on a machine with megabytes,
+ * and an uptime of weeks. Layout and units follow sysinfo(2) (post Linux
+ * 2.3.48):
  * memory as multiples of mem_unit, loads as fixed point with a 16-bit
  * fraction.
  */

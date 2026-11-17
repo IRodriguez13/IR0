@@ -50,7 +50,7 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg);
 int64_t sys_fcntl(int fd, int cmd, unsigned long arg);
 int64_t sys_pipe(int pipefd[2]);
 int64_t sys_pipe2(int pipefd[2], int flags);
-/* Linux syslog(2) / klogctl — BusyBox dmesg. */
+/* Linux syslog(2) / klogctl (read the kernel log ring). */
 int64_t sys_syslog(int type, char *bufp, int len);
 int stdio_is_redirected(fd_entry_t *fd_table, int fd);
 int pipe_wait(process_t *proc, pipe_t *pipe, int waiting_read, size_t write_need);

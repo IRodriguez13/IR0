@@ -20,8 +20,8 @@
 #define __NR_mincore       27
 
 /*
- * Linux time64 syscalls (musl / BusyBox may call these even on x86_64 when built
- * against recent kernel headers). Must not collide with IR0 custom numbers.
+ * Linux time64 syscalls (a libc built against recent kernel headers may call
+ * these even on x86_64). Must not collide with IR0 custom numbers.
  */
 #define __NR_clock_gettime64 403
 #define __NR_clock_settime64 404
@@ -34,7 +34,7 @@
 #define __NR_console_clear    441
 #define __NR_keymap_set       442
 #define __NR_keymap_get       443
-/* 444 was sudo_auth: privilege elevation is userspace policy (doas/sudo). */
+/* 444 was an IR0 privilege-elevation call: that is userspace policy (setuid). */
 
 /* Max syscall number we handle (for table size) */
 #define __NR_syscall_max   450

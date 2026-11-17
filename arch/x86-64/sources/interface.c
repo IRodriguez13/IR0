@@ -256,7 +256,7 @@ void cpu_idle(void)
 {
     /*
      * Safe halt: IRQs must be on or hlt never wakes (no IRQ1 → dead TTY
-     * after ash blocks and the idle task runs). The idle loop enables
+     * once every task blocks and the idle task runs). The idle loop enables
      * them too; keep the halt safe for any caller.
      */
     enable_interrupts();

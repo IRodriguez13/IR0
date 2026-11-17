@@ -104,7 +104,7 @@ static int64_t mount_strings(const char *dev_copy, const char *mountpoint,
     return rc;
   mount_path = mountpoint_resolved;
 
-  /* Linux remount via flags (BusyBox umount -r, mount -o remount,ro). */
+  /* Linux remount via flags (mount(2) MS_REMOUNT, e.g. remount read-only). */
   if (flags & IR0_MS_REMOUNT)
     return vfs_remount(mount_path, flags);
 

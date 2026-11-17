@@ -201,8 +201,8 @@ switch_context_x64:
     ; CR3 vs stack ordering (x86-64):
     ; Loading next CR3 while RSP still points at prev's kstack requires every
     ; process mm to map every kstack (shared kernel-half PDPT). When that link
-    ; is missing, the next push #PF → #DF (seen post-ash in kernel_ret FSBASE
-    ; scratch pushes). For ring-0 resume, switch to next's kstack first while
+    ; is missing, the next push #PF → #DF (seen in kernel_ret FSBASE scratch
+    ; pushes after a user task blocked). For ring-0 resume, switch to next's kstack first while
     ; prev CR3 still maps it, then load next CR3.
     ;
     movzx eax, word [r11 + 0x90]

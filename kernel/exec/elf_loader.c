@@ -418,9 +418,9 @@ static uint64_t elf_compute_initial_brk(const elf64_header_t *header, const uint
 	/*
 	 * Initial break is the first page after the last PT_LOAD (Linux).
 	 * Do not jump to USER_HEAP_BASE: that leaves a multi‑hundred‑MiB hole
-	 * between &_end and the break which musl/BusyBox may touch as heap
+	 * between &_end and the break which a libc may touch as heap
 	 * without a brk/mmap (present=1 SEGV on supervisor identity, e.g.
-	 * addr=0x1020000 in hexdump|head). Growth through the identity window
+	 * addr=0x1020000). Growth through the identity window
 	 * is handled by map_page split_huge + COW (see page_fault).
 	 */
 	return brk;
@@ -506,10 +506,11 @@ static int elf_file_off_for_vaddr(const elf64_phdr_t *phdr, uint16_t phnum,
 }
 
 /*
- * tcc ET_EXEC still emits DT_RELA (GLOB_DAT for __environ/main). Linux ld.so
- * applies those when PT_INTERP is present. If the interpreter file is missing
- * (MINIX NAME_LEN cannot store ld-linux-x86-64.so.2), apply local relocs so
- * `cc hello.c && ./hello` does not write through a NULL GOT slot.
+ * An ET_EXEC with PT_INTERP may still carry DT_RELA entries (GLOB_DAT) that
+ * its interpreter would apply. When the interpreter file is missing (MINIX
+ * names stop at 14 bytes), IR0 applies the local relocations itself and runs
+ * the image without it. Linux binfmt_elf fails such an execve with ENOENT;
+ * this fallback is a known divergence.
  */
 static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
                                   size_t file_size, address_space_root_t root)
@@ -1816,8 +1817,8 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
 
     /*
      * Image read is the largest single kernel allocation in the system (the
-     * whole binary; ~1.8 MiB for busybox-full), so it is the first thing to
-     * fail when the heap fragments. That failure mode shipped undetected
+     * whole binary; ~1.8 MiB for a large multi-call binary), so it is the
+     * first thing to fail when the heap fragments. That failure mode shipped undetected
      * once already — exec started returning -ENOMEM after a few hundred
      * spawns — because nothing exercised this branch.
      */

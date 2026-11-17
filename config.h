@@ -223,7 +223,7 @@
 
 /* MEMORY LAYOUT — virtual addresses and segment selectors */
 #define USER_STACK_TOP      0x7FFFF000UL
-/* 1 MiB — BusyBox tab completion / large ash frames need headroom below guard. */
+/* 1 MiB of main-thread stack below the guard (Linux grows to RLIMIT_STACK). */
 #define USER_STACK_SIZE     0x100000
 #define USER_STACK_BASE     (USER_STACK_TOP - USER_STACK_SIZE)
 #define USER_STACK_GUARD    (USER_STACK_BASE - 0x1000UL)

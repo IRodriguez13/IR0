@@ -178,7 +178,7 @@ syscall_insn_entry_asm:
     mov rsp, [rsp]              ; user RSP from this task's own frame
 
     ; Force IF in R11. Shared syscall stack / cli save can leave IF=0 and
-    ; sysret would return ash with IRQs masked (dead keyboard after login).
+    ; sysret would return to user mode with IRQs masked (no keyboard IRQ).
     or r11, 0x200
 
     o64 sysret

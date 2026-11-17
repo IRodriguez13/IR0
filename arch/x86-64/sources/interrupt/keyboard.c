@@ -388,7 +388,7 @@ static void keyboard_feed_scancode(uint8_t scancode)
 		{
 			/*
 			 * A leaked /dev/events0 reader silently kills all
-			 * console input, which looks like a dead getty. Say so
+			 * console input, which looks like a hung terminal. Say so
 			 * on the serial log instead of dropping in silence.
 			 */
 			static unsigned int suppressed;

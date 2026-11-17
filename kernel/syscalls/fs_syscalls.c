@@ -249,8 +249,8 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
 
   /*
    * Finite text devices: capture a per-open snapshot so read() honors
-   * offset and reaches EOF (BusyBox cat). Failure falls back to ops->read
-   * bounce+slice.
+   * offset and reaches EOF, as a regular file does. Failure falls back to
+   * ops->read bounce+slice.
    */
   if (devfs_node_wants_text_snap(node->entry.device_id))
     fd_table[fd].vfs_file = devfs_text_snap_capture(node->entry.device_id);
@@ -390,7 +390,7 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
         return -ENAMETOOLONG;
       /*
-       * Missing parent is ENOENT (Linux), not EACCES (runsv pid.new noise).
+       * Missing parent is ENOENT (Linux path_openat()), not EACCES.
        */
       if (vfs_stat(parent, &pst) != 0)
       {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /**
- * IR0 Kernel — EXEC-only busybox read path serial diagnostics.
+ * IR0 Kernel — serial diagnostics of the file reads execve(2) makes.
  */
 
 #include <ir0/exec_read_trace.h>

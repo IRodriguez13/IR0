@@ -872,7 +872,7 @@ int64_t sys_exec(const char *pathname,
    * the binary is ever opened. IR0's /proc is not a VFS mount and the ELF
    * loader only reads through vfs_read_file, so the substitution happens
    * here instead — the one place that still knows it is handling a path.
-   * BusyBox with FEATURE_SH_STANDALONE re-executes itself this way.
+   * execve("/proc/self/exe") runs the caller's own image again (proc(5)).
    */
   if (exec_path_is_proc_self_exe(resolved_path))
   {

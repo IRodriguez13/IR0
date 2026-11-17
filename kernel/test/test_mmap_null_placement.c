@@ -26,7 +26,7 @@
 #define KTEST_MAP_FIXED     0x10
 #define KTEST_PROT_RW       0x3
 
-#define KTEST_BUSYBOX_INITIAL_BRK 0x453000UL
+#define KTEST_INITIAL_BRK 0x453000UL
 
 static int ktest_pte_state(uintptr_t va, uint64_t *flags)
 {
@@ -112,8 +112,8 @@ void ktest_mmap_null_placement(void)
 	saved_heap_end = process_heap_end(current_process);
 	saved_mmap_base = process_mmap_base(current_process);
 
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 	process_set_mmap_base(current_process, 0);
 
 	for (i = 0; i < 4; i++)
