@@ -11,8 +11,8 @@
  * Description: Focused host regression for Linux setreuid/setregid saved IDs
  */
 
-#include "test_harness.h"
-#include <ir0/cred_transition.h>
+#include "test_harness_ir0.h"
+#include <ir0/cred.h>
 
 static int permanent_drop_cannot_regain_root(uint32_t real)
 {

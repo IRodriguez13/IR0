@@ -12,7 +12,7 @@
 #include <ir0/named_socket.h>
 #include <ir0/named_devnode.h>
 #include <ir0/named_symlink.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/procfs.h>
 #include <ir0/sysfs.h>
 #include <ir0/heartfs.h>
@@ -137,9 +137,8 @@ int ir0_chown_path_routed(const char *path, uid_t owner, gid_t group)
     return vfs_chown(path, owner, group);
 }
 
-int64_t ir0_access_path_routed_groups(const char *resolved_path, int mode,
-                                      uid_t uid, gid_t gid,
-                                      const gid_t *groups, int ngroups)
+int64_t ir0_access_path_routed(const char *resolved_path, int mode,
+                               const struct ir0_task_cred *cred)
 {
     stat_t st;
     int rc;
@@ -161,29 +160,18 @@ int64_t ir0_access_path_routed_groups(const char *resolved_path, int mode,
     if (access_mode == 0)
         return 0;
 
-    if (!ir0_access_from_stat_groups(&st, access_mode, uid, gid, groups,
-                                     ngroups))
-        return -EACCES;
-
-    return 0;
-}
-
-int64_t ir0_access_path_routed(const char *resolved_path, int mode,
-                               uid_t euid, gid_t egid)
-{
-    return ir0_access_path_routed_groups(resolved_path, mode, euid, egid,
-                                         NULL, 0);
+    return generic_permission(cred, &st, access_mode);
 }
 
 int ir0_open_access_path_routed(const char *resolved_path, int open_flags,
-                                uid_t euid, gid_t egid)
+                                const struct ir0_task_cred *cred)
 {
     stat_t st;
     int access_mode;
     int accmode;
     int rc;
 
-    if (!resolved_path)
+    if (!resolved_path || !cred)
         return -EFAULT;
 
     rc = ir0_stat_path_routed(resolved_path, &st);
@@ -192,7 +180,7 @@ int ir0_open_access_path_routed(const char *resolved_path, int open_flags,
 
     if (is_proc_path(resolved_path))
     {
-        rc = proc_access_path(resolved_path, euid);
+        rc = proc_access_path(resolved_path, cred->euid);
         if (rc != 0)
             return rc;
     }
@@ -204,9 +192,8 @@ int ir0_open_access_path_routed(const char *resolved_path, int open_flags,
     if (accmode == O_WRONLY || accmode == O_RDWR)
         access_mode |= ACCESS_WRITE;
 
-    if (access_mode != 0 &&
-        !ir0_access_from_stat(&st, access_mode, euid, egid))
-        return -EACCES;
+    if (access_mode != 0)
+        return generic_permission(cred, &st, access_mode);
 
     return 0;
 }

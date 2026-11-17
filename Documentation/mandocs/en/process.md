@@ -104,7 +104,7 @@ fd table, credentials, cwd, signal state, and mmap list. Creation paths include
 | MM | per-process PML4, mmap_list, brk bounds |
 | VFS | cwd resolution, vfs_file in fd entries |
 | Syscalls | fork/exec/wait/kill/signals |
-| Credentials | `check_file_access`, setuid syscalls |
+| Credentials | `ir0_current_cred`, setuid syscalls |
 
 ## 7. Visual maps
 

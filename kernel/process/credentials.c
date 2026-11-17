@@ -8,15 +8,11 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: credentials.c
- * Description: Current-task credential accessors and path access checks.
+ * Description: Current-task credential accessors.
  */
 
 #include <ir0/process.h>
-#include <fs/vfs.h>
-#include <ir0/credentials.h>
-#include <ir0/path_routed.h>
-#include <ir0/permissions.h>
-#include <ir0/stat.h>
+#include <ir0/cred.h>
 
 const struct ir0_task_cred *ir0_current_cred(void)
 {
@@ -29,6 +25,8 @@ const struct ir0_task_cred *ir0_current_cred(void)
         .umask = 0022,
         .pid = 0,
         .cwd = "/",
+        .groups = NULL,
+        .ngroups = 0,
     };
 
     if (!current_process)
@@ -41,6 +39,8 @@ const struct ir0_task_cred *ir0_current_cred(void)
     cred.umask = (mode_t)current_process->umask;
     cred.pid = current_process->task.pid;
     cred.cwd = current_process->cwd;
+    cred.groups = current_process->groups;
+    cred.ngroups = (int)current_process->ngroups;
 
     return &cred;
 }
@@ -59,52 +59,4 @@ int ir0_cred_is_root(void)
 
     c = ir0_current_cred();
     return (c && c->euid == ROOT_UID) ? 1 : 0;
-}
-
-bool ir0_check_file_access(const char *path, int mode)
-{
-    stat_t st;
-    const struct ir0_task_cred *c;
-
-    c = ir0_current_cred();
-    if (!path || !c)
-        return false;
-
-    /*
-     * VFS-mounted paths use vfs_stat (Linux inode from the path walk).
-     * The syscall router (path_routed) is for /proc /sys /dev, not for
-     * DAC inside vfs_open of a real mount.
-     */
-    if (vfs_stat(path, &st) != 0)
-        return false;
-
-    if (!current_process)
-        return ir0_access_from_stat(&st, mode, c->euid, c->egid);
-
-    /* Supplementary groups count for DAC (wheel, etc.), like Linux. */
-    return ir0_access_from_stat_groups(&st, mode, c->euid, c->egid,
-                                      current_process->groups,
-                                      (int)current_process->ngroups);
-}
-
-bool check_file_access(const char *path, int mode, const struct process *process)
-{
-    stat_t st;
-
-    if (!path || !process)
-        return false;
-
-    if (ir0_stat_path_routed(path, &st) != 0)
-        return false;
-
-    return ir0_access_from_stat_groups(&st, mode,
-                                       (uid_t)process->euid,
-                                       (gid_t)process->egid,
-                                       process->groups,
-                                       (int)process->ngroups);
-}
-
-bool is_root(const struct process *process)
-{
-    return process && process->euid == ROOT_UID;
 }

@@ -27,8 +27,7 @@
 #include <ir0/path.h>
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
-#include <ir0/permissions.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
@@ -522,6 +521,7 @@ int64_t sys_uname(struct utsname *buf)
  */
 int64_t sys_access(const char *pathname, int mode)
 {
+  struct ir0_task_cred cred;
   char resolved[256];
   int rc;
 
@@ -534,23 +534,21 @@ int64_t sys_access(const char *pathname, int mode)
     return rc;
 
   /*
-   * Linux access(2): real uid/gid + supplementary groups, not effective.
-   * man7 access(2); AT_EACCESS is only on faccessat.
+   * Linux access(2): real uid/gid + supplementary groups, not effective
+   * (access_override_creds()); AT_EACCESS is only on faccessat.
    */
-  return ir0_access_path_routed_groups(resolved, mode,
-                                       (uid_t)current_process->uid,
-                                       (gid_t)current_process->gid,
-                                       current_process->groups,
-                                       (int)current_process->ngroups);
+  cred = *ir0_current_cred();
+  cred.euid = cred.uid;
+  cred.egid = cred.gid;
+  return ir0_access_path_routed(resolved, mode, &cred);
 }
 
 int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
 {
+  struct ir0_task_cred cred;
   char resolved[256];
   int rc;
   int masked_flags;
-  uid_t uid;
-  gid_t gid;
 
   if (!current_process || !pathname)
     return -EFAULT;
@@ -566,19 +564,13 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
    * Linux faccessat(2): real IDs unless AT_EACCESS (then effective).
    * AT_SYMLINK_NOFOLLOW is accepted as a no-op (no symlink walk yet).
    */
-  if (flags & IR0_AT_EACCESS)
+  cred = *ir0_current_cred();
+  if (!(flags & IR0_AT_EACCESS))
   {
-    uid = (uid_t)current_process->euid;
-    gid = (gid_t)current_process->egid;
+    cred.euid = cred.uid;
+    cred.egid = cred.gid;
   }
-  else
-  {
-    uid = (uid_t)current_process->uid;
-    gid = (gid_t)current_process->gid;
-  }
-  return ir0_access_path_routed_groups(resolved, mode, uid, gid,
-                                       current_process->groups,
-                                       (int)current_process->ngroups);
+  return ir0_access_path_routed(resolved, mode, &cred);
 }
 
 /**
@@ -641,9 +633,7 @@ int64_t ir0_chdir_resolved(const char *pathname)
     return -ENOTDIR;
 
   /* In Unix, entering a directory requires execute permission on that path. */
-  ret = ir0_access_path_routed(new_path, 1,
-                               (uid_t)current_process->euid,
-                               (gid_t)current_process->egid);
+  ret = ir0_access_path_routed(new_path, 1, ir0_current_cred());
   if (ret != 0)
     return ret;
 

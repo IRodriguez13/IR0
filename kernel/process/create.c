@@ -144,7 +144,6 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		strncpy(proc->root, "/", sizeof(proc->root) - 1);
 		proc->root[sizeof(proc->root) - 1] = '\0';
 	}
-	process_cred_init_groups(proc);
 	if (proc->cwd[0] != '/')
 	{
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);

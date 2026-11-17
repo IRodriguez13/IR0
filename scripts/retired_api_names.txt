@@ -147,9 +147,9 @@ minix_fs_is_available minix_fs_is_working()
 minix_fs_ls (nothing; userspace ls uses getdents64)
 minix_fs_read_file vfs_read_file() (the VFS read path)
 minix_fs_rmdir_force minix_fs_rmdir() through vfs_rmdir()
-minix_get_gid_perms (nothing; permissions go through <ir0/permissions.h>)
-minix_get_oth_perms (nothing; permissions go through <ir0/permissions.h>)
-minix_get_uid_perms (nothing; permissions go through <ir0/permissions.h>)
+minix_get_gid_perms (nothing; permissions go through <ir0/cred.h>)
+minix_get_oth_perms (nothing; permissions go through <ir0/cred.h>)
+minix_get_uid_perms (nothing; permissions go through <ir0/cred.h>)
 minix_is_blk S_ISBLK() on the stat mode
 minix_is_chr S_ISCHR() on the stat mode
 minix_mark_inode_free minix_fs_free_inode()
@@ -213,3 +213,15 @@ exec_read_trace_minix_block (nothing; minix_fs_read_file was deleted)
 exec_read_trace_minix_eio (nothing; minix_fs_read_file was deleted)
 exec_read_trace_minix_file_begin (nothing; minix_fs_read_file was deleted)
 exec_read_trace_minix_zones (nothing; minix_fs_read_file was deleted)
+
+# Credentials (includes/ir0/cred.h): one accessor, ir0_current_cred(), and
+# one DAC check, generic_permission(), on the stat of the object.
+check_file_access a stat (ir0_stat_path_routed()) + generic_permission()
+get_current_gid ir0_current_cred()->gid
+get_current_uid ir0_current_cred()->uid
+ir0_access_from_stat generic_permission()
+ir0_access_from_stat_groups generic_permission() (the cred carries the groups)
+ir0_access_path_routed_groups ir0_access_path_routed() with a struct ir0_task_cred
+ir0_check_file_access a stat (vfs_stat()) + generic_permission()
+is_root ir0_cred_is_root()
+process_cred_init_groups (nothing; the supplementary groups are what setgroups(2) set, possibly none)

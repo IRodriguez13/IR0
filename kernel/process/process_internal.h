@@ -34,7 +34,7 @@
 #include <ir0/vfs.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/video_backend.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/signals.h>
 #include <ir0/oops.h>
 #include <string.h>

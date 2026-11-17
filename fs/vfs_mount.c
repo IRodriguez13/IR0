@@ -31,7 +31,7 @@
 #include "ext2_disk.h"
 #endif
 #include <ir0/kmem.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/blockdev.h>
 #include <ir0/klog.h>
 #include <ir0/statfs.h>

@@ -313,8 +313,7 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   if (named_fifo_lookup(path_to_use))
   {
     path_rc = ir0_open_access_path_routed(path_to_use, ir0_flags,
-                                          (uid_t)current_process->euid,
-                                          (gid_t)current_process->egid);
+                                          ir0_current_cred());
     if (path_rc != 0)
       return path_rc;
     open_ret = open_named_fifo_fd(path_to_use, ir0_flags);
@@ -345,8 +344,7 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       if (!dn)
         return -ENXIO;
       drc = ir0_open_access_path_routed(path_to_use, ir0_flags,
-                                        (uid_t)current_process->euid,
-                                        (gid_t)current_process->egid);
+                                        ir0_current_cred());
       if (drc != 0)
         return drc;
       ensure_devfs_init();
@@ -365,10 +363,15 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
 
   if (flags & O_DIRECTORY)
   {
-    if (!check_file_access(path_to_use, ACCESS_EXEC, current_process))
-    {
+    stat_t st;
+
+    if (ir0_stat_path_routed(path_to_use, &st) != 0)
       return -EACCES;
-    }
+    /* The lookup fails on a non-directory before any permission check. */
+    if (!S_ISDIR(st.st_mode))
+      return -ENOTDIR;
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+      return -EACCES;
   }
   else if (flags & O_CREAT)
   {
@@ -382,14 +385,15 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       if (get_parent_path(path_to_use, parent, sizeof(parent)) != 0)
         return -ENAMETOOLONG;
       /*
-       * Missing parent is ENOENT (Linux). check_file_access() returns false
-       * when stat fails — do not mask that as EACCES (runsv pid.new noise).
+       * Missing parent is ENOENT (Linux), not EACCES (runsv pid.new noise).
        */
       if (vfs_stat(parent, &pst) != 0)
       {
         return -ENOENT;
       }
-      if (!check_file_access(parent, ACCESS_EXEC | ACCESS_WRITE, current_process))
+      if (ir0_stat_path_routed(parent, &pst) != 0 ||
+          generic_permission(ir0_current_cred(), &pst,
+                             ACCESS_EXEC | ACCESS_WRITE) != 0)
       {
         return -EACCES;
       }
@@ -404,7 +408,8 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
       if (accmode == O_WRONLY || accmode == O_RDWR)
         access_mode |= ACCESS_WRITE;
       if (access_mode &&
-          !check_file_access(path_to_use, access_mode, current_process))
+          (ir0_stat_path_routed(path_to_use, &st) != 0 ||
+           generic_permission(ir0_current_cred(), &st, access_mode) != 0))
       {
         return -EACCES;
       }
@@ -425,7 +430,8 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
      * permission probe on a non-existent inode.
      */
     if (access_mode && vfs_stat(path_to_use, &st) == 0 &&
-        !check_file_access(path_to_use, access_mode, current_process))
+        (ir0_stat_path_routed(path_to_use, &st) != 0 ||
+         generic_permission(ir0_current_cred(), &st, access_mode) != 0))
     {
       return -EACCES;
     }
@@ -503,14 +509,12 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   if (!S_ISDIR(st.st_mode))
     return -ENOTDIR;
   access_rc = ir0_open_access_path_routed(path, ir0_flags,
-                                          (uid_t)current_process->euid,
-                                          (gid_t)current_process->egid);
+                                          ir0_current_cred());
   if (access_rc != 0)
     return access_rc;
-  if (!ir0_access_from_stat(&st, ACCESS_EXEC,
-                            (uid_t)current_process->euid,
-                            (gid_t)current_process->egid))
-    return -EACCES;
+  access_rc = generic_permission(ir0_current_cred(), &st, ACCESS_EXEC);
+  if (access_rc != 0)
+    return access_rc;
 
   fd_table = get_process_fd_table();
   fd = -1;
@@ -559,8 +563,7 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
     return -EINVAL;
 
   rc = ir0_open_access_path_routed(path, ir0_flags,
-                                   (uid_t)current_process->euid,
-                                   (gid_t)current_process->egid);
+                                   ir0_current_cred());
   if (rc != 0)
     return rc;
 
@@ -618,8 +621,7 @@ static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
     return -ENOENT;
   }
   drc = ir0_open_access_path_routed(path, ir0_flags,
-                                    (uid_t)current_process->euid,
-                                    (gid_t)current_process->egid);
+                                    ir0_current_cred());
   if (drc != 0)
   {
     return drc;

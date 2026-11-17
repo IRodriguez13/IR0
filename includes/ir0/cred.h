@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
@@ -6,16 +7,74 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: cred_transition.h
- * Description: Linux credential transitions (setreuid/setregid/setresuid).
+ * File: cred.h
+ * Description: Task credentials and the DAC permission check (Linux
+ *              <linux/cred.h>). kernel/process/credentials.c owns the
+ *              credentials, fs/permissions.c the permission check.
  */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <ir0/errno.h>
 #include <stdint.h>
+#include <stdbool.h>
+
+#include <ir0/errno.h>
+#include <ir0/types.h>
+#include <ir0/stat.h>
+
+/*
+ * Well-known IDs used by the kernel itself (root checks) and by tests.
+ * Account data lives in userspace: /etc/passwd, /etc/shadow, /etc/group.
+ */
+#define ROOT_UID     0
+#define ROOT_GID     0
+#define USER_UID     1000
+#define USER_GID     1000
+
+/* Default umask (022 = ----w--w-) */
+#define DEFAULT_UMASK 0022
+
+/* Access modes for generic_permission() */
+#define ACCESS_READ    1
+#define ACCESS_WRITE   2
+#define ACCESS_EXEC    4
+
+struct ir0_task_cred
+{
+    uid_t uid;
+    gid_t gid;
+    uid_t euid;
+    gid_t egid;
+    mode_t umask;
+    pid_t pid;
+
+    /*
+     * Points at the current process cwd buffer (nul-terminated) while the
+     * caller holds the scheduler lock / runs in syscall context.
+     */
+    const char *cwd;
+
+    /* Supplementary groups (setgroups(2)); they count for DAC like egid. */
+    const gid_t *groups;
+    int ngroups;
+};
+
+const struct ir0_task_cred *ir0_current_cred(void);
+pid_t ir0_current_pid(void);
+int ir0_cred_is_root(void);
+
+/*
+ * generic_permission - may @cred access the object @st describes with
+ * @mask (ACCESS_*)? Linux fs/namei.c rules: the owner bits for the owner,
+ * the group bits for a member of the file group (effective or
+ * supplementary), else the other bits; root may read and write anything
+ * and search any directory, but execute a file only when it has an exec
+ * bit. Returns 0 or -EACCES (also for a NULL argument). Implemented in fs/permissions.c; the caller looks
+ * the object up (vfs_stat(), ir0_stat_path_routed()) and passes
+ * ir0_current_cred(), or a copy with the real IDs for access(2).
+ */
+int generic_permission(const struct ir0_task_cred *cred, const stat_t *st,
+                       int mask);
 
 typedef struct ir0_cred_id_triplet
 {

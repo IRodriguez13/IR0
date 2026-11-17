@@ -156,7 +156,7 @@ Mermaid source (richer map): `Documentation/mandocs/diagrams/vfs-routing.mmd`
 
 - Validate paths and enforce generic open/create/truncate policy.
 - Select the correct mount and ops table.
-- Apply credential checks via `ir0_check_file_access` and `ir0_current_cred`.
+- Apply credential checks via `generic_permission` on the stat of the object and `ir0_current_cred`.
 - Keep syscall-facing semantics for `O_TRUNC`, relative paths (via caller resolution), negative errno.
 
 **Syscall layer must:**

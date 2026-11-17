@@ -300,6 +300,15 @@ a case in the same group (checked on a Linux 7.0 host):
 | F19 | getdents64 | fs_getdents64_lists_all_entries | every entry | first 24 backend entries |
 | F20 | pread64, pwrite64, linkat, statx | fs_pread_pwrite_at_offset, fs_pread_pipe_espipe, fs_linkat_hardlink, fs_statx_basic | implemented | ENOSYS |
 | F21 | ftruncate | fs_ftruncate_resizes | read-only fd: EINVAL | file truncated |
+| F22 | faccessat (root) | fs_access_root_exec_needs_x_bit | X_OK on a file without exec bits: EACCES | 0 |
+| F23 | openat, faccessat | fs_supplementary_group_selects_group_bits | a member of the file group gets the group bits: EACCES | other bits granted |
+| F24 | chdir | fs_chdir_supplementary_group_search | supplementary group grants search | EACCES |
+| F25 | setgroups(0) | fs_setgroups_empty_drops_root_group | no groups left: EACCES on a 0640 root:root file | group 0 kept, file readable |
+
+F22-F25 come from the DAC check (`generic_permission()`, checked on Linux
+7.3 in QEMU), together with `fs_dac_owner_bits_and_eperm`, which passed
+before and pins the owner class and EACCES vs EPERM. Group IDs in these
+cases stay below 256 because the guest MINIX inode stores an 8-bit gid.
 
 Conformance after them: 91 PASS, 1 FAIL, 7 TCONF on both ISAs. The FAIL is
 `fs_unlink_open_file`: the VFS is path-based, so an fd whose file was

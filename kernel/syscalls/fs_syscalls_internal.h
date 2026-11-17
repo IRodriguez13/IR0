@@ -34,7 +34,7 @@
 #include <ir0/fd_dispatch.h>
 #include <ir0/fd_get.h>
 #include <ir0/path_user.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/pipe.h>
 #include <ir0/pipe_fd.h>
 #include <ir0/sock_stream.h>

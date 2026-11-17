@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | process, vfs, syscalls |
 | Página man | IR0-security (sección 7) |
-| Fuentes principales | `kernel/process/credentials.c`, `kernel/exec/elf_loader.c`, `includes/ir0/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/credentials.h` |
+| Fuentes principales | `kernel/process/credentials.c`, `kernel/exec/elf_loader.c`, `includes/ir0/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/cred.h` |
 
 > **Última verificación:** 2026-07-25
 
@@ -28,8 +28,8 @@ contraseñas hardcodeadas se eliminaron; el número queda retirado en
 
 | Pieza | Rol |
 |-------|-----|
-| `credentials.c` | `ir0_current_cred`, `ir0_check_file_access` |
-| `permissions.c` | `ir0_access_from_stat` |
+| `credentials.c` | `ir0_current_cred` |
+| `permissions.c` | `generic_permission` |
 | `process_t` | uid, gid, euid, egid, `suid`, `sgid`, `groups[]`, `ngroups`, `no_new_privs`, umask |
 | `elf_loader.c` | bits set-id en exec, `AT_SECURE` en auxv |
 | VFS | comprobaciones traverse, política chmod/chown/mount |
@@ -46,9 +46,9 @@ no hay contraseñas en el código del kernel.
 ```text
   open/stat/access path
        → ir0_stat_path_routed (proc/sys/dev/vfs)
-       → ir0_access_from_stat(st, mode, euid, egid)
-       → euid==0 permite todo
-       → else bits rwx owner/group/other en st_mode
+       → generic_permission(ir0_current_cred(), st, mode)
+       → bits rwx de owner, si no de group (egid o suplementario), si no other
+       → euid==0 salta lectura/escritura/búsqueda; exec necesita un bit x
 ```
 
 **Elevación (exec set-id):**
@@ -68,7 +68,7 @@ Mapa ASCII:
   syscall ──► ir0_current_cred() ──► euid/egid
                       │
                       ▼
-              ir0_check_file_access
+              stat + generic_permission
                       │
                       ▼
               backend VFS (minix/tmpfs también aplican)

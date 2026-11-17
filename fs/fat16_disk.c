@@ -74,14 +74,14 @@ struct fat16_dirent
 /* Location of a directory entry on disk (for updates). */
 struct fat16_ent_ref
 {
-	int is_root;
-	uint16_t dir_cluster; /* start cluster of containing dir if !is_root */
+	int at_root;
+	uint16_t dir_cluster; /* start cluster of containing dir if !at_root */
 	uint32_t index;       /* entry index within that directory */
 	struct fat16_dirent de;
 };
 
 static struct fat16_vol *fat16_find_mount(const char *vfs_path, char *rel, size_t rel_sz,
-					  int *is_root)
+					  int *at_root)
 {
 	size_t best = 0;
 	struct fat16_vol *best_vol = NULL;
@@ -114,7 +114,7 @@ static struct fat16_vol *fat16_find_mount(const char *vfs_path, char *rel, size_
 	if (vfs_path[best] == '\0')
 	{
 		rel[0] = '\0';
-		*is_root = 1;
+		*at_root = 1;
 		return best_vol;
 	}
 
@@ -128,7 +128,7 @@ static struct fat16_vol *fat16_find_mount(const char *vfs_path, char *rel, size_
 			return NULL;
 		memcpy(rel, vfs_path + best, rlen + 1);
 	}
-	*is_root = 0;
+	*at_root = 0;
 	return best_vol;
 }
 
@@ -602,10 +602,10 @@ static int fat16_write_root_raw(struct fat16_vol *v, const uint8_t *buf)
 				   (uint8_t)v->root_dir_sectors, buf);
 }
 
-static int fat16_load_dir_buf(struct fat16_vol *v, int is_root, uint16_t dir_cluster,
+static int fat16_load_dir_buf(struct fat16_vol *v, int at_root, uint16_t dir_cluster,
 			      uint8_t **buf_out, uint32_t *bytes_out)
 {
-	if (is_root)
+	if (at_root)
 		return fat16_read_root_raw(v, buf_out, bytes_out);
 
 	{
@@ -647,10 +647,10 @@ static int fat16_load_dir_buf(struct fat16_vol *v, int is_root, uint16_t dir_clu
 	}
 }
 
-static int fat16_store_dir_buf(struct fat16_vol *v, int is_root, uint16_t dir_cluster,
+static int fat16_store_dir_buf(struct fat16_vol *v, int at_root, uint16_t dir_cluster,
 			       const uint8_t *buf, uint32_t bytes)
 {
-	if (is_root)
+	if (at_root)
 		return fat16_write_root_raw(v, buf);
 
 	{
@@ -678,7 +678,7 @@ static int fat16_write_dirent_at(struct fat16_vol *v, const struct fat16_ent_ref
 	uint32_t bytes = 0;
 	int ret;
 
-	ret = fat16_load_dir_buf(v, ref->is_root, ref->dir_cluster, &buf, &bytes);
+	ret = fat16_load_dir_buf(v, ref->at_root, ref->dir_cluster, &buf, &bytes);
 	if (ret != 0)
 		return ret;
 	if ((ref->index + 1U) * 32U > bytes)
@@ -687,12 +687,12 @@ static int fat16_write_dirent_at(struct fat16_vol *v, const struct fat16_ent_ref
 		return -ENOSPC;
 	}
 	memcpy(buf + ref->index * 32U, &ref->de, 32);
-	ret = fat16_store_dir_buf(v, ref->is_root, ref->dir_cluster, buf, bytes);
+	ret = fat16_store_dir_buf(v, ref->at_root, ref->dir_cluster, buf, bytes);
 	kfree(buf);
 	return ret;
 }
 
-static int fat16_find_in_dir(struct fat16_vol *v, int is_root, uint16_t dir_cluster,
+static int fat16_find_in_dir(struct fat16_vol *v, int at_root, uint16_t dir_cluster,
 			     const char *name, struct fat16_ent_ref *out)
 {
 	uint8_t *buf = NULL;
@@ -701,7 +701,7 @@ static int fat16_find_in_dir(struct fat16_vol *v, int is_root, uint16_t dir_clus
 	uint32_t nent;
 	int ret;
 
-	ret = fat16_load_dir_buf(v, is_root, dir_cluster, &buf, &bytes);
+	ret = fat16_load_dir_buf(v, at_root, dir_cluster, &buf, &bytes);
 	if (ret != 0)
 		return ret;
 	nent = bytes / 32U;
@@ -713,7 +713,7 @@ static int fat16_find_in_dir(struct fat16_vol *v, int is_root, uint16_t dir_clus
 			break;
 		if (fat16_name_match(name, de))
 		{
-			out->is_root = is_root;
+			out->at_root = at_root;
 			out->dir_cluster = dir_cluster;
 			out->index = i;
 			out->de = *de;
@@ -725,7 +725,7 @@ static int fat16_find_in_dir(struct fat16_vol *v, int is_root, uint16_t dir_clus
 	return -ENOENT;
 }
 
-static int fat16_find_free_slot(struct fat16_vol *v, int is_root, uint16_t dir_cluster,
+static int fat16_find_free_slot(struct fat16_vol *v, int at_root, uint16_t dir_cluster,
 				struct fat16_ent_ref *out)
 {
 	uint8_t *buf = NULL;
@@ -734,7 +734,7 @@ static int fat16_find_free_slot(struct fat16_vol *v, int is_root, uint16_t dir_c
 	uint32_t nent;
 	int ret;
 
-	ret = fat16_load_dir_buf(v, is_root, dir_cluster, &buf, &bytes);
+	ret = fat16_load_dir_buf(v, at_root, dir_cluster, &buf, &bytes);
 	if (ret != 0)
 		return ret;
 	nent = bytes / 32U;
@@ -744,7 +744,7 @@ static int fat16_find_free_slot(struct fat16_vol *v, int is_root, uint16_t dir_c
 
 		if (de->name[0] == 0x00 || de->name[0] == (uint8_t)0xE5)
 		{
-			out->is_root = is_root;
+			out->at_root = at_root;
 			out->dir_cluster = dir_cluster;
 			out->index = i;
 			memset(&out->de, 0, sizeof(out->de));
@@ -818,12 +818,12 @@ static char *fat16_strtok(char *s, char **save)
  */
 static int fat16_resolve_path(struct fat16_vol *v, const char *rel, int want_parent,
 			      char *leaf_out, size_t leaf_sz, struct fat16_ent_ref *out,
-			      int *parent_is_root, uint16_t *parent_cluster)
+			      int *parent_at_root, uint16_t *parent_cluster)
 {
 	char path[FAT16_MAX_PATH];
 	char *save = NULL;
 	char *tok;
-	int is_root = 1;
+	int at_root = 1;
 	uint16_t cur_cluster = 0;
 	struct fat16_ent_ref cur;
 	int have = 0;
@@ -857,19 +857,19 @@ static int fat16_resolve_path(struct fat16_vol *v, const char *rel, int want_par
 				strncpy(leaf_out, tokens[i], leaf_sz - 1);
 				leaf_out[leaf_sz - 1] = '\0';
 			}
-			if (parent_is_root)
-				*parent_is_root = is_root;
+			if (parent_at_root)
+				*parent_at_root = at_root;
 			if (parent_cluster)
 				*parent_cluster = cur_cluster;
 			return 0;
 		}
 
-		if (fat16_find_in_dir(v, is_root, cur_cluster, tokens[i], &cur) != 0)
+		if (fat16_find_in_dir(v, at_root, cur_cluster, tokens[i], &cur) != 0)
 			return -ENOENT;
 		have = 1;
 		if (cur.de.attr & FAT_ATTR_DIR)
 		{
-			is_root = 0;
+			at_root = 0;
 			cur_cluster = cur.de.cluster_lo;
 		}
 		else if (!last)
@@ -1103,7 +1103,7 @@ static int fat16_write_file(struct fat16_vol *v, struct fat16_ent_ref *ref,
 }
 
 static int fat16_init_subdir(struct fat16_vol *v, uint16_t cluster, uint16_t parent_cluster,
-			     int parent_is_root)
+			     int parent_at_root)
 {
 	uint32_t bytes = (uint32_t)v->sectors_per_cluster * 512U;
 	uint8_t *buf;
@@ -1125,7 +1125,7 @@ static int fat16_init_subdir(struct fat16_vol *v, uint16_t cluster, uint16_t par
 	dotdot->name[0] = '.';
 	dotdot->name[1] = '.';
 	dotdot->attr = FAT_ATTR_DIR;
-	dotdot->cluster_lo = parent_is_root ? 0 : parent_cluster;
+	dotdot->cluster_lo = parent_at_root ? 0 : parent_cluster;
 	ret = fat16_write_sectors(v, fat16_cluster_lba(v, cluster), v->sectors_per_cluster,
 				  buf);
 	kfree(buf);
@@ -1215,26 +1215,26 @@ int fat16_disk_umount(const char *mount_dir)
 int fat16_disk_path_is_mounted(const char *vfs_path)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 
-	return fat16_find_mount(vfs_path, rel, sizeof(rel), &is_root) != NULL;
+	return fat16_find_mount(vfs_path, rel, sizeof(rel), &at_root) != NULL;
 }
 
 int fat16_disk_stat(const char *path, stat_t *buf)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	int ret;
 
 	if (!buf)
 		return -EFAULT;
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
 	memset(buf, 0, sizeof(*buf));
-	if (is_root)
+	if (at_root)
 	{
 		buf->st_mode = S_IFDIR | 0777;
 		buf->st_nlink = 1;
@@ -1253,7 +1253,7 @@ int fat16_disk_stat(const char *path, stat_t *buf)
 int fat16_disk_readdir(const char *path, struct vfs_dirent *entries, int max)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	uint8_t *buf = NULL;
@@ -1261,18 +1261,18 @@ int fat16_disk_readdir(const char *path, struct vfs_dirent *entries, int max)
 	uint32_t i;
 	uint32_t nent;
 	int out = 0;
-	int dir_is_root;
+	int dir_at_root;
 	uint16_t dir_cluster;
 	int ret;
 
 	if (!entries || max <= 0)
 		return -EINVAL;
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 	{
-		dir_is_root = 1;
+		dir_at_root = 1;
 		dir_cluster = 0;
 	}
 	else
@@ -1282,11 +1282,11 @@ int fat16_disk_readdir(const char *path, struct vfs_dirent *entries, int max)
 			return ret;
 		if (!(ref.de.attr & FAT_ATTR_DIR))
 			return -ENOTDIR;
-		dir_is_root = 0;
+		dir_at_root = 0;
 		dir_cluster = ref.de.cluster_lo;
 	}
 
-	ret = fat16_load_dir_buf(v, dir_is_root, dir_cluster, &buf, &bytes);
+	ret = fat16_load_dir_buf(v, dir_at_root, dir_cluster, &buf, &bytes);
 	if (ret != 0)
 		return ret;
 	nent = bytes / 32U;
@@ -1312,17 +1312,17 @@ int fat16_disk_read(const char *path, void *buf, size_t count, size_t *bytes_rea
 		    off_t offset)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	int ret;
 
 	if (!buf || !bytes_read)
 		return -EINVAL;
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EISDIR;
 	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &ref, NULL, NULL);
 	if (ret != 0)
@@ -1336,8 +1336,8 @@ int fat16_disk_create(const char *path, mode_t mode)
 {
 	char rel[FAT16_MAX_PATH];
 	char leaf[FAT16_MAX_NAME];
-	int is_root = 0;
-	int parent_is_root = 1;
+	int at_root = 0;
+	int parent_at_root = 1;
 	uint16_t parent_cluster = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref slot;
@@ -1345,18 +1345,18 @@ int fat16_disk_create(const char *path, mode_t mode)
 	int ret;
 
 	(void)mode;
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EISDIR;
 	if (fat16_resolve_path(v, rel, 0, NULL, 0, &existing, NULL, NULL) == 0)
 		return -EEXIST;
-	ret = fat16_resolve_path(v, rel, 1, leaf, sizeof(leaf), NULL, &parent_is_root,
+	ret = fat16_resolve_path(v, rel, 1, leaf, sizeof(leaf), NULL, &parent_at_root,
 				 &parent_cluster);
 	if (ret != 0)
 		return ret;
-	ret = fat16_find_free_slot(v, parent_is_root, parent_cluster, &slot);
+	ret = fat16_find_free_slot(v, parent_at_root, parent_cluster, &slot);
 	if (ret != 0)
 		return ret;
 	memset(&slot.de, 0, sizeof(slot.de));
@@ -1372,8 +1372,8 @@ int fat16_disk_mkdir(const char *path, mode_t mode)
 {
 	char rel[FAT16_MAX_PATH];
 	char leaf[FAT16_MAX_NAME];
-	int is_root = 0;
-	int parent_is_root = 1;
+	int at_root = 0;
+	int parent_at_root = 1;
 	uint16_t parent_cluster = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref slot;
@@ -1382,27 +1382,27 @@ int fat16_disk_mkdir(const char *path, mode_t mode)
 	int ret;
 
 	(void)mode;
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EEXIST;
 	if (fat16_resolve_path(v, rel, 0, NULL, 0, &existing, NULL, NULL) == 0)
 		return -EEXIST;
-	ret = fat16_resolve_path(v, rel, 1, leaf, sizeof(leaf), NULL, &parent_is_root,
+	ret = fat16_resolve_path(v, rel, 1, leaf, sizeof(leaf), NULL, &parent_at_root,
 				 &parent_cluster);
 	if (ret != 0)
 		return ret;
 	ret = fat16_alloc_cluster(v, &neu);
 	if (ret != 0)
 		return ret;
-	ret = fat16_init_subdir(v, neu, parent_cluster, parent_is_root);
+	ret = fat16_init_subdir(v, neu, parent_cluster, parent_at_root);
 	if (ret != 0)
 	{
 		fat16_free_chain(v, neu);
 		return ret;
 	}
-	ret = fat16_find_free_slot(v, parent_is_root, parent_cluster, &slot);
+	ret = fat16_find_free_slot(v, parent_at_root, parent_cluster, &slot);
 	if (ret != 0)
 	{
 		fat16_free_chain(v, neu);
@@ -1423,15 +1423,15 @@ int fat16_disk_mkdir(const char *path, mode_t mode)
 int fat16_disk_unlink(const char *path)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	int ret;
 
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EBUSY;
 	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &ref, NULL, NULL);
 	if (ret != 0)
@@ -1451,16 +1451,16 @@ int fat16_disk_unlink(const char *path)
 int fat16_disk_rmdir(const char *path)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	int empty;
 	int ret;
 
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EBUSY;
 	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &ref, NULL, NULL);
 	if (ret != 0)
@@ -1486,7 +1486,7 @@ int fat16_disk_link(const char *oldpath, const char *newpath)
 	char leaf[FAT16_MAX_NAME];
 	int o_root = 0;
 	int n_root = 0;
-	int parent_is_root = 1;
+	int parent_at_root = 1;
 	uint16_t parent_cluster = 0;
 	struct fat16_vol *ov;
 	struct fat16_vol *nv;
@@ -1511,11 +1511,11 @@ int fat16_disk_link(const char *oldpath, const char *newpath)
 		return -EPERM;
 	if (fat16_resolve_path(ov, nrel, 0, NULL, 0, &existing, NULL, NULL) == 0)
 		return -EEXIST;
-	ret = fat16_resolve_path(ov, nrel, 1, leaf, sizeof(leaf), NULL, &parent_is_root,
+	ret = fat16_resolve_path(ov, nrel, 1, leaf, sizeof(leaf), NULL, &parent_at_root,
 				 &parent_cluster);
 	if (ret != 0)
 		return ret;
-	ret = fat16_find_free_slot(ov, parent_is_root, parent_cluster, &slot);
+	ret = fat16_find_free_slot(ov, parent_at_root, parent_cluster, &slot);
 	if (ret != 0)
 		return ret;
 
@@ -1580,17 +1580,17 @@ int fat16_disk_write(const char *path, const void *buf, size_t count,
 		     size_t *bytes_written, off_t offset)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	int ret;
 
 	if (!buf || !bytes_written)
 		return -EINVAL;
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EISDIR;
 	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &ref, NULL, NULL);
 	if (ret != 0)
@@ -1603,15 +1603,15 @@ int fat16_disk_write(const char *path, const void *buf, size_t count,
 int fat16_disk_truncate(const char *path, size_t length)
 {
 	char rel[FAT16_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
 	int ret;
 
-	v = fat16_find_mount(path, rel, sizeof(rel), &is_root);
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENODEV;
-	if (is_root)
+	if (at_root)
 		return -EISDIR;
 	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &ref, NULL, NULL);
 	if (ret != 0)

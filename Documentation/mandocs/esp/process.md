@@ -91,7 +91,7 @@ POSIX musl depende de fork/execve y wait4.
 | MM | PML4 por proceso, mmap_list, límites brk |
 | VFS | resolución cwd, vfs_file en entradas fd |
 | Syscalls | fork/exec/wait/kill/signals |
-| Credentials | `check_file_access`, syscalls setuid |
+| Credentials | `ir0_current_cred`, syscalls setuid |
 
 ## 7. Mapas visuales
 

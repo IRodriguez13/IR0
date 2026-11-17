@@ -63,8 +63,8 @@ typedef int syscall_num_t;
 #define STDOUT_FILENO  1
 #define STDERR_FILENO  2
 
-/* Access modes for permission checking - use definitions from permissions.h */
-#include <ir0/permissions.h>
+/* Access modes for permission checking - use definitions from cred.h */
+#include <ir0/cred.h>
 #define ACCESS_EXECUTE ACCESS_EXEC
 
 #endif /* _IR0_SYSCALL_H */

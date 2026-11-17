@@ -298,8 +298,13 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   }
 
   /* Check write permissions */
-  if (!check_file_access(fd_table[fd].path, ACCESS_WRITE, current_process))
-    return -EACCES;
+  {
+    stat_t st;
+
+    if (ir0_stat_path_routed(fd_table[fd].path, &st) != 0 ||
+        generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
+      return -EACCES;
+  }
 
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)
@@ -622,8 +627,13 @@ int64_t sys_read(int fd, void *buf, size_t count)
   }
 
   /* Check read permissions */
-  if (!check_file_access(fd_table[fd].path, ACCESS_READ, current_process))
-    return -EACCES;
+  {
+    stat_t st;
+
+    if (ir0_stat_path_routed(fd_table[fd].path, &st) != 0 ||
+        generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
+      return -EACCES;
+  }
 
   /* Use VFS file handle if available */
   if (fd_table[fd].vfs_file)

@@ -51,7 +51,6 @@ int64_t sys_personality(unsigned long persona);
 int64_t sys_setpriority(int which, int who, int prio);
 int64_t sys_getpriority(int which, int who);
 int64_t sys_setpgid(pid_t pid, pid_t pgid);
-void process_cred_init_groups(process_t *p);
 
 int64_t sys_exit(int exit_code);
 int64_t sys_exit_group(int exit_code);

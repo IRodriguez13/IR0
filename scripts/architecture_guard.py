@@ -119,7 +119,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "init_drv.h",
     ROOT / "includes" / "ir0" / "sched.h",
     ROOT / "includes" / "ir0" / "pseudo_fs.h",
-    ROOT / "includes" / "ir0" / "credentials.h",
+    ROOT / "includes" / "ir0" / "cred.h",
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
     ROOT / "includes" / "ir0" / "irq.h",
     ROOT / "includes" / "ir0" / "context_backend.h",

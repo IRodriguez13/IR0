@@ -27,7 +27,7 @@
 #include <ir0/named_fifo.h>
 #include <ir0/oom.h>
 #include <ir0/path_routed.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/procfs.h>
 #include <ir0/stat.h>
 #include <string.h>
@@ -339,6 +339,7 @@ restore:
 void ktest_routed_open_access(void)
 {
 	const char *fifo_path = "/run/ktest-access-fifo";
+	struct ir0_task_cred cred;
 	uint32_t saved_euid;
 	uint32_t saved_egid;
 	uid_t target_uid;
@@ -369,11 +370,14 @@ void ktest_routed_open_access(void)
 				    (uid_t)(target_uid + 1U)), -EACCES);
 	KASSERT_EQ(proc_access_path("/proc/self/exe",
 				    (uid_t)(target_uid + 1U)), -EACCES);
+	cred = *ir0_current_cred();
+	cred.euid = target_uid;
+	cred.egid = target_gid;
 	KASSERT_EQ(ir0_open_access_path_routed("/proc/self/environ", O_RDONLY,
-					      target_uid, target_gid), 0);
+					      &cred), 0);
+	cred.euid = (uid_t)(target_uid + 1U);
 	KASSERT_EQ(ir0_open_access_path_routed("/proc/self/environ", O_RDONLY,
-					      (uid_t)(target_uid + 1U),
-					      target_gid), -EACCES);
+					      &cred), -EACCES);
 
 	memset(&st, 0, sizeof(st));
 	KASSERT_EQ(proc_stat("/proc/self/environ", &st), 0);
@@ -398,6 +402,52 @@ void ktest_routed_open_access(void)
 
 	current_process->euid = saved_euid;
 	current_process->egid = saved_egid;
+	KASSERT_EQ(named_fifo_unlink(fifo_path), 0);
+	KTEST_END();
+}
+
+/*
+ * open(2) of a routed node (here a named FIFO) honours supplementary
+ * groups like any other file: Linux acl_permission_check() selects the
+ * group bits when in_group_p() matches the file group.
+ */
+void ktest_routed_open_supplementary_group(void)
+{
+	const char *fifo_path = "/run/ktest-group-fifo";
+	uint32_t saved_euid;
+	uint32_t saved_egid;
+	uint8_t saved_ngroups;
+	gid_t saved_group;
+	int64_t fd;
+
+	KTEST_BEGIN("routed_open_supplementary_group");
+	if (!current_process)
+	{
+		KTEST_END();
+		return;
+	}
+
+	saved_euid = current_process->euid;
+	saved_egid = current_process->egid;
+	saved_ngroups = current_process->ngroups;
+	saved_group = current_process->groups[0];
+
+	(void)named_fifo_unlink(fifo_path);
+	KASSERT_EQ(named_fifo_create_owned(fifo_path, 0660, ROOT_UID, 2000), 0);
+	current_process->euid = USER_UID;
+	current_process->egid = USER_GID;
+	current_process->groups[0] = 2000;
+	current_process->ngroups = 1;
+
+	fd = sys_open(fifo_path, O_RDONLY | O_NONBLOCK, 0);
+	KASSERT(fd >= 0);
+	if (fd >= 0)
+		sys_close((int)fd);
+
+	current_process->euid = saved_euid;
+	current_process->egid = saved_egid;
+	current_process->groups[0] = saved_group;
+	current_process->ngroups = saved_ngroups;
 	KASSERT_EQ(named_fifo_unlink(fifo_path), 0);
 	KTEST_END();
 }

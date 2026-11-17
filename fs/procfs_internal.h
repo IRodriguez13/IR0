@@ -17,7 +17,7 @@
 #include <ir0/kmem.h>
 #include <ir0/mm_port.h>
 #include <ir0/mman.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <ir0/net.h>
@@ -28,7 +28,6 @@
 #include <ir0/mm_struct.h>
 #include <ir0/oom.h>
 #include <ir0/pmm.h>
-#include <ir0/credentials.h>
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/utsname.h>

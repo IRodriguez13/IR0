@@ -37,8 +37,7 @@
 #include <ir0/fpu.h>
 #include <ir0/context.h>
 #include <ir0/chmod.h>
-#include <ir0/credentials.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/path_routed.h>
 #include <config.h>
 #include <ir0/ktm/fault.h>
@@ -1669,10 +1668,8 @@ static int exec_permission_denied(const process_t *proc, const char *path)
 		return 0;
 	if (!S_ISREG(st.st_mode))
 		return 1;
-	if (proc->euid == ROOT_UID)
-		return (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0;
 
-	return ir0_check_file_access(path, ACCESS_EXEC) ? 0 : 1;
+	return generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0;
 }
 
 static void exec_setid_collect(const process_t *proc, const char *path,

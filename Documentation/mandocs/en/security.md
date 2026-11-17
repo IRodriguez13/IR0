@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | process, vfs, syscalls |
 | Man page | IR0-security (section 7) |
-| Primary sources | `kernel/process/credentials.c`, `kernel/exec/elf_loader.c`, `includes/ir0/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/credentials.h` |
+| Primary sources | `kernel/process/credentials.c`, `kernel/exec/elf_loader.c`, `includes/ir0/process.h`, `fs/permissions.c`, `fs/vfs.c`, `includes/ir0/cred.h` |
 
 > **Last verified:** 2026-07-25
 
@@ -28,8 +28,8 @@ removed; the number is retired in `arch/x86-64/include/uapi/asm/unistd_ir0.h`
 
 | Piece | Role |
 |-------|------|
-| `credentials.c` | `ir0_current_cred`, `ir0_check_file_access` |
-| `permissions.c` | `ir0_access_from_stat` |
+| `credentials.c` | `ir0_current_cred` |
+| `permissions.c` | `generic_permission` |
 | `process_t` | uid, gid, euid, egid, `suid`, `sgid`, `groups[]`, `ngroups`, `no_new_privs`, umask |
 | `elf_loader.c` | set-id bits on exec, `AT_SECURE` in auxv |
 | VFS | traverse checks, chmod/chown/mount policy |
@@ -46,9 +46,9 @@ there are no passwords in kernel source.
 ```text
   open/stat/access path
        → ir0_stat_path_routed (proc/sys/dev/vfs)
-       → ir0_access_from_stat(st, mode, euid, egid)
-       → euid==0 allow all
-       → else owner/group/other rwx bits on st_mode
+       → generic_permission(ir0_current_cred(), st, mode)
+       → owner, else group (egid or supplementary), else other rwx bits
+       → euid==0 overrides read/write/search; exec needs an x bit
 ```
 
 **Elevation (set-id exec):**
@@ -68,7 +68,7 @@ ASCII:
   syscall ──► ir0_current_cred() ──► euid/egid
                       │
                       ▼
-              ir0_check_file_access
+              stat + generic_permission
                       │
                       ▼
               VFS backend (minix/tmpfs enforce too)

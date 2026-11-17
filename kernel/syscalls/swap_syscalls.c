@@ -16,7 +16,7 @@
 #include <ir0/vfs.h>
 #include <ir0/process.h>
 #include <ir0/path_user.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/blockdev.h>
 #include <ir0/vfs_dispatch.h>
 #include <string.h>
