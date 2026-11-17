@@ -419,7 +419,10 @@ struct vfs_ops *vfs_ops_for_path(const char *path)
 }
 
 /**
- * Check that the current process has execute on every directory component.
+ * Check that the current process has execute on every directory component
+ * before the last one, as the Linux path walk (may_lookup()) does: a
+ * missing component is ENOENT, one that is not a directory ENOTDIR, and a
+ * directory without search permission EACCES.
  */
 int vfs_check_dir_traverse(const char *path)
 {
@@ -448,8 +451,13 @@ int vfs_check_dir_traverse(const char *path)
         dir[sizeof(dir) - 1] = '\0';
 
         stat_t st;
-        if (vfs_stat(dir, &st) != 0 ||
-            generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+        int ret = vfs_stat(dir, &st);
+
+        if (ret != 0)
+            return ret;
+        if ((st.st_mode & S_IFMT) != 0 && !S_ISDIR(st.st_mode))
+            return -ENOTDIR;
+        if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
             return -EACCES;
         p = slash + 1;
     }

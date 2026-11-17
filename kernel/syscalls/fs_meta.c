@@ -380,6 +380,36 @@ int64_t sys_statx(int dirfd, const char *pathname, int flags,
   return 0;
 }
 
+/*
+ * In-memory nodes (named FIFOs, sockets, device nodes, and symlinks on a
+ * file system without them) live in a VFS directory, so dropping one needs
+ * the same may_delete() as a file; vfs_unlink() checks its own victims.
+ * -ENOENT when @resolved is not such a node.
+ */
+static int unlink_named_node(const char *resolved)
+{
+  stat_t st;
+  int rc;
+
+  if (named_symlink_stat(resolved, &st) != 0 &&
+      named_fifo_stat(resolved, &st) != 0 &&
+      named_socket_stat(resolved, &st) != 0 &&
+      named_devnode_stat(resolved, &st) != 0)
+    return -ENOENT;
+  rc = may_delete(resolved, &st, false);
+  if (rc != 0)
+    return rc;
+
+  rc = named_symlink_unlink(resolved);
+  if (rc == -ENOENT)
+    rc = named_fifo_unlink(resolved);
+  if (rc == -ENOENT)
+    rc = named_socket_unlink(resolved);
+  if (rc == -ENOENT)
+    rc = named_devnode_unlink(resolved);
+  return rc;
+}
+
 int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
 {
   char resolved[256];
@@ -398,27 +428,7 @@ int64_t sys_unlinkat(int dirfd, const char *pathname, int flags)
   if (flags & AT_REMOVEDIR)
     return vfs_rmdir(resolved);
 
-  rc = named_symlink_unlink(resolved);
-  if (rc == 0)
-    return 0;
-  if (rc != -ENOENT)
-    return rc;
-
-  rc = named_fifo_unlink(resolved);
-  if (rc == 0)
-    return 0;
-  if (rc != -ENOENT)
-    return rc;
-
-  rc = named_socket_unlink(resolved);
-  if (rc == 0)
-    return 0;
-  if (rc != -ENOENT)
-    return rc;
-
-  rc = named_devnode_unlink(resolved);
-  if (rc == 0)
-    return 0;
+  rc = unlink_named_node(resolved);
   if (rc != -ENOENT)
     return rc;
 

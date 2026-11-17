@@ -17,6 +17,7 @@
 #include "vfs.h"
 #include <ir0/path.h>
 #include <ir0/kmem.h>
+#include <ir0/chmod.h>
 #include <ir0/cred.h>
 #include <ir0/process.h>
 #include <string.h>
@@ -74,6 +75,45 @@ int vfs_mkdir(const char *path, int mode)
     return vfs_ops_mkdir(ops, path, (mode_t)mode);
 }
 
+/*
+ * may_delete - Linux fs/namei.c may_delete(): may the caller remove the
+ * name @path, which refers to @victim? Removing a name changes the parent
+ * directory, never the victim: it needs search on every directory on the
+ * way and write and search on the parent. In a sticky (+t) parent only
+ * the owner of the victim, the owner of the parent or root may remove it
+ * (check_sticky(), EPERM). Last, @victim must be a directory when @isdir
+ * is set (ENOTDIR) and must not be one otherwise (EISDIR).
+ */
+int may_delete(const char *path, const stat_t *victim, bool isdir)
+{
+    const struct ir0_task_cred *cred = ir0_current_cred();
+    char parent[MAX_PATH];
+    stat_t dir;
+    int ret;
+
+    if (!cred)
+        return -ESRCH;
+    ret = vfs_check_dir_traverse(path);
+    if (ret != 0)
+        return ret;
+    ret = vfs_parent_dir(path, parent, sizeof(parent));
+    if (ret != 0)
+        return ret;
+    ret = vfs_stat(parent, &dir);
+    if (ret != 0)
+        return ret;
+    if (generic_permission(cred, &dir, ACCESS_WRITE | ACCESS_EXEC) != 0)
+        return -EACCES;
+    if ((dir.st_mode & S_ISVTX) && cred->euid != ROOT_UID &&
+        cred->euid != victim->st_uid && cred->euid != dir.st_uid)
+        return -EPERM;
+    if (isdir && !S_ISDIR(victim->st_mode))
+        return -ENOTDIR;
+    if (!isdir && S_ISDIR(victim->st_mode))
+        return -EISDIR;
+    return 0;
+}
+
 int vfs_unlink(const char *path)
 {
     int ret = vfs_validate_path(path);
@@ -89,11 +129,9 @@ int vfs_unlink(const char *path)
     if (vfs_stat(path, &st) != 0)
         return -ENOENT;
 
-    if (S_ISDIR(st.st_mode))
-        return -EISDIR;
-
-    if (generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
-        return -EACCES;
+    ret = may_delete(path, &st, false);
+    if (ret != 0)
+        return ret;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);
     if (!ops || !ops->unlink)
@@ -281,21 +319,10 @@ int vfs_rmdir(const char *path)
     stat_t st;
     if (vfs_stat(norm, &st) != 0)
         return -ENOENT;
-    if (!S_ISDIR(st.st_mode))
-        return -ENOTDIR;
 
-    ret = vfs_check_dir_traverse(norm);
+    ret = may_delete(norm, &st, true);
     if (ret != 0)
         return ret;
-
-    char parent[MAX_PATH];
-    if (vfs_parent_dir(norm, parent, sizeof(parent)) == 0)
-    {
-        if (vfs_stat(parent, &st) != 0 ||
-            generic_permission(ir0_current_cred(), &st,
-                               ACCESS_WRITE | ACCESS_EXEC) != 0)
-            return -EACCES;
-    }
 
     struct vfs_ops *ops = vfs_ops_for_path(norm);
     if (!ops || !ops->rmdir)

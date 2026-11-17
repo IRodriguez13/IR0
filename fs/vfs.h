@@ -112,6 +112,16 @@ int vfs_chmod(const char *path, mode_t mode);
 int vfs_truncate(const char *path, size_t length);
 int vfs_utimens(const char *path, const struct timespec times[2]);
 
+/*
+ * Linux may_delete(): may the current task remove the name @path that
+ * refers to @victim? 0, -EACCES (no write and search on the parent or on
+ * the way there), -EPERM (sticky parent), -ENOTDIR/-EISDIR (@victim does
+ * not match @isdir) or the lookup error. The VFS calls it for unlink,
+ * rmdir and rename; in-memory nodes (named FIFOs, sockets, device nodes,
+ * symlinks) call it before they drop a name.
+ */
+int may_delete(const char *path, const stat_t *victim, bool isdir);
+
 /* Bulk read helper (ELF loader, etc.) */
 int vfs_read_file(const char *path, void **data, size_t *size);
 

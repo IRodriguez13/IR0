@@ -15,6 +15,7 @@
 #include <kernel/syscalls.h>
 #include <ir0/process.h>
 #include "fs_path_syscalls.h"
+#include "fs_syscalls.h"
 #include "syscalls_glue.h"
 #include <config.h>
 #include <ir0/chmod.h>
@@ -770,29 +771,10 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
   return ir0_utimensat_path(resolved, NULL, flags);
 }
 
+/* unlink(2) is unlinkat(AT_FDCWD, path, 0): one path, one permission check. */
 int64_t sys_unlink(const char *pathname)
 {
-  char resolved[256];
-  int rc;
-
-  if (!current_process || !pathname)
-    return -EFAULT;
-
-  rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
-                            current_process->cwd, current_process->root);
-  if (rc != 0)
-    return rc;
-
-  if (posix_shm_path_is(resolved))
-    return posix_shm_try_unlink(resolved);
-
-  rc = named_socket_unlink(resolved);
-  if (rc == 0)
-    return 0;
-  if (rc != -ENOENT)
-    return rc;
-
-  return vfs_unlink(resolved);
+  return sys_unlinkat(IR0_AT_FDCWD, pathname, 0);
 }
 
 int64_t sys_truncate(const char *pathname, off_t length)

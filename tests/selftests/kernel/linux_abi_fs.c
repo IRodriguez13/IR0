@@ -719,3 +719,58 @@ int fs_setgroups_empty_drops_root_group(void)
 	EXPECT(S2(SYS_getgroups, 0, 0), 0);
 	return CONF_PASS;
 }
+
+/* Hand @path to DAC_UID:DAC_GID. */
+static int dac_give(const char *path)
+{
+	return S5(SYS_fchownat, AT_FDCWD, path, DAC_UID, DAC_GID, 0) == 0 ?
+		0 : -1;
+}
+
+/*
+ * may_delete(): unlink and rmdir need write and search on the parent
+ * directory, never write on the victim. A writable file in a directory the
+ * user cannot write stays, a read-only file in the user's own directory
+ * goes. The directory check comes before the type check (EACCES, not
+ * EISDIR) and covers a FIFO too.
+ */
+int fs_unlink_needs_parent_write(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("ro", 1, 0755, 0) != 0 ||
+	    dac_make("ro/f", 0, 0666, 0) != 0 ||
+	    dac_make("ro/d", 1, 0777, 0) != 0 ||
+	    S4(SYS_mknodat, AT_FDCWD, "ro/p", S_IFIFO | 0666, 0) != 0 ||
+	    dac_make("own", 1, 0755, DAC_GID) != 0 || dac_give("own") != 0 ||
+	    dac_make("own/f", 0, 0444, 0) != 0 ||
+	    dac_make("own/d", 1, 0555, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/f", 0), EACCES);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/p", 0), EACCES);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/d", 0), EACCES);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "ro/d", AT_REMOVEDIR), EACCES);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "own/f", 0), 0);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "own/d", AT_REMOVEDIR), 0);
+	return CONF_PASS;
+}
+
+/*
+ * check_sticky(): in a sticky (+t) directory only the owner of the victim,
+ * the owner of the directory or root removes a name, write permission on
+ * the directory notwithstanding. The denial is EPERM, not EACCES.
+ */
+int fs_sticky_dir_restricts_delete(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("t", 1, 01777, 0) != 0 ||
+	    dac_make("t/f", 0, 0666, 0) != 0 ||
+	    dac_make("t/d", 1, 0777, 0) != 0 ||
+	    dac_make("t/mine", 0, 0644, DAC_GID) != 0 ||
+	    dac_give("t/mine") != 0 ||
+	    dac_make("ut", 1, 01777, DAC_GID) != 0 || dac_give("ut") != 0 ||
+	    dac_make("ut/f", 0, 0644, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), EPERM);
+	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "t/d", AT_REMOVEDIR), EPERM);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/mine", 0), 0);
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "ut/f", 0), 0);
+	return CONF_PASS;
+}
