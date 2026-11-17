@@ -37,7 +37,7 @@ Checks:
     canonical catalog through <errno.h> or <ir0/errno.h>.
 25) Portable .c under drivers/fs/kernel/mm/net/sched/ipc/ktm/interrupt must not
     use #if* on compiler ISA or CONFIG_ARCH_* tokens; use build-selected
-    backends or IR0_LEGACY_PC_IO (includes/ir0/driver_backend.h). Ignore
+    backends or platform objects (scripts/make/platform/<platform>.mk). Ignore
     // line comments when matching (avoids flagging examples in comments).
 26) Include layout: a C/H file includes each header once, and every #include
     comes before the first function definition (no late includes).
@@ -1838,7 +1838,6 @@ def _cpp_directive_not_in_trailing_comment(line: str) -> Optional[str]:
 def check_common_c_has_no_isa_conditionals():
     """Select ISA implementations by objects/facades, never inside common C."""
     errors = []
-    # IR0_LEGACY_PC_IO is the Makefile-selected legacy PC class gate (drivers, etc.).
     isa_token = (
         r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|ARCH_X86|"
         r"ARCH_ARM64|ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
@@ -1864,7 +1863,7 @@ def check_common_c_has_no_isa_conditionals():
                     errors.append(
                         f"[common-c-no-isa-conditional] "
                         f"{rel_to_root(fpath)}:{idx}: select an object or "
-                        f"facade backend (use IR0_LEGACY_PC_IO for PC-only paths): "
+                        f"facade backend (PC-only code: scripts/make/platform/pc.mk): "
                         f"{line.strip()}"
                     )
     return errors
