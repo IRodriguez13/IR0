@@ -783,16 +783,11 @@ int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios)
 		if (!was_icanon && now_icanon)
 			input_kbd_clear();
 
-		tty_termios = *ktermios;
 		/*
-		 * Do NOT force ICANON when VMIN==0: nano and other editors use
-		 * non-canonical timed reads (VMIN=0). Password prompts
-		 * (bb_ask_noecho) keep ICANON and only clear ECHO. Cooked+echo
-		 * restore after exec is ir0_console_reset_cooked_echo().
+		 * Store the caller's termios as given (Linux tty_set_termios()):
+		 * no flag is forced on or off here, whatever the mode.
 		 */
-		now_icanon = (tty_termios.c_lflag & IR0_LFLAG_ICANON) ? 1 : 0;
-		if (now_icanon)
-			tty_termios.c_iflag |= IR0_IFLAG_ICRNL;
+		tty_termios = *ktermios;
 		tty_termios_ready = 1;
 		/*
 		 * Mode flip or TCSETSF: drop pending LD input so raw↔cooked does
