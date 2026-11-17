@@ -8,10 +8,9 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: simplefs.h
- * Description: Minimal persistent-style filesystem backend registration.
+ * Description: The "simplefs" filesystem type.
  */
 
 #pragma once
 
 int simplefs_register(void);
-int simplefs_engine_register(const char *fs_name);
