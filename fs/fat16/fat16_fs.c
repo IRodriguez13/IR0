@@ -11,7 +11,6 @@
  * Description: The "fat16" filesystem type: a FAT16 volume on a block device.
  */
 
-#include "fat16_fs.h"
 #include "fat16_disk.h"
 #include <fs/vfs.h>
 
@@ -30,15 +29,10 @@ static struct vfs_ops fat16_ops = {
 	.truncate = fat16_disk_truncate,
 };
 
-static struct vfs_fstype fat16_fs_type = {
+struct vfs_fstype fat16_fs_type = {
 	.name = "fat16",
 	.ops = &fat16_ops,
 	.mount = fat16_disk_mount,
 	.umount = fat16_disk_umount,
 	.next = NULL,
 };
-
-int fat16_fs_register(void)
-{
-	return vfs_register_fs(&fat16_fs_type);
-}

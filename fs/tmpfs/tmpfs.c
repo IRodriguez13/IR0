@@ -392,7 +392,7 @@ static struct vfs_ops tmpfs_fs_ops = {
 };
 
 /* ramfs is an alias of tmpfs: the same in-memory driver under both names. */
-static struct vfs_fstype tmpfs_fs_type = {
+struct vfs_fstype tmpfs_fs_type = {
     .name  = "tmpfs",
     .alias = "ramfs",
     .fs_flags = FS_NOSUID_DEFAULT,
@@ -402,11 +402,6 @@ static struct vfs_fstype tmpfs_fs_type = {
     .statfs = tmpfs_statfs,
     .next  = NULL,
 };
-
-int tmpfs_register(void)
-{
-    return vfs_register_fs(&tmpfs_fs_type);
-}
 
 /* TMPFS API functions for VFS integration */
 

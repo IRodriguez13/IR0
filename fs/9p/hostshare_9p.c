@@ -344,7 +344,7 @@ static int hs_statfs(const char *path, struct ir0_statfs *buf)
 	return 0;
 }
 
-static struct vfs_fstype hs_fstype = {
+struct vfs_fstype v9fs_fs_type = {
 	.name = "9p",
 	.ops = &hs_ops,
 	.mount = hs_mount,
@@ -352,8 +352,3 @@ static struct vfs_fstype hs_fstype = {
 	.statfs = hs_statfs,
 	.next = NULL,
 };
-
-int hostshare_9p_register(void)
-{
-	return vfs_register_fs(&hs_fstype);
-}

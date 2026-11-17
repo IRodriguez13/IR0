@@ -764,32 +764,11 @@ FS_OBJS = \
     fs/devfs_net.o \
     fs/devfs_block.o \
     fs/sysfs.o \
-    fs/9p/hostshare_9p.o
+    fs/filesystems.o
 
-ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
-FS_OBJS += fs/minix/minix_fs.o
-FS_OBJS += fs/minix/minix_inode.o
-FS_OBJS += fs/minix/minix_dir.o
-FS_OBJS += fs/minix/minix_file.o
-FS_OBJS += fs/minix/minix_meta.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_TMPFS),n)
-FS_OBJS += fs/tmpfs/tmpfs.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_SIMPLEFS),n)
-FS_OBJS += fs/simplefs/simplefs.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_FAT16),n)
-FS_OBJS += fs/fat16/fat16_fs.o
-FS_OBJS += fs/fat16/fat16_disk.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_EXT2),n)
-FS_OBJS += fs/ext2/ext2_disk.o
-endif
+# Filesystems: one fragment per filesystem, selected by .config.
+include scripts/make/fs.mk
+FS_OBJS += $(fs-obj-y)
 
 DISK_OBJS = \
     drivers/storage/partition.o

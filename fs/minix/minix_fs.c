@@ -645,8 +645,6 @@ static struct vfs_ops minix_fs_ops = {
 	.map_swap_extents = minix_map_swap_extents,
 };
 
-static struct vfs_fstype minix_fs_type;
-
 static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name)
 {
 	if (!dir_name || strcmp(dir_name, "/") != 0)
@@ -662,12 +660,10 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
 	return 0;
 }
 
-int minix_fs_register(void)
-{
-	minix_fs_type.name  = "minix";
-	minix_fs_type.ops   = &minix_fs_ops;
-	minix_fs_type.mount = minix_mount;
-	minix_fs_type.statfs = minix_fs_statfs;
-	minix_fs_type.next  = NULL;
-	return vfs_register_fs(&minix_fs_type);
-}
+struct vfs_fstype minix_fs_type = {
+	.name = "minix",
+	.ops = &minix_fs_ops,
+	.mount = minix_mount,
+	.statfs = minix_fs_statfs,
+	.next = NULL,
+};

@@ -29,6 +29,3 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset);
 int tmpfs_chmod(const char *path, mode_t mode);
 int tmpfs_statfs(const char *path, struct ir0_statfs *buf);
-
-/* Filesystem registration */
-int tmpfs_register(void);

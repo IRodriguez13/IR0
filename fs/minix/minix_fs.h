@@ -99,7 +99,6 @@ static inline bool minix_is_reg(const minix_inode_t *inode)
  * Registra el tipo de filesystem MINIX en el VFS (llamado desde vfs.c al
  * inicializar los builtins).
  */
-int minix_fs_register(void);
 
 int minix_fs_format(void);
 int minix_fs_mkdir(const char *path, mode_t mode);

@@ -14,22 +14,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "vfs.h"
-#if CONFIG_ENABLE_FS_MINIX
-#include "minix/minix_fs.h"
-#endif
-#if CONFIG_ENABLE_FS_TMPFS
-#include "tmpfs/tmpfs.h"
-#include "9p/hostshare_9p.h"
-#endif
-#if CONFIG_ENABLE_FS_SIMPLEFS
-#include "simplefs/simplefs.h"
-#endif
-#if CONFIG_ENABLE_FS_FAT16
-#include "fat16/fat16_fs.h"
-#endif
-#if CONFIG_ENABLE_FS_EXT2
-#include "ext2/ext2_disk.h"
-#endif
 #include <ir0/kmem.h>
 #include <ir0/cred.h>
 #include <ir0/blockdev.h>
@@ -151,26 +135,24 @@ static struct vfs_fstype proc_fs_type = {
     .next   = NULL,
 };
 
-static void proc_fs_register(void)
-{
-    (void)vfs_register_fs(&proc_fs_type);
-}
-
 /* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
 
-int vfs_register_fs(struct vfs_fstype *fs)
+/* Linux register_filesystem(): append @fs, keeping registration order. */
+static int vfs_register_fs(struct vfs_fstype *fs)
 {
+    struct vfs_fstype **link = &fs_types;
+
     if (!fs || !fs->name || strlen(fs->name) == 0)
         return -EINVAL;
 
-    for (struct vfs_fstype *t = fs_types; t; t = t->next)
-        if (strcmp(t->name, fs->name) == 0)
+    for (; *link; link = &(*link)->next)
+        if (strcmp((*link)->name, fs->name) == 0)
             return -EEXIST;
 
-    fs->next = fs_types;
-    fs_types = fs;
+    fs->next = NULL;
+    *link = fs;
     return 0;
 }
 
@@ -178,23 +160,9 @@ static int vfs_init(void)
 {
     fs_types = NULL;
     mounts   = NULL;
-#if CONFIG_ENABLE_FS_MINIX
-    minix_fs_register();
-#endif
-#if CONFIG_ENABLE_FS_TMPFS
-    tmpfs_register();
-    hostshare_9p_register();
-#endif
-#if CONFIG_ENABLE_FS_SIMPLEFS
-    simplefs_register();
-#endif
-#if CONFIG_ENABLE_FS_FAT16
-    fat16_fs_register();
-#endif
-#if CONFIG_ENABLE_FS_EXT2
-    ext2_fs_register();
-#endif
-    proc_fs_register();
+    (void)vfs_register_fs(&proc_fs_type);
+    for (size_t i = 0; vfs_builtin_filesystems[i]; i++)
+        (void)vfs_register_fs(vfs_builtin_filesystems[i]);
     if (DEBUG_VFS)
     {
         klog_info("VFS", "CLASSIFY VFS_FS_CONTRACT_ACTIVE");
@@ -563,71 +531,52 @@ int vfs_pivot_root(const char *new_root, const char *put_old)
     return 0;
 }
 
+/*
+ * Mount the configured root; when that is impossible, fall back to a tmpfs
+ * root (an error if tmpfs is not built in either).
+ */
+static int vfs_mount_fallback_root(const char *why)
+{
+    int ret;
+
+    klog_info("VFS", why);
+    ret = vfs_mount("none", "/", "tmpfs");
+    if (ret != 0) {
+        klog_error("VFS", "tmpfs fallback root failed");
+        return ret;
+    }
+    klog_info("VFS", "tmpfs root mounted (fallback)");
+    return 0;
+}
+
 int vfs_init_root(void)
 {
     const char *root_blk = CONFIG_ROOT_BLOCK_DEVICE;
     const char *root_fs = CONFIG_ROOT_FILESYSTEM;
     char root_dev_path[64];
-    int can_use_block_dev = 1;
+    int ret;
 
-#define VFS_MSG(s) klog_info("VFS", (s))
-#define VFS_ERR(s) klog_error("VFS", (s))
-
-    VFS_MSG("Initializing VFS...");
-    int ret = vfs_init();
+    klog_info("VFS", "Initializing VFS...");
+    ret = vfs_init();
     if (ret != 0) {
-        VFS_ERR("vfs_init failed");
+        klog_error("VFS", "vfs_init failed");
         return ret;
     }
-    VFS_MSG("vfs_init OK (builtin filesystems registered)");
+    klog_info("VFS", "vfs_init OK (builtin filesystems registered)");
 
     snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
 
-#if !CONFIG_ENABLE_FS_MINIX
-    if (strcmp(root_fs, "minix") == 0)
-        can_use_block_dev = 0;
-#endif
-#if !CONFIG_ENABLE_FS_EXT2
-    if (strcmp(root_fs, "ext2") == 0)
-        can_use_block_dev = 0;
-#endif
-
-    if (can_use_block_dev && !ir0_block_name_is_present(root_blk)) {
-        VFS_ERR("No block device configured for root available");
-#if CONFIG_ENABLE_FS_TMPFS
-        VFS_MSG("falling back to tmpfs root (block device missing)");
-        ret = vfs_mount("none", "/", "tmpfs");
-        if (ret != 0) {
-            VFS_ERR("tmpfs fallback also failed");
-            return ret;
-        }
-        VFS_MSG("tmpfs root mounted (fallback, no block device)");
-        return 0;
-#else
-        return -ENODEV;
-#endif
+    /* A missing disk only matters when the root type is built in. */
+    if (vfs_find_fstype(root_fs) && !ir0_block_name_is_present(root_blk)) {
+        klog_error("VFS", "No block device configured for root available");
+        return vfs_mount_fallback_root("falling back to tmpfs root (block device missing)");
     }
 
-    VFS_MSG("Mounting root filesystem...");
+    klog_info("VFS", "Mounting root filesystem...");
     ret = vfs_mount(root_dev_path, "/", root_fs);
-    if (ret != 0) {
-        VFS_MSG("configured root mount failed, falling back to tmpfs root");
-#if CONFIG_ENABLE_FS_TMPFS
-        ret = vfs_mount("none", "/", "tmpfs");
-        if (ret != 0) {
-            VFS_ERR("tmpfs fallback also failed");
-            return ret;
-        }
-        VFS_MSG("tmpfs root mounted (fallback)");
-#else
-        VFS_ERR("tmpfs fallback disabled by configuration");
-        return ret;
-#endif
-    } else {
-        VFS_MSG("vfs_mount OK (configured root)");
-    }
-#undef VFS_MSG
-#undef VFS_ERR
+    if (ret != 0)
+        return vfs_mount_fallback_root("configured root mount failed, falling back to tmpfs root");
+    klog_info("VFS", "vfs_mount OK (configured root)");
     return 0;
 }
 

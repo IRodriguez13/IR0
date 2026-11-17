@@ -13,7 +13,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <fs/vfs.h>
-#include "simplefs.h"
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
@@ -753,15 +752,10 @@ static struct vfs_ops simplefs_ops = {
     .truncate = simplefs_truncate,
 };
 
-static struct vfs_fstype simplefs_fs_type = {
+struct vfs_fstype simplefs_fs_type = {
     .name = "simplefs",
     .ops = &simplefs_ops,
     .mount = simplefs_mount,
     .umount = simplefs_umount,
     .next = NULL,
 };
-
-int simplefs_register(void)
-{
-    return vfs_register_fs(&simplefs_fs_type);
-}

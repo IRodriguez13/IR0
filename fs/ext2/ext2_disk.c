@@ -12,7 +12,6 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include "ext2_disk.h"
 #include <fs/vfs.h>
 #include <ir0/blockdev.h>
 #include <ir0/clock.h>
@@ -1602,15 +1601,10 @@ static int ext2_umount_cb(const char *dir)
 	return -EINVAL;
 }
 
-static struct vfs_fstype ext2_fstype = {
+struct vfs_fstype ext2_fs_type = {
 	.name = "ext2",
 	.ops = &ext2_ops,
 	.mount = ext2_mount_cb,
 	.umount = ext2_umount_cb,
 	.next = NULL,
 };
-
-int ext2_fs_register(void)
-{
-	return vfs_register_fs(&ext2_fstype);
-}
