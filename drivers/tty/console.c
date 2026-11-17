@@ -610,10 +610,9 @@ static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 	for (;;)
 	{
 		/*
-		 * Drain ready input before honouring a pending signal. Otherwise a
-		 * sticky SIGCHLD (runsv/logger) turns every completed canon line into
-		 * EINTR and getty never leaves the username read — no Password:
-		 * after firstboot.
+		 * Linux n_tty_read() returns available input first and checks
+		 * signal_pending() only when it would block: a pending signal
+		 * never turns a completed line into EINTR.
 		 */
 		if (canon_eof_pending && canon_readq_pos >= canon_readq_len)
 		{
@@ -672,9 +671,9 @@ static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 			unsigned vtime = tty_termios.c_cc[IR0_CC_VTIME];
 
 			/*
-			 * Linux non-canonical: VMIN=0,VTIME=0 → return 0 now
-			 * (ncurses poll). VMIN=0,VTIME>0 → wait up to VTIME
-			 * tenths of a second then return 0.
+			 * Linux non-canonical (termios(3)): VMIN=0,VTIME=0 is a
+			 * poll and returns 0 now; VMIN=0,VTIME>0 waits up to VTIME
+			 * tenths of a second for a byte, then returns 0.
 			 */
 			if (vmin == 0 && vtime == 0)
 			{
@@ -825,9 +824,9 @@ int ir0_console_wake_readers(void)
 		return 0;
 
 	/*
-	 * Wake one waiter back into tty_read_kernel (in-syscall drain).
-	 * Do not tty_wake_stage_user_read here — that path fought
-	 * process_arm_blocked_syscall_resume and hung getty after Enter.
+	 * Wake one waiter back into tty_read_kernel(), which drains the input
+	 * on the reader's own stack inside its read(2), as n_tty_read() does
+	 * after wait_woken(). The wake never copies data to the reader.
 	 */
 	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
 	{
@@ -989,8 +988,9 @@ int ir0_console_ioctl_winsize_set(void *user_arg)
 }
 
 /*
- * Restore cooked+echo after password entry / exec. Dropped ECHO or ICANON
- * leaves ash looking dead (no echo, lines never finish).
+ * Put the console back in cooked mode with echo when the session that owned
+ * it ends (ir0_console_flush_input_session() and session-leader exit). IR0
+ * has no tty hangup yet; the next session starts from a usable terminal.
  */
 void ir0_console_reset_cooked_echo(void)
 {
@@ -1014,10 +1014,11 @@ void ir0_console_flush_input_session(void)
 
 	tty_flush_input();
 	/*
-	 * Only the momentary decoder state (mods + E0/E1), never the ring:
-	 * clearing bytes here races IRQ1 (login garbage), but a session that
-	 * ended with a modifier held would otherwise stick into the next
-	 * getty (wrong case / stray CSI on the first keystrokes).
+	 * Linux flushes the line discipline on hangup and TCFLSH
+	 * (n_tty_flush_buffer()), never the keyboard controller. Here that
+	 * means the momentary decoder state (mods + E0/E1) only, never the
+	 * ring that IRQ1 fills: a session that ended with a modifier held
+	 * would otherwise carry it into the next session's first keystrokes.
 	 */
 	input_kbd_resync_modifiers();
 	if (!resync_tag)

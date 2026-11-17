@@ -378,7 +378,7 @@ devfs_node_t dev_events0 = {
     .ref_count = 0,
 };
 
-/* Linux path alias for Xfbdev (-mouse evdev) */
+/* Linux evdev node (/dev/input/event0, input(4)). */
 devfs_node_t dev_input_event0 = {
     .entry = { .name = "input/event0", .mode = 0660, .device_id = 45 },
     .ops = &events0_ops,

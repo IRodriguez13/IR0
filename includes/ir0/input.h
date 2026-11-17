@@ -57,7 +57,7 @@ struct input_event {
 #define IR0_INPUT_IOCTL_INJECT 0x49520001u
 #define IR0_INPUT_IOCTL_GET_CAPS 0x49520002u
 
-/* Linux uapi/linux/input.h — subset used by Xfbdev/evdev clients */
+/* Linux uapi/linux/input.h — the evdev subset IR0 implements */
 #define EV_VERSION 0x010001
 #define EVIOCGVERSION 0x80044501u /* _IOR('E', 0x01, int) */
 #define EVIOCGBIT_BASE 0x20u

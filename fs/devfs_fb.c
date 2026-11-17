@@ -84,8 +84,10 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         return 0;
     }
     /*
-     * Fixed VBE/QEMU framebuffer: no mode switching. Accept PUT so TinyX
-     * KdFindMode probes do not abort; subsequent FBIOGET_* report hardware.
+     * Fixed VBE/QEMU framebuffer: no mode switching. Like Linux
+     * fb_set_var() on a driver without fb_check_var (efifb, simplefb),
+     * FBIOPUT_VSCREENINFO keeps the current mode and succeeds;
+     * FBIOGET_* keep reporting the hardware mode.
      */
     if (request == FBIOPUT_VSCREENINFO && arg)
     {
@@ -105,11 +107,11 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
         strncpy(fix.id, "IR0 FB", sizeof(fix.id) - 1);
         /*
          * IR0 mmap(/dev/fb0) maps fb_phys at offset 0 of the returned VA
-         * (see sys_mmap fb path). TinyX then does
-         *   fb = mmap_base + (smem_start % pagesize).
-         * Reporting the raw physical address when it is not page-aligned
-         * makes TinyX skip the first bytes and write past the mapping.
-         * Use 0 so the userspace offset is always 0.
+         * (see sys_mmap fb path). Clients locate the pixels at
+         *   mmap_base + (smem_start % pagesize),
+         * so smem_start must agree with that mapping: report 0. Linux
+         * reports the physical address and maps from its page instead;
+         * IR0 diverges until mmap(/dev/fb0) does the same.
          */
         fix.smem_start = 0;
         /*
@@ -130,8 +132,8 @@ static int64_t dev_fb0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
     if (request == FBIOPAN_DISPLAY || request == FBIOBLANK)
         return 0;
     /*
-     * Colormap put/get: TrueColor FB ignores palette; accept so TinyX
-     * fbdevUpdateFbColormap does not abort enable.
+     * Colormap put/get: a TrueColor framebuffer has no hardware palette;
+     * accept the call as Linux drivers with a pseudo palette do.
      */
     if (request == FBIOPUTCMAP || request == FBIOGETCMAP)
         return 0;

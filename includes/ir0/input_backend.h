@@ -94,7 +94,7 @@ int input_kbd_set_layout(int layout);
 int input_kbd_get_layout(void);
 const char *input_kbd_get_layout_name(int layout);
 
-/* Linux console keyboard discipline used by unmodified userspace (Xfbdev). */
+/* Linux console keyboard mode (console_ioctl(2) KDSKBMODE). */
 #define IR0_INPUT_KBD_XLATE     0
 #define IR0_INPUT_KBD_MEDIUMRAW 2
 int input_kbd_set_console_mode(int mode);
