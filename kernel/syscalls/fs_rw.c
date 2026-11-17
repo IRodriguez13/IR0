@@ -10,21 +10,6 @@
 #include "fs_syscalls_internal.h"
 #include "socket_syscalls.h"
 
-static void ash_smoke_read_trace(int fd, int64_t ret)
-{
-  if (fd == STDIN_FILENO)
-    ir0_ash_smoke_read_return(fd, ret);
-}
-
-static void ash_smoke_write_trace(int fd, const void *data, size_t count)
-{
-  if ((fd != STDOUT_FILENO && fd != STDERR_FILENO) || !data || count == 0)
-    return;
-
-  ir0_ash_smoke_scan_write((const char *)data, count);
-  ir0_ash_smoke_scan_stdout((const char *)data, count);
-}
-
 static devfs_node_t *devfs_node_from_fd(int fd)
 {
   fd_entry_t *fd_table = get_process_fd_table();
@@ -117,7 +102,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
           devfs_is_ptmx_device(fdt[fd].dev_device_id))
         return devfs_pty_master_write(fdt[fd].vfs_file, kernel_buf,
                                       copy_size);
-      ash_smoke_write_trace(fd, kernel_buf, copy_size);
       return node->ops->write(&node->entry, kernel_buf, copy_size, 0);
     }
   }
@@ -140,7 +124,6 @@ int64_t sys_write(int fd, const void *buf, size_t count)
       /* Unredirected stdio still goes to console backend. */
       if (copy_from_user(kernel_buf, buf, copy_size) != 0)
         return -EFAULT;
-      ash_smoke_write_trace(fd, kernel_buf, copy_size);
       str = kernel_buf;
       uint8_t color = (fd == STDERR_FILENO) ? 0x0C : 0x0F;
       {
@@ -497,12 +480,12 @@ int64_t sys_read(int fd, void *buf, size_t count)
         if (fd == STDIN_FILENO)
         {
           d1_12_read_diag_kcopy(ret, count, kernel_read_buf, (size_t)ret);
-          ash_smoke_read_trace(fd, ret);
+          ir0_tty_smoke_read_return(fd, ret);
         }
       }
       else if (fd == STDIN_FILENO)
       {
-        ash_smoke_read_trace(fd, ret);
+        ir0_tty_smoke_read_return(fd, ret);
       }
       return ret;
     }
@@ -517,7 +500,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
     {
       int64_t ret = syscalls_read_stdio_stdin(buf, count);
 
-      ash_smoke_read_trace(STDIN_FILENO, ret);
+      ir0_tty_smoke_read_return(STDIN_FILENO, ret);
       return ret;
     }
   }

@@ -15,7 +15,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-static int g_ash_smoke_cmdline;
+static int g_tty_smoke_cmdline;
 
 static int cmdline_token_eq(const char *s, const char *key)
 {
@@ -92,9 +92,9 @@ static void apply_kconfig_default(void)
 #endif
 }
 
-int ir0_cmdline_ash_smoke_enabled(void)
+int ir0_cmdline_tty_smoke_enabled(void)
 {
-	return g_ash_smoke_cmdline;
+	return g_tty_smoke_cmdline;
 }
 
 void ir0_cmdline_apply_log_profile(void)
@@ -120,9 +120,9 @@ void ir0_cmdline_apply_log_profile(void)
 		{
 			apply_loglevel_token(val);
 		}
-		else if (cmdline_token_eq(p, "ir0.ash_smoke=1"))
+		else if (cmdline_token_eq(p, "ir0.tty_smoke=1"))
 		{
-			g_ash_smoke_cmdline = 1;
+			g_tty_smoke_cmdline = 1;
 		}
 		else
 		{

@@ -20,7 +20,7 @@
 #include <ir0/arch_cpu.h>
 #include <ir0/console_backend.h>
 #include <ir0/cred.h>
-#include <ir0/ash_smoke.h>
+#include <ir0/tty_smoke.h>
 #include <d1_12_read_diag.h>
 #include <d1_16_tty_read_diag.h>
 #include <ir0/errno.h>
@@ -537,7 +537,7 @@ void ir0_console_keypress(char c)
 		line_done = tty_canon_feed(nc);
 		if (line_done)
 		{
-			ir0_ash_smoke_tty_line_ready();
+			ir0_tty_smoke_line_ready();
 			/*
 			 * Wake waiters only. Scheduling from IRQ1 (keyboard →
 			 * keypress) corrupted prev RIP → #UD into .bss /

@@ -188,7 +188,7 @@ static void keyboard_buffer_add(char c)
 		keyboard_buffer[keyboard_buffer_head] = c;
 		keyboard_buffer_head = next;
 		input_kbd_wake_readers();
-		if (ir0_cmdline_ash_smoke_enabled() &&
+		if (ir0_cmdline_tty_smoke_enabled() &&
 		    !kbd_ascii_tag && (unsigned char)c >= ' ')
 		{
 			kbd_ascii_tag = 1;
@@ -300,12 +300,12 @@ void keyboard_poll_ps2(void)
 			continue;
 		}
 
-		if (ir0_cmdline_ash_smoke_enabled() && !kbd_poll_tag)
+		if (ir0_cmdline_tty_smoke_enabled() && !kbd_poll_tag)
 		{
 			kbd_poll_tag = 1;
 			klog_smoke("KBD_POLL_OK");
 		}
-		if (ir0_cmdline_ash_smoke_enabled() && ir0_console_in_userspace())
+		if (ir0_cmdline_tty_smoke_enabled() && ir0_console_in_userspace())
 		{
 			static int kbd_user_poll_once;
 
@@ -325,7 +325,7 @@ void keyboard_handler64(void)
 {
 	static int kbd_irq_tag;
 
-	if (ir0_cmdline_ash_smoke_enabled() && !kbd_irq_tag)
+	if (ir0_cmdline_tty_smoke_enabled() && !kbd_irq_tag)
 	{
 		kbd_irq_tag = 1;
 		klog_smoke("KBD_IRQ_OK");
@@ -371,7 +371,7 @@ static void keyboard_feed_scancode(uint8_t scancode)
 	{
 		static int kbd_scancode_tag;
 
-		if (ir0_cmdline_ash_smoke_enabled() && !kbd_scancode_tag)
+		if (ir0_cmdline_tty_smoke_enabled() && !kbd_scancode_tag)
 		{
 			kbd_scancode_tag = 1;
 			klog_smoke("KBD_SCANCODE_OK");

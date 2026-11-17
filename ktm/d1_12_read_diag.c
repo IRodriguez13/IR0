@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <d1_12_read_diag.h>
-#include <ir0/ash_smoke.h>
+#include <ir0/tty_smoke.h>
 #include <ir0/copy_user.h>
 #include <ir0/process.h>
 #include <ir0/ktm/klog.h>
@@ -58,9 +58,7 @@ static int d1_12_target(struct process *p)
 {
 	if (!p || !p->comm[0])
 		return 0;
-	if (p->comm[0] == 's' && p->comm[1] == 'h' && p->comm[2] == '\0')
-		return 1;
-	return ir0_ash_smoke_active();
+	return ir0_tty_smoke_active();
 }
 
 static void d1_12_hex_preview(const char *tag, const uint8_t *buf, size_t len)
