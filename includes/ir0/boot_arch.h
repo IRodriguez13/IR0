@@ -32,6 +32,13 @@ void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params);
  */
 void ir0_boot_arch_userspace_handoff_smoke(void);
 
+/**
+ * ir0_boot_arch_drivers() - register the platform's device drivers with
+ * driver_bootstrap_register(). The default registers none; the PC adds
+ * its i8042 and PS/2 devices.
+ */
+void ir0_boot_arch_drivers(void);
+
 #ifdef __cplusplus
 }
 #endif

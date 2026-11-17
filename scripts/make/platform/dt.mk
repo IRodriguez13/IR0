@@ -7,6 +7,7 @@
 PLATFORM_OBJS =
 
 ifneq ($(CONFIG_ENABLE_NETWORKING),n)
+PLATFORM_OBJS += drivers/net/net_drivers_dt.o
 ifneq ($(CONFIG_DRV_NIC_BCMGENET),n)
 PLATFORM_OBJS += drivers/net/bcmgenet.o
 endif

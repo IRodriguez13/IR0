@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: irq.c
- * Description: x86-64 irq_* facade → IDT / PIC / keyboard.
+ * Description: x86-64 irq_* facade → IDT / PIC.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,7 +15,6 @@
 #include <ir0/irq.h>
 #include <interrupt/idt.h>
 #include <interrupt/pic.h>
-#include <interrupt/keyboard.h>
 
 void irq_tables_init(void)
 {
@@ -26,11 +25,6 @@ void irq_tables_init(void)
 void irq_controller_init(void)
 {
 	pic_remap64();
-}
-
-void irq_keyboard_init(void)
-{
-	keyboard_init();
 }
 
 void irq_unmask_line(unsigned irq)

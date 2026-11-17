@@ -21,3 +21,7 @@ __attribute__((weak)) void ir0_boot_arch_firmware_early(
 __attribute__((weak)) void ir0_boot_arch_userspace_handoff_smoke(void)
 {
 }
+
+__attribute__((weak)) void ir0_boot_arch_drivers(void)
+{
+}

@@ -8,6 +8,7 @@ ARCH_OBJS_COMMON = \
 
 ARCH_OBJS_X86_64 = \
 	arch/x86-64/sources/boot_arch.o \
+	arch/x86-64/sources/boot_drivers.o \
 	arch/x86-64/sources/firmware_sysfs.o \
 	arch/x86-64/sources/boot_port.o \
 	arch/x86-64/sources/boot_identity.o \

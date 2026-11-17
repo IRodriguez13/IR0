@@ -25,6 +25,12 @@ struct net_driver
 	int (*probe)(void);
 };
 
+/*
+ * The platform's NICs in probe order, NULL-terminated. Each platform lists
+ * its cards in drivers/net/net_drivers_<platform>.c, picked by the build.
+ */
+extern const struct net_driver *const net_drivers[];
+
 extern const struct net_driver bcmgenet_driver;
 extern const struct net_driver rtl8139_driver;
 extern const struct net_driver virtio_net_driver;

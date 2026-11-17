@@ -22,6 +22,7 @@ PLATFORM_OBJS += drivers/input/ps2_mouse.o
 endif
 
 ifneq ($(CONFIG_ENABLE_NETWORKING),n)
+PLATFORM_OBJS += drivers/net/net_drivers_pc.o
 ifneq ($(CONFIG_DRV_NIC_RTL8139),n)
 PLATFORM_OBJS += drivers/net/rtl8139.o
 endif

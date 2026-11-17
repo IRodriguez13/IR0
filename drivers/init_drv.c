@@ -31,8 +31,6 @@
 #include <string.h>
 #include <config.h>
 #include <drivers/multilang_drivers.h>
-#include <drivers/input/ps2.h>
-#include <ir0/irq.h>
 #if CONFIG_ENABLE_PC_SPEAKER
 #include <drivers/char/pc_speaker.h>
 #endif
@@ -44,11 +42,7 @@
 #include <ir0/blockdev.h>
 #include <drivers/serial/serial.h>
 #include <ir0/resource_registry.h>
-#include <ir0/driver_backend.h>
-
-#if CONFIG_ENABLE_MOUSE
-#include <drivers/input/ps2_mouse.h>
-#endif
+#include <ir0/boot_arch.h>
 
 #if CONFIG_ENABLE_SOUND
 #include <sound/sound_blaster.h>
@@ -72,30 +66,6 @@
 
 static int g_registry_ready = 0;
 static int g_bootstrap_done = 0;
-
-static int boot_init_ps2_controller(void)
-{
-#if IR0_LEGACY_PC_IO && CONFIG_INIT_PS2_CONTROLLER
-	ps2_init();
-#endif
-	return 0;
-}
-
-static int boot_init_keyboard(void)
-{
-#if IR0_LEGACY_PC_IO && CONFIG_INIT_PS2_CONTROLLER
-	irq_keyboard_init();
-#endif
-	return 0;
-}
-
-static int boot_init_mouse(void)
-{
-#if IR0_LEGACY_PC_IO && CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
-	ps2_mouse_init();
-#endif
-	return 0;
-}
 
 static int boot_init_pc_speaker(void)
 {
@@ -169,21 +139,7 @@ static int boot_init_hostshare_9p(void)
 
 static void register_bootstrap_plan(void)
 {
-#if IR0_LEGACY_PC_IO
-	const int ps2_boot = CONFIG_INIT_PS2_CONTROLLER;
-	const int ps2_mouse_boot =
-	    (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER);
-#else
-	const int ps2_boot = 0;
-	const int ps2_mouse_boot = 0;
-#endif
     driver_bootstrap_reset();
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_controller", boot_init_ps2_controller,
-			      ps2_boot);
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_keyboard", boot_init_keyboard,
-			      ps2_boot);
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_mouse", boot_init_mouse,
-			      ps2_mouse_boot);
     driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "pc_speaker", boot_init_pc_speaker,
                               (CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "hostshare_9p", boot_init_hostshare_9p,
@@ -200,6 +156,8 @@ static void register_bootstrap_plan(void)
                               (CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER));
     driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "usb_host", boot_init_usb_host,
                               (CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST));
+    /* Platform devices (PC: i8042 keyboard and PS/2 mouse). */
+    ir0_boot_arch_drivers();
 }
 
 /**
