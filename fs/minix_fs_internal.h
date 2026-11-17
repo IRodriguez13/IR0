@@ -21,8 +21,7 @@
 #include <ir0/console_backend.h>
 #include <config.h>
 #include <ir0/kmem.h>
-#include <ir0/credentials.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/exec_read_trace.h>
 #include <string.h>
 

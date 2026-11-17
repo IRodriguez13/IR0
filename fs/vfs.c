@@ -14,8 +14,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/permissions.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/cpu.h>
 #include <ir0/ipc.h>
 #include <ir0/problems.h>

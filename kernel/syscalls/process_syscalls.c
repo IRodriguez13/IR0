@@ -20,8 +20,7 @@
 #include <ir0/clock.h>
 #include <ir0/clone.h>
 #include <ir0/copy_user.h>
-#include <ir0/cred_transition.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/elf_loader.h>
 #include <ir0/kexec.h>
 #include <ir0/kmem.h>
@@ -30,7 +29,6 @@
 #include <ir0/mm_port.h>
 #include <ir0/oops.h>
 #include <ir0/path_user.h>
-#include <ir0/permissions.h>
 #include <ir0/power_manag.h>
 #include <ir0/sched.h>
 #include <ir0/wait.h>

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
 /**
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
@@ -6,16 +7,71 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: cred_transition.h
- * Description: Linux credential transitions (setreuid/setregid/setresuid).
+ * File: cred.h
+ * Description: Task credentials and the DAC permission check (Linux
+ *              <linux/cred.h>). kernel/process/credentials.c owns the
+ *              credentials, fs/permissions.c the permission check.
  */
-
-/* SPDX-License-Identifier: GPL-3.0-only */
 
 #pragma once
 
-#include <ir0/errno.h>
 #include <stdint.h>
+#include <stdbool.h>
+
+#include <ir0/errno.h>
+#include <ir0/types.h>
+#include <ir0/stat.h>
+
+/* Forward declaration */
+struct process;
+
+/*
+ * Well-known IDs used by the kernel itself (root checks) and by tests.
+ * Account data lives in userspace: /etc/passwd, /etc/shadow, /etc/group.
+ */
+#define ROOT_UID     0
+#define ROOT_GID     0
+#define USER_UID     1000
+#define USER_GID     1000
+
+/* Default umask (022 = ----w--w-) */
+#define DEFAULT_UMASK 0022
+
+/* Access modes for check_file_access() */
+#define ACCESS_READ    1
+#define ACCESS_WRITE   2
+#define ACCESS_EXEC    4
+
+struct ir0_task_cred
+{
+    uid_t uid;
+    gid_t gid;
+    uid_t euid;
+    gid_t egid;
+    mode_t umask;
+    pid_t pid;
+
+    /*
+     * Points at the current process cwd buffer (nul-terminated) while the
+     * caller holds the scheduler lock / runs in syscall context.
+     */
+    const char *cwd;
+};
+
+const struct ir0_task_cred *ir0_current_cred(void);
+pid_t ir0_current_pid(void);
+int ir0_cred_is_root(void);
+
+bool ir0_check_file_access(const char *path, int mode);
+
+/* Evaluate Unix permission bits against effective uid/gid */
+bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid);
+bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
+                                 gid_t egid, const gid_t *groups, int ngroups);
+
+/* Function declarations */
+bool check_file_access(const char *path, int mode, const struct process *process);
+bool is_root(const struct process *process);
 
 typedef struct ir0_cred_id_triplet
 {

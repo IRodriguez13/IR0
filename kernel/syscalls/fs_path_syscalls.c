@@ -27,8 +27,7 @@
 #include <ir0/path.h>
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
-#include <ir0/permissions.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>

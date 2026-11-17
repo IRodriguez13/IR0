@@ -11,8 +11,7 @@
  * Description: IR0 kernel source/header file
  */
 
-#include "permissions.h"
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <string.h>
 
 /*

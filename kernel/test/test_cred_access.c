@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/stat.h>
 #include <ir0/ktm/klog.h>
 #include <string.h>

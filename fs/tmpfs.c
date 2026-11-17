@@ -24,8 +24,7 @@
 #include <ir0/statfs.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
-#include <ir0/credentials.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 
 static int tmpfs_stat(const char *path, stat_t *buf);
 static int tmpfs_mkdir(const char *path, mode_t mode);

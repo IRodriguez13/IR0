@@ -12,7 +12,7 @@
 #include <ir0/named_socket.h>
 #include <ir0/named_devnode.h>
 #include <ir0/named_symlink.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/procfs.h>
 #include <ir0/sysfs.h>
 #include <ir0/heartfs.h>

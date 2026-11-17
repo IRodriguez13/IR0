@@ -21,8 +21,7 @@
 #include <ir0/stat.h>
 #include <ir0/clock.h>
 #include <ir0/blockdev.h>
-#include <ir0/credentials.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <string.h>
 
 #if CONFIG_ENABLE_FS_FAT16

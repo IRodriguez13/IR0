@@ -37,8 +37,7 @@
 #include <ir0/fpu.h>
 #include <ir0/context.h>
 #include <ir0/chmod.h>
-#include <ir0/credentials.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/path_routed.h>
 #include <config.h>
 #include <ir0/ktm/fault.h>

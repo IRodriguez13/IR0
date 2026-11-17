@@ -18,8 +18,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/flock.h>
 #include <ir0/exec_read_trace.h>
-#include <ir0/permissions.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/klog.h>
 #include <ir0/overflow.h>
 #include <ir0/process.h>

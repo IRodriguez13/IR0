@@ -39,7 +39,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/copy_user.h>
 #include <ir0/input.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/fb.h>
 #include <ir0/ktm/userdev.h>
 #include <ir0/io_async.h>

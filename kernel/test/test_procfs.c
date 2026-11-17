@@ -27,7 +27,7 @@
 #include <ir0/named_fifo.h>
 #include <ir0/oom.h>
 #include <ir0/path_routed.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/procfs.h>
 #include <ir0/stat.h>
 #include <string.h>

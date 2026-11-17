@@ -8,7 +8,7 @@
 
 #include <ir0/rootfs_base.h>
 #include <config.h>
-#include <ir0/permissions.h>
+#include <ir0/cred.h>
 #include <ir0/errno.h>
 #include <ir0/serial_io.h>
 #include <fs/vfs.h>

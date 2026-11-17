@@ -17,7 +17,7 @@
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/oops_port.h>
 #include <stddef.h>
 #include <stdint.h>

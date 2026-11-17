@@ -16,7 +16,7 @@
 #include "vfs.h"
 #include <ir0/blockdev.h>
 #include <ir0/clock.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/klog.h>

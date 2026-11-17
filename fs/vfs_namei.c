@@ -17,8 +17,7 @@
 #include "vfs.h"
 #include <ir0/path.h>
 #include <ir0/kmem.h>
-#include <ir0/permissions.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/process.h>
 #include <string.h>
 #include "vfs_internal.h"

@@ -147,9 +147,9 @@ minix_fs_is_available minix_fs_is_working()
 minix_fs_ls (nothing; userspace ls uses getdents64)
 minix_fs_read_file vfs_read_file() (the VFS read path)
 minix_fs_rmdir_force minix_fs_rmdir() through vfs_rmdir()
-minix_get_gid_perms (nothing; permissions go through <ir0/permissions.h>)
-minix_get_oth_perms (nothing; permissions go through <ir0/permissions.h>)
-minix_get_uid_perms (nothing; permissions go through <ir0/permissions.h>)
+minix_get_gid_perms (nothing; permissions go through <ir0/cred.h>)
+minix_get_oth_perms (nothing; permissions go through <ir0/cred.h>)
+minix_get_uid_perms (nothing; permissions go through <ir0/cred.h>)
 minix_is_blk S_ISBLK() on the stat mode
 minix_is_chr S_ISCHR() on the stat mode
 minix_mark_inode_free minix_fs_free_inode()

@@ -13,9 +13,8 @@
 
 #include <ir0/process.h>
 #include <fs/vfs.h>
-#include <ir0/credentials.h>
+#include <ir0/cred.h>
 #include <ir0/path_routed.h>
-#include <ir0/permissions.h>
 #include <ir0/stat.h>
 
 const struct ir0_task_cred *ir0_current_cred(void)
