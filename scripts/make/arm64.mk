@@ -201,7 +201,7 @@ smoke-arm64-hypervisor-log: kernel-arm64-product.bin
 		echo "✓ smoke-arm64-hypervisor-log (HYPERVISOR line + ARM64_BOOT_OK)"; \
 	fi
 
-# Portable product kernel (ir0_kernel_boot): tag before /sbin/init handoff.
+# Portable product kernel (kmain): tag before /sbin/init handoff.
 .PHONY: smoke-arm64-product-log
 smoke-arm64-product-log: kernel-arm64-product.bin
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \

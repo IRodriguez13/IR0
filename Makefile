@@ -409,8 +409,7 @@ KERNEL_OBJS = \
 	arch/common/boot_arch.o \
 	arch/common/boot_port.o \
 	arch/common/oops_port.o \
-	kernel/boot/boot_flow.o \
-	kernel/boot/kernel_wiring.o \
+	kernel/main.o \
 	kernel/boot/boot_init.o \
 	kernel/boot/boot_firmware_sysfs.o \
 	kernel/boot/boot_params.o \
@@ -905,8 +904,7 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o \
-	build/test/kernel/boot/boot_flow.o build/test/kernel/boot/kernel_wiring.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
 KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
@@ -917,8 +915,8 @@ KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
-ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o kernel/boot/boot_flow.o \
-	kernel/boot/kernel_wiring.o arch/common/boot_arch.o arch/common/boot_port.o \
+ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o \
+	arch/common/boot_arch.o arch/common/boot_port.o \
 	arch/common/oops_port.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
                 $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
@@ -1025,7 +1023,7 @@ kernel-arm64.bin: kernel-arm64-product.bin arm64-common-core-compile arm64-provi
 	@aarch64-linux-gnu-objcopy -O binary $@ kernel-arm64.img
 	@echo "✓ Kernel image ready: $@"
 
-# Portable ARM64 kernel: same ir0_kernel_boot chain as x86.
+# Portable ARM64 kernel: same kmain() boot sequence as x86.
 # `make kernel-arm64-product.bin` forces ARCH=arm64 via goal detection.
 kernel-arm64-product.bin: $(ALL_OBJS) arch/arm64/linker.ld
 	@echo "  LD      $@"
@@ -1053,8 +1051,7 @@ kernel-x64-userspace.iso: kernel-x64.iso
 
 # Kernel con tests in-kernel (solo al hacer make tests / kernel-tests)
 # config.h documents IR0_KERNEL_TESTS; Makefile ensures it for this target.
-# The boot entry objects (boot_init, boot_flow, kernel_wiring) must be built
-# with that flag: production objects would skip kernel_test_run_all().
+# The boot step object (boot_init) must be built with that flag: production objects would skip kernel_test_run_all().
 kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@echo "  LD      $@ (with in-kernel tests)"
 	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)

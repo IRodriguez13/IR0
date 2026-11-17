@@ -405,7 +405,7 @@ fail:
 
 /*
  * Post-sti DMA+IRQ self-test: one silent buffer so smoke can grep SB16_IRQ_OK.
- * Must run after enable_interrupts() (boot_runtime), not from sb16_hw_init.
+ * Must run after enable_interrupts() (boot_irq_init), not from sb16_hw_init.
  */
 void sb16_post_irq_selftest(void)
 {
