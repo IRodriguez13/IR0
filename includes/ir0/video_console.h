@@ -35,6 +35,21 @@ struct console_geometry
 	unsigned scale;
 };
 
+/*
+ * A hardware text-mode screen: rows x cols cells of (color << 8 | glyph).
+ * The platform registers one at early boot (PC: VGA text mode); the console
+ * draws on it while no framebuffer is active. Without one nothing is drawn.
+ */
+struct console_text_screen
+{
+	volatile uint16_t *cells;
+	int cols;
+	int rows;
+};
+
+void console_set_text_screen(const struct console_text_screen *screen);
+const struct console_text_screen *console_text_screen(void);
+
 void console_put_cell(int row, int col, char c, uint8_t color);
 void console_scroll_up(uint8_t clear_color);
 void console_clear(uint8_t color);

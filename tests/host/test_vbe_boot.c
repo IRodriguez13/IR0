@@ -7,9 +7,11 @@
 
 #include "test_harness.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <ir0/boot_memory.h>
 #include <ir0/vbe.h>
+#include <ir0/video_console.h>
 
 static uint64_t g_map_first;
 static uint64_t g_map_last;
@@ -39,6 +41,12 @@ int map_page_in_directory(address_space_root_t root, uint64_t virt_addr,
 	g_root_map_last = phys_addr;
 	g_root_map_calls++;
 	return 0;
+}
+
+/* No platform text screen: these cases only exercise the firmware path. */
+const struct console_text_screen *console_text_screen(void)
+{
+	return NULL;
 }
 
 static uint64_t g_mmio_start;

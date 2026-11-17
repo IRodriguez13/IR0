@@ -12,7 +12,6 @@
  */
 
 #include <ir0/vga.h>
-#include <ir0/driver_backend.h>
 #include <ir0/serial_io.h>
 #include <ir0/console_backend.h>
 #include <ir0/video_console.h>
@@ -49,28 +48,12 @@ static unsigned char make_color(unsigned char fg, unsigned char bg)
 }
 
 /*
- * putchar_at - Escribe carácter en (x,y).
- * Usa consola (framebuffer) o VGA según backend activo.
+ * putchar_at - Escribe carácter en (x,y) en la consola activa (framebuffer o
+ * la pantalla de texto que registró la plataforma).
  */
 static void putchar_at(char c, unsigned char color, int x, int y)
 {
-    if (console_use_framebuffer())
-    {
-        console_put_cell(y, x, c, color);
-        return;
-    }
-#if !IR0_LEGACY_PC_IO
-    (void)c;
-    (void)color;
-    (void)x;
-    (void)y;
-#else
-    {
-        unsigned short *vga = (unsigned short *)VGA_MEMORY;
-        int index = y * VGA_WIDTH + x;
-        vga[index] = (unsigned short)c | (unsigned short)color << 8;
-    }
-#endif
+    console_put_cell(y, x, c, color);
 }
 
 /* Scroll screen up by one line */
@@ -79,29 +62,13 @@ void scroll()
     int cols = vga_cols();
     int rows = vga_rows();
 
+    /* The framebuffer keeps the current color; text mode blanks white on black. */
     if (console_use_framebuffer())
-    {
         console_scroll_up(current_color);
-        cursor_y = rows - 1;
-        cursor_pos = cursor_y * cols + cursor_x;
-        return;
-    }
-#if IR0_LEGACY_PC_IO
-    {
-        unsigned short *vga = (unsigned short *)VGA_MEMORY;
-
-        for (int i = 0; i < (VGA_HEIGHT - 1) * VGA_WIDTH; i++)
-            vga[i] = vga[i + VGA_WIDTH];
-
-        for (int i = (VGA_HEIGHT - 1) * VGA_WIDTH; i < VGA_HEIGHT * VGA_WIDTH; i++)
-            vga[i] = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
-
-        cursor_y = VGA_HEIGHT - 1;
-    }
-#else
+    else
+        console_scroll_up(make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
     cursor_y = rows - 1;
     cursor_pos = cursor_y * cols + cursor_x;
-#endif
 }
 
 /*
@@ -217,30 +184,9 @@ void print_colored(const char *str, unsigned char fg, unsigned char bg)
 
 void clear_screen()
 {
-    if (console_use_framebuffer())
-    {
-        console_clear(make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
-        cursor_x = 0;
-        cursor_y = 0;
-        cursor_pos = 0;
-        return;
-    }
-#if IR0_LEGACY_PC_IO
-    {
-        unsigned short *vga = (unsigned short *)VGA_MEMORY;
-        unsigned short blank = make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK) << 8 | ' ';
-
-        for (int i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++)
-            vga[i] = blank;
-
-        cursor_x = 0;
-        cursor_y = 0;
-        cursor_pos = 0;
-    }
-#else
+    console_clear(make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
     cursor_x = 0;
     cursor_y = 0;
     cursor_pos = 0;
-#endif
 }
 
