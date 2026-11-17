@@ -15,7 +15,6 @@
 #include <stdint.h>
 #include <string.h>
 #include <config.h>
-#include <ir0/driver_backend.h>
 #include <ir0/cpu_info.h>
 #include <ir0/types.h>
 #include <ir0/arch_port.h>
@@ -26,8 +25,6 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/rtc.h>
 #include <ir0/process.h>
-#include "pit/pit.h"
-#include "rtc/rtc.h"
 #include <ir0/clock.h>
 
 /* Clock state; private to the clock core. */
@@ -42,7 +39,6 @@ typedef struct
 	uint32_t timer_ticks_per_second;
 	time_t boot_time;
 	time_t current_time;
-	int pit_enabled;
 	int hpet_enabled;
 	int lapic_enabled;
 	clock_timer_t active_timer;
@@ -161,7 +157,6 @@ int clock_system_init(void)
     clock_state.current_time = 0;
     
     /* Initialize timer sources */
-    clock_state.pit_enabled = 0;
     clock_state.hpet_enabled = 0;
     clock_state.lapic_enabled = 0;
     clock_state.active_timer = CLOCK_TIMER_NONE;
@@ -172,21 +167,7 @@ int clock_system_init(void)
     if (clock_state.scheduler_ticks_per_quantum == 0)
         clock_state.scheduler_ticks_per_quantum = 1;
 
-/*
- * Legacy PC uses PIT; ARM64 product uses the arch timer (see Makefile: IR0_LEGACY_PC_IO).
- * .config may still describe the developer’s menuconfig host (x86) — do not use CONFIG_ARCH_* alone for this split.
- */
-#if !IR0_LEGACY_PC_IO
-    timer_init();
-    clock_state.pit_enabled = 0;
-    clock_state.active_timer = CLOCK_TIMER_NONE;
-#else
-    /* Initialize PIT */
-    extern void init_PIT(uint32_t frequency);
-    init_PIT(CONFIG_TICK_RATE_HZ);
-    clock_state.pit_enabled = 1;
-    clock_state.active_timer = CLOCK_TIMER_PIT;
-#endif
+    clock_state.active_timer = clock_timer_init();
 
     /* Wall clock: realtime_boot_epoch = RTC_UTC; then += monotonic elapsed. */
     clock_try_set_realtime_from_rtc();
@@ -197,11 +178,7 @@ int clock_system_init(void)
 
     /* Mark as initialized */
     clock_state.initialized = 1;
-#if !IR0_LEGACY_PC_IO
-    klog_notice("CLOCK", "Clock system initialized (ARM Generic Timer jiffy)");
-#else
-    klog_notice("CLOCK", "Clock system initialized with PIT");
-#endif
+    klog_notice("CLOCK", "Clock system initialized");
     return 0;
 }
 

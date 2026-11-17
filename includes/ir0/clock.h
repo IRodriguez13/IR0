@@ -43,6 +43,13 @@ typedef struct
 
 int clock_system_init(void);
 
+/*
+ * Start the platform's periodic tick at CONFIG_TICK_RATE_HZ and return the
+ * timer that drives it. The platform timer driver implements it (PC: the
+ * PIT; arm64: the generic timer).
+ */
+clock_timer_t clock_timer_init(void);
+
 
 /* Non-zero once PIT/timer path marked clock_state.initialized. */
 int clock_is_ready(void);
