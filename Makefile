@@ -669,7 +669,7 @@ LIB_OBJS = \
     fs/named_symlink.o \
     fs/path_user.o \
     fs/path_routed.o \
-    kernel/utsname.o \
+    kernel/sys/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
     drivers/tty/ash_smoke.o \

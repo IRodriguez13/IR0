@@ -10,7 +10,7 @@
  * File: utsname.h
  * Description: struct utsname (Linux new_utsname ABI for uname(2)) and the
  *              runtime fillers of its version and nodename fields
- *              (kernel/utsname.c).
+ *              (kernel/sys/utsname.c).
  */
 
 #ifndef _IR0_UTSNAME_H
