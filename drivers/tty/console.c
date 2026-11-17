@@ -1026,13 +1026,3 @@ void ir0_console_flush_input_session(void)
 		klog_notice_fmt("TTY", "KBD_STATE_RESYNC (session flush)");
 	}
 }
-
-void ir0_console_after_signal_abandon(void)
-{
-	/*
-	 * BusyBox ash: raise_interrupt() longjmps without rt_sigreturn
-	 * (SIGFRAME_ABANDON). Same hygiene as VINTR on a cooked tty.
-	 */
-	input_kbd_resync_modifiers();
-	tty_flush_input();
-}

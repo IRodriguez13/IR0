@@ -13,7 +13,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/signals.h>
-#include <ir0/console.h>
 #include <ir0/mm_range.h>
 #include <ir0/sched.h>
 #include <ir0/clock.h>
@@ -101,21 +100,6 @@ static void signals_apply_handler_mask(process_t *p, int sig, uint32_t sa_flags)
 		p->signal_mask |= SIGNAL_MASK(sig);
 }
 
-static void signals_restore_handler_mask(process_t *p)
-{
-	if (!p || !p->signal_mask_saved_valid)
-		return;
-	p->signal_mask = p->signal_mask_saved;
-	p->signal_mask_saved_valid = 0;
-}
-
-static void signals_on_sigreturn(process_t *p)
-{
-	signals_restore_handler_mask(p);
-	if (p)
-		p->signal_frame_sp = 0;
-}
-
 void signals_try_abandon_sigframe(process_t *p)
 {
 	uint64_t usp;
@@ -140,16 +124,14 @@ void signals_try_abandon_sigframe(process_t *p)
 	signal_trace(SIGNAL_TRACE_ABANDON, p, 0, usp, frame_sp, 0);
 
 	/*
-	 * Restore pre-delivery mask. Strict Linux leaves the handler mask
-	 * after longjmp(); with a full sa_mask (ash sigfillset) that would
-	 * mute the process. Restoring matches siglongjmp(... savesigs) and
-	 * keeps the process signable.
-	 *
-	 * Userspace-first: stock BusyBox ash longjmps without rt_sigreturn;
-	 * resync console input so GNU/BusyBox need no kernel-specific patches.
+	 * Linux keeps no per-frame state, so leaving a handler this way
+	 * changes nothing for the task: the handler mask stays in force
+	 * (signal(7); siglongjmp(3) restores a saved mask from userspace) and
+	 * no other subsystem hears about it. Only IR0's own frame
+	 * bookkeeping goes, so the next frame saves the mask in force then.
 	 */
-	signals_on_sigreturn(p);
-	ir0_console_after_signal_abandon();
+	p->signal_mask_saved_valid = 0;
+	p->signal_frame_sp = 0;
 }
 
 int signals_has_user_handler(process_t *p, int sig)
