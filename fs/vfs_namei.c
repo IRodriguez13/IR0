@@ -44,6 +44,38 @@ int vfs_stat(const char *path, stat_t *buf)
     return ret;
 }
 
+/*
+ * may_create - Linux fs/namei.c may_create(): may the caller add the name
+ * @path? A new name changes the parent directory: it needs search on
+ * every directory on the way and write and search on the parent, which
+ * must exist (ENOENT) and be a directory (ENOTDIR). The caller has
+ * checked that the name is free: in Linux EEXIST comes first.
+ */
+int may_create(const char *path)
+{
+    const struct ir0_task_cred *cred = ir0_current_cred();
+    char parent[MAX_PATH];
+    stat_t dir;
+    int ret;
+
+    if (!cred)
+        return -ESRCH;
+    ret = vfs_check_dir_traverse(path);
+    if (ret != 0)
+        return ret;
+    ret = vfs_parent_dir(path, parent, sizeof(parent));
+    if (ret != 0)
+        return ret;
+    ret = vfs_stat(parent, &dir);
+    if (ret != 0)
+        return ret;
+    if ((dir.st_mode & S_IFMT) != 0 && !S_ISDIR(dir.st_mode))
+        return -ENOTDIR;
+    if (generic_permission(cred, &dir, ACCESS_WRITE | ACCESS_EXEC) != 0)
+        return -EACCES;
+    return 0;
+}
+
 int vfs_mkdir(const char *path, int mode)
 {
     int ret = vfs_validate_path(path);
@@ -58,16 +90,16 @@ int vfs_mkdir(const char *path, int mode)
     ret = vfs_lookup_parent(path, parent, sizeof(parent));
     if (ret != 0)
         return ret;
-    if (strcmp(parent, "/") != 0 &&
-        (vfs_stat(parent, &st) != 0 ||
-         generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0))
-        return -EACCES;
 
     if (strcmp(path, "/") == 0)
         return -EEXIST;
 
     if (vfs_stat(path, &st) == 0 && (st.st_mode & S_IFMT) != 0)
         return -EEXIST;
+
+    ret = may_create(path);
+    if (ret != 0)
+        return ret;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);
     if (!ops || !ops->mkdir)
@@ -154,14 +186,11 @@ int vfs_link(const char *oldpath, const char *newpath)
     if (generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
         return -EACCES;
 
-    char parent[MAX_PATH];
-    if (vfs_parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (vfs_stat(parent, &st) != 0 ||
-            generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
-            return -EACCES;
-
     if (vfs_stat(newpath, &st) == 0)
         return -EEXIST;
+    ret = may_create(newpath);
+    if (ret != 0)
+        return ret;
 
     struct vfs_ops *ops = vfs_ops_for_path(oldpath);
     if (!ops || !ops->link)
@@ -181,6 +210,9 @@ int vfs_symlink(const char *target, const char *linkpath)
         return ret;
     if (!ir0_current_cred())
         return -ESRCH;
+    ret = may_create(linkpath);
+    if (ret != 0)
+        return ret;
     ops = vfs_ops_for_path(linkpath);
     if (!ops || !ops->symlink)
         return -ENOSYS;

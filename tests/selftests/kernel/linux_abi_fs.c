@@ -774,3 +774,35 @@ int fs_sticky_dir_restricts_delete(void)
 	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "ut/f", 0), 0);
 	return CONF_PASS;
 }
+
+/*
+ * may_create(): a new name (mkdir, mknod, link, symlink, open with
+ * O_CREAT) needs write and search on the parent; write without search is
+ * not enough. An existing name is EEXIST before the directory check, and
+ * O_CREAT on an existing file does not look at the directory.
+ */
+int fs_create_needs_parent_write_search(void)
+{
+	long fd;
+
+	if (S0(SYS_geteuid) != 0 || dac_make("ro", 1, 0755, 0) != 0 ||
+	    dac_make("ro/mine", 0, 0644, DAC_GID) != 0 ||
+	    dac_give("ro/mine") != 0 ||
+	    dac_make("wo", 1, 0200, DAC_GID) != 0 || dac_give("wo") != 0 ||
+	    dac_make("f", 0, 0644, DAC_GID) != 0 || dac_give("f") != 0 ||
+	    dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S3(SYS_mkdirat, AT_FDCWD, "wo/d", 0755), EACCES);
+	EXPECT_ERR(S3(SYS_mkdirat, AT_FDCWD, "ro", 0755), EEXIST);
+	EXPECT_ERR(S3(SYS_mkdirat, AT_FDCWD, "ro/d", 0755), EACCES);
+	EXPECT_ERR(S4(SYS_mknodat, AT_FDCWD, "ro/p", S_IFIFO | 0644, 0),
+		   EACCES);
+	EXPECT_ERR(S3(SYS_symlinkat, "f", AT_FDCWD, "ro/l"), EACCES);
+	EXPECT_ERR(S5(SYS_linkat, AT_FDCWD, "f", AT_FDCWD, "wo/l", 0), EACCES);
+	EXPECT_ERR(S5(SYS_linkat, AT_FDCWD, "f", AT_FDCWD, "ro/l", 0), EACCES);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "ro/c", O_WRONLY | O_CREAT, 0644),
+		   EACCES);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "ro/mine", O_WRONLY | O_CREAT, 0644));
+	EXPECT(S1(SYS_close, fd), 0);
+	return CONF_PASS;
+}

@@ -113,6 +113,14 @@ int vfs_truncate(const char *path, size_t length);
 int vfs_utimens(const char *path, const struct timespec times[2]);
 
 /*
+ * Linux may_create(): may the current task add the name @path? 0, -EACCES
+ * (no write and search on the parent or no search on the way there) or
+ * the lookup error of the parent. Callers check EEXIST first. Used by
+ * mkdir, link, symlink, mknod and open(O_CREAT) of a new file.
+ */
+int may_create(const char *path);
+
+/*
  * Linux may_delete(): may the current task remove the name @path that
  * refers to @victim? 0, -EACCES (no write and search on the parent or on
  * the way there), -EPERM (sticky parent), -ENOTDIR/-EISDIR (@victim does

@@ -847,6 +847,25 @@ static int64_t mknod_create_device(const char *resolved, unsigned int mode,
                               (dev_t)dev);
 }
 
+/*
+ * mknodat(2) on a resolved path: an existing name is EEXIST, then the
+ * parent must take a new name (may_create()), then the node is made.
+ */
+static int64_t mknod_resolved(const char *resolved, unsigned int mode,
+                              unsigned int dev)
+{
+  int rc = mknod_check_free(resolved);
+
+  if (rc != 0)
+    return rc;
+  rc = may_create(resolved);
+  if (rc != 0)
+    return rc;
+  if ((mode & S_IFMT) != S_IFIFO)
+    return mknod_create_device(resolved, mode, dev);
+  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+}
+
 int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
 {
   char resolved[256];
@@ -868,14 +887,7 @@ int64_t sys_mknod(const char *pathname, unsigned int mode, unsigned int dev)
   if (rc != 0)
     return rc;
 
-  if ((mode & S_IFMT) != S_IFIFO)
-    return mknod_create_device(resolved, mode, dev);
-
-  rc = mknod_check_free(resolved);
-  if (rc != 0)
-    return rc;
-
-  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+  return mknod_resolved(resolved, mode, dev);
 }
 
 int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
@@ -899,12 +911,5 @@ int64_t sys_mknodat(int dirfd, const char *pathname, unsigned int mode,
   if (rc != 0)
     return rc;
 
-  if ((mode & S_IFMT) != S_IFIFO)
-    return mknod_create_device(resolved, mode, dev);
-
-  rc = mknod_check_free(resolved);
-  if (rc != 0)
-    return rc;
-
-  return mknod_create_named_fifo(resolved, (mode_t)(mode & 07777));
+  return mknod_resolved(resolved, mode, dev);
 }
