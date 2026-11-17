@@ -1178,8 +1178,6 @@ PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
 
 PORTABLE_TASK_ARCH_ALLOWLIST = {
     ROOT / "includes" / "ir0" / "arch_task.h",
-    ROOT / "includes" / "ir0" / "arch_task_context_x86_64.h",
-    ROOT / "includes" / "ir0" / "arch_task_context_arm64.h",
     ROOT / "includes" / "ir0" / "arch_task_ops.h",
 }
 
@@ -1187,8 +1185,8 @@ PORTABLE_TASK_ARCH_ALLOWLIST = {
 def check_asm_offsets_sync():
     """C asm_offsets.h constants must match NASM asm_offsets.inc."""
     errors = []
-    h_path = ROOT / "includes" / "ir0" / "asm_offsets.h"
-    i_path = ROOT / "includes" / "ir0" / "asm_offsets.inc"
+    h_path = ROOT / "arch" / "x86-64" / "include" / "asm" / "asm_offsets.h"
+    i_path = ROOT / "arch" / "x86-64" / "include" / "asm" / "asm_offsets.inc"
     if not h_path.is_file() or not i_path.is_file():
         errors.append("[asm-offsets] missing asm_offsets.h or asm_offsets.inc")
         return errors
@@ -2590,9 +2588,6 @@ REGISTER_NAME_ISA_HEADERS = frozenset(
     {
         "arch_syscall_frame_arm64.h",
         "arch_syscall_frame_x86_64.h",
-        "arch_task_context_arm64.h",
-        "arch_task_context_x86_64.h",
-        "asm_offsets.h",
         "sigcontext_arm64.h",
         "sigcontext_x86_64.h",
     }

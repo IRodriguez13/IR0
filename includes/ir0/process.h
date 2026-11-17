@@ -323,7 +323,7 @@ void process_registry_insert(process_t *process);
  * The placeholder forces a compile error showing the real value if it drifts.
  */
 /*
- * FS_BASE offset: includes/ir0/asm_offsets.h + asm_offsets.inc (NASM).
+ * FS_BASE offset: x86 <asm/asm_offsets.h> + asm_offsets.inc (NASM).
  * arch-guard verifies the C header matches the .inc file.
  */
 PROCESS_CONTEXT_ASSERT_LAYOUT(process_t);

@@ -11,8 +11,8 @@ extern fork_restore_audit
 extern _etext
 extern switch_report_bad_ret
 
-; Single source: includes/ir0/asm_offsets.h ↔ asm_offsets.inc
-%include "includes/ir0/asm_offsets.inc"
+; Single source: arch/x86-64/include/asm/asm_offsets.h ↔ asm_offsets.inc
+%include "arch/x86-64/include/asm/asm_offsets.inc"
 
 section .bss
 align 16
