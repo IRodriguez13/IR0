@@ -13,10 +13,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # x86-64 numbers: Linux ones in the exported asm/unistd.h, IR0 extras in
-# <ir0/syscall_linux.h>.
+# asm/unistd_ir0.h (both reached through <ir0/syscall_linux.h>).
 SYSCALL_HEADERS = (
     ROOT / "arch/x86-64/include/uapi/asm/unistd.h",
-    ROOT / "includes/uapi/ir0/syscall_linux.h",
+    ROOT / "arch/x86-64/include/uapi/asm/unistd_ir0.h",
 )
 SYSCALL_DISPATCH_C = ROOT / "kernel/syscalls/syscall_dispatch.c"
 SYSCALLS_C = ROOT / "kernel/syscalls.c"  # legacy fallback if dispatch not split yet

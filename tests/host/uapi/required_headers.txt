@@ -40,3 +40,5 @@ linux/mii.h
 linux/raid/md_u.h
 linux/rtnetlink.h
 linux/wireless.h
+# IR0 syscall numbers of the selected ISA (ISD lib/ir0_keymap.c):
+ir0/syscall_linux.h

@@ -196,7 +196,7 @@ host_arm64_syscall_decode.o: $(KERNEL_ROOT)/arch/arm64/sources/syscall_decode.c 
 
 host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
-	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h \
+	$(KERNEL_ROOT)/arch/x86-64/include/uapi/asm/unistd_ir0.h \
 	$(KERNEL_ROOT)/arch/x86-64/include/uapi/asm/unistd.h
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
@@ -276,7 +276,8 @@ test_arm64_syscall_decode.o: test_arm64_syscall_decode.c \
 
 test_x86_syscall_decode.o: test_x86_syscall_decode.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_id.h \
-	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h
+	$(KERNEL_ROOT)/includes/uapi/ir0/syscall_linux.h \
+	$(KERNEL_ROOT)/arch/x86-64/include/uapi/asm/unistd_ir0.h
 	$(KERNEL_CC)
 
 test_syscall_table.o: test_syscall_table.c \

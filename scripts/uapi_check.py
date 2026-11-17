@@ -14,7 +14,7 @@ For every ISA with a syscall decoder (arch/<isa>/sources/syscall_decode.c):
    those roots.
 3. Check asm/unistd.h against the kernel: every __NR_* it exports is a case of
    the ISA decoder, every decoder case is a named constant from asm/unistd.h
-   (or an IR0 extension from <ir0/syscall_linux.h>), no number is defined
+   (or an IR0 extension from the ISA's asm/unistd_ir0.h), no number is defined
    twice, and each exported value equals the Linux table found on the host.
 
 ISAs whose cross compiler is missing are reported as SKIP; the check fails
@@ -35,7 +35,6 @@ ROOT = Path(__file__).resolve().parents[1]
 UAPI_TESTS = ROOT / "tests" / "host" / "uapi"
 REQUIRED = UAPI_TESTS / "required_headers.txt"
 CONSTANTS = UAPI_TESTS / "uapi_abi_constants.c"
-IR0_EXT = ROOT / "includes" / "uapi" / "ir0" / "syscall_linux.h"
 
 # One entry per ISA: compiler triple and Linux syscall tables to compare with
 # (the first one present on the host is used).
@@ -117,18 +116,27 @@ def resolve(defs: dict[str, list[str]], name: str, depth: int = 0) -> set[int]:
 
 def check_syscalls(isa: str, errors: list[str]) -> str:
     """Return a one-line summary; append failures to errors."""
-    header = ROOT / "arch" / isa / "include" / "uapi" / "asm" / "unistd.h"
+    uapi_asm = ROOT / "arch" / isa / "include" / "uapi" / "asm"
+    header = uapi_asm / "unistd.h"
+    ir0_ext = uapi_asm / "unistd_ir0.h"
     decoder = ROOT / "arch" / isa / "sources" / "syscall_decode.c"
-    if not header.is_file():
-        errors.append(f"[{isa}] missing {header.relative_to(ROOT)}")
-        return "asm/unistd.h missing"
+    for required in (header, ir0_ext):
+        if not required.is_file():
+            # <ir0/syscall_linux.h> includes both on every ISA.
+            errors.append(f"[{isa}] missing {required.relative_to(ROOT)}")
+    if not header.is_file() or not ir0_ext.is_file():
+        return "asm/unistd.h or asm/unistd_ir0.h missing"
 
     exported = nr_defines(header.read_text())
     decoder_text = decoder.read_text()
-    # IR0-specific numbers only count for a decoder that includes them.
-    ext = nr_defines(IR0_EXT.read_text()) if "ir0/syscall_linux.h" in decoder_text else {}
+    # <ir0/syscall_linux.h> includes both headers: a name in both would
+    # silently replace the Linux number on that ISA.
+    ext = nr_defines(ir0_ext.read_text())
     for name in sorted(set(exported) & set(ext)):
-        errors.append(f"[{isa}] {name} defined in both asm/unistd.h and ir0/syscall_linux.h")
+        errors.append(f"[{isa}] {name} defined in both asm/unistd.h and asm/unistd_ir0.h")
+    # IR0-specific numbers only count for a decoder that includes them.
+    if "asm/unistd_ir0.h" not in decoder_text:
+        ext = {}
     for name, values in exported.items():
         if len(values) != 1 or not values[0].isdigit():
             errors.append(f"[{isa}] asm/unistd.h: {name} must be one decimal number")
