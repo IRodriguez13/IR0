@@ -31,11 +31,6 @@ int ir0_bt_proc_scan_read(char *buffer, size_t count)
 	return bt_proc_scan_read(buffer, count);
 }
 
-int ir0_bt_proc_scan_write(const char *command)
-{
-	return bt_proc_scan_write(command);
-}
-
 int ir0_bt_sysfs_hci0_address_read(char *buf, size_t count)
 {
 	return bt_sysfs_hci0_address_read(buf, count);

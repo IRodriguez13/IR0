@@ -193,11 +193,6 @@ void epoll_release(void *epoll_state)
 	epoll_try_destroy(ep);
 }
 
-void epoll_release_fd(void *epoll_state)
-{
-	epoll_release(epoll_state);
-}
-
 int64_t sys_epoll_create1(int flags)
 {
 	int slot = -1;

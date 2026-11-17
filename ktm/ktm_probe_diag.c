@@ -127,14 +127,6 @@ static void probe_arm_target(struct process *p)
 		       p->comm[0] ? p->comm : "(none)");
 }
 
-void ktm_probe_diag_note_comm(struct process *p)
-{
-	if (!p)
-		return;
-	if (probe_comm_is_sh(p))
-		probe_arm_target(p);
-}
-
 void ktm_probe_diag_execve(struct process *p, const char *path)
 {
 	if (!p || !path)

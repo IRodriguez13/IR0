@@ -200,7 +200,8 @@ exist. `make test` opens the picker; `SUITE=<id>` runs suites non-interactively.
 | `make build-graph-audit` | Audit the generated build graph |
 | `make unibuild FILE=<file.c>` | Compile translation units in isolation |
 | `make unibuild-cpp` / `unibuild-rust` / `unibuild-clean` | Other isolated compiler modes |
-| `make headers_install` | Export `includes/uapi` to `DESTDIR/usr/include` (default: `build/uapi-install`) |
+| `make headers_install [arm64]` | Export `includes/uapi` plus `arch/$(ARCH)/include/uapi` to `DESTDIR/usr/include` (default: `build/uapi-install`) |
+| `make uapi-check` | Compile every exported header per ISA against the installed tree only; check `asm/unistd.h` against the syscall decoder (part of `test-fast`) |
 | `make check-env` | Host environment diagnostic (`scripts/deptest.sh`) |
 
 ### Utilities

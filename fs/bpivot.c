@@ -93,15 +93,6 @@ int ir0_bpivot_cpio_fold_done(void)
 	return g_bpivot_cpio_fold > 0;
 }
 
-int ir0_bpivot_tree_count(void)
-{
-	int n = 0;
-
-	while (ir0_bpivot_trees[n])
-		n++;
-	return n;
-}
-
 int ir0_bpivot_prepare_staging(void)
 {
 	stat_t st;

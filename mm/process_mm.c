@@ -87,7 +87,7 @@ bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t leng
 	return false;
 }
 
-uint64_t *process_pt_child(uint64_t *table, size_t index)
+static uint64_t *process_pt_child(uint64_t *table, size_t index)
 {
 	if (!mm_pte_present(table[index]))
 		return NULL;
@@ -186,14 +186,6 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 
 	mm_count_user_pages(mm, &resident, NULL);
 	return resident;
-}
-
-uint64_t process_count_resident_user_pages(const process_t *p)
-{
-	if (!p || !p->mm)
-		return 0;
-
-	return mm_count_resident_user_pages(p->mm);
 }
 
 /*

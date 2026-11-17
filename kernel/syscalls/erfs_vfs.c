@@ -613,26 +613,9 @@ int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp)
 	return 0;
 }
 
-int early_rootfs_exec_pending(void)
-{
-	return g_exec_pending &&
-	       (int)early_process_current_pid() == g_exec_owner;
-}
-
 int early_rootfs_abstract_observed(void)
 {
 	return g_abstract_ok;
-}
-
-char *const *early_rootfs_exec_argv(void)
-{
-	return g_exec_argv;
-}
-
-void early_rootfs_exec_clear(void)
-{
-	g_exec_pending = 0;
-	g_exec_owner = 0;
 }
 
 int early_rootfs_fd_is_pipe_write(int fd)

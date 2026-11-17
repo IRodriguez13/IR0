@@ -33,17 +33,6 @@ uint64_t sigcontext_sp(const struct sigcontext *ctx)
 	return ctx ? ctx->sp : 0;
 }
 
-uint64_t sigcontext_arg(const struct sigcontext *ctx, unsigned index)
-{
-	return (ctx && index < 6) ? ctx->regs[index] : 0;
-}
-
-void sigcontext_set_arg(struct sigcontext *ctx, unsigned index, uint64_t value)
-{
-	if (ctx && index < 6)
-		ctx->regs[index] = value;
-}
-
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx)
 {
     if (!ctx || ctx->pc < 0x00400000ULL ||

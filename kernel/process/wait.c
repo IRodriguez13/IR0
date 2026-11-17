@@ -15,7 +15,7 @@
 #include "process_internal.h"
 #include <ir0/ktm/checkpoint.h>
 
-int process_reap_detach_zombie(process_t *child)
+static int process_reap_detach_zombie(process_t *child)
 {
 	int removed;
 
@@ -81,21 +81,6 @@ static int process_wait_pid_matches_child(pid_t wait_pid,
 	return process_lifecycle_child_matches(parent, child, wait_pid);
 }
 
-int process_has_zombie_child(const process_t *parent)
-{
-	process_t *p;
-
-	if (!parent)
-		return 0;
-
-	for (p = process_list; p; p = p->next)
-	{
-		if (p->ppid == parent->task.pid && p->state == PROCESS_ZOMBIE)
-			return 1;
-	}
-	return 0;
-}
-
 int process_wait_child_matches_blocked_target(const process_t *parent,
 					    pid_t child_pid)
 {
@@ -116,7 +101,7 @@ int process_child_wait_status_word(const process_t *child)
 	return process_lifecycle_wait_status(child);
 }
 
-int process_wait_prepare_child_wake(const process_t *parent,
+static int process_wait_prepare_child_wake(const process_t *parent,
 				    const process_t *child, int *status_word)
 {
 	if (!parent || !child || !status_word)

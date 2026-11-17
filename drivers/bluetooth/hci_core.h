@@ -98,7 +98,6 @@ int hci_read_bd_addr(bd_addr_t addr);
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_set_event_mask(const uint8_t *mask);
 
 /**
  * hci_inquiry - Start device discovery
@@ -128,7 +127,6 @@ int hci_inquiry_cancel(void);
  * 
  * Returns: 0 on success, negative error code on failure
  */
-int hci_remote_name_request(const bd_addr_t bd_addr);
 
 /**
  * hci_get_discovered_devices - Get list of discovered devices

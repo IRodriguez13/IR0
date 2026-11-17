@@ -81,8 +81,6 @@ const char *boot_memory_cmdline(void);
 int boot_memory_range_is_reserved(uintptr_t base, size_t size);
 
 /* Read, page-normalize, order and validate the platform usable-RAM banks. */
-int boot_memory_get_usable_ranges(struct ir0_phys_range *ranges,
-				  size_t capacity, size_t *count);
 
 /* Normalize a caller-supplied inventory without consulting an ISA backend. */
 int boot_memory_normalize_ranges(const struct ir0_phys_range *input,
@@ -99,8 +97,6 @@ int boot_memory_exclude_reserved(const struct ir0_phys_range *usable,
 				 size_t output_capacity, size_t *output_count);
 
 /* Read the typed reservations supplied by the active architecture backend. */
-int boot_memory_get_reserved_ranges(struct ir0_phys_range *ranges,
-				    size_t capacity, size_t *count);
 
 /* Build the final reserved-free inventory consumed by the generic PMM. */
 int boot_memory_get_allocatable_ranges(struct ir0_phys_range *ranges,

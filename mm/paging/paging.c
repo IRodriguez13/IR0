@@ -86,30 +86,6 @@ void ir0_mm_free_table_frame(uint64_t frame, int level)
 }
 
 
-void enable_paging(void)
-{
-	mm_enable_translation();
-	paging_pin_kernel_address_space(paging_current_address_space());
-}
-
-void setup_and_enable_paging(void)
-{
-	/* SILENT safety checks */
-	/* DO NOT use print/log during critical setup */
-
-	if (!mm_translation_ready())
-		return;
-
-	/* Verify address translation is enabled. */
-	if (!is_paging_enabled())
-	{
-		/* Paging not enabled - enable it */
-		enable_paging();
-	}
-	else
-		paging_pin_kernel_address_space(paging_current_address_space());
-}
-
 void paging_sync_kernel_mappings(address_space_root_t root)
 {
 	uintptr_t kernel_root = paging_kernel_root;
@@ -195,11 +171,6 @@ void paging_poison_phys_page(uintptr_t phys, uint8_t pattern)
 	paging_phys_map_begin(&saved);
 	memset((void *)phys, (int)pattern, PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
-}
-
-int is_paging_enabled(void)
-{
-	return mm_translation_enabled();
 }
 
 /**
@@ -847,18 +818,6 @@ void unmap_user_region_in_directory(address_space_root_t root, uintptr_t start,
 	}
 }
 
-/**
- * Unmap a single 4KB page in the current address space
- */
-int unmap_page(uint64_t virt_addr)
-{
-    address_space_root_t root =
-        (address_space_root_t)paging_current_address_space();
-
-    return unmap_page_in_directory(root, (uintptr_t)virt_addr);
-}
-
-
 /* Map user page with U/S=1 permissions */
 int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags)
 {
@@ -867,14 +826,6 @@ int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flag
 
     /* Map the page */
     return map_page(virtual_addr, physical_addr, flags);
-}
-
-/* Map user memory region in current page directory */
-int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags)
-{
-    address_space_root_t root =
-        (address_space_root_t)paging_current_address_space();
-    return map_user_region_in_directory(root, virtual_start, size, flags);
 }
 
 /* Map user memory region in a specific page directory */

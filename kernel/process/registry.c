@@ -55,18 +55,6 @@ process_t *process_find_child_of(pid_t ppid)
 	return NULL;
 }
 
-void process_registry_install_if_empty(process_t *process)
-{
-	uint64_t irq_flags;
-
-	if (!process)
-		return;
-	irq_flags = process_registry_lock();
-	if (!process_list)
-		process_list = process;
-	process_registry_unlock(irq_flags);
-}
-
 pid_t process_get_next_pid(void)
 {
 	uint64_t irq_flags = process_registry_lock();

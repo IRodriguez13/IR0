@@ -43,14 +43,12 @@ int bluetooth_init(void);
  * 
  * Cleans up all Bluetooth components and frees resources.
  */
-void bluetooth_cleanup(void);
 
 /**
  * bluetooth_is_initialized - Check if Bluetooth is initialized
  * 
  * Returns: true if initialized, false otherwise
  */
-bool bluetooth_is_initialized(void);
 
 /**
  * bluetooth_get_status - Get Bluetooth subsystem status
@@ -59,7 +57,6 @@ bool bluetooth_is_initialized(void);
  * 
  * Returns: Number of bytes written to buffer
  */
-int bluetooth_get_status(char *buffer, size_t size);
 
 /**
  * bluetooth_register_driver - Register Bluetooth driver with kernel

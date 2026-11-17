@@ -76,6 +76,17 @@ IR0 exporta UAPI con `make headers_install` (por defecto:
 build externo de usuarios consume esa exportación. ISD valida la versión antes
 de empaquetar.
 
+La exportación sigue el layout UAPI de Linux: headers neutrales de
+`includes/uapi/` (`linux/`, `asm-generic/`, `mtd/` importados textualmente de
+`make headers_install` de Linux v7.4, más `ir0/`) y `asm/` de
+`arch/$(ARCH)/include/uapi/` (`make headers_install arm64` para AArch64).
+`asm/unistd.h` lista exactamente los números de syscall Linux que despacha el
+decodificador de la ISA, que usa esos nombres: una sola tabla.
+`make uapi-check` (en `test-fast`) compila cada header de
+`tests/host/uapi/required_headers.txt` por ISA con `-nostdinc` contra el árbol
+instalado y musl. Si un programa Linux sin modificar necesita un header, se
+importa de Linux y se agrega a esa lista; el programa no se parchea.
+
 ## Capas de configuración
 
 | Archivo | Dueño | Significado |

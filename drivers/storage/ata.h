@@ -79,22 +79,12 @@ extern ata_device_info_t ata_devices[4];
 
 // Core ATA functions
 void ata_init(void);
-bool ata_is_available(void);
 bool ata_drive_present(uint8_t drive);
-bool ata_identify_drive(uint8_t drive);
 bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void* buffer);
 bool ata_write_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, const void* buffer);
-bool ata_wait_ready(uint8_t drive);
-bool ata_wait_drq(uint8_t drive);
-void ata_reset_drive(uint8_t drive);
-bool ata_get_device_info(uint8_t drive, ata_device_info_t *out);
 
 /* Register the detected ATA disks with the blockdev facade. */
 void ata_block_register(void);
 
 // Helper functions
 uint64_t ata_get_size(uint8_t drive);
-const char* ata_get_model(uint8_t drive);
-const char* ata_get_serial(uint8_t drive);
-
-

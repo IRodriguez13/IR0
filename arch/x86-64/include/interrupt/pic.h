@@ -70,7 +70,6 @@
 
 void pic_remap64(void);
 void pic_send_eoi64(uint8_t irq);
-void pic_mask_irq(uint8_t irq);
 void pic_unmask_irq(uint8_t irq);
 
 #endif /* PIC_H */

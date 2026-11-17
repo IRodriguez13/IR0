@@ -12,14 +12,14 @@
 #include <ir0/atomic.h>
 #include <stdint.h>
 
-void ep_early_set_current_pid(int64_t pid)
+static void ep_early_set_current_pid(int64_t pid)
 {
 	ep_g_current_pid = pid;
 	if (ep_g_identity && ep_g_identity->sync_current)
 		ep_g_identity->sync_current(pid);
 }
 
-void ep_early_publish_creds(void)
+static void ep_early_publish_creds(void)
 {
 	if (ep_g_identity && ep_g_identity->publish_creds)
 		ep_g_identity->publish_creds(ep_g_uid, ep_g_euid, ep_g_gid, ep_g_egid);

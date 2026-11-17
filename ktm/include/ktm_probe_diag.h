@@ -21,7 +21,6 @@ struct process;
 
 #if defined(CONFIG_KTM_PROBE_DIAG) && CONFIG_KTM_PROBE_DIAG
 
-void ktm_probe_diag_note_comm(struct process *p);
 void ktm_probe_diag_execve(struct process *p, const char *path);
 void ktm_probe_diag_syscall_pre(uint64_t nr, uint64_t a1, uint64_t a2,
 				uint64_t a3, uint64_t a4, uint64_t a5,
@@ -31,11 +30,6 @@ void ktm_probe_diag_pf(struct process *p, uint64_t fault_addr,
 		       uint64_t fault_rip);
 
 #else
-
-static inline void ktm_probe_diag_note_comm(struct process *p)
-{
-	(void)p;
-}
 
 static inline void ktm_probe_diag_execve(struct process *p, const char *path)
 {

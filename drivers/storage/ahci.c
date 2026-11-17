@@ -539,16 +539,6 @@ void ahci_map_mmio_in_directory(address_space_root_t root)
 	}
 }
 
-int ahci_disk_present(void)
-{
-	return ahci_nslots > 0 && ahci_slots[0].ready;
-}
-
-uint64_t ahci_sector_count(void)
-{
-	return ahci_nslots > 0 ? ahci_slots[0].nsectors : 0;
-}
-
 void ahci_probe(void)
 {
 	uint8_t bus, slot, func;

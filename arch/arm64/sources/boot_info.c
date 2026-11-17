@@ -291,7 +291,7 @@ int arm64_fdt_boot_info_init_fallback(uintptr_t primary, uintptr_t fallback)
 #endif
 }
 
-int arm64_board_hypervisor_present(void)
+static int arm64_board_hypervisor_present(void)
 {
 	return g_boot_info.fdt_valid &&
 	       g_boot_info.hypervisor_kind != ARM64_HV_NONE;

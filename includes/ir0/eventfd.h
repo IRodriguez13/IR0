@@ -20,7 +20,6 @@
 struct ir0_eventfd;
 
 int64_t sys_eventfd2(unsigned int count, int flags);
-int ir0_eventfd_is(const void *ptr);
 int64_t ir0_eventfd_read(struct ir0_eventfd *e, void *buf, size_t count, int nonblock);
 int64_t ir0_eventfd_write(struct ir0_eventfd *e, const void *buf, size_t count, int nonblock);
 int ir0_eventfd_poll_readable(const struct ir0_eventfd *e);

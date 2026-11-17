@@ -31,7 +31,7 @@ static void ir0_clock_wait_wake_process(process_t *proc)
 	sched_promote(proc);
 }
 
-void ir0_clock_wait_arm(process_t *proc, uint64_t deadline_ms)
+static void ir0_clock_wait_arm(process_t *proc, uint64_t deadline_ms)
 {
 	if (!proc)
 		return;

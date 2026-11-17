@@ -76,24 +76,6 @@ int copy_from_user(void *dst, const void *src, size_t n)
 	return copy_from_user_mm(process_pgd(current), (uintptr_t)src, dst, n);
 }
 
-int clear_user(void *dst, size_t n)
-{
-	process_t *current = process_get_current();
-
-	if (n == 0)
-		return 0;
-
-	if (uaccess_kernel(current))
-	{
-		memset(dst, 0, n);
-		return 0;
-	}
-
-	if (!current || !process_pgd(current))
-		return -EFAULT;
-	return clear_user_mm(process_pgd(current), (uintptr_t)dst, n);
-}
-
 long strncpy_from_user(char *dst, const char *src, long count)
 {
 	uintptr_t addr = (uintptr_t)src;

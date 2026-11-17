@@ -27,6 +27,15 @@
 #include <ir0/credentials.h>
 #include <ir0/permissions.h>
 
+static int tmpfs_stat(const char *path, stat_t *buf);
+static int tmpfs_mkdir(const char *path, mode_t mode);
+static int tmpfs_link(const char *oldpath, const char *newpath);
+static int tmpfs_unlink(const char *path);
+static int tmpfs_rmdir(const char *path);
+static int tmpfs_chown(const char *path, uid_t owner, gid_t group);
+static int tmpfs_truncate(const char *path, size_t length);
+static int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);
+
 #define TMPFS_MAX_FILES 128
 #define TMPFS_MAX_FILE_SIZE 65536 /* 64KB max per file */
 #define TMPFS_MAX_NAME_LEN 255
@@ -398,11 +407,6 @@ int tmpfs_register(void)
 
 /* TMPFS API functions for VFS integration */
 
-bool tmpfs_is_available(void)
-{
-    return num_tmpfs_instances > 0;
-}
-
 tmpfs_inode_t *tmpfs_find_inode(const char *path)
 {
     tmpfs_data_t *tmpfs = tmpfs_get_instance_for_path(path);
@@ -412,7 +416,7 @@ tmpfs_inode_t *tmpfs_find_inode(const char *path)
     const char *rel_path = tmpfs_get_relative_path(path, tmpfs->mount_point);
     return tmpfs_lookup_inode(tmpfs, rel_path);
 }
-int tmpfs_stat(const char *path, stat_t *buf)
+static int tmpfs_stat(const char *path, stat_t *buf)
 {
     if (!path || !buf)
         return -EINVAL;
@@ -446,7 +450,7 @@ int tmpfs_stat(const char *path, stat_t *buf)
     return 0;
 }
 
-int tmpfs_mkdir(const char *path, mode_t mode)
+static int tmpfs_mkdir(const char *path, mode_t mode)
 {
     if (!path)
         return -EINVAL;
@@ -717,7 +721,7 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
     return 0;
 }
 
-int tmpfs_link(const char *oldpath, const char *newpath)
+static int tmpfs_link(const char *oldpath, const char *newpath)
 {
     if (!oldpath || !newpath)
         return -EINVAL;
@@ -785,7 +789,7 @@ int tmpfs_link(const char *oldpath, const char *newpath)
     return 0;
 }
 
-int tmpfs_unlink(const char *path)
+static int tmpfs_unlink(const char *path)
 {
     if (!path)
         return -EINVAL;
@@ -813,7 +817,7 @@ int tmpfs_unlink(const char *path)
     return 0;
 }
 
-int tmpfs_rmdir(const char *path)
+static int tmpfs_rmdir(const char *path)
 {
     if (!path)
         return -EINVAL;
@@ -866,7 +870,7 @@ int tmpfs_chmod(const char *path, mode_t mode)
     return 0;
 }
 
-int tmpfs_chown(const char *path, uid_t owner, gid_t group)
+static int tmpfs_chown(const char *path, uid_t owner, gid_t group)
 {
     if (!path)
         return -EINVAL;
@@ -899,7 +903,7 @@ int tmpfs_chown(const char *path, uid_t owner, gid_t group)
  * when a larger buffer is allocated. Shrinking keeps the backing allocation
  * but hides bytes beyond @length from readers.
  */
-int tmpfs_truncate(const char *path, size_t length)
+static int tmpfs_truncate(const char *path, size_t length)
 {
     tmpfs_data_t *tmpfs;
     tmpfs_inode_t *inode;
@@ -1024,7 +1028,7 @@ int tmpfs_statfs(const char *path, struct ir0_statfs *buf)
     return 0;
 }
 
-int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
+static int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 {
     if (!path || !entries || max_entries <= 0)
         return -EINVAL;

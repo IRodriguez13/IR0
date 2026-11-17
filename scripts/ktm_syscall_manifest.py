@@ -12,7 +12,12 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SYSCALL_H = ROOT / "includes/uapi/ir0/syscall_linux.h"
+# x86-64 numbers: Linux ones in the exported asm/unistd.h, IR0 extras in
+# asm/unistd_ir0.h (both reached through <ir0/syscall_linux.h>).
+SYSCALL_HEADERS = (
+    ROOT / "arch/x86-64/include/uapi/asm/unistd.h",
+    ROOT / "arch/x86-64/include/uapi/asm/unistd_ir0.h",
+)
 SYSCALL_DISPATCH_C = ROOT / "kernel/syscalls/syscall_dispatch.c"
 SYSCALLS_C = ROOT / "kernel/syscalls.c"  # legacy fallback if dispatch not split yet
 X86_DECODE_C = ROOT / "arch/x86-64/sources/syscall_decode.c"
@@ -42,9 +47,9 @@ MUSL_SIGNAL_SET = {
 }
 
 
-def parse_nr_define(path: Path) -> dict[int, str]:
+def parse_nr_define(paths: tuple[Path, ...]) -> dict[int, str]:
     out: dict[int, str] = {}
-    for line in path.read_text().splitlines():
+    for line in "\n".join(p.read_text() for p in paths).splitlines():
         m = re.match(r"#define\s+__NR_(\w+)\s+(\d+)", line)
         if m:
             out[int(m.group(2))] = m.group(1)
@@ -78,7 +83,7 @@ def parse_socket_loop_wiring(text: str, name_to_nr: dict[str, int]) -> set[int]:
 
 def parse_wired_table(path: Path) -> set[int]:
     wired: set[int] = set()
-    names = parse_nr_define(SYSCALL_H)
+    names = parse_nr_define(SYSCALL_HEADERS)
     name_to_nr = {name: nr for nr, name in names.items()}
     text = path.read_text()
 
@@ -127,7 +132,7 @@ def parse_semantic_contract(
     dispatch_path: Path, decoder_path: Path
 ) -> tuple[dict[int, str], set[str]]:
     """Read both sides of the native ABI-to-common-core contract."""
-    names = parse_nr_define(SYSCALL_H)
+    names = parse_nr_define(SYSCALL_HEADERS)
     name_to_nr = {name: nr for nr, name in names.items()}
     return (
         parse_semantic_decoder(decoder_path, name_to_nr),
@@ -141,7 +146,7 @@ def main() -> int:
     parser.add_argument("--musl", action="store_true", help="show musl cred/signal gaps")
     args = parser.parse_args()
 
-    names = parse_nr_define(SYSCALL_H)
+    names = parse_nr_define(SYSCALL_HEADERS)
     dispatch_path = SYSCALL_DISPATCH_C if SYSCALL_DISPATCH_C.is_file() else SYSCALLS_C
     wired = parse_wired_table(dispatch_path)
     semantic_errors: list[str] = []

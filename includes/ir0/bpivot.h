@@ -21,7 +21,6 @@ int ir0_bpivot_mount_count(void);
 void ir0_bpivot_note_cpio_fold(int installed);
 int ir0_bpivot_cpio_fold_done(void);
 extern const char *const ir0_bpivot_trees[];
-int ir0_bpivot_tree_count(void);
 
 int ir0_bpivot_prepare_staging(void);
 int ir0_bpivot_commit(void);

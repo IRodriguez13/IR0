@@ -91,34 +91,3 @@
 #define PS2_MOUSE_Y_SIGN        0x20
 #define PS2_MOUSE_X_OVERFLOW    0x40
 #define PS2_MOUSE_Y_OVERFLOW    0x80
-
-// Mouse control
-bool ps2_mouse_enable(void);
-bool ps2_mouse_disable(void);
-bool ps2_mouse_reset(void);
-bool ps2_mouse_set_defaults(void);
-
-// Configuration
-bool ps2_mouse_set_resolution(uint8_t resolution);
-bool ps2_mouse_set_scaling_2_1(void);
-bool ps2_mouse_set_scaling_1_1(void);
-
-void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet);
-
-// Low-level functions
-bool ps2_mouse_send_command(uint8_t command);
-bool ps2_mouse_send_command_with_data(uint8_t command, uint8_t data);
-uint8_t ps2_mouse_read_data(void);
-bool ps2_mouse_wait_ack(void);
-
-// Utility functions
-bool ps2_controller_wait_input(void);
-bool ps2_controller_wait_output(void);
-void ps2_controller_write_command(uint8_t command);
-void ps2_controller_write_data(uint8_t data);
-uint8_t ps2_controller_read_data(void);
-
-// Mouse type detection
-ps2_mouse_type_t ps2_mouse_detect_type(void);
-bool ps2_mouse_enable_wheel(void);
-bool ps2_mouse_enable_5buttons(void);

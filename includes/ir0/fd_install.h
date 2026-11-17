@@ -30,5 +30,3 @@ struct ir0_fd_install_ops
 	int (*share_files)(int64_t child_pid);
 	struct vfs_file *(*file)(int fd);
 };
-
-const struct ir0_fd_install_ops *ir0_fd_install_product(void);

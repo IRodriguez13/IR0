@@ -53,14 +53,6 @@ pid_t ir0_current_pid(void)
     return c ? c->pid : (pid_t)0;
 }
 
-mode_t ir0_current_umask(void)
-{
-    const struct ir0_task_cred *c;
-
-    c = ir0_current_cred();
-    return c ? c->umask : (mode_t)0;
-}
-
 int ir0_cred_is_root(void)
 {
     const struct ir0_task_cred *c;

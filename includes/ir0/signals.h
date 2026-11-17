@@ -13,7 +13,6 @@
 
 // SPDX-License-Identifier: GPL-3.0-only
 
-
 #ifndef _IR0_SIGNALS_H
 #define _IR0_SIGNALS_H
 
@@ -21,7 +20,6 @@
 #include <stddef.h>
 
 typedef struct process process_t;
-
 
 /* Standard Unix signals - essential set for error handling */
 /* Hardware/CPU exceptions */
@@ -250,7 +248,6 @@ int register_signal_handler(int signal, void (*handler)(int));
  *
  * Returns: 0 on success, -1 on error
  */
-int signal_ignore(int signal);
 
 /*
  * Returns 1 if @sig has a deliverable userspace handler (not DFL/IGN/blocked).
@@ -261,7 +258,6 @@ int signals_has_user_handler(process_t *p, int sig);
 void signals_reset_on_exec(process_t *p);
 
 /** Restore process signal_mask after rt_sigreturn (paired with delivery). */
-void signals_on_sigreturn(process_t *p);
 
 /**
  * Linux-like: if userspace left the handler stack without rt_sigreturn
@@ -278,7 +274,6 @@ void signals_try_abandon_sigframe(process_t *p);
  */
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 				   uint64_t fault_addr);
-
 
 /*
  * Linux/musl place signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.

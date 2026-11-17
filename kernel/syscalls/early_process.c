@@ -74,43 +74,6 @@ const struct syscall_context_provider early_process_provider = {
 	.handler = ep_early_process_syscall,
 };
 
-int early_process_clone_take_enter(uint64_t *stack, uint64_t *tls)
-{
-	if (!ep_g_enter_child)
-		return 0;
-	ep_g_enter_child = 0;
-	ep_early_set_current_pid(ep_g_child_pid);
-	ep_g_child_state = EP_CHILD_RUNNING;
-	if (stack)
-		*stack = ep_g_child_stack;
-	if (tls)
-		*tls = ep_g_child_tls;
-	return 1;
-}
-
-void early_process_clone_save_parent(const uint64_t *frame)
-{
-	unsigned int i;
-
-	if (!frame)
-		return;
-	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
-		ep_g_parent_frame[i] = frame[i];
-}
-
-int early_process_clone_resume_parent(uint64_t *frame)
-{
-	unsigned int i;
-
-	if (!ep_g_resume_parent || !frame)
-		return 0;
-	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
-		frame[i] = ep_g_parent_frame[i];
-	ep_g_resume_parent = 0;
-	ep_early_set_current_pid(1);
-	return 1;
-}
-
 int early_process_is_root(void)
 {
 	return ep_g_euid == 0;
@@ -124,25 +87,6 @@ void early_process_note_exec(void)
 		ep_g_vfork_exec = 1;
 		ep_g_resume_parent = 1;
 	}
-}
-
-int early_process_vfork_exec_resume(uint64_t *frame)
-{
-	unsigned int i;
-
-	if (!frame || !ep_g_vfork_exec || !ep_g_resume_parent ||
-	    ep_g_current_pid != ep_g_child_pid)
-		return 0;
-	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
-		ep_g_child_frame[i] = frame[i];
-	ep_g_child_frame_valid = 1;
-	ep_g_child_state = EP_CHILD_PARKED;
-	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
-		frame[i] = ep_g_parent_frame[i];
-	ep_g_vfork_exec = 0;
-	ep_g_resume_parent = 0;
-	ep_early_set_current_pid(1);
-	return 1;
 }
 
 int early_process_request_yield(void)
@@ -162,64 +106,6 @@ int early_process_request_yield(void)
 	return 0;
 }
 
-int early_process_take_yield(uint64_t *frame)
-{
-	uint64_t *save;
-	uint64_t *load;
-	unsigned int i;
-	int64_t dest;
-	int rewind;
-
-	if (!frame || ep_g_enter_child || ep_g_resume_parent)
-		return 0;
-	dest = 0;
-	rewind = 0;
-	if (ep_g_yield_requested)
-	{
-		if (ep_g_current_pid == ep_g_child_pid && ep_g_vfork)
-		{
-			ep_g_yield_requested = 0;
-			return 0;
-		}
-		dest = (ep_g_current_pid == 1) ? ep_g_child_pid : 1;
-		rewind = 1;
-		ep_g_yield_requested = 0;
-	}
-	else if (ep_g_current_pid == 1 && ep_g_child_state == EP_CHILD_PARKED &&
-		 ep_g_child_frame_valid)
-		dest = ep_g_child_pid;
-	if (!dest)
-		return 0;
-	if (dest == ep_g_child_pid && !ep_g_child_frame_valid &&
-	    ep_g_current_pid == 1)
-		return 0;
-	save = (ep_g_current_pid == 1) ? ep_g_parent_frame : ep_g_child_frame;
-	load = (dest == 1) ? ep_g_parent_frame : ep_g_child_frame;
-	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
-		save[i] = frame[i];
-	if (rewind && save[31] >= IR0_EARLY_SVC_INSN_BYTES)
-		save[31] -= IR0_EARLY_SVC_INSN_BYTES;
-	if (ep_g_current_pid == ep_g_child_pid)
-	{
-		ep_g_child_frame_valid = 1;
-		ep_g_child_state = EP_CHILD_PARKED;
-	}
-	for (i = 0; i < IR0_EARLY_EL0_FRAME_WORDS; i++)
-		frame[i] = load[i];
-	if (dest == ep_g_child_pid && ep_g_child_state == EP_CHILD_PARKED)
-	{
-		ep_g_child_state = EP_CHILD_RUNNING;
-		ep_g_block_wait_ok = 1;
-	}
-	ep_early_set_current_pid(dest);
-	return 1;
-}
-
-int early_process_block_wait_observed(void)
-{
-	return ep_g_block_wait_ok;
-}
-
 int64_t early_process_current_pid(void)
 {
 	return ep_g_current_pid;
@@ -235,11 +121,6 @@ void early_process_current_ucred(int32_t *pid, int32_t *uid, int32_t *gid)
 		*gid = (int32_t)ep_g_gid;
 }
 
-int early_process_smoke_ok(void)
-{
-	return ep_g_getpid_ok;
-}
-
 void early_process_bind_common_exit(int (*fn)(int code))
 {
 	ep_g_common_task_exit = fn;
@@ -250,34 +131,3 @@ void early_process_bind_schedule_exit(void (*fn)(int code))
 	ep_g_schedule_exit = fn;
 }
 
-void early_process_arm_schedule_exit(void)
-{
-	ep_g_schedule_exit_armed = 1;
-}
-
-int early_process_common_exit_published(void)
-{
-	int published = ep_g_common_task_exit_published;
-
-	ep_g_common_task_exit_published = 0;
-	return published;
-}
-
-void early_process_bind_identity(const struct ir0_syscall_identity_ops *ops)
-{
-	ep_g_identity = ops;
-	ep_g_identity_used = 0;
-	if (ep_g_identity && ep_g_identity->sync_current)
-		ep_g_identity->sync_current(ep_g_current_pid);
-	ep_early_publish_creds();
-}
-
-int early_process_identity_used(void)
-{
-	return ep_g_identity_used;
-}
-
-void early_process_bind_files(const struct ir0_fd_install_ops *ops)
-{
-	ep_g_files = ops;
-}

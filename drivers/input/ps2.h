@@ -162,22 +162,6 @@
 void ps2_init(void);
 bool ps2_send_command(uint8_t command);
 uint8_t ps2_read_data(void);
-bool ps2_wait_for_output(void);
-bool ps2_wait_for_input(void);
-void ps2_keyboard_init(void);
-bool ps2_keyboard_send_command(uint8_t command);
-uint8_t ps2_keyboard_read_scancode(void);
-char ps2_scancode_to_ascii(uint8_t scancode);
-bool ps2_is_key_pressed(uint8_t scancode);
-bool ps2_is_shift_pressed(void);
-bool ps2_is_ctrl_pressed(void);
-bool ps2_is_alt_pressed(void);
-void ps2_keyboard_handler(void);
-
-// Public interface functions
-char ps2_get_char(void);
-bool ps2_has_char(void);
-void ps2_flush_buffer(void);
 
 // Global variables
 extern uint8_t keyboard_buffer[PS2_KEYBOARD_BUFFER_SIZE];
@@ -186,4 +170,3 @@ extern int keyboard_buffer_tail;
 extern bool keyboard_shift_pressed;
 extern bool keyboard_ctrl_pressed;
 extern bool keyboard_alt_pressed;
-

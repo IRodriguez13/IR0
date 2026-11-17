@@ -15,12 +15,8 @@
 
 struct process;
 
-int load_elf_program(const char *path, struct process *process);
 int kexecve(const char *path, char *const argv[], char *const envp[]);
 int exec_replace_current(const char *path, char *const argv[], char *const envp[]);
-
-void debug_elf_header(const void *header);
-void debug_program_header(const void *phdr, int index);
 
 #define ELF_MAGIC 0x464C457Fu
 #define PT_LOAD 1

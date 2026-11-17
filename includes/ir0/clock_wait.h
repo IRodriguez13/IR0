@@ -20,7 +20,6 @@ struct process;
 
 #define IR0_CLOCK_WAIT_DISARMED UINT64_MAX
 
-void ir0_clock_wait_arm(struct process *proc, uint64_t deadline_ms);
 void ir0_clock_wait_disarm(struct process *proc);
 void ir0_clock_wait_fire_due(uint64_t now_ms);
 

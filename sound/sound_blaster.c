@@ -28,6 +28,13 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/irq.h>
 
+static void sb16_shutdown(void);
+static bool sb16_reset_dsp(void);
+static bool sb16_dsp_ready_read(void);
+static bool sb16_dsp_ready_write(void);
+static uint16_t sb16_get_dsp_version(void);
+static void sb16_mixer_write(uint8_t reg, uint8_t data);
+
 /* Global Sound Blaster state */
 static sb16_state_t sb16_state = {0};
 
@@ -119,7 +126,7 @@ static int32_t sb16_hw_init(void)
     return 0;
 }
 
-void sb16_shutdown(void)
+static void sb16_shutdown(void)
 {
     if (!sb16_state.initialized)
     {
@@ -140,7 +147,7 @@ bool sb16_is_available(void)
     return sb16_state.initialized;
 }
 
-bool sb16_reset_dsp(void)
+static bool sb16_reset_dsp(void)
 {
     /* Write 1 to reset port */
     outb(SB16_RESET_PORT, 1);
@@ -167,7 +174,7 @@ bool sb16_reset_dsp(void)
     return false;
 }
 
-bool sb16_dsp_write(uint8_t data)
+static bool sb16_dsp_write(uint8_t data)
 {
     if (!sb16_dsp_ready_write())
     {
@@ -178,7 +185,7 @@ bool sb16_dsp_write(uint8_t data)
     return true;
 }
 
-uint8_t sb16_dsp_read(void)
+static uint8_t sb16_dsp_read(void)
 {
     if (!sb16_dsp_ready_read())
     {
@@ -188,7 +195,7 @@ uint8_t sb16_dsp_read(void)
     return inb(SB16_READ_DATA);
 }
 
-bool sb16_dsp_ready_read(void)
+static bool sb16_dsp_ready_read(void)
 {
     int timeout = SB16_DSP_TIMEOUT;
     while (timeout--)
@@ -206,7 +213,7 @@ static bool sb16_dsp_data_ready(void)
     return (inb(SB16_READ_STATUS) & SB16_DSP_BUSY) != 0;
 }
 
-bool sb16_dsp_ready_write(void)
+static bool sb16_dsp_ready_write(void)
 {
     return sb16_dsp_ready_write_hot();
 }
@@ -245,7 +252,7 @@ static void sb16_reclaim_playback(void)
     sb16_hw_playing = false;
 }
 
-uint16_t sb16_get_dsp_version(void)
+static uint16_t sb16_get_dsp_version(void)
 {
     if (!sb16_dsp_write(SB16_DSP_GET_VERSION))
     {
@@ -263,7 +270,7 @@ void sb16_set_master_volume(uint8_t volume)
     sb16_mixer_write(SB16_MIXER_MASTER_VOL, volume);
 }
 
-void sb16_mixer_write(uint8_t reg, uint8_t data)
+static void sb16_mixer_write(uint8_t reg, uint8_t data)
 {
     outb(SB16_MIXER_PORT, reg);
     outb(SB16_MIXER_DATA, data);
@@ -289,7 +296,7 @@ void sb16_speaker_off(void)
  * sb16_setup_dma_8bit - Configure DMA channel 1 for 8-bit playback.
  * Buffer must be below 16MB physical (kernel heap is identity-mapped).
  */
-void sb16_setup_dma_8bit(uint32_t buffer_addr, uint16_t length)
+static void sb16_setup_dma_8bit(uint32_t buffer_addr, uint16_t length)
 {
     dma_disable_channel(SB16_DMA_8BIT);
     dma_setup_channel(SB16_DMA_8BIT, buffer_addr, length, false);
@@ -318,38 +325,6 @@ static int sb16_program_rate(uint32_t sample_rate)
         }
     }
     return 0;
-}
-
-/*
- * sb16_create_sample - Allocate buffer, copy PCM data, fill sample struct.
- * Caller's data is copied; buffer stays valid until sb16_destroy_sample.
- */
-int sb16_create_sample(sb16_sample_t *sample, uint8_t *data, uint32_t size,
-                       uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample)
-{
-    if (!sample || !data || size == 0)
-        return -1;
-    uint8_t *buf = (uint8_t *)kmalloc(size);
-    if (!buf)
-        return -1;
-    memcpy(buf, data, size);
-    sample->data = buf;
-    sample->size = size;
-    sample->sample_rate = sample_rate;
-    sample->channels = channels;
-    sample->bits_per_sample = bits_per_sample;
-    sample->format = (bits_per_sample == 16) ? SB16_FORMAT_16BIT_MONO : SB16_FORMAT_8BIT_MONO;
-    sample->is_playing = false;
-    return 0;
-}
-
-void sb16_destroy_sample(sb16_sample_t *sample)
-{
-    if (sample && sample->data)
-    {
-        kfree(sample->data);
-        sample->data = NULL;
-    }
 }
 
 int sb16_play_pcm(const void *data, uint32_t size, uint32_t sample_rate)
@@ -408,31 +383,6 @@ fail:
     sb16_hw_playing = false;
     irq_restore(irq_flags);
     return -1;
-}
-
-/*
- * sb16_play_sample - Legacy API: copy into ping-pong buffer (no heap UAF).
- */
-int sb16_play_sample(sb16_sample_t *sample)
-{
-    int ret;
-
-    if (!sample || !sample->data || sample->size == 0)
-        return -1;
-    ret = sb16_play_pcm(sample->data, sample->size, sample->sample_rate);
-    sample->is_playing = (ret == 0);
-    return ret;
-}
-
-int sb16_stop_playback(void)
-{
-    sb16_reclaim_playback();
-    return 0;
-}
-
-bool sb16_is_playing(void)
-{
-    return sb16_hw_playing;
 }
 
 /*

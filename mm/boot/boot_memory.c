@@ -130,7 +130,7 @@ int boot_memory_normalize_ranges(const struct ir0_phys_range *input,
 	return 0;
 }
 
-int boot_memory_get_usable_ranges(struct ir0_phys_range *ranges,
+static int boot_memory_get_usable_ranges(struct ir0_phys_range *ranges,
 				  size_t capacity, size_t *count)
 {
 	struct ir0_phys_range raw[IR0_BOOT_MEMORY_MAX_BANKS];
@@ -230,24 +230,6 @@ int boot_memory_exclude_reserved(const struct ir0_phys_range *usable,
 	for (i = 0; i < current_count; i++)
 		output[i] = current[i];
 	*output_count = current_count;
-	return 0;
-}
-
-int boot_memory_get_reserved_ranges(struct ir0_phys_range *ranges,
-				    size_t capacity, size_t *count)
-{
-	size_t raw_count;
-	size_t i;
-
-	if (!g_boot_snapshot.valid)
-		return -ENODEV;
-	raw_count = g_boot_snapshot.reserved_count;
-	if (!ranges || !count || raw_count > capacity ||
-	    raw_count > IR0_BOOT_MEMORY_MAX_RESERVATIONS)
-		return -EINVAL;
-	for (i = 0; i < raw_count; i++)
-		ranges[i] = g_boot_snapshot.reserved[i];
-	*count = raw_count;
 	return 0;
 }
 

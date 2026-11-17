@@ -26,6 +26,8 @@
 #include <ir0/kmem.h>
 #include <ir0/arch_port.h>
 
+static void pc_speaker_stop(void);
+
 /* PC Speaker ports */
 #define PC_SPEAKER_PORT 0x61
 #define PIT_CHANNEL2_DATA 0x42
@@ -170,30 +172,8 @@ void pc_speaker_init(void)
     }
 }
 
-int32_t pc_speaker_beep(uint16_t frequency)
-{
-    return speaker_driver_beep(&frequency, sizeof(frequency));
-}
-
-void pc_speaker_stop(void)
+static void pc_speaker_stop(void)
 {
     speaker_driver_stop();
 }
 
-void pc_speaker_set_enabled(bool enabled)
-{
-    if (!speaker_initialized)
-        return;
-
-    uint8_t port_val = inb(PC_SPEAKER_PORT);
-    if (enabled)
-    {
-        port_val |= PC_SPEAKER_SPKR;
-    }
-    else
-    {
-        port_val &= ~PC_SPEAKER_SPKR;
-    }
-    outb(PC_SPEAKER_PORT, port_val);
-    speaker_enabled = enabled;
-}

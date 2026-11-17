@@ -51,6 +51,12 @@ Checks:
 28) No raw atomics: __atomic_*, __sync_* and inline asm appear only under
     arch/ and in includes/asm-generic/atomic.h; portable code uses
     <ir0/atomic.h>. Empty exception ledger; injected-violation self-test.
+29) No undefined prototypes: every function a project header declares is
+    defined somewhere in the tree (C, C++, Rust or an assembly label,
+    macro-generated labels included). Exceptions live in
+    scripts/undefined_prototypes.txt, which only shrinks; Linux UAPI headers
+    and the userspace wrapper header are not scanned. Injected-violation
+    self-test.
 """
 
 from functools import lru_cache
@@ -1172,8 +1178,6 @@ PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
 
 PORTABLE_TASK_ARCH_ALLOWLIST = {
     ROOT / "includes" / "ir0" / "arch_task.h",
-    ROOT / "includes" / "ir0" / "arch_task_context_x86_64.h",
-    ROOT / "includes" / "ir0" / "arch_task_context_arm64.h",
     ROOT / "includes" / "ir0" / "arch_task_ops.h",
 }
 
@@ -1181,8 +1185,8 @@ PORTABLE_TASK_ARCH_ALLOWLIST = {
 def check_asm_offsets_sync():
     """C asm_offsets.h constants must match NASM asm_offsets.inc."""
     errors = []
-    h_path = ROOT / "includes" / "ir0" / "asm_offsets.h"
-    i_path = ROOT / "includes" / "ir0" / "asm_offsets.inc"
+    h_path = ROOT / "arch" / "x86-64" / "include" / "asm" / "asm_offsets.h"
+    i_path = ROOT / "arch" / "x86-64" / "include" / "asm" / "asm_offsets.inc"
     if not h_path.is_file() or not i_path.is_file():
         errors.append("[asm-offsets] missing asm_offsets.h or asm_offsets.inc")
         return errors
@@ -1425,8 +1429,6 @@ SYSCALL_FRAME_PTR_FIELD_RE = re.compile(
 )
 
 SYSCALL_FRAME_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "arch_syscall_frame_x86_64.h",
-    ROOT / "includes" / "ir0" / "arch_syscall_frame_arm64.h",
     ROOT / "ktm" / "d1_12_read_diag.c",
     ROOT / "ktm" / "d1_16_tty_read_diag.c",
 }
@@ -1876,7 +1878,9 @@ def check_common_headers_have_only_data_model_isa_conditionals():
         r"(?:__x86_64__|__i386__|__amd64__|__aarch64__|__arm__|"
         r"ARCH_X86|ARCH_ARM|CONFIG_ARCH_|IR0_ARCH_)"
     )
-    allowed = {"includes/stdint.h", "includes/stddef.h"}
+    # linux/sockios.h is verbatim Linux UAPI: its x32 test selects the
+    # userspace SIOCGSTAMP value and never reaches kernel code paths.
+    allowed = {"includes/stdint.h", "includes/stddef.h", "includes/uapi/linux/sockios.h"}
 
     for root in (ROOT / "includes", ROOT / "setup"):
         if not root.is_dir():
@@ -1967,7 +1971,6 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/task.h": "#include <asm/task_context.h>",
         "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
         "includes/ir0/signals.h": "#include <asm/sigcontext.h>",
-        "includes/ir0/syscall.h": "#include <asm/syscall_user.h>",
         "includes/ir0/arch_task.h": "#include <asm/task_access.h>",
         "includes/ir0/abi/vdso_contract.h": "#include <asm/vdso_contract.h>",
         "includes/ir0/abi/signal_contract.h":
@@ -2572,24 +2575,14 @@ def check_kmem_single_api():
 
 # ISA register names in portable identifiers (rsp, rip, rax, cr3, esr, ...).
 # Portable code speaks ip / sp / retval / root; register names live in arch/
-# and in the ISA-specific uapi/context headers. Existing offenders are frozen
+# (the frame, context and sigcontext layouts in arch/<isa>/include/asm/).
+# Existing offenders are frozen
 # in REGISTER_NAME_BASELINE as "<path> <identifier>" pairs. The ledger only
 # shrinks: a new pair fails, and so does a pair whose identifier is gone, so a
 # branch that fixes an offender deletes its line in the same commit.
 REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
 REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
                        "mm", "net", "sched", "smp")
-REGISTER_NAME_ISA_HEADERS = frozenset(
-    {
-        "arch_syscall_frame_arm64.h",
-        "arch_syscall_frame_x86_64.h",
-        "arch_task_context_arm64.h",
-        "arch_task_context_x86_64.h",
-        "asm_offsets.h",
-        "sigcontext_arm64.h",
-        "sigcontext_x86_64.h",
-    }
-)
 REGISTER_NAME_PARTS = frozenset(
     {
         "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
@@ -2650,8 +2643,6 @@ def register_name_violations() -> dict[tuple[str, str], int]:
         if not base.is_dir():
             continue
         for path in iter_c_files(base):
-            if path.name in REGISTER_NAME_ISA_HEADERS:
-                continue
             rel = str(rel_to_root(path)).replace("\\", "/")
             if "/mocks/arm64/" in rel or "/mocks/x86" in rel:
                 continue
@@ -2883,6 +2874,164 @@ def check_no_raw_atomics():
     return errors
 
 
+# A header for one ISA lives in arch/<isa>/include/asm/ (or uapi/asm/) under
+# a neutral name, and the $(ARCH) include directory selects it. includes/
+# holds only portable APIs and the ISA-neutral uapi, so a path component
+# there that names an ISA (foo_x86_64.h, bar_arm64.h, x86/) is a per-ISA
+# file in the portable tree. No ledger: includes/ has none left.
+ISA_NAMED_HEADER_TREE = "includes/"
+ISA_NAME_RE = re.compile(
+    r"(?:^|[_.-])(x86(?:[_-]?64)?|x64|amd64|i[3-6]86|arm64|aarch64|"
+    r"riscv(?:32|64)?)(?:[_.-]|$)")
+
+
+def isa_named_header(rel: str) -> str | None:
+    """Return the ISA a header path under includes/ is named after."""
+    if not rel.startswith(ISA_NAMED_HEADER_TREE):
+        return None
+    parts = rel[len(ISA_NAMED_HEADER_TREE):].split("/")
+    parts[-1] = parts[-1].rsplit(".", 1)[0]
+    for part in parts:
+        match = ISA_NAME_RE.search(part)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _isa_named_header_self_test() -> list[str]:
+    cases = {
+        "includes/ir0/arch_task_context_x86_64.h": "x86_64",
+        "includes/ir0/sigcontext_arm64.h": "arm64",
+        "includes/uapi/ir0/syscall_aarch64.h": "aarch64",
+        "includes/ir0/x86-64/io.h": "x86-64",
+        "includes/ir0/syscall_frame.h": None,
+        "includes/ir0/arch_task.h": None,
+        "includes/uapi/asm-generic/posix_types.h": None,
+        "includes/ir0/alarm.h": None,
+        "arch/x86-64/include/asm/task_context.h": None,
+    }
+    return [f"[isa-named-header] self-test {rel}: expected {want}, got {got}"
+            for rel, want in cases.items()
+            if (got := isa_named_header(rel)) != want]
+
+
+def check_no_isa_named_headers():
+    """Reject per-ISA headers under includes/; they belong in arch/<isa>/."""
+    errors = _isa_named_header_self_test()
+    base = ROOT / ISA_NAMED_HEADER_TREE
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+        for name in sorted(filenames):
+            if not name.endswith((".h", ".inc")):
+                continue
+            rel = str(rel_to_root(Path(dirpath) / name)).replace("\\", "/")
+            isa = isa_named_header(rel)
+            if isa:
+                errors.append(
+                    f"[isa-named-header] {rel}: named after {isa}; move it "
+                    f"to arch/<isa>/include/asm/ under a neutral name and "
+                    f"include it as <asm/...>")
+    return errors
+
+
+# Userspace enters the kernel through libc syscall() or its own stubs
+# (tests/selftests/ir0/nolibc.h, tests/conformance/rt.h, setup/pid1/*).
+# The kernel, includes/ and host tooling never carry a syscall-trap
+# wrapper: inline asm that issues syscall, sysenter, int $0x80 or svc #0 is
+# rejected outside arch/ and the userspace trees below.
+SYSCALL_STUB_ALLOWED = ("arch/", "userspace/", "setup/pid1/",
+                        "tests/selftests/", "tests/conformance/",
+                        "scripts/linux_abi/workloads/")
+SYSCALL_STUB_SUFFIXES = (".c", ".h", ".cc", ".cpp", ".hpp")
+_ASM_OPEN_RE = re.compile(
+    r"\b(?:__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
+    r"\s*\(")
+_C_STRING_BODY_RE = re.compile(r'"((?:\\.|[^"\\\n])*)"')
+SYSCALL_TRAP_RE = re.compile(
+    r"(?:^|[\s;])(syscall|sysenter|int\s+\$(?:0x80|128)|svc\s+#?(?:0x)?0)\b")
+
+
+def syscall_stub_violations(rel: str, text: str) -> list[tuple[int, str]]:
+    """Return (line, instruction) for each syscall-trap asm in *text*."""
+    if rel.startswith(SYSCALL_STUB_ALLOWED):
+        return []
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    found = []
+    for match in _ASM_OPEN_RE.finditer(text):
+        depth, pos = 1, match.end()
+        while pos < len(text) and depth:
+            char = text[pos]
+            if char == '"':
+                pos += 1
+                while pos < len(text) and text[pos] not in '"\n':
+                    pos += 2 if text[pos] == "\\" else 1
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            pos += 1
+        template = "\n".join(
+            body.replace("\\n", "\n").replace("\\t", " ")
+            for body in _C_STRING_BODY_RE.findall(text[match.end():pos]))
+        trap = SYSCALL_TRAP_RE.search(template)
+        if trap:
+            found.append((text.count("\n", 0, match.start()) + 1,
+                          trap.group(1)))
+    return found
+
+
+def _syscall_stub_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "kernel/x.c": ('\t__asm__ volatile("syscall" : "=a"(r) : "a"(n)'
+                       ' : "rcx", "r11", "memory");\n', [1]),
+        "includes/ir0/x.h": ("static inline long s(long n)\n{\n"
+                             '\tregister long x8 __asm__("x8") = n;\n'
+                             "\t__asm__ volatile(\n\t\t\"svc #0\"\n"
+                             '\t\t: "+r"(x0) : "r"(x8) : "memory");\n', [4]),
+        "arch/x86-64/include/asm/x.h": (
+            '\tasm volatile("int $0x80" : "=a"(r) : "a"(n));\n', []),
+        "lib/x.c": ('\tasm("movq %1, %%rax\\n\\tsyscall" : : "r"(n));\n',
+                    [1]),
+        "ktm/user_canary.c": ('\tcheck(root, sp, pid, "syscall");\n'
+                              '\t/* asm volatile("syscall"); */\n'
+                              '\t__asm__ volatile("hlt");\n'
+                              '\tsyscall_entry();\n', []),
+        "tests/selftests/ir0/nolibc.h": (
+            '\t__asm__ volatile("syscall" : "=a"(r) : "a"(n));\n', []),
+    }
+    failures = []
+    for rel, (text, expected) in cases.items():
+        got = [line for line, _ in syscall_stub_violations(rel, text)]
+        if got != expected:
+            failures.append(f"[no-syscall-stubs] self-test {rel}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_syscall_stubs():
+    """Reject syscall-trap inline asm outside arch/ and userspace trees."""
+    errors = _syscall_stub_self_test()
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        rel_dir = os.path.relpath(dirpath, ROOT).replace("\\", "/")
+        rel_dir = "" if rel_dir == "." else rel_dir + "/"
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in SKIP_DIR_NAMES
+            and not (rel_dir + d + "/").startswith(SYSCALL_STUB_ALLOWED))
+        for name in sorted(filenames):
+            if not name.endswith(SYSCALL_STUB_SUFFIXES):
+                continue
+            rel = rel_dir + name
+            for lineno, insn in syscall_stub_violations(
+                    rel, read_file_text(Path(dirpath) / name)):
+                errors.append(
+                    f"[no-syscall-stubs] {rel}:{lineno}: '{insn}' trap in "
+                    "inline asm outside arch/ and userspace; userspace uses "
+                    "libc syscall() or its own nolibc stubs")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3023,6 +3172,153 @@ def check_retired_api_names():
     return errors
 
 
+# Every function a project header declares has a definition somewhere in the
+# tree (C, C++, Rust, or an assembly label, macro-generated labels included).
+# A prototype with no definition is dead surface that hides a link error until
+# someone calls it. Entries in UNDEFINED_PROTOTYPE_LEDGER ("<name> <header>
+# <reason>") may stay while the work that owns their header lands; an entry
+# whose prototype is gone or now defined fails the guard, so the list only
+# shrinks. Userspace wrapper headers are not kernel API (SYS-6 moves them).
+UNDEFINED_PROTOTYPE_LEDGER = ROOT / "scripts" / "undefined_prototypes.txt"
+UNDEFINED_PROTOTYPE_SKIP = (
+    "includes/uapi/",
+    "includes/ir0/syscall.h",
+)
+_UNDEFINED_PROTOTYPE_SKIP_RE = re.compile(r"^arch/[^/]+/include/uapi/")
+DEFINITION_TREES = SINGLE_DECL_TREES + ("cpp", "rust")
+_C_DEFINITION_RE = re.compile(
+    r"\b([A-Za-z_]\w*)\s*\([^()]*(?:\([^()]*(?:\([^()]*\)[^()]*)*\)[^()]*)*\)\s*"
+    r"(?:__attribute__\s*\(\([^;{]*?\)\)\s*)*\{"
+)
+_RUST_DEFINITION_RE = re.compile(r"\bfn\s+([A-Za-z_]\w*)\s*[(<]")
+_ASM_LABEL_RE = re.compile(r"^[ \t]*([A-Za-z_.%\\][\w.%\\{}()]*)[ \t]*:", re.M)
+_ASM_MACRO_ARG_RE = re.compile(r"%\{?\w+\}?|\\\(\)|\\\w+")
+_UNDEFINED_LEDGER_LINE_RE = re.compile(r"^([A-Za-z_]\w*)\s+(\S+)\s+(\S.*)$")
+
+
+def defined_function_names(rel: str, text: str) -> tuple[set[str], list[re.Pattern]]:
+    """Return (names, label templates) a source file defines.
+
+    C/C++ definitions are "name(...) {" after comments are blanked. Assembly
+    labels written inside macros ("isr%1_64:", "entry_\\n:") become templates
+    in which every macro argument matches any identifier fragment.
+    """
+    if rel.endswith(".rs"):
+        return set(_RUST_DEFINITION_RE.findall(text)), []
+    if rel.endswith((".S", ".s", ".asm")):
+        names: set[str] = set()
+        templates = []
+        for label in _ASM_LABEL_RE.findall(text):
+            if _ASM_MACRO_ARG_RE.search(label):
+                parts = _ASM_MACRO_ARG_RE.split(label)
+                templates.append(re.compile(r"\w*".join(map(re.escape, parts))))
+            else:
+                names.add(label)
+        return names, templates
+    text = _DECL_COMMENT_RE.sub(" ", text)
+    return set(_C_DEFINITION_RE.findall(text)), []
+
+
+def load_undefined_prototype_ledger(text: str) -> tuple[dict[str, str], list[str]]:
+    """Parse the ledger; return ({name: header}, errors)."""
+    names: dict[str, str] = {}
+    errors = []
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = _UNDEFINED_LEDGER_LINE_RE.match(line)
+        if not match:
+            errors.append(f"[undefined-prototype] ledger line {lineno}: "
+                          f"expected '<name> <header> <reason>', got '{line}'")
+            continue
+        name, header, _reason = match.groups()
+        if name in names:
+            errors.append(f"[undefined-prototype] ledger line {lineno}: "
+                          f"duplicate entry '{name}'")
+            continue
+        names[name] = header
+    return names, errors
+
+
+def undefined_prototypes(headers: dict[str, str],
+                         sources: dict[str, str]) -> list[tuple[str, str]]:
+    """Return sorted (header, name) for prototypes no source defines."""
+    defined: set[str] = set()
+    templates: list[re.Pattern] = []
+    for rel, text in sources.items():
+        names, tmpl = defined_function_names(rel, text)
+        defined |= names
+        templates.extend(tmpl)
+    found = []
+    for rel, text in headers.items():
+        for name in _header_prototypes(text):
+            if name in defined or any(t.fullmatch(name) for t in templates):
+                continue
+            found.append((rel, name))
+    return sorted(found)
+
+
+def _undefined_prototype_self_test() -> list[str]:
+    """Inject an undefined prototype and ledger defects; the check must fire."""
+    errors = []
+    names, ledger_errors = load_undefined_prototype_ledger(
+        "# c\nold_fn a.h owner\nold_fn a.h again\nbroken\n")
+    if names != {"old_fn": "a.h"} or len(ledger_errors) != 2:
+        errors.append("[undefined-prototype] self-test: ledger parser "
+                      f"accepted a duplicate or malformed line: {ledger_errors}")
+    headers = {"a.h": "int used(void);\nint ghost(int x);\n"
+                      "void isr7_64(void);\nint rs_fn(void);\n"
+                      "static inline int inl(void) { return 0; }\n"}
+    sources = {
+        "a.c": "/* int ghost(int x) { } */\nint used(void)\n{\n\treturn 0;\n}\n",
+        "b.asm": "%macro ISR 1\nglobal isr%1_64\nisr%1_64:\n\tiretq\n%endmacro\n",
+        "c.rs": "pub extern \"C\" fn rs_fn() -> i32 { 0 }\n",
+    }
+    got = undefined_prototypes(headers, sources)
+    if got != [("a.h", "ghost")]:
+        errors.append("[undefined-prototype] self-test: expected "
+                      f"[('a.h', 'ghost')], got {got}")
+    return errors
+
+
+def check_undefined_prototypes():
+    """Reject a project-header prototype that nothing in the tree defines."""
+    errors = _undefined_prototype_self_test()
+    ledger, ledger_errors = load_undefined_prototype_ledger(
+        read_file_text(UNDEFINED_PROTOTYPE_LEDGER))
+    errors.extend(ledger_errors)
+    headers: dict[str, str] = {}
+    sources: dict[str, str] = {}
+    for tree in DEFINITION_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+            for name in sorted(filenames):
+                path = Path(dirpath) / name
+                rel = str(rel_to_root(path))
+                if name.endswith(".h"):
+                    if (tree in SINGLE_DECL_TREES
+                            and not rel.startswith(UNDEFINED_PROTOTYPE_SKIP)
+                            and not _UNDEFINED_PROTOTYPE_SKIP_RE.match(rel)):
+                        headers[rel] = read_file_text(path)
+                elif name.endswith((".c", ".cpp", ".rs", ".S", ".s", ".asm")):
+                    sources[rel] = read_file_text(path)
+    seen: set[str] = set()
+    for rel, name in undefined_prototypes(headers, sources):
+        if ledger.get(name) == rel:
+            seen.add(name)
+            continue
+        errors.append(f"[undefined-prototype] {rel}: {name} is declared but "
+                      "never defined; delete the prototype")
+    for name in sorted(set(ledger) - seen):
+        errors.append(f"[undefined-prototype] stale ledger entry '{name}': "
+                      "the prototype is gone or defined, remove the entry")
+    return errors
+
+
 INCLUDE_LAYOUT_TREES = SINGLE_DECL_TREES
 _LAYOUT_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*([<"][^>"]+[>"])')
 _LAYOUT_ALLMAN_HEAD_RE = re.compile(r"\)\s*(?:__attribute__\s*\(\(.*\)\)\s*)*$")
@@ -3138,7 +3434,8 @@ def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
                     _register_name_self_test() + _uaccess_self_test() +
-                    _raw_atomic_self_test())
+                    _raw_atomic_self_test() +
+                    _undefined_prototype_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3146,7 +3443,7 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics)")
+              "no-raw-atomics, undefined-prototype)")
         return 0
 
     errors = []
@@ -3220,8 +3517,11 @@ def main():
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
     errors.extend(check_no_raw_atomics())
+    errors.extend(check_no_isa_named_headers())
+    errors.extend(check_no_syscall_stubs())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
+    errors.extend(check_undefined_prototypes())
     errors.extend(check_include_layout())
 
     if errors:

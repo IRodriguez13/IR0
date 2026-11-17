@@ -25,57 +25,12 @@ static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
 	*out = *sf;
 }
 
-uint64_t process_list_count(void)
-{
-	process_t *p;
-	uint64_t n = 0;
-	uint64_t irq_flags = process_registry_lock();
-
-	for (p = process_list; p; p = p->next)
-		n++;
-	process_registry_unlock(irq_flags);
-	return n;
-}
-
-uint64_t process_list_count_user(void)
-{
-	process_t *p;
-	uint64_t n = 0;
-	uint64_t irq_flags = process_registry_lock();
-
-	for (p = process_list; p; p = p->next)
-	{
-		if (p->mode == USER_MODE && p->state != PROCESS_ZOMBIE)
-			n++;
-	}
-	process_registry_unlock(irq_flags);
-	return n;
-}
-
 void process_init(void)
 {
 	process_set_current(NULL);
 	process_registry_reset();
 	debug_state_init();
 }
-
-void process_guest_install(process_t *guest)
-{
-	if (!guest)
-		return;
-	process_set_current(guest);
-	process_registry_install_if_empty(guest);
-}
-
-void process_guest_rearm(process_t *guest)
-{
-	if (!guest)
-		return;
-	guest->lifecycle = PROCESS_LIFECYCLE_ALIVE;
-	guest->state = PROCESS_RUNNING;
-	process_set_current(guest);
-}
-
 
 process_t *process_get_current(void)
 {

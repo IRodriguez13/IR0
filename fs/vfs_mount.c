@@ -100,15 +100,6 @@ int vfs_path_allows_setid(const char *path)
     return 1;
 }
 
-int vfs_mount_is_nosuid(const char *path)
-{
-    struct vfs_mount *m = vfs_find_mount(path);
-
-    if (!m)
-        return 1;
-    return (m->flags & IR0_MS_NOSUID) != 0;
-}
-
 static unsigned long vfs_default_mount_flags(const char *mount_path,
                                              const char *fstype)
 {
@@ -191,7 +182,7 @@ int vfs_register_fs(struct vfs_fstype *fs)
     return 0;
 }
 
-int vfs_init(void)
+static int vfs_init(void)
 {
     fs_types = NULL;
     mounts   = NULL;
@@ -582,11 +573,6 @@ int vfs_init_root(void)
 #undef VFS_MSG
 #undef VFS_ERR
     return 0;
-}
-
-int vfs_init_with_minix(void)
-{
-    return vfs_init_root();
 }
 
 int vfs_statfs(const char *path, struct ir0_statfs *buf)

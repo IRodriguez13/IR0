@@ -86,11 +86,7 @@ struct ir0_termios
 #define IR0_CC_VMIN               6
 
 /* TTY line discipline (kernel buffers only) */
-void tty_input_char(char c);
-int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock);
-int64_t tty_write_kernel(const char *kbuf, size_t count, uint8_t color);
 int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios);
-void tty_flush_input(void);
 int tty_input_bytes_available(void);
 
 int ir0_console_wake_readers(void);

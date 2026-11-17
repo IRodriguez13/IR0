@@ -31,6 +31,8 @@
 #include <ir0/serial_io.h>
 #include <stdint.h>
 
+static int hci_set_event_mask(const uint8_t *mask);
+
 /* Helper: Get uptime in milliseconds */
 static uint32_t hci_get_uptime_ms(void)
 {
@@ -439,7 +441,7 @@ int hci_read_bd_addr(bd_addr_t addr)
 /**
  * hci_set_event_mask - Set HCI event mask
  */
-int hci_set_event_mask(const uint8_t *mask)
+static int hci_set_event_mask(const uint8_t *mask)
 {
     uint8_t status;
 
@@ -551,89 +553,6 @@ int hci_inquiry_cancel(void)
     hci_dev->scanning = false;
     LOG_INFO("BLUETOOTH", "Inquiry cancelled");
     return 0;
-}
-
-/**
- * hci_remote_name_request - Request remote device name
- */
-int hci_remote_name_request(const bd_addr_t bd_addr)
-{
-    uint8_t event_buf[256];
-    uint8_t event_code;
-    uint8_t event_params[250];
-    uint8_t param_len;
-    uint32_t start_time;
-    int ret;
-
-    if (!bd_addr)
-        return -EINVAL;
-
-    {
-        uint8_t params[10];
-
-        memcpy(params, bd_addr, 6);
-        params[6] = 0x02;
-        params[7] = 0x00;
-        params[8] = 0x00;
-        params[9] = 0x00;
-
-        {
-            uint8_t cmd_buf[13];
-            int len = hci_build_command_packet(HCI_OPCODE_REMOTE_NAME_REQUEST, params, 10,
-                                               cmd_buf, sizeof(cmd_buf));
-
-            if (len < 0)
-                return len;
-
-            ret = hci_uart_send_command(cmd_buf, (size_t)len);
-            if (ret < 0)
-                return ret;
-        }
-    }
-
-    start_time = hci_get_uptime_ms();
-    while ((hci_get_uptime_ms() - start_time) < 10000)
-    {
-        if (!hci_uart_is_data_available())
-            continue;
-
-        ret = hci_uart_receive_event(event_buf, sizeof(event_buf));
-        if (ret <= 0)
-            continue;
-
-        ret = hci_parse_event(event_buf, (size_t)ret, &event_code, event_params, &param_len);
-        if (ret < 0)
-            continue;
-
-        hci_handle_event(event_code, event_params, param_len);
-
-        if (event_code != HCI_EVENT_REMOTE_NAME_REQUEST_COMPLETE || param_len < 7)
-            continue;
-
-        if (event_params[6] != HCI_STATUS_SUCCESS)
-            return -EIO;
-
-        if (memcmp(event_params, bd_addr, 6) != 0)
-            continue;
-
-        for (int i = 0; i < num_discovered_devices; i++)
-        {
-            if (memcmp(discovered_devices[i].bd_addr, bd_addr, 6) == 0)
-            {
-                size_t name_len = (size_t)(param_len - 7);
-
-                if (name_len > 247)
-                    name_len = 247;
-                memcpy(discovered_devices[i].name, &event_params[7], name_len);
-                discovered_devices[i].name[name_len] = '\0';
-                break;
-            }
-        }
-
-        return 0;
-    }
-
-    return -110;
 }
 
 /**

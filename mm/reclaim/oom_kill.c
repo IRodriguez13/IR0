@@ -61,7 +61,7 @@ uint64_t oom_kill_count(void)
     return (uint64_t)atomic64_read(&oom_kills);
 }
 
-int oom_kill_process(struct process *victim, const char *reason)
+static int oom_kill_process(struct process *victim, const char *reason)
 {
     int pid;
 
@@ -95,7 +95,7 @@ int oom_kill_process(struct process *victim, const char *reason)
     return 0;
 }
 
-int oom_out_of_memory(struct process *origin, const char *reason)
+static int oom_out_of_memory(struct process *origin, const char *reason)
 {
     struct ir0_oom_candidate candidate;
     struct ir0_oom_candidate best;

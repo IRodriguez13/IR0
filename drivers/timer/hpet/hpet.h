@@ -17,7 +17,4 @@
 #include <stdint.h>
 #include <stddef.h>
 
-void hpet_init();
-void hpet_set_address(void* addr);
-
 #endif

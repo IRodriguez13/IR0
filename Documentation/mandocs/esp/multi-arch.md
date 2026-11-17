@@ -34,7 +34,7 @@ CFLAGS de boot incluyen `-mgeneral-regs-only` para no atrapar NEON en EL1 tempra
 |------|-----------|-----|
 | Fachada portable | `arch_port.h`, `irq.h`, `context.h` | CPU, IRQ, `switch_to` |
 | Backends ISA | `arch/*/sources/arch_*.c` | switch, mm, signal, syscall frame, irq_init |
-| sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | uapi Linux en ambas ISA |
+| sigcontext | `arch/<isa>/include/asm/sigcontext.h` | uapi Linux en ambas ISA |
 | Interfaz común | `arch/*/sources/interface.c` | Despacho cross-arch |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | IDT/PIC impl + userspace |
 | arm64 | `arch/arm64/sources/` | VBAR+GIC; `arch_switch`/`arch_mm` TTBR0; link producto `kernel-arm64-product.bin` = **`$(ALL_OBJS)`** en toda placa |

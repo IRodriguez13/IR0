@@ -40,8 +40,6 @@ int fd_can_read_for(process_t *proc, int fd);
 int fd_can_write_for(process_t *proc, int fd);
 int64_t sys_pause(void);
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem);
-void syscall_wake_blocked_on_child(process_t *parent);
-void syscall_poll_finish_blocked_resume(process_t *proc);
 
 int64_t sys_close(int fd);
 int64_t sys_lseek(int fd, off_t offset, int whence);

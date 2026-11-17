@@ -19,7 +19,7 @@ the existing x86 and ARM runtime gates remain green.
 - Task context: `includes/ir0/task_ops.h`; implemented by each ISA's
   `task.c`. The redundant `arch_task_ops.h` alias was removed.
 - Syscall frame: `includes/ir0/syscall_frame.h`; ISA storage stays in
-  `arch_syscall_frame_*.h`, and each ISA implements frame transfer.
+  each ISA's `asm/syscall_frame.h`, and each ISA implements frame transfer.
 - Address translation: `includes/ir0/arch_mm.h`; common MM consumes semantic
   mapping flags and opaque address-space roots.
 - ELF image loading: `includes/ir0/elf64_image.h`; common code validates and

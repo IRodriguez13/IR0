@@ -72,7 +72,6 @@ void bt_device_cleanup(void);
  * 
  * Returns: Pointer to device manager, NULL if not initialized
  */
-struct bt_device_manager *bt_device_get_manager(void);
 
 /**
  * bt_scan_state_sync - Align /proc/bluetooth/scan with HCI inquiry state
@@ -89,4 +88,3 @@ int bt_hci_ioctl(unsigned int cmd, unsigned long arg);
 /* Proc filesystem operations */
 int bt_proc_devices_read(char *buffer, size_t count);
 int bt_proc_scan_read(char *buffer, size_t count);
-int bt_proc_scan_write(const char *command);

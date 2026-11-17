@@ -9,7 +9,7 @@
  * File: syscall_frame.h
  * Description: ISA syscall-frame type + capture/restore hooks for portable core.
  *
- * Storage: arch_syscall_frame_t is selected from arch_syscall_frame_{x86_64,arm64}.h.
+ * Storage: arch_syscall_frame_t comes from the ISA's <asm/syscall_frame.h>.
  * Semantic accessors live with the layout. Decode/fill stays in arch backends.
  */
 

@@ -29,6 +29,8 @@
 
 #include "mmu.h"
 
+static int mm_map_platform_supervisor(address_space_root_t root);
+
 uintptr_t mm_kernel_heap_start(void)
 {
 	/* QEMU virt DRAM starts at 0x40000000; leave 8 MiB for the image. */
@@ -133,7 +135,7 @@ void mm_prepare_root_activation(address_space_root_t root)
  * framebuffer needs its own write-combining pages, which a cacheable
  * DRAM block of the supervisor identity map would otherwise cover.
  */
-int mm_map_platform_supervisor(address_space_root_t root)
+static int mm_map_platform_supervisor(address_space_root_t root)
 {
 	if (video_backend_map_supervisor(root) != 0)
 		return -ENOMEM;

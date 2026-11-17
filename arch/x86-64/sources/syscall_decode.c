@@ -8,7 +8,8 @@
  */
 
 #include <ir0/syscall_id.h>
-#include <ir0/syscall_linux.h>
+#include <asm/unistd.h>
+#include <asm/unistd_ir0.h>
 
 enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 {

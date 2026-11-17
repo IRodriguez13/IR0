@@ -566,7 +566,7 @@ Decision needed (Q1).
 | SYS-3 | Fork child wake at the end of `sys_fork/sys_clone` (Linux wakes in `kernel_clone()`), segment restore inside the x86 syscall exit; `exit_to_user_mode()` keeps resched + signals only | medium | S |
 | SYS-4 | One table mechanism: generate the native table from one list (X-macro), drop the context-provider path once the early dispatcher goes, delete the two unused setters and `syscall_identity.h` | low | M |
 | SYS-5 | net registers its syscall rows (or a stub file when networking is off); no `#if` in the dispatcher (lane G2) | low | S |
-| SYS-6 | Move `syscall.h`'s userspace wrappers and `syscall_{x86_64,arm64}.h` to the userspace library / `includes/uapi`; kernel files take `SYS_*`/`__NR_*` from uapi | low | S |
+| SYS-6 | Move `syscall.h`'s userspace wrappers and `syscall_{x86_64,arm64}.h` to the userspace library / `includes/uapi`; kernel files take `SYS_*`/`__NR_*` from uapi. *Done:* the wrappers had no consumer and were deleted; numbers come from `arch/<isa>/include/uapi/asm/unistd.h` plus the IR0 extras in `asm/unistd_ir0.h` (`<ir0/syscall_linux.h>` includes both); arch-guard `[no-syscall-stubs]` | low | S |
 | SYS-7 | tty stdin functions from `kernel/syscalls.c` to `drivers/tty/` | low | S |
 | SYS-8 | Early rootfs world: see Q1 (retire, freeze, or fold into fs as an initramfs filesystem) | high | XL |
 | SYS-9 | Console/keymap custom syscalls -> tty ioctls (Linux `TIOCL*`, `KDSKBENT`) | medium | S |
@@ -1226,7 +1226,7 @@ selects the ISA directory. x86 also keeps `arch/x86-64/include/interrupt/`
 |----|----------|------|------|
 | ARCH-1 | Split `cpu.h`/`arch_io.h`: portable part stays; MSR/CPUID/debug registers/port I/O to x86 `asm/` headers; delete arm64 stubs (X-4) | medium | M |
 | ARCH-2 | Delete the aggregators and one-line arch/common headers; each file includes what it uses (X-3) | low | M (many includers) |
-| ARCH-3 | Move the 9 ISA-specific headers from `includes/ir0/` to `arch/<isa>/include/asm/` | low | S |
+| ARCH-3 | Move the 9 ISA-specific headers from `includes/ir0/` to `arch/<isa>/include/asm/`. *Done:* `asm/{syscall_frame,task_context,sigcontext}.h` per ISA and x86 `asm/asm_offsets.{h,inc}`; arch-guard `[isa-named-header]` | low | S |
 | ARCH-4 | Delete the 15 never-defined prototypes and the unused facade entries (Appendix B) | low | S |
 | ARCH-5 | `/proc/cpuinfo` through one arch hook (`arch_show_cpuinfo(buf)`, Linux `show_cpuinfo`); shrink `cpu_info.h` to neutral queries | low | M |
 | ARCH-6 | `fault.h`: drop the x86-only kinds (`STACK_SEGMENT`, `SEGMENT_NOT_PRESENT`, `DOUBLE`) into `PROTECTION`/`OTHER` and `code_seg`/`stack_seg` into the arch `show_regs` hook (R5) | low | S |

@@ -43,7 +43,7 @@ static int cursor_y = 0;
 static unsigned char current_color = 0x0F; /* Blanco sobre negro */
 
 /* Función para crear atributo de color */
-unsigned char make_color(unsigned char fg, unsigned char bg)
+static unsigned char make_color(unsigned char fg, unsigned char bg)
 {
     return fg | bg << 4;
 }
@@ -52,7 +52,7 @@ unsigned char make_color(unsigned char fg, unsigned char bg)
  * putchar_at - Escribe carácter en (x,y).
  * Usa consola (framebuffer) o VGA según backend activo.
  */
-void putchar_at(char c, unsigned char color, int x, int y)
+static void putchar_at(char c, unsigned char color, int x, int y)
 {
     if (console_use_framebuffer())
     {
@@ -175,7 +175,7 @@ static void putchar_ex(char c, int to_serial, int force_screen)
 }
 
 /* Función para poner un carácter (con cursor automático) */
-void putchar(char c)
+static void putchar(char c)
 {
     putchar_ex(c, 1, 0);
 }

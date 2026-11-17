@@ -16,7 +16,6 @@
 typedef struct ktm_writer ktm_writer_t;
 
 void ktm_write_u64(ktm_writer_t *w, const char *key, uint64_t value);
-void ktm_write_cstr(ktm_writer_t *w, const char *key, const char *value);
 
 typedef int (*ktm_probe_fn)(void *ctx, ktm_writer_t *writer);
 

@@ -64,7 +64,6 @@ extern bool root_inode_cached;
 /* Internal helpers shared across the split implementation. */
 void minix_dirent_name(const minix_dir_entry_t *e, char out[MINIX_NAME_LEN + 1]);
 uint32_t minix_now_seconds(void);
-size_t minix_zmap_bytes(void);
 int minix_sync_zone_bitmap(void);
 bool minix_root_block_present(void);
 int minix_sync_inode_bitmap(void);

@@ -297,38 +297,6 @@ static void early_publish_fd(int fd, enum ir0_early_rootfs_node node)
 	}
 }
 
-void early_rootfs_bind_fdtable(const struct ir0_fd_install_ops *ops)
-{
-	unsigned i;
-
-	g_fd_ops = ops;
-	g_fd_used = 0;
-	g_vfs_file_used = 0;
-	if (!ops || !ops->install)
-		return;
-	for (i = 0; i < 3; i++)
-	{
-		if (g_stdio_open[i])
-			early_publish_fd((int)i, g_stdio_node[i]);
-	}
-	for (i = 0; i < ROOTFS_MAX_OPEN; i++)
-	{
-		if (g_slots[i].used)
-			early_publish_fd((int)(ROOTFS_FD_BASE + i),
-					 g_slots[i].node);
-	}
-}
-
-int early_rootfs_fdtable_used(void)
-{
-	return g_fd_used;
-}
-
-int early_rootfs_vfs_file_used(void)
-{
-	return g_vfs_file_used;
-}
-
 int early_fdtable_ok(int fd)
 {
 	if (!g_fd_ops || !g_fd_ops->check)

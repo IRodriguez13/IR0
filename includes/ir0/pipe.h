@@ -47,7 +47,6 @@ int pipe_unread(pipe_t *pipe, const void *buf, size_t count);
 void pipe_close_end(pipe_t *pipe, int end);
 void pipe_wait_enter(pipe_t *pipe);
 void pipe_wait_leave(pipe_t *pipe);
-void pipe_acquire(pipe_t *pipe);
 void pipe_acquire_end(pipe_t *pipe, int end);
 int pipe_named_peer_is_open(pipe_t *pipe, int end);
 
@@ -56,6 +55,5 @@ void pipe_ktm_note_read_sleep(pipe_t *pipe);
 void pipe_ktm_note_read_wake(pipe_t *pipe);
 void pipe_ktm_note_write_wake(pipe_t *pipe);
 void pipe_abort_unopened(pipe_t *pipe);
-void pipe_ipc_lifecycle_audit(void);
 
 #endif /* _IR0_PIPE_H */

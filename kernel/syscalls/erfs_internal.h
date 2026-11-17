@@ -203,7 +203,6 @@ int sock_pair_of_fd(int fd);
 int64_t splice_wait(int fd, unsigned flags);
 int status_flags(int flags);
 int store_loff(uint64_t uptr, int64_t value);
-int strings_equal(const char *left, const char *right);
 void timerfd_advance_all(void);
 void timerfd_advance_one(struct early_timerfd *t);
 int unix_find_bound(const char *path, int stream);

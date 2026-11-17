@@ -34,12 +34,6 @@ int ir0_bt_proc_scan_read(char *buffer, size_t count)
 	return -ENOSYS;
 }
 
-int ir0_bt_proc_scan_write(const char *command)
-{
-	(void)command;
-	return -ENOSYS;
-}
-
 int ir0_bt_sysfs_hci0_address_read(char *buf, size_t count)
 {
 	(void)buf;

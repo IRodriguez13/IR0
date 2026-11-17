@@ -17,16 +17,8 @@
 #include <stdint.h>
 
 void early_init(void);
-void late_init(void);
 void syscall_init(void);
 
-const char *get_cmdline(void);
 const char *get_arch_name(void);
 const char *get_arch_uname_machine(void);
 const char *boot_entry_name(void);
-uint32_t get_arch_bits(void);
-int supports_feature(const char *feature);
-const char *get_arch_cflags(void);
-const char *get_arch_ldflags(void);
-
-void dump_cpu_registers(void);

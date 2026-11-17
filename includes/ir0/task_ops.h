@@ -37,7 +37,5 @@ void task_sync_syscall_soft_mirror(task_t *task,
 /* Decode an opaque ISA exception frame into the portable task snapshot. */
 void task_save_user_exception_frame(task_t *task, const void *frame);
 void task_apply_user_segments(task_t *task);
-uint64_t *task_retval_slot_addr(task_t *task);
 
 void task_load_sigcontext(task_t *t, const struct sigcontext *ctx);
-void task_store_sigcontext(struct sigcontext *ctx, const task_t *t);

@@ -96,17 +96,6 @@ void ktm_input_mock_queue_mouse_packet(const uint8_t packet[3])
 	g_packet_count++;
 }
 
-void ktm_input_mock_set_layout(int layout)
-{
-	if (layout == IR0_KBD_LAYOUT_US || layout == IR0_KBD_LAYOUT_LATAM)
-		g_layout = layout;
-}
-
-void ktm_input_mock_set_console_mode(int mode)
-{
-	g_console_mode = mode;
-}
-
 void input_mouse_handle_interrupt(void)
 {
 	g_mouse_interrupts++;

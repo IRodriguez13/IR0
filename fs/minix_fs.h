@@ -25,12 +25,10 @@
 #include <ir0/swap.h>
 #include <ir0/types.h>  // For standard types
 
-
 #define MINIX_BLOCK_SIZE 1024
 #define MINIX_INODE_SIZE 32
 #define MINIX_NAME_LEN 14
 #define MINIX_DIR_ENTRY_SIZE 16
-
 
 typedef struct minix_inode
 {
@@ -49,7 +47,6 @@ typedef struct minix_dir_entry
     char name[MINIX_NAME_LEN]; // Nombre del archivo
 } minix_dir_entry_t;
 
-
 typedef struct minix_superblock
 {
     uint16_t s_ninodes;       // Número de inodes
@@ -61,7 +58,6 @@ typedef struct minix_superblock
     uint32_t s_max_size;      // Tamaño máximo de archivo
     uint16_t s_magic;         // Número mágico
 } minix_superblock_t;
-
 
 #define MINIX_IFMT 0170000   /* File type mask (POSIX-compatible) */
 #define MINIX_IFDIR 0040000  // Directorio
@@ -87,7 +83,6 @@ typedef struct minix_superblock
 #define MINIX_IWOTH 0000002 // Otros: escritura
 #define MINIX_IXOTH 0000001 // Otros: ejecución
 
-
 // Verificar si un inode es un directorio
 static inline bool minix_is_dir(const minix_inode_t *inode)
 {
@@ -100,22 +95,14 @@ static inline bool minix_is_reg(const minix_inode_t *inode)
     return (inode->i_mode & MINIX_IFMT) == MINIX_IFREG;
 }
 
-
-// Filesystem availability check
-bool minix_fs_is_working(void);
-
 /*
  * Registra el tipo de filesystem MINIX en el VFS (llamado desde vfs.c al
  * inicializar los builtins).
  */
 int minix_fs_register(void);
 
-// Filesystem operations
-int minix_fs_init(void);
 int minix_fs_format(void);
 int minix_fs_mkdir(const char *path, mode_t mode);
-int minix_fs_write_file_len(const char *path, const void *content, size_t content_size);
-int minix_fs_write_file(const char *path, const char *content);
 int minix_fs_touch(const char *path, mode_t mode);
 int minix_fs_rm(const char *path);
 int minix_fs_rmdir(const char *path);
@@ -149,7 +136,6 @@ int minix_map_swap_extents(const char *path, struct ir0_swap_extent *out,
 uint32_t minix_alloc_zone(void);
 void minix_free_zone(uint32_t zone_num);
 bool minix_is_zone_free(uint32_t zone_num);
-void minix_mark_zone_used(uint32_t zone_num);
 
 // Operaciones de inodes (bitmap)
 uint32_t minix_alloc_inode(void);

@@ -75,12 +75,10 @@ struct vfs_dirent {
 #define DT_LNK     10
 
 /* Lifecycle */
-int vfs_init(void);
 int vfs_register_fs(struct vfs_fstype *fs);
 int vfs_mount(const char *dev, const char *path, const char *fstype);
 int vfs_umount(const char *path);
 int vfs_pivot_root(const char *new_root, const char *put_old);
-int vfs_init_with_minix(void);
 int vfs_init_root(void);
 
 /* Mount table (single linked list, newest first); NULL if empty */
@@ -119,7 +117,6 @@ int vfs_read_file(const char *path, void **data, size_t *size);
 
 /* Non-zero when the mount holding @path may raise privileges on exec. */
 int vfs_path_allows_setid(const char *path);
-int vfs_mount_is_nosuid(const char *path);
 
 /* Exec-loader observational audit (single-threaded). */
 void vfs_exec_audit_begin(const char *path);

@@ -60,13 +60,11 @@
 /**
  * Enable paging (sets CR0.PG bit)
  */
-void enable_paging(void);
 
 /**
  * Complete paging setup: configure tables and enable paging
  * This function handles all paging configuration from C code
  */
-void setup_and_enable_paging(void);
 
 /**
  * Load page directory root via mm_activate (ISA-neutral).
@@ -107,7 +105,6 @@ void paging_poison_phys_page(uintptr_t phys, uint8_t pattern);
 /**
  * Check if paging is enabled
  */
-int is_paging_enabled(void);
 
 /**
  * Map a virtual address to a physical address
@@ -179,13 +176,11 @@ void paging_test_poison_freed_tables(int enable);
 /**
  * Unmap a virtual address in the current address space (current address-space root)
  */
-int unmap_page(uint64_t virt_addr);
 
 /* Map user page with U/S=1 */
 int map_user_page(uintptr_t virtual_addr, uintptr_t physical_addr, uint64_t flags);
 
 /* Map user region in current page directory */
-int map_user_region(uintptr_t virtual_start, size_t size, uint64_t flags);
 
 /* Map user region in a specific page directory */
 int map_user_region_in_directory(address_space_root_t root, uintptr_t virtual_start, size_t size, uint64_t flags);

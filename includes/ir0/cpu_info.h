@@ -17,11 +17,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-
-size_t get_page_size(void);
 uint32_t get_cpu_id(void);
 uint32_t get_cpu_count(void);
-uint32_t get_cpu_mode(void);
 int get_cpu_vendor(char *vendor_buf);
 int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
 int get_cpuid_max_leaf(uint32_t *max_leaf);
@@ -32,5 +29,3 @@ int hypervisor_vendor(char *buf, size_t n);
 uint32_t get_cpu_clflush_size(void);
 
 void timer_init(void);
-void timer_set_frequency(uint32_t hz);
-uint32_t timer_get_frequency(void);

@@ -77,7 +77,6 @@ int ir0_swap_slot_busy(unsigned type);
 int ir0_swap_read_page(unsigned type, uint64_t offset, void *buf);
 int ir0_swap_write_page(unsigned type, uint64_t offset, const void *buf);
 
-int ir0_swap_out_page(struct process *proc, uintptr_t va);
 int ir0_swap_in_page(struct process *proc, uintptr_t va, uint64_t map_flags);
 int ir0_swap_dup_pte(uint64_t pte);
 int ir0_swap_drop_pte(uint64_t pte);

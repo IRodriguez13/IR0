@@ -21,24 +21,6 @@
  * task, set-id transitions on exec and these permission checks.
  */
 
-/* Get current process UID */
-uint32_t get_current_uid(void)
-{
-    const struct ir0_task_cred *c;
-
-    c = ir0_current_cred();
-    return c ? (uint32_t)c->euid : ROOT_UID;
-}
-
-/* Get current process GID */
-uint32_t get_current_gid(void)
-{
-    const struct ir0_task_cred *c;
-
-    c = ir0_current_cred();
-    return c ? (uint32_t)c->egid : ROOT_GID;
-}
-
 bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid)
 {
     uint16_t file_mode;

@@ -24,16 +24,6 @@ static unsigned g_nsc;
 static unsigned g_suite_pass;
 static unsigned g_suite_fail;
 
-unsigned ktm_suite_pass_count(void)
-{
-	return g_suite_pass;
-}
-
-unsigned ktm_suite_fail_count(void)
-{
-	return g_suite_fail;
-}
-
 void ktm_suite_reset(void)
 {
 	g_suite_pass = 0;

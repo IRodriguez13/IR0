@@ -1489,7 +1489,7 @@ static int ext2_parse_dev(const char *dev, char *blk, size_t blk_sz)
 	return 0;
 }
 
-int ext2_disk_mount(const char *dev, const char *mount_dir)
+static int ext2_disk_mount(const char *dev, const char *mount_dir)
 {
 	struct ext2_vol *slot = NULL;
 	char blk[16];

@@ -64,7 +64,6 @@ void process_mm_bind(struct process *p, mm_struct_t *mm);
  * process_mm_release_on_exit() can switch away before mm_put. Idempotent
  * if @p already holds the same root.
  */
-int process_mm_adopt_active(struct process *p, int owns_tables);
 
 /* Share parent's mm with child (CLONE_VM). Returns 0 or -errno. */
 int process_mm_share(struct process *child, struct process *parent);

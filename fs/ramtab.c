@@ -39,7 +39,7 @@ void ramtab_set_rehome_observer(void (*fn)(int old_id, int new_id))
 	g_rehome = fn;
 }
 
-int ramtab_eq(const char *left, const char *right)
+static int ramtab_eq(const char *left, const char *right)
 {
 	unsigned i;
 
@@ -81,7 +81,7 @@ int ramtab_parent(const char *path, char *parent, unsigned cap)
 	return 1;
 }
 
-const char *ramtab_basename(const char *path)
+static const char *ramtab_basename(const char *path)
 {
 	unsigned i = 0;
 	unsigned last = 0;
@@ -109,13 +109,6 @@ int ramtab_find(const char *path)
 			return (int)i;
 	}
 	return -1;
-}
-
-struct ramtab_ent *ramtab_get(int idx)
-{
-	if (idx < 0 || idx >= RAMTAB_MAX || !g_tab[idx].used)
-		return 0;
-	return &g_tab[idx];
 }
 
 struct ramtab_ent *ramtab_table(void)

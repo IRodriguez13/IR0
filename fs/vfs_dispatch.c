@@ -15,14 +15,6 @@
 
 static struct vfs_ops *g_ops;
 
-int vfs_dispatch_bind(struct vfs_ops *ops)
-{
-	if (!ops || !ops->stat || !ops->read)
-		return -EINVAL;
-	g_ops = ops;
-	return 0;
-}
-
 struct vfs_ops *vfs_dispatch_ops(const char *path)
 {
 	if (!path || path[0] != '/' || !g_ops)
@@ -33,17 +25,6 @@ struct vfs_ops *vfs_dispatch_ops(const char *path)
 int vfs_dispatch_bound(void)
 {
 	return g_ops != NULL;
-}
-
-int vfs_dispatch_stat(const char *path, stat_t *st)
-{
-	struct vfs_ops *ops = vfs_dispatch_ops(path);
-
-	if (!ops)
-		return -ENODEV;
-	if (!st)
-		return -EFAULT;
-	return ops->stat(path, st);
 }
 
 int vfs_dispatch_read(struct vfs_file *f, void *buf, size_t count)

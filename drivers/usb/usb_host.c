@@ -147,7 +147,7 @@ int ir0_usb_host_controller_count(void)
     return g_usb_controller_count;
 }
 
-int ir0_usb_host_describe(int idx, char *buf, size_t len)
+static int ir0_usb_host_describe(int idx, char *buf, size_t len)
 {
     const usb_hc_info_t *hc;
 

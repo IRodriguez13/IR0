@@ -396,12 +396,6 @@ int ir0_acpi_pm_try_poweroff(void)
 	return 0;
 }
 
-int ir0_acpi_pm_s3_ok(void)
-{
-	(void)ir0_acpi_pm_init();
-	return g_s3_ok;
-}
-
 int ir0_acpi_pm_try_suspend(void)
 {
 	uint16_t val_a;

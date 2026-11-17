@@ -29,8 +29,8 @@
 #include <ir0/files_struct.h>
 #include <ir0/errno.h>
 
-/* waitpid / wait4 options and status inspection (POSIX-style) */
-#define WNOHANG 1
+/* waitpid / wait4 options (Linux UAPI) and status inspection */
+#include <linux/wait.h>
 
 #define WEXITSTATUS(s) (((s) >> 8) & 0xFF)
 #define WIFEXITED(s) (((s) & 0x7F) == 0)
@@ -323,7 +323,7 @@ void process_registry_insert(process_t *process);
  * The placeholder forces a compile error showing the real value if it drifts.
  */
 /*
- * FS_BASE offset: includes/ir0/asm_offsets.h + asm_offsets.inc (NASM).
+ * FS_BASE offset: x86 <asm/asm_offsets.h> + asm_offsets.inc (NASM).
  * arch-guard verifies the C header matches the .inc file.
  */
 PROCESS_CONTEXT_ASSERT_LAYOUT(process_t);
@@ -458,7 +458,7 @@ static inline void process_tls_set(process_t *p, uint64_t tls)
 		p->arch_thread.tls_base = tls;
 }
 
-/* Opaque syscall-frame accessors — ISA decode lives in arch_syscall_frame_*.h. */
+/* Opaque syscall-frame accessors — ISA decode lives in <asm/syscall_frame.h>. */
 static inline uint64_t process_syscall_ip(const process_t *p)
 {
 	return p ? syscall_frame_ip(&p->syscall_frame) : 0;
@@ -511,19 +511,13 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p);
 
 void process_restore_user_task_segments(process_t *p);
 
-
 void fork_ret_emit_pre_return(void);
-void fork_restore_emit_pre_iretq(void);
 void fork_ret_first_syscall_entry(uint64_t nr, uint64_t ip, uint64_t sp);
 int fork_flow_note_debug_exception(uint64_t *stack);
-void fork_flow_note_kernel_entry(uint64_t ip, uint64_t nr, int from_syscall);
 __attribute__((noreturn)) void process_exit(int code);
 void process_pre_zombie_teardown(process_t *dying);
 void process_notify_parent_of_exit(process_t *dying);
 void process_resources_release_on_exit(process_t *dying);
-void process_guest_install(process_t *guest);
-void process_guest_rearm(process_t *guest);
-int process_exit_guest(int code);
 int process_wait(pid_t pid, int *status, int options);
 
 /*
@@ -605,8 +599,6 @@ static inline int process_is_alive(const process_t *p)
  */
 int process_wait_child_matches_blocked_target(const process_t *parent,
 					      pid_t child_pid);
-int process_wait_prepare_child_wake(const process_t *parent,
-				    const process_t *child, int *status_word);
 void process_wait_wake_blocked_parent(process_t *parent, process_t *child);
 
 /* Linux wait status word for a zombie (exit << 8 or WTERMSIG). */
@@ -628,7 +620,6 @@ void process_reparent_children(process_t *dying_parent);
 int process_signal_is_default_fatal(process_t *p, int sig);
 int process_signal_default_kill(process_t *target, int signal);
 
-
 void process_saved_environ_clear(process_t *p);
 int process_saved_environ_set(process_t *p, char *const envp[]);
 int process_saved_environ_clone(process_t *dst, const process_t *src);
@@ -645,7 +636,6 @@ int process_wait_options(const process_t *p);
 void process_wait_options_set(process_t *p, int options);
 int *process_wait_status_ptr_peek(process_t *p);
 void process_wait_status_ptr_set(process_t *p, int *status_ptr);
-void process_wait_state_init(process_t *p);
 void process_wait_state_arm(process_t *p, pid_t pid, int options, int *status_ptr);
 void process_wait_state_clear(process_t *p);
 
@@ -681,7 +671,6 @@ void process_fork_wake_pending(process_t *parent);
 void process_fork_abort_pending_on_exit(process_t *parent);
 void process_syscall_restore_exit_regs(uint64_t *exit_frame);
 
-
 pid_t process_get_pid(void);
 pid_t process_get_ppid(void);
 process_t *process_get_current(void);
@@ -695,15 +684,11 @@ void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 process_t *process_find_child_of(pid_t ppid);
 
-
-
 address_space_root_t process_mm_create_root(void);
 void process_init_fd_table(process_t *process);
 
 /* Process lifecycle management */
 void process_reap_zombies(process_t *parent); /* Reap zombie children (used by init) */
-int process_has_zombie_child(const process_t *parent);
-int process_reap_detach_zombie(process_t *child);
 void process_reap_zombie_child(process_t *child);
 void process_destroy(process_t *p);
 
@@ -716,14 +701,11 @@ void process_kernel_stack_free(process_t *p);
 void process_unmap_user_address_space(process_t *p);
 int process_remove_from_list(process_t *target);
 
-uint64_t *process_pt_child(uint64_t *table, size_t index);
-
 /*
  * Count present 4 KiB-equivalent user leaf pages under @p's page tables.
  * Used for /proc/[pid]/stat rss (Linux reports pages, not bytes). Read-only
  * walk; 2 MiB huge leaves count as 512 pages each.
  */
-uint64_t process_count_resident_user_pages(const process_t *p);
 
 /* Page-table walk; @mm must be held alive (mm_get) for the duration of the call. */
 uint64_t mm_count_resident_user_pages(const mm_struct_t *mm);
@@ -742,9 +724,6 @@ bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t leng
 struct mmap_region *find_vma(process_t *proc, uintptr_t addr);
 /* Nonzero when @addr lies in a MAP_SHARED region of @proc. */
 int vma_is_shared(process_t *proc, uintptr_t addr);
-
-uint64_t process_list_count(void);
-uint64_t process_list_count_user(void);
 
 extern process_t *current_process;
 extern process_t *process_list;

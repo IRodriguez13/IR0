@@ -18,6 +18,8 @@
 #include <ir0/logging.h>
 #include <stdbool.h>
 
+static void adlib_shutdown(void);
+
 /* Adlib state */
 static bool adlib_initialized = false;
 
@@ -43,7 +45,7 @@ static ir0_driver_info_t adlib_info = {
  * @reg: Register address (0x01-0xFF)
  * @value: Value to write
  */
-void adlib_write(uint8_t reg, uint8_t value)
+static void adlib_write(uint8_t reg, uint8_t value)
 {
     /* Write register address */
     outb(ADLIB_ADDRESS_PORT, reg);
@@ -66,7 +68,7 @@ void adlib_write(uint8_t reg, uint8_t value)
  * Note: OPL2 has very limited readable registers. Most are write-only.
  * This function is mainly for detection.
  */
-uint8_t adlib_read(uint8_t reg)
+static uint8_t adlib_read(uint8_t reg)
 {
     /* Write register address */
     outb(ADLIB_ADDRESS_PORT, reg);
@@ -86,7 +88,7 @@ uint8_t adlib_read(uint8_t reg)
  * adlib_detect - Detect if Adlib card is present
  * @return: true if Adlib is detected, false otherwise
  */
-bool adlib_detect(void)
+static bool adlib_detect(void)
 {
     uint8_t status1, status2;
     
@@ -168,7 +170,7 @@ static int32_t adlib_hw_init(void)
 /**
  * adlib_shutdown - Shutdown Adlib driver
  */
-void adlib_shutdown(void)
+static void adlib_shutdown(void)
 {
     if (!adlib_initialized)
     {
@@ -182,14 +184,5 @@ void adlib_shutdown(void)
     
     adlib_initialized = false;
     LOG_INFO("ADLIB", "Adlib OPL2 shutdown");
-}
-
-/**
- * adlib_is_available - Check if Adlib is available
- * @return: true if initialized and available, false otherwise
- */
-bool adlib_is_available(void)
-{
-    return adlib_initialized;
 }
 

@@ -18,19 +18,6 @@ void fd_slot_note_created(void)
 {
 }
 
-void fd_slot_stats_get(uint64_t *created, uint64_t *destroyed,
-			 uint64_t *blocked_readers, uint64_t *blocked_writers)
-{
-	if (created)
-		*created = 0;
-	if (destroyed)
-		*destroyed = 0;
-	if (blocked_readers)
-		*blocked_readers = 0;
-	if (blocked_writers)
-		*blocked_writers = 0;
-}
-
 void ktm_event_emit4(uint16_t type, uint16_t subsystem,
 		     uint64_t a0, uint64_t a1, uint64_t a2, uint64_t a3)
 {

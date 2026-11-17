@@ -78,6 +78,18 @@ IR0 exports UAPI with `make headers_install` (default install tree:
 userspace build consumes that export. ISD checks the interface version before
 building packages. The kernel must not name BusyBox or other user programs.
 
+The export is the Linux UAPI layout: ISA-neutral headers from `includes/uapi/`
+(Linux `linux/`, `asm-generic/`, `mtd/` headers imported verbatim from Linux
+v7.4 `make headers_install`, plus IR0's `ir0/`) and `asm/` from
+`arch/$(ARCH)/include/uapi/` (`make headers_install arm64` for AArch64).
+`asm/unistd.h` lists exactly the Linux syscall numbers the ISA decoder
+dispatches; the decoder switches on those names, so there is one table.
+`make uapi-check` (in `test-fast`) compiles every header listed in
+`tests/host/uapi/required_headers.txt` for each ISA with `-nostdinc` against
+the installed tree and musl only. When an unmodified Linux program needs a
+header, import it from Linux and add it to that list. Do not patch the
+program.
+
 ## Configuration layers
 
 | File | Owner | Meaning |

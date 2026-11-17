@@ -38,7 +38,8 @@ from architecture_guard import _header_prototypes  # noqa: E402
 
 # Kernel -I order (Makefile CFLAGS); "x.h" also searches the file's directory.
 INCLUDE_DIRS = (
-    ROOT, ROOT / "includes", ROOT / "includes/uapi", ROOT / "ktm/include",
+    ROOT, ROOT / "includes", ROOT / "includes/uapi",
+    ROOT / "arch/x86-64/include/uapi", ROOT / "arch/arm64/include/uapi", ROOT / "ktm/include",
     ROOT / "includes/ir0", ROOT / "mm", ROOT / "arch/common",
     ROOT / "arch/x86-64/include", ROOT / "arch/arm64/include",
     ROOT / "arch/arm64/sources",

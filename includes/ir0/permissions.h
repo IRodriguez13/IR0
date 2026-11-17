@@ -46,6 +46,4 @@ bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
 
 /* Function declarations */
 bool check_file_access(const char *path, int mode, const struct process *process);
-uint32_t get_current_uid(void);
-uint32_t get_current_gid(void);
 bool is_root(const struct process *process);

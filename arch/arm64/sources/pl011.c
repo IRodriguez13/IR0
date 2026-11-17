@@ -32,7 +32,7 @@ static volatile uint32_t *pl011_reg(uintptr_t off)
 	return (volatile uint32_t *)(g_pl011_base + off);
 }
 
-void pl011_init_at(uintptr_t base)
+static void pl011_init_at(uintptr_t base)
 {
 	g_pl011_base = base;
 	if (!g_pl011_base)

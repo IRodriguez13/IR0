@@ -36,9 +36,7 @@ typedef struct wait_queue
 	wait_queue_node_t *tail;
 } wait_queue_t;
 
-void wait_queue_init(wait_queue_t *wq);
 void wait_queue_add(wait_queue_t *wq, process_t *proc);
-process_t *wait_queue_wake_one(wait_queue_t *wq);
 void wait_queue_wake_all(wait_queue_t *wq);
 
 /* Drop @proc from every IPC channel wait queue (process exit). */
@@ -50,9 +48,6 @@ typedef struct semaphore
 	wait_queue_t wait_queue;
 } semaphore_t;
 
-void semaphore_init(semaphore_t *sem, int initial_count);
-void semaphore_up(semaphore_t *sem);
-
 typedef struct ring_buffer
 {
 	uint8_t *buffer;
@@ -63,13 +58,7 @@ typedef struct ring_buffer
 } ring_buffer_t;
 
 int ring_buffer_init(ring_buffer_t *rb, size_t size);
-void ring_buffer_destroy(ring_buffer_t *rb);
 size_t ring_buffer_write(ring_buffer_t *rb, const void *data, size_t len);
-size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len);
-size_t ring_buffer_available_write(ring_buffer_t *rb);
-size_t ring_buffer_available_read(ring_buffer_t *rb);
-bool ring_buffer_empty(ring_buffer_t *rb);
-bool ring_buffer_full(ring_buffer_t *rb);
 
 typedef struct ipc_channel
 {
@@ -87,7 +76,6 @@ typedef struct ipc_channel
 
 ipc_channel_t *ipc_channel_create(uint32_t id);
 void ipc_channel_destroy(ipc_channel_t *channel);
-ipc_channel_t *ipc_channel_find(uint32_t id);
 ipc_channel_t *ipc_channel_get_or_create(uint32_t id);
 uint32_t ipc_allocate_channel_id(void);
 

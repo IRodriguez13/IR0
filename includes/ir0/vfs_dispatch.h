@@ -21,8 +21,6 @@ struct vfs_file;
  * a bound vfs_ops table owns path I/O; the fd only holds vfs_file.
  * https://www.kernel.org/doc/html/latest/filesystems/porting.html
  */
-int vfs_dispatch_bind(struct vfs_ops *ops);
 struct vfs_ops *vfs_dispatch_ops(const char *path);
-int vfs_dispatch_stat(const char *path, stat_t *st);
 int vfs_dispatch_read(struct vfs_file *f, void *buf, size_t count);
 int vfs_dispatch_bound(void);

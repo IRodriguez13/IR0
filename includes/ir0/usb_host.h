@@ -35,4 +35,3 @@ int ir0_usb_host_controller_count(void);
  *
  * Returns: 0 on success, negative errno on failure.
  */
-int ir0_usb_host_describe(int idx, char *buf, size_t len);

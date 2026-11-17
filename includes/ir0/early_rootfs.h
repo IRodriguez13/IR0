@@ -894,28 +894,18 @@ static inline uint64_t ir0_early_elf64_image_bytes(const uint8_t *hdr,
 	return size;
 }
 
-void early_rootfs_bind(const uint8_t *init_blob, uint64_t init_len,
-		       const struct early_user_services *user);
 int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 				uint64_t buffer_len,
 				const struct early_user_services *user);
-const uint8_t *early_rootfs_init_blob(uint64_t *length);
-int early_rootfs_init_from_block(void);
 int early_rootfs_cpio_ready(void);
 int early_rootfs_bind_cpio(const uint8_t *buffer, uint64_t bytes,
 			   const struct early_user_services *user);
 int early_rootfs_cpio_bpath_fold(void);
 
 /* Non-zero when staging mounts exist and CPIO members were folded to product VFS. */
-int early_rootfs_bpivot_done(void);
 int early_rootfs_ready(void);
 int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count);
 int early_rootfs_fd_is_block(int fd);
-int early_rootfs_console_ready(void);
-int early_rootfs_memdev_ready(void);
-int early_rootfs_dents_ready(void);
-int early_rootfs_vda_ready(void);
-int early_rootfs_smoke_init(void);
 int early_rootfs_fd_is_console(int fd);
 int early_rootfs_fd_discards_write(int fd);
 int early_rootfs_fd_is_pipe_write(int fd);
@@ -969,24 +959,14 @@ int64_t early_rootfs_dup3(int oldfd, int newfd, int flags);
 int64_t early_rootfs_chdir(uint64_t path);
 int64_t early_rootfs_getcwd(uint64_t buffer, uint64_t size);
 struct ir0_cwd_ops;
-void early_rootfs_bind_cwd(const struct ir0_cwd_ops *ops);
-int early_rootfs_cwd_used(void);
 struct ir0_fd_install_ops;
-void early_rootfs_bind_fdtable(const struct ir0_fd_install_ops *ops);
-int early_rootfs_fdtable_used(void);
-int early_rootfs_vfs_file_used(void);
-void early_rootfs_bind_vfs_ops(void);
-int early_rootfs_vfs_ops_used(void);
 int64_t early_rootfs_getdents64(int fd, uint64_t buffer, uint64_t count);
 int64_t early_rootfs_lseek(int fd, int64_t offset, int whence);
 int64_t early_rootfs_fcntl(int fd, int cmd, uint64_t arg);
 int64_t early_rootfs_fchdir(int fd);
 int64_t early_rootfs_fsync(int fd);
 int64_t early_rootfs_execve(uint64_t path, uint64_t argv, uint64_t envp);
-int early_rootfs_exec_pending(void);
 int early_rootfs_abstract_observed(void);
-char *const *early_rootfs_exec_argv(void);
-void early_rootfs_exec_clear(void);
 
 int64_t early_rootfs_openat(int dirfd, uint64_t path, int flags);
 int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count);
@@ -1004,8 +984,6 @@ int64_t early_rootfs_sendfile(int out_fd, int in_fd, uint64_t offset,
 int64_t early_rootfs_fallocate(int fd, int mode, int64_t offset, int64_t len);
 int64_t early_rootfs_statx(int dirfd, uint64_t path, int flags, uint32_t mask,
 			   uint64_t statxbuf);
-int64_t early_rootfs_readlinkat(int dirfd, uint64_t path, uint64_t buffer,
-				uint64_t size);
 int early_rootfs_poll_revents(int fd, int events);
 int64_t early_rootfs_statfs(uint64_t path, uint64_t buf);
 int64_t early_rootfs_fstatfs(int fd, uint64_t buf);
@@ -1080,6 +1058,5 @@ int64_t early_rootfs_pidfd_getfd(int target);
 int64_t early_rootfs_faccessat2(int dirfd, uint64_t path, int mode, int flags);
 int64_t early_rootfs_openat2(int dirfd, uint64_t path, uint64_t how,
 			     uint64_t usize);
-int early_rootfs_want_creds(int fd);
 int early_rootfs_take_creds(int fd, int32_t *pid, int32_t *uid, int32_t *gid);
 int64_t early_rootfs_send_creds(int fd, int32_t pid, int32_t uid, int32_t gid);

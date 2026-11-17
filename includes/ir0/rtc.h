@@ -33,7 +33,6 @@ typedef struct
 
 int rtc_init(void);
 int rtc_read_time(rtc_time_t *time);
-uint8_t rtc_read_register(uint8_t reg);
 
 uint8_t rtc_bcd_to_binary(uint8_t bcd);
 /* Resolve century + year (or full year) to a Gregorian year ≥ 1970. */

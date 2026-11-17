@@ -52,10 +52,6 @@ size_t mm_kernel_heap_size(void);
 uintptr_t mm_user_va_start(void);
 uintptr_t mm_user_va_end(void);
 
-void mm_enable_translation(void);
-int mm_translation_enabled(void);
-int mm_translation_ready(void);
-
 /*
  * Nonzero when the boot page tables already identity-map [@phys, @phys +
  * @size) for the kernel, so a driver need not map_page() it again.
@@ -140,4 +136,3 @@ void mm_destroy_user_root(address_space_root_t root);
 void mm_prepare_root_activation(address_space_root_t root);
 
 /* Install board/ISA-owned supervisor MMIO mappings in a process root. */
-int mm_map_platform_supervisor(address_space_root_t root);

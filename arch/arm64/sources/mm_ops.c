@@ -90,39 +90,6 @@ void irq_restore(unsigned long flags)
 	__asm__ volatile("msr daif, %0" :: "r"(flags) : "memory");
 }
 
-static uint64_t mm_read_ctrl0(void)
-{
-	uint64_t sctlr;
-
-	__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
-	return sctlr;
-}
-
-static void mm_write_ctrl0(uint64_t value)
-{
-	__asm__ volatile("msr sctlr_el1, %0" :: "r"(value) : "memory");
-	__asm__ volatile("isb" ::: "memory");
-}
-
-void mm_enable_translation(void)
-{
-	uint64_t sctlr = mm_read_ctrl0();
-
-	sctlr |= A64_SCTLR_M;
-	mm_write_ctrl0(sctlr);
-}
-
-int mm_translation_enabled(void)
-{
-	return (mm_read_ctrl0() & A64_SCTLR_M) != 0;
-}
-
-int mm_translation_ready(void)
-{
-	/* Early platform setup owns MAIR/TCR/TTBR initialization. */
-	return 1;
-}
-
 void mm_va_indices(uintptr_t va, size_t idx[4])
 {
 	/* Same 4-level 9-bit split as x86-64 4 KiB (VA bits 47:12). */

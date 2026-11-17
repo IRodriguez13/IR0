@@ -37,7 +37,7 @@ NEON.
 |-------|----------|------|
 | Portable facade | `includes/ir0/arch_port.h`, `irq.h`, `context.h` | CPU, IRQ bring-up, `switch_to` |
 | ISA backends | `arch/*/sources/arch_*.c` | switch, mm half, signal frames, syscall frames, irq_init |
-| sigcontext | `sigcontext_x86_64.h` / `sigcontext_arm64.h` | Linux uapi on both ISAs (`__reserved[4096]` on aarch64) |
+| sigcontext | `arch/<isa>/include/asm/sigcontext.h` | Linux uapi on both ISAs (`__reserved[4096]` on aarch64) |
 | Common interface | `arch/*/sources/interface.c` | Cross-arch dispatch (`irq_init` → interrupt_init) |
 | First switch | `first_switch_to` | x86 `user_mode.c`; ARM `first_switch.c` |
 | x86-64 | `arch/x86-64/` + `arch/x86-64/sources/interrupt/` | boot, IDT/PIC impl, user mode, syscalls |

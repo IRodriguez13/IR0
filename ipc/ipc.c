@@ -63,7 +63,7 @@ static bool wait_queue_contains(wait_queue_t *wq, process_t *proc)
 
 
 
-void wait_queue_init(wait_queue_t *wq)
+static void wait_queue_init(wait_queue_t *wq)
 {
     wq->head = NULL;
     wq->tail = NULL;
@@ -105,7 +105,7 @@ void wait_queue_add(wait_queue_t *wq, process_t *proc)
     ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
-process_t *wait_queue_wake_one(wait_queue_t *wq)
+static process_t *wait_queue_wake_one(wait_queue_t *wq)
 {
     unsigned long irq_flags;
     wait_queue_node_t *node;
@@ -219,7 +219,7 @@ void ipc_purge_waiters_for_process(process_t *proc)
     ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
 }
 
-void semaphore_init(semaphore_t *sem, int initial_count)
+static void semaphore_init(semaphore_t *sem, int initial_count)
 {
     if (!sem)
         return;
@@ -227,18 +227,6 @@ void semaphore_init(semaphore_t *sem, int initial_count)
     sem->count = initial_count;
     wait_queue_init(&sem->wait_queue);
 }
-
-void semaphore_up(semaphore_t *sem)
-{
-    if (!sem)
-        return;
-
-    sem->count++;
-
-    /* Wake up one waiting process */
-    wait_queue_wake_one(&sem->wait_queue);
-}
-
 
 int ring_buffer_init(ring_buffer_t *rb, size_t size)
 {
@@ -259,7 +247,7 @@ int ring_buffer_init(ring_buffer_t *rb, size_t size)
     return 0;
 }
 
-void ring_buffer_destroy(ring_buffer_t *rb)
+static void ring_buffer_destroy(ring_buffer_t *rb)
 {
     if (!rb)
         return;
@@ -270,26 +258,26 @@ void ring_buffer_destroy(ring_buffer_t *rb)
     }
 }
 
-size_t ring_buffer_available_write(ring_buffer_t *rb)
+static size_t ring_buffer_available_write(ring_buffer_t *rb)
 {
     if (!rb)
         return 0;
     return rb->size - rb->count;
 }
 
-size_t ring_buffer_available_read(ring_buffer_t *rb)
+static size_t ring_buffer_available_read(ring_buffer_t *rb)
 {
     if (!rb)
         return 0;
     return rb->count;
 }
 
-bool ring_buffer_empty(ring_buffer_t *rb)
+static bool ring_buffer_empty(ring_buffer_t *rb)
 {
     return !rb || rb->count == 0;
 }
 
-bool ring_buffer_full(ring_buffer_t *rb)
+static bool ring_buffer_full(ring_buffer_t *rb)
 {
     return !rb || rb->count >= rb->size;
 }
@@ -312,7 +300,7 @@ size_t ring_buffer_write(ring_buffer_t *rb, const void *data, size_t len)
     return to_write;
 }
 
-size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len)
+static size_t ring_buffer_read(ring_buffer_t *rb, void *data, size_t len)
 {
     if (!rb || !data || len == 0)
         return 0;
@@ -383,16 +371,6 @@ void ipc_channel_destroy(ipc_channel_t *channel)
     ring_buffer_destroy(&channel->rb);
 
     kfree(channel);
-}
-
-ipc_channel_t *ipc_channel_find(uint32_t id)
-{
-    unsigned long irq_flags;
-
-    irq_flags = ir0_spin_lock_irqsave(&ipc_lock);
-    ipc_channel_t *channel = ipc_channel_find_locked(id);
-    ir0_spin_unlock_irqrestore(&ipc_lock, irq_flags);
-    return channel;
 }
 
 /**

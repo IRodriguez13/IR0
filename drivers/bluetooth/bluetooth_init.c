@@ -30,6 +30,8 @@
 #include <ir0/logging.h>
 #include <ir0/driver.h>
 
+static void bluetooth_cleanup(void);
+
 /* Bluetooth subsystem state */
 static bool bluetooth_initialized = false;
 
@@ -117,7 +119,7 @@ int bluetooth_init(void)
 /**
  * bluetooth_cleanup - Cleanup Bluetooth subsystem
  */
-void bluetooth_cleanup(void)
+static void bluetooth_cleanup(void)
 {
     if (!bluetooth_initialized) {
         return;
@@ -145,81 +147,6 @@ void bluetooth_poll(void)
         return;
     hci_process_events();
     bt_scan_state_sync();
-}
-
-/**
- * bluetooth_is_initialized - Check if Bluetooth is initialized
- */
-bool bluetooth_is_initialized(void)
-{
-    return bluetooth_initialized;
-}
-
-/**
- * bluetooth_get_status - Get Bluetooth subsystem status
- */
-int bluetooth_get_status(char *buffer, size_t size)
-{
-    if (!buffer || size == 0) {
-        return -EINVAL;
-    }
-    
-    size_t offset = 0;
-    int written;
-    
-    /* Basic status */
-    written = snprintf(buffer + offset, size - offset,
-                      "Bluetooth Subsystem Status:\n"
-                      "  Initialized: %s\n",
-                      bluetooth_initialized ? "Yes" : "No");
-    
-    if (written > 0 && (size_t)written < size - offset) {
-        offset += written;
-    }
-    
-    if (!bluetooth_initialized) {
-        return (int)offset;
-    }
-    
-    /* HCI device status */
-    struct hci_device *hci_dev = hci_get_device();
-    if (hci_dev) {
-        written = snprintf(buffer + offset, size - offset,
-                          "  HCI Device: Initialized\n"
-                          "  Transport: UART (COM1)\n"
-                          "  Scanning: %s\n",
-                          hci_dev->scanning ? "Active" : "Inactive");
-        
-        if (written > 0 && (size_t)written < size - offset) {
-            offset += written;
-        }
-    }
-    
-    /* Device discovery status */
-    struct bluetooth_device devices[32];
-    int device_count = hci_get_discovered_devices(devices, 32);
-    if (device_count < 0)
-        device_count = 0;
-    written = snprintf(buffer + offset, size - offset,
-                      "  Discovered Devices: %d\n",
-                      device_count);
-    
-    if (written > 0 && (size_t)written < size - offset) {
-        offset += written;
-    }
-    
-    /* Available interfaces */
-    written = snprintf(buffer + offset, size - offset,
-                      "\nAvailable Interfaces:\n"
-                      "  /dev/bluetooth/hci0 - HCI control\n"
-                      "  /proc/bluetooth/devices - Device list\n"
-                      "  /proc/bluetooth/scan - Scan control\n");
-    
-    if (written > 0 && (size_t)written < size - offset) {
-        offset += written;
-    }
-    
-    return (int)offset;
 }
 
 /**

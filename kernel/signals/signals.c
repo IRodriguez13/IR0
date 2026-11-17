@@ -109,7 +109,7 @@ static void signals_restore_handler_mask(process_t *p)
 	p->signal_mask_saved_valid = 0;
 }
 
-void signals_on_sigreturn(process_t *p)
+static void signals_on_sigreturn(process_t *p)
 {
 	signals_restore_handler_mask(p);
 	if (p)
@@ -863,17 +863,3 @@ int register_signal_handler(int signal, void (*handler)(int))
     return 0;
 }
 
-/**
- * signal_ignore - Ignore a signal for current process
- */
-int signal_ignore(int signal)
-{
-    if (signal < 1 || signal >= _NSIG)
-        return -1;
-    
-    /* Signals that cannot be ignored */
-    if (signal == SIGKILL || signal == SIGSTOP)
-        return -1;
-    
-    return register_signal_handler(signal, SIG_IGN);
-}

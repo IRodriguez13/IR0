@@ -48,7 +48,6 @@ static inline int devfs_is_pts_device(uint32_t device_id)
 int devfs_pty_take_pending_master_slot(void);
 void devfs_pty_abort_pending_master(void);
 void *devfs_pty_vfs_mark(int slot);
-int devfs_pty_vfs_slot(const void *vfs_file);
 void devfs_pty_master_release_vfs(const void *vfs_file);
 void devfs_pty_master_dup_vfs(const void *vfs_file);
 void devfs_pty_slave_dup_device(uint32_t device_id);

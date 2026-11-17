@@ -150,12 +150,6 @@ typedef enum {
  * }
  */
 
-/**
- * Panic handler for Rust drivers
- * Rust panics will call into this C function
- */
-IR0_API void ir0_rust_panic_handler(const char *file, u32 line, const char *msg);
-
 // C++ COMPATIBILITY
 
 #ifdef __cplusplus
