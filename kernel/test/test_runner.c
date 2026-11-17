@@ -99,6 +99,7 @@ static const struct ktest_case ktest_cases[] = {
 	  "mount_longest_prefix_contract", 1 },
 	{ ktest_mount_umount_remount_contract,
 	  "mount_umount_remount_contract", 1 },
+	{ ktest_simplefs_source_is_a_label, "simplefs_source_is_a_label", 1 },
 	{ ktest_fat16_mount_any_block_device,
 	  "fat16_mount_any_block_device", 1 },
 	{ ktest_fat16_mount_needs_block_device,

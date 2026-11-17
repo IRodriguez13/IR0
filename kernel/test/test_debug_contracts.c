@@ -709,6 +709,40 @@ void ktest_mount_umount_remount_contract(void)
 	KTEST_END();
 }
 
+/*
+ * simplefs lives in memory: its source only names the store, like the
+ * source of tmpfs, whatever disk name it spells and whether that disk is
+ * present or not.
+ */
+void ktest_simplefs_source_is_a_label(void)
+{
+	char src[32];
+	const char *absent = NULL;
+
+	KTEST_BEGIN("simplefs_source_is_a_label");
+
+	for (uint8_t d = 0; d < MAX_DISKS && !absent; d++)
+	{
+		const char *name = ir0_block_legacy_name(d);
+
+		if (name && !ir0_block_name_is_present(name))
+			absent = name;
+	}
+	KASSERT(absent != NULL);
+	if (!absent)
+	{
+		KTEST_END();
+		return;
+	}
+	snprintf(src, sizeof(src), "/dev/%s", absent);
+
+	ktest_ensure_mountpoint_dir("/mnt/slabel");
+	KASSERT_EQ(sys_mount(src, "/mnt/slabel", "simplefs", 0, NULL), 0);
+	KASSERT_EQ(sys_umount("/mnt/slabel", 0), 0);
+
+	KTEST_END();
+}
+
 void ktest_mount_longest_prefix_contract(void)
 {
 	KTEST_BEGIN("mount_longest_prefix_contract");

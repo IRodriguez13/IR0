@@ -20,7 +20,6 @@
 #include <ir0/mount_prefix.h>
 #include <ir0/stat.h>
 #include <ir0/clock.h>
-#include <ir0/blockdev.h>
 #include <ir0/cred.h>
 #include <string.h>
 
@@ -226,29 +225,6 @@ static simplefs_entry_t *simplefs_alloc_entry(simplefs_store_t *store)
     return NULL;
 }
 
-/*
- * simplefs_check_block_device - Require ATA block names to be registered.
- * Virtual backing devices (simple0, fat0, ...) skip this check.
- */
-static int simplefs_check_block_device(const char *dev)
-{
-    const char *name;
-
-    if (!dev || strcmp(dev, "none") == 0)
-        return 0;
-
-    name = dev;
-    if (strncmp(dev, "/dev/", 5) == 0)
-        name = dev + 5;
-
-    if (strcmp(name, "hda") != 0 && strcmp(name, "hdb") != 0 &&
-        strcmp(name, "hdc") != 0 && strcmp(name, "hdd") != 0)
-        return 0;
-
-    return ir0_block_name_is_present(name) ? 0 : -ENXIO;
-}
-
-
 static int simplefs_umount(const char *dir)
 {
     char mount_norm[256];
@@ -291,14 +267,9 @@ static int simplefs_mount(const char *dev, const char *dir)
     char mount_norm[256];
     simplefs_store_t *store;
     simplefs_mount_t *slot = NULL;
-    int blk_rc;
 
     if (!dir)
         return -EINVAL;
-
-    blk_rc = simplefs_check_block_device(dev);
-    if (blk_rc != 0)
-        return blk_rc;
 
     simplefs_normalize_mount(dir, mount_norm, sizeof(mount_norm));
 
