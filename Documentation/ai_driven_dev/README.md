@@ -23,6 +23,7 @@ ARM staged-adapter vs product VFS: [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
 | `rules/*.md` | Full rule set (architecture, tiers, git hygiene, multi-agent) |
 | `skills/ctr/SKILL.md` | CTR checklist — compile gates and facade discipline |
 | `skills/baseline-compare/SKILL.md` | Unpatched vs patched runs (`scripts/baseline_compare.sh`) and internal branch cleanup |
+| `smp-entry-gate.md` | When SMP work may start: four criteria checked by `make smp-entry-gate` |
 
 ## Install into Cursor (local only)
 
