@@ -339,12 +339,12 @@ static int ext2_inode_ensure_block(struct ext2_vol *v,
 	return ret;
 }
 
-static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, int *is_root)
+static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, int *at_root)
 {
 	size_t best = 0;
 	struct ext2_vol *best_vol = NULL;
 
-	if (!path || !rel || rel_sz == 0 || !is_root)
+	if (!path || !rel || rel_sz == 0 || !at_root)
 		return NULL;
 	for (int i = 0; i < EXT2_MAX_MOUNTS; i++)
 	{
@@ -368,7 +368,7 @@ static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, in
 		return NULL;
 	if (path[best] == '\0' || (path[best] == '/' && path[best + 1] == '\0'))
 	{
-		*is_root = 1;
+		*at_root = 1;
 		rel[0] = '\0';
 	}
 	else
@@ -378,7 +378,7 @@ static struct ext2_vol *ext2_find(const char *path, char *rel, size_t rel_sz, in
 
 		if (relative_len >= rel_sz)
 			return NULL;
-		*is_root = 0;
+		*at_root = 0;
 		memcpy(rel, relative, relative_len + 1);
 	}
 	return best_vol;
@@ -512,16 +512,16 @@ static int ext2_resolve_parent(struct ext2_vol *v, const char *rel,
 static int ext2_stat_path(const char *path, stat_t *st)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct ext2_vol *v;
 	struct ext2_inode ino;
 	uint32_t inum;
 	int ret;
 
-	v = ext2_find(path, rel, sizeof(rel), &is_root);
+	v = ext2_find(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENOENT;
-	ret = ext2_resolve(v, is_root ? "" : rel, &inum);
+	ret = ext2_resolve(v, at_root ? "" : rel, &inum);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, inum, &ino);
@@ -546,7 +546,7 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 			  off_t offset)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct ext2_vol *v;
 	struct ext2_inode ino;
 	uint32_t inum;
@@ -559,10 +559,10 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 	*nread = 0;
 	if (offset < 0)
 		return -EINVAL;
-	v = ext2_find(path, rel, sizeof(rel), &is_root);
+	v = ext2_find(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENOENT;
-	ret = ext2_resolve(v, is_root ? "" : rel, &inum);
+	ret = ext2_resolve(v, at_root ? "" : rel, &inum);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, inum, &ino);
@@ -619,7 +619,7 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 static int ext2_readdir_path(const char *path, struct vfs_dirent *entries, int max)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct ext2_vol *v;
 	struct ext2_inode ino;
 	uint32_t inum;
@@ -628,10 +628,10 @@ static int ext2_readdir_path(const char *path, struct vfs_dirent *entries, int m
 	int ret;
 	uint32_t b;
 
-	v = ext2_find(path, rel, sizeof(rel), &is_root);
+	v = ext2_find(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENOENT;
-	ret = ext2_resolve(v, is_root ? "" : rel, &inum);
+	ret = ext2_resolve(v, at_root ? "" : rel, &inum);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, inum, &ino);
@@ -953,8 +953,8 @@ static int ext2_create_common(const char *path, mode_t mode, int directory)
 {
 	char rel[EXT2_MAX_PATH];
 	char name[EXT2_NAME_MAX + 1];
-	int is_root = 0;
-	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &is_root);
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
 	struct ext2_inode inode;
 	const struct ir0_task_cred *cred;
 	uint32_t parent;
@@ -962,8 +962,8 @@ static int ext2_create_common(const char *path, mode_t mode, int directory)
 	uint32_t existing;
 	int ret;
 
-	if (!v || is_root)
-		return is_root ? -EEXIST : -ENOENT;
+	if (!v || at_root)
+		return at_root ? -EEXIST : -ENOENT;
 	ret = ext2_resolve_parent(v, rel, &parent, name, sizeof(name));
 	if (ret != 0)
 		return ret;
@@ -1080,14 +1080,14 @@ static int ext2_unlink_path(const char *path)
 {
 	char rel[EXT2_MAX_PATH];
 	char name[EXT2_NAME_MAX + 1];
-	int is_root = 0;
-	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &is_root);
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
 	struct ext2_inode inode;
 	uint32_t parent;
 	uint32_t ino;
 	int ret;
 
-	if (!v || is_root)
+	if (!v || at_root)
 		return -ENOENT;
 	ret = ext2_resolve_parent(v, rel, &parent, name, sizeof(name));
 	if (ret != 0)
@@ -1123,8 +1123,8 @@ static int ext2_rmdir_path(const char *path)
 {
 	char rel[EXT2_MAX_PATH];
 	char name[EXT2_NAME_MAX + 1];
-	int is_root = 0;
-	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &is_root);
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
 	struct ext2_inode inode;
 	struct ext2_inode parent_inode;
 	uint8_t *buf;
@@ -1133,7 +1133,7 @@ static int ext2_rmdir_path(const char *path)
 	uint32_t i;
 	int ret;
 
-	if (!v || is_root)
+	if (!v || at_root)
 		return -EBUSY;
 	ret = ext2_resolve_parent(v, rel, &parent, name, sizeof(name));
 	if (ret != 0)
@@ -1253,15 +1253,15 @@ static int ext2_link_path(const char *oldpath, const char *newpath)
 static int ext2_chown_path(const char *path, uid_t owner, gid_t group)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
-	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &is_root);
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
 	struct ext2_inode inode;
 	uint32_t ino;
 	int ret;
 
 	if (!v)
 		return -ENOENT;
-	ret = ext2_resolve(v, is_root ? "" : rel, &ino);
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, ino, &inode);
@@ -1277,15 +1277,15 @@ static int ext2_chown_path(const char *path, uid_t owner, gid_t group)
 static int ext2_chmod_path(const char *path, mode_t mode)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
-	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &is_root);
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
 	struct ext2_inode inode;
 	uint32_t ino;
 	int ret;
 
 	if (!v)
 		return -ENOENT;
-	ret = ext2_resolve(v, is_root ? "" : rel, &ino);
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, ino, &inode);
@@ -1302,7 +1302,7 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 			   size_t *bytes_written, off_t offset)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
+	int at_root = 0;
 	struct ext2_vol *v;
 	struct ext2_inode inode;
 	uint8_t *block_buf;
@@ -1314,10 +1314,10 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 	if (offset < 0 || !bytes_written || (count > 0 && !buf))
 		return -EINVAL;
 	*bytes_written = 0;
-	v = ext2_find(path, rel, sizeof(rel), &is_root);
+	v = ext2_find(path, rel, sizeof(rel), &at_root);
 	if (!v)
 		return -ENOENT;
-	ret = ext2_resolve(v, is_root ? "" : rel, &ino);
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, ino, &inode);
@@ -1383,8 +1383,8 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 static int ext2_truncate_path(const char *path, size_t length)
 {
 	char rel[EXT2_MAX_PATH];
-	int is_root = 0;
-	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &is_root);
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
 	struct ext2_inode inode;
 	uint32_t ino;
 	uint32_t keep;
@@ -1395,7 +1395,7 @@ static int ext2_truncate_path(const char *path, size_t length)
 		return -ENOENT;
 	if (length > ext2_max_file_blocks(v) * v->block_size)
 		return -EFBIG;
-	ret = ext2_resolve(v, is_root ? "" : rel, &ino);
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
 	if (ret != 0)
 		return ret;
 	ret = ext2_read_inode(v, ino, &inode);
