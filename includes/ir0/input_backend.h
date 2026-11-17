@@ -56,6 +56,8 @@ struct input_keyboard_ops
 	const char *(*get_layout_name)(int layout);
 	int (*set_console_mode)(int mode);
 	int (*get_console_mode)(void);
+	/* Take @c as if it had just been typed (TIOCSTI). */
+	void (*receive)(char c);
 };
 
 struct input_mouse_ops
@@ -97,5 +99,7 @@ const char *input_kbd_get_layout_name(int layout);
 #define IR0_INPUT_KBD_MEDIUMRAW 2
 int input_kbd_set_console_mode(int mode);
 int input_kbd_get_console_mode(void);
+/* Feed @c to the keyboard path as a typed byte; -1 without a keyboard. */
+int input_kbd_receive(char c);
 /* Publish newly queued console bytes to poll/select waiters. */
 void input_kbd_wake_readers(void);

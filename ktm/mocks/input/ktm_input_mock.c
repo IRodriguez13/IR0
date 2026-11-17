@@ -224,6 +224,12 @@ int input_kbd_get_console_mode(void)
 	return g_console_mode;
 }
 
+int input_kbd_receive(char c)
+{
+	ktm_input_mock_queue_key(c);
+	return 0;
+}
+
 void input_kbd_wake_readers(void)
 {
 	g_wake_calls++;

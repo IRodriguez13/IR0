@@ -30,6 +30,8 @@
 /* Linux TIOCGPGRP / TIOCSPGRP — foreground process group */
 #define IR0_TIOCGPGRP 0x540Fu
 #define IR0_TIOCSPGRP 0x5410u
+/* Linux TIOCSTI — insert one byte into the input queue */
+#define IR0_TIOCSTI 0x5412u
 
 typedef unsigned int ir0_tcflag_t;
 typedef unsigned char ir0_cc_t;
@@ -124,6 +126,8 @@ int ir0_console_set_fg_pgid(int32_t pgid);
 void ir0_console_clear_fg_pgid(int32_t pgid, int32_t exiting_pid);
 /* TIOCSCTTY on the console: session-leader check + foreground pgrp bind. */
 int ir0_console_ioctl_set_ctty(void);
+/* TIOCSTI on the console: one byte in, as if typed (Linux tiocsti()). */
+int ir0_console_ioctl_sti(const void *user_arg);
 int ir0_console_has_ctty_for_sid(int32_t sid);
 void ir0_console_clear_ctty_session(int32_t sid);
 int32_t ir0_console_get_fg_pgid(void);

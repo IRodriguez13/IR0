@@ -257,6 +257,8 @@ int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
      */
     if (request == IR0_TIOCSCTTY)
 	return ir0_console_ioctl_set_ctty();
+    if (request == IR0_TIOCSTI)
+	return ir0_console_ioctl_sti(arg);
     if (request == IR0_TIOCSPGRP)
     {
 	pid_t pg;

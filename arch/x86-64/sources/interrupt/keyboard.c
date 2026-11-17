@@ -416,6 +416,16 @@ int keyboard_get_console_mode(void)
 	return console_keyboard_mode;
 }
 
+/* A byte that did not come from the controller (TIOCSTI): same path as IRQ1. */
+static void keyboard_receive(char c)
+{
+	unsigned long flags;
+
+	flags = irq_save();
+	keyboard_buffer_add(c);
+	irq_restore(flags);
+}
+
 static const struct input_keyboard_ops i8042_keyboard_ops = {
 	.get = keyboard_buffer_get,
 	.has_data = keyboard_buffer_has_data,
@@ -427,6 +437,7 @@ static const struct input_keyboard_ops i8042_keyboard_ops = {
 	.get_layout_name = keyboard_get_layout_name,
 	.set_console_mode = keyboard_set_console_mode,
 	.get_console_mode = keyboard_get_console_mode,
+	.receive = keyboard_receive,
 };
 
 void keyboard_init(void)

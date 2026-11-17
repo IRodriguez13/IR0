@@ -19,6 +19,7 @@
 #include <ir0/arch_port.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/console_backend.h>
+#include <ir0/cred.h>
 #include <ir0/ash_smoke.h>
 #include <d1_12_read_diag.h>
 #include <d1_16_tty_read_diag.h>
@@ -572,6 +573,33 @@ void ir0_console_keypress(char c)
 	/* Raw (!ICANON): optional echo; byte lands in the kbd ring via store. */
 	if (tty_echo_on())
 		tty_echo_char(nc);
+}
+
+/*
+ * TIOCSTI (Linux drivers/tty/tty_io.c tiocsti()): the byte enters the line
+ * discipline as if it had been typed. Allowed on the caller's controlling
+ * terminal, or for root (CAP_SYS_ADMIN on Linux). Without a keyboard the
+ * console has no raw input queue, so only canonical mode can take it.
+ */
+int ir0_console_ioctl_sti(const void *user_arg)
+{
+	char c;
+
+	if (!current_process)
+		return -ESRCH;
+	if (!ir0_console_has_ctty_for_sid((int32_t)current_process->sid) &&
+	    !ir0_cred_is_root())
+		return -EPERM;
+	if (!user_arg)
+		return -EFAULT;
+	if (copy_from_user(&c, user_arg, 1) != 0)
+		return -EFAULT;
+	if (input_kbd_receive(c) == 0)
+		return 0;
+	if (!tty_icanon_on())
+		return -EIO;
+	ir0_console_keypress(c);
+	return 0;
 }
 
 int ir0_console_input_ready(void)

@@ -1235,6 +1235,11 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
       ret = ir0_console_ioctl_set_ctty();
       goto out;
     }
+    if (request == IR0_TIOCSTI)
+    {
+      ret = ir0_console_ioctl_sti(arg);
+      goto out;
+    }
     if (request == IR0_TIOCSPGRP)
     {
       pid_t pg;
