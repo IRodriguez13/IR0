@@ -356,7 +356,6 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
         klog_smoke("PANICEX_DOUBLE_FAULT_SAFE_OK");
         klog_smoke("PANIC_HANDLER_NO_USERPTR_DEREF_OK");
         cpu_halt();
-        return;
     }
 
     in_panic = 1;

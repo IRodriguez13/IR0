@@ -34,7 +34,9 @@ typedef enum
 extern "C" {
 #endif
 
-void panicex(const char *message, panic_level_t level, const char *file, int line, const char *caller); /*Panic with more detailed logs*/
+/* Panic with the full diagnostic dump; halts the CPU and never returns. */
+void panicex(const char *message, panic_level_t level, const char *file,
+	     int line, const char *caller) __attribute__((noreturn));
 struct ir0_fault;
 
 /*

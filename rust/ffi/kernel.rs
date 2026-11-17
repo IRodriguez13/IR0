@@ -96,7 +96,7 @@ extern "C" {
         file: *const u8,
         line: i32,
         caller: *const u8
-    );
+    ) -> !;
     
     // Printing
     pub fn print(s: *const u8);
