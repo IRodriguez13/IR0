@@ -103,8 +103,10 @@ Mapa ASCII:
 2. `sys_kill`: solo `pid > 0`; sin grupos de proceso ni `kill(-1)`.
 3. Handler usuario necesita stack usuario válido en [0x400000, 0x7FFFFFFFFFFF], alineado 16 bytes.
    Los frames se colocan con `signal_pick_handler_sp()` (también desde
-   `signals_deliver_from_irq_frame`) y `SIGNAL_HANDLER_TOP_MARGIN` bajo
-   `USER_STACK_TOP` para no pisar la banda del canary / overrun.
+   `signals_deliver_from_irq_frame`) justo debajo del SP interrumpido,
+   después de la red zone de la ISA (`SIGFRAME_RED_ZONE`), como
+   `get_sigframe()` de Linux. Un handler que sale con `longjmp(3)` conserva
+   su máscara (signal(7)); el kernel sólo olvida su propia contabilidad.
 4. `sa_flags` no implementado (siempre 0).
 5. `act->sa_mask` sobrescribe máscara completa del proceso en sigaction.
 

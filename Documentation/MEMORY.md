@@ -61,8 +61,11 @@ atomic instructions live under `arch/<isa>/` behind `<ir0/arch_mm.h>`,
   (see [`KTM.md`](KTM.md) §7.3). **Do not** reintroduce soft-grow past TOP; do not
   treat enlarging `USER_STACK_SIZE` as the primary fix for `addr=7ffff000`.
 - User signal delivery (`do_signal` and `signals_deliver_from_irq_frame`)
-  places frames via `signal_pick_handler_sp()` with `SIGNAL_HANDLER_TOP_MARGIN`
-  (`includes/ir0/abi/signal_contract.h`) so frames stay out of the canary band.
+  places frames via `signal_pick_handler_sp()` as Linux `get_sigframe()`
+  does: just below the interrupted SP, past the ISA red zone
+  (`SIGFRAME_RED_ZONE` in `includes/ir0/abi/signal_contract.h`: 128 bytes on
+  x86-64, 0 on arm64), whatever mapping that SP is in. A frame that cannot be
+  written ends in SIGSEGV.
 - Gate: `make smoke-pipeline-stress` (0× `STACK_TOP_OVERRUN` on that path);
   session chaos treats the tag as fatal (`make smoke-session-chaos`).
 

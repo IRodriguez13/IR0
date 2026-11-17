@@ -328,7 +328,7 @@ pairs.
 | ID | Proposal | Risk | Size |
 |----|----------|------|------|
 | SIG-1 | Finish lane G1 (delete `signal_ignore`; `signal_deliver_fault` -> static behind `force_sig_fault`; one sigset converter pair) | low | S |
-| SIG-2 | tty handles its own interrupted read; delete `ir0_console_after_tty_read_signal` / `ir0_console_after_signal_abandon` and the three call sites | medium | S |
+| SIG-2 | DONE (UPROG-1): `ir0_console_after_tty_read_signal` / `ir0_console_after_signal_abandon` and their call sites are deleted; VINTR/VQUIT flush in the line discipline (n_tty `isig()`) | medium | S |
 | SIG-3 | Remove the per-syscall `signals_try_abandon_sigframe()` by not keeping abandonable frame state (Linux model) | high | M |
 | SIG-4 | `signal_irq.h`: delete `sigcontext_arg/set_arg`, make `irq_frame_sp` test-local, rename toward Linux (`setup_sigcontext`, `restore_sigcontext`, `setup_rt_frame`), `new_rsp` -> `new_sp`, raw `uint64_t *frame` -> an opaque `struct pt_regs`-like type | low | S |
 | SIG-5 | Move the signal syscalls next to the signal code | low | M |
@@ -1124,7 +1124,7 @@ definitions in `arch/*/sources/`. `arch/common/` holds generic code
 | BOOT-2 | One arch boot-hook header (`boot_port.h` + `boot_arch.h` + the live part of `arch_info.h`); `boot_flow.h`, `init_handoff.h`, `boot_log_hostshare.h` private to init | low | S |
 | BOOT-3 | Move `arch/common/*.c` to the generic owners; replace weak defaults by required per-ISA hooks (fails at link time instead of silently using a default) | low | S |
 | BOOT-4 | Rootfs selection in generic init, arm64 only reports the block device (follows Q1) | medium | S |
-| BOOT-5 | `ash_smoke` hooks behind KTM | low | S |
+| BOOT-5 | DONE (UPROG-1): shell detection moved to the harness (`scripts/serial_shell_tags.py`); the kernel keeps generic `tty_smoke` tags (`ir0.tty_smoke=1`) | low | S |
 
 ### 11.5 Proposed layout
 
