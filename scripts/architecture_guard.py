@@ -74,6 +74,9 @@ Checks:
     directly under kernel/; everything else lives in a kernel/<responsibility>/
     subdirectory, lib/ or its owner subsystem. No ledger; injected-violation
     self-test.
+33) Every file in Documentation/ai_driven_dev/rules/ has a "### <file name>"
+    section in rules-digest.md and every section names an existing rule
+    file. No ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -3455,6 +3458,71 @@ def check_kernel_loose_files():
     return errors
 
 
+# Documentation/ai_driven_dev/rules-digest.md summarizes every rule file: one
+# "### <file name>" section per file in rules/, and every section names an
+# existing rule file. Keeps the digest from going stale. No ledger.
+RULES_DIR = Path("Documentation/ai_driven_dev/rules")
+RULES_DIGEST = Path("Documentation/ai_driven_dev/rules-digest.md")
+RULES_DIGEST_HEADING_RE = re.compile(r"^### (\S+)[ \t]*$", re.M)
+
+
+def rules_digest_errors(rules_dir: Path, digest: Path) -> list[str]:
+    """Compare the rule files in @rules_dir with the sections of @digest."""
+    rule_names = ({p.name for p in rules_dir.iterdir() if p.is_file()}
+                  if rules_dir.is_dir() else set())
+    if not digest.is_file():
+        return [f"[rules-digest] {RULES_DIGEST}: digest is missing"]
+    sections = RULES_DIGEST_HEADING_RE.findall(
+        digest.read_text(encoding="utf-8"))
+    errors = []
+    for name in sorted(rule_names - set(sections)):
+        errors.append(
+            f"[rules-digest] {RULES_DIGEST}: no '### {name}' section for "
+            f"{RULES_DIR}/{name}")
+    for name in sorted(set(sections) - rule_names):
+        errors.append(
+            f"[rules-digest] {RULES_DIGEST}: section '### {name}' names no "
+            f"file in {RULES_DIR}/")
+    for name in sorted({n for n in sections if sections.count(n) > 1}):
+        errors.append(
+            f"[rules-digest] {RULES_DIGEST}: duplicate section '### {name}'")
+    return errors
+
+
+def _rules_digest_self_test() -> list[str]:
+    """Inject a rule without a section, a section without a rule and a
+    duplicate section; the check must report exactly those, and accept the
+    consistent tree."""
+    with tempfile.TemporaryDirectory(prefix="ir0-rdigest-") as tmp:
+        rules = Path(tmp) / "rules"
+        rules.mkdir()
+        digest = Path(tmp) / "rules-digest.md"
+        for name in ("a.md", "b.mdc"):
+            (rules / name).write_text("x\n", encoding="utf-8")
+        digest.write_text("### a.md\n- x\n### b.mdc\n- x\n",
+                          encoding="utf-8")
+        clean = rules_digest_errors(rules, digest)
+        (rules / "new.md").write_text("x\n", encoding="utf-8")
+        digest.write_text("### a.md\n### a.md\n### b.mdc\n### gone.md\n",
+                          encoding="utf-8")
+        bad = rules_digest_errors(rules, digest)
+    errors = []
+    if clean:
+        errors.append(f"[rules-digest] self-test: consistent tree "
+                      f"reported {clean}")
+    wanted = ("no '### new.md'", "names no file", "duplicate section")
+    for needle in wanted:
+        if not any(needle in e for e in bad):
+            errors.append(f"[rules-digest] self-test: missed '{needle}'")
+    return errors
+
+
+def check_rules_digest():
+    """Every rules/ file has a digest section and every section a file."""
+    return _rules_digest_self_test() + rules_digest_errors(
+        ROOT / RULES_DIR, ROOT / RULES_DIGEST)
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3873,7 +3941,8 @@ def main():
                     _undefined_prototype_self_test() +
                     _legacy_pc_self_test() +
                     _domain_isolation_self_test() +
-                    _kernel_loose_self_test())
+                    _kernel_loose_self_test() +
+                    _rules_digest_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3882,7 +3951,7 @@ def main():
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
               "no-raw-atomics, undefined-prototype, legacy-pc-io, "
-              "domain-isolation, kernel-loose-files)")
+              "domain-isolation, kernel-loose-files, rules-digest)")
         return 0
 
     errors = []
@@ -3961,6 +4030,7 @@ def main():
     errors.extend(check_legacy_pc_io())
     errors.extend(check_domain_isolation())
     errors.extend(check_kernel_loose_files())
+    errors.extend(check_rules_digest())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
