@@ -15,7 +15,7 @@
 #include "test/ktest_harness.h"
 #include <ir0/process.h>
 #include "process/process_internal.h"
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/copy_user.h>
 #include <ir0/kmem.h>

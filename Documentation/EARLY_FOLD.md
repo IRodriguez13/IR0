@@ -21,7 +21,7 @@ Do not park pipe/unix/eventfd tables in `fs/`.
 
 | Layer | Role | Path |
 |-------|------|------|
-| Product VFS | Mounts, `vfs_open`/`read`/`write`, tmpfs | `fs/vfs.c`, `fs/tmpfs.c` |
+| Product VFS | Mounts, `vfs_open`/`read`/`write`, tmpfs | `fs/vfs.c`, `fs/tmpfs/tmpfs.c` |
 | Ramtab | Bounded in-memory names **not** on a VFS mount | `fs/ramtab.c` |
 | Staged IPC tables | pipe/eventfd/memfd/timerfd/epoll, AF_UNIX/socketpair | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
 | Product path bind | Optional ops so the adapter can call product VFS | `includes/ir0/bpath.h` |

@@ -56,12 +56,17 @@ nativo.
 
 ### Drivers registrados (`vfs_init`)
 
-Registro condicionado por Kconfig en `vfs_init()`:
+`vfs_init()` registra `proc` y después `vfs_builtin_filesystems[]`
+(`fs/filesystems.c`), los tipos que el build eligió con
+`scripts/make/fs/<nombre>.mk`, en el orden de `FILESYSTEMS` en
+`scripts/make/fs.mk`:
 
-- `minix` — root en disco (predeterminado en defconfig)
-- `tmpfs` — árbol en RAM (alias `ramfs` al montar)
-- `9p` — virtio-9p hostshare (`fs/hostshare_9p.c`)
-- `simplefs`, `fat16` — backends opcionales experimentales
+- `tmpfs` — árbol en RAM (`fs/tmpfs/`, alias `ramfs`)
+- `minix` — root en disco (`fs/minix/`, predeterminado en defconfig)
+- `simplefs` — almacén plano en RAM (`fs/simplefs/`)
+- `fat16` — FAT16 en un dispositivo de bloque o partición (`fs/fat16/`)
+- `ext2` — ext2 en un dispositivo de bloque (`fs/ext2/`)
+- `9p` — virtio-9p hostshare (`fs/9p/hostshare_9p.c`)
 
 Los árboles pseudo (`procfs`, `devfs`, `sysfs`) **no** son montajes `vfs_fstype`
 completos en el árbol actual; usan dispatch en syscalls más
@@ -194,7 +199,7 @@ diagnóstico — aceptable en T0, no ideal a largo plazo.
 | MM | `kmalloc` para montajes y `vfs_file`; ELF usa `vfs_read_file` |
 | Proceso | `cwd` por proceso; tabla fd; contexto `/proc/[pid]/` |
 | Drivers | ops devfs → block, net, fb, input vía facades |
-| Config | `CONFIG_ENABLE_FS_*`, `CONFIG_ROOT_*` |
+| Config | `CONFIG_ENABLE_FS_*` (objetos y registro en `scripts/make/fs/`), `CONFIG_ROOT_*` |
 | Layout root | `kernel/boot/rootfs_base.c` crea `/dev`, `/proc`, … con `vfs_mkdir` |
 
 ## 7. Mapas visuales
@@ -270,8 +275,7 @@ Fallos frecuentes:
 - Registro VFS unificado para proc/dev/sys como montajes reales (hoy: router dual).
 - Namespace de montajes por proceso; bind mounts.
 - Modelo de permisos rico (ACLs).
-- `ext2` u otro FS disco — hooks vía `vfs_register_fs`, sin backend de producción.
-- Split de `kernel/syscalls.c` — lógica FS nueva en `fs_syscalls.c` o `includes/ir0/`.
+- Lógica FS nueva de syscalls en `kernel/syscalls/fs_*.c` (hacia `fs/`, Q2) o `includes/ir0/`.
 - Sacar diagnóstico VFS de `vga.h`/`serial_io.h`.
 
 **Tradeoffs aceptados:**

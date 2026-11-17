@@ -240,17 +240,18 @@ menu "Filesystems"
           mount coexistence and scaling validation.
 
     config ENABLE_FS_FAT16
-        bool "FAT16 filesystem (on-disk read-only + virtual /dev/fat0)"
+        bool "FAT16 filesystem on block devices"
         default y
         help
-          On-disk FAT16 read-only parser for ATA block devices (hda, hda1, …)
-          and a virtual backend at /dev/fat0 delegating to simplefs for mount tests.
+          FAT16 volumes on a registered block device or one of its
+          partitions (/dev/hdb, /dev/hda1, /dev/vdb, ...). The mount source
+          must be a block device, as in Linux.
 
     config ENABLE_FS_EXT2
         bool "EXT2 filesystem (on-disk root and mounts)"
         default y
         help
-          Bounded EXT2 backend for persistent volumes (fs/ext2_disk.c): the
+          Bounded EXT2 backend for persistent volumes (fs/ext2/ext2_disk.c): the
           ext2 product root and ext2 mounts on ATA block devices.
 
 endmenu

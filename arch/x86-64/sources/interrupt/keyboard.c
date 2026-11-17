@@ -27,7 +27,7 @@
 #include <ir0/cmdline.h>
 #include <ir0/console.h>
 #include <ir0/ps2_set1.h>
-#include <kernel/syscalls.h>
+#include <kernel/syscalls/syscalls.h>
 #include <asm/io.h>
 
 #define PS2_STATUS_PORT        0x64

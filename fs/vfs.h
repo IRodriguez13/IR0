@@ -31,12 +31,24 @@ struct vfs_dirent;
 
 /* struct vfs_ops — see includes/ir0/vfs_backend.h */
 
-/* Filesystem type descriptor — one per FS driver */
+/* vfs_fstype.fs_flags */
+#define FS_REQUIRES_DEV   1 /* the mount source is a block device (Linux) */
+#define FS_NOSUID_DEFAULT 2 /* new mounts start MS_NOSUID (pseudo, in-RAM) */
+
+/*
+ * Filesystem type descriptor — one per FS driver (Linux file_system_type).
+ * @alias:  second type name mount(2) accepts for the same driver, or NULL.
+ * @statfs: statfs(2) for @path on a mount of this type; NULL reports an
+ *          empty filesystem. Called under the fs-op lock.
+ */
 struct vfs_fstype {
     const char *name;
+    const char *alias;
+    int fs_flags;
     struct vfs_ops *ops;
     int (*mount)(const char *dev, const char *dir);
     int (*umount)(const char *dir);
+    int (*statfs)(const char *path, struct ir0_statfs *buf);
     struct vfs_fstype *next;
 };
 
@@ -75,11 +87,31 @@ struct vfs_dirent {
 #define DT_LNK     10
 
 /* Lifecycle */
-int vfs_register_fs(struct vfs_fstype *fs);
 int vfs_mount(const char *dev, const char *path, const char *fstype);
 int vfs_umount(const char *path);
 int vfs_pivot_root(const char *new_root, const char *put_old);
 int vfs_init_root(void);
+
+/*
+ * The block device a mount source names: a registered block device
+ * ("/dev/<disk>" or "<disk>"), or partition n of one ("<disk><n>").
+ * @start is the partition's first sector, 0 for a whole disk.
+ */
+struct vfs_bdev {
+    char disk[16];
+    uint64_t start;
+};
+
+/*
+ * Linux lookup_bdev() for block filesystems: fill @bdev for @source. 0, or
+ * -ENOENT (no such path), -ENOTBLK (the path is not a block device),
+ * -ENXIO (a block node with no registered device), -ENODEV (no such
+ * partition) or -EINVAL (no source).
+ */
+int lookup_bdev(const char *source, struct vfs_bdev *bdev);
+
+/* Registered filesystem types, in registration order; NULL if none. */
+const struct vfs_fstype *vfs_get_fstypes(void);
 
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);

@@ -16,7 +16,7 @@
 #include "syscalls_glue.h"
 #include "io_syscalls.h"
 #include <errno.h>
-#include <kernel/syscalls.h>
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
 #include <ir0/errno.h>

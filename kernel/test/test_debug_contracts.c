@@ -13,11 +13,11 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
-#include "syscalls.h"
-#include "../errno.h"
+#include "test/ktest_decl.h"
+#include <kernel/syscalls/syscalls.h>
 #include "../../drivers/storage/partition.h"
 #include "../../fs/devfs_internal.h"
-#include "../../fs/tmpfs.h"
+#include "../../fs/tmpfs/tmpfs.h"
 #include <config.h>
 #include <ir0/acpi_pm.h>
 #include <ir0/acpi_rsdp.h>
@@ -30,6 +30,7 @@
 #include <ir0/process_limits.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
+#include <ir0/strerror.h>
 #include <ir0/vfs.h>
 #include <ir0/sysfs.h>
 #include <ir0/boot_firmware_sysfs.h>
@@ -464,6 +465,56 @@ void ktest_dev_net_contract(void)
 	KTEST_END();
 }
 
+/*
+ * /proc/filesystems lists the registered filesystem types, in registration
+ * order, "nodev" unless the type mounts a block device (Linux
+ * FS_REQUIRES_DEV). With setup/defconfig that is proc, then the order of
+ * scripts/make/fs.mk; devfs is not a registered type.
+ */
+void ktest_proc_filesystems_contract(void)
+{
+	static const char expected[] =
+		"nodev\tproc\n"
+		"nodev\ttmpfs\n"
+		"nodev\tramfs\n"
+		"\tminix\n"
+		"nodev\tsimplefs\n"
+		"\tfat16\n"
+		"\text2\n"
+		"nodev\t9p\n";
+	char buf[512];
+	char *line;
+	int64_t fd;
+	int64_t n;
+
+	KTEST_BEGIN("proc_filesystems_contract");
+
+	memset(buf, 0, sizeof(buf));
+	fd = sys_open("/proc/filesystems", O_RDONLY, 0);
+	KASSERT_GE(fd, 0);
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+
+	/* One log line per entry, for before/after comparisons. */
+	line = buf;
+	while (*line)
+	{
+		char *end = strchr(line, '\n');
+
+		if (end)
+			*end = '\0';
+		klog_info_fmt("KTEST", "FILESYSTEMS|%s", line);
+		if (!end)
+			break;
+		*end = '\n';
+		line = end + 1;
+	}
+
+	KASSERT(strcmp(buf, expected) == 0);
+
+	KTEST_END();
+}
 
 void ktest_mount_proc_contract(void)
 {
@@ -609,7 +660,9 @@ void ktest_mount_multi_fs_contract(void)
 
 	int64_t ms = sys_mount("/dev/simple0", "/mnt/simple", "simplefs", 0, NULL);
 	KASSERT(ms == 0 || ms == -EBUSY);
-	int64_t mf = sys_mount("/dev/fat0", "/mnt/fat", "fat16", 0, NULL);
+	const char *fat_src = ktest_fat16_source();
+	KASSERT(fat_src != NULL);
+	int64_t mf = sys_mount(fat_src, "/mnt/fat", "fat16", 0, NULL);
 	KASSERT(mf == 0 || mf == -EBUSY);
 
 	int64_t sfd = sys_open("/mnt/simple/s1.txt",
@@ -620,7 +673,7 @@ void ktest_mount_multi_fs_contract(void)
 	KASSERT_EQ(sw, (int64_t)strlen(smsg));
 	sys_close((int)sfd);
 
-	int64_t ffd = sys_open("/mnt/fat/HELLO.TXT",
+	int64_t ffd = sys_open("/mnt/fat/MULTI.TXT",
 			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(ffd, 0);
 	const char *fmsg = "fat16-ok";
@@ -637,7 +690,7 @@ void ktest_mount_multi_fs_contract(void)
 	KASSERT_EQ(sys_read((int)sfd, sread, sizeof(sread) - 1),
 		   (int64_t)strlen(smsg));
 	sys_close((int)sfd);
-	ffd = sys_open("/mnt/fat/HELLO.TXT", O_RDONLY, 0);
+	ffd = sys_open("/mnt/fat/MULTI.TXT", O_RDONLY, 0);
 	KASSERT_GT(ffd, 0);
 	KASSERT_EQ(sys_read((int)ffd, fread_buf, sizeof(fread_buf) - 1),
 		   (int64_t)strlen(fmsg));
@@ -679,18 +732,20 @@ void ktest_mount_umount_remount_contract(void)
 	int64_t m2 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	KASSERT_EQ(m2, 0);
 
-	int64_t mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
+	const char *fat_src = ktest_fat16_source();
+	KASSERT(fat_src != NULL);
+	int64_t mf1 = sys_mount(fat_src, "/mnt/umfat", "fat16", 0, NULL);
 	if (mf1 == -EBUSY)
 	{
 		(void)sys_umount("/mnt/umfat", 0);
-		mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
+		mf1 = sys_mount(fat_src, "/mnt/umfat", "fat16", 0, NULL);
 	}
 	KASSERT_EQ(mf1, 0);
 
 	int64_t uf = sys_umount("/mnt/umfat", 0);
 	KASSERT_EQ(uf, 0);
 
-	int64_t mf2 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
+	int64_t mf2 = sys_mount(fat_src, "/mnt/umfat", "fat16", 0, NULL);
 	KASSERT_EQ(mf2, 0);
 
 	/* Linux mount(2) remount via MS_REMOUNT|MS_RDONLY (flags arg). */
@@ -700,6 +755,40 @@ void ktest_mount_umount_remount_contract(void)
 	int64_t rrw = sys_mount("ignored", "/mnt/um", "ignored",
 				IR0_MS_REMOUNT, NULL);
 	KASSERT_EQ(rrw, 0);
+
+	KTEST_END();
+}
+
+/*
+ * simplefs lives in memory: its source only names the store, like the
+ * source of tmpfs, whatever disk name it spells and whether that disk is
+ * present or not.
+ */
+void ktest_simplefs_source_is_a_label(void)
+{
+	char src[32];
+	const char *absent = NULL;
+
+	KTEST_BEGIN("simplefs_source_is_a_label");
+
+	for (uint8_t d = 0; d < MAX_DISKS && !absent; d++)
+	{
+		const char *name = ir0_block_legacy_name(d);
+
+		if (name && !ir0_block_name_is_present(name))
+			absent = name;
+	}
+	KASSERT(absent != NULL);
+	if (!absent)
+	{
+		KTEST_END();
+		return;
+	}
+	snprintf(src, sizeof(src), "/dev/%s", absent);
+
+	ktest_ensure_mountpoint_dir("/mnt/slabel");
+	KASSERT_EQ(sys_mount(src, "/mnt/slabel", "simplefs", 0, NULL), 0);
+	KASSERT_EQ(sys_umount("/mnt/slabel", 0), 0);
 
 	KTEST_END();
 }

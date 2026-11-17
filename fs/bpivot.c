@@ -14,7 +14,6 @@
 #include <ir0/stat.h>
 #include <ir0/vfs.h>
 
-#include "tmpfs.h"
 #include <string.h>
 
 static int g_bpivot_mounts;
@@ -57,10 +56,6 @@ int ir0_bpivot_mount_trees(void)
 	int i;
 	int ok = 0;
 
-	/*
-	 * vfs_init() may have registered tmpfs already; -EEXIST is success here.
-	 */
-	(void)tmpfs_register();
 	for (i = 0; ir0_bpivot_trees[i]; i++)
 	{
 		const char *tree = ir0_bpivot_trees[i];

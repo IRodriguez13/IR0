@@ -61,12 +61,18 @@ void ktest_boot_snapshot_acpi_rsdp_contract(void);
 void ktest_sysfs_max_processes_contract(void);
 void ktest_proc_netinfo_contract(void);
 void ktest_dev_net_contract(void);
+void ktest_proc_filesystems_contract(void);
 void ktest_mount_proc_contract(void);
 void ktest_mount_tmpfs_contract(void);
 void ktest_bpivot_boot_contract(void);
 void ktest_mount_multi_fs_contract(void);
 void ktest_mount_longest_prefix_contract(void);
 void ktest_mount_umount_remount_contract(void);
+void ktest_simplefs_source_is_a_label(void);
+void ktest_fat16_mount_any_block_device(void);
+void ktest_fat16_mount_needs_block_device(void);
+/* "/dev/<name>" of a RAM block device holding a FAT16 volume (test_fat16_contracts.c). */
+const char *ktest_fat16_source(void);
 void ktest_block_layer_contract(void);
 void ktest_errno_string_contract(void);
 void ktest_block_hda_read_contract(void);

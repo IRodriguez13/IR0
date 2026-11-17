@@ -18,7 +18,7 @@ IR0 uses a centralized registry and bootstrap path for core and optional drivers
 - Timers: PIT, RTC, HPET, LAPIC, clock abstraction.
 - Storage: ATA core and ATA block path. Odd userspace buffers use a 512-byte
   bounce in `drivers/storage/ata.c`; MINIX fast-path skips when dst/src is odd
-  (`fs/minix_fs.c`) to avoid alignment storms.
+  (`fs/minix/minix_fs.c`) to avoid alignment storms.
 - Network: RTL8139 and virtio-net on x86-64. ARM64 Raspberry Pi 4 uses BCM2711
   GENET v5 (`drivers/net/bcmgenet.c`, `CONFIG_DRV_NIC_BCMGENET`) with FDT
   `brcm,bcm2711-genet-v5`, DMA burst `0x08`, PHY@1 `rgmii-rxid`. Probe is honest:

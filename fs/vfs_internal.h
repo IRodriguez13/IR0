@@ -64,6 +64,12 @@ int vfs_parent_dir(const char *path, char *out, size_t out_sz);
 int vfs_lookup_parent(const char *path, char *out, size_t out_sz);
 int vfs_lookup_error(const char *path);
 
+/*
+ * The filesystem types built into this kernel, NULL-terminated, in
+ * registration order (fs/filesystems.c, from the build's selection).
+ */
+extern struct vfs_fstype *const vfs_builtin_filesystems[];
+
 /* Mount table lookups (vfs_mount.c). */
 struct vfs_mount *vfs_find_mount(const char *path);
 int vfs_mount_is_readonly(const char *path);

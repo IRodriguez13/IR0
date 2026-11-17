@@ -81,12 +81,14 @@ Para validar coexistencia en puntos de montaje coherentes:
 
 1. `mkdir /mnt && mkdir /mnt/simple && mkdir /mnt/fat`
 2. `mount /dev/simple0 /mnt/simple simplefs`
-3. `mount /dev/fat0 /mnt/fat fat16`
+3. `mount /dev/hdb /mnt/fat fat16` (una imagen FAT16 en `hdb`, p. ej.
+   `scripts/create_fat16_smoke_disk.sh`; FAT16 sólo monta dispositivos de bloque)
 4. Crear/leer archivos en ambos árboles
 5. `mount` y verificar líneas para `simplefs` y `fat16`
 
 Los contratos `mount_multi_fs_contract` y `mount_longest_prefix_contract`
-cubren esta ruta en `kernel-tests` y en `runtime-mount-check`.
+cubren esta ruta en `kernel-tests` y en `runtime-mount-check`; en `kernel-tests`
+el FAT16 es una imagen en el disco RAM `ktfat` (`kernel/test/test_fat16_contracts.c`).
 
 ## ¿Se puede testear todo sin procesos usermode reales?
 

@@ -5,7 +5,7 @@
 > `make build-matrix-min`, `make arch-guard`.
 
 > **Last verified:** 2026-09-01  
-> **Source of truth:** `kernel/syscalls.c`, `kernel/process/*`, `includes/ir0/*`, `scripts/architecture_guard.py`, CTR gates in `Makefile`, ktest runner in `kernel/test/test_runner.c`.
+> **Source of truth:** `kernel/syscalls/*`, `kernel/process/*`, `includes/ir0/*`, `scripts/architecture_guard.py`, CTR gates in `Makefile`, ktest runner in `kernel/test/test_runner.c`.
 
 This document tracks **post-milestone sanitization** (not new features). Each sprint must close with green CTR gates before the next feature oleada. Canonical sprint IDs also appear in [`ROADMAP.md`](ROADMAP.md) and [`Documentation/ai_driven_dev/rules/ir0-optimization-arch-sprints.md`](ai_driven_dev/rules/ir0-optimization-arch-sprints.md).
 
@@ -103,7 +103,9 @@ Ordered by **risk reduction per diff size**. Each row: entry gate → files → 
 
 ### Sprint H1 — ARCH-1 finish syscall monolith — **DONE**
 
-`kernel/syscalls.c` is **86 lines** (init + stdin wake). Submodules:
+`kernel/syscalls.c` was **86 lines** (init + stdin wake); it is gone since:
+`syscalls_init()` lives in `kernel/syscalls/syscall_dispatch.c` and the stdin
+helpers in `kernel/syscalls/stdin.c`. Submodules:
 
 | File | ~Lines | Role |
 |------|--------|------|

@@ -26,6 +26,7 @@ Pendiente fuera de oleada: smoke Doom IWAD al disparar; pipe stress 5/6.
 ## Oleada cerrada (2026-06-23) — hardening estructural **CERRADO**
 
 - **ARCH-1:** `kernel/syscalls.c` **86 líneas**; submódulos en `kernel/syscalls/`
+  (después se repartió: `syscalls_init()` en `syscall_dispatch.c`, stdin en `stdin.c`)
 - **H2:** FASE43–48 → `kernel/debug/fase_audit.c`; `process.c` ~2980 L; hooks `fase_audit_note_*`
 - **H3:** facades — 0 `#include <drivers/` en `includes/ir0`
 - **H5:** `devfs_resolve_read_fd()` unifica `sys_read` devfs

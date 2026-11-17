@@ -102,7 +102,7 @@ d=$(mktemp -d); build/conformance/x86_64/conformance "$d"   # must print pass=N 
 Cases with system-wide effects, such as `kill(-1, ...)`, must check
 `conf_guest` and report TCONF outside the guest.
 
-The arm64 image must fit one IR0 tmpfs file (64 KiB, `fs/tmpfs.c`), so arm64
+The arm64 image must fit one IR0 tmpfs file (64 KiB, `fs/tmpfs/tmpfs.c`), so arm64
 builds with `-DCONF_TERSE`: diagnostics name the source line, not the
 expression. The CPIO carries a stub `/init`, because the early rootfs binds a
 CPIO only when `/init` is an ELF image, and the runner as `/sbin/init`.
@@ -204,7 +204,7 @@ Other observations, not kernel bugs on their own:
   do.
 - **Smaller resource limits**: `RLIMIT_NOFILE` is 64 (Linux 1024), the pipe
   capacity is 4096 bytes (Linux 65536), and tmpfs files are capped at 64 KiB
-  (`fs/tmpfs.c` `TMPFS_MAX_FILE_SIZE`).
+  (`fs/tmpfs/tmpfs.c` `TMPFS_MAX_FILE_SIZE`).
 
 ## Kernel bugs found
 

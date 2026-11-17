@@ -1,0 +1,761 @@
+/**
+ * IR0 Kernel — Core system software
+ * Copyright (C) 2026  Iván Rodriguez
+ *
+ * This file is part of the IR0 Operating System.
+ * Distributed under the terms of the GNU General Public License v3.0.
+ * See the LICENSE file in the project root for full license information.
+ *
+ * File: simplefs.c
+ * Description: simplefs, a minimal in-memory filesystem with a flat store.
+ */
+
+/* SPDX-License-Identifier: GPL-3.0-only */
+
+#include <fs/vfs.h>
+#include <config.h>
+#include <ir0/kmem.h>
+#include <ir0/errno.h>
+#include <ir0/mount_prefix.h>
+#include <ir0/stat.h>
+#include <ir0/clock.h>
+#include <ir0/cred.h>
+#include <string.h>
+
+
+#define SIMPLEFS_MAX_STORES 16
+#define SIMPLEFS_MAX_MOUNTS 32
+#define SIMPLEFS_MAX_ENTRIES 128
+#define SIMPLEFS_MAX_NAME_LEN 63
+#define SIMPLEFS_MAX_FILE_SIZE 65536
+
+typedef struct simplefs_entry
+{
+    int in_use;
+    int is_dir;
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    mode_t mode;
+    uid_t uid;
+    gid_t gid;
+    uint32_t ino;
+    uint8_t *data;
+    size_t size;
+    time_t mtime;
+} simplefs_entry_t;
+
+typedef struct simplefs_store
+{
+    int in_use;
+    int mount_refcount;
+    char dev[64];
+    uint32_t next_ino;
+    simplefs_entry_t entries[SIMPLEFS_MAX_ENTRIES];
+} simplefs_store_t;
+
+typedef struct simplefs_mount
+{
+    int in_use;
+    char mount_path[256];
+    simplefs_store_t *store;
+} simplefs_mount_t;
+
+static simplefs_store_t g_stores[SIMPLEFS_MAX_STORES];
+static simplefs_mount_t g_mounts[SIMPLEFS_MAX_MOUNTS];
+
+static int simplefs_validate_entry_name(const char *name)
+{
+    size_t len = strlen(name);
+
+    if (len == 0 || len > SIMPLEFS_MAX_NAME_LEN)
+        return -EINVAL;
+    return 0;
+}
+
+static simplefs_store_t *simplefs_find_store(const char *dev)
+{
+    for (int i = 0; i < SIMPLEFS_MAX_STORES; i++)
+    {
+        if (!g_stores[i].in_use)
+            continue;
+        if (strcmp(g_stores[i].dev, dev) == 0)
+            return &g_stores[i];
+    }
+    return NULL;
+}
+
+static void simplefs_store_release(simplefs_store_t *store)
+{
+    int j;
+
+    if (!store || !store->in_use)
+        return;
+
+    for (j = 0; j < SIMPLEFS_MAX_ENTRIES; j++)
+    {
+        if (!store->entries[j].in_use)
+            continue;
+        if (store->entries[j].data)
+        {
+            kfree(store->entries[j].data);
+            store->entries[j].data = NULL;
+        }
+    }
+
+    memset(store, 0, sizeof(*store));
+}
+
+static simplefs_store_t *simplefs_get_or_create_store(const char *dev)
+{
+    simplefs_store_t *store = simplefs_find_store(dev);
+    if (store)
+        return store;
+
+    for (int i = 0; i < SIMPLEFS_MAX_STORES; i++)
+    {
+        if (g_stores[i].in_use)
+            continue;
+        memset(&g_stores[i], 0, sizeof(g_stores[i]));
+        g_stores[i].in_use = 1;
+        g_stores[i].next_ino = 1;
+        strncpy(g_stores[i].dev, dev, sizeof(g_stores[i].dev) - 1);
+        g_stores[i].dev[sizeof(g_stores[i].dev) - 1] = '\0';
+        g_stores[i].mount_refcount = 0;
+        return &g_stores[i];
+    }
+    return NULL;
+}
+
+static void simplefs_normalize_mount(const char *src, char *dst, size_t dst_sz)
+{
+    size_t len;
+
+    strncpy(dst, src, dst_sz - 1);
+    dst[dst_sz - 1] = '\0';
+    len = strlen(dst);
+    while (len > 1 && dst[len - 1] == '/')
+    {
+        dst[len - 1] = '\0';
+        len--;
+    }
+}
+
+static simplefs_mount_t *simplefs_find_mount_for_path(const char *path)
+{
+    simplefs_mount_t *best = NULL;
+    size_t best_len = 0;
+
+    for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
+    {
+        size_t mlen;
+
+        if (!g_mounts[i].in_use)
+            continue;
+        mlen = strlen(g_mounts[i].mount_path);
+        if (strncmp(path, g_mounts[i].mount_path, mlen) != 0)
+            continue;
+        if (!ir0_mount_prefix_boundary_ok(path, g_mounts[i].mount_path, mlen))
+            continue;
+        if (mlen > best_len)
+        {
+            best_len = mlen;
+            best = &g_mounts[i];
+        }
+    }
+    return best;
+}
+
+static int simplefs_relname(const char *mount_path, const char *full_path, char *name, size_t name_sz, int *at_root)
+{
+    const char *rel;
+    const char *slash;
+
+    *at_root = 0;
+    if (strcmp(full_path, mount_path) == 0)
+    {
+        *at_root = 1;
+        name[0] = '\0';
+        return 0;
+    }
+
+    rel = full_path + strlen(mount_path);
+    if (rel[0] == '/')
+        rel++;
+    if (rel[0] == '\0')
+    {
+        *at_root = 1;
+        name[0] = '\0';
+        return 0;
+    }
+
+    slash = strchr(rel, '/');
+    if (slash)
+        return -ENOTSUPP;
+    if (strlen(rel) >= name_sz)
+        return -ENAMETOOLONG;
+    strncpy(name, rel, name_sz - 1);
+    name[name_sz - 1] = '\0';
+    return 0;
+}
+
+static simplefs_entry_t *simplefs_find_entry(simplefs_store_t *store, const char *name)
+{
+    for (int i = 0; i < SIMPLEFS_MAX_ENTRIES; i++)
+    {
+        if (!store->entries[i].in_use)
+            continue;
+        if (strcmp(store->entries[i].name, name) == 0)
+            return &store->entries[i];
+    }
+    return NULL;
+}
+
+static simplefs_entry_t *simplefs_alloc_entry(simplefs_store_t *store)
+{
+    for (int i = 0; i < SIMPLEFS_MAX_ENTRIES; i++)
+    {
+        if (store->entries[i].in_use)
+            continue;
+        memset(&store->entries[i], 0, sizeof(store->entries[i]));
+        store->entries[i].in_use = 1;
+        store->entries[i].ino = ++store->next_ino;
+        store->entries[i].mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
+        return &store->entries[i];
+    }
+    return NULL;
+}
+
+static int simplefs_umount(const char *dir)
+{
+    char mount_norm[256];
+
+    if (!dir)
+        return -EINVAL;
+
+    simplefs_normalize_mount(dir, mount_norm, sizeof(mount_norm));
+
+    for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
+    {
+        if (!g_mounts[i].in_use)
+            continue;
+        if (strcmp(g_mounts[i].mount_path, mount_norm) != 0)
+            continue;
+
+        {
+            simplefs_store_t *stor = g_mounts[i].store;
+
+            g_mounts[i].in_use = 0;
+            g_mounts[i].store = NULL;
+            g_mounts[i].mount_path[0] = '\0';
+
+            if (stor)
+            {
+                if (stor->mount_refcount > 0)
+                    stor->mount_refcount--;
+                if (stor->mount_refcount == 0)
+                    simplefs_store_release(stor);
+            }
+        }
+        return 0;
+    }
+
+    return -EINVAL;
+}
+
+static int simplefs_mount(const char *dev, const char *dir)
+{
+    char mount_norm[256];
+    simplefs_store_t *store;
+    simplefs_mount_t *slot = NULL;
+
+    if (!dir)
+        return -EINVAL;
+
+    simplefs_normalize_mount(dir, mount_norm, sizeof(mount_norm));
+
+    for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
+    {
+        if (g_mounts[i].in_use && strcmp(g_mounts[i].mount_path, mount_norm) == 0)
+            return -EBUSY;
+        if (!g_mounts[i].in_use && !slot)
+            slot = &g_mounts[i];
+    }
+
+    /* Do not allocate a store until a mount slot is definitely available.
+     * Otherwise EBUSY/ENOSPC leaves an unowned store in the global registry. */
+    if (!slot)
+        return -ENOSPC;
+
+    store = simplefs_get_or_create_store(dev ? dev : "none");
+    if (!store)
+        return -ENOMEM;
+
+    memset(slot, 0, sizeof(*slot));
+    slot->in_use = 1;
+    slot->store = store;
+    strncpy(slot->mount_path, mount_norm, sizeof(slot->mount_path) - 1);
+    slot->mount_path[sizeof(slot->mount_path) - 1] = '\0';
+    store->mount_refcount++;
+    return 0;
+
+}
+
+static simplefs_mount_t *simplefs_context_mount(const char *path, char *name, int *at_root, int *rc)
+{
+    simplefs_mount_t *mnt = simplefs_find_mount_for_path(path);
+    if (!mnt)
+    {
+        *rc = -ENODEV;
+        return NULL;
+    }
+    *rc = simplefs_relname(mnt->mount_path, path, name, SIMPLEFS_MAX_NAME_LEN + 1, at_root);
+    if (*rc != 0)
+        return NULL;
+    return mnt;
+}
+
+static int simplefs_stat(const char *path, stat_t *buf)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    if (!buf)
+        return -EFAULT;
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+
+    memset(buf, 0, sizeof(*buf));
+    if (at_root)
+    {
+        buf->st_mode = S_IFDIR | 0755;
+        buf->st_nlink = 1;
+        return 0;
+    }
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+
+    buf->st_mode = e->mode;
+    buf->st_uid = e->uid;
+    buf->st_gid = e->gid;
+    buf->st_size = (off_t)e->size;
+    buf->st_ino = e->ino;
+    buf->st_nlink = 1;
+    buf->st_mtime = e->mtime;
+    return 0;
+}
+
+static int simplefs_mkdir(const char *path, mode_t mode)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+    const struct ir0_task_cred *cr = ir0_current_cred();
+    mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EEXIST;
+    if (simplefs_validate_entry_name(name) != 0)
+        return -EINVAL;
+    if (simplefs_find_entry(mnt->store, name))
+        return -EEXIST;
+
+    e = simplefs_alloc_entry(mnt->store);
+    if (!e)
+        return -ENOSPC;
+    e->is_dir = 1;
+    e->mode = S_IFDIR | ((mode & 0777) & ~umask_value);
+    e->uid = cr ? cr->euid : ROOT_UID;
+    e->gid = cr ? cr->egid : ROOT_GID;
+    strncpy(e->name, name, sizeof(e->name) - 1);
+    e->name[sizeof(e->name) - 1] = '\0';
+    return 0;
+}
+
+static int simplefs_create(const char *path, mode_t mode)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+    const struct ir0_task_cred *cr = ir0_current_cred();
+    mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EEXIST;
+    if (simplefs_validate_entry_name(name) != 0)
+        return -EINVAL;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (e)
+    {
+        if (e->is_dir)
+            return -EISDIR;
+        return 0;
+    }
+
+    e = simplefs_alloc_entry(mnt->store);
+    if (!e)
+        return -ENOSPC;
+    e->is_dir = 0;
+    e->mode = S_IFREG | ((mode & 0777) & ~umask_value);
+    e->uid = cr ? cr->euid : ROOT_UID;
+    e->gid = cr ? cr->egid : ROOT_GID;
+    strncpy(e->name, name, sizeof(e->name) - 1);
+    e->name[sizeof(e->name) - 1] = '\0';
+    return 0;
+}
+
+static int simplefs_unlink(const char *path)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EBUSY;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    if (e->is_dir)
+        return -EISDIR;
+    if (e->data)
+        kfree(e->data);
+    memset(e, 0, sizeof(*e));
+    return 0;
+}
+
+static int simplefs_rmdir(const char *path)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EBUSY;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    if (!e->is_dir)
+        return -ENOTDIR;
+    memset(e, 0, sizeof(*e));
+    return 0;
+}
+
+static int simplefs_read(const char *path, void *buf, size_t count, size_t *bytes_read, off_t offset)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    size_t avail;
+    size_t to_read;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    if (!buf)
+        return -EFAULT;
+    if (bytes_read)
+        *bytes_read = 0;
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EISDIR;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    if (e->is_dir)
+        return -EISDIR;
+    if (offset < 0)
+        return -EINVAL;
+    if ((size_t)offset >= e->size)
+        return 0;
+
+    avail = e->size - (size_t)offset;
+    to_read = (count < avail) ? count : avail;
+    if (to_read > 0 && e->data)
+        memcpy(buf, e->data + offset, to_read);
+    if (bytes_read)
+        *bytes_read = to_read;
+    return 0;
+}
+
+static int simplefs_write(const char *path, const void *buf, size_t count, size_t *bytes_written, off_t offset)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    size_t new_size;
+    uint8_t *new_data;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    if (!buf)
+        return -EFAULT;
+    if (bytes_written)
+        *bytes_written = 0;
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EISDIR;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    if (e->is_dir)
+        return -EISDIR;
+    if (offset < 0)
+        return -EINVAL;
+    if (count == 0)
+        return 0;
+
+    if ((size_t)offset > SIMPLEFS_MAX_FILE_SIZE ||
+        count > SIMPLEFS_MAX_FILE_SIZE - (size_t)offset)
+        return -EFBIG;
+    new_size = (size_t)offset + count;
+
+    if (new_size > e->size)
+    {
+        new_data = (uint8_t *)kmalloc(new_size);
+        if (!new_data)
+            return -ENOMEM;
+        if (e->data)
+        {
+            memcpy(new_data, e->data, e->size);
+            kfree(e->data);
+        }
+        if (new_size > e->size)
+            memset(new_data + e->size, 0, new_size - e->size);
+        e->data = new_data;
+        e->size = new_size;
+    }
+
+    memcpy(e->data + offset, buf, count);
+    e->mtime = (time_t)(clock_get_uptime_milliseconds() / 1000);
+    if (bytes_written)
+        *bytes_written = count;
+    return 0;
+}
+
+static int simplefs_chown(const char *path, uid_t owner, gid_t group)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return 0;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    e->uid = owner;
+    e->gid = group;
+    return 0;
+}
+
+static int simplefs_chmod(const char *path, mode_t mode)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return 0;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    e->mode = (e->mode & ~0777) | (mode & 0777);
+    return 0;
+}
+
+static int simplefs_truncate(const char *path, size_t length)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    uint8_t *new_data = NULL;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EISDIR;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    if (e->is_dir)
+        return -EISDIR;
+    if (length > SIMPLEFS_MAX_FILE_SIZE)
+        return -EFBIG;
+    if (length == 0)
+    {
+        if (e->data)
+            kfree(e->data);
+        e->data = NULL;
+        e->size = 0;
+        return 0;
+    }
+
+    new_data = (uint8_t *)kmalloc(length);
+    if (!new_data)
+        return -ENOMEM;
+    if (e->data)
+    {
+        size_t copy = (e->size < length) ? e->size : length;
+        memcpy(new_data, e->data, copy);
+        if (copy < length)
+            memset(new_data + copy, 0, length - copy);
+        kfree(e->data);
+    }
+    else
+    {
+        memset(new_data, 0, length);
+    }
+
+    e->data = new_data;
+    e->size = length;
+    return 0;
+}
+
+static int simplefs_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    int out = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    if (!entries || max_entries <= 0)
+        return -EINVAL;
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    /*
+     * The store is flat: an entry's name is its whole path relative to the
+     * mount point, so nesting is expressed by '/' inside that name. A
+     * directory listing is therefore the set of entries under "<dir>/" whose
+     * remainder holds no further separator.
+     *
+     * Subdirectories used to return 0 here, reporting every one of them as
+     * empty: ls showed nothing below the mount root and a recursive rmdir
+     * saw no children, so it failed with ENOTEMPTY on a tree it had just
+     * been asked to delete. The mount root had the mirror problem, listing
+     * nested entries under their full relative name.
+     */
+    size_t plen = 0;
+    char prefix[SIMPLEFS_MAX_NAME_LEN + 2];
+
+    if (!at_root)
+    {
+        e = simplefs_find_entry(mnt->store, name);
+        if (!e)
+            return -ENOENT;
+        if (!e->is_dir)
+            return -ENOTDIR;
+
+        plen = strlen(name);
+        if (plen + 2 > sizeof(prefix))
+            return -ENAMETOOLONG;
+        memcpy(prefix, name, plen);
+        prefix[plen++] = '/';
+        prefix[plen] = '\0';
+    }
+
+    for (int i = 0; i < SIMPLEFS_MAX_ENTRIES && out < max_entries; i++)
+    {
+        const char *ename;
+        const char *child;
+
+        if (!mnt->store->entries[i].in_use)
+            continue;
+
+        ename = mnt->store->entries[i].name;
+        if (plen != 0)
+        {
+            if (strncmp(ename, prefix, plen) != 0)
+                continue;
+            child = ename + plen;
+        }
+        else
+        {
+            child = ename;
+        }
+
+        if (child[0] == '\0')
+            continue;
+        /* Deeper descendant, not an immediate child. */
+        if (strchr(child, '/') != NULL)
+            continue;
+
+        strncpy(entries[out].name, child, sizeof(entries[out].name) - 1);
+        entries[out].name[sizeof(entries[out].name) - 1] = '\0';
+        entries[out].type = mnt->store->entries[i].is_dir ? DT_DIR : DT_REG;
+        out++;
+    }
+    return out;
+}
+
+static struct vfs_ops simplefs_ops = {
+    .stat = simplefs_stat,
+    .mkdir = simplefs_mkdir,
+    .create = simplefs_create,
+    .unlink = simplefs_unlink,
+    .rmdir = simplefs_rmdir,
+    .chown = simplefs_chown,
+    .chmod = simplefs_chmod,
+    .readdir = simplefs_readdir,
+    .read = simplefs_read,
+    .write = simplefs_write,
+    .truncate = simplefs_truncate,
+};
+
+struct vfs_fstype simplefs_fs_type = {
+    .name = "simplefs",
+    .ops = &simplefs_ops,
+    .mount = simplefs_mount,
+    .umount = simplefs_umount,
+    .next = NULL,
+};

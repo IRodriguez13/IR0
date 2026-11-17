@@ -8,7 +8,7 @@
       "files": {
         "x86-64": [
           "sched/idle.c",
-          "kernel/syscalls.c",
+          "kernel/syscalls/syscall_dispatch.c",
           "kernel/exec/elf_loader.c",
           "sched/core.c",
           "drivers/core/driver_registry.c"
@@ -61,11 +61,11 @@
           "fs/vfs_mount.c",
           "fs/vfs_file.c",
           "fs/vfs_namei.c",
-          "fs/minix_fs.c",
-          "fs/minix_inode.c",
-          "fs/minix_dir.c",
-          "fs/minix_file.c",
-          "fs/minix_meta.c",
+          "fs/minix/minix_fs.c",
+          "fs/minix/minix_inode.c",
+          "fs/minix/minix_dir.c",
+          "fs/minix/minix_file.c",
+          "fs/minix/minix_meta.c",
           "fs/path.c",
           "fs/chmod.c"
         ],

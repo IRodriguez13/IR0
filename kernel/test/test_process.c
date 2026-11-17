@@ -14,7 +14,7 @@
 
 #include "test/ktest_harness.h"
 #include <ir0/process.h>
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/errno.h>
 #include <ir0/sched.h>

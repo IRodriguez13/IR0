@@ -48,7 +48,7 @@
 #include <ir0/open_flags.h>
 #include <ir0/stat.h>
 #include <ir0/ipc.h>
-#include <kernel/syscalls.h>
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/sched.h>
 #include <ir0/process.h>
 #include <ir0/idle.h>

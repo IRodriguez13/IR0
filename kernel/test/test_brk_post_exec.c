@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
-#include "syscalls.h"
+#include <kernel/syscalls/syscalls.h>
 #include <ir0/abi/brk_contract.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>

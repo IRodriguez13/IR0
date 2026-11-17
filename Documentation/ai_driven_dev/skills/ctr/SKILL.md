@@ -25,7 +25,7 @@ CTR Progress
 
 ## Architectural Rules
 
-1. In `fs/*` and `kernel/syscalls.c`, do not add direct `#include <drivers/...>`.
+1. In `fs/*` and `kernel/syscalls/`, do not add direct `#include <drivers/...>`.
 2. Access hardware-facing capabilities through `includes/ir0/*` facades.
 3. Prefer extending facade headers over leaking driver internals upward.
 4. Keep scheduler/filesystem selection compatible with config-driven build.

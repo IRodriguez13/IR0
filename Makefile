@@ -453,7 +453,7 @@ KERNEL_OBJS = \
     kernel/process/credentials.o \
     kernel/power/power_manag.o \
     kernel/kexec/kexec.o \
-    kernel/syscalls.o \
+    kernel/syscalls/stdin.o \
     kernel/syscalls/fs_syscalls.o \
     kernel/syscalls/fs_rw.o \
     kernel/syscalls/fs_meta.o \
@@ -577,11 +577,12 @@ endif
 
 # In-kernel test suite: linked only in kernel-x64-test.bin (make tests)
 KERNEL_TEST_OBJS = \
-	kernel/errno.o \
+	lib/strerror.o \
 	kernel/test/test_runner.o \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
 	kernel/test/test_debug_contracts.o \
+	kernel/test/test_fat16_contracts.o \
 	kernel/test/test_bpivot_boot.o \
 	kernel/test/test_process.o \
 	kernel/test/test_cred_access.o \
@@ -668,7 +669,7 @@ LIB_OBJS = \
     fs/named_symlink.o \
     fs/path_user.o \
     fs/path_routed.o \
-    kernel/utsname.o \
+    kernel/sys/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
     drivers/tty/ash_smoke.o \
@@ -728,7 +729,7 @@ $(HEART_SRC_BLOB): \
 		$(KERNEL_ROOT)/includes/ir0/sock_stream.h \
 		$(KERNEL_ROOT)/includes/ir0/ahci_api.h \
 		$(KERNEL_ROOT)/arch/common/arch_portable.h \
-		$(KERNEL_ROOT)/kernel/syscalls.c
+		$(KERNEL_ROOT)/kernel/syscalls/syscall_dispatch.c
 	@python3 $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		--root $(KERNEL_ROOT) --out $(HEART_SRC_BLOB)
 
@@ -763,32 +764,11 @@ FS_OBJS = \
     fs/devfs_net.o \
     fs/devfs_block.o \
     fs/sysfs.o \
-    fs/hostshare_9p.o
+    fs/filesystems.o
 
-ifneq ($(CONFIG_ENABLE_FS_MINIX),n)
-FS_OBJS += fs/minix_fs.o
-FS_OBJS += fs/minix_inode.o
-FS_OBJS += fs/minix_dir.o
-FS_OBJS += fs/minix_file.o
-FS_OBJS += fs/minix_meta.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_TMPFS),n)
-FS_OBJS += fs/tmpfs.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_SIMPLEFS),n)
-FS_OBJS += fs/simplefs.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_FAT16),n)
-FS_OBJS += fs/fat16_fs.o
-FS_OBJS += fs/fat16_disk.o
-endif
-
-ifneq ($(CONFIG_ENABLE_FS_EXT2),n)
-FS_OBJS += fs/ext2_disk.o
-endif
+# Filesystems: one fragment per filesystem, selected by .config.
+include scripts/make/fs.mk
+FS_OBJS += $(fs-obj-y)
 
 DISK_OBJS = \
     drivers/storage/partition.o
@@ -1264,6 +1244,12 @@ arch-guard:
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py --self-test
 	@python3 $(KERNEL_ROOT)/scripts/architecture_guard.py
 
+# SMP entry gate (Documentation/ai_driven_dev/smp-entry-gate.md): PASS/FAIL/
+# UNKNOWN per criterion, non-zero while SMP work must wait. Not in test-fast.
+.PHONY: smp-entry-gate
+smp-entry-gate:
+	@python3 $(KERNEL_ROOT)/scripts/smp_entry_gate.py
+
 # Host↔guest clipboard via 9p dennis (.ir0/clipboard → guest ir0-paste)
 # HELP
 
@@ -1381,6 +1367,7 @@ help:
 	@echo "  make kernel-tests            In-kernel tests in QEMU"
 	@echo "  make ctr                     Merge gate (includes the daily matrix)"
 	@echo "  make arch-guard              Architecture boundary"
+	@echo "  make smp-entry-gate          SMP entry gate (non-zero until SMP may start)"
 	@echo "  make build-matrix-min        Daily .config matrix"
 	@echo "  make build-matrix-full       Daily matrix plus CI cases"
 	@echo "  make test                    Test TUI"
@@ -1398,7 +1385,7 @@ help:
 	@echo "  make format                  clang-format tracked C/H, skip toolchain/ and setup/"
 	@echo "  make analyze                 cppcheck on kernel trees when installed"
 	@echo "  make stack-usage             Rebuild with -fstack-usage (keeps ISO and disk)"
-	@echo "  make unibuild FILE=fs/tmpfs.c"
+	@echo "  make unibuild FILE=fs/tmpfs/tmpfs.c"
 	@echo "  make headers_install [arm64] Export the UAPI to DESTDIR (default: build/uapi-install)"
 	@echo "  make create-disk [FS=minix] [SIZE=200]"
 	@echo "  make delete-disk | disk-reset | load-init"
@@ -1429,7 +1416,7 @@ define run-unibuild
 		FILE_ARG="$$FILTERED"; \
 	fi; \
 	if [ -z "$$FILE_ARG" ]; then \
-		echo "Error: FILE is required (example: make $@ FILE=fs/tmpfs.c)"; \
+		echo "Error: FILE is required (example: make $@ FILE=fs/tmpfs/tmpfs.c)"; \
 		exit 2; \
 	fi; \
 	$(KERNEL_ROOT)/scripts/unibuild.sh $(1) $$FILE_ARG
@@ -1446,7 +1433,7 @@ unibuild-clean:
 	@if [ -z "$(FILE)" ]; then \
 		echo "Error: FILE parameter required"; \
 		echo "Usage: make unibuild-clean <source_file>"; \
-		echo "Example: make unibuild-clean fs/tmpfs.c"; \
+		echo "Example: make unibuild-clean fs/tmpfs/tmpfs.c"; \
 		exit 1; \
 	fi
 	@$(KERNEL_ROOT)/scripts/unibuild-clean.sh "$(FILE)"

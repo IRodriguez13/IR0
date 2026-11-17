@@ -14,28 +14,13 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "vfs.h"
-#if CONFIG_ENABLE_FS_MINIX
-#include "minix_fs.h"
-#endif
-#if CONFIG_ENABLE_FS_TMPFS
-#include "tmpfs.h"
-#include "hostshare_9p.h"
-#endif
-#if CONFIG_ENABLE_FS_SIMPLEFS
-#include "simplefs.h"
-#endif
-#if CONFIG_ENABLE_FS_FAT16
-#include "fat16_fs.h"
-#endif
-#if CONFIG_ENABLE_FS_EXT2
-#include "ext2_disk.h"
-#endif
 #include <ir0/kmem.h>
 #include <ir0/cred.h>
 #include <ir0/blockdev.h>
+#include <ir0/partition.h>
+#include <ir0/path_routed.h>
 #include <ir0/klog.h>
 #include <ir0/statfs.h>
-#include <ir0/virtio_9p.h>
 #include <ir0/process.h>
 #include <string.h>
 #include "vfs_internal.h"
@@ -100,19 +85,9 @@ int vfs_path_allows_setid(const char *path)
     return 1;
 }
 
-static unsigned long vfs_default_mount_flags(const char *mount_path,
-                                             const char *fstype)
+static unsigned long vfs_default_mount_flags(const struct vfs_fstype *ft)
 {
-    (void)mount_path;
-
-    if (!fstype)
-        return IR0_MS_NOSUID;
-
-    if (strcmp(fstype, "proc") == 0 || strcmp(fstype, "sysfs") == 0 ||
-        strcmp(fstype, "tmpfs") == 0 || strcmp(fstype, "ramfs") == 0)
-        return IR0_MS_NOSUID;
-
-    return 0;
+    return (ft->fs_flags & FS_NOSUID_DEFAULT) ? IR0_MS_NOSUID : 0;
 }
 
 static void normalize_mount_path(const char *in, char *out, size_t out_sz)
@@ -153,32 +128,31 @@ static int proc_fs_umount(const char *dir)
 
 static struct vfs_fstype proc_fs_type = {
     .name   = "proc",
+    .fs_flags = FS_NOSUID_DEFAULT,
     .ops    = NULL,
     .mount  = proc_fs_mount,
     .umount = proc_fs_umount,
     .next   = NULL,
 };
 
-static void proc_fs_register(void)
-{
-    (void)vfs_register_fs(&proc_fs_type);
-}
-
 /* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
 
-int vfs_register_fs(struct vfs_fstype *fs)
+/* Linux register_filesystem(): append @fs, keeping registration order. */
+static int vfs_register_fs(struct vfs_fstype *fs)
 {
+    struct vfs_fstype **link = &fs_types;
+
     if (!fs || !fs->name || strlen(fs->name) == 0)
         return -EINVAL;
 
-    for (struct vfs_fstype *t = fs_types; t; t = t->next)
-        if (strcmp(t->name, fs->name) == 0)
+    for (; *link; link = &(*link)->next)
+        if (strcmp((*link)->name, fs->name) == 0)
             return -EEXIST;
 
-    fs->next = fs_types;
-    fs_types = fs;
+    fs->next = NULL;
+    *link = fs;
     return 0;
 }
 
@@ -186,23 +160,9 @@ static int vfs_init(void)
 {
     fs_types = NULL;
     mounts   = NULL;
-#if CONFIG_ENABLE_FS_MINIX
-    minix_fs_register();
-#endif
-#if CONFIG_ENABLE_FS_TMPFS
-    tmpfs_register();
-    hostshare_9p_register();
-#endif
-#if CONFIG_ENABLE_FS_SIMPLEFS
-    simplefs_register();
-#endif
-#if CONFIG_ENABLE_FS_FAT16
-    fat16_fs_register();
-#endif
-#if CONFIG_ENABLE_FS_EXT2
-    ext2_fs_register();
-#endif
-    proc_fs_register();
+    (void)vfs_register_fs(&proc_fs_type);
+    for (size_t i = 0; vfs_builtin_filesystems[i]; i++)
+        (void)vfs_register_fs(vfs_builtin_filesystems[i]);
     if (DEBUG_VFS)
     {
         klog_info("VFS", "CLASSIFY VFS_FS_CONTRACT_ACTIVE");
@@ -211,6 +171,11 @@ static int vfs_init(void)
         klog_info("VFS", "CLASSIFY FUTURE_FS_READY");
     }
     return 0;
+}
+
+const struct vfs_fstype *vfs_get_fstypes(void)
+{
+    return fs_types;
 }
 
 struct vfs_mount *vfs_get_mounts(void)
@@ -228,10 +193,84 @@ int vfs_sync(void)
     return 0;
 }
 
+/* Partition @partno (1-based) of the registered disk @disk. */
+static int lookup_partition(const char *disk, unsigned long partno,
+                            uint64_t *start)
+{
+    partition_info_t pi;
+
+    /* The partition table is indexed by the legacy disk slot (Q12). */
+    for (uint8_t d = 0; d < MAX_DISKS; d++) {
+        const char *name = ir0_block_legacy_name(d);
+
+        if (!name || strcmp(name, disk) != 0)
+            continue;
+        if (partno == 0 || partno > MAX_PARTITIONS_PER_DISK ||
+            get_partition_info(d, (uint8_t)(partno - 1), &pi) != 0)
+            return -ENODEV;
+        *start = pi.start_lba;
+        return 0;
+    }
+    return -ENODEV;
+}
+
+int lookup_bdev(const char *source, struct vfs_bdev *bdev)
+{
+    const char *name;
+    size_t len;
+    size_t base;
+    stat_t st;
+    int ret;
+
+    if (!source || !source[0] || !bdev)
+        return -EINVAL;
+
+    memset(bdev, 0, sizeof(*bdev));
+    name = strncmp(source, "/dev/", 5) == 0 ? source + 5 : source;
+    len = strlen(name);
+
+    if (len < sizeof(bdev->disk) && ir0_block_name_is_present(name)) {
+        memcpy(bdev->disk, name, len + 1);
+        return 0;
+    }
+
+    /* "<disk><n>": partition n of a registered disk. */
+    base = len;
+    while (base > 0 && name[base - 1] >= '0' && name[base - 1] <= '9')
+        base--;
+    if (base > 0 && base < len && base < sizeof(bdev->disk)) {
+        unsigned long partno = 0;
+
+        memcpy(bdev->disk, name, base);
+        bdev->disk[base] = '\0';
+        if (ir0_block_name_is_present(bdev->disk)) {
+            for (size_t i = base; i < len && partno <= MAX_PARTITIONS_PER_DISK; i++)
+                partno = partno * 10 + (unsigned long)(name[i] - '0');
+            return lookup_partition(bdev->disk, partno, &bdev->start);
+        }
+        bdev->disk[0] = '\0';
+    }
+
+    /* Not a block device: tell a missing path from a file of another type. */
+    ret = ir0_stat_path_routed_follow(source, &st);
+    if (ret != 0)
+        return ret;
+    return S_ISBLK(st.st_mode) ? -ENXIO : -ENOTBLK;
+}
+
+static struct vfs_fstype *vfs_find_fstype(const char *name)
+{
+    for (struct vfs_fstype *t = fs_types; t; t = t->next) {
+        if (strcmp(t->name, name) == 0 ||
+            (t->alias && strcmp(t->alias, name) == 0))
+            return t;
+    }
+    return NULL;
+}
+
 int vfs_mount(const char *dev, const char *path, const char *fstype)
 {
     char mount_path[MAX_PATH];
-    const char *resolved_fstype = fstype;
 
     if (!fstype || !path)
         return -EINVAL;
@@ -244,18 +283,8 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     normalize_mount_path(path, mount_path, sizeof(mount_path));
 
-    /* ramfs is intentionally an alias of tmpfs in IR0 runtime mounts. */
-    if (strcmp(resolved_fstype, "ramfs") == 0)
-        resolved_fstype = "tmpfs";
-
     /* Linux do_new_mount(): an unknown type is -ENODEV before anything else. */
-    struct vfs_fstype *ft = NULL;
-    for (struct vfs_fstype *t = fs_types; t; t = t->next) {
-        if (strcmp(t->name, resolved_fstype) == 0) {
-            ft = t;
-            break;
-        }
-    }
+    struct vfs_fstype *ft = vfs_find_fstype(fstype);
     if (!ft)
         return -ENODEV;
 
@@ -280,7 +309,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
         m->dev[0] = '\0';
     }
     m->fs = ft;
-    m->flags = vfs_default_mount_flags(mount_path, resolved_fstype);
+    m->flags = vfs_default_mount_flags(ft);
     m->next = mounts;
 
     ret = ft->mount(dev, mount_path);
@@ -507,78 +536,58 @@ int vfs_pivot_root(const char *new_root, const char *put_old)
     return 0;
 }
 
+/*
+ * Mount the configured root; when that is impossible, fall back to a tmpfs
+ * root (an error if tmpfs is not built in either).
+ */
+static int vfs_mount_fallback_root(const char *why)
+{
+    int ret;
+
+    klog_info("VFS", why);
+    ret = vfs_mount("none", "/", "tmpfs");
+    if (ret != 0) {
+        klog_error("VFS", "tmpfs fallback root failed");
+        return ret;
+    }
+    klog_info("VFS", "tmpfs root mounted (fallback)");
+    return 0;
+}
+
 int vfs_init_root(void)
 {
     const char *root_blk = CONFIG_ROOT_BLOCK_DEVICE;
     const char *root_fs = CONFIG_ROOT_FILESYSTEM;
     char root_dev_path[64];
-    int can_use_block_dev = 1;
+    int ret;
 
-#define VFS_MSG(s) klog_info("VFS", (s))
-#define VFS_ERR(s) klog_error("VFS", (s))
-
-    VFS_MSG("Initializing VFS...");
-    int ret = vfs_init();
+    klog_info("VFS", "Initializing VFS...");
+    ret = vfs_init();
     if (ret != 0) {
-        VFS_ERR("vfs_init failed");
+        klog_error("VFS", "vfs_init failed");
         return ret;
     }
-    VFS_MSG("vfs_init OK (builtin filesystems registered)");
+    klog_info("VFS", "vfs_init OK (builtin filesystems registered)");
 
     snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
 
-#if !CONFIG_ENABLE_FS_MINIX
-    if (strcmp(root_fs, "minix") == 0)
-        can_use_block_dev = 0;
-#endif
-#if !CONFIG_ENABLE_FS_EXT2
-    if (strcmp(root_fs, "ext2") == 0)
-        can_use_block_dev = 0;
-#endif
-
-    if (can_use_block_dev && !ir0_block_name_is_present(root_blk)) {
-        VFS_ERR("No block device configured for root available");
-#if CONFIG_ENABLE_FS_TMPFS
-        VFS_MSG("falling back to tmpfs root (block device missing)");
-        ret = vfs_mount("none", "/", "tmpfs");
-        if (ret != 0) {
-            VFS_ERR("tmpfs fallback also failed");
-            return ret;
-        }
-        VFS_MSG("tmpfs root mounted (fallback, no block device)");
-        return 0;
-#else
-        return -ENODEV;
-#endif
+    /* A missing disk only matters when the root type is built in. */
+    if (vfs_find_fstype(root_fs) && !ir0_block_name_is_present(root_blk)) {
+        klog_error("VFS", "No block device configured for root available");
+        return vfs_mount_fallback_root("falling back to tmpfs root (block device missing)");
     }
 
-    VFS_MSG("Mounting root filesystem...");
+    klog_info("VFS", "Mounting root filesystem...");
     ret = vfs_mount(root_dev_path, "/", root_fs);
-    if (ret != 0) {
-        VFS_MSG("configured root mount failed, falling back to tmpfs root");
-#if CONFIG_ENABLE_FS_TMPFS
-        ret = vfs_mount("none", "/", "tmpfs");
-        if (ret != 0) {
-            VFS_ERR("tmpfs fallback also failed");
-            return ret;
-        }
-        VFS_MSG("tmpfs root mounted (fallback)");
-#else
-        VFS_ERR("tmpfs fallback disabled by configuration");
-        return ret;
-#endif
-    } else {
-        VFS_MSG("vfs_mount OK (configured root)");
-    }
-#undef VFS_MSG
-#undef VFS_ERR
+    if (ret != 0)
+        return vfs_mount_fallback_root("configured root mount failed, falling back to tmpfs root");
+    klog_info("VFS", "vfs_mount OK (configured root)");
     return 0;
 }
 
 int vfs_statfs(const char *path, struct ir0_statfs *buf)
 {
 	struct vfs_mount *m;
-	const char *fst;
 	int ret;
 
 	if (!path || !buf)
@@ -629,62 +638,15 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 		return -ENODEV;
 
 	memset(buf, 0, sizeof(*buf));
-	fst = m->fs->name;
-
-#if CONFIG_ENABLE_FS_MINIX
-	if (strcmp(fst, "minix") == 0)
+	if (m->fs->statfs)
 	{
-		int rc;
-
 		vfs_fs_op_acquire();
-		rc = minix_fs_statfs(buf);
+		ret = m->fs->statfs(path, buf);
 		vfs_fs_op_release();
-		return rc;
+		return ret;
 	}
-#endif
-#if CONFIG_ENABLE_FS_TMPFS
-	if (strcmp(fst, "tmpfs") == 0)
-	{
-		int rc;
 
-		vfs_fs_op_acquire();
-		rc = tmpfs_statfs(path, buf);
-		vfs_fs_op_release();
-		return rc;
-	}
-	if (strcmp(fst, "9p") == 0)
-	{
-		struct virtio_9p_statfs h;
-
-		buf->f_type = IR0_9P_MAGIC;
-		buf->f_bsize = 4096;
-		buf->f_frsize = 4096;
-		buf->f_blocks = 0;
-		buf->f_bfree = 0;
-		buf->f_bavail = 0;
-		buf->f_namelen = 255;
-
-		/*
-		 * Ask the host. Falling back to the zeros above keeps df
-		 * working against a server without Tstatfs instead of failing
-		 * the whole call.
-		 */
-		if (virtio_9p_statfs(&h) == 0 && h.bsize != 0)
-		{
-			buf->f_bsize = h.bsize;
-			buf->f_frsize = h.bsize;
-			buf->f_blocks = h.blocks;
-			buf->f_bfree = h.bfree;
-			buf->f_bavail = h.bavail;
-			buf->f_files = h.files;
-			buf->f_ffree = h.ffree;
-			if (h.namelen)
-				buf->f_namelen = h.namelen;
-		}
-		return 0;
-	}
-#endif
-	/* Unknown FS: honest empty stats (df skips f_blocks==0 unless -a). */
+	/* No statfs: honest empty stats (df skips f_blocks==0 unless -a). */
 	buf->f_bsize = 1024;
 	buf->f_frsize = 1024;
 	buf->f_namelen = 255;

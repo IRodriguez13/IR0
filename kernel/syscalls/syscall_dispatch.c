@@ -32,6 +32,7 @@
 #include <ir0/memfd.h>
 #include <ir0/eventfd.h>
 #include <ir0/timerfd.h>
+#include <ir0/ktm/klog.h>
 #include <ktm.h>
 #include <ktm_probe_diag.h>
 #include <d1_12_read_diag.h>
@@ -463,6 +464,23 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SHMCTL] = wrap_sys_shmctl;
   syscall_semantic_table[IR0_SYSCALL_SHMDT] = wrap_sys_shmdt;
   syscall_semantic_table[IR0_SYSCALL_SHMGET] = wrap_sys_shmget;
+}
+
+void syscalls_init(void)
+{
+	process_t *real_current;
+	process_t *real_list;
+
+	syscall_table_init();
+	klog_info("SYSCALL", "syscalls_init: using REAL process management");
+
+	real_current = current_process;
+	real_list = get_process_list();
+
+	klog_debug_fmt("SYSCALL", "Real current_process = %x",
+		       (unsigned)(uintptr_t)real_current);
+	klog_debug_fmt("SYSCALL", "Real process_list = %x",
+		       (unsigned)(uintptr_t)real_list);
 }
 
 /*

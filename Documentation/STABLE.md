@@ -163,7 +163,7 @@ These items were tracked as partial, WIP, or hardening backlog. They are **close
 
 | Sprint | Deliverable | Evidence |
 |--------|-------------|----------|
-| **H1** ARCH-1 | `kernel/syscalls.c` **86 lines**; submodules under `kernel/syscalls/` | `wc -l kernel/syscalls.c` |
+| **H1** ARCH-1 | `kernel/syscalls.c` gone; submodules under `kernel/syscalls/`; `kernel/main.c` is the only loose file in `kernel/` | `make arch-guard` (`[kernel-loose-files]`) |
 | **H2** FASE | FASE43–48 in `kernel/debug/fase_audit.c`; hooks on hot path | `process.c` ~3014 L |
 | **H3** facades | 0 `#include <drivers/` in `includes/ir0/*.h`; `sched.h` ops facade | `make arch-guard` |
 | **H4** host ABI | `test_musl_cred_abi`, `includes/ir0/abi/musl_cred_abi.h` | `make -C tests/host run` 12/12 |

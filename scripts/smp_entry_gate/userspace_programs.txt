@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-3.0-only
+# Userspace program names the kernel must not know (SMP entry gate,
+# criterion 2: UPROG-1). One name per line, matched as a whole word,
+# case-insensitive, in kernel sources (comments included: a comment that
+# justifies kernel code by a program counts). Reviewed false positives go
+# to userspace_programs_ledger.txt.
+busybox
+ash
+getty
+agetty
+runit
+runsv
+runsvdir
+nano
+ncurses
+ping
+sudo
+doas
+bash
+doom

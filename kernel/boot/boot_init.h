@@ -56,4 +56,4 @@ void boot_irq_init(void);
 void boot_diagnostics(void);
 
 /* Load /sbin/init, spawn idle, first schedule; panics instead of returning. */
-void boot_enter_userspace(void);
+void boot_enter_userspace(void) __attribute__((noreturn));

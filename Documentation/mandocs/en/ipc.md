@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | process, syscalls, scheduler |
 | Man page | IR0-ipc (section 7) |
-| Primary sources | `kernel/ipc.c`, `includes/ir0/pipe.c`, `kernel/syscalls.c`, `fs/devfs.c` |
+| Primary sources | `kernel/ipc.c`, `includes/ir0/pipe.c`, `kernel/syscalls/io_syscalls.c`, `fs/devfs.c` |
 
 ## 1. Overview
 

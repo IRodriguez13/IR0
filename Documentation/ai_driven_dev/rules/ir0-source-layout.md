@@ -12,7 +12,7 @@ Criterio del mantenedor para todo el kernel. Complementa
 ## Sólo código genérico en los subsistemas
 
 - `kernel/`, `mm/`, `fs/`, `net/`, `sched/`, `ipc/`, `drivers/`, `ktm/`,
-  `sound/` e `includes/ir0/` contienen **sólo código genérico**.
+  `sound/`, `lib/` e `includes/ir0/` contienen **sólo código genérico**.
 - Lo específico de una ISA vive en `arch/<isa>/` (`.c`, `.S`, `.asm`, headers
   en `arch/<isa>/include/asm/`): asm inline, atomics o spins hechos a mano,
   barreras de CPU, registros, formatos de tablas de páginas, instrucciones de
@@ -56,15 +56,18 @@ Criterio del mantenedor para todo el kernel. Complementa
   | `kernel/process/` | ciclo de vida: registro, create, fork, exec (CLOEXEC), exit, wait, credenciales, límites |
   | `kernel/signals/` | entrega, frame de usuario, acción por defecto, trampolín, syscalls de señales y su hook de diag |
   | `kernel/exec/` | carga de ELF, pila de entrada, vDSO, caché environ/cmdline de exec |
-  | `kernel/main.c` | `kmain()`: el orden de arranque de cada subsistema, una llamada por paso (único archivo suelto previsto en `kernel/`) |
+  | `kernel/main.c` | `kmain()`: el orden de arranque de cada subsistema, una llamada por paso (único archivo suelto de `kernel/`, decisión Q11; lo hace cumplir `[kernel-loose-files]`) |
   | `kernel/boot/` | pasos de arranque que llama `kmain()`, parámetros, cmdline, rootfs base, handoff a init |
   | `kernel/problems/` | BUG/OOPS, panic y descripción neutral de faults |
   | `kernel/irq/` | tabla portable de IRQs y trabajo al volver a usuario desde una IRQ |
   | `kernel/futex/` | colas de futex y sus syscalls (robust list incluida) |
   | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado y reboot |
   | `kernel/kexec/` | `kexec_load` y el salto a la imagen cargada (como execve, para el kernel) |
-  | `kernel/syscalls/` | tabla de syscalls y el resto de los syscalls (partición pendiente) |
+  | `kernel/syscalls/` | tabla y dispatch de syscalls (`syscalls_init()`), el resto de los syscalls (partición por dueño pendiente, Q2) y la lectura de stdin sin redirigir (`stdin.c`, hasta que pase al tty) |
+  | `kernel/sys/` | información del sistema: los campos de `uname(2)` (`utsname.c`); Linux tiene `uname`/`sethostname` en `kernel/sys.c` |
 
+  Los helpers puros de biblioteca viven en `lib/` (nivel superior, como en
+  Linux): hoy `lib/strerror.c` con su header `<ir0/strerror.h>`.
   Lo multi-CPU vive en `smp/` (nivel superior); las tablas de fds y
   `struct file` en `fs/`; `mm_struct` y el espacio de direcciones del
   proceso en `mm/`; los registros de drivers en `drivers/core/`.
@@ -103,4 +106,15 @@ Criterio del mantenedor para todo el kernel. Complementa
 - `[portable-no-isa-asm]`, `[portable-no-register-names]` y
   `[paging-neutral-root]` cubren mnemónicos, registros y vocabulario x86 en
   código común.
+- `[domain-isolation]`: un dominio es un núcleo más miembros independientes.
+  Hoy `fs/`: cada filesystem vive en `fs/<nombre>/` con su
+  `scripts/make/fs/<nombre>.mk` y no incluye headers de otro, no usa
+  símbolos que otro define ni prueba su `CONFIG_ENABLE_FS_*`; el núcleo VFS
+  (archivos directamente en `fs/`, `scripts/make/fs.mk`) no prueba ningún
+  `CONFIG_ENABLE_FS_*`: los filesystems se registran en
+  `vfs_builtin_filesystems[]`, que arma el build. Sin ledger; auto-test de
+  violación inyectada. `net/` y `drivers/` se suman con un `DomainSpec`.
+- `[kernel-loose-files]`: `kernel/main.c` es el único `.c`/`.h`/`.S`/`.asm`
+  directamente en `kernel/`; lo demás va a un `kernel/<responsabilidad>/`, a
+  `lib/` o a su subsistema dueño. Sin ledger; auto-test de violación inyectada.
 - Un hallazgo de layout que no tiene guard es deuda: se anota y se automatiza.

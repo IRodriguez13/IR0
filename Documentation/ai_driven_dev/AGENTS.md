@@ -1,7 +1,9 @@
 # IR0 Agent Entry Point
 
-Read `Documentation/ai_driven_dev/README.md` and all always-apply rules under
-`Documentation/ai_driven_dev/rules/` before changing the kernel.
+Read `Documentation/ai_driven_dev/rules-digest.md` at session start: it
+summarizes every rule under `Documentation/ai_driven_dev/rules/`. Open a full
+rule (and `Documentation/ai_driven_dev/README.md`) only when the task touches
+its topic, and always before changing the kernel area it governs.
 
 Every kernel bug fix follows `ir0-bugfix-red-green-proof.md`: reproduce the
 failure on the unpatched tree, then prove the same test passes with the fix. A

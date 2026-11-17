@@ -689,6 +689,15 @@ sysfs, heartfs, pseudo_fs (2), named_{fifo,socket,symlink,devnode}. Other:
 pipe, eventfd, timerfd, flock, path*, bpath/bpivot, ramtab,
 fd_resource(+_legacy), permissions, chmod, utimens, open_flags, stat_user.
 
+**Status (refactor/fs-isolation):** minix, ext2, fat16, simplefs, tmpfs and
+9p live in `fs/<name>/` and register through the build-selected table
+`vfs_builtin_filesystems[]` (`scripts/make/fs.mk`, `fs/filesystems.c`);
+FAT16 is a block filesystem of its own (the simplefs `fat16mini` fake is
+gone) and resolves sources with `lookup_bdev()`; `/proc/filesystems` comes
+from the registry; `[domain-isolation]` in `make arch-guard` keeps members
+apart. Pseudo filesystems (Q3) and the early-rootfs files (Q1) remain flat.
+The paths below are the pre-move ones.
+
 ### 6.1 Public interface
 
 fs owns about 35 headers in `includes/ir0/`. The large ones:
@@ -1111,7 +1120,7 @@ definitions in `arch/*/sources/`. `arch/common/` holds generic code
 
 | ID | Proposal | Risk | Size |
 |----|----------|------|------|
-| BOOT-1 | One `init/main.c` (`kmain` with the phase sequence) replacing `kernel_wiring.c`, `boot_flow.c` and the dispatch part of `boot_init.c` | low | S |
+| BOOT-1 | **Done (2026-11-17):** `kmain()` with the phase sequence in `kernel/main.c` (Q11 keeps it in `kernel/`, not `init/`), one call per step into `kernel/boot/boot_init.c`; `kernel_wiring.c` and `boot_flow.c` are gone. Was: one `init/main.c` replacing `kernel_wiring.c`, `boot_flow.c` and the dispatch part of `boot_init.c` | low | S |
 | BOOT-2 | One arch boot-hook header (`boot_port.h` + `boot_arch.h` + the live part of `arch_info.h`); `boot_flow.h`, `init_handoff.h`, `boot_log_hostshare.h` private to init | low | S |
 | BOOT-3 | Move `arch/common/*.c` to the generic owners; replace weak defaults by required per-ISA hooks (fails at link time instead of silently using a default) | low | S |
 | BOOT-4 | Rootfs selection in generic init, arm64 only reports the block device (follows Q1) | medium | S |
@@ -1281,7 +1290,7 @@ maintainer decision.
 | P1 | DRV-1 / DRV-2 | drivers | Driver core into `drivers/base/`; self-registering drivers | medium | M |
 | P1 | DRV-4 / DRV-5 | drivers | x86 keyboard to `drivers/input`; one block API | medium | M |
 | P1 | SYS-7 | syscalls/tty | tty stdin code out of `kernel/syscalls.c` | low | S |
-| P1 | BOOT-1 / BOOT-2 | boot | One `init/main.c`; one arch boot-hook header | low | S |
+| P1 | BOOT-1 / BOOT-2 | boot | ~~One `init/main.c`~~ (BOOT-1 done: `kernel/main.c`); one arch boot-hook header | low | S |
 | P1 | Q1 / SYS-8 | early world | Decide the early rootfs world's fate | high | XL |
 | P2 | FS-1 (Q3) | fs | Pseudo filesystems as real VFS mounts; retire path routing and `named_*` tables | high | XL |
 | P2 | SYS-1 (Q2) | syscalls | Syscall implementations to their owners | medium | XL |
@@ -1307,6 +1316,10 @@ FS-2 (larger but mechanical), then X-7 as the first core-first item.
 ---
 
 ## 16. Questions for the maintainer
+
+Answered 2026-11-17. The answers and their status are tracked in
+[`smp-entry-gate.md`](smp-entry-gate.md) (criterion 3,
+`scripts/smp_entry_gate/decisions.tsv`).
 
 Q1. **Early rootfs world** (`erfs*`, `early_*`, `product_*`, `ramtab`,
 `bpath`/`bpivot`, ~12k lines and ~20 headers). Options: (a) retire it once

@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | memory, boot, devfs |
 | Página man | IR0-graphics (sección 7) |
-| Fuentes principales | `kernel/video_backend.c`, `drivers/video/vbe.c`, `includes/ir0/fb.c`, `fs/devfs.c`, `kernel/syscalls.c`, `setup/doom/doomgeneric_ir0.c` |
+| Fuentes principales | `kernel/video_backend.c`, `drivers/video/vbe.c`, `includes/ir0/fb.c`, `fs/devfs.c`, `kernel/syscalls/mm_syscalls.c`, `setup/doom/doomgeneric_ir0.c` |
 
 ## 1. Visión general
 
@@ -25,7 +25,7 @@ events0 + mmap.
 | Hardware | `drivers/video/vbe.c` | Init fb Multiboot, fallback VGA 0xB8000 |
 | API FB | `includes/ir0/fb.c` | Comprobación disponibilidad, var/fix screeninfo |
 | devfs | `fs/devfs.c` | `/dev/fb0` device_id **15**, ioctl FBIO* |
-| mmap | `kernel/syscalls.c` | Caso especial mapea páginas FB físicas |
+| mmap | `kernel/syscalls/mm_syscalls.c` | Caso especial mapea páginas FB físicas |
 | Dibujo consola | `drivers/video/console_renderer.c` | CSI/SGR, celdas a FB o VGA |
 | Cliente | `setup/doom/doomgeneric_ir0.c` | Bucle blit userspace T2 |
 

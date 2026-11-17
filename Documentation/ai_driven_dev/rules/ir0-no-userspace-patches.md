@@ -30,7 +30,7 @@ while the kernel still returns wrong behavior.
 - Subsystems communicate through callback/facade tables; extend facades instead of
   cross-includes.
 - New syscall logic → `kernel/syscalls/<domain>.c` or `includes/ir0/*` helpers;
-  do not grow glue `kernel/syscalls.c`.
+  do not add loose files to `kernel/` (only `kernel/main.c`).
 
 ## ISD / rootfs scope
 

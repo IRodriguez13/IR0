@@ -164,6 +164,7 @@ that image is missing. `DISK=none` boots the kernel with no root disk.
 | `make build-matrix-min` | Daily `.config` matrix (defconfig, tiny, net off, storage off, tmpfs root, arm64 scaffold, lazy MM off); restores `.config` |
 | `make build-matrix-full` | `build-matrix-min` plus scheduler, split storage, USB and Bluetooth; for CI |
 | `make arch-guard` | Architecture boundary checks (`scripts/architecture_guard.py`) |
+| `make smp-entry-gate` | SMP entry gate: PASS/FAIL/UNKNOWN per criterion, non-zero until SMP work may start ([`smp-entry-gate.md`](ai_driven_dev/smp-entry-gate.md)); not part of `test-fast` |
 | `make repo-hygiene-guard` | Repository hygiene (`scripts/repo_hygiene_guard.py`) |
 | `make health` | `kernel-analyze` + text budget + memsafe + kernel tests |
 | `make tests` | Build the in-kernel test kernel, kernel-memsafe harness and host tests |

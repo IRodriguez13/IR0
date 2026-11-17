@@ -3,7 +3,7 @@
 IR0 architecture guardrails.
 
 Checks:
-1) No direct <drivers/...> includes inside fs/* and kernel/syscalls.c.
+1) No direct <drivers/...> includes inside fs/* and kernel/syscalls/.
 2) Required facade headers for subsystem decoupling exist.
 3) Portable trees (fs/kernel/mm/net) must not include arch interrupt headers
    (#include <interrupt/...> or <arch/.../interrupt/...>);
@@ -62,6 +62,21 @@ Checks:
     (inb/outb/inw/outw/inl/outl, ins*/outs*, io_wait) is called or defined
     only under arch/x86-64/ and in the sources scripts/make/platform/pc.mk
     builds. No ledger; injected-violation self-test.
+31) Domain isolation: a member of an isolated domain (today each
+    filesystem in fs/<name>/ with its scripts/make/fs/<name>.mk) includes
+    no header of another member, uses no symbol another member defines and
+    tests no CONFIG_ENABLE_FS_<other> / CONFIG_FS_<other>; the domain core
+    (files directly in fs/, scripts/make/fs.mk) tests no member CONFIG
+    symbol and includes no member header. New domains (net/ protocols,
+    drivers/ classes) are one DomainSpec. No ledger; injected-violation
+    self-test.
+32) kernel/ keeps one loose file: kernel/main.c is the only .c/.h/.S/.asm
+    directly under kernel/; everything else lives in a kernel/<responsibility>/
+    subdirectory, lib/ or its owner subsystem. No ledger; injected-violation
+    self-test.
+33) Every file in Documentation/ai_driven_dev/rules/ has a "### <file name>"
+    section in rules-digest.md and every section names an existing rule
+    file. No ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -100,7 +115,7 @@ SKIP_DIR_NAMES = frozenset(
 
 FORBIDDEN_PATHS = [
     ROOT / "fs",
-    ROOT / "kernel" / "syscalls.c",
+    ROOT / "kernel" / "syscalls",
 ]
 
 REQUIRED_FACADES = [
@@ -214,6 +229,7 @@ DIRS_BLUETOOTH_INCLUDE_SCAN = [
     ROOT / "includes",
     ROOT / "interrupt",
     ROOT / "kernel",
+    ROOT / "lib",
     ROOT / "smp",
     ROOT / "mm",
     ROOT / "net",
@@ -236,6 +252,7 @@ PORTABLE_DIRS_MM_NET_NO_ARCH = [
 PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "fs",
     ROOT / "kernel",
+    ROOT / "lib",
     ROOT / "smp",
     ROOT / "mm",
     ROOT / "net",
@@ -478,7 +495,7 @@ def check_drivers_ir0_block_dev_only():
 
 SINGLE_DECL_TREES = (
     "arch", "block", "drivers", "fs", "includes", "ipc", "kernel", "ktm",
-    "mm", "net", "sched", "smp", "sound", "tests/ktm",
+    "lib", "mm", "net", "sched", "smp", "sound", "tests/ktm",
 )
 _DECL_COMMENT_RE = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
 _DECL_PP_RE = re.compile(r"^[ \t]*#(?:[^\n]*\\\n)*[^\n]*", re.M)
@@ -817,6 +834,7 @@ def check_ktm_no_fase_serial():
     fase_re = re.compile(r"\[FASE")
     scan_roots = [
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
@@ -863,6 +881,7 @@ def check_klog_serial_print_allowlist():
     serial_re = re.compile(r"\bserial_print\s*\(")
     scan_roots = [
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
@@ -973,6 +992,7 @@ PORTABLE_ISA_ASM_RE = re.compile(
 PORTABLE_ISA_TREES = (
     ROOT / "arch" / "common",
     ROOT / "kernel",
+    ROOT / "lib",
     ROOT / "smp",
     ROOT / "net",
     ROOT / "includes" / "ir0",
@@ -987,6 +1007,7 @@ PORTABLE_ISA_ALLOWLIST: set[Path] = set()
 # ISA firmware headers must not leak into portable policy trees.
 PORTABLE_NO_ISA_FIRMWARE_TREES = (
     ROOT / "kernel",
+    ROOT / "lib",
     ROOT / "smp",
     ROOT / "fs",
     ROOT / "mm",
@@ -1279,6 +1300,7 @@ def check_process_pgd_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
@@ -1348,6 +1370,7 @@ def check_signal_resume_retired():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
@@ -1382,6 +1405,7 @@ def check_process_wait_state_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
@@ -1444,6 +1468,7 @@ def check_syscall_frame_accessor():
     errors = []
     trees = [
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "fs",
@@ -1572,6 +1597,7 @@ CONTEXT_BACKEND_INCLUDE_ALLOW = {
 PORTABLE_NO_ARCH_CALL_TREES = [
     ROOT / "mm",
     ROOT / "kernel",
+    ROOT / "lib",
     ROOT / "smp",
     ROOT / "fs",
     ROOT / "net",
@@ -1851,8 +1877,8 @@ def check_common_c_has_no_isa_conditionals():
         rf"^\s*#\s*(?:if|ifdef|ifndef|elif)\b.*\b{isa_token}\b"
     )
     roots = (ROOT / "drivers", ROOT / "fs", ROOT / "interrupt",
-             ROOT / "kernel", ROOT / "ktm", ROOT / "mm", ROOT / "net",
-             ROOT / "sched", ROOT / "smp", ROOT / "ipc")
+             ROOT / "kernel", ROOT / "ktm", ROOT / "lib", ROOT / "mm",
+             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -1949,8 +1975,9 @@ def check_portable_task_api_has_no_x86_register_aliases():
     """Keep public task accessors semantic instead of naming x86 registers."""
     errors = []
     forbidden = re.compile(r"\btask_(?:get|set)_(?:rdi|rsi|rdx)\s*\(")
-    roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "ipc")
+    roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "lib",
+             ROOT / "mm", ROOT / "net", ROOT / "sched", ROOT / "smp",
+             ROOT / "ipc")
 
     for root in roots:
         if not root.is_dir():
@@ -2004,8 +2031,9 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
         "includes/ir0/kexec.h": "#include <asm/kexec.h>",
     }
-    roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "mm",
-             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "fs",
+    roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "lib",
+             ROOT / "mm", ROOT / "net", ROOT / "sched", ROOT / "smp",
+             ROOT / "fs",
              ROOT / "drivers", ROOT / "ipc")
 
     for root in roots:
@@ -2084,8 +2112,8 @@ def check_common_elf_uses_isa_policy():
         r"\b(?:ARCH_ELF_MACHINE|IR0_R_X86_64_[A-Z0-9_]+|R_X86_64_[A-Z0-9_]+|"
         r"R_AARCH64_[A-Z0-9_]+)\b"
     )
-    paths = [ROOT / "kernel", ROOT / "mm", ROOT / "fs", ROOT / "net", ROOT / "sched",
-             ROOT / "smp", ROOT / "ipc"]
+    paths = [ROOT / "kernel", ROOT / "lib", ROOT / "mm", ROOT / "fs",
+             ROOT / "net", ROOT / "sched", ROOT / "smp", ROOT / "ipc"]
 
     for base in paths:
         for path in iter_c_files(base):
@@ -2299,6 +2327,7 @@ def check_ktm_mock_boundaries():
         ROOT / "drivers",
         ROOT / "fs",
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "net",
@@ -2453,6 +2482,7 @@ def check_errno_has_single_catalog():
         ROOT / "interrupt",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "mm",
         ROOT / "net",
@@ -2513,6 +2543,7 @@ def check_uaccess_single_api():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
@@ -2573,6 +2604,7 @@ def check_kmem_single_api():
         ROOT / "includes",
         ROOT / "ipc",
         ROOT / "kernel",
+        ROOT / "lib",
         ROOT / "smp",
         ROOT / "ktm",
         ROOT / "mm",
@@ -2608,7 +2640,7 @@ def check_kmem_single_api():
 # branch that fixes an offender deletes its line in the same commit.
 REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
 REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
-                       "mm", "net", "sched", "smp")
+                       "lib", "mm", "net", "sched", "smp")
 REGISTER_NAME_PARTS = frozenset(
     {
         "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
@@ -2756,7 +2788,8 @@ RETIRED_WAIT_RE = re.compile(
 )
 CPU_HALT_RE = re.compile(r"\bcpu_halt\s*\(")
 BUSY_WAIT_TREES = ("arch", "drivers", "fs", "includes", "ipc", "kernel",
-                   "ktm", "mm", "net", "sched", "smp", "sound", "cpp", "tests")
+                   "ktm", "lib", "mm", "net", "sched", "smp", "sound", "cpp",
+                   "tests")
 
 
 def busy_wait_violations(rel: str, text: str) -> list[tuple[int, str]]:
@@ -2828,7 +2861,8 @@ RAW_ATOMIC_RE = re.compile(
     r"\b(__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
     r"\s*\(")
 RAW_ATOMIC_TREES = ("block", "cpp", "drivers", "fs", "includes", "ipc",
-                    "kernel", "ktm", "mm", "net", "sched", "smp", "sound")
+                    "kernel", "ktm", "lib", "mm", "net", "sched", "smp",
+                    "sound")
 RAW_ATOMIC_BACKEND = "includes/asm-generic/atomic.h"
 RAW_ATOMIC_LEDGER: frozenset[str] = frozenset()
 
@@ -3151,6 +3185,344 @@ def check_legacy_pc_io():
     return errors
 
 
+# Domain isolation. Some subsystems are a core plus independent members:
+# filesystems in fs/<name>/ around the VFS core in fs/, later network
+# protocols and driver classes. A member knows only the shared APIs (the
+# core, permissions, memory, block class, common helpers), never another
+# member: it includes no header of another member, calls or references no
+# symbol another member defines, and tests no configuration symbol of
+# another member. The core selects no member by configuration: the build
+# registers members (scripts/make/fs/<name>.mk) and the core iterates the
+# registry. A member is a subdirectory of the domain root; files directly in
+# the root are the core. To isolate another domain, add a DomainSpec.
+class DomainSpec:
+    def __init__(self, name, root, member_config_re, fragments, core_extra,
+                 not_members=()):
+        self.name = name                # report tag suffix
+        self.root = root                # "fs": members are fs/<m>/
+        # One capture group: the member token of a member config symbol.
+        self.member_config_re = re.compile(member_config_re)
+        self.fragments = fragments      # "scripts/make/fs": <m>.mk each
+        self.core_extra = core_extra    # more core files (the registry .mk)
+        self.not_members = frozenset(not_members)
+
+
+DOMAINS = (
+    DomainSpec("fs", "fs", r"\bCONFIG_(?:ENABLE_)?FS_([A-Z0-9_]+)\b",
+               "scripts/make/fs", ("scripts/make/fs.mk",)),
+)
+
+DOMAIN_SOURCE_SUFFIXES = (".c", ".h", ".S", ".mk")
+_DOMAIN_INCLUDE_RE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*[<"]([^>"]+)[>"]',
+                                re.M)
+# Top-level definitions a member exports: functions and initialized objects
+# (a filesystem's struct vfs_fstype). static and extern lines are skipped.
+_DOMAIN_FUNC_DEF_RE = re.compile(
+    r"^(?P<head>[A-Za-z_][\w \t\*]*?)\b(?P<name>[A-Za-z_]\w*)[ \t]*"
+    r"\((?P<args>[^;{}()]*(?:\([^;{}()]*\)[^;{}()]*)*)\)\s*\{", re.M)
+_DOMAIN_OBJ_DEF_RE = re.compile(
+    r"^(?P<head>[A-Za-z_][\w \t\*]*?)\b(?P<name>[A-Za-z_]\w*)[ \t]*"
+    r"(?:\[[^\]\n]*\])?[ \t]*=", re.M)
+_DOMAIN_IDENT_RE = re.compile(r"\b[A-Za-z_]\w*\b")
+
+
+def _domain_token(member: str) -> str:
+    return re.sub(r"\W", "_", member.upper())
+
+
+def _domain_strip(rel: str, text: str) -> str:
+    """Blank comments and strings, keeping line numbers."""
+    if rel.endswith(".mk") or rel.endswith("Makefile"):
+        return re.sub(r"#[^\n]*", "", text)
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    return _C_STRING_RE.sub('""', text)
+
+
+def _domain_exports(rel: str, text: str) -> set[str]:
+    if not rel.endswith(".c"):
+        return set()
+    names = set()
+    for regex in (_DOMAIN_FUNC_DEF_RE, _DOMAIN_OBJ_DEF_RE):
+        for match in regex.finditer(text):
+            words = match.group("head").split()
+            if not words or words[0] in ("static", "extern", "return",
+                                         "else", "typedef"):
+                continue
+            names.add(match.group("name"))
+    return names
+
+
+def domain_violations(spec: DomainSpec,
+                      files: dict[str, str]) -> list[tuple[str, int, str]]:
+    """Return (path, line, message) for every isolation break in @files,
+    a map from repository-relative path to text."""
+    root = spec.root + "/"
+    frag = spec.fragments + "/"
+    member_of: dict[str, str] = {}
+    core: list[str] = []
+    for rel in files:
+        if rel.startswith(root):
+            parts = rel[len(root):].split("/")
+            if len(parts) == 1:
+                core.append(rel)
+            elif parts[0] not in spec.not_members:
+                member_of[rel] = parts[0]
+        elif rel.startswith(frag) and rel.endswith(".mk"):
+            member_of[rel] = rel[len(frag):-len(".mk")]
+        elif rel in spec.core_extra:
+            core.append(rel)
+    members = sorted(set(member_of.values()))
+    stripped = {rel: _domain_strip(rel, files[rel])
+                for rel in list(member_of) + core}
+
+    exported: dict[str, set[str]] = {m: set() for m in members}
+    for rel, member in member_of.items():
+        exported[member] |= _domain_exports(rel, stripped[rel])
+    owner: dict[str, str] = {}
+    for member, names in exported.items():
+        for name in names:
+            # A name two members both define is nobody's to borrow.
+            owner[name] = "" if name in owner else member
+
+    def other_include(path: str, member: Optional[str]) -> Optional[str]:
+        for other in members:
+            if other == member:
+                continue
+            if (path.startswith(f"{root}{other}/") or
+                    path.startswith(f"{other}/") or
+                    f"../{other}/" in path):
+                return other
+        return None
+
+    found = []
+    for rel in sorted(member_of):
+        member = member_of[rel]
+        token = _domain_token(member)
+        raw = files[rel]
+        for lineno, line in enumerate(stripped[rel].splitlines(), 1):
+            for match in spec.member_config_re.finditer(line):
+                if match.group(1) != token:
+                    found.append((rel, lineno,
+                                  f"{member} tests {match.group(0)}, the "
+                                  "configuration of another member"))
+            for match in _DOMAIN_IDENT_RE.finditer(line):
+                other = owner.get(match.group(0))
+                if other and other != member:
+                    found.append((rel, lineno,
+                                  f"{member} uses {match.group(0)}, defined "
+                                  f"by {other}"))
+        for match in _DOMAIN_INCLUDE_RE.finditer(raw):
+            other = other_include(match.group(1), member)
+            if other:
+                lineno = raw.count("\n", 0, match.start()) + 1
+                found.append((rel, lineno,
+                              f"{member} includes {match.group(1)} of "
+                              f"{other}"))
+    for rel in sorted(core):
+        for lineno, line in enumerate(stripped[rel].splitlines(), 1):
+            for match in spec.member_config_re.finditer(line):
+                found.append((rel, lineno,
+                              f"the {spec.name} core tests "
+                              f"{match.group(0)}; members are selected by "
+                              f"{spec.fragments}/<member>.mk and registered"))
+        raw = files[rel]
+        for match in _DOMAIN_INCLUDE_RE.finditer(raw):
+            other = other_include(match.group(1), None)
+            if other:
+                lineno = raw.count("\n", 0, match.start()) + 1
+                found.append((rel, lineno,
+                              f"the {spec.name} core includes "
+                              f"{match.group(1)} of {other}"))
+    found.sort(key=lambda item: (item[0], item[1], item[2]))
+    return found
+
+
+def _domain_files(spec: DomainSpec) -> dict[str, str]:
+    files = {}
+    for base in (ROOT / spec.root, ROOT / spec.fragments):
+        if not base.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+            for name in sorted(filenames):
+                if name.endswith(DOMAIN_SOURCE_SUFFIXES):
+                    path = Path(dirpath) / name
+                    files[str(rel_to_root(path)).replace("\\", "/")] = \
+                        read_file_text(path)
+    for rel in spec.core_extra:
+        if (ROOT / rel).is_file():
+            files[rel] = read_file_text(ROOT / rel)
+    return files
+
+
+def _domain_isolation_self_test() -> list[str]:
+    """Inject each kind of break; the scanner must report exactly those."""
+    spec = DOMAINS[0]
+    files = {
+        "fs/minix/a.c": ("#include <fs/vfs.h>\n"
+                         "#include <fs/tmpfs/tmpfs.h>\n"
+                         "#include \"../fat16/fat16_disk.h\"\n"
+                         "#include \"minix.h\"\n"),
+        "fs/minix/b.c": ("int minix_read(void)\n{\n"
+                         "\treturn tmpfs_lookup(1) + minix_local(2);\n}\n"
+                         "/* tmpfs_lookup() in a comment is fine */\n"
+                         "static const char *s = \"tmpfs_lookup\";\n"
+                         "\tp = &fat16_fs_type;\n"
+                         "\tq = tmpfs_private(3);\n"),
+        "fs/minix/c.c": ("#if CONFIG_ENABLE_FS_FAT16\n#endif\n"
+                         "#if CONFIG_ENABLE_FS_MINIX\n#endif\n"
+                         "int minix_local(int x)\n{\n\treturn x;\n}\n"),
+        "fs/tmpfs/t.c": ("int tmpfs_lookup(int x)\n{\n\treturn x;\n}\n"
+                         "static int tmpfs_private(int x)\n{\n\treturn x;\n}\n"
+                         "struct vfs_fstype tmpfs_fs_type = {\n};\n"),
+        "fs/fat16/f.c": "struct vfs_fstype fat16_fs_type = {\n};\n",
+        "fs/9p/p.c": "#if CONFIG_FS_9P\n#endif\n",
+        "fs/vfs_x.c": ("/* CONFIG_ENABLE_FS_TMPFS in a comment */\n"
+                       "#if CONFIG_ENABLE_FS_TMPFS\n#endif\n"
+                       "#include \"minix/minix_fs.h\"\n"),
+        "scripts/make/fs/fat16.mk": ("# CONFIG_ENABLE_FS_TMPFS in a comment\n"
+                                     "fs-obj-$(CONFIG_ENABLE_FS_FAT16) += f.o\n"
+                                     "fs-obj-$(CONFIG_ENABLE_FS_TMPFS) += g.o\n"),
+        "scripts/make/fs.mk": "include $(FS_FRAGMENTS)\n",
+    }
+    expected = [
+        ("fs/minix/a.c", 2), ("fs/minix/a.c", 3),
+        ("fs/minix/b.c", 3), ("fs/minix/b.c", 7),
+        ("fs/minix/c.c", 1),
+        ("fs/vfs_x.c", 2), ("fs/vfs_x.c", 4),
+        ("scripts/make/fs/fat16.mk", 3),
+    ]
+    got = [(rel, line) for rel, line, _ in domain_violations(spec, files)]
+    if got != expected:
+        return [f"[domain-isolation] self-test: expected {expected}, got {got}"]
+    return []
+
+
+def check_domain_isolation():
+    """Members of an isolated domain (fs/<name>/) never reach another
+    member, and the domain core selects no member by configuration."""
+    errors = _domain_isolation_self_test()
+    for spec in DOMAINS:
+        for rel, lineno, message in domain_violations(spec,
+                                                      _domain_files(spec)):
+            errors.append(f"[domain-isolation] {rel}:{lineno}: {message}")
+    return errors
+
+
+# kernel/ holds subdirectories by responsibility plus one loose file,
+# kernel/main.c (kmain(), the boot order). Any other source directly under
+# kernel/ belongs to a subdirectory, lib/ or its owner subsystem. No ledger.
+KERNEL_LOOSE_ALLOWED = frozenset({"main.c"})
+KERNEL_LOOSE_SUFFIXES = (".c", ".h", ".S", ".asm")
+
+
+def kernel_loose_files(kernel_dir: Path) -> list[str]:
+    """Return the names of source files directly in @kernel_dir that are not
+    the allowed loose file."""
+    if not kernel_dir.is_dir():
+        return []
+    return sorted(p.name for p in kernel_dir.iterdir()
+                  if p.is_file() and p.suffix in KERNEL_LOOSE_SUFFIXES
+                  and p.name not in KERNEL_LOOSE_ALLOWED)
+
+
+def _kernel_loose_self_test() -> list[str]:
+    """Inject loose files next to main.c; the scanner must report exactly
+    those, and nothing in subdirectories or build output."""
+    files = ("main.c", "errno.c", "errno.h", "entry.S", "main.o", "main.d",
+             "boot/boot_init.c", "sys/utsname.c")
+    with tempfile.TemporaryDirectory(prefix="ir0-kloose-") as tmp:
+        kdir = Path(tmp) / "kernel"
+        for rel in files:
+            path = kdir / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("\n", encoding="utf-8")
+        got = kernel_loose_files(kdir)
+    expected = ["entry.S", "errno.c", "errno.h"]
+    if got != expected:
+        return [f"[kernel-loose-files] self-test: expected {expected}, "
+                f"got {got}"]
+    return []
+
+
+def check_kernel_loose_files():
+    """kernel/main.c is the only source file directly under kernel/."""
+    errors = _kernel_loose_self_test()
+    for name in kernel_loose_files(ROOT / "kernel"):
+        errors.append(
+            f"[kernel-loose-files] kernel/{name}: kernel/ keeps one loose "
+            "file, kernel/main.c; move it to its kernel/<responsibility>/ "
+            "subdirectory, lib/ or its owner subsystem "
+            "(rules/ir0-source-layout.md)")
+    return errors
+
+
+# Documentation/ai_driven_dev/rules-digest.md summarizes every rule file: one
+# "### <file name>" section per file in rules/, and every section names an
+# existing rule file. Keeps the digest from going stale. No ledger.
+RULES_DIR = Path("Documentation/ai_driven_dev/rules")
+RULES_DIGEST = Path("Documentation/ai_driven_dev/rules-digest.md")
+RULES_DIGEST_HEADING_RE = re.compile(r"^### (\S+)[ \t]*$", re.M)
+
+
+def rules_digest_errors(rules_dir: Path, digest: Path) -> list[str]:
+    """Compare the rule files in @rules_dir with the sections of @digest."""
+    rule_names = ({p.name for p in rules_dir.iterdir() if p.is_file()}
+                  if rules_dir.is_dir() else set())
+    if not digest.is_file():
+        return [f"[rules-digest] {RULES_DIGEST}: digest is missing"]
+    sections = RULES_DIGEST_HEADING_RE.findall(
+        digest.read_text(encoding="utf-8"))
+    errors = []
+    for name in sorted(rule_names - set(sections)):
+        errors.append(
+            f"[rules-digest] {RULES_DIGEST}: no '### {name}' section for "
+            f"{RULES_DIR}/{name}")
+    for name in sorted(set(sections) - rule_names):
+        errors.append(
+            f"[rules-digest] {RULES_DIGEST}: section '### {name}' names no "
+            f"file in {RULES_DIR}/")
+    for name in sorted({n for n in sections if sections.count(n) > 1}):
+        errors.append(
+            f"[rules-digest] {RULES_DIGEST}: duplicate section '### {name}'")
+    return errors
+
+
+def _rules_digest_self_test() -> list[str]:
+    """Inject a rule without a section, a section without a rule and a
+    duplicate section; the check must report exactly those, and accept the
+    consistent tree."""
+    with tempfile.TemporaryDirectory(prefix="ir0-rdigest-") as tmp:
+        rules = Path(tmp) / "rules"
+        rules.mkdir()
+        digest = Path(tmp) / "rules-digest.md"
+        for name in ("a.md", "b.mdc"):
+            (rules / name).write_text("x\n", encoding="utf-8")
+        digest.write_text("### a.md\n- x\n### b.mdc\n- x\n",
+                          encoding="utf-8")
+        clean = rules_digest_errors(rules, digest)
+        (rules / "new.md").write_text("x\n", encoding="utf-8")
+        digest.write_text("### a.md\n### a.md\n### b.mdc\n### gone.md\n",
+                          encoding="utf-8")
+        bad = rules_digest_errors(rules, digest)
+    errors = []
+    if clean:
+        errors.append(f"[rules-digest] self-test: consistent tree "
+                      f"reported {clean}")
+    wanted = ("no '### new.md'", "names no file", "duplicate section")
+    for needle in wanted:
+        if not any(needle in e for e in bad):
+            errors.append(f"[rules-digest] self-test: missed '{needle}'")
+    return errors
+
+
+def check_rules_digest():
+    """Every rules/ file has a digest section and every section a file."""
+    return _rules_digest_self_test() + rules_digest_errors(
+        ROOT / RULES_DIR, ROOT / RULES_DIGEST)
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3213,7 +3585,8 @@ def check_retired_mm_headers():
 # line fails the guard instead of being ignored.
 RETIRED_API_LEDGER = ROOT / "scripts" / "retired_api_names.txt"
 RETIRED_API_TREES = ("arch", "block", "drivers", "fs", "includes", "ipc",
-                     "kernel", "ktm", "mm", "net", "sched", "smp", "sound")
+                     "kernel", "ktm", "lib", "mm", "net", "sched", "smp",
+                     "sound")
 _RETIRED_API_LINE_RE = re.compile(r"^([A-Za-z_]\w*)\s+(\S.*)$")
 
 
@@ -3548,13 +3921,28 @@ def self_test_include_layout() -> list[str]:
     return failures
 
 
+# Debt ledgers: reviewed exceptions that only shrink. The SMP entry gate
+# (scripts/smp_entry_gate.py) needs every one of them empty. Files count
+# their non-comment lines; in-module ledgers count their entries.
+# RETIRED_API_LEDGER is not debt: it is the deny-list of retired names and
+# never empties.
+DEBT_LEDGER_FILES = (REGISTER_NAME_BASELINE, UNDEFINED_PROTOTYPE_LEDGER)
+DEBT_LEDGER_SETS = {
+    "RAW_ATOMIC_LEDGER": RAW_ATOMIC_LEDGER,
+    "INCLUDE_LAYOUT_BASELINE": INCLUDE_LAYOUT_BASELINE,
+}
+
+
 def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
                     _register_name_self_test() + _uaccess_self_test() +
                     _raw_atomic_self_test() +
                     _undefined_prototype_self_test() +
-                    _legacy_pc_self_test())
+                    _legacy_pc_self_test() +
+                    _domain_isolation_self_test() +
+                    _kernel_loose_self_test() +
+                    _rules_digest_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3562,7 +3950,8 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics, undefined-prototype, legacy-pc-io)")
+              "no-raw-atomics, undefined-prototype, legacy-pc-io, "
+              "domain-isolation, kernel-loose-files, rules-digest)")
         return 0
 
     errors = []
@@ -3639,6 +4028,9 @@ def main():
     errors.extend(check_no_isa_named_headers())
     errors.extend(check_no_syscall_stubs())
     errors.extend(check_legacy_pc_io())
+    errors.extend(check_domain_isolation())
+    errors.extend(check_kernel_loose_files())
+    errors.extend(check_rules_digest())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
