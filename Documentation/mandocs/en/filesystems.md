@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | vfs, syscalls, drivers |
 | Man page | IR0-filesystems (section 7) |
-| Primary sources | `fs/tmpfs.c`, `fs/ramtab.c`, `fs/devfs.c`, `fs/procfs.c`, `fs/pseudo_fs_registry.c`, `fs/minix_fs.c`, `fs/hostshare_9p.c`, `drivers/virtio/virtio_9p.c`, `includes/ir0/sysfs.h` |
+| Primary sources | `fs/tmpfs/tmpfs.c`, `fs/ramtab.c`, `fs/devfs.c`, `fs/procfs.c`, `fs/pseudo_fs_registry.c`, `fs/minix/minix_fs.c`, `fs/9p/hostshare_9p.c`, `drivers/virtio/virtio_9p.c`, `includes/ir0/sysfs.h` |
 
 ## 1. Overview
 
@@ -28,11 +28,11 @@ See IR0-vfs for the two-stage router diagram.
 
 | Backend | Router | Storage | Key file |
 |---------|--------|---------|----------|
-| minix | VFS mount | Block device (ATA/AHCI) | `fs/minix_fs.c` |
-| fat16 | VFS mount | Block device | `fs/fat16_disk.c` |
+| minix | VFS mount | Block device (ATA/AHCI) | `fs/minix/minix_fs.c` |
+| fat16 | VFS mount | Block device | `fs/fat16/fat16_disk.c` |
 | ext2 | VFS mount (RO) | Block device | EXT2 backend |
-| tmpfs | VFS mount | RAM inode tree | `fs/tmpfs.c` |
-| 9p hostshare | VFS mount | QEMU virtio-9p host dir | `fs/hostshare_9p.c`, `drivers/virtio/virtio_9p.c` |
+| tmpfs | VFS mount | RAM inode tree | `fs/tmpfs/tmpfs.c` |
+| 9p hostshare | VFS mount | QEMU virtio-9p host dir | `fs/9p/hostshare_9p.c`, `drivers/virtio/virtio_9p.c` |
 | procfs | Syscall + registry | Generated kernel text | `fs/procfs.c` |
 | sysfs | Syscall + registry | Kernel/driver state | `includes/ir0/sysfs.h` |
 | devfs | Syscall only | Node ops table | `fs/devfs.c` |

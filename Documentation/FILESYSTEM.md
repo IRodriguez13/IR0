@@ -1,9 +1,9 @@
 # IR0 Filesystem Architecture
 
 > **Last verified:** 2026-10-18  
-> **Source of truth:** `fs/vfs.c`, `fs/tmpfs.c`, `fs/ramtab.c`, `ipc/early_*.c`,
-> `fs/minix_fs.c`,
-> `fs/simplefs.c`, `fs/fat16_*.c`, `fs/ext2_*.c`, `drivers/storage/ahci.c`,
+> **Source of truth:** `fs/vfs.c`, `fs/vfs_mount.c`, `fs/filesystems.c`,
+> `scripts/make/fs.mk`, `fs/tmpfs/`, `fs/minix/`, `fs/simplefs/`, `fs/fat16/`,
+> `fs/ext2/`, `fs/9p/`, `fs/ramtab.c`, `ipc/early_*.c`, `drivers/storage/ahci.c`,
 > `includes/ir0/blockdev.h`, `includes/ir0/bpath.h`,
 > [`EARLY_FOLD.md`](EARLY_FOLD.md), [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
 
@@ -18,12 +18,35 @@ provide concrete operations.
 2. `fs/ramtab.c`: bounded in-memory names used by the staged ARM adapter until a
    VFS mount owns the path (not a `vfs_fstype`). Staged pipe/unix tables live
    in `ipc/`, not here. See [`EARLY_FOLD.md`](EARLY_FOLD.md).
-3. Backend filesystems:
-   - persistent: `minix`, **FAT16** (`fs/fat16_disk.c`), **EXT2 read-only**
-   - in-memory: `tmpfs`, virtual `fat0` (simplefs engine)
+3. Backend filesystems, one directory each (`fs/<name>/`):
+   - on a block device: `minix`, **FAT16** (`fs/fat16/`), **EXT2**
+   - in-memory: `tmpfs` (also `ramfs`), `simplefs`
+   - host share: `9p` (`fs/9p/`)
    - pseudo: `procfs`, `devfs`, `sysfs`, **`/heart`** (`fs/heartfs.c`)
 3. Storage via `ir0_block_*` facade (`includes/ir0/blockdev.h`); ATA and **AHCI**
    register backends (AHCI supports DMA EXT + NCQ FPDMA when CAP/device allow).
+
+## Filesystem registry and isolation
+
+- Each filesystem defines one `struct vfs_fstype` (`minix_fs_type`,
+  `tmpfs_fs_type`, ...) in `fs/<name>/` and registers nothing itself.
+- `scripts/make/fs.mk` lists the filesystems in registration order
+  (`FILESYSTEMS`) and includes `scripts/make/fs/<name>.mk`, which adds the
+  objects and the type under the filesystem's own `CONFIG_ENABLE_FS_*`.
+  The build writes `<generated/filesystems.h>`; `fs/filesystems.c` turns it
+  into `vfs_builtin_filesystems[]`, which `vfs_init()` registers after
+  `proc`. `/proc/filesystems` prints the registered types in that order.
+- A type carries its own `statfs`, `alias` (tmpfs: `ramfs`) and `fs_flags`
+  (`FS_REQUIRES_DEV`, `FS_NOSUID_DEFAULT`); the VFS core never compares
+  filesystem names or tests `CONFIG_ENABLE_FS_*`.
+- Block filesystems resolve their mount source with `lookup_bdev()`: a
+  registered block device by name, or partition *n* of one. A source that is
+  not a block device fails like Linux (`-ENOENT`, `-ENOTBLK`).
+- `make arch-guard` `[domain-isolation]`: a filesystem includes no header of
+  another, uses no symbol another defines and tests no other filesystem's
+  CONFIG symbol; the core tests none.
+- Adding a filesystem: `fs/<name>/`, `scripts/make/fs/<name>.mk`, a Kconfig
+  symbol and an entry in `FILESYSTEMS`.
 
 ## Current Filesystem Set
 
@@ -35,8 +58,10 @@ provide concrete operations.
   `/tmp/` binds `includes/ir0/bpath.h` → `vfs_*`
   (`ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`).
 - `minix`: disk-backed baseline filesystem (rw path audited via vfs-write bundle).
-- `fat16`: on-disk RO mount (`smoke-fat16-mount`) + write path audited
-  (`linux-abi-audit-vfs-write-fat`).
+- `fat16`: FAT16 on any registered block device or partition (ktest
+  `fat16_mount_any_block_device`) + write path audited
+  (`linux-abi-audit-vfs-write-fat`). There is no in-memory FAT16.
+- `simplefs`: in-memory flat store named by the mount source (any string).
 - `ext2`: read-only mount smoke (`smoke-ext2-mount`).
 - GPT partition probe: `smoke-gpt-partition`.
 

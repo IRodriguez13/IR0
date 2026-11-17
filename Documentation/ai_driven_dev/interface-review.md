@@ -689,6 +689,15 @@ sysfs, heartfs, pseudo_fs (2), named_{fifo,socket,symlink,devnode}. Other:
 pipe, eventfd, timerfd, flock, path*, bpath/bpivot, ramtab,
 fd_resource(+_legacy), permissions, chmod, utimens, open_flags, stat_user.
 
+**Status (refactor/fs-isolation):** minix, ext2, fat16, simplefs, tmpfs and
+9p live in `fs/<name>/` and register through the build-selected table
+`vfs_builtin_filesystems[]` (`scripts/make/fs.mk`, `fs/filesystems.c`);
+FAT16 is a block filesystem of its own (the simplefs `fat16mini` fake is
+gone) and resolves sources with `lookup_bdev()`; `/proc/filesystems` comes
+from the registry; `[domain-isolation]` in `make arch-guard` keeps members
+apart. Pseudo filesystems (Q3) and the early-rootfs files (Q1) remain flat.
+The paths below are the pre-move ones.
+
 ### 6.1 Public interface
 
 fs owns about 35 headers in `includes/ir0/`. The large ones:

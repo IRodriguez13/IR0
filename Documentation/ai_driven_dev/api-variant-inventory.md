@@ -259,7 +259,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `devfs_find_node` / `_by_id` / `_by_rdev` | `ir0/devfs.h` | 3 / 5 / 2 | three lookups: KEEP `_by_rdev` (Linux key) and path lookup; `_by_id` is already fenced by a guard |
 | `ensure_devfs_init` (def in `io_syscalls.c`) | `ir0/devfs.h` | 11 | DELETE: lazy-init guard sprinkled over callers; init devfs once at boot |
 | `resource_register_*` / `resource_unregister_*` / `resource_foreach_*` | `ir0/resource_registry.h` | 3-10 | KEEP |
-| fs registration (`vfs_register_fs` + `minix_fs_register`, `tmpfs_register`, `fat16_fs_register`, `ext2_fs_register`, `hostshare_9p_register`, `simplefs_register` + `simplefs_engine_register`) | fs-private headers | — | KEEP `vfs_register_fs`; the per-fs `*_register` wrappers are fine if each only calls it; `simplefs` has two |
+| fs registration (`vfs_register_fs` + `minix_fs_register`, `tmpfs_register`, `fat16_fs_register`, `ext2_fs_register`, `hostshare_9p_register`, `simplefs_register` + `simplefs_engine_register`) | fs-private headers | — | DONE: each filesystem defines one `struct vfs_fstype`; the build-generated `vfs_builtin_filesystems[]` is registered by `vfs_init()`; `vfs_register_fs` is private to `fs/vfs_mount.c` |
 | `register_netdev` / `net_register_protocol` | `ir0/netdevice.h` / `net/net_internal.h` | — | KEEP; protocol registration is private to net/ (NET-3) |
 
 ### 1.10 Console and tty output

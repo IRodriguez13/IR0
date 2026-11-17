@@ -59,12 +59,17 @@ symlink support.
 
 ### Registered block/in-memory drivers (`vfs_init`)
 
-Config-gated registration in `vfs_init()`:
+`vfs_init()` registers `proc`, then `vfs_builtin_filesystems[]`
+(`fs/filesystems.c`), the types the build selected through
+`scripts/make/fs/<name>.mk`, in the order of `FILESYSTEMS` in
+`scripts/make/fs.mk`:
 
-- `minix` — disk-backed root (default in defconfig)
-- `tmpfs` — in-memory tree (also serves `ramfs` alias on mount)
-- `9p` — virtio-9p hostshare (`fs/hostshare_9p.c`)
-- `simplefs`, `fat16` — optional experimental backends
+- `tmpfs` — in-memory tree (`fs/tmpfs/`, alias `ramfs`)
+- `minix` — disk-backed root (`fs/minix/`, default in defconfig)
+- `simplefs` — in-memory flat store (`fs/simplefs/`)
+- `fat16` — FAT16 on a block device or partition (`fs/fat16/`)
+- `ext2` — ext2 on a block device (`fs/ext2/`)
+- `9p` — virtio-9p hostshare (`fs/9p/hostshare_9p.c`)
 
 Pseudo trees (`procfs`, `devfs`, `sysfs`) are **not** full `vfs_fstype` mounts in
 the current tree; they use syscall-side dispatch plus `pseudo_fs_registry.c` for
@@ -196,7 +201,7 @@ diagnostics — acceptable for T0 but not ideal long term.
 | MM | `kmalloc` for mounts and `vfs_file`; ELF loader uses `vfs_read_file` |
 | Process | Per-process `cwd`; fd table; proc-specific `/proc/[pid]/` context |
 | Drivers | devfs ops → block, net, fb, input via facades |
-| Config | `CONFIG_ENABLE_FS_*`, `CONFIG_ROOT_FILESYSTEM`, `CONFIG_ROOT_BLOCK_DEVICE` |
+| Config | `CONFIG_ENABLE_FS_*` (objects and registry in `scripts/make/fs/`), `CONFIG_ROOT_FILESYSTEM`, `CONFIG_ROOT_BLOCK_DEVICE` |
 | Root layout | `kernel/boot/rootfs_base.c` creates `/dev`, `/proc`, … dirs on MINIX via `vfs_mkdir` |
 
 ## 7. Visual maps
@@ -276,7 +281,6 @@ Common failures:
 - Unified VFS registration for proc/dev/sys as true mount types (today: dual router).
 - Full mount namespace per process; bind mounts.
 - Rich permission model (ACLs, default ACLs on tmpfs).
-- `ext2` or other disk FS — hooks exist via `vfs_register_fs`, no production backend yet.
 - Split `kernel/syscalls.c` — new FS logic should land in `fs_syscalls.c` or helpers under `includes/ir0/`.
 - Move VFS diagnostics off `vga.h`/`serial_io.h` to logging facade only.
 

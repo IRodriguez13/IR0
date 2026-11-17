@@ -103,4 +103,12 @@ Criterio del mantenedor para todo el kernel. Complementa
 - `[portable-no-isa-asm]`, `[portable-no-register-names]` y
   `[paging-neutral-root]` cubren mnemónicos, registros y vocabulario x86 en
   código común.
+- `[domain-isolation]`: un dominio es un núcleo más miembros independientes.
+  Hoy `fs/`: cada filesystem vive en `fs/<nombre>/` con su
+  `scripts/make/fs/<nombre>.mk` y no incluye headers de otro, no usa
+  símbolos que otro define ni prueba su `CONFIG_ENABLE_FS_*`; el núcleo VFS
+  (archivos directamente en `fs/`, `scripts/make/fs.mk`) no prueba ningún
+  `CONFIG_ENABLE_FS_*`: los filesystems se registran en
+  `vfs_builtin_filesystems[]`, que arma el build. Sin ledger; auto-test de
+  violación inyectada. `net/` y `drivers/` se suman con un `DomainSpec`.
 - Un hallazgo de layout que no tiene guard es deuda: se anota y se automatiza.

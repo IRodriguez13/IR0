@@ -4,7 +4,7 @@
 > **Build note (2026-10-29):** the `smoke-*` targets quoted below were removed
 > with the legacy QA catalog. Build the kernel with `make ir0`, attach disks with
 > `make run DISK=…`, and pass extra QEMU flags through `IR0_QEMU_EXTRA`.
-> **Source of truth:** `drivers/net/virtio_net.c`, `fs/hostshare_9p.c`,  
+> **Source of truth:** `drivers/net/virtio_net.c`, `fs/9p/hostshare_9p.c`,  
 > `scripts/run_qemu.sh`, [`HOSTSHARE_PRODUCT.md`](HOSTSHARE_PRODUCT.md)
 
 IR0 talks to the host through **legacy virtio-pci** devices in QEMU

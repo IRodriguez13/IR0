@@ -43,7 +43,7 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 - **`IR0_ENABLE_USB`** (`setup/kernel_config.h`): target-profile macro (Desktop/Server/IoT/…) that enables the higher-level USB *driver class* bundle (`IR0_ENABLE_USB_DRIVER`, storage, HID). It does not by itself pull in the host scaffold; use **`CONFIG_ENABLE_USB_HOST`** when you want the kernel to compile and optionally run the host PCI discovery path (`CONFIG_INIT_USB_HOST` controls early init registration).
 
 - Driver init selection (`CONFIG_INIT_*`).
-- Filesystem selection (`CONFIG_ENABLE_FS_*`).
+- Filesystem selection (`CONFIG_ENABLE_FS_*`, read by `scripts/make/fs/<name>.mk`).
 - Scheduler policy (`CONFIG_SCHEDULER_POLICY`).
 - Keyboard layout default (`CONFIG_KEYBOARD_LAYOUT`).
 - Menu language (`CONFIG_TOOL_MENUCONFIG_LANG`).

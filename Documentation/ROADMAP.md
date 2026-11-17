@@ -229,8 +229,9 @@ See version matrix in [`STABLE.md`](STABLE.md). Open Future: [`BACKLOG_REMAINING
 
 ### FAT / block storage
 
-- **0.0.1:** MINIX root, `/dev/hda` read, FAT16 read-only MVP on block (`fs/fat16_disk.c`).
-- **`fat0` virtual mount** still uses simplefs engine (by design).
+- **0.0.1:** MINIX root, `/dev/hda` read, FAT16 read-only MVP on block (`fs/fat16/fat16_disk.c`).
+- FAT16 mounts only block devices (any registered name or partition); the
+  virtual `fat0` mount on the simplefs engine is gone.
 - **Next:** FAT write path, EXT2 read-only, AHCI.
 - **Product direction (2026-09):** MINIX v1 root is a bring-up constraint (14-char names,
   inject pipeline). **STO-*** oleadas in [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
@@ -631,7 +632,7 @@ Kconfig/defconfig/Makefile
 ## Anti-patterns
 
 - Marking COW or lazy alloc “done” without `smoke-mm-cow-lazy` / FASE40 D green.
-- Claiming **FAT16** done because `mount -t fat16` works on **virtual** `fat0`.
+- Claiming **FAT16** done from a mount that is not backed by a FAT image on a block device.
 - Implementing WM/compositor inside `kernel/`.
 - Growing `kernel/syscalls.c` without split plan (`ARCH_DEBT` comment).
 - Claiming “TCP complete” without stream socket syscalls.
