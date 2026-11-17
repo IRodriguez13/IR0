@@ -31,12 +31,23 @@ struct vfs_dirent;
 
 /* struct vfs_ops — see includes/ir0/vfs_backend.h */
 
-/* Filesystem type descriptor — one per FS driver */
+/* vfs_fstype.fs_flags */
+#define FS_NOSUID_DEFAULT 1 /* new mounts start MS_NOSUID (pseudo, in-RAM) */
+
+/*
+ * Filesystem type descriptor — one per FS driver (Linux file_system_type).
+ * @alias:  second type name mount(2) accepts for the same driver, or NULL.
+ * @statfs: statfs(2) for @path on a mount of this type; NULL reports an
+ *          empty filesystem. Called under the fs-op lock.
+ */
 struct vfs_fstype {
     const char *name;
+    const char *alias;
+    int fs_flags;
     struct vfs_ops *ops;
     int (*mount)(const char *dev, const char *dir);
     int (*umount)(const char *dir);
+    int (*statfs)(const char *path, struct ir0_statfs *buf);
     struct vfs_fstype *next;
 };
 

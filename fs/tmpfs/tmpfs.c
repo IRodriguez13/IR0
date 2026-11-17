@@ -391,11 +391,15 @@ static struct vfs_ops tmpfs_fs_ops = {
     .truncate = tmpfs_truncate,
 };
 
+/* ramfs is an alias of tmpfs: the same in-memory driver under both names. */
 static struct vfs_fstype tmpfs_fs_type = {
     .name  = "tmpfs",
+    .alias = "ramfs",
+    .fs_flags = FS_NOSUID_DEFAULT,
     .ops   = &tmpfs_fs_ops,
     .mount = tmpfs_mount,
     .umount = tmpfs_umount,
+    .statfs = tmpfs_statfs,
     .next  = NULL,
 };
 

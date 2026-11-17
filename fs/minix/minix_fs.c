@@ -667,6 +667,7 @@ int minix_fs_register(void)
 	minix_fs_type.name  = "minix";
 	minix_fs_type.ops   = &minix_fs_ops;
 	minix_fs_type.mount = minix_mount;
+	minix_fs_type.statfs = minix_fs_statfs;
 	minix_fs_type.next  = NULL;
 	return vfs_register_fs(&minix_fs_type);
 }

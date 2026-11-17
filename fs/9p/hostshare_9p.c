@@ -312,11 +312,44 @@ static int hs_umount(const char *dir)
 	return 0;
 }
 
+static int hs_statfs(const char *path, struct ir0_statfs *buf)
+{
+	struct virtio_9p_statfs h;
+
+	(void)path;
+	buf->f_type = IR0_9P_MAGIC;
+	buf->f_bsize = 4096;
+	buf->f_frsize = 4096;
+	buf->f_blocks = 0;
+	buf->f_bfree = 0;
+	buf->f_bavail = 0;
+	buf->f_namelen = 255;
+
+	/*
+	 * Ask the host. Falling back to the zeros above keeps df working
+	 * against a server without Tstatfs instead of failing the whole call.
+	 */
+	if (virtio_9p_statfs(&h) == 0 && h.bsize != 0)
+	{
+		buf->f_bsize = h.bsize;
+		buf->f_frsize = h.bsize;
+		buf->f_blocks = h.blocks;
+		buf->f_bfree = h.bfree;
+		buf->f_bavail = h.bavail;
+		buf->f_files = h.files;
+		buf->f_ffree = h.ffree;
+		if (h.namelen)
+			buf->f_namelen = h.namelen;
+	}
+	return 0;
+}
+
 static struct vfs_fstype hs_fstype = {
 	.name = "9p",
 	.ops = &hs_ops,
 	.mount = hs_mount,
 	.umount = hs_umount,
+	.statfs = hs_statfs,
 	.next = NULL,
 };
 

@@ -35,7 +35,6 @@
 #include <ir0/blockdev.h>
 #include <ir0/klog.h>
 #include <ir0/statfs.h>
-#include <ir0/virtio_9p.h>
 #include <ir0/process.h>
 #include <string.h>
 #include "vfs_internal.h"
@@ -100,19 +99,9 @@ int vfs_path_allows_setid(const char *path)
     return 1;
 }
 
-static unsigned long vfs_default_mount_flags(const char *mount_path,
-                                             const char *fstype)
+static unsigned long vfs_default_mount_flags(const struct vfs_fstype *ft)
 {
-    (void)mount_path;
-
-    if (!fstype)
-        return IR0_MS_NOSUID;
-
-    if (strcmp(fstype, "proc") == 0 || strcmp(fstype, "sysfs") == 0 ||
-        strcmp(fstype, "tmpfs") == 0 || strcmp(fstype, "ramfs") == 0)
-        return IR0_MS_NOSUID;
-
-    return 0;
+    return (ft->fs_flags & FS_NOSUID_DEFAULT) ? IR0_MS_NOSUID : 0;
 }
 
 static void normalize_mount_path(const char *in, char *out, size_t out_sz)
@@ -153,6 +142,7 @@ static int proc_fs_umount(const char *dir)
 
 static struct vfs_fstype proc_fs_type = {
     .name   = "proc",
+    .fs_flags = FS_NOSUID_DEFAULT,
     .ops    = NULL,
     .mount  = proc_fs_mount,
     .umount = proc_fs_umount,
@@ -228,10 +218,19 @@ int vfs_sync(void)
     return 0;
 }
 
+static struct vfs_fstype *vfs_find_fstype(const char *name)
+{
+    for (struct vfs_fstype *t = fs_types; t; t = t->next) {
+        if (strcmp(t->name, name) == 0 ||
+            (t->alias && strcmp(t->alias, name) == 0))
+            return t;
+    }
+    return NULL;
+}
+
 int vfs_mount(const char *dev, const char *path, const char *fstype)
 {
     char mount_path[MAX_PATH];
-    const char *resolved_fstype = fstype;
 
     if (!fstype || !path)
         return -EINVAL;
@@ -244,18 +243,8 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     normalize_mount_path(path, mount_path, sizeof(mount_path));
 
-    /* ramfs is intentionally an alias of tmpfs in IR0 runtime mounts. */
-    if (strcmp(resolved_fstype, "ramfs") == 0)
-        resolved_fstype = "tmpfs";
-
     /* Linux do_new_mount(): an unknown type is -ENODEV before anything else. */
-    struct vfs_fstype *ft = NULL;
-    for (struct vfs_fstype *t = fs_types; t; t = t->next) {
-        if (strcmp(t->name, resolved_fstype) == 0) {
-            ft = t;
-            break;
-        }
-    }
+    struct vfs_fstype *ft = vfs_find_fstype(fstype);
     if (!ft)
         return -ENODEV;
 
@@ -280,7 +269,7 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
         m->dev[0] = '\0';
     }
     m->fs = ft;
-    m->flags = vfs_default_mount_flags(mount_path, resolved_fstype);
+    m->flags = vfs_default_mount_flags(ft);
     m->next = mounts;
 
     ret = ft->mount(dev, mount_path);
@@ -578,7 +567,6 @@ int vfs_init_root(void)
 int vfs_statfs(const char *path, struct ir0_statfs *buf)
 {
 	struct vfs_mount *m;
-	const char *fst;
 	int ret;
 
 	if (!path || !buf)
@@ -629,62 +617,15 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 		return -ENODEV;
 
 	memset(buf, 0, sizeof(*buf));
-	fst = m->fs->name;
-
-#if CONFIG_ENABLE_FS_MINIX
-	if (strcmp(fst, "minix") == 0)
+	if (m->fs->statfs)
 	{
-		int rc;
-
 		vfs_fs_op_acquire();
-		rc = minix_fs_statfs(buf);
+		ret = m->fs->statfs(path, buf);
 		vfs_fs_op_release();
-		return rc;
+		return ret;
 	}
-#endif
-#if CONFIG_ENABLE_FS_TMPFS
-	if (strcmp(fst, "tmpfs") == 0)
-	{
-		int rc;
 
-		vfs_fs_op_acquire();
-		rc = tmpfs_statfs(path, buf);
-		vfs_fs_op_release();
-		return rc;
-	}
-	if (strcmp(fst, "9p") == 0)
-	{
-		struct virtio_9p_statfs h;
-
-		buf->f_type = IR0_9P_MAGIC;
-		buf->f_bsize = 4096;
-		buf->f_frsize = 4096;
-		buf->f_blocks = 0;
-		buf->f_bfree = 0;
-		buf->f_bavail = 0;
-		buf->f_namelen = 255;
-
-		/*
-		 * Ask the host. Falling back to the zeros above keeps df
-		 * working against a server without Tstatfs instead of failing
-		 * the whole call.
-		 */
-		if (virtio_9p_statfs(&h) == 0 && h.bsize != 0)
-		{
-			buf->f_bsize = h.bsize;
-			buf->f_frsize = h.bsize;
-			buf->f_blocks = h.blocks;
-			buf->f_bfree = h.bfree;
-			buf->f_bavail = h.bavail;
-			buf->f_files = h.files;
-			buf->f_ffree = h.ffree;
-			if (h.namelen)
-				buf->f_namelen = h.namelen;
-		}
-		return 0;
-	}
-#endif
-	/* Unknown FS: honest empty stats (df skips f_blocks==0 unless -a). */
+	/* No statfs: honest empty stats (df skips f_blocks==0 unless -a). */
 	buf->f_bsize = 1024;
 	buf->f_frsize = 1024;
 	buf->f_namelen = 255;

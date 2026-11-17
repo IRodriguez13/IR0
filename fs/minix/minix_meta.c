@@ -9,7 +9,7 @@
 
 #include "minix_fs_internal.h"
 
-int minix_fs_statfs(struct ir0_statfs *buf)
+int minix_fs_statfs(const char *path, struct ir0_statfs *buf)
 {
 	uint32_t first;
 	uint32_t limit;
@@ -17,6 +17,8 @@ int minix_fs_statfs(struct ir0_statfs *buf)
 	uint32_t free_z = 0;
 	uint32_t free_i = 0;
 	uint32_t i;
+
+	(void)path;
 
 	if (!buf)
 		return -EINVAL;
