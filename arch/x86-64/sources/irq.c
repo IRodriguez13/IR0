@@ -38,8 +38,3 @@ void irq_unmask_line(unsigned irq)
 	if (irq < 16)
 		pic_unmask_irq((uint8_t)irq);
 }
-
-void irq_keyboard_poll_ps2(void)
-{
-	keyboard_poll_ps2();
-}

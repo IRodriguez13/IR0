@@ -7,82 +7,37 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: input_backend.c
- * Description: Input backend — mouse (PS/2) + keyboard buffer facade.
+ * Description: Input facade — forwards to the registered keyboard and mouse drivers.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/input_backend.h>
-#include <config.h>
-#include <ir0/driver_backend.h>
-#if CONFIG_ENABLE_MOUSE
-#include <ir0/ps2_mouse.h>
-#endif
-#include <ir0/irq.h>
 #include <ir0/poll.h>
-#include <ir0/keyboard.h>
+#include <stddef.h>
 
-#if !IR0_LEGACY_PC_IO
 /*
- * PS/2 keyboard path is legacy-PC only; virtio-input and other boards wire separately.
- * Stubs keep the input_backend TU linkable on non-legacy backends.
+ * The keyboard and mouse drivers a platform has register here. While none is
+ * registered the facade reports no device: no keys, no mouse, no layouts.
  */
-char keyboard_buffer_get(void)
+static const struct input_keyboard_ops *keyboard;
+static const struct input_mouse_ops *mouse;
+
+void input_register_keyboard(const struct input_keyboard_ops *ops)
 {
-	return 0;
+	keyboard = ops;
 }
 
-int keyboard_buffer_has_data(void)
+void input_register_mouse(const struct input_mouse_ops *ops)
 {
-	return 0;
+	mouse = ops;
 }
-
-void keyboard_buffer_clear(void)
-{
-}
-
-void keyboard_all_keys_up(void)
-{
-}
-
-int keyboard_set_layout(int layout)
-{
-	(void)layout;
-	return -1;
-}
-
-int keyboard_get_layout(void)
-{
-	return 0;
-}
-
-const char *keyboard_get_layout_name(int layout)
-{
-	(void)layout;
-	return "";
-}
-
-int keyboard_set_console_mode(int mode)
-{
-	(void)mode;
-	return -1;
-}
-
-int keyboard_get_console_mode(void)
-{
-	return 0;
-}
-#endif /* x86-64 implements <ir0/keyboard.h> in interrupt/keyboard.c */
 
 void input_mouse_feed_byte(uint8_t data)
 {
-#if !IR0_LEGACY_PC_IO
-	(void)data;
-#elif CONFIG_ENABLE_MOUSE
-	ps2_mouse_feed_byte(data);
-#else
-	(void)data; /* Discard AUX while mouse driver is disabled. */
-#endif
+	/* Without a mouse driver the AUX byte is discarded. */
+	if (mouse)
+		mouse->feed_byte(data);
 }
 
 void input_mouse_handle_interrupt(void)
@@ -96,142 +51,84 @@ void input_mouse_handle_interrupt(void)
 
 bool input_mouse_is_available(void)
 {
-#if !IR0_LEGACY_PC_IO
-	return false;
-#elif CONFIG_ENABLE_MOUSE
-	return ps2_mouse_is_available();
-#else
-	return false;
-#endif
+	return mouse && mouse->is_available();
 }
 
 bool input_mouse_get_state(ir0_mouse_state_t *out)
 {
-	if (!out)
+	if (!out || !mouse)
 		return false;
-#if !IR0_LEGACY_PC_IO
-	return false;
-#elif CONFIG_ENABLE_MOUSE
-	if (!ps2_mouse_is_available())
-		return false;
-	{
-		ps2_mouse_state_t *st = ps2_mouse_get_state();
-		if (!st)
-			return false;
-		out->x = st->x;
-		out->y = st->y;
-		out->wheel = st->wheel;
-		out->left_button = st->left_button;
-		out->right_button = st->right_button;
-		out->middle_button = st->middle_button;
-		out->button4 = st->button4;
-		out->button5 = st->button5;
-		out->has_wheel = st->has_wheel;
-		out->has_5buttons = st->has_5buttons;
-		out->resolution = st->resolution;
-		out->sample_rate = st->sample_rate;
-		out->type = (uint8_t)st->type;
-		out->initialized = st->initialized;
-	}
-	return true;
-#else
-	return false;
-#endif
+	return mouse->get_state(out);
 }
 
 bool input_mouse_set_sensitivity(uint8_t sensitivity)
 {
-#if !IR0_LEGACY_PC_IO
-	(void)sensitivity;
-	return false;
-#elif CONFIG_ENABLE_MOUSE
-	return ps2_mouse_set_sample_rate(sensitivity);
-#else
-	(void)sensitivity;
-	return false;
-#endif
+	return mouse && mouse->set_sample_rate(sensitivity);
 }
 
 bool input_mouse_packet_available(void)
 {
-#if !IR0_LEGACY_PC_IO
-	return false;
-#elif CONFIG_ENABLE_MOUSE
-	return ps2_mouse_packet_available();
-#else
-	return false;
-#endif
+	return mouse && mouse->packet_available();
 }
 
 int input_mouse_read_ps2(uint8_t packet[3])
 {
-#if !IR0_LEGACY_PC_IO
-	(void)packet;
-	return 0;
-#elif CONFIG_ENABLE_MOUSE
-	ps2_mouse_packet_t source;
-
-	if (!packet || !ps2_mouse_packet_available() ||
-	    !ps2_mouse_read_packet(&source))
+	if (!packet || !mouse)
 		return 0;
-	packet[0] = (uint8_t)(source.flags | 0x08u);
-	packet[1] = (uint8_t)source.delta_x;
-	packet[2] = (uint8_t)source.delta_y;
-	return 3;
-#else
-	(void)packet;
-	return 0;
-#endif
+	return mouse->read_packet(packet);
 }
 
 char input_kbd_get(void)
 {
-	return keyboard_buffer_get();
+	return keyboard ? keyboard->get() : 0;
 }
 
 int input_kbd_has_data(void)
 {
-	return keyboard_buffer_has_data();
+	return keyboard ? keyboard->has_data() : 0;
 }
 
 void input_kbd_clear(void)
 {
-	keyboard_buffer_clear();
+	if (keyboard)
+		keyboard->clear();
 }
 
 void input_kbd_resync_modifiers(void)
 {
-	keyboard_all_keys_up();
+	if (keyboard)
+		keyboard->all_keys_up();
 }
 
 void input_kbd_poll_ps2(void)
 {
-	irq_keyboard_poll_ps2();
+	if (keyboard)
+		keyboard->poll();
 }
 
 int input_kbd_set_layout(int layout)
 {
-	return keyboard_set_layout(layout);
+	return keyboard ? keyboard->set_layout(layout) : -1;
 }
 
 int input_kbd_get_layout(void)
 {
-	return keyboard_get_layout();
+	return keyboard ? keyboard->get_layout() : IR0_KBD_LAYOUT_US;
 }
 
 const char *input_kbd_get_layout_name(int layout)
 {
-	return keyboard_get_layout_name(layout);
+	return keyboard ? keyboard->get_layout_name(layout) : "";
 }
 
 int input_kbd_set_console_mode(int mode)
 {
-	return keyboard_set_console_mode(mode);
+	return keyboard ? keyboard->set_console_mode(mode) : -1;
 }
 
 int input_kbd_get_console_mode(void)
 {
-	return keyboard_get_console_mode();
+	return keyboard ? keyboard->get_console_mode() : IR0_INPUT_KBD_XLATE;
 }
 
 void input_kbd_wake_readers(void)

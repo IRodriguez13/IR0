@@ -16,7 +16,6 @@ typedef void (*ir0_irq_fn)(uint32_t irq, void *data);
 void irq_tables_init(void);
 void irq_controller_init(void);
 void irq_keyboard_init(void);
-void irq_keyboard_poll_ps2(void);
 void irq_unmask_line(unsigned irq);
 void irq_init(void);
 int irq_hw_enable(uint32_t irq);

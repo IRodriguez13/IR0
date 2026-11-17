@@ -37,7 +37,3 @@ void irq_unmask_line(unsigned irq)
 {
 	(void)arm64_irq_backend_enable((uint32_t)irq);
 }
-
-void irq_keyboard_poll_ps2(void)
-{
-}

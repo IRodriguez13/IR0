@@ -416,8 +416,22 @@ int keyboard_get_console_mode(void)
 	return console_keyboard_mode;
 }
 
+static const struct input_keyboard_ops i8042_keyboard_ops = {
+	.get = keyboard_buffer_get,
+	.has_data = keyboard_buffer_has_data,
+	.clear = keyboard_buffer_clear,
+	.all_keys_up = keyboard_all_keys_up,
+	.poll = keyboard_poll_ps2,
+	.set_layout = keyboard_set_layout,
+	.get_layout = keyboard_get_layout,
+	.get_layout_name = keyboard_get_layout_name,
+	.set_console_mode = keyboard_set_console_mode,
+	.get_console_mode = keyboard_get_console_mode,
+};
+
 void keyboard_init(void)
 {
+	input_register_keyboard(&i8042_keyboard_ops);
 	keyboard_buffer_head = 0;
 	keyboard_buffer_tail = 0;
 	ps2_set1_reset(&kbd_state);
