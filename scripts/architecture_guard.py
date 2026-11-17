@@ -70,6 +70,10 @@ Checks:
     symbol and includes no member header. New domains (net/ protocols,
     drivers/ classes) are one DomainSpec. No ledger; injected-violation
     self-test.
+32) kernel/ keeps one loose file: kernel/main.c is the only .c/.h/.S/.asm
+    directly under kernel/; everything else lives in a kernel/<responsibility>/
+    subdirectory, lib/ or its owner subsystem. No ledger; injected-violation
+    self-test.
 """
 
 from functools import lru_cache
@@ -3403,6 +3407,54 @@ def check_domain_isolation():
     return errors
 
 
+# kernel/ holds subdirectories by responsibility plus one loose file,
+# kernel/main.c (kmain(), the boot order). Any other source directly under
+# kernel/ belongs to a subdirectory, lib/ or its owner subsystem. No ledger.
+KERNEL_LOOSE_ALLOWED = frozenset({"main.c"})
+KERNEL_LOOSE_SUFFIXES = (".c", ".h", ".S", ".asm")
+
+
+def kernel_loose_files(kernel_dir: Path) -> list[str]:
+    """Return the names of source files directly in @kernel_dir that are not
+    the allowed loose file."""
+    if not kernel_dir.is_dir():
+        return []
+    return sorted(p.name for p in kernel_dir.iterdir()
+                  if p.is_file() and p.suffix in KERNEL_LOOSE_SUFFIXES
+                  and p.name not in KERNEL_LOOSE_ALLOWED)
+
+
+def _kernel_loose_self_test() -> list[str]:
+    """Inject loose files next to main.c; the scanner must report exactly
+    those, and nothing in subdirectories or build output."""
+    files = ("main.c", "errno.c", "errno.h", "entry.S", "main.o", "main.d",
+             "boot/boot_init.c", "sys/utsname.c")
+    with tempfile.TemporaryDirectory(prefix="ir0-kloose-") as tmp:
+        kdir = Path(tmp) / "kernel"
+        for rel in files:
+            path = kdir / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("\n", encoding="utf-8")
+        got = kernel_loose_files(kdir)
+    expected = ["entry.S", "errno.c", "errno.h"]
+    if got != expected:
+        return [f"[kernel-loose-files] self-test: expected {expected}, "
+                f"got {got}"]
+    return []
+
+
+def check_kernel_loose_files():
+    """kernel/main.c is the only source file directly under kernel/."""
+    errors = _kernel_loose_self_test()
+    for name in kernel_loose_files(ROOT / "kernel"):
+        errors.append(
+            f"[kernel-loose-files] kernel/{name}: kernel/ keeps one loose "
+            "file, kernel/main.c; move it to its kernel/<responsibility>/ "
+            "subdirectory, lib/ or its owner subsystem "
+            "(rules/ir0-source-layout.md)")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3808,7 +3860,8 @@ def main():
                     _raw_atomic_self_test() +
                     _undefined_prototype_self_test() +
                     _legacy_pc_self_test() +
-                    _domain_isolation_self_test())
+                    _domain_isolation_self_test() +
+                    _kernel_loose_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3817,7 +3870,7 @@ def main():
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
               "no-raw-atomics, undefined-prototype, legacy-pc-io, "
-              "domain-isolation)")
+              "domain-isolation, kernel-loose-files)")
         return 0
 
     errors = []
@@ -3895,6 +3948,7 @@ def main():
     errors.extend(check_no_syscall_stubs())
     errors.extend(check_legacy_pc_io())
     errors.extend(check_domain_isolation())
+    errors.extend(check_kernel_loose_files())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
