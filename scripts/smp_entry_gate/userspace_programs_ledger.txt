@@ -2,9 +2,6 @@
 # Reviewed false positives of userspace_programs.txt: "<path> <name>  # why".
 # An entry covers every hit of <name> in <path>; an entry with no hit left
 # is stale and fails the gate, so the ledger only shrinks.
-arch/x86-64/include/uapi/asm/unistd_ir0.h sudo  # notes the retired sudo_auth syscall number
-arch/x86-64/include/uapi/asm/unistd_ir0.h doas  # same retirement note
 ktm/event_ring.c ping  # "ping-pongs": a BLOCK/WAKE pattern, not the program
 sound/sound_blaster.c ping  # "ping-pong" DMA buffers
-net/icmp.c ping  # ICMP echo terminology (Linux: ping sockets)
-net/ip.c ping  # ICMP echo reply terminology
+drivers/video/console_renderer.c xterm  # cites the "xterm ctlseqs" standard for DECSET 1049
