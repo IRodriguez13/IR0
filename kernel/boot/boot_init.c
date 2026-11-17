@@ -32,9 +32,7 @@
 #include <ir0/clock.h>
 #include <ir0/init_drv.h>
 #include <ir0/blockdev.h>
-#if CONFIG_ENABLE_SOUND
-#include <ir0/sound_blaster.h>
-#endif
+#include <ir0/audio_backend.h>
 #include <ir0/video_backend.h>
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
@@ -231,10 +229,7 @@ void boot_runtime(void)
 	irq_init();
 	ir0_boot_port_unmask_irqs();
 	enable_interrupts();
-#if CONFIG_ENABLE_SOUND
-	if (sb16_is_available())
-		sb16_post_irq_selftest();
-#endif
+	audio_backend_post_irq_selftest();
 #if DEBUG_BOOT
 	log_info("BOOT", "Interrupts enabled globally (sti)");
 #endif

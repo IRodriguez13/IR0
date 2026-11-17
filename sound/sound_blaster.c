@@ -27,6 +27,7 @@
 #include <ir0/resource_registry.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/irq.h>
+#include <ir0/audio_backend.h>
 
 static void sb16_shutdown(void);
 static bool sb16_reset_dsp(void);
@@ -82,9 +83,25 @@ static ir0_driver_info_t sb16_info = {
 /**
  * sb16_init - register Sound Blaster 16 driver
  */
+static uint8_t sb16_get_master_volume(void)
+{
+    return sb16_mixer_read(SB16_MIXER_MASTER_VOL);
+}
+
+static const struct audio_ops sb16_audio_ops = {
+    .is_available = sb16_is_available,
+    .play_pcm = sb16_play_pcm,
+    .set_master_volume = sb16_set_master_volume,
+    .get_master_volume = sb16_get_master_volume,
+    .speaker_on = sb16_speaker_on,
+    .speaker_off = sb16_speaker_off,
+    .post_irq_selftest = sb16_post_irq_selftest,
+};
+
 bool sb16_init(void)
 {
     LOG_INFO("SB16", "Registering Sound Blaster 16 driver...");
+    audio_register_device(&sb16_audio_ops);
     ir0_register_driver(&sb16_info, &sb16_ops);
     return true;
 }
