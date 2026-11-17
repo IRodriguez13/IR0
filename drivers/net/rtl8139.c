@@ -848,7 +848,8 @@ static void rtl8139_process_rx_packets(void)
     /*
      * Hardware write cursor is CBR (I/O 0x3A), not rx_buffer+0x10.
      * Reading the ring as a write ptr desyncs CAPR under load → RxOverflow
-     * and RX stays wedged (TX still works; ping/wget die after stress).
+     * and RX stays wedged (TX still works; nothing is received after
+     * sustained traffic).
      * Spec: Realtek RTL8139 programming guide / datasheet CBR/CAPR.
      */
     uint16_t current_write = inw(rtl8139_io_base + RTL8139_REG_CBR);

@@ -132,10 +132,10 @@ struct audio_format {
 #define MOUSE_GET_STATE     0x2001
 #define MOUSE_SET_SENSITIVITY 0x2002
 
-#define NET_SEND_PING       0x3001
+#define NET_SEND_ECHO       0x3001
 #define NET_GET_CONFIG      0x3002
 #define NET_SET_CONFIG      0x3003
-#define NET_GET_PING_RESULT 0x3004
+#define NET_GET_ECHO_RESULT 0x3004
 
 #define DISK_READ_SECTOR    0x4001
 #define DISK_WRITE_SECTOR   0x4002

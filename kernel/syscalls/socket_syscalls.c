@@ -1873,9 +1873,11 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 		if (level == IPPROTO_IP && optname == IP_MULTICAST_IF)
 		{
 			/*
-			 * BusyBox ping -I <addr> passes sockaddr_in (16B). Linux
-			 * treats optlen>=12 as ip_mreqn; imr_address sits at
-			 * offset 4 — same as sin_addr in sockaddr_in.
+			 * ip(7) IP_MULTICAST_IF takes struct in_addr (4 bytes),
+			 * ip_mreq (8) or ip_mreqn (12); from 8 bytes up the
+			 * address sits at offset 4, as sin_addr does in a
+			 * 16-byte sockaddr_in. IR0 applies it as the socket's
+			 * source address; Linux uses it for multicast only.
 			 */
 			uint8_t buf[16];
 			uint32_t addr = 0;
@@ -1904,8 +1906,8 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 			if (!optval || optlen == 0)
 				return sock_icmp_set_bind_device(icmp, NULL, 0);
 			/*
-			 * Linux accepts a C string or struct ifreq (name at offset 0).
-			 * BusyBox setsockopt_bindtodevice() passes sizeof(ifreq).
+			 * Linux accepts a C string or struct ifreq (name at offset 0),
+			 * so optlen may be IFNAMSIZ or sizeof(struct ifreq).
 			 */
 			n = optlen;
 			if (n > sizeof(name))

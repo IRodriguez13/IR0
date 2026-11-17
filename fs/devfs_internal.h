@@ -118,7 +118,7 @@ void devfs_input_init(void);
 int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
 int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
 int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
-int dev_net_pid_has_ready_ping(pid_t pid);
+int dev_net_pid_has_echo_result(pid_t pid);
 void devfs_register_disk_topology(void);
 
 pid_t devfs_current_pid(void);

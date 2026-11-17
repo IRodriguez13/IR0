@@ -25,7 +25,7 @@
 /* ICMP Protocol registration */
 static struct net_protocol icmp_proto;
 
-/* ICMP Echo tracking: track pending ping requests to match replies */
+/* ICMP Echo tracking: track pending echo requests to match replies */
 struct icmp_pending_echo {
     uint16_t id;
     uint16_t seq;
@@ -143,7 +143,7 @@ static uint16_t icmp_checksum(const void *data, size_t len)
  * ICMP (Internet Control Message Protocol) is used for error reporting and
  * network diagnostics. Common ICMP message types include:
  *
- *   - Echo Request/Reply (ping): Network connectivity testing
+ *   - Echo Request/Reply: Network connectivity testing
  *   - Destination Unreachable: Routing errors, host unreachable
  *   - Time Exceeded: TTL expired (traceroute uses this)
  *
@@ -207,7 +207,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
                  (int)type, (int)code);
 
     /*
-     * Deliver to SOCK_RAW IPPROTO_ICMP sockets (BusyBox ping). Skip echo
+     * Deliver to SOCK_RAW IPPROTO_ICMP sockets (raw(7)). Skip echo
      * requests: the kernel auto-replies and userspace did not send them.
      */
     if (type != ICMP_TYPE_ECHO_REQUEST)
@@ -219,17 +219,16 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
     {
         case ICMP_TYPE_ECHO_REQUEST:
         {
-            /* Echo Request (ping request): respond with Echo Reply (ping reply).
-             * The Echo Request/Reply mechanism is used by the ping utility to
-             * test network connectivity. We copy the entire packet (including
+            /* Echo Request: respond with Echo Reply (RFC 792). We copy the
+             * entire packet (including
              * any payload data), change the type to Echo Reply, recalculate
              * the checksum, and send it back to the source.
              */
             LOG_INFO("ICMP", "Echo Request received, sending Echo Reply");
 
             /* Allocate buffer for reply. We use the same length as the request
-             * to preserve any payload data (ping often includes timestamps or
-             * other data in the payload for round-trip time calculation).
+             * to preserve any payload data (RFC 792: the reply returns the
+             * request's data unchanged, often a timestamp for the RTT).
              */
             size_t reply_len = len;
             if (reply_len > 1500)
@@ -320,12 +319,12 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
                     echo->payload_bytes = payload_bytes;
                     echo->reply_ip = src_ip;
                     
-                    /* Log the ping response with Linux-style format for serial debugging */
+                    /* Log the echo reply in the usual "bytes from" format for serial debugging */
                     /* Note: VGA output should be handled by dbgshell/userspace, not by ICMP layer */
                     LOG_INFO_FMT("ICMP", "%d bytes from " IP4_FMT ": icmp_seq=%d ttl=%d time=%d ms",
                                 (int)payload_bytes, IP4_ARGS(ntohl(src_ip)), (int)seq, (int)ttl, (int)rtt);
                     
-                    /* Keep it pending until userspace consumes via NET_GET_PING_RESULT. */
+                    /* Keep it pending until userspace consumes via NET_GET_ECHO_RESULT. */
                     ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
                     break;
                 }
@@ -385,16 +384,16 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
 }
 
 /**
- * icmp_send_echo_request - Send an ICMP Echo Request (ping packet)
+ * icmp_send_echo_request - Send an ICMP Echo Request (RFC 792)
  *
- * This function constructs and sends an ICMP Echo Request message, which is
- * the packet type used by the ping utility to test network connectivity.
+ * This function constructs and sends an ICMP Echo Request message, the
+ * packet used to test whether a host is reachable.
  * The request includes an identifier and sequence number to help match replies
  * to requests, and optional payload data (often used for timing or identification).
  *
  * The identifier is typically the process ID or a unique value that identifies
- * the ping instance. The sequence number increments for each ping packet sent,
- * allowing multiple ping packets to be distinguished. Both values are echoed
+ * the sender. The sequence number increments for each request sent,
+ * allowing multiple requests to be distinguished. Both values are echoed
  * back in the Echo Reply, allowing the sender to match replies to requests.
  *
  * @dev: Network device to send on

@@ -24,7 +24,7 @@ typedef struct dev_net_config_values {
     ip4_addr_t gateway;
 } dev_net_config_values_t;
 
-int dev_net_pid_has_ready_ping(pid_t pid)
+int dev_net_pid_has_echo_result(pid_t pid)
 {
     uint16_t id;
 
@@ -34,7 +34,7 @@ int dev_net_pid_has_ready_ping(pid_t pid)
     return icmp_has_ready_echo_result(id) ? 1 : 0;
 }
 
-static int64_t dev_net_send_ping(ip4_addr_t dest_ip)
+static int64_t dev_net_send_echo(ip4_addr_t dest_ip)
 {
     struct net_device *dev = first_net_device();
     pid_t pid;
@@ -92,8 +92,8 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
     cmd_local[copy_len] = '\0';
     const char *cmd = cmd_local;
 
-    /* Parse network commands (ping, ifconfig, etc.) */
-    if (strncmp(cmd, "ping ", 5) == 0)
+    /* Text commands: "echo <host>", "dhcp", "addr [<ip> [netmask] [gateway]]". */
+    if (strncmp(cmd, "echo ", 5) == 0)
     {
         /* Parse IP address or hostname from command */
         const char *host_str = cmd + 5;
@@ -209,9 +209,9 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
             }
         }
 
-        /* Send ping via ioctl */
+        /* Send the ICMP echo request (same path as NET_SEND_ECHO). */
         {
-            int64_t rc = dev_net_send_ping(dest_ip);
+            int64_t rc = dev_net_send_echo(dest_ip);
             return (rc < 0) ? rc : (int64_t)count;
         }
     }
@@ -228,10 +228,10 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
             return ret;
         return (int64_t)count;
     }
-    else if (strncmp(cmd, "ifconfig", 8) == 0)
+    else if (strncmp(cmd, "addr", 4) == 0)
     {
-        /* Parse ifconfig command: "ifconfig <ip> [netmask] [gateway]" */
-        const char *config_str = cmd + 8;  /* Skip "ifconfig" */
+        /* "addr <ip> [netmask] [gateway]"; bare "addr" reports the config. */
+        const char *config_str = cmd + 4;  /* Skip "addr" */
         while (*config_str == ' ' || *config_str == '\t')
             config_str++;
 
@@ -434,7 +434,7 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
 
 #if CONFIG_ENABLE_NETWORKING
 /*
- * Build one /dev/net text payload into @out (ping_result or snapshot).
+ * Build one /dev/net text payload into @out (echo_result or snapshot).
  * Returns byte length (not including a forced NUL).
  */
 static size_t dev_net_build_text(char *out, size_t out_len)
@@ -462,7 +462,7 @@ static size_t dev_net_build_text(char *out, size_t out_len)
 		uint32_t ip = ntohl(reply_ip);
 
 		n = snprintf(out, out_len,
-			     "type=ping_result\nsuccess=1\nseq=%u\nrtt_ms=%u\nttl=%u\npayload_bytes=%u\nip=%u.%u.%u.%u\n",
+			     "type=echo_result\nsuccess=1\nseq=%u\nrtt_ms=%u\nttl=%u\npayload_bytes=%u\nip=%u.%u.%u.%u\n",
 			     (unsigned)seq, (unsigned)rtt, (unsigned)ttl,
 			     (unsigned)payload_bytes,
 			     (unsigned)((ip >> 24) & 0xFF), (unsigned)((ip >> 16) & 0xFF),
@@ -673,14 +673,14 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
 
     switch (request)
     {
-        case NET_SEND_PING:
+        case NET_SEND_ECHO:
             if (arg)
             {
                 ip4_addr_t dest_ip;
 
                 if (copy_from_user(&dest_ip, arg, sizeof(dest_ip)) != 0)
                     return -EFAULT;
-                return dev_net_send_ping(dest_ip);
+                return dev_net_send_echo(dest_ip);
             }
             return -EINVAL;
 
@@ -722,13 +722,13 @@ int64_t dev_net_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
             }
             return -EINVAL;
 
-        case NET_GET_PING_RESULT:
+        case NET_GET_ECHO_RESULT:
             if (arg)
             {
                 /* arg points to: { int success; uint64_t rtt; uint8_t ttl; size_t payload_bytes; ip4_addr_t reply_ip; } */
-                struct ping_result result = {0};
+                struct icmp_echo_result result = {0};
 
-                /* Get PID to use as ICMP ID (matches NET_SEND_PING behavior) */
+                /* Get PID to use as ICMP ID (matches NET_SEND_ECHO behavior) */
                 pid_t pid = ir0_current_pid();
                 uint16_t id = (uint16_t)(pid & 0xFFFF);
 

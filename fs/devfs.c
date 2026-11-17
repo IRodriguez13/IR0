@@ -62,7 +62,7 @@ static int num_dev_nodes = 0;
 static int devfs_net_can_read(devfs_entry_t *entry, pid_t pid)
 {
     (void)entry;
-    return dev_net_pid_has_ready_ping(pid);
+    return dev_net_pid_has_echo_result(pid);
 }
 #endif
 

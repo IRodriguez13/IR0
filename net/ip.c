@@ -253,8 +253,8 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
             ip4_addr_t interface_ip = 0;
             arp_get_interface_ip(dev, &interface_ip);
             
-            /* CRITICAL: Always log drops of ICMP Echo Replies (ping responses) */
-            /* This helps debug why ping to 8.8.8.8 isn't working */
+            /* Always log dropped ICMP Echo Replies: a reply for another
+             * address usually means the interface address is wrong. */
             bool is_icmp_reply = false;
             uint8_t protocol_check = ip->protocol;
             if (protocol_check == IPPROTO_ICMP && len >= header_len + 4)
@@ -266,7 +266,7 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
             
             if (is_icmp_reply)
             {
-                LOG_WARNING_FMT("IP", "DROPPING ICMP Echo Reply: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ") - This may explain why ping to external IPs fails!",
+                LOG_WARNING_FMT("IP", "DROPPING ICMP Echo Reply: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ") - echo replies from other hosts will not arrive",
                                IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
                                IP4_ARGS(ntohl(interface_ip)));
             }

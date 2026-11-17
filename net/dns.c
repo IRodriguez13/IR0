@@ -16,8 +16,8 @@
  * - Parses DNS responses to extract A records (IPv4 addresses)
  * - Supports recursive queries (RD flag)
  *
- * The implementation is minimal but functional for basic DNS resolution needed
- * for ping and other network utilities.
+ * The implementation is minimal but functional for basic DNS resolution of
+ * the A records the kernel itself needs (the /dev/net "echo <host>" command).
  */
 
 #include "dns.h"

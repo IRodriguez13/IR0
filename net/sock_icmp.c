@@ -50,7 +50,7 @@ struct sock_icmp
 	struct sock_icmp_rx_pkt *rx_head;
 	struct sock_icmp_rx_pkt *rx_tail;
 	size_t rx_count;
-	ip4_addr_t bind_ip; /* 0 = any; set by bind() for ping -I addr */
+	ip4_addr_t bind_ip; /* 0 = any; source address set by bind() */
 	uint8_t ttl;        /* 0 = default 64; IP_TTL */
 	char bind_dev[16];  /* SO_BINDTODEVICE name (advisory on single-NIC) */
 };
@@ -168,8 +168,8 @@ void sock_icmp_rx_deliver(uint32_t src_ip_be, uint32_t dst_ip_be, uint8_t ttl,
 	size_t total;
 
 	/*
-	 * Linux SOCK_RAW IPPROTO_ICMP delivers IP header + ICMP to
-	 * userspace (BusyBox unpack4 reads ihl/ttl before ICMP).
+	 * Linux SOCK_RAW IPPROTO_ICMP delivers the IP header followed by
+	 * the ICMP message (raw(7)); readers take ihl and ttl from it.
 	 */
 	if (!icmp_data || icmp_len == 0)
 		return;
