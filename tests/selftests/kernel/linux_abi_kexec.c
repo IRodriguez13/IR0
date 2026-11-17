@@ -6,7 +6,8 @@
  * Description: Selftest: kexec_load(2) architecture check. An image built
  *              for another architecture is refused with EINVAL; the native
  *              and the default architecture are accepted. Each case passes
- *              on Linux and on IR0.
+ *              on Linux and on IR0. Run by
+ *              make ir0-selftest-kexec-abi-{x86,arm64}.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
