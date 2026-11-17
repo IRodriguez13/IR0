@@ -481,7 +481,7 @@ int proc_is_virtual_subdir(const char *path)
            strcmp(filename, "self_link") == 0;
 }
 
-/* /proc/[pid]/status — Linux proc(5) lines (BusyBox top reads Uid:/Name:). */
+/* /proc/[pid]/status — Linux proc(5) lines (Name:, Uid:, ...). */
 int proc_status_read(char *buf, size_t count, pid_t pid)
 {
 	proc_fs_snap_t snap;

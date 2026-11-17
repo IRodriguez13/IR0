@@ -14,7 +14,7 @@
 /*
  * /proc/netinfo: raw data only, one line per interface, tab-separated.
  * name\tmtu\tflags\tmac (mac as xx:xx:xx:xx:xx:xx)
- * Frontend (e.g. ifconfig/netinfo) does formatting.
+ * Userspace does the formatting.
  */
 int proc_netinfo_read(char *buf, size_t count)
 {
@@ -67,8 +67,8 @@ int proc_net_dev_read(char *buf, size_t count)
     memset(buf, 0, count);
     size_t off = 0;
     /*
-     * Linux /proc/net/dev columns (BusyBox interface.c procnetdev_vsn=2).
-     * Header must contain "bytes" and "compressed" for fancy ifconfig stats.
+     * Linux /proc/net/dev columns (net/core/net-procfs.c dev_seq_show()),
+     * header included: readers key on "bytes" and "compressed" in it.
      */
     int n = snprintf(buf, count,
                      "Inter-|   Receive                                                |  Transmit\n"
@@ -136,7 +136,8 @@ int proc_net_dev_read(char *buf, size_t count)
 }
 
 /*
- * /proc/net/route — Linux fib_trie format for BusyBox route/netstat -r.
+ * /proc/net/route — Linux fib_trie format (net/ipv4/fib_trie.c
+ * fib_route_seq_show()).
  * Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT
  */
 #define IR0_RTF_UP      0x0001
@@ -197,7 +198,7 @@ static int proc_route_walk_cb(ip4_addr_t dest, ip4_addr_t mask, ip4_addr_t gw,
 #endif
 
 /*
- * Linux-style /proc/net/{tcp,udp,raw,unix} for BusyBox netstat.
+ * Linux-style /proc/net/{tcp,udp,raw,unix} (proc(5)).
  * IPv4 addresses are printed as %08X of the __be32 (sin_addr.s_addr) value —
  * same as Linux get_tcp4_sock — not ntohl()'d host integers.
  */
@@ -489,7 +490,7 @@ int proc_net_route_read(char *buf, size_t count)
 	}
 	else if (walked && ip_gateway != 0)
 	{
-		/* List present but may omit default — BusyBox still wants it. */
+		/* List present but may omit the default route; Linux lists it. */
 		/* Skip duplicate default if already in list: best-effort emit. */
 	}
 

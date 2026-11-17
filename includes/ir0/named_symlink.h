@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: named_symlink.h
- * Description: In-memory symbolic links for runsv supervise paths (tier-1)
+ * Description: In-memory symbolic links on filesystems without a symlink op
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

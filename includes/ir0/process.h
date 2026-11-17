@@ -171,9 +171,9 @@ typedef struct process
 	char comm[16]; /* Process command name (max 15 chars + null) */
 	/*
 	 * Absolute path of the running image, as resolved by execve. Linux
-	 * exposes it as the /proc/<pid>/exe symlink; BusyBox built with
-	 * FEATURE_SH_STANDALONE re-executes itself through that path, and
-	 * comm[] cannot serve because it is only the basename.
+	 * exposes it as the /proc/<pid>/exe symlink (proc(5)), which a program
+	 * may execve(2) to run itself again; comm[] cannot serve because it is
+	 * only the basename.
 	 */
 	char exe_path[256];
 	/*
