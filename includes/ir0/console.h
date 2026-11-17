@@ -77,6 +77,7 @@ struct ir0_termios
 #define IR0_LFLAG_ECHOE            (0x00000010u)
 #define IR0_LFLAG_ECHOK            (0x00000020u)
 #define IR0_LFLAG_ECHONL           (0x00000040u)
+#define IR0_LFLAG_NOFLSH           (0x00000080u)
 #define IR0_OFLAG_ONLCR           (0x00000004u)
 #define IR0_OFLAG_OPOST           (0x00000001u)
 /* Linux asm-generic/termbits.h c_cc indices */

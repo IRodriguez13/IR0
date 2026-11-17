@@ -478,6 +478,19 @@ static int tty_sleep_for_input(void)
 	return 1;
 }
 
+/*
+ * Linux isig() (drivers/tty/n_tty.c): signal the foreground group and,
+ * unless NOFLSH, discard all pending input, partial and completed lines.
+ * Never schedule() here: keypress runs under IRQ1.
+ */
+static void tty_isig(int sig)
+{
+	if (!(tty_termios.c_lflag & IR0_LFLAG_NOFLSH))
+		tty_flush_input();
+	input_kbd_resync_modifiers();
+	tty_deliver_sig(sig);
+}
+
 static void tty_input_char(char c)
 {
 	ir0_console_keypress(c);
@@ -509,22 +522,12 @@ void ir0_console_keypress(char c)
 			vquit = 28;
 		if ((unsigned char)nc == vintr)
 		{
-			canon_line_len = 0;
-			input_kbd_resync_modifiers();
-			tty_deliver_sig(SIGINT);
-			/*
-			 * Never schedule() here: keypress runs under
-			 * IRQ1. Wake only; the reader runs at the next schedule().
-			 */
-			(void)ir0_console_wake_readers();
+			tty_isig(SIGINT);
 			return;
 		}
 		if ((unsigned char)nc == vquit)
 		{
-			canon_line_len = 0;
-			input_kbd_resync_modifiers();
-			tty_deliver_sig(SIGQUIT);
-			(void)ir0_console_wake_readers();
+			tty_isig(SIGQUIT);
 			return;
 		}
 	}
