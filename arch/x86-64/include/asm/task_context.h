@@ -16,7 +16,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <ir0/sigcontext_x86_64.h>
+#include <asm/sigcontext.h>
 
 typedef struct arch_task_context
 {

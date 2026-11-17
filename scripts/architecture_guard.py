@@ -2588,8 +2588,6 @@ REGISTER_NAME_ISA_HEADERS = frozenset(
     {
         "arch_syscall_frame_arm64.h",
         "arch_syscall_frame_x86_64.h",
-        "sigcontext_arm64.h",
-        "sigcontext_x86_64.h",
     }
 )
 REGISTER_NAME_PARTS = frozenset(
