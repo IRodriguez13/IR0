@@ -595,3 +595,77 @@ int fs_statx_basic(void)
 	EXPECT_ERR(S5(SYS_statx, AT_FDCWD, "f", 0x80000000U, 0x7ffU, sx), EINVAL);
 	return CONF_PASS;
 }
+
+/*
+ * DAC permission checks (fs/namei.c generic_permission()). The runner
+ * forks each case, so a case may drop to an unprivileged user. Setting up
+ * needs root and IDs 1000, 100 and 200 (a host user namespace that maps
+ * only root has none of them), so a failed setup is TCONF; the IR0 runner
+ * expects PASS for every listed case. Group IDs stay below 256: the MINIX
+ * inode the guest /tmp lives on stores an 8-bit gid.
+ */
+#define DAC_UID 1000
+#define DAC_GID 100
+#define DAC_GROUP 200
+
+/* Become DAC_UID/DAC_GID with @group (if nonzero) as the only extra group. */
+static int dac_become_user(unsigned int group)
+{
+	unsigned int groups[1] = { group };
+
+	if (S2(SYS_setgroups, group ? 1 : 0, groups) != 0)
+		return -1;
+	if (S3(SYS_setresgid, DAC_GID, DAC_GID, DAC_GID) != 0)
+		return -1;
+	if (S3(SYS_setresuid, DAC_UID, DAC_UID, DAC_UID) != 0)
+		return -1;
+	return 0;
+}
+
+/* Create @path as root with @mode, owned by root:@gid. */
+static int dac_make(const char *path, int is_dir, unsigned int mode,
+		    unsigned int gid)
+{
+	long fd;
+
+	if (is_dir)
+	{
+		if (S3(SYS_mkdirat, AT_FDCWD, path, 0700) != 0)
+			return -1;
+	}
+	else
+	{
+		fd = conf_creat(path, "data");
+		if (fd < 0 || S1(SYS_close, fd) != 0)
+			return -1;
+	}
+	if (S5(SYS_fchownat, AT_FDCWD, path, 0, gid, 0) != 0)
+		return -1;
+	return S4(SYS_fchmodat, AT_FDCWD, path, mode, 0) == 0 ? 0 : -1;
+}
+
+/* A supplementary group grants search on a directory its group owns. */
+int fs_chdir_supplementary_group_search(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("d", 1, 0710, DAC_GROUP) != 0 ||
+	    dac_become_user(DAC_GROUP) != 0)
+		return CONF_TCONF;
+	EXPECT(S1(SYS_chdir, "d"), 0);
+	return CONF_PASS;
+}
+
+/*
+ * The owner gets the owner bits only, even when group and other would
+ * allow more; denied access is EACCES, while chmod by a non-owner is EPERM.
+ */
+int fs_dac_owner_bits_and_eperm(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("mine", 0, 0077, DAC_GID) != 0 ||
+	    S5(SYS_fchownat, AT_FDCWD, "mine", DAC_UID, DAC_GID, 0) != 0 ||
+	    dac_make("theirs", 0, 0666, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "mine", O_RDONLY, 0), EACCES);
+	EXPECT(S4(SYS_fchmodat, AT_FDCWD, "mine", 0600, 0), 0);
+	EXPECT_ERR(S4(SYS_fchmodat, AT_FDCWD, "theirs", 0600, 0), EPERM);
+	return CONF_PASS;
+}

@@ -115,7 +115,9 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         {
             if (!ops->stat || vfs_ops_stat(ops, parent, &st) != 0)
                 return -ENOENT;
-            if (!ir0_check_file_access(parent, ACCESS_WRITE))
+            if (vfs_stat(parent, &st) != 0 ||
+                generic_permission(ir0_current_cred(), &st,
+                                   ACCESS_WRITE) != 0)
                 return -EACCES;
         }
 
@@ -162,10 +164,10 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
             return -EISDIR;
 
         if (accmode == IR0_O_RDONLY || accmode == IR0_O_RDWR)
-            acc |= 0x1;
+            acc |= ACCESS_READ;
         if (accmode == IR0_O_WRONLY || accmode == IR0_O_RDWR)
-            acc |= 0x2;
-        if (!ir0_check_file_access(path, acc))
+            acc |= ACCESS_WRITE;
+        if (generic_permission(ir0_current_cred(), &st, acc) != 0)
             return -EACCES;
     }
 

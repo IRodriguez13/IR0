@@ -8,7 +8,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: permissions.c
- * Description: IR0 kernel source/header file
+ * Description: DAC permission check (Linux fs/namei.c generic_permission()).
  */
 
 #include <ir0/cred.h>
@@ -20,14 +20,12 @@
  * task, set-id transitions on exec and these permission checks.
  */
 
-bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid)
+static bool dac_class_allows(const stat_t *st, int mode, uid_t euid,
+                             gid_t egid)
 {
     uint16_t file_mode;
     uint32_t file_uid;
     uint32_t file_gid;
-
-    if (!st)
-        return false;
 
     if (euid == ROOT_UID)
         return true;
@@ -68,24 +66,27 @@ bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid)
     return true;
 }
 
-bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
-                                 gid_t egid, const gid_t *groups, int ngroups)
+int generic_permission(const struct ir0_task_cred *cred, const stat_t *st,
+                       int mask)
 {
-    size_t i;
+    int i;
 
-    if (ir0_access_from_stat(st, mode, euid, egid))
-        return true;
+    if (!cred || !st)
+        return -EACCES;
 
-    if (!groups || ngroups <= 0)
-        return false;
+    if (dac_class_allows(st, mask, cred->euid, cred->egid))
+        return 0;
 
-    for (i = 0; i < (size_t)ngroups; i++)
+    if (!cred->groups)
+        return -EACCES;
+
+    for (i = 0; i < cred->ngroups; i++)
     {
-        if (groups[i] == egid)
+        if (cred->groups[i] == cred->egid)
             continue;
-        if (ir0_access_from_stat(st, mode, euid, groups[i]))
-            return true;
+        if (dac_class_allows(st, mask, cred->euid, cred->groups[i]))
+            return 0;
     }
 
-    return false;
+    return -EACCES;
 }

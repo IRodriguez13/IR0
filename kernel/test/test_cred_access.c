@@ -20,32 +20,42 @@
 
 void ktest_cred_access_contract(void)
 {
+	struct ir0_task_cred root;
+	struct ir0_task_cred user;
 	stat_t st;
 	gid_t supp[1];
 
 	KTEST_BEGIN("cred_access_contract");
+
+	memset(&root, 0, sizeof(root));
+	root.euid = ROOT_UID;
+	root.egid = ROOT_GID;
+	memset(&user, 0, sizeof(user));
+	user.euid = USER_UID;
+	user.egid = USER_GID;
 
 	memset(&st, 0, sizeof(st));
 	st.st_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 	st.st_uid = USER_UID;
 	st.st_gid = USER_GID;
 
-	KASSERT(ir0_access_from_stat_groups(&st, ACCESS_READ, ROOT_UID,
-					    ROOT_GID, NULL, 0));
-	KASSERT(ir0_access_from_stat_groups(&st, ACCESS_WRITE, USER_UID,
-					     USER_GID, NULL, 0));
+	KASSERT_EQ(generic_permission(&root, &st, ACCESS_READ), 0);
+	KASSERT_EQ(generic_permission(&user, &st, ACCESS_WRITE), 0);
 
 	st.st_mode = S_IRUSR | S_IWUSR | S_IXUSR;
 	st.st_uid = ROOT_UID;
-	KASSERT(!ir0_access_from_stat_groups(&st, ACCESS_WRITE, USER_UID,
-					     USER_GID, NULL, 0));
+	KASSERT_EQ(generic_permission(&user, &st, ACCESS_WRITE), -EACCES);
 
 	supp[0] = USER_GID;
+	user.egid = (gid_t)(USER_GID + 1);
+	user.groups = supp;
+	user.ngroups = 1;
 	st.st_uid = ROOT_UID;
 	st.st_gid = USER_GID;
 	st.st_mode = S_IRGRP;
-	KASSERT(ir0_access_from_stat_groups(&st, ACCESS_READ, USER_UID,
-					     (gid_t)(USER_GID + 1), supp, 1));
+	KASSERT_EQ(generic_permission(&user, &st, ACCESS_READ), 0);
+	KASSERT_EQ(generic_permission(NULL, &st, ACCESS_READ), -EACCES);
+	KASSERT_EQ(generic_permission(&user, NULL, ACCESS_READ), -EACCES);
 
 	klog_smoke("MULTIUSER_PERMS_OK");
 	KTEST_END();

@@ -22,9 +22,6 @@
 #include <ir0/types.h>
 #include <ir0/stat.h>
 
-/* Forward declaration */
-struct process;
-
 /*
  * Well-known IDs used by the kernel itself (root checks) and by tests.
  * Account data lives in userspace: /etc/passwd, /etc/shadow, /etc/group.
@@ -37,7 +34,7 @@ struct process;
 /* Default umask (022 = ----w--w-) */
 #define DEFAULT_UMASK 0022
 
-/* Access modes for check_file_access() */
+/* Access modes for generic_permission() */
 #define ACCESS_READ    1
 #define ACCESS_WRITE   2
 #define ACCESS_EXEC    4
@@ -56,22 +53,26 @@ struct ir0_task_cred
      * caller holds the scheduler lock / runs in syscall context.
      */
     const char *cwd;
+
+    /* Supplementary groups (setgroups(2)); they count for DAC like egid. */
+    const gid_t *groups;
+    int ngroups;
 };
 
 const struct ir0_task_cred *ir0_current_cred(void);
 pid_t ir0_current_pid(void);
 int ir0_cred_is_root(void);
 
-bool ir0_check_file_access(const char *path, int mode);
-
-/* Evaluate Unix permission bits against effective uid/gid */
-bool ir0_access_from_stat(const stat_t *st, int mode, uid_t euid, gid_t egid);
-bool ir0_access_from_stat_groups(const stat_t *st, int mode, uid_t euid,
-                                 gid_t egid, const gid_t *groups, int ngroups);
-
-/* Function declarations */
-bool check_file_access(const char *path, int mode, const struct process *process);
-bool is_root(const struct process *process);
+/*
+ * generic_permission - may @cred access the object @st describes with
+ * @mask (ACCESS_*)? Unix permission bits against the effective IDs and the
+ * supplementary groups; root may do anything. Returns 0 or -EACCES (also
+ * for a NULL argument). Implemented in fs/permissions.c; the caller looks
+ * the object up (vfs_stat(), ir0_stat_path_routed()) and passes
+ * ir0_current_cred(), or a copy with the real IDs for access(2).
+ */
+int generic_permission(const struct ir0_task_cred *cred, const stat_t *st,
+                       int mask);
 
 typedef struct ir0_cred_id_triplet
 {

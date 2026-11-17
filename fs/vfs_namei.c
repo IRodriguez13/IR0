@@ -53,16 +53,18 @@ int vfs_mkdir(const char *path, int mode)
         return -EROFS;
 
     char parent[MAX_PATH];
+    stat_t st;
     ret = vfs_lookup_parent(path, parent, sizeof(parent));
     if (ret != 0)
         return ret;
-    if (strcmp(parent, "/") != 0 && !ir0_check_file_access(parent, ACCESS_WRITE))
+    if (strcmp(parent, "/") != 0 &&
+        (vfs_stat(parent, &st) != 0 ||
+         generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0))
         return -EACCES;
 
     if (strcmp(path, "/") == 0)
         return -EEXIST;
 
-    stat_t st;
     if (vfs_stat(path, &st) == 0 && (st.st_mode & S_IFMT) != 0)
         return -EEXIST;
 
@@ -90,7 +92,7 @@ int vfs_unlink(const char *path)
     if (S_ISDIR(st.st_mode))
         return -EISDIR;
 
-    if (!ir0_check_file_access(path, ACCESS_WRITE))
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
         return -EACCES;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);
@@ -111,12 +113,13 @@ int vfs_link(const char *oldpath, const char *newpath)
     stat_t st;
     if (vfs_stat(oldpath, &st) != 0)
         return -ENOENT;
-    if (!ir0_check_file_access(oldpath, ACCESS_READ))
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
         return -EACCES;
 
     char parent[MAX_PATH];
     if (vfs_parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (!ir0_check_file_access(parent, ACCESS_WRITE))
+        if (vfs_stat(parent, &st) != 0 ||
+            generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
             return -EACCES;
 
     if (vfs_stat(newpath, &st) == 0)
@@ -203,12 +206,15 @@ int vfs_rename(const char *oldpath, const char *newpath)
     if (vfs_stat(oldpath, &st_old) != 0)
         return -ENOENT;
 
-    if (!ir0_check_file_access(oldpath, ACCESS_READ | ACCESS_WRITE))
+    if (generic_permission(ir0_current_cred(), &st_old,
+                           ACCESS_READ | ACCESS_WRITE) != 0)
         return -EACCES;
 
     char parent[MAX_PATH];
     if (vfs_parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (!ir0_check_file_access(parent, ACCESS_WRITE))
+        if (vfs_stat(parent, &st_new) != 0 ||
+            generic_permission(ir0_current_cred(), &st_new,
+                               ACCESS_WRITE) != 0)
             return -EACCES;
 
     struct vfs_mount *m_old = vfs_find_mount(oldpath);
@@ -285,7 +291,9 @@ int vfs_rmdir(const char *path)
     char parent[MAX_PATH];
     if (vfs_parent_dir(norm, parent, sizeof(parent)) == 0)
     {
-        if (!ir0_check_file_access(parent, ACCESS_WRITE | ACCESS_EXEC))
+        if (vfs_stat(parent, &st) != 0 ||
+            generic_permission(ir0_current_cred(), &st,
+                               ACCESS_WRITE | ACCESS_EXEC) != 0)
             return -EACCES;
     }
 
@@ -304,7 +312,9 @@ int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
     if (!ir0_current_cred())
         return -ESRCH;
 
-    if (!ir0_check_file_access(path, ACCESS_EXEC))
+    stat_t st;
+    if (vfs_stat(path, &st) != 0 ||
+        generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
         return -EACCES;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);
@@ -362,7 +372,9 @@ int vfs_truncate(const char *path, size_t length)
     int ret = vfs_validate_path(path);
     if (ret != 0)
         return ret;
-    if (!ir0_check_file_access(path, ACCESS_WRITE))
+    stat_t st;
+    if (vfs_stat(path, &st) != 0 ||
+        generic_permission(ir0_current_cred(), &st, ACCESS_WRITE) != 0)
         return -EACCES;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);

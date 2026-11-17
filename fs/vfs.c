@@ -447,7 +447,9 @@ int vfs_check_dir_traverse(const char *path)
         strncat(dir, p, clen);
         dir[sizeof(dir) - 1] = '\0';
 
-        if (!ir0_check_file_access(dir, ACCESS_EXEC))
+        stat_t st;
+        if (vfs_stat(dir, &st) != 0 ||
+            generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
             return -EACCES;
         p = slash + 1;
     }

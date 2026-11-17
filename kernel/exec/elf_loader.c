@@ -1671,7 +1671,7 @@ static int exec_permission_denied(const process_t *proc, const char *path)
 	if (proc->euid == ROOT_UID)
 		return (st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0;
 
-	return ir0_check_file_access(path, ACCESS_EXEC) ? 0 : 1;
+	return generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0;
 }
 
 static void exec_setid_collect(const process_t *proc, const char *path,

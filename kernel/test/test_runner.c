@@ -57,6 +57,8 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_procfs_pid_fd, "procfs_pid_fd", 1 },
 	{ ktest_procfs_pid_environ, "procfs_pid_environ", 1 },
 	{ ktest_routed_open_access, "routed_open_access", 1 },
+	{ ktest_routed_open_supplementary_group,
+	  "routed_open_supplementary_group", 1 },
 	{ ktest_procfs_self_symlink, "procfs_self_symlink", 1 },
 	{ ktest_procfs_pid_exe, "procfs_pid_exe", 1 },
 	{ ktest_procfs_oom_score, "procfs_oom_score", 1 },
