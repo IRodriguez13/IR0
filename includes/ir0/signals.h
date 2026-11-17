@@ -135,9 +135,9 @@ struct sigaction {
  * Layout on stack (low→high): [return slot][sigframe…]. The return slot is
  * SIGFRAME_RETURN_SLOT bytes: the 8-byte restorer on x86-64, empty on arm64
  * (x30 holds it). sizeof must be 0 mod 16 so that after aligning SP the
- * handler entry SP is 8 mod 16 on x86-64 (SysV; otherwise musl/glibc movaps
- * in rt_sigaction/setitimer #GP, BusyBox ping SIGALRM) and 16-byte aligned
- * on arm64 (AAPCS64).
+ * handler entry SP is 8 mod 16 on x86-64 (SysV psABI: as after a call, so
+ * aligned SSE stores in the handler do not #GP) and 16-byte aligned on
+ * arm64 (AAPCS64).
  */
 struct sigframe {
     void (*handler)(int);     /* Signal handler function */

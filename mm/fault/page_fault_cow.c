@@ -40,8 +40,9 @@ void pf_user_write_present(const struct page_fault_info *info,
 
 	vaddr_aligned = fault_addr & ~0xFFFUL;
 	/*
-	 * IRQ-off + optional PMM pin: sibling pipe-stage COW must not
-	 * free the shared frame under memcpy (ash pipelines).
+	 * IRQ-off + optional PMM pin: a sibling that shares the frame after
+	 * fork(2) and breaks COW at the same time must not free it under
+	 * memcpy.
 	 */
 	irq_flags = irq_save();
 	/*
@@ -130,7 +131,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 	 * sibling) would otherwise leave the parent mapped RO+COW to
 	 * the same phys while the child writes through a RW PTE,
 	 * corrupting the parent's .data/.bss (seen as ip/addr=0 SEGV
-	 * in multi-fork ash/pipeline smokes).
+	 * when several forked children write the same pages).
 	 */
 	new_phys = mm_alloc_frame(MM_ALLOC_ATOMIC);
 	if (!new_phys)

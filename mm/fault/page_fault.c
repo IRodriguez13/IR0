@@ -34,8 +34,8 @@ void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	pf_diag_user_segv(p, fault_addr, info);
 
 	/*
-	 * Linux wait status must be WIFSIGNALED(SIGSEGV), not exited(139).
-	 * Ash prints "Segmentation fault" only when exit_signal is set.
+	 * Linux wait status must be WIFSIGNALED(SIGSEGV), not exited(139):
+	 * the parent's wait(2) reports the signal through exit_signal.
 	 */
 	signal_exit_current(SIGSEGV);
 }

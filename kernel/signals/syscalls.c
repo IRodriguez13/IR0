@@ -194,11 +194,9 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 		return -ESRCH;
 	/*
 	 * sigsetsize=8 (uapi compact) or sizeof(sigset_t), same contract as
-	 * rt_sigaction above. musl passes _NSIG/8 = 8, the kernel sigset width
-	 * on x86-64, while the userspace type is 128 bytes: demanding the
-	 * latter rejected every call with -EINVAL, so ash's wait-for-SIGCHLD
-	 * never blocked and it re-issued the syscall forever (observed 320k
-	 * back-to-back calls, pipeline children left unreaped).
+	 * rt_sigaction above. Linux rt_sigsuspend() takes _NSIG/8 = 8, the
+	 * kernel sigset width on x86-64 and arm64; the libc sigset_t is 128
+	 * bytes and is never what a libc passes.
 	 */
 	if (!mask ||
 	    (sigsetsize != sizeof(sigset_t) && sigsetsize != sizeof(uint64_t)))

@@ -336,10 +336,10 @@ int send_signal(int pid, int signal)
     signal_trace(SIGNAL_TRACE_SEND, proc, signal, 0, 0, 0);
 
     /*
-     * Linux: signals to PID 1 are discarded unless init installed a handler
-     * (man 2 kill). BusyBox poweroff/reboot without -f send SIGUSR2/SIGTERM
-     * to PID 1; runit has no handler — leaving them pending destabilized
-     * stage supervision and later showed up as kernel #UD.
+     * kill(2): "The only signals that can be sent to process ID 1, the init
+     * process, are those for which init has explicitly installed signal
+     * handlers." Linux sig_task_ignored() drops the rest at send time
+     * instead of leaving them pending.
      */
     if (proc->task.pid == 1)
     {
@@ -533,8 +533,7 @@ static int signal_is_fault(int sig)
  * end the task here (the fault signals first); SIGSTOP and an uncaught
  * SIGTSTP/SIGTTIN/SIGTTOU sleep until SIGCONT. Ignored signals, and
  * uncaught ones whose default is Ign, are dropped; blocked ones stay
- * pending. BusyBox ash relies on this: it catches SIGINT and may
- * raise() it after a foreground job, and a blocked SIGTERM must not kill it.
+ * pending until unblocked, so a blocked SIGTERM never kills the task.
  */
 static int get_signal(process_t *p)
 {
