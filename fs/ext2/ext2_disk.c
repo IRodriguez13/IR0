@@ -1603,6 +1603,7 @@ static int ext2_umount_cb(const char *dir)
 
 struct vfs_fstype ext2_fs_type = {
 	.name = "ext2",
+	.fs_flags = FS_REQUIRES_DEV,
 	.ops = &ext2_ops,
 	.mount = ext2_mount_cb,
 	.umount = ext2_umount_cb,

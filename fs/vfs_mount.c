@@ -173,6 +173,11 @@ static int vfs_init(void)
     return 0;
 }
 
+const struct vfs_fstype *vfs_get_fstypes(void)
+{
+    return fs_types;
+}
+
 struct vfs_mount *vfs_get_mounts(void)
 {
     return mounts;

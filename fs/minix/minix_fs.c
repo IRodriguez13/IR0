@@ -662,6 +662,7 @@ static int minix_mount(const char *dev_name __attribute__((unused)), const char 
 
 struct vfs_fstype minix_fs_type = {
 	.name = "minix",
+	.fs_flags = FS_REQUIRES_DEV,
 	.ops = &minix_fs_ops,
 	.mount = minix_mount,
 	.statfs = minix_fs_statfs,

@@ -32,7 +32,8 @@ struct vfs_dirent;
 /* struct vfs_ops — see includes/ir0/vfs_backend.h */
 
 /* vfs_fstype.fs_flags */
-#define FS_NOSUID_DEFAULT 1 /* new mounts start MS_NOSUID (pseudo, in-RAM) */
+#define FS_REQUIRES_DEV   1 /* the mount source is a block device (Linux) */
+#define FS_NOSUID_DEFAULT 2 /* new mounts start MS_NOSUID (pseudo, in-RAM) */
 
 /*
  * Filesystem type descriptor — one per FS driver (Linux file_system_type).
@@ -108,6 +109,9 @@ struct vfs_bdev {
  * partition) or -EINVAL (no source).
  */
 int lookup_bdev(const char *source, struct vfs_bdev *bdev);
+
+/* Registered filesystem types, in registration order; NULL if none. */
+const struct vfs_fstype *vfs_get_fstypes(void);
 
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);

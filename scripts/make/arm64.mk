@@ -79,9 +79,7 @@ $(MUSL_AARCH64_HELLO): setup/pid1/hello_aarch64.c setup/pid1/hello_aarch64_frees
 ARM64_COMMON_CORE_COMPILE_CFLAGS = -ffreestanding -nostdlib -fno-builtin -O2 -mgeneral-regs-only \
 	$(ARM64_BOARD_CFLAGS) \
 	-I. -Iarch/arm64/include -Iarch/arm64/sources -Iarch/common -Iincludes -Iktm/include -Iincludes/ir0 \
-	-ffunction-sections -fdata-sections \
-	-DCONFIG_ENABLE_FS_MINIX=0 -DCONFIG_ENABLE_FS_SIMPLEFS=0 \
-	-DCONFIG_ENABLE_FS_FAT16=0 -DCONFIG_ENABLE_FS_EXT2=0
+	-ffunction-sections -fdata-sections
 
 # QEMU virt: pin GICv2 (default may be v3 — product path uses the same GIC backend).
 ARM64_QEMU_MACHINE = virt,gic-version=2

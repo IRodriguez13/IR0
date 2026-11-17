@@ -92,6 +92,7 @@ static const struct ktest_case ktest_cases[] = {
 	  "sysfs_max_processes_contract", 1 },
 	{ ktest_proc_netinfo_contract, "proc_netinfo_contract", 1 },
 	{ ktest_dev_net_contract, "dev_net_contract", 1 },
+	{ ktest_proc_filesystems_contract, "proc_filesystems_contract", 1 },
 	{ ktest_mount_proc_contract, "mount_proc_contract", 1 },
 	{ ktest_mount_tmpfs_contract, "mount_tmpfs_contract", 1 },
 	{ ktest_mount_multi_fs_contract, "mount_multi_fs_contract", 1 },

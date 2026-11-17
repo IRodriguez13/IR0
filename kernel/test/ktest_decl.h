@@ -61,6 +61,7 @@ void ktest_boot_snapshot_acpi_rsdp_contract(void);
 void ktest_sysfs_max_processes_contract(void);
 void ktest_proc_netinfo_contract(void);
 void ktest_dev_net_contract(void);
+void ktest_proc_filesystems_contract(void);
 void ktest_mount_proc_contract(void);
 void ktest_mount_tmpfs_contract(void);
 void ktest_bpivot_boot_contract(void);

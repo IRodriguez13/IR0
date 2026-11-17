@@ -536,36 +536,35 @@ int proc_blockdevices_read(char *buf, size_t count)
     return (int)off;
 }
 
-/* /proc/filesystems: raw data only. One line per fs: type\tname (type=nodev or empty) */
+/*
+ * /proc/filesystems: one line per registered type, in registration order,
+ * "nodev" unless it mounts a block device; an alias gets its own line.
+ */
+static int proc_filesystems_line(char *buf, size_t count, size_t *off,
+				 const struct vfs_fstype *t, const char *name)
+{
+    int n = snprintf(buf + *off, count - *off, "%s\t%s\n",
+                     (t->fs_flags & FS_REQUIRES_DEV) ? "" : "nodev", name);
+
+    if (n < 0 || (size_t)n >= count - *off)
+        return -1;
+    *off += (size_t)n;
+    return 0;
+}
+
 int proc_filesystems_read(char *buf, size_t count)
 {
+    size_t off = 0;
+
     if (!buf || count == 0)
         return -1;
     memset(buf, 0, count);
-    size_t off = 0;
-    int n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\tproc\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\tdevfs\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-#if CONFIG_ENABLE_FS_TMPFS
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\ttmpfs\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "nodev\tramfs\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-#endif
-#if CONFIG_ENABLE_FS_MINIX
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "\tminix\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-#endif
-#if CONFIG_ENABLE_FS_SIMPLEFS
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "\tsimplefs\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-#endif
-#if CONFIG_ENABLE_FS_FAT16
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "\tfat16\n");
-    if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-#endif
-    if (off < count) buf[off] = '\0';
+    for (const struct vfs_fstype *t = vfs_get_fstypes(); t; t = t->next) {
+        if (proc_filesystems_line(buf, count, &off, t, t->name) != 0)
+            break;
+        if (t->alias && proc_filesystems_line(buf, count, &off, t, t->alias) != 0)
+            break;
+    }
     return (int)off;
 }
 

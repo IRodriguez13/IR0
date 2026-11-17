@@ -31,6 +31,7 @@ static struct vfs_ops fat16_ops = {
 
 struct vfs_fstype fat16_fs_type = {
 	.name = "fat16",
+	.fs_flags = FS_REQUIRES_DEV,
 	.ops = &fat16_ops,
 	.mount = fat16_disk_mount,
 	.umount = fat16_disk_umount,

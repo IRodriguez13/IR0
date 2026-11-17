@@ -465,6 +465,56 @@ void ktest_dev_net_contract(void)
 	KTEST_END();
 }
 
+/*
+ * /proc/filesystems lists the registered filesystem types, in registration
+ * order, "nodev" unless the type mounts a block device (Linux
+ * FS_REQUIRES_DEV). With setup/defconfig that is proc, then the order of
+ * scripts/make/fs.mk; devfs is not a registered type.
+ */
+void ktest_proc_filesystems_contract(void)
+{
+	static const char expected[] =
+		"nodev\tproc\n"
+		"nodev\ttmpfs\n"
+		"nodev\tramfs\n"
+		"\tminix\n"
+		"nodev\tsimplefs\n"
+		"\tfat16\n"
+		"\text2\n"
+		"nodev\t9p\n";
+	char buf[512];
+	char *line;
+	int64_t fd;
+	int64_t n;
+
+	KTEST_BEGIN("proc_filesystems_contract");
+
+	memset(buf, 0, sizeof(buf));
+	fd = sys_open("/proc/filesystems", O_RDONLY, 0);
+	KASSERT_GE(fd, 0);
+	n = sys_read((int)fd, buf, sizeof(buf) - 1);
+	sys_close((int)fd);
+	KASSERT_GT(n, 0);
+
+	/* One log line per entry, for before/after comparisons. */
+	line = buf;
+	while (*line)
+	{
+		char *end = strchr(line, '\n');
+
+		if (end)
+			*end = '\0';
+		klog_info_fmt("KTEST", "FILESYSTEMS|%s", line);
+		if (!end)
+			break;
+		*end = '\n';
+		line = end + 1;
+	}
+
+	KASSERT(strcmp(buf, expected) == 0);
+
+	KTEST_END();
+}
 
 void ktest_mount_proc_contract(void)
 {
