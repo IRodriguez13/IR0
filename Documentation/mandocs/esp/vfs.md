@@ -259,7 +259,8 @@ Fallos frecuentes:
 |---------|----------------|
 | `-ENODEV` en ruta VFS | Sin montaje; fallo de root |
 | `-ENOENT` en `/dev/x` | Nodo no registrado en devfs |
-| `-EACCES` en create | Padre no escribible o traverse fallido |
+| `-EACCES` en create | Padre sin escritura o búsqueda (`may_create`) o traverse fallido |
+| `-EACCES` / `-EPERM` en unlink, rmdir, rename | Padre sin escritura o búsqueda (`may_delete`); `-EPERM`: padre sticky y el llamador no es dueño ni de la víctima ni del padre |
 | `-EINVAL` en open | Flags Linux sin traducir |
 
 ## 10. Roadmap futuro

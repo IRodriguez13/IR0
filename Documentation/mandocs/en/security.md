@@ -77,6 +77,10 @@ ASCII:
 ## 4. Responsibilities
 
 - VFS: `check_dir_traverse` requires execute on each path component (non-root).
+- VFS: a new name (`may_create`) needs write and search on the parent; removing
+  or renaming one (`may_delete`) too, and in a sticky (+t) directory only the
+  owner of the file, the owner of the directory or root may do it (EPERM).
+  Listing a directory needs read on it.
 - chmod: root or file owner at syscall + VFS boundary.
 - chown: root only at VFS; minix backend also root-only.
 - mount/umount: root cred required.
@@ -123,6 +127,8 @@ ASCII:
 
 - `whoami`, `id` debug commands show effective ids.
 - `-EACCES` on traverse: missing execute on directory component.
+- `-EACCES` on unlink/rename/create: no write or search on the parent directory.
+- `-EPERM` on unlink/rename: sticky directory, caller owns neither the file nor the directory.
 - `-EPERM` on mount/chown: need root euid.
 
 ## 10. Future roadmap

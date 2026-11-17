@@ -305,10 +305,21 @@ a case in the same group (checked on a Linux 7.0 host):
 | F24 | chdir | fs_chdir_supplementary_group_search | supplementary group grants search | EACCES |
 | F25 | setgroups(0) | fs_setgroups_empty_drops_root_group | no groups left: EACCES on a 0640 root:root file | group 0 kept, file readable |
 
+| F26 | unlinkat, rmdir | fs_unlink_needs_parent_write, fs_sticky_dir_restricts_delete | write and search on the parent decide (EACCES); a sticky directory keeps names the caller does not own (EPERM) | write on the file decided; no sticky rule; FIFOs removable by anyone |
+| F27 | mkdirat, mknodat, linkat, symlinkat, openat(O_CREAT) | fs_create_needs_parent_write_search | write and search on the parent; EEXIST first; O_CREAT on an existing file ignores the parent | write only, none for mknod/symlink; EACCES before EEXIST; existing file refused |
+| F28 | renameat | fs_rename_needs_parent_write | write and search on both parents, sticky rule, write on a directory that changes parent | read and write on the file, write on the new parent |
+| F29 | openat(O_DIRECTORY), getdents64 | fs_opendir_needs_read | read on the directory | search on the directory |
+
 F22-F25 come from the DAC check (`generic_permission()`, checked on Linux
 7.3 in QEMU), together with `fs_dac_owner_bits_and_eperm`, which passed
 before and pins the owner class and EACCES vs EPERM. Group IDs in these
 cases stay below 256 because the guest MINIX inode stores an 8-bit gid.
+
+F26-F29 are the directory checks of Linux `fs/namei.c` (`may_delete()`,
+`may_create()`, `vfs_rename()`, `may_open()`), checked on Linux 7.3 in
+QEMU with the runner as init. `may_create()` and `may_delete()` live in
+`fs/vfs_namei.c`; the in-memory nodes (named FIFOs, sockets, device nodes
+and symlinks) use them too. MINIX, ext2 and tmpfs keep the sticky bit.
 
 Conformance after them: 91 PASS, 1 FAIL, 7 TCONF on both ISAs. The FAIL is
 `fs_unlink_open_file`: the VFS is path-based, so an fd whose file was

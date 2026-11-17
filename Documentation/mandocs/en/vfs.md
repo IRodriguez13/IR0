@@ -265,7 +265,8 @@ Common failures:
 |---------|----------------|
 | `-ENODEV` on VFS path | No mount covers prefix; root mount failed |
 | `-ENOENT` on `/dev/x` | Node not registered in devfs |
-| `-EACCES` on create | Parent not writable or traverse check failed |
+| `-EACCES` on create | Parent lacks write or search (`may_create`) or traverse check failed |
+| `-EACCES` / `-EPERM` on unlink, rmdir, rename | Parent lacks write or search (`may_delete`); `-EPERM`: sticky parent, caller owns neither the victim nor the parent |
 | `-EINVAL` on open | Linux flags not translated before VFS |
 
 ## 10. Future roadmap
