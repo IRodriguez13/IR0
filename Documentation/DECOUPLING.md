@@ -33,7 +33,8 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | Staged syscall dispatch | **`early_syscall_dispatch_invoke()`** owns provider registration and semantic-ID dispatch in common C. Narrow `user/time/console/vfs/process/mm` ops groups prevent a monolithic early facade. ISA code owns ABI decoding, exception return, machine layout and early mechanisms. |
 | Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); x86-only iretq repair stays behind `<asm/context.h>`. New portable code includes the domain header ([`context.h`](../../includes/ir0/context.h)). [`arch_cpu.h`](../../includes/ir0/arch_cpu.h) is a compatibility umbrella only (does **not** include `cpu.h`). |
 | Context switch | **`switch_to(prev, next)`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); first entry **`first_switch_to`**. Portable policy is in `sched/switch/context_switch.c`; ISA backends stay in `arch/*/sources/`. |
-| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_keyboard_*` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/irq.c`. Portable trees must not include arch interrupt backend headers. |
+| IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/irq.c`. Portable trees must not include arch interrupt backend headers. |
+| Platform devices | Each ISA names its platform (`pc`, `dt`) and `scripts/make/platform/<platform>.mk` lists its device objects. The PC registers its boot entries from `ir0_boot_arch_drivers()` ([`boot_arch.h`](../../includes/ir0/boot_arch.h)), its VGA text screen with `console_set_text_screen()`, and its drivers register with the class facades (`input_register_keyboard/mouse`, `audio_register_device`, `clock_timer_init`). Guard: `[legacy-pc-io]`. |
 | Signals / sigcontext | ISA layouts in each ISA's `asm/sigcontext.h` ([x86-64](../arch/x86-64/include/asm/sigcontext.h) / [arm64](../arch/arm64/include/asm/sigcontext.h)); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
 | Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
@@ -66,7 +67,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | `kernel-no-driver-include` | `kernel/` (whole tree) | No `#include <drivers/...>` |
 | `kernel-use-arch-port-facade` | `kernel/` | No `#include <arch/common/arch_portable.h>`; use **`ir0/arch_port.h`** |
 | `bluetooth-include-scope` | Outside `drivers/bluetooth/` | No `#include <bluetooth/...>` |
-| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/`inb`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). |
+| `portable-no-isa-asm` | `kernel/`, `net/`, `mm/`, `sched/`, `drivers/`, `fs/`, `includes/ir0/` | No ISA mnemonics in asm; use **`smp_mb`/`udelay`/…** ([`ir0/cpu.h`](../../includes/ir0/cpu.h)). Port I/O is x86 `<asm/io.h>`, for PC platform drivers only. |
 | `no-raw-atomics` | `block/`, `cpp/`, `drivers/`, `fs/`, `includes/`, `ipc/`, `kernel/`, `ktm/`, `mm/`, `net/`, `sched/`, `smp/`, `sound/` | No `__atomic_*`, `__sync_*` or inline asm outside `arch/` and `includes/asm-generic/atomic.h`; use **`<ir0/atomic.h>`** (`atomic_t`, `cmpxchg`, `test_and_set_bit_lock`, `barrier`). Empty exception ledger, injected-violation self-test. |
 | `isa-named-header` | `includes/` | No header whose path names an ISA (`*_x86_64.h`, `*_arm64.h`, `x86/`, ...); a per-ISA header lives in `arch/<isa>/include/asm/` (or `uapi/asm/`) under a neutral name and is included as **`<asm/...>`**. No ledger, injected-violation self-test. |
 | `no-syscall-stubs` | whole tree except `arch/`, `userspace/`, `setup/pid1/`, `tests/selftests/`, `tests/conformance/`, `scripts/linux_abi/workloads/` | No inline asm that traps into the kernel (`syscall`, `sysenter`, `int $0x80`, `svc #0`); userspace uses libc **`syscall()`** or its own nolibc stubs. No ledger, injected-violation self-test. |
@@ -251,8 +252,8 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
    `arch_switch` / `arch_mm` = TTBR0 model; `irq_*` → VBAR + GICv2.
    ISD AArch64 rootfs pack remains open.
 4. **`arch/x86-64/sources/interrupt/`** is the **x86-only** IDT/PIC/ISR backend (see `Documentation/architecture/x86-64-interrupt-backend.md`).
-   Portable and driver code enter via **`ir0/irq.h`** / **`ir0/arch_io.h`**; arm64 never
-   links this tree.
+   Portable and driver code enter via **`ir0/irq.h`**; port I/O (`<asm/io.h>`) is
+   reserved to x86 code and the PC platform drivers; arm64 never links this tree.
 
 ## Testing and menuconfig ergonomics
 

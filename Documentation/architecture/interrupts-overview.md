@@ -11,7 +11,6 @@ through `ir0/irq.h`.
 - `sources/interrupt/pic.c` / `include/interrupt/pic.h` - Programmable Interrupt Controller
 - `sources/interrupt/isr_handlers.c` - Interrupt Service Routine routing
 - `sources/interrupt/keyboard.c` / `include/interrupt/keyboard.h` - Keyboard IRQ handler
-- `include/interrupt/io.h` - I/O port operations for interrupts
 - `asm/interrupt/isr_stubs_64.asm` - Assembly interrupt stubs
 - `asm/interrupt/early_idt_stubs.asm` - Early-boot exception stubs
 

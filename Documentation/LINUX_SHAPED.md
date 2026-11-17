@@ -42,9 +42,9 @@ the domain header, not the umbrella.
 
 | Domain | Header | Public names |
 |--------|--------|--------------|
-| CPU identity / delay / timer extras | `cpu.h`, `cpu_info.h`, `delay.h` | `udelay`, `cpuid` (portable), `timer_read` |
+| CPU identity / delay / timer extras | `cpu.h`, `cpu_info.h`, `delay.h` | `udelay`, `timer_read` |
 | IRQ | `irq.h` | `irq_save`, `irq_restore`, `enable_interrupts` |
-| I/O ports | `arch_io.h` | `inb`, `outb`, … |
+| I/O ports (x86-64, PC platform drivers only) | `<asm/io.h>` | `inb`, `outb`, … |
 | MM / paging activate | `arch_mm.h` | `mm_activate`, `arch_mm_copy_kernel_half` |
 | Page fault classify | `page_fault.h` | portable classify helpers |
 | TLS | `tls.h` | `set_tls` |

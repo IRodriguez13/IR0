@@ -101,7 +101,7 @@ NEON.
 | Scheduler | per-arch switch; first entry via `first_switch_to` |
 | Syscalls | per-arch entry ASM / stub |
 | Interrupts | Product entry: `ir0/irq.h`; impl PIC (x86 `arch/x86-64/sources/interrupt/`) vs GIC scaffold (arm64) |
-| Drivers | port I/O via `ir0/arch_io.h` (not `arch/x86-64/include/interrupt/io.h`) |
+| Drivers | PC platform drivers only: port I/O via x86 `<asm/io.h>`; listed in `scripts/make/platform/pc.mk` |
 | VFS/procfs | CPU info via `arch_port` |
 
 ## 7. Visual maps

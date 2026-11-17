@@ -92,6 +92,12 @@ Criterio del mantenedor para todo el kernel. Complementa
   `sysenter`, `int $0x80`, `svc #0`) fuera de `arch/` y de los árboles de
   userspace (`userspace/`, `setup/pid1/`, `tests/selftests/`,
   `tests/conformance/`, `scripts/linux_abi/workloads/`).
+- `[legacy-pc-io]`: el PC es una plataforma, no una rama. Rechaza
+  `#if`/`#ifdef`/`#define` con `IR0_LEGACY_PC_IO` u otro switch de PC y el
+  port I/O (`inb`/`outb`/…, `io_wait`) fuera de `arch/x86-64/` y de los
+  fuentes que lista `scripts/make/platform/pc.mk`. Cada ISA nombra su
+  plataforma (`PLATFORM_x86-64 := pc`, `PLATFORM_arm64 := dt`) y el build
+  incluye un único `scripts/make/platform/<plataforma>.mk`.
 - `[portable-no-isa-asm]`, `[portable-no-register-names]` y
   `[paging-neutral-root]` cubren mnemónicos, registros y vocabulario x86 en
   código común.

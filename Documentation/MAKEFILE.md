@@ -32,6 +32,7 @@ under `scripts/make/`:
 | `docs.mk` | Man pages and docs helpers |
 | `host-portable.mk` | POSIX host helpers (`HOST_TMP`) |
 | `ktm.mk` | `kernel-tests`, host harnesses, CTR/KTM gates, test catalog |
+| `platform/<platform>.mk` | Device objects of the platform each ISA boots on (`PLATFORM_x86-64 := pc`, `PLATFORM_arm64 := dt`); exactly one is included |
 
 There is no ISD, product, release, profile, QA, or Windows fragment. The root file is
 the complete graph for a kernel checkout.
