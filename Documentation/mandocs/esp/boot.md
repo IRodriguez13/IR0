@@ -25,11 +25,11 @@ habilitación de syscalls/IRQ, y `kexecve("/sbin/init")` (runit desde
 |-------|------------|---------|
 | Entrada del loader | Comprobación Multiboot, PAE, long mode | `arch/x86-64/asm/boot_x64.asm` |
 | CPU temprana | GDT, TSS, SSE | `arch/x86-64/sources/early.c` |
-| Entrada del kernel | Orquestación + fases de boot | `kernel/main.c` (`kmain`) |
+| Entrada del kernel | Init ordenado de subsistemas; pasos en `kernel/boot/boot_init.c` | `kernel/main.c` (`kmain`) |
 | Event core | `klog_record` + early clock | `ktm/klog.c`, `arch_early_clock_*` |
 | Drivers | Bootstrap por etapas + probe events | `drivers/init_drv.c` |
 | FS raíz | Init de tabla de montajes | `fs/vfs.c` (`vfs_init_root`) |
-| Milestone bare-metal | `/etc/ir0-baremetal-booted` | `kernel/main.c` (post-VFS) |
+| Milestone bare-metal | `/etc/ir0-baremetal-booted` | `kernel/boot/boot_init.c` (`boot_rootfs_init`) |
 | Userspace | Carga ELF + schedule | `kernel/exec/elf_loader.c` (`kexecve`) |
 
 **Paginación temprana (`boot_x64.asm`):** mapa de identidad 0–48 MiB con páginas

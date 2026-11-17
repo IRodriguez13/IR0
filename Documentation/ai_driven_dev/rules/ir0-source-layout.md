@@ -56,11 +56,13 @@ Criterio del mantenedor para todo el kernel. Complementa
   | `kernel/process/` | ciclo de vida: registro, create, fork, exec (CLOEXEC), exit, wait, credenciales, límites |
   | `kernel/signals/` | entrega, frame de usuario, acción por defecto, trampolín, syscalls de señales y su hook de diag |
   | `kernel/exec/` | carga de ELF, pila de entrada, vDSO, caché environ/cmdline de exec |
-  | `kernel/boot/` | secuencia de arranque, parámetros, cmdline, rootfs base, handoff a init |
+  | `kernel/main.c` | `kmain()`: el orden de arranque de cada subsistema, una llamada por paso (único archivo suelto previsto en `kernel/`) |
+  | `kernel/boot/` | pasos de arranque que llama `kmain()`, parámetros, cmdline, rootfs base, handoff a init |
   | `kernel/problems/` | BUG/OOPS, panic y descripción neutral de faults |
   | `kernel/irq/` | tabla portable de IRQs y trabajo al volver a usuario desde una IRQ |
   | `kernel/futex/` | colas de futex y sus syscalls (robust list incluida) |
-  | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado, reboot y kexec |
+  | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado y reboot |
+  | `kernel/kexec/` | `kexec_load` y el salto a la imagen cargada (como execve, para el kernel) |
   | `kernel/syscalls/` | tabla de syscalls y el resto de los syscalls (partición pendiente) |
 
   Lo multi-CPU vive en `smp/` (nivel superior); las tablas de fds y

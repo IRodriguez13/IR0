@@ -207,7 +207,7 @@ pattern); treat explicit `n` as the compile-out signal.
 | Aspect | x86-64 | ARM64 |
 |--------|--------|-------|
 | **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-product.bin` / `kernel-arm64.bin` = the same portable **`$(ALL_OBJS)`** product link (validated by `arm64-common-core-compile` + `arm64-provider-audit`). A board goal (`make ir0 arm64 rpi5`) builds this same link with the board's macros. |
-| **Boot** | Multiboot → full kernel bring-up. | Shared `ir0_kernel_boot` chain, the only ARM64 boot path (the freestanding `-min` board images are retired). |
+| **Boot** | Multiboot → full kernel bring-up. | Shared `kmain()` (`kernel/main.c`), the only ARM64 boot path (the freestanding `-min` board images are retired). |
 | **Userspace** | musl / BusyBox / TCC / Doom on x86 via ISD. | Staged EL0 on QEMU virt (`make ir0 arm64`). ISD has **no** AArch64 rootfs pack yet. |
 | **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`EARLY_FOLD.md`](EARLY_FOLD.md). Not an ISD product boot. |
 
@@ -223,7 +223,7 @@ CPIO/`vda`).
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep
 baseline; evolves with refactors):
 
-- **`kernel/main.c`:** portable boot calls **`ir0_boot_port_unmask_irqs()`** after **`irq_init()`**; PIC details stay in the ISA backend.
+- **`kernel/boot/boot_init.c`:** portable boot (`boot_irq_init()`) calls **`ir0_boot_port_unmask_irqs()`** after **`irq_init()`**; PIC details stay in the ISA backend.
 - **`mm/`:** use **`ir0/serial_io.h`** for logging where applicable.
 - **`net/`:** use **`ir0/serial_io.h`** and **`ir0/clock.h`** for diagnostics and time.
 - **`fs/`:** CPU queries go through **`includes/ir0/arch_port.h`** (no direct `<arch/...>` includes).
