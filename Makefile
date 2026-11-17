@@ -423,7 +423,6 @@ KERNEL_OBJS = \
     kernel/process/core.o \
     sched/trace.o \
     kernel/process/create.o \
-    kernel/process/cred_groups.o \
     kernel/process/domains.o \
     mm/mm_struct.o \
     fs/files_lifecycle.o \

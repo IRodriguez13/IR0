@@ -50,7 +50,6 @@ int64_t sys_getgroups(int size, gid_t *list)
 	if (!current_process)
 		return -ESRCH;
 
-	process_cred_init_groups(current_process);
 	n = current_process->ngroups;
 
 	if (size == 0)
@@ -94,11 +93,6 @@ int64_t sys_setgroups(size_t size, const gid_t *list)
 	for (i = 0; i < size; i++)
 		current_process->groups[i] = groups[i];
 	current_process->ngroups = (uint8_t)size;
-	if (size == 0)
-	{
-		current_process->groups[0] = (gid_t)current_process->gid;
-		current_process->ngroups = 1;
-	}
 	return 0;
 }
 
@@ -170,7 +164,6 @@ int64_t sys_setregid(gid_t rgid, gid_t egid)
 	if (ret < 0)
 		return ret;
 	process_cred_store_gid(current_process, &ids);
-	process_cred_init_groups(current_process);
 	return 0;
 }
 
@@ -230,7 +223,6 @@ int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid)
 	if (ret < 0)
 		return ret;
 	process_cred_store_gid(current_process, &ids);
-	process_cred_init_groups(current_process);
 	return 0;
 }
 

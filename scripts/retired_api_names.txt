@@ -224,3 +224,4 @@ ir0_access_from_stat_groups generic_permission() (the cred carries the groups)
 ir0_access_path_routed_groups ir0_access_path_routed() with a struct ir0_task_cred
 ir0_check_file_access a stat (vfs_stat()) + generic_permission()
 is_root ir0_cred_is_root()
+process_cred_init_groups (nothing; the supplementary groups are what setgroups(2) set, possibly none)

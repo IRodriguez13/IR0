@@ -704,3 +704,18 @@ int fs_dac_owner_bits_and_eperm(void)
 	EXPECT_ERR(S4(SYS_fchmodat, AT_FDCWD, "theirs", 0600, 0), EPERM);
 	return CONF_PASS;
 }
+
+/*
+ * setgroups(0, NULL) empties the supplementary groups (kernel/groups.c),
+ * so root that drops to a user keeps no group 0 and cannot read a 0640
+ * root:root file.
+ */
+int fs_setgroups_empty_drops_root_group(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("f", 0, 0640, 0) != 0 ||
+	    dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "f", O_RDONLY, 0), EACCES);
+	EXPECT(S2(SYS_getgroups, 0, 0), 0);
+	return CONF_PASS;
+}
