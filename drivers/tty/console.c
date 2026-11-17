@@ -211,17 +211,25 @@ static int tty_icanon_on(void)
 	return (tty_termios.c_lflag & IR0_LFLAG_ICANON) ? 1 : 0;
 }
 
+/*
+ * Input mapping of Linux n_tty_receive_char_special(), the same in
+ * canonical and raw mode: IGNCR drops CR, ICRNL turns CR into NL, INLCR
+ * turns NL into CR. Returns 0 for a dropped byte.
+ */
 static char tty_normalize_input(char c)
 {
 	tty_termios_ensure();
-	/*
-	 * ICRNL maps CR→NL for cooked lines. In non-canonical/raw mode
-	 * (nano/ncurses), deliver CR as 0x0d even if ICRNL is stale — apps
-	 * expect Enter = '\r' after cfmakeraw().
-	 */
-	if (c == '\r' && (tty_termios.c_iflag & IR0_IFLAG_ICRNL) &&
-	    tty_icanon_on())
-		return '\n';
+	if (c == '\r')
+	{
+		if (tty_termios.c_iflag & IR0_IFLAG_IGNCR)
+			return 0;
+		if (tty_termios.c_iflag & IR0_IFLAG_ICRNL)
+			return '\n';
+	}
+	else if (c == '\n' && (tty_termios.c_iflag & IR0_IFLAG_INLCR))
+	{
+		return '\r';
+	}
 	return c;
 }
 
@@ -295,7 +303,8 @@ static void tty_canon_drain(char *kbuf, size_t count, size_t *out_len)
 }
 
 /*
- * Returns 1 when a completed canonical line is queued in canon_readq.
+ * Feed one byte, already mapped by tty_normalize_input(), to the canonical
+ * line. Returns 1 when a completed line is queued in canon_readq.
  */
 static int tty_canon_feed(char c)
 {
@@ -306,11 +315,6 @@ static int tty_canon_feed(char c)
 	erase = tty_termios.c_cc[IR0_CC_VERASE];
 	if (erase == 0)
 		erase = 127;
-
-	c = tty_normalize_input(c);
-	/* Defensive: treat bare CR as EOL under ICANON (Enter from PS/2). */
-	if (c == '\r')
-		c = '\n';
 
 	if (c == '\b' || c == 127 || (unsigned char)c == erase)
 	{

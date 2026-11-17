@@ -94,6 +94,7 @@ void ktest_brk_post_exec(void);
 void ktest_brk_linux_fail_returns_current(void);
 void ktest_tty_canon_read_immediate(void);
 void ktest_tty_canon_block_wake(void);
+void ktest_tty_raw_icrnl_maps_cr(void);
 void ktest_sock_stream_accept_fifo_backlog(void);
 void ktest_sock_stream_segmented_queue(void);
 void ktest_oom_reclaim_before_kill(void);

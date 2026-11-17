@@ -15,6 +15,7 @@
 #include "test/ktest_harness.h"
 #include <ir0/process.h>
 #include <ir0/console.h>
+#include <ir0/input_backend.h>
 #include <ir0/sched.h>
 #include <string.h>
 
@@ -89,6 +90,41 @@ void ktest_tty_canon_block_wake(void)
 	KASSERT(tty_ktest_done);
 	KASSERT_EQ(tty_ktest_result, 8);
 	KASSERT(memcmp(tty_ktest_buf, "echo hi\n", 8) == 0);
+
+	KTEST_END();
+}
+
+/*
+ * Linux n_tty_receive_char_special(): ICRNL maps CR to NL in raw mode as
+ * well as in canonical mode. The byte enters through the keyboard path,
+ * as a typed key or TIOCSTI does.
+ */
+void ktest_tty_raw_icrnl_maps_cr(void)
+{
+	struct ir0_termios saved;
+	struct ir0_termios raw;
+	char c = 0;
+	int recv;
+	int64_t n;
+
+	KTEST_BEGIN("tty_raw_icrnl_maps_cr");
+
+	KASSERT_EQ(tty_ioctl_termios_kernel(IR0_CONSOLE_TCGETS, &saved), 0);
+	raw = saved;
+	raw.c_lflag &= ~(IR0_LFLAG_ICANON | IR0_LFLAG_ECHO | IR0_LFLAG_ISIG);
+	raw.c_iflag |= IR0_IFLAG_ICRNL;
+	raw.c_cc[IR0_CC_VMIN] = 1;
+	raw.c_cc[IR0_CC_VTIME] = 0;
+	KASSERT_EQ(tty_ioctl_termios_kernel(IR0_CONSOLE_TCSETS, &raw), 0);
+	ir0_console_flush_input();
+	recv = input_kbd_receive('\r');
+	n = ir0_console_read(&c, 1, 1);
+	ir0_console_flush_input();
+	(void)tty_ioctl_termios_kernel(IR0_CONSOLE_TCSETS, &saved);
+
+	KASSERT_EQ(recv, 0);
+	KASSERT_EQ(n, 1);
+	KASSERT_EQ(c, '\n');
 
 	KTEST_END();
 }
