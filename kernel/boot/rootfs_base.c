@@ -19,7 +19,6 @@ void ir0_rootfs_prepare_userspace_base(void)
 		"/bin",
 		"/sbin",
 		"/lib",
-		"/lib/tcc",
 		"/bpivot",
 		"/tmp",
 		"/var",
