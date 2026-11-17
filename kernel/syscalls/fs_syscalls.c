@@ -370,7 +370,12 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     /* The lookup fails on a non-directory before any permission check. */
     if (!S_ISDIR(st.st_mode))
       return -ENOTDIR;
-    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+    /*
+     * opendir(3) reads the directory: it needs read, while search is the
+     * path walk's business. Opening one for write is EISDIR (vfs_open()).
+     */
+    if ((flags & O_ACCMODE) == O_RDONLY &&
+        generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
       return -EACCES;
   }
   else if (flags & O_CREAT)
@@ -510,9 +515,6 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
     return -ENOTDIR;
   access_rc = ir0_open_access_path_routed(path, ir0_flags,
                                           ir0_current_cred());
-  if (access_rc != 0)
-    return access_rc;
-  access_rc = generic_permission(ir0_current_cred(), &st, ACCESS_EXEC);
   if (access_rc != 0)
     return access_rc;
 

@@ -838,3 +838,26 @@ int fs_rename_needs_parent_write(void)
 		   EACCES);
 	return CONF_PASS;
 }
+
+/*
+ * opendir needs read on the directory, not search: a 0711 directory does
+ * not open for listing, a 0744 one opens and lists its entries, while the
+ * files in it stay out of reach without search.
+ */
+int fs_opendir_needs_read(void)
+{
+	char buf[512];
+	long fd;
+
+	if (S0(SYS_geteuid) != 0 || dac_make("x", 1, 0711, 0) != 0 ||
+	    dac_make("r", 1, 0744, 0) != 0 ||
+	    dac_make("r/f", 0, 0644, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "x", O_RDONLY | O_DIRECTORY, 0),
+		   EACCES);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "r", O_RDONLY | O_DIRECTORY, 0));
+	CHECK(S3(SYS_getdents64, fd, buf, sizeof(buf)) > 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "r/f", O_RDONLY, 0), EACCES);
+	return CONF_PASS;
+}

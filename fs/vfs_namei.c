@@ -235,17 +235,25 @@ int vfs_readlink(const char *path, char *buf, size_t buflen)
     return vfs_ops_readlink(ops, path, buf, buflen);
 }
 
-/* Nonzero when the directory @path lists any entry besides "." and "..". */
+/*
+ * Nonzero when the directory @path lists any entry besides "." and "..".
+ * It asks the backend directly: replacing a directory needs no read
+ * permission on it.
+ */
 static int vfs_dir_has_entries(const char *path)
 {
-    struct vfs_dirent *ents = kmalloc(3 * sizeof(*ents));
+    struct vfs_ops *ops = vfs_ops_for_path(path);
+    struct vfs_dirent *ents;
     int n;
     int i;
     int found = 0;
 
+    if (!ops || !ops->readdir)
+        return -ENOSYS;
+    ents = kmalloc(3 * sizeof(*ents));
     if (!ents)
         return -ENOMEM;
-    n = vfs_readdir(path, ents, 3);
+    n = vfs_ops_readdir(ops, path, ents, 3);
     for (i = 0; i < n && !found; i++)
         found = strcmp(ents[i].name, ".") != 0 && strcmp(ents[i].name, "..") != 0;
     kfree(ents);
@@ -389,7 +397,8 @@ int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
         return -EACCES;
     if ((st.st_mode & S_IFMT) != 0 && !S_ISDIR(st.st_mode))
         return -ENOTDIR;
-    if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)
+    /* Listing a directory reads it; search only lets a path go through. */
+    if (generic_permission(ir0_current_cred(), &st, ACCESS_READ) != 0)
         return -EACCES;
 
     struct vfs_ops *ops = vfs_ops_for_path(path);
