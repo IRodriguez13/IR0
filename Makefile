@@ -716,6 +716,7 @@ DRIVER_OBJS = \
 	drivers/video/typewriter.o \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
+	drivers/virtio/virtio_9p_pci.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
 
 HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h

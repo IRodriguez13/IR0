@@ -58,7 +58,7 @@
 #include <ir0/usb_host.h>
 #endif
 
-#include <ir0/virtio_9p.h>
+#include <drivers/virtio/virtio_9p.h>
 
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
@@ -133,7 +133,7 @@ static int boot_init_usb_host(void)
 static int boot_init_hostshare_9p(void)
 {
 	/* Optional: absent without QEMU -virtfs; non-fatal for normal boots. */
-	(void)virtio_9p_init();
+	(void)virtio_9p_pci_probe();
 	return 0;
 }
 
