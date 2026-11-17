@@ -33,6 +33,8 @@
 #include <ir0/kmem.h>
 #include <ir0/cred.h>
 #include <ir0/blockdev.h>
+#include <ir0/partition.h>
+#include <ir0/path_routed.h>
 #include <ir0/klog.h>
 #include <ir0/statfs.h>
 #include <ir0/process.h>
@@ -216,6 +218,71 @@ int vfs_sync(void)
      */
     ir0_block_flush_all();
     return 0;
+}
+
+/* Partition @partno (1-based) of the registered disk @disk. */
+static int lookup_partition(const char *disk, unsigned long partno,
+                            uint64_t *start)
+{
+    partition_info_t pi;
+
+    /* The partition table is indexed by the legacy disk slot (Q12). */
+    for (uint8_t d = 0; d < MAX_DISKS; d++) {
+        const char *name = ir0_block_legacy_name(d);
+
+        if (!name || strcmp(name, disk) != 0)
+            continue;
+        if (partno == 0 || partno > MAX_PARTITIONS_PER_DISK ||
+            get_partition_info(d, (uint8_t)(partno - 1), &pi) != 0)
+            return -ENODEV;
+        *start = pi.start_lba;
+        return 0;
+    }
+    return -ENODEV;
+}
+
+int lookup_bdev(const char *source, struct vfs_bdev *bdev)
+{
+    const char *name;
+    size_t len;
+    size_t base;
+    stat_t st;
+    int ret;
+
+    if (!source || !source[0] || !bdev)
+        return -EINVAL;
+
+    memset(bdev, 0, sizeof(*bdev));
+    name = strncmp(source, "/dev/", 5) == 0 ? source + 5 : source;
+    len = strlen(name);
+
+    if (len < sizeof(bdev->disk) && ir0_block_name_is_present(name)) {
+        memcpy(bdev->disk, name, len + 1);
+        return 0;
+    }
+
+    /* "<disk><n>": partition n of a registered disk. */
+    base = len;
+    while (base > 0 && name[base - 1] >= '0' && name[base - 1] <= '9')
+        base--;
+    if (base > 0 && base < len && base < sizeof(bdev->disk)) {
+        unsigned long partno = 0;
+
+        memcpy(bdev->disk, name, base);
+        bdev->disk[base] = '\0';
+        if (ir0_block_name_is_present(bdev->disk)) {
+            for (size_t i = base; i < len && partno <= MAX_PARTITIONS_PER_DISK; i++)
+                partno = partno * 10 + (unsigned long)(name[i] - '0');
+            return lookup_partition(bdev->disk, partno, &bdev->start);
+        }
+        bdev->disk[0] = '\0';
+    }
+
+    /* Not a block device: tell a missing path from a file of another type. */
+    ret = ir0_stat_path_routed_follow(source, &st);
+    if (ret != 0)
+        return ret;
+    return S_ISBLK(st.st_mode) ? -ENXIO : -ENOTBLK;
 }
 
 static struct vfs_fstype *vfs_find_fstype(const char *name)

@@ -582,6 +582,7 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \
 	kernel/test/test_debug_contracts.o \
+	kernel/test/test_fat16_contracts.o \
 	kernel/test/test_bpivot_boot.o \
 	kernel/test/test_process.o \
 	kernel/test/test_cred_access.o \

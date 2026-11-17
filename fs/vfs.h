@@ -92,6 +92,24 @@ int vfs_umount(const char *path);
 int vfs_pivot_root(const char *new_root, const char *put_old);
 int vfs_init_root(void);
 
+/*
+ * The block device a mount source names: a registered block device
+ * ("/dev/<disk>" or "<disk>"), or partition n of one ("<disk><n>").
+ * @start is the partition's first sector, 0 for a whole disk.
+ */
+struct vfs_bdev {
+    char disk[16];
+    uint64_t start;
+};
+
+/*
+ * Linux lookup_bdev() for block filesystems: fill @bdev for @source. 0, or
+ * -ENOENT (no such path), -ENOTBLK (the path is not a block device),
+ * -ENXIO (a block node with no registered device), -ENODEV (no such
+ * partition) or -EINVAL (no source).
+ */
+int lookup_bdev(const char *source, struct vfs_bdev *bdev);
+
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);
 

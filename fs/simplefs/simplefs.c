@@ -922,7 +922,9 @@ static int simplefs_mount_simple(const char *dev, const char *dir)
 static int simplefs_mount_fat16(const char *dev, const char *dir)
 {
 #if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_dev_is_block(dev))
+    struct vfs_bdev bdev;
+
+    if (simplefs_fat16_dev_is_block(dev) || lookup_bdev(dev, &bdev) == 0)
     {
         int blk_rc = simplefs_check_block_device(dev);
 

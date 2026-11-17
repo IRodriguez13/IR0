@@ -15,7 +15,6 @@
 #include "fat16_disk.h"
 #include <fs/vfs.h>
 #include <ir0/blockdev.h>
-#include <ir0/partition.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
 #include <ir0/mount_prefix.h>
@@ -254,67 +253,12 @@ static int fat16_load_bpb(struct fat16_vol *v, const uint8_t *sector)
 	return 0;
 }
 
-static int fat16_parse_dev(const char *dev, char *blk_out, size_t blk_sz,
-			   uint32_t *part_lba_out, int *use_whole_disk)
-{
-	const char *name;
-	uint8_t disk_id;
-	char letter;
-
-	if (!dev || !blk_out || !part_lba_out || !use_whole_disk)
-		return -EINVAL;
-
-	(void)blk_sz;
-
-	name = dev;
-	if (strncmp(dev, "/dev/", 5) == 0)
-		name = dev + 5;
-
-	if (strlen(name) < 3 || name[0] != 'h' || name[1] != 'd')
-		return -EINVAL;
-
-	letter = name[2];
-	if (letter < 'a' || letter > 'd')
-		return -EINVAL;
-	disk_id = (uint8_t)(letter - 'a');
-
-	if (name[3] == '\0')
-	{
-		*use_whole_disk = 1;
-		blk_out[0] = 'h';
-		blk_out[1] = 'd';
-		blk_out[2] = letter;
-		blk_out[3] = '\0';
-		*part_lba_out = 0;
-		return 0;
-	}
-
-	if (name[3] >= '1' && name[3] <= '9' && name[4] == '\0')
-	{
-		partition_info_t pi;
-		uint8_t part_idx = (uint8_t)(name[3] - '1');
-
-		if (get_partition_info(disk_id, part_idx, &pi) != 0)
-			return -ENODEV;
-		*use_whole_disk = 0;
-		blk_out[0] = 'h';
-		blk_out[1] = 'd';
-		blk_out[2] = letter;
-		blk_out[3] = '\0';
-		*part_lba_out = (uint32_t)pi.start_lba;
-		(void)disk_id;
-		return 0;
-	}
-
-	return -EINVAL;
-}
-
-static int fat16_find_fat16_partition(uint8_t disk_id, uint32_t *lba_out)
+static int fat16_find_fat16_partition(const char *disk, uint32_t *lba_out)
 {
 	uint8_t mbr[512];
 	int i;
 
-	if (ir0_block_read_by_name(ir0_block_legacy_name(disk_id), 0, 1, mbr))
+	if (ir0_block_read_by_name(disk, 0, 1, mbr))
 		return -EIO;
 	if (mbr[510] != 0x55 || mbr[511] != 0xAA)
 		return -ENOENT;
@@ -1135,13 +1079,11 @@ static int fat16_init_subdir(struct fat16_vol *v, uint16_t cluster, uint16_t par
 int fat16_disk_mount(const char *dev, const char *mount_dir)
 {
 	struct fat16_vol *slot = NULL;
-	char blk[16];
-	uint32_t part_lba = 0;
-	int whole = 0;
+	struct vfs_bdev bdev;
+	uint32_t part_lba;
 	uint8_t boot[512];
 	int ret;
 	char mount_norm[FAT16_MAX_PATH];
-	uint8_t disk_id;
 
 	if (!dev || !mount_dir)
 		return -EINVAL;
@@ -1157,31 +1099,26 @@ int fat16_disk_mount(const char *dev, const char *mount_dir)
 	if (!slot)
 		return -ENOSPC;
 
-	ret = fat16_parse_dev(dev, blk, sizeof(blk), &part_lba, &whole);
+	ret = lookup_bdev(dev, &bdev);
 	if (ret != 0)
 		return ret;
-	if (!ir0_block_name_is_present(blk))
-		return -ENXIO;
+	part_lba = (uint32_t)bdev.start;
 
-	disk_id = (uint8_t)(blk[2] - 'a');
-
-	if (whole)
+	/* A whole disk with no BPB: use its first FAT partition. */
+	if (part_lba == 0)
 	{
-		if (ir0_block_read_by_name(blk, 0, 1, boot))
+		if (ir0_block_read_by_name(bdev.disk, 0, 1, boot))
 			return -EIO;
-		if (fat16_disk_probe_bpb(boot, NULL) != 0)
-		{
-			if (fat16_find_fat16_partition(disk_id, &part_lba) != 0)
-				return -EINVAL;
-			whole = 0;
-		}
+		if (fat16_disk_probe_bpb(boot, NULL) != 0 &&
+		    fat16_find_fat16_partition(bdev.disk, &part_lba) != 0)
+			return -EINVAL;
 	}
 
 	memset(slot, 0, sizeof(*slot));
-	strncpy(slot->blk_name, blk, sizeof(slot->blk_name) - 1);
+	strncpy(slot->blk_name, bdev.disk, sizeof(slot->blk_name) - 1);
 	slot->base_lba = part_lba;
 
-	if (ir0_block_read_by_name(blk, part_lba, 1, boot))
+	if (ir0_block_read_by_name(bdev.disk, part_lba, 1, boot))
 		return -EIO;
 	ret = fat16_load_bpb(slot, boot);
 	if (ret != 0)
