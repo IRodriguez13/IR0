@@ -154,7 +154,7 @@ Fuente Mermaid: `Documentation/mandocs/diagrams/vfs-routing.mmd`
 
 - Validar rutas y aplicar política genérica open/create/truncate.
 - Elegir montaje y tabla ops correctos.
-- Aplicar credenciales vía `ir0_check_file_access` y `ir0_current_cred`.
+- Aplicar credenciales vía `generic_permission` sobre el stat del objeto y `ir0_current_cred`.
 - Mantener semántica syscall para `O_TRUNC`, rutas relativas (resueltas por el caller), errno negativo.
 
 **Capa syscall debe:**
