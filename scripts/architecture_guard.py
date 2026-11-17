@@ -1429,8 +1429,6 @@ SYSCALL_FRAME_PTR_FIELD_RE = re.compile(
 )
 
 SYSCALL_FRAME_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "arch_syscall_frame_x86_64.h",
-    ROOT / "includes" / "ir0" / "arch_syscall_frame_arm64.h",
     ROOT / "ktm" / "d1_12_read_diag.c",
     ROOT / "ktm" / "d1_16_tty_read_diag.c",
 }
@@ -2577,19 +2575,14 @@ def check_kmem_single_api():
 
 # ISA register names in portable identifiers (rsp, rip, rax, cr3, esr, ...).
 # Portable code speaks ip / sp / retval / root; register names live in arch/
-# and in the ISA-specific uapi/context headers. Existing offenders are frozen
+# (the frame, context and sigcontext layouts in arch/<isa>/include/asm/).
+# Existing offenders are frozen
 # in REGISTER_NAME_BASELINE as "<path> <identifier>" pairs. The ledger only
 # shrinks: a new pair fails, and so does a pair whose identifier is gone, so a
 # branch that fixes an offender deletes its line in the same commit.
 REGISTER_NAME_BASELINE = ROOT / "scripts" / "isa_register_name_baseline.txt"
 REGISTER_NAME_TREES = ("block", "fs", "includes/ir0", "ipc", "kernel", "ktm",
                        "mm", "net", "sched", "smp")
-REGISTER_NAME_ISA_HEADERS = frozenset(
-    {
-        "arch_syscall_frame_arm64.h",
-        "arch_syscall_frame_x86_64.h",
-    }
-)
 REGISTER_NAME_PARTS = frozenset(
     {
         "rax", "rbx", "rcx", "rdx", "rsi", "rdi", "rbp", "rsp", "rip",
@@ -2650,8 +2643,6 @@ def register_name_violations() -> dict[tuple[str, str], int]:
         if not base.is_dir():
             continue
         for path in iter_c_files(base):
-            if path.name in REGISTER_NAME_ISA_HEADERS:
-                continue
             rel = str(rel_to_root(path)).replace("\\", "/")
             if "/mocks/arm64/" in rel or "/mocks/x86" in rel:
                 continue

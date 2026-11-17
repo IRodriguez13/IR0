@@ -458,7 +458,7 @@ static inline void process_tls_set(process_t *p, uint64_t tls)
 		p->arch_thread.tls_base = tls;
 }
 
-/* Opaque syscall-frame accessors — ISA decode lives in arch_syscall_frame_*.h. */
+/* Opaque syscall-frame accessors — ISA decode lives in <asm/syscall_frame.h>. */
 static inline uint64_t process_syscall_ip(const process_t *p)
 {
 	return p ? syscall_frame_ip(&p->syscall_frame) : 0;
