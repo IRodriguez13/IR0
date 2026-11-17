@@ -2743,7 +2743,7 @@ def _register_name_self_test() -> list[str]:
 # Terminal halt: the only callers of cpu_halt() (Linux stop_this_cpu users).
 TERMINAL_HALT_CALLERS = frozenset((
     "kernel/problems/oops.c",
-    "kernel/power/kexec.c",
+    "kernel/kexec/kexec.c",
     "kernel/power/power_manag.c",
 ))
 TERMINAL_HALT_HEADER = "includes/ir0/oops_port.h"
