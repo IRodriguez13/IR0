@@ -806,3 +806,35 @@ int fs_create_needs_parent_write_search(void)
 	EXPECT(S1(SYS_close, fd), 0);
 	return CONF_PASS;
 }
+
+/*
+ * rename(2) deletes a name in the old directory and creates one (or
+ * replaces one) in the new: both directories need write and search, the
+ * file itself needs nothing, a sticky directory keeps names the user does
+ * not own (EPERM), and a directory moved to another parent needs write on
+ * itself to update "..".
+ */
+int fs_rename_needs_parent_write(void)
+{
+	if (S0(SYS_geteuid) != 0 || dac_make("ro", 1, 0755, 0) != 0 ||
+	    dac_make("ro/f", 0, 0666, 0) != 0 ||
+	    dac_make("own", 1, 0755, DAC_GID) != 0 || dac_give("own") != 0 ||
+	    dac_make("own/f", 0, 0444, 0) != 0 ||
+	    dac_make("own/d", 1, 0755, 0) != 0 ||
+	    dac_make("own2", 1, 0755, DAC_GID) != 0 || dac_give("own2") != 0 ||
+	    dac_make("t", 1, 01777, 0) != 0 ||
+	    dac_make("t/f", 0, 0666, 0) != 0 || dac_become_user(0) != 0)
+		return CONF_TCONF;
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "ro/f", AT_FDCWD, "own/x"),
+		   EACCES);
+	EXPECT(S4(SYS_renameat, AT_FDCWD, "own/f", AT_FDCWD, "own/g"), 0);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "own/g", AT_FDCWD, "ro/g"),
+		   EACCES);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "t/f", AT_FDCWD, "own/t"),
+		   EPERM);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "own/g", AT_FDCWD, "t/f"),
+		   EPERM);
+	EXPECT_ERR(S4(SYS_renameat, AT_FDCWD, "own/d", AT_FDCWD, "own2/d"),
+		   EACCES);
+	return CONF_PASS;
+}

@@ -258,6 +258,12 @@ static int vfs_dir_has_entries(const char *path)
  * directory is EISDIR, a directory over a non-directory ENOTDIR, and a
  * directory over a non-empty directory ENOTEMPTY. Two names for the same
  * file leave both in place.
+ *
+ * Permissions follow vfs_rename() in fs/namei.c: the old name is deleted
+ * and the new one created, or deleted first when it exists, each with the
+ * check of its own directory (may_delete(), may_create()); the file itself
+ * needs nothing. A directory that moves to another parent also needs
+ * write on itself, for its ".." entry.
  */
 int vfs_rename(const char *oldpath, const char *newpath)
 {
@@ -271,21 +277,13 @@ int vfs_rename(const char *oldpath, const char *newpath)
     stat_t st_old;
     stat_t st_new;
     int have_new;
+    bool isdir;
+    char old_parent[MAX_PATH];
+    char new_parent[MAX_PATH];
     struct vfs_ops *ops;
 
     if (vfs_stat(oldpath, &st_old) != 0)
         return -ENOENT;
-
-    if (generic_permission(ir0_current_cred(), &st_old,
-                           ACCESS_READ | ACCESS_WRITE) != 0)
-        return -EACCES;
-
-    char parent[MAX_PATH];
-    if (vfs_parent_dir(newpath, parent, sizeof(parent)) == 0)
-        if (vfs_stat(parent, &st_new) != 0 ||
-            generic_permission(ir0_current_cred(), &st_new,
-                               ACCESS_WRITE) != 0)
-            return -EACCES;
 
     struct vfs_mount *m_old = vfs_find_mount(oldpath);
     struct vfs_mount *m_new = vfs_find_mount(newpath);
@@ -293,22 +291,37 @@ int vfs_rename(const char *oldpath, const char *newpath)
         return -EXDEV;
 
     have_new = vfs_stat(newpath, &st_new) == 0;
-    if (have_new)
+    if (have_new &&
+        (strcmp(oldpath, newpath) == 0 ||
+         (st_old.st_ino != 0 && st_old.st_ino == st_new.st_ino &&
+          st_old.st_dev == st_new.st_dev)))
+        return 0;
+
+    isdir = S_ISDIR(st_old.st_mode);
+    ret = may_delete(oldpath, &st_old, isdir);
+    if (ret != 0)
+        return ret;
+    ret = have_new ? may_delete(newpath, &st_new, isdir) : may_create(newpath);
+    if (ret != 0)
+        return ret;
+    if (isdir)
     {
-        if (strcmp(oldpath, newpath) == 0 ||
-            (st_old.st_ino != 0 && st_old.st_ino == st_new.st_ino &&
-             st_old.st_dev == st_new.st_dev))
-            return 0;
-        if (S_ISDIR(st_old.st_mode) && !S_ISDIR(st_new.st_mode))
-            return -ENOTDIR;
-        if (!S_ISDIR(st_old.st_mode) && S_ISDIR(st_new.st_mode))
-            return -EISDIR;
-        if (S_ISDIR(st_new.st_mode))
-        {
-            ret = vfs_dir_has_entries(newpath);
-            if (ret != 0)
-                return ret < 0 ? ret : -ENOTEMPTY;
-        }
+        ret = vfs_parent_dir(oldpath, old_parent, sizeof(old_parent));
+        if (ret == 0)
+            ret = vfs_parent_dir(newpath, new_parent, sizeof(new_parent));
+        if (ret != 0)
+            return ret;
+        if (strcmp(old_parent, new_parent) != 0 &&
+            generic_permission(ir0_current_cred(), &st_old,
+                               ACCESS_WRITE) != 0)
+            return -EACCES;
+    }
+
+    if (have_new && S_ISDIR(st_new.st_mode))
+    {
+        ret = vfs_dir_has_entries(newpath);
+        if (ret != 0)
+            return ret < 0 ? ret : -ENOTEMPTY;
     }
 
     ops = vfs_ops_for_path(oldpath);
