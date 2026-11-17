@@ -34,8 +34,8 @@ void ir0_boot_arch_userspace_handoff_smoke(void);
 
 /**
  * ir0_boot_arch_drivers() - register the platform's device drivers with
- * driver_bootstrap_register(). The default registers none; the PC adds
- * its i8042 and PS/2 devices.
+ * driver_bootstrap_register(). Every ISA defines it (PC:
+ * arch/x86-64/sources/boot_drivers.c; arm64: arch/arm64/sources/boot_arch.c).
  */
 void ir0_boot_arch_drivers(void);
 
