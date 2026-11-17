@@ -236,7 +236,7 @@ typedef struct process
 	 */
 	uint32_t saved_sigmask;
 	uint8_t restore_sigmask;
-	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER / musl) */
+	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	/*
 	 * Handler entry RSP (points at restorer slot). Non-zero while a

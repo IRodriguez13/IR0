@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: stat_user.c
- * Description: kernel stat_t → Linux/musl userspace struct stat conversion
+ * Description: kernel stat_t → Linux userspace struct stat conversion
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

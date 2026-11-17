@@ -82,8 +82,7 @@ int64_t sys_brk(void *addr)
 
 	/*
 	 * Linux brk(2) never returns -errno. A rejected request keeps the
-	 * current program break so musl's `__syscall(SYS_brk) < end` probe
-	 * sees a real VA instead of -EFAULT.
+	 * current program break, the only failure brk(2) reports.
 	 */
 	if (!mm_user_range_mappable(new_brk, 0) || new_brk < heap_lo ||
 	    new_brk > heap_lo + USER_HEAP_MAX_SIZE)
@@ -91,17 +90,16 @@ int64_t sys_brk(void *addr)
 
 	/*
 	 * Linux do_brk_flags: the break never grows over an existing mapping.
-	 * musl probes the page above the break with a PROT_NONE MAP_FIXED
-	 * anonymous mmap; extending across it left the kernel treating the page
-	 * as heap while the VMA still said PROT_NONE, so the first heap access
-	 * took a SIGSEGV. Returning the unchanged break is how brk(2) reports
-	 * failure, and musl then falls back to mmap.
+	 * A PROT_NONE MAP_FIXED mapping above the break must stop it; growing
+	 * across it left the kernel treating the page as heap while the VMA
+	 * still said PROT_NONE, so the first heap access took a SIGSEGV.
+	 * Returning the unchanged break is how brk(2) reports failure.
 	 */
 	/*
 	 * Linux SYSCALL_DEFINE1(brk) also reserves a guard page past the new
 	 * break (find_vma_intersection(mm, oldbrk, newbrk + PAGE_SIZE)). IR0
-	 * cannot: mallocng parks its PROT_NONE guard exactly one page above
-	 * the break it just set, so the extra page rejects musl's own growth.
+	 * does not yet: an allocator that parks a PROT_NONE guard right above
+	 * the break it set would then fail to grow. Known divergence.
 	 */
 	if (new_brk > current_brk &&
 	    brk_range_hits_mmap(current_process, current_brk, new_brk))

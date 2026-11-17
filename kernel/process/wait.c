@@ -219,8 +219,9 @@ int process_wait(pid_t pid, int *status, int options)
 			/*
 			 * wait(2) consumed this child exit (Linux waitpid). Drop stale
 			 * SIGCHLD pending when no zombies remain — otherwise
-			 * sigprocmask(SIG_UNBLOCK) after waitpid runs the musl handler
-			 * and corrupts the supervisor syscall frame (rip=user stack).
+			 * sigprocmask(SIG_UNBLOCK) after waitpid ran the handler and
+			 * corrupted the supervisor syscall frame (rip=user stack).
+			 * Linux leaves SIGCHLD pending here; known divergence.
 			 */
 			if (!wait_find_matching_zombie(current_process, (pid_t)-1))
 				current_process->signal_pending &= ~SIGNAL_MASK(SIGCHLD);

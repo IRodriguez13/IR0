@@ -321,7 +321,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 }
 
 /*
- * sys_writev - POSIX writev(2) via repeated sys_write (musl stdio flush path).
+ * sys_writev - POSIX writev(2) via repeated sys_write.
  */
 int64_t sys_writev(int fd, const struct iovec *iov, int iovcnt)
 {

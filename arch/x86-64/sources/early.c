@@ -29,7 +29,7 @@
 #include <interrupt/idt.h> /* idt_early_install64 only */
 
 /*
- * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (musl CRT uses XMM).
+ * arch_enable_sse_x86_64 - Allow SSE/x87 in ring 0/3 (user code may use XMM).
  * Clears CR0.EM, sets CR0.MP, CR4.OSFXSR and CR4.OSXMMEXCPT.
  */
 static void arch_enable_sse_x86_64(void)

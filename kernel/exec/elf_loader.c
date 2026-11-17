@@ -1267,7 +1267,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
         }
     }
 
-    /* auxv[] — musl walks past envp NULL to find these */
+    /* auxv[] follows the envp NULL (Linux create_elf_tables()) */
     {
         uint64_t at_secure = process ? process->at_secure : 0;
         uint64_t at_vdso = vdso_ok ? vdso_ehdr() : 0;
@@ -1973,7 +1973,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     /*
      * Linux clears TLS across execve. Stale tls_base from the pre-exec image
      * (or fork parent) must not be restored on the next context switch —
-     * that leaves TLS pointing at unmapped VA while glibc/musl still expect
+     * that leaves TLS pointing at unmapped VA while the libc still expects
      * to install a new base during CRT startup (x86: arch_prctl; ARM: TPIDR).
      */
     process_tls_set(proc, 0);

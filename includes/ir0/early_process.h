@@ -23,8 +23,7 @@
 /*
  * Linux clone(2) on AArch64 is syscall 220:
  *   clone(flags, stack, parent_tid, tls, child_tid)
- * (man7.org/linux/man-pages/man2/clone.2.html; musl
- * src/thread/aarch64/clone.s). CSIGNAL is the low 8 bits. Staged
+ * (man7.org/linux/man-pages/man2/clone.2.html). CSIGNAL is the low 8 bits. Staged
  * EL0 implements a real child only with CLONE_VM (shared address
  * space). Private mm / COW fork stays ENOSYS.
  */

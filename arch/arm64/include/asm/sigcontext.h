@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: sigcontext.h
- * Description: Linux aarch64 sigcontext uapi layout (rt_sigreturn / musl).
+ * Description: Linux aarch64 sigcontext uapi layout (rt_sigreturn, arch/arm64/include/uapi/asm/sigcontext.h).
  *
  * Source: arch/arm64/include/uapi/asm/sigcontext.h (Linux). Portable code must
  * not open these fields — use arch_task_load/store_sigcontext and arch_signal_*.

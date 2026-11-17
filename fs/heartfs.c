@@ -53,7 +53,7 @@ static const char heart_manifesto_text[] =
     "  cat /heart/README      /heart layout\n"
     "  cat /heart/kernel/version\n"
     "  man IR0-boot           guest manual pages (cat7)\n"
-    "  ls /usr/ken/games      Ken Thompson nod — small games (Doom)\n"
+    "  ls /usr/ken/games      Ken Thompson nod — small games\n"
     "  ls /heart/dennis/src   Dennis Ritchie nod — IR0 sources (9p/writable)\n"
     "\n"
     "Home: Documentation/ in the source tree; SETUP.md for QEMU.\n";

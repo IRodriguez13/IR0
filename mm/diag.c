@@ -152,7 +152,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 		/*
 		 * The fault ip lands inside the libc block copy, so it names
 		 * memcpy and not whoever asked for the bad length. Snapshot the
-		 * top of the user stack instead: musl's x86-64 memcpy pushes
+		 * top of the user stack instead: a leaf memcpy pushes
 		 * nothing, so the first word is the caller's return address.
 		 *
 		 * That last part is a SysV assumption. On link-register ISAs the

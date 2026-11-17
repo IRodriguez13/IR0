@@ -1077,7 +1077,7 @@ int sys_mprotect(void *addr, size_t len, int prot)
   /*
    * Linux allows mprotect on any mapped VA (including ELF LOAD segments).
    * IR0 mmap_list only tracks sys_mmap regions — fall through to PTE walk so
-   * glibc/musl RELRO (mprotect → PROT_READ after load) works for exec images.
+   * libc RELRO (mprotect → PROT_READ after load) works for exec images.
    */
   current = process_mmap_list(current_process);
   while (current)

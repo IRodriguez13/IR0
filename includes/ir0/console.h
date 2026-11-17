@@ -38,7 +38,7 @@ typedef unsigned char ir0_cc_t;
 
 /*
  * Linux kernel uapi termios for TCGETS/TCSETS (asm-generic/termbits.h).
- * NCCS=19 → sizeof 36. musl x86_64 exposes a larger struct, but tcgetattr()
+ * NCCS=19 → sizeof 36. A libc may expose a larger struct, but tcgetattr()
  * passes it directly to ioctl and Linux reads/writes this 36-byte prefix.
  */
 #define IR0_NCCS 19

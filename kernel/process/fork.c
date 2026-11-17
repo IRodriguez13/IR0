@@ -215,9 +215,9 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 
 /*
  * Linux copy_thread: if clone() passed a child stack, the child resumes with
- * that RSP. musl __clone stores the fn argument at stack-8 and the child
- * path is `pop %rdi; call *fn`. Ignoring the stack makes posix_spawn's child
- * pop the parent's return address and #SS on attr->__flags (SS:%rbp).
+ * that RSP. A clone wrapper may store data on the new stack for the child
+ * to pop (the thread function and its argument). Ignoring the stack makes
+ * such a child pop the parent's return address and #SS on attr->__flags (SS:%rbp).
  */
 static void fork_child_set_user_stack(process_t *child, void *stack)
 {

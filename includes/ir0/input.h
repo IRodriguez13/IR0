@@ -68,7 +68,7 @@ struct input_event {
 #define EVIOC_READ 2u
 #define EVIOC_TYPE_SHIFT 8
 
-/* Key codes (Linux input-event-codes.h subset for Doom) */
+/* Key codes (Linux input-event-codes.h subset) */
 #define KEY_RESERVED  0
 #define KEY_ESC       1
 #define KEY_1         2
@@ -187,7 +187,7 @@ void input_event_push(uint16_t type, uint16_t code, int32_t value);
 
 /*
  * /dev/events0 open-reader count. While >0, PS/2 still feeds EV_KEY but
- * must not also inject cooked TTY bytes (Doom dual-delivery → "qqqls").
+ * must not also inject cooked TTY bytes (each key would reach the evdev reader and the TTY reader).
  */
 void input_events_reader_open(void);
 void input_events_reader_close(void);

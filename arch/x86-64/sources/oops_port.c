@@ -54,8 +54,8 @@ void ir0_oops_show_fault_regs(const struct ir0_fault *fault)
 }
 
 /*
- * #GP and #PF in the current mm: peek the opcode at RIP (musl a_crash /
- * abort fallback is "endbr64; hlt") and the return address at [RSP]
+ * #GP and #PF in the current mm: peek the opcode at RIP (a libc abort
+ * fallback may be "endbr64; hlt") and the return address at [RSP]
  * (SysV call pushes it), which names the caller of the faulting code.
  */
 const char *ir0_oops_user_fault_extra(const struct ir0_fault *fault,

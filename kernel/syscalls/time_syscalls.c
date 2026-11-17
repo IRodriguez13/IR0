@@ -278,7 +278,7 @@ int64_t sys_setitimer(int which, const struct itimerval *new_value,
 }
 
 /*
- * alarm(2) — one-shot ITIMER_REAL in whole seconds (musl may use setitimer).
+ * alarm(2) — one-shot ITIMER_REAL in whole seconds (alarm(2); setitimer(2) is the same timer).
  * Returns previous remaining seconds (rounded up), like Linux.
  */
 int64_t sys_alarm(unsigned int seconds)

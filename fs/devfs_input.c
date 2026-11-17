@@ -176,7 +176,7 @@ void devfs_input_init(void)
     input_mouse_set_ready_notifier(dev_mouse_ready_notify);
 }
 /*
- * /dev/events0 - Linux evdev input events (keyboard for Doom)
+ * /dev/events0 - Linux evdev input events (keyboard, input(4))
  * read: struct input_event (type, code, value)
  */
 static int64_t dev_events0_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)

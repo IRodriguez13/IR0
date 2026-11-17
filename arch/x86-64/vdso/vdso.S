@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * Minimal Linux-compatible vDSO for musl __vdsosym("LINUX_2.6", "__vdso_clock_gettime").
- * Delegates to syscall 228 (clock_gettime); no vdso → musl can fail in signal paths.
+ * Minimal Linux-compatible vDSO exporting __vdso_clock_gettime (version
+ * LINUX_2.6, vdso(7)). Delegates to syscall 228 (clock_gettime).
  */
 
 	.section .note.GNU-stack,"",%progbits

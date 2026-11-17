@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: sigcontext.h
- * Description: Linux/x86-64 sigcontext uapi layout (rt_sigreturn / musl).
+ * Description: Linux/x86-64 sigcontext uapi layout (rt_sigreturn, arch/x86/include/uapi/asm/sigcontext.h).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

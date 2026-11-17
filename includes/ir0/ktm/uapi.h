@@ -12,7 +12,7 @@
 
 #include <stdint.h>
 
-/* Ioctl request numbers (32-bit; musl may sign-extend). */
+/* Ioctl request numbers (32-bit; the register may arrive sign-extended). */
 #define KTM_IOC_RUN_SCENARIO   0x4B01u
 #define KTM_IOC_RUN_INVARIANTS 0x4B02u
 #define KTM_IOC_TAKE_SNAPSHOT  0x4B03u

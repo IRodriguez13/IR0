@@ -53,7 +53,7 @@ static int system_in_idle_mode = 0;
 static struct ps2_set1_state kbd_state;
 static int console_keyboard_mode = IR0_INPUT_KBD_XLATE;
 
-/* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, Doom) */
+/* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, input(4)) */
 static const uint16_t scancode_to_keycode[256] = {
     [0x01] = KEY_ESC, [0x02] = KEY_1, [0x03] = KEY_2, [0x04] = KEY_3,
     [0x05] = KEY_4, [0x06] = KEY_5, [0x07] = KEY_6, [0x08] = KEY_7,
@@ -377,7 +377,7 @@ static void keyboard_feed_scancode(uint8_t scancode)
 			klog_smoke("KBD_SCANCODE_OK");
 		}
 		/*
-		 * While /dev/events0 has readers (Doom, etc.), only EV_KEY —
+		 * While /dev/events0 has readers, only EV_KEY —
 		 * do not also inject ASCII into the cooked TTY line (qqqls).
 		 */
 		if (!input_events_readers_active())

@@ -517,7 +517,7 @@ static int64_t exit_to_user_mode(process_t *p, enum ir0_syscall_id id,
 }
 
 /**
- * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
+ * syscall_dispatch - Dispatch system call via table (Linux syscall ABI)
  * @syscall_num: Native Linux ABI syscall number for the active ISA
  * @arg1-arg6: System call arguments captured by the ISA entry backend
  *

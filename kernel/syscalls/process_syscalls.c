@@ -376,8 +376,8 @@ int64_t sys_setpriority(int which, int who, int prio)
 
 /*
  * getpriority(2). The raw syscall returns the nice value biased by 20 so a
- * legitimate negative nice is not mistaken for an error code; musl and glibc
- * undo the bias (Linux kernel/sys.c).
+ * legitimate negative nice is not mistaken for an error code; the libc
+ * undoes the bias (Linux kernel/sys.c).
  */
 int64_t sys_getpriority(int which, int who)
 {
@@ -1003,7 +1003,7 @@ int64_t sys_vfork(void)
  * CLONE_VFORK|CLONE_VM: vfork semantics (no CLONE_THREAD).
  * CLONE_THREAD|CLONE_VM: lightweight thread sharing the caller's mm.
  * Otherwise duplicates the address space like fork().
- * stack is the child user RSP (musl __clone / posix_spawn); NULL keeps the
+ * stack is the child user RSP (clone(2) child stack); NULL keeps the
  * parent's stack (classic vfork).
  */
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
@@ -1143,7 +1143,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
 }
 
 /*
- * sys_set_tid_address - Linux set_tid_address(2) stub for musl.
+ * sys_set_tid_address - Linux set_tid_address(2).
  */
 int64_t sys_set_tid_address(int *tidptr)
 {
@@ -1157,7 +1157,7 @@ int64_t sys_set_tid_address(int *tidptr)
   return (int64_t)current_process->task.pid;
 }
 /*
- * sys_getrandom - Non-cryptographic entropy for musl bring-up.
+ * sys_getrandom - Non-cryptographic entropy (getrandom(2) subset).
  */
 int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags)
 {

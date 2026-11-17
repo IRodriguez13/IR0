@@ -122,9 +122,9 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
 #define AUDIO_SET_FORMAT    0x1005
 #define AUDIO_GET_FORMAT    0x1006
 
-/* PCM format for Doom compatibility (11025 Hz, 8-bit mono default) */
+/* PCM format (11025 Hz, 8-bit mono default) */
 struct audio_format {
-    uint32_t sample_rate;   /* 4000-45454 Hz, Doom uses 11025 */
+    uint32_t sample_rate;   /* 4000-45454 Hz */
     uint8_t channels;      /* 1=mono, 2=stereo */
     uint8_t bits_per_sample; /* 8 or 16 */
 };

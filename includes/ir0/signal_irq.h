@@ -29,7 +29,7 @@ uint64_t sigcontext_sp(const struct sigcontext *ctx);
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx);
 
 /*
- * Fill @ctx from a captured syscall frame (musl syscall insn while blocked).
+ * Fill @ctx from a captured syscall frame (syscall insn while blocked).
  * @retval is the interrupted syscall return (typically -EINTR).
  */
 void signal_fill_sigcontext_from_syscall_frame(struct sigcontext *ctx,

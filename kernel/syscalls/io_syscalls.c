@@ -1180,7 +1180,7 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
   fd_entry_t *e;
   int64_t ret;
 
-  /* Linux ioctl cmd is 32-bit; musl may sign-extend into the register. */
+  /* Linux ioctl cmd is 32-bit; the register may arrive sign-extended. */
   request = (uint32_t)request;
 
   if (!current_process)

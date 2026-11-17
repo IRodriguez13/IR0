@@ -319,7 +319,7 @@ void ir0_boot_port_unmask_irqs(void)
 void syscall_init(void)
 {
     /*
-     * MSR LSTAR: syscall insn → syscall_insn_entry_asm (Linux/musl ABI),
+     * MSR LSTAR: syscall insn → syscall_insn_entry_asm (Linux syscall ABI),
      * the only syscall entry. Vector 0x80 keeps the kernel-only default
      * gate, so int $0x80 from userspace is #GP → SIGSEGV, as on a Linux
      * x86-64 kernel without IA32 emulation.
@@ -340,8 +340,8 @@ void syscall_init(void)
         uint32_t efer_hi;
 
         /*
-         * IA32_EFER.SCE: required for the syscall instruction (init_smoke,
-         * musl). Boot only enables LME+NXE; enable SCE when syscalls init.
+         * IA32_EFER.SCE: required for the syscall instruction (every user
+         * syscall). Boot only enables LME+NXE; enable SCE when syscalls init.
          */
         __asm__ volatile("rdmsr" : "=a"(efer_lo), "=d"(efer_hi) : "c"(0xC0000080U));
         efer_lo |= 1U;

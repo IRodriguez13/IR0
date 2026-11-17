@@ -21,7 +21,7 @@
 ;   slept inside the syscall returns with its own value (Linux pt_regs->sp).
 ;
 ; Violating ABI corrupts user computation across any syscall whose caller keeps
-; a live value in those registers (e.g. musl _Fork keeps the TLS pointer in
+; a live value in those registers (e.g. a libc that keeps the TLS pointer in
 ; %rdx across `syscall gettid`).
 [BITS 64]
 
@@ -153,8 +153,8 @@ syscall_insn_entry_asm:
     pop rax
 
     ; C helper clobbers SysV volatiles. Linux syscall ABI must preserve
-    ; all GPR except rax (retval), rcx, and r11 — musl _Fork keeps the TLS
-    ; pointer in %rdx across gettid after fork returns 0. Save the full set.
+    ; all GPR except rax (retval), rcx, and r11; callers may keep live
+    ; values (a TLS pointer in %rdx) across the syscall. Save the full set.
     push rax
     push rcx
     push r11

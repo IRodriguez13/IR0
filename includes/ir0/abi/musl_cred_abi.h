@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: musl_cred_abi.h
- * Description: musl/Linux ABI layout constants for host contract tests
+ * Description: Linux ABI layout constants for host contract tests
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
