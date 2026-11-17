@@ -14,7 +14,6 @@
 
 #include <interrupt/idt.h>
 #include <interrupt/pic.h>
-#include <interrupt/io.h>
 #include <interrupt/keyboard.h>
 #include <ir0/arch_cpu.h>
 
@@ -29,6 +28,7 @@
 #include <ir0/console.h>
 #include <ir0/ps2_set1.h>
 #include <kernel/syscalls.h>
+#include <asm/io.h>
 
 #define PS2_STATUS_PORT        0x64
 #define PS2_STATUS_OUTPUT_FULL 0x01

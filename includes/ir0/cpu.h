@@ -53,12 +53,4 @@ int cpu_is_active(unsigned int cpu);
 
 uint64_t timer_read(void);
 
-uint64_t rdmsr(uint32_t msr);
-void wrmsr(uint32_t msr, uint64_t value);
-void cpuid(uint32_t leaf, uint32_t *eax, uint32_t *ebx, uint32_t *ecx,
-	   uint32_t *edx);
 
-
-/* x86 debug registers; no-op / zero on other ISA */
-void debug_reg_write(unsigned int regno, uint64_t value);
-uint64_t debug_reg_read(unsigned int regno);

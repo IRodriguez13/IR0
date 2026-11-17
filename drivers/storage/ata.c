@@ -21,6 +21,7 @@
 #include <ir0/resource_registry.h>
 #include <stdint.h>
 #include <fs/vfs.h>
+#include <asm/io.h>
 
 static void ata_reset_drive(uint8_t drive);
 static bool ata_identify_drive(uint8_t drive);

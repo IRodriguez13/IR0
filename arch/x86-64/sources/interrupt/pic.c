@@ -12,8 +12,8 @@
  */
 
 #include <interrupt/pic.h>
-#include <interrupt/io.h>
 #include <ir0/vga.h>
+#include <asm/io.h>
 
 /*
  * pic_remap64 - Remap PIC vectors to IRQ_BASE_MASTER..IRQ_BASE_SLAVE+7

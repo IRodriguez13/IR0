@@ -16,6 +16,7 @@
 #include <ir0/rtc.h>
 #include <ir0/arch_port.h>
 #include <string.h>
+#include <asm/io.h>
 
 static uint8_t rtc_read_register(uint8_t reg);
 

@@ -1962,10 +1962,27 @@ def check_portable_task_api_has_no_x86_register_aliases():
     return errors
 
 
+def platform_object_sources(platform):
+    """C sources of the objects scripts/make/platform/<platform>.mk lists."""
+    text = read_file_text(ROOT / "scripts" / "make" / "platform" / f"{platform}.mk")
+    return {m.group(1) + ".c"
+            for m in re.finditer(r"([\w./-]+)\.o\b", text)}
+
+
+# x86 headers a PC platform driver may include: port I/O, MSRs, CPUID.
+PC_PLATFORM_ASM_INCLUDE = re.compile(
+    r'^\s*#\s*include\s*<asm/(?:io|msr|processor|debugreg)\.h>')
+
+
 def check_portable_code_has_no_private_asm_headers():
-    """Allow only reviewed layout-selection gateways into private asm headers."""
+    """Allow only reviewed layout-selection gateways into private asm headers.
+
+    The PC platform's device drivers (scripts/make/platform/pc.mk) build
+    only on x86-64 and may include the x86 port-I/O, MSR and CPUID headers.
+    """
     errors = []
     private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
+    pc_sources = platform_object_sources("pc")
     selection_gateways = {
         "includes/ir0/task.h": "#include <asm/task_context.h>",
         "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
@@ -1993,6 +2010,8 @@ def check_portable_code_has_no_private_asm_headers():
                 if private_include.search(line):
                     rel = str(rel_to_root(fpath))
                     if selection_gateways.get(rel) == line.strip():
+                        continue
+                    if rel in pc_sources and PC_PLATFORM_ASM_INCLUDE.search(line):
                         continue
                     errors.append(
                         f"[portable-no-private-asm-header] "

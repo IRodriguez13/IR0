@@ -30,6 +30,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <asm/io.h>
 
 #define ACPI_SLP_EN            (1u << 13)
 /* Early boot identity map covers 0..48MiB; above that we map on demand. */

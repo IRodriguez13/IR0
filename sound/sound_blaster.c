@@ -28,6 +28,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/irq.h>
 #include <ir0/audio_backend.h>
+#include <asm/io.h>
 
 static void sb16_shutdown(void);
 static bool sb16_reset_dsp(void);

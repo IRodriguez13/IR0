@@ -24,6 +24,7 @@
 #include <ir0/paging.h>
 #include <string.h>
 #include <stdint.h>
+#include <asm/io.h>
 
 #define PCI_CONFIG_ADDRESS 0xCF8
 #define PCI_CONFIG_DATA    0xCFC

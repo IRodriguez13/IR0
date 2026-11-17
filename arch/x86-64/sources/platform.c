@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <asm/io.h>
 
 #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
 #define MINGW_BUILD 1

@@ -13,7 +13,6 @@
 
 #include <interrupt/idt.h>
 #include <interrupt/pic.h>
-#include <interrupt/io.h>
 #include <ir0/vga.h>
 #include <ir0/entry.h>
 #include <ir0/signals.h>

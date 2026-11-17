@@ -23,6 +23,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/ps2_mouse_pkt.h>
 #include <ir0/console.h>
+#include <asm/io.h>
 
 static void ps2_mouse_shutdown(void);
 static bool ps2_mouse_enable(void);

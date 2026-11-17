@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <asm/io.h>
 
 #if CONFIG_ENABLE_USB_HOST
 

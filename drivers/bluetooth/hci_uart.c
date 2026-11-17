@@ -18,6 +18,7 @@
 #include <ir0/kmem.h>
 #include <string.h>
 #include <ir0/errno.h>
+#include <asm/io.h>
 
 #define SERIAL_LINE_STATUS_REG 5
 #define SERIAL_DATA_REG        0

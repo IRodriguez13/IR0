@@ -16,6 +16,8 @@
 #include <vga.h>
 #include <ir0/oops.h>
 #include <stdint.h>
+#include <asm/msr.h>
+#include <asm/processor.h>
 
 #define LAPIC_BASE_LEGACY   ((uintptr_t)0xFEE00000)
 #define MSR_IA32_APIC_BASE  0x1BU

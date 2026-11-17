@@ -25,6 +25,10 @@
 #include <ir0/irq.h>
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
+#include <asm/io.h>
+#include <asm/msr.h>
+#include <asm/processor.h>
+#include <asm/debugreg.h>
 #endif
 
 // Detect MinGW-w64 cross-compilation
