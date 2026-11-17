@@ -14,7 +14,7 @@
  */
 
 #include "test/ktest_harness.h"
-#include "ktest_decl.h"
+#include "test/ktest_decl.h"
 #include "syscalls.h"
 #include <ir0/blockdev.h>
 #include <ir0/errno.h>
@@ -192,6 +192,31 @@ void ktest_fat16_mount_any_block_device(void)
 		   (int64_t)strlen(msg));
 	KASSERT(strcmp(buf, msg) == 0);
 	KASSERT_EQ(sys_umount("/mnt/ktfat", 0), 0);
+
+	KTEST_END();
+}
+
+/*
+ * Linux mount(2) of a block filesystem looks the source up as a block
+ * device (lookup_bdev()): a missing path is -ENOENT and a file of another
+ * type is -ENOTBLK. FAT16 has no in-memory fallback for such sources.
+ */
+void ktest_fat16_mount_needs_block_device(void)
+{
+	int mk;
+
+	KTEST_BEGIN("fat16_mount_needs_block_device");
+
+	mk = vfs_mkdir("/mnt", 0755);
+	KASSERT(mk == 0 || mk == -EEXIST);
+	mk = vfs_mkdir("/mnt/fatsrc", 0755);
+	KASSERT(mk == 0 || mk == -EEXIST);
+
+	KASSERT_EQ(sys_mount("/dev/fat0", "/mnt/fatsrc", "fat16", 0, NULL),
+		   -ENOENT);
+	KASSERT_EQ(sys_mount("none", "/mnt/fatsrc", "fat16", 0, NULL), -ENOENT);
+	KASSERT_EQ(sys_mount("/dev/null", "/mnt/fatsrc", "fat16", 0, NULL),
+		   -ENOTBLK);
 
 	KTEST_END();
 }

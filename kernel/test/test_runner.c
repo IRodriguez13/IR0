@@ -101,6 +101,8 @@ static const struct ktest_case ktest_cases[] = {
 	  "mount_umount_remount_contract", 1 },
 	{ ktest_fat16_mount_any_block_device,
 	  "fat16_mount_any_block_device", 1 },
+	{ ktest_fat16_mount_needs_block_device,
+	  "fat16_mount_needs_block_device", 1 },
 	{ ktest_block_layer_contract, "block_layer_contract", 1 },
 	{ ktest_errno_string_contract, "errno_string_contract", 1 },
 	{ ktest_block_hda_read_contract, "block_hda_read_contract", 1 },

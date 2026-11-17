@@ -68,6 +68,7 @@ void ktest_mount_multi_fs_contract(void);
 void ktest_mount_longest_prefix_contract(void);
 void ktest_mount_umount_remount_contract(void);
 void ktest_fat16_mount_any_block_device(void);
+void ktest_fat16_mount_needs_block_device(void);
 /* "/dev/<name>" of a RAM block device holding a FAT16 volume (test_fat16_contracts.c). */
 const char *ktest_fat16_source(void);
 void ktest_block_layer_contract(void);

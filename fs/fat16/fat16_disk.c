@@ -1149,14 +1149,6 @@ int fat16_disk_umount(const char *mount_dir)
 	return -ENOENT;
 }
 
-int fat16_disk_path_is_mounted(const char *vfs_path)
-{
-	char rel[FAT16_MAX_PATH];
-	int at_root = 0;
-
-	return fat16_find_mount(vfs_path, rel, sizeof(rel), &at_root) != NULL;
-}
-
 int fat16_disk_stat(const char *path, stat_t *buf)
 {
 	char rel[FAT16_MAX_PATH];

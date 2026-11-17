@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: simplefs.c
- * Description: Minimal mountable filesystem engine for simplefs/fat16-like backends.
+ * Description: simplefs, a minimal in-memory filesystem with a flat store.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -24,9 +24,6 @@
 #include <ir0/cred.h>
 #include <string.h>
 
-#if CONFIG_ENABLE_FS_FAT16
-#include <fs/fat16/fat16_disk.h>
-#endif
 
 #define SIMPLEFS_MAX_STORES 16
 #define SIMPLEFS_MAX_MOUNTS 32
@@ -54,7 +51,6 @@ typedef struct simplefs_store
     int mount_refcount;
     char fs_name[16];
     char dev[64];
-    int strict_83_names;
     uint32_t next_ino;
     simplefs_entry_t entries[SIMPLEFS_MAX_ENTRIES];
 } simplefs_store_t;
@@ -70,7 +66,6 @@ typedef struct simplefs_mount
 typedef struct simplefs_backend
 {
     int in_use;
-    int strict_83_names;
     char fs_name[16];
     struct vfs_ops ops;
     struct vfs_fstype type;
@@ -80,59 +75,12 @@ static simplefs_store_t g_stores[SIMPLEFS_MAX_STORES];
 static simplefs_mount_t g_mounts[SIMPLEFS_MAX_MOUNTS];
 static simplefs_backend_t g_backends[4];
 
-static int simplefs_name_valid_83(const char *name)
-{
-    int seen_dot = 0;
-    int base_len = 0;
-    int ext_len = 0;
-
-    if (!name || !name[0])
-        return 0;
-
-    for (const char *p = name; *p; p++)
-    {
-        char c = *p;
-        if (c == '/')
-            return 0;
-        if (c == '.')
-        {
-            if (seen_dot)
-                return 0;
-            seen_dot = 1;
-            continue;
-        }
-        if (c == ' ' || c < 0x20 || c == 0x7F)
-            return 0;
-        if (!seen_dot)
-        {
-            base_len++;
-            if (base_len > 8)
-                return 0;
-        }
-        else
-        {
-            ext_len++;
-            if (ext_len > 3)
-                return 0;
-        }
-    }
-
-    if (base_len == 0)
-        return 0;
-    return 1;
-}
-
-static int simplefs_validate_entry_name(simplefs_store_t *store, const char *name)
+static int simplefs_validate_entry_name(const char *name)
 {
     size_t len = strlen(name);
 
     if (len == 0 || len > SIMPLEFS_MAX_NAME_LEN)
         return -EINVAL;
-    if (store->strict_83_names)
-    {
-        if (!simplefs_name_valid_83(name))
-            return -EINVAL;
-    }
     return 0;
 }
 
@@ -171,7 +119,7 @@ static void simplefs_store_release(simplefs_store_t *store)
     memset(store, 0, sizeof(*store));
 }
 
-static simplefs_store_t *simplefs_get_or_create_store(const char *fs_name, const char *dev, int strict_83_names)
+static simplefs_store_t *simplefs_get_or_create_store(const char *fs_name, const char *dev)
 {
     simplefs_store_t *store = simplefs_find_store(fs_name, dev);
     if (store)
@@ -183,7 +131,6 @@ static simplefs_store_t *simplefs_get_or_create_store(const char *fs_name, const
             continue;
         memset(&g_stores[i], 0, sizeof(g_stores[i]));
         g_stores[i].in_use = 1;
-        g_stores[i].strict_83_names = strict_83_names;
         g_stores[i].next_ino = 1;
         strncpy(g_stores[i].fs_name, fs_name, sizeof(g_stores[i].fs_name) - 1);
         g_stores[i].fs_name[sizeof(g_stores[i].fs_name) - 1] = '\0';
@@ -318,34 +265,6 @@ static int simplefs_check_block_device(const char *dev)
     return ir0_block_name_is_present(name) ? 0 : -ENXIO;
 }
 
-#if CONFIG_ENABLE_FS_FAT16
-static int simplefs_fat16_dev_is_block(const char *dev)
-{
-    const char *name;
-
-    if (!dev || strcmp(dev, "none") == 0)
-        return 0;
-
-    name = dev;
-    if (strncmp(dev, "/dev/", 5) == 0)
-        name = dev + 5;
-
-    if (name[0] != 'h' || name[1] != 'd')
-        return 0;
-    if (name[2] < 'a' || name[2] > 'd')
-        return 0;
-    if (name[3] == '\0')
-        return 1;
-    if (name[3] >= '1' && name[3] <= '9' && name[4] == '\0')
-        return 1;
-    return 0;
-}
-
-static int simplefs_fat16_on_disk(const char *fs_name, const char *path)
-{
-    return strcmp(fs_name, "fat16") == 0 && fat16_disk_path_is_mounted(path);
-}
-#endif
 
 static int simplefs_umount_common(const char *fs_name, const char *dir)
 {
@@ -386,7 +305,7 @@ static int simplefs_umount_common(const char *fs_name, const char *dir)
     return -EINVAL;
 }
 
-static int simplefs_mount_common(const char *fs_name, const char *dev, const char *dir, int strict_83_names)
+static int simplefs_mount_common(const char *fs_name, const char *dev, const char *dir)
 {
     char mount_norm[256];
     simplefs_store_t *store;
@@ -415,7 +334,7 @@ static int simplefs_mount_common(const char *fs_name, const char *dev, const cha
     if (!slot)
         return -ENOSPC;
 
-    store = simplefs_get_or_create_store(fs_name, dev ? dev : "none", strict_83_names);
+    store = simplefs_get_or_create_store(fs_name, dev ? dev : "none");
     if (!store)
         return -ENOMEM;
 
@@ -455,10 +374,6 @@ static int simplefs_stat_common(const char *fs_name, const char *path, stat_t *b
 
     if (!buf)
         return -EFAULT;
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_stat(path, buf);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -495,16 +410,12 @@ static int simplefs_mkdir_common(const char *fs_name, const char *path, mode_t m
     const struct ir0_task_cred *cr = ir0_current_cred();
     mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_mkdir(path, mode);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
     if (at_root)
         return -EEXIST;
-    if (simplefs_validate_entry_name(mnt->store, name) != 0)
+    if (simplefs_validate_entry_name(name) != 0)
         return -EINVAL;
     if (simplefs_find_entry(mnt->store, name))
         return -EEXIST;
@@ -531,16 +442,12 @@ static int simplefs_create_common(const char *fs_name, const char *path, mode_t 
     const struct ir0_task_cred *cr = ir0_current_cred();
     mode_t umask_value = (mode_t)(cr ? cr->umask : DEFAULT_UMASK);
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_create(path, mode);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
     if (at_root)
         return -EEXIST;
-    if (simplefs_validate_entry_name(mnt->store, name) != 0)
+    if (simplefs_validate_entry_name(name) != 0)
         return -EINVAL;
 
     e = simplefs_find_entry(mnt->store, name);
@@ -571,10 +478,6 @@ static int simplefs_unlink_common(const char *fs_name, const char *path)
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_unlink(path);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -600,10 +503,6 @@ static int simplefs_rmdir_common(const char *fs_name, const char *path)
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_rmdir(path);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -633,10 +532,6 @@ static int simplefs_read_common(const char *fs_name, const char *path, void *buf
         return -EFAULT;
     if (bytes_read)
         *bytes_read = 0;
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_read(path, buf, count, bytes_read, offset);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -676,10 +571,6 @@ static int simplefs_write_common(const char *fs_name, const char *path, const vo
         return -EFAULT;
     if (bytes_written)
         *bytes_written = 0;
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_write(path, buf, count, bytes_written, offset);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -732,10 +623,6 @@ static int simplefs_chown_common(const char *fs_name, const char *path, uid_t ow
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_chown(path, owner, group);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -758,10 +645,6 @@ static int simplefs_chmod_common(const char *fs_name, const char *path, mode_t m
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_chmod(path, mode);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -784,10 +667,6 @@ static int simplefs_truncate_common(const char *fs_name, const char *path, size_
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
 
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_truncate(path, length);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -842,10 +721,6 @@ static int simplefs_readdir_common(const char *fs_name, const char *path, struct
 
     if (!entries || max_entries <= 0)
         return -EINVAL;
-#if CONFIG_ENABLE_FS_FAT16
-    if (simplefs_fat16_on_disk(fs_name, path))
-        return fat16_disk_readdir(path, entries, max_entries);
-#endif
     mnt = simplefs_context_mount(fs_name, path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -916,38 +791,12 @@ static int simplefs_readdir_common(const char *fs_name, const char *path, struct
 
 static int simplefs_mount_simple(const char *dev, const char *dir)
 {
-    return simplefs_mount_common("simplefs", dev, dir, 0);
-}
-
-static int simplefs_mount_fat16(const char *dev, const char *dir)
-{
-#if CONFIG_ENABLE_FS_FAT16
-    struct vfs_bdev bdev;
-
-    if (simplefs_fat16_dev_is_block(dev) || lookup_bdev(dev, &bdev) == 0)
-    {
-        int blk_rc = simplefs_check_block_device(dev);
-
-        if (blk_rc != 0)
-            return blk_rc;
-        return fat16_disk_mount(dev, dir);
-    }
-#endif
-    return simplefs_mount_common("fat16", dev, dir, 1);
+    return simplefs_mount_common("simplefs", dev, dir);
 }
 
 static int simplefs_umount_simple(const char *dir)
 {
     return simplefs_umount_common("simplefs", dir);
-}
-
-static int simplefs_umount_fat16(const char *dir)
-{
-#if CONFIG_ENABLE_FS_FAT16
-    if (fat16_disk_umount(dir) == 0)
-        return 0;
-#endif
-    return simplefs_umount_common("fat16", dir);
 }
 
 #define SIMPLEFS_DEFINE_OPS(prefix, fsName) \
@@ -965,9 +814,8 @@ static int prefix##_write(const char *path, const void *buf, size_t count, size_
 static int prefix##_truncate(const char *path, size_t length) { return simplefs_truncate_common(fsName, path, length); }
 
 SIMPLEFS_DEFINE_OPS(simplefs, "simplefs")
-SIMPLEFS_DEFINE_OPS(fat16mini, "fat16")
 
-int simplefs_engine_register(const char *fs_name, int strict_83_names)
+int simplefs_engine_register(const char *fs_name)
 {
     simplefs_backend_t *be = NULL;
     int (*mount_fn)(const char *, const char *) = NULL;
@@ -992,57 +840,32 @@ int simplefs_engine_register(const char *fs_name, int strict_83_names)
 
     memset(be, 0, sizeof(*be));
     be->in_use = 1;
-    be->strict_83_names = strict_83_names;
     strncpy(be->fs_name, fs_name, sizeof(be->fs_name) - 1);
     be->fs_name[sizeof(be->fs_name) - 1] = '\0';
 
-    if (strcmp(fs_name, "fat16") == 0)
-    {
-        be->ops.stat = fat16mini_stat;
-        be->ops.mkdir = fat16mini_mkdir;
-        be->ops.create = fat16mini_create;
-        be->ops.unlink = fat16mini_unlink;
-        be->ops.rmdir = fat16mini_rmdir;
-#if CONFIG_ENABLE_FS_FAT16
-        be->ops.link = fat16_disk_link;
-#else
-        be->ops.link = fat16mini_link;
-#endif
-        be->ops.chown = fat16mini_chown;
-        be->ops.chmod = fat16mini_chmod;
-        be->ops.readdir = fat16mini_readdir;
-        be->ops.read = fat16mini_read;
-        be->ops.write = fat16mini_write;
-        be->ops.truncate = fat16mini_truncate;
-        mount_fn = simplefs_mount_fat16;
-    }
-    else
-    {
-        be->ops.stat = simplefs_stat;
-        be->ops.mkdir = simplefs_mkdir;
-        be->ops.create = simplefs_create;
-        be->ops.unlink = simplefs_unlink;
-        be->ops.rmdir = simplefs_rmdir;
-        be->ops.link = simplefs_link;
-        be->ops.chown = simplefs_chown;
-        be->ops.chmod = simplefs_chmod;
-        be->ops.readdir = simplefs_readdir;
-        be->ops.read = simplefs_read;
-        be->ops.write = simplefs_write;
-        be->ops.truncate = simplefs_truncate;
-        mount_fn = simplefs_mount_simple;
-    }
+    be->ops.stat = simplefs_stat;
+    be->ops.mkdir = simplefs_mkdir;
+    be->ops.create = simplefs_create;
+    be->ops.unlink = simplefs_unlink;
+    be->ops.rmdir = simplefs_rmdir;
+    be->ops.link = simplefs_link;
+    be->ops.chown = simplefs_chown;
+    be->ops.chmod = simplefs_chmod;
+    be->ops.readdir = simplefs_readdir;
+    be->ops.read = simplefs_read;
+    be->ops.write = simplefs_write;
+    be->ops.truncate = simplefs_truncate;
+    mount_fn = simplefs_mount_simple;
 
     be->type.name = be->fs_name;
     be->type.ops = &be->ops;
     be->type.mount = mount_fn;
-    be->type.umount = (strcmp(fs_name, "fat16") == 0) ?
-                      simplefs_umount_fat16 : simplefs_umount_simple;
+    be->type.umount = simplefs_umount_simple;
     be->type.next = NULL;
     return vfs_register_fs(&be->type);
 }
 
 int simplefs_register(void)
 {
-    return simplefs_engine_register("simplefs", 0);
+    return simplefs_engine_register("simplefs");
 }

@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
+#include "test/ktest_decl.h"
 #include "syscalls.h"
 #include "../errno.h"
 #include "../../drivers/storage/partition.h"
@@ -609,7 +610,9 @@ void ktest_mount_multi_fs_contract(void)
 
 	int64_t ms = sys_mount("/dev/simple0", "/mnt/simple", "simplefs", 0, NULL);
 	KASSERT(ms == 0 || ms == -EBUSY);
-	int64_t mf = sys_mount("/dev/fat0", "/mnt/fat", "fat16", 0, NULL);
+	const char *fat_src = ktest_fat16_source();
+	KASSERT(fat_src != NULL);
+	int64_t mf = sys_mount(fat_src, "/mnt/fat", "fat16", 0, NULL);
 	KASSERT(mf == 0 || mf == -EBUSY);
 
 	int64_t sfd = sys_open("/mnt/simple/s1.txt",
@@ -620,7 +623,7 @@ void ktest_mount_multi_fs_contract(void)
 	KASSERT_EQ(sw, (int64_t)strlen(smsg));
 	sys_close((int)sfd);
 
-	int64_t ffd = sys_open("/mnt/fat/HELLO.TXT",
+	int64_t ffd = sys_open("/mnt/fat/MULTI.TXT",
 			       KTEST_O_CREAT | KTEST_O_RDWR | KTEST_O_TRUNC, 0644);
 	KASSERT_GT(ffd, 0);
 	const char *fmsg = "fat16-ok";
@@ -637,7 +640,7 @@ void ktest_mount_multi_fs_contract(void)
 	KASSERT_EQ(sys_read((int)sfd, sread, sizeof(sread) - 1),
 		   (int64_t)strlen(smsg));
 	sys_close((int)sfd);
-	ffd = sys_open("/mnt/fat/HELLO.TXT", O_RDONLY, 0);
+	ffd = sys_open("/mnt/fat/MULTI.TXT", O_RDONLY, 0);
 	KASSERT_GT(ffd, 0);
 	KASSERT_EQ(sys_read((int)ffd, fread_buf, sizeof(fread_buf) - 1),
 		   (int64_t)strlen(fmsg));
@@ -679,18 +682,20 @@ void ktest_mount_umount_remount_contract(void)
 	int64_t m2 = sys_mount("/dev/simple0", "/mnt/um", "simplefs", 0, NULL);
 	KASSERT_EQ(m2, 0);
 
-	int64_t mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
+	const char *fat_src = ktest_fat16_source();
+	KASSERT(fat_src != NULL);
+	int64_t mf1 = sys_mount(fat_src, "/mnt/umfat", "fat16", 0, NULL);
 	if (mf1 == -EBUSY)
 	{
 		(void)sys_umount("/mnt/umfat", 0);
-		mf1 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
+		mf1 = sys_mount(fat_src, "/mnt/umfat", "fat16", 0, NULL);
 	}
 	KASSERT_EQ(mf1, 0);
 
 	int64_t uf = sys_umount("/mnt/umfat", 0);
 	KASSERT_EQ(uf, 0);
 
-	int64_t mf2 = sys_mount("/dev/fat0", "/mnt/umfat", "fat16", 0, NULL);
+	int64_t mf2 = sys_mount(fat_src, "/mnt/umfat", "fat16", 0, NULL);
 	KASSERT_EQ(mf2, 0);
 
 	/* Linux mount(2) remount via MS_REMOUNT|MS_RDONLY (flags arg). */

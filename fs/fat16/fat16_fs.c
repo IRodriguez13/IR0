@@ -8,13 +8,37 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: fat16_fs.c
- * Description: FAT16-like backend registration built over the simplefs engine.
+ * Description: The "fat16" filesystem type: a FAT16 volume on a block device.
  */
 
 #include "fat16_fs.h"
-#include <fs/simplefs/simplefs.h>
+#include "fat16_disk.h"
+#include <fs/vfs.h>
+
+static struct vfs_ops fat16_ops = {
+	.stat = fat16_disk_stat,
+	.mkdir = fat16_disk_mkdir,
+	.create = fat16_disk_create,
+	.unlink = fat16_disk_unlink,
+	.rmdir = fat16_disk_rmdir,
+	.link = fat16_disk_link,
+	.chown = fat16_disk_chown,
+	.chmod = fat16_disk_chmod,
+	.readdir = fat16_disk_readdir,
+	.read = fat16_disk_read,
+	.write = fat16_disk_write,
+	.truncate = fat16_disk_truncate,
+};
+
+static struct vfs_fstype fat16_fs_type = {
+	.name = "fat16",
+	.ops = &fat16_ops,
+	.mount = fat16_disk_mount,
+	.umount = fat16_disk_umount,
+	.next = NULL,
+};
 
 int fat16_fs_register(void)
 {
-    return simplefs_engine_register("fat16", 1);
+	return vfs_register_fs(&fat16_fs_type);
 }

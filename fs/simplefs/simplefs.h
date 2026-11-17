@@ -14,4 +14,4 @@
 #pragma once
 
 int simplefs_register(void);
-int simplefs_engine_register(const char *fs_name, int strict_83_names);
+int simplefs_engine_register(const char *fs_name);

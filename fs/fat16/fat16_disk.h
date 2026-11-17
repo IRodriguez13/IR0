@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: fat16_disk.h
- * Description: IR0 — read-only FAT16 on block devices (BPB + cluster I/O)
+ * Description: FAT16 on a block device (BPB, FAT chains, 8.3 directories).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -23,7 +23,6 @@ struct vfs_dirent;
 
 int fat16_disk_mount(const char *dev, const char *mount_dir);
 int fat16_disk_umount(const char *mount_dir);
-int fat16_disk_path_is_mounted(const char *vfs_path);
 
 int fat16_disk_stat(const char *path, stat_t *buf);
 int fat16_disk_readdir(const char *path, struct vfs_dirent *entries, int max);
@@ -39,5 +38,3 @@ int fat16_disk_chmod(const char *path, mode_t mode);
 int fat16_disk_write(const char *path, const void *buf, size_t count,
 		     size_t *bytes_written, off_t offset);
 int fat16_disk_truncate(const char *path, size_t length);
-
-/* ktest: validate BPB layout from a 512-byte boot sector image */

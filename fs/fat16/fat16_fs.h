@@ -8,7 +8,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: fat16_fs.h
- * Description: FAT16-like minimal backend registration.
+ * Description: The "fat16" filesystem type.
  */
 
 #pragma once
