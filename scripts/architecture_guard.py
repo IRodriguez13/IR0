@@ -3853,6 +3853,18 @@ def self_test_include_layout() -> list[str]:
     return failures
 
 
+# Debt ledgers: reviewed exceptions that only shrink. The SMP entry gate
+# (scripts/smp_entry_gate.py) needs every one of them empty. Files count
+# their non-comment lines; in-module ledgers count their entries.
+# RETIRED_API_LEDGER is not debt: it is the deny-list of retired names and
+# never empties.
+DEBT_LEDGER_FILES = (REGISTER_NAME_BASELINE, UNDEFINED_PROTOTYPE_LEDGER)
+DEBT_LEDGER_SETS = {
+    "RAW_ATOMIC_LEDGER": RAW_ATOMIC_LEDGER,
+    "INCLUDE_LAYOUT_BASELINE": INCLUDE_LAYOUT_BASELINE,
+}
+
+
 def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
