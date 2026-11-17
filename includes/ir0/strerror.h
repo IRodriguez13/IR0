@@ -7,8 +7,8 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: errno.h
- * Description: IR0 kernel source/header file
+ * File: strerror.h
+ * Description: strerror() and the largest errno it names (lib/strerror.c)
  */
 
 #pragma once

@@ -15,7 +15,6 @@
 #include "test/ktest_harness.h"
 #include "test/ktest_decl.h"
 #include "syscalls.h"
-#include "../errno.h"
 #include "../../drivers/storage/partition.h"
 #include "../../fs/devfs_internal.h"
 #include "../../fs/tmpfs/tmpfs.h"
@@ -31,6 +30,7 @@
 #include <ir0/process_limits.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
+#include <ir0/strerror.h>
 #include <ir0/vfs.h>
 #include <ir0/sysfs.h>
 #include <ir0/boot_firmware_sysfs.h>

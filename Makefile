@@ -577,7 +577,7 @@ endif
 
 # In-kernel test suite: linked only in kernel-x64-test.bin (make tests)
 KERNEL_TEST_OBJS = \
-	kernel/errno.o \
+	lib/strerror.o \
 	kernel/test/test_runner.o \
 	kernel/test/test_syscall.o \
 	kernel/test/test_procfs.o \

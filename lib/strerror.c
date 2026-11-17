@@ -7,11 +7,11 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: errno.c
- * Description: IR0 kernel source/header file
+ * File: strerror.c
+ * Description: strerror() over the canonical errno catalog
  */
 
-#include "errno.h"
+#include <ir0/strerror.h>
 
 static const char *const errno_str[ERRNO_MAX + 1] = {
     [EPERM] = "Operation not permitted",
