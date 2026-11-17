@@ -2874,6 +2874,164 @@ def check_no_raw_atomics():
     return errors
 
 
+# A header for one ISA lives in arch/<isa>/include/asm/ (or uapi/asm/) under
+# a neutral name, and the $(ARCH) include directory selects it. includes/
+# holds only portable APIs and the ISA-neutral uapi, so a path component
+# there that names an ISA (foo_x86_64.h, bar_arm64.h, x86/) is a per-ISA
+# file in the portable tree. No ledger: includes/ has none left.
+ISA_NAMED_HEADER_TREE = "includes/"
+ISA_NAME_RE = re.compile(
+    r"(?:^|[_.-])(x86(?:[_-]?64)?|x64|amd64|i[3-6]86|arm64|aarch64|"
+    r"riscv(?:32|64)?)(?:[_.-]|$)")
+
+
+def isa_named_header(rel: str) -> str | None:
+    """Return the ISA a header path under includes/ is named after."""
+    if not rel.startswith(ISA_NAMED_HEADER_TREE):
+        return None
+    parts = rel[len(ISA_NAMED_HEADER_TREE):].split("/")
+    parts[-1] = parts[-1].rsplit(".", 1)[0]
+    for part in parts:
+        match = ISA_NAME_RE.search(part)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _isa_named_header_self_test() -> list[str]:
+    cases = {
+        "includes/ir0/arch_task_context_x86_64.h": "x86_64",
+        "includes/ir0/sigcontext_arm64.h": "arm64",
+        "includes/uapi/ir0/syscall_aarch64.h": "aarch64",
+        "includes/ir0/x86-64/io.h": "x86-64",
+        "includes/ir0/syscall_frame.h": None,
+        "includes/ir0/arch_task.h": None,
+        "includes/uapi/asm-generic/posix_types.h": None,
+        "includes/ir0/alarm.h": None,
+        "arch/x86-64/include/asm/task_context.h": None,
+    }
+    return [f"[isa-named-header] self-test {rel}: expected {want}, got {got}"
+            for rel, want in cases.items()
+            if (got := isa_named_header(rel)) != want]
+
+
+def check_no_isa_named_headers():
+    """Reject per-ISA headers under includes/; they belong in arch/<isa>/."""
+    errors = _isa_named_header_self_test()
+    base = ROOT / ISA_NAMED_HEADER_TREE
+    for dirpath, dirnames, filenames in os.walk(base):
+        dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+        for name in sorted(filenames):
+            if not name.endswith((".h", ".inc")):
+                continue
+            rel = str(rel_to_root(Path(dirpath) / name)).replace("\\", "/")
+            isa = isa_named_header(rel)
+            if isa:
+                errors.append(
+                    f"[isa-named-header] {rel}: named after {isa}; move it "
+                    f"to arch/<isa>/include/asm/ under a neutral name and "
+                    f"include it as <asm/...>")
+    return errors
+
+
+# Userspace enters the kernel through libc syscall() or its own stubs
+# (tests/selftests/ir0/nolibc.h, tests/conformance/rt.h, setup/pid1/*).
+# The kernel, includes/ and host tooling never carry a syscall-trap
+# wrapper: inline asm that issues syscall, sysenter, int $0x80 or svc #0 is
+# rejected outside arch/ and the userspace trees below.
+SYSCALL_STUB_ALLOWED = ("arch/", "userspace/", "setup/pid1/",
+                        "tests/selftests/", "tests/conformance/",
+                        "scripts/linux_abi/workloads/")
+SYSCALL_STUB_SUFFIXES = (".c", ".h", ".cc", ".cpp", ".hpp")
+_ASM_OPEN_RE = re.compile(
+    r"\b(?:__asm__|__asm|asm)\b(?:\s+(?:volatile|__volatile__|goto|inline))*"
+    r"\s*\(")
+_C_STRING_BODY_RE = re.compile(r'"((?:\\.|[^"\\\n])*)"')
+SYSCALL_TRAP_RE = re.compile(
+    r"(?:^|[\s;])(syscall|sysenter|int\s+\$(?:0x80|128)|svc\s+#?(?:0x)?0)\b")
+
+
+def syscall_stub_violations(rel: str, text: str) -> list[tuple[int, str]]:
+    """Return (line, instruction) for each syscall-trap asm in *text*."""
+    if rel.startswith(SYSCALL_STUB_ALLOWED):
+        return []
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    found = []
+    for match in _ASM_OPEN_RE.finditer(text):
+        depth, pos = 1, match.end()
+        while pos < len(text) and depth:
+            char = text[pos]
+            if char == '"':
+                pos += 1
+                while pos < len(text) and text[pos] not in '"\n':
+                    pos += 2 if text[pos] == "\\" else 1
+            elif char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+            pos += 1
+        template = "\n".join(
+            body.replace("\\n", "\n").replace("\\t", " ")
+            for body in _C_STRING_BODY_RE.findall(text[match.end():pos]))
+        trap = SYSCALL_TRAP_RE.search(template)
+        if trap:
+            found.append((text.count("\n", 0, match.start()) + 1,
+                          trap.group(1)))
+    return found
+
+
+def _syscall_stub_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "kernel/x.c": ('\t__asm__ volatile("syscall" : "=a"(r) : "a"(n)'
+                       ' : "rcx", "r11", "memory");\n', [1]),
+        "includes/ir0/x.h": ("static inline long s(long n)\n{\n"
+                             '\tregister long x8 __asm__("x8") = n;\n'
+                             "\t__asm__ volatile(\n\t\t\"svc #0\"\n"
+                             '\t\t: "+r"(x0) : "r"(x8) : "memory");\n', [4]),
+        "arch/x86-64/include/asm/x.h": (
+            '\tasm volatile("int $0x80" : "=a"(r) : "a"(n));\n', []),
+        "lib/x.c": ('\tasm("movq %1, %%rax\\n\\tsyscall" : : "r"(n));\n',
+                    [1]),
+        "ktm/user_canary.c": ('\tcheck(root, sp, pid, "syscall");\n'
+                              '\t/* asm volatile("syscall"); */\n'
+                              '\t__asm__ volatile("hlt");\n'
+                              '\tsyscall_entry();\n', []),
+        "tests/selftests/ir0/nolibc.h": (
+            '\t__asm__ volatile("syscall" : "=a"(r) : "a"(n));\n', []),
+    }
+    failures = []
+    for rel, (text, expected) in cases.items():
+        got = [line for line, _ in syscall_stub_violations(rel, text)]
+        if got != expected:
+            failures.append(f"[no-syscall-stubs] self-test {rel}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_syscall_stubs():
+    """Reject syscall-trap inline asm outside arch/ and userspace trees."""
+    errors = _syscall_stub_self_test()
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        rel_dir = os.path.relpath(dirpath, ROOT).replace("\\", "/")
+        rel_dir = "" if rel_dir == "." else rel_dir + "/"
+        dirnames[:] = sorted(
+            d for d in dirnames if d not in SKIP_DIR_NAMES
+            and not (rel_dir + d + "/").startswith(SYSCALL_STUB_ALLOWED))
+        for name in sorted(filenames):
+            if not name.endswith(SYSCALL_STUB_SUFFIXES):
+                continue
+            rel = rel_dir + name
+            for lineno, insn in syscall_stub_violations(
+                    rel, read_file_text(Path(dirpath) / name)):
+                errors.append(
+                    f"[no-syscall-stubs] {rel}:{lineno}: '{insn}' trap in "
+                    "inline asm outside arch/ and userspace; userspace uses "
+                    "libc syscall() or its own nolibc stubs")
+    return errors
+
+
 def check_portable_no_register_names():
     """Reject new ISA register names in portable identifiers and stale
     ledger lines."""
@@ -3359,6 +3517,8 @@ def main():
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
     errors.extend(check_no_raw_atomics())
+    errors.extend(check_no_isa_named_headers())
+    errors.extend(check_no_syscall_stubs())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
