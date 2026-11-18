@@ -9,6 +9,7 @@
 
 #include "swap_internal.h"
 #include <ir0/abi/mmap_contract.h>
+#include <ir0/page.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/process.h>
@@ -112,7 +113,7 @@ static int ir0_swap_out_page(process_t *proc, uintptr_t va)
 	if (rc < 0)
 		return rc;
 	paging_copy_phys_page(g_bounce_phys, phys);
-	rc = ir0_swap_write_page(type, offset, (void *)g_bounce_phys);
+	rc = ir0_swap_write_page(type, offset, phys_to_virt(g_bounce_phys));
 	if (rc < 0)
 	{
 		(void)ir0_swap_slot_put(type, offset);
@@ -142,7 +143,7 @@ int ir0_swap_in_page(process_t *proc, uintptr_t va, uint64_t map_flags)
 	if (!pte || !mm_pte_is_swap(*pte))
 		return -ENOENT;
 	mm_pte_swap_decode(*pte, &type, &offset);
-	rc = ir0_swap_read_page(type, offset, (void *)g_bounce_phys);
+	rc = ir0_swap_read_page(type, offset, phys_to_virt(g_bounce_phys));
 	if (rc < 0)
 		return rc;
 	frame = alloc_frame_or_reserve();

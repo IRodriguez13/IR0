@@ -22,6 +22,7 @@
 #include <ir0/errno.h>
 #include <ir0/mm_range.h>
 #include <ir0/page_table_pool.h>
+#include <ir0/page.h>
 #include <ir0/pmm.h>
 #include <ir0/paging.h>
 #include <ir0/video_backend.h>
@@ -93,25 +94,26 @@ int mm_user_range_mappable(uintptr_t addr, size_t size)
 address_space_root_t mm_create_user_root(void)
 {
 	address_space_root_t root;
+	uintptr_t root_phys;
 
-	root = (address_space_root_t)page_table_frame_alloc(
-		MM_ALLOC_DIRECT_RECLAIM);
-	if (!root)
+	root_phys = page_table_frame_alloc(MM_ALLOC_DIRECT_RECLAIM);
+	if (!root_phys)
 	{
 		paging_oom_note("mm_create_user_root", paging_oom_classify_current());
 		return NULL;
 	}
+	root = phys_to_virt(root_phys);
 	memset(root, 0, PAGE_SIZE_4KB);
 
 	if (arm64_mmu_map_supervisor(root) != 0 ||
 	    mm_map_platform_supervisor(root) != 0)
 	{
 		paging_reclaim_user_tables(root);
-		page_table_frame_free((uintptr_t)root);
+		page_table_frame_free(root_phys);
 		return NULL;
 	}
 
-	paging_ir0_mm_note_root_created((uintptr_t)root);
+	paging_ir0_mm_note_root_created(root_phys);
 	return root;
 }
 
@@ -120,13 +122,13 @@ void mm_destroy_user_root(address_space_root_t root)
 	if (!root)
 		return;
 	paging_reclaim_user_tables(root);
-	paging_ir0_mm_note_root_freed((uintptr_t)root);
-	page_table_frame_free((uintptr_t)root);
+	paging_ir0_mm_note_root_freed(virt_to_phys(root));
+	page_table_frame_free(virt_to_phys(root));
 }
 
 void mm_prepare_root_activation(address_space_root_t root)
 {
-	if (root && (uintptr_t)root != arm64_mmu_kernel_root())
+	if (root && virt_to_phys(root) != arm64_mmu_kernel_root())
 		(void)arm64_mmu_sync_supervisor(root);
 }
 

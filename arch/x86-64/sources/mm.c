@@ -16,6 +16,7 @@
 #include <ir0/mm_range.h>
 #include <ir0/errno.h>
 #include <ir0/page_table_pool.h>
+#include <ir0/page.h>
 #include <ir0/pmm.h>
 #include <ir0/video_backend.h>
 #include <ir0/ahci_api.h>
@@ -100,16 +101,17 @@ int mm_user_range_mappable(uintptr_t addr, size_t size)
 address_space_root_t mm_create_user_root(void)
 {
 	address_space_root_t root;
+	uintptr_t root_phys;
 	uintptr_t kernel_root_phys;
 	address_space_root_t kernel_root;
 
-	root = (address_space_root_t)page_table_frame_alloc(
-		MM_ALLOC_DIRECT_RECLAIM);
-	if (!root)
+	root_phys = page_table_frame_alloc(MM_ALLOC_DIRECT_RECLAIM);
+	if (!root_phys)
 	{
 		paging_oom_note("mm_create_user_root", paging_oom_classify_current());
 		return NULL;
 	}
+	root = phys_to_virt(root_phys);
 	memset(root, 0, PAGE_SIZE_4KB);
 
 	/* Use the pinned boot root: a switch runs briefly on the old stack. */
@@ -119,7 +121,7 @@ address_space_root_t mm_create_user_root(void)
 		kernel_root_phys = paging_current_address_space();
 		paging_pin_kernel_address_space(kernel_root_phys);
 	}
-	kernel_root = (address_space_root_t)kernel_root_phys;
+	kernel_root = phys_to_virt(kernel_root_phys);
 	mm_copy_kernel_half(root, kernel_root);
 
 	/*
@@ -136,11 +138,11 @@ address_space_root_t mm_create_user_root(void)
 	    mm_map_platform_supervisor(root) != 0)
 	{
 		paging_reclaim_user_tables(root);
-		page_table_frame_free((uintptr_t)root);
+		page_table_frame_free(root_phys);
 		return NULL;
 	}
 
-	paging_ir0_mm_note_root_created((uintptr_t)root);
+	paging_ir0_mm_note_root_created(root_phys);
 	return root;
 }
 
@@ -149,8 +151,8 @@ void mm_destroy_user_root(address_space_root_t root)
 	if (!root)
 		return;
 	paging_reclaim_user_tables(root);
-	paging_ir0_mm_note_root_freed((uintptr_t)root);
-	page_table_frame_free((uintptr_t)root);
+	paging_ir0_mm_note_root_freed(virt_to_phys(root));
+	page_table_frame_free(virt_to_phys(root));
 }
 
 void mm_prepare_root_activation(address_space_root_t root)

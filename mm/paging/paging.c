@@ -77,7 +77,7 @@ void ir0_mm_free_table_frame(uint64_t frame, int level)
         ir0_mm_level3_freed++;
 
     if (paging_test_poison_freed)
-        memset((void *)(uintptr_t)frame, PAGING_TEST_POISON_BYTE, PAGE_SIZE_4KB);
+        memset(phys_to_virt(frame), PAGING_TEST_POISON_BYTE, PAGE_SIZE_4KB);
 
     ir0_mm_set_frame_type(frame, IR0_MM_FRAME_UNKNOWN);
     ir0_mm_frame_pt_free++;
@@ -92,9 +92,9 @@ void paging_sync_kernel_mappings(address_space_root_t root)
 
 	if (!root || !kernel_root)
 		return;
-	if ((uintptr_t)root == kernel_root)
+	if (virt_to_phys(root) == kernel_root)
 		return;
-	mm_copy_kernel_half(root, (address_space_root_t)kernel_root);
+	mm_copy_kernel_half(root, phys_to_virt(kernel_root));
 }
 
 void paging_activate_address_space(uintptr_t root)
@@ -104,7 +104,7 @@ void paging_activate_address_space(uintptr_t root)
 	 * links the ISA-defined shared translation subtree (new kstack slots).
 	 */
 	if (root)
-		mm_prepare_root_activation((address_space_root_t)root);
+		mm_prepare_root_activation(phys_to_virt(root));
 	mm_activate(root);
 }
 
@@ -143,7 +143,7 @@ void paging_copy_phys_page(uintptr_t dst_phys, uintptr_t src_phys)
 	uintptr_t saved;
 
 	paging_phys_map_begin(&saved);
-	memcpy((void *)dst_phys, (void *)src_phys, PAGE_SIZE_4KB);
+	memcpy(phys_to_virt(dst_phys), phys_to_virt(src_phys), PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
 }
 
@@ -152,7 +152,7 @@ void paging_zero_phys_page(uintptr_t phys)
 	uintptr_t saved;
 
 	paging_phys_map_begin(&saved);
-	memset((void *)phys, 0, PAGE_SIZE_4KB);
+	memset(phys_to_virt(phys), 0, PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
 }
 
@@ -169,7 +169,7 @@ void paging_poison_phys_page(uintptr_t phys, uint8_t pattern)
 	uintptr_t saved;
 
 	paging_phys_map_begin(&saved);
-	memset((void *)phys, (int)pattern, PAGE_SIZE_4KB);
+	memset(phys_to_virt(phys), (int)pattern, PAGE_SIZE_4KB);
 	paging_phys_map_end(saved);
 }
 
@@ -290,10 +290,9 @@ uint64_t *paging_existing_table(uint64_t *table, size_t index)
 static uint64_t alloc_page_table(int level)
 {
     uintptr_t frame = page_table_frame_alloc(MM_ALLOC_ATOMIC);
-    void *page = (void *)frame;
     paging_oom_class_t oom_cls;
 
-    if (!page)
+    if (!frame)
     {
         oom_cls = paging_oom_classify_current();
         paging_oom_note("alloc_page_table", oom_cls);
@@ -301,7 +300,7 @@ static uint64_t alloc_page_table(int level)
     }
     
     /* Zero out the page */
-    memset(page, 0, PAGE_SIZE_4KB);
+    memset(phys_to_virt(frame), 0, PAGE_SIZE_4KB);
 
     switch (level)
     {
@@ -317,9 +316,9 @@ static uint64_t alloc_page_table(int level)
     default:
         break;
     }
-    ir0_mm_set_frame_type((uint64_t)(uintptr_t)page, IR0_MM_FRAME_PT);
+    ir0_mm_set_frame_type((uint64_t)frame, IR0_MM_FRAME_PT);
     ir0_mm_frame_pt_alloc++;
-    ir0_mm_log_frame_type("ALLOC", (uint64_t)(uintptr_t)page, IR0_MM_FRAME_PT);
+    ir0_mm_log_frame_type("ALLOC", (uint64_t)frame, IR0_MM_FRAME_PT);
 
     return (uint64_t)frame;
 }
@@ -351,7 +350,7 @@ static int paging_split_large_level2_leaf(address_space_root_t root,
 	pt_phys = alloc_page_table(3);
 	if (pt_phys == 0)
 		return -1;
-	level3_table = (uint64_t *)(uintptr_t)pt_phys;
+	level3_table = phys_to_virt((uintptr_t)pt_phys);
 	phys_base = paging_entry_pfn(level2_entry);
 	leaf_flags = PAGE_RW;
 	exec = mm_pte_executable(level2_entry);
@@ -433,7 +432,7 @@ uint64_t *paging_get_or_create_table(address_space_root_t root,
 		 * execute-never on non-leaf levels.  Encode via mm_make_table_pte.
 		 */
 		parent[index] = mm_make_table_pte((uintptr_t)phys_addr, user);
-		return (uint64_t *)paging_entry_pfn(phys_addr);
+		return phys_to_virt(paging_entry_pfn(phys_addr));
 	}
 
 	if (paging_entry_large(parent[index]))
@@ -568,8 +567,7 @@ int paging_install_pte(address_space_root_t root, uintptr_t virt_addr, uint64_t 
 int map_page(uint64_t virt_addr, uint64_t phys_addr, uint64_t flags)
 {
     /* Get current address-space root (address-space root address) */
-    address_space_root_t root =
-        (address_space_root_t)paging_current_address_space();
+    address_space_root_t root = phys_to_virt(paging_current_address_space());
 
     return map_page_in_directory(root, virt_addr, phys_addr, flags);
 }
@@ -634,7 +632,8 @@ void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
 		if (pte && mm_pte_present(*pte) && pte_user(*pte))
 		{
 			phys = mm_pte_phys(*pte);
-			flush_icache_range(phys, phys + PAGE_SIZE_4KB);
+			flush_icache_range((uintptr_t)phys_to_virt(phys),
+					   (uintptr_t)phys_to_virt(phys) + PAGE_SIZE_4KB);
 		}
 		if (page > UINTPTR_MAX - PAGE_SIZE_4KB)
 			break;

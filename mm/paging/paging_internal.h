@@ -20,6 +20,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <ir0/arch_mm.h>
+#include <ir0/page.h>
 
 typedef enum
 {
@@ -84,5 +85,5 @@ static inline uint64_t *paging_entry_table(uint64_t entry)
 		return NULL;
 	if (paging_entry_large(entry))
 		return NULL;
-	return (uint64_t *)paging_entry_pfn(entry);
+	return phys_to_virt(paging_entry_pfn(entry));
 }

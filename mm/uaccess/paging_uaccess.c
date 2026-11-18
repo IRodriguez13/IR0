@@ -141,7 +141,7 @@ int copy_to_user_mm(address_space_root_t root, uintptr_t dst, const void *src,
 		uintptr_t saved;
 
 		paging_phys_map_begin(&saved);
-		memcpy((void *)(phys + off), s, chunk);
+		memcpy((char *)phys_to_virt(phys) + off, s, chunk);
 		paging_phys_map_end(saved);
 	}
         dst += chunk;
@@ -180,7 +180,7 @@ int copy_from_user_mm(address_space_root_t root, uintptr_t src, void *dst,
 		uintptr_t saved;
 
 		paging_phys_map_begin(&saved);
-		memcpy(d, (const void *)(phys + off), chunk);
+		memcpy(d, (const char *)phys_to_virt(phys) + off, chunk);
 		paging_phys_map_end(saved);
 	}
         src += chunk;
@@ -216,7 +216,7 @@ int clear_user_mm(address_space_root_t root, uintptr_t dst, size_t n)
 		uintptr_t saved;
 
 		paging_phys_map_begin(&saved);
-		memset((void *)(phys + off), 0, chunk);
+		memset((char *)phys_to_virt(phys) + off, 0, chunk);
 		paging_phys_map_end(saved);
 	}
         dst += chunk;

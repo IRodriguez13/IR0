@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Common TLB-coherence policy; ISAs provide local invalidation mechanics. */
 
+#include <ir0/page.h>
 #include <ir0/tlb.h>
 #include <ir0/tlb_sync.h>
 
@@ -10,7 +11,7 @@
 
 static int mm_tlb_root_is_local(address_space_root_t root)
 {
-	return !root || (uintptr_t)root == mm_current_root();
+	return !root || virt_to_phys(root) == mm_current_root();
 }
 
 void mm_tlb_sync_page(address_space_root_t root, uintptr_t va)

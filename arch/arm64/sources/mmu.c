@@ -26,6 +26,7 @@
 #include <arm64_board.h>
 #include <ir0/errno.h>
 #include <ir0/mm_range.h>
+#include <ir0/page.h>
 #include <ir0/paging.h>
 #include <stdint.h>
 
@@ -217,7 +218,7 @@ static int install_device_block(uint64_t block)
 		l2 = mmio_l2_for_l1(l1_idx);
 	if (!l2)
 		return -ENOSPC;
-	l2_pa = (uint64_t)(uintptr_t)l2;
+	l2_pa = virt_to_phys(l2);
 	if (g_l1[l1_idx] != 0U &&
 	    ((g_l1[l1_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE ||
 	     (g_l1[l1_idx] & PTE_ADDR_MASK) != (l2_pa & PTE_ADDR_MASK)))
@@ -269,7 +270,7 @@ static void map_framebuffer(const struct arm64_board_boot_info *boot)
 			l3[i] = pte_page_kernel(pa, (pa >= base && pa < end) ?
 						    ATTR_NORMAL_NC : ATTR_NORMAL);
 		}
-		g_l2_dram[L2_INDEX(block)] = pte_table((uint64_t)(uintptr_t)l3);
+		g_l2_dram[L2_INDEX(block)] = pte_table(virt_to_phys(l3));
 	}
 }
 
@@ -294,8 +295,8 @@ static void build_idmap(void)
 
 	for (block = g_dram_base; block < g_dram_end; block += BLOCK_2M)
 		g_l2_dram[L2_INDEX(block)] = pte_block_dram(block);
-	g_l1[L1_INDEX(g_dram_base)] = pte_table((uint64_t)(uintptr_t)g_l2_dram);
-	g_l0[0] = pte_table((uint64_t)(uintptr_t)g_l1);
+	g_l1[L1_INDEX(g_dram_base)] = pte_table(virt_to_phys(g_l2_dram));
+	g_l0[0] = pte_table(virt_to_phys(g_l1));
 	(void)install_device_block(uart_block);
 	map_framebuffer(boot);
 }
@@ -340,7 +341,7 @@ int arm64_mmu_enable(void)
 		return -EINVAL;
 
 	build_idmap();
-	mmu_configure_and_enable((uint64_t)(uintptr_t)g_l0);
+	mmu_configure_and_enable(virt_to_phys(g_l0));
 	g_mmu_on = 1;
 	return 0;
 }
@@ -354,7 +355,7 @@ int arm64_mmu_verify(void)
 		return -ENODEV;
 	__asm__ volatile("mrs %0, ttbr0_el1" : "=r"(ttbr0));
 	__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
-	if ((ttbr0 & PTE_ADDR_MASK) != ((uint64_t)(uintptr_t)g_l0 & PTE_ADDR_MASK))
+	if ((ttbr0 & PTE_ADDR_MASK) != (virt_to_phys(g_l0) & PTE_ADDR_MASK))
 		return -EINVAL;
 	if ((sctlr & 1UL) == 0)
 		return -EINVAL;
@@ -363,7 +364,7 @@ int arm64_mmu_verify(void)
 
 uintptr_t arm64_mmu_kernel_root(void)
 {
-	return (uintptr_t)g_l0;
+	return virt_to_phys(g_l0);
 }
 
 int arm64_mmu_map_device_block(uint64_t pa)

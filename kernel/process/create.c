@@ -91,7 +91,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			uintptr_t kcr3 = paging_current_address_space();
 
 			proc->sched_prio = 0;
-			mm_init_root(mm, (uint64_t *)kcr3, 0);
+			mm_init_root(mm, phys_to_virt(kcr3), 0);
 			process_mm_bind(proc, mm);
 			process_set_mm_root(proc, kcr3);
 			klog_debug("KERN", "SERIAL: spawn: kernel mm root shared (idle)\n");
@@ -110,7 +110,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			mm_init_root(mm, root, 1);
 			process_mm_bind(proc, mm);
 			klog_debug("KERN", "SERIAL: spawn: page directory OK\n");
-			process_set_mm_root(proc, (uint64_t)(uintptr_t)process_pgd(proc));
+			process_set_mm_root(proc, (uint64_t)virt_to_phys(process_pgd(proc)));
 		}
 	}
 

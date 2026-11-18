@@ -25,6 +25,7 @@
 #include <ir0/signals.h>
 #include <ir0/types.h>
 #include <ir0/mm.h>
+#include <ir0/page.h>
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
 #include <ir0/errno.h>
@@ -352,7 +353,7 @@ static inline uint64_t process_mm_root(const process_t *p)
 	if (!p)
 		return 0;
 	if (p->mm && p->mm->page_directory)
-		return (uint64_t)(uintptr_t)p->mm->page_directory;
+		return (uint64_t)virt_to_phys(p->mm->page_directory);
 	return task_mm_root(&p->task);
 }
 
@@ -368,7 +369,7 @@ static inline void process_set_pgd(process_t *p, uint64_t *pgd)
 	p->mm->page_directory = pgd;
 	if (!pgd)
 		p->mm->owns_tables = 0;
-	task_set_mm_root(&p->task, (uint64_t)(uintptr_t)pgd);
+	task_set_mm_root(&p->task, (uint64_t)virt_to_phys(pgd));
 }
 
 static inline struct mmap_region *process_mmap_list(const process_t *p)
@@ -439,7 +440,7 @@ static inline void process_set_mm_root(process_t *p, uint64_t root)
 		return;
 	task_set_mm_root(&p->task, root);
 	if (p->mm)
-		p->mm->page_directory = (uint64_t *)(uintptr_t)root;
+		p->mm->page_directory = root ? phys_to_virt((uintptr_t)root) : NULL;
 }
 
 static inline pid_t process_pid(const process_t *p)
