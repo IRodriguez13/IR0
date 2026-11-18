@@ -103,9 +103,7 @@ void boot_memory_init(void)
 
 	/*
 	 * Pin the boot address-space root while still on the identity map from the
-	 * assembly bootstrap.
-	 * COW/clear_highpage switch here after process tables use pte_none
-	 * holes (Linux kmap / copy_user_highpage analogue).
+	 * assembly bootstrap; process roots copy its kernel half.
 	 */
 	paging_pin_kernel_address_space(paging_current_address_space());
 }

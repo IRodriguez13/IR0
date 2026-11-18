@@ -60,9 +60,6 @@ uint64_t *paging_get_or_create_table(address_space_root_t root,
 				      int create, uint64_t map_flags,
 				      int level);
 
-/* Switch to the pinned kernel root for physical-address access. */
-void paging_phys_map_begin(uintptr_t *saved_root);
-void paging_phys_map_end(uintptr_t saved_root);
 
 
 /*

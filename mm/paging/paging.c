@@ -23,9 +23,8 @@
 #include <ir0/tlb.h>
 
 /*
- * Boot/kernel address-space root with full PMM identity. Pinned once before
- * any process mm. Used like Linux kmap for physical page copy/zero
- * after process tables punch identity holes to pte_none.
+ * Boot/kernel address-space root (Linux init_mm). Pinned once before any
+ * process mm; its kernel half is the reference every process root copies.
  */
 static uintptr_t paging_kernel_root;
 void paging_pin_kernel_address_space(uintptr_t root)
@@ -119,41 +118,18 @@ uintptr_t paging_kernel_address_space(void)
 	return paging_kernel_root;
 }
 
-void paging_phys_map_begin(uintptr_t *saved_root)
-{
-	*saved_root = paging_current_address_space();
-	if (paging_kernel_root && paging_kernel_root != *saved_root)
-		paging_activate_address_space(paging_kernel_root);
-}
-
-void paging_phys_map_end(uintptr_t saved_root)
-{
-	if (paging_kernel_root && paging_kernel_root != saved_root)
-	{
-		paging_activate_address_space(saved_root);
-	}
-}
-
 /*
- * Phys↔phys page copy (Linux copy_user_highpage / kmap spirit): run under the
- * pinned boot address-space root so process tables may leave heap holes as pte_none.
+ * Phys-to-phys page copy (Linux copy_user_highpage): the direct map reaches
+ * every frame from whichever root is loaded.
  */
 void paging_copy_phys_page(uintptr_t dst_phys, uintptr_t src_phys)
 {
-	uintptr_t saved;
-
-	paging_phys_map_begin(&saved);
 	memcpy(phys_to_virt(dst_phys), phys_to_virt(src_phys), PAGE_SIZE_4KB);
-	paging_phys_map_end(saved);
 }
 
 void paging_zero_phys_page(uintptr_t phys)
 {
-	uintptr_t saved;
-
-	paging_phys_map_begin(&saved);
 	memset(phys_to_virt(phys), 0, PAGE_SIZE_4KB);
-	paging_phys_map_end(saved);
 }
 
 /*
@@ -166,11 +142,7 @@ void paging_zero_phys_page(uintptr_t phys)
  */
 void paging_poison_phys_page(uintptr_t phys, uint8_t pattern)
 {
-	uintptr_t saved;
-
-	paging_phys_map_begin(&saved);
 	memset(phys_to_virt(phys), (int)pattern, PAGE_SIZE_4KB);
-	paging_phys_map_end(saved);
 }
 
 /**
@@ -613,7 +585,6 @@ int protect_user_region_in_directory(address_space_root_t root,
 void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
 			     size_t length)
 {
-	uintptr_t saved;
 	uintptr_t page;
 	uintptr_t end;
 
@@ -622,7 +593,6 @@ void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
 		return;
 	end = start + length;
 
-	paging_phys_map_begin(&saved);
 	for (page = start & (uintptr_t)PAGE_FRAME_MASK; page < end;
 	     page += PAGE_SIZE_4KB)
 	{
@@ -638,7 +608,6 @@ void paging_sync_icache_user(address_space_root_t root, uintptr_t start,
 		if (page > UINTPTR_MAX - PAGE_SIZE_4KB)
 			break;
 	}
-	paging_phys_map_end(saved);
 }
 
 paging_unmap_test_hook_fn paging_unmap_test_hook;
