@@ -60,6 +60,12 @@
 #define TCR_ORGN0_WBWA   (1UL << 10)
 #define TCR_SH0_INNER    (3UL << 12)
 #define TCR_EPD1         (1UL << 23)
+/* TTBR1 (kernel half): T1SZ=16, write-back walks, 4 KiB granule (TG1=0b10). */
+#define TCR_T1SZ_48      (16UL << 16)
+#define TCR_IRGN1_WBWA   (1UL << 24)
+#define TCR_ORGN1_WBWA   (1UL << 26)
+#define TCR_SH1_INNER    (3UL << 28)
+#define TCR_TG1_4K       (2UL << 30)
 #define TCR_IPS_40BIT    (2UL << 32)
 
 #define VIRT_UART_BASE   0x09000000UL
@@ -86,6 +92,8 @@ static uint64_t g_l2_mmio[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 static int g_l2_mmio_l1[MMIO_L2_POOL_MAX];
 static uint64_t g_l3_fb[FB_L3_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
+/* TTBR1 root: the kernel half, holding the linear map of all RAM. */
+static uint64_t g_ttbr1_l0[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 
 /* Every Device block installed so far, replayed into each user root. */
 static uint64_t g_device_blocks[DEVICE_BLOCK_MAX];
@@ -360,6 +368,31 @@ int arm64_mmu_verify(void)
 	if ((sctlr & 1UL) == 0)
 		return -EINVAL;
 	return 0;
+}
+
+uint64_t *mm_kernel_map_root(void)
+{
+	return g_mmu_on ? g_ttbr1_l0 : NULL;
+}
+
+/*
+ * Turn on TTBR1 walks for the kernel half (Linux arm64 swapper_pg_dir).
+ * EL0 never reaches it: its descriptors carry no AP[1] user permission.
+ */
+void mm_kernel_map_enable(void)
+{
+	uint64_t tcr;
+
+	__asm__ volatile("dsb ishst" ::: "memory");
+	__asm__ volatile("msr ttbr1_el1, %0" :: "r"(virt_to_phys(g_ttbr1_l0))
+			 : "memory");
+	__asm__ volatile("mrs %0, tcr_el1" : "=r"(tcr));
+	tcr &= ~(TCR_EPD1 | (0x3FUL << 16) | (0xFFUL << 24));
+	tcr |= TCR_T1SZ_48 | TCR_IRGN1_WBWA | TCR_ORGN1_WBWA | TCR_SH1_INNER |
+	       TCR_TG1_4K;
+	__asm__ volatile("msr tcr_el1, %0" :: "r"(tcr) : "memory");
+	__asm__ volatile("isb" ::: "memory");
+	tlb_flush_all();
 }
 
 uintptr_t arm64_mmu_kernel_root(void)

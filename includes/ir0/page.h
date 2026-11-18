@@ -22,7 +22,7 @@
 /*
  * All of RAM is mapped once, at PAGE_OFFSET, in the kernel half shared by
  * every address space. The kernel image and its heap stay identity mapped
- * below it until the kernel itself moves to the higher half.
+ * low until the kernel image itself moves to the higher half.
  */
 #define PAGE_OFFSET IR0_ARCH_PAGE_OFFSET
 

@@ -60,6 +60,12 @@ int mm_large_identity_supported(void)
 	return 1;
 }
 
+/* 4 KiB granule: level-1 block descriptors map 1 GiB. */
+int mm_pud_leaf_supported(void)
+{
+	return 1;
+}
+
 unsigned mm_user_root_slots(void)
 {
 	/* TTBR0 covers only the low half: every L0 slot belongs to the root. */

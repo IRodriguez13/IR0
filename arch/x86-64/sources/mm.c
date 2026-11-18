@@ -21,6 +21,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/ahci_api.h>
 #include <ir0/paging.h>
+#include <ir0/tlb.h>
 #include <string.h>
 
 static int mm_map_platform_supervisor(address_space_root_t root);
@@ -51,6 +52,40 @@ uintptr_t mm_user_va_end(void)
 int mm_large_identity_supported(void)
 {
 	return 1;
+}
+
+/* CPUID.80000001h:EDX.Page1GB (Linux X86_FEATURE_GBPAGES). */
+int mm_pud_leaf_supported(void)
+{
+	uint32_t eax = 0x80000000U;
+	uint32_t ebx;
+	uint32_t ecx = 0;
+	uint32_t edx;
+
+	__asm__ volatile("cpuid"
+			 : "+a"(eax), "=b"(ebx), "+c"(ecx), "=d"(edx));
+	if (eax < 0x80000001U)
+		return 0;
+	eax = 0x80000001U;
+	ecx = 0;
+	__asm__ volatile("cpuid"
+			 : "+a"(eax), "=b"(ebx), "+c"(ecx), "=d"(edx));
+	return (edx & (1U << 26)) != 0;
+}
+
+/*
+ * The direct map lives in the kernel half of the boot PML4, still loaded
+ * and identity mapped when it is built; mm_copy_kernel_half() hands its
+ * slot to every process root.
+ */
+uint64_t *mm_kernel_map_root(void)
+{
+	return (uint64_t *)(mm_current_root() & ~(uintptr_t)(PAGE_SIZE_4KB - 1U));
+}
+
+void mm_kernel_map_enable(void)
+{
+	tlb_invalidate_all();
 }
 
 unsigned mm_user_root_slots(void)

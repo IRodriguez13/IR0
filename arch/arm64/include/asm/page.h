@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
 /*
- * Base of the ARM64 linear map (Linux PAGE_OFFSET, 48-bit VA). Zero while
- * the kernel still reaches RAM through its TTBR0 identity map.
+ * Base of the ARM64 linear map, as in Linux with 48-bit VAs: the bottom of
+ * the TTBR1 (kernel) half.
  */
-#define IR0_ARCH_PAGE_OFFSET 0x0UL
+#define IR0_ARCH_PAGE_OFFSET 0xffff000000000000UL
