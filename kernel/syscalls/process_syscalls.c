@@ -14,7 +14,6 @@
 
 #include "process_syscalls.h"
 #include <string.h>
-#include <ktm_probe_diag.h>
 #include <ir0/acpi_pm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
@@ -377,8 +376,8 @@ int64_t sys_setpriority(int which, int who, int prio)
 
 /*
  * getpriority(2). The raw syscall returns the nice value biased by 20 so a
- * legitimate negative nice is not mistaken for an error code; musl and glibc
- * undo the bias (Linux kernel/sys.c).
+ * legitimate negative nice is not mistaken for an error code; the libc
+ * undoes the bias (Linux kernel/sys.c).
  */
 int64_t sys_getpriority(int which, int who)
 {
@@ -873,7 +872,7 @@ int64_t sys_exec(const char *pathname,
    * the binary is ever opened. IR0's /proc is not a VFS mount and the ELF
    * loader only reads through vfs_read_file, so the substitution happens
    * here instead — the one place that still knows it is handling a path.
-   * BusyBox with FEATURE_SH_STANDALONE re-executes itself this way.
+   * execve("/proc/self/exe") runs the caller's own image again (proc(5)).
    */
   if (exec_path_is_proc_self_exe(resolved_path))
   {
@@ -898,7 +897,6 @@ int64_t sys_exec(const char *pathname,
 
   if (current_process->mode == USER_MODE)
   {
-    ktm_probe_diag_execve(current_process, path_to_use);
     KTM_CHECKPOINT(KTM_CP_PROCESS_EXEC);
     result = exec_replace_current(path_to_use, argv ? args.argv : NULL,
                                   args.envp);
@@ -1005,7 +1003,7 @@ int64_t sys_vfork(void)
  * CLONE_VFORK|CLONE_VM: vfork semantics (no CLONE_THREAD).
  * CLONE_THREAD|CLONE_VM: lightweight thread sharing the caller's mm.
  * Otherwise duplicates the address space like fork().
- * stack is the child user RSP (musl __clone / posix_spawn); NULL keeps the
+ * stack is the child user RSP (clone(2) child stack); NULL keeps the
  * parent's stack (classic vfork).
  */
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
@@ -1145,7 +1143,7 @@ int64_t sys_arch_prctl(int code, unsigned long addr)
 }
 
 /*
- * sys_set_tid_address - Linux set_tid_address(2) stub for musl.
+ * sys_set_tid_address - Linux set_tid_address(2).
  */
 int64_t sys_set_tid_address(int *tidptr)
 {
@@ -1159,7 +1157,7 @@ int64_t sys_set_tid_address(int *tidptr)
   return (int64_t)current_process->task.pid;
 }
 /*
- * sys_getrandom - Non-cryptographic entropy for musl bring-up.
+ * sys_getrandom - Non-cryptographic entropy (getrandom(2) subset).
  */
 int64_t sys_getrandom(void *buf, size_t buflen, unsigned int flags)
 {

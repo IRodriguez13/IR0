@@ -686,10 +686,11 @@ ir0-selftest-fpsimd: ir0-selftest-fpsimd-x86 ir0-selftest-fpsimd-arm64
 # linux_abi_<group>.c, one case per fixed divergence): sock (socket
 # syscalls), mm (memory mapping and clocks), fs (file and path syscalls),
 # signals (delivery, masks and default actions), uaccess (user-pointer
-# checks that ran ahead of the copy) and kexec (kexec_load architecture
-# check). Built with the conformance runner, which fails the target unless
+# checks that ran ahead of the copy), kexec (kexec_load architecture
+# check), tty (console line discipline, TIOCSTI-driven) and sigframe
+# (handler frame placement and the mask after longjmp). Built with the conformance runner, which fails the target unless
 # every case listed in linux_abi_<group>.h passes.
-IR0_ABI_SELFTESTS := sock mm fs signals uaccess kexec
+IR0_ABI_SELFTESTS := sock mm fs signals uaccess kexec tty sigframe
 IR0_ABI_SELFTEST_RUN := python3 $(KERNEL_ROOT)/scripts/ir0_conformance.py run \
 	--mode conformance --timeout 300
 

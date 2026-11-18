@@ -66,7 +66,6 @@ Boot wiring (kernel):
 | `CONFIG_KTM_USERDEV` | depends on KTM+EVENTS | `/dev/ktm` control plane |
 | `CONFIG_KTM_FAULT` | n | Fault-injection stub (v2); keep off in prod |
 | `CONFIG_KTM_SERIAL_VERBOSE` | n | Full `CHECKPOINT`/`PROBE`/`KTM|LOG` on serial; leave off for product/desk |
-| `CONFIG_KTM_PROBE_DIAG` / `MALLOC_FORENSICS` | n | Temporary bring-up noise |
 
 When `CONFIG_KTM_USERDEV` is off, `includes/ir0/ktm/userdev.h` provides an empty
 `static inline ktm_userdev_register()`. The real definition in `ktm/userdev.c` is
@@ -88,7 +87,7 @@ compiled only when the option is on — keep that pairing intact.
 | Human log hub | `klog.c`, `ktm_klog.c`, [`KLOG.md`](KLOG.md) | Structured `klog_record` + `[#seq] [phase] [ts] [LEVEL] [COMP] msg`; facade `<ir0/ktm/klog.h>` |
 | Userdev | `userdev.c` | `/dev/ktm` ioctl + read/poll over the ring |
 | Flight / panic | `ktm_flight.c`, `ktm_panic_class.c`, … | Post-mortem classification |
-| Diags | `d1_*`, `ktm_probe_diag.c` | Optional forensics (Kconfig off by default) |
+| Diags | `d1_*` | Optional forensics (Kconfig off by default; armed by `ir0.tty_smoke=1`) |
 
 ### Logging layers (klog vs KTM vs host)
 

@@ -131,6 +131,14 @@ int input_kbd_get_console_mode(void)
 	return keyboard ? keyboard->get_console_mode() : IR0_INPUT_KBD_XLATE;
 }
 
+int input_kbd_receive(char c)
+{
+	if (!keyboard || !keyboard->receive)
+		return -1;
+	keyboard->receive(c);
+	return 0;
+}
+
 void input_kbd_wake_readers(void)
 {
 	(void)poll_wake_check_nosched();

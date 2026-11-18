@@ -117,4 +117,15 @@ Criterio del mantenedor para todo el kernel. Complementa
 - `[kernel-loose-files]`: `kernel/main.c` es el único `.c`/`.h`/`.S`/`.asm`
   directamente en `kernel/`; lo demás va a un `kernel/<responsabilidad>/`, a
   `lib/` o a su subsistema dueño. Sin ledger; auto-test de violación inyectada.
+- `[userspace-agnostic]` (UPROG-1): el kernel no sabe qué programa de
+  userspace corre. Rechaza nombres de programas (shells, init y
+  supervisores, logins, editores, programas gráficos, utilidades de red,
+  compiladores, la libc) en código, comentarios y strings de los árboles
+  del kernel (sin `kernel/test/`, `ktm/mocks/` ni `includes/uapi/`). La
+  lista vive en `scripts/smp_entry_gate/userspace_programs.txt` y los falsos
+  positivos revisados en `userspace_programs_ledger.txt` (sólo se achica);
+  el criterio 2 de `make smp-entry-gate` usa el mismo escaneo. Coincidencia
+  por palabra completa (`ash` no toca `hash`, `ping` no toca `mapping`);
+  auto-test de violación inyectada. El comentario cita la regla de Linux
+  (POSIX, man page, archivo de Linux), no el programa.
 - Un hallazgo de layout que no tiene guard es deuda: se anota y se automatiza.

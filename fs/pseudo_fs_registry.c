@@ -569,8 +569,9 @@ int64_t pseudo_fs_ops_read(const pseudo_fs_ops_t *ops, void *ctx, char *buf,
 
 	/*
 	 * Always regenerate from offset 0 into a bounce buffer, then slice.
-	 * Many backends ignore *offset; BusyBox full_read() would otherwise
-	 * re-read the same payload (cmdline "sh" → "shshshsh…", "busybox"×N).
+	 * Many backends ignore *offset; a reader looping read(2) until EOF
+	 * would otherwise get the same payload again and again (a cmdline
+	 * repeated without end) instead of 0 at the end of the file.
 	 */
 	full = ops->read(ctx, full_buf, sizeof(full_buf), &gen_off);
 	if (full < 0)

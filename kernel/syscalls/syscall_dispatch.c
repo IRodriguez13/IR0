@@ -34,7 +34,6 @@
 #include <ir0/timerfd.h>
 #include <ir0/ktm/klog.h>
 #include <ktm.h>
-#include <ktm_probe_diag.h>
 #include <d1_12_read_diag.h>
 #include <config.h>
 
@@ -518,7 +517,7 @@ static int64_t exit_to_user_mode(process_t *p, enum ir0_syscall_id id,
 }
 
 /**
- * syscall_dispatch - Dispatch system call via table (Linux/musl ABI)
+ * syscall_dispatch - Dispatch system call via table (Linux syscall ABI)
  * @syscall_num: Native Linux ABI syscall number for the active ISA
  * @arg1-arg6: System call arguments captured by the ISA entry backend
  *
@@ -558,8 +557,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
   KTM_TRACE_SYSCALL_ENTER((uint32_t)syscall_num);
   if (current_process && current_process->mode == USER_MODE)
   {
-    ktm_probe_diag_syscall_pre(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6,
-			       process_syscall_ip(current_process));
     if (syscall_id == IR0_SYSCALL_READ)
     {
       d1_12_read_diag_syscall_pre(current_process, (int)arg1,
@@ -579,7 +576,6 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
     ktm_user_canary_poll(process_pgd(current_process),
 			 (uint64_t)USER_STACK_TOP,
 			 (uint32_t)current_process->task.pid);
-  ktm_probe_diag_syscall_post(syscall_num, r);
   if (current_process && current_process->mode == USER_MODE &&
       syscall_id == IR0_SYSCALL_READ)
     d1_12_read_diag_syscall_post(current_process, r);

@@ -7,7 +7,8 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: sock_inet_ioctl.h
- * Description: Linux SIOCGIF and SIOCSIF plus SIOCADDRT/SIOCDELRT for BusyBox.
+ * Description: Linux SIOCGIF and SIOCSIF plus SIOCADDRT/SIOCDELRT
+ *              (netdevice(7), route ioctls).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -112,7 +112,7 @@ int sock_stream_buf_space(const struct sock_stream *peer_of_sender);
 int sock_stream_buf_count(const struct sock_stream *s);
 struct sock_stream *sock_stream_get_peer(struct sock_stream *s);
 
-/* /proc/net/{tcp,unix} inventory (BusyBox netstat). */
+/* /proc/net/{tcp,unix} inventory (proc(5)). */
 struct sock_stream_inet_snap
 {
 	uint32_t local_ip;

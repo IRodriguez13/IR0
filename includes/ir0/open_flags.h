@@ -17,7 +17,7 @@
 #include <stdint.h>
 #include <asm/fcntl.h>
 
-/* File access modes (same numeric values as Linux/musl accmode) */
+/* File access modes (same numeric values as Linux accmode) */
 #define IR0_O_RDONLY    0x0000
 #define IR0_O_WRONLY    0x0001
 #define IR0_O_RDWR      0x0002
@@ -48,7 +48,7 @@
 #define LINUX_O_ASYNC     0x002000U /* stored as is: no IR0 bit collides */
 
 /**
- * linux_open_flags_to_ir0 - Translate Linux/musl open flags to IR0 VFS flags.
+ * linux_open_flags_to_ir0 - Translate Linux open flags to IR0 VFS flags.
  * @linux_flags: Raw flags from userspace (Linux ABI).
  * Returns: IR0_O_* bitmask suitable for vfs_open and fd_table->flags.
  */

@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: statfs.h
- * Description: Linux x86-64 statfs(2) layout for BusyBox df / musl statvfs.
+ * Description: Linux x86-64 statfs(2) layout (struct statfs, statfs(2)).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

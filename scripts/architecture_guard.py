@@ -3921,6 +3921,159 @@ def self_test_include_layout() -> list[str]:
     return failures
 
 
+# UPROG-1: the kernel never knows which userspace program runs. Code paths,
+# workarounds and comments state the Linux rule they implement (POSIX, the
+# man pages, Linux behaviour), not the program that needed it. The names
+# live in scripts/smp_entry_gate/userspace_programs.txt (one per line) and
+# the reviewed false positives in userspace_programs_ledger.txt
+# ("<path> <name>  # why"; an entry with no hit left is stale). The SMP
+# entry gate (criterion 2) runs this same scan through
+# userspace_program_findings(). A name matches as a whole word, without
+# regard to case, in code, comments and strings: "ash" leaves "hash" and
+# "flash" alone, "ping" leaves "mapping" alone.
+USERSPACE_DATA = ROOT / "scripts" / "smp_entry_gate"
+USERSPACE_NAMES_FILE = USERSPACE_DATA / "userspace_programs.txt"
+USERSPACE_LEDGER_FILE = USERSPACE_DATA / "userspace_programs_ledger.txt"
+USERSPACE_TREES = ("arch", "block", "cpp", "drivers", "fs", "includes", "ipc",
+                   "kernel", "ktm", "lib", "mm", "net", "rust", "sched", "smp",
+                   "sound")
+USERSPACE_SKIP_PREFIXES = ("kernel/test/", "ktm/mocks/", "includes/uapi/")
+USERSPACE_SUFFIXES = (".c", ".h", ".S", ".asm", ".cpp", ".hpp", ".rs")
+_USERSPACE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9+._-]*$")
+
+
+def _data_lines(text: str):
+    for lineno, raw in enumerate(text.splitlines(), 1):
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            yield lineno, line
+
+
+def load_userspace_names(text: str) -> tuple[set[str], list[str]]:
+    """Parse the name list; return (names, errors)."""
+    names: set[str] = set()
+    errors = []
+    for lineno, line in _data_lines(text):
+        name = line.lower()
+        if not _USERSPACE_NAME_RE.match(name):
+            errors.append(f"userspace_programs.txt:{lineno}: expected one "
+                          f"program name, got '{line}'")
+        elif name in names:
+            errors.append(f"userspace_programs.txt:{lineno}: duplicate "
+                          f"name '{name}'")
+        else:
+            names.add(name)
+    return names, errors
+
+
+def load_userspace_ledger(text: str, names: set[str]):
+    """Parse the ledger; return ({(path, name): lineno}, errors)."""
+    entries: dict[tuple[str, str], int] = {}
+    errors = []
+    for lineno, line in _data_lines(text):
+        fields = line.split()
+        if len(fields) != 2 or fields[1].lower() not in names:
+            errors.append(f"userspace_programs_ledger.txt:{lineno}: expected "
+                          "'<path> <listed name>  # why'")
+            continue
+        key = (fields[0], fields[1].lower())
+        if key in entries:
+            errors.append(f"userspace_programs_ledger.txt:{lineno}: "
+                          "duplicate entry")
+        entries[key] = lineno
+    return entries, errors
+
+
+def userspace_name_pattern(names: set[str]) -> re.Pattern:
+    return re.compile(r"\b(" + "|".join(sorted(map(re.escape, names))) +
+                      r")\b", re.IGNORECASE)
+
+
+def userspace_name_hits(text: str, pattern: re.Pattern):
+    """Return (line, name, source line) for every listed name in *text*."""
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for match in pattern.finditer(line):
+            found.append((lineno, match.group(1).lower(), line))
+    return found
+
+
+def _userspace_files() -> list[str]:
+    files = []
+    for tree in USERSPACE_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = sorted(d for d in dirnames if d not in SKIP_DIR_NAMES)
+            for fname in sorted(filenames):
+                if fname.endswith(USERSPACE_SUFFIXES):
+                    rel = str(rel_to_root(Path(dirpath) / fname))
+                    if not rel.startswith(USERSPACE_SKIP_PREFIXES):
+                        files.append(rel)
+    return sorted(files)
+
+
+def userspace_program_findings() -> tuple[list[str], list[str]]:
+    """(hits "path:line: name: text", data and stale-ledger errors)."""
+    names, errors = load_userspace_names(read_file_text(USERSPACE_NAMES_FILE))
+    if not names:
+        return [], errors + ["userspace_programs.txt lists no names"]
+    ledger, ledger_errors = load_userspace_ledger(
+        read_file_text(USERSPACE_LEDGER_FILE), names)
+    errors.extend(ledger_errors)
+    pattern = userspace_name_pattern(names)
+    hits = []
+    covered = set()
+    for rel in _userspace_files():
+        for lineno, name, line in userspace_name_hits(
+                read_file_text(ROOT / rel), pattern):
+            if (rel, name) in ledger:
+                covered.add((rel, name))
+                continue
+            hits.append(f"{rel}:{lineno}: {name}: {line.strip()[:100]}")
+    for key in sorted(set(ledger) - covered):
+        errors.append(f"userspace_programs_ledger.txt:{ledger[key]}: stale "
+                      f"entry '{key[0]} {key[1]}': no hit left, drop it")
+    return hits, errors
+
+
+def _userspace_agnostic_self_test() -> list[str]:
+    """Inject program names and near misses; the scanner must tell them apart."""
+    errors = []
+    names, name_errors = load_userspace_names(
+        "# comment\nash\nping\nvi\nash\nBad Name\n")
+    if names != {"ash", "ping", "vi"} or len(name_errors) != 2:
+        errors.append("[userspace-agnostic] self-test: name parser accepted "
+                      f"a defect: {sorted(names)} {name_errors}")
+    ledger, ledger_errors = load_userspace_ledger(
+        "a.c ping  # why\na.c ping\nb.c nope\nbroken\n", names)
+    if set(ledger) != {("a.c", "ping")} or len(ledger_errors) != 3:
+        errors.append("[userspace-agnostic] self-test: ledger parser accepted "
+                      f"a defect: {ledger_errors}")
+    sample = ("/* hash flash crash mapping typing ashes vivid via */\n"
+              "static int busy; /* ASH spins */\n"
+              "\t/* ping 10.0.0.1 */\n"
+              "/* open it in vi */\n")
+    got = [(line, name) for line, name, _text in
+           userspace_name_hits(sample, userspace_name_pattern(names))]
+    want = [(2, "ash"), (3, "ping"), (4, "vi")]
+    if got != want:
+        errors.append(f"[userspace-agnostic] self-test: expected {want}, "
+                      f"got {got}")
+    return errors
+
+
+def check_userspace_agnostic():
+    """Reject userspace program names anywhere in the kernel sources."""
+    errors = _userspace_agnostic_self_test()
+    hits, data_errors = userspace_program_findings()
+    errors.extend(f"[userspace-agnostic] {e}" for e in data_errors)
+    errors.extend(f"[userspace-agnostic] {h}  (state the Linux rule instead)"
+                  for h in hits)
+    return errors
+
+
 # Debt ledgers: reviewed exceptions that only shrink. The SMP entry gate
 # (scripts/smp_entry_gate.py) needs every one of them empty. Files count
 # their non-comment lines; in-module ledgers count their entries.
@@ -3942,7 +4095,8 @@ def main():
                     _legacy_pc_self_test() +
                     _domain_isolation_self_test() +
                     _kernel_loose_self_test() +
-                    _rules_digest_self_test())
+                    _rules_digest_self_test() +
+                    _userspace_agnostic_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -3951,7 +4105,8 @@ def main():
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
               "no-raw-atomics, undefined-prototype, legacy-pc-io, "
-              "domain-isolation, kernel-loose-files, rules-digest)")
+              "domain-isolation, kernel-loose-files, rules-digest, "
+              "userspace-agnostic)")
         return 0
 
     errors = []
@@ -4029,6 +4184,7 @@ def main():
     errors.extend(check_no_syscall_stubs())
     errors.extend(check_legacy_pc_io())
     errors.extend(check_domain_isolation())
+    errors.extend(check_userspace_agnostic())
     errors.extend(check_kernel_loose_files())
     errors.extend(check_rules_digest())
     errors.extend(check_retired_mm_headers())

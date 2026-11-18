@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# Userspace program names the kernel must not know (SMP entry gate,
-# criterion 2: UPROG-1). One name per line, matched as a whole word,
+# Userspace program names the kernel must not know (UPROG-1). Checked by
+# scripts/architecture_guard.py [userspace-agnostic] (make arch-guard) and,
+# through the same scan, by the SMP entry gate criterion 2. One name per line, matched as a whole word,
 # case-insensitive, in kernel sources (comments included: a comment that
 # justifies kernel code by a program counts). Reviewed false positives go
 # to userspace_programs_ledger.txt.
@@ -18,3 +19,27 @@ sudo
 doas
 bash
 doom
+hush
+zsh
+ksh
+mingetty
+opendoas
+vi
+vim
+emacs
+xorg
+tinyx
+xfbdev
+xinit
+startx
+xterm
+twm
+hexdump
+ifconfig
+netstat
+wget
+dropbear
+sshd
+tcc
+tinycc
+musl

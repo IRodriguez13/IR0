@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: clone.h
- * Description: Linux clone(2) flags (musl pthread ABI)
+ * Description: Linux clone(2) flags (pthread ABI, clone(2))
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

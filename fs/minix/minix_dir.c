@@ -303,7 +303,7 @@ int minix_fs_link(const char *oldpath, const char *newpath)
    * Holding the raw pointer across find_inode(newpath)/find_inode(parent)
    * would alias the parent directory inode onto old_inode and write its
    * IFDIR contents back to old_inode_num — corrupting the renamed file into
-   * a directory (runsv "supervise/pid: is a directory").
+   * a directory (a later open reported "is a directory" for a file).
    */
   minix_inode_t *old_inode_ptr = minix_fs_find_inode(oldpath);
   if (!old_inode_ptr)

@@ -51,20 +51,6 @@ void test_named_fifo_supervise(void)
 	ASSERT(!S_ISDIR(S_IFIFO | 0600));
 	TEST_END();
 
-	TEST_BEGIN("named_fifo_supervise_paths");
-	ASSERT(named_fifo_is_runsv_supervise_path(
-		"/etc/runit/sv/console/supervise/control"));
-	ASSERT(named_fifo_is_runsv_supervise_path(
-		"/etc/runit/sv/logger/log/supervise/ok"));
-	ASSERT(!named_fifo_is_runsv_supervise_path(
-		"/etc/runit/sv/console/supervise/pid"));
-	ASSERT(!named_fifo_is_runsv_supervise_path(
-		"/etc/runit/sv/console/supervise/lock"));
-	ASSERT(named_fifo_path_must_be_fifo("/run/initctl"));
-	ASSERT(named_fifo_path_must_be_fifo("/run/openrc/init.ctl"));
-	ASSERT(!named_fifo_path_must_be_fifo("/run/.keep"));
-	TEST_END();
-
 	reset_named_fifo_table();
 
 	TEST_BEGIN("named_fifo_supervise_mknod_stat");

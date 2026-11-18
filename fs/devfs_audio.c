@@ -11,7 +11,7 @@
 
 #if CONFIG_ENABLE_SOUND
 /*
- * PCM format state for /dev/audio. Default: Doom-compatible 11025 Hz, 8-bit mono.
+ * PCM format state for /dev/audio. Default: 11025 Hz, 8-bit mono.
  * Use ioctl(AUDIO_SET_FORMAT) before write() to change.
  */
 static struct audio_format audio_pcm_format = {
@@ -99,7 +99,7 @@ static int64_t dev_audio_ioctl(devfs_entry_t *entry, uint64_t request, void *arg
                 struct audio_format fmt;
                 if (copy_from_user(&fmt, arg, sizeof(fmt)) != 0)
                     return -1;
-                /* SB16 8-bit mono: 4000-45454 Hz. Doom uses 11025. */
+                /* SB16 8-bit mono: 4000-45454 Hz. */
                 if (fmt.sample_rate < 4000 || fmt.sample_rate > 45454)
                     return -1;
                 if (fmt.channels != 1 || fmt.bits_per_sample != 8)

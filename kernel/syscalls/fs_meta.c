@@ -656,8 +656,8 @@ int64_t sys_fchdir(int fd)
 
   /*
    * fd_table[].path is a kernel string. sys_chdir() rejects non-userspace
-   * pointers with -EFAULT, which broke runsvdir's fchdir(curdir) loop and
-   * left services with a wrong cwd (./run ENOENT, supervise create fails).
+   * pointers with -EFAULT, so fchdir(2) must not go through it: it would
+   * fail on every valid directory fd and leave the cwd unchanged.
    */
   return ir0_chdir_resolved(fd_table[fd].path);
 }

@@ -135,6 +135,7 @@ static const struct ktest_case ktest_cases[] = {
 	{ ktest_brk_linux_fail_returns_current,
 	  "brk_linux_fail_returns_current", 1 },
 	{ ktest_tty_canon_read_immediate, "tty_canon_read_immediate", 1 },
+	{ ktest_tty_raw_icrnl_maps_cr, "tty_raw_icrnl_maps_cr", 1 },
 	{ ktest_sock_stream_accept_fifo_backlog,
 	  "sock_stream_accept_fifo_backlog", 0 },
 	{ ktest_sock_stream_segmented_queue, "sock_stream_segmented_queue", 0 },

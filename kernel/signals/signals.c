@@ -13,7 +13,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/signals.h>
-#include <ir0/console.h>
 #include <ir0/mm_range.h>
 #include <ir0/sched.h>
 #include <ir0/clock.h>
@@ -101,21 +100,6 @@ static void signals_apply_handler_mask(process_t *p, int sig, uint32_t sa_flags)
 		p->signal_mask |= SIGNAL_MASK(sig);
 }
 
-static void signals_restore_handler_mask(process_t *p)
-{
-	if (!p || !p->signal_mask_saved_valid)
-		return;
-	p->signal_mask = p->signal_mask_saved;
-	p->signal_mask_saved_valid = 0;
-}
-
-static void signals_on_sigreturn(process_t *p)
-{
-	signals_restore_handler_mask(p);
-	if (p)
-		p->signal_frame_sp = 0;
-}
-
 void signals_try_abandon_sigframe(process_t *p)
 {
 	uint64_t usp;
@@ -140,16 +124,14 @@ void signals_try_abandon_sigframe(process_t *p)
 	signal_trace(SIGNAL_TRACE_ABANDON, p, 0, usp, frame_sp, 0);
 
 	/*
-	 * Restore pre-delivery mask. Strict Linux leaves the handler mask
-	 * after longjmp(); with a full sa_mask (ash sigfillset) that would
-	 * mute the process. Restoring matches siglongjmp(... savesigs) and
-	 * keeps the process signable.
-	 *
-	 * Userspace-first: stock BusyBox ash longjmps without rt_sigreturn;
-	 * resync console input so GNU/BusyBox need no kernel-specific patches.
+	 * Linux keeps no per-frame state, so leaving a handler this way
+	 * changes nothing for the task: the handler mask stays in force
+	 * (signal(7); siglongjmp(3) restores a saved mask from userspace) and
+	 * no other subsystem hears about it. Only IR0's own frame
+	 * bookkeeping goes, so the next frame saves the mask in force then.
 	 */
-	signals_on_sigreturn(p);
-	ir0_console_after_signal_abandon();
+	p->signal_mask_saved_valid = 0;
+	p->signal_frame_sp = 0;
 }
 
 int signals_has_user_handler(process_t *p, int sig)
@@ -354,10 +336,10 @@ int send_signal(int pid, int signal)
     signal_trace(SIGNAL_TRACE_SEND, proc, signal, 0, 0, 0);
 
     /*
-     * Linux: signals to PID 1 are discarded unless init installed a handler
-     * (man 2 kill). BusyBox poweroff/reboot without -f send SIGUSR2/SIGTERM
-     * to PID 1; runit has no handler — leaving them pending destabilized
-     * stage supervision and later showed up as kernel #UD.
+     * kill(2): "The only signals that can be sent to process ID 1, the init
+     * process, are those for which init has explicitly installed signal
+     * handlers." Linux sig_task_ignored() drops the rest at send time
+     * instead of leaving them pending.
      */
     if (proc->task.pid == 1)
     {
@@ -416,104 +398,29 @@ int send_signal_pgrp(int32_t pgid, int signal)
 }
 
 /*
- * Pick a mapped user stack slot for [return slot][sigframe] + handler redzone.
- * The return slot holds the restorer on ISAs whose handlers return with a
- * stack pop (SIGFRAME_RETURN_SLOT); it is empty on link-register ISAs.
- * When the interrupted SP is near the stack guard (deep call chain in
- * recvfrom → ping), placing the frame below saved SP lands in unmapped
- * pages and syscalls from the handler (clock_gettime in SIGALRM) fail with
- * -EFAULT.
+ * Linux get_sigframe() (arch/x86/kernel/signal.c, arch/arm64/kernel/
+ * signal.c) without SA_ONSTACK: the frame goes just below the interrupted
+ * stack pointer, past the ABI red zone, whatever mapping that pointer is
+ * in (the main stack, a thread stack from mmap(2)). Below the frame sits
+ * the return slot on ISAs whose handlers return with a stack pop; the
+ * handler starts with SP there. A frame that cannot be written makes the
+ * copy fail and the task gets SIGSEGV, as with force_sigsegv().
  *
- * Stale syscall_frame SP (outside the process stack VMA) must not be used —
- * BusyBox ping after exec can interrupt with bogus sp≈0xffa… and unmapped
- * handler locals.
+ * Returns the handler's SP and the frame address, or 0 when the stack
+ * pointer is too low to hold a frame at all.
  */
-static int signal_sp_in_stack(process_t *p, uint64_t sp)
-{
-	uint64_t lo;
-	uint64_t hi;
-
-	if (!p || sp == 0)
-		return 0;
-
-	lo = process_stack_start(p);
-	hi = lo + process_stack_size(p);
-	if (lo == 0 || hi <= lo)
-	{
-		lo = USER_STACK_BASE;
-		hi = USER_STACK_TOP;
-	}
-
-	return sp >= lo + 16 && sp < hi;
-}
-
-static uint64_t signal_pick_handler_sp(process_t *p, uint64_t saved_sp,
+static uint64_t signal_pick_handler_sp(uint64_t saved_sp,
 				       uint64_t *frame_addr_out)
 {
-	uint64_t stack_lo;
-	uint64_t stack_hi;
-	uint64_t user_sp;
 	uint64_t frame_addr;
-	uint64_t min_sp;
 
-	if (!p || !frame_addr_out)
+	if (saved_sp < SIGFRAME_RED_ZONE + sizeof(struct sigframe) +
+			       SIGFRAME_RETURN_SLOT + 16UL)
 		return 0;
-
-	stack_lo = process_stack_start(p);
-	stack_hi = stack_lo + process_stack_size(p);
-	if (stack_lo == 0 || stack_hi <= stack_lo)
-	{
-		stack_lo = USER_STACK_BASE;
-		stack_hi = USER_STACK_TOP;
-	}
-
-	saved_sp &= ~0xFUL;
-	min_sp = stack_lo + 2048UL;
-
-	if (!signal_sp_in_stack(p, saved_sp))
-		saved_sp = 0;
-
-	user_sp = saved_sp;
-	if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
-		user_sp = 0;
-
-	/*
-	 * Deep call chain left SP near USER_STACK_TOP: building the frame below
-	 * saved SP still runs the handler in the canary band (STACK_TOP_OVERRUN).
-	 */
-	if (user_sp != 0 && user_sp > stack_hi - SIGNAL_HANDLER_TOP_MARGIN)
-		user_sp = 0;
-
-	if (user_sp == 0 || user_sp < min_sp)
-	{
-		uint64_t margin = SIGNAL_HANDLER_TOP_MARGIN;
-
-		if (margin + sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT +
-		    2048UL > (stack_hi - stack_lo))
-			margin = (stack_hi - stack_lo) / 4;
-
-		user_sp = (stack_hi - margin) & ~0xFUL;
-		if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT +
-			      min_sp)
-			return 0;
-	}
-	else
-	{
-		if (user_sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
-			return 0;
-	}
-
-	user_sp -= sizeof(struct sigframe);
-	frame_addr = user_sp;
-	user_sp -= SIGFRAME_RETURN_SLOT;
-
-	if (user_sp < min_sp || frame_addr + sizeof(struct sigframe) > stack_hi)
-		return 0;
-	if (user_sp < 0x400000UL || user_sp > 0x7FFFFFFFFFFFUL)
-		return 0;
-
+	frame_addr = (saved_sp - SIGFRAME_RED_ZONE - sizeof(struct sigframe)) &
+		     ~0xFUL;
 	*frame_addr_out = frame_addr;
-	return user_sp;
+	return frame_addr - SIGFRAME_RETURN_SLOT;
 }
 
 /*
@@ -554,7 +461,7 @@ static int signal_setup_frame(process_t *p, int sig,
 	uint64_t user_sp;
 	uint64_t restorer;
 
-	user_sp = signal_pick_handler_sp(p, sigcontext_sp(ctx), &frame_addr);
+	user_sp = signal_pick_handler_sp(sigcontext_sp(ctx), &frame_addr);
 	if (user_sp == 0)
 		return SIGFRAME_BAD_SP;
 	restorer = signal_handler_restorer(p, sig);
@@ -626,8 +533,7 @@ static int signal_is_fault(int sig)
  * end the task here (the fault signals first); SIGSTOP and an uncaught
  * SIGTSTP/SIGTTIN/SIGTTOU sleep until SIGCONT. Ignored signals, and
  * uncaught ones whose default is Ign, are dropped; blocked ones stay
- * pending. BusyBox ash relies on this: it catches SIGINT and may
- * raise() it after a foreground job, and a blocked SIGTERM must not kill it.
+ * pending until unblocked, so a blocked SIGTERM never kills the task.
  */
 static int get_signal(process_t *p)
 {
@@ -798,8 +704,6 @@ static int handle_signal(process_t *p, int sig,
 	signals_apply_handler_mask(p, sig, sa_flags);
 	p->restore_sigmask = 0;
 	p->signal_pending &= ~SIGNAL_MASK(sig);
-	if (sig == SIGCHLD)
-		ir0_console_after_tty_read_signal(SIGCHLD);
 	return 1;
 }
 

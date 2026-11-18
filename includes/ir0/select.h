@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: select.h
- * Description: IR0 Kernel - select(2) ABI (Linux x86-64 musl layout)
+ * Description: IR0 Kernel - select(2) ABI (Linux x86-64 layout)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

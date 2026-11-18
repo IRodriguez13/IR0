@@ -19,7 +19,8 @@
 #include <ir0/arch_port.h>
 #include <ir0/arch_cpu.h>
 #include <ir0/console_backend.h>
-#include <ir0/ash_smoke.h>
+#include <ir0/cred.h>
+#include <ir0/tty_smoke.h>
 #include <d1_12_read_diag.h>
 #include <d1_16_tty_read_diag.h>
 #include <ir0/errno.h>
@@ -90,41 +91,13 @@ static int tty_isig_on(void)
 }
 
 /*
- * Deliver INTR/QUIT to the console foreground group, or to blocked readers
- * when job-control has not installed a fg pgid yet (ash without tcsetpgrp).
+ * Linux __isig() (drivers/tty/n_tty.c): VINTR and VQUIT signal the
+ * terminal's foreground process group, and nobody when it has none.
  */
 static void tty_deliver_sig(int sig)
 {
-	int i;
-	int n = 0;
-
-	if (console_fg_pgid > 1)
-		n = send_signal_pgrp(console_fg_pgid, sig);
-
-	/*
-	 * Blocked stdin readers (hexdump, cat, ash lineedit) must see VINTR even
-	 * when console_fg_pgid lags tcsetpgrp after SIGCHLD or a short-lived fg
-	 * job — Linux job control can leave the tty waiter outside a stale pgid.
-	 */
-	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
-	{
-		process_t *w = tty_read_waiters[i];
-
-		if (!w || w->task.pid <= 1)
-			continue;
-		if (send_signal((int)w->task.pid, sig) == 0)
-			n++;
-	}
-
-	if (n > 0)
-		return;
-
-	/*
-	 * No fg pgrp and no blocked tty readers: deliver to the running task
-	 * (e.g. cat busy in write, not read).
-	 */
-	if (current_process && current_process->task.pid > 1)
-		(void)send_signal((int)current_process->task.pid, sig);
+	if (console_fg_pgid > 0)
+		(void)send_signal_pgrp(console_fg_pgid, sig);
 }
 
 int ir0_console_set_fg_pgid(int32_t pgid)
@@ -210,17 +183,25 @@ static int tty_icanon_on(void)
 	return (tty_termios.c_lflag & IR0_LFLAG_ICANON) ? 1 : 0;
 }
 
+/*
+ * Input mapping of Linux n_tty_receive_char_special(), the same in
+ * canonical and raw mode: IGNCR drops CR, ICRNL turns CR into NL, INLCR
+ * turns NL into CR. Returns 0 for a dropped byte.
+ */
 static char tty_normalize_input(char c)
 {
 	tty_termios_ensure();
-	/*
-	 * ICRNL maps CR→NL for cooked lines. In non-canonical/raw mode
-	 * (nano/ncurses), deliver CR as 0x0d even if ICRNL is stale — apps
-	 * expect Enter = '\r' after cfmakeraw().
-	 */
-	if (c == '\r' && (tty_termios.c_iflag & IR0_IFLAG_ICRNL) &&
-	    tty_icanon_on())
-		return '\n';
+	if (c == '\r')
+	{
+		if (tty_termios.c_iflag & IR0_IFLAG_IGNCR)
+			return 0;
+		if (tty_termios.c_iflag & IR0_IFLAG_ICRNL)
+			return '\n';
+	}
+	else if (c == '\n' && (tty_termios.c_iflag & IR0_IFLAG_INLCR))
+	{
+		return '\r';
+	}
 	return c;
 }
 
@@ -294,7 +275,8 @@ static void tty_canon_drain(char *kbuf, size_t count, size_t *out_len)
 }
 
 /*
- * Returns 1 when a completed canonical line is queued in canon_readq.
+ * Feed one byte, already mapped by tty_normalize_input(), to the canonical
+ * line. Returns 1 when a completed line is queued in canon_readq.
  */
 static int tty_canon_feed(char c)
 {
@@ -305,11 +287,6 @@ static int tty_canon_feed(char c)
 	erase = tty_termios.c_cc[IR0_CC_VERASE];
 	if (erase == 0)
 		erase = 127;
-
-	c = tty_normalize_input(c);
-	/* Defensive: treat bare CR as EOL under ICANON (Enter from PS/2). */
-	if (c == '\r')
-		c = '\n';
 
 	if (c == '\b' || c == 127 || (unsigned char)c == erase)
 	{
@@ -501,6 +478,19 @@ static int tty_sleep_for_input(void)
 	return 1;
 }
 
+/*
+ * Linux isig() (drivers/tty/n_tty.c): signal the foreground group and,
+ * unless NOFLSH, discard all pending input, partial and completed lines.
+ * Never schedule() here: keypress runs under IRQ1.
+ */
+static void tty_isig(int sig)
+{
+	if (!(tty_termios.c_lflag & IR0_LFLAG_NOFLSH))
+		tty_flush_input();
+	input_kbd_resync_modifiers();
+	tty_deliver_sig(sig);
+}
+
 static void tty_input_char(char c)
 {
 	ir0_console_keypress(c);
@@ -532,22 +522,12 @@ void ir0_console_keypress(char c)
 			vquit = 28;
 		if ((unsigned char)nc == vintr)
 		{
-			canon_line_len = 0;
-			input_kbd_resync_modifiers();
-			tty_deliver_sig(SIGINT);
-			/*
-			 * Never schedule() here: keypress runs under
-			 * IRQ1. Wake only; the reader runs at the next schedule().
-			 */
-			(void)ir0_console_wake_readers();
+			tty_isig(SIGINT);
 			return;
 		}
 		if ((unsigned char)nc == vquit)
 		{
-			canon_line_len = 0;
-			input_kbd_resync_modifiers();
-			tty_deliver_sig(SIGQUIT);
-			(void)ir0_console_wake_readers();
+			tty_isig(SIGQUIT);
 			return;
 		}
 	}
@@ -557,7 +537,7 @@ void ir0_console_keypress(char c)
 		line_done = tty_canon_feed(nc);
 		if (line_done)
 		{
-			ir0_ash_smoke_tty_line_ready();
+			ir0_tty_smoke_line_ready();
 			/*
 			 * Wake waiters only. Scheduling from IRQ1 (keyboard →
 			 * keypress) corrupted prev RIP → #UD into .bss /
@@ -572,6 +552,33 @@ void ir0_console_keypress(char c)
 	/* Raw (!ICANON): optional echo; byte lands in the kbd ring via store. */
 	if (tty_echo_on())
 		tty_echo_char(nc);
+}
+
+/*
+ * TIOCSTI (Linux drivers/tty/tty_io.c tiocsti()): the byte enters the line
+ * discipline as if it had been typed. Allowed on the caller's controlling
+ * terminal, or for root (CAP_SYS_ADMIN on Linux). Without a keyboard the
+ * console has no raw input queue, so only canonical mode can take it.
+ */
+int ir0_console_ioctl_sti(const void *user_arg)
+{
+	char c;
+
+	if (!current_process)
+		return -ESRCH;
+	if (!ir0_console_has_ctty_for_sid((int32_t)current_process->sid) &&
+	    !ir0_cred_is_root())
+		return -EPERM;
+	if (!user_arg)
+		return -EFAULT;
+	if (copy_from_user(&c, user_arg, 1) != 0)
+		return -EFAULT;
+	if (input_kbd_receive(c) == 0)
+		return 0;
+	if (!tty_icanon_on())
+		return -EIO;
+	ir0_console_keypress(c);
+	return 0;
 }
 
 int ir0_console_input_ready(void)
@@ -603,10 +610,9 @@ static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 	for (;;)
 	{
 		/*
-		 * Drain ready input before honouring a pending signal. Otherwise a
-		 * sticky SIGCHLD (runsv/logger) turns every completed canon line into
-		 * EINTR and getty never leaves the username read — no Password:
-		 * after firstboot.
+		 * Linux n_tty_read() returns available input first and checks
+		 * signal_pending() only when it would block: a pending signal
+		 * never turns a completed line into EINTR.
 		 */
 		if (canon_eof_pending && canon_readq_pos >= canon_readq_len)
 		{
@@ -665,9 +671,9 @@ static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 			unsigned vtime = tty_termios.c_cc[IR0_CC_VTIME];
 
 			/*
-			 * Linux non-canonical: VMIN=0,VTIME=0 → return 0 now
-			 * (ncurses poll). VMIN=0,VTIME>0 → wait up to VTIME
-			 * tenths of a second then return 0.
+			 * Linux non-canonical (termios(3)): VMIN=0,VTIME=0 is a
+			 * poll and returns 0 now; VMIN=0,VTIME>0 waits up to VTIME
+			 * tenths of a second for a byte, then returns 0.
 			 */
 			if (vmin == 0 && vtime == 0)
 			{
@@ -755,16 +761,11 @@ int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios)
 		if (!was_icanon && now_icanon)
 			input_kbd_clear();
 
-		tty_termios = *ktermios;
 		/*
-		 * Do NOT force ICANON when VMIN==0: nano and other editors use
-		 * non-canonical timed reads (VMIN=0). Password prompts
-		 * (bb_ask_noecho) keep ICANON and only clear ECHO. Cooked+echo
-		 * restore after exec is ir0_console_reset_cooked_echo().
+		 * Store the caller's termios as given (Linux tty_set_termios()):
+		 * no flag is forced on or off here, whatever the mode.
 		 */
-		now_icanon = (tty_termios.c_lflag & IR0_LFLAG_ICANON) ? 1 : 0;
-		if (now_icanon)
-			tty_termios.c_iflag |= IR0_IFLAG_ICRNL;
+		tty_termios = *ktermios;
 		tty_termios_ready = 1;
 		/*
 		 * Mode flip or TCSETSF: drop pending LD input so raw↔cooked does
@@ -823,9 +824,9 @@ int ir0_console_wake_readers(void)
 		return 0;
 
 	/*
-	 * Wake one waiter back into tty_read_kernel (in-syscall drain).
-	 * Do not tty_wake_stage_user_read here — that path fought
-	 * process_arm_blocked_syscall_resume and hung getty after Enter.
+	 * Wake one waiter back into tty_read_kernel(), which drains the input
+	 * on the reader's own stack inside its read(2), as n_tty_read() does
+	 * after wait_woken(). The wake never copies data to the reader.
 	 */
 	for (i = 0; i < IR0_TTY_MAX_READ_WAITERS; i++)
 	{
@@ -987,8 +988,9 @@ int ir0_console_ioctl_winsize_set(void *user_arg)
 }
 
 /*
- * Restore cooked+echo after password entry / exec. Dropped ECHO or ICANON
- * leaves ash looking dead (no echo, lines never finish).
+ * Put the console back in cooked mode with echo when the session that owned
+ * it ends (ir0_console_flush_input_session() and session-leader exit). IR0
+ * has no tty hangup yet; the next session starts from a usable terminal.
  */
 void ir0_console_reset_cooked_echo(void)
 {
@@ -1012,10 +1014,11 @@ void ir0_console_flush_input_session(void)
 
 	tty_flush_input();
 	/*
-	 * Only the momentary decoder state (mods + E0/E1), never the ring:
-	 * clearing bytes here races IRQ1 (login garbage), but a session that
-	 * ended with a modifier held would otherwise stick into the next
-	 * getty (wrong case / stray CSI on the first keystrokes).
+	 * Linux flushes the line discipline on hangup and TCFLSH
+	 * (n_tty_flush_buffer()), never the keyboard controller. Here that
+	 * means the momentary decoder state (mods + E0/E1) only, never the
+	 * ring that IRQ1 fills: a session that ended with a modifier held
+	 * would otherwise carry it into the next session's first keystrokes.
 	 */
 	input_kbd_resync_modifiers();
 	if (!resync_tag)
@@ -1023,26 +1026,4 @@ void ir0_console_flush_input_session(void)
 		resync_tag = 1;
 		klog_notice_fmt("TTY", "KBD_STATE_RESYNC (session flush)");
 	}
-}
-
-void ir0_console_after_tty_read_signal(int signo)
-{
-	(void)signo;
-	/*
-	 * PS/2 modifier state must not leak across any signal that interrupted
-	 * a console read (SIGCHLD after ./a.out, SIGINT, SIGQUIT). Without this,
-	 * VINTR stops working until session restart (hexdump | grep, ^C dead).
-	 */
-	input_kbd_resync_modifiers();
-	if (signo == SIGINT || signo == SIGQUIT)
-		tty_flush_input();
-}
-
-void ir0_console_after_signal_abandon(void)
-{
-	/*
-	 * BusyBox ash: raise_interrupt() longjmps without rt_sigreturn
-	 * (SIGFRAME_ABANDON). Same hygiene as VINTR on a cooked tty.
-	 */
-	ir0_console_after_tty_read_signal(SIGINT);
 }

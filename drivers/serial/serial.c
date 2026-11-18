@@ -91,8 +91,8 @@ static int serial_is_transmit_empty(void)
  *
  * Bounded wait: if the host side of -serial stdio stops draining (full pipe
  * while the user watches only the GTK window), an infinite THRE spin freezes
- * the guest — including getty after LOGIN_USER_READ, before "Password:" is
- * painted on the framebuffer.
+ * the whole guest, including whatever it would have painted on the
+ * framebuffer next.
  */
 void serial_putchar(char c)
 {

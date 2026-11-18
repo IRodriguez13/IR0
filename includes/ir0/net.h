@@ -87,9 +87,9 @@ void net_stack_poll(void);
 int net_stack_get_irq_line(void);
 int net_stack_handle_irq(uint8_t irq);
 
-/* Ping result structure for syscalls */
-struct ping_result {
-    int success;          /* 1 if ping succeeded, 0 if failed */
+/* NET_GET_ECHO_RESULT: the next ICMP echo reply for the caller. */
+struct icmp_echo_result {
+    int success;          /* 1 if a reply arrived, 0 if not */
     uint16_t seq;         /* ICMP sequence number */
     uint64_t rtt;         /* Round-trip time in milliseconds */
     uint8_t ttl;          /* TTL from reply */
@@ -117,7 +117,7 @@ extern ip4_addr_t ip_local_addr;
 extern ip4_addr_t ip_netmask;
 extern ip4_addr_t ip_gateway;
 
-/* Soft route table walk (BusyBox /proc/net/route). */
+/* Soft route table walk (feeds /proc/net/route, proc(5)). */
 int ip_route_walk(int (*cb)(ip4_addr_t dest, ip4_addr_t mask, ip4_addr_t gw,
 			     void *ctx),
 		  void *ctx);
@@ -132,7 +132,7 @@ uint16_t icmp_allocate_echo_seq(void);
 int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
                            uint16_t id, uint16_t seq, const void *data, size_t len);
 
-/* DNS resolver used by /dev/net ping hostname path. */
+/* DNS resolver used by the /dev/net "echo <host>" command. */
 ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip);
 ip4_addr_t dns_get_default_server(void);
 

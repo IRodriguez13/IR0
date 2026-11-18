@@ -521,7 +521,6 @@ KERNEL_OBJS = \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
     ktm/klog.o \
-    ktm/d1_13_malloc_pf_diag.o \
 	sched/core.o \
     sched/idle.o \
     sched/switch/context_switch.o \
@@ -563,7 +562,6 @@ KERNEL_OBJS += \
     ktm/ktm_flight.o \
     ktm/ktm_panic_class.o \
     ktm/ktm_ctx_snapshot.o \
-    ktm/ktm_probe_diag.o \
     $(KTM_D1_DIAG_OBJS)
 ifeq ($(CONFIG_KTM_PLATFORM_MOCK),y)
 KERNEL_OBJS += ktm/mocks/platform/ktm_platform_mock.o
@@ -672,7 +670,7 @@ LIB_OBJS = \
     kernel/sys/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
-    drivers/tty/ash_smoke.o \
+    drivers/tty/tty_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
     fs/utimens.o \

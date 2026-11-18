@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: futex.c
- * Description: futex wait queues (musl pthread subset)
+ * Description: futex wait queues (the futex(2) subset pthreads use)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

@@ -25,7 +25,7 @@
  */
 #define SPSR_EL1_EL0T_AARCH64_DAIF_UNMASKED 0x0UL
 
-/* CPACR_EL1.FPEN=0b11: no trap on FP/SIMD at EL0/EL1 (musl crt uses NEON). */
+/* CPACR_EL1.FPEN=0b11: no trap on FP/SIMD at EL0/EL1 (EL0 code may use NEON). */
 static void arm64_enable_fp_simd(void)
 {
 	uint64_t cpacr;
@@ -54,7 +54,7 @@ arm64_eret_to_user(uint64_t elr, uint64_t sp0, const uint64_t *gprs)
 
 	if (process_mm_root(current_process))
 		paging_activate_address_space((uintptr_t)process_mm_root(current_process));
-	/* musl expects the TLS base in TPIDR_EL0 before the first user insn. */
+	/* TLS base in TPIDR_EL0 before the first user insn (Linux arm64 ABI). */
 	tls_set_base(process_tls_get(current_process));
 	arm64_enable_fp_simd();
 	ir0_boot_smoke("ARM64_USER_ERET");

@@ -43,7 +43,7 @@ kernel still returns wrong errno, corrupts syscall GPRs on `sigreturn`, or spuri
 | `read(2)` + signal | `-EINTR` without EOF; no handler GPRs in resume frame | `sys_sigreturn`, `kernel_sleep_syscall_frame` |
 | SA_RESTART | Restart blocked syscall when `sa_flags` says so | `signal_sa_flags`, sigreturn restart path |
 | TTY / console | VINTR, cooked/raw, `TCFLSH`, no sticky PS/2 mods | `kernel/lib/console.c`, `keyboard.c` |
-| Abandoned sigframe | ash `longjmp` after ^C — no `rt_sigreturn` | `signals_try_abandon_sigframe` + TTY hygiene |
+| Abandoned sigframe | `longjmp` out of a handler — no `rt_sigreturn`; the handler mask stays (signal(7)) | `signals_try_abandon_sigframe` drops kernel bookkeeping only; no TTY action |
 | SIGCHLD + lineedit | `-EINTR` or restart — **not** stdin EOF / logout | Same as read+signal; no `read=0` race |
 | PTY multiplex | `/dev/ptmx` + `/dev/pts/N`, `TIOCGPTN`, dual xterm | `fs/devfs.c` + `includes/ir0/pty_devfs.h` |
 

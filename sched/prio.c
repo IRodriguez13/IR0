@@ -36,8 +36,8 @@ static prio_band_t prio_bands[IR0_SCHED_PRIO_BANDS];
 /*
  * nice(2) is a proportional CPU-share hint, not a real-time scheduling
  * class.  Always selecting the highest non-empty band lets a process which
- * lowers its nice value by one starve every ordinary task.  Xorg does that
- * during server startup, which previously left twm/xterm runnable forever.
+ * lowers its nice value by one starve every ordinary task (a display
+ * server that does so at startup left every client runnable forever).
  * Keep the responsive priority preference, but periodically service one
  * lower runnable band and rotate that relief across all lower bands.
  */

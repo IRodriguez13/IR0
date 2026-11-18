@@ -29,9 +29,9 @@ static int csi_priv; /* ESC[? … private mode */
 static int render_cursor_enabled = 1; /* DECTCEM: 0 = civis, 1 = cnorm */
 
 /*
- * Alternate screen (xterm 1049 / legacy 47): ncurses/nano smcup/rmcup. Serial
- * terminals emulate this; without it GTK/FB keeps scrollback under the TUI and
- * nano looks garbled while vi (no smcup) still works.
+ * Alternate screen buffer (xterm ctlseqs DECSET 1049, legacy 47; terminfo
+ * smcup/rmcup): entering saves the screen and cursor, leaving restores
+ * them, so a full-screen program never paints over the scrollback.
  */
 static uint16_t alt_saved_screen[CONSOLE_MAX_HEIGHT][CONSOLE_MAX_WIDTH];
 static int alt_saved_cursor_pos;
@@ -175,11 +175,9 @@ static void csi_clear_screen(int cols, int rows, uint8_t color)
 }
 
 /*
- * SGR state must survive across CSI sequences. BusyBox ls emits ESC[1;34m
- * (bold then blue); if bold is applied only as a one-shot brighten before
- * the fg is set, directories stay VGA blue-on-near-black and vanish. Nano uses
- * A_REVERSE (SGR 7) for title/status/selection — ignore that and the UI
- * looks broken regardless of FB scale.
+ * SGR (ECMA-48 8.3.117) attributes persist until changed, across CSI
+ * sequences. Bold set before the colour (ESC[1;34m) must still brighten
+ * that colour, and reverse video (SGR 7) swaps foreground and background.
  */
 static uint8_t sgr_fg = CONSOLE_RENDERER_COLOR_DEFAULT & 0x0F;
 static uint8_t sgr_bg = (CONSOLE_RENDERER_COLOR_DEFAULT >> 4) & 0x0F;
@@ -286,7 +284,7 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 		/* ESC[?25h / ESC[?25l — show / hide cursor (DECTCEM). */
 		if (csi_priv && n == 25)
 			render_cursor_enabled = (cmd == 'h') ? 1 : 0;
-		/* ESC[?47h/l and ESC[?1049h/l — alternate screen (nano/vi). */
+		/* ESC[?47h/l and ESC[?1049h/l — alternate screen buffer. */
 		else if (csi_priv && (n == 47 || n == 1049))
 		{
 			if (cmd == 'h')
@@ -297,7 +295,7 @@ static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 		break;
 	case 'J':
 	{
-		/* ECMA-48 / xterm: 0=from cursor, 1=to cursor, 2=entire screen. */
+		/* ECMA-48 ED: 0=from cursor, 1=to cursor, 2=entire screen. */
 		int mode = csi_param_count > 0 ? csi_params[0] : 0;
 
 		if (mode == 2 || mode == 3)
@@ -513,7 +511,7 @@ void console_renderer_putchar(char c, uint8_t color)
 		/*
 		 * Only refresh the hardware cursor when a full CSI sequence
 		 * completes (or civis). Intermediate ESC/[ / digits must not
-		 * paint — nano floods DECTCEM around every glyph.
+		 * paint: output may wrap every glyph in DECTCEM hide/show.
 		 */
 		if (csi_state == CSI_NONE)
 		{

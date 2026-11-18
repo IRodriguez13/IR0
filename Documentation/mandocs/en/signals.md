@@ -107,8 +107,10 @@ ASCII:
    `set_current_blocked()`.
 3. User handler needs valid user stack in [0x400000, 0x7FFFFFFFFFFF], 16-byte aligned.
    Frames are placed by `signal_pick_handler_sp()` (also used from
-   `signals_deliver_from_irq_frame`) with `SIGNAL_HANDLER_TOP_MARGIN` below
-   `USER_STACK_TOP` so delivery does not land in the canary / overrun page.
+   `signals_deliver_from_irq_frame`) just below the interrupted SP, past the
+   ISA red zone (`SIGFRAME_RED_ZONE`), as Linux `get_sigframe()`. A handler
+   that leaves with `longjmp(3)` keeps its mask (signal(7)); the kernel
+   only forgets its own frame bookkeeping.
 4. `sa_flags` stores `SA_RESTART` / `SA_SIGINFO` / `SA_RESTORER` on `rt_sigaction`.
    `-ERESTARTSYS` (read, write, wait4, futex) restarts under `SA_RESTART`;
    `pause` / `rt_sigsuspend` return `-ERESTARTNOHAND` (EINTR when a handler

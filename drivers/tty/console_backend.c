@@ -114,8 +114,7 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
         len > 0 && !userspace_gui_first_draw_tag)
     {
         userspace_gui_first_draw_tag = 1;
-        klog_smoke("BUSYBOX_GUI_TEXT_FIRST_DRAW_OK");
-        klog_smoke("ASH_VISIBLE_QEMU_OK");
+        klog_smoke("USERSPACE_FB_TEXT_FIRST_DRAW_OK");
     }
 
     for (i = 0; i < len; i++)

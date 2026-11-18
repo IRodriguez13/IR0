@@ -702,8 +702,8 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba, uint8_t num_sectors, void *bu
 	}
 
 	/*
-	 * PIO command/data is not reentrant. Concurrent exec of the same
-	 * BusyBox inode (hexdump | head) preempted mid-DRQ and tore the ELF.
+	 * PIO command/data is not reentrant. Two tasks exec'ing the same
+	 * binary at once preempted each other mid-DRQ and tore the ELF.
 	 */
 	irq_flags = irq_save();
 

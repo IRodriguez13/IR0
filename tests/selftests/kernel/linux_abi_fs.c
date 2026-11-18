@@ -861,3 +861,26 @@ int fs_opendir_needs_read(void)
 	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "r/f", O_RDONLY, 0), EACCES);
 	return CONF_PASS;
 }
+
+/*
+ * fs/namei.c path_openat(): a name means the same thing wherever it is.
+ * Opening a missing file without O_CREAT is ENOENT and O_CREAT makes a
+ * regular file, even under a "supervise" directory; only mkfifo(3)/mknod(2)
+ * make a FIFO.
+ */
+int fs_open_names_no_special_paths(void)
+{
+	struct stat st;
+	long fd;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "sv", 0755), 0);
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "sv/supervise", 0755), 0);
+	EXPECT_ERR(S4(SYS_openat, AT_FDCWD, "sv/supervise/control",
+		      O_RDONLY | O_NONBLOCK, 0), ENOENT);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "sv/supervise/ok",
+		  O_WRONLY | O_CREAT | O_NONBLOCK, 0600));
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	CHECK(S_ISREG(st.st_mode));
+	EXPECT(S1(SYS_close, fd), 0);
+	return CONF_PASS;
+}

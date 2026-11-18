@@ -252,11 +252,13 @@ int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
     }
 
     /*
-     * Job-control ioctls on /dev/console. Without these, BusyBox ash may
-     * disable job control.
+     * Job-control ioctls on /dev/console (tty_ioctl(4): TIOCSCTTY,
+     * TIOCSPGRP, TIOCGPGRP), as on any Linux terminal.
      */
     if (request == IR0_TIOCSCTTY)
 	return ir0_console_ioctl_set_ctty();
+    if (request == IR0_TIOCSTI)
+	return ir0_console_ioctl_sti(arg);
     if (request == IR0_TIOCSPGRP)
     {
 	pid_t pg;
@@ -383,7 +385,7 @@ devfs_node_t dev_console = {
     .ref_count = 0
 };
 
-/* Synthetic VTs for TinyX/Xfbdev LinuxInit (VT_OPENQRY → tty1). */
+/* Virtual consoles (console_ioctl(2): VT_OPENQRY answers tty1). */
 devfs_node_t dev_tty0 = {
     .entry = { .name = "tty0", .mode = 0620, .device_id = 46 },
     .ops = &console_ops,

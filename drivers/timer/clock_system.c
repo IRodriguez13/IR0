@@ -350,7 +350,7 @@ void clock_tick(void)
 	clock_sample_loadavg();
     }
 
-    /* POSIX ITIMER_REAL → SIGALRM (BusyBox ping -c N / -i). */
+    /* POSIX ITIMER_REAL → SIGALRM (setitimer(2), alarm(2)). */
     process_itimer_tick(clock_get_uptime_milliseconds());
 
     /* Timed waits (nanosleep, poll timeout) and poll fd timeouts. */

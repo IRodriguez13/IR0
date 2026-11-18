@@ -14,10 +14,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from ktm_host_safety import MAX_LOG_BYTES, read_log_text  # noqa: E402
+from serial_shell_tags import with_shell_tags  # noqa: E402
 
 
 def classify(text: str) -> list[tuple[str, str, str]]:
     hits: list[tuple[str, str, str]] = []
+    text = with_shell_tags(text)
     has_panic = "KERNEL PANIC" in text or "DOUBLE PANIC" in text
     has_read_ok = "SYS_READ_RETURN_OK" in text
     has_echo_ok = "ASH_COMMAND_ECHO_OK" in text

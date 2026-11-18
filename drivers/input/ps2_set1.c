@@ -296,7 +296,7 @@ static void emit_ascii(struct ps2_set1_state *st, struct ps2_set1_result *out,
 	char ch;
 	int shifted;
 
-	/* ESC → ASCII ESC so TTY apps (BusyBox vi) can leave insert/command modes. */
+	/* Esc → ASCII ESC (0x1b), as the Linux default keymap. */
 	if (code == 0x01)
 	{
 		emit_byte(out, (uint8_t)0x1b);
@@ -324,7 +324,7 @@ static void emit_ascii(struct ps2_set1_state *st, struct ps2_set1_result *out,
 			emit_byte(out, (uint8_t)' ');
 		return;
 	}
-	/* Ctrl+L → form-feed for BusyBox lineedit clear-screen */
+	/* Ctrl+L → form feed (0x0c), as for any Ctrl+letter in the keymap. */
 	if (code == 0x26 && ps2_set1_ctrl(&st->mods))
 	{
 		emit_byte(out, (uint8_t)'\f');

@@ -332,6 +332,15 @@ static int probe(int argc, char **argv)
 		return argc == 5 && rt_streq(argv[4], "last") ? 0 : 1;
 	if (rt_streq(argv[2], "arglen"))
 		return argc == 5 && (long)rt_strlen(argv[4]) == v ? 0 : 1;
+	if (rt_streq(argv[2], "lflag_clear"))
+	{
+		/* TCGETS on stdin; c_lflag (word 3) has none of the bits in v. */
+		unsigned int term[16];
+
+		if (S3(SYS_ioctl, 0, 0x5401, term) != 0)
+			return 2;
+		return (term[3] & (unsigned int)v) == 0 ? 0 : 1;
+	}
 	return 98;
 }
 

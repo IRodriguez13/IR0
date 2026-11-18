@@ -5,9 +5,10 @@ Runit PID1 + BusyBox ash interactive smoke (headless + QEMU monitor sendkey).
 
 Gate contract (D1.16b): after runit boot + ash ready, inject ``echo hi`` once,
 then PASS as soon as SYS_READ_RETURN_OK + ASH_COMMAND_ECHO_OK appear in serial.
-``ASH_COMMAND_ECHO_OK`` is emitted only after the kernel observes ``hi\\n`` on
-ash stdout (``includes/ir0/ash_smoke.c``); do not require a separate literal
-``hi`` line in the serial log — console/logger interleaving can omit it.
+``SYS_READ_RETURN_OK`` comes from the kernel (ir0.tty_smoke=1: a read on fd 0
+returned data); ``ASH_COMMAND_ECHO_OK`` is derived here from the mirrored
+console output (``serial_shell_tags.py``: a line "hi" after the shell banner),
+because the kernel does not know which program runs.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ import ktm_host_safety as safety
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+from serial_shell_tags import with_shell_tags  # noqa: E402
 DEFAULT_TIMEOUT = 90
 MONITOR_PORT = 4446
 ECHO_STABILIZE_SEC = 3.5
@@ -183,7 +185,7 @@ def clear_prompt_line(port: int) -> None:
 def read_log(path: Path) -> str:
     if not path.is_file():
         return ""
-    return normalize_serial_smoke(safety.read_log_text(path))
+    return with_shell_tags(normalize_serial_smoke(safety.read_log_text(path)))
 
 
 def kill_qemu(proc: subprocess.Popen[bytes]) -> None:
@@ -473,7 +475,7 @@ def main() -> int:
     parser.add_argument("--log", default=str(safety.host_temp_dir() / "runit-ash-smoke.log"))
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT)
     parser.add_argument("--qemu", default=os.environ.get("QEMU", "qemu-system-x86_64"))
-    parser.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace-ash-smoke.iso"))
+    parser.add_argument("--iso", default=str(ROOT / "kernel-x64-userspace-tty-smoke.iso"))
     parser.add_argument("--disk", default=str(ROOT / "disk.img"))
     parser.add_argument("--monitor-port", type=int, default=MONITOR_PORT)
     args = parser.parse_args()

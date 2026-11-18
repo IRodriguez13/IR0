@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: vdso.c
- * Description: Map built-in vDSO (AT_SYSINFO_EHDR) for musl clock_gettime fast path.
+ * Description: Map built-in vDSO (AT_SYSINFO_EHDR) for the clock_gettime fast path (vdso(7)).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

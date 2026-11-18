@@ -34,7 +34,7 @@
 #define KTEST_PROT_WRITE    0x2
 #define KTEST_PROT_RW       (KTEST_PROT_READ | KTEST_PROT_WRITE)
 
-#define KTEST_BUSYBOX_INITIAL_BRK 0x453000UL
+#define KTEST_INITIAL_BRK 0x453000UL
 
 void ktest_usercopy_explicit_mm_range_contract(void)
 {
@@ -155,8 +155,8 @@ void ktest_munmap_partial_preserves_vma(void)
 	saved_heap_start = process_heap_start(current_process);
 	saved_heap_end = process_heap_end(current_process);
 	saved_mmap_base = process_mmap_base(current_process);
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 	process_set_mmap_base(current_process, 0);
 
 	region = ktest_mm_mmap_anon(4 * PAGE_SIZE_4KB, KTEST_PROT_RW,
@@ -219,8 +219,8 @@ void ktest_mmap_fixed_partial_overlap_preserves_vma(void)
 	saved_heap_start = process_heap_start(current_process);
 	saved_heap_end = process_heap_end(current_process);
 	saved_mmap_base = process_mmap_base(current_process);
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 	process_set_mmap_base(current_process, 0);
 
 	region = ktest_mm_mmap_anon(4 * PAGE_SIZE_4KB, KTEST_PROT_RW,
@@ -448,8 +448,8 @@ void ktest_mprotect_updates_maps(void)
 	saved_heap_start = process_heap_start(current_process);
 	saved_heap_end = process_heap_end(current_process);
 	saved_mmap_base = process_mmap_base(current_process);
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 	process_set_mmap_base(current_process, 0);
 
 	region = ktest_mm_mmap_anon(3 * PAGE_SIZE_4KB, KTEST_PROT_RW,
@@ -528,8 +528,8 @@ void ktest_mprotect_preserves_cow(void)
 	saved_heap_start = process_heap_start(current_process);
 	saved_heap_end = process_heap_end(current_process);
 	saved_mmap_base = process_mmap_base(current_process);
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 	process_set_mmap_base(current_process, 0);
 
 	region = ktest_mm_mmap_anon(PAGE_SIZE_4KB, KTEST_PROT_RW,

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /**
- * IR0 Kernel — utimensat(2) helpers (Linux ABI subset for musl/BusyBox).
+ * IR0 Kernel — utimensat(2) helpers (Linux ABI subset).
  */
 
 #ifndef _IR0_UTIMENS_H

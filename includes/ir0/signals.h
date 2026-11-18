@@ -91,7 +91,7 @@ typedef struct
 #define SEGV_MAPERR   1
 
 /*
- * siginfo_t — Linux/musl layout: 128 bytes, the union starts at offset 16
+ * siginfo_t — Linux layout: 128 bytes, the union starts at offset 16
  * (__ARCH_SI_PREAMBLE_SIZE on 64-bit). Only the fault fields are used.
  */
 typedef struct
@@ -112,7 +112,7 @@ typedef struct
 _Static_assert(sizeof(siginfo_t) == 128, "siginfo_t must match Linux");
 
 /**
- * struct sigaction — Linux rt_sigaction layout (musl-compatible size).
+ * struct sigaction — Linux rt_sigaction layout (kernel struct sigaction size).
  */
 struct sigaction {
     void (*sa_handler)(int);
@@ -135,9 +135,9 @@ struct sigaction {
  * Layout on stack (low→high): [return slot][sigframe…]. The return slot is
  * SIGFRAME_RETURN_SLOT bytes: the 8-byte restorer on x86-64, empty on arm64
  * (x30 holds it). sizeof must be 0 mod 16 so that after aligning SP the
- * handler entry SP is 8 mod 16 on x86-64 (SysV; otherwise musl/glibc movaps
- * in rt_sigaction/setitimer #GP, BusyBox ping SIGALRM) and 16-byte aligned
- * on arm64 (AAPCS64).
+ * handler entry SP is 8 mod 16 on x86-64 (SysV psABI: as after a call, so
+ * aligned SSE stores in the handler do not #GP) and 16-byte aligned on
+ * arm64 (AAPCS64).
  */
 struct sigframe {
     void (*handler)(int);     /* Signal handler function */
@@ -276,7 +276,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 				   uint64_t fault_addr);
 
 /*
- * Linux/musl place signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.
+ * Linux places signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.
  * Convert at the ABI boundary only; keep kernel-internal bits unchanged.
  */
 static inline uint32_t linux_sigword_to_ir0(uint32_t linux_low)

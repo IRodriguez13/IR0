@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mmap_contract.h
- * Description: musl/Linux mmap userspace ABI helpers (host + kernel)
+ * Description: Linux mmap userspace ABI helpers (host + kernel)
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -36,14 +36,14 @@
 #define IR0_PAGE_SIZE         4096UL
 #define IR0_PAGE_MASK         (IR0_PAGE_SIZE - 1UL)
 /*
- * mmap(NULL) on Linux (ASLR off) lands well above the legacy musl fallback
+ * mmap(NULL) on Linux (ASLR off) lands well above a low brk-style heap
  * arena; host/ktest use this floor to reject low fixed placements.
  */
 #define IR0_MMAP_NULL_MIN_VA  0x60000000UL
 
 /*
  * Kernel internal mmap errors use negative errno magnitudes cast to void*
- * (SYSCALL_PTR_ERR). musl treats (unsigned long)ret >= -4096UL as error.
+ * (SYSCALL_PTR_ERR). The Linux ABI treats (unsigned long)ret >= -4096UL as error.
  */
 static inline int ir0_mmap_is_kernel_error(uintptr_t ret)
 {
@@ -60,7 +60,7 @@ static inline int ir0_mmap_kernel_errno(uintptr_t ret)
 }
 
 /*
- * Encode kernel mmap return for x86-64 syscall rax (musl __syscall path).
+ * Encode kernel mmap return for x86-64 syscall rax (raw syscall return).
  * Success: user VA. Failure: negative errno (-ENOMEM, -EINVAL, …).
  */
 static inline int64_t ir0_mmap_syscall_ret(uintptr_t kernel_ret)
@@ -101,7 +101,7 @@ static inline int ir0_mmap_in_musl_arena(uintptr_t va, size_t len,
 }
 
 /*
- * musl mallocng linear slot after last 4 KiB map ends at slot_end.
+ * Allocator linear slot: after the last 4 KiB map ends at slot_end.
  * Next slot starts at slot_end (page aligned).
  */
 static inline uintptr_t ir0_mmap_musl_next_slot(uintptr_t slot_start, size_t slot_len)

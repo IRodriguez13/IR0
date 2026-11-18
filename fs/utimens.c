@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 /**
- * IR0 Kernel — utimensat path facade (VFS backend, no BusyBox coupling).
+ * IR0 Kernel — utimensat path facade (VFS backend).
  */
 
 #include <ir0/utimens.h>

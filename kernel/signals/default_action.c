@@ -26,15 +26,11 @@ int process_signal_is_default_fatal(process_t *p, int sig)
 	if (sig == SIGKILL)
 		return 1;
 	/*
-	 * Default action Terminate (Linux signal(7)). Include:
-	 * - USR1/USR2 — BusyBox halt/poweroff when not using -f
-	 * - SEGV/FPE/ILL/BUS/ABRT — so wait status is WIFSIGNALED (ash
-	 *   prints "Segmentation fault", etc.)
-	 */
-	/*
-	 * SIGPIPE: write(2) to a closed pipe/FIFO (ash pipelines like
-	 * hexdump | head). Without Terminate, BusyBox keeps writing and
-	 * often ends in a userspace SIGSEGV that looks like a session crash.
+	 * Signals whose default action is Term or Core in signal(7) and that
+	 * are killed here at send time when neither caught, ignored nor
+	 * blocked. The task ends WIFSIGNALED with that signal, as on Linux;
+	 * SIGPIPE is the one write(2) raises on a pipe or FIFO with no reader
+	 * (pipe(7)). The remaining Term signals are applied by get_signal().
 	 */
 	if (sig != SIGTERM && sig != SIGHUP && sig != SIGINT && sig != SIGQUIT &&
 	    sig != SIGUSR1 && sig != SIGUSR2 && sig != SIGSEGV && sig != SIGFPE &&

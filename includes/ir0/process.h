@@ -171,9 +171,9 @@ typedef struct process
 	char comm[16]; /* Process command name (max 15 chars + null) */
 	/*
 	 * Absolute path of the running image, as resolved by execve. Linux
-	 * exposes it as the /proc/<pid>/exe symlink; BusyBox built with
-	 * FEATURE_SH_STANDALONE re-executes itself through that path, and
-	 * comm[] cannot serve because it is only the basename.
+	 * exposes it as the /proc/<pid>/exe symlink (proc(5)), which a program
+	 * may execve(2) to run itself again; comm[] cannot serve because it is
+	 * only the basename.
 	 */
 	char exe_path[256];
 	/*
@@ -236,7 +236,7 @@ typedef struct process
 	 */
 	uint32_t saved_sigmask;
 	uint8_t restore_sigmask;
-	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER / musl) */
+	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	/*
 	 * Handler entry RSP (points at restorer slot). Non-zero while a

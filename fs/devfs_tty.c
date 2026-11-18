@@ -58,7 +58,7 @@ devfs_node_t dev_serial = {
 /*
  * /dev/tty is the controlling terminal of the calling session, not an alias
  * for /dev/console.  Linux resolves it dynamically (drivers/tty/tty_io.c);
- * do the same so unmodified readpassphrase/sudo/OpenDoas reach their PTY.
+ * do the same, so a program that opens /dev/tty reaches its PTY.
  */
 static struct pty_pair *dev_tty_current_pty(int *slot_out)
 {

@@ -20,12 +20,12 @@
 #include <config.h>
 #include <stdint.h>
 
-#define KTEST_BUSYBOX_INITIAL_BRK 0x453000UL
+#define KTEST_INITIAL_BRK 0x453000UL
 #define KTEST_BRK_GROW 0x2000UL
 #define KTEST_BRK_ACROSS_6M 0x601000UL
 
 #define KTEST_BRK_PAGE_COUNT \
-	((KTEST_BRK_ACROSS_6M - KTEST_BUSYBOX_INITIAL_BRK) / PAGE_SIZE_4KB)
+	((KTEST_BRK_ACROSS_6M - KTEST_INITIAL_BRK) / PAGE_SIZE_4KB)
 
 struct ktest_brk_page {
 	uint8_t present;
@@ -62,7 +62,7 @@ static void ktest_brk_snapshot(struct ktest_brk_page *state)
 
 	for (i = 0; i < KTEST_BRK_PAGE_COUNT; i++)
 	{
-		uintptr_t va = KTEST_BUSYBOX_INITIAL_BRK + (i * PAGE_SIZE_4KB);
+		uintptr_t va = KTEST_INITIAL_BRK + (i * PAGE_SIZE_4KB);
 		uint64_t flags = 0;
 
 		state[i].present = (uint8_t)ktest_pte_state(va, &flags);
@@ -88,7 +88,7 @@ static void ktest_brk_restore(const struct ktest_brk_page *state)
 
 	for (i = 0; i < KTEST_BRK_PAGE_COUNT; i++)
 	{
-		uintptr_t va = KTEST_BUSYBOX_INITIAL_BRK + (i * PAGE_SIZE_4KB);
+		uintptr_t va = KTEST_INITIAL_BRK + (i * PAGE_SIZE_4KB);
 		uint64_t flags = 0;
 
 		if (!ktest_pte_state(va, &flags) || !(flags & PAGE_USER) ||
@@ -114,18 +114,18 @@ void ktest_brk_post_exec(void)
 	saved_end = process_heap_end(current_process);
 	ktest_brk_snapshot(state);
 
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 
 	cur = sys_brk(NULL);
-	KASSERT_EQ((uint64_t)cur, KTEST_BUSYBOX_INITIAL_BRK);
+	KASSERT_EQ((uint64_t)cur, KTEST_INITIAL_BRK);
 
-	grown = sys_brk((void *)(KTEST_BUSYBOX_INITIAL_BRK + KTEST_BRK_GROW));
-	KASSERT_EQ((uint64_t)grown, KTEST_BUSYBOX_INITIAL_BRK + KTEST_BRK_GROW);
-	KASSERT(ktest_pte_present(KTEST_BUSYBOX_INITIAL_BRK));
-	KASSERT(ktest_pte_user(KTEST_BUSYBOX_INITIAL_BRK));
-	KASSERT(ktest_pte_present(KTEST_BUSYBOX_INITIAL_BRK + 0x1000UL));
-	KASSERT(ktest_pte_user(KTEST_BUSYBOX_INITIAL_BRK + 0x1000UL));
+	grown = sys_brk((void *)(KTEST_INITIAL_BRK + KTEST_BRK_GROW));
+	KASSERT_EQ((uint64_t)grown, KTEST_INITIAL_BRK + KTEST_BRK_GROW);
+	KASSERT(ktest_pte_present(KTEST_INITIAL_BRK));
+	KASSERT(ktest_pte_user(KTEST_INITIAL_BRK));
+	KASSERT(ktest_pte_present(KTEST_INITIAL_BRK + 0x1000UL));
+	KASSERT(ktest_pte_user(KTEST_INITIAL_BRK + 0x1000UL));
 
 	/* Cross the 6 MiB supervisor-2MB identity seam (Linux split_huge_pmd). */
 	grown = sys_brk((void *)KTEST_BRK_ACROSS_6M);
@@ -154,18 +154,18 @@ void ktest_brk_linux_fail_returns_current(void)
 	saved_start = process_heap_start(current_process);
 	saved_end = process_heap_end(current_process);
 
-	process_set_heap_start(current_process, KTEST_BUSYBOX_INITIAL_BRK);
-	process_set_heap_end(current_process, KTEST_BUSYBOX_INITIAL_BRK);
+	process_set_heap_start(current_process, KTEST_INITIAL_BRK);
+	process_set_heap_end(current_process, KTEST_INITIAL_BRK);
 
 	cur = sys_brk(NULL);
-	KASSERT_EQ((uint64_t)cur, KTEST_BUSYBOX_INITIAL_BRK);
+	KASSERT_EQ((uint64_t)cur, KTEST_INITIAL_BRK);
 
 	/* Below heap_lo: Linux keeps the old break (not -EFAULT). */
-	ret = sys_brk((void *)(KTEST_BUSYBOX_INITIAL_BRK - 1UL));
+	ret = sys_brk((void *)(KTEST_INITIAL_BRK - 1UL));
 	KASSERT_EQ((uint64_t)ret, (uint64_t)cur);
 
 	/* Past USER_HEAP_MAX_SIZE: same contract. */
-	ret = sys_brk((void *)(KTEST_BUSYBOX_INITIAL_BRK + USER_HEAP_MAX_SIZE +
+	ret = sys_brk((void *)(KTEST_INITIAL_BRK + USER_HEAP_MAX_SIZE +
 			       PAGE_SIZE_4KB));
 	KASSERT_EQ((uint64_t)ret, (uint64_t)cur);
 	KASSERT_EQ((uint64_t)sys_brk(NULL), (uint64_t)cur);

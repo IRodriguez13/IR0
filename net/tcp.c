@@ -27,7 +27,7 @@ ir0_spinlock_t tcp_lock;
 struct tcp_pending_conn tcp_wire_pending;
 /*
  * Serialize outbound connect: single tcp_wire_pending/tcp_wire_out
- * (parallel wget → EINVAL).
+ * (concurrent connect(2) calls otherwise failed with EINVAL).
  */
 static unsigned long g_tcp_connect_busy;
 static uint32_t g_tcp_connect_owner;
@@ -395,10 +395,10 @@ int tcp_wire_connect(ip4_addr_t peer_ip, uint16_t peer_port,
 	my_pid = current_process ? (uint32_t)current_process->task.pid : 0;
 
 	/*
-	 * One outbound association at a time. Concurrent connect (stress
-	 * parallel wget) used to overwrite tcp_wire_pending → -EINVAL.
+	 * One outbound association at a time. Concurrent connect(2) calls
+	 * used to overwrite tcp_wire_pending → -EINVAL.
 	 * Owner pid + tcp_wire_on_process_exit: SEGV mid-connect must not
-	 * leave the lock wedged for later nc/wget.
+	 * leave the lock wedged for later connects.
 	 */
 	wait_deadline = clock_get_uptime_milliseconds() + TCP_WIRE_TIMEOUT_MS;
 	while (test_and_set_bit_lock(0, &g_tcp_connect_busy))

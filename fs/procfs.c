@@ -98,7 +98,8 @@ static int proc_readdir_fill_live_pids(struct vfs_dirent *entries, int max_entri
  * /proc/pid/N    — status, cmdline, stat
  *
  * Digit PIDs come first so a caller that fills @entries to @max_entries still
- * sees them: BusyBox top/ps scan only numeric dirents, then open /proc/N/stat.
+ * sees them: process listers scan only the numeric dirents (proc(5)), then
+ * open /proc/N/stat.
  */
 int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
 {

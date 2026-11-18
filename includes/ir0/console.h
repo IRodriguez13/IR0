@@ -30,13 +30,15 @@
 /* Linux TIOCGPGRP / TIOCSPGRP — foreground process group */
 #define IR0_TIOCGPGRP 0x540Fu
 #define IR0_TIOCSPGRP 0x5410u
+/* Linux TIOCSTI — insert one byte into the input queue */
+#define IR0_TIOCSTI 0x5412u
 
 typedef unsigned int ir0_tcflag_t;
 typedef unsigned char ir0_cc_t;
 
 /*
  * Linux kernel uapi termios for TCGETS/TCSETS (asm-generic/termbits.h).
- * NCCS=19 → sizeof 36. musl x86_64 exposes a larger struct, but tcgetattr()
+ * NCCS=19 → sizeof 36. A libc may expose a larger struct, but tcgetattr()
  * passes it directly to ioctl and Linux reads/writes this 36-byte prefix.
  */
 #define IR0_NCCS 19
@@ -75,6 +77,7 @@ struct ir0_termios
 #define IR0_LFLAG_ECHOE            (0x00000010u)
 #define IR0_LFLAG_ECHOK            (0x00000020u)
 #define IR0_LFLAG_ECHONL           (0x00000040u)
+#define IR0_LFLAG_NOFLSH           (0x00000080u)
 #define IR0_OFLAG_ONLCR           (0x00000004u)
 #define IR0_OFLAG_OPOST           (0x00000001u)
 /* Linux asm-generic/termbits.h c_cc indices */
@@ -111,19 +114,12 @@ void ir0_console_flush_input(void);
 /* Userspace TCFLSH: drop pending LD input and resync the PS/2 decoder so a
  * session ended mid-modifier (SEGV/logout) does not leak Shift/Ctrl/E0. */
 void ir0_console_flush_input_session(void);
-/*
- * Linux-like console hygiene after a signal hits stdin read(2).
- * IR0 adapts to BusyBox/GNU userspace — not the other way around.
- *  SIGINT/SIGQUIT: flush raw/canonical partial + resync PS/2 mods.
- *  SIGCHLD/other: resync mods only (EINTR, no spurious EOF).
- */
-void ir0_console_after_tty_read_signal(int signo);
-/* Ash longjmp without rt_sigreturn (SIGFRAME_ABANDON). */
-void ir0_console_after_signal_abandon(void);
 int ir0_console_set_fg_pgid(int32_t pgid);
 void ir0_console_clear_fg_pgid(int32_t pgid, int32_t exiting_pid);
 /* TIOCSCTTY on the console: session-leader check + foreground pgrp bind. */
 int ir0_console_ioctl_set_ctty(void);
+/* TIOCSTI on the console: one byte in, as if typed (Linux tiocsti()). */
+int ir0_console_ioctl_sti(const void *user_arg);
 int ir0_console_has_ctty_for_sid(int32_t sid);
 void ir0_console_clear_ctty_session(int32_t sid);
 int32_t ir0_console_get_fg_pgid(void);

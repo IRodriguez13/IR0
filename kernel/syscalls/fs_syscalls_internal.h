@@ -46,7 +46,7 @@
 #include <ir0/heartfs.h>
 #include <ir0/kmem.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/ash_smoke.h>
+#include <ir0/tty_smoke.h>
 #include <d1_12_read_diag.h>
 #include <ir0/sysfs.h>
 #include <ir0/uio.h>

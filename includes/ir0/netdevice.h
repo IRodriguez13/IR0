@@ -26,8 +26,8 @@
 #define IP_MAX_MTU	65535
 
 /*
- * Linux uapi netdevice flags (include/uapi/linux/if.h).
- * BusyBox ifconfig/route interpret these bits; IR0 must match.
+ * Linux uapi netdevice flags (include/uapi/linux/if.h, netdevice(7)):
+ * the same bit values, reported through SIOCGIFFLAGS.
  */
 #define IFF_UP          0x1
 #define IFF_BROADCAST   0x2

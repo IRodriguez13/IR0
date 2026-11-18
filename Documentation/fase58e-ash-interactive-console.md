@@ -107,7 +107,7 @@ PROCESS_BLOCKED → sched_schedule_next()
 | devfs console | `fs/devfs.c` | `/dev/console`, `/dev/tty`, termios ioctl |
 | PID 1 | `setup/pid1/irinit.c` | Attach stdio to `/dev/console`, spawn `ash -i` |
 | BusyBox config | `ISD/packages/busybox/fase50_minimal.config` | `FEATURE_EDITING=n`, `ASH_JOB_CONTROL=n` |
-| Smoke tags | `includes/ir0/ash_smoke.c` | Compact serial tags after BusyBox banner |
+| Smoke tags | `drivers/tty/tty_smoke.c` (kernel, `ir0.tty_smoke=1`) + `scripts/serial_shell_tags.py` (harness) | Generic TTY tags in the kernel; the shell tags are derived from the serial log |
 | Next BusyBox | `ISD/packages/busybox/fase58_busybox.config` | More coreutils; build with `make build-busybox-plus` |
 
 ## BusyBox configuration (intentional)

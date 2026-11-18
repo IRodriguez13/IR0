@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: vdso.h
- * Description: Userspace vDSO mapping (AT_SYSINFO_EHDR) for musl/BusyBox.
+ * Description: Userspace vDSO mapping (AT_SYSINFO_EHDR, vdso(7)).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

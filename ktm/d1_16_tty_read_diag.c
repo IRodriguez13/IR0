@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <d1_16_tty_read_diag.h>
-#include <ir0/ash_smoke.h>
+#include <ir0/tty_smoke.h>
 #include <ir0/process.h>
 #include <ir0/ktm/klog.h>
 
@@ -21,9 +21,7 @@ static int d1_16_active(struct process *p)
 {
 	if (!p || !p->comm[0])
 		return 0;
-	if (p->comm[0] == 's' && p->comm[1] == 'h' && p->comm[2] == '\0')
-		return 1;
-	return ir0_ash_smoke_active();
+	return ir0_tty_smoke_active();
 }
 
 void d1_16_tty_read_pre(struct process *p, int fd, int nonblock,
@@ -53,7 +51,7 @@ void d1_16_tty_read_block(struct process *p, int waiters, const char *reason)
 
 void d1_16_tty_line_ready(uintptr_t tty_ptr, size_t queued)
 {
-	if (!ir0_ash_smoke_active())
+	if (!ir0_tty_smoke_active())
 		return;
 
 	klog_debug_fmt("D1.16", "[D1.16][tty_line_ready] tty=%llx queued=%llx",
@@ -63,7 +61,7 @@ void d1_16_tty_line_ready(uintptr_t tty_ptr, size_t queued)
 
 void d1_16_tty_wake(int waiters_before, int woke, uint32_t pid)
 {
-	if (!ir0_ash_smoke_active() && waiters_before == 0)
+	if (!ir0_tty_smoke_active() && waiters_before == 0)
 		return;
 
 	klog_debug_fmt("D1.16",

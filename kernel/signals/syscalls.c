@@ -16,7 +16,6 @@
 
 #include <kernel/syscalls/process_syscalls.h>
 #include <string.h>
-#include <ir0/console.h>
 #include <ir0/context.h>
 #include <ir0/copy_user.h>
 #include <ir0/sched.h>
@@ -55,7 +54,7 @@ static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint32
 }
 
 /*
- * Linux/musl may pass sigsetsize=8; user buffers are sized for the uapi layout,
+ * Callers pass sigsetsize=8 (_NSIG/8); user buffers are sized for the uapi layout,
  * not for IR0 internal struct sigaction.  Copy handler + flags + restorer +
  * mask64 (32 bytes), never sizeof(struct sigaction).
  */
@@ -183,7 +182,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 
 /*
  * sys_rt_sigsuspend - Linux rt_sigsuspend(2): replace mask and wait for signal.
- * Always returns -EINTR when a non-blocked signal is pending (musl sigsuspend).
+ * Always returns -EINTR when a non-blocked signal is pending (rt_sigsuspend(2)).
  */
 int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 {
@@ -195,11 +194,9 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 		return -ESRCH;
 	/*
 	 * sigsetsize=8 (uapi compact) or sizeof(sigset_t), same contract as
-	 * rt_sigaction above. musl passes _NSIG/8 = 8, the kernel sigset width
-	 * on x86-64, while the userspace type is 128 bytes: demanding the
-	 * latter rejected every call with -EINVAL, so ash's wait-for-SIGCHLD
-	 * never blocked and it re-issued the syscall forever (observed 320k
-	 * back-to-back calls, pipeline children left unreaped).
+	 * rt_sigaction above. Linux rt_sigsuspend() takes _NSIG/8 = 8, the
+	 * kernel sigset width on x86-64 and arm64; the libc sigset_t is 128
+	 * bytes and is never what a libc passes.
 	 */
 	if (!mask ||
 	    (sigsetsize != sizeof(sigset_t) && sigsetsize != sizeof(uint64_t)))
@@ -238,9 +235,8 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 }
 
 /*
- * sys_tkill — Linux tkill(2) (x86-64 NR 200). musl raise()/abort() use this
- * rather than kill(2) or tgkill(2). Without it, abort() sees -ENOSYS and falls
- * through to a_crash() (hlt) → #GP delivered as SIGSEGV.
+ * sys_tkill — Linux tkill(2) (x86-64 NR 200). A libc may implement raise()
+ * and abort() with it; -ENOSYS there turns abort() into a crash.
  */
 int64_t sys_tkill(pid_t tid, int sig)
 {
@@ -367,7 +363,7 @@ int64_t sys_kill(pid_t pid, int signal)
  *
  * Restores CPU state saved at signal delivery. Never returns on success.
  *
- * Linux rt_sigreturn takes no argument: musl __restore_rt is just
+ * Linux rt_sigreturn takes no argument: a restorer is just
  *   mov $__NR_rt_sigreturn, %eax; syscall
  * and the handler's return leaves the user stack pointer at our struct
  * sigframe. The frame is copied from there and from nowhere else; a frame
@@ -416,8 +412,6 @@ int64_t sys_sigreturn(void)
 					    &current_process->syscall_frame,
 					    signal_sigcontext_return_value(restore_ctx));
 	process_restore_user_task_segments(current_process);
-	if (user_frame.signum > 0 && user_frame.signum < _NSIG)
-		ir0_console_after_tty_read_signal(user_frame.signum);
 	tls_restore_current();
 	switch_to_user_task(&current_process->task);
 	return 0;

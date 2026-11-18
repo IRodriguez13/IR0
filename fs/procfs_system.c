@@ -53,9 +53,9 @@ int proc_meminfo_read(char *buf, size_t count)
 		       "MemTotal:       %llu kB\n"
 		       "MemFree:        %llu kB\n"
 		       /*
-			* Linux field order; BusyBox free reads MemAvailable
-			* for its "available" column and printed 0 while the
-			* field was missing. IR0 has no reclaimable page
+			* Linux field order (proc(5)); MemAvailable is the
+			* estimate of memory available for new work and must
+			* be present. IR0 has no reclaimable page
 			* cache, so everything free is available and Buffers
 			* and Cached are genuinely zero rather than unknown.
 			*/
@@ -96,7 +96,7 @@ int proc_meminfo_read(char *buf, size_t count)
 }
 
 /*
- * /proc/uptime — "<seconds_uptime> <seconds_idle>\n" (Unix/BusyBox contract).
+ * /proc/uptime — "<seconds_uptime> <seconds_idle>\n" (proc(5)).
  * Values are real seconds from the monotonic clock / idle tick counter.
  */
 int proc_uptime_read(char *buf, size_t count)
@@ -135,7 +135,7 @@ int proc_uptime_read(char *buf, size_t count)
 }
 
 /*
- * /proc/stat — Linux proc(5) / BusyBox top contract.
+ * /proc/stat — Linux proc(5) contract.
  *
  * Aggregate "cpu" + single "cpu0" jiffy lines (USER_HZ ≈ CONFIG_TICK_RATE_HZ).
  * Jiffies from clock_get_cpu_accounting(); nice/iowait/irq/softirq/steal are 0
@@ -175,8 +175,9 @@ int proc_stat_read(char *buf, size_t count)
 	btime = (time_t)clock_get_boot_time();
 
 	/*
-	 * Eight fields after the label so FEATURE_TOP_SMP_CPU (BusyBox) accepts
-	 * both the aggregate line (>=4) and cpu0 (>4). Duplicate cpu0: one logical CPU.
+	 * Eight fields after the label, as Linux prints them (proc(5)): readers
+	 * parse the aggregate line and each cpuN line the same way. Duplicate
+	 * cpu0: one logical CPU.
 	 * intr/ctxt/btime: runtime counters (not placeholder zeros when activity exists).
 	 */
 	len = snprintf(buf, count,

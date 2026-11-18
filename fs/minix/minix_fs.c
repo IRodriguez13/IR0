@@ -30,10 +30,9 @@ static uint32_t minix_zmap_search_start;
  *
  * MINIX stores names in a fixed 14-byte field with no terminator when the
  * name uses the whole field. Treating that field as a C string reads into
- * the next directory entry: `du` reported
- * "/usr/share/ash-completion<garbage>: Invalid argument" because
- * "ash-completion" is exactly 14 characters, and a lookup of any such name
- * compared past the field and never matched.
+ * the next directory entry: a directory walk reported a 14-character name
+ * with trailing garbage as "Invalid argument", and a lookup of any such
+ * name compared past the field and never matched.
  */
 void minix_dirent_name(const minix_dir_entry_t *e,
 			      char out[MINIX_NAME_LEN + 1])

@@ -53,7 +53,7 @@ static int system_in_idle_mode = 0;
 static struct ps2_set1_state kbd_state;
 static int console_keyboard_mode = IR0_INPUT_KBD_XLATE;
 
-/* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, Doom) */
+/* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, input(4)) */
 static const uint16_t scancode_to_keycode[256] = {
     [0x01] = KEY_ESC, [0x02] = KEY_1, [0x03] = KEY_2, [0x04] = KEY_3,
     [0x05] = KEY_4, [0x06] = KEY_5, [0x07] = KEY_6, [0x08] = KEY_7,
@@ -188,7 +188,7 @@ static void keyboard_buffer_add(char c)
 		keyboard_buffer[keyboard_buffer_head] = c;
 		keyboard_buffer_head = next;
 		input_kbd_wake_readers();
-		if (ir0_cmdline_ash_smoke_enabled() &&
+		if (ir0_cmdline_tty_smoke_enabled() &&
 		    !kbd_ascii_tag && (unsigned char)c >= ' ')
 		{
 			kbd_ascii_tag = 1;
@@ -300,12 +300,12 @@ void keyboard_poll_ps2(void)
 			continue;
 		}
 
-		if (ir0_cmdline_ash_smoke_enabled() && !kbd_poll_tag)
+		if (ir0_cmdline_tty_smoke_enabled() && !kbd_poll_tag)
 		{
 			kbd_poll_tag = 1;
 			klog_smoke("KBD_POLL_OK");
 		}
-		if (ir0_cmdline_ash_smoke_enabled() && ir0_console_in_userspace())
+		if (ir0_cmdline_tty_smoke_enabled() && ir0_console_in_userspace())
 		{
 			static int kbd_user_poll_once;
 
@@ -325,7 +325,7 @@ void keyboard_handler64(void)
 {
 	static int kbd_irq_tag;
 
-	if (ir0_cmdline_ash_smoke_enabled() && !kbd_irq_tag)
+	if (ir0_cmdline_tty_smoke_enabled() && !kbd_irq_tag)
 	{
 		kbd_irq_tag = 1;
 		klog_smoke("KBD_IRQ_OK");
@@ -371,13 +371,13 @@ static void keyboard_feed_scancode(uint8_t scancode)
 	{
 		static int kbd_scancode_tag;
 
-		if (ir0_cmdline_ash_smoke_enabled() && !kbd_scancode_tag)
+		if (ir0_cmdline_tty_smoke_enabled() && !kbd_scancode_tag)
 		{
 			kbd_scancode_tag = 1;
 			klog_smoke("KBD_SCANCODE_OK");
 		}
 		/*
-		 * While /dev/events0 has readers (Doom, etc.), only EV_KEY —
+		 * While /dev/events0 has readers, only EV_KEY —
 		 * do not also inject ASCII into the cooked TTY line (qqqls).
 		 */
 		if (!input_events_readers_active())
@@ -388,7 +388,7 @@ static void keyboard_feed_scancode(uint8_t scancode)
 		{
 			/*
 			 * A leaked /dev/events0 reader silently kills all
-			 * console input, which looks like a dead getty. Say so
+			 * console input, which looks like a hung terminal. Say so
 			 * on the serial log instead of dropping in silence.
 			 */
 			static unsigned int suppressed;
@@ -416,6 +416,16 @@ int keyboard_get_console_mode(void)
 	return console_keyboard_mode;
 }
 
+/* A byte that did not come from the controller (TIOCSTI): same path as IRQ1. */
+static void keyboard_receive(char c)
+{
+	unsigned long flags;
+
+	flags = irq_save();
+	keyboard_buffer_add(c);
+	irq_restore(flags);
+}
+
 static const struct input_keyboard_ops i8042_keyboard_ops = {
 	.get = keyboard_buffer_get,
 	.has_data = keyboard_buffer_has_data,
@@ -427,6 +437,7 @@ static const struct input_keyboard_ops i8042_keyboard_ops = {
 	.get_layout_name = keyboard_get_layout_name,
 	.set_console_mode = keyboard_set_console_mode,
 	.get_console_mode = keyboard_get_console_mode,
+	.receive = keyboard_receive,
 };
 
 void keyboard_init(void)

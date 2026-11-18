@@ -135,7 +135,7 @@ void pf_demand_zero_page(process_t *current, uint64_t fault_addr,
  * IR0 artifact: the process address-space root keeps a supervisor 2 MiB
  * identity map for PMM access.
  * After fork, heap/stack holes remain present+!USER (Linux would be pte_none).
- * Treat as do_anonymous_page — never memcpy identity (PMM garbage → musl abort).
+ * Treat as do_anonymous_page — never memcpy identity (PMM garbage would reach userspace).
  * Refs: Linux do_anonymous_page; Gorman ch.4 demand paging.
  *
  * Returns 0 on success, -1 on OOM / map failure (caller delivers SEGV).

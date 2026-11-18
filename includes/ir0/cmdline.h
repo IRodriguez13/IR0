@@ -13,9 +13,9 @@
 /*
  * Apply Kconfig LOG_PROFILE_* default, then override from Multiboot cmdline
  * (flags bit 2 / cmdline pointer). Safe before serial is up — only mutates
- * klog profile/level/trace mask and boot feature flags (e.g. ash smoke tags).
+ * klog profile/level/trace mask and boot feature flags (e.g. TTY smoke tags).
  */
 void ir0_cmdline_apply_log_profile(void);
 
-/* Non-zero when Multiboot cmdline contains ir0.ash_smoke=1 (QEMU smokes only). */
-int ir0_cmdline_ash_smoke_enabled(void);
+/* Non-zero when Multiboot cmdline contains ir0.tty_smoke=1 (QEMU smokes only). */
+int ir0_cmdline_tty_smoke_enabled(void);
