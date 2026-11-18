@@ -9,12 +9,6 @@
 #include <ir0/errno.h>
 
 static int64_t early_time_set_realtime(void *opaque, int64_t sec, int64_t nsec);
-#define CLOCK_REALTIME 0UL
-#define CLOCK_MONOTONIC 1UL
-#define CLOCK_MONOTONIC_RAW 4UL
-#define CLOCK_REALTIME_COARSE 5UL
-#define CLOCK_MONOTONIC_COARSE 6UL
-#define CLOCK_BOOTTIME 7UL
 #define NS_PER_SEC 1000000000ULL
 
 static int clock_supported(uint64_t clock_id)

@@ -17,9 +17,15 @@
 #include <stdint.h>
 
 struct process;
+struct timespec;
 
 #define IR0_CLOCK_WAIT_DISARMED UINT64_MAX
 
+/*
+ * Arm @proc's timer: ir0_clock_wait_fire_due() makes it READY once the
+ * monotonic clock reaches @deadline_ms. Disarm it when the wait ends.
+ */
+void ir0_clock_wait_arm(struct process *proc, uint64_t deadline_ms);
 void ir0_clock_wait_disarm(struct process *proc);
 void ir0_clock_wait_fire_due(uint64_t now_ms);
 
@@ -29,3 +35,12 @@ void ir0_clock_wait_fire_due(uint64_t now_ms);
  * current_process.
  */
 int ir0_clock_wait_block_until(uint64_t deadline_ms);
+
+/*
+ * ir0_clock_deadline_ms - Monotonic deadline in ms for @ts: an interval
+ * from now, or with @absolute a time on CLOCK_REALTIME (@realtime) or
+ * CLOCK_MONOTONIC. Rounded up, so a wait never ends early; a time already
+ * past is now. Returns 0, or -EINVAL for a malformed timespec.
+ */
+int ir0_clock_deadline_ms(const struct timespec *ts, int absolute,
+			  int realtime, uint64_t *deadline_ms);

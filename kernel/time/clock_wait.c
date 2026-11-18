@@ -17,6 +17,12 @@
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
+#include <ir0/time.h>
+
+/* Seconds beyond this saturate: the deadline is then never reached. */
+#define CLOCK_DEADLINE_MAX_SEC (1ULL << 40)
+#define NSEC_PER_MSEC 1000000L
+#define NSEC_PER_SEC 1000000000L
 
 extern process_t *process_list;
 extern process_t *current_process;
@@ -31,7 +37,7 @@ static void ir0_clock_wait_wake_process(process_t *proc)
 	sched_promote(proc);
 }
 
-static void ir0_clock_wait_arm(process_t *proc, uint64_t deadline_ms)
+void ir0_clock_wait_arm(process_t *proc, uint64_t deadline_ms)
 {
 	if (!proc)
 		return;
@@ -66,6 +72,40 @@ void ir0_clock_wait_fire_due(uint64_t now_ms)
 		ir0_clock_wait_disarm(p);
 		ir0_clock_wait_wake_process(p);
 	}
+}
+
+/* CLOCK_REALTIME in ms, as clock_gettime(2) reports it, at uptime @now. */
+static uint64_t clock_realtime_ms(uint64_t now)
+{
+	if (!clock_realtime_available())
+		return now;
+	return (uint64_t)clock_get_current_time() * 1000ULL + now % 1000ULL;
+}
+
+int ir0_clock_deadline_ms(const struct timespec *ts, int absolute,
+			  int realtime, uint64_t *deadline_ms)
+{
+	uint64_t now = clock_get_uptime_milliseconds();
+	uint64_t base;
+	uint64_t ms;
+
+	if (ts->tv_sec < 0 || ts->tv_nsec < 0 || ts->tv_nsec >= NSEC_PER_SEC)
+		return -EINVAL;
+	if ((uint64_t)ts->tv_sec >= CLOCK_DEADLINE_MAX_SEC)
+	{
+		*deadline_ms = IR0_CLOCK_WAIT_DISARMED - 1;
+		return 0;
+	}
+	ms = (uint64_t)ts->tv_sec * 1000ULL +
+	     (uint64_t)(ts->tv_nsec + NSEC_PER_MSEC - 1) / NSEC_PER_MSEC;
+	if (!absolute)
+	{
+		*deadline_ms = now + ms;
+		return 0;
+	}
+	base = realtime ? clock_realtime_ms(now) : now;
+	*deadline_ms = ms > base ? now + (ms - base) : now;
+	return 0;
 }
 
 int ir0_clock_wait_block_until(uint64_t deadline_ms)

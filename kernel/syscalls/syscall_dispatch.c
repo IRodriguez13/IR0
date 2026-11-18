@@ -183,6 +183,7 @@ WRAP4(sys_openat, int, const char *, int, mode_t)
 WRAP4(sys_newfstatat, int, const char *, stat_t *, int)
 WRAP5(sys_statx, int, const char *, int, unsigned int, void *)
 WRAP2(sys_clock_gettime, int, struct timespec *)
+WRAP4(sys_clock_nanosleep, int, int, const struct timespec *, struct timespec *)
 WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
 WRAP2(sys_set_robust_list, struct robust_list_head *, size_t)
@@ -213,6 +214,7 @@ WRAP0(sys_vfork)
 WRAP1(sys_personality, unsigned long)
 WRAP2(sys_getpriority, int, int)
 WRAP3(sys_setpriority, int, int, int)
+WRAP0(sys_sched_yield)
 WRAP0(sys_sync)
 WRAP1(sys_fsync, int)
 WRAP1(sys_fdatasync, int)
@@ -302,6 +304,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_CHROOT] = wrap_sys_chroot;
   syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME] = wrap_sys_clock_gettime;
   syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME64] = wrap_sys_clock_gettime;
+  syscall_semantic_table[IR0_SYSCALL_CLOCK_NANOSLEEP] = wrap_sys_clock_nanosleep;
   syscall_semantic_table[IR0_SYSCALL_CLONE] = wrap_sys_clone;
   syscall_semantic_table[IR0_SYSCALL_CLOSE] = wrap_sys_close;
   syscall_semantic_table[IR0_SYSCALL_EXTENSION_CONSOLE_CLEAR] = wrap_console_clear;
@@ -408,6 +411,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SETITIMER] = wrap_sys_setitimer;
   syscall_semantic_table[IR0_SYSCALL_SETPGID] = wrap_sys_setpgid;
   syscall_semantic_table[IR0_SYSCALL_SETPRIORITY] = wrap_sys_setpriority;
+  syscall_semantic_table[IR0_SYSCALL_SCHED_YIELD] = wrap_sys_sched_yield;
   syscall_semantic_table[IR0_SYSCALL_SETREGID] = wrap_sys_setregid;
   syscall_semantic_table[IR0_SYSCALL_SETRESGID] = wrap_sys_setresgid;
   syscall_semantic_table[IR0_SYSCALL_SETRESUID] = wrap_sys_setresuid;

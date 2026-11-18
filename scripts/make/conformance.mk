@@ -88,8 +88,8 @@ ir0-fuzz-arm64: kernel-arm64-product.bin
 
 # Red selftests: one target per area and ISA. A fixed group moves to
 # IR0_ABI_SELFTESTS (scripts/make/selftest.mk): futex (timeouts, bitset,
-# requeue, keys, waiter cap) and sleep (clock_nanosleep, sched_yield).
-IR0_RED_SELFTESTS := futex sleep
+# requeue, keys, waiter cap, robust list).
+IR0_RED_SELFTESTS := futex
 
 define ir0_red_selftest
 .PHONY: ir0-selftest-red-$(1)-x86 ir0-selftest-red-$(1)-arm64

@@ -28,6 +28,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_chroot: return IR0_SYSCALL_CHROOT;
 	case __NR_clock_gettime: return IR0_SYSCALL_CLOCK_GETTIME;
 	case __NR_clock_gettime64: return IR0_SYSCALL_CLOCK_GETTIME64;
+	case __NR_clock_nanosleep: return IR0_SYSCALL_CLOCK_NANOSLEEP;
 	case __NR_clone: return IR0_SYSCALL_CLONE;
 	case __NR_close: return IR0_SYSCALL_CLOSE;
 	case __NR_connect: return IR0_SYSCALL_CONNECT;
@@ -133,6 +134,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_rt_sigprocmask: return IR0_SYSCALL_RT_SIGPROCMASK;
 	case __NR_rt_sigreturn: return IR0_SYSCALL_RT_SIGRETURN;
 	case __NR_rt_sigsuspend: return IR0_SYSCALL_RT_SIGSUSPEND;
+	case __NR_sched_yield: return IR0_SYSCALL_SCHED_YIELD;
 	case __NR_select: return IR0_SYSCALL_SELECT;
 	case __NR_sendmsg: return IR0_SYSCALL_SENDMSG;
 	case __NR_sendto: return IR0_SYSCALL_SENDTO;
