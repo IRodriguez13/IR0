@@ -1,6 +1,6 @@
 # IR0 Kernel Documentation
 
-> **Last verified:** 2026-11-06
+> **Last verified:** 2026-11-20
 > **Source of truth:** files listed in the map below; code under `includes/ir0/`,
 > `kernel/`, `fs/`, `scripts/make/`.
 
@@ -56,13 +56,18 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `releases/`: ABI board, syscall/pseudo map, 0.0.1 scope and write-path plan.
 - `DRIVERS.md`: driver registry, bootstrap flow, config-gated initialization, **SB16 QEMU smoke**.
 - `INTERRUPTS.md`: IDT/PIC path, syscall entry, and exception behavior.
-- `MEMORY.md`: PMM, allocator, paging, real fork COW + lazy alloc limits.
+- `MEMORY.md`: PMM, allocator, paging, fork COW, and lazy anonymous commit
+  (`MAP_NORESERVE` / `PROT_NONE`; Spanish: `esp/MEMORY.md`).
+- `PROCESSES.md`: process lifecycle, the growable fd table, shared
+  `CLONE_SIGHAND`, Linux `ucontext` in the sigframe (Spanish: `esp/PROCESSES.md`).
 - `ARM64_STACK_MODEL.md`: EL0→EL1 exception frame vs **SP_EL1**, **SPSel**, `set_current_kernel_stack` (Spanish: `esp/ARM64_STACK_MODEL.md`).
 - [`sysfs-firmware-ir0.md`](sysfs-firmware-ir0.md): `/sys/firmware/ir0/*` boot snapshot (Spanish: [`esp/sysfs-firmware-ir0.md`](esp/sysfs-firmware-ir0.md)).
 - `uaccess.md`: **kernel↔userspace copy frontier** — `copy_*_user`,
   `copy_*_user_mm`, `*_region_in_directory`, the single `access_ok` predicate,
   arch-guard tags, `KERNEL_UACCESS_FAULT` (Spanish: `esp/uaccess.md`).
-- `PROCESSES.md`: process lifecycle, credentials, signals, and wait/reap behavior.
+- `ABI_DEV.md`: behavior landed on `dev` through 2026-11-20 (fd table, lazy
+  commit, ucontext, hypervisor kind, `accept4` peer address, `CLONE_SIGHAND`)
+  and the selftest that locks each one (Spanish: `esp/ABI_DEV.md`).
 - `SCHEDULING.md`: scheduler selection, blocking syscalls and signals.
 - `UNIX_DIFFERENCES.md`: compatibility boundaries and intentional divergences.
 - `mandocs/`: **internals initiative** — bilingual subsystem chapters, diagrams, `man IR0-vfs` targets (see `mandocs/en/INDEX.md`; MM COW in `mandocs/en/mm.md`; **boot banner-first** in `mandocs/en/boot.md`).
