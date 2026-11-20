@@ -368,6 +368,26 @@ int proc_cpuinfo_read(char *buf, size_t count)
 		off += (size_t)n;
 	}
     }
+    {
+	enum ir0_hv_kind kind;
+	const char *hv_name;
+
+	if (hypervisor_kind(&kind) == 0)
+	{
+	    if (kind == IR0_HV_KVM)
+		hv_name = "kvm";
+	    else if (kind == IR0_HV_XEN)
+		hv_name = "xen";
+	    else if (kind == IR0_HV_OTHER)
+		hv_name = "other";
+	    else
+		hv_name = "none";
+	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+			 "hypervisor_kind\t%s\n", hv_name);
+	    if (n > 0 && (size_t)n < count - off)
+		off += (size_t)n;
+	}
+    }
     snprintf(t, sizeof(t), "%ubits physical, %ubits virtual", arch_bits, arch_bits);
     n = snprintf(buf + off, (off < count) ? (count - off) : 0, "address sizes\t%s\n", t); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
     if (off < count) buf[off] = '\0';
