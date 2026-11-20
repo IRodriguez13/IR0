@@ -763,17 +763,7 @@ int register_signal_handler(int signal, void (*handler)(int))
     }
     
     current->sighand->handlers[signal] = handler;
-    
-    /* If handler is SIG_IGN, add to ignored mask */
-    if (handler == SIG_IGN)
-    {
-        current->signal_ignored |= SIGNAL_MASK(signal);
-        current->signal_pending &= ~SIGNAL_MASK(signal);
-    }
-    else
-    {
-        current->signal_ignored &= ~SIGNAL_MASK(signal);
-    }
+    process_sighand_note_ignore(current, signal, handler == SIG_IGN);
     
     return 0;
 }

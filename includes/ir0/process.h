@@ -696,7 +696,8 @@ pid_t spawn_kernel(void (*entry)(void), const char *name);
 pid_t fork(void);
 /* clone_flags is the Linux clone(2) word. CLONE_SIGHAND shares handlers. */
 pid_t fork_with_stack(void *child_stack, unsigned long clone_flags);
-pid_t vfork_process(void *child_stack);
+/* clone_flags is honored for CLONE_SIGHAND. vfork(2) passes 0. */
+pid_t vfork_process(void *child_stack, unsigned long clone_flags);
 int process_vfork_link(process_t *parent, process_t *child);
 int process_vfork_parent_blocked(const process_t *parent);
 void process_vfork_complete(process_t *child);

@@ -202,6 +202,32 @@ int process_signals_clone(process_t *dst, const process_t *src,
 	return 0;
 }
 
+void process_sighand_note_ignore(process_t *owner, int sig, int ignored)
+{
+	process_t *p;
+	unsigned int bit;
+	uint64_t irq_flags;
+
+	if (!owner || !owner->sighand || sig < 1 || sig >= 32)
+		return;
+
+	bit = SIGNAL_MASK(sig);
+	irq_flags = process_registry_lock();
+	for (p = process_list; p; p = p->next)
+	{
+		if (p->sighand != owner->sighand)
+			continue;
+		if (ignored)
+		{
+			p->signal_ignored |= bit;
+			p->signal_pending &= ~bit;
+		}
+		else
+			p->signal_ignored &= ~bit;
+	}
+	process_registry_unlock(irq_flags);
+}
+
 int process_rel_init_child(process_t *child, const process_t *parent,
 			   pid_t child_pid)
 {

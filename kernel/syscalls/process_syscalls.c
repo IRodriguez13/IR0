@@ -995,7 +995,7 @@ int64_t sys_vfork(void)
 {
 	if (!current_process)
 		return -ESRCH;
-	return (int64_t)vfork_process(NULL);
+	return (int64_t)vfork_process(NULL, 0);
 }
 
 /*
@@ -1013,11 +1013,15 @@ int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 	if (!current_process)
 		return -ESRCH;
 
+	/* Linux copy_process(): CLONE_SIGHAND without CLONE_VM is EINVAL. */
+	if ((flags & CLONE_SIGHAND) && !(flags & CLONE_VM))
+		return -EINVAL;
+
 	if (flags & CLONE_VFORK)
 	{
 		if ((flags & CLONE_THREAD) || !(flags & CLONE_VM))
 			return -EINVAL;
-		return (int64_t)vfork_process(stack);
+		return (int64_t)vfork_process(stack, flags);
 	}
 
 	if (flags & CLONE_THREAD)

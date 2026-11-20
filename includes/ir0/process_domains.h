@@ -38,6 +38,13 @@ int process_cred_clone(struct process *dst, const struct process *src);
 int process_signals_clone(struct process *dst, const struct process *src,
 			  unsigned long flags);
 
+/*
+ * SIG_IGN / a real handler is a property of the shared table. Every task
+ * that holds @owner's sighand gets the same ignored bit, so a sibling's
+ * sigaction is not hidden by a stale per-task mask.
+ */
+void process_sighand_note_ignore(struct process *owner, int sig, int ignored);
+
 /* Private table, refcount 1, every handler SIG_DFL. Returns 0 or -errno. */
 int process_signals_init(struct process *p);
 

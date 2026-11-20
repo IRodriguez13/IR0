@@ -258,7 +258,20 @@ pid_t fork_with_stack(void *child_stack, unsigned long clone_flags)
 	if (!child)
 		return -ENOMEM;
 
-	if (fork_child_mm_create(child, parent) != 0)
+	/*
+	 * CLONE_VM without CLONE_THREAD (clone_thread owns that pair) shares
+	 * the parent's mm. fork() passes flags 0 and still copies.
+	 */
+	if (clone_flags & CLONE_VM)
+	{
+		if (process_mm_share(child, parent) < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+		process_set_mm_root(child, process_mm_root(parent));
+	}
+	else if (fork_child_mm_create(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
@@ -271,12 +284,14 @@ pid_t fork_with_stack(void *child_stack, unsigned long clone_flags)
 		return -ENOMEM;
 	}
 
-	if (KTM_FAULT_HIT("process.fork_cow") || copy_process_memory(parent, child) != 0)
+	if (!(clone_flags & CLONE_VM) &&
+	    (KTM_FAULT_HIT("process.fork_cow") || copy_process_memory(parent, child) != 0))
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
 
+	if (!(clone_flags & CLONE_VM))
 	{
 		struct mmap_region *mmap_list;
 
@@ -508,7 +523,7 @@ void process_mm_release_on_exit(process_t *dying)
  * vfork() — share mm, run the child immediately, block the parent until the
  * child calls process_vfork_complete() from exec or _exit.
  */
-pid_t vfork_process(void *child_stack)
+pid_t vfork_process(void *child_stack, unsigned long clone_flags)
 {
 	process_t *parent = current_process;
 	process_t *child;
@@ -520,8 +535,8 @@ pid_t vfork_process(void *child_stack)
 	if (!parent->mm)
 		return -ENOMEM;
 
-	/* vfork does not set CLONE_SIGHAND: the child gets its own table. */
-	child = fork_process_create(parent, &child_pid, 0);
+	/* vfork(2) passes 0. clone(CLONE_VFORK|CLONE_SIGHAND) shares the table. */
+	child = fork_process_create(parent, &child_pid, clone_flags);
 	if (!child)
 		return -ENOMEM;
 
