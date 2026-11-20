@@ -11,6 +11,8 @@ IR0_SELFTEST_X86_NOFILE := $(KERNEL_ROOT)/build/selftests/x86_64/nofile
 IR0_SELFTEST_ARM64_NOFILE := $(KERNEL_ROOT)/build/selftests/arm64/nofile
 IR0_SELFTEST_X86_VMCOMMIT := $(KERNEL_ROOT)/build/selftests/x86_64/vm_commit
 IR0_SELFTEST_ARM64_VMCOMMIT := $(KERNEL_ROOT)/build/selftests/arm64/vm_commit
+IR0_SELFTEST_X86_UCONTEXT := $(KERNEL_ROOT)/build/selftests/x86_64/ucontext
+IR0_SELFTEST_ARM64_UCONTEXT := $(KERNEL_ROOT)/build/selftests/arm64/ucontext
 IR0_SELFTEST_X86_FAULT := $(KERNEL_ROOT)/build/selftests/x86_64/fault
 IR0_SELFTEST_ARM64_FAULT := $(KERNEL_ROOT)/build/selftests/arm64/fault
 IR0_SELFTEST_TAP_TEST := $(KERNEL_ROOT)/tests/host/test_selftest_tap.py
@@ -19,6 +21,7 @@ IR0_SELFTEST_TAP_TEST := $(KERNEL_ROOT)/tests/host/test_selftest_tap.py
 	ir0-selftest-identity-x86 ir0-selftest-identity-arm64 ir0-selftest-identity \
 	ir0-selftest-nofile-x86 ir0-selftest-nofile-arm64 ir0-selftest-nofile \
 	ir0-selftest-vm-commit-x86 ir0-selftest-vm-commit-arm64 ir0-selftest-vm-commit \
+	ir0-selftest-ucontext-x86 ir0-selftest-ucontext-arm64 ir0-selftest-ucontext \
 	ir0-selftest-fault-x86 ir0-selftest-fault-arm64 ir0-selftest-fault
 
 $(IR0_SELFTEST_X86_OPENAT): tests/selftests/syscall/openat.c tests/selftests/ir0/ksft.h
@@ -112,6 +115,30 @@ ir0-selftest-vm-commit-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_VMCO
 	@echo "✓ ir0-selftest-vm-commit-arm64"
 
 ir0-selftest-vm-commit: ir0-selftest-vm-commit-x86 ir0-selftest-vm-commit-arm64
+
+$(IR0_SELFTEST_X86_UCONTEXT): tests/selftests/syscall/ucontext.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 ucontext
+
+$(IR0_SELFTEST_ARM64_UCONTEXT): tests/selftests/syscall/ucontext.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 ucontext
+
+ir0-selftest-ucontext-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_UCONTEXT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_UCONTEXT) \
+		--done "ok 1 ucontext_sets_ip" \
+		--log $(HOST_TMP)/ir0-selftest-x86-ucontext.log
+	@echo "✓ ir0-selftest-ucontext-x86"
+
+ir0-selftest-ucontext-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_UCONTEXT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_UCONTEXT) \
+		--done "ok 1 ucontext_sets_ip" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-ucontext.log
+	@echo "✓ ir0-selftest-ucontext-arm64"
+
+ir0-selftest-ucontext: ir0-selftest-ucontext-x86 ir0-selftest-ucontext-arm64
 
 $(IR0_SELFTEST_X86_FAULT): tests/selftests/mm/fault.c tests/selftests/ir0/ksft.h
 	@$(MAKE) -C tests/selftests ARCH=x86_64 fault

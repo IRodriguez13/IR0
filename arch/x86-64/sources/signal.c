@@ -19,6 +19,7 @@
 #include <ir0/fpu_backend.h>
 #include <asm/debug_trap.h>
 #include <config.h>
+#include <stddef.h>
 #include <string.h>
 
 uint64_t sigcontext_ip(const struct sigcontext *ctx)
@@ -174,4 +175,87 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	(void)sf;
 	(void)restorer;
 	fpu_signal_enter();
+}
+
+/* musl x86-64 ucontext_t. gregs follow the Linux sigcontext register order. */
+struct ir0_x86_ucontext
+{
+	unsigned long uc_flags;
+	unsigned long uc_link;
+	unsigned long ss_sp;
+	int ss_flags;
+	int ss_pad;
+	unsigned long ss_size;
+	unsigned long gregs[23];
+	unsigned long fpregs;
+	unsigned long reserved1[8];
+	unsigned long sigmask[16];
+	unsigned char fpregs_mem[512];
+};
+
+_Static_assert(sizeof(struct ir0_x86_ucontext) == IR0_UCONTEXT_BYTES,
+	       "x86-64 ucontext_t size");
+_Static_assert(offsetof(struct ir0_x86_ucontext, gregs) + 16 * sizeof(unsigned long) == 168,
+	       "x86-64 ucontext RIP offset");
+
+void arch_ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
+			  uint64_t mask, void *image)
+{
+	struct ir0_x86_ucontext *uc = image;
+
+	if (!ctx || !image)
+		return;
+	memset(uc, 0, sizeof(*uc));
+	uc->gregs[0] = ctx->r8;
+	uc->gregs[1] = ctx->r9;
+	uc->gregs[2] = ctx->r10;
+	uc->gregs[3] = ctx->r11;
+	uc->gregs[4] = ctx->r12;
+	uc->gregs[5] = ctx->r13;
+	uc->gregs[6] = ctx->r14;
+	uc->gregs[7] = ctx->r15;
+	uc->gregs[8] = ctx->rdi;
+	uc->gregs[9] = ctx->rsi;
+	uc->gregs[10] = ctx->rbp;
+	uc->gregs[11] = ctx->rbx;
+	uc->gregs[12] = ctx->rdx;
+	uc->gregs[13] = ctx->rax;
+	uc->gregs[14] = ctx->rcx;
+	uc->gregs[15] = ctx->rsp;
+	uc->gregs[16] = ctx->rip;
+	uc->gregs[17] = ctx->rflags;
+	uc->gregs[18] = (ctx->cs & 0xffffULL) | ((ctx->ss & 0xffffULL) << 48);
+	uc->fpregs = user_va + offsetof(struct ir0_x86_ucontext, fpregs_mem);
+	memcpy(uc->fpregs_mem, &ctx->fpstate, sizeof(uc->fpregs_mem));
+	uc->sigmask[0] = mask;
+}
+
+void arch_ucontext_import(const void *image, uint64_t user_va,
+			  struct sigcontext *ctx)
+{
+	const struct ir0_x86_ucontext *uc = image;
+
+	if (!image || !ctx)
+		return;
+	ctx->r8 = uc->gregs[0];
+	ctx->r9 = uc->gregs[1];
+	ctx->r10 = uc->gregs[2];
+	ctx->r11 = uc->gregs[3];
+	ctx->r12 = uc->gregs[4];
+	ctx->r13 = uc->gregs[5];
+	ctx->r14 = uc->gregs[6];
+	ctx->r15 = uc->gregs[7];
+	ctx->rdi = uc->gregs[8];
+	ctx->rsi = uc->gregs[9];
+	ctx->rbp = uc->gregs[10];
+	ctx->rbx = uc->gregs[11];
+	ctx->rdx = uc->gregs[12];
+	ctx->rax = uc->gregs[13];
+	ctx->rcx = uc->gregs[14];
+	ctx->rsp = uc->gregs[15];
+	ctx->rip = uc->gregs[16];
+	ctx->rflags = uc->gregs[17];
+	if (uc->fpregs == user_va + offsetof(struct ir0_x86_ucontext, fpregs_mem))
+		memcpy(&ctx->fpstate, uc->fpregs_mem, sizeof(uc->fpregs_mem));
+	(void)user_va;
 }

@@ -151,10 +151,11 @@ struct sigframe {
     uint64_t oldmask;
     siginfo_t info;           /* SA_SIGINFO second argument */
     /*
-     * SA_SIGINFO third argument. Zeroed: IR0 does not lay out a Linux
-     * ucontext_t yet, so handlers cannot edit the resumed context.
+     * SA_SIGINFO third argument: Linux ucontext_t. rt_sigreturn resumes
+     * from its mcontext, so the handler can edit the restored registers.
+     * The stored size is rounded up so the whole frame stays 16-aligned.
      */
-    unsigned char ucontext[128];
+    unsigned char ucontext[(IR0_UCONTEXT_BYTES + 15u) & ~15u];
 };
 
 _Static_assert((sizeof(struct sigframe) % 16) == 0,

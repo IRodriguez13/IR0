@@ -15,6 +15,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <kernel/syscalls/process_syscalls.h>
+#include <stddef.h>
 #include <string.h>
 #include <ir0/context.h>
 #include <ir0/copy_user.h>
@@ -372,7 +373,8 @@ int64_t sys_kill(pid_t pid, int signal)
 int64_t sys_sigreturn(void)
 {
 	struct sigframe user_frame;
-	struct sigcontext *restore_ctx = &user_frame.ctx;
+	struct sigcontext restored;
+	struct sigcontext *restore_ctx = &restored;
 	uint64_t user_sp;
 
 	if (!current_process)
@@ -383,8 +385,16 @@ int64_t sys_sigreturn(void)
 
 	user_sp = process_syscall_sp(current_process);
 	if (copy_from_user(&user_frame, (const void *)(uintptr_t)user_sp,
-			   sizeof(user_frame)) != 0 ||
-	    !signal_sigcontext_validate_and_sanitize(restore_ctx))
+			   sizeof(user_frame)) != 0)
+	{
+		current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);
+		return -EFAULT;
+	}
+	restored = user_frame.ctx;
+	arch_ucontext_import(user_frame.ucontext,
+			     user_sp + offsetof(struct sigframe, ucontext),
+			     &restored);
+	if (!signal_sigcontext_validate_and_sanitize(restore_ctx))
 	{
 		/* Linux force_sig(SIGSEGV), delivered on the way out. */
 		current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);

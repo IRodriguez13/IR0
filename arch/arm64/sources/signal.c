@@ -21,6 +21,7 @@
 #include <ir0/fpu_backend.h>
 #include <stdint.h>
 #include <asm/exc_frame.h>
+#include <stddef.h>
 #include <string.h>
 
 uint64_t sigcontext_ip(const struct sigcontext *ctx)
@@ -186,4 +187,50 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	if (sf)
 		sf->x30 = restorer;
 	fpu_signal_enter();
+}
+
+/* musl aarch64 ucontext_t: sigmask, then 8 bytes of alignment, then mcontext. */
+struct ir0_arm64_ucontext
+{
+	unsigned long uc_flags;
+	unsigned long uc_link;
+	unsigned long ss_sp;
+	int ss_flags;
+	int ss_pad;
+	unsigned long ss_size;
+	unsigned long sigmask[16];
+	unsigned char align_pad[8];
+	struct sigcontext mc;
+};
+
+_Static_assert(sizeof(struct sigcontext) == 4384, "aarch64 mcontext size");
+_Static_assert(offsetof(struct ir0_arm64_ucontext, mc) == 176,
+	       "aarch64 ucontext mcontext offset");
+_Static_assert(offsetof(struct ir0_arm64_ucontext, mc.pc) == 440,
+	       "aarch64 ucontext PC offset");
+_Static_assert(sizeof(struct ir0_arm64_ucontext) == IR0_UCONTEXT_BYTES,
+	       "aarch64 ucontext_t size");
+
+void arch_ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
+			  uint64_t mask, void *image)
+{
+	struct ir0_arm64_ucontext *uc = image;
+
+	(void)user_va;
+	if (!ctx || !image)
+		return;
+	memset(uc, 0, sizeof(*uc));
+	uc->mc = *ctx;
+	uc->sigmask[0] = mask;
+}
+
+void arch_ucontext_import(const void *image, uint64_t user_va,
+			  struct sigcontext *ctx)
+{
+	const struct ir0_arm64_ucontext *uc = image;
+
+	(void)user_va;
+	if (!image || !ctx)
+		return;
+	*ctx = uc->mc;
 }

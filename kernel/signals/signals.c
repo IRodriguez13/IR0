@@ -22,6 +22,7 @@
 #include <ir0/fault.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
+#include <stddef.h>
 #include <string.h>
 #include "signal_diag.h"
 
@@ -487,6 +488,9 @@ static int signal_setup_frame(process_t *p, int sig,
 		frame.info._sifields._sigfault.si_addr =
 			(void *)(uintptr_t)fault_addr;
 	}
+	arch_ucontext_export(&frame.ctx,
+			     frame_addr + offsetof(struct sigframe, ucontext),
+			     frame.oldmask, frame.ucontext);
 
 	if (copy_to_user_mm(process_pgd(p), frame_addr, &frame,
 			    sizeof(frame)) != 0 ||
