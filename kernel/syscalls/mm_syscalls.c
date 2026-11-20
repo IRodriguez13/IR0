@@ -865,6 +865,13 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   {
     bool collision = false;
 
+    /*
+     * A reserved VMA may have no PTEs yet (PROT_NONE, MAP_NORESERVE).
+     * Overlap is a collision even when the page tables are empty.
+     */
+    if (process_user_va_range_overlaps(current_process, hint_addr, length))
+      collision = true;
+
     for (uintptr_t check = hint_addr; check < hint_addr + length;
          check += PAGE_SIZE_4KB)
     {
@@ -913,8 +920,14 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   if (prot & PROT_EXEC)
     page_flags |= PAGE_EXEC;
 
-  /* Map pages in process page directory (skip PTE install for anon PROT_NONE) */
-  if (!((flags & MAP_ANONYMOUS) && prot == PROT_NONE))
+  /*
+   * Leave anonymous PROT_NONE and MAP_NORESERVE unpopulated. The first
+   * user access demand-zeros one page. MAP_NORESERVE does not charge
+   * commit, so a mapping larger than free RAM is allowed.
+   * Linux: mm/mmap.c do_mmap / accountable_mapping, MAP_NORESERVE.
+   */
+  if (!((flags & MAP_ANONYMOUS) &&
+	(prot == PROT_NONE || (flags & MAP_NORESERVE) != 0)))
   {
     if (map_user_region_in_directory(process_pgd(current_process), virt_addr, length, page_flags) != 0)
     {
@@ -972,7 +985,8 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
   if (!region)
   {
       /* Failed to allocate region entry - unmap pages */
-      if (!((flags & MAP_ANONYMOUS) && prot == PROT_NONE))
+      if (!((flags & MAP_ANONYMOUS) &&
+	    (prot == PROT_NONE || (flags & MAP_NORESERVE) != 0)))
       {
         for (uintptr_t page = virt_addr; page < virt_addr + length; page += PAGE_SIZE_4KB)
         {
@@ -1121,26 +1135,12 @@ int sys_mprotect(void *addr, size_t len, int prot)
     if (!pte || !pte_present(*pte))
     {
       /*
-       * Gaps only OK when covering a known mmap region (lazy anon). A
-       * PROT_NONE gap stays empty: the VMA already denies access.
+       * A known VMA with no page yet stays empty. PROT_NONE→RW only
+       * updates the VMA; the fault allocates the page that is touched.
+       * A hole with no VMA does not count as a mapping.
        */
-      if (!matched || prot == PROT_NONE)
-      {
-        saw_present |= matched != NULL;
-        continue;
-      }
-      phys = pmm_alloc_frame();
-      if (phys == 0)
-        return -ENOMEM;
-      /* Zero before mapping: @prot may leave the page read-only. */
-      paging_zero_phys_page(phys);
-      if (map_page_in_directory(root, page, phys, page_flags) != 0)
-      {
-        pmm_free_frame(phys);
-        return -ENOMEM;
-      }
-      tlb_invalidate_page((uintptr_t)page);
-      saw_present = 1;
+      if (matched)
+        saw_present = 1;
       continue;
     }
 

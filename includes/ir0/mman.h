@@ -21,3 +21,5 @@
 #define MAP_TYPE      0x0f
 #define MAP_FIXED     0x10
 #define MAP_ANONYMOUS 0x20
+/* Linux asm-generic/mman-common.h: do not charge commit for this mapping. */
+#define MAP_NORESERVE 0x4000
