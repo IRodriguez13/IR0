@@ -18,7 +18,6 @@
 #include <ir0/version.h>
 
 #include <stddef.h>
-#include <string.h>
 
 enum boot_log_level {
 	BOOT_LOG_INFO,
@@ -96,24 +95,24 @@ void ir0_boot_smoke(const char *tag)
 
 void ir0_boot_log_platform_hypervisor(void)
 {
-	char hv_vendor[16];
+	enum ir0_hv_kind kind;
 
-	if (hypervisor_present() &&
-	    hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
+	if (hypervisor_kind(&kind) < 0)
 	{
-		if (strncmp(hv_vendor, "TCGTCGTCGTCG", 12) == 0)
-			ir0_boot_info("HYPERVISOR",
-				      "detected vendor=TCG (QEMU TCG)");
-		else if (strncmp(hv_vendor, "KVMKVMKVM", 9) == 0)
-			ir0_boot_info("HYPERVISOR",
-				      "detected vendor=KVM");
-		else
-			ir0_boot_info("HYPERVISOR", hv_vendor);
+		ir0_boot_info("HYPERVISOR", "probe did not run");
+		return;
 	}
-	else
+	if (kind == IR0_HV_NONE)
 	{
 		ir0_boot_info("HYPERVISOR", "none detected");
 		ir0_boot_notice("PLATFORM",
 				"Bare-metal execution confirmed!");
+		return;
 	}
+	if (kind == IR0_HV_KVM)
+		ir0_boot_info("HYPERVISOR", "detected kind=kvm");
+	else if (kind == IR0_HV_XEN)
+		ir0_boot_info("HYPERVISOR", "detected kind=xen");
+	else
+		ir0_boot_info("HYPERVISOR", "detected kind=other");
 }

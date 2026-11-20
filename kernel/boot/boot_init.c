@@ -45,8 +45,6 @@
 #include <ir0/init_handoff.h>
 #include <ir0/vfs.h>
 #include <ir0/swap.h>
-#include <ir0/open_flags.h>
-#include <ir0/stat.h>
 #include <ir0/ipc.h>
 #include <kernel/syscalls/syscalls.h>
 #include <ir0/sched.h>
@@ -186,37 +184,6 @@ void boot_rootfs_init(void)
 	klog_set_boot_phase(KLOG_BOOT_ROOTFS);
 	vfs_init_root();
 	log_subsystem_ok("FILESYSTEM");
-
-	if (!hypervisor_present())
-	{
-		stat_t st;
-		struct vfs_file *f = NULL;
-
-		if (vfs_stat("/etc/ir0-baremetal-booted", &st) == 0)
-		{
-			klog_info("BOOT", "bare-metal milestone already recorded");
-			klog_smoke("FIRST_BAREMETAL_BOOT_SKIP");
-		}
-		else if (vfs_open("/etc/ir0-baremetal-booted",
-				  IR0_O_WRONLY | IR0_O_CREAT | IR0_O_TRUNC, 0644,
-				  &f) == 0)
-		{
-			static const char mark[] = "IR0 first bare-metal boot\n";
-
-			(void)vfs_write(f, mark, sizeof(mark) - 1);
-			(void)vfs_close(f);
-			klog_event(KLOG_EVENT_FIRST_BAREMETAL_BOOT, 0,
-				   KLOG_LEVEL_NOTICE, "BOOT",
-				   "first bare-metal boot recorded");
-			klog_smoke("FIRST_BAREMETAL_BOOT");
-		}
-		else
-		{
-			klog_warn("BOOT",
-				  "bare-metal milestone sentinel write failed");
-			klog_smoke("FIRST_BAREMETAL_BOOT_FAIL");
-		}
-	}
 
 	ir0_boot_port_maybe_seed_init_from_embedded();
 }
