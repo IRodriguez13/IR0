@@ -33,6 +33,7 @@
 #include <ir0/sock_icmp.h>
 #include <ir0/sock_inet_ioctl.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/input.h>
 #include <ir0/fd_get.h>
 #include <ir0/pipe_fd.h>
 #include <ir0/memfd.h>
@@ -174,6 +175,12 @@ int fd_can_read_for(process_t *proc, int fd)
   {
     if (devfs_is_ptmx_device(e->dev_device_id) && e->vfs_file)
       ready = devfs_pty_master_can_read(e->vfs_file);
+    else if (input_is_event_device(e->dev_device_id))
+    {
+      input_set_read_context(e->vfs_file, 0);
+      ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
+      input_set_read_context(NULL, 0);
+    }
     else
       ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
     goto out;

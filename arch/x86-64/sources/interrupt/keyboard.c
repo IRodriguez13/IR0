@@ -356,8 +356,8 @@ static void keyboard_feed_scancode(uint8_t scancode)
 	kc = extended ? ext_scancode_to_keycode[code] : scancode_to_keycode[code];
 	if (kc)
 	{
-		input_event_push(EV_KEY, kc, down);
-		input_event_push(EV_SYN, SYN_REPORT, 0);
+		input_event(input_i8042_dev(), EV_KEY, kc, down);
+		input_sync(input_i8042_dev());
 	}
 
 	/* Linux K_MEDIUMRAW: one byte, KEY_* code with bit 7 on release. */
@@ -442,6 +442,7 @@ static const struct input_keyboard_ops i8042_keyboard_ops = {
 
 void keyboard_init(void)
 {
+	(void)input_register_device(input_i8042_dev());
 	input_register_keyboard(&i8042_keyboard_ops);
 	keyboard_buffer_head = 0;
 	keyboard_buffer_tail = 0;

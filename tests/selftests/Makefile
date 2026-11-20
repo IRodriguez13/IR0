@@ -399,3 +399,21 @@ $(FPSIMD_BIN): $(FPSIMD_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 
 clean:
 	@rm -rf $(BUILD_DIR)
+
+# EVDEV-SELFTEST
+EVDEV_SRC := syscall/evdev.c
+EVDEV_BIN := $(BUILD_DIR)/evdev
+
+.PHONY: evdev
+
+evdev: $(EVDEV_BIN)
+
+$(EVDEV_BIN): $(EVDEV_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev"
+	@$(CC) $(CFLAGS) -I$(KERNEL_ROOT)/includes/uapi -o $@ $(EVDEV_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

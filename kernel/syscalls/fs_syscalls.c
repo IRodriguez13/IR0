@@ -8,6 +8,7 @@
  */
 
 #include "fs_syscalls_internal.h"
+#include <ir0/input.h>
 
 
 /*
@@ -252,6 +253,22 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
    */
   if (devfs_node_wants_text_snap(node->entry.device_id))
     fd_table[fd].vfs_file = devfs_text_snap_capture(node->entry.device_id);
+
+  /*
+   * Each open of an event node gets its own ring. A second reader must
+   * not consume events still queued for the first.
+   */
+  if (input_is_event_device(node->entry.device_id))
+  {
+    void *client = input_client_open();
+
+    if (!client)
+    {
+      fd_table[fd].in_use = false;
+      return -ENOMEM;
+    }
+    fd_table[fd].vfs_file = client;
+  }
 
   if (DEBUG_VFS)
   {

@@ -9,6 +9,7 @@
 
 #include "fs_syscalls_internal.h"
 #include "socket_syscalls.h"
+#include <ir0/input.h>
 
 static devfs_node_t *devfs_node_from_fd(int fd)
 {
@@ -451,15 +452,26 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	  int nb = (fd_table && fd >= 0 && fd < ir0_fd_span() &&
 		    fd_table[fd].in_use &&
 		    (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
+	  void *ev_client = NULL;
+
+	  if (fd_table && fd >= 0 && fd < ir0_fd_span() &&
+	      fd_table[fd].in_use &&
+	      input_is_event_device(fd_table[fd].dev_device_id))
+	    ev_client = fd_table[fd].vfs_file;
 
 	  for (;;)
 	  {
+	    input_set_read_context(ev_client, nb);
 	    devfs_set_read_nonblock(nb);
 	    ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
 	    devfs_set_read_nonblock(0);
 	    if (ret != 0 || nb || !node->ops->can_read ||
 	        node->ops->can_read(&node->entry, current_process->task.pid))
+	    {
+	      input_set_read_context(NULL, 0);
 	      break;
+	    }
+	    input_set_read_context(NULL, 0);
 	    if (signal_pending(current_process))
 	      return -ERESTARTSYS;
 	    {
