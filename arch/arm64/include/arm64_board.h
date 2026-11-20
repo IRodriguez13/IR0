@@ -46,7 +46,7 @@ enum arm64_uart_model
 	ARM64_UART_PL011,
 };
 
-/* Best-effort from firmware DTB (see boot_info FDT parse). */
+/* Xen is recorded from the FDT hypervisor node. KVM is not guessed here. */
 enum arm64_hypervisor_kind
 {
 	ARM64_HV_NONE = 0,
@@ -147,5 +147,5 @@ int arm64_board_prepare_memory(uintptr_t kernel_base, size_t kernel_size);
 /* Emit ARCH lines (and WARN if uart_mmio == 0). */
 void arm64_board_log_arch(void);
 
-/* Populated when FDT parsing sees hypervisor / guest compatible strings. */
+/* Vendor text left by the FDT parse. Empty unless a backend stored one. */
 int arm64_board_hypervisor_vendor(char *buf, size_t n);

@@ -32,6 +32,7 @@ struct arm64_fdt_device_node
 	int cpus;
 	int cpu;
 	int psci;
+	int hypervisor;
 	int pl011;
 	int pl031;
 	int genet;
@@ -44,60 +45,17 @@ struct arm64_fdt_device_node
 	uint32_t phy_addr;
 };
 
-static void set_hypervisor(struct arm64_board_boot_info *info,
-			   enum arm64_hypervisor_kind kind,
-			   const char *vendor)
+static void note_xen_hypervisor_node(struct arm64_board_boot_info *info,
+				     const struct arm64_fdt_device_node *node,
+				     const volatile uint8_t *value,
+				     uint32_t length)
 {
-	size_t i;
-
-	info->hypervisor_kind = kind;
-	if (vendor == NULL)
-	{
-		info->hypervisor_vendor[0] = '\0';
+	if (node == NULL || !node->hypervisor)
 		return;
-	}
-	for (i = 0U; i < sizeof(info->hypervisor_vendor) - 1U &&
-	     vendor[i] != '\0'; i++)
-	{
-		info->hypervisor_vendor[i] = vendor[i];
-	}
-	info->hypervisor_vendor[i] = '\0';
-}
-
-static void note_hypervisor_compatible(struct arm64_board_boot_info *info,
-				       const volatile uint8_t *value,
-				       uint32_t length)
-{
-	if (arm64_fdt_string_list_has(value, length, "linux,kvm") ||
-	    arm64_fdt_string_list_has(value, length, "arm,kvm"))
-	{
-		set_hypervisor(info, ARM64_HV_KVM, "KVMKVMKVM");
-	}
-	else if (arm64_fdt_string_list_has(value, length, "xen,xen") ||
-		 arm64_fdt_string_list_has(value, length, "arm,xen") ||
-		 arm64_fdt_string_list_has(value, length, "xen,arm"))
-	{
-		set_hypervisor(info, ARM64_HV_XEN, "XenVMMXenVMM");
-	}
-	else if (arm64_fdt_string_list_has(
-		     value, length, "microsoft,hyperv-genic") ||
-		 arm64_fdt_string_list_has(value, length,
-					   "microsoft,hyperv"))
-	{
-		set_hypervisor(info, ARM64_HV_HYPERV, "Microsoft Hv");
-	}
-	else if (arm64_fdt_string_list_has(value, length,
-					   "vmware,vmvisor") ||
-		 arm64_fdt_string_list_has(value, length, "vmware,GuestVM"))
-	{
-		set_hypervisor(info, ARM64_HV_VMWARE, "VMwareVMware");
-	}
-	else if ((arm64_fdt_string_list_has(value, length, "qemu,virt") ||
-		  arm64_fdt_string_list_has_prefix(value, length, "qemu,")) &&
-		 info->hypervisor_kind == ARM64_HV_NONE)
-	{
-		set_hypervisor(info, ARM64_HV_QEMU, "TCGTCGTCGTCG");
-	}
+	if (!arm64_fdt_string_list_has(value, length, "xen,xen"))
+		return;
+	info->hypervisor_kind = ARM64_HV_XEN;
+	info->hypervisor_vendor[0] = '\0';
 }
 
 static int translate_address(const struct arm64_fdt_device_node *nodes,
@@ -432,6 +390,13 @@ int arm64_boot_parse_devices(struct arm64_boot_parse_context *context,
 			node->psci = arm64_fdt_name_is(
 			    view.structure + name_start, offset - name_start,
 			    "psci");
+			node->hypervisor =
+			    arm64_fdt_name_is(view.structure + name_start,
+					      offset - name_start,
+					      "hypervisor") ||
+			    arm64_fdt_name_has_prefix(
+				view.structure + name_start,
+				offset - name_start, "hypervisor@");
 			node->pl011 = 0;
 			node->pl031 = 0;
 			node->genet = 0;
@@ -501,8 +466,8 @@ int arm64_boot_parse_devices(struct arm64_boot_parse_context *context,
 			else if (arm64_fdt_prop_name_is(
 				     &view, name_offset, "compatible"))
 			{
-				note_hypervisor_compatible(info, value,
-							   property_length);
+				note_xen_hypervisor_node(info, node, value,
+							 property_length);
 				if (arm64_fdt_string_list_has(
 					value, property_length, "arm,gic-v3"))
 				{
