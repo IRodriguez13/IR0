@@ -143,6 +143,23 @@ struct sigframe {
     void (*handler)(int);     /* Signal handler function */
     int signum;               /* Signal number */
     int __pad0;
+#ifdef IR0_SIGFRAME_CTX_IS_MCONTEXT
+    /*
+     * Pre-delivery signal_mask (Linux ucontext uc_sigmask role, compact).
+     * rt_sigreturn restores this; also used if userspace abandons the frame.
+     */
+    uint64_t oldmask;
+    siginfo_t info;           /* SA_SIGINFO second argument */
+    /*
+     * Linux ucontext_t header. ctx is the mcontext and follows this array
+     * with no gap, so the handler's ucontext and rt_sigreturn share one
+     * copy. A second sigcontext does not fit a SIGSTKSZ stack once a
+     * handler nests another signal.
+     */
+    unsigned char ucontext[IR0_UCONTEXT_MCONTEXT_OFF]
+	    __attribute__((aligned(16)));
+    struct sigcontext ctx;
+#else
     struct sigcontext ctx;    /* Saved CPU context */
     /*
      * Pre-delivery signal_mask (Linux ucontext uc_sigmask role, compact).
@@ -154,12 +171,23 @@ struct sigframe {
      * SA_SIGINFO third argument: Linux ucontext_t. rt_sigreturn resumes
      * from its mcontext, so the handler can edit the restored registers.
      * The stored size is rounded up so the whole frame stays 16-aligned.
+     * The ISA sigcontext above stays too: its layout is not the mcontext.
      */
     unsigned char ucontext[(IR0_UCONTEXT_BYTES + 15u) & ~15u];
+#endif
 };
 
 _Static_assert((sizeof(struct sigframe) % 16) == 0,
 	       "sigframe size must be 16-byte multiple for handler RSP ABI");
+#ifdef IR0_SIGFRAME_CTX_IS_MCONTEXT
+_Static_assert(offsetof(struct sigframe, ctx) ==
+		       offsetof(struct sigframe, ucontext) +
+			       IR0_UCONTEXT_MCONTEXT_OFF,
+	       "sigframe ctx must be the ucontext mcontext");
+_Static_assert(IR0_UCONTEXT_MCONTEXT_OFF + sizeof(struct sigcontext) ==
+		       IR0_UCONTEXT_BYTES,
+	       "ucontext must be the header plus one mcontext");
+#endif
 
 /**
  * send_signal - Send a signal to a process

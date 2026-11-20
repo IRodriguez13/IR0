@@ -36,6 +36,9 @@ struct sigcontext
 
 /* Linux aarch64 ucontext_t (sigmask before mcontext). */
 #define IR0_UCONTEXT_BYTES 4560u
+/* Byte offset of uc_mcontext. The sigframe stores that mcontext once, as ctx. */
+#define IR0_UCONTEXT_MCONTEXT_OFF 176u
+#define IR0_SIGFRAME_CTX_IS_MCONTEXT 1
 
 /* Header for records placed in sigcontext.__reserved (Linux uapi). */
 struct _aarch64_ctx
