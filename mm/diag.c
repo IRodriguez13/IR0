@@ -192,7 +192,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 			(unsigned long long)(info && info->present ? 1 : 0),
 			(unsigned long long)(info ? (unsigned long long)info->ip : 0ULL),
 			(unsigned long long)(info && info->user ? 1 : 0),
-			(unsigned long long)((uint64_t)(uintptr_t)p->signal_handlers[SIGSEGV]),
+			(unsigned long long)((uint64_t)(uintptr_t)p->sighand->handlers[SIGSEGV]),
 			(unsigned)(p->signal_mask),
 			(unsigned)(p->signal_ignored));
 	log_info_fmt("PF",

@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/process_domains.h>
 #include <ir0/task_ops.h>
 
 /*
@@ -214,18 +215,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	/* Initialize file descriptor table */
 	process_init_fd_table(proc);
 
-	/* Initialize signal handlers to default */
-	proc->signal_pending = 0;
-	proc->signal_mask = 0;
-	proc->signal_ignored = 0;
-	proc->restore_sigmask = 0;
-	for (int i = 0; i < _NSIG; i++)
-	{
-		proc->signal_handlers[i] = SIG_DFL;
-		proc->signal_sa_flags[i] = 0;
-		proc->signal_sa_mask[i] = 0;
-		proc->signal_restorer[i] = NULL;
-	}
+	if (process_signals_init(proc) != 0)
+		goto fail_proc;
 	proc->robust_list = NULL;
 
 	/* Private kernel stack for syscall/IRQ entry (see IR0_PROC_KSTACK_SIZE). */
@@ -253,6 +244,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	return proc->task.pid;
 
 fail_proc:
+	process_signals_drop(proc);
 	process_kernel_stack_free(proc);
 	if (process_stack_start(proc) && proc->mode == KERNEL_MODE)
 	{

@@ -113,10 +113,10 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	 */
 	saved_task = p->task;
 	saved_mode = p->mode;
-	saved_handler = p->signal_handlers[SIGSEGV];
-	saved_restorer = p->signal_restorer[SIGSEGV];
-	saved_sa_flags = p->signal_sa_flags[SIGSEGV];
-	saved_sa_mask = p->signal_sa_mask[SIGSEGV];
+	saved_handler = p->sighand->handlers[SIGSEGV];
+	saved_restorer = p->sighand->restorer[SIGSEGV];
+	saved_sa_flags = p->sighand->sa_flags[SIGSEGV];
+	saved_sa_mask = p->sighand->sa_mask[SIGSEGV];
 	saved_mask = p->signal_mask;
 	saved_ignored = p->signal_ignored;
 	saved_pending = p->signal_pending;
@@ -129,11 +129,11 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	frame = stub + 15;
 
 	p->mode = USER_MODE;
-	p->signal_handlers[SIGSEGV] = (void (*)(int))handler;
-	p->signal_sa_flags[SIGSEGV] = 0;
-	p->signal_sa_mask[SIGSEGV] = 0;
+	p->sighand->handlers[SIGSEGV] = (void (*)(int))handler;
+	p->sighand->sa_flags[SIGSEGV] = 0;
+	p->sighand->sa_mask[SIGSEGV] = 0;
 	/* x86-64 has no kernel trampoline: Linux needs SA_RESTORER. */
-	p->signal_restorer[SIGSEGV] = (void (*)(void))restorer;
+	p->sighand->restorer[SIGSEGV] = (void (*)(void))restorer;
 	p->signal_mask = 0;
 	p->signal_ignored = 0;
 	p->signal_pending = 0;
@@ -186,10 +186,10 @@ void ktest_signal_segv_deliver_irq_frame(void)
 
 	p->task = saved_task;
 	p->mode = saved_mode;
-	p->signal_handlers[SIGSEGV] = saved_handler;
-	p->signal_restorer[SIGSEGV] = saved_restorer;
-	p->signal_sa_flags[SIGSEGV] = saved_sa_flags;
-	p->signal_sa_mask[SIGSEGV] = saved_sa_mask;
+	p->sighand->handlers[SIGSEGV] = saved_handler;
+	p->sighand->restorer[SIGSEGV] = saved_restorer;
+	p->sighand->sa_flags[SIGSEGV] = saved_sa_flags;
+	p->sighand->sa_mask[SIGSEGV] = saved_sa_mask;
 	p->signal_mask = saved_mask;
 	p->signal_ignored = saved_ignored;
 	p->signal_pending = saved_pending;

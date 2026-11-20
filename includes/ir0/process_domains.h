@@ -29,10 +29,26 @@ struct process;
 int process_cred_clone(struct process *dst, const struct process *src);
 
 /*
- * Signal handlers/masks — value clone; pending cleared.
+ * Handler table for a new task.
+ * Linux clone(2): CLONE_SIGHAND shares the parent's table (refcount).
+ * Without the flag the child gets a copy. Pending signals, the blocked
+ * mask and the saved mask stay per-task either way.
  * May not sleep. Returns 0 or -errno.
  */
-int process_signals_clone(struct process *dst, const struct process *src);
+int process_signals_clone(struct process *dst, const struct process *src,
+			  unsigned long flags);
+
+/* Private table, refcount 1, every handler SIG_DFL. Returns 0 or -errno. */
+int process_signals_init(struct process *p);
+
+/* Drop this task's reference. The table is freed at zero. */
+void process_signals_drop(struct process *p);
+
+/*
+ * Linux execve does not keep a shared handler table. Copy when the
+ * refcount is greater than 1. Returns 0 or -errno.
+ */
+int process_signals_unshare(struct process *p);
 
 /*
  * Relationships (ppid/tgid/sid/pgid) + identity fields for a new child pid.
