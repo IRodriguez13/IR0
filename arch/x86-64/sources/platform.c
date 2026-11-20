@@ -260,26 +260,68 @@ uint32_t get_cpu_clflush_size(void)
     return ((ebx >> 8) & 0xFF) * 8;
 }
 
-int hypervisor_present(void)
+int hypervisor_kind(enum ir0_hv_kind *kind)
 {
 	static int cached;
-	static int present;
-	uint32_t eax, ebx, ecx, edx;
+	static int ran;
+	static enum ir0_hv_kind found;
+	uint32_t eax;
+	uint32_t ebx;
+	uint32_t ecx;
+	uint32_t edx;
+	char vendor[12];
 
+	if (!kind)
+		return -1;
 	if (cached)
-		return present;
+	{
+		if (!ran)
+			return -1;
+		*kind = found;
+		return 0;
+	}
 
 	cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
 	if (eax < 1)
 	{
-		present = 0;
+		ran = 0;
 		cached = 1;
-		return 0;
+		return -1;
 	}
 	cpuid_count(1, 0, &eax, &ebx, &ecx, &edx);
-	present = (ecx & (1u << 31)) ? 1 : 0;
+	if ((ecx & (1u << 31)) == 0)
+	{
+		found = IR0_HV_NONE;
+		ran = 1;
+		cached = 1;
+		*kind = found;
+		return 0;
+	}
+
+	/* Leaf 0x40000000 vendor is ebx, ecx, edx — 12 bytes, not a C string. */
+	cpuid_count(0x40000000U, 0, &eax, &ebx, &ecx, &edx);
+	memcpy(vendor + 0, &ebx, 4);
+	memcpy(vendor + 4, &ecx, 4);
+	memcpy(vendor + 8, &edx, 4);
+	if (memcmp(vendor, "KVMKVMKVM\0\0\0", 12) == 0)
+		found = IR0_HV_KVM;
+	else if (memcmp(vendor, "XenVMMXenVMM", 12) == 0)
+		found = IR0_HV_XEN;
+	else
+		found = IR0_HV_OTHER;
+	ran = 1;
 	cached = 1;
-	return present;
+	*kind = found;
+	return 0;
+}
+
+int hypervisor_present(void)
+{
+	enum ir0_hv_kind kind;
+
+	if (hypervisor_kind(&kind) < 0)
+		return 0;
+	return kind != IR0_HV_NONE;
 }
 
 int hypervisor_vendor(char *buf, size_t n)

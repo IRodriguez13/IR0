@@ -56,6 +56,8 @@ SIGRETURN_BAD_FRAME_SRC := kernel/sigreturn_bad_frame.c
 SIGRETURN_BAD_FRAME_BIN := $(BUILD_DIR)/sigreturn_bad_frame
 FPSIMD_SRC := kernel/fpsimd.c
 FPSIMD_BIN := $(BUILD_DIR)/fpsimd
+HV_KIND_SRC := kernel/hypervisor_kind.c
+HV_KIND_BIN := $(BUILD_DIR)/hypervisor_kind
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -90,7 +92,7 @@ endif
 .PHONY: all openat identity nofile vm_commit ucontext swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
 	sock_zero_len path_too_long blocking_sleep sleep_yields futex cow_mprotect setgroups_efault init_exit signal_restart sigreturn_bad_frame \
-	fpsimd clean
+	fpsimd hypervisor_kind clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
@@ -394,6 +396,18 @@ $(FPSIMD_BIN): $(FPSIMD_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest fpsimd"
 	@$(CC) $(CFLAGS) -o $@ $(FPSIMD_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+hypervisor_kind: $(HV_KIND_BIN)
+
+$(HV_KIND_BIN): $(HV_KIND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest hypervisor_kind"
+	@$(CC) $(CFLAGS) -o $@ $(HV_KIND_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
