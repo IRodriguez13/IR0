@@ -817,7 +817,7 @@ $(IR0_SELFTEST_ARM64_EVDEV): tests/selftests/syscall/evdev.c \
 	@$(MAKE) -C tests/selftests ARCH=arm64 evdev
 
 ir0-selftest-evdev-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV)
-	@flock -w 600 /tmp/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+	@flock -w 600 $${TMPDIR:-/tmp}/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_EVDEV) \
 		--done "ok 5 non_event_enotty" \
@@ -825,7 +825,7 @@ ir0-selftest-evdev-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV)
 	@echo "✓ ir0-selftest-evdev-x86"
 
 ir0-selftest-evdev-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV)
-	@flock -w 600 /tmp/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+	@flock -w 600 $${TMPDIR:-/tmp}/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_EVDEV) \
 		--done "ok 5 non_event_enotty" \
