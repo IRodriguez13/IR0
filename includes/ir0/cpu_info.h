@@ -24,7 +24,6 @@ int get_cpu_signature(uint32_t *family, uint32_t *model, uint32_t *stepping);
 int get_cpuid_max_leaf(uint32_t *max_leaf);
 int get_cpu_brand_string(char *buf, size_t size);
 int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx);
-int hypervisor_present(void);
 int hypervisor_vendor(char *buf, size_t n);
 
 enum ir0_hv_kind
@@ -40,6 +39,16 @@ enum ir0_hv_kind
  * Returns -1 when the probe did not run; that is not bare metal.
  */
 int hypervisor_kind(enum ir0_hv_kind *kind);
+
+/* True only after the probe ran and reported a hypervisor. */
+static inline int hypervisor_present(void)
+{
+	enum ir0_hv_kind kind;
+
+	if (hypervisor_kind(&kind) < 0)
+		return 0;
+	return kind != IR0_HV_NONE;
+}
 uint32_t get_cpu_clflush_size(void);
 
 void timer_init(void);
