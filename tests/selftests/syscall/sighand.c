@@ -33,9 +33,6 @@
 #ifndef CLONE_SIGHAND
 #define CLONE_SIGHAND 0x800UL
 #endif
-#ifndef EINVAL
-#define EINVAL 22
-#endif
 
 static void handler_keep(int sig)
 {
@@ -254,7 +251,11 @@ static int sighand_without_vm_is_einval(void)
 		(void)reap((int)pid, &status);
 		return 0;
 	}
+#ifdef IR0_SELFTEST_NOLIBC
+	return errno == 22;
+#else
 	return errno == EINVAL;
+#endif
 }
 
 int main(void)
