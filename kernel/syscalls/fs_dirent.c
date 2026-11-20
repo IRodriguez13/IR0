@@ -209,7 +209,7 @@ static const char *fs_fd_resolved_dir_path(int fd, char *buf, size_t bufsz)
   const char *path;
 
   fd_table = get_process_fd_table();
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() ||
       !fd_table[fd].in_use)
     return NULL;
 
@@ -340,7 +340,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
     return -EINVAL;
 
   fd_table = get_process_fd_table();
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() ||
       !fd_table[fd].in_use)
     return -EBADF;
 

@@ -192,7 +192,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 	}
 
 	fd_table = process_fd_table(proc);
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+	if (fd < 0 || fd >= process_fd_span(proc) || !fd_table[fd].in_use)
 		return SYSCALL_PTR_ERR(EBADF);
 	if (fd_table[fd].is_pipe || fd_table[fd].is_devfs)
 		return SYSCALL_PTR_ERR(ENODEV);
@@ -543,7 +543,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
      */
     {
       fd_entry_t *fd_table = get_process_fd_table();
-      bool fd_valid_open = (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+      bool fd_valid_open = (fd >= 0 && fd < ir0_fd_span() &&
                             fd_table && fd_table[fd].in_use);
 
       if (!fd_valid_open)
@@ -565,7 +565,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
       uint32_t device_id = UINT32_MAX;
       fd_entry_t *fd_table = get_process_fd_table();
 
-      if (fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+      if (fd >= 0 && fd < ir0_fd_span() &&
           fd_table && fd_table[fd].in_use && fd_table[fd].is_devfs)
       {
         device_id = fd_table[fd].dev_device_id;
@@ -710,7 +710,7 @@ void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t off
     {
       fd_entry_t *fd_table = get_process_fd_table();
 
-      if (fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table &&
+      if (fd >= 0 && fd < ir0_fd_span() && fd_table &&
 	  fd_table[fd].in_use && fd_table[fd].is_memfd && fd_table[fd].vfs_file)
       {
 	struct ir0_memfd *m = (struct ir0_memfd *)fd_table[fd].vfs_file;

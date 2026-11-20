@@ -171,7 +171,7 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
             return 0;
 
         n = 0;
-        for (i = 0; i < MAX_FDS_PER_PROCESS && n < max_entries; i++)
+        for (i = 0; i < snap.span && n < max_entries; i++)
         {
             char fd_name[16];
 
@@ -181,6 +181,7 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
                 continue;
             n = proc_readdir_add(entries, max_entries, n, fd_name, DT_LNK);
         }
+        proc_fd_snap_release(&snap);
         return n;
     }
 

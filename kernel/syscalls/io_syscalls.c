@@ -775,7 +775,7 @@ void io_async_notify_device(uint32_t device_id)
 
     if (!table || proc->state == PROCESS_ZOMBIE)
       continue;
-    for (fd = 0; fd < MAX_FDS_PER_PROCESS; fd++)
+    for (fd = 0; fd < process_fd_span(proc); fd++)
     {
       fd_entry_t *entry = fd_table_slot(table, fd);
 
@@ -1141,19 +1141,19 @@ int64_t sys_dup(int oldfd)
   if (!current_process)
     return -ESRCH;
 
-  if (oldfd < 0 || oldfd >= MAX_FDS_PER_PROCESS)
+  if (oldfd < 0 || oldfd >= ir0_fd_span())
     return -EBADF;
 
   fd_entry_t *fd_table = get_process_fd_table();
+  int neu;
+
   if (!fd_table || !fd_table[oldfd].in_use)
     return -EBADF;
 
-  for (int i = 0; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-      return sys_dup2(oldfd, i);
-  }
-  return -EMFILE;
+  neu = fd_alloc_lowest(0);
+  if (neu < 0)
+    return neu;
+  return sys_dup2(oldfd, neu);
 }
 
 fd_entry_t *get_process_fd_table(void)
@@ -1506,10 +1506,16 @@ int64_t sys_dup2(int oldfd, int newfd)
   if (!current_process)
     return -ESRCH;
 
-  if (oldfd < 0 || oldfd >= MAX_FDS_PER_PROCESS)
+  if (oldfd < 0 || oldfd >= ir0_fd_span())
     return -EBADF;
-  if (newfd < 0 || newfd >= MAX_FDS_PER_PROCESS)
+  if (newfd < 0)
     return -EBADF;
+  {
+    int ensured = files_ensure_fd(current_process, newfd);
+
+    if (ensured < 0)
+      return ensured == -ENOMEM ? (int64_t)ensured : (int64_t)-EBADF;
+  }
 
   if (oldfd == newfd)
     return newfd;
@@ -1644,32 +1650,30 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     int start = (int)arg;
     int i;
 
-    if (start < 0 || start >= MAX_FDS_PER_PROCESS)
+    if (start < 0 || start >= process_nofile_limit(current_process))
     {
       ret = -EINVAL;
       break;
     }
-    for (i = start; i < MAX_FDS_PER_PROCESS; i++)
+    /* Drop pin before dup2 (re-enters fd table). */
+    ir0_fd_put(&h);
+    i = fd_alloc_lowest(start);
+    if (i < 0)
     {
-      if (!fd_table[i].in_use)
-      {
-	/* Drop pin before dup2 (re-enters fd table). */
-	ir0_fd_put(&h);
-	ret = sys_dup2(fd, i);
-	if (ret < 0)
-	  return ret;
-	if (cmd == F_DUPFD_CLOEXEC)
-	{
-	  fd_table = get_process_fd_table();
-	  if (!fd_table)
-	    return -ESRCH;
-	  fd_table[i].fd_flags |= FD_CLOEXEC;
-	}
-	return ret;
-      }
+      ret = i;
+      return ret;
     }
-    ret = -EMFILE;
-    break;
+    ret = sys_dup2(fd, i);
+    if (ret < 0)
+      return ret;
+    if (cmd == F_DUPFD_CLOEXEC)
+    {
+      fd_table = get_process_fd_table();
+      if (!fd_table)
+        return -ESRCH;
+      fd_table[i].fd_flags |= FD_CLOEXEC;
+    }
+    return ret;
   }
   default:
     ret = -EINVAL;
@@ -1718,20 +1722,21 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
   if (!pipe)
     return -ENOMEM;
 
-  fd_table = get_process_fd_table();
-  read_fd = fd_alloc_lowest(fd_table, 3);
+  read_fd = fd_alloc_lowest(3);
   if (read_fd >= 0)
   {
     /* Reserve the read end before scanning so both ends differ. */
+    fd_table = get_process_fd_table();
     fd_table[read_fd].in_use = 1;
-    write_fd = fd_alloc_lowest(fd_table, read_fd + 1);
+    write_fd = fd_alloc_lowest(read_fd + 1);
+    fd_table = get_process_fd_table();
     fd_table[read_fd].in_use = 0;
   }
 
-  if (read_fd == -1 || write_fd == -1)
+  if (read_fd < 0 || write_fd < 0)
   {
     pipe_abort_unopened(pipe);
-    return -EMFILE;
+    return read_fd < 0 ? read_fd : write_fd;
   }
 
   fd_table[read_fd].in_use = true;

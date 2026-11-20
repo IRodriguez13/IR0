@@ -206,13 +206,8 @@ static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 	if (!sock || !current_process)
 		return -EINVAL;
 
-	fd_table = get_process_fd_table();
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!fd_table[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
 	{
 		if (is_stream)
 			sock_stream_release(sock);
@@ -220,8 +215,11 @@ static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 			sock_icmp_release(sock);
 		else
 			sock_udp_release(sock);
-		return -EMFILE;
+		return fd;
 	}
+	fd_table = get_process_fd_table();
+	if (!fd_table)
+		return -ESRCH;
 
 	memset(&fd_table[fd], 0, sizeof(fd_table[fd]));
 	fd_table[fd].in_use = true;
@@ -243,7 +241,7 @@ static int sock_fd_check(int fd)
 {
 	fd_entry_t *fd_table;
 
-	if (!current_process || fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (!current_process || fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use)
@@ -260,7 +258,7 @@ static struct sock_udp *sock_fd_lookup(int fd)
 
 	if (!current_process)
 		return NULL;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use || !fd_table[fd].is_socket)
@@ -280,7 +278,7 @@ static struct sock_icmp *sock_icmp_fd_lookup(int fd)
 
 	if (!current_process)
 		return NULL;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use || !fd_table[fd].is_socket)
@@ -298,7 +296,7 @@ static struct sock_stream *sock_stream_fd_lookup(int fd)
 
 	if (!current_process)
 		return NULL;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use || !fd_table[fd].is_socket)
@@ -1147,7 +1145,7 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 {
 	fd_entry_t *tab = get_process_fd_table();
 
-	if (!tab || srcfd < 0 || srcfd >= MAX_FDS_PER_PROCESS || !tab[srcfd].in_use)
+	if (!tab || srcfd < 0 || srcfd >= ir0_fd_span() || !tab[srcfd].in_use)
 		return -EBADF;
 	*dst = tab[srcfd];
 	dst->fd_flags = 0;
@@ -1195,15 +1193,14 @@ static int scm_install_fd_entry(const fd_entry_t *src)
 	fd_entry_t *tab = get_process_fd_table();
 	int fd;
 
-	if (!tab || !src)
+	if (!src)
 		return -EINVAL;
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!tab[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
-		return -EMFILE;
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
+		return fd;
+	tab = get_process_fd_table();
+	if (!tab)
+		return -ESRCH;
 	tab[fd] = *src;
 	tab[fd].in_use = true;
 	fd_slot_note_created(&tab[fd]);

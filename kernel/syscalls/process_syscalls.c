@@ -965,7 +965,7 @@ int64_t sys_execveat(int dirfd, const char *pathname, char *const argv[],
   }
   if (!(flags & IR0_AT_EMPTY_PATH))
     return -ENOENT;
-  if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+  if (dirfd < 0 || dirfd >= ir0_fd_span())
     return -EBADF;
   fd_table = get_process_fd_table();
   if (!fd_table || !fd_table[dirfd].in_use ||
@@ -1227,6 +1227,10 @@ int64_t sys_prlimit64(pid_t pid, unsigned int resource, const void *new_limit,
       return -EFAULT;
     if (lim[0] > lim[1])
       return -EINVAL;
+    /* Same ceiling as Linux sysctl_nr_open: nobody may exceed it. */
+    if (resource == IR0_RLIMIT_NOFILE &&
+	lim[1] > (uint64_t)IR0_NOFILE_CEILING)
+      return -EPERM;
     if (lim[1] > target->rlimits[resource].rlim_max &&
 	!ir0_cred_is_root())
       return -EPERM;

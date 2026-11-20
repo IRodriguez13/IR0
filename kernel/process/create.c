@@ -44,9 +44,9 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->rlimits[ri].rlim_cur = (uint64_t)-1;
 		proc->rlimits[ri].rlim_max = (uint64_t)-1;
 	}
-	/* Soft NOFILE matches MAX_FDS_PER_PROCESS. */
-	proc->rlimits[7].rlim_cur = MAX_FDS_PER_PROCESS; /* RLIMIT_NOFILE */
-	proc->rlimits[7].rlim_max = MAX_FDS_PER_PROCESS;
+	/* Soft NOFILE is Linux INR_OPEN; the table grows up to the hard cap. */
+	proc->rlimits[IR0_RLIMIT_NOFILE].rlim_cur = IR0_NOFILE_SOFT_DEFAULT;
+	proc->rlimits[IR0_RLIMIT_NOFILE].rlim_max = IR0_NOFILE_CEILING;
 	/* RLIMIT_STACK soft 8 MiB (Linux-like default). */
 	proc->rlimits[3].rlim_cur = 8ULL * 1024ULL * 1024ULL;
 	proc->rlimits[3].rlim_max = (uint64_t)-1;

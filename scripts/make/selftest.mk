@@ -7,12 +7,15 @@ IR0_SELFTEST_X86_OPENAT := $(KERNEL_ROOT)/build/selftests/x86_64/openat
 IR0_SELFTEST_ARM64_OPENAT := $(KERNEL_ROOT)/build/selftests/arm64/openat
 IR0_SELFTEST_X86_IDENTITY := $(KERNEL_ROOT)/build/selftests/x86_64/identity
 IR0_SELFTEST_ARM64_IDENTITY := $(KERNEL_ROOT)/build/selftests/arm64/identity
+IR0_SELFTEST_X86_NOFILE := $(KERNEL_ROOT)/build/selftests/x86_64/nofile
+IR0_SELFTEST_ARM64_NOFILE := $(KERNEL_ROOT)/build/selftests/arm64/nofile
 IR0_SELFTEST_X86_FAULT := $(KERNEL_ROOT)/build/selftests/x86_64/fault
 IR0_SELFTEST_ARM64_FAULT := $(KERNEL_ROOT)/build/selftests/arm64/fault
 IR0_SELFTEST_TAP_TEST := $(KERNEL_ROOT)/tests/host/test_selftest_tap.py
 
 .PHONY: ir0-selftest-x86 ir0-selftest-arm64 ir0-selftest-openat \
 	ir0-selftest-identity-x86 ir0-selftest-identity-arm64 ir0-selftest-identity \
+	ir0-selftest-nofile-x86 ir0-selftest-nofile-arm64 ir0-selftest-nofile \
 	ir0-selftest-fault-x86 ir0-selftest-fault-arm64 ir0-selftest-fault
 
 $(IR0_SELFTEST_X86_OPENAT): tests/selftests/syscall/openat.c tests/selftests/ir0/ksft.h
@@ -58,6 +61,30 @@ ir0-selftest-identity-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_IDENT
 
 ir0-selftest-openat: ir0-selftest-x86 ir0-selftest-arm64
 ir0-selftest-identity: ir0-selftest-identity-x86 ir0-selftest-identity-arm64
+
+$(IR0_SELFTEST_X86_NOFILE): tests/selftests/syscall/nofile.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 nofile
+
+$(IR0_SELFTEST_ARM64_NOFILE): tests/selftests/syscall/nofile.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 nofile
+
+ir0-selftest-nofile-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_NOFILE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_NOFILE) \
+		--done "ok 3 emfile_at_soft" \
+		--log $(HOST_TMP)/ir0-selftest-x86-nofile.log
+	@echo "✓ ir0-selftest-nofile-x86"
+
+ir0-selftest-nofile-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_NOFILE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_NOFILE) \
+		--done "ok 3 emfile_at_soft" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-nofile.log
+	@echo "✓ ir0-selftest-nofile-arm64"
+
+ir0-selftest-nofile: ir0-selftest-nofile-x86 ir0-selftest-nofile-arm64
 
 $(IR0_SELFTEST_X86_FAULT): tests/selftests/mm/fault.c tests/selftests/ir0/ksft.h
 	@$(MAKE) -C tests/selftests ARCH=x86_64 fault

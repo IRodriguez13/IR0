@@ -14,7 +14,7 @@ static devfs_node_t *devfs_node_from_fd(int fd)
 {
   fd_entry_t *fd_table = get_process_fd_table();
 
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() || !fd_table[fd].in_use)
     return NULL;
   if (!fd_table[fd].is_devfs)
     return NULL;
@@ -30,7 +30,7 @@ static devfs_node_t *devfs_resolve_read_fd(int fd, off_t *offset_out)
 {
   fd_entry_t *fd_table = get_process_fd_table();
 
-  if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use &&
+  if (fd_table && fd >= 0 && fd < ir0_fd_span() && fd_table[fd].in_use &&
       fd_table[fd].is_devfs)
   {
     ensure_devfs_init();
@@ -47,7 +47,7 @@ static int fd_is_unix_dgram(int fd)
 {
   fd_entry_t *fdt;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return 0;
   fdt = get_process_fd_table();
   return fdt && fdt[fd].in_use && fdt[fd].is_socket &&
@@ -72,7 +72,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
   const char *str = NULL;
   size_t copy_size = (count < sizeof(kernel_buf)) ? count : sizeof(kernel_buf);
 
-  if (fd >= 0 && fd < MAX_FDS_PER_PROCESS)
+  if (fd >= 0 && fd < ir0_fd_span())
   {
     fd_entry_t *fdt = get_process_fd_table();
 
@@ -97,7 +97,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
         return -EBADF;
       if (copy_from_user(kernel_buf, buf, copy_size) != 0)
         return -EFAULT;
-      if (fdt && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+      if (fdt && fd >= 0 && fd < ir0_fd_span() &&
           fdt[fd].in_use &&
           devfs_is_ptmx_device(fdt[fd].dev_device_id))
         return devfs_pty_master_write(fdt[fd].vfs_file, kernel_buf,
@@ -155,7 +155,7 @@ int64_t sys_write(int fd, const void *buf, size_t count)
     }
     return -EBADF;
   }
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() || !fd_table[fd].in_use)
     return -EBADF;
 
   if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
@@ -369,7 +369,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
     return -EFAULT;
 
   /* Process-local pseudo_fs binds (/proc|/sys|/heart) — real fd_table slots. */
-  if (fd >= 0 && fd < MAX_FDS_PER_PROCESS)
+  if (fd >= 0 && fd < ir0_fd_span())
   {
     fd_entry_t *fdt = get_process_fd_table();
 
@@ -412,7 +412,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
       size_t read_size = (count < sizeof(kernel_read_buf)) ? count : sizeof(kernel_read_buf);
       int ret;
 
-      if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+      if (fd_table && fd >= 0 && fd < ir0_fd_span() &&
 	  fd_table[fd].in_use &&
 	  devfs_is_ptmx_device(fd_table[fd].dev_device_id))
       {
@@ -435,7 +435,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	  }
 	}
       }
-      else if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+      else if (fd_table && fd >= 0 && fd < ir0_fd_span() &&
 	  fd_table[fd].in_use && fd_table[fd].vfs_file &&
 	  devfs_node_wants_text_snap(fd_table[fd].dev_device_id))
       {
@@ -448,7 +448,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	if (!node->ops || !node->ops->read)
 	  return -EBADF;
 	{
-	  int nb = (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+	  int nb = (fd_table && fd >= 0 && fd < ir0_fd_span() &&
 		    fd_table[fd].in_use &&
 		    (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
 
@@ -475,7 +475,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
       {
         if (copy_to_user(buf, kernel_read_buf, (size_t)ret) != 0)
           return -EFAULT;
-        if (fd_table && fd >= 0 && fd < MAX_FDS_PER_PROCESS && fd_table[fd].in_use)
+        if (fd_table && fd >= 0 && fd < ir0_fd_span() && fd_table[fd].in_use)
           fd_table[fd].offset += ret;
         if (fd == STDIN_FILENO)
         {
@@ -504,7 +504,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
       return ret;
     }
   }
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS || !fd_table[fd].in_use)
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() || !fd_table[fd].in_use)
     return -EBADF;
 
   if (fd_table[fd].is_eventfd && fd_table[fd].vfs_file)
@@ -688,7 +688,7 @@ int64_t sys_readv(int fd, const struct iovec *iov, int iovcnt)
     {
       fd_entry_t *table = get_process_fd_table();
 
-      if (table && fd >= 0 && fd < MAX_FDS_PER_PROCESS &&
+      if (table && fd >= 0 && fd < ir0_fd_span() &&
           table[fd].in_use && table[fd].is_socket &&
           !fd_can_read_for(current_process, fd))
         break;

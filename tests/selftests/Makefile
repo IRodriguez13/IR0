@@ -10,6 +10,8 @@ OPENAT_SRC := syscall/openat.c
 OPENAT_BIN := $(BUILD_DIR)/openat
 IDENTITY_SRC := syscall/identity.c
 IDENTITY_BIN := $(BUILD_DIR)/identity
+NOFILE_SRC := syscall/nofile.c
+NOFILE_BIN := $(BUILD_DIR)/nofile
 FAULT_SRC := mm/fault.c
 FAULT_BIN := $(BUILD_DIR)/fault
 PANIC_NESTED_SRC := kernel/panic_nested.c
@@ -81,7 +83,7 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 	-nostdlib -L$(X86_MUSL_LIB) -lc $(X86_MUSL_LIB)/crtn.o
 endif
 
-.PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
+.PHONY: all openat identity nofile swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
 	sock_zero_len path_too_long blocking_sleep sleep_yields futex cow_mprotect setgroups_efault init_exit signal_restart sigreturn_bad_frame \
 	fpsimd clean
@@ -107,6 +109,17 @@ $(OPENAT_BIN): $(OPENAT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@test -x $@
 
 identity: $(IDENTITY_BIN)
+nofile: $(NOFILE_BIN)
+
+$(NOFILE_BIN): $(NOFILE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest nofile"
+	@$(CC) $(CFLAGS) -o $@ $(NOFILE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
 
 $(IDENTITY_BIN): $(IDENTITY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@if [ -z "$(CC)" ]; then \

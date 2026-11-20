@@ -60,11 +60,13 @@
 
 typedef struct proc_fd_snap
 {
-	fd_entry_t table[MAX_FDS_PER_PROCESS];
+	fd_entry_t *table;
+	int span;
 	int valid;
 } proc_fd_snap_t;
 
 int proc_fd_snap_acquire(pid_t pid, proc_fd_snap_t *snap);
+void proc_fd_snap_release(proc_fd_snap_t *snap);
 const char *proc_parse_path(const char *path, pid_t *pid_out);
 void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 

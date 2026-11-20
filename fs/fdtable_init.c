@@ -25,7 +25,7 @@ void process_init_fd_table(process_t *process)
 			return;
 	}
 	table = process->files->fd_table;
-	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+	for (i = 0; i < process_fd_span(process); i++)
 		memset(&table[i], 0, sizeof(table[i]));
 	table[0].in_use = true;
 	strncpy(table[0].path, "/dev/stdin", sizeof(table[0].path) - 1);

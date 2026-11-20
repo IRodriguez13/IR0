@@ -877,13 +877,33 @@ int proc_fd_snap_acquire(pid_t pid, proc_fd_snap_t *snap)
 			proc = proc->next;
 	}
 
-	if (proc && proc->files && files_struct_live(proc->files))
+	if (proc && proc->files && files_struct_live(proc->files) &&
+	    proc->files->fd_table && proc->files->max_fds > 0)
 	{
-		memcpy(snap->table, proc->files->fd_table, sizeof(snap->table));
-		snap->valid = 1;
+		int span = proc->files->max_fds;
+		fd_entry_t *copy = kmalloc(sizeof(*copy) * (size_t)span);
+
+		if (copy)
+		{
+			memcpy(copy, proc->files->fd_table,
+			       sizeof(*copy) * (size_t)span);
+			snap->table = copy;
+			snap->span = span;
+			snap->valid = 1;
+		}
 	}
 	irq_restore(irqf);
 	return snap->valid;
+}
+
+void proc_fd_snap_release(proc_fd_snap_t *snap)
+{
+	if (!snap || !snap->table)
+		return;
+	kfree(snap->table);
+	snap->table = NULL;
+	snap->span = 0;
+	snap->valid = 0;
 }
 
 static int proc_parse_pid_fd_link(const char *path, pid_t *pid_out, int *fd_out)
@@ -904,7 +924,7 @@ static int proc_parse_pid_fd_link(const char *path, pid_t *pid_out, int *fd_out)
 		return -ENOENT;
 
 	fd = atoi(fd_slash + 4);
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= IR0_NOFILE_CEILING)
 		return -EINVAL;
 
 	*fd_out = fd;
@@ -948,11 +968,15 @@ int proc_pid_fd_link_target_read(char *buf, size_t count, pid_t pid, int fd_num)
 	if (!proc_fd_snap_acquire(pid, &snap))
 		return -ENOENT;
 
-	if (fd_num < 0 || fd_num >= MAX_FDS_PER_PROCESS ||
+	if (fd_num < 0 || fd_num >= snap.span ||
 	    !snap.table[fd_num].in_use)
+	{
+		proc_fd_snap_release(&snap);
 		return -ENOENT;
+	}
 
 	len = proc_fd_entry_target(&snap.table[fd_num], buf, count);
+	proc_fd_snap_release(&snap);
 	if (len < 0)
 		return len;
 	if ((size_t)len >= count)

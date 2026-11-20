@@ -127,7 +127,7 @@ static int64_t fs_fstat_kernel(int fd, stat_t *kst_out)
   if (fd < 0)
     return -EBADF;
 
-  if (fd < MAX_FDS_PER_PROCESS)
+  if (fd < ir0_fd_span())
   {
     fd_entry_t *fdt = get_process_fd_table();
 
@@ -140,7 +140,7 @@ static int64_t fs_fstat_kernel(int fd, stat_t *kst_out)
     }
   }
 
-  if (fd >= MAX_FDS_PER_PROCESS)
+  if (fd >= ir0_fd_span())
     return -EBADF;
 
   fd_entry_t *fd_table = get_process_fd_table();
@@ -525,7 +525,7 @@ int64_t sys_fchmod(int fd, mode_t mode)
 
   if (!current_process)
     return -ESRCH;
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -554,7 +554,7 @@ int64_t sys_fchown(int fd, uid_t owner, gid_t group)
 
   if (!current_process)
     return -ESRCH;
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -620,7 +620,7 @@ int64_t sys_flock(int fd, int operation)
   if (!current_process)
     return -ESRCH;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -641,7 +641,7 @@ int64_t sys_fchdir(int fd)
   if (!current_process)
     return -ESRCH;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();

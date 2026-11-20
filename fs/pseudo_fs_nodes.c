@@ -522,7 +522,7 @@ static int proc_pid_file_parse_fd_link(const char *path, pid_t *pid_out, int *fd
         return -ENOENT;
 
     fd = atoi(fd_slash + 4);
-    if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+    if (fd < 0 || fd >= ir0_fd_span())
         return -EINVAL;
 
     *fd_out = fd;

@@ -23,7 +23,7 @@
 /*
  * FD routing policy (C1-A / ir0-userspace-monolith-debt):
  * - Syscall open of /proc|/sys|/heart installs a process fd_table slot via
- *   pseudo_fs_acquire_path + pseudo_bind_file_fd (real index < MAX_FDS_PER_PROCESS).
+ *   pseudo_fs_acquire_path + pseudo_bind_file_fd (real index < ir0_fd_span()).
  * - PSEUDO_FS_*_FD_BASE values are LEGACY compat for host unit tests and
  *   pseudo_fs_open_path / find_by_fd only. Do NOT add new global bases.
  * - New mounts must use acquire + process fd_table, never a new FD_*_BASE.

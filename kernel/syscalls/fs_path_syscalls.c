@@ -295,7 +295,7 @@ int64_t sys_fsync(int fd)
 
   if (!current_process)
     return -ESRCH;
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -738,7 +738,7 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
   {
     fd_entry_t *slot;
 
-    if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+    if (dirfd < 0 || dirfd >= ir0_fd_span())
       return -EBADF;
     slot = process_fd_table(current_process);
     if (!slot)
@@ -806,7 +806,7 @@ int64_t sys_ftruncate(int fd, off_t length)
   if (length < 0)
     return -EINVAL;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -875,7 +875,7 @@ int64_t sys_fstatfs(int fd, void *buf)
 
 	if (!current_process || !buf)
 		return -EFAULT;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 
 	fd_table = get_process_fd_table();

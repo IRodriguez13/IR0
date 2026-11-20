@@ -53,7 +53,7 @@ static int fs_dirfd_base_path(int dirfd, char *base, size_t base_sz)
   }
 
   fdt = get_process_fd_table();
-  if (!fdt || dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS || !fdt[dirfd].in_use)
+  if (!fdt || dirfd < 0 || dirfd >= ir0_fd_span() || !fdt[dirfd].in_use)
     return -EBADF;
   if (fdt[dirfd].path[0] != '/')
     return -EBADF;
@@ -172,9 +172,12 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
   if (!fd_table)
     return -ESRCH;
 
-  fd = fd_alloc_lowest(fd_table, 0);
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
-    return -EMFILE;
+    return fd;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
 
   fd_table[fd].in_use = true;
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
@@ -205,23 +208,18 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
 
 static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flags)
 {
-  fd_entry_t *fd_table = get_process_fd_table();
-  int fd = -1;
-  int i;
+  fd_entry_t *fd_table;
+  int fd;
 
-  if (!fd_table || !node || !path)
+  if (!node || !path)
     return -EINVAL;
 
-  for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-    {
-      fd = i;
-      break;
-    }
-  }
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
-    return -EMFILE;
+    return fd;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
 
   memset(&fd_table[fd], 0, sizeof(fd_table[fd]));
   fd_table[fd].in_use = true;
@@ -436,14 +434,12 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     }
   }
 
+  fd = fd_alloc_lowest(0);
+  if (fd < 0)
+    return fd;
   fd_table = get_process_fd_table();
-  fd = -1;
-  fd = fd_alloc_lowest(fd_table, 0);
-
-  if (fd == -1)
-  {
-    return -EMFILE;
-  }
+  if (!fd_table)
+    return -ESRCH;
 
   vfs_file = NULL;
   ret = vfs_open(path_to_use, flags, mode, &vfs_file);
@@ -512,18 +508,12 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   if (access_rc != 0)
     return access_rc;
 
-  fd_table = get_process_fd_table();
-  fd = -1;
-  for (int i = 0; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-    {
-      fd = i;
-      break;
-    }
-  }
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
-    return -EMFILE;
+    return fd;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
 
   fd_table[fd].in_use = true;
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
@@ -568,13 +558,17 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
   if (rc != 0)
     return rc;
 
-  fd_table = get_process_fd_table();
-  fd = -1;
-  fd = fd_alloc_lowest(fd_table, 0);
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
   {
     (void)pseudo_fs_release_ops(ops, ctx, dynamic);
-    return -EMFILE;
+    return fd;
+  }
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+  {
+    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
+    return -ESRCH;
   }
 
   bind = (pseudo_fd_bind_t *)kmalloc(sizeof(*bind));
@@ -808,7 +802,7 @@ int fs_resolve_at_empty(int dirfd, char *resolved, size_t resolved_sz)
                                current_process->cwd, current_process->root);
   }
 
-  if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+  if (dirfd < 0 || dirfd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();

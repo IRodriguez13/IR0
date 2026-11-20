@@ -65,7 +65,7 @@ void process_exec_close_cloexec(process_t *p)
 	if (!table)
 		return;
 
-	for (i = 3; i < MAX_FDS_PER_PROCESS; i++)
+	for (i = 3; i < process_fd_span(p); i++)
 	{
 		fd_entry_t *e = &table[i];
 

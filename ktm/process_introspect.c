@@ -39,7 +39,7 @@ int ir0_proc_snapshot_collect(ir0_proc_snapshot_t *out)
 		fdt = process_fd_table(p);
 		if (!fdt)
 			continue;
-		for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+		for (i = 0; i < process_fd_span(p); i++)
 		{
 			if (!fdt[i].in_use)
 				continue;

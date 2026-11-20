@@ -86,7 +86,7 @@ static struct epoll_state *epoll_from_fd(int epfd)
 {
 	fd_entry_t *tab;
 
-	if (!current_process || epfd < 0 || epfd >= MAX_FDS_PER_PROCESS)
+	if (!current_process || epfd < 0 || epfd >= ir0_fd_span())
 		return NULL;
 	tab = process_fd_table(current_process);
 	if (!tab || !tab[epfd].in_use || !tab[epfd].is_epoll || !tab[epfd].vfs_file)
@@ -216,13 +216,12 @@ int64_t sys_epoll_create1(int flags)
 	tab = process_fd_table(current_process);
 	if (!tab)
 		return -ESRCH;
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!tab[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
-		return -EMFILE;
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
+		return fd;
+	tab = process_fd_table(current_process);
+	if (!tab)
+		return -ESRCH;
 
 	memset(&g_epoll[slot], 0, sizeof(g_epoll[slot]));
 	g_epoll[slot].in_use = 1;
@@ -246,7 +245,7 @@ int64_t sys_epoll_create1(int flags)
 	ep = epoll_from_fd(epfd);
 	if (!ep)
 		return -EBADF;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 	tab = process_fd_table(current_process);
 	if (!tab || !tab[fd].in_use)

@@ -190,6 +190,7 @@ typedef struct process
 
 	/* Resource limits (Linux rlimit indices 0..15). */
 #define IR0_RLIM_NLIMITS 16
+#define IR0_RLIMIT_NOFILE 7
 	struct
 	{
 		uint64_t rlim_cur;
@@ -335,6 +336,32 @@ static inline fd_entry_t *process_fd_table(const process_t *p)
 	if (!p || !files_struct_live(p->files))
 		return NULL;
 	return p->files->fd_table;
+}
+
+static inline int process_fd_span(const process_t *p)
+{
+	int n;
+
+	if (!p || !files_struct_live(p->files))
+		return 0;
+	n = p->files->max_fds;
+	if (n <= 0)
+		return 0;
+	if (n > IR0_NOFILE_CEILING)
+		return IR0_NOFILE_CEILING;
+	return n;
+}
+
+static inline int process_nofile_limit(const process_t *p)
+{
+	uint64_t cur;
+
+	if (!p)
+		return 0;
+	cur = p->rlimits[IR0_RLIMIT_NOFILE].rlim_cur;
+	if (cur > (uint64_t)IR0_NOFILE_CEILING)
+		return IR0_NOFILE_CEILING;
+	return (int)cur;
 }
 
 static inline process_t *task_to_process(task_t *task)
