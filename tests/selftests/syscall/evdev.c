@@ -13,7 +13,6 @@
 #endif
 
 #include "ir0/ksft.h"
-#include <linux/input-event-codes.h>
 
 #ifndef IR0_SELFTEST_NOLIBC
 #include <errno.h>
@@ -23,6 +22,48 @@
 #include <sys/time.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <linux/input-event-codes.h>
+#else
+#include <stdint.h>
+#define EAGAIN 11
+#define ENOTTY 25
+#define EV_REL 0x02
+#define REL_X 0x00
+
+struct timeval
+{
+	long tv_sec;
+	long tv_usec;
+};
+
+static void *memset(void *s, int c, unsigned long n)
+{
+	unsigned char *p = s;
+
+	while (n--)
+		*p++ = (unsigned char)c;
+	return s;
+}
+
+static int memcmp(const void *a, const void *b, unsigned long n)
+{
+	const unsigned char *x = a;
+	const unsigned char *y = b;
+
+	while (n--)
+	{
+		if (*x != *y)
+			return *x - *y;
+		x++;
+		y++;
+	}
+	return 0;
+}
+
+static int ioctl(int fd, unsigned long req, void *arg)
+{
+	return (int)syscall(29, fd, (long)req, (long)arg, 0);
+}
 #endif
 
 /* Linux uapi/linux/input.h — not in input-event-codes.h. */
