@@ -798,3 +798,33 @@ ir0-selftest-$(1)-abi: ir0-selftest-$(1)-abi-x86 ir0-selftest-$(1)-abi-arm64
 endef
 
 $(foreach g,$(IR0_ABI_SELFTESTS),$(eval $(call ir0_abi_selftest,$(g))))
+
+# ACCEPT4-SELFTEST
+IR0_SELFTEST_X86_ACCEPT4 := $(KERNEL_ROOT)/build/selftests/x86_64/accept4
+IR0_SELFTEST_ARM64_ACCEPT4 := $(KERNEL_ROOT)/build/selftests/arm64/accept4
+
+.PHONY: ir0-selftest-accept4-x86 ir0-selftest-accept4-arm64 ir0-selftest-accept4
+
+$(IR0_SELFTEST_X86_ACCEPT4): tests/selftests/syscall/accept4.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 accept4
+
+$(IR0_SELFTEST_ARM64_ACCEPT4): tests/selftests/syscall/accept4.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 accept4
+
+ir0-selftest-accept4-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_ACCEPT4)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_ACCEPT4) \
+		--done "ok 1 accept4_peer_addr" \
+		--log $(HOST_TMP)/ir0-selftest-x86-accept4.log
+	@echo "✓ ir0-selftest-accept4-x86"
+
+ir0-selftest-accept4-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ACCEPT4)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_ACCEPT4) \
+		--done "ok 1 accept4_peer_addr" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-accept4.log
+	@echo "✓ ir0-selftest-accept4-arm64"
+
+ir0-selftest-accept4: ir0-selftest-accept4-x86 ir0-selftest-accept4-arm64
