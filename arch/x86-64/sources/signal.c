@@ -177,7 +177,7 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	fpu_signal_enter();
 }
 
-/* musl x86-64 ucontext_t. gregs follow the Linux sigcontext register order. */
+/* Linux x86-64 ucontext_t. gregs follow the sigcontext register order. */
 struct ir0_x86_ucontext
 {
 	unsigned long uc_flags;
@@ -198,7 +198,7 @@ _Static_assert(sizeof(struct ir0_x86_ucontext) == IR0_UCONTEXT_BYTES,
 _Static_assert(offsetof(struct ir0_x86_ucontext, gregs) + 16 * sizeof(unsigned long) == 168,
 	       "x86-64 ucontext RIP offset");
 
-void arch_ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
+void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
 			  uint64_t mask, void *image)
 {
 	struct ir0_x86_ucontext *uc = image;
@@ -230,7 +230,7 @@ void arch_ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
 	uc->sigmask[0] = mask;
 }
 
-void arch_ucontext_import(const void *image, uint64_t user_va,
+void ucontext_import(const void *image, uint64_t user_va,
 			  struct sigcontext *ctx)
 {
 	const struct ir0_x86_ucontext *uc = image;

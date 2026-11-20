@@ -391,7 +391,7 @@ int64_t sys_sigreturn(void)
 		return -EFAULT;
 	}
 	restored = user_frame.ctx;
-	arch_ucontext_import(user_frame.ucontext,
+	ucontext_import(user_frame.ucontext,
 			     user_sp + offsetof(struct sigframe, ucontext),
 			     &restored);
 	if (!signal_sigcontext_validate_and_sanitize(restore_ctx))

@@ -29,14 +29,14 @@ uint64_t sigcontext_sp(const struct sigcontext *ctx);
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx);
 
 /*
- * Linux ucontext_t image (musl layout for this ISA). @user_va is the
- * address the handler receives; the FP pointer inside the image uses it.
- * import overlays the edited mcontext onto @ctx.
+ * Linux ucontext_t for this ISA. @user_va is the address the handler
+ * receives; the FP pointer inside the image uses it. import overlays
+ * the edited mcontext onto @ctx.
  */
-void arch_ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
-			  uint64_t mask, void *image);
-void arch_ucontext_import(const void *image, uint64_t user_va,
-			  struct sigcontext *ctx);
+void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
+		     uint64_t mask, void *image);
+void ucontext_import(const void *image, uint64_t user_va,
+		     struct sigcontext *ctx);
 
 /*
  * Fill @ctx from a captured syscall frame (syscall insn while blocked).

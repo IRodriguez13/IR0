@@ -34,7 +34,7 @@ struct sigcontext
 	uint8_t __reserved[4096] __attribute__((__aligned__(16)));
 };
 
-/* musl/Linux aarch64 ucontext_t (sigmask before mcontext). */
+/* Linux aarch64 ucontext_t (sigmask before mcontext). */
 #define IR0_UCONTEXT_BYTES 4560u
 
 /* Header for records placed in sigcontext.__reserved (Linux uapi). */

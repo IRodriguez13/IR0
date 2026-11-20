@@ -23,7 +23,7 @@
 
 /*
  * Byte offset of the resumed instruction pointer inside the ucontext
- * the handler receives. musl x86-64 gregs[REG_RIP]; musl aarch64
+ * the handler receives. Linux x86-64 gregs[REG_RIP]; Linux aarch64
  * mcontext.pc.
  */
 #if defined(__aarch64__)
