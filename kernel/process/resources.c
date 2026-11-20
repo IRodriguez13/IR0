@@ -10,6 +10,7 @@
 
 #include "process_internal.h"
 #include <ir0/futex.h>
+#include <ir0/process_domains.h>
 #include <ir0/process_exit.h>
 
 static struct process_exit_services g_exit_ops;
@@ -61,6 +62,8 @@ void process_resources_release_on_exit(process_t *dying)
 	if (g_exit_ops.clear_console_session)
 		g_exit_ops.clear_console_session(dying);
 	process_release_fds(dying, "EXIT_CLOSE");
+	/* Linux exit drops the handler table; the last task frees it. */
+	process_signals_drop(dying);
 }
 
 void process_destroy(process_t *process)
@@ -87,6 +90,7 @@ void process_destroy(process_t *process)
 		files_put(process->files);
 		process->files = NULL;
 	}
+	process_signals_drop(process);
 
 	if (process->mode == KERNEL_MODE)
 		kstack = process_stack_start(process);

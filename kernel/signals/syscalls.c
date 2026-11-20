@@ -88,11 +88,11 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 	if (oldact)
 	{
 		memset(&kold, 0, sizeof(kold));
-		kold.sa_handler = current_process->signal_handlers[signum];
+		kold.sa_handler = current_process->sighand->handlers[signum];
 		rt_sigaction_mask_to_sigset(&kold.sa_mask, sigsetsize,
-					    current_process->signal_sa_mask[signum]);
-		kold.sa_flags = (unsigned long)current_process->signal_sa_flags[signum];
-		kold.sa_restorer = current_process->signal_restorer[signum];
+					    current_process->sighand->sa_mask[signum]);
+		kold.sa_flags = (unsigned long)current_process->sighand->sa_flags[signum];
+		kold.sa_restorer = current_process->sighand->restorer[signum];
 		if (copy_to_user(oldact, &kold, user_bytes) != 0)
 			return -EFAULT;
 	}
@@ -104,11 +104,11 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 			return -EFAULT;
 		if (register_signal_handler(signum, kact.sa_handler) != 0)
 			return -EFAULT;
-		current_process->signal_sa_mask[signum] =
+		current_process->sighand->sa_mask[signum] =
 			rt_sigaction_mask_from_sigset(&kact.sa_mask, sigsetsize) &
 			~SIGNAL_UNBLOCKABLE;
-		current_process->signal_sa_flags[signum] = (uint32_t)kact.sa_flags;
-		current_process->signal_restorer[signum] =
+		current_process->sighand->sa_flags[signum] = (uint32_t)kact.sa_flags;
+		current_process->sighand->restorer[signum] =
 			(kact.sa_flags & SA_RESTORER) ? kact.sa_restorer : NULL;
 	}
 

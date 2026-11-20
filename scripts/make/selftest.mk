@@ -819,6 +819,37 @@ ir0-selftest-evdev-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV)
 		--log $(HOST_TMP)/ir0-selftest-x86-evdev.log
 	@echo "✓ ir0-selftest-evdev-x86"
 
+# SIGHAND-SELFTEST
+IR0_SELFTEST_X86_SIGHAND := $(KERNEL_ROOT)/build/selftests/x86_64/sighand
+IR0_SELFTEST_ARM64_SIGHAND := $(KERNEL_ROOT)/build/selftests/arm64/sighand
+
+.PHONY: ir0-selftest-sighand-x86 ir0-selftest-sighand-arm64 ir0-selftest-sighand
+
+$(IR0_SELFTEST_X86_SIGHAND): tests/selftests/syscall/sighand.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sighand
+
+$(IR0_SELFTEST_ARM64_SIGHAND): tests/selftests/syscall/sighand.c tests/selftests/ir0/ksft.h \
+		tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sighand
+
+ir0-selftest-sighand-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SIGHAND)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SIGHAND) \
+		--done "ok 2 sighand_shared" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sighand.log
+	@echo "✓ ir0-selftest-sighand-x86"
+
+ir0-selftest-sighand-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SIGHAND)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SIGHAND) \
+		--done "ok 2 sighand_shared" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sighand.log
+	@echo "✓ ir0-selftest-sighand-arm64"
+
+ir0-selftest-sighand: ir0-selftest-sighand-x86 ir0-selftest-sighand-arm64
+
 # ACCEPT4-SELFTEST
 IR0_SELFTEST_X86_ACCEPT4 := $(KERNEL_ROOT)/build/selftests/x86_64/accept4
 IR0_SELFTEST_ARM64_ACCEPT4 := $(KERNEL_ROOT)/build/selftests/arm64/accept4

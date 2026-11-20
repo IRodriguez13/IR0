@@ -41,6 +41,20 @@
 
 struct robust_list_head;
 
+/*
+ * One handler table (Linux sighand_struct). refcount is the number of tasks
+ * that use it. clone(CLONE_SIGHAND) shares it; execve copies it when the
+ * count is greater than 1; the last exit frees it.
+ */
+struct sighand_struct
+{
+	int refcount;
+	void (*handlers[_NSIG])(int);
+	uint32_t sa_flags[_NSIG];
+	uint32_t sa_mask[_NSIG];
+	void (*restorer[_NSIG])(void);
+};
+
 /* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
 typedef struct pseudo_fd_bind
 {
@@ -216,14 +230,15 @@ typedef struct process
 	uint64_t it_real_expire_ms;
 	uint64_t it_real_interval_ms;
 
-	/* Signal management */
+	/* Signal management. Pending and masks stay on the task. */
 	uint32_t signal_pending; /* Bitmask of pending signals */
-	/* Signal handlers (function pointers to userspace handlers) */
-	void (*signal_handlers[_NSIG])(int);  /* Array of signal handler functions */
+	/*
+	 * Linux sighand: handler, sa_flags, sa_mask and restorer. Shared when
+	 * clone(CLONE_SIGHAND) is set; otherwise the child has its own copy.
+	 */
+	struct sighand_struct *sighand;
 	uint32_t signal_mask;  /* Mask of signals to block */
 	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
-	uint32_t signal_sa_flags[_NSIG]; /* Per-signal sa_flags from sigaction */
-	uint32_t signal_sa_mask[_NSIG];  /* Per-signal sa_mask (during handler only) */
 	/*
 	 * signal_mask snapshotted when a userspace handler is armed; restored
 	 * on rt_sigreturn (Linux-like sa_mask / !SA_NODEFER blocking).
@@ -237,7 +252,6 @@ typedef struct process
 	 */
 	uint32_t saved_sigmask;
 	uint8_t restore_sigmask;
-	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	/*
 	 * Handler entry RSP (points at restorer slot). Non-zero while a
@@ -680,8 +694,10 @@ pid_t spawn_kernel(void (*entry)(void), const char *name);
 
 /* POSIX fork/clone: kernel/process/fork.c (not spawn internally). */
 pid_t fork(void);
-pid_t fork_with_stack(void *child_stack);
-pid_t vfork_process(void *child_stack);
+/* clone_flags is the Linux clone(2) word. CLONE_SIGHAND shares handlers. */
+pid_t fork_with_stack(void *child_stack, unsigned long clone_flags);
+/* clone_flags is honored for CLONE_SIGHAND. vfork(2) passes 0. */
+pid_t vfork_process(void *child_stack, unsigned long clone_flags);
 int process_vfork_link(process_t *parent, process_t *child);
 int process_vfork_parent_blocked(const process_t *parent);
 void process_vfork_complete(process_t *child);

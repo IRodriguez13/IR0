@@ -27,6 +27,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
+#include <ir0/process_domains.h>
 #include <ir0/arch_port.h>
 #include <ir0/signals.h>
 #include <ir0/ktm/user_canary.h>
@@ -1940,6 +1941,22 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
             exec_commit_emit("return-shared-mm", detach_rc, proc,
                              "EXEC_MM_SHARED");
             return detach_rc;
+        }
+    }
+
+    /*
+     * Linux execve does not keep a shared handler table. Fail before the
+     * old image is destroyed so the other task keeps its handlers.
+     */
+    {
+        int sighand_rc = process_signals_unshare(proc);
+
+        if (sighand_rc < 0)
+        {
+            kfree(file_data);
+            exec_commit_emit("return-sighand", sighand_rc, proc,
+                             "EXEC_SIGHAND");
+            return sighand_rc;
         }
     }
 

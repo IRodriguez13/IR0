@@ -14,8 +14,138 @@
 
 #include "process_internal.h"
 #include <ir0/process_domains.h>
+#include <ir0/clone.h>
 #include <ir0/errno.h>
+#include <ir0/spinlock.h>
 #include <string.h>
+
+static ir0_spinlock_t sighand_lock;
+
+static struct sighand_struct *sighand_alloc_default(void)
+{
+	struct sighand_struct *hand;
+	int i;
+
+	hand = kmalloc(sizeof(*hand));
+	if (!hand)
+		return NULL;
+	hand->refcount = 1;
+	for (i = 0; i < _NSIG; i++)
+	{
+		hand->handlers[i] = SIG_DFL;
+		hand->sa_flags[i] = 0;
+		hand->sa_mask[i] = 0;
+		hand->restorer[i] = NULL;
+	}
+	return hand;
+}
+
+static struct sighand_struct *sighand_alloc_copy(const struct sighand_struct *src)
+{
+	struct sighand_struct *hand;
+
+	if (!src)
+		return NULL;
+	hand = kmalloc(sizeof(*hand));
+	if (!hand)
+		return NULL;
+	memcpy(hand, src, sizeof(*hand));
+	hand->refcount = 1;
+	return hand;
+}
+
+static struct sighand_struct *sighand_get(struct sighand_struct *hand)
+{
+	uint64_t irq_flags;
+
+	if (!hand)
+		return NULL;
+	irq_flags = ir0_spin_lock_irqsave(&sighand_lock);
+	hand->refcount++;
+	ir0_spin_unlock_irqrestore(&sighand_lock, irq_flags);
+	return hand;
+}
+
+static void sighand_put(struct sighand_struct *hand)
+{
+	uint64_t irq_flags;
+	int last;
+
+	if (!hand)
+		return;
+	irq_flags = ir0_spin_lock_irqsave(&sighand_lock);
+	if (hand->refcount <= 0)
+	{
+		ir0_spin_unlock_irqrestore(&sighand_lock, irq_flags);
+		panic("sighand_put: refcount underflow");
+		return;
+	}
+	hand->refcount--;
+	last = (hand->refcount == 0);
+	ir0_spin_unlock_irqrestore(&sighand_lock, irq_flags);
+	if (last)
+		kfree(hand);
+}
+
+static int sighand_users(const struct sighand_struct *hand)
+{
+	uint64_t irq_flags;
+	int n;
+
+	if (!hand)
+		return 0;
+	irq_flags = ir0_spin_lock_irqsave(&sighand_lock);
+	n = hand->refcount;
+	ir0_spin_unlock_irqrestore(&sighand_lock, irq_flags);
+	return n;
+}
+
+int process_signals_init(process_t *p)
+{
+	if (!p)
+		return -EINVAL;
+	p->signal_pending = 0;
+	p->signal_mask = 0;
+	p->signal_ignored = 0;
+	p->signal_mask_saved = 0;
+	p->signal_mask_saved_valid = 0;
+	p->saved_sigmask = 0;
+	p->restore_sigmask = 0;
+	p->signal_frame_sp = 0;
+	p->sighand = sighand_alloc_default();
+	if (!p->sighand)
+		return -ENOMEM;
+	return 0;
+}
+
+void process_signals_drop(process_t *p)
+{
+	struct sighand_struct *hand;
+
+	if (!p)
+		return;
+	hand = p->sighand;
+	p->sighand = NULL;
+	sighand_put(hand);
+}
+
+int process_signals_unshare(process_t *p)
+{
+	struct sighand_struct *old;
+	struct sighand_struct *copy;
+
+	if (!p || !p->sighand)
+		return -EINVAL;
+	if (sighand_users(p->sighand) <= 1)
+		return 0;
+	copy = sighand_alloc_copy(p->sighand);
+	if (!copy)
+		return -ENOMEM;
+	old = p->sighand;
+	p->sighand = copy;
+	sighand_put(old);
+	return 0;
+}
 
 int process_cred_clone(process_t *dst, const process_t *src)
 {
@@ -36,10 +166,9 @@ int process_cred_clone(process_t *dst, const process_t *src)
 	return 0;
 }
 
-int process_signals_clone(process_t *dst, const process_t *src)
+int process_signals_clone(process_t *dst, const process_t *src,
+			  unsigned long flags)
 {
-	int i;
-
 	if (!dst || !src)
 		return -EINVAL;
 
@@ -49,18 +178,54 @@ int process_signals_clone(process_t *dst, const process_t *src)
 	dst->signal_mask_saved = 0;
 	dst->signal_mask_saved_valid = 0;
 	dst->signal_frame_sp = 0;
+	dst->saved_sigmask = 0;
+	dst->restore_sigmask = 0;
 	/* Linux: interval timers are not inherited by the child. */
 	dst->it_real_expire_ms = 0;
 	dst->it_real_interval_ms = 0;
-	for (i = 0; i < _NSIG; i++)
+	dst->sighand = NULL;
+	/*
+	 * Linux CLONE_SIGHAND: one table, later sigaction in either task is
+	 * visible to the other. Pending signals and both masks stay above,
+	 * on the task. Without the flag the child gets a private copy.
+	 */
+	if (flags & CLONE_SIGHAND)
 	{
-		dst->signal_handlers[i] = src->signal_handlers[i];
-		dst->signal_sa_flags[i] = src->signal_sa_flags[i];
-		dst->signal_sa_mask[i] = src->signal_sa_mask[i];
-		dst->signal_restorer[i] = src->signal_restorer[i];
+		if (!sighand_get(src->sighand))
+			return -EINVAL;
+		dst->sighand = src->sighand;
+		return 0;
 	}
-	dst->restore_sigmask = 0;
+	dst->sighand = sighand_alloc_copy(src->sighand);
+	if (!dst->sighand)
+		return -ENOMEM;
 	return 0;
+}
+
+void process_sighand_note_ignore(process_t *owner, int sig, int ignored)
+{
+	process_t *p;
+	unsigned int bit;
+	uint64_t irq_flags;
+
+	if (!owner || !owner->sighand || sig < 1 || sig >= 32)
+		return;
+
+	bit = SIGNAL_MASK(sig);
+	irq_flags = process_registry_lock();
+	for (p = process_list; p; p = p->next)
+	{
+		if (p->sighand != owner->sighand)
+			continue;
+		if (ignored)
+		{
+			p->signal_ignored |= bit;
+			p->signal_pending &= ~bit;
+		}
+		else
+			p->signal_ignored &= ~bit;
+	}
+	process_registry_unlock(irq_flags);
 }
 
 int process_rel_init_child(process_t *child, const process_t *parent,
