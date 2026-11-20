@@ -968,9 +968,6 @@ int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags
 	struct sock_stream *child;
 	int nfd;
 
-	(void)addr;
-	(void)addrlen;
-
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
 	(void)flags;
@@ -1025,6 +1022,35 @@ int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags
 			return -EBADF;
 	}
 	nfd = sock_alloc_fd_flags(child, 1, flags);
+	if (nfd < 0)
+		return nfd;
+	/*
+	 * Linux __sys_accept4() / unix_accept(): the returned address is the
+	 * peer's name (getpeername of the new fd). A NULL addr skips the copy.
+	 */
+	if (addr != NULL)
+	{
+		struct sock_stream *peer;
+		int64_t filled;
+
+		if (addrlen == NULL)
+		{
+			(void)sys_close(nfd);
+			return -EFAULT;
+		}
+		if (sock_stream_family(child) == IR0_AF_UNIX)
+		{
+			peer = sock_stream_get_peer(child);
+			filled = unix_fill_sockaddr(peer ? sock_stream_unix_addr(peer)
+							  : NULL,
+						     addr, addrlen);
+			if (filled < 0)
+			{
+				(void)sys_close(nfd);
+				return filled;
+			}
+		}
+	}
 	return nfd;
 }
 
