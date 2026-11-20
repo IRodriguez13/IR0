@@ -389,7 +389,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 		return;
 	}
 
-	saved_handler = p->signal_handlers[SIGUSR1];
+	saved_handler = p->sighand->handlers[SIGUSR1];
 	saved_pending = p->signal_pending;
 	saved_mask = p->signal_mask;
 	saved_ignored = p->signal_ignored;
@@ -403,7 +403,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	 * bit still set would make every later rt_sigsuspend return at once.
 	 */
 	saved_regs = p->syscall_frame;
-	p->signal_handlers[SIGUSR1] = (void (*)(int))(uintptr_t)2;
+	p->sighand->handlers[SIGUSR1] = (void (*)(int))(uintptr_t)2;
 	p->signal_ignored &= ~SIGNAL_MASK(SIGUSR1);
 	p->signal_pending = SIGNAL_MASK(SIGUSR1);
 	rc = sys_rt_sigsuspend((const sigset_t *)&zero_mask, sizeof(zero_mask));
@@ -419,7 +419,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	KASSERT_EQ((unsigned)p->restore_sigmask, 0u);
 	p->syscall_frame = saved_regs;
 
-	p->signal_handlers[SIGUSR1] = saved_handler;
+	p->sighand->handlers[SIGUSR1] = saved_handler;
 	p->signal_pending = saved_pending;
 	p->signal_mask = saved_mask;
 	p->signal_ignored = saved_ignored;

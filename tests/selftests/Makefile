@@ -426,3 +426,21 @@ $(HV_KIND_BIN): $(HV_KIND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 
 clean:
 	@rm -rf $(BUILD_DIR)
+
+# SIGHAND-SELFTEST
+SIGHAND_SRC := syscall/sighand.c
+SIGHAND_BIN := $(BUILD_DIR)/sighand
+
+.PHONY: sighand
+
+sighand: $(SIGHAND_BIN)
+
+$(SIGHAND_BIN): $(SIGHAND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sighand"
+	@$(CC) $(CFLAGS) -o $@ $(SIGHAND_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
