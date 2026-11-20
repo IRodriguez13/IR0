@@ -25,8 +25,6 @@
 #include <linux/input-event-codes.h>
 #else
 #include <stdint.h>
-#define EAGAIN 11
-#define ENOTTY 25
 #define EV_REL 0x02
 #define REL_X 0x00
 
@@ -146,7 +144,11 @@ static int empty_read_is_eagain(int fd)
 		return 0;
 	errno = 0;
 	n = read(fd, &ev, sizeof(ev));
+#ifdef IR0_SELFTEST_NOLIBC
+	return n < 0 && errno == 11;
+#else
 	return n < 0 && errno == EAGAIN;
+#endif
 }
 
 static int second_reader_sees_event(int first, int second)
@@ -183,7 +185,11 @@ static int mouse_ioctl_is_enotty(void)
 	errno = 0;
 	rc = ioctl(fd, EVIOCGNAME32, name);
 	close(fd);
+#ifdef IR0_SELFTEST_NOLIBC
+	return rc < 0 && errno == 25;
+#else
 	return rc < 0 && errno == ENOTTY;
+#endif
 }
 
 int main(void)
