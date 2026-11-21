@@ -12,6 +12,7 @@
 #include <ir0/futex.h>
 #include <ir0/process_domains.h>
 #include <ir0/process_exit.h>
+#include <ir0/sysv_shm.h>
 
 static struct process_exit_services g_exit_ops;
 
@@ -58,6 +59,8 @@ void process_resources_release_on_exit(process_t *dying)
 	ir0_futex_drop_process(dying);
 	if (dying->fork_pending_child)
 		process_fork_abort_pending_on_exit(dying);
+	/* Page tables are still this task's. mm_put unmaps whatever remains. */
+	sysv_shm_detach_process(dying);
 	process_mm_release_on_exit(dying);
 	if (g_exit_ops.clear_console_session)
 		g_exit_ops.clear_console_session(dying);

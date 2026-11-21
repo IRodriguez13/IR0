@@ -26,7 +26,12 @@ struct ir0_shmid_ds
 	int shm_perm_mode;
 };
 
+struct process;
+
 int64_t sys_shmget(int key, size_t size, int shmflg);
 int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg);
 int64_t sys_shmdt(const void *shmaddr);
 int64_t sys_shmctl(int shmid, int cmd, void *buf);
+
+/* Drop every attach owned by this task. Fork does not copy attaches. */
+void sysv_shm_detach_process(struct process *proc);

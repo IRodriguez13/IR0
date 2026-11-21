@@ -82,6 +82,58 @@ static void shm_try_destroy(struct shm_seg *s)
 	memset(s, 0, sizeof(*s));
 }
 
+/*
+ * Fork does not copy these slots. A child keeps COW copies of the pages
+ * until its mm is torn down, but nattch counts only shmat records. Exit
+ * and exec drop the records that name this task. nattch 0 without
+ * IPC_RMID leaves the segment in place.
+ */
+static void shm_detach_at(struct shm_seg *s, int ai)
+{
+	struct shm_attach *a;
+	address_space_root_t root;
+	size_t off;
+
+	a = &s->attaches[ai];
+	root = a->proc ? process_pgd(a->proc) : NULL;
+	if (root)
+	{
+		for (off = 0; off < a->len; off += PAGE_SZ)
+			unmap_page_in_directory(root, a->va + off);
+	}
+	a->used = 0;
+	a->proc = NULL;
+	a->va = 0;
+	a->len = 0;
+	if (s->nattch > 0)
+		s->nattch--;
+	shm_try_destroy(s);
+}
+
+void sysv_shm_detach_process(struct process *proc)
+{
+	int i;
+	int ai;
+
+	if (!proc)
+		return;
+	for (i = 0; i < SHM_MAX; i++)
+	{
+		struct shm_seg *s = &g_shm[i];
+
+		if (!s->in_use)
+			continue;
+		for (ai = 0; ai < SHM_ATTACH_MAX; ai++)
+		{
+			if (!s->in_use)
+				break;
+			if (!s->attaches[ai].used || s->attaches[ai].proc != proc)
+				continue;
+			shm_detach_at(s, ai);
+		}
+	}
+}
+
 int64_t sys_shmget(int key, size_t size, int shmflg)
 {
 	int i;
@@ -203,7 +255,6 @@ int64_t sys_shmdt(const void *shmaddr)
 	uintptr_t va = (uintptr_t)shmaddr;
 	int i;
 	int ai;
-	size_t off;
 
 	if (!current_process || !shmaddr)
 		return -EINVAL;
@@ -219,12 +270,7 @@ int64_t sys_shmdt(const void *shmaddr)
 			    s->attaches[ai].proc != current_process ||
 			    s->attaches[ai].va != va)
 				continue;
-			for (off = 0; off < s->attaches[ai].len; off += PAGE_SZ)
-				unmap_page_in_directory(process_pgd(current_process),
-							va + off);
-			s->attaches[ai].used = 0;
-			s->nattch--;
-			shm_try_destroy(s);
+			shm_detach_at(s, ai);
 			return 0;
 		}
 	}

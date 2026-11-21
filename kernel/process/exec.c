@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/sysv_shm.h>
 
 int exec_detach_shared_mm(process_t *proc)
 {
@@ -38,6 +39,11 @@ int exec_detach_shared_mm(process_t *proc)
 
 	mm_init_root(fresh, root, 1);
 	old = proc->mm;
+	/*
+	 * Still the shared tables. Unmap this task's attaches before the
+	 * fresh root is installed; a failure above has not switched yet.
+	 */
+	sysv_shm_detach_process(proc);
 	/*
 	 * Linux exec_mmap: bind + activate the private mm, then
 	 * complete_vfork_done, then mmput(old). switch_to_user() must

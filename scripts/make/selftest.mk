@@ -993,3 +993,34 @@ ir0-selftest-sigaltstack-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SI
 	@echo "✓ ir0-selftest-sigaltstack-arm64"
 
 ir0-selftest-sigaltstack: ir0-selftest-sigaltstack-x86 ir0-selftest-sigaltstack-arm64
+
+# SHM-EXIT-SELFTEST
+IR0_SELFTEST_X86_SHM_EXIT := $(KERNEL_ROOT)/build/selftests/x86_64/shm_exit
+IR0_SELFTEST_ARM64_SHM_EXIT := $(KERNEL_ROOT)/build/selftests/arm64/shm_exit
+
+.PHONY: ir0-selftest-shm-exit-x86 ir0-selftest-shm-exit-arm64 ir0-selftest-shm-exit
+
+$(IR0_SELFTEST_X86_SHM_EXIT): tests/selftests/syscall/shm_exit.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 shm_exit
+
+$(IR0_SELFTEST_ARM64_SHM_EXIT): tests/selftests/syscall/shm_exit.c tests/selftests/ir0/ksft.h \
+		tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 shm_exit
+
+ir0-selftest-shm-exit-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SHM_EXIT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SHM_EXIT) \
+		--done "ok 1 shm_exit" \
+		--log $(HOST_TMP)/ir0-selftest-x86-shm-exit.log
+	@echo "✓ ir0-selftest-shm-exit-x86"
+
+ir0-selftest-shm-exit-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_EXIT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SHM_EXIT) \
+		--done "ok 1 shm_exit" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-shm-exit.log
+	@echo "✓ ir0-selftest-shm-exit-arm64"
+
+ir0-selftest-shm-exit: ir0-selftest-shm-exit-x86 ir0-selftest-shm-exit-arm64
