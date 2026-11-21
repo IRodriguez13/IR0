@@ -43,7 +43,7 @@ uint32_t virtio_mmio_get_status(struct virtio_mmio_dev *d)
 	return virtio_mmio_read(d, VIRTIO_MMIO_REG_STATUS);
 }
 
-struct virtio_mmio_dev *arm64_virtio_mmio_find(uint32_t device_id)
+struct virtio_mmio_dev *virtio_mmio_find(uint32_t device_id)
 {
 	unsigned i;
 
@@ -55,7 +55,7 @@ struct virtio_mmio_dev *arm64_virtio_mmio_find(uint32_t device_id)
 	return NULL;
 }
 
-int arm64_virtio_mmio_probe(void)
+int virtio_mmio_probe(void)
 {
 	unsigned i;
 	uint64_t pa;

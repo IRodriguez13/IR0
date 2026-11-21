@@ -68,10 +68,10 @@ enum virtio_mmio_probe_result
 };
 
 /** Map the virtio-mmio window and distinguish absence from probe failure. */
-int arm64_virtio_mmio_probe(void);
+int virtio_mmio_probe(void);
 
 /** First discovered device of @device_id, or NULL. */
-struct virtio_mmio_dev *arm64_virtio_mmio_find(uint32_t device_id);
+struct virtio_mmio_dev *virtio_mmio_find(uint32_t device_id);
 
 uint32_t virtio_mmio_read(struct virtio_mmio_dev *d, uint32_t off);
 void virtio_mmio_write(struct virtio_mmio_dev *d, uint32_t off, uint32_t val);

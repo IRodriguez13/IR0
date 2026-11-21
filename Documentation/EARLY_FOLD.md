@@ -91,7 +91,7 @@ kernel does not invent one.
 
 - Special char/block nodes and the `/init` blob on the staged adapter
 - `early_process.c` (~2k lines) — clone pid can come from the registry
-- virtio-blk still uses the `virtio_blk_early` transport (product needs `vda`)
+- virtio-blk is `drivers/virtio/virtio_blk.c` (device `vda`); the MMIO window is still the QEMU virt bank
 - ISD has no `arch/aarch64` / `rootfs/arch/aarch64` product pack
 
 ## Next fold order

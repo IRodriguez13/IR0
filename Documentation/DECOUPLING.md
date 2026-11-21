@@ -216,8 +216,8 @@ same portable object set as x86 (`ALL_OBJS`) and product SVC enters `syscall_dis
 User MM, fault handling and task switching also run through the common
 kernel (`make ir0-selftest-fault-arm64`). Remaining gaps vs full Linux-like
 userspace: FP/SIMD state is not saved on context switch (both ISAs); ISD
-AArch64 rootfs pack; product block transport (still `virtio_blk_early` for
-CPIO/`vda`).
+AArch64 rootfs pack. Product `vda` is `drivers/virtio/virtio_blk.c`
+over virtio-mmio.
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep

@@ -3,12 +3,13 @@
  * IR0 Kernel — Core system software
  * Copyright (C) 2026  Iván Rodriguez
  *
- * File: virtio_blk_early.c
- * Description: Virtio-blk modern MMIO backend for the portable block facade.
+ * File: virtio_blk.c
+ * Description: Virtio-blk over virtio-mmio, registered as block device vda.
  */
 
-#include "virtio_blk_early.h"
+#include <ir0/virtio_blk.h>
 #include <ir0/blockdev.h>
+#include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <ir0/virtio_mmio.h>
 
@@ -123,7 +124,7 @@ static int blk_setup_queue(struct virtio_mmio_dev *d)
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DEVICE_HIGH,
 			  (uint32_t)((uint64_t)(uintptr_t)&g_used >> 32));
 
-	__asm__ volatile("dmb sy" ::: "memory");
+	mb();
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_READY, 1);
 	ready = virtio_mmio_read(d, VIRTIO_MMIO_REG_QUEUE_READY);
 	if ((ready & 1U) == 0U)
@@ -165,17 +166,17 @@ static int blk_xfer_buf(struct virtio_mmio_dev *d, uint32_t type, uint64_t secto
 	last_used = g_used.idx;
 	aidx = g_avail.idx;
 	g_avail.ring[aidx % BLK_QUEUE_SIZE] = 0;
-	__asm__ volatile("dmb sy" ::: "memory");
+	smp_mb();
 	g_avail.idx = (uint16_t)(aidx + 1U);
-	__asm__ volatile("dmb sy" ::: "memory");
+	smp_mb();
 
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_NOTIFY, 0);
 
 	for (spins = 0; spins < 2000000U; spins++)
 	{
+		smp_mb();
 		if (g_used.idx != last_used)
 			break;
-		__asm__ volatile("yield" ::: "memory");
 	}
 	if (g_used.idx == last_used)
 		return -EIO;
@@ -290,13 +291,13 @@ static int virtio_blk_bringup(struct virtio_mmio_dev *d)
 	return 0;
 }
 
-int arm64_virtio_blk_init(void)
+int virtio_blk_init(void)
 {
 	struct virtio_mmio_dev *d;
 	struct ir0_block_device bdev;
 	int rc;
 
-	d = arm64_virtio_mmio_find(VIRTIO_ID_BLOCK);
+	d = virtio_mmio_find(VIRTIO_ID_BLOCK);
 	if (!d)
 		return -1;
 
@@ -322,7 +323,7 @@ int arm64_virtio_blk_init(void)
 	return 0;
 }
 
-int arm64_virtio_blk_facade_probe(void)
+int virtio_blk_facade_probe(void)
 {
 	dev_t id;
 	struct ir0_block_info info;
