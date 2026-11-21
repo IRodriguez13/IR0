@@ -448,6 +448,7 @@ KERNEL_OBJS = \
     kernel/signals/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
+	kernel/time/time_sys.o \
 	smp/cpu_topology.o \
 	smp/percpu.o \
     kernel/process/credentials.o \
@@ -467,7 +468,6 @@ KERNEL_OBJS = \
     kernel/syscalls/process_syscalls.o \
     kernel/syscalls/io_syscalls.o \
     kernel/syscalls/epoll_syscalls.o \
-    kernel/syscalls/time_syscalls.o \
 	kernel/syscalls/early_dispatch.o \
 	kernel/syscalls/early_time.o \
 	kernel/syscalls/early_io.o \
