@@ -8,7 +8,8 @@
  *
  * File: mm_syscalls_internal.h
  * Description: Internal facade of the memory syscall units (mm_syscalls.c,
- *              mm_vma.c, mm_brk.c, swap_syscalls.c). Not a public API.
+ *              swap_syscalls.c). VMA operations are declared in mm/mmap.h.
+ *              Not a public API.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -17,11 +18,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <mm/mmap.h>
 
 #define SYSCALL_PTR_ERR(err) ((void *)(intptr_t)(-(err)))
 #define MMAP_AUDIT_FAILED ((void *)(intptr_t)-1)
-
-/* VMA list of the current process (mm_vma.c). */
-int mm_detach_vma_range(uintptr_t start, uintptr_t end);
-int mm_apply_vma_prot(uintptr_t start, uintptr_t end, int prot);
-int mm_prepare_map_fixed(uintptr_t start, size_t length);
