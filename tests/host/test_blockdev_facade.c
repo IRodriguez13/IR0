@@ -91,6 +91,9 @@ void test_blockdev_facade_contract(void)
 	ASSERT_EQ(rc, 0);
 	ASSERT_EQ(info.sector_size, MOCK_SEC_SIZE);
 	ASSERT_EQ(info.sector_count, (uint64_t)MOCK_SECTORS);
+	ASSERT_EQ(ir0_block_sector_count(id), (uint64_t)MOCK_SECTORS);
+	ASSERT(ir0_block_lookup_by_name("missing") == 0);
+	ASSERT_EQ(ir0_block_sector_count(0), (uint64_t)0);
 
 	memset(buf, 0, sizeof(buf));
 	rc = ir0_block_read(id, 0, 1, buf);
