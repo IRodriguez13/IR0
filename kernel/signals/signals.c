@@ -230,6 +230,8 @@ int signal_deliver_fault(int sig, const struct ir0_fault *fault,
 
 		if (fault && fault->kind == IR0_FAULT_PAGE)
 			si_code = fault->present ? SEGV_ACCERR : SEGV_MAPERR;
+		else if (fault && fault->si_code != 0)
+			si_code = fault->si_code;
 		else if (fault && fault->addr != 0)
 			si_code = SEGV_MAPERR;
 		return signals_deliver_from_irq_frame(p, sig, irq_frame,
