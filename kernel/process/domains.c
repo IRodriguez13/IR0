@@ -163,6 +163,7 @@ int process_cred_clone(process_t *dst, const process_t *src)
 	memcpy(dst->groups, src->groups, sizeof(dst->groups));
 	dst->no_new_privs = src->no_new_privs;
 	dst->dumpable = src->dumpable;
+	dst->keep_caps = src->keep_caps;
 	dst->at_secure = src->at_secure;
 	return 0;
 }
