@@ -430,7 +430,7 @@ KERNEL_OBJS = \
     fs/files_lifecycle.o \
     fs/files_struct.o \
     kernel/process/fork.o \
-    kernel/process/exec.o \
+    fs/exec.o \
     kernel/process/lifecycle.o \
     kernel/process/parent.o \
     kernel/process/resources.o \
