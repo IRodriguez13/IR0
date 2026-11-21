@@ -677,7 +677,7 @@ LIB_OBJS = \
     fs/exec_read_trace.o \
     fs/mount_prefix.o \
     block/blockdev.o \
-    kernel/exec/elf64_image.o \
+    fs/elf64_image.o \
     kernel/exec/early_elf_stack.o \
     $(MM_PORT_OBJ) \
     ktm/process_introspect.o \

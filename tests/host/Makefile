@@ -294,7 +294,7 @@ host_pipe.o: $(KERNEL_ROOT)/fs/pipe.c
 host_blockdev.o: $(KERNEL_ROOT)/block/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
-host_elf64_image.o: $(KERNEL_ROOT)/kernel/exec/elf64_image.c
+host_elf64_image.o: $(KERNEL_ROOT)/fs/elf64_image.c
 	$(KERNEL_CC)
 
 host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/exec/early_elf_stack.c
