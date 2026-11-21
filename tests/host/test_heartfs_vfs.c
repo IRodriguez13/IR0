@@ -186,9 +186,9 @@ void test_heartfs_vfs(void)
 	ASSERT_EQ(read_at("/heart/README", buf, 4, -1, &done), -EINVAL);
 	ASSERT_EQ(read_at("/heart/kernel", buf, 4, 0, &done), -EISDIR);
 	ASSERT_EQ(read_at("/heart/nope", buf, 4, 0, &done), -ENOENT);
-	ASSERT_EQ(ops->stat("/heart/src/kernel/syscalls/syscall_dispatch.c", &st), 0);
+	ASSERT_EQ(ops->stat("/heart/src/kernel/entry/syscall_dispatch.c", &st), 0);
 	ASSERT(st.st_size > 4096);
-	ASSERT_EQ(read_at("/heart/src/kernel/syscalls/syscall_dispatch.c", buf,
+	ASSERT_EQ(read_at("/heart/src/kernel/entry/syscall_dispatch.c", buf,
 			  sizeof(buf), st.st_size - 1, &done), 0);
 	ASSERT_EQ(done, (size_t)1);
 	ASSERT_EQ(buf[0], '\n');

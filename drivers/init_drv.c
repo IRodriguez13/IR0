@@ -73,11 +73,11 @@ static void driver_registry_prepare(void)
 
     if (!ir0_driver_registry_is_initialized())
         ir0_driver_registry_init();
-    log_subsystem_ok("DRIVER_REGISTRY");
+    klog_info("DRIVER_REGISTRY", "Registered and Initialized OK");
 
 #if KERNEL_ENABLE_EXAMPLE_DRIVERS
     register_multilang_example_drivers();
-    log_subsystem_ok("MULTI_LANG_DRIVERS");
+    klog_info("MULTI_LANG_DRIVERS", "Registered and Initialized OK");
 #endif
 
     g_registry_ready = 1;
@@ -102,18 +102,18 @@ void init_all_drivers(void)
                              sizeof(boot_driver_tables[0])) != 0)
         klog_warn("DRIVERS", "One or more selectable boot drivers failed");
 
-    log_subsystem_ok("PS2_KEYBOARD");
+    klog_info("PS2_KEYBOARD", "Registered and Initialized OK");
 #if CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
-    log_subsystem_ok("PS2_MOUSE");
+    klog_info("PS2_MOUSE", "Registered and Initialized OK");
 #endif
 #if CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK
-    log_subsystem_ok("NETWORK_STACK");
+    klog_info("NETWORK_STACK", "Registered and Initialized OK");
 #endif
 #if CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER
-    log_subsystem_ok("BLUETOOTH_STACK");
+    klog_info("BLUETOOTH_STACK", "Registered and Initialized OK");
 #endif
 #if CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST
-    log_subsystem_ok("USB_HOST");
+    klog_info("USB_HOST", "Registered and Initialized OK");
 #endif
     g_bootstrap_done = 1;
     {
