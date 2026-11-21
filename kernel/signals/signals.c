@@ -260,7 +260,6 @@ void signals_reset_on_exec(process_t *p)
 	if (!p)
 		return;
 	p->signal_pending = 0;
-	p->signal_mask = 0;
 	p->signal_ignored = 0;
 	p->signal_mask_saved = 0;
 	p->signal_mask_saved_valid = 0;
