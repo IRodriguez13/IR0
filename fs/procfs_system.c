@@ -485,6 +485,15 @@ static void proc_format_size(uint64_t sectors, char *out, size_t out_size, int *
     *len = (int)(p - out);
 }
 
+static uint64_t proc_block_sectors(dev_t dev)
+{
+    struct ir0_block_info info;
+
+    if (ir0_block_get_info(dev, &info) != 0)
+        return 0;
+    return info.sector_count;
+}
+
 /*
  * /proc/blockdevices — tab-separated; sectors are 512-byte units.
  * Header documents the contract; size_human uses MiB/GiB from those sectors.
@@ -511,9 +520,11 @@ int proc_blockdevices_read(char *buf, size_t count)
     for (uint8_t i = 0; i < 4; i++)
     {
         const char *disk_name = ir0_block_legacy_name(i);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
+        dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
+
+        if (!disk_name || !ir0_block_is_present(dev))
             continue;
-        uint64_t size = ir0_block_sector_count_by_name(disk_name);
+        uint64_t size = proc_block_sectors(dev);
         const char *model = "-";
         const char *serial = "-";
         char name_buf[8];
@@ -599,9 +610,11 @@ int proc_partitions_read(char *buf, size_t count)
     for (uint8_t disk_id = 0; disk_id < MAX_DISKS; disk_id++)
     {
         const char *disk_name = ir0_block_legacy_name(disk_id);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
+        dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
+
+        if (!disk_name || !ir0_block_is_present(dev))
             continue;
-        uint64_t disk_blocks_1k = ir0_block_sector_count_by_name(disk_name) / 2;
+        uint64_t disk_blocks_1k = proc_block_sectors(dev) / 2;
         char name_buf[16];
         snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + disk_id);
         char disk_blocks_str[24];

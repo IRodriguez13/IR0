@@ -774,8 +774,9 @@ void ktest_simplefs_source_is_a_label(void)
 	for (uint8_t d = 0; d < MAX_DISKS && !absent; d++)
 	{
 		const char *name = ir0_block_legacy_name(d);
+		dev_t dev = name ? ir0_block_lookup_by_name(name) : 0;
 
-		if (name && !ir0_block_name_is_present(name))
+		if (name && !ir0_block_is_present(dev))
 			absent = name;
 	}
 	KASSERT(absent != NULL);
@@ -935,9 +936,7 @@ void ktest_block_layer_contract(void)
 
 	id = ir0_block_lookup_by_name(KTEST_BLK_NAME);
 	KASSERT(id != 0);
-	KASSERT(ir0_block_name_is_present(KTEST_BLK_NAME));
-	KASSERT_EQ(ir0_block_sector_count_by_name(KTEST_BLK_NAME),
-		   (uint64_t)KTEST_BLK_SECTORS);
+	KASSERT(ir0_block_is_present(id));
 
 	KASSERT_EQ(ir0_block_get_info(id, &info), 0);
 	KASSERT_EQ(info.sector_size, KTEST_BLK_SECTOR_SIZE);
@@ -970,9 +969,9 @@ void ktest_block_layer_contract(void)
 
 	/* A write through the facade must be visible to the next read. */
 	memset(pattern, 0xEE, sizeof(pattern));
-	KASSERT_EQ(ir0_block_write_by_name(KTEST_BLK_NAME, 1, 1, pattern), 0);
+	KASSERT_EQ(ir0_block_write(id, 1, 1, pattern), 0);
 	memset(sectors, 0, sizeof(sectors));
-	KASSERT_EQ(ir0_block_read_by_name(KTEST_BLK_NAME, 1, 1, sectors), 0);
+	KASSERT_EQ(ir0_block_read(id, 1, 1, sectors), 0);
 	KASSERT_EQ(memcmp(sectors, pattern, sizeof(pattern)), 0);
 
 	/* Argument and range validation. */
@@ -980,10 +979,8 @@ void ktest_block_layer_contract(void)
 	KASSERT_EQ(ir0_block_read(id, 0, 1, NULL), -EINVAL);
 	KASSERT_EQ(ir0_block_read(id, KTEST_BLK_SECTORS - 1, 2, sectors),
 		   -EINVAL);
-	KASSERT_EQ(ir0_block_read_by_name("ktest-missing", 0, 1, sectors),
-		   -ENODEV);
-	KASSERT_EQ(ir0_block_read_by_name(KTEST_BLK_NAME, 0, 1, NULL),
-		   -EINVAL);
+	KASSERT_EQ(ir0_block_lookup_by_name("ktest-missing"), 0);
+	KASSERT_EQ(ir0_block_read(0, 0, 1, sectors), -EINVAL);
 	KASSERT_EQ(ir0_block_get_info(0, &info), -EINVAL);
 
 	/* flush is optional: a NULL backend hook is a successful no-op. */
@@ -997,6 +994,8 @@ void ktest_block_hda_read_contract(void)
 	char buf[512];
 	int64_t fd;
 	int64_t n;
+	dev_t id;
+	struct ir0_block_info info;
 
 	KTEST_BEGIN("block_hda_read_contract");
 
@@ -1005,17 +1004,19 @@ void ktest_block_hda_read_contract(void)
 	 * absence contract instead of ending silently; block_layer_contract
 	 * covers the read path with a fake device either way.
 	 */
-	if (!ir0_block_name_is_present("hda"))
+	id = ir0_block_lookup_by_name("hda");
+	if (!ir0_block_is_present(id))
 	{
-		KASSERT_EQ(ir0_block_lookup_by_name("hda"), 0u);
-		KASSERT_EQ(ir0_block_sector_count_by_name("hda"), 0ULL);
-		KASSERT_EQ(ir0_block_read_by_name("hda", 0, 1, buf), -ENODEV);
+		KASSERT_EQ(id, 0u);
+		KASSERT_EQ(ir0_block_get_info(id, &info), -EINVAL);
+		KASSERT_EQ(ir0_block_read(id, 0, 1, buf), -EINVAL);
 		KTEST_END();
 		return;
 	}
 
-	KASSERT_GT(ir0_block_sector_count_by_name("hda"), 0ULL);
-	KASSERT_EQ(ir0_block_read_by_name("hda", 0, 1, buf), 0);
+	KASSERT_EQ(ir0_block_get_info(id, &info), 0);
+	KASSERT_GT(info.sector_count, 0ULL);
+	KASSERT_EQ(ir0_block_read(id, 0, 1, buf), 0);
 
 	fd = sys_open("/dev/hda", KTEST_O_RDONLY, 0);
 	KASSERT_GT(fd, 0);
@@ -1038,9 +1039,9 @@ void ktest_block_hda_read_contract(void)
 		memset(one_a, 0, sizeof(one_a));
 		memset(one_b, 0, sizeof(one_b));
 		memset(two, 0, sizeof(two));
-		KASSERT_EQ(ir0_block_read_by_name("hda", 0, 1, one_a), 0);
-		KASSERT_EQ(ir0_block_read_by_name("hda", 1, 1, one_b), 0);
-		KASSERT_EQ(ir0_block_read_by_name("hda", 0, 2, two), 0);
+		KASSERT_EQ(ir0_block_read(id, 0, 1, one_a), 0);
+		KASSERT_EQ(ir0_block_read(id, 1, 1, one_b), 0);
+		KASSERT_EQ(ir0_block_read(id, 0, 2, two), 0);
 		KASSERT_EQ(memcmp(two, one_a, 512), 0);
 		KASSERT_EQ(memcmp(two + 512, one_b, 512), 0);
 	}
@@ -1098,8 +1099,9 @@ static const char *ktest_disk_register(uint8_t *disk_id_out,
 	for (d = 1; d < 4; d++)
 	{
 		const char *candidate = ir0_block_legacy_name(d);
+		dev_t id = candidate ? ir0_block_lookup_by_name(candidate) : 0;
 
-		if (!candidate || ir0_block_name_is_present(candidate))
+		if (!candidate || ir0_block_is_present(id))
 			continue;
 		memset(&dev, 0, sizeof(dev));
 		dev.ops = &ktest_disk_ops;

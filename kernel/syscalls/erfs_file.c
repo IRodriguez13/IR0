@@ -137,14 +137,18 @@ static int64_t kread_at(int fd, uint64_t off, uint8_t *tmp, uint64_t count)
 		uint8_t sector[512];
 		uint64_t lba;
 		uint64_t skip;
+		dev_t dev;
+		struct ir0_block_info info;
 
-		if (!vda_present())
+		dev = ir0_block_lookup_by_name("vda");
+		if (!ir0_block_is_present(dev))
 			return -EIO;
-		if (off >= vda_bytes())
+		if (ir0_block_get_info(dev, &info) != 0 ||
+		    off >= info.sector_count * 512ULL)
 			return 0;
 		lba = off / 512ULL;
 		skip = off % 512ULL;
-		if (ir0_block_read_by_name("vda", lba, 1, sector) != 0)
+		if (ir0_block_read(dev, lba, 1, sector) != 0)
 			return -EIO;
 		n = 512ULL - skip;
 		if (n > count)

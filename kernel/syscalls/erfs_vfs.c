@@ -23,14 +23,19 @@ int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count)
 	uint64_t i;
 	uint8_t sector[512];
 	uint8_t tmp[256];
+	dev_t dev;
+	struct ir0_block_info info;
 
-	if (!pos || node_of_fd(fd) != IR0_EARLY_ROOTFS_VDA || !vda_present())
+	dev = ir0_block_lookup_by_name("vda");
+	if (!pos || node_of_fd(fd) != IR0_EARLY_ROOTFS_VDA ||
+	    !ir0_block_is_present(dev))
 		return -EBADF;
 	off = *pos;
-	if (off >= vda_bytes())
+	if (ir0_block_get_info(dev, &info) != 0 ||
+	    off >= info.sector_count * 512ULL)
 		return -EIO;
 	lba = off / 512ULL;
-	if (ir0_block_read_by_name("vda", lba, 1, sector) != 0)
+	if (ir0_block_read(dev, lba, 1, sector) != 0)
 		return -EIO;
 	n = 512ULL - (off % 512ULL);
 	if (n > count)
@@ -42,7 +47,7 @@ int64_t early_rootfs_block_write(int fd, uint64_t buffer, uint64_t count)
 		return -EFAULT;
 	for (i = 0; i < n; i++)
 		sector[(off % 512ULL) + i] = tmp[i];
-	if (ir0_block_write_by_name("vda", lba, 1, sector) != 0)
+	if (ir0_block_write(dev, lba, 1, sector) != 0)
 		return -EIO;
 	*pos = off + n;
 	return (int64_t)n;
@@ -228,14 +233,18 @@ int64_t early_rootfs_read(int fd, uint64_t buffer, uint64_t count)
 		uint64_t off;
 		uint64_t lba;
 		uint8_t sector[512];
+		dev_t dev;
+		struct ir0_block_info info;
 
-		if (!pos || !vda_present())
+		dev = ir0_block_lookup_by_name("vda");
+		if (!pos || !ir0_block_is_present(dev))
 			return -EIO;
 		off = *pos;
-		if (off >= vda_bytes())
+		if (ir0_block_get_info(dev, &info) != 0 ||
+		    off >= info.sector_count * 512ULL)
 			return 0;
 		lba = off / 512ULL;
-		if (ir0_block_read_by_name("vda", lba, 1, sector) != 0)
+		if (ir0_block_read(dev, lba, 1, sector) != 0)
 			return -EIO;
 		n = 512ULL - (off % 512ULL);
 		if (n > count)

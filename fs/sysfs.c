@@ -475,7 +475,9 @@ int sys_devices_block_read_reg(char *buf, size_t count)
     for (uint8_t i = 0; i < 4; i++)
     {
         const char *disk_name = ir0_block_legacy_name(i);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
+        dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
+
+        if (!disk_name || !ir0_block_is_present(dev))
             continue;
         int n = snprintf(buf + off, (off < count) ? (count - off) : 0,
                          "%s\n", disk_name);
