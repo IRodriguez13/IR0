@@ -79,6 +79,7 @@ typewriter_get_mode (nothing; the mode is write-only)
 typewriter_is_enabled_for_commands (nothing)
 typewriter_print typewriter_print_char()
 typewriter_print_uint32 typewriter_print_char()
+typewriter_set_mode (nothing; the console never delays output)
 uint_to_hex snprintf("%lx")
 
 # Block devices: one facade, <ir0/blockdev.h> (ir0_block_*).

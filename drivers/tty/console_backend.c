@@ -31,7 +31,6 @@ void console_backend_init(void)
 void console_backend_typewriter_init(void)
 {
     typewriter_init();
-    typewriter_set_mode(TYPEWRITER_DISABLED);
 }
 
 void console_backend_clear(uint8_t color)
@@ -77,13 +76,10 @@ void console_backend_userspace_handoff(void)
     tty_serial_mirror = 0;
 #endif
     /*
-     * Product console must be instant. TYPEWRITER_* delays are a demo effect
-     * only — never leave FAST/NORMAL/SLOW enabled after userspace attach.
      * Keep TTY→COM1 mirror when CONFIG_CONSOLE_SERIAL_MIRROR=y so headless
      * smokes can grep prompts; serial_putchar itself must not spin forever
      * if the host stdio pipe backs up.
      */
-    typewriter_set_mode(TYPEWRITER_DISABLED);
     typewriter_console_clear(IR0_CONSOLE_COLOR_DEFAULT);
 
     if (console_backend_uses_framebuffer())

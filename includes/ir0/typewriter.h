@@ -17,20 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TYPEWRITER_DELAY_FAST    2000
-#define TYPEWRITER_DELAY_NORMAL  5000
-#define TYPEWRITER_DELAY_SLOW    8000
-
-typedef enum
-{
-	TYPEWRITER_DISABLED = 0,
-	TYPEWRITER_FAST,
-	TYPEWRITER_NORMAL,
-	TYPEWRITER_SLOW
-} typewriter_mode_t;
-
 void typewriter_init(void);
-void typewriter_set_mode(typewriter_mode_t mode);
 void typewriter_vga_print(const char *str, uint8_t color);
 void typewriter_vga_print_char(char c, uint8_t color);
 /* Kernel text (print()): drawn with @color, recorded in the scrollback. */

@@ -19,7 +19,6 @@
  */
 
 #include <ir0/typewriter.h>
-#include <ir0/delay.h>
 #include "console.h"
 #include "console_renderer.h"
 #include <ir0/vga.h>
@@ -44,10 +43,6 @@ static int tw_rows(void)
 #define VGA_HEIGHT 25
 #define SCROLLBACK_LINES 200
 
-/* Global typewriter state — default off (product console must not delay). */
-static typewriter_mode_t current_mode = TYPEWRITER_DISABLED;
-static int command_output_enabled = 1;
-
 /*
  * Scrollback: circular buffer of lines for console scroll (Page Up/Down).
  * Width matches CONSOLE_MAX_WIDTH so FB fitted geometry (e.g. ~87 cols)
@@ -68,11 +63,6 @@ static int scrollback_cols(void)
 	if (cols < 1)
 		cols = 1;
 	return cols;
-}
-
-static void typewriter_delay(uint32_t microseconds)
-{
-    udelay(microseconds);
 }
 
 /*
@@ -149,20 +139,12 @@ void typewriter_console_clear(uint8_t color)
 
 void typewriter_init(void)
 {
-    /* Default off — product console must not delay per character. */
-    current_mode = TYPEWRITER_DISABLED;
-    command_output_enabled = 1;
     total_lines_written = 0;
     current_col = 0;
     scroll_offset = 0;
     for (int i = 0; i < SCROLLBACK_LINES; i++)
         for (int c = 0; c < CONSOLE_MAX_WIDTH; c++)
             scrollback[i][c] = (scrollback_color << 8) | ' ';
-}
-
-void typewriter_set_mode(typewriter_mode_t mode)
-{
-    current_mode = mode;
 }
 
 /*
@@ -220,18 +202,6 @@ static void typewriter_put(char c, uint8_t color, int attr)
     else
     {
         current_col = (size_t)(cursor_pos % cols);
-    }
-
-    if (current_mode != TYPEWRITER_DISABLED && command_output_enabled &&
-        c != '\n' && c != '\b' && c != ' ')
-    {
-        uint32_t delay;
-        switch (current_mode) {
-            case TYPEWRITER_FAST:  delay = TYPEWRITER_DELAY_FAST;  break;
-            case TYPEWRITER_SLOW:  delay = TYPEWRITER_DELAY_SLOW;  break;
-            default:               delay = TYPEWRITER_DELAY_NORMAL; break;
-        }
-        typewriter_delay(delay);
     }
 }
 
