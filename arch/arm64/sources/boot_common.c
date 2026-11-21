@@ -16,7 +16,7 @@
 #include "timer.h"
 #include <drivers/irq/gic_v2.h>
 #include "irq_backend.h"
-#include "virtio_blk_early.h"
+#include <ir0/virtio_blk.h>
 
 #include <arch/common/arch_portable.h>
 #include <arm64_board.h>
@@ -203,20 +203,20 @@ void arm64_platform_setup_for_portable_boot(const struct ir0_boot_params *params
 	mm_activate(arm64_mmu_kernel_root());
 
 	{
-		int virtio_probe = arm64_virtio_mmio_probe();
+		int virtio_probe = virtio_mmio_probe();
 
 		if (virtio_probe == VIRTIO_MMIO_PROBE_OK)
 		{
 #if DEBUG_BOOT
 			ir0_boot_smoke("ARM64_VIRTIO_MMIO_OK");
 #endif
-			if (arm64_virtio_mmio_find(VIRTIO_ID_BLOCK))
+			if (virtio_mmio_find(VIRTIO_ID_BLOCK))
 			{
-				if (arm64_virtio_blk_init() == 0)
+				if (virtio_blk_init() == 0)
 				{
 #if DEBUG_BOOT
 					ir0_boot_smoke("ARM64_VIRTIO_BLK_OK");
-					if (arm64_virtio_blk_facade_probe() == 0)
+					if (virtio_blk_facade_probe() == 0)
 						ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_OK");
 					else
 						ir0_boot_smoke("ARM64_BLOCKDEV_FACADE_FAIL");

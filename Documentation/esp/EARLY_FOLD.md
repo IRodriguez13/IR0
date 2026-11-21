@@ -67,5 +67,5 @@ de rootfs AArch64 sigue siendo trabajo **ISD**.
 
 ## Pendiente
 
-transporte `virtio_blk_early` → driver de producto, rootfs ISD AArch64,
+rootfs ISD AArch64 (virtio-blk ya es `drivers/virtio/virtio_blk.c`),
 `early_process.c` residual en bring-up freestanding.

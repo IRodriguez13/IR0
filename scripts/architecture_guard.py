@@ -2488,7 +2488,7 @@ def check_hardware_backends_do_not_self_test_log():
     errors = []
     paths = [
         ROOT / "drivers" / "virtio" / "virtio_mmio.c",
-        ROOT / "arch" / "arm64" / "sources" / "virtio_blk_early.c",
+        ROOT / "drivers" / "virtio" / "virtio_blk.c",
     ]
     forbidden = ("ir0_boot_smoke", "klog_smoke", "pl011_puts")
 

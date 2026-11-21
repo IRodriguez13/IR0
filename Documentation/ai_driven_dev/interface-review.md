@@ -153,7 +153,7 @@ are deleted.
 | IRQ controller | `arch/x86-64/sources/interrupt/pic.c` | `arch/arm64/sources/{gic_v2,bcm2836_irq,irq_backend}.c` |
 | Keyboard | `arch/x86-64/sources/interrupt/keyboard.c` | `drivers/input/input_backend.c` |
 | Power-off (`acpi_pm.h`) | `drivers/timer/acpi/acpi_pm.c` | `arch/arm64/sources/acpi_pm_stub.c` |
-| Block (early) | - | `arch/arm64/sources/virtio_blk_early.c` |
+| Block (virtio) | `drivers/virtio/virtio_blk.c` | same driver; MMIO window is the QEMU virt bank |
 | Firmware tables | `drivers/timer/hpet/find_hpet.c` (ACPI) | `arch/arm64/sources/fdt_reader.c` |
 
 The same facade is implemented by an arch file on one ISA and by a driver
@@ -979,8 +979,8 @@ includes `fs/vfs.h`.
   includes `drivers/dma/dma.h` (ISA 8237 DMA, same basename as `ir0/dma.h`);
   `sb16_irq_handler` is called from the x86 ISR.
 - `virtio_9p.h` 16 (1 unused) used by `fs/hostshare_9p.c`;
-  `virtio_mmio.h` 6, arm64 only, `arm64_virtio_mmio_*` names in a
-  public header.
+  `virtio_mmio.h` exposes `virtio_mmio_probe` / `virtio_mmio_find`; the
+  probe window is still the QEMU ARM virt bank.
 - `usb_host.h` 3 (2 owner-only).
 - `multilang_drivers.[ch]`: example drivers (inventory: delete if
   example-only).
