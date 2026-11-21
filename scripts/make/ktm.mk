@@ -47,6 +47,7 @@ test-fast: kernel-x64.bin arch-guard
 	@$(MAKE) -s -C tests/host run
 	@python3 $(KERNEL_ROOT)/tests/host/test_selftest_tap.py
 	@python3 $(KERNEL_ROOT)/tests/host/test_smoke_autokill.py
+	@python3 $(KERNEL_ROOT)/tests/host/test_ltp_harness.py
 	@python3 $(KERNEL_ROOT)/tests/host/test_kconfig_choice.py
 	@$(MAKE) -s sync-menuconfig-defconfig-check
 	@python3 scripts/ktm_classify_selftest.py
