@@ -18,7 +18,6 @@ includes/ir0/signal_irq.h new_rsp
 includes/ir0/syscall_frame.h rip_hw
 includes/ir0/task_ops.h rax
 kernel/process/core.c task_cs_is_user
-kernel/syscalls/fs_path_syscalls.c rflags
 ktm/d1_12_read_diag.c fault_rip
 ktm/d1_12_read_diag.c magic_rax
 ktm/d1_12_read_diag.c magic_rdx

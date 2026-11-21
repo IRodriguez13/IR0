@@ -145,15 +145,15 @@ static int64_t mount_strings(const char *dev_copy, const char *mountpoint,
   /* Legacy string remount for IR0 recovery helpers. */
   if (strcmp(dev_copy, "remount") == 0)
   {
-    unsigned long rflags = IR0_MS_REMOUNT;
+    unsigned long remount_flags = IR0_MS_REMOUNT;
 
     if (strcmp(mount_fstype, "ro") == 0 ||
         strcmp(mount_fstype, "remount,ro") == 0)
-      rflags |= IR0_MS_RDONLY;
+      remount_flags |= IR0_MS_RDONLY;
     else if (strcmp(mount_fstype, "rw") != 0 &&
              strcmp(mount_fstype, "remount,rw") != 0)
       return -EINVAL;
-    return vfs_remount(mount_path, rflags);
+    return vfs_remount(mount_path, remount_flags);
   }
 
   if (flags & IR0_MS_UNSUPPORTED)
