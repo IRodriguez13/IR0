@@ -374,8 +374,9 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     stat_t st;
 
-    if (ir0_stat_path_routed(path_to_use, &st) != 0)
-      return -EACCES;
+    path_rc = ir0_stat_path_routed(path_to_use, &st);
+    if (path_rc != 0)
+      return path_rc;
     /* The lookup fails on a non-directory before any permission check. */
     if (!S_ISDIR(st.st_mode))
       return -ENOTDIR;
