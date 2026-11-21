@@ -81,26 +81,6 @@ long strncpy_from_user(char *dst, const char *src, long count);
 int access_ok(const void *addr, size_t size);
 
 /*
- * Scalar helpers (Linux-shaped). Evaluate to 0 on success, -EFAULT on fault.
- * @ptr is a userspace pointer; @x is a kernel lvalue / rvalue.
- */
-#define put_user(x, ptr)                                                       \
-	({                                                                     \
-		__typeof__(*(ptr)) __pu_val = (x);                             \
-		copy_to_user((void *)(ptr), &__pu_val, sizeof(__pu_val));      \
-	})
-
-#define get_user(x, ptr)                                                       \
-	({                                                                     \
-		__typeof__(*(ptr)) __gu_tmp;                                   \
-		int __gu_ret = copy_from_user(&__gu_tmp, (const void *)(ptr),  \
-					      sizeof(__gu_tmp));               \
-		if (__gu_ret == 0)                                             \
-			(x) = __gu_tmp;                                        \
-		__gu_ret;                                                      \
-	})
-
-/*
  * Copies against an explicit address space (Linux access_remote_vm analogue)
  * for callers that must reach a process other than current, or a root that
  * is not active yet: ELF load, signal frames, exit/wait bookkeeping.
