@@ -1354,3 +1354,36 @@ ir0-selftest-shm-owner-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_
 	@echo "✓ ir0-selftest-shm-owner-arm64"
 
 ir0-selftest-shm-owner: ir0-selftest-shm-owner-x86 ir0-selftest-shm-owner-arm64
+
+# ILL-CODE-SELFTEST
+IR0_SELFTEST_X86_ILL_CODE := $(KERNEL_ROOT)/build/selftests/x86_64/ill_code
+IR0_SELFTEST_ARM64_ILL_CODE := $(KERNEL_ROOT)/build/selftests/arm64/ill_code
+
+.PHONY: ir0-selftest-ill-code-x86 ir0-selftest-ill-code-arm64 \
+	ir0-selftest-ill-code
+
+$(IR0_SELFTEST_X86_ILL_CODE): tests/selftests/syscall/ill_code.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 ill_code
+
+$(IR0_SELFTEST_ARM64_ILL_CODE): tests/selftests/syscall/ill_code.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 ill_code
+
+ir0-selftest-ill-code-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_ILL_CODE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_ILL_CODE) \
+		--done "ok 1 ill_code" \
+		--log $(HOST_TMP)/ir0-selftest-x86-ill-code.log
+	@echo "✓ ir0-selftest-ill-code-x86"
+
+ir0-selftest-ill-code-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ILL_CODE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_ILL_CODE) \
+		--done "ok 1 ill_code" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-ill-code.log
+	@echo "✓ ir0-selftest-ill-code-arm64"
+
+ir0-selftest-ill-code: ir0-selftest-ill-code-x86 ir0-selftest-ill-code-arm64

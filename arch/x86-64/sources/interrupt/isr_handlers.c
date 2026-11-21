@@ -208,18 +208,26 @@ static void x86_fault_from_frame(struct ir0_fault *fault,
 	/* Classes follow Linux arch/x86/kernel/traps.c; fault_signal() maps them. */
 	switch (interrupt_number)
 	{
-	case 0:  /* #DE */
+	case 0:  /* #DE → SIGFPE / FPE_INTDIV */
+		fault->kind = IR0_FAULT_ARITHMETIC;
+		fault->si_code = FPE_INTDIV;
+		break;
 	case 9:  /* coprocessor segment overrun */
 	case 16: /* #MF */
 	case 19: /* #XM */
 		fault->kind = IR0_FAULT_ARITHMETIC;
 		break;
 	case 1:  /* #DB not consumed by the debug-trap backend */
+		fault->kind = IR0_FAULT_BREAKPOINT;
+		fault->si_code = TRAP_TRACE;
+		break;
 	case 3:  /* #BP */
 		fault->kind = IR0_FAULT_BREAKPOINT;
+		fault->si_code = TRAP_BRKPT;
 		break;
-	case 6:
+	case 6:  /* #UD → SIGILL / ILL_ILLOPN */
 		fault->kind = IR0_FAULT_ILLEGAL_INSN;
+		fault->si_code = ILL_ILLOPN;
 		break;
 	case 8:
 		fault->kind = IR0_FAULT_DOUBLE;
@@ -241,8 +249,9 @@ static void x86_fault_from_frame(struct ir0_fault *fault,
 		fault->kind = IR0_FAULT_PAGE;
 		fault->addr = read_fault_address();
 		break;
-	case 17:
+	case 17: /* #AC → SIGBUS / BUS_ADRALN */
 		fault->kind = IR0_FAULT_ALIGNMENT;
+		fault->si_code = BUS_ADRALN;
 		break;
 	default:
 		fault->kind = IR0_FAULT_OTHER;

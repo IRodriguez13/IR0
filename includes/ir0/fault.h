@@ -49,6 +49,11 @@ struct ir0_fault
 	int present;
 	int write;
 	int exec;
+	/*
+	 * Linux si_code for this class when the ISA already knows it.
+	 * 0: the signal path decides (page faults use present/not-present).
+	 */
+	int si_code;
 };
 
 /* Fill @fault from a decoded page fault (kind = IR0_FAULT_PAGE). */

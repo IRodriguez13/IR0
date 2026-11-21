@@ -120,6 +120,14 @@ _Static_assert(offsetof(struct sigaltstack, ss_size) == 16, "ss_size");
 #define SEGV_MAPERR   1
 #define SEGV_ACCERR   2
 
+/* Linux uapi si_code for the other synchronous faults (subset). */
+#define ILL_ILLOPC    1
+#define ILL_ILLOPN    2
+#define FPE_INTDIV    1
+#define BUS_ADRALN    1
+#define TRAP_BRKPT    1
+#define TRAP_TRACE    2
+
 /*
  * siginfo_t — Linux layout: 128 bytes, the union starts at offset 16
  * (__ARCH_SI_PREAMBLE_SIZE on 64-bit). Only the fault fields are used.

@@ -715,3 +715,21 @@ $(SHM_OWNER_BIN): $(SHM_OWNER_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_OWNER_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# ILL-CODE-SELFTEST
+ILL_CODE_SRC := syscall/ill_code.c
+ILL_CODE_BIN := $(BUILD_DIR)/ill_code
+
+.PHONY: ill_code
+
+ill_code: $(ILL_CODE_BIN)
+
+$(ILL_CODE_BIN): $(ILL_CODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest ill_code"
+	@$(CC) $(CFLAGS) -o $@ $(ILL_CODE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
