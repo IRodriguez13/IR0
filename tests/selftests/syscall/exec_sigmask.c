@@ -35,7 +35,7 @@
  * The nolibc entry does not pass argv, so the re-executed image learns it is
  * the child from a marker file the parent creates before execve.
  */
-#define CHILD_MARKER "/exec_sigmask.child"
+#define CHILD_MARKER "/es_child"
 
 static int take_child_marker(void)
 {
