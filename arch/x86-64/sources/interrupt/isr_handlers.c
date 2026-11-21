@@ -31,9 +31,6 @@
 #include <ir0/paging.h>
 #include <string.h>
 #include <arch/x86-64/sources/fault.h>
-#if CONFIG_ENABLE_SOUND
-#include <ir0/sound_blaster.h>
-#endif
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
@@ -445,26 +442,7 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
         uint8_t irq = interrupt_number - 32;
         void *prev_frame = cpu_local_set_irq_frame(stack);
 
-        /*
-         * irq_request owns the line when dispatch returns 0: skip the
-         * built-in cases and still send EOI. An empty slot (-ENOENT)
-         * keeps those cases.
-         */
-        if (irq_dispatch(irq) == -ENOENT)
-        {
-            switch (irq)
-            {
-#if CONFIG_ENABLE_SOUND
-            case 5: /* SB16 8-bit DMA */
-                if (sb16_is_available())
-                    sb16_irq_handler();
-                break;
-#endif
-
-            default:
-                break;
-            }
-        }
+        (void)irq_dispatch(irq);
 #if CONFIG_ENABLE_NETWORKING
         net_stack_handle_irq(irq);
 #endif

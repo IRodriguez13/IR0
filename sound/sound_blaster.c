@@ -107,6 +107,14 @@ bool sb16_init(void)
     return true;
 }
 
+static void sb16_irq(uint32_t irq, void *data)
+{
+    (void)irq;
+    (void)data;
+    if (sb16_is_available())
+        sb16_irq_handler();
+}
+
 static int32_t sb16_hw_init(void)
 {
     LOG_INFO("SB16", "Initializing Sound Blaster 16 hardware...");
@@ -140,6 +148,8 @@ static int32_t sb16_hw_init(void)
     sb16_state.initialized = true;
     resource_register_ioport(SB16_BASE_PORT, SB16_ACK_16BIT, "sound blaster");
     resource_register_irq(SB16_IRQ, "sb16");
+    if (irq_request(SB16_IRQ, sb16_irq, NULL, "sb16") != 0)
+        LOG_WARNING("SB16", "IRQ line already claimed");
     irq_unmask_line(SB16_IRQ);
     return 0;
 }
