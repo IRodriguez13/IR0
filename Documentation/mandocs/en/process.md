@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | scheduler, memory, syscalls, elf_loader |
 | Man page | IR0-process (section 7) |
-| Primary sources | `kernel/process/*.c`, `includes/ir0/process.h`, `kernel/exec/elf_loader.c`, `kernel/process/credentials.c` |
+| Primary sources | `kernel/process/*.c`, `includes/ir0/process.h`, `fs/exec.c`, `fs/binfmt_elf.c`, `kernel/process/credentials.c` |
 
 ## 1. Overview
 
@@ -36,7 +36,7 @@ fd table, credentials, cwd, signal state, and mmap list. Creation paths include
 |-----|------|-----|
 | `spawn_user` | `process/create.c` + elf_loader | New ELF process |
 | `fork` | `process/fork.c` | POSIX fork |
-| `process_exec_close_cloexec` | `process/exec.c` | CLOEXEC on execve |
+| `process_exec_close_cloexec` | `fs/exec.c` | CLOEXEC on execve |
 | `process_exit` / `process_destroy` | `process/exit.c` | zombie then reap teardown |
 | `process_wait` / reap | `process/wait.c` | wait4 / reparent |
 | `process_release_fds` | `process/fdtable.c` | FD lifecycle |

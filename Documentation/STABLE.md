@@ -178,7 +178,7 @@ These items were tracked as partial, WIP, or hardening backlog. They are **close
 | Fork COW (share + WP break) | `mm/paging/paging.c`, `arch/x86-64/sources/fault.c` | `smoke-mm-cow-lazy` (real since `62cc512`) |
 | Lazy anon `mmap` | `CONFIG_LAZY_ANON_MMAP` | same smoke |
 | Lazy `brk` | `CONFIG_LAZY_BRK_HEAP` | same smoke |
-| ELF PT_LOAD VMA metadata | `kernel/exec/elf_loader.c`, `process_user_vma_prot()` | exec + mmap ktests |
+| ELF PT_LOAD VMA metadata | `fs/binfmt_elf.c`, `process_user_vma_prot()` | exec + mmap ktests |
 
 **Not required for 0.0.1:** 2 MiB huge-page COW, file-backed COW, optional stack COW (see ROADMAP P2/PERF-2).
 

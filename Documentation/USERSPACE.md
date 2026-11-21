@@ -127,7 +127,7 @@ pull the binary.
 
 ### Shebang scripts (`#!`)
 
-`execve` / `exec_replace_current` in `kernel/exec/elf_loader.c` recognize a leading
+`execve` / `exec_replace_current` in `fs/binfmt_elf.c` recognize a leading
 `#!` line before ELF validation: interpreter path, optional argument, then the
 script path is appended to `argv`. Recursion depth is capped at 4; non-ELF files
 without a valid shebang return `-ENOEXEC`. Example: `./script.sh` with

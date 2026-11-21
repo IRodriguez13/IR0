@@ -9,7 +9,7 @@
 | Tier | Target | ~Progress | Primary paths |
 |------|--------|-----------|---------------|
 | T0 | OS funcional + contratos | ~80% | `kernel/test/`, `kernel/syscalls/`, `fs/*`, contracts |
-| T1 | Userspace POSIX mínimo (init+musl) | ~40% | `kernel/exec/elf_loader.c`, `kernel/process.c`, `setup/pid1/`, `includes/ir0/bits/` |
+| T1 | Userspace POSIX mínimo (init+musl) | ~40% | `fs/binfmt_elf.c`, `kernel/process.c`, `setup/pid1/`, `includes/ir0/bits/` |
 | T2 | Cliente gráfico fullscreen (Doom-class) | ~50% | `drivers/video/`, `/dev/fb0`, `/dev/events0`, `sys_mmap` |
 | T3 | Escritorio minimalista (WM+panel) | ~15–20% | Out of kernel slice unless explicitly scoped |
 

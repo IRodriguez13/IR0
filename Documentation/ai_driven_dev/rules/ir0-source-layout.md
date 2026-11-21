@@ -53,9 +53,9 @@ Criterio del mantenedor para todo el kernel. Complementa
 
   | Subdirectorio | Responsabilidad |
   |---------------|-----------------|
-  | `kernel/process/` | ciclo de vida: registro, create, fork, exec (CLOEXEC), exit, wait, credenciales, límites |
+  | `kernel/process/` | ciclo de vida: registro, create, fork, exit, wait, credenciales, límites |
   | `kernel/signals/` | entrega, frame de usuario, acción por defecto, trampolín, syscalls de señales y su hook de diag |
-  | `kernel/exec/` | carga de ELF, pila de entrada, vDSO, caché environ/cmdline de exec |
+  | `kernel/exec/` | pila de entrada del mundo early (Q1), vDSO, caché environ/cmdline de exec |
   | `kernel/main.c` | `kmain()`: el orden de arranque de cada subsistema, una llamada por paso (único archivo suelto de `kernel/`, decisión Q11; lo hace cumplir `[kernel-loose-files]`) |
   | `kernel/boot/` | pasos de arranque que llama `kmain()`, parámetros, cmdline, rootfs base, handoff a init |
   | `kernel/panic/` | BUG/OOPS, panic y descripción neutral de faults |
@@ -69,8 +69,10 @@ Criterio del mantenedor para todo el kernel. Complementa
   Los helpers puros de biblioteca viven en `lib/` (nivel superior, como en
   Linux): hoy `lib/strerror.c` con su header `<ir0/strerror.h>`.
   Lo multi-CPU vive en `smp/` (nivel superior); las tablas de fds y
-  `struct file` en `fs/`; `mm_struct` y el espacio de direcciones del
-  proceso en `mm/`; los registros de drivers en `drivers/core/`.
+  `struct file` en `fs/`; `execve(2)` y la carga de ELF también en `fs/`
+  (`exec.c`, `binfmt_elf.c`, `elf64_image.c`, `exec_read_trace.c`, decisión
+  Q6); `mm_struct` y el espacio de direcciones del proceso en `mm/`; los
+  registros de drivers en `drivers/core/`.
 - El nivel superior del subsistema queda para lo transversal (p. ej.
   `mm/diag.c`, los hooks de `<ir0/mm_diag.h>`).
 - Los headers privados (`*_internal.h`) viajan con sus archivos. Entre

@@ -20,7 +20,7 @@
 
 #include "ir0/ksft.h"
 
-/* Same on-disk fields as kernel/exec/elf64_image.c elf64_ehdr and elf64_phdr. */
+/* Same on-disk fields as fs/elf64_image.c elf64_ehdr and elf64_phdr. */
 struct elf64_ehdr
 {
 	unsigned char e_ident[16];

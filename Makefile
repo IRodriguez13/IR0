@@ -428,7 +428,7 @@ KERNEL_OBJS = \
     fs/files_lifecycle.o \
     fs/files_struct.o \
     kernel/process/fork.o \
-    kernel/process/exec.o \
+    fs/exec.o \
     kernel/process/lifecycle.o \
     kernel/process/parent.o \
     kernel/process/resources.o \
@@ -671,10 +671,10 @@ LIB_OBJS = \
     drivers/video/fb.o \
     drivers/input/input.o \
     fs/utimens.o \
-    kernel/exec/exec_read_trace.o \
+    fs/exec_read_trace.o \
     fs/mount_prefix.o \
     block/blockdev.o \
-    kernel/exec/elf64_image.o \
+    fs/elf64_image.o \
     kernel/exec/early_elf_stack.o \
     $(MM_PORT_OBJ) \
     ktm/process_introspect.o \

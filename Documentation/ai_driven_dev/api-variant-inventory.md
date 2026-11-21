@@ -140,7 +140,7 @@ Header `includes/string.h` (`includes/string.c`).
 Private duplicates of public helpers: `find_hpet.c` static `memcmp` and
 `acpi_memcmp` — DONE (call `memcmp`). `sock_strnlen` was already gone at
 `bc3e0e15`, so no public `strnlen` is needed yet. Still open:
-`kernel/exec/elf_loader.c` `exec_strdup_kern` (add `kstrdup` only if a second
+`fs/binfmt_elf.c` `exec_strdup_kern` (add `kstrdup` only if a second
 user appears) and `kernel/exec/early_elf_stack.c` `cstr_len` (a NULL-tolerant
 `strlen`; the file is also built for host tests). The ARM64 freestanding
 string copies (`portable_string.c`, `freestanding_stubs.c`) left with the
@@ -284,7 +284,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `heap_alloc` / `heap_free` (`mm/allocator.h`) | mm-private | 3 / 5 | KEEP private (guarded by `[kmem-single-api]`) |
 | `dma_alloc` / `dma_free` / `dma_sync_for_*` / `dma_map_mmio` | `ir0/dma.h` | 2 / 2 / 3 / 1 | KEEP (Linux names, both arches) |
 | `mm_alloc_frame(ctx)` | `ir0/mm_alloc.h` | 9 | KEEP as the one frame allocator (adds direct reclaim) |
-| `pmm_alloc_frame` | `mm/pmm.h` | 12 | PRIVATE to mm: non-mm users (`kernel/syscalls/mm_syscalls.c`, `ipc/sysv_shm.c`, `arch/x86-64/sources/task_stack.c`) skip reclaim; `mm/pmm.h` is also included by `kernel/exec/elf_loader.c` and `kernel/boot/boot_init.c` |
+| `pmm_alloc_frame` | `mm/pmm.h` | 12 | PRIVATE to mm: non-mm users (`kernel/syscalls/mm_syscalls.c`, `ipc/sysv_shm.c`, `arch/x86-64/sources/task_stack.c`) skip reclaim; `mm/pmm.h` is also included by `fs/binfmt_elf.c` and `kernel/boot/boot_init.c` |
 | `pmm_free_frame` vs `pmm_frame_put` | `mm/pmm.h` | 17 / 10 | MERGE: `pmm_free_frame` is literally `pmm_frame_put` |
 | `pmm_init` | `mm/pmm.h` | 0 | DELETE (`pmm_init_ranges` is used) |
 | `page_table_frame_alloc` / `_free` | `ir0/page_table_pool.h` | 4 / 6 | KEEP (dedicated pool) |
@@ -348,7 +348,7 @@ scanned (hardware register vocabulary, and HCI "rsp" = response).
 | `includes/ir0/signal_irq.h:59` | `new_rsp` param | `new_sp` |
 | `includes/ir0/ktm/stack_watch.h:20`, `ktm/stack_watch.c` | `ktm_stack_watch(uint64_t rsp)` | `sp` |
 | `kernel/signals/signals.c:58-70`, `:211`, `:999`, `:931-959` | `signal_rip_is_registered_handler(p, rip)`, `snap_rdi`, `snap_rsi` | `signal_ip_is_registered_handler(ip)`, `snap_arg0/1` |
-| `kernel/exec/elf_loader.c:1513-2042` | `exec_commit_ctx.{task_cr3_entry, active_cr3_entry, entry_rip, task_rip_final, task_rsp_final}` | `{task_root, active_root, entry_ip, final_ip, final_sp}` |
+| `fs/binfmt_elf.c:1513-2042` | `exec_commit_ctx.{task_cr3_entry, active_cr3_entry, entry_rip, task_rip_final, task_rsp_final}` | `{task_root, active_root, entry_ip, final_ip, final_sp}` |
 | `kernel/syscalls/fs_path_syscalls.c:154-162` | local `rflags` (means remount flags) | `remount_flags` (misleading name only) |
 | `drivers/timer/acpi/acpi_pm.c:125-147` | `cr3`, `pml4`, `& ~0xFFF` decode of the root | `map_page_in_directory(paging_current_address_space(), ...)` |
 | `ktm/d1_12_read_diag.c` (26), `ktm/d1_13_malloc_pf_diag.c` (7), `ktm/ktm_panic_class.c` (6), `ktm/include/d1_1{2,3}_*.h` (10), `ktm_probe_diag.[ch]` (4), `ktm/include/ktm.h` (2) | `pre_rax..pre_r10`, `magic_rax`, `USER_RIP_LO/HI`, ... | diag snapshots of x86 syscall registers: read them through `syscall_frame_arg(i)` / `task_get_ip/sp`, or move the x86-only probes under `arch/x86-64` |

@@ -17,6 +17,9 @@ struct process;
 
 int kexecve(const char *path, char *const argv[], char *const envp[]);
 int exec_replace_current(const char *path, char *const argv[], char *const envp[]);
+int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
+int64_t sys_execveat(int dirfd, const char *pathname, char *const argv[],
+		     char *const envp[], int flags);
 
 #define ELF_MAGIC 0x464C457Fu
 #define PT_LOAD 1
