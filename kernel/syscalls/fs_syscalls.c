@@ -550,7 +550,7 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
 }
 
 /*
- * Install a registry /proc|/sys|/heart file into the process fd_table.
+ * Install a registry /proc|/sys file into the process fd_table.
  * Returns a real slot index (not PSEUDO_FS_*_FD_BASE).
  */
 static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
@@ -680,26 +680,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
       if (!(ir0_flags & O_DIRECTORY))
         return -EISDIR;
       return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
-
-  if (is_heart_path(resolved) && !heart_is_dennis_vfs_path(resolved))
-  {
-    char canon[256];
-
-    heart_nodes_register();
-    if (heart_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    if (heart_alias_canonical(resolved, canon, sizeof(canon)))
-    {
-      open_ret = pseudo_bind_file_fd(canon, ir0_flags);
-      return open_ret;
     }
     open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
     return open_ret;

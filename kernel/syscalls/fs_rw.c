@@ -371,7 +371,7 @@ int64_t sys_read(int fd, void *buf, size_t count)
   if (!buf)
     return -EFAULT;
 
-  /* Process-local pseudo_fs binds (/proc|/sys|/heart) — real fd_table slots. */
+  /* Process-local pseudo_fs binds (/proc|/sys) — real fd_table slots. */
   if (fd >= 0 && fd < ir0_fd_span())
   {
     fd_entry_t *fdt = get_process_fd_table();

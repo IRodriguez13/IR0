@@ -108,15 +108,6 @@ void test_pseudo_fs_register_lookup_read(void)
 	ASSERT_EQ(n, 0);
 	ASSERT_EQ(pseudo_fs_read_fd(fd, out, sizeof(out), -1), -EINVAL);
 
-	rc = pseudo_fs_register("/heart", "beat", &mock_ops, "alive");
-	ASSERT_EQ(rc, 0);
-	rc = pseudo_fs_open_path("/heart/beat", 0, &fd);
-	ASSERT_EQ(rc, 0);
-	memset(out, 0, sizeof(out));
-	n = pseudo_fs_read_fd(fd, out, sizeof(out) - 1, 0);
-	ASSERT_EQ(n, 5);
-	ASSERT_STR_EQ(out, "alive");
-
 	{
 		off_t offset = 0;
 		ASSERT_EQ(pseudo_fs_ops_read(&oversized_ops, NULL, out, sizeof(out),

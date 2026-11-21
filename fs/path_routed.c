@@ -15,7 +15,6 @@
 #include <ir0/cred.h>
 #include <ir0/procfs.h>
 #include <ir0/sysfs.h>
-#include <ir0/heartfs.h>
 #include <ir0/pseudo_fs.h>
 #include <fs/vfs.h>
 
@@ -55,12 +54,6 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
         return proc_stat(path, st);
     if (is_sys_path(path))
         return sysfs_stat(path, st);
-    if (is_heart_path(path))
-    {
-        if (heart_is_dennis_vfs_path(path))
-            return vfs_stat(path, st);
-        return heart_stat(path, st);
-    }
     if (ir0_is_dev_path(path))
     {
         ensure_devfs_init();
@@ -204,13 +197,6 @@ int ir0_getdents_path_routed(const char *path, struct vfs_dirent *entries,
     {
         ensure_devfs_init();
         return devfs_readdir_subdir(path, entries, max_entries);
-    }
-
-    if (is_heart_path(path))
-    {
-        if (heart_is_dennis_vfs_path(path))
-            return vfs_readdir(path, entries, max_entries);
-        return heart_getdents(path, entries, max_entries);
     }
 
     if (is_proc_path(path))

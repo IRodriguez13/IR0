@@ -21,10 +21,8 @@
 
 static pseudo_fs_entry_t g_proc_entries[PSEUDO_FS_MAX_ENTRIES];
 static pseudo_fs_entry_t g_sys_entries[PSEUDO_FS_MAX_ENTRIES];
-static pseudo_fs_entry_t g_heart_entries[PSEUDO_FS_MAX_ENTRIES];
 static int g_proc_count;
 static int g_sys_count;
-static int g_heart_count;
 
 typedef struct pseudo_fs_dynamic_reg
 {
@@ -220,13 +218,6 @@ int pseudo_fs_register(const char *mount_prefix, const char *rel_path,
                                       mount_prefix, rel_path, ops, ctx);
     }
 
-    if (strncmp(mount_prefix, "/heart", 6) == 0)
-    {
-        return pseudo_fs_register_table(g_heart_entries, &g_heart_count,
-                                        PSEUDO_FS_HEART_FD_BASE,
-                                        mount_prefix, rel_path, ops, ctx);
-    }
-
     return pseudo_fs_register_table(g_proc_entries, &g_proc_count, PSEUDO_FS_PROC_FD_BASE,
                                     mount_prefix, rel_path, ops, ctx);
 }
@@ -339,11 +330,7 @@ const pseudo_fs_entry_t *pseudo_fs_lookup(const char *full_path)
     if (hit)
         return hit;
 
-    hit = pseudo_fs_lookup_table(g_sys_entries, g_sys_count, full_path);
-    if (hit)
-        return hit;
-
-    return pseudo_fs_lookup_table(g_heart_entries, g_heart_count, full_path);
+    return pseudo_fs_lookup_table(g_sys_entries, g_sys_count, full_path);
 }
 
 void pseudo_fs_reset(void)
@@ -360,11 +347,9 @@ void pseudo_fs_reset(void)
 
     memset(g_proc_entries, 0, sizeof(g_proc_entries));
     memset(g_sys_entries, 0, sizeof(g_sys_entries));
-    memset(g_heart_entries, 0, sizeof(g_heart_entries));
     memset(g_dyn_regs, 0, sizeof(g_dyn_regs));
     g_proc_count = 0;
     g_sys_count = 0;
-    g_heart_count = 0;
     g_dyn_reg_count = 0;
 }
 
@@ -408,8 +393,6 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
     entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
     if (!entry)
         entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
-    if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_heart_entries, g_heart_count, fd);
     if (!entry || !entry->ops || !entry->ops->read)
         return -EBADF;
 
@@ -704,8 +687,6 @@ int64_t pseudo_fs_close_fd(int fd)
     if (!entry)
         entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
     if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_heart_entries, g_heart_count, fd);
-    if (!entry)
         return -EBADF;
 
     if (entry->ops && entry->ops->close)
@@ -762,9 +743,6 @@ int pseudo_fs_path_has_children(const char *path)
     if (pseudo_fs_table_has_children(g_sys_entries, g_sys_count, path))
         return 1;
 
-    if (pseudo_fs_table_has_children(g_heart_entries, g_heart_count, path))
-        return 1;
-
     return sys_class_net_path_has_children(path);
 }
 
@@ -799,7 +777,7 @@ int pseudo_fs_collect_registry_children(const char *dir_path,
     plen = strlen(norm);
     n = start_n;
 
-    for (int tbl = 0; tbl < 3; tbl++)
+    for (int tbl = 0; tbl < 2; tbl++)
     {
         const pseudo_fs_entry_t *table;
         int count;
@@ -809,15 +787,10 @@ int pseudo_fs_collect_registry_children(const char *dir_path,
             table = g_proc_entries;
             count = g_proc_count;
         }
-        else if (tbl == 1)
+        else
         {
             table = g_sys_entries;
             count = g_sys_count;
-        }
-        else
-        {
-            table = g_heart_entries;
-            count = g_heart_count;
         }
 
         for (int i = 0; i < count && n < max_entries; i++)

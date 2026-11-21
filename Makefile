@@ -722,7 +722,7 @@ $(HEART_SRC_BLOB): \
 		$(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		$(KERNEL_ROOT)/includes/ir0/heart_src_probe.h \
 		$(KERNEL_ROOT)/includes/ir0/pseudo_fs.h \
-		$(KERNEL_ROOT)/includes/ir0/heartfs.h \
+		$(KERNEL_ROOT)/fs/heartfs/heartfs.c \
 		$(KERNEL_ROOT)/includes/ir0/version.h \
 		$(KERNEL_ROOT)/includes/ir0/sock_stream.h \
 		$(KERNEL_ROOT)/includes/ir0/ahci_api.h \
@@ -731,7 +731,7 @@ $(HEART_SRC_BLOB): \
 	@python3 $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		--root $(KERNEL_ROOT) --out $(HEART_SRC_BLOB)
 
-fs/heartfs.o: $(HEART_SRC_BLOB)
+fs/heartfs/heartfs.o: $(HEART_SRC_BLOB)
 
 FS_OBJS = \
     fs/vfs.o \
@@ -745,7 +745,6 @@ FS_OBJS = \
     fs/flock.o \
     fs/pseudo_fs_registry.o \
     fs/pseudo_fs_nodes.o \
-    fs/heartfs.o \
     fs/procfs.o \
     fs/procfs_process.o \
     fs/procfs_net.o \

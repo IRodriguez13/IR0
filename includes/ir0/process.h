@@ -56,7 +56,7 @@ struct sighand_struct
 	void (*restorer[_NSIG])(void);
 };
 
-/* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
+/* Process-local binding for /proc /sys opens (not global virtual fds). */
 typedef struct pseudo_fd_bind
 {
 	const void *ops; /* const pseudo_fs_ops_t * */

@@ -21,7 +21,7 @@ LDFLAGS    =
 
 TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_registry.c test_pseudo_fs_proc_registry.c \
-	test_pseudo_fs_children.c \
+	test_pseudo_fs_children.c test_heartfs_vfs.c \
 	test_usb_pci_scan.c test_bt_scan_sync.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
@@ -71,7 +71,8 @@ TEST_SRCS += test_fault_signal.c
 # The freestanding string library is compiled into the host suite under
 # ir0_* names so width/precision and alignment fast paths are unit-tested.
 TEST_SRCS += test_kernel_string.c
-KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
+KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_heartfs.o \
+	host_usb_host_disabled.o \
 	host_kernel_string.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
@@ -126,6 +127,17 @@ KERNEL_CC = $(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 
 host_pseudo_fs_registry.o: $(KERNEL_ROOT)/fs/pseudo_fs_registry.c
 	$(CC) $(KERNEL_CFLAGS) -include stdio.h -c -o $@ $<
+
+HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
+
+$(HEART_SRC_BLOB): $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py
+	python3 $< --root $(KERNEL_ROOT) --out $@
+
+host_heartfs.o: $(KERNEL_ROOT)/fs/heartfs/heartfs.c $(HEART_SRC_BLOB)
+	$(CC) $(KERNEL_CFLAGS) -include stdio.h \
+		-DIR0_BUILD_DATE_STRING='"host"' -DIR0_BUILD_TIME_STRING='"host"' \
+		-DIR0_BUILD_USER_STRING='"host"' -DIR0_BUILD_HOST_STRING='"host"' \
+		-DIR0_BUILD_CC_STRING='"$(CC)"' -c -o $@ $<
 
 host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
 	$(CC) $(KERNEL_CFLAGS) -DCONFIG_ENABLE_USB_HOST=0 -c -o $@ $<

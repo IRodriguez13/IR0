@@ -26,6 +26,7 @@ extern void test_example_asserts(void);
 extern void test_pseudo_fs_register_lookup_read(void);
 extern void test_pseudo_fs_proc_registry_paths(void);
 extern void test_pseudo_fs_path_has_children_and_collect(void);
+extern void test_heartfs_vfs(void);
 extern void test_usb_host_disabled_controller_count(void);
 extern void test_bt_scan_sync_stub(void);
 extern void test_vfs_backend_contract(void);
@@ -130,6 +131,7 @@ static void (*test_functions[])(void) = {
 	test_pseudo_fs_register_lookup_read,
 	test_pseudo_fs_proc_registry_paths,
 	test_pseudo_fs_path_has_children_and_collect,
+	test_heartfs_vfs,
 	test_usb_host_disabled_controller_count,
 	test_bt_scan_sync_stub,
 	test_vfs_backend_contract,

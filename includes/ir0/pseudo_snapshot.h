@@ -3,9 +3,9 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: pseudo_snapshot.h
- * Description: Contract for finite pseudo-file snapshots (proc/sys/heart).
+ * Description: Contract for finite pseudo-file snapshots (proc/sys).
  *
- * Snapshot semantics (default for /proc,/sys,/heart text nodes):
+ * Snapshot semantics (default for /proc,/sys text nodes):
  *   open → generate content (or regenerate per read into bounce)
  *   read → respect process fd offset; return 0 at EOF
  *   lseek → SEEK_SET/CUR/END within snapshot size when bound in fd_table

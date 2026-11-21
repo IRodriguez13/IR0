@@ -662,7 +662,6 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 			{ "/proc", IR0_PROC_SUPER_MAGIC },
 			{ "/sys", IR0_SYSFS_MAGIC },
 			{ "/dev", IR0_TMPFS_MAGIC },
-			{ "/heart", IR0_HEARTFS_MAGIC },
 		};
 		size_t i;
 
