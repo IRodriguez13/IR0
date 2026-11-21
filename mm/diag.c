@@ -185,7 +185,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 	 * klog level drops DEBUG.
 	 */
 	log_info_fmt("PF",
-			"[PF] userspace segv pid=%x addr=%llx write=%llx present=%llx rip=%llx user=%llx handler=%llx proc_mask=%x ignored=%x (no handler)\n",
+			"[PF] userspace segv pid=%x addr=%llx write=%llx present=%llx rip=%llx user=%llx handler=%llx proc_mask=%llx ignored=%llx (no handler)\n",
 			(unsigned)((uint32_t)p->task.pid),
 			(unsigned long long)fault_addr,
 			(unsigned long long)(info && info->write ? 1 : 0),
@@ -193,8 +193,8 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 			(unsigned long long)(info ? (unsigned long long)info->ip : 0ULL),
 			(unsigned long long)(info && info->user ? 1 : 0),
 			(unsigned long long)((uint64_t)(uintptr_t)p->sighand->handlers[SIGSEGV]),
-			(unsigned)(p->signal_mask),
-			(unsigned)(p->signal_ignored));
+			(unsigned long long)(p->signal_mask),
+			(unsigned long long)(p->signal_ignored));
 	log_info_fmt("PF",
 			"[PF] segv diag pid=%x arg0=%llx arg1=%llx sp=%llx "
 			"sigframe_sp=%llx mask_saved=%x\n",

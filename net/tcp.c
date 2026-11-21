@@ -34,7 +34,7 @@ static uint32_t g_tcp_connect_owner;
 
 static int tcp_consume_connect_sigalrm(void)
 {
-	uint32_t pend;
+	uint64_t pend;
 
 	if (!current_process)
 		return 0;

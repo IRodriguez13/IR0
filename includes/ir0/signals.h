@@ -54,14 +54,24 @@ typedef struct process process_t;
 #define SIGWINCH 28   /* Window size change (TTY) */
 #define SIGIO    29   /* I/O readiness notification (F_SETOWN/O_ASYNC) */
 
-/* Signal bitmask helpers */
-#define SIGNAL_MASK(sig) (1U << (sig))
+/*
+ * Bit N is signal N (1..63). A 32-bit mask cannot hold signal 32, so the
+ * pending, blocked and ignored sets are one uint64_t.
+ */
+#define SIGNAL_MASK(sig) (1ULL << (sig))
 
 /* Never blocked, caught or ignored (Linux sigdelsetmask(SIGKILL|SIGSTOP)). */
 #define SIGNAL_UNBLOCKABLE (SIGNAL_MASK(SIGKILL) | SIGNAL_MASK(SIGSTOP))
 
-/* Maximum signal number */
-#define _NSIG 32
+/* Exclusive bound: valid signals are 1.._NSIG-1. */
+#define _NSIG 64
+
+/* Real-time signals. Standard signals stay 1..31. */
+#define SIGRTMIN 32
+#define SIGRTMAX 63
+
+_Static_assert(SIGRTMIN == 32, "SIGRTMIN");
+_Static_assert(SIGRTMAX == (_NSIG - 1), "SIGRTMAX is the last valid signal");
 
 /* sigset_t — Linux uapi layout (128 bytes on x86-64). */
 #define _IR0_SIGSET_WORDS 16
@@ -260,7 +270,7 @@ int signal_pending(process_t *p);
  * (Linux set_current_blocked()). SIGKILL and SIGSTOP are dropped from it:
  * every path that takes a mask from userspace goes through here.
  */
-void set_current_blocked(uint32_t mask);
+void set_current_blocked(uint64_t mask);
 
 /**
  * register_signal_handler - Register a signal handler for current process
@@ -305,27 +315,29 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 				   uint64_t fault_addr);
 
 /*
- * Linux places signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.
- * Convert at the ABI boundary only; keep kernel-internal bits unchanged.
+ * Linux places signal N in bit (N-1) of the first sigset word. IR0
+ * SIGNAL_MASK(N) is bit N. Signals 1..63 fit in one uint64_t: the shift
+ * maps Linux bits 0..62 onto IR0 bits 1..63. Convert at the ABI boundary
+ * only; keep kernel-internal bits unchanged.
  */
-static inline uint32_t linux_sigword_to_ir0(uint32_t linux_low)
+static inline uint64_t linux_sigword_to_ir0(uint64_t linux_bits)
 {
-	return linux_low << 1;
+	return linux_bits << 1;
 }
 
-static inline uint32_t ir0_sigword_to_linux(uint32_t ir0_mask)
+static inline uint64_t ir0_sigword_to_linux(uint64_t ir0_mask)
 {
 	return ir0_mask >> 1;
 }
 
-static inline uint32_t ir0_sigset_low32(const sigset_t *set)
+static inline uint64_t ir0_sigset_word(const sigset_t *set)
 {
 	if (!set)
 		return 0;
-	return linux_sigword_to_ir0((uint32_t)(set->__val[0] & 0xFFFFFFFFUL));
+	return linux_sigword_to_ir0((uint64_t)set->__val[0]);
 }
 
-static inline void ir0_sigset_set_low32(sigset_t *set, uint32_t mask)
+static inline void ir0_sigset_set_word(sigset_t *set, uint64_t mask)
 {
 	size_t i;
 

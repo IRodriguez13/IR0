@@ -373,9 +373,9 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 {
 	process_t *p;
 	void (*saved_handler)(int);
-	uint32_t saved_pending;
-	uint32_t saved_mask;
-	uint32_t saved_ignored;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
+	uint64_t saved_ignored;
 	uint64_t zero_mask = 0;
 	arch_syscall_frame_t saved_regs;
 	int64_t rc;
@@ -446,8 +446,8 @@ static void futex_drop_on_sleep(process_t *proc)
 void ktest_futex_interrupted_wait_frees_slot(void)
 {
 	int rc;
-	uint32_t saved_pending;
-	uint32_t saved_mask;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
 
 	KTEST_BEGIN("futex_interrupted_wait_frees_slot");
 	KASSERT(current_process != NULL);
@@ -474,8 +474,8 @@ void ktest_futex_interrupted_wait_frees_slot(void)
 void ktest_futex_exit_drop_frees_slot(void)
 {
 	int rc;
-	uint32_t saved_pending;
-	uint32_t saved_mask;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
 
 	KTEST_BEGIN("futex_exit_drop_frees_slot");
 	KASSERT(current_process != NULL);
@@ -518,8 +518,8 @@ static void futex_count_sleep(process_t *proc)
 void ktest_futex_pending_signal_skips_sleep(void)
 {
 	int rc;
-	uint32_t saved_pending;
-	uint32_t saved_mask;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
 
 	KTEST_BEGIN("futex_pending_signal_skips_sleep");
 	KASSERT(current_process != NULL);

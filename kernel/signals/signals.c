@@ -83,7 +83,7 @@ static int signal_ip_is_registered_handler(process_t *p, uint64_t ip)
  * The mask a handler frame saves (Linux sigmask_to_save()): the caller's own
  * mask while rt_sigsuspend runs with a temporary one.
  */
-static uint32_t sigmask_to_save(const process_t *p)
+static uint64_t sigmask_to_save(const process_t *p)
 {
 	return p->restore_sigmask ? p->saved_sigmask : p->signal_mask;
 }
@@ -292,7 +292,7 @@ static int signal_default_stops(int sig)
  */
 int signal_pending(process_t *p)
 {
-	uint32_t deliverable;
+	uint64_t deliverable;
 	int sig;
 
 	if (!p || p->signal_pending == 0)
@@ -585,7 +585,7 @@ static int get_signal(process_t *p)
 
 	for (sig = 1; sig < _NSIG; sig++)
 	{
-		uint32_t bit = SIGNAL_MASK(sig);
+		uint64_t bit = SIGNAL_MASK(sig);
 		void (*handler)(int) = p->sighand->handlers[sig];
 
 		if (!(p->signal_pending & bit))
@@ -718,7 +718,7 @@ static int handle_signal(process_t *p, int sig,
 	return 1;
 }
 
-void set_current_blocked(uint32_t mask)
+void set_current_blocked(uint64_t mask)
 {
 	current_process->signal_mask = mask & ~SIGNAL_UNBLOCKABLE;
 }

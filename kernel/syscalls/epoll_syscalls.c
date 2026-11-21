@@ -411,7 +411,7 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 int64_t sys_epoll_pwait(int epfd, struct epoll_event *events, int maxevents,
 			int timeout, const void *sigmask, size_t sigsetsize)
 {
-	uint32_t saved_mask = 0;
+	uint64_t saved_mask = 0;
 	int applied = 0;
 	int64_t ret;
 	int rc;
@@ -434,7 +434,7 @@ int64_t sys_pselect6(int nfds, fd_set *readfds, fd_set *writefds,
 		size_t ss_len;
 	} pack;
 	struct timespec ts;
-	uint32_t saved_mask = 0;
+	uint64_t saved_mask = 0;
 	int timeout_ms = -1;
 	int has_timeout = 0;
 	int applied = 0;

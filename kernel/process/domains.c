@@ -205,10 +205,10 @@ int process_signals_clone(process_t *dst, const process_t *src,
 void process_sighand_note_ignore(process_t *owner, int sig, int ignored)
 {
 	process_t *p;
-	unsigned int bit;
+	uint64_t bit;
 	uint64_t irq_flags;
 
-	if (!owner || !owner->sighand || sig < 1 || sig >= 32)
+	if (!owner || !owner->sighand || sig < 1 || sig >= _NSIG)
 		return;
 
 	bit = SIGNAL_MASK(sig);
