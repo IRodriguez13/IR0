@@ -165,6 +165,11 @@ typedef struct process
 	uint32_t sgid;
 	/* prctl(PR_SET_NO_NEW_PRIVS): execve must not raise privileges. */
 	uint8_t no_new_privs;
+	/*
+	 * prctl(PR_SET_PDEATHSIG). 0 means none. The child starts at 0
+	 * (fork zeroes the task); exec keeps the value.
+	 */
+	int pdeathsig;
 	/* AT_SECURE of the running image; recomputed on every execve. */
 	uint8_t at_secure;
 	pid_t tgid;

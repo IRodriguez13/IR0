@@ -36,6 +36,10 @@
 #define ARCH_GET_FS 0x1003
 
 /* prctl(2) options (Linux include/uapi/linux/prctl.h) */
+#define PR_SET_PDEATHSIG 1
+#define PR_GET_PDEATHSIG 2
+#define PR_SET_NAME 15
+#define PR_GET_NAME 16
 #define PR_SET_NO_NEW_PRIVS 38
 #define PR_GET_NO_NEW_PRIVS 39
 
@@ -1097,6 +1101,38 @@ int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 
   switch (option)
   {
+  case PR_SET_PDEATHSIG:
+    if (arg2 >= _NSIG)
+      return -EINVAL;
+    current_process->pdeathsig = (int)arg2;
+    return 0;
+  case PR_GET_PDEATHSIG:
+    {
+      int word = current_process->pdeathsig;
+
+      if (copy_to_user((void *)(uintptr_t)arg2, &word, sizeof(word)) != 0)
+        return -EFAULT;
+    }
+    return 0;
+  case PR_SET_NAME:
+    {
+      char comm[sizeof(current_process->comm)];
+      long n;
+
+      memset(comm, 0, sizeof(comm));
+      n = strncpy_from_user(comm, (const char *)(uintptr_t)arg2,
+                            (long)sizeof(comm));
+      if (n < 0)
+        return n;
+      comm[sizeof(comm) - 1] = '\0';
+      memcpy(current_process->comm, comm, sizeof(comm));
+    }
+    return 0;
+  case PR_GET_NAME:
+    if (copy_to_user((void *)(uintptr_t)arg2, current_process->comm,
+                     sizeof(current_process->comm)) != 0)
+      return -EFAULT;
+    return 0;
   case PR_SET_NO_NEW_PRIVS:
     if (arg2 != 1 || arg3 || arg4 || arg5)
       return -EINVAL;

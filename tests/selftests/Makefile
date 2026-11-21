@@ -534,3 +534,21 @@ $(SHM_EXIT_BIN): $(SHM_EXIT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_EXIT_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PRCTL-TASK-SELFTEST
+PRCTL_TASK_SRC := syscall/prctl_task.c
+PRCTL_TASK_BIN := $(BUILD_DIR)/prctl_task
+
+.PHONY: prctl_task
+
+prctl_task: $(PRCTL_TASK_BIN)
+
+$(PRCTL_TASK_BIN): $(PRCTL_TASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest prctl_task"
+	@$(CC) $(CFLAGS) -o $@ $(PRCTL_TASK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

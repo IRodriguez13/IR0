@@ -9,6 +9,33 @@
 
 #include "process_internal.h"
 #include <ir0/process_exit.h>
+#include <ir0/signals.h>
+
+/*
+ * Linux forget_original_parent() sends the child's pdeath_signal before
+ * the ppid changes. 0 means the child asked for none.
+ */
+static void process_send_pdeathsig(process_t *dying)
+{
+	process_t *child;
+
+	if (!dying)
+		return;
+
+	for (child = process_list; child; child = child->next)
+	{
+		int sig;
+
+		if (child == dying || child->ppid != dying->task.pid)
+			continue;
+		if (!process_is_alive(child))
+			continue;
+		sig = child->pdeathsig;
+		if (sig <= 0 || sig >= _NSIG)
+			continue;
+		(void)send_signal((int)child->task.pid, sig);
+	}
+}
 
 void process_reparent_children(process_t *dying_parent)
 {
@@ -16,6 +43,8 @@ void process_reparent_children(process_t *dying_parent)
 
 	if (!dying_parent)
 		return;
+
+	process_send_pdeathsig(dying_parent);
 
 	init = process_find_by_pid(1);
 	if (!init || init == dying_parent || !process_is_alive(init))
