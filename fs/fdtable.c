@@ -20,6 +20,48 @@
 #include <ir0/fd_install.h>
 #include <ir0/fd_resource.h>
 #include <ir0/vfs_file.h>
+#include <ir0/errno.h>
+
+int ir0_fd_span(void)
+{
+	if (!current_process)
+		return 0;
+	return process_fd_span(current_process);
+}
+
+int fd_alloc_lowest(int from)
+{
+	process_t *p = current_process;
+	files_struct_t *f;
+	int i;
+	int span;
+	int limit;
+	int rc;
+
+	if (!p || !files_struct_live(p->files))
+		return -ESRCH;
+	if (from < 0)
+		from = 0;
+	limit = process_nofile_limit(p);
+	if (from >= limit)
+		return -EMFILE;
+
+	f = p->files;
+	span = process_fd_span(p);
+	for (i = from; i < span && i < limit; i++)
+	{
+		if (!f->fd_table[i].in_use)
+			return i;
+	}
+
+	i = span > from ? span : from;
+	if (i >= limit)
+		return -EMFILE;
+	rc = files_grow(f, i + 1, limit);
+	if (rc < 0)
+		return rc;
+	return i;
+}
 
 int ir0_fd_get(process_t *proc, int fd, ir0_fd_t *out)
 {
@@ -35,7 +77,7 @@ int ir0_fd_get(process_t *proc, int fd, ir0_fd_t *out)
 
 	if (!proc)
 		return -ESRCH;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= process_fd_span(proc))
 		return -EBADF;
 
 	f = proc->files;
@@ -120,7 +162,7 @@ void process_release_fds(process_t *p, const char *pipe_trace_op)
 		return;
 
 	table = p->files->fd_table;
-	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+	for (i = 0; i < process_fd_span(p); i++)
 	{
 		fd_entry_t *e = &table[i];
 

@@ -16,7 +16,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/mm_range.h>
 
 /*

@@ -14,7 +14,7 @@
 
 #include <config.h>
 #include <stdint.h>
-#include <ir0/arch_pf_debug.h>
+#include <ir0/mm_diag.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
 #include <ir0/ktm/klog.h>

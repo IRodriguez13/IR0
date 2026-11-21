@@ -8,6 +8,7 @@
  */
 
 #include "fs_syscalls_internal.h"
+#include <ir0/input.h>
 
 
 /*
@@ -53,7 +54,7 @@ static int fs_dirfd_base_path(int dirfd, char *base, size_t base_sz)
   }
 
   fdt = get_process_fd_table();
-  if (!fdt || dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS || !fdt[dirfd].in_use)
+  if (!fdt || dirfd < 0 || dirfd >= ir0_fd_span() || !fdt[dirfd].in_use)
     return -EBADF;
   if (fdt[dirfd].path[0] != '/')
     return -EBADF;
@@ -172,9 +173,12 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
   if (!fd_table)
     return -ESRCH;
 
-  fd = fd_alloc_lowest(fd_table, 0);
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
-    return -EMFILE;
+    return fd;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
 
   fd_table[fd].in_use = true;
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
@@ -205,23 +209,18 @@ static int open_named_fifo_fd(const char *path, int ir0_flags)
 
 static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flags)
 {
-  fd_entry_t *fd_table = get_process_fd_table();
-  int fd = -1;
-  int i;
+  fd_entry_t *fd_table;
+  int fd;
 
-  if (!fd_table || !node || !path)
+  if (!node || !path)
     return -EINVAL;
 
-  for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-    {
-      fd = i;
-      break;
-    }
-  }
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
-    return -EMFILE;
+    return fd;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
 
   memset(&fd_table[fd], 0, sizeof(fd_table[fd]));
   fd_table[fd].in_use = true;
@@ -254,6 +253,22 @@ static int devfs_bind_fd_slot(const char *path, devfs_node_t *node, int ir0_flag
    */
   if (devfs_node_wants_text_snap(node->entry.device_id))
     fd_table[fd].vfs_file = devfs_text_snap_capture(node->entry.device_id);
+
+  /*
+   * Each open of an event node gets its own ring. A second reader must
+   * not consume events still queued for the first.
+   */
+  if (input_is_event_device(node->entry.device_id))
+  {
+    void *client = input_client_open();
+
+    if (!client)
+    {
+      fd_table[fd].in_use = false;
+      return -ENOMEM;
+    }
+    fd_table[fd].vfs_file = client;
+  }
 
   if (DEBUG_VFS)
   {
@@ -359,8 +374,9 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     stat_t st;
 
-    if (ir0_stat_path_routed(path_to_use, &st) != 0)
-      return -EACCES;
+    path_rc = ir0_stat_path_routed(path_to_use, &st);
+    if (path_rc != 0)
+      return path_rc;
     /* The lookup fails on a non-directory before any permission check. */
     if (!S_ISDIR(st.st_mode))
       return -ENOTDIR;
@@ -436,14 +452,12 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
     }
   }
 
+  fd = fd_alloc_lowest(0);
+  if (fd < 0)
+    return fd;
   fd_table = get_process_fd_table();
-  fd = -1;
-  fd = fd_alloc_lowest(fd_table, 0);
-
-  if (fd == -1)
-  {
-    return -EMFILE;
-  }
+  if (!fd_table)
+    return -ESRCH;
 
   vfs_file = NULL;
   ret = vfs_open(path_to_use, flags, mode, &vfs_file);
@@ -512,18 +526,12 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   if (access_rc != 0)
     return access_rc;
 
-  fd_table = get_process_fd_table();
-  fd = -1;
-  for (int i = 0; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-    {
-      fd = i;
-      break;
-    }
-  }
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
-    return -EMFILE;
+    return fd;
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+    return -ESRCH;
 
   fd_table[fd].in_use = true;
   strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
@@ -542,7 +550,7 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
 }
 
 /*
- * Install a registry /proc|/sys|/heart file into the process fd_table.
+ * Install a registry /proc|/sys file into the process fd_table.
  * Returns a real slot index (not PSEUDO_FS_*_FD_BASE).
  */
 static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
@@ -568,13 +576,17 @@ static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
   if (rc != 0)
     return rc;
 
-  fd_table = get_process_fd_table();
-  fd = -1;
-  fd = fd_alloc_lowest(fd_table, 0);
+  fd = fd_alloc_lowest(0);
   if (fd < 0)
   {
     (void)pseudo_fs_release_ops(ops, ctx, dynamic);
-    return -EMFILE;
+    return fd;
+  }
+  fd_table = get_process_fd_table();
+  if (!fd_table)
+  {
+    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
+    return -ESRCH;
   }
 
   bind = (pseudo_fd_bind_t *)kmalloc(sizeof(*bind));
@@ -655,39 +667,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
       if (!(ir0_flags & O_DIRECTORY))
         return -EISDIR;
       return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
-
-  if (is_sys_path(resolved))
-  {
-    if (strcmp(resolved, "/sys") == 0 || strcmp(resolved, "/sys/") == 0 ||
-        sysfs_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
-
-  if (is_heart_path(resolved) && !heart_is_dennis_vfs_path(resolved))
-  {
-    char canon[256];
-
-    heart_nodes_register();
-    if (heart_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    if (heart_alias_canonical(resolved, canon, sizeof(canon)))
-    {
-      open_ret = pseudo_bind_file_fd(canon, ir0_flags);
-      return open_ret;
     }
     open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
     return open_ret;
@@ -808,7 +787,7 @@ int fs_resolve_at_empty(int dirfd, char *resolved, size_t resolved_sz)
                                current_process->cwd, current_process->root);
   }
 
-  if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+  if (dirfd < 0 || dirfd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();

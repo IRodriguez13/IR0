@@ -71,3 +71,6 @@ struct sigcontext
 	 */
 	struct _fpstate_64 fpstate;
 };
+
+/* Linux x86-64 ucontext_t, including the FP save area. */
+#define IR0_UCONTEXT_BYTES 936u

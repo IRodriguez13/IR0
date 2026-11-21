@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: oops_port.h
- * Description: ISA extra panic diagnostics — weak noop in arch/common.
+ * Description: ISA extra panic diagnostics — every ISA defines each hook.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

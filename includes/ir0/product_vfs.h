@@ -13,4 +13,3 @@
 #include <ir0/syscall_table.h>
 
 extern const struct syscall_context_provider ir0_product_vfs_provider;
-extern const struct syscall_context_provider early_vfs_path_provider;

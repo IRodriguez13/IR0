@@ -19,7 +19,6 @@
 #include <ir0/clock.h>
 #include <ir0/net.h>
 #include <ir0/netdevice.h>
-#include <ir0/arch_port.h>
 #include <config.h>
 #include <string.h>
 #include <ir0/spinlock.h>
@@ -51,6 +50,7 @@ struct sock_icmp
 	struct sock_icmp_rx_pkt *rx_tail;
 	size_t rx_count;
 	ip4_addr_t bind_ip; /* 0 = any; source address set by bind() */
+	ip4_addr_t mcast_if; /* IP_MULTICAST_IF; not the bind address */
 	uint8_t ttl;        /* 0 = default 64; IP_TTL */
 	char bind_dev[16];  /* SO_BINDTODEVICE name (advisory on single-NIC) */
 };
@@ -276,6 +276,14 @@ int sock_icmp_bind(struct sock_icmp *sock, uint32_t local_ip_be)
 	if (!sock || !sock_icmp_is(sock))
 		return -EINVAL;
 	sock->bind_ip = local_ip_be;
+	return 0;
+}
+
+int sock_icmp_set_mcast_if(struct sock_icmp *sock, uint32_t addr_be)
+{
+	if (!sock || !sock_icmp_is(sock))
+		return -EINVAL;
+	sock->mcast_if = addr_be;
 	return 0;
 }
 

@@ -193,6 +193,15 @@ int ir0_block_get_info(dev_t dev, struct ir0_block_info *out)
 	return 0;
 }
 
+uint64_t ir0_block_sector_count(dev_t dev)
+{
+	struct ir0_block_info info;
+
+	if (ir0_block_get_info(dev, &info) != 0)
+		return 0;
+	return info.sector_count;
+}
+
 int ir0_block_count(void)
 {
 	return ir0_block_slot_count;
@@ -219,52 +228,6 @@ const char *ir0_block_legacy_name(uint8_t disk_id)
 	if (disk_id >= (sizeof(legacy) / sizeof(legacy[0])))
 		return NULL;
 	return legacy[disk_id];
-}
-
-int ir0_block_name_is_present(const char *name)
-{
-	if (!name)
-		return 0;
-	return ir0_block_lookup_by_name(name) != 0;
-}
-
-uint64_t ir0_block_sector_count_by_name(const char *name)
-{
-	struct ir0_block_info info;
-	dev_t dev;
-
-	if (!name)
-		return 0;
-	dev = ir0_block_lookup_by_name(name);
-	if (dev == 0 || ir0_block_get_info(dev, &info) != 0)
-		return 0;
-	return info.sector_count;
-}
-
-int ir0_block_read_by_name(const char *name, uint64_t lba, uint32_t count,
-			   void *buf)
-{
-	dev_t dev;
-
-	if (!name || !buf || count == 0)
-		return -EINVAL;
-	dev = ir0_block_lookup_by_name(name);
-	if (dev == 0)
-		return -ENODEV;
-	return ir0_block_read(dev, lba, count, buf);
-}
-
-int ir0_block_write_by_name(const char *name, uint64_t lba, uint32_t count,
-			    const void *buf)
-{
-	dev_t dev;
-
-	if (!name || !buf || count == 0)
-		return -EINVAL;
-	dev = ir0_block_lookup_by_name(name);
-	if (dev == 0)
-		return -ENODEV;
-	return ir0_block_write(dev, lba, count, buf);
 }
 
 #ifdef TEST_HOST

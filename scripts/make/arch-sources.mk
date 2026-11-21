@@ -64,14 +64,14 @@ ARM64_BACKEND_OBJS = \
 	arch/arm64/sources/early.o \
 	arch/arm64/sources/interrupts.o \
 	arch/arm64/sources/timer.o \
-	arch/arm64/sources/rtc.o \
+	drivers/rtc/rtc.o \
 	arch/arm64/sources/vdso.o \
 	arch/arm64/sources/mm_ops.o \
 	arch/arm64/sources/dma.o \
-	arch/arm64/sources/pl011.o \
-	arch/arm64/sources/serial.o \
-	arch/arm64/sources/gic_v2.o \
-	arch/arm64/sources/bcm2836_irq.o \
+	drivers/tty/pl011.o \
+	drivers/tty/arm_serial.o \
+	drivers/irq/gic_v2.o \
+	drivers/irq/bcm2836_irq.o \
 	arch/arm64/sources/syscall_decode.o \
 	arch/arm64/sources/elf_policy.o \
 	arch/arm64/sources/boot_identity.o
@@ -112,9 +112,9 @@ ARM64_PRODUCT_SWITCH_OBJS = \
 	arch/arm64/asm/context/switch_early.o \
 	arch/arm64/sources/switch_early.o
 
-# Product keeps virtio-blk (CPIO/vda).
+# Product virtio-blk (CPIO/vda) over the common MMIO transport.
 ARM64_PRODUCT_STORAGE_OBJS = \
-	arch/arm64/sources/virtio_blk_early.o \
+	drivers/virtio/virtio_blk.o \
 	drivers/virtio/virtio_mmio.o
 
 ARM64_FIRST_SWITCH_OBJS = \

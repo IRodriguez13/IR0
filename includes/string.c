@@ -37,6 +37,14 @@ typedef unsigned long __attribute__((may_alias)) word_t;
 #define WORD_ONES (~(word_t)0 / 0xff)
 #define WORD_HIGHS (WORD_ONES << 7)
 
+struct parsed_ulong
+{
+    unsigned long mag;
+    const char *end;
+    int negative;
+    int overflow;
+};
+
 /*
  * True when at least one byte of the word is zero.  The classic
  * (word - 0x01..) & ~word & 0x80.. test only inspects lanes whose
@@ -141,17 +149,18 @@ char *strcpy(char *dest, const char *src)
 
 char *strncpy(char *dest, const char *src, size_t n)
 {
-    size_t len = strlen(src);
+    size_t i = 0;
 
-    if (len >= n)
+    /* Stop at n. No NUL is written when src has none inside those bytes. */
+    while (i < n && src[i] != '\0')
     {
-        if (n > 0)
-            memcpy(dest, src, n);
+        dest[i] = src[i];
+        i++;
     }
-    else
+    while (i < n)
     {
-        memcpy(dest, src, len);
-        memset(dest + len, '\0', n - len);
+        dest[i] = '\0';
+        i++;
     }
 
     return dest;
@@ -159,14 +168,18 @@ char *strncpy(char *dest, const char *src, size_t n)
 
 char *strncat(char *dest, const char *src, size_t n)
 {
-    size_t dest_len = strlen(dest);
-    size_t src_len = strlen(src);
+    char *d = dest;
 
-    if (src_len > n)
-        src_len = n;
+    while (*d != '\0')
+        d++;
 
-    memcpy(dest + dest_len, src, src_len);
-    dest[dest_len + src_len] = '\0';
+    /* n bounds the read of src, not the size of dest. */
+    while (n > 0 && *src != '\0')
+    {
+        *d++ = *src++;
+        n--;
+    }
+    *d = '\0';
     return dest;
 }
 
@@ -397,53 +410,8 @@ int memcmp(const void *ptr1, const void *ptr2, size_t num)
 // STRING CONVERSION FUNCTIONS
 // ===============================================================================
 
-int atoi(const char *str)
-{
-    unsigned int result = 0;
-    unsigned int limit;
-    int sign = 1;
-
-    // Skip whitespace
-    while (*str == ' ' || *str == '\t' || *str == '\n')
-    {
-        str++;
-    }
-
-    // Handle sign
-    if (*str == '-')
-    {
-        sign = -1;
-        str++;
-    }
-    else if (*str == '+')
-    {
-        str++;
-    }
-
-    limit = sign < 0 ? (unsigned int)INT32_MAX + 1U : (unsigned int)INT32_MAX;
-
-    // Convert digits
-    while (*str >= '0' && *str <= '9')
-    {
-        unsigned int digit = (unsigned int)(*str - '0');
-
-        if (result > (limit - digit) / 10U)
-            return sign < 0 ? INT32_MIN : INT32_MAX;
-        result = result * 10U + digit;
-        str++;
-    }
-
-    if (sign < 0)
-    {
-        if (result == (unsigned int)INT32_MAX + 1U)
-            return INT32_MIN;
-        return -(int)result;
-    }
-
-    return (int)result;
-}
-
-unsigned long strtoul(const char *str, char **endptr, int base)
+/* One scanner for strtoul and strtol. overflow means the magnitude does not fit. */
+static void parse_ulong(const char *str, int base, struct parsed_ulong *out)
 {
     const char *start = str;
     unsigned long result = 0;
@@ -451,13 +419,6 @@ unsigned long strtoul(const char *str, char **endptr, int base)
     int negative = 0;
     int converted = 0;
     int overflow = 0;
-
-    if (!str)
-    {
-        if (endptr)
-            *endptr = NULL;
-        return 0;
-    }
 
     while (*str == ' ' || *str == '\t' || *str == '\n')
         str++;
@@ -470,9 +431,11 @@ unsigned long strtoul(const char *str, char **endptr, int base)
 
     if (base != 0 && (base < 2 || base > 36))
     {
-        if (endptr)
-            *endptr = (char *)start;
-        return 0;
+        out->mag = 0;
+        out->end = start;
+        out->negative = 0;
+        out->overflow = 0;
+        return;
     }
 
     if (base == 0)
@@ -527,28 +490,82 @@ unsigned long strtoul(const char *str, char **endptr, int base)
             break;
 
         converted = 1;
-        if (result > (max - (unsigned long)digit) / (unsigned long)base)
+        if (overflow ||
+            result > (max - (unsigned long)digit) / (unsigned long)base)
         {
-            result = max;
             overflow = 1;
+            result = max;
         }
         else
+        {
             result = result * (unsigned long)base + (unsigned long)digit;
+        }
         str++;
     }
 
+    out->mag = result;
+    out->end = converted ? str : start;
+    out->negative = negative;
+    out->overflow = overflow;
+}
+
+int atoi(const char *str)
+{
+    long value = strtol(str, NULL, 10);
+    uint32_t bits = (uint32_t)value;
+    int out;
+
+    /* Same bits as (int)strtol. A signed cast of an out-of-range long is not used. */
+    memcpy(&out, &bits, sizeof(out));
+    return out;
+}
+
+unsigned long strtoul(const char *str, char **endptr, int base)
+{
+    struct parsed_ulong parsed;
+
+    if (!str)
+    {
+        if (endptr)
+            *endptr = NULL;
+        return 0;
+    }
+
+    parse_ulong(str, base, &parsed);
     if (endptr)
-        *endptr = (char *)(converted ? str : start);
-
-    if (negative && !overflow)
-        return 0UL - result;
-
-    return result;
+        *endptr = (char *)parsed.end;
+    if (parsed.overflow)
+        return ~0UL;
+    return parsed.negative ? 0UL - parsed.mag : parsed.mag;
 }
 
 long strtol(const char *str, char **endptr, int base)
 {
-    return (long)strtoul(str, endptr, base);
+    struct parsed_ulong parsed;
+    unsigned long long_max = ~0UL >> 1;
+
+    if (!str)
+    {
+        if (endptr)
+            *endptr = NULL;
+        return 0;
+    }
+
+    parse_ulong(str, base, &parsed);
+    if (endptr)
+        *endptr = (char *)parsed.end;
+    if (parsed.end == str)
+        return 0;
+
+    if (parsed.negative)
+    {
+        if (parsed.overflow || parsed.mag > long_max)
+            return -(long)long_max - 1;
+        return -(long)parsed.mag;
+    }
+    if (parsed.overflow || parsed.mag > long_max)
+        return (long)long_max;
+    return (long)parsed.mag;
 }
 
 // ===============================================================================
@@ -856,6 +873,25 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
                               width, precision, zero, left);
             break;
         }
+        case 'o':
+        {
+            char num_str[32];
+            uint64_t value;
+            int len;
+
+            if (is_size_t)
+                value = (uint64_t)va_arg(ap, size_t);
+            else if (long_count >= 2)
+                value = (uint64_t)va_arg(ap, unsigned long long);
+            else if (long_count == 1)
+                value = (uint64_t)va_arg(ap, unsigned long);
+            else
+                value = (uint64_t)va_arg(ap, unsigned int);
+            len = u64_to_string(value, num_str, 8, 0);
+            ptr = emit_number(ptr, &remaining, num_str, len, 0,
+                              width, precision, zero, left);
+            break;
+        }
         case 'x':
         case 'X':
         {
@@ -894,9 +930,17 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
 
             if (s == NULL)
                 s = "(null)";
-            len = strlen(s);
-            if (precision >= 0 && (size_t)precision < len)
-                len = (size_t)precision;
+            /* Precision is a read bound: the array need not contain a NUL. */
+            if (precision >= 0)
+            {
+                len = 0;
+                while (len < (size_t)precision && s[len] != '\0')
+                    len++;
+            }
+            else
+            {
+                len = strlen(s);
+            }
             ptr = emit_text(ptr, &remaining, s, len, width, left, ' ');
             break;
         }

@@ -12,12 +12,12 @@ import sys
 DEFAULT_FILES = [
     "includes/ir0/heart_src_probe.h",
     "includes/ir0/pseudo_fs.h",
-    "includes/ir0/heartfs.h",
+    "fs/heartfs/heartfs.c",
     "includes/ir0/version.h",
     "includes/ir0/sock_stream.h",
     "includes/ir0/ahci_api.h",
     "arch/common/arch_portable.h",
-    "kernel/syscalls/syscall_dispatch.c",
+    "kernel/entry/syscall_dispatch.c",
 ]
 
 

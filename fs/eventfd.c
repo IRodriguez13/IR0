@@ -14,7 +14,7 @@
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
 #include <ir0/fcntl.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <stdint.h>
 #include <string.h>
 #include <ir0/files_struct.h>
@@ -159,15 +159,17 @@ int64_t sys_eventfd2(unsigned int count, int flags)
 		memset(e, 0, sizeof(*e));
 		return -ESRCH;
 	}
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!tab[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
 	{
 		memset(e, 0, sizeof(*e));
-		return -EMFILE;
+		return fd;
+	}
+	tab = get_process_fd_table();
+	if (!tab)
+	{
+		memset(e, 0, sizeof(*e));
+		return -ESRCH;
 	}
 	memset(&tab[fd], 0, sizeof(tab[fd]));
 	tab[fd].in_use = true;

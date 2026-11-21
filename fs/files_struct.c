@@ -25,7 +25,7 @@ static int process_files_acquire_entries(files_struct_t *f)
 	if (!f)
 		return -EINVAL;
 
-	for (i = 0; i < MAX_FDS_PER_PROCESS; i++)
+	for (i = 0; i < f->max_fds; i++)
 	{
 		fd_entry_t *e = &f->fd_table[i];
 
@@ -70,7 +70,13 @@ int process_files_clone(process_t *child, process_t *parent)
 	if (!nf)
 		return -ENOMEM;
 
-	memcpy(nf->fd_table, parent->files->fd_table, sizeof(nf->fd_table));
+	if (files_grow(nf, parent->files->max_fds, IR0_NOFILE_CEILING) != 0)
+	{
+		files_put(nf);
+		return -ENOMEM;
+	}
+	memcpy(nf->fd_table, parent->files->fd_table,
+	       sizeof(fd_entry_t) * (size_t)parent->files->max_fds);
 	if (process_files_acquire_entries(nf) != 0)
 	{
 		files_put(nf);

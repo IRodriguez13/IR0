@@ -10,8 +10,8 @@
  * Description: Scheduler core <-> policy contract (sched/ only, not a facade).
  *
  * CONFIG_SCHEDULER_POLICY links exactly one policy file: sched/rr.c
- * (policies 0 and 1) or sched/prio.c (policy 2). There is no run-time
- * dispatch. A policy implements the queue operations published in
+ * (policy 0), sched/cfs.c (policy 1), or sched/prio.c (policy 2). There
+ * is no run-time dispatch. A policy implements the queue operations published in
  * <ir0/sched.h> (add, remove, promote, count, name, selftest) plus
  * sched_pick_next() below; the core (sched/core.c) owns schedule() and the
  * context switch. Policies never call each other.

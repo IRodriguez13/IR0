@@ -15,7 +15,10 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <kernel/syscalls/process_syscalls.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
+#include <ir0/abi/signal_contract.h>
 #include <ir0/context.h>
 #include <ir0/copy_user.h>
 #include <ir0/sched.h>
@@ -23,7 +26,7 @@
 #include <ir0/task_ops.h>
 #include <ir0/tls.h>
 
-static uint32_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigsetsize)
+static uint64_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigsetsize)
 {
 	uint64_t legacy64;
 
@@ -32,12 +35,12 @@ static uint32_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigset
 		if (!set)
 			return 0;
 		memcpy(&legacy64, set, sizeof(legacy64));
-		return linux_sigword_to_ir0((uint32_t)legacy64);
+		return linux_sigword_to_ir0(legacy64);
 	}
-	return ir0_sigset_low32(set);
+	return ir0_sigset_word(set);
 }
 
-static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint32_t mask)
+static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint64_t mask)
 {
 	uint64_t legacy64;
 
@@ -46,11 +49,11 @@ static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint32
 
 	if (sigsetsize == sizeof(uint64_t))
 	{
-		legacy64 = (uint64_t)ir0_sigword_to_linux(mask);
+		legacy64 = ir0_sigword_to_linux(mask);
 		memcpy(set, &legacy64, sizeof(legacy64));
 		return;
 	}
-	ir0_sigset_set_low32(set, mask);
+	ir0_sigset_set_word(set, mask);
 }
 
 /*
@@ -87,11 +90,11 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 	if (oldact)
 	{
 		memset(&kold, 0, sizeof(kold));
-		kold.sa_handler = current_process->signal_handlers[signum];
+		kold.sa_handler = current_process->sighand->handlers[signum];
 		rt_sigaction_mask_to_sigset(&kold.sa_mask, sigsetsize,
-					    current_process->signal_sa_mask[signum]);
-		kold.sa_flags = (unsigned long)current_process->signal_sa_flags[signum];
-		kold.sa_restorer = current_process->signal_restorer[signum];
+					    current_process->sighand->sa_mask[signum]);
+		kold.sa_flags = (unsigned long)current_process->sighand->sa_flags[signum];
+		kold.sa_restorer = current_process->sighand->restorer[signum];
 		if (copy_to_user(oldact, &kold, user_bytes) != 0)
 			return -EFAULT;
 	}
@@ -103,11 +106,11 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 			return -EFAULT;
 		if (register_signal_handler(signum, kact.sa_handler) != 0)
 			return -EFAULT;
-		current_process->signal_sa_mask[signum] =
+		current_process->sighand->sa_mask[signum] =
 			rt_sigaction_mask_from_sigset(&kact.sa_mask, sigsetsize) &
 			~SIGNAL_UNBLOCKABLE;
-		current_process->signal_sa_flags[signum] = (uint32_t)kact.sa_flags;
-		current_process->signal_restorer[signum] =
+		current_process->sighand->sa_flags[signum] = (uint32_t)kact.sa_flags;
+		current_process->sighand->restorer[signum] =
 			(kact.sa_flags & SA_RESTORER) ? kact.sa_restorer : NULL;
 	}
 
@@ -118,8 +121,8 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 			   size_t sigsetsize)
 {
 	sigset_t kset;
-	uint32_t oldmask;
-	uint32_t newmask;
+	uint64_t oldmask;
+	uint64_t newmask;
 	uint64_t legacy64;
 
 	if (!current_process)
@@ -138,13 +141,13 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 		{
 			if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
 				return -EFAULT;
-			newmask = linux_sigword_to_ir0((uint32_t)legacy64);
+			newmask = linux_sigword_to_ir0(legacy64);
 		}
 		else
 		{
 			if (copy_from_user(&kset, set, sizeof(kset)) != 0)
 				return -EFAULT;
-			newmask = ir0_sigset_low32(&kset);
+			newmask = ir0_sigset_word(&kset);
 		}
 		switch (how)
 		{
@@ -166,13 +169,13 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 	{
 		if (sigsetsize == sizeof(uint64_t))
 		{
-			legacy64 = (uint64_t)ir0_sigword_to_linux(oldmask);
+			legacy64 = ir0_sigword_to_linux(oldmask);
 			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
 				return -EFAULT;
 		}
 		else
 		{
-			ir0_sigset_set_low32(&kset, oldmask);
+			ir0_sigset_set_word(&kset, oldmask);
 			if (copy_to_user(oldset, &kset, sizeof(kset)) != 0)
 				return -EFAULT;
 		}
@@ -187,7 +190,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 {
 	sigset_t kset;
-	uint32_t saved_mask;
+	uint64_t saved_mask;
 	size_t copy_bytes;
 
 	if (!current_process)
@@ -358,6 +361,71 @@ int64_t sys_kill(pid_t pid, int signal)
 	return 0;
 }
 
+/*
+ * sys_sigaltstack - Install or read the task's alternate signal stack
+ * (Linux do_sigaltstack()). Either pointer may be NULL. A size below
+ * MINSIGSTKSZ is ENOMEM. Changing the stack while the task is running on
+ * it is EPERM. SS_DISABLE clears it.
+ */
+int64_t sys_sigaltstack(const struct sigaltstack *ss,
+			struct sigaltstack *old_ss)
+{
+	struct sigaltstack kss;
+	struct sigaltstack kold;
+	int mode;
+	uint64_t sp;
+
+	if (!current_process)
+		return -ESRCH;
+
+	if (old_ss)
+	{
+		memset(&kold, 0, sizeof(kold));
+		kold.ss_sp = (void *)(uintptr_t)current_process->sas_ss_sp;
+		kold.ss_size = (size_t)current_process->sas_ss_size;
+		if (current_process->sas_ss_size == 0)
+			kold.ss_flags = SS_DISABLE;
+		else if (process_on_altstack(current_process,
+					     process_syscall_sp(current_process)))
+			kold.ss_flags = SS_ONSTACK;
+		if (copy_to_user(old_ss, &kold, sizeof(kold)) != 0)
+			return -EFAULT;
+	}
+
+	if (!ss)
+		return 0;
+
+	memset(&kss, 0, sizeof(kss));
+	if (copy_from_user(&kss, ss, sizeof(kss)) != 0)
+		return -EFAULT;
+
+	sp = process_syscall_sp(current_process);
+	if (process_on_altstack(current_process, sp))
+		return -EPERM;
+
+	mode = kss.ss_flags;
+	if (mode != 0 && mode != SS_DISABLE)
+		return -EINVAL;
+
+	if (mode == SS_DISABLE)
+	{
+		current_process->sas_ss_sp = 0;
+		current_process->sas_ss_size = 0;
+		current_process->sas_ss_flags = SS_DISABLE;
+		return 0;
+	}
+
+	if ((uint64_t)kss.ss_size < (uint64_t)MINSIGSTKSZ)
+		return -ENOMEM;
+	if ((uint64_t)(uintptr_t)kss.ss_sp > UINT64_MAX - (uint64_t)kss.ss_size)
+		return -ENOMEM;
+
+	current_process->sas_ss_sp = (uint64_t)(uintptr_t)kss.ss_sp;
+	current_process->sas_ss_size = (uint64_t)kss.ss_size;
+	current_process->sas_ss_flags = 0;
+	return 0;
+}
+
 /**
  * sys_sigreturn - Return from signal handler (rt_sigreturn)
  *
@@ -372,7 +440,8 @@ int64_t sys_kill(pid_t pid, int signal)
 int64_t sys_sigreturn(void)
 {
 	struct sigframe user_frame;
-	struct sigcontext *restore_ctx = &user_frame.ctx;
+	struct sigcontext restored;
+	struct sigcontext *restore_ctx = &restored;
 	uint64_t user_sp;
 
 	if (!current_process)
@@ -383,15 +452,23 @@ int64_t sys_sigreturn(void)
 
 	user_sp = process_syscall_sp(current_process);
 	if (copy_from_user(&user_frame, (const void *)(uintptr_t)user_sp,
-			   sizeof(user_frame)) != 0 ||
-	    !signal_sigcontext_validate_and_sanitize(restore_ctx))
+			   sizeof(user_frame)) != 0)
+	{
+		current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);
+		return -EFAULT;
+	}
+	restored = user_frame.ctx;
+	ucontext_import(user_frame.ucontext,
+			     user_sp + offsetof(struct sigframe, ucontext),
+			     &restored);
+	if (!signal_sigcontext_validate_and_sanitize(restore_ctx))
 	{
 		/* Linux force_sig(SIGSEGV), delivered on the way out. */
 		current_process->signal_pending |= SIGNAL_MASK(SIGSEGV);
 		return -EFAULT;
 	}
 
-	set_current_blocked((uint32_t)user_frame.oldmask);
+	set_current_blocked(user_frame.oldmask);
 	current_process->signal_mask_saved_valid = 0;
 	current_process->signal_frame_sp = 0;
 

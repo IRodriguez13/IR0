@@ -19,7 +19,6 @@ void ir0_rootfs_prepare_userspace_base(void)
 		"/bin",
 		"/sbin",
 		"/lib",
-		"/bpivot",
 		"/tmp",
 		"/var",
 		"/dev",
@@ -27,15 +26,8 @@ void ir0_rootfs_prepare_userspace_base(void)
 		"/etc",
 		"/usr",
 		"/usr/bin",
-		"/usr/include",
-		"/usr/include/bits",
 		"/usr/lib",
 		"/usr/share",
-		"/usr/ken",
-		"/usr/ken/games",
-		"/heart",
-		"/heart/dennis",
-		"/heart/dennis/src",
 		NULL
 	};
 	int i;

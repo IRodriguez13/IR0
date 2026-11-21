@@ -32,19 +32,19 @@
 #include <ir0/version.h>
 #include <ir0/utsname.h>
 #include <ir0/clock.h>
-#include <ir0/arch_port.h>
+#include <asm/setup.h>
+#include <ir0/cpu.h>
+#include <ir0/cpu_info.h>
 #include <ir0/partition.h>
 #include <ir0/blockdev.h>
 #include <ir0/swap.h>
 #include <ir0/boot_memory.h>
-#include <ir0/arch_cpu.h>
 #include <fs/vfs.h>
 #include <ir0/copy_user.h>
 #include <ir0/resource_registry.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
-#include <ir0/logging.h>
 #include <ir0/sock_stream.h>
 #include <ir0/sock_udp.h>
 #include <ir0/sock_icmp.h>
@@ -60,11 +60,13 @@
 
 typedef struct proc_fd_snap
 {
-	fd_entry_t table[MAX_FDS_PER_PROCESS];
+	fd_entry_t *table;
+	int span;
 	int valid;
 } proc_fd_snap_t;
 
 int proc_fd_snap_acquire(pid_t pid, proc_fd_snap_t *snap);
+void proc_fd_snap_release(proc_fd_snap_t *snap);
 const char *proc_parse_path(const char *path, pid_t *pid_out);
 void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 
@@ -72,6 +74,7 @@ void proc_u64_to_dec(uint64_t value, char *out, size_t out_len);
 int proc_meminfo_read(char *buf, size_t count);
 int proc_ps_read(char *buf, size_t count);
 int proc_status_read(char *buf, size_t count, pid_t pid);
+int proc_comm_read(char *buf, size_t count, pid_t pid);
 int proc_cmdline_read(char *buf, size_t count, pid_t pid);
 int proc_pid_stat_read(char *buf, size_t count, pid_t pid);
 int proc_pid_maps_read(char *buf, size_t count, pid_t pid);

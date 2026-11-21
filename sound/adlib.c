@@ -12,10 +12,9 @@
  */
 
 #include "adlib.h"
-#include <ir0/arch_io.h>
 #include <ir0/cpu.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <stdbool.h>
 #include <asm/io.h>
 
@@ -135,7 +134,7 @@ static bool adlib_detect(void)
  */
 bool adlib_init(void)
 {
-    LOG_INFO("ADLIB", "Registering Adlib OPL2 driver...");
+    klog_info("ADLIB", "Registering Adlib OPL2 driver...");
     ir0_register_driver(&adlib_info, &adlib_ops);
     return true;
 }
@@ -145,16 +144,16 @@ bool adlib_init(void)
  */
 static int32_t adlib_hw_init(void)
 {
-    LOG_INFO("ADLIB", "Initializing Adlib OPL2 hardware...");
+    klog_info("ADLIB", "Initializing Adlib OPL2 hardware...");
     
     /* Detect Adlib card */
     if (!adlib_detect())
     {
-        LOG_WARNING("ADLIB", "Adlib card not detected (this is normal if no hardware is present)");
+        klog_warn("ADLIB", "Adlib card not detected (this is normal if no hardware is present)");
         return IR0_DRIVER_ABSENT;
     }
     
-    LOG_INFO("ADLIB", "Adlib OPL2 card detected");
+    klog_info("ADLIB", "Adlib OPL2 card detected");
     
     /* Reset the chip */
     adlib_write(ADLIB_REG_TIMER_CTRL, 0x60);
@@ -163,7 +162,7 @@ static int32_t adlib_hw_init(void)
     adlib_write(ADLIB_REG_FM_MODE, 0x00);
     
     adlib_initialized = true;
-    LOG_INFO("ADLIB", "Adlib OPL2 initialized successfully");
+    klog_info("ADLIB", "Adlib OPL2 initialized successfully");
     
     return 0;
 }
@@ -184,6 +183,6 @@ static void adlib_shutdown(void)
     /* Turn off all channels (would need to iterate through all channels) */
     
     adlib_initialized = false;
-    LOG_INFO("ADLIB", "Adlib OPL2 shutdown");
+    klog_info("ADLIB", "Adlib OPL2 shutdown");
 }
 

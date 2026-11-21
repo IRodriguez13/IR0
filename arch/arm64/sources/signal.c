@@ -15,12 +15,13 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/signal_irq.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
 #include <ir0/fpu_backend.h>
 #include <stdint.h>
 #include <asm/exc_frame.h>
+#include <stddef.h>
 #include <string.h>
 
 uint64_t sigcontext_ip(const struct sigcontext *ctx)
@@ -149,7 +150,7 @@ uint64_t irq_frame_sp(const uint64_t *frame)
 }
 
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
-				    uint64_t new_rsp, uint64_t info_addr,
+				    uint64_t new_sp, uint64_t info_addr,
 				    uint64_t uctx_addr, int sa_siginfo,
 				    uint64_t restorer)
 {
@@ -177,7 +178,7 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 
 	/* vectors.S restores ELR/SP_EL0 from the frame on eret. */
 	frame[ARM64_EXC_IDX_ELR] = elr;
-	frame[ARM64_EXC_IDX_SP] = new_rsp;
+	frame[ARM64_EXC_IDX_SP] = new_sp;
 }
 
 void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
@@ -186,4 +187,50 @@ void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
 	if (sf)
 		sf->x30 = restorer;
 	fpu_signal_enter();
+}
+
+/* Linux aarch64 ucontext_t: sigmask, then 8 bytes of alignment, then mcontext. */
+struct ir0_arm64_ucontext
+{
+	unsigned long uc_flags;
+	unsigned long uc_link;
+	unsigned long ss_sp;
+	int ss_flags;
+	int ss_pad;
+	unsigned long ss_size;
+	unsigned long sigmask[16];
+	unsigned char align_pad[8];
+	struct sigcontext mc;
+};
+
+_Static_assert(sizeof(struct sigcontext) == 4384, "aarch64 mcontext size");
+_Static_assert(offsetof(struct ir0_arm64_ucontext, mc) == 176,
+	       "aarch64 ucontext mcontext offset");
+_Static_assert(offsetof(struct ir0_arm64_ucontext, mc.pc) == 440,
+	       "aarch64 ucontext PC offset");
+_Static_assert(sizeof(struct ir0_arm64_ucontext) == IR0_UCONTEXT_BYTES,
+	       "aarch64 ucontext_t size");
+
+void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
+			  uint64_t mask, void *image)
+{
+	struct ir0_arm64_ucontext *uc = image;
+
+	(void)user_va;
+	if (!ctx || !image)
+		return;
+	memset(uc, 0, sizeof(*uc));
+	uc->mc = *ctx;
+	uc->sigmask[0] = mask;
+}
+
+void ucontext_import(const void *image, uint64_t user_va,
+			  struct sigcontext *ctx)
+{
+	const struct ir0_arm64_ucontext *uc = image;
+
+	(void)user_va;
+	if (!image || !ctx)
+		return;
+	*ctx = uc->mc;
 }

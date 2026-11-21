@@ -45,11 +45,21 @@ void ir0_utsname_fill_version(char *dst, size_t n)
 	else
 		cpu_mode = "UP";
 
+	/*
+	 * Label the scheduler that is actually linked. Unknown names pass
+	 * through; only a missing name stays RR.
+	 */
 	sched_name = sched_policy_name();
-	if (sched_name && strcmp(sched_name, "priority") == 0)
-		sched_label = "Priority";
-	else
+	if (!sched_name)
 		sched_label = "RR";
+	else if (strcmp(sched_name, "priority") == 0)
+		sched_label = "Priority";
+	else if (strcmp(sched_name, "round_robin") == 0)
+		sched_label = "RR";
+	else if (strcmp(sched_name, "cfs") == 0)
+		sched_label = "CFS";
+	else
+		sched_label = sched_name;
 
 	/* Linux exposes the build identity in the uname version field. */
 	snprintf(dst, n, "#%lu %s %s",

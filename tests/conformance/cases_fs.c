@@ -301,7 +301,7 @@ int fd_dup3(void)
 
 	OK(fd, conf_creat("f", 0));
 	EXPECT_ERR(S3(SYS_dup3, fd, fd, 0), EINVAL);
-	/* Below every fd limit in use (IR0 RLIMIT_NOFILE is 64). */
+	/* Below the soft RLIMIT_NOFILE (IR0 default is 1024). */
 	EXPECT(S3(SYS_dup3, fd, 40, O_CLOEXEC), 40);
 	EXPECT(S2(SYS_fcntl, 40, F_GETFD), FD_CLOEXEC);
 	EXPECT(S3(SYS_dup3, fd, 41, 0), 41);

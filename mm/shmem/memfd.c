@@ -243,16 +243,12 @@ int ir0_memfd_install_fd(struct ir0_memfd *m, int open_flags, int cloexec)
 
 	if (!m || !ir0_memfd_is(m) || !current_process)
 		return -EINVAL;
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
+		return fd;
 	tab = get_process_fd_table();
 	if (!tab)
 		return -ESRCH;
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!tab[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
-		return -EMFILE;
 	memset(&tab[fd], 0, sizeof(tab[fd]));
 	tab[fd].in_use = true;
 	tab[fd].is_memfd = true;

@@ -14,7 +14,6 @@
 
 #include "rtc.h"
 #include <ir0/rtc.h>
-#include <ir0/arch_port.h>
 #include <string.h>
 #include <asm/io.h>
 

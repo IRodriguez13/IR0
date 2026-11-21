@@ -55,7 +55,6 @@ struct ps2_set1_state
 	struct keyboard_modifiers mods;
 	uint8_t e0_prefix; /* next byte is extended */
 	uint8_t e1_skip;   /* bytes remaining to discard (Pause) */
-	int layout;        /* 0=US 1=LATAM — same as KEYBOARD_LAYOUT_* */
 };
 
 enum ps2_set1_key_name

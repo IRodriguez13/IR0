@@ -10,6 +10,14 @@ OPENAT_SRC := syscall/openat.c
 OPENAT_BIN := $(BUILD_DIR)/openat
 IDENTITY_SRC := syscall/identity.c
 IDENTITY_BIN := $(BUILD_DIR)/identity
+NOFILE_SRC := syscall/nofile.c
+NOFILE_BIN := $(BUILD_DIR)/nofile
+VMCOMMIT_SRC := syscall/vm_commit.c
+VMCOMMIT_BIN := $(BUILD_DIR)/vm_commit
+UCONTEXT_SRC := syscall/ucontext.c
+UCONTEXT_BIN := $(BUILD_DIR)/ucontext
+ACCEPT4_SRC := syscall/accept4.c
+ACCEPT4_BIN := $(BUILD_DIR)/accept4
 FAULT_SRC := mm/fault.c
 FAULT_BIN := $(BUILD_DIR)/fault
 PANIC_NESTED_SRC := kernel/panic_nested.c
@@ -50,6 +58,8 @@ SIGRETURN_BAD_FRAME_SRC := kernel/sigreturn_bad_frame.c
 SIGRETURN_BAD_FRAME_BIN := $(BUILD_DIR)/sigreturn_bad_frame
 FPSIMD_SRC := kernel/fpsimd.c
 FPSIMD_BIN := $(BUILD_DIR)/fpsimd
+HV_KIND_SRC := kernel/hypervisor_kind.c
+HV_KIND_BIN := $(BUILD_DIR)/hypervisor_kind
 KSFT_INC := -I$(CURDIR)
 
 X86_CC ?= gcc
@@ -81,10 +91,10 @@ LDLIBS := $(X86_MUSL_LIB)/crt1.o $(X86_MUSL_LIB)/crti.o \
 	-nostdlib -L$(X86_MUSL_LIB) -lc $(X86_MUSL_LIB)/crtn.o
 endif
 
-.PHONY: all openat identity swapon fault panic_nested fault_signals signal_semantics \
+.PHONY: all openat identity nofile vm_commit ucontext accept4 swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
 	sock_zero_len path_too_long blocking_sleep sleep_yields futex cow_mprotect setgroups_efault init_exit signal_restart sigreturn_bad_frame \
-	fpsimd clean
+	fpsimd hypervisor_kind clean
 
 all: openat identity swapon fault panic_nested fault_signals signal_semantics \
 	uaccess_kernel_addr uaccess_readonly uaccess_efault_keeps_data signal_return \
@@ -107,6 +117,50 @@ $(OPENAT_BIN): $(OPENAT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@test -x $@
 
 identity: $(IDENTITY_BIN)
+nofile: $(NOFILE_BIN)
+vm_commit: $(VMCOMMIT_BIN)
+ucontext: $(UCONTEXT_BIN)
+accept4: $(ACCEPT4_BIN)
+
+$(NOFILE_BIN): $(NOFILE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest nofile"
+	@$(CC) $(CFLAGS) -o $@ $(NOFILE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+$(VMCOMMIT_BIN): $(VMCOMMIT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest vm_commit"
+	@$(CC) $(CFLAGS) -o $@ $(VMCOMMIT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+$(UCONTEXT_BIN): $(UCONTEXT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest ucontext"
+	@$(CC) $(CFLAGS) -o $@ $(UCONTEXT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+$(ACCEPT4_BIN): $(ACCEPT4_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest accept4"
+	@$(CC) $(CFLAGS) -o $@ $(ACCEPT4_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
 
 $(IDENTITY_BIN): $(IDENTITY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@if [ -z "$(CC)" ]; then \
@@ -358,5 +412,684 @@ $(FPSIMD_BIN): $(FPSIMD_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
+hypervisor_kind: $(HV_KIND_BIN)
+
+$(HV_KIND_BIN): $(HV_KIND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest hypervisor_kind"
+	@$(CC) $(CFLAGS) -o $@ $(HV_KIND_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
 clean:
 	@rm -rf $(BUILD_DIR)
+
+# EVDEV-SELFTEST
+EVDEV_SRC := syscall/evdev.c
+EVDEV_BIN := $(BUILD_DIR)/evdev
+
+.PHONY: evdev
+
+evdev: $(EVDEV_BIN)
+
+$(EVDEV_BIN): $(EVDEV_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev"
+	@$(CC) $(CFLAGS) -I$(KERNEL_ROOT)/includes/uapi -o $@ $(EVDEV_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SIGHAND-SELFTEST
+SIGHAND_SRC := syscall/sighand.c
+SIGHAND_BIN := $(BUILD_DIR)/sighand
+
+.PHONY: sighand
+
+sighand: $(SIGHAND_BIN)
+
+$(SIGHAND_BIN): $(SIGHAND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sighand"
+	@$(CC) $(CFLAGS) -o $@ $(SIGHAND_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# RT-SIG-SELFTEST
+RT_SIG_SRC := syscall/rt_sig.c
+RT_SIG_BIN := $(BUILD_DIR)/rt_sig
+
+.PHONY: rt_sig
+
+rt_sig: $(RT_SIG_BIN)
+
+$(RT_SIG_BIN): $(RT_SIG_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest rt_sig"
+	@$(CC) $(CFLAGS) -o $@ $(RT_SIG_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SYSFS-CPU-SELFTEST
+SYSFS_CPU_SRC := syscall/sysfs_cpu.c
+SYSFS_CPU_BIN := $(BUILD_DIR)/sysfs_cpu
+
+.PHONY: sysfs_cpu
+
+sysfs_cpu: $(SYSFS_CPU_BIN)
+
+$(SYSFS_CPU_BIN): $(SYSFS_CPU_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sysfs_cpu"
+	@$(CC) $(CFLAGS) -o $@ $(SYSFS_CPU_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SIGALTSTACK-SELFTEST
+SIGALTSTACK_SRC := syscall/sigaltstack.c
+SIGALTSTACK_BIN := $(BUILD_DIR)/sigaltstack
+
+.PHONY: sigaltstack
+
+sigaltstack: $(SIGALTSTACK_BIN)
+
+$(SIGALTSTACK_BIN): $(SIGALTSTACK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sigaltstack"
+	@$(CC) $(CFLAGS) -o $@ $(SIGALTSTACK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-EXIT-SELFTEST
+SHM_EXIT_SRC := syscall/shm_exit.c
+SHM_EXIT_BIN := $(BUILD_DIR)/shm_exit
+
+.PHONY: shm_exit
+
+shm_exit: $(SHM_EXIT_BIN)
+
+$(SHM_EXIT_BIN): $(SHM_EXIT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_exit"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_EXIT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-FORK-SELFTEST
+SHM_FORK_SRC := syscall/shm_fork.c
+SHM_FORK_BIN := $(BUILD_DIR)/shm_fork
+
+.PHONY: shm_fork
+
+shm_fork: $(SHM_FORK_BIN)
+
+$(SHM_FORK_BIN): $(SHM_FORK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_fork"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_FORK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PRCTL-TASK-SELFTEST
+PRCTL_TASK_SRC := syscall/prctl_task.c
+PRCTL_TASK_BIN := $(BUILD_DIR)/prctl_task
+
+.PHONY: prctl_task
+
+prctl_task: $(PRCTL_TASK_BIN)
+
+$(PRCTL_TASK_BIN): $(PRCTL_TASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest prctl_task"
+	@$(CC) $(CFLAGS) -o $@ $(PRCTL_TASK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SEGV-ACCERR-SELFTEST
+SEGV_ACCERR_SRC := syscall/segv_accerr.c
+SEGV_ACCERR_BIN := $(BUILD_DIR)/segv_accerr
+
+.PHONY: segv_accerr
+
+segv_accerr: $(SEGV_ACCERR_BIN)
+
+$(SEGV_ACCERR_BIN): $(SEGV_ACCERR_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest segv_accerr"
+	@$(CC) $(CFLAGS) -o $@ $(SEGV_ACCERR_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-STATUS-SELFTEST
+PROC_STATUS_SRC := syscall/proc_status.c
+PROC_STATUS_BIN := $(BUILD_DIR)/proc_status
+
+.PHONY: proc_status
+
+proc_status: $(PROC_STATUS_BIN)
+
+$(PROC_STATUS_BIN): $(PROC_STATUS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_status"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_STATUS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-CPID-SELFTEST
+SHM_CPID_SRC := syscall/shm_cpid.c
+SHM_CPID_BIN := $(BUILD_DIR)/shm_cpid
+
+.PHONY: shm_cpid
+
+shm_cpid: $(SHM_CPID_BIN)
+
+$(SHM_CPID_BIN): $(SHM_CPID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_cpid"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_CPID_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EVDEV-GRAB-SELFTEST
+EVDEV_GRAB_SRC := syscall/evdev_grab.c
+EVDEV_GRAB_BIN := $(BUILD_DIR)/evdev_grab
+
+.PHONY: evdev_grab
+
+evdev_grab: $(EVDEV_GRAB_BIN)
+
+$(EVDEV_GRAB_BIN): $(EVDEV_GRAB_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_grab"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_GRAB_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PRCTL-DUMPABLE-SELFTEST
+PRCTL_DUMPABLE_SRC := syscall/prctl_dumpable.c
+PRCTL_DUMPABLE_BIN := $(BUILD_DIR)/prctl_dumpable
+
+.PHONY: prctl_dumpable
+
+prctl_dumpable: $(PRCTL_DUMPABLE_BIN)
+
+$(PRCTL_DUMPABLE_BIN): $(PRCTL_DUMPABLE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest prctl_dumpable"
+	@$(CC) $(CFLAGS) -o $@ $(PRCTL_DUMPABLE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+
+# SHM-LPID-SELFTEST
+SHM_LPID_SRC := syscall/shm_lpid.c
+SHM_LPID_BIN := $(BUILD_DIR)/shm_lpid
+
+.PHONY: shm_lpid
+
+shm_lpid: $(SHM_LPID_BIN)
+
+$(SHM_LPID_BIN): $(SHM_LPID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_lpid"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_LPID_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PRCTL-KEEPCAPS-SELFTEST
+PRCTL_KEEPCAPS_SRC := syscall/prctl_keepcaps.c
+PRCTL_KEEPCAPS_BIN := $(BUILD_DIR)/prctl_keepcaps
+
+.PHONY: prctl_keepcaps
+
+prctl_keepcaps: $(PRCTL_KEEPCAPS_BIN)
+
+$(PRCTL_KEEPCAPS_BIN): $(PRCTL_KEEPCAPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest prctl_keepcaps"
+	@$(CC) $(CFLAGS) -o $@ $(PRCTL_KEEPCAPS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-TIMES-SELFTEST
+SHM_TIMES_SRC := syscall/shm_times.c
+SHM_TIMES_BIN := $(BUILD_DIR)/shm_times
+
+.PHONY: shm_times
+
+shm_times: $(SHM_TIMES_BIN)
+
+$(SHM_TIMES_BIN): $(SHM_TIMES_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_times"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_TIMES_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-OWNER-SELFTEST
+SHM_OWNER_SRC := syscall/shm_owner.c
+SHM_OWNER_BIN := $(BUILD_DIR)/shm_owner
+
+.PHONY: shm_owner
+
+shm_owner: $(SHM_OWNER_BIN)
+
+$(SHM_OWNER_BIN): $(SHM_OWNER_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_owner"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_OWNER_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-UMASK-SELFTEST
+PROC_UMASK_SRC := syscall/proc_umask.c
+PROC_UMASK_BIN := $(BUILD_DIR)/proc_umask
+
+.PHONY: proc_umask
+
+proc_umask: $(PROC_UMASK_BIN)
+
+$(PROC_UMASK_BIN): $(PROC_UMASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_umask"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_UMASK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-MODE-SELFTEST
+SHM_MODE_SRC := syscall/shm_mode.c
+SHM_MODE_BIN := $(BUILD_DIR)/shm_mode
+
+.PHONY: shm_mode
+
+shm_mode: $(SHM_MODE_BIN)
+
+$(SHM_MODE_BIN): $(SHM_MODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_mode"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_MODE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EVDEV-PROP-SELFTEST
+EVDEV_PROP_SRC := syscall/evdev_prop.c
+EVDEV_PROP_BIN := $(BUILD_DIR)/evdev_prop
+
+.PHONY: evdev_prop
+
+evdev_prop: $(EVDEV_PROP_BIN)
+
+$(EVDEV_PROP_BIN): $(EVDEV_PROP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_prop"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_PROP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-SIGSET-SELFTEST
+PROC_SIGSET_SRC := syscall/proc_sigset.c
+PROC_SIGSET_BIN := $(BUILD_DIR)/proc_sigset
+
+.PHONY: proc_sigset
+
+proc_sigset: $(PROC_SIGSET_BIN)
+
+$(PROC_SIGSET_BIN): $(PROC_SIGSET_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_sigset"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_SIGSET_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# ILL-CODE-SELFTEST
+ILL_CODE_SRC := syscall/ill_code.c
+ILL_CODE_BIN := $(BUILD_DIR)/ill_code
+
+.PHONY: ill_code
+
+ill_code: $(ILL_CODE_BIN)
+
+$(ILL_CODE_BIN): $(ILL_CODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest ill_code"
+	@$(CC) $(CFLAGS) -o $@ $(ILL_CODE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EVDEV-CLOCK-SELFTEST
+EVDEV_CLOCK_SRC := syscall/evdev_clock.c
+EVDEV_CLOCK_BIN := $(BUILD_DIR)/evdev_clock
+
+.PHONY: evdev_clock
+
+evdev_clock: $(EVDEV_CLOCK_BIN)
+
+$(EVDEV_CLOCK_BIN): $(EVDEV_CLOCK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_clock"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_CLOCK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-SIGACT-SELFTEST
+PROC_SIGACT_SRC := syscall/proc_sigact.c
+PROC_SIGACT_BIN := $(BUILD_DIR)/proc_sigact
+
+.PHONY: proc_sigact
+
+proc_sigact: $(PROC_SIGACT_BIN)
+
+$(PROC_SIGACT_BIN): $(PROC_SIGACT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_sigact"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_SIGACT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EVDEV-ABS-SELFTEST
+EVDEV_ABS_SRC := syscall/evdev_abs.c
+EVDEV_ABS_BIN := $(BUILD_DIR)/evdev_abs
+
+.PHONY: evdev_abs
+
+evdev_abs: $(EVDEV_ABS_BIN)
+
+$(EVDEV_ABS_BIN): $(EVDEV_ABS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_abs"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_ABS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-GROUPS-SELFTEST
+PROC_GROUPS_SRC := syscall/proc_groups.c
+PROC_GROUPS_BIN := $(BUILD_DIR)/proc_groups
+
+.PHONY: proc_groups
+
+proc_groups: $(PROC_GROUPS_BIN)
+
+$(PROC_GROUPS_BIN): $(PROC_GROUPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_groups"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_GROUPS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PIPE-SZ-SELFTEST
+PIPE_SZ_SRC := syscall/pipe_sz.c
+PIPE_SZ_BIN := $(BUILD_DIR)/pipe_sz
+
+.PHONY: pipe_sz
+
+pipe_sz: $(PIPE_SZ_BIN)
+
+$(PIPE_SZ_BIN): $(PIPE_SZ_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest pipe_sz"
+	@$(CC) $(CFLAGS) -o $@ $(PIPE_SZ_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EVDEV-KEY-SELFTEST
+EVDEV_KEY_SRC := syscall/evdev_key.c
+EVDEV_KEY_BIN := $(BUILD_DIR)/evdev_key
+
+.PHONY: evdev_key
+
+evdev_key: $(EVDEV_KEY_BIN)
+
+$(EVDEV_KEY_BIN): $(EVDEV_KEY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_key"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_KEY_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# WAITID-SELFTEST
+WAITID_SRC := syscall/waitid.c
+WAITID_BIN := $(BUILD_DIR)/waitid
+
+.PHONY: waitid
+
+waitid: $(WAITID_BIN)
+
+$(WAITID_BIN): $(WAITID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest waitid"
+	@$(CC) $(CFLAGS) -o $@ $(WAITID_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# KD-KEYMAP-SELFTEST
+KD_KEYMAP_SRC := syscall/kd_keymap.c
+KD_KEYMAP_BIN := $(BUILD_DIR)/kd_keymap
+
+.PHONY: kd_keymap
+
+kd_keymap: $(KD_KEYMAP_BIN)
+
+$(KD_KEYMAP_BIN): $(KD_KEYMAP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest kd_keymap"
+	@$(CC) $(CFLAGS) -o $@ $(KD_KEYMAP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-COMM-SELFTEST
+PROC_COMM_SRC := syscall/proc_comm.c
+PROC_COMM_BIN := $(BUILD_DIR)/proc_comm
+
+.PHONY: proc_comm
+
+proc_comm: $(PROC_COMM_BIN)
+
+$(PROC_COMM_BIN): $(PROC_COMM_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_comm"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_COMM_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SHM-RDONLY-SELFTEST
+SHM_RDONLY_SRC := syscall/shm_rdonly.c
+SHM_RDONLY_BIN := $(BUILD_DIR)/shm_rdonly
+
+.PHONY: shm_rdonly
+
+shm_rdonly: $(SHM_RDONLY_BIN)
+
+$(SHM_RDONLY_BIN): $(SHM_RDONLY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_rdonly"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_RDONLY_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# ELF-INTERP-SELFTEST
+ELF_INTERP_SRC := syscall/elf_interp.c
+ELF_INTERP_BIN := $(BUILD_DIR)/elf_interp
+
+.PHONY: elf_interp
+
+elf_interp: $(ELF_INTERP_BIN)
+
+$(ELF_INTERP_BIN): $(ELF_INTERP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest elf_interp"
+	@$(CC) $(CFLAGS) -o $@ $(ELF_INTERP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EXEC-SIGMASK-SELFTEST
+EXEC_SIGMASK_SRC := syscall/exec_sigmask.c
+EXEC_SIGMASK_BIN := $(BUILD_DIR)/exec_sigmask
+
+.PHONY: exec_sigmask
+
+exec_sigmask: $(EXEC_SIGMASK_BIN)
+
+$(EXEC_SIGMASK_BIN): $(EXEC_SIGMASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest exec_sigmask"
+	@$(CC) $(CFLAGS) -o $@ $(EXEC_SIGMASK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# GETDENTS-LAYOUT-SELFTEST
+GETDENTS_LAYOUT_SRC := syscall/getdents_layout.c
+GETDENTS_LAYOUT_BIN := $(BUILD_DIR)/getdents_layout
+
+.PHONY: getdents_layout
+
+getdents_layout: $(GETDENTS_LAYOUT_BIN)
+
+$(GETDENTS_LAYOUT_BIN): $(GETDENTS_LAYOUT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest getdents_layout"
+	@$(CC) $(CFLAGS) -o $@ $(GETDENTS_LAYOUT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# NAMEI-SEARCH-SELFTEST
+NAMEI_SEARCH_SRC := syscall/namei_search.c
+NAMEI_SEARCH_BIN := $(BUILD_DIR)/namei_search
+
+.PHONY: namei_search
+
+namei_search: $(NAMEI_SEARCH_BIN)
+
+$(NAMEI_SEARCH_BIN): $(NAMEI_SEARCH_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest namei_search"
+	@$(CC) $(CFLAGS) -o $@ $(NAMEI_SEARCH_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# BIGMEM-SELFTEST
+BIGMEM_SRC := mm/bigmem.c
+BIGMEM_BIN := $(BUILD_DIR)/bigmem
+
+.PHONY: bigmem
+
+bigmem: $(BIGMEM_BIN)
+
+$(BIGMEM_BIN): $(BIGMEM_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest bigmem"
+	@$(CC) $(CFLAGS) -o $@ $(BIGMEM_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

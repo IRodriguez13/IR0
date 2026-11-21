@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "io_syscalls.h"
+#include "time_syscalls.h"
 #include <ir0/fd_resource.h>
 #include "syscalls_glue.h"
 #include <ir0/kmem.h>
@@ -33,6 +34,7 @@
 #include <ir0/sock_icmp.h>
 #include <ir0/sock_inet_ioctl.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/input.h>
 #include <ir0/fd_get.h>
 #include <ir0/pipe_fd.h>
 #include <ir0/memfd.h>
@@ -174,6 +176,12 @@ int fd_can_read_for(process_t *proc, int fd)
   {
     if (devfs_is_ptmx_device(e->dev_device_id) && e->vfs_file)
       ready = devfs_pty_master_can_read(e->vfs_file);
+    else if (input_is_event_device(e->dev_device_id))
+    {
+      input_set_read_context(e->vfs_file, 0);
+      ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
+      input_set_read_context(NULL, 0);
+    }
     else
       ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
     goto out;
@@ -420,11 +428,11 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 }
 
 int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
-			  int *applied, uint32_t *saved_mask)
+			  int *applied, uint64_t *saved_mask)
 {
   sigset_t kset;
   uint64_t legacy64;
-  uint32_t new_mask;
+  uint64_t new_mask;
 
   if (!applied || !saved_mask)
     return -EINVAL;
@@ -439,13 +447,13 @@ int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
   {
     if (copy_from_user(&legacy64, user_sigmask, sizeof(legacy64)) != 0)
       return -EFAULT;
-    new_mask = linux_sigword_to_ir0((uint32_t)legacy64);
+    new_mask = linux_sigword_to_ir0(legacy64);
   }
   else if (sigsetsize == sizeof(sigset_t))
   {
     if (copy_from_user(&kset, user_sigmask, sizeof(kset)) != 0)
       return -EFAULT;
-    new_mask = ir0_sigset_low32(&kset);
+    new_mask = ir0_sigset_word(&kset);
   }
   else
     return -EINVAL;
@@ -456,7 +464,7 @@ int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
   return 0;
 }
 
-void io_temp_sigmask_end(int applied, uint32_t saved_mask)
+void io_temp_sigmask_end(int applied, uint64_t saved_mask)
 {
   if (applied && current_process)
     current_process->signal_mask = saved_mask;
@@ -467,7 +475,7 @@ int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
 		  size_t sigsetsize)
 {
   struct timespec ts;
-  uint32_t saved_mask = 0;
+  uint64_t saved_mask = 0;
   int timeout_ms = -1;
   int mask_applied = 0;
   int64_t ret;
@@ -733,6 +741,7 @@ static int poll_wake_do(void)
         process_set_sched_state(w->proc, PROCESS_READY);
         sched_add(w->proc);
         sched_promote(w->proc);
+        clock_request_sched_resched();
       }
       woke = 1;
     }
@@ -748,13 +757,9 @@ int poll_wake_check_nosched(void)
 void poll_wake_check(void)
 {
   /*
-   * Producers call this facade from ordinary syscalls and from device paths.
-   * A wakeup makes consumers runnable; it must not force a cooperative switch
-   * at this syscall boundary.  AF_UNIX connect exposed why: preempting the
-   * producer after connect but before its setup write lets the X server accept
-   * and wait for bytes while the producer's cooperative resume is starved.
-   * The normal timer/idle scheduler observes the READY task, matching Linux's
-   * separation between try_to_wake_up() and the later scheduling decision.
+   * Do not call schedule() here. A switch inside connect never resumed the
+   * producer for its setup write. poll_wake_do() promotes a blocked waiter
+   * and sets the resched flag; syscall exit and IRQ return call schedule().
    */
 	(void)poll_wake_do();
 }
@@ -775,7 +780,7 @@ void io_async_notify_device(uint32_t device_id)
 
     if (!table || proc->state == PROCESS_ZOMBIE)
       continue;
-    for (fd = 0; fd < MAX_FDS_PER_PROCESS; fd++)
+    for (fd = 0; fd < process_fd_span(proc); fd++)
     {
       fd_entry_t *entry = fd_table_slot(table, fd);
 
@@ -813,49 +818,12 @@ int64_t sys_pause(void)
 }
 
 /**
- * sys_nanosleep - Sleep for specified time (POSIX, OSDev Time And Date)
- * @req: Requested sleep duration (seconds + nanoseconds)
- * @rem: Remaining time if interrupted (optional, can be NULL)
- *
- * Blocks the process until the requested time has elapsed (at clock-tick
- * resolution, ~1ms) or a caught signal interrupts it.
+ * sys_nanosleep - Sleep for an interval: Linux nanosleep(2) is a relative
+ * clock_nanosleep(2) on CLOCK_MONOTONIC.
  */
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
-  struct timespec kreq;
-  struct timespec krem;
-  uint64_t deadline;
-  uint64_t now;
-  int64_t ret;
-
-  if (!current_process || !req)
-    return -EFAULT;
-  if (copy_from_user(&kreq, req, sizeof(kreq)) != 0)
-    return -EFAULT;
-  if (kreq.tv_sec < 0 || kreq.tv_nsec < 0 || kreq.tv_nsec > 999999999)
-    return -EINVAL;
-
-  /* Millisecond clock: round the request up so the sleep is never short. */
-  deadline = clock_get_uptime_milliseconds() + (uint64_t)kreq.tv_sec * 1000UL +
-             (uint64_t)(kreq.tv_nsec + 999999) / 1000000;
-  ret = ir0_clock_wait_block_until(deadline);
-  if (ret != -EINTR)
-    return ret;
-
-  /*
-   * signal(7): nanosleep is never restarted. It fails with EINTR and
-   * reports the unslept time.
-   */
-  if (rem)
-  {
-    now = clock_get_uptime_milliseconds();
-    now = deadline > now ? deadline - now : 0;
-    krem.tv_sec = (time_t)(now / 1000);
-    krem.tv_nsec = (long)(now % 1000) * 1000000L;
-    if (copy_to_user(rem, &krem, sizeof(krem)) != 0)
-      return -EFAULT;
-  }
-  return -EINTR;
+  return sys_clock_nanosleep(CLOCK_MONOTONIC, 0, req, rem);
 }
 
 #define MAX_PIPE_WAITERS 32
@@ -1068,6 +1036,7 @@ void pipe_wake_all(pipe_t *pipe)
 				proc = w->proc;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
+				clock_request_sched_resched();
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -1082,6 +1051,7 @@ void pipe_wake_all(pipe_t *pipe)
 				proc = w->proc;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
+				clock_request_sched_resched();
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -1141,19 +1111,19 @@ int64_t sys_dup(int oldfd)
   if (!current_process)
     return -ESRCH;
 
-  if (oldfd < 0 || oldfd >= MAX_FDS_PER_PROCESS)
+  if (oldfd < 0 || oldfd >= ir0_fd_span())
     return -EBADF;
 
   fd_entry_t *fd_table = get_process_fd_table();
+  int neu;
+
   if (!fd_table || !fd_table[oldfd].in_use)
     return -EBADF;
 
-  for (int i = 0; i < MAX_FDS_PER_PROCESS; i++)
-  {
-    if (!fd_table[i].in_use)
-      return sys_dup2(oldfd, i);
-  }
-  return -EMFILE;
+  neu = fd_alloc_lowest(0);
+  if (neu < 0)
+    return neu;
+  return sys_dup2(oldfd, neu);
 }
 
 fd_entry_t *get_process_fd_table(void)
@@ -1199,6 +1169,23 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 
       if (devfs_is_ptmx_device(e->dev_device_id))
 	ret = devfs_pty_master_ioctl(e->vfs_file, request, arg);
+      else if (input_is_event_device(e->dev_device_id) &&
+	       request == INPUT_EVIOCGRAB)
+	/* The grab belongs to this open's ring, which the device
+	 * ioctl does not receive. 1 grabs, 0 releases. */
+	ret = input_client_grab(e->vfs_file, arg ? 1 : 0);
+      else if (input_is_event_device(e->dev_device_id) &&
+	       request == INPUT_EVIOCSCLOCKID)
+      {
+	int clockid;
+
+	/* Per-open clock. The device ioctl does not receive the client. */
+	if (!arg ||
+	    copy_from_user(&clockid, arg, sizeof(clockid)) != 0)
+	  ret = -EFAULT;
+	else
+	  ret = input_client_set_clock(e->vfs_file, clockid);
+      }
       else if (!node || !node->ops || !node->ops->ioctl)
 	ret = -ENOTTY;
       else
@@ -1506,10 +1493,16 @@ int64_t sys_dup2(int oldfd, int newfd)
   if (!current_process)
     return -ESRCH;
 
-  if (oldfd < 0 || oldfd >= MAX_FDS_PER_PROCESS)
+  if (oldfd < 0 || oldfd >= ir0_fd_span())
     return -EBADF;
-  if (newfd < 0 || newfd >= MAX_FDS_PER_PROCESS)
+  if (newfd < 0)
     return -EBADF;
+  {
+    int ensured = files_ensure_fd(current_process, newfd);
+
+    if (ensured < 0)
+      return ensured == -ENOMEM ? (int64_t)ensured : (int64_t)-EBADF;
+  }
 
   if (oldfd == newfd)
     return newfd;
@@ -1644,33 +1637,51 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     int start = (int)arg;
     int i;
 
-    if (start < 0 || start >= MAX_FDS_PER_PROCESS)
+    if (start < 0 || start >= process_nofile_limit(current_process))
     {
       ret = -EINVAL;
       break;
     }
-    for (i = start; i < MAX_FDS_PER_PROCESS; i++)
+    /* Drop pin before dup2 (re-enters fd table). */
+    ir0_fd_put(&h);
+    i = fd_alloc_lowest(start);
+    if (i < 0)
     {
-      if (!fd_table[i].in_use)
-      {
-	/* Drop pin before dup2 (re-enters fd table). */
-	ir0_fd_put(&h);
-	ret = sys_dup2(fd, i);
-	if (ret < 0)
-	  return ret;
-	if (cmd == F_DUPFD_CLOEXEC)
-	{
-	  fd_table = get_process_fd_table();
-	  if (!fd_table)
-	    return -ESRCH;
-	  fd_table[i].fd_flags |= FD_CLOEXEC;
-	}
-	return ret;
-      }
+      ret = i;
+      return ret;
     }
-    ret = -EMFILE;
-    break;
+    ret = sys_dup2(fd, i);
+    if (ret < 0)
+      return ret;
+    if (cmd == F_DUPFD_CLOEXEC)
+    {
+      fd_table = get_process_fd_table();
+      if (!fd_table)
+        return -ESRCH;
+      fd_table[i].fd_flags |= FD_CLOEXEC;
+    }
+    return ret;
   }
+  case F_GETPIPE_SZ:
+    if (!e->is_pipe)
+    {
+      ret = -EINVAL;
+      break;
+    }
+    ret = PIPE_SIZE;
+    break;
+  case F_SETPIPE_SZ:
+    /*
+     * The pipe buffer is the fixed PIPE_SIZE array. Any other size
+     * would report a capacity the object does not have.
+     */
+    if (!e->is_pipe || arg != (unsigned long)PIPE_SIZE)
+    {
+      ret = -EINVAL;
+      break;
+    }
+    ret = PIPE_SIZE;
+    break;
   default:
     ret = -EINVAL;
     break;
@@ -1718,20 +1729,21 @@ static int64_t sys_pipe_install(int pipefd[2], int flags)
   if (!pipe)
     return -ENOMEM;
 
-  fd_table = get_process_fd_table();
-  read_fd = fd_alloc_lowest(fd_table, 3);
+  read_fd = fd_alloc_lowest(3);
   if (read_fd >= 0)
   {
     /* Reserve the read end before scanning so both ends differ. */
+    fd_table = get_process_fd_table();
     fd_table[read_fd].in_use = 1;
-    write_fd = fd_alloc_lowest(fd_table, read_fd + 1);
+    write_fd = fd_alloc_lowest(read_fd + 1);
+    fd_table = get_process_fd_table();
     fd_table[read_fd].in_use = 0;
   }
 
-  if (read_fd == -1 || write_fd == -1)
+  if (read_fd < 0 || write_fd < 0)
   {
     pipe_abort_unopened(pipe);
-    return -EMFILE;
+    return read_fd < 0 ? read_fd : write_fd;
   }
 
   fd_table[read_fd].in_use = true;

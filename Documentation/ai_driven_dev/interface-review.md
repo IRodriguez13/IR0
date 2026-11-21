@@ -153,7 +153,7 @@ are deleted.
 | IRQ controller | `arch/x86-64/sources/interrupt/pic.c` | `arch/arm64/sources/{gic_v2,bcm2836_irq,irq_backend}.c` |
 | Keyboard | `arch/x86-64/sources/interrupt/keyboard.c` | `drivers/input/input_backend.c` |
 | Power-off (`acpi_pm.h`) | `drivers/timer/acpi/acpi_pm.c` | `arch/arm64/sources/acpi_pm_stub.c` |
-| Block (early) | - | `arch/arm64/sources/virtio_blk_early.c` |
+| Block (virtio) | `drivers/virtio/virtio_blk.c` | same driver; MMIO window is the QEMU virt bank |
 | Firmware tables | `drivers/timer/hpet/find_hpet.c` (ACPI) | `arch/arm64/sources/fdt_reader.c` |
 
 The same facade is implemented by an arch file on one ISA and by a driver
@@ -317,7 +317,7 @@ pairs.
   should clean up inside the tty read and return `-ERESTARTSYS`; signals
   should not know the tty exists.
 - `signals_try_abandon_sigframe()` runs on every syscall entry
-  (`kernel/syscalls/syscall_dispatch.c:524`) to detect a `longjmp` out of a
+  (`kernel/entry/syscall_dispatch.c:524`) to detect a `longjmp` out of a
   handler. Linux has no such hook (the kernel keeps no per-frame state that
   needs abandoning). Uncertain whether it can be removed without a frame
   bookkeeping change; needs red/green.
@@ -484,8 +484,8 @@ kernel/process/
 ## 4. syscalls (entry, dispatch, table) and the early rootfs world
 
 Files: `kernel/entry.c` (52), `kernel/syscalls.c` (104),
-`kernel/syscalls/syscall_dispatch.c` (573), `syscall_table.c`,
-`syscall_identity.c`, plus 20 implementation files (about 13.3k lines) and
+`kernel/entry/syscall_dispatch.c` (573), `kernel/entry/syscall_table.c`,
+`kernel/syscalls/syscall_identity.c`, plus 20 implementation files (about 13.3k lines) and
 32 early-rootfs files (about 11.9k lines).
 
 ### 4.1 Public interface
@@ -979,8 +979,8 @@ includes `fs/vfs.h`.
   includes `drivers/dma/dma.h` (ISA 8237 DMA, same basename as `ir0/dma.h`);
   `sb16_irq_handler` is called from the x86 ISR.
 - `virtio_9p.h` 16 (1 unused) used by `fs/hostshare_9p.c`;
-  `virtio_mmio.h` 6, arm64 only, `arm64_virtio_mmio_*` names in a
-  public header.
+  `virtio_mmio.h` exposes `virtio_mmio_probe` / `virtio_mmio_find`; the
+  probe window is still the QEMU ARM virt bank.
 - `usb_host.h` 3 (2 owner-only).
 - `multilang_drivers.[ch]`: example drivers (inventory: delete if
   example-only).
@@ -1162,7 +1162,7 @@ syscall dispatch, the tty and the x86 page-fault path.
   `ir0/klog.h` -> `ir0/ktm/klog.h` -> `<klog.h>`. KTM should be a consumer.
 - Inline KTM/diag in policy and critical code: `fs/pipe.c` 16,
   `kernel/process/fork.c` 12, `drivers/tty/console.c` 10,
-  `kernel/syscalls/syscall_dispatch.c` 9, `kernel/syscalls/mm_syscalls.c` 4,
+  `kernel/entry/syscall_dispatch.c` 9, `kernel/syscalls/mm_syscalls.c` 4,
   `io_syscalls.c` 4 (lanes D1/D2/D4).
 - Bug-ticket-named probe files (`d1_12`, `d1_13`, `d1_16`) with hooks in
   product code.

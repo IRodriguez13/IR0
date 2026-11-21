@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
@@ -36,10 +36,11 @@ static void context_prepare_next(task_t *next)
 		return;
 
 	if (task_mm_root(next) == 0 && process_pgd(next_proc))
-		task_set_mm_root(next, (uint64_t)(uintptr_t)process_pgd(next_proc));
+		task_set_mm_root(next,
+				 (uint64_t)virt_to_phys(process_pgd(next_proc)));
 	if (task_mm_root(next))
 		mm_prepare_root_activation(
-			(address_space_root_t)task_mm_root(next));
+			phys_to_virt((uintptr_t)task_mm_root(next)));
 	set_current_kernel_stack(next_proc);
 	cpu_local_set_kernel_stack(next_proc->kstack_top);
 	set_tls(process_tls_get(next_proc));

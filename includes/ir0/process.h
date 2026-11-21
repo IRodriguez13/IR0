@@ -25,9 +25,11 @@
 #include <ir0/signals.h>
 #include <ir0/types.h>
 #include <ir0/mm.h>
+#include <ir0/page.h>
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
 #include <ir0/errno.h>
+#include <ir0/mm_struct.h>
 
 /* waitpid / wait4 options (Linux UAPI) and status inspection */
 #include <linux/wait.h>
@@ -41,7 +43,21 @@
 
 struct robust_list_head;
 
-/* Process-local binding for /proc /sys /heart opens (not global virtual fds). */
+/*
+ * One handler table (Linux sighand_struct). refcount is the number of tasks
+ * that use it. clone(CLONE_SIGHAND) shares it; execve copies it when the
+ * count is greater than 1; the last exit frees it.
+ */
+struct sighand_struct
+{
+	int refcount;
+	void (*handlers[_NSIG])(int);
+	uint32_t sa_flags[_NSIG];
+	uint64_t sa_mask[_NSIG];
+	void (*restorer[_NSIG])(void);
+};
+
+/* Process-local binding for /proc /sys opens (not global virtual fds). */
 typedef struct pseudo_fd_bind
 {
 	const void *ops; /* const pseudo_fs_ops_t * */
@@ -150,6 +166,15 @@ typedef struct process
 	uint32_t sgid;
 	/* prctl(PR_SET_NO_NEW_PRIVS): execve must not raise privileges. */
 	uint8_t no_new_privs;
+	/* prctl(PR_SET_DUMPABLE): 1 dumpable, 0 not. Fork copies it. */
+	uint8_t dumpable;
+	/* prctl(PR_SET_KEEPCAPS): keep permitted caps when dropping root. */
+	uint8_t keep_caps;
+	/*
+	 * prctl(PR_SET_PDEATHSIG). 0 means none. The child starts at 0
+	 * (fork zeroes the task); exec keeps the value.
+	 */
+	int pdeathsig;
 	/* AT_SECURE of the running image; recomputed on every execve. */
 	uint8_t at_secure;
 	pid_t tgid;
@@ -190,6 +215,7 @@ typedef struct process
 
 	/* Resource limits (Linux rlimit indices 0..15). */
 #define IR0_RLIM_NLIMITS 16
+#define IR0_RLIMIT_NOFILE 7
 	struct
 	{
 		uint64_t rlim_cur;
@@ -215,28 +241,28 @@ typedef struct process
 	uint64_t it_real_expire_ms;
 	uint64_t it_real_interval_ms;
 
-	/* Signal management */
-	uint32_t signal_pending; /* Bitmask of pending signals */
-	/* Signal handlers (function pointers to userspace handlers) */
-	void (*signal_handlers[_NSIG])(int);  /* Array of signal handler functions */
-	uint32_t signal_mask;  /* Mask of signals to block */
-	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
-	uint32_t signal_sa_flags[_NSIG]; /* Per-signal sa_flags from sigaction */
-	uint32_t signal_sa_mask[_NSIG];  /* Per-signal sa_mask (during handler only) */
+	/* Signal management. Pending and masks stay on the task. */
+	uint64_t signal_pending; /* Bits 1..63: signal N is bit N */
+	/*
+	 * Linux sighand: handler, sa_flags, sa_mask and restorer. Shared when
+	 * clone(CLONE_SIGHAND) is set; otherwise the child has its own copy.
+	 */
+	struct sighand_struct *sighand;
+	uint64_t signal_mask;  /* Mask of signals to block */
+	uint64_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
 	/*
 	 * signal_mask snapshotted when a userspace handler is armed; restored
 	 * on rt_sigreturn (Linux-like sa_mask / !SA_NODEFER blocking).
 	 */
-	uint32_t signal_mask_saved;
+	uint64_t signal_mask_saved;
 	uint8_t signal_mask_saved_valid;
 	/*
 	 * Linux TIF_RESTORE_SIGMASK: rt_sigsuspend runs with a temporary mask
 	 * and parks the caller's mask here. The handler frame saves it, or the
 	 * syscall exit puts it back when no handler runs.
 	 */
-	uint32_t saved_sigmask;
+	uint64_t saved_sigmask;
 	uint8_t restore_sigmask;
-	void (*signal_restorer[_NSIG])(void); /* sa_restorer (SA_RESTORER) */
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	/*
 	 * Handler entry RSP (points at restorer slot). Non-zero while a
@@ -295,7 +321,30 @@ typedef struct process
 	/* personality(2) execution domain; only PER_LINUX/PER_LINUX32 exist. */
 	uint32_t personality;
 
+	/*
+	 * sigaltstack(2). sas_ss_size 0 means disabled (Linux sas_ss_size).
+	 * Per task: fork copies it, exec clears it, CLONE_VM starts with none.
+	 */
+	uint64_t sas_ss_sp;
+	uint64_t sas_ss_size;
+	int sas_ss_flags;
+
 } process_t;
+
+/* 1 when @sp lies inside the task's alternate signal stack. */
+static inline int process_on_altstack(const process_t *p, uint64_t sp)
+{
+	uint64_t base;
+	uint64_t size;
+
+	if (!p || p->sas_ss_size == 0)
+		return 0;
+	base = p->sas_ss_sp;
+	size = p->sas_ss_size;
+	if (sp < base)
+		return 0;
+	return (sp - base) < size;
+}
 
 /* Boot-time reset of the current-process slot and the process registry. */
 void process_init(void);
@@ -328,13 +377,37 @@ void process_registry_insert(process_t *process);
  */
 PROCESS_CONTEXT_ASSERT_LAYOUT(process_t);
 
-#include <ir0/mm_struct.h>
-
 static inline fd_entry_t *process_fd_table(const process_t *p)
 {
 	if (!p || !files_struct_live(p->files))
 		return NULL;
 	return p->files->fd_table;
+}
+
+static inline int process_fd_span(const process_t *p)
+{
+	int n;
+
+	if (!p || !files_struct_live(p->files))
+		return 0;
+	n = p->files->max_fds;
+	if (n <= 0)
+		return 0;
+	if (n > IR0_NOFILE_CEILING)
+		return IR0_NOFILE_CEILING;
+	return n;
+}
+
+static inline int process_nofile_limit(const process_t *p)
+{
+	uint64_t cur;
+
+	if (!p)
+		return 0;
+	cur = p->rlimits[IR0_RLIMIT_NOFILE].rlim_cur;
+	if (cur > (uint64_t)IR0_NOFILE_CEILING)
+		return IR0_NOFILE_CEILING;
+	return (int)cur;
 }
 
 static inline process_t *task_to_process(task_t *task)
@@ -352,7 +425,7 @@ static inline uint64_t process_mm_root(const process_t *p)
 	if (!p)
 		return 0;
 	if (p->mm && p->mm->page_directory)
-		return (uint64_t)(uintptr_t)p->mm->page_directory;
+		return (uint64_t)virt_to_phys(p->mm->page_directory);
 	return task_mm_root(&p->task);
 }
 
@@ -368,7 +441,7 @@ static inline void process_set_pgd(process_t *p, uint64_t *pgd)
 	p->mm->page_directory = pgd;
 	if (!pgd)
 		p->mm->owns_tables = 0;
-	task_set_mm_root(&p->task, (uint64_t)(uintptr_t)pgd);
+	task_set_mm_root(&p->task, (uint64_t)virt_to_phys(pgd));
 }
 
 static inline struct mmap_region *process_mmap_list(const process_t *p)
@@ -439,7 +512,7 @@ static inline void process_set_mm_root(process_t *p, uint64_t root)
 		return;
 	task_set_mm_root(&p->task, root);
 	if (p->mm)
-		p->mm->page_directory = (uint64_t *)(uintptr_t)root;
+		p->mm->page_directory = root ? phys_to_virt((uintptr_t)root) : NULL;
 }
 
 static inline pid_t process_pid(const process_t *p)
@@ -653,8 +726,10 @@ pid_t spawn_kernel(void (*entry)(void), const char *name);
 
 /* POSIX fork/clone: kernel/process/fork.c (not spawn internally). */
 pid_t fork(void);
-pid_t fork_with_stack(void *child_stack);
-pid_t vfork_process(void *child_stack);
+/* clone_flags is the Linux clone(2) word. CLONE_SIGHAND shares handlers. */
+pid_t fork_with_stack(void *child_stack, unsigned long clone_flags);
+/* clone_flags is honored for CLONE_SIGHAND. vfork(2) passes 0. */
+pid_t vfork_process(void *child_stack, unsigned long clone_flags);
 int process_vfork_link(process_t *parent, process_t *child);
 int process_vfork_parent_blocked(const process_t *parent);
 void process_vfork_complete(process_t *child);

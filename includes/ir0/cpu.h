@@ -23,6 +23,14 @@
 
 void smp_mb(void);
 
+/*
+ * mb() orders and completes all prior memory and device accesses system-wide.
+ * cpu_sync() makes later instructions observe the effects of prior ones
+ * (needed after interrupt-controller programming on arm64).
+ */
+void mb(void);
+void cpu_sync(void);
+
 void enable_interrupts(void);
 void disable_interrupts(void);
 

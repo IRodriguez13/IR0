@@ -28,11 +28,10 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_chroot: return IR0_SYSCALL_CHROOT;
 	case __NR_clock_gettime: return IR0_SYSCALL_CLOCK_GETTIME;
 	case __NR_clock_gettime64: return IR0_SYSCALL_CLOCK_GETTIME64;
+	case __NR_clock_nanosleep: return IR0_SYSCALL_CLOCK_NANOSLEEP;
 	case __NR_clone: return IR0_SYSCALL_CLONE;
 	case __NR_close: return IR0_SYSCALL_CLOSE;
 	case __NR_connect: return IR0_SYSCALL_CONNECT;
-	case __NR_console_clear: return IR0_SYSCALL_EXTENSION_CONSOLE_CLEAR;
-	case __NR_console_scroll: return IR0_SYSCALL_EXTENSION_CONSOLE_SCROLL;
 	case __NR_dup: return IR0_SYSCALL_DUP;
 	case __NR_dup2: return IR0_SYSCALL_DUP2;
 	case __NR_dup3: return IR0_SYSCALL_DUP3;
@@ -133,6 +132,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_rt_sigprocmask: return IR0_SYSCALL_RT_SIGPROCMASK;
 	case __NR_rt_sigreturn: return IR0_SYSCALL_RT_SIGRETURN;
 	case __NR_rt_sigsuspend: return IR0_SYSCALL_RT_SIGSUSPEND;
+	case __NR_sched_yield: return IR0_SYSCALL_SCHED_YIELD;
 	case __NR_select: return IR0_SYSCALL_SELECT;
 	case __NR_sendmsg: return IR0_SYSCALL_SENDMSG;
 	case __NR_sendto: return IR0_SYSCALL_SENDTO;
@@ -150,6 +150,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_setsid: return IR0_SYSCALL_SETSID;
 	case __NR_setsockopt: return IR0_SYSCALL_SETSOCKOPT;
 	case __NR_setuid: return IR0_SYSCALL_SETUID;
+	case __NR_sigaltstack: return IR0_SYSCALL_SIGALTSTACK;
 	case __NR_shmat: return IR0_SYSCALL_SHMAT;
 	case __NR_shmctl: return IR0_SYSCALL_SHMCTL;
 	case __NR_shmdt: return IR0_SYSCALL_SHMDT;
@@ -181,6 +182,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_utimensat: return IR0_SYSCALL_UTIMENSAT;
 	case __NR_vfork: return IR0_SYSCALL_VFORK;
 	case __NR_wait4: return IR0_SYSCALL_WAIT4;
+	case __NR_waitid: return IR0_SYSCALL_WAITID;
 	case __NR_write: return IR0_SYSCALL_WRITE;
 	case __NR_writev: return IR0_SYSCALL_WRITEV;
 	default: return IR0_SYSCALL_UNKNOWN;

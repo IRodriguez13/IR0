@@ -123,3 +123,8 @@ int ir0_console_ioctl_sti(const void *user_arg);
 int ir0_console_has_ctty_for_sid(int32_t sid);
 void ir0_console_clear_ctty_session(int32_t sid);
 int32_t ir0_console_get_fg_pgid(void);
+
+/* Copy TTY output to the serial port, translating LF to CR LF. */
+void tty_serial_mirror_set(int on);
+void tty_serial_mirror_handoff(void);
+void tty_serial_mirror_bytes(const char *str, size_t len);

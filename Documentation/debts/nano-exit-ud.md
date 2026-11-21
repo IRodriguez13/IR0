@@ -1,5 +1,5 @@
 > **Última verificación:** 2026-07-25
-> **Fuente de verdad:** `drivers/video/typewriter.c`, `scripts/smoke_desktop_nano_mnt.py`
+> **Fuente de verdad:** `drivers/tty/vt/vt.c`, `scripts/smoke_desktop_nano_mnt.py`
 
 # Debt: #UD after GNU nano save/exit (fitted FB geometry)
 
@@ -17,7 +17,7 @@ Fitted Terminus geometry (~87×27) while typewriter scrollback was still `VGA_WI
 
 ## Fix applied
 
-`typewriter.c`: scrollback `[SCROLLBACK_LINES][CONSOLE_MAX_WIDTH]` + column clamps via `scrollback_cols()`.
+`vt.c`: scrollback `[SCROLLBACK_LINES][CONSOLE_MAX_WIDTH]` + column clamps via `scrollback_cols()`.
 
 ## Residual risk
 

@@ -21,10 +21,10 @@
 #include <ir0/process.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
+#include <ir0/clock.h>
 #include <ir0/sched.h>
-#include <ir0/arch_port.h>
 #include <ir0/spinlock.h>
 
 /* Guards the channel table and message queues. */
@@ -125,11 +125,13 @@ static process_t *wait_queue_wake_one(wait_queue_t *wq)
     proc = node->process;
     kfree(node);
 
-    /* Mark process as ready to run outside IRQ-off section. */
+    /* Ready outside the IRQ-off section. Exit consumes the flag. */
     if (proc)
     {
         process_set_sched_state(proc, PROCESS_READY);
         sched_add(proc);
+        sched_promote(proc);
+        clock_request_sched_resched();
     }
 
     return proc;
@@ -159,6 +161,8 @@ void wait_queue_wake_all(wait_queue_t *wq)
         {
             process_set_sched_state(node->process, PROCESS_READY);
             sched_add(node->process);
+            sched_promote(node->process);
+            clock_request_sched_resched();
         }
         kfree(node);
         node = next;
@@ -351,7 +355,7 @@ ipc_channel_t *ipc_channel_create(uint32_t id)
     channel->ref_count = 0;
     channel->next = NULL;
 
-    LOG_INFO_FMT("IPC", "Created IPC channel %u", id);
+    klog_info_fmt("IPC", "Created IPC channel %u", id);
 
     return channel;
 }
@@ -361,7 +365,7 @@ void ipc_channel_destroy(ipc_channel_t *channel)
     if (!channel)
         return;
 
-    LOG_INFO_FMT("IPC", "Destroying IPC channel %u", channel->id);
+    klog_info_fmt("IPC", "Destroying IPC channel %u", channel->id);
 
     /* Wake up all waiting processes */
     wait_queue_wake_all(&channel->read_queue);
@@ -610,7 +614,7 @@ ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
 
 int ipc_init(void)
 {
-    LOG_INFO("IPC", "Initializing IPC subsystem");
+    klog_info("IPC", "Initializing IPC subsystem");
     ipc_channels = NULL;
     next_channel_id = 1;
     return 0;

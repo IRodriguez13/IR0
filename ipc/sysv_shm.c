@@ -14,8 +14,10 @@
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
+#include <ir0/tlb_sync.h>
 #include <ir0/pmm.h>
-#include <ir0/arch_port.h>
+#include <asm/pgtable.h>
+#include <ir0/clock.h>
 #include <string.h>
 
 #define SHM_MAX 8
@@ -29,6 +31,8 @@ struct shm_attach
 	process_t *proc;
 	uintptr_t va;
 	size_t len;
+	/* PAGE_USER, or PAGE_USER|PAGE_RW when the attach is writable. */
+	uint64_t prot;
 };
 
 struct shm_seg
@@ -40,11 +44,28 @@ struct shm_seg
 	size_t npages;
 	uintptr_t *frames;
 	int nattch;
+	int cpid;
+	int lpid;
+	int mode;
+	time_t atime;
+	time_t dtime;
+	time_t ctime;
+	int uid;
+	int gid;
 	struct shm_attach attaches[SHM_ATTACH_MAX];
 };
 
 static struct shm_seg g_shm[SHM_MAX];
 static int g_next_id = 1;
+
+static time_t shm_now(void)
+{
+	uint64_t uptime_ms = clock_get_uptime_milliseconds();
+
+	if (clock_realtime_available())
+		return clock_get_current_time();
+	return (time_t)(uptime_ms / 1000);
+}
 
 static struct shm_seg *shm_by_id(int shmid)
 {
@@ -80,6 +101,161 @@ static void shm_try_destroy(struct shm_seg *s)
 		return;
 	shm_free_frames(s);
 	memset(s, 0, sizeof(*s));
+}
+
+/*
+ * One slot per task. sysv_shm_fork copies the parent's slots onto a
+ * child with its own page tables; exit and shmdt drop that task's slots
+ * once. nattch 0 without IPC_RMID leaves the segment in place.
+ */
+static void shm_detach_at(struct shm_seg *s, int ai)
+{
+	struct shm_attach *a;
+	address_space_root_t root;
+	size_t off;
+
+	a = &s->attaches[ai];
+	root = a->proc ? process_pgd(a->proc) : NULL;
+	if (root)
+	{
+		for (off = 0; off < a->len; off += PAGE_SZ)
+			unmap_page_in_directory(root, a->va + off);
+	}
+	a->used = 0;
+	a->proc = NULL;
+	a->va = 0;
+	a->len = 0;
+	a->prot = 0;
+	if (s->nattch > 0)
+		s->nattch--;
+	shm_try_destroy(s);
+}
+
+void sysv_shm_detach_process(struct process *proc)
+{
+	int i;
+	int ai;
+
+	if (!proc)
+		return;
+	for (i = 0; i < SHM_MAX; i++)
+	{
+		struct shm_seg *s = &g_shm[i];
+
+		if (!s->in_use)
+			continue;
+		for (ai = 0; ai < SHM_ATTACH_MAX; ai++)
+		{
+			if (!s->in_use)
+				break;
+			if (!s->attaches[ai].used || s->attaches[ai].proc != proc)
+				continue;
+			shm_detach_at(s, ai);
+		}
+	}
+}
+
+/*
+ * Point one address space at the segment frames with @prot, without
+ * taking or dropping a reference and without allocating a frame.
+ * copy_process_memory already holds the child's reference on these
+ * pages; the parent still holds the reference from shmat.
+ */
+static int shm_rewire_shared(address_space_root_t root, struct shm_seg *s,
+			     uintptr_t va, size_t len, uint64_t prot,
+			     int sync_tlb)
+{
+	size_t off;
+
+	if (!root || !s || !s->frames)
+		return -EINVAL;
+	for (off = 0; off < len; off += PAGE_SZ)
+	{
+		size_t pi = off / PAGE_SZ;
+		uintptr_t page = va + off;
+		uint64_t pte;
+
+		if (pi >= s->npages || !s->frames[pi])
+			return -EINVAL;
+		pte = mm_make_leaf_pte(s->frames[pi], prot, 0);
+		if (paging_install_pte(root, page, pte) != 0)
+			return -ENOMEM;
+		if (sync_tlb)
+			mm_tlb_sync_page(root, page);
+	}
+	return 0;
+}
+
+static int shm_fork_one(struct shm_seg *s, const struct shm_attach *src,
+			struct process *child)
+{
+	int ai;
+	uintptr_t va;
+	size_t len;
+	int rc;
+
+	va = src->va;
+	len = src->len;
+	for (ai = 0; ai < SHM_ATTACH_MAX; ai++)
+	{
+		if (!s->attaches[ai].used)
+			break;
+	}
+	if (ai == SHM_ATTACH_MAX)
+		return -ENOSPC;
+
+	rc = shm_rewire_shared(process_pgd(child), s, va, len, src->prot, 0);
+	if (rc < 0)
+		return rc;
+	/* Parent TLB still has the COW entry installed by the copy. */
+	rc = shm_rewire_shared(process_pgd(src->proc), s, va, len,
+			        src->prot, 1);
+	if (rc < 0)
+		return rc;
+
+	s->attaches[ai].used = 1;
+	s->attaches[ai].proc = child;
+	s->attaches[ai].va = va;
+	s->attaches[ai].len = len;
+	s->attaches[ai].prot = src->prot;
+	s->nattch++;
+	return 0;
+}
+
+int sysv_shm_fork(struct process *parent, struct process *child)
+{
+	int i;
+	int ai;
+
+	if (!parent || !child)
+		return -EINVAL;
+	if (!process_pgd(parent) || !process_pgd(child))
+		return -ENOMEM;
+	if (process_pgd(parent) == process_pgd(child))
+		return 0;
+
+	for (i = 0; i < SHM_MAX; i++)
+	{
+		struct shm_seg *s = &g_shm[i];
+
+		if (!s->in_use)
+			continue;
+		for (ai = 0; ai < SHM_ATTACH_MAX; ai++)
+		{
+			int rc;
+
+			if (!s->attaches[ai].used ||
+			    s->attaches[ai].proc != parent)
+				continue;
+			rc = shm_fork_one(s, &s->attaches[ai], child);
+			if (rc < 0)
+			{
+				sysv_shm_detach_process(child);
+				return rc;
+			}
+		}
+	}
+	return 0;
 }
 
 int64_t sys_shmget(int key, size_t size, int shmflg)
@@ -141,6 +317,11 @@ int64_t sys_shmget(int key, size_t size, int shmflg)
 	free_slot->key = key;
 	free_slot->id = g_next_id++;
 	free_slot->npages = npages;
+	free_slot->cpid = (int)process_pid(current_process);
+	free_slot->mode = (int)(shmflg & 0777);
+	free_slot->ctime = shm_now();
+	free_slot->uid = current_process ? (int)current_process->euid : 0;
+	free_slot->gid = current_process ? (int)current_process->egid : 0;
 	return free_slot->id;
 }
 
@@ -152,12 +333,16 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	int ai;
 	address_space_root_t root;
 	size_t len;
+	uint64_t prot;
 
-	(void)shmflg;
 	if (!current_process)
 		return -ESRCH;
-	if (shmaddr != NULL)
+	/* SHM_RND and a chosen address are not implemented. */
+	if (shmaddr != NULL || (shmflg & ~IR0_SHM_RDONLY) != 0)
 		return -EINVAL;
+	prot = PAGE_USER;
+	if ((shmflg & IR0_SHM_RDONLY) == 0)
+		prot |= PAGE_RW;
 	s = shm_by_id(shmid);
 	if (!s || !s->frames)
 		return -EINVAL;
@@ -170,7 +355,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	{
 		pmm_frame_get(s->frames[p]);
 		if (map_page_in_directory(root, va + p * PAGE_SZ, s->frames[p],
-					  PAGE_USER | PAGE_RW) != 0)
+					  prot) != 0)
 		{
 			pmm_frame_put(s->frames[p]);
 			while (p > 0)
@@ -189,7 +374,10 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 			s->attaches[ai].proc = current_process;
 			s->attaches[ai].va = va;
 			s->attaches[ai].len = len;
+			s->attaches[ai].prot = prot;
 			s->nattch++;
+			s->lpid = (int)process_pid(current_process);
+			s->atime = shm_now();
 			return (int64_t)va;
 		}
 	}
@@ -203,7 +391,6 @@ int64_t sys_shmdt(const void *shmaddr)
 	uintptr_t va = (uintptr_t)shmaddr;
 	int i;
 	int ai;
-	size_t off;
 
 	if (!current_process || !shmaddr)
 		return -EINVAL;
@@ -219,12 +406,9 @@ int64_t sys_shmdt(const void *shmaddr)
 			    s->attaches[ai].proc != current_process ||
 			    s->attaches[ai].va != va)
 				continue;
-			for (off = 0; off < s->attaches[ai].len; off += PAGE_SZ)
-				unmap_page_in_directory(process_pgd(current_process),
-							va + off);
-			s->attaches[ai].used = 0;
-			s->nattch--;
-			shm_try_destroy(s);
+			shm_detach_at(s, ai);
+			s->lpid = (int)process_pid(current_process);
+			s->dtime = shm_now();
 			return 0;
 		}
 	}
@@ -251,7 +435,14 @@ int64_t sys_shmctl(int shmid, int cmd, void *buf)
 		memset(&st, 0, sizeof(st));
 		st.shm_segsz = s->npages * PAGE_SZ;
 		st.shm_nattch = s->nattch;
-		st.shm_perm_mode = 0600;
+		st.shm_perm_mode = s->mode;
+		st.shm_cpid = s->cpid;
+		st.shm_lpid = s->lpid;
+		st.shm_atime = s->atime;
+		st.shm_dtime = s->dtime;
+		st.shm_ctime = s->ctime;
+		st.shm_uid = s->uid;
+		st.shm_gid = s->gid;
 		if (copy_to_user(buf, &st, sizeof(st)) != 0)
 			return -EFAULT;
 		return 0;

@@ -30,7 +30,6 @@
 #include <ir0/socket.h>
 #include <ir0/time.h>
 #include <ir0/signals.h>
-#include <ir0/arch_cpu.h>
 #include <ir0/clock.h>
 #include <ir0/pipe.h>
 #include <ir0/pipe_fd.h>
@@ -39,7 +38,6 @@
 #include <ir0/named_socket.h>
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
-#include <ir0/logging.h>
 #include <ir0/devfs.h>
 #include <ir0/uio.h>
 #include <config.h>
@@ -206,13 +204,8 @@ static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 	if (!sock || !current_process)
 		return -EINVAL;
 
-	fd_table = get_process_fd_table();
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!fd_table[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
 	{
 		if (is_stream)
 			sock_stream_release(sock);
@@ -220,8 +213,11 @@ static int sock_alloc_fd_flags(void *sock, int is_stream, int type_flags)
 			sock_icmp_release(sock);
 		else
 			sock_udp_release(sock);
-		return -EMFILE;
+		return fd;
 	}
+	fd_table = get_process_fd_table();
+	if (!fd_table)
+		return -ESRCH;
 
 	memset(&fd_table[fd], 0, sizeof(fd_table[fd]));
 	fd_table[fd].in_use = true;
@@ -243,7 +239,7 @@ static int sock_fd_check(int fd)
 {
 	fd_entry_t *fd_table;
 
-	if (!current_process || fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (!current_process || fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use)
@@ -260,7 +256,7 @@ static struct sock_udp *sock_fd_lookup(int fd)
 
 	if (!current_process)
 		return NULL;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use || !fd_table[fd].is_socket)
@@ -280,7 +276,7 @@ static struct sock_icmp *sock_icmp_fd_lookup(int fd)
 
 	if (!current_process)
 		return NULL;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use || !fd_table[fd].is_socket)
@@ -298,7 +294,7 @@ static struct sock_stream *sock_stream_fd_lookup(int fd)
 
 	if (!current_process)
 		return NULL;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	fd_table = get_process_fd_table();
 	if (!fd_table[fd].in_use || !fd_table[fd].is_socket)
@@ -970,9 +966,6 @@ int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags
 	struct sock_stream *child;
 	int nfd;
 
-	(void)addr;
-	(void)addrlen;
-
 #if !CONFIG_ENABLE_NETWORKING
 	(void)fd;
 	(void)flags;
@@ -1027,6 +1020,35 @@ int64_t sys_accept4(int fd, struct sockaddr *addr, socklen_t *addrlen, int flags
 			return -EBADF;
 	}
 	nfd = sock_alloc_fd_flags(child, 1, flags);
+	if (nfd < 0)
+		return nfd;
+	/*
+	 * Linux __sys_accept4() / unix_accept(): the returned address is the
+	 * peer's name (getpeername of the new fd). A NULL addr skips the copy.
+	 */
+	if (addr != NULL)
+	{
+		struct sock_stream *peer;
+		int64_t filled;
+
+		if (addrlen == NULL)
+		{
+			(void)sys_close(nfd);
+			return -EFAULT;
+		}
+		if (sock_stream_family(child) == IR0_AF_UNIX)
+		{
+			peer = sock_stream_get_peer(child);
+			filled = unix_fill_sockaddr(peer ? sock_stream_unix_addr(peer)
+							  : NULL,
+						     addr, addrlen);
+			if (filled < 0)
+			{
+				(void)sys_close(nfd);
+				return filled;
+			}
+		}
+	}
 	return nfd;
 }
 
@@ -1147,7 +1169,7 @@ static int scm_clone_fd_entry(fd_entry_t *dst, int srcfd)
 {
 	fd_entry_t *tab = get_process_fd_table();
 
-	if (!tab || srcfd < 0 || srcfd >= MAX_FDS_PER_PROCESS || !tab[srcfd].in_use)
+	if (!tab || srcfd < 0 || srcfd >= ir0_fd_span() || !tab[srcfd].in_use)
 		return -EBADF;
 	*dst = tab[srcfd];
 	dst->fd_flags = 0;
@@ -1195,15 +1217,14 @@ static int scm_install_fd_entry(const fd_entry_t *src)
 	fd_entry_t *tab = get_process_fd_table();
 	int fd;
 
-	if (!tab || !src)
+	if (!src)
 		return -EINVAL;
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!tab[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
-		return -EMFILE;
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
+		return fd;
+	tab = get_process_fd_table();
+	if (!tab)
+		return -ESRCH;
 	tab[fd] = *src;
 	tab[fd].in_use = true;
 	fd_slot_note_created(&tab[fd]);
@@ -1876,8 +1897,8 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 			 * ip(7) IP_MULTICAST_IF takes struct in_addr (4 bytes),
 			 * ip_mreq (8) or ip_mreqn (12); from 8 bytes up the
 			 * address sits at offset 4, as sin_addr does in a
-			 * 16-byte sockaddr_in. IR0 applies it as the socket's
-			 * source address; Linux uses it for multicast only.
+			 * 16-byte sockaddr_in. Stored as the multicast output
+			 * interface and does not change the bind address.
 			 */
 			uint8_t buf[16];
 			uint32_t addr = 0;
@@ -1895,7 +1916,7 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 				memcpy(&addr, buf + 4, 4);
 			else
 				memcpy(&addr, buf, 4);
-			return sock_icmp_bind(icmp, addr);
+			return sock_icmp_set_mcast_if(icmp, addr);
 		}
 		if (level == SOL_SOCKET && optname == SO_BINDTODEVICE)
 		{

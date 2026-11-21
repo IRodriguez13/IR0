@@ -54,14 +54,24 @@ typedef struct process process_t;
 #define SIGWINCH 28   /* Window size change (TTY) */
 #define SIGIO    29   /* I/O readiness notification (F_SETOWN/O_ASYNC) */
 
-/* Signal bitmask helpers */
-#define SIGNAL_MASK(sig) (1U << (sig))
+/*
+ * Bit N is signal N (1..63). A 32-bit mask cannot hold signal 32, so the
+ * pending, blocked and ignored sets are one uint64_t.
+ */
+#define SIGNAL_MASK(sig) (1ULL << (sig))
 
 /* Never blocked, caught or ignored (Linux sigdelsetmask(SIGKILL|SIGSTOP)). */
 #define SIGNAL_UNBLOCKABLE (SIGNAL_MASK(SIGKILL) | SIGNAL_MASK(SIGSTOP))
 
-/* Maximum signal number */
-#define _NSIG 32
+/* Exclusive bound: valid signals are 1.._NSIG-1. */
+#define _NSIG 64
+
+/* Real-time signals. Standard signals stay 1..31. */
+#define SIGRTMIN 32
+#define SIGRTMAX 63
+
+_Static_assert(SIGRTMIN == 32, "SIGRTMIN");
+_Static_assert(SIGRTMAX == (_NSIG - 1), "SIGRTMAX is the last valid signal");
 
 /* sigset_t — Linux uapi layout (128 bytes on x86-64). */
 #define _IR0_SIGSET_WORDS 16
@@ -82,13 +92,41 @@ typedef struct
 #define SIG_ERR ((void (*)(int))-1) /* Error return */
 
 #define SA_SIGINFO    4
+#define SA_ONSTACK    0x08000000U
 #define SA_NODEFER    0x40000000U
 #define SA_RESTORER   0x04000000U
 #define SA_RESTART    0x10000000U
 #define SA_RESETHAND  0x80000000U
 
+/* sigaltstack(2) ss_flags. SS_ONSTACK is only reported, never installed. */
+#define SS_ONSTACK    1
+#define SS_DISABLE    2
+
+/*
+ * Linux stack_t (LP64): ss_sp, ss_flags, then ss_size at offset 16.
+ * Either pointer argument of sigaltstack(2) may be NULL.
+ */
+struct sigaltstack {
+	void *ss_sp;
+	int ss_flags;
+	size_t ss_size;
+};
+
+_Static_assert(sizeof(struct sigaltstack) == 24, "stack_t size");
+_Static_assert(offsetof(struct sigaltstack, ss_flags) == 8, "ss_flags");
+_Static_assert(offsetof(struct sigaltstack, ss_size) == 16, "ss_size");
+
 /* Linux uapi si_code for SIGSEGV (subset). */
 #define SEGV_MAPERR   1
+#define SEGV_ACCERR   2
+
+/* Linux uapi si_code for the other synchronous faults (subset). */
+#define ILL_ILLOPC    1
+#define ILL_ILLOPN    2
+#define FPE_INTDIV    1
+#define BUS_ADRALN    1
+#define TRAP_BRKPT    1
+#define TRAP_TRACE    2
 
 /*
  * siginfo_t — Linux layout: 128 bytes, the union starts at offset 16
@@ -143,6 +181,23 @@ struct sigframe {
     void (*handler)(int);     /* Signal handler function */
     int signum;               /* Signal number */
     int __pad0;
+#ifdef IR0_SIGFRAME_CTX_IS_MCONTEXT
+    /*
+     * Pre-delivery signal_mask (Linux ucontext uc_sigmask role, compact).
+     * rt_sigreturn restores this; also used if userspace abandons the frame.
+     */
+    uint64_t oldmask;
+    siginfo_t info;           /* SA_SIGINFO second argument */
+    /*
+     * Linux ucontext_t header. ctx is the mcontext and follows this array
+     * with no gap, so the handler's ucontext and rt_sigreturn share one
+     * copy. A second sigcontext does not fit a SIGSTKSZ stack once a
+     * handler nests another signal.
+     */
+    unsigned char ucontext[IR0_UCONTEXT_MCONTEXT_OFF]
+	    __attribute__((aligned(16)));
+    struct sigcontext ctx;
+#else
     struct sigcontext ctx;    /* Saved CPU context */
     /*
      * Pre-delivery signal_mask (Linux ucontext uc_sigmask role, compact).
@@ -151,14 +206,26 @@ struct sigframe {
     uint64_t oldmask;
     siginfo_t info;           /* SA_SIGINFO second argument */
     /*
-     * SA_SIGINFO third argument. Zeroed: IR0 does not lay out a Linux
-     * ucontext_t yet, so handlers cannot edit the resumed context.
+     * SA_SIGINFO third argument: Linux ucontext_t. rt_sigreturn resumes
+     * from its mcontext, so the handler can edit the restored registers.
+     * The stored size is rounded up so the whole frame stays 16-aligned.
+     * The ISA sigcontext above stays too: its layout is not the mcontext.
      */
-    unsigned char ucontext[128];
+    unsigned char ucontext[(IR0_UCONTEXT_BYTES + 15u) & ~15u];
+#endif
 };
 
 _Static_assert((sizeof(struct sigframe) % 16) == 0,
 	       "sigframe size must be 16-byte multiple for handler RSP ABI");
+#ifdef IR0_SIGFRAME_CTX_IS_MCONTEXT
+_Static_assert(offsetof(struct sigframe, ctx) ==
+		       offsetof(struct sigframe, ucontext) +
+			       IR0_UCONTEXT_MCONTEXT_OFF,
+	       "sigframe ctx must be the ucontext mcontext");
+_Static_assert(IR0_UCONTEXT_MCONTEXT_OFF + sizeof(struct sigcontext) ==
+		       IR0_UCONTEXT_BYTES,
+	       "ucontext must be the header plus one mcontext");
+#endif
 
 /**
  * send_signal - Send a signal to a process
@@ -231,7 +298,7 @@ int signal_pending(process_t *p);
  * (Linux set_current_blocked()). SIGKILL and SIGSTOP are dropped from it:
  * every path that takes a mask from userspace goes through here.
  */
-void set_current_blocked(uint32_t mask);
+void set_current_blocked(uint64_t mask);
 
 /**
  * register_signal_handler - Register a signal handler for current process
@@ -254,7 +321,7 @@ int register_signal_handler(int signal, void (*handler)(int));
  */
 int signals_has_user_handler(process_t *p, int sig);
 
-/** POSIX exec: reset handlers, mask, pending; drop saved sigreturn context. */
+/** execve: drop pending signals and handlers; keep signal_mask. */
 void signals_reset_on_exec(process_t *p);
 
 /** Restore process signal_mask after rt_sigreturn (paired with delivery). */
@@ -269,34 +336,37 @@ void signals_try_abandon_sigframe(process_t *p);
 /*
  * Deliver @sig synchronously from a user #PF IRQ @frame (isr_common_stub layout).
  * @fault_addr is the ISA-decoded faulting virtual address (stored in siginfo
- * for SA_SIGINFO).
+ * for SA_SIGINFO). @si_code is the Linux si_code (SEGV_MAPERR / SEGV_ACCERR)
+ * or 0 when the signal is not a page fault.
  * Returns 1 if redirected to handler; 0 if caller should terminate/default.
  */
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
-				   uint64_t fault_addr);
+				   uint64_t fault_addr, int si_code);
 
 /*
- * Linux places signal N in bit (N-1). IR0 SIGNAL_MASK(N) is bit N.
- * Convert at the ABI boundary only; keep kernel-internal bits unchanged.
+ * Linux places signal N in bit (N-1) of the first sigset word. IR0
+ * SIGNAL_MASK(N) is bit N. Signals 1..63 fit in one uint64_t: the shift
+ * maps Linux bits 0..62 onto IR0 bits 1..63. Convert at the ABI boundary
+ * only; keep kernel-internal bits unchanged.
  */
-static inline uint32_t linux_sigword_to_ir0(uint32_t linux_low)
+static inline uint64_t linux_sigword_to_ir0(uint64_t linux_bits)
 {
-	return linux_low << 1;
+	return linux_bits << 1;
 }
 
-static inline uint32_t ir0_sigword_to_linux(uint32_t ir0_mask)
+static inline uint64_t ir0_sigword_to_linux(uint64_t ir0_mask)
 {
 	return ir0_mask >> 1;
 }
 
-static inline uint32_t ir0_sigset_low32(const sigset_t *set)
+static inline uint64_t ir0_sigset_word(const sigset_t *set)
 {
 	if (!set)
 		return 0;
-	return linux_sigword_to_ir0((uint32_t)(set->__val[0] & 0xFFFFFFFFUL));
+	return linux_sigword_to_ir0((uint64_t)set->__val[0]);
 }
 
-static inline void ir0_sigset_set_low32(sigset_t *set, uint32_t mask)
+static inline void ir0_sigset_set_word(sigset_t *set, uint64_t mask)
 {
 	size_t i;
 

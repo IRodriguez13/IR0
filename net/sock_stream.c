@@ -16,8 +16,8 @@
 #include <ir0/kmem.h>
 #include <ir0/copy_user.h>
 #include <ir0/ktm/fault.h>
-#include <ir0/arch_cpu.h>
-#include <ir0/logging.h>
+#include <ir0/cpu.h>
+#include <ir0/ktm/klog.h>
 #include <config.h>
 #include <string.h>
 #include <ir0/poll.h>
@@ -478,7 +478,7 @@ struct sock_stream *sock_stream_create(int family, int type)
 			return &g_socks[i];
 		}
 	}
-	log_warn("SOCKET", "stream socket table exhausted");
+	klog_warn("SOCKET", "stream socket table exhausted");
 	return NULL;
 }
 

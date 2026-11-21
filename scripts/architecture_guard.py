@@ -3,7 +3,7 @@
 IR0 architecture guardrails.
 
 Checks:
-1) No direct <drivers/...> includes inside fs/* and kernel/syscalls/.
+1) No direct <drivers/...> includes inside fs/*, kernel/syscalls/ and kernel/entry/.
 2) Required facade headers for subsystem decoupling exist.
 3) Portable trees (fs/kernel/mm/net) must not include arch interrupt headers
    (#include <interrupt/...> or <arch/.../interrupt/...>);
@@ -12,9 +12,9 @@ Checks:
 6) mm/, net/, sched/: no #include <arch/...>.
 7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/blockdev.h.
 8) Paths outside drivers/bluetooth/ must not #include bluetooth/...
-9) drivers/: no #include <arch/...> (use ir0/arch_port.h).
+9) drivers/: no #include <arch/...> (use ir0/cpu.h, ir0/irq.h, or asm/pgtable.h).
 10) kernel/: no #include <drivers/...> (whole tree).
-11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
+11) kernel/: no #include <arch/common/arch_portable.h> (use the ir0 domain headers).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (smp_mb, inb, udelay, …).
@@ -77,6 +77,19 @@ Checks:
 33) Every file in Documentation/ai_driven_dev/rules/ has a "### <file name>"
     section in rules-digest.md and every section names an existing rule
     file. No ledger; injected-violation self-test.
+34) Scheduler policies share one private contract. A sched/*.c other than
+    core.c, idle.c and trace.c that defines sched_pick_next also defines
+    sched_add, sched_remove, sched_promote, sched_count_runnable,
+    sched_pick_next, sched_policy_name and sched_selftest; it does not
+    define schedule or sched_switch_to, and it does not include rr.c,
+    prio.c, cfs.c or idle.c. includes/ir0/sched.h keeps the public set
+    and does not declare sched_pick_next. No ledger; injected-violation
+    self-test.
+35) No weak symbols: kernel sources carry no __attribute__((weak)),
+    __weak or #pragma weak. A required ISA hook is a strong definition per
+    ISA (arch/template/port.h) so a missing one fails the link; an optional
+    fallback is a separate object the build selects. Empty exception
+    ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -116,6 +129,7 @@ SKIP_DIR_NAMES = frozenset(
 FORBIDDEN_PATHS = [
     ROOT / "fs",
     ROOT / "kernel" / "syscalls",
+    ROOT / "kernel" / "entry",
 ]
 
 REQUIRED_FACADES = [
@@ -123,7 +137,6 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "driver_bootstrap.h",
     ROOT / "includes" / "ir0" / "blockdev.h",
     ROOT / "includes" / "ir0" / "partition.h",
-    ROOT / "includes" / "ir0" / "arch_port.h",
     ROOT / "includes" / "ir0" / "mm_port.h",
     ROOT / "includes" / "ir0" / "clock.h",
     ROOT / "includes" / "ir0" / "rtc.h",
@@ -143,22 +156,22 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
     ROOT / "includes" / "ir0" / "irq.h",
     ROOT / "includes" / "ir0" / "context_backend.h",
-    ROOT / "includes" / "ir0" / "arch_mm.h",
+    ROOT / "includes" / "asm-generic" / "pgtable.h",
     ROOT / "includes" / "ir0" / "task_ops.h",
     ROOT / "includes" / "ir0" / "fork.h",
     ROOT / "includes" / "ir0" / "page_fault.h",
     ROOT / "includes" / "ir0" / "signal_irq.h",
-    ROOT / "includes" / "ir0" / "arch_elf.h",
+    ROOT / "includes" / "asm-generic" / "elf.h",
     ROOT / "includes" / "ir0" / "syscall_frame.h",
 ]
 
 REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "linker.ld",
     ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
-    ROOT / "arch" / "arm64" / "sources" / "pl011.c",
-    ROOT / "arch" / "arm64" / "sources" / "serial.c",
+    ROOT / "drivers" / "tty" / "pl011.c",
+    ROOT / "drivers" / "tty" / "arm_serial.c",
     ROOT / "arch" / "arm64" / "sources" / "mm_ops.c",
-    ROOT / "arch" / "arm64" / "sources" / "gic_v2.c",
+    ROOT / "drivers" / "irq" / "gic_v2.c",
     ROOT / "arch" / "arm64" / "sources" / "timer.c",
     ROOT / "arch" / "arm64" / "asm" / "entry" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "early.c",
@@ -177,7 +190,7 @@ INTERRUPT_ARCH_INCLUDE_RE = re.compile(
 # fs/ pseudo-VFS layers must route CPU/HW probes through ir0/*.h wrappers.
 FS_DIRECT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
 
-# mm/ and net/ must not pull arch headers directly — use ir0/arch_port.h, etc.
+# mm/ and net/ must not pull arch headers directly — use ir0/cpu.h, asm/pgtable.h, etc.
 PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s*[<"]arch/'
 )
@@ -739,9 +752,9 @@ def check_usercopy_no_raw_user_touch():
     uname_strncpy_re = re.compile(r"strncpy\s*\(\s*buf\s*->")
 
     targets = [ROOT / "kernel" / "lib" / "signals.c"]
-    syscalls = ROOT / "kernel" / "syscalls"
-    if syscalls.is_dir():
-        targets.extend(sorted(syscalls.glob("*.c")))
+    for syscalls in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "entry"):
+        if syscalls.is_dir():
+            targets.extend(sorted(syscalls.glob("*.c")))
 
     for fpath in targets:
         if not fpath.is_file():
@@ -865,17 +878,18 @@ def check_ktm_no_fase_serial():
 def check_klog_serial_print_allowlist():
     """
     Human logging must go through KTM hub (ktm/klog.c / kprintf / klog_*).
-    serial_print is only allowed in the sink, serial drivers, KTM protocol
+    serial_print is only allowed in the printk serial console
+    (kernel/printk/console.c), serial drivers, KTM protocol
     transport, and remaining gated diag TUs (shrinking allowlist).
     """
     errors = []
     allow = {
-        "ktm/klog.c",
+        "kernel/printk/console.c",
         "ktm/transport_serial.c",
         "drivers/serial/serial.c",
         "drivers/serial/serial.h",
         "includes/ir0/serial_io.h",
-        "arch/arm64/sources/serial.c",
+        "drivers/tty/arm_serial.c",
         "tests/host/host_serial_stub.c",
     }
     serial_re = re.compile(r"\bserial_print\s*\(")
@@ -915,7 +929,7 @@ def check_klog_serial_print_allowlist():
                 if serial_re.search(line):
                     errors.append(
                         f"[klog-hub] {rel}:{idx}: use kprintf/klog_* "
-                        f"(serial_print only in ktm/klog.c + serial/KTM protocol)"
+                        f"(serial_print only in the printk serial console + serial/KTM protocol)"
                     )
     return errors
 
@@ -956,10 +970,11 @@ def check_ktm_angle_includes():
 
 
 def check_kernel_no_relative_includes():
-    """kernel/syscalls and kernel/process must not use #include \"../…\"."""
+    """kernel/syscalls, kernel/entry and kernel/process must not use #include \"../…\"."""
     errors = []
     bad_re = re.compile(r'^\s*#\s*include\s+"\.\./')
-    for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "process"):
+    for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "entry",
+                 ROOT / "kernel" / "process"):
         for fpath in iter_c_files(base):
             try:
                 lines = read_file_text(fpath).splitlines()
@@ -1195,7 +1210,7 @@ def check_portable_no_isa_leak_literals():
 
 
 # Direct GPR / control-register fields on task.arch — portable code must use
-# includes/ir0/arch_task.h accessors (or arch_task_ops bulk helpers).
+# includes/ir0/task_access.h accessors (or arch_task_ops bulk helpers).
 PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
     r"(?:\.|->)arch\.(rax|rbx|rcx|rdx|rsi|rdi|rbp|rsp|r8|r9|r10|r11|r12|r13|r14|r15|"
     r"rip|rflags|cs|ss|ds|es|fs|gs|cr0|cr2|cr3|cr4|dr0|dr1|dr2|dr3|dr6|dr7|"
@@ -1203,7 +1218,7 @@ PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
 )
 
 PORTABLE_TASK_ARCH_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "arch_task.h",
+    ROOT / "includes" / "ir0" / "task_access.h",
     ROOT / "includes" / "ir0" / "arch_task_ops.h",
 }
 
@@ -1721,7 +1736,7 @@ def check_portable_port1_no_legacy_arch_mm():
             if ARCH_MM_LEGACY_RE.search(text):
                 errors.append(
                     f"[portable-port1-mm] {rel}: use mm_user_root_slots / "
-                    f"mm_copy_kernel_half (arch_mm.h)"
+                    f"mm_copy_kernel_half (asm/pgtable.h)"
                 )
             if ARCH_PF_LEGACY_RE.search(text):
                 errors.append(
@@ -1775,6 +1790,56 @@ def check_scheduler_user_return_boundary():
             "portable scheduler entry points"
         )
 
+    return errors
+
+
+IRQ_ENTRY_FILES = (
+    ROOT / "arch" / "x86-64" / "sources" / "interrupt" / "isr_handlers.c",
+    ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
+)
+
+IRQ_ENTRY_DRIVER_CALL_RE = re.compile(
+    r"\b(keyboard_handler64|increment_pit_ticks|input_mouse_handle_interrupt|"
+    r"sb16_irq_handler|clock_tick|clock_note_irq|arch_timer_periodic_arm|"
+    r"process_save_user_exception_frame)\s*\("
+)
+
+IRQ_ENTRY_DRIVER_INCLUDE_RE = re.compile(
+    r"#\s*include\s*<(drivers/(?:timer|input|net|storage)/|sound/|"
+    r"interrupt/keyboard\.h|ir0/input_backend\.h|ir0/sound_blaster\.h|"
+    r"ir0/clock\.h)"
+)
+
+RETIRED_IRQ_HANDLER_RE = re.compile(r"\b(keyboard_handler64|increment_pit_ticks)\b")
+
+
+def check_irq_entry_dispatch_only():
+    """Hardware IRQ entries acknowledge, call irq_dispatch() and send EOI;
+    device handlers are registered by their drivers with irq_request()."""
+    errors = []
+    for path in IRQ_ENTRY_FILES:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            match = (IRQ_ENTRY_DRIVER_CALL_RE.search(line) or
+                     IRQ_ENTRY_DRIVER_INCLUDE_RE.search(line))
+            if match:
+                errors.append(
+                    f"[irq-entry-dispatch-only] {rel_to_root(path)}:{lineno}: "
+                    f"'{match.group(1)}' in an IRQ entry; the owning driver "
+                    "registers its handler with irq_request()"
+                )
+    for base in (ROOT / "arch", ROOT / "drivers", ROOT / "includes",
+                 ROOT / "kernel"):
+        for path in iter_c_files(base):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for lineno, line in enumerate(text.splitlines(), 1):
+                match = RETIRED_IRQ_HANDLER_RE.search(line)
+                if match:
+                    errors.append(
+                        f"[irq-entry-dispatch-only] {rel_to_root(path)}:"
+                        f"{lineno}: {match.group(1)} is retired; its body is "
+                        "an irq_request() handler"
+                    )
     return errors
 
 
@@ -2007,26 +2072,50 @@ def platform_object_sources(platform):
 PC_PLATFORM_ASM_INCLUDE = re.compile(
     r'^\s*#\s*include\s*<asm/(?:io|msr|processor|debugreg)\.h>')
 
+# Hooks every ISA implements (Linux asm-generic model): the declarations live
+# in includes/asm-generic/<topic>.h, each ISA's asm/<topic>.h includes them,
+# and portable code includes <asm/<topic>.h>.
+ARCH_HOOK_ASM_HEADERS = ("elf", "hw_breakpoint", "pgtable", "setup")
+ARCH_HOOK_ISAS = ("x86-64", "arm64")
+ARCH_HOOK_ASM_INCLUDE = re.compile(
+    r'^\s*#\s*include\s*<asm/(?:'
+    + "|".join(map(re.escape, ARCH_HOOK_ASM_HEADERS)) + r')\.h>')
+
 
 def check_portable_code_has_no_private_asm_headers():
     """Allow only reviewed layout-selection gateways into private asm headers.
 
     The PC platform's device drivers (scripts/make/platform/pc.mk) build
     only on x86-64 and may include the x86 port-I/O, MSR and CPUID headers.
+    Any portable file may include the ARCH_HOOK_ASM_HEADERS, which every
+    ISA provides over the shared asm-generic declarations.
     """
     errors = []
+    for topic in ARCH_HOOK_ASM_HEADERS:
+        generic = f"#include <asm-generic/{topic}.h>"
+        if not (ROOT / "includes" / "asm-generic" / f"{topic}.h").is_file():
+            errors.append(f"[portable-no-private-asm-header] "
+                          f"includes/asm-generic/{topic}.h is missing")
+        for isa in ARCH_HOOK_ISAS:
+            rel = f"arch/{isa}/include/asm/{topic}.h"
+            path = ROOT / rel
+            if (not path.is_file()
+                    or generic not in read_file_text(path).splitlines()):
+                errors.append(f"[portable-no-private-asm-header] {rel} "
+                              f"must exist and {generic}")
     private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
     pc_sources = platform_object_sources("pc")
     selection_gateways = {
         "includes/ir0/task.h": "#include <asm/task_context.h>",
         "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
         "includes/ir0/signals.h": "#include <asm/sigcontext.h>",
-        "includes/ir0/arch_task.h": "#include <asm/task_access.h>",
+        "includes/ir0/task_access.h": "#include <asm/task_access.h>",
         "includes/ir0/abi/vdso_contract.h": "#include <asm/vdso_contract.h>",
         "includes/ir0/abi/signal_contract.h":
             "#include <asm/signal_contract.h>",
         "includes/ir0/cacheflush.h": "#include <asm/cacheflush.h>",
         "includes/ir0/atomic.h": "#include <asm/atomic.h>",
+        "includes/ir0/page.h": "#include <asm/page.h>",
         "includes/ir0/stat_user.h": "#include <asm/stat.h>",
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
         "includes/ir0/kexec.h": "#include <asm/kexec.h>",
@@ -2046,6 +2135,8 @@ def check_portable_code_has_no_private_asm_headers():
                 if private_include.search(line):
                     rel = str(rel_to_root(fpath))
                     if selection_gateways.get(rel) == line.strip():
+                        continue
+                    if ARCH_HOOK_ASM_INCLUDE.search(line):
                         continue
                     if rel in pc_sources and PC_PLATFORM_ASM_INCLUDE.search(line):
                         continue
@@ -2121,7 +2212,7 @@ def check_common_elf_uses_isa_policy():
                 if forbidden.search(line):
                     rel = rel_to_root(path)
                     errors.append(
-                        f"[elf-isa-policy] {rel}:{line_no}: use arch_elf facade"
+                        f"[elf-isa-policy] {rel}:{line_no}: use the asm/elf.h hooks"
                     )
     return errors
 
@@ -2137,7 +2228,7 @@ def check_common_mm_uses_user_va_policy():
                 if forbidden.search(line):
                     rel = rel_to_root(path)
                     errors.append(
-                        f"[user-va-policy] {rel}:{line_no}: use arch_mm facade"
+                        f"[user-va-policy] {rel}:{line_no}: use the asm/pgtable.h hooks"
                     )
     return errors
 
@@ -2146,7 +2237,7 @@ def check_common_syscall_policy_uses_semantic_ids():
     """Keep native syscall numbers inside the build-selected ISA decoders."""
     errors = []
     targets = (
-        ROOT / "kernel" / "syscalls" / "syscall_dispatch.c",
+        ROOT / "kernel" / "entry" / "syscall_dispatch.c",
     )
     forbidden = re.compile(r"\b__NR_[A-Za-z0-9_]+|syscall_linux\.h")
 
@@ -2162,7 +2253,7 @@ def check_common_syscall_policy_uses_semantic_ids():
 
 def check_sysv_shm_is_network_independent():
     """Keep SysV IPC registration independent from optional networking."""
-    path = ROOT / "kernel" / "syscalls" / "syscall_dispatch.c"
+    path = ROOT / "kernel" / "entry" / "syscall_dispatch.c"
     errors = []
     network_depths = []
     depth = 0
@@ -2398,7 +2489,7 @@ def check_hardware_backends_do_not_self_test_log():
     errors = []
     paths = [
         ROOT / "drivers" / "virtio" / "virtio_mmio.c",
-        ROOT / "arch" / "arm64" / "sources" / "virtio_blk_early.c",
+        ROOT / "drivers" / "virtio" / "virtio_blk.c",
     ]
     forbidden = ("ir0_boot_smoke", "klog_smoke", "pl011_puts")
 
@@ -2506,7 +2597,8 @@ RETIRED_UACCESS_RE = re.compile(
     r"\b(access_ok_mapped|validate_userspace_buffer|validate_userspace_string|"
     r"process_validate_userspace_buffer|is_user_address(_checked)?|"
     r"copy_from_user_cstring|copy_(to|from)_user_in_mm|zero_user_mm|"
-    r"(copy_to|copy_from|zero)_user_region_in_directory|VALIDATE_BUFFER)\b"
+    r"(copy_to|copy_from|zero)_user_region_in_directory|VALIDATE_BUFFER|"
+    r"put_user|get_user)\b"
 )
 
 
@@ -2564,15 +2656,17 @@ def _uaccess_self_test() -> list[str]:
         "static int ok(void *p) { return access_ok(p, 4); }\n"
         "int bad(uintptr_t a) { return mm_user_va_ok(a, 1); }\n"
         "int old(void *p) { return access_ok_mapped(p, 1); }\n"
+        "void scalar(int x, int *p) { put_user(x, p); }\n"
+        "void scalar_in(int x, int *p) { get_user(x, p); }\n"
     )
     got = [line for line, _ in uaccess_violations("kernel/x.c", sample)]
-    if got != [2, 3]:
+    if got != [2, 3, 4, 5]:
         errors.append(f"[uaccess-single-api] self-test: kernel/x.c flagged "
-                      f"lines {got}, expected [2, 3]")
+                      f"lines {got}, expected [2, 3, 4, 5]")
     got = [line for line, _ in uaccess_violations("mm/x.c", sample)]
-    if got != [3]:
+    if got != [3, 4, 5]:
         errors.append(f"[uaccess-single-api] self-test: mm/x.c flagged "
-                      f"lines {got}, expected [3]")
+                      f"lines {got}, expected [3, 4, 5]")
     return errors
 
 
@@ -2775,7 +2869,7 @@ def _register_name_self_test() -> list[str]:
 
 # Terminal halt: the only callers of cpu_halt() (Linux stop_this_cpu users).
 TERMINAL_HALT_CALLERS = frozenset((
-    "kernel/problems/oops.c",
+    "kernel/panic/oops.c",
     "kernel/kexec/kexec.c",
     "kernel/power/power_manag.c",
 ))
@@ -2824,7 +2918,7 @@ def _busy_wait_self_test() -> list[str]:
         "fs/relax.c": ("void f(void)\n{\n\twhile (busy)\n\t\tcpu_relax();\n}\n",
                        [4]),
         "net/halt.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", [3]),
-        "kernel/problems/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
+        "kernel/panic/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
         "includes/ir0/cpu.h": ("void cpu_halt(void);\n", [1]),
         "kernel/boot.c": ("\tkernel_idle_poll();\n", [1]),
     }
@@ -2934,6 +3028,84 @@ def check_no_raw_atomics():
     return errors
 
 
+# Weak symbols hide a missing ISA hook or build choice until runtime. Required
+# hooks are strong per-ISA definitions listed in arch/template/port.h, and an
+# optional fallback is an object the Makefile links only where it is needed.
+# WEAK_SYMBOL_LEDGER lists reviewed exceptions as "<path>" lines; it starts
+# empty and only shrinks.
+WEAK_SYMBOL_RE = re.compile(
+    r"__attribute__\s*\(\((?:[^()]|\([^()]*\))*?\b(__weak__|weak|weakref)\b|"
+    r"\b(__weak)\b|"
+    r"^\s*#\s*pragma\s+(weak)\b")
+WEAK_SYMBOL_TREES = RAW_ATOMIC_TREES + ("arch", "tests/ktm")
+WEAK_SYMBOL_LEDGER: frozenset[str] = frozenset()
+
+
+def weak_symbol_violations(text: str) -> list[tuple[int, str]]:
+    """Return (line, spelling) for each weak attribute or pragma in *text*."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = WEAK_SYMBOL_RE.search(line)
+        if match:
+            found.append((lineno, next(g for g in match.groups() if g)))
+    return found
+
+
+def _weak_symbol_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "clean": ("/* __attribute__((weak)) in a comment */\n"
+                  "static const char *m = \"#pragma weak f\";\n"
+                  "int weak_magnitude;\n"
+                  "__attribute__((unused)) static int x;\n", []),
+        "attr": ("__attribute__((weak)) void f(void)\n{\n}\n"
+                 "void g(void) __attribute__((__weak__));\n", [1, 4]),
+        "list": ("int __attribute__((used, weak)) h;\n"
+                 "void i(void) __attribute__((weak, alias(\"j\")));\n"
+                 "static void k(void) __attribute__((weakref(\"l\")));\n",
+                 [1, 2, 3]),
+        "macro": ("void __weak m(void);\n", [1]),
+        "pragma": ("#pragma weak n\n  #  pragma weak o = p\n", [1, 2]),
+    }
+    failures = []
+    for name, (text, expected) in cases.items():
+        got = [line for line, _ in weak_symbol_violations(text)]
+        if got != expected:
+            failures.append(f"[no-weak-symbols] self-test {name}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_weak_symbols():
+    """Reject weak attributes and pragmas in kernel sources; stale ledger
+    entries fail too."""
+    errors = _weak_symbol_self_test()
+    hit: set[str] = set()
+    for tree in WEAK_SYMBOL_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            found = weak_symbol_violations(read_file_text(path))
+            if found and rel in WEAK_SYMBOL_LEDGER:
+                hit.add(rel)
+                continue
+            for lineno, spelling in found:
+                errors.append(
+                    f"[no-weak-symbols] {rel}:{lineno}: {spelling}; define a "
+                    "required ISA hook strongly in every ISA "
+                    "(arch/template/port.h) or link an optional fallback "
+                    "object from the build")
+    for rel in sorted(WEAK_SYMBOL_LEDGER - hit):
+        errors.append(f"[no-weak-symbols] {rel} is clean; drop it from "
+                      "WEAK_SYMBOL_LEDGER")
+    return errors
+
+
 # A header for one ISA lives in arch/<isa>/include/asm/ (or uapi/asm/) under
 # a neutral name, and the $(ARCH) include directory selects it. includes/
 # holds only portable APIs and the ISA-neutral uapi, so a path component
@@ -2965,7 +3137,7 @@ def _isa_named_header_self_test() -> list[str]:
         "includes/uapi/ir0/syscall_aarch64.h": "aarch64",
         "includes/ir0/x86-64/io.h": "x86-64",
         "includes/ir0/syscall_frame.h": None,
-        "includes/ir0/arch_task.h": None,
+        "includes/ir0/task_access.h": None,
         "includes/uapi/asm-generic/posix_types.h": None,
         "includes/ir0/alarm.h": None,
         "arch/x86-64/include/asm/task_context.h": None,
@@ -3820,10 +3992,6 @@ _LAYOUT_KR_HEAD_RE = re.compile(r"^[A-Za-z_][^;=#]*\)\s*\{\s*$")
 # its entry; an entry whose violation is gone fails the guard so the list
 # only shrinks.
 INCLUDE_LAYOUT_BASELINE = frozenset({
-    "duplicate drivers/virtio/virtio_9p.c <ir0/ktm/klog.h>",
-    "duplicate fs/devfs.c <ir0/arch_cpu.h>",
-    "duplicate fs/devfs_internal.h <string.h>",
-    "duplicate ktm/klog.c <ir0/clock.h>",
 })
 
 
@@ -4074,6 +4242,169 @@ def check_userspace_agnostic():
     return errors
 
 
+
+# A policy is any sched/*.c other than the core, the idle loop and the
+# trace hook that defines sched_pick_next. Every policy implements the same
+# private contract; schedule() and the context switch stay in sched/core.c.
+# sched_pick_next() is declared in sched/core.h, not in the public facade.
+# A future sched/cfs.c is covered once it defines sched_pick_next. No ledger.
+SCHED_POLICY_SKIP = frozenset({"core.c", "idle.c", "trace.c"})
+SCHED_POLICY_REQUIRED = (
+    "sched_add",
+    "sched_remove",
+    "sched_promote",
+    "sched_count_runnable",
+    "sched_pick_next",
+    "sched_policy_name",
+    "sched_selftest",
+)
+SCHED_POLICY_CORE_ONLY = ("schedule", "sched_switch_to")
+SCHED_POLICY_INCLUDES = frozenset({"rr.c", "prio.c", "cfs.c", "idle.c"})
+SCHED_PUBLIC_DECLS = (
+    "schedule",
+    "sched_switch_to",
+    "sched_take_resched",
+    "sched_add",
+    "sched_remove",
+    "sched_promote",
+    "sched_count_runnable",
+    "sched_policy_name",
+    "sched_selftest",
+)
+
+
+def _sched_source(text: str) -> str:
+    """Blank comments and strings, keeping line numbers."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    return _C_STRING_RE.sub('""', text)
+
+
+def _sched_definitions(text: str) -> dict[str, int]:
+    """First definition line of each function in one translation unit."""
+    code = _sched_source(text)
+    found: dict[str, int] = {}
+    for match in _C_DEFINITION_RE.finditer(code):
+        name = match.group(1)
+        if name not in found:
+            found[name] = code.count("\n", 0, match.start()) + 1
+    return found
+
+
+def sched_policy_errors(sched_dir: Path) -> list[str]:
+    """Policy files directly under @sched_dir that break the contract."""
+    if not sched_dir.is_dir():
+        return []
+    errors = []
+    for path in sorted(sched_dir.glob("*.c")):
+        if path.name in SCHED_POLICY_SKIP:
+            continue
+        source = path.read_text(encoding="utf-8", errors="replace")
+        defined = _sched_definitions(source)
+        if "sched_pick_next" not in defined:
+            continue
+        rel = f"sched/{path.name}"
+        for name in SCHED_POLICY_REQUIRED:
+            if name not in defined:
+                errors.append(
+                    f"[sched-policy] {rel}: does not define {name}")
+        for name in SCHED_POLICY_CORE_ONLY:
+            if name in defined:
+                errors.append(
+                    f"[sched-policy] {rel}:{defined[name]}: defines {name}; "
+                    "that stays in sched/core.c")
+        code = _sched_source(source)
+        for match in _DOMAIN_INCLUDE_RE.finditer(code):
+            header = match.group(1)
+            base = header.replace("\\", "/").rsplit("/", 1)[-1]
+            if base not in SCHED_POLICY_INCLUDES:
+                continue
+            lineno = code.count("\n", 0, match.start()) + 1
+            errors.append(
+                f"[sched-policy] {rel}:{lineno}: includes {header}; "
+                "a policy does not include another policy")
+    return errors
+
+
+def sched_facade_errors(text: str, rel: str) -> list[str]:
+    """The public facade keeps its declarations and not sched_pick_next."""
+    declared = _header_prototypes(text)
+    errors = []
+    for name in SCHED_PUBLIC_DECLS:
+        if name not in declared:
+            errors.append(
+                f"[sched-policy] {rel}: public facade does not declare "
+                f"{name}")
+    if "sched_pick_next" in declared:
+        errors.append(
+            f"[sched-policy] {rel}: declares sched_pick_next; "
+            "that prototype stays in sched/core.h")
+    return errors
+
+
+def _sched_policy_stub(names) -> str:
+    return "".join(f"void {name}(void)\n{{\n}}\n" for name in names)
+
+
+def _sched_policy_self_test() -> list[str]:
+    """Inject a policy that omits sched_promote and one that defines
+    schedule. Both must be reported, then the scratch files are removed."""
+    omit = _sched_policy_stub(
+        name for name in SCHED_POLICY_REQUIRED if name != "sched_promote")
+    takeover = _sched_policy_stub((*SCHED_POLICY_REQUIRED, "schedule"))
+    failures = []
+    got: list[str] = []
+    facade_got: list[str] = []
+    scratch: list[Path] = []
+    with tempfile.TemporaryDirectory(prefix="ir0-sched-policy-") as tmp:
+        sched = Path(tmp) / "sched"
+        sched.mkdir()
+        scratch = [sched / "omit_promote.c", sched / "defines_schedule.c"]
+        scratch[0].write_text(omit, encoding="utf-8")
+        scratch[1].write_text(takeover, encoding="utf-8")
+        got = sched_policy_errors(sched)
+        for path in scratch:
+            path.unlink()
+        facade_rel = "includes/ir0/sched.h"
+        facade_got = sched_facade_errors(
+            (ROOT / facade_rel).read_text(encoding="utf-8"), facade_rel)
+        live = sched_policy_errors(ROOT / "sched")
+    leftovers = [p.name for p in scratch if p.exists()]
+    if leftovers:
+        failures.append(
+            "[sched-policy] self-test: scratch files left behind: "
+            + ", ".join(leftovers))
+    if not any("omit_promote.c" in err and "sched_promote" in err
+               for err in got):
+        failures.append(
+            "[sched-policy] self-test: missed a policy that omits "
+            f"sched_promote ({got})")
+    if not any("defines_schedule.c" in err and "defines schedule" in err
+               for err in got):
+        failures.append(
+            "[sched-policy] self-test: missed a policy that defines "
+            f"schedule ({got})")
+    if live:
+        failures.append(
+            "[sched-policy] self-test: current policies reported "
+            f"{live}")
+    if facade_got:
+        failures.append(
+            "[sched-policy] self-test: public facade reported "
+            f"{facade_got}")
+    return failures
+
+
+def check_sched_policy_contract():
+    """Each scheduler policy implements the same private contract."""
+    errors = _sched_policy_self_test()
+    errors.extend(sched_policy_errors(ROOT / "sched"))
+    facade = ROOT / "includes" / "ir0" / "sched.h"
+    errors.extend(sched_facade_errors(
+        read_file_text(facade), "includes/ir0/sched.h"))
+    return errors
+
+
 # Debt ledgers: reviewed exceptions that only shrink. The SMP entry gate
 # (scripts/smp_entry_gate.py) needs every one of them empty. Files count
 # their non-comment lines; in-module ledgers count their entries.
@@ -4090,13 +4421,14 @@ def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
                     _register_name_self_test() + _uaccess_self_test() +
-                    _raw_atomic_self_test() +
+                    _raw_atomic_self_test() + _weak_symbol_self_test() +
                     _undefined_prototype_self_test() +
                     _legacy_pc_self_test() +
                     _domain_isolation_self_test() +
                     _kernel_loose_self_test() +
                     _rules_digest_self_test() +
-                    _userspace_agnostic_self_test())
+                    _userspace_agnostic_self_test() +
+                    _sched_policy_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -4104,9 +4436,10 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics, undefined-prototype, legacy-pc-io, "
+              "no-raw-atomics, no-weak-symbols, undefined-prototype, "
+              "legacy-pc-io, "
               "domain-isolation, kernel-loose-files, rules-digest, "
-              "userspace-agnostic)")
+              "userspace-agnostic, sched-policy)")
         return 0
 
     errors = []
@@ -4158,6 +4491,7 @@ def main():
     errors.extend(check_portable_no_arch_prefix_calls())
     errors.extend(check_context_backend_include_boundary())
     errors.extend(check_scheduler_user_return_boundary())
+    errors.extend(check_irq_entry_dispatch_only())
     errors.extend(check_scheduler_runqueue_lock_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_process_registry_ownership())
@@ -4180,6 +4514,7 @@ def main():
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
     errors.extend(check_no_raw_atomics())
+    errors.extend(check_no_weak_symbols())
     errors.extend(check_no_isa_named_headers())
     errors.extend(check_no_syscall_stubs())
     errors.extend(check_legacy_pc_io())
@@ -4187,6 +4522,7 @@ def main():
     errors.extend(check_userspace_agnostic())
     errors.extend(check_kernel_loose_files())
     errors.extend(check_rules_digest())
+    errors.extend(check_sched_policy_contract())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())

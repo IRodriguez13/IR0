@@ -29,7 +29,7 @@
 #include "fs_path_syscalls.h"
 #include "fs_syscalls.h"
 #include "time_syscalls.h"
-#include "syscall_dispatch.h"
+#include <kernel/entry/syscall_dispatch.h>
 
 /* Forward declarations */
 struct stat;

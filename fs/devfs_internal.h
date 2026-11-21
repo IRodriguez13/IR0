@@ -11,7 +11,6 @@
 
 #include "devfs.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <ir0/errno.h>
 #include <config.h>
 #include <ir0/console_backend.h>
@@ -29,7 +28,7 @@
 #include <ir0/clock.h>
 #include <ir0/process.h>
 #include <ir0/signals.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <ir0/klog.h>
 #include <ir0/serial_io.h>
 #include <ir0/ipc.h>
@@ -48,7 +47,6 @@
 #include <linux/vt.h>
 #include "vfs.h"
 #include <ir0/pty_devfs.h>
-#include <string.h>
 #include <ir0/devfs.h>
 
 #define PTY_BUF_SIZE 1024

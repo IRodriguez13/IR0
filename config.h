@@ -267,7 +267,6 @@
 
 /* PROCESS LIMITS */
 #define MAX_PROCESSES 256
-#define MAX_FDS_PER_PROCESS 64
 #define MAX_NICE 19
 #define MIN_NICE -20
 #define DEFAULT_NICE 0

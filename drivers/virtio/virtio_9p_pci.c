@@ -12,7 +12,6 @@
 
 #include "virtio_9p.h"
 
-#include <ir0/arch_io.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
 #include <asm/io.h>

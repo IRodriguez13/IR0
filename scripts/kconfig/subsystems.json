@@ -8,8 +8,8 @@
       "files": {
         "x86-64": [
           "sched/idle.c",
-          "kernel/syscalls/syscall_dispatch.c",
-          "kernel/exec/elf_loader.c",
+          "kernel/entry/syscall_dispatch.c",
+          "fs/binfmt_elf.c",
           "sched/core.c",
           "drivers/core/driver_registry.c"
         ],
@@ -100,7 +100,7 @@
       "files": {
         "x86-64": [
           "drivers/char/vga.c",
-          "kernel/problems/oops.c",
+          "kernel/panic/oops.c",
           "kernel/signals/signals.c",
           "fs/pipe.c",
           "mm/uaccess/copy_user.c",
@@ -174,7 +174,7 @@
       "files": {
         "x86-64": [
           "drivers/video/vbe.c",
-          "drivers/video/typewriter.c",
+          "drivers/tty/vt/vt.c",
           "drivers/char/vga.c"
         ],
         "arm32": []

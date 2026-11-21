@@ -19,7 +19,7 @@ struct linux_dirent {
 
 #define LINUX_DIRENT_NAME_OFF ((size_t)offsetof(struct linux_dirent, d_name))
 
-/* Linux getdents64 struct linux_dirent64 (NR 217; IR0 also emits it on NR 78). */
+/* Linux getdents64 struct linux_dirent64 (NR 217). d_type precedes d_name. */
 struct linux_dirent64 {
   uint64_t d_ino;
   int64_t d_off;
@@ -80,14 +80,6 @@ static int getdents_trust_readdir_type(const char *dir_path)
   if (strcmp(dir_path, "/proc") == 0 || strcmp(dir_path, "/proc/") == 0)
     return 1;
   if (is_proc_path(dir_path) && proc_is_virtual_subdir(dir_path))
-    return 1;
-
-  if (strcmp(dir_path, "/sys") == 0 || strcmp(dir_path, "/sys/") == 0)
-    return 1;
-  if (is_sys_path(dir_path) && sysfs_is_virtual_subdir(dir_path))
-    return 1;
-
-  if (is_heart_path(dir_path) && heart_is_virtual_subdir(dir_path))
     return 1;
 
   if (strcmp(dir_path, "/dev") == 0 || strcmp(dir_path, "/dev/") == 0)
@@ -209,7 +201,7 @@ static const char *fs_fd_resolved_dir_path(int fd, char *buf, size_t bufsz)
   const char *path;
 
   fd_table = get_process_fd_table();
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() ||
       !fd_table[fd].in_use)
     return NULL;
 
@@ -340,7 +332,7 @@ static int64_t sys_getdents_scratch(int fd, void *dirent, size_t count,
     return -EINVAL;
 
   fd_table = get_process_fd_table();
-  if (!fd_table || fd < 0 || fd >= MAX_FDS_PER_PROCESS ||
+  if (!fd_table || fd < 0 || fd >= ir0_fd_span() ||
       !fd_table[fd].in_use)
     return -EBADF;
 
@@ -545,13 +537,8 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
 
 int64_t sys_getdents(int fd, void *dirent, size_t count)
 {
-  /*
-   * NR 78 emits linux_dirent64 records (d_type before d_name). Linux NR 78
-   * uses struct linux_dirent (d_type last); known divergence.
-   * Legacy filldir layout is reserved for strict Linux NR 78 consumers via
-   * getdents64-only paths or future compat toggle.
-   */
-  return sys_getdents_common(fd, dirent, count, 0);
+  /* NR 78: struct linux_dirent, d_type in the last byte of the record. */
+  return sys_getdents_common(fd, dirent, count, 1);
 }
 
 int64_t sys_getdents64(int fd, void *dirent, size_t count)

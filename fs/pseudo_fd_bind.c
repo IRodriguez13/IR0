@@ -9,7 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 
 void pseudo_fd_bind_acquire(pseudo_fd_bind_t *bind)
 {

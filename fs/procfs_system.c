@@ -368,6 +368,26 @@ int proc_cpuinfo_read(char *buf, size_t count)
 		off += (size_t)n;
 	}
     }
+    {
+	enum ir0_hv_kind kind;
+	const char *hv_name;
+
+	if (hypervisor_kind(&kind) == 0)
+	{
+	    if (kind == IR0_HV_KVM)
+		hv_name = "kvm";
+	    else if (kind == IR0_HV_XEN)
+		hv_name = "xen";
+	    else if (kind == IR0_HV_OTHER)
+		hv_name = "other";
+	    else
+		hv_name = "none";
+	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
+			 "hypervisor_kind\t%s\n", hv_name);
+	    if (n > 0 && (size_t)n < count - off)
+		off += (size_t)n;
+	}
+    }
     snprintf(t, sizeof(t), "%ubits physical, %ubits virtual", arch_bits, arch_bits);
     n = snprintf(buf + off, (off < count) ? (count - off) : 0, "address sizes\t%s\n", t); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
     if (off < count) buf[off] = '\0';
@@ -465,6 +485,15 @@ static void proc_format_size(uint64_t sectors, char *out, size_t out_size, int *
     *len = (int)(p - out);
 }
 
+static uint64_t proc_block_sectors(dev_t dev)
+{
+    struct ir0_block_info info;
+
+    if (ir0_block_get_info(dev, &info) != 0)
+        return 0;
+    return info.sector_count;
+}
+
 /*
  * /proc/blockdevices — tab-separated; sectors are 512-byte units.
  * Header documents the contract; size_human uses MiB/GiB from those sectors.
@@ -491,9 +520,11 @@ int proc_blockdevices_read(char *buf, size_t count)
     for (uint8_t i = 0; i < 4; i++)
     {
         const char *disk_name = ir0_block_legacy_name(i);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
+        dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
+
+        if (!disk_name || !ir0_block_is_present(dev))
             continue;
-        uint64_t size = ir0_block_sector_count_by_name(disk_name);
+        uint64_t size = proc_block_sectors(dev);
         const char *model = "-";
         const char *serial = "-";
         char name_buf[8];
@@ -579,9 +610,11 @@ int proc_partitions_read(char *buf, size_t count)
     for (uint8_t disk_id = 0; disk_id < MAX_DISKS; disk_id++)
     {
         const char *disk_name = ir0_block_legacy_name(disk_id);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
+        dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
+
+        if (!disk_name || !ir0_block_is_present(dev))
             continue;
-        uint64_t disk_blocks_1k = ir0_block_sector_count_by_name(disk_name) / 2;
+        uint64_t disk_blocks_1k = proc_block_sectors(dev) / 2;
         char name_buf[16];
         snprintf(name_buf, sizeof(name_buf), "hd%c", 'a' + disk_id);
         char disk_blocks_str[24];
@@ -636,18 +669,14 @@ int proc_mounts_read(char *buf, size_t count)
         off += (size_t)n;
     }
     /*
-     * Pseudo-filesystems are served through the registry, not through the VFS
-     * mount list, so they never appeared here and mount(1) showed only the
-     * root. Linux lists proc, sysfs and devtmpfs; /heart is IR0-specific but
-     * is a namespace the session can use, so it is listed too. vfs_statfs()
-     * reports them with zero blocks, so df skips them without -a.
+     * proc and devfs are not VFS mounts, so they never appeared here.
+     * Linux lists them; sysfs is a real mount and shows up in the loop above.
+     * vfs_statfs() reports them with zero blocks, so df skips them without -a.
      */
     {
         static const char *const pseudo[] = {
             "proc /proc proc rw 0 0\n",
-            "sysfs /sys sysfs rw 0 0\n",
             "devtmpfs /dev devtmpfs rw 0 0\n",
-            "heartfs /heart heartfs rw 0 0\n",
         };
         size_t i;
 

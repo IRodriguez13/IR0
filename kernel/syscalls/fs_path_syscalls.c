@@ -32,7 +32,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
-#include <ir0/arch_cpu.h>
+#include <asm/setup.h>
 #include <ir0/utsname.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>
@@ -145,15 +145,15 @@ static int64_t mount_strings(const char *dev_copy, const char *mountpoint,
   /* Legacy string remount for IR0 recovery helpers. */
   if (strcmp(dev_copy, "remount") == 0)
   {
-    unsigned long rflags = IR0_MS_REMOUNT;
+    unsigned long remount_flags = IR0_MS_REMOUNT;
 
     if (strcmp(mount_fstype, "ro") == 0 ||
         strcmp(mount_fstype, "remount,ro") == 0)
-      rflags |= IR0_MS_RDONLY;
+      remount_flags |= IR0_MS_RDONLY;
     else if (strcmp(mount_fstype, "rw") != 0 &&
              strcmp(mount_fstype, "remount,rw") != 0)
       return -EINVAL;
-    return vfs_remount(mount_path, rflags);
+    return vfs_remount(mount_path, remount_flags);
   }
 
   if (flags & IR0_MS_UNSUPPORTED)
@@ -295,7 +295,7 @@ int64_t sys_fsync(int fd)
 
   if (!current_process)
     return -ESRCH;
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -367,6 +367,11 @@ int64_t sys_chmod(const char *path, mode_t mode)
   if (rc != 0)
     return rc;
   path_to_use = resolved;
+
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(path_to_use);
+  if (rc != 0)
+    return rc;
 
   stat_t st;
   int sret = vfs_stat(path_to_use, &st);
@@ -534,6 +539,11 @@ int64_t sys_access(const char *pathname, int mode)
   if (rc != 0)
     return rc;
 
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
+  if (rc != 0)
+    return rc;
+
   /*
    * Linux access(2): real uid/gid + supplementary groups, not effective
    * (access_override_creds()); AT_EACCESS is only on faccessat.
@@ -558,6 +568,11 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
     return -EINVAL;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
   if (rc != 0)
     return rc;
 
@@ -658,6 +673,11 @@ int64_t sys_chdir(const char *pathname)
   if (rc != 0)
     return rc;
 
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
+  if (rc != 0)
+    return rc;
+
   return ir0_chdir_resolved(resolved);
 }
 
@@ -738,7 +758,7 @@ int64_t sys_utimensat(int dirfd, const char *pathname,
   {
     fd_entry_t *slot;
 
-    if (dirfd < 0 || dirfd >= MAX_FDS_PER_PROCESS)
+    if (dirfd < 0 || dirfd >= ir0_fd_span())
       return -EBADF;
     slot = process_fd_table(current_process);
     if (!slot)
@@ -806,7 +826,7 @@ int64_t sys_ftruncate(int fd, off_t length)
   if (length < 0)
     return -EINVAL;
 
-  if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+  if (fd < 0 || fd >= ir0_fd_span())
     return -EBADF;
 
   fd_table = get_process_fd_table();
@@ -875,7 +895,7 @@ int64_t sys_fstatfs(int fd, void *buf)
 
 	if (!current_process || !buf)
 		return -EFAULT;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 
 	fd_table = get_process_fd_table();

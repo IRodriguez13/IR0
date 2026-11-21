@@ -122,12 +122,17 @@ int status_flags(int flags)
 
 int vda_present(void)
 {
-	return ir0_block_name_is_present("vda");
+	return ir0_block_is_present(ir0_block_lookup_by_name("vda"));
 }
 
 uint64_t vda_bytes(void)
 {
-	return ir0_block_sector_count_by_name("vda") * 512ULL;
+	struct ir0_block_info info;
+	dev_t dev = ir0_block_lookup_by_name("vda");
+
+	if (ir0_block_get_info(dev, &info) != 0)
+		return 0;
+	return info.sector_count * 512ULL;
 }
 
 int pipe_id_of_fd(int fd)

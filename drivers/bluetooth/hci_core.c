@@ -23,7 +23,7 @@
 #include "hci_uart.h"
 #include "../serial/serial.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <errno.h>
@@ -96,10 +96,10 @@ static void hci_ingest_inquiry_device(const uint8_t *rec, size_t rec_len, int8_t
         dev->last_seen = hci_get_uptime_ms();
         dev->rssi = (rec_len >= HCI_INQUIRY_RSSI_RECORD_LEN) ? rssi : 0;
         num_discovered_devices++;
-        LOG_INFO_FMT("BLUETOOTH",
-                     "Device discovered: %02X:%02X:%02X:%02X:%02X:%02X",
-                     dev->bd_addr[0], dev->bd_addr[1], dev->bd_addr[2],
-                     dev->bd_addr[3], dev->bd_addr[4], dev->bd_addr[5]);
+        klog_info_fmt("BLUETOOTH",
+                      "Device discovered: %02X:%02X:%02X:%02X:%02X:%02X",
+                      dev->bd_addr[0], dev->bd_addr[1], dev->bd_addr[2],
+                      dev->bd_addr[3], dev->bd_addr[4], dev->bd_addr[5]);
     }
 }
 
@@ -174,7 +174,7 @@ static void hci_handle_event(uint8_t event_code, const uint8_t *params, uint8_t 
     if (event_code == HCI_EVENT_INQUIRY_COMPLETE)
     {
         hci_dev->scanning = false;
-        LOG_INFO_FMT("BLUETOOTH", "Inquiry complete, %d device(s) found", num_discovered_devices);
+        klog_info_fmt("BLUETOOTH", "Inquiry complete, %d device(s) found", num_discovered_devices);
     }
     else if (event_code == HCI_EVENT_INQUIRY_RESULT)
         hci_ingest_inquiry_result(params, param_len);
@@ -367,7 +367,7 @@ int hci_reset(void)
         if (len < 0)
             return len;
 
-        LOG_INFO("BLUETOOTH", "HCI Reset command sent");
+        klog_info("BLUETOOTH", "HCI Reset command sent");
         ret = hci_uart_send_command(cmd_buf, (size_t)len);
         if (ret < 0)
             return ret;
@@ -376,17 +376,17 @@ int hci_reset(void)
     ret = hci_wait_command_complete(HCI_OPCODE_RESET, 100, &status);
     if (ret < 0)
     {
-        LOG_INFO("BLUETOOTH", "HCI Reset: no reply (timeout or no hardware)");
+        klog_info("BLUETOOTH", "HCI Reset: no reply (timeout or no hardware)");
         return ret;
     }
 
     if (status != HCI_STATUS_SUCCESS)
     {
-        LOG_INFO("BLUETOOTH", "HCI Reset failed (controller status)");
+        klog_info("BLUETOOTH", "HCI Reset failed (controller status)");
         return -EIO;
     }
 
-    LOG_INFO("BLUETOOTH", "HCI Reset complete");
+    klog_info("BLUETOOTH", "HCI Reset complete");
     return hci_controller_post_reset();
 }
 
@@ -507,7 +507,7 @@ int hci_inquiry(uint8_t duration, uint8_t num_responses)
         return ret;
 
     hci_dev->scanning = true;
-    LOG_INFO_FMT("BLUETOOTH", "Inquiry started (duration=%u*1.28s, max_responses=%u)", (unsigned)duration, (unsigned)num_responses);
+    klog_info_fmt("BLUETOOTH", "Inquiry started (duration=%u*1.28s, max_responses=%u)", (unsigned)duration, (unsigned)num_responses);
     hci_process_events();
     return 0;
 }
@@ -551,7 +551,7 @@ int hci_inquiry_cancel(void)
     }
 
     hci_dev->scanning = false;
-    LOG_INFO("BLUETOOTH", "Inquiry cancelled");
+    klog_info("BLUETOOTH", "Inquiry cancelled");
     return 0;
 }
 

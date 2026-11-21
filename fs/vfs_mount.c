@@ -221,6 +221,7 @@ int lookup_bdev(const char *source, struct vfs_bdev *bdev)
     size_t base;
     stat_t st;
     int ret;
+    dev_t dev;
 
     if (!source || !source[0] || !bdev)
         return -EINVAL;
@@ -229,7 +230,8 @@ int lookup_bdev(const char *source, struct vfs_bdev *bdev)
     name = strncmp(source, "/dev/", 5) == 0 ? source + 5 : source;
     len = strlen(name);
 
-    if (len < sizeof(bdev->disk) && ir0_block_name_is_present(name)) {
+    dev = ir0_block_lookup_by_name(name);
+    if (len < sizeof(bdev->disk) && ir0_block_is_present(dev)) {
         memcpy(bdev->disk, name, len + 1);
         return 0;
     }
@@ -243,7 +245,8 @@ int lookup_bdev(const char *source, struct vfs_bdev *bdev)
 
         memcpy(bdev->disk, name, base);
         bdev->disk[base] = '\0';
-        if (ir0_block_name_is_present(bdev->disk)) {
+        dev = ir0_block_lookup_by_name(bdev->disk);
+        if (ir0_block_is_present(dev)) {
             for (size_t i = base; i < len && partno <= MAX_PARTITIONS_PER_DISK; i++)
                 partno = partno * 10 + (unsigned long)(name[i] - '0');
             return lookup_partition(bdev->disk, partno, &bdev->start);
@@ -323,6 +326,52 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     return 0;
 }
 
+int vfs_bind_mount(const char *source, const char *target)
+{
+    char target_path[MAX_PATH];
+    struct vfs_mount *src;
+    struct vfs_mount *b;
+    int ret;
+
+    if (!source || !target)
+        return -EINVAL;
+    ret = vfs_validate_path(source);
+    if (ret == 0)
+        ret = vfs_validate_path(target);
+    if (ret != 0)
+        return ret;
+
+    normalize_mount_path(target, target_path, sizeof(target_path));
+    for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
+    {
+        if (strcmp(existing->path, target_path) == 0)
+            return -EBUSY;
+    }
+
+    src = vfs_find_mount(source);
+    if (!src || !src->fs || !src->fs->ops)
+        return -EINVAL;
+
+    b = kmalloc(sizeof(*b));
+    if (!b)
+        return -ENOMEM;
+    ret = vfs_backend_path(src->fs->ops, source, b->backend_path,
+                           sizeof(b->backend_path));
+    if (ret != 0)
+    {
+        kfree(b);
+        return ret;
+    }
+    strncpy(b->path, target_path, sizeof(b->path) - 1);
+    b->path[sizeof(b->path) - 1] = '\0';
+    memcpy(b->dev, src->dev, sizeof(b->dev));
+    b->fs = src->fs;
+    b->flags = src->flags | IR0_MS_BIND;
+    b->next = mounts;
+    mounts = b;
+    return 0;
+}
+
 int vfs_remount(const char *path, unsigned long flags)
 {
     char mount_path[MAX_PATH];
@@ -394,7 +443,7 @@ int vfs_umount(const char *path)
             return -EBUSY;
     }
 
-    if (victim->fs && victim->fs->umount)
+    if (!(victim->flags & IR0_MS_BIND) && victim->fs && victim->fs->umount)
     {
         int ret = victim->fs->umount(victim->path);
         if (ret != 0)
@@ -560,6 +609,7 @@ int vfs_init_root(void)
     const char *root_fs = CONFIG_ROOT_FILESYSTEM;
     char root_dev_path[64];
     int ret;
+    dev_t root_dev;
 
     klog_info("VFS", "Initializing VFS...");
     ret = vfs_init();
@@ -572,7 +622,8 @@ int vfs_init_root(void)
     snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
 
     /* A missing disk only matters when the root type is built in. */
-    if (vfs_find_fstype(root_fs) && !ir0_block_name_is_present(root_blk)) {
+    root_dev = ir0_block_lookup_by_name(root_blk);
+    if (vfs_find_fstype(root_fs) && !ir0_block_is_present(root_dev)) {
         klog_error("VFS", "No block device configured for root available");
         return vfs_mount_fallback_root("falling back to tmpfs root (block device missing)");
     }
@@ -609,9 +660,7 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 			uint32_t magic;
 		} pseudo[] = {
 			{ "/proc", IR0_PROC_SUPER_MAGIC },
-			{ "/sys", IR0_SYSFS_MAGIC },
 			{ "/dev", IR0_TMPFS_MAGIC },
-			{ "/heart", IR0_HEARTFS_MAGIC },
 		};
 		size_t i;
 

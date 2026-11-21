@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_pf_debug.h>
+#include <ir0/mm_diag.h>
 
 void pf_debug_stack_adjacent(uint64_t *frame, uint64_t fault_addr,
 				 const struct page_fault_info *info,

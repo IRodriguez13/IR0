@@ -44,6 +44,9 @@
 #define F_SETOWN        8   /* Set owner for SIGIO (Linux x86-64) */
 #define F_GETOWN        9   /* Get owner for SIGIO (Linux x86-64) */
 #define F_DUPFD_CLOEXEC 1030
+/* Linux uapi: F_LINUX_SPECIFIC_BASE + 7 / + 8. Capacity stays PIPE_SIZE. */
+#define F_SETPIPE_SZ    1031
+#define F_GETPIPE_SZ    1032
 
 #define FD_CLOEXEC      1   /* Close-on-exec flag */
 

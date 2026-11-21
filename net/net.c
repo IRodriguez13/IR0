@@ -37,10 +37,10 @@
 #include "dhcp.h"
 #include "dns.h"
 #include "net_internal.h"
+#include <ir0/idle.h>
 #include <ir0/net.h>
 #include <ir0/netdevice.h>
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <ir0/klog.h>
 #include <string.h>
 
@@ -81,12 +81,12 @@ static struct net_protocol *net_find_protocol_by_ethertype(uint16_t ethertype);
  */
 int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac, const void *payload, size_t len)
 {
-    LOG_DEBUG_FMT("NET", "net_send: dev=%p, ethertype=0x%04x, payload=%p, len=%d",
-                  dev, ethertype, payload, (int)len);
+    klog_debug_fmt("NET", "net_send: dev=%p, ethertype=0x%04x, payload=%p, len=%d",
+                   dev, ethertype, payload, (int)len);
     
     if (!dev || !payload || len > dev->mtu)
     {
-        LOG_ERROR_FMT("NET", "net_send: Invalid parameters (dev=%p, payload=%p, len=%d, mtu=%d)",
+        klog_error_fmt("NET", "net_send: Invalid parameters (dev=%p, payload=%p, len=%d, mtu=%d)",
                      dev, payload, (int)len, dev ? (int)dev->mtu : 0);
         return -1;
     }
@@ -101,15 +101,15 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      * Standard Ethernet MTU is 1500 bytes, so frames are typically <= 1514 bytes.
      */
     size_t frame_len = sizeof(struct eth_header) + len;
-    LOG_DEBUG_FMT("NET", "net_send: Allocating frame buffer, frame_len=%d", (int)frame_len);
+    klog_debug_fmt("NET", "net_send: Allocating frame buffer, frame_len=%d", (int)frame_len);
     uint8_t *frame = kmalloc(frame_len);
 
     if (!frame)
     {
-        LOG_ERROR("NET", "net_send: Failed to allocate frame buffer");
+        klog_error("NET", "net_send: Failed to allocate frame buffer");
         return -1;
     }
-    LOG_DEBUG_FMT("NET", "net_send: Frame buffer allocated at %p", frame);
+    klog_debug_fmt("NET", "net_send: Frame buffer allocated at %p", frame);
 
     /* Fill Ethernet header. The header structure is:
      *   - dest[6]: Destination MAC address
@@ -120,20 +120,20 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
     memcpy(eth->dest, dest_mac, 6);
     memcpy(eth->src, dev->dev_addr, ETH_ALEN);
     eth->type = htons(ethertype);
-    LOG_DEBUG_FMT("NET", "net_send: Ethernet header filled, copying %d bytes of payload", (int)len);
+    klog_debug_fmt("NET", "net_send: Ethernet header filled, copying %d bytes of payload", (int)len);
 
     /* Copy payload after Ethernet header. Protocols (IP, ARP) place their
      * packets here. The driver will transmit the entire frame including header.
      */
     memcpy(frame + sizeof(struct eth_header), payload, len);
-    LOG_DEBUG("NET", "net_send: Payload copied, calling ndo_start_xmit");
+    klog_debug("NET", "net_send: Payload copied, calling ndo_start_xmit");
     
     /* Verify frame length is reasonable before passing to driver.
      * This sanity check prevents buffer overflows if len was corrupted.
      */
     if (frame_len > 2000)
     {
-        LOG_ERROR_FMT("NET", "net_send: CORRUPTION DETECTED! frame_len=%d is too large!", (int)frame_len);
+        klog_error_fmt("NET", "net_send: CORRUPTION DETECTED! frame_len=%d is too large!", (int)frame_len);
         kfree(frame);
         return -1;
     }
@@ -145,14 +145,14 @@ int net_send(struct net_device *dev, uint16_t ethertype, const uint8_t *dest_mac
      * The frame must be fully transmitted or queued before this returns.
      */
     int ret = dev->netdev_ops->ndo_start_xmit(dev, frame, frame_len);
-    LOG_DEBUG_FMT("NET", "net_send: ndo_start_xmit returned %d, freeing frame buffer", ret);
+    klog_debug_fmt("NET", "net_send: ndo_start_xmit returned %d, freeing frame buffer", ret);
 
     /* Free frame buffer. The driver must have copied/DMA'd the frame by now.
      * If the driver needs to keep the frame (e.g., for retransmission), it
      * must allocate its own buffer and copy the data.
      */
     kfree(frame);
-    LOG_DEBUG("NET", "net_send: Frame buffer freed, returning");
+    klog_debug("NET", "net_send: Frame buffer freed, returning");
     return ret;
 }
 
@@ -188,7 +188,7 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
     {
         if (dev)
             dev->stats.rx_dropped++;
-        LOG_WARNING_FMT("NET", "Invalid packet: dev=%p, data=%p, len=%d", dev, data, (int)len);
+        klog_warn_fmt("NET", "Invalid packet: dev=%p, data=%p, len=%d", dev, data, (int)len);
         return;
     }
 
@@ -228,13 +228,13 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
         multicast_drop_count++;
         if ((multicast_drop_count % 100) == 0)
         {
-            LOG_DEBUG_FMT("NET", "Dropped %d multicast packets (mDNS/SSDP/IPv6 ND)", multicast_drop_count);
+            klog_debug_fmt("NET", "Dropped %d multicast packets (mDNS/SSDP/IPv6 ND)", multicast_drop_count);
         }
         return;
     }
     
     /* Hot path: keep packet traces at DEBUG to avoid serial spam (F8 smokes). */
-    LOG_DEBUG_FMT("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x, broadcast=%d, multicast=%d, for_us=%d",
+    klog_debug_fmt("NET", "Received packet on %s: len=%d, type=0x%04x, src_mac=%02x:%02x:%02x:%02x:%02x:%02x, dst_mac=%02x:%02x:%02x:%02x:%02x:%02x, broadcast=%d, multicast=%d, for_us=%d",
                  dev->name, (int)len, type,
                  eth->src[0], eth->src[1], eth->src[2], eth->src[3], eth->src[4], eth->src[5],
                  eth->dest[0], eth->dest[1], eth->dest[2], eth->dest[3], eth->dest[4], eth->dest[5],
@@ -248,18 +248,18 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
     {
         if (is_broadcast)
         {
-            LOG_DEBUG("NET", "Received broadcast ARP packet - processing");
+            klog_debug("NET", "Received broadcast ARP packet - processing");
         }
         else
         {
-            LOG_DEBUG("NET", "Received unicast ARP packet - processing");
+            klog_debug("NET", "Received unicast ARP packet - processing");
         }
     }
     else if (!is_for_us && type != ETHERTYPE_ARP)
     {
         /* For non-ARP packets not for us, we'll still log but note they're being dropped */
         /* This helps debug connectivity issues */
-        LOG_DEBUG_FMT("NET", "Packet not for us (not broadcast, not our MAC) - will be dropped by protocol handler");
+        klog_debug_fmt("NET", "Packet not for us (not broadcast, not our MAC) - will be dropped by protocol handler");
     }
 
     /* Look up protocol handler by EtherType. Protocols register themselves
@@ -273,7 +273,7 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
     struct net_protocol *proto = net_find_protocol_by_ethertype(type);
     if (proto && proto->handler)
     {
-        LOG_DEBUG_FMT("NET", "Found protocol handler: %s", proto->name);
+        klog_debug_fmt("NET", "Found protocol handler: %s", proto->name);
         
         /* Extract payload: skip Ethernet header (14 bytes), pass rest to protocol.
          * The protocol handler will parse its own header (IP, ARP, etc.).
@@ -281,7 +281,7 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
         const void *payload = (const uint8_t *)data + sizeof(struct eth_header);
         size_t payload_len = len - sizeof(struct eth_header);
         
-        LOG_DEBUG_FMT("NET", "Calling protocol handler %s with payload_len=%d", proto->name, (int)payload_len);
+        klog_debug_fmt("NET", "Calling protocol handler %s with payload_len=%d", proto->name, (int)payload_len);
         
         /* Call protocol handler. The handler receives:
          *   - dev: Network device (for sending replies if needed)
@@ -290,7 +290,7 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
          *   - proto->priv: Protocol-specific private data (can be NULL)
          */
         proto->handler(dev, payload, payload_len, proto->priv);
-        LOG_DEBUG_FMT("NET", "Protocol handler %s returned", proto->name);
+        klog_debug_fmt("NET", "Protocol handler %s returned", proto->name);
     }
     else
     {
@@ -298,8 +298,8 @@ void netif_rx(struct net_device *dev, const void *data, size_t len)
         /* CRITICAL: Log ARP packets even if handler not found (shouldn't happen) */
         if (type == ETHERTYPE_ARP)
         {
-            LOG_ERROR_FMT("NET", "ARP packet received but NO HANDLER FOUND! EtherType=0x%04x", type);
-            LOG_ERROR("NET", "This should never happen - ARP protocol should be registered!");
+            klog_error_fmt("NET", "ARP packet received but NO HANDLER FOUND! EtherType=0x%04x", type);
+            klog_error("NET", "This should never happen - ARP protocol should be registered!");
         }
         /* No handler registered for this EtherType. This is normal for:
          * - Unknown protocols
@@ -454,7 +454,7 @@ int init_net_stack(void)
 {
     struct net_device *dev;
 
-    LOG_INFO("NET", "Initializing network stack");
+    klog_info("NET", "Initializing network stack");
     
     /* Initialize network drivers first. These register net_device structures
      * that protocols will use for sending packets. Drivers probe hardware
@@ -463,7 +463,7 @@ int init_net_stack(void)
      */
     if (net_stack_probe_drivers() != 0)
     {
-        LOG_WARNING("NET", "Some network drivers failed to probe");
+        klog_warn("NET", "Some network drivers failed to probe");
     }
 
     /* In-kernel IP autoconfiguration brings every probed interface up,
@@ -479,41 +479,41 @@ int init_net_stack(void)
      */
     if (arp_init() != 0)
     {
-        LOG_ERROR("NET", "Failed to initialize ARP protocol");
+        klog_error("NET", "Failed to initialize ARP protocol");
         return -1;
     }
     
     if (ip_init() != 0)
     {
-        LOG_ERROR("NET", "Failed to initialize IP protocol");
+        klog_error("NET", "Failed to initialize IP protocol");
         return -1;
     }
     
     if (icmp_init() != 0)
     {
-        LOG_ERROR("NET", "Failed to initialize ICMP protocol");
+        klog_error("NET", "Failed to initialize ICMP protocol");
         return -1;
     }
     
     if (udp_init() != 0)
     {
-        LOG_ERROR("NET", "Failed to initialize UDP protocol");
+        klog_error("NET", "Failed to initialize UDP protocol");
         return -1;
     }
 
     if (tcp_init() != 0)
     {
-        LOG_ERROR("NET", "Failed to initialize TCP protocol");
+        klog_error("NET", "Failed to initialize TCP protocol");
         return -1;
     }
 
     if (dns_init() != 0)
     {
-        LOG_ERROR("NET", "Failed to initialize DNS client");
+        klog_error("NET", "Failed to initialize DNS client");
         return -1;
     }
     
-    LOG_INFO("NET", "Network stack initialized successfully");
+    klog_info("NET", "Network stack initialized successfully");
     return 0;
 }
 
@@ -523,9 +523,11 @@ int net_stack_post_irq_init(void)
      * DHCP waits rely on uptime progression. Run this only after clock/IRQ
      * plumbing is active (kmain calls us right after global sti).
      */
+    kernel_idle_poll_register(net_stack_poll);
+
     if (dhcp_init() != 0)
     {
-        LOG_WARNING("NET", "DHCP post-IRQ init failed, keeping static network configuration");
+        klog_warn("NET", "DHCP post-IRQ init failed, keeping static network configuration");
         return -1;
     }
 

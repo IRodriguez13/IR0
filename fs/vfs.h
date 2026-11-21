@@ -72,6 +72,13 @@ struct vfs_mount {
 
 int vfs_remount(const char *path, unsigned long flags);
 
+/*
+ * Kernel-internal bind mount: make @target show the tree that @source names
+ * on the filesystem holding it now (same fs, dev and flags, plus
+ * IR0_MS_BIND). Unmounting it leaves that filesystem mounted.
+ */
+int vfs_bind_mount(const char *source, const char *target);
+
 /* Directory entry returned by vfs_readdir */
 struct vfs_dirent {
     char name[VFS_PATH_MAX];
@@ -130,6 +137,14 @@ off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence);
 
 /* Path operations */
 int vfs_stat(const char *path, stat_t *buf);
+
+/*
+ * Linux may_lookup(): search permission on every directory before the
+ * final component. Missing is ENOENT, a non-directory is ENOTDIR, and a
+ * directory without search is EACCES. Call before the final name is
+ * looked up, so a denied search is not reported as ENOENT.
+ */
+int vfs_check_dir_traverse(const char *path);
 struct ir0_statfs;
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);

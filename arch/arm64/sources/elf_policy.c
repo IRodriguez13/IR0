@@ -7,7 +7,7 @@
  * Description: AArch64 ELF machine and relocation policy backend.
  */
 
-#include <ir0/arch_elf.h>
+#include <asm/elf.h>
 
 #define ELF_EM_AARCH64       183U
 #define R_AARCH64_ABS64      257U

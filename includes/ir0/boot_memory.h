@@ -2,8 +2,8 @@
 /**
  * IR0 Kernel — normalized early physical-memory inventory facade.
  *
- * Board/ISA code provides raw reserved-free RAM through arch_mm.h.  Common MM
- * consumes only the normalized inventory exposed here.
+ * Board/ISA code provides raw reserved-free RAM through asm/pgtable.h.
+ * Common MM consumes only the normalized inventory exposed here.
  */
 
 #pragma once
@@ -104,6 +104,16 @@ int boot_memory_get_allocatable_ranges(struct ir0_phys_range *ranges,
 
 /* Initialize the generic PMM from the normalized platform inventory. */
 int boot_memory_init_pmm(void);
+
+/*
+ * One zeroed-by-caller 4 KiB page from boot-identity RAM before the PMM
+ * exists, reserved from it for good; 0 when none is left.
+ */
+uintptr_t boot_memory_early_page(void);
+
+/* Every RAM bank, reserved parts included, minus the firmware framebuffer. */
+int boot_memory_get_ram_ranges(struct ir0_phys_range *ranges,
+			       size_t capacity, size_t *count);
 
 /*
  * Count the PMM frames that overlap a range the kernel still uses (firmware

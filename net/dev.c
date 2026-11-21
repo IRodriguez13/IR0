@@ -14,7 +14,6 @@
  */
 
 #include <ir0/errno.h>
-#include <ir0/irq.h>
 #include <ir0/klog.h>
 #include <ir0/kmem.h>
 #include <ir0/net.h>
@@ -283,20 +282,22 @@ int net_stack_get_irq_line(void)
 }
 
 /*
- * A line a NIC requested runs its irq_request() handler once; devices
- * without a line are polled, so they still receive between idle polls.
+ * Every interrupt on a line that is not a NIC line polls the devices
+ * without a line, so they still receive between idle polls. A NIC line
+ * already ran its irq_request() handler.
  */
-int net_stack_handle_irq(uint8_t irq)
+void net_stack_handle_irq(uint8_t irq)
 {
 	struct net_device *dev;
-	int handled = 0;
 
+	for_each_netdev(dev)
+	{
+		if (dev->irq == (int)irq)
+			return;
+	}
 	for_each_netdev(dev)
 	{
 		if (dev->irq < 0)
 			dev_poll_controller(dev);
-		else if (dev->irq == (int)irq && !handled)
-			handled = irq_dispatch(irq) == 0;
 	}
-	return handled;
 }

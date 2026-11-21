@@ -182,6 +182,13 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
         }
     }
 
+    if (ops->open)
+    {
+        ret = vfs_ops_open(ops, path, flags);
+        if (ret != 0)
+            return ret;
+    }
+
     struct vfs_file *f = vfs_file_alloc(path, flags);
     if (!f)
         return -ENOMEM;

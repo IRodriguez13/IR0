@@ -306,8 +306,7 @@ void sched_promote(process_t *proc)
 
 const char *sched_policy_name(void)
 {
-	/* Policy 1 is an honest CFS name alias over the round-robin queue. */
-	return CONFIG_SCHEDULER_POLICY == 1 ? "cfs" : "round_robin";
+	return "round_robin";
 }
 
 /* FIFO rotation has no ordering invariant to check at boot. */

@@ -29,6 +29,16 @@ uint64_t sigcontext_sp(const struct sigcontext *ctx);
 int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx);
 
 /*
+ * Linux ucontext_t for this ISA. @user_va is the address the handler
+ * receives; the FP pointer inside the image uses it. import overlays
+ * the edited mcontext onto @ctx.
+ */
+void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
+		     uint64_t mask, void *image);
+void ucontext_import(const void *image, uint64_t user_va,
+		     struct sigcontext *ctx);
+
+/*
  * Fill @ctx from a captured syscall frame (syscall insn while blocked).
  * @retval is the interrupted syscall return (typically -EINTR).
  */
@@ -47,14 +57,14 @@ void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 
 /*
  * Point the IRQ return path at @handler with SysV args (sig / info / ucontext).
- * @new_rsp must already be computed by portable policy, with the signal
+ * @new_sp must already be computed by portable policy, with the signal
  * frame written above it. @restorer is the handler's return address: an
  * ISA that returns through a link register (arm64 x30) sets it in @frame;
  * one that returns through the stack slot portable code fills ignores it
  * (x86-64).
  */
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
-				    uint64_t new_rsp, uint64_t info_addr,
+				    uint64_t new_sp, uint64_t info_addr,
 				    uint64_t uctx_addr, int sa_siginfo,
 				    uint64_t restorer);
 

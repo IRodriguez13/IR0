@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/process_domains.h>
 #include <ir0/task_ops.h>
 
 /*
@@ -44,9 +45,9 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->rlimits[ri].rlim_cur = (uint64_t)-1;
 		proc->rlimits[ri].rlim_max = (uint64_t)-1;
 	}
-	/* Soft NOFILE matches MAX_FDS_PER_PROCESS. */
-	proc->rlimits[7].rlim_cur = MAX_FDS_PER_PROCESS; /* RLIMIT_NOFILE */
-	proc->rlimits[7].rlim_max = MAX_FDS_PER_PROCESS;
+	/* Soft NOFILE is Linux INR_OPEN; the table grows up to the hard cap. */
+	proc->rlimits[IR0_RLIMIT_NOFILE].rlim_cur = IR0_NOFILE_SOFT_DEFAULT;
+	proc->rlimits[IR0_RLIMIT_NOFILE].rlim_max = IR0_NOFILE_CEILING;
 	/* RLIMIT_STACK soft 8 MiB (Linux-like default). */
 	proc->rlimits[3].rlim_cur = 8ULL * 1024ULL * 1024ULL;
 	proc->rlimits[3].rlim_max = (uint64_t)-1;
@@ -91,7 +92,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			uintptr_t kcr3 = paging_current_address_space();
 
 			proc->sched_prio = 0;
-			mm_init_root(mm, (uint64_t *)kcr3, 0);
+			mm_init_root(mm, phys_to_virt(kcr3), 0);
 			process_mm_bind(proc, mm);
 			process_set_mm_root(proc, kcr3);
 			klog_debug("KERN", "SERIAL: spawn: kernel mm root shared (idle)\n");
@@ -110,7 +111,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 			mm_init_root(mm, root, 1);
 			process_mm_bind(proc, mm);
 			klog_debug("KERN", "SERIAL: spawn: page directory OK\n");
-			process_set_mm_root(proc, (uint64_t)(uintptr_t)process_pgd(proc));
+			process_set_mm_root(proc, (uint64_t)virt_to_phys(process_pgd(proc)));
 		}
 	}
 
@@ -123,6 +124,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->suid = current_process->suid;
 		proc->sgid = current_process->sgid;
 		proc->no_new_privs = current_process->no_new_privs;
+		proc->dumpable = current_process->dumpable;
+		proc->keep_caps = current_process->keep_caps;
 		proc->at_secure = current_process->at_secure;
 		proc->umask = current_process->umask;
 		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
@@ -137,6 +140,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->suid = ROOT_UID;
 		proc->sgid = ROOT_GID;
 		proc->no_new_privs = 0;
+		proc->dumpable = 1;
 		proc->at_secure = 0;
 		proc->umask = DEFAULT_UMASK;
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
@@ -214,18 +218,8 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	/* Initialize file descriptor table */
 	process_init_fd_table(proc);
 
-	/* Initialize signal handlers to default */
-	proc->signal_pending = 0;
-	proc->signal_mask = 0;
-	proc->signal_ignored = 0;
-	proc->restore_sigmask = 0;
-	for (int i = 0; i < _NSIG; i++)
-	{
-		proc->signal_handlers[i] = SIG_DFL;
-		proc->signal_sa_flags[i] = 0;
-		proc->signal_sa_mask[i] = 0;
-		proc->signal_restorer[i] = NULL;
-	}
+	if (process_signals_init(proc) != 0)
+		goto fail_proc;
 	proc->robust_list = NULL;
 
 	/* Private kernel stack for syscall/IRQ entry (see IR0_PROC_KSTACK_SIZE). */
@@ -253,6 +247,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 	return proc->task.pid;
 
 fail_proc:
+	process_signals_drop(proc);
 	process_kernel_stack_free(proc);
 	if (process_stack_start(proc) && proc->mode == KERNEL_MODE)
 	{

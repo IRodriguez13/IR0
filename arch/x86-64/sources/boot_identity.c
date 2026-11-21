@@ -8,7 +8,7 @@
  *              boot_x64.asm already identity-maps for the kernel.
  */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 
 /* boot_x64.asm identity-maps the low 32 MiB with 2 MiB pages. */
 #define X86_BOOT_LOW_IDENTITY_END 0x2000000ULL

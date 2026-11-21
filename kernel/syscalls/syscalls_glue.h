@@ -31,19 +31,7 @@
  * in that slot would shadow the console. It goes away once fds 0-2 are
  * real table entries.
  */
-static inline int fd_alloc_lowest(fd_entry_t *fd_table, int from)
-{
-	int i;
-
-	if (!fd_table)
-		return -1;
-	for (i = (from < 0) ? 0 : from; i < MAX_FDS_PER_PROCESS; i++)
-	{
-		if (!fd_table[i].in_use)
-			return i;
-	}
-	return -1;
-}
+/* fd_alloc_lowest() lives in fs/fdtable.c and may grow the table. */
 
 /* Resolve user path against dirfd (Linux openat/fstatat subset). */
 int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,

@@ -20,7 +20,6 @@
 #include <ir0/clock.h>
 #include <ir0/net.h>
 #include <ir0/netdevice.h>
-#include <ir0/arch_port.h>
 #include <config.h>
 #include <string.h>
 #include "udp.h"

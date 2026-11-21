@@ -111,7 +111,7 @@ static int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg
     
     if (!input_mouse_is_available())
     {
-        return -1;  /* Device not available */
+        return -ENOTTY;
     }
     
     switch (request)
@@ -127,8 +127,8 @@ static int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg
                     return 0;
                 }
             }
-            return -1;
-            
+            return -ENOTTY;
+
         case MOUSE_SET_SENSITIVITY:
             if (arg)
             {
@@ -147,10 +147,10 @@ static int64_t dev_mouse_ioctl(devfs_entry_t *entry, uint64_t request, void *arg
                     return 0;
                 }
             }
-            return -1;
-            
+            return -ENOTTY;
+
         default:
-            return -1;  /* Invalid request */
+            return -ENOTTY;
     }
 #else
     (void)entry; (void)request; (void)arg;
@@ -174,6 +174,13 @@ static void dev_mouse_ready_notify(void)
 void devfs_input_init(void)
 {
     input_mouse_set_ready_notifier(dev_mouse_ready_notify);
+    (void)input_register_device(input_i8042_dev());
+}
+
+int input_is_event_device(uint32_t device_id)
+{
+    return device_id == dev_events0.entry.device_id ||
+           device_id == dev_input_event0.entry.device_id;
 }
 /*
  * /dev/events0 - Linux evdev input events (keyboard, input(4))
@@ -212,7 +219,11 @@ static int64_t dev_events0_read(devfs_entry_t *entry, void *buf, size_t count, o
     }
 
     if (n == 0)
+    {
+        if (input_read_is_nonblock())
+            return -EAGAIN;
         return 0;
+    }
 
     {
         size_t bytes = n * sizeof(struct input_event);
@@ -344,7 +355,87 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    return -EINVAL;
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == EVIOCGID_NR)
+    {
+        struct input_id id;
+
+        if (!arg || size < sizeof(id))
+            return -EINVAL;
+        if (input_device_id(&id) != 0)
+            return -ENODEV;
+        if (copy_to_user(arg, &id, sizeof(id)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == EVIOCGNAME_NR)
+    {
+        const char *name;
+        char tmp[64];
+        size_t full;
+        size_t ncopy;
+
+        if (!arg || size == 0)
+            return -EINVAL;
+        name = input_device_name();
+        if (!name)
+            return -ENODEV;
+        full = strlen(name) + 1u;
+        ncopy = full < size ? full : size;
+        if (ncopy > sizeof(tmp))
+            ncopy = sizeof(tmp);
+        memcpy(tmp, name, ncopy);
+        if (copy_to_user(arg, tmp, ncopy) != 0)
+            return -EFAULT;
+        return (int64_t)ncopy;
+    }
+
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x09u)
+    {
+        unsigned long bits;
+        size_t ncopy;
+
+        /* INPUT_PROP_POINTER: this node is the pointer device. */
+        bits = 1ul;
+        if (!arg || size == 0)
+            return -EINVAL;
+        ncopy = size < sizeof(bits) ? size : sizeof(bits);
+        if (copy_to_user(arg, &bits, ncopy) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    /* EVIOCGKEY: _IOC(READ, 'E', 0x18, len) — current key bitmap. */
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x18u)
+    {
+        unsigned char bitmap[(KEY_CNT + 7u) / 8u];
+        size_t stored;
+        size_t ncopy;
+
+        if (!arg || size == 0)
+        {
+            return -EINVAL;
+        }
+        stored = input_key_state(input_i8042_dev(), bitmap, sizeof(bitmap));
+        ncopy = (size_t)size < stored ? (size_t)size : stored;
+        if (copy_to_user(arg, bitmap, ncopy) != 0)
+        {
+            return -EFAULT;
+        }
+        return 0;
+    }
+
+    /*
+     * EVIOCGABS(0) .. EVIOCGABS(ABS_MAX) are nr 0x40 .. 0x7f.
+     * This node is a relative pointer and has no absolute axes.
+     */
+    if (type == (unsigned)'E' && dir == EVIOC_READ &&
+        nr >= 0x40u && nr <= 0x7fu)
+    {
+        return -EINVAL;
+    }
+
+    return -ENOTTY;
 }
 
 static int64_t dev_events0_open(devfs_entry_t *entry, int flags)

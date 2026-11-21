@@ -15,10 +15,8 @@
 #include "ip.h"
 #include "net_internal.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <ir0/klog.h>
 #include <ir0/clock.h>
-#include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 #include <ir0/netdevice.h>
@@ -145,7 +143,7 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     
     if (len < sizeof(struct arp_header))
     {
-        LOG_WARNING("ARP", "Packet too short");
+        klog_warn("ARP", "Packet too short");
         return;
     }
     
@@ -161,7 +159,7 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
         arp->hw_len != 6 ||
         arp->proto_len != 4)
     {
-        LOG_WARNING("ARP", "Invalid ARP packet format");
+        klog_warn("ARP", "Invalid ARP packet format");
         return;
     }
     
@@ -174,18 +172,18 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     ip4_addr_t sender_ip = arp->sender_ip;  /* Already in network byte order */
     ip4_addr_t target_ip = arp->target_ip;  /* Already in network byte order */
     
-    LOG_INFO_FMT("ARP", "Received ARP packet: opcode=%d, sender_ip=" IP4_FMT ", target_ip=" IP4_FMT,
-                 (int)opcode, IP4_ARGS(ntohl(sender_ip)), IP4_ARGS(ntohl(target_ip)));
-    LOG_INFO_FMT("ARP", "Sender MAC: %02x:%02x:%02x:%02x:%02x:%02x",
-                 arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
-                 arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
-    LOG_INFO_FMT("ARP", "Target MAC: %02x:%02x:%02x:%02x:%02x:%02x",
-                 arp->target_mac[0], arp->target_mac[1], arp->target_mac[2],
-                 arp->target_mac[3], arp->target_mac[4], arp->target_mac[5]);
+    klog_info_fmt("ARP", "Received ARP packet: opcode=%d, sender_ip=" IP4_FMT ", target_ip=" IP4_FMT,
+                  (int)opcode, IP4_ARGS(ntohl(sender_ip)), IP4_ARGS(ntohl(target_ip)));
+    klog_info_fmt("ARP", "Sender MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                  arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
+                  arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
+    klog_info_fmt("ARP", "Target MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                  arp->target_mac[0], arp->target_mac[1], arp->target_mac[2],
+                  arp->target_mac[3], arp->target_mac[4], arp->target_mac[5]);
     
     if (opcode == ARP_OP_REQUEST)
     {
-        LOG_INFO("ARP", "ARP Request received");
+        klog_info("ARP", "ARP Request received");
         
         /* Opportunistic cache update: even if the request isn't for us, we
          * learn the sender's IP/MAC mapping. This helps populate our cache
@@ -215,19 +213,19 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
         }
         
         /* Log IPs for debugging - CRITICAL for debugging ARP replies */
-        LOG_INFO_FMT("ARP", "ARP Request check: target=" IP4_FMT ", my_ip=" IP4_FMT ", interface_ip=" IP4_FMT,
-                     IP4_ARGS(ntohl(target_ip)), IP4_ARGS(ntohl(my_ip)), IP4_ARGS(ntohl(interface_ip)));
-        LOG_INFO_FMT("ARP", "Device: %s, target matches my_ip=%d, target matches interface_ip=%d",
-                     dev->name ? dev->name : "unknown",
-                     (target_ip == my_ip) ? 1 : 0,
-                     (target_ip == interface_ip) ? 1 : 0);
+        klog_info_fmt("ARP", "ARP Request check: target=" IP4_FMT ", my_ip=" IP4_FMT ", interface_ip=" IP4_FMT,
+                      IP4_ARGS(ntohl(target_ip)), IP4_ARGS(ntohl(my_ip)), IP4_ARGS(ntohl(interface_ip)));
+        klog_info_fmt("ARP", "Device: %s, target matches my_ip=%d, target matches interface_ip=%d",
+                      dev->name ? dev->name : "unknown",
+                      (target_ip == my_ip) ? 1 : 0,
+                      (target_ip == interface_ip) ? 1 : 0);
         
         if (target_ip == interface_ip || target_ip == my_ip)
         {
-            LOG_INFO("ARP", "ARP Request is for us, sending reply");
-            LOG_INFO_FMT("ARP", "Using sender_ip=" IP4_FMT " in reply, our IP will be " IP4_FMT,
-                         IP4_ARGS(ntohl(arp->sender_ip)), 
-                         IP4_ARGS(ntohl((interface_ip != 0) ? interface_ip : my_ip)));
+            klog_info("ARP", "ARP Request is for us, sending reply");
+            klog_info_fmt("ARP", "Using sender_ip=" IP4_FMT " in reply, our IP will be " IP4_FMT,
+                          IP4_ARGS(ntohl(arp->sender_ip)),
+                          IP4_ARGS(ntohl((interface_ip != 0) ? interface_ip : my_ip)));
             
             /* Send ARP Reply */
             struct arp_header *reply = (struct arp_header *)kmalloc(sizeof(struct arp_header));
@@ -252,11 +250,11 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
             /* Send reply to the sender */
             if (net_send(dev, ETHERTYPE_ARP, arp->sender_mac, reply, sizeof(struct arp_header)) == 0)
             {
-                LOG_INFO("ARP", "ARP Reply sent");
+                klog_info("ARP", "ARP Reply sent");
             }
             else
             {
-                LOG_ERROR("ARP", "Failed to send ARP Reply");
+                klog_error("ARP", "Failed to send ARP Reply");
             }
             
             kfree(reply);
@@ -264,15 +262,15 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
     }
     else if (opcode == ARP_OP_REPLY)
     {
-        LOG_INFO("ARP", "ARP Reply received");
+        klog_info("ARP", "ARP Reply received");
         
         /* Update ARP cache with sender information */
         arp_cache_add(sender_ip, arp->sender_mac);
         
-        LOG_INFO_FMT("ARP", "Resolved IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
-                     IP4_ARGS(ntohl(sender_ip)),
-                     arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
-                     arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
+        klog_info_fmt("ARP", "Resolved IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
+                      IP4_ARGS(ntohl(sender_ip)),
+                      arp->sender_mac[0], arp->sender_mac[1], arp->sender_mac[2],
+                      arp->sender_mac[3], arp->sender_mac[4], arp->sender_mac[5]);
     }
 }
 
@@ -282,7 +280,7 @@ static void arp_receive_handler(struct net_device *dev, const void *data,
  */
 int arp_init(void)
 {
-    LOG_INFO("ARP", "Initializing ARP protocol");
+    klog_info("ARP", "Initializing ARP protocol");
     
     memset(&arp_proto, 0, sizeof(arp_proto));
     arp_proto.name = "ARP";
@@ -297,13 +295,13 @@ int arp_init(void)
     int ret = net_register_protocol(&arp_proto);
     if (ret == 0)
     {
-        LOG_INFO("ARP", "ARP protocol registered");
+        klog_info("ARP", "ARP protocol registered");
         /* Print initial cache state (should be empty) */
         arp_print_cache();
     }
     else
     {
-        LOG_ERROR("ARP", "Failed to register ARP protocol");
+        klog_error("ARP", "Failed to register ARP protocol");
     }
     
     return ret;
@@ -377,7 +375,7 @@ static void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
         memcpy(entry->mac, mac, 6);
         entry->timestamp = clock_get_uptime_milliseconds();
         ir0_spin_unlock_irqrestore(&arp_lock, flags);
-        LOG_INFO_FMT("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ntohl(ip)));
+        klog_info_fmt("ARP", "Updated ARP cache entry for IP " IP4_FMT, IP4_ARGS(ntohl(ip)));
         return;
     }
 
@@ -395,7 +393,7 @@ static void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     if (!entry)
     {
         ir0_spin_unlock_irqrestore(&arp_lock, flags);
-        LOG_ERROR("ARP", "Failed to allocate ARP cache entry");
+        klog_error("ARP", "Failed to allocate ARP cache entry");
         return;
     }
     
@@ -405,9 +403,9 @@ static void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
     entry->next = arp_cache;
     arp_cache = entry;
     ir0_spin_unlock_irqrestore(&arp_lock, flags);
-    LOG_INFO_FMT("ARP", "Added ARP cache entry: IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
-                 IP4_ARGS(ntohl(ip)),
-                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    klog_info_fmt("ARP", "Added ARP cache entry: IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
+                  IP4_ARGS(ntohl(ip)),
+                  mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 /**
@@ -417,12 +415,12 @@ static void arp_cache_add(ip4_addr_t ip, const mac_addr_t mac)
  */
 static void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
 {
-    LOG_INFO_FMT("ARP", "Sending ARP request for IP " IP4_FMT, IP4_ARGS(ntohl(target_ip)));
+    klog_info_fmt("ARP", "Sending ARP request for IP " IP4_FMT, IP4_ARGS(ntohl(target_ip)));
     
     struct arp_header *request = (struct arp_header *)kmalloc(sizeof(struct arp_header));
     if (!request)
     {
-        LOG_ERROR("ARP", "Failed to allocate ARP request");
+        klog_error("ARP", "Failed to allocate ARP request");
         return;
     }
     
@@ -452,11 +450,11 @@ static void arp_send_request(struct net_device *dev, ip4_addr_t target_ip)
     /* Send ARP request as broadcast */
     if (net_send(dev, ETHERTYPE_ARP, broadcast_mac, request, sizeof(struct arp_header)) == 0)
     {
-        LOG_INFO("ARP", "ARP Request sent");
+        klog_info("ARP", "ARP Request sent");
     }
     else
     {
-        LOG_ERROR("ARP", "Failed to send ARP Request");
+        klog_error("ARP", "Failed to send ARP Request");
     }
     
     kfree(request);
@@ -493,7 +491,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         {
             /* This is our interface IP, use our MAC */
             memcpy(mac, dev->dev_addr, 6);
-            LOG_INFO_FMT("ARP", "IP " IP4_FMT " is our interface IP, using our MAC", IP4_ARGS(ntohl(ip)));
+            klog_info_fmt("ARP", "IP " IP4_FMT " is our interface IP, using our MAC", IP4_ARGS(ntohl(ip)));
             return 0;
         }
     }
@@ -507,7 +505,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
         if (dev)
         {
             memcpy(mac, dev->dev_addr, 6);
-            LOG_INFO_FMT("ARP", "IP " IP4_FMT " is our own IP, using our MAC", IP4_ARGS(ntohl(ip)));
+            klog_info_fmt("ARP", "IP " IP4_FMT " is our own IP, using our MAC", IP4_ARGS(ntohl(ip)));
             return 0;
         }
         return -1;  /* No device, can't get MAC */
@@ -520,7 +518,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
      */
     if (arp_lookup_mac(ip, mac) == 0)
     {
-        LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved from cache", IP4_ARGS(ntohl(ip)));
+        klog_info_fmt("ARP", "IP " IP4_FMT " resolved from cache", IP4_ARGS(ntohl(ip)));
         return 0;
     }
     
@@ -529,7 +527,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
      * caller sleeps on the clock (clock_sleep), so other tasks run; a
      * signal aborts the resolution.
      */
-    LOG_INFO_FMT("ARP", "IP " IP4_FMT " not in cache, attempting resolution", IP4_ARGS(ntohl(ip)));
+    klog_info_fmt("ARP", "IP " IP4_FMT " not in cache, attempting resolution", IP4_ARGS(ntohl(ip)));
 
     for (int retry = 0; retry < ARP_RESOLVE_RETRIES; retry++)
     {
@@ -537,7 +535,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
 
         if (retry > 0)
         {
-            LOG_INFO_FMT("ARP", "Retry %d/%d for IP " IP4_FMT,
+            klog_info_fmt("ARP", "Retry %d/%d for IP " IP4_FMT,
                         retry, ARP_RESOLVE_RETRIES, IP4_ARGS(ntohl(ip)));
         }
 
@@ -552,7 +550,7 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
             net_stack_poll();
             if (arp_lookup_mac(ip, mac) == 0)
             {
-                LOG_INFO_FMT("ARP", "IP " IP4_FMT " resolved after %d ms (attempt %d)",
+                klog_info_fmt("ARP", "IP " IP4_FMT " resolved after %d ms (attempt %d)",
                             IP4_ARGS(ntohl(ip)), (int)elapsed, retry + 1);
                 return 0;
             }
@@ -560,16 +558,16 @@ int arp_resolve(struct net_device *dev, ip4_addr_t ip, mac_addr_t mac)
                 break;
             if (clock_sleep(ARP_POLL_INTERVAL_MS) < 0)
             {
-                LOG_INFO("ARP", "Resolution interrupted by a signal");
+                klog_info("ARP", "Resolution interrupted by a signal");
                 return -1;
             }
         }
 
-        LOG_WARNING_FMT("ARP", "Timeout waiting for ARP reply after %d ms (attempt %d/%d)",
+        klog_warn_fmt("ARP", "Timeout waiting for ARP reply after %d ms (attempt %d/%d)",
                        ARP_RESOLVE_TIMEOUT_MS, retry + 1, ARP_RESOLVE_RETRIES);
     }
 
-    LOG_ERROR_FMT("ARP", "Failed to resolve IP " IP4_FMT " after %d attempts",
+    klog_error_fmt("ARP", "Failed to resolve IP " IP4_FMT " after %d attempts",
                  IP4_ARGS(ntohl(ip)), ARP_RESOLVE_RETRIES);
     return -1;
 }
@@ -583,28 +581,28 @@ static void arp_print_cache(void)
     struct arp_cache_entry *entry;
     int count = 0;
     
-    LOG_INFO("ARP", "ARP Cache:");
+    klog_info("ARP", "ARP Cache:");
     
     flags = ir0_spin_lock_irqsave(&arp_lock);
     entry = arp_cache;
     if (!entry)
     {
         ir0_spin_unlock_irqrestore(&arp_lock, flags);
-        LOG_INFO("ARP", "  (cache empty)");
+        klog_info("ARP", "  (cache empty)");
         return;
     }
     
     while (entry)
     {
-        LOG_INFO_FMT("ARP", "  %d. IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
-                     ++count,
-                     IP4_ARGS(ntohl(entry->ip)),
-                     entry->mac[0], entry->mac[1], entry->mac[2],
-                     entry->mac[3], entry->mac[4], entry->mac[5]);
+        klog_info_fmt("ARP", "  %d. IP " IP4_FMT " -> MAC %02x:%02x:%02x:%02x:%02x:%02x",
+                      ++count,
+                      IP4_ARGS(ntohl(entry->ip)),
+                      entry->mac[0], entry->mac[1], entry->mac[2],
+                      entry->mac[3], entry->mac[4], entry->mac[5]);
         entry = entry->next;
     }
     ir0_spin_unlock_irqrestore(&arp_lock, flags);
-    LOG_INFO_FMT("ARP", "Total entries: %d", count);
+    klog_info_fmt("ARP", "Total entries: %d", count);
 }
 
 /**
@@ -616,7 +614,7 @@ void arp_set_my_ip(ip4_addr_t ip)
     uint64_t flags = ir0_spin_lock_irqsave(&arp_lock);
     my_ip = ip;
     ir0_spin_unlock_irqrestore(&arp_lock, flags);
-    LOG_INFO_FMT("ARP", "Updated ARP default IP address to " IP4_FMT, IP4_ARGS(ntohl(ip)));
+    klog_info_fmt("ARP", "Updated ARP default IP address to " IP4_FMT, IP4_ARGS(ntohl(ip)));
 }
 
 /**
@@ -642,7 +640,7 @@ int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
             /* Update existing IP */
             if_ip->ip = ip;
             ir0_spin_unlock_irqrestore(&arp_lock, flags);
-            LOG_INFO_FMT("ARP", "Updated IP for interface %s: " IP4_FMT,
+            klog_info_fmt("ARP", "Updated IP for interface %s: " IP4_FMT,
                         dev->name, IP4_ARGS(ntohl(ip)));
             return 0;
         }
@@ -662,7 +660,7 @@ int arp_set_interface_ip(struct net_device *dev, ip4_addr_t ip)
     if_ip->next = interface_ips;
     interface_ips = if_ip;
     ir0_spin_unlock_irqrestore(&arp_lock, flags);
-    LOG_INFO_FMT("ARP", "Set IP for interface %s: " IP4_FMT,
+    klog_info_fmt("ARP", "Set IP for interface %s: " IP4_FMT,
                 dev->name, IP4_ARGS(ntohl(ip)));
     return 0;
 }

@@ -15,7 +15,6 @@
 
 #include <ir0/vga.h>
 #include <ir0/oops.h>
-#include <ir0/logging.h>
 #include <ir0/cmdline.h>
 #include <ir0/boot_log_hostshare.h>
 #include <stdbool.h>
@@ -24,8 +23,9 @@
 #include <ir0/kmem.h>
 #include <ir0/pmm.h>
 #include <ir0/paging.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_info.h>
+#include <ir0/cpu.h>
+#include <ir0/irq.h>
+#include <asm/setup.h>
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/elf_loader.h>
@@ -45,8 +45,6 @@
 #include <ir0/init_handoff.h>
 #include <ir0/vfs.h>
 #include <ir0/swap.h>
-#include <ir0/open_flags.h>
-#include <ir0/stat.h>
 #include <ir0/ipc.h>
 #include <kernel/syscalls/syscalls.h>
 #include <ir0/sched.h>
@@ -56,6 +54,7 @@
 #include <ir0/rootfs_base.h>
 #include <ir0/boot_params.h>
 #include <ir0/boot_port.h>
+#include <ir0/direct_map.h>
 #include "boot_init.h"
 
 void boot_firmware_init(uintptr_t firmware_handle)
@@ -69,6 +68,9 @@ void boot_firmware_init(uintptr_t firmware_handle)
 
 	ir0_boot_arch_firmware_early(params);
 	(void)boot_memory_snapshot_init(params);
+	/* Every later phys_to_virt() relies on it (frames, roots, tables). */
+	if (direct_map_init() != 0)
+		panic("direct map: boot RAM inventory unusable");
 	ir0_boot_firmware_sysfs_init();
 	ir0_cmdline_apply_log_profile();
 }
@@ -90,18 +92,16 @@ void boot_console_init(void)
 void boot_memory_init(void)
 {
 	/*
-	 * The architecture facade supplies reserved-free RAM banks. x86 currently
-	 * reports the historical [32 MiB, 512 MiB) interval; fragmented targets
-	 * use the same generic PMM path without a special allocator.
+	 * The architecture facade supplies reserved-free RAM banks, including
+	 * memory above the old 512 MiB window. Fragmented targets use the same
+	 * generic PMM path.
 	 */
 	if (boot_memory_init_pmm() != 0)
 		panic("PMM: architecture boot-memory inventory unavailable");
 
 	/*
 	 * Pin the boot address-space root while still on the identity map from the
-	 * assembly bootstrap.
-	 * COW/clear_highpage switch here after process tables use pte_none
-	 * holes (Linux kmap / copy_user_highpage analogue).
+	 * assembly bootstrap; process roots copy its kernel half.
 	 */
 	paging_pin_kernel_address_space(paging_current_address_space());
 }
@@ -137,13 +137,13 @@ void boot_serial_init(void)
 		if (console_backend_uses_framebuffer() &&
 		    video_backend_get_info(&w, &h, &bpp))
 		{
-			log_info_fmt("BOOT", "Console: framebuffer %ux%ux%u",
-				     (unsigned)w, (unsigned)h, (unsigned)bpp);
+			klog_info_fmt("BOOT", "Console: framebuffer %ux%ux%u",
+				      (unsigned)w, (unsigned)h, (unsigned)bpp);
 		}
 		else
 		{
 #if DEBUG_BOOT
-			log_info_fmt(
+			klog_info_fmt(
 				"BOOT",
 				"Console: VGA text (80x25)%s vbe_fail_reason=%u",
 				video_backend_is_available()
@@ -152,13 +152,13 @@ void boot_serial_init(void)
 				(unsigned)video_backend_fail_reason());
 
 			if (!boot_memory_snapshot())
-				log_info("BOOT", "Firmware snapshot unavailable");
+				klog_info("BOOT", "Firmware snapshot unavailable");
 #endif
 		}
 	}
 #endif
 
-	log_subsystem_ok("CORE");
+	klog_info("CORE", "Registered and Initialized OK");
 }
 
 void boot_drivers_init(void)
@@ -170,55 +170,30 @@ void boot_drivers_init(void)
 void boot_rootfs_init(void)
 {
 	klog_set_boot_phase(KLOG_BOOT_STORAGE);
-	if (!ir0_block_name_is_present(CONFIG_ROOT_BLOCK_DEVICE))
+	if (!ir0_block_lookup_by_name(CONFIG_ROOT_BLOCK_DEVICE))
 	{
-		log_warn("BOOT", "Configured root block device not detected");
-		log_warn("BOOT", "Filesystem initialization may fail");
+		klog_warn("BOOT", "Configured root block device not detected");
+		klog_warn("BOOT", "Filesystem initialization may fail");
 	}
 #if DEBUG_BOOT
 	else
 	{
-		log_info("BOOT",
-			 "Configured root block device detected, proceeding with filesystem init");
+		klog_info("BOOT",
+			  "Configured root block device detected, proceeding with filesystem init");
 	}
 #endif
 
 	klog_set_boot_phase(KLOG_BOOT_ROOTFS);
 	vfs_init_root();
-	log_subsystem_ok("FILESYSTEM");
-
-	if (!hypervisor_present())
-	{
-		stat_t st;
-		struct vfs_file *f = NULL;
-
-		if (vfs_stat("/etc/ir0-baremetal-booted", &st) == 0)
-		{
-			klog_info("BOOT", "bare-metal milestone already recorded");
-			klog_smoke("FIRST_BAREMETAL_BOOT_SKIP");
-		}
-		else if (vfs_open("/etc/ir0-baremetal-booted",
-				  IR0_O_WRONLY | IR0_O_CREAT | IR0_O_TRUNC, 0644,
-				  &f) == 0)
-		{
-			static const char mark[] = "IR0 first bare-metal boot\n";
-
-			(void)vfs_write(f, mark, sizeof(mark) - 1);
-			(void)vfs_close(f);
-			klog_event(KLOG_EVENT_FIRST_BAREMETAL_BOOT, 0,
-				   KLOG_LEVEL_NOTICE, "BOOT",
-				   "first bare-metal boot recorded");
-			klog_smoke("FIRST_BAREMETAL_BOOT");
-		}
-		else
-		{
-			klog_warn("BOOT",
-				  "bare-metal milestone sentinel write failed");
-			klog_smoke("FIRST_BAREMETAL_BOOT_FAIL");
-		}
-	}
+	klog_info("FILESYSTEM", "Registered and Initialized OK");
 
 	ir0_boot_port_maybe_seed_init_from_embedded();
+
+	/* After the port hook: the arm64 boot pivot would move it under /bpivot. */
+	if (vfs_mount("heartfs", "/heart", "heartfs") != 0)
+		klog_warn("BOOT", "heartfs mount at /heart failed");
+	if (vfs_mount("sysfs", "/sys", "sysfs") != 0)
+		klog_warn("BOOT", "sysfs mount at /sys failed");
 }
 
 void boot_process_init(void)
@@ -226,13 +201,13 @@ void boot_process_init(void)
 	process_init();
 	ir0_swap_init();
 	process_exit_bind_product();
-	log_subsystem_ok("PROCESSES");
+	klog_info("PROCESSES", "Registered and Initialized OK");
 }
 
 void boot_ipc_init(void)
 {
 	ipc_init();
-	log_subsystem_ok("IPC");
+	klog_info("IPC", "Registered and Initialized OK");
 }
 
 void boot_clock_init(void)
@@ -251,7 +226,7 @@ void boot_syscalls_init(void)
 {
 	syscall_init();
 	syscalls_init();
-	log_subsystem_ok("SYSCALLS");
+	klog_info("SYSCALLS", "Registered and Initialized OK");
 }
 
 void boot_irq_init(void)
@@ -262,9 +237,9 @@ void boot_irq_init(void)
 	enable_interrupts();
 	audio_backend_post_irq_selftest();
 #if DEBUG_BOOT
-	log_info("BOOT", "Interrupts enabled globally (sti)");
+	klog_info("BOOT", "Interrupts enabled globally (sti)");
 #endif
-	log_subsystem_ok("INTERRUPTS");
+	klog_info("INTERRUPTS", "Registered and Initialized OK");
 
 	klog_set_boot_phase(KLOG_BOOT_READY);
 	klog_notice("BOOT", "kernel core initialization complete");
@@ -380,7 +355,7 @@ void boot_enter_userspace(void)
 	init_pid = ir0_init_handoff_run(&ops, NULL, "/sbin/init", argv_init);
 	if (init_pid < 0)
 	{
-		log_error("BOOT", "FAILED to load /sbin/init");
+		klog_error("BOOT", "FAILED to load /sbin/init");
 		panic("Failed to load /sbin/init");
 	}
 	panic("schedule returned after userspace init");

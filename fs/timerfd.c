@@ -16,7 +16,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/clock.h>
 #include <ir0/time.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <string.h>
 #include <ir0/files_struct.h>
 #include <ir0/poll.h>
@@ -164,15 +164,17 @@ int64_t sys_timerfd_create(int clockid, int flags)
 		memset(t, 0, sizeof(*t));
 		return -ESRCH;
 	}
-	for (fd = 3; fd < MAX_FDS_PER_PROCESS; fd++)
-	{
-		if (!tab[fd].in_use)
-			break;
-	}
-	if (fd >= MAX_FDS_PER_PROCESS)
+	fd = fd_alloc_lowest(3);
+	if (fd < 0)
 	{
 		memset(t, 0, sizeof(*t));
-		return -EMFILE;
+		return fd;
+	}
+	tab = get_process_fd_table();
+	if (!tab)
+	{
+		memset(t, 0, sizeof(*t));
+		return -ESRCH;
 	}
 	memset(&tab[fd], 0, sizeof(tab[fd]));
 	tab[fd].in_use = true;
@@ -218,7 +220,7 @@ int64_t sys_timerfd_settime(int fd, int flags, const struct itimerspec *new_valu
 		return -ESRCH;
 	if (!new_value)
 		return -EFAULT;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 	tab = get_process_fd_table();
 	if (!tab || !tab[fd].in_use || !tab[fd].is_timerfd || !tab[fd].vfs_file)
@@ -261,7 +263,7 @@ int64_t sys_timerfd_gettime(int fd, struct itimerspec *curr_value)
 
 	if (!current_process || !curr_value)
 		return -EFAULT;
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= ir0_fd_span())
 		return -EBADF;
 	tab = get_process_fd_table();
 	if (!tab || !tab[fd].in_use || !tab[fd].is_timerfd || !tab[fd].vfs_file)

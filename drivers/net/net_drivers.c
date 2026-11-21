@@ -14,7 +14,7 @@
 
 #include "net_drivers.h"
 
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/net.h>
 #include <stddef.h>
 
@@ -30,7 +30,7 @@ int net_stack_probe_drivers(void)
 	{
 		int rc = (*drv)->probe();
 
-		LOG_DEBUG_FMT("NET", "probe %s: %d", (*drv)->name, rc);
+		klog_debug_fmt("NET", "probe %s: %d", (*drv)->name, rc);
 	}
 	return 0;
 }

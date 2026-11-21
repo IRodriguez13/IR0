@@ -67,7 +67,7 @@ typedef struct task
 
 TASK_CONTEXT_ASSERT_LAYOUT(task_t);
 
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 
 #define MAX_TASKS 256
 #define DEFAULT_STACK_SIZE (4 * 1024)

@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_port.h
- * Description: Portable boot hooks — weak defaults in arch/common, strong per ISA.
+ * Description: Portable boot hooks — every ISA defines each hook.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -21,8 +21,7 @@ extern "C" {
 
 /*
  * Translate the raw ISA entry argument into the typed boot handoff (protocol
- * and protocol block address, e.g. the ARM64 DTB stash). Default: unknown
- * protocol, @firmware_handle passed through as the block address.
+ * and protocol block address, e.g. the ARM64 DTB stash).
  */
 void ir0_boot_port_params(uintptr_t firmware_handle,
 			  struct ir0_boot_params *params);

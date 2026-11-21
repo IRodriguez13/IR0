@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/vdso.h>
-#include <ir0/arch_elf.h>
+#include <asm/elf.h>
 #include <ir0/elf64_image.h>
 #include <ir0/process.h>
 #include <ir0/paging.h>

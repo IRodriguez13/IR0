@@ -23,26 +23,26 @@ struct process;
 #if DEBUG_D1_DIAG
 
 void d1_12_read_diag_syscall_pre(struct process *p, int fd, uintptr_t buf,
-				 size_t count, uint64_t rip);
+				 size_t count, uint64_t pc);
 void d1_12_read_diag_syscall_post(struct process *p, int64_t ret);
 void d1_12_read_diag_tty_line(size_t line_len, const char *kline,
 			      size_t kline_len);
 void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
 			   const char *kbuf, size_t kcopy_len);
-void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip, uint64_t rdx,
-			uint64_t rsi, uint64_t rdi);
+void d1_12_read_diag_pf(struct process *p, uint64_t fault_pc, uint64_t arg2,
+			uint64_t arg1, uint64_t arg0);
 
 #else
 
 static inline void d1_12_read_diag_syscall_pre(struct process *p, int fd,
 					       uintptr_t buf, size_t count,
-					       uint64_t rip)
+					       uint64_t pc)
 {
 	(void)p;
 	(void)fd;
 	(void)buf;
 	(void)count;
-	(void)rip;
+	(void)pc;
 }
 
 static inline void d1_12_read_diag_syscall_post(struct process *p, int64_t ret)
@@ -68,14 +68,14 @@ static inline void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
 	(void)kcopy_len;
 }
 
-static inline void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip,
-				      uint64_t rdx, uint64_t rsi, uint64_t rdi)
+static inline void d1_12_read_diag_pf(struct process *p, uint64_t fault_pc,
+				      uint64_t arg2, uint64_t arg1, uint64_t arg0)
 {
 	(void)p;
-	(void)fault_rip;
-	(void)rdx;
-	(void)rsi;
-	(void)rdi;
+	(void)fault_pc;
+	(void)arg2;
+	(void)arg1;
+	(void)arg0;
 }
 
 #endif /* DEBUG_D1_DIAG */

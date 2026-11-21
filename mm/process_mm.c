@@ -15,6 +15,7 @@
 #include <ir0/process.h>
 #include <ir0/kmem.h>
 #include <ir0/mm_struct.h>
+#include <ir0/page.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <string.h>
@@ -93,7 +94,7 @@ static uint64_t *process_pt_child(uint64_t *table, size_t index)
 		return NULL;
 	if (mm_pte_large(table[index]))
 		return NULL;
-	return (uint64_t *)mm_pte_phys(table[index]);
+	return phys_to_virt(mm_pte_phys(table[index]));
 }
 
 void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,

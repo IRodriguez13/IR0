@@ -26,6 +26,20 @@ int get_cpu_brand_string(char *buf, size_t size);
 int get_cpu_feature_bits(uint32_t *out_edx, uint32_t *out_ecx);
 int hypervisor_present(void);
 int hypervisor_vendor(char *buf, size_t n);
+
+enum ir0_hv_kind
+{
+	IR0_HV_NONE = 0,
+	IR0_HV_KVM,
+	IR0_HV_XEN,
+	IR0_HV_OTHER
+};
+
+/*
+ * Hardware probe. Returns 0 and writes *kind when the probe ran.
+ * Returns -1 when the probe did not run; that is not bare metal.
+ */
+int hypervisor_kind(enum ir0_hv_kind *kind);
 uint32_t get_cpu_clflush_size(void);
 
 void timer_init(void);

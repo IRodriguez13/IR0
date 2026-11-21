@@ -20,6 +20,7 @@
 #include <ir0/page_fault.h>
 #include <ir0/errno.h>
 #include <ir0/fault.h>
+#include <ir0/signals.h>
 #include <asm/esr.h>
 #include <string.h>
 
@@ -86,17 +87,20 @@ void arm64_fault_from_esr(struct ir0_fault *fault, uint64_t esr, uint64_t pc,
 	{
 	case ESR_EC_BRK64:
 		fault->kind = IR0_FAULT_BREAKPOINT;
+		fault->si_code = TRAP_BRKPT;
 		break;
 	case ESR_EC_PC_ALIGN:
 	case ESR_EC_SP_ALIGN:
 		fault->kind = IR0_FAULT_ALIGNMENT;
 		fault->addr = (uintptr_t)far;
+		fault->si_code = BUS_ADRALN;
 		break;
 	case ESR_EC_FP_EXC64:
 		fault->kind = IR0_FAULT_ARITHMETIC;
 		break;
-	case ESR_EC_UNKNOWN:
+	case ESR_EC_UNKNOWN: /* undefined insn → SIGILL / ILL_ILLOPC */
 		fault->kind = IR0_FAULT_ILLEGAL_INSN;
+		fault->si_code = ILL_ILLOPC;
 		break;
 	default:
 		fault->kind = IR0_FAULT_OTHER;

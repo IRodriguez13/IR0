@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <ir0/mm_struct.h>
@@ -123,7 +123,7 @@ void process_mm_bind(process_t *p, mm_struct_t *mm)
 	p->mm = mm;
 	if (mm && mm->page_directory)
 		task_set_mm_root(&p->task,
-				 (uint64_t)(uintptr_t)mm->page_directory);
+				 (uint64_t)virt_to_phys(mm->page_directory));
 }
 
 int process_mm_share(process_t *child, process_t *parent)

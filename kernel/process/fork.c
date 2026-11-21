@@ -13,16 +13,18 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/clock.h>
 #include <ir0/clone.h>
 #include <ir0/fork.h>
 #include <ir0/process_limits.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <ir0/process_domains.h>
 #include <ir0/mm_struct.h>
 #include <ir0/files_struct.h>
 #include <ir0/ktm/checkpoint.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/syscall_frame.h>
+#include <ir0/sysv_shm.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 
@@ -32,7 +34,8 @@ static ir0_spinlock_t fork_link_lock;
  * Transactional child construction — no memcpy(process_t). Each domain is
  * cloned explicitly; resource handles start NULL until their phase succeeds.
  */
-static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
+static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out,
+				     unsigned long clone_flags)
 {
 	process_t *child;
 	pid_t child_pid;
@@ -63,9 +66,10 @@ static process_t *fork_process_create(process_t *parent, pid_t *child_pid_out)
 	if (process_rel_init_child(child, parent, child_pid) < 0 ||
 	    process_cred_clone(child, parent) < 0 ||
 	    process_session_attrs_clone(child, parent) < 0 ||
-	    process_signals_clone(child, parent) < 0 ||
+	    process_signals_clone(child, parent, clone_flags) < 0 ||
 	    process_mm_cursor_clone(child, parent) < 0)
 	{
+		process_signals_drop(child);
 		kfree(child);
 		return NULL;
 	}
@@ -117,7 +121,7 @@ static int fork_child_mm_create(process_t *child, process_t *parent)
 		mm->stack_size = parent->mm->stack_size;
 	}
 	process_mm_bind(child, mm);
-	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
+	process_set_mm_root(child, (uint64_t)virt_to_phys(process_pgd(child)));
 
 	if (KTM_FAULT_HIT("process.fork_page_directory"))
 	{
@@ -207,9 +211,12 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 		files_put(child->files);
 		child->files = NULL;
 	}
+	/* Drop slots before the mm. Shared-mm children have none. */
+	sysv_shm_detach_process(child);
 	process_fork_destroy_child_mm(child);
 	process_fork_free_mmap_list(child);
 	process_kernel_stack_free(child);
+	process_signals_drop(child);
 	kfree(child);
 }
 
@@ -238,10 +245,10 @@ static void fork_child_set_user_stack(process_t *child, void *stack)
  */
 pid_t fork(void)
 {
-	return fork_with_stack(NULL);
+	return fork_with_stack(NULL, 0);
 }
 
-pid_t fork_with_stack(void *child_stack)
+pid_t fork_with_stack(void *child_stack, unsigned long clone_flags)
 {
 	process_t *parent = current_process;
 	process_t *child;
@@ -251,11 +258,24 @@ pid_t fork_with_stack(void *child_stack)
 	if (!parent)
 		return -1;
 
-	child = fork_process_create(parent, &child_pid);
+	child = fork_process_create(parent, &child_pid, clone_flags);
 	if (!child)
 		return -ENOMEM;
 
-	if (fork_child_mm_create(child, parent) != 0)
+	/*
+	 * CLONE_VM without CLONE_THREAD (clone_thread owns that pair) shares
+	 * the parent's mm. fork() passes flags 0 and still copies.
+	 */
+	if (clone_flags & CLONE_VM)
+	{
+		if (process_mm_share(child, parent) < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return -ENOMEM;
+		}
+		process_set_mm_root(child, process_mm_root(parent));
+	}
+	else if (fork_child_mm_create(child, parent) != 0)
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
@@ -268,14 +288,27 @@ pid_t fork_with_stack(void *child_stack)
 		return -ENOMEM;
 	}
 
-	if (KTM_FAULT_HIT("process.fork_cow") || copy_process_memory(parent, child) != 0)
+	if (!(clone_flags & CLONE_VM) &&
+	    (KTM_FAULT_HIT("process.fork_cow") || copy_process_memory(parent, child) != 0))
 	{
 		fork_rollback(child, child_pid, 0);
 		return -ENOMEM;
 	}
 
+	if (!(clone_flags & CLONE_VM))
 	{
 		struct mmap_region *mmap_list;
+
+		/*
+		 * Page tables exist and already share the parent's user
+		 * frames as COW. Shm must stay on the segment frames.
+		 */
+		ret = sysv_shm_fork(parent, child);
+		if (ret < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return ret;
+		}
 
 		if (KTM_FAULT_HIT("process.fork_mmap_clone"))
 		{
@@ -309,7 +342,7 @@ pid_t fork_with_stack(void *child_stack)
 		return -ENOMEM;
 	}
 
-	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
+	process_set_mm_root(child, (uint64_t)virt_to_phys(process_pgd(child)));
 	child->task.pid = child_pid;
 	process_tls_set(child, process_tls_get(parent));
 
@@ -453,6 +486,8 @@ void process_vfork_complete(process_t *child)
 	{
 		sched_add(parent);
 		sched_promote(parent);
+		/* Child syscall exit takes the flag and runs the parent. */
+		clock_request_sched_resched();
 	}
 }
 
@@ -489,7 +524,7 @@ void process_mm_release_on_exit(process_t *dying)
 	mm = dying->mm;
 	if (!mm)
 		return;
-	user_root = mm->page_directory ? (uintptr_t)mm->page_directory : 0;
+	user_root = mm->page_directory ? virt_to_phys(mm->page_directory) : 0;
 	if (user_root && paging_current_address_space() == user_root)
 	{
 		kernel_root = paging_kernel_address_space();
@@ -505,7 +540,7 @@ void process_mm_release_on_exit(process_t *dying)
  * vfork() — share mm, run the child immediately, block the parent until the
  * child calls process_vfork_complete() from exec or _exit.
  */
-pid_t vfork_process(void *child_stack)
+pid_t vfork_process(void *child_stack, unsigned long clone_flags)
 {
 	process_t *parent = current_process;
 	process_t *child;
@@ -517,7 +552,8 @@ pid_t vfork_process(void *child_stack)
 	if (!parent->mm)
 		return -ENOMEM;
 
-	child = fork_process_create(parent, &child_pid);
+	/* vfork(2) passes 0. clone(CLONE_VFORK|CLONE_SIGHAND) shares the table. */
+	child = fork_process_create(parent, &child_pid, clone_flags);
 	if (!child)
 		return -ENOMEM;
 
@@ -599,7 +635,7 @@ pid_t clone_thread(unsigned long flags, void *stack, int *parent_tid,
 	if (!stack)
 		return -EINVAL;
 
-	child = fork_process_create(parent, &child_pid);
+	child = fork_process_create(parent, &child_pid, flags);
 	if (!child)
 		return -ENOMEM;
 

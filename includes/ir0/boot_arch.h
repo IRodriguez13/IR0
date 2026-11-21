@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 struct ir0_boot_params;
+struct driver_boot_table;
 
 #ifdef __cplusplus
 extern "C"
@@ -28,16 +29,16 @@ void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params);
 
 /**
  * Optional smoke tag immediately before init handoff / first schedule to EL0.
- * Product images use this for QEMU autokill; default is empty.
+ * Product images use this for QEMU autokill; x86-64 leaves it empty.
  */
 void ir0_boot_arch_userspace_handoff_smoke(void);
 
 /**
- * ir0_boot_arch_drivers() - register the platform's device drivers with
- * driver_bootstrap_register(). Every ISA defines it (PC:
+ * ir0_boot_arch_driver_table - the platform's boot driver table
+ * (<ir0/driver_bootstrap.h>). Every ISA defines it (PC:
  * arch/x86-64/sources/boot_drivers.c; arm64: arch/arm64/sources/boot_arch.c).
  */
-void ir0_boot_arch_drivers(void);
+extern const struct driver_boot_table ir0_boot_arch_driver_table;
 
 #ifdef __cplusplus
 }

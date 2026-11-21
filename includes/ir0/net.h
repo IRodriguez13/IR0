@@ -80,12 +80,12 @@ int net_stack_post_irq_init(void);
 void net_stack_poll(void);
 
 /*
- * x86 PIC bridge until its ISR calls irq_dispatch(): the first NIC IRQ line
- * to unmask, and the per-interrupt hook that dispatches NIC lines and polls
- * the devices that have none.
+ * x86 PIC bridge: the first NIC IRQ line to unmask, and the hook the ISR
+ * runs after irq_dispatch() that polls the devices without a line on every
+ * interrupt that is not a NIC line.
  */
 int net_stack_get_irq_line(void);
-int net_stack_handle_irq(uint8_t irq);
+void net_stack_handle_irq(uint8_t irq);
 
 /* NET_GET_ECHO_RESULT: the next ICMP echo reply for the caller. */
 struct icmp_echo_result {

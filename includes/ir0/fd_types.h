@@ -20,7 +20,11 @@
 struct devfs_node;
 struct fd_resource_ops;
 
-#define MAX_FDS_PER_PROCESS 64
+/* Linux nr_open analogue: RLIMIT_NOFILE cannot exceed this. */
+#define IR0_NOFILE_CEILING 4096
+/* Soft default, Linux INR_OPEN. The table itself starts smaller and grows. */
+#define IR0_NOFILE_SOFT_DEFAULT 1024
+#define IR0_FD_INITIAL 32
 
 typedef struct fd_entry
 {

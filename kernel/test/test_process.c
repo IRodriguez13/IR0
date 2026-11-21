@@ -15,11 +15,11 @@
 #include "test/ktest_harness.h"
 #include <ir0/process.h>
 #include <kernel/syscalls/syscalls.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/tls.h>
 #include <ir0/errno.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
-#include <ir0/wait.h>
+#include <ir0/wait_status.h>
 #include <ir0/clone.h>
 #include <string.h>
 

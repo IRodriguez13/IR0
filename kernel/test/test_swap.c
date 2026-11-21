@@ -9,7 +9,7 @@
 
 #include "test/ktest_harness.h"
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/errno.h>
 #include <ir0/swap.h>
 #include <string.h>

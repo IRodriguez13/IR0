@@ -119,7 +119,7 @@ struct ext2_dirent
 struct ext2_vol
 {
 	int in_use;
-	char blk_name[16];
+	dev_t dev;
 	char mount_path[EXT2_MAX_PATH];
 	uint32_t block_size;
 	uint32_t inodes_per_group;
@@ -147,7 +147,7 @@ static int ext2_read_block(struct ext2_vol *v, uint32_t block, void *buf)
 
 	if (block >= v->blocks_count)
 		return -EIO;
-	if (ir0_block_read_by_name(v->blk_name, lba, sectors, buf))
+	if (ir0_block_read(v->dev, lba, sectors, buf))
 		return -EIO;
 	return 0;
 }
@@ -159,7 +159,7 @@ static int ext2_write_block(struct ext2_vol *v, uint32_t block, const void *buf)
 
 	if (block >= v->blocks_count)
 		return -EIO;
-	if (ir0_block_write_by_name(v->blk_name, lba, sectors, buf))
+	if (ir0_block_write(v->dev, lba, sectors, buf))
 		return -EIO;
 	return 0;
 }
@@ -170,10 +170,10 @@ static int ext2_write_metadata(struct ext2_vol *v)
 	uint8_t *buf;
 	int ret;
 
-	if (ir0_block_read_by_name(v->blk_name, 2, 2, sector))
+	if (ir0_block_read(v->dev, 2, 2, sector))
 		return -EIO;
 	memcpy(sector, &v->super, sizeof(v->super));
-	if (ir0_block_write_by_name(v->blk_name, 2, 2, sector))
+	if (ir0_block_write(v->dev, 2, 2, sector))
 		return -EIO;
 	buf = kmalloc(v->block_size);
 	if (!buf)
@@ -1492,6 +1492,7 @@ static int ext2_disk_mount(const char *dev, const char *mount_dir)
 {
 	struct ext2_vol *slot = NULL;
 	char blk[16];
+	dev_t id;
 	uint8_t sector[1024];
 	struct ext2_super *sb;
 	struct ext2_bgd *bgd;
@@ -1513,11 +1514,12 @@ static int ext2_disk_mount(const char *dev, const char *mount_dir)
 	ret = ext2_parse_dev(dev, blk, sizeof(blk));
 	if (ret != 0)
 		return ret;
-	if (!ir0_block_name_is_present(blk))
+	id = ir0_block_lookup_by_name(blk);
+	if (!ir0_block_is_present(id))
 		return -ENXIO;
 
 	/* Superblock at byte 1024 → LBA 2 for 512-byte sectors. */
-	if (ir0_block_read_by_name(blk, 2, 2, sector))
+	if (ir0_block_read(id, 2, 2, sector))
 		return -EIO;
 	sb = (struct ext2_super *)sector;
 	if (sb->s_magic != EXT2_MAGIC)
@@ -1534,7 +1536,7 @@ static int ext2_disk_mount(const char *dev, const char *mount_dir)
 		return -ENOTSUPP;
 
 	memset(slot, 0, sizeof(*slot));
-	strncpy(slot->blk_name, blk, sizeof(slot->blk_name) - 1);
+	slot->dev = id;
 	slot->block_size = 1024U << sb->s_log_block_size;
 	slot->inodes_per_group = sb->s_inodes_per_group;
 	slot->inode_size = sb->s_inode_size ? sb->s_inode_size : 128;
@@ -1560,7 +1562,7 @@ static int ext2_disk_mount(const char *dev, const char *mount_dir)
 			uint32_t sectors = slot->block_size / 512;
 			uint32_t lba = gd_block * sectors;
 
-			if (ir0_block_read_by_name(blk, lba, sectors, gbuf))
+			if (ir0_block_read(id, lba, sectors, gbuf))
 				ret = -EIO;
 		}
 		if (ret != 0)

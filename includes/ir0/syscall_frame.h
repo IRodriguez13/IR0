@@ -34,7 +34,7 @@ struct process;
  */
 void syscall_capture_frame_at_entry(struct process *p,
 						 uint64_t *frame_base,
-						 uint64_t rip_hw);
+						 uint64_t ip_hw);
 
 /*
  * Write process->syscall_frame back onto the ISA syscall exit frame, so the

@@ -21,7 +21,7 @@ LDFLAGS    =
 
 TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_registry.c test_pseudo_fs_proc_registry.c \
-	test_pseudo_fs_children.c \
+	test_pseudo_fs_children.c test_heartfs_vfs.c test_sysfs_vfs.c \
 	test_usb_pci_scan.c test_bt_scan_sync.c \
 	test_vfs_backend_contract.c 	test_stat_user_abi.c \
 	test_named_fifo_supervise.c 	test_path_resolve_at.c \
@@ -71,15 +71,16 @@ TEST_SRCS += test_fault_signal.c
 # The freestanding string library is compiled into the host suite under
 # ir0_* names so width/precision and alignment fast paths are unit-tested.
 TEST_SRCS += test_kernel_string.c
-KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
+KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_heartfs.o host_sysfs.o \
+	host_usb_host_disabled.o \
 	host_kernel_string.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
 	host_open_flags.o host_bpath.o host_bpivot_stub.o \
-	host_sysfs_net_stub.o host_sysfs_honesty_stub.o \
+	host_sysfs_net_stub.o host_sysfs_attr_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
-	host_ps2_set1.o host_ps2_mouse_pkt.o \
+	host_ps2_set1.o host_keymap.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
 KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o \
 	host_alloc_policy.o host_no_mmu.o
@@ -125,6 +126,24 @@ KERNEL_CC = $(CC) $(KERNEL_CFLAGS) -c -o $@ $<
 	$(KERNEL_CC)
 
 host_pseudo_fs_registry.o: $(KERNEL_ROOT)/fs/pseudo_fs_registry.c
+	$(CC) $(KERNEL_CFLAGS) -include stdio.h -c -o $@ $<
+
+HEART_SRC_BLOB := $(KERNEL_ROOT)/includes/generated/heart_src_blob.h
+
+$(HEART_SRC_BLOB): $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py
+	python3 $< --root $(KERNEL_ROOT) --out $@
+
+host_heartfs.o: $(KERNEL_ROOT)/fs/heartfs/heartfs.c $(HEART_SRC_BLOB)
+	$(CC) $(KERNEL_CFLAGS) -include stdio.h \
+		-DIR0_BUILD_DATE_STRING='"host"' -DIR0_BUILD_TIME_STRING='"host"' \
+		-DIR0_BUILD_USER_STRING='"host"' -DIR0_BUILD_HOST_STRING='"host"' \
+		-DIR0_BUILD_CC_STRING='"$(CC)"' -c -o $@ $<
+
+host_sysfs.o: $(KERNEL_ROOT)/fs/sysfs/sysfs.c
+	$(CC) $(KERNEL_CFLAGS) -I$(KERNEL_ROOT)/fs -include stdio.h -DTEST_HOST \
+		-DCONFIG_ENABLE_NETWORKING=0 -DCONFIG_ENABLE_BLUETOOTH=0 -c -o $@ $<
+
+host_sysfs_attr_stub.o: host_sysfs_attr_stub.c
 	$(CC) $(KERNEL_CFLAGS) -include stdio.h -c -o $@ $<
 
 host_usb_host_disabled.o: $(KERNEL_ROOT)/drivers/usb/usb_host.c
@@ -201,7 +220,7 @@ host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
 
-host_syscall_table.o: $(KERNEL_ROOT)/kernel/syscalls/syscall_table.c \
+host_syscall_table.o: $(KERNEL_ROOT)/kernel/entry/syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
 	$(KERNEL_CC)
 
@@ -267,7 +286,7 @@ host_x86_elf_policy.o: $(KERNEL_ROOT)/arch/x86-64/sources/elf_policy.c
 		-Delf_local_reloc_value=x86_test_elf_local_reloc_value \
 		-c -o $@ $<
 
-host_fault.o: $(KERNEL_ROOT)/kernel/problems/fault.c $(KERNEL_ROOT)/includes/ir0/fault.h
+host_fault.o: $(KERNEL_ROOT)/kernel/panic/fault.c $(KERNEL_ROOT)/includes/ir0/fault.h
 	$(KERNEL_CC)
 
 test_arm64_syscall_decode.o: test_arm64_syscall_decode.c \
@@ -294,7 +313,7 @@ host_pipe.o: $(KERNEL_ROOT)/fs/pipe.c
 host_blockdev.o: $(KERNEL_ROOT)/block/blockdev.c
 	$(CC) $(KERNEL_CFLAGS) -DTEST_HOST -c -o $@ $<
 
-host_elf64_image.o: $(KERNEL_ROOT)/kernel/exec/elf64_image.c
+host_elf64_image.o: $(KERNEL_ROOT)/fs/elf64_image.c
 	$(KERNEL_CC)
 
 host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/exec/early_elf_stack.c
@@ -310,6 +329,9 @@ host_arch_mm_stub.o: host_arch_mm_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 host_ps2_set1.o: $(KERNEL_ROOT)/drivers/input/ps2_set1.c
+	$(KERNEL_CC)
+
+host_keymap.o: $(KERNEL_ROOT)/drivers/input/keymap.c
 	$(KERNEL_CC)
 
 host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/drivers/input/ps2_mouse_pkt.c

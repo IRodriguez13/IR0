@@ -79,17 +79,35 @@ typewriter_get_mode (nothing; the mode is write-only)
 typewriter_is_enabled_for_commands (nothing)
 typewriter_print typewriter_print_char()
 typewriter_print_uint32 typewriter_print_char()
+typewriter_set_mode (nothing; the console never delays output)
+typewriter_console_clear vt_clear()
+typewriter_console_scroll vt_scroll()
+typewriter_cursor_x vt_cursor_x()
+typewriter_init vt_init()
+typewriter_putchar_attr vt_putchar_attr()
+typewriter_show_cursor vt_show_cursor()
+typewriter_vga_print vt_print()
+typewriter_vga_print_char vt_putchar()
+console_renderer_get_cursor_x vt_cursor_x()
+console_renderer_putchar vt_putchar()
+console_renderer_putchar_attr vt_putchar_attr()
+console_renderer_reset vt_clear()
+console_renderer_show_cursor vt_show_cursor()
 uint_to_hex snprintf("%lx")
 
 # Block devices: one facade, <ir0/blockdev.h> (ir0_block_*).
 BLOCK_DEV_SECTOR_SIZE struct ir0_block_info.sector_size
 block_dev_count ir0_block_count()
-block_dev_get_sector_count ir0_block_sector_count_by_name()
-block_dev_is_present ir0_block_name_is_present()
+block_dev_get_sector_count ir0_block_lookup_by_name() + ir0_block_sector_count()
+block_dev_is_present ir0_block_lookup_by_name() != 0
 block_dev_legacy_name ir0_block_legacy_name()
 block_dev_name_at ir0_block_name_at()
-block_dev_read_sectors ir0_block_read_by_name()
-block_dev_write_sectors ir0_block_write_by_name()
+block_dev_read_sectors ir0_block_lookup_by_name() + ir0_block_read()
+block_dev_write_sectors ir0_block_lookup_by_name() + ir0_block_write()
+ir0_block_name_is_present ir0_block_lookup_by_name() != 0
+ir0_block_read_by_name ir0_block_lookup_by_name() + ir0_block_read()
+ir0_block_sector_count_by_name ir0_block_lookup_by_name() + ir0_block_sector_count()
+ir0_block_write_by_name ir0_block_lookup_by_name() + ir0_block_write()
 
 # Screen output (vga.h): print / print_colored / print_screen_only only;
 # numbers go through snprintf() first.
@@ -102,6 +120,9 @@ print_success print_colored(VGA_COLOR_GREEN)
 print_uint32 snprintf("%u") and print()
 print_uint64 snprintf("%lu") and print()
 print_warning print_colored(VGA_COLOR_YELLOW)
+
+# printk sinks (<ir0/printk_console.h>): klog writes to registered consoles.
+klog_set_screen_sink register_console() with CON_DUMP
 
 # Locks: one API, ir0_spin_lock_irqsave / ir0_spin_unlock_irqrestore on an
 # ir0_spinlock_t per protected structure (<ir0/spinlock.h>).
@@ -225,3 +246,15 @@ ir0_access_path_routed_groups ir0_access_path_routed() with a struct ir0_task_cr
 ir0_check_file_access a stat (vfs_stat()) + generic_permission()
 is_root ir0_cred_is_root()
 process_cred_init_groups (nothing; the supplementary groups are what setgroups(2) set, possibly none)
+
+# Syscalls (uapi asm/unistd_ir0.h): clear and scroll left the table.
+# keymap_get/set stay: ISD firstboot still calls 442 and 443.
+__NR_console_scroll CSI through the console renderer
+__NR_console_clear CSI through the console renderer
+
+# Driver bootstrap (includes/ir0/driver_bootstrap.h): drivers are listed in
+# a struct driver_boot_entry table, never registered at runtime.
+driver_bootstrap_register an entry in a driver_boot_entry table
+driver_bootstrap_reset (nothing; the tables are const)
+driver_bootstrap_run_all driver_bootstrap_run()
+ir0_boot_arch_drivers ir0_boot_arch_driver_table

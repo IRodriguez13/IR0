@@ -15,15 +15,12 @@
 #include <ir0/vga.h>
 #include <stddef.h>
 #include <string.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_io.h>
 #include <ir0/cpu.h>
 #include <ir0/delay.h>
 #include <drivers/dma/dma.h>
 #include <ir0/kmem.h>
 #include <drivers/timer/pit/pit.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
 #include <ir0/resource_registry.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/irq.h>
@@ -101,20 +98,28 @@ static const struct audio_ops sb16_audio_ops = {
 
 bool sb16_init(void)
 {
-    LOG_INFO("SB16", "Registering Sound Blaster 16 driver...");
+    klog_info("SB16", "Registering Sound Blaster 16 driver...");
     audio_register_device(&sb16_audio_ops);
     ir0_register_driver(&sb16_info, &sb16_ops);
     return true;
 }
 
+static void sb16_irq(uint32_t irq, void *data)
+{
+    (void)irq;
+    (void)data;
+    if (sb16_is_available())
+        sb16_irq_handler();
+}
+
 static int32_t sb16_hw_init(void)
 {
-    LOG_INFO("SB16", "Initializing Sound Blaster 16 hardware...");
+    klog_info("SB16", "Initializing Sound Blaster 16 hardware...");
 
     /* Reset the DSP */
     if (!sb16_reset_dsp())
     {
-        LOG_WARNING("SB16", "DSP not detected (normal if no SB16 hardware)");
+        klog_warn("SB16", "DSP not detected (normal if no SB16 hardware)");
         return IR0_DRIVER_ABSENT;
     }
 
@@ -122,12 +127,12 @@ static int32_t sb16_hw_init(void)
     uint16_t version = sb16_get_dsp_version();
     if (version == 0)
     {
-        LOG_WARNING("SB16", "DSP version unavailable (treating as absent)");
+        klog_warn("SB16", "DSP version unavailable (treating as absent)");
         return IR0_DRIVER_ABSENT;
     }
 
     sb16_state.dsp_version = version;
-    LOG_INFO_FMT("SB16", "DSP Version %d.%d detected", version >> 8, version & 0xFF);
+    klog_info_fmt("SB16", "DSP Version %d.%d detected", version >> 8, version & 0xFF);
     klog_smoke("SB16_DSP_OK");
 
     /* Route IRQ5 + 8-bit DMA1 (mixer 80h/81h bitmasks — OSDev SB16). */
@@ -140,6 +145,8 @@ static int32_t sb16_hw_init(void)
     sb16_state.initialized = true;
     resource_register_ioport(SB16_BASE_PORT, SB16_ACK_16BIT, "sound blaster");
     resource_register_irq(SB16_IRQ, "sb16");
+    if (irq_request(SB16_IRQ, sb16_irq, NULL, "sb16") != 0)
+        klog_warn("SB16", "IRQ line already claimed");
     irq_unmask_line(SB16_IRQ);
     return 0;
 }

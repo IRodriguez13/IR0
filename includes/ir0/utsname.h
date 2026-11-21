@@ -64,8 +64,9 @@ _Static_assert(sizeof(struct utsname) == 390,
 	       "Linux new_utsname ABI must contain six 65-byte fields");
 
 /*
- * Fill version string: "<UP|SMP> <RR|Priority>" from online CPUs and
- * active scheduler policy (not compile-time macros alone).
+ * Fill version string: "<UP|SMP> <Priority|RR|CFS|name>" from online CPUs
+ * and sched_policy_name() (not compile-time macros alone). NULL is RR;
+ * any other name is kept unchanged.
  */
 void ir0_utsname_fill_version(char *dst, size_t n);
 

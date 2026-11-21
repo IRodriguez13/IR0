@@ -33,20 +33,20 @@ struct d1_12_last_read
 	size_t   kcopy_len;
 	uint8_t  kpreview[D1_12_PREVIEW];
 	uint8_t  upreview[D1_12_PREVIEW];
-	uint64_t pre_rax;
-	uint64_t pre_rdi;
-	uint64_t pre_rsi;
-	uint64_t pre_rdx;
-	uint64_t pre_rcx;
-	uint64_t pre_r8;
-	uint64_t pre_r9;
-	uint64_t pre_r10;
-	uint64_t pre_rip;
-	uint64_t pre_rsp;
-	uint64_t post_rax;
-	uint64_t restore_rdx;
-	uint64_t restore_rsi;
-	uint64_t restore_rdi;
+	uint64_t pre_ret;
+	uint64_t pre_arg0;
+	uint64_t pre_arg1;
+	uint64_t pre_arg2;
+	uint64_t pre_pad;
+	uint64_t pre_arg4;
+	uint64_t pre_arg5;
+	uint64_t pre_arg3;
+	uint64_t pre_pc;
+	uint64_t pre_sp;
+	uint64_t post_ret;
+	uint64_t restore_arg2;
+	uint64_t restore_arg1;
+	uint64_t restore_arg0;
 	size_t   tty_line_len;
 };
 
@@ -95,14 +95,11 @@ static void d1_12_read_user_preview(struct process *p, uintptr_t buf,
 }
 
 void d1_12_read_diag_syscall_pre(struct process *p, int fd, uintptr_t buf,
-				 size_t count, uint64_t rip)
+				 size_t count, uint64_t pc)
 {
-	const syscall_user_frame_t *sf;
-
 	if (!d1_12_target(p))
 		return;
 
-	sf = &p->syscall_frame;
 	d1_12_seq++;
 	d1_12_last.valid = 1;
 	d1_12_last.seq = d1_12_seq;
@@ -113,16 +110,16 @@ void d1_12_read_diag_syscall_pre(struct process *p, int fd, uintptr_t buf,
 	d1_12_last.kcopy_len = 0;
 	memset(d1_12_last.kpreview, 0, sizeof(d1_12_last.kpreview));
 	memset(d1_12_last.upreview, 0, sizeof(d1_12_last.upreview));
-	d1_12_last.pre_rax = 0;
-	d1_12_last.pre_rdi = sf->rdi;
-	d1_12_last.pre_rsi = sf->rsi;
-	d1_12_last.pre_rdx = sf->rdx;
-	d1_12_last.pre_rcx = 0;
-	d1_12_last.pre_r8 = sf->r8;
-	d1_12_last.pre_r9 = sf->r9;
-	d1_12_last.pre_r10 = sf->r10;
-	d1_12_last.pre_rip = sf->rip;
-	d1_12_last.pre_rsp = sf->rsp;
+	d1_12_last.pre_ret = 0;
+	d1_12_last.pre_arg0 = process_syscall_arg(p, 0);
+	d1_12_last.pre_arg1 = process_syscall_arg(p, 1);
+	d1_12_last.pre_arg2 = process_syscall_arg(p, 2);
+	d1_12_last.pre_pad = 0;
+	d1_12_last.pre_arg4 = process_syscall_arg(p, 4);
+	d1_12_last.pre_arg5 = process_syscall_arg(p, 5);
+	d1_12_last.pre_arg3 = process_syscall_arg(p, 3);
+	d1_12_last.pre_pc = process_syscall_ip(p);
+	d1_12_last.pre_sp = process_syscall_sp(p);
 
 	if (p->comm[0] == 's' && p->comm[1] == 'h' && p->comm[2] == '\0')
 		d1_12_last_sh = d1_12_last;
@@ -133,8 +130,8 @@ void d1_12_read_diag_syscall_pre(struct process *p, int fd, uintptr_t buf,
 		       (unsigned long long)(uint64_t)fd,
 		       (unsigned long long)(uint64_t)buf,
 		       (unsigned long long)(uint64_t)count,
-		       (unsigned long long)rip,
-		       (unsigned long long)sf->rdx);
+		       (unsigned long long)pc,
+		       (unsigned long long)process_syscall_arg(p, 2));
 }
 
 void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
@@ -170,34 +167,34 @@ void d1_12_read_diag_kcopy(int64_t ret, size_t req_count,
 
 void d1_12_read_diag_syscall_post(struct process *p, int64_t ret)
 {
-	const syscall_user_frame_t *sf;
-	const char *magic_rdx = "";
-	const char *magic_rax = "";
-	const char *rdx_neq = "";
+	const char *magic_arg2 = "";
+	const char *magic_ret = "";
+	const char *arg2_neq = "";
 
 	if (!d1_12_target(p) || !d1_12_last.valid)
 		return;
 
-	sf = &p->syscall_frame;
-	d1_12_last.post_rax = (uint64_t)ret;
-	d1_12_last.restore_rdx = sf->rdx;
-	d1_12_last.restore_rsi = sf->rsi;
-	d1_12_last.restore_rdi = sf->rdi;
+	d1_12_last.post_ret = (uint64_t)ret;
+	d1_12_last.restore_arg2 = process_syscall_arg(p, 2);
+	d1_12_last.restore_arg1 = process_syscall_arg(p, 1);
+	d1_12_last.restore_arg0 = process_syscall_arg(p, 0);
 	if (ret > 0)
 		d1_12_last.ret = ret;
 
-	if (sf->rdx == D1_12_MAGIC_LEN)
-		magic_rdx = " RDX_EQ_1AF43F=1";
+	if (process_syscall_arg(p, 2) == D1_12_MAGIC_LEN)
+		magic_arg2 = " RDX_EQ_1AF43F=1";
 	if ((uint64_t)ret == D1_12_MAGIC_LEN)
-		magic_rax = " RAX_EQ_1AF43F=1";
-	if (sf->rdx != d1_12_last.req_count)
-		rdx_neq = " RDX_NEQ_REQ=1";
+		magic_ret = " RAX_EQ_1AF43F=1";
+	if (process_syscall_arg(p, 2) != d1_12_last.req_count)
+		arg2_neq = " RDX_NEQ_REQ=1";
 
 	klog_debug_fmt("D1.12",
 		       "[D1.12][READ_POST] seq=%x ret_rax=%llx restore_rdx=%llx restore_rsi=%llx restore_rdi=%llx%s%s%s",
 		       (unsigned)d1_12_last.seq, (unsigned long long)(uint64_t)ret,
-		       (unsigned long long)sf->rdx, (unsigned long long)sf->rsi,
-		       (unsigned long long)sf->rdi, magic_rdx, magic_rax, rdx_neq);
+		       (unsigned long long)process_syscall_arg(p, 2),
+		       (unsigned long long)process_syscall_arg(p, 1),
+		       (unsigned long long)process_syscall_arg(p, 0),
+		       magic_arg2, magic_ret, arg2_neq);
 
 	if (ret > 0 && d1_12_last.user_buf)
 		d1_12_read_user_preview(p, d1_12_last.user_buf, (size_t)ret);
@@ -224,8 +221,8 @@ void d1_12_read_diag_tty_line(size_t line_len, const char *kline,
 				  kline_len);
 }
 
-void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip, uint64_t rdx,
-			uint64_t rsi, uint64_t rdi)
+void d1_12_read_diag_pf(struct process *p, uint64_t fault_pc, uint64_t arg2,
+			uint64_t arg1, uint64_t arg0)
 {
 	if (!d1_12_target(p))
 		return;
@@ -233,9 +230,9 @@ void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip, uint64_t rdx,
 	klog_debug_fmt("D1.12", "=== [D1.12][PF_CORRELATE] ===");
 	klog_debug_fmt("D1.12",
 		       "[D1.12][PF] rip=%llx memcpy_rdx=%llx rsi=%llx rdi=%llx%s",
-		       (unsigned long long)fault_rip, (unsigned long long)rdx,
-		       (unsigned long long)rsi, (unsigned long long)rdi,
-		       rdx == D1_12_MAGIC_LEN ? " MEMCPY_RDX_IS_1AF43F=1" : "");
+		       (unsigned long long)fault_pc, (unsigned long long)arg2,
+		       (unsigned long long)arg1, (unsigned long long)arg0,
+		       arg2 == D1_12_MAGIC_LEN ? " MEMCPY_RDX_IS_1AF43F=1" : "");
 
 	if (d1_12_last.valid)
 	{
@@ -246,20 +243,20 @@ void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip, uint64_t rdx,
 			       (unsigned long long)d1_12_last.req_count,
 			       (unsigned long long)d1_12_last.ret,
 			       (unsigned long long)d1_12_last.kcopy_len,
-			       (unsigned long long)d1_12_last.restore_rdx,
-			       (unsigned long long)d1_12_last.post_rax,
+			       (unsigned long long)d1_12_last.restore_arg2,
+			       (unsigned long long)d1_12_last.post_ret,
 			       (unsigned long long)d1_12_last.tty_line_len);
 
-		if (rdx == d1_12_last.restore_rdx)
+		if (arg2 == d1_12_last.restore_arg2)
 			klog_debug_fmt("D1.12",
 				       "[D1.12][MATCH] memcpy_rdx == read_restore_rdx");
-		if (rdx == (uint64_t)d1_12_last.req_count)
+		if (arg2 == (uint64_t)d1_12_last.req_count)
 			klog_debug_fmt("D1.12",
 				       "[D1.12][MATCH] memcpy_rdx == read_req_count");
-		if (rdx == (uint64_t)d1_12_last.ret)
+		if (arg2 == (uint64_t)d1_12_last.ret)
 			klog_debug_fmt("D1.12",
 				       "[D1.12][MATCH] memcpy_rdx == read_ret_rax");
-		if (d1_12_last.restore_rdx == d1_12_last.req_count)
+		if (d1_12_last.restore_arg2 == d1_12_last.req_count)
 			klog_debug_fmt("D1.12",
 				       "[D1.12][ABI] restore_rdx == req_count (preserved)");
 
@@ -278,18 +275,18 @@ void d1_12_read_diag_pf(struct process *p, uint64_t fault_rip, uint64_t rdx,
 			       (unsigned long long)d1_12_last_sh.req_count,
 			       (unsigned long long)d1_12_last_sh.ret,
 			       (unsigned long long)d1_12_last_sh.kcopy_len,
-			       (unsigned long long)d1_12_last_sh.restore_rdx,
-			       (unsigned long long)d1_12_last_sh.post_rax,
-			       (unsigned long long)d1_12_last_sh.pre_rip,
-			       (d1_12_last_sh.post_rax == 0 &&
+			       (unsigned long long)d1_12_last_sh.restore_arg2,
+			       (unsigned long long)d1_12_last_sh.post_ret,
+			       (unsigned long long)d1_12_last_sh.pre_pc,
+			       (d1_12_last_sh.post_ret == 0 &&
 				d1_12_last_sh.kcopy_len == 0) ?
 				       " SH_READ_INCOMPLETE=1" :
 				       "");
 
-		if (rdx == d1_12_last_sh.restore_rdx)
+		if (arg2 == d1_12_last_sh.restore_arg2)
 			klog_debug_fmt("D1.12",
 				       "[D1.12][SH_MATCH] memcpy_rdx == sh_restore_rdx");
-		if (rdx == (uint64_t)d1_12_last_sh.req_count)
+		if (arg2 == (uint64_t)d1_12_last_sh.req_count)
 			klog_debug_fmt("D1.12",
 				       "[D1.12][SH_MATCH] memcpy_rdx == sh_req_count");
 	}

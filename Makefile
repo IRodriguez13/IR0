@@ -406,9 +406,6 @@ IR0_DISK ?= disk.img
 # KERNEL OBJECTS 
 
 KERNEL_OBJS = \
-	arch/common/boot_arch.o \
-	arch/common/boot_port.o \
-	arch/common/oops_port.o \
 	kernel/main.o \
 	kernel/boot/boot_init.o \
 	kernel/boot/boot_firmware_sysfs.o \
@@ -420,14 +417,18 @@ KERNEL_OBJS = \
 	kernel/process/registry_lock.o \
     kernel/process/limits.o \
     kernel/process/core.o \
-    sched/trace.o \
+    ktm/sched_trace.o \
     kernel/process/create.o \
     kernel/process/domains.o \
     mm/mm_struct.o \
+    mm/brk.o \
+    mm/mmap.o \
+    mm/map_sys.o \
+    mm/va_search.o \
     fs/files_lifecycle.o \
     fs/files_struct.o \
     kernel/process/fork.o \
-    kernel/process/exec.o \
+    fs/exec.o \
     kernel/process/lifecycle.o \
     kernel/process/parent.o \
     kernel/process/resources.o \
@@ -448,6 +449,7 @@ KERNEL_OBJS = \
     kernel/signals/sigtramp.o \
 	kernel/time/clock_wait.o \
 	kernel/time/clock_accounting.o \
+	kernel/time/time_sys.o \
 	smp/cpu_topology.o \
 	smp/percpu.o \
     kernel/process/credentials.o \
@@ -467,11 +469,6 @@ KERNEL_OBJS = \
     kernel/syscalls/process_syscalls.o \
     kernel/syscalls/io_syscalls.o \
     kernel/syscalls/epoll_syscalls.o \
-    kernel/syscalls/time_syscalls.o \
-	kernel/syscalls/early_dispatch.o \
-	kernel/syscalls/early_time.o \
-	kernel/syscalls/early_io.o \
-	kernel/syscalls/early_vfs.o \
 	kernel/syscalls/erfs.o \
 	kernel/syscalls/erfs_fd.o \
 	kernel/syscalls/erfs_bind.o \
@@ -500,7 +497,7 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_process.o \
 	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \
-    kernel/syscalls/syscall_dispatch.o \
+    kernel/entry/syscall_dispatch.o \
     net/sock_udp.o \
     net/sock_icmp.o \
     net/sock_stream.o \
@@ -511,16 +508,16 @@ KERNEL_OBJS = \
     fs/timerfd.o \
     ipc/posix_shm.o \
     drivers/input/input_events.o \
-    kernel/exec/elf_loader.o \
+    fs/binfmt_elf.o \
     drivers/core/driver_registry.o \
     drivers/core/resource_registry.o \
     ipc/ipc.o \
     kernel/futex/futex.o \
     kernel/futex/syscalls.o \
-    net/net_compat.o \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
-    ktm/klog.o \
+    kernel/printk/klog.o \
+    kernel/printk/console.o \
 	sched/core.o \
     sched/idle.o \
     sched/switch/context_switch.o \
@@ -603,10 +600,11 @@ KERNEL_TEST_OBJS = \
 
 
 # Scheduler policy from menuconfig: link exactly one policy file
-# (sched/core.h). Policy 1 (CFS) is an honest RR alias — same object,
-# different policy name.
+# (sched/core.h). 0 round-robin, 1 CFS, 2 priority bands.
 ifeq ($(CONFIG_SCHEDULER_POLICY),2)
 KERNEL_OBJS += sched/prio.o
+else ifeq ($(CONFIG_SCHEDULER_POLICY),1)
+KERNEL_OBJS += sched/cfs.o
 else
 KERNEL_OBJS += sched/rr.o
 endif
@@ -628,6 +626,7 @@ MEMORY_OBJS = \
 	mm/uaccess/paging_uaccess.o \
 	mm/paging/paging_fork.o \
 	mm/paging/paging_identity.o \
+	mm/paging/direct_map.o \
 	mm/paging/paging_audit.o \
 	mm/paging/tlb_sync.o \
 	mm/alloc/pmm.o \
@@ -645,9 +644,9 @@ MEMORY_OBJS = \
 LIB_OBJS = \
     drivers/char/vga.o \
     kernel/boot/boot_log_hostshare.o \
-    kernel/problems/oops.o \
-    kernel/problems/problems.o \
-    kernel/problems/fault.o \
+    kernel/panic/oops.o \
+    kernel/panic/problems.o \
+    kernel/panic/fault.o \
     kernel/irq/irq_dispatch.o \
     kernel/signals/signals.o \
     kernel/signals/signal_diag.o \
@@ -659,7 +658,7 @@ LIB_OBJS = \
     fs/bpath.o \
     fs/bpivot.o \
     fs/bpivot_boot.o \
-    kernel/syscalls/syscall_table.o \
+    kernel/entry/syscall_table.o \
     fs/stat_user.o \
     fs/named_fifo.o \
     fs/named_socket.o \
@@ -670,14 +669,16 @@ LIB_OBJS = \
     kernel/sys/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
+    drivers/tty/tty_mirror.o \
     drivers/tty/tty_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
+    drivers/input/keymap.o \
     fs/utimens.o \
-    kernel/exec/exec_read_trace.o \
+    fs/exec_read_trace.o \
     fs/mount_prefix.o \
     block/blockdev.o \
-    kernel/exec/elf64_image.o \
+    fs/elf64_image.o \
     kernel/exec/early_elf_stack.o \
     $(MM_PORT_OBJ) \
     ktm/process_introspect.o \
@@ -710,8 +711,8 @@ DRIVER_OBJS = \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
 	drivers/video/font_terminus_14x28.o \
-	drivers/video/console_renderer.o \
-	drivers/video/typewriter.o \
+	drivers/video/textcon.o \
+	drivers/tty/vt/vt.o \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
@@ -722,16 +723,16 @@ $(HEART_SRC_BLOB): \
 		$(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		$(KERNEL_ROOT)/includes/ir0/heart_src_probe.h \
 		$(KERNEL_ROOT)/includes/ir0/pseudo_fs.h \
-		$(KERNEL_ROOT)/includes/ir0/heartfs.h \
+		$(KERNEL_ROOT)/fs/heartfs/heartfs.c \
 		$(KERNEL_ROOT)/includes/ir0/version.h \
 		$(KERNEL_ROOT)/includes/ir0/sock_stream.h \
 		$(KERNEL_ROOT)/includes/ir0/ahci_api.h \
 		$(KERNEL_ROOT)/arch/common/arch_portable.h \
-		$(KERNEL_ROOT)/kernel/syscalls/syscall_dispatch.c
+		$(KERNEL_ROOT)/kernel/entry/syscall_dispatch.c
 	@python3 $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		--root $(KERNEL_ROOT) --out $(HEART_SRC_BLOB)
 
-fs/heartfs.o: $(HEART_SRC_BLOB)
+fs/heartfs/heartfs.o: $(HEART_SRC_BLOB)
 
 FS_OBJS = \
     fs/vfs.o \
@@ -745,7 +746,6 @@ FS_OBJS = \
     fs/flock.o \
     fs/pseudo_fs_registry.o \
     fs/pseudo_fs_nodes.o \
-    fs/heartfs.o \
     fs/procfs.o \
     fs/procfs_process.o \
     fs/procfs_net.o \
@@ -796,13 +796,13 @@ NET_OBJS = \
 NET_DRIVER_OBJS = \
     drivers/net/net_drivers.o
 else
-NET_OBJS =
+NET_OBJS = net/net_compat.o
 NET_DRIVER_OBJS =
 endif
 
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
-VBE_OBJS = drivers/video/vbe.o
+VBE_OBJS = drivers/video/vbe.o drivers/video/fbcon.o
 else
 VBE_OBJS =
 endif
@@ -882,22 +882,23 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o \
+	build/test/mm/alloc/allocator.o
+ifeq ($(CONFIG_KTM),y)
+KERNEL_TEST_ENTRY_OBJS += build/test/tests/ktm/scenarios/ktest_bridge.o
+endif
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
-KERNEL_TEST_BOOT_ARCH_OBJS = build/test/arch/common/boot_arch.o \
-	build/test/arch/common/boot_port.o \
-	build/test/arch/common/oops_port.o
+KERNEL_TEST_BOOT_ARCH_OBJS =
 ifeq ($(ARCH),arm64)
 KERNEL_TEST_BOOT_ARCH_OBJS += build/test/arch/arm64/sources/boot_arch.o
 endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
 ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o \
-	arch/common/boot_arch.o arch/common/boot_port.o \
-	arch/common/oops_port.o \
+	tests/ktm/scenarios/ktest_bridge.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
-                $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+                $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(filter-out mm/alloc/allocator.o,$(MEMORY_OBJS)) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(VBE_OBJS)
@@ -1035,31 +1036,7 @@ kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)
 	@echo "✓ Kernel (test) linked: $@"
 
-build/test/arch/common/%.o: arch/common/%.c
-	@mkdir -p $(@D)
-	@echo "  CC      $< (test variant)"
-	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
-		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
-		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
-		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
-		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
-		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
-		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
-		-c $< -o $@
-
-build/test/arch/arm64/sources/%.o: arch/arm64/sources/%.c
-	@mkdir -p $(@D)
-	@echo "  CC      $< (test variant)"
-	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
-		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
-		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
-		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
-		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
-		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
-		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
-		-c $< -o $@
-
-build/test/kernel/%.o: kernel/%.c
+build/test/%.o: %.c
 	@mkdir -p $(@D)
 	@echo "  CC      $< (test variant)"
 	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \

@@ -11,7 +11,6 @@
  * Description: x86-64 implementation of the portable architecture interface.
  */
 
-#include "arch_interface.h"
 #include <arch/common/arch_portable.h>
 #include <ir0/cpu.h>
 #include <ir0/delay.h>
@@ -166,6 +165,16 @@ void outl(uint16_t port, uint32_t value)
 void smp_mb(void)
 {
 	__asm__ volatile("mfence" ::: "memory");
+}
+
+void mb(void)
+{
+	__asm__ volatile("mfence" ::: "memory");
+}
+
+void cpu_sync(void)
+{
+	__asm__ volatile("" ::: "memory");
 }
 
 uint64_t rdmsr(uint32_t msr)

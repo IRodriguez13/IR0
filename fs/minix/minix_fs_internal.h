@@ -12,25 +12,16 @@
 
 #include "minix_fs.h"
 #include <fs/vfs.h>
-#include <ir0/logging.h>
 #include <ir0/blockdev.h>
 #include <ir0/klog.h>
 #include <ir0/clock.h>
 #include <ir0/stat.h>
 #include <ir0/errno.h>
-#include <ir0/console_backend.h>
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/cred.h>
 #include <ir0/exec_read_trace.h>
 #include <string.h>
-
-#define typewriter_vga_print(msg, color)                                         \
-    do {                                                                         \
-        const char *__msg = (msg);                                               \
-        if (__msg)                                                               \
-            console_backend_write(__msg, strlen(__msg), (uint8_t)(color));       \
-    } while (0)
 
 #define MINIX_SUPER_MAGIC 0x137F
 #define MINIX_MAGIC 0x137F

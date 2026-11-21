@@ -22,7 +22,7 @@
 #include <ir0/video_console.h>
 #include <ir0/boot_memory.h>
 #include <string.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/paging.h>
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>

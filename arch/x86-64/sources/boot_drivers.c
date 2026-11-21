@@ -10,6 +10,8 @@
 
 #include <ir0/boot_arch.h>
 #include <ir0/driver_bootstrap.h>
+#include <ir0/idle.h>
+#include <ir0/input_backend.h>
 #include <ir0/resource_registry.h>
 #include <config.h>
 #include <drivers/input/ps2.h>
@@ -53,6 +55,8 @@ static int boot_init_ps2_controller(void)
 static int boot_init_keyboard(void)
 {
 	keyboard_init();
+	/* Drain bytes delivered without IRQ1. */
+	kernel_idle_poll_register(input_kbd_poll_ps2);
 	return 0;
 }
 
@@ -125,39 +129,35 @@ static int boot_init_hostshare_9p(void)
 	return 0;
 }
 
-/*
- * Same order as before the split: within each stage the bootstrap runs
- * entries in registration order, after the generic network stack.
- */
-void ir0_boot_arch_drivers(void)
+static int boot_init_i8042_irqs(void)
 {
-	const int ps2_boot = CONFIG_INIT_PS2_CONTROLLER;
-	const int ps2_mouse_boot = (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER);
-
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_controller",
-				  boot_init_ps2_controller, ps2_boot);
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_keyboard",
-				  boot_init_keyboard, ps2_boot);
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_mouse",
-				  boot_init_mouse, ps2_mouse_boot);
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "pc_speaker",
-				  boot_init_pc_speaker,
-				  (CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER));
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "hostshare_9p",
-				  boot_init_hostshare_9p, 1);
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_core",
-				  boot_init_storage_ata,
-				  (CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA));
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_STORAGE, "ata_block",
-				  boot_init_storage_block,
-				  (CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK));
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_AUDIO, "sound_stack",
-				  boot_init_sound,
-				  (CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS));
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "bluetooth_stack",
-				  boot_init_bluetooth,
-				  (CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER));
-	driver_bootstrap_register(DRIVER_BOOT_STAGE_PLATFORM, "usb_host",
-				  boot_init_usb_host,
-				  (CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST));
+	i8042_irq_init();
+	return 0;
 }
+
+/* Within a stage the bootstrap runs these after the generic network stack. */
+static const struct driver_boot_entry pc_boot_drivers[] = {
+	{ "i8042_irq", boot_init_i8042_irqs, DRIVER_BOOT_STAGE_INPUT, 1 },
+	{ "ps2_controller", boot_init_ps2_controller, DRIVER_BOOT_STAGE_INPUT,
+	  CONFIG_INIT_PS2_CONTROLLER },
+	{ "ps2_keyboard", boot_init_keyboard, DRIVER_BOOT_STAGE_INPUT,
+	  CONFIG_INIT_PS2_CONTROLLER },
+	{ "ps2_mouse", boot_init_mouse, DRIVER_BOOT_STAGE_INPUT,
+	  CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER },
+	{ "pc_speaker", boot_init_pc_speaker, DRIVER_BOOT_STAGE_PLATFORM,
+	  CONFIG_ENABLE_PC_SPEAKER && CONFIG_INIT_PC_SPEAKER },
+	{ "hostshare_9p", boot_init_hostshare_9p, DRIVER_BOOT_STAGE_PLATFORM, 1 },
+	{ "ata_core", boot_init_storage_ata, DRIVER_BOOT_STAGE_STORAGE,
+	  CONFIG_ENABLE_STORAGE_ATA && CONFIG_INIT_STORAGE_ATA },
+	{ "ata_block", boot_init_storage_block, DRIVER_BOOT_STAGE_STORAGE,
+	  CONFIG_ENABLE_STORAGE_ATA_BLOCK && CONFIG_INIT_STORAGE_ATA_BLOCK },
+	{ "sound_stack", boot_init_sound, DRIVER_BOOT_STAGE_AUDIO,
+	  CONFIG_ENABLE_SOUND && CONFIG_INIT_SOUND_DRIVERS },
+	{ "bluetooth_stack", boot_init_bluetooth, DRIVER_BOOT_STAGE_NETWORK,
+	  CONFIG_ENABLE_BLUETOOTH && CONFIG_INIT_BLUETOOTH_DRIVER },
+	{ "usb_host", boot_init_usb_host, DRIVER_BOOT_STAGE_PLATFORM,
+	  CONFIG_ENABLE_USB_HOST && CONFIG_INIT_USB_HOST },
+};
+
+const struct driver_boot_table ir0_boot_arch_driver_table =
+	DRIVER_BOOT_TABLE(pc_boot_drivers);

@@ -98,8 +98,8 @@ embeds and the `el0_entry` workload in `vectors.S`) was deleted on
 - `arch/arm64/sources/switch_early.c` + `switch_early.S`;
   `arm64_cpu_switch` / `arm64_cpu_switch_mm` for the product switch.
   Destination: rename out of "early".
-- `arch/arm64/sources/virtio_blk_early.c`; product CPIO/`vda` block provider.
-  Destination: the common virtio block driver over `drivers/virtio/virtio_mmio.c`.
+- `drivers/virtio/virtio_blk.c`; product CPIO/`vda` over `virtio_mmio.c`.
+  The probe window is still the QEMU ARM virt bank (`VIRTIO_MMIO_BASE`).
 - `irq_portable_stubs.c`; compile probe only; forbidden as a product provider.
 
 ### Boot-only assets and harnesses

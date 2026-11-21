@@ -16,7 +16,7 @@ Apply to all fixes toward real userspace (init, musl, BusyBox, syscalls, exec, r
   - `kernel/syscalls/mm_syscalls.c`
   - `kernel/syscalls/io_syscalls.c`
   - `kernel/syscalls/time_syscalls.c`
-  - `kernel/syscalls/syscall_dispatch.c`
+  - `kernel/entry/syscall_dispatch.c`
 - **New logic**: prefer small helpers in `includes/ir0/*` or new syscall submodules; avoid adding blocks to `syscalls.c`.
 - If a fix must touch `syscalls.c`, note `ARCH_DEBT: move to syscalls/<area>.c` in the commit/summary.
 

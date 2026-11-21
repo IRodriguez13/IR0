@@ -15,56 +15,54 @@
 /**
  * IR0 Kernel - Networking compatibility stubs
  *
- * Weak fallbacks used when networking backend is not linked.
- * Real implementations in net/dev.c override these symbols.
+ * Fallbacks linked instead of net/dev.c when networking is disabled.
  */
 
 #include <ir0/errno.h>
 #include <ir0/net.h>
 #include <ir0/netdevice.h>
 
-__attribute__((weak)) void net_stack_poll(void)
+void net_stack_poll(void)
 {
 }
 
-__attribute__((weak)) int net_stack_get_irq_line(void)
+int net_stack_get_irq_line(void)
 {
     return -1;
 }
 
-__attribute__((weak)) int net_stack_handle_irq(uint8_t irq)
+void net_stack_handle_irq(uint8_t irq)
 {
     (void)irq;
-    return 0;
 }
 
-__attribute__((weak)) struct net_device *first_net_device(void)
+struct net_device *first_net_device(void)
 {
     return (struct net_device *)0;
 }
 
 /* Socket ioctls look interfaces up by name; without a stack there are none. */
-__attribute__((weak)) struct net_device *dev_get_by_name(const char *name)
+struct net_device *dev_get_by_name(const char *name)
 {
     (void)name;
     return (struct net_device *)0;
 }
 
-__attribute__((weak)) int dev_change_flags(struct net_device *dev, unsigned int flags)
+int dev_change_flags(struct net_device *dev, unsigned int flags)
 {
     (void)dev;
     (void)flags;
     return -ENODEV;
 }
 
-__attribute__((weak)) int dev_set_mtu(struct net_device *dev, int new_mtu)
+int dev_set_mtu(struct net_device *dev, int new_mtu)
 {
     (void)dev;
     (void)new_mtu;
     return -ENODEV;
 }
 
-__attribute__((weak)) int dev_set_mac_address(struct net_device *dev, const uint8_t *addr)
+int dev_set_mac_address(struct net_device *dev, const uint8_t *addr)
 {
     (void)dev;
     (void)addr;

@@ -28,7 +28,7 @@
 
 extern "C" {
     #include <ir0/kmem.h>
-    #include <ir0/logging.h>
+    #include <ir0/ktm/klog.h>
     #include <ir0/driver.h>
 }
 
@@ -47,7 +47,7 @@ public:
     ResourceGuard(size_t size) : size_(size) {
         resource_ = static_cast<T*>(kcalloc(size, sizeof(T)));
         if (!resource_) {
-            log_error("ResourceGuard", "Allocation failed");
+            klog_error("ResourceGuard", "Allocation failed");
         }
     }
     
@@ -135,20 +135,20 @@ public:
     
     bool init() {
         if (initialized_) {
-            log_warn("CPPExample", "Component already initialized");
+            klog_warn("CPPExample", "Component already initialized");
             return true;
         }
         
-        log_info("CPPExample", "Example C++ component initializing...");
+        klog_info("CPPExample", "Example C++ component initializing...");
         
         initialized_ = true;
         event_count_ = 0;
         
-        log_info("CPPExample", "Component initialized successfully");
-        log_info("CPPExample", "  - RAII resource management");
-        log_info("CPPExample", "  - Template-based data structures");
-        log_info("CPPExample", "  - Object-oriented design");
-        log_info("CPPExample", "  - Exception-free C++ (freestanding)");
+        klog_info("CPPExample", "Component initialized successfully");
+        klog_info("CPPExample", "  - RAII resource management");
+        klog_info("CPPExample", "  - Template-based data structures");
+        klog_info("CPPExample", "  - Object-oriented design");
+        klog_info("CPPExample", "  - Exception-free C++ (freestanding)");
         
         return true;
     }
@@ -158,22 +158,22 @@ public:
             return;
         }
         
-        log_info("CPPExample", "Shutting down C++ component...");
+        klog_info("CPPExample", "Shutting down C++ component...");
         
         initialized_ = false;
         event_count_ = 0;
         
-        log_info("CPPExample", "Component shutdown complete");
+        klog_info("CPPExample", "Component shutdown complete");
     }
     
     bool process_event(uint32_t event) {
         if (!initialized_) {
-            log_error("CPPExample", "Cannot process event: not initialized");
+            klog_error("CPPExample", "Cannot process event: not initialized");
             return false;
         }
         
         if (!event_queue_.push(event)) {
-            log_error("CPPExample", "Event queue full, dropping event");
+            klog_error("CPPExample", "Event queue full, dropping event");
             return false;
         }
         
@@ -208,7 +208,7 @@ static ExampleComponent* g_component = nullptr;
 
 extern "C" {
     #include <ir0/kmem.h>
-    #include <ir0/logging.h>
+    #include <ir0/ktm/klog.h>
     #include <ir0/driver.h>
     #include <ir0/vga.h>  // For print_colored
 }
@@ -233,13 +233,13 @@ using namespace ir0::example;
  * Initialize the C++ example component
  */
 IR0_API int32_t cpp_example_init() {
-    log_info("CPPExample", "Initializing C++ example component...");
+    klog_info("CPPExample", "Initializing C++ example component...");
     
     // Allocate component using kernel allocator (calls our custom new)
     g_component = new ExampleComponent();
     
     if (!g_component) {
-        log_error("CPPExample", "Failed to allocate component");
+        klog_error("CPPExample", "Failed to allocate component");
         return IR0_DRIVER_ERR;
     }
     
@@ -257,7 +257,7 @@ IR0_API int32_t cpp_example_init() {
  */
 IR0_API void cpp_example_shutdown() {
     if (g_component) {
-        log_info("CPPExample", "Shutting down component...");
+        klog_info("CPPExample", "Shutting down component...");
         delete g_component;
         g_component = nullptr;
     }
@@ -268,7 +268,7 @@ IR0_API void cpp_example_shutdown() {
  */
 IR0_API int32_t cpp_example_process_event(uint32_t event) {
     if (!g_component) {
-        log_error("CPPExample", "Component not initialized");
+        klog_error("CPPExample", "Component not initialized");
         return IR0_DRIVER_ERR;
     }
     
@@ -290,14 +290,14 @@ IR0_API size_t cpp_example_pending_events() {
  * Demonstrate RAII with ResourceGuard
  */
 IR0_API int32_t cpp_example_test_raii() {
-    log_info("CPPExample", "Testing RAII resource management...");
+    klog_info("CPPExample", "Testing RAII resource management...");
     
     {
         // ResourceGuard automatically allocates in constructor
         ResourceGuard<uint8_t> guard(1024);
         
         if (!guard.valid()) {
-            log_error("CPPExample", "RAII test failed: allocation error");
+            klog_error("CPPExample", "RAII test failed: allocation error");
             return IR0_DRIVER_ERR;
         }
         

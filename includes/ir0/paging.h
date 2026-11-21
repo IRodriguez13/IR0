@@ -18,7 +18,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <ir0/mm.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/copy_user.h>
 
 #define PAGE_PRESENT IR0_MM_MAP_PRESENT

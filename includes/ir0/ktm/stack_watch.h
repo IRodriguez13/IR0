@@ -16,8 +16,8 @@
 
 #include <ir0/types.h>
 
-/* Sample @rsp; ignores addresses outside the kernel stack window. */
-void ktm_stack_watch(uint64_t rsp);
+/* Sample @sp; ignores addresses outside the kernel stack window. */
+void ktm_stack_watch(uint64_t sp);
 
 /* Smallest headroom seen since boot, in bytes (0 if never sampled). */
 uint64_t ktm_stack_min_headroom_get(void);

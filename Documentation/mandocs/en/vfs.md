@@ -197,7 +197,7 @@ diagnostics — acceptable for T0 but not ideal long term.
 
 | Neighbor | Interaction |
 |----------|-------------|
-| Syscalls | `fs_syscalls.c` front door; `kernel/syscalls/syscall_dispatch.c` holds the dispatch table |
+| Syscalls | `fs_syscalls.c` front door; `kernel/entry/syscall_dispatch.c` holds the dispatch table |
 | MM | `kmalloc` for mounts and `vfs_file`; ELF loader uses `vfs_read_file` |
 | Process | Per-process `cwd`; fd table; proc-specific `/proc/[pid]/` context |
 | Drivers | devfs ops → block, net, fb, input via facades |

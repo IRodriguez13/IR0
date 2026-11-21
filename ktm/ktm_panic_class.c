@@ -18,8 +18,8 @@
 #include <string.h>
 
 
-#define USER_RIP_LO    0x00400000ULL
-#define USER_RIP_HI    0x00007FFFFFFFFFFFULL
+#define USER_PC_LO    0x00400000ULL
+#define USER_PC_HI    0x00007FFFFFFFFFFFULL
 
 /* Mirrors panic_level_t in includes/ir0/oops.h (no include — avoid coupling). */
 #define KTM_PL_KERNEL_BUG       0

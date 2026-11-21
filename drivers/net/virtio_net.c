@@ -15,12 +15,10 @@
 #include <config.h>
 #if CONFIG_DRV_NIC_VIRTIO_NET
 
-#include <ir0/arch_io.h>
 #include <ir0/cpu.h>
-#include <ir0/arch_port.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/netdevice.h>
 #include <string.h>
 #include <asm/io.h>
@@ -177,8 +175,8 @@ static int setup_queue(struct vn_queue *q, uint16_t qsel)
 	qsz = vp_inw(VIRTIO_PCI_QUEUE_NUM);
 	if (qsz == 0 || qsz > VN_QSZ_MAX)
 	{
-		LOG_ERROR_FMT("VIRTIO_NET", "bad queue size qsel=%u qsz=%u (max=%u)",
-			      (unsigned)qsel, (unsigned)qsz, (unsigned)VN_QSZ_MAX);
+		klog_error_fmt("VIRTIO_NET", "bad queue size qsel=%u qsz=%u (max=%u)",
+			       (unsigned)qsel, (unsigned)qsz, (unsigned)VN_QSZ_MAX);
 		return -EINVAL;
 	}
 
@@ -305,7 +303,7 @@ static int virtio_net_send(struct net_device *dev, const void *data, size_t len)
 		}
 	}
 	dev->stats.tx_errors++;
-	LOG_DEBUG("VIRTIO_NET", "TX notify timeout");
+	klog_debug("VIRTIO_NET", "TX notify timeout");
 	return -1;
 }
 
@@ -333,7 +331,7 @@ static int virtio_net_probe(void)
 	g_ready = 0;
 	if (find_virtio_net(&bus, &slot) != 0)
 	{
-		LOG_INFO("VIRTIO_NET", "device absent");
+		klog_info("VIRTIO_NET", "device absent");
 		return -ENODEV;
 	}
 
@@ -343,7 +341,7 @@ static int virtio_net_probe(void)
 	bar0 = pci_read(bus, slot, 0, 0x10);
 	if (!(bar0 & 1))
 	{
-		LOG_ERROR_FMT("VIRTIO_NET", "BAR0 not I/O space bar0=0x%x", bar0);
+		klog_error_fmt("VIRTIO_NET", "BAR0 not I/O space bar0=0x%x", bar0);
 		return -ENODEV;
 	}
 	g_iobase = (uint16_t)(bar0 & ~0x3u);
@@ -396,12 +394,12 @@ static int virtio_net_probe(void)
 	register_netdev(g_dev);
 
 	g_ready = 1;
-	LOG_INFO_FMT("VIRTIO_NET", "ready MAC %02x:%02x:%02x:%02x:%02x:%02x",
-		     g_mac[0], g_mac[1], g_mac[2], g_mac[3], g_mac[4], g_mac[5]);
+	klog_info_fmt("VIRTIO_NET", "ready MAC %02x:%02x:%02x:%02x:%02x:%02x",
+		      g_mac[0], g_mac[1], g_mac[2], g_mac[3], g_mac[4], g_mac[5]);
 	return 0;
 
 fail:
-	LOG_ERROR("VIRTIO_NET", "init failed");
+	klog_error("VIRTIO_NET", "init failed");
 	vp_outb(VIRTIO_PCI_STATUS, VIRTIO_STATUS_FAILED);
 	return rc < 0 ? rc : -ENOMEM;
 }

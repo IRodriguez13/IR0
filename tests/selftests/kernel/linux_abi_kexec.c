@@ -3,10 +3,10 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: linux_abi_kexec.c
- * Description: Selftest: kexec_load(2) architecture check. An image built
- *              for another architecture is refused with EINVAL; the native
- *              and the default architecture are accepted. Each case passes
- *              on Linux and on IR0. Run by
+ * Description: Selftest: kexec_load(2). A foreign architecture is EINVAL, the
+ *              native and default architectures reach the segment copy, and
+ *              nr_segments == 0 uninstalls the image. Each case passes on
+ *              Linux and on IR0. Run by
  *              make ir0-selftest-kexec-abi-{x86,arm64}.
  */
 
@@ -16,7 +16,7 @@
 
 #include <sys/mman.h>
 
-/* include/uapi/linux/kexec.h; musl ships no <linux/kexec.h>. */
+/* include/uapi/linux/kexec.h. This file does not include a libc copy. */
 #define LINUX_KEXEC_ARCH_DEFAULT (0UL << 16)
 #define LINUX_KEXEC_ARCH_X86_64 (62UL << 16)
 #define LINUX_KEXEC_ARCH_AARCH64 (183UL << 16)
@@ -71,6 +71,20 @@ int kexec_load_native_arch_accepted(void)
 		return CONF_TCONF;
 	EXPECT(r, -EFAULT);
 	EXPECT(kexec_load_arch(KEXEC_ARCH_NATIVE), -EFAULT);
+	return CONF_PASS;
+}
+
+/*
+ * kernel/kexec.c do_kexec_load(): nr_segments == 0 uninstalls the loaded
+ * image and returns 0. No segment list is read.
+ */
+int kexec_load_zero_segments_unloads(void)
+{
+	long r = S4(SYS_kexec_load, 0, 0, 0, LINUX_KEXEC_ARCH_DEFAULT);
+
+	if (r == -EPERM)
+		return CONF_TCONF;
+	EXPECT(r, 0);
 	return CONF_PASS;
 }
 

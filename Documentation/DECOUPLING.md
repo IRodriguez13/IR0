@@ -34,7 +34,7 @@ underlying `drivers/*` via those façades; direct `#include <drivers/serial/...>
 | Ring‑3 transition | **`switch_to_user(entry, stack)`** / **`switch_to_user_task`** ([`arch/x86-64/sources/user_mode.c`](../../arch/x86-64/sources/user_mode.c)); x86-only iretq repair stays behind `<asm/context.h>`. New portable code includes the domain header ([`context.h`](../../includes/ir0/context.h)). [`arch_cpu.h`](../../includes/ir0/arch_cpu.h) is a compatibility umbrella only (does **not** include `cpu.h`). |
 | Context switch | **`switch_to(prev, next)`** ([`includes/ir0/context.h`](../../includes/ir0/context.h)); first entry **`first_switch_to`**. Portable policy is in `sched/switch/context_switch.c`; ISA backends stay in `arch/*/sources/`. |
 | IRQ bring-up | **`irq_tables_init` / `irq_controller_init` / `irq_unmask_line`** ([`includes/ir0/irq.h`](../../includes/ir0/irq.h)); backends in `arch/*/sources/irq.c`. Portable trees must not include arch interrupt backend headers. |
-| Platform devices | Each ISA names its platform (`pc`, `dt`) and `scripts/make/platform/<platform>.mk` lists its device objects. The PC registers its boot entries from `ir0_boot_arch_drivers()` ([`boot_arch.h`](../../includes/ir0/boot_arch.h)), its VGA text screen with `console_set_text_screen()`, and its drivers register with the class facades (`input_register_keyboard/mouse`, `audio_register_device`, `clock_timer_init`). Guard: `[legacy-pc-io]`. |
+| Platform devices | Each ISA names its platform (`pc`, `dt`) and `scripts/make/platform/<platform>.mk` lists its device objects. The PC lists its boot drivers in `ir0_boot_arch_driver_table` ([`boot_arch.h`](../../includes/ir0/boot_arch.h)), its VGA text screen with `console_set_text_screen()`, and its drivers register with the class facades (`input_register_keyboard/mouse`, `audio_register_device`, `clock_timer_init`). Guard: `[legacy-pc-io]`. |
 | Signals / sigcontext | ISA layouts in each ISA's `asm/sigcontext.h` ([x86-64](../arch/x86-64/include/asm/sigcontext.h) / [arm64](../arch/arm64/include/asm/sigcontext.h)); portable delivery via **`arch_signal_*`** + **`arch_task_{load,store}_sigcontext`**. |
 | Syscall frame | Opaque **`process_syscall_*`** accessors; fill/restore in **`arch_syscall_frame`**. Guard: `[syscall-frame-accessor]`. |
 | MM root half | **`arch_mm_copy_kernel_half` / `arch_mm_user_root_slots`** ([`arch_mm.h`](../../includes/ir0/arch_mm.h)). |
@@ -157,7 +157,7 @@ Implementations may include drivers from `.c` adapters (`input_backend.c`,
 | **Block devices** | `ir0_block_ops` / `ir0_block_register()` | Sector I/O; ATA/AHCI/virtio register via facade. |
 | **Filesystems** | `struct vfs_ops`, `vfs_fstype` | Mountable FS plugins (`minix_fs.c`, `tmpfs.c`, `simplefs.c`, …). |
 | **Character devices** | `devfs_ops_t`, `devfs_register_node()` | Per-node read/write/ioctl/open/close in `fs/devfs.c`. |
-| **Bootstrap** | `driver_boot_init_fn`, `driver_bootstrap_register()` | Staged early init wired from `drivers/init_drv.c` with `CONFIG_INIT_*`. |
+| **Bootstrap** | `struct driver_boot_entry`, `DRIVER_BOOT_TABLE()`, `driver_bootstrap_run()` | Const tables (generic in `drivers/init_drv.c`, one per ISA) walked by stage; `CONFIG_INIT_*` gates each entry. |
 | **Resources** | `resource_register_irq`, `resource_register_ioport` | Naming / tracking; drivers include [`includes/ir0/resource_registry.h`](../../includes/ir0/resource_registry.h). |
 
 **Preferred patterns for new code**
@@ -216,8 +216,8 @@ same portable object set as x86 (`ALL_OBJS`) and product SVC enters `syscall_dis
 User MM, fault handling and task switching also run through the common
 kernel (`make ir0-selftest-fault-arm64`). Remaining gaps vs full Linux-like
 userspace: FP/SIMD state is not saved on context switch (both ISAs); ISD
-AArch64 rootfs pack; product block transport (still `virtio_blk_early` for
-CPIO/`vda`).
+AArch64 rootfs pack. Product `vda` is `drivers/virtio/virtio_blk.c`
+over virtio-mmio.
 ## Known upward coupling (not via `includes/ir0/` alone)
 
 Direct `#include <drivers/...>` or tight `#include <arch/...>` in non-driver trees (grep

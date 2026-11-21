@@ -140,7 +140,7 @@ Header `includes/string.h` (`includes/string.c`).
 Private duplicates of public helpers: `find_hpet.c` static `memcmp` and
 `acpi_memcmp` — DONE (call `memcmp`). `sock_strnlen` was already gone at
 `bc3e0e15`, so no public `strnlen` is needed yet. Still open:
-`kernel/exec/elf_loader.c` `exec_strdup_kern` (add `kstrdup` only if a second
+`fs/binfmt_elf.c` `exec_strdup_kern` (add `kstrdup` only if a second
 user appears) and `kernel/exec/early_elf_stack.c` `cstr_len` (a NULL-tolerant
 `strlen`; the file is also built for host tests). The ARM64 freestanding
 string copies (`portable_string.c`, `freestanding_stubs.c`) left with the
@@ -284,7 +284,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `heap_alloc` / `heap_free` (`mm/allocator.h`) | mm-private | 3 / 5 | KEEP private (guarded by `[kmem-single-api]`) |
 | `dma_alloc` / `dma_free` / `dma_sync_for_*` / `dma_map_mmio` | `ir0/dma.h` | 2 / 2 / 3 / 1 | KEEP (Linux names, both arches) |
 | `mm_alloc_frame(ctx)` | `ir0/mm_alloc.h` | 9 | KEEP as the one frame allocator (adds direct reclaim) |
-| `pmm_alloc_frame` | `mm/pmm.h` | 12 | PRIVATE to mm: non-mm users (`kernel/syscalls/mm_syscalls.c`, `ipc/sysv_shm.c`, `arch/x86-64/sources/task_stack.c`) skip reclaim; `mm/pmm.h` is also included by `kernel/exec/elf_loader.c` and `kernel/boot/boot_init.c` |
+| `pmm_alloc_frame` | `mm/pmm.h` | 12 | PRIVATE to mm: non-mm users (`kernel/syscalls/mm_syscalls.c`, `ipc/sysv_shm.c`, `arch/x86-64/sources/task_stack.c`) skip reclaim; `mm/pmm.h` is also included by `fs/binfmt_elf.c` and `kernel/boot/boot_init.c` |
 | `pmm_free_frame` vs `pmm_frame_put` | `mm/pmm.h` | 17 / 10 | MERGE: `pmm_free_frame` is literally `pmm_frame_put` |
 | `pmm_init` | `mm/pmm.h` | 0 | DELETE (`pmm_init_ranges` is used) |
 | `page_table_frame_alloc` / `_free` | `ir0/page_table_pool.h` | 4 / 6 | KEEP (dedicated pool) |
@@ -300,7 +300,7 @@ conditionals:
 
 | File:line | Macro | Guards | Suggested replacement |
 |-----------|-------|--------|-----------------------|
-| `kernel/syscalls/syscall_dispatch.c:91`, `:116`, `:454` | `CONFIG_ENABLE_NETWORKING` | socket syscall wrappers and table slots | Build `socket_syscalls.c` only with networking and give `syscall_dispatch` a `net_syscalls_register(table)` hook (stub returns nothing when disabled); coordinate with `refactor/net-fs-split` |
+| `kernel/entry/syscall_dispatch.c:91`, `:116`, `:454` | `CONFIG_ENABLE_NETWORKING` | socket syscall wrappers and table slots | Build `socket_syscalls.c` only with networking and give `syscall_dispatch` a `net_syscalls_register(table)` hook (stub returns nothing when disabled); coordinate with `refactor/net-fs-split` |
 | `kernel/signals/signals.c:255` | `SIGNAL_DELIVER_LOG` | delivery klog with `cr2=`/`rip=`/`rsp=` tags | `signal_trace_deliver()` in a `kernel/signals/signal_diag.c` |
 | `kernel/signals/signals.c:266` | `CONFIG_KTM_FLIGHT` | two `KTM_FLIGHT` records | same hook; KTM flight wrapper compiles to nothing when disabled |
 | `kernel/signals/signals.c:403`, `:449`, `kernel/signals/default_action.c:82`, `kernel/process/exit.c:60`, `kernel/process/wait.c:185`, `kernel/syscalls/process_syscalls.c:1626` | `IR0_DEBUG_PROC` | `[SIGTERM_AUDIT]` klog | `signal_trace_*()` / `process_trace_*()` hooks in a diag file (stubbed when the debug config is off) |
@@ -313,7 +313,7 @@ conditionals:
 | `includes/ir0/signals.h:85` | `SIGNAL_DELIVER_LOG` default | | DELETE with the signals.c item |
 
 Clean (no conditionals): `sched/core.c`, `sched/core.h`, `sched/rr.c`,
-`sched/prio.c`, `sched/switch/*`, `kernel/problems/fault.c`, `kernel/signals/sigtramp.c`,
+`sched/prio.c`, `sched/switch/*`, `kernel/panic/fault.c`, `kernel/signals/sigtramp.c`,
 `kernel/process/signal_enter.c`, `saved_context.c`, `mm.c`, `mm_struct.c`,
 `idle.c`, `kernel/irq/irq_dispatch.c`, `mm/page_fault.c`, `page_fault_user.c`,
 `page_fault_kernel.c`, `page_fault_cow.c`, `mm/paging.c`, `mm/copy_user.c`,
@@ -342,13 +342,13 @@ scanned (hardware register vocabulary, and HCI "rsp" = response).
 | `includes/ir0/task_ops.h:34` | `rax` param of `task_apply_syscall_frame` | `retval` |
 | `includes/ir0/process.h:591-594` | `fork_restore_emit_pre_iretq`, `fork_ret_first_syscall_entry(rax_hw, rip_hw, rsp_hw)`, `fork_flow_note_kernel_entry(rip_hw, ...)` | `fork_trace_before_user_return`, `(retval, ip, sp)`; these are arch hook prototypes and could move to an arch hook header |
 | `includes/ir0/arch_task.h:22-25` (+ `IR0_TASK_{GET,SET}_{CS,SS}`, `task_cs_is_user`) | x86 segment accessors in the portable task facade | move to an x86-private header; users are `arch/x86-64/*` and `ktm/ktm_ctx_snapshot.c`; `task_cs_is_user` -> `task_is_user_mode` |
-| `includes/ir0/fault.h:47`, `includes/ir0/page_fault.h:28`, `kernel/problems/fault.c:35`, `mm/page_fault_diag.c:31-77` | `code_seg` field ("x86 CS"), `fault_cs/fault_rip/fault_rsp` | drop `code_seg` from the neutral fault (arch `show_regs` hook prints it); `fault_ip/fault_sp` (mm diag branch is moving this file) |
+| `includes/ir0/fault.h:47`, `includes/ir0/page_fault.h:28`, `kernel/panic/fault.c:35`, `mm/page_fault_diag.c:31-77` | `code_seg` field ("x86 CS"), `fault_cs/fault_rip/fault_rsp` | drop `code_seg` from the neutral fault (arch `show_regs` hook prints it); `fault_ip/fault_sp` (mm diag branch is moving this file) |
 | `includes/ir0/process.h:116` | `fs_base` union member (x86 TLS register) | `arch_thread.tls_base` only (the comment already says so) |
-| `includes/ir0/oops.h:47`, `kernel/problems/oops.c:96` | `ir0_panic_fault_rsp()` | `panic_fault_sp()` |
+| `includes/ir0/oops.h:47`, `kernel/panic/oops.c:96` | `ir0_panic_fault_rsp()` | `panic_fault_sp()` |
 | `includes/ir0/signal_irq.h:59` | `new_rsp` param | `new_sp` |
 | `includes/ir0/ktm/stack_watch.h:20`, `ktm/stack_watch.c` | `ktm_stack_watch(uint64_t rsp)` | `sp` |
 | `kernel/signals/signals.c:58-70`, `:211`, `:999`, `:931-959` | `signal_rip_is_registered_handler(p, rip)`, `snap_rdi`, `snap_rsi` | `signal_ip_is_registered_handler(ip)`, `snap_arg0/1` |
-| `kernel/exec/elf_loader.c:1513-2042` | `exec_commit_ctx.{task_cr3_entry, active_cr3_entry, entry_rip, task_rip_final, task_rsp_final}` | `{task_root, active_root, entry_ip, final_ip, final_sp}` |
+| `fs/binfmt_elf.c:1513-2042` | `exec_commit_ctx.{task_cr3_entry, active_cr3_entry, entry_rip, task_rip_final, task_rsp_final}` | `{task_root, active_root, entry_ip, final_ip, final_sp}` |
 | `kernel/syscalls/fs_path_syscalls.c:154-162` | local `rflags` (means remount flags) | `remount_flags` (misleading name only) |
 | `drivers/timer/acpi/acpi_pm.c:125-147` | `cr3`, `pml4`, `& ~0xFFF` decode of the root | `map_page_in_directory(paging_current_address_space(), ...)` |
 | `ktm/d1_12_read_diag.c` (26), `ktm/d1_13_malloc_pf_diag.c` (7), `ktm/ktm_panic_class.c` (6), `ktm/include/d1_1{2,3}_*.h` (10), `ktm_probe_diag.[ch]` (4), `ktm/include/ktm.h` (2) | `pre_rax..pre_r10`, `magic_rax`, `USER_RIP_LO/HI`, ... | diag snapshots of x86 syscall registers: read them through `syscall_frame_arg(i)` / `task_get_ip/sp`, or move the x86-only probes under `arch/x86-64` |
@@ -368,13 +368,13 @@ frame patching (x86 "blocked syscall frame" model) and
 | `kernel/signals/default_action.c:83`, `kernel/process/exit.c:55,59,63`, `kernel/process/wait.c:38,68,186,230,306,317` | `[SIGTERM_AUDIT]`, `CLASSIFY ZOMBIE_*`, `[WAIT4_WNOHANG_AUDIT]`, `KTM_CHECKPOINT` | `process_trace(event, ...)` in `sched/trace.c` or a new `process/diag.c` (the existing `wait_audit.c` is the model) |
 | `kernel/process/core.c:137,145` | `[ISRABI][IRQ_SAVE]` | same `process_trace` hook |
 | `kernel/process/fork.c:40,91,119,132,262,268,277,302,320,656` (10 `KTM_FAULT_HIT`), `:296` (klog), `:351,579` (`KTM_CHECKPOINT`) | fault injection and checkpoints | one `fork_should_fail(site)` hook (Linux `should_fail`) like `mm_diag_fault_hit`, plus `process_trace` |
-| `kernel/syscalls/syscall_dispatch.c:518,521,532,539,542` | `KTM_TRACE_SYSCALL_ENTER/RET`, `ktm_probe_diag_syscall_pre/post`, `ktm_user_canary_poll` | one `syscall_trace_enter()` / `syscall_trace_exit()` pair (Linux tracepoints) in a `kernel/syscalls/syscall_diag.c` |
+| `kernel/entry/syscall_dispatch.c:518,521,532,539,542` | `KTM_TRACE_SYSCALL_ENTER/RET`, `ktm_probe_diag_syscall_pre/post`, `ktm_user_canary_poll` | one `syscall_trace_enter()` / `syscall_trace_exit()` pair (Linux tracepoints) in a `kernel/syscalls/syscall_diag.c` |
 | `kernel/syscalls.c:41,95,100,102` | init-time klog (`syscalls_init`) | KEEP (not hot path) or drop |
 | `mm/page_fault_cow.c:56,81,111,147`, `mm/page_fault_kernel.c:36,47,57` | `log_*_fmt("PF", ...)` | `mm_diag_*` hooks (IN FLIGHT: `refactor/mm-diag-headers` already moves `page_fault_kernel.c`; `page_fault_cow.c` is the remaining file) |
 
 Clean: `sched/*`, `sched/switch/context_switch.c`, `kernel_resume.c` (go
 through `switch_trace()` in `sched/switch/diag.c`), `mm/page_fault.c`,
-`mm/page_fault_user.c`, `mm/paging.c`, `kernel/problems/fault.c`, `kernel/signals/sigtramp.c`,
+`mm/page_fault_user.c`, `mm/paging.c`, `kernel/panic/fault.c`, `kernel/signals/sigtramp.c`,
 `kernel/process/signal_enter.c`, `kernel/irq/irq_dispatch.c`.
 
 ---
@@ -386,7 +386,7 @@ through `switch_trace()` in `sched/switch/diag.c`), `mm/page_fault.c`,
   (`string.h`), `ktm/klog.c` (`ir0/clock.h`), `drivers/net/virtio_net.c`
   (`ir0/cpu.h`), `drivers/net/rtl8139.c` (`ir0/ktm/klog.h`),
   `drivers/virtio/virtio_9p.c` (`ir0/cpu.h`, `ir0/ktm/klog.h`),
-  `kernel/syscalls/syscall_dispatch.c` (`config.h`).
+  `kernel/entry/syscall_dispatch.c` (`config.h`).
 - Public definitions living in the wrong file: `get_process_fd_table`,
   `fd_slot_*` and `ensure_devfs_init` are defined in
   `kernel/syscalls/io_syscalls.c`.
@@ -432,7 +432,7 @@ part, `fs_meta.c`, `fs_path_syscalls.c`, `fs_syscalls.c`, `time_syscalls.c`,
    `klog_get_boot_phase`. Merge `ir0_boot_smoke` and `klog_smoke` (keep
    harness tags stable).
 
-**Lane D — diag hooks (files: `kernel/syscalls/syscall_dispatch.c`,
+**Lane D — diag hooks (files: `kernel/entry/syscall_dispatch.c`,
 `kernel/process/{fork,wait,exit,core,signals}.c`, new diag files)**
 
 7. **D1.** `syscall_trace_enter/exit` hook file; move the 5 KTM calls out of

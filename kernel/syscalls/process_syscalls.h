@@ -30,6 +30,8 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 			   size_t sigsetsize);
 int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize);
+int64_t sys_sigaltstack(const struct sigaltstack *ss,
+			struct sigaltstack *old_ss);
 int64_t sys_getgroups(int size, gid_t *list);
 int64_t sys_setgroups(size_t size, const gid_t *list);
 int64_t sys_setreuid(uid_t ruid, uid_t euid);
@@ -50,6 +52,7 @@ int64_t sys_vfork(void);
 int64_t sys_personality(unsigned long persona);
 int64_t sys_setpriority(int which, int who, int prio);
 int64_t sys_getpriority(int which, int who);
+int64_t sys_sched_yield(void);
 int64_t sys_setpgid(pid_t pid, pid_t pgid);
 
 int64_t sys_exit(int exit_code);
@@ -65,14 +68,13 @@ int64_t sys_getegid(void);
 int64_t sys_setuid(uid_t uid);
 int64_t sys_setgid(gid_t gid);
 int64_t sys_umask(mode_t mask);
-int64_t sys_exec(const char *pathname, char *const argv[], char *const envp[]);
-int64_t sys_execveat(int dirfd, const char *pathname, char *const argv[],
-		     char *const envp[], int flags);
 int64_t sys_fork(void);
 int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 		  int *child_tid, unsigned long tls);
 int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage);
 int64_t sys_waitpid(pid_t pid, int *status, int options);
+int64_t sys_waitid(int idtype, pid_t id, siginfo_t *infop, int options,
+		   void *ru);
 int64_t sys_kill(pid_t pid, int signal);
 int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
 		  unsigned long arg4, unsigned long arg5);

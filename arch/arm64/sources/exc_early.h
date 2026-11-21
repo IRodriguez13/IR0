@@ -25,14 +25,8 @@ void arm64_exc_trigger_svc(void);
 /** C sync handler (Current EL SPx); prints ARM64_VBAR_OK on SVC. */
 void arm64_exc_sync_el1(void);
 
-/** C IRQ handler (Current EL SPx); EOI + timer disarm; ARM64_TIMER_IRQ_OK once.
- *  When the scheduling smoke is active, uses the portable scheduler facade and
- *  re-arms the oneshot timer.
- */
+/** C IRQ handler (Current EL SPx); timer disarm, irq_dispatch(), EOI. */
 void arm64_exc_irq_el1(uint64_t *frame);
-
-/** Nonzero after first handled timer IRQ (boot poll). */
-int arm64_timer_irq_seen(void);
 
 /**
  * C sync handler (Lower EL AArch64). @frame is saved GPRs (x0 at [0], x8 at [8]).

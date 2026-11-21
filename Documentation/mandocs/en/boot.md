@@ -7,7 +7,7 @@
 | Status | stable (product: runit only; dbgshell removed) |
 | Depends on | memory, drivers, vfs, process |
 | Man page | IR0-boot (section 7) |
-| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `kernel/exec/elf_loader.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
+| Primary sources | `arch/x86-64/asm/boot_x64.asm`, `arch/x86-64/sources/early.c`, `kernel/main.c`, `fs/vfs.c`, `fs/binfmt_elf.c`, `includes/ir0/klog_event.h`, `ktm/klog.c` |
 
 ## 1. Overview
 
@@ -30,7 +30,7 @@ dbgshell / `debug_bins/` path was **removed** (2026-07-25); see
 | Drivers | Staged bootstrap + probe events | `drivers/init_drv.c` |
 | Root FS | Mount table init | `fs/vfs.c` (`vfs_init_root`) |
 | Bare-metal milestone | `/etc/ir0-baremetal-booted` | `kernel/boot/boot_init.c` (`boot_rootfs_init`) |
-| Userspace | ELF load + schedule | `kernel/exec/elf_loader.c` (`kexecve`) |
+| Userspace | ELF load + schedule | `fs/binfmt_elf.c` (`kexecve`) |
 
 **Early paging (`boot_x64.asm`):** identity map 0–48 MiB with 2 MiB pages;
 optional framebuffer window at `0xFD000000`. Stack at `0x8FF00`; Multiboot info

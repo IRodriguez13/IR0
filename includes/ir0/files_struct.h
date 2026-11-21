@@ -33,7 +33,8 @@ typedef struct files_struct
 {
 	uint32_t magic;
 	int refcount;
-	fd_entry_t fd_table[MAX_FDS_PER_PROCESS];
+	int max_fds; /* allocated slots; grows up to RLIMIT_NOFILE */
+	fd_entry_t *fd_table;
 } files_struct_t;
 
 /*
@@ -52,6 +53,21 @@ void process_files_bind(struct process *p, files_struct_t *f);
 /* Current task's fd table and fd-slot accounting (kernel/syscalls/io_syscalls.c). */
 fd_entry_t *get_process_fd_table(void);
 void fd_slot_note_created(fd_entry_t *entry);
+
+/* Allocated slots of the current task (0 when there is none). */
+int ir0_fd_span(void);
+
+/*
+ * Grow @f so slot indexes [0, min_span) exist. @limit is the task's
+ * RLIMIT_NOFILE (already capped). Returns 0, -EMFILE or -ENOMEM.
+ */
+int files_grow(files_struct_t *f, int min_span, int limit);
+
+/* Make @fd indexable when it is below the task rlimit. dup2 uses -EBADF. */
+int files_ensure_fd(struct process *p, int fd);
+
+/* Lowest free descriptor >= @from, growing the table. -errno on failure. */
+int fd_alloc_lowest(int from);
 
 /* CLONE_FILES: share parent's table (same memory). Returns 0 or -errno. */
 int process_files_share(struct process *child, struct process *parent);

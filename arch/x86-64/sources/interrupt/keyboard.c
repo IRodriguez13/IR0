@@ -15,11 +15,13 @@
 #include <interrupt/idt.h>
 #include <interrupt/pic.h>
 #include <interrupt/keyboard.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 
 #define PS2_DATA_PORT 0x60
 #include <config.h>
+#include <ir0/clock.h>
 #include <ir0/errno.h>
+#include <ir0/irq.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
 #include <ir0/input_backend.h>
@@ -27,6 +29,7 @@
 #include <ir0/cmdline.h>
 #include <ir0/console.h>
 #include <ir0/ps2_set1.h>
+#include <ir0/keymap.h>
 #include <kernel/syscalls/syscalls.h>
 #include <asm/io.h>
 
@@ -129,15 +132,12 @@ static void kbd_dbg_trace(const struct ps2_set1_result *r)
 
 int keyboard_set_layout(int layout)
 {
-	if (layout != KEYBOARD_LAYOUT_US && layout != KEYBOARD_LAYOUT_LATAM)
-		return -EINVAL;
-	kbd_state.layout = layout;
-	return 0;
+	return keymap_load_layout(layout);
 }
 
 int keyboard_get_layout(void)
 {
-	return kbd_state.layout;
+	return keymap_get_layout();
 }
 
 const char *keyboard_get_layout_name(int layout)
@@ -321,10 +321,13 @@ void keyboard_poll_ps2(void)
 	stdin_wake_check();
 }
 
-void keyboard_handler64(void)
+static void keyboard_irq(uint32_t irq, void *data)
 {
 	static int kbd_irq_tag;
 
+	(void)irq;
+	(void)data;
+	clock_note_irq();
 	if (ir0_cmdline_tty_smoke_enabled() && !kbd_irq_tag)
 	{
 		kbd_irq_tag = 1;
@@ -332,6 +335,24 @@ void keyboard_handler64(void)
 	}
 
 	keyboard_poll_ps2();
+}
+
+static void i8042_aux_irq(uint32_t irq, void *data)
+{
+	(void)irq;
+	(void)data;
+	clock_note_irq();
+	input_mouse_handle_interrupt();
+}
+
+/*
+ * Lines 1 and 12 are serviced even when the controller is not initialized
+ * at boot: firmware leaves the i8042 raising them.
+ */
+void i8042_irq_init(void)
+{
+	(void)irq_request(1, keyboard_irq, NULL, "i8042-kbd");
+	(void)irq_request(12, i8042_aux_irq, NULL, "i8042-aux");
 }
 
 static void keyboard_feed_scancode(uint8_t scancode)
@@ -356,8 +377,8 @@ static void keyboard_feed_scancode(uint8_t scancode)
 	kc = extended ? ext_scancode_to_keycode[code] : scancode_to_keycode[code];
 	if (kc)
 	{
-		input_event_push(EV_KEY, kc, down);
-		input_event_push(EV_SYN, SYN_REPORT, 0);
+		input_event(input_i8042_dev(), EV_KEY, kc, down);
+		input_sync(input_i8042_dev());
 	}
 
 	/* Linux K_MEDIUMRAW: one byte, KEY_* code with bit 7 on release. */
@@ -442,14 +463,11 @@ static const struct input_keyboard_ops i8042_keyboard_ops = {
 
 void keyboard_init(void)
 {
+	(void)input_register_device(input_i8042_dev());
 	input_register_keyboard(&i8042_keyboard_ops);
 	keyboard_buffer_head = 0;
 	keyboard_buffer_tail = 0;
 	ps2_set1_reset(&kbd_state);
-	if (CONFIG_KEYBOARD_LAYOUT == KEYBOARD_LAYOUT_LATAM)
-		kbd_state.layout = KEYBOARD_LAYOUT_LATAM;
-	else
-		kbd_state.layout = KEYBOARD_LAYOUT_US;
 }
 
 void set_idle_mode(int is_idle)

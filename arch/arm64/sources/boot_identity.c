@@ -8,7 +8,7 @@
  *              firmware-described memory (framebuffers).
  */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 
 /*
  * The boot MMU (mmu.c) maps DRAM as Normal memory and device blocks on

@@ -16,8 +16,6 @@
 #include <ir0/copy_user.h>
 #include <ir0/console.h>
 #include <ir0/paging.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_cpu.h>
 #include <ir0/console_backend.h>
 #include <ir0/cred.h>
 #include <ir0/tty_smoke.h>
@@ -846,8 +844,12 @@ int ir0_console_wake_readers(void)
 		prev_state = reader->state;
 		process_set_sched_state(reader, PROCESS_READY);
 		d1_16_tty_state_transition(reader, prev_state, PROCESS_READY);
-		/* Prefer woken TTY reader on the next schedule. */
+		/*
+		 * Prefer this reader. IRQ return takes the flag; the keypress
+		 * path must not call schedule().
+		 */
 		sched_promote(reader);
+		clock_request_sched_resched();
 		last_pid = (uint32_t)reader->task.pid;
 		tty_read_waiters[i] = NULL;
 		woke = 1;

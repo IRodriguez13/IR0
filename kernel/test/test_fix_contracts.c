@@ -18,7 +18,7 @@
 #include <kernel/syscalls/fs_path_syscalls.h>
 #include <kernel/syscalls/fs_syscalls.h>
 #include <kernel/syscalls/socket_syscalls.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/files_struct.h>
@@ -373,9 +373,9 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 {
 	process_t *p;
 	void (*saved_handler)(int);
-	uint32_t saved_pending;
-	uint32_t saved_mask;
-	uint32_t saved_ignored;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
+	uint64_t saved_ignored;
 	uint64_t zero_mask = 0;
 	arch_syscall_frame_t saved_regs;
 	int64_t rc;
@@ -389,7 +389,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 		return;
 	}
 
-	saved_handler = p->signal_handlers[SIGUSR1];
+	saved_handler = p->sighand->handlers[SIGUSR1];
 	saved_pending = p->signal_pending;
 	saved_mask = p->signal_mask;
 	saved_ignored = p->signal_ignored;
@@ -403,7 +403,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	 * bit still set would make every later rt_sigsuspend return at once.
 	 */
 	saved_regs = p->syscall_frame;
-	p->signal_handlers[SIGUSR1] = (void (*)(int))(uintptr_t)2;
+	p->sighand->handlers[SIGUSR1] = (void (*)(int))(uintptr_t)2;
 	p->signal_ignored &= ~SIGNAL_MASK(SIGUSR1);
 	p->signal_pending = SIGNAL_MASK(SIGUSR1);
 	rc = sys_rt_sigsuspend((const sigset_t *)&zero_mask, sizeof(zero_mask));
@@ -419,7 +419,7 @@ void ktest_rt_sigsuspend_consumes_pending(void)
 	KASSERT_EQ((unsigned)p->restore_sigmask, 0u);
 	p->syscall_frame = saved_regs;
 
-	p->signal_handlers[SIGUSR1] = saved_handler;
+	p->sighand->handlers[SIGUSR1] = saved_handler;
 	p->signal_pending = saved_pending;
 	p->signal_mask = saved_mask;
 	p->signal_ignored = saved_ignored;
@@ -439,15 +439,16 @@ static void futex_signal_on_sleep(process_t *proc)
 static void futex_drop_on_sleep(process_t *proc)
 {
 	ir0_futex_drop_process(proc);
-	futex_drop_wake = ir0_futex_wake(&futex_word, 1);
+	futex_drop_wake = ir0_futex_wake(proc, &futex_word, 0, 1,
+					  FUTEX_BITSET_MATCH_ANY);
 	futex_signal_on_sleep(proc);
 }
 
 void ktest_futex_interrupted_wait_frees_slot(void)
 {
 	int rc;
-	uint32_t saved_pending;
-	uint32_t saved_mask;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
 
 	KTEST_BEGIN("futex_interrupted_wait_frees_slot");
 	KASSERT(current_process != NULL);
@@ -462,20 +463,22 @@ void ktest_futex_interrupted_wait_frees_slot(void)
 	saved_mask = current_process->signal_mask;
 	current_process->signal_mask &= ~SIGNAL_MASK(SIGUSR1);
 	ir0_futex_before_sleep = futex_signal_on_sleep;
-	rc = ir0_futex_wait(current_process, &futex_word, 0);
+	rc = ir0_futex_wait(current_process, &futex_word, 0, 0,
+			    FUTEX_BITSET_MATCH_ANY, IR0_FUTEX_NO_TIMEOUT);
 	ir0_futex_before_sleep = NULL;
 	current_process->signal_pending = saved_pending;
 	current_process->signal_mask = saved_mask;
 	KASSERT_EQ(rc, -ERESTARTSYS);
-	KASSERT_EQ(ir0_futex_wake(&futex_word, 1), 0);
+	KASSERT_EQ(ir0_futex_wake(current_process, &futex_word, 0, 1,
+				  FUTEX_BITSET_MATCH_ANY), 0);
 	KTEST_END();
 }
 
 void ktest_futex_exit_drop_frees_slot(void)
 {
 	int rc;
-	uint32_t saved_pending;
-	uint32_t saved_mask;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
 
 	KTEST_BEGIN("futex_exit_drop_frees_slot");
 	KASSERT(current_process != NULL);
@@ -491,13 +494,15 @@ void ktest_futex_exit_drop_frees_slot(void)
 	saved_mask = current_process->signal_mask;
 	current_process->signal_mask &= ~SIGNAL_MASK(SIGUSR1);
 	ir0_futex_before_sleep = futex_drop_on_sleep;
-	rc = ir0_futex_wait(current_process, &futex_word, 0);
+	rc = ir0_futex_wait(current_process, &futex_word, 0, 0,
+			    FUTEX_BITSET_MATCH_ANY, IR0_FUTEX_NO_TIMEOUT);
 	ir0_futex_before_sleep = NULL;
 	current_process->signal_pending = saved_pending;
 	current_process->signal_mask = saved_mask;
 	KASSERT_EQ(rc, -ERESTARTSYS);
 	KASSERT_EQ(futex_drop_wake, 0);
-	KASSERT_EQ(ir0_futex_wake(&futex_word, 1), 0);
+	KASSERT_EQ(ir0_futex_wake(current_process, &futex_word, 0, 1,
+				  FUTEX_BITSET_MATCH_ANY), 0);
 	KTEST_END();
 }
 
@@ -518,8 +523,8 @@ static void futex_count_sleep(process_t *proc)
 void ktest_futex_pending_signal_skips_sleep(void)
 {
 	int rc;
-	uint32_t saved_pending;
-	uint32_t saved_mask;
+	uint64_t saved_pending;
+	uint64_t saved_mask;
 
 	KTEST_BEGIN("futex_pending_signal_skips_sleep");
 	KASSERT(current_process != NULL);
@@ -536,13 +541,15 @@ void ktest_futex_pending_signal_skips_sleep(void)
 	current_process->signal_mask &= ~SIGNAL_MASK(SIGUSR1);
 	current_process->signal_pending |= SIGNAL_MASK(SIGUSR1);
 	ir0_futex_before_sleep = futex_count_sleep;
-	rc = ir0_futex_wait(current_process, &futex_word, 0);
+	rc = ir0_futex_wait(current_process, &futex_word, 0, 0,
+			    FUTEX_BITSET_MATCH_ANY, IR0_FUTEX_NO_TIMEOUT);
 	ir0_futex_before_sleep = NULL;
 	current_process->signal_pending = saved_pending;
 	current_process->signal_mask = saved_mask;
 	KASSERT_EQ(rc, -ERESTARTSYS);
 	KASSERT_EQ(futex_presleep_calls, 0);
-	KASSERT_EQ(ir0_futex_wake(&futex_word, 1), 0);
+	KASSERT_EQ(ir0_futex_wake(current_process, &futex_word, 0, 1,
+				  FUTEX_BITSET_MATCH_ANY), 0);
 	KTEST_END();
 }
 

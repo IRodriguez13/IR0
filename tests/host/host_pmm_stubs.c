@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* Host-only providers for the PMM bank-layout contract. */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_params.h>
 #include <ir0/oops.h>

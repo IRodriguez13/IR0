@@ -22,6 +22,8 @@
 #include <ir0/fault.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
+#include <ir0/process_domains.h>
+#include <stddef.h>
 #include <string.h>
 #include "signal_diag.h"
 
@@ -45,7 +47,7 @@ enum signal_frame_error
 
 static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
-			      uint64_t fault_addr,
+			      uint64_t fault_addr, int si_code,
 			      struct signal_frame_setup *out);
 
 /*
@@ -67,7 +69,7 @@ static int signal_ip_is_registered_handler(process_t *p, uint64_t ip)
 		return 0;
 	for (i = 1; i < _NSIG; i++)
 	{
-		void (*h)(int) = p->signal_handlers[i];
+		void (*h)(int) = p->sighand->handlers[i];
 
 		if (!h || h == SIG_DFL || h == SIG_IGN)
 			continue;
@@ -81,7 +83,7 @@ static int signal_ip_is_registered_handler(process_t *p, uint64_t ip)
  * The mask a handler frame saves (Linux sigmask_to_save()): the caller's own
  * mask while rt_sigsuspend runs with a temporary one.
  */
-static uint32_t sigmask_to_save(const process_t *p)
+static uint64_t sigmask_to_save(const process_t *p)
 {
 	return p->restore_sigmask ? p->saved_sigmask : p->signal_mask;
 }
@@ -95,7 +97,7 @@ static void signals_apply_handler_mask(process_t *p, int sig, uint32_t sa_flags)
 		p->signal_mask_saved = sigmask_to_save(p);
 		p->signal_mask_saved_valid = 1;
 	}
-	p->signal_mask |= p->signal_sa_mask[sig];
+	p->signal_mask |= p->sighand->sa_mask[sig];
 	if (!(sa_flags & SA_NODEFER))
 		p->signal_mask |= SIGNAL_MASK(sig);
 }
@@ -144,7 +146,7 @@ int signals_has_user_handler(process_t *p, int sig)
 		return 0;
 	if (p->signal_mask & SIGNAL_MASK(sig))
 		return 0;
-	handler = p->signal_handlers[sig];
+	handler = p->sighand->handlers[sig];
 	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
 		return 0;
 	if (p->mode == USER_MODE &&
@@ -154,7 +156,7 @@ int signals_has_user_handler(process_t *p, int sig)
 }
 
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
-				   uint64_t fault_addr)
+				   uint64_t fault_addr, int si_code)
 {
 	void (*handler)(int);
 	struct sigcontext ctx;
@@ -166,8 +168,8 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	if (!frame || p->mode != USER_MODE)
 		return 0;
 
-	handler = p->signal_handlers[sig];
-	sa_flags = p->signal_sa_flags[sig];
+	handler = p->sighand->handlers[sig];
+	sa_flags = p->sighand->sa_flags[sig];
 
 	memset(&ctx, 0, sizeof(ctx));
 	signal_fill_sigcontext_from_irq_frame(&ctx, frame);
@@ -186,7 +188,8 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	 * is what lets the handler return (rt_sigreturn reads it back), so a
 	 * fault whose frame cannot be built ends the task by SIGSEGV.
 	 */
-	if (signal_setup_frame(p, sig, &ctx, fault_addr, &setup) != SIGFRAME_OK)
+	if (signal_setup_frame(p, sig, &ctx, fault_addr, si_code, &setup) !=
+	    SIGFRAME_OK)
 		signal_exit_current(SIGSEGV);
 
 	signal_redirect_irq_frame(frame, (void *)handler, sig, setup.sp,
@@ -196,7 +199,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	process_save_user_exception_frame(frame);
 
 	if (sa_flags & SA_RESETHAND)
-		p->signal_handlers[sig] = SIG_DFL;
+		p->sighand->handlers[sig] = SIG_DFL;
 
 	p->signal_frame_sp = setup.sp;
 	signals_apply_handler_mask(p, sig, sa_flags);
@@ -222,8 +225,19 @@ int signal_deliver_fault(int sig, const struct ir0_fault *fault,
 	 * now; replaying the instruction first would fault again.
 	 */
 	if (irq_frame)
+	{
+		int si_code = 0;
+
+		if (fault && fault->kind == IR0_FAULT_PAGE)
+			si_code = fault->present ? SEGV_ACCERR : SEGV_MAPERR;
+		else if (fault && fault->si_code != 0)
+			si_code = fault->si_code;
+		else if (fault && fault->addr != 0)
+			si_code = SEGV_MAPERR;
 		return signals_deliver_from_irq_frame(p, sig, irq_frame,
-						      fault ? fault->addr : 0);
+						      fault ? fault->addr : 0,
+						      si_code);
+	}
 	if (signals_has_user_handler(p, sig))
 	{
 		p->signal_pending |= SIGNAL_MASK(sig);
@@ -246,19 +260,27 @@ void signals_reset_on_exec(process_t *p)
 	if (!p)
 		return;
 	p->signal_pending = 0;
-	p->signal_mask = 0;
 	p->signal_ignored = 0;
 	p->signal_mask_saved = 0;
 	p->signal_mask_saved_valid = 0;
 	p->signal_frame_sp = 0;
+	p->sas_ss_sp = 0;
+	p->sas_ss_size = 0;
+	p->sas_ss_flags = SS_DISABLE;
 	p->it_real_expire_ms = 0;
 	p->it_real_interval_ms = 0;
+	/*
+	 * Linux execve does not keep a shared handler table. Reset only the
+	 * private copy so another task keeps the handlers it installed.
+	 */
+	if (process_signals_unshare(p) < 0 || !p->sighand)
+		return;
 	for (i = 0; i < _NSIG; i++)
 	{
-		p->signal_handlers[i] = SIG_DFL;
-		p->signal_sa_flags[i] = 0;
-		p->signal_sa_mask[i] = 0;
-		p->signal_restorer[i] = NULL;
+		p->sighand->handlers[i] = SIG_DFL;
+		p->sighand->sa_flags[i] = 0;
+		p->sighand->sa_mask[i] = 0;
+		p->sighand->restorer[i] = NULL;
 	}
 }
 
@@ -284,7 +306,7 @@ static int signal_default_stops(int sig)
  */
 int signal_pending(process_t *p)
 {
-	uint32_t deliverable;
+	uint64_t deliverable;
 	int sig;
 
 	if (!p || p->signal_pending == 0)
@@ -295,7 +317,7 @@ int signal_pending(process_t *p)
 	deliverable = p->signal_pending & ~p->signal_mask & ~p->signal_ignored;
 	for (sig = 1; sig < _NSIG && deliverable; sig++)
 	{
-		void (*handler)(int) = p->signal_handlers[sig];
+		void (*handler)(int) = p->sighand->handlers[sig];
 		int caught = handler && handler != SIG_DFL && handler != SIG_IGN;
 
 		if (!(deliverable & SIGNAL_MASK(sig)))
@@ -343,7 +365,7 @@ int send_signal(int pid, int signal)
      */
     if (proc->task.pid == 1)
     {
-	void (*handler)(int) = proc->signal_handlers[signal];
+	void (*handler)(int) = proc->sighand->handlers[signal];
 
 	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
 		return 0;
@@ -399,28 +421,58 @@ int send_signal_pgrp(int32_t pgid, int signal)
 
 /*
  * Linux get_sigframe() (arch/x86/kernel/signal.c, arch/arm64/kernel/
- * signal.c) without SA_ONSTACK: the frame goes just below the interrupted
- * stack pointer, past the ABI red zone, whatever mapping that pointer is
- * in (the main stack, a thread stack from mmap(2)). Below the frame sits
+ * signal.c). SA_ONSTACK with an enabled alternate stack, and the
+ * interrupted SP not already inside it, places the frame at the top of
+ * that stack (no red zone). Otherwise the frame goes just below the
+ * interrupted stack pointer, past the ABI red zone. Below the frame sits
  * the return slot on ISAs whose handlers return with a stack pop; the
  * handler starts with SP there. A frame that cannot be written makes the
  * copy fail and the task gets SIGSEGV, as with force_sigsegv().
  *
- * Returns the handler's SP and the frame address, or 0 when the stack
- * pointer is too low to hold a frame at all.
+ * Returns the handler's SP and the frame address, or 0 when the chosen
+ * stack cannot hold a frame.
  */
-static uint64_t signal_pick_handler_sp(uint64_t saved_sp,
+static uint64_t signal_pick_handler_sp(process_t *p, int sig,
+				       uint64_t saved_sp,
 				       uint64_t *frame_addr_out)
 {
 	uint64_t frame_addr;
+	uint64_t sp;
+	uint64_t user_sp;
+	int alt;
 
-	if (saved_sp < SIGFRAME_RED_ZONE + sizeof(struct sigframe) +
-			       SIGFRAME_RETURN_SLOT + 16UL)
-		return 0;
-	frame_addr = (saved_sp - SIGFRAME_RED_ZONE - sizeof(struct sigframe)) &
-		     ~0xFUL;
+	alt = 0;
+	sp = saved_sp;
+	if (p && p->sighand && sig >= 1 && sig < _NSIG &&
+	    (p->sighand->sa_flags[sig] & SA_ONSTACK) &&
+	    p->sas_ss_size != 0 &&
+	    !process_on_altstack(p, saved_sp))
+	{
+		sp = p->sas_ss_sp + p->sas_ss_size;
+		alt = 1;
+	}
+
+	if (!alt)
+	{
+		if (sp < SIGFRAME_RED_ZONE + sizeof(struct sigframe) +
+				SIGFRAME_RETURN_SLOT + 16UL)
+			return 0;
+		frame_addr = (sp - SIGFRAME_RED_ZONE -
+			      sizeof(struct sigframe)) & ~0xFUL;
+		user_sp = frame_addr - SIGFRAME_RETURN_SLOT;
+	}
+	else
+	{
+		if (sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
+			return 0;
+		frame_addr = (sp - sizeof(struct sigframe)) & ~0xFUL;
+		user_sp = frame_addr - SIGFRAME_RETURN_SLOT;
+		if (user_sp < p->sas_ss_sp || frame_addr < p->sas_ss_sp)
+			return 0;
+	}
+
 	*frame_addr_out = frame_addr;
-	return frame_addr - SIGFRAME_RETURN_SLOT;
+	return user_sp;
 }
 
 /*
@@ -430,7 +482,7 @@ static uint64_t signal_pick_handler_sp(uint64_t saved_sp,
  */
 static uint64_t signal_handler_restorer(process_t *p, int sig)
 {
-	void (*fn)(void) = p->signal_restorer[sig];
+	void (*fn)(void) = p->sighand->restorer[sig];
 
 	if (!fn)
 		return sigtramp_addr();
@@ -453,7 +505,7 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
  */
 static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
-			      uint64_t fault_addr,
+			      uint64_t fault_addr, int si_code,
 			      struct signal_frame_setup *out)
 {
 	struct sigframe frame;
@@ -461,7 +513,7 @@ static int signal_setup_frame(process_t *p, int sig,
 	uint64_t user_sp;
 	uint64_t restorer;
 
-	user_sp = signal_pick_handler_sp(sigcontext_sp(ctx), &frame_addr);
+	user_sp = signal_pick_handler_sp(p, sig, sigcontext_sp(ctx), &frame_addr);
 	if (user_sp == 0)
 		return SIGFRAME_BAD_SP;
 	restorer = signal_handler_restorer(p, sig);
@@ -469,7 +521,7 @@ static int signal_setup_frame(process_t *p, int sig,
 		return SIGFRAME_NO_RESTORER;
 
 	memset(&frame, 0, sizeof(frame));
-	frame.handler = p->signal_handlers[sig];
+	frame.handler = p->sighand->handlers[sig];
 	frame.signum = sig;
 	frame.ctx = *ctx;
 	/*
@@ -481,12 +533,15 @@ static int signal_setup_frame(process_t *p, int sig,
 		? (uint64_t)p->signal_mask_saved
 		: (uint64_t)sigmask_to_save(p);
 	frame.info.si_signo = sig;
-	if (fault_addr != 0)
+	if (si_code != 0)
 	{
-		frame.info.si_code = SEGV_MAPERR;
+		frame.info.si_code = si_code;
 		frame.info._sifields._sigfault.si_addr =
 			(void *)(uintptr_t)fault_addr;
 	}
+	ucontext_export(ctx,
+			     frame_addr + offsetof(struct sigframe, ucontext),
+			     frame.oldmask, frame.ucontext);
 
 	if (copy_to_user_mm(process_pgd(p), frame_addr, &frame,
 			    sizeof(frame)) != 0 ||
@@ -574,8 +629,8 @@ static int get_signal(process_t *p)
 
 	for (sig = 1; sig < _NSIG; sig++)
 	{
-		uint32_t bit = SIGNAL_MASK(sig);
-		void (*handler)(int) = p->signal_handlers[sig];
+		uint64_t bit = SIGNAL_MASK(sig);
+		void (*handler)(int) = p->sighand->handlers[sig];
 
 		if (!(p->signal_pending & bit))
 			continue;
@@ -605,7 +660,7 @@ static int get_signal(process_t *p)
 		if (!signal_code_addr_ok((const void *)handler))
 		{
 			/* A handler outside userspace falls back to the default. */
-			p->signal_handlers[sig] = SIG_DFL;
+			p->sighand->handlers[sig] = SIG_DFL;
 			p->signal_pending &= ~bit;
 			continue;
 		}
@@ -661,8 +716,8 @@ static int handle_signal(process_t *p, int sig,
 			 const struct sigcontext *interrupted)
 {
 	arch_syscall_frame_t *regs = &p->syscall_frame;
-	void (*handler)(int) = p->signal_handlers[sig];
-	uint32_t sa_flags = p->signal_sa_flags[sig];
+	void (*handler)(int) = p->sighand->handlers[sig];
+	uint32_t sa_flags = p->sighand->sa_flags[sig];
 	struct signal_frame_setup setup;
 	struct sigcontext ctx;
 
@@ -683,7 +738,7 @@ static int handle_signal(process_t *p, int sig,
 		return 0;
 	}
 
-	if (signal_setup_frame(p, sig, &ctx, 0, &setup) != SIGFRAME_OK)
+	if (signal_setup_frame(p, sig, &ctx, 0, 0, &setup) != SIGFRAME_OK)
 	{
 		/* Linux force_sigsegv(): no frame, no handler. */
 		p->signal_pending &= ~SIGNAL_MASK(sig);
@@ -700,14 +755,14 @@ static int handle_signal(process_t *p, int sig,
 
 	p->signal_frame_sp = setup.sp;
 	if (sa_flags & SA_RESETHAND)
-		p->signal_handlers[sig] = SIG_DFL;
+		p->sighand->handlers[sig] = SIG_DFL;
 	signals_apply_handler_mask(p, sig, sa_flags);
 	p->restore_sigmask = 0;
 	p->signal_pending &= ~SIGNAL_MASK(sig);
 	return 1;
 }
 
-void set_current_blocked(uint32_t mask)
+void set_current_blocked(uint64_t mask)
 {
 	current_process->signal_mask = mask & ~SIGNAL_UNBLOCKABLE;
 }
@@ -751,18 +806,8 @@ int register_signal_handler(int signal, void (*handler)(int))
             return -1; /* Invalid handler address */  
     }
     
-    current->signal_handlers[signal] = handler;
-    
-    /* If handler is SIG_IGN, add to ignored mask */
-    if (handler == SIG_IGN)
-    {
-        current->signal_ignored |= SIGNAL_MASK(signal);
-        current->signal_pending &= ~SIGNAL_MASK(signal);
-    }
-    else
-    {
-        current->signal_ignored &= ~SIGNAL_MASK(signal);
-    }
+    current->sighand->handlers[signal] = handler;
+    process_sighand_note_ignore(current, signal, handler == SIG_IGN);
     
     return 0;
 }

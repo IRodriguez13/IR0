@@ -4,10 +4,11 @@
  * Copyright (C) 2025  Iván Rodriguez
  *
  * File: procfs_process.c
- * Description: /proc process, pid, fd-link, environ and status entries.
+ * Description: /proc process, pid, fd-link, environ, status and comm entries.
  */
 
 #include "procfs_internal.h"
+#include <ir0/signals.h>
 
 
 /*
@@ -23,6 +24,14 @@ typedef struct proc_fs_snap
 	pid_t pgid;
 	pid_t sid;
 	int sched_prio;
+	int threads;
+	int no_new_privs;
+	int fd_size;
+	uint32_t umask;
+	uint64_t sig_pending;
+	uint64_t sig_blocked;
+	uint64_t sig_ignored;
+	uint64_t sig_caught;
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
@@ -33,6 +42,8 @@ typedef struct proc_fs_snap
 	uint32_t egid;
 	uint32_t suid;
 	uint32_t sgid;
+	gid_t groups[IR0_NGROUPS_MAX];
+	uint8_t ngroups;
 	int oom_score_adj;
 	char *cmdline_copy;
 	size_t cmdline_len;
@@ -77,12 +88,62 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->utime = proc->utime;
 	snap->stime = proc->stime;
 	snap->state = (int)proc->state;
+	snap->no_new_privs = (int)proc->no_new_privs;
+	snap->umask = proc->umask;
+	snap->sig_pending = proc->signal_pending;
+	snap->sig_blocked = proc->signal_mask;
+	snap->sig_ignored = 0;
+	snap->sig_caught = 0;
+	if (proc->sighand)
+	{
+		int sig;
+
+		for (sig = 1; sig < _NSIG; sig++)
+		{
+			void (*handler)(int) = proc->sighand->handlers[sig];
+
+			if (handler == SIG_IGN)
+			{
+				snap->sig_ignored |= 1ULL << sig;
+			}
+			else if (handler != SIG_DFL)
+			{
+				snap->sig_caught |= 1ULL << sig;
+			}
+		}
+	}
+	snap->fd_size = process_fd_span(proc);
+	snap->threads = 0;
+	{
+		process_t *scan;
+
+		for (scan = process_list; scan; scan = scan->next)
+		{
+			if (scan->tgid == proc->tgid && process_is_alive(scan))
+				snap->threads++;
+		}
+	}
+	if (snap->threads == 0)
+		snap->threads = 1;
 	snap->uid = proc->uid;
 	snap->gid = proc->gid;
 	snap->euid = proc->euid;
 	snap->egid = proc->egid;
 	snap->suid = proc->suid;
 	snap->sgid = proc->sgid;
+	snap->ngroups = proc->ngroups;
+	if (snap->ngroups > IR0_NGROUPS_MAX)
+	{
+		snap->ngroups = IR0_NGROUPS_MAX;
+	}
+	{
+		unsigned int gi;
+
+		for (gi = 0; gi < snap->ngroups; gi++)
+		{
+			snap->groups[gi] = proc->groups[gi];
+		}
+	}
 	snap->oom_score_adj = process_oom_score_adj_get(proc);
 	snap->cmdline_copy = NULL;
 	snap->cmdline_len = 0;
@@ -243,6 +304,7 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
             return NULL;
         *pid_out = current_process->task.pid;
         if (strcmp(rest, "status") == 0) return "status";
+        if (strcmp(rest, "comm") == 0) return "comm";
         if (strcmp(rest, "cmdline") == 0) return "cmdline";
         if (strcmp(rest, "maps") == 0) return "maps";
         if (strcmp(rest, "statm") == 0) return "statm";
@@ -277,6 +339,12 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
         return "status";
     }
 
+    if (strcmp(after_proc, "comm") == 0)
+    {
+        *pid_out = -1;
+        return "comm";
+    }
+
     /* OSDev-style: /proc/pid or /proc/pid/N or /proc/pid/N/status */
     if (strncmp(after_proc, "pid", 3) == 0 && (after_proc[3] == '\0' || after_proc[3] == '/'))
     {
@@ -302,6 +370,8 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
         *pid_out = atoi(pid_str);
         if (strncmp(slash + 1, "status", 6) == 0)
             return "status";
+        if (strcmp(slash + 1, "comm") == 0)
+            return "comm";
         if (strncmp(slash + 1, "cmdline", 7) == 0)
             return "cmdline";
         if (strncmp(slash + 1, "maps", 4) == 0)
@@ -343,6 +413,8 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
 
             if (strncmp(slash + 1, "status", 6) == 0)
                 return "status";
+            if (strcmp(slash + 1, "comm") == 0)
+                return "comm";
             if (strncmp(slash + 1, "cmdline", 7) == 0)
                 return "cmdline";
             if (strncmp(slash + 1, "maps", 4) == 0)
@@ -487,6 +559,12 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	proc_fs_snap_t snap;
 	const char *state_str = "?";
 	const char *state_paren = "unknown";
+	const struct mmap_region *region;
+	uint64_t vsize = 0;
+	uint64_t rss_kb = 0;
+	char groups_line[sizeof("Groups:\t") + IR0_NGROUPS_MAX * 11 + 1];
+	int groups_len;
+	int gi;
 	int len;
 
 	if (!buf || count == 0)
@@ -513,20 +591,86 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 			break;
 	}
 
+	if (snap.heap_end > snap.heap_start)
+		vsize = snap.heap_end - snap.heap_start;
+	vsize += snap.stack_size;
+	for (region = snap.mmap_list; region; region = region->next)
+		vsize += (uint64_t)region->length;
+	vsize /= 1024ULL;
+	if (snap.mm)
+		rss_kb = mm_count_resident_user_pages(snap.mm) *
+			 ((uint64_t)IR0_MM_PAGE_SIZE / 1024ULL);
+
+	groups_len = snprintf(groups_line, sizeof(groups_line), "Groups:\t");
+	if (groups_len < 0 || (size_t)groups_len >= sizeof(groups_line))
+	{
+		groups_line[0] = '\0';
+	}
+	else
+	{
+		for (gi = 0; gi < (int)snap.ngroups; gi++)
+		{
+			int wrote;
+
+			if ((size_t)groups_len >= sizeof(groups_line))
+			{
+				break;
+			}
+			wrote = snprintf(groups_line + groups_len,
+					 sizeof(groups_line) - (size_t)groups_len,
+					 "%s%u",
+					 gi ? " " : "",
+					 (unsigned int)snap.groups[gi]);
+			if (wrote < 0 ||
+			    (size_t)groups_len + (size_t)wrote >= sizeof(groups_line))
+			{
+				break;
+			}
+			groups_len += wrote;
+		}
+		if ((size_t)groups_len + 1 < sizeof(groups_line))
+		{
+			groups_line[groups_len] = '\n';
+			groups_line[groups_len + 1] = '\0';
+		}
+	}
+
+	/* TracerPid stays 0: there is no ptrace attach. */
 	len = snprintf(buf, count,
 		       "Name:\t%s\n"
 		       "State:\t%s (%s)\n"
 		       "Pid:\t%d\n"
 		       "PPid:\t%d\n"
+		       "TracerPid:\t0\n"
 		       "Uid:\t%d\t%d\t%d\t%d\n"
-		       "Gid:\t%d\t%d\t%d\t%d\n",
+		       "Gid:\t%d\t%d\t%d\t%d\n"
+		       "%s"
+		       "FDSize:\t%d\n"
+		       "Threads:\t%d\n"
+		       "NoNewPrivs:\t%d\n"
+		       "Umask:\t%04o\n"
+		       "SigPnd:\t%016llx\n"
+		       "SigBlk:\t%016llx\n"
+		       "SigIgn:\t%016llx\n"
+		       "SigCgt:\t%016llx\n"
+		       "VmSize:\t%llu kB\n"
+		       "VmRSS:\t%llu kB\n",
 		       snap.comm[0] ? snap.comm : "(none)",
 		       state_str, state_paren,
 		       (int)snap.pid, (int)snap.ppid,
 		       (int)snap.uid, (int)snap.euid, (int)snap.suid,
 		       (int)snap.uid,
 		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
-		       (int)snap.gid);
+		       (int)snap.gid,
+		       groups_line,
+		       snap.fd_size, snap.threads, snap.no_new_privs,
+		       snap.umask,
+		       (unsigned long long)(snap.sig_pending >> 1),
+		       (unsigned long long)(snap.sig_blocked >> 1),
+		       (unsigned long long)(snap.sig_ignored >> 1),
+		       (unsigned long long)(snap.sig_caught >> 1),
+		       (unsigned long long)vsize,
+		       (unsigned long long)rss_kb);
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;
@@ -537,6 +681,42 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	}
 	buf[len] = '\0';
 	return len;
+}
+
+/* /proc/[pid]/comm — task comm (at most 15 bytes) and one newline. */
+int proc_comm_read(char *buf, size_t count, pid_t pid)
+{
+	proc_fs_snap_t snap;
+	size_t name_len;
+	size_t i;
+	size_t out;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
+
+	name_len = 0;
+	while (name_len < sizeof(snap.comm) - 1 && snap.comm[name_len] != '\0')
+	{
+		name_len++;
+	}
+
+	out = name_len + 1;
+	if (out > count)
+		out = count;
+
+	for (i = 0; i < out; i++)
+	{
+		if (i < name_len)
+			buf[i] = snap.comm[i];
+		else
+			buf[i] = '\n';
+	}
+
+	proc_fs_snap_release(&snap);
+	return (int)out;
 }
 
 /*
@@ -877,13 +1057,33 @@ int proc_fd_snap_acquire(pid_t pid, proc_fd_snap_t *snap)
 			proc = proc->next;
 	}
 
-	if (proc && proc->files && files_struct_live(proc->files))
+	if (proc && proc->files && files_struct_live(proc->files) &&
+	    proc->files->fd_table && proc->files->max_fds > 0)
 	{
-		memcpy(snap->table, proc->files->fd_table, sizeof(snap->table));
-		snap->valid = 1;
+		int span = proc->files->max_fds;
+		fd_entry_t *copy = kmalloc(sizeof(*copy) * (size_t)span);
+
+		if (copy)
+		{
+			memcpy(copy, proc->files->fd_table,
+			       sizeof(*copy) * (size_t)span);
+			snap->table = copy;
+			snap->span = span;
+			snap->valid = 1;
+		}
 	}
 	irq_restore(irqf);
 	return snap->valid;
+}
+
+void proc_fd_snap_release(proc_fd_snap_t *snap)
+{
+	if (!snap || !snap->table)
+		return;
+	kfree(snap->table);
+	snap->table = NULL;
+	snap->span = 0;
+	snap->valid = 0;
 }
 
 static int proc_parse_pid_fd_link(const char *path, pid_t *pid_out, int *fd_out)
@@ -904,7 +1104,7 @@ static int proc_parse_pid_fd_link(const char *path, pid_t *pid_out, int *fd_out)
 		return -ENOENT;
 
 	fd = atoi(fd_slash + 4);
-	if (fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (fd < 0 || fd >= IR0_NOFILE_CEILING)
 		return -EINVAL;
 
 	*fd_out = fd;
@@ -948,11 +1148,15 @@ int proc_pid_fd_link_target_read(char *buf, size_t count, pid_t pid, int fd_num)
 	if (!proc_fd_snap_acquire(pid, &snap))
 		return -ENOENT;
 
-	if (fd_num < 0 || fd_num >= MAX_FDS_PER_PROCESS ||
+	if (fd_num < 0 || fd_num >= snap.span ||
 	    !snap.table[fd_num].in_use)
+	{
+		proc_fd_snap_release(&snap);
 		return -ENOENT;
+	}
 
 	len = proc_fd_entry_target(&snap.table[fd_num], buf, count);
+	proc_fd_snap_release(&snap);
 	if (len < 0)
 		return len;
 	if ((size_t)len >= count)

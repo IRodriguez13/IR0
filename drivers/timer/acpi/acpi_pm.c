@@ -25,8 +25,9 @@
 #include <ir0/boot_memory.h>
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/page.h>
 #include <ir0/paging.h>
-#include <ir0/arch_port.h>
+#include <ir0/tlb.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -124,7 +125,7 @@ static int acpi_map_phys_window(uint64_t phys, size_t need)
 		return -1;
 
 	cr3 = (uint64_t)mm_current_root();
-	pml4 = (uint64_t *)(uintptr_t)(cr3 & ~0xFFFULL);
+	pml4 = phys_to_virt((uintptr_t)(cr3 & ~0xFFFULL));
 	if (!pml4)
 		return -1;
 

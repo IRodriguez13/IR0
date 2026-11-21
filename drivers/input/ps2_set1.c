@@ -13,42 +13,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/ps2_set1.h>
-
-#ifndef KEYBOARD_LAYOUT_US
-#define KEYBOARD_LAYOUT_US 0
-#endif
-#ifndef KEYBOARD_LAYOUT_LATAM
-#define KEYBOARD_LAYOUT_LATAM 1
-#endif
-
-static const char ascii_us[] = {
-	0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 0, 0,
-	'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', 0, 0, 'a', 's',
-	'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', '`', 0, '\\', 'z', 'x', 'c', 'v',
-	'b', 'n', 'm', ',', '.', '/', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
-};
-
-static const char ascii_shift_us[] = {
-	0, 0, '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+', 0, 0,
-	'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', 0, 0, 'A', 'S',
-	'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"', '~', 0, '|', 'Z', 'X', 'C', 'V',
-	'B', 'N', 'M', '<', '>', '?', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
-};
-
-/* LATAM: same printable ASCII subset as keyboard.c (no dead keys). */
-static const char ascii_latam[] = {
-	0, 0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '\'', 0, 0, 0,
-	'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', 0, '+', 0, 0, 'a', 's',
-	'd', 'f', 'g', 'h', 'j', 'k', 'l', 0, '{', '|', 0, '}', 'z', 'x', 'c', 'v',
-	'b', 'n', 'm', ',', '.', '-', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
-};
-
-static const char ascii_shift_latam[] = {
-	0, 0, '!', '"', '#', '$', '%', '&', '/', '(', ')', '=', '?', 0, 0, 0,
-	'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', 0, '*', 0, 0, 'A', 'S',
-	'D', 'F', 'G', 'H', 'J', 'K', 'L', 0, '[', 0, 0, ']', 'Z', 'X', 'C', 'V',
-	'B', 'N', 'M', ';', ':', '_', 0, '*', 0, ' ', 0, 0, 0, 0, 0, 0,
-};
+#include <ir0/keymap.h>
+#include <linux/kd.h>
+#include <linux/keyboard.h>
 
 void ps2_set1_reset(struct ps2_set1_state *st)
 {
@@ -65,7 +32,6 @@ void ps2_set1_reset(struct ps2_set1_state *st)
 	st->mods.scroll_lock = 0;
 	st->e0_prefix = 0;
 	st->e1_skip = 0;
-	st->layout = KEYBOARD_LAYOUT_US;
 }
 
 void ps2_set1_all_keys_up(struct ps2_set1_state *st)
@@ -291,10 +257,8 @@ static void emit_extended_csi(struct ps2_set1_result *out, uint8_t code)
 static void emit_ascii(struct ps2_set1_state *st, struct ps2_set1_result *out,
 		       uint8_t code)
 {
-	const char *base;
-	const char *shift_tbl;
+	unsigned short sym;
 	char ch;
-	int shifted;
 
 	/* Esc → ASCII ESC (0x1b), as the Linux default keymap. */
 	if (code == 0x01)
@@ -331,27 +295,16 @@ static void emit_ascii(struct ps2_set1_state *st, struct ps2_set1_result *out,
 		return;
 	}
 
-	if (st->layout == KEYBOARD_LAYOUT_LATAM)
-	{
-		base = ascii_latam;
-		shift_tbl = ascii_shift_latam;
-	}
-	else
-	{
-		base = ascii_us;
-		shift_tbl = ascii_shift_us;
-	}
-
-	if (code >= sizeof(ascii_us))
+	sym = keymap_get_entry(ps2_set1_shift(&st->mods) ? K_SHIFTTAB : K_NORMTAB,
+			       code);
+	if (KTYP(sym) != KT_LATIN && KTYP(sym) != KT_LETTER)
 		return;
-
-	shifted = ps2_set1_shift(&st->mods);
-	ch = shifted ? shift_tbl[code] : base[code];
+	ch = (char)KVAL(sym);
 	if (ch == 0)
 		return;
 
-	/* Caps Lock toggles case for a–z / A–Z only. */
-	if (st->mods.caps_lock)
+	/* Caps Lock toggles case for KT_LETTER keysyms (a–z / A–Z). */
+	if (st->mods.caps_lock && KTYP(sym) == KT_LETTER)
 	{
 		if (ch >= 'a' && ch <= 'z')
 			ch = (char)(ch - 'a' + 'A');

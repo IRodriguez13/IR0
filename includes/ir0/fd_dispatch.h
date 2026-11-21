@@ -15,6 +15,7 @@
 #pragma once
 
 #include <ir0/fd_types.h>
+#include <ir0/files_struct.h>
 #include <stddef.h>
 
 static inline int fd_entry_live(const fd_entry_t *e)
@@ -47,7 +48,7 @@ static inline int fd_entry_file(const fd_entry_t *e)
 
 static inline fd_entry_t *fd_table_slot(fd_entry_t *table, int fd)
 {
-	if (!table || fd < 0 || fd >= MAX_FDS_PER_PROCESS)
+	if (!table || fd < 0 || fd >= ir0_fd_span())
 		return NULL;
 	return &table[fd];
 }

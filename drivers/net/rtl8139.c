@@ -17,17 +17,14 @@
 #include "net_drivers.h"
 #include <stdbool.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/arch_io.h>
 #include <ir0/kmem.h>
 #include <string.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
 #include <ir0/oops.h>
 #include <ir0/spinlock.h>
 #include <ir0/cpu.h>  /* For ASSERT and panicex */
 #include <ir0/resource_registry.h>
 #include <ir0/clock.h>
-#include <ir0/arch_port.h>
 #include <config.h>
 #include <asm/io.h>
 
@@ -104,7 +101,7 @@ static int rtl8139_recover_tx_path(void)
         if ((now - rtl8139_last_full_recover_tick) < window)
         {
             rtl8139_recover_suppressed++;
-            LOG_DEBUG("RTL8139", "TX recover suppressed (rate limit)");
+            klog_debug("RTL8139", "TX recover suppressed (rate limit)");
             return 0;
         }
     }
@@ -136,14 +133,14 @@ static int rtl8139_recover_tx_path(void)
     outw(rtl8139_io_base + RTL8139_REG_ISR, RTL8139_INT_TOK | RTL8139_INT_TER | RTL8139_INT_PUN);
     if (rtl8139_recover_suppressed)
     {
-        LOG_DEBUG_FMT("RTL8139",
+        klog_debug_fmt("RTL8139",
                       "TX path recovered (suppressed=%u prior)",
                       rtl8139_recover_suppressed);
         rtl8139_recover_suppressed = 0;
     }
     else
     {
-        LOG_WARNING("RTL8139", "TX path recovered (descriptor ring re-armed)");
+        klog_warn("RTL8139", "TX path recovered (descriptor ring re-armed)");
     }
     return 1;
 }
@@ -234,7 +231,7 @@ static int find_rtl8139(uint8_t *bus, uint8_t *slot)
  */
 static int rtl8139_probe(void)
 {
-    LOG_INFO("RTL8139", "Registering RTL8139 driver...");
+    klog_info("RTL8139", "Registering RTL8139 driver...");
     ir0_register_driver(&rtl8139_info, &rtl8139_ops);
     return 0;
 }
@@ -249,15 +246,15 @@ static int32_t rtl8139_hw_init(void)
     uint8_t bus, slot;
     int i;
 
-    LOG_INFO("RTL8139", "Searching for device...");
+    klog_info("RTL8139", "Searching for device...");
 
     if (find_rtl8139(&bus, &slot) != 0)
     {
-        LOG_WARNING("RTL8139", "Device not found (absent)");
+        klog_warn("RTL8139", "Device not found (absent)");
         return IR0_DRIVER_ABSENT;
     }
 
-    LOG_INFO_FMT("RTL8139", "Found device at PCI %d:%d", (int)bus, (int)slot);
+    klog_info_fmt("RTL8139", "Found device at PCI %d:%d", (int)bus, (int)slot);
 
     memset(rtl8139_tx_desc_start_tick, 0, sizeof(rtl8139_tx_desc_start_tick));
     memset(rtl8139_tx_timeout_latched, 0, sizeof(rtl8139_tx_timeout_latched));
@@ -266,11 +263,11 @@ static int32_t rtl8139_hw_init(void)
     uint32_t bar0 = pci_config_read(bus, slot, 0, PCI_REG_BAR0);
     if (!(bar0 & 1))
     {
-        LOG_ERROR_FMT("RTL8139", "BAR0 is not I/O space. BAR0=0x%x", bar0);
+        klog_error_fmt("RTL8139", "BAR0 is not I/O space. BAR0=0x%x", bar0);
         return -1;
     }
     rtl8139_io_base = bar0 & ~0x3;
-    LOG_INFO_FMT("RTL8139", "I/O Base address: 0x%x", rtl8139_io_base);
+    klog_info_fmt("RTL8139", "I/O Base address: 0x%x", rtl8139_io_base);
 
     /* Enable PCI Bus Mastering and I/O Space */
     uint32_t command = pci_config_read(bus, slot, 0, PCI_REG_COMMAND);
@@ -290,22 +287,22 @@ static int32_t rtl8139_hw_init(void)
             }
         }
     }
-    LOG_INFO("RTL8139", "Software reset complete.");
+    klog_info("RTL8139", "Software reset complete.");
 
     /* Read MAC address (REAL DATA) */
     for (int i = 0; i < 6; i++)
     {
         rtl8139_mac[i] = inb(rtl8139_io_base + RTL8139_REG_MAC0 + i);
     }
-    LOG_INFO_FMT("RTL8139", "MAC Address: %02x:%02x:%02x:%02x:%02x:%02x",
-                 rtl8139_mac[0], rtl8139_mac[1], rtl8139_mac[2],
-                 rtl8139_mac[3], rtl8139_mac[4], rtl8139_mac[5]);
+    klog_info_fmt("RTL8139", "MAC Address: %02x:%02x:%02x:%02x:%02x:%02x",
+                  rtl8139_mac[0], rtl8139_mac[1], rtl8139_mac[2],
+                  rtl8139_mac[3], rtl8139_mac[4], rtl8139_mac[5]);
 
     /* Initialize RX buffer */
     rtl8139_rx_buffer = (uint8_t *)kmalloc(RTL8139_RX_BUF_SIZE + RTL8139_RX_BUF_PADDING);
     if (!rtl8139_rx_buffer)
     {
-        LOG_ERROR("RTL8139", "Failed to allocate RX buffer");
+        klog_error("RTL8139", "Failed to allocate RX buffer");
         return -1;
     }
     memset(rtl8139_rx_buffer, 0, RTL8139_RX_BUF_SIZE + RTL8139_RX_BUF_PADDING);
@@ -324,7 +321,7 @@ static int32_t rtl8139_hw_init(void)
         rtl8139_tx_buffers[i] = (uint8_t *)kmalloc(RTL8139_MAX_TX_SIZE);
         if (!rtl8139_tx_buffers[i])
         {
-            LOG_ERROR("RTL8139", "Failed to allocate TX buffer");
+            klog_error("RTL8139", "Failed to allocate TX buffer");
             goto init_fail;
         }
         
@@ -332,7 +329,7 @@ static int32_t rtl8139_hw_init(void)
         uintptr_t addr = (uintptr_t)rtl8139_tx_buffers[i];
         if (addr % 4 != 0)
         {
-            LOG_ERROR_FMT("RTL8139", "TX buffer %d not 32-bit aligned: %p", i, rtl8139_tx_buffers[i]);
+            klog_error_fmt("RTL8139", "TX buffer %d not 32-bit aligned: %p", i, rtl8139_tx_buffers[i]);
             goto init_fail;
         }
         
@@ -340,7 +337,7 @@ static int32_t rtl8139_hw_init(void)
         uint32_t phys_addr = KVA_TO_PHYS(rtl8139_tx_buffers[i]);
         if (phys_addr > 0xFFFFFFFF)
         {
-            LOG_ERROR_FMT("RTL8139", "TX buffer %d physical address > 4GB: 0x%x", i, phys_addr);
+            klog_error_fmt("RTL8139", "TX buffer %d physical address > 4GB: 0x%x", i, phys_addr);
             goto init_fail;
         }
         
@@ -354,11 +351,11 @@ static int32_t rtl8139_hw_init(void)
         uint32_t tsd_init = inl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4));
         if (!(tsd_init & RTL8139_TSD_OWN))
         {
-            LOG_WARNING_FMT("RTL8139", "TX descriptor %d missing host-owns after init: 0x%x", i, tsd_init);
+            klog_warn_fmt("RTL8139", "TX descriptor %d missing host-owns after init: 0x%x", i, tsd_init);
         }
         rtl8139_tx_descriptor_own_state[i] = 1;
         
-        LOG_DEBUG_FMT("RTL8139", "TX buffer %d: virt=%p, phys=0x%x, size=%d, TSD=0x%x", 
+        klog_debug_fmt("RTL8139", "TX buffer %d: virt=%p, phys=0x%x, size=%d, TSD=0x%x",
                      i, rtl8139_tx_buffers[i], phys_addr, RTL8139_MAX_TX_SIZE, tsd_init);
     }
 
@@ -380,7 +377,7 @@ static int32_t rtl8139_hw_init(void)
     /* Read PCI Interrupt Line to get actual IRQ */
     uint32_t pci_int_line = pci_config_read(bus, slot, 0, PCI_REG_INTERRUPT_LINE);
     uint8_t irq = (uint8_t)(pci_int_line & 0xFF);
-    LOG_INFO_FMT("RTL8139", "PCI Interrupt Line (IRQ): %d", (int)irq);
+    klog_info_fmt("RTL8139", "PCI Interrupt Line (IRQ): %d", (int)irq);
     resource_register_irq(irq, "rtl8139");
     resource_register_ioport(rtl8139_io_base, (uint16_t)(rtl8139_io_base + 0x40), "rtl8139");
 
@@ -396,7 +393,7 @@ static int32_t rtl8139_hw_init(void)
     rtl8139_dev = alloc_etherdev(0);
     if (!rtl8139_dev)
     {
-        LOG_ERROR("RTL8139", "Failed to allocate net_device");
+        klog_error("RTL8139", "Failed to allocate net_device");
         goto init_fail;
     }
     rtl8139_dev->name = "eth0";
@@ -405,12 +402,12 @@ static int32_t rtl8139_hw_init(void)
     if (link_ok)
     {
         netif_carrier_on(rtl8139_dev);
-        LOG_INFO("RTL8139", "Link is UP");
+        klog_info("RTL8139", "Link is UP");
     }
     else
     {
         netif_carrier_off(rtl8139_dev);
-        LOG_WARNING("RTL8139", "Link is DOWN");
+        klog_warn("RTL8139", "Link is DOWN");
     }
 
     register_netdev(rtl8139_dev);
@@ -419,7 +416,7 @@ static int32_t rtl8139_hw_init(void)
     if (irq < 16 && irq_request(irq, rtl8139_irq, rtl8139_dev, "rtl8139") == 0)
         rtl8139_dev->irq = irq;
 
-    LOG_INFO("RTL8139", "Initialization successful.");
+    klog_info("RTL8139", "Initialization successful.");
     return 0;
 
 init_fail:
@@ -480,7 +477,7 @@ static void rtl8139_force_release_busy_tx_descriptors(void)
                 rtl8139_tx_in_flight--;
             }
             rtl8139_dev->stats.tx_errors++;
-            LOG_DEBUG_FMT("RTL8139", "Force-released busy TX descriptor %d", i);
+            klog_debug_fmt("RTL8139", "Force-released busy TX descriptor %d", i);
         }
     }
 }
@@ -569,7 +566,7 @@ static int rtl8139_send(const void *data, size_t len)
 
         if (desc == -1)
         {
-            LOG_DEBUG("RTL8139", "TX busy: descriptor ring still saturated after recovery window");
+            klog_debug("RTL8139", "TX busy: descriptor ring still saturated after recovery window");
             return -1;
         }
     }
@@ -653,7 +650,7 @@ static void rtl8139_check_tx_completion(void)
                     !rtl8139_tx_timeout_latched[i]) {
                     rtl8139_dev->stats.tx_errors++;
                     rtl8139_tx_timeout_latched[i] = 1;
-                    LOG_WARNING_FMT("RTL8139", "TX descriptor %d stalled >1s (timeout)", i);
+                    klog_warn_fmt("RTL8139", "TX descriptor %d stalled >1s (timeout)", i);
 
                     outl(rtl8139_io_base + RTL8139_REG_TSD0 + (i * 4), RTL8139_TSD_OWN);
                     rtl8139_tx_descriptor_own_state[i] = 1;
@@ -663,7 +660,7 @@ static void rtl8139_check_tx_completion(void)
                     rtl8139_tx_pending_len[i] = 0;
                     if (rtl8139_tx_in_flight > 0)
                         rtl8139_tx_in_flight--;
-                    LOG_DEBUG_FMT("RTL8139", "TX descriptor %d force-released after timeout", i);
+                    klog_debug_fmt("RTL8139", "TX descriptor %d force-released after timeout", i);
                     continue;
                 }
             }
@@ -688,12 +685,12 @@ static void rtl8139_check_tx_completion(void)
             if (rtl8139_tx_in_flight > 0)
             {
                 rtl8139_tx_in_flight--;
-                LOG_DEBUG_FMT("RTL8139", "TX descriptor %d completed, in-flight=%d", 
+                klog_debug_fmt("RTL8139", "TX descriptor %d completed, in-flight=%d",
                              i, rtl8139_tx_in_flight);
             }
             else
             {
-                LOG_WARNING_FMT("RTL8139", "TX descriptor %d completed but in-flight counter already 0", i);
+                klog_warn_fmt("RTL8139", "TX descriptor %d completed but in-flight counter already 0", i);
             }
         }
     }
@@ -723,7 +720,7 @@ static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t 
     /* CRITICAL: Validate len IMMEDIATELY - if corrupted, abort */
     if (len > RTL8139_MAX_TX_SIZE || len == 0 || len > 2000)
     {
-        LOG_ERROR_FMT("RTL8139", "netdev_send: CORRUPTION! len=%d (0x%x) is invalid! MAX=%d", 
+        klog_error_fmt("RTL8139", "netdev_send: CORRUPTION! len=%d (0x%x) is invalid! MAX=%d",
                      (int)len, (unsigned int)len, RTL8139_MAX_TX_SIZE);
 #if KERNEL_DEBUG
         klog_info("RTL8139", "ERROR: Invalid len parameter!");
@@ -733,11 +730,11 @@ static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t 
     
     if (!data)
     {
-        LOG_ERROR("RTL8139", "netdev_send: data is NULL");
+        klog_error("RTL8139", "netdev_send: data is NULL");
         return -1;
     }
 
-    LOG_DEBUG("RTL8139", "netdev_send: calling rtl8139_send");
+    klog_debug("RTL8139", "netdev_send: calling rtl8139_send");
 
     /*
      * TX descriptor ownership can transiently lag behind completion after
@@ -749,7 +746,7 @@ static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t 
         {
             if (attempt > 0)
             {
-                LOG_DEBUG_FMT("RTL8139", "netdev_send: TX completed after retry #%d", attempt);
+                klog_debug_fmt("RTL8139", "netdev_send: TX completed after retry #%d", attempt);
             }
             return 0;
         }
@@ -761,7 +758,7 @@ static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t 
             rtl8139_recover_tx_path();
         }
 
-        LOG_DEBUG_FMT("RTL8139", "netdev_send: retrying TX after busy path (attempt=%d)", attempt + 1);
+        klog_debug_fmt("RTL8139", "netdev_send: retrying TX after busy path (attempt=%d)", attempt + 1);
     }
 
     /*
@@ -777,11 +774,11 @@ static int rtl8139_netdev_send(struct net_device *dev, const void *data, size_t 
     }
     if (rtl8139_send(data, len) == 0)
     {
-        LOG_DEBUG("RTL8139", "netdev_send: TX succeeded after forced descriptor release");
+        klog_debug("RTL8139", "netdev_send: TX succeeded after forced descriptor release");
         return 0;
     }
 
-    LOG_DEBUG("RTL8139", "netdev_send: rtl8139_send failed after retries");
+    klog_debug("RTL8139", "netdev_send: rtl8139_send failed after retries");
     return -1;
 }
 
@@ -859,7 +856,7 @@ static void rtl8139_process_rx_packets(void)
     if (current_write < rtl8139_rx_read_offset)
     {
         /* Buffer wrapped around, process from read_offset to end, then from start to write */
-        LOG_DEBUG("RTL8139", "RX buffer wrapped");
+        klog_debug("RTL8139", "RX buffer wrapped");
     }
     
     /* If write pointer hasn't advanced, there are no new packets */
@@ -868,7 +865,7 @@ static void rtl8139_process_rx_packets(void)
         return;
     }
     
-    LOG_DEBUG_FMT("RTL8139", "RX buffer: read_offset=%d, write_offset=%d", 
+    klog_debug_fmt("RTL8139", "RX buffer: read_offset=%d, write_offset=%d",
                  rtl8139_rx_read_offset, current_write);
     
     int packet_count = 0;
@@ -880,7 +877,7 @@ static void rtl8139_process_rx_packets(void)
         /* Safety check: ensure read_offset is within buffer bounds */
         if (rtl8139_rx_read_offset >= RTL8139_RX_BUF_SIZE)
         {
-            LOG_ERROR_FMT("RTL8139", "RX read_offset out of bounds: %d >= %d", 
+            klog_error_fmt("RTL8139", "RX read_offset out of bounds: %d >= %d",
                          rtl8139_rx_read_offset, RTL8139_RX_BUF_SIZE);
             /* Reset to safe position */
             rtl8139_rx_read_offset = current_write & (RTL8139_RX_BUF_SIZE - 1);
@@ -927,7 +924,7 @@ static void rtl8139_process_rx_packets(void)
         if (length < 4)
         {
             rtl8139_dev->stats.rx_errors++;
-            LOG_WARNING_FMT("RTL8139", "Invalid RX length (too small): %d (must be >= 4), discarding packet", length);
+            klog_warn_fmt("RTL8139", "Invalid RX length (too small): %d (must be >= 4), discarding packet", length);
             /* Invalid length cannot be advanced safely: resync to current writer. */
             rtl8139_rx_read_offset = current_write;
             break;
@@ -936,7 +933,7 @@ static void rtl8139_process_rx_packets(void)
         if (length > (RTL8139_RX_BUF_SIZE - 4))
         {
             rtl8139_dev->stats.rx_errors++;
-            LOG_WARNING_FMT("RTL8139", "Invalid RX length (too large): %d, resyncing RX ring", length);
+            klog_warn_fmt("RTL8139", "Invalid RX length (too large): %d, resyncing RX ring", length);
             rtl8139_rx_read_offset = current_write;
             break;
         }
@@ -944,7 +941,7 @@ static void rtl8139_process_rx_packets(void)
         if (!(status & RTL8139_RX_STAT_ROK))
         {
             rtl8139_dev->stats.rx_errors++;
-            LOG_WARNING_FMT("RTL8139", "RX status error 0x%04x, skipping frame len=%u", status, (unsigned)length);
+            klog_warn_fmt("RTL8139", "RX status error 0x%04x, skipping frame len=%u", status, (unsigned)length);
             rtl8139_advance_rx_read_offset(length);
             continue;
         }
@@ -958,7 +955,7 @@ static void rtl8139_process_rx_packets(void)
         if (packet_len == 0 || packet_len > RTL8139_RX_BUF_SIZE)
         {
             rtl8139_dev->stats.rx_errors++;
-            LOG_WARNING_FMT("RTL8139", "Invalid packet length after header subtraction: raw_len=%d, pkt_len=%d, discarding", 
+            klog_warn_fmt("RTL8139", "Invalid packet length after header subtraction: raw_len=%d, pkt_len=%d, discarding",
                            length, packet_len);
             rtl8139_advance_rx_read_offset(length);
             continue;
@@ -972,7 +969,7 @@ static void rtl8139_process_rx_packets(void)
         /* Check if packet is OK */
         if (status & RTL8139_RX_STAT_ROK)
         {
-            LOG_DEBUG_FMT("RTL8139", "Packet #%d: status=0x%04x, raw_length=%d, packet_len=%d",
+            klog_debug_fmt("RTL8139", "Packet #%d: status=0x%04x, raw_length=%d, packet_len=%d",
                          packet_count, status, length, packet_len);
             
             if (packet_len > 0 && packet_len <= 1518) /* Valid Ethernet frame size */
@@ -994,7 +991,7 @@ static void rtl8139_process_rx_packets(void)
                         if (!merge_heap)
                         {
                             rtl8139_dev->stats.rx_dropped++;
-                            LOG_WARNING_FMT("RTL8139", "RX wrap: kmalloc(%u) failed, skipping packet", (unsigned int)length);
+                            klog_warn_fmt("RTL8139", "RX wrap: kmalloc(%u) failed, skipping packet", (unsigned int)length);
                             merge_buf = NULL;
                         }
                         else
@@ -1052,7 +1049,7 @@ static void rtl8139_process_rx_packets(void)
             else
             {
                 rtl8139_dev->stats.rx_errors++;
-                LOG_WARNING_FMT("RTL8139", "Invalid packet length: %d", packet_len);
+                klog_warn_fmt("RTL8139", "Invalid packet length: %d", packet_len);
             }
         }
         /* CRITICAL: Move to next packet with correct alignment.
@@ -1075,7 +1072,7 @@ static void rtl8139_process_rx_packets(void)
     if (packet_count > 0)
     {
         /* Only log if we actually processed packets */
-        LOG_DEBUG_FMT("RTL8139", "Processed %d packet(s)", packet_count);
+        klog_debug_fmt("RTL8139", "Processed %d packet(s)", packet_count);
     }
 }
 
@@ -1090,7 +1087,7 @@ static void rtl8139_handle_interrupt(void)
 {
     if (!rtl8139_io_base || !rtl8139_rx_buffer)
     {
-        LOG_WARNING("RTL8139", "Interrupt handler called but device not initialized");
+        klog_warn("RTL8139", "Interrupt handler called but device not initialized");
         return;
     }
 
@@ -1112,7 +1109,7 @@ static void rtl8139_handle_interrupt(void)
         {
             rtl8139_dev->stats.rx_errors++;
             rtl8139_dev->stats.rx_fifo_errors++;
-            LOG_WARNING_FMT("RTL8139", "RX overflow ISR=0x%x — draining ring",
+            klog_warn_fmt("RTL8139", "RX overflow ISR=0x%x — draining ring",
                             (unsigned)isr);
         }
         if (rtl8139_try_enter_rx())
@@ -1125,20 +1122,20 @@ static void rtl8139_handle_interrupt(void)
     if (isr & RTL8139_INT_RER)
     {
         rtl8139_dev->stats.rx_errors++;
-        LOG_DEBUG("RTL8139", "RX error interrupt");
+        klog_debug("RTL8139", "RX error interrupt");
     }
     if (isr & RTL8139_INT_TER)
     {
         rtl8139_dev->stats.tx_errors++;
-        LOG_DEBUG("RTL8139", "TX error interrupt");
+        klog_debug("RTL8139", "TX error interrupt");
     }
     if (isr & RTL8139_INT_PUN)
-        LOG_DEBUG("RTL8139", "Packet underrun interrupt");
+        klog_debug("RTL8139", "Packet underrun interrupt");
     
     /* Check for transmit interrupt (optional, for TX completion) */
     if (isr & RTL8139_INT_TOK)
     {
-        LOG_DEBUG("RTL8139", "TX interrupt: transmission completed");
+        klog_debug("RTL8139", "TX interrupt: transmission completed");
         /* CRITICAL: Check TX completion and update in-flight counter */
         rtl8139_check_tx_completion();
     }
@@ -1157,7 +1154,7 @@ static void rtl8139_handle_interrupt(void)
     if ((isr_after & RTL8139_INT_ROK) && (isr & RTL8139_INT_ROK))
     {
         /* ISR still set after clearing - this shouldn't happen but log it */
-        LOG_WARNING_FMT("RTL8139", "ISR still set after clearing (was=0x%04x, now=0x%04x)", isr, isr_after);
+        klog_warn_fmt("RTL8139", "ISR still set after clearing (was=0x%04x, now=0x%04x)", isr, isr_after);
     }
 }
 

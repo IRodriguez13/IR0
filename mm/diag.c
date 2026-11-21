@@ -14,11 +14,10 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/mm_diag.h>
 #include <ir0/oops.h>
 #include <ir0/fault.h>
-#include <ir0/arch_pf_debug.h>
 #include <ir0/ktm/deferred.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/ktm/user_canary.h>
@@ -72,22 +71,22 @@ static void pf_diag_audit(const struct page_fault_info *info)
 		 (find_vma(current, fault_addr) != NULL);
 	in_userspace_range = mm_user_va_ok((uintptr_t)fault_addr, 1);
 
-	log_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_ip), (unsigned long long)(fault_code_seg), (unsigned long long)(fault_sp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
+	klog_debug_fmt("PF", "[PF_AUDIT][FAULT] addr=%llx present=%llx write=%llx user=%llx reserved=%llx insn_fetch=%llx rip=%llx cs=%llx rsp=%llx mode=%s pid=%x comm=%s", (unsigned long long)(fault_addr), (unsigned long long)(info->present ? 1 : 0), (unsigned long long)(info->write ? 1 : 0), (unsigned long long)(info->user ? 1 : 0), (unsigned long long)(info->reserved ? 1 : 0), (unsigned long long)(info->exec ? 1 : 0), (unsigned long long)(fault_ip), (unsigned long long)(fault_code_seg), (unsigned long long)(fault_sp), info->user ? "user" : "kernel", (unsigned)(current ? (uint32_t)current->task.pid : 0), current ? current->comm : "(none)");
 
-	log_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(find_vma(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
+	klog_debug_fmt("PF", "[PF_AUDIT][VMA] in_allowed_vma=%llx in_heap=%llx in_stack=%llx in_mmap=%llx pte_present=%llx pte_user=%llx pte_rw=%llx pte_nx=%llx", (unsigned long long)(in_vma ? 1 : 0), (unsigned long long)(pf_addr_in_heap(current, fault_addr) ? 1 : 0), (unsigned long long)(pf_addr_in_stack(current, fault_addr) ? 1 : 0), (unsigned long long)(find_vma(current, fault_addr) != NULL ? 1 : 0), (unsigned long long)((mapped > 0 && pte && mm_pte_present(*pte)) ? 1 : 0), (unsigned long long)(pte_flags & PAGE_USER ? 1 : 0), (unsigned long long)(pte_flags & PAGE_RW ? 1 : 0), (unsigned long long)(pte && !mm_pte_executable(*pte) ? 1 : 0));
 
 	if (!info->user && in_userspace_range)
-		log_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR addr_in_userspace=1");
+		klog_debug("PF", "CLASSIFY KERNEL_DEREF_USERPTR addr_in_userspace=1");
 
 	if (info->user && not_present && in_vma && mapped <= 0)
-		log_debug("PF", "CLASSIFY PF_ADDR_IN_VMA_NOT_MAPPED");
+		klog_debug("PF", "CLASSIFY PF_ADDR_IN_VMA_NOT_MAPPED");
 	else if (info->user && not_present && !in_vma)
-		log_debug("PF", "CLASSIFY PF_ADDR_NOT_IN_VMA");
+		klog_debug("PF", "CLASSIFY PF_ADDR_NOT_IN_VMA");
 	else if (info->user && not_present && in_vma)
-		log_debug("PF", "CLASSIFY USER_PF_SHOULD_BE_HANDLED");
+		klog_debug("PF", "CLASSIFY USER_PF_SHOULD_BE_HANDLED");
 
 	if (!info->user && fault_ip != 0)
-		log_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_ip));
+		klog_debug_fmt("PF", "CLASSIFY kernel_fault_rip=%llx", (unsigned long long)(fault_ip));
 #endif /* DEBUG_PAGE_FAULTS */
 }
 
@@ -141,7 +140,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 	{
 		uint64_t sp_words[4] = { 0, 0, 0, 0 };
 
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] STACK_TOP_OVERRUN pid=%x addr=%llx rip=%llx write=%llx off=%llx\n",
 				(unsigned)((uint32_t)p->task.pid),
 				(unsigned long long)fault_addr,
@@ -165,7 +164,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 						       (uintptr_t)info->sp,
 						       sp_words,
 						       sizeof(sp_words)) == 0)
-			log_info_fmt("PF",
+			klog_info_fmt("PF",
 					"[PF] STACK_TOP_OVERRUN usp=%llx w0=%llx w1=%llx w2=%llx w3=%llx\n",
 					(unsigned long long)info->sp,
 					(unsigned long long)sp_words[0],
@@ -184,18 +183,18 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 	 * NOTICE (not DEBUG): smoke-mm-cow-lazy greps this on serial; default
 	 * klog level drops DEBUG.
 	 */
-	log_info_fmt("PF",
-			"[PF] userspace segv pid=%x addr=%llx write=%llx present=%llx rip=%llx user=%llx handler=%llx proc_mask=%x ignored=%x (no handler)\n",
+	klog_info_fmt("PF",
+			"[PF] userspace segv pid=%x addr=%llx write=%llx present=%llx rip=%llx user=%llx handler=%llx proc_mask=%llx ignored=%llx (no handler)\n",
 			(unsigned)((uint32_t)p->task.pid),
 			(unsigned long long)fault_addr,
 			(unsigned long long)(info && info->write ? 1 : 0),
 			(unsigned long long)(info && info->present ? 1 : 0),
 			(unsigned long long)(info ? (unsigned long long)info->ip : 0ULL),
 			(unsigned long long)(info && info->user ? 1 : 0),
-			(unsigned long long)((uint64_t)(uintptr_t)p->signal_handlers[SIGSEGV]),
-			(unsigned)(p->signal_mask),
-			(unsigned)(p->signal_ignored));
-	log_info_fmt("PF",
+			(unsigned long long)((uint64_t)(uintptr_t)p->sighand->handlers[SIGSEGV]),
+			(unsigned long long)(p->signal_mask),
+			(unsigned long long)(p->signal_ignored));
+	klog_info_fmt("PF",
 			"[PF] segv diag pid=%x arg0=%llx arg1=%llx sp=%llx "
 			"sigframe_sp=%llx mask_saved=%x\n",
 			(unsigned)((uint32_t)p->task.pid),
@@ -217,7 +216,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 							 (uint64_t)fault_addr,
 							 &pte_flags);
 
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] segv pte pid=%x addr=%llx mapped=%llx flags=%llx user=%llx rw=%llx\n",
 				(unsigned)((uint32_t)p->task.pid),
 				(unsigned long long)fault_addr,
@@ -235,7 +234,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 		 * Split across two records: klog_notice_fmt drops arguments
 		 * past the eighth, which silently corrupted the tail fields.
 		 */
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] segv vma pid=%x addr=%llx heap=[%llx,%llx) stack=%llx\n",
 				(unsigned)((uint32_t)p->task.pid),
 				(unsigned long long)fault_addr,
@@ -243,7 +242,7 @@ void pf_diag_user_segv(process_t *p, uint64_t fault_addr,
 				(unsigned long long)(uint64_t)process_heap_end(p),
 				(unsigned long long)(pf_addr_in_stack(p, fault_addr) ? 1ULL : 0ULL));
 		if (mr)
-			log_info_fmt("PF",
+			klog_info_fmt("PF",
 					"[PF] segv vma rgn pid=%x vma=%llx len=%llx prot=%llx flags=%llx hint=%llx\n",
 					(unsigned)((uint32_t)p->task.pid),
 					(unsigned long long)(uint64_t)(uintptr_t)mr->addr,
@@ -262,12 +261,12 @@ void pf_diag_kernel_uaccess(const struct ir0_fault *fault, unsigned int pid,
 	 * site, not only CONSOLE_SESSION_SEGV; they also grep the CLASSIFY tag.
 	 */
 	ir0_log_user_fault(fault, pid, comm);
-	log_info_fmt("PF",
-		     "CLASSIFY KERNEL_UACCESS_FAULT addr=%llx write=%x "
-		     "pid=%x ip=%llx",
-		     (unsigned long long)fault->addr,
-		     (unsigned)(fault->write ? 1 : 0), pid,
-		     (unsigned long long)fault->ip);
+	klog_info_fmt("PF",
+		      "CLASSIFY KERNEL_UACCESS_FAULT addr=%llx write=%x "
+		      "pid=%x ip=%llx",
+		      (unsigned long long)fault->addr,
+		      (unsigned)(fault->write ? 1 : 0), pid,
+		      (unsigned long long)fault->ip);
 }
 
 void pf_diag_kernel_fault(const struct ir0_fault *fault,
@@ -275,16 +274,16 @@ void pf_diag_kernel_fault(const struct ir0_fault *fault,
 {
 	uint64_t fault_addr = (uint64_t)fault->addr;
 
-	log_error_fmt("PF",
-		      "kernel_pf addr=%llx write=%x user=%x present=%x ip=%llx "
-		      "sp=%llx pid=%x",
-		      (unsigned long long)fault_addr,
-		      (unsigned)(fault->write ? 1 : 0),
-		      (unsigned)(info->user ? 1 : 0),
-		      (unsigned)(fault->present ? 1 : 0),
-		      (unsigned long long)fault->ip,
-		      (unsigned long long)fault->sp, pid);
+	klog_error_fmt("PF",
+		       "kernel_pf addr=%llx write=%x user=%x present=%x ip=%llx "
+		       "sp=%llx pid=%x",
+		       (unsigned long long)fault_addr,
+		       (unsigned)(fault->write ? 1 : 0),
+		       (unsigned)(info->user ? 1 : 0),
+		       (unsigned)(fault->present ? 1 : 0),
+		       (unsigned long long)fault->ip,
+		       (unsigned long long)fault->sp, pid);
 	if (fault_addr >= (uint64_t)(intptr_t)-4095)
-		log_error_fmt("PF", "addr looks like ERR_PTR(-errno) errno=%llx",
-			      (unsigned long long)(-(intptr_t)fault_addr));
+		klog_error_fmt("PF", "addr looks like ERR_PTR(-errno) errno=%llx",
+			       (unsigned long long)(-(intptr_t)fault_addr));
 }

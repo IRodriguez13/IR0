@@ -24,8 +24,7 @@
 #include "arp.h"
 #include "net_internal.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
-#include <ir0/arch_port.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 
@@ -126,7 +125,7 @@ static void udp_receive_handler(struct net_device *dev, const void *data, size_t
     
     if (len < sizeof(struct udp_header))
     {
-        LOG_WARNING("UDP", "Packet too short");
+        klog_warn("UDP", "Packet too short");
         return;
     }
     
@@ -138,7 +137,7 @@ static void udp_receive_handler(struct net_device *dev, const void *data, size_t
     /* Validate packet length */
     if (packet_len > len || packet_len < sizeof(struct udp_header))
     {
-        LOG_WARNING("UDP", "Invalid UDP packet length");
+        klog_warn("UDP", "Invalid UDP packet length");
         return;
     }
     
@@ -155,7 +154,7 @@ static void udp_receive_handler(struct net_device *dev, const void *data, size_t
 
         if (!udp_scratch)
         {
-            LOG_WARNING("UDP", "No memory to verify checksum");
+            klog_warn("UDP", "No memory to verify checksum");
             return;
         }
         memcpy(udp_scratch, data, packet_len);
@@ -165,13 +164,13 @@ static void udp_receive_handler(struct net_device *dev, const void *data, size_t
 
         if (received_checksum != calculated_checksum)
         {
-            LOG_WARNING("UDP", "Checksum mismatch");
+            klog_warn("UDP", "Checksum mismatch");
             return;
         }
     }
     
-    LOG_INFO_FMT("UDP", "Received UDP packet: src=" IP4_FMT ":%d, dest=%d, len=%d",
-                 IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)dest_port, (int)packet_len);
+    klog_info_fmt("UDP", "Received UDP packet: src=" IP4_FMT ":%d, dest=%d, len=%d",
+                  IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)dest_port, (int)packet_len);
     
     /* Look up handler for destination port */
     struct udp_port_handler *handler = NULL;
@@ -200,7 +199,7 @@ static void udp_receive_handler(struct net_device *dev, const void *data, size_t
         return;
     }
 
-    LOG_INFO_FMT("UDP", "No handler registered for port %d", (int)dest_port);
+    klog_info_fmt("UDP", "No handler registered for port %d", (int)dest_port);
 }
 
 /**
@@ -258,8 +257,8 @@ int udp_send(struct net_device *dev, ip4_addr_t dest_ip, uint16_t src_port,
     
     udp->checksum = udp_checksum(udp_packet, total_len, src_ip, dest_ip);
     
-    LOG_INFO_FMT("UDP", "Sending UDP packet: dest=" IP4_FMT ":%d, len=%d",
-                 IP4_ARGS(ntohl(dest_ip)), (int)dest_port, (int)total_len);
+    klog_info_fmt("UDP", "Sending UDP packet: dest=" IP4_FMT ":%d, len=%d",
+                  IP4_ARGS(ntohl(dest_ip)), (int)dest_port, (int)total_len);
     
     /* Send via IP layer */
     int ret = ip_send(dev, dest_ip, IPPROTO_UDP, udp_packet, total_len);
@@ -289,7 +288,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
             existing->handler = handler;
             existing->priv = priv;
             ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
-            LOG_INFO_FMT("UDP", "Updated handler for port %d", (int)port);
+            klog_info_fmt("UDP", "Updated handler for port %d", (int)port);
             return;
         }
         existing = existing->next;
@@ -309,7 +308,7 @@ void udp_register_handler(uint16_t port, void (*handler)(struct net_device *dev,
     new_handler->next = udp_handlers;
     udp_handlers = new_handler;
     ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
-    LOG_INFO_FMT("UDP", "Registered handler for UDP port %d", (int)port);
+    klog_info_fmt("UDP", "Registered handler for UDP port %d", (int)port);
 }
 
 void udp_unregister_handler(uint16_t port)
@@ -326,7 +325,7 @@ void udp_unregister_handler(uint16_t port)
             *pp = dead->next;
             kfree(dead);
             ir0_spin_unlock_irqrestore(&udp_lock, irq_flags);
-            LOG_INFO_FMT("UDP", "Unregistered handler for port %d", (int)port);
+            klog_info_fmt("UDP", "Unregistered handler for port %d", (int)port);
             return;
         }
     }
@@ -340,7 +339,7 @@ void udp_unregister_handler(uint16_t port)
  */
 int udp_init(void)
 {
-    LOG_INFO("UDP", "Initializing UDP protocol");
+    klog_info("UDP", "Initializing UDP protocol");
     
     /* Register UDP protocol handler */
     memset(&udp_proto, 0, sizeof(udp_proto));
@@ -352,10 +351,10 @@ int udp_init(void)
     
     if (net_register_protocol(&udp_proto) != 0)
     {
-        LOG_ERROR("UDP", "Failed to register UDP protocol");
+        klog_error("UDP", "Failed to register UDP protocol");
         return -1;
     }
     
-    LOG_INFO("UDP", "UDP protocol initialized");
+    klog_info("UDP", "UDP protocol initialized");
     return 0;
 }

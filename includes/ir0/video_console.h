@@ -45,6 +45,8 @@ struct console_text_screen
 	volatile uint16_t *cells;
 	int cols;
 	int rows;
+	/* Optional hardware cursor. NULL keeps the software cursor. */
+	void (*cursor)(int row, int col, int on);
 };
 
 void console_set_text_screen(const struct console_text_screen *screen);

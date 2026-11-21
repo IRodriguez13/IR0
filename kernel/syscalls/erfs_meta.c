@@ -117,6 +117,8 @@ int64_t early_rootfs_linkat(int olddirfd, uint64_t oldpath, int newdirfd,
 static void fill_statfs(struct ir0_statfs *st)
 {
 	unsigned i;
+	dev_t dev;
+	struct ir0_block_info info;
 
 	for (i = 0; i < sizeof(*st); i++)
 		((unsigned char *)st)[i] = 0;
@@ -124,9 +126,13 @@ static void fill_statfs(struct ir0_statfs *st)
 	st->f_bsize = 4096;
 	st->f_frsize = 4096;
 	st->f_namelen = 255;
-	if (vda_present())
+	dev = ir0_block_lookup_by_name("vda");
+
+	if (ir0_block_is_present(dev))
 	{
-		st->f_blocks = ir0_block_sector_count_by_name("vda") / 8ULL;
+		st->f_blocks = 0;
+		if (ir0_block_get_info(dev, &info) == 0)
+			st->f_blocks = info.sector_count / 8ULL;
 		st->f_bfree = st->f_blocks;
 		st->f_bavail = st->f_blocks;
 	}
