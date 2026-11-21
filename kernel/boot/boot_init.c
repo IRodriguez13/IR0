@@ -92,9 +92,9 @@ void boot_console_init(void)
 void boot_memory_init(void)
 {
 	/*
-	 * The architecture facade supplies reserved-free RAM banks. x86 currently
-	 * reports the historical [32 MiB, 512 MiB) interval; fragmented targets
-	 * use the same generic PMM path without a special allocator.
+	 * The architecture facade supplies reserved-free RAM banks, including
+	 * memory above the old 512 MiB window. Fragmented targets use the same
+	 * generic PMM path.
 	 */
 	if (boot_memory_init_pmm() != 0)
 		panic("PMM: architecture boot-memory inventory unavailable");

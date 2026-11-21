@@ -308,15 +308,12 @@ int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 	}
 	/*
 	 * Low memory up to the end of the kernel heap belongs to the kernel
-	 * (image, fixed rings, heap). The PMM still stops at its historical
-	 * 512 MiB ceiling; the direct map already covers all RAM.
+	 * (image, fixed rings, heap). RAM above that is allocatable: the
+	 * direct map reaches it, so the PMM no longer stops at 512 MiB.
 	 */
 	if (x86_snapshot_add_reserved(snapshot, 0,
 				      (uint64_t)mm_kernel_heap_start() +
-				      mm_kernel_heap_size()) != 0 ||
-	    x86_snapshot_add_reserved(snapshot, PMM_PHYS_BASE + PMM_PHYS_SIZE,
-				      X86_PHYS_LIMIT -
-				      (PMM_PHYS_BASE + PMM_PHYS_SIZE)) != 0)
+				      mm_kernel_heap_size()) != 0)
 		return -EINVAL;
 	snapshot->acpi_rsdp = x86_acpi_rsdp_legacy_bios();
 	snapshot->valid = snapshot->usable_count != 0;
