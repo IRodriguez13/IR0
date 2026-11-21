@@ -23,6 +23,9 @@ typedef struct proc_fs_snap
 	pid_t pgid;
 	pid_t sid;
 	int sched_prio;
+	int threads;
+	int no_new_privs;
+	int fd_size;
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
@@ -77,6 +80,20 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->utime = proc->utime;
 	snap->stime = proc->stime;
 	snap->state = (int)proc->state;
+	snap->no_new_privs = (int)proc->no_new_privs;
+	snap->fd_size = process_fd_span(proc);
+	snap->threads = 0;
+	{
+		process_t *scan;
+
+		for (scan = process_list; scan; scan = scan->next)
+		{
+			if (scan->tgid == proc->tgid && process_is_alive(scan))
+				snap->threads++;
+		}
+	}
+	if (snap->threads == 0)
+		snap->threads = 1;
 	snap->uid = proc->uid;
 	snap->gid = proc->gid;
 	snap->euid = proc->euid;
@@ -487,6 +504,9 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	proc_fs_snap_t snap;
 	const char *state_str = "?";
 	const char *state_paren = "unknown";
+	const struct mmap_region *region;
+	uint64_t vsize = 0;
+	uint64_t rss_kb = 0;
 	int len;
 
 	if (!buf || count == 0)
@@ -513,20 +533,40 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 			break;
 	}
 
+	if (snap.heap_end > snap.heap_start)
+		vsize = snap.heap_end - snap.heap_start;
+	vsize += snap.stack_size;
+	for (region = snap.mmap_list; region; region = region->next)
+		vsize += (uint64_t)region->length;
+	vsize /= 1024ULL;
+	if (snap.mm)
+		rss_kb = mm_count_resident_user_pages(snap.mm) *
+			 ((uint64_t)IR0_MM_PAGE_SIZE / 1024ULL);
+
+	/* TracerPid stays 0: there is no ptrace attach. */
 	len = snprintf(buf, count,
 		       "Name:\t%s\n"
 		       "State:\t%s (%s)\n"
 		       "Pid:\t%d\n"
 		       "PPid:\t%d\n"
+		       "TracerPid:\t0\n"
 		       "Uid:\t%d\t%d\t%d\t%d\n"
-		       "Gid:\t%d\t%d\t%d\t%d\n",
+		       "Gid:\t%d\t%d\t%d\t%d\n"
+		       "FDSize:\t%d\n"
+		       "Threads:\t%d\n"
+		       "NoNewPrivs:\t%d\n"
+		       "VmSize:\t%llu kB\n"
+		       "VmRSS:\t%llu kB\n",
 		       snap.comm[0] ? snap.comm : "(none)",
 		       state_str, state_paren,
 		       (int)snap.pid, (int)snap.ppid,
 		       (int)snap.uid, (int)snap.euid, (int)snap.suid,
 		       (int)snap.uid,
 		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
-		       (int)snap.gid);
+		       (int)snap.gid,
+		       snap.fd_size, snap.threads, snap.no_new_privs,
+		       (unsigned long long)vsize,
+		       (unsigned long long)rss_kb);
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;

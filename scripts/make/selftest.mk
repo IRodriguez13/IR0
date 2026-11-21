@@ -1024,3 +1024,36 @@ ir0-selftest-shm-exit-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_E
 	@echo "✓ ir0-selftest-shm-exit-arm64"
 
 ir0-selftest-shm-exit: ir0-selftest-shm-exit-x86 ir0-selftest-shm-exit-arm64
+
+# PROC-STATUS-SELFTEST
+IR0_SELFTEST_X86_PROC_STATUS := $(KERNEL_ROOT)/build/selftests/x86_64/proc_status
+IR0_SELFTEST_ARM64_PROC_STATUS := $(KERNEL_ROOT)/build/selftests/arm64/proc_status
+
+.PHONY: ir0-selftest-proc-status-x86 ir0-selftest-proc-status-arm64 \
+	ir0-selftest-proc-status
+
+$(IR0_SELFTEST_X86_PROC_STATUS): tests/selftests/syscall/proc_status.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 proc_status
+
+$(IR0_SELFTEST_ARM64_PROC_STATUS): tests/selftests/syscall/proc_status.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 proc_status
+
+ir0-selftest-proc-status-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PROC_STATUS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PROC_STATUS) \
+		--done "ok 1 proc_status" \
+		--log $(HOST_TMP)/ir0-selftest-x86-proc-status.log
+	@echo "✓ ir0-selftest-proc-status-x86"
+
+ir0-selftest-proc-status-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PROC_STATUS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PROC_STATUS) \
+		--done "ok 1 proc_status" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-proc-status.log
+	@echo "✓ ir0-selftest-proc-status-arm64"
+
+ir0-selftest-proc-status: ir0-selftest-proc-status-x86 ir0-selftest-proc-status-arm64
