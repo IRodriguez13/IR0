@@ -64,11 +64,24 @@ int64_t sys_kexec_load(unsigned long entry, unsigned long nr_segments,
 	if (flags & KEXEC_ON_CRASH)
 		return -EINVAL;
 
+	/*
+	 * Linux do_kexec_load(): nr_segments == 0 uninstalls the image and
+	 * returns 0. The architecture check applies only when a new image
+	 * is installed. A crash image is not implemented, so KEXEC_ON_CRASH
+	 * with a zero count is a no-op success.
+	 */
+	if (nr_segments == 0)
+	{
+		if (!(flags & KEXEC_ON_CRASH))
+			kexec_clear();
+		return 0;
+	}
+
 	arch = flags & KEXEC_ARCH_MASK;
 	if (arch != KEXEC_ARCH_DEFAULT && arch != KEXEC_ARCH)
 		return -EINVAL;
 
-	if (nr_segments == 0 || nr_segments > KEXEC_SEGMENT_MAX)
+	if (nr_segments > KEXEC_SEGMENT_MAX)
 		return -EINVAL;
 	if (!segments)
 		return -EFAULT;
