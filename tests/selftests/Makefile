@@ -985,3 +985,75 @@ $(SHM_RDONLY_BIN): $(SHM_RDONLY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_RDONLY_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# ELF-INTERP-SELFTEST
+ELF_INTERP_SRC := syscall/elf_interp.c
+ELF_INTERP_BIN := $(BUILD_DIR)/elf_interp
+
+.PHONY: elf_interp
+
+elf_interp: $(ELF_INTERP_BIN)
+
+$(ELF_INTERP_BIN): $(ELF_INTERP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest elf_interp"
+	@$(CC) $(CFLAGS) -o $@ $(ELF_INTERP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# EXEC-SIGMASK-SELFTEST
+EXEC_SIGMASK_SRC := syscall/exec_sigmask.c
+EXEC_SIGMASK_BIN := $(BUILD_DIR)/exec_sigmask
+
+.PHONY: exec_sigmask
+
+exec_sigmask: $(EXEC_SIGMASK_BIN)
+
+$(EXEC_SIGMASK_BIN): $(EXEC_SIGMASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest exec_sigmask"
+	@$(CC) $(CFLAGS) -o $@ $(EXEC_SIGMASK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# GETDENTS-LAYOUT-SELFTEST
+GETDENTS_LAYOUT_SRC := syscall/getdents_layout.c
+GETDENTS_LAYOUT_BIN := $(BUILD_DIR)/getdents_layout
+
+.PHONY: getdents_layout
+
+getdents_layout: $(GETDENTS_LAYOUT_BIN)
+
+$(GETDENTS_LAYOUT_BIN): $(GETDENTS_LAYOUT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest getdents_layout"
+	@$(CC) $(CFLAGS) -o $@ $(GETDENTS_LAYOUT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# NAMEI-SEARCH-SELFTEST
+NAMEI_SEARCH_SRC := syscall/namei_search.c
+NAMEI_SEARCH_BIN := $(BUILD_DIR)/namei_search
+
+.PHONY: namei_search
+
+namei_search: $(NAMEI_SEARCH_BIN)
+
+$(NAMEI_SEARCH_BIN): $(NAMEI_SEARCH_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest namei_search"
+	@$(CC) $(CFLAGS) -o $@ $(NAMEI_SEARCH_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

@@ -1847,3 +1847,135 @@ ir0-selftest-shm-rdonly-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM
 	@echo "✓ ir0-selftest-shm-rdonly-arm64"
 
 ir0-selftest-shm-rdonly: ir0-selftest-shm-rdonly-x86 ir0-selftest-shm-rdonly-arm64
+
+# ELF-INTERP-SELFTEST
+IR0_SELFTEST_X86_ELF_INTERP := $(KERNEL_ROOT)/build/selftests/x86_64/elf_interp
+IR0_SELFTEST_ARM64_ELF_INTERP := $(KERNEL_ROOT)/build/selftests/arm64/elf_interp
+
+.PHONY: ir0-selftest-elf-interp-x86 ir0-selftest-elf-interp-arm64 \
+	ir0-selftest-elf-interp
+
+$(IR0_SELFTEST_X86_ELF_INTERP): tests/selftests/syscall/elf_interp.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 elf_interp
+
+$(IR0_SELFTEST_ARM64_ELF_INTERP): tests/selftests/syscall/elf_interp.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 elf_interp
+
+ir0-selftest-elf-interp-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_ELF_INTERP)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_ELF_INTERP) \
+		--done "ok 1 elf_interp" \
+		--log $(HOST_TMP)/ir0-selftest-x86-elf-interp.log
+	@echo "✓ ir0-selftest-elf-interp-x86"
+
+ir0-selftest-elf-interp-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ELF_INTERP)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_ELF_INTERP) \
+		--done "ok 1 elf_interp" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-elf-interp.log
+	@echo "✓ ir0-selftest-elf-interp-arm64"
+
+ir0-selftest-elf-interp: ir0-selftest-elf-interp-x86 ir0-selftest-elf-interp-arm64
+
+# EXEC-SIGMASK-SELFTEST
+IR0_SELFTEST_X86_EXEC_SIGMASK := $(KERNEL_ROOT)/build/selftests/x86_64/exec_sigmask
+IR0_SELFTEST_ARM64_EXEC_SIGMASK := $(KERNEL_ROOT)/build/selftests/arm64/exec_sigmask
+
+.PHONY: ir0-selftest-exec-sigmask-x86 ir0-selftest-exec-sigmask-arm64 \
+	ir0-selftest-exec-sigmask
+
+$(IR0_SELFTEST_X86_EXEC_SIGMASK): tests/selftests/syscall/exec_sigmask.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 exec_sigmask
+
+$(IR0_SELFTEST_ARM64_EXEC_SIGMASK): tests/selftests/syscall/exec_sigmask.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 exec_sigmask
+
+ir0-selftest-exec-sigmask-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EXEC_SIGMASK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_EXEC_SIGMASK) \
+		--done "ok 1 exec_sigmask" \
+		--log $(HOST_TMP)/ir0-selftest-x86-exec-sigmask.log
+	@echo "✓ ir0-selftest-exec-sigmask-x86"
+
+ir0-selftest-exec-sigmask-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EXEC_SIGMASK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_EXEC_SIGMASK) \
+		--done "ok 1 exec_sigmask" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-exec-sigmask.log
+	@echo "✓ ir0-selftest-exec-sigmask-arm64"
+
+ir0-selftest-exec-sigmask: ir0-selftest-exec-sigmask-x86 ir0-selftest-exec-sigmask-arm64
+
+# GETDENTS-LAYOUT-SELFTEST
+IR0_SELFTEST_X86_GETDENTS_LAYOUT := $(KERNEL_ROOT)/build/selftests/x86_64/getdents_layout
+IR0_SELFTEST_ARM64_GETDENTS_LAYOUT := $(KERNEL_ROOT)/build/selftests/arm64/getdents_layout
+
+.PHONY: ir0-selftest-getdents-layout-x86 ir0-selftest-getdents-layout-arm64 \
+	ir0-selftest-getdents-layout
+
+$(IR0_SELFTEST_X86_GETDENTS_LAYOUT): tests/selftests/syscall/getdents_layout.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 getdents_layout
+
+$(IR0_SELFTEST_ARM64_GETDENTS_LAYOUT): tests/selftests/syscall/getdents_layout.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 getdents_layout
+
+ir0-selftest-getdents-layout-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_GETDENTS_LAYOUT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_GETDENTS_LAYOUT) \
+		--done "ok 1 getdents_layout" \
+		--log $(HOST_TMP)/ir0-selftest-x86-getdents-layout.log
+	@echo "✓ ir0-selftest-getdents-layout-x86"
+
+ir0-selftest-getdents-layout-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_GETDENTS_LAYOUT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_GETDENTS_LAYOUT) \
+		--done "ok 1 getdents_layout" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-getdents-layout.log
+	@echo "✓ ir0-selftest-getdents-layout-arm64"
+
+ir0-selftest-getdents-layout: ir0-selftest-getdents-layout-x86 ir0-selftest-getdents-layout-arm64
+
+# NAMEI-SEARCH-SELFTEST
+IR0_SELFTEST_X86_NAMEI_SEARCH := $(KERNEL_ROOT)/build/selftests/x86_64/namei_search
+IR0_SELFTEST_ARM64_NAMEI_SEARCH := $(KERNEL_ROOT)/build/selftests/arm64/namei_search
+
+.PHONY: ir0-selftest-namei-search-x86 ir0-selftest-namei-search-arm64 \
+	ir0-selftest-namei-search
+
+$(IR0_SELFTEST_X86_NAMEI_SEARCH): tests/selftests/syscall/namei_search.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 namei_search
+
+$(IR0_SELFTEST_ARM64_NAMEI_SEARCH): tests/selftests/syscall/namei_search.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 namei_search
+
+ir0-selftest-namei-search-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_NAMEI_SEARCH)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_NAMEI_SEARCH) \
+		--done "ok 1 namei_search" \
+		--log $(HOST_TMP)/ir0-selftest-x86-namei-search.log
+	@echo "✓ ir0-selftest-namei-search-x86"
+
+ir0-selftest-namei-search-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_NAMEI_SEARCH)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_NAMEI_SEARCH) \
+		--done "ok 1 namei_search" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-namei-search.log
+	@echo "✓ ir0-selftest-namei-search-arm64"
+
+ir0-selftest-namei-search: ir0-selftest-namei-search-x86 ir0-selftest-namei-search-arm64
