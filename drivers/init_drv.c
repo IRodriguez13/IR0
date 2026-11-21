@@ -27,7 +27,6 @@
 #include <ir0/driver_bootstrap.h>
 #include <ir0/driver.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <config.h>
 #include <drivers/multilang_drivers.h>
