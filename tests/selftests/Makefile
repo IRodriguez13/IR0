@@ -588,3 +588,21 @@ $(PROC_STATUS_BIN): $(PROC_STATUS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(PROC_STATUS_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SHM-CPID-SELFTEST
+SHM_CPID_SRC := syscall/shm_cpid.c
+SHM_CPID_BIN := $(BUILD_DIR)/shm_cpid
+
+.PHONY: shm_cpid
+
+shm_cpid: $(SHM_CPID_BIN)
+
+$(SHM_CPID_BIN): $(SHM_CPID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_cpid"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_CPID_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

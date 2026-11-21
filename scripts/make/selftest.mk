@@ -1123,3 +1123,36 @@ ir0-selftest-proc-status-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PR
 	@echo "✓ ir0-selftest-proc-status-arm64"
 
 ir0-selftest-proc-status: ir0-selftest-proc-status-x86 ir0-selftest-proc-status-arm64
+
+# SHM-CPID-SELFTEST
+IR0_SELFTEST_X86_SHM_CPID := $(KERNEL_ROOT)/build/selftests/x86_64/shm_cpid
+IR0_SELFTEST_ARM64_SHM_CPID := $(KERNEL_ROOT)/build/selftests/arm64/shm_cpid
+
+.PHONY: ir0-selftest-shm-cpid-x86 ir0-selftest-shm-cpid-arm64 \
+	ir0-selftest-shm-cpid
+
+$(IR0_SELFTEST_X86_SHM_CPID): tests/selftests/syscall/shm_cpid.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 shm_cpid
+
+$(IR0_SELFTEST_ARM64_SHM_CPID): tests/selftests/syscall/shm_cpid.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 shm_cpid
+
+ir0-selftest-shm-cpid-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SHM_CPID)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SHM_CPID) \
+		--done "ok 1 shm_cpid" \
+		--log $(HOST_TMP)/ir0-selftest-x86-shm-cpid.log
+	@echo "✓ ir0-selftest-shm-cpid-x86"
+
+ir0-selftest-shm-cpid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_CPID)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SHM_CPID) \
+		--done "ok 1 shm_cpid" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-shm-cpid.log
+	@echo "✓ ir0-selftest-shm-cpid-arm64"
+
+ir0-selftest-shm-cpid: ir0-selftest-shm-cpid-x86 ir0-selftest-shm-cpid-arm64

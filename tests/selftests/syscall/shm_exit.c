@@ -36,6 +36,7 @@ struct shm_info
 	size_t shm_segsz;
 	int shm_nattch;
 	int shm_perm_mode;
+	int shm_cpid;
 };
 
 static int shm_inval(void)

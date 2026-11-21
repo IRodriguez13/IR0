@@ -24,6 +24,8 @@ struct ir0_shmid_ds
 	size_t shm_segsz;
 	int shm_nattch;
 	int shm_perm_mode;
+	/* pid of the task that created the segment. 0 if unknown. */
+	int shm_cpid;
 };
 
 struct process;

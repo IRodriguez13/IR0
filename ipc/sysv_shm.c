@@ -40,6 +40,7 @@ struct shm_seg
 	size_t npages;
 	uintptr_t *frames;
 	int nattch;
+	int cpid;
 	struct shm_attach attaches[SHM_ATTACH_MAX];
 };
 
@@ -193,6 +194,7 @@ int64_t sys_shmget(int key, size_t size, int shmflg)
 	free_slot->key = key;
 	free_slot->id = g_next_id++;
 	free_slot->npages = npages;
+	free_slot->cpid = (int)process_pid(current_process);
 	return free_slot->id;
 }
 
@@ -298,6 +300,7 @@ int64_t sys_shmctl(int shmid, int cmd, void *buf)
 		st.shm_segsz = s->npages * PAGE_SZ;
 		st.shm_nattch = s->nattch;
 		st.shm_perm_mode = 0600;
+		st.shm_cpid = s->cpid;
 		if (copy_to_user(buf, &st, sizeof(st)) != 0)
 			return -EFAULT;
 		return 0;
