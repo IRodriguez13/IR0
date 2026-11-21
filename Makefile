@@ -713,7 +713,7 @@ DRIVER_OBJS = \
 	drivers/video/console_font.o \
 	drivers/video/font_terminus_14x28.o \
 	drivers/video/textcon.o \
-	drivers/video/vt.o \
+	drivers/tty/vt/vt.o \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)

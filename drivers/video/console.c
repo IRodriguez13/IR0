@@ -117,6 +117,13 @@ void console_draw_cell(int row, int col, char c, uint8_t color)
 	video->put_cell(row, col, c, color);
 }
 
+int console_set_cursor(int row, int col, int on)
+{
+	if (!video->cursor)
+		return 0;
+	return video->cursor(row, col, on);
+}
+
 void console_put_cell(int row, int col, char c, uint8_t color)
 {
 	shadow_put(row, col, c, color);

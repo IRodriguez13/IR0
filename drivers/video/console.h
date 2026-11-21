@@ -45,6 +45,8 @@ struct console_video_ops
 	void (*put_cell)(int row, int col, char c, uint8_t color);
 	void (*scroll_up)(uint8_t clear_color);
 	void (*clear)(uint8_t color);
+	/* Hardware cursor. Returns 1 when the backend drew it. */
+	int (*cursor)(int row, int col, int on);
 };
 
 extern const struct console_video_ops textcon_video_ops;
@@ -54,6 +56,9 @@ extern const struct console_video_ops fbcon_video_ops;
  * console_draw_cell - Paint without updating the cell shadow (software cursor).
  */
 void console_draw_cell(int row, int col, char c, uint8_t color);
+
+/* 1 if the backend placed a hardware cursor; 0 if the caller paints one. */
+int console_set_cursor(int row, int col, int on);
 
 /*
  * console_get_cell - Return shadowed (char | color<<8) for software cursor restore.

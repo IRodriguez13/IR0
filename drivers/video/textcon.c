@@ -57,6 +57,14 @@ static void scroll_up_text(uint8_t clear_color)
 		cells[i] = (uint16_t)((clear_color << 8) | ' ');
 }
 
+static int cursor_text(int row, int col, int on)
+{
+	if (!text_screen || !text_screen->cursor)
+		return 0;
+	text_screen->cursor(row, col, on);
+	return 1;
+}
+
 static void clear_text(uint8_t color)
 {
 	int total;
@@ -75,4 +83,5 @@ const struct console_video_ops textcon_video_ops = {
 	.put_cell = put_cell_text,
 	.scroll_up = scroll_up_text,
 	.clear = clear_text,
+	.cursor = cursor_text,
 };

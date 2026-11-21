@@ -1,15 +1,17 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
  * IR0 virtual terminal — single cursor_pos for /dev/console, TTY echo,
- * kernel print() and klog: ANSI/CSI parsing, soft cursor, alternate screen
- * and scrollback, drawn through the console core.
+ * kernel print() and klog: ANSI/CSI parsing, cursor, alternate screen
+ * and scrollback, drawn through the console core. A backend hardware
+ * cursor is used when the video ops provide one; otherwise the cell
+ * under the cursor is inverted.
  */
 
 #include <ir0/console_backend.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/printk_console.h>
 #include <ir0/vt.h>
-#include "console.h"
+#include "video/console.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -489,6 +491,7 @@ static void render_reset(uint8_t color)
 	alt_saved_cols = 0;
 	alt_saved_cursor_pos = 0;
 	console_clear(color);
+	(void)console_set_cursor(0, 0, 0);
 }
 
 static void render_putchar(char c, uint8_t color)
@@ -616,11 +619,16 @@ static void render_show_cursor(uint8_t color)
 	if (!render_cursor_enabled)
 	{
 		render_erase_cursor(cols, rows, color);
+		if (row >= 0 && row < rows && col >= 0 && col < cols)
+			(void)console_set_cursor(row, col, 0);
 		return;
 	}
 	render_erase_cursor(cols, rows, color);
 
 	if (row < 0 || row >= rows || col < 0 || col >= cols)
+		return;
+
+	if (console_set_cursor(row, col, 1))
 		return;
 
 	cell = console_get_cell(row, col);
