@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <mm/map_sys.h>
+#include <mm/va_search.h>
 #include <syscalls/mm_syscalls.h>
 #include <syscalls/mm_syscalls_internal.h>
 #include <config.h>
