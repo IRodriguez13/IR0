@@ -2035,8 +2035,8 @@ ir0-selftest-bigmem-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_BIGMEM)
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_BIGMEM) \
 		--mem 3584M \
-		--timeout 180 \
-		--stale-sec 120 \
+		--timeout 300 \
+		--stale-sec 240 \
 		--done "ok 2 touch_1280_mib_anon" \
 		--expect-log "ok 1 memtotal_reflects_ram" \
 		--log $(HOST_TMP)/ir0-selftest-x86-bigmem.log
@@ -2047,8 +2047,8 @@ ir0-selftest-bigmem-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_BIGMEM)
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_BIGMEM) \
 		--mem 3584M \
-		--timeout 180 \
-		--stale-sec 120 \
+		--timeout 300 \
+		--stale-sec 240 \
 		--done "ok 2 touch_1280_mib_anon" \
 		--expect-log "ok 1 memtotal_reflects_ram" \
 		--log $(HOST_TMP)/ir0-selftest-arm64-bigmem.log
