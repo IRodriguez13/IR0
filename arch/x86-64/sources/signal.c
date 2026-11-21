@@ -144,7 +144,7 @@ uint64_t irq_frame_sp(const uint64_t *frame)
 }
 
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
-				    uint64_t new_rsp, uint64_t info_addr,
+				    uint64_t new_sp, uint64_t info_addr,
 				    uint64_t uctx_addr, int sa_siginfo,
 				    uint64_t restorer)
 {
@@ -155,7 +155,7 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 
 	fpu_signal_enter();
 	frame[2] = (uint64_t)(uintptr_t)handler;
-	frame[5] = new_rsp;
+	frame[5] = new_sp;
 	frame[-7] = (uint64_t)(uint32_t)sig;
 	if (sa_siginfo)
 	{

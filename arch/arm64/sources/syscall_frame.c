@@ -27,7 +27,7 @@ static void arm64_copy_exc_gprs(arch_syscall_frame_t *sf, const uint64_t *frame)
 
 void syscall_capture_frame_at_entry(struct process *p,
 						 uint64_t *frame_base,
-						 uint64_t rip_hw)
+						 uint64_t ip_hw)
 {
 	arch_syscall_frame_t *sf;
 	uint64_t elr;
@@ -46,8 +46,8 @@ void syscall_capture_frame_at_entry(struct process *p,
 	sp_el0 = frame_base[ARM64_EXC_IDX_SP];
 
 	sf->elr = elr;
-	if (!sf->elr && rip_hw)
-		sf->elr = rip_hw;
+	if (!sf->elr && ip_hw)
+		sf->elr = ip_hw;
 	sf->spsr = spsr;
 	sf->sp = sp_el0;
 	process_sync_task_user_ip_from_syscall_frame(p);

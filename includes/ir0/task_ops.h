@@ -31,7 +31,7 @@ uint64_t task_initial_kernel_status(void);
 
 void task_apply_syscall_frame(task_t *task,
 				   const arch_task_syscall_frame_t *sf,
-				   uint64_t rax);
+				   uint64_t retval);
 void task_sync_syscall_soft_mirror(task_t *task,
 					const arch_task_syscall_frame_t *sf);
 /* Decode an opaque ISA exception frame into the portable task snapshot. */
