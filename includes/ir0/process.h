@@ -28,6 +28,7 @@
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
 #include <ir0/errno.h>
+#include <ir0/mm_struct.h>
 
 /* waitpid / wait4 options (Linux UAPI) and status inspection */
 #include <linux/wait.h>
@@ -365,8 +366,6 @@ void process_registry_insert(process_t *process);
  * arch-guard verifies the C header matches the .inc file.
  */
 PROCESS_CONTEXT_ASSERT_LAYOUT(process_t);
-
-#include <ir0/mm_struct.h>
 
 static inline fd_entry_t *process_fd_table(const process_t *p)
 {
