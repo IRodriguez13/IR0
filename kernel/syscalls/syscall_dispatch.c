@@ -166,6 +166,7 @@ WRAP2(sys_kill, pid_t, int)
 WRAP4(sys_rt_sigaction, int, const struct sigaction *, struct sigaction *, size_t)
 WRAP4(sys_rt_sigprocmask, int, const sigset_t *, sigset_t *, size_t)
 WRAP2(sys_rt_sigsuspend, const sigset_t *, size_t)
+WRAP2(sys_sigaltstack, const struct sigaltstack *, struct sigaltstack *)
 WRAP2(sys_getgroups, int, gid_t *)
 WRAP2(sys_setgroups, size_t, const gid_t *)
 WRAP2(sys_setreuid, uid_t, uid_t)
@@ -414,6 +415,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SETREUID] = wrap_sys_setreuid;
   syscall_semantic_table[IR0_SYSCALL_SETSID] = wrap_sys_setsid;
   syscall_semantic_table[IR0_SYSCALL_SETUID] = wrap_sys_setuid;
+  syscall_semantic_table[IR0_SYSCALL_SIGALTSTACK] = wrap_sys_sigaltstack;
   syscall_semantic_table[IR0_SYSCALL_STAT] = wrap_sys_stat;
   syscall_semantic_table[IR0_SYSCALL_STATX] = wrap_sys_statx;
   syscall_semantic_table[IR0_SYSCALL_STATFS] = wrap_sys_statfs;

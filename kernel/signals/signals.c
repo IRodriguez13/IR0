@@ -253,6 +253,9 @@ void signals_reset_on_exec(process_t *p)
 	p->signal_mask_saved = 0;
 	p->signal_mask_saved_valid = 0;
 	p->signal_frame_sp = 0;
+	p->sas_ss_sp = 0;
+	p->sas_ss_size = 0;
+	p->sas_ss_flags = SS_DISABLE;
 	p->it_real_expire_ms = 0;
 	p->it_real_interval_ms = 0;
 	/*
@@ -407,28 +410,58 @@ int send_signal_pgrp(int32_t pgid, int signal)
 
 /*
  * Linux get_sigframe() (arch/x86/kernel/signal.c, arch/arm64/kernel/
- * signal.c) without SA_ONSTACK: the frame goes just below the interrupted
- * stack pointer, past the ABI red zone, whatever mapping that pointer is
- * in (the main stack, a thread stack from mmap(2)). Below the frame sits
+ * signal.c). SA_ONSTACK with an enabled alternate stack, and the
+ * interrupted SP not already inside it, places the frame at the top of
+ * that stack (no red zone). Otherwise the frame goes just below the
+ * interrupted stack pointer, past the ABI red zone. Below the frame sits
  * the return slot on ISAs whose handlers return with a stack pop; the
  * handler starts with SP there. A frame that cannot be written makes the
  * copy fail and the task gets SIGSEGV, as with force_sigsegv().
  *
- * Returns the handler's SP and the frame address, or 0 when the stack
- * pointer is too low to hold a frame at all.
+ * Returns the handler's SP and the frame address, or 0 when the chosen
+ * stack cannot hold a frame.
  */
-static uint64_t signal_pick_handler_sp(uint64_t saved_sp,
+static uint64_t signal_pick_handler_sp(process_t *p, int sig,
+				       uint64_t saved_sp,
 				       uint64_t *frame_addr_out)
 {
 	uint64_t frame_addr;
+	uint64_t sp;
+	uint64_t user_sp;
+	int alt;
 
-	if (saved_sp < SIGFRAME_RED_ZONE + sizeof(struct sigframe) +
-			       SIGFRAME_RETURN_SLOT + 16UL)
-		return 0;
-	frame_addr = (saved_sp - SIGFRAME_RED_ZONE - sizeof(struct sigframe)) &
-		     ~0xFUL;
+	alt = 0;
+	sp = saved_sp;
+	if (p && p->sighand && sig >= 1 && sig < _NSIG &&
+	    (p->sighand->sa_flags[sig] & SA_ONSTACK) &&
+	    p->sas_ss_size != 0 &&
+	    !process_on_altstack(p, saved_sp))
+	{
+		sp = p->sas_ss_sp + p->sas_ss_size;
+		alt = 1;
+	}
+
+	if (!alt)
+	{
+		if (sp < SIGFRAME_RED_ZONE + sizeof(struct sigframe) +
+				SIGFRAME_RETURN_SLOT + 16UL)
+			return 0;
+		frame_addr = (sp - SIGFRAME_RED_ZONE -
+			      sizeof(struct sigframe)) & ~0xFUL;
+		user_sp = frame_addr - SIGFRAME_RETURN_SLOT;
+	}
+	else
+	{
+		if (sp < sizeof(struct sigframe) + SIGFRAME_RETURN_SLOT)
+			return 0;
+		frame_addr = (sp - sizeof(struct sigframe)) & ~0xFUL;
+		user_sp = frame_addr - SIGFRAME_RETURN_SLOT;
+		if (user_sp < p->sas_ss_sp || frame_addr < p->sas_ss_sp)
+			return 0;
+	}
+
 	*frame_addr_out = frame_addr;
-	return frame_addr - SIGFRAME_RETURN_SLOT;
+	return user_sp;
 }
 
 /*
@@ -469,7 +502,7 @@ static int signal_setup_frame(process_t *p, int sig,
 	uint64_t user_sp;
 	uint64_t restorer;
 
-	user_sp = signal_pick_handler_sp(sigcontext_sp(ctx), &frame_addr);
+	user_sp = signal_pick_handler_sp(p, sig, sigcontext_sp(ctx), &frame_addr);
 	if (user_sp == 0)
 		return SIGFRAME_BAD_SP;
 	restorer = signal_handler_restorer(p, sig);

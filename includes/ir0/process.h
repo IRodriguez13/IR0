@@ -310,7 +310,30 @@ typedef struct process
 	/* personality(2) execution domain; only PER_LINUX/PER_LINUX32 exist. */
 	uint32_t personality;
 
+	/*
+	 * sigaltstack(2). sas_ss_size 0 means disabled (Linux sas_ss_size).
+	 * Per task: fork copies it, exec clears it, CLONE_VM starts with none.
+	 */
+	uint64_t sas_ss_sp;
+	uint64_t sas_ss_size;
+	int sas_ss_flags;
+
 } process_t;
+
+/* 1 when @sp lies inside the task's alternate signal stack. */
+static inline int process_on_altstack(const process_t *p, uint64_t sp)
+{
+	uint64_t base;
+	uint64_t size;
+
+	if (!p || p->sas_ss_size == 0)
+		return 0;
+	base = p->sas_ss_sp;
+	size = p->sas_ss_size;
+	if (sp < base)
+		return 0;
+	return (sp - base) < size;
+}
 
 /* Boot-time reset of the current-process slot and the process registry. */
 void process_init(void);

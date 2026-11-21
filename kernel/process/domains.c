@@ -178,6 +178,22 @@ int process_signals_clone(process_t *dst, const process_t *src,
 	dst->signal_mask_saved = 0;
 	dst->signal_mask_saved_valid = 0;
 	dst->signal_frame_sp = 0;
+	/*
+	 * Alternate signal stack is per task. fork copies it. A thread that
+	 * shares the address space must not deliver onto the parent's stack.
+	 */
+	if ((flags & (CLONE_VM | CLONE_VFORK)) == CLONE_VM)
+	{
+		dst->sas_ss_sp = 0;
+		dst->sas_ss_size = 0;
+		dst->sas_ss_flags = SS_DISABLE;
+	}
+	else
+	{
+		dst->sas_ss_sp = src->sas_ss_sp;
+		dst->sas_ss_size = src->sas_ss_size;
+		dst->sas_ss_flags = src->sas_ss_flags;
+	}
 	dst->saved_sigmask = 0;
 	dst->restore_sigmask = 0;
 	/* Linux: interval timers are not inherited by the child. */

@@ -7,6 +7,8 @@
 #define IR0_ARCH_SIGFRAME_RETURN_SLOT 0UL
 /* AAPCS64 has no red zone below SP. */
 #define IR0_ARCH_SIGFRAME_RED_ZONE 0UL
+/* Linux arch/arm64/include/uapi/asm/signal.h */
+#define IR0_ARCH_MINSIGSTKSZ 5120UL
 /*
  * Linux arm64 returns handlers installed without SA_RESTORER through the
  * vDSO __kernel_rt_sigreturn. IR0 has no ARM64 vDSO yet, so the same two

@@ -16,7 +16,9 @@
 
 #include <kernel/syscalls/process_syscalls.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
+#include <ir0/abi/signal_contract.h>
 #include <ir0/context.h>
 #include <ir0/copy_user.h>
 #include <ir0/sched.h>
@@ -356,6 +358,71 @@ int64_t sys_kill(pid_t pid, int signal)
 		sent++;
 	if (sent == 0 && pid != -1)
 		return -EPERM;
+	return 0;
+}
+
+/*
+ * sys_sigaltstack - Install or read the task's alternate signal stack
+ * (Linux do_sigaltstack()). Either pointer may be NULL. A size below
+ * MINSIGSTKSZ is ENOMEM. Changing the stack while the task is running on
+ * it is EPERM. SS_DISABLE clears it.
+ */
+int64_t sys_sigaltstack(const struct sigaltstack *ss,
+			struct sigaltstack *old_ss)
+{
+	struct sigaltstack kss;
+	struct sigaltstack kold;
+	int mode;
+	uint64_t sp;
+
+	if (!current_process)
+		return -ESRCH;
+
+	if (old_ss)
+	{
+		memset(&kold, 0, sizeof(kold));
+		kold.ss_sp = (void *)(uintptr_t)current_process->sas_ss_sp;
+		kold.ss_size = (size_t)current_process->sas_ss_size;
+		if (current_process->sas_ss_size == 0)
+			kold.ss_flags = SS_DISABLE;
+		else if (process_on_altstack(current_process,
+					     process_syscall_sp(current_process)))
+			kold.ss_flags = SS_ONSTACK;
+		if (copy_to_user(old_ss, &kold, sizeof(kold)) != 0)
+			return -EFAULT;
+	}
+
+	if (!ss)
+		return 0;
+
+	memset(&kss, 0, sizeof(kss));
+	if (copy_from_user(&kss, ss, sizeof(kss)) != 0)
+		return -EFAULT;
+
+	sp = process_syscall_sp(current_process);
+	if (process_on_altstack(current_process, sp))
+		return -EPERM;
+
+	mode = kss.ss_flags;
+	if (mode != 0 && mode != SS_DISABLE)
+		return -EINVAL;
+
+	if (mode == SS_DISABLE)
+	{
+		current_process->sas_ss_sp = 0;
+		current_process->sas_ss_size = 0;
+		current_process->sas_ss_flags = SS_DISABLE;
+		return 0;
+	}
+
+	if ((uint64_t)kss.ss_size < (uint64_t)MINSIGSTKSZ)
+		return -ENOMEM;
+	if ((uint64_t)(uintptr_t)kss.ss_sp > UINT64_MAX - (uint64_t)kss.ss_size)
+		return -ENOMEM;
+
+	current_process->sas_ss_sp = (uint64_t)(uintptr_t)kss.ss_sp;
+	current_process->sas_ss_size = (uint64_t)kss.ss_size;
+	current_process->sas_ss_flags = 0;
 	return 0;
 }
 

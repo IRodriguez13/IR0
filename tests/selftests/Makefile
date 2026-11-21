@@ -498,3 +498,21 @@ $(SYSFS_CPU_BIN): $(SYSFS_CPU_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SYSFS_CPU_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SIGALTSTACK-SELFTEST
+SIGALTSTACK_SRC := syscall/sigaltstack.c
+SIGALTSTACK_BIN := $(BUILD_DIR)/sigaltstack
+
+.PHONY: sigaltstack
+
+sigaltstack: $(SIGALTSTACK_BIN)
+
+$(SIGALTSTACK_BIN): $(SIGALTSTACK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sigaltstack"
+	@$(CC) $(CFLAGS) -o $@ $(SIGALTSTACK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

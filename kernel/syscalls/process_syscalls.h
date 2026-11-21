@@ -30,6 +30,8 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 			   size_t sigsetsize);
 int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize);
+int64_t sys_sigaltstack(const struct sigaltstack *ss,
+			struct sigaltstack *old_ss);
 int64_t sys_getgroups(int size, gid_t *list);
 int64_t sys_setgroups(size_t size, const gid_t *list);
 int64_t sys_setreuid(uid_t ruid, uid_t euid);

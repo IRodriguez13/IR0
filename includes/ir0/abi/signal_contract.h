@@ -26,3 +26,6 @@
 /* Bytes below the interrupted SP the frame must not touch (ABI red zone). */
 #define SIGFRAME_RED_ZONE IR0_ARCH_SIGFRAME_RED_ZONE
 
+/* Smallest alternate signal stack sigaltstack(2) accepts (Linux MINSIGSTKSZ). */
+#define MINSIGSTKSZ IR0_ARCH_MINSIGSTKSZ
+

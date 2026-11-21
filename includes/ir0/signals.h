@@ -92,10 +92,29 @@ typedef struct
 #define SIG_ERR ((void (*)(int))-1) /* Error return */
 
 #define SA_SIGINFO    4
+#define SA_ONSTACK    0x08000000U
 #define SA_NODEFER    0x40000000U
 #define SA_RESTORER   0x04000000U
 #define SA_RESTART    0x10000000U
 #define SA_RESETHAND  0x80000000U
+
+/* sigaltstack(2) ss_flags. SS_ONSTACK is only reported, never installed. */
+#define SS_ONSTACK    1
+#define SS_DISABLE    2
+
+/*
+ * Linux stack_t (LP64): ss_sp, ss_flags, then ss_size at offset 16.
+ * Either pointer argument of sigaltstack(2) may be NULL.
+ */
+struct sigaltstack {
+	void *ss_sp;
+	int ss_flags;
+	size_t ss_size;
+};
+
+_Static_assert(sizeof(struct sigaltstack) == 24, "stack_t size");
+_Static_assert(offsetof(struct sigaltstack, ss_flags) == 8, "ss_flags");
+_Static_assert(offsetof(struct sigaltstack, ss_size) == 16, "ss_size");
 
 /* Linux uapi si_code for SIGSEGV (subset). */
 #define SEGV_MAPERR   1

@@ -150,6 +150,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_setsid: return IR0_SYSCALL_SETSID;
 	case __NR_setsockopt: return IR0_SYSCALL_SETSOCKOPT;
 	case __NR_setuid: return IR0_SYSCALL_SETUID;
+	case __NR_sigaltstack: return IR0_SYSCALL_SIGALTSTACK;
 	case __NR_shmat: return IR0_SYSCALL_SHMAT;
 	case __NR_shmctl: return IR0_SYSCALL_SHMCTL;
 	case __NR_shmdt: return IR0_SYSCALL_SHMDT;
