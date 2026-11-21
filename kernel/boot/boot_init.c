@@ -170,8 +170,8 @@ void boot_rootfs_init(void)
 	klog_set_boot_phase(KLOG_BOOT_STORAGE);
 	if (!ir0_block_lookup_by_name(CONFIG_ROOT_BLOCK_DEVICE))
 	{
-		kklog_warn("BOOT", "Configured root block device not detected");
-		kklog_warn("BOOT", "Filesystem initialization may fail");
+		klog_warn("BOOT", "Configured root block device not detected");
+		klog_warn("BOOT", "Filesystem initialization may fail");
 	}
 #if DEBUG_BOOT
 	else
