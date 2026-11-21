@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: exc_early.c
- * Description: VBAR, SVC ABI, IRQ (timer), EL0 drop, PSCI HVC (product + freestanding).
+ * Description: VBAR, SVC ABI, IRQ dispatch, EL0 drop, PSCI HVC (product + freestanding).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -28,7 +28,6 @@
 #include <ir0/boot_log.h>
 #include <ir0/errno.h>
 #include <ir0/entry.h>
-#include <ir0/clock.h>
 #include <ir0/oops.h>
 #include <ir0/signals.h>
 #include <ir0/page_fault.h>
@@ -44,7 +43,6 @@
 
 extern char ir0_el1_vectors[];
 
-static volatile int g_timer_irq_seen;
 static int g_el0_svc_tagged;
 
 extern process_t *current_process;
@@ -56,11 +54,6 @@ static void exc_put_hex64(uint64_t value)
 
 	for (shift = 60; shift >= 0; shift -= 4)
 		pl011_putc(digits[(value >> (unsigned)shift) & 0xfU]);
-}
-
-int arm64_timer_irq_seen(void)
-{
-	return g_timer_irq_seen;
 }
 
 int arm64_vbar_early_install(void)
@@ -133,28 +126,15 @@ void arm64_exc_irq_el1(uint64_t *frame)
 {
 	uint32_t iar = arm64_irq_backend_ack();
 	uint32_t irq = iar & 0x3ffU;
+	void *prev_frame;
 
 	cpu_local_irq_enter();
 
 	arch_timer_oneshot_disarm();
 
-	if (irq == ARM64_IRQ_PHYS_TIMER)
-	{
-		if (!g_timer_irq_seen)
-		{
-			g_timer_irq_seen = 1;
-			ir0_boot_smoke("ARM64_TIMER_IRQ_OK");
-		}
-
-		if (clock_is_ready())
-		{
-			clock_note_irq();
-			clock_tick();
-			arch_timer_periodic_arm();
-		}
-	}
-	else
-		(void)irq_dispatch(irq);
+	prev_frame = cpu_local_set_irq_frame(frame);
+	(void)irq_dispatch(irq);
+	(void)cpu_local_set_irq_frame(prev_frame);
 
 	if (irq < 1020U)
 	{
