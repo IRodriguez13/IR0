@@ -199,6 +199,7 @@ static const struct input_mouse_ops ps2_mouse_input_ops;
 
 bool ps2_mouse_init(void)
 {
+    (void)input_register_device(input_i8042_dev());
     LOG_INFO("PS2_MOUSE", "Registering PS/2 Mouse driver...");
     input_register_mouse(&ps2_mouse_input_ops);
     ir0_driver_t* drv = ir0_register_driver(&mouse_info, &mouse_ops);
@@ -445,36 +446,36 @@ static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
 
     if (packet->delta_x != 0)
     {
-        input_event_push(EV_REL, REL_X, packet->delta_x);
+        input_event(input_i8042_dev(), EV_REL, REL_X, packet->delta_x);
     }
     if (packet->delta_y != 0)
     {
-        input_event_push(EV_REL, REL_Y, -(int32_t)packet->delta_y);
+        input_event(input_i8042_dev(), EV_REL, REL_Y, -(int32_t)packet->delta_y);
     }
     if (packet->delta_wheel != 0)
     {
-        input_event_push(EV_REL, REL_WHEEL, packet->delta_wheel);
+        input_event(input_i8042_dev(), EV_REL, REL_WHEEL, packet->delta_wheel);
     }
 
     if (prev_left != mouse_state.left_button)
     {
-        input_event_push(EV_KEY, BTN_LEFT, mouse_state.left_button ? 1 : 0);
+        input_event(input_i8042_dev(), EV_KEY, BTN_LEFT, mouse_state.left_button ? 1 : 0);
     }
     if (prev_right != mouse_state.right_button)
     {
-        input_event_push(EV_KEY, BTN_RIGHT, mouse_state.right_button ? 1 : 0);
+        input_event(input_i8042_dev(), EV_KEY, BTN_RIGHT, mouse_state.right_button ? 1 : 0);
     }
     if (prev_middle != mouse_state.middle_button)
     {
-        input_event_push(EV_KEY, BTN_MIDDLE, mouse_state.middle_button ? 1 : 0);
+        input_event(input_i8042_dev(), EV_KEY, BTN_MIDDLE, mouse_state.middle_button ? 1 : 0);
     }
     if (prev_button4 != mouse_state.button4)
     {
-        input_event_push(EV_KEY, BTN_SIDE, mouse_state.button4 ? 1 : 0);
+        input_event(input_i8042_dev(), EV_KEY, BTN_SIDE, mouse_state.button4 ? 1 : 0);
     }
     if (prev_button5 != mouse_state.button5)
     {
-        input_event_push(EV_KEY, BTN_EXTRA, mouse_state.button5 ? 1 : 0);
+        input_event(input_i8042_dev(), EV_KEY, BTN_EXTRA, mouse_state.button5 ? 1 : 0);
     }
 
     if (packet->delta_x != 0 || packet->delta_y != 0 || packet->delta_wheel != 0 ||
@@ -482,7 +483,7 @@ static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
         prev_middle != mouse_state.middle_button || prev_button4 != mouse_state.button4 ||
         prev_button5 != mouse_state.button5)
     {
-        input_event_push(EV_SYN, SYN_REPORT, 0);
+        input_sync(input_i8042_dev());
     }
 }
 

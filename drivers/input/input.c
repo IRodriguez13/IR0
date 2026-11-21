@@ -55,7 +55,7 @@ void ir0_input_get_caps(struct ir0_input_caps *caps)
 int ir0_input_inject_event(uint16_t type, uint16_t code, int32_t value)
 {
 #if CONFIG_TEST_INPUT_INJECT
-    input_event_push(type, code, value);
+    input_event(input_i8042_dev(), type, code, value);
     return 0;
 #else
     (void)type;
