@@ -230,3 +230,10 @@ process_cred_init_groups (nothing; the supplementary groups are what setgroups(2
 # keymap_get/set stay: ISD firstboot still calls 442 and 443.
 __NR_console_scroll CSI through the console renderer
 __NR_console_clear CSI through the console renderer
+
+# Driver bootstrap (includes/ir0/driver_bootstrap.h): drivers are listed in
+# a struct driver_boot_entry table, never registered at runtime.
+driver_bootstrap_register an entry in a driver_boot_entry table
+driver_bootstrap_reset (nothing; the tables are const)
+driver_bootstrap_run_all driver_bootstrap_run()
+ir0_boot_arch_drivers ir0_boot_arch_driver_table
