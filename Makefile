@@ -424,6 +424,7 @@ KERNEL_OBJS = \
     kernel/process/create.o \
     kernel/process/domains.o \
     mm/mm_struct.o \
+    mm/map_sys.o \
     fs/files_lifecycle.o \
     fs/files_struct.o \
     kernel/process/fork.o \
