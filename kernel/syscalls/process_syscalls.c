@@ -391,6 +391,15 @@ int64_t sys_setpriority(int which, int who, int prio)
  * legitimate negative nice is not mistaken for an error code; the libc
  * undoes the bias (Linux kernel/sys.c).
  */
+/* sched_yield(2): let every other runnable task run first; never fails. */
+int64_t sys_sched_yield(void)
+{
+	if (!current_process)
+		return -ESRCH;
+	schedule();
+	return 0;
+}
+
 int64_t sys_getpriority(int which, int who)
 {
 	process_t *target;

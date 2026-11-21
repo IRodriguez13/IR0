@@ -86,9 +86,10 @@ ir0-fuzz-arm64: kernel-arm64-product.bin
 		--summary $(HOST_TMP)/ir0-fuzz-arm64-s$(SEED).json
 	@echo "✓ ir0-fuzz-arm64 seed=$(SEED) count=$(COUNT)"
 
-# Red selftests: one target per area and ISA. Empty while every group is
-# fixed; a fixed group moves to IR0_ABI_SELFTESTS (scripts/make/selftest.mk).
-IR0_RED_SELFTESTS :=
+# Red selftests: one target per area and ISA. A fixed group moves to
+# IR0_ABI_SELFTESTS (scripts/make/selftest.mk): futex (timeouts, bitset,
+# requeue, keys, waiter cap, robust list).
+IR0_RED_SELFTESTS := futex
 
 define ir0_red_selftest
 .PHONY: ir0-selftest-red-$(1)-x86 ir0-selftest-red-$(1)-arm64

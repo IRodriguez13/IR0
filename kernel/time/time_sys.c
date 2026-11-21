@@ -18,6 +18,7 @@
 #include <ir0/process.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>
+#include <ir0/clock_wait.h>
 #include <ir0/copy_user.h>
 #include <ir0/signals.h>
 #include <ir0/time.h>
@@ -206,6 +207,80 @@ int64_t sys_clock_gettime(int clock_id, struct timespec *tp)
 	if (!tp || copy_to_user(tp, &kts, sizeof(kts)) != 0)
 		return -EFAULT;
 	return 0;
+}
+
+/*
+ * Linux clock_nanosleep(): REALTIME, MONOTONIC and BOOTTIME (which is
+ * MONOTONIC here) can be slept on; the other known clocks have no nsleep
+ * (EOPNOTSUPP) and any other id is EINVAL. Sets *@realtime for REALTIME.
+ */
+static int nsleep_clock(int clock_id, int *realtime)
+{
+	switch (clock_id)
+	{
+	case CLOCK_REALTIME:
+		*realtime = 1;
+		return 0;
+	case CLOCK_MONOTONIC:
+	case CLOCK_BOOTTIME:
+		*realtime = 0;
+		return 0;
+	case CLOCK_PROCESS_CPUTIME_ID:
+	case CLOCK_THREAD_CPUTIME_ID:
+	case CLOCK_MONOTONIC_RAW:
+	case CLOCK_REALTIME_COARSE:
+	case CLOCK_MONOTONIC_COARSE:
+		return -EOPNOTSUPP;
+	default:
+		return -EINVAL;
+	}
+}
+
+/*
+ * sys_clock_nanosleep - Sleep on @clock_id until an interval passes or,
+ * with TIMER_ABSTIME, until the clock reaches @req (clock_nanosleep(2)).
+ * At clock-tick resolution (1 ms), rounded up. A caught signal ends a
+ * relative sleep with EINTR and the unslept time in @rem (signal(7): it
+ * is never restarted); an absolute sleep leaves @rem alone and restarts
+ * when no handler runs, as on Linux.
+ */
+int64_t sys_clock_nanosleep(int clock_id, int flags,
+			    const struct timespec *req, struct timespec *rem)
+{
+	int absolute = (flags & TIMER_ABSTIME) != 0;
+	struct timespec kreq;
+	struct timespec krem;
+	uint64_t deadline;
+	uint64_t now;
+	int realtime;
+	int ret;
+
+	if (!current_process)
+		return -ESRCH;
+	ret = nsleep_clock(clock_id, &realtime);
+	if (ret)
+		return ret;
+	if (copy_from_user(&kreq, req, sizeof(kreq)) != 0)
+		return -EFAULT;
+	ret = ir0_clock_deadline_ms(&kreq, absolute, realtime, &deadline);
+	if (ret)
+		return ret;
+
+	ret = ir0_clock_wait_block_until(deadline);
+	if (ret != -EINTR)
+		return ret;
+	if (absolute)
+		return -ERESTARTNOHAND;
+	if (rem)
+	{
+		now = clock_get_uptime_milliseconds();
+		now = deadline > now ? deadline - now : 0;
+		krem.tv_sec = (time_t)(now / 1000);
+		krem.tv_nsec = (long)(now % 1000) * 1000000L;
+		if (copy_to_user(rem, &krem, sizeof(krem)) != 0)
+			return -EFAULT;
+	}
+	return -EINTR;
 }
 
 int64_t sys_getitimer(int which, struct itimerval *curr_value)

@@ -35,11 +35,13 @@ static void product_clear_child_tid(process_t *dying)
 	{
 		if (copy_to_user_mm(process_pgd(dying), (uintptr_t)tidptr,
 				    &zero, sizeof(zero)) == 0)
-			(void)ir0_futex_wake(tidptr, 1);
+			(void)ir0_futex_wake(dying, tidptr, IR0_FUTEX_SHARED, 1,
+					     FUTEX_BITSET_MATCH_ANY);
 	}
 	else if (copy_to_user(tidptr, &zero, sizeof(zero)) == 0)
 	{
-		(void)ir0_futex_wake(tidptr, 1);
+		(void)ir0_futex_wake(dying, tidptr, IR0_FUTEX_SHARED, 1,
+				     FUTEX_BITSET_MATCH_ANY);
 	}
 }
 

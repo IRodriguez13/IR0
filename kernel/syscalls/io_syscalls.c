@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "io_syscalls.h"
+#include "time_syscalls.h"
 #include <ir0/fd_resource.h>
 #include "syscalls_glue.h"
 #include <ir0/kmem.h>
@@ -817,49 +818,12 @@ int64_t sys_pause(void)
 }
 
 /**
- * sys_nanosleep - Sleep for specified time (POSIX, OSDev Time And Date)
- * @req: Requested sleep duration (seconds + nanoseconds)
- * @rem: Remaining time if interrupted (optional, can be NULL)
- *
- * Blocks the process until the requested time has elapsed (at clock-tick
- * resolution, ~1ms) or a caught signal interrupts it.
+ * sys_nanosleep - Sleep for an interval: Linux nanosleep(2) is a relative
+ * clock_nanosleep(2) on CLOCK_MONOTONIC.
  */
 int64_t sys_nanosleep(const struct timespec *req, struct timespec *rem)
 {
-  struct timespec kreq;
-  struct timespec krem;
-  uint64_t deadline;
-  uint64_t now;
-  int64_t ret;
-
-  if (!current_process || !req)
-    return -EFAULT;
-  if (copy_from_user(&kreq, req, sizeof(kreq)) != 0)
-    return -EFAULT;
-  if (kreq.tv_sec < 0 || kreq.tv_nsec < 0 || kreq.tv_nsec > 999999999)
-    return -EINVAL;
-
-  /* Millisecond clock: round the request up so the sleep is never short. */
-  deadline = clock_get_uptime_milliseconds() + (uint64_t)kreq.tv_sec * 1000UL +
-             (uint64_t)(kreq.tv_nsec + 999999) / 1000000;
-  ret = ir0_clock_wait_block_until(deadline);
-  if (ret != -EINTR)
-    return ret;
-
-  /*
-   * signal(7): nanosleep is never restarted. It fails with EINTR and
-   * reports the unslept time.
-   */
-  if (rem)
-  {
-    now = clock_get_uptime_milliseconds();
-    now = deadline > now ? deadline - now : 0;
-    krem.tv_sec = (time_t)(now / 1000);
-    krem.tv_nsec = (long)(now % 1000) * 1000000L;
-    if (copy_to_user(rem, &krem, sizeof(krem)) != 0)
-      return -EFAULT;
-  }
-  return -EINTR;
+  return sys_clock_nanosleep(CLOCK_MONOTONIC, 0, req, rem);
 }
 
 #define MAX_PIPE_WAITERS 32

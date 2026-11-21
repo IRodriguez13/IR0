@@ -34,6 +34,7 @@
 #define __NR_access          21
 #define __NR_pipe            22
 #define __NR_select          23
+#define __NR_sched_yield     24
 #define __NR_shmget          29
 #define __NR_shmat           30
 #define __NR_shmctl          31
@@ -138,6 +139,7 @@
 #define __NR_getdents64      217
 #define __NR_set_tid_address 218
 #define __NR_clock_gettime   228
+#define __NR_clock_nanosleep 230
 #define __NR_exit_group      231
 #define __NR_epoll_wait      232
 #define __NR_epoll_ctl       233

@@ -52,6 +52,7 @@ int64_t sys_vfork(void);
 int64_t sys_personality(unsigned long persona);
 int64_t sys_setpriority(int which, int who, int prio);
 int64_t sys_getpriority(int which, int who);
+int64_t sys_sched_yield(void);
 int64_t sys_setpgid(pid_t pid, pid_t pgid);
 
 int64_t sys_exit(int exit_code);
