@@ -1899,8 +1899,8 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 			 * ip(7) IP_MULTICAST_IF takes struct in_addr (4 bytes),
 			 * ip_mreq (8) or ip_mreqn (12); from 8 bytes up the
 			 * address sits at offset 4, as sin_addr does in a
-			 * 16-byte sockaddr_in. IR0 applies it as the socket's
-			 * source address; Linux uses it for multicast only.
+			 * 16-byte sockaddr_in. Stored as the multicast output
+			 * interface and does not change the bind address.
 			 */
 			uint8_t buf[16];
 			uint32_t addr = 0;
@@ -1918,7 +1918,7 @@ int64_t sys_setsockopt(int fd, int level, int optname, const void *optval,
 				memcpy(&addr, buf + 4, 4);
 			else
 				memcpy(&addr, buf, 4);
-			return sock_icmp_bind(icmp, addr);
+			return sock_icmp_set_mcast_if(icmp, addr);
 		}
 		if (level == SOL_SOCKET && optname == SO_BINDTODEVICE)
 		{
