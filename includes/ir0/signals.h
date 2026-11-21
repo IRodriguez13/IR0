@@ -321,7 +321,7 @@ int register_signal_handler(int signal, void (*handler)(int));
  */
 int signals_has_user_handler(process_t *p, int sig);
 
-/** POSIX exec: reset handlers, mask, pending; drop saved sigreturn context. */
+/** execve: drop pending signals and handlers; keep signal_mask. */
 void signals_reset_on_exec(process_t *p);
 
 /** Restore process signal_mask after rt_sigreturn (paired with delivery). */
