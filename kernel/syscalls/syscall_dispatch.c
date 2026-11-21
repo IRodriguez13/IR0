@@ -110,6 +110,7 @@ WRAP4(sys_pwrite64, int, const void *, size_t, off_t)
 WRAP3(sys_open, const char *, int, mode_t)
 WRAP1(sys_close, int)
 WRAP3(sys_waitpid, pid_t, int *, int)
+WRAP5(sys_waitid, int, pid_t, siginfo_t *, int, void *)
 WRAP2(sys_link, const char *, const char *)
 WRAP5(sys_linkat, int, const char *, int, const char *, int)
 WRAP3(sys_readlink, const char *, char *, size_t)
@@ -423,6 +424,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_UTIMENSAT] = wrap_sys_utimensat;
   syscall_semantic_table[IR0_SYSCALL_VFORK] = wrap_sys_vfork;
   syscall_semantic_table[IR0_SYSCALL_WAIT4] = wrap_sys_waitpid;
+  syscall_semantic_table[IR0_SYSCALL_WAITID] = wrap_sys_waitid;
   syscall_semantic_table[IR0_SYSCALL_WRITE] = wrap_sys_write;
   syscall_semantic_table[IR0_SYSCALL_WRITEV] = wrap_sys_writev;
 
