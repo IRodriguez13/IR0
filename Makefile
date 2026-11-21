@@ -672,6 +672,7 @@ LIB_OBJS = \
     drivers/tty/tty_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
+    drivers/input/keymap.o \
     fs/utimens.o \
     fs/exec_read_trace.o \
     fs/mount_prefix.o \

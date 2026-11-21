@@ -950,6 +950,24 @@ $(WAITID_BIN): $(WAITID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
+# KD-KEYMAP-SELFTEST
+KD_KEYMAP_SRC := syscall/kd_keymap.c
+KD_KEYMAP_BIN := $(BUILD_DIR)/kd_keymap
+
+.PHONY: kd_keymap
+
+kd_keymap: $(KD_KEYMAP_BIN)
+
+$(KD_KEYMAP_BIN): $(KD_KEYMAP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest kd_keymap"
+	@$(CC) $(CFLAGS) -o $@ $(KD_KEYMAP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
 # PROC-COMM-SELFTEST
 PROC_COMM_SRC := syscall/proc_comm.c
 PROC_COMM_BIN := $(BUILD_DIR)/proc_comm

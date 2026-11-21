@@ -8,6 +8,7 @@
  */
 
 #include "devfs_internal.h"
+#include <ir0/keymap.h>
 
 int devfs_console_can_read(devfs_entry_t *entry, pid_t pid)
 {
@@ -29,54 +30,6 @@ static const struct console_vt_backend_ops console_vt_backend = {
 
 static struct vt_mode console_vt_mode = { .mode = VT_AUTO };
 static int console_display_mode = KD_TEXT;
-
-static unsigned short console_linux_keysym(unsigned int table,
-                                           unsigned int key)
-{
-    static const char plain_digits[] = "1234567890";
-    static const char shift_digits[] = "!@#$%^&*()";
-
-    if (key >= 2 && key <= 11)
-        return (unsigned short)((table & 1U) ? shift_digits[key - 2]
-                                             : plain_digits[key - 2]);
-    if (key >= 16 && key <= 25)
-        return (unsigned short)(((table & 1U) ? 'Q' : 'q') +
-            ("qwertyuiop"[key - 16] - 'q'));
-    if (key >= 30 && key <= 38)
-        return (unsigned short)(((table & 1U) ? 'A' : 'a') +
-            ("asdfghjkl"[key - 30] - 'a'));
-    if (key >= 44 && key <= 50)
-        return (unsigned short)(((table & 1U) ? 'Z' : 'z') +
-            ("zxcvbnm"[key - 44] - 'z'));
-    switch (key)
-    {
-    case 1: return 27;
-    case 12: return (table & 1U) ? '_' : '-';
-    case 13: return (table & 1U) ? '+' : '=';
-    case 14: return 127;
-    case 15: return '\t';
-    case 26: return (table & 1U) ? '{' : '[';
-    case 27: return (table & 1U) ? '}' : ']';
-    case 28: return K_ENTER;
-    case 29: return K_CTRL;
-    case 39: return (table & 1U) ? ':' : ';';
-    case 40: return (table & 1U) ? '"' : '\'';
-    case 41: return (table & 1U) ? '~' : '`';
-    case 42: return K_SHIFTL;
-    case 43: return (table & 1U) ? '|' : '\\';
-    case 51: return (table & 1U) ? '<' : ',';
-    case 52: return (table & 1U) ? '>' : '.';
-    case 53: return (table & 1U) ? '?' : '/';
-    case 54: return K_SHIFTR;
-    case 56: return K_ALT;
-    case 57: return ' ';
-    case 58: return K_CAPS;
-    default:
-        if (key >= 59 && key <= 68)
-            return (unsigned short)K(KT_FN, key - 59);
-        return 0;
-    }
-}
 
 void devfs_set_read_nonblock(int nonblock)
 {
@@ -170,16 +123,37 @@ int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
     if (request == KDSKBMODE)
         return console_vt_backend.set_keyboard_mode((int)(uintptr_t)arg);
 
-    if (request == KDGKBENT)
+    if (request == KDGKBTYPE)
     {
-        struct kbentry ent;
+        unsigned char kbtype = KB_101;
 
         if (!arg)
-            return -EINVAL;
+            return -EFAULT;
+        if (copy_to_user(arg, &kbtype, sizeof(kbtype)) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
+    if (request == KDGKBENT || request == KDSKBENT)
+    {
+        struct kbentry ent;
+        struct kbentry *uent = arg;
+
+        if (!arg)
+            return -EFAULT;
         if (copy_from_user(&ent, arg, sizeof(ent)) != 0)
             return -EFAULT;
-        ent.kb_value = console_linux_keysym(ent.kb_table, ent.kb_index);
-        if (copy_to_user(arg, &ent, sizeof(ent)) != 0)
+        if (request == KDSKBENT)
+        {
+            /* CAP_SYS_TTY_CONFIG: IR0 grants capabilities to root only. */
+            if (!ir0_cred_is_root())
+                return -EPERM;
+            return keymap_set_entry(ent.kb_table, ent.kb_index,
+                                    ent.kb_value);
+        }
+        ent.kb_value = keymap_get_entry(ent.kb_table, ent.kb_index);
+        if (copy_to_user(&uent->kb_value, &ent.kb_value,
+                         sizeof(ent.kb_value)) != 0)
             return -EFAULT;
         return 0;
     }
