@@ -19,7 +19,7 @@ struct linux_dirent {
 
 #define LINUX_DIRENT_NAME_OFF ((size_t)offsetof(struct linux_dirent, d_name))
 
-/* Linux getdents64 struct linux_dirent64 (NR 217; IR0 also emits it on NR 78). */
+/* Linux getdents64 struct linux_dirent64 (NR 217). d_type precedes d_name. */
 struct linux_dirent64 {
   uint64_t d_ino;
   int64_t d_off;
@@ -545,13 +545,8 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
 
 int64_t sys_getdents(int fd, void *dirent, size_t count)
 {
-  /*
-   * NR 78 emits linux_dirent64 records (d_type before d_name). Linux NR 78
-   * uses struct linux_dirent (d_type last); known divergence.
-   * Legacy filldir layout is reserved for strict Linux NR 78 consumers via
-   * getdents64-only paths or future compat toggle.
-   */
-  return sys_getdents_common(fd, dirent, count, 0);
+  /* NR 78: struct linux_dirent, d_type in the last byte of the record. */
+  return sys_getdents_common(fd, dirent, count, 1);
 }
 
 int64_t sys_getdents64(int fd, void *dirent, size_t count)
