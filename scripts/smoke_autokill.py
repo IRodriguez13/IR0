@@ -531,6 +531,11 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         help="Allow panic text for a smoke whose success condition is the panic itself",
     )
     parser.add_argument(
+        "--no-default-fail",
+        action="store_true",
+        help="Only --fail patterns end the run (payloads that print arbitrary text)",
+    )
+    parser.add_argument(
         "--mem",
         default=f"{DEFAULT_MEM_MIB}M",
         help=f"Guest RAM when the QEMU command omits -m (default {DEFAULT_MEM_MIB}M)",
@@ -604,7 +609,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     success_mode = args.success_mode
     timeout_sec = args.timeout
     stale_sec = args.stale_sec
-    default_fail_res = list(DEFAULT_FAIL_RES)
+    default_fail_res = [] if args.no_default_fail else list(DEFAULT_FAIL_RES)
     if args.expected_panic:
         default_fail_res = [
             pattern for pattern in default_fail_res
