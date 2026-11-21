@@ -55,9 +55,9 @@ man7 `signal(7)`, `pty(7)`, `termios(3)`, musl `src/signal/`, BusyBox `shell/ash
 
 | Patch class | Role |
 |-------------|------|
-| **0001–0004** | Features / hardening (tab completion, ESC clamp) — not ABI spec |
-| **0005–0009** | **Retired** (2026-09-05) — were temporary belts for signal/TTY; kernel `sigreturn_blocked_syscall` VERIFIED + smokes green without them → `ir0-patches/retired/` |
-| **Goal** | Remove 0006–0009 when `linux-abi-audit` + smokes green **without** them |
+| **IR0-specific BusyBox source edits** | **Forbidden and retired.** ISD builds the upstream BusyBox source; Linux-compatible TTY, utmpx and console colour behavior belong to IR0. |
+| **Temporary ABI belts** | Retire after the kernel contract and its Linux-audit/smoke gate are green without them. Record the removal in ISD and the ABI board. |
+| **Upstream defect patch** | Allowed only when reproduced on Linux, kept in ISD `patches/<pkg>/`, and documented as an upstream candidate. |
 
 Before adding a new `ir0-patches/*` ash/login patch for ABI-like behavior: **stop** —
 implement Linux semantics in kernel first; prove with smoke + compare.
