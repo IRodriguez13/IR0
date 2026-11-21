@@ -895,3 +895,21 @@ $(PROC_GROUPS_BIN): $(PROC_GROUPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(PROC_GROUPS_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SHM-RDONLY-SELFTEST
+SHM_RDONLY_SRC := syscall/shm_rdonly.c
+SHM_RDONLY_BIN := $(BUILD_DIR)/shm_rdonly
+
+.PHONY: shm_rdonly
+
+shm_rdonly: $(SHM_RDONLY_BIN)
+
+$(SHM_RDONLY_BIN): $(SHM_RDONLY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_rdonly"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_RDONLY_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

@@ -19,6 +19,7 @@
 #define IR0_IPC_EXCL    02000
 #define IR0_IPC_RMID    0
 #define IR0_IPC_STAT    2
+#define IR0_SHM_RDONLY  010000
 
 struct ir0_shmid_ds
 {
@@ -50,9 +51,10 @@ void sysv_shm_detach_process(struct process *proc);
 /*
  * After the child has its own page tables, copy each of the parent's
  * attach slots. The new slot names the child and the same user address.
- * Both roots are rewritten to the segment frames, writable and shared:
- * no second physical copy, and nattch grows by one per slot. Returns 0
- * or a negative errno. On failure the child owns no slots. A child that
- * shares the parent's root (vfork, CLONE_VM) is left unchanged.
+ * Both roots are rewritten to the segment frames with that attach's
+ * protection, shared: no second physical copy, and nattch grows by
+ * one per slot. Returns 0 or a negative errno. On failure the child
+ * owns no slots. A child that shares the parent's root (vfork,
+ * CLONE_VM) is left unchanged.
  */
 int sysv_shm_fork(struct process *parent, struct process *child);

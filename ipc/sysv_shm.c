@@ -31,6 +31,8 @@ struct shm_attach
 	process_t *proc;
 	uintptr_t va;
 	size_t len;
+	/* PAGE_USER, or PAGE_USER|PAGE_RW when the attach is writable. */
+	uint64_t prot;
 };
 
 struct shm_seg
@@ -123,6 +125,7 @@ static void shm_detach_at(struct shm_seg *s, int ai)
 	a->proc = NULL;
 	a->va = 0;
 	a->len = 0;
+	a->prot = 0;
 	if (s->nattch > 0)
 		s->nattch--;
 	shm_try_destroy(s);
@@ -153,13 +156,14 @@ void sysv_shm_detach_process(struct process *proc)
 }
 
 /*
- * Point one address space at the segment frames, writable, without
+ * Point one address space at the segment frames with @prot, without
  * taking or dropping a reference and without allocating a frame.
  * copy_process_memory already holds the child's reference on these
  * pages; the parent still holds the reference from shmat.
  */
 static int shm_rewire_shared(address_space_root_t root, struct shm_seg *s,
-			     uintptr_t va, size_t len, int sync_tlb)
+			     uintptr_t va, size_t len, uint64_t prot,
+			     int sync_tlb)
 {
 	size_t off;
 
@@ -173,7 +177,7 @@ static int shm_rewire_shared(address_space_root_t root, struct shm_seg *s,
 
 		if (pi >= s->npages || !s->frames[pi])
 			return -EINVAL;
-		pte = mm_make_leaf_pte(s->frames[pi], PAGE_USER | PAGE_RW, 0);
+		pte = mm_make_leaf_pte(s->frames[pi], prot, 0);
 		if (paging_install_pte(root, page, pte) != 0)
 			return -ENOMEM;
 		if (sync_tlb)
@@ -200,11 +204,12 @@ static int shm_fork_one(struct shm_seg *s, const struct shm_attach *src,
 	if (ai == SHM_ATTACH_MAX)
 		return -ENOSPC;
 
-	rc = shm_rewire_shared(process_pgd(child), s, va, len, 0);
+	rc = shm_rewire_shared(process_pgd(child), s, va, len, src->prot, 0);
 	if (rc < 0)
 		return rc;
 	/* Parent TLB still has the COW entry installed by the copy. */
-	rc = shm_rewire_shared(process_pgd(src->proc), s, va, len, 1);
+	rc = shm_rewire_shared(process_pgd(src->proc), s, va, len,
+			        src->prot, 1);
 	if (rc < 0)
 		return rc;
 
@@ -212,6 +217,7 @@ static int shm_fork_one(struct shm_seg *s, const struct shm_attach *src,
 	s->attaches[ai].proc = child;
 	s->attaches[ai].va = va;
 	s->attaches[ai].len = len;
+	s->attaches[ai].prot = src->prot;
 	s->nattch++;
 	return 0;
 }
@@ -327,12 +333,16 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	int ai;
 	address_space_root_t root;
 	size_t len;
+	uint64_t prot;
 
-	(void)shmflg;
 	if (!current_process)
 		return -ESRCH;
-	if (shmaddr != NULL)
+	/* SHM_RND and a chosen address are not implemented. */
+	if (shmaddr != NULL || (shmflg & ~IR0_SHM_RDONLY) != 0)
 		return -EINVAL;
+	prot = PAGE_USER;
+	if ((shmflg & IR0_SHM_RDONLY) == 0)
+		prot |= PAGE_RW;
 	s = shm_by_id(shmid);
 	if (!s || !s->frames)
 		return -EINVAL;
@@ -345,7 +355,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 	{
 		pmm_frame_get(s->frames[p]);
 		if (map_page_in_directory(root, va + p * PAGE_SZ, s->frames[p],
-					  PAGE_USER | PAGE_RW) != 0)
+					  prot) != 0)
 		{
 			pmm_frame_put(s->frames[p]);
 			while (p > 0)
@@ -364,6 +374,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 			s->attaches[ai].proc = current_process;
 			s->attaches[ai].va = va;
 			s->attaches[ai].len = len;
+			s->attaches[ai].prot = prot;
 			s->nattch++;
 			s->lpid = (int)process_pid(current_process);
 			s->atime = shm_now();
