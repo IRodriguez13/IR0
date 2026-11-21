@@ -913,3 +913,21 @@ $(EVDEV_KEY_BIN): $(EVDEV_KEY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(EVDEV_KEY_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# WAITID-SELFTEST
+WAITID_SRC := syscall/waitid.c
+WAITID_BIN := $(BUILD_DIR)/waitid
+
+.PHONY: waitid
+
+waitid: $(WAITID_BIN)
+
+$(WAITID_BIN): $(WAITID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest waitid"
+	@$(CC) $(CFLAGS) -o $@ $(WAITID_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

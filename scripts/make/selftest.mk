@@ -1717,3 +1717,36 @@ ir0-selftest-evdev-key-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDE
 	@echo "✓ ir0-selftest-evdev-key-arm64"
 
 ir0-selftest-evdev-key: ir0-selftest-evdev-key-x86 ir0-selftest-evdev-key-arm64
+
+# WAITID-SELFTEST
+IR0_SELFTEST_X86_WAITID := $(KERNEL_ROOT)/build/selftests/x86_64/waitid
+IR0_SELFTEST_ARM64_WAITID := $(KERNEL_ROOT)/build/selftests/arm64/waitid
+
+.PHONY: ir0-selftest-waitid-x86 ir0-selftest-waitid-arm64 \
+	ir0-selftest-waitid
+
+$(IR0_SELFTEST_X86_WAITID): tests/selftests/syscall/waitid.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 waitid
+
+$(IR0_SELFTEST_ARM64_WAITID): tests/selftests/syscall/waitid.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 waitid
+
+ir0-selftest-waitid-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_WAITID)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_WAITID) \
+		--done "ok 1 waitid" \
+		--log $(HOST_TMP)/ir0-selftest-x86-waitid.log
+	@echo "✓ ir0-selftest-waitid-x86"
+
+ir0-selftest-waitid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_WAITID)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_WAITID) \
+		--done "ok 1 waitid" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-waitid.log
+	@echo "✓ ir0-selftest-waitid-arm64"
+
+ir0-selftest-waitid: ir0-selftest-waitid-x86 ir0-selftest-waitid-arm64

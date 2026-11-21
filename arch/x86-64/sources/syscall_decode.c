@@ -182,6 +182,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_utimensat: return IR0_SYSCALL_UTIMENSAT;
 	case __NR_vfork: return IR0_SYSCALL_VFORK;
 	case __NR_wait4: return IR0_SYSCALL_WAIT4;
+	case __NR_waitid: return IR0_SYSCALL_WAITID;
 	case __NR_write: return IR0_SYSCALL_WRITE;
 	case __NR_writev: return IR0_SYSCALL_WRITEV;
 	default: return IR0_SYSCALL_UNKNOWN;
