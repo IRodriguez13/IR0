@@ -906,16 +906,16 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
     if (!have_interp_file)
         return elf_load_plan_seal(&main_plan);
 
-	irc = elf_try_load_interp(process, ipath, at_base, &interp_entry,
-				    &interp_plan);
-	if (irc != 0)
-		return -1;
-	if (elf_load_plan_seal(&main_plan) != 0 ||
-	    elf_load_plan_seal(&interp_plan) != 0)
-		return -1;
-	*user_ip = interp_entry;
-	klog_debug("ELF", "SERIAL: ELF: PT_INTERP_OK\n");
-	return 0;
+    irc = elf_try_load_interp(process, ipath, at_base, &interp_entry,
+                              &interp_plan);
+    if (irc != 0)
+        return -1;
+    if (elf_load_plan_seal(&main_plan) != 0 ||
+        elf_load_plan_seal(&interp_plan) != 0)
+        return -1;
+    *user_ip = interp_entry;
+    klog_debug("ELF", "SERIAL: ELF: PT_INTERP_OK\n");
+    return 0;
 }
 
 /* Dummy entry: spawn() needs a function pointer; ELF overwrites the IP. */
