@@ -104,7 +104,7 @@ Ordered by **risk reduction per diff size**. Each row: entry gate → files → 
 ### Sprint H1 — ARCH-1 finish syscall monolith — **DONE**
 
 `kernel/syscalls.c` was **86 lines** (init + stdin wake); it is gone since:
-`syscalls_init()` lives in `kernel/syscalls/syscall_dispatch.c` and the stdin
+`syscalls_init()` lives in `kernel/entry/syscall_dispatch.c` and the stdin
 helpers in `kernel/syscalls/stdin.c`. Submodules:
 
 | File | ~Lines | Role |
