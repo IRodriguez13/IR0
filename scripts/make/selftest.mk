@@ -1387,3 +1387,36 @@ ir0-selftest-proc-umask-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PRO
 	@echo "✓ ir0-selftest-proc-umask-arm64"
 
 ir0-selftest-proc-umask: ir0-selftest-proc-umask-x86 ir0-selftest-proc-umask-arm64
+
+# SHM-MODE-SELFTEST
+IR0_SELFTEST_X86_SHM_MODE := $(KERNEL_ROOT)/build/selftests/x86_64/shm_mode
+IR0_SELFTEST_ARM64_SHM_MODE := $(KERNEL_ROOT)/build/selftests/arm64/shm_mode
+
+.PHONY: ir0-selftest-shm-mode-x86 ir0-selftest-shm-mode-arm64 \
+	ir0-selftest-shm-mode
+
+$(IR0_SELFTEST_X86_SHM_MODE): tests/selftests/syscall/shm_mode.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 shm_mode
+
+$(IR0_SELFTEST_ARM64_SHM_MODE): tests/selftests/syscall/shm_mode.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 shm_mode
+
+ir0-selftest-shm-mode-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SHM_MODE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SHM_MODE) \
+		--done "ok 1 shm_mode" \
+		--log $(HOST_TMP)/ir0-selftest-x86-shm-mode.log
+	@echo "✓ ir0-selftest-shm-mode-x86"
+
+ir0-selftest-shm-mode-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_MODE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SHM_MODE) \
+		--done "ok 1 shm_mode" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-shm-mode.log
+	@echo "✓ ir0-selftest-shm-mode-arm64"
+
+ir0-selftest-shm-mode: ir0-selftest-shm-mode-x86 ir0-selftest-shm-mode-arm64
