@@ -520,6 +520,7 @@ KERNEL_OBJS = \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
     kernel/printk/klog.o \
+    kernel/printk/console.o \
 	sched/core.o \
     sched/idle.o \
     sched/switch/context_switch.o \

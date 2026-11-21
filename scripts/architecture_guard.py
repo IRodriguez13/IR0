@@ -873,12 +873,13 @@ def check_ktm_no_fase_serial():
 def check_klog_serial_print_allowlist():
     """
     Human logging must go through KTM hub (ktm/klog.c / kprintf / klog_*).
-    serial_print is only allowed in the sink, serial drivers, KTM protocol
+    serial_print is only allowed in the printk serial console
+    (kernel/printk/console.c), serial drivers, KTM protocol
     transport, and remaining gated diag TUs (shrinking allowlist).
     """
     errors = []
     allow = {
-        "kernel/printk/klog.c",
+        "kernel/printk/console.c",
         "ktm/transport_serial.c",
         "drivers/serial/serial.c",
         "drivers/serial/serial.h",
@@ -923,7 +924,7 @@ def check_klog_serial_print_allowlist():
                 if serial_re.search(line):
                     errors.append(
                         f"[klog-hub] {rel}:{idx}: use kprintf/klog_* "
-                        f"(serial_print only in kernel/printk/klog.c + serial/KTM protocol)"
+                        f"(serial_print only in the printk serial console + serial/KTM protocol)"
                     )
     return errors
 

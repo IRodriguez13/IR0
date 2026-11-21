@@ -117,6 +117,9 @@ print_uint32 snprintf("%u") and print()
 print_uint64 snprintf("%lu") and print()
 print_warning print_colored(VGA_COLOR_YELLOW)
 
+# printk sinks (<ir0/printk_console.h>): klog writes to registered consoles.
+klog_set_screen_sink register_console() with CON_DUMP
+
 # Locks: one API, ir0_spin_lock_irqsave / ir0_spin_unlock_irqrestore on an
 # ir0_spinlock_t per protected structure (<ir0/spinlock.h>).
 arp_irq_restore ir0_spin_unlock_irqrestore(&arp_lock)

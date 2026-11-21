@@ -10,6 +10,7 @@
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 #include <ir0/ktm/klog.h>
+#include <ir0/printk_console.h>
 #include <config.h>
 
 #ifndef CONFIG_CONSOLE_SERIAL_MIRROR
@@ -23,9 +24,22 @@ static int userspace_gui_first_draw_tag;
 /* After handoff, do not mirror TTY glyphs to serial (human console vs bootlog). */
 static int tty_serial_mirror = 1;
 
+static void vt_console_write(const char *str)
+{
+    if (printk_to_screen)
+        vt_print(str, 0x07);
+}
+
+static struct console vt_console = {
+    .name = "vt",
+    .write = vt_console_write,
+    .flags = CON_MIRROR,
+};
+
 void console_backend_init(void)
 {
     console_init();
+    register_console(&vt_console);
 }
 
 void console_backend_typewriter_init(void)
