@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 void vt_init(void);
@@ -28,3 +29,11 @@ void vt_print(const char *str, uint8_t color);
 void vt_putchar_attr(char c, uint8_t color);
 void vt_show_cursor(uint8_t color);
 int vt_cursor_x(void);
+
+/* printk screen gate and the userspace-handoff tags. */
+void vt_register_printk_console(void);
+int vt_printk_to_screen(void);
+void vt_printk_screen_off(void);
+void vt_printk_screen_on(void);
+void vt_note_userspace_draw(size_t len);
+void vt_userspace_handoff(void);

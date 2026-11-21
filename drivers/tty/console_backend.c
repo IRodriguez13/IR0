@@ -7,39 +7,12 @@
 #include <ir0/console.h>
 #include <ir0/video_console.h>
 #include <ir0/vt.h>
-#include <ir0/serial_io.h>
 #include <ir0/vga.h>
-#include <ir0/ktm/klog.h>
-#include <ir0/printk_console.h>
-#include <config.h>
-
-#ifndef CONFIG_CONSOLE_SERIAL_MIRROR
-#define CONFIG_CONSOLE_SERIAL_MIRROR 1
-#endif
-
-#define CONSOLE_BACKEND_READY_MSG "IR0 console ready\n"
-
-static int printk_to_screen = 1;
-static int userspace_gui_first_draw_tag;
-/* After handoff, do not mirror TTY glyphs to serial (human console vs bootlog). */
-static int tty_serial_mirror = 1;
-
-static void vt_console_write(const char *str)
-{
-    if (printk_to_screen)
-        vt_print(str, 0x07);
-}
-
-static struct console vt_console = {
-    .name = "vt",
-    .write = vt_console_write,
-    .flags = CON_MIRROR,
-};
 
 void console_backend_init(void)
 {
     console_init();
-    register_console(&vt_console);
+    vt_register_printk_console();
 }
 
 void console_backend_typewriter_init(void)
@@ -64,48 +37,24 @@ int console_backend_fb_scale(void)
 
 int console_backend_printk_to_screen(void)
 {
-    return printk_to_screen;
+    return vt_printk_to_screen();
 }
 
 void console_backend_panic_screen_on(void)
 {
-    /*
-     * Re-enable kernel text output to the active console. After the userspace
-     * handoff printk_to_screen is 0, so a panic drew nothing on the FB/GTK
-     * screen (print()/clear_screen() were gated). Turn it back on so the panic
-     * banner and the mirrored dump reach the screen, not just serial.
-     */
-    printk_to_screen = 1;
+    vt_printk_screen_on();
 }
 
 void console_backend_set_tty_serial_mirror(int on)
 {
-    tty_serial_mirror = on ? 1 : 0;
+    tty_serial_mirror_set(on);
 }
 
 void console_backend_userspace_handoff(void)
 {
-    printk_to_screen = 0;
-#if !CONFIG_CONSOLE_SERIAL_MIRROR
-    tty_serial_mirror = 0;
-#endif
-    /*
-     * Keep TTY→COM1 mirror when CONFIG_CONSOLE_SERIAL_MIRROR=y so headless
-     * smokes can grep prompts; serial_putchar itself must not spin forever
-     * if the host stdio pipe backs up.
-     */
-    vt_clear(IR0_CONSOLE_COLOR_DEFAULT);
-
-    if (console_backend_uses_framebuffer())
-        klog_smoke("CONSOLE_BACKEND_FB_OK");
-    else
-        klog_smoke("CONSOLE_BACKEND_VGA_OK");
-
-    klog_smoke("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK");
-    console_backend_write(CONSOLE_BACKEND_READY_MSG,
-                          sizeof(CONSOLE_BACKEND_READY_MSG) - 1,
-                          IR0_CONSOLE_COLOR_DEFAULT);
-    klog_smoke("CONSOLE_GUI_VISIBLE_OK");
+    vt_printk_screen_off();
+    tty_serial_mirror_handoff();
+    vt_userspace_handoff();
 }
 
 void console_backend_scroll(int lines)
@@ -120,47 +69,23 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
     if (!str)
         return;
 
-    if (!printk_to_screen && console_backend_uses_framebuffer() &&
-        len > 0 && !userspace_gui_first_draw_tag)
-    {
-        userspace_gui_first_draw_tag = 1;
-        klog_smoke("USERSPACE_FB_TEXT_FIRST_DRAW_OK");
-    }
+    vt_note_userspace_draw(len);
 
     for (i = 0; i < len; i++)
     {
         char c = str[i];
 
+        tty_serial_mirror_bytes(&c, 1);
         if (c == '\n')
-        {
-            if (tty_serial_mirror)
-            {
-                serial_putchar('\r');
-                serial_putchar('\n');
-            }
             vt_print("\n", color);
-        }
         else
-        {
-            if (tty_serial_mirror)
-                serial_putchar(c);
             vt_putchar(c, color);
-        }
     }
 }
 
 void console_backend_write_serial(const char *str, size_t len)
 {
-    size_t i;
-
-    if (!str || !tty_serial_mirror)
-        return;
-    for (i = 0; i < len; i++)
-    {
-        if (str[i] == '\n')
-            serial_putchar('\r');
-        serial_putchar(str[i]);
-    }
+    tty_serial_mirror_bytes(str, len);
 }
 
 void console_backend_show_cursor(uint8_t color)

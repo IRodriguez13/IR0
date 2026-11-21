@@ -5,6 +5,9 @@
  * and scrollback, drawn through the console core.
  */
 
+#include <ir0/console_backend.h>
+#include <ir0/ktm/klog.h>
+#include <ir0/printk_console.h>
 #include <ir0/vt.h>
 #include "console.h"
 #include <stddef.h>
@@ -33,6 +36,9 @@ static int csi_params[4];
 static int csi_param_count;
 static int csi_priv; /* ESC[? … private mode */
 static int render_cursor_enabled = 1; /* DECTCEM: 0 = civis, 1 = cnorm */
+
+static int printk_to_screen = 1;
+static int userspace_gui_first_draw_tag;
 
 /*
  * Alternate screen buffer (xterm ctlseqs DECSET 1049, legacy 47; terminfo
@@ -840,4 +846,69 @@ void vt_show_cursor(uint8_t color)
 int vt_cursor_x(void)
 {
 	return render_cursor_x();
+}
+
+static void vt_console_write(const char *str)
+{
+	if (printk_to_screen)
+		vt_print(str, 0x07);
+}
+
+static struct console vt_console = {
+	.name = "vt",
+	.write = vt_console_write,
+	.flags = CON_MIRROR,
+};
+
+void vt_register_printk_console(void)
+{
+	register_console(&vt_console);
+}
+
+int vt_printk_to_screen(void)
+{
+	return printk_to_screen;
+}
+
+void vt_printk_screen_off(void)
+{
+	printk_to_screen = 0;
+}
+
+void vt_printk_screen_on(void)
+{
+	/*
+	 * Re-enable kernel text output to the active console. After the userspace
+	 * handoff printk_to_screen is 0, so a panic drew nothing on the FB/GTK
+	 * screen (print()/clear_screen() were gated). Turn it back on so the panic
+	 * banner and the mirrored dump reach the screen, not just serial.
+	 */
+	printk_to_screen = 1;
+}
+
+void vt_note_userspace_draw(size_t len)
+{
+	if (!printk_to_screen && console_use_framebuffer() &&
+	    len > 0 && !userspace_gui_first_draw_tag)
+	{
+		userspace_gui_first_draw_tag = 1;
+		klog_smoke("USERSPACE_FB_TEXT_FIRST_DRAW_OK");
+	}
+}
+
+void vt_userspace_handoff(void)
+{
+	static const char ready[] = "IR0 console ready\n";
+
+	vt_clear(IR0_CONSOLE_COLOR_DEFAULT);
+
+	if (console_use_framebuffer())
+		klog_smoke("CONSOLE_BACKEND_FB_OK");
+	else
+		klog_smoke("CONSOLE_BACKEND_VGA_OK");
+
+	klog_smoke("PRINTK_SERIAL_CONSOLE_FB_HANDOFF_OK");
+	console_backend_write(ready, sizeof(ready) - 1,
+			      IR0_CONSOLE_COLOR_DEFAULT);
+	klog_smoke("CONSOLE_GUI_VISIBLE_OK");
 }

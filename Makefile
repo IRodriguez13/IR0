@@ -671,6 +671,7 @@ LIB_OBJS = \
     kernel/sys/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
+    drivers/tty/tty_mirror.o \
     drivers/tty/tty_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
