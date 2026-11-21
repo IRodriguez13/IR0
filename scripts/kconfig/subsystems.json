@@ -9,7 +9,7 @@
         "x86-64": [
           "sched/idle.c",
           "kernel/syscalls/syscall_dispatch.c",
-          "kernel/exec/elf_loader.c",
+          "fs/binfmt_elf.c",
           "sched/core.c",
           "drivers/core/driver_registry.c"
         ],
