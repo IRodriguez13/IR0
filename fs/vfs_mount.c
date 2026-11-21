@@ -221,6 +221,7 @@ int lookup_bdev(const char *source, struct vfs_bdev *bdev)
     size_t base;
     stat_t st;
     int ret;
+    dev_t dev;
 
     if (!source || !source[0] || !bdev)
         return -EINVAL;
@@ -229,7 +230,8 @@ int lookup_bdev(const char *source, struct vfs_bdev *bdev)
     name = strncmp(source, "/dev/", 5) == 0 ? source + 5 : source;
     len = strlen(name);
 
-    if (len < sizeof(bdev->disk) && ir0_block_name_is_present(name)) {
+    dev = ir0_block_lookup_by_name(name);
+    if (len < sizeof(bdev->disk) && ir0_block_is_present(dev)) {
         memcpy(bdev->disk, name, len + 1);
         return 0;
     }
@@ -243,7 +245,8 @@ int lookup_bdev(const char *source, struct vfs_bdev *bdev)
 
         memcpy(bdev->disk, name, base);
         bdev->disk[base] = '\0';
-        if (ir0_block_name_is_present(bdev->disk)) {
+        dev = ir0_block_lookup_by_name(bdev->disk);
+        if (ir0_block_is_present(dev)) {
             for (size_t i = base; i < len && partno <= MAX_PARTITIONS_PER_DISK; i++)
                 partno = partno * 10 + (unsigned long)(name[i] - '0');
             return lookup_partition(bdev->disk, partno, &bdev->start);
@@ -560,6 +563,7 @@ int vfs_init_root(void)
     const char *root_fs = CONFIG_ROOT_FILESYSTEM;
     char root_dev_path[64];
     int ret;
+    dev_t root_dev;
 
     klog_info("VFS", "Initializing VFS...");
     ret = vfs_init();
@@ -572,7 +576,8 @@ int vfs_init_root(void)
     snprintf(root_dev_path, sizeof(root_dev_path), "/dev/%s", root_blk);
 
     /* A missing disk only matters when the root type is built in. */
-    if (vfs_find_fstype(root_fs) && !ir0_block_name_is_present(root_blk)) {
+    root_dev = ir0_block_lookup_by_name(root_blk);
+    if (vfs_find_fstype(root_fs) && !ir0_block_is_present(root_dev)) {
         klog_error("VFS", "No block device configured for root available");
         return vfs_mount_fallback_root("falling back to tmpfs root (block device missing)");
     }

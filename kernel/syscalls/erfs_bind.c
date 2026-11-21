@@ -236,12 +236,14 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 	uint64_t image_bytes;
 	uint64_t sectors;
 	uint64_t i;
+	dev_t dev;
 
 	if (!name || !buffer || buffer_len < 512 || !user)
 		return -EINVAL;
-	if (!ir0_block_name_is_present(name))
+	dev = ir0_block_lookup_by_name(name);
+	if (!ir0_block_is_present(dev))
 		return -ENOENT;
-	if (ir0_block_read_by_name(name, 0, 1, sector) != 0)
+	if (ir0_block_read(dev, 0, 1, sector) != 0)
 		return -EIO;
 	if (ir0_early_cpio_magic(sector))
 	{
@@ -254,7 +256,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 		load = (bytes + 511UL) / 512UL;
 		for (i = 0; i < load; i++)
 		{
-			if (ir0_block_read_by_name(name, i, 1,
+			if (ir0_block_read(dev, i, 1,
 						   buffer + i * 512UL) != 0)
 				return -EIO;
 		}
@@ -282,7 +284,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 		sectors = (header_bytes + 511UL) / 512UL;
 		for (i = 1; i < sectors; i++)
 		{
-			if (ir0_block_read_by_name(name, i, 1,
+			if (ir0_block_read(dev, i, 1,
 						   buffer + i * 512UL) != 0)
 				return -EIO;
 		}
@@ -295,7 +297,7 @@ int early_rootfs_try_bind_block(const char *name, uint8_t *buffer,
 	sectors = (image_bytes + 511UL) / 512UL;
 	for (i = (header_bytes + 511UL) / 512UL; i < sectors; i++)
 	{
-		if (ir0_block_read_by_name(name, i, 1, buffer + i * 512UL) != 0)
+		if (ir0_block_read(dev, i, 1, buffer + i * 512UL) != 0)
 			return -EIO;
 	}
 	early_rootfs_bind(buffer, image_bytes, user);
