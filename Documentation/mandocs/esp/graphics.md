@@ -26,7 +26,7 @@ events0 + mmap.
 | API FB | `includes/ir0/fb.c` | Comprobación disponibilidad, var/fix screeninfo |
 | devfs | `fs/devfs.c` | `/dev/fb0` device_id **15**, ioctl FBIO* |
 | mmap | `kernel/syscalls/mm_syscalls.c` | Caso especial mapea páginas FB físicas |
-| Dibujo consola | `drivers/video/vt.c` | CSI/SGR, celdas a FB o VGA |
+| Dibujo consola | `drivers/tty/vt/vt.c` | CSI/SGR, celdas a FB o VGA |
 | Cliente | `setup/doom/doomgeneric_ir0.c` | Bucle blit userspace T2 |
 
 ## 3. Flujo de datos

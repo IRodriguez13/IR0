@@ -1,5 +1,5 @@
 > **Última verificación:** 2026-07-25
-> **Fuente de verdad:** `drivers/video/vt.c`, `scripts/smoke_desktop_nano_mnt.py`
+> **Fuente de verdad:** `drivers/tty/vt/vt.c`, `scripts/smoke_desktop_nano_mnt.py`
 
 # Debt: #UD after GNU nano save/exit (fitted FB geometry)
 

@@ -25,7 +25,7 @@ scale). DoomGeneric is the reference T2 client: open fb0 + events0 + mmap.
 | FB API | `includes/ir0/fb.c` | Availability check, var/fix screeninfo |
 | devfs | `fs/devfs.c` | `/dev/fb0` device_id **15**, ioctl FBIO* |
 | mmap | `kernel/syscalls/mm_syscalls.c` | Special case maps physical FB pages |
-| Console draw | `drivers/video/vt.c` | CSI/SGR, cells to FB or VGA |
+| Console draw | `drivers/tty/vt/vt.c` | CSI/SGR, cells to FB or VGA |
 | Client | `setup/doom/doomgeneric_ir0.c` | T2 userspace blit loop |
 
 ## 3. Data flow
