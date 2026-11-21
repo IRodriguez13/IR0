@@ -18,16 +18,6 @@
 #include <stddef.h>
 #include <ir0/mm.h>
 
-struct process;
-typedef struct process process_t;
-
-void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
-                           int flags, int fd, off_t offset);
-
-/* Top-down anonymous placement. mm_mmap() calls it from mm/. */
-uintptr_t mm_pick_free_va_topdown(process_t *proc, address_space_root_t root,
-				  size_t length);
-
 int64_t sys_brk(void *addr);
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int sys_munmap(void *addr, size_t length);
