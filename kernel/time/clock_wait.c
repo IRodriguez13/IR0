@@ -29,6 +29,8 @@ static void ir0_clock_wait_wake_process(process_t *proc)
 	process_set_sched_state(proc, PROCESS_READY);
 	sched_add(proc);
 	sched_promote(proc);
+	/* Timer IRQ return takes the flag. Do not schedule() here. */
+	clock_request_sched_resched();
 }
 
 static void ir0_clock_wait_arm(process_t *proc, uint64_t deadline_ms)

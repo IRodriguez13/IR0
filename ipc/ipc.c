@@ -23,6 +23,7 @@
 #include <ir0/oops.h>
 #include <ir0/logging.h>
 #include <string.h>
+#include <ir0/clock.h>
 #include <ir0/sched.h>
 #include <ir0/arch_port.h>
 #include <ir0/spinlock.h>
@@ -125,11 +126,13 @@ static process_t *wait_queue_wake_one(wait_queue_t *wq)
     proc = node->process;
     kfree(node);
 
-    /* Mark process as ready to run outside IRQ-off section. */
+    /* Ready outside the IRQ-off section. Exit consumes the flag. */
     if (proc)
     {
         process_set_sched_state(proc, PROCESS_READY);
         sched_add(proc);
+        sched_promote(proc);
+        clock_request_sched_resched();
     }
 
     return proc;
@@ -159,6 +162,8 @@ void wait_queue_wake_all(wait_queue_t *wq)
         {
             process_set_sched_state(node->process, PROCESS_READY);
             sched_add(node->process);
+            sched_promote(node->process);
+            clock_request_sched_resched();
         }
         kfree(node);
         node = next;

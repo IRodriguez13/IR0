@@ -12,6 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/clock.h>
 #include <ir0/futex.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
@@ -109,7 +110,13 @@ int ir0_futex_wake(int *uaddr, int count)
 			continue;
 		futex_waiters[i] = NULL;
 		w->woken = 1;
+		/*
+		 * The waiter stays queued while BLOCKED. Make it the next
+		 * candidate; syscall exit consumes the flag. Do not schedule().
+		 */
 		process_set_sched_state(w->proc, PROCESS_READY);
+		sched_promote(w->proc);
+		clock_request_sched_resched();
 		woke++;
 	}
 	return woke;

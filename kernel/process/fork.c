@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
+#include <ir0/clock.h>
 #include <ir0/clone.h>
 #include <ir0/fork.h>
 #include <ir0/process_limits.h>
@@ -485,6 +486,8 @@ void process_vfork_complete(process_t *child)
 	{
 		sched_add(parent);
 		sched_promote(parent);
+		/* Child syscall exit takes the flag and runs the parent. */
+		clock_request_sched_resched();
 	}
 }
 
