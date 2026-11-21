@@ -878,7 +878,11 @@ endif
 
 # Keep test-only entry objects separate: their IR0_KERNEL_TESTS references must
 # never contaminate an incremental production link.
-KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o
+KERNEL_TEST_ENTRY_OBJS = build/test/kernel/boot/boot_init.o \
+	build/test/mm/alloc/allocator.o
+ifeq ($(CONFIG_KTM),y)
+KERNEL_TEST_ENTRY_OBJS += build/test/tests/ktm/scenarios/ktest_bridge.o
+endif
 
 # Same boot_arch objects as production, rebuilt with -DIR0_KERNEL_TESTS=1 for test link.
 KERNEL_TEST_BOOT_ARCH_OBJS =
@@ -888,8 +892,9 @@ endif
 
 # Objetos para kernel con tests in-kernel (make tests / kernel-tests)
 ALL_OBJS_TEST = $(filter-out kernel/boot/boot_init.o \
+	tests/ktm/scenarios/ktest_bridge.o \
 	arch/arm64/sources/boot_arch.o,$(KERNEL_OBJS)) \
-                $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(MEMORY_OBJS) $(LIB_OBJS) $(INTERRUPT_OBJS) \
+                $(KERNEL_TEST_ENTRY_OBJS) $(KERNEL_TEST_BOOT_ARCH_OBJS) $(KERNEL_TEST_OBJS) $(filter-out mm/alloc/allocator.o,$(MEMORY_OBJS)) $(LIB_OBJS) $(INTERRUPT_OBJS) \
                 $(DRIVER_OBJS) $(PLATFORM_OBJS) $(FS_OBJS) $(ARCH_OBJS) $(DISK_OBJS) \
                 $(CPP_OBJS) $(CPP_DRIVER_OBJS) $(RUST_DRIVER_OBJS) \
                 $(NET_OBJS) $(NET_DRIVER_OBJS) $(VBE_OBJS)
@@ -1027,19 +1032,7 @@ kernel-x64-test.bin: $(ALL_OBJS_TEST) arch/x86-64/linker.ld
 	@$(LD) $(LDFLAGS) --defsym=ir0_build_number=$(IR0_BUILD_NUMBER) -o $@ $(ALL_OBJS_TEST)
 	@echo "✓ Kernel (test) linked: $@"
 
-build/test/arch/arm64/sources/%.o: arch/arm64/sources/%.c
-	@mkdir -p $(@D)
-	@echo "  CC      $< (test variant)"
-	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \
-		-DIR0_BUILD_DATE_STRING="\"$(IR0_BUILD_DATE)\"" \
-		-DIR0_BUILD_TIME_STRING="\"$(IR0_BUILD_TIME)\"" \
-		-DIR0_BUILD_USER_STRING="\"$(IR0_BUILD_USER)\"" \
-		-DIR0_BUILD_HOST_STRING="\"$(IR0_BUILD_HOST)\"" \
-		-DIR0_BUILD_CC_STRING="\"$(IR0_BUILD_CC)\"" \
-		-DIR0_BUILD_NUMBER_STRING="\"$(IR0_BUILD_NUMBER)\"" \
-		-c $< -o $@
-
-build/test/kernel/%.o: kernel/%.c
+build/test/%.o: %.c
 	@mkdir -p $(@D)
 	@echo "  CC      $< (test variant)"
 	@$(CC) $(CFLAGS) -DIR0_KERNEL_TESTS=1 \

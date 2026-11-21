@@ -17,21 +17,17 @@
 #include <stddef.h>
 #include <kernel/test/test_runner.h>
 
-/* Only IR0_INCLUDE_QA builds link the ktest runner; elsewhere it is NULL. */
-#pragma weak kernel_test_run_all
-
 /*
- * kernel/test is only linked into kernel-x64-test.bin. A weak reference keeps
- * this object safe in every kernel: production resolves it to NULL and never
- * registers the scenario, while the test kernel registers it and boot_init
- * runs it from a holder process (ktest needs current_process).
+ * kernel/test is only linked into kernel-x64-test.bin, which links the
+ * IR0_KERNEL_TESTS build of this object. Production registers nothing; the
+ * test kernel registers the scenario and boot_init runs it from a holder
+ * process (ktest needs current_process).
  */
 
+#if defined(IR0_KERNEL_TESTS)
 static int ktest_bridge_run(ktm_context_t *ctx)
 {
 	(void)ctx;
-	if (!kernel_test_run_all)
-		return -1;
 	return kernel_test_run_all();
 }
 
@@ -42,9 +38,11 @@ static const ktm_scenario_t scenario_ktest = {
 	.run = ktest_bridge_run,
 	.teardown = NULL,
 };
+#endif
 
 void ktm_scenario_register_ktest_bridge(void)
 {
-	if (kernel_test_run_all)
-		(void)ktm_scenario_register(&scenario_ktest);
+#if defined(IR0_KERNEL_TESTS)
+	(void)ktm_scenario_register(&scenario_ktest);
+#endif
 }
