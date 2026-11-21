@@ -740,6 +740,7 @@ static int poll_wake_do(void)
         process_set_sched_state(w->proc, PROCESS_READY);
         sched_add(w->proc);
         sched_promote(w->proc);
+        clock_request_sched_resched();
       }
       woke = 1;
     }
@@ -755,13 +756,9 @@ int poll_wake_check_nosched(void)
 void poll_wake_check(void)
 {
   /*
-   * Producers call this facade from ordinary syscalls and from device paths.
-   * A wakeup makes consumers runnable; it must not force a cooperative switch
-   * at this syscall boundary.  AF_UNIX connect exposed why: preempting the
-   * producer after connect but before its setup write lets the X server accept
-   * and wait for bytes while the producer's cooperative resume is starved.
-   * The normal timer/idle scheduler observes the READY task, matching Linux's
-   * separation between try_to_wake_up() and the later scheduling decision.
+   * Do not call schedule() here. A switch inside connect never resumed the
+   * producer for its setup write. poll_wake_do() promotes a blocked waiter
+   * and sets the resched flag; syscall exit and IRQ return call schedule().
    */
 	(void)poll_wake_do();
 }
@@ -1075,6 +1072,7 @@ void pipe_wake_all(pipe_t *pipe)
 				proc = w->proc;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
+				clock_request_sched_resched();
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
@@ -1089,6 +1087,7 @@ void pipe_wake_all(pipe_t *pipe)
 				proc = w->proc;
 				process_set_sched_state(proc, PROCESS_READY);
 				sched_promote(proc);
+				clock_request_sched_resched();
 				w->proc = NULL;
 				w->pipe = NULL;
 				w->waiting_read = 0;
