@@ -570,3 +570,21 @@ $(SEGV_ACCERR_BIN): $(SEGV_ACCERR_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SEGV_ACCERR_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PROC-STATUS-SELFTEST
+PROC_STATUS_SRC := syscall/proc_status.c
+PROC_STATUS_BIN := $(BUILD_DIR)/proc_status
+
+.PHONY: proc_status
+
+proc_status: $(PROC_STATUS_BIN)
+
+$(PROC_STATUS_BIN): $(PROC_STATUS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_status"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_STATUS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
