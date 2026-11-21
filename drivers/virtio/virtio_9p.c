@@ -24,7 +24,6 @@
 #include <ir0/ktm/klog.h>
 #include <string.h>
 #include <stddef.h>
-#include <ir0/ktm/klog.h>
 
 #define VRING_DESC_F_NEXT  1
 #define VRING_DESC_F_WRITE 2

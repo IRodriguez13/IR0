@@ -22,7 +22,6 @@
 #include <ir0/klog_event.h>
 #include <ir0/kmem.h>
 #include <ir0/serial_io.h>
-#include <ir0/clock.h>
 #include <ir0/console_backend.h>
 #include <ir0/typewriter.h>
 

@@ -48,7 +48,6 @@
 #include <linux/vt.h>
 #include "vfs.h"
 #include <ir0/pty_devfs.h>
-#include <string.h>
 #include <ir0/devfs.h>
 
 #define PTY_BUF_SIZE 1024
