@@ -12,7 +12,7 @@
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <ir0/files_struct.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/errno.h>
 #include <string.h>
 #include <ir0/spinlock.h>

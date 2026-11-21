@@ -8,7 +8,7 @@
  *
  * File: arch_cpu.h
  * Description: Compatibility umbrella for ISA facades. New code includes the
- *              domain header (cpu.h, irq.h, arch_mm.h, context.h, …).
+ *              domain header (cpu.h, irq.h, asm/pgtable.h, context.h, …).
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -20,7 +20,7 @@
 #include <ir0/tls.h>
 #include <ir0/cpu_info.h>
 #include <ir0/irq.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/page_fault.h>
 #include <asm/setup.h>
 #include <ir0/cpu.h>

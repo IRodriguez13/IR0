@@ -24,7 +24,7 @@
 #include <ir0/clock_wait.h>
 #include <ir0/mm_struct.h>
 #include <ir0/mm.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/files_struct.h>
 #include <ir0/sched.h>
 #include <ir0/kmem.h>

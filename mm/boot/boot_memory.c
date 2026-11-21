@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
 #include <ir0/errno.h>

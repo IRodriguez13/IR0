@@ -15,9 +15,9 @@
 #pragma once
 
 #include <stddef.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 
-/* The heap spans the range the architecture reserves via <ir0/arch_mm.h>. */
+/* The heap spans the range the architecture reserves via <asm/pgtable.h>. */
 #define SIMPLE_HEAP_START (mm_kernel_heap_start())
 #define SIMPLE_HEAP_SIZE (mm_kernel_heap_size())
 #define SIMPLE_HEAP_END (SIMPLE_HEAP_START + SIMPLE_HEAP_SIZE)

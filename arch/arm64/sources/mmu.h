@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <stdint.h>
 
 /* Build the boot identity map (DRAM + console UART) and enable the MMU. */

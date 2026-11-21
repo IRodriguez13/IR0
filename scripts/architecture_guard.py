@@ -151,7 +151,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
     ROOT / "includes" / "ir0" / "irq.h",
     ROOT / "includes" / "ir0" / "context_backend.h",
-    ROOT / "includes" / "ir0" / "arch_mm.h",
+    ROOT / "includes" / "asm-generic" / "pgtable.h",
     ROOT / "includes" / "ir0" / "task_ops.h",
     ROOT / "includes" / "ir0" / "fork.h",
     ROOT / "includes" / "ir0" / "page_fault.h",
@@ -1729,7 +1729,7 @@ def check_portable_port1_no_legacy_arch_mm():
             if ARCH_MM_LEGACY_RE.search(text):
                 errors.append(
                     f"[portable-port1-mm] {rel}: use mm_user_root_slots / "
-                    f"mm_copy_kernel_half (arch_mm.h)"
+                    f"mm_copy_kernel_half (asm/pgtable.h)"
                 )
             if ARCH_PF_LEGACY_RE.search(text):
                 errors.append(
@@ -2018,7 +2018,7 @@ PC_PLATFORM_ASM_INCLUDE = re.compile(
 # Hooks every ISA implements (Linux asm-generic model): the declarations live
 # in includes/asm-generic/<topic>.h, each ISA's asm/<topic>.h includes them,
 # and portable code includes <asm/<topic>.h>.
-ARCH_HOOK_ASM_HEADERS = ("elf", "hw_breakpoint", "setup")
+ARCH_HOOK_ASM_HEADERS = ("elf", "hw_breakpoint", "pgtable", "setup")
 ARCH_HOOK_ISAS = ("x86-64", "arm64")
 ARCH_HOOK_ASM_INCLUDE = re.compile(
     r'^\s*#\s*include\s*<asm/(?:'
@@ -2170,7 +2170,7 @@ def check_common_mm_uses_user_va_policy():
                 if forbidden.search(line):
                     rel = rel_to_root(path)
                     errors.append(
-                        f"[user-va-policy] {rel}:{line_no}: use arch_mm facade"
+                        f"[user-va-policy] {rel}:{line_no}: use the asm/pgtable.h hooks"
                     )
     return errors
 

@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/context.h>
 #include <ir0/context_backend.h>
 #include <ir0/process.h>
