@@ -47,6 +47,7 @@ struct input_client
 	int refs;
 	unsigned int head;
 	unsigned int tail;
+	int clockid; /* 0 realtime, 1 monotonic */
 	struct input_event ring[INPUT_CLIENT_RING];
 };
 
@@ -161,12 +162,27 @@ static void client_push(struct input_client *c, const struct input_event *ev)
 	c->head = next;
 }
 
+/* CLOCK_REALTIME is seconds since the epoch when the clock is set, else uptime. */
+static void stamp_input_time(struct input_event *ev, int clockid)
+{
+	uint64_t ms;
+
+	if (clockid == 0 && clock_realtime_available())
+	{
+		ev->time.tv_sec = clock_get_current_time();
+		ev->time.tv_usec = 0;
+		return;
+	}
+	ms = clock_get_uptime_milliseconds();
+	ev->time.tv_sec = (time_t)(ms / 1000u);
+	ev->time.tv_usec = (suseconds_t)((ms % 1000u) * 1000u);
+}
+
 void input_event(struct input_dev *dev, unsigned int type,
 		 unsigned int code, int value)
 {
 	struct input_event ev;
 	struct input_client *c;
-	uint64_t ms;
 	unsigned long irq_flags;
 	int queued = 0;
 
@@ -175,9 +191,6 @@ void input_event(struct input_dev *dev, unsigned int type,
 		return;
 	}
 
-	ms = clock_get_uptime_milliseconds();
-	ev.time.tv_sec = (time_t)(ms / 1000u);
-	ev.time.tv_usec = (suseconds_t)((ms % 1000u) * 1000u);
 	ev.type = (uint16_t)type;
 	ev.code = (uint16_t)code;
 	ev.value = value;
@@ -185,6 +198,7 @@ void input_event(struct input_dev *dev, unsigned int type,
 	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
 	if (dev->grabber)
 	{
+		stamp_input_time(&ev, dev->grabber->clockid);
 		client_push(dev->grabber, &ev);
 		queued = 1;
 	}
@@ -192,6 +206,7 @@ void input_event(struct input_dev *dev, unsigned int type,
 	{
 		for (c = dev->clients; c; c = c->next)
 		{
+			stamp_input_time(&ev, c->clockid);
 			client_push(c, &ev);
 			queued = 1;
 		}
@@ -226,6 +241,7 @@ void *input_client_open(void)
 	c->refs = 1;
 	c->head = 0;
 	c->tail = 0;
+	c->clockid = 0;
 	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
 	c->next = i8042_dev.clients;
 	i8042_dev.clients = c;
@@ -275,6 +291,25 @@ int input_client_grab(void *client, int grab)
 	}
 	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 	return ret;
+}
+
+int input_client_set_clock(void *client, int clockid)
+{
+	struct input_client *c = client;
+	unsigned long irq_flags;
+
+	if (!c)
+	{
+		return -EINVAL;
+	}
+	if (clockid != 0 && clockid != 1)
+	{
+		return -EINVAL;
+	}
+	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
+	c->clockid = clockid;
+	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
+	return 0;
 }
 
 void input_client_put(void *client)

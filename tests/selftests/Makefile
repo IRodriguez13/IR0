@@ -805,3 +805,21 @@ $(ILL_CODE_BIN): $(ILL_CODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(ILL_CODE_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# EVDEV-CLOCK-SELFTEST
+EVDEV_CLOCK_SRC := syscall/evdev_clock.c
+EVDEV_CLOCK_BIN := $(BUILD_DIR)/evdev_clock
+
+.PHONY: evdev_clock
+
+evdev_clock: $(EVDEV_CLOCK_BIN)
+
+$(EVDEV_CLOCK_BIN): $(EVDEV_CLOCK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_clock"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_CLOCK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

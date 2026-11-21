@@ -1519,3 +1519,36 @@ ir0-selftest-ill-code-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ILL_C
 	@echo "✓ ir0-selftest-ill-code-arm64"
 
 ir0-selftest-ill-code: ir0-selftest-ill-code-x86 ir0-selftest-ill-code-arm64
+
+# EVDEV-CLOCK-SELFTEST
+IR0_SELFTEST_X86_EVDEV_CLOCK := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_clock
+IR0_SELFTEST_ARM64_EVDEV_CLOCK := $(KERNEL_ROOT)/build/selftests/arm64/evdev_clock
+
+.PHONY: ir0-selftest-evdev-clock-x86 ir0-selftest-evdev-clock-arm64 \
+	ir0-selftest-evdev-clock
+
+$(IR0_SELFTEST_X86_EVDEV_CLOCK): tests/selftests/syscall/evdev_clock.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_clock
+
+$(IR0_SELFTEST_ARM64_EVDEV_CLOCK): tests/selftests/syscall/evdev_clock.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_clock
+
+ir0-selftest-evdev-clock-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_CLOCK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_EVDEV_CLOCK) \
+		--done "ok 1 evdev_clock" \
+		--log $(HOST_TMP)/ir0-selftest-x86-evdev-clock.log
+	@echo "✓ ir0-selftest-evdev-clock-x86"
+
+ir0-selftest-evdev-clock-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_CLOCK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_EVDEV_CLOCK) \
+		--done "ok 1 evdev_clock" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-clock.log
+	@echo "✓ ir0-selftest-evdev-clock-arm64"
+
+ir0-selftest-evdev-clock: ir0-selftest-evdev-clock-x86 ir0-selftest-evdev-clock-arm64

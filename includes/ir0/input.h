@@ -84,6 +84,13 @@ void input_client_put(void *client);
 #define INPUT_EVIOCGRAB 0x40044590u
 /* 0 on success. A second grabber gets -EBUSY. */
 int input_client_grab(void *client, int grab);
+/*
+ * EVIOCSCLOCKID: _IOW('E', 0xa0, int). The third argument is a pointer
+ * to the clock id (CLOCK_REALTIME 0 or CLOCK_MONOTONIC 1).
+ */
+#define INPUT_EVIOCSCLOCKID 0x400445a0u
+/* 0 on success. Any other clock id is -EINVAL. */
+int input_client_set_clock(void *client, int clockid);
 void input_set_read_context(void *client, int nonblock);
 int input_read_is_nonblock(void);
 
