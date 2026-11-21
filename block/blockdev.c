@@ -230,46 +230,6 @@ const char *ir0_block_legacy_name(uint8_t disk_id)
 	return legacy[disk_id];
 }
 
-int ir0_block_name_is_present(const char *name)
-{
-	if (!name)
-		return 0;
-	return ir0_block_lookup_by_name(name) != 0;
-}
-
-uint64_t ir0_block_sector_count_by_name(const char *name)
-{
-	if (!name)
-		return 0;
-	return ir0_block_sector_count(ir0_block_lookup_by_name(name));
-}
-
-int ir0_block_read_by_name(const char *name, uint64_t lba, uint32_t count,
-			   void *buf)
-{
-	dev_t dev;
-
-	if (!name || !buf || count == 0)
-		return -EINVAL;
-	dev = ir0_block_lookup_by_name(name);
-	if (dev == 0)
-		return -ENODEV;
-	return ir0_block_read(dev, lba, count, buf);
-}
-
-int ir0_block_write_by_name(const char *name, uint64_t lba, uint32_t count,
-			    const void *buf)
-{
-	dev_t dev;
-
-	if (!name || !buf || count == 0)
-		return -EINVAL;
-	dev = ir0_block_lookup_by_name(name);
-	if (dev == 0)
-		return -ENODEV;
-	return ir0_block_write(dev, lba, count, buf);
-}
-
 #ifdef TEST_HOST
 void ir0_block_reset_for_test(void)
 {
