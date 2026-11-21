@@ -146,7 +146,7 @@ static void futex_q_wake(struct futex_q *q)
 /* Read the futex word: @proc is current, or a kernel thread's own word. */
 static int futex_get_value(int *uaddr, int *val)
 {
-	return get_user(*val, uaddr) ? -EFAULT : 0;
+	return copy_from_user(val, uaddr, sizeof(*val));
 }
 
 int ir0_futex_wait(process_t *proc, int *uaddr, int val, unsigned int flags,
@@ -154,7 +154,7 @@ int ir0_futex_wait(process_t *proc, int *uaddr, int val, unsigned int flags,
 {
 	struct futex_q q;
 	int timed = deadline_ms != IR0_FUTEX_NO_TIMEOUT;
-	int cur;
+	int cur = 0;
 	int ret;
 
 	if (!proc || !uaddr || !bitset)
@@ -245,7 +245,7 @@ int ir0_futex_wake(process_t *proc, int *uaddr, unsigned int flags,
 		return -EINVAL;
 	if ((flags & IR0_FUTEX_SHARED) && proc == current_process)
 	{
-		int unused;
+		int unused = 0;
 
 		/* Linux get_user_pages_fast(): map the page to key it. */
 		(void)futex_get_value(uaddr, &unused);
@@ -276,7 +276,7 @@ int ir0_futex_requeue(process_t *proc, int *uaddr, int *uaddr2,
 	struct futex_q *q;
 	struct futex_q *next;
 	int count = 0;
-	int cur;
+	int cur = 0;
 	int ret;
 
 	if (!proc || !uaddr || !uaddr2)
