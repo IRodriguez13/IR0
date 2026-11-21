@@ -21,7 +21,7 @@
 
 void syscall_capture_frame_at_entry(struct process *p,
 						 uint64_t *frame_base,
-						 uint64_t rip_hw)
+						 uint64_t ip_hw)
 {
 	syscall_user_frame_t *sf;
 
@@ -31,8 +31,8 @@ void syscall_capture_frame_at_entry(struct process *p,
 	sf = &p->syscall_frame;
 	/* frame_base[7] is the user RIP (rcx) at syscall entry. */
 	sf->rip = frame_base[7];
-	if (!sf->rip && rip_hw)
-		sf->rip = rip_hw;
+	if (!sf->rip && ip_hw)
+		sf->rip = ip_hw;
 	sf->rflags = frame_base[6];
 	sf->rsp = frame_base[8];
 	sf->rbx = frame_base[0];

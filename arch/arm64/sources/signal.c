@@ -150,7 +150,7 @@ uint64_t irq_frame_sp(const uint64_t *frame)
 }
 
 void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
-				    uint64_t new_rsp, uint64_t info_addr,
+				    uint64_t new_sp, uint64_t info_addr,
 				    uint64_t uctx_addr, int sa_siginfo,
 				    uint64_t restorer)
 {
@@ -178,7 +178,7 @@ void signal_redirect_irq_frame(uint64_t *frame, void *handler, int sig,
 
 	/* vectors.S restores ELR/SP_EL0 from the frame on eret. */
 	frame[ARM64_EXC_IDX_ELR] = elr;
-	frame[ARM64_EXC_IDX_SP] = new_rsp;
+	frame[ARM64_EXC_IDX_SP] = new_sp;
 }
 
 void signal_set_return(struct arch_syscall_frame *sf, uint64_t restorer)
