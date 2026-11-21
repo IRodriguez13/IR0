@@ -468,10 +468,6 @@ KERNEL_OBJS = \
     kernel/syscalls/io_syscalls.o \
     kernel/syscalls/epoll_syscalls.o \
     kernel/syscalls/time_syscalls.o \
-	kernel/syscalls/early_dispatch.o \
-	kernel/syscalls/early_time.o \
-	kernel/syscalls/early_io.o \
-	kernel/syscalls/early_vfs.o \
 	kernel/syscalls/erfs.o \
 	kernel/syscalls/erfs_fd.o \
 	kernel/syscalls/erfs_bind.o \
