@@ -1699,6 +1699,26 @@ int64_t sys_fcntl(int fd, int cmd, unsigned long arg)
     }
     return ret;
   }
+  case F_GETPIPE_SZ:
+    if (!e->is_pipe)
+    {
+      ret = -EINVAL;
+      break;
+    }
+    ret = PIPE_SIZE;
+    break;
+  case F_SETPIPE_SZ:
+    /*
+     * The pipe buffer is the fixed PIPE_SIZE array. Any other size
+     * would report a capacity the object does not have.
+     */
+    if (!e->is_pipe || arg != (unsigned long)PIPE_SIZE)
+    {
+      ret = -EINVAL;
+      break;
+    }
+    ret = PIPE_SIZE;
+    break;
   default:
     ret = -EINVAL;
     break;

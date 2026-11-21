@@ -895,3 +895,21 @@ $(PROC_GROUPS_BIN): $(PROC_GROUPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(PROC_GROUPS_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PIPE-SZ-SELFTEST
+PIPE_SZ_SRC := syscall/pipe_sz.c
+PIPE_SZ_BIN := $(BUILD_DIR)/pipe_sz
+
+.PHONY: pipe_sz
+
+pipe_sz: $(PIPE_SZ_BIN)
+
+$(PIPE_SZ_BIN): $(PIPE_SZ_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest pipe_sz"
+	@$(CC) $(CFLAGS) -o $@ $(PIPE_SZ_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
