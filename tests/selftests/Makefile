@@ -913,3 +913,21 @@ $(PIPE_SZ_BIN): $(PIPE_SZ_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(PIPE_SZ_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# EVDEV-KEY-SELFTEST
+EVDEV_KEY_SRC := syscall/evdev_key.c
+EVDEV_KEY_BIN := $(BUILD_DIR)/evdev_key
+
+.PHONY: evdev_key
+
+evdev_key: $(EVDEV_KEY_BIN)
+
+$(EVDEV_KEY_BIN): $(EVDEV_KEY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_key"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_KEY_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

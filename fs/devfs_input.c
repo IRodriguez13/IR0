@@ -405,6 +405,26 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
+    /* EVIOCGKEY: _IOC(READ, 'E', 0x18, len) — current key bitmap. */
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x18u)
+    {
+        unsigned char bitmap[(KEY_CNT + 7u) / 8u];
+        size_t stored;
+        size_t ncopy;
+
+        if (!arg || size == 0)
+        {
+            return -EINVAL;
+        }
+        stored = input_key_state(input_i8042_dev(), bitmap, sizeof(bitmap));
+        ncopy = (size_t)size < stored ? (size_t)size : stored;
+        if (copy_to_user(arg, bitmap, ncopy) != 0)
+        {
+            return -EFAULT;
+        }
+        return 0;
+    }
+
     /*
      * EVIOCGABS(0) .. EVIOCGABS(ABS_MAX) are nr 0x40 .. 0x7f.
      * This node is a relative pointer and has no absolute axes.

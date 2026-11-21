@@ -1715,3 +1715,36 @@ ir0-selftest-pipe-sz-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PIPE_S
 	@echo "✓ ir0-selftest-pipe-sz-arm64"
 
 ir0-selftest-pipe-sz: ir0-selftest-pipe-sz-x86 ir0-selftest-pipe-sz-arm64
+
+# EVDEV-KEY-SELFTEST
+IR0_SELFTEST_X86_EVDEV_KEY := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_key
+IR0_SELFTEST_ARM64_EVDEV_KEY := $(KERNEL_ROOT)/build/selftests/arm64/evdev_key
+
+.PHONY: ir0-selftest-evdev-key-x86 ir0-selftest-evdev-key-arm64 \
+	ir0-selftest-evdev-key
+
+$(IR0_SELFTEST_X86_EVDEV_KEY): tests/selftests/syscall/evdev_key.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_key
+
+$(IR0_SELFTEST_ARM64_EVDEV_KEY): tests/selftests/syscall/evdev_key.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_key
+
+ir0-selftest-evdev-key-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_KEY)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_EVDEV_KEY) \
+		--done "ok 1 evdev_key" \
+		--log $(HOST_TMP)/ir0-selftest-x86-evdev-key.log
+	@echo "✓ ir0-selftest-evdev-key-x86"
+
+ir0-selftest-evdev-key-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_KEY)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_EVDEV_KEY) \
+		--done "ok 1 evdev_key" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-key.log
+	@echo "✓ ir0-selftest-evdev-key-arm64"
+
+ir0-selftest-evdev-key: ir0-selftest-evdev-key-x86 ir0-selftest-evdev-key-arm64

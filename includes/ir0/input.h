@@ -68,6 +68,8 @@ struct input_dev *input_i8042_dev(void);
 void input_event(struct input_dev *dev, unsigned int type,
 		 unsigned int code, int value);
 void input_sync(struct input_dev *dev);
+/* EVIOCGKEY: current key bitmap. Fills min(len, bitmap) from dev. */
+size_t input_key_state(struct input_dev *dev, void *buf, size_t len);
 
 const char *input_device_name(void);
 int input_device_id(struct input_id *id);
