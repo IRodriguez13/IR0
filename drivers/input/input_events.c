@@ -16,6 +16,7 @@
  * One producer (device IRQ) fans out to every open client.
  */
 #include <stddef.h>
+#include <string.h>
 #include <ir0/input.h>
 #include <ir0/time.h>
 #include <ir0/clock.h>
@@ -38,6 +39,7 @@ struct input_dev
 	struct input_client *clients;
 	struct input_client *grabber;
 	int registered;
+	unsigned long key[KEY_CNT / (sizeof(unsigned long) * 8u)];
 };
 
 struct input_client
@@ -178,6 +180,28 @@ static void stamp_input_time(struct input_event *ev, int clockid)
 	ev->time.tv_usec = (suseconds_t)((ms % 1000u) * 1000u);
 }
 
+/* Caller holds input_events_lock. value 0 clears the key; any other sets it. */
+static void key_state_set(struct input_dev *dev, unsigned int code, int value)
+{
+	unsigned int idx;
+	unsigned int off;
+
+	if (code >= KEY_CNT)
+	{
+		return;
+	}
+	idx = code / (8u * (unsigned int)sizeof(unsigned long));
+	off = code % (8u * (unsigned int)sizeof(unsigned long));
+	if (value == 0)
+	{
+		dev->key[idx] &= ~(1UL << off);
+	}
+	else
+	{
+		dev->key[idx] |= 1UL << off;
+	}
+}
+
 void input_event(struct input_dev *dev, unsigned int type,
 		 unsigned int code, int value)
 {
@@ -196,6 +220,10 @@ void input_event(struct input_dev *dev, unsigned int type,
 	ev.value = value;
 
 	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
+	if (type == EV_KEY)
+	{
+		key_state_set(dev, code, value);
+	}
 	if (dev->grabber)
 	{
 		stamp_input_time(&ev, dev->grabber->clockid);
@@ -221,6 +249,26 @@ void input_event(struct input_dev *dev, unsigned int type,
 void input_sync(struct input_dev *dev)
 {
 	input_event(dev, EV_SYN, SYN_REPORT, 0);
+}
+
+size_t input_key_state(struct input_dev *dev, void *buf, size_t len)
+{
+	unsigned long irq_flags;
+	size_t n;
+
+	if (!dev || !buf || len == 0)
+	{
+		return 0;
+	}
+	n = len;
+	if (n > sizeof(dev->key))
+	{
+		n = sizeof(dev->key);
+	}
+	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
+	memcpy(buf, dev->key, n);
+	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
+	return n;
 }
 
 void *input_client_open(void)
