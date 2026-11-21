@@ -32,10 +32,9 @@ __attribute__((weak)) int net_stack_get_irq_line(void)
     return -1;
 }
 
-__attribute__((weak)) int net_stack_handle_irq(uint8_t irq)
+__attribute__((weak)) void net_stack_handle_irq(uint8_t irq)
 {
     (void)irq;
-    return 0;
 }
 
 __attribute__((weak)) struct net_device *first_net_device(void)

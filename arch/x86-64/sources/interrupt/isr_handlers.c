@@ -452,8 +452,7 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
         /*
          * irq_request owns the line when dispatch returns 0: skip the
          * built-in cases and still send EOI. An empty slot (-ENOENT)
-         * keeps those cases. net_stack_handle_irq also polls NICs with
-         * no line, so that call stays on the empty path only.
+         * keeps those cases.
          */
         if (irq_dispatch(irq) == -ENOENT)
         {
@@ -488,11 +487,10 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
             default:
                 break;
             }
-
-#if CONFIG_ENABLE_NETWORKING
-            net_stack_handle_irq(irq);
-#endif
         }
+#if CONFIG_ENABLE_NETWORKING
+        net_stack_handle_irq(irq);
+#endif
 
         /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);
