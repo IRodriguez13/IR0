@@ -513,7 +513,6 @@ KERNEL_OBJS = \
     ipc/ipc.o \
     kernel/futex/futex.o \
     kernel/futex/syscalls.o \
-    net/net_compat.o \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
     kernel/printk/klog.o \
@@ -793,7 +792,7 @@ NET_OBJS = \
 NET_DRIVER_OBJS = \
     drivers/net/net_drivers.o
 else
-NET_OBJS =
+NET_OBJS = net/net_compat.o
 NET_DRIVER_OBJS =
 endif
 
