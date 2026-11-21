@@ -18,7 +18,6 @@
 #include <ir0/mm_diag.h>
 #include <ir0/oops.h>
 #include <ir0/fault.h>
-#include <ir0/arch_pf_debug.h>
 #include <ir0/ktm/deferred.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/ktm/user_canary.h>
