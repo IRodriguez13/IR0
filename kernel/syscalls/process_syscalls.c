@@ -38,6 +38,8 @@
 /* prctl(2) options (Linux include/uapi/linux/prctl.h) */
 #define PR_SET_PDEATHSIG 1
 #define PR_GET_PDEATHSIG 2
+#define PR_GET_DUMPABLE 3
+#define PR_SET_DUMPABLE 4
 #define PR_SET_NAME 15
 #define PR_GET_NAME 16
 #define PR_SET_NO_NEW_PRIVS 38
@@ -1114,6 +1116,13 @@ int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
         return -EFAULT;
     }
     return 0;
+  case PR_SET_DUMPABLE:
+    if (arg2 > 1)
+      return -EINVAL;
+    current_process->dumpable = (uint8_t)arg2;
+    return 0;
+  case PR_GET_DUMPABLE:
+    return (int64_t)current_process->dumpable;
   case PR_SET_NAME:
     {
       char comm[sizeof(current_process->comm)];

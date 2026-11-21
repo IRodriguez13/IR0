@@ -165,6 +165,8 @@ typedef struct process
 	uint32_t sgid;
 	/* prctl(PR_SET_NO_NEW_PRIVS): execve must not raise privileges. */
 	uint8_t no_new_privs;
+	/* prctl(PR_SET_DUMPABLE): 1 dumpable, 0 not. Fork copies it. */
+	uint8_t dumpable;
 	/*
 	 * prctl(PR_SET_PDEATHSIG). 0 means none. The child starts at 0
 	 * (fork zeroes the task); exec keeps the value.
