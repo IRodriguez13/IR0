@@ -14,6 +14,7 @@ struct ir0_cpu_local
 	unsigned int irq_depth;
 	uint64_t context_switches;
 	uint64_t interrupts;
+	void *irq_frame;	/* opaque ISA frame of the IRQ being handled */
 };
 
 struct ir0_cpu_local *cpu_local(void);
@@ -22,4 +23,6 @@ void cpu_local_set_current_task(struct task *task);
 void cpu_local_set_kernel_stack(uintptr_t stack_top);
 void cpu_local_irq_enter(void);
 int cpu_local_irq_leave(void);
+void *cpu_local_set_irq_frame(void *frame);
+void *cpu_local_irq_frame(void);
 void cpu_local_note_context_switch(void);

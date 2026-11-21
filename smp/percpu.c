@@ -52,6 +52,25 @@ int cpu_local_irq_leave(void)
 	return 0;
 }
 
+/*
+ * The IRQ entry publishes the interrupted frame around irq_dispatch() so a
+ * handler that needs it (the tick saving user context) can read it. Returns
+ * the previous frame; nested entries restore it on the way out.
+ */
+void *cpu_local_set_irq_frame(void *frame)
+{
+	struct ir0_cpu_local *cpu = cpu_local();
+	void *old = cpu->irq_frame;
+
+	cpu->irq_frame = frame;
+	return old;
+}
+
+void *cpu_local_irq_frame(void)
+{
+	return cpu_local()->irq_frame;
+}
+
 void cpu_local_note_context_switch(void)
 {
 	cpu_local()->context_switches++;

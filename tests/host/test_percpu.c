@@ -29,4 +29,19 @@ void test_percpu_up_contract(void)
 	cpu_local_note_context_switch();
 	ASSERT(cpu->context_switches == 1);
 	TEST_END();
+
+	TEST_BEGIN("percpu IRQ frame nests");
+	{
+		int outer;
+		int inner;
+
+		ASSERT(cpu_local_irq_frame() == NULL);
+		ASSERT(cpu_local_set_irq_frame(&outer) == NULL);
+		ASSERT(cpu_local_set_irq_frame(&inner) == &outer);
+		ASSERT(cpu_local_irq_frame() == &inner);
+		ASSERT(cpu_local_set_irq_frame(&outer) == &inner);
+		ASSERT(cpu_local_set_irq_frame(NULL) == &outer);
+		ASSERT(cpu_local_irq_frame() == NULL);
+	}
+	TEST_END();
 }
