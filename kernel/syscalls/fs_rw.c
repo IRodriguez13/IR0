@@ -249,8 +249,9 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 	   * still get the signal; write returns -EPIPE if no bytes yet,
 	   * else short success (Linux pipe_write keeps prior progress).
 	   */
-	  if (!(current_process->signal_ignored & SIGNAL_MASK(SIGPIPE)))
-	    current_process->signal_pending |= SIGNAL_MASK(SIGPIPE);
+	  if (current_process &&
+	      !(current_process->signal_ignored & SIGNAL_MASK(SIGPIPE)))
+	    send_signal(current_process->task.pid, SIGPIPE);
 	  return total > 0 ? (int64_t)total : -EPIPE;
 	}
 	if (ret != -EAGAIN)
@@ -259,8 +260,9 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 	  return total > 0 ? (int64_t)total : -EAGAIN;
 	if (pipe->readers <= 0)
 	{
-	  if (!(current_process->signal_ignored & SIGNAL_MASK(SIGPIPE)))
-	    current_process->signal_pending |= SIGNAL_MASK(SIGPIPE);
+	  if (current_process &&
+	      !(current_process->signal_ignored & SIGNAL_MASK(SIGPIPE)))
+	    send_signal(current_process->task.pid, SIGPIPE);
 	  return total > 0 ? (int64_t)total : -EPIPE;
 	}
 	if (signal_pending(current_process))
