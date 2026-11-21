@@ -2514,7 +2514,8 @@ RETIRED_UACCESS_RE = re.compile(
     r"\b(access_ok_mapped|validate_userspace_buffer|validate_userspace_string|"
     r"process_validate_userspace_buffer|is_user_address(_checked)?|"
     r"copy_from_user_cstring|copy_(to|from)_user_in_mm|zero_user_mm|"
-    r"(copy_to|copy_from|zero)_user_region_in_directory|VALIDATE_BUFFER)\b"
+    r"(copy_to|copy_from|zero)_user_region_in_directory|VALIDATE_BUFFER|"
+    r"put_user|get_user)\b"
 )
 
 
@@ -2572,15 +2573,17 @@ def _uaccess_self_test() -> list[str]:
         "static int ok(void *p) { return access_ok(p, 4); }\n"
         "int bad(uintptr_t a) { return mm_user_va_ok(a, 1); }\n"
         "int old(void *p) { return access_ok_mapped(p, 1); }\n"
+        "void scalar(int x, int *p) { put_user(x, p); }\n"
+        "void scalar_in(int x, int *p) { get_user(x, p); }\n"
     )
     got = [line for line, _ in uaccess_violations("kernel/x.c", sample)]
-    if got != [2, 3]:
+    if got != [2, 3, 4, 5]:
         errors.append(f"[uaccess-single-api] self-test: kernel/x.c flagged "
-                      f"lines {got}, expected [2, 3]")
+                      f"lines {got}, expected [2, 3, 4, 5]")
     got = [line for line, _ in uaccess_violations("mm/x.c", sample)]
-    if got != [3]:
+    if got != [3, 4, 5]:
         errors.append(f"[uaccess-single-api] self-test: mm/x.c flagged "
-                      f"lines {got}, expected [3]")
+                      f"lines {got}, expected [3, 4, 5]")
     return errors
 
 
