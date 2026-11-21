@@ -30,7 +30,7 @@
 #include <ir0/path_user.h>
 #include <ir0/power_manag.h>
 #include <ir0/sched.h>
-#include <ir0/wait.h>
+#include <ir0/wait_status.h>
 
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003

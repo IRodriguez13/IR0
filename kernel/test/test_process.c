@@ -19,7 +19,7 @@
 #include <ir0/errno.h>
 #include <ir0/sched.h>
 #include <ir0/signals.h>
-#include <ir0/wait.h>
+#include <ir0/wait_status.h>
 #include <ir0/clone.h>
 #include <string.h>
 
