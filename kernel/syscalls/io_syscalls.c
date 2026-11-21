@@ -1206,6 +1206,11 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 
       if (devfs_is_ptmx_device(e->dev_device_id))
 	ret = devfs_pty_master_ioctl(e->vfs_file, request, arg);
+      else if (input_is_event_device(e->dev_device_id) &&
+	       request == INPUT_EVIOCGRAB)
+	/* The grab belongs to this open's ring, which the device
+	 * ioctl does not receive. 1 grabs, 0 releases. */
+	ret = input_client_grab(e->vfs_file, arg ? 1 : 0);
       else if (!node || !node->ops || !node->ops->ioctl)
 	ret = -ENOTTY;
       else

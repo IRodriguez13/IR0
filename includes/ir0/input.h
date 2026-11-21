@@ -77,6 +77,13 @@ int input_is_event_device(uint32_t device_id);
 void *input_client_open(void);
 void input_client_get(void *client);
 void input_client_put(void *client);
+/*
+ * EVIOCGRAB: _IOW('E', 0x90, int). The third ioctl argument is the
+ * value itself (1 grabs, 0 releases), not a user pointer.
+ */
+#define INPUT_EVIOCGRAB 0x40044590u
+/* 0 on success. A second grabber gets -EBUSY. */
+int input_client_grab(void *client, int grab);
 void input_set_read_context(void *client, int nonblock);
 int input_read_is_nonblock(void);
 
