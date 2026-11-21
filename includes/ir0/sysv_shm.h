@@ -44,5 +44,15 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg);
 int64_t sys_shmdt(const void *shmaddr);
 int64_t sys_shmctl(int shmid, int cmd, void *buf);
 
-/* Drop every attach owned by this task. Fork does not copy attaches. */
+/* Drop every attach owned by this task. */
 void sysv_shm_detach_process(struct process *proc);
+
+/*
+ * After the child has its own page tables, copy each of the parent's
+ * attach slots. The new slot names the child and the same user address.
+ * Both roots are rewritten to the segment frames, writable and shared:
+ * no second physical copy, and nattch grows by one per slot. Returns 0
+ * or a negative errno. On failure the child owns no slots. A child that
+ * shares the parent's root (vfork, CLONE_VM) is left unchanged.
+ */
+int sysv_shm_fork(struct process *parent, struct process *child);

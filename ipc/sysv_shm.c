@@ -14,6 +14,7 @@
 #include <ir0/process.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
+#include <ir0/tlb_sync.h>
 #include <ir0/pmm.h>
 #include <ir0/arch_port.h>
 #include <ir0/clock.h>
@@ -101,10 +102,9 @@ static void shm_try_destroy(struct shm_seg *s)
 }
 
 /*
- * Fork does not copy these slots. A child keeps COW copies of the pages
- * until its mm is torn down, but nattch counts only shmat records. Exit
- * and exec drop the records that name this task. nattch 0 without
- * IPC_RMID leaves the segment in place.
+ * One slot per task. sysv_shm_fork copies the parent's slots onto a
+ * child with its own page tables; exit and shmdt drop that task's slots
+ * once. nattch 0 without IPC_RMID leaves the segment in place.
  */
 static void shm_detach_at(struct shm_seg *s, int ai)
 {
@@ -150,6 +150,106 @@ void sysv_shm_detach_process(struct process *proc)
 			shm_detach_at(s, ai);
 		}
 	}
+}
+
+/*
+ * Point one address space at the segment frames, writable, without
+ * taking or dropping a reference and without allocating a frame.
+ * copy_process_memory already holds the child's reference on these
+ * pages; the parent still holds the reference from shmat.
+ */
+static int shm_rewire_shared(address_space_root_t root, struct shm_seg *s,
+			     uintptr_t va, size_t len, int sync_tlb)
+{
+	size_t off;
+
+	if (!root || !s || !s->frames)
+		return -EINVAL;
+	for (off = 0; off < len; off += PAGE_SZ)
+	{
+		size_t pi = off / PAGE_SZ;
+		uintptr_t page = va + off;
+		uint64_t pte;
+
+		if (pi >= s->npages || !s->frames[pi])
+			return -EINVAL;
+		pte = mm_make_leaf_pte(s->frames[pi], PAGE_USER | PAGE_RW, 0);
+		if (paging_install_pte(root, page, pte) != 0)
+			return -ENOMEM;
+		if (sync_tlb)
+			mm_tlb_sync_page(root, page);
+	}
+	return 0;
+}
+
+static int shm_fork_one(struct shm_seg *s, const struct shm_attach *src,
+			struct process *child)
+{
+	int ai;
+	uintptr_t va;
+	size_t len;
+	int rc;
+
+	va = src->va;
+	len = src->len;
+	for (ai = 0; ai < SHM_ATTACH_MAX; ai++)
+	{
+		if (!s->attaches[ai].used)
+			break;
+	}
+	if (ai == SHM_ATTACH_MAX)
+		return -ENOSPC;
+
+	rc = shm_rewire_shared(process_pgd(child), s, va, len, 0);
+	if (rc < 0)
+		return rc;
+	/* Parent TLB still has the COW entry installed by the copy. */
+	rc = shm_rewire_shared(process_pgd(src->proc), s, va, len, 1);
+	if (rc < 0)
+		return rc;
+
+	s->attaches[ai].used = 1;
+	s->attaches[ai].proc = child;
+	s->attaches[ai].va = va;
+	s->attaches[ai].len = len;
+	s->nattch++;
+	return 0;
+}
+
+int sysv_shm_fork(struct process *parent, struct process *child)
+{
+	int i;
+	int ai;
+
+	if (!parent || !child)
+		return -EINVAL;
+	if (!process_pgd(parent) || !process_pgd(child))
+		return -ENOMEM;
+	if (process_pgd(parent) == process_pgd(child))
+		return 0;
+
+	for (i = 0; i < SHM_MAX; i++)
+	{
+		struct shm_seg *s = &g_shm[i];
+
+		if (!s->in_use)
+			continue;
+		for (ai = 0; ai < SHM_ATTACH_MAX; ai++)
+		{
+			int rc;
+
+			if (!s->attaches[ai].used ||
+			    s->attaches[ai].proc != parent)
+				continue;
+			rc = shm_fork_one(s, &s->attaches[ai], child);
+			if (rc < 0)
+			{
+				sysv_shm_detach_process(child);
+				return rc;
+			}
+		}
+	}
+	return 0;
 }
 
 int64_t sys_shmget(int key, size_t size, int shmflg)

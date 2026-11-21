@@ -23,6 +23,7 @@
 #include <ir0/ktm/checkpoint.h>
 #include <ir0/ktm/fault.h>
 #include <ir0/syscall_frame.h>
+#include <ir0/sysv_shm.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 
@@ -209,6 +210,8 @@ static void fork_rollback(process_t *child, pid_t child_pid, int enqueued)
 		files_put(child->files);
 		child->files = NULL;
 	}
+	/* Drop slots before the mm. Shared-mm children have none. */
+	sysv_shm_detach_process(child);
 	process_fork_destroy_child_mm(child);
 	process_fork_free_mmap_list(child);
 	process_kernel_stack_free(child);
@@ -294,6 +297,17 @@ pid_t fork_with_stack(void *child_stack, unsigned long clone_flags)
 	if (!(clone_flags & CLONE_VM))
 	{
 		struct mmap_region *mmap_list;
+
+		/*
+		 * Page tables exist and already share the parent's user
+		 * frames as COW. Shm must stay on the segment frames.
+		 */
+		ret = sysv_shm_fork(parent, child);
+		if (ret < 0)
+		{
+			fork_rollback(child, child_pid, 0);
+			return ret;
+		}
 
 		if (KTM_FAULT_HIT("process.fork_mmap_clone"))
 		{
