@@ -46,6 +46,8 @@ struct shm_seg
 	time_t atime;
 	time_t dtime;
 	time_t ctime;
+	int uid;
+	int gid;
 	struct shm_attach attaches[SHM_ATTACH_MAX];
 };
 
@@ -210,6 +212,8 @@ int64_t sys_shmget(int key, size_t size, int shmflg)
 	free_slot->npages = npages;
 	free_slot->cpid = (int)process_pid(current_process);
 	free_slot->ctime = shm_now();
+	free_slot->uid = current_process ? (int)current_process->euid : 0;
+	free_slot->gid = current_process ? (int)current_process->egid : 0;
 	return free_slot->id;
 }
 
@@ -324,6 +328,8 @@ int64_t sys_shmctl(int shmid, int cmd, void *buf)
 		st.shm_atime = s->atime;
 		st.shm_dtime = s->dtime;
 		st.shm_ctime = s->ctime;
+		st.shm_uid = s->uid;
+		st.shm_gid = s->gid;
 		if (copy_to_user(buf, &st, sizeof(st)) != 0)
 			return -EFAULT;
 		return 0;

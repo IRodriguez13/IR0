@@ -33,6 +33,8 @@ struct shm_info
 	long shm_atime;
 	long shm_dtime;
 	long shm_ctime;
+	int shm_uid;
+	int shm_gid;
 };
 
 int main(void)

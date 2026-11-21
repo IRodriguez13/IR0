@@ -33,6 +33,8 @@ struct ir0_shmid_ds
 	time_t shm_atime;
 	time_t shm_dtime;
 	time_t shm_ctime;
+	int shm_uid;
+	int shm_gid;
 };
 
 struct process;
