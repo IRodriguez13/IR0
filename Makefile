@@ -511,7 +511,7 @@ KERNEL_OBJS = \
     fs/timerfd.o \
     ipc/posix_shm.o \
     drivers/input/input_events.o \
-    kernel/exec/elf_loader.o \
+    fs/binfmt_elf.o \
     drivers/core/driver_registry.o \
     drivers/core/resource_registry.o \
     ipc/ipc.o \
