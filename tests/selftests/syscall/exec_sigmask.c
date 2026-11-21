@@ -10,9 +10,12 @@
 
 #ifdef IR0_SELFTEST_NOLIBC
 #include "ir0/nolibc.h"
-/* arch/arm64/include/uapi/asm/unistd.h: __NR_execve is 221. */
+/* arch/arm64/include/uapi/asm/unistd.h: __NR_execve 221, __NR_unlinkat 35. */
 #define SYS_execve 221
+#define SYS_unlinkat 35
+#define O_CREAT 0100
 #else
+#include <fcntl.h>
 #include <signal.h>
 #include <sys/syscall.h>
 #include <sys/wait.h>
@@ -28,21 +31,34 @@
  */
 #define SIGUSR1_LINUX_BIT (1UL << (SIGUSR1 - 1))
 
-static int is_child_arg(char **argv)
-{
-	const char *s;
-	const char *want;
+/*
+ * The nolibc entry does not pass argv, so the re-executed image learns it is
+ * the child from a marker file the parent creates before execve.
+ */
+#define CHILD_MARKER "/exec_sigmask.child"
 
-	if (!argv || !argv[1])
+static int take_child_marker(void)
+{
+	int fd;
+
+	fd = open(CHILD_MARKER, O_RDONLY);
+	if (fd < 0)
 		return 0;
-	s = argv[1];
-	want = "child";
-	while (*want != '\0' && *s == *want)
-	{
-		s++;
-		want++;
-	}
-	return *want == '\0' && *s == '\0';
+	(void)close(fd);
+	(void)syscall(SYS_unlinkat, (long)AT_FDCWD, (long)CHILD_MARKER, 0L);
+	return 1;
+}
+
+static int make_child_marker(void)
+{
+	int fd;
+
+	fd = (int)syscall(SYS_openat, (long)AT_FDCWD, (long)CHILD_MARKER,
+			  (long)(O_WRONLY | O_CREAT), 0644L);
+	if (fd < 0)
+		return -1;
+	(void)close(fd);
+	return 0;
 }
 
 static void zero_bytes(void *p, int n)
@@ -90,9 +106,11 @@ static int reap(int pid)
 static int run_parent(void)
 {
 	unsigned long block;
-	char *av[3];
+	char *av[2];
 	int pid;
 
+	if (make_child_marker() != 0)
+		return 1;
 	block = SIGUSR1_LINUX_BIT;
 	if (syscall(SYS_rt_sigprocmask, (long)SIG_BLOCK, (long)&block, 0L,
 		    8L) != 0)
@@ -103,37 +121,16 @@ static int run_parent(void)
 	if (pid == 0)
 	{
 		av[0] = "/proc/self/exe";
-		av[1] = "child";
-		av[2] = 0;
+		av[1] = 0;
 		(void)syscall(SYS_execve, (long)av[0], (long)av, 0L);
 		_exit(1);
 	}
 	return reap(pid);
 }
 
-__attribute__((used, noinline)) static int exec_sigmask_main(char **argv)
+int main(void)
 {
-	if (is_child_arg(argv))
+	if (take_child_marker())
 		return run_child();
 	return run_parent();
 }
-
-#ifdef IR0_SELFTEST_NOLIBC
-/*
- * nolibc _start keeps the kernel entry argv in x1 and calls main.
- * This is the whole body of main: no C prologue can reuse x1.
- */
-__asm__(
-	".global main\n"
-	".type main, %function\n"
-	"main:\n"
-	"	mov	x0, x1\n"
-	"	b	exec_sigmask_main\n"
-);
-#else
-int main(int argc, char **argv)
-{
-	(void)argc;
-	return exec_sigmask_main(argv);
-}
-#endif
