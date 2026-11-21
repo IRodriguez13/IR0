@@ -1288,3 +1288,36 @@ ir0-selftest-prctl-keepcaps-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64
 	@echo "✓ ir0-selftest-prctl-keepcaps-arm64"
 
 ir0-selftest-prctl-keepcaps: ir0-selftest-prctl-keepcaps-x86 ir0-selftest-prctl-keepcaps-arm64
+
+# SHM-TIMES-SELFTEST
+IR0_SELFTEST_X86_SHM_TIMES := $(KERNEL_ROOT)/build/selftests/x86_64/shm_times
+IR0_SELFTEST_ARM64_SHM_TIMES := $(KERNEL_ROOT)/build/selftests/arm64/shm_times
+
+.PHONY: ir0-selftest-shm-times-x86 ir0-selftest-shm-times-arm64 \
+	ir0-selftest-shm-times
+
+$(IR0_SELFTEST_X86_SHM_TIMES): tests/selftests/syscall/shm_times.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 shm_times
+
+$(IR0_SELFTEST_ARM64_SHM_TIMES): tests/selftests/syscall/shm_times.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 shm_times
+
+ir0-selftest-shm-times-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SHM_TIMES)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SHM_TIMES) \
+		--done "ok 1 shm_times" \
+		--log $(HOST_TMP)/ir0-selftest-x86-shm-times.log
+	@echo "✓ ir0-selftest-shm-times-x86"
+
+ir0-selftest-shm-times-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_TIMES)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SHM_TIMES) \
+		--done "ok 1 shm_times" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-shm-times.log
+	@echo "✓ ir0-selftest-shm-times-arm64"
+
+ir0-selftest-shm-times: ir0-selftest-shm-times-x86 ir0-selftest-shm-times-arm64

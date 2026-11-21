@@ -12,6 +12,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <time.h>
 
 #define IR0_IPC_PRIVATE 0
 #define IR0_IPC_CREAT   01000
@@ -28,6 +29,10 @@ struct ir0_shmid_ds
 	int shm_cpid;
 	/* pid of the task that last attached or detached. 0 if none. */
 	int shm_lpid;
+	/* Seconds. Wall clock when it is available, otherwise uptime. */
+	time_t shm_atime;
+	time_t shm_dtime;
+	time_t shm_ctime;
 };
 
 struct process;

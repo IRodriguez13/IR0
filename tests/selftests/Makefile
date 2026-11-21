@@ -679,3 +679,21 @@ $(PRCTL_KEEPCAPS_BIN): $(PRCTL_KEEPCAPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_D
 	@$(CC) $(CFLAGS) -o $@ $(PRCTL_KEEPCAPS_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SHM-TIMES-SELFTEST
+SHM_TIMES_SRC := syscall/shm_times.c
+SHM_TIMES_BIN := $(BUILD_DIR)/shm_times
+
+.PHONY: shm_times
+
+shm_times: $(SHM_TIMES_BIN)
+
+$(SHM_TIMES_BIN): $(SHM_TIMES_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_times"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_TIMES_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

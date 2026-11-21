@@ -38,6 +38,9 @@ struct shm_info
 	int shm_perm_mode;
 	int shm_cpid;
 	int shm_lpid;
+	long shm_atime;
+	long shm_dtime;
+	long shm_ctime;
 };
 
 static int shm_inval(void)

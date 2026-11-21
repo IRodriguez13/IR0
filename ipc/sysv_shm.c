@@ -16,6 +16,7 @@
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/arch_port.h>
+#include <ir0/clock.h>
 #include <string.h>
 
 #define SHM_MAX 8
@@ -42,11 +43,23 @@ struct shm_seg
 	int nattch;
 	int cpid;
 	int lpid;
+	time_t atime;
+	time_t dtime;
+	time_t ctime;
 	struct shm_attach attaches[SHM_ATTACH_MAX];
 };
 
 static struct shm_seg g_shm[SHM_MAX];
 static int g_next_id = 1;
+
+static time_t shm_now(void)
+{
+	uint64_t uptime_ms = clock_get_uptime_milliseconds();
+
+	if (clock_realtime_available())
+		return clock_get_current_time();
+	return (time_t)(uptime_ms / 1000);
+}
 
 static struct shm_seg *shm_by_id(int shmid)
 {
@@ -196,6 +209,7 @@ int64_t sys_shmget(int key, size_t size, int shmflg)
 	free_slot->id = g_next_id++;
 	free_slot->npages = npages;
 	free_slot->cpid = (int)process_pid(current_process);
+	free_slot->ctime = shm_now();
 	return free_slot->id;
 }
 
@@ -246,6 +260,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 			s->attaches[ai].len = len;
 			s->nattch++;
 			s->lpid = (int)process_pid(current_process);
+			s->atime = shm_now();
 			return (int64_t)va;
 		}
 	}
@@ -276,6 +291,7 @@ int64_t sys_shmdt(const void *shmaddr)
 				continue;
 			shm_detach_at(s, ai);
 			s->lpid = (int)process_pid(current_process);
+			s->dtime = shm_now();
 			return 0;
 		}
 	}
@@ -305,6 +321,9 @@ int64_t sys_shmctl(int shmid, int cmd, void *buf)
 		st.shm_perm_mode = 0600;
 		st.shm_cpid = s->cpid;
 		st.shm_lpid = s->lpid;
+		st.shm_atime = s->atime;
+		st.shm_dtime = s->dtime;
+		st.shm_ctime = s->ctime;
 		if (copy_to_user(buf, &st, sizeof(st)) != 0)
 			return -EFAULT;
 		return 0;
