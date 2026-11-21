@@ -15,6 +15,8 @@
 #define CSI_ESC     1
 #define CSI_BRACKET 2
 
+int cursor_pos;
+
 static uint8_t render_color = CONSOLE_RENDERER_COLOR_DEFAULT;
 static int render_cursor_visible;
 static int render_cursor_row;
@@ -588,6 +590,16 @@ void console_renderer_putchar(char c, uint8_t color)
 		console_renderer_show_cursor(draw);
 	else
 		render_erase_cursor(cols, rows, draw);
+}
+
+/* Kernel text: draw with @attr; the SGR colour of the output stream is kept. */
+void console_renderer_putchar_attr(char c, uint8_t attr)
+{
+	uint8_t sgr_color = render_color;
+
+	render_color = attr;
+	console_renderer_putchar(c, attr);
+	render_color = sgr_color;
 }
 
 void console_renderer_show_cursor(uint8_t color)

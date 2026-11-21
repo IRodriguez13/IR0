@@ -15,9 +15,6 @@
 
 #include <stdint.h>
 
-/* Cursor compartido para salida coherente entre print() y typewriter/shell */
-extern int cursor_pos;
-
 /* Configuración VGA Text Mode */
 #define VGA_WIDTH  80
 #define VGA_HEIGHT 25
@@ -111,10 +108,3 @@ void print_colored(const char *str, unsigned char fg, unsigned char bg);
  * Resetea el cursor a posición (0,0).
  */
 void clear_screen();
-
-/*
- * Simula scroll hacia arriba cuando la pantalla se llena.
- * Copia línea N+1 → línea N para todas las líneas,
- * limpia la última línea y ajusta cursor_y.
- */
-void scroll();

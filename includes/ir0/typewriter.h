@@ -33,6 +33,8 @@ void typewriter_init(void);
 void typewriter_set_mode(typewriter_mode_t mode);
 void typewriter_vga_print(const char *str, uint8_t color);
 void typewriter_vga_print_char(char c, uint8_t color);
+/* Kernel text (print()): drawn with @color, recorded in the scrollback. */
+void typewriter_putchar_attr(char c, uint8_t color);
 void typewriter_show_cursor(uint8_t color);
 int typewriter_cursor_x(void);
 void typewriter_console_scroll(int delta);

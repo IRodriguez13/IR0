@@ -82,7 +82,6 @@ static void typewriter_delay(uint32_t microseconds)
  */
 static void redraw_from_scrollback(void)
 {
-    extern int cursor_pos;
     int cols = tw_cols();
     int rows = tw_rows();
     int first_line = (int)((long)total_lines_written - (rows - 1) - scroll_offset);
@@ -166,10 +165,12 @@ void typewriter_set_mode(typewriter_mode_t mode)
     current_mode = mode;
 }
 
-/* Shell /dev/console output — unified renderer (single cursor_pos). */
-void typewriter_vga_print_char(char c, uint8_t color)
+/*
+ * One glyph into the renderer and the scrollback. @attr draws with @color
+ * (kernel text) instead of the SGR colour of the output stream.
+ */
+static void typewriter_put(char c, uint8_t color, int attr)
 {
-    extern int cursor_pos;
     int cols = tw_cols();
     int pos;
     size_t line_idx;
@@ -182,7 +183,10 @@ void typewriter_vga_print_char(char c, uint8_t color)
         redraw_from_scrollback();
     }
 
-    console_renderer_putchar(c, color);
+    if (attr)
+        console_renderer_putchar_attr(c, color);
+    else
+        console_renderer_putchar(c, color);
 
     line_idx = total_lines_written % SCROLLBACK_LINES;
     cols = scrollback_cols();
@@ -229,6 +233,17 @@ void typewriter_vga_print_char(char c, uint8_t color)
         }
         typewriter_delay(delay);
     }
+}
+
+/* Shell /dev/console output — unified renderer (single cursor_pos). */
+void typewriter_vga_print_char(char c, uint8_t color)
+{
+    typewriter_put(c, color, 0);
+}
+
+void typewriter_putchar_attr(char c, uint8_t color)
+{
+    typewriter_put(c, color, 1);
 }
 
 void typewriter_vga_print(const char *str, uint8_t color)
