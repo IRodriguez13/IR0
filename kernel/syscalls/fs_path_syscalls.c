@@ -32,7 +32,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/stat.h>
 #include <ir0/utimens.h>
-#include <ir0/arch_cpu.h>
+#include <asm/setup.h>
 #include <ir0/utsname.h>
 #include <ir0/version.h>
 #include <ir0/vfs.h>

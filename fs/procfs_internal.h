@@ -37,7 +37,6 @@
 #include <ir0/blockdev.h>
 #include <ir0/swap.h>
 #include <ir0/boot_memory.h>
-#include <ir0/arch_cpu.h>
 #include <fs/vfs.h>
 #include <ir0/copy_user.h>
 #include <ir0/resource_registry.h>

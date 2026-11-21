@@ -29,7 +29,7 @@
 #include <ir0/clock.h>
 #include <ir0/process.h>
 #include <ir0/signals.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <ir0/klog.h>
 #include <ir0/serial_io.h>
 #include <ir0/ipc.h>

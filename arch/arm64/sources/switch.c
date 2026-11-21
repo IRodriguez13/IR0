@@ -14,7 +14,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_cpu.h>
+#include <ir0/context.h>
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/task.h>
