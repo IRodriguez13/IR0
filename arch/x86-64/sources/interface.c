@@ -11,7 +11,6 @@
  * Description: x86-64 implementation of the portable architecture interface.
  */
 
-#include "arch_interface.h"
 #include <arch/common/arch_portable.h>
 #include <ir0/cpu.h>
 #include <ir0/delay.h>

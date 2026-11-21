@@ -15,7 +15,6 @@
 #include <config.h>
 #if CONFIG_DRV_NIC_VIRTIO_NET
 
-#include <ir0/arch_io.h>
 #include <ir0/cpu.h>
 #include <ir0/arch_port.h>
 #include <ir0/errno.h>

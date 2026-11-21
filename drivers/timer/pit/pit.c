@@ -14,7 +14,6 @@
 #include "pit.h"
 #include <config.h>
 #include <ir0/oops.h>
-#include <arch_interface.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/clock.h>

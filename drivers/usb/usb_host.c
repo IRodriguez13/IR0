@@ -14,7 +14,6 @@
 #include <config.h>
 #include <ir0/usb_host.h>
 #include <ir0/logging.h>
-#include <ir0/arch_io.h>
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <stddef.h>

@@ -11,6 +11,7 @@
 #include <ir0/cpu.h>
 #include <ir0/irq.h>
 #include <ir0/arch_types.h>
+#include <asm/processor.h>
 #include <ir0/oops.h>
 #include <ir0/oops_port.h>
 #include <ir0/fpu_backend.h>
@@ -130,7 +131,7 @@ void syscall_init(void)
 
 /*
  * libgcc may call these for 64-bit division on targets without native idiv;
- * provide a small non-lifting implementation (mirrors x86 arch_interface).
+ * provide a small non-lifting implementation (mirrors x86 interface.c).
  */
 uint64_t __udivdi3(uint64_t a, uint64_t b)
 {

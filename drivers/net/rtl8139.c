@@ -17,7 +17,6 @@
 #include "net_drivers.h"
 #include <stdbool.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/arch_io.h>
 #include <ir0/kmem.h>
 #include <string.h>
 #include <ir0/driver.h>

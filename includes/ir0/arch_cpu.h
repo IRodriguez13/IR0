@@ -21,7 +21,6 @@
 #include <ir0/tls.h>
 #include <ir0/cpu_info.h>
 #include <ir0/irq.h>
-#include <ir0/arch_io.h>
 #include <ir0/arch_mm.h>
 #include <ir0/page_fault.h>
 #include <asm/setup.h>

@@ -1,3 +1,3 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #pragma once
-#include <ir0/arch_io.h>
+#include <asm-generic/processor.h>
