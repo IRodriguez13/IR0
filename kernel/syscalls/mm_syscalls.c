@@ -7,160 +7,18 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mm_syscalls.c
- * Description: mmap, munmap and mprotect wrappers, private file mmap and sysinfo.
+ * Description: mmap, munmap and mprotect wrappers and sysinfo.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "mm_syscalls.h"
 #include <mm/map_sys.h>
-#include <mm/va_search.h>
-#include <config.h>
-#include <ir0/vfs.h>
-#include <ir0/kmem.h>
-#include <ir0/ktm/klog.h>
-#include <ir0/paging.h>
-#include <ir0/mm_port.h>
-#include <ir0/process.h>
-#include <ir0/mman.h>
 #include <ir0/clock.h>
-#include <ir0/ktm/checkpoint.h>
+#include <ir0/copy_user.h>
+#include <ir0/mm_port.h>
+#include <ir0/swap.h>
 #include <string.h>
-#include "mm_syscalls_internal.h"
-
-void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
-                           int flags, int fd, off_t offset)
-{
-	fd_entry_t *fd_table;
-	struct vfs_file *vfs_file;
-	stat_t st;
-	size_t map_len;
-	size_t file_rem;
-	uint64_t page_flags;
-	uintptr_t virt_addr;
-	struct mmap_region *region;
-	char page_buf[PAGE_SIZE_4KB];
-	size_t copied;
-	off_t file_pos;
-
-	if (!proc)
-		return SYSCALL_PTR_ERR(ESRCH);
-
-	if (flags & MAP_SHARED)
-	{
-		if (prot & PROT_WRITE)
-			return SYSCALL_PTR_ERR(ENOSYS);
-	}
-
-	fd_table = process_fd_table(proc);
-	if (fd < 0 || fd >= process_fd_span(proc) || !fd_table[fd].in_use)
-		return SYSCALL_PTR_ERR(EBADF);
-	if (fd_table[fd].is_pipe || fd_table[fd].is_devfs)
-		return SYSCALL_PTR_ERR(ENODEV);
-	if (!fd_table[fd].vfs_file)
-		return SYSCALL_PTR_ERR(EACCES);
-
-	if (vfs_stat(fd_table[fd].path, &st) != 0)
-		return SYSCALL_PTR_ERR(EACCES);
-	if (!S_ISREG(st.st_mode))
-		return SYSCALL_PTR_ERR(ENODEV);
-
-	if (offset < 0 || (uint64_t)offset >= (uint64_t)st.st_size)
-		return SYSCALL_PTR_ERR(EINVAL);
-
-	file_rem = (size_t)((uint64_t)st.st_size - (uint64_t)offset);
-	map_len = length;
-	if (map_len > file_rem)
-		map_len = file_rem;
-	map_len = (map_len + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
-	if (map_len == 0)
-		return SYSCALL_PTR_ERR(EINVAL);
-
-	virt_addr = mm_find_free_va(process_pgd(proc), proc, (uintptr_t)addr, map_len);
-	if (virt_addr == 0)
-		return SYSCALL_PTR_ERR(ENOMEM);
-
-	page_flags = PAGE_USER;
-	if (prot & PROT_WRITE)
-		page_flags |= PAGE_RW;
-	if (prot & PROT_EXEC)
-		page_flags |= PAGE_EXEC;
-
-	/*
-	 * Fill through a writable mapping, then apply @prot: the uaccess copy
-	 * only writes into user pages the process could write itself.
-	 */
-	if (map_user_region_in_directory(process_pgd(proc), virt_addr, map_len,
-					 PAGE_USER | PAGE_RW) != 0)
-		return SYSCALL_PTR_ERR(ENOMEM);
-
-	vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-	copied = 0;
-	file_pos = offset;
-
-	while (copied < map_len)
-	{
-		size_t chunk = map_len - copied;
-		int nread;
-
-		if (chunk > sizeof(page_buf))
-			chunk = sizeof(page_buf);
-		nread = vfs_pread(vfs_file, page_buf, chunk, file_pos);
-		if (nread < 0)
-		{
-			for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-				unmap_page_in_directory(process_pgd(proc),
-							virt_addr + off);
-			return SYSCALL_PTR_ERR(EIO);
-		}
-		if ((size_t)nread < chunk)
-			memset(page_buf + nread, 0, chunk - (size_t)nread);
-		if (copy_to_user_mm(process_pgd(proc),
-						     virt_addr + copied,
-						     page_buf, chunk) != 0)
-		{
-			for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-				unmap_page_in_directory(process_pgd(proc),
-							virt_addr + off);
-			return SYSCALL_PTR_ERR(EFAULT);
-		}
-		copied += chunk;
-		file_pos += (off_t)chunk;
-	}
-	/* File code copied into an executable mapping (ld.so loading a DSO). */
-	if (prot & PROT_EXEC)
-		paging_sync_icache_user(process_pgd(proc), virt_addr, map_len);
-
-	if (page_flags != (PAGE_USER | PAGE_RW) &&
-	    protect_user_region_in_directory(process_pgd(proc), virt_addr,
-					     map_len, page_flags) != 0)
-	{
-		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-			unmap_page_in_directory(process_pgd(proc), virt_addr + off);
-		return SYSCALL_PTR_ERR(ENOMEM);
-	}
-
-	region = kmalloc(sizeof(struct mmap_region));
-	if (!region)
-	{
-		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-			unmap_page_in_directory(process_pgd(proc), virt_addr + off);
-		return SYSCALL_PTR_ERR(ENOMEM);
-	}
-
-	region->addr = (void *)virt_addr;
-	region->hint_addr = addr;
-	region->length = map_len;
-	region->prot = prot;
-	region->flags = flags;
-	region->next = process_mmap_list(proc);
-	process_mm_set_mmap_list(proc, region);
-	KTM_CHECKPOINT(KTM_CP_MM_MAP);
-
-	if (DEBUG_MMAP_AUDIT)
-		klog_debug("MMAP", "CLASSIFY FILE_MMAP_PRIVATE_OK");
-	return (void *)virt_addr;
-}
 
 void *sys_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
