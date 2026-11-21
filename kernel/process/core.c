@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "process_internal.h"
-#include <ir0/arch_debug.h>
+#include <asm/hw_breakpoint.h>
 #include <ir0/task_ops.h>
 
 static void syscall_frame_to_arch(const syscall_user_frame_t *sf,
