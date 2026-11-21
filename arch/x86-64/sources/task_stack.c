@@ -5,6 +5,7 @@
 #include <ir0/errno.h>
 #include <ir0/mm.h>
 #include <ir0/paging.h>
+#include <ir0/page.h>
 #include <ir0/pmm.h>
 #include <ir0/tlb.h>
 #include <config.h>
@@ -17,7 +18,7 @@ static uint64_t *kernel_page_root(void)
 
 	if (!root)
 		root = paging_current_address_space();
-	return root ? (uint64_t *)(uintptr_t)root : NULL;
+	return root ? phys_to_virt(root) : NULL;
 }
 
 int process_kernel_stack_alloc(process_t *p)
@@ -60,11 +61,12 @@ int process_kernel_stack_alloc(process_t *p)
 
 	{
 		uintptr_t saved = paging_current_address_space();
+		uintptr_t pml4_phys = virt_to_phys(pml4);
 
-		if (saved != (uint64_t)(uintptr_t)pml4)
-			paging_activate_address_space((uintptr_t)pml4);
+		if (saved != pml4_phys)
+			paging_activate_address_space(pml4_phys);
 		tlb_invalidate_all();
-		if (saved != (uint64_t)(uintptr_t)pml4)
+		if (saved != pml4_phys)
 			paging_activate_address_space(saved);
 	}
 

@@ -121,7 +121,7 @@ static int fork_child_mm_create(process_t *child, process_t *parent)
 		mm->stack_size = parent->mm->stack_size;
 	}
 	process_mm_bind(child, mm);
-	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
+	process_set_mm_root(child, (uint64_t)virt_to_phys(process_pgd(child)));
 
 	if (KTM_FAULT_HIT("process.fork_page_directory"))
 	{
@@ -342,7 +342,7 @@ pid_t fork_with_stack(void *child_stack, unsigned long clone_flags)
 		return -ENOMEM;
 	}
 
-	process_set_mm_root(child, (uint64_t)(uintptr_t)process_pgd(child));
+	process_set_mm_root(child, (uint64_t)virt_to_phys(process_pgd(child)));
 	child->task.pid = child_pid;
 	process_tls_set(child, process_tls_get(parent));
 
@@ -524,7 +524,7 @@ void process_mm_release_on_exit(process_t *dying)
 	mm = dying->mm;
 	if (!mm)
 		return;
-	user_root = mm->page_directory ? (uintptr_t)mm->page_directory : 0;
+	user_root = mm->page_directory ? virt_to_phys(mm->page_directory) : 0;
 	if (user_root && paging_current_address_space() == user_root)
 	{
 		kernel_root = paging_kernel_address_space();

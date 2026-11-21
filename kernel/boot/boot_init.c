@@ -54,6 +54,7 @@
 #include <ir0/rootfs_base.h>
 #include <ir0/boot_params.h>
 #include <ir0/boot_port.h>
+#include <ir0/direct_map.h>
 #include "boot_init.h"
 
 void boot_firmware_init(uintptr_t firmware_handle)
@@ -67,6 +68,9 @@ void boot_firmware_init(uintptr_t firmware_handle)
 
 	ir0_boot_arch_firmware_early(params);
 	(void)boot_memory_snapshot_init(params);
+	/* Every later phys_to_virt() relies on it (frames, roots, tables). */
+	if (direct_map_init() != 0)
+		panic("direct map: boot RAM inventory unusable");
 	ir0_boot_firmware_sysfs_init();
 	ir0_cmdline_apply_log_profile();
 }
@@ -97,9 +101,7 @@ void boot_memory_init(void)
 
 	/*
 	 * Pin the boot address-space root while still on the identity map from the
-	 * assembly bootstrap.
-	 * COW/clear_highpage switch here after process tables use pte_none
-	 * holes (Linux kmap / copy_user_highpage analogue).
+	 * assembly bootstrap; process roots copy its kernel half.
 	 */
 	paging_pin_kernel_address_space(paging_current_address_space());
 }

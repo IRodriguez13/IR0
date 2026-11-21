@@ -61,6 +61,17 @@ int mm_boot_identity_covers(uint64_t phys, uint64_t size);
 /* Whether the backend can encode the common large identity-map leaf. */
 int mm_large_identity_supported(void);
 
+/* Whether a level-1 (1 GiB) leaf can map the direct map (Linux gbpages). */
+int mm_pud_leaf_supported(void);
+
+/*
+ * Boot-identity pointer to the root table whose kernel half holds the
+ * direct map (x86-64: the boot PML4, shared into every mm; ARM64: the
+ * TTBR1 root). mm_kernel_map_enable() makes the CPU walk it.
+ */
+uint64_t *mm_kernel_map_root(void);
+void mm_kernel_map_enable(void);
+
 /*
  * Translation-table indices from the root level to the leaf-table level.
  * The selected ISA backend defines how the virtual address is decomposed.

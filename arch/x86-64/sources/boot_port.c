@@ -8,6 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/arch_mm.h>
 #include <ir0/acpi_rsdp.h>
 #include <ir0/boot_params.h>
 #include <ir0/boot_port.h>
@@ -22,6 +23,7 @@
 #include <stdint.h>
 
 #define X86_BOOT_IDENTITY_LIMIT 0x20000000ULL
+#define X86_PHYS_LIMIT          (1ULL << 52)
 #define X86_MULTIBOOT_MMAP_MAX  (1024U * 1024U)
 #define X86_MULTIBOOT_MODULE_MAX 32U
 
@@ -71,23 +73,10 @@ static int x86_snapshot_add_range(struct ir0_phys_range *ranges,
 static int x86_snapshot_add_usable(struct ir0_boot_snapshot *snapshot,
 				   uint64_t base, uint64_t size)
 {
-	uint64_t end;
-	uint64_t managed_start = PMM_PHYS_BASE;
-	uint64_t managed_end = PMM_PHYS_BASE + PMM_PHYS_SIZE;
-
-	if (size == 0 || base > UINT64_MAX - size)
-		return -EINVAL;
-	end = base + size;
-	if (base < managed_start)
-		base = managed_start;
-	if (end > managed_end)
-		end = managed_end;
-	if (end <= base)
-		return 0;
 	return x86_snapshot_add_range(snapshot->usable,
 				      &snapshot->usable_count,
 				      IR0_BOOT_MEMORY_MAX_BANKS,
-				      base, end - base);
+				      base, size);
 }
 
 static int x86_snapshot_add_reserved(struct ir0_boot_snapshot *snapshot,
@@ -317,6 +306,18 @@ int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 				return -EINVAL;
 		}
 	}
+	/*
+	 * Low memory up to the end of the kernel heap belongs to the kernel
+	 * (image, fixed rings, heap). The PMM still stops at its historical
+	 * 512 MiB ceiling; the direct map already covers all RAM.
+	 */
+	if (x86_snapshot_add_reserved(snapshot, 0,
+				      (uint64_t)mm_kernel_heap_start() +
+				      mm_kernel_heap_size()) != 0 ||
+	    x86_snapshot_add_reserved(snapshot, PMM_PHYS_BASE + PMM_PHYS_SIZE,
+				      X86_PHYS_LIMIT -
+				      (PMM_PHYS_BASE + PMM_PHYS_SIZE)) != 0)
+		return -EINVAL;
 	snapshot->acpi_rsdp = x86_acpi_rsdp_legacy_bios();
 	snapshot->valid = snapshot->usable_count != 0;
 	return snapshot->valid ? 0 : -ENODEV;

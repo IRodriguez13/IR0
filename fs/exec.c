@@ -84,9 +84,9 @@ int exec_detach_shared_mm(process_t *proc)
 	 * image against the parent's tables.
 	 */
 	process_mm_bind(proc, fresh);
-	process_set_mm_root(proc, (uint64_t)(uintptr_t)root);
+	process_set_mm_root(proc, (uint64_t)virt_to_phys(root));
 	if (proc == current_process)
-		paging_activate_address_space((uintptr_t)root);
+		paging_activate_address_space(virt_to_phys(root));
 	process_vfork_complete(proc);
 	mm_put(old);
 	return 0;

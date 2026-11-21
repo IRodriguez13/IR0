@@ -15,10 +15,22 @@
 #include <ir0/pmm.h>
 #include <string.h>
 
-/* Snapshot reservations plus the DTB, the initrd and the kernel heap. */
-#define BOOT_MEMORY_MAX_PROTECTED (IR0_BOOT_MEMORY_MAX_RESERVATIONS + 3U)
+/*
+ * Snapshot reservations plus the DTB, the initrd, the kernel heap and the
+ * early page-table pages.
+ */
+#define BOOT_MEMORY_MAX_PROTECTED (IR0_BOOT_MEMORY_MAX_RESERVATIONS + 4U)
 
 static struct ir0_boot_snapshot g_boot_snapshot;
+
+/*
+ * Pages handed out before the PMM exists (Linux memblock_alloc): the direct
+ * map's own tables. [g_early_base, g_early_next) grows inside the first
+ * allocatable range and stays reserved from the PMM.
+ */
+static uint64_t g_early_base;
+static uint64_t g_early_next;
+static uint64_t g_early_limit;
 
 int boot_memory_snapshot_init(const struct ir0_boot_params *params)
 {
@@ -271,6 +283,7 @@ static size_t boot_memory_protected_ranges(struct ir0_phys_range *ranges)
 		      g_boot_snapshot.initrd.size);
 	protected_add(ranges, &count, (uint64_t)mm_kernel_heap_start(),
 		      (uint64_t)mm_kernel_heap_size());
+	protected_add(ranges, &count, g_early_base, g_early_next - g_early_base);
 	return count;
 }
 
@@ -324,6 +337,61 @@ int boot_memory_get_allocatable_ranges(struct ir0_phys_range *ranges,
 		ranges[i] = current[i];
 	*count = current_count;
 	return 0;
+}
+
+/*
+ * The first allocatable range lies in the low memory every ISA keeps
+ * identity mapped during boot (x86-64: the first 512 MiB, ARM64: the first
+ * GiB of DRAM), so early pages are reachable before the direct map exists.
+ */
+uintptr_t boot_memory_early_page(void)
+{
+	struct ir0_phys_range ranges[IR0_BOOT_MEMORY_MAX_BANKS];
+	size_t count;
+	uint64_t page;
+
+	if (g_early_limit == 0)
+	{
+		if (boot_memory_get_allocatable_ranges(ranges,
+						       IR0_BOOT_MEMORY_MAX_BANKS,
+						       &count) != 0 || count == 0)
+			return 0;
+		g_early_base = ranges[0].base;
+		g_early_next = ranges[0].base;
+		g_early_limit = ranges[0].base + ranges[0].size;
+	}
+	if (g_early_next >= g_early_limit)
+		return 0;
+	page = g_early_next;
+	g_early_next += PMM_FRAME_SIZE;
+	return (uintptr_t)page;
+}
+
+int boot_memory_get_ram_ranges(struct ir0_phys_range *ranges,
+			       size_t capacity, size_t *count)
+{
+	struct ir0_phys_range usable[IR0_BOOT_MEMORY_MAX_BANKS];
+	size_t usable_count;
+	int ret;
+
+	ret = boot_memory_get_usable_ranges(usable, IR0_BOOT_MEMORY_MAX_BANKS,
+					    &usable_count);
+	if (ret != 0)
+		return ret;
+	/* Scanout memory keeps its own non-cacheable mapping. */
+	if (g_boot_snapshot.framebuffer.size == 0)
+	{
+		if (usable_count > capacity)
+			return -ENOSPC;
+		memcpy(ranges, usable, usable_count * sizeof(*usable));
+		*count = usable_count;
+		return 0;
+	}
+	return boot_memory_exclude_reserved(usable, usable_count,
+					    &(struct ir0_phys_range){
+						    g_boot_snapshot.framebuffer.base,
+						    g_boot_snapshot.framebuffer.size },
+					    1, ranges, capacity, count);
 }
 
 int boot_memory_init_pmm(void)

@@ -14,6 +14,7 @@
 #include <ir0/errno.h>
 #include <ir0/irq.h>
 #include <ir0/kmem.h>
+#include <ir0/page.h>
 #include <string.h>
 
 static void cache_clean(uintptr_t start, size_t size)
@@ -60,7 +61,7 @@ void *dma_alloc(size_t size, uintptr_t *phys)
 	if (!va)
 		return NULL;
 	memset(va, 0, size);
-	*phys = (uintptr_t)va;
+	*phys = virt_to_phys(va);
 	dma_sync_for_device(va, size);
 	return va;
 }

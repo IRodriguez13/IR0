@@ -626,6 +626,7 @@ MEMORY_OBJS = \
 	mm/uaccess/paging_uaccess.o \
 	mm/paging/paging_fork.o \
 	mm/paging/paging_identity.o \
+	mm/paging/direct_map.o \
 	mm/paging/paging_audit.o \
 	mm/paging/tlb_sync.o \
 	mm/alloc/pmm.o \
