@@ -138,6 +138,7 @@ void ir0_boot_arch_drivers(void)
 	const int ps2_boot = CONFIG_INIT_PS2_CONTROLLER;
 	const int ps2_mouse_boot = (CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER);
 
+	i8042_irq_init();
 	driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_controller",
 				  boot_init_ps2_controller, ps2_boot);
 	driver_bootstrap_register(DRIVER_BOOT_STAGE_INPUT, "ps2_keyboard",
