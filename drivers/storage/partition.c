@@ -104,7 +104,14 @@ int read_partition_table(uint8_t disk_id)
 {
     uint8_t sector[512];
     const char *disk_name = ir0_block_legacy_name(disk_id);
-    if (!disk_name || !ir0_block_name_is_present(disk_name))
+    dev_t dev;
+
+    if (!disk_name)
+    {
+        return -1;
+    }
+    dev = ir0_block_lookup_by_name(disk_name);
+    if (!ir0_block_is_present(dev))
     {
         return -1;
     }
@@ -112,7 +119,7 @@ int read_partition_table(uint8_t disk_id)
     /**
      * Read first sector (MBR or GPT Protective MBR)
      */
-    if (ir0_block_read_by_name(disk_name, 0, 1, sector) != 0)
+    if (ir0_block_read(dev, 0, 1, sector) != 0)
     {
         return -1;
     }
@@ -179,12 +186,19 @@ static int read_gpt_header(uint8_t disk_id, gpt_header_t *header)
 {
     uint8_t sector[512];
     const char *disk_name = ir0_block_legacy_name(disk_id);
-    if (!disk_name || !ir0_block_name_is_present(disk_name))
+    dev_t dev;
+
+    if (!disk_name)
+    {
+        return -1;
+    }
+    dev = ir0_block_lookup_by_name(disk_name);
+    if (!ir0_block_is_present(dev))
     {
         return -1;
     }
 
-    if (ir0_block_read_by_name(disk_name, 1, 1, sector) != 0)
+    if (ir0_block_read(dev, 1, 1, sector) != 0)
     {
         return -1;
     }
@@ -214,7 +228,14 @@ static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header)
 {
     uint8_t buffer[512];
     const char *disk_name = ir0_block_legacy_name(disk_id);
-    if (!disk_name || !ir0_block_name_is_present(disk_name))
+    dev_t dev;
+
+    if (!disk_name)
+    {
+        return -1;
+    }
+    dev = ir0_block_lookup_by_name(disk_name);
+    if (!ir0_block_is_present(dev))
     {
         return -1;
     }
@@ -223,7 +244,7 @@ static int read_gpt_partitions(uint8_t disk_id, const gpt_header_t *header)
 
     for (uint32_t i = 0; i < sectors_to_read; i++)
     {
-        if (ir0_block_read_by_name(disk_name, (uint32_t)(header->partition_entry_lba + i), 1, buffer) != 0)
+        if (ir0_block_read(dev, (uint32_t)(header->partition_entry_lba + i), 1, buffer) != 0)
         {
             return -1;
         }
