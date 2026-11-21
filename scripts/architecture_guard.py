@@ -77,6 +77,14 @@ Checks:
 33) Every file in Documentation/ai_driven_dev/rules/ has a "### <file name>"
     section in rules-digest.md and every section names an existing rule
     file. No ledger; injected-violation self-test.
+34) Scheduler policies share one private contract. A sched/*.c other than
+    core.c, idle.c and trace.c that defines sched_pick_next also defines
+    sched_add, sched_remove, sched_promote, sched_count_runnable,
+    sched_pick_next, sched_policy_name and sched_selftest; it does not
+    define schedule or sched_switch_to, and it does not include rr.c,
+    prio.c, cfs.c or idle.c. includes/ir0/sched.h keeps the public set
+    and does not declare sched_pick_next. No ledger; injected-violation
+    self-test.
 """
 
 from functools import lru_cache
@@ -4070,6 +4078,169 @@ def check_userspace_agnostic():
     return errors
 
 
+
+# A policy is any sched/*.c other than the core, the idle loop and the
+# trace hook that defines sched_pick_next. Every policy implements the same
+# private contract; schedule() and the context switch stay in sched/core.c.
+# sched_pick_next() is declared in sched/core.h, not in the public facade.
+# A future sched/cfs.c is covered once it defines sched_pick_next. No ledger.
+SCHED_POLICY_SKIP = frozenset({"core.c", "idle.c", "trace.c"})
+SCHED_POLICY_REQUIRED = (
+    "sched_add",
+    "sched_remove",
+    "sched_promote",
+    "sched_count_runnable",
+    "sched_pick_next",
+    "sched_policy_name",
+    "sched_selftest",
+)
+SCHED_POLICY_CORE_ONLY = ("schedule", "sched_switch_to")
+SCHED_POLICY_INCLUDES = frozenset({"rr.c", "prio.c", "cfs.c", "idle.c"})
+SCHED_PUBLIC_DECLS = (
+    "schedule",
+    "sched_switch_to",
+    "sched_take_resched",
+    "sched_add",
+    "sched_remove",
+    "sched_promote",
+    "sched_count_runnable",
+    "sched_policy_name",
+    "sched_selftest",
+)
+
+
+def _sched_source(text: str) -> str:
+    """Blank comments and strings, keeping line numbers."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    return _C_STRING_RE.sub('""', text)
+
+
+def _sched_definitions(text: str) -> dict[str, int]:
+    """First definition line of each function in one translation unit."""
+    code = _sched_source(text)
+    found: dict[str, int] = {}
+    for match in _C_DEFINITION_RE.finditer(code):
+        name = match.group(1)
+        if name not in found:
+            found[name] = code.count("\n", 0, match.start()) + 1
+    return found
+
+
+def sched_policy_errors(sched_dir: Path) -> list[str]:
+    """Policy files directly under @sched_dir that break the contract."""
+    if not sched_dir.is_dir():
+        return []
+    errors = []
+    for path in sorted(sched_dir.glob("*.c")):
+        if path.name in SCHED_POLICY_SKIP:
+            continue
+        source = path.read_text(encoding="utf-8", errors="replace")
+        defined = _sched_definitions(source)
+        if "sched_pick_next" not in defined:
+            continue
+        rel = f"sched/{path.name}"
+        for name in SCHED_POLICY_REQUIRED:
+            if name not in defined:
+                errors.append(
+                    f"[sched-policy] {rel}: does not define {name}")
+        for name in SCHED_POLICY_CORE_ONLY:
+            if name in defined:
+                errors.append(
+                    f"[sched-policy] {rel}:{defined[name]}: defines {name}; "
+                    "that stays in sched/core.c")
+        code = _sched_source(source)
+        for match in _DOMAIN_INCLUDE_RE.finditer(code):
+            header = match.group(1)
+            base = header.replace("\\", "/").rsplit("/", 1)[-1]
+            if base not in SCHED_POLICY_INCLUDES:
+                continue
+            lineno = code.count("\n", 0, match.start()) + 1
+            errors.append(
+                f"[sched-policy] {rel}:{lineno}: includes {header}; "
+                "a policy does not include another policy")
+    return errors
+
+
+def sched_facade_errors(text: str, rel: str) -> list[str]:
+    """The public facade keeps its declarations and not sched_pick_next."""
+    declared = _header_prototypes(text)
+    errors = []
+    for name in SCHED_PUBLIC_DECLS:
+        if name not in declared:
+            errors.append(
+                f"[sched-policy] {rel}: public facade does not declare "
+                f"{name}")
+    if "sched_pick_next" in declared:
+        errors.append(
+            f"[sched-policy] {rel}: declares sched_pick_next; "
+            "that prototype stays in sched/core.h")
+    return errors
+
+
+def _sched_policy_stub(names) -> str:
+    return "".join(f"void {name}(void)\n{{\n}}\n" for name in names)
+
+
+def _sched_policy_self_test() -> list[str]:
+    """Inject a policy that omits sched_promote and one that defines
+    schedule. Both must be reported, then the scratch files are removed."""
+    omit = _sched_policy_stub(
+        name for name in SCHED_POLICY_REQUIRED if name != "sched_promote")
+    takeover = _sched_policy_stub((*SCHED_POLICY_REQUIRED, "schedule"))
+    failures = []
+    got: list[str] = []
+    facade_got: list[str] = []
+    scratch: list[Path] = []
+    with tempfile.TemporaryDirectory(prefix="ir0-sched-policy-") as tmp:
+        sched = Path(tmp) / "sched"
+        sched.mkdir()
+        scratch = [sched / "omit_promote.c", sched / "defines_schedule.c"]
+        scratch[0].write_text(omit, encoding="utf-8")
+        scratch[1].write_text(takeover, encoding="utf-8")
+        got = sched_policy_errors(sched)
+        for path in scratch:
+            path.unlink()
+        facade_rel = "includes/ir0/sched.h"
+        facade_got = sched_facade_errors(
+            (ROOT / facade_rel).read_text(encoding="utf-8"), facade_rel)
+        live = sched_policy_errors(ROOT / "sched")
+    leftovers = [p.name for p in scratch if p.exists()]
+    if leftovers:
+        failures.append(
+            "[sched-policy] self-test: scratch files left behind: "
+            + ", ".join(leftovers))
+    if not any("omit_promote.c" in err and "sched_promote" in err
+               for err in got):
+        failures.append(
+            "[sched-policy] self-test: missed a policy that omits "
+            f"sched_promote ({got})")
+    if not any("defines_schedule.c" in err and "defines schedule" in err
+               for err in got):
+        failures.append(
+            "[sched-policy] self-test: missed a policy that defines "
+            f"schedule ({got})")
+    if live:
+        failures.append(
+            "[sched-policy] self-test: current policies reported "
+            f"{live}")
+    if facade_got:
+        failures.append(
+            "[sched-policy] self-test: public facade reported "
+            f"{facade_got}")
+    return failures
+
+
+def check_sched_policy_contract():
+    """Each scheduler policy implements the same private contract."""
+    errors = _sched_policy_self_test()
+    errors.extend(sched_policy_errors(ROOT / "sched"))
+    facade = ROOT / "includes" / "ir0" / "sched.h"
+    errors.extend(sched_facade_errors(
+        read_file_text(facade), "includes/ir0/sched.h"))
+    return errors
+
+
 # Debt ledgers: reviewed exceptions that only shrink. The SMP entry gate
 # (scripts/smp_entry_gate.py) needs every one of them empty. Files count
 # their non-comment lines; in-module ledgers count their entries.
@@ -4092,7 +4263,8 @@ def main():
                     _domain_isolation_self_test() +
                     _kernel_loose_self_test() +
                     _rules_digest_self_test() +
-                    _userspace_agnostic_self_test())
+                    _userspace_agnostic_self_test() +
+                    _sched_policy_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -4102,7 +4274,7 @@ def main():
               "portable-no-register-names, uaccess-single-api, "
               "no-raw-atomics, undefined-prototype, legacy-pc-io, "
               "domain-isolation, kernel-loose-files, rules-digest, "
-              "userspace-agnostic)")
+              "userspace-agnostic, sched-policy)")
         return 0
 
     errors = []
@@ -4183,6 +4355,7 @@ def main():
     errors.extend(check_userspace_agnostic())
     errors.extend(check_kernel_loose_files())
     errors.extend(check_rules_digest())
+    errors.extend(check_sched_policy_contract())
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
