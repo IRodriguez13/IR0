@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <asm/elf.h>
 #include <ir0/task_ops.h>
 #include <ir0/sched.h>

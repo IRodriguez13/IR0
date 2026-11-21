@@ -1203,7 +1203,7 @@ def check_portable_no_isa_leak_literals():
 
 
 # Direct GPR / control-register fields on task.arch — portable code must use
-# includes/ir0/arch_task.h accessors (or arch_task_ops bulk helpers).
+# includes/ir0/task_access.h accessors (or arch_task_ops bulk helpers).
 PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
     r"(?:\.|->)arch\.(rax|rbx|rcx|rdx|rsi|rdi|rbp|rsp|r8|r9|r10|r11|r12|r13|r14|r15|"
     r"rip|rflags|cs|ss|ds|es|fs|gs|cr0|cr2|cr3|cr4|dr0|dr1|dr2|dr3|dr6|dr7|"
@@ -1211,7 +1211,7 @@ PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
 )
 
 PORTABLE_TASK_ARCH_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "arch_task.h",
+    ROOT / "includes" / "ir0" / "task_access.h",
     ROOT / "includes" / "ir0" / "arch_task_ops.h",
 }
 
@@ -2052,7 +2052,7 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/task.h": "#include <asm/task_context.h>",
         "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
         "includes/ir0/signals.h": "#include <asm/sigcontext.h>",
-        "includes/ir0/arch_task.h": "#include <asm/task_access.h>",
+        "includes/ir0/task_access.h": "#include <asm/task_access.h>",
         "includes/ir0/abi/vdso_contract.h": "#include <asm/vdso_contract.h>",
         "includes/ir0/abi/signal_contract.h":
             "#include <asm/signal_contract.h>",
@@ -3001,7 +3001,7 @@ def _isa_named_header_self_test() -> list[str]:
         "includes/uapi/ir0/syscall_aarch64.h": "aarch64",
         "includes/ir0/x86-64/io.h": "x86-64",
         "includes/ir0/syscall_frame.h": None,
-        "includes/ir0/arch_task.h": None,
+        "includes/ir0/task_access.h": None,
         "includes/uapi/asm-generic/posix_types.h": None,
         "includes/ir0/alarm.h": None,
         "arch/x86-64/include/asm/task_context.h": None,

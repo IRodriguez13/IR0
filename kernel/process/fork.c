@@ -17,7 +17,7 @@
 #include <ir0/clone.h>
 #include <ir0/fork.h>
 #include <ir0/process_limits.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <ir0/process_domains.h>
 #include <ir0/mm_struct.h>
 #include <ir0/files_struct.h>

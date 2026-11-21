@@ -15,7 +15,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/signal_irq.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <ir0/syscall_frame.h>
 #include <ir0/signals.h>
 #include <ir0/fpu_backend.h>
