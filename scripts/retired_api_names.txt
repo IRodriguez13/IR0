@@ -79,6 +79,20 @@ typewriter_get_mode (nothing; the mode is write-only)
 typewriter_is_enabled_for_commands (nothing)
 typewriter_print typewriter_print_char()
 typewriter_print_uint32 typewriter_print_char()
+typewriter_set_mode (nothing; the console never delays output)
+typewriter_console_clear vt_clear()
+typewriter_console_scroll vt_scroll()
+typewriter_cursor_x vt_cursor_x()
+typewriter_init vt_init()
+typewriter_putchar_attr vt_putchar_attr()
+typewriter_show_cursor vt_show_cursor()
+typewriter_vga_print vt_print()
+typewriter_vga_print_char vt_putchar()
+console_renderer_get_cursor_x vt_cursor_x()
+console_renderer_putchar vt_putchar()
+console_renderer_putchar_attr vt_putchar_attr()
+console_renderer_reset vt_clear()
+console_renderer_show_cursor vt_show_cursor()
 uint_to_hex snprintf("%lx")
 
 # Block devices: one facade, <ir0/blockdev.h> (ir0_block_*).
@@ -106,6 +120,9 @@ print_success print_colored(VGA_COLOR_GREEN)
 print_uint32 snprintf("%u") and print()
 print_uint64 snprintf("%lu") and print()
 print_warning print_colored(VGA_COLOR_YELLOW)
+
+# printk sinks (<ir0/printk_console.h>): klog writes to registered consoles.
+klog_set_screen_sink register_console() with CON_DUMP
 
 # Locks: one API, ir0_spin_lock_irqsave / ir0_spin_unlock_irqrestore on an
 # ir0_spinlock_t per protected structure (<ir0/spinlock.h>).

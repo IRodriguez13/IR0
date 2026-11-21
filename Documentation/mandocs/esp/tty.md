@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | drivers, syscalls, devfs |
 | Página man | IR0-tty (sección 7) |
-| Fuentes principales | `includes/ir0/console.c`, `includes/ir0/pty_devfs.h`, `drivers/tty/console_backend.c`, `fs/devfs.c`, `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/video/console_renderer.c` |
+| Fuentes principales | `includes/ir0/console.c`, `includes/ir0/pty_devfs.h`, `drivers/tty/console_backend.c`, `fs/devfs.c`, `arch/x86-64/sources/interrupt/keyboard.c`, `drivers/tty/vt/vt.c` |
 
 > **Última verificación:** 2026-09-18
 
@@ -31,7 +31,7 @@ de userspace principal.
 | devfs | `fs/devfs.c` | `/dev/console` (id 3), `/dev/tty` (4), multiplex PTY, alias stdio |
 | Facade PTY | `includes/ir0/pty_devfs.h` | `/dev/ptmx` (43), `/dev/pts/0..7` (48–55), `DEVFS_PTY_MAX=8` |
 | Teclado | `arch/x86-64/sources/interrupt/keyboard.c` | scancode → ASCII + eventos input |
-| Renderer | `drivers/video/console_renderer.c` | celdas 80×25, CSI/SGR, escala FB |
+| Renderer | `drivers/tty/vt/vt.c` | celdas 80×25, CSI/SGR, escala FB |
 | Syscalls | `kernel/syscalls/stdin.c` | lectura de stdin sin redirigir (`ir0_console_read`), despertar de lectores stdin/tty por teclado |
 
 **termios por defecto:** ICANON | ECHO | ECHOE | ISIG, ICRNL, OPOST|ONLCR, VMIN=1, VTIME=0.

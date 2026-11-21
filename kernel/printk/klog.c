@@ -21,9 +21,7 @@
 #include <ir0/ktm/klog.h>
 #include <ir0/klog_event.h>
 #include <ir0/kmem.h>
-#include <ir0/serial_io.h>
-#include <ir0/console_backend.h>
-#include <ir0/typewriter.h>
+#include <ir0/printk_console.h>
 
 static klog_level_t g_klog_level = KLOG_LEVEL_INFO;
 static klog_profile_t g_klog_profile = KLOG_PROFILE_NORMAL;
@@ -107,16 +105,16 @@ static const char *klog_level_string(klog_level_t level)
 	}
 }
 
+/*
+ * Every line goes to CON_RECORDS consoles (serial). Screens take only the
+ * CON_MIRROR subset from klog_event(): mirroring every record through UI paths
+ * duplicated lines on -serial stdio smokes.
+ */
 static void klog_write_raw(const char *str)
 {
-	/*
-	 * Serial only. Mirroring to console_backend here re-enters UI paths and
-	 * duplicated every line on -serial stdio smokes. Screen output stays on
-	 * console_puts/typewriter; use kprintf only as the log channel.
-	 */
 	if (!str || g_boot_hold)
 		return;
-	serial_print(str);
+	console_write(CON_RECORDS, str);
 }
 
 static int klog_should_mirror_screen(const klog_record_t *record)
@@ -208,21 +206,8 @@ static size_t klog_render_record(const klog_record_t *record, char *line,
 	return off;
 }
 
-/*
- * Optional screen sink for the panic dump. klog_* is serial-only by design;
- * during a panic oops.c installs print_screen_only here so the same text also
- * reaches the FB/GTK console. NULL in normal operation (no extra work, no
- * ktm→vga coupling: the sink is a plain callback owned by the caller).
- */
-static void (*g_klog_screen_sink)(const char *);
-
-void klog_set_screen_sink(void (*sink)(const char *))
-{
-	g_klog_screen_sink = sink;
-}
-
 /* Fixed-width uppercase hex, matching serial_print_hex32/64 (no 0x prefix). */
-static void klog_screen_hex(uint64_t num, int nibbles)
+static void klog_dump_hex(uint64_t num, int nibbles)
 {
 	static const char hex[] = "0123456789ABCDEF";
 	char buf[17];
@@ -236,28 +221,22 @@ static void klog_screen_hex(uint64_t num, int nibbles)
 		num >>= 4;
 	}
 	buf[nibbles] = '\0';
-	g_klog_screen_sink(buf);
+	console_write(CON_DUMP, buf);
 }
 
 void klog_print(const char *str)
 {
-	serial_print(str);
-	if (g_klog_screen_sink)
-		g_klog_screen_sink(str);
+	console_write(CON_DUMP, str);
 }
 
 void klog_hex32(uint32_t num)
 {
-	serial_print_hex32(num);
-	if (g_klog_screen_sink)
-		klog_screen_hex(num, 8);
+	klog_dump_hex(num, 8);
 }
 
 void klog_hex64(uint64_t num)
 {
-	serial_print_hex64(num);
-	if (g_klog_screen_sink)
-		klog_screen_hex(num, 16);
+	klog_dump_hex(num, 16);
 }
 
 void klog_set_level(klog_level_t level)
@@ -441,9 +420,8 @@ void klog_event(uint32_t event_id, uint16_t subsystem, uint8_t severity,
 				     message);
 	(void)klog_render_record(record, line, sizeof(line));
 	klog_write_raw(line);
-	if (!g_boot_hold && console_backend_printk_to_screen() &&
-	    klog_should_mirror_screen(record))
-		typewriter_vga_print(line, 0x07);
+	if (!g_boot_hold && klog_should_mirror_screen(record))
+		console_write(CON_MIRROR, line);
 
 	if (g_protocol_mirror)
 		g_protocol_mirror(level, component, message);

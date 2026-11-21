@@ -517,6 +517,7 @@ KERNEL_OBJS = \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
     kernel/printk/klog.o \
+    kernel/printk/console.o \
 	sched/core.o \
     sched/idle.o \
     sched/switch/context_switch.o \
@@ -667,6 +668,7 @@ LIB_OBJS = \
     kernel/sys/utsname.o \
     kernel/boot/version_stamp.o \
     drivers/tty/console.o \
+    drivers/tty/tty_mirror.o \
     drivers/tty/tty_smoke.o \
     drivers/video/fb.o \
     drivers/input/input.o \
@@ -707,8 +709,8 @@ DRIVER_OBJS = \
 	drivers/video/console.o \
 	drivers/video/console_font.o \
 	drivers/video/font_terminus_14x28.o \
-	drivers/video/console_renderer.o \
-	drivers/video/typewriter.o \
+	drivers/video/textcon.o \
+	drivers/tty/vt/vt.o \
 	drivers/init_drv.o \
 	drivers/virtio/virtio_9p.o \
 	$(MULTILANG_DRIVER_SUPPORT_OBJ)
@@ -798,7 +800,7 @@ endif
 
 # VBE framebuffer (VGA text console is always compiled)
 ifneq ($(CONFIG_ENABLE_VBE),n)
-VBE_OBJS = drivers/video/vbe.o
+VBE_OBJS = drivers/video/vbe.o drivers/video/fbcon.o
 else
 VBE_OBJS =
 endif

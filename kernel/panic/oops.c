@@ -395,7 +395,6 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
      * off a 25-row (or scaled) console.
      */
     console_backend_panic_screen_on();
-    klog_set_screen_sink(NULL);
 
     /* Dump comprehensive panic information to serial port first.
      * Serial output is structured for easy parsing and can be copied
