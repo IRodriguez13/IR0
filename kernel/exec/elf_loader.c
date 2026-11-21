@@ -37,6 +37,7 @@
 #include <ir0/context.h>
 #include <ir0/chmod.h>
 #include <ir0/cred.h>
+#include <ir0/sysv_shm.h>
 #include <ir0/path_routed.h>
 #include <config.h>
 #include <ir0/ktm/fault.h>
@@ -1961,6 +1962,12 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     }
 
     process_exec_close_cloexec(proc);
+
+    /*
+     * Old image is still mapped. Drop this task's shm attaches before
+     * the address space is discarded. A failed exec returns above this.
+     */
+    sysv_shm_detach_process(proc);
 
     {
         size_t used_after_unmap = 0;

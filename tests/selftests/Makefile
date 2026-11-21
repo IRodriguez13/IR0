@@ -498,3 +498,21 @@ $(SYSFS_CPU_BIN): $(SYSFS_CPU_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SYSFS_CPU_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SHM-EXIT-SELFTEST
+SHM_EXIT_SRC := syscall/shm_exit.c
+SHM_EXIT_BIN := $(BUILD_DIR)/shm_exit
+
+.PHONY: shm_exit
+
+shm_exit: $(SHM_EXIT_BIN)
+
+$(SHM_EXIT_BIN): $(SHM_EXIT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_exit"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_EXIT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
