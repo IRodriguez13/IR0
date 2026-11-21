@@ -168,7 +168,7 @@ void boot_drivers_init(void)
 void boot_rootfs_init(void)
 {
 	klog_set_boot_phase(KLOG_BOOT_STORAGE);
-	if (!ir0_block_name_is_present(CONFIG_ROOT_BLOCK_DEVICE))
+	if (!ir0_block_lookup_by_name(CONFIG_ROOT_BLOCK_DEVICE))
 	{
 		log_warn("BOOT", "Configured root block device not detected");
 		log_warn("BOOT", "Filesystem initialization may fail");

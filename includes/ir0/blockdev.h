@@ -59,18 +59,6 @@ dev_t ir0_block_dev_at(int index);
 /** Map legacy ATA-style disk_id 0..3 → "hda"/"hdb"/"hdc"/"hdd". */
 const char *ir0_block_legacy_name(uint8_t disk_id);
 
-/*
- * Name wrappers for callers that still pass a device name. Each one calls
- * ir0_block_lookup_by_name() and then the handle operation. Read, write and
- * size on a handle do not look up a name.
- */
-int ir0_block_name_is_present(const char *name);
-uint64_t ir0_block_sector_count_by_name(const char *name);
-int ir0_block_read_by_name(const char *name, uint64_t lba, uint32_t count,
-			   void *buf);
-int ir0_block_write_by_name(const char *name, uint64_t lba, uint32_t count,
-			    const void *buf);
-
 #ifdef TEST_HOST
 /* Host-only: clear registry between unit tests. */
 void ir0_block_reset_for_test(void);
