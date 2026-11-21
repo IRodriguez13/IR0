@@ -13,7 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "exc_early.h"
-#include "pl011.h"
+#include <drivers/tty/pl011.h>
 #include "irq_backend.h"
 #include <ir0/irq.h>
 #include "timer.h"

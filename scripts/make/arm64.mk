@@ -91,12 +91,12 @@ ARM64_SLICE_OBJS = \
 	arch/arm64/sources/fdt_reader.o \
 	arch/arm64/sources/boot_info_platform.o \
 	arch/arm64/sources/boot_info_devices.o \
-	arch/arm64/sources/pl011.o \
-	arch/arm64/sources/serial.o
+	drivers/tty/pl011.o \
+	drivers/tty/arm_serial.o
 ARM64_PORTABLE_OBJS = \
 	$(ARM64_SLICE_OBJS) \
-	arch/arm64/sources/gic_v2.o \
-	arch/arm64/sources/bcm2836_irq.o \
+	drivers/irq/gic_v2.o \
+	drivers/irq/bcm2836_irq.o \
 	arch/arm64/sources/irq_backend.o \
 	arch/arm64/sources/irq.o \
 	arch/arm64/sources/interrupts.o \

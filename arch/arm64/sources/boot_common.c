@@ -12,9 +12,9 @@
 #include <ir0/boot_params.h>
 #include "mmu.h"
 #include "exc_early.h"
-#include "pl011.h"
+#include <drivers/tty/pl011.h>
 #include "timer.h"
-#include "gic_v2.h"
+#include <drivers/irq/gic_v2.h>
 #include "irq_backend.h"
 #include "virtio_blk_early.h"
 

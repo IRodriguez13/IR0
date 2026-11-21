@@ -875,7 +875,7 @@ def check_klog_serial_print_allowlist():
         "drivers/serial/serial.c",
         "drivers/serial/serial.h",
         "includes/ir0/serial_io.h",
-        "arch/arm64/sources/serial.c",
+        "drivers/tty/arm_serial.c",
         "tests/host/host_serial_stub.c",
     }
     serial_re = re.compile(r"\bserial_print\s*\(")

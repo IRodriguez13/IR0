@@ -2,8 +2,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "irq_backend.h"
-#include "gic_v2.h"
-#include "bcm2836_irq.h"
+#include <drivers/irq/gic_v2.h>
+#include <drivers/irq/bcm2836_irq.h>
 
 struct arm64_irq_ops
 {
