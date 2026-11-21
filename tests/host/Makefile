@@ -79,7 +79,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_usb_host_disabled.o \
 	host_sysfs_net_stub.o host_sysfs_honesty_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
-	host_ps2_set1.o host_ps2_mouse_pkt.o \
+	host_ps2_set1.o host_keymap.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
 KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o \
 	host_alloc_policy.o host_no_mmu.o
@@ -310,6 +310,9 @@ host_arch_mm_stub.o: host_arch_mm_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
 host_ps2_set1.o: $(KERNEL_ROOT)/drivers/input/ps2_set1.c
+	$(KERNEL_CC)
+
+host_keymap.o: $(KERNEL_ROOT)/drivers/input/keymap.c
 	$(KERNEL_CC)
 
 host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/drivers/input/ps2_mouse_pkt.c

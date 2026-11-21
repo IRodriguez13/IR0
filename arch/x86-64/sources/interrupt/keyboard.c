@@ -27,6 +27,7 @@
 #include <ir0/cmdline.h>
 #include <ir0/console.h>
 #include <ir0/ps2_set1.h>
+#include <ir0/keymap.h>
 #include <kernel/syscalls/syscalls.h>
 #include <asm/io.h>
 
@@ -129,15 +130,12 @@ static void kbd_dbg_trace(const struct ps2_set1_result *r)
 
 int keyboard_set_layout(int layout)
 {
-	if (layout != KEYBOARD_LAYOUT_US && layout != KEYBOARD_LAYOUT_LATAM)
-		return -EINVAL;
-	kbd_state.layout = layout;
-	return 0;
+	return keymap_load_layout(layout);
 }
 
 int keyboard_get_layout(void)
 {
-	return kbd_state.layout;
+	return keymap_get_layout();
 }
 
 const char *keyboard_get_layout_name(int layout)
@@ -447,10 +445,6 @@ void keyboard_init(void)
 	keyboard_buffer_head = 0;
 	keyboard_buffer_tail = 0;
 	ps2_set1_reset(&kbd_state);
-	if (CONFIG_KEYBOARD_LAYOUT == KEYBOARD_LAYOUT_LATAM)
-		kbd_state.layout = KEYBOARD_LAYOUT_LATAM;
-	else
-		kbd_state.layout = KEYBOARD_LAYOUT_US;
 }
 
 void set_idle_mode(int is_idle)
