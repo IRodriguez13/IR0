@@ -450,13 +450,30 @@ static int map_device_blocks(address_space_root_t root, unsigned first)
 	return 0;
 }
 
+/*
+ * The kernel image and heap stay identity-mapped in TTBR0. The rest of DRAM
+ * is reached through the TTBR1 direct map, so user mmap can use those
+ * addresses.
+ */
+static uint64_t supervisor_ram_end(void)
+{
+	uint64_t end;
+
+	end = (uint64_t)mm_kernel_heap_start() + mm_kernel_heap_size();
+	if (end < g_dram_base)
+		end = g_dram_base;
+	if (end > g_dram_end)
+		end = g_dram_end;
+	return end;
+}
+
 int arm64_mmu_map_supervisor(address_space_root_t root)
 {
 	if (!root || !g_mmu_on)
 		return -EINVAL;
 	if (g_device_count_at_first_root < 0)
 		g_device_count_at_first_root = (int)g_device_count;
-	if (map_supervisor_identity_2mb(root, g_dram_base, g_dram_end) != 0)
+	if (map_supervisor_identity_2mb(root, g_dram_base, supervisor_ram_end()) != 0)
 		return -ENOMEM;
 	return map_device_blocks(root, 0);
 }
@@ -464,8 +481,10 @@ int arm64_mmu_map_supervisor(address_space_root_t root)
 int arm64_mmu_supervisor_overlaps(uintptr_t va, size_t size)
 {
 	unsigned i;
+	uint64_t ram_end;
 
-	if (mm_range_overlaps(va, size, g_dram_base, g_dram_end - g_dram_base))
+	ram_end = supervisor_ram_end();
+	if (mm_range_overlaps(va, size, g_dram_base, ram_end - g_dram_base))
 		return 1;
 	for (i = 0; i < g_device_count; i++)
 	{
