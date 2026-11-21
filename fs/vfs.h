@@ -72,6 +72,13 @@ struct vfs_mount {
 
 int vfs_remount(const char *path, unsigned long flags);
 
+/*
+ * Kernel-internal bind mount: make @target show the tree that @source names
+ * on the filesystem holding it now (same fs, dev and flags, plus
+ * IR0_MS_BIND). Unmounting it leaves that filesystem mounted.
+ */
+int vfs_bind_mount(const char *source, const char *target);
+
 /* Directory entry returned by vfs_readdir */
 struct vfs_dirent {
     char name[VFS_PATH_MAX];

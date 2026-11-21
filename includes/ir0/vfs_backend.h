@@ -51,6 +51,11 @@ struct vfs_ops {
 	int (*chmod)(const char *path, mode_t mode);
 	int (*readdir)(const char *path, struct vfs_dirent *entries, int max);
 	/*
+	 * Optional open(2) check, called by vfs_open() after the permission
+	 * checks with the IR0_O_* flags; a negative errno fails the open.
+	 */
+	int (*open)(const char *path, int flags);
+	/*
 	 * Offset-aware read (POSIX pread semantics at backend level).
 	 * offset >= file size: *bytes_read = 0, return 0 (EOF).
 	 * offset < 0: -EINVAL.
