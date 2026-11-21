@@ -42,6 +42,8 @@ typedef struct proc_fs_snap
 	uint32_t egid;
 	uint32_t suid;
 	uint32_t sgid;
+	gid_t groups[IR0_NGROUPS_MAX];
+	uint8_t ngroups;
 	int oom_score_adj;
 	char *cmdline_copy;
 	size_t cmdline_len;
@@ -129,6 +131,19 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->egid = proc->egid;
 	snap->suid = proc->suid;
 	snap->sgid = proc->sgid;
+	snap->ngroups = proc->ngroups;
+	if (snap->ngroups > IR0_NGROUPS_MAX)
+	{
+		snap->ngroups = IR0_NGROUPS_MAX;
+	}
+	{
+		unsigned int gi;
+
+		for (gi = 0; gi < snap->ngroups; gi++)
+		{
+			snap->groups[gi] = proc->groups[gi];
+		}
+	}
 	snap->oom_score_adj = process_oom_score_adj_get(proc);
 	snap->cmdline_copy = NULL;
 	snap->cmdline_len = 0;
@@ -536,6 +551,9 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	const struct mmap_region *region;
 	uint64_t vsize = 0;
 	uint64_t rss_kb = 0;
+	char groups_line[sizeof("Groups:\t") + IR0_NGROUPS_MAX * 11 + 1];
+	int groups_len;
+	int gi;
 	int len;
 
 	if (!buf || count == 0)
@@ -572,6 +590,40 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		rss_kb = mm_count_resident_user_pages(snap.mm) *
 			 ((uint64_t)IR0_MM_PAGE_SIZE / 1024ULL);
 
+	groups_len = snprintf(groups_line, sizeof(groups_line), "Groups:\t");
+	if (groups_len < 0 || (size_t)groups_len >= sizeof(groups_line))
+	{
+		groups_line[0] = '\0';
+	}
+	else
+	{
+		for (gi = 0; gi < (int)snap.ngroups; gi++)
+		{
+			int wrote;
+
+			if ((size_t)groups_len >= sizeof(groups_line))
+			{
+				break;
+			}
+			wrote = snprintf(groups_line + groups_len,
+					 sizeof(groups_line) - (size_t)groups_len,
+					 "%s%u",
+					 gi ? " " : "",
+					 (unsigned int)snap.groups[gi]);
+			if (wrote < 0 ||
+			    (size_t)groups_len + (size_t)wrote >= sizeof(groups_line))
+			{
+				break;
+			}
+			groups_len += wrote;
+		}
+		if ((size_t)groups_len + 1 < sizeof(groups_line))
+		{
+			groups_line[groups_len] = '\n';
+			groups_line[groups_len + 1] = '\0';
+		}
+	}
+
 	/* TracerPid stays 0: there is no ptrace attach. */
 	len = snprintf(buf, count,
 		       "Name:\t%s\n"
@@ -581,6 +633,7 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       "TracerPid:\t0\n"
 		       "Uid:\t%d\t%d\t%d\t%d\n"
 		       "Gid:\t%d\t%d\t%d\t%d\n"
+		       "%s"
 		       "FDSize:\t%d\n"
 		       "Threads:\t%d\n"
 		       "NoNewPrivs:\t%d\n"
@@ -598,6 +651,7 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.uid,
 		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
 		       (int)snap.gid,
+		       groups_line,
 		       snap.fd_size, snap.threads, snap.no_new_privs,
 		       snap.umask,
 		       (unsigned long long)(snap.sig_pending >> 1),
