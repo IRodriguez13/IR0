@@ -168,6 +168,16 @@ void smp_mb(void)
 	__asm__ volatile("mfence" ::: "memory");
 }
 
+void mb(void)
+{
+	__asm__ volatile("mfence" ::: "memory");
+}
+
+void cpu_sync(void)
+{
+	__asm__ volatile("" ::: "memory");
+}
+
 uint64_t rdmsr(uint32_t msr)
 {
 	uint32_t lo, hi;

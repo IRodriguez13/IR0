@@ -14,6 +14,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/cpu.h>
 #include "gic_v2.h"
 
 #include <stdint.h>
@@ -62,8 +63,8 @@ int arm64_gic_v2_init(void)
 	GICC_REG32(0x000UL) = GICC_CTLR_ENABLE;
 	GICD_REG32(0x000UL) = GICD_CTLR_ENABLE;
 
-	__asm__ volatile("dsb sy" ::: "memory");
-	__asm__ volatile("isb" ::: "memory");
+	mb();
+	cpu_sync();
 	g_gic_inited = 1;
 	return 0;
 }
@@ -93,8 +94,8 @@ int arm64_gic_v2_enable(uint32_t irq)
 	GICD_REG32_PTR(0x280UL)[irq / 32U] = bit;
 	GICD_REG32_PTR(0x100UL)[irq / 32U] = bit;
 
-	__asm__ volatile("dsb sy" ::: "memory");
-	__asm__ volatile("isb" ::: "memory");
+	mb();
+	cpu_sync();
 	return 0;
 }
 
@@ -106,5 +107,5 @@ uint32_t arm64_gic_v2_ack(void)
 void arm64_gic_v2_eoi(uint32_t irq)
 {
 	GICC_REG32(0x010UL) = irq;
-	__asm__ volatile("dsb sy" ::: "memory");
+	mb();
 }

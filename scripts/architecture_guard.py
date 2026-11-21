@@ -163,10 +163,10 @@ REQUIRED_FACADES = [
 REQUIRED_ARM64_SCAFFOLD = [
     ROOT / "arch" / "arm64" / "linker.ld",
     ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
-    ROOT / "arch" / "arm64" / "sources" / "pl011.c",
-    ROOT / "arch" / "arm64" / "sources" / "serial.c",
+    ROOT / "drivers" / "tty" / "pl011.c",
+    ROOT / "drivers" / "tty" / "arm_serial.c",
     ROOT / "arch" / "arm64" / "sources" / "mm_ops.c",
-    ROOT / "arch" / "arm64" / "sources" / "gic_v2.c",
+    ROOT / "drivers" / "irq" / "gic_v2.c",
     ROOT / "arch" / "arm64" / "sources" / "timer.c",
     ROOT / "arch" / "arm64" / "asm" / "entry" / "vectors.S",
     ROOT / "arch" / "arm64" / "sources" / "early.c",

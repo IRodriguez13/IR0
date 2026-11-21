@@ -68,6 +68,16 @@ void smp_mb(void)
 	__asm__ volatile("dsb ish" ::: "memory");
 }
 
+void mb(void)
+{
+	__asm__ volatile("dsb sy" ::: "memory");
+}
+
+void cpu_sync(void)
+{
+	__asm__ volatile("isb" ::: "memory");
+}
+
 void cpu_wait(void)
 {
 	__asm__ volatile("wfi" ::: "memory");
