@@ -2115,6 +2115,7 @@ def check_portable_code_has_no_private_asm_headers():
             "#include <asm/signal_contract.h>",
         "includes/ir0/cacheflush.h": "#include <asm/cacheflush.h>",
         "includes/ir0/atomic.h": "#include <asm/atomic.h>",
+        "includes/ir0/page.h": "#include <asm/page.h>",
         "includes/ir0/stat_user.h": "#include <asm/stat.h>",
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
         "includes/ir0/kexec.h": "#include <asm/kexec.h>",

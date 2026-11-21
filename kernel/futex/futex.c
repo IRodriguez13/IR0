@@ -17,7 +17,6 @@
 
 #include <ir0/clock.h>
 #include <ir0/futex.h>
-#include <ir0/clock.h>
 #include <ir0/clock_wait.h>
 #include <ir0/copy_user.h>
 #include <ir0/paging.h>
