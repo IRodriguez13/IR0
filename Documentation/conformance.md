@@ -223,11 +223,11 @@ in its group, so it cannot hide the others.
 | F5 | getdents64 | dir_getdents64 / fs_getdents64_lists_dot_entries | lists `.` and `..` | omitted | both | kernel/syscalls/fs_dirent.c `sys_getdents64` |
 | F6 | symlinkat + fstatat NOFOLLOW | stat_symlink / fs_lstat_symlink | S_ISLNK | ENOENT | both | kernel/syscalls/fs_meta.c `sys_symlinkat`, `sys_newfstatat` |
 | F7 | getcwd | dir_chdir_getcwd / fs_getcwd_counts_nul | returns strlen+1 | strlen | both | kernel/syscalls/fs_path_syscalls.c:690 `sys_getcwd` |
-| F8 | execve | proc_exec_errors / fs_execve_non_executable_eacces | file without x bit → EACCES | ENOENT | both | kernel/syscalls/process_syscalls.c `sys_execveat` |
+| F8 | execve | proc_exec_errors / fs_execve_non_executable_eacces | file without x bit → EACCES | ENOENT | both | fs/exec.c `sys_execveat` |
 | F9 | fstat / fstatat | stat_fstat_regular, stat_umask, stat_fifo_and_dir, dir_openat_dirfd / fs_stat_layout_matches_isa | asm-generic `struct stat` on arm64 | x86_64 layout (mode reads as nlink) | arm64 | includes/ir0/stat.h (one layout for both ISAs) |
 | F10 | openat, newfstatat | fs_open_errors, stat_empty_path / fs_file_component_enotdir | regular file as a path component → ENOTDIR | ENOENT | both | fs/vfs_namei.c `vfs_stat`, fs/vfs_file.c `vfs_open` |
 | F11 | unlinkat AT_REMOVEDIR | dir_mkdir_rmdir / fs_rmdir_nonempty_enotempty | non-empty → ENOTEMPTY | tree removed | both | kernel/syscalls/fs_meta.c `sys_unlinkat` |
-| F12 | execve | — / fs_execve_long_arg, fs_execve_e2big | strings up to MAX_ARG_STRLEN; overflow → E2BIG | 256-byte copies, EFAULT | both | kernel/syscalls/process_syscalls.c `sys_exec` |
+| F12 | execve | — / fs_execve_long_arg, fs_execve_e2big | strings up to MAX_ARG_STRLEN; overflow → E2BIG | 256-byte copies, EFAULT | both | fs/exec.c `sys_exec` |
 | F13 | openat O_NOFOLLOW | stat_symlink / fs_open_nofollow_eloop | symlink → ELOOP | opens the target | both | kernel/syscalls/fs_syscalls.c `sys_open_vfs_resolved` |
 | F14 | openat O_DIRECTORY | fs_open_errors / fs_open_directory_on_file_enotdir | arm64 values (040000) → ENOTDIR | x86_64 values, flag lost | arm64 | includes/ir0/open_flags.h |
 | F15 | unlinkat, openat on a directory | fs_open_errors, dir_mkdir_rmdir / fs_unlink_dir_eisdir, fs_open_dir_for_write_eisdir | EISDIR | tree removed / fd / replaced by a file | both | kernel/syscalls/fs_meta.c, fs/vfs_file.c |
