@@ -58,7 +58,7 @@ Criterio del mantenedor para todo el kernel. Complementa
   | `kernel/exec/` | carga de ELF, pila de entrada, vDSO, caché environ/cmdline de exec |
   | `kernel/main.c` | `kmain()`: el orden de arranque de cada subsistema, una llamada por paso (único archivo suelto de `kernel/`, decisión Q11; lo hace cumplir `[kernel-loose-files]`) |
   | `kernel/boot/` | pasos de arranque que llama `kmain()`, parámetros, cmdline, rootfs base, handoff a init |
-  | `kernel/problems/` | BUG/OOPS, panic y descripción neutral de faults |
+  | `kernel/panic/` | BUG/OOPS, panic y descripción neutral de faults |
   | `kernel/irq/` | tabla portable de IRQs y trabajo al volver a usuario desde una IRQ |
   | `kernel/futex/` | colas de futex y sus syscalls (robust list incluida) |
   | `kernel/time/`, `kernel/power/` | esperas de reloj y contadores; apagado y reboot |

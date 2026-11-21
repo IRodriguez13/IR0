@@ -313,7 +313,7 @@ conditionals:
 | `includes/ir0/signals.h:85` | `SIGNAL_DELIVER_LOG` default | | DELETE with the signals.c item |
 
 Clean (no conditionals): `sched/core.c`, `sched/core.h`, `sched/rr.c`,
-`sched/prio.c`, `sched/switch/*`, `kernel/problems/fault.c`, `kernel/signals/sigtramp.c`,
+`sched/prio.c`, `sched/switch/*`, `kernel/panic/fault.c`, `kernel/signals/sigtramp.c`,
 `kernel/process/signal_enter.c`, `saved_context.c`, `mm.c`, `mm_struct.c`,
 `idle.c`, `kernel/irq/irq_dispatch.c`, `mm/page_fault.c`, `page_fault_user.c`,
 `page_fault_kernel.c`, `page_fault_cow.c`, `mm/paging.c`, `mm/copy_user.c`,
@@ -342,9 +342,9 @@ scanned (hardware register vocabulary, and HCI "rsp" = response).
 | `includes/ir0/task_ops.h:34` | `rax` param of `task_apply_syscall_frame` | `retval` |
 | `includes/ir0/process.h:591-594` | `fork_restore_emit_pre_iretq`, `fork_ret_first_syscall_entry(rax_hw, rip_hw, rsp_hw)`, `fork_flow_note_kernel_entry(rip_hw, ...)` | `fork_trace_before_user_return`, `(retval, ip, sp)`; these are arch hook prototypes and could move to an arch hook header |
 | `includes/ir0/arch_task.h:22-25` (+ `IR0_TASK_{GET,SET}_{CS,SS}`, `task_cs_is_user`) | x86 segment accessors in the portable task facade | move to an x86-private header; users are `arch/x86-64/*` and `ktm/ktm_ctx_snapshot.c`; `task_cs_is_user` -> `task_is_user_mode` |
-| `includes/ir0/fault.h:47`, `includes/ir0/page_fault.h:28`, `kernel/problems/fault.c:35`, `mm/page_fault_diag.c:31-77` | `code_seg` field ("x86 CS"), `fault_cs/fault_rip/fault_rsp` | drop `code_seg` from the neutral fault (arch `show_regs` hook prints it); `fault_ip/fault_sp` (mm diag branch is moving this file) |
+| `includes/ir0/fault.h:47`, `includes/ir0/page_fault.h:28`, `kernel/panic/fault.c:35`, `mm/page_fault_diag.c:31-77` | `code_seg` field ("x86 CS"), `fault_cs/fault_rip/fault_rsp` | drop `code_seg` from the neutral fault (arch `show_regs` hook prints it); `fault_ip/fault_sp` (mm diag branch is moving this file) |
 | `includes/ir0/process.h:116` | `fs_base` union member (x86 TLS register) | `arch_thread.tls_base` only (the comment already says so) |
-| `includes/ir0/oops.h:47`, `kernel/problems/oops.c:96` | `ir0_panic_fault_rsp()` | `panic_fault_sp()` |
+| `includes/ir0/oops.h:47`, `kernel/panic/oops.c:96` | `ir0_panic_fault_rsp()` | `panic_fault_sp()` |
 | `includes/ir0/signal_irq.h:59` | `new_rsp` param | `new_sp` |
 | `includes/ir0/ktm/stack_watch.h:20`, `ktm/stack_watch.c` | `ktm_stack_watch(uint64_t rsp)` | `sp` |
 | `kernel/signals/signals.c:58-70`, `:211`, `:999`, `:931-959` | `signal_rip_is_registered_handler(p, rip)`, `snap_rdi`, `snap_rsi` | `signal_ip_is_registered_handler(ip)`, `snap_arg0/1` |
@@ -374,7 +374,7 @@ frame patching (x86 "blocked syscall frame" model) and
 
 Clean: `sched/*`, `sched/switch/context_switch.c`, `kernel_resume.c` (go
 through `switch_trace()` in `sched/switch/diag.c`), `mm/page_fault.c`,
-`mm/page_fault_user.c`, `mm/paging.c`, `kernel/problems/fault.c`, `kernel/signals/sigtramp.c`,
+`mm/page_fault_user.c`, `mm/paging.c`, `kernel/panic/fault.c`, `kernel/signals/sigtramp.c`,
 `kernel/process/signal_enter.c`, `kernel/irq/irq_dispatch.c`.
 
 ---

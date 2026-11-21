@@ -2775,7 +2775,7 @@ def _register_name_self_test() -> list[str]:
 
 # Terminal halt: the only callers of cpu_halt() (Linux stop_this_cpu users).
 TERMINAL_HALT_CALLERS = frozenset((
-    "kernel/problems/oops.c",
+    "kernel/panic/oops.c",
     "kernel/kexec/kexec.c",
     "kernel/power/power_manag.c",
 ))
@@ -2824,7 +2824,7 @@ def _busy_wait_self_test() -> list[str]:
         "fs/relax.c": ("void f(void)\n{\n\twhile (busy)\n\t\tcpu_relax();\n}\n",
                        [4]),
         "net/halt.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", [3]),
-        "kernel/problems/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
+        "kernel/panic/oops.c": ("void f(void)\n{\n\tcpu_halt();\n}\n", []),
         "includes/ir0/cpu.h": ("void cpu_halt(void);\n", [1]),
         "kernel/boot.c": ("\tkernel_idle_poll();\n", [1]),
     }
