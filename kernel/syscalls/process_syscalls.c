@@ -15,7 +15,8 @@
 #include "process_syscalls.h"
 #include <string.h>
 #include <ir0/acpi_pm.h>
-#include <ir0/arch_port.h>
+#include <asm/pgtable.h>
+#include <ir0/tls.h>
 #include <ir0/clock.h>
 #include <ir0/clone.h>
 #include <ir0/copy_user.h>

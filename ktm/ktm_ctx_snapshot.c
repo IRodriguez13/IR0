@@ -14,7 +14,7 @@
 
 #include <ktm.h>
 #include <ir0/process.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <ir0/ktm/klog.h>
 
 void ktm_ctx_snapshot(const process_t *p, const char *reason)

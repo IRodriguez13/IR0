@@ -16,8 +16,6 @@
 #include <ir0/copy_user.h>
 #include <ir0/console.h>
 #include <ir0/paging.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_cpu.h>
 #include <ir0/console_backend.h>
 #include <ir0/cred.h>
 #include <ir0/tty_smoke.h>

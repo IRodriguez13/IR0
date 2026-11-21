@@ -12,9 +12,9 @@ Checks:
 6) mm/, net/, sched/: no #include <arch/...>.
 7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/blockdev.h.
 8) Paths outside drivers/bluetooth/ must not #include bluetooth/...
-9) drivers/: no #include <arch/...> (use ir0/arch_port.h).
+9) drivers/: no #include <arch/...> (use ir0/cpu.h, ir0/irq.h, or asm/pgtable.h).
 10) kernel/: no #include <drivers/...> (whole tree).
-11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
+11) kernel/: no #include <arch/common/arch_portable.h> (use the ir0 domain headers).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (smp_mb, inb, udelay, …).
@@ -131,7 +131,6 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "driver_bootstrap.h",
     ROOT / "includes" / "ir0" / "blockdev.h",
     ROOT / "includes" / "ir0" / "partition.h",
-    ROOT / "includes" / "ir0" / "arch_port.h",
     ROOT / "includes" / "ir0" / "mm_port.h",
     ROOT / "includes" / "ir0" / "clock.h",
     ROOT / "includes" / "ir0" / "rtc.h",
@@ -151,12 +150,12 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "ktm" / "ktm.h",
     ROOT / "includes" / "ir0" / "irq.h",
     ROOT / "includes" / "ir0" / "context_backend.h",
-    ROOT / "includes" / "ir0" / "arch_mm.h",
+    ROOT / "includes" / "asm-generic" / "pgtable.h",
     ROOT / "includes" / "ir0" / "task_ops.h",
     ROOT / "includes" / "ir0" / "fork.h",
     ROOT / "includes" / "ir0" / "page_fault.h",
     ROOT / "includes" / "ir0" / "signal_irq.h",
-    ROOT / "includes" / "ir0" / "arch_elf.h",
+    ROOT / "includes" / "asm-generic" / "elf.h",
     ROOT / "includes" / "ir0" / "syscall_frame.h",
 ]
 
@@ -185,7 +184,7 @@ INTERRUPT_ARCH_INCLUDE_RE = re.compile(
 # fs/ pseudo-VFS layers must route CPU/HW probes through ir0/*.h wrappers.
 FS_DIRECT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
 
-# mm/ and net/ must not pull arch headers directly — use ir0/arch_port.h, etc.
+# mm/ and net/ must not pull arch headers directly — use ir0/cpu.h, asm/pgtable.h, etc.
 PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s*[<"]arch/'
 )
@@ -1203,7 +1202,7 @@ def check_portable_no_isa_leak_literals():
 
 
 # Direct GPR / control-register fields on task.arch — portable code must use
-# includes/ir0/arch_task.h accessors (or arch_task_ops bulk helpers).
+# includes/ir0/task_access.h accessors (or arch_task_ops bulk helpers).
 PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
     r"(?:\.|->)arch\.(rax|rbx|rcx|rdx|rsi|rdi|rbp|rsp|r8|r9|r10|r11|r12|r13|r14|r15|"
     r"rip|rflags|cs|ss|ds|es|fs|gs|cr0|cr2|cr3|cr4|dr0|dr1|dr2|dr3|dr6|dr7|"
@@ -1211,7 +1210,7 @@ PORTABLE_TASK_ARCH_FIELD_RE = re.compile(
 )
 
 PORTABLE_TASK_ARCH_ALLOWLIST = {
-    ROOT / "includes" / "ir0" / "arch_task.h",
+    ROOT / "includes" / "ir0" / "task_access.h",
     ROOT / "includes" / "ir0" / "arch_task_ops.h",
 }
 
@@ -1729,7 +1728,7 @@ def check_portable_port1_no_legacy_arch_mm():
             if ARCH_MM_LEGACY_RE.search(text):
                 errors.append(
                     f"[portable-port1-mm] {rel}: use mm_user_root_slots / "
-                    f"mm_copy_kernel_half (arch_mm.h)"
+                    f"mm_copy_kernel_half (asm/pgtable.h)"
                 )
             if ARCH_PF_LEGACY_RE.search(text):
                 errors.append(
@@ -2015,21 +2014,44 @@ def platform_object_sources(platform):
 PC_PLATFORM_ASM_INCLUDE = re.compile(
     r'^\s*#\s*include\s*<asm/(?:io|msr|processor|debugreg)\.h>')
 
+# Hooks every ISA implements (Linux asm-generic model): the declarations live
+# in includes/asm-generic/<topic>.h, each ISA's asm/<topic>.h includes them,
+# and portable code includes <asm/<topic>.h>.
+ARCH_HOOK_ASM_HEADERS = ("elf", "hw_breakpoint", "pgtable", "setup")
+ARCH_HOOK_ISAS = ("x86-64", "arm64")
+ARCH_HOOK_ASM_INCLUDE = re.compile(
+    r'^\s*#\s*include\s*<asm/(?:'
+    + "|".join(map(re.escape, ARCH_HOOK_ASM_HEADERS)) + r')\.h>')
+
 
 def check_portable_code_has_no_private_asm_headers():
     """Allow only reviewed layout-selection gateways into private asm headers.
 
     The PC platform's device drivers (scripts/make/platform/pc.mk) build
     only on x86-64 and may include the x86 port-I/O, MSR and CPUID headers.
+    Any portable file may include the ARCH_HOOK_ASM_HEADERS, which every
+    ISA provides over the shared asm-generic declarations.
     """
     errors = []
+    for topic in ARCH_HOOK_ASM_HEADERS:
+        generic = f"#include <asm-generic/{topic}.h>"
+        if not (ROOT / "includes" / "asm-generic" / f"{topic}.h").is_file():
+            errors.append(f"[portable-no-private-asm-header] "
+                          f"includes/asm-generic/{topic}.h is missing")
+        for isa in ARCH_HOOK_ISAS:
+            rel = f"arch/{isa}/include/asm/{topic}.h"
+            path = ROOT / rel
+            if (not path.is_file()
+                    or generic not in read_file_text(path).splitlines()):
+                errors.append(f"[portable-no-private-asm-header] {rel} "
+                              f"must exist and {generic}")
     private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
     pc_sources = platform_object_sources("pc")
     selection_gateways = {
         "includes/ir0/task.h": "#include <asm/task_context.h>",
         "includes/ir0/syscall_frame.h": "#include <asm/syscall_frame.h>",
         "includes/ir0/signals.h": "#include <asm/sigcontext.h>",
-        "includes/ir0/arch_task.h": "#include <asm/task_access.h>",
+        "includes/ir0/task_access.h": "#include <asm/task_access.h>",
         "includes/ir0/abi/vdso_contract.h": "#include <asm/vdso_contract.h>",
         "includes/ir0/abi/signal_contract.h":
             "#include <asm/signal_contract.h>",
@@ -2054,6 +2076,8 @@ def check_portable_code_has_no_private_asm_headers():
                 if private_include.search(line):
                     rel = str(rel_to_root(fpath))
                     if selection_gateways.get(rel) == line.strip():
+                        continue
+                    if ARCH_HOOK_ASM_INCLUDE.search(line):
                         continue
                     if rel in pc_sources and PC_PLATFORM_ASM_INCLUDE.search(line):
                         continue
@@ -2129,7 +2153,7 @@ def check_common_elf_uses_isa_policy():
                 if forbidden.search(line):
                     rel = rel_to_root(path)
                     errors.append(
-                        f"[elf-isa-policy] {rel}:{line_no}: use arch_elf facade"
+                        f"[elf-isa-policy] {rel}:{line_no}: use the asm/elf.h hooks"
                     )
     return errors
 
@@ -2145,7 +2169,7 @@ def check_common_mm_uses_user_va_policy():
                 if forbidden.search(line):
                     rel = rel_to_root(path)
                     errors.append(
-                        f"[user-va-policy] {rel}:{line_no}: use arch_mm facade"
+                        f"[user-va-policy] {rel}:{line_no}: use the asm/pgtable.h hooks"
                     )
     return errors
 
@@ -2976,7 +3000,7 @@ def _isa_named_header_self_test() -> list[str]:
         "includes/uapi/ir0/syscall_aarch64.h": "aarch64",
         "includes/ir0/x86-64/io.h": "x86-64",
         "includes/ir0/syscall_frame.h": None,
-        "includes/ir0/arch_task.h": None,
+        "includes/ir0/task_access.h": None,
         "includes/uapi/asm-generic/posix_types.h": None,
         "includes/ir0/alarm.h": None,
         "arch/x86-64/include/asm/task_context.h": None,

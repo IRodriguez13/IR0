@@ -16,7 +16,7 @@
 #include <ir0/fcntl.h>
 #include <ir0/clock.h>
 #include <ir0/time.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <string.h>
 #include <ir0/files_struct.h>
 #include <ir0/poll.h>

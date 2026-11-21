@@ -16,8 +16,7 @@
 #include <ir0/oops.h>
 #include <ir0/ktm/klog.h>
 #include <string.h>
-#include <ir0/arch_port.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 #include <ir0/resource_registry.h>
 #include <stdint.h>
 #include <fs/vfs.h>

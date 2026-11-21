@@ -26,7 +26,7 @@
 #include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/paging.h>
-#include <ir0/arch_port.h>
+#include <ir0/tlb.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>

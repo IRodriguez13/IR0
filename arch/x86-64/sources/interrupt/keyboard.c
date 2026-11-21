@@ -15,7 +15,7 @@
 #include <interrupt/idt.h>
 #include <interrupt/pic.h>
 #include <interrupt/keyboard.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/cpu.h>
 
 #define PS2_DATA_PORT 0x60
 #include <config.h>

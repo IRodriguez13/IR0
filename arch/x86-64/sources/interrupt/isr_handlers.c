@@ -27,7 +27,7 @@
 #include <ir0/clock.h>
 #include <ir0/errno.h>
 #include <ir0/irq.h>
-#include <ir0/arch_io.h>
+#include <asm/processor.h>
 #include <config.h>
 #include <ir0/input_backend.h>
 #include <ir0/paging.h>

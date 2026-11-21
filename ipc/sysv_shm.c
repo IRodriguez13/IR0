@@ -16,7 +16,7 @@
 #include <ir0/paging.h>
 #include <ir0/tlb_sync.h>
 #include <ir0/pmm.h>
-#include <ir0/arch_port.h>
+#include <asm/pgtable.h>
 #include <ir0/clock.h>
 #include <string.h>
 

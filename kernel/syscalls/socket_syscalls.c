@@ -30,7 +30,6 @@
 #include <ir0/socket.h>
 #include <ir0/time.h>
 #include <ir0/signals.h>
-#include <ir0/arch_cpu.h>
 #include <ir0/clock.h>
 #include <ir0/pipe.h>
 #include <ir0/pipe_fd.h>

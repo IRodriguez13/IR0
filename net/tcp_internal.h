@@ -13,7 +13,6 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <ir0/arch_port.h>
 #include <ir0/spinlock.h>
 #include "tcp.h"
 

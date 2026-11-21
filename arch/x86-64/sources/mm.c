@@ -12,7 +12,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/mm_range.h>
 #include <ir0/errno.h>
 #include <ir0/page_table_pool.h>

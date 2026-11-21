@@ -9,7 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <arch/common/arch_portable.h>
-#include <arch/common/arch_interface.h>
+#include <asm/processor.h>
 #include <arm64_board.h>
 #include <ir0/platform_ops.h>
 #include <stddef.h>

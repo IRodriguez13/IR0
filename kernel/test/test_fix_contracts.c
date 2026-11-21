@@ -18,7 +18,7 @@
 #include <kernel/syscalls/fs_path_syscalls.h>
 #include <kernel/syscalls/fs_syscalls.h>
 #include <kernel/syscalls/socket_syscalls.h>
-#include <ir0/arch_mm.h>
+#include <asm/pgtable.h>
 #include <ir0/errno.h>
 #include <ir0/fcntl.h>
 #include <ir0/files_struct.h>

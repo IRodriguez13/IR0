@@ -17,7 +17,6 @@
 #include "net_drivers.h"
 #include <stdbool.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/arch_io.h>
 #include <ir0/kmem.h>
 #include <string.h>
 #include <ir0/driver.h>
@@ -26,7 +25,6 @@
 #include <ir0/cpu.h>  /* For ASSERT and panicex */
 #include <ir0/resource_registry.h>
 #include <ir0/clock.h>
-#include <ir0/arch_port.h>
 #include <config.h>
 #include <asm/io.h>
 

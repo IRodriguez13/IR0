@@ -6,7 +6,7 @@
  * Distributed under the terms of the GNU General Public License v3.0.
  * See the LICENSE file in the project root for full license information.
  *
- * File: arch_elf.h
+ * File: elf.h
  * Description: ELF e_machine accepted by this kernel build (portable loader).
  */
 

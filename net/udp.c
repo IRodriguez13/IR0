@@ -25,7 +25,6 @@
 #include "net_internal.h"
 #include <ir0/kmem.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 

@@ -14,7 +14,7 @@
 
 #include <ir0/process.h>
 #include <ir0/fork.h>
-#include <ir0/arch_cpu.h>
+#include <ir0/tls.h>
 #include <ir0/errno.h>
 #include <ir0/fpu_backend.h>
 

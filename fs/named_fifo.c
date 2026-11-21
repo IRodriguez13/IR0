@@ -19,7 +19,6 @@
 #include <ir0/cred.h>
 #include <ir0/pipe.h>
 #include <ir0/types.h>
-#include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 

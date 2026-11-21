@@ -24,7 +24,6 @@
 #include <ir0/driver.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/kmem.h>
-#include <ir0/arch_port.h>
 #include <asm/io.h>
 
 static void pc_speaker_stop(void);

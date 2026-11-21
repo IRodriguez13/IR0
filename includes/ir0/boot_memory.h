@@ -2,8 +2,8 @@
 /**
  * IR0 Kernel — normalized early physical-memory inventory facade.
  *
- * Board/ISA code provides raw reserved-free RAM through arch_mm.h.  Common MM
- * consumes only the normalized inventory exposed here.
+ * Board/ISA code provides raw reserved-free RAM through asm/pgtable.h.
+ * Common MM consumes only the normalized inventory exposed here.
  */
 
 #pragma once

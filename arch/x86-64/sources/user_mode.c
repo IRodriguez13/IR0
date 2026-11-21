@@ -68,7 +68,7 @@ static void arch_audit_iret_frame(const task_t *task)
 #if !MINGW_BUILD
 #endif
 
-void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
+void switch_to_user(uintptr_t entry, uintptr_t stack_top)
 {
 #if MINGW_BUILD
     (void)entry;
@@ -190,8 +190,8 @@ void first_switch_to(struct process *next)
 	else
 	{
 		paging_activate_address_space((uintptr_t)process_mm_root(p));
-		switch_to_user((arch_addr_t)p->task.arch.rip,
-				    (arch_addr_t)p->task.arch.rsp);
+		switch_to_user((uintptr_t)p->task.arch.rip,
+				    (uintptr_t)p->task.arch.rsp);
 	}
 	panic("Returned from first_switch_to unexpectedly");
 #endif

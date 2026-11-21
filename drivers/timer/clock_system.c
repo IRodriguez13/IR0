@@ -17,7 +17,6 @@
 #include <config.h>
 #include <ir0/cpu_info.h>
 #include <ir0/types.h>
-#include <ir0/arch_port.h>
 #include <ir0/sched.h>
 #include <ir0/clock_wait.h>
 #include <ir0/delay.h>

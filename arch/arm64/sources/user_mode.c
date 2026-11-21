@@ -11,7 +11,7 @@
 #include <ir0/oops.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
-#include <ir0/arch_task.h>
+#include <ir0/task_access.h>
 #include <ir0/tls.h>
 #include <ir0/boot_log.h>
 #include <ir0/task.h>
@@ -98,7 +98,7 @@ arm64_eret_to_user(uint64_t elr, uint64_t sp0, const uint64_t *gprs)
 }
 
 /* New image (execve, init): Linux starts EL0 with every GPR cleared. */
-void switch_to_user(arch_addr_t entry, arch_addr_t stack_top)
+void switch_to_user(uintptr_t entry, uintptr_t stack_top)
 {
 	static const uint64_t zero_gprs[31];
 
