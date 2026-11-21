@@ -35,6 +35,8 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=90)
     parser.add_argument("--mem", default="256M",
                         help="Guest RAM passed to smoke_autokill (default 256M)")
+    parser.add_argument("--stale-sec", type=int, default=0,
+                        help="Seconds without serial output before smoke stops the guest")
     parser.add_argument(
         "--expected-panic",
         action="store_true",
@@ -113,7 +115,7 @@ def main() -> int:
                     "--timeout",
                     str(args.timeout),
                     "--stale-sec",
-                    "12",
+                    str(args.stale_sec or 12),
                     "--mem",
                     args.mem,
                     *(["--expected-panic"] if args.expected_panic else []),
