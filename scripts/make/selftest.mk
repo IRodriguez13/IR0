@@ -1255,3 +1255,36 @@ ir0-selftest-shm-lpid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_L
 	@echo "✓ ir0-selftest-shm-lpid-arm64"
 
 ir0-selftest-shm-lpid: ir0-selftest-shm-lpid-x86 ir0-selftest-shm-lpid-arm64
+
+# PRCTL-KEEPCAPS-SELFTEST
+IR0_SELFTEST_X86_PRCTL_KEEPCAPS := $(KERNEL_ROOT)/build/selftests/x86_64/prctl_keepcaps
+IR0_SELFTEST_ARM64_PRCTL_KEEPCAPS := $(KERNEL_ROOT)/build/selftests/arm64/prctl_keepcaps
+
+.PHONY: ir0-selftest-prctl-keepcaps-x86 ir0-selftest-prctl-keepcaps-arm64 \
+	ir0-selftest-prctl-keepcaps
+
+$(IR0_SELFTEST_X86_PRCTL_KEEPCAPS): tests/selftests/syscall/prctl_keepcaps.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 prctl_keepcaps
+
+$(IR0_SELFTEST_ARM64_PRCTL_KEEPCAPS): tests/selftests/syscall/prctl_keepcaps.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 prctl_keepcaps
+
+ir0-selftest-prctl-keepcaps-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PRCTL_KEEPCAPS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PRCTL_KEEPCAPS) \
+		--done "ok 1 prctl_keepcaps" \
+		--log $(HOST_TMP)/ir0-selftest-x86-prctl-keepcaps.log
+	@echo "✓ ir0-selftest-prctl-keepcaps-x86"
+
+ir0-selftest-prctl-keepcaps-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PRCTL_KEEPCAPS)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PRCTL_KEEPCAPS) \
+		--done "ok 1 prctl_keepcaps" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-prctl-keepcaps.log
+	@echo "✓ ir0-selftest-prctl-keepcaps-arm64"
+
+ir0-selftest-prctl-keepcaps: ir0-selftest-prctl-keepcaps-x86 ir0-selftest-prctl-keepcaps-arm64

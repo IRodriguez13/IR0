@@ -661,3 +661,21 @@ $(SHM_LPID_BIN): $(SHM_LPID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_LPID_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PRCTL-KEEPCAPS-SELFTEST
+PRCTL_KEEPCAPS_SRC := syscall/prctl_keepcaps.c
+PRCTL_KEEPCAPS_BIN := $(BUILD_DIR)/prctl_keepcaps
+
+.PHONY: prctl_keepcaps
+
+prctl_keepcaps: $(PRCTL_KEEPCAPS_BIN)
+
+$(PRCTL_KEEPCAPS_BIN): $(PRCTL_KEEPCAPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest prctl_keepcaps"
+	@$(CC) $(CFLAGS) -o $@ $(PRCTL_KEEPCAPS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

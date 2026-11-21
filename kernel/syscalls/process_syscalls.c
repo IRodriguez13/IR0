@@ -40,6 +40,8 @@
 #define PR_GET_PDEATHSIG 2
 #define PR_GET_DUMPABLE 3
 #define PR_SET_DUMPABLE 4
+#define PR_GET_KEEPCAPS 7
+#define PR_SET_KEEPCAPS 8
 #define PR_SET_NAME 15
 #define PR_GET_NAME 16
 #define PR_SET_NO_NEW_PRIVS 38
@@ -1123,6 +1125,13 @@ int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
     return 0;
   case PR_GET_DUMPABLE:
     return (int64_t)current_process->dumpable;
+  case PR_SET_KEEPCAPS:
+    if (arg2 > 1)
+      return -EINVAL;
+    current_process->keep_caps = (uint8_t)arg2;
+    return 0;
+  case PR_GET_KEEPCAPS:
+    return (int64_t)current_process->keep_caps;
   case PR_SET_NAME:
     {
       char comm[sizeof(current_process->comm)];

@@ -125,6 +125,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->sgid = current_process->sgid;
 		proc->no_new_privs = current_process->no_new_privs;
 		proc->dumpable = current_process->dumpable;
+		proc->keep_caps = current_process->keep_caps;
 		proc->at_secure = current_process->at_secure;
 		proc->umask = current_process->umask;
 		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
