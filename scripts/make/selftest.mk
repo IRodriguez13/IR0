@@ -1354,3 +1354,36 @@ ir0-selftest-shm-owner-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_
 	@echo "✓ ir0-selftest-shm-owner-arm64"
 
 ir0-selftest-shm-owner: ir0-selftest-shm-owner-x86 ir0-selftest-shm-owner-arm64
+
+# EVDEV-PROP-SELFTEST
+IR0_SELFTEST_X86_EVDEV_PROP := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_prop
+IR0_SELFTEST_ARM64_EVDEV_PROP := $(KERNEL_ROOT)/build/selftests/arm64/evdev_prop
+
+.PHONY: ir0-selftest-evdev-prop-x86 ir0-selftest-evdev-prop-arm64 \
+	ir0-selftest-evdev-prop
+
+$(IR0_SELFTEST_X86_EVDEV_PROP): tests/selftests/syscall/evdev_prop.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_prop
+
+$(IR0_SELFTEST_ARM64_EVDEV_PROP): tests/selftests/syscall/evdev_prop.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_prop
+
+ir0-selftest-evdev-prop-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_PROP)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_EVDEV_PROP) \
+		--done "ok 1 evdev_prop" \
+		--log $(HOST_TMP)/ir0-selftest-x86-evdev-prop.log
+	@echo "✓ ir0-selftest-evdev-prop-x86"
+
+ir0-selftest-evdev-prop-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_PROP)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_EVDEV_PROP) \
+		--done "ok 1 evdev_prop" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-prop.log
+	@echo "✓ ir0-selftest-evdev-prop-arm64"
+
+ir0-selftest-evdev-prop: ir0-selftest-evdev-prop-x86 ir0-selftest-evdev-prop-arm64

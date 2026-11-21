@@ -390,6 +390,21 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return (int64_t)ncopy;
     }
 
+    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x09u)
+    {
+        unsigned long bits;
+        size_t ncopy;
+
+        /* INPUT_PROP_POINTER: this node is the pointer device. */
+        bits = 1ul;
+        if (!arg || size == 0)
+            return -EINVAL;
+        ncopy = size < sizeof(bits) ? size : sizeof(bits);
+        if (copy_to_user(arg, &bits, ncopy) != 0)
+            return -EFAULT;
+        return 0;
+    }
+
     return -ENOTTY;
 }
 
