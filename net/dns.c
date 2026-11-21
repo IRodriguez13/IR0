@@ -24,7 +24,7 @@
 #include "udp.h"
 #include "ip.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <stdbool.h>
@@ -243,12 +243,12 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     (void)src_port;
     (void)priv;
     
-    LOG_INFO_FMT("DNS", "DNS response received from " IP4_FMT " port %d, len=%d", 
-                 IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)len);
+    klog_info_fmt("DNS", "DNS response received from " IP4_FMT " port %d, len=%d",
+                  IP4_ARGS(ntohl(src_ip)), (int)src_port, (int)len);
     
     if (len < sizeof(struct dns_header))
     {
-        LOG_WARNING("DNS", "DNS response too short");
+        klog_warn("DNS", "DNS response too short");
         return;
     }
     
@@ -261,7 +261,7 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     /* Check if QR bit is set (response) */
     if (!(flags & 0x8000))
     {
-        LOG_WARNING("DNS", "DNS packet is not a response");
+        klog_warn("DNS", "DNS packet is not a response");
         return;
     }
     
@@ -269,11 +269,11 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     uint8_t rcode = flags & 0x0F;
     if (rcode != DNS_RCODE_NOERROR)
     {
-        LOG_WARNING_FMT("DNS", "DNS error response: RCODE=%d", (int)rcode);
+        klog_warn_fmt("DNS", "DNS error response: RCODE=%d", (int)rcode);
         return;
     }
     
-    LOG_INFO_FMT("DNS", "DNS response: id=%d, answers=%d", (int)id, (int)ancount);
+    klog_info_fmt("DNS", "DNS response: id=%d, answers=%d", (int)id, (int)ancount);
     
     /* Parse response to find A record */
     const uint8_t *ptr = (const uint8_t *)data + sizeof(struct dns_header);
@@ -328,7 +328,7 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
             {
                 memcpy(&resolved_ip, ptr, 4);
                 found_a_record = true;
-                LOG_INFO_FMT("DNS", "Resolved %s to " IP4_FMT, name, IP4_ARGS(ntohl(resolved_ip)));
+                klog_info_fmt("DNS", "Resolved %s to " IP4_FMT, name, IP4_ARGS(ntohl(resolved_ip)));
                 break;
             }
         }
@@ -341,7 +341,7 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
     
     if (!found_a_record)
     {
-        LOG_WARNING("DNS", "No A record found in DNS response");
+        klog_warn("DNS", "No A record found in DNS response");
         return;
     }
 
@@ -351,7 +351,7 @@ static void dns_response_handler(struct net_device *dev, ip4_addr_t src_ip,
         if (!query)
         {
             ir0_spin_unlock_irqrestore(&dns_lock, flags);
-            LOG_WARNING_FMT("DNS", "DNS response id=%d not matched", (int)id);
+            klog_warn_fmt("DNS", "DNS response id=%d not matched", (int)id);
             return;
         }
         query->result = resolved_ip;
@@ -370,7 +370,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
 {
     if (!domain_name || !dns_net_dev)
     {
-        LOG_ERROR("DNS", "DNS not initialized or invalid parameters");
+        klog_error("DNS", "DNS not initialized or invalid parameters");
         return 0;
     }
 
@@ -383,7 +383,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     struct net_device *dev = first_net_device();
     if (!dev)
     {
-        LOG_ERROR("DNS", "No network device available");
+        klog_error("DNS", "No network device available");
         return 0;
     }
     
@@ -412,7 +412,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
                                       DNS_MAX_QUERY_LEN - query_len);
     if (name_len == 0)
     {
-        LOG_ERROR("DNS", "Failed to encode domain name");
+        klog_error("DNS", "Failed to encode domain name");
         return 0;
     }
     query_len += name_len;
@@ -420,7 +420,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     /* QTYPE: A record */
     if (query_len + 4 > DNS_MAX_QUERY_LEN)
     {
-        LOG_ERROR("DNS", "DNS query too large");
+        klog_error("DNS", "DNS query too large");
         return 0;
     }
     *(uint16_t *)(query_buf + query_len) = htons(DNS_TYPE_A);
@@ -440,8 +440,8 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     query->next = NULL;
     dns_pending_add(query);
     
-    LOG_INFO_FMT("DNS", "Resolving %s via DNS server " IP4_FMT, 
-                 domain_name, IP4_ARGS(ntohl(dns_server_ip)));
+    klog_info_fmt("DNS", "Resolving %s via DNS server " IP4_FMT,
+                  domain_name, IP4_ARGS(ntohl(dns_server_ip)));
     
     /* Register handler for DNS responses if not already registered */
     if (!dns_handler_registered)
@@ -456,18 +456,18 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
     }
     
     /* Send DNS query */
-    LOG_INFO_FMT("DNS", "Sending DNS query to " IP4_FMT " port %d", 
-                 IP4_ARGS(ntohl(dns_server_ip)), DNS_PORT);
+    klog_info_fmt("DNS", "Sending DNS query to " IP4_FMT " port %d",
+                  IP4_ARGS(ntohl(dns_server_ip)), DNS_PORT);
     int ret = udp_send(dev, dns_server_ip, dns_client_port, DNS_PORT, query_buf, query_len);
     if (ret != 0)
     {
-        LOG_ERROR("DNS", "Failed to send DNS query");
+        klog_error("DNS", "Failed to send DNS query");
         /* Remove from pending */
         dns_pending_remove(query);
         kfree(query);
         return 0;
     }
-    LOG_INFO("DNS", "DNS query sent successfully, waiting for response...");
+    klog_info("DNS", "DNS query sent successfully, waiting for response...");
     
     /* Wait for response with timeout. We poll the network card periodically
      * to check for incoming DNS responses. The polling is necessary because
@@ -502,7 +502,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         /* Check timeout */
         if (elapsed >= timeout_ms)
         {
-            LOG_WARNING_FMT("DNS", "DNS resolution timeout for %s after %d ms", 
+            klog_warn_fmt("DNS", "DNS resolution timeout for %s after %d ms",
                            domain_name, (int)timeout_ms);
             break;
         }
@@ -520,14 +520,14 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         }
         if (stagnant_loops >= max_stagnant_loops)
         {
-            LOG_WARNING_FMT("DNS", "DNS resolution aborted by stagnant-time guard for %s", domain_name);
+            klog_warn_fmt("DNS", "DNS resolution aborted by stagnant-time guard for %s", domain_name);
             break;
         }
         
         /* Log progress every second */
         if (current_time - last_log_time >= log_interval_ms)
         {
-            LOG_INFO_FMT("DNS", "Still waiting for DNS response for %s (%d ms elapsed, timeout in %d ms)",
+            klog_info_fmt("DNS", "Still waiting for DNS response for %s (%d ms elapsed, timeout in %d ms)",
                         domain_name, (int)elapsed, (int)(timeout_ms - elapsed));
             last_log_time = current_time;
         }
@@ -558,7 +558,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
             {
                 uint64_t rtt = current_time - start_time;
                 
-                LOG_INFO_FMT("DNS", "DNS resolution successful for %s (RTT: %d ms)", 
+                klog_info_fmt("DNS", "DNS resolution successful for %s (RTT: %d ms)",
                             domain_name, (int)rtt);
                 
                 kfree(query);
@@ -571,7 +571,7 @@ ip4_addr_t dns_resolve(const char *domain_name, ip4_addr_t dns_server_ip)
         for (volatile int i = 0; i < 1000; i++);  /* Reduced delay since we have poll_interval */
     }
     
-    LOG_WARNING_FMT("DNS", "DNS resolution timeout for %s", domain_name);
+    klog_warn_fmt("DNS", "DNS resolution timeout for %s", domain_name);
     
     /* Remove from pending */
     dns_pending_remove(query);
@@ -588,7 +588,7 @@ void dns_set_default_server(ip4_addr_t dns_server_ip)
 
     if (dns_server_ip != 0)
     {
-        LOG_INFO_FMT("DNS", "Default DNS server set to " IP4_FMT, IP4_ARGS(ntohl(dns_server_ip)));
+        klog_info_fmt("DNS", "Default DNS server set to " IP4_FMT, IP4_ARGS(ntohl(dns_server_ip)));
     }
 }
 
@@ -607,7 +607,7 @@ ip4_addr_t dns_get_default_server(void)
  */
 int dns_init(void)
 {
-    LOG_INFO("DNS", "Initializing DNS client");
+    klog_info("DNS", "Initializing DNS client");
     
     /* Register DNS response handler on UDP port 5353 (we use ephemeral port for responses) */
     /* Actually, DNS responses come to the same port we sent from, but since we
@@ -619,7 +619,7 @@ int dns_init(void)
     struct net_device *dev = first_net_device();
     if (!dev)
     {
-        LOG_WARNING("DNS", "No network device available, DNS will work when device is registered");
+        klog_warn("DNS", "No network device available, DNS will work when device is registered");
     }
     else
     {
@@ -634,6 +634,6 @@ int dns_init(void)
      * by query ID and handle dynamic source ports properly.
      */
     
-    LOG_INFO("DNS", "DNS client initialized");
+    klog_info("DNS", "DNS client initialized");
     return 0;
 }

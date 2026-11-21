@@ -16,7 +16,7 @@
 #include "net_internal.h"
 #include <ir0/sock_icmp.h>
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <string.h>
@@ -165,7 +165,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
 
     if (len < sizeof(struct icmp_header))
     {
-        LOG_WARNING("ICMP", "Packet too short");
+        klog_warn("ICMP", "Packet too short");
         return;
     }
 
@@ -181,7 +181,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
 
     if (!icmp_scratch)
     {
-        LOG_WARNING("ICMP", "No memory to verify checksum");
+        klog_warn("ICMP", "No memory to verify checksum");
         return;
     }
     memcpy(icmp_scratch, data, len);
@@ -191,7 +191,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
 
     if (received_checksum != calculated_checksum)
     {
-        LOG_WARNING("ICMP", "Checksum mismatch");
+        klog_warn("ICMP", "Checksum mismatch");
         return;
     }
 
@@ -203,8 +203,8 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
     uint8_t type = icmp->type;
     uint8_t code = icmp->code;
 
-    LOG_INFO_FMT("ICMP", "Received ICMP packet: type=%d, code=%d", 
-                 (int)type, (int)code);
+    klog_info_fmt("ICMP", "Received ICMP packet: type=%d, code=%d",
+                  (int)type, (int)code);
 
     /*
      * Deliver to SOCK_RAW IPPROTO_ICMP sockets (raw(7)). Skip echo
@@ -224,7 +224,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
              * any payload data), change the type to Echo Reply, recalculate
              * the checksum, and send it back to the source.
              */
-            LOG_INFO("ICMP", "Echo Request received, sending Echo Reply");
+            klog_info("ICMP", "Echo Request received, sending Echo Reply");
 
             /* Allocate buffer for reply. We use the same length as the request
              * to preserve any payload data (RFC 792: the reply returns the
@@ -236,7 +236,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
             uint8_t *reply = kmalloc(reply_len);
             if (!reply)
             {
-                LOG_ERROR("ICMP", "Failed to allocate memory for ICMP reply");
+                klog_error("ICMP", "Failed to allocate memory for ICMP reply");
                 return;
             }
 
@@ -265,7 +265,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
 
             if (src_ip == 0)
             {
-                LOG_WARNING("ICMP", "Cannot send Echo Reply: source IP not available");
+                klog_warn("ICMP", "Cannot send Echo Reply: source IP not available");
                 kfree(reply);
                 return;
             }
@@ -274,11 +274,11 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
             int ret = ip_send(dev, src_ip, IPPROTO_ICMP, reply, reply_len);
             if (ret != 0)
             {
-                LOG_ERROR("ICMP", "Failed to send ICMP Echo Reply");
+                klog_error("ICMP", "Failed to send ICMP Echo Reply");
             }
             else
             {
-                LOG_INFO("ICMP", "ICMP Echo Reply sent");
+                klog_info("ICMP", "ICMP Echo Reply sent");
             }
 
             kfree(reply);
@@ -291,8 +291,8 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
             uint16_t id = ntohs(icmp->un.echo.id);
             uint16_t seq = ntohs(icmp->un.echo.seq);
             
-            LOG_INFO_FMT("ICMP", "Echo Reply received: id=%d, seq=%d, src=" IP4_FMT,
-                         (int)id, (int)seq, IP4_ARGS(ntohl(src_ip)));
+            klog_info_fmt("ICMP", "Echo Reply received: id=%d, seq=%d, src=" IP4_FMT,
+                          (int)id, (int)seq, IP4_ARGS(ntohl(src_ip)));
             
             /* Search for matching pending echo request */
             uint64_t irq_flags = ir0_spin_lock_irqsave(&icmp_lock);
@@ -321,7 +321,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
                     
                     /* Log the echo reply in the usual "bytes from" format for serial debugging */
                     /* Note: VGA output should be handled by dbgshell/userspace, not by ICMP layer */
-                    LOG_INFO_FMT("ICMP", "%d bytes from " IP4_FMT ": icmp_seq=%d ttl=%d time=%d ms",
+                    klog_info_fmt("ICMP", "%d bytes from " IP4_FMT ": icmp_seq=%d ttl=%d time=%d ms",
                                 (int)payload_bytes, IP4_ARGS(ntohl(src_ip)), (int)seq, (int)ttl, (int)rtt);
                     
                     /* Keep it pending until userspace consumes via NET_GET_ECHO_RESULT. */
@@ -334,7 +334,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
 
             if (!echo)
             {
-                LOG_INFO_FMT("ICMP", "Echo Reply id=%d, seq=%d not matched to any pending request",
+                klog_info_fmt("ICMP", "Echo Reply id=%d, seq=%d not matched to any pending request",
                             (int)id, (int)seq);
             }
             if (echo == NULL)
@@ -354,7 +354,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
              * trigger retransmission in upper-layer protocols or notify the
              * application that initiated the failed connection.
              */
-            LOG_WARNING_FMT("ICMP", "Destination Unreachable: code=%d", (int)code);
+            klog_warn_fmt("ICMP", "Destination Unreachable: code=%d", (int)code);
             break;
         }
 
@@ -366,7 +366,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
              * too many hops away. The traceroute utility uses this message type
              * to discover the path packets take through the network.
              */
-            LOG_WARNING_FMT("ICMP", "Time Exceeded: code=%d", (int)code);
+            klog_warn_fmt("ICMP", "Time Exceeded: code=%d", (int)code);
             break;
         }
 
@@ -377,7 +377,7 @@ static void icmp_receive_handler(struct net_device *dev, const void *data,
              * now, we just log them. A full implementation might handle more
              * types for better network diagnostics and error reporting.
              */
-            LOG_INFO_FMT("ICMP", "Unhandled ICMP message type: %d", (int)type);
+            klog_info_fmt("ICMP", "Unhandled ICMP message type: %d", (int)type);
             break;
         }
     }
@@ -457,9 +457,9 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
     /* Calculate checksum */
     icmp->checksum = icmp_checksum(icmp_packet, icmp_len);
 
-    LOG_INFO_FMT("ICMP", "Sending Echo Request to " IP4_FMT " (id=%d, seq=%d)",
-                 IP4_ARGS(ntohl(dest_ip)),
-                 (int)id, (int)seq);
+    klog_info_fmt("ICMP", "Sending Echo Request to " IP4_FMT " (id=%d, seq=%d)",
+                  IP4_ARGS(ntohl(dest_ip)),
+                  (int)id, (int)seq);
 
     /* Track this echo request so we can match the reply */
     struct icmp_pending_echo *pending = kmalloc(sizeof(struct icmp_pending_echo));
@@ -481,7 +481,7 @@ int icmp_send_echo_request(struct net_device *dev, ip4_addr_t dest_ip,
         icmp_pending_append_locked(pending);
         ir0_spin_unlock_irqrestore(&icmp_lock, irq_flags);
         
-        LOG_INFO_FMT("ICMP", "Tracking echo request: id=%d, seq=%d", (int)id, (int)seq);
+        klog_info_fmt("ICMP", "Tracking echo request: id=%d, seq=%d", (int)id, (int)seq);
     }
 
     /* Send via IP layer */
@@ -571,7 +571,7 @@ uint16_t icmp_allocate_echo_seq(void)
  */
 int icmp_init(void)
 {
-    LOG_INFO("ICMP", "Initializing ICMP protocol");
+    klog_info("ICMP", "Initializing ICMP protocol");
 
     /* Register ICMP protocol handler */
     memset(&icmp_proto, 0, sizeof(icmp_proto));
@@ -583,10 +583,10 @@ int icmp_init(void)
 
     if (net_register_protocol(&icmp_proto) != 0)
     {
-        LOG_ERROR("ICMP", "Failed to register ICMP protocol");
+        klog_error("ICMP", "Failed to register ICMP protocol");
         return -1;
     }
 
-    LOG_INFO("ICMP", "ICMP protocol initialized");
+    klog_info("ICMP", "ICMP protocol initialized");
     return 0;
 }

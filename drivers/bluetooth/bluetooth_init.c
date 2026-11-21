@@ -30,7 +30,7 @@
 #include <ir0/bluetooth.h>
 #include <ir0/driver.h>
 #include <ir0/idle.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 
 static void bluetooth_cleanup(void);
 
@@ -67,7 +67,7 @@ static ir0_driver_ops_t bluetooth_driver_ops = {
  */
 static int32_t bluetooth_driver_init(void)
 {
-    LOG_INFO("BLUETOOTH", "Initializing Bluetooth driver");
+    klog_info("BLUETOOTH", "Initializing Bluetooth driver");
     int ret = bluetooth_init();
     return ret == 0 ? IR0_DRIVER_OK : IR0_DRIVER_ERR;
 }
@@ -77,7 +77,7 @@ static int32_t bluetooth_driver_init(void)
  */
 static void bluetooth_driver_shutdown(void)
 {
-    LOG_INFO("BLUETOOTH", "Shutting down Bluetooth driver");
+    klog_info("BLUETOOTH", "Shutting down Bluetooth driver");
     bluetooth_cleanup();
 }
 
@@ -87,16 +87,16 @@ static void bluetooth_driver_shutdown(void)
 int bluetooth_init(void)
 {
     if (bluetooth_initialized) {
-        LOG_INFO("BLUETOOTH", "Already initialized");
+        klog_info("BLUETOOTH", "Already initialized");
         return 0;
     }
     
-    LOG_INFO("BLUETOOTH", "Starting Bluetooth subsystem initialization");
+    klog_info("BLUETOOTH", "Starting Bluetooth subsystem initialization");
     
     /* Initialize device management (this will init HCI core and UART) */
     int ret = bt_device_init();
     if (ret < 0) {
-        LOG_ERROR("BLUETOOTH", "Failed to initialize device management");
+        klog_error("BLUETOOTH", "Failed to initialize device management");
         return ret;
     }
     
@@ -105,7 +105,7 @@ int bluetooth_init(void)
      * to wait for hardware that may not exist (like in QEMU).
      * HCI reset will happen on first open of /dev/bluetooth/hci0
      */
-    LOG_INFO("BLUETOOTH", "HCI reset deferred until first device open");
+    klog_info("BLUETOOTH", "HCI reset deferred until first device open");
     
     bluetooth_initialized = true;
     /*
@@ -114,11 +114,11 @@ int bluetooth_init(void)
      */
     kernel_idle_poll_register(ir0_bluetooth_poll);
 
-    LOG_INFO("BLUETOOTH", "Bluetooth subsystem initialized successfully");
-    LOG_INFO("BLUETOOTH", "Available interfaces:");
-    LOG_INFO("BLUETOOTH", "  /dev/bluetooth/hci0 - HCI control interface");
-    LOG_INFO("BLUETOOTH", "  /proc/bluetooth/devices - Discovered devices");
-    LOG_INFO("BLUETOOTH", "  /proc/bluetooth/scan - Scan control");
+    klog_info("BLUETOOTH", "Bluetooth subsystem initialized successfully");
+    klog_info("BLUETOOTH", "Available interfaces:");
+    klog_info("BLUETOOTH", "  /dev/bluetooth/hci0 - HCI control interface");
+    klog_info("BLUETOOTH", "  /proc/bluetooth/devices - Discovered devices");
+    klog_info("BLUETOOTH", "  /proc/bluetooth/scan - Scan control");
     
     return 0;
 }
@@ -132,14 +132,14 @@ static void bluetooth_cleanup(void)
         return;
     }
     
-    LOG_INFO("BLUETOOTH", "Cleaning up Bluetooth subsystem");
+    klog_info("BLUETOOTH", "Cleaning up Bluetooth subsystem");
     
     /* Cleanup device management */
     bt_device_cleanup();
     
     bluetooth_initialized = false;
     
-    LOG_INFO("BLUETOOTH", "Bluetooth subsystem cleaned up");
+    klog_info("BLUETOOTH", "Bluetooth subsystem cleaned up");
 }
 
 /**
@@ -164,14 +164,14 @@ void bluetooth_poll(void)
  */
 int bluetooth_register_driver(void)
 {
-    LOG_INFO("BLUETOOTH", "Registering Bluetooth driver");
+    klog_info("BLUETOOTH", "Registering Bluetooth driver");
     
     ir0_driver_t *driver = ir0_register_driver(&bluetooth_driver_info, &bluetooth_driver_ops);
     if (!driver) {
-        LOG_ERROR("BLUETOOTH", "Failed to register Bluetooth driver");
+        klog_error("BLUETOOTH", "Failed to register Bluetooth driver");
         return -1;
     }
     
-    LOG_INFO("BLUETOOTH", "Bluetooth driver registered successfully");
+    klog_info("BLUETOOTH", "Bluetooth driver registered successfully");
     return 0;
 }

@@ -311,8 +311,8 @@ static int minix_fs_ensure_root_inode(void)
   if ((root.i_mode & MINIX_IFMT) == MINIX_IFDIR)
     return 0;
 
-  log_warn_fmt("MINIX", "root inode mode=0x%x missing IFDIR, repairing",
-               root.i_mode);
+  klog_warn_fmt("MINIX", "root inode mode=0x%x missing IFDIR, repairing",
+                root.i_mode);
 
   perms = (mode_t)(root.i_mode & 0777);
   if (perms == 0)
@@ -362,11 +362,11 @@ static int minix_fs_init(void)
   uint8_t block_buffer[MINIX_BLOCK_SIZE];
   if (minix_read_block(1, block_buffer) != 0)
   {
-    log_debug_fmt("MINIX", "superblock read failed, formatting");
+    klog_debug_fmt("MINIX", "superblock read failed, formatting");
     return minix_fs_format();
   }
   memcpy(&minix_fs.superblock, block_buffer, sizeof(minix_superblock_t));
-  log_info_fmt("MINIX", "superblock read OK magic=0x%x", minix_fs.superblock.s_magic);
+  klog_info_fmt("MINIX", "superblock read OK magic=0x%x", minix_fs.superblock.s_magic);
 
   /* Check magic number */
   if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
@@ -385,9 +385,9 @@ static int minix_fs_init(void)
       minix_fs.superblock.s_zmap_blocks > 256 ||
       minix_fs.superblock.s_imap_blocks > 16)
   {
-    log_warn_fmt("MINIX", "corrupt geometry imap=%u zmap=%u, formatting",
-                 minix_fs.superblock.s_imap_blocks,
-                 minix_fs.superblock.s_zmap_blocks);
+    klog_warn_fmt("MINIX", "corrupt geometry imap=%u zmap=%u, formatting",
+                  minix_fs.superblock.s_imap_blocks,
+                  minix_fs.superblock.s_zmap_blocks);
     return minix_fs_format();
   }
 
@@ -437,7 +437,7 @@ static int minix_fs_init(void)
   minix_fs.initialized = true; // Temporary set to allow read_inode to work
   if (minix_read_inode(MINIX_ROOT_INODE, &root_inode_check) != 0 || root_inode_check.i_mode == 0)
   {
-    log_warn_fmt("MINIX", "root inode corrupt (mode=0x%x), forcing format", root_inode_check.i_mode);
+    klog_warn_fmt("MINIX", "root inode corrupt (mode=0x%x), forcing format", root_inode_check.i_mode);
     minix_fs.initialized = false;
     return minix_fs_format();
   }
@@ -454,8 +454,8 @@ static int minix_fs_init(void)
     return minix_fs_format();
   }
 
-  log_info_fmt("MINIX", "root inode OK mode=0x%x (dir=%d)", root_inode_check.i_mode,
-               (root_inode_check.i_mode & MINIX_IFDIR) ? 1 : 0);
+  klog_info_fmt("MINIX", "root inode OK mode=0x%x (dir=%d)", root_inode_check.i_mode,
+                (root_inode_check.i_mode & MINIX_IFDIR) ? 1 : 0);
 
   /* Valid filesystem found */
   minix_fs.initialized = true;

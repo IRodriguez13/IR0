@@ -21,7 +21,7 @@
 #include <ir0/process.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <ir0/clock.h>
 #include <ir0/sched.h>
@@ -356,7 +356,7 @@ ipc_channel_t *ipc_channel_create(uint32_t id)
     channel->ref_count = 0;
     channel->next = NULL;
 
-    LOG_INFO_FMT("IPC", "Created IPC channel %u", id);
+    klog_info_fmt("IPC", "Created IPC channel %u", id);
 
     return channel;
 }
@@ -366,7 +366,7 @@ void ipc_channel_destroy(ipc_channel_t *channel)
     if (!channel)
         return;
 
-    LOG_INFO_FMT("IPC", "Destroying IPC channel %u", channel->id);
+    klog_info_fmt("IPC", "Destroying IPC channel %u", channel->id);
 
     /* Wake up all waiting processes */
     wait_queue_wake_all(&channel->read_queue);
@@ -615,7 +615,7 @@ ssize_t ipc_channel_write(ipc_channel_t *channel, const void *buf, size_t count)
 
 int ipc_init(void)
 {
-    LOG_INFO("IPC", "Initializing IPC subsystem");
+    klog_info("IPC", "Initializing IPC subsystem");
     ipc_channels = NULL;
     next_channel_id = 1;
     return 0;

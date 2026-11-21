@@ -26,7 +26,6 @@
 
 #include <ir0/driver.h>
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <ir0/klog.h>
 #include <string.h>
 #include <stdbool.h>
@@ -108,19 +107,19 @@ static int validate_driver_info(const ir0_driver_info_t* info)
 {
     if (!info)
     {
-        LOG_ERROR("DRIVER", "Driver info is NULL");
+        klog_error("DRIVER", "Driver info is NULL");
         return 0;
     }
 
     if (!info->name || strlen(info->name) == 0)
     {
-        LOG_ERROR("DRIVER", "Driver name is NULL or empty");
+        klog_error("DRIVER", "Driver name is NULL or empty");
         return 0;
     }
 
     if (strlen(info->name) > 64)
     {
-        LOG_ERROR_FMT("DRIVER", "Driver name too long: %s", info->name);
+        klog_error_fmt("DRIVER", "Driver name too long: %s", info->name);
         return 0;
     }
 
@@ -131,14 +130,14 @@ static int validate_driver_ops(const ir0_driver_ops_t* ops)
 {
     if (!ops)
     {
-        LOG_ERROR("DRIVER", "Driver ops is NULL");
+        klog_error("DRIVER", "Driver ops is NULL");
         return 0;
     }
 
     /* At least init function is required */
     if (!ops->init)
     {
-        LOG_ERROR("DRIVER", "Driver must have init function");
+        klog_error("DRIVER", "Driver must have init function");
         return 0;
     }
 
@@ -168,7 +167,7 @@ void ir0_driver_registry_init(void)
 {
     if (driver_registry.initialized)
     {
-        LOG_WARNING("DRIVER", "Driver registry already initialized");
+        klog_warn("DRIVER", "Driver registry already initialized");
         return;
     }
 
@@ -176,7 +175,7 @@ void ir0_driver_registry_init(void)
     driver_registry.count = 0;
     driver_registry.initialized = 1;
 
-    LOG_DEBUG("DRIVER", "Driver registry initialized");
+    klog_debug("DRIVER", "Driver registry initialized");
 }
 
 int ir0_driver_registry_is_initialized(void)
@@ -201,21 +200,21 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     /* Check if registry is initialized */
     if (!driver_registry.initialized)
     {
-        LOG_WARNING("DRIVER", "Driver registry not initialized, initializing now");
+        klog_warn("DRIVER", "Driver registry not initialized, initializing now");
         ir0_driver_registry_init();
     }
 
     /* Check if driver already exists */
     if (find_driver_by_name(info->name))
     {
-        LOG_ERROR_FMT("DRIVER", "Driver '%s' already registered", info->name);
+        klog_error_fmt("DRIVER", "Driver '%s' already registered", info->name);
         return NULL;
     }
 
     /* Check driver limit */
     if (driver_registry.count >= MAX_DRIVERS)
     {
-        LOG_ERROR_FMT("DRIVER", "Maximum number of drivers (%d) reached", MAX_DRIVERS);
+        klog_error_fmt("DRIVER", "Maximum number of drivers (%d) reached", MAX_DRIVERS);
         return NULL;
     }
 
@@ -224,7 +223,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
 
     if (!driver)
     {
-        LOG_ERROR_FMT("DRIVER", "Failed to allocate memory for driver '%s'", info->name);
+        klog_error_fmt("DRIVER", "Failed to allocate memory for driver '%s'", info->name);
         return NULL;
     }
 
@@ -244,7 +243,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
         if (driver->owns_author && author_copy) kfree(author_copy);
         if (driver->owns_description && desc_copy) kfree(desc_copy);
         kfree(driver);
-        LOG_ERROR("DRIVER", "Failed to allocate memory for driver metadata");
+        klog_error("DRIVER", "Failed to allocate memory for driver metadata");
         return NULL;
     }
 
@@ -265,7 +264,7 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     driver_registry.count++;
 
     /* Log registration */
-    LOG_DEBUG_FMT("DRIVER", "Registered driver: %s (v%s) [%s]",
+    klog_debug_fmt("DRIVER", "Registered driver: %s (v%s) [%s]",
              driver->info.name,
              driver->info.version,
              lang_to_string(driver->info.language));
@@ -273,23 +272,23 @@ ir0_driver_t* ir0_register_driver(const ir0_driver_info_t* info,
     /* Call driver init function */
     if (driver->ops.init)
     {
-        LOG_DEBUG_FMT("DRIVER", "Initializing driver: %s", driver->info.name);
+        klog_debug_fmt("DRIVER", "Initializing driver: %s", driver->info.name);
         int32_t result = driver->ops.init();
 
         if (result == 0)
         {
             driver->state = IR0_DRIVER_STATE_INITIALIZED;
-            LOG_INFO_FMT("DRIVER", "%s initialized", driver->info.name);
+            klog_info_fmt("DRIVER", "%s initialized", driver->info.name);
         }
         else if (result == IR0_DRIVER_ABSENT)
         {
             driver->state = IR0_DRIVER_STATE_ABSENT;
-            LOG_WARNING_FMT("DRIVER", "Driver '%s' absent (no hardware)", driver->info.name);
+            klog_warn_fmt("DRIVER", "Driver '%s' absent (no hardware)", driver->info.name);
         }
         else
         {
             driver->state = IR0_DRIVER_STATE_FAILED;
-            LOG_ERROR_FMT("DRIVER", "Driver '%s' initialization failed: %d", driver->info.name, result);
+            klog_error_fmt("DRIVER", "Driver '%s' initialization failed: %d", driver->info.name, result);
         }
     }
 

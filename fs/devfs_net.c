@@ -168,44 +168,44 @@ int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t
             }
             {
                 uint32_t dns_h = ntohl(dns_server);
-                LOG_INFO_FMT("DEVNET", "Attempting DNS resolution for '%s' using DNS server %d.%d.%d.%d",
-                             hostname,
-                             (int)((dns_h >> 24) & 0xFF),
-                             (int)((dns_h >> 16) & 0xFF),
-                             (int)((dns_h >> 8) & 0xFF),
-                             (int)(dns_h & 0xFF));
+                klog_info_fmt("DEVNET", "Attempting DNS resolution for '%s' using DNS server %d.%d.%d.%d",
+                              hostname,
+                              (int)((dns_h >> 24) & 0xFF),
+                              (int)((dns_h >> 16) & 0xFF),
+                              (int)((dns_h >> 8) & 0xFF),
+                              (int)(dns_h & 0xFF));
             }
 
             /* In QEMU user-mode, try gateway first (10.0.2.2) as it might forward DNS */
             if (ip_gateway != 0)
             {
-                LOG_INFO_FMT("DEVNET", "Trying DNS via gateway first");
+                klog_info_fmt("DEVNET", "Trying DNS via gateway first");
                 dest_ip = dns_resolve(hostname, ip_gateway);
                 if (dest_ip == 0)
                 {
-                    LOG_INFO_FMT("DEVNET", "Gateway DNS failed, trying direct DNS server");
+                    klog_info_fmt("DEVNET", "Gateway DNS failed, trying direct DNS server");
                     dest_ip = dns_resolve(hostname, dns_server);
                 }
                 else
                 {
-                    LOG_INFO_FMT("DEVNET", "DNS resolution via gateway successful");
+                    klog_info_fmt("DEVNET", "DNS resolution via gateway successful");
                 }
             }
             else
             {
-                LOG_INFO_FMT("DEVNET", "No gateway, using direct DNS server");
+                klog_info_fmt("DEVNET", "No gateway, using direct DNS server");
                 dest_ip = dns_resolve(hostname, dns_server);
             }
 
             if (dest_ip == 0)
             {
                 /* DNS resolution failed */
-                LOG_INFO_FMT("DEVNET", "DNS resolution failed for '%s'", hostname);
+                klog_info_fmt("DEVNET", "DNS resolution failed for '%s'", hostname);
                 return -EIO;
             }
             else
             {
-                LOG_INFO_FMT("DEVNET", "DNS resolution successful: '%s' -> resolved IP", hostname);
+                klog_info_fmt("DEVNET", "DNS resolution successful: '%s' -> resolved IP", hostname);
             }
         }
 

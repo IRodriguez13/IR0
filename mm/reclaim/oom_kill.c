@@ -21,7 +21,7 @@
 #include <ir0/pmm.h>
 #include <ir0/percpu.h>
 #include <ir0/cpu.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 static atomic64_t oom_kills;
@@ -76,7 +76,7 @@ static int oom_kill_process(struct process *victim, const char *reason)
      * Linux logs the victim before signalling so a hang inside teardown still
      * leaves the audit trail on the serial console.
      */
-    log_info_fmt("OOM",
+    klog_info_fmt("OOM",
                     "[OOM] kill pid=%d comm=%s reason=%s",
                     pid, victim->comm[0] ? victim->comm : "(none)",
                     reason ? reason : "unknown");
@@ -121,7 +121,7 @@ static int oom_out_of_memory(struct process *origin, const char *reason)
     irq_restore(flags);
     if (!found)
     {
-        log_info_fmt("OOM",
+        klog_info_fmt("OOM",
                         "[OOM] no eligible victim (origin=%d reason=%s)",
                         origin ? (int)origin->task.pid : -1,
                         reason ? reason : "unknown");

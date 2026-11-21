@@ -70,8 +70,8 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
 
   if (!minix_fs.initialized || !pathname || !buf)
   {
-    log_debug_fmt("MINIX", "stat('%s') rejected: init=%d", pathname ? pathname : "(null)",
-                  minix_fs.initialized);
+    klog_debug_fmt("MINIX", "stat('%s') rejected: init=%d", pathname ? pathname : "(null)",
+                   minix_fs.initialized);
     if (!minix_fs.initialized)
       return -ENODEV;
     return -EINVAL;
@@ -81,14 +81,14 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
   rc = minix_lookup(pathname, &inode, &inode_num);
   if (rc != 0)
   {
-    log_debug_fmt("MINIX", "stat('%s') inode not found", pathname);
+    klog_debug_fmt("MINIX", "stat('%s') inode not found", pathname);
     return rc;
   }
 
   if ((inode.i_mode & MINIX_IFMT) == 0)
   {
-    log_debug_fmt("MINIX", "stat('%s') invalid mode 0x%x (stale)", pathname,
-                  inode.i_mode);
+    klog_debug_fmt("MINIX", "stat('%s') invalid mode 0x%x (stale)", pathname,
+                   inode.i_mode);
     return -ENOENT;
   }
 

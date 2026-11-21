@@ -13,7 +13,7 @@
 
 #include <config.h>
 #include <ir0/usb_host.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/arch_io.h>
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
@@ -80,11 +80,11 @@ static int usb_host_record_controller(uint16_t bus, uint8_t slot, uint8_t func,
     slotp->prog_if = (uint8_t)((class_rev_dw >> 8) & 0xFFU);
     slotp->bar0 = bar0;
 
-    LOG_INFO_FMT("USB",
-                 "PCI USB HC %04x:%04x %u:%u.%u prog_if=0x%02x BAR0=0x%08x",
-                 (unsigned)vendor, (unsigned)device,
-                 (unsigned)bus, (unsigned)slot, (unsigned)func,
-                 (unsigned)slotp->prog_if, (unsigned)bar0);
+    klog_info_fmt("USB",
+                  "PCI USB HC %04x:%04x %u:%u.%u prog_if=0x%02x BAR0=0x%08x",
+                  (unsigned)vendor, (unsigned)device,
+                  (unsigned)bus, (unsigned)slot, (unsigned)func,
+                  (unsigned)slotp->prog_if, (unsigned)bar0);
     g_usb_controller_count++;
     return 1;
 }
@@ -139,7 +139,7 @@ int ir0_usb_host_init(void)
 {
     int count = usb_host_pci_scan();
 
-    LOG_INFO_FMT("USB", "Host scaffold init: %d controller(s) on PCI bus", count);
+    klog_info_fmt("USB", "Host scaffold init: %d controller(s) on PCI bus", count);
     return 0;
 }
 

@@ -11,7 +11,6 @@
 
 #include "devfs.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <ir0/errno.h>
 #include <config.h>
 #include <ir0/console_backend.h>

@@ -26,7 +26,7 @@
 
 #include <drivers/multilang_drivers.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 
 /**
  * Register all multi-language example drivers
@@ -42,24 +42,24 @@ int register_multilang_example_drivers(void)
     driver = (ir0_driver_t*)register_rust_simple_driver();
     if (driver) {
         registered++;
-        LOG_INFO("MULTILANG", "Registered rust_simple driver");
+        klog_info("MULTILANG", "Registered rust_simple driver");
     } else {
-        LOG_WARNING("MULTILANG", "Failed to register rust_simple driver (may not be compiled)");
+        klog_warn("MULTILANG", "Failed to register rust_simple driver (may not be compiled)");
     }
 
     /* Register C++ example driver */
     driver = register_cpp_example_driver();
     if (driver) {
         registered++;
-        LOG_INFO("MULTILANG", "Registered cpp_example driver");
+        klog_info("MULTILANG", "Registered cpp_example driver");
     } else {
-        LOG_WARNING("MULTILANG", "Failed to register cpp_example driver (may not be compiled)");
+        klog_warn("MULTILANG", "Failed to register cpp_example driver (may not be compiled)");
     }
 
     if (registered > 0) {
-        LOG_INFO_FMT("MULTILANG", "Successfully registered %d multi-language driver(s)", registered);
+        klog_info_fmt("MULTILANG", "Successfully registered %d multi-language driver(s)", registered);
     } else {
-        LOG_WARNING("MULTILANG", "No multi-language drivers were registered (they may not be compiled)");
+        klog_warn("MULTILANG", "No multi-language drivers were registered (they may not be compiled)");
     }
 
     return registered;

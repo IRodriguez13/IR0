@@ -12,7 +12,6 @@
 
 #include "minix_fs.h"
 #include <fs/vfs.h>
-#include <ir0/logging.h>
 #include <ir0/blockdev.h>
 #include <ir0/klog.h>
 #include <ir0/clock.h>

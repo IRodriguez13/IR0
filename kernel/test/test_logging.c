@@ -7,14 +7,14 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: test_logging.c
- * Description: The log_* API filters on the klog level and lands in dmesg.
+ * Description: Formatted klog_* calls filter on the klog level and land in dmesg.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include "test/ktest_harness.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 
 /* Every record of the dmesg ring rendered at its 256-byte line cap. */
@@ -35,9 +35,8 @@ static int ktest_dmesg_has(const char *needle)
 }
 
 /*
- * One level filter: log_debug_fmt() must follow ir0.loglevel exactly like
- * klog_debug_fmt() does. A second, private threshold in logging.c pinned the
- * formatted log_* calls at INFO, so a debug profile never showed them.
+ * One level filter: klog_debug_fmt() must follow ir0.loglevel, with no
+ * private threshold pinning formatted calls at INFO.
  */
 void ktest_log_fmt_follows_klog_level(void)
 {
@@ -46,11 +45,11 @@ void ktest_log_fmt_follows_klog_level(void)
 	KTEST_BEGIN("log_fmt_follows_klog_level");
 
 	klog_set_level(KLOG_LEVEL_INFO);
-	log_debug_fmt("KTEST", "log-fmt-filtered-%d", 4243);
+	klog_debug_fmt("KTEST", "log-fmt-filtered-%d", 4243);
 	KASSERT_EQ(ktest_dmesg_has("log-fmt-filtered-4243"), 0);
 
 	klog_set_level(KLOG_LEVEL_DEBUG);
-	log_debug_fmt("KTEST", "log-fmt-debug-%d", 4242);
+	klog_debug_fmt("KTEST", "log-fmt-debug-%d", 4242);
 	klog_set_level(saved);
 	KASSERT_EQ(ktest_dmesg_has("log-fmt-debug-4242"), 1);
 

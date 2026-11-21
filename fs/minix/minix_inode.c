@@ -30,13 +30,13 @@ int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   // Validate superblock values before using them
   if (minix_fs.superblock.s_magic != MINIX_SUPER_MAGIC)
   {
-    log_debug_fmt("MINIX", "read_inode: invalid magic=0x%x", minix_fs.superblock.s_magic);
+    klog_debug_fmt("MINIX", "read_inode: invalid magic=0x%x", minix_fs.superblock.s_magic);
     return -1;
   }
   if (minix_fs.superblock.s_imap_blocks == 0 || minix_fs.superblock.s_zmap_blocks == 0)
   {
-    log_debug_fmt("MINIX", "read_inode: invalid bitmaps imap=%u zmap=%u",
-                  minix_fs.superblock.s_imap_blocks, minix_fs.superblock.s_zmap_blocks);
+    klog_debug_fmt("MINIX", "read_inode: invalid bitmaps imap=%u zmap=%u",
+                   minix_fs.superblock.s_imap_blocks, minix_fs.superblock.s_zmap_blocks);
     return -1;
   }
 
@@ -53,7 +53,7 @@ int minix_read_inode(uint32_t inode_num, minix_inode_t *inode)
   int result = minix_read_block(inode_block, block_buffer);
   if (result != 0)
   {
-    log_debug_fmt("MINIX", "read_inode: read_block failed ino=%u", inode_num);
+    klog_debug_fmt("MINIX", "read_inode: read_block failed ino=%u", inode_num);
     return -1;
   }
 
@@ -91,7 +91,7 @@ int minix_lookup(const char *pathname, minix_inode_t *out, uint16_t *ino_out)
 
     if (read_result != 0)
     {
-      log_debug_fmt("MINIX", "find_inode('/') read failed=%d", read_result);
+      klog_debug_fmt("MINIX", "find_inode('/') read failed=%d", read_result);
       return -EIO;
     }
     root_inode_cached = true;
