@@ -43,7 +43,6 @@
 #include <ir0/procfs.h>
 #include "io_syscalls.h"
 #include <ir0/pseudo_fs.h>
-#include <ir0/heartfs.h>
 #include <ir0/kmem.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/tty_smoke.h>

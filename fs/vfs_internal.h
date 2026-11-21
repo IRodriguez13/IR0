@@ -41,6 +41,7 @@ int vfs_ops_unlink(struct vfs_ops *ops, const char *path);
 int vfs_ops_rmdir(struct vfs_ops *ops, const char *path);
 int vfs_ops_readdir(struct vfs_ops *ops, const char *path,
 		    struct vfs_dirent *entries, int max);
+int vfs_ops_open(struct vfs_ops *ops, const char *path, int flags);
 int vfs_ops_link(struct vfs_ops *ops, const char *oldpath,
 		 const char *newpath);
 int vfs_ops_symlink(struct vfs_ops *ops, const char *target,

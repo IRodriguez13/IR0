@@ -186,6 +186,12 @@ void boot_rootfs_init(void)
 	klog_info("FILESYSTEM", "Registered and Initialized OK");
 
 	ir0_boot_port_maybe_seed_init_from_embedded();
+
+	/* After the port hook: the arm64 boot pivot would move it under /bpivot. */
+	if (vfs_mount("heartfs", "/heart", "heartfs") != 0)
+		log_warn("BOOT", "heartfs mount at /heart failed");
+	if (vfs_mount("sysfs", "/sys", "sysfs") != 0)
+		log_warn("BOOT", "sysfs mount at /sys failed");
 }
 
 void boot_process_init(void)

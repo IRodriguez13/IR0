@@ -46,7 +46,6 @@
 #include <ir0/partition.h>
 #include <ir0/blockdev.h>
 #include <ir0/video_backend.h>
-#include <ir0/pseudo_fs.h>
 #include <ir0/oops.h>
 #include <ir0/cpu_info.h>
 #include <ir0/mm_port.h>
@@ -70,16 +69,6 @@ static char sys_kernel_hostname[64] = "unix";
  * sysfs uses FD range 3000-3999, procfs uses 1000-1999,
  * but both can use the same tracking mechanism.
  */
-
-/* Check if path is in /sys (mount root or under it). */
-bool is_sys_path(const char *path)
-{
-    if (!path)
-        return false;
-    if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
-        return true;
-    return strncmp(path, "/sys/", 5) == 0;
-}
 
 /**
  * sys_kernel_version_read - Read kernel version from /sys/kernel/version
@@ -885,52 +874,35 @@ int sys_class_net_path_has_children(const char *path)
 }
 #endif
 
-/* Get stat for /sys file */
-int sysfs_stat(const char *path, stat_t *st)
+/*
+ * Public /heart/sys entry points. They live with the attribute readers, in
+ * the filesystem core, so heartfs does not call another filesystem member.
+ */
+int sysfs_alias_stat(const char *path, stat_t *st)
 {
-    int rc;
-
-    if (!st || !is_sys_path(path))
-        return -EINVAL;
-
-    if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
-    {
-        memset(st, 0, sizeof(*st));
-        st->st_mode = S_IFDIR | 0555;
-        st->st_nlink = 2;
-        pseudo_fs_stat_now(st);
-        return 0;
-    }
-
-    /*
-     * Use exact + dynamic resolution (same as open). Do not apply prefix
-     * static entries (e.g. /sys/class/net) to longer paths.
-     */
-    pseudo_fs_nodes_register_all();
-    rc = pseudo_fs_stat_path(path, st);
-    if (rc == 0)
-        return 0;
-
-    if (pseudo_fs_path_has_children(path) ||
-	sys_class_net_path_has_children(path))
-    {
-        memset(st, 0, sizeof(*st));
-        st->st_mode = S_IFDIR | 0555;
-        st->st_nlink = 2;
-        pseudo_fs_stat_now(st);
-        return 0;
-    }
-
-    return (rc < 0) ? rc : -ENOENT;
+	return sysfs_exact_stat(path, st);
 }
 
-int sysfs_is_virtual_subdir(const char *path)
+int sysfs_alias_read(const char *path, void *buf, size_t count,
+		     size_t *bytes_read, off_t offset)
 {
-    if (!path)
-        return 0;
-    if (strcmp(path, "/sys") == 0 || strcmp(path, "/sys/") == 0)
-        return 1;
-    if (pseudo_fs_path_has_children(path))
-	return 1;
-    return sys_class_net_path_has_children(path);
+	return sysfs_exact_read(path, buf, count, bytes_read, offset);
+}
+
+int sysfs_alias_write(const char *path, const void *buf, size_t count,
+		      size_t *bytes_written, off_t offset)
+{
+	return sysfs_exact_write(path, buf, count, bytes_written, offset);
+}
+
+int sysfs_alias_open(const char *path, int flags)
+{
+	return sysfs_exact_open(path, flags);
+}
+
+int sysfs_alias_readdir(const char *path, struct vfs_dirent *entries, int max)
+{
+	if (!sysfs_fs_type.ops || !sysfs_fs_type.ops->readdir)
+		return -ENOSYS;
+	return sysfs_fs_type.ops->readdir(path, entries, max);
 }

@@ -374,8 +374,9 @@ static int64_t sys_open_vfs_resolved(char *path_to_use, int ir0_flags,
   {
     stat_t st;
 
-    if (ir0_stat_path_routed(path_to_use, &st) != 0)
-      return -EACCES;
+    path_rc = ir0_stat_path_routed(path_to_use, &st);
+    if (path_rc != 0)
+      return path_rc;
     /* The lookup fails on a non-directory before any permission check. */
     if (!S_ISDIR(st.st_mode))
       return -ENOTDIR;
@@ -549,7 +550,7 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
 }
 
 /*
- * Install a registry /proc|/sys|/heart file into the process fd_table.
+ * Install a registry /proc|/sys file into the process fd_table.
  * Returns a real slot index (not PSEUDO_FS_*_FD_BASE).
  */
 static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
@@ -666,39 +667,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
       if (!(ir0_flags & O_DIRECTORY))
         return -EISDIR;
       return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
-
-  if (is_sys_path(resolved))
-  {
-    if (strcmp(resolved, "/sys") == 0 || strcmp(resolved, "/sys/") == 0 ||
-        sysfs_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
-
-  if (is_heart_path(resolved) && !heart_is_dennis_vfs_path(resolved))
-  {
-    char canon[256];
-
-    heart_nodes_register();
-    if (heart_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    if (heart_alias_canonical(resolved, canon, sizeof(canon)))
-    {
-      open_ret = pseudo_bind_file_fd(canon, ir0_flags);
-      return open_ret;
     }
     open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
     return open_ret;

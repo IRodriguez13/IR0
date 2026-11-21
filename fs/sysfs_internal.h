@@ -53,3 +53,11 @@ int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
 				  unsigned attr);
 int sys_class_net_parse_attr(const char *attr_name);
 int sys_class_net_find_name(const char *ifname);
+
+/* Exact node or net path. Intermediate directories are -ENOENT. */
+int sysfs_exact_stat(const char *path, stat_t *st);
+int sysfs_exact_read(const char *path, void *buf, size_t count,
+		     size_t *bytes_read, off_t offset);
+int sysfs_exact_write(const char *path, const void *buf, size_t count,
+		      size_t *bytes_written, off_t offset);
+int sysfs_exact_open(const char *path, int flags);

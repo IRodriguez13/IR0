@@ -211,6 +211,20 @@ int vfs_ops_readdir(struct vfs_ops *ops, const char *path,
 	return ret;
 }
 
+int vfs_ops_open(struct vfs_ops *ops, const char *path, int flags)
+{
+	char backend[VFS_PATH_MAX];
+	int ret;
+
+	ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+	if (ret != 0)
+		return ret;
+	vfs_fs_op_acquire();
+	ret = ops->open(backend, flags);
+	vfs_fs_op_release();
+	return ret;
+}
+
 int vfs_ops_link(struct vfs_ops *ops, const char *oldpath,
 		 const char *newpath)
 {

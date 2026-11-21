@@ -326,6 +326,52 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     return 0;
 }
 
+int vfs_bind_mount(const char *source, const char *target)
+{
+    char target_path[MAX_PATH];
+    struct vfs_mount *src;
+    struct vfs_mount *b;
+    int ret;
+
+    if (!source || !target)
+        return -EINVAL;
+    ret = vfs_validate_path(source);
+    if (ret == 0)
+        ret = vfs_validate_path(target);
+    if (ret != 0)
+        return ret;
+
+    normalize_mount_path(target, target_path, sizeof(target_path));
+    for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
+    {
+        if (strcmp(existing->path, target_path) == 0)
+            return -EBUSY;
+    }
+
+    src = vfs_find_mount(source);
+    if (!src || !src->fs || !src->fs->ops)
+        return -EINVAL;
+
+    b = kmalloc(sizeof(*b));
+    if (!b)
+        return -ENOMEM;
+    ret = vfs_backend_path(src->fs->ops, source, b->backend_path,
+                           sizeof(b->backend_path));
+    if (ret != 0)
+    {
+        kfree(b);
+        return ret;
+    }
+    strncpy(b->path, target_path, sizeof(b->path) - 1);
+    b->path[sizeof(b->path) - 1] = '\0';
+    memcpy(b->dev, src->dev, sizeof(b->dev));
+    b->fs = src->fs;
+    b->flags = src->flags | IR0_MS_BIND;
+    b->next = mounts;
+    mounts = b;
+    return 0;
+}
+
 int vfs_remount(const char *path, unsigned long flags)
 {
     char mount_path[MAX_PATH];
@@ -397,7 +443,7 @@ int vfs_umount(const char *path)
             return -EBUSY;
     }
 
-    if (victim->fs && victim->fs->umount)
+    if (!(victim->flags & IR0_MS_BIND) && victim->fs && victim->fs->umount)
     {
         int ret = victim->fs->umount(victim->path);
         if (ret != 0)
@@ -614,9 +660,7 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 			uint32_t magic;
 		} pseudo[] = {
 			{ "/proc", IR0_PROC_SUPER_MAGIC },
-			{ "/sys", IR0_SYSFS_MAGIC },
 			{ "/dev", IR0_TMPFS_MAGIC },
-			{ "/heart", IR0_HEARTFS_MAGIC },
 		};
 		size_t i;
 
