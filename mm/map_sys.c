@@ -25,7 +25,7 @@
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/process.h>
-#include <ir0/tlb.h>
+#include <ir0/tlb_sync.h>
 
 static int mm_mmap_verify_ptes(address_space_root_t root, uintptr_t virt_addr,
 			       size_t len)
@@ -921,7 +921,7 @@ int mm_mprotect(void *addr, size_t len, int prot)
       page_flags &= ~PAGE_RW;
     if (map_page_in_directory(root, page, phys, page_flags) != 0)
       return -ENOMEM;
-    tlb_invalidate_page((uintptr_t)page);
+    mm_tlb_sync_page(root, (uintptr_t)page);
   }
 
   if (!saw_present)
