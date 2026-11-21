@@ -170,7 +170,7 @@ def main() -> int:
                     "--timeout",
                     str(args.timeout),
                     "--stale-sec",
-                    "20",
+                    str(args.stale_sec or 20),
                     "--mem",
                     args.mem,
                     "--expected-panic",
