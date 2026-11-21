@@ -2014,3 +2014,42 @@ ir0-selftest-namei-search-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_N
 	@echo "✓ ir0-selftest-namei-search-arm64"
 
 ir0-selftest-namei-search: ir0-selftest-namei-search-x86 ir0-selftest-namei-search-arm64
+
+# BIGMEM-SELFTEST
+IR0_SELFTEST_X86_BIGMEM := $(KERNEL_ROOT)/build/selftests/x86_64/bigmem
+IR0_SELFTEST_ARM64_BIGMEM := $(KERNEL_ROOT)/build/selftests/arm64/bigmem
+
+.PHONY: ir0-selftest-bigmem-x86 ir0-selftest-bigmem-arm64 \
+	ir0-selftest-bigmem
+
+$(IR0_SELFTEST_X86_BIGMEM): tests/selftests/mm/bigmem.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 bigmem
+
+$(IR0_SELFTEST_ARM64_BIGMEM): tests/selftests/mm/bigmem.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 bigmem
+
+ir0-selftest-bigmem-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_BIGMEM)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_BIGMEM) \
+		--mem 4096M \
+		--timeout 180 \
+		--done "ok 2 touch_1280_mib_anon" \
+		--expect-log "ok 1 memtotal_reflects_ram" \
+		--log $(HOST_TMP)/ir0-selftest-x86-bigmem.log
+	@echo "✓ ir0-selftest-bigmem-x86"
+
+ir0-selftest-bigmem-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_BIGMEM)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_BIGMEM) \
+		--mem 4096M \
+		--timeout 180 \
+		--done "ok 2 touch_1280_mib_anon" \
+		--expect-log "ok 1 memtotal_reflects_ram" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-bigmem.log
+	@echo "✓ ir0-selftest-bigmem-arm64"
+
+ir0-selftest-bigmem: ir0-selftest-bigmem-x86 ir0-selftest-bigmem-arm64

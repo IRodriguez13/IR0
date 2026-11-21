@@ -33,6 +33,8 @@ def main() -> int:
     parser.add_argument("--binary", required=True)
     parser.add_argument("--log", required=True)
     parser.add_argument("--timeout", type=int, default=90)
+    parser.add_argument("--mem", default="256M",
+                        help="Guest RAM passed to smoke_autokill (default 256M)")
     parser.add_argument(
         "--expected-panic",
         action="store_true",
@@ -113,7 +115,7 @@ def main() -> int:
                     "--stale-sec",
                     "12",
                     "--mem",
-                    "256M",
+                    args.mem,
                     *(["--expected-panic"] if args.expected_panic else []),
                     "--done",
                     done_tag,
@@ -168,7 +170,7 @@ def main() -> int:
                     "--stale-sec",
                     "20",
                     "--mem",
-                    "256M",
+                    args.mem,
                     "--expected-panic",
                     "--success-mode",
                     "all",

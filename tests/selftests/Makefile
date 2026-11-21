@@ -1075,3 +1075,21 @@ $(NAMEI_SEARCH_BIN): $(NAMEI_SEARCH_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(NAMEI_SEARCH_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# BIGMEM-SELFTEST
+BIGMEM_SRC := mm/bigmem.c
+BIGMEM_BIN := $(BUILD_DIR)/bigmem
+
+.PHONY: bigmem
+
+bigmem: $(BIGMEM_BIN)
+
+$(BIGMEM_BIN): $(BIGMEM_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest bigmem"
+	@$(CC) $(CFLAGS) -o $@ $(BIGMEM_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
