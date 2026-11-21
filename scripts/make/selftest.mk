@@ -799,6 +799,41 @@ endef
 
 $(foreach g,$(IR0_ABI_SELFTESTS),$(eval $(call ir0_abi_selftest,$(g))))
 
+# EVDEV-SELFTEST
+# Each open of /dev/input/event0 has its own ring. Empty non-blocking
+# read is EAGAIN. EVIOCGNAME and EVIOCGID identify the device. An ioctl
+# on a non-event fd is ENOTTY.
+IR0_SELFTEST_X86_EVDEV := $(KERNEL_ROOT)/build/selftests/x86_64/evdev
+IR0_SELFTEST_ARM64_EVDEV := $(KERNEL_ROOT)/build/selftests/arm64/evdev
+
+.PHONY: ir0-selftest-evdev-x86 ir0-selftest-evdev-arm64 ir0-selftest-evdev
+
+$(IR0_SELFTEST_X86_EVDEV): tests/selftests/syscall/evdev.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev
+
+$(IR0_SELFTEST_ARM64_EVDEV): tests/selftests/syscall/evdev.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 evdev
+
+ir0-selftest-evdev-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV)
+	@flock -w 600 $${TMPDIR:-/tmp}/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_EVDEV) \
+		--done "ok 5 non_event_enotty" \
+		--log $(HOST_TMP)/ir0-selftest-x86-evdev.log
+	@echo "✓ ir0-selftest-evdev-x86"
+
+ir0-selftest-evdev-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV)
+	@flock -w 600 $${TMPDIR:-/tmp}/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_EVDEV) \
+		--done "ok 5 non_event_enotty" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-evdev.log
+	@echo "✓ ir0-selftest-evdev-arm64"
+
+ir0-selftest-evdev: ir0-selftest-evdev-x86 ir0-selftest-evdev-arm64
+
 # SIGHAND-SELFTEST
 IR0_SELFTEST_X86_SIGHAND := $(KERNEL_ROOT)/build/selftests/x86_64/sighand
 IR0_SELFTEST_ARM64_SIGHAND := $(KERNEL_ROOT)/build/selftests/arm64/sighand
