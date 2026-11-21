@@ -1156,3 +1156,36 @@ ir0-selftest-shm-cpid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_C
 	@echo "✓ ir0-selftest-shm-cpid-arm64"
 
 ir0-selftest-shm-cpid: ir0-selftest-shm-cpid-x86 ir0-selftest-shm-cpid-arm64
+
+# EVDEV-GRAB-SELFTEST
+IR0_SELFTEST_X86_EVDEV_GRAB := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_grab
+IR0_SELFTEST_ARM64_EVDEV_GRAB := $(KERNEL_ROOT)/build/selftests/arm64/evdev_grab
+
+.PHONY: ir0-selftest-evdev-grab-x86 ir0-selftest-evdev-grab-arm64 \
+	ir0-selftest-evdev-grab
+
+$(IR0_SELFTEST_X86_EVDEV_GRAB): tests/selftests/syscall/evdev_grab.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_grab
+
+$(IR0_SELFTEST_ARM64_EVDEV_GRAB): tests/selftests/syscall/evdev_grab.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_grab
+
+ir0-selftest-evdev-grab-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_GRAB)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_EVDEV_GRAB) \
+		--done "ok 1 evdev_grab" \
+		--log $(HOST_TMP)/ir0-selftest-x86-evdev-grab.log
+	@echo "✓ ir0-selftest-evdev-grab-x86"
+
+ir0-selftest-evdev-grab-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_GRAB)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_EVDEV_GRAB) \
+		--done "ok 1 evdev_grab" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-grab.log
+	@echo "✓ ir0-selftest-evdev-grab-arm64"
+
+ir0-selftest-evdev-grab: ir0-selftest-evdev-grab-x86 ir0-selftest-evdev-grab-arm64

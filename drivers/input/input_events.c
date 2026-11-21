@@ -36,6 +36,7 @@ struct input_dev
 	const char *name;
 	struct input_id id;
 	struct input_client *clients;
+	struct input_client *grabber;
 	int registered;
 };
 
@@ -182,10 +183,18 @@ void input_event(struct input_dev *dev, unsigned int type,
 	ev.value = value;
 
 	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
-	for (c = dev->clients; c; c = c->next)
+	if (dev->grabber)
 	{
-		client_push(c, &ev);
+		client_push(dev->grabber, &ev);
 		queued = 1;
+	}
+	else
+	{
+		for (c = dev->clients; c; c = c->next)
+		{
+			client_push(c, &ev);
+			queued = 1;
+		}
 	}
 	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 	if (queued)
@@ -238,6 +247,36 @@ void input_client_get(void *client)
 	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 }
 
+int input_client_grab(void *client, int grab)
+{
+	struct input_client *c = client;
+	unsigned long irq_flags;
+	int ret = 0;
+
+	if (!c || !c->dev)
+	{
+		return -EINVAL;
+	}
+	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
+	if (grab)
+	{
+		if (c->dev->grabber && c->dev->grabber != c)
+		{
+			ret = -EBUSY;
+		}
+		else
+		{
+			c->dev->grabber = c;
+		}
+	}
+	else if (c->dev->grabber == c)
+	{
+		c->dev->grabber = NULL;
+	}
+	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
+	return ret;
+}
+
 void input_client_put(void *client)
 {
 	struct input_client *c = client;
@@ -267,6 +306,10 @@ void input_client_put(void *client)
 		if (active_client == c)
 		{
 			active_client = NULL;
+		}
+		if (c->dev->grabber == c)
+		{
+			c->dev->grabber = NULL;
 		}
 		free_it = 1;
 	}
