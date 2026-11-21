@@ -1781,3 +1781,36 @@ ir0-selftest-waitid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_WAITID)
 	@echo "✓ ir0-selftest-waitid-arm64"
 
 ir0-selftest-waitid: ir0-selftest-waitid-x86 ir0-selftest-waitid-arm64
+
+# PROC-COMM-SELFTEST
+IR0_SELFTEST_X86_PROC_COMM := $(KERNEL_ROOT)/build/selftests/x86_64/proc_comm
+IR0_SELFTEST_ARM64_PROC_COMM := $(KERNEL_ROOT)/build/selftests/arm64/proc_comm
+
+.PHONY: ir0-selftest-proc-comm-x86 ir0-selftest-proc-comm-arm64 \
+	ir0-selftest-proc-comm
+
+$(IR0_SELFTEST_X86_PROC_COMM): tests/selftests/syscall/proc_comm.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 proc_comm
+
+$(IR0_SELFTEST_ARM64_PROC_COMM): tests/selftests/syscall/proc_comm.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 proc_comm
+
+ir0-selftest-proc-comm-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PROC_COMM)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PROC_COMM) \
+		--done "ok 1 proc_comm" \
+		--log $(HOST_TMP)/ir0-selftest-x86-proc-comm.log
+	@echo "✓ ir0-selftest-proc-comm-x86"
+
+ir0-selftest-proc-comm-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PROC_COMM)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PROC_COMM) \
+		--done "ok 1 proc_comm" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-proc-comm.log
+	@echo "✓ ir0-selftest-proc-comm-arm64"
+
+ir0-selftest-proc-comm: ir0-selftest-proc-comm-x86 ir0-selftest-proc-comm-arm64

@@ -490,6 +490,7 @@ typedef struct proc_pid_file_ctx
 #define PROC_PID_FILE_FD_LINK 6
 #define PROC_PID_FILE_OOM_SCORE_ADJ 7
 #define PROC_PID_FILE_OOM_SCORE 8
+#define PROC_PID_FILE_COMM  9
 #define PROC_PID_CTX_MAX      32
 
 static proc_pid_file_ctx_t g_proc_pid_ctx[PROC_PID_CTX_MAX];
@@ -565,6 +566,7 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
         strcmp(name, "environ") != 0 &&
         strcmp(name, "oom_score_adj") != 0 &&
         strcmp(name, "oom_score") != 0 &&
+        strcmp(name, "comm") != 0 &&
         !(strcmp(name, "stat") == 0 && pid > 0))
         return -ENOENT;
 
@@ -591,6 +593,8 @@ static int proc_pid_file_match(const char *path, void **out_ctx)
         ctx->kind = PROC_PID_FILE_OOM_SCORE_ADJ;
     else if (strcmp(name, "oom_score") == 0)
         ctx->kind = PROC_PID_FILE_OOM_SCORE;
+    else if (strcmp(name, "comm") == 0)
+        ctx->kind = PROC_PID_FILE_COMM;
     else
         ctx->kind = PROC_PID_FILE_STATUS;
     ctx->in_use = 1;
@@ -622,6 +626,8 @@ static int64_t proc_pid_file_read(void *ctx, char *buf, size_t count, off_t *off
         return proc_pid_oom_score_read(buf, count, file->pid);
     if (file->kind == PROC_PID_FILE_FD_LINK)
         return proc_pid_fd_link_target_read(buf, count, file->pid, file->fd_num);
+    if (file->kind == PROC_PID_FILE_COMM)
+        return proc_comm_read(buf, count, file->pid);
 
     return proc_status_read(buf, count, file->pid);
 }

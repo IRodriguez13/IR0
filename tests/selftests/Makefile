@@ -949,3 +949,21 @@ $(WAITID_BIN): $(WAITID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(WAITID_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PROC-COMM-SELFTEST
+PROC_COMM_SRC := syscall/proc_comm.c
+PROC_COMM_BIN := $(BUILD_DIR)/proc_comm
+
+.PHONY: proc_comm
+
+proc_comm: $(PROC_COMM_BIN)
+
+$(PROC_COMM_BIN): $(PROC_COMM_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_comm"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_COMM_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
