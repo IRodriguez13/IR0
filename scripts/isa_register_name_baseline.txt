@@ -4,20 +4,10 @@
 # and on a listed pair whose identifier is gone: a branch that fixes an
 # offender deletes its line here in the same commit.
 # Regenerate: python3 scripts/architecture_guard.py --print-register-baseline
-includes/ir0/arch_task.h IR0_TASK_GET_CS
-includes/ir0/arch_task.h IR0_TASK_GET_SS
-includes/ir0/arch_task.h IR0_TASK_SET_CS
-includes/ir0/arch_task.h IR0_TASK_SET_SS
-includes/ir0/arch_task.h task_cs_is_user
-includes/ir0/arch_task.h task_get_cs
-includes/ir0/arch_task.h task_get_ss
-includes/ir0/arch_task.h task_set_cs
-includes/ir0/arch_task.h task_set_ss
 includes/ir0/ktm/stack_watch.h rsp
 includes/ir0/signal_irq.h new_rsp
 includes/ir0/syscall_frame.h rip_hw
 includes/ir0/task_ops.h rax
-kernel/process/core.c task_cs_is_user
 kernel/syscalls/fs_path_syscalls.c rflags
 ktm/d1_12_read_diag.c fault_rip
 ktm/d1_12_read_diag.c magic_rax
@@ -50,7 +40,6 @@ ktm/include/d1_12_read_diag.h rdi
 ktm/include/d1_12_read_diag.h rdx
 ktm/include/d1_12_read_diag.h rip
 ktm/include/d1_12_read_diag.h rsi
-ktm/ktm_ctx_snapshot.c task_get_cs
 ktm/ktm_panic_class.c USER_RIP_HI
 ktm/ktm_panic_class.c USER_RIP_LO
 ktm/stack_watch.c rsp

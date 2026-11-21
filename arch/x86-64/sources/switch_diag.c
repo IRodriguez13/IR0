@@ -19,7 +19,7 @@
 void switch_report_bad_ret(uint64_t rip, task_t *task)
 {
 	process_t *p = task ? task_to_process(task) : current_process;
-	uint64_t cs = task ? (uint64_t)task_get_cs(task) : 0;
+	uint64_t cs = task ? (uint64_t)IR0_TASK_GET_CODE_SEG(task) : 0;
 	uint64_t rsp = task ? task_get_sp(task) : 0;
 
 	/*

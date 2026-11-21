@@ -42,7 +42,7 @@ void ktm_ctx_snapshot(const process_t *p, const char *reason)
 		       (unsigned)(uint32_t)p->task.pid,
 		       (unsigned long long)process_syscall_ip(p),
 		       (unsigned long long)process_syscall_sp(p),
-		       (unsigned long long)(uint64_t)task_get_cs(&p->task),
+		       (unsigned long long)(uint64_t)IR0_TASK_GET_CODE_SEG(&p->task),
 		       (unsigned long long)process_mm_root(p),
 		       (unsigned long long)(uint64_t)(uintptr_t)p->poll_waiter);
 }
