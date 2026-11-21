@@ -19,7 +19,7 @@
  */
 
 #include <ir0/typewriter.h>
-#include <ir0/atomic.h>
+#include <ir0/delay.h>
 #include "console.h"
 #include "console_renderer.h"
 #include <ir0/vga.h>
@@ -70,17 +70,9 @@ static int scrollback_cols(void)
 	return cols;
 }
 
-/* Simple delay function using CPU cycles */
 static void typewriter_delay(uint32_t microseconds)
 {
-    /* Approximate delay based on CPU cycles
-     * This is a rough estimate - adjust multiplier as needed */
-    volatile uint32_t cycles = microseconds * 1000; /* Rough approximation */
-    
-    for (volatile uint32_t i = 0; i < cycles; i++) {
-        /* Busy wait */
-        barrier();
-    }
+    udelay(microseconds);
 }
 
 /*
