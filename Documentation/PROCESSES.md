@@ -36,7 +36,7 @@ validates it, and a frame that cannot be read or does not validate ends in
 SIGSEGV. Handlers nest as in Linux: a signal that is not blocked while a
 handler runs gets its own frame below the running handler's.
 
-`signal_enter_pending` (separate field) gates syscall exit into the handler frame; see `kernel/syscalls/syscall_dispatch.c` and `kernel/lib/signals.c`.
+`signal_enter_pending` (separate field) gates syscall exit into the handler frame; see `kernel/entry/syscall_dispatch.c` and `kernel/lib/signals.c`.
 
 Signal frame / `siginfo` setup **must** use `copy_to_user_mm`
 (never CR3 + `memcpy` to the user stack). Contract and fault tags:

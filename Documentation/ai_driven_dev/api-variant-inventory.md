@@ -300,7 +300,7 @@ conditionals:
 
 | File:line | Macro | Guards | Suggested replacement |
 |-----------|-------|--------|-----------------------|
-| `kernel/syscalls/syscall_dispatch.c:91`, `:116`, `:454` | `CONFIG_ENABLE_NETWORKING` | socket syscall wrappers and table slots | Build `socket_syscalls.c` only with networking and give `syscall_dispatch` a `net_syscalls_register(table)` hook (stub returns nothing when disabled); coordinate with `refactor/net-fs-split` |
+| `kernel/entry/syscall_dispatch.c:91`, `:116`, `:454` | `CONFIG_ENABLE_NETWORKING` | socket syscall wrappers and table slots | Build `socket_syscalls.c` only with networking and give `syscall_dispatch` a `net_syscalls_register(table)` hook (stub returns nothing when disabled); coordinate with `refactor/net-fs-split` |
 | `kernel/signals/signals.c:255` | `SIGNAL_DELIVER_LOG` | delivery klog with `cr2=`/`rip=`/`rsp=` tags | `signal_trace_deliver()` in a `kernel/signals/signal_diag.c` |
 | `kernel/signals/signals.c:266` | `CONFIG_KTM_FLIGHT` | two `KTM_FLIGHT` records | same hook; KTM flight wrapper compiles to nothing when disabled |
 | `kernel/signals/signals.c:403`, `:449`, `kernel/signals/default_action.c:82`, `kernel/process/exit.c:60`, `kernel/process/wait.c:185`, `kernel/syscalls/process_syscalls.c:1626` | `IR0_DEBUG_PROC` | `[SIGTERM_AUDIT]` klog | `signal_trace_*()` / `process_trace_*()` hooks in a diag file (stubbed when the debug config is off) |
@@ -368,7 +368,7 @@ frame patching (x86 "blocked syscall frame" model) and
 | `kernel/signals/default_action.c:83`, `kernel/process/exit.c:55,59,63`, `kernel/process/wait.c:38,68,186,230,306,317` | `[SIGTERM_AUDIT]`, `CLASSIFY ZOMBIE_*`, `[WAIT4_WNOHANG_AUDIT]`, `KTM_CHECKPOINT` | `process_trace(event, ...)` in `sched/trace.c` or a new `process/diag.c` (the existing `wait_audit.c` is the model) |
 | `kernel/process/core.c:137,145` | `[ISRABI][IRQ_SAVE]` | same `process_trace` hook |
 | `kernel/process/fork.c:40,91,119,132,262,268,277,302,320,656` (10 `KTM_FAULT_HIT`), `:296` (klog), `:351,579` (`KTM_CHECKPOINT`) | fault injection and checkpoints | one `fork_should_fail(site)` hook (Linux `should_fail`) like `mm_diag_fault_hit`, plus `process_trace` |
-| `kernel/syscalls/syscall_dispatch.c:518,521,532,539,542` | `KTM_TRACE_SYSCALL_ENTER/RET`, `ktm_probe_diag_syscall_pre/post`, `ktm_user_canary_poll` | one `syscall_trace_enter()` / `syscall_trace_exit()` pair (Linux tracepoints) in a `kernel/syscalls/syscall_diag.c` |
+| `kernel/entry/syscall_dispatch.c:518,521,532,539,542` | `KTM_TRACE_SYSCALL_ENTER/RET`, `ktm_probe_diag_syscall_pre/post`, `ktm_user_canary_poll` | one `syscall_trace_enter()` / `syscall_trace_exit()` pair (Linux tracepoints) in a `kernel/syscalls/syscall_diag.c` |
 | `kernel/syscalls.c:41,95,100,102` | init-time klog (`syscalls_init`) | KEEP (not hot path) or drop |
 | `mm/page_fault_cow.c:56,81,111,147`, `mm/page_fault_kernel.c:36,47,57` | `log_*_fmt("PF", ...)` | `mm_diag_*` hooks (IN FLIGHT: `refactor/mm-diag-headers` already moves `page_fault_kernel.c`; `page_fault_cow.c` is the remaining file) |
 
@@ -386,7 +386,7 @@ through `switch_trace()` in `sched/switch/diag.c`), `mm/page_fault.c`,
   (`string.h`), `ktm/klog.c` (`ir0/clock.h`), `drivers/net/virtio_net.c`
   (`ir0/cpu.h`), `drivers/net/rtl8139.c` (`ir0/ktm/klog.h`),
   `drivers/virtio/virtio_9p.c` (`ir0/cpu.h`, `ir0/ktm/klog.h`),
-  `kernel/syscalls/syscall_dispatch.c` (`config.h`).
+  `kernel/entry/syscall_dispatch.c` (`config.h`).
 - Public definitions living in the wrong file: `get_process_fd_table`,
   `fd_slot_*` and `ensure_devfs_init` are defined in
   `kernel/syscalls/io_syscalls.c`.
@@ -432,7 +432,7 @@ part, `fs_meta.c`, `fs_path_syscalls.c`, `fs_syscalls.c`, `time_syscalls.c`,
    `klog_get_boot_phase`. Merge `ir0_boot_smoke` and `klog_smoke` (keep
    harness tags stable).
 
-**Lane D — diag hooks (files: `kernel/syscalls/syscall_dispatch.c`,
+**Lane D — diag hooks (files: `kernel/entry/syscall_dispatch.c`,
 `kernel/process/{fork,wait,exit,core,signals}.c`, new diag files)**
 
 7. **D1.** `syscall_trace_enter/exit` hook file; move the 5 KTM calls out of

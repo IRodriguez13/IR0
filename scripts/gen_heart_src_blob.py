@@ -17,7 +17,7 @@ DEFAULT_FILES = [
     "includes/ir0/sock_stream.h",
     "includes/ir0/ahci_api.h",
     "arch/common/arch_portable.h",
-    "kernel/syscalls/syscall_dispatch.c",
+    "kernel/entry/syscall_dispatch.c",
 ]
 
 

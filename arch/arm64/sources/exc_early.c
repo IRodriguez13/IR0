@@ -36,7 +36,7 @@
 #include <asm/exc_frame.h>
 #include <asm/esr.h>
 #include <ir0/fault.h>
-#include <kernel/syscalls/syscall_dispatch.h>
+#include <kernel/entry/syscall_dispatch.h>
 
 /* PSCI 0.2 (SMC Calling Convention) — QEMU virt uses HVC conduit at EL1. */
 #define PSCI_0_2_FN_SYSTEM_OFF   0x84000008UL

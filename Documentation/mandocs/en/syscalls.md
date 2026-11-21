@@ -7,7 +7,7 @@
 | Status | stable |
 | Depends on | vfs, process, memory |
 | Man page | IR0-syscalls (section 7) |
-| Primary sources | `kernel/syscalls/{syscall_dispatch,fs_syscalls,socket_syscalls,stdin}.c`, `arch/x86-64/asm/syscall_*.asm`, `includes/ir0/syscall*.h`, `includes/ir0/copy_user.c` |
+| Primary sources | `kernel/entry/syscall_dispatch.c`, `kernel/syscalls/{fs_syscalls,socket_syscalls,stdin}.c`, `arch/x86-64/asm/syscall_*.asm`, `includes/ir0/syscall*.h`, `includes/ir0/copy_user.c` |
 
 ## 1. Overview
 

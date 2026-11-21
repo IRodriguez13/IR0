@@ -497,7 +497,7 @@ KERNEL_OBJS = \
 	kernel/syscalls/early_process.o \
 	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \
-    kernel/syscalls/syscall_dispatch.o \
+    kernel/entry/syscall_dispatch.o \
     net/sock_udp.o \
     net/sock_icmp.o \
     net/sock_stream.o \
@@ -656,7 +656,7 @@ LIB_OBJS = \
     fs/bpath.o \
     fs/bpivot.o \
     fs/bpivot_boot.o \
-    kernel/syscalls/syscall_table.o \
+    kernel/entry/syscall_table.o \
     fs/stat_user.o \
     fs/named_fifo.o \
     fs/named_socket.o \
@@ -724,7 +724,7 @@ $(HEART_SRC_BLOB): \
 		$(KERNEL_ROOT)/includes/ir0/sock_stream.h \
 		$(KERNEL_ROOT)/includes/ir0/ahci_api.h \
 		$(KERNEL_ROOT)/arch/common/arch_portable.h \
-		$(KERNEL_ROOT)/kernel/syscalls/syscall_dispatch.c
+		$(KERNEL_ROOT)/kernel/entry/syscall_dispatch.c
 	@python3 $(KERNEL_ROOT)/scripts/gen_heart_src_blob.py \
 		--root $(KERNEL_ROOT) --out $(HEART_SRC_BLOB)
 

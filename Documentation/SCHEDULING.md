@@ -5,7 +5,7 @@
 > `sched/idle.c`, `kernel/futex/futex.c`,
 > `sched/rr.c`, `sched/prio.c`,
 > `kernel/time/clock_wait.c`, `kernel/syscalls/io_syscalls.c`,
-> `kernel/syscalls/syscall_dispatch.c`, `kernel/signals/signals.c`
+> `kernel/entry/syscall_dispatch.c`, `kernel/signals/signals.c`
 
 IR0 scheduling is one core plus one policy file chosen at build time from
 Kconfig. There is no run-time dispatch.
