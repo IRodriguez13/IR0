@@ -508,11 +508,9 @@ static int elf_file_off_for_vaddr(const elf64_phdr_t *phdr, uint16_t phnum,
 }
 
 /*
- * An ET_EXEC with PT_INTERP may still carry DT_RELA entries (GLOB_DAT) that
- * its interpreter would apply. When the interpreter file is missing (MINIX
- * names stop at 14 bytes), IR0 applies the local relocations itself and runs
- * the image without it. Linux binfmt_elf fails such an execve with ENOENT;
- * this fallback is a known divergence.
+ * An ET_EXEC with no PT_INTERP may still carry DT_RELA (GLOB_DAT). Apply
+ * those local relocations here. A named PT_INTERP that is not on the
+ * filesystem is -ENOENT and never reaches this path.
  */
 static int elf_apply_local_relocs(elf64_header_t *header, uint8_t *file_data,
                                   size_t file_size, address_space_root_t root)
@@ -843,7 +841,32 @@ static int elf_try_load_interp(process_t *process, const char *path,
 }
 
 /*
+ * Linux binfmt_elf open_exec(): a PT_INTERP path that is not on the
+ * filesystem is -ENOENT. No PT_INTERP returns 1. An existing file returns
+ * 0. A malformed path returns -1.
+ */
+static int elf_interp_on_fs(const uint8_t *file_data, size_t file_size,
+                            char *ipath, size_t ipath_sz)
+{
+    stat_t st;
+    int pr;
+
+    if (!file_data || !ipath || ipath_sz < 2)
+        return -1;
+
+    memset(ipath, 0, ipath_sz);
+    pr = ir0_elf64_read_interp_path(file_data, file_size, ipath, ipath_sz);
+    if (pr != 0)
+        return pr;
+    if (vfs_stat(ipath, &st) != 0)
+        return -ENOENT;
+    return 0;
+}
+
+/*
  * Map the main image, then PT_INTERP when the interpreter file exists.
+ * A missing interpreter returns -ENOENT and does not seal or run e_entry.
+ * No PT_INTERP still runs the main image.
  * *at_base starts as the main load VA and becomes the interp load address.
  * *user_ip is the first user RIP (interp entry, or main e_entry).
  * AT_ENTRY stays the main e_entry: set task IP to that before elf_setup_stack.
@@ -863,18 +886,16 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
     if (!header || !file_data || !process || !at_base || !user_ip)
         return -1;
 
-    *user_ip = header->e_entry;
-    memset(ipath, 0, sizeof(ipath));
-    pr = ir0_elf64_read_interp_path(file_data, file_size, ipath, sizeof(ipath));
+    pr = elf_interp_on_fs(file_data, file_size, ipath, sizeof(ipath));
+    /* Missing interpreter: stop before seal and before e_entry is published. */
+    if (pr == -ENOENT)
+        return -ENOENT;
     if (pr < 0)
         return -1;
-    if (pr == 0)
-    {
-        stat_t st;
 
-        if (vfs_stat(ipath, &st) == 0)
-            have_interp_file = 1;
-    }
+    *user_ip = header->e_entry;
+    if (pr == 0)
+        have_interp_file = 1;
 
     memset(&main_plan, 0, sizeof(main_plan));
     main_plan.root = process_pgd(process);
@@ -883,11 +904,7 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
         return -1;
 
     if (!have_interp_file)
-    {
-        if (pr == 0)
-            klog_debug_fmt("ELF", "SERIAL: ELF: PT_INTERP fallback %s\n", ipath);
         return elf_load_plan_seal(&main_plan);
-    }
 
 	irc = elf_try_load_interp(process, ipath, at_base, &interp_entry,
 				    &interp_plan);
@@ -1377,7 +1394,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
  * 5. Set up entry point, stack with argc/argv/envp, and registers
  * 6. Free the in-kernel ELF buffer and enqueue the process for execution
  *
- * Returns: Process PID on success, -1 on error
+ * Returns: Process PID on success, -ENOENT if PT_INTERP is missing, -1 on error
  *
  * Thread safety: NOT thread-safe - should be called from process context
  */
@@ -1393,6 +1410,8 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     uint64_t at_phdr;
     uint64_t at_base;
     uint64_t user_ip;
+    int load_rc;
+
     result = vfs_read_file(path, &file_data, &file_size);
     if (result != 0 || !file_data)
     {
@@ -1446,6 +1465,19 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     header = (elf64_header_t *)file_data;
     klog_debug("ELF", "SERIAL: ELF: Header validation passed\n");
 
+    {
+        char ipath[IR0_ELF_INTERP_PATH_MAX + 1];
+        int ipr;
+
+        ipr = elf_interp_on_fs((const uint8_t *)file_data, file_size,
+                               ipath, sizeof(ipath));
+        if (ipr == -ENOENT)
+        {
+            kfree(file_data);
+            return -ENOENT;
+        }
+    }
+
     /* Step 3: Create process first */
     process = elf_create_process(header, path);
     if (!process)
@@ -1459,8 +1491,9 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
     at_base = elf_compute_load_base(header, (uint8_t *)file_data);
     user_ip = header->e_entry;
-    if (elf_load_image_and_interp(header, (uint8_t *)file_data, file_size,
-                                 process, &at_base, &user_ip) != 0)
+    load_rc = elf_load_image_and_interp(header, (uint8_t *)file_data, file_size,
+                                        process, &at_base, &user_ip);
+    if (load_rc != 0)
     {
         klog_debug("ELF", "SERIAL: ELF: ERROR - Failed to load segments\n");
         /*
@@ -1472,7 +1505,7 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
         process_destroy(process);
         kfree(process);
         kfree(file_data);
-        return -1;
+        return load_rc;
     }
 
     /* AT_ENTRY is the main e_entry; RIP becomes interp after auxv is written. */
@@ -1926,6 +1959,24 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     }
 
     header = (elf64_header_t *)file_data;
+    {
+        char ipath[IR0_ELF_INTERP_PATH_MAX + 1];
+        int ipr;
+
+        /*
+         * Return before the old image is unmapped. After that point
+         * exec_fail_kill() does not give execve an errno.
+         */
+        ipr = elf_interp_on_fs((const uint8_t *)file_data, file_size,
+                               ipath, sizeof(ipath));
+        if (ipr == -ENOENT)
+        {
+            kfree(file_data);
+            exec_commit_emit("return-interp-enoent", -ENOENT, proc,
+                             "EXEC_INTERP_ENOENT");
+            return -ENOENT;
+        }
+    }
     at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
     at_base = elf_compute_load_base(header, (uint8_t *)file_data);
 
