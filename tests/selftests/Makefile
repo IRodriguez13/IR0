@@ -859,3 +859,39 @@ $(PROC_SIGACT_BIN): $(PROC_SIGACT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(PROC_SIGACT_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# EVDEV-ABS-SELFTEST
+EVDEV_ABS_SRC := syscall/evdev_abs.c
+EVDEV_ABS_BIN := $(BUILD_DIR)/evdev_abs
+
+.PHONY: evdev_abs
+
+evdev_abs: $(EVDEV_ABS_BIN)
+
+$(EVDEV_ABS_BIN): $(EVDEV_ABS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_abs"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_ABS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# PROC-GROUPS-SELFTEST
+PROC_GROUPS_SRC := syscall/proc_groups.c
+PROC_GROUPS_BIN := $(BUILD_DIR)/proc_groups
+
+.PHONY: proc_groups
+
+proc_groups: $(PROC_GROUPS_BIN)
+
+$(PROC_GROUPS_BIN): $(PROC_GROUPS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_groups"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_GROUPS_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
