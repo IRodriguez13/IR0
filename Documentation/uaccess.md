@@ -148,7 +148,7 @@ x86-64 window (code): `0x00400000` … `0x00007FFFFFFFFFFF` in
 |------|------|-------------|
 | Signal frames / `siginfo` | `kernel/signals/signals.c` | `copy_to_user_mm(process_pgd(p), …)` |
 | `uname` | `kernel/syscalls/fs_path_syscalls.c` | kernel `struct utsname` + `copy_to_user` |
-| `gettimeofday` | `kernel/syscalls/time_syscalls.c` | bounce + `copy_to_user` |
+| `gettimeofday` | `kernel/time/time_sys.c` | bounce + `copy_to_user` |
 | `nanosleep` rem | `kernel/syscalls/io_syscalls.c` | `copy_from_user` / `copy_to_user` |
 | `getrandom` | `kernel/syscalls/process_syscalls.c` | kernel chunk + `copy_to_user` |
 | mprotect zero | `kernel/syscalls/mm_syscalls.c` | `clear_user_mm` |

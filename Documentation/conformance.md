@@ -247,7 +247,7 @@ in its group, so it cannot hide the others.
 | M3 | munmap | mm_munmap_then_segv / mm_munmap_hole_succeeds | unmapped range → 0 | EINVAL | both | kernel/syscalls/mm_vma.c |
 | M4 | mprotect PROT_NONE | mm_mprotect_readonly / mm_prot_none_faults | read faults (SIGSEGV) | readable | both | kernel/syscalls/mm_syscalls.c `sys_mprotect` / PTE encoding |
 | M5 | mmap MAP_SHARED anon | mm_shared_anon_fork / mm_shared_anon_survives_fork | shared with the child | copied (COW) | both | mm/paging/paging_fork.c (fork copies shared VMAs as private) |
-| M6 | clock_gettime | time_clock_gettime / time_clock_process_cputime | CLOCK_PROCESS_CPUTIME_ID works | EINVAL | both | kernel/syscalls/time_syscalls.c:140 |
+| M6 | clock_gettime | time_clock_gettime / time_clock_process_cputime | CLOCK_PROCESS_CPUTIME_ID works | EINVAL | both | kernel/time/time_sys.c |
 | M7 | clock_gettime | time_clock_gettime / time_realtime_from_rtc | REALTIME from RTC | near 0 | arm64 | arch/arm64/sources/rtc.c, drivers/timer/clock_system.c |
 | M8 | munmap of an ELF text page | mm_unmapped_segv_handler_kills_task | page unmapped; a fault whose handler is gone kills with SIGSEGV | munmap fails (child exit 60), the handler keeps running | both | kernel/syscalls/mm_vma.c (ELF image pages are not unmappable VMAs) |
 | M9 | mmap MAP_FIXED, munmap | fuzzer / mm_mmap_fixed_over_kernel_pages_is_harmless | plain user range | MAP_FIXED over the identity-mapped kernel heap (0x40800000) stops the guest; so does the fuzzer's `munmap(0x40800000, 1 GiB)` (replay: `make ir0-fuzz-arm64 SEED=3 COUNT=5000 BATCH=5 TRACE=1`, not reduced to a red case yet) | arm64 | kernel/syscalls/mm_syscalls.c `sys_mmap`, kernel/syscalls/mm_vma.c (no check against supervisor mappings) |
@@ -264,7 +264,7 @@ in its group, so it cannot hide the others.
 | N11 | sendmsg SCM_RIGHTS | — / sock_unix_stream_scm_rights | descriptor delivered | EINVAL (`fd_entry_t` outgrew the rights slot) | both | **fixed**: includes/ir0/sock_stream.h, build-time size assert |
 | U1 | pipe2 | — / uaccess_pipe2_flags_before_copy | bad flags → EINVAL before the array | EFAULT | both | **fixed**: kernel/syscalls/io_syscalls.c |
 | U2 | wait4 | — / uaccess_wait4_bad_status_reaps | child reaped, then EFAULT | child left a zombie | both | **fixed**: kernel/process/wait.c |
-| U3 | clock_gettime | — / uaccess_clock_gettime_clock_first | unknown clock → EINVAL | EFAULT | both | **fixed**: kernel/syscalls/time_syscalls.c |
+| U3 | clock_gettime | — / uaccess_clock_gettime_clock_first | unknown clock → EINVAL | EFAULT | both | **fixed**: kernel/time/time_sys.c |
 | U4 | futex | — / uaccess_futex_unknown_op_enosys | unknown op → ENOSYS | EFAULT | both | **fixed**: kernel/syscalls/process_syscalls.c |
 | U5 | recvmsg (stream) | — / uaccess_recvmsg_fault_keeps_data_and_rights | a faulting copy keeps data and SCM_RIGHTS | both lost | both | **fixed**: payload via `sock_stream_recv_user()`, rights after it |
 | U6 | sendmsg (stream) | — / uaccess_sendmsg_fault_sends_nothing | a faulting iovec sends nothing | earlier iovecs sent | both | **fixed**: payload copied in before queuing |
