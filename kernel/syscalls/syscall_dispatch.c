@@ -22,6 +22,7 @@
 #include "time_syscalls.h"
 #include "epoll_syscalls.h"
 #include <ir0/syscall_table.h>
+#include <ir0/elf_loader.h>
 #include <ir0/kexec.h>
 #include <ir0/input_backend.h>
 #include <ir0/sched.h>
