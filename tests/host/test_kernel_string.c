@@ -12,6 +12,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
 static void check_region(const char *what, const unsigned char *p,
 			 size_t n, unsigned char value)
@@ -29,6 +31,36 @@ static void check_region(const char *what, const unsigned char *p,
 			return;
 		}
 	}
+}
+
+/* n bytes at the end of a mapped page. The next page is inaccessible. */
+static unsigned char *map_exact(size_t n, unsigned char fill)
+{
+	long ps = sysconf(_SC_PAGESIZE);
+	unsigned char *p;
+
+	if (n == 0 || (size_t)ps < n)
+		return NULL;
+	p = mmap(NULL, (size_t)ps * 2, PROT_READ | PROT_WRITE,
+		 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (p == MAP_FAILED)
+		return NULL;
+	memset(p, fill, (size_t)ps);
+	if (mprotect(p + ps, (size_t)ps, PROT_NONE) != 0)
+	{
+		munmap(p, (size_t)ps * 2);
+		return NULL;
+	}
+	return p + ps - n;
+}
+
+static void unmap_exact(unsigned char *tail, size_t n)
+{
+	long ps = sysconf(_SC_PAGESIZE);
+	unsigned char *base = tail + n - (size_t)ps;
+
+	mprotect(base + ps, (size_t)ps, PROT_READ | PROT_WRITE);
+	munmap(base, (size_t)ps * 2);
 }
 
 void test_kernel_string_printf_width(void)
@@ -83,6 +115,26 @@ void test_kernel_string_printf_width(void)
 
 	ir0_snprintf(buf, 8, "0123456789");
 	ASSERT_STR_EQ(buf, "0123456");
+
+	memset(buf, 0x5a, sizeof(buf));
+	ir0_snprintf(buf, 1, "hello");
+	ASSERT_EQ(buf[0], '\0');
+	ASSERT_EQ((unsigned char)buf[1], 0x5a);
+
+	{
+		unsigned char *src = map_exact(4, 'C');
+
+		ASSERT(src != NULL);
+		if (src)
+		{
+			memset(buf, 0x5a, sizeof(buf));
+			ir0_snprintf(buf, sizeof(buf), "%.4s", (char *)src);
+			ASSERT_STR_EQ(buf, "CCCC");
+			ir0_snprintf(buf, sizeof(buf), "%.2s", (char *)src);
+			ASSERT_STR_EQ(buf, "CC");
+			unmap_exact(src, 4);
+		}
+	}
 
 	TEST_END();
 }
@@ -280,6 +332,83 @@ void test_kernel_string_copy_pad(void)
 	ir0_strcpy(buf, "ab");
 	ASSERT(ir0_strncat(buf, "cdef", 3) == buf);
 	ASSERT_STR_EQ(buf, "abcde");
+
+	memset(buf, 0x5a, sizeof(buf));
+	ir0_strncpy(buf, "abcdef", 4);
+	ASSERT_EQ(buf[0], 'a');
+	ASSERT_EQ(buf[3], 'd');
+	ASSERT_EQ((unsigned char)buf[4], 0x5a);
+
+	{
+		unsigned char *src = map_exact(8, 'A');
+
+		ASSERT(src != NULL);
+		if (src)
+		{
+			memset(buf, 0x5a, sizeof(buf));
+			ASSERT(ir0_strncpy(buf, (char *)src, 8) == buf);
+			check_region("strncpy unterminated", (unsigned char *)buf, 8,
+				     'A');
+			ASSERT_EQ((unsigned char)buf[8], 0x5a);
+			unmap_exact(src, 8);
+		}
+	}
+	{
+		unsigned char *src = map_exact(3, 'B');
+
+		ASSERT(src != NULL);
+		if (src)
+		{
+			memset(buf, 0x5a, sizeof(buf));
+			ir0_strcpy(buf, "xy");
+			ASSERT(ir0_strncat(buf, (char *)src, 3) == buf);
+			ASSERT_STR_EQ(buf, "xyBBB");
+			ASSERT_EQ((unsigned char)buf[6], 0x5a);
+			unmap_exact(src, 3);
+		}
+	}
+
+	TEST_END();
+}
+
+void test_kernel_string_integers(void)
+{
+	char *end = NULL;
+
+	TEST_BEGIN("kernel atoi/strtol overflow without signed wrap");
+
+	ASSERT(sizeof(long) == 8);
+	ASSERT_EQ(ir0_atoi("2147483647"), 2147483647);
+	ASSERT_EQ(ir0_atoi("2147483648"), -2147483647 - 1);
+	ASSERT_EQ(ir0_atoi("-2147483648"), -2147483647 - 1);
+	ASSERT_EQ(ir0_atoi("-2147483649"), 2147483647);
+	ASSERT_EQ(ir0_atoi("  -42"), -42);
+	ASSERT_EQ(ir0_atoi("99abc"), 99);
+	ASSERT_EQ(ir0_atoi("9223372036854775808"), -1);
+	ASSERT_EQ(ir0_atoi("-9223372036854775809"), 0);
+
+	ASSERT_EQ(ir0_strtol("9223372036854775807", &end, 10),
+		  9223372036854775807L);
+	ASSERT_EQ(*end, '\0');
+	ASSERT_EQ(ir0_strtol("9223372036854775808", &end, 10),
+		  9223372036854775807L);
+	ASSERT_EQ(ir0_strtol("-9223372036854775808", &end, 10),
+		  -9223372036854775807L - 1);
+	ASSERT_EQ(ir0_strtol("-9223372036854775809", &end, 10),
+		  -9223372036854775807L - 1);
+	ASSERT_EQ(ir0_strtol("-42", &end, 10), -42L);
+	ASSERT_EQ(*end, '\0');
+
+	ASSERT_EQ(ir0_strtoul("-1", &end, 10), ~0UL);
+	ASSERT_EQ(ir0_strtoul("-18446744073709551615", &end, 10), 1UL);
+	ASSERT_EQ(ir0_strtoul("-18446744073709551616", &end, 10), ~0UL);
+	ASSERT_EQ(ir0_strtoul("999999999999999999999999", &end, 10), ~0UL);
+	ASSERT_EQ(ir0_strtoul("0x2a", &end, 0), 42UL);
+	ASSERT_EQ(*end, '\0');
+	ASSERT_EQ(ir0_strtoul("0x", &end, 0), 0UL);
+	ASSERT_EQ(*end, 'x');
+	ASSERT_EQ(ir0_strtoul("19", &end, 8), 1UL);
+	ASSERT_EQ(*end, '9');
 
 	TEST_END();
 }
