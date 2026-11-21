@@ -247,8 +247,9 @@ void *heap_alloc(size_t size)
 	 * allocation patterns are relatively predictable. Alternative strategies
 	 * (best-fit, worst-fit) could reduce fragmentation but add complexity.
 	 */
-	if (heap_locked_test_hook)
-		heap_locked_test_hook();
+#if defined(IR0_KERNEL_TESTS)
+	heap_locked_test_hook();
+#endif
 
 	block_header_t *current = allocator.free_list;
 

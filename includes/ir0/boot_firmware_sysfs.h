@@ -41,7 +41,7 @@ struct ir0_boot_firmware_sysfs_snapshot
 
 /*
  * Architecture adds the protocol-specific fields (bootloader name,
- * boot_detail lines). Default weak implementation leaves them empty.
+ * boot_detail lines). Every ISA defines it.
  */
 void ir0_boot_firmware_sysfs_fill_from_arch(struct ir0_boot_firmware_sysfs_snapshot *snap);
 

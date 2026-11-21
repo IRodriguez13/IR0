@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_arch.c
- * Description: ARM64 boot_arch hooks for the portable kernel (overrides weak boot_arch.c).
+ * Description: ARM64 boot_arch hooks for the portable kernel
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */

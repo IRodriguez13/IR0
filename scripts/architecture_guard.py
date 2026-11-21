@@ -85,6 +85,11 @@ Checks:
     prio.c, cfs.c or idle.c. includes/ir0/sched.h keeps the public set
     and does not declare sched_pick_next. No ledger; injected-violation
     self-test.
+35) No weak symbols: kernel sources carry no __attribute__((weak)),
+    __weak or #pragma weak. A required ISA hook is a strong definition per
+    ISA (arch/template/port.h) so a missing one fails the link; an optional
+    fallback is a separate object the build selects. Empty exception
+    ledger; injected-violation self-test.
 """
 
 from functools import lru_cache
@@ -2969,6 +2974,84 @@ def check_no_raw_atomics():
     return errors
 
 
+# Weak symbols hide a missing ISA hook or build choice until runtime. Required
+# hooks are strong per-ISA definitions listed in arch/template/port.h, and an
+# optional fallback is an object the Makefile links only where it is needed.
+# WEAK_SYMBOL_LEDGER lists reviewed exceptions as "<path>" lines; it starts
+# empty and only shrinks.
+WEAK_SYMBOL_RE = re.compile(
+    r"__attribute__\s*\(\((?:[^()]|\([^()]*\))*?\b(__weak__|weak|weakref)\b|"
+    r"\b(__weak)\b|"
+    r"^\s*#\s*pragma\s+(weak)\b")
+WEAK_SYMBOL_TREES = RAW_ATOMIC_TREES + ("arch", "tests/ktm")
+WEAK_SYMBOL_LEDGER: frozenset[str] = frozenset()
+
+
+def weak_symbol_violations(text: str) -> list[tuple[int, str]]:
+    """Return (line, spelling) for each weak attribute or pragma in *text*."""
+    text = _C_COMMENT_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+    text = _C_LINE_COMMENT_RE.sub("", text)
+    text = _C_STRING_RE.sub('""', text)
+    found = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = WEAK_SYMBOL_RE.search(line)
+        if match:
+            found.append((lineno, next(g for g in match.groups() if g)))
+    return found
+
+
+def _weak_symbol_self_test() -> list[str]:
+    """Inject each violation; the scanner must report exactly those lines."""
+    cases = {
+        "clean": ("/* __attribute__((weak)) in a comment */\n"
+                  "static const char *m = \"#pragma weak f\";\n"
+                  "int weak_magnitude;\n"
+                  "__attribute__((unused)) static int x;\n", []),
+        "attr": ("__attribute__((weak)) void f(void)\n{\n}\n"
+                 "void g(void) __attribute__((__weak__));\n", [1, 4]),
+        "list": ("int __attribute__((used, weak)) h;\n"
+                 "void i(void) __attribute__((weak, alias(\"j\")));\n"
+                 "static void k(void) __attribute__((weakref(\"l\")));\n",
+                 [1, 2, 3]),
+        "macro": ("void __weak m(void);\n", [1]),
+        "pragma": ("#pragma weak n\n  #  pragma weak o = p\n", [1, 2]),
+    }
+    failures = []
+    for name, (text, expected) in cases.items():
+        got = [line for line, _ in weak_symbol_violations(text)]
+        if got != expected:
+            failures.append(f"[no-weak-symbols] self-test {name}: expected "
+                            f"lines {expected}, got {got}")
+    return failures
+
+
+def check_no_weak_symbols():
+    """Reject weak attributes and pragmas in kernel sources; stale ledger
+    entries fail too."""
+    errors = _weak_symbol_self_test()
+    hit: set[str] = set()
+    for tree in WEAK_SYMBOL_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in iter_c_files(base):
+            rel = str(rel_to_root(path)).replace("\\", "/")
+            found = weak_symbol_violations(read_file_text(path))
+            if found and rel in WEAK_SYMBOL_LEDGER:
+                hit.add(rel)
+                continue
+            for lineno, spelling in found:
+                errors.append(
+                    f"[no-weak-symbols] {rel}:{lineno}: {spelling}; define a "
+                    "required ISA hook strongly in every ISA "
+                    "(arch/template/port.h) or link an optional fallback "
+                    "object from the build")
+    for rel in sorted(WEAK_SYMBOL_LEDGER - hit):
+        errors.append(f"[no-weak-symbols] {rel} is clean; drop it from "
+                      "WEAK_SYMBOL_LEDGER")
+    return errors
+
+
 # A header for one ISA lives in arch/<isa>/include/asm/ (or uapi/asm/) under
 # a neutral name, and the $(ARCH) include directory selects it. includes/
 # holds only portable APIs and the ISA-neutral uapi, so a path component
@@ -4284,7 +4367,7 @@ def main():
     if "--self-test" in sys.argv[1:]:
         failures = (self_test_include_layout() + _busy_wait_self_test() +
                     _register_name_self_test() + _uaccess_self_test() +
-                    _raw_atomic_self_test() +
+                    _raw_atomic_self_test() + _weak_symbol_self_test() +
                     _undefined_prototype_self_test() +
                     _legacy_pc_self_test() +
                     _domain_isolation_self_test() +
@@ -4299,7 +4382,8 @@ def main():
             return 1
         print("[arch-guard] self-test OK (include-layout, no-busy-wait, "
               "portable-no-register-names, uaccess-single-api, "
-              "no-raw-atomics, undefined-prototype, legacy-pc-io, "
+              "no-raw-atomics, no-weak-symbols, undefined-prototype, "
+              "legacy-pc-io, "
               "domain-isolation, kernel-loose-files, rules-digest, "
               "userspace-agnostic, sched-policy)")
         return 0
@@ -4375,6 +4459,7 @@ def main():
     errors.extend(check_portable_no_register_names())
     errors.extend(check_no_busy_wait_primitives())
     errors.extend(check_no_raw_atomics())
+    errors.extend(check_no_weak_symbols())
     errors.extend(check_no_isa_named_headers())
     errors.extend(check_no_syscall_stubs())
     errors.extend(check_legacy_pc_io())
