@@ -4,7 +4,7 @@
  * Copyright (C) 2025  Iván Rodriguez
  *
  * File: procfs_process.c
- * Description: /proc process, pid, fd-link, environ and status entries.
+ * Description: /proc process, pid, fd-link, environ, status and comm entries.
  */
 
 #include "procfs_internal.h"
@@ -304,6 +304,7 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
             return NULL;
         *pid_out = current_process->task.pid;
         if (strcmp(rest, "status") == 0) return "status";
+        if (strcmp(rest, "comm") == 0) return "comm";
         if (strcmp(rest, "cmdline") == 0) return "cmdline";
         if (strcmp(rest, "maps") == 0) return "maps";
         if (strcmp(rest, "statm") == 0) return "statm";
@@ -338,6 +339,12 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
         return "status";
     }
 
+    if (strcmp(after_proc, "comm") == 0)
+    {
+        *pid_out = -1;
+        return "comm";
+    }
+
     /* OSDev-style: /proc/pid or /proc/pid/N or /proc/pid/N/status */
     if (strncmp(after_proc, "pid", 3) == 0 && (after_proc[3] == '\0' || after_proc[3] == '/'))
     {
@@ -363,6 +370,8 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
         *pid_out = atoi(pid_str);
         if (strncmp(slash + 1, "status", 6) == 0)
             return "status";
+        if (strcmp(slash + 1, "comm") == 0)
+            return "comm";
         if (strncmp(slash + 1, "cmdline", 7) == 0)
             return "cmdline";
         if (strncmp(slash + 1, "maps", 4) == 0)
@@ -404,6 +413,8 @@ const char *proc_parse_path(const char *path, pid_t *pid_out)
 
             if (strncmp(slash + 1, "status", 6) == 0)
                 return "status";
+            if (strcmp(slash + 1, "comm") == 0)
+                return "comm";
             if (strncmp(slash + 1, "cmdline", 7) == 0)
                 return "cmdline";
             if (strncmp(slash + 1, "maps", 4) == 0)
@@ -670,6 +681,42 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	}
 	buf[len] = '\0';
 	return len;
+}
+
+/* /proc/[pid]/comm — task comm (at most 15 bytes) and one newline. */
+int proc_comm_read(char *buf, size_t count, pid_t pid)
+{
+	proc_fs_snap_t snap;
+	size_t name_len;
+	size_t i;
+	size_t out;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+
+	if (proc_fs_snap_acquire(pid, &snap) != 0)
+		return -ENOENT;
+
+	name_len = 0;
+	while (name_len < sizeof(snap.comm) - 1 && snap.comm[name_len] != '\0')
+	{
+		name_len++;
+	}
+
+	out = name_len + 1;
+	if (out > count)
+		out = count;
+
+	for (i = 0; i < out; i++)
+	{
+		if (i < name_len)
+			buf[i] = snap.comm[i];
+		else
+			buf[i] = '\n';
+	}
+
+	proc_fs_snap_release(&snap);
+	return (int)out;
 }
 
 /*

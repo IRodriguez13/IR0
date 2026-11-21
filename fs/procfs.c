@@ -36,6 +36,7 @@ static int proc_readdir_fill_pid_subdir(struct vfs_dirent *entries, int max_entr
                                         int n)
 {
 	n = proc_readdir_add(entries, max_entries, n, "status", DT_REG);
+	n = proc_readdir_add(entries, max_entries, n, "comm", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "cmdline", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "stat", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "maps", DT_REG);
