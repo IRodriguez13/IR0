@@ -469,7 +469,7 @@ void ktest_dev_net_contract(void)
  * /proc/filesystems lists the registered filesystem types, in registration
  * order, "nodev" unless the type mounts a block device (Linux
  * FS_REQUIRES_DEV). With setup/defconfig that is proc, then the order of
- * scripts/make/fs.mk; devfs is not a registered type.
+ * scripts/make/fs.mk; devfs is not a registered type. heartfs and sysfs register after 9p.
  */
 void ktest_proc_filesystems_contract(void)
 {
@@ -481,7 +481,9 @@ void ktest_proc_filesystems_contract(void)
 		"nodev\tsimplefs\n"
 		"\tfat16\n"
 		"\text2\n"
-		"nodev\t9p\n";
+		"nodev\t9p\n"
+		"nodev\theartfs\n"
+		"nodev\tsysfs\n";
 	char buf[512];
 	char *line;
 	int64_t fd;
