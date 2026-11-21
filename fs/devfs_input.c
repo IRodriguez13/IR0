@@ -405,6 +405,16 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
+    /*
+     * EVIOCGABS(0) .. EVIOCGABS(ABS_MAX) are nr 0x40 .. 0x7f.
+     * This node is a relative pointer and has no absolute axes.
+     */
+    if (type == (unsigned)'E' && dir == EVIOC_READ &&
+        nr >= 0x40u && nr <= 0x7fu)
+    {
+        return -EINVAL;
+    }
+
     return -ENOTTY;
 }
 
