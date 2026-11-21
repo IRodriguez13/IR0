@@ -2155,7 +2155,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
      */
     if (proc == current_process && process_mm_root(proc))
 	    paging_activate_address_space((uintptr_t)process_mm_root(proc));
-    switch_to_user((arch_addr_t)task_get_ip(&proc->task), (arch_addr_t)task_get_sp(&proc->task));
+    switch_to_user((uintptr_t)task_get_ip(&proc->task), (uintptr_t)task_get_sp(&proc->task));
     exec_commit_emit("return-after-userswitch", -1, proc, "EXEC_COMMIT_RETURNED");
     return -1;
 }

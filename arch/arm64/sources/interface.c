@@ -10,7 +10,6 @@
 
 #include <ir0/cpu.h>
 #include <ir0/irq.h>
-#include <ir0/arch_types.h>
 #include <asm/processor.h>
 #include <ir0/oops.h>
 #include <ir0/oops_port.h>
