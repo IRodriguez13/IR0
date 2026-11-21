@@ -1189,3 +1189,36 @@ ir0-selftest-evdev-grab-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVD
 	@echo "✓ ir0-selftest-evdev-grab-arm64"
 
 ir0-selftest-evdev-grab: ir0-selftest-evdev-grab-x86 ir0-selftest-evdev-grab-arm64
+
+# PRCTL-DUMPABLE-SELFTEST
+IR0_SELFTEST_X86_PRCTL_DUMPABLE := $(KERNEL_ROOT)/build/selftests/x86_64/prctl_dumpable
+IR0_SELFTEST_ARM64_PRCTL_DUMPABLE := $(KERNEL_ROOT)/build/selftests/arm64/prctl_dumpable
+
+.PHONY: ir0-selftest-prctl-dumpable-x86 ir0-selftest-prctl-dumpable-arm64 \
+	ir0-selftest-prctl-dumpable
+
+$(IR0_SELFTEST_X86_PRCTL_DUMPABLE): tests/selftests/syscall/prctl_dumpable.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 prctl_dumpable
+
+$(IR0_SELFTEST_ARM64_PRCTL_DUMPABLE): tests/selftests/syscall/prctl_dumpable.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 prctl_dumpable
+
+ir0-selftest-prctl-dumpable-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PRCTL_DUMPABLE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PRCTL_DUMPABLE) \
+		--done "ok 1 prctl_dumpable" \
+		--log $(HOST_TMP)/ir0-selftest-x86-prctl-dumpable.log
+	@echo "✓ ir0-selftest-prctl-dumpable-x86"
+
+ir0-selftest-prctl-dumpable-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PRCTL_DUMPABLE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PRCTL_DUMPABLE) \
+		--done "ok 1 prctl_dumpable" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-prctl-dumpable.log
+	@echo "✓ ir0-selftest-prctl-dumpable-arm64"
+
+ir0-selftest-prctl-dumpable: ir0-selftest-prctl-dumpable-x86 ir0-selftest-prctl-dumpable-arm64

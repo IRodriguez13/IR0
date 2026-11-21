@@ -624,3 +624,22 @@ $(EVDEV_GRAB_BIN): $(EVDEV_GRAB_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(EVDEV_GRAB_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PRCTL-DUMPABLE-SELFTEST
+PRCTL_DUMPABLE_SRC := syscall/prctl_dumpable.c
+PRCTL_DUMPABLE_BIN := $(BUILD_DIR)/prctl_dumpable
+
+.PHONY: prctl_dumpable
+
+prctl_dumpable: $(PRCTL_DUMPABLE_BIN)
+
+$(PRCTL_DUMPABLE_BIN): $(PRCTL_DUMPABLE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest prctl_dumpable"
+	@$(CC) $(CFLAGS) -o $@ $(PRCTL_DUMPABLE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+

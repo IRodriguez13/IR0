@@ -124,6 +124,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->suid = current_process->suid;
 		proc->sgid = current_process->sgid;
 		proc->no_new_privs = current_process->no_new_privs;
+		proc->dumpable = current_process->dumpable;
 		proc->at_secure = current_process->at_secure;
 		proc->umask = current_process->umask;
 		strncpy(proc->cwd, current_process->cwd, sizeof(proc->cwd) - 1);
@@ -138,6 +139,7 @@ pid_t spawn(void (*entry)(void), const char *name, process_mode_t mode)
 		proc->suid = ROOT_UID;
 		proc->sgid = ROOT_GID;
 		proc->no_new_privs = 0;
+		proc->dumpable = 1;
 		proc->at_secure = 0;
 		proc->umask = DEFAULT_UMASK;
 		strncpy(proc->cwd, "/", sizeof(proc->cwd) - 1);
