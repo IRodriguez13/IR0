@@ -751,3 +751,21 @@ $(SHM_MODE_BIN): $(SHM_MODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_MODE_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# EVDEV-PROP-SELFTEST
+EVDEV_PROP_SRC := syscall/evdev_prop.c
+EVDEV_PROP_BIN := $(BUILD_DIR)/evdev_prop
+
+.PHONY: evdev_prop
+
+evdev_prop: $(EVDEV_PROP_BIN)
+
+$(EVDEV_PROP_BIN): $(EVDEV_PROP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest evdev_prop"
+	@$(CC) $(CFLAGS) -o $@ $(EVDEV_PROP_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
