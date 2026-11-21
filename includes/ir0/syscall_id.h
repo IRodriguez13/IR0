@@ -14,9 +14,9 @@
 
 /*
  * Semantic identities are independent of Linux ABI numbers. Each ISA decoder
- * maps its native Linux numbering into this namespace. IR0-private extensions
- * are kept after IR0_SYSCALL_LINUX_COUNT so future personalities cannot confuse
- * them with the native Linux ABI.
+ * maps its native Linux numbering into this namespace. IR0_SYSCALL_COUNT is
+ * the exclusive end. keymap_get/set stay after IR0_SYSCALL_LINUX_COUNT
+ * because ISD firstboot still calls them.
  */
 enum ir0_syscall_id
 {
@@ -294,8 +294,6 @@ enum ir0_syscall_id
 	IR0_SYSCALL_SETNS,
 	IR0_SYSCALL_PROCESS_MRELEASE,
 	IR0_SYSCALL_LINUX_COUNT,
-	IR0_SYSCALL_EXTENSION_CONSOLE_CLEAR,
-	IR0_SYSCALL_EXTENSION_CONSOLE_SCROLL,
 	IR0_SYSCALL_EXTENSION_KEYMAP_GET,
 	IR0_SYSCALL_EXTENSION_KEYMAP_SET,
 	IR0_SYSCALL_COUNT

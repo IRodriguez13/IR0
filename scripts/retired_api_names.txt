@@ -225,3 +225,8 @@ ir0_access_path_routed_groups ir0_access_path_routed() with a struct ir0_task_cr
 ir0_check_file_access a stat (vfs_stat()) + generic_permission()
 is_root ir0_cred_is_root()
 process_cred_init_groups (nothing; the supplementary groups are what setgroups(2) set, possibly none)
+
+# Syscalls (uapi asm/unistd_ir0.h): clear and scroll left the table.
+# keymap_get/set stay: ISD firstboot still calls 442 and 443.
+__NR_console_scroll CSI through the console renderer
+__NR_console_clear CSI through the console renderer

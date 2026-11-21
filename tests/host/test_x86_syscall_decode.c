@@ -46,6 +46,6 @@ void test_x86_syscall_decode_contract(void)
 		decoded++;
 	}
 	/* Keep the native ABI catalog and its regression test in lockstep. */
-	ASSERT(decoded == 169);
+	ASSERT(decoded == 167);
 	TEST_END();
 }

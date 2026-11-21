@@ -23,7 +23,6 @@
 #include "epoll_syscalls.h"
 #include <ir0/syscall_table.h>
 #include <ir0/kexec.h>
-#include <ir0/console_backend.h>
 #include <ir0/input_backend.h>
 #include <ir0/sched.h>
 #include <ir0/abi/mmap_contract.h>
@@ -260,21 +259,7 @@ static int64_t wrap_sys_getgid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a
 static int64_t wrap_sys_getegid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6; return sys_getegid(); }
 
-/* Console scroll: IR0 custom syscall */
-static int64_t wrap_console_scroll(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
-  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  console_backend_scroll((int)a1);
-  return 0;
-}
-
-/* Console clear: IR0 custom syscall */
-static int64_t wrap_console_clear(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
-  (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  console_backend_clear((uint8_t)a1);
-  return 0;
-}
-
-/* Keyboard layout set/get: IR0 custom syscalls */
+/* ISD firstboot still switches the keyboard layout through these. */
 static int64_t wrap_keymap_set(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
   return input_kbd_set_layout((int)a1);
@@ -305,8 +290,6 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME64] = wrap_sys_clock_gettime;
   syscall_semantic_table[IR0_SYSCALL_CLONE] = wrap_sys_clone;
   syscall_semantic_table[IR0_SYSCALL_CLOSE] = wrap_sys_close;
-  syscall_semantic_table[IR0_SYSCALL_EXTENSION_CONSOLE_CLEAR] = wrap_console_clear;
-  syscall_semantic_table[IR0_SYSCALL_EXTENSION_CONSOLE_SCROLL] = wrap_console_scroll;
   syscall_semantic_table[IR0_SYSCALL_DUP] = wrap_sys_dup;
   syscall_semantic_table[IR0_SYSCALL_DUP2] = wrap_sys_dup2;
   syscall_semantic_table[IR0_SYSCALL_DUP3] = wrap_sys_dup3;

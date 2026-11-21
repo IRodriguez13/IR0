@@ -31,8 +31,6 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_clone: return IR0_SYSCALL_CLONE;
 	case __NR_close: return IR0_SYSCALL_CLOSE;
 	case __NR_connect: return IR0_SYSCALL_CONNECT;
-	case __NR_console_clear: return IR0_SYSCALL_EXTENSION_CONSOLE_CLEAR;
-	case __NR_console_scroll: return IR0_SYSCALL_EXTENSION_CONSOLE_SCROLL;
 	case __NR_dup: return IR0_SYSCALL_DUP;
 	case __NR_dup2: return IR0_SYSCALL_DUP2;
 	case __NR_dup3: return IR0_SYSCALL_DUP3;
