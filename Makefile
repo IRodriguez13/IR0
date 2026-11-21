@@ -603,10 +603,11 @@ KERNEL_TEST_OBJS = \
 
 
 # Scheduler policy from menuconfig: link exactly one policy file
-# (sched/core.h). Policy 1 (CFS) is an honest RR alias — same object,
-# different policy name.
+# (sched/core.h). 0 round-robin, 1 CFS, 2 priority bands.
 ifeq ($(CONFIG_SCHEDULER_POLICY),2)
 KERNEL_OBJS += sched/prio.o
+else ifeq ($(CONFIG_SCHEDULER_POLICY),1)
+KERNEL_OBJS += sched/cfs.o
 else
 KERNEL_OBJS += sched/rr.o
 endif
