@@ -426,6 +426,7 @@ KERNEL_OBJS = \
     mm/mm_struct.o \
     mm/brk.o \
     mm/mmap.o \
+    mm/map_sys.o \
     fs/files_lifecycle.o \
     fs/files_struct.o \
     kernel/process/fork.o \
