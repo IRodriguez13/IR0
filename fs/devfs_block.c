@@ -15,6 +15,15 @@
  * only bound; do not clamp to UINT32_MAX (that rejected large swap images).
  */
 
+static uint64_t devfs_disk_sectors(dev_t dev)
+{
+    struct ir0_block_info info;
+
+    if (ir0_block_get_info(dev, &info) != 0)
+        return 0;
+    return info.sector_count;
+}
+
 /*
  * Resolve whole-disk vs partition extents for disk_ops (/dev/hd*).
  */
@@ -45,7 +54,7 @@ static int devfs_resolve_disk_geo(const devfs_entry_t *entry, uint8_t *disk_out,
 }
 
 struct devfs_disk_io {
-    const char *name;
+    dev_t dev;
     uint64_t lba;
     size_t bytes;
     size_t in_sector;
@@ -64,11 +73,12 @@ static int devfs_disk_prepare_io(const devfs_entry_t *entry, off_t offset,
     uint64_t sector_off;
     uint64_t available_sectors;
     size_t sectors;
+    const char *name;
 
     if (!io)
         return -EINVAL;
 
-    io->name = NULL;
+    io->dev = 0;
     io->lba = 0;
     io->bytes = 0;
     io->in_sector = 0;
@@ -78,8 +88,11 @@ static int devfs_disk_prepare_io(const devfs_entry_t *entry, off_t offset,
     if (devfs_resolve_disk_geo(entry, &disk_id, &pinfo, &is_whole) != 0)
         return -ENODEV;
 
-    io->name = ir0_block_legacy_name(disk_id);
-    if (!io->name || !ir0_block_name_is_present(io->name))
+    name = ir0_block_legacy_name(disk_id);
+    if (!name)
+        return -ENODEV;
+    io->dev = ir0_block_lookup_by_name(name);
+    if (!ir0_block_is_present(io->dev))
         return -ENODEV;
 
     sector_off = (uint64_t)offset / 512;
@@ -96,7 +109,7 @@ static int devfs_disk_prepare_io(const devfs_entry_t *entry, off_t offset,
     }
     else
     {
-        uint64_t disk_sectors = ir0_block_sector_count_by_name(io->name);
+        uint64_t disk_sectors = devfs_disk_sectors(io->dev);
 
         if (sector_off >= disk_sectors)
             return 0;
@@ -149,7 +162,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
 
             if (chunk > io.bytes)
                 chunk = io.bytes;
-            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            rc = ir0_block_read(io.dev, io.lba, 1, bounce);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             memcpy(dst, bounce + io.in_sector, chunk);
@@ -170,7 +183,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
             if (sectors > 255)
                 sectors = 255;
             n = (uint8_t)sectors;
-            rc = ir0_block_read_by_name(io.name, io.lba, n, dst + done);
+            rc = ir0_block_read(io.dev, io.lba, n, dst + done);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             done += (size_t)n * 512;
@@ -182,7 +195,7 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         {
             size_t tail = io.bytes - done;
 
-            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            rc = ir0_block_read(io.dev, io.lba, 1, bounce);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             memcpy(dst + done, bounce, tail);
@@ -216,7 +229,9 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
     for (int i = 0; i < total_devs; i++)
     {
         const char *disk_name = ir0_block_name_at(i);
-        if (!disk_name || !ir0_block_name_is_present(disk_name))
+        dev_t dev = ir0_block_dev_at(i);
+
+        if (!disk_name || !ir0_block_is_present(dev))
             continue;
 
         found_drives++;
@@ -225,8 +240,8 @@ int64_t dev_disk_read(devfs_entry_t *entry, void *buf, size_t count, off_t offse
         if (len < 0 || len >= (int)sizeof(devname))
             continue;
 
-        /* ir0_block_sector_count_by_name() returns size in 512-byte sectors */
-        uint64_t size = ir0_block_sector_count_by_name(disk_name);
+        /* Sector count is in 512-byte sectors. */
+        uint64_t size = devfs_disk_sectors(dev);
         if (size == 0)
         {
             n = snprintf(output + output_len, sizeof(output) - output_len,
@@ -358,11 +373,11 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
 
             if (chunk > io.bytes)
                 chunk = io.bytes;
-            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            rc = ir0_block_read(io.dev, io.lba, 1, bounce);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             memcpy(bounce + io.in_sector, src, chunk);
-            rc = ir0_block_write_by_name(io.name, io.lba, 1, bounce);
+            rc = ir0_block_write(io.dev, io.lba, 1, bounce);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             done += chunk;
@@ -378,7 +393,7 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
             if (sectors > 255)
                 sectors = 255;
             n = (uint8_t)sectors;
-            rc = ir0_block_write_by_name(io.name, io.lba, n, src + done);
+            rc = ir0_block_write(io.dev, io.lba, n, src + done);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             done += (size_t)n * 512;
@@ -390,11 +405,11 @@ int64_t dev_disk_write(devfs_entry_t *entry, const void *buf, size_t count, off_
         {
             size_t tail = io.bytes - done;
 
-            rc = ir0_block_read_by_name(io.name, io.lba, 1, bounce);
+            rc = ir0_block_read(io.dev, io.lba, 1, bounce);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             memcpy(bounce, src + done, tail);
-            rc = ir0_block_write_by_name(io.name, io.lba, 1, bounce);
+            rc = ir0_block_write(io.dev, io.lba, 1, bounce);
             if (rc != 0)
                 return done ? (int64_t)done : rc;
             done += tail;
@@ -470,13 +485,14 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : req->drive;
                     const char *disk_name = ir0_block_legacy_name(d);
+                    dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
                     uint32_t lba = req->lba;
                     if (have_disk_ctx && !is_whole &&
                         devfs_disk_ioctl_lba(part_start_lba, part_sectors,
                                              req->lba, &lba) != 0)
                         return -1;
-                    if (disk_name && ir0_block_name_is_present(disk_name) &&
-                        ir0_block_read_by_name(disk_name, lba, 1, req->buffer) == 0)
+                    if (ir0_block_is_present(dev) &&
+                        ir0_block_read(dev, lba, 1, req->buffer) == 0)
                         return 512;
                 }
             }
@@ -495,13 +511,14 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : req->drive;
                     const char *disk_name = ir0_block_legacy_name(d);
+                    dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
                     uint32_t lba = req->lba;
                     if (have_disk_ctx && !is_whole &&
                         devfs_disk_ioctl_lba(part_start_lba, part_sectors,
                                              req->lba, &lba) != 0)
                         return -1;
-                    if (disk_name && ir0_block_name_is_present(disk_name) &&
-                        ir0_block_write_by_name(disk_name, lba, 1, req->buffer) == 0)
+                    if (ir0_block_is_present(dev) &&
+                        ir0_block_write(dev, lba, 1, req->buffer) == 0)
                         return 512;
                 }
             }
@@ -520,11 +537,15 @@ int64_t dev_disk_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
                 {
                     uint8_t d = have_disk_ctx ? disk_id : geom->drive;
                     const char *disk_name = ir0_block_legacy_name(d);
-                    if (!disk_name || !ir0_block_name_is_present(disk_name))
+                    dev_t dev = disk_name ? ir0_block_lookup_by_name(disk_name) : 0;
+                    uint64_t sectors;
+                    uint64_t bytes;
+
+                    if (!ir0_block_is_present(dev))
                         return -1;
-                    uint64_t sectors =
-                        (have_disk_ctx && !is_whole) ? part_sectors : ir0_block_sector_count_by_name(disk_name);
-                    uint64_t bytes = sectors > UINT64_MAX / 512u
+                    sectors =
+                        (have_disk_ctx && !is_whole) ? part_sectors : devfs_disk_sectors(dev);
+                    bytes = sectors > UINT64_MAX / 512u
                                          ? UINT64_MAX
                                          : sectors * 512u;
                     if (geom->size_sectors)
@@ -566,7 +587,9 @@ void devfs_register_disk_topology(void)
     for (unsigned d = 0; d < (unsigned)MAX_DISKS; d++)
     {
         const char *dn = ir0_block_legacy_name((uint8_t)d);
-        if (!dn || !ir0_block_name_is_present(dn))
+        dev_t dev = dn ? ir0_block_lookup_by_name(dn) : 0;
+
+        if (!ir0_block_is_present(dev))
             continue;
 
         memset(&disk_ctx_whole_slots[d], 0, sizeof(disk_ctx_whole_slots[d]));

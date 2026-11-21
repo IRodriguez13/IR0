@@ -35,6 +35,14 @@
 #define ARCH_SET_FS 0x1002
 #define ARCH_GET_FS 0x1003
 
+/* Linux uapi si_code for SIGCHLD (asm-generic/siginfo.h). */
+#define CLD_EXITED 1
+#define CLD_KILLED 2
+#define CLD_DUMPED 3
+
+_Static_assert(offsetof(siginfo_t, _sifields) == 16,
+	       "waitid si_pid is the siginfo union");
+
 /* prctl(2) options (Linux include/uapi/linux/prctl.h) */
 #define PR_SET_PDEATHSIG 1
 #define PR_GET_PDEATHSIG 2
@@ -1042,25 +1050,9 @@ int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 }
 
 
-int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
+/* Body of sys_wait4 once pid and options are already the wait4 ABI. */
+static int64_t wait4_reap(pid_t pid, int *status, int options)
 {
-  (void)rusage;
-
-  if (!current_process)
-    return -ESRCH;
-
-  if (current_process->mode == USER_MODE)
-  {
-    pid_t wait_pid = pid;
-    int wait_opts = options;
-
-    /* Read the wait arguments from the syscall frame (pt_regs). */
-    wait_pid = (pid_t)process_syscall_arg(current_process, 0);
-    wait_opts = (int)process_syscall_arg(current_process, 2);
-    pid = wait_pid;
-    options = wait_opts;
-  }
-
   /* Linux kernel_wait4(): unknown option bits fail before any lookup. */
   if ((unsigned int)options & ~(unsigned int)WAIT4_VALID_OPTIONS)
     return -EINVAL;
@@ -1085,9 +1077,140 @@ int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
   }
 }
 
+int64_t sys_wait4(pid_t pid, int *status, int options, void *rusage)
+{
+  (void)rusage;
+
+  if (!current_process)
+    return -ESRCH;
+
+  if (current_process->mode == USER_MODE)
+  {
+    /* Read the wait arguments from the syscall frame (pt_regs). */
+    pid = (pid_t)process_syscall_arg(current_process, 0);
+    options = (int)process_syscall_arg(current_process, 2);
+  }
+
+  return wait4_reap(pid, status, options);
+}
+
 int64_t sys_waitpid(pid_t pid, int *status, int options)
 {
   return sys_wait4(pid, status, options, NULL);
+}
+
+/*
+ * sys_waitid — Linux waitid(2) for an exited child.
+ * WEXITED is required. WNOHANG is the only other accepted bit: WSTOPPED
+ * and WCONTINUED have no stopped state here and return EINVAL.
+ * The zombie is reaped by wait4_reap (the body of sys_wait4). Success is
+ * 0; the child pid and exit code go into the signal-path siginfo.
+ * A null infop still reaps. No matching child is ECHILD, or 0 with WNOHANG.
+ */
+int64_t sys_waitid(int idtype, pid_t id, siginfo_t *infop, int options,
+		   void *ru)
+{
+	pid_t wait_pid;
+	int wait_opts;
+	int raw;
+	int child_pid;
+	int child_status;
+	int64_t ret;
+	siginfo_t info;
+	int *slot;
+
+	(void)ru;
+
+	if (!current_process)
+		return -ESRCH;
+
+	if (current_process->mode == USER_MODE)
+	{
+		idtype = (int)process_syscall_arg(current_process, 0);
+		id = (pid_t)process_syscall_arg(current_process, 1);
+		infop = (siginfo_t *)(uintptr_t)process_syscall_arg(
+			current_process, 2);
+		options = (int)process_syscall_arg(current_process, 3);
+	}
+
+	/* WSTOPPED is WUNTRACED: any bit outside this pair is EINVAL. */
+	if ((unsigned int)options & ~(unsigned int)(WEXITED | WNOHANG))
+		return -EINVAL;
+	if ((options & WEXITED) == 0)
+		return -EINVAL;
+
+	switch (idtype)
+	{
+	case P_ALL:
+		wait_pid = (pid_t)-1;
+		break;
+	case P_PID:
+		if (id <= 0)
+			return -EINVAL;
+		wait_pid = id;
+		break;
+	case P_PGID:
+		/*
+		 * process_wait already matches pid 0 to the caller's group
+		 * and pid < -1 to that process group (setpgid stores pgid).
+		 */
+		if (id < 0)
+			return -EINVAL;
+		wait_pid = (id == 0) ? (pid_t)0 : (pid_t)(-id);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	wait_opts = (options & WNOHANG) ? WNOHANG : 0;
+	/*
+	 * In user mode process_wait copies the raw wait status through a
+	 * user pointer. infop is that slot; the siginfo overwrites it.
+	 * sys_wait4 itself would re-read idtype/infop from the frame, so
+	 * the translated pid and options go to wait4_reap.
+	 */
+	slot = infop ? (int *)(void *)infop : NULL;
+	ret = wait4_reap(wait_pid, slot, wait_opts);
+	if (ret <= 0)
+		return ret;
+	if (!infop)
+		return 0;
+
+	raw = 0;
+	if (current_process->mode == KERNEL_MODE)
+		raw = *slot;
+	else if (copy_from_user(&raw, slot, sizeof(raw)) != 0)
+		return -EFAULT;
+
+	memset(&info, 0, sizeof(info));
+	info.si_signo = SIGCHLD;
+	child_pid = (int)ret;
+	if (WIFEXITED(raw))
+	{
+		info.si_code = CLD_EXITED;
+		child_status = WEXITSTATUS(raw);
+	}
+	else
+	{
+		info.si_code = (raw & 0x80) ? CLD_DUMPED : CLD_KILLED;
+		child_status = raw & 0x7f;
+	}
+	/*
+	 * siginfo_t's union is the Linux _sigchld slot (same bytes as
+	 * si_addr): si_pid at the start, si_status eight bytes later.
+	 */
+	memcpy(&info._sifields, &child_pid, sizeof(child_pid));
+	memcpy((char *)&info._sifields + 8, &child_status,
+	       sizeof(child_status));
+
+	if (current_process->mode == KERNEL_MODE)
+	{
+		*infop = info;
+		return 0;
+	}
+	if (copy_to_user(infop, &info, sizeof(info)) != 0)
+		return -EFAULT;
+	return 0;
 }
 
 /*

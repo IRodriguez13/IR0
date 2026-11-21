@@ -143,6 +143,7 @@
 #define __NR_epoll_ctl       233
 #define __NR_tgkill          234
 #define __NR_kexec_load      246
+#define __NR_waitid          247
 #define __NR_openat          257
 #define __NR_mkdirat         258
 #define __NR_mknodat         259

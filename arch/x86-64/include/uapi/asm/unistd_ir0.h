@@ -21,7 +21,7 @@
 
 /*
  * Linux time64 syscalls (a libc built against recent kernel headers may call
- * these even on x86_64). Must not collide with IR0 custom numbers.
+ * these even on x86_64).
  */
 #define __NR_clock_gettime64 403
 #define __NR_clock_settime64 404
@@ -29,9 +29,10 @@
 #define __NR_clock_getres_time64 406
 #define __NR_clock_nanosleep_time64 407
 
-/* IR0 custom syscalls (440+ — outside Linux x86-64 assigned range) */
-#define __NR_console_scroll   440
-#define __NR_console_clear    441
+/*
+ * ISD firstboot and the keymap service still call these. Scroll and clear
+ * are gone: nothing calls them, and the console already honors CSI.
+ */
 #define __NR_keymap_set       442
 #define __NR_keymap_get       443
 /* 444 was an IR0 privilege-elevation call: that is userspace policy (setuid). */
