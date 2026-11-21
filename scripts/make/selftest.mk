@@ -1453,3 +1453,36 @@ ir0-selftest-evdev-prop-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVD
 	@echo "✓ ir0-selftest-evdev-prop-arm64"
 
 ir0-selftest-evdev-prop: ir0-selftest-evdev-prop-x86 ir0-selftest-evdev-prop-arm64
+
+# PROC-SIGSET-SELFTEST
+IR0_SELFTEST_X86_PROC_SIGSET := $(KERNEL_ROOT)/build/selftests/x86_64/proc_sigset
+IR0_SELFTEST_ARM64_PROC_SIGSET := $(KERNEL_ROOT)/build/selftests/arm64/proc_sigset
+
+.PHONY: ir0-selftest-proc-sigset-x86 ir0-selftest-proc-sigset-arm64 \
+	ir0-selftest-proc-sigset
+
+$(IR0_SELFTEST_X86_PROC_SIGSET): tests/selftests/syscall/proc_sigset.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 proc_sigset
+
+$(IR0_SELFTEST_ARM64_PROC_SIGSET): tests/selftests/syscall/proc_sigset.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 proc_sigset
+
+ir0-selftest-proc-sigset-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PROC_SIGSET)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PROC_SIGSET) \
+		--done "ok 1 proc_sigset" \
+		--log $(HOST_TMP)/ir0-selftest-x86-proc-sigset.log
+	@echo "✓ ir0-selftest-proc-sigset-x86"
+
+ir0-selftest-proc-sigset-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PROC_SIGSET)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PROC_SIGSET) \
+		--done "ok 1 proc_sigset" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-proc-sigset.log
+	@echo "✓ ir0-selftest-proc-sigset-arm64"
+
+ir0-selftest-proc-sigset: ir0-selftest-proc-sigset-x86 ir0-selftest-proc-sigset-arm64

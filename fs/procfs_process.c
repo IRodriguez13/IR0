@@ -27,6 +27,8 @@ typedef struct proc_fs_snap
 	int no_new_privs;
 	int fd_size;
 	uint32_t umask;
+	uint64_t sig_pending;
+	uint64_t sig_blocked;
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
@@ -83,6 +85,8 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->state = (int)proc->state;
 	snap->no_new_privs = (int)proc->no_new_privs;
 	snap->umask = proc->umask;
+	snap->sig_pending = proc->signal_pending;
+	snap->sig_blocked = proc->signal_mask;
 	snap->fd_size = process_fd_span(proc);
 	snap->threads = 0;
 	{
@@ -558,6 +562,8 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       "Threads:\t%d\n"
 		       "NoNewPrivs:\t%d\n"
 		       "Umask:\t%04o\n"
+		       "SigPnd:\t%016llx\n"
+		       "SigBlk:\t%016llx\n"
 		       "VmSize:\t%llu kB\n"
 		       "VmRSS:\t%llu kB\n",
 		       snap.comm[0] ? snap.comm : "(none)",
@@ -569,6 +575,8 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.gid,
 		       snap.fd_size, snap.threads, snap.no_new_privs,
 		       snap.umask,
+		       (unsigned long long)(snap.sig_pending >> 1),
+		       (unsigned long long)(snap.sig_blocked >> 1),
 		       (unsigned long long)vsize,
 		       (unsigned long long)rss_kb);
 	proc_fs_snap_release(&snap);

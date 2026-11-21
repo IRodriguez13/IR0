@@ -769,3 +769,21 @@ $(EVDEV_PROP_BIN): $(EVDEV_PROP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(EVDEV_PROP_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PROC-SIGSET-SELFTEST
+PROC_SIGSET_SRC := syscall/proc_sigset.c
+PROC_SIGSET_BIN := $(BUILD_DIR)/proc_sigset
+
+.PHONY: proc_sigset
+
+proc_sigset: $(PROC_SIGSET_BIN)
+
+$(PROC_SIGSET_BIN): $(PROC_SIGSET_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_sigset"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_SIGSET_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
