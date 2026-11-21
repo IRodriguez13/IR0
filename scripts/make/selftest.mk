@@ -859,3 +859,34 @@ ir0-selftest-accept4-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ACCEPT
 	@echo "✓ ir0-selftest-accept4-arm64"
 
 ir0-selftest-accept4: ir0-selftest-accept4-x86 ir0-selftest-accept4-arm64
+
+# SYSFS-CPU-SELFTEST
+IR0_SELFTEST_X86_SYSFS_CPU := $(KERNEL_ROOT)/build/selftests/x86_64/sysfs_cpu
+IR0_SELFTEST_ARM64_SYSFS_CPU := $(KERNEL_ROOT)/build/selftests/arm64/sysfs_cpu
+
+.PHONY: ir0-selftest-sysfs-cpu-x86 ir0-selftest-sysfs-cpu-arm64 ir0-selftest-sysfs-cpu
+
+$(IR0_SELFTEST_X86_SYSFS_CPU): tests/selftests/syscall/sysfs_cpu.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sysfs_cpu
+
+$(IR0_SELFTEST_ARM64_SYSFS_CPU): tests/selftests/syscall/sysfs_cpu.c tests/selftests/ir0/ksft.h \
+		tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sysfs_cpu
+
+ir0-selftest-sysfs-cpu-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SYSFS_CPU)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SYSFS_CPU) \
+		--done "ok 1 cpu0_online" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sysfs-cpu.log
+	@echo "✓ ir0-selftest-sysfs-cpu-x86"
+
+ir0-selftest-sysfs-cpu-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SYSFS_CPU)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SYSFS_CPU) \
+		--done "ok 1 cpu0_online" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sysfs-cpu.log
+	@echo "✓ ir0-selftest-sysfs-cpu-arm64"
+
+ir0-selftest-sysfs-cpu: ir0-selftest-sysfs-cpu-x86 ir0-selftest-sysfs-cpu-arm64

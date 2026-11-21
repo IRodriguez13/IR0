@@ -707,15 +707,18 @@ static void pseudo_fs_register_sys_cpus(void)
     if (cpus > PSEUDO_SYS_MAX_CPUS)
         cpus = PSEUDO_SYS_MAX_CPUS;
 
+    pseudo_fs_register("/sys", "devices/system/cpu", &sys_static_read_ops,
+                       (void *)(uintptr_t)sys_devices_cpus_read_reg);
+
     for (uint32_t i = 0; i < cpus; i++)
     {
         g_sys_cpu_ctx[i] = (uintptr_t)i;
         g_sys_cpu_online_ctx[i] = (uintptr_t)i;
 
-        snprintf(rel, sizeof(rel), "devices/system/cpu%u", (unsigned)i);
+        snprintf(rel, sizeof(rel), "devices/system/cpu/cpu%u", (unsigned)i);
         pseudo_fs_register("/sys", rel, &sys_cpu_read_ops, (void *)g_sys_cpu_ctx[i]);
 
-        snprintf(rel, sizeof(rel), "devices/system/cpu%u/online", (unsigned)i);
+        snprintf(rel, sizeof(rel), "devices/system/cpu/cpu%u/online", (unsigned)i);
         pseudo_fs_register("/sys", rel, &sys_cpu_online_ops, (void *)g_sys_cpu_online_ctx[i]);
     }
 }
