@@ -1782,6 +1782,39 @@ ir0-selftest-waitid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_WAITID)
 
 ir0-selftest-waitid: ir0-selftest-waitid-x86 ir0-selftest-waitid-arm64
 
+# KD-KEYMAP-SELFTEST
+IR0_SELFTEST_X86_KD_KEYMAP := $(KERNEL_ROOT)/build/selftests/x86_64/kd_keymap
+IR0_SELFTEST_ARM64_KD_KEYMAP := $(KERNEL_ROOT)/build/selftests/arm64/kd_keymap
+
+.PHONY: ir0-selftest-kd-keymap-x86 ir0-selftest-kd-keymap-arm64 \
+	ir0-selftest-kd-keymap
+
+$(IR0_SELFTEST_X86_KD_KEYMAP): tests/selftests/syscall/kd_keymap.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 kd_keymap
+
+$(IR0_SELFTEST_ARM64_KD_KEYMAP): tests/selftests/syscall/kd_keymap.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 kd_keymap
+
+ir0-selftest-kd-keymap-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_KD_KEYMAP)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_KD_KEYMAP) \
+		--done "ok 1 kd_keymap" \
+		--log $(HOST_TMP)/ir0-selftest-x86-kd-keymap.log
+	@echo "✓ ir0-selftest-kd-keymap-x86"
+
+ir0-selftest-kd-keymap-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_KD_KEYMAP)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_KD_KEYMAP) \
+		--done "ok 1 kd_keymap" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-kd-keymap.log
+	@echo "✓ ir0-selftest-kd-keymap-arm64"
+
+ir0-selftest-kd-keymap: ir0-selftest-kd-keymap-x86 ir0-selftest-kd-keymap-arm64
+
 # PROC-COMM-SELFTEST
 IR0_SELFTEST_X86_PROC_COMM := $(KERNEL_ROOT)/build/selftests/x86_64/proc_comm
 IR0_SELFTEST_ARM64_PROC_COMM := $(KERNEL_ROOT)/build/selftests/arm64/proc_comm
