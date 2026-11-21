@@ -37,6 +37,7 @@
 #include "dhcp.h"
 #include "dns.h"
 #include "net_internal.h"
+#include <ir0/idle.h>
 #include <ir0/net.h>
 #include <ir0/netdevice.h>
 #include <ir0/kmem.h>
@@ -522,7 +523,10 @@ int net_stack_post_irq_init(void)
     /*
      * DHCP waits rely on uptime progression. Run this only after clock/IRQ
      * plumbing is active (kmain calls us right after global sti).
+     * Real stack only; the weak poll in net_compat.c does not register.
      */
+    kernel_idle_poll_register(net_stack_poll);
+
     if (dhcp_init() != 0)
     {
         LOG_WARNING("NET", "DHCP post-IRQ init failed, keeping static network configuration");

@@ -27,8 +27,10 @@
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
-#include <ir0/logging.h>
+#include <ir0/bluetooth.h>
 #include <ir0/driver.h>
+#include <ir0/idle.h>
+#include <ir0/logging.h>
 
 static void bluetooth_cleanup(void);
 
@@ -106,7 +108,12 @@ int bluetooth_init(void)
     LOG_INFO("BLUETOOTH", "HCI reset deferred until first device open");
     
     bluetooth_initialized = true;
-    
+    /*
+     * The HCI UART has no RX IRQ. The stub linked when Bluetooth is absent
+     * is a different file and does not register.
+     */
+    kernel_idle_poll_register(ir0_bluetooth_poll);
+
     LOG_INFO("BLUETOOTH", "Bluetooth subsystem initialized successfully");
     LOG_INFO("BLUETOOTH", "Available interfaces:");
     LOG_INFO("BLUETOOTH", "  /dev/bluetooth/hci0 - HCI control interface");
