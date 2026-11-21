@@ -18,7 +18,6 @@
 #include <ir0/procfs.h>
 #include <ir0/process.h>
 #include <ir0/fd_types.h>
-#include <ir0/arch_port.h>
 #include <ir0/power_manag.h>
 #include <config.h>
 #include <ir0/errno.h>

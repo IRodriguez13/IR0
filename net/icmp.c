@@ -18,7 +18,6 @@
 #include <ir0/kmem.h>
 #include <ir0/logging.h>
 #include <ir0/clock.h>
-#include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 

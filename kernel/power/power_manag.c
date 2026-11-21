@@ -14,7 +14,7 @@
 
 #include "power_manag.h"
 
-#include <ir0/arch_port.h>
+#include <ir0/cpu.h>
 #include <ir0/oops_port.h>
 #include <ir0/platform_ops.h>
 #include <ir0/ktm/klog.h>

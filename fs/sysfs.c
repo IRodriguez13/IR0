@@ -48,7 +48,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/pseudo_fs.h>
 #include <ir0/oops.h>
-#include <ir0/arch_port.h>
+#include <ir0/cpu_info.h>
 #include <ir0/mm_port.h>
 #include <ir0/ktm/stack_watch.h>
 #if CONFIG_ENABLE_NETWORKING

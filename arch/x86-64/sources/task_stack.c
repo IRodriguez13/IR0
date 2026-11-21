@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/process.h>
-#include <ir0/arch_port.h>
+#include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <ir0/mm.h>
 #include <ir0/paging.h>

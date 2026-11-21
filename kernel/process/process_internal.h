@@ -40,7 +40,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <ir0/errno.h>
-#include <ir0/arch_port.h>
+#include <ir0/cpu.h>
 #include <ir0/copy_user.h>
 #include <ir0/fcntl.h>
 #include <ir0/pmm.h>

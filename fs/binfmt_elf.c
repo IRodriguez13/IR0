@@ -28,7 +28,7 @@
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
 #include <ir0/process_domains.h>
-#include <ir0/arch_port.h>
+#include <ir0/cpu.h>
 #include <ir0/signals.h>
 #include <ir0/ktm/user_canary.h>
 #include <ir0/paging.h>
@@ -904,7 +904,9 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
         return -1;
 
     if (!have_interp_file)
+    {
         return elf_load_plan_seal(&main_plan);
+    }
 
 	irc = elf_try_load_interp(process, ipath, at_base, &interp_entry,
 				    &interp_plan);

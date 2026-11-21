@@ -16,7 +16,6 @@
 #include <ir0/errno.h>
 #include <ir0/path.h>
 #include <ir0/types.h>
-#include <ir0/arch_port.h>
 #include <string.h>
 #include <ir0/spinlock.h>
 

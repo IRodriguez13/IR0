@@ -15,7 +15,6 @@
 #include <config.h>
 #include <ir0/vga.h>
 #include <stddef.h>
-#include <ir0/arch_port.h>
 #include <ir0/driver.h>
 #include <ir0/logging.h>
 #include <ir0/input.h>

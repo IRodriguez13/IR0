@@ -32,7 +32,9 @@
 #include <ir0/version.h>
 #include <ir0/utsname.h>
 #include <ir0/clock.h>
-#include <ir0/arch_port.h>
+#include <asm/setup.h>
+#include <ir0/cpu.h>
+#include <ir0/cpu_info.h>
 #include <ir0/partition.h>
 #include <ir0/blockdev.h>
 #include <ir0/swap.h>

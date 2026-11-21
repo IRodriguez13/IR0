@@ -15,7 +15,6 @@
 #include <ir0/vga.h>
 #include <stddef.h>
 #include <string.h>
-#include <ir0/arch_port.h>
 #include <ir0/cpu.h>
 #include <ir0/delay.h>
 #include <drivers/dma/dma.h>

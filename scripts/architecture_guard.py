@@ -12,9 +12,9 @@ Checks:
 6) mm/, net/, sched/: no #include <arch/...>.
 7) drivers/: no raw #include of drivers/storage/block_dev.h — use ir0/blockdev.h.
 8) Paths outside drivers/bluetooth/ must not #include bluetooth/...
-9) drivers/: no #include <arch/...> (use ir0/arch_port.h).
+9) drivers/: no #include <arch/...> (use ir0/cpu.h, ir0/irq.h, or asm/pgtable.h).
 10) kernel/: no #include <drivers/...> (whole tree).
-11) kernel/: no #include <arch/common/arch_portable.h> (use ir0/arch_port.h).
+11) kernel/: no #include <arch/common/arch_portable.h> (use the ir0 domain headers).
 12) fs/: no #include <mm/...> (use ir0/mm_port.h or narrower facades).
 13) Portable trees must not embed ISA asm (pause/hlt/cli/port IO/CR/DR/…);
     use simple facades in includes/ir0/cpu.h (smp_mb, inb, udelay, …).
@@ -131,7 +131,6 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "driver_bootstrap.h",
     ROOT / "includes" / "ir0" / "blockdev.h",
     ROOT / "includes" / "ir0" / "partition.h",
-    ROOT / "includes" / "ir0" / "arch_port.h",
     ROOT / "includes" / "ir0" / "mm_port.h",
     ROOT / "includes" / "ir0" / "clock.h",
     ROOT / "includes" / "ir0" / "rtc.h",
@@ -185,7 +184,7 @@ INTERRUPT_ARCH_INCLUDE_RE = re.compile(
 # fs/ pseudo-VFS layers must route CPU/HW probes through ir0/*.h wrappers.
 FS_DIRECT_ARCH_INCLUDE_RE = re.compile(r'^\s*#\s*include\s*[<"]arch/')
 
-# mm/ and net/ must not pull arch headers directly — use ir0/arch_port.h, etc.
+# mm/ and net/ must not pull arch headers directly — use ir0/cpu.h, asm/pgtable.h, etc.
 PORTABLE_MM_NET_ARCH_INCLUDE_RE = re.compile(
     r'^\s*#\s*include\s*[<"]arch/'
 )

@@ -16,7 +16,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <ir0/arch_port.h>
 #include "serial.h"
 #include <ir0/driver.h>
 #include <ir0/logging.h>

@@ -25,7 +25,6 @@
 #include <string.h>
 #include <ir0/clock.h>
 #include <ir0/sched.h>
-#include <ir0/arch_port.h>
 #include <ir0/spinlock.h>
 
 /* Guards the channel table and message queues. */

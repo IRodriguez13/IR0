@@ -24,7 +24,8 @@
 #include <ir0/kmem.h>
 #include <ir0/pmm.h>
 #include <ir0/paging.h>
-#include <ir0/arch_port.h>
+#include <ir0/cpu.h>
+#include <ir0/irq.h>
 #include <asm/setup.h>
 #include <config.h>
 #include <ir0/version.h>
