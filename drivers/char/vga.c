@@ -14,7 +14,7 @@
 #include <ir0/vga.h>
 #include <ir0/serial_io.h>
 #include <ir0/console_backend.h>
-#include <ir0/typewriter.h>
+#include <ir0/vt.h>
 
 static unsigned char current_color = 0x0F; /* Blanco sobre negro */
 
@@ -49,7 +49,7 @@ static void putchar_ex(char c, int to_serial, int force_screen)
     if (!force_screen && !console_backend_printk_to_screen())
         return;
 
-    typewriter_putchar_attr(c, current_color);
+    vt_putchar_attr(c, current_color);
 }
 
 /* Función para poner un carácter (con cursor automático) */
@@ -95,5 +95,5 @@ void print_colored(const char *str, unsigned char fg, unsigned char bg)
 
 void clear_screen()
 {
-    typewriter_console_clear(make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
+    vt_clear(make_color(VGA_COLOR_WHITE, VGA_COLOR_BLACK));
 }

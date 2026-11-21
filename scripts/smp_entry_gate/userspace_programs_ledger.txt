@@ -4,4 +4,4 @@
 # is stale and fails the gate, so the ledger only shrinks.
 ktm/event_ring.c ping  # "ping-pongs": a BLOCK/WAKE pattern, not the program
 sound/sound_blaster.c ping  # "ping-pong" DMA buffers
-drivers/video/console_renderer.c xterm  # cites the "xterm ctlseqs" standard for DECSET 1049
+drivers/video/vt.c xterm  # cites the "xterm ctlseqs" standard for DECSET 1049

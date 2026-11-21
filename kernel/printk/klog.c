@@ -23,7 +23,7 @@
 #include <ir0/kmem.h>
 #include <ir0/serial_io.h>
 #include <ir0/console_backend.h>
-#include <ir0/typewriter.h>
+#include <ir0/vt.h>
 
 static klog_level_t g_klog_level = KLOG_LEVEL_INFO;
 static klog_profile_t g_klog_profile = KLOG_PROFILE_NORMAL;
@@ -112,7 +112,7 @@ static void klog_write_raw(const char *str)
 	/*
 	 * Serial only. Mirroring to console_backend here re-enters UI paths and
 	 * duplicated every line on -serial stdio smokes. Screen output stays on
-	 * console_puts/typewriter; use kprintf only as the log channel.
+	 * console_puts/the VT; use kprintf only as the log channel.
 	 */
 	if (!str || g_boot_hold)
 		return;
@@ -443,7 +443,7 @@ void klog_event(uint32_t event_id, uint16_t subsystem, uint8_t severity,
 	klog_write_raw(line);
 	if (!g_boot_hold && console_backend_printk_to_screen() &&
 	    klog_should_mirror_screen(record))
-		typewriter_vga_print(line, 0x07);
+		vt_print(line, 0x07);
 
 	if (g_protocol_mirror)
 		g_protocol_mirror(level, component, message);

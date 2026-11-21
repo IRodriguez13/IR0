@@ -6,7 +6,7 @@
 #include <ir0/console_backend.h>
 #include <ir0/console.h>
 #include <ir0/video_console.h>
-#include <ir0/typewriter.h>
+#include <ir0/vt.h>
 #include <ir0/serial_io.h>
 #include <ir0/vga.h>
 #include <ir0/ktm/klog.h>
@@ -30,12 +30,12 @@ void console_backend_init(void)
 
 void console_backend_typewriter_init(void)
 {
-    typewriter_init();
+    vt_init();
 }
 
 void console_backend_clear(uint8_t color)
 {
-    typewriter_console_clear(color);
+    vt_clear(color);
 }
 
 int console_backend_uses_framebuffer(void)
@@ -80,7 +80,7 @@ void console_backend_userspace_handoff(void)
      * smokes can grep prompts; serial_putchar itself must not spin forever
      * if the host stdio pipe backs up.
      */
-    typewriter_console_clear(IR0_CONSOLE_COLOR_DEFAULT);
+    vt_clear(IR0_CONSOLE_COLOR_DEFAULT);
 
     if (console_backend_uses_framebuffer())
         klog_smoke("CONSOLE_BACKEND_FB_OK");
@@ -96,7 +96,7 @@ void console_backend_userspace_handoff(void)
 
 void console_backend_scroll(int lines)
 {
-    typewriter_console_scroll(lines);
+    vt_scroll(lines);
 }
 
 void console_backend_write(const char *str, size_t len, uint8_t color)
@@ -124,13 +124,13 @@ void console_backend_write(const char *str, size_t len, uint8_t color)
                 serial_putchar('\r');
                 serial_putchar('\n');
             }
-            typewriter_vga_print("\n", color);
+            vt_print("\n", color);
         }
         else
         {
             if (tty_serial_mirror)
                 serial_putchar(c);
-            typewriter_vga_print_char(c, color);
+            vt_putchar(c, color);
         }
     }
 }
@@ -151,10 +151,10 @@ void console_backend_write_serial(const char *str, size_t len)
 
 void console_backend_show_cursor(uint8_t color)
 {
-    typewriter_show_cursor(color);
+    vt_show_cursor(color);
 }
 
 int console_backend_cursor_x(void)
 {
-    return typewriter_cursor_x();
+    return vt_cursor_x();
 }

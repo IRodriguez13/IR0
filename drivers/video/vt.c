@@ -1,28 +1,32 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /*
- * IR0 unified text console renderer — single cursor_pos for /dev/console,
- * TTY echo, and shell write. Classic 80x25 VT; FB cells scaled.
+ * IR0 virtual terminal — single cursor_pos for /dev/console, TTY echo,
+ * kernel print() and klog: ANSI/CSI parsing, soft cursor, alternate screen
+ * and scrollback, drawn through the console core.
  */
 
-#include "console_renderer.h"
+#include <ir0/vt.h>
 #include "console.h"
-#include <ir0/serial_io.h>
-#include <ir0/vga.h>
+#include <stddef.h>
 #include <stdint.h>
-#include <string.h>
+
+#define VT_COLOR_DEFAULT 0x07u /* light grey on black */
 
 #define CSI_NONE    0
 #define CSI_ESC     1
 #define CSI_BRACKET 2
 
-int cursor_pos;
+#define SCROLLBACK_LINES 200
 
-static uint8_t render_color = CONSOLE_RENDERER_COLOR_DEFAULT;
+/* Linear cursor: row * cols + col. */
+static int cursor_pos;
+
+static uint8_t render_color = VT_COLOR_DEFAULT;
 static int render_cursor_visible;
 static int render_cursor_row;
 static int render_cursor_col;
 static char render_cursor_under_ch = ' ';
-static uint8_t render_cursor_under_color = CONSOLE_RENDERER_COLOR_DEFAULT;
+static uint8_t render_cursor_under_color = VT_COLOR_DEFAULT;
 static int csi_state;
 static int csi_param;
 static int csi_params[4];
@@ -44,10 +48,10 @@ static int alt_screen_active;
 static void sgr_reset_attrs(void);
 static void sgr_compose(uint8_t *color);
 static void csi_clear_screen(int cols, int rows, uint8_t color);
+static void render_show_cursor(uint8_t color);
 
 static void alt_screen_save(int cols, int rows)
 {
-	extern int cursor_pos;
 	int r;
 	int c;
 
@@ -69,7 +73,6 @@ static void alt_screen_save(int cols, int rows)
 
 static void alt_screen_restore(int cols, int rows)
 {
-	extern int cursor_pos;
 	int r;
 	int c;
 	int sr = alt_saved_rows;
@@ -100,8 +103,6 @@ static void alt_screen_restore(int cols, int rows)
 
 static void alt_screen_enter(int cols, int rows, uint8_t color)
 {
-	extern int cursor_pos;
-
 	if (!alt_screen_active)
 	{
 		alt_screen_save(cols, rows);
@@ -132,7 +133,6 @@ static void csi_reset(void)
 
 static void csi_clear_from_cursor(int cols, int rows, uint8_t color)
 {
-	extern int cursor_pos;
 	int row = cursor_pos / cols;
 	int col = cursor_pos % cols;
 	int r;
@@ -150,7 +150,6 @@ static void csi_clear_from_cursor(int cols, int rows, uint8_t color)
 /* CSI J mode 1 — erase from start of screen through cursor (inclusive). */
 static void csi_clear_to_cursor(int cols, int rows, uint8_t color)
 {
-	extern int cursor_pos;
 	int row = cursor_pos / cols;
 	int col = cursor_pos % cols;
 	int r;
@@ -181,8 +180,8 @@ static void csi_clear_screen(int cols, int rows, uint8_t color)
  * sequences. Bold set before the colour (ESC[1;34m) must still brighten
  * that colour, and reverse video (SGR 7) swaps foreground and background.
  */
-static uint8_t sgr_fg = CONSOLE_RENDERER_COLOR_DEFAULT & 0x0F;
-static uint8_t sgr_bg = (CONSOLE_RENDERER_COLOR_DEFAULT >> 4) & 0x0F;
+static uint8_t sgr_fg = VT_COLOR_DEFAULT & 0x0F;
+static uint8_t sgr_bg = (VT_COLOR_DEFAULT >> 4) & 0x0F;
 static int sgr_bold;
 static int sgr_reverse;
 
@@ -205,8 +204,8 @@ static void sgr_compose(uint8_t *color)
 
 static void sgr_reset_attrs(void)
 {
-	sgr_fg = CONSOLE_RENDERER_COLOR_DEFAULT & 0x0F;
-	sgr_bg = (CONSOLE_RENDERER_COLOR_DEFAULT >> 4) & 0x0F;
+	sgr_fg = VT_COLOR_DEFAULT & 0x0F;
+	sgr_bg = (VT_COLOR_DEFAULT >> 4) & 0x0F;
 	sgr_bold = 0;
 	sgr_reverse = 0;
 }
@@ -245,16 +244,15 @@ static void sgr_apply(int *params, int count, uint8_t *color)
 		else if (p >= 100 && p <= 107)
 			sgr_bg = (uint8_t)(p - 100 + 8);
 		else if (p == 39)
-			sgr_fg = CONSOLE_RENDERER_COLOR_DEFAULT & 0x0F;
+			sgr_fg = VT_COLOR_DEFAULT & 0x0F;
 		else if (p == 49)
-			sgr_bg = (CONSOLE_RENDERER_COLOR_DEFAULT >> 4) & 0x0F;
+			sgr_bg = (VT_COLOR_DEFAULT >> 4) & 0x0F;
 	}
 	sgr_compose(color);
 }
 
 static void csi_apply(char cmd, int cols, int rows, uint8_t *color)
 {
-	extern int cursor_pos;
 	int n = 1;
 	int row;
 	int col;
@@ -467,16 +465,14 @@ static void render_erase_cursor(int cols, int rows, uint8_t color)
 	render_cursor_visible = 0;
 }
 
-void console_renderer_reset(uint8_t color)
+static void render_reset(uint8_t color)
 {
-	extern int cursor_pos;
-
 	csi_reset();
 	sgr_reset_attrs();
 	/* Caller may pass an explicit clear color; keep SGR defaults unless
 	 * it matches the composed default (typical product path). */
 	render_color = color;
-	if (color == CONSOLE_RENDERER_COLOR_DEFAULT)
+	if (color == VT_COLOR_DEFAULT)
 		sgr_compose(&render_color);
 	render_cursor_visible = 0;
 	render_cursor_row = 0;
@@ -489,9 +485,8 @@ void console_renderer_reset(uint8_t color)
 	console_clear(color);
 }
 
-void console_renderer_putchar(char c, uint8_t color)
+static void render_putchar(char c, uint8_t color)
 {
-	extern int cursor_pos;
 	int cols = render_cols();
 	int rows = render_rows();
 	int row;
@@ -518,7 +513,7 @@ void console_renderer_putchar(char c, uint8_t color)
 		if (csi_state == CSI_NONE)
 		{
 			if (render_cursor_enabled)
-				console_renderer_show_cursor(draw);
+				render_show_cursor(draw);
 			else
 				render_erase_cursor(cols, rows, draw);
 		}
@@ -587,24 +582,23 @@ void console_renderer_putchar(char c, uint8_t color)
 	}
 
 	if (render_cursor_enabled)
-		console_renderer_show_cursor(draw);
+		render_show_cursor(draw);
 	else
 		render_erase_cursor(cols, rows, draw);
 }
 
 /* Kernel text: draw with @attr; the SGR colour of the output stream is kept. */
-void console_renderer_putchar_attr(char c, uint8_t attr)
+static void render_putchar_attr(char c, uint8_t attr)
 {
 	uint8_t sgr_color = render_color;
 
 	render_color = attr;
-	console_renderer_putchar(c, attr);
+	render_putchar(c, attr);
 	render_color = sgr_color;
 }
 
-void console_renderer_show_cursor(uint8_t color)
+static void render_show_cursor(uint8_t color)
 {
-	extern int cursor_pos;
 	int cols = render_cols();
 	int rows = render_rows();
 	int row = cursor_pos / cols;
@@ -635,9 +629,8 @@ void console_renderer_show_cursor(uint8_t color)
 	render_cursor_col = col;
 }
 
-int console_renderer_get_cursor_x(void)
+static int render_cursor_x(void)
 {
-	extern int cursor_pos;
 	int cols = render_cols();
 
 	if (cols <= 0)
@@ -645,3 +638,206 @@ int console_renderer_get_cursor_x(void)
 	return cursor_pos % cols;
 }
 
+
+/*
+ * Scrollback: circular buffer of lines for console scroll (Page Up/Down).
+ * Width matches CONSOLE_MAX_WIDTH so FB fitted geometry (e.g. ~87 cols)
+ * does not OOB-read past a VGA-only 80-wide line.
+ */
+static uint16_t scrollback[SCROLLBACK_LINES][CONSOLE_MAX_WIDTH];
+static size_t total_lines_written;	/* Total lines ever appended */
+static size_t current_col;		/* Column in current line */
+static int scroll_offset;		/* 0 = live at bottom; >0 = scrolled up */
+static uint8_t scrollback_color = 0x0F;
+
+static int scrollback_cols(void)
+{
+	int cols = render_cols();
+
+	if (cols > CONSOLE_MAX_WIDTH)
+		cols = CONSOLE_MAX_WIDTH;
+	if (cols < 1)
+		cols = 1;
+	return cols;
+}
+
+/*
+ * Redraw the visible rows from scrollback. first_line is the logical line
+ * index of the top row (can be negative; then top rows are blank). The
+ * bottom row shows line total_lines_written.
+ */
+static void redraw_from_scrollback(void)
+{
+	int cols = render_cols();
+	int rows = render_rows();
+	int first_line = (int)((long)total_lines_written - (rows - 1) -
+			       scroll_offset);
+	int row;
+	int col;
+
+	for (row = 0; row < rows; row++)
+	{
+		int line_idx = first_line + row;
+
+		if (line_idx < 0)
+		{
+			for (col = 0; col < cols; col++)
+				console_put_cell(row, col, ' ', scrollback_color);
+		}
+		else
+		{
+			size_t buf_idx = (size_t)line_idx % SCROLLBACK_LINES;
+			int maxc = cols < CONSOLE_MAX_WIDTH ? cols : CONSOLE_MAX_WIDTH;
+
+			for (col = 0; col < maxc; col++)
+			{
+				uint16_t cell = scrollback[buf_idx][col];
+
+				console_put_cell(row, col, (char)(cell & 0xFF),
+						 (uint8_t)(cell >> 8));
+			}
+			for (col = maxc; col < cols; col++)
+				console_put_cell(row, col, ' ', scrollback_color);
+		}
+	}
+	if (scroll_offset == 0)
+		current_col = (size_t)(cursor_pos % cols);
+	else
+		cursor_pos = (rows - 1) * cols + (int)current_col;
+}
+
+void vt_scroll(int delta)
+{
+	int rows = render_rows();
+	int max_scroll = (int)(total_lines_written + 1) - rows;
+
+	if (max_scroll < 0)
+		max_scroll = 0;
+	scroll_offset += delta;
+	if (scroll_offset < 0)
+		scroll_offset = 0;
+	if (scroll_offset > max_scroll)
+		scroll_offset = max_scroll;
+	redraw_from_scrollback();
+}
+
+void vt_clear(uint8_t color)
+{
+	uint16_t blank = ((uint16_t)color << 8) | ' ';
+	int i;
+	int c;
+
+	render_reset(color);
+	scrollback_color = color;
+	scroll_offset = 0;
+	total_lines_written = 0;
+	current_col = 0;
+
+	for (i = 0; i < SCROLLBACK_LINES; i++)
+	{
+		for (c = 0; c < CONSOLE_MAX_WIDTH; c++)
+			scrollback[i][c] = blank;
+	}
+}
+
+void vt_init(void)
+{
+	int i;
+	int c;
+
+	total_lines_written = 0;
+	current_col = 0;
+	scroll_offset = 0;
+	for (i = 0; i < SCROLLBACK_LINES; i++)
+		for (c = 0; c < CONSOLE_MAX_WIDTH; c++)
+			scrollback[i][c] = (scrollback_color << 8) | ' ';
+}
+
+/*
+ * One glyph into the renderer and the scrollback. @attr draws with @color
+ * (kernel text) instead of the SGR colour of the output stream.
+ */
+static void vt_put(char c, uint8_t color, int attr)
+{
+	int cols;
+	int pos;
+	size_t line_idx;
+
+	scrollback_color = color;
+
+	if (scroll_offset > 0)
+	{
+		scroll_offset = 0;
+		redraw_from_scrollback();
+	}
+
+	if (attr)
+		render_putchar_attr(c, color);
+	else
+		render_putchar(c, color);
+
+	line_idx = total_lines_written % SCROLLBACK_LINES;
+	cols = scrollback_cols();
+	if (c == '\n')
+	{
+		size_t j;
+
+		for (j = current_col; j < (size_t)cols; j++)
+			scrollback[line_idx][j] = (color << 8) | ' ';
+		total_lines_written++;
+		current_col = 0;
+	}
+	else if (c == '\b' || c == 127)
+	{
+		current_col = (size_t)(cursor_pos % cols);
+		if (current_col < (size_t)cols)
+			scrollback[line_idx][current_col] = (color << 8) | ' ';
+	}
+	else if ((unsigned char)c >= ' ')
+	{
+		pos = cursor_pos - 1;
+		if (pos >= 0)
+		{
+			int sc = pos % cols;
+
+			if (sc >= 0 && sc < cols)
+				scrollback[line_idx][sc] = (color << 8) | (uint8_t)c;
+		}
+		current_col = (size_t)(cursor_pos % cols);
+	}
+	else
+	{
+		current_col = (size_t)(cursor_pos % cols);
+	}
+}
+
+void vt_putchar(char c, uint8_t color)
+{
+	vt_put(c, color, 0);
+}
+
+void vt_putchar_attr(char c, uint8_t color)
+{
+	vt_put(c, color, 1);
+}
+
+void vt_print(const char *str, uint8_t color)
+{
+	if (!str)
+		return;
+	while (*str)
+	{
+		vt_putchar(*str, color);
+		str++;
+	}
+}
+
+void vt_show_cursor(uint8_t color)
+{
+	render_show_cursor(color);
+}
+
+int vt_cursor_x(void)
+{
+	return render_cursor_x();
+}
