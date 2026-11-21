@@ -31,7 +31,6 @@
 #include <ir0/klog.h>
 #include <ir0/serial_io.h>
 #include <ir0/ipc.h>
-#include <ir0/arch_cpu.h>
 #if CONFIG_ENABLE_BLUETOOTH
 #include <ir0/bluetooth.h>
 #endif
