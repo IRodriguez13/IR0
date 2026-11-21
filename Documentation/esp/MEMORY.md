@@ -1,10 +1,18 @@
 # Subsistema de Memoria en IR0
 
-> **Última verificación:** 2026-11-07  
-> **Fuente de verdad:** [`../MEMORY.md`](../MEMORY.md), [`uaccess.md`](uaccess.md), `mm/swap/`
+> **Última verificación:** 2026-11-20  
+> **Fuente de verdad:** [`../MEMORY.md`](../MEMORY.md), `kernel/syscalls/mm_syscalls.c`,
+> `includes/ir0/mman.h`
 
 La memoria en IR0 combina PMM, allocator del kernel y paginacion para
 aislamiento de procesos.
+
+## Commit anónimo (2026-11-20)
+
+`mmap` anónimo con `PROT_NONE`, o con `MAP_NORESERVE` (`0x4000`), no puebla
+PTEs. El primer acceso hace demand-zero de una página. `MAP_NORESERVE` no
+carga el commit. Un `mmap` anónimo de lectura/escritura sin ese flag sigue
+poblado de entrada. Gate: `ir0-selftest-vm-commit-{x86,arm64}`.
 
 ## Cambios recientes (2026-09-02)
 

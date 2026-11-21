@@ -16,6 +16,7 @@
 #include <asm/processor.h>
 #include <ir0/acpi_pm.h>
 #include <ir0/platform_ops.h>
+#include <ir0/cpu_info.h>
 #include <ir0/ktm/klog.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -313,15 +314,6 @@ int hypervisor_kind(enum ir0_hv_kind *kind)
 	cached = 1;
 	*kind = found;
 	return 0;
-}
-
-int hypervisor_present(void)
-{
-	enum ir0_hv_kind kind;
-
-	if (hypervisor_kind(&kind) < 0)
-		return 0;
-	return kind != IR0_HV_NONE;
 }
 
 int hypervisor_vendor(char *buf, size_t n)

@@ -8,6 +8,7 @@
  */
 
 #include "procfs_internal.h"
+#include <ir0/cpu_info.h>
 
 
 int proc_drivers_read(char *buf, size_t count)
