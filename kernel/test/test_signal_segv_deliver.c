@@ -160,7 +160,7 @@ void ktest_signal_segv_deliver_irq_frame(void)
 				  (unsigned)sizeof(mapped));
 
 	delivered = signals_deliver_from_irq_frame(p, SIGSEGV, frame,
-						   fault_addr);
+						   fault_addr, SEGV_MAPERR);
 	KASSERT_EQ(delivered, 1);
 	KASSERT(frame[2] == (uint64_t)(uintptr_t)handler);
 	KASSERT(frame[-7] == (uint64_t)SIGSEGV);
