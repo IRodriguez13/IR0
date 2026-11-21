@@ -39,7 +39,6 @@
 #include <ir0/named_socket.h>
 #include <ir0/path_routed.h>
 #include <ir0/path_user.h>
-#include <ir0/logging.h>
 #include <ir0/devfs.h>
 #include <ir0/uio.h>
 #include <config.h>

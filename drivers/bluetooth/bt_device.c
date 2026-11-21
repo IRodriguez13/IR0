@@ -23,7 +23,6 @@
 #include "hci_core.h"
 #include "hci_uart.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <string.h>
 #include <ir0/errno.h>
 #include <ir0/clock.h>

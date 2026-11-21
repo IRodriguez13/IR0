@@ -16,7 +16,7 @@
 #include <ir0/oops.h>
 #include <arch_interface.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/clock.h>
 #include <ir0/resource_registry.h>
 #include <asm/io.h>
@@ -56,7 +56,7 @@ void increment_pit_ticks(void)
  */
 void init_PIT(uint32_t frequency)
 {
-    LOG_INFO_FMT("PIT", "Registering PIT Timer at %d Hz...", frequency);
+    klog_info_fmt("PIT", "Registering PIT Timer at %d Hz...", frequency);
     ir0_register_driver(&pit_info, &pit_ops);
 
     uint32_t divisor = PIT_BASE_FREC / frequency;

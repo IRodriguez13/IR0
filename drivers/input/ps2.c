@@ -17,7 +17,7 @@
 #include <string.h>
 #include <ir0/arch_port.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/resource_registry.h>
 #include <asm/io.h>
 
@@ -26,7 +26,7 @@ static int32_t ps2_hw_init(void)
 {
     uint8_t config;
 
-    LOG_INFO("PS2", "Running PS/2 Controller HW Init...");
+    klog_info("PS2", "Running PS/2 Controller HW Init...");
 
     /* Disable both ports */
     outb(PS2_COMMAND_PORT, PS2_CMD_DISABLE_PORT1);
@@ -93,7 +93,7 @@ static ir0_driver_info_t ps2_info = {
  */
 void ps2_init(void) 
 {
-    LOG_INFO("PS2", "Registering PS/2 Controller driver...");
+    klog_info("PS2", "Registering PS/2 Controller driver...");
     ir0_register_driver(&ps2_info, &ps2_ops);
 }
 

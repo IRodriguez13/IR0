@@ -17,7 +17,7 @@
 #include "ip.h"
 #include "udp.h"
 #include "net_internal.h"
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/clock.h>
 #include <ir0/arch_port.h>
 #include <string.h>
@@ -228,7 +228,7 @@ static int dhcp_send_message(struct net_device *dev, uint32_t xid, uint8_t msg_t
                                             requested_ip, server_id);
     if (payload_len == 0)
     {
-        LOG_ERROR("DHCP", "Failed to build DHCP payload");
+        klog_error("DHCP", "Failed to build DHCP payload");
         return -1;
     }
 
@@ -260,11 +260,11 @@ static int dhcp_send_message(struct net_device *dev, uint32_t xid, uint8_t msg_t
 
     if (net_send(dev, ETHERTYPE_IP, broadcast_mac, ip_packet, ip_len) != 0)
     {
-        LOG_WARNING_FMT("DHCP", "Failed to send DHCP message type=%d", (int)msg_type);
+        klog_warn_fmt("DHCP", "Failed to send DHCP message type=%d", (int)msg_type);
         return -1;
     }
 
-    LOG_INFO_FMT("DHCP", "Sent DHCP message type=%d (xid=0x%x)", (int)msg_type, (unsigned int)xid);
+    klog_info_fmt("DHCP", "Sent DHCP message type=%d (xid=0x%x)", (int)msg_type, (unsigned int)xid);
     return 0;
 }
 
@@ -533,12 +533,12 @@ static void dhcp_apply_config(struct dhcp_offer_data *offer)
         dns_set_default_server(offer->dns_server);
     }
 
-    LOG_INFO_FMT("DHCP", "Lease applied: ip=" IP4_FMT ", mask=" IP4_FMT ", gw=" IP4_FMT ", dns=" IP4_FMT ", lease_s=%d",
-                 IP4_ARGS(ntohl(cfg.addr)),
-                 IP4_ARGS(ntohl(cfg.netmask)),
-                 IP4_ARGS(ntohl(cfg.gateway)),
-                 IP4_ARGS(ntohl(offer->dns_server)),
-                 (int)offer->lease_time_s);
+    klog_info_fmt("DHCP", "Lease applied: ip=" IP4_FMT ", mask=" IP4_FMT ", gw=" IP4_FMT ", dns=" IP4_FMT ", lease_s=%d",
+                  IP4_ARGS(ntohl(cfg.addr)),
+                  IP4_ARGS(ntohl(cfg.netmask)),
+                  IP4_ARGS(ntohl(cfg.gateway)),
+                  IP4_ARGS(ntohl(offer->dns_server)),
+                  (int)offer->lease_time_s);
 }
 
 int dhcp_init(void)
@@ -546,7 +546,7 @@ int dhcp_init(void)
     struct net_device *dev = first_net_device();
     if (!dev)
     {
-        LOG_WARNING("DHCP", "No network device available, skipping DHCP");
+        klog_warn("DHCP", "No network device available, skipping DHCP");
         return 0;
     }
 
@@ -572,7 +572,7 @@ int dhcp_init(void)
 
         if (dhcp_wait_offer(DHCP_DISCOVER_TIMEOUT_MS) != 0)
         {
-            LOG_WARNING_FMT("DHCP", "No OFFER received (attempt %d/%d)", attempt + 1, DHCP_MAX_HANDSHAKE_TRIES);
+            klog_warn_fmt("DHCP", "No OFFER received (attempt %d/%d)", attempt + 1, DHCP_MAX_HANDSHAKE_TRIES);
             continue;
         }
 
@@ -586,7 +586,7 @@ int dhcp_init(void)
 
         if (offer.yiaddr == 0 || offer.server_id == 0)
         {
-            LOG_WARNING("DHCP", "Invalid OFFER received, retrying");
+            klog_warn("DHCP", "Invalid OFFER received, retrying");
             continue;
         }
 
@@ -597,7 +597,7 @@ int dhcp_init(void)
 
         if (dhcp_wait_ack(DHCP_REQUEST_TIMEOUT_MS) != 0)
         {
-            LOG_WARNING_FMT("DHCP", "No ACK received (attempt %d/%d)", attempt + 1, DHCP_MAX_HANDSHAKE_TRIES);
+            klog_warn_fmt("DHCP", "No ACK received (attempt %d/%d)", attempt + 1, DHCP_MAX_HANDSHAKE_TRIES);
             continue;
         }
 
@@ -608,11 +608,11 @@ int dhcp_init(void)
         }
 
         dhcp_apply_config(&offer);
-        LOG_INFO("DHCP", "DHCP handshake completed successfully");
+        klog_info("DHCP", "DHCP handshake completed successfully");
         return 0;
     }
 
-    LOG_WARNING("DHCP", "DHCP unavailable, keeping static IPv4 configuration");
+    klog_warn("DHCP", "DHCP unavailable, keeping static IPv4 configuration");
     return 0;
 }
 

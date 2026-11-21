@@ -16,7 +16,6 @@
 #include "arp.h"
 #include "net_internal.h"
 #include <ir0/kmem.h>
-#include <ir0/logging.h>
 #include <ir0/errno.h>
 #include <ir0/klog.h>
 #include <ir0/clock.h>
@@ -171,7 +170,7 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
 
     if (len < sizeof(struct ip_header))
     {
-        LOG_WARNING("IP", "Packet too short");
+        klog_warn("IP", "Packet too short");
         return;
     }
 
@@ -180,7 +179,7 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
     /* Validate IP version */
     if (IP_VERSION(ip) != 4)
     {
-        LOG_WARNING("IP", "Invalid IP version");
+        klog_warn("IP", "Invalid IP version");
         return;
     }
 
@@ -188,21 +187,21 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
     uint8_t ihl = IP_IHL(ip);
     if (ihl < 5)
     {
-        LOG_WARNING("IP", "Invalid IP header length");
+        klog_warn("IP", "Invalid IP header length");
         return;
     }
 
     size_t header_len = ihl * 4;
     if (len < header_len)
     {
-        LOG_WARNING("IP", "Packet shorter than header length");
+        klog_warn("IP", "Packet shorter than header length");
         return;
     }
 
     uint16_t total_len = ntohs(ip->total_len);
     if (total_len > len || total_len < header_len)
     {
-        LOG_WARNING("IP", "Total length inconsistent with buffer or header");
+        klog_warn("IP", "Total length inconsistent with buffer or header");
         return;
     }
 
@@ -211,7 +210,7 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
     uint8_t ip_hdr_scratch[60]; /* IPv4 header length is at most 15 * 4 bytes */
     if (header_len > sizeof(ip_hdr_scratch))
     {
-        LOG_WARNING("IP", "IP header length exceeds maximum");
+        klog_warn("IP", "IP header length exceeds maximum");
         return;
     }
     memcpy(ip_hdr_scratch, data, header_len);
@@ -221,7 +220,7 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
 
     if (received_checksum != calculated_checksum)
     {
-        LOG_WARNING("IP", "Checksum mismatch");
+        klog_warn("IP", "Checksum mismatch");
         return;
     }
 
@@ -266,13 +265,13 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
             
             if (is_icmp_reply)
             {
-                LOG_WARNING_FMT("IP", "DROPPING ICMP Echo Reply: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ") - echo replies from other hosts will not arrive",
+                klog_warn_fmt("IP", "DROPPING ICMP Echo Reply: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ") - echo replies from other hosts will not arrive",
                                IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
                                IP4_ARGS(ntohl(interface_ip)));
             }
             else
             {
-                LOG_DEBUG_FMT("IP", "Dropping packet: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ")", 
+                klog_debug_fmt("IP", "Dropping packet: dest=" IP4_FMT " != local=" IP4_FMT " (interface=" IP4_FMT ")",
                              IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)), 
                              IP4_ARGS(ntohl(interface_ip)));
             }
@@ -282,8 +281,8 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
     }
     
     /* Log that we accepted the packet for debugging */
-    LOG_DEBUG_FMT("IP", "Packet accepted: dest=" IP4_FMT " matches local=" IP4_FMT,
-                  IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)));
+    klog_debug_fmt("IP", "Packet accepted: dest=" IP4_FMT " matches local=" IP4_FMT,
+                   IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_local_addr)));
 
     /* Check if packet is fragmented */
     uint16_t frag_offset = IP_FRAG_OFFSET(ip);
@@ -314,8 +313,8 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
     }
 
     /* Normal (unfragmented) packet processing */
-    LOG_DEBUG_FMT("IP", "RX packet: proto=%d src=" IP4_FMT " dst=" IP4_FMT,
-                  (int)protocol, IP4_ARGS(ntohl(src_ip)), IP4_ARGS(ntohl(dest_ip)));
+    klog_debug_fmt("IP", "RX packet: proto=%d src=" IP4_FMT " dst=" IP4_FMT,
+                   (int)protocol, IP4_ARGS(ntohl(src_ip)), IP4_ARGS(ntohl(dest_ip)));
 
 #if KERNEL_DEBUG
     /* Enhanced serial-only logging for ICMP diagnostics. */
@@ -366,7 +365,7 @@ static void ip_receive_handler(struct net_device *dev, const void *data,
     }
     else
     {
-        LOG_WARNING_FMT("IP", "No handler registered for IP protocol %d", (int)protocol);
+        klog_warn_fmt("IP", "No handler registered for IP protocol %d", (int)protocol);
     }
 }
 
@@ -486,7 +485,7 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
     
     if (dest_ip == src_ip || dest_ip == ip_local_addr)
     {
-        LOG_WARNING_FMT("IP", "Attempted to send packet to our own IP " IP4_FMT ", dropping", 
+        klog_warn_fmt("IP", "Attempted to send packet to our own IP " IP4_FMT ", dropping",
                        IP4_ARGS(ntohl(dest_ip)));
         return -1;
     }
@@ -528,7 +527,7 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
         if (best_route->gateway != 0)
         {
             next_hop_ip = best_route->gateway;
-            LOG_INFO_FMT("IP", "Routing to " IP4_FMT " via route gateway " IP4_FMT,
+            klog_info_fmt("IP", "Routing to " IP4_FMT " via route gateway " IP4_FMT,
                         IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(best_route->gateway)));
         }
         /* else: gateway is 0, means direct route, use dest_ip */
@@ -544,7 +543,7 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
             if (local_network != dest_network && ip_gateway != 0)
             {
                 next_hop_ip = ip_gateway;
-                LOG_INFO_FMT("IP", "Routing to " IP4_FMT " via default gateway " IP4_FMT,
+                klog_info_fmt("IP", "Routing to " IP4_FMT " via default gateway " IP4_FMT,
                             IP4_ARGS(ntohl(dest_ip)), IP4_ARGS(ntohl(ip_gateway)));
             }
         }
@@ -593,24 +592,24 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
         uint8_t dest_mac[6];
         if (arp_resolve(dev, next_hop_ip, dest_mac) != 0)
         {
-            LOG_ERROR_FMT("IP", "Failed to resolve MAC for " IP4_FMT, IP4_ARGS(ntohl(next_hop_ip)));
+            klog_error_fmt("IP", "Failed to resolve MAC for " IP4_FMT, IP4_ARGS(ntohl(next_hop_ip)));
             kfree(ip_packet);
             return -1;
         }
         
-        LOG_INFO_FMT("IP", "Sending IP packet: dest=" IP4_FMT ", protocol=%d, len=%d",
-                     IP4_ARGS(ntohl(dest_ip)), (int)protocol, (int)total_len);
+        klog_info_fmt("IP", "Sending IP packet: dest=" IP4_FMT ", protocol=%d, len=%d",
+                      IP4_ARGS(ntohl(dest_ip)), (int)protocol, (int)total_len);
         
         int ret = net_send(dev, ETHERTYPE_IP, dest_mac, ip_packet, total_len);
         kfree(ip_packet);
         
         if (ret == 0)
         {
-            LOG_INFO_FMT("IP", "IP packet sent successfully to " IP4_FMT, IP4_ARGS(ntohl(dest_ip)));
+            klog_info_fmt("IP", "IP packet sent successfully to " IP4_FMT, IP4_ARGS(ntohl(dest_ip)));
         }
         else
         {
-            LOG_ERROR_FMT("IP", "Failed to send IP packet to " IP4_FMT, IP4_ARGS(ntohl(dest_ip)));
+            klog_error_fmt("IP", "Failed to send IP packet to " IP4_FMT, IP4_ARGS(ntohl(dest_ip)));
         }
         
         return ret;
@@ -618,13 +617,13 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
     
     if (!IP_TX_FRAGMENTATION_ENABLED)
     {
-        LOG_WARNING("IP", "TX packet exceeds MTU and TX fragmentation is disabled");
+        klog_warn("IP", "TX packet exceeds MTU and TX fragmentation is disabled");
         return -EFBIG;
     }
 
     /* Packet is too large, fragment according to TX policy */
-    LOG_INFO_FMT("IP", "Fragmenting packet: total_len=%d, max_payload=%d", 
-                 (int)total_len, (int)max_payload);
+    klog_info_fmt("IP", "Fragmenting packet: total_len=%d, max_payload=%d",
+                  (int)total_len, (int)max_payload);
     
     uint16_t frag_id = ip_frag_id_counter++;
     size_t offset = 0;
@@ -652,15 +651,15 @@ int ip_send_ttl(struct net_device *dev, ip4_addr_t dest_ip, uint8_t protocol,
         
         if (ret != 0)
         {
-            LOG_ERROR_FMT("IP", "Failed to send fragment at offset %d", (int)offset);
+            klog_error_fmt("IP", "Failed to send fragment at offset %d", (int)offset);
             return -1;
         }
         
         offset += fragment_payload_len;
     }
     
-    LOG_INFO_FMT("IP", "Fragmentation complete: %d fragments sent", 
-                 (int)((len + max_payload - 1) / max_payload));
+    klog_info_fmt("IP", "Fragmentation complete: %d fragments sent",
+                  (int)((len + max_payload - 1) / max_payload));
     return 0;
 
 }
@@ -692,13 +691,13 @@ int ip_init(void)
     ip_local_addr = ip_make_addr(192, 168, 100, 2);
     ip_netmask = ip_make_addr(255, 255, 255, 0);
     ip_gateway = ip_make_addr(192, 168, 100, 1);
-    LOG_INFO("IP", "TAP networking mode: Auto-configured IP 192.168.100.2");
+    klog_info("IP", "TAP networking mode: Auto-configured IP 192.168.100.2");
 #else
     /* User-mode networking (QEMU default) */
     ip_local_addr = ip_make_addr(10, 0, 2, 15);
     ip_netmask = ip_make_addr(255, 255, 255, 0);
     ip_gateway = ip_make_addr(10, 0, 2, 2);
-    LOG_INFO("IP", "User-mode networking: Using QEMU defaults (10.0.2.15)");
+    klog_info("IP", "User-mode networking: Using QEMU defaults (10.0.2.15)");
 #endif
     
     /* Synchronize ARP's IP address */
@@ -711,12 +710,12 @@ int ip_init(void)
     {
         if (arp_set_interface_ip(dev, ip_local_addr) == 0)
         {
-            LOG_INFO_FMT("IP", "Configured interface IP " IP4_FMT " for device %s",
+            klog_info_fmt("IP", "Configured interface IP " IP4_FMT " for device %s",
                         IP4_ARGS(ntohl(ip_local_addr)), dev->name);
         }
     }
 
-    LOG_INFO_FMT("IP", "Initializing IPv4 with address " IP4_FMT, IP4_ARGS(ntohl(ip_local_addr)));
+    klog_info_fmt("IP", "Initializing IPv4 with address " IP4_FMT, IP4_ARGS(ntohl(ip_local_addr)));
 
     /* Soft FIB mirrors globals so /proc/net/route is not synthesis-only. */
     (void)ip_routes_seed_from_globals();
@@ -731,11 +730,11 @@ int ip_init(void)
 
     if (net_register_protocol(&ip_proto) != 0)
     {
-        LOG_ERROR("IP", "Failed to register IP protocol");
+        klog_error("IP", "Failed to register IP protocol");
         return -1;
     }
 
-    LOG_INFO("IP", "IPv4 protocol initialized");
+    klog_info("IP", "IPv4 protocol initialized");
     return 0;
 }
 
@@ -772,7 +771,7 @@ int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway
 {
     if (ip_route_count >= MAX_ROUTES)
     {
-        LOG_ERROR("IP", "Routing table full");
+        klog_error("IP", "Routing table full");
         return -1;
     }
     
@@ -784,7 +783,7 @@ int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway
         {
             /* Update existing route */
             route->gateway = gateway;
-            LOG_INFO_FMT("IP", "Updated route: " IP4_FMT "/%d -> " IP4_FMT,
+            klog_info_fmt("IP", "Updated route: " IP4_FMT "/%d -> " IP4_FMT,
                         IP4_ARGS(ntohl(dest_network)),
                         ip_count_bits(ntohl(netmask)),
                         IP4_ARGS(ntohl(gateway)));
@@ -807,14 +806,14 @@ int ip_route_add(ip4_addr_t dest_network, ip4_addr_t netmask, ip4_addr_t gateway
     
     if (gateway)
     {
-        LOG_INFO_FMT("IP", "Added route: " IP4_FMT "/%d -> gateway " IP4_FMT,
+        klog_info_fmt("IP", "Added route: " IP4_FMT "/%d -> gateway " IP4_FMT,
                     IP4_ARGS(ntohl(route->dest_network)),
                     ip_count_bits(ntohl(netmask)),
                     IP4_ARGS(ntohl(gateway)));
     }
     else
     {
-        LOG_INFO_FMT("IP", "Added route: " IP4_FMT "/%d -> direct " IP4_FMT,
+        klog_info_fmt("IP", "Added route: " IP4_FMT "/%d -> direct " IP4_FMT,
                     IP4_ARGS(ntohl(route->dest_network)),
                     ip_count_bits(ntohl(netmask)),
                     IP4_ARGS(ntohl(dest_network)));
@@ -842,7 +841,7 @@ int ip_route_del(ip4_addr_t dest_network, ip4_addr_t netmask)
             else
                 ip_routes = route->next;
             
-            LOG_INFO_FMT("IP", "Deleted route: " IP4_FMT "/%d",
+            klog_info_fmt("IP", "Deleted route: " IP4_FMT "/%d",
                         IP4_ARGS(ntohl(route->dest_network)),
                         ip_count_bits(ntohl(route->netmask)));
             kfree(route);

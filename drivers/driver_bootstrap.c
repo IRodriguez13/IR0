@@ -17,7 +17,7 @@
  */
 
 #include <ir0/driver_bootstrap.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <stddef.h>
 
 #define DRIVER_BOOT_MAX_ENTRIES 32
@@ -71,17 +71,17 @@ int driver_bootstrap_run_all(void)
             if ((int)entry->stage != stage || !entry->enabled)
                 continue;
 
-            LOG_DEBUG_FMT("DRIVERS", "Boot init: %s", entry->name);
+            klog_debug_fmt("DRIVERS", "Boot init: %s", entry->name);
             ret = entry->init_fn();
             if (ret != 0)
             {
-                LOG_WARNING_FMT("DRIVERS", "Boot init failed: %s (%d)",
+                klog_warn_fmt("DRIVERS", "Boot init failed: %s (%d)",
                                 entry->name, ret);
                 failures++;
             }
             else
             {
-                LOG_INFO_FMT("DRIVERS", "%s initialized", entry->name);
+                klog_info_fmt("DRIVERS", "%s initialized", entry->name);
             }
         }
     }

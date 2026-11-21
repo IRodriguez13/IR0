@@ -44,7 +44,6 @@
 #include <ir0/pseudo_fs.h>
 #include <ir0/fd_types.h>
 #include <ir0/files_struct.h>
-#include <ir0/logging.h>
 #include <ir0/sock_stream.h>
 #include <ir0/sock_udp.h>
 #include <ir0/sock_icmp.h>

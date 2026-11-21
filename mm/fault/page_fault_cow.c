@@ -15,7 +15,7 @@
 #include <ir0/mm_alloc.h>
 #include <ir0/pmm.h>
 #include <ir0/oom.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/paging.h>
 #include "page_fault_internal.h"
 
@@ -53,7 +53,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 				  vaddr_aligned) != 0)
 	{
 		irq_restore(irq_flags);
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] write-fault no-COW pid=%x addr=%llx pte=0\n",
 				(unsigned)((uint32_t)current->task.pid),
 				(unsigned long long)fault_addr);
@@ -78,7 +78,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 					    stack, info);
 			return;
 		}
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] write-fault no-COW pid=%x addr=%llx pte=0\n",
 				(unsigned)((uint32_t)current->task.pid),
 				(unsigned long long)fault_addr);
@@ -108,7 +108,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 		uint64_t pte_val = pte ? *pte : 0;
 
 		irq_restore(irq_flags);
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] write-fault no-COW pid=%x addr=%llx pte=%llx\n",
 				(unsigned)((uint32_t)current->task.pid),
 				(unsigned long long)fault_addr,
@@ -144,7 +144,7 @@ void pf_user_write_present(const struct page_fault_info *info,
 			pmm_frame_put(old_phys);
 		irq_restore(irq_flags);
 		pmm_stats(&tot, &used, &free_fr);
-		log_info_fmt("PF",
+		klog_info_fmt("PF",
 				"[PF] COW OOM pid=%x addr=%llx refs=%u used=%u free=%u\n",
 				(unsigned)((uint32_t)current->task.pid),
 				(unsigned long long)fault_addr,

@@ -22,7 +22,7 @@
 
 #include "pc_speaker.h"
 #include <ir0/driver.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/kmem.h>
 #include <ir0/arch_port.h>
 #include <asm/io.h>
@@ -67,7 +67,7 @@ static int32_t speaker_driver_init(void)
 {
     if (speaker_initialized)
     {
-        LOG_WARNING("PC_SPEAKER", "PC Speaker already initialized");
+        klog_warn("PC_SPEAKER", "PC Speaker already initialized");
         return 0;
     }
 
@@ -79,7 +79,7 @@ static int32_t speaker_driver_init(void)
     speaker_initialized = true;
     speaker_enabled = false;
 
-    LOG_INFO("PC_SPEAKER", "PC Speaker initialized");
+    klog_info("PC_SPEAKER", "PC Speaker initialized");
     return 0;
 }
 
@@ -88,13 +88,13 @@ static int32_t speaker_driver_beep(const void *buf, size_t len)
 {
     if (!speaker_initialized)
     {
-        LOG_ERROR("PC_SPEAKER", "PC Speaker not initialized");
+        klog_error("PC_SPEAKER", "PC Speaker not initialized");
         return -1;
     }
 
     if (!buf || len < sizeof(uint16_t))
     {
-        LOG_ERROR("PC_SPEAKER", "Invalid buffer or size");
+        klog_error("PC_SPEAKER", "Invalid buffer or size");
         return -1;
     }
 
@@ -139,7 +139,7 @@ static void speaker_driver_shutdown(void)
 {
     speaker_driver_stop();
     speaker_initialized = false;
-    LOG_INFO("PC_SPEAKER", "PC Speaker shutdown");
+    klog_info("PC_SPEAKER", "PC Speaker shutdown");
 }
 
 /* Driver operations */
@@ -169,7 +169,7 @@ void pc_speaker_init(void)
     ir0_driver_t *driver = ir0_register_driver(&speaker_info, &speaker_ops);
     if (!driver)
     {
-        LOG_ERROR("PC_SPEAKER", "Failed to register PC Speaker driver");
+        klog_error("PC_SPEAKER", "Failed to register PC Speaker driver");
     }
 }
 

@@ -17,7 +17,6 @@
 #include <stddef.h>
 #include <ir0/arch_port.h>
 #include <ir0/driver.h>
-#include <ir0/logging.h>
 #include <ir0/input.h>
 #include <ir0/input_backend.h>
 #include <ir0/ktm/klog.h>
@@ -118,7 +117,7 @@ static int32_t ps2_mouse_hw_init(void)
     if (ps2_controller_read_data() != 0x00) /* Port test OK response */
     {
         /* Mouse port test failed */
-        LOG_ERROR("PS2_MOUSE", "Mouse port test failed");
+        klog_error("PS2_MOUSE", "Mouse port test failed");
         return -1;
     }
 
@@ -200,7 +199,7 @@ static const struct input_mouse_ops ps2_mouse_input_ops;
 bool ps2_mouse_init(void)
 {
     (void)input_register_device(input_i8042_dev());
-    LOG_INFO("PS2_MOUSE", "Registering PS/2 Mouse driver...");
+    klog_info("PS2_MOUSE", "Registering PS/2 Mouse driver...");
     input_register_mouse(&ps2_mouse_input_ops);
     ir0_driver_t* drv = ir0_register_driver(&mouse_info, &mouse_ops);
     return drv != NULL;

@@ -12,7 +12,7 @@
 #include "tcp.h"
 #include "net_internal.h"
 #include <ir0/atomic.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <ir0/clock.h>
 #include <ir0/clock_wait.h>
 #include <ir0/process.h>
@@ -701,7 +701,7 @@ void tcp_wire_close(ip4_addr_t peer_ip, uint16_t peer_port, uint16_t local_port,
 
 int tcp_init(void)
 {
-	LOG_INFO("TCP", "Initializing minimal wire TCP");
+	klog_info("TCP", "Initializing minimal wire TCP");
 
 	memset(&tcp_proto, 0, sizeof(tcp_proto));
 	memset(tcp_wire_listeners, 0, sizeof(tcp_wire_listeners));
@@ -715,10 +715,10 @@ int tcp_init(void)
 
 	if (net_register_protocol(&tcp_proto) != 0)
 	{
-		LOG_ERROR("TCP", "Failed to register TCP protocol");
+		klog_error("TCP", "Failed to register TCP protocol");
 		return -1;
 	}
 
-	LOG_INFO("TCP", "Wire TCP protocol registered");
+	klog_info("TCP", "Wire TCP protocol registered");
 	return 0;
 }

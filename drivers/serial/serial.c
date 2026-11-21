@@ -19,7 +19,7 @@
 #include <ir0/arch_port.h>
 #include "serial.h"
 #include <ir0/driver.h>
-#include <ir0/logging.h>
+#include <ir0/ktm/klog.h>
 #include <string.h>
 #include <asm/io.h>
 
@@ -72,7 +72,7 @@ static ir0_driver_info_t serial_info = {
  */
 void serial_init(void)
 {
-    LOG_INFO("SERIAL", "Registering Serial UART (COM1) driver...");
+    klog_info("SERIAL", "Registering Serial UART (COM1) driver...");
     ir0_register_driver(&serial_info, &serial_ops);
 }
 
