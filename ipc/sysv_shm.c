@@ -43,6 +43,7 @@ struct shm_seg
 	int nattch;
 	int cpid;
 	int lpid;
+	int mode;
 	time_t atime;
 	time_t dtime;
 	time_t ctime;
@@ -211,6 +212,7 @@ int64_t sys_shmget(int key, size_t size, int shmflg)
 	free_slot->id = g_next_id++;
 	free_slot->npages = npages;
 	free_slot->cpid = (int)process_pid(current_process);
+	free_slot->mode = (int)(shmflg & 0777);
 	free_slot->ctime = shm_now();
 	free_slot->uid = current_process ? (int)current_process->euid : 0;
 	free_slot->gid = current_process ? (int)current_process->egid : 0;
@@ -322,7 +324,7 @@ int64_t sys_shmctl(int shmid, int cmd, void *buf)
 		memset(&st, 0, sizeof(st));
 		st.shm_segsz = s->npages * PAGE_SZ;
 		st.shm_nattch = s->nattch;
-		st.shm_perm_mode = 0600;
+		st.shm_perm_mode = s->mode;
 		st.shm_cpid = s->cpid;
 		st.shm_lpid = s->lpid;
 		st.shm_atime = s->atime;

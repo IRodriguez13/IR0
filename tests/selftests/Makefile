@@ -715,3 +715,21 @@ $(SHM_OWNER_BIN): $(SHM_OWNER_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_OWNER_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SHM-MODE-SELFTEST
+SHM_MODE_SRC := syscall/shm_mode.c
+SHM_MODE_BIN := $(BUILD_DIR)/shm_mode
+
+.PHONY: shm_mode
+
+shm_mode: $(SHM_MODE_BIN)
+
+$(SHM_MODE_BIN): $(SHM_MODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_mode"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_MODE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
