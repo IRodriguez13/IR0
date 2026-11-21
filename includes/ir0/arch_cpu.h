@@ -24,7 +24,7 @@
 #include <ir0/arch_io.h>
 #include <ir0/arch_mm.h>
 #include <ir0/page_fault.h>
-#include <ir0/arch_info.h>
+#include <asm/setup.h>
 #include <ir0/cpu.h>
 #include <ir0/context.h>
 

@@ -2018,7 +2018,7 @@ PC_PLATFORM_ASM_INCLUDE = re.compile(
 # Hooks every ISA implements (Linux asm-generic model): the declarations live
 # in includes/asm-generic/<topic>.h, each ISA's asm/<topic>.h includes them,
 # and portable code includes <asm/<topic>.h>.
-ARCH_HOOK_ASM_HEADERS = ("elf", "hw_breakpoint")
+ARCH_HOOK_ASM_HEADERS = ("elf", "hw_breakpoint", "setup")
 ARCH_HOOK_ISAS = ("x86-64", "arm64")
 ARCH_HOOK_ASM_INCLUDE = re.compile(
     r'^\s*#\s*include\s*<asm/(?:'

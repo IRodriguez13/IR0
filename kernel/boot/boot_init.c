@@ -25,7 +25,7 @@
 #include <ir0/pmm.h>
 #include <ir0/paging.h>
 #include <ir0/arch_port.h>
-#include <ir0/arch_info.h>
+#include <asm/setup.h>
 #include <config.h>
 #include <ir0/version.h>
 #include <ir0/elf_loader.h>
