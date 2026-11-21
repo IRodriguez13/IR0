@@ -146,7 +146,7 @@ static int32_t sb16_hw_init(void)
     resource_register_ioport(SB16_BASE_PORT, SB16_ACK_16BIT, "sound blaster");
     resource_register_irq(SB16_IRQ, "sb16");
     if (irq_request(SB16_IRQ, sb16_irq, NULL, "sb16") != 0)
-        LOG_WARNING("SB16", "IRQ line already claimed");
+        klog_warn("SB16", "IRQ line already claimed");
     irq_unmask_line(SB16_IRQ);
     return 0;
 }

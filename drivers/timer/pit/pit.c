@@ -72,7 +72,7 @@ void init_PIT(uint32_t frequency)
 
     resource_register_irq(0, "timer");
     if (irq_request(0, pit_irq, NULL, "timer") != 0)
-        LOG_WARNING("PIT", "IRQ 0 already claimed");
+        klog_warn("PIT", "IRQ 0 already claimed");
     resource_register_ioport(PIT_REG_CHAN0, PIT_REG_COMMAND, "timer0");
 }
 
