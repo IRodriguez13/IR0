@@ -85,17 +85,17 @@ void task_save_user_exception_frame(task_t *t, const void *opaque_frame)
 	if ((frame[3] & 3U) == 3U)
 	{
 #if defined(USER_CODE_SEL) && defined(USER_DATA_SEL)
-		task_set_cs(t, (uint16_t)USER_CODE_SEL);
-		task_set_ss(t, (uint16_t)USER_DATA_SEL);
+		IR0_TASK_SET_CODE_SEG(t, (uint16_t)USER_CODE_SEL);
+		IR0_TASK_SET_STACK_SEG(t, (uint16_t)USER_DATA_SEL);
 #else
-		task_set_cs(t, 0x1B);
-		task_set_ss(t, 0x23);
+		IR0_TASK_SET_CODE_SEG(t, 0x1B);
+		IR0_TASK_SET_STACK_SEG(t, 0x23);
 #endif
 	}
 	else
 	{
-		task_set_cs(t, (uint16_t)frame[3]);
-		task_set_ss(t, (uint16_t)frame[6]);
+		IR0_TASK_SET_CODE_SEG(t, (uint16_t)frame[3]);
+		IR0_TASK_SET_STACK_SEG(t, (uint16_t)frame[6]);
 	}
 }
 

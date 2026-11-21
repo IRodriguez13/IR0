@@ -4,14 +4,3 @@
 # and on a listed pair whose identifier is gone: a branch that fixes an
 # offender deletes its line here in the same commit.
 # Regenerate: python3 scripts/architecture_guard.py --print-register-baseline
-includes/ir0/arch_task.h IR0_TASK_GET_CS
-includes/ir0/arch_task.h IR0_TASK_GET_SS
-includes/ir0/arch_task.h IR0_TASK_SET_CS
-includes/ir0/arch_task.h IR0_TASK_SET_SS
-includes/ir0/arch_task.h task_cs_is_user
-includes/ir0/arch_task.h task_get_cs
-includes/ir0/arch_task.h task_get_ss
-includes/ir0/arch_task.h task_set_cs
-includes/ir0/arch_task.h task_set_ss
-kernel/process/core.c task_cs_is_user
-ktm/ktm_ctx_snapshot.c task_get_cs

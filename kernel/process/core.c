@@ -121,7 +121,7 @@ void process_sync_task_user_ip_from_syscall_frame(process_t *p)
 
 	if (!p || p->mode != USER_MODE)
 		return;
-	if (!task_cs_is_user(&p->task))
+	if (!task_is_user_mode(&p->task))
 		return;
 
 	sf = &p->syscall_frame;
