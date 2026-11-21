@@ -28,6 +28,11 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
   if (rc != 0)
     return rc;
 
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
+  if (rc != 0)
+    return rc;
+
   if (is_proc_path(resolved))
   {
     rc = proc_access_path(resolved, (uid_t)current_process->euid);
@@ -218,6 +223,11 @@ int64_t sys_stat(const char *pathname, stat_t *buf)
   if (rc != 0)
     return rc;
 
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
+  if (rc != 0)
+    return rc;
+
   rc = ir0_stat_path_routed_follow(resolved, &kst);
 
   if (rc != 0)
@@ -237,11 +247,13 @@ static int64_t fs_fstatat_kernel(int dirfd, const char *pathname, int flags,
   char resolved[256];
   int64_t rc;
   char first;
+  int name_lookup;
 
   if (!current_process)
     return -ESRCH;
 
   memset(kst, 0, sizeof(*kst));
+  name_lookup = 0;
   if ((flags & IR0_AT_EMPTY_PATH) &&
       copy_from_user(&first, pathname, sizeof(first)) == 0 && first == '\0')
   {
@@ -252,9 +264,17 @@ static int64_t fs_fstatat_kernel(int dirfd, const char *pathname, int flags,
   else
   {
     rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+    name_lookup = 1;
   }
   if (rc != 0)
     return rc;
+  if (name_lookup)
+  {
+    /* Search the directories before the name is looked up. */
+    rc = vfs_check_dir_traverse(resolved);
+    if (rc != 0)
+      return rc;
+  }
 
   if (!(flags & IR0_AT_SYMLINK_NOFOLLOW))
   {
@@ -575,14 +595,30 @@ int64_t sys_fchmodat(int dirfd, const char *pathname, mode_t mode, int flags)
 {
   char resolved[256];
   stat_t st;
+  char first;
+  int empty_path;
   int rc;
 
   if (!current_process)
     return -ESRCH;
 
+  /*
+   * AT_EMPTY_PATH with an empty name is fchmod of the fd: no path walk.
+   * Any other name still needs search before it is looked up.
+   */
+  empty_path = (flags & IR0_AT_EMPTY_PATH) && pathname &&
+               copy_from_user(&first, pathname, sizeof(first)) == 0 &&
+               first == '\0';
+
   rc = fs_resolve_fchmodat_path(dirfd, pathname, resolved, sizeof(resolved), flags);
   if (rc != 0)
     return rc;
+  if (!empty_path)
+  {
+    rc = vfs_check_dir_traverse(resolved);
+    if (rc != 0)
+      return rc;
+  }
 
   rc = vfs_stat(resolved, &st);
   if (rc != 0)

@@ -130,6 +130,14 @@ off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence);
 
 /* Path operations */
 int vfs_stat(const char *path, stat_t *buf);
+
+/*
+ * Linux may_lookup(): search permission on every directory before the
+ * final component. Missing is ENOENT, a non-directory is ENOTDIR, and a
+ * directory without search is EACCES. Call before the final name is
+ * looked up, so a denied search is not reported as ENOENT.
+ */
+int vfs_check_dir_traverse(const char *path);
 struct ir0_statfs;
 int vfs_mkdir(const char *path, int mode);
 int vfs_unlink(const char *path);

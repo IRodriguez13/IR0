@@ -368,6 +368,11 @@ int64_t sys_chmod(const char *path, mode_t mode)
     return rc;
   path_to_use = resolved;
 
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(path_to_use);
+  if (rc != 0)
+    return rc;
+
   stat_t st;
   int sret = vfs_stat(path_to_use, &st);
   if (sret != 0)
@@ -534,6 +539,11 @@ int64_t sys_access(const char *pathname, int mode)
   if (rc != 0)
     return rc;
 
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
+  if (rc != 0)
+    return rc;
+
   /*
    * Linux access(2): real uid/gid + supplementary groups, not effective
    * (access_override_creds()); AT_EACCESS is only on faccessat.
@@ -558,6 +568,11 @@ int64_t sys_faccessat(int dirfd, const char *pathname, int mode, int flags)
     return -EINVAL;
 
   rc = ir0_resolve_path_at(dirfd, pathname, resolved, sizeof(resolved));
+  if (rc != 0)
+    return rc;
+
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
   if (rc != 0)
     return rc;
 
@@ -655,6 +670,11 @@ int64_t sys_chdir(const char *pathname)
 
   rc = ir0_resolve_user_path(pathname, resolved, sizeof(resolved),
                              current_process->cwd, current_process->root);
+  if (rc != 0)
+    return rc;
+
+  /* Search the directories before the name is looked up. */
+  rc = vfs_check_dir_traverse(resolved);
   if (rc != 0)
     return rc;
 
