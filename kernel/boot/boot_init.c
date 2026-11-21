@@ -170,8 +170,8 @@ void boot_rootfs_init(void)
 	klog_set_boot_phase(KLOG_BOOT_STORAGE);
 	if (!ir0_block_lookup_by_name(CONFIG_ROOT_BLOCK_DEVICE))
 	{
-		klog_warn("BOOT", "Configured root block device not detected");
-		klog_warn("BOOT", "Filesystem initialization may fail");
+		kklog_warn("BOOT", "Configured root block device not detected");
+		kklog_warn("BOOT", "Filesystem initialization may fail");
 	}
 #if DEBUG_BOOT
 	else
@@ -189,9 +189,9 @@ void boot_rootfs_init(void)
 
 	/* After the port hook: the arm64 boot pivot would move it under /bpivot. */
 	if (vfs_mount("heartfs", "/heart", "heartfs") != 0)
-		log_warn("BOOT", "heartfs mount at /heart failed");
+		klog_warn("BOOT", "heartfs mount at /heart failed");
 	if (vfs_mount("sysfs", "/sys", "sysfs") != 0)
-		log_warn("BOOT", "sysfs mount at /sys failed");
+		klog_warn("BOOT", "sysfs mount at /sys failed");
 }
 
 void boot_process_init(void)
