@@ -19,7 +19,7 @@ LOG_CHUNK = 1 << 20
 MAX_LOG_BYTES = 64 * 1024 * 1024
 MAX_LINE_CHARS = 64 * 1024
 DEFAULT_MEM_MIB = 128
-MAX_MEM_MIB = 2048
+MAX_MEM_MIB = 4096
 HOST_HEADROOM_MIB = 512
 MAX_TIMEOUT_SEC = 3600
 
@@ -115,8 +115,8 @@ def ensure_qemu_mem(
     """Enforce an explicit, host-safe -m on every QEMU invocation."""
     if requested_mib <= 0:
         raise ValueError("guest RAM must be positive")
-    # The 2 GiB ceiling is a contract, not a default: a caller may lower the
-    # cap but never raise it.
+    # 4 GiB is the absolute ceiling. A caller may lower it, not raise it.
+    # The host cap is still a quarter of physical RAM.
     max_mib = min(max_mib, MAX_MEM_MIB)
     total = host_total_mib()
     host_cap = min(max_mib, max(64, total // 4)) if total else max_mib

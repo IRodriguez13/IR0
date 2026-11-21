@@ -2034,7 +2034,7 @@ ir0-selftest-bigmem-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_BIGMEM)
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch x86_64 \
 		--binary $(IR0_SELFTEST_X86_BIGMEM) \
-		--mem 4096M \
+		--mem 3584M \
 		--timeout 180 \
 		--done "ok 2 touch_1280_mib_anon" \
 		--expect-log "ok 1 memtotal_reflects_ram" \
@@ -2045,7 +2045,7 @@ ir0-selftest-bigmem-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_BIGMEM)
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_BIGMEM) \
-		--mem 4096M \
+		--mem 3584M \
 		--timeout 180 \
 		--done "ok 2 touch_1280_mib_anon" \
 		--expect-log "ok 1 memtotal_reflects_ram" \
