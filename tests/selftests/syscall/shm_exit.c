@@ -26,7 +26,7 @@
 #include <unistd.h>
 #endif
 
-/* Matches includes/ir0/sysv_shm.h. Fork does not copy attaches. */
+/* Matches includes/ir0/sysv_shm.h. */
 #define SHM_CREAT 01000
 #define SHM_RMID 0
 #define SHM_STAT 2

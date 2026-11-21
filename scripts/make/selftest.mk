@@ -1025,6 +1025,39 @@ ir0-selftest-shm-exit-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_E
 
 ir0-selftest-shm-exit: ir0-selftest-shm-exit-x86 ir0-selftest-shm-exit-arm64
 
+# SHM-FORK-SELFTEST
+# Parent shmat, fork, child stores at that address. The parent must see
+# the child's byte: SysV shm is shared, not copy-on-write.
+IR0_SELFTEST_X86_SHM_FORK := $(KERNEL_ROOT)/build/selftests/x86_64/shm_fork
+IR0_SELFTEST_ARM64_SHM_FORK := $(KERNEL_ROOT)/build/selftests/arm64/shm_fork
+
+.PHONY: ir0-selftest-shm-fork-x86 ir0-selftest-shm-fork-arm64 ir0-selftest-shm-fork
+
+$(IR0_SELFTEST_X86_SHM_FORK): tests/selftests/syscall/shm_fork.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 shm_fork
+
+$(IR0_SELFTEST_ARM64_SHM_FORK): tests/selftests/syscall/shm_fork.c tests/selftests/ir0/ksft.h \
+		tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 shm_fork
+
+ir0-selftest-shm-fork-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SHM_FORK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SHM_FORK) \
+		--done "ok 1 shm_fork" \
+		--log $(HOST_TMP)/ir0-selftest-x86-shm-fork.log
+	@echo "✓ ir0-selftest-shm-fork-x86"
+
+ir0-selftest-shm-fork-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_FORK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SHM_FORK) \
+		--done "ok 1 shm_fork" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-shm-fork.log
+	@echo "✓ ir0-selftest-shm-fork-arm64"
+
+ir0-selftest-shm-fork: ir0-selftest-shm-fork-x86 ir0-selftest-shm-fork-arm64
+
 # PRCTL-TASK-SELFTEST
 IR0_SELFTEST_X86_PRCTL_TASK := $(KERNEL_ROOT)/build/selftests/x86_64/prctl_task
 IR0_SELFTEST_ARM64_PRCTL_TASK := $(KERNEL_ROOT)/build/selftests/arm64/prctl_task
