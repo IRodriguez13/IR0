@@ -1,10 +1,11 @@
 # IR0 Memory Subsystem
 
-> **Last verified:** 2026-11-07  
+> **Last verified:** 2026-11-20  
 > **Source of truth:** `mm/alloc/pmm.c`, `mm/paging/paging.c`, `mm/fault/page_fault.c`,  
+> `kernel/syscalls/mm_syscalls.c`, `includes/ir0/mman.h`,
 > `mm/swap/`, `includes/ir0/swap.h`, `arch/x86-64/sources/pf_debug.c`,
 > `Documentation/mandocs/en/mm.md`, `Documentation/uaccess.md`,  
-> `make smoke-mm-cow-lazy`, `tests/host` swap contracts, `ktest_swap_header_and_area`
+> `make smoke-mm-cow-lazy`, `tests/selftests/syscall/vm_commit.c`
 
 IR0 memory management currently combines PMM, kernel allocator, and paging-based
 process isolation.
@@ -54,6 +55,17 @@ atomic instructions live under `arch/<isa>/` behind `<ir0/arch_mm.h>`,
 
 - **Soft-grow removed:** heap/stack VMAs are no longer extended implicitly on a fault one page past `heap_end` or stack top. Out-of-VMA faults deliver SIGSEGV (Linux expects explicit `brk`/`mmap` growth).
 - **COW break:** write faults on `PAGE_COW` always copy to a new frame (`pmm_frame_get` pin when refcount is non-zero); shared frames are never promoted RW in place. Unchanged from prior FASE40 path; gate: `make smoke-mm-cow-lazy`.
+
+## Anonymous commit (2026-11-20)
+
+`mmap` of anonymous `PROT_NONE`, and anonymous `MAP_NORESERVE` (`0x4000` in
+`includes/ir0/mman.h`), does not populate PTEs
+(`kernel/syscalls/mm_syscalls.c`). The first user access demand-zeros one
+page. `MAP_NORESERVE` does not charge commit, so the mapping may be larger
+than free RAM. A read-write anonymous `mmap` without `MAP_NORESERVE` is still
+populated up front, so `copy_to_user` of an untouched buffer works.
+Gate: `make ir0-selftest-vm-commit-x86` and `make ir0-selftest-vm-commit-arm64`
+(`tests/selftests/syscall/vm_commit.c`).
 
 ## Stack top and signal frames (2026-09-02)
 

@@ -1,8 +1,8 @@
 # Modelo de Procesos en IR0
 
-> **Última verificación:** 2026-09-02
-> **Fuente de verdad:** `kernel/process/exit.c`, `kernel/process/wait.c`,
-> [`PROCESSES.md`](../PROCESSES.md) (canónico en inglés), [`uaccess.md`](uaccess.md)
+> **Última verificación:** 2026-11-20
+> **Fuente de verdad:** `kernel/process/domains.c`, `kernel/syscalls/process_syscalls.c`,
+> `includes/ir0/fd_types.h`, [`PROCESSES.md`](../PROCESSES.md) (canónico en inglés)
 
 El manejo de procesos en IR0 prioriza ciclo de vida claro y semántica Unix de
 credenciales en forma incremental.
@@ -20,12 +20,17 @@ credenciales en forma incremental.
 
 - PID/PPID y enlaces de lista de procesos.
 - Metadatos de contexto/tarea y address-space.
-- Tabla de file descriptors y directorio de trabajo.
+- Tabla de descriptores y directorio de trabajo. Crece con `files_grow()`
+  hasta `RLIMIT_NOFILE`, con tope `IR0_NOFILE_CEILING` (4096) y default blando
+  1024. Un solo asignador: `fd_alloc_lowest()`.
 - Credenciales: `uid/gid/euid/egid` y `umask`.
-- Estado de señales pendientes y metadata de salida.
-- Sin copia en el kernel del contexto de usuario interrumpido: la entrega lo
-  escribe en el `struct sigframe` de usuario y `rt_sigreturn(2)` lo restaura
-  sólo desde ahí. Los handlers se anidan como en Linux.
+- Señales pendientes. `clone(CLONE_SIGHAND)` comparte la tabla; sin el flag
+  se copia. `CLONE_SIGHAND` sin `CLONE_VM` es `-EINVAL`. El bit de `SIG_IGN`
+  se actualiza en todas las tareas que comparten la tabla. `exec` copia la
+  tabla si más de una tarea la usa (`process_signals_unshare`).
+- El contexto interrumpido no queda en el kernel: vive en el `sigframe` de
+  usuario, que incluye el `ucontext` de Linux. El handler lo edita y
+  `rt_sigreturn(2)` lo importa. En arm64 el `mcontext` es el `sigcontext`.
 
 ## Exit, reparent, wait
 
