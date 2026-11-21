@@ -8,6 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <ir0/cpu.h>
 #include "bcm2836_irq.h"
 
 #include <stdint.h>
@@ -47,8 +48,8 @@ int arm64_bcm2836_irq_enable(uint32_t irq)
 		return -1;
 
 	*local_reg(BCM2836_CORE0_TIMER_IRQ_CONTROL) = BCM2836_CNTPNSIRQ_BIT;
-	__asm__ volatile("dsb sy" ::: "memory");
-	__asm__ volatile("isb" ::: "memory");
+	mb();
+	cpu_sync();
 	return 0;
 }
 
