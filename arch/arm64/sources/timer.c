@@ -14,13 +14,44 @@
 
 #include <stdint.h>
 #include <config.h>
+#include <ir0/boot_log.h>
 #include <ir0/clock.h>
 #include <ir0/delay.h>
+#include <ir0/irq.h>
+#include "irq_backend.h"
 #include "timer.h"
 
 static uint64_t g_cntfrq;
 static uint32_t g_hz;
+static volatile int g_timer_irq_seen;
 
+int arm64_timer_irq_seen(void)
+{
+	return g_timer_irq_seen;
+}
+
+static void arch_timer_irq(uint32_t irq, void *data)
+{
+	(void)irq;
+	(void)data;
+	if (!g_timer_irq_seen)
+	{
+		g_timer_irq_seen = 1;
+		ir0_boot_smoke("ARM64_TIMER_IRQ_OK");
+	}
+
+	if (clock_is_ready())
+	{
+		clock_note_irq();
+		clock_tick();
+		arch_timer_periodic_arm();
+	}
+}
+
+/*
+ * Runs at platform setup, before the boot IRQ demo, and again from
+ * clock_timer_init(), where the line is already taken (-EBUSY).
+ */
 void timer_init(void)
 {
 	uint64_t frq;
@@ -28,6 +59,8 @@ void timer_init(void)
 	__asm__ volatile("mrs %0, cntfrq_el0" : "=r"(frq));
 	g_cntfrq = frq;
 	g_hz = (uint32_t)frq;
+	(void)irq_request(ARM64_IRQ_PHYS_TIMER, arch_timer_irq, NULL,
+			  "arch_timer");
 }
 
 /* The tick IRQ is armed later by arch_timer_periodic_arm(); no PC timer runs. */

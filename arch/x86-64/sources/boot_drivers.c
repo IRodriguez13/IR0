@@ -129,8 +129,15 @@ static int boot_init_hostshare_9p(void)
 	return 0;
 }
 
+static int boot_init_i8042_irqs(void)
+{
+	i8042_irq_init();
+	return 0;
+}
+
 /* Within a stage the bootstrap runs these after the generic network stack. */
 static const struct driver_boot_entry pc_boot_drivers[] = {
+	{ "i8042_irq", boot_init_i8042_irqs, DRIVER_BOOT_STAGE_INPUT, 1 },
 	{ "ps2_controller", boot_init_ps2_controller, DRIVER_BOOT_STAGE_INPUT,
 	  CONFIG_INIT_PS2_CONTROLLER },
 	{ "ps2_keyboard", boot_init_keyboard, DRIVER_BOOT_STAGE_INPUT,

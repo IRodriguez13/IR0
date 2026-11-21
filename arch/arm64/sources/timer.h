@@ -20,6 +20,9 @@
 
 int arch_timer_smoke_ok(void);
 
+/** Nonzero after first handled timer IRQ (boot poll). */
+int arm64_timer_irq_seen(void);
+
 /** Arm EL1 physical timer one-shot (CNTP_TVAL + ENABLE, IMASK clear). */
 void arch_timer_oneshot_arm(uint32_t ticks);
 

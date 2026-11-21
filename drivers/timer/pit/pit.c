@@ -17,6 +17,9 @@
 #include <ir0/driver.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/clock.h>
+#include <ir0/irq.h>
+#include <ir0/percpu.h>
+#include <ir0/process.h>
 #include <ir0/resource_registry.h>
 #include <asm/io.h>
 
@@ -40,10 +43,13 @@ static ir0_driver_info_t pit_info = {
     .language = IR0_DRIVER_LANG_C
 };
 
-void increment_pit_ticks(void)
+/* The tick saves the interrupted user context before clock_tick(). */
+static void pit_irq(uint32_t irq, void *data)
 {
+	(void)irq;
+	(void)data;
+	process_save_user_exception_frame(cpu_local_irq_frame());
 	clock_note_irq();
-	extern void clock_tick(void);
 	clock_tick();
 }
 
@@ -65,6 +71,8 @@ void init_PIT(uint32_t frequency)
     outb(PIT_REG_CHAN0, (divisor >> 8) & 0xFF);
 
     resource_register_irq(0, "timer");
+    if (irq_request(0, pit_irq, NULL, "timer") != 0)
+        LOG_WARNING("PIT", "IRQ 0 already claimed");
     resource_register_ioport(PIT_REG_CHAN0, PIT_REG_COMMAND, "timer0");
 }
 

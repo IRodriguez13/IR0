@@ -31,10 +31,9 @@ int net_stack_get_irq_line(void)
     return -1;
 }
 
-int net_stack_handle_irq(uint8_t irq)
+void net_stack_handle_irq(uint8_t irq)
 {
     (void)irq;
-    return 0;
 }
 
 struct net_device *first_net_device(void)

@@ -24,25 +24,17 @@
 #include <ir0/process.h>
 #include <ir0/cpu.h>
 #include <ir0/percpu.h>
-#include <ir0/clock.h>
 #include <ir0/errno.h>
 #include <ir0/irq.h>
 #include <asm/processor.h>
 #include <config.h>
-#include <ir0/input_backend.h>
 #include <ir0/paging.h>
 #include <string.h>
-#include <interrupt/keyboard.h>
-#include <drivers/timer/pit/pit.h>
 #include <arch/x86-64/sources/fault.h>
-#if CONFIG_ENABLE_SOUND
-#include <ir0/sound_blaster.h>
-#endif
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
 
-/* Declaraciones externas para el nuevo driver de teclado */
 extern uint64_t iretq_checkpoint_buf[40];
 extern uint64_t isr_abi_entry_intno;
 extern uint64_t isr_abi_entry_has_err;
@@ -448,56 +440,16 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
     if (interrupt_number >= 32 && interrupt_number <= 47)
     {
         uint8_t irq = interrupt_number - 32;
+        void *prev_frame = cpu_local_set_irq_frame(stack);
 
-        /*
-         * irq_request owns the line when dispatch returns 0: skip the
-         * built-in cases and still send EOI. An empty slot (-ENOENT)
-         * keeps those cases. net_stack_handle_irq also polls NICs with
-         * no line, so that call stays on the empty path only.
-         */
-        if (irq_dispatch(irq) == -ENOENT)
-        {
-            switch (irq)
-            {
-            case 0: /* Timer */
-            {
-                process_save_user_exception_frame(stack);
-                increment_pit_ticks();
-                break;
-            }
-
-            case 1: /* Keyboard */
-    			clock_note_irq();
-                keyboard_handler64();
-                break;
-
-            case 12: /* PS/2 Mouse */
-            {
-    			clock_note_irq();
-                input_mouse_handle_interrupt();
-                break;
-            }
-
-#if CONFIG_ENABLE_SOUND
-            case 5: /* SB16 8-bit DMA */
-                if (sb16_is_available())
-                    sb16_irq_handler();
-                break;
-#endif
-
-            default:
-                break;
-            }
-
+        (void)irq_dispatch(irq);
 #if CONFIG_ENABLE_NETWORKING
-            net_stack_handle_irq(irq);
+        net_stack_handle_irq(irq);
 #endif
-        }
+        (void)cpu_local_set_irq_frame(prev_frame);
 
         /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);
-	/* Architecture owns raw frame decoding; portable IRQ code ignores it. */
-	(void)stack;
         return;
     }
 

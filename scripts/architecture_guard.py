@@ -1793,6 +1793,56 @@ def check_scheduler_user_return_boundary():
     return errors
 
 
+IRQ_ENTRY_FILES = (
+    ROOT / "arch" / "x86-64" / "sources" / "interrupt" / "isr_handlers.c",
+    ROOT / "arch" / "arm64" / "sources" / "exc_early.c",
+)
+
+IRQ_ENTRY_DRIVER_CALL_RE = re.compile(
+    r"\b(keyboard_handler64|increment_pit_ticks|input_mouse_handle_interrupt|"
+    r"sb16_irq_handler|clock_tick|clock_note_irq|arch_timer_periodic_arm|"
+    r"process_save_user_exception_frame)\s*\("
+)
+
+IRQ_ENTRY_DRIVER_INCLUDE_RE = re.compile(
+    r"#\s*include\s*<(drivers/(?:timer|input|net|storage)/|sound/|"
+    r"interrupt/keyboard\.h|ir0/input_backend\.h|ir0/sound_blaster\.h|"
+    r"ir0/clock\.h)"
+)
+
+RETIRED_IRQ_HANDLER_RE = re.compile(r"\b(keyboard_handler64|increment_pit_ticks)\b")
+
+
+def check_irq_entry_dispatch_only():
+    """Hardware IRQ entries acknowledge, call irq_dispatch() and send EOI;
+    device handlers are registered by their drivers with irq_request()."""
+    errors = []
+    for path in IRQ_ENTRY_FILES:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for lineno, line in enumerate(text.splitlines(), 1):
+            match = (IRQ_ENTRY_DRIVER_CALL_RE.search(line) or
+                     IRQ_ENTRY_DRIVER_INCLUDE_RE.search(line))
+            if match:
+                errors.append(
+                    f"[irq-entry-dispatch-only] {rel_to_root(path)}:{lineno}: "
+                    f"'{match.group(1)}' in an IRQ entry; the owning driver "
+                    "registers its handler with irq_request()"
+                )
+    for base in (ROOT / "arch", ROOT / "drivers", ROOT / "includes",
+                 ROOT / "kernel"):
+        for path in iter_c_files(base):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for lineno, line in enumerate(text.splitlines(), 1):
+                match = RETIRED_IRQ_HANDLER_RE.search(line)
+                if match:
+                    errors.append(
+                        f"[irq-entry-dispatch-only] {rel_to_root(path)}:"
+                        f"{lineno}: {match.group(1)} is retired; its body is "
+                        "an irq_request() handler"
+                    )
+    return errors
+
+
 def check_scheduler_runqueue_lock_boundary():
     """Scheduler core and policy code take the runqueue lock, never raw IRQ masking."""
     errors = []
@@ -4440,6 +4490,7 @@ def main():
     errors.extend(check_portable_no_arch_prefix_calls())
     errors.extend(check_context_backend_include_boundary())
     errors.extend(check_scheduler_user_return_boundary())
+    errors.extend(check_irq_entry_dispatch_only())
     errors.extend(check_scheduler_runqueue_lock_boundary())
     errors.extend(check_process_lifecycle_no_isa_conditionals())
     errors.extend(check_process_registry_ownership())

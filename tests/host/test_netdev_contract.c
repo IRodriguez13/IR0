@@ -143,18 +143,20 @@ void test_netdev_contract(void)
 	ASSERT_EQ(g_poll_calls, 1);
 	TEST_END();
 
-	TEST_BEGIN("netdev_irq_dispatch_and_poll_fallback");
+	TEST_BEGIN("netdev_irq_line_skips_poll_fallback");
 	ASSERT_EQ(irq_request(210, fake_irq, a, "fake0"), 0);
 	a->irq = 210;
 	ASSERT_EQ(net_stack_get_irq_line(), 210);
 	g_irq_calls = 0;
 	g_poll_calls = 0;
-	ASSERT_EQ(net_stack_handle_irq(210), 1);
+	ASSERT_EQ(irq_dispatch(210), 0);
+	net_stack_handle_irq(210);
+	ASSERT_EQ(g_irq_calls, 1);
+	ASSERT_EQ(g_poll_calls, 0);
+	ASSERT_EQ(irq_dispatch(211), -ENOENT);
+	net_stack_handle_irq(211);
 	ASSERT_EQ(g_irq_calls, 1);
 	ASSERT_EQ(g_poll_calls, 1);
-	ASSERT_EQ(net_stack_handle_irq(211), 0);
-	ASSERT_EQ(g_irq_calls, 1);
-	ASSERT_EQ(g_poll_calls, 2);
 	TEST_END();
 
 	TEST_BEGIN("netdev_unregister");

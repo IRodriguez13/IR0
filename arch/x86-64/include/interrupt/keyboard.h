@@ -20,7 +20,7 @@
 #define KEYBOARD_LAYOUT_US     0
 #define KEYBOARD_LAYOUT_LATAM  1
 
-void keyboard_handler64(void);
+void i8042_irq_init(void);
 void keyboard_poll_ps2(void);
 
 void keyboard_init(void);

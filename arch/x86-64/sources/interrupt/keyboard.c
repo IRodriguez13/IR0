@@ -19,7 +19,9 @@
 
 #define PS2_DATA_PORT 0x60
 #include <config.h>
+#include <ir0/clock.h>
 #include <ir0/errno.h>
+#include <ir0/irq.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
 #include <ir0/input_backend.h>
@@ -319,10 +321,13 @@ void keyboard_poll_ps2(void)
 	stdin_wake_check();
 }
 
-void keyboard_handler64(void)
+static void keyboard_irq(uint32_t irq, void *data)
 {
 	static int kbd_irq_tag;
 
+	(void)irq;
+	(void)data;
+	clock_note_irq();
 	if (ir0_cmdline_tty_smoke_enabled() && !kbd_irq_tag)
 	{
 		kbd_irq_tag = 1;
@@ -330,6 +335,24 @@ void keyboard_handler64(void)
 	}
 
 	keyboard_poll_ps2();
+}
+
+static void i8042_aux_irq(uint32_t irq, void *data)
+{
+	(void)irq;
+	(void)data;
+	clock_note_irq();
+	input_mouse_handle_interrupt();
+}
+
+/*
+ * Lines 1 and 12 are serviced even when the controller is not initialized
+ * at boot: firmware leaves the i8042 raising them.
+ */
+void i8042_irq_init(void)
+{
+	(void)irq_request(1, keyboard_irq, NULL, "i8042-kbd");
+	(void)irq_request(12, i8042_aux_irq, NULL, "i8042-aux");
 }
 
 static void keyboard_feed_scancode(uint8_t scancode)
