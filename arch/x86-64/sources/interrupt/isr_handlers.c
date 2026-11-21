@@ -25,6 +25,8 @@
 #include <ir0/cpu.h>
 #include <ir0/percpu.h>
 #include <ir0/clock.h>
+#include <ir0/errno.h>
+#include <ir0/irq.h>
 #include <ir0/arch_io.h>
 #include <config.h>
 #include <ir0/input_backend.h>
@@ -447,41 +449,50 @@ static void isr_handler64_dispatch(uint64_t interrupt_number, uint64_t *stack)
     {
         uint8_t irq = interrupt_number - 32;
 
-        switch (irq)
+        /*
+         * irq_request owns the line when dispatch returns 0: skip the
+         * built-in cases and still send EOI. An empty slot (-ENOENT)
+         * keeps those cases. net_stack_handle_irq also polls NICs with
+         * no line, so that call stays on the empty path only.
+         */
+        if (irq_dispatch(irq) == -ENOENT)
         {
-        case 0: /* Timer */
-        {
-            process_save_user_exception_frame(stack);
-            increment_pit_ticks();
-            break;
-        }
+            switch (irq)
+            {
+            case 0: /* Timer */
+            {
+                process_save_user_exception_frame(stack);
+                increment_pit_ticks();
+                break;
+            }
 
-        case 1: /* Keyboard */
-			clock_note_irq();
-            keyboard_handler64();
-            break;
+            case 1: /* Keyboard */
+    			clock_note_irq();
+                keyboard_handler64();
+                break;
 
-        case 12: /* PS/2 Mouse */
-        {
-			clock_note_irq();
-            input_mouse_handle_interrupt();
-            break;
-        }
+            case 12: /* PS/2 Mouse */
+            {
+    			clock_note_irq();
+                input_mouse_handle_interrupt();
+                break;
+            }
 
 #if CONFIG_ENABLE_SOUND
-        case 5: /* SB16 8-bit DMA */
-            if (sb16_is_available())
-                sb16_irq_handler();
-            break;
+            case 5: /* SB16 8-bit DMA */
+                if (sb16_is_available())
+                    sb16_irq_handler();
+                break;
 #endif
 
-        default:
-            break;
-        }
+            default:
+                break;
+            }
 
 #if CONFIG_ENABLE_NETWORKING
-        net_stack_handle_irq(irq);
+            net_stack_handle_irq(irq);
 #endif
+        }
 
         /* Enviar EOI para IRQs */
         pic_send_eoi64(irq);
