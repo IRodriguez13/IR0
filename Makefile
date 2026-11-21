@@ -674,7 +674,7 @@ LIB_OBJS = \
     drivers/video/fb.o \
     drivers/input/input.o \
     fs/utimens.o \
-    kernel/exec/exec_read_trace.o \
+    fs/exec_read_trace.o \
     fs/mount_prefix.o \
     block/blockdev.o \
     kernel/exec/elf64_image.o \
