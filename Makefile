@@ -420,7 +420,7 @@ KERNEL_OBJS = \
 	kernel/process/registry_lock.o \
     kernel/process/limits.o \
     kernel/process/core.o \
-    sched/trace.o \
+    ktm/sched_trace.o \
     kernel/process/create.o \
     kernel/process/domains.o \
     mm/mm_struct.o \
