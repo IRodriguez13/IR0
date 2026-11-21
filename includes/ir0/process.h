@@ -51,7 +51,7 @@ struct sighand_struct
 	int refcount;
 	void (*handlers[_NSIG])(int);
 	uint32_t sa_flags[_NSIG];
-	uint32_t sa_mask[_NSIG];
+	uint64_t sa_mask[_NSIG];
 	void (*restorer[_NSIG])(void);
 };
 
@@ -231,26 +231,26 @@ typedef struct process
 	uint64_t it_real_interval_ms;
 
 	/* Signal management. Pending and masks stay on the task. */
-	uint32_t signal_pending; /* Bitmask of pending signals */
+	uint64_t signal_pending; /* Bits 1..63: signal N is bit N */
 	/*
 	 * Linux sighand: handler, sa_flags, sa_mask and restorer. Shared when
 	 * clone(CLONE_SIGHAND) is set; otherwise the child has its own copy.
 	 */
 	struct sighand_struct *sighand;
-	uint32_t signal_mask;  /* Mask of signals to block */
-	uint32_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
+	uint64_t signal_mask;  /* Mask of signals to block */
+	uint64_t signal_ignored;  /* Mask of signals to ignore (SIG_IGN) */
 	/*
 	 * signal_mask snapshotted when a userspace handler is armed; restored
 	 * on rt_sigreturn (Linux-like sa_mask / !SA_NODEFER blocking).
 	 */
-	uint32_t signal_mask_saved;
+	uint64_t signal_mask_saved;
 	uint8_t signal_mask_saved_valid;
 	/*
 	 * Linux TIF_RESTORE_SIGMASK: rt_sigsuspend runs with a temporary mask
 	 * and parks the caller's mask here. The handler frame saves it, or the
 	 * syscall exit puts it back when no handler runs.
 	 */
-	uint32_t saved_sigmask;
+	uint64_t saved_sigmask;
 	uint8_t restore_sigmask;
 	int *set_tid_ptr;      /* set_tid_address(2) userspace pointer */
 	/*

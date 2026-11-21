@@ -87,11 +87,11 @@ void ktest_signal_segv_deliver_irq_frame(void)
 	void (*saved_handler)(int);
 	void (*saved_restorer)(void);
 	uint32_t saved_sa_flags;
-	uint32_t saved_sa_mask;
-	uint32_t saved_mask;
-	uint32_t saved_ignored;
-	uint32_t saved_pending;
-	uint32_t saved_mask_saved;
+	uint64_t saved_sa_mask;
+	uint64_t saved_mask;
+	uint64_t saved_ignored;
+	uint64_t saved_pending;
+	uint64_t saved_mask_saved;
 	uint8_t saved_mask_saved_valid;
 	uint64_t saved_frame_sp;
 

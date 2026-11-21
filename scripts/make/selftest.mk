@@ -894,3 +894,67 @@ ir0-selftest-accept4-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ACCEPT
 	@echo "✓ ir0-selftest-accept4-arm64"
 
 ir0-selftest-accept4: ir0-selftest-accept4-x86 ir0-selftest-accept4-arm64
+
+# RT-SIG-SELFTEST
+IR0_SELFTEST_X86_RT_SIG := $(KERNEL_ROOT)/build/selftests/x86_64/rt_sig
+IR0_SELFTEST_ARM64_RT_SIG := $(KERNEL_ROOT)/build/selftests/arm64/rt_sig
+
+.PHONY: ir0-selftest-rt-sig-x86 ir0-selftest-rt-sig-arm64 ir0-selftest-rt-sig
+
+$(IR0_SELFTEST_X86_RT_SIG): tests/selftests/syscall/rt_sig.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 rt_sig
+
+$(IR0_SELFTEST_ARM64_RT_SIG): tests/selftests/syscall/rt_sig.c tests/selftests/ir0/ksft.h \
+		tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 rt_sig
+
+# Signal 34 is a real-time signal: rt_sigaction installs a handler and both
+# kill and tgkill run it.
+ir0-selftest-rt-sig-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_RT_SIG)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_RT_SIG) \
+		--done "ok 1 rt_sig_34_delivered" \
+		--log $(HOST_TMP)/ir0-selftest-x86-rt-sig.log
+	@echo "✓ ir0-selftest-rt-sig-x86"
+
+ir0-selftest-rt-sig-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_RT_SIG)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_RT_SIG) \
+		--done "ok 1 rt_sig_34_delivered" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-rt-sig.log
+	@echo "✓ ir0-selftest-rt-sig-arm64"
+
+ir0-selftest-rt-sig: ir0-selftest-rt-sig-x86 ir0-selftest-rt-sig-arm64
+
+# SYSFS-CPU-SELFTEST
+IR0_SELFTEST_X86_SYSFS_CPU := $(KERNEL_ROOT)/build/selftests/x86_64/sysfs_cpu
+IR0_SELFTEST_ARM64_SYSFS_CPU := $(KERNEL_ROOT)/build/selftests/arm64/sysfs_cpu
+
+.PHONY: ir0-selftest-sysfs-cpu-x86 ir0-selftest-sysfs-cpu-arm64 ir0-selftest-sysfs-cpu
+
+$(IR0_SELFTEST_X86_SYSFS_CPU): tests/selftests/syscall/sysfs_cpu.c tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sysfs_cpu
+
+$(IR0_SELFTEST_ARM64_SYSFS_CPU): tests/selftests/syscall/sysfs_cpu.c tests/selftests/ir0/ksft.h \
+		tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sysfs_cpu
+
+ir0-selftest-sysfs-cpu-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SYSFS_CPU)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SYSFS_CPU) \
+		--done "ok 1 cpu0_online" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sysfs-cpu.log
+	@echo "✓ ir0-selftest-sysfs-cpu-x86"
+
+ir0-selftest-sysfs-cpu-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SYSFS_CPU)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SYSFS_CPU) \
+		--done "ok 1 cpu0_online" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sysfs-cpu.log
+	@echo "✓ ir0-selftest-sysfs-cpu-arm64"
+
+ir0-selftest-sysfs-cpu: ir0-selftest-sysfs-cpu-x86 ir0-selftest-sysfs-cpu-arm64

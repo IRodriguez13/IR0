@@ -427,11 +427,11 @@ int64_t sys_poll(struct pollfd *user_fds, unsigned int nfds, int timeout_ms)
 }
 
 int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
-			  int *applied, uint32_t *saved_mask)
+			  int *applied, uint64_t *saved_mask)
 {
   sigset_t kset;
   uint64_t legacy64;
-  uint32_t new_mask;
+  uint64_t new_mask;
 
   if (!applied || !saved_mask)
     return -EINVAL;
@@ -446,13 +446,13 @@ int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
   {
     if (copy_from_user(&legacy64, user_sigmask, sizeof(legacy64)) != 0)
       return -EFAULT;
-    new_mask = linux_sigword_to_ir0((uint32_t)legacy64);
+    new_mask = linux_sigword_to_ir0(legacy64);
   }
   else if (sigsetsize == sizeof(sigset_t))
   {
     if (copy_from_user(&kset, user_sigmask, sizeof(kset)) != 0)
       return -EFAULT;
-    new_mask = ir0_sigset_low32(&kset);
+    new_mask = ir0_sigset_word(&kset);
   }
   else
     return -EINVAL;
@@ -463,7 +463,7 @@ int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
   return 0;
 }
 
-void io_temp_sigmask_end(int applied, uint32_t saved_mask)
+void io_temp_sigmask_end(int applied, uint64_t saved_mask)
 {
   if (applied && current_process)
     current_process->signal_mask = saved_mask;
@@ -474,7 +474,7 @@ int64_t sys_ppoll(struct pollfd *user_fds, unsigned int nfds,
 		  size_t sigsetsize)
 {
   struct timespec ts;
-  uint32_t saved_mask = 0;
+  uint64_t saved_mask = 0;
   int timeout_ms = -1;
   int mask_applied = 0;
   int64_t ret;

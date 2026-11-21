@@ -52,10 +52,10 @@ void signal_trace(enum signal_trace_event ev, const process_t *p, int sig,
 		if (IR0_DEBUG_PROC)
 			klog_info_fmt("SIGNAL",
 				      "[SIGTERM_AUDIT] send_signal pid=0x%x sig=0x%x "
-				      "pending=0x%x mask=0x%x state=0x%x",
+				      "pending=0x%llx mask=0x%llx state=0x%x",
 				      (unsigned)p->task.pid, (unsigned)sig,
-				      (unsigned)p->signal_pending,
-				      (unsigned)p->signal_mask,
+				      (unsigned long long)p->signal_pending,
+				      (unsigned long long)p->signal_mask,
 				      (unsigned)p->state);
 		break;
 	case SIGNAL_TRACE_WAKE:

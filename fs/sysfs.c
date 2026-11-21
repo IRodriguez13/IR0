@@ -368,8 +368,28 @@ int sys_devices_cpu_online_count(void)
 	return online > 0 ? online : 1;
 }
 
-/* /sys/devices/system — one cpuN entry per logical CPU. */
+/* /sys/devices/system — the cpu directory. */
 int sys_devices_system_read_reg(char *buf, size_t count)
+{
+    int len;
+
+    if (!buf || count == 0)
+        return -EINVAL;
+
+    memset(buf, 0, count);
+    len = snprintf(buf, count, "cpu\n");
+    if (len < 0)
+        return -EIO;
+    if (len >= (int)count)
+    {
+        buf[count - 1] = '\0';
+        return (int)(count - 1);
+    }
+    return len;
+}
+
+/* /sys/devices/system/cpu — one cpuN entry per logical CPU. */
+int sys_devices_cpus_read_reg(char *buf, size_t count)
 {
     uint32_t cpus;
     size_t off = 0;
@@ -393,7 +413,7 @@ int sys_devices_system_read_reg(char *buf, size_t count)
     return (int)off;
 }
 
-/* /sys/devices/system/cpuN — lists child attributes. */
+/* /sys/devices/system/cpu/cpuN — lists child attributes. */
 int sys_devices_cpu_read_reg(char *buf, size_t count, unsigned cpu)
 {
     size_t off = 0;

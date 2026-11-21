@@ -462,3 +462,39 @@ $(SIGHAND_BIN): $(SIGHAND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SIGHAND_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# RT-SIG-SELFTEST
+RT_SIG_SRC := syscall/rt_sig.c
+RT_SIG_BIN := $(BUILD_DIR)/rt_sig
+
+.PHONY: rt_sig
+
+rt_sig: $(RT_SIG_BIN)
+
+$(RT_SIG_BIN): $(RT_SIG_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest rt_sig"
+	@$(CC) $(CFLAGS) -o $@ $(RT_SIG_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
+# SYSFS-CPU-SELFTEST
+SYSFS_CPU_SRC := syscall/sysfs_cpu.c
+SYSFS_CPU_BIN := $(BUILD_DIR)/sysfs_cpu
+
+.PHONY: sysfs_cpu
+
+sysfs_cpu: $(SYSFS_CPU_BIN)
+
+$(SYSFS_CPU_BIN): $(SYSFS_CPU_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sysfs_cpu"
+	@$(CC) $(CFLAGS) -o $@ $(SYSFS_CPU_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
