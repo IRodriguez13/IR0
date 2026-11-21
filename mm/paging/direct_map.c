@@ -13,12 +13,11 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_mm.h>
+#include <ir0/paging.h>
 #include <ir0/boot_memory.h>
 #include <ir0/direct_map.h>
 #include <ir0/errno.h>
 #include <ir0/page.h>
-#include <ir0/paging.h>
 #include <string.h>
 
 #define DIRECT_MAP_1G (512ULL * PAGE_SIZE_2MB)

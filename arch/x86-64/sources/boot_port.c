@@ -8,7 +8,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
-#include <ir0/arch_mm.h>
+#include <ir0/paging.h>
 #include <ir0/acpi_rsdp.h>
 #include <ir0/boot_params.h>
 #include <ir0/boot_port.h>
