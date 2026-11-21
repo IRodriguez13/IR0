@@ -28,7 +28,7 @@ void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params);
 
 /**
  * Optional smoke tag immediately before init handoff / first schedule to EL0.
- * Product images use this for QEMU autokill; default is empty.
+ * Product images use this for QEMU autokill; x86-64 leaves it empty.
  */
 void ir0_boot_arch_userspace_handoff_smoke(void);
 

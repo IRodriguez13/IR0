@@ -18,12 +18,6 @@
 static struct ir0_boot_firmware_sysfs_snapshot g_boot_fw_snap;
 static int g_boot_fw_init;
 
-__attribute__((weak)) void ir0_boot_firmware_sysfs_fill_from_arch(
-	struct ir0_boot_firmware_sysfs_snapshot *snap)
-{
-	(void)snap;
-}
-
 static const char *boot_protocol_name(enum ir0_boot_protocol protocol)
 {
 	switch (protocol)

@@ -18,6 +18,10 @@
 
 #include <stdint.h>
 
+void ir0_oops_dump_arch_extra(void)
+{
+}
+
 void ir0_oops_show_fault_regs(const struct ir0_fault *fault)
 {
 	if (!fault)
@@ -40,4 +44,13 @@ void ir0_oops_show_fault_regs(const struct ir0_fault *fault)
 		klog_hex64((uint64_t)fault->addr);
 		klog_print("\n");
 	}
+}
+
+const char *ir0_oops_user_fault_extra(const struct ir0_fault *fault,
+				      struct process *proc,
+				      const char *classify)
+{
+	(void)fault;
+	(void)proc;
+	return classify;
 }

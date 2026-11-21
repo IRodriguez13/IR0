@@ -25,3 +25,7 @@ void ir0_boot_arch_firmware_early(const struct ir0_boot_params *params)
 	(void)params;
 	console_set_text_screen(&pc_vga_text);
 }
+
+void ir0_boot_arch_userspace_handoff_smoke(void)
+{
+}
