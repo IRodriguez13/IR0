@@ -1552,3 +1552,36 @@ ir0-selftest-evdev-clock-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EV
 	@echo "✓ ir0-selftest-evdev-clock-arm64"
 
 ir0-selftest-evdev-clock: ir0-selftest-evdev-clock-x86 ir0-selftest-evdev-clock-arm64
+
+# PROC-SIGACT-SELFTEST
+IR0_SELFTEST_X86_PROC_SIGACT := $(KERNEL_ROOT)/build/selftests/x86_64/proc_sigact
+IR0_SELFTEST_ARM64_PROC_SIGACT := $(KERNEL_ROOT)/build/selftests/arm64/proc_sigact
+
+.PHONY: ir0-selftest-proc-sigact-x86 ir0-selftest-proc-sigact-arm64 \
+	ir0-selftest-proc-sigact
+
+$(IR0_SELFTEST_X86_PROC_SIGACT): tests/selftests/syscall/proc_sigact.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 proc_sigact
+
+$(IR0_SELFTEST_ARM64_PROC_SIGACT): tests/selftests/syscall/proc_sigact.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 proc_sigact
+
+ir0-selftest-proc-sigact-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PROC_SIGACT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PROC_SIGACT) \
+		--done "ok 1 proc_sigact" \
+		--log $(HOST_TMP)/ir0-selftest-x86-proc-sigact.log
+	@echo "✓ ir0-selftest-proc-sigact-x86"
+
+ir0-selftest-proc-sigact-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PROC_SIGACT)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PROC_SIGACT) \
+		--done "ok 1 proc_sigact" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-proc-sigact.log
+	@echo "✓ ir0-selftest-proc-sigact-arm64"
+
+ir0-selftest-proc-sigact: ir0-selftest-proc-sigact-x86 ir0-selftest-proc-sigact-arm64

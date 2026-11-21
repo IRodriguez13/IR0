@@ -823,3 +823,21 @@ $(EVDEV_CLOCK_BIN): $(EVDEV_CLOCK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(EVDEV_CLOCK_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PROC-SIGACT-SELFTEST
+PROC_SIGACT_SRC := syscall/proc_sigact.c
+PROC_SIGACT_BIN := $(BUILD_DIR)/proc_sigact
+
+.PHONY: proc_sigact
+
+proc_sigact: $(PROC_SIGACT_BIN)
+
+$(PROC_SIGACT_BIN): $(PROC_SIGACT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_sigact"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_SIGACT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

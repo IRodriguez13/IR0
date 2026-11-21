@@ -8,6 +8,7 @@
  */
 
 #include "procfs_internal.h"
+#include <ir0/signals.h>
 
 
 /*
@@ -29,6 +30,8 @@ typedef struct proc_fs_snap
 	uint32_t umask;
 	uint64_t sig_pending;
 	uint64_t sig_blocked;
+	uint64_t sig_ignored;
+	uint64_t sig_caught;
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
@@ -87,6 +90,26 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->umask = proc->umask;
 	snap->sig_pending = proc->signal_pending;
 	snap->sig_blocked = proc->signal_mask;
+	snap->sig_ignored = 0;
+	snap->sig_caught = 0;
+	if (proc->sighand)
+	{
+		int sig;
+
+		for (sig = 1; sig < _NSIG; sig++)
+		{
+			void (*handler)(int) = proc->sighand->handlers[sig];
+
+			if (handler == SIG_IGN)
+			{
+				snap->sig_ignored |= 1ULL << sig;
+			}
+			else if (handler != SIG_DFL)
+			{
+				snap->sig_caught |= 1ULL << sig;
+			}
+		}
+	}
 	snap->fd_size = process_fd_span(proc);
 	snap->threads = 0;
 	{
@@ -564,6 +587,8 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       "Umask:\t%04o\n"
 		       "SigPnd:\t%016llx\n"
 		       "SigBlk:\t%016llx\n"
+		       "SigIgn:\t%016llx\n"
+		       "SigCgt:\t%016llx\n"
 		       "VmSize:\t%llu kB\n"
 		       "VmRSS:\t%llu kB\n",
 		       snap.comm[0] ? snap.comm : "(none)",
@@ -577,6 +602,8 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       snap.umask,
 		       (unsigned long long)(snap.sig_pending >> 1),
 		       (unsigned long long)(snap.sig_blocked >> 1),
+		       (unsigned long long)(snap.sig_ignored >> 1),
+		       (unsigned long long)(snap.sig_caught >> 1),
 		       (unsigned long long)vsize,
 		       (unsigned long long)rss_kb);
 	proc_fs_snap_release(&snap);
