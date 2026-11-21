@@ -14,13 +14,13 @@
 
 #include "syscall_dispatch.h"
 #include <ir0/ktm/user_canary.h>
-#include "fs_syscalls.h"
-#include "fs_path_syscalls.h"
-#include "mm_syscalls.h"
-#include "socket_syscalls.h"
-#include "io_syscalls.h"
-#include "time_syscalls.h"
-#include "epoll_syscalls.h"
+#include <kernel/syscalls/fs_syscalls.h>
+#include <kernel/syscalls/fs_path_syscalls.h>
+#include <kernel/syscalls/mm_syscalls.h>
+#include <kernel/syscalls/socket_syscalls.h>
+#include <kernel/syscalls/io_syscalls.h>
+#include <kernel/syscalls/time_syscalls.h>
+#include <kernel/syscalls/epoll_syscalls.h>
 #include <ir0/syscall_table.h>
 #include <ir0/kexec.h>
 #include <ir0/input_backend.h>

@@ -482,7 +482,7 @@ kernel/syscalls/io_syscalls.c	fd_slot_destroyed	895
 kernel/syscalls/io_syscalls.c	fd_slot_blocked_readers	896
 kernel/syscalls/io_syscalls.c	fd_slot_blocked_writers	897
 kernel/syscalls/stdin.c	stdin_waiters	26
-kernel/syscalls/syscall_dispatch.c	native_syscall_handlers	289
+kernel/entry/syscall_dispatch.c	native_syscall_handlers	289
 kernel/test/test_allocator.c	heap_hook_armed	31
 kernel/test/test_allocator.c	heap_hook_spins	32
 kernel/test/test_allocator.c	heap_hook_ticks	33

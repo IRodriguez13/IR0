@@ -3,7 +3,7 @@
 IR0 architecture guardrails.
 
 Checks:
-1) No direct <drivers/...> includes inside fs/* and kernel/syscalls/.
+1) No direct <drivers/...> includes inside fs/*, kernel/syscalls/ and kernel/entry/.
 2) Required facade headers for subsystem decoupling exist.
 3) Portable trees (fs/kernel/mm/net) must not include arch interrupt headers
    (#include <interrupt/...> or <arch/.../interrupt/...>);
@@ -124,6 +124,7 @@ SKIP_DIR_NAMES = frozenset(
 FORBIDDEN_PATHS = [
     ROOT / "fs",
     ROOT / "kernel" / "syscalls",
+    ROOT / "kernel" / "entry",
 ]
 
 REQUIRED_FACADES = [
@@ -747,9 +748,9 @@ def check_usercopy_no_raw_user_touch():
     uname_strncpy_re = re.compile(r"strncpy\s*\(\s*buf\s*->")
 
     targets = [ROOT / "kernel" / "lib" / "signals.c"]
-    syscalls = ROOT / "kernel" / "syscalls"
-    if syscalls.is_dir():
-        targets.extend(sorted(syscalls.glob("*.c")))
+    for syscalls in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "entry"):
+        if syscalls.is_dir():
+            targets.extend(sorted(syscalls.glob("*.c")))
 
     for fpath in targets:
         if not fpath.is_file():
@@ -964,10 +965,11 @@ def check_ktm_angle_includes():
 
 
 def check_kernel_no_relative_includes():
-    """kernel/syscalls and kernel/process must not use #include \"../…\"."""
+    """kernel/syscalls, kernel/entry and kernel/process must not use #include \"../…\"."""
     errors = []
     bad_re = re.compile(r'^\s*#\s*include\s+"\.\./')
-    for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "process"):
+    for base in (ROOT / "kernel" / "syscalls", ROOT / "kernel" / "entry",
+                 ROOT / "kernel" / "process"):
         for fpath in iter_c_files(base):
             try:
                 lines = read_file_text(fpath).splitlines()
@@ -2154,7 +2156,7 @@ def check_common_syscall_policy_uses_semantic_ids():
     """Keep native syscall numbers inside the build-selected ISA decoders."""
     errors = []
     targets = (
-        ROOT / "kernel" / "syscalls" / "syscall_dispatch.c",
+        ROOT / "kernel" / "entry" / "syscall_dispatch.c",
     )
     forbidden = re.compile(r"\b__NR_[A-Za-z0-9_]+|syscall_linux\.h")
 
@@ -2170,7 +2172,7 @@ def check_common_syscall_policy_uses_semantic_ids():
 
 def check_sysv_shm_is_network_independent():
     """Keep SysV IPC registration independent from optional networking."""
-    path = ROOT / "kernel" / "syscalls" / "syscall_dispatch.c"
+    path = ROOT / "kernel" / "entry" / "syscall_dispatch.c"
     errors = []
     network_depths = []
     depth = 0

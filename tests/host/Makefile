@@ -201,7 +201,7 @@ host_x86_syscall_decode.o: $(KERNEL_ROOT)/arch/x86-64/sources/syscall_decode.c \
 	$(CC) $(KERNEL_CFLAGS) \
 		-Dsyscall_decode_number=x86_test_syscall_decode_number -c -o $@ $<
 
-host_syscall_table.o: $(KERNEL_ROOT)/kernel/syscalls/syscall_table.c \
+host_syscall_table.o: $(KERNEL_ROOT)/kernel/entry/syscall_table.c \
 	$(KERNEL_ROOT)/includes/ir0/syscall_table.h
 	$(KERNEL_CC)
 

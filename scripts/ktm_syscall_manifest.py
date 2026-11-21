@@ -18,7 +18,7 @@ SYSCALL_HEADERS = (
     ROOT / "arch/x86-64/include/uapi/asm/unistd.h",
     ROOT / "arch/x86-64/include/uapi/asm/unistd_ir0.h",
 )
-SYSCALL_DISPATCH_C = ROOT / "kernel/syscalls/syscall_dispatch.c"
+SYSCALL_DISPATCH_C = ROOT / "kernel/entry/syscall_dispatch.c"
 X86_DECODE_C = ROOT / "arch/x86-64/sources/syscall_decode.c"
 
 TIER1_BUSYBOX = {
