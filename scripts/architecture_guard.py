@@ -156,7 +156,7 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "fork.h",
     ROOT / "includes" / "ir0" / "page_fault.h",
     ROOT / "includes" / "ir0" / "signal_irq.h",
-    ROOT / "includes" / "ir0" / "arch_elf.h",
+    ROOT / "includes" / "asm-generic" / "elf.h",
     ROOT / "includes" / "ir0" / "syscall_frame.h",
 ]
 
@@ -2015,14 +2015,37 @@ def platform_object_sources(platform):
 PC_PLATFORM_ASM_INCLUDE = re.compile(
     r'^\s*#\s*include\s*<asm/(?:io|msr|processor|debugreg)\.h>')
 
+# Hooks every ISA implements (Linux asm-generic model): the declarations live
+# in includes/asm-generic/<topic>.h, each ISA's asm/<topic>.h includes them,
+# and portable code includes <asm/<topic>.h>.
+ARCH_HOOK_ASM_HEADERS = ("elf",)
+ARCH_HOOK_ISAS = ("x86-64", "arm64")
+ARCH_HOOK_ASM_INCLUDE = re.compile(
+    r'^\s*#\s*include\s*<asm/(?:'
+    + "|".join(map(re.escape, ARCH_HOOK_ASM_HEADERS)) + r')\.h>')
+
 
 def check_portable_code_has_no_private_asm_headers():
     """Allow only reviewed layout-selection gateways into private asm headers.
 
     The PC platform's device drivers (scripts/make/platform/pc.mk) build
     only on x86-64 and may include the x86 port-I/O, MSR and CPUID headers.
+    Any portable file may include the ARCH_HOOK_ASM_HEADERS, which every
+    ISA provides over the shared asm-generic declarations.
     """
     errors = []
+    for topic in ARCH_HOOK_ASM_HEADERS:
+        generic = f"#include <asm-generic/{topic}.h>"
+        if not (ROOT / "includes" / "asm-generic" / f"{topic}.h").is_file():
+            errors.append(f"[portable-no-private-asm-header] "
+                          f"includes/asm-generic/{topic}.h is missing")
+        for isa in ARCH_HOOK_ISAS:
+            rel = f"arch/{isa}/include/asm/{topic}.h"
+            path = ROOT / rel
+            if (not path.is_file()
+                    or generic not in read_file_text(path).splitlines()):
+                errors.append(f"[portable-no-private-asm-header] {rel} "
+                              f"must exist and {generic}")
     private_include = re.compile(r'^\s*#\s*include\s*[<"]asm/')
     pc_sources = platform_object_sources("pc")
     selection_gateways = {
@@ -2054,6 +2077,8 @@ def check_portable_code_has_no_private_asm_headers():
                 if private_include.search(line):
                     rel = str(rel_to_root(fpath))
                     if selection_gateways.get(rel) == line.strip():
+                        continue
+                    if ARCH_HOOK_ASM_INCLUDE.search(line):
                         continue
                     if rel in pc_sources and PC_PLATFORM_ASM_INCLUDE.search(line):
                         continue
@@ -2129,7 +2154,7 @@ def check_common_elf_uses_isa_policy():
                 if forbidden.search(line):
                     rel = rel_to_root(path)
                     errors.append(
-                        f"[elf-isa-policy] {rel}:{line_no}: use arch_elf facade"
+                        f"[elf-isa-policy] {rel}:{line_no}: use the asm/elf.h hooks"
                     )
     return errors
 

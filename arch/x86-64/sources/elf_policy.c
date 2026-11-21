@@ -7,7 +7,7 @@
  * Description: x86-64 ELF machine and relocation policy backend.
  */
 
-#include <ir0/arch_elf.h>
+#include <asm/elf.h>
 
 #define ELF_EM_X86_64        62U
 #define R_X86_64_64          1U

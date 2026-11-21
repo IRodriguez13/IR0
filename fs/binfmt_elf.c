@@ -14,7 +14,7 @@
 
 #include <ir0/process.h>
 #include <ir0/arch_task.h>
-#include <ir0/arch_elf.h>
+#include <asm/elf.h>
 #include <ir0/task_ops.h>
 #include <ir0/sched.h>
 #include <stdint.h>
