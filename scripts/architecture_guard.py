@@ -1982,6 +1982,9 @@ def check_common_headers_have_only_data_model_isa_conditionals():
             continue
         for fpath in root.rglob("*.h"):
             rel = str(rel_to_root(fpath))
+            # Verbatim Linux UAPI selects widths and ioctl numbers per ISA.
+            if rel.startswith("includes/uapi/") and not rel.startswith("includes/uapi/ir0/"):
+                continue
             for idx, line in enumerate(
                 read_file_text(fpath).splitlines(), 1
             ):
@@ -2582,6 +2585,10 @@ def check_errno_has_single_catalog():
     ):
         for path in iter_c_files(base):
             if path == catalog:
+                continue
+            rel = str(rel_to_root(path))
+            # Verbatim Linux UAPI defines the errno names. IR0 headers must not.
+            if rel.startswith("includes/uapi/") and not rel.startswith("includes/uapi/ir0/"):
                 continue
             for lineno, line in enumerate(path.read_text(errors="replace").splitlines(), 1):
                 match = ERRNO_DEFINE_RE.match(line)
