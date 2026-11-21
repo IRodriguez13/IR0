@@ -118,6 +118,7 @@ _Static_assert(offsetof(struct sigaltstack, ss_size) == 16, "ss_size");
 
 /* Linux uapi si_code for SIGSEGV (subset). */
 #define SEGV_MAPERR   1
+#define SEGV_ACCERR   2
 
 /*
  * siginfo_t — Linux layout: 128 bytes, the union starts at offset 16
@@ -327,11 +328,12 @@ void signals_try_abandon_sigframe(process_t *p);
 /*
  * Deliver @sig synchronously from a user #PF IRQ @frame (isr_common_stub layout).
  * @fault_addr is the ISA-decoded faulting virtual address (stored in siginfo
- * for SA_SIGINFO).
+ * for SA_SIGINFO). @si_code is the Linux si_code (SEGV_MAPERR / SEGV_ACCERR)
+ * or 0 when the signal is not a page fault.
  * Returns 1 if redirected to handler; 0 if caller should terminate/default.
  */
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
-				   uint64_t fault_addr);
+				   uint64_t fault_addr, int si_code);
 
 /*
  * Linux places signal N in bit (N-1) of the first sigset word. IR0

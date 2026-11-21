@@ -552,3 +552,21 @@ $(PRCTL_TASK_BIN): $(PRCTL_TASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(PRCTL_TASK_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SEGV-ACCERR-SELFTEST
+SEGV_ACCERR_SRC := syscall/segv_accerr.c
+SEGV_ACCERR_BIN := $(BUILD_DIR)/segv_accerr
+
+.PHONY: segv_accerr
+
+segv_accerr: $(SEGV_ACCERR_BIN)
+
+$(SEGV_ACCERR_BIN): $(SEGV_ACCERR_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest segv_accerr"
+	@$(CC) $(CFLAGS) -o $@ $(SEGV_ACCERR_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

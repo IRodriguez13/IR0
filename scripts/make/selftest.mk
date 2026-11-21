@@ -1057,3 +1057,36 @@ ir0-selftest-prctl-task-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PRC
 	@echo "✓ ir0-selftest-prctl-task-arm64"
 
 ir0-selftest-prctl-task: ir0-selftest-prctl-task-x86 ir0-selftest-prctl-task-arm64
+
+# SEGV-ACCERR-SELFTEST
+IR0_SELFTEST_X86_SEGV_ACCERR := $(KERNEL_ROOT)/build/selftests/x86_64/segv_accerr
+IR0_SELFTEST_ARM64_SEGV_ACCERR := $(KERNEL_ROOT)/build/selftests/arm64/segv_accerr
+
+.PHONY: ir0-selftest-segv-accerr-x86 ir0-selftest-segv-accerr-arm64 \
+	ir0-selftest-segv-accerr
+
+$(IR0_SELFTEST_X86_SEGV_ACCERR): tests/selftests/syscall/segv_accerr.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 segv_accerr
+
+$(IR0_SELFTEST_ARM64_SEGV_ACCERR): tests/selftests/syscall/segv_accerr.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 segv_accerr
+
+ir0-selftest-segv-accerr-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SEGV_ACCERR)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SEGV_ACCERR) \
+		--done "ok 1 segv_accerr" \
+		--log $(HOST_TMP)/ir0-selftest-x86-segv-accerr.log
+	@echo "✓ ir0-selftest-segv-accerr-x86"
+
+ir0-selftest-segv-accerr-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SEGV_ACCERR)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SEGV_ACCERR) \
+		--done "ok 1 segv_accerr" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-segv-accerr.log
+	@echo "✓ ir0-selftest-segv-accerr-arm64"
+
+ir0-selftest-segv-accerr: ir0-selftest-segv-accerr-x86 ir0-selftest-segv-accerr-arm64

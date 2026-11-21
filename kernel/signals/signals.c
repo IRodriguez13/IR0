@@ -47,7 +47,7 @@ enum signal_frame_error
 
 static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
-			      uint64_t fault_addr,
+			      uint64_t fault_addr, int si_code,
 			      struct signal_frame_setup *out);
 
 /*
@@ -156,7 +156,7 @@ int signals_has_user_handler(process_t *p, int sig)
 }
 
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
-				   uint64_t fault_addr)
+				   uint64_t fault_addr, int si_code)
 {
 	void (*handler)(int);
 	struct sigcontext ctx;
@@ -188,7 +188,8 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	 * is what lets the handler return (rt_sigreturn reads it back), so a
 	 * fault whose frame cannot be built ends the task by SIGSEGV.
 	 */
-	if (signal_setup_frame(p, sig, &ctx, fault_addr, &setup) != SIGFRAME_OK)
+	if (signal_setup_frame(p, sig, &ctx, fault_addr, si_code, &setup) !=
+	    SIGFRAME_OK)
 		signal_exit_current(SIGSEGV);
 
 	signal_redirect_irq_frame(frame, (void *)handler, sig, setup.sp,
@@ -224,8 +225,17 @@ int signal_deliver_fault(int sig, const struct ir0_fault *fault,
 	 * now; replaying the instruction first would fault again.
 	 */
 	if (irq_frame)
+	{
+		int si_code = 0;
+
+		if (fault && fault->kind == IR0_FAULT_PAGE)
+			si_code = fault->present ? SEGV_ACCERR : SEGV_MAPERR;
+		else if (fault && fault->addr != 0)
+			si_code = SEGV_MAPERR;
 		return signals_deliver_from_irq_frame(p, sig, irq_frame,
-						      fault ? fault->addr : 0);
+						      fault ? fault->addr : 0,
+						      si_code);
+	}
 	if (signals_has_user_handler(p, sig))
 	{
 		p->signal_pending |= SIGNAL_MASK(sig);
@@ -494,7 +504,7 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
  */
 static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
-			      uint64_t fault_addr,
+			      uint64_t fault_addr, int si_code,
 			      struct signal_frame_setup *out)
 {
 	struct sigframe frame;
@@ -522,9 +532,9 @@ static int signal_setup_frame(process_t *p, int sig,
 		? (uint64_t)p->signal_mask_saved
 		: (uint64_t)sigmask_to_save(p);
 	frame.info.si_signo = sig;
-	if (fault_addr != 0)
+	if (si_code != 0)
 	{
-		frame.info.si_code = SEGV_MAPERR;
+		frame.info.si_code = si_code;
 		frame.info._sifields._sigfault.si_addr =
 			(void *)(uintptr_t)fault_addr;
 	}
@@ -727,7 +737,7 @@ static int handle_signal(process_t *p, int sig,
 		return 0;
 	}
 
-	if (signal_setup_frame(p, sig, &ctx, 0, &setup) != SIGFRAME_OK)
+	if (signal_setup_frame(p, sig, &ctx, 0, 0, &setup) != SIGFRAME_OK)
 	{
 		/* Linux force_sigsegv(): no frame, no handler. */
 		p->signal_pending &= ~SIGNAL_MASK(sig);
