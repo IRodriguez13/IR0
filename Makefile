@@ -338,9 +338,16 @@ sync-menuconfig-defconfig-check:
 
 CFLAGS += $(CFLAGS_TARGET)
 
-# Include paths
+# Include paths. The kernel asm headers come before the exported UAPI asm
+# tree so a Linux sigcontext.h does not hide IR0's.
 CFLAGS += -I$(KERNEL_ROOT)
 CFLAGS += -I$(KERNEL_ROOT)/includes
+ifeq ($(ARCH),x86-64)
+CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
+else ifeq ($(ARCH),arm64)
+CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/include
+CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/sources
+endif
 # Public userspace ABI (exported by `make headers_install`).
 CFLAGS += -I$(KERNEL_ROOT)/includes/uapi
 CFLAGS += -I$(KERNEL_ROOT)/arch/$(ARCH)/include/uapi
@@ -348,12 +355,6 @@ CFLAGS += -I$(KERNEL_ROOT)/ktm/include
 CFLAGS += -I$(KERNEL_ROOT)/includes/ir0
 CFLAGS += -I$(KERNEL_ROOT)/mm
 CFLAGS += -I$(KERNEL_ROOT)/arch/common
-ifeq ($(ARCH),x86-64)
-CFLAGS += -I$(KERNEL_ROOT)/arch/x86-64/include
-else ifeq ($(ARCH),arm64)
-CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/include
-CFLAGS += -I$(KERNEL_ROOT)/arch/arm64/sources
-endif
 CFLAGS += -I$(KERNEL_ROOT)/arch/arm64
 CFLAGS += -I$(KERNEL_ROOT)/kernel
 CFLAGS += -I$(KERNEL_ROOT)/sched
