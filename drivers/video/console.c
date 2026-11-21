@@ -18,31 +18,42 @@
 #include <string.h>
 #include <ir0/ktm/klog.h>
 
-static int use_fb = 0;
-static int fb_console_cols = CONSOLE_WIDTH;
-static int fb_console_rows = CONSOLE_HEIGHT;
-static int fb_scale = CONSOLE_FB_SCALE_DEFAULT;
-static int fb_cell_w;
-static int fb_cell_h;
+#define CONSOLE_TEXT_GEOMETRY                                      \
+	{                                                          \
+		.pixel_width = CONSOLE_WIDTH * FONT_EARLY_WIDTH,   \
+		.pixel_height = CONSOLE_HEIGHT * FONT_EARLY_HEIGHT, \
+		.cell_width = FONT_EARLY_WIDTH,                    \
+		.cell_height = FONT_EARLY_HEIGHT,                  \
+		.columns = CONSOLE_WIDTH,                          \
+		.rows = CONSOLE_HEIGHT,                            \
+		.scale = 1,                                        \
+	}
+
+static const struct console_geometry console_text_geometry =
+	CONSOLE_TEXT_GEOMETRY;
+
+/* Probed in order; the first backend that accepts the screen draws it. */
+static const struct console_video_ops *const console_video_backends[] = {
 #if CONFIG_ENABLE_VBE
-static int fb_origin_x;
-static int fb_origin_y;
+	&fbcon_video_ops,
 #endif
+	&textcon_video_ops,
+};
+
+static const struct console_video_ops *video = &textcon_video_ops;
+static struct console_geometry geometry = CONSOLE_TEXT_GEOMETRY;
 
 /* Glyph+color shadow so the software cursor can restore column 0 after CR/LF. */
 static uint16_t cell_shadow[CONSOLE_MAX_HEIGHT][CONSOLE_MAX_WIDTH];
 
-/* Text-mode screen the platform registered; NULL when it has none. */
-static const struct console_text_screen *text_screen;
-
 static int shadow_rows(void)
 {
-	return use_fb ? fb_console_rows : CONSOLE_HEIGHT;
+	return (int)geometry.rows;
 }
 
 static int shadow_cols(void)
 {
-	return use_fb ? fb_console_cols : CONSOLE_WIDTH;
+	return (int)geometry.columns;
 }
 
 static void shadow_put(int row, int col, char c, uint8_t color)
@@ -98,6 +109,9 @@ static void shadow_clear(uint8_t color)
 	}
 }
 
+/* Text-mode screen the platform registered; NULL when it has none. */
+static const struct console_text_screen *text_screen;
+
 void console_set_text_screen(const struct console_text_screen *screen)
 {
 	text_screen = screen;
@@ -148,7 +162,23 @@ static void clear_text(uint8_t color)
 		text_screen->cells[i] = (uint16_t)((color << 8) | ' ');
 }
 
+const struct console_video_ops textcon_video_ops = {
+	.is_framebuffer = 0,
+	.init = NULL,
+	.put_cell = put_cell_text,
+	.scroll_up = scroll_up_text,
+	.clear = clear_text,
+};
+
 #if CONFIG_ENABLE_VBE
+static int fb_console_cols = CONSOLE_WIDTH;
+static int fb_console_rows = CONSOLE_HEIGHT;
+static int fb_scale = CONSOLE_FB_SCALE_DEFAULT;
+static int fb_cell_w;
+static int fb_cell_h;
+static int fb_origin_x;
+static int fb_origin_y;
+
 /*
  * Soft product palette: off-black bg, light-gray fg (not pure white).
  * Blues are lifted so ANSI di/title colors stay readable on the dark bg
@@ -368,74 +398,50 @@ static void clear_fb(uint8_t color)
 	fb_fill_border(w, h, pitch, fb);
 	fb_clear_console_region(color, pitch, fb);
 }
-#else
-static void put_cell_fb(int row, int col, char c, uint8_t color)
+
+static int fbcon_init(struct console_geometry *geo)
 {
-	(void)row;
-	(void)col;
-	(void)c;
-	(void)color;
+	uint32_t w;
+	uint32_t h;
+	uint32_t bpp;
+
+	/*
+	 * vbe_init() may register a 16bpp VGA-text fallback on x86. That must
+	 * not enable the framebuffer console path (ARM has no VGA text mode).
+	 */
+	if (!vbe_is_available() || !vbe_get_info(&w, &h, &bpp) || bpp != 32 ||
+	    w < 640 || h < 400)
+		return -1;
+
+	fb_compute_layout(w, h);
+	geo->pixel_width = w;
+	geo->pixel_height = h;
+	geo->cell_width = (unsigned)fb_cell_w;
+	geo->cell_height = (unsigned)fb_cell_h;
+	geo->columns = (unsigned)fb_console_cols;
+	geo->rows = (unsigned)fb_console_rows;
+	geo->scale = (unsigned)fb_scale;
+	return 0;
 }
 
-static void scroll_up_fb(uint8_t clear_color)
-{
-	(void)clear_color;
-}
-
-static void clear_fb(uint8_t color)
-{
-	(void)color;
-}
+const struct console_video_ops fbcon_video_ops = {
+	.is_framebuffer = 1,
+	.init = fbcon_init,
+	.put_cell = put_cell_fb,
+	.scroll_up = scroll_up_fb,
+	.clear = clear_fb,
+};
 #endif
 
-/*
- * Always available (VGA text and framebuffer). Must not live inside the
- * CONFIG_ENABLE_VBE block — TIOCGWINSZ / tiny matrix need this symbol.
- */
 void console_get_geometry(struct console_geometry *geo)
 {
-	uint32_t w = 0;
-	uint32_t h = 0;
-	uint32_t bpp = 0;
-
-	if (!geo)
-		return;
-	memset(geo, 0, sizeof(*geo));
-	geo->columns = (unsigned)console_get_width();
-	geo->rows = (unsigned)console_get_height();
-	geo->scale = (unsigned)console_get_fb_scale();
-	if (use_fb)
-	{
-		geo->cell_width = (unsigned)fb_cell_w;
-		geo->cell_height = (unsigned)fb_cell_h;
-	}
-	else
-	{
-		geo->cell_width = FONT_EARLY_WIDTH;
-		geo->cell_height = FONT_EARLY_HEIGHT;
-	}
-#if CONFIG_ENABLE_VBE
-	if (use_fb && vbe_get_info(&w, &h, &bpp))
-	{
-		geo->pixel_width = w;
-		geo->pixel_height = h;
-		return;
-	}
-#else
-	(void)w;
-	(void)h;
-	(void)bpp;
-#endif
-	geo->pixel_width = geo->columns * geo->cell_width;
-	geo->pixel_height = geo->rows * geo->cell_height;
+	if (geo)
+		*geo = geometry;
 }
 
 void console_draw_cell(int row, int col, char c, uint8_t color)
 {
-	if (use_fb)
-		put_cell_fb(row, col, c, color);
-	else
-		put_cell_text(row, col, c, color);
+	video->put_cell(row, col, c, color);
 }
 
 void console_put_cell(int row, int col, char c, uint8_t color)
@@ -459,67 +465,53 @@ uint16_t console_get_cell(int row, int col)
 void console_scroll_up(uint8_t clear_color)
 {
 	shadow_scroll_up(clear_color);
-	if (use_fb)
-		scroll_up_fb(clear_color);
-	else
-		scroll_up_text(clear_color);
+	video->scroll_up(clear_color);
 }
 
 void console_clear(uint8_t color)
 {
 	shadow_clear(color);
-	if (use_fb)
-		clear_fb(color);
-	else
-		clear_text(color);
+	video->clear(color);
 }
 
 void console_init(void)
 {
-#if CONFIG_ENABLE_VBE
-	uint32_t w;
-	uint32_t h;
-	uint32_t bpp;
+	size_t i;
 
-	use_fb = 0;
-	/*
-	 * vbe_init() may register a 16bpp VGA-text fallback on x86. That must
-	 * not enable the framebuffer console path (ARM has no VGA; never use_fb).
-	 */
-	if (vbe_is_available() && vbe_get_info(&w, &h, &bpp) && bpp == 32 &&
-	    w >= 640 && h >= 400)
+	video = &textcon_video_ops;
+	geometry = console_text_geometry;
+	for (i = 0; i < sizeof(console_video_backends) /
+			sizeof(console_video_backends[0]); i++)
 	{
-		use_fb = 1;
-		fb_compute_layout(w, h);
-		klog_smoke("CONSOLE_FB_BACKEND_ENABLED");
+		const struct console_video_ops *ops = console_video_backends[i];
+		struct console_geometry geo = console_text_geometry;
+
+		if (ops->init && ops->init(&geo) != 0)
+			continue;
+		video = ops;
+		geometry = geo;
+		break;
 	}
-#else
-	use_fb = 0;
-#endif
+	if (video->is_framebuffer)
+		klog_smoke("CONSOLE_FB_BACKEND_ENABLED");
 }
 
 int console_use_framebuffer(void)
 {
-	return use_fb;
+	return video->is_framebuffer;
 }
 
 int console_get_width(void)
 {
-	if (use_fb)
-		return fb_console_cols;
-	return CONSOLE_WIDTH;
+	return (int)geometry.columns;
 }
 
 int console_get_height(void)
 {
-	if (use_fb)
-		return fb_console_rows;
-	return CONSOLE_HEIGHT;
+	return (int)geometry.rows;
 }
 
 int console_get_fb_scale(void)
 {
-	if (use_fb)
-		return fb_scale;
-	return 1;
+	return (int)geometry.scale;
 }
