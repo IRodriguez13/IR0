@@ -520,7 +520,7 @@ KERNEL_OBJS = \
     net/net_compat.o \
     fs/fd_resource.o \
     fs/fd_resource_legacy.o \
-    ktm/klog.o \
+    kernel/printk/klog.o \
 	sched/core.o \
     sched/idle.o \
     sched/switch/context_switch.o \

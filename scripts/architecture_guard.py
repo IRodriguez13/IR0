@@ -870,7 +870,7 @@ def check_klog_serial_print_allowlist():
     """
     errors = []
     allow = {
-        "ktm/klog.c",
+        "kernel/printk/klog.c",
         "ktm/transport_serial.c",
         "drivers/serial/serial.c",
         "drivers/serial/serial.h",
@@ -915,7 +915,7 @@ def check_klog_serial_print_allowlist():
                 if serial_re.search(line):
                     errors.append(
                         f"[klog-hub] {rel}:{idx}: use kprintf/klog_* "
-                        f"(serial_print only in ktm/klog.c + serial/KTM protocol)"
+                        f"(serial_print only in kernel/printk/klog.c + serial/KTM protocol)"
                     )
     return errors
 
