@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: pseudo_fs_registry.c
- * Description: Longest-prefix registry for /proc and /sys pseudo-fs endpoints.
+ * Description: Longest-prefix registry for /proc pseudo-fs endpoints.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -16,13 +16,10 @@
 #include <ir0/clock.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/sysfs.h>
 #include <string.h>
 
 static pseudo_fs_entry_t g_proc_entries[PSEUDO_FS_MAX_ENTRIES];
-static pseudo_fs_entry_t g_sys_entries[PSEUDO_FS_MAX_ENTRIES];
 static int g_proc_count;
-static int g_sys_count;
 
 typedef struct pseudo_fs_dynamic_reg
 {
@@ -212,12 +209,6 @@ int pseudo_fs_register(const char *mount_prefix, const char *rel_path,
     if (!mount_prefix || !rel_path)
         return -EINVAL;
 
-    if (strncmp(mount_prefix, "/sys", 4) == 0)
-    {
-        return pseudo_fs_register_table(g_sys_entries, &g_sys_count, PSEUDO_FS_SYS_FD_BASE,
-                                      mount_prefix, rel_path, ops, ctx);
-    }
-
     return pseudo_fs_register_table(g_proc_entries, &g_proc_count, PSEUDO_FS_PROC_FD_BASE,
                                     mount_prefix, rel_path, ops, ctx);
 }
@@ -321,16 +312,10 @@ static int pseudo_fs_dynamic_try_match(const char *full_path, void **out_ctx,
 
 const pseudo_fs_entry_t *pseudo_fs_lookup(const char *full_path)
 {
-    const pseudo_fs_entry_t *hit;
-
     if (!full_path)
         return NULL;
 
-    hit = pseudo_fs_lookup_table(g_proc_entries, g_proc_count, full_path);
-    if (hit)
-        return hit;
-
-    return pseudo_fs_lookup_table(g_sys_entries, g_sys_count, full_path);
+    return pseudo_fs_lookup_table(g_proc_entries, g_proc_count, full_path);
 }
 
 void pseudo_fs_reset(void)
@@ -346,10 +331,8 @@ void pseudo_fs_reset(void)
     }
 
     memset(g_proc_entries, 0, sizeof(g_proc_entries));
-    memset(g_sys_entries, 0, sizeof(g_sys_entries));
     memset(g_dyn_regs, 0, sizeof(g_dyn_regs));
     g_proc_count = 0;
-    g_sys_count = 0;
     g_dyn_reg_count = 0;
 }
 
@@ -391,8 +374,6 @@ int64_t pseudo_fs_read_fd(int fd, char *buf, size_t count, off_t offset)
     }
 
     entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
-    if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
     if (!entry || !entry->ops || !entry->ops->read)
         return -EBADF;
 
@@ -685,8 +666,6 @@ int64_t pseudo_fs_close_fd(int fd)
 
     entry = pseudo_fs_find_by_fd_table(g_proc_entries, g_proc_count, fd);
     if (!entry)
-        entry = pseudo_fs_find_by_fd_table(g_sys_entries, g_sys_count, fd);
-    if (!entry)
         return -EBADF;
 
     if (entry->ops && entry->ops->close)
@@ -737,13 +716,7 @@ int pseudo_fs_path_has_children(const char *path)
     if (!path)
         return 0;
 
-    if (pseudo_fs_table_has_children(g_proc_entries, g_proc_count, path))
-        return 1;
-
-    if (pseudo_fs_table_has_children(g_sys_entries, g_sys_count, path))
-        return 1;
-
-    return sys_class_net_path_has_children(path);
+    return pseudo_fs_table_has_children(g_proc_entries, g_proc_count, path);
 }
 
 static int pseudo_fs_dirent_exists(struct vfs_dirent *entries, int n,
@@ -777,62 +750,45 @@ int pseudo_fs_collect_registry_children(const char *dir_path,
     plen = strlen(norm);
     n = start_n;
 
-    for (int tbl = 0; tbl < 2; tbl++)
+    for (int i = 0; i < g_proc_count && n < max_entries; i++)
     {
-        const pseudo_fs_entry_t *table;
-        int count;
+        const char *rest;
+        const char *slash;
+        char top[VFS_PATH_MAX];
+        size_t len;
 
-        if (tbl == 0)
-        {
-            table = g_proc_entries;
-            count = g_proc_count;
-        }
-        else
-        {
-            table = g_sys_entries;
-            count = g_sys_count;
-        }
+        if (!g_proc_entries[i].in_use)
+            continue;
 
-        for (int i = 0; i < count && n < max_entries; i++)
-        {
-            const char *rest;
-            const char *slash;
-            char top[VFS_PATH_MAX];
-            size_t len;
+        if (strncmp(g_proc_entries[i].full_path, norm, plen) != 0)
+            continue;
 
-            if (!table[i].in_use)
-                continue;
+        rest = g_proc_entries[i].full_path + plen;
+        if (rest[0] == '\0')
+            continue;
+        if (rest[0] != '/')
+            continue;
 
-            if (strncmp(table[i].full_path, norm, plen) != 0)
-                continue;
+        rest++;
+        if (!rest[0])
+            continue;
 
-            rest = table[i].full_path + plen;
-            if (rest[0] == '\0')
-                continue;
-            if (rest[0] != '/')
-                continue;
+        slash = strchr(rest, '/');
+        len = slash ? (size_t)(slash - rest) : strlen(rest);
+        if (len == 0 || len >= sizeof(top))
+            continue;
 
-            rest++;
-            if (!rest[0])
-                continue;
+        memcpy(top, rest, len);
+        top[len] = '\0';
 
-            slash = strchr(rest, '/');
-            len = slash ? (size_t)(slash - rest) : strlen(rest);
-            if (len == 0 || len >= sizeof(top))
-                continue;
+        if (pseudo_fs_dirent_exists(entries, n, top))
+            continue;
 
-            memcpy(top, rest, len);
-            top[len] = '\0';
-
-            if (pseudo_fs_dirent_exists(entries, n, top))
-                continue;
-
-            strncpy(entries[n].name, top, sizeof(entries[n].name) - 1);
-            entries[n].name[sizeof(entries[n].name) - 1] = '\0';
-            entries[n].type = slash ? DT_DIR : DT_REG;
-            n++;
-        }
+        strncpy(entries[n].name, top, sizeof(entries[n].name) - 1);
+        entries[n].name[sizeof(entries[n].name) - 1] = '\0';
+        entries[n].type = slash ? DT_DIR : DT_REG;
+        n++;
     }
 
-    return sys_class_net_collect_children(norm, entries, max_entries, n);
+    return n;
 }

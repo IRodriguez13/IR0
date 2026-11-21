@@ -672,19 +672,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
     return open_ret;
   }
 
-  if (is_sys_path(resolved))
-  {
-    if (strcmp(resolved, "/sys") == 0 || strcmp(resolved, "/sys/") == 0 ||
-        sysfs_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
-
   if (ir0_is_dev_path(resolved))
   {
     if (posix_shm_path_is(resolved))

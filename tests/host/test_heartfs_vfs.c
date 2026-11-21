@@ -219,7 +219,12 @@ void test_heartfs_vfs(void)
 	ASSERT_EQ(done, (size_t)5);
 	ASSERT_STR_EQ(buf, "3.00\n");
 	ASSERT_EQ(ops->write("/heart/proc/uptime", "1", 1, &done, 0), -EINVAL);
-	ASSERT_EQ(ops->readdir("/heart/sys", ents, 16), 0);
+	n = ops->readdir("/heart/sys", ents, 16);
+	ASSERT(find_dirent(ents, n, "kernel") >= 0);
+	ASSERT_EQ(ents[find_dirent(ents, n, "kernel")].type, DT_DIR);
+	ASSERT_EQ(ops->stat("/heart/sys/kernel", &st), -ENOENT);
+	ASSERT_EQ(ops->stat("/heart/sys/kernel/version", &st), 0);
+	ASSERT_EQ(st.st_mode, (mode_t)(S_IFREG | 0444));
 	pseudo_fs_reset();
 
 	TEST_END();

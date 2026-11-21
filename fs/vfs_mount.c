@@ -660,7 +660,6 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 			uint32_t magic;
 		} pseudo[] = {
 			{ "/proc", IR0_PROC_SUPER_MAGIC },
-			{ "/sys", IR0_SYSFS_MAGIC },
 			{ "/dev", IR0_TMPFS_MAGIC },
 		};
 		size_t i;

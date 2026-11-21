@@ -19,6 +19,7 @@
 #include <ir0/open_flags.h>
 #include <ir0/procfs.h>
 #include <ir0/pseudo_fs.h>
+#include <ir0/sysfs.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
 #include <ir0/version.h>
@@ -254,9 +255,18 @@ static void heart_fill_dir_stat(stat_t *st)
     pseudo_fs_stat_now(st);
 }
 
+static int heart_alias_is_sys(const char *canon)
+{
+    return strncmp(canon, "/sys", 4) == 0 &&
+           (canon[4] == '\0' || canon[4] == '/');
+}
+
 static int heart_alias_stat(const char *canon, stat_t *st)
 {
     const pseudo_fs_entry_t *pf;
+
+    if (heart_alias_is_sys(canon))
+        return sysfs_alias_stat(canon, st);
 
     pseudo_fs_nodes_register_all();
     pf = pseudo_fs_lookup(canon);
@@ -338,10 +348,7 @@ static int heart_readdir(const char *path, struct vfs_dirent *entries, int max)
         return pseudo_fs_collect_registry_children("/proc", entries, max, 0);
     }
     if (strcmp(rel, "sys") == 0)
-    {
-        pseudo_fs_nodes_register_all();
-        return pseudo_fs_collect_registry_children("/sys", entries, max, 0);
-    }
+        return sysfs_alias_readdir("/sys", entries, max);
     if (strcmp(rel, "dennis") == 0)
         return 0;
     if (!heart_has_children(rel))
@@ -364,8 +371,8 @@ static int heart_readdir(const char *path, struct vfs_dirent *entries, int max)
 }
 
 /*
- * The /proc|/sys node behind an alias path, acquired for one operation;
- * release it with pseudo_fs_release_ops().
+ * The /proc node behind an alias path, acquired for one operation;
+ * release it with pseudo_fs_release_ops(). /sys aliases go through sysfs.
  */
 static int heart_alias_acquire(const char *canon, int flags,
                                const pseudo_fs_ops_t **ops, void **ctx,
@@ -390,6 +397,8 @@ static int heart_open(const char *path, int flags)
         return ret;
     if (!heart_alias_canonical(rel, canon, sizeof(canon)))
         return 0;
+    if (heart_alias_is_sys(canon))
+        return sysfs_alias_open(canon, flags);
 
     cred = ir0_current_cred();
     if (cred && is_proc_path(canon))
@@ -428,6 +437,9 @@ static int heart_read(const char *path, void *buf, size_t count,
         void *ctx;
         int dynamic;
         int64_t n;
+
+        if (heart_alias_is_sys(canon))
+            return sysfs_alias_read(canon, buf, count, bytes_read, offset);
 
         ret = heart_alias_acquire(canon, IR0_O_RDONLY, &ops, &ctx, &dynamic);
         if (ret != 0)
@@ -474,6 +486,8 @@ static int heart_write(const char *path, const void *buf, size_t count,
         return ret;
     if (!heart_alias_canonical(rel, canon, sizeof(canon)))
         return -EINVAL;
+    if (heart_alias_is_sys(canon))
+        return sysfs_alias_write(canon, buf, count, bytes_written, offset);
 
     ret = heart_alias_acquire(canon, IR0_O_WRONLY, &ops, &ctx, &dynamic);
     if (ret != 0)

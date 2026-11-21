@@ -3,7 +3,8 @@
 > **Last verified:** 2026-11-21
 > **Source of truth:** `fs/vfs*.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`,
 > `fs/path_routed.c`, `fs/pseudo_fs_registry.c`, `fs/pseudo_fs_nodes.c`,
-> `fs/named_*.c`, `fs/procfs*.c`, `fs/sysfs.c`, `fs/devfs*.c`,
+> `fs/named_*.c`, `fs/procfs*.c`, `fs/sysfs.c`, `fs/sysfs/sysfs.c`,
+> `fs/devfs*.c`,
 > `fs/heartfs/heartfs.c`, `kernel/syscalls/fs_syscalls.c`,
 > `kernel/syscalls/fs_dirent.c`
 
@@ -39,21 +40,21 @@ their parent directory; `fs/pseudo_fs_registry.c`, `fs/path_routed.c` and
 
 ### Pseudo filesystems and side tables (outside the mount table)
 
-The syscall layer checks the path string *before* the VFS:
+sysfs and heartfs are mounts. The syscall layer still checks the path
+string *before* the VFS for what remains:
 
 | Entry point | Order of checks |
 |---|---|
-| `ir0_stat_path_routed()` (`fs/path_routed.c`) | `is_proc_path` → `proc_stat`; `is_sys_path` → `sysfs_stat`; `ir0_is_dev_path` → `devfs_stat_path`; then `named_socket_stat`, `named_fifo_stat`, `named_devnode_stat`, `named_symlink_stat`; finally `vfs_stat` |
-| `ir0_getdents_path_routed()` | `/dev` → `devfs_readdir_root`/`_subdir`; `/proc` → `proc_readdir`; `/sys` → `pseudo_fs_collect_registry_children`; else `vfs_readdir` |
-| `sys_open_routed_resolved()` (`kernel/syscalls/fs_syscalls.c`) | `/proc`, `/sys`: directories → `pseudo_bind_dir_fd`, files → `pseudo_bind_file_fd` (an `is_pseudo` fd holding registry ops/ctx); `/dev` → `devfs_find_node` + `devfs_open_node` + `devfs_bind_fd_slot` (an `is_devfs` fd); else `sys_open_vfs_resolved`, which itself first checks `named_fifo_lookup`, `posix_shm_path_is` and `named_devnode_lookup` |
-| `getdents_trust_readdir_type()` (`fs_dirent.c`) | trusts `d_type` for `/proc`, `/sys`, `/dev` virtual directories |
-| `vfs_statfs()` | prefix table for `/proc`, `/sys`, `/dev` (Linux magic, zero blocks) |
-| `proc_mounts_read()` | appends fixed lines for proc, sysfs and devtmpfs after the real mounts |
+| `ir0_stat_path_routed()` (`fs/path_routed.c`) | `is_proc_path` → `proc_stat`; `ir0_is_dev_path` → `devfs_stat_path`; then `named_socket_stat`, `named_fifo_stat`, `named_devnode_stat`, `named_symlink_stat`; finally `vfs_stat` (`/sys` is the sysfs mount) |
+| `ir0_getdents_path_routed()` | `/dev` → `devfs_readdir_root`/`_subdir`; `/proc` → `proc_readdir`; else `vfs_readdir` |
+| `sys_open_routed_resolved()` (`kernel/syscalls/fs_syscalls.c`) | `/proc`: directories → `pseudo_bind_dir_fd`, files → `pseudo_bind_file_fd` (an `is_pseudo` fd holding registry ops/ctx); `/dev` → `devfs_find_node` + `devfs_open_node` + `devfs_bind_fd_slot` (an `is_devfs` fd); else `sys_open_vfs_resolved`, which itself first checks `named_fifo_lookup`, `posix_shm_path_is` and `named_devnode_lookup` |
+| `getdents_trust_readdir_type()` (`fs_dirent.c`) | trusts `d_type` for `/proc` and `/dev` virtual directories |
+| `vfs_statfs()` | prefix table for `/proc` and `/dev` (Linux magic, zero blocks); `/sys` uses the sysfs `statfs` |
+| `proc_mounts_read()` | real mounts (including sysfs), then fixed lines for proc and devtmpfs |
 
-- **Registry** (`fs/pseudo_fs_registry.c`): two fixed tables (`/proc`,
-  `/sys`) of `{full_path, pseudo_fs_ops_t *, ctx}` plus dynamic matchers
-  (`/proc/<pid>/…`, `/sys/class/net/<if>/…`, `/sys/devices/system/cpu/cpuN`).
-  Nodes are registered lazily by `pseudo_fs_nodes_register_all()`
+- **Registry** (`fs/pseudo_fs_registry.c`): one fixed table (`/proc`) of
+  `{full_path, pseudo_fs_ops_t *, ctx}` plus the `/proc/<pid>/…` dynamic
+  matcher. Nodes are registered lazily by `pseudo_fs_nodes_register_all()`
   (`fs/pseudo_fs_nodes.c`). `pseudo_fs_ops_t` reads regenerate the whole
   text into a 4 KiB bounce buffer and slice it at the offset; writes have no
   offset.
@@ -61,10 +62,7 @@ The syscall layer checks the path string *before* the VFS:
   (pid directories), `proc_access_path` (ptrace-like check on `environ`,
   `maps`, `fd`, `exe`) and the registry nodes. A `proc` fstype exists only
   so `mount -t proc proc /proc` succeeds; the mount entry it adds has no
-  ops, and the routing above answers `/proc` paths before the VFS.
-- **sysfs** (`fs/sysfs.c`, ~940 lines): attribute readers/writers
-  registered as `/sys` registry nodes; `sysfs_stat` and
-  `sysfs_is_virtual_subdir` decide directories.
+  ops,   and the routing above answers `/proc` paths before the VFS.
 - **devfs** (`fs/devfs*.c`, ~4400 lines): its own node table
   (`devfs_node_t`, by name and by rdev) with per-device ops, permissions and
   ownership (`devfs_chown_path`), PTY master/slave pairing, input, fb,
@@ -74,14 +72,23 @@ The syscall layer checks the path string *before* the VFS:
   `bind(2)` (AF_UNIX) and `symlink(2)` on backends without a `symlink` op.
   They shadow whatever the mounted filesystem has at that path.
 
-### heartfs (migrated in this slice)
+### sysfs (migrated)
+
+`/sys` is a `sysfs` `vfs_fstype` (`fs/sysfs/sysfs.c`, readers in
+`fs/sysfs.c`) mounted by `boot_rootfs_init()` after heartfs. The node
+table, cpu nodes and net lookup live in sysfs. `stat` synthesizes
+intermediate directories; an exact file wins even when it has children
+(open of that path is `EISDIR` without `O_DIRECTORY`, `ENOTDIR` with it).
+Reads slice a 4 KiB regeneration at the offset; writes ignore the offset.
+
+### heartfs (migrated)
 
 `/heart` is a `heartfs` `vfs_fstype` mounted by `boot_rootfs_init()` after
 the root is final (after the arm64 boot pivot). Its `vfs_ops` serve
 `README`, `MANIFESTO`, `kernel/{version,build,features}`, `src/…` (the
-build-time blob) and the aliases `proc/…`, `sys/…` (which still call the
-registry on the canonical `/proc|/sys` path, with `proc_access_path` in the
-`open` hook). `/heart/dennis` stays on the filesystem that held it, as an
+build-time blob) and the aliases `proc/…` (registry, with `proc_access_path`
+in the `open` hook) and `sys/…` (sysfs exact-node stat/read/write/open;
+`readdir` of `/heart/sys` is sysfs readdir). `/heart/dennis` stays on the filesystem that held it, as an
 internal bind mount (`vfs_bind_mount`) created when heartfs is mounted.
 
 ## 2. What each pseudo filesystem needs to be a `vfs_fstype`
@@ -96,7 +103,7 @@ follows.
 | fs | Extra ops / VFS support needed |
 |---|---|
 | heartfs | none (read-only, done) |
-| sysfs | `.write` (hostname, panic, `max_processes`, `cpuN/online`); a node table owned by sysfs instead of the registry, with the dynamic cpu/net matchers as lookup; write semantics of today's `pseudo_fs_ops_write` (no offset) |
+| sysfs | done: `.write` ignores the offset; cpu/net lookup is inside sysfs |
 | proc | `.readlink` for `self`, `fd/N`, `exe`; pid directories in `readdir`/`stat`; `.open` for `proc_access_path`; `.write` for the few writable nodes; per-open snapshot if a reader must see one generation across reads |
 | devfs | per-node file ops beyond read/write: `ioctl`, `poll`, `mmap` (fb), PTY pairing on open/close, `chown`/`chmod` on nodes. The VFS needs an fd type whose ops come from the filesystem (Linux `file->f_op`) instead of `is_devfs` special cases in every syscall |
 | named_\* | `vfs_ops.mknod` (FIFO, device, socket node) and `symlink` on every backend that lacks them (tmpfs has `symlink`; MINIX/FAT do not), or a generic in-memory overlay the VFS owns; `open` of a FIFO/device node must dispatch to the pipe/devfs code by node type, not by table lookup |
@@ -107,7 +114,7 @@ follows.
    mount for `/heart/dennis`; drop its registry table and routes. *(done)*
 2. **sysfs** — move `/sys` nodes out of the registry into a sysfs-owned
    table with `vfs_ops.write`; mount `/sys`; drop the `/sys` routes,
-   `sysfs_is_virtual_subdir` callers and the `/sys` registry table.
+   `sysfs_is_virtual_subdir` callers and the `/sys` registry table. *(done)*
 3. **proc** — give the `proc` fstype real ops (stat/readdir/read/readlink/
    open/write) and an actual mount at `/proc`; move the `/proc` registry
    nodes and the pid matcher into procfs; then `fs/pseudo_fs_registry.c`

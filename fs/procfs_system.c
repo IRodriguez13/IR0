@@ -669,15 +669,13 @@ int proc_mounts_read(char *buf, size_t count)
         off += (size_t)n;
     }
     /*
-     * Pseudo-filesystems are served through the registry, not through the VFS
-     * mount list, so they never appeared here and mount(1) showed only the
-     * root. Linux lists proc, sysfs and devtmpfs. vfs_statfs() reports
-     * them with zero blocks, so df skips them without -a.
+     * proc and devfs are not VFS mounts, so they never appeared here.
+     * Linux lists them; sysfs is a real mount and shows up in the loop above.
+     * vfs_statfs() reports them with zero blocks, so df skips them without -a.
      */
     {
         static const char *const pseudo[] = {
             "proc /proc proc rw 0 0\n",
-            "sysfs /sys sysfs rw 0 0\n",
             "devtmpfs /dev devtmpfs rw 0 0\n",
         };
         size_t i;

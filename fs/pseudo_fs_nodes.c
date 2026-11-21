@@ -7,18 +7,15 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: pseudo_fs_nodes.c
- * Description: Registered /proc and /sys endpoints using pseudo_fs_ops_t.
+ * Description: Registered /proc endpoints using pseudo_fs_ops_t.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/pseudo_fs.h>
-#include "sysfs_internal.h"
 #include <ir0/procfs.h>
 #include <ir0/process.h>
 #include <ir0/fd_types.h>
-#include <ir0/arch_port.h>
-#include <ir0/power_manag.h>
 #include <config.h>
 #include <ir0/errno.h>
 #include <ir0/stat.h>
@@ -29,13 +26,9 @@
 #include <ir0/bluetooth.h>
 #endif
 
-#define PSEUDO_SYS_MAX_CPUS 16
-
 
 static int g_pseudo_fs_nodes_ready;
 static int g_proc_dynamic_registered;
-static uintptr_t g_sys_cpu_ctx[PSEUDO_SYS_MAX_CPUS];
-static uintptr_t g_sys_cpu_online_ctx[PSEUDO_SYS_MAX_CPUS];
 
 static int64_t pseudo_read_wrap_int(void *ctx, char *buf, size_t count, off_t *offset)
 {
@@ -48,142 +41,6 @@ static int64_t pseudo_read_wrap_int(void *ctx, char *buf, size_t count, off_t *o
     return fn(buf, count);
 }
 
-static int64_t pseudo_max_processes_write(void *ctx, const char *buf, size_t count)
-{
-    int r;
-
-    (void)ctx;
-    r = sys_kernel_max_processes_write_reg(buf, count);
-    if (r < 0)
-        return r;
-    return (int64_t)count;
-}
-
-static int64_t pseudo_sys_panic_write(void *ctx, const char *buf, size_t count)
-{
-    (void)ctx;
-    /* Never returns: forces panicex(TESTING) so read is help-only above. */
-    return (int64_t)sys_kernel_panic_write_reg(buf, count);
-}
-
-/* Root-writable only (0644): a foot-gun crash trigger, Linux sysrq-style. */
-static int pseudo_panic_stat(void *ctx, stat_t *st)
-{
-    (void)ctx;
-    if (!st)
-        return -EINVAL;
-    memset(st, 0, sizeof(*st));
-    st->st_mode = S_IFREG | 0644;
-    st->st_nlink = 1;
-    st->st_uid = 0;
-    st->st_gid = 0;
-    st->st_size = 4096;
-    pseudo_fs_stat_now(st);
-    return 0;
-}
-
-static const pseudo_fs_ops_t sys_panic_ops = {
-    .read = pseudo_read_wrap_int,
-    .write = pseudo_sys_panic_write,
-    .stat = pseudo_panic_stat,
-};
-
-struct pseudo_power_control
-{
-    const char *name;
-    enum ir0_system_action action;
-};
-
-static const struct pseudo_power_control sys_reboot_control = {
-    .name = "reboot",
-    .action = IR0_SYSTEM_REBOOT,
-};
-
-static const struct pseudo_power_control sys_poweroff_control = {
-    .name = "poweroff",
-    .action = IR0_SYSTEM_POWEROFF,
-};
-
-static const struct pseudo_power_control sys_halt_control = {
-    .name = "halt",
-    .action = IR0_SYSTEM_HALT,
-};
-
-static int64_t pseudo_power_read(void *ctx, char *buf, size_t count, off_t *offset)
-{
-    const struct pseudo_power_control *control = ctx;
-    int len;
-
-    if (!control || !buf || !offset || count == 0)
-        return -EINVAL;
-    if (*offset != 0)
-        return 0;
-    len = snprintf(buf, count, "write '%s' to request a coordinated %s\n",
-                   control->name, control->name);
-    if (len < 0)
-        return -EIO;
-    if ((size_t)len >= count)
-        len = (int)count - 1;
-    *offset += len;
-    return len;
-}
-
-static int64_t pseudo_power_write(void *ctx, const char *buf, size_t count)
-{
-    const struct pseudo_power_control *control = ctx;
-    size_t len;
-
-    if (!control || !buf || count == 0)
-        return -EINVAL;
-    len = strlen(control->name);
-    if (count < len || memcmp(buf, control->name, len) != 0)
-        return -EINVAL;
-    if (count > len)
-    {
-        size_t i;
-
-        for (i = len; i < count; i++)
-        {
-            if (buf[i] != '\n' && buf[i] != '\r' &&
-                buf[i] != ' ' && buf[i] != '\t')
-                return -EINVAL;
-        }
-    }
-    kernel_system_shutdown(control->action);
-}
-
-static const pseudo_fs_ops_t sys_power_ops = {
-    .read = pseudo_power_read,
-    .write = pseudo_power_write,
-    .stat = pseudo_panic_stat,
-};
-
-static int64_t pseudo_sys_cpu_read(void *ctx, char *buf, size_t count, off_t *offset)
-{
-    unsigned cpu = (unsigned)(uintptr_t)ctx;
-
-    (void)offset;
-    return sys_devices_cpu_read_reg(buf, count, cpu);
-}
-
-static int64_t pseudo_sys_cpu_online_read(void *ctx, char *buf, size_t count, off_t *offset)
-{
-    unsigned cpu = (unsigned)(uintptr_t)ctx;
-
-    (void)offset;
-    return sys_devices_cpu_online_read_reg(buf, count, cpu);
-}
-
-static int64_t pseudo_sys_cpu_online_write(void *ctx, const char *buf, size_t count)
-{
-    unsigned cpu = (unsigned)(uintptr_t)ctx;
-    int r;
-
-    r = sys_devices_cpu_online_write_reg(cpu, buf, count);
-    if (r < 0)
-        return r;
-    return (int64_t)count;
-}
 
 #if CONFIG_ENABLE_BLUETOOTH
 static int64_t pseudo_write_cstr(void *ctx, const char *buf, size_t count)
@@ -239,18 +96,6 @@ static int pseudo_default_stat(void *ctx, stat_t *st)
     return 0;
 }
 
-static int pseudo_writable_stat(void *ctx, stat_t *st)
-{
-    (void)ctx;
-    if (!st)
-        return -EINVAL;
-    memset(st, 0, sizeof(*st));
-    st->st_mode = S_IFREG | 0664;
-    st->st_nlink = 1;
-    st->st_size = 4096;
-    pseudo_fs_stat_now(st);
-    return 0;
-}
 
 static const pseudo_fs_ops_t proc_mounts_ops = {
     .read = pseudo_read_wrap_int,
@@ -262,162 +107,6 @@ static const pseudo_fs_ops_t proc_static_read_ops = {
     .stat = pseudo_default_stat,
 };
 
-static const pseudo_fs_ops_t sys_static_read_ops = {
-    .read = pseudo_read_wrap_int,
-    .stat = pseudo_default_stat,
-};
-
-static const pseudo_fs_ops_t sys_max_processes_ops = {
-    .read = pseudo_read_wrap_int,
-    .write = pseudo_max_processes_write,
-    .stat = pseudo_writable_stat,
-};
-
-static const pseudo_fs_ops_t sys_cpu_read_ops = {
-    .read = pseudo_sys_cpu_read,
-    .stat = pseudo_default_stat,
-};
-
-static const pseudo_fs_ops_t sys_cpu_online_ops = {
-    .read = pseudo_sys_cpu_online_read,
-    .write = pseudo_sys_cpu_online_write,
-    .stat = pseudo_writable_stat,
-};
-
-#if CONFIG_ENABLE_NETWORKING
-typedef struct sys_net_iface_ctx
-{
-	char ifname[16];
-	unsigned attr;
-	int in_use;
-} sys_net_iface_ctx_t;
-
-#define SYS_NET_IFACE_CTX_MAX 32
-
-static sys_net_iface_ctx_t g_sys_net_iface_ctx[SYS_NET_IFACE_CTX_MAX];
-static int g_sys_net_dynamic_registered;
-
-static sys_net_iface_ctx_t *sys_net_iface_ctx_alloc(void)
-{
-	int i;
-
-	for (i = 0; i < SYS_NET_IFACE_CTX_MAX; i++)
-	{
-		if (!g_sys_net_iface_ctx[i].in_use)
-			return &g_sys_net_iface_ctx[i];
-	}
-	return NULL;
-}
-
-static int sys_net_iface_match(const char *path, void **out_ctx)
-{
-	const char *rest;
-	const char *slash;
-	char ifname[16];
-	size_t nlen;
-	int attr;
-	sys_net_iface_ctx_t *ctx;
-
-	if (!path || !out_ctx)
-		return -EINVAL;
-	if (strncmp(path, "/sys/class/net/", 15) != 0)
-		return -ENOENT;
-	rest = path + 15;
-	if (!rest[0])
-		return -ENOENT;
-	slash = strchr(rest, '/');
-	if (!slash)
-	{
-		/* /sys/class/net/<iface> — directory node (Linux sysfs). */
-		nlen = strlen(rest);
-		attr = SYS_NET_ATTR_DIR;
-	}
-	else if (!slash[1])
-	{
-		return -ENOENT;
-	}
-	else
-	{
-		nlen = (size_t)(slash - rest);
-		attr = sys_class_net_parse_attr(slash + 1);
-		if (attr < 0)
-			return -ENOENT;
-	}
-	if (nlen == 0 || nlen >= sizeof(ifname))
-		return -ENOENT;
-	memcpy(ifname, rest, nlen);
-	ifname[nlen] = '\0';
-	if (sys_class_net_find_name(ifname) != 0)
-		return -ENOENT;
-	ctx = sys_net_iface_ctx_alloc();
-	if (!ctx)
-		return -ENFILE;
-	memset(ctx, 0, sizeof(*ctx));
-	memcpy(ctx->ifname, ifname, nlen + 1);
-	ctx->attr = (unsigned)attr;
-	ctx->in_use = 1;
-	*out_ctx = ctx;
-	return 0;
-}
-
-static int sys_net_iface_stat(void *ctx, stat_t *st)
-{
-	sys_net_iface_ctx_t *file = ctx;
-
-	if (!file || !st)
-		return -EINVAL;
-	memset(st, 0, sizeof(*st));
-	if (file->attr == (unsigned)SYS_NET_ATTR_DIR)
-	{
-		st->st_mode = S_IFDIR | 0555;
-		st->st_nlink = 2;
-	}
-	else
-	{
-		st->st_mode = S_IFREG | 0444;
-		st->st_nlink = 1;
-		st->st_size = 4096;
-	}
-    pseudo_fs_stat_now(st);
-	return 0;
-}
-
-static int64_t sys_net_iface_read(void *ctx, char *buf, size_t count, off_t *offset)
-{
-	sys_net_iface_ctx_t *file = ctx;
-
-	(void)offset;
-	if (!file || !buf)
-		return -EINVAL;
-	if (file->attr == (unsigned)SYS_NET_ATTR_DIR)
-		return -EISDIR;
-	return sys_class_net_attr_read_named(buf, count, file->ifname, file->attr);
-}
-
-static int64_t sys_net_iface_close(void *ctx)
-{
-	sys_net_iface_ctx_t *file = ctx;
-
-	if (file)
-		file->in_use = 0;
-	return 0;
-}
-
-static const pseudo_fs_ops_t sys_net_iface_ops = {
-	.read = sys_net_iface_read,
-	.close = sys_net_iface_close,
-	.stat = sys_net_iface_stat,
-};
-
-static void pseudo_fs_register_sys_net_dynamic(void)
-{
-	if (g_sys_net_dynamic_registered)
-		return;
-	if (pseudo_fs_register_dynamic("/sys", sys_net_iface_match,
-				       &sys_net_iface_ops) == 0)
-		g_sys_net_dynamic_registered = 1;
-}
-#endif
 
 #if CONFIG_ENABLE_BLUETOOTH
 static const pseudo_fs_ops_t proc_bt_devices_ops = {
@@ -432,45 +121,8 @@ static const pseudo_fs_ops_t proc_bt_scan_ops = {
     .stat = pseudo_default_stat,
 };
 
-static const pseudo_fs_ops_t sys_bt_address_ops = {
-    .read = pseudo_read_wrap_int,
-    .stat = pseudo_default_stat,
-};
-
-static const pseudo_fs_ops_t sys_bt_state_ops = {
-    .read = pseudo_read_wrap_int,
-    .stat = pseudo_default_stat,
-};
-
-static const pseudo_fs_ops_t sys_bt_neighbors_ops = {
-    .read = pseudo_read_wrap_int,
-    .stat = pseudo_default_stat,
-};
-
-static const pseudo_fs_ops_t sys_bt_sessions_ops = {
-    .read = pseudo_read_wrap_int,
-    .stat = pseudo_default_stat,
-};
 #endif
 
-static int64_t pseudo_hostname_read(void *ctx, char *buf, size_t count, off_t *offset)
-{
-    (void)ctx;
-    (void)offset;
-    return sys_kernel_hostname_read_reg(buf, count);
-}
-
-static int64_t pseudo_hostname_write(void *ctx, const char *buf, size_t count)
-{
-    (void)ctx;
-    return sys_kernel_hostname_write_reg(buf, count);
-}
-
-static const pseudo_fs_ops_t sys_hostname_ops = {
-    .read = pseudo_hostname_read,
-    .write = pseudo_hostname_write,
-    .stat = pseudo_writable_stat,
-};
 
 typedef struct proc_pid_file_ctx
 {
@@ -702,31 +354,6 @@ static void pseudo_fs_register_proc_dynamic(void)
         g_proc_dynamic_registered = 1;
 }
 
-static void pseudo_fs_register_sys_cpus(void)
-{
-    uint32_t cpus = get_cpu_count();
-    char rel[96];
-
-    if (cpus == 0)
-        cpus = 1;
-    if (cpus > PSEUDO_SYS_MAX_CPUS)
-        cpus = PSEUDO_SYS_MAX_CPUS;
-
-    pseudo_fs_register("/sys", "devices/system/cpu", &sys_static_read_ops,
-                       (void *)(uintptr_t)sys_devices_cpus_read_reg);
-
-    for (uint32_t i = 0; i < cpus; i++)
-    {
-        g_sys_cpu_ctx[i] = (uintptr_t)i;
-        g_sys_cpu_online_ctx[i] = (uintptr_t)i;
-
-        snprintf(rel, sizeof(rel), "devices/system/cpu/cpu%u", (unsigned)i);
-        pseudo_fs_register("/sys", rel, &sys_cpu_read_ops, (void *)g_sys_cpu_ctx[i]);
-
-        snprintf(rel, sizeof(rel), "devices/system/cpu/cpu%u/online", (unsigned)i);
-        pseudo_fs_register("/sys", rel, &sys_cpu_online_ops, (void *)g_sys_cpu_online_ctx[i]);
-    }
-}
 
 void pseudo_fs_nodes_register_all(void)
 {
@@ -795,67 +422,8 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)ir0_bt_proc_devices_read);
     pseudo_fs_register("/proc", "bluetooth/scan", &proc_bt_scan_ops,
                        (void *)(uintptr_t)ir0_bt_proc_scan_read);
-    pseudo_fs_register("/sys", "class/bluetooth/hci0/address", &sys_bt_address_ops,
-                       (void *)(uintptr_t)ir0_bt_sysfs_hci0_address_read);
-    pseudo_fs_register("/sys", "class/bluetooth/hci0/state", &sys_bt_state_ops,
-                       (void *)(uintptr_t)ir0_bt_sysfs_hci0_state_read);
-    pseudo_fs_register("/sys", "class/bluetooth/topology/neighbors", &sys_bt_neighbors_ops,
-                       (void *)(uintptr_t)ir0_bt_sysfs_topology_neighbors_read);
-    pseudo_fs_register("/sys", "class/bluetooth/sessions", &sys_bt_sessions_ops,
-                       (void *)(uintptr_t)ir0_bt_sysfs_sessions_read);
 #endif
 
-    pseudo_fs_register("/sys", "kernel/hostname", &sys_hostname_ops, NULL);
-    pseudo_fs_register("/sys", "kernel/version", &sys_static_read_ops,
-                       (void *)(uintptr_t)sys_kernel_version_read_reg);
-    pseudo_fs_register("/sys", "kernel/osrelease", &sys_static_read_ops,
-                       (void *)(uintptr_t)sys_kernel_osrelease_read_reg);
-    pseudo_fs_register("/sys", "kernel/build", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_kernel_build_read_reg);
-    pseudo_fs_register("/sys", "kernel/features", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_kernel_features_read_reg);
-    pseudo_fs_register("/sys", "kernel/mm", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_kernel_mm_read_reg);
-    pseudo_fs_register("/sys", "kernel/max_processes", &sys_max_processes_ops,
-                       (void *)(uintptr_t)sys_kernel_max_processes_read_reg);
-    pseudo_fs_register("/sys", "kernel/panic", &sys_panic_ops,
-                       (void *)(uintptr_t)sys_kernel_panic_read_reg);
-    pseudo_fs_register("/sys", "kernel/reboot", &sys_power_ops,
-                       (void *)&sys_reboot_control);
-    pseudo_fs_register("/sys", "kernel/poweroff", &sys_power_ops,
-                       (void *)&sys_poweroff_control);
-    pseudo_fs_register("/sys", "kernel/halt", &sys_power_ops,
-                       (void *)&sys_halt_control);
-    pseudo_fs_register("/sys", "firmware/ir0/protocol", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_protocol_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/bootloader", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_bootloader_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/cmdline", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_cmdline_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/memory_map", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_memory_map_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/framebuffer", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_framebuffer_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/acpi_rsdp", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_acpi_rsdp_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/dtb", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_dtb_read_reg);
-    pseudo_fs_register("/sys", "firmware/ir0/boot_detail", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_firmware_ir0_boot_detail_read_reg);
-    pseudo_fs_register("/sys", "devices/system", &sys_static_read_ops,
-                       (void *)(uintptr_t)sys_devices_system_read_reg);
-    pseudo_fs_register("/sys", "devices/block", &sys_static_read_ops,
-                       (void *)(uintptr_t)sys_devices_block_read_reg);
-    pseudo_fs_register("/sys", "console/mode", &sys_static_read_ops,
-                       (void *)(uintptr_t)sys_console_mode_read_reg);
-    /* NIC list + /sys/class/net/<iface>/attrs via dynamic matcher. */
-    pseudo_fs_register("/sys", "class/net", &sys_static_read_ops,
-		       (void *)(uintptr_t)sys_class_net_list_read_reg);
-#if CONFIG_ENABLE_NETWORKING
-    pseudo_fs_register_sys_net_dynamic();
-#endif
-
-    pseudo_fs_register_sys_cpus();
 
     g_pseudo_fs_nodes_ready = 1;
 }

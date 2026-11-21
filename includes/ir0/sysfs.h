@@ -26,17 +26,24 @@
 #include <ir0/types.h>
 #include <ir0/vfs.h>
 
-/* /sys filesystem interface; files are pseudo_fs nodes (pseudo_fs_nodes.c). */
-bool is_sys_path(const char *path);
-int sysfs_stat(const char *path, stat_t *st);
-int sysfs_is_virtual_subdir(const char *path);
+struct vfs_fstype;
+extern struct vfs_fstype sysfs_fs_type;
+
+/* Exact-node view used by /heart/sys. Intermediate directories are -ENOENT. */
+int sysfs_alias_stat(const char *path, stat_t *st);
+int sysfs_alias_read(const char *path, void *buf, size_t count,
+		     size_t *bytes_read, off_t offset);
+int sysfs_alias_write(const char *path, const void *buf, size_t count,
+		      size_t *bytes_written, off_t offset);
+int sysfs_alias_open(const char *path, int flags);
+int sysfs_alias_readdir(const char *path, struct vfs_dirent *entries, int max);
 
 /* kernel/sys/utsname.c reads the hostname and the online CPU count. */
 int sys_kernel_hostname_read_reg(char *buf, size_t count);
 /* Count of CPUs currently marked online in sysfs (at least 1). */
 int sys_devices_cpu_online_count(void);
 
-/* /sys/class/net children for the pseudo_fs registry readdir. */
+/* /sys/class/net children appended by sysfs readdir. */
 int sys_class_net_collect_children(const char *dir_path,
 				   struct vfs_dirent *entries, int max_entries,
 				   int start_n);

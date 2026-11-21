@@ -7,11 +7,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: host_sysfs_net_stub.c
- * Description: Host-test stubs for /sys/class/net helpers used by pseudo_fs_registry.
+ * Description: Host-test stubs for /sys/class/net helpers used by sysfs.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <fs/sysfs_internal.h>
+#include <ir0/errno.h>
 #include <ir0/sysfs.h>
 
 int sys_class_net_collect_children(const char *dir_path,
@@ -27,5 +29,16 @@ int sys_class_net_collect_children(const char *dir_path,
 int sys_class_net_path_has_children(const char *path)
 {
 	(void)path;
+	return 0;
+}
+
+int sys_class_net_attr_read_named(char *buf, size_t count, const char *ifname,
+				  unsigned attr)
+{
+	(void)ifname;
+	(void)attr;
+	if (!buf || count == 0)
+		return -EINVAL;
+	buf[0] = '\0';
 	return 0;
 }
