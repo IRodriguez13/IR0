@@ -835,6 +835,25 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap)
                               width, precision, zero, left);
             break;
         }
+        case 'o':
+        {
+            char num_str[32];
+            uint64_t value;
+            int len;
+
+            if (is_size_t)
+                value = (uint64_t)va_arg(ap, size_t);
+            else if (long_count >= 2)
+                value = (uint64_t)va_arg(ap, unsigned long long);
+            else if (long_count == 1)
+                value = (uint64_t)va_arg(ap, unsigned long);
+            else
+                value = (uint64_t)va_arg(ap, unsigned int);
+            len = u64_to_string(value, num_str, 8, 0);
+            ptr = emit_number(ptr, &remaining, num_str, len, 0,
+                              width, precision, zero, left);
+            break;
+        }
         case 'x':
         case 'X':
         {

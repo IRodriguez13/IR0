@@ -26,6 +26,7 @@ typedef struct proc_fs_snap
 	int threads;
 	int no_new_privs;
 	int fd_size;
+	uint32_t umask;
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
@@ -81,6 +82,7 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->stime = proc->stime;
 	snap->state = (int)proc->state;
 	snap->no_new_privs = (int)proc->no_new_privs;
+	snap->umask = proc->umask;
 	snap->fd_size = process_fd_span(proc);
 	snap->threads = 0;
 	{
@@ -555,6 +557,7 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       "FDSize:\t%d\n"
 		       "Threads:\t%d\n"
 		       "NoNewPrivs:\t%d\n"
+		       "Umask:\t%04o\n"
 		       "VmSize:\t%llu kB\n"
 		       "VmRSS:\t%llu kB\n",
 		       snap.comm[0] ? snap.comm : "(none)",
@@ -565,6 +568,7 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
 		       (int)snap.gid,
 		       snap.fd_size, snap.threads, snap.no_new_privs,
+		       snap.umask,
 		       (unsigned long long)vsize,
 		       (unsigned long long)rss_kb);
 	proc_fs_snap_release(&snap);

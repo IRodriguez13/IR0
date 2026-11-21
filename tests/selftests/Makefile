@@ -715,3 +715,21 @@ $(SHM_OWNER_BIN): $(SHM_OWNER_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(SHM_OWNER_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# PROC-UMASK-SELFTEST
+PROC_UMASK_SRC := syscall/proc_umask.c
+PROC_UMASK_BIN := $(BUILD_DIR)/proc_umask
+
+.PHONY: proc_umask
+
+proc_umask: $(PROC_UMASK_BIN)
+
+$(PROC_UMASK_BIN): $(PROC_UMASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest proc_umask"
+	@$(CC) $(CFLAGS) -o $@ $(PROC_UMASK_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

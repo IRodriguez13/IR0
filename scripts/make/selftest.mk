@@ -1354,3 +1354,36 @@ ir0-selftest-shm-owner-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_
 	@echo "✓ ir0-selftest-shm-owner-arm64"
 
 ir0-selftest-shm-owner: ir0-selftest-shm-owner-x86 ir0-selftest-shm-owner-arm64
+
+# PROC-UMASK-SELFTEST
+IR0_SELFTEST_X86_PROC_UMASK := $(KERNEL_ROOT)/build/selftests/x86_64/proc_umask
+IR0_SELFTEST_ARM64_PROC_UMASK := $(KERNEL_ROOT)/build/selftests/arm64/proc_umask
+
+.PHONY: ir0-selftest-proc-umask-x86 ir0-selftest-proc-umask-arm64 \
+	ir0-selftest-proc-umask
+
+$(IR0_SELFTEST_X86_PROC_UMASK): tests/selftests/syscall/proc_umask.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 proc_umask
+
+$(IR0_SELFTEST_ARM64_PROC_UMASK): tests/selftests/syscall/proc_umask.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 proc_umask
+
+ir0-selftest-proc-umask-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_PROC_UMASK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_PROC_UMASK) \
+		--done "ok 1 proc_umask" \
+		--log $(HOST_TMP)/ir0-selftest-x86-proc-umask.log
+	@echo "✓ ir0-selftest-proc-umask-x86"
+
+ir0-selftest-proc-umask-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PROC_UMASK)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_PROC_UMASK) \
+		--done "ok 1 proc_umask" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-proc-umask.log
+	@echo "✓ ir0-selftest-proc-umask-arm64"
+
+ir0-selftest-proc-umask: ir0-selftest-proc-umask-x86 ir0-selftest-proc-umask-arm64
