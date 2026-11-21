@@ -34,17 +34,17 @@
 
 static uint64_t ktm_stack_min_headroom = ~0ULL;
 
-void ktm_stack_watch(uint64_t rsp)
+void ktm_stack_watch(uint64_t sp)
 {
 	uint64_t off;
 	uint64_t slot;
 	uint64_t bottom;
 	uint64_t headroom;
 
-	if (rsp < IR0_KSTACK_VA_BASE)
+	if (sp < IR0_KSTACK_VA_BASE)
 		return;
 
-	off = rsp - (uint64_t)IR0_KSTACK_VA_BASE;
+	off = sp - (uint64_t)IR0_KSTACK_VA_BASE;
 	slot = off / (uint64_t)IR0_KSTACK_SLOT_SIZE;
 	if (slot >= (uint64_t)IR0_KSTACK_MAX_SLOTS)
 		return;
@@ -52,10 +52,10 @@ void ktm_stack_watch(uint64_t rsp)
 	/* First page of every slot is the unmapped guard. */
 	bottom = (uint64_t)IR0_KSTACK_VA_BASE +
 		 slot * (uint64_t)IR0_KSTACK_SLOT_SIZE + KSTACK_GUARD_BYTES;
-	if (rsp < bottom)
+	if (sp < bottom)
 		return;
 
-	headroom = rsp - bottom;
+	headroom = sp - bottom;
 	if (headroom >= ktm_stack_min_headroom)
 		return;
 
@@ -64,7 +64,7 @@ void ktm_stack_watch(uint64_t rsp)
 	/* Only the record-breaking samples, and only once they matter. */
 	if (headroom < KSTACK_WARN_HEADROOM)
 		ktm_deferred_record(KTM_DEFERRED_STACK_LOW, 0, headroom, slot,
-				    rsp);
+				    sp);
 }
 
 uint64_t ktm_stack_min_headroom_get(void)
