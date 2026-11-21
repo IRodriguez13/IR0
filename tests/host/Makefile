@@ -267,7 +267,7 @@ host_x86_elf_policy.o: $(KERNEL_ROOT)/arch/x86-64/sources/elf_policy.c
 		-Delf_local_reloc_value=x86_test_elf_local_reloc_value \
 		-c -o $@ $<
 
-host_fault.o: $(KERNEL_ROOT)/kernel/problems/fault.c $(KERNEL_ROOT)/includes/ir0/fault.h
+host_fault.o: $(KERNEL_ROOT)/kernel/panic/fault.c $(KERNEL_ROOT)/includes/ir0/fault.h
 	$(KERNEL_CC)
 
 test_arm64_syscall_decode.o: test_arm64_syscall_decode.c \
