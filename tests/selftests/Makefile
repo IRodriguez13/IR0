@@ -643,3 +643,21 @@ $(PRCTL_DUMPABLE_BIN): $(PRCTL_DUMPABLE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_D
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
+
+# SHM-LPID-SELFTEST
+SHM_LPID_SRC := syscall/shm_lpid.c
+SHM_LPID_BIN := $(BUILD_DIR)/shm_lpid
+
+.PHONY: shm_lpid
+
+shm_lpid: $(SHM_LPID_BIN)
+
+$(SHM_LPID_BIN): $(SHM_LPID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest shm_lpid"
+	@$(CC) $(CFLAGS) -o $@ $(SHM_LPID_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@

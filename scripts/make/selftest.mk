@@ -1222,3 +1222,36 @@ ir0-selftest-prctl-dumpable-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64
 	@echo "✓ ir0-selftest-prctl-dumpable-arm64"
 
 ir0-selftest-prctl-dumpable: ir0-selftest-prctl-dumpable-x86 ir0-selftest-prctl-dumpable-arm64
+
+# SHM-LPID-SELFTEST
+IR0_SELFTEST_X86_SHM_LPID := $(KERNEL_ROOT)/build/selftests/x86_64/shm_lpid
+IR0_SELFTEST_ARM64_SHM_LPID := $(KERNEL_ROOT)/build/selftests/arm64/shm_lpid
+
+.PHONY: ir0-selftest-shm-lpid-x86 ir0-selftest-shm-lpid-arm64 \
+	ir0-selftest-shm-lpid
+
+$(IR0_SELFTEST_X86_SHM_LPID): tests/selftests/syscall/shm_lpid.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 shm_lpid
+
+$(IR0_SELFTEST_ARM64_SHM_LPID): tests/selftests/syscall/shm_lpid.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 shm_lpid
+
+ir0-selftest-shm-lpid-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SHM_LPID)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SHM_LPID) \
+		--done "ok 1 shm_lpid" \
+		--log $(HOST_TMP)/ir0-selftest-x86-shm-lpid.log
+	@echo "✓ ir0-selftest-shm-lpid-x86"
+
+ir0-selftest-shm-lpid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_LPID)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SHM_LPID) \
+		--done "ok 1 shm_lpid" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-shm-lpid.log
+	@echo "✓ ir0-selftest-shm-lpid-arm64"
+
+ir0-selftest-shm-lpid: ir0-selftest-shm-lpid-x86 ir0-selftest-shm-lpid-arm64

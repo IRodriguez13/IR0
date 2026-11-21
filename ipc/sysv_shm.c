@@ -41,6 +41,7 @@ struct shm_seg
 	uintptr_t *frames;
 	int nattch;
 	int cpid;
+	int lpid;
 	struct shm_attach attaches[SHM_ATTACH_MAX];
 };
 
@@ -244,6 +245,7 @@ int64_t sys_shmat(int shmid, const void *shmaddr, int shmflg)
 			s->attaches[ai].va = va;
 			s->attaches[ai].len = len;
 			s->nattch++;
+			s->lpid = (int)process_pid(current_process);
 			return (int64_t)va;
 		}
 	}
@@ -273,6 +275,7 @@ int64_t sys_shmdt(const void *shmaddr)
 			    s->attaches[ai].va != va)
 				continue;
 			shm_detach_at(s, ai);
+			s->lpid = (int)process_pid(current_process);
 			return 0;
 		}
 	}
@@ -301,6 +304,7 @@ int64_t sys_shmctl(int shmid, int cmd, void *buf)
 		st.shm_nattch = s->nattch;
 		st.shm_perm_mode = 0600;
 		st.shm_cpid = s->cpid;
+		st.shm_lpid = s->lpid;
 		if (copy_to_user(buf, &st, sizeof(st)) != 0)
 			return -EFAULT;
 		return 0;

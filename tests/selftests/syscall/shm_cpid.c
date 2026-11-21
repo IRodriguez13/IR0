@@ -29,6 +29,7 @@ struct shm_info
 	int shm_nattch;
 	int shm_perm_mode;
 	int shm_cpid;
+	int shm_lpid;
 };
 
 int main(void)

@@ -26,6 +26,8 @@ struct ir0_shmid_ds
 	int shm_perm_mode;
 	/* pid of the task that created the segment. 0 if unknown. */
 	int shm_cpid;
+	/* pid of the task that last attached or detached. 0 if none. */
+	int shm_lpid;
 };
 
 struct process;
