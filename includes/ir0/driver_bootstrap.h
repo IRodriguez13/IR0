@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
 
 typedef enum
@@ -19,7 +20,31 @@ typedef enum
 
 typedef int (*driver_boot_init_fn)(void);
 
-int driver_bootstrap_register(driver_boot_stage_t stage, const char *name,
-			      driver_boot_init_fn init_fn, int enabled);
-int driver_bootstrap_run_all(void);
-void driver_bootstrap_reset(void);
+/*
+ * One boot driver. The table that holds it decides the ISA (generic table in
+ * drivers/init_drv.c, platform table from ir0_boot_arch_driver_table);
+ * @enabled is the CONFIG_* condition, a compile-time constant.
+ */
+struct driver_boot_entry
+{
+	const char *name;
+	driver_boot_init_fn init;
+	driver_boot_stage_t stage;
+	int enabled;
+};
+
+struct driver_boot_table
+{
+	const struct driver_boot_entry *entries;
+	size_t count;
+};
+
+#define DRIVER_BOOT_TABLE(array) \
+	{ (array), sizeof(array) / sizeof((array)[0]) }
+
+/*
+ * Run every enabled entry stage by stage; within a stage, @tables in order
+ * and each table's entries in order. Returns 0, or -(number of failed inits).
+ */
+int driver_bootstrap_run(const struct driver_boot_table *const *tables,
+			 size_t ntables);

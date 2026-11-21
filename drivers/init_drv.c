@@ -49,14 +49,19 @@ static int boot_init_network(void)
 #endif
 }
 
-static void register_bootstrap_plan(void)
-{
-    driver_bootstrap_reset();
-    driver_bootstrap_register(DRIVER_BOOT_STAGE_NETWORK, "network_stack", boot_init_network,
-                              (CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK));
-    /* Platform devices (PC: i8042, ISA sound, ATA/AHCI/NVMe, virtio-9p, ...). */
-    ir0_boot_arch_drivers();
-}
+static const struct driver_boot_entry generic_boot_drivers[] = {
+    { "network_stack", boot_init_network, DRIVER_BOOT_STAGE_NETWORK,
+      CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK },
+};
+
+static const struct driver_boot_table generic_boot_table =
+    DRIVER_BOOT_TABLE(generic_boot_drivers);
+
+/* Generic drivers first, then the platform (PC: i8042, ISA sound, ATA, ...). */
+static const struct driver_boot_table *const boot_driver_tables[] = {
+    &generic_boot_table,
+    &ir0_boot_arch_driver_table,
+};
 
 /**
  * Initialize multi-language driver subsystem.
@@ -93,8 +98,9 @@ void init_all_drivers(void)
 
     LOG_INFO("DRIVERS", "Initializing all hardware drivers...");
     driver_registry_prepare();
-    register_bootstrap_plan();
-    if (driver_bootstrap_run_all() != 0)
+    if (driver_bootstrap_run(boot_driver_tables,
+                             sizeof(boot_driver_tables) /
+                             sizeof(boot_driver_tables[0])) != 0)
         LOG_WARNING("DRIVERS", "One or more selectable boot drivers failed");
 
     log_subsystem_ok("PS2_KEYBOARD");
