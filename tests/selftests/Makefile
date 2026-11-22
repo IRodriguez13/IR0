@@ -1093,3 +1093,21 @@ $(BIGMEM_BIN): $(BIGMEM_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@$(CC) $(CFLAGS) -o $@ $(BIGMEM_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
+
+# SCHED-LAT-SELFTEST
+SCHED_LAT_SRC := syscall/sched_lat.c
+SCHED_LAT_BIN := $(BUILD_DIR)/sched_lat
+
+.PHONY: sched_lat
+
+sched_lat: $(SCHED_LAT_BIN)
+
+$(SCHED_LAT_BIN): $(SCHED_LAT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest sched_lat"
+	@$(CC) $(CFLAGS) -o $@ $(SCHED_LAT_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
