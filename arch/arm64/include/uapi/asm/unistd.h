@@ -122,6 +122,7 @@
 #define __NR_rt_sigsuspend           133
 #define __NR_rt_sigaction            134
 #define __NR_rt_sigprocmask          135
+#define __NR_rt_sigpending           136
 #define __NR_rt_sigreturn            139
 #define __NR_setpriority             140
 #define __NR_getpriority             141

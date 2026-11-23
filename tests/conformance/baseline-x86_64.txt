@@ -5,6 +5,4 @@
 
 fs_unlink_open_file FAIL  # an unlinked file cannot be read through an fd still open on it (path-based VFS)
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
-sig_block_pending TCONF  # rt_sigpending is ENOSYS
-sig_ignored_is_discarded TCONF  # rt_sigpending is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS

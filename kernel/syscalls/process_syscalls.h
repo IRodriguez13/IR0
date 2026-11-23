@@ -29,6 +29,7 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 			 struct sigaction *oldact, size_t sigsetsize);
 int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 			   size_t sigsetsize);
+int64_t sys_rt_sigpending(sigset_t *set, size_t sigsetsize);
 int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize);
 int64_t sys_sigaltstack(const struct sigaltstack *ss,
 			struct sigaltstack *old_ss);

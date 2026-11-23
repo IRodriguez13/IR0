@@ -184,6 +184,27 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 }
 
 /*
+ * sys_rt_sigpending - Linux rt_sigpending(2) (do_sigpending()): the pending
+ * signals the caller blocks. The kernel set is 8 bytes; a larger
+ * @sigsetsize is EINVAL, a smaller one gets the low bytes.
+ */
+int64_t sys_rt_sigpending(sigset_t *set, size_t sigsetsize)
+{
+	uint64_t pending;
+
+	if (!current_process)
+		return -ESRCH;
+	if (sigsetsize > sizeof(uint64_t))
+		return -EINVAL;
+
+	pending = ir0_sigword_to_linux(current_process->signal_pending &
+				       current_process->signal_mask);
+	if (copy_to_user(set, &pending, sigsetsize) != 0)
+		return -EFAULT;
+	return 0;
+}
+
+/*
  * sys_rt_sigsuspend - Linux rt_sigsuspend(2): replace mask and wait for signal.
  * Always returns -EINTR when a non-blocked signal is pending (rt_sigsuspend(2)).
  */

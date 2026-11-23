@@ -14,6 +14,7 @@
 
 #include "conf.h"
 
+#include <sched.h>
 #include <sys/socket.h>
 #include <time.h>
 
@@ -317,5 +318,30 @@ int sig_nested_handler_runs(void)
 	EXPECT(g_hits, 1);
 	EXPECT(g_nested_seen, 1);
 	EXPECT(g_usr2_hits, 1);
+	return CONF_PASS;
+}
+
+/*
+ * kernel/signal.c do_sigpending(): rt_sigpending reports the blocked
+ * signals that wait for the caller. A set larger than the kernel's is
+ * EINVAL.
+ */
+int sig_rt_sigpending_reports_blocked(void)
+{
+	unsigned long set = SIGBIT(SIGUSR1);
+	unsigned long pending = 0;
+
+	EXPECT(rt_sigaction(SIGUSR1, on_signal, 0, 0), 0);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_BLOCK, &set, 0, 8), 0);
+	EXPECT(S2(SYS_rt_sigpending, &pending, 8), 0);
+	EXPECT(pending, 0);
+	EXPECT(S2(SYS_kill, S0(SYS_getpid), SIGUSR1), 0);
+	EXPECT(S2(SYS_rt_sigpending, &pending, 8), 0);
+	EXPECT(pending, SIGBIT(SIGUSR1));
+	EXPECT_ERR(S2(SYS_rt_sigpending, &pending, 16), EINVAL);
+	EXPECT_ERR(S2(SYS_rt_sigpending, 8, 8), EFAULT);
+	EXPECT(g_hits, 0);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_UNBLOCK, &set, 0, 8), 0);
+	EXPECT(g_hits, 1);
 	return CONF_PASS;
 }

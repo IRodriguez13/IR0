@@ -167,6 +167,7 @@ WRAP3(sys_mprotect, void *, size_t, int)
 WRAP2(sys_kill, pid_t, int)
 WRAP4(sys_rt_sigaction, int, const struct sigaction *, struct sigaction *, size_t)
 WRAP4(sys_rt_sigprocmask, int, const sigset_t *, sigset_t *, size_t)
+WRAP2(sys_rt_sigpending, sigset_t *, size_t)
 WRAP2(sys_rt_sigsuspend, const sigset_t *, size_t)
 WRAP2(sys_sigaltstack, const struct sigaltstack *, struct sigaltstack *)
 WRAP2(sys_getgroups, int, gid_t *)
@@ -388,6 +389,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_RENAMEAT] = wrap_sys_renameat;
   syscall_semantic_table[IR0_SYSCALL_RMDIR] = wrap_sys_rmdir;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGACTION] = wrap_sys_rt_sigaction;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGPENDING] = wrap_sys_rt_sigpending;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGPROCMASK] = wrap_sys_rt_sigprocmask;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGRETURN] = wrap_sys_sigreturn;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGSUSPEND] = wrap_sys_rt_sigsuspend;
