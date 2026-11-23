@@ -723,6 +723,8 @@ int proc_comm_read(char *buf, size_t count, pid_t pid)
  * /proc/[pid]/stat — Linux proc(5) field order.
  *
  * Fields 1..22 carry real process state; utime/stime are scheduler jiffies.
+ * Fields 9-13 are flags, minflt, cminflt, majflt and cmajflt, so utime is 14,
+ * stime 15, cutime 16, cstime 17 and priority 18.
  * Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
  * so every process on it shares that terminal.
  */
@@ -765,7 +767,7 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 
 	len = snprintf(buf, count,
 		       "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
-		       "0 0 0 0 %llu %llu 0 0 0 %d "    /*  9-18 */
+		       "0 0 0 0 0 %llu %llu 0 0 %d "    /*  9-18 */
 		       "0 1 0 %llu %llu %llu 0 0 0 0 0 0 0 0 0 0 0 0\n",
 		       (int)snap.pid,
 		       snap.comm[0] ? snap.comm : "none",
