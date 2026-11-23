@@ -29,11 +29,12 @@ Kconfig. There is no run-time dispatch.
 | `CONFIG_SCHEDULER_POLICY` | Name (`sched_policy_name`) | Policy object |
 |---------------------------|-----------------------------------|----------------|
 | `0` | `round_robin` | `sched/rr.o` |
-| `1` | `cfs` | **Same RR object** (honest alias — no CFS runqueue) |
+| `1` | `cfs` | `sched/cfs.o` (nice-weighted vruntime, one runqueue) |
 | `2` (defconfig) | `priority` | `sched/prio.o` only |
 
-The Makefile links exactly one policy object. `sched_selftest()` checks the
-priority bands (round robin has nothing to check and returns 0);
+The Makefile links exactly one policy object, looked up by policy number
+(`sched-policy-<n>`). `sched_selftest()` checks the priority bands and
+CFS vruntime order (round robin has nothing to check and returns 0);
 `kernel/boot/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
 
 ### Multi-CPU boundary
@@ -133,8 +134,7 @@ returning kexec); arch-guard `[no-busy-wait]` rejects any other caller.
 
 ## Weak Points
 
-- Policy `1` is not a fair CFS runqueue — name only until a real CFS policy
-  file implements the `sched/core.h` contract.
+- CFS keeps one linked runqueue and scans it on every pick (no tree).
 - SMP-oriented scheduling is not the current baseline.
 
 ## Related

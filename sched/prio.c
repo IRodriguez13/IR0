@@ -202,6 +202,25 @@ static process_t *priority_pick_from_band(int b)
 	return NULL;
 }
 
+/* True when the band has a task pick would return. Does not move the cursor. */
+static int priority_band_has_runnable(int b)
+{
+	prio_task_t *walk;
+
+	if (b < 0 || b >= IR0_SCHED_PRIO_BANDS || !prio_bands[b].head)
+		return 0;
+
+	for (walk = prio_bands[b].head; walk; walk = walk->next)
+	{
+		process_t *cand = walk->process;
+
+		if (cand && cand->state != PROCESS_ZOMBIE &&
+		    cand->state != PROCESS_BLOCKED)
+			return 1;
+	}
+	return 0;
+}
+
 static process_t *priority_pick_next(void)
 {
 	process_t *next;
@@ -209,7 +228,7 @@ static process_t *priority_pick_next(void)
 	int b;
 
 	for (highest = IR0_SCHED_PRIO_MAX; highest >= 0; highest--)
-		if ((next = priority_pick_from_band(highest)) != NULL)
+		if (priority_band_has_runnable(highest))
 			break;
 	if (highest < 0)
 		return NULL;
@@ -224,6 +243,12 @@ static process_t *priority_pick_next(void)
 		prio_relief_band = highest - 1;
 	}
 
+	/*
+	 * Relief must not commit the preferred band's RR cursor. pick_from_band()
+	 * advances before it selects, so probing the preferred band and then
+	 * returning a lower one skipped that task on every later turn. A woken
+	 * sleeper sharing the preferred band with a spinner never ran again.
+	 */
 	if (prio_preferred_runs >= PRIO_PREFERRED_RUNS && highest > 0)
 	{
 		if (prio_relief_band < 0 || prio_relief_band >= highest)
@@ -244,7 +269,7 @@ static process_t *priority_pick_next(void)
 	}
 
 	prio_preferred_runs++;
-	return next;
+	return priority_pick_from_band(highest);
 }
 
 process_t *sched_pick_next(void)

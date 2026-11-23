@@ -368,17 +368,21 @@ def cmd_run(args) -> int:
         if not path.is_file():
             raise SystemExit(f"ltp: missing {path} ({hint})")
     chunks = plan_chunks(src, out, args.list)
+    numbered = list(enumerate(chunks))
     if args.only_chunk is not None:
-        chunks = [chunks[args.only_chunk]]
+        numbered = [numbered[args.only_chunk]]
     args.log_dir.mkdir(parents=True, exist_ok=True)
     worst = 0
-    for i, (tests, files) in enumerate(chunks):
+    for i, (tests, files) in numbered:
         log = args.log_dir / f"ltp-{arch}-{i}.log"
         log.unlink(missing_ok=True)
         disk = safety.make_temp_disk(prefix="ir0-ltp-")
         try:
             make_disk(disk, runner, tests, files, args.test_timeout)
-            budget = args.boot_timeout + len(tests) * args.test_timeout
+            # smoke_autokill accepts at most an hour; per-test kills are the
+            # runner's job, this is only the ceiling for the whole chunk.
+            budget = min(3600, args.boot_timeout +
+                         len(tests) * args.test_timeout)
             # The payload prints arbitrary text (errno names, "fork failed",
             # OOM messages), so only a kernel panic ends the run early.
             rc = subprocess.run(

@@ -884,3 +884,71 @@ int fs_open_names_no_special_paths(void)
 	EXPECT(S1(SYS_close, fd), 0);
 	return CONF_PASS;
 }
+
+/* Numeric field @want of a /proc/<pid>/stat line; fields after ')' start at 3. */
+static int stat_field(const char *buf, int want, unsigned long long *out)
+{
+	const char *p = buf;
+	const char *last = 0;
+	int field = 3;
+
+	for (; *p; p++)
+		if (*p == ')')
+			last = p;
+	if (!last)
+		return -1;
+	for (p = last + 1; *p; field++)
+	{
+		while (*p == ' ' || *p == '\n')
+			p++;
+		if (field == want)
+		{
+			*out = 0;
+			if (*p < '0' || *p > '9')
+				return -1;
+			while (*p >= '0' && *p <= '9')
+				*out = *out * 10ULL + (unsigned long long)(*p++ - '0');
+			return 0;
+		}
+		while (*p && *p != ' ' && *p != '\n')
+			p++;
+	}
+	return -1;
+}
+
+/*
+ * proc(5): /proc/<pid>/stat has flags, minflt, cminflt, majflt and cmajflt
+ * as fields 9-13, then utime (14) and stime (15). IR0 printed four fields
+ * there, so utime landed in cmajflt and stime in utime.
+ */
+int fs_proc_stat_utime_field(void)
+{
+	struct timespec ts;
+	char buf[512];
+	unsigned long long cmajflt;
+	unsigned long long utime;
+	volatile unsigned long spin = 0;
+	long start;
+	long now;
+	long n;
+
+	EXPECT(S2(SYS_clock_gettime, CLOCK_MONOTONIC, &ts), 0);
+	start = ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
+	do
+	{
+		unsigned long i;
+
+		for (i = 0; i < (1UL << 20); i++)
+			spin++;
+		EXPECT(S2(SYS_clock_gettime, CLOCK_MONOTONIC, &ts), 0);
+		now = ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
+	} while (now - start < 200L);
+
+	OK(n, read_file("/proc/self/stat", buf, (long)sizeof(buf) - 1));
+	buf[n] = 0;
+	CHECK(stat_field(buf, 13, &cmajflt) == 0);
+	CHECK(stat_field(buf, 14, &utime) == 0);
+	CHECK(cmajflt == 0);
+	CHECK(utime > 0);
+	return CONF_PASS;
+}
