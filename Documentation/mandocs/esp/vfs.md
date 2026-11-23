@@ -7,7 +7,7 @@
 | Estado | stable |
 | Depende de | memory, syscalls, filesystems |
 | Página man | IR0-vfs (sección 7) |
-| Fuentes principales | `fs/vfs.c`, `fs/vfs.h`, `fs/ramtab.c`, `includes/ir0/vfs_backend.h`, `includes/ir0/bpath.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
+| Fuentes principales | `fs/vfs.c`, `fs/vfs.h`, `includes/ir0/vfs_backend.h`, `includes/ir0/named_symlink.h`, `kernel/syscalls/fs_syscalls.c`, `fs/pseudo_fs_registry.c` |
 
 ## 1. Visión general
 
@@ -23,8 +23,8 @@ Eso es solo la mitad del diseño. En la frontera de syscalls, las rutas bajo
 2. **Router VFS** — tabla de montajes + `vfs_ops` para montajes reales (`/`, `/tmp`, …).
 
 Este capítulo documenta ambas etapas: `open("/dev/console")` no llama a `vfs_open()`
-hoy; `open("/tmp/foo")` sí en x86 y en ARM ALL con `bpath` ligado.
-Nombres staged sin montaje usan `fs/ramtab.c`. Ver `Documentation/EARLY_FOLD.md`.
+hoy; `open("/tmp/foo")` sí en x86 y en ARM64, que monta su raíz de bloque
+igual (`root=/dev/vda`).
 
 ## 2. Arquitectura interna
 
@@ -213,7 +213,6 @@ Ver mapa ASCII de la sección 3 y `Documentation/mandocs/diagrams/vfs-routing.mm
 | `/` (minix) | VFS | Bloques disco vía `block_dev` | Sí |
 | `/tmp` (tmpfs) | VFS | Árbol inode RAM | No |
 | `/tmp/*` (ARM ALL) | Adaptador → `vfs_*` | tmpfs | No |
-| nombres staged sin montaje | `fs/ramtab.c` | Tabla | No |
 | `/proc/*` | Syscall | Texto kernel/proceso generado | No |
 | `/sys/*` | Syscall | Registry + estado kernel | Mixto |
 | `/dev/fb0`, `/dev/events0` | Syscall/devfs | Ops con driver | Sí |

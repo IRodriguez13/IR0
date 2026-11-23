@@ -1,6 +1,6 @@
 # IR0 Kernel — Consolidated Development Roadmap
 
-> **Last verified:** 2026-11-07 (ARM64 product link = `kernel-arm64-product.bin` / `kernel-arm64.bin`; swap ABI + MINIX swapfile; userspace KTAP selftests; RPi4 GENET probe; early fold + ipc/ tables; [`EARLY_FOLD.md`](EARLY_FOLD.md); ISD aarch64 rootfs still absent — [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
+> **Last verified:** 2026-11-07 (ARM64 product link = `kernel-arm64-product.bin` / `kernel-arm64.bin`; swap ABI + MINIX swapfile; userspace KTAP selftests; RPi4 GENET probe; early fold + ipc/ tables; retired in Q1, [`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md); ISD aarch64 rootfs still absent — [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md))  
 > **Source of truth:** code under `kernel/`, `mm/`, `sched/`, `fs/`, `net/`, `setup/`, `ktm/`, `scripts/`, and CTR gates in `Makefile`; product userspace lives in the **`ISD`** sibling. README and old docs may lag; **grep the tree before claiming “done”.**
 
 > **Build-system note (2026-10-29):** historical gate names in this roadmap
@@ -98,7 +98,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 |------|--------|----------|
 | Product process/MM on ARM ALL | Partial | `kernel-arm64-product.bin` / `kernel-arm64.bin` (`$(ALL_OBJS)`); heap mm + `exit_mm` |
 | Product `vfs.c` + tmpfs `/tmp` | Done (ALL image) | `ARM64_PRODUCT_VFS_OK` |
-| Staged names → `fs/ramtab.c` | Done | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
+| Staged names → `fs/ramtab.c` | Done | `ARM64_EARLY_PATH_FOLD_OK`; retired in Q1, [`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md) |
 | Staged IPC tables → `ipc/` | Done | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
 | ARM ALL identity/cwd providers | Done | `ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK` |
 | `syscall_dispatch` on ARM SVC | Done | product SVC → `syscall_dispatch`; selftests `openat`/`identity` |

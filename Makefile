@@ -425,6 +425,7 @@ KERNEL_OBJS = \
     mm/brk.o \
     mm/mmap.o \
     mm/map_sys.o \
+    mm/filemap/filemap.o \
     mm/va_search.o \
     fs/files_lifecycle.o \
     fs/files_struct.o \
@@ -434,7 +435,6 @@ KERNEL_OBJS = \
     kernel/process/parent.o \
     kernel/process/resources.o \
     kernel/process/exit_bind.o \
-    fs/cwd.o \
     fs/file_table.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
@@ -470,34 +470,6 @@ KERNEL_OBJS = \
     kernel/syscalls/process_syscalls.o \
     kernel/syscalls/io_syscalls.o \
     kernel/syscalls/epoll_syscalls.o \
-	kernel/syscalls/erfs.o \
-	kernel/syscalls/erfs_fd.o \
-	kernel/syscalls/erfs_bind.o \
-	kernel/syscalls/erfs_cwd.o \
-	kernel/syscalls/erfs_stat.o \
-	kernel/syscalls/erfs_util.o \
-	kernel/syscalls/erfs_vfs.o \
-	kernel/syscalls/erfs_cpio.o \
-	kernel/syscalls/erfs_state.o \
-	kernel/syscalls/erfs_ipc.o \
-	kernel/syscalls/erfs_socket.o \
-	kernel/syscalls/erfs_file.o \
-	kernel/syscalls/erfs_landlock.o \
-	kernel/syscalls/erfs_xattr.o \
-	kernel/syscalls/erfs_mount.o \
-	kernel/syscalls/erfs_path.o \
-	kernel/syscalls/erfs_vfs_ops.o \
-	kernel/syscalls/erfs_meta.o \
-	fs/ramtab.o \
-	ipc/early_anonfd.o \
-	ipc/early_unix.o \
-	ipc/product_ipc.o \
-	kernel/syscalls/product_vfs.o \
-	kernel/syscalls/early_process_state.o \
-	kernel/syscalls/early_process_helpers.o \
-	kernel/syscalls/early_process.o \
-	kernel/syscalls/syscall_identity.o \
-	kernel/syscalls/early_mm.o \
     kernel/entry/syscall_dispatch.o \
     net/sock_udp.o \
     net/sock_icmp.o \
@@ -579,7 +551,6 @@ KERNEL_TEST_OBJS = \
 	kernel/test/test_procfs.o \
 	kernel/test/test_debug_contracts.o \
 	kernel/test/test_fat16_contracts.o \
-	kernel/test/test_bpivot_boot.o \
 	kernel/test/test_process.o \
 	kernel/test/test_cred_access.o \
 	kernel/test/test_resource_registry.o \
@@ -657,9 +628,6 @@ LIB_OBJS = \
     fs/pipe.o \
     mm/uaccess/copy_user.o \
     fs/open_flags.o \
-    fs/bpath.o \
-    fs/bpivot.o \
-    fs/bpivot_boot.o \
     kernel/entry/syscall_table.o \
     fs/stat_user.o \
     fs/named_fifo.o \
@@ -681,7 +649,6 @@ LIB_OBJS = \
     fs/mount_prefix.o \
     block/blockdev.o \
     fs/elf64_image.o \
-    kernel/exec/early_elf_stack.o \
     $(MM_PORT_OBJ) \
     ktm/process_introspect.o \
     drivers/rtc/rtc_calendar.o \

@@ -26,7 +26,7 @@ rule in [DOCS_POLICY.md](DOCS_POLICY.md).
 - `ai_driven_dev/`: tracked AI agent rules, skills, and install/sync workflow (see below).
 - `DECOUPLING.md`: subsystem boundaries, façade map, portable arch conventions, symbol digest.
 - `FILESYSTEM.md`: VFS layer, mounted filesystems, permissions path, and policy.
-- `EARLY_FOLD.md`: staged `early_*` adapter vs product VFS/`ramtab`/`ipc/` and ARM identity/cwd providers.
+- `ai_driven_dev/early-rootfs-retirement.md`: the retired early rootfs (Q1) and where its handlers live in git history.
 - `debts/arm64-core-convergence.md`: ARM scaffolding to replace, not generalize.
 - `VIRTUAL_FILESYSTEMS.md`: `/proc`, `/dev`, `/sys`, and observable interfaces.
 - `PSEUDO_FS_HEART.md`: registry + `/heart` facade + ARCH-3 fd_table lifecycle.

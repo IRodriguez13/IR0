@@ -62,9 +62,7 @@ RED ?= linux_abi_fs
 RED_DIR := $(KERNEL_ROOT)/tests/selftests/kernel
 RED_BIN := $(KERNEL_ROOT)/build/selftests/$(ARCH)/$(RED)
 
-STUB_BIN := $(BUILD_DIR)/init-stub
-
-.PHONY: all conformance fuzz red stub print-fuzz-bin clean
+.PHONY: all conformance fuzz red print-fuzz-bin clean
 
 all: conformance fuzz
 
@@ -97,12 +95,6 @@ $(FUZZ_BIN): fuzz.c $(RT_SRCS) $(RT_HDRS) Makefile | $(BUILD_DIR)
 	@echo "  CC      $(ARCH) fuzz seed=$(SEED) count=$(COUNT)"
 	@$(CC) $(CFLAGS) $(FUZZ_DEFS) -o $@ fuzz.c $(RT_SRCS) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
-
-stub: $(STUB_BIN)
-
-$(STUB_BIN): init_stub.c Makefile | $(BUILD_DIR)
-	$(need_cc)
-	@$(CC) $(CFLAGS) -o $@ init_stub.c
 
 red: $(RED_BIN)
 

@@ -35,6 +35,9 @@ int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 /* Deliver SIGSEGV, or kill the task when no handler takes it (page_fault.c). */
 void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 		  const struct page_fault_info *info);
+/* SIGBUS (BUS_ADRERR) for an access past the end of a mapped file. */
+void pf_user_sigbus(process_t *p, uint64_t *stack, uint64_t fault_addr,
+		    const struct page_fault_info *info);
 
 /*
  * Diagnostic hooks (mm/diag.c). They only report; the fault policy above

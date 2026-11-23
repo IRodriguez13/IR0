@@ -11,6 +11,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
+#include <ir0/page.h>
 #include <ir0/virtio_mmio.h>
 
 #include <stddef.h>
@@ -147,18 +148,22 @@ static int blk_xfer_buf(struct virtio_mmio_dev *d, uint32_t type, uint64_t secto
 	g_req.sector = sector;
 	g_status = 0xff;
 
-	g_desc[0].addr = (uint64_t)(uintptr_t)&g_req;
+	/*
+	 * The device reads guest-physical addresses. @data may be a direct-map
+	 * pointer (a page cache frame), which is not identity mapped.
+	 */
+	g_desc[0].addr = (uint64_t)virt_to_phys(&g_req);
 	g_desc[0].len = sizeof(g_req);
 	g_desc[0].flags = VIRTQ_DESC_F_NEXT;
 	g_desc[0].next = 1;
 
-	g_desc[1].addr = (uint64_t)(uintptr_t)data;
+	g_desc[1].addr = (uint64_t)virt_to_phys(data);
 	g_desc[1].len = BLK_SECTOR;
 	g_desc[1].flags = VIRTQ_DESC_F_NEXT |
 			   (type == VIRTIO_BLK_T_IN ? VIRTQ_DESC_F_WRITE : 0U);
 	g_desc[1].next = 2;
 
-	g_desc[2].addr = (uint64_t)(uintptr_t)&g_status;
+	g_desc[2].addr = (uint64_t)virt_to_phys(&g_status);
 	g_desc[2].len = 1;
 	g_desc[2].flags = VIRTQ_DESC_F_WRITE;
 	g_desc[2].next = 0;

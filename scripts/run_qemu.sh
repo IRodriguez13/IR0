@@ -179,7 +179,7 @@ if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = x86-64 ]; then
 		exit 1
 	fi
 fi
-# ARM64 qemu-virt: optional virtio-blk (kernel registers vda; early rootfs can bind /init from disk).
+# ARM64 qemu-virt: optional virtio-blk root (the kernel mounts vda with root=/dev/vda).
 if [ -z "$DISK" ] && [ "$NO_DISK" = 0 ] && [ "$ARCH" = arm64 ]; then
 	resolve_isd_root_disk || true
 	if [ -z "$DISK" ] && [ -f "$ROOT/disk.img" ]; then
@@ -230,7 +230,8 @@ if [ "$ARCH" = arm64 ]; then
 	set -- "$@" -global virtio-mmio.force-legacy=false
 	if [ -n "$DISK" ]; then
 		set -- "$@" -drive "file=$DISK,format=raw,if=none,id=ir0_root" \
-			-device virtio-blk-device,drive=ir0_root
+			-device virtio-blk-device,drive=ir0_root \
+			-append "root=/dev/vda"
 	fi
 	if [ "${IR0_NET:-1}" != 0 ]; then
 		set -- "$@" -netdev user,id=net0 \

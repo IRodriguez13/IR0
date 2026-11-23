@@ -25,6 +25,11 @@
 #include <ir0/errno.h>
 #include <ir0/clock.h>
 #include <ir0/cred.h>
+#include <ir0/mm_alloc.h>
+#include <ir0/mm_port.h>
+#include <ir0/page.h>
+#include <ir0/paging.h>
+#include <ir0/pmm.h>
 
 static int tmpfs_stat(const char *path, stat_t *buf);
 static int tmpfs_mkdir(const char *path, mode_t mode);
@@ -35,20 +40,27 @@ static int tmpfs_chown(const char *path, uid_t owner, gid_t group);
 static int tmpfs_truncate(const char *path, size_t length);
 static int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);
 
-#define TMPFS_MAX_FILES 128
-#define TMPFS_MAX_FILE_SIZE 65536 /* 64KB max per file */
 #define TMPFS_MAX_NAME_LEN 255
 #define TMPFS_MAX_DIRS 32
+#define TMPFS_PAGE ((size_t)IR0_MM_PAGE_SIZE)
+/* Largest file size a write may reach (the page table is one array). */
+#define TMPFS_MAX_WRITE_PAGES ((size_t)1 << 20)
 
+/*
+ * Regular-file contents live in whole pages (Linux shmem): pages[i] is the
+ * physical frame holding bytes [i * TMPFS_PAGE, (i + 1) * TMPFS_PAGE), or 0
+ * for a hole that reads as zeros. Only written pages are allocated.
+ */
 typedef struct tmpfs_file
 {
     uint32_t ino;
     uint16_t mode;
     uint32_t uid;
     uint32_t gid;
-    uint32_t size;
-    size_t data_cap;
-    uint8_t *data;
+    size_t size;
+    size_t npages;     /* slots in pages[] */
+    uintptr_t *pages;
+    size_t nr_frames;  /* allocated frames, for st_blocks */
     time_t mtime;
     uint32_t nlink;
 } tmpfs_file_t;
@@ -68,12 +80,18 @@ typedef struct tmpfs_inode
     time_t mtime;
 } tmpfs_inode_t;
 
+/*
+ * One mount. Linux shmem limits: size and nr_inodes both default to half
+ * of RAM (in pages); every name counts as an inode, as in shmem_link().
+ */
 typedef struct tmpfs_data
 {
     tmpfs_inode_t *root;
-    tmpfs_inode_t inodes[TMPFS_MAX_FILES];
     uint32_t next_ino;
-    size_t total_size;
+    size_t nr_inodes;
+    size_t max_inodes;
+    size_t nr_pages;
+    size_t max_pages;
     char mount_point[256];  /* Mount point path (e.g., "/tmp") */
 } tmpfs_data_t;
 
@@ -162,21 +180,42 @@ static const char *tmpfs_get_relative_path(const char *full_path, const char *mo
 
 static tmpfs_inode_t *tmpfs_alloc_inode(tmpfs_data_t *tmpfs)
 {
-    if (!tmpfs)
-        return NULL;
+    tmpfs_inode_t *inode;
 
-    for (int i = 0; i < TMPFS_MAX_FILES; i++)
+    if (!tmpfs || tmpfs->nr_inodes >= tmpfs->max_inodes)
+        return NULL;
+    inode = (tmpfs_inode_t *)kmalloc(sizeof(*inode));
+    if (!inode)
+        return NULL;
+    memset(inode, 0, sizeof(*inode));
+    inode->ino = ++tmpfs->next_ino;
+    inode->mtime = clock_get_current_time();
+    tmpfs->nr_inodes++;
+    return inode;
+}
+
+/* Give back an inode that was never linked into a directory. */
+static void tmpfs_drop_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
+{
+    kfree(inode);
+    if (tmpfs->nr_inodes > 0)
+        tmpfs->nr_inodes--;
+}
+
+/* Free the frames of pages [first, npages) and uncharge them. */
+static void tmpfs_free_pages_from(tmpfs_data_t *tmpfs, tmpfs_file_t *file,
+                                  size_t first)
+{
+    for (size_t i = first; i < file->npages; i++)
     {
-        if (tmpfs->inodes[i].ino == 0)
-        {
-            tmpfs_inode_t *inode = &tmpfs->inodes[i];
-            memset(inode, 0, sizeof(tmpfs_inode_t));
-            inode->ino = ++tmpfs->next_ino;
-            inode->mtime = clock_get_current_time();
-            return inode;
-        }
+        if (!file->pages[i])
+            continue;
+        pmm_free_frame(file->pages[i]);
+        file->pages[i] = 0;
+        file->nr_frames--;
+        if (tmpfs->nr_pages > 0)
+            tmpfs->nr_pages--;
     }
-    return NULL;
 }
 
 static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
@@ -193,12 +232,8 @@ static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
             file->nlink--;
         if (file->nlink == 0)
         {
-            if (file->data)
-                kfree(file->data);
-            if (tmpfs->total_size >= file->size)
-                tmpfs->total_size -= file->size;
-            else
-                tmpfs->total_size = 0;
+            tmpfs_free_pages_from(tmpfs, file, 0);
+            kfree(file->pages);
             kfree(file);
         }
     }
@@ -233,8 +268,23 @@ static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
         child = next;
     }
     
-    /* Clear inode */
-    memset(inode, 0, sizeof(tmpfs_inode_t));
+    tmpfs_drop_inode(tmpfs, inode);
+}
+
+/*
+ * Append @inode to @parent's list. Inode numbers only grow, so the list
+ * stays in inode order and readdir can hand out the inode number as a
+ * stable position cookie (vfs_dirent.off).
+ */
+static void tmpfs_add_child(tmpfs_inode_t *parent, tmpfs_inode_t *inode)
+{
+    tmpfs_inode_t **link = &parent->children;
+
+    while (*link)
+        link = &(*link)->sibling;
+    inode->parent = parent;
+    inode->sibling = NULL;
+    *link = inode;
 }
 
 static tmpfs_inode_t *tmpfs_lookup_inode(tmpfs_data_t *tmpfs, const char *rel_path)
@@ -298,6 +348,20 @@ static tmpfs_inode_t *tmpfs_lookup_inode(tmpfs_data_t *tmpfs, const char *rel_pa
     return current;
 }
 
+/* Linux shmem_default_max_blocks/_inodes: half of RAM, in pages. */
+static void tmpfs_default_limits(tmpfs_data_t *tmpfs)
+{
+    size_t total = 0;
+    size_t used = 0;
+    size_t free_frames = 0;
+
+    ir0_mm_pmm_stats(&total, &used, &free_frames);
+    tmpfs->max_pages = total / 2;
+    tmpfs->max_inodes = total / 2;
+    if (tmpfs->max_inodes < 1)
+        tmpfs->max_inodes = 1;
+}
+
 static int tmpfs_mount(const char *dev_name __attribute__((unused)),
                        const char *dir_name)
 {
@@ -318,6 +382,7 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
         return -ENOMEM;
 
     memset(tmpfs, 0, sizeof(tmpfs_data_t));
+    tmpfs_default_limits(tmpfs);
     strncpy(tmpfs->mount_point, dir_name, sizeof(tmpfs->mount_point) - 1);
     tmpfs->mount_point[sizeof(tmpfs->mount_point) - 1] = '\0';
 
@@ -433,6 +498,7 @@ static int tmpfs_stat(const char *path, stat_t *buf)
         buf->st_uid = inode->file->uid;
         buf->st_gid = inode->file->gid;
         buf->st_mtime = inode->file->mtime;
+        buf->st_blocks = inode->file->nr_frames * (TMPFS_PAGE / 512);
     }
     else
     {
@@ -512,9 +578,7 @@ static int tmpfs_mkdir(const char *path, mode_t mode)
     new_inode->is_dir = true;
     strncpy(new_inode->name, dirname, TMPFS_MAX_NAME_LEN);
     new_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
-    new_inode->parent = parent;
-    new_inode->sibling = parent->children;
-    parent->children = new_inode;
+    tmpfs_add_child(parent, new_inode);
     
     return 0;
 }
@@ -579,7 +643,7 @@ int tmpfs_create_file(const char *path, mode_t mode)
 
         if (!file)
         {
-            memset(new_inode, 0, sizeof(*new_inode));
+            tmpfs_drop_inode(tmpfs, new_inode);
             return -ENOMEM;
         }
         memset(file, 0, sizeof(*file));
@@ -594,9 +658,7 @@ int tmpfs_create_file(const char *path, mode_t mode)
     new_inode->is_dir = false;
     strncpy(new_inode->name, filename, TMPFS_MAX_NAME_LEN);
     new_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
-    new_inode->parent = parent;
-    new_inode->sibling = parent->children;
-    parent->children = new_inode;
+    tmpfs_add_child(parent, new_inode);
     
     return 0;
 }
@@ -604,6 +666,9 @@ int tmpfs_create_file(const char *path, mode_t mode)
 int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
 {
     tmpfs_file_t *file;
+    size_t pos;
+    size_t to_read;
+    size_t done = 0;
 
     if (read_count)
         *read_count = 0;
@@ -623,21 +688,88 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
     if (!file)
         return -EIO;
     
-    if ((size_t)offset >= file->size)
+    pos = (size_t)offset;
+    if (pos >= file->size)
         return 0;  /* EOF */
-    
-    size_t available = file->size - (size_t)offset;
-    size_t to_read = (count < available) ? count : available;
-    
-    if (to_read > 0 && file->data)
+    to_read = file->size - pos;
+    if (count < to_read)
+        to_read = count;
+
+    while (done < to_read)
     {
-        memcpy(buf, file->data + offset, to_read);
+        size_t idx = (pos + done) / TMPFS_PAGE;
+        size_t in_page = (pos + done) % TMPFS_PAGE;
+        size_t chunk = TMPFS_PAGE - in_page;
+
+        if (chunk > to_read - done)
+            chunk = to_read - done;
+        if (idx < file->npages && file->pages[idx])
+            memcpy((uint8_t *)buf + done,
+                   (const uint8_t *)phys_to_virt(file->pages[idx]) + in_page,
+                   chunk);
+        else
+            memset((uint8_t *)buf + done, 0, chunk);
+        done += chunk;
     }
     
     if (read_count)
-        *read_count = to_read;
+        *read_count = done;
     
     return 0;
+}
+
+/* Make pages[] hold at least @need slots (geometric growth). */
+static int tmpfs_reserve_slots(tmpfs_file_t *file, size_t need)
+{
+    size_t cap;
+    uintptr_t *slots;
+
+    if (need <= file->npages)
+        return 0;
+    if (need > TMPFS_MAX_WRITE_PAGES)
+        return -EFBIG;
+    cap = file->npages ? file->npages : 4;
+    while (cap < need)
+        cap *= 2;
+    if (cap > TMPFS_MAX_WRITE_PAGES)
+        cap = TMPFS_MAX_WRITE_PAGES;
+    slots = (uintptr_t *)kcalloc(cap, sizeof(*slots));
+    if (!slots)
+        return -ENOMEM;
+    if (file->pages)
+    {
+        memcpy(slots, file->pages, file->npages * sizeof(*slots));
+        kfree(file->pages);
+    }
+    file->pages = slots;
+    file->npages = cap;
+    return 0;
+}
+
+/* The frame for page @idx, allocated (zeroed and charged) on first use. */
+static uint8_t *tmpfs_page_for_write(tmpfs_data_t *tmpfs, tmpfs_file_t *file,
+                                     size_t idx, int *err)
+{
+    uintptr_t phys;
+
+    if (file->pages[idx])
+        return (uint8_t *)phys_to_virt(file->pages[idx]);
+    if (tmpfs->nr_pages >= tmpfs->max_pages)
+    {
+        *err = -ENOSPC;
+        return NULL;
+    }
+    phys = mm_alloc_frame(MM_ALLOC_DIRECT_RECLAIM);
+    if (!phys)
+    {
+        *err = -ENOSPC;
+        return NULL;
+    }
+    paging_zero_phys_page(phys);
+    file->pages[idx] = phys;
+    file->nr_frames++;
+    tmpfs->nr_pages++;
+    return (uint8_t *)phys_to_virt(phys);
 }
 
 int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
@@ -645,8 +777,9 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
     tmpfs_data_t *tmpfs;
     tmpfs_inode_t *inode;
     tmpfs_file_t *file;
-    size_t old_size;
-    size_t offset_u;
+    size_t pos;
+    size_t done = 0;
+    int ret;
 
     if (written_count)
         *written_count = 0;
@@ -672,49 +805,42 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
 
     if (count == 0)
         return 0;
-    
-    /* Calculate new size */
-    offset_u = (size_t)offset;
-    if (offset_u > TMPFS_MAX_FILE_SIZE ||
-        count > TMPFS_MAX_FILE_SIZE - offset_u)
+
+    pos = (size_t)offset;
+    if (pos > TMPFS_MAX_WRITE_PAGES * TMPFS_PAGE ||
+        count > TMPFS_MAX_WRITE_PAGES * TMPFS_PAGE - pos)
         return -EFBIG;
-    size_t new_size = offset_u + count;
-    old_size = file->size;
-    
-    /* Reallocate if needed */
-    if (new_size > file->size && new_size > file->data_cap)
+    ret = tmpfs_reserve_slots(file, (pos + count + TMPFS_PAGE - 1) / TMPFS_PAGE);
+    if (ret != 0)
+        return ret;
+
+    /* Linux generic_perform_write: a short write stops at the first error. */
+    while (done < count)
     {
-        uint8_t *new_data = (uint8_t *)kmalloc(new_size);
-        if (!new_data)
-            return -ENOMEM;
-        
-        /* Copy existing data */
-        if (file->data)
+        size_t idx = (pos + done) / TMPFS_PAGE;
+        size_t in_page = (pos + done) % TMPFS_PAGE;
+        size_t chunk = TMPFS_PAGE - in_page;
+        uint8_t *page;
+        int err = 0;
+
+        if (chunk > count - done)
+            chunk = count - done;
+        page = tmpfs_page_for_write(tmpfs, file, idx, &err);
+        if (!page)
         {
-            memcpy(new_data, file->data, file->size);
-            kfree(file->data);
+            if (done == 0)
+                return err;
+            break;
         }
-        
-        file->data = new_data;
-        file->data_cap = new_size;
+        memcpy(page + in_page, (const uint8_t *)buf + done, chunk);
+        done += chunk;
     }
 
-    if (new_size > old_size)
-    {
-        memset(file->data + old_size, 0, new_size - old_size);
-        file->size = new_size;
-        tmpfs->total_size += new_size - old_size;
-    }
-    
-    /* Write data */
-    if (count > 0)
-    {
-        memcpy(file->data + offset_u, buf, count);
-        file->mtime = clock_get_current_time();
-    }
-    
+    if (pos + done > file->size)
+        file->size = pos + done;
+    file->mtime = clock_get_current_time();
     if (written_count)
-        *written_count = count;
+        *written_count = done;
     
     return 0;
 }
@@ -780,9 +906,7 @@ static int tmpfs_link(const char *oldpath, const char *newpath)
     dst->file->nlink++;
     strncpy(dst->name, linkname, TMPFS_MAX_NAME_LEN);
     dst->name[TMPFS_MAX_NAME_LEN] = '\0';
-    dst->parent = parent;
-    dst->sibling = parent->children;
-    parent->children = dst;
+    tmpfs_add_child(parent, dst);
 
     return 0;
 }
@@ -897,16 +1021,16 @@ static int tmpfs_chown(const char *path, uid_t owner, gid_t group)
 }
 
 /*
- * tmpfs_truncate - Set regular file length; extending zero-fills new bytes
- * when a larger buffer is allocated. Shrinking keeps the backing allocation
- * but hides bytes beyond @length from readers.
+ * tmpfs_truncate - Set a regular file's length (Linux shmem_setattr). A
+ * longer file reads zeros past the old end without allocating; a shorter
+ * one frees whole pages past the new end and zeroes the rest of the last
+ * page, so growing it again shows zeros.
  */
 static int tmpfs_truncate(const char *path, size_t length)
 {
     tmpfs_data_t *tmpfs;
     tmpfs_inode_t *inode;
     tmpfs_file_t *file;
-    size_t old_size;
 
     if (!path)
         return -EINVAL;
@@ -924,60 +1048,24 @@ static int tmpfs_truncate(const char *path, size_t length)
     if (!file)
         return -EIO;
 
-    if (length > TMPFS_MAX_FILE_SIZE)
-        return -EFBIG;
+    if (length < file->size)
+    {
+        size_t keep = (length + TMPFS_PAGE - 1) / TMPFS_PAGE;
+        size_t tail = length % TMPFS_PAGE;
 
-    old_size = file->size;
-
-    if (length < file->size) {
-        file->size = (uint32_t)length;
-        tmpfs->total_size -= old_size - length;
-        file->mtime = clock_get_current_time();
-        return 0;
+        tmpfs_free_pages_from(tmpfs, file, keep);
+        if (tail != 0 && keep - 1 < file->npages && file->pages[keep - 1])
+            memset((uint8_t *)phys_to_virt(file->pages[keep - 1]) + tail, 0,
+                   TMPFS_PAGE - tail);
     }
-
-    if (length > file->size) {
-        /*
-         * Reuse the existing allocation when it already covers @length so
-         * the extended range is zero-filled without a new kmalloc.
-         */
-        if (file->data && length <= file->data_cap) {
-            memset(file->data + file->size, 0, length - file->size);
-            file->size = (uint32_t)length;
-            tmpfs->total_size += length - old_size;
-            file->mtime = clock_get_current_time();
-            return 0;
-        }
-
-        uint8_t *new_data = (uint8_t *)kmalloc(length);
-        if (!new_data)
-            return -ENOMEM;
-
-        if (file->data) {
-            memcpy(new_data, file->data, file->size);
-            kfree(file->data);
-        }
-
-        memset(new_data + file->size, 0, length - file->size);
-        file->data = new_data;
-        file->size = (uint32_t)length;
-        file->data_cap = length;
-        tmpfs->total_size += length - old_size;
-        file->mtime = clock_get_current_time();
-        return 0;
-    }
-
+    file->size = length;
     file->mtime = clock_get_current_time();
     return 0;
 }
 
 int tmpfs_statfs(const char *path, struct ir0_statfs *buf)
 {
-    const size_t block_size = 4096;
-    const size_t capacity = TMPFS_MAX_FILES * TMPFS_MAX_FILE_SIZE;
     tmpfs_data_t *tmpfs;
-    size_t used_blocks;
-    size_t used_inodes = 0;
 
     if (!path || !buf)
         return -EINVAL;
@@ -986,42 +1074,15 @@ int tmpfs_statfs(const char *path, struct ir0_statfs *buf)
     if (!tmpfs)
         return -ENODEV;
 
-    for (int i = 0; i < TMPFS_MAX_FILES; i++)
-    {
-        tmpfs_inode_t *entry = &tmpfs->inodes[i];
-
-        if (entry->ino == 0)
-            continue;
-        if (!entry->file)
-        {
-            used_inodes++;
-            continue;
-        }
-
-        bool seen = false;
-        for (int j = 0; j < i; j++)
-        {
-            if (tmpfs->inodes[j].ino != 0 &&
-                tmpfs->inodes[j].file == entry->file)
-            {
-                seen = true;
-                break;
-            }
-        }
-        if (!seen)
-            used_inodes++;
-    }
-
     memset(buf, 0, sizeof(*buf));
-    used_blocks = (tmpfs->total_size + block_size - 1) / block_size;
     buf->f_type = IR0_TMPFS_MAGIC;
-    buf->f_bsize = block_size;
-    buf->f_frsize = block_size;
-    buf->f_blocks = capacity / block_size;
-    buf->f_bfree = buf->f_blocks - used_blocks;
+    buf->f_bsize = TMPFS_PAGE;
+    buf->f_frsize = TMPFS_PAGE;
+    buf->f_blocks = tmpfs->max_pages;
+    buf->f_bfree = tmpfs->max_pages - tmpfs->nr_pages;
     buf->f_bavail = buf->f_bfree;
-    buf->f_files = TMPFS_MAX_FILES;
-    buf->f_ffree = TMPFS_MAX_FILES - used_inodes;
+    buf->f_files = tmpfs->max_inodes;
+    buf->f_ffree = tmpfs->max_inodes - tmpfs->nr_inodes;
     buf->f_namelen = TMPFS_MAX_NAME_LEN;
     return 0;
 }
@@ -1060,6 +1121,7 @@ static int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_e
         strncpy(entries[count].name, child->name, sizeof(entries[count].name) - 1);
         entries[count].name[sizeof(entries[count].name) - 1] = '\0';
         entries[count].type = child->is_dir ? DT_DIR : DT_REG;
+        entries[count].off = child->ino;
         count++;
         child = child->sibling;
     }

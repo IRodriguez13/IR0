@@ -35,6 +35,11 @@ int sys_mprotect(void *addr, size_t len, int prot)
 	return mm_mprotect(addr, len, prot);
 }
 
+int sys_msync(void *addr, size_t len, int flags)
+{
+	return mm_msync(addr, len, flags);
+}
+
 /*
  * sysinfo(2) — memory, load and uptime in one struct.
  *

@@ -43,11 +43,6 @@ extern void test_syscall_restart_frame_abi(void);
 extern void test_elf_initial_brk_abi(void);
 extern void test_elf_local_reloc_abi(void);
 extern void test_elf_interp_abi(void);
-extern void test_early_rootfs_abi(void);
-extern void test_early_cpio_abi(void);
-extern void test_early_process_abi(void);
-extern void test_early_elf_stack_abi(void);
-extern void test_early_mm_abi(void);
 extern void test_musl_cred_abi(void);
 extern void test_credential_saved_ids(void);
 extern void test_blockdev_facade_contract(void);
@@ -85,7 +80,6 @@ extern void test_procfs_linux_abi(void);
 extern void test_pseudo_fs_honesty(void);
 extern void test_matrix_capture_suite(void);
 extern void test_mount_prefix_boundary(void);
-extern void test_bpath_fold(void);
 extern void test_arm64_boot_info_fdt_contract(void);
 extern void test_arm64_syscall_decode_contract(void);
 extern void test_fault_signal_linux_classes(void);
@@ -149,11 +143,6 @@ static void (*test_functions[])(void) = {
 	test_elf_initial_brk_abi,
 	test_elf_local_reloc_abi,
 	test_elf_interp_abi,
-	test_early_rootfs_abi,
-	test_early_cpio_abi,
-	test_early_process_abi,
-	test_early_elf_stack_abi,
-	test_early_mm_abi,
 	test_musl_cred_abi,
 	test_credential_saved_ids,
 	test_blockdev_facade_contract,
@@ -191,7 +180,6 @@ static void (*test_functions[])(void) = {
 	test_pseudo_fs_honesty,
 	test_matrix_capture_suite,
 	test_mount_prefix_boundary,
-	test_bpath_fold,
 	test_arm64_boot_info_fdt_contract,
 	test_arm64_boot_info_genet_fdt,
 	test_arm64_boot_info_simplefb_mode,

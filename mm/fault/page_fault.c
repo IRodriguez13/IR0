@@ -14,6 +14,7 @@
 
 #include <ir0/oops.h>
 #include <ir0/fault.h>
+#include <ir0/signals.h>
 #include "page_fault_internal.h"
 
 void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
@@ -38,6 +39,22 @@ void pf_user_segv(process_t *p, uint64_t *stack, uint64_t fault_addr,
 	 * the parent's wait(2) reports the signal through exit_signal.
 	 */
 	signal_exit_current(SIGSEGV);
+}
+
+void pf_user_sigbus(process_t *p, uint64_t *stack, uint64_t fault_addr,
+		    const struct page_fault_info *info)
+{
+	struct ir0_fault fault;
+
+	if (!p)
+		panic("[PF] userspace fault without process");
+
+	/* Linux filemap_fault -> VM_FAULT_SIGBUS: si_code BUS_ADRERR, si_addr. */
+	ir0_fault_from_page_fault(&fault, info);
+	fault.kind = IR0_FAULT_OTHER;
+	fault.addr = (uintptr_t)fault_addr;
+	fault.si_code = BUS_ADRERR;
+	force_sig_fault(SIGBUS, &fault, stack);
 }
 
 void mm_page_fault_handle(const struct page_fault_info *info, void *irq_frame)

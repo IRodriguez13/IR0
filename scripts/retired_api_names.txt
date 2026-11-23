@@ -278,3 +278,26 @@ arch_syscall_frame_arm64 <asm/syscall_frame.h>
 arch_syscall_frame_x86_64 <asm/syscall_frame.h>
 arch_task_context_arm64 <asm/task_context.h>
 arch_task_context_x86_64 <asm/task_context.h>
+
+# Early rootfs world (Q1): the block root mounts through vfs_init_root()
+# (root=/dev/<name>) and PID 1 comes from the common kexecve("/sbin/init").
+syscall_context_provider syscall_handler_set() on struct syscall_handler_table
+syscall_context_provider_register syscall_handler_set()
+syscall_context_handler_set syscall_handler_set()
+syscall_context_handler_t syscall_handler_t
+ir0_product_vfs_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+ir0_product_ipc_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+ir0_product_cwd_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+ir0_product_identity_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+early_process_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+early_process_identity_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+early_mm_provider the common syscall dispatch (kernel/entry/syscall_dispatch.c)
+ir0_cwd_product current_process cwd (fs/path.c)
+early_rootfs_try_bind_block vfs_init_root() with root=/dev/<name>
+early_rootfs_ready vfs_init_root() with root=/dev/<name>
+early_rootfs_cpio_ready vfs_init_root() with root=/dev/<name>
+ir0_bpivot_product_boot vfs_init_root() with root=/dev/<name>
+ir0_bpath_vfs_product_ops the VFS (includes/ir0/vfs.h)
+ir0_boot_port_maybe_seed_init_from_embedded (nothing; PID 1 comes from the root disk)
+ramtab_reset (nothing; the CPIO RAM table is gone)
+ep_g_euid current_process credentials (includes/ir0/cred.h)

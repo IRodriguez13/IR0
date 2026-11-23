@@ -789,7 +789,7 @@ ir0-selftest-$(1)-abi-x86: kernel-x64-userspace.iso
 	@echo "✓ ir0-selftest-$(1)-abi-x86"
 
 ir0-selftest-$(1)-abi-arm64: kernel-arm64-product.bin
-	@$$(MAKE) -C tests/conformance ARCH=arm64 stub red RED=linux_abi_$(1)
+	@$$(MAKE) -C tests/conformance ARCH=arm64 red RED=linux_abi_$(1)
 	@$$(IR0_ABI_SELFTEST_RUN) --arch arm64 \
 		--cases $$(KERNEL_ROOT)/tests/selftests/kernel/linux_abi_$(1).h \
 		--binary $$(KERNEL_ROOT)/build/selftests/arm64/linux_abi_$(1) \

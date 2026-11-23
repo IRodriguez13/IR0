@@ -141,8 +141,8 @@ Private duplicates of public helpers: `find_hpet.c` static `memcmp` and
 `acpi_memcmp` — DONE (call `memcmp`). `sock_strnlen` was already gone at
 `bc3e0e15`, so no public `strnlen` is needed yet. Still open:
 `fs/binfmt_elf.c` `exec_strdup_kern` (add `kstrdup` only if a second
-user appears) and `kernel/exec/early_elf_stack.c` `cstr_len` (a NULL-tolerant
-`strlen`; the file is also built for host tests). The ARM64 freestanding
+user appears). `kernel/exec/early_elf_stack.c` `cstr_len` left with the
+early rootfs (Q1). The ARM64 freestanding
 string copies (`portable_string.c`, `freestanding_stubs.c`) left with the
 board `-min` images.
 
@@ -179,7 +179,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `rtc_write_register`, `rtc_get_time_string`, `rtc_get_date_string` (`rtc.h`) | 0 | DONE: deleted |
 | `delay_ms` (`ir0/vga.h`!) | 0 | DONE: deleted |
 | `ir0_clock_wait_service_clockevents` (`clock_wait.h`) | 0 | DONE (deleted with the clock-wait idle step) |
-| `minix_now_seconds` (13), `pseudo_fs_stat_now` (16), `clock_now_ticks` (erfs, 5) | private | T2 OPEN: `minix_now_seconds` is a pure alias, MERGE INTO `clock_get_current_time` (fs/ is owned by the fs data-loss work; do it after that lands). `pseudo_fs_stat_now` fills three stat fields: KEEP. `clock_now_ticks` reads the early rootfs's own simulated clock, not the kernel clock: KEEP, rename `erfs_clock_now` (namespace) |
+| `minix_now_seconds` (13), `pseudo_fs_stat_now` (16) | private | T2 OPEN: `minix_now_seconds` is a pure alias, MERGE INTO `clock_get_current_time` (fs/ is owned by the fs data-loss work; do it after that lands). `pseudo_fs_stat_now` fills three stat fields: KEEP. `clock_now_ticks` (the early rootfs's simulated clock) is deleted with the early rootfs (Q1) |
 
 ### 1.6 Process and fd lookup
 
@@ -196,7 +196,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `ir0_fd_install_product` | `ir0/fd_install.h` | 0 | DELETE |
 | `fd_entry_is_redirected` (inline) | `ir0/fd_get.h` | 7 (1 file) | PRIVATE to its user |
 | `fd_slot_note_created/destroyed`, `fd_slot_stats_get` | `ir0/files_struct.h` | 14 / 4 / 1 | KEEP (accounting); move the defs out of `io_syscalls.c` |
-| erfs fd helpers (`close_fd`, `fd_is_open`, `flags_of_fd`, `slot_from_fd`, ... in `kernel/syscalls/erfs_internal.h`) and `early_rootfs_fd_is_*` (`ir0/early_rootfs.h`, 9 predicates) | — | — | Separate early-rootfs fd world; KEEP private but do not grow; one `early_rootfs_fd_kind(fd)` could replace the 9 `_is_*` predicates |
+| erfs fd helpers and `early_rootfs_fd_is_*` | — | 0 | DONE: deleted with the early rootfs (Q1) |
 
 ### 1.7 Page map / unmap / protect and mm activation — partly IN FLIGHT (`fix/security-2`, `refactor/mm-diag-headers`)
 

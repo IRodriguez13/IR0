@@ -165,18 +165,36 @@ static void getdents_dot_meta(const char *dir_path, const stat_t *dir_st,
     *ino = (uint64_t)parent_st.st_ino;
 }
 
-static int getdents_visible_count(const struct vfs_dirent *entries, int entry_count)
+/*
+ * Position cookies (d_off and the fd offset). "." and ".." are 1 and 2.
+ * When the backend gives each entry a stable cookie (vfs_dirent.off,
+ * growing along the list) an entry's cookie is 2 + off: removing names
+ * already read does not move the ones after them, so a walk that unlinks
+ * what it reads (rm -rf, LTP tst_rmdir) still sees every entry. Otherwise
+ * the cookie is the entry's index after the dots, as before.
+ */
+static int getdents_stable_cookies(const struct vfs_dirent *entries,
+                                   int entry_count)
 {
-  int visible = 0;
+  uint64_t last = 0;
 
   for (int i = 0; i < entry_count; i++)
   {
     if (getdents_skip_name(entries[i].name))
       continue;
-    visible++;
+    if (entries[i].off <= last || entries[i].off > INT64_MAX - 3)
+      return 0;
+    last = entries[i].off;
   }
+  return 1;
+}
 
-  return visible;
+static uint64_t getdents_cookie(const struct vfs_dirent *ent, int visible_idx,
+                                int stable)
+{
+  if (stable)
+    return ent->off + GETDENTS_DOT_ENTRIES;
+  return (uint64_t)visible_idx + 1;
 }
 
 /* Linux filldir: ALIGN(name_off + strlen(name) + 2, 8) — +2 = NUL + d_type byte. */
@@ -271,7 +289,7 @@ static int getdents_list(const char *dir_path, struct vfs_dirent **out)
   *out = NULL;
   for (;;)
   {
-    struct vfs_dirent *ents = kmalloc((size_t)cap * sizeof(*ents));
+    struct vfs_dirent *ents = kcalloc((size_t)cap, sizeof(*ents));
     int n;
 
     if (!ents)
@@ -365,23 +383,18 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
                              int entry_count)
 {
   fd_entry_t *fd_table = get_process_fd_table();
-  int visible_count;
-  size_t start_cookie;
-  size_t returned;
+  int stable;
+  uint64_t start_cookie;
+  uint64_t last_cookie;
   size_t user_budget;
   size_t user_off;
   char *const kernel_buf = scr->kernel_buf;
   size_t buf_offset;
   int64_t copy_size;
 
-  visible_count = GETDENTS_DOT_ENTRIES +
-                  getdents_visible_count(entries, entry_count);
+  stable = getdents_stable_cookies(entries, entry_count);
+  start_cookie = (uint64_t)fd_table[fd].offset;
 
-  start_cookie = (size_t)fd_table[fd].offset;
-  if (start_cookie >= (size_t)visible_count)
-    return 0;
-
-  returned = 0;
   buf_offset = 0;
 
   {
@@ -394,6 +407,7 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
       size_t name_len;
       size_t reclen;
       uint64_t ino;
+      uint64_t cookie;
       uint8_t dtype;
 
       if (i < 0)
@@ -403,7 +417,11 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
       else
         name = entries[i].name;
 
-      if ((size_t)visible_idx < start_cookie)
+      if (i < 0)
+        cookie = (uint64_t)(i + GETDENTS_DOT_ENTRIES + 1);
+      else
+        cookie = getdents_cookie(&entries[i], visible_idx, stable);
+      if (cookie <= start_cookie)
       {
         visible_idx++;
         continue;
@@ -430,7 +448,7 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
 
         memset(dent, 0, reclen);
         dent->d_ino = ino;
-        dent->d_off = (int64_t)(start_cookie + returned + 1);
+        dent->d_off = (int64_t)cookie;
         dent->d_reclen = (unsigned short)reclen;
         memcpy(dent->d_name, name, name_len);
         ((char *)dent)[reclen - 1U] = (char)dtype;
@@ -442,14 +460,13 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
 
         memset(dent, 0, reclen);
         dent->d_ino = ino;
-        dent->d_off = (int64_t)(start_cookie + returned + 1);
+        dent->d_off = (int64_t)cookie;
         dent->d_reclen = (unsigned short)reclen;
         dent->d_type = dtype;
         memcpy(dent->d_name, name, name_len);
       }
 
       buf_offset += reclen;
-      returned++;
       visible_idx++;
     }
   }
@@ -497,10 +514,11 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
   if (copy_to_user(dirent, kernel_buf, (size_t)copy_size) != 0)
     return -EFAULT;
 
+  /* The next call resumes after the last record the caller received. */
   {
-    size_t copied = 0;
     size_t pos = 0;
 
+    last_cookie = start_cookie;
     while (pos < user_off)
     {
       unsigned short dent_reclen;
@@ -526,10 +544,12 @@ static int64_t getdents_emit(int fd, void *dirent, size_t count,
       if ((size_t)dent_reclen < min_reclen ||
           pos + (size_t)dent_reclen > user_off)
         break;
+      /* d_off sits at the same offset in both layouts. */
+      last_cookie = (uint64_t)((const struct linux_dirent64 *)(kernel_buf +
+                                                               pos))->d_off;
       pos += (size_t)dent_reclen;
-      copied++;
     }
-    fd_table[fd].offset = start_cookie + copied;
+    fd_table[fd].offset = last_cookie;
   }
 
   return copy_size;

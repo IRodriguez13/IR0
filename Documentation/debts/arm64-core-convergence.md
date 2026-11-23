@@ -63,24 +63,10 @@ pure-move pass.
   into generic ARM platform plus QEMU/Raspberry Pi providers; DTB-derived
   resources are the interface boundary.
 
-### Common staged adapters (fold in progress)
+### Common staged adapters
 
-- `fs/ramtab.c` + `includes/ir0/ramtab.h`; owner: in-memory names without a
-  VFS mount; destination: keep until every staged path has a mount; then
-  delete callers in `erfs_*.c`.
-- `includes/ir0/bpath.h`; owner: optional bind from the staged adapter
-  to product `vfs_*`; destination: keep as the transition seam.
-- `ipc/early_anonfd.c`, `ipc/early_unix.c`; owner: staged IPC object tables;
-  destination: product `ipc/` / pipe objects. Keep out of `fs/`.
-- `kernel/syscalls/erfs_*.c`; owner: `/`, `/init`, `/dev/*`, CPIO,
-  syscall routing onto those tables; destination: shrink only. `/tmp/*`
-  uses product VFS when bound (`ARM64_EARLY_PATH_FOLD_OK`).
-- `ir0_product_identity_provider` / `ir0_product_cwd_provider`; owner:
-  historical fold-slice markers (retired with the freestanding stack); product
-  ABI proof is `syscall_dispatch` + `ir0-selftest-arm64` / `identity`.
-- `kernel/syscalls/early_{dispatch,vfs,io,time,mm,process}.c`; owner: staged
-  freestanding EL0 only; the freestanding stack is gone, so nothing calls them.
-  Destination: delete. See [`../EARLY_FOLD.md`](../EARLY_FOLD.md).
+Retired in Q1 (erfs*, early_*, product_*, ramtab, bpath, bpivot); see
+[`../ai_driven_dev/early-rootfs-retirement.md`](../ai_driven_dev/early-rootfs-retirement.md).
 
 ### Early scaffolding still linked by the product image
 
@@ -128,12 +114,12 @@ embeds and the `el0_entry` workload in `vectors.S`) was deleted on
    scheduler, signal, IPC and console dependencies required by common
    `exit`/`wait` next.
 4. Replace early process and syscall providers one subsystem at a time.
-   **Started:** path table is `fs/ramtab.c`; ARM ALL `/tmp` uses product VFS.
    **Product SVC:** `syscall_dispatch` is linked and used; bring-up
    `syscall_early` / hello / RR are filtered out of `kernel-arm64-product.bin`.
-   Next: shrink portable `early_process.c` / erfs for remaining staged nodes.
+   **Done (Q1):** the early process and erfs adapters are deleted.
 5. Load PID 1 through common VFS/exec. **Product:** no embedded hello seed;
-   CPIO/`vda` bind + `kexecve("/sbin/init")`. ISD AArch64 rootfs still open.
+   `vda` is mounted by `vfs_init_root()` (`root=/dev/vda`) and the common
+   handoff runs `kexecve("/sbin/init")`. ISD AArch64 rootfs still open.
 6. Board descriptor lives under `arch/arm64/include/arm64_board.h` (not
    `includes/ir0/`). `/proc/cmdline` uses `boot_memory_cmdline()`.
 7. Only then perform pure directory moves for boot, MM, IRQ and platform code.

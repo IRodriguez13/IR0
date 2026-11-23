@@ -125,6 +125,7 @@ _Static_assert(offsetof(struct sigaltstack, ss_size) == 16, "ss_size");
 #define ILL_ILLOPN    2
 #define FPE_INTDIV    1
 #define BUS_ADRALN    1
+#define BUS_ADRERR    2
 #define TRAP_BRKPT    1
 #define TRAP_TRACE    2
 

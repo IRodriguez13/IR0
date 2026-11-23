@@ -14,7 +14,7 @@
 
 Cerrado 2026-10-18: tablas IPC en `ipc/`, providers identity/getcwd en ARM
 ALL. No existe `make isd-aarch64-prep` en este árbol; empaquetado rootfs =
-ISD. Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+ISD. Ver [`early-rootfs-retirement.md`](../ai_driven_dev/early-rootfs-retirement.md).
 
 Ver tablas en el archivo inglés, incluida la oleada **2026-07-25** (publicación
 de ISD, eliminación de `debug_bins`/dbgshell, docs de acoplamiento).

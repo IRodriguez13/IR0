@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -206,7 +207,14 @@ int main(void)
 			dup2(fd, STDERR_FILENO);
 		}
 	}
+	/*
+	 * /tmp is a tmpfs, as on the images LTP normally runs on: the root may
+	 * be MINIX (14-character names) and LTP names its files longer. The
+	 * size and inode limits are tmpfs defaults (half of RAM).
+	 */
 	mkdir("/tmp", 01777);
+	if (mount("tmpfs", "/tmp", "tmpfs", MS_NOSUID | MS_NODEV, NULL) != 0)
+		emit("LTP_WARN mount tmpfs /tmp errno=%d", errno);
 	chmod("/tmp", 01777);
 	if (chdir("/tmp") != 0)
 		emit("LTP_WARN chdir /tmp errno=%d", errno);

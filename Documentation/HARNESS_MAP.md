@@ -38,7 +38,7 @@ C prints semantic tokens. Grep/`--done`/`--require` must match these.
 | ARM heap/owned mm | `ARM64_PROCESS_MM_HEAP_OK` / `OWNED_OK` / `RETIRE_OK` / `EXIT_OK` | — |
 | ARM64 boot / hypervisor banner | `ARM64_BOOT_OK` | — (see `make smoke-arm64-hypervisor-log`) |
 | Userspace KTAP selftests | `[OPENATOK]` / `[IDENTITYOK]`, KTAP `ok`/`not ok` | `make ir0-selftest-x86` / `ir0-selftest-arm64` / `ir0-selftest-identity` |
-| ARM product EL0 via dispatch | `ARM64_PRODUCT_EL0_SYSCALL_OK` | `make smoke-arm64-product-usermode-log` (CPIO init) |
+| ARM product EL0 via dispatch | `ARM64_PRODUCT_EL0_SYSCALL_OK` | `make smoke-arm64-product-usermode-log` (MINIX root on vda) |
 | BCM2711 GENET probe | `GENET_PROBE_ABSENT` / `GENET_PROBE_OK` / `GENET_PROBE_BLOCKED` / `GENET_PROBE_NOLINK` | ARM64 + `CONFIG_DRV_NIC_BCMGENET`; hardware traffic BLOCKED without RPi4 |
 
 Kernel production paths must not print `[FASE…`. Debug leftover is

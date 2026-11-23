@@ -20,7 +20,6 @@ import json
 import os
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import tempfile
@@ -40,8 +39,6 @@ CONF_DONE = "IR0_CONFORMANCE_DONE"
 FUZZ_DONE = "IR0_FUZZ_DONE"
 FUZZ_LOST = "IR0_FUZZ_HEALTH_LOST"
 FUZZ_SETUP = "IR0_FUZZ_SETUP_BROKEN"
-# The ARM64 early rootfs buffer (arch/arm64/sources/boot_port.c).
-ARM64_DISK_MAX = 128 * 1024
 TAIL_LINES = 30
 
 
@@ -52,50 +49,7 @@ def run_cmd(argv: list[str], timeout: int) -> int:
 # --- guest images ----------------------------------------------------------
 
 
-def cpio_member(name: str, mode: int, data: bytes, ino: int) -> bytes:
-    encoded = name.encode("utf-8") + b"\0"
-    fields = (ino, mode, 0, 0, 1, 0, len(data), 0, 0, 0, 0, len(encoded), 0)
-    out = bytearray(b"070701")
-    out += b"".join(f"{v:08x}".encode("ascii") for v in fields)
-    out += encoded
-    out += b"\0" * (-len(out) % 4)
-    out += data
-    out += b"\0" * (-len(out) % 4)
-    return bytes(out)
-
-
-ARM64_STUB = ROOT / "build" / "conformance" / "arm64" / "init-stub"
-
-
-def arm64_cpio(init: Path, out: Path) -> None:
-    """newc archive: /init is a stub ELF (the early rootfs binds a CPIO only
-    with an ELF /init), /sbin/init the program the kernel execs. Two copies
-    of the runner would not fit the 128 KiB early-rootfs buffer."""
-    if not ARM64_STUB.is_file():
-        raise SystemExit(f"ir0-conformance: missing {ARM64_STUB} "
-                         "(make -C tests/conformance ARCH=arm64 stub)")
-    entries = (
-        ("init", stat.S_IFREG | 0o755, ARM64_STUB.read_bytes()),
-        ("sbin", stat.S_IFDIR | 0o755, b""),
-        ("sbin/init", stat.S_IFREG | 0o755, init.read_bytes()),
-        ("etc", stat.S_IFDIR | 0o755, b""),
-        # The bpivot commit checks this marker (fs/bpivot.c).
-        ("etc/pivot-probe", stat.S_IFREG | 0o644, b"bpivot-arm64\n"),
-        ("TRAILER!!!", 0, b""),
-    )
-    archive = bytearray()
-    for ino, (name, mode, payload) in enumerate(entries, start=1):
-        archive += cpio_member(name, mode, payload, ino)
-    archive += b"\0" * (-len(archive) % 512)
-    if len(archive) > ARM64_DISK_MAX:
-        raise SystemExit(
-            f"ir0-conformance: {init.name} makes a {len(archive)} byte archive; "
-            f"the ARM64 early rootfs holds {ARM64_DISK_MAX}"
-        )
-    out.write_bytes(archive)
-
-
-def x86_disk(init: Path, out: Path, ltp_dir: Path | None) -> int:
+def minix_disk(init: Path, out: Path, ltp_dir: Path | None) -> int:
     # The large layout (2048 inodes, 64 MiB of zones) leaves room for cases
     # that fill a directory; the default one has 64 inodes in all.
     with out.open("wb") as fp:
@@ -153,7 +107,7 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
         disk = Path(name)
         try:
             ltp = Path(args.ltp_dir) if args.ltp_dir else None
-            if x86_disk(binary, disk, ltp) != 0:
+            if minix_disk(binary, disk, ltp) != 0:
                 return 1
             argv = [*smoke, "--done", done, "--",
                     "qemu-system-x86_64", "-cdrom", str(iso),
@@ -169,26 +123,25 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
     if not product.is_file():
         raise SystemExit("ir0-conformance: missing kernel-arm64-product.bin "
                          "(make kernel-arm64-product.bin)")
-    if args.ltp_dir:
-        print("ir0-conformance: LTP binaries do not fit the ARM64 early rootfs; "
-              "running IR0 cases only", file=sys.stderr)
-    fd, name = tempfile.mkstemp(prefix="ir0-conf-arm64.", dir=tmpdir)
+    fd, name = tempfile.mkstemp(prefix="ir0-conf-arm64.", suffix=".img", dir=tmpdir)
     os.close(fd)
-    cpio = Path(name)
+    disk = Path(name)
     try:
-        arm64_cpio(binary, cpio)
+        ltp = Path(args.ltp_dir) if args.ltp_dir else None
+        if minix_disk(binary, disk, ltp) != 0:
+            return 1
         argv = [*smoke, "--expected-panic", "--success-mode", "all",
-                "--done", "ARM64_CPIO_ROOT_OK", "--done", "INIT_EXEC_LOADED_OK",
-                "--done", done, "--",
+                "--done", "INIT_EXEC_LOADED_OK", "--done", done, "--",
                 "qemu-system-aarch64", "-M", "virt,gic-version=2",
                 "-cpu", "cortex-a57", "-global", "virtio-mmio.force-legacy=false",
-                "-kernel", str(product), "-nographic", "-serial", "mon:stdio",
-                "-drive", f"file={cpio},format=raw,if=none,id=conf",
+                "-kernel", str(product), "-append", "root=/dev/vda",
+                "-nographic", "-serial", "mon:stdio",
+                "-drive", f"file={disk},format=raw,if=none,id=conf",
                 "-device", "virtio-blk-device,drive=conf",
                 "-display", "none", "-no-reboot"]
         return run_cmd(argv, args.timeout + 30)
     finally:
-        cpio.unlink(missing_ok=True)
+        disk.unlink(missing_ok=True)
 
 
 # --- judging ---------------------------------------------------------------

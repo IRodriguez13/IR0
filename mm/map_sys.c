@@ -17,12 +17,15 @@
 #include <syscalls/mm_syscalls_internal.h>
 #include <config.h>
 #include <ir0/copy_user.h>
+#include <ir0/filemap.h>
 #include <ir0/fb.h>
 #include <ir0/kmem.h>
 #include <ir0/ktm/checkpoint.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/memfd.h>
+#include <ir0/mm.h>
 #include <ir0/mman.h>
+#include <ir0/open_flags.h>
 #include <ir0/paging.h>
 #include <ir0/pmm.h>
 #include <ir0/process.h>
@@ -206,6 +209,200 @@ static void mmap_audit_log_return(const char *stage, void *ret, uintptr_t virt_a
       }
     }
   }
+}
+
+/*
+ * Pick the address of a new mapping of @len bytes: MAP_FIXED takes @addr
+ * (replacing what is there), a usable hint is honoured, else the top-down
+ * search decides. 0 and the address in @out, or -errno.
+ */
+static int mm_mmap_place(void *addr, size_t len, int flags, uintptr_t *out)
+{
+	uintptr_t hint = (uintptr_t)addr;
+
+	if (flags & MAP_FIXED)
+	{
+		if (!addr || (hint & (PAGE_SIZE_4KB - 1)) != 0)
+			return -EINVAL;
+		if (!mm_user_range_mappable(hint, len))
+			return -ENOMEM;
+		if (mm_prepare_map_fixed(hint, len) != 0)
+			return -ENOMEM;
+		*out = hint;
+		return 0;
+	}
+	if (addr && (hint & (PAGE_SIZE_4KB - 1)) == 0 && hint >= USER_MMAP_START &&
+	    hint + len >= hint && hint + len <= USER_MMAP_END &&
+	    mm_user_range_mappable(hint, len) &&
+	    !process_user_va_range_overlaps(current_process, hint, len))
+	{
+		uintptr_t va;
+
+		for (va = hint; va < hint + len; va += PAGE_SIZE_4KB)
+		{
+			if (is_page_mapped_in_directory(process_pgd(current_process), va,
+							NULL) == 1)
+				break;
+		}
+		if (va == hint + len)
+		{
+			*out = hint;
+			return 0;
+		}
+	}
+	*out = mm_pick_free_va_topdown(current_process,
+				       process_pgd(current_process), len);
+	return *out ? 0 : -ENOMEM;
+}
+
+/*
+ * mmap(MAP_SHARED) of a regular file (Linux do_mmap + filemap_fault): the
+ * mapping shares the file's page cache with every other mapping of it and
+ * with read()/write(). Pages inside the file are mapped now; pages past
+ * its end stay empty and raise SIGBUS. PROT_NONE pages are mapped
+ * inaccessible so mprotect() can open them later.
+ */
+static void *mm_mmap_shared_file(void *addr, size_t length, int prot,
+				 int flags, int fd, off_t offset)
+{
+	fd_entry_t *tab = get_process_fd_table();
+	address_space_root_t root = process_pgd(current_process);
+	struct vfs_file *vf;
+	struct mmap_region *region;
+	stat_t st;
+	uint64_t id = 0;
+	uint64_t pte_flags = PAGE_USER;
+	uintptr_t va = 0;
+	size_t len;
+	size_t npages;
+	size_t i;
+	int acc;
+	int ret;
+
+	if (offset < 0)
+		return SYSCALL_PTR_ERR(EINVAL);
+	if (tab[fd].is_pipe || tab[fd].is_devfs || tab[fd].is_socket ||
+	    tab[fd].is_pseudo || tab[fd].is_epoll || tab[fd].is_eventfd ||
+	    tab[fd].is_timerfd || !tab[fd].vfs_file)
+		return SYSCALL_PTR_ERR(ENODEV);
+	vf = (struct vfs_file *)tab[fd].vfs_file;
+	if (vfs_stat(vf->path, &st) != 0 || !S_ISREG(st.st_mode))
+		return SYSCALL_PTR_ERR(ENODEV);
+	/* Linux do_mmap(): read access always, write access for PROT_WRITE. */
+	acc = vf->flags & IR0_O_ACCMODE;
+	if (acc == IR0_O_WRONLY)
+		return SYSCALL_PTR_ERR(EACCES);
+	if ((prot & PROT_WRITE) &&
+	    (acc != IR0_O_RDWR || (vf->flags & IR0_O_APPEND)))
+		return SYSCALL_PTR_ERR(EACCES);
+
+	len = (length + PAGE_SIZE_4KB - 1) & ~(size_t)(PAGE_SIZE_4KB - 1);
+	npages = len / PAGE_SIZE_4KB;
+	if (prot & PROT_WRITE)
+		pte_flags |= PAGE_RW;
+	if (prot & PROT_EXEC)
+		pte_flags |= PAGE_EXEC;
+	if (prot == PROT_NONE)
+		pte_flags |= PAGE_PROTNONE;
+
+	region = kcalloc(1, sizeof(*region));
+	if (!region)
+		return SYSCALL_PTR_ERR(ENOMEM);
+
+	/* No reclaim may drop the cache between filling and mapping it. */
+	vfs_pagecache_lock();
+	ret = filemap_map_file(vf->path, (uint64_t)offset / PAGE_SIZE_4KB, npages,
+			       (prot & PROT_WRITE) != 0, &id);
+	if (ret == 0)
+		ret = mm_mmap_place(addr, len, flags, &va);
+	for (i = 0; ret == 0 && i < npages; i++)
+	{
+		uintptr_t phys;
+
+		if (filemap_get_page(id, (uint64_t)offset / PAGE_SIZE_4KB + i,
+				     &phys) != 0)
+			break; /* past the end of the file */
+		if (map_page_in_directory(root, va + i * PAGE_SIZE_4KB, phys,
+					  pte_flags) != 0)
+		{
+			pmm_frame_put(phys);
+			ret = -ENOMEM;
+		}
+	}
+	if (ret != 0)
+	{
+		if (va)
+			unmap_user_region_in_directory(root, va, va + i * PAGE_SIZE_4KB);
+		vfs_pagecache_unlock();
+		kfree(region);
+		filemap_reclaim();
+		return SYSCALL_PTR_ERR(-ret);
+	}
+
+	region->addr = (void *)va;
+	region->hint_addr = addr;
+	region->length = len;
+	region->prot = prot;
+	region->flags = flags;
+	region->file_id = id;
+	region->pgoff = (uint64_t)offset / PAGE_SIZE_4KB;
+	region->next = process_mmap_list(current_process);
+	process_mm_set_mmap_list(current_process, region);
+	vfs_pagecache_unlock();
+	KTM_CHECKPOINT(KTM_CP_MM_MAP);
+	return (void *)va;
+}
+
+/*
+ * msync(2) (Linux mm/msync.c): write back the shared file mappings in
+ * [addr, addr + len). MS_ASYNC writes back too; there is no deferred
+ * writeback to schedule. A range with unmapped pages is ENOMEM.
+ */
+int mm_msync(void *addr, size_t len, int flags)
+{
+	uintptr_t start = (uintptr_t)addr;
+	uintptr_t end;
+	uintptr_t va;
+	int unmapped = 0;
+
+	if (!current_process)
+		return -ESRCH;
+	if (flags & ~(MS_ASYNC | MS_INVALIDATE | MS_SYNC))
+		return -EINVAL;
+	if (start & (PAGE_SIZE_4KB - 1))
+		return -EINVAL;
+	if ((flags & MS_ASYNC) && (flags & MS_SYNC))
+		return -EINVAL;
+	if (len > SIZE_MAX - (PAGE_SIZE_4KB - 1))
+		return -ENOMEM;
+	len = (len + PAGE_SIZE_4KB - 1) & ~(size_t)(PAGE_SIZE_4KB - 1);
+	end = start + len;
+	if (end < start)
+		return -ENOMEM;
+	if (end == start)
+		return 0;
+	if (!mm_user_range_mappable(start, len))
+		return -ENOMEM;
+
+	for (va = start; va < end;)
+	{
+		struct mmap_region *mr = find_vma(current_process, va);
+
+		if (!mr)
+		{
+			if (!process_user_va_range_overlaps(current_process, va,
+							    PAGE_SIZE_4KB) &&
+			    is_page_mapped_in_directory(process_pgd(current_process),
+							va, NULL) != 1)
+				unmapped = 1;
+			va += PAGE_SIZE_4KB;
+			continue;
+		}
+		if (mr->file_id && (mr->flags & MAP_SHARED))
+			(void)filemap_writeback(mr->file_id);
+		va = (uintptr_t)mr->addr + mr->length;
+	}
+	return unmapped ? -ENOMEM : 0;
 }
 
 void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
@@ -402,7 +599,7 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
           }
         }
         
-        struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
+        struct mmap_region *region = kcalloc(1, sizeof(struct mmap_region));
         if (!region)
         {
           for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
@@ -506,7 +703,7 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
 	  return SYSCALL_PTR_ERR(-mapped_len);
 	map_len = (size_t)mapped_len;
 
-	region = kmalloc(sizeof(struct mmap_region));
+	region = kcalloc(1, sizeof(struct mmap_region));
 	if (!region)
 	{
 	  for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
@@ -534,7 +731,10 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
       }
     }
 
-    /* File-based mapping not yet implemented for other files */
+    if ((flags & MAP_TYPE) != MAP_PRIVATE)
+      return mm_mmap_shared_file(addr, length, prot, flags, fd, offset);
+
+    /* MAP_PRIVATE of a regular file is not implemented. */
     klog_debug("KERN", "SERIAL: mmap: file-based mapping not yet implemented\n");
     return SYSCALL_PTR_ERR(ENOSYS);
   }
@@ -726,7 +926,7 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
   }
 
   /* Create mapping entry */
-  struct mmap_region *region = kmalloc(sizeof(struct mmap_region));
+  struct mmap_region *region = kcalloc(1, sizeof(struct mmap_region));
   if (!region)
   {
       /* Failed to allocate region entry - unmap pages */
@@ -805,6 +1005,9 @@ int mm_munmap(void *addr, size_t length)
    */
   unmap_user_region_in_directory(process_pgd(current_process), start_page,
                                  end_page);
+
+  /* A page cache no mapping uses any more goes back to its file. */
+  filemap_reclaim();
 
   KTM_CHECKPOINT(KTM_CP_MM_UNMAP);
   paging_ir0_mm_checkpoint("munmap-after",
@@ -1048,7 +1251,7 @@ void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
 		return SYSCALL_PTR_ERR(ENOMEM);
 	}
 
-	region = kmalloc(sizeof(struct mmap_region));
+	region = kcalloc(1, sizeof(struct mmap_region));
 	if (!region)
 	{
 		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)

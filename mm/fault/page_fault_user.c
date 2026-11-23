@@ -19,6 +19,7 @@
 #include <ir0/oom.h>
 #include <ir0/paging.h>
 #include <ir0/abi/mmap_contract.h>
+#include <ir0/filemap.h>
 #include <ir0/swap.h>
 #include "page_fault_internal.h"
 #include <mm/uaccess/user_va.h>
@@ -168,6 +169,42 @@ int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 	return 0;
 }
 
+/*
+ * Linux filemap_fault for a MAP_SHARED file VMA: map the cached file page,
+ * or SIGBUS when the page lies past the end of the file.
+ */
+static void pf_file_page(process_t *current, struct mmap_region *mr,
+			 const struct page_fault_info *info, uint64_t *stack,
+			 uint64_t fault_addr)
+{
+	uint64_t va = fault_addr & ~0xFFFULL;
+	uint64_t map_flags = PAGE_USER;
+	uintptr_t phys;
+
+	if (mr->prot == 0 || (info->write && (mr->prot & 0x2) == 0) ||
+	    (info->exec && (mr->prot & 0x4) == 0))
+	{
+		pf_user_segv(current, stack, fault_addr, info);
+		return;
+	}
+	if (mr->prot & 0x2) /* PROT_WRITE */
+		map_flags |= PAGE_RW;
+	if (mr->prot & 0x4) /* PROT_EXEC */
+		map_flags |= PAGE_EXEC;
+	if (filemap_get_page(mr->file_id,
+			     mr->pgoff + (va - (uintptr_t)mr->addr) / PAGE_SIZE_4KB,
+			     &phys) != 0)
+	{
+		pf_user_sigbus(current, stack, fault_addr, info);
+		return;
+	}
+	if (map_page_in_directory(process_pgd(current), va, phys, map_flags) != 0)
+	{
+		pmm_frame_put(phys);
+		pf_user_segv(current, stack, fault_addr, info);
+	}
+}
+
 /* User access to a page with no valid descriptor (demand paging, swap-in). */
 void pf_user_not_present(const struct page_fault_info *info, uint64_t *stack,
 			 uint64_t fault_addr)
@@ -221,6 +258,11 @@ void pf_user_not_present(const struct page_fault_info *info, uint64_t *stack,
 		mr = find_vma(current, fault_addr);
 		if (mr != NULL)
 		{
+			if (mr->file_id != 0)
+			{
+				pf_file_page(current, mr, info, stack, fault_addr);
+				return;
+			}
 			if ((mr->flags & IR0_MAP_ANONYMOUS) == 0)
 			{
 				pf_user_segv(current, stack, fault_addr, info);

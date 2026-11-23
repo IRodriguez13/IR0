@@ -14,6 +14,7 @@
 
 #include <ir0/process.h>
 #include <asm/pgtable.h>
+#include <ir0/filemap.h>
 #include <ir0/kmem.h>
 #include <ir0/oops.h>
 #include <ir0/mm_struct.h>
@@ -78,6 +79,8 @@ void mm_put(mm_struct_t *mm)
 		mm_destroy_user_root(mm->page_directory);
 		mm->page_directory = NULL;
 	}
+	/* Linux exit_mmap: the shared file pages go back to their files. */
+	filemap_reclaim();
 
 	{
 		struct mmap_region *r = mm->mmap_list;

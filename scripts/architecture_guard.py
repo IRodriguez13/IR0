@@ -3898,6 +3898,73 @@ def check_retired_api_names():
     return errors
 
 
+# Q1 retired the early rootfs world: the erfs*/early_*/product_* syscall
+# emulation, the ramtab/bpath/bpivot boot pivot and their headers. Both ISAs
+# mount the block root through vfs_init_root() and exec /sbin/init through
+# the common handoff. No file with those name prefixes may come back in the
+# kernel trees or tests/host. early_ is only reserved outside arch/ (the x86
+# early IDT is boot code, not the early rootfs); early_clock.h is the live
+# pre-timer clock port hook. The retired API names are in
+# RETIRED_API_LEDGER.
+RETIRED_FILE_TREES = RETIRED_API_TREES + ("tests/host",)
+_RETIRED_FILE_PREFIX_RE = re.compile(r"^(erfs|product_|ramtab|bpath|bpivot)")
+_RETIRED_EARLY_FILE_RE = re.compile(r"^early_")
+RETIRED_FILE_ALLOW = frozenset({"includes/ir0/early_clock.h"})
+RETIRED_FILE_SUFFIXES = (".c", ".h", ".S", ".s", ".asm", ".rs", ".cc", ".cpp")
+
+
+def retired_file_violations(rels: list[str]) -> list[str]:
+    """Return the repository paths that reuse a retired file name prefix."""
+    found = []
+    for rel in rels:
+        if rel in RETIRED_FILE_ALLOW or not rel.endswith(RETIRED_FILE_SUFFIXES):
+            continue
+        name = rel.rsplit("/", 1)[-1]
+        if _RETIRED_FILE_PREFIX_RE.match(name):
+            found.append(rel)
+        elif _RETIRED_EARLY_FILE_RE.match(name) and not rel.startswith("arch/"):
+            found.append(rel)
+    return found
+
+
+def _retired_file_self_test() -> list[str]:
+    """Inject retired file names; the scanner must flag exactly those."""
+    sample = [
+        "kernel/syscalls/erfs_fd.c",
+        "kernel/syscalls/early_process.c",
+        "ipc/product_ipc.c",
+        "fs/bpivot_boot.c",
+        "includes/ir0/ramtab.h",
+        "tests/host/test_bpath_fold.c",
+        "includes/ir0/early_clock.h",
+        "arch/x86-64/sources/interrupt/early_idt.c",
+        "fs/vfs_mount.c",
+        "kernel/syscalls/early_notes.txt",
+    ]
+    want = sample[:5]
+    got = retired_file_violations(sample)
+    if got != want:
+        return [f"[retired-file] self-test: expected {want}, got {got}"]
+    return []
+
+
+def check_retired_file_names():
+    """Reject source files that bring back an early rootfs name prefix."""
+    errors = _retired_file_self_test()
+    rels = []
+    for tree in RETIRED_FILE_TREES:
+        base = ROOT / tree
+        if not base.is_dir():
+            continue
+        for path in sorted(base.rglob("*")):
+            if path.is_file():
+                rels.append(rel_to_root(path).as_posix())
+    for rel in retired_file_violations(rels):
+        errors.append(f"[retired-file] {rel}: the early rootfs was retired "
+                      "(Q1); use the common VFS and process path")
+    return errors
+
+
 # Every function a project header declares has a definition somewhere in the
 # tree (C, C++, Rust, or an assembly label, macro-generated labels included).
 # A prototype with no definition is dead surface that hides a link error until
@@ -4588,6 +4655,7 @@ def main():
     errors.extend(spdx_errors(SPDX_SOURCE_ROOTS))
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
+    errors.extend(check_retired_file_names())
     errors.extend(check_undefined_prototypes())
     errors.extend(check_include_layout())
 

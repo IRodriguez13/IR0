@@ -16,6 +16,7 @@
 
 #include <ir0/cred.h>
 #include <ir0/cpu.h>
+#include <ir0/filemap.h>
 #include <ir0/ipc.h>
 #include <ir0/problems.h>
 #include <ir0/sched.h>
@@ -121,6 +122,8 @@ int vfs_ops_read(struct vfs_ops *ops, const char *path, void *buf,
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->read(backend, buf, count, done, offset);
+	if (ret == 0 && done)
+		filemap_sync_read(ops, backend, buf, *done, offset);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -136,6 +139,8 @@ int vfs_ops_write(struct vfs_ops *ops, const char *path, const void *buf,
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->write(backend, buf, count, done, offset);
+	if (ret == 0 && done)
+		filemap_sync_write(ops, backend, buf, *done, offset);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -178,6 +183,8 @@ int vfs_ops_unlink(struct vfs_ops *ops, const char *path)
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->unlink(backend);
+	if (ret == 0)
+		filemap_forget(ops, backend);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -289,8 +296,93 @@ int vfs_ops_rename(struct vfs_ops *ops, const char *oldpath,
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->rename(old_backend, new_backend);
+	if (ret == 0)
+		filemap_rename(ops, old_backend, new_backend);
 	vfs_fs_op_release();
 	return ret;
+}
+
+/*
+ * A rename done as link + unlink (backends without a rename op): the page
+ * cache follows the name to @newpath before the old name goes.
+ */
+void vfs_ops_renamed(struct vfs_ops *ops, const char *oldpath,
+		     const char *newpath)
+{
+	char old_backend[VFS_PATH_MAX];
+	char new_backend[VFS_PATH_MAX];
+
+	if (vfs_backend_path(ops, oldpath, old_backend, sizeof(old_backend)) != 0 ||
+	    vfs_backend_path(ops, newpath, new_backend, sizeof(new_backend)) != 0)
+		return;
+	vfs_fs_op_acquire();
+	filemap_rename(ops, old_backend, new_backend);
+	vfs_fs_op_release();
+}
+
+int vfs_pagecache_key(const char *path, const void **fs, char *key,
+		      size_t cap)
+{
+	struct vfs_ops *ops;
+
+	if (!path || !fs || !key)
+		return -EINVAL;
+	ops = vfs_ops_for_path(path);
+	if (!ops || !ops->read || !ops->write || !ops->stat)
+		return -ENODEV;
+	*fs = ops;
+	return vfs_backend_path(ops, path, key, cap);
+}
+
+void vfs_pagecache_lock(void)
+{
+	vfs_fs_op_acquire();
+}
+
+void vfs_pagecache_unlock(void)
+{
+	vfs_fs_op_release();
+}
+
+int vfs_pagecache_read(const void *fs, const char *key, void *buf,
+		       size_t count, off_t offset, size_t *done)
+{
+	struct vfs_ops *ops = (struct vfs_ops *)fs;
+	int ret;
+
+	vfs_fs_op_acquire();
+	ret = ops->read(key, buf, count, done, offset);
+	vfs_fs_op_release();
+	return ret;
+}
+
+int vfs_pagecache_write(const void *fs, const char *key, const void *buf,
+			size_t count, off_t offset, size_t *done)
+{
+	struct vfs_ops *ops = (struct vfs_ops *)fs;
+	int ret;
+
+	vfs_fs_op_acquire();
+	ret = ops->write(key, buf, count, done, offset);
+	vfs_fs_op_release();
+	return ret;
+}
+
+int vfs_pagecache_size(const void *fs, const char *key, size_t *size)
+{
+	struct vfs_ops *ops = (struct vfs_ops *)fs;
+	stat_t st;
+	int ret;
+
+	vfs_fs_op_acquire();
+	ret = ops->stat(key, &st);
+	vfs_fs_op_release();
+	if (ret != 0)
+		return ret;
+	if (!S_ISREG(st.st_mode) || st.st_size < 0)
+		return -ENODEV;
+	*size = (size_t)st.st_size;
+	return 0;
 }
 
 int vfs_ops_chown(struct vfs_ops *ops, const char *path, uid_t owner,
@@ -332,6 +424,8 @@ int vfs_ops_truncate(struct vfs_ops *ops, const char *path, size_t length)
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->truncate(backend, length);
+	if (ret == 0)
+		filemap_sync_truncate(ops, backend, length);
 	vfs_fs_op_release();
 	return ret;
 }

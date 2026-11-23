@@ -41,6 +41,30 @@ static int mm_vma_bounds(const struct mmap_region *region, uintptr_t *start,
 }
 
 /*
+ * @dst starts at @dst_start inside @src's range: same page cache, and the
+ * file page moves with the start (Linux vm_pgoff on __split_vma).
+ */
+static void mm_vma_inherit_file(struct mmap_region *dst,
+				const struct mmap_region *src,
+				uintptr_t dst_start)
+{
+	dst->file_id = src->file_id;
+	dst->pgoff = src->file_id ?
+		src->pgoff + (dst_start - ((uintptr_t)src->addr &
+					   PAGE_FRAME_MASK)) / PAGE_SIZE_4KB :
+		0;
+}
+
+/* @b follows @a in memory; do they also follow in the same file? */
+static int mm_vma_file_contiguous(const struct mmap_region *a,
+				  const struct mmap_region *b, size_t a_len)
+{
+	if (a->file_id != b->file_id)
+		return 0;
+	return a->file_id == 0 || b->pgoff == a->pgoff + a_len / PAGE_SIZE_4KB;
+}
+
+/*
  * Coalesce contiguous VMAs that share prot and flags.  The list is built by
  * prepending, so two address-adjacent regions need not be list-adjacent;
  * scan the whole list until no merge is possible.  O(n^2) is fine here: the
@@ -79,11 +103,16 @@ static void mm_merge_adjacent_vmas(void)
 					link = &b->next;
 					continue;
 				}
-				if (a_end != b_start && b_end != a_start)
+				if (!(a_end == b_start &&
+				      mm_vma_file_contiguous(a, b, a_end - a_start)) &&
+				    !(b_end == a_start &&
+				      mm_vma_file_contiguous(b, a, b_end - b_start)))
 				{
 					link = &b->next;
 					continue;
 				}
+				if (b_start < a_start)
+					a->pgoff = b->pgoff;
 				start = a_start < b_start ? a_start : b_start;
 				end = a_end > b_end ? a_end : b_end;
 				a->addr = (void *)start;
@@ -171,6 +200,7 @@ int mm_detach_vma_range(uintptr_t start, uintptr_t end)
 			struct mmap_region *right = spare;
 
 			spare = NULL;
+			mm_vma_inherit_file(right, region, end);
 			right->addr = (void *)end;
 			right->hint_addr = (void *)end;
 			right->length = region_end - end;
@@ -192,6 +222,7 @@ int mm_detach_vma_range(uintptr_t start, uintptr_t end)
 		}
 
 		/* Keep [end, region_end), drop the head. */
+		mm_vma_inherit_file(region, region, end);
 		region->addr = (void *)end;
 		region->hint_addr = (void *)end;
 		region->length = region_end - end;
@@ -294,6 +325,8 @@ int mm_apply_vma_prot(uintptr_t start, uintptr_t end, int prot)
 			right = spares;
 			spares = right->next;
 
+			mm_vma_inherit_file(middle, region, start);
+			mm_vma_inherit_file(right, region, end);
 			middle->addr = (void *)start;
 			middle->hint_addr = (void *)start;
 			middle->length = end - start;
@@ -321,6 +354,7 @@ int mm_apply_vma_prot(uintptr_t start, uintptr_t end, int prot)
 			struct mmap_region *right = spares;
 
 			spares = right->next;
+			mm_vma_inherit_file(right, region, start);
 			right->addr = (void *)start;
 			right->hint_addr = (void *)start;
 			right->length = region_end - start;
@@ -340,6 +374,8 @@ int mm_apply_vma_prot(uintptr_t start, uintptr_t end, int prot)
 			struct mmap_region *left = spares;
 
 			spares = left->next;
+			mm_vma_inherit_file(left, region, region_start);
+			mm_vma_inherit_file(region, region, end);
 			left->addr = (void *)region_start;
 			left->hint_addr = (void *)region_start;
 			left->length = end - region_start;

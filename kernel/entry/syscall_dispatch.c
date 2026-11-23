@@ -162,6 +162,7 @@ WRAP4(sys_mknodat, int, const char *, unsigned int, unsigned int)
 WRAP3(sys_mknod, const char *, unsigned int, unsigned int)
 WRAP1(sys_brk, void *)
 WRAP2(sys_munmap, void *, size_t)
+WRAP3(sys_msync, void *, size_t, int)
 WRAP3(sys_mprotect, void *, size_t, int)
 WRAP2(sys_kill, pid_t, int)
 WRAP4(sys_rt_sigaction, int, const struct sigaction *, struct sigaction *, size_t)
@@ -362,6 +363,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_MOUNT] = wrap_sys_mount;
   syscall_semantic_table[IR0_SYSCALL_MPROTECT] = wrap_sys_mprotect;
   syscall_semantic_table[IR0_SYSCALL_MUNMAP] = wrap_sys_munmap;
+  syscall_semantic_table[IR0_SYSCALL_MSYNC] = wrap_sys_msync;
   syscall_semantic_table[IR0_SYSCALL_NANOSLEEP] = wrap_sys_nanosleep;
   syscall_semantic_table[IR0_SYSCALL_NEWFSTATAT] = wrap_sys_newfstatat;
   syscall_semantic_table[IR0_SYSCALL_OPEN] = wrap_sys_open;
@@ -556,7 +558,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 				  process_syscall_ip(current_process));
     }
   }
-  r = syscall_handler_invoke(&native_syscall_handlers, NULL, syscall_id,
+  r = syscall_handler_invoke(&native_syscall_handlers, syscall_id,
 			     arg1, arg2, arg3, arg4, arg5, arg6);
   KTM_TRACE_SYSCALL_RET((uint32_t)syscall_num, (uint32_t)r);
   /*

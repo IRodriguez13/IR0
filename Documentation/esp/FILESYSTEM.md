@@ -2,12 +2,11 @@
 
 > **Última verificación:** 2026-10-18
 > **Fuente de verdad:** [`../FILESYSTEM.md`](../FILESYSTEM.md), `fs/vfs.c`,
-> `fs/ramtab.c`, [`EARLY_FOLD.md`](EARLY_FOLD.md)
+> `fs/vfs_mount.c`
 
 IR0 usa un diseno VFS-first donde la politica se centraliza y los backends
-implementan operaciones concretas. `fs/ramtab.c` guarda nombres staged sin
-montaje VFS. Pipe/AF_UNIX staged viven en `ipc/`. En ARM ALL, `/tmp` es
-tmpfs de producto.
+implementan operaciones concretas. x86 y ARM64 montan la raíz de
+bloque con `vfs_init_root()` (`root=/dev/<nombre>`).
 
 ## Capas Activas
 

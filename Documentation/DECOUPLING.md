@@ -209,7 +209,7 @@ pattern); treat explicit `n` as the compile-out signal.
 | **Link rule** | `kernel-x64.bin` links **`$(ALL_OBJS)`** (full kernel). | `kernel-arm64-product.bin` / `kernel-arm64.bin` = the same portable **`$(ALL_OBJS)`** product link (validated by `arm64-common-core-compile` + `arm64-provider-audit`). A board goal (`make ir0 arm64 rpi5`) builds this same link with the board's macros. |
 | **Boot** | Multiboot → full kernel bring-up. | Shared `kmain()` (`kernel/main.c`), the only ARM64 boot path (the freestanding `-min` board images are retired). |
 | **Userspace** | musl / BusyBox / TCC / Doom on x86 via ISD. | Staged EL0 on QEMU virt (`make ir0 arm64`). ISD has **no** AArch64 rootfs pack yet. |
-| **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`EARLY_FOLD.md`](EARLY_FOLD.md). Not an ISD product boot. |
+| **Maturity** | Production ISA for 0.0.1. | Generic-core bind in progress — see [`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md). Not an ISD product boot. |
 
 So **menuconfig toggles primarily affect the full x86-64 image**. ARM64 now links the
 same portable object set as x86 (`ALL_OBJS`) and product SVC enters `syscall_dispatch`.
@@ -246,7 +246,7 @@ through `includes/ir0/*`, `CONFIG_*`, and `Makefile` consistently.
    helps testing (optional split of “CPU info” vs “I/O port” APIs).
 2. **Facades that include drivers:** optionally split **API-only** headers from `.c`.
 3. **ARM64 product image:** `make ir0 arm64` links portable process/MM/VFS and
-   binds `/tmp` through product `vfs.c` ([`EARLY_FOLD.md`](EARLY_FOLD.md)).
+   binds `/tmp` through product `vfs.c` ([`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md)).
    Product EL0 enters via `syscall_dispatch` (selftests `openat`/`identity`).
    ISA facades are wired: arm64 `asm/sigcontext.h` = Linux aarch64 uapi;
    `arch_switch` / `arch_mm` = TTBR0 model; `irq_*` → VBAR + GICv2.
