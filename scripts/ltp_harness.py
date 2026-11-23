@@ -378,7 +378,10 @@ def cmd_run(args) -> int:
         disk = safety.make_temp_disk(prefix="ir0-ltp-")
         try:
             make_disk(disk, runner, tests, files, args.test_timeout)
-            budget = args.boot_timeout + len(tests) * args.test_timeout
+            # smoke_autokill accepts at most an hour; per-test kills are the
+            # runner's job, this is only the ceiling for the whole chunk.
+            budget = min(3600, args.boot_timeout +
+                         len(tests) * args.test_timeout)
             # The payload prints arbitrary text (errno names, "fork failed",
             # OOM messages), so only a kernel panic ends the run early.
             rc = subprocess.run(
