@@ -17,6 +17,8 @@
 #include <ir0/kmem.h>
 #include <ir0/problems.h>
 
+SCHED_POLICY_LINKED("rr");
+
 /*
  * Ready list is singly linked (head -> ... -> tail, next=NULL). Advance wraps
  * with `next ? next : rr_head`; it is not a circular queue.

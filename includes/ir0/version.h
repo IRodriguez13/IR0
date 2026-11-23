@@ -89,13 +89,9 @@
  * Runtime uname(2) /proc/version use ir0_utsname_fill_version()
  * (online CPUs + active scheduler policy).
  * CONFIG_ENABLE_SMP reflects SMP build hooks (not a claim of SMP-safe runtime).
- * CONFIG_SCHEDULER_POLICY: 0 → RR; 1 → CFS; 2 → Priority.
  */
 #ifndef CONFIG_ENABLE_SMP
 #define CONFIG_ENABLE_SMP 0
-#endif
-#ifndef CONFIG_SCHEDULER_POLICY
-#define CONFIG_SCHEDULER_POLICY 0
 #endif
 
 #if CONFIG_ENABLE_SMP
@@ -104,14 +100,6 @@
 #define IR0_UNAME_CPU_MODE "UP"
 #endif
 
-#if CONFIG_SCHEDULER_POLICY == 2
-#define IR0_UNAME_SCHED_POLICY "Priority"
-#elif CONFIG_SCHEDULER_POLICY == 1
-#define IR0_UNAME_SCHED_POLICY "CFS"
-#else
-#define IR0_UNAME_SCHED_POLICY "RR"
-#endif
-
-#define IR0_UNAME_VERSION_STRING IR0_UNAME_CPU_MODE " " IR0_UNAME_SCHED_POLICY
+#define IR0_UNAME_VERSION_STRING IR0_UNAME_CPU_MODE " " CONFIG_SCHEDULER
 
 #endif /* _IR0_VERSION_H */

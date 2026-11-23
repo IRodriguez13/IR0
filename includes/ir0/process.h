@@ -312,7 +312,7 @@ typedef struct process
 	uint64_t kstack_top;
 
 	/*
-	 * Priority-band scheduler (CONFIG_SCHEDULER_POLICY==2): 0 = lowest,
+	 * Priority-band scheduler (CONFIG_SCHEDULER "prio"): 0 = lowest,
 	 * IR0_SCHED_PRIO_MAX = highest. RR and CFS-alias backends ignore this.
 	 * Placed after ASM-critical fields so PROC_FS_BASE_OFFSET stays stable.
 	 */

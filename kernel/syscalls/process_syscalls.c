@@ -328,7 +328,7 @@ int64_t sys_personality(unsigned long persona)
 /*
  * Project a Linux nice value (-20..19) onto IR0's 8 priority bands, keeping
  * nice 0 on the default band and lower nice on higher bands. Backends other
- * than CONFIG_SCHEDULER_POLICY=2 ignore sched_prio, so there the nice value
+ * than CONFIG_SCHEDULER "prio" ignore sched_prio, so there the nice value
  * is recorded and reported but does not change scheduling.
  */
 static int prio_band_from_nice(int nice_val)

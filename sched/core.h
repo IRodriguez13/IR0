@@ -9,9 +9,10 @@
  * File: core.h
  * Description: Scheduler core <-> policy contract (sched/ only, not a facade).
  *
- * CONFIG_SCHEDULER_POLICY links exactly one policy file: sched/rr.c
- * (policy 0), sched/cfs.c (policy 1), or sched/prio.c (policy 2). There
- * is no run-time dispatch. A policy implements the queue operations published in
+ * CONFIG_SCHEDULER names the one policy file that is linked: sched/rr.c
+ * ("rr"), sched/prio.c ("prio") or sched/cfs.c ("cfs"); the Makefile
+ * registry sched-policy-<name> maps the name to the object. There is no
+ * run-time dispatch. A policy implements the queue operations published in
  * <ir0/sched.h> (add, remove, promote, count, name, selftest) plus
  * sched_pick_next() below; the core (sched/core.c) owns schedule() and the
  * context switch. Policies never call each other.
@@ -23,6 +24,15 @@
 
 #include <ir0/cpu.h>
 #include <ir0/sched.h>
+
+/*
+ * Each policy file ends its includes with SCHED_POLICY_LINKED("<name>").
+ * If the Makefile links sched/<name>.o while CONFIG_SCHEDULER (the C view
+ * of the choice) names another policy, compilation of that file fails.
+ */
+#define SCHED_POLICY_LINKED(name) \
+	_Static_assert(__builtin_strcmp(CONFIG_SCHEDULER, name) == 0, \
+		       "sched/" name ".c is linked but CONFIG_SCHEDULER selects another policy")
 
 /*
  * Choose the next task to run, or NULL when nothing is runnable. Takes the

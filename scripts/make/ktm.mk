@@ -241,13 +241,13 @@ build-matrix-run:
 		$(MAKE) defconfig >/dev/null; \
 		python3 scripts/kconfig/menuconfig.py --set ENABLE_STORAGE_ATA=y ENABLE_STORAGE_ATA_BLOCK=n INIT_STORAGE_ATA=y INIT_STORAGE_ATA_BLOCK=n >/dev/null; \
 		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
-		echo "  MATRIX  scheduler policy 1"; \
+		echo "  MATRIX  scheduler policy rr"; \
 		$(MAKE) defconfig >/dev/null; \
-		python3 scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=1 >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set SCHEDULER=rr >/dev/null; \
 		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
-		echo "  MATRIX  scheduler policy 2"; \
+		echo "  MATRIX  scheduler policy prio"; \
 		$(MAKE) defconfig >/dev/null; \
-		python3 scripts/kconfig/menuconfig.py --set SCHEDULER_POLICY=2 >/dev/null; \
+		python3 scripts/kconfig/menuconfig.py --set SCHEDULER=prio >/dev/null; \
 		$(MAKE) -s ARCH=x86_64 kernel-x64.bin >/dev/null; \
 		echo "  MATRIX  USB host enabled"; \
 		$(MAKE) defconfig >/dev/null; \

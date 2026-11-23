@@ -19,6 +19,8 @@
 #include <ir0/process.h>
 #include <string.h>
 
+SCHED_POLICY_LINKED("cfs");
+
 /*
  * One singly-linked runqueue. Pick scans for the lowest vruntime; equal
  * vruntimes keep list order. There is no tree and no second policy.
