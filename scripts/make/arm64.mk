@@ -242,53 +242,21 @@ smoke-arm64-simplefb: kernel-arm64-product.bin
 		echo "✓ smoke-arm64-simplefb (CONSOLE_FB_BACKEND_ENABLED)"; \
 	fi
 
-.PHONY: smoke-arm64-bpivot-product
-smoke-arm64-bpivot-product: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/make_test_cpio.py
-	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
-		echo "⊘ smoke-arm64-bpivot-product SKIP (qemu-system-aarch64 not in PATH)"; \
-	else \
-		cpio=$$(mktemp "$${TMPDIR:-/tmp}/ir0-arm64-bpivot.XXXXXX"); \
-		trap 'rm -f "$$cpio"' EXIT HUP INT TERM; \
-		python3 scripts/make_test_cpio.py \
-			--init $(MUSL_AARCH64_HELLO) --output "$$cpio"; \
-		echo "  SMOKE   ARM64 portable bpivot boot (common fs/bpivot_boot.c)..."; \
-		rm -f $(HOST_TMP)/arm64-bpivot-smoke.log; \
-		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-bpivot-smoke.log \
-			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
-			--done ARM64_DTB_OK --done ARM64_DTB_USABLE_MEMORY_OK \
-			--done ARM64_CPIO_ROOT_OK --done IR0_INITRAMFS_CPIO_OK \
-			--done IR0_BPIVOT_COMMIT_OK --done ARM64_BPIVOT_COMMIT_OK \
-			--done INIT_EXEC_LOADED_OK -- \
-			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
-			-global virtio-mmio.force-legacy=false \
-			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
-			-drive file="$$cpio",format=raw,if=none,id=bpivot \
-			-device virtio-blk-device,drive=bpivot \
-			-display none -no-reboot 2>/dev/null && \
-		grep -q 'ARM64_DTB_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'ARM64_DTB_USABLE_MEMORY_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'ARM64_CPIO_ROOT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'IR0_INITRAMFS_CPIO_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'IR0_BPIVOT_MOUNT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'IR0_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'ARM64_BPIVOT_COMMIT_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		grep -q 'INIT_EXEC_LOADED_OK' $(HOST_TMP)/arm64-bpivot-smoke.log && \
-		test "$$(grep -c 'ARM64_SYNC_OTHER' \
-			$(HOST_TMP)/arm64-bpivot-smoke.log || true)" -le 1 && \
-		echo "✓ smoke-arm64-bpivot-product (CPIO fold + real root switch)"; \
-	fi
-
-# Handoff + first EL0 syscall via syscall_dispatch (CPIO init, no embedded hello).
+# Handoff + first EL0 syscall via syscall_dispatch: MINIX root on virtio-blk
+# vda, mounted by vfs_init_root() (root=/dev/vda), /sbin/init exec'd by the
+# common handoff.
 .PHONY: smoke-arm64-product-usermode-log
-smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/make_test_cpio.py
+smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/inject_init_minix.py
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
 		echo "⊘ smoke-arm64-product-usermode-log SKIP (qemu-system-aarch64 not in PATH)"; \
 	else \
-		cpio=$$(mktemp "$${TMPDIR:-/tmp}/ir0-arm64-usermode.XXXXXX"); \
-		trap 'rm -f "$$cpio"' EXIT HUP INT TERM; \
-		python3 scripts/make_test_cpio.py \
-			--init $(MUSL_AARCH64_HELLO) --output "$$cpio"; \
-		echo "  SMOKE   ARM64 product handoff + EL0 syscall (CPIO)..."; \
+		disk=$$(mktemp "$${TMPDIR:-/tmp}/ir0-arm64-usermode.XXXXXX"); \
+		trap 'rm -f "$$disk"' EXIT HUP INT TERM; \
+		truncate -s 32M "$$disk" && \
+		python3 scripts/inject_init_minix.py --format "$$disk" >/dev/null && \
+		python3 scripts/inject_init_minix.py "$$disk" \
+			$(MUSL_AARCH64_HELLO) sbin/init >/dev/null || exit 1; \
+		echo "  SMOKE   ARM64 product handoff + EL0 syscall (MINIX root on vda)..."; \
 		rm -f $(HOST_TMP)/arm64-product-usermode-smoke.log; \
 		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-product-usermode-smoke.log \
 			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
@@ -296,16 +264,17 @@ smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO)
 			--done ARM64_PRODUCT_EL0_SYSCALL_OK -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
 			-global virtio-mmio.force-legacy=false \
-			-kernel kernel-arm64-product.img -nographic -serial mon:stdio \
-			-drive file="$$cpio",format=raw,if=none,id=usermode \
+			-kernel kernel-arm64-product.img -append root=/dev/vda \
+			-nographic -serial mon:stdio \
+			-drive file="$$disk",format=raw,if=none,id=usermode \
 			-device virtio-blk-device,drive=usermode \
 			-display none -no-reboot 2>/dev/null && \
+		grep -q 'vfs_mount OK (configured root)' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
 		grep -q 'ARM64_PRODUCT_BOOT_HANDOFF' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
 		grep -q 'INIT_EXEC_LOADED_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
 		grep -q 'ARM64_PRODUCT_EL0_SYSCALL_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
-		echo "✓ smoke-arm64-product-usermode-log (handoff + EL0 via syscall_dispatch)"; \
+		echo "✓ smoke-arm64-product-usermode-log (MINIX root on vda, EL0 via syscall_dispatch)"; \
 	fi
-
 
 .PHONY: arm64-common-core-compile arm64-provider-audit
 

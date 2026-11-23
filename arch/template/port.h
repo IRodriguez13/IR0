@@ -40,8 +40,6 @@
  *     includes/ir0/boot_port.h
  * ir0_boot_port_serial_after_driver_registry
  *     includes/ir0/boot_port.h
- * ir0_boot_port_maybe_seed_init_from_embedded
- *     includes/ir0/boot_port.h
  *
  * ir0_boot_firmware_sysfs_fill_from_arch
  *     includes/ir0/boot_firmware_sysfs.h

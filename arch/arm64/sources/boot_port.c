@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: boot_port.c
- * Description: ARM64 boot hooks — DTB handoff, PL011, CPIO/vda bind for PID 1.
+ * Description: ARM64 boot hooks — DTB handoff, PL011.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -21,63 +21,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#if defined(IR0_ARM64_PRODUCT_KERNEL)
-#include <ir0/bpivot.h>
-#include <ir0/copy_user.h>
-#include <ir0/early_rootfs.h>
-#include <ir0/rootfs_base.h>
-#endif
-
 extern volatile uintptr_t arm64_firmware_fdt;
-
-#if defined(IR0_ARM64_PRODUCT_KERNEL)
-#define ARM64_DISK_INIT_MAX (128UL * 1024UL)
-
-static uint8_t g_disk_init[ARM64_DISK_INIT_MAX];
-
-static int arm64_product_copy_from_user(void *destination, uint64_t source,
-					uint64_t size)
-{
-	return copy_from_user(destination, (const void *)(uintptr_t)source,
-			      (size_t)size);
-}
-
-static int arm64_product_copy_to_user(uint64_t destination, const void *source,
-				      uint64_t size)
-{
-	return copy_to_user((void *)(uintptr_t)destination, source,
-			    (size_t)size);
-}
-
-static const struct early_user_services g_product_usercopy = {
-	.copy_from_user = arm64_product_copy_from_user,
-	.copy_to_user = arm64_product_copy_to_user,
-};
-
-/*
- * Bind virtio-blk CPIO (or ELF init) when present. No embedded hello seed —
- * PID 1 must come from the block image via common kexecve("/sbin/init").
- */
-static void boot_arm64_bind_block_rootfs(void)
-{
-	int ret;
-
-	ret = early_rootfs_try_bind_block("vda", g_disk_init,
-					  sizeof(g_disk_init),
-					  &g_product_usercopy);
-	if (ret == 0)
-	{
-		ir0_boot_smoke("ARM64_DISK_INIT_OK");
-		if (early_rootfs_cpio_ready())
-			ir0_boot_smoke("ARM64_CPIO_ROOT_OK");
-		if (early_rootfs_ready())
-			ir0_boot_smoke("ARM64_ROOTFS_OK");
-	}
-	ir0_rootfs_prepare_userspace_base();
-	if (ir0_bpivot_product_boot(ir0_bpath_vfs_product_ops()) == 0)
-		ir0_boot_smoke("ARM64_BPIVOT_COMMIT_OK");
-}
-#endif
 
 /* The entry stub stashes the firmware DTB pointer (x0) before kmain. */
 void ir0_boot_port_params(uintptr_t firmware_handle,
@@ -149,17 +93,4 @@ void ir0_boot_port_serial_before_logging(void)
 
 void ir0_boot_port_serial_after_driver_registry(void)
 {
-}
-
-void ir0_boot_port_maybe_seed_init_from_embedded(void)
-{
-#if defined(IR0_ARM64_PRODUCT_KERNEL)
-	/*
-	 * Not a seed: bind block rootfs / CPIO when present. Missing /sbin/init
-	 * fails honestly in the common handoff (same as x86 without ISD).
-	 */
-	boot_arm64_bind_block_rootfs();
-#else
-	(void)0;
-#endif
 }

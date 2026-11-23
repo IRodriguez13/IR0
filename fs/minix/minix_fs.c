@@ -8,6 +8,7 @@
  */
 
 #include "minix_fs_internal.h"
+#include <ir0/cmdline.h>
 
 minix_fs_info_t minix_fs;
 static dev_t minix_root_dev;
@@ -90,7 +91,7 @@ int minix_sync_zone_bitmap(void)
 static dev_t minix_root_dev_id(void)
 {
 	if (minix_root_dev == 0)
-		minix_root_dev = ir0_block_lookup_by_name(CONFIG_ROOT_BLOCK_DEVICE);
+		minix_root_dev = ir0_block_lookup_by_name(ir0_cmdline_root_device());
 	return minix_root_dev;
 }
 

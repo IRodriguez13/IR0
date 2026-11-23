@@ -112,7 +112,7 @@ ARM64_PRODUCT_SWITCH_OBJS = \
 	arch/arm64/asm/context/switch_early.o \
 	arch/arm64/sources/switch_early.o
 
-# Product virtio-blk (CPIO/vda) over the common MMIO transport.
+# Product virtio-blk (vda root disk) over the common MMIO transport.
 ARM64_PRODUCT_STORAGE_OBJS = \
 	drivers/virtio/virtio_blk.o \
 	drivers/virtio/virtio_mmio.o

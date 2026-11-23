@@ -328,7 +328,3 @@ void ir0_boot_port_serial_after_driver_registry(void)
 {
 	serial_init();
 }
-
-void ir0_boot_port_maybe_seed_init_from_embedded(void)
-{
-}

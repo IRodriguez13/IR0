@@ -343,7 +343,8 @@ def qemu_argv(arch: str, disk: Path, kernel: Path) -> list[str]:
                 "-net", "none"]
     return ["qemu-system-aarch64", "-M", "virt,gic-version=2",
             "-cpu", "cortex-a57", "-global", "virtio-mmio.force-legacy=false",
-            "-kernel", str(kernel), "-nographic", "-serial", "mon:stdio",
+            "-kernel", str(kernel), "-append", "root=/dev/vda",
+            "-nographic", "-serial", "mon:stdio",
             "-drive", f"file={disk},format=raw,if=none,id=ltp",
             "-device", "virtio-blk-device,drive=ltp", "-display", "none",
             "-no-reboot"]

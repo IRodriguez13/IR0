@@ -31,7 +31,6 @@ int ir0_boot_port_snapshot_fill(const struct ir0_boot_params *params,
 
 void ir0_boot_port_serial_before_logging(void);
 void ir0_boot_port_serial_after_driver_registry(void);
-void ir0_boot_port_maybe_seed_init_from_embedded(void);
 void ir0_boot_port_unmask_irqs(void);
 
 #ifdef __cplusplus

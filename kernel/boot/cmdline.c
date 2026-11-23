@@ -3,7 +3,7 @@
  * Copyright (C) 2026  Iván Rodriguez
  *
  * File: cmdline.c
- * Description: Parse Multiboot cmdline for log profile / trace categories.
+ * Description: Parse the boot cmdline: root device, log profile, trace categories.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -90,6 +90,34 @@ static void apply_kconfig_default(void)
 #else
 	klog_apply_profile(KLOG_PROFILE_NORMAL);
 #endif
+}
+
+const char *ir0_cmdline_root_device(void)
+{
+	static char name[32];
+	const char *cmdline = boot_memory_cmdline();
+	const char *p = cmdline;
+	const char *val;
+	size_t i;
+
+	while (p && *p)
+	{
+		while (*p == ' ' || *p == '\t')
+			p++;
+		val = cmdline_value_after(p, "root=/dev/");
+		if (val)
+		{
+			for (i = 0; i < sizeof(name) - 1U && val[i] &&
+				    val[i] != ' ' && val[i] != '\t'; i++)
+				name[i] = val[i];
+			name[i] = '\0';
+			if (i > 0)
+				return name;
+		}
+		while (*p && *p != ' ' && *p != '\t')
+			p++;
+	}
+	return CONFIG_ROOT_BLOCK_DEVICE;
 }
 
 int ir0_cmdline_tty_smoke_enabled(void)

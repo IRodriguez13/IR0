@@ -17,6 +17,7 @@
 #include <ir0/kmem.h>
 #include <ir0/cred.h>
 #include <ir0/blockdev.h>
+#include <ir0/cmdline.h>
 #include <ir0/partition.h>
 #include <ir0/path_routed.h>
 #include <ir0/klog.h>
@@ -605,7 +606,7 @@ static int vfs_mount_fallback_root(const char *why)
 
 int vfs_init_root(void)
 {
-    const char *root_blk = CONFIG_ROOT_BLOCK_DEVICE;
+    const char *root_blk = ir0_cmdline_root_device();
     const char *root_fs = CONFIG_ROOT_FILESYSTEM;
     char root_dev_path[64];
     int ret;

@@ -33,7 +33,7 @@ $(KERNEL_ROOT)/build/conformance/x86_64/conformance: $(CONFORMANCE_SRCS)
 	@$(MAKE) -C tests/conformance ARCH=x86_64 conformance
 
 $(KERNEL_ROOT)/build/conformance/arm64/conformance: $(CONFORMANCE_SRCS)
-	@$(MAKE) -C tests/conformance ARCH=arm64 conformance stub
+	@$(MAKE) -C tests/conformance ARCH=arm64 conformance
 
 # LTP is optional and never downloaded: LTP_SRC names an existing checkout.
 ir0-conformance-x86: kernel-x64-userspace.iso \
@@ -77,7 +77,7 @@ ir0-fuzz-x86: kernel-x64-userspace.iso
 	@echo "✓ ir0-fuzz-x86 seed=$(SEED) count=$(COUNT)"
 
 ir0-fuzz-arm64: kernel-arm64-product.bin
-	@$(MAKE) -C tests/conformance ARCH=arm64 stub fuzz \
+	@$(MAKE) -C tests/conformance ARCH=arm64 fuzz \
 		SEED=$(SEED) COUNT=$(COUNT) BATCH=$(BATCH) TRACE=$(TRACE)
 	@$(CONFORMANCE_RUN) run --arch arm64 --mode fuzz \
 		--binary $(KERNEL_ROOT)/build/conformance/arm64/fuzz-s$(SEED)-n$(COUNT)-b$(BATCH)-t$(TRACE) \
@@ -102,7 +102,7 @@ ir0-selftest-red-$(1)-x86: kernel-x64-userspace.iso
 	@echo "✓ ir0-selftest-red-$(1)-x86"
 
 ir0-selftest-red-$(1)-arm64: kernel-arm64-product.bin
-	@$$(MAKE) -C tests/conformance ARCH=arm64 stub red RED=linux_abi_$(1)
+	@$$(MAKE) -C tests/conformance ARCH=arm64 red RED=linux_abi_$(1)
 	@$$(CONFORMANCE_RUN) run --arch arm64 --mode conformance --timeout 300 \
 		--binary $$(KERNEL_ROOT)/build/selftests/arm64/linux_abi_$(1) \
 		--cases $$(KERNEL_ROOT)/tests/selftests/kernel/linux_abi_$(1).h \

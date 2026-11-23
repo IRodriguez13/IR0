@@ -144,20 +144,31 @@ def main() -> int:
         if not product.is_file():
             product = ROOT / "kernel-arm64-product.bin"
         require(product, "ARCH=arm64 make kernel-arm64-product.bin")
-        cpio_fd, cpio_name = tempfile.mkstemp(
-            prefix="ir0-selftest-arm64.", dir=os.environ.get("TMPDIR", "/tmp")
+        fd, disk_name = tempfile.mkstemp(
+            prefix="ir0-selftest-arm64.", suffix=".img", dir=os.environ.get("TMPDIR", "/tmp")
         )
-        os.close(cpio_fd)
-        cpio = Path(cpio_name)
+        os.close(fd)
+        disk = Path(disk_name)
         try:
+            with disk.open("wb") as fp:
+                fp.truncate(32 * 1024 * 1024)
             if run(
                 [
                     sys.executable,
-                    str(ROOT / "scripts" / "make_test_cpio.py"),
-                    "--init",
+                    str(ROOT / "scripts" / "inject_init_minix.py"),
+                    "--format",
+                    str(disk),
+                ],
+                timeout=30,
+            ) != 0:
+                return 1
+            if run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "inject_init_minix.py"),
+                    str(disk),
                     str(binary),
-                    "--output",
-                    str(cpio),
+                    "sbin/init",
                 ],
                 timeout=30,
             ) != 0:
@@ -177,10 +188,6 @@ def main() -> int:
                     "--success-mode",
                     "all",
                     "--done",
-                    "ARM64_CPIO_ROOT_OK",
-                    "--done",
-                    "IR0_BPIVOT_COMMIT_OK",
-                    "--done",
                     "INIT_EXEC_LOADED_OK",
                     "--done",
                     done_tag,
@@ -197,8 +204,10 @@ def main() -> int:
                     "-nographic",
                     "-serial",
                     "mon:stdio",
+                    "-append",
+                    "root=/dev/vda",
                     "-drive",
-                    f"file={cpio},format=raw,if=none,id=selftest",
+                    f"file={disk},format=raw,if=none,id=selftest",
                     "-device",
                     "virtio-blk-device,drive=selftest",
                     "-display",
@@ -208,7 +217,7 @@ def main() -> int:
                 timeout=args.timeout + 30,
             )
         finally:
-            cpio.unlink(missing_ok=True)
+            disk.unlink(missing_ok=True)
 
     if rc != 0:
         print(f"ir0-selftest: QEMU failed rc={rc} log={log}", file=sys.stderr)
