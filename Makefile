@@ -434,7 +434,6 @@ KERNEL_OBJS = \
     kernel/process/parent.o \
     kernel/process/resources.o \
     kernel/process/exit_bind.o \
-    fs/cwd.o \
     fs/file_table.o \
     kernel/process/exit.o \
     kernel/process/wait.o \
@@ -491,12 +490,9 @@ KERNEL_OBJS = \
 	fs/ramtab.o \
 	ipc/early_anonfd.o \
 	ipc/early_unix.o \
-	ipc/product_ipc.o \
-	kernel/syscalls/product_vfs.o \
 	kernel/syscalls/early_process_state.o \
 	kernel/syscalls/early_process_helpers.o \
 	kernel/syscalls/early_process.o \
-	kernel/syscalls/syscall_identity.o \
 	kernel/syscalls/early_mm.o \
     kernel/entry/syscall_dispatch.o \
     net/sock_udp.o \

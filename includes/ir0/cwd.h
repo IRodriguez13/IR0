@@ -28,5 +28,3 @@ struct ir0_cwd_ops
 	int (*set_root)(const char *path);
 };
 
-const struct ir0_cwd_ops *ir0_cwd_product(void);
-extern const struct syscall_context_provider ir0_product_cwd_provider;
