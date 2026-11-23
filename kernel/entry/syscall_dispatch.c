@@ -556,7 +556,7 @@ int64_t syscall_dispatch(uint64_t syscall_num, uint64_t arg1, uint64_t arg2,
 				  process_syscall_ip(current_process));
     }
   }
-  r = syscall_handler_invoke(&native_syscall_handlers, NULL, syscall_id,
+  r = syscall_handler_invoke(&native_syscall_handlers, syscall_id,
 			     arg1, arg2, arg3, arg4, arg5, arg6);
   KTM_TRACE_SYSCALL_RET((uint32_t)syscall_num, (uint32_t)r);
   /*

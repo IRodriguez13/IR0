@@ -17,10 +17,7 @@ void syscall_handlers_init(struct syscall_handler_table *table)
 	if (!table)
 		return;
 	for (id = 0; id < IR0_SYSCALL_COUNT; id++)
-	{
 		table->handlers[id] = 0;
-		table->context_handlers[id] = 0;
-	}
 }
 
 int syscall_handler_set(struct syscall_handler_table *table,
@@ -30,56 +27,11 @@ int syscall_handler_set(struct syscall_handler_table *table,
 	    id >= IR0_SYSCALL_COUNT)
 		return -EINVAL;
 	table->handlers[id] = handler;
-	table->context_handlers[id] = 0;
-	return 0;
-}
-
-int syscall_context_handler_set(struct syscall_handler_table *table,
-				enum ir0_syscall_id id,
-				syscall_context_handler_t handler)
-{
-	if (!table || !handler || id <= IR0_SYSCALL_UNKNOWN ||
-	    id >= IR0_SYSCALL_COUNT)
-		return -EINVAL;
-	table->handlers[id] = 0;
-	table->context_handlers[id] = handler;
-	return 0;
-}
-
-int syscall_context_provider_register(struct syscall_handler_table *table,
-				      const struct syscall_context_provider *provider)
-{
-	unsigned int index;
-
-	if (!table || !provider || !provider->handler || !provider->ids ||
-	    provider->count == 0)
-		return -EINVAL;
-	/* Validate the complete descriptor before mutating the table. */
-	for (index = 0; index < provider->count; index++)
-	{
-		unsigned int prior;
-		enum ir0_syscall_id id = provider->ids[index];
-
-		if (id <= IR0_SYSCALL_UNKNOWN || id >= IR0_SYSCALL_COUNT)
-			return -EINVAL;
-		if (table->handlers[id] || table->context_handlers[id])
-			return -EEXIST;
-		for (prior = 0; prior < index; prior++)
-		{
-			if (provider->ids[prior] == id)
-				return -EEXIST;
-		}
-	}
-	for (index = 0; index < provider->count; index++)
-	{
-		table->handlers[provider->ids[index]] = 0;
-		table->context_handlers[provider->ids[index]] = provider->handler;
-	}
 	return 0;
 }
 
 int64_t syscall_handler_invoke(const struct syscall_handler_table *table,
-			       void *context, enum ir0_syscall_id id, uint64_t arg1,
+			       enum ir0_syscall_id id, uint64_t arg1,
 			       uint64_t arg2, uint64_t arg3, uint64_t arg4,
 			       uint64_t arg5, uint64_t arg6)
 {
@@ -88,9 +40,6 @@ int64_t syscall_handler_invoke(const struct syscall_handler_table *table,
 	if (!table || id <= IR0_SYSCALL_UNKNOWN || id >= IR0_SYSCALL_COUNT)
 		return -ENOSYS;
 	handler = table->handlers[id];
-	if (table->context_handlers[id])
-		return table->context_handlers[id](context, id, arg1, arg2, arg3,
-					   arg4, arg5, arg6);
 	if (!handler)
 		return -ENOSYS;
 	return handler(arg1, arg2, arg3, arg4, arg5, arg6);
