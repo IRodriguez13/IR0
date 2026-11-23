@@ -258,3 +258,23 @@ driver_bootstrap_register an entry in a driver_boot_entry table
 driver_bootstrap_reset (nothing; the tables are const)
 driver_bootstrap_run_all driver_bootstrap_run()
 ir0_boot_arch_drivers ir0_boot_arch_driver_table
+
+# Retired arch facade headers (Q5): includes/ir0/ keeps only portable APIs;
+# ISA layouts live in arch/<isa>/include/asm/<topic>.h. The scan matches the
+# stem of an #include path, so the header cannot come back under that name.
+arch_port the portable headers (<ir0/cpu.h>, <ir0/mm.h>, ...)
+arch_cpu <ir0/cpu.h>, <ir0/irq.h>, <ir0/tlb.h>
+arch_mm <asm/pgtable.h>, <ir0/paging.h>
+arch_task <ir0/task_access.h>
+arch_task_ops <ir0/task_access.h>
+arch_types <stdint.h>
+arch_io <asm/processor.h>
+arch_info <asm/setup.h>
+arch_debug <asm/hw_breakpoint.h>
+arch_elf <asm/elf.h>
+arch_pf_debug <ir0/mm_diag.h>
+arch_page_fault <ir0/page_fault.h>
+arch_syscall_frame_arm64 <asm/syscall_frame.h>
+arch_syscall_frame_x86_64 <asm/syscall_frame.h>
+arch_task_context_arm64 <asm/task_context.h>
+arch_task_context_x86_64 <asm/task_context.h>
