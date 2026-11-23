@@ -264,14 +264,27 @@ _Static_assert(IR0_UCONTEXT_MCONTEXT_OFF + sizeof(struct sigcontext) ==
 int send_signal(int pid, int signal);
 
 /**
- * send_sig_info - Queue @sig with @info for @t (Linux send_sig_info()).
+ * send_sig_info - Queue @sig with @info (Linux send_sig_info() and
+ * group_send_sig_info()).
+ * @group: 0 sends to the thread @t (tkill, tgkill); 1 sends to @t's
+ *         process, and any of its threads that does not block @sig
+ *         takes it (kill, sigqueue).
  *
  * Ignored signals are dropped, a standard signal already pending is not
- * queued again, real-time signals queue one entry per send. Wakes @t
- * when it does not block @sig. Returns 0, or -EAGAIN when a real-time
- * signal from sigqueue cannot be queued.
+ * queued again, real-time signals queue one entry per send. Wakes the
+ * receiving thread. Returns 0, or -EAGAIN when a real-time signal from
+ * sigqueue cannot be queued.
  */
-int send_sig_info(int sig, const siginfo_t *info, process_t *t);
+int send_sig_info(int sig, const siginfo_t *info, process_t *t, int group);
+
+/*
+ * Signal state of a new task: nothing pending; with CLONE_THREAD it joins
+ * @parent's thread group, otherwise (or with no @parent) it starts one.
+ * signals_task_release() undoes it when the task exits.
+ */
+int signals_task_init(process_t *p, const process_t *parent,
+		      unsigned long clone_flags);
+void signals_task_release(process_t *p);
 
 /* Every signal pending for @p, blocked or not (Linux sigpending set). */
 uint64_t signal_pending_set(const process_t *p);

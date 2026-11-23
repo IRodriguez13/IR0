@@ -617,3 +617,75 @@ int sig_sigqueueinfo_rules(void)
 		      SIGUSR1, &si), ESRCH);
 	return CONF_PASS;
 }
+
+static volatile int g_thread_stop;
+static volatile int g_thread_done;
+static volatile int g_thread_ready;
+
+static int thread_spin(void *arg)
+{
+	(void)arg;
+	g_thread_ready = 1;
+	while (!g_thread_stop)
+		(void)S0(SYS_sched_yield);
+	g_thread_done = 1;
+	return 0;
+}
+
+static int wait_flag(volatile int *flag, int want)
+{
+	long end = rt_now_ms() + 3000;
+
+	while (*flag != want && rt_now_ms() < end)
+		rt_sleep_ms(2);
+	return *flag == want;
+}
+
+#define SIG_THREAD_FLAGS                                                     \
+	(CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD |  \
+	 CLONE_SYSVSEM)
+
+static int in_tstack(unsigned long sp)
+{
+	unsigned long lo = (unsigned long)g_tstack;
+
+	return sp >= lo && sp < lo + sizeof(g_tstack);
+}
+
+/*
+ * kernel/signal.c complete_signal(): kill() targets the thread group, and
+ * a thread that does not block the signal takes it; the handler runs on
+ * that thread's stack. tgkill() targets the one thread it names.
+ */
+int sig_kill_picks_unblocked_thread(void)
+{
+	unsigned long set = SIGBIT(SIGUSR1) | SIGBIT(SIGUSR2);
+	unsigned long pending = 0;
+	long tid;
+
+	EXPECT(set_info_handler(SIGUSR1, 0), 0);
+	EXPECT(set_info_handler(SIGUSR2, 0), 0);
+	OK(tid, rt_clone_fn(SIG_THREAD_FLAGS, (void *)g_tstack_top(),
+			    thread_spin, 0));
+	CHECK(wait_flag(&g_thread_ready, 1));
+	/* The thread keeps the mask it was created with: nothing blocked. */
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_BLOCK, &set, 0, 8), 0);
+	EXPECT(S2(SYS_kill, S0(SYS_getpid), SIGUSR1), 0);
+	CHECK(wait_flag(&g_log_n, 1));
+	EXPECT(g_log_sig[0], SIGUSR1);
+	EXPECT(g_log_tid[0], tid);
+	CHECK(in_tstack(g_log_sp[0]));
+	EXPECT(S3(SYS_tgkill, S0(SYS_getpid), tid, SIGUSR2), 0);
+	CHECK(wait_flag(&g_log_n, 2));
+	EXPECT(g_log_tid[1], tid);
+	EXPECT(g_log_code[1], SIG_SI_TKILL);
+	/* Sent to the blocked main thread: it stays pending there. */
+	EXPECT(S3(SYS_tgkill, S0(SYS_getpid), S0(SYS_gettid), SIGUSR2), 0);
+	EXPECT(S2(SYS_rt_sigpending, &pending, 8), 0);
+	EXPECT(pending, SIGBIT(SIGUSR2));
+	g_thread_stop = 1;
+	CHECK(wait_flag(&g_thread_done, 1));
+	rt_sleep_ms(20);
+	EXPECT(g_log_n, 2);
+	return CONF_PASS;
+}

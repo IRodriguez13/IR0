@@ -291,7 +291,7 @@ static int64_t send_specific(pid_t tgid, pid_t tid, int sig,
 		return -EPERM;
 	if (sig == 0)
 		return 0;
-	return send_sig_info(sig, info, p);
+	return send_sig_info(sig, info, p, 0);
 }
 
 /*
@@ -360,7 +360,7 @@ int64_t sys_rt_sigqueueinfo(pid_t pid, int sig, const siginfo_t *uinfo)
 		return -EPERM;
 	if (sig == 0)
 		return 0;
-	return send_sig_info(sig, &info, p);
+	return send_sig_info(sig, &info, p, 1);
 }
 
 /* sys_rt_tgsigqueueinfo - Linux rt_tgsigqueueinfo(2): to one thread. */
@@ -393,9 +393,9 @@ int64_t sys_kill(pid_t pid, int signal)
 	process_t *target;
 	process_t *scan;
 	pid_t pgid;
+	process_t *self = NULL;
 	int count = 0;
 	int sent = 0;
-	int self = 0;
 
 	if (!current_process)
 		return -ESRCH;
@@ -412,7 +412,7 @@ int64_t sys_kill(pid_t pid, int signal)
 			return -EPERM;
 		if (signal == 0)
 			return 0;
-		return send_sig_info(signal, &info, target);
+		return send_sig_info(signal, &info, target, 1);
 	}
 
 	if (pid == INT32_MIN)
@@ -420,7 +420,8 @@ int64_t sys_kill(pid_t pid, int signal)
 	pgid = (pid == 0) ? current_process->pgid : -pid;
 	for (scan = process_list; scan; scan = scan->next)
 	{
-		if (scan->mode != USER_MODE)
+		/* One delivery per process: its threads share the pgid. */
+		if (scan->mode != USER_MODE || scan->task.pid != scan->tgid)
 			continue;
 		if (pid == -1)
 		{
@@ -433,13 +434,13 @@ int64_t sys_kill(pid_t pid, int signal)
 		if (!kill_permitted(scan))
 			continue;
 		/* The caller last: a fatal signal to itself does not return. */
-		if (scan == current_process)
+		if (scan->tgid == current_process->tgid)
 		{
-			self = 1;
+			self = scan;
 			continue;
 		}
 		/* A zombie still counts and takes the signal as a no-op (Linux). */
-		if (signal == 0 || send_sig_info(signal, &info, scan) == 0)
+		if (signal == 0 || send_sig_info(signal, &info, scan, 1) == 0)
 			sent++;
 	}
 
@@ -450,7 +451,7 @@ int64_t sys_kill(pid_t pid, int signal)
 	if (count == 0)
 		return -ESRCH;
 	if (self && (signal == 0 ||
-		     send_sig_info(signal, &info, current_process) == 0))
+		     send_sig_info(signal, &info, self, 1) == 0))
 		sent++;
 	if (sent == 0 && pid != -1)
 		return -EPERM;

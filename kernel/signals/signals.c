@@ -23,6 +23,7 @@
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/process_domains.h>
+#include <ir0/clone.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/spinlock.h>
@@ -59,7 +60,7 @@ static int signal_setup_frame(process_t *p, int sig,
  */
 static ir0_spinlock_t sigqueue_lock;
 
-/* Queued siginfo per task: the RLIMIT_SIGPENDING role. */
+/* Queued siginfo per thread group: the RLIMIT_SIGPENDING role. */
 #define SIGQUEUE_MAX 1024
 
 /*
@@ -317,7 +318,9 @@ static int signal_default_stops(int sig)
 
 uint64_t signal_pending_set(const process_t *p)
 {
-	return p ? p->signal_pending : 0;
+	if (!p)
+		return 0;
+	return p->signal_pending | (p->signal ? p->signal->shared_pending : 0);
 }
 
 /*
@@ -358,18 +361,78 @@ static void sigqueue_free(struct sigqueue *q)
 	}
 }
 
-void signal_flush(process_t *p, uint64_t mask)
+/* Drop @mask from @p's own set and, with @shared, the group's set. */
+static void signal_flush_sets(process_t *p, uint64_t mask, int shared)
 {
+	struct signal_struct *sig = p->signal;
 	struct sigqueue *freed = NULL;
 	unsigned long flags;
+	int n;
+
+	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+	p->signal_pending &= ~mask;
+	n = sigqueue_collect(&p->sigqueue, mask, &freed);
+	if (sig && shared)
+	{
+		sig->shared_pending &= ~mask;
+		n += sigqueue_collect(&sig->shared_queue, mask, &freed);
+	}
+	if (sig)
+		sig->nr_queued -= n;
+	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+	sigqueue_free(freed);
+}
+
+void signal_flush(process_t *p, uint64_t mask)
+{
+	if (p)
+		signal_flush_sets(p, mask, 1);
+}
+
+int signals_task_init(process_t *p, const process_t *parent,
+		      unsigned long clone_flags)
+{
+	unsigned long flags;
+
+	p->signal_pending = 0;
+	p->sigqueue = NULL;
+	p->signal = NULL;
+	if (parent && (clone_flags & CLONE_THREAD) && parent->signal)
+	{
+		flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+		parent->signal->refcount++;
+		ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+		p->signal = parent->signal;
+		return 0;
+	}
+	p->signal = kmalloc(sizeof(*p->signal));
+	if (!p->signal)
+		return -ENOMEM;
+	memset(p->signal, 0, sizeof(*p->signal));
+	p->signal->refcount = 1;
+	return 0;
+}
+
+void signals_task_release(process_t *p)
+{
+	struct signal_struct *sig;
+	unsigned long flags;
+	int last = 0;
 
 	if (!p)
 		return;
+	signal_flush_sets(p, ~0ULL, 0);
+	sig = p->signal;
+	p->signal = NULL;
+	if (!sig)
+		return;
 	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
-	p->signal_pending &= ~mask;
-	p->sigqueue_count -= sigqueue_collect(&p->sigqueue, mask, &freed);
+	last = --sig->refcount == 0;
 	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
-	sigqueue_free(freed);
+	if (!last)
+		return;
+	sigqueue_free(sig->shared_queue);
+	kfree(sig);
 }
 
 /*
@@ -380,6 +443,9 @@ void signal_flush(process_t *p, uint64_t mask)
  */
 static void dequeue_signal(process_t *p, int sig, siginfo_t *info)
 {
+	struct signal_struct *group = p->signal;
+	struct sigqueue **list = &p->sigqueue;
+	uint64_t *set = &p->signal_pending;
 	struct sigqueue **pp;
 	struct sigqueue *q = NULL;
 	struct sigqueue *r;
@@ -387,13 +453,20 @@ static void dequeue_signal(process_t *p, int sig, siginfo_t *info)
 	int more = 0;
 
 	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
-	for (pp = &p->sigqueue; *pp; pp = &(*pp)->next)
+	/* Linux dequeue_signal(): the thread's own set before the group's. */
+	if (!(*set & SIGNAL_MASK(sig)) && group)
+	{
+		list = &group->shared_queue;
+		set = &group->shared_pending;
+	}
+	for (pp = list; *pp; pp = &(*pp)->next)
 	{
 		if ((*pp)->info.si_signo == sig)
 		{
 			q = *pp;
 			*pp = q->next;
-			p->sigqueue_count--;
+			if (group)
+				group->nr_queued--;
 			break;
 		}
 	}
@@ -406,7 +479,7 @@ static void dequeue_signal(process_t *p, int sig, siginfo_t *info)
 		}
 	}
 	if (!more)
-		p->signal_pending &= ~SIGNAL_MASK(sig);
+		*set &= ~SIGNAL_MASK(sig);
 	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
 
 	if (q)
@@ -485,16 +558,42 @@ static void signal_wake(process_t *t, int sig)
 	signal_trace(SIGNAL_TRACE_WAKE, t, sig, 0, 0, 0);
 }
 
-int send_sig_info(int sig, const siginfo_t *info, process_t *t)
+/*
+ * Linux complete_signal(): the thread that takes a signal sent to @t's
+ * group. @t itself when it does not block @sig, otherwise another live
+ * thread of the group that does not, or NULL when all block it (it then
+ * stays pending for the group).
+ */
+static process_t *signal_pick_thread(process_t *t, int sig)
+{
+	process_t *scan;
+
+	if (!(t->signal_mask & SIGNAL_MASK(sig)))
+		return t;
+	for (scan = process_list; scan; scan = scan->next)
+	{
+		if (scan == t || scan->tgid != t->tgid || scan->signal != t->signal)
+			continue;
+		if (process_is_zombie(scan) || !scan->sighand)
+			continue;
+		if (!(scan->signal_mask & SIGNAL_MASK(sig)))
+			return scan;
+	}
+	return NULL;
+}
+
+int send_sig_info(int sig, const siginfo_t *info, process_t *t, int group)
 {
 	struct sigqueue *q;
+	struct sigqueue **list;
+	uint64_t *set;
 	unsigned long flags;
 	uint64_t bit;
 
 	if (!t || !valid_signal(sig) || !info)
 		return -EINVAL;
 	/* A zombie takes the signal as a no-op (Linux). */
-	if (!t->sighand || process_is_zombie(t))
+	if (!t->sighand || !t->signal || process_is_zombie(t))
 		return 0;
 	bit = SIGNAL_MASK(sig);
 
@@ -530,15 +629,18 @@ int send_sig_info(int sig, const siginfo_t *info, process_t *t)
 		return 0;
 	}
 
+	list = group ? &t->signal->shared_queue : &t->sigqueue;
+	set = group ? &t->signal->shared_pending : &t->signal_pending;
+
 	/* Linux legacy_queue(): a standard signal is pending at most once. */
-	if (sig < SIGRTMIN && (t->signal_pending & bit))
+	if (sig < SIGRTMIN && (*set & bit))
 		return 0;
 
 	q = kmalloc(sizeof(*q));
 	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
-	if (q && t->sigqueue_count < SIGQUEUE_MAX)
+	if (q && t->signal->nr_queued < SIGQUEUE_MAX)
 	{
-		struct sigqueue **tail = &t->sigqueue;
+		struct sigqueue **tail = list;
 
 		q->next = NULL;
 		q->info = *info;
@@ -546,7 +648,7 @@ int send_sig_info(int sig, const siginfo_t *info, process_t *t)
 		while (*tail)
 			tail = &(*tail)->next;
 		*tail = q;
-		t->sigqueue_count++;
+		t->signal->nr_queued++;
 		q = NULL;
 	}
 	else if (sig >= SIGRTMIN && info->si_code != SI_USER &&
@@ -558,12 +660,15 @@ int send_sig_info(int sig, const siginfo_t *info, process_t *t)
 		return -EAGAIN;
 	}
 	/* Otherwise the signal still arrives, without its info. */
-	t->signal_pending |= bit;
+	*set |= bit;
 	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
 	if (q)
 		kfree(q);
 
-	signal_wake(t, sig);
+	if (group)
+		t = signal_pick_thread(t, sig);
+	if (t)
+		signal_wake(t, sig);
 	return 0;
 }
 
@@ -590,7 +695,7 @@ int send_signal(int pid, int signal)
 	memset(&info, 0, sizeof(info));
 	info.si_signo = signal;
 	info.si_code = SI_KERNEL;
-	return send_sig_info(signal, &info, proc) == 0 ? 0 : -1;
+	return send_sig_info(signal, &info, proc, 1) == 0 ? 0 : -1;
 }
 
 int send_signal_pgrp(int32_t pgid, int signal)
@@ -603,7 +708,8 @@ int send_signal_pgrp(int32_t pgid, int signal)
 
 	for (p = process_list; p; p = p->next)
 	{
-		if ((int32_t)p->pgid != pgid)
+		/* One delivery per process: its threads share the pgid. */
+		if ((int32_t)p->pgid != pgid || p->task.pid != p->tgid)
 			continue;
 		if (send_signal((int)p->task.pid, signal) == 0)
 			n++;

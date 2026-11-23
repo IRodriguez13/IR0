@@ -104,9 +104,6 @@ int process_signals_init(process_t *p)
 {
 	if (!p)
 		return -EINVAL;
-	p->signal_pending = 0;
-	p->sigqueue = NULL;
-	p->sigqueue_count = 0;
 	p->signal_mask = 0;
 	p->signal_ignored = 0;
 	p->signal_mask_saved = 0;
@@ -114,6 +111,9 @@ int process_signals_init(process_t *p)
 	p->saved_sigmask = 0;
 	p->restore_sigmask = 0;
 	p->signal_frame_sp = 0;
+	p->sighand = NULL;
+	if (signals_task_init(p, NULL, 0) < 0)
+		return -ENOMEM;
 	p->sighand = sighand_alloc_default();
 	if (!p->sighand)
 		return -ENOMEM;
@@ -126,7 +126,7 @@ void process_signals_drop(process_t *p)
 
 	if (!p)
 		return;
-	signal_flush(p, ~0ULL);
+	signals_task_release(p);
 	hand = p->sighand;
 	p->sighand = NULL;
 	sighand_put(hand);
@@ -177,10 +177,6 @@ int process_signals_clone(process_t *dst, const process_t *src,
 	if (!dst || !src)
 		return -EINVAL;
 
-	/* Linux copy_process(): the child starts with nothing pending. */
-	dst->signal_pending = 0;
-	dst->sigqueue = NULL;
-	dst->sigqueue_count = 0;
 	dst->signal_mask = src->signal_mask;
 	dst->signal_ignored = src->signal_ignored;
 	dst->signal_mask_saved = 0;
@@ -208,6 +204,9 @@ int process_signals_clone(process_t *dst, const process_t *src,
 	dst->it_real_expire_ms = 0;
 	dst->it_real_interval_ms = 0;
 	dst->sighand = NULL;
+	/* Nothing pending; a thread joins its creator's group (CLONE_THREAD). */
+	if (signals_task_init(dst, src, flags) < 0)
+		return -ENOMEM;
 	/*
 	 * Linux CLONE_SIGHAND: one table, later sigaction in either task is
 	 * visible to the other. Pending signals and both masks stay above,

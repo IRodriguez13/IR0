@@ -57,6 +57,20 @@ struct sighand_struct
 	void (*restorer[_NSIG + 1])(void);
 };
 
+/*
+ * What a thread group shares (Linux signal_struct subset). clone
+ * (CLONE_THREAD) shares it; the last task frees it. shared_pending holds
+ * the signals sent to the process (kill, sigqueue) until one of its
+ * threads takes them; nr_queued counts the siginfo entries of the group.
+ */
+struct signal_struct
+{
+	int refcount;
+	uint64_t shared_pending;
+	struct sigqueue *shared_queue;
+	int nr_queued;
+};
+
 /* Process-local binding for /proc /sys opens (not global virtual fds). */
 typedef struct pseudo_fd_bind
 {
@@ -249,7 +263,8 @@ typedef struct process
 	uint64_t it_real_interval_ms;
 
 	/* Signal management. Pending and masks stay on the task. */
-	uint64_t signal_pending; /* Signal N is bit N-1 (SIGNAL_MASK) */
+	/* Sent to this thread (tkill, faults); signal N is bit N-1. */
+	uint64_t signal_pending;
 	/*
 	 * Linux sighand: handler, sa_flags, sa_mask and restorer. Shared when
 	 * clone(CLONE_SIGHAND) is set; otherwise the child has its own copy.
@@ -339,10 +354,10 @@ typedef struct process
 	/*
 	 * siginfo of each instance in signal_pending, oldest first (Linux
 	 * struct sigpending list). A pending bit with no entry was raised by
-	 * the kernel without info. sigqueue_count bounds the list.
+	 * the kernel without info.
 	 */
 	struct sigqueue *sigqueue;
-	int sigqueue_count;
+	struct signal_struct *signal;
 
 } process_t;
 
