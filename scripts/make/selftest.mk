@@ -2056,6 +2056,45 @@ ir0-selftest-bigmem-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_BIGMEM)
 
 ir0-selftest-bigmem: ir0-selftest-bigmem-x86 ir0-selftest-bigmem-arm64
 
+# SCHED-NICE-SELFTEST
+IR0_SELFTEST_X86_SCHED_NICE := $(KERNEL_ROOT)/build/selftests/x86_64/sched_nice
+IR0_SELFTEST_ARM64_SCHED_NICE := $(KERNEL_ROOT)/build/selftests/arm64/sched_nice
+
+.PHONY: ir0-selftest-sched-nice-x86 ir0-selftest-sched-nice-arm64 \
+	ir0-selftest-sched-nice
+
+$(IR0_SELFTEST_X86_SCHED_NICE): tests/selftests/syscall/sched_nice.c \
+		tests/selftests/ir0/ksft.h
+	@$(MAKE) -C tests/selftests ARCH=x86_64 sched_nice
+
+$(IR0_SELFTEST_ARM64_SCHED_NICE): tests/selftests/syscall/sched_nice.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 sched_nice
+
+ir0-selftest-sched-nice-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_SCHED_NICE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_SELFTEST_X86_SCHED_NICE) \
+		--mem 256M \
+		--timeout 60 \
+		--stale-sec 45 \
+		--done "ok 1 sched_nice" \
+		--log $(HOST_TMP)/ir0-selftest-x86-sched-nice.log
+	@echo "✓ ir0-selftest-sched-nice-x86"
+
+ir0-selftest-sched-nice-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SCHED_NICE)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_SCHED_NICE) \
+		--mem 256M \
+		--timeout 60 \
+		--stale-sec 45 \
+		--done "ok 1 sched_nice" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-sched-nice.log
+	@echo "✓ ir0-selftest-sched-nice-arm64"
+
+ir0-selftest-sched-nice: ir0-selftest-sched-nice-x86 ir0-selftest-sched-nice-arm64
+
 # SCHED-LAT-SELFTEST
 IR0_SELFTEST_X86_SCHED_LAT := $(KERNEL_ROOT)/build/selftests/x86_64/sched_lat
 IR0_SELFTEST_ARM64_SCHED_LAT := $(KERNEL_ROOT)/build/selftests/arm64/sched_lat
