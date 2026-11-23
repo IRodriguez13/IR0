@@ -411,3 +411,21 @@ int sig_ucontext_sigmask_layout(void)
 	EXPECT(g_uc_mask, set);
 	return CONF_PASS;
 }
+
+/*
+ * kernel/signal.c restore_sigcontext() / rt_sigreturn: the mask after the
+ * handler is the uc_sigmask the handler leaves in its ucontext.
+ */
+int sig_sigreturn_restores_uc_sigmask(void)
+{
+	unsigned long cur = 0;
+
+	g_uc_edit = 1;
+	EXPECT(set_ucontext_handler(SIGUSR1), 0);
+	EXPECT(S2(SYS_kill, S0(SYS_getpid), SIGUSR1), 0);
+	EXPECT(g_hits, 1);
+	EXPECT(g_uc_mask, 0);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_BLOCK, 0, &cur, 8), 0);
+	EXPECT(cur, SIGBIT(SIGUSR2));
+	return CONF_PASS;
+}

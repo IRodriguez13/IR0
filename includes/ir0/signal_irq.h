@@ -31,12 +31,12 @@ int signal_sigcontext_validate_and_sanitize(struct sigcontext *ctx);
 /*
  * Linux ucontext_t for this ISA. @user_va is the address the handler
  * receives; the FP pointer inside the image uses it. import overlays
- * the edited mcontext onto @ctx.
+ * the edited mcontext onto @ctx and reads uc_sigmask into @mask.
  */
 void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
 		     uint64_t mask, void *image);
 void ucontext_import(const void *image, uint64_t user_va,
-		     struct sigcontext *ctx);
+		     struct sigcontext *ctx, uint64_t *mask);
 
 /*
  * Fill @ctx from a captured syscall frame (syscall insn while blocked).

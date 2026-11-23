@@ -463,6 +463,7 @@ int64_t sys_sigreturn(void)
 	struct sigcontext restored;
 	struct sigcontext *restore_ctx = &restored;
 	uint64_t user_sp;
+	uint64_t mask;
 
 	if (!current_process)
 		return -ESRCH;
@@ -478,9 +479,11 @@ int64_t sys_sigreturn(void)
 		return -EFAULT;
 	}
 	restored = user_frame.ctx;
+	mask = user_frame.oldmask;
+	/* Linux restore_sigcontext(): the handler may edit uc_sigmask too. */
 	ucontext_import(user_frame.ucontext,
 			     user_sp + offsetof(struct sigframe, ucontext),
-			     &restored);
+			     &restored, &mask);
 	if (!signal_sigcontext_validate_and_sanitize(restore_ctx))
 	{
 		/* Linux force_sig(SIGSEGV), delivered on the way out. */
@@ -488,7 +491,7 @@ int64_t sys_sigreturn(void)
 		return -EFAULT;
 	}
 
-	set_current_blocked(user_frame.oldmask);
+	set_current_blocked(mask);
 	current_process->signal_mask_saved_valid = 0;
 	current_process->signal_frame_sp = 0;
 
