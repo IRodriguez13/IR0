@@ -601,14 +601,15 @@ KERNEL_TEST_OBJS = \
 
 
 # Scheduler policy from menuconfig: link exactly one policy file
-# (sched/core.h). 0 round-robin, 1 CFS, 2 priority bands.
-ifeq ($(CONFIG_SCHEDULER_POLICY),2)
-KERNEL_OBJS += sched/prio.o
-else ifeq ($(CONFIG_SCHEDULER_POLICY),1)
-KERNEL_OBJS += sched/cfs.o
-else
-KERNEL_OBJS += sched/rr.o
+# (sched/core.h). A new policy adds one sched-policy-<n> entry.
+sched-policy-0 := sched/rr.o
+sched-policy-1 := sched/cfs.o
+sched-policy-2 := sched/prio.o
+SCHED_POLICY_OBJ := $(sched-policy-$(or $(CONFIG_SCHEDULER_POLICY),0))
+ifeq ($(SCHED_POLICY_OBJ),)
+$(error CONFIG_SCHEDULER_POLICY=$(CONFIG_SCHEDULER_POLICY) names no sched/ policy)
 endif
+KERNEL_OBJS += $(SCHED_POLICY_OBJ)
 
 ifeq ($(ARCH),arm64)
 KERNEL_OBJS += arch/arm64/sources/boot_arch.o
