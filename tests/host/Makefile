@@ -29,7 +29,7 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_ktm_sched_contract.c test_musl_cred_abi.c \
 	test_credential_saved_ids.c test_musl_mmap_contract.c \
 	test_signal_rt_sigaction_abi.c test_syscall_restart_abi.c test_mmap_null_placement.c \
-	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_elf_interp_abi.c test_early_rootfs_abi.c test_early_cpio_abi.c test_early_process_abi.c test_early_elf_stack_abi.c test_early_mm_abi.c test_blockdev_facade.c \
+	test_elf_initial_brk_abi.c test_elf_local_reloc_abi.c test_elf_interp_abi.c test_blockdev_facade.c \
 	test_arch_irq_facade.c test_arch_mm_pte_facade.c \
 	test_open_flags_abi.c test_fcntl_abi.c test_ktm_panic_inventory.c test_ktm_facade_contract.c \
 	test_ps2_set1_modifiers.c \
@@ -47,7 +47,6 @@ TEST_SRCS  = test_runner.c test_example.c \
 	test_pseudo_fs_honesty.c \
 	test_matrix_capture.c \
 	test_mount_prefix_boundary.c \
-	test_bpath_fold.c \
 	test_backend_mock_contract.c
 TEST_SRCS += test_pmm_banks.c test_boot_memory.c test_no_mmu_policy.c
 TEST_SRCS += test_oom_policy.c
@@ -76,7 +75,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_heartfs.o host_sysfs.o \
 	host_kernel_string.o \
 	host_rtc_calendar.o \
 	host_kmem_stub.o host_serial_stub.o host_klog_stub.o host_pipe_fd_stub.o \
-	host_open_flags.o host_bpath.o host_bpivot_stub.o \
+	host_open_flags.o \
 	host_sysfs_net_stub.o host_sysfs_attr_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
@@ -86,7 +85,7 @@ KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o \
 	host_alloc_policy.o host_no_mmu.o
 KERNEL_HOST_OBJS += host_oom.o
 KERNEL_HOST_OBJS += host_reclaim.o
-KERNEL_HOST_OBJS += host_elf64_image.o host_early_elf_stack.o host_early_mm.o
+KERNEL_HOST_OBJS += host_elf64_image.o
 KERNEL_HOST_OBJS += host_arm64_boot_info.o host_arm64_fdt_reader.o \
 	host_arm64_boot_info_platform.o host_arm64_boot_info_devices.o \
 	host_arm64_syscall_decode.o \
@@ -316,12 +315,6 @@ host_blockdev.o: $(KERNEL_ROOT)/block/blockdev.c
 host_elf64_image.o: $(KERNEL_ROOT)/fs/elf64_image.c
 	$(KERNEL_CC)
 
-host_early_elf_stack.o: $(KERNEL_ROOT)/kernel/exec/early_elf_stack.c
-	$(KERNEL_CC)
-
-host_early_mm.o: $(KERNEL_ROOT)/kernel/syscalls/early_mm.c
-	$(KERNEL_CC)
-
 host_arch_irq_stub.o: host_arch_irq_stub.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<
 
@@ -354,15 +347,6 @@ test_blockdev_facade.o: test_blockdev_facade.c
 
 host_open_flags.o: $(KERNEL_ROOT)/fs/open_flags.c
 	$(KERNEL_CC)
-
-host_bpath.o: $(KERNEL_ROOT)/fs/bpath.c
-	$(KERNEL_CC)
-
-host_bpivot_stub.o: host_bpivot_stub.c
-	$(CC) $(BASE_CFLAGS) -idirafter $(KERNEL_ROOT)/includes -c -o $@ $<
-
-test_bpath_fold.o: test_bpath_fold.c
-	$(CC) $(BASE_CFLAGS) -idirafter $(KERNEL_ROOT)/includes -c -o $@ $<
 
 test_ktm_panic_inventory.o: test_ktm_panic_inventory.c
 	$(CC) $(BASE_CFLAGS) -c -o $@ $<

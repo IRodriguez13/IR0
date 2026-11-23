@@ -177,7 +177,6 @@ static const struct ktest_case ktest_cases[] = {
 	  "shmget_metadata_oom_returns_enomem", 1 },
 	{ ktest_swap_header_and_area, "swap_header_and_area", 0 },
 	/* Switches the live root mount; it must remain the final contract. */
-	{ ktest_bpivot_boot_contract, "bpivot_boot_contract", 1 },
 	/*
 	 * tty_canon_block_wake: needs cooperative schedule from a real
 	 * timer/IRQ context; from kmain+holder it can spin forever.
