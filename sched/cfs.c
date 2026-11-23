@@ -31,8 +31,17 @@ typedef struct cfs_task
 	struct cfs_task *next;
 } cfs_task_t;
 
-static cfs_task_t *cfs_head;
-static cfs_task_t *cfs_tail;
+/*
+ * Everything a runqueue owns. There is one; SMP turns it into one per CPU
+ * and the code below keeps working on the CPU's own queue.
+ */
+struct cfs_rq
+{
+	cfs_task_t *head;
+	cfs_task_t *tail;
+};
+
+static struct cfs_rq cfs_rq;
 
 /* Same predicate as clock_system.c clock_comm_is_idle. Kept local. */
 static int cfs_comm_is_idle(const char *comm)
@@ -77,7 +86,7 @@ static cfs_task_t *cfs_find(process_t *proc)
 {
 	cfs_task_t *walk;
 
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		if (walk->process == proc)
 			return walk;
@@ -95,7 +104,7 @@ static uint64_t cfs_min_vruntime(void)
 	uint64_t min = 0;
 	int seen = 0;
 
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		if (!walk->process || cfs_comm_is_idle(walk->process->comm))
 			continue;
@@ -113,7 +122,7 @@ static void cfs_unlink(cfs_task_t *node)
 	cfs_task_t *prev = NULL;
 	cfs_task_t *walk;
 
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		if (walk != node)
 		{
@@ -124,9 +133,9 @@ static void cfs_unlink(cfs_task_t *node)
 		if (prev)
 			prev->next = node->next;
 		else
-			cfs_head = node->next;
-		if (cfs_tail == node)
-			cfs_tail = prev;
+			cfs_rq.head = node->next;
+		if (cfs_rq.tail == node)
+			cfs_rq.tail = prev;
 		node->next = NULL;
 		return;
 	}
@@ -140,18 +149,18 @@ static void cfs_insert_before(cfs_task_t *node, cfs_task_t *before)
 	if (!before)
 	{
 		node->next = NULL;
-		if (!cfs_head)
-			cfs_head = cfs_tail = node;
+		if (!cfs_rq.head)
+			cfs_rq.head = cfs_rq.tail = node;
 		else
 		{
-			cfs_tail->next = node;
-			cfs_tail = node;
+			cfs_rq.tail->next = node;
+			cfs_rq.tail = node;
 		}
 		return;
 	}
 
 	prev = NULL;
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		if (walk != before)
 		{
@@ -163,7 +172,7 @@ static void cfs_insert_before(cfs_task_t *node, cfs_task_t *before)
 		if (prev)
 			prev->next = node;
 		else
-			cfs_head = node;
+			cfs_rq.head = node;
 		return;
 	}
 }
@@ -174,7 +183,7 @@ static void cfs_make_first_equal(cfs_task_t *node)
 	cfs_task_t *walk;
 
 	cfs_unlink(node);
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		if (walk->vruntime == node->vruntime)
 		{
@@ -209,7 +218,7 @@ static void cfs_charge_running(void)
 	uint64_t now;
 
 	now = clock_get_tick_count();
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		uint64_t delta = 0;
 
@@ -247,7 +256,7 @@ static process_t *cfs_choose(void)
 	cfs_task_t *best = NULL;
 	cfs_task_t *idle = NULL;
 
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		process_t *proc = walk->process;
 
@@ -355,7 +364,7 @@ int sched_count_runnable(void)
 	unsigned long irq_flags;
 
 	irq_flags = rq_lock();
-	for (walk = cfs_head; walk; walk = walk->next)
+	for (walk = cfs_rq.head; walk; walk = walk->next)
 	{
 		if (walk->process &&
 		    (walk->process->state == PROCESS_READY ||
