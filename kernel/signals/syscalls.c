@@ -35,7 +35,7 @@ static uint64_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigset
 		if (!set)
 			return 0;
 		memcpy(&legacy64, set, sizeof(legacy64));
-		return linux_sigword_to_ir0(legacy64);
+		return legacy64;
 	}
 	return ir0_sigset_word(set);
 }
@@ -49,7 +49,7 @@ static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint64
 
 	if (sigsetsize == sizeof(uint64_t))
 	{
-		legacy64 = ir0_sigword_to_linux(mask);
+		legacy64 = mask;
 		memcpy(set, &legacy64, sizeof(legacy64));
 		return;
 	}
@@ -77,7 +77,7 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 
 	if (!current_process)
 		return -ESRCH;
-	if (signum < 1 || signum >= _NSIG)
+	if (!valid_signal(signum))
 		return -EINVAL;
 	if (signum == SIGKILL || signum == SIGSTOP)
 		return -EINVAL;
@@ -141,7 +141,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 		{
 			if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
 				return -EFAULT;
-			newmask = linux_sigword_to_ir0(legacy64);
+			newmask = legacy64;
 		}
 		else
 		{
@@ -169,7 +169,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 	{
 		if (sigsetsize == sizeof(uint64_t))
 		{
-			legacy64 = ir0_sigword_to_linux(oldmask);
+			legacy64 = oldmask;
 			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
 				return -EFAULT;
 		}
@@ -197,8 +197,7 @@ int64_t sys_rt_sigpending(sigset_t *set, size_t sigsetsize)
 	if (sigsetsize > sizeof(uint64_t))
 		return -EINVAL;
 
-	pending = ir0_sigword_to_linux(current_process->signal_pending &
-				       current_process->signal_mask);
+	pending = current_process->signal_pending & current_process->signal_mask;
 	if (copy_to_user(set, &pending, sigsetsize) != 0)
 		return -EFAULT;
 	return 0;
@@ -268,7 +267,7 @@ int64_t sys_tkill(pid_t tid, int sig)
 
 	if (!current_process)
 		return -ESRCH;
-	if (sig < 0 || sig >= _NSIG)
+	if (sig < 0 || sig > _NSIG)
 		return -EINVAL;
 	if (tid <= 0)
 		return -EINVAL;
@@ -289,7 +288,7 @@ int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig)
 
 	if (!current_process)
 		return -ESRCH;
-	if (sig < 0 || sig >= _NSIG)
+	if (sig < 0 || sig > _NSIG)
 		return -EINVAL;
 
 	p = process_find_by_pid(tid);
@@ -326,7 +325,7 @@ int64_t sys_kill(pid_t pid, int signal)
 
 	if (!current_process)
 		return -ESRCH;
-	if (signal < 0 || signal >= _NSIG)
+	if (signal < 0 || signal > _NSIG)
 		return -EINVAL;
 
 	if (pid > 0)

@@ -932,7 +932,7 @@ int64_t sys_prctl(int option, unsigned long arg2, unsigned long arg3,
   switch (option)
   {
   case PR_SET_PDEATHSIG:
-    if (arg2 >= _NSIG)
+    if (arg2 > _NSIG)
       return -EINVAL;
     current_process->pdeathsig = (int)arg2;
     return 0;

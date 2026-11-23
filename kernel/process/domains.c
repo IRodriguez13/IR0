@@ -30,7 +30,7 @@ static struct sighand_struct *sighand_alloc_default(void)
 	if (!hand)
 		return NULL;
 	hand->refcount = 1;
-	for (i = 0; i < _NSIG; i++)
+	for (i = 0; i <= _NSIG; i++)
 	{
 		hand->handlers[i] = SIG_DFL;
 		hand->sa_flags[i] = 0;
@@ -226,7 +226,7 @@ void process_sighand_note_ignore(process_t *owner, int sig, int ignored)
 	uint64_t bit;
 	uint64_t irq_flags;
 
-	if (!owner || !owner->sighand || sig < 1 || sig >= _NSIG)
+	if (!owner || !owner->sighand || !valid_signal(sig))
 		return;
 
 	bit = SIGNAL_MASK(sig);

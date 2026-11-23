@@ -98,17 +98,17 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	{
 		int sig;
 
-		for (sig = 1; sig < _NSIG; sig++)
+		for (sig = 1; sig <= _NSIG; sig++)
 		{
 			void (*handler)(int) = proc->sighand->handlers[sig];
 
 			if (handler == SIG_IGN)
 			{
-				snap->sig_ignored |= 1ULL << sig;
+				snap->sig_ignored |= SIGNAL_MASK(sig);
 			}
 			else if (handler != SIG_DFL)
 			{
-				snap->sig_caught |= 1ULL << sig;
+				snap->sig_caught |= SIGNAL_MASK(sig);
 			}
 		}
 	}
@@ -665,10 +665,10 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		       groups_line,
 		       snap.fd_size, snap.threads, snap.no_new_privs,
 		       snap.umask,
-		       (unsigned long long)(snap.sig_pending >> 1),
-		       (unsigned long long)(snap.sig_blocked >> 1),
-		       (unsigned long long)(snap.sig_ignored >> 1),
-		       (unsigned long long)(snap.sig_caught >> 1),
+		       (unsigned long long)snap.sig_pending,
+		       (unsigned long long)snap.sig_blocked,
+		       (unsigned long long)snap.sig_ignored,
+		       (unsigned long long)snap.sig_caught,
 		       (unsigned long long)vsize,
 		       (unsigned long long)rss_kb);
 	proc_fs_snap_release(&snap);

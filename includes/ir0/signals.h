@@ -55,23 +55,23 @@ typedef struct process process_t;
 #define SIGIO    29   /* I/O readiness notification (F_SETOWN/O_ASYNC) */
 
 /*
- * Bit N is signal N (1..63). A 32-bit mask cannot hold signal 32, so the
- * pending, blocked and ignored sets are one uint64_t.
+ * Linux sigset layout: signal N is bit N-1, so signals 1..64 fill one
+ * uint64_t. The pending, blocked and ignored sets use it unchanged at the
+ * ABI boundary.
  */
-#define SIGNAL_MASK(sig) (1ULL << (sig))
+#define SIGNAL_MASK(sig) (1ULL << ((sig) - 1))
 
 /* Never blocked, caught or ignored (Linux sigdelsetmask(SIGKILL|SIGSTOP)). */
 #define SIGNAL_UNBLOCKABLE (SIGNAL_MASK(SIGKILL) | SIGNAL_MASK(SIGSTOP))
 
-/* Exclusive bound: valid signals are 1.._NSIG-1. */
+/* Linux _NSIG: valid signals are 1.._NSIG inclusive (valid_signal()). */
 #define _NSIG 64
 
 /* Real-time signals. Standard signals stay 1..31. */
 #define SIGRTMIN 32
-#define SIGRTMAX 63
+#define SIGRTMAX _NSIG
 
 _Static_assert(SIGRTMIN == 32, "SIGRTMIN");
-_Static_assert(SIGRTMAX == (_NSIG - 1), "SIGRTMAX is the last valid signal");
 
 /* sigset_t — Linux uapi layout (128 bytes on x86-64). */
 #define _IR0_SIGSET_WORDS 16
@@ -344,27 +344,21 @@ void signals_try_abandon_sigframe(process_t *p);
 int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 				   uint64_t fault_addr, int si_code);
 
+/* Linux valid_signal() plus the "no signal 0" rule of every caller. */
+static inline int valid_signal(int sig)
+{
+	return sig >= 1 && sig <= _NSIG;
+}
+
 /*
- * Linux places signal N in bit (N-1) of the first sigset word. IR0
- * SIGNAL_MASK(N) is bit N. Signals 1..63 fit in one uint64_t: the shift
- * maps Linux bits 0..62 onto IR0 bits 1..63. Convert at the ABI boundary
- * only; keep kernel-internal bits unchanged.
+ * The kernel set is the first word of a Linux sigset_t, in the same
+ * layout (signal N in bit N-1); the other words are always zero.
  */
-static inline uint64_t linux_sigword_to_ir0(uint64_t linux_bits)
-{
-	return linux_bits << 1;
-}
-
-static inline uint64_t ir0_sigword_to_linux(uint64_t ir0_mask)
-{
-	return ir0_mask >> 1;
-}
-
 static inline uint64_t ir0_sigset_word(const sigset_t *set)
 {
 	if (!set)
 		return 0;
-	return linux_sigword_to_ir0((uint64_t)set->__val[0]);
+	return (uint64_t)set->__val[0];
 }
 
 static inline void ir0_sigset_set_word(sigset_t *set, uint64_t mask)
@@ -376,7 +370,7 @@ static inline void ir0_sigset_set_word(sigset_t *set, uint64_t mask)
 
 	for (i = 0; i < _IR0_SIGSET_WORDS; i++)
 		set->__val[i] = 0;
-	set->__val[0] = (unsigned long)ir0_sigword_to_linux(mask);
+	set->__val[0] = (unsigned long)mask;
 }
 
 #endif /* _IR0_SIGNALS_H */

@@ -51,10 +51,10 @@ struct robust_list_head;
 struct sighand_struct
 {
 	int refcount;
-	void (*handlers[_NSIG])(int);
-	uint32_t sa_flags[_NSIG];
-	uint64_t sa_mask[_NSIG];
-	void (*restorer[_NSIG])(void);
+	void (*handlers[_NSIG + 1])(int);
+	uint32_t sa_flags[_NSIG + 1];
+	uint64_t sa_mask[_NSIG + 1];
+	void (*restorer[_NSIG + 1])(void);
 };
 
 /* Process-local binding for /proc /sys opens (not global virtual fds). */
@@ -249,7 +249,7 @@ typedef struct process
 	uint64_t it_real_interval_ms;
 
 	/* Signal management. Pending and masks stay on the task. */
-	uint64_t signal_pending; /* Bits 1..63: signal N is bit N */
+	uint64_t signal_pending; /* Signal N is bit N-1 (SIGNAL_MASK) */
 	/*
 	 * Linux sighand: handler, sa_flags, sa_mask and restorer. Shared when
 	 * clone(CLONE_SIGHAND) is set; otherwise the child has its own copy.

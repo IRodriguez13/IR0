@@ -447,7 +447,7 @@ int io_temp_sigmask_begin(const void *user_sigmask, size_t sigsetsize,
   {
     if (copy_from_user(&legacy64, user_sigmask, sizeof(legacy64)) != 0)
       return -EFAULT;
-    new_mask = linux_sigword_to_ir0(legacy64);
+    new_mask = legacy64;
   }
   else if (sigsetsize == sizeof(sigset_t))
   {

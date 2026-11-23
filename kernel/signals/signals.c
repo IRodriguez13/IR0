@@ -67,7 +67,7 @@ static int signal_ip_is_registered_handler(process_t *p, uint64_t ip)
 
 	if (!p || ip < 0x1000ul)
 		return 0;
-	for (i = 1; i < _NSIG; i++)
+	for (i = 1; i <= _NSIG; i++)
 	{
 		void (*h)(int) = p->sighand->handlers[i];
 
@@ -90,7 +90,7 @@ static uint64_t sigmask_to_save(const process_t *p)
 
 static void signals_apply_handler_mask(process_t *p, int sig, uint32_t sa_flags)
 {
-	if (!p || sig < 1 || sig >= _NSIG)
+	if (!p || !valid_signal(sig))
 		return;
 	if (!p->signal_mask_saved_valid)
 	{
@@ -140,7 +140,7 @@ int signals_has_user_handler(process_t *p, int sig)
 {
 	void (*handler)(int);
 
-	if (!p || sig < 1 || sig >= _NSIG)
+	if (!p || !valid_signal(sig))
 		return 0;
 	if (p->signal_ignored & SIGNAL_MASK(sig))
 		return 0;
@@ -275,7 +275,7 @@ void signals_reset_on_exec(process_t *p)
 	 */
 	if (process_signals_unshare(p) < 0 || !p->sighand)
 		return;
-	for (i = 0; i < _NSIG; i++)
+	for (i = 1; i <= _NSIG; i++)
 	{
 		p->sighand->handlers[i] = SIG_DFL;
 		p->sighand->sa_flags[i] = 0;
@@ -315,7 +315,7 @@ int signal_pending(process_t *p)
 		return 1;
 
 	deliverable = p->signal_pending & ~p->signal_mask & ~p->signal_ignored;
-	for (sig = 1; sig < _NSIG && deliverable; sig++)
+	for (sig = 1; sig <= _NSIG && deliverable; sig++)
 	{
 		void (*handler)(int) = p->sighand->handlers[sig];
 		int caught = handler && handler != SIG_DFL && handler != SIG_IGN;
@@ -336,7 +336,7 @@ int send_signal(int pid, int signal)
     process_t *proc;
 
     /* Validate signal number */
-    if (signal < 0 || signal >= _NSIG)
+    if (signal < 0 || signal > _NSIG)
     {
         return -1;
     }
@@ -406,7 +406,7 @@ int send_signal_pgrp(int32_t pgid, int signal)
 	process_t *p;
 	int n = 0;
 
-	if (pgid <= 0 || signal < 0 || signal >= _NSIG)
+	if (pgid <= 0 || signal < 0 || signal > _NSIG)
 		return 0;
 
 	for (p = process_list; p; p = p->next)
@@ -443,7 +443,7 @@ static uint64_t signal_pick_handler_sp(process_t *p, int sig,
 
 	alt = 0;
 	sp = saved_sp;
-	if (p && p->sighand && sig >= 1 && sig < _NSIG &&
+	if (p && p->sighand && valid_signal(sig) &&
 	    (p->sighand->sa_flags[sig] & SA_ONSTACK) &&
 	    p->sas_ss_size != 0 &&
 	    !process_on_altstack(p, saved_sp))
@@ -627,7 +627,7 @@ static int get_signal(process_t *p)
 	/* SIGCONT already woke a stopped task when it was sent. */
 	p->signal_pending &= ~SIGNAL_MASK(SIGCONT);
 
-	for (sig = 1; sig < _NSIG; sig++)
+	for (sig = 1; sig <= _NSIG; sig++)
 	{
 		uint64_t bit = SIGNAL_MASK(sig);
 		void (*handler)(int) = p->sighand->handlers[sig];
@@ -788,7 +788,7 @@ void do_signal(process_t *p, const struct sigcontext *interrupted)
  */
 int register_signal_handler(int signal, void (*handler)(int))
 {
-    if (signal < 1 || signal >= _NSIG)
+    if (!valid_signal(signal))
         return -1;
     
     /* Signals that cannot be caught */

@@ -15,6 +15,7 @@
 #include "conf.h"
 
 #include <sched.h>
+#include <ucontext.h>
 #include <sys/socket.h>
 #include <time.h>
 
@@ -343,5 +344,70 @@ int sig_rt_sigpending_reports_blocked(void)
 	EXPECT(g_hits, 0);
 	EXPECT(S4(SYS_rt_sigprocmask, SIG_UNBLOCK, &set, 0, 8), 0);
 	EXPECT(g_hits, 1);
+	return CONF_PASS;
+}
+
+/*
+ * include/uapi/asm-generic/signal.h: _NSIG is 64 and valid_signal()
+ * accepts 1.._NSIG, so signal 64 (SIGRTMAX) is a real signal held in bit
+ * 63 of the set.
+ */
+int sig_rtmax_is_valid(void)
+{
+	unsigned long set = SIGBIT(64);
+	unsigned long pending = 0;
+
+	EXPECT(rt_sigaction(64, on_signal, 0, 0), 0);
+	EXPECT_ERR(rt_sigaction(65, on_signal, 0, 0), EINVAL);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_BLOCK, &set, 0, 8), 0);
+	EXPECT(S2(SYS_kill, S0(SYS_getpid), 64), 0);
+	EXPECT(S2(SYS_rt_sigpending, &pending, 8), 0);
+	EXPECT(pending, SIGBIT(64));
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_UNBLOCK, &set, 0, 8), 0);
+	EXPECT(g_hits, 1);
+	EXPECT(g_sig, 64);
+	return CONF_PASS;
+}
+
+static volatile unsigned long g_uc_mask;
+static volatile int g_uc_edit;
+
+/* Records uc_sigmask word 0 and, when asked, blocks SIGUSR2 through it. */
+static void on_ucontext(int sig, void *si, void *uc)
+{
+	unsigned long *word = (unsigned long *)&((ucontext_t *)uc)->uc_sigmask;
+
+	(void)si;
+	g_uc_mask = word[0];
+	if (g_uc_edit)
+		word[0] |= SIGBIT(SIGUSR2);
+	g_sig = sig;
+	g_hits++;
+}
+
+static long set_ucontext_handler(int sig)
+{
+	struct ksigaction act;
+
+	act.handler = (void (*)(int))(uintptr_t)on_ucontext;
+	act.flags = SA_SIGINFO | SA_RESTORER;
+	act.restorer = rt_restore;
+	act.mask = 0;
+	return S4(SYS_rt_sigaction, sig, &act, 0, sizeof(act.mask));
+}
+
+/*
+ * arch/x86/kernel/signal.c setup_rt_frame(): uc_sigmask is the mask before
+ * delivery, in the sigset_t layout (signal N in bit N-1).
+ */
+int sig_ucontext_sigmask_layout(void)
+{
+	unsigned long set = SIGBIT(SIGUSR2) | SIGBIT(64);
+
+	EXPECT(set_ucontext_handler(SIGUSR1), 0);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_BLOCK, &set, 0, 8), 0);
+	EXPECT(S2(SYS_kill, S0(SYS_getpid), SIGUSR1), 0);
+	EXPECT(g_hits, 1);
+	EXPECT(g_uc_mask, set);
 	return CONF_PASS;
 }
