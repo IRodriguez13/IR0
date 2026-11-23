@@ -732,7 +732,13 @@ int64_t sys_clone(unsigned long flags, void *stack, int *parent_tid,
 	if (!current_process)
 		return -ESRCH;
 
-	/* Linux copy_process(): CLONE_SIGHAND without CLONE_VM is EINVAL. */
+	/*
+	 * Linux copy_process(): a thread shares the handlers (CLONE_THREAD
+	 * needs CLONE_SIGHAND), and shared handlers need a shared address
+	 * space (CLONE_SIGHAND needs CLONE_VM). Anything else is EINVAL.
+	 */
+	if ((flags & CLONE_THREAD) && !(flags & CLONE_SIGHAND))
+		return -EINVAL;
 	if ((flags & CLONE_SIGHAND) && !(flags & CLONE_VM))
 		return -EINVAL;
 

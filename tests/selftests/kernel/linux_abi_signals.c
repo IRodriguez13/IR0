@@ -429,3 +429,23 @@ int sig_sigreturn_restores_uc_sigmask(void)
 	EXPECT(cur, SIGBIT(SIGUSR2));
 	return CONF_PASS;
 }
+
+static unsigned char g_tstack[65536] __attribute__((aligned(16)));
+
+static long g_tstack_top(void)
+{
+	return (long)(uintptr_t)(g_tstack + sizeof(g_tstack));
+}
+
+/*
+ * kernel/fork.c copy_process(): CLONE_THREAD needs CLONE_SIGHAND, which
+ * needs CLONE_VM.
+ */
+int sig_clone_thread_needs_sighand(void)
+{
+	EXPECT_ERR(S5(SYS_clone, CLONE_VM | CLONE_THREAD, g_tstack_top(), 0, 0,
+		      0), EINVAL);
+	EXPECT_ERR(S5(SYS_clone, CLONE_THREAD | CLONE_SIGHAND,
+		      g_tstack_top(), 0, 0, 0), EINVAL);
+	return CONF_PASS;
+}
