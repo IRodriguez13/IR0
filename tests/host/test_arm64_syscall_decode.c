@@ -138,6 +138,6 @@ void test_arm64_syscall_decode_contract(void)
 	ASSERT(syscall_decode_number(171) == IR0_SYSCALL_ADJTIMEX);
 	ASSERT(syscall_decode_number(268) == IR0_SYSCALL_SETNS);
 	ASSERT(syscall_decode_number(448) == IR0_SYSCALL_PROCESS_MRELEASE);
-	ASSERT(decoded == 246);
+	ASSERT(decoded == 248);
 	TEST_END();
 }

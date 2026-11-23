@@ -38,12 +38,12 @@ static int tcp_consume_connect_sigalrm(void)
 
 	if (!current_process)
 		return 0;
-	pend = current_process->signal_pending;
+	pend = signal_pending_set(current_process);
 	if ((pend & SIGNAL_MASK(SIGALRM)) == 0)
 		return 0;
 	if ((pend & ~(SIGNAL_MASK(SIGALRM) | SIGNAL_MASK(SIGCHLD))) != 0)
 		return 0;
-	current_process->signal_pending &= ~SIGNAL_MASK(SIGALRM);
+	signal_flush(current_process, SIGNAL_MASK(SIGALRM));
 	current_process->it_real_expire_ms = 0;
 	current_process->it_real_interval_ms = 0;
 	return 1;

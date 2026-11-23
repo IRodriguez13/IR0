@@ -129,9 +129,16 @@ _Static_assert(offsetof(struct sigaltstack, ss_size) == 16, "ss_size");
 #define TRAP_BRKPT    1
 #define TRAP_TRACE    2
 
+/* Linux uapi si_code of the senders (<= 0 come from userspace). */
+#define SI_USER       0
+#define SI_KERNEL     0x80
+#define SI_QUEUE      (-1)
+#define SI_TKILL      (-6)
+
 /*
  * siginfo_t — Linux layout: 128 bytes, the union starts at offset 16
- * (__ARCH_SI_PREAMBLE_SIZE on 64-bit). Only the fault fields are used.
+ * (__ARCH_SI_PREAMBLE_SIZE on 64-bit): _kill for kill/tkill, _rt for
+ * sigqueue, _sigfault for the synchronous faults.
  */
 typedef struct
 {
@@ -143,12 +150,31 @@ typedef struct
 		char _pad[128 - 4 * (int)sizeof(int)];
 		struct
 		{
+			int32_t si_pid;
+			uint32_t si_uid;
+		} _kill;
+		struct
+		{
+			int32_t si_pid;
+			uint32_t si_uid;
+			uint64_t si_value;
+		} _rt;
+		struct
+		{
 			void *si_addr;
 		} _sigfault;
 	} _sifields;
 } siginfo_t;
 
 _Static_assert(sizeof(siginfo_t) == 128, "siginfo_t must match Linux");
+_Static_assert(offsetof(siginfo_t, _sifields) == 16, "siginfo_t preamble");
+
+/* One queued signal instance (Linux struct sigqueue). */
+struct sigqueue
+{
+	struct sigqueue *next;
+	siginfo_t info;
+};
 
 /**
  * struct sigaction — Linux rt_sigaction layout (kernel struct sigaction size).
@@ -229,13 +255,29 @@ _Static_assert(IR0_UCONTEXT_MCONTEXT_OFF + sizeof(struct sigcontext) ==
 #endif
 
 /**
- * send_signal - Send a signal to a process
+ * send_signal - Send a kernel-raised signal (SI_KERNEL) to a process
  * @pid: Target process ID
  * @signal: Signal number to send
  *
  * Returns: 0 on success, -1 on error
  */
 int send_signal(int pid, int signal);
+
+/**
+ * send_sig_info - Queue @sig with @info for @t (Linux send_sig_info()).
+ *
+ * Ignored signals are dropped, a standard signal already pending is not
+ * queued again, real-time signals queue one entry per send. Wakes @t
+ * when it does not block @sig. Returns 0, or -EAGAIN when a real-time
+ * signal from sigqueue cannot be queued.
+ */
+int send_sig_info(int sig, const siginfo_t *info, process_t *t);
+
+/* Every signal pending for @p, blocked or not (Linux sigpending set). */
+uint64_t signal_pending_set(const process_t *p);
+
+/* Drop the signals in @mask from @p's pending set with their siginfo. */
+void signal_flush(process_t *p, uint64_t mask);
 
 /**
  * send_signal_pgrp - Deliver @signal to every live process with pgid == @pgid.

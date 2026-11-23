@@ -336,6 +336,14 @@ typedef struct process
 	uint64_t sas_ss_size;
 	int sas_ss_flags;
 
+	/*
+	 * siginfo of each instance in signal_pending, oldest first (Linux
+	 * struct sigpending list). A pending bit with no entry was raised by
+	 * the kernel without info. sigqueue_count bounds the list.
+	 */
+	struct sigqueue *sigqueue;
+	int sigqueue_count;
+
 } process_t;
 
 /* 1 when @sp lies inside the task's alternate signal stack. */

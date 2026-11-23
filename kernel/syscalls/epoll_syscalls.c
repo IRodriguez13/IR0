@@ -364,7 +364,7 @@ int64_t sys_epoll_wait(int epfd, struct epoll_event *events, int maxevents,
 		if (timeout >= 0 && expire != (uint64_t)-1 &&
 		    clock_get_uptime_milliseconds() >= expire)
 			break;
-		if (current_process->signal_pending != 0)
+		if (signal_pending_set(current_process) != 0)
 		{
 			epoll_wait_leave(ep);
 			return -EINTR;

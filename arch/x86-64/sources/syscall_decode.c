@@ -131,6 +131,8 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_rmdir: return IR0_SYSCALL_RMDIR;
 	case __NR_rt_sigaction: return IR0_SYSCALL_RT_SIGACTION;
 	case __NR_rt_sigpending: return IR0_SYSCALL_RT_SIGPENDING;
+	case __NR_rt_sigqueueinfo: return IR0_SYSCALL_RT_SIGQUEUEINFO;
+	case __NR_rt_tgsigqueueinfo: return IR0_SYSCALL_RT_TGSIGQUEUEINFO;
 	case __NR_rt_sigprocmask: return IR0_SYSCALL_RT_SIGPROCMASK;
 	case __NR_rt_sigreturn: return IR0_SYSCALL_RT_SIGRETURN;
 	case __NR_rt_sigsuspend: return IR0_SYSCALL_RT_SIGSUSPEND;

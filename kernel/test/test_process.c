@@ -328,7 +328,7 @@ void ktest_kill_sigterm_wait_status(void)
 	KASSERT_EQ(send_signal(pid, SIGTERM), 0);
 	KASSERT(child->state == PROCESS_READY || child->state == PROCESS_ZOMBIE);
 	if (child->state == PROCESS_READY)
-		KASSERT(child->signal_pending & SIGNAL_MASK(SIGTERM));
+		KASSERT(signal_pending_set(child) & SIGNAL_MASK(SIGTERM));
 	if (child->state != PROCESS_ZOMBIE)
 	{
 		process_mark_zombie(child);

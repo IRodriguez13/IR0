@@ -105,6 +105,8 @@ int process_signals_init(process_t *p)
 	if (!p)
 		return -EINVAL;
 	p->signal_pending = 0;
+	p->sigqueue = NULL;
+	p->sigqueue_count = 0;
 	p->signal_mask = 0;
 	p->signal_ignored = 0;
 	p->signal_mask_saved = 0;
@@ -124,6 +126,7 @@ void process_signals_drop(process_t *p)
 
 	if (!p)
 		return;
+	signal_flush(p, ~0ULL);
 	hand = p->sighand;
 	p->sighand = NULL;
 	sighand_put(hand);
@@ -174,7 +177,10 @@ int process_signals_clone(process_t *dst, const process_t *src,
 	if (!dst || !src)
 		return -EINVAL;
 
+	/* Linux copy_process(): the child starts with nothing pending. */
 	dst->signal_pending = 0;
+	dst->sigqueue = NULL;
+	dst->sigqueue_count = 0;
 	dst->signal_mask = src->signal_mask;
 	dst->signal_ignored = src->signal_ignored;
 	dst->signal_mask_saved = 0;
@@ -238,7 +244,7 @@ void process_sighand_note_ignore(process_t *owner, int sig, int ignored)
 		if (ignored)
 		{
 			p->signal_ignored |= bit;
-			p->signal_pending &= ~bit;
+			signal_flush(p, bit);
 		}
 		else
 			p->signal_ignored &= ~bit;

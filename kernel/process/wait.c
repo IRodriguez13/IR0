@@ -224,7 +224,7 @@ int process_wait(pid_t pid, int *status, int options)
 			 * Linux leaves SIGCHLD pending here; known divergence.
 			 */
 			if (!wait_find_matching_zombie(current_process, (pid_t)-1))
-				current_process->signal_pending &= ~SIGNAL_MASK(SIGCHLD);
+				signal_flush(current_process, SIGNAL_MASK(SIGCHLD));
 
 			return ret ? ret : reaped_pid;
 		}

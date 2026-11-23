@@ -42,6 +42,9 @@ int64_t sys_getresuid(uid_t *ruid, uid_t *euid, uid_t *suid);
 int64_t sys_setresgid(gid_t rgid, gid_t egid, gid_t sgid);
 int64_t sys_getresgid(gid_t *rgid, gid_t *egid, gid_t *sgid);
 int64_t sys_tkill(pid_t tid, int sig);
+int64_t sys_rt_sigqueueinfo(pid_t pid, int sig, const siginfo_t *uinfo);
+int64_t sys_rt_tgsigqueueinfo(pid_t tgid, pid_t tid, int sig,
+			      const siginfo_t *uinfo);
 int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig);
 int64_t sys_set_robust_list(struct robust_list_head *head, size_t len);
 int64_t sys_get_robust_list(int pid, struct robust_list_head **head_ptr,

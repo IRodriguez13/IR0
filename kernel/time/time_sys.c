@@ -99,7 +99,7 @@ void process_itimer_tick(uint64_t now_ms)
 		 * waits for rt_sigreturn. Advancing the expiry above still
 		 * accounts for elapsed intervals.
 		 */
-		if (!(p->signal_pending & SIGNAL_MASK(SIGALRM)))
+		if (!(signal_pending_set(p) & SIGNAL_MASK(SIGALRM)))
 			(void)send_signal((int)p->task.pid, SIGALRM);
 	}
 }

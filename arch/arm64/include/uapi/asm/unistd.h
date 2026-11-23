@@ -123,6 +123,7 @@
 #define __NR_rt_sigaction            134
 #define __NR_rt_sigprocmask          135
 #define __NR_rt_sigpending           136
+#define __NR_rt_sigqueueinfo         138
 #define __NR_rt_sigreturn            139
 #define __NR_setpriority             140
 #define __NR_getpriority             141
@@ -199,6 +200,7 @@
 #define __NR_munlockall              231
 #define __NR_mincore                 232
 #define __NR_madvise                 233
+#define __NR_rt_tgsigqueueinfo       240
 #define __NR_accept4                 242
 #define __NR_recvmmsg                243
 #define __NR_wait4                   260

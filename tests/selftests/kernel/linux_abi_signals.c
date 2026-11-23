@@ -449,3 +449,171 @@ int sig_clone_thread_needs_sighand(void)
 		      g_tstack_top(), 0, 0, 0), EINVAL);
 	return CONF_PASS;
 }
+
+/* Linux siginfo_t prefix: _kill, _rt and the TKILL form share pid and uid. */
+struct sig_info
+{
+	int signo;
+	int err;
+	int code;
+	int pad;
+	int pid;
+	unsigned int uid;
+	long value;
+	char rest[128 - 32];
+};
+
+#define SIG_SI_USER 0
+#define SIG_SI_QUEUE (-1)
+#define SIG_SI_TKILL (-6)
+#define SIG_LOG_MAX 8
+#define FAR_TID 0x3ffffff0L
+
+static volatile int g_log_n;
+static volatile int g_log_sig[SIG_LOG_MAX];
+static volatile int g_log_code[SIG_LOG_MAX];
+static volatile int g_log_pid[SIG_LOG_MAX];
+static volatile unsigned int g_log_uid[SIG_LOG_MAX];
+static volatile long g_log_value[SIG_LOG_MAX];
+static volatile long g_log_tid[SIG_LOG_MAX];
+static volatile unsigned long g_log_sp[SIG_LOG_MAX];
+
+static void on_info(int sig, struct sig_info *si, void *uc)
+{
+	volatile int here = 0;
+	int n = g_log_n;
+
+	(void)uc;
+	if (n >= SIG_LOG_MAX)
+		return;
+	g_log_sig[n] = sig;
+	g_log_code[n] = si->code;
+	g_log_pid[n] = si->pid;
+	g_log_uid[n] = si->uid;
+	g_log_value[n] = si->value;
+	g_log_tid[n] = S0(SYS_gettid);
+	g_log_sp[n] = (unsigned long)&here;
+	g_log_n = n + 1;
+}
+
+/* rt_sigaction with an SA_SIGINFO handler and @mask (Linux bit sig-1). */
+static long set_info_handler(int sig, unsigned long mask)
+{
+	struct ksigaction act;
+
+	act.handler = (void (*)(int))(uintptr_t)on_info;
+	act.flags = SA_SIGINFO | SA_RESTORER;
+	act.restorer = rt_restore;
+	act.mask = mask;
+	return S4(SYS_rt_sigaction, sig, &act, 0, sizeof(act.mask));
+}
+
+static long queue_info(long pid, int sig, int code, long value)
+{
+	struct sig_info si;
+
+	rt_fill(&si, 0, sizeof(si));
+	si.signo = sig;
+	si.code = code;
+	si.pid = (int)S0(SYS_getpid);
+	si.uid = (unsigned int)S0(SYS_getuid);
+	si.value = value;
+	return S3(SYS_rt_sigqueueinfo, pid, sig, &si);
+}
+
+/*
+ * signal(7): real-time signals queue (one delivery per send, each with its
+ * own siginfo), and the lowest-numbered pending signal is delivered first.
+ */
+int sig_rt_queue_lowest_first(void)
+{
+	unsigned long rt = SIGBIT(35) | SIGBIT(40);
+	int i;
+
+	EXPECT(set_info_handler(35, rt), 0);
+	EXPECT(set_info_handler(40, rt), 0);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_BLOCK, &rt, 0, 8), 0);
+	for (i = 1; i <= 3; i++)
+		EXPECT(queue_info(S0(SYS_getpid), 40, SIG_SI_QUEUE, i), 0);
+	EXPECT(queue_info(S0(SYS_getpid), 35, SIG_SI_QUEUE, 7), 0);
+	EXPECT(g_log_n, 0);
+	EXPECT(S4(SYS_rt_sigprocmask, SIG_UNBLOCK, &rt, 0, 8), 0);
+	EXPECT(g_log_n, 4);
+	EXPECT(g_log_sig[0], 35);
+	EXPECT(g_log_value[0], 7);
+	for (i = 1; i <= 3; i++)
+	{
+		EXPECT(g_log_sig[i], 40);
+		EXPECT(g_log_value[i], i);
+		EXPECT(g_log_code[i], SIG_SI_QUEUE);
+	}
+	return CONF_PASS;
+}
+
+/*
+ * kernel/signal.c: kill() reports SI_USER, tkill()/tgkill() SI_TKILL and
+ * rt_sigqueueinfo() the caller's SI_QUEUE info, each with the sender's pid
+ * and uid.
+ */
+int sig_siginfo_names_sender(void)
+{
+	long pid = S0(SYS_getpid);
+	long uid = S0(SYS_getuid);
+
+	EXPECT(set_info_handler(SIGUSR1, 0), 0);
+	EXPECT(set_info_handler(SIGUSR2, 0), 0);
+	EXPECT(S2(SYS_kill, pid, SIGUSR1), 0);
+	EXPECT(S2(SYS_tkill, S0(SYS_gettid), SIGUSR2), 0);
+	EXPECT(S3(SYS_tgkill, pid, S0(SYS_gettid), SIGUSR2), 0);
+	EXPECT(queue_info(pid, SIGUSR1, SIG_SI_QUEUE, 42), 0);
+	EXPECT(g_log_n, 4);
+	EXPECT(g_log_sig[0], SIGUSR1);
+	EXPECT(g_log_code[0], SIG_SI_USER);
+	EXPECT(g_log_pid[0], pid);
+	EXPECT(g_log_uid[0], uid);
+	EXPECT(g_log_code[1], SIG_SI_TKILL);
+	EXPECT(g_log_pid[1], pid);
+	EXPECT(g_log_code[2], SIG_SI_TKILL);
+	EXPECT(g_log_code[3], SIG_SI_QUEUE);
+	EXPECT(g_log_value[3], 42);
+	return CONF_PASS;
+}
+
+/*
+ * kernel/signal.c do_rt_sigqueueinfo(): another process may not forge a
+ * kernel or kill() si_code (>= 0) or SI_TKILL: EPERM. The caller may
+ * queue any code to itself. rt_tgsigqueueinfo names the thread.
+ */
+int sig_sigqueueinfo_rules(void)
+{
+	struct sig_info si;
+	int status = 0;
+	long pid;
+
+	EXPECT(set_info_handler(SIGUSR1, 0), 0);
+	OK(pid, rt_fork());
+	if (pid == 0)
+	{
+		for (;;)
+			rt_sleep_ms(1000);
+	}
+	EXPECT_ERR(queue_info(pid, SIGUSR1, SIG_SI_USER, 0), EPERM);
+	EXPECT_ERR(queue_info(pid, SIGUSR1, SIG_SI_TKILL, 0), EPERM);
+	EXPECT_ERR(queue_info(pid, 65, SIG_SI_QUEUE, 0), EINVAL);
+	EXPECT(S2(SYS_kill, pid, SIGKILL), 0);
+	EXPECT(conf_child_status(pid, &status, 3000), pid);
+	EXPECT(queue_info(S0(SYS_getpid), SIGUSR1, SIG_SI_USER, 5), 0);
+	EXPECT(g_log_n, 1);
+	EXPECT(g_log_code[0], SIG_SI_USER);
+	rt_fill(&si, 0, sizeof(si));
+	si.signo = SIGUSR1;
+	si.code = SIG_SI_QUEUE;
+	si.value = 9;
+	EXPECT(S4(SYS_rt_tgsigqueueinfo, S0(SYS_getpid), S0(SYS_gettid),
+		  SIGUSR1, &si), 0);
+	EXPECT(g_log_n, 2);
+	EXPECT(g_log_value[1], 9);
+	EXPECT_ERR(S4(SYS_rt_tgsigqueueinfo, S0(SYS_getpid), FAR_TID,
+		      SIGUSR1, &si), ESRCH);
+	return CONF_PASS;
+}
