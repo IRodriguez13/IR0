@@ -90,6 +90,9 @@ Checks:
     ISA (arch/template/port.h) so a missing one fails the link; an optional
     fallback is a separate object the build selects. Empty exception
     ledger; injected-violation self-test.
+36) Maintained kernel C/header sources carry an SPDX-License-Identifier.
+    Imported architecture UAPI headers are excluded; injected-violation
+    self-test.
 """
 
 from functools import lru_cache
@@ -274,6 +277,24 @@ PORTABLE_DIRS_NO_INTERRUPT_ARCH = [
     ROOT / "ipc",
 ]
 
+SPDX_SOURCE_ROOTS = [
+    ROOT / "kernel",
+    ROOT / "mm",
+    ROOT / "fs",
+    ROOT / "sched",
+    ROOT / "smp",
+    ROOT / "drivers",
+    ROOT / "net",
+    ROOT / "ipc",
+    ROOT / "block",
+    ROOT / "ktm",
+    ROOT / "arch",
+    ROOT / "includes" / "ir0",
+    ROOT / "includes" / "asm-generic",
+]
+
+SPDX_MARKER = "SPDX-License-Identifier:"
+
 
 @lru_cache(maxsize=None)
 def iter_c_files(base: Path) -> tuple[Path, ...]:
@@ -301,6 +322,40 @@ def rel_to_root(path: Path) -> Path:
     if raw.startswith(ROOT_PREFIX):
         return Path(raw[len(ROOT_PREFIX):])
     raise ValueError(f"{path} is not under {ROOT}")
+
+
+def spdx_errors(roots: tuple[Path, ...] | list[Path], root: Path = ROOT) -> list[str]:
+    """Report maintained C/header sources without a short SPDX marker."""
+    errors: list[str] = []
+    for base in roots:
+        for path in iter_c_files(base):
+            rel = path.relative_to(root)
+            # These are imported ABI definitions, not maintained IR0 source.
+            if "uapi" in rel.parts:
+                continue
+            if SPDX_MARKER not in read_file_text(path):
+                errors.append(f"[spdx] {rel}: missing {SPDX_MARKER}")
+    return errors
+
+
+def _spdx_self_test() -> list[str]:
+    """Ensure the SPDX guard detects a missing marker and ignores UAPI."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        good = root / "kernel" / "good.c"
+        bad = root / "kernel" / "bad.c"
+        uapi = root / "arch" / "test" / "include" / "uapi" / "asm" / "wire.h"
+        for path in (good, bad, uapi):
+            path.parent.mkdir(parents=True, exist_ok=True)
+        good.write_text("/* SPDX-License-Identifier: GPL-3.0-only */\n", encoding="utf-8")
+        bad.write_text("int missing_marker;\n", encoding="utf-8")
+        uapi.write_text("#define IMPORTED_UAPI 1\n", encoding="utf-8")
+        got = spdx_errors((root,), root)
+
+    want = [f"[spdx] kernel/bad.c: missing {SPDX_MARKER}"]
+    if got != want:
+        return [f"[spdx] self-test: expected {want}, got {got}"]
+    return []
 
 
 def check_forbidden_includes():
@@ -4435,7 +4490,7 @@ def main():
                     _kernel_loose_self_test() +
                     _rules_digest_self_test() +
                     _userspace_agnostic_self_test() +
-                    _sched_policy_self_test())
+                    _sched_policy_self_test() + _spdx_self_test())
         if failures:
             print("[arch-guard] self-test FAILED")
             for failure in failures:
@@ -4446,7 +4501,7 @@ def main():
               "no-raw-atomics, no-weak-symbols, undefined-prototype, "
               "legacy-pc-io, "
               "domain-isolation, kernel-loose-files, rules-digest, "
-              "userspace-agnostic, sched-policy)")
+              "userspace-agnostic, sched-policy, spdx)")
         return 0
 
     errors = []
@@ -4530,6 +4585,7 @@ def main():
     errors.extend(check_kernel_loose_files())
     errors.extend(check_rules_digest())
     errors.extend(check_sched_policy_contract())
+    errors.extend(spdx_errors(SPDX_SOURCE_ROOTS))
     errors.extend(check_retired_mm_headers())
     errors.extend(check_retired_api_names())
     errors.extend(check_undefined_prototypes())
