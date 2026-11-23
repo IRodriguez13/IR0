@@ -237,6 +237,22 @@ static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
     memset(inode, 0, sizeof(tmpfs_inode_t));
 }
 
+/*
+ * Append @inode to @parent's list. Inode numbers only grow, so the list
+ * stays in inode order and readdir can hand out the inode number as a
+ * stable position cookie (vfs_dirent.off).
+ */
+static void tmpfs_add_child(tmpfs_inode_t *parent, tmpfs_inode_t *inode)
+{
+    tmpfs_inode_t **link = &parent->children;
+
+    while (*link)
+        link = &(*link)->sibling;
+    inode->parent = parent;
+    inode->sibling = NULL;
+    *link = inode;
+}
+
 static tmpfs_inode_t *tmpfs_lookup_inode(tmpfs_data_t *tmpfs, const char *rel_path)
 {
     if (!tmpfs || !rel_path)
@@ -512,9 +528,7 @@ static int tmpfs_mkdir(const char *path, mode_t mode)
     new_inode->is_dir = true;
     strncpy(new_inode->name, dirname, TMPFS_MAX_NAME_LEN);
     new_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
-    new_inode->parent = parent;
-    new_inode->sibling = parent->children;
-    parent->children = new_inode;
+    tmpfs_add_child(parent, new_inode);
     
     return 0;
 }
@@ -594,9 +608,7 @@ int tmpfs_create_file(const char *path, mode_t mode)
     new_inode->is_dir = false;
     strncpy(new_inode->name, filename, TMPFS_MAX_NAME_LEN);
     new_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
-    new_inode->parent = parent;
-    new_inode->sibling = parent->children;
-    parent->children = new_inode;
+    tmpfs_add_child(parent, new_inode);
     
     return 0;
 }
@@ -780,9 +792,7 @@ static int tmpfs_link(const char *oldpath, const char *newpath)
     dst->file->nlink++;
     strncpy(dst->name, linkname, TMPFS_MAX_NAME_LEN);
     dst->name[TMPFS_MAX_NAME_LEN] = '\0';
-    dst->parent = parent;
-    dst->sibling = parent->children;
-    parent->children = dst;
+    tmpfs_add_child(parent, dst);
 
     return 0;
 }
@@ -1060,6 +1070,7 @@ static int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_e
         strncpy(entries[count].name, child->name, sizeof(entries[count].name) - 1);
         entries[count].name[sizeof(entries[count].name) - 1] = '\0';
         entries[count].type = child->is_dir ? DT_DIR : DT_REG;
+        entries[count].off = child->ino;
         count++;
         child = child->sibling;
     }

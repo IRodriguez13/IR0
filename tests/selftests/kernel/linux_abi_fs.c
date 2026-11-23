@@ -15,6 +15,7 @@
 
 #include <dirent.h>
 #include <sys/stat.h>
+#include <sys/vfs.h>
 
 #ifndef CLOCK_MONOTONIC
 #define CLOCK_MONOTONIC 1
@@ -950,5 +951,128 @@ int fs_proc_stat_utime_field(void)
 	CHECK(stat_field(buf, 14, &utime) == 0);
 	CHECK(cmajflt == 0);
 	CHECK(utime > 0);
+	return CONF_PASS;
+}
+
+/* MINIX roots cap names at 14 characters; the mount point stays short. */
+#define RECLAIM_MNT "/ir0rcl"
+#define RECLAIM_DIR RECLAIM_MNT "/directory_with_a_long_name"
+#define RECLAIM_ROUNDS 20
+#define RECLAIM_FILES 100
+#define RECLAIM_CHUNK 4096
+
+static void reclaim_name(char *buf, size_t cap, const char *dir, long i)
+{
+	buf[0] = '\0';
+	rt_cat(buf, cap, dir);
+	rt_cat(buf, cap, "/file_with_a_name_longer_than_minix_");
+	rt_catn(buf, cap, i);
+}
+
+/*
+ * rm -rf, as LTP's tst_rmdir() does it: read a buffer of entries, unlink
+ * each, read the next buffer. Returns the number of names removed.
+ */
+static long reclaim_purge(const char *dir)
+{
+	char buf[2048];
+	char path[192];
+	long removed = 0;
+	long fd = S4(SYS_openat, AT_FDCWD, dir, O_RDONLY | O_DIRECTORY, 0);
+	long n;
+
+	if (fd < 0)
+		return -1;
+	while ((n = S3(SYS_getdents64, fd, buf, sizeof(buf))) > 0)
+	{
+		long off = 0;
+
+		while (off < n)
+		{
+			struct dirent *d = (struct dirent *)(buf + off);
+
+			if (d->d_reclen == 0)
+				break;
+			off += d->d_reclen;
+			if (rt_streq(d->d_name, ".") || rt_streq(d->d_name, ".."))
+				continue;
+			path[0] = '\0';
+			rt_cat(path, sizeof(path), dir);
+			rt_cat(path, sizeof(path), "/");
+			rt_cat(path, sizeof(path), d->d_name);
+			if (S3(SYS_unlinkat, AT_FDCWD, path, 0) == 0)
+				removed++;
+		}
+	}
+	(void)S1(SYS_close, fd);
+	return removed;
+}
+
+static long reclaim_round(const char *chunk)
+{
+	char file[192];
+	long fd;
+	long i;
+
+	if (S3(SYS_mkdirat, AT_FDCWD, RECLAIM_DIR, 0755) != 0)
+		return 1;
+	for (i = 0; i < RECLAIM_FILES; i++)
+	{
+		reclaim_name(file, sizeof(file), RECLAIM_DIR, i);
+		fd = S4(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT | O_EXCL,
+			0600);
+		if (fd < 0)
+			return 2;
+		if (S3(SYS_write, fd, chunk, RECLAIM_CHUNK) != RECLAIM_CHUNK)
+			return 3;
+		/* Grow and shrink one file; drop one name while it is open. */
+		if (i == 0 && (S2(SYS_ftruncate, fd, 8 * RECLAIM_CHUNK) != 0 ||
+			       S2(SYS_ftruncate, fd, 1) != 0))
+			return 4;
+		if (i == 1 && S3(SYS_unlinkat, AT_FDCWD, file, 0) != 0)
+			return 5;
+		if (S1(SYS_close, fd) != 0)
+			return 6;
+	}
+	if (reclaim_purge(RECLAIM_DIR) != RECLAIM_FILES - 1)
+		return 7;
+	if (S3(SYS_unlinkat, AT_FDCWD, RECLAIM_DIR, AT_REMOVEDIR) != 0)
+		return 8;
+	return 0;
+}
+
+/*
+ * mm/shmem.c and fs/libfs.c: unlink, rmdir, truncate and the last close of
+ * an unlinked file give tmpfs its space and inodes back, and a directory
+ * walk that unlinks what it reads still visits every name (the cursor
+ * does not move when earlier entries go). Far more files than the
+ * filesystem holds at once, created and removed round after round, never
+ * run out of space, and statfs ends where it started.
+ */
+int fs_tmpfs_reclaims_space(void)
+{
+	static char chunk[RECLAIM_CHUNK];
+	struct statfs before;
+	struct statfs after;
+	long i;
+	long fail = 0;
+
+	(void)S3(SYS_mkdirat, AT_FDCWD, RECLAIM_MNT, 0755);
+	OK(i, S5(SYS_mount, "tmpfs", RECLAIM_MNT, "tmpfs", 0, 0));
+	rt_fill(chunk, 'r', sizeof(chunk));
+	EXPECT(S2(SYS_statfs, RECLAIM_MNT, &before), 0);
+	for (i = 0; i < RECLAIM_ROUNDS && fail == 0; i++)
+		fail = reclaim_round(chunk);
+	if (fail != 0)
+	{
+		rt_diag("round=", i - 1);
+		rt_diag("step=", fail);
+	}
+	EXPECT(S2(SYS_statfs, RECLAIM_MNT, &after), 0);
+	(void)S2(SYS_umount2, RECLAIM_MNT, 0);
+	(void)S3(SYS_unlinkat, AT_FDCWD, RECLAIM_MNT, AT_REMOVEDIR);
+	EXPECT(fail, 0);
+	EXPECT((long)after.f_bfree, (long)before.f_bfree);
+	EXPECT((long)after.f_ffree, (long)before.f_ffree);
 	return CONF_PASS;
 }

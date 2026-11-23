@@ -79,10 +79,18 @@ int vfs_remount(const char *path, unsigned long flags);
  */
 int vfs_bind_mount(const char *source, const char *target);
 
-/* Directory entry returned by vfs_readdir */
+/*
+ * Directory entry returned by vfs_readdir.
+ * @off: optional position cookie (Linux dir_context.pos). A backend that
+ *       sets it gives every entry a nonzero value that grows along the
+ *       list and does not change when other entries come or go, so a
+ *       getdents walk that unlinks what it read still visits every name.
+ *       0 means the backend has none and getdents counts entries instead.
+ */
 struct vfs_dirent {
     char name[VFS_PATH_MAX];
     uint8_t type;
+    uint64_t off;
 };
 
 /*
