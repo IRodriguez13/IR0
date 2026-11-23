@@ -776,7 +776,9 @@ static uint64_t signal_pick_handler_sp(process_t *p, int sig,
 /*
  * Return address for @sig's handler: SA_RESTORER when the caller supplied
  * one, otherwise the kernel trampoline (Linux arm64 vDSO sigtramp). 0 when
- * the ISA requires SA_RESTORER and none was given (Linux x86-64).
+ * the ISA requires SA_RESTORER and none was given (Linux x86-64). Like
+ * Linux, a supplied restorer is not checked: the handler runs, and a bad
+ * one faults when the handler returns to it.
  */
 static uint64_t signal_handler_restorer(process_t *p, int sig)
 {
@@ -784,8 +786,6 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
 
 	if (!fn)
 		return sigtramp_addr();
-	if (!signal_code_addr_ok((const void *)fn))
-		return 0;
 	return (uint64_t)(uintptr_t)fn;
 }
 

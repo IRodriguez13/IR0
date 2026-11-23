@@ -689,3 +689,47 @@ int sig_kill_picks_unblocked_thread(void)
 	EXPECT(g_log_n, 2);
 	return CONF_PASS;
 }
+
+static int g_restorer_pipe = -1;
+
+static void on_usr1_write(int sig)
+{
+	(void)sig;
+	(void)S3(SYS_write, g_restorer_pipe, "h", 1);
+}
+
+/*
+ * arch/x86/kernel/signal.c setup_rt_frame(): SA_RESTORER is pushed as the
+ * handler's return address unchecked. The handler runs; returning to a
+ * bad restorer then faults (SIGSEGV).
+ */
+int sig_bad_restorer_runs_handler(void)
+{
+	struct ksigaction act;
+	char buf[2] = { 0, 0 };
+	int status = 0;
+	int p[2];
+	long pid;
+	long r;
+
+	OK(r, S2(SYS_pipe2, p, 0));
+	OK(pid, rt_fork());
+	if (pid == 0)
+	{
+		g_restorer_pipe = p[1];
+		act.handler = on_usr1_write;
+		act.flags = SA_RESTORER;
+		act.restorer = (void (*)(void))(uintptr_t)RT_KERNEL_ADDR_B;
+		act.mask = 0;
+		(void)S4(SYS_rt_sigaction, SIGUSR1, &act, 0, 8);
+		(void)S2(SYS_kill, S0(SYS_getpid), SIGUSR1);
+		rt_exit(0);
+	}
+	(void)S1(SYS_close, p[1]);
+	EXPECT(conf_child_status(pid, &status, 3000), pid);
+	CHECK(RT_SIGNALED(status));
+	EXPECT(RT_TERMSIG(status), SIGSEGV);
+	EXPECT(S3(SYS_read, p[0], buf, 1), 1);
+	EXPECT(buf[0], 'h');
+	return CONF_PASS;
+}
