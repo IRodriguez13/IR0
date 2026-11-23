@@ -26,14 +26,22 @@ Kconfig. There is no run-time dispatch.
 
 ### Policies
 
-| `CONFIG_SCHEDULER_POLICY` | Name (`sched_policy_name`) | Policy object |
-|---------------------------|-----------------------------------|----------------|
-| `0` | `round_robin` | `sched/rr.o` |
-| `1` | `cfs` | `sched/cfs.o` (nice-weighted vruntime, one runqueue) |
-| `2` (defconfig) | `priority` | `sched/prio.o` only |
+| `CONFIG_SCHEDULER` | Name (`sched_policy_name`) | Policy object |
+|--------------------|-----------------------------------|----------------|
+| `rr` | `round_robin` | `sched/rr.o` |
+| `prio` | `priority` | `sched/prio.o` only |
+| `cfs` (default) | `cfs` | `sched/cfs.o` (nice-weighted vruntime, one runqueue) |
 
-The Makefile links exactly one policy object, looked up by policy number
-(`sched-policy-<n>`). `sched_selftest()` checks the priority bands and
+Choose the policy one of two ways; both link the matching object:
+
+- `make menuconfig` (Kernel options), or `python3 scripts/kconfig/menuconfig.py --set SCHEDULER=<name>`.
+- Uncomment `#define IR0_SCHEDULER "<name>"` in `config.h`. It wins over `.config`.
+
+The Makefile links exactly one policy object, looked up by name
+(`sched-policy-<name>`; a new policy is one line plus `sched/<name>.c`).
+Each policy file asserts `SCHED_POLICY_LINKED("<name>")` (`sched/core.h`), so
+a linked object that disagrees with the C macro `CONFIG_SCHEDULER` fails the
+build. The default (`cfs`) is set once, in `setup/Kconfig`. `sched_selftest()` checks the priority bands and
 CFS vruntime order (round robin has nothing to check and returns 0);
 `kernel/boot/boot_init.c` prints `SCHED_POLICY_OK` or `SCHED_POLICY_FAIL`.
 

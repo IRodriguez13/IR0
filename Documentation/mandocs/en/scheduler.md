@@ -15,9 +15,9 @@
 ## 1. Overview
 
 IR0 schedules runnable processes through a **portable facade**, one
-**scheduler core** and **one policy file** linked by `CONFIG_SCHEDULER_POLICY`.
-Default defconfig uses **priority bands** (`CONFIG_SCHEDULER_POLICY=2`).
-Round-robin (`0`) and CFS-name alias (`1`) remain available. Scheduling is
+**scheduler core** and **one policy file** linked by `CONFIG_SCHEDULER`.
+The default is **CFS** (`cfs`); priority bands (`prio`) and round-robin (`rr`)
+remain available. Set it in menuconfig or with `IR0_SCHEDULER` in `config.h`. Scheduling is
 **single-CPU** oriented. A task running in userspace is preempted at the
 timer quantum on the interrupt return (`irqentry_exit_to_user_mode()`); a
 task running in the kernel is not.
@@ -34,8 +34,8 @@ Portable backend code must **not** embed `iretq` / ISA entry frames.
 | `includes/ir0/sched.h` | Portable API (no `<sched/…>` includes) |
 | `sched/core.c` | `schedule()`, `sched_switch_to()`, `sched_take_resched()` |
 | `sched/core.h` | Private core/policy contract (`sched_pick_next`, `rq_lock`/`rq_unlock`) |
-| `sched/prio.c` | Default priority bands when `CONFIG_SCHEDULER_POLICY=2` |
-| `sched/rr.c` | Ready list for policy `0` or `1` |
+| `sched/prio.c` | Priority bands when `CONFIG_SCHEDULER=prio` |
+| `sched/rr.c` | Ready list when `CONFIG_SCHEDULER=rr` |
 | `process_t::state` | `READY`, `RUNNING`, `BLOCKED`, `ZOMBIE` |
 | `sched/switch/context_switch.c` | `switch_to(prev, next)` → arch `__switch_to()` |
 

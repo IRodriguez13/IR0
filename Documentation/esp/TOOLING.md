@@ -41,7 +41,7 @@ Lista completa de variables: `Documentation/MAKEFILE.md`.
 
 - Seleccion de init de drivers (`CONFIG_INIT_*`).
 - Seleccion de filesystem (`CONFIG_ENABLE_FS_*`, leido por `scripts/make/fs/<nombre>.mk`).
-- Politica de scheduler (`CONFIG_SCHEDULER_POLICY`).
+- Politica de scheduler (`CONFIG_SCHEDULER`: rr, prio, cfs).
 - Layout de teclado por defecto (`CONFIG_KEYBOARD_LAYOUT`).
 - Idioma del menu (`CONFIG_TOOL_MENUCONFIG_LANG`).
 

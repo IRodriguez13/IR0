@@ -53,7 +53,7 @@ T3 kernel prerequisites (verify with grep before coding): stable T1 boot, T2 fb+
 | **BusyBox ash** interactive on `/dev/console` | Done | `smoke-runit-ash-interactive` |
 | Scheduler policy fix (preempt / RR promotion) | Done | `sched/core.c` (`sched_take_resched`), boot log in `kernel/main.c` |
 | Facade includes unified (`<ir0/...>` for kernel/mm/fs/sched/net) | Done | `arch-guard` `ir0-facade-include` |
-| **`SCHEDULER_POLICY` in menuconfig** | Documented | `setup/Kconfig` help text |
+| **`SCHEDULER` in menuconfig** | Documented | `setup/Kconfig` help text |
 | **`sys_select` (__NR 23)** | Done | `kernel/syscalls.c`, `includes/ir0/select.h` |
 | **Tier1 syscall manifest** | Done | `scripts/ktm_syscall_manifest.py --tier1` — **sin gaps** (incl. `connect`/`accept`) |
 | **MUSL cred/signal manifest** | Done | `python3 scripts/ktm_syscall_manifest.py --musl` |

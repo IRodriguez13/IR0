@@ -18,10 +18,10 @@ The variable is `process_t *current_process` in `kernel/process/registry.c`. Tha
 
 `rq_lock()` and `rq_unlock()` live in `sched/core.h`. Today they are `irq_save()` and `irq_restore()`. No `ir0_spinlock_t` backs them.
 
-`CONFIG_SCHEDULER_POLICY` links one policy file (`sched/core.h`, `Makefile`). Both policy files call `rq_lock()`:
+`CONFIG_SCHEDULER` links one policy file (`sched/core.h`, `Makefile`). The policy files call `rq_lock()`:
 
-- `sched/rr.c` (policies 0 and 1): `sched_add`, `sched_remove`, `sched_pick_next`, `sched_count_runnable`, `sched_promote`. `sched_selftest` does not.
-- `sched/prio.c` (policy 2): the same five, plus `sched_selftest`.
+- `sched/rr.c` (`rr`): `sched_add`, `sched_remove`, `sched_pick_next`, `sched_count_runnable`, `sched_promote`. `sched_selftest` does not.
+- `sched/prio.c` (`prio`): the same five, plus `sched_selftest`.
 
 `sched/core.c` is not a policy file. `sched_switch_to()` calls `rq_lock()`. `schedule()` calls `sched_pick_next()` (which takes and drops the lock) and then `sched_switch_to()`.
 
