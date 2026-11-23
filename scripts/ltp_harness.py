@@ -368,11 +368,12 @@ def cmd_run(args) -> int:
         if not path.is_file():
             raise SystemExit(f"ltp: missing {path} ({hint})")
     chunks = plan_chunks(src, out, args.list)
+    numbered = list(enumerate(chunks))
     if args.only_chunk is not None:
-        chunks = [chunks[args.only_chunk]]
+        numbered = [numbered[args.only_chunk]]
     args.log_dir.mkdir(parents=True, exist_ok=True)
     worst = 0
-    for i, (tests, files) in enumerate(chunks):
+    for i, (tests, files) in numbered:
         log = args.log_dir / f"ltp-{arch}-{i}.log"
         log.unlink(missing_ok=True)
         disk = safety.make_temp_disk(prefix="ir0-ltp-")
