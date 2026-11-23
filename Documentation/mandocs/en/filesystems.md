@@ -7,15 +7,12 @@
 | Status | stable |
 | Depends on | vfs, syscalls, drivers |
 | Man page | IR0-filesystems (section 7) |
-| Primary sources | `fs/tmpfs/tmpfs.c`, `fs/ramtab.c`, `fs/devfs.c`, `fs/procfs.c`, `fs/pseudo_fs_registry.c`, `fs/minix/minix_fs.c`, `fs/9p/hostshare_9p.c`, `drivers/virtio/virtio_9p.c`, `includes/ir0/sysfs.h` |
+| Primary sources | `fs/tmpfs/tmpfs.c`, `fs/devfs.c`, `fs/procfs.c`, `fs/pseudo_fs_registry.c`, `fs/minix/minix_fs.c`, `fs/9p/hostshare_9p.c`, `drivers/virtio/virtio_9p.c`, `includes/ir0/sysfs.h` |
 
 ## 1. Overview
 
 IR0 exposes several filesystem backends with different routing and backing models.
 Block-backed **minix** and in-memory **tmpfs** register as `vfs_fstype` drivers.
-`fs/ramtab.c` is **not** a filesystem type: it is the staged name table used
-until a VFS mount owns the path (`Documentation/EARLY_FOLD.md`). Staged
-pipe/unix tables live in `ipc/`.
 **virtio-9p hostshare** (`fstype "9p"`) mounts a QEMU `-virtfs` share for deep
 tree ops (mkdir/readdir/rename/write-at/**symlink**/readlink). **procfs**,
 **sysfs**, and **devfs** are primarily **syscall-side** namespaces (not full VFS

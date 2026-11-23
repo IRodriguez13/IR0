@@ -13,7 +13,7 @@ mismo contenido sin mezclar idiomas.
 con TTBR0/SP_EL*; ARM64 `irq_*` → VBAR+GICv2; `arch/x86-64/sources/interrupt/` = backend x86-only.
 Residual: ISD AArch64 (rootfs BusyBox). Producto ARM ya usa `syscall_dispatch`
 en SVC. `kernel-arm64-product.bin` / `kernel-arm64.bin` enlaza **`$(ALL_OBJS)`**
-(mismo corte portable que x86); ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+(mismo corte portable que x86); ver [`early-rootfs-retirement.md`](../ai_driven_dev/early-rootfs-retirement.md).
 
 ## Objetivos de diseño
 
@@ -60,7 +60,7 @@ El MM de usuario, los fallos y el cambio de tareas también pasan por el
 núcleo común (`make ir0-selftest-fault-arm64`). Objetivos de port abiertos:
 guardado de FP/SIMD en el cambio de contexto (ambas ISAs), rootfs ISD
 AArch64, transporte block de producto.
-Ver [`EARLY_FOLD.md`](EARLY_FOLD.md).
+Ver [`early-rootfs-retirement.md`](../ai_driven_dev/early-rootfs-retirement.md).
 ## Fugas conocidas de acoplamiento
 
 Listado cualitativo actualizado en `Documentation/DECOUPLING.md`: `kernel/main.c` (política de

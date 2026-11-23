@@ -4,7 +4,10 @@ Maintainer decision Q1 (`scripts/smp_entry_gate/decisions.tsv`) retires the
 "early rootfs world": the single-process syscall emulation under
 `kernel/syscalls/{erfs,early_,product_}*`, `fs/{ramtab,bpath,bpivot,bpivot_boot}.c`,
 the never-registered `syscall_context_provider` layer and their
-`includes/ir0/` headers.
+`includes/ir0/` headers. Both ISAs boot from the block image through
+`vfs_init_root()` and the common `kexecve("/sbin/init")`;
+`scripts/architecture_guard.py` [retired-file] and `scripts/retired_api_names.txt`
+keep the names from coming back.
 
 None of the handlers below ran in a linked kernel when they were removed: the
 providers were never registered (only `tests/host` did). They are listed so
@@ -49,3 +52,11 @@ every syscall in this table except `sigaltstack`.
 | pipe, eventfd, memfd, timerfd, epoll slots | ipc/early_anonfd.c (aac79adffe94) | Fixed-size anonymous-file tables. |
 | ELF initial stack layout | kernel/exec/early_elf_stack.c (30bc62ca55bd) | argv/envp/auxv builder for the early exec; the common path uses fs/binfmt_elf.c. |
 
+## Boot path that went away
+
+ARM64 used to read the first 128 KiB of `vda` into a buffer, unpack a newc
+CPIO into a RAM table (`fs/ramtab.c`), fold it into tmpfs through `bpath`
+and switch the root with `bpivot`. ARM64 now mounts `vda` like x86 mounts
+`hda`: `root=/dev/vda` on the kernel command line selects the block device
+and `vfs_init_root()` mounts it. The QEMU harnesses build a MINIX image with
+`scripts/inject_init_minix.py` for both ISAs.

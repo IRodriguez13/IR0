@@ -3,10 +3,9 @@
 > **Last verified:** 2026-10-16
 > **Source of truth:** `includes/ir0/copy_user.h`, `includes/ir0/arch_cpu.h`,
 > `includes/ir0/context.h`, `includes/ir0/cpu.h`, `includes/ir0/irq.h`,
-> `includes/ir0/ramtab.h`, `includes/ir0/bpath.h`,
 > `scripts/architecture_guard.py`, [`DECOUPLING.md`](DECOUPLING.md),
 > [`uaccess.md`](uaccess.md), [`HARNESS_MAP.md`](HARNESS_MAP.md),
-> [`EARLY_FOLD.md`](EARLY_FOLD.md)
+> [`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md)
 
 IR0 takes **Linux learnings** (syscall ABI, observable contracts, facade names)
 as training for later Linux work. It does **not** clone the Linux directory
@@ -33,7 +32,7 @@ Spanish mirror: [`esp/LINUX_SHAPED.md`](esp/LINUX_SHAPED.md).
 | `include/linux/*.h` dump | Facades stay small and IR0-owned |
 | One `.c` per syscall | Domain modules under `kernel/syscalls/` already exist |
 | Linux Kconfig / `drivers/` clone | IR0 Kconfig + `includes/ir0/` facades |
-| A second ABI dump in `early_*.c` | Fold into `fs/`, `ipc/`, `kernel/process/`, product providers ([`EARLY_FOLD.md`](EARLY_FOLD.md)) |
+| A second ABI dump in `early_*.c` | Retired (Q1); `scripts/architecture_guard.py` [retired-file] rejects it ([`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md)) |
 
 ## Architecture facades
 

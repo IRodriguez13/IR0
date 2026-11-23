@@ -7,7 +7,7 @@
 > trail; see [`MAKEFILE.md`](MAKEFILE.md) for the live target set.
 
 > **Last verified:** 2026-11-06
-> **Source of truth:** `Documentation/ROADMAP.md`, [`EARLY_FOLD.md`](EARLY_FOLD.md),
+> **Source of truth:** `Documentation/ROADMAP.md`, [`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md),
 > code under `fs/`, `drivers/storage/`, `scripts/linux_abi/`, Makefile gates.
 > Prefer this file for **what is still open**; ROADMAP holds history and tier %.
 
@@ -47,7 +47,7 @@
 | ARM64 VBAR + EL1 SVC (F7.2) | (same — not a current Makefile entry point) |
 | ARM64 EL0 drop + SVC + PSCI off (F7.3) | (same — not a current Makefile entry point) |
 | ARM ALL product `vfs.c` + tmpfs `/tmp` | `kernel-arm64-product.bin` → `ARM64_PRODUCT_VFS_OK` / `ARM64_EARLY_PATH_FOLD_OK` |
-| Staged path table → `fs/ramtab.c` + product `/tmp` bind | `ARM64_EARLY_PATH_FOLD_OK`; [`EARLY_FOLD.md`](EARLY_FOLD.md) |
+| Staged path table → `fs/ramtab.c` + product `/tmp` bind | `ARM64_EARLY_PATH_FOLD_OK`; [`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md) |
 | Staged IPC tables → `ipc/` | `ipc/early_anonfd.c`, `ipc/early_unix.c` |
 | ARM ALL product identity + getcwd providers | `ARM64_PRODUCT_IDENTITY_OK`, `ARM64_PRODUCT_CWD_OK` |
 | ISD AArch64 packaging | No in-tree `isd-aarch64-prep`; use ISD sibling + `make headers_install` for uapi only |
@@ -236,7 +236,7 @@ Proof: make smoke-arm64-product-usermode-log / ir0-selftest-arm64
 ```
 
 Bring-up F7.1–F7.3 history is unchanged below. Current fold contract:
-[`EARLY_FOLD.md`](EARLY_FOLD.md).
+[`early-rootfs-retirement.md`](ai_driven_dev/early-rootfs-retirement.md).
 
 **Still open (real product port):**
 

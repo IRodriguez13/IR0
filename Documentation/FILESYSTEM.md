@@ -3,9 +3,8 @@
 > **Last verified:** 2026-10-18  
 > **Source of truth:** `fs/vfs.c`, `fs/vfs_mount.c`, `fs/filesystems.c`,
 > `scripts/make/fs.mk`, `fs/tmpfs/`, `fs/minix/`, `fs/simplefs/`, `fs/fat16/`,
-> `fs/ext2/`, `fs/9p/`, `fs/ramtab.c`, `ipc/early_*.c`, `drivers/storage/ahci.c`,
-> `includes/ir0/blockdev.h`, `includes/ir0/bpath.h`,
-> [`EARLY_FOLD.md`](EARLY_FOLD.md), [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
+> `fs/ext2/`, `fs/9p/`, `drivers/storage/ahci.c`, `includes/ir0/blockdev.h`,
+> [`BACKLOG_REMAINING.md`](BACKLOG_REMAINING.md)
 
 IR0 uses a VFS-first design where policy is centralized and backend filesystems
 provide concrete operations.
@@ -15,10 +14,7 @@ provide concrete operations.
 1. `fs/vfs*.c`: VFS core and backend dispatch (`vfs.c`), mount table
    (`vfs_mount.c`), open files (`vfs_file.c`) and path operations
    (`vfs_namei.c`).
-2. `fs/ramtab.c`: bounded in-memory names used by the staged ARM adapter until a
-   VFS mount owns the path (not a `vfs_fstype`). Staged pipe/unix tables live
-   in `ipc/`, not here. See [`EARLY_FOLD.md`](EARLY_FOLD.md).
-3. Backend filesystems, one directory each (`fs/<name>/`):
+2. Backend filesystems, one directory each (`fs/<name>/`):
    - on a block device: `minix`, **FAT16** (`fs/fat16/`), **EXT2**
    - in-memory: `tmpfs` (also `ramfs`), `simplefs`
    - host share: `9p` (`fs/9p/`)
@@ -54,9 +50,6 @@ provide concrete operations.
 - `procfs` / `sysfs` / `devfs`: pseudo mounts (registry + fd_table binds).
 - `/heart`: IR0 facade reexporting proc/sys + kernel meta + embedded sources.
 - `tmpfs`: volatile files and directories with uid/gid and umask behavior.
-  On ARM ALL, product tmpfs is mounted at `/tmp` and staged path I/O under
-  `/tmp/` binds `includes/ir0/bpath.h` → `vfs_*`
-  (`ARM64_PRODUCT_VFS_OK`, `ARM64_EARLY_PATH_FOLD_OK`).
 - `minix`: disk-backed baseline filesystem (rw path audited via vfs-write bundle).
 - `fat16`: FAT16 on any registered block device or partition (ktest
   `fat16_mount_any_block_device`) + write path audited

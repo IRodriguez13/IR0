@@ -20,7 +20,7 @@ Este directorio contiene traducciones de la documentacion tecnica principal.
 - `MAKEFILE.md`
 - `TOOLING.md`
 - `FILESYSTEM.md`
-- `EARLY_FOLD.md` — adaptador `early_*` vs VFS/`ramtab`/`ipc/` y providers ARM
+- `../ai_driven_dev/early-rootfs-retirement.md` — early rootfs retirado (Q1), en inglés
 - `VIRTUAL_FILESYSTEMS.md`
 - `DRIVERS.md`
 - `INTERRUPTS.md`

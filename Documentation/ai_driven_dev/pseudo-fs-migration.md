@@ -23,8 +23,8 @@ their parent directory; `fs/pseudo_fs_registry.c`, `fs/path_routed.c` and
   them in that order after the core's `proc` stub.
 - `vfs_mount(dev, path, type)` adds a `struct vfs_mount` (path,
   `backend_path`, `dev`, `fs`, `flags`). The root is mounted by
-  `vfs_init_root()` from `boot_rootfs_init()`; `/tmp`, `/run`, … by
-  `fs/bpivot.c`; the rest by `mount(2)`.
+  `vfs_init_root()` from `boot_rootfs_init()` (`root=/dev/<name>` or
+  `CONFIG_ROOT_BLOCK_DEVICE`); the rest by `mount(2)`.
 - Lookup is by string, not by inode: `vfs_find_mount()` picks the mount
   with the longest path prefix, `vfs_backend_path()` rewrites the path for
   that mount (`backend_path` + suffix), and the `vfs_ops` callback runs on
