@@ -103,6 +103,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_mount: return IR0_SYSCALL_MOUNT;
 	case __NR_mprotect: return IR0_SYSCALL_MPROTECT;
 	case __NR_munmap: return IR0_SYSCALL_MUNMAP;
+	case __NR_msync: return IR0_SYSCALL_MSYNC;
 	case __NR_nanosleep: return IR0_SYSCALL_NANOSLEEP;
 	case __NR_newfstatat: return IR0_SYSCALL_NEWFSTATAT;
 	case __NR_open: return IR0_SYSCALL_OPEN;

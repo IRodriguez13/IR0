@@ -98,6 +98,11 @@ typedef enum
 } process_lifecycle_t;
 
 /* Tracked anonymous/file mmap regions for demand paging and munmap */
+/*
+ * One user mapping (Linux vm_area_struct). A MAP_SHARED file mapping names
+ * its page cache by @file_id (0 for every other mapping) and maps file
+ * page @pgoff at @addr (Linux vm_pgoff).
+ */
 struct mmap_region
 {
 	void *addr;
@@ -105,6 +110,8 @@ struct mmap_region
 	size_t length;
 	int prot;
 	int flags;
+	uint64_t file_id;
+	uint64_t pgoff;
 	struct mmap_region *next;
 };
 

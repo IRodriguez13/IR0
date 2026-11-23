@@ -425,6 +425,7 @@ KERNEL_OBJS = \
     mm/brk.o \
     mm/mmap.o \
     mm/map_sys.o \
+    mm/filemap/filemap.o \
     mm/va_search.o \
     fs/files_lifecycle.o \
     fs/files_struct.o \

@@ -23,3 +23,8 @@
 #define MAP_ANONYMOUS 0x20
 /* Linux asm-generic/mman-common.h: do not charge commit for this mapping. */
 #define MAP_NORESERVE 0x4000
+
+/* msync(2) flags (Linux asm-generic/mman-common.h). */
+#define MS_ASYNC      1
+#define MS_INVALIDATE 2
+#define MS_SYNC       4

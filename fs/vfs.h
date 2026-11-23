@@ -131,6 +131,24 @@ const struct vfs_fstype *vfs_get_fstypes(void);
 /* Mount table (single linked list, newest first); NULL if empty */
 struct vfs_mount *vfs_get_mounts(void);
 
+/*
+ * Backing store of the page cache (mm/filemap). A file is named by its
+ * filesystem (an opaque handle) and its path inside it: the pair every
+ * vfs_ops_* call reaches the backend with, so the read/write/truncate/
+ * unlink/rename hooks find the same cache. These calls skip permission
+ * checks and the cache itself. vfs_pagecache_lock() is the fs-op lock:
+ * held, no VFS operation runs, and the calls nest under it.
+ */
+int vfs_pagecache_key(const char *path, const void **fs, char *key,
+		      size_t cap);
+void vfs_pagecache_lock(void);
+void vfs_pagecache_unlock(void);
+int vfs_pagecache_read(const void *fs, const char *key, void *buf,
+		       size_t count, off_t offset, size_t *done);
+int vfs_pagecache_write(const void *fs, const char *key, const void *buf,
+			size_t count, off_t offset, size_t *done);
+int vfs_pagecache_size(const void *fs, const char *key, size_t *size);
+
 /* Best-effort sync: flush all registered block devices (FS-level sync later). */
 int vfs_sync(void);
 

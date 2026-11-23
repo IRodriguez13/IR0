@@ -266,3 +266,169 @@ int mm_munmap_over_kernel_pages_is_harmless(void)
 	CHECK(kernel_alive());
 	return CONF_PASS;
 }
+
+/* A page-sized file "f" opened read-write, as LTP's tst_test.c sets up IPC. */
+static long shared_file(long size)
+{
+	long fd = S4(SYS_openat, AT_FDCWD, "f", O_CREAT | O_EXCL | O_RDWR, 0600);
+
+	if (fd < 0)
+		return fd;
+	if (S2(SYS_ftruncate, fd, size) != 0)
+		return -EIO;
+	return fd;
+}
+
+static long map_file(long fd, long len, int prot)
+{
+	return S6(SYS_mmap, 0, len, prot, MAP_SHARED, fd, 0);
+}
+
+/*
+ * mm/filemap.c: every MAP_SHARED mapping of a file maps the same page
+ * cache pages. A store through one mapping shows in the other, also after
+ * the fd is closed (LTP's results page lives this way).
+ */
+int mm_shared_file_mappings_share_pages(void)
+{
+	long fd;
+	long a;
+	long b;
+
+	OK(fd, shared_file(PG));
+	OK(a, map_file(fd, PG, PROT_READ | PROT_WRITE));
+	OK(b, map_file(fd, PG, PROT_READ | PROT_WRITE));
+	EXPECT(S1(SYS_close, fd), 0);
+	CHECK(a != b);
+	EXPECT(*(volatile char *)b, 0);
+	*(volatile char *)(a + 7) = 'A';
+	EXPECT(*(volatile char *)(b + 7), 'A');
+	*(volatile char *)(b + PG - 1) = 'B';
+	EXPECT(*(volatile char *)(a + PG - 1), 'B');
+	EXPECT(S2(SYS_munmap, a, PG), 0);
+	EXPECT(*(volatile char *)(b + 7), 'A');
+	return CONF_PASS;
+}
+
+/*
+ * read(2) and write(2) go through the same page cache as the mapping: a
+ * store is visible to pread at once, a pwrite is visible in the mapping.
+ */
+int mm_shared_file_coherent_with_read_write(void)
+{
+	char c = 0;
+	long fd;
+	long a;
+
+	OK(fd, shared_file(2 * PG));
+	OK(a, map_file(fd, 2 * PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)(a + PG + 3) = 'M';
+	EXPECT(S4(SYS_pread64, fd, &c, 1, PG + 3), 1);
+	EXPECT(c, 'M');
+	EXPECT(S4(SYS_pwrite64, fd, "W", 1, 10), 1);
+	EXPECT(*(volatile char *)(a + 10), 'W');
+	/* Shrink and grow back: the tail reads as zeros again. */
+	EXPECT(S2(SYS_ftruncate, fd, PG), 0);
+	EXPECT(S2(SYS_ftruncate, fd, 2 * PG), 0);
+	EXPECT(*(volatile char *)(a + PG + 3), 0);
+	c = 1;
+	EXPECT(S4(SYS_pread64, fd, &c, 1, PG + 3), 1);
+	EXPECT(c, 0);
+	return CONF_PASS;
+}
+
+/*
+ * fork(2) keeps MAP_SHARED pages shared: the child's stores reach the
+ * parent's mapping, and so does the child's write(2) to the file.
+ */
+int mm_shared_file_survives_fork(void)
+{
+	int status = 0;
+	long fd;
+	long a;
+	long pid;
+
+	OK(fd, shared_file(PG));
+	OK(a, map_file(fd, PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)a = 'P';
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		if (*(volatile char *)a != 'P')
+			rt_exit(60);
+		*(volatile char *)(a + 1) = 'C';
+		if (S4(SYS_pwrite64, fd, "w", 1, 2) != 1)
+			rt_exit(61);
+		rt_exit(0);
+	}
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	EXPECT(RT_EXITED(status) ? RT_EXITCODE(status) : -1, 0);
+	EXPECT(*(volatile char *)(a + 1), 'C');
+	EXPECT(*(volatile char *)(a + 2), 'w');
+	return CONF_PASS;
+}
+
+/*
+ * mm/msync.c: msync(MS_SYNC) and msync(MS_ASYNC) on a shared file mapping
+ * succeed and the stores reach the file; bad flags or an unaligned address
+ * are EINVAL, an unmapped range is ENOMEM. After munmap and close the data
+ * is in the file.
+ */
+int mm_shared_file_msync(void)
+{
+	char buf[4];
+	long fd;
+	long a;
+
+	OK(fd, shared_file(PG));
+	OK(a, map_file(fd, PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)(a + 100) = 'S';
+	EXPECT(S3(SYS_msync, a, PG, MS_SYNC), 0);
+	*(volatile char *)(a + 101) = 'A';
+	EXPECT(S3(SYS_msync, a, PG, MS_ASYNC), 0);
+	EXPECT_ERR(S3(SYS_msync, a, PG, MS_SYNC | MS_ASYNC), EINVAL);
+	EXPECT_ERR(S3(SYS_msync, a + 1, PG, MS_SYNC), EINVAL);
+	EXPECT_ERR(S3(SYS_msync, a, PG, 0x100), EINVAL);
+	*(volatile char *)(a + 102) = 'U';
+	EXPECT(S2(SYS_munmap, a, PG), 0);
+	EXPECT_ERR(S3(SYS_msync, a, PG, MS_SYNC), ENOMEM);
+	EXPECT(S1(SYS_close, fd), 0);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "f", O_RDONLY, 0));
+	EXPECT(S4(SYS_pread64, fd, buf, 3, 100), 3);
+	CHECK(rt_memeq(buf, "SAU", 3));
+	return CONF_PASS;
+}
+
+static long g_bus_page;
+
+static void touch_past_eof(void)
+{
+	(void)*(volatile char *)g_bus_page;
+	rt_exit(0);
+}
+
+/*
+ * mm/filemap.c filemap_fault(): the rest of the last page reads as zeros,
+ * a whole page past the end of the file raises SIGBUS.
+ */
+int mm_shared_file_past_eof_sigbus(void)
+{
+	int status = 0;
+	long fd;
+	long a;
+	long pid;
+
+	OK(fd, shared_file(100));
+	OK(a, map_file(fd, 2 * PG, PROT_READ | PROT_WRITE));
+	EXPECT(*(volatile char *)(a + 200), 0);
+	g_bus_page = a + PG;
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+		touch_past_eof();
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	CHECK(RT_SIGNALED(status));
+	EXPECT(RT_TERMSIG(status), SIGBUS);
+	return CONF_PASS;
+}

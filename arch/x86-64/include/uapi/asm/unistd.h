@@ -35,6 +35,7 @@
 #define __NR_pipe            22
 #define __NR_select          23
 #define __NR_sched_yield     24
+#define __NR_msync           26
 #define __NR_shmget          29
 #define __NR_shmat           30
 #define __NR_shmctl          31
