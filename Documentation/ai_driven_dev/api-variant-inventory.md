@@ -141,8 +141,8 @@ Private duplicates of public helpers: `find_hpet.c` static `memcmp` and
 `acpi_memcmp` — DONE (call `memcmp`). `sock_strnlen` was already gone at
 `bc3e0e15`, so no public `strnlen` is needed yet. Still open:
 `fs/binfmt_elf.c` `exec_strdup_kern` (add `kstrdup` only if a second
-user appears) and `kernel/exec/early_elf_stack.c` `cstr_len` (a NULL-tolerant
-`strlen`; the file is also built for host tests). The ARM64 freestanding
+user appears). `kernel/exec/early_elf_stack.c` `cstr_len` left with the
+early rootfs (Q1). The ARM64 freestanding
 string copies (`portable_string.c`, `freestanding_stubs.c`) left with the
 board `-min` images.
 
@@ -179,7 +179,7 @@ Header `includes/ir0/clock.h` (`drivers/timer/clock_system.c`).
 | `rtc_write_register`, `rtc_get_time_string`, `rtc_get_date_string` (`rtc.h`) | 0 | DONE: deleted |
 | `delay_ms` (`ir0/vga.h`!) | 0 | DONE: deleted |
 | `ir0_clock_wait_service_clockevents` (`clock_wait.h`) | 0 | DONE (deleted with the clock-wait idle step) |
-| `minix_now_seconds` (13), `pseudo_fs_stat_now` (16) | private | T2 OPEN: `minix_now_seconds` is a pure alias, MERGE INTO `clock_get_current_time` (fs/ is owned by the fs data-loss work; do it after that lands). `pseudo_fs_stat_now` fills three stat fields: KEEP. `clock_now_ticks` reads the early rootfs's own simulated clock, not the kernel clock: KEEP, rename `erfs_clock_now` (namespace) |
+| `minix_now_seconds` (13), `pseudo_fs_stat_now` (16) | private | T2 OPEN: `minix_now_seconds` is a pure alias, MERGE INTO `clock_get_current_time` (fs/ is owned by the fs data-loss work; do it after that lands). `pseudo_fs_stat_now` fills three stat fields: KEEP. `clock_now_ticks` (the early rootfs's simulated clock) is deleted with the early rootfs (Q1) |
 
 ### 1.6 Process and fd lookup
 
