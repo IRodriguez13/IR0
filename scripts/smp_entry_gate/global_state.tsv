@@ -391,9 +391,9 @@ kernel/syscalls/stdin.c	stdin_waiters	26
 kernel/test/test_allocator.c	heap_hook_armed	31
 kernel/test/test_allocator.c	heap_hook_spins	32
 kernel/test/test_allocator.c	heap_hook_ticks	33
-kernel/test/test_debug_contracts.c	ktest_blk_data	866
-kernel/test/test_debug_contracts.c	ktest_blk_read_calls	867
-kernel/test/test_debug_contracts.c	ktest_disk_data	1057
+kernel/test/test_debug_contracts.c	ktest_blk_data	867
+kernel/test/test_debug_contracts.c	ktest_blk_read_calls	868
+kernel/test/test_debug_contracts.c	ktest_disk_data	1058
 kernel/test/test_fat16_contracts.c	ktfat_data	38
 kernel/test/test_fat16_contracts.c	ktfat_dev	39
 kernel/test/test_fat16_contracts.c	ktfat_registered	40

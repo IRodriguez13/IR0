@@ -611,7 +611,8 @@ void ktest_mount_tmpfs_contract(void)
 	struct ir0_statfs linked_fs;
 	memset(&linked_fs, 0, sizeof(linked_fs));
 	KASSERT_EQ(vfs_statfs("/mntkt/mount_alias.txt", &linked_fs), 0);
-	KASSERT_EQ(linked_fs.f_ffree, written_fs.f_ffree);
+	/* Linux shmem_link(): every name, links included, takes an inode. */
+	KASSERT_EQ(linked_fs.f_ffree + 1, written_fs.f_ffree);
 	KASSERT_EQ(linked_fs.f_bfree, written_fs.f_bfree);
 	int64_t alias_fd = sys_open("/mntkt/mount_alias.txt", KTEST_O_RDWR, 0);
 	KASSERT_GT(alias_fd, 0);

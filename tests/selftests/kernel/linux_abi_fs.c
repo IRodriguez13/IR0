@@ -1076,3 +1076,67 @@ int fs_tmpfs_reclaims_space(void)
 	EXPECT((long)after.f_ffree, (long)before.f_ffree);
 	return CONF_PASS;
 }
+
+#define BIG_DIR_FILES 300
+#define BIG_FILE_BYTES (1L << 20)
+
+/*
+ * mm/shmem.c: a tmpfs holds as many files and bytes as its size and
+ * nr_inodes allow (half of RAM by default), not a fixed handful: 300
+ * names in one directory and a 1 MiB file fit, the file reads back, a hole
+ * reads as zeros, and st_blocks counts only the pages written.
+ */
+int fs_tmpfs_holds_many_files_and_large_file(void)
+{
+	static char chunk[RECLAIM_CHUNK];
+	char file[192];
+	char back[RECLAIM_CHUNK];
+	struct stat st;
+	long fd;
+	long i;
+	long fail = 0;
+
+	(void)S3(SYS_mkdirat, AT_FDCWD, RECLAIM_MNT, 0755);
+	OK(i, S5(SYS_mount, "tmpfs", RECLAIM_MNT, "tmpfs", 0, 0));
+	(void)S3(SYS_mkdirat, AT_FDCWD, RECLAIM_DIR, 0755);
+	for (i = 0; i < BIG_DIR_FILES && fail == 0; i++)
+	{
+		reclaim_name(file, sizeof(file), RECLAIM_DIR, i);
+		fd = S4(SYS_openat, AT_FDCWD, file, O_WRONLY | O_CREAT, 0600);
+		if (fd < 0)
+			fail = 1;
+		else
+			(void)S1(SYS_close, fd);
+	}
+	if (fail)
+		rt_diag("files=", i - 1);
+	fd = S4(SYS_openat, AT_FDCWD, RECLAIM_MNT "/big", O_RDWR | O_CREAT, 0600);
+	rt_fill(chunk, 'b', sizeof(chunk));
+	for (i = 0; fd >= 0 && fail == 0 && i < BIG_FILE_BYTES; i += RECLAIM_CHUNK)
+	{
+		if (S3(SYS_write, fd, chunk, RECLAIM_CHUNK) != RECLAIM_CHUNK)
+			fail = 2;
+	}
+	if (fail == 0 &&
+	    (S4(SYS_pread64, fd, back, sizeof(back), BIG_FILE_BYTES - RECLAIM_CHUNK) !=
+		     RECLAIM_CHUNK ||
+	     !rt_memeq(back, chunk, sizeof(back))))
+		fail = 3;
+	/* A hole past the end reads as zeros and allocates nothing. */
+	if (fail == 0 && S2(SYS_ftruncate, fd, 4 * BIG_FILE_BYTES) != 0)
+		fail = 4;
+	if (fail == 0 &&
+	    (S4(SYS_pread64, fd, back, sizeof(back), 2 * BIG_FILE_BYTES) !=
+		     RECLAIM_CHUNK ||
+	     back[0] != 0 || back[RECLAIM_CHUNK - 1] != 0))
+		fail = 5;
+	if (fail == 0 && (S2(SYS_fstat, fd, &st) != 0 ||
+			  st.st_blocks != BIG_FILE_BYTES / 512))
+		fail = 6;
+	if (fd >= 0)
+		(void)S1(SYS_close, fd);
+	(void)S2(SYS_umount2, RECLAIM_MNT, 0);
+	(void)S3(SYS_unlinkat, AT_FDCWD, RECLAIM_MNT, AT_REMOVEDIR);
+	EXPECT(fail, 0);
+	return CONF_PASS;
+}
