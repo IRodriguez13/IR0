@@ -22,8 +22,13 @@
 #define CONFIG_ENABLE_SMP 0
 #endif
 
-/* Absolute value supplied by the linker for every concrete kernel image. */
+/*
+ * Absolute value supplied by the linker for every concrete kernel image.
+ * It is read through a data word: a PC-relative reference cannot reach a
+ * small absolute value from a kernel linked in the upper half.
+ */
 extern char ir0_build_number[];
+static char *const volatile ir0_build_number_ref = ir0_build_number;
 
 void ir0_utsname_fill_version(char *dst, size_t n)
 {
@@ -63,7 +68,7 @@ void ir0_utsname_fill_version(char *dst, size_t n)
 
 	/* Linux exposes the build identity in the uname version field. */
 	snprintf(dst, n, "#%lu %s %s",
-		 (unsigned long)(uintptr_t)ir0_build_number,
+		 (unsigned long)(uintptr_t)ir0_build_number_ref,
 		 cpu_mode, sched_label);
 	dst[n - 1] = '\0';
 }
