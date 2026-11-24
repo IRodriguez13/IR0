@@ -196,3 +196,51 @@ int sleep_sched_yield_returns_zero(void)
 		EXPECT(S0(SYS_sched_yield), 0);
 	return CONF_PASS;
 }
+
+#if defined(__aarch64__)
+static unsigned long read_thread_pointer(void)
+{
+	unsigned long tp;
+
+	__asm__ volatile("mrs %0, tpidr_el0" : "=r"(tp));
+	return tp;
+}
+#else
+#define LINUX_ARCH_GET_FS 0x1003
+static unsigned long read_thread_pointer(void)
+{
+	unsigned long tp = 0;
+
+	(void)S2(SYS_arch_prctl, LINUX_ARCH_GET_FS, &tp);
+	return tp;
+}
+#endif
+
+/*
+ * The thread pointer is user state that survives syscalls, sleeps and task
+ * switches (arm64 tls_thread_switch() saves TPIDR_EL0, which userspace
+ * sets with msr as musl's __set_thread_area does).
+ */
+int sleep_keeps_thread_pointer(void)
+{
+	struct timespec ts;
+	unsigned long tp;
+	int i;
+
+#if defined(__aarch64__)
+	tp = 0x00007a5c0de0f000UL;
+	__asm__ volatile("msr tpidr_el0, %0" : : "r"(tp) : "memory");
+#else
+	tp = read_thread_pointer();
+#endif
+	EXPECT(read_thread_pointer(), tp);
+	(void)S0(SYS_getpid);
+	EXPECT(read_thread_pointer(), tp);
+	for (i = 0; i < 4; i++)
+		EXPECT(S0(SYS_sched_yield), 0);
+	EXPECT(read_thread_pointer(), tp);
+	ts_set_ms(&ts, 20);
+	EXPECT(S4(SYS_clock_nanosleep, LINUX_CLOCK_MONOTONIC, 0, &ts, 0), 0);
+	EXPECT(read_thread_pointer(), tp);
+	return CONF_PASS;
+}

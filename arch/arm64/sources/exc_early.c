@@ -77,6 +77,22 @@ void arm64_exc_trigger_svc(void)
 
 static void arm64_abort_to_common_mm(uint64_t esr, uint64_t *frame);
 
+/*
+ * Linux tls_thread_switch(): TPIDR_EL0 is user state that EL0 may write
+ * with msr at any time. Take it into the task on every entry from EL0, so
+ * the syscall exit and the next switch_to() restore what the task set
+ * instead of an older value.
+ */
+static void arm64_save_user_tls(void)
+{
+	uint64_t tp;
+
+	if (!current_process)
+		return;
+	__asm__ volatile("mrs %0, tpidr_el0" : "=r"(tp));
+	process_tls_set(current_process, tp);
+}
+
 void arm64_exc_sync_el1(void)
 {
 	uint64_t esr;
@@ -128,6 +144,8 @@ void arm64_exc_irq_el1(uint64_t *frame)
 	uint32_t irq = iar & 0x3ffU;
 	void *prev_frame;
 
+	if ((frame[ARM64_EXC_IDX_SPSR] & 0xfU) == 0)
+		arm64_save_user_tls();
 	cpu_local_irq_enter();
 
 	arch_timer_oneshot_disarm();
@@ -188,6 +206,7 @@ void arm64_exc_sync_lower(uint64_t *frame)
 	uint64_t esr;
 	int64_t ret;
 
+	arm64_save_user_tls();
 	__asm__ volatile("mrs %0, esr_el1" : "=r"(esr));
 	if (esr_ec(esr) != ESR_EC_SVC64)
 	{
