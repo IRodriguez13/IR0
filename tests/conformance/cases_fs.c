@@ -617,3 +617,75 @@ int dir_openat_dirfd(void)
 	EXPECT_ERR(S4(SYS_openat, fd, "x", O_RDONLY, 0), ENOTDIR);
 	return CONF_PASS;
 }
+
+/*
+ * Every path lookup needs search (x) permission on each directory it
+ * walks, and that check comes before anything about the final name: a
+ * caller without it learns neither that a name exists (EEXIST) nor that
+ * it is missing (ENOENT). Each call below gets EACCES on Linux.
+ */
+#define NS_CALLS 16
+
+static long ns_call(int i)
+{
+	struct timespec ts[2] = { { 0, 0 }, { 0, 0 } };
+	char buf[256];
+	struct stat st;
+
+	switch (i)
+	{
+	case 0: return S4(SYS_newfstatat, AT_FDCWD, "ns/f", &st, 0);
+	case 1: return S4(SYS_newfstatat, AT_FDCWD, "ns/missing", &st, 0);
+	case 2: return S4(SYS_faccessat, AT_FDCWD, "ns/f", F_OK, 0);
+	case 3: return S1(SYS_chdir, "ns/sub");
+	case 4: return S4(SYS_readlinkat, AT_FDCWD, "ns/f", buf, sizeof(buf));
+	case 5: return S4(SYS_fchmodat, AT_FDCWD, "ns/f", 0644, 0);
+	case 6: return S5(SYS_fchownat, AT_FDCWD, "ns/f", -1, -1, 0);
+	case 7: return S2(SYS_truncate, "ns/f", 0);
+	case 8: return S4(SYS_utimensat, AT_FDCWD, "ns/f", ts, 0);
+	case 9: return S2(SYS_statfs, "ns/f", buf);
+	case 10: return S4(SYS_mknodat, AT_FDCWD, "ns/fifo", S_IFIFO | 0644, 0);
+	case 11: return S3(SYS_mkdirat, AT_FDCWD, "ns/f", 0755);
+	case 12: return S4(SYS_openat, AT_FDCWD, "ns/f",
+			   O_CREAT | O_EXCL | O_WRONLY, 0644);
+	case 13: return S3(SYS_unlinkat, AT_FDCWD, "ns/missing", 0);
+	case 14: return S4(SYS_openat, AT_FDCWD, "ns/sub", O_RDONLY | O_DIRECTORY, 0);
+	default: return S5(SYS_linkat, AT_FDCWD, "ns/f", AT_FDCWD, "ns/g", 0);
+	}
+}
+
+int fs_search_permission_first(void)
+{
+	long fd, pid;
+	int status, i;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "ns", 0755), 0);
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "ns/sub", 0755), 0);
+	OK(fd, S4(SYS_openat, AT_FDCWD, "ns/f", O_CREAT | O_WRONLY, 0666));
+	EXPECT(S1(SYS_close, fd), 0);
+	/* Readable, so its names can be listed, but not searchable. */
+	EXPECT(S4(SYS_fchmodat, AT_FDCWD, "ns", 0666, 0), 0);
+	pid = rt_fork();
+	if (pid == 0)
+	{
+		if (S1(SYS_setgid, 1000) != 0 || S1(SYS_setuid, 1000) != 0)
+			rt_exit(100);
+		for (i = 0; i < NS_CALLS; i++)
+		{
+			long r = ns_call(i);
+
+			if (r != -EACCES)
+			{
+				rt_diag("call=", i);
+				rt_diag("ret=", r);
+				rt_exit(1 + i);
+			}
+		}
+		rt_exit(0);
+	}
+	CHECK(pid > 0);
+	EXPECT(rt_wait(pid, &status, 0), pid);
+	(void)S4(SYS_fchmodat, AT_FDCWD, "ns", 0755, 0);
+	EXPECT((status >> 8) & 0xff, 0);
+	return CONF_PASS;
+}
