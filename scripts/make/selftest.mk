@@ -1071,7 +1071,7 @@ ir0-selftest-user-va-low-half-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM
 	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
 		--arch arm64 \
 		--binary $(IR0_SELFTEST_ARM64_USER_VA_LOW_HALF) \
-		--done "ok 2 former_kernel_image_read_segv" \
+		--done "ok 3 former_kernel_image_read_segv" \
 		--log $(HOST_TMP)/ir0-selftest-arm64-user-va-low-half.log
 	@echo "✓ ir0-selftest-user-va-low-half-arm64"
 
