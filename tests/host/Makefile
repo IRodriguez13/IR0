@@ -79,7 +79,7 @@ KERNEL_HOST_OBJS = host_pseudo_fs_registry.o host_heartfs.o host_sysfs.o \
 	host_sysfs_net_stub.o host_sysfs_attr_stub.o \
 	host_named_fifo.o host_path.o host_pipe.o host_blockdev.o \
 	host_arch_irq_stub.o host_arch_mm_stub.o \
-	host_ps2_set1.o host_keymap.o host_ps2_mouse_pkt.o \
+	host_ps2_set1.o host_kbd_translate.o host_keymap.o host_ps2_mouse_pkt.o \
 	host_matrix_capture.o host_mount_prefix.o
 KERNEL_HOST_OBJS += host_pmm.o host_pmm_stubs.o host_boot_memory.o \
 	host_alloc_policy.o host_no_mmu.o
@@ -99,7 +99,7 @@ KERNEL_HOST_OBJS += host_vbe.o host_x86_boot_identity.o
 KERNEL_HOST_OBJS += host_fault.o
 KERNEL_HOST_OBJS += host_swap_header.o host_swap.o host_swap_reclaim.o host_dma.o host_irq_dispatch.o
 KERNEL_HOST_OBJS += host_net_dev.o
-KERNEL_HOST_OBJS += host_ktm_console_mock.o host_ktm_input_mock.o \
+KERNEL_HOST_OBJS += host_ktm_console_mock.o \
 	host_ktm_video_mock.o host_ktm_audio_mock.o \
 	host_ktm_mm_port_mock.o host_ktm_platform_mock.o
 TEST_OBJS  = $(TEST_SRCS:.c=.o) $(KERNEL_HOST_OBJS)
@@ -256,9 +256,6 @@ host_net_dev.o: $(KERNEL_ROOT)/net/dev.c
 host_ktm_console_mock.o: $(KERNEL_ROOT)/ktm/mocks/console/ktm_console_mock.c
 	$(KERNEL_CC)
 
-host_ktm_input_mock.o: $(KERNEL_ROOT)/ktm/mocks/input/ktm_input_mock.c
-	$(KERNEL_CC)
-
 host_ktm_video_mock.o: $(KERNEL_ROOT)/ktm/mocks/video/ktm_video_mock.c
 	$(KERNEL_CC)
 
@@ -325,6 +322,9 @@ host_ps2_set1.o: $(KERNEL_ROOT)/drivers/input/ps2_set1.c
 	$(KERNEL_CC)
 
 host_keymap.o: $(KERNEL_ROOT)/drivers/input/keymap.c
+	$(KERNEL_CC)
+
+host_kbd_translate.o: $(KERNEL_ROOT)/drivers/tty/vt/kbd_translate.c
 	$(KERNEL_CC)
 
 host_ps2_mouse_pkt.o: $(KERNEL_ROOT)/drivers/input/ps2_mouse_pkt.c

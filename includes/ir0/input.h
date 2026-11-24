@@ -147,6 +147,7 @@ int input_handle_locked(struct input_handle *handle,
 /* Handler registration, from the generic boot table (drivers/init_drv.c). */
 int evdev_init(void);
 int uinput_init(void);
+int mousedev_init(void);
 
 /*
  * Legacy IR0 interfaces of /dev/events0, the multiplexed node that
@@ -183,8 +184,3 @@ struct ir0_input_caps
  * EV_KEY but does not also type into the tty (legacy events0 contract).
  */
 int input_events_readers_active(void);
-
-/* IRQ-safe notification after a complete device event/report is queued. */
-typedef void (*input_ready_notifier_t)(void);
-void input_mouse_set_ready_notifier(input_ready_notifier_t notifier);
-void input_event_wake_readers(void);

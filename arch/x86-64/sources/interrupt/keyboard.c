@@ -7,7 +7,10 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: keyboard.c
- * Description: PS/2 IRQ path; set-1 decode via <ir0/ps2_set1.h>; TTY ring.
+ * Description: i8042 port 1 keyboard (Linux atkbd): the IRQ path demuxes
+ *              the controller byte, decodes scancode set 1 and reports
+ *              keys to its input device. The console keyboard handler turns
+ *              them into console input.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -24,12 +27,10 @@
 #include <ir0/irq.h>
 #include <ir0/vga.h>
 #include <ir0/input.h>
-#include <ir0/input_backend.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/cmdline.h>
 #include <ir0/console.h>
 #include <ir0/ps2_set1.h>
-#include <ir0/keymap.h>
 #include <kernel/syscalls/syscalls.h>
 #include <asm/io.h>
 
@@ -38,219 +39,20 @@
 /* i8042: output buffer byte is from AUX (mouse) when set — Linux I8042_STR_AUXDATA */
 #define PS2_STATUS_AUXDATA     0x20
 
-static void keyboard_buffer_add(char c);
-static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len);
 static void keyboard_feed_scancode(uint8_t scancode);
-
-#define KERNEL_KBD_RING_SIZE 256
-static char keyboard_buffer[KERNEL_KBD_RING_SIZE];
-static int keyboard_buffer_head = 0;
-static int keyboard_buffer_tail = 0;
 
 volatile char *shared_keyboard_buffer = (volatile char *)KEYBOARD_BUFFER_ADDR;
 volatile int *shared_keyboard_buffer_pos =
     (volatile int *)(KEYBOARD_BUFFER_ADDR + KEYBOARD_BUFFER_SIZE);
 
 static int system_in_idle_mode = 0;
+/* The port-2 (AUX) device driver, if one bound it. */
+static void (*i8042_aux_feed)(uint8_t data);
 
 static struct ps2_set1_state kbd_state;
 /* The AT keyboard behind i8042 port 1 (Linux atkbd). */
 static struct input_dev *kbd_dev;
-static int console_keyboard_mode = IR0_INPUT_KBD_XLATE;
 
-/* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, input(4)) */
-static const uint16_t scancode_to_keycode[256] = {
-    [0x01] = KEY_ESC, [0x02] = KEY_1, [0x03] = KEY_2, [0x04] = KEY_3,
-    [0x05] = KEY_4, [0x06] = KEY_5, [0x07] = KEY_6, [0x08] = KEY_7,
-    [0x09] = KEY_8, [0x0A] = KEY_9, [0x0B] = KEY_0, [0x0C] = KEY_MINUS,
-    [0x0D] = KEY_EQUAL, [0x0E] = KEY_BACKSPACE, [0x0F] = KEY_TAB,
-    [0x10] = KEY_Q, [0x11] = KEY_W, [0x12] = KEY_E, [0x13] = KEY_R,
-    [0x14] = KEY_T, [0x15] = KEY_Y, [0x16] = KEY_U, [0x17] = KEY_I,
-    [0x18] = KEY_O, [0x19] = KEY_P, [0x1A] = KEY_LEFTBRACE, [0x1B] = KEY_RIGHTBRACE,
-    [0x1C] = KEY_ENTER, [0x1D] = KEY_LEFTCTRL, [0x1E] = KEY_A, [0x1F] = KEY_S,
-    [0x20] = KEY_D, [0x21] = KEY_F, [0x22] = KEY_G, [0x23] = KEY_H,
-    [0x24] = KEY_J, [0x25] = KEY_K, [0x26] = KEY_L, [0x27] = KEY_SEMICOLON,
-    [0x28] = KEY_APOSTROPHE, [0x29] = KEY_GRAVE, [0x2A] = KEY_LEFTSHIFT,
-    [0x2B] = KEY_BACKSLASH, [0x2C] = KEY_Z, [0x2D] = KEY_X, [0x2E] = KEY_C,
-    [0x2F] = KEY_V, [0x30] = KEY_B, [0x31] = KEY_N, [0x32] = KEY_M,
-    [0x33] = KEY_COMMA, [0x34] = KEY_DOT, [0x35] = KEY_SLASH, [0x36] = KEY_RIGHTSHIFT,
-    [0x37] = KEY_KPASTERISK, [0x38] = KEY_LEFTALT, [0x39] = KEY_SPACE,
-    [0x3A] = KEY_CAPSLOCK, [0x3B] = KEY_F1, [0x3C] = KEY_F2, [0x3D] = KEY_F3,
-    [0x3E] = KEY_F4, [0x3F] = KEY_F5, [0x40] = KEY_F6, [0x41] = KEY_F7,
-    [0x42] = KEY_F8, [0x43] = KEY_F9, [0x44] = KEY_F10, [0x45] = KEY_NUMLOCK,
-    [0x46] = KEY_SCROLLLOCK, [0x47] = KEY_KP7, [0x48] = KEY_KP8, [0x49] = KEY_KP9,
-    [0x4A] = KEY_KPMINUS, [0x4B] = KEY_KP4, [0x4C] = KEY_KP5, [0x4D] = KEY_KP6,
-    [0x4E] = KEY_KPPLUS, [0x4F] = KEY_KP1, [0x50] = KEY_KP2, [0x51] = KEY_KP3,
-    [0x52] = KEY_KP0, [0x53] = KEY_KPDOT, [0x57] = KEY_F11, [0x58] = KEY_F12,
-};
-
-static const uint16_t ext_scancode_to_keycode[256] = {
-    [0x1C] = KEY_KPENTER, [0x1D] = KEY_RIGHTCTRL, [0x35] = KEY_KPSLASH,
-    [0x37] = KEY_SYSRQ, [0x38] = KEY_RIGHTALT, [0x47] = KEY_HOME,
-    [0x48] = KEY_UP, [0x49] = KEY_PAGEUP, [0x4B] = KEY_LEFT,
-    [0x4D] = KEY_RIGHT, [0x4F] = KEY_END, [0x50] = KEY_DOWN,
-    [0x51] = KEY_PAGEDOWN, [0x52] = KEY_INSERT, [0x53] = KEY_DELETE,
-    [0x5B] = KEY_LEFTMETA, [0x5C] = KEY_RIGHTMETA,
-};
-
-#if DEBUG_KEYBOARD
-static void kbd_dbg_trace(const struct ps2_set1_result *r)
-{
-	if (!r)
-		return;
-
-	if (r->raw == 0xE0 || r->raw == 0xE1 || r->prefix == 0xE1)
-	{
-		kprintf("[INPUT] raw_scancode=0x%02x prefix=0x%02x event=prefix\n",
-			r->raw, r->prefix);
-		return;
-	}
-
-	if (r->emitted_len == 1)
-	{
-		kprintf("[INPUT] raw_scancode=0x%02x prefix=0x%02x event=%s key=%s emitted=0x%02x\n",
-			r->raw, r->prefix, r->down ? "down" : "up",
-			ps2_set1_key_name(r->key), r->emitted[0]);
-	}
-	else
-	{
-		kprintf("[INPUT] raw_scancode=0x%02x prefix=0x%02x event=%s key=%s emitted_len=%u\n",
-			r->raw, r->prefix, r->down ? "down" : "up",
-			ps2_set1_key_name(r->key), (unsigned)r->emitted_len);
-	}
-
-	if (r->mods_before != r->mods_after)
-	{
-		kprintf("[INPUT] modifiers before=0x%x after=0x%x\n",
-			(unsigned)r->mods_before, (unsigned)r->mods_after);
-	}
-}
-#else
-static void kbd_dbg_trace(const struct ps2_set1_result *r)
-{
-	(void)r;
-}
-#endif
-
-int keyboard_set_layout(int layout)
-{
-	return keymap_load_layout(layout);
-}
-
-int keyboard_get_layout(void)
-{
-	return keymap_get_layout();
-}
-
-const char *keyboard_get_layout_name(int layout)
-{
-	if (layout == KEYBOARD_LAYOUT_LATAM)
-		return "latam";
-	return "us";
-}
-
-uint32_t keyboard_modifiers_mask(void)
-{
-	return ps2_set1_mods_mask(&kbd_state.mods);
-}
-
-int keyboard_ctrl_active(void)
-{
-	return ps2_set1_ctrl(&kbd_state.mods);
-}
-
-void keyboard_all_keys_up(void)
-{
-	unsigned long flags;
-
-	/*
-	 * kbd_state is also mutated by IRQ1 (keyboard_feed_scancode). This may
-	 * run from a syscall (TCFLSH resync on session end) or from the idle
-	 * poll drain with IRQs enabled, so serialise against the producer.
-	 */
-	flags = irq_save();
-	ps2_set1_all_keys_up(&kbd_state);
-	irq_restore(flags);
-}
-
-static void keyboard_buffer_add(char c)
-{
-	int next = (keyboard_buffer_head + 1) % KERNEL_KBD_RING_SIZE;
-	static int kbd_ascii_tag;
-
-	ir0_console_keypress(c);
-
-	if (!ir0_console_store_key_in_ring())
-	{
-		return;
-	}
-
-	if (next != keyboard_buffer_tail)
-	{
-		keyboard_buffer[keyboard_buffer_head] = c;
-		keyboard_buffer_head = next;
-		input_kbd_wake_readers();
-		if (ir0_cmdline_tty_smoke_enabled() &&
-		    !kbd_ascii_tag && (unsigned char)c >= ' ')
-		{
-			kbd_ascii_tag = 1;
-			klog_smoke("KBD_ASCII_OK");
-		}
-	}
-	else
-	{
-		/* Ring overflow: resync momentary modifiers (documented). */
-		keyboard_all_keys_up();
-	}
-}
-
-static void keyboard_buffer_add_bytes(const uint8_t *data, uint8_t len)
-{
-	uint8_t i;
-
-	if (!data || !len)
-		return;
-	for (i = 0; i < len; i++)
-		keyboard_buffer_add((char)data[i]);
-}
-
-char keyboard_buffer_get(void)
-{
-	char c;
-
-	if (keyboard_buffer_head == keyboard_buffer_tail)
-		return 0;
-
-	c = keyboard_buffer[keyboard_buffer_tail];
-	keyboard_buffer_tail = (keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
-	return c;
-}
-
-int keyboard_buffer_has_data(void)
-{
-	return keyboard_buffer_head != keyboard_buffer_tail;
-}
-
-void keyboard_buffer_clear(void)
-{
-	int guard = KERNEL_KBD_RING_SIZE;
-
-	/*
-	 * Discard by advancing tail, not by resetting both indices. Linux keeps
-	 * head producer-published and tail consumer-published (n_tty_data), and
-	 * the only writer of both is n_tty_flush_buffer(), which serialises
-	 * against the producer under an exclusive termios_rwsem. IR0 flushes
-	 * against a live IRQ1 producer with no such lock, and resetting head
-	 * from here raced it: the IRQ resumed a stale index and left head ahead
-	 * of tail over dead slots, replayed as random characters.
-	 *
-	 * Touching only tail keeps that ownership rule, so no masking is needed.
-	 * Bounded because a held key can refill the ring while we drain.
-	 */
-	while (guard-- > 0 && keyboard_buffer_head != keyboard_buffer_tail)
-		keyboard_buffer_tail =
-			(keyboard_buffer_tail + 1) % KERNEL_KBD_RING_SIZE;
-}
 void keyboard_poll_ps2(void)
 {
 	static int kbd_poll_tag;
@@ -298,7 +100,9 @@ void keyboard_poll_ps2(void)
 
 		if (status & PS2_STATUS_AUXDATA)
 		{
-			input_mouse_feed_byte(data);
+			/* Without an AUX driver the byte is discarded. */
+			if (i8042_aux_feed)
+				i8042_aux_feed(data);
 			continue;
 		}
 
@@ -344,7 +148,11 @@ static void i8042_aux_irq(uint32_t irq, void *data)
 	(void)irq;
 	(void)data;
 	clock_note_irq();
-	input_mouse_handle_interrupt();
+	/*
+	 * IRQ12 and IRQ1 share the i8042 output buffer: demux by AUXDATA,
+	 * never assume this IRQ's byte is the mouse's.
+	 */
+	keyboard_poll_ps2();
 }
 
 /*
@@ -359,119 +167,30 @@ void i8042_irq_init(void)
 
 static void keyboard_feed_scancode(uint8_t scancode)
 {
-	struct ps2_set1_result r;
-	uint8_t code;
+	unsigned int kc;
 	int down;
-	int extended;
-	uint16_t kc;
+	static int kbd_scancode_tag;
 
-	ps2_set1_feed(&kbd_state, scancode, &r);
-	kbd_dbg_trace(&r);
-
-	/* Prefix-only: no EV_KEY yet. */
-	if (scancode == 0xE0 || scancode == 0xE1 || r.prefix == 0xE1)
+	if (!ps2_set1_decode(&kbd_state, scancode, &kc, &down))
 		return;
-
-	extended = (r.prefix == 0xE0) ? 1 : 0;
-	down = r.down ? 1 : 0;
-	code = (uint8_t)(scancode & 0x7F);
-
-	kc = extended ? ext_scancode_to_keycode[code] : scancode_to_keycode[code];
-	if (kc && kbd_dev)
+	if (ir0_cmdline_tty_smoke_enabled() && !kbd_scancode_tag && down)
 	{
-		/* atkbd: the scancode, then the key; a held key repeats as 2. */
-		input_event(kbd_dev, EV_MSC, MSC_SCAN,
-			    extended ? (0xE000 | code) : code);
-		input_report_key(kbd_dev, kc,
-				 down ? (test_bit(kc, kbd_dev->key) ? 2 : 1) : 0);
-		input_sync(kbd_dev);
+		kbd_scancode_tag = 1;
+		klog_smoke("KBD_SCANCODE_OK");
 	}
-
-	/* Linux K_MEDIUMRAW: one byte, KEY_* code with bit 7 on release. */
-	if (console_keyboard_mode == IR0_INPUT_KBD_MEDIUMRAW && kc && kc < 128)
-	{
-		keyboard_buffer_add((char)((uint8_t)kc | (down ? 0U : 0x80U)));
+	if (!kc || !kbd_dev)
 		return;
-	}
-
-	if (r.emitted_len)
-	{
-		static int kbd_scancode_tag;
-
-		if (ir0_cmdline_tty_smoke_enabled() && !kbd_scancode_tag)
-		{
-			kbd_scancode_tag = 1;
-			klog_smoke("KBD_SCANCODE_OK");
-		}
-		/*
-		 * While /dev/events0 has readers, only EV_KEY —
-		 * do not also inject ASCII into the cooked TTY line (qqqls).
-		 */
-		if (!input_events_readers_active())
-		{
-			keyboard_buffer_add_bytes(r.emitted, r.emitted_len);
-		}
-		else
-		{
-			/*
-			 * A leaked /dev/events0 reader silently kills all
-			 * console input, which looks like a hung terminal. Say so
-			 * on the serial log instead of dropping in silence.
-			 */
-			static unsigned int suppressed;
-
-			if (++suppressed <= 8)
-				klog_notice_fmt("INPUT",
-						"[INPUT] ascii suppressed: events0 readers active (n=%u)\n",
-						suppressed);
-		}
-	}
+	/* atkbd: the scancode, then the key; a held key repeats as 2. */
+	input_event(kbd_dev, EV_MSC, MSC_SCAN, scancode & 0x7F);
+	input_report_key(kbd_dev, kc,
+			 down ? (test_bit(kc, kbd_dev->key) ? 2 : 1) : 0);
+	input_sync(kbd_dev);
 }
-
-int keyboard_set_console_mode(int mode)
-{
-	if (mode != IR0_INPUT_KBD_XLATE && mode != IR0_INPUT_KBD_MEDIUMRAW)
-		return -EINVAL;
-	console_keyboard_mode = mode;
-	keyboard_buffer_clear();
-	keyboard_all_keys_up();
-	return 0;
-}
-
-int keyboard_get_console_mode(void)
-{
-	return console_keyboard_mode;
-}
-
-/* A byte that did not come from the controller (TIOCSTI): same path as IRQ1. */
-static void keyboard_receive(char c)
-{
-	unsigned long flags;
-
-	flags = irq_save();
-	keyboard_buffer_add(c);
-	irq_restore(flags);
-}
-
-static const struct input_keyboard_ops i8042_keyboard_ops = {
-	.get = keyboard_buffer_get,
-	.has_data = keyboard_buffer_has_data,
-	.clear = keyboard_buffer_clear,
-	.all_keys_up = keyboard_all_keys_up,
-	.poll = keyboard_poll_ps2,
-	.set_layout = keyboard_set_layout,
-	.get_layout = keyboard_get_layout,
-	.get_layout_name = keyboard_get_layout_name,
-	.set_console_mode = keyboard_set_console_mode,
-	.get_console_mode = keyboard_get_console_mode,
-	.receive = keyboard_receive,
-};
 
 /* Linux atkbd identity for a translated set-2 keyboard. */
 static int keyboard_register_input(void)
 {
 	struct input_dev *dev = input_allocate_device();
-	unsigned int i;
 	int ret;
 
 	if (!dev)
@@ -485,13 +204,7 @@ static int keyboard_register_input(void)
 	__set_bit(EV_KEY, dev->evbit);
 	__set_bit(EV_MSC, dev->evbit);
 	__set_bit(MSC_SCAN, dev->mscbit);
-	for (i = 0; i < 256; i++)
-	{
-		if (scancode_to_keycode[i])
-			__set_bit(scancode_to_keycode[i], dev->keybit);
-		if (ext_scancode_to_keycode[i])
-			__set_bit(ext_scancode_to_keycode[i], dev->keybit);
-	}
+	ps2_set1_keybits(dev->keybit);
 	ret = input_register_device(dev);
 	if (ret)
 	{
@@ -502,13 +215,15 @@ static int keyboard_register_input(void)
 	return 0;
 }
 
+void i8042_register_aux(void (*feed)(uint8_t data))
+{
+	i8042_aux_feed = feed;
+}
+
 void keyboard_init(void)
 {
-	(void)keyboard_register_input();
-	input_register_keyboard(&i8042_keyboard_ops);
-	keyboard_buffer_head = 0;
-	keyboard_buffer_tail = 0;
 	ps2_set1_reset(&kbd_state);
+	(void)keyboard_register_input();
 }
 
 void set_idle_mode(int is_idle)

@@ -182,7 +182,6 @@ endif
 CONSOLE_BACKEND_OBJ := drivers/tty/console_backend.o
 MM_PORT_OBJ := mm/alloc/mm_port.o
 VIDEO_BACKEND_OBJ := drivers/video/video_backend.o
-INPUT_BACKEND_OBJ := drivers/input/input_backend.o
 AUDIO_BACKEND_OBJ := sound/audio_backend.o
 
 ifeq ($(CONFIG_KTM),y)
@@ -194,9 +193,6 @@ MM_PORT_OBJ := ktm/mocks/mm/ktm_mm_port_mock.o
 endif
 ifeq ($(CONFIG_KTM_VIDEO_MOCK),y)
 VIDEO_BACKEND_OBJ := ktm/mocks/video/ktm_video_mock.o
-endif
-ifeq ($(CONFIG_KTM_INPUT_MOCK),y)
-INPUT_BACKEND_OBJ := ktm/mocks/input/ktm_input_mock.o
 endif
 ifeq ($(CONFIG_KTM_AUDIO_MOCK),y)
 AUDIO_BACKEND_OBJ := ktm/mocks/audio/ktm_audio_mock.o
@@ -496,6 +492,9 @@ KERNEL_OBJS = \
     ipc/posix_shm.o \
     drivers/input/evdev.o \
     drivers/input/uinput.o \
+    drivers/input/mousedev.o \
+    drivers/tty/vt/keyboard.o \
+    drivers/tty/vt/kbd_translate.o \
     fs/binfmt_elf.o \
     drivers/core/driver_registry.o \
     drivers/core/resource_registry.o \
@@ -678,7 +677,6 @@ LIB_OBJS = \
     ktm/process_introspect.o \
     drivers/rtc/rtc_calendar.o \
     $(VIDEO_BACKEND_OBJ) \
-    $(INPUT_BACKEND_OBJ) \
     $(AUDIO_BACKEND_OBJ) \
     includes/string.o
 
@@ -748,7 +746,6 @@ FS_OBJS = \
     fs/devfs_char.o \
     fs/devfs_console.o \
     fs/devfs_audio.o \
-    fs/devfs_input.o \
     fs/devfs_fb.o \
     fs/devfs_tty.o \
     fs/devfs_ipc.o \

@@ -17,7 +17,6 @@
 #include <ir0/input.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
-#include <ir0/poll.h>
 #include <ir0/spinlock.h>
 #include <string.h>
 
@@ -29,22 +28,6 @@
 static ir0_spinlock_t input_lock;
 static struct input_dev *input_dev_list;
 static struct input_handler *input_handler_list;
-static input_ready_notifier_t mouse_ready_notifier;
-
-void input_mouse_set_ready_notifier(input_ready_notifier_t notifier)
-{
-	mouse_ready_notifier = notifier;
-}
-
-/* Poll core callback: marks matching waiters ready without scheduling. */
-void input_event_wake_readers(void)
-{
-	(void)poll_wake_check_nosched();
-	if (mouse_ready_notifier)
-	{
-		mouse_ready_notifier();
-	}
-}
 
 struct input_dev *input_allocate_device(void)
 {

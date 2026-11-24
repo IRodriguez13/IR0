@@ -14,7 +14,7 @@
 #include "syscalls.h"
 #include <ir0/console.h>
 #include <ir0/copy_user.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
 #include <ir0/clock.h>
@@ -69,7 +69,7 @@ static int stdin_wake_check_nosched(void)
 	int woke_tty = 0;
 	int i;
 
-	if (!input_kbd_has_data() && !ir0_console_input_ready())
+	if (!kbd_has_data() && !ir0_console_input_ready())
 		return 0;
 
 	woke_tty = ir0_console_wake_readers();

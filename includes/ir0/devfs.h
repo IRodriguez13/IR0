@@ -152,9 +152,6 @@ struct audio_format {
     uint8_t bits_per_sample; /* 8 or 16 */
 };
 
-#define MOUSE_GET_STATE     0x2001
-#define MOUSE_SET_SENSITIVITY 0x2002
-
 #define NET_SEND_ECHO       0x3001
 #define NET_GET_CONFIG      0x3002
 #define NET_SET_CONFIG      0x3003

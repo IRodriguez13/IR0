@@ -17,7 +17,6 @@
 #include <stddef.h>
 #include <ir0/driver.h>
 #include <ir0/input.h>
-#include <ir0/input_backend.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/ps2_mouse_pkt.h>
 #include <ir0/console.h>
@@ -49,42 +48,6 @@ static ps2_mouse_state_t mouse_state = {0};
 static struct input_dev *mouse_dev;
 static struct ps2_mouse_pkt_state pkt_state;
 static uint8_t expected_packet_size = 3;
-
-/* Mouse packet queue (ring buffer) */
-#define MOUSE_QUEUE_SIZE 256
-static ps2_mouse_packet_t mouse_queue[MOUSE_QUEUE_SIZE];
-static int mouse_queue_head = 0;
-static int mouse_queue_tail = 0;
-
-static void mouse_queue_push(const ps2_mouse_packet_t *p)
-{
-    int next = (mouse_queue_head + 1) % MOUSE_QUEUE_SIZE;
-
-    /* Preserve the newest physical state under input bursts.  Dropping the
-     * incoming packet can discard ButtonPress/ButtonRelease and leave a GUI
-     * permanently stuck; evdev-style consumers can recover from an older
-     * motion sample being displaced by the latest complete PS/2 packet. */
-    if (next == mouse_queue_tail)
-        mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE;
-    mouse_queue[mouse_queue_head] = *p;
-    mouse_queue_head = next;
-}
-
-static bool mouse_queue_pop(ps2_mouse_packet_t *p)
-{
-    if (mouse_queue_head == mouse_queue_tail)
-    {
-        return false;
-    }
-    *p = mouse_queue[mouse_queue_tail];
-    mouse_queue_tail = (mouse_queue_tail + 1) % MOUSE_QUEUE_SIZE;
-    return true;
-}
-
-bool ps2_mouse_packet_available(void)
-{
-    return mouse_queue_head != mouse_queue_tail;
-}
 
 /* Internal hardware initialization function */
 /* Linux psmouse names and ids for the protocol the mouse answered. */
@@ -244,12 +207,10 @@ static ir0_driver_info_t mouse_info = {
 /**
  * ps2_mouse_init - register PS/2 mouse driver
  */
-static const struct input_mouse_ops ps2_mouse_input_ops;
 
 bool ps2_mouse_init(void)
 {
     klog_info("PS2_MOUSE", "Registering PS/2 Mouse driver...");
-    input_register_mouse(&ps2_mouse_input_ops);
     ir0_driver_t* drv = ir0_register_driver(&mouse_info, &mouse_ops);
     return drv != NULL;
 }
@@ -387,50 +348,11 @@ void ps2_mouse_feed_byte(uint8_t data)
 #endif
 
 	ps2_mouse_process_packet(&packet);
-	mouse_queue_push(&packet);
 	if (!packet_path_logged)
 	{
 		packet_path_logged = 1;
 		klog_info_fmt("INPUT", "PS2_MOUSE_PACKET_PATH_OK");
 	}
-	/* /dev/mouse and evdev readers may be asleep in select/poll. */
-	input_event_wake_readers();
-}
-
-bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet)
-{
-    if (!packet || !mouse_state.initialized)
-    {
-        return false;
-    }
-
-    /* Try to pop from real hardware queue */
-    if (mouse_queue_pop(packet))
-    {
-        return true;
-    }
-
-    /* If no movement, return current static state with 0 delta */
-    packet->flags = 0;
-    if (mouse_state.left_button)
-    {
-        packet->flags |= PS2_MOUSE_LEFT_BUTTON;
-    }
-    if (mouse_state.right_button)
-    {
-        packet->flags |= PS2_MOUSE_RIGHT_BUTTON;
-    }
-    if (mouse_state.middle_button)
-    {
-        packet->flags |= PS2_MOUSE_MIDDLE_BUTTON;
-    }
-
-    packet->delta_x = 0;
-    packet->delta_y = 0;
-    packet->delta_wheel = 0;
-    packet->extra_buttons = 0;
-
-    return true;
 }
 
 static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
@@ -666,46 +588,3 @@ static bool ps2_mouse_enable_5buttons(void)
 
     return ps2_controller_read_data() == PS2_MOUSE_ID_5BUTTON;
 }
-
-static bool ps2_mouse_input_state(ir0_mouse_state_t *out)
-{
-	if (!ps2_mouse_is_available())
-		return false;
-	out->x = mouse_state.x;
-	out->y = mouse_state.y;
-	out->wheel = mouse_state.wheel;
-	out->left_button = mouse_state.left_button;
-	out->right_button = mouse_state.right_button;
-	out->middle_button = mouse_state.middle_button;
-	out->button4 = mouse_state.button4;
-	out->button5 = mouse_state.button5;
-	out->has_wheel = mouse_state.has_wheel;
-	out->has_5buttons = mouse_state.has_5buttons;
-	out->resolution = mouse_state.resolution;
-	out->sample_rate = mouse_state.sample_rate;
-	out->type = (uint8_t)mouse_state.type;
-	out->initialized = mouse_state.initialized;
-	return true;
-}
-
-/* Linux /dev/mouse compatibility: one standard three-byte PS/2 packet. */
-static int ps2_mouse_input_packet(uint8_t packet[3])
-{
-	ps2_mouse_packet_t source;
-
-	if (!ps2_mouse_packet_available() || !ps2_mouse_read_packet(&source))
-		return 0;
-	packet[0] = (uint8_t)(source.flags | 0x08u);
-	packet[1] = (uint8_t)source.delta_x;
-	packet[2] = (uint8_t)source.delta_y;
-	return 3;
-}
-
-static const struct input_mouse_ops ps2_mouse_input_ops = {
-	.feed_byte = ps2_mouse_feed_byte,
-	.is_available = ps2_mouse_is_available,
-	.get_state = ps2_mouse_input_state,
-	.set_sample_rate = ps2_mouse_set_sample_rate,
-	.packet_available = ps2_mouse_packet_available,
-	.read_packet = ps2_mouse_input_packet,
-};

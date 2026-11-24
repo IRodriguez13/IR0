@@ -17,7 +17,6 @@
 #if CONFIG_ENABLE_SOUND
 #include <ir0/audio_backend.h>
 #endif
-#include <ir0/input_backend.h>
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
@@ -185,9 +184,6 @@ int devfs_init(void)
         return -1;
     if (devfs_register_node_checked(&dev_audio) != 0)
         return -1;
-    if (devfs_register_node_checked(&dev_mouse) != 0)
-        return -1;
-    devfs_input_init();
     if (devfs_register_node_checked(&dev_net) != 0)
         return -1;
     if (devfs_register_node_checked(&dev_disk) != 0)

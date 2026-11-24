@@ -14,7 +14,7 @@
 
 #include "test_harness.h"
 #include <ir0/ps2_mouse_pkt.h>
-#include <ir0/ps2_set1.h>
+#include "kbd_feed.h"
 
 void test_ps2_mouse_pkt_resync_and_complete(void)
 {
@@ -49,18 +49,18 @@ void test_ps2_mouse_pkt_resync_and_complete(void)
 
 void test_ps2_mouse_interleaved_does_not_touch_kbd_mods(void)
 {
-	struct ps2_set1_state kbd;
-	struct ps2_set1_result kr;
+	struct kbd_feed kbd;
+	struct kbd_result kr;
 	struct ps2_mouse_pkt_state mouse;
 	struct ps2_mouse_pkt mpkt;
 
 	TEST_BEGIN("ps2 mouse packets never alter keyboard modifiers");
-	ps2_set1_reset(&kbd);
+	kbd_feed_reset(&kbd);
 	ps2_mouse_pkt_reset(&mouse, 3);
 
 	/* Establish Left Ctrl via keyboard path only. */
-	ps2_set1_feed(&kbd, 0x1D, &kr);
-	ASSERT(ps2_set1_ctrl(&kbd.mods));
+	kbd_feed(&kbd, 0x1D, &kr);
+	ASSERT(kbd_mods_ctrl(&kbd.mods));
 
 	/*
 	 * Mouse motion bytes (would look like scancodes if misrouted).
@@ -73,36 +73,36 @@ void test_ps2_mouse_interleaved_does_not_touch_kbd_mods(void)
 
 	/* Keyboard modifiers unchanged — mouse path did not call set1. */
 	ASSERT(kbd.mods.left_ctrl);
-	ASSERT(ps2_set1_ctrl(&kbd.mods));
+	ASSERT(kbd_mods_ctrl(&kbd.mods));
 
 	/* Real Ctrl break still clears via keyboard path. */
-	ps2_set1_feed(&kbd, 0x9D, &kr);
-	ASSERT(!ps2_set1_ctrl(&kbd.mods));
-	ASSERT_EQ(ps2_set1_mods_mask(&kbd.mods), KBD_MOD_NONE);
+	kbd_feed(&kbd, 0x9D, &kr);
+	ASSERT(!kbd_mods_ctrl(&kbd.mods));
+	ASSERT_EQ(kbd_mods_mask(&kbd.mods), KBD_MOD_NONE);
 	TEST_END();
 }
 
 void test_ps2_set1_alt_independent(void)
 {
-	struct ps2_set1_state st;
-	struct ps2_set1_result r;
+	struct kbd_feed st;
+	struct kbd_result r;
 
 	TEST_BEGIN("ps2_set1 Left/Right Alt independent");
-	ps2_set1_reset(&st);
+	kbd_feed_reset(&st);
 
-	ps2_set1_feed(&st, 0x38, &r); /* LAlt make */
+	kbd_feed(&st, 0x38, &r); /* LAlt make */
 	ASSERT(st.mods.left_alt);
-	ps2_set1_feed(&st, 0xE0, &r);
-	ps2_set1_feed(&st, 0x38, &r); /* RAlt make */
+	kbd_feed(&st, 0xE0, &r);
+	kbd_feed(&st, 0x38, &r); /* RAlt make */
 	ASSERT(st.mods.left_alt && st.mods.right_alt);
 
-	ps2_set1_feed(&st, 0xB8, &r); /* LAlt break */
+	kbd_feed(&st, 0xB8, &r); /* LAlt break */
 	ASSERT(!st.mods.left_alt);
 	ASSERT(st.mods.right_alt);
 
-	ps2_set1_feed(&st, 0xE0, &r);
-	ps2_set1_feed(&st, 0xB8, &r); /* RAlt break */
+	kbd_feed(&st, 0xE0, &r);
+	kbd_feed(&st, 0xB8, &r); /* RAlt break */
 	ASSERT(!st.mods.right_alt);
-	ASSERT_EQ(ps2_set1_mods_mask(&st.mods), KBD_MOD_NONE);
+	ASSERT_EQ(kbd_mods_mask(&st.mods), KBD_MOD_NONE);
 	TEST_END();
 }

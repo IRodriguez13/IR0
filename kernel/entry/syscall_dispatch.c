@@ -24,7 +24,7 @@
 #include <ir0/syscall_table.h>
 #include <ir0/elf_loader.h>
 #include <ir0/kexec.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/sched.h>
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/cpu.h>
@@ -270,12 +270,12 @@ static int64_t wrap_sys_getegid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t 
 /* ISD firstboot still switches the keyboard layout through these. */
 static int64_t wrap_keymap_set(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  return input_kbd_set_layout((int)a1);
+  return kbd_set_layout((int)a1);
 }
 
 static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  return input_kbd_get_layout();
+  return kbd_get_layout();
 }
 
 /* ABI numbers never index common kernel state. */

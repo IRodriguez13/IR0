@@ -32,6 +32,7 @@
 #include <drivers/multilang_drivers.h>
 #include <ir0/boot_arch.h>
 #include <ir0/input.h>
+#include <ir0/kbd.h>
 
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
@@ -54,6 +55,10 @@ static int boot_init_input(void)
 {
     int ret = evdev_init();
 
+    if (ret == 0)
+        ret = kbd_init();
+    if (ret == 0)
+        ret = mousedev_init();
     if (ret == 0)
         ret = uinput_init();
     return ret;

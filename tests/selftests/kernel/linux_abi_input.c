@@ -670,3 +670,44 @@ int input_uinput_device_lifecycle(void)
 	(void)S1(SYS_close, u);
 	return CONF_PASS;
 }
+
+/*
+ * mousedev.c: every pointer feeds /dev/input/mice, read as three-byte
+ * PS/2 packets (Y counts up); the node takes no ioctls.
+ */
+int input_mice_reads_ps2_packets(void)
+{
+	struct t_uinput_setup setup;
+	unsigned char pkt[3];
+	char name[8];
+	long u;
+	long m;
+
+	dev_mount();
+	m = S4(SYS_openat, AT_FDCWD, "/dev/input/mice", O_RDONLY | O_NONBLOCK, 0);
+	CHECK(m >= 0);
+	u = S4(SYS_openat, AT_FDCWD, "/dev/uinput", O_RDWR, 0);
+	CHECK(u >= 0);
+	EXPECT(S3(SYS_ioctl, u, T_UI_SET_EVBIT, T_EV_KEY), 0);
+	EXPECT(S3(SYS_ioctl, u, T_UI_SET_EVBIT, T_EV_REL), 0);
+	EXPECT(S3(SYS_ioctl, u, T_UI_SET_KEYBIT, T_BTN_LEFT), 0);
+	EXPECT(S3(SYS_ioctl, u, T_UI_SET_RELBIT, T_REL_X), 0);
+	EXPECT(S3(SYS_ioctl, u, T_UI_SET_RELBIT, T_REL_Y), 0);
+	rt_fill(&setup, 0, sizeof(setup));
+	setup.id.bustype = T_BUS_VIRTUAL;
+	rt_copy(setup.name, "ir0 input mouse", sizeof("ir0 input mouse"));
+	EXPECT(S3(SYS_ioctl, u, T_UI_DEV_SETUP, &setup), 0);
+	EXPECT(S2(SYS_ioctl, u, T_UI_DEV_CREATE), 0);
+	drain(m);
+	g_ufd = u;
+	EXPECT(emit(-1, T_EV_REL, T_REL_X, 5), (long)sizeof(struct t_input_event));
+	EXPECT(emit(-1, T_EV_REL, T_REL_Y, -3), (long)sizeof(struct t_input_event));
+	EXPECT(emit(-1, T_EV_KEY, T_BTN_LEFT, 1), (long)sizeof(struct t_input_event));
+	EXPECT(emit(-1, T_EV_SYN, T_SYN_REPORT, 0), (long)sizeof(struct t_input_event));
+	EXPECT(S3(SYS_read, m, pkt, sizeof(pkt)), 3);
+	EXPECT(pkt[0], 0x09);
+	EXPECT(pkt[1], 5);
+	EXPECT(pkt[2], 3);
+	EXPECT_ERR(S3(SYS_ioctl, m, T_EVIOCGNAME(sizeof(name)), name), ENOTTY);
+	return CONF_PASS;
+}

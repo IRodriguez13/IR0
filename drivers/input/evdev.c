@@ -21,7 +21,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/devfs.h>
 #include <ir0/errno.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/kmem.h>
 #include <ir0/poll.h>
 #include <ir0/spinlock.h>
@@ -39,9 +39,9 @@
 /* EVDEV_MIN_BUFFER_SIZE: a power of two. */
 #define EVDEV_BUFFER_SIZE	64u
 
-#define EV_CLK_REAL	0
-#define EV_CLK_MONO	1
-#define EV_CLK_BOOT	2
+#define EVDEV_CLK_REAL	0
+#define EVDEV_CLK_MONO	1
+#define EVDEV_CLK_BOOT	2
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME	0
@@ -114,7 +114,7 @@ static void evdev_stamp(struct input_event *ev, int clk_type)
 {
 	uint64_t ms = clock_get_uptime_milliseconds();
 
-	if (clk_type == EV_CLK_REAL && clock_realtime_available())
+	if (clk_type == EVDEV_CLK_REAL && clock_realtime_available())
 	{
 		/* Same sources as gettimeofday(2). */
 		ev->time.tv_sec = clock_get_current_time();
@@ -251,7 +251,7 @@ static void evdev_event(struct input_handle *handle, unsigned int type,
 	ir0_spin_unlock_irqrestore(&evdev_lock, flags);
 	if (type == EV_SYN && code == SYN_REPORT)
 	{
-		input_event_wake_readers();
+		(void)poll_wake_check_nosched();
 	}
 }
 
@@ -324,7 +324,7 @@ static void evdev_disconnect(struct input_handle *handle)
 	evdev_table[evdev->minor] = NULL;
 	ir0_spin_unlock_irqrestore(&evdev_lock, flags);
 	/* Readers wake to -ENODEV. */
-	input_event_wake_readers();
+	(void)poll_wake_check_nosched();
 	evdev_put(evdev);
 }
 
@@ -354,7 +354,7 @@ static int evdev_open(devfs_node_t *node, int flags, void **priv)
 	}
 	c->evdev = evdev;
 	c->refs = 1;
-	c->clk_type = EV_CLK_REAL;
+	c->clk_type = EVDEV_CLK_REAL;
 	irq_flags = ir0_spin_lock_irqsave(&evdev_lock);
 	if (!evdev->exist)
 	{
@@ -495,7 +495,7 @@ static void evdev_release(void *priv)
 		 * ASCII that may have landed while divert was ending.
 		 */
 		ir0_console_flush_input();
-		input_kbd_clear();
+		kbd_flush();
 	}
 	evdev_put(evdev);
 }
@@ -899,13 +899,13 @@ static int evdev_set_clk_type(struct evdev_client *c, int clkid)
 	switch (clkid)
 	{
 	case CLOCK_REALTIME:
-		clk_type = EV_CLK_REAL;
+		clk_type = EVDEV_CLK_REAL;
 		break;
 	case CLOCK_MONOTONIC:
-		clk_type = EV_CLK_MONO;
+		clk_type = EVDEV_CLK_MONO;
 		break;
 	case CLOCK_BOOTTIME:
-		clk_type = EV_CLK_BOOT;
+		clk_type = EVDEV_CLK_BOOT;
 		break;
 	default:
 		return -EINVAL;
@@ -933,7 +933,7 @@ static int evdev_revoke(struct evdev_client *c)
 	c->revoked = 1;
 	ir0_spin_unlock_irqrestore(&evdev_lock, flags);
 	(void)evdev_ungrab(c);
-	input_event_wake_readers();
+	(void)poll_wake_check_nosched();
 	return 0;
 }
 
