@@ -147,7 +147,8 @@ REQUIRED_FACADES = [
     ROOT / "includes" / "ir0" / "audio_backend.h",
     ROOT / "includes" / "ir0" / "console_backend.h",
     ROOT / "includes" / "ir0" / "video_backend.h",
-    ROOT / "includes" / "ir0" / "input_backend.h",
+    ROOT / "includes" / "ir0" / "input.h",
+    ROOT / "includes" / "ir0" / "kbd.h",
     ROOT / "includes" / "ir0" / "net.h",
     ROOT / "includes" / "ir0" / "bluetooth.h",
     ROOT / "includes" / "ir0" / "usb_host.h",
@@ -3880,6 +3881,49 @@ def _retired_api_self_test() -> list[str]:
     return errors
 
 
+# The evdev ABI (struct input_event, struct input_id, EV_*/KEY_*/BTN_*/
+# REL_*/ABS_*/SYN_*/MSC_* codes) comes only from the verbatim UAPI
+# linux/input.h and linux/input-event-codes.h; a private copy drifts.
+INPUT_UAPI_COPY_RE = re.compile(
+    r"^\s*(?:#\s*define\s+((?:EV|KEY|BTN|REL|ABS|SYN|MSC)_[A-Z0-9_]+)\b|"
+    r"struct\s+(input_event|input_id)\s*\{?\s*$)"
+)
+
+
+def input_uapi_copy_errors(text: str, rel: str) -> list[str]:
+    errors = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        match = INPUT_UAPI_COPY_RE.match(line)
+        if match:
+            errors.append(
+                f"[input-uapi-only] {rel}:{lineno}: "
+                f"{match.group(1) or 'struct ' + match.group(2)} is UAPI; "
+                "include <linux/input.h>"
+            )
+    return errors
+
+
+def _input_uapi_self_test():
+    bad = input_uapi_copy_errors(
+        "#define EV_KEY 0x01\nstruct input_event {\n", "drivers/x.c")
+    good = input_uapi_copy_errors(
+        "#include <linux/input.h>\nstruct input_event ev;\n", "drivers/x.c")
+    if len(bad) != 2 or good:
+        return [f"[input-uapi-only] self-test: bad={bad} good={good}"]
+    return []
+
+
+def check_input_uapi_only():
+    errors = _input_uapi_self_test()
+    for tree in RETIRED_API_TREES:
+        for path in iter_c_files(ROOT / tree):
+            rel = str(rel_to_root(path))
+            if rel.startswith("includes/uapi/"):
+                continue
+            errors.extend(input_uapi_copy_errors(read_file_text(path), rel))
+    return errors
+
+
 def check_retired_api_names():
     """Reject every name listed in the retired-API ledger."""
     errors = _retired_api_self_test()
@@ -4610,6 +4654,7 @@ def main():
     errors.extend(check_portable_no_task_arch_fields())
     errors.extend(check_process_pgd_accessor())
     errors.extend(check_signal_resume_retired())
+    errors.extend(check_input_uapi_only())
     errors.extend(check_process_wait_state_accessor())
     errors.extend(check_syscall_frame_accessor())
     errors.extend(check_asm_offsets_sync())
