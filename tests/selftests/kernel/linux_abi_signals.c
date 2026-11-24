@@ -165,6 +165,37 @@ int sig_handler_gets_signum(void)
 }
 
 /*
+ * signal(7): the handler's first argument is the signal number also when
+ * the signal interrupts code that never enters the kernel. The child
+ * spins in userspace when the parent signals it, so only the interrupt
+ * return to user mode delivers it; the child exits with the number its
+ * handler saw. On arm64 the first argument and the return value share
+ * x0: the interrupted x0 must not overwrite it.
+ */
+int sig_async_handler_gets_signum(void)
+{
+	static volatile unsigned long spin;
+	int status = 0;
+	long pid;
+
+	EXPECT(rt_sigaction(SIGUSR1, on_signal, 0, 0), 0);
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		while (!g_hits)
+			spin++;
+		rt_exit(g_sig);
+	}
+	rt_sleep_ms(100);
+	EXPECT(S2(SYS_kill, pid, SIGUSR1), 0);
+	EXPECT(conf_child_status(pid, &status, 3000), pid);
+	CHECK(RT_EXITED(status));
+	EXPECT(RT_EXITCODE(status), SIGUSR1);
+	return CONF_PASS;
+}
+
+/*
  * signal(7) SA_RESTART: a read(2) on a stream socket interrupted by a
  * handler is restarted (unix_stream_read_generic(): -ERESTARTSYS).
  */

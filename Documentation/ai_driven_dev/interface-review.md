@@ -257,7 +257,7 @@ No ISA code in `sched/`.
 ```text
 sched/
   core.c core.h idle.c wait.c        (wait.c from ipc/ipc.c, X-7)
-  policy/rr.c policy/prio.c          (CONFIG_SCHEDULER_POLICY picks one)
+  policy/rr.c policy/prio.c          (CONFIG_SCHEDULER picks one)
   switch/context_switch.c
 ```
 

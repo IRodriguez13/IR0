@@ -66,16 +66,17 @@ menu "General"
           Frequency of the PIT timer interrupt. Higher values give finer
           scheduling granularity at the cost of more IRQ overhead.
 
-    config SCHEDULER_POLICY
-        int "Scheduler policy (0=RR, 1=Cfs, 2=Priority)"
-        range 0 2
-        default 2
+    config SCHEDULER
+        string "Scheduler policy (rr, prio, cfs)"
+        default "cfs"
         help
           Build-time scheduler backend (make menuconfig → Kernel options).
-          0 = round-robin (stable reference)
-          1 = CFS — nice-weighted vruntime (sched/cfs.c)
-          2 = priority bands (default) — fixed bands with RR within band
-          The Makefile links exactly one policy file (Documentation/SCHEDULING.md).
+          rr   = round-robin (stable reference, sched/rr.c)
+          prio = priority bands with RR within a band (sched/prio.c)
+          cfs  = nice-weighted vruntime (sched/cfs.c, default)
+          The Makefile links exactly one sched/<name>.o. An uncommented
+          `#define IR0_SCHEDULER "<name>"` in config.h overrides this
+          value (Documentation/SCHEDULING.md).
 
     config ROOT_BLOCK_DEVICE
         string "Default root block device name"

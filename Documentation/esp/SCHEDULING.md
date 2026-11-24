@@ -21,11 +21,14 @@ compilación desde Kconfig. No hay despacho en tiempo de ejecución.
 
 ### Políticas
 
-| `CONFIG_SCHEDULER_POLICY` | Nombre | Objeto |
-|---------------------------|--------|--------|
-| `0` | `round_robin` | `sched/rr.o` |
-| `1` | `cfs` | Mismo objeto RR (alias honesto, sin `cfs_sched.c`) |
-| `2` (defconfig) | `priority` | `sched/prio.o` |
+| `CONFIG_SCHEDULER` | Nombre | Objeto |
+|--------------------|--------|--------|
+| `rr` | `round_robin` | `sched/rr.o` |
+| `prio` | `priority` | `sched/prio.o` |
+| `cfs` (defecto) | `cfs` | `sched/cfs.o` |
+
+Se elige en menuconfig o descomentando `#define IR0_SCHEDULER "<nombre>"` en
+`config.h` (prevalece sobre `.config`).
 
 ## Syscalls bloqueantes y señales
 

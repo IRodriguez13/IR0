@@ -18,6 +18,8 @@
 #include <ir0/problems.h>
 #include <string.h>
 
+SCHED_POLICY_LINKED("prio");
+
 typedef struct prio_task
 {
 	process_t *process;

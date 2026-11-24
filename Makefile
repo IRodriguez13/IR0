@@ -112,6 +112,20 @@ endif
 
 -include .config
 
+# Goals that compile or link need a complete .config. One written before
+# CONFIG_SCHEDULER existed is merged with the Kconfig defaults, the way a
+# missing .config falls back to setup/defconfig above.
+IR0_BUILD_GOALS := $(if $(MAKECMDGOALS),$(filter-out $(IR0_NO_DOTCONFIG_GOALS),$(MAKECMDGOALS)),all)
+ifneq ($(wildcard $(KERNEL_ROOT)/.config),)
+ifeq ($(CONFIG_SCHEDULER),)
+ifneq ($(IR0_BUILD_GOALS),)
+$(info   CONFIG  .config lacks CONFIG_SCHEDULER: merging Kconfig defaults)
+$(shell python3 $(KERNEL_ROOT)/scripts/kconfig/menuconfig.py --sync >/dev/null)
+-include .config
+endif
+endif
+endif
+
 CONFIG_ENABLE_USB_HOST ?= n
 
 # Tooling defaults from menuconfig (.config)
@@ -571,16 +585,26 @@ KERNEL_TEST_OBJS = \
 	ktm/ktm_sched_gate.o
 
 
-# Scheduler policy from menuconfig: link exactly one policy file
-# (sched/core.h). A new policy adds one sched-policy-<n> entry.
-sched-policy-0 := sched/rr.o
-sched-policy-1 := sched/cfs.o
-sched-policy-2 := sched/prio.o
-SCHED_POLICY_OBJ := $(sched-policy-$(or $(CONFIG_SCHEDULER_POLICY),0))
+# Scheduler policy: link exactly one policy file (sched/core.h). A new
+# policy is one sched-policy-<name> line here plus sched/<name>.c.
+# The name comes from one place at build time: an uncommented
+# `#define IR0_SCHEDULER "<name>"` in config.h, else CONFIG_SCHEDULER from
+# .config (menuconfig; Kconfig holds the default). config.h rewrites the C
+# macro CONFIG_SCHEDULER the same way, and every policy file asserts that
+# macro names itself (SCHED_POLICY_LINKED), so a mismatch fails the build.
+sched-policy-rr := sched/rr.o
+sched-policy-prio := sched/prio.o
+sched-policy-cfs := sched/cfs.o
+SCHED_POLICIES := $(patsubst sched-policy-%,%,$(filter sched-policy-%,$(.VARIABLES)))
+SCHED_CONFIG_H := $(shell sed -n 's/^\#define[[:space:]]\{1,\}IR0_SCHEDULER[[:space:]]\{1,\}"\([^"]*\)".*/\1/p' $(KERNEL_ROOT)/config.h)
+SCHED_POLICY := $(or $(SCHED_CONFIG_H),$(patsubst "%",%,$(CONFIG_SCHEDULER)))
+ifneq ($(IR0_BUILD_GOALS),)
+SCHED_POLICY_OBJ := $(sched-policy-$(SCHED_POLICY))
 ifeq ($(SCHED_POLICY_OBJ),)
-$(error CONFIG_SCHEDULER_POLICY=$(CONFIG_SCHEDULER_POLICY) names no sched/ policy)
+$(error scheduler policy '$(SCHED_POLICY)' names no sched/ policy; available: $(sort $(SCHED_POLICIES)))
 endif
 KERNEL_OBJS += $(SCHED_POLICY_OBJ)
+endif
 
 ifeq ($(ARCH),arm64)
 KERNEL_OBJS += arch/arm64/sources/boot_arch.o

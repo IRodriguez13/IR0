@@ -44,7 +44,7 @@ out. See `Documentation/MAKEFILE.md` for the full variable list.
 
 - Driver init selection (`CONFIG_INIT_*`).
 - Filesystem selection (`CONFIG_ENABLE_FS_*`, read by `scripts/make/fs/<name>.mk`).
-- Scheduler policy (`CONFIG_SCHEDULER_POLICY`).
+- Scheduler policy (`CONFIG_SCHEDULER`: rr, prio, cfs).
 - Keyboard layout default (`CONFIG_KEYBOARD_LAYOUT`).
 - Menu language (`CONFIG_TOOL_MENUCONFIG_LANG`).
 

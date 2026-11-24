@@ -297,8 +297,16 @@
 #endif
 #define ENABLE_USB CONFIG_ENABLE_USB_HOST
 
-#ifndef CONFIG_SCHEDULER_POLICY
-#define CONFIG_SCHEDULER_POLICY 0
+/*
+ * SCHEDULER POLICY — "rr", "prio" or "cfs". The default (cfs) lives in
+ * setup/Kconfig; menuconfig changes it through .config. To pick it here
+ * instead, uncomment the next line (it wins over .config). The Makefile
+ * reads this same line to link sched/<name>.o, so the two cannot disagree.
+ */
+/* #define IR0_SCHEDULER "cfs" */
+#ifdef IR0_SCHEDULER
+#undef CONFIG_SCHEDULER
+#define CONFIG_SCHEDULER IR0_SCHEDULER
 #endif
 
 /* KERNEL VERSION AND BUILD INFO (after CONFIG_* so uname version macros see them) */

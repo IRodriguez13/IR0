@@ -15,9 +15,9 @@
 ## 1. Visión general
 
 IR0 planifica procesos mediante una **fachada portable**, un **núcleo** y
-**un archivo de política** enlazado según `CONFIG_SCHEDULER_POLICY`. El defconfig usa **bandas de
-prioridad** (`=2`). Round-robin (`0`) y el alias de nombre CFS (`1`) siguen
-disponibles. Planificación **un CPU**; una tarea en userspace se desaloja al vencer el quantum, en el retorno de la interrupción (`irqentry_exit_to_user_mode()`).
+**un archivo de política** enlazado según `CONFIG_SCHEDULER`. El valor por defecto es **CFS** (`cfs`);
+`prio` (bandas de prioridad) y `rr` (round-robin) siguen disponibles. Se elige
+en menuconfig o con `IR0_SCHEDULER` en `config.h`. Planificación **un CPU**; una tarea en userspace se desaloja al vencer el quantum, en el retorno de la interrupción (`irqentry_exit_to_user_mode()`).
 
 La primera transferencia es `switch_to(NULL, next)`, que delega en el hook
 de arquitectura `first_switch_to()`.

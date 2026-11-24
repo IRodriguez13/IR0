@@ -49,9 +49,6 @@ void signal_fill_sigcontext_from_syscall_frame(struct sigcontext *ctx,
 void signal_fill_syscall_frame_from_sigcontext(arch_syscall_frame_t *sf,
 						    const struct sigcontext *ctx);
 
-/* Read the Linux ABI return register without exposing its ISA name. */
-uint64_t signal_sigcontext_return_value(const struct sigcontext *ctx);
-
 void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 						const uint64_t *frame);
 
