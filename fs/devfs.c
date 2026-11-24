@@ -242,12 +242,8 @@ int64_t devfs_close_node(devfs_node_t *node)
     rc = 0;
     if (node->ops && node->ops->close)
     {
-        /*
-         * events0: per-fd release (reader divert count).
-         * Other devices: last-close teardown only.
-         */
-        if (node == &dev_events0 || node == &dev_input_event0 ||
-            ref_after == 0)
+        /* Last-close teardown only; per-open state uses fops->release. */
+        if (ref_after == 0)
             rc = node->ops->close(&node->entry);
     }
 

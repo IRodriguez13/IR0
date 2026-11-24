@@ -9,31 +9,6 @@
 #include <config.h>
 #include <string.h>
 
-int ir0_input_poll(void)
-{
-    return input_event_has_data() ? 1 : 0;
-}
-
-int ir0_input_read_event(struct ir0_input_event *ev)
-{
-    struct input_event raw;
-    size_t n;
-
-    if (!ev)
-        return -1;
-
-    n = input_event_read(&raw, 1);
-    if (n == 0)
-        return 0;
-
-    ev->type = raw.type;
-    ev->code = raw.code;
-    ev->value = raw.value;
-    ev->timestamp_ms = ((int64_t)raw.time.tv_sec * 1000LL) +
-                       ((int64_t)raw.time.tv_usec / 1000LL);
-    return 1;
-}
-
 void ir0_input_get_caps(struct ir0_input_caps *caps)
 {
     if (!caps)
@@ -47,7 +22,6 @@ void ir0_input_get_caps(struct ir0_input_caps *caps)
     caps->keyboard_ps2 = 1;
 #endif
     caps->mouse_ps2 = input_mouse_is_available() ? 1 : 0;
-    caps->event_queue_depth = (int)input_event_queue_depth();
     caps->supports_key_up_down = 1;
     caps->supports_mouse_motion = input_mouse_is_available() ? 1 : 0;
 }

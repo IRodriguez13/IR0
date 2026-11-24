@@ -9,19 +9,6 @@
 
 #include "devfs_internal.h"
 
-static int devfs_events0_can_write(devfs_entry_t *entry, pid_t pid)
-{
-    (void)entry;
-    (void)pid;
-    return 0;
-}
-
-static int devfs_events0_can_read(devfs_entry_t *entry, pid_t pid)
-{
-    (void)entry;
-    (void)pid;
-    return ir0_input_poll() ? 1 : 0;
-}
 #if CONFIG_ENABLE_MOUSE
 static int dev_mouse_can_read(devfs_entry_t *entry, pid_t pid)
 {
@@ -177,59 +164,22 @@ void devfs_input_init(void)
     (void)input_register_device(input_i8042_dev());
 }
 
-int input_is_event_device(uint32_t device_id)
-{
-    return device_id == dev_events0.entry.device_id ||
-           device_id == dev_input_event0.entry.device_id;
-}
 /*
  * /dev/events0 - Linux evdev input events (keyboard, input(4))
  * read: struct input_event (type, code, value)
  */
-static int64_t dev_events0_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset)
+static int64_t evdev_fop_read(void *priv, void *buf, size_t count, int nonblock)
 {
-    struct input_event ev_buf[16];
-    size_t max_ev;
     size_t n;
-    size_t i;
 
-    (void)entry;
-    (void)offset;
+    (void)nonblock;
     if (count < sizeof(struct input_event))
         return 0;
 
-    max_ev = count / sizeof(struct input_event);
-    if (max_ev > 16)
-        max_ev = 16;
-
-    n = 0;
-    for (i = 0; i < max_ev; i++)
-    {
-        struct ir0_input_event ir0_ev;
-        int rc = ir0_input_read_event(&ir0_ev);
-
-        if (rc <= 0)
-            break;
-        ev_buf[i].time.tv_sec = (time_t)(ir0_ev.timestamp_ms / 1000);
-        ev_buf[i].time.tv_usec = (suseconds_t)((ir0_ev.timestamp_ms % 1000) * 1000);
-        ev_buf[i].type = ir0_ev.type;
-        ev_buf[i].code = ir0_ev.code;
-        ev_buf[i].value = ir0_ev.value;
-        n++;
-    }
-
+    n = input_client_read(priv, buf, count / sizeof(struct input_event));
     if (n == 0)
-    {
-        if (input_read_is_nonblock())
-            return -EAGAIN;
-        return 0;
-    }
-
-    {
-        size_t bytes = n * sizeof(struct input_event);
-        memcpy(buf, ev_buf, bytes);
-        return (int64_t)bytes;
-    }
+        return -EAGAIN;
+    return (int64_t)(n * sizeof(struct input_event));
 }
 
 static void evdev_set_bit(unsigned long *bits, size_t nlongs, unsigned int bit)
@@ -242,7 +192,7 @@ static void evdev_set_bit(unsigned long *bits, size_t nlongs, unsigned int bit)
     bits[idx] |= (1UL << off);
 }
 
-static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *arg)
+static int64_t evdev_fop_ioctl(void *priv, uint64_t request, void *arg)
 {
     struct ir0_input_caps caps;
     unsigned dir;
@@ -250,13 +200,24 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     unsigned nr;
     unsigned size;
 
-    (void)entry;
+    if (request == EVIOCGRAB)
+        /* 1 grabs, 0 releases. */
+        return input_client_grab(priv, arg ? 1 : 0);
+    if (request == EVIOCSCLOCKID)
+    {
+        int clockid;
+
+        if (!arg || copy_from_user(&clockid, arg, sizeof(clockid)) != 0)
+            return -EFAULT;
+        return input_client_set_clock(priv, clockid);
+    }
 
     if (request == IR0_INPUT_IOCTL_GET_CAPS)
     {
         if (!arg)
             return -EFAULT;
         ir0_input_get_caps(&caps);
+        caps.event_queue_depth = (int)input_client_queue_depth(priv);
         if (copy_to_user(arg, &caps, sizeof(caps)) != 0)
             return -EFAULT;
         return 0;
@@ -438,41 +399,56 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     return -ENOTTY;
 }
 
-static int64_t dev_events0_open(devfs_entry_t *entry, int flags)
+static int evdev_fop_open(devfs_node_t *node, int flags, void **priv)
 {
-	(void)entry;
-	(void)flags;
-	input_events_reader_open();
-	return 0;
+    void *client;
+
+    (void)node;
+    (void)flags;
+    client = input_client_open();
+    if (!client)
+        return -ENOMEM;
+    input_events_reader_open();
+    *priv = client;
+    return 0;
 }
 
-static int64_t dev_events0_close(devfs_entry_t *entry)
+static void evdev_fop_release(void *priv)
 {
-	(void)entry;
-	input_events_reader_close();
-	return 0;
+    input_client_put(priv);
+    input_events_reader_close();
 }
 
-static const devfs_ops_t events0_ops = {
-    .read = dev_events0_read,
-    .write = NULL,
-    .ioctl = dev_events0_ioctl,
-    .open = dev_events0_open,
-    .close = dev_events0_close,
-    .can_read = devfs_events0_can_read,
-    .can_write = devfs_events0_can_write,
+static void evdev_fop_get(void *priv)
+{
+    input_client_get(priv);
+    input_events_reader_open();
+}
+
+static int evdev_fop_poll(void *priv)
+{
+    return input_client_has_data(priv);
+}
+
+static const struct devfs_file_ops evdev_fops = {
+    .open = evdev_fop_open,
+    .get = evdev_fop_get,
+    .release = evdev_fop_release,
+    .read = evdev_fop_read,
+    .ioctl = evdev_fop_ioctl,
+    .poll = evdev_fop_poll,
 };
 
 devfs_node_t dev_events0 = {
     .entry = { .name = "events0", .mode = 0660, .device_id = 16 },
-    .ops = &events0_ops,
+    .fops = &evdev_fops,
     .ref_count = 0,
 };
 
 /* Linux evdev node (/dev/input/event0, input(4)). */
 devfs_node_t dev_input_event0 = {
     .entry = { .name = "input/event0", .mode = 0660, .device_id = 45 },
-    .ops = &events0_ops,
+    .fops = &evdev_fops,
     .ref_count = 0,
 };
 devfs_node_t dev_mouse = {

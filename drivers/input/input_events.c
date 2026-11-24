@@ -59,8 +59,6 @@ static struct input_dev i8042_dev =
 	.id = { BUS_I8042, 0x0001, 0x0001, 0x0001 },
 };
 
-static struct input_client *active_client;
-static int read_nonblock;
 static volatile int events_readers;
 
 /* Poll core callback: marks matching waiters ready without scheduling in IRQ. */
@@ -386,10 +384,6 @@ void input_client_put(void *client)
 				break;
 			}
 		}
-		if (active_client == c)
-		{
-			active_client = NULL;
-		}
 		if (c->dev->grabber == c)
 		{
 			c->dev->grabber = NULL;
@@ -403,70 +397,56 @@ void input_client_put(void *client)
 	}
 }
 
-void input_set_read_context(void *client, int nonblock)
+size_t input_client_read(void *client, struct input_event *buf, size_t count)
 {
-	active_client = client;
-	read_nonblock = nonblock ? 1 : 0;
-}
-
-int input_read_is_nonblock(void)
-{
-	return read_nonblock;
-}
-
-size_t input_event_read(struct input_event *buf, size_t count)
-{
-	struct input_client *c;
+	struct input_client *c = client;
 	size_t n = 0;
 	unsigned long irq_flags;
 
-	if (!buf || count == 0)
+	if (!c || !buf || count == 0)
 	{
 		return 0;
 	}
 
 	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
-	c = active_client;
-	if (c)
+	while (n < count && c->tail != c->head)
 	{
-		while (n < count && c->tail != c->head)
-		{
-			buf[n] = c->ring[c->tail];
-			c->tail = (c->tail + 1u) % INPUT_CLIENT_RING;
-			n++;
-		}
+		buf[n] = c->ring[c->tail];
+		c->tail = (c->tail + 1u) % INPUT_CLIENT_RING;
+		n++;
 	}
 	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 	return n;
 }
 
-int input_event_has_data(void)
+int input_client_has_data(void *client)
 {
-	struct input_client *c;
+	struct input_client *c = client;
 	int has;
 	unsigned long irq_flags;
 
+	if (!c)
+	{
+		return 0;
+	}
 	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
-	c = active_client;
-	has = (c && c->tail != c->head) ? 1 : 0;
+	has = (c->tail != c->head) ? 1 : 0;
 	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 	return has;
 }
 
-size_t input_event_queue_depth(void)
+size_t input_client_queue_depth(void *client)
 {
-	struct input_client *c;
+	struct input_client *c = client;
 	size_t head;
 	size_t tail;
 	unsigned long irq_flags;
 
-	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
-	c = active_client;
 	if (!c)
 	{
-		ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);
 		return 0;
 	}
+	irq_flags = ir0_spin_lock_irqsave(&input_events_lock);
 	head = c->head;
 	tail = c->tail;
 	ir0_spin_unlock_irqrestore(&input_events_lock, irq_flags);

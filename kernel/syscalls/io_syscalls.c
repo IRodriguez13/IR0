@@ -34,7 +34,6 @@
 #include <ir0/sock_icmp.h>
 #include <ir0/sock_inet_ioctl.h>
 #include <ir0/ktm/klog.h>
-#include <ir0/input.h>
 #include <ir0/fd_get.h>
 #include <ir0/pipe_fd.h>
 #include <ir0/memfd.h>
@@ -176,12 +175,9 @@ int fd_can_read_for(process_t *proc, int fd)
   {
     if (devfs_is_ptmx_device(e->dev_device_id) && e->vfs_file)
       ready = devfs_pty_master_can_read(e->vfs_file);
-    else if (input_is_event_device(e->dev_device_id))
-    {
-      input_set_read_context(e->vfs_file, 0);
-      ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
-      input_set_read_context(NULL, 0);
-    }
+    else if (fd_entry_devfs_node(e) && fd_entry_devfs_node(e)->fops &&
+	     fd_entry_devfs_node(e)->fops->poll)
+      ready = fd_entry_devfs_node(e)->fops->poll(e->vfs_file) ? 1 : 0;
     else
       ready = devfs_fd_can_read(e->dev_device_id, pid) ? 1 : 0;
     goto out;
@@ -1169,23 +1165,9 @@ int64_t sys_ioctl(int fd, uint64_t request, void *arg)
 
       if (devfs_is_ptmx_device(e->dev_device_id))
 	ret = devfs_pty_master_ioctl(e->vfs_file, request, arg);
-      else if (input_is_event_device(e->dev_device_id) &&
-	       request == EVIOCGRAB)
-	/* The grab belongs to this open's ring, which the device
-	 * ioctl does not receive. 1 grabs, 0 releases. */
-	ret = input_client_grab(e->vfs_file, arg ? 1 : 0);
-      else if (input_is_event_device(e->dev_device_id) &&
-	       request == EVIOCSCLOCKID)
-      {
-	int clockid;
-
-	/* Per-open clock. The device ioctl does not receive the client. */
-	if (!arg ||
-	    copy_from_user(&clockid, arg, sizeof(clockid)) != 0)
-	  ret = -EFAULT;
-	else
-	  ret = input_client_set_clock(e->vfs_file, clockid);
-      }
+      else if (node && node->fops)
+	ret = node->fops->ioctl ? node->fops->ioctl(e->vfs_file, request, arg)
+				: -ENOTTY;
       else if (!node || !node->ops || !node->ops->ioctl)
 	ret = -ENOTTY;
       else

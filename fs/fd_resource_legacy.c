@@ -23,7 +23,6 @@
 #include <ir0/errno.h>
 #include <ir0/process.h>
 #include <ir0/epoll.h>
-#include <ir0/input.h>
 
 static int pipe_resource_acquire(fd_entry_t *entry)
 {
@@ -71,8 +70,8 @@ static int devfs_resource_acquire(fd_entry_t *entry)
 		devfs_pty_slave_dup_device(entry->dev_device_id);
 	else if (entry->vfs_file && devfs_node_wants_text_snap(entry->dev_device_id))
 		devfs_text_snap_acquire((devfs_text_snap_t *)entry->vfs_file);
-	else if (input_is_event_device(entry->dev_device_id))
-		input_client_get(entry->vfs_file);
+	else if (node && node->fops && node->fops->get)
+		node->fops->get(entry->vfs_file);
 	return 0;
 }
 
@@ -84,8 +83,8 @@ static void devfs_resource_release(fd_entry_t *entry)
 		devfs_pty_master_release_vfs(entry->vfs_file);
 	if (entry->vfs_file && devfs_node_wants_text_snap(entry->dev_device_id))
 		devfs_text_snap_release((devfs_text_snap_t *)entry->vfs_file);
-	if (input_is_event_device(entry->dev_device_id))
-		input_client_put(entry->vfs_file);
+	if (node && node->fops && node->fops->release)
+		node->fops->release(entry->vfs_file);
 	if (node)
 		devfs_close_node(node);
 }

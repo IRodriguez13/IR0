@@ -59,8 +59,10 @@ int input_client_grab(void *client, int grab);
  */
 /* 0 on success. Any other clock id is -EINVAL. */
 int input_client_set_clock(void *client, int clockid);
-void input_set_read_context(void *client, int nonblock);
-int input_read_is_nonblock(void);
+/* Pop up to @count queued events of @client; the number popped. */
+size_t input_client_read(void *client, struct input_event *buf, size_t count);
+int input_client_has_data(void *client);
+size_t input_client_queue_depth(void *client);
 
 /*
  * /dev/events0 open-reader count. While >0, PS/2 still feeds EV_KEY but
@@ -70,10 +72,6 @@ void input_events_reader_open(void);
 void input_events_reader_close(void);
 int input_events_readers_active(void);
 
-/* Read events (devfs /dev/events0) */
-size_t input_event_read(struct input_event *buf, size_t count);
-int input_event_has_data(void);
-size_t input_event_queue_depth(void);
 
 /*
  * IR0 input facade (device/provider neutral).
@@ -99,8 +97,6 @@ struct ir0_input_caps {
     int supports_mouse_motion;
 };
 
-int ir0_input_poll(void);
-int ir0_input_read_event(struct ir0_input_event *ev);
 void ir0_input_get_caps(struct ir0_input_caps *caps);
 int ir0_input_inject_event(uint16_t type, uint16_t code, int32_t value);
 
