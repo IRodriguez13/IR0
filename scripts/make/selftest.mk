@@ -1058,6 +1058,23 @@ ir0-selftest-prctl-task-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PRC
 
 ir0-selftest-prctl-task: ir0-selftest-prctl-task-x86 ir0-selftest-prctl-task-arm64
 
+# USER-VA-LOW-HALF-SELFTEST (arm64: TTBR0 holds only user mappings)
+IR0_SELFTEST_ARM64_USER_VA_LOW_HALF := $(KERNEL_ROOT)/build/selftests/arm64/user_va_low_half
+
+.PHONY: ir0-selftest-user-va-low-half-arm64
+
+$(IR0_SELFTEST_ARM64_USER_VA_LOW_HALF): tests/selftests/syscall/user_va_low_half.c \
+		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
+	@$(MAKE) -C tests/selftests ARCH=arm64 user_va_low_half
+
+ir0-selftest-user-va-low-half-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_USER_VA_LOW_HALF)
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_SELFTEST_ARM64_USER_VA_LOW_HALF) \
+		--done "ok 2 former_kernel_image_read_segv" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-user-va-low-half.log
+	@echo "✓ ir0-selftest-user-va-low-half-arm64"
+
 # SEGV-ACCERR-SELFTEST
 IR0_SELFTEST_X86_SEGV_ACCERR := $(KERNEL_ROOT)/build/selftests/x86_64/segv_accerr
 IR0_SELFTEST_ARM64_SEGV_ACCERR := $(KERNEL_ROOT)/build/selftests/arm64/segv_accerr
