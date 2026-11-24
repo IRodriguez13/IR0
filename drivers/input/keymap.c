@@ -14,7 +14,7 @@
 
 #include <ir0/keymap.h>
 #include <ir0/errno.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/spinlock.h>
 #include <config.h>
 #include <linux/kd.h>
@@ -105,7 +105,7 @@ static unsigned short keymap_default(int layout, unsigned int table,
 	if (table > K_SHIFTTAB || key >= sizeof(latin_us))
 		return K_HOLE;
 
-	if (layout == IR0_KBD_LAYOUT_LATAM)
+	if (layout == KBD_LAYOUT_LATAM)
 		latin = table == K_SHIFTTAB ? latin_shift_latam : latin_latam;
 	else
 		latin = table == K_SHIFTTAB ? latin_shift_us : latin_us;
@@ -135,8 +135,8 @@ static void keymap_ensure_loaded(void)
 {
 	if (keymap_layout >= 0)
 		return;
-	keymap_load_locked(CONFIG_KEYBOARD_LAYOUT == IR0_KBD_LAYOUT_LATAM ?
-			   IR0_KBD_LAYOUT_LATAM : IR0_KBD_LAYOUT_US);
+	keymap_load_locked(CONFIG_KEYBOARD_LAYOUT == KBD_LAYOUT_LATAM ?
+			   KBD_LAYOUT_LATAM : KBD_LAYOUT_US);
 }
 
 unsigned short keymap_get_entry(unsigned int table, unsigned int index)
@@ -206,7 +206,7 @@ int keymap_load_layout(int layout)
 {
 	unsigned long flags;
 
-	if (layout != IR0_KBD_LAYOUT_US && layout != IR0_KBD_LAYOUT_LATAM)
+	if (layout != KBD_LAYOUT_US && layout != KBD_LAYOUT_LATAM)
 		return -EINVAL;
 	flags = ir0_spin_lock_irqsave(&keymap_lock);
 	keymap_load_locked(layout);

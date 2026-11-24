@@ -19,7 +19,11 @@
 #include <string.h>
 
 #define IR0_PT_INTERP 3U
-#define IR0_ELF_INTERP_BASE 0x40000000ULL
+/*
+ * Linux ELF_ET_DYN_BASE: where an ET_DYN program (PIE) is loaded. Its
+ * p_vaddr, e_entry and program headers are relative to it.
+ */
+#define IR0_ELF_ET_DYN_BASE 0x60000000ULL
 #define IR0_ELF_INTERP_PATH_MAX 255U
 #define IR0_ELF_INTERP_MAX_PHNUM 64U
 

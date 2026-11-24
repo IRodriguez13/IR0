@@ -51,10 +51,24 @@ struct robust_list_head;
 struct sighand_struct
 {
 	int refcount;
-	void (*handlers[_NSIG])(int);
-	uint32_t sa_flags[_NSIG];
-	uint64_t sa_mask[_NSIG];
-	void (*restorer[_NSIG])(void);
+	void (*handlers[_NSIG + 1])(int);
+	uint32_t sa_flags[_NSIG + 1];
+	uint64_t sa_mask[_NSIG + 1];
+	void (*restorer[_NSIG + 1])(void);
+};
+
+/*
+ * What a thread group shares (Linux signal_struct subset). clone
+ * (CLONE_THREAD) shares it; the last task frees it. shared_pending holds
+ * the signals sent to the process (kill, sigqueue) until one of its
+ * threads takes them; nr_queued counts the siginfo entries of the group.
+ */
+struct signal_struct
+{
+	int refcount;
+	uint64_t shared_pending;
+	struct sigqueue *shared_queue;
+	int nr_queued;
 };
 
 /* Process-local binding for /proc /sys opens (not global virtual fds). */
@@ -249,7 +263,8 @@ typedef struct process
 	uint64_t it_real_interval_ms;
 
 	/* Signal management. Pending and masks stay on the task. */
-	uint64_t signal_pending; /* Bits 1..63: signal N is bit N */
+	/* Sent to this thread (tkill, faults); signal N is bit N-1. */
+	uint64_t signal_pending;
 	/*
 	 * Linux sighand: handler, sa_flags, sa_mask and restorer. Shared when
 	 * clone(CLONE_SIGHAND) is set; otherwise the child has its own copy.
@@ -335,6 +350,14 @@ typedef struct process
 	uint64_t sas_ss_sp;
 	uint64_t sas_ss_size;
 	int sas_ss_flags;
+
+	/*
+	 * siginfo of each instance in signal_pending, oldest first (Linux
+	 * struct sigpending list). A pending bit with no entry was raised by
+	 * the kernel without info.
+	 */
+	struct sigqueue *sigqueue;
+	struct signal_struct *signal;
 
 } process_t;
 

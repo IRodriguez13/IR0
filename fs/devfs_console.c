@@ -24,8 +24,8 @@ struct console_vt_backend_ops {
 };
 
 static const struct console_vt_backend_ops console_vt_backend = {
-    .set_keyboard_mode = input_kbd_set_console_mode,
-    .get_keyboard_mode = input_kbd_get_console_mode,
+    .set_keyboard_mode = kbd_set_mode,
+    .get_keyboard_mode = kbd_get_mode,
 };
 
 static struct vt_mode console_vt_mode = { .mode = VT_AUTO };

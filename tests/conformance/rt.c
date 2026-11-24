@@ -33,6 +33,56 @@ __asm__(".text\n"
 	"	svc	#0\n");
 #endif
 
+/*
+ * rt_clone_fn(flags, stack_top, fn, arg): fn and arg ride on the child's
+ * stack because the child shares no registers with the C caller's frame.
+ */
+#if defined(__x86_64__)
+__asm__(".text\n"
+	".global rt_clone_fn\n"
+	".type rt_clone_fn, @function\n"
+	"rt_clone_fn:\n"
+	"	and	$-16, %rsi\n"
+	"	sub	$16, %rsi\n"
+	"	mov	%rdx, 0(%rsi)\n"
+	"	mov	%rcx, 8(%rsi)\n"
+	"	xor	%edx, %edx\n"
+	"	xor	%r10d, %r10d\n"
+	"	xor	%r8d, %r8d\n"
+	"	mov	$56, %eax\n"
+	"	syscall\n"
+	"	test	%rax, %rax\n"
+	"	jnz	1f\n"
+	"	pop	%rax\n"
+	"	pop	%rdi\n"
+	"	xor	%ebp, %ebp\n"
+	"	call	*%rax\n"
+	"	mov	%eax, %edi\n"
+	"	mov	$60, %eax\n"
+	"	syscall\n"
+	"	hlt\n"
+	"1:	ret\n");
+#else
+__asm__(".text\n"
+	".global rt_clone_fn\n"
+	".type rt_clone_fn, %function\n"
+	"rt_clone_fn:\n"
+	"	and	x1, x1, #0xfffffffffffffff0\n"
+	"	stp	x2, x3, [x1, #-16]!\n"
+	"	mov	x2, #0\n"
+	"	mov	x3, #0\n"
+	"	mov	x4, #0\n"
+	"	mov	x8, #220\n"
+	"	svc	#0\n"
+	"	cbnz	x0, 1f\n"
+	"	ldp	x9, x0, [sp], #16\n"
+	"	mov	x29, #0\n"
+	"	blr	x9\n"
+	"	mov	x8, #93\n"
+	"	svc	#0\n"
+	"1:	ret\n");
+#endif
+
 #if defined(__aarch64__)
 /*
  * No libc on arm64: the program brings its own entry and an in-image stack

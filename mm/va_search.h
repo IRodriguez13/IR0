@@ -22,12 +22,6 @@ struct process;
 typedef struct process process_t;
 
 /*
- * Linux-like top-down placement for mmap(NULL) and non-fixed hints.
- * Updates process_mmap_base(proc) to the chosen start for the next call.
- */
-uintptr_t mm_pick_free_va_topdown(process_t *proc, address_space_root_t root,
-				  size_t length);
-/*
  * Non-zero @hint: returned only if page-aligned, inside the mmap window and
  * unmapped, else 0. Zero @hint: top-down placement.
  */

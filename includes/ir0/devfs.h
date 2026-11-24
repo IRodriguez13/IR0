@@ -52,11 +52,33 @@ typedef struct {
     int (*can_write)(devfs_entry_t *entry, pid_t pid);
 } devfs_ops_t;
 
+struct devfs_node;
+
+/*
+ * Per-open file operations (Linux struct file_operations with
+ * file->private_data). A node with fops gets its own state for every
+ * open: open() returns it, the fd layer keeps it for the descriptor and
+ * passes it back to every call. get() and release() follow dup/fork and
+ * close. Each call validates its own arguments and returns -errno.
+ */
+struct devfs_file_ops
+{
+	int (*open)(struct devfs_node *node, int flags, void **priv);
+	void (*get)(void *priv);
+	void (*release)(void *priv);
+	int64_t (*read)(void *priv, void *buf, size_t count, int nonblock);
+	int64_t (*write)(void *priv, const void *buf, size_t count);
+	int64_t (*ioctl)(void *priv, uint64_t request, void *arg);
+	/* Readable now: 1, or 0. */
+	int (*poll)(void *priv);
+};
+
 // Device node structure
 typedef struct devfs_node
 {
 	devfs_entry_t entry;
 	const devfs_ops_t *ops;
+	const struct devfs_file_ops *fops;
 	uint64_t ref_count;
 } devfs_node_t;
 
@@ -94,6 +116,7 @@ devfs_node_t *devfs_find_node_by_id(uint32_t device_id);
 /* Node carrying a given Linux (major,minor); NULL when none claims it. */
 devfs_node_t *devfs_find_node_by_rdev(uint32_t rdev);
 int devfs_register_node(devfs_node_t *node);
+void devfs_unregister_node(devfs_node_t *node);
 int devfs_chown_path(const char *path, uid_t owner, gid_t group);
 int devfs_fd_can_read(uint32_t device_id, pid_t pid);
 
@@ -128,9 +151,6 @@ struct audio_format {
     uint8_t channels;      /* 1=mono, 2=stereo */
     uint8_t bits_per_sample; /* 8 or 16 */
 };
-
-#define MOUSE_GET_STATE     0x2001
-#define MOUSE_SET_SENSITIVITY 0x2002
 
 #define NET_SEND_ECHO       0x3001
 #define NET_GET_CONFIG      0x3002

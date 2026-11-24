@@ -220,12 +220,13 @@ void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
 }
 
 void ucontext_import(const void *image, uint64_t user_va,
-			  struct sigcontext *ctx)
+			  struct sigcontext *ctx, uint64_t *mask)
 {
 	const struct ir0_arm64_ucontext *uc = image;
 
 	(void)user_va;
-	if (!image || !ctx)
+	if (!image || !ctx || !mask)
 		return;
 	*ctx = uc->mc;
+	*mask = uc->sigmask[0];
 }

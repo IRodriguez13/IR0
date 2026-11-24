@@ -27,7 +27,7 @@ The variable is `process_t *current_process` in `kernel/process/registry.c`. Tha
 
 ## ir0_spinlock_t objects
 
-23 objects. `tcp_lock` is defined in `net/tcp.c` and declared in `net/tcp_internal.h`; that is one object. Every object below is taken with `ir0_spin_lock_irqsave` and dropped with `ir0_spin_unlock_irqrestore`. There is no other acquire.
+27 objects. `tcp_lock` is defined in `net/tcp.c` and declared in `net/tcp_internal.h`; that is one object. Every object below is taken with `ir0_spin_lock_irqsave` and dropped with `ir0_spin_unlock_irqrestore`. There is no other acquire.
 
 ### fs
 
@@ -51,7 +51,11 @@ The variable is `process_t *current_process` in `kernel/process/registry.c`. Tha
 ### drivers
 
 - `tty_lock` (`drivers/tty/console.c`) — tty read-waiter table in `tty_sleep_for_input`.
-- `input_events_lock` (`drivers/input/input_events.c`) — evdev client rings and the reader count.
+- `input_lock` (`drivers/input/input.c`) — input device and handler lists, each device's handle list, grab, key/LED/switch state and event delivery. Handlers run under it.
+- `evdev_lock` (`drivers/input/evdev.c`) — evdev minor table, client lists, grabs, refcounts and client rings. Taken inside `input_lock`, never held across a call into the input core.
+- `mousedev_lock` (`drivers/input/mousedev.c`) — `/dev/input/mice` client queues and the motion gathered since the last report. Taken inside `input_lock`.
+- `kbd_lock` (`drivers/tty/vt/keyboard.c`) — console keyboard modifiers and mode. Taken inside `input_lock`; dropped before bytes reach the line discipline.
+- `uinput_lock` (`drivers/input/uinput.c`) — the refcount of each `/dev/uinput` open.
 - `rtl8139_lock` (`drivers/net/rtl8139.c`) — `rtl8139_rx_processing` in `rtl8139_try_enter_rx` and `rtl8139_leave_rx`.
 
 ### net

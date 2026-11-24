@@ -35,7 +35,7 @@ static uint64_t rt_sigaction_mask_from_sigset(const sigset_t *set, size_t sigset
 		if (!set)
 			return 0;
 		memcpy(&legacy64, set, sizeof(legacy64));
-		return linux_sigword_to_ir0(legacy64);
+		return legacy64;
 	}
 	return ir0_sigset_word(set);
 }
@@ -49,7 +49,7 @@ static void rt_sigaction_mask_to_sigset(sigset_t *set, size_t sigsetsize, uint64
 
 	if (sigsetsize == sizeof(uint64_t))
 	{
-		legacy64 = ir0_sigword_to_linux(mask);
+		legacy64 = mask;
 		memcpy(set, &legacy64, sizeof(legacy64));
 		return;
 	}
@@ -77,7 +77,7 @@ int64_t sys_rt_sigaction(int signum, const struct sigaction *act,
 
 	if (!current_process)
 		return -ESRCH;
-	if (signum < 1 || signum >= _NSIG)
+	if (!valid_signal(signum))
 		return -EINVAL;
 	if (signum == SIGKILL || signum == SIGSTOP)
 		return -EINVAL;
@@ -141,7 +141,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 		{
 			if (copy_from_user(&legacy64, set, sizeof(legacy64)) != 0)
 				return -EFAULT;
-			newmask = linux_sigword_to_ir0(legacy64);
+			newmask = legacy64;
 		}
 		else
 		{
@@ -169,7 +169,7 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 	{
 		if (sigsetsize == sizeof(uint64_t))
 		{
-			legacy64 = ir0_sigword_to_linux(oldmask);
+			legacy64 = oldmask;
 			if (copy_to_user(oldset, &legacy64, sizeof(legacy64)) != 0)
 				return -EFAULT;
 		}
@@ -180,6 +180,26 @@ int64_t sys_rt_sigprocmask(int how, const sigset_t *set, sigset_t *oldset,
 				return -EFAULT;
 		}
 	}
+	return 0;
+}
+
+/*
+ * sys_rt_sigpending - Linux rt_sigpending(2) (do_sigpending()): the pending
+ * signals the caller blocks. The kernel set is 8 bytes; a larger
+ * @sigsetsize is EINVAL, a smaller one gets the low bytes.
+ */
+int64_t sys_rt_sigpending(sigset_t *set, size_t sigsetsize)
+{
+	uint64_t pending;
+
+	if (!current_process)
+		return -ESRCH;
+	if (sigsetsize > sizeof(uint64_t))
+		return -EINVAL;
+
+	pending = signal_pending_set(current_process) & current_process->signal_mask;
+	if (copy_to_user(set, &pending, sigsetsize) != 0)
+		return -EFAULT;
 	return 0;
 }
 
@@ -237,56 +257,129 @@ int64_t sys_rt_sigsuspend(const sigset_t *mask, size_t sigsetsize)
 	return -ERESTARTNOHAND;
 }
 
-/*
- * sys_tkill — Linux tkill(2) (x86-64 NR 200). A libc may implement raise()
- * and abort() with it; -ENOSYS there turns abort() into a crash.
- */
-int64_t sys_tkill(pid_t tid, int sig)
-{
-	process_t *p;
-
-	if (!current_process)
-		return -ESRCH;
-	if (sig < 0 || sig >= _NSIG)
-		return -EINVAL;
-	if (tid <= 0)
-		return -EINVAL;
-
-	p = process_find_by_pid(tid);
-	if (!p)
-		return -ESRCH;
-	if (sig == 0)
-		return 0;
-	if (send_signal(tid, sig) != 0)
-		return -ESRCH;
-	return 0;
-}
-
-int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig)
-{
-	process_t *p;
-
-	if (!current_process)
-		return -ESRCH;
-	if (sig < 0 || sig >= _NSIG)
-		return -EINVAL;
-
-	p = process_find_by_pid(tid);
-	if (!p || p->tgid != tgid)
-		return -ESRCH;
-	if (sig == 0)
-		return 0;
-	if (send_signal(tid, sig) != 0)
-		return -ESRCH;
-	return 0;
-}
-
 /* kill(2) permission (Linux check_kill_permission(), uid subset). */
 static int kill_permitted(const process_t *target)
 {
 	return current_process->euid == 0 ||
 	       current_process->euid == target->uid ||
 	       current_process->euid == target->suid;
+}
+
+/* The siginfo kill() and tkill() report: the sender's pid and real uid. */
+static void sender_info(siginfo_t *info, int sig, int code)
+{
+	memset(info, 0, sizeof(*info));
+	info->si_signo = sig;
+	info->si_code = code;
+	info->_sifields._kill.si_pid = (int32_t)current_process->tgid;
+	info->_sifields._kill.si_uid = (uint32_t)current_process->uid;
+}
+
+/*
+ * Linux do_send_specific(): @sig with @info for the one thread @tid, in
+ * thread group @tgid when @tgid > 0. Signal 0 checks existence and
+ * permission only.
+ */
+static int64_t send_specific(pid_t tgid, pid_t tid, int sig,
+			     const siginfo_t *info)
+{
+	process_t *p = process_find_by_pid(tid);
+
+	if (!p || (tgid > 0 && p->tgid != tgid))
+		return -ESRCH;
+	if (!kill_permitted(p))
+		return -EPERM;
+	if (sig == 0)
+		return 0;
+	return send_sig_info(sig, info, p, 0);
+}
+
+/*
+ * sys_tkill — Linux tkill(2) (x86-64 NR 200). A libc may implement raise()
+ * and abort() with it; -ENOSYS there turns abort() into a crash.
+ */
+int64_t sys_tkill(pid_t tid, int sig)
+{
+	siginfo_t info;
+
+	if (!current_process)
+		return -ESRCH;
+	if (sig < 0 || sig > _NSIG || tid <= 0)
+		return -EINVAL;
+	sender_info(&info, sig, SI_TKILL);
+	return send_specific(0, tid, sig, &info);
+}
+
+int64_t sys_tgkill(pid_t tgid, pid_t tid, int sig)
+{
+	siginfo_t info;
+
+	if (!current_process)
+		return -ESRCH;
+	if (sig < 0 || sig > _NSIG || tid <= 0 || tgid <= 0)
+		return -EINVAL;
+	sender_info(&info, sig, SI_TKILL);
+	return send_specific(tgid, tid, sig, &info);
+}
+
+/*
+ * Linux copy_siginfo_from_user() plus the do_rt_sigqueueinfo() rule: only
+ * a process signalling itself may claim a kernel or kill() si_code
+ * (>= 0) or SI_TKILL.
+ */
+static int64_t sigqueue_info_from_user(siginfo_t *info, const siginfo_t *uinfo,
+				       int sig, pid_t tgid)
+{
+	if (copy_from_user(info, uinfo, sizeof(*info)) != 0)
+		return -EFAULT;
+	if ((info->si_code >= 0 || info->si_code == SI_TKILL) &&
+	    tgid != current_process->tgid)
+		return -EPERM;
+	info->si_signo = sig;
+	return 0;
+}
+
+/* sys_rt_sigqueueinfo - Linux rt_sigqueueinfo(2): sigqueue(3) to a process. */
+int64_t sys_rt_sigqueueinfo(pid_t pid, int sig, const siginfo_t *uinfo)
+{
+	siginfo_t info;
+	process_t *p;
+	int64_t ret;
+
+	if (!current_process)
+		return -ESRCH;
+	ret = sigqueue_info_from_user(&info, uinfo, sig, pid);
+	if (ret != 0)
+		return ret;
+	p = pid > 0 ? process_find_by_pid(pid) : NULL;
+	if (!p)
+		return -ESRCH;
+	if (sig < 0 || sig > _NSIG)
+		return -EINVAL;
+	if (!kill_permitted(p))
+		return -EPERM;
+	if (sig == 0)
+		return 0;
+	return send_sig_info(sig, &info, p, 1);
+}
+
+/* sys_rt_tgsigqueueinfo - Linux rt_tgsigqueueinfo(2): to one thread. */
+int64_t sys_rt_tgsigqueueinfo(pid_t tgid, pid_t tid, int sig,
+			      const siginfo_t *uinfo)
+{
+	siginfo_t info;
+	int64_t ret;
+
+	if (!current_process)
+		return -ESRCH;
+	if (tid <= 0 || tgid <= 0)
+		return -EINVAL;
+	ret = sigqueue_info_from_user(&info, uinfo, sig, tgid);
+	if (ret != 0)
+		return ret;
+	if (sig < 0 || sig > _NSIG)
+		return -EINVAL;
+	return send_specific(tgid, tid, sig, &info);
 }
 
 /*
@@ -296,17 +389,19 @@ static int kill_permitted(const process_t *target)
  */
 int64_t sys_kill(pid_t pid, int signal)
 {
+	siginfo_t info;
 	process_t *target;
 	process_t *scan;
 	pid_t pgid;
+	process_t *self = NULL;
 	int count = 0;
 	int sent = 0;
-	int self = 0;
 
 	if (!current_process)
 		return -ESRCH;
-	if (signal < 0 || signal >= _NSIG)
+	if (signal < 0 || signal > _NSIG)
 		return -EINVAL;
+	sender_info(&info, signal, SI_USER);
 
 	if (pid > 0)
 	{
@@ -315,9 +410,9 @@ int64_t sys_kill(pid_t pid, int signal)
 			return -ESRCH;
 		if (!kill_permitted(target))
 			return -EPERM;
-		if (send_signal(pid, signal) != 0)
-			return -ESRCH;
-		return 0;
+		if (signal == 0)
+			return 0;
+		return send_sig_info(signal, &info, target, 1);
 	}
 
 	if (pid == INT32_MIN)
@@ -325,7 +420,8 @@ int64_t sys_kill(pid_t pid, int signal)
 	pgid = (pid == 0) ? current_process->pgid : -pid;
 	for (scan = process_list; scan; scan = scan->next)
 	{
-		if (scan->mode != USER_MODE)
+		/* One delivery per process: its threads share the pgid. */
+		if (scan->mode != USER_MODE || scan->task.pid != scan->tgid)
 			continue;
 		if (pid == -1)
 		{
@@ -338,13 +434,13 @@ int64_t sys_kill(pid_t pid, int signal)
 		if (!kill_permitted(scan))
 			continue;
 		/* The caller last: a fatal signal to itself does not return. */
-		if (scan == current_process)
+		if (scan->tgid == current_process->tgid)
 		{
-			self = 1;
+			self = scan;
 			continue;
 		}
 		/* A zombie still counts and takes the signal as a no-op (Linux). */
-		if (process_is_zombie(scan) || send_signal(scan->task.pid, signal) == 0)
+		if (signal == 0 || send_sig_info(signal, &info, scan, 1) == 0)
 			sent++;
 	}
 
@@ -354,7 +450,8 @@ int64_t sys_kill(pid_t pid, int signal)
 	 */
 	if (count == 0)
 		return -ESRCH;
-	if (self && send_signal(current_process->task.pid, signal) == 0)
+	if (self && (signal == 0 ||
+		     send_sig_info(signal, &info, self, 1) == 0))
 		sent++;
 	if (sent == 0 && pid != -1)
 		return -EPERM;
@@ -443,6 +540,7 @@ int64_t sys_sigreturn(void)
 	struct sigcontext restored;
 	struct sigcontext *restore_ctx = &restored;
 	uint64_t user_sp;
+	uint64_t mask;
 
 	if (!current_process)
 		return -ESRCH;
@@ -458,9 +556,11 @@ int64_t sys_sigreturn(void)
 		return -EFAULT;
 	}
 	restored = user_frame.ctx;
+	mask = user_frame.oldmask;
+	/* Linux restore_sigcontext(): the handler may edit uc_sigmask too. */
 	ucontext_import(user_frame.ucontext,
 			     user_sp + offsetof(struct sigframe, ucontext),
-			     &restored);
+			     &restored, &mask);
 	if (!signal_sigcontext_validate_and_sanitize(restore_ctx))
 	{
 		/* Linux force_sig(SIGSEGV), delivered on the way out. */
@@ -468,7 +568,7 @@ int64_t sys_sigreturn(void)
 		return -EFAULT;
 	}
 
-	set_current_blocked(user_frame.oldmask);
+	set_current_blocked(mask);
 	current_process->signal_mask_saved_valid = 0;
 	current_process->signal_frame_sp = 0;
 

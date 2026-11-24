@@ -11,7 +11,6 @@
 #include <ir0/boot_arch.h>
 #include <ir0/driver_bootstrap.h>
 #include <ir0/idle.h>
-#include <ir0/input_backend.h>
 #include <ir0/resource_registry.h>
 #include <config.h>
 #include <drivers/input/ps2.h>
@@ -56,14 +55,15 @@ static int boot_init_keyboard(void)
 {
 	keyboard_init();
 	/* Drain bytes delivered without IRQ1. */
-	kernel_idle_poll_register(input_kbd_poll_ps2);
+	kernel_idle_poll_register(keyboard_poll_ps2);
 	return 0;
 }
 
 static int boot_init_mouse(void)
 {
 #if CONFIG_ENABLE_MOUSE && CONFIG_INIT_MOUSE_DRIVER
-	ps2_mouse_init();
+	if (ps2_mouse_init())
+		i8042_register_aux(ps2_mouse_feed_byte);
 #endif
 	return 0;
 }

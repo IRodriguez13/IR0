@@ -769,11 +769,11 @@ ir0-selftest-fpsimd: ir0-selftest-fpsimd-x86 ir0-selftest-fpsimd-arm64
 # signals (delivery, masks and default actions), uaccess (user-pointer
 # checks that ran ahead of the copy), kexec (kexec_load architecture
 # check), tty (console line discipline, TIOCSTI-driven), sigframe
-# (handler frame placement and the mask after longjmp) and sleep
-# (clock_nanosleep and sched_yield). Built with the conformance runner,
-# which fails the target unless every case listed in linux_abi_<group>.h
-# passes.
-IR0_ABI_SELFTESTS := sock mm fs signals uaccess kexec tty sigframe sleep
+# (handler frame placement and the mask after longjmp), sleep
+# (clock_nanosleep and sched_yield) and input (evdev and uinput).
+# Built with the conformance runner, which fails the target unless every
+# case listed in linux_abi_<group>.h passes.
+IR0_ABI_SELFTESTS := sock mm fs signals uaccess kexec tty sigframe sleep input
 IR0_ABI_SELFTEST_RUN := python3 $(KERNEL_ROOT)/scripts/ir0_conformance.py run \
 	--mode conformance --timeout 300
 
@@ -800,41 +800,6 @@ ir0-selftest-$(1)-abi: ir0-selftest-$(1)-abi-x86 ir0-selftest-$(1)-abi-arm64
 endef
 
 $(foreach g,$(IR0_ABI_SELFTESTS),$(eval $(call ir0_abi_selftest,$(g))))
-
-# EVDEV-SELFTEST
-# Each open of /dev/input/event0 has its own ring. Empty non-blocking
-# read is EAGAIN. EVIOCGNAME and EVIOCGID identify the device. An ioctl
-# on a non-event fd is ENOTTY.
-IR0_SELFTEST_X86_EVDEV := $(KERNEL_ROOT)/build/selftests/x86_64/evdev
-IR0_SELFTEST_ARM64_EVDEV := $(KERNEL_ROOT)/build/selftests/arm64/evdev
-
-.PHONY: ir0-selftest-evdev-x86 ir0-selftest-evdev-arm64 ir0-selftest-evdev
-
-$(IR0_SELFTEST_X86_EVDEV): tests/selftests/syscall/evdev.c \
-		tests/selftests/ir0/ksft.h
-	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev
-
-$(IR0_SELFTEST_ARM64_EVDEV): tests/selftests/syscall/evdev.c \
-		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
-	@$(MAKE) -C tests/selftests ARCH=arm64 evdev
-
-ir0-selftest-evdev-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV)
-	@flock -w 600 $${TMPDIR:-/tmp}/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch x86_64 \
-		--binary $(IR0_SELFTEST_X86_EVDEV) \
-		--done "ok 5 non_event_enotty" \
-		--log $(HOST_TMP)/ir0-selftest-x86-evdev.log
-	@echo "✓ ir0-selftest-evdev-x86"
-
-ir0-selftest-evdev-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV)
-	@flock -w 600 $${TMPDIR:-/tmp}/ir0-qemu.lock python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch arm64 \
-		--binary $(IR0_SELFTEST_ARM64_EVDEV) \
-		--done "ok 5 non_event_enotty" \
-		--log $(HOST_TMP)/ir0-selftest-arm64-evdev.log
-	@echo "✓ ir0-selftest-evdev-arm64"
-
-ir0-selftest-evdev: ir0-selftest-evdev-x86 ir0-selftest-evdev-arm64
 
 # SIGHAND-SELFTEST
 IR0_SELFTEST_X86_SIGHAND := $(KERNEL_ROOT)/build/selftests/x86_64/sighand
@@ -1192,39 +1157,6 @@ ir0-selftest-shm-cpid-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_C
 
 ir0-selftest-shm-cpid: ir0-selftest-shm-cpid-x86 ir0-selftest-shm-cpid-arm64
 
-# EVDEV-GRAB-SELFTEST
-IR0_SELFTEST_X86_EVDEV_GRAB := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_grab
-IR0_SELFTEST_ARM64_EVDEV_GRAB := $(KERNEL_ROOT)/build/selftests/arm64/evdev_grab
-
-.PHONY: ir0-selftest-evdev-grab-x86 ir0-selftest-evdev-grab-arm64 \
-	ir0-selftest-evdev-grab
-
-$(IR0_SELFTEST_X86_EVDEV_GRAB): tests/selftests/syscall/evdev_grab.c \
-		tests/selftests/ir0/ksft.h
-	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_grab
-
-$(IR0_SELFTEST_ARM64_EVDEV_GRAB): tests/selftests/syscall/evdev_grab.c \
-		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
-	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_grab
-
-ir0-selftest-evdev-grab-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_GRAB)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch x86_64 \
-		--binary $(IR0_SELFTEST_X86_EVDEV_GRAB) \
-		--done "ok 1 evdev_grab" \
-		--log $(HOST_TMP)/ir0-selftest-x86-evdev-grab.log
-	@echo "✓ ir0-selftest-evdev-grab-x86"
-
-ir0-selftest-evdev-grab-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_GRAB)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch arm64 \
-		--binary $(IR0_SELFTEST_ARM64_EVDEV_GRAB) \
-		--done "ok 1 evdev_grab" \
-		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-grab.log
-	@echo "✓ ir0-selftest-evdev-grab-arm64"
-
-ir0-selftest-evdev-grab: ir0-selftest-evdev-grab-x86 ir0-selftest-evdev-grab-arm64
-
 # PRCTL-DUMPABLE-SELFTEST
 IR0_SELFTEST_X86_PRCTL_DUMPABLE := $(KERNEL_ROOT)/build/selftests/x86_64/prctl_dumpable
 IR0_SELFTEST_ARM64_PRCTL_DUMPABLE := $(KERNEL_ROOT)/build/selftests/arm64/prctl_dumpable
@@ -1456,39 +1388,6 @@ ir0-selftest-shm-mode-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_SHM_M
 
 ir0-selftest-shm-mode: ir0-selftest-shm-mode-x86 ir0-selftest-shm-mode-arm64
 
-# EVDEV-PROP-SELFTEST
-IR0_SELFTEST_X86_EVDEV_PROP := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_prop
-IR0_SELFTEST_ARM64_EVDEV_PROP := $(KERNEL_ROOT)/build/selftests/arm64/evdev_prop
-
-.PHONY: ir0-selftest-evdev-prop-x86 ir0-selftest-evdev-prop-arm64 \
-	ir0-selftest-evdev-prop
-
-$(IR0_SELFTEST_X86_EVDEV_PROP): tests/selftests/syscall/evdev_prop.c \
-		tests/selftests/ir0/ksft.h
-	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_prop
-
-$(IR0_SELFTEST_ARM64_EVDEV_PROP): tests/selftests/syscall/evdev_prop.c \
-		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
-	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_prop
-
-ir0-selftest-evdev-prop-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_PROP)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch x86_64 \
-		--binary $(IR0_SELFTEST_X86_EVDEV_PROP) \
-		--done "ok 1 evdev_prop" \
-		--log $(HOST_TMP)/ir0-selftest-x86-evdev-prop.log
-	@echo "✓ ir0-selftest-evdev-prop-x86"
-
-ir0-selftest-evdev-prop-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_PROP)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch arm64 \
-		--binary $(IR0_SELFTEST_ARM64_EVDEV_PROP) \
-		--done "ok 1 evdev_prop" \
-		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-prop.log
-	@echo "✓ ir0-selftest-evdev-prop-arm64"
-
-ir0-selftest-evdev-prop: ir0-selftest-evdev-prop-x86 ir0-selftest-evdev-prop-arm64
-
 # PROC-SIGSET-SELFTEST
 IR0_SELFTEST_X86_PROC_SIGSET := $(KERNEL_ROOT)/build/selftests/x86_64/proc_sigset
 IR0_SELFTEST_ARM64_PROC_SIGSET := $(KERNEL_ROOT)/build/selftests/arm64/proc_sigset
@@ -1555,39 +1454,6 @@ ir0-selftest-ill-code-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ILL_C
 
 ir0-selftest-ill-code: ir0-selftest-ill-code-x86 ir0-selftest-ill-code-arm64
 
-# EVDEV-CLOCK-SELFTEST
-IR0_SELFTEST_X86_EVDEV_CLOCK := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_clock
-IR0_SELFTEST_ARM64_EVDEV_CLOCK := $(KERNEL_ROOT)/build/selftests/arm64/evdev_clock
-
-.PHONY: ir0-selftest-evdev-clock-x86 ir0-selftest-evdev-clock-arm64 \
-	ir0-selftest-evdev-clock
-
-$(IR0_SELFTEST_X86_EVDEV_CLOCK): tests/selftests/syscall/evdev_clock.c \
-		tests/selftests/ir0/ksft.h
-	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_clock
-
-$(IR0_SELFTEST_ARM64_EVDEV_CLOCK): tests/selftests/syscall/evdev_clock.c \
-		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
-	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_clock
-
-ir0-selftest-evdev-clock-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_CLOCK)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch x86_64 \
-		--binary $(IR0_SELFTEST_X86_EVDEV_CLOCK) \
-		--done "ok 1 evdev_clock" \
-		--log $(HOST_TMP)/ir0-selftest-x86-evdev-clock.log
-	@echo "✓ ir0-selftest-evdev-clock-x86"
-
-ir0-selftest-evdev-clock-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_CLOCK)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch arm64 \
-		--binary $(IR0_SELFTEST_ARM64_EVDEV_CLOCK) \
-		--done "ok 1 evdev_clock" \
-		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-clock.log
-	@echo "✓ ir0-selftest-evdev-clock-arm64"
-
-ir0-selftest-evdev-clock: ir0-selftest-evdev-clock-x86 ir0-selftest-evdev-clock-arm64
-
 # PROC-SIGACT-SELFTEST
 IR0_SELFTEST_X86_PROC_SIGACT := $(KERNEL_ROOT)/build/selftests/x86_64/proc_sigact
 IR0_SELFTEST_ARM64_PROC_SIGACT := $(KERNEL_ROOT)/build/selftests/arm64/proc_sigact
@@ -1620,39 +1486,6 @@ ir0-selftest-proc-sigact-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PR
 	@echo "✓ ir0-selftest-proc-sigact-arm64"
 
 ir0-selftest-proc-sigact: ir0-selftest-proc-sigact-x86 ir0-selftest-proc-sigact-arm64
-
-# EVDEV-ABS-SELFTEST
-IR0_SELFTEST_X86_EVDEV_ABS := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_abs
-IR0_SELFTEST_ARM64_EVDEV_ABS := $(KERNEL_ROOT)/build/selftests/arm64/evdev_abs
-
-.PHONY: ir0-selftest-evdev-abs-x86 ir0-selftest-evdev-abs-arm64 \
-	ir0-selftest-evdev-abs
-
-$(IR0_SELFTEST_X86_EVDEV_ABS): tests/selftests/syscall/evdev_abs.c \
-		tests/selftests/ir0/ksft.h
-	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_abs
-
-$(IR0_SELFTEST_ARM64_EVDEV_ABS): tests/selftests/syscall/evdev_abs.c \
-		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
-	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_abs
-
-ir0-selftest-evdev-abs-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_ABS)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch x86_64 \
-		--binary $(IR0_SELFTEST_X86_EVDEV_ABS) \
-		--done "ok 1 evdev_abs" \
-		--log $(HOST_TMP)/ir0-selftest-x86-evdev-abs.log
-	@echo "✓ ir0-selftest-evdev-abs-x86"
-
-ir0-selftest-evdev-abs-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_ABS)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch arm64 \
-		--binary $(IR0_SELFTEST_ARM64_EVDEV_ABS) \
-		--done "ok 1 evdev_abs" \
-		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-abs.log
-	@echo "✓ ir0-selftest-evdev-abs-arm64"
-
-ir0-selftest-evdev-abs: ir0-selftest-evdev-abs-x86 ir0-selftest-evdev-abs-arm64
 
 # PROC-GROUPS-SELFTEST
 IR0_SELFTEST_X86_PROC_GROUPS := $(KERNEL_ROOT)/build/selftests/x86_64/proc_groups
@@ -1717,39 +1550,6 @@ ir0-selftest-pipe-sz-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_PIPE_S
 	@echo "✓ ir0-selftest-pipe-sz-arm64"
 
 ir0-selftest-pipe-sz: ir0-selftest-pipe-sz-x86 ir0-selftest-pipe-sz-arm64
-
-# EVDEV-KEY-SELFTEST
-IR0_SELFTEST_X86_EVDEV_KEY := $(KERNEL_ROOT)/build/selftests/x86_64/evdev_key
-IR0_SELFTEST_ARM64_EVDEV_KEY := $(KERNEL_ROOT)/build/selftests/arm64/evdev_key
-
-.PHONY: ir0-selftest-evdev-key-x86 ir0-selftest-evdev-key-arm64 \
-	ir0-selftest-evdev-key
-
-$(IR0_SELFTEST_X86_EVDEV_KEY): tests/selftests/syscall/evdev_key.c \
-		tests/selftests/ir0/ksft.h
-	@$(MAKE) -C tests/selftests ARCH=x86_64 evdev_key
-
-$(IR0_SELFTEST_ARM64_EVDEV_KEY): tests/selftests/syscall/evdev_key.c \
-		tests/selftests/ir0/ksft.h tests/selftests/ir0/nolibc.h
-	@$(MAKE) -C tests/selftests ARCH=arm64 evdev_key
-
-ir0-selftest-evdev-key-x86: kernel-x64-userspace.iso $(IR0_SELFTEST_X86_EVDEV_KEY)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch x86_64 \
-		--binary $(IR0_SELFTEST_X86_EVDEV_KEY) \
-		--done "ok 1 evdev_key" \
-		--log $(HOST_TMP)/ir0-selftest-x86-evdev-key.log
-	@echo "✓ ir0-selftest-evdev-key-x86"
-
-ir0-selftest-evdev-key-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_EVDEV_KEY)
-	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
-		--arch arm64 \
-		--binary $(IR0_SELFTEST_ARM64_EVDEV_KEY) \
-		--done "ok 1 evdev_key" \
-		--log $(HOST_TMP)/ir0-selftest-arm64-evdev-key.log
-	@echo "✓ ir0-selftest-evdev-key-arm64"
-
-ir0-selftest-evdev-key: ir0-selftest-evdev-key-x86 ir0-selftest-evdev-key-arm64
 
 # WAITID-SELFTEST
 IR0_SELFTEST_X86_WAITID := $(KERNEL_ROOT)/build/selftests/x86_64/waitid
@@ -1915,6 +1715,44 @@ ir0-selftest-elf-interp-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ELF
 	@echo "✓ ir0-selftest-elf-interp-arm64"
 
 ir0-selftest-elf-interp: ir0-selftest-elf-interp-x86 ir0-selftest-elf-interp-arm64
+
+# DYN-HELLO-SELFTEST
+# The first dynamically linked program (tests/selftests/syscall/dyn_hello.c):
+# execve loads PT_INTERP /lib/ld-musl-<arch>.so.1, which maps libc and
+# /lib/libdynhello.so MAP_PRIVATE and runs their constructors. MINIX v1
+# names stop at 14 characters: the static dyn_hello_stage (PID 1) copies
+# the files from /dyn into a tmpfs /lib first.
+IR0_DYN_HELLO_X86 := $(KERNEL_ROOT)/build/selftests/x86_64
+IR0_DYN_HELLO_ARM64 := $(KERNEL_ROOT)/build/selftests/arm64
+
+.PHONY: ir0-selftest-dyn-hello-x86 ir0-selftest-dyn-hello-arm64 \
+	ir0-selftest-dyn-hello
+
+ir0-selftest-dyn-hello-x86: kernel-x64-userspace.iso
+	@$(MAKE) -C tests/selftests ARCH=x86_64 dyn_hello
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_DYN_HELLO_X86)/dyn_hello_stage \
+		--extra $(IR0_DYN_HELLO_X86)/dyn_hello:dyn/hello \
+		--extra $(IR0_DYN_HELLO_X86)/ld-musl-x86_64.so.1:dyn/ldso \
+		--extra $(IR0_DYN_HELLO_X86)/libdynhello.so:dyn/libdynhello.so \
+		--done "ok 3 dynamic_hello" \
+		--log $(HOST_TMP)/ir0-selftest-x86-dyn-hello.log
+	@echo "✓ ir0-selftest-dyn-hello-x86"
+
+ir0-selftest-dyn-hello-arm64: kernel-arm64-product.bin
+	@$(MAKE) -C tests/selftests ARCH=arm64 dyn_hello
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_DYN_HELLO_ARM64)/dyn_hello_stage \
+		--extra $(IR0_DYN_HELLO_ARM64)/dyn_hello:dyn/hello \
+		--extra $(IR0_DYN_HELLO_ARM64)/ld-musl-aarch64.so.1:dyn/ldso \
+		--extra $(IR0_DYN_HELLO_ARM64)/libdynhello.so:dyn/libdynhello.so \
+		--done "ok 3 dynamic_hello" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-dyn-hello.log
+	@echo "✓ ir0-selftest-dyn-hello-arm64"
+
+ir0-selftest-dyn-hello: ir0-selftest-dyn-hello-x86 ir0-selftest-dyn-hello-arm64
 
 # EXEC-SIGMASK-SELFTEST
 IR0_SELFTEST_X86_EXEC_SIGMASK := $(KERNEL_ROOT)/build/selftests/x86_64/exec_sigmask

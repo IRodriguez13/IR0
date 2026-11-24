@@ -26,6 +26,8 @@
 #define EV_REL 0x02
 #define SYN_REPORT 0
 #define REL_X 0x00
+#define EV_MSC 0x04
+#define MSC_SCAN 0x04
 #define KEY_W 17
 
 #define IR0_INPUT_IOCTL_INJECT 0x49520001u
@@ -129,7 +131,12 @@ static int test_fb_bitfields(void)
 	return 0;
 }
 
-static int test_evdev_ioctls(const char *path)
+/*
+ * @type/@code: an event the node's device declares. /dev/events0 carries
+ * every device (the mouse takes REL_X); /dev/input/event0 is the keyboard
+ * alone (MSC_SCAN, which no console handler turns into a keystroke).
+ */
+static int test_evdev_ioctls(const char *path, int type, int code)
 {
 	int fd;
 	int version = 0;
@@ -157,7 +164,7 @@ static int test_evdev_ioctls(const char *path)
 		close(fd);
 		return -1;
 	}
-	if (!bit_test(bits, EV_KEY) || !bit_test(bits, EV_REL) ||
+	if (!bit_test(bits, EV_KEY) || !bit_test(bits, type) ||
 	    !bit_test(bits, EV_SYN))
 	{
 		close(fd);
@@ -166,8 +173,8 @@ static int test_evdev_ioctls(const char *path)
 	say("EVIOCGBIT_OK\n");
 
 	memset(&inj, 0, sizeof(inj));
-	inj.type = EV_REL;
-	inj.code = REL_X;
+	inj.type = (uint16_t)type;
+	inj.code = (uint16_t)code;
 	inj.value = 3;
 	if (ioctl(fd, IR0_INPUT_IOCTL_INJECT, &inj) != 0)
 	{
@@ -181,7 +188,7 @@ static int test_evdev_ioctls(const char *path)
 
 		if (n != (ssize_t)sizeof(ev))
 			break;
-		if (ev.type == EV_REL && ev.code == REL_X && ev.value == 3)
+		if (ev.type == type && ev.code == code && ev.value == 3)
 			saw_rel = 1;
 		if (ev.type == EV_SYN && ev.code == SYN_REPORT)
 			saw_syn = 1;
@@ -240,7 +247,7 @@ int main(void)
 		say("INPUT_EVENT0_PATH_OK\n");
 	}
 
-	if (test_evdev_ioctls("/dev/events0") != 0)
+	if (test_evdev_ioctls("/dev/events0", EV_REL, REL_X) != 0)
 	{
 		(void)ktm_assert_true(kfd, "evdev_events0", 0);
 		fails++;
@@ -248,7 +255,7 @@ int main(void)
 	else
 		(void)ktm_assert_true(kfd, "evdev_events0", 1);
 
-	if (test_evdev_ioctls("/dev/input/event0") != 0)
+	if (test_evdev_ioctls("/dev/input/event0", EV_MSC, MSC_SCAN) != 0)
 	{
 		(void)ktm_assert_true(kfd, "evdev_input_event0", 0);
 		fails++;

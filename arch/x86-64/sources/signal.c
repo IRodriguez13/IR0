@@ -227,11 +227,11 @@ void ucontext_export(const struct sigcontext *ctx, uint64_t user_va,
 }
 
 void ucontext_import(const void *image, uint64_t user_va,
-			  struct sigcontext *ctx)
+			  struct sigcontext *ctx, uint64_t *mask)
 {
 	const struct ir0_x86_ucontext *uc = image;
 
-	if (!image || !ctx)
+	if (!image || !ctx || !mask)
 		return;
 	ctx->r8 = uc->gregs[0];
 	ctx->r9 = uc->gregs[1];
@@ -253,5 +253,5 @@ void ucontext_import(const void *image, uint64_t user_va,
 	ctx->rflags = uc->gregs[17];
 	if (uc->fpregs == user_va + offsetof(struct ir0_x86_ucontext, fpregs_mem))
 		memcpy(&ctx->fpstate, uc->fpregs_mem, sizeof(uc->fpregs_mem));
-	(void)user_va;
+	*mask = uc->sigmask[0];
 }

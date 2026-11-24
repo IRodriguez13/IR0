@@ -24,7 +24,7 @@
 #include <ir0/syscall_table.h>
 #include <ir0/elf_loader.h>
 #include <ir0/kexec.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/sched.h>
 #include <ir0/abi/mmap_contract.h>
 #include <ir0/cpu.h>
@@ -167,6 +167,7 @@ WRAP3(sys_mprotect, void *, size_t, int)
 WRAP2(sys_kill, pid_t, int)
 WRAP4(sys_rt_sigaction, int, const struct sigaction *, struct sigaction *, size_t)
 WRAP4(sys_rt_sigprocmask, int, const sigset_t *, sigset_t *, size_t)
+WRAP2(sys_rt_sigpending, sigset_t *, size_t)
 WRAP2(sys_rt_sigsuspend, const sigset_t *, size_t)
 WRAP2(sys_sigaltstack, const struct sigaltstack *, struct sigaltstack *)
 WRAP2(sys_getgroups, int, gid_t *)
@@ -179,6 +180,8 @@ WRAP3(sys_setresgid, gid_t, gid_t, gid_t)
 WRAP3(sys_getresgid, gid_t *, gid_t *, gid_t *)
 WRAP2(sys_tkill, pid_t, int)
 WRAP3(sys_tgkill, pid_t, pid_t, int)
+WRAP3(sys_rt_sigqueueinfo, pid_t, int, const siginfo_t *)
+WRAP4(sys_rt_tgsigqueueinfo, pid_t, pid_t, int, const siginfo_t *)
 WRAP2(sys_arch_prctl, int, unsigned long)
 WRAP1(sys_set_tid_address, int *)
 WRAP3(sys_fcntl, int, int, unsigned long)
@@ -267,12 +270,12 @@ static int64_t wrap_sys_getegid(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t 
 /* ISD firstboot still switches the keyboard layout through these. */
 static int64_t wrap_keymap_set(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  return input_kbd_set_layout((int)a1);
+  return kbd_set_layout((int)a1);
 }
 
 static int64_t wrap_keymap_get(uint64_t a1, uint64_t a2, uint64_t a3, uint64_t a4, uint64_t a5, uint64_t a6) {
   (void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  return input_kbd_get_layout();
+  return kbd_get_layout();
 }
 
 /* ABI numbers never index common kernel state. */
@@ -388,6 +391,7 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_RENAMEAT] = wrap_sys_renameat;
   syscall_semantic_table[IR0_SYSCALL_RMDIR] = wrap_sys_rmdir;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGACTION] = wrap_sys_rt_sigaction;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGPENDING] = wrap_sys_rt_sigpending;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGPROCMASK] = wrap_sys_rt_sigprocmask;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGRETURN] = wrap_sys_sigreturn;
   syscall_semantic_table[IR0_SYSCALL_RT_SIGSUSPEND] = wrap_sys_rt_sigsuspend;
@@ -418,6 +422,8 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_SYSINFO] = wrap_sys_sysinfo;
   syscall_semantic_table[IR0_SYSCALL_SYSLOG] = wrap_sys_syslog;
   syscall_semantic_table[IR0_SYSCALL_TGKILL] = wrap_sys_tgkill;
+  syscall_semantic_table[IR0_SYSCALL_RT_SIGQUEUEINFO] = wrap_sys_rt_sigqueueinfo;
+  syscall_semantic_table[IR0_SYSCALL_RT_TGSIGQUEUEINFO] = wrap_sys_rt_tgsigqueueinfo;
   syscall_semantic_table[IR0_SYSCALL_TIMERFD_CREATE] = wrap_sys_timerfd_create;
   syscall_semantic_table[IR0_SYSCALL_TIMERFD_GETTIME] = wrap_sys_timerfd_gettime;
   syscall_semantic_table[IR0_SYSCALL_TIMERFD_SETTIME] = wrap_sys_timerfd_settime;

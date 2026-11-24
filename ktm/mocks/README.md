@@ -13,7 +13,6 @@ kernel APIs.
 | Family | Production object replaced | CONFIG option |
 | --- | --- | --- |
 | console | `drivers/tty/console_backend.c` | `KTM_CONSOLE_MOCK` |
-| input | `drivers/input/input_backend.c` | `KTM_INPUT_MOCK` |
 | video | `drivers/video/video_backend.c` | `KTM_VIDEO_MOCK` |
 | audio | `sound/audio_backend.c` | `KTM_AUDIO_MOCK` |
 | mm stats | `mm/alloc/mm_port.c` | `KTM_MM_PORT_MOCK` |
@@ -41,7 +40,7 @@ callbacks, so no NIC driver or `CONFIG_DRV_NIC_*` is required. See
 ## Scope
 
 Link-time mocks cover facades whose production object owns a specific device:
-console, input, video, audio, MM stats, and platform power. Arch services
+console, video, audio, MM stats, and platform power. Arch services
 (serial, timer, interrupt controller, RTC hardware access) are not replaced:
 their portable logic is host-tested, and the device access itself is the arch
 boundary. RTC calendar logic is covered by `tests/host/test_rtc_calendar.c`;

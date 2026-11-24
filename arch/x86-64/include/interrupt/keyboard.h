@@ -7,7 +7,7 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: keyboard.h
- * Description: PS/2 keyboard IRQ API; modifiers via <ir0/ps2_set1.h>.
+ * Description: i8042 keyboard: IRQ setup, controller drain, device init.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -15,23 +15,13 @@
 #pragma once
 
 #include <stdint.h>
-#include <ir0/keyboard.h>
-
-#define KEYBOARD_LAYOUT_US     0
-#define KEYBOARD_LAYOUT_LATAM  1
 
 void i8042_irq_init(void);
 void keyboard_poll_ps2(void);
 
 void keyboard_init(void);
-
-/* Momentary + lock modifier snapshot (see ps2_set1.h masks). */
-uint32_t keyboard_modifiers_mask(void);
-int keyboard_ctrl_active(void);
-/*
- * Resync momentary keys only (device reinit / overflow / focus loss).
- * Does not replace correct break-code processing.
- */
+/* Hand every byte from i8042 port 2 (AUX) to @feed. */
+void i8042_register_aux(void (*feed)(uint8_t data));
 
 void set_idle_mode(int is_idle);
 int is_in_idle_mode(void);

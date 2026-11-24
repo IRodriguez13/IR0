@@ -256,14 +256,17 @@ static int mm_mmap_place(void *addr, size_t len, int flags, uintptr_t *out)
 }
 
 /*
- * mmap(MAP_SHARED) of a regular file (Linux do_mmap + filemap_fault): the
- * mapping shares the file's page cache with every other mapping of it and
- * with read()/write(). Pages inside the file are mapped now; pages past
- * its end stay empty and raise SIGBUS. PROT_NONE pages are mapped
- * inaccessible so mprotect() can open them later.
+ * mmap() of a regular file (Linux do_mmap + filemap_fault). The mapping
+ * maps the file's page cache, the pages every mapping of it and
+ * read()/write() share. MAP_SHARED stores go to those pages. MAP_PRIVATE
+ * pages are copy-on-write: the first store takes a private copy that never
+ * reaches the file and that later file writes do not change. Pages inside
+ * the file are mapped now (the last one zero past EOF); pages past its end
+ * stay empty and raise SIGBUS. PROT_NONE pages are mapped inaccessible so
+ * mprotect() can open them later.
  */
-static void *mm_mmap_shared_file(void *addr, size_t length, int prot,
-				 int flags, int fd, off_t offset)
+static void *mm_mmap_file(void *addr, size_t length, int prot, int flags,
+			  int fd, off_t offset)
 {
 	fd_entry_t *tab = get_process_fd_table();
 	address_space_root_t root = process_pgd(current_process);
@@ -276,6 +279,7 @@ static void *mm_mmap_shared_file(void *addr, size_t length, int prot,
 	size_t len;
 	size_t npages;
 	size_t i;
+	int shared;
 	int acc;
 	int ret;
 
@@ -288,18 +292,24 @@ static void *mm_mmap_shared_file(void *addr, size_t length, int prot,
 	vf = (struct vfs_file *)tab[fd].vfs_file;
 	if (vfs_stat(vf->path, &st) != 0 || !S_ISREG(st.st_mode))
 		return SYSCALL_PTR_ERR(ENODEV);
-	/* Linux do_mmap(): read access always, write access for PROT_WRITE. */
+	/*
+	 * Linux do_mmap(): read access always; a shared mapping needs write
+	 * access for PROT_WRITE, a private one never writes the file.
+	 */
+	shared = (flags & MAP_TYPE) != MAP_PRIVATE;
 	acc = vf->flags & IR0_O_ACCMODE;
 	if (acc == IR0_O_WRONLY)
 		return SYSCALL_PTR_ERR(EACCES);
-	if ((prot & PROT_WRITE) &&
+	if (shared && (prot & PROT_WRITE) &&
 	    (acc != IR0_O_RDWR || (vf->flags & IR0_O_APPEND)))
 		return SYSCALL_PTR_ERR(EACCES);
 
 	len = (length + PAGE_SIZE_4KB - 1) & ~(size_t)(PAGE_SIZE_4KB - 1);
 	npages = len / PAGE_SIZE_4KB;
-	if (prot & PROT_WRITE)
+	if ((prot & PROT_WRITE) && shared)
 		pte_flags |= PAGE_RW;
+	else if (prot & PROT_WRITE)
+		pte_flags |= PAGE_COW; /* writable once copied */
 	if (prot & PROT_EXEC)
 		pte_flags |= PAGE_EXEC;
 	if (prot == PROT_NONE)
@@ -312,7 +322,7 @@ static void *mm_mmap_shared_file(void *addr, size_t length, int prot,
 	/* No reclaim may drop the cache between filling and mapping it. */
 	vfs_pagecache_lock();
 	ret = filemap_map_file(vf->path, (uint64_t)offset / PAGE_SIZE_4KB, npages,
-			       (prot & PROT_WRITE) != 0, &id);
+			       shared && (prot & PROT_WRITE), &id);
 	if (ret == 0)
 		ret = mm_mmap_place(addr, len, flags, &va);
 	for (i = 0; ret == 0 && i < npages; i++)
@@ -338,6 +348,9 @@ static void *mm_mmap_shared_file(void *addr, size_t length, int prot,
 		filemap_reclaim();
 		return SYSCALL_PTR_ERR(-ret);
 	}
+	/* File code mapped executable (ld.so loading a DSO). */
+	if (prot & PROT_EXEC)
+		paging_sync_icache_user(root, va, len);
 
 	region->addr = (void *)va;
 	region->hint_addr = addr;
@@ -422,6 +435,25 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
     return ret;
   }
 
+  /*
+   * Linux sys_mmap() checks the offset alignment, then ksys_mmap_pgoff()
+   * looks the fd up: both come before do_mmap() checks length and flags.
+   */
+  if (!(flags & MAP_ANONYMOUS))
+  {
+    fd_entry_t *fd_table = get_process_fd_table();
+
+    if (offset % PAGE_SIZE_4KB != 0)
+      return SYSCALL_PTR_ERR(EINVAL);
+    if (fd < 0 || fd >= ir0_fd_span() || !fd_table || !fd_table[fd].in_use)
+    {
+      ret = SYSCALL_PTR_ERR(EBADF);
+      mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
+                            process_pgd(current_process));
+      return ret;
+    }
+  }
+
   if (length == 0)
   {
     klog_debug("KERN", "SERIAL: mmap: zero length\n");
@@ -463,41 +495,8 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
     return ret;
   }
 
-  /* Validate offset alignment for file mappings */
   if (!(flags & MAP_ANONYMOUS))
   {
-    if (fd < 0)
-    {
-      klog_debug("KERN", "SERIAL: mmap: file mapping requires valid fd\n");
-      return SYSCALL_PTR_ERR(EBADF);
-    }
-    
-    /* Offset must be page-aligned for file mappings */
-    if (offset % PAGE_SIZE_4KB != 0)
-    {
-      klog_debug("KERN", "SERIAL: mmap: offset must be page-aligned\n");
-      return SYSCALL_PTR_ERR(EINVAL);
-    }
-
-    /*
-     * Linux: reject invalid fds before ENOSYS for unimplemented file-backed
-     * mmap. Only real fd_table slots are valid (devfs /dev/fb0 uses is_devfs).
-     */
-    {
-      fd_entry_t *fd_table = get_process_fd_table();
-      bool fd_valid_open = (fd >= 0 && fd < ir0_fd_span() &&
-                            fd_table && fd_table[fd].in_use);
-
-      if (!fd_valid_open)
-      {
-        klog_debug("KERN", "SERIAL: mmap: invalid fd for file-backed mmap\n");
-        ret = SYSCALL_PTR_ERR(EBADF);
-        mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
-                              process_pgd(current_process));
-        return ret;
-      }
-    }
-
     /*
      * mmap of /dev/fb0 — real fd_table slot (is_devfs + device_id 15).
      * Maps framebuffer physical memory into userspace for efficient access.
@@ -731,12 +730,7 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
       }
     }
 
-    if ((flags & MAP_TYPE) != MAP_PRIVATE)
-      return mm_mmap_shared_file(addr, length, prot, flags, fd, offset);
-
-    /* MAP_PRIVATE of a regular file is not implemented. */
-    klog_debug("KERN", "SERIAL: mmap: file-based mapping not yet implemented\n");
-    return SYSCALL_PTR_ERR(ENOSYS);
+    return mm_mmap_file(addr, length, prot, flags, fd, offset);
   }
 
   /* Align length to page boundary */
@@ -1137,138 +1131,4 @@ int mm_mprotect(void *addr, size_t len, int prot)
     return -ENOMEM;
 
   return 0;
-}
-
-void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
-                           int flags, int fd, off_t offset)
-{
-	fd_entry_t *fd_table;
-	struct vfs_file *vfs_file;
-	stat_t st;
-	size_t map_len;
-	size_t file_rem;
-	uint64_t page_flags;
-	uintptr_t virt_addr;
-	struct mmap_region *region;
-	char page_buf[PAGE_SIZE_4KB];
-	size_t copied;
-	off_t file_pos;
-
-	if (!proc)
-		return SYSCALL_PTR_ERR(ESRCH);
-
-	if (flags & MAP_SHARED)
-	{
-		if (prot & PROT_WRITE)
-			return SYSCALL_PTR_ERR(ENOSYS);
-	}
-
-	fd_table = process_fd_table(proc);
-	if (fd < 0 || fd >= process_fd_span(proc) || !fd_table[fd].in_use)
-		return SYSCALL_PTR_ERR(EBADF);
-	if (fd_table[fd].is_pipe || fd_table[fd].is_devfs)
-		return SYSCALL_PTR_ERR(ENODEV);
-	if (!fd_table[fd].vfs_file)
-		return SYSCALL_PTR_ERR(EACCES);
-
-	if (vfs_stat(fd_table[fd].path, &st) != 0)
-		return SYSCALL_PTR_ERR(EACCES);
-	if (!S_ISREG(st.st_mode))
-		return SYSCALL_PTR_ERR(ENODEV);
-
-	if (offset < 0 || (uint64_t)offset >= (uint64_t)st.st_size)
-		return SYSCALL_PTR_ERR(EINVAL);
-
-	file_rem = (size_t)((uint64_t)st.st_size - (uint64_t)offset);
-	map_len = length;
-	if (map_len > file_rem)
-		map_len = file_rem;
-	map_len = (map_len + PAGE_SIZE_4KB - 1) & ~(PAGE_SIZE_4KB - 1);
-	if (map_len == 0)
-		return SYSCALL_PTR_ERR(EINVAL);
-
-	virt_addr = mm_find_free_va(process_pgd(proc), proc, (uintptr_t)addr, map_len);
-	if (virt_addr == 0)
-		return SYSCALL_PTR_ERR(ENOMEM);
-
-	page_flags = PAGE_USER;
-	if (prot & PROT_WRITE)
-		page_flags |= PAGE_RW;
-	if (prot & PROT_EXEC)
-		page_flags |= PAGE_EXEC;
-
-	/*
-	 * Fill through a writable mapping, then apply @prot: the uaccess copy
-	 * only writes into user pages the process could write itself.
-	 */
-	if (map_user_region_in_directory(process_pgd(proc), virt_addr, map_len,
-					 PAGE_USER | PAGE_RW) != 0)
-		return SYSCALL_PTR_ERR(ENOMEM);
-
-	vfs_file = (struct vfs_file *)fd_table[fd].vfs_file;
-	copied = 0;
-	file_pos = offset;
-
-	while (copied < map_len)
-	{
-		size_t chunk = map_len - copied;
-		int nread;
-
-		if (chunk > sizeof(page_buf))
-			chunk = sizeof(page_buf);
-		nread = vfs_pread(vfs_file, page_buf, chunk, file_pos);
-		if (nread < 0)
-		{
-			for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-				unmap_page_in_directory(process_pgd(proc),
-							virt_addr + off);
-			return SYSCALL_PTR_ERR(EIO);
-		}
-		if ((size_t)nread < chunk)
-			memset(page_buf + nread, 0, chunk - (size_t)nread);
-		if (copy_to_user_mm(process_pgd(proc),
-						     virt_addr + copied,
-						     page_buf, chunk) != 0)
-		{
-			for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-				unmap_page_in_directory(process_pgd(proc),
-							virt_addr + off);
-			return SYSCALL_PTR_ERR(EFAULT);
-		}
-		copied += chunk;
-		file_pos += (off_t)chunk;
-	}
-	/* File code copied into an executable mapping (ld.so loading a DSO). */
-	if (prot & PROT_EXEC)
-		paging_sync_icache_user(process_pgd(proc), virt_addr, map_len);
-
-	if (page_flags != (PAGE_USER | PAGE_RW) &&
-	    protect_user_region_in_directory(process_pgd(proc), virt_addr,
-					     map_len, page_flags) != 0)
-	{
-		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-			unmap_page_in_directory(process_pgd(proc), virt_addr + off);
-		return SYSCALL_PTR_ERR(ENOMEM);
-	}
-
-	region = kcalloc(1, sizeof(struct mmap_region));
-	if (!region)
-	{
-		for (size_t off = 0; off < map_len; off += PAGE_SIZE_4KB)
-			unmap_page_in_directory(process_pgd(proc), virt_addr + off);
-		return SYSCALL_PTR_ERR(ENOMEM);
-	}
-
-	region->addr = (void *)virt_addr;
-	region->hint_addr = addr;
-	region->length = map_len;
-	region->prot = prot;
-	region->flags = flags;
-	region->next = process_mmap_list(proc);
-	process_mm_set_mmap_list(proc, region);
-	KTM_CHECKPOINT(KTM_CP_MM_MAP);
-
-	if (DEBUG_MMAP_AUDIT)
-		klog_debug("MMAP", "CLASSIFY FILE_MMAP_PRIVATE_OK");
-	return (void *)virt_addr;
 }

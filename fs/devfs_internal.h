@@ -18,7 +18,7 @@
 #if CONFIG_ENABLE_SOUND
 #include <ir0/audio_backend.h>
 #endif
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
 #endif
@@ -87,7 +87,6 @@ extern devfs_node_t dev_console;
 extern devfs_node_t dev_tty;
 extern devfs_node_t dev_kmsg;
 extern devfs_node_t dev_audio;
-extern devfs_node_t dev_mouse;
 extern devfs_node_t dev_disk;
 extern devfs_node_t dev_tty0;
 extern devfs_node_t dev_tty1;
@@ -98,8 +97,6 @@ extern devfs_node_t dev_random;
 extern devfs_node_t dev_urandom;
 extern devfs_node_t dev_full;
 extern devfs_node_t dev_fb0;
-extern devfs_node_t dev_events0;
-extern devfs_node_t dev_input_event0;
 extern devfs_node_t dev_serial;
 extern devfs_node_t dev_ipc;
 #if CONFIG_ENABLE_BLUETOOTH
@@ -111,7 +108,6 @@ int devfs_console_can_read(devfs_entry_t *entry, pid_t pid);
 int64_t dev_console_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
 int64_t dev_console_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);
 int64_t dev_console_ioctl(devfs_entry_t *entry, uint64_t request, void *arg);
-void devfs_input_init(void);
 
 int64_t dev_net_read(devfs_entry_t *entry, void *buf, size_t count, off_t offset);
 int64_t dev_net_write(devfs_entry_t *entry, const void *buf, size_t count, off_t offset);

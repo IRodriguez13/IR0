@@ -15,7 +15,7 @@
 #include "test/ktest_harness.h"
 #include <ir0/process.h>
 #include <ir0/console.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/sched.h>
 #include <string.h>
 
@@ -104,7 +104,6 @@ void ktest_tty_raw_icrnl_maps_cr(void)
 	struct ir0_termios saved;
 	struct ir0_termios raw;
 	char c = 0;
-	int recv;
 	int64_t n;
 
 	KTEST_BEGIN("tty_raw_icrnl_maps_cr");
@@ -117,12 +116,11 @@ void ktest_tty_raw_icrnl_maps_cr(void)
 	raw.c_cc[IR0_CC_VTIME] = 0;
 	KASSERT_EQ(tty_ioctl_termios_kernel(IR0_CONSOLE_TCSETS, &raw), 0);
 	ir0_console_flush_input();
-	recv = input_kbd_receive('\r');
+	kbd_receive('\r');
 	n = ir0_console_read(&c, 1, 1);
 	ir0_console_flush_input();
 	(void)tty_ioctl_termios_kernel(IR0_CONSOLE_TCSETS, &saved);
 
-	KASSERT_EQ(recv, 0);
 	KASSERT_EQ(n, 1);
 	KASSERT_EQ(c, '\n');
 

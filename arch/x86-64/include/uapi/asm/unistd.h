@@ -116,6 +116,8 @@
 #define __NR_getresgid       120
 #define __NR_getpgid         121
 #define __NR_getsid          124
+#define __NR_rt_sigpending   127
+#define __NR_rt_sigqueueinfo 129
 #define __NR_rt_sigsuspend   130
 #define __NR_sigaltstack     131
 #define __NR_mknod           133
@@ -173,6 +175,7 @@
 #define __NR_epoll_create1   291
 #define __NR_dup3            292
 #define __NR_pipe2           293
+#define __NR_rt_tgsigqueueinfo 297
 #define __NR_prlimit64       302
 #define __NR_getrandom       318
 #define __NR_memfd_create    319

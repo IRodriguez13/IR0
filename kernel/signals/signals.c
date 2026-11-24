@@ -23,6 +23,10 @@
 #include <ir0/oops.h>
 #include <ir0/process.h>
 #include <ir0/process_domains.h>
+#include <ir0/clone.h>
+#include <ir0/errno.h>
+#include <ir0/kmem.h>
+#include <ir0/spinlock.h>
 #include <stddef.h>
 #include <string.h>
 #include "signal_diag.h"
@@ -47,8 +51,17 @@ enum signal_frame_error
 
 static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
-			      uint64_t fault_addr, int si_code,
+			      const siginfo_t *info,
 			      struct signal_frame_setup *out);
+
+/*
+ * Guards every pending set and siginfo list (Linux sighand->siglock).
+ * Senders run in IRQ context too (SIGALRM from the tick).
+ */
+static ir0_spinlock_t sigqueue_lock;
+
+/* Queued siginfo per thread group: the RLIMIT_SIGPENDING role. */
+#define SIGQUEUE_MAX 1024
 
 /*
  * A handler or restorer is a code address in the task's user window. It is
@@ -67,7 +80,7 @@ static int signal_ip_is_registered_handler(process_t *p, uint64_t ip)
 
 	if (!p || ip < 0x1000ul)
 		return 0;
-	for (i = 1; i < _NSIG; i++)
+	for (i = 1; i <= _NSIG; i++)
 	{
 		void (*h)(int) = p->sighand->handlers[i];
 
@@ -90,7 +103,7 @@ static uint64_t sigmask_to_save(const process_t *p)
 
 static void signals_apply_handler_mask(process_t *p, int sig, uint32_t sa_flags)
 {
-	if (!p || sig < 1 || sig >= _NSIG)
+	if (!p || !valid_signal(sig))
 		return;
 	if (!p->signal_mask_saved_valid)
 	{
@@ -140,7 +153,7 @@ int signals_has_user_handler(process_t *p, int sig)
 {
 	void (*handler)(int);
 
-	if (!p || sig < 1 || sig >= _NSIG)
+	if (!p || !valid_signal(sig))
 		return 0;
 	if (p->signal_ignored & SIGNAL_MASK(sig))
 		return 0;
@@ -161,6 +174,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	void (*handler)(int);
 	struct sigcontext ctx;
 	struct signal_frame_setup setup;
+	siginfo_t info;
 	uint32_t sa_flags;
 
 	if (!signals_has_user_handler(p, sig))
@@ -188,8 +202,12 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 	 * is what lets the handler return (rt_sigreturn reads it back), so a
 	 * fault whose frame cannot be built ends the task by SIGSEGV.
 	 */
-	if (signal_setup_frame(p, sig, &ctx, fault_addr, si_code, &setup) !=
-	    SIGFRAME_OK)
+	memset(&info, 0, sizeof(info));
+	info.si_signo = sig;
+	info.si_code = si_code ? si_code : SI_KERNEL;
+	if (si_code)
+		info._sifields._sigfault.si_addr = (void *)(uintptr_t)fault_addr;
+	if (signal_setup_frame(p, sig, &ctx, &info, &setup) != SIGFRAME_OK)
 		signal_exit_current(SIGSEGV);
 
 	signal_redirect_irq_frame(frame, (void *)handler, sig, setup.sp,
@@ -203,7 +221,7 @@ int signals_deliver_from_irq_frame(process_t *p, int sig, uint64_t *frame,
 
 	p->signal_frame_sp = setup.sp;
 	signals_apply_handler_mask(p, sig, sa_flags);
-	p->signal_pending &= ~SIGNAL_MASK(sig);
+	signal_flush(p, SIGNAL_MASK(sig));
 
 	signal_trace(SIGNAL_TRACE_DELIVER_FAULT, p, sig, fault_addr,
 		     sigcontext_ip(&ctx), (uint64_t)(uintptr_t)handler);
@@ -259,7 +277,7 @@ void signals_reset_on_exec(process_t *p)
 
 	if (!p)
 		return;
-	p->signal_pending = 0;
+	signal_flush(p, ~0ULL);
 	p->signal_ignored = 0;
 	p->signal_mask_saved = 0;
 	p->signal_mask_saved_valid = 0;
@@ -275,7 +293,7 @@ void signals_reset_on_exec(process_t *p)
 	 */
 	if (process_signals_unshare(p) < 0 || !p->sighand)
 		return;
-	for (i = 0; i < _NSIG; i++)
+	for (i = 1; i <= _NSIG; i++)
 	{
 		p->sighand->handlers[i] = SIG_DFL;
 		p->sighand->sa_flags[i] = 0;
@@ -298,6 +316,183 @@ static int signal_default_stops(int sig)
 	       sig == SIGTTOU;
 }
 
+uint64_t signal_pending_set(const process_t *p)
+{
+	if (!p)
+		return 0;
+	return p->signal_pending | (p->signal ? p->signal->shared_pending : 0);
+}
+
+/*
+ * Unlink the entries of @list whose signal is in @mask onto @freed.
+ * Returns how many moved. Caller holds sigqueue_lock.
+ */
+static int sigqueue_collect(struct sigqueue **list, uint64_t mask,
+			    struct sigqueue **freed)
+{
+	struct sigqueue **pp = list;
+	int n = 0;
+
+	while (*pp)
+	{
+		struct sigqueue *q = *pp;
+
+		if (mask & SIGNAL_MASK(q->info.si_signo))
+		{
+			*pp = q->next;
+			q->next = *freed;
+			*freed = q;
+			n++;
+		}
+		else
+			pp = &q->next;
+	}
+	return n;
+}
+
+static void sigqueue_free(struct sigqueue *q)
+{
+	while (q)
+	{
+		struct sigqueue *next = q->next;
+
+		kfree(q);
+		q = next;
+	}
+}
+
+/* Drop @mask from @p's own set and, with @shared, the group's set. */
+static void signal_flush_sets(process_t *p, uint64_t mask, int shared)
+{
+	struct signal_struct *sig = p->signal;
+	struct sigqueue *freed = NULL;
+	unsigned long flags;
+	int n;
+
+	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+	p->signal_pending &= ~mask;
+	n = sigqueue_collect(&p->sigqueue, mask, &freed);
+	if (sig && shared)
+	{
+		sig->shared_pending &= ~mask;
+		n += sigqueue_collect(&sig->shared_queue, mask, &freed);
+	}
+	if (sig)
+		sig->nr_queued -= n;
+	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+	sigqueue_free(freed);
+}
+
+void signal_flush(process_t *p, uint64_t mask)
+{
+	if (p)
+		signal_flush_sets(p, mask, 1);
+}
+
+int signals_task_init(process_t *p, const process_t *parent,
+		      unsigned long clone_flags)
+{
+	unsigned long flags;
+
+	p->signal_pending = 0;
+	p->sigqueue = NULL;
+	p->signal = NULL;
+	if (parent && (clone_flags & CLONE_THREAD) && parent->signal)
+	{
+		flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+		parent->signal->refcount++;
+		ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+		p->signal = parent->signal;
+		return 0;
+	}
+	p->signal = kmalloc(sizeof(*p->signal));
+	if (!p->signal)
+		return -ENOMEM;
+	memset(p->signal, 0, sizeof(*p->signal));
+	p->signal->refcount = 1;
+	return 0;
+}
+
+void signals_task_release(process_t *p)
+{
+	struct signal_struct *sig;
+	unsigned long flags;
+	int last = 0;
+
+	if (!p)
+		return;
+	signal_flush_sets(p, ~0ULL, 0);
+	sig = p->signal;
+	p->signal = NULL;
+	if (!sig)
+		return;
+	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+	last = --sig->refcount == 0;
+	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+	if (!last)
+		return;
+	sigqueue_free(sig->shared_queue);
+	kfree(sig);
+}
+
+/*
+ * dequeue_signal - Take one instance of @sig off @p's pending set into
+ * @info (Linux collect_signal()). The bit stays set while another
+ * real-time instance is queued. A bit with no entry was raised by the
+ * kernel without info: SI_KERNEL.
+ */
+static void dequeue_signal(process_t *p, int sig, siginfo_t *info)
+{
+	struct signal_struct *group = p->signal;
+	struct sigqueue **list = &p->sigqueue;
+	uint64_t *set = &p->signal_pending;
+	struct sigqueue **pp;
+	struct sigqueue *q = NULL;
+	struct sigqueue *r;
+	unsigned long flags;
+	int more = 0;
+
+	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+	/* Linux dequeue_signal(): the thread's own set before the group's. */
+	if (!(*set & SIGNAL_MASK(sig)) && group)
+	{
+		list = &group->shared_queue;
+		set = &group->shared_pending;
+	}
+	for (pp = list; *pp; pp = &(*pp)->next)
+	{
+		if ((*pp)->info.si_signo == sig)
+		{
+			q = *pp;
+			*pp = q->next;
+			if (group)
+				group->nr_queued--;
+			break;
+		}
+	}
+	for (r = q ? *pp : NULL; r; r = r->next)
+	{
+		if (r->info.si_signo == sig)
+		{
+			more = 1;
+			break;
+		}
+	}
+	if (!more)
+		*set &= ~SIGNAL_MASK(sig);
+	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+
+	if (q)
+	{
+		*info = q->info;
+		kfree(q);
+		return;
+	}
+	memset(info, 0, sizeof(*info));
+	info->si_signo = sig;
+	info->si_code = SI_KERNEL;
+}
+
 /*
  * signal_pending - @p has a signal that must end an interruptible sleep
  * (Linux signal_pending()): pending and not blocked, or SIGKILL. Ignored
@@ -306,16 +501,17 @@ static int signal_default_stops(int sig)
  */
 int signal_pending(process_t *p)
 {
+	uint64_t pending = signal_pending_set(p);
 	uint64_t deliverable;
 	int sig;
 
-	if (!p || p->signal_pending == 0)
+	if (!p || pending == 0)
 		return 0;
-	if (p->signal_pending & SIGNAL_MASK(SIGKILL))
+	if (pending & SIGNAL_MASK(SIGKILL))
 		return 1;
 
-	deliverable = p->signal_pending & ~p->signal_mask & ~p->signal_ignored;
-	for (sig = 1; sig < _NSIG && deliverable; sig++)
+	deliverable = pending & ~p->signal_mask & ~p->signal_ignored;
+	for (sig = 1; sig <= _NSIG && deliverable; sig++)
 	{
 		void (*handler)(int) = p->sighand->handlers[sig];
 		int caught = handler && handler != SIG_DFL && handler != SIG_IGN;
@@ -328,77 +524,178 @@ int signal_pending(process_t *p)
 	return deliverable != 0;
 }
 
+/*
+ * Linux sig_ignored(): a signal nobody will see is dropped at send time,
+ * unless @t blocks it (the handler may change before it is unblocked).
+ */
+static int sig_ignored(const process_t *t, int sig)
+{
+	void (*handler)(int) = t->sighand->handlers[sig];
+
+	if (sig == SIGKILL || sig == SIGSTOP)
+		return 0;
+	if (t->signal_mask & SIGNAL_MASK(sig))
+		return 0;
+	return handler == SIG_IGN ||
+	       (handler == SIG_DFL && signal_default_ignored(sig));
+}
+
+/*
+ * Make @t run its signal work: a task asleep in an interruptible wait
+ * that does not block @sig wakes up (Linux signal_wake_up()). SIGKILL and
+ * SIGCONT always wake, SIGCONT also a stopped task.
+ */
+static void signal_wake(process_t *t, int sig)
+{
+	if (t->state != PROCESS_BLOCKED)
+		return;
+	if (sig != SIGKILL && sig != SIGCONT &&
+	    (t->signal_mask & SIGNAL_MASK(sig)))
+		return;
+	process_set_sched_state(t, PROCESS_READY);
+	sched_promote(t);
+	clock_request_sched_resched();
+	signal_trace(SIGNAL_TRACE_WAKE, t, sig, 0, 0, 0);
+}
+
+/*
+ * Linux complete_signal(): the thread that takes a signal sent to @t's
+ * group. @t itself when it does not block @sig, otherwise another live
+ * thread of the group that does not, or NULL when all block it (it then
+ * stays pending for the group).
+ */
+static process_t *signal_pick_thread(process_t *t, int sig)
+{
+	process_t *scan;
+
+	if (!(t->signal_mask & SIGNAL_MASK(sig)))
+		return t;
+	for (scan = process_list; scan; scan = scan->next)
+	{
+		if (scan == t || scan->tgid != t->tgid || scan->signal != t->signal)
+			continue;
+		if (process_is_zombie(scan) || !scan->sighand)
+			continue;
+		if (!(scan->signal_mask & SIGNAL_MASK(sig)))
+			return scan;
+	}
+	return NULL;
+}
+
+int send_sig_info(int sig, const siginfo_t *info, process_t *t, int group)
+{
+	struct sigqueue *q;
+	struct sigqueue **list;
+	uint64_t *set;
+	unsigned long flags;
+	uint64_t bit;
+
+	if (!t || !valid_signal(sig) || !info)
+		return -EINVAL;
+	/* A zombie takes the signal as a no-op (Linux). */
+	if (!t->sighand || !t->signal || process_is_zombie(t))
+		return 0;
+	bit = SIGNAL_MASK(sig);
+
+	signal_trace(SIGNAL_TRACE_SEND, t, sig, 0, 0, 0);
+
+	/*
+	 * kill(2): "The only signals that can be sent to process ID 1, the init
+	 * process, are those for which init has explicitly installed signal
+	 * handlers." Linux sig_task_ignored() drops the rest at send time
+	 * instead of leaving them pending.
+	 */
+	if (t->task.pid == 1)
+	{
+		void (*handler)(int) = t->sighand->handlers[sig];
+
+		if (!handler || handler == SIG_DFL || handler == SIG_IGN)
+			return 0;
+	}
+
+	if (sig == SIGCONT)
+		signal_wake(t, sig);
+	if (sig_ignored(t, sig))
+		return 0;
+
+	/*
+	 * Default-fatal: zombieize immediately. Do not promote BLOCKED→READY
+	 * first (that raced schedule into a half-dead task → #UD on iret).
+	 */
+	if (process_signal_is_default_fatal(t, sig) &&
+	    process_signal_default_kill(t, sig))
+	{
+		clock_request_sched_resched();
+		return 0;
+	}
+
+	list = group ? &t->signal->shared_queue : &t->sigqueue;
+	set = group ? &t->signal->shared_pending : &t->signal_pending;
+
+	/* Linux legacy_queue(): a standard signal is pending at most once. */
+	if (sig < SIGRTMIN && (*set & bit))
+		return 0;
+
+	q = kmalloc(sizeof(*q));
+	flags = ir0_spin_lock_irqsave(&sigqueue_lock);
+	if (q && t->signal->nr_queued < SIGQUEUE_MAX)
+	{
+		struct sigqueue **tail = list;
+
+		q->next = NULL;
+		q->info = *info;
+		q->info.si_signo = sig;
+		while (*tail)
+			tail = &(*tail)->next;
+		*tail = q;
+		t->signal->nr_queued++;
+		q = NULL;
+	}
+	else if (sig >= SIGRTMIN && info->si_code != SI_USER &&
+		 info->si_code != SI_KERNEL)
+	{
+		/* Linux __send_signal(): sigqueue past the limit is EAGAIN. */
+		ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+		kfree(q);
+		return -EAGAIN;
+	}
+	/* Otherwise the signal still arrives, without its info. */
+	*set |= bit;
+	ir0_spin_unlock_irqrestore(&sigqueue_lock, flags);
+	if (q)
+		kfree(q);
+
+	if (group)
+		t = signal_pick_thread(t, sig);
+	if (t)
+		signal_wake(t, sig);
+	return 0;
+}
+
 /**
  * send_signal - Send signal to process
  */
 int send_signal(int pid, int signal)
 {
-    process_t *proc;
+	siginfo_t info;
+	process_t *proc;
 
-    /* Validate signal number */
-    if (signal < 0 || signal >= _NSIG)
-    {
-        return -1;
-    }
-
-    /* Find target process by PID */
-    proc = process_find_by_pid(pid);
-    if (!proc)
-    {
-        return -1; /* Process not found */
-    }
-
-    /*
-     * kill(pid, 0): existence probe only (Linux). Must not set pending,
-     * wake blocked tasks, or run default-fatal teardown.
-     */
-    if (signal == 0)
-	return 0;
-
-    signal_trace(SIGNAL_TRACE_SEND, proc, signal, 0, 0, 0);
-
-    /*
-     * kill(2): "The only signals that can be sent to process ID 1, the init
-     * process, are those for which init has explicitly installed signal
-     * handlers." Linux sig_task_ignored() drops the rest at send time
-     * instead of leaving them pending.
-     */
-    if (proc->task.pid == 1)
-    {
-	void (*handler)(int) = proc->sighand->handlers[signal];
-
-	if (!handler || handler == SIG_DFL || handler == SIG_IGN)
+	if (signal < 0 || signal > _NSIG)
+		return -1;
+	proc = process_find_by_pid(pid);
+	if (!proc)
+		return -1;
+	/*
+	 * kill(pid, 0): existence probe only (Linux). Must not set pending,
+	 * wake blocked tasks, or run default-fatal teardown.
+	 */
+	if (signal == 0)
 		return 0;
-    }
 
-    /*
-     * Default-fatal: zombieize immediately. Do not promote BLOCKED→READY
-     * first (that raced schedule into a half-dead task → #UD on iret).
-     */
-    if (process_signal_is_default_fatal(proc, signal))
-    {
-	if (process_signal_default_kill(proc, signal))
-	{
-	    clock_request_sched_resched();
-	    return 0;
-	}
-	/* Ignored / caught — fall through to pending delivery. */
-    }
-
-    proc->signal_pending |= SIGNAL_MASK(signal);
-
-    /*
-     * Wake blocked tasks so caught signals / pause(2) can run handlers.
-     */
-    if (proc->state == PROCESS_BLOCKED)
-    {
-	process_set_sched_state(proc, PROCESS_READY);
-	sched_promote(proc);
-	clock_request_sched_resched();
-	signal_trace(SIGNAL_TRACE_WAKE, proc, signal, 0, 0, 0);
-    }
-
-    return 0;
+	memset(&info, 0, sizeof(info));
+	info.si_signo = signal;
+	info.si_code = SI_KERNEL;
+	return send_sig_info(signal, &info, proc, 1) == 0 ? 0 : -1;
 }
 
 int send_signal_pgrp(int32_t pgid, int signal)
@@ -406,12 +703,13 @@ int send_signal_pgrp(int32_t pgid, int signal)
 	process_t *p;
 	int n = 0;
 
-	if (pgid <= 0 || signal < 0 || signal >= _NSIG)
+	if (pgid <= 0 || signal < 0 || signal > _NSIG)
 		return 0;
 
 	for (p = process_list; p; p = p->next)
 	{
-		if ((int32_t)p->pgid != pgid)
+		/* One delivery per process: its threads share the pgid. */
+		if ((int32_t)p->pgid != pgid || p->task.pid != p->tgid)
 			continue;
 		if (send_signal((int)p->task.pid, signal) == 0)
 			n++;
@@ -443,7 +741,7 @@ static uint64_t signal_pick_handler_sp(process_t *p, int sig,
 
 	alt = 0;
 	sp = saved_sp;
-	if (p && p->sighand && sig >= 1 && sig < _NSIG &&
+	if (p && p->sighand && valid_signal(sig) &&
 	    (p->sighand->sa_flags[sig] & SA_ONSTACK) &&
 	    p->sas_ss_size != 0 &&
 	    !process_on_altstack(p, saved_sp))
@@ -478,7 +776,9 @@ static uint64_t signal_pick_handler_sp(process_t *p, int sig,
 /*
  * Return address for @sig's handler: SA_RESTORER when the caller supplied
  * one, otherwise the kernel trampoline (Linux arm64 vDSO sigtramp). 0 when
- * the ISA requires SA_RESTORER and none was given (Linux x86-64).
+ * the ISA requires SA_RESTORER and none was given (Linux x86-64). Like
+ * Linux, a supplied restorer is not checked: the handler runs, and a bad
+ * one faults when the handler returns to it.
  */
 static uint64_t signal_handler_restorer(process_t *p, int sig)
 {
@@ -486,8 +786,6 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
 
 	if (!fn)
 		return sigtramp_addr();
-	if (!signal_code_addr_ok((const void *)fn))
-		return 0;
 	return (uint64_t)(uintptr_t)fn;
 }
 
@@ -498,14 +796,14 @@ static uint64_t signal_handler_restorer(process_t *p, int sig)
  * The one frame writer for every delivery: asynchronous signals and
  * synchronous CPU faults. Below the frame sits the return slot holding
  * the restorer on ISAs that return through the stack; rt_sigreturn finds
- * the frame at the handler's SP after the handler returns. @fault_addr is
- * the si_addr reported to an SA_SIGINFO handler.
+ * the frame at the handler's SP after the handler returns. @info is what
+ * an SA_SIGINFO handler receives.
  *
  * Returns SIGFRAME_OK and fills @out, or why no frame was written.
  */
 static int signal_setup_frame(process_t *p, int sig,
 			      const struct sigcontext *ctx,
-			      uint64_t fault_addr, int si_code,
+			      const siginfo_t *info,
 			      struct signal_frame_setup *out)
 {
 	struct sigframe frame;
@@ -532,13 +830,8 @@ static int signal_setup_frame(process_t *p, int sig,
 	frame.oldmask = p->signal_mask_saved_valid
 		? (uint64_t)p->signal_mask_saved
 		: (uint64_t)sigmask_to_save(p);
+	frame.info = *info;
 	frame.info.si_signo = sig;
-	if (si_code != 0)
-	{
-		frame.info.si_code = si_code;
-		frame.info._sifields._sigfault.si_addr =
-			(void *)(uintptr_t)fault_addr;
-	}
 	ucontext_export(ctx,
 			     frame_addr + offsetof(struct sigframe, ucontext),
 			     frame.oldmask, frame.ucontext);
@@ -590,17 +883,17 @@ static int signal_is_fault(int sig)
  * uncaught ones whose default is Ign, are dropped; blocked ones stay
  * pending until unblocked, so a blocked SIGTERM never kills the task.
  */
-static int get_signal(process_t *p)
+static int get_signal(process_t *p, siginfo_t *info)
 {
 	size_t i;
 	int sig;
 
-	if (p->signal_pending & SIGNAL_MASK(SIGKILL))
+	if (signal_pending_set(p) & SIGNAL_MASK(SIGKILL))
 		signal_exit_current(SIGKILL);
 
-	if (p->signal_pending & SIGNAL_MASK(SIGSTOP))
+	if (signal_pending_set(p) & SIGNAL_MASK(SIGSTOP))
 	{
-		p->signal_pending &= ~SIGNAL_MASK(SIGSTOP);
+		signal_flush(p, SIGNAL_MASK(SIGSTOP));
 		process_set_sched_state(p, PROCESS_BLOCKED);
 		schedule();
 	}
@@ -609,11 +902,11 @@ static int get_signal(process_t *p)
 			    sizeof(signal_default_terminate[0]); i++)
 	{
 		sig = signal_default_terminate[i];
-		if (!(p->signal_pending & SIGNAL_MASK(sig)))
+		if (!(signal_pending_set(p) & SIGNAL_MASK(sig)))
 			continue;
 		if (p->signal_ignored & SIGNAL_MASK(sig))
 		{
-			p->signal_pending &= ~SIGNAL_MASK(sig);
+			signal_flush(p, SIGNAL_MASK(sig));
 			continue;
 		}
 		if ((p->signal_mask & SIGNAL_MASK(sig)) ||
@@ -624,19 +917,21 @@ static int get_signal(process_t *p)
 		signal_exit_current(sig);
 	}
 
-	/* SIGCONT already woke a stopped task when it was sent. */
-	p->signal_pending &= ~SIGNAL_MASK(SIGCONT);
-
-	for (sig = 1; sig < _NSIG; sig++)
+	/*
+	 * SIGCONT already woke a stopped task when it was sent; uncaught it
+	 * is default-ignored below.
+	 */
+	/* Lowest number first (signal(7) for real-time signals). */
+	for (sig = 1; sig <= _NSIG; sig++)
 	{
 		uint64_t bit = SIGNAL_MASK(sig);
 		void (*handler)(int) = p->sighand->handlers[sig];
 
-		if (!(p->signal_pending & bit))
+		if (!(signal_pending_set(p) & bit))
 			continue;
 		if (p->signal_ignored & bit)
 		{
-			p->signal_pending &= ~bit;
+			signal_flush(p, bit);
 			continue;
 		}
 		if (p->signal_mask & bit)
@@ -644,12 +939,12 @@ static int get_signal(process_t *p)
 		if (handler == SIG_IGN || (handler == SIG_DFL &&
 					   signal_default_ignored(sig)))
 		{
-			p->signal_pending &= ~bit;
+			signal_flush(p, bit);
 			continue;
 		}
 		if (handler == SIG_DFL && signal_default_stops(sig))
 		{
-			p->signal_pending &= ~bit;
+			signal_flush(p, bit);
 			process_set_sched_state(p, PROCESS_BLOCKED);
 			schedule();
 			continue;
@@ -661,9 +956,10 @@ static int get_signal(process_t *p)
 		{
 			/* A handler outside userspace falls back to the default. */
 			p->sighand->handlers[sig] = SIG_DFL;
-			p->signal_pending &= ~bit;
+			signal_flush(p, bit);
 			continue;
 		}
+		dequeue_signal(p, sig, info);
 		return sig;
 	}
 	return 0;
@@ -712,7 +1008,7 @@ static void syscall_restart_or_eintr(arch_syscall_frame_t *regs, int handler,
  * nest: a signal not blocked while a handler runs gets its own frame below
  * the running handler's.
  */
-static int handle_signal(process_t *p, int sig,
+static int handle_signal(process_t *p, int sig, const siginfo_t *info,
 			 const struct sigcontext *interrupted)
 {
 	arch_syscall_frame_t *regs = &p->syscall_frame;
@@ -734,14 +1030,12 @@ static int handle_signal(process_t *p, int sig,
 	{
 		if (signal_is_fault(sig))
 			signal_exit_current(sig);
-		p->signal_pending &= ~SIGNAL_MASK(sig);
 		return 0;
 	}
 
-	if (signal_setup_frame(p, sig, &ctx, 0, 0, &setup) != SIGFRAME_OK)
+	if (signal_setup_frame(p, sig, &ctx, info, &setup) != SIGFRAME_OK)
 	{
 		/* Linux force_sigsegv(): no frame, no handler. */
-		p->signal_pending &= ~SIGNAL_MASK(sig);
 		signal_force_segv(p, sig);
 		return 0;
 	}
@@ -758,7 +1052,6 @@ static int handle_signal(process_t *p, int sig,
 		p->sighand->handlers[sig] = SIG_DFL;
 	signals_apply_handler_mask(p, sig, sa_flags);
 	p->restore_sigmask = 0;
-	p->signal_pending &= ~SIGNAL_MASK(sig);
 	return 1;
 }
 
@@ -769,9 +1062,10 @@ void set_current_blocked(uint64_t mask)
 
 void do_signal(process_t *p, const struct sigcontext *interrupted)
 {
-	int sig = signal_pending(p) ? get_signal(p) : 0;
+	siginfo_t info;
+	int sig = signal_pending(p) ? get_signal(p, &info) : 0;
 
-	if (sig && handle_signal(p, sig, interrupted))
+	if (sig && handle_signal(p, sig, &info, interrupted))
 		return;
 
 	if (!interrupted)
@@ -788,7 +1082,7 @@ void do_signal(process_t *p, const struct sigcontext *interrupted)
  */
 int register_signal_handler(int signal, void (*handler)(int))
 {
-    if (signal < 1 || signal >= _NSIG)
+    if (!valid_signal(signal))
         return -1;
     
     /* Signals that cannot be caught */

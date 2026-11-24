@@ -35,6 +35,6 @@ unsigned short keymap_get_entry(unsigned int table, unsigned int index);
 int keymap_set_entry(unsigned int table, unsigned int index,
 		     unsigned short value);
 
-/* Reload every table with layout IR0_KBD_LAYOUT_*; -EINVAL if unknown. */
+/* Reload every table with layout KBD_LAYOUT_* (<ir0/kbd.h>); -EINVAL if unknown. */
 int keymap_load_layout(int layout);
 int keymap_get_layout(void);

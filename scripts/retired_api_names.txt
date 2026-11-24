@@ -301,3 +301,86 @@ ir0_bpath_vfs_product_ops the VFS (includes/ir0/vfs.h)
 ir0_boot_port_maybe_seed_init_from_embedded (nothing; PID 1 comes from the root disk)
 ramtab_reset (nothing; the CPIO RAM table is gone)
 ep_g_euid current_process credentials (includes/ir0/cred.h)
+
+# Input (includes/ir0/input.h, kbd.h): the Linux input class replaced the
+# keyboard_*/input_kbd_*/input_mouse_* facades and the single i8042 device.
+keyboard_buffer_get kbd_getc()
+keyboard_buffer_has_data kbd_has_data()
+keyboard_buffer_clear kbd_flush()
+keyboard_all_keys_up kbd_reset()
+keyboard_set_layout kbd_set_layout()
+keyboard_get_layout kbd_get_layout()
+keyboard_get_layout_name (nothing; layouts are numbers)
+keyboard_set_console_mode kbd_set_mode()
+keyboard_get_console_mode kbd_get_mode()
+keyboard_modifiers_mask kbd_mods_mask()
+keyboard_ctrl_active kbd_mods_ctrl()
+input_register_keyboard input_register_device()
+input_register_mouse input_register_device()
+input_keyboard_ops struct input_dev
+input_mouse_ops struct input_dev
+input_kbd_get kbd_getc()
+input_kbd_has_data kbd_has_data()
+input_kbd_clear kbd_flush()
+input_kbd_resync_modifiers kbd_reset()
+input_kbd_poll_ps2 (nothing; the i8042 driver drains itself)
+input_kbd_set_layout kbd_set_layout()
+input_kbd_get_layout kbd_get_layout()
+input_kbd_get_layout_name (nothing; layouts are numbers)
+input_kbd_set_console_mode kbd_set_mode()
+input_kbd_get_console_mode kbd_get_mode()
+input_kbd_receive kbd_receive()
+input_kbd_wake_readers (nothing; the handler wakes poll)
+input_mouse_feed_byte i8042_register_aux()
+input_mouse_handle_interrupt (nothing; IRQ12 drains the i8042)
+input_mouse_is_available an input handler connect()
+input_mouse_get_state EVIOCGKEY on the mouse event node
+input_mouse_set_sensitivity (nothing; IR0-private ioctl removed)
+input_mouse_packet_available the mousedev handler
+input_mouse_read_ps2 the mousedev handler
+input_mouse_set_ready_notifier the mousedev handler
+input_event_wake_readers poll_wake_check_nosched()
+input_i8042_dev input_allocate_device()
+input_client_open devfs_file_ops.open
+input_client_get devfs_file_ops.get
+input_client_put devfs_file_ops.release
+input_client_grab EVIOCGRAB through the evdev handler
+input_client_set_clock EVIOCSCLOCKID through the evdev handler
+input_client_read devfs_file_ops.read
+input_client_has_data devfs_file_ops.poll
+input_client_queue_depth devfs_file_ops.ioctl
+input_set_read_context devfs_file_ops (per-open state)
+input_read_is_nonblock devfs_file_ops.read nonblock argument
+input_is_event_device devfs_node_t.fops
+input_event_read devfs_file_ops.read
+input_event_has_data devfs_file_ops.poll
+input_event_queue_depth devfs_file_ops.ioctl
+input_events_reader_open devfs_file_ops.open
+input_events_reader_close devfs_file_ops.release
+input_device_name EVIOCGNAME through the evdev handler
+input_device_id EVIOCGID through the evdev handler
+input_key_state EVIOCGKEY through the evdev handler
+ir0_input_poll devfs_file_ops.poll
+ir0_input_read_event devfs_file_ops.read
+ir0_input_get_caps IR0_INPUT_IOCTL_GET_CAPS on /dev/events0
+ir0_input_inject_event input_inject_event()
+ps2_set1_feed ps2_set1_decode() and kbd_translate()
+ps2_set1_ctrl kbd_mods_ctrl()
+ps2_set1_shift kbd_mods_shift()
+ps2_set1_alt (nothing; Alt sets no console byte)
+ps2_set1_mods_mask kbd_mods_mask()
+ps2_set1_all_keys_up kbd_reset()
+ps2_set1_key_name (nothing; keycodes are Linux KEY_*)
+ps2_mouse_read_packet the mousedev handler
+ps2_mouse_packet_available the mousedev handler
+IR0_INPUT_KBD_XLATE KBD_MODE_XLATE
+IR0_INPUT_KBD_MEDIUMRAW KBD_MODE_MEDIUMRAW
+IR0_KBD_LAYOUT_US KBD_LAYOUT_US
+IR0_KBD_LAYOUT_LATAM KBD_LAYOUT_LATAM
+MOUSE_GET_STATE (nothing; IR0-private ioctl removed, ENOTTY as Linux)
+MOUSE_SET_SENSITIVITY (nothing; IR0-private ioctl removed, ENOTTY as Linux)
+INPUT_EVIOCGRAB EVIOCGRAB (uapi linux/input.h)
+INPUT_EVIOCSCLOCKID EVIOCSCLOCKID (uapi linux/input.h)
+EVIOCGBIT_BASE EVIOCGBIT() (uapi linux/input.h)
+EVIOCGID_NR EVIOCGID (uapi linux/input.h)
+EVIOCGNAME_NR EVIOCGNAME() (uapi linux/input.h)

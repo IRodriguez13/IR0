@@ -588,15 +588,6 @@ menu "Debugging"
           framebuffer/serial-mirror branches without touching VGA or COM1.
           Never enable in product images.
 
-    config KTM_INPUT_MOCK
-        bool "KTM input facade mock (test-only)"
-        depends on KTM
-        default n
-        help
-          Links ktm/mocks/input/ktm_input_mock.c instead of
-          drivers/input/input_backend.c. Provides injectable keyboard and
-          mouse state without an i8042 controller. Never enable in products.
-
     config KTM_VIDEO_MOCK
         bool "KTM video facade mock (test-only)"
         depends on KTM

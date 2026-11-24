@@ -9,7 +9,6 @@
 
 #include "fs_syscalls_internal.h"
 #include "socket_syscalls.h"
-#include <ir0/input.h>
 
 static devfs_node_t *devfs_node_from_fd(int fd)
 {
@@ -94,6 +93,15 @@ int64_t sys_write(int fd, const void *buf, size_t count)
 
     if (node)
     {
+      if (node->fops && fdt && fd >= 0 && fd < ir0_fd_span() &&
+          fdt[fd].in_use)
+      {
+        if (!node->fops->write)
+          return -EINVAL;
+        if (copy_from_user(kernel_buf, buf, copy_size) != 0)
+          return -EFAULT;
+        return node->fops->write(fdt[fd].vfs_file, kernel_buf, copy_size);
+      }
       if (!node->ops || !node->ops->write)
         return -EBADF;
       if (copy_from_user(kernel_buf, buf, copy_size) != 0)
@@ -446,6 +454,32 @@ int64_t sys_read(int fd, void *buf, size_t count)
 		(const devfs_text_snap_t *)fd_table[fd].vfs_file,
 		kernel_read_buf, read_size, read_off);
       }
+      else if (node->fops && node->fops->read && fd_table && fd >= 0 &&
+	       fd < ir0_fd_span() && fd_table[fd].in_use)
+      {
+	int nb = (fd_table[fd].flags & IR0_O_NONBLOCK) ? 1 : 0;
+
+	/* -EAGAIN is "empty": a blocking read sleeps and asks again. */
+	for (;;)
+	{
+	  int64_t r = node->fops->read(fd_table[fd].vfs_file, kernel_read_buf,
+				       read_size, nb);
+
+	  if (r != -EAGAIN || nb)
+	  {
+	    ret = (int)r;
+	    break;
+	  }
+	  if (signal_pending(current_process))
+	    return -ERESTARTSYS;
+	  {
+	    int64_t sleep_ret = syscall_sleep_ms_locked(20);
+
+	    if (sleep_ret < 0)
+	      return sleep_ret;
+	  }
+	}
+      }
       else
       {
 	if (!node->ops || !node->ops->read)
@@ -454,26 +488,15 @@ int64_t sys_read(int fd, void *buf, size_t count)
 	  int nb = (fd_table && fd >= 0 && fd < ir0_fd_span() &&
 		    fd_table[fd].in_use &&
 		    (fd_table[fd].flags & IR0_O_NONBLOCK)) ? 1 : 0;
-	  void *ev_client = NULL;
-
-	  if (fd_table && fd >= 0 && fd < ir0_fd_span() &&
-	      fd_table[fd].in_use &&
-	      input_is_event_device(fd_table[fd].dev_device_id))
-	    ev_client = fd_table[fd].vfs_file;
 
 	  for (;;)
 	  {
-	    input_set_read_context(ev_client, nb);
 	    devfs_set_read_nonblock(nb);
 	    ret = node->ops->read(&node->entry, kernel_read_buf, read_size, read_off);
 	    devfs_set_read_nonblock(0);
 	    if (ret != 0 || nb || !node->ops->can_read ||
 	        node->ops->can_read(&node->entry, current_process->task.pid))
-	    {
-	      input_set_read_context(NULL, 0);
 	      break;
-	    }
-	    input_set_read_context(NULL, 0);
 	    if (signal_pending(current_process))
 	      return -ERESTARTSYS;
 	    {

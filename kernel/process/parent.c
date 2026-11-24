@@ -31,7 +31,7 @@ static void process_send_pdeathsig(process_t *dying)
 		if (!process_is_alive(child))
 			continue;
 		sig = child->pdeathsig;
-		if (sig <= 0 || sig >= _NSIG)
+		if (!valid_signal(sig))
 			continue;
 		(void)send_signal((int)child->task.pid, sig);
 	}

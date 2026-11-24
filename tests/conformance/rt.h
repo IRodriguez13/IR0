@@ -132,6 +132,12 @@ long rt_sigaction(int sig, void (*handler)(int), unsigned long flags,
 		  struct ksigaction *old);
 long rt_now_ms(void);
 void rt_sleep_ms(long ms);
+/*
+ * clone(2) with @flags onto @stack_top: the child runs fn(arg) there and
+ * then exit(2)s with its return value. Returns the child tid or -errno.
+ */
+long rt_clone_fn(unsigned long flags, void *stack_top, int (*fn)(void *),
+		 void *arg);
 
 /* Child status decoding (Linux wait status encoding). */
 #define RT_EXITED(s) (((s) & 0x7f) == 0)

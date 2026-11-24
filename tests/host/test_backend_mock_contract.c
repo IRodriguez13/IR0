@@ -12,12 +12,10 @@
 #include "test_harness_ir0.h"
 #include <ir0/audio_backend.h>
 #include <ir0/console_backend.h>
-#include <ir0/input_backend.h>
 #include <ir0/mm_port.h>
 #include <ir0/video_backend.h>
 #include <ktm_mock_audio.h>
 #include <ktm_mock_console.h>
-#include <ktm_mock_input.h>
 #include <ktm_mock_mm_port.h>
 #include <ktm_mock_platform.h>
 #include <ktm_mock_video.h>
@@ -85,108 +83,6 @@ void test_console_backend_mock_contract(void)
 	console_backend_panic_screen_on();
 	ASSERT_EQ(ktm_console_mock_panic_screen_calls(), 1);
 	ASSERT_EQ(console_backend_printk_to_screen(), 1);
-
-	TEST_END();
-}
-
-void test_input_backend_mock_contract(void)
-{
-	ir0_mouse_state_t state;
-	ir0_mouse_state_t readback;
-	uint8_t packet[3] = {0x09, 0xFE, 0x02};
-	uint8_t read_packet[3] = {0, 0, 0};
-
-	TEST_BEGIN("input_backend_mock_contract");
-
-	ktm_input_mock_reset();
-	ASSERT_EQ(input_kbd_has_data(), 0);
-	ASSERT_EQ(input_kbd_get(), 0);
-	ASSERT_EQ(input_kbd_get_layout(), IR0_KBD_LAYOUT_US);
-	ASSERT_STR_EQ(input_kbd_get_layout_name(input_kbd_get_layout()), "us");
-	ASSERT_EQ(input_kbd_get_console_mode(), IR0_INPUT_KBD_XLATE);
-
-	ktm_input_mock_queue_key('a');
-	ktm_input_mock_queue_key('b');
-	ASSERT_EQ(input_kbd_has_data(), 1);
-	ASSERT_EQ(input_kbd_get(), 'a');
-	ASSERT_EQ(input_kbd_get(), 'b');
-	ASSERT_EQ(input_kbd_get(), 0);
-
-	ktm_input_mock_queue_key('x');
-	input_kbd_clear();
-	ASSERT_EQ(input_kbd_has_data(), 0);
-
-	ASSERT_EQ(input_kbd_set_layout(IR0_KBD_LAYOUT_LATAM), 0);
-	ASSERT_EQ(input_kbd_get_layout(), IR0_KBD_LAYOUT_LATAM);
-	ASSERT_STR_EQ(input_kbd_get_layout_name(IR0_KBD_LAYOUT_LATAM), "latam");
-	ASSERT_EQ(input_kbd_set_layout(7), -1);
-	ASSERT_EQ(input_kbd_get_layout(), IR0_KBD_LAYOUT_LATAM);
-
-	ASSERT_EQ(input_kbd_set_console_mode(IR0_INPUT_KBD_MEDIUMRAW), 0);
-	ASSERT_EQ(input_kbd_get_console_mode(), IR0_INPUT_KBD_MEDIUMRAW);
-	ASSERT_EQ(input_kbd_set_console_mode(1), -1);
-	ASSERT_EQ(input_kbd_get_console_mode(), IR0_INPUT_KBD_MEDIUMRAW);
-
-	input_kbd_resync_modifiers();
-	input_kbd_poll_ps2();
-	input_kbd_wake_readers();
-	ASSERT_EQ(ktm_input_mock_resync_calls(), 1);
-	ASSERT_EQ(ktm_input_mock_poll_calls(), 1);
-	ASSERT_EQ(ktm_input_mock_wake_calls(), 1);
-
-	/* Mouse unavailable: every success path reports failure honestly. */
-	ASSERT(!input_mouse_is_available());
-	ASSERT(!input_mouse_get_state(&readback));
-	ASSERT(!input_mouse_set_sensitivity(80));
-	ASSERT(!input_mouse_packet_available());
-	ASSERT_EQ(input_mouse_read_ps2(read_packet), 0);
-	input_mouse_feed_byte(0xAB);
-	input_mouse_handle_interrupt();
-	ASSERT_EQ(ktm_input_mock_mouse_feed_bytes(), 1);
-	ASSERT_EQ((int)ktm_input_mock_last_aux_byte(), 0xAB);
-	ASSERT_EQ(ktm_input_mock_mouse_interrupts(), 1);
-
-	ktm_input_mock_set_mouse_available(1);
-	ASSERT(input_mouse_is_available());
-
-	state.x = 10;
-	state.y = -5;
-	state.wheel = 1;
-	state.left_button = true;
-	state.right_button = false;
-	state.middle_button = true;
-	state.button4 = false;
-	state.button5 = true;
-	state.has_wheel = true;
-	state.has_5buttons = true;
-	state.resolution = 4;
-	state.sample_rate = 100;
-	state.type = 3;
-	state.initialized = true;
-	ktm_input_mock_set_mouse_state(&state);
-	ASSERT(input_mouse_get_state(&readback));
-	ASSERT_EQ(readback.x, 10);
-	ASSERT_EQ(readback.y, -5);
-	ASSERT_EQ(readback.wheel, 1);
-	ASSERT(readback.left_button);
-	ASSERT(readback.middle_button);
-	ASSERT(readback.button5);
-	ASSERT(readback.initialized);
-
-	ASSERT(input_mouse_set_sensitivity(80));
-	ASSERT_EQ(ktm_input_mock_sensitivity(), 80);
-	ktm_input_mock_set_mouse_sensitivity_result(0);
-	ASSERT(!input_mouse_set_sensitivity(90));
-	ASSERT_EQ(ktm_input_mock_sensitivity(), 90);
-
-	ktm_input_mock_queue_mouse_packet(packet);
-	ASSERT(input_mouse_packet_available());
-	ASSERT_EQ(input_mouse_read_ps2(read_packet), 3);
-	ASSERT_EQ(read_packet[0], 0x09);
-	ASSERT_EQ(read_packet[1], 0xFE);
-	ASSERT_EQ(read_packet[2], 0x02);
-	ASSERT(!input_mouse_packet_available());
-	ASSERT_EQ(input_mouse_read_ps2(read_packet), 0);
 
 	TEST_END();
 }

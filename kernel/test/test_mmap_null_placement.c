@@ -16,7 +16,9 @@
 #include <kernel/syscalls/syscalls.h>
 #include <config.h>
 #include <ir0/abi/mmap_contract.h>
+#include <ir0/clock.h>
 #include <ir0/copy_user.h>
+#include <ir0/mm.h>
 #include <ir0/paging.h>
 #include <ir0/process.h>
 #include <stdint.h>
@@ -228,3 +230,62 @@ void ktest_mmap_null_placement(void)
 
 	KTEST_END();
 }
+
+/*
+ * Linux vm_unmapped_area(): placing a mapping costs one step per mapping
+ * in the way, not one per page. A page mapped at the bottom of the first
+ * candidate window (no VMA, like ELF image or identity pages) made the
+ * page-by-page search rescan up to it from every lower page: about
+ * (L / 4 KiB)^2 / 2 page-table probes for a window of L bytes.
+ */
+#define KTEST_PLACE_LEN (32UL << 20)
+#define KTEST_PLACE_MS_MAX 200U
+
+void ktest_mmap_place_skips_blockers(void)
+{
+	address_space_root_t root;
+	uint64_t saved_mmap_base;
+	uintptr_t top;
+	uintptr_t blocker;
+	uintptr_t got;
+	uint64_t t0;
+	uint64_t ms;
+
+	KTEST_BEGIN("mmap_place_skips_blockers");
+	KASSERT(current_process && process_pgd(current_process));
+	if (!current_process || !process_pgd(current_process))
+	{
+		KTEST_END();
+		return;
+	}
+	root = process_pgd(current_process);
+	saved_mmap_base = process_mmap_base(current_process);
+
+	/* The first top-down window [top - L, top) and the one below it. */
+	process_set_mmap_base(current_process, 0);
+	top = mm_pick_free_va_topdown(current_process, root, PAGE_SIZE_4KB) +
+	      PAGE_SIZE_4KB;
+	process_set_mmap_base(current_process, top);
+	KASSERT(top > 2 * KTEST_PLACE_LEN + USER_MMAP_START);
+	KASSERT(!process_user_va_range_overlaps(current_process,
+						top - 2 * KTEST_PLACE_LEN,
+						2 * KTEST_PLACE_LEN));
+	blocker = top - KTEST_PLACE_LEN;
+	KASSERT(map_user_region_in_directory(root, blocker, PAGE_SIZE_4KB,
+					     PAGE_USER | PAGE_RW) == 0);
+
+	t0 = clock_get_uptime_milliseconds();
+	got = mm_pick_free_va_topdown(current_process, root, KTEST_PLACE_LEN);
+	ms = clock_get_uptime_milliseconds() - t0;
+	klog_info_fmt("KTEST", "[KTEST] mmap_place_skips_blockers ms=%u",
+		      (unsigned)ms);
+
+	/* Highest window that ends at the blocker; found in a few steps. */
+	KASSERT(got == blocker - KTEST_PLACE_LEN);
+	KASSERT(ms < KTEST_PLACE_MS_MAX);
+
+	unmap_user_region_in_directory(root, blocker, blocker + PAGE_SIZE_4KB);
+	process_set_mmap_base(current_process, saved_mmap_base);
+	KTEST_END();
+}
+

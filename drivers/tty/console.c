@@ -22,7 +22,7 @@
 #include <d1_12_read_diag.h>
 #include <d1_16_tty_read_diag.h>
 #include <ir0/errno.h>
-#include <ir0/input_backend.h>
+#include <ir0/kbd.h>
 #include <ir0/video_console.h>
 #include <ir0/process.h>
 #include <ir0/sched.h>
@@ -485,7 +485,7 @@ static void tty_isig(int sig)
 {
 	if (!(tty_termios.c_lflag & IR0_LFLAG_NOFLSH))
 		tty_flush_input();
-	input_kbd_resync_modifiers();
+	kbd_reset();
 	tty_deliver_sig(sig);
 }
 
@@ -571,11 +571,7 @@ int ir0_console_ioctl_sti(const void *user_arg)
 		return -EFAULT;
 	if (copy_from_user(&c, user_arg, 1) != 0)
 		return -EFAULT;
-	if (input_kbd_receive(c) == 0)
-		return 0;
-	if (!tty_icanon_on())
-		return -EIO;
-	ir0_console_keypress(c);
+	kbd_receive(c);
 	return 0;
 }
 
@@ -583,7 +579,7 @@ int ir0_console_input_ready(void)
 {
 	if (canon_readq_pos < canon_readq_len)
 		return 1;
-	if (!tty_icanon_on() && input_kbd_has_data())
+	if (!tty_icanon_on() && kbd_has_data())
 		return 1;
 	return 0;
 }
@@ -631,9 +627,9 @@ static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 
 		if (!tty_icanon_on())
 		{
-			while (bytes_read < count && input_kbd_has_data())
+			while (bytes_read < count && kbd_has_data())
 			{
-				char c = input_kbd_get();
+				char c = kbd_getc();
 
 				c = tty_normalize_input(c);
 				if (c == 0)
@@ -687,7 +683,7 @@ static int64_t tty_read_kernel(char *kbuf, size_t count, int nonblock)
 
 				while (clock_get_uptime_milliseconds() < deadline)
 				{
-					if (input_kbd_has_data())
+					if (kbd_has_data())
 						break;
 					if (current_process &&
 					    signal_pending(current_process))
@@ -757,7 +753,7 @@ int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios)
 		 */
 		now_icanon = (ktermios->c_lflag & IR0_LFLAG_ICANON) ? 1 : 0;
 		if (!was_icanon && now_icanon)
-			input_kbd_clear();
+			kbd_flush();
 
 		/*
 		 * Store the caller's termios as given (Linux tty_set_termios()):
@@ -777,7 +773,7 @@ int tty_ioctl_termios_kernel(uint64_t request, struct ir0_termios *ktermios)
 			 * must resync like TCFLSH or the first shell keystrokes show
 			 * garbage (ê-prefix) after interactive firstboot login.
 			 */
-			input_kbd_resync_modifiers();
+			kbd_reset();
 		}
 		return 0;
 	}
@@ -790,7 +786,7 @@ int tty_input_bytes_available(void)
 	tty_termios_ensure();
 	if (canon_readq_pos < canon_readq_len)
 		return (int)(canon_readq_len - canon_readq_pos);
-	if (!tty_icanon_on() && input_kbd_has_data())
+	if (!tty_icanon_on() && kbd_has_data())
 		return 1;
 	return 0;
 }
@@ -804,7 +800,7 @@ static void tty_flush_input(void)
 	 * Linux n_tty_flush_buffer does not empty i8042.
 	 */
 	if (!tty_icanon_on())
-		input_kbd_clear();
+		kbd_flush();
 	canon_line_len = 0;
 	canon_readq_len = 0;
 	canon_readq_pos = 0;
@@ -1002,7 +998,7 @@ void ir0_console_reset_cooked_echo(void)
 				IR0_LFLAG_ECHOE | IR0_LFLAG_ECHOK |
 				IR0_LFLAG_ECHONL);
 	tty_termios_ready = 1;
-	input_kbd_resync_modifiers();
+	kbd_reset();
 }
 
 void ir0_console_flush_input(void)
@@ -1022,7 +1018,7 @@ void ir0_console_flush_input_session(void)
 	 * ring that IRQ1 fills: a session that ended with a modifier held
 	 * would otherwise carry it into the next session's first keystrokes.
 	 */
-	input_kbd_resync_modifiers();
+	kbd_reset();
 	if (!resync_tag)
 	{
 		resync_tag = 1;

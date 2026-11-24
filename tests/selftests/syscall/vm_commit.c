@@ -18,6 +18,7 @@
 #include <errno.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <time.h>
 #include <unistd.h>
 #endif
 
@@ -69,8 +70,26 @@ static int free_bytes(unsigned long long *out)
 	return 0;
 }
 
+/*
+ * Placing one mapping is linear in the mappings in the way (Linux
+ * vm_unmapped_area()); a quadratic search took seconds with IRQs off for
+ * this size. An idle guest maps it in far less than this bound.
+ */
+#define MMAP_PLACE_MS_MAX 1000L
+
+static long now_ms(void)
+{
+	struct timespec ts;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+		return -1;
+	return (long)ts.tv_sec * 1000L + (long)ts.tv_nsec / 1000000L;
+}
+
 int main(void)
 {
+	long t0;
+	long ms;
 	unsigned long long free0;
 	unsigned long long before;
 	unsigned long long after;
@@ -93,10 +112,13 @@ int main(void)
 	}
 	if (pass)
 	{
+		t0 = now_ms();
 		p = mmap(0, len, PROT_READ | PROT_WRITE,
 			 MAP_PRIVATE | MAP_ANONYMOUS | LINUX_MAP_NORESERVE,
 			 -1, 0);
-		pass = p != MAP_FAILED;
+		ms = now_ms() - t0;
+		ksft_print_num("noreserve_mmap_ms", ms);
+		pass = p != MAP_FAILED && t0 >= 0 && ms < MMAP_PLACE_MS_MAX;
 		if (pass)
 		{
 			*(volatile unsigned char *)p = 0x11;
