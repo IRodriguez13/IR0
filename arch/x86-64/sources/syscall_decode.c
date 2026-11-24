@@ -78,6 +78,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_getresgid: return IR0_SYSCALL_GETRESGID;
 	case __NR_getresuid: return IR0_SYSCALL_GETRESUID;
 	case __NR_getrlimit: return IR0_SYSCALL_GETRLIMIT;
+	case __NR_getrusage: return IR0_SYSCALL_GETRUSAGE;
 	case __NR_getsid: return IR0_SYSCALL_GETSID;
 	case __NR_getsockname: return IR0_SYSCALL_GETSOCKNAME;
 	case __NR_getsockopt: return IR0_SYSCALL_GETSOCKOPT;
@@ -173,6 +174,7 @@ enum ir0_syscall_id syscall_decode_number(uint64_t abi_number)
 	case __NR_sysinfo: return IR0_SYSCALL_SYSINFO;
 	case __NR_syslog: return IR0_SYSCALL_SYSLOG;
 	case __NR_tgkill: return IR0_SYSCALL_TGKILL;
+	case __NR_times: return IR0_SYSCALL_TIMES;
 	case __NR_timerfd_create: return IR0_SYSCALL_TIMERFD_CREATE;
 	case __NR_timerfd_gettime: return IR0_SYSCALL_TIMERFD_GETTIME;
 	case __NR_timerfd_settime: return IR0_SYSCALL_TIMERFD_SETTIME;

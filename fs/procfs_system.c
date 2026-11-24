@@ -138,14 +138,13 @@ int proc_uptime_read(char *buf, size_t count)
 /*
  * /proc/stat — Linux proc(5) contract.
  *
- * Aggregate "cpu" + single "cpu0" jiffy lines (USER_HZ ≈ CONFIG_TICK_RATE_HZ).
+ * Aggregate "cpu" + single "cpu0" lines in USER_HZ, as times(2) counts.
  * Jiffies from clock_get_cpu_accounting(); nice/iowait/irq/softirq/steal are 0
  * until IR0 tracks those buckets (honest zeros, not invented).
  * Source: man7.org/linux/man-pages/man5/proc_stat.5.html
  */
 int proc_stat_read(char *buf, size_t count)
 {
-	uint64_t total;
 	uint64_t user;
 	uint64_t system;
 	uint64_t idle;
@@ -165,10 +164,11 @@ int proc_stat_read(char *buf, size_t count)
 		return -1;
 	memset(buf, 0, count);
 
-	total = clock_get_tick_count();
 	clock_get_cpu_accounting(&user, &system, &idle);
-	if (user + system + idle > total)
-		total = user + system + idle;
+	/* Scheduler ticks to USER_HZ, the unit of every clock_t in /proc. */
+	user = jiffies_to_clock_t(user);
+	system = jiffies_to_clock_t(system);
+	idle = jiffies_to_clock_t(idle);
 
 	clock_get_loadavg(NULL, NULL, NULL, &runnable, &nprocs, NULL);
 	irq_total = clock_get_irq_count();

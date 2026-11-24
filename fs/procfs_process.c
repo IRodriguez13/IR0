@@ -35,6 +35,8 @@ typedef struct proc_fs_snap
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
+	uint64_t cutime;
+	uint64_t cstime;
 	int state;
 	uid_t uid;
 	gid_t gid;
@@ -87,6 +89,8 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->start_ticks = proc->start_ticks;
 	snap->utime = proc->utime;
 	snap->stime = proc->stime;
+	snap->cutime = proc->cutime;
+	snap->cstime = proc->cstime;
 	snap->state = (int)proc->state;
 	snap->no_new_privs = (int)proc->no_new_privs;
 	snap->umask = proc->umask;
@@ -722,7 +726,7 @@ int proc_comm_read(char *buf, size_t count, pid_t pid)
 /*
  * /proc/[pid]/stat — Linux proc(5) field order.
  *
- * Fields 1..22 carry real process state; utime/stime are scheduler jiffies.
+ * Fields 1..22 carry real process state; times are clock_t (USER_HZ).
  * Fields 9-13 are flags, minflt, cminflt, majflt and cmajflt, so utime is 14,
  * stime 15, cutime 16, cstime 17 and priority 18.
  * Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
@@ -767,7 +771,7 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 
 	len = snprintf(buf, count,
 		       "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
-		       "0 0 0 0 0 %llu %llu 0 0 %d "    /*  9-18 */
+		       "0 0 0 0 0 %llu %llu %llu %llu %d "    /*  9-18 */
 		       "0 1 0 %llu %llu %llu 0 0 0 0 0 0 0 0 0 0 0 0\n",
 		       (int)snap.pid,
 		       snap.comm[0] ? snap.comm : "none",
@@ -777,10 +781,13 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.sid,
 		       tty_nr,
 		       (int)snap.pgid,               /* tpgid: fg group on tty */
-		       (unsigned long long)snap.utime,
-		       (unsigned long long)snap.stime,
+		       /* 14-17 and 22 are clock_t: USER_HZ, not scheduler ticks. */
+		       (unsigned long long)jiffies_to_clock_t(snap.utime),
+		       (unsigned long long)jiffies_to_clock_t(snap.stime),
+		       (unsigned long long)jiffies_to_clock_t(snap.cutime),
+		       (unsigned long long)jiffies_to_clock_t(snap.cstime),
 		       snap.sched_prio,               /* 18: priority */
-		       (unsigned long long)snap.start_ticks, /* 22: starttime */
+		       (unsigned long long)jiffies_to_clock_t(snap.start_ticks),
 		       (unsigned long long)vsize,               /* 23: vsize */
 		       (unsigned long long)rss);                /* 24: rss pages */
 	proc_fs_snap_release(&snap);

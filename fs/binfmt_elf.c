@@ -24,6 +24,7 @@
 #include <fs/vfs.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/pmm.h>
+#include <ir0/clock.h>
 #include <ir0/copy_user.h>
 #include <ir0/mm_struct.h>
 #include <ir0/oops.h>
@@ -161,7 +162,6 @@ typedef struct
 
 #define ELF_AUXV_PAIRS 16
 #define ELF_AT_RANDOM_BYTES 16
-#define AT_CLKTCK_VALUE 100
 
 static int elf_stack_add_size(size_t *total, size_t add)
 {
@@ -1335,7 +1335,7 @@ static int elf_setup_stack(process_t *process, char *const argv[], char *const e
             { AT_EUID, process->euid },
             { AT_GID, process->gid },
             { AT_EGID, process->egid },
-            { AT_CLKTCK, AT_CLKTCK_VALUE },
+            { AT_CLKTCK, USER_HZ },
             { AT_SECURE, at_secure },
             { AT_FLAGS, 0 },
             { AT_RANDOM, random_base },

@@ -95,7 +95,9 @@
 #define __NR_umask           95
 #define __NR_gettimeofday    96
 #define __NR_getrlimit       97
+#define __NR_getrusage       98
 #define __NR_sysinfo         99
+#define __NR_times           100
 #define __NR_getuid          102
 #define __NR_syslog          103
 #define __NR_getgid          104

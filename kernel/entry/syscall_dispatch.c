@@ -189,6 +189,8 @@ WRAP4(sys_openat, int, const char *, int, mode_t)
 WRAP4(sys_newfstatat, int, const char *, stat_t *, int)
 WRAP5(sys_statx, int, const char *, int, unsigned int, void *)
 WRAP2(sys_clock_gettime, int, struct timespec *)
+WRAP1(sys_times, struct tms *)
+WRAP2(sys_getrusage, int, struct rusage *)
 WRAP4(sys_clock_nanosleep, int, int, const struct timespec *, struct timespec *)
 WRAP6(sys_futex, int *, int, int, const struct timespec *, int *, int)
 WRAP3(sys_getrandom, void *, size_t, unsigned int)
@@ -295,6 +297,8 @@ void syscall_table_init(void)
   syscall_semantic_table[IR0_SYSCALL_CHOWN] = wrap_sys_chown;
   syscall_semantic_table[IR0_SYSCALL_CHROOT] = wrap_sys_chroot;
   syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME] = wrap_sys_clock_gettime;
+  syscall_semantic_table[IR0_SYSCALL_TIMES] = wrap_sys_times;
+  syscall_semantic_table[IR0_SYSCALL_GETRUSAGE] = wrap_sys_getrusage;
   syscall_semantic_table[IR0_SYSCALL_CLOCK_GETTIME64] = wrap_sys_clock_gettime;
   syscall_semantic_table[IR0_SYSCALL_CLOCK_NANOSLEEP] = wrap_sys_clock_nanosleep;
   syscall_semantic_table[IR0_SYSCALL_CLONE] = wrap_sys_clone;

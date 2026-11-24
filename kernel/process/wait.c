@@ -199,6 +199,9 @@ int process_wait(pid_t pid, int *status, int options)
 
 			status_val = process_child_wait_status_word(zombie);
 			reaped_pid = zombie->task.pid;
+			/* Linux wait_task_zombie(): the reaper inherits the CPU time. */
+			current_process->cutime += zombie->utime + zombie->cutime;
+			current_process->cstime += zombie->stime + zombie->cstime;
 			process_registry_unlock(irq_flags);
 
 			process_reap_zombie_child(zombie);

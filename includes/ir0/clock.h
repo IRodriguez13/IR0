@@ -79,6 +79,13 @@ void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
 
 uint32_t clock_get_timer_frequency(void);
 
+/* Linux USER_HZ: the unit of every clock_t in the ABI (/proc, times(2)). */
+#define USER_HZ 100
+
+/* Scheduler ticks (CONFIG_TICK_RATE_HZ) to clock_t and to microseconds. */
+uint64_t jiffies_to_clock_t(uint64_t ticks);
+uint64_t jiffies_to_usecs(uint64_t ticks);
+
 /*
  * Sleep at least @milliseconds; 0, or -EINTR when a signal ended it.
  * Without a current task (early boot) it is a bounded udelay().

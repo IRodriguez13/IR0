@@ -23,6 +23,8 @@
 #include <ir0/signals.h>
 #include <ir0/time.h>
 #include <string.h>
+#include <linux/resource.h>
+#include <linux/times.h>
 
 extern process_t *process_list;
 
@@ -154,6 +156,103 @@ static uint64_t cputime_ms(const process_t *self, int whole_group)
 			ms += p->utime + p->stime;
 	}
 	return ms;
+}
+
+/* CPU time of the thread group and of its reaped children, in ticks. */
+struct group_cputime
+{
+	uint64_t utime;
+	uint64_t stime;
+	uint64_t cutime;
+	uint64_t cstime;
+	uint64_t nvcsw;
+	uint64_t nivcsw;
+};
+
+static void group_cputime(const process_t *self, struct group_cputime *t)
+{
+	const process_t *p;
+
+	memset(t, 0, sizeof(*t));
+	for (p = process_list; p; p = p->next)
+	{
+		if (p->tgid != self->tgid)
+			continue;
+		t->utime += p->utime;
+		t->stime += p->stime;
+		t->cutime += p->cutime;
+		t->cstime += p->cstime;
+		t->nvcsw += p->nvcsw;
+		t->nivcsw += p->nivcsw;
+	}
+}
+
+/* times(2): clock_t in USER_HZ; returns clock ticks since boot. */
+int64_t sys_times(struct tms *buf)
+{
+	struct group_cputime t;
+	struct tms kt;
+
+	if (!current_process)
+		return -ESRCH;
+	if (buf)
+	{
+		group_cputime(current_process, &t);
+		kt.tms_utime = (long)jiffies_to_clock_t(t.utime);
+		kt.tms_stime = (long)jiffies_to_clock_t(t.stime);
+		kt.tms_cutime = (long)jiffies_to_clock_t(t.cutime);
+		kt.tms_cstime = (long)jiffies_to_clock_t(t.cstime);
+		if (copy_to_user(buf, &kt, sizeof(kt)) != 0)
+			return -EFAULT;
+	}
+	return (int64_t)jiffies_to_clock_t(clock_get_tick_count());
+}
+
+static void ticks_to_timeval(uint64_t ticks, struct __kernel_old_timeval *tv)
+{
+	uint64_t us = jiffies_to_usecs(ticks);
+
+	tv->tv_sec = (long)(us / 1000000ULL);
+	tv->tv_usec = (long)(us % 1000000ULL);
+}
+
+/*
+ * getrusage(2): CPU times and context switches. The memory, fault and
+ * block I/O fields are not tracked and read 0.
+ */
+int64_t sys_getrusage(int who, struct rusage *ru)
+{
+	struct group_cputime t;
+	struct rusage kr;
+
+	if (!current_process)
+		return -ESRCH;
+	memset(&kr, 0, sizeof(kr));
+	group_cputime(current_process, &t);
+	switch (who)
+	{
+	case RUSAGE_SELF:
+		ticks_to_timeval(t.utime, &kr.ru_utime);
+		ticks_to_timeval(t.stime, &kr.ru_stime);
+		kr.ru_nvcsw = (long)t.nvcsw;
+		kr.ru_nivcsw = (long)t.nivcsw;
+		break;
+	case RUSAGE_THREAD:
+		ticks_to_timeval(current_process->utime, &kr.ru_utime);
+		ticks_to_timeval(current_process->stime, &kr.ru_stime);
+		kr.ru_nvcsw = (long)current_process->nvcsw;
+		kr.ru_nivcsw = (long)current_process->nivcsw;
+		break;
+	case RUSAGE_CHILDREN:
+		ticks_to_timeval(t.cutime, &kr.ru_utime);
+		ticks_to_timeval(t.cstime, &kr.ru_stime);
+		break;
+	default:
+		return -EINVAL;
+	}
+	if (copy_to_user(ru, &kr, sizeof(kr)) != 0)
+		return -EFAULT;
+	return 0;
 }
 
 int64_t sys_clock_gettime(int clock_id, struct timespec *tp)

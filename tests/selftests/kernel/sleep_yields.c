@@ -29,9 +29,13 @@
 #include <unistd.h>
 #endif
 
-#define SLEEPS 40
+#define SLEEPS 200
 #define SLEEP_NS 5000000L
-/* CPU time is in scheduler ticks; a halting sleeper takes at least SLEEPS. */
+/*
+ * CPU time is clock_t (USER_HZ, 10 ms). A halting sleeper takes at least
+ * one 1 ms scheduler tick per sleep, SLEEPS / 10 = 20 clock_t; the budget
+ * is half that.
+ */
 #define MAX_CPU_TICKS 10
 
 /* Fields 14 + 15 (utime + stime) of /proc/self/stat; -1 if unreadable. */

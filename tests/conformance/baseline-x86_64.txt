@@ -6,8 +6,6 @@
 fs_unlink_open_file FAIL  # an unlinked file cannot be read through an fd still open on it (path-based VFS)
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
-procfs_cpu_jiffies_vs_uptime FAIL  # /proc/stat cpu prints scheduler ticks (1000 Hz), not USER_HZ
-procfs_task_cpu_times FAIL  # utime/stime/starttime in ticks; times(2) and getrusage(2) are ENOSYS
 procfs_stat_processes_forks FAIL  # "processes" counts live tasks, not forks since boot
 procfs_swap_consistent FAIL  # SwapTotal/SwapFree missing from /proc/meminfo
 procfs_loadavg_runqueue FAIL  # procs_running and loadavg count only the task on the CPU; integer EMA stalls

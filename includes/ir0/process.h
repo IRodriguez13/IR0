@@ -359,6 +359,15 @@ typedef struct process
 	struct sigqueue *sigqueue;
 	struct signal_struct *signal;
 
+	/*
+	 * Ticks of the reaped children (Linux signal->cutime/cstime): a
+	 * successful wait adds the child's own time and its children's.
+	 */
+	uint64_t cutime;
+	uint64_t cstime;
+	/* Switches away while blocked / while still runnable (Linux nvcsw). */
+	uint64_t nvcsw;
+	uint64_t nivcsw;
 } process_t;
 
 /* 1 when @sp lies inside the task's alternate signal stack. */
