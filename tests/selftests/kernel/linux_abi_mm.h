@@ -21,6 +21,7 @@ CONF_CASE(mm_private_file_cow_ignores_later_writes)
 CONF_CASE(mm_private_file_fork)
 CONF_CASE(mm_private_file_past_eof)
 CONF_CASE(mm_private_file_mprotect)
+CONF_CASE(mm_mmap_closed_fd_ebadf)
 /* Last: before the fix they stopped the IR0 arm64 guest. */
 CONF_CASE(mm_mmap_fixed_over_kernel_pages_is_harmless)
 CONF_CASE(mm_munmap_over_kernel_pages_is_harmless)

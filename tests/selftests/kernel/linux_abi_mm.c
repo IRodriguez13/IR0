@@ -627,3 +627,20 @@ int mm_private_file_mprotect(void)
 	EXPECT(*(volatile char *)a, 'M');
 	return CONF_PASS;
 }
+
+/*
+ * LTP mmap08: a file mapping of a closed fd is EBADF, whatever the type.
+ * ksys_mmap_pgoff() looks the fd up before do_mmap() checks the length, so
+ * a zero length (mmap08 passes one) is EBADF too.
+ */
+int mm_mmap_closed_fd_ebadf(void)
+{
+	long fd;
+
+	OK(fd, shared_file(PG));
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT_ERR(map_file(fd, PG, PROT_WRITE), EBADF);
+	EXPECT_ERR(map_private(fd, PG, PROT_READ), EBADF);
+	EXPECT_ERR(map_file(fd, 0, PROT_WRITE), EBADF);
+	return CONF_PASS;
+}

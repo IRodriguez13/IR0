@@ -435,6 +435,25 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
     return ret;
   }
 
+  /*
+   * Linux sys_mmap() checks the offset alignment, then ksys_mmap_pgoff()
+   * looks the fd up: both come before do_mmap() checks length and flags.
+   */
+  if (!(flags & MAP_ANONYMOUS))
+  {
+    fd_entry_t *fd_table = get_process_fd_table();
+
+    if (offset % PAGE_SIZE_4KB != 0)
+      return SYSCALL_PTR_ERR(EINVAL);
+    if (fd < 0 || fd >= ir0_fd_span() || !fd_table || !fd_table[fd].in_use)
+    {
+      ret = SYSCALL_PTR_ERR(EBADF);
+      mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
+                            process_pgd(current_process));
+      return ret;
+    }
+  }
+
   if (length == 0)
   {
     klog_debug("KERN", "SERIAL: mmap: zero length\n");
@@ -476,41 +495,8 @@ void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offs
     return ret;
   }
 
-  /* Validate offset alignment for file mappings */
   if (!(flags & MAP_ANONYMOUS))
   {
-    if (fd < 0)
-    {
-      klog_debug("KERN", "SERIAL: mmap: file mapping requires valid fd\n");
-      return SYSCALL_PTR_ERR(EBADF);
-    }
-    
-    /* Offset must be page-aligned for file mappings */
-    if (offset % PAGE_SIZE_4KB != 0)
-    {
-      klog_debug("KERN", "SERIAL: mmap: offset must be page-aligned\n");
-      return SYSCALL_PTR_ERR(EINVAL);
-    }
-
-    /*
-     * Linux: reject invalid fds before ENOSYS for unimplemented file-backed
-     * mmap. Only real fd_table slots are valid (devfs /dev/fb0 uses is_devfs).
-     */
-    {
-      fd_entry_t *fd_table = get_process_fd_table();
-      bool fd_valid_open = (fd >= 0 && fd < ir0_fd_span() &&
-                            fd_table && fd_table[fd].in_use);
-
-      if (!fd_valid_open)
-      {
-        klog_debug("KERN", "SERIAL: mmap: invalid fd for file-backed mmap\n");
-        ret = SYSCALL_PTR_ERR(EBADF);
-        mmap_audit_log_return("bad-fd", ret, 0, 0, 0,
-                              process_pgd(current_process));
-        return ret;
-      }
-    }
-
     /*
      * mmap of /dev/fb0 — real fd_table slot (is_devfs + device_id 15).
      * Maps framebuffer physical memory into userspace for efficient access.
