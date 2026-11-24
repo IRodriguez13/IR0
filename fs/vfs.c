@@ -563,6 +563,12 @@ int vfs_check_dir_traverse(const char *path)
 
         if (ret != 0)
             return ret;
+        /* A symlink component (/proc/self) is resolved by its filesystem. */
+        if (S_ISLNK(st.st_mode))
+        {
+            p = slash + 1;
+            continue;
+        }
         if ((st.st_mode & S_IFMT) != 0 && !S_ISDIR(st.st_mode))
             return -ENOTDIR;
         if (generic_permission(ir0_current_cred(), &st, ACCESS_EXEC) != 0)

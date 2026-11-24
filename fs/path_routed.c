@@ -13,7 +13,6 @@
 #include <ir0/named_devnode.h>
 #include <ir0/named_symlink.h>
 #include <ir0/cred.h>
-#include <ir0/procfs.h>
 #include <fs/vfs.h>
 
 static int ir0_access_mode_from_linux(int mode)
@@ -48,8 +47,6 @@ int ir0_stat_path_routed(const char *path, stat_t *st)
     if (!path || !st)
         return -EINVAL;
 
-    if (is_proc_path(path))
-        return proc_stat(path, st);
     if (ir0_is_dev_path(path))
     {
         ensure_devfs_init();
@@ -157,12 +154,6 @@ int ir0_open_access_path_routed(const char *resolved_path, int open_flags,
     if (rc != 0)
         return rc;
 
-    if (is_proc_path(resolved_path))
-    {
-        rc = proc_access_path(resolved_path, cred->euid);
-        if (rc != 0)
-            return rc;
-    }
 
     access_mode = 0;
     accmode = open_flags & O_ACCMODE;
@@ -194,9 +185,6 @@ int ir0_getdents_path_routed(const char *path, struct vfs_dirent *entries,
         ensure_devfs_init();
         return devfs_readdir_subdir(path, entries, max_entries);
     }
-
-    if (is_proc_path(path))
-        return proc_readdir(path, entries, max_entries);
 
     return vfs_readdir(path, entries, max_entries);
 }

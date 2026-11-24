@@ -546,73 +546,6 @@ static int64_t pseudo_bind_dir_fd(const char *path, int ir0_flags)
   return fd;
 }
 
-/*
- * Install a registry /proc|/sys file into the process fd_table.
- * Returns a real slot index (not PSEUDO_FS_*_FD_BASE).
- */
-static int64_t pseudo_bind_file_fd(const char *path, int ir0_flags)
-{
-  fd_entry_t *fd_table;
-  const pseudo_fs_ops_t *ops = NULL;
-  void *ctx = NULL;
-  pseudo_fd_bind_t *bind;
-  int dynamic = 0;
-  int fd;
-  int64_t rc;
-
-  if (!path || !current_process)
-    return -EINVAL;
-
-  rc = ir0_open_access_path_routed(path, ir0_flags,
-                                   ir0_current_cred());
-  if (rc != 0)
-    return rc;
-
-  pseudo_fs_nodes_register_all();
-  rc = pseudo_fs_acquire_path(path, ir0_flags, &ops, &ctx, &dynamic);
-  if (rc != 0)
-    return rc;
-
-  fd = fd_alloc_lowest(0);
-  if (fd < 0)
-  {
-    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
-    return fd;
-  }
-  fd_table = get_process_fd_table();
-  if (!fd_table)
-  {
-    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
-    return -ESRCH;
-  }
-
-  bind = (pseudo_fd_bind_t *)kmalloc(sizeof(*bind));
-  if (!bind)
-  {
-    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
-    return -ENOMEM;
-  }
-  bind->ops = ops;
-  bind->ctx = ctx;
-  bind->refs = 1;
-  bind->dynamic = dynamic;
-
-  fd_table[fd].in_use = true;
-  strncpy(fd_table[fd].path, path, sizeof(fd_table[fd].path) - 1);
-  fd_table[fd].path[sizeof(fd_table[fd].path) - 1] = '\0';
-  fd_table[fd].flags = ir0_flags;
-  fd_table[fd].fd_flags = (ir0_flags & O_CLOEXEC) ? FD_CLOEXEC : 0;
-  fd_table[fd].vfs_file = bind;
-  fd_table[fd].offset = 0;
-  fd_table[fd].is_pipe = false;
-  fd_table[fd].is_socket = false;
-  fd_entry_devfs_unbind(&fd_table[fd]);
-  fd_table[fd].is_pseudo = true;
-  fd_table[fd].pipe_end = -1;
-  fd_slot_note_created(&fd_table[fd]);
-  return fd;
-}
-
 static int64_t devfs_open_resolved_node(const char *path, int ir0_flags)
 {
   devfs_node_t *node;
@@ -655,19 +588,6 @@ static int64_t sys_open_routed_resolved(char *resolved, int ir0_flags,
                                         int dirfd_dbg)
 {
   int64_t open_ret;
-
-  if (is_proc_path(resolved))
-  {
-    if (strcmp(resolved, "/proc") == 0 || strcmp(resolved, "/proc/") == 0 ||
-        proc_is_virtual_subdir(resolved))
-    {
-      if (!(ir0_flags & O_DIRECTORY))
-        return -EISDIR;
-      return pseudo_bind_dir_fd(resolved, ir0_flags);
-    }
-    open_ret = pseudo_bind_file_fd(resolved, ir0_flags);
-    return open_ret;
-  }
 
   if (ir0_is_dev_path(resolved))
   {

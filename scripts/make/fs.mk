@@ -7,9 +7,9 @@
 # and an entry in FILESYSTEMS; the VFS core is never edited for it.
 #
 # FILESYSTEMS is the registration order, which /proc/filesystems follows
-# (proc, registered by the VFS core, comes first).
+# (proc first, as on Linux).
 
-FILESYSTEMS := tmpfs minix simplefs fat16 ext2 9p heartfs sysfs
+FILESYSTEMS := proc tmpfs minix simplefs fat16 ext2 9p heartfs sysfs
 
 fs-obj-y :=
 fs-type-y :=

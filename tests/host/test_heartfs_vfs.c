@@ -16,8 +16,8 @@
 #include <fs/vfs.h>
 #include <ir0/cred.h>
 #include <ir0/errno.h>
-#include <ir0/procfs.h>
-#include <ir0/pseudo_fs.h>
+#include <ir0/open_flags.h>
+#include <ir0/vfs_file.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
 #include <string.h>
@@ -39,46 +39,88 @@ const struct ir0_task_cred *ir0_current_cred(void)
 	return NULL;
 }
 
-bool is_proc_path(const char *path)
-{
-	return strncmp(path, "/proc/", 6) == 0;
-}
+/*
+ * A two-file VFS behind the aliases: heartfs reaches /proc and /sys only
+ * through vfs_stat/vfs_readdir/vfs_open/vfs_pread, whoever serves them.
+ */
+static const char g_uptime[] = "12.50 3.00\n";
+static struct vfs_file g_file;
 
-int proc_access_path(const char *path, uid_t euid)
-{
-	(void)path;
-	(void)euid;
-	return 0;
-}
-
-void pseudo_fs_nodes_register_all(void)
-{
-}
-
-static int64_t uptime_read(void *ctx, char *buf, size_t count, off_t *off)
-{
-	const char *s = (const char *)ctx;
-	size_t len = strlen(s);
-
-	(void)off;
-	if (len > count)
-		len = count;
-	memcpy(buf, s, len);
-	return (int64_t)len;
-}
-
-static int uptime_stat(void *ctx, stat_t *st)
+int vfs_stat(const char *path, stat_t *st)
 {
 	memset(st, 0, sizeof(*st));
-	st->st_mode = S_IFREG | 0444;
-	st->st_size = (off_t)strlen((const char *)ctx);
+	if (strcmp(path, "/proc") == 0 || strcmp(path, "/sys") == 0)
+	{
+		st->st_mode = S_IFDIR | 0555;
+		return 0;
+	}
+	if (strcmp(path, "/proc/uptime") == 0)
+	{
+		st->st_mode = S_IFREG | 0444;
+		st->st_size = (off_t)strlen(g_uptime);
+		return 0;
+	}
+	if (strcmp(path, "/sys/kernel/version") == 0)
+	{
+		st->st_mode = S_IFREG | 0444;
+		return 0;
+	}
+	return -ENOENT;
+}
+
+int vfs_readdir(const char *path, struct vfs_dirent *entries, int max)
+{
+	const char *name = strcmp(path, "/proc") == 0 ? "uptime" : "kernel";
+
+	if (max < 1)
+		return 0;
+	strncpy(entries[0].name, name, sizeof(entries[0].name) - 1);
+	entries[0].type = strcmp(path, "/proc") == 0 ? DT_REG : DT_DIR;
+	return 1;
+}
+
+int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
+{
+	stat_t st;
+	int ret = vfs_stat(path, &st);
+
+	(void)mode;
+	if (ret != 0)
+		return ret;
+	if ((flags & IR0_O_ACCMODE) != IR0_O_RDONLY)
+		return -EACCES;
+	strncpy(g_file.path, path, sizeof(g_file.path) - 1);
+	*out = &g_file;
 	return 0;
 }
 
-static const pseudo_fs_ops_t uptime_ops = {
-	.read = uptime_read,
-	.stat = uptime_stat,
-};
+int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset)
+{
+	size_t len = strlen(g_uptime);
+
+	if (strcmp(f->path, "/proc/uptime") != 0 || (size_t)offset >= len)
+		return 0;
+	len -= (size_t)offset;
+	if (len > count)
+		len = count;
+	memcpy(buf, g_uptime + offset, len);
+	return (int)len;
+}
+
+int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset)
+{
+	(void)f;
+	(void)buf;
+	(void)count;
+	(void)offset;
+	return -EINVAL;
+}
+
+int vfs_close(struct vfs_file *f)
+{
+	(void)f;
+	return 0;
+}
 
 static int find_dirent(const struct vfs_dirent *ents, int n, const char *name)
 {
@@ -200,10 +242,7 @@ void test_heartfs_vfs(void)
 	ASSERT_EQ(ops->create("/heart/new", 0644), -EACCES);
 	ASSERT_EQ(ops->open("/heart/README", 0), 0);
 
-	/* /heart/proc views the /proc registry node. */
-	pseudo_fs_reset();
-	ASSERT_EQ(pseudo_fs_register("/proc", "uptime", &uptime_ops,
-				     (void *)"12.50 3.00\n"), 0);
+	/* /heart/proc and /heart/sys view /proc and /sys through the VFS. */
 	ASSERT_EQ(ops->stat("/heart/proc", &st), 0);
 	ASSERT(S_ISDIR(st.st_mode));
 	n = ops->readdir("/heart/proc", ents, 16);
@@ -218,14 +257,12 @@ void test_heartfs_vfs(void)
 	ASSERT_EQ(read_at("/heart/proc/uptime", buf, sizeof(buf) - 1, 6, &done), 0);
 	ASSERT_EQ(done, (size_t)5);
 	ASSERT_STR_EQ(buf, "3.00\n");
-	ASSERT_EQ(ops->write("/heart/proc/uptime", "1", 1, &done, 0), -EINVAL);
+	ASSERT_EQ(ops->write("/heart/proc/uptime", "1", 1, &done, 0), -EACCES);
 	n = ops->readdir("/heart/sys", ents, 16);
 	ASSERT(find_dirent(ents, n, "kernel") >= 0);
 	ASSERT_EQ(ents[find_dirent(ents, n, "kernel")].type, DT_DIR);
-	ASSERT_EQ(ops->stat("/heart/sys/kernel", &st), -ENOENT);
 	ASSERT_EQ(ops->stat("/heart/sys/kernel/version", &st), 0);
 	ASSERT_EQ(st.st_mode, (mode_t)(S_IFREG | 0444));
-	pseudo_fs_reset();
 
 	TEST_END();
 }

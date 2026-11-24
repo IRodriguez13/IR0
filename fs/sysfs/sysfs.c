@@ -851,7 +851,7 @@ static int sysfs_statfs(const char *path, struct ir0_statfs *buf)
 
 struct vfs_fstype sysfs_fs_type = {
     .name = "sysfs",
-    .fs_flags = FS_NOSUID_DEFAULT,
+    .fs_flags = FS_NOSUID_DEFAULT | FS_SINGLE_INSTANCE,
     .ops = &sysfs_ops,
     .mount = sysfs_mount,
     .umount = sysfs_umount,

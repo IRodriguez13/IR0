@@ -33,26 +33,6 @@ static int64_t do_readlinkat(int dirfd, const char *pathname, char *buf,
   if (rc != 0)
     return rc;
 
-  if (is_proc_path(resolved))
-  {
-    rc = proc_access_path(resolved, (uid_t)current_process->euid);
-    if (rc != 0)
-      return rc;
-    rc = proc_readlink(resolved, kbuf, sizeof(kbuf));
-    if (rc >= 0)
-    {
-      len = (size_t)rc;
-      copy_len = len;
-      if (copy_len > bufsiz)
-        copy_len = bufsiz;
-      if (copy_to_user(buf, kbuf, copy_len) != 0)
-        return -EFAULT;
-      return (int64_t)copy_len;
-    }
-    if (rc != -ENOENT)
-      return rc;
-  }
-
   rc = vfs_readlink(resolved, kbuf, sizeof(kbuf));
   if (rc >= 0)
   {

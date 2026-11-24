@@ -34,6 +34,12 @@ struct vfs_dirent;
 /* vfs_fstype.fs_flags */
 #define FS_REQUIRES_DEV   1 /* the mount source is a block device (Linux) */
 #define FS_NOSUID_DEFAULT 2 /* new mounts start MS_NOSUID (pseudo, in-RAM) */
+/*
+ * Every mount shows the same tree (Linux proc, sysfs): mounting it again
+ * where it is already mounted stacks an identical view, so it succeeds
+ * without a second record.
+ */
+#define FS_SINGLE_INSTANCE 4
 
 /*
  * Filesystem type descriptor — one per FS driver (Linux file_system_type).
