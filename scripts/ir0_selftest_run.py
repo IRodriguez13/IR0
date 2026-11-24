@@ -27,6 +27,30 @@ def require(path: Path, hint: str) -> None:
         raise SystemExit(f"ir0-selftest: missing {path} ({hint})")
 
 
+def inject_extra(disk: Path, extra: list[str]) -> int:
+    """Copy each SRC:DEST host file onto the MINIX disk."""
+    for item in extra:
+        src, sep, dest = item.partition(":")
+        if not sep or not dest:
+            print(f"--extra needs SRC:DEST, got {item!r}", file=sys.stderr)
+            return 1
+        require(Path(src), "build the selftest first")
+        if run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "inject_init_minix.py"),
+                "--mode",
+                "755",
+                str(disk),
+                src,
+                dest,
+            ],
+            timeout=30,
+        ) != 0:
+            return 1
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arch", choices=("x86_64", "arm64"), required=True)
@@ -46,6 +70,13 @@ def main() -> int:
         "--done",
         default="",
         help="KTAP success tag (default from binary basename)",
+    )
+    parser.add_argument(
+        "--extra",
+        action="append",
+        default=[],
+        metavar="SRC:DEST",
+        help="Also copy host file SRC to DEST on the disk (repeatable)",
     )
     parser.add_argument(
         "--expect-log",
@@ -106,6 +137,8 @@ def main() -> int:
                 ],
                 timeout=30,
             ) != 0:
+                return 1
+            if inject_extra(disk, args.extra) != 0:
                 return 1
             rc = run(
                 [
@@ -172,6 +205,8 @@ def main() -> int:
                 ],
                 timeout=30,
             ) != 0:
+                return 1
+            if inject_extra(disk, args.extra) != 0:
                 return 1
             rc = run(
                 [

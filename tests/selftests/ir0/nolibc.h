@@ -14,6 +14,7 @@
 #define AT_FDCWD		-100
 #define O_RDONLY		0
 #define O_WRONLY		1
+#define O_CREAT			0100
 #define SYS_read		63
 #define SYS_write		64
 #define SYS_close		57
@@ -51,6 +52,8 @@
 #define SYS_sendto		206
 #define SYS_bind		200
 #define SYS_mount		40
+#define SYS_mkdirat		34
+#define SYS_execve		221
 #define SA_SIGINFO		0x00000004UL
 #define SA_RESTORER		0x04000000UL
 #define SIGCHLD			17
