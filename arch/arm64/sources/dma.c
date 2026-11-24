@@ -85,13 +85,6 @@ void dma_sync_for_cpu(void *va, size_t size)
 		cache_invalidate((uintptr_t)va, size);
 }
 
-int dma_map_mmio(uintptr_t pa, size_t size)
-{
-	if (!pa || size == 0)
-		return -EINVAL;
-	return arm64_mmu_map_device_range((uint64_t)pa, (uint64_t)size);
-}
-
 int irq_hw_enable(uint32_t irq)
 {
 	return arm64_irq_backend_enable(irq);

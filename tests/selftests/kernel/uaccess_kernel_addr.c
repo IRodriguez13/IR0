@@ -27,9 +27,9 @@
 #define PROBE_BYTES 16
 
 /*
- * Supervisor-only memory that sits inside the low user VA window of every
- * process root: x86_64 maps the keyboard ring at 0x500000 with 4 KiB
- * supervisor pages; arm64 identity-maps the kernel heap at 0x40800000.
+ * Supervisor-only memory the kernel really uses: x86_64 maps the keyboard
+ * ring at 0x500000 with 4 KiB supervisor pages inside the low user VA
+ * window; arm64 keeps its heap in TTBR1, at KIMAGE_VADDR + 8 MiB.
  */
 #if defined(__x86_64__)
 #define KERNEL_ADDR 0x500000UL
@@ -37,7 +37,7 @@
 #define SYS_clock_gettime 228
 #endif
 #elif defined(__aarch64__)
-#define KERNEL_ADDR 0x40800000UL
+#define KERNEL_ADDR 0xffff800000800000UL
 #ifndef SYS_clock_gettime
 #define SYS_clock_gettime 113
 #endif

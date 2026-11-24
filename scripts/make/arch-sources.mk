@@ -73,8 +73,7 @@ ARM64_BACKEND_OBJS = \
 	drivers/irq/gic_v2.o \
 	drivers/irq/bcm2836_irq.o \
 	arch/arm64/sources/syscall_decode.o \
-	arch/arm64/sources/elf_policy.o \
-	arch/arm64/sources/boot_identity.o
+	arch/arm64/sources/elf_policy.o
 
 # Portable kernel: ir0/cpu.h + irq.h facades.
 ARM64_INTERFACE_OBJS_PRODUCT = \

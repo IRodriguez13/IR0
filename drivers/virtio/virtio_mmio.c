@@ -14,7 +14,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "mmu.h"
+#include <ir0/io.h>
 
 static struct virtio_mmio_dev g_devs[VIRTIO_MMIO_MAX_SLOTS];
 static unsigned g_ndevs;
@@ -54,12 +54,13 @@ struct virtio_mmio_dev *virtio_mmio_find(uint32_t device_id)
 int virtio_mmio_probe(void)
 {
 	unsigned i;
-	uint64_t pa;
+	uint8_t *bank;
 
 	g_ndevs = 0;
 
-	/* One 2 MiB Device block covers the whole virtio-mmio bank. */
-	if (arm64_mmu_map_device_block(VIRTIO_MMIO_BASE) != 0)
+	bank = ioremap(VIRTIO_MMIO_BASE,
+		       (size_t)VIRTIO_MMIO_MAX_SLOTS * VIRTIO_MMIO_STRIDE);
+	if (!bank)
 		return VIRTIO_MMIO_PROBE_ERROR;
 
 	for (i = 0; i < VIRTIO_MMIO_MAX_SLOTS; i++)
@@ -69,9 +70,9 @@ int virtio_mmio_probe(void)
 		uint32_t ver;
 		uint32_t id;
 
-		pa = VIRTIO_MMIO_BASE + (uint64_t)i * VIRTIO_MMIO_STRIDE;
 		d = &g_devs[g_ndevs];
-		d->base = (volatile uint32_t *)(uintptr_t)pa;
+		d->base = (volatile uint32_t *)(bank +
+						(size_t)i * VIRTIO_MMIO_STRIDE);
 		d->slot = (int)i;
 
 		magic = virtio_mmio_read(d, VIRTIO_MMIO_REG_MAGIC);

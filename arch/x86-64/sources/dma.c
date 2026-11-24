@@ -49,13 +49,6 @@ void dma_sync_for_cpu(void *va, size_t size)
 	(void)size;
 }
 
-int dma_map_mmio(uintptr_t pa, size_t size)
-{
-	(void)pa;
-	(void)size;
-	return 0;
-}
-
 int irq_hw_enable(uint32_t irq)
 {
 	(void)irq;

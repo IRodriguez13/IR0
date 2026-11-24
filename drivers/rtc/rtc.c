@@ -22,7 +22,7 @@
 #include <ir0/rtc.h>
 #include <stdint.h>
 
-#include "mmu.h"
+#include <ir0/io.h>
 
 /* RTCDR: seconds counter, loaded by firmware/QEMU with the host time. */
 #define PL031_DR 0x000U
@@ -37,10 +37,10 @@ int rtc_init(void)
 		return 0;
 	if (!info || info->rtc_mmio.size == 0U)
 		return -ENODEV;
-	if (arm64_mmu_map_device_range(info->rtc_mmio.base,
-				       info->rtc_mmio.size) != 0)
+	g_pl031 = ioremap((uintptr_t)info->rtc_mmio.base,
+			  (size_t)info->rtc_mmio.size);
+	if (!g_pl031)
 		return -ENODEV;
-	g_pl031 = (volatile uint32_t *)(uintptr_t)info->rtc_mmio.base;
 	return 0;
 }
 

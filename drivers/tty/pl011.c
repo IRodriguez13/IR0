@@ -15,6 +15,7 @@
 #include "pl011.h"
 
 #include <arm64_board.h>
+#include <ir0/io.h>
 
 #include <stdint.h>
 
@@ -32,9 +33,12 @@ static volatile uint32_t *pl011_reg(uintptr_t off)
 	return (volatile uint32_t *)(g_pl011_base + off);
 }
 
+/* PL011 register window (PrimeCell UART: 4 KiB). */
+#define PL011_MMIO_SIZE 0x1000UL
+
 static void pl011_init_at(uintptr_t base)
 {
-	g_pl011_base = base;
+	g_pl011_base = base ? (uintptr_t)ioremap(base, PL011_MMIO_SIZE) : 0;
 	if (!g_pl011_base)
 	{
 		return;

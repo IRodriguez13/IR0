@@ -44,6 +44,6 @@
  * ir0_boot_firmware_sysfs_fill_from_arch
  *     includes/ir0/boot_firmware_sysfs.h
  *
- * arm64_mmu_map_device_block
- *     arch/arm64/sources/mmu.h
+ * ioremap, ioremap_wc
+ *     includes/ir0/io.h
  */

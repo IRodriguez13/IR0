@@ -7,11 +7,13 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: mmu.c
- * Description: ARM64 boot MMU. Builds the 4-level 48-bit TTBR0 identity map
- *              used before the first process and supplies the supervisor
- *              identity (DRAM + Device blocks) of every user root. User
- *              mappings are owned by the common page-table walker (mm/paging/paging.c)
- *              through the mm_ops descriptor encoders.
+ * Description: ARM64 kernel MMU. The kernel lives in TTBR1 only: the image
+ *              (entry.S), the linear map (mm/paging/direct_map.c) and the
+ *              ioremap window for device registers and framebuffers.
+ *              TTBR0 holds user mappings; before the first process it
+ *              holds the boot identity of DRAM. User mappings are owned by
+ *              the common page-table walker (mm/paging/paging.c) through
+ *              the mm_ops descriptor encoders.
  *
  * Reference: Linux arch/arm64/kernel/head.S (idmap), arch/arm64/mm/proc.S
  * (TCR/MAIR). entry.S turns the MMU on with the image in TTBR1 at
@@ -25,9 +27,8 @@
 #include <arch/common/arch_portable.h>
 #include <arm64_board.h>
 #include <ir0/errno.h>
-#include <ir0/mm_range.h>
+#include <ir0/io.h>
 #include <ir0/page.h>
-#include <ir0/paging.h>
 #include <stdint.h>
 
 #define PAGE_SIZE        4096UL
@@ -52,7 +53,6 @@
 #define ATTR_NORMAL_NC   2
 /* MAIR_EL1 itself is programmed by entry.S (MAIR_INIT). */
 
-#define VIRT_UART_BASE   0x09000000UL
 #define VIRT_DRAM_FALLBACK_BASE 0x40000000UL
 #define VIRT_DRAM_FALLBACK_SIZE 0x40000000UL
 
@@ -60,35 +60,43 @@
 #define L2_INDEX(va)     (((va) >> 21) & 0x1FFUL)
 
 #define MMIO_L2_POOL_MAX 8
-/* L3 tables for framebuffer blocks: 8 x 2 MiB covers a 1920x1080x32 mode. */
-#define FB_L3_POOL_MAX   8
-#define DEVICE_BLOCK_MAX 64
+/* L3 tables for write-combining pages: 8 x 2 MiB covers 1920x1080x32. */
+#define WC_L3_POOL_MAX   8
 
 /*
- * Boot tables. They live in the kernel image and back TTBR0 until the first
- * process root is activated; they never hold EL0 mappings.
+ * ioremap window (TTBR1): one L0 slot, 512 GiB, where the device or
+ * framebuffer at physical address PA is reached at IOREMAP_BASE + PA.
+ */
+#define IOREMAP_BASE     0xfffffc0000000000UL
+#define IOREMAP_SIZE     (1UL << 39)
+#define IOREMAP_L0_INDEX 504U
+
+/*
+ * Boot identity of DRAM: TTBR0 from arm64_mmu_enable() until the first
+ * process root, and for threads without a user address space. It never
+ * holds EL0 mappings.
  */
 static uint64_t g_l0[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t g_l1[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
 static uint64_t g_l2_dram[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
-static uint64_t g_l2_mmio[MMIO_L2_POOL_MAX][PTE_ENTRIES]
+
+/* ioremap window tables; a pool slot is taken when its 1 GiB is first used. */
+static uint64_t g_io_l1[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+static uint64_t g_io_l2[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
-static int g_l2_mmio_l1[MMIO_L2_POOL_MAX];
-static uint64_t g_l3_fb[FB_L3_POOL_MAX][PTE_ENTRIES]
+static uint64_t g_io_l3[WC_L3_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
+static unsigned g_io_l2_used;
+static unsigned g_io_l3_used;
+
 /*
  * TTBR1 root (entry.S): the kernel image at KIMAGE_VADDR from the first
- * instruction with the MMU on, then the linear map of all RAM.
+ * instruction with the MMU on, then the linear map of all RAM and the
+ * ioremap window.
  */
 extern uint64_t swapper_pg_dir[PTE_ENTRIES];
 
 uint64_t kimage_voffset;
-
-/* Every Device block installed so far, replayed into each user root. */
-static uint64_t g_device_blocks[DEVICE_BLOCK_MAX];
-static unsigned g_device_count;
-/* Device count when the first user root was built (-1: none yet). */
-static int g_device_count_at_first_root = -1;
 
 static int g_mmu_on;
 static uint64_t g_dram_base = VIRT_DRAM_FALLBACK_BASE;
@@ -112,11 +120,11 @@ static uint64_t pte_block_dram(uint64_t pa)
 	       PTE_SH_INNER | PTE_AF | PTE_UXN | (pa & PTE_BLOCK_MASK);
 }
 
-static uint64_t pte_page_kernel(uint64_t pa, unsigned attr)
+static uint64_t pte_page_wc(uint64_t pa)
 {
-	/* L3 page descriptor: bits[1:0] = 0b11. */
-	return PTE_TYPE_TABLE | ((uint64_t)attr << PTE_ATTR_SHIFT) |
-	       PTE_SH_INNER | PTE_AF | PTE_UXN | (pa & PTE_ADDR_MASK);
+	/* L3 page descriptor (bits[1:0] = 0b11), Normal non-cacheable. */
+	return PTE_TYPE_TABLE | ((uint64_t)ATTR_NORMAL_NC << PTE_ATTR_SHIFT) |
+	       PTE_SH_INNER | PTE_AF | PTE_UXN | PTE_PXN | (pa & PTE_ADDR_MASK);
 }
 
 static void zero_table(uint64_t *tbl)
@@ -161,146 +169,23 @@ static void select_dram_window(void)
 	g_dram_end = end & ~(BLOCK_2M - 1U);
 }
 
-static uint64_t *mmio_l2_for_l1(uint64_t l1_idx)
-{
-	unsigned i;
-	int free_slot = -1;
-
-	for (i = 0; i < MMIO_L2_POOL_MAX; i++)
-	{
-		if (g_l2_mmio_l1[i] == (int)l1_idx)
-			return g_l2_mmio[i];
-		if (free_slot < 0 && g_l2_mmio_l1[i] < 0)
-			free_slot = (int)i;
-	}
-	if (free_slot < 0)
-		return NULL;
-	g_l2_mmio_l1[free_slot] = (int)l1_idx;
-	zero_table(g_l2_mmio[free_slot]);
-	return g_l2_mmio[free_slot];
-}
-
-static int device_block_recorded(uint64_t block)
-{
-	unsigned i;
-
-	for (i = 0; i < g_device_count; i++)
-		if (g_device_blocks[i] == block)
-			return 1;
-	return 0;
-}
-
-static int install_device_block(uint64_t block)
-{
-	uint64_t l1_idx = L1_INDEX(block);
-	uint64_t *l2;
-	uint64_t l2_pa;
-
-	if (device_block_recorded(block))
-		return 0;
-	if (g_device_count >= DEVICE_BLOCK_MAX)
-		return -ENOSPC;
-
-	/*
-	 * Raspberry boards place peripheral MMIO in the same 1 GiB L1 window as
-	 * RAM. Reuse the DRAM L2 only outside the firmware RAM extent.
-	 */
-	if (l1_idx == L1_INDEX(g_dram_base))
-	{
-		if (block < g_dram_end && block + BLOCK_2M > g_dram_base)
-			return -EINVAL;
-		l2 = g_l2_dram;
-	}
-	else
-		l2 = mmio_l2_for_l1(l1_idx);
-	if (!l2)
-		return -ENOSPC;
-	l2_pa = virt_to_phys(l2);
-	if (g_l1[l1_idx] != 0U &&
-	    ((g_l1[l1_idx] & PTE_TYPE_TABLE) != PTE_TYPE_TABLE ||
-	     (g_l1[l1_idx] & PTE_ADDR_MASK) != (l2_pa & PTE_ADDR_MASK)))
-		return -EINVAL;
-	g_l1[l1_idx] = pte_table(l2_pa);
-	l2[L2_INDEX(block)] = pte_block_device(block);
-	g_device_blocks[g_device_count++] = block;
-	return 0;
-}
-
-/*
- * The firmware framebuffer is scanout memory: map its pages Normal
- * non-cacheable (write-combining) before anything draws. Inside the DRAM
- * window the 2 MiB blocks it touches become static L3 tables, so the rest of
- * each block keeps the cacheable type and nothing needs the PMM this early.
- * A framebuffer outside DRAM is MMIO and gets Device blocks.
- */
-static void map_framebuffer(const struct arm64_board_boot_info *boot)
-{
-	uint64_t base;
-	uint64_t end;
-	uint64_t block;
-	unsigned used = 0;
-	unsigned i;
-
-	if (!boot || boot->framebuffer.size == 0U)
-		return;
-	base = boot->framebuffer.base & ~(PAGE_SIZE - 1U);
-	end = boot->framebuffer.base + boot->framebuffer.size;
-	if (end < base || end > UINT64_MAX - (PAGE_SIZE - 1U))
-		return;
-	end = (end + PAGE_SIZE - 1U) & ~(PAGE_SIZE - 1U);
-	if (base < g_dram_base || end > g_dram_end)
-	{
-		for (block = base & ~(BLOCK_2M - 1U); block < end; block += BLOCK_2M)
-			if (install_device_block(block) != 0)
-				return;
-		return;
-	}
-	for (block = base & ~(BLOCK_2M - 1U); block < end && used < FB_L3_POOL_MAX;
-	     block += BLOCK_2M)
-	{
-		uint64_t *l3 = g_l3_fb[used++];
-
-		for (i = 0; i < PTE_ENTRIES; i++)
-		{
-			uint64_t pa = block + (uint64_t)i * PAGE_SIZE;
-
-			l3[i] = pte_page_kernel(pa, (pa >= base && pa < end) ?
-						    ATTR_NORMAL_NC : ATTR_NORMAL);
-		}
-		g_l2_dram[L2_INDEX(block)] = pte_table(virt_to_phys(l3));
-	}
-}
-
 static void build_idmap(void)
 {
-	const struct arm64_board_boot_info *boot = arm64_board_boot_info();
-	uint64_t uart_block = VIRT_UART_BASE & ~(BLOCK_2M - 1U);
 	uint64_t block;
-	unsigned i;
 
 	zero_table(g_l0);
 	zero_table(g_l1);
 	zero_table(g_l2_dram);
-	for (i = 0; i < MMIO_L2_POOL_MAX; i++)
-		g_l2_mmio_l1[i] = -1;
-	g_device_count = 0;
-
 	select_dram_window();
-	if (boot && boot->fdt_valid && boot->console_uart == ARM64_UART_PL011 &&
-	    boot->console_mmio.size != 0U)
-		uart_block = boot->console_mmio.base & ~(BLOCK_2M - 1U);
-
 	for (block = g_dram_base; block < g_dram_end; block += BLOCK_2M)
 		g_l2_dram[L2_INDEX(block)] = pte_block_dram(block);
 	g_l1[L1_INDEX(g_dram_base)] = pte_table(virt_to_phys(g_l2_dram));
 	g_l0[0] = pte_table(virt_to_phys(g_l1));
-	(void)install_device_block(uart_block);
-	map_framebuffer(boot);
 }
 
 /*
  * entry.S already enabled the MMU (MAIR, TCR, both TTBRs, SCTLR). Replace
- * its Device-only boot identity with the DRAM + Device identity map.
+ * its Device-only boot identity with the DRAM identity map.
  */
 static void mmu_install_idmap(uint64_t ttbr0)
 {
@@ -360,106 +245,111 @@ uintptr_t arm64_mmu_kernel_root(void)
 	return virt_to_phys(g_l0);
 }
 
-int arm64_mmu_map_device_block(uint64_t pa)
+/* ioremap tables are image statics: reach a descriptor's table there. */
+static uint64_t *kimage_table(uint64_t desc)
 {
-	int ret;
-
-	if (!g_mmu_on)
-		return -ENODEV;
-	ret = install_device_block(pa & ~(BLOCK_2M - 1U));
-	if (ret == 0)
-		tlb_flush_all();
-	return ret;
+	return (uint64_t *)(uintptr_t)((desc & PTE_ADDR_MASK) + kimage_voffset);
 }
 
-int arm64_mmu_map_device_range(uint64_t pa, uint64_t size)
+/* L2 table of the ioremap window that covers @pa, created on first use. */
+static uint64_t *io_l2_for(uint64_t pa)
+{
+	uint64_t idx = L1_INDEX(pa);
+	uint64_t *l2;
+
+	if (swapper_pg_dir[IOREMAP_L0_INDEX] == 0U)
+		swapper_pg_dir[IOREMAP_L0_INDEX] = pte_table(virt_to_phys(g_io_l1));
+	if (g_io_l1[idx] != 0U)
+		return kimage_table(g_io_l1[idx]);
+	if (g_io_l2_used >= MMIO_L2_POOL_MAX)
+		return NULL;
+	l2 = g_io_l2[g_io_l2_used++];
+	zero_table(l2);
+	g_io_l1[idx] = pte_table(virt_to_phys(l2));
+	return l2;
+}
+
+static int io_range_ok(uintptr_t pa, size_t size)
+{
+	if (size == 0U || pa + size - 1U < pa)
+		return 0;
+	return pa + size - 1U < IOREMAP_SIZE;
+}
+
+static void io_publish(void)
+{
+	/* New entries replace invalid ones: no stale TLB entry can exist. */
+	__asm__ volatile("dsb ishst" ::: "memory");
+	__asm__ volatile("isb" ::: "memory");
+}
+
+/*
+ * Device-nGnRnE 2 MiB blocks over [pa, pa + size). Asking again for a
+ * range already mapped returns the same address.
+ */
+void *ioremap(uintptr_t pa, size_t size)
 {
 	uint64_t block;
 	uint64_t last;
-	int ret;
 
-	if (!g_mmu_on)
-		return -ENODEV;
-	if (size == 0U || pa + size - 1U < pa)
-		return -EINVAL;
+	if (!io_range_ok(pa, size))
+		return NULL;
 	block = pa & ~(BLOCK_2M - 1U);
 	last = (pa + size - 1U) & ~(BLOCK_2M - 1U);
 	for (;;)
 	{
-		ret = install_device_block(block);
-		if (ret != 0)
-			return ret;
+		uint64_t *l2 = io_l2_for(block);
+		uint64_t *slot;
+
+		if (!l2)
+			return NULL;
+		slot = &l2[L2_INDEX(block)];
+		if (*slot == 0U)
+			*slot = pte_block_device(block);
+		else if (*slot != pte_block_device(block))
+			return NULL;
 		if (block == last)
 			break;
 		block += BLOCK_2M;
 	}
-	tlb_flush_all();
-	return 0;
-}
-
-static int map_device_blocks(address_space_root_t root, unsigned first)
-{
-	unsigned i;
-
-	for (i = first; i < g_device_count; i++)
-	{
-		if (map_supervisor_device_2mb(root, g_device_blocks[i],
-					      g_device_blocks[i] + BLOCK_2M) != 0)
-			return -ENOMEM;
-	}
-	return 0;
+	io_publish();
+	return (void *)(IOREMAP_BASE + pa);
 }
 
 /*
- * The kernel image and heap stay identity-mapped in TTBR0. The rest of DRAM
- * is reached through the TTBR1 direct map, so user mmap can use those
- * addresses.
+ * Normal non-cacheable 4 KiB pages over [pa, pa + size): scanout memory,
+ * which the display reads behind the CPU caches.
  */
-static uint64_t supervisor_ram_end(void)
+void *ioremap_wc(uintptr_t pa, size_t size)
 {
+	uint64_t page;
 	uint64_t end;
 
-	end = (uint64_t)virt_to_phys((void *)mm_kernel_heap_start()) +
-	      mm_kernel_heap_size();
-	if (end < g_dram_base)
-		end = g_dram_base;
-	if (end > g_dram_end)
-		end = g_dram_end;
-	return end;
-}
-
-int arm64_mmu_map_supervisor(address_space_root_t root)
-{
-	if (!root || !g_mmu_on)
-		return -EINVAL;
-	if (g_device_count_at_first_root < 0)
-		g_device_count_at_first_root = (int)g_device_count;
-	if (map_supervisor_identity_2mb(root, g_dram_base, supervisor_ram_end()) != 0)
-		return -ENOMEM;
-	return map_device_blocks(root, 0);
-}
-
-int arm64_mmu_supervisor_overlaps(uintptr_t va, size_t size)
-{
-	unsigned i;
-	uint64_t ram_end;
-
-	ram_end = supervisor_ram_end();
-	if (mm_range_overlaps(va, size, g_dram_base, ram_end - g_dram_base))
-		return 1;
-	for (i = 0; i < g_device_count; i++)
+	if (!io_range_ok(pa, size))
+		return NULL;
+	end = (pa + size + PAGE_SIZE - 1U) & ~(PAGE_SIZE - 1U);
+	for (page = pa & ~(PAGE_SIZE - 1U); page < end; page += PAGE_SIZE)
 	{
-		if (mm_range_overlaps(va, size, g_device_blocks[i], BLOCK_2M))
-			return 1;
-	}
-	return 0;
-}
+		uint64_t *l2 = io_l2_for(page);
+		uint64_t *l3;
+		uint64_t *slot;
 
-int arm64_mmu_sync_supervisor(address_space_root_t root)
-{
-	/* Common case: no Device block appeared after the first user root. */
-	if (!root || g_device_count_at_first_root < 0 ||
-	    g_device_count == (unsigned)g_device_count_at_first_root)
-		return 0;
-	return map_device_blocks(root, (unsigned)g_device_count_at_first_root);
+		if (!l2)
+			return NULL;
+		slot = &l2[L2_INDEX(page)];
+		if (*slot == 0U)
+		{
+			if (g_io_l3_used >= WC_L3_POOL_MAX)
+				return NULL;
+			l3 = g_io_l3[g_io_l3_used++];
+			zero_table(l3);
+			*slot = pte_table(virt_to_phys(l3));
+		}
+		else if ((*slot & PTE_TYPE_TABLE) != PTE_TYPE_TABLE)
+			return NULL;
+		l3 = kimage_table(*slot);
+		l3[(page >> 12) & 0x1FFUL] = pte_page_wc(page);
+	}
+	io_publish();
+	return (void *)(IOREMAP_BASE + pa);
 }

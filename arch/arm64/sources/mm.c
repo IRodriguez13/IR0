@@ -26,12 +26,9 @@
 #include <ir0/page.h>
 #include <ir0/pmm.h>
 #include <ir0/paging.h>
-#include <ir0/video_backend.h>
 #include <string.h>
 
 #include "mmu.h"
-
-static int mm_map_platform_supervisor(address_space_root_t root);
 
 uintptr_t mm_kernel_heap_start(void)
 {
@@ -82,20 +79,14 @@ void mm_copy_kernel_half(uint64_t *dst_root, const uint64_t *src_root)
 {
 	(void)dst_root;
 	(void)src_root;
-	/* No shared kernel half: the supervisor identity is per root (mmu.c). */
+	/* The kernel half is TTBR1 (swapper_pg_dir), shared by every root. */
 }
 
-/*
- * Every root identity-maps all of DRAM (kernel image, heap, page tables and
- * other PMM frames) and the Device blocks: a user page over any of them
- * would hide kernel memory from the kernel itself while that root runs.
- */
+/* TTBR0 holds nothing but user mappings: the whole lower half is usable. */
 int mm_user_range_mappable(uintptr_t addr, size_t size)
 {
-	if (!mm_user_range_ok(addr, size, mm_user_va_start(),
-			      mm_user_va_end()))
-		return 0;
-	return !arm64_mmu_supervisor_overlaps(addr, size);
+	return mm_user_range_ok(addr, size, mm_user_va_start(),
+				mm_user_va_end());
 }
 
 address_space_root_t mm_create_user_root(void)
@@ -111,15 +102,6 @@ address_space_root_t mm_create_user_root(void)
 	}
 	root = phys_to_virt(root_phys);
 	memset(root, 0, PAGE_SIZE_4KB);
-
-	if (arm64_mmu_map_supervisor(root) != 0 ||
-	    mm_map_platform_supervisor(root) != 0)
-	{
-		paging_reclaim_user_tables(root);
-		page_table_frame_free(root_phys);
-		return NULL;
-	}
-
 	paging_ir0_mm_note_root_created(root_phys);
 	return root;
 }
@@ -135,19 +117,6 @@ void mm_destroy_user_root(address_space_root_t root)
 
 void mm_prepare_root_activation(address_space_root_t root)
 {
-	if (root && virt_to_phys(root) != arm64_mmu_kernel_root())
-		(void)arm64_mmu_sync_supervisor(root);
+	/* Nothing to sync: kernel mappings live only in TTBR1. */
+	(void)root;
 }
-
-/*
- * MMIO device blocks are part of arm64_mmu_map_supervisor(); the
- * framebuffer needs its own write-combining pages, which a cacheable
- * DRAM block of the supervisor identity map would otherwise cover.
- */
-static int mm_map_platform_supervisor(address_space_root_t root)
-{
-	if (video_backend_map_supervisor(root) != 0)
-		return -ENOMEM;
-	return 0;
-}
-

@@ -243,8 +243,9 @@ static void unmap_supervisor_range(void)
 }
 
 /*
- * The kernel pages IR0 maps into every process root (arm64: the
- * identity-mapped heap at 0x40800000; x86_64: 0x500000) are not user VMAs:
+ * The kernel pages IR0 maps into every process root (x86_64: 0x500000;
+ * arm64 had its heap there at 0x40800000 until the kernel moved to TTBR1
+ * and these became plain user addresses) are not user VMAs:
  * mmap(2) MAP_FIXED over them must leave the kernel running. On Linux the
  * range is plain user address space. The IR0 arm64 guest used to hang.
  */
