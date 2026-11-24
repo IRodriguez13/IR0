@@ -21,8 +21,8 @@
 
 /*
  * All of RAM is mapped once, at PAGE_OFFSET, in the kernel half shared by
- * every address space. The kernel image and its heap stay identity mapped
- * low until the kernel image itself moves to the higher half.
+ * every address space. Where the kernel image and its heap live is the
+ * ISA's business: <asm/page.h> supplies __virt_to_phys() for them.
  */
 #define PAGE_OFFSET IR0_ARCH_PAGE_OFFSET
 
@@ -33,15 +33,11 @@ static inline void *phys_to_virt(uintptr_t phys)
 }
 
 /*
- * Physical address behind a direct-map pointer (kernel half), or behind a
- * kernel image or heap pointer, which sit in the low identity map. Not for
- * kernel stacks or other kernel-half mappings outside the direct map.
+ * Physical address behind a direct-map pointer or a kernel image or heap
+ * pointer. Not for kernel stacks or other kernel-half mappings outside the
+ * direct map.
  */
 static inline uintptr_t virt_to_phys(const volatile void *addr)
 {
-	uintptr_t va = (uintptr_t)addr;
-
-	if ((intptr_t)va < 0)
-		return va - PAGE_OFFSET;
-	return va;
+	return __virt_to_phys((uintptr_t)addr);
 }
