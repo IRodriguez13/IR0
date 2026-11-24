@@ -32,6 +32,7 @@
 #include <ir0/signals.h>
 #include <ir0/ktm/user_canary.h>
 #include <ir0/paging.h>
+#include <ir0/mm.h>
 #include <ir0/tls.h>
 #include <ir0/fpu.h>
 #include <ir0/context.h>
@@ -365,6 +366,18 @@ fail:
     exec_release_string_vector(nv);
     kfree(nv);
     return NULL;
+}
+
+/* Load bias of the program image: ET_DYN (PIE) at ELF_ET_DYN_BASE. */
+static uint64_t elf_main_bias(const elf64_header_t *header)
+{
+    return header->e_type == ET_DYN ? IR0_ELF_ET_DYN_BASE : 0;
+}
+
+/* First instruction of the program image, AT_ENTRY. */
+static uint64_t elf_main_entry(const elf64_header_t *header)
+{
+    return header->e_entry + elf_main_bias(header);
 }
 
 static uint64_t elf_compute_load_base(const elf64_header_t *header, const uint8_t *file_data)
@@ -820,7 +833,24 @@ static int elf_try_load_interp(process_t *process, const char *path,
     }
 
     ih = (elf64_header_t *)idata;
-    load_bias = (ih->e_type == ET_DYN) ? IR0_ELF_INTERP_BASE : 0ULL;
+    min_vaddr = elf_compute_load_base(ih, (uint8_t *)idata);
+    load_bias = 0;
+    if (ih->e_type == ET_DYN)
+    {
+        /* Linux load_elf_interp(): the interpreter goes where mmap(NULL) would. */
+        uint64_t first = min_vaddr & ~0xFFFULL;
+        uint64_t end = elf_compute_initial_brk(ih, (uint8_t *)idata);
+        uintptr_t va = end > first ?
+            mm_pick_free_va_topdown(process, process_pgd(process),
+                                    (size_t)(end - first)) : 0;
+
+        if (!va)
+        {
+            kfree(idata);
+            return -ENOEXEC;
+        }
+        load_bias = (uint64_t)va - first;
+    }
     memset(plan, 0, sizeof(*plan));
     plan->root = process_pgd(process);
     if (elf_load_segments(ih, (uint8_t *)idata, isize, process, load_bias, 0,
@@ -830,7 +860,6 @@ static int elf_try_load_interp(process_t *process, const char *path,
         return -ENOEXEC;
     }
 
-    min_vaddr = elf_compute_load_base(ih, (uint8_t *)idata);
     (void)ir0_elf64_interp_at_base(min_vaddr, load_bias, at_base);
     (void)ir0_elf64_interp_entry(ih->e_type, ih->e_entry, load_bias, interp_entry);
     klog_debug_fmt("ELF", "SERIAL: ELF: PT_INTERP loaded %s at_base=0x%x entry=0x%x\n",
@@ -893,14 +922,15 @@ static int elf_load_image_and_interp(elf64_header_t *header, uint8_t *file_data,
     if (pr < 0)
         return -1;
 
-    *user_ip = header->e_entry;
+    *user_ip = elf_main_entry(header);
     if (pr == 0)
         have_interp_file = 1;
 
     memset(&main_plan, 0, sizeof(main_plan));
     main_plan.root = process_pgd(process);
-    if (elf_load_segments(header, file_data, file_size, process, 0,
-                          have_interp_file ? 0 : 1, &main_plan) != 0)
+    if (elf_load_segments(header, file_data, file_size, process,
+                          elf_main_bias(header), have_interp_file ? 0 : 1,
+                          &main_plan) != 0)
         return -1;
 
     if (!have_interp_file)
@@ -978,7 +1008,7 @@ static process_t *elf_create_process(elf64_header_t *header, const char *path)
     /* We just need to set the entry point (will be done after loading segments) */
     
     /* Set entry point (will be adjusted after segments are loaded) */
-    task_set_ip(&process->task, header->e_entry);
+    task_set_ip(&process->task, elf_main_entry(header));
     task_set_user_segments(&process->task);
 
     /* Stack window is USER_STACK_TOP (spawn_user / process_set_stack_layout). */
@@ -1490,9 +1520,11 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     }
 
     /* Step 4: Load segments (+ PT_INTERP when the interpreter file exists) */
-    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
-    at_base = elf_compute_load_base(header, (uint8_t *)file_data);
-    user_ip = header->e_entry;
+    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data) +
+              elf_main_bias(header);
+    at_base = elf_compute_load_base(header, (uint8_t *)file_data) +
+              elf_main_bias(header);
+    user_ip = elf_main_entry(header);
     load_rc = elf_load_image_and_interp(header, (uint8_t *)file_data, file_size,
                                         process, &at_base, &user_ip);
     if (load_rc != 0)
@@ -1511,7 +1543,7 @@ static int kexecve_depth(const char *path, char *const argv[], char *const envp[
     }
 
     /* AT_ENTRY is the main e_entry; RIP becomes interp after auxv is written. */
-    task_set_ip(&process->task, header->e_entry);
+    task_set_ip(&process->task, elf_main_entry(header));
 
     /* Step 5: Set up stack with argc/argv/envp */
     if (elf_setup_stack(process, argv, envp, header, at_phdr, at_base,
@@ -1979,8 +2011,10 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
             return -ENOENT;
         }
     }
-    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data);
-    at_base = elf_compute_load_base(header, (uint8_t *)file_data);
+    at_phdr = elf_compute_at_phdr(header, (uint8_t *)file_data) +
+              elf_main_bias(header);
+    at_base = elf_compute_load_base(header, (uint8_t *)file_data) +
+              elf_main_bias(header);
 
     /* Decided on the old image; committed below, past the point of no return. */
     exec_setid_collect(proc, path, &setid);
@@ -2073,7 +2107,7 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
         exec_fail_kill(proc, 127, "map_stack_fail");
     }
 
-    user_ip = header->e_entry;
+    user_ip = elf_main_entry(header);
     if (elf_load_image_and_interp(header, (uint8_t *)file_data, file_size, proc,
                                  &at_base, &user_ip) != 0)
     {
@@ -2083,6 +2117,9 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
 
     {
 	uint64_t brk0 = elf_compute_initial_brk(header, (uint8_t *)file_data);
+
+	if (brk0 != 0)
+		brk0 += elf_main_bias(header);
 
 	if (brk0 != 0)
 	{
@@ -2099,8 +2136,8 @@ static int exec_replace_current_depth(const char *path, char *const argv[],
     strncpy(proc->exe_path, path, sizeof(proc->exe_path) - 1);
     proc->exe_path[sizeof(proc->exe_path) - 1] = '\0';
 
-    task_set_ip(&proc->task, header->e_entry);
-    exec_commit_ctx.entry_ip = header->e_entry;
+    task_set_ip(&proc->task, elf_main_entry(header));
+    exec_commit_ctx.entry_ip = elf_main_entry(header);
     task_set_user_segments(&proc->task);
     task_set_flags(&proc->task, task_initial_user_status());
 

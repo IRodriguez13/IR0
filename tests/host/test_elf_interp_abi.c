@@ -17,6 +17,9 @@
 #include <stdint.h>
 #include <string.h>
 
+/* Any page-aligned load bias the kernel may pick for an ET_DYN interpreter. */
+#define INTERP_BIAS 0x7f000000ULL
+
 void test_elf_interp_abi(void)
 {
 	uint64_t out = 0;
@@ -26,14 +29,14 @@ void test_elf_interp_abi(void)
 
 	TEST_BEGIN("elf_interp_abi");
 
-	ASSERT_EQ(ir0_elf64_interp_entry(3, 0x7bf0eULL, IR0_ELF_INTERP_BASE, &out), 0);
-	ASSERT_EQ(out, IR0_ELF_INTERP_BASE + 0x7bf0eULL);
+	ASSERT_EQ(ir0_elf64_interp_entry(3, 0x7bf0eULL, INTERP_BIAS, &out), 0);
+	ASSERT_EQ(out, INTERP_BIAS + 0x7bf0eULL);
 
-	ASSERT_EQ(ir0_elf64_interp_entry(2, 0x401000ULL, IR0_ELF_INTERP_BASE, &out), 0);
+	ASSERT_EQ(ir0_elf64_interp_entry(2, 0x401000ULL, INTERP_BIAS, &out), 0);
 	ASSERT_EQ(out, 0x401000ULL);
 
-	ASSERT_EQ(ir0_elf64_interp_at_base(0, IR0_ELF_INTERP_BASE, &out), 0);
-	ASSERT_EQ(out, IR0_ELF_INTERP_BASE);
+	ASSERT_EQ(ir0_elf64_interp_at_base(0, INTERP_BIAS, &out), 0);
+	ASSERT_EQ(out, INTERP_BIAS);
 
 	memset(img, 0, sizeof(img));
 	img[0] = 0x7f;

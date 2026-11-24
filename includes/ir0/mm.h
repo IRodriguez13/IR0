@@ -51,3 +51,13 @@ void mm_copy_kernel_half(address_space_root_t dst_root,
  * mprotect(2) use this; a user pointer is checked with access_ok().
  */
 int mm_user_range_mappable(uintptr_t addr, size_t size);
+
+struct process;
+
+/*
+ * Linux get_unmapped_area(): top-down placement of @length bytes for
+ * mmap(NULL), non-fixed hints and the ELF interpreter. 0 when nothing
+ * fits. Updates process_mmap_base(proc) to the chosen start.
+ */
+uintptr_t mm_pick_free_va_topdown(struct process *proc,
+				  address_space_root_t root, size_t length);

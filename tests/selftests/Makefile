@@ -1005,6 +1005,52 @@ $(SHM_RDONLY_BIN): $(SHM_RDONLY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@test -x $@
 
 # ELF-INTERP-SELFTEST
+# DYN-HELLO-SELFTEST
+# The first dynamically linked program: musl ld.so, libc.so and a small
+# libdynhello.so, which the static dyn_hello_stage (PID 1) copies into a
+# tmpfs /lib before it execs the program.
+DYN_HELLO_STAGE_SRC := syscall/dyn_hello_stage.c
+DYN_HELLO_STAGE_BIN := $(BUILD_DIR)/dyn_hello_stage
+DYN_HELLO_SRC := syscall/dyn_hello.c
+DYN_HELLO_LIB_SRC := syscall/dyn_hello_lib.c
+DYN_HELLO_BIN := $(BUILD_DIR)/dyn_hello
+DYN_HELLO_LIB := $(BUILD_DIR)/libdynhello.so
+ifeq ($(ARCH),arm64)
+DYN_CC := $(ARM64_CC)
+DYN_LDSO_NAME := ld-musl-aarch64.so.1
+DYN_LDSO_SRC := $(dir $(ARM64_CC))../aarch64-linux-musl/lib/libc.so
+else
+DYN_CC ?= musl-gcc
+DYN_LDSO_NAME := ld-musl-x86_64.so.1
+DYN_LDSO_SRC := $(X86_MUSL_LIB)/libc.so
+endif
+DYN_LDSO := $(BUILD_DIR)/$(DYN_LDSO_NAME)
+
+.PHONY: dyn_hello
+
+dyn_hello: $(DYN_HELLO_STAGE_BIN) $(DYN_HELLO_BIN) $(DYN_HELLO_LIB) $(DYN_LDSO)
+
+$(DYN_HELLO_STAGE_BIN): $(DYN_HELLO_STAGE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest dyn_hello_stage"
+	@$(CC) $(CFLAGS) -o $@ $(DYN_HELLO_STAGE_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+
+$(DYN_HELLO_LIB): $(DYN_HELLO_LIB_SRC) | $(BUILD_DIR)
+	@echo "  CC      $(ARCH) selftest libdynhello.so"
+	@$(DYN_CC) -shared -fPIC -Os -o $@ $(DYN_HELLO_LIB_SRC)
+
+$(DYN_HELLO_BIN): $(DYN_HELLO_SRC) $(DYN_HELLO_LIB) ir0/ksft.h | $(BUILD_DIR)
+	@echo "  CC      $(ARCH) selftest dyn_hello"
+	@$(DYN_CC) -Os $(KSFT_INC) -o $@ $(DYN_HELLO_SRC) -L$(BUILD_DIR) -ldynhello
+	@file -L $@ | grep -q 'interpreter /lib/$(DYN_LDSO_NAME)'
+
+$(DYN_LDSO): $(DYN_LDSO_SRC) | $(BUILD_DIR)
+	@cp -L $(DYN_LDSO_SRC) $@
+
 ELF_INTERP_SRC := syscall/elf_interp.c
 ELF_INTERP_BIN := $(BUILD_DIR)/elf_interp
 

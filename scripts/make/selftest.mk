@@ -1916,6 +1916,44 @@ ir0-selftest-elf-interp-arm64: kernel-arm64-product.bin $(IR0_SELFTEST_ARM64_ELF
 
 ir0-selftest-elf-interp: ir0-selftest-elf-interp-x86 ir0-selftest-elf-interp-arm64
 
+# DYN-HELLO-SELFTEST
+# The first dynamically linked program (tests/selftests/syscall/dyn_hello.c):
+# execve loads PT_INTERP /lib/ld-musl-<arch>.so.1, which maps libc and
+# /lib/libdynhello.so MAP_PRIVATE and runs their constructors. MINIX v1
+# names stop at 14 characters: the static dyn_hello_stage (PID 1) copies
+# the files from /dyn into a tmpfs /lib first.
+IR0_DYN_HELLO_X86 := $(KERNEL_ROOT)/build/selftests/x86_64
+IR0_DYN_HELLO_ARM64 := $(KERNEL_ROOT)/build/selftests/arm64
+
+.PHONY: ir0-selftest-dyn-hello-x86 ir0-selftest-dyn-hello-arm64 \
+	ir0-selftest-dyn-hello
+
+ir0-selftest-dyn-hello-x86: kernel-x64-userspace.iso
+	@$(MAKE) -C tests/selftests ARCH=x86_64 dyn_hello
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch x86_64 \
+		--binary $(IR0_DYN_HELLO_X86)/dyn_hello_stage \
+		--extra $(IR0_DYN_HELLO_X86)/dyn_hello:dyn/hello \
+		--extra $(IR0_DYN_HELLO_X86)/ld-musl-x86_64.so.1:dyn/ldso \
+		--extra $(IR0_DYN_HELLO_X86)/libdynhello.so:dyn/libdynhello.so \
+		--done "ok 3 dynamic_hello" \
+		--log $(HOST_TMP)/ir0-selftest-x86-dyn-hello.log
+	@echo "✓ ir0-selftest-dyn-hello-x86"
+
+ir0-selftest-dyn-hello-arm64: kernel-arm64-product.bin
+	@$(MAKE) -C tests/selftests ARCH=arm64 dyn_hello
+	@python3 $(KERNEL_ROOT)/scripts/ir0_selftest_run.py \
+		--arch arm64 \
+		--binary $(IR0_DYN_HELLO_ARM64)/dyn_hello_stage \
+		--extra $(IR0_DYN_HELLO_ARM64)/dyn_hello:dyn/hello \
+		--extra $(IR0_DYN_HELLO_ARM64)/ld-musl-aarch64.so.1:dyn/ldso \
+		--extra $(IR0_DYN_HELLO_ARM64)/libdynhello.so:dyn/libdynhello.so \
+		--done "ok 3 dynamic_hello" \
+		--log $(HOST_TMP)/ir0-selftest-arm64-dyn-hello.log
+	@echo "✓ ir0-selftest-dyn-hello-arm64"
+
+ir0-selftest-dyn-hello: ir0-selftest-dyn-hello-x86 ir0-selftest-dyn-hello-arm64
+
 # EXEC-SIGMASK-SELFTEST
 IR0_SELFTEST_X86_EXEC_SIGMASK := $(KERNEL_ROOT)/build/selftests/x86_64/exec_sigmask
 IR0_SELFTEST_ARM64_EXEC_SIGMASK := $(KERNEL_ROOT)/build/selftests/arm64/exec_sigmask

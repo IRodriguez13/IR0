@@ -217,7 +217,7 @@ fs/9p/hostshare_9p.c	g_mount_point	17
 fs/9p/hostshare_9p.c	g_mounted	18
 fs/9p/hostshare_9p.c	hs_ops	280
 fs/9p/hostshare_9p.c	v9fs_fs_type	347
-fs/binfmt_elf.c	exec_commit_ctx	1556
+fs/binfmt_elf.c	exec_commit_ctx	1588
 fs/devfs.c	dev_nodes	56
 fs/devfs.c	num_dev_nodes	57
 fs/devfs.c	dev_net	98
