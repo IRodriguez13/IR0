@@ -122,6 +122,12 @@ static const struct sysfs_spec sysfs_static[] = {
     { "console/mode", SYS_RO, (uintptr_t)sys_console_mode_read_reg },
     { "class/net", SYS_RO, (uintptr_t)sys_class_net_list_read_reg },
     { "devices/system/cpu", SYS_RO, (uintptr_t)sys_devices_cpus_read_reg },
+    { "devices/system/cpu/online", SYS_RO,
+      (uintptr_t)sys_devices_cpu_online_list_read_reg },
+    { "devices/system/cpu/possible", SYS_RO,
+      (uintptr_t)sys_devices_cpu_possible_list_read_reg },
+    { "devices/system/cpu/present", SYS_RO,
+      (uintptr_t)sys_devices_cpu_present_list_read_reg },
 };
 
 #define SYS_STATIC_COUNT (sizeof(sysfs_static) / sizeof(sysfs_static[0]))
@@ -138,9 +144,7 @@ static void sysfs_ensure_nodes(void)
 
     if (g_nodes_ready)
         return;
-    cpus = get_cpu_count();
-    if (cpus == 0)
-        cpus = 1;
+    cpus = sys_devices_cpu_count();
     if (cpus > SYS_CPU_MAX)
         cpus = SYS_CPU_MAX;
     g_cpu_node_count = 0;
