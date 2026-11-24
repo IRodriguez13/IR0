@@ -12,3 +12,9 @@
  * half is user address space.
  */
 #define IR0_ARCH_USER_STACK_TOP 0x0000FFFFFFFFF000UL
+
+/*
+ * A TTBR1 address never mapped (test faults): between the linear map
+ * (0xffff000000000000) and the image (KIMAGE_VADDR, 0xffff800000000000).
+ */
+#define IR0_ARCH_UNMAPPED_KERNEL_VA 0xFFFF700000000000ULL
