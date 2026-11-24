@@ -80,6 +80,7 @@ void ktest_devfs_disk_ioctl_bounds_contract(void);
 void ktest_cred_access_contract(void);
 void ktest_devfs_hci_open_contract(void);
 void ktest_mmap_null_placement(void);
+void ktest_mmap_place_skips_blockers(void);
 void ktest_usercopy_explicit_mm_range_contract(void);
 void ktest_munmap_partial_preserves_vma(void);
 void ktest_mmap_fixed_partial_overlap_preserves_vma(void);

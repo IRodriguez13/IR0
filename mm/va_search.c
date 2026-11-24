@@ -18,20 +18,55 @@
 #include <ir0/paging.h>
 #include <ir0/process.h>
 
-static bool mm_va_range_all_unmapped(address_space_root_t root, uintptr_t start,
-				     size_t length)
+/*
+ * Lowest mapped page in [start, start + length), or 0 when there is none:
+ * every window that still contains it is skipped in one step.
+ */
+static uintptr_t mm_va_range_lowest_mapped(address_space_root_t root,
+					   uintptr_t start, size_t length)
 {
 	uintptr_t check;
-
-	if (!root || length == 0)
-		return false;
 
 	for (check = start; check < start + length; check += PAGE_SIZE_4KB)
 	{
 		if (is_page_mapped_in_directory(root, check, NULL) == 1)
-			return false;
+			return check;
 	}
-	return true;
+	return 0;
+}
+
+/* Lowest start of a range [base, base + size) that overlaps the window. */
+static void mm_va_note_blocker(uintptr_t *low, uintptr_t start, size_t length,
+			       uintptr_t base, size_t size)
+{
+	if (size && base < start + length && start < base + size &&
+	    (*low == 0 || base < *low))
+		*low = base;
+}
+
+/*
+ * Lowest start of the heap, stack or VMA overlapping [start, start +
+ * length), or 0 when none does (the ranges process_user_va_range_overlaps()
+ * checks).
+ */
+static uintptr_t mm_va_range_lowest_region(process_t *proc, uintptr_t start,
+					   size_t length)
+{
+	struct mmap_region *r;
+	uintptr_t low = 0;
+
+	if (process_heap_end(proc) > process_heap_start(proc))
+		mm_va_note_blocker(&low, start, length,
+				   (uintptr_t)process_heap_start(proc),
+				   (size_t)(process_heap_end(proc) -
+					    process_heap_start(proc)));
+	mm_va_note_blocker(&low, start, length,
+			   (uintptr_t)process_stack_start(proc),
+			   (size_t)process_stack_size(proc));
+	for (r = process_mmap_list(proc); r; r = r->next)
+		mm_va_note_blocker(&low, start, length, (uintptr_t)r->addr,
+				   r->length);
+	return low;
 }
 
 static uintptr_t mm_mmap_search_low(process_t *proc)
@@ -91,20 +126,34 @@ uintptr_t mm_pick_free_va_topdown(process_t *proc, address_space_root_t root,
 		top = (uintptr_t)process_mmap_base(proc);
 		if (top == 0 || top > search_end)
 			top = search_end;
-		for (start = top - length; start >= search_low; start -= PAGE_SIZE_4KB)
+		/*
+		 * Linux vm_unmapped_area() top-down: a window that hits a
+		 * mapping moves to end at that mapping's lowest start, so the
+		 * search takes one step per mapping in the way.
+		 */
+		start = (top - length) & ~(uintptr_t)(PAGE_SIZE_4KB - 1);
+		while (start >= search_low)
 		{
-			start &= ~(PAGE_SIZE_4KB - 1);
-			if (start < search_low)
-				break;
-			if (!ir0_mmap_respects_stack_gap(start, length, stack_ref))
-				continue;
-			if (process_user_va_range_overlaps(proc, start, length))
-				continue;
-			if (!mm_va_range_all_unmapped(root, start, length))
-				continue;
+			uintptr_t low;
 
-			process_set_mmap_base(proc, start);
-			return start;
+			if (!ir0_mmap_respects_stack_gap(start, length, stack_ref))
+			{
+				if (start < search_low + PAGE_SIZE_4KB)
+					break;
+				start -= PAGE_SIZE_4KB;
+				continue;
+			}
+			low = mm_va_range_lowest_region(proc, start, length);
+			if (!low)
+				low = mm_va_range_lowest_mapped(root, start, length);
+			if (!low)
+			{
+				process_set_mmap_base(proc, start);
+				return start;
+			}
+			if (low < search_low + length)
+				break;
+			start = (low - length) & ~(uintptr_t)(PAGE_SIZE_4KB - 1);
 		}
 	}
 	return 0;
