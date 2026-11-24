@@ -88,8 +88,9 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
 
   if (path_copy[0] == '/')
   {
-    return ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved, resolved_sz,
-                                current_process->cwd, current_process->root);
+    rc = ir0_resolve_kpath_at(IR0_AT_FDCWD, path_copy, resolved, resolved_sz,
+                              current_process->cwd, current_process->root);
+    return rc ? rc : ir0_path_walk_search(resolved);
   }
 
   if (dirfd != IR0_AT_FDCWD)
@@ -105,7 +106,7 @@ int ir0_resolve_path_at(int dirfd, const char *user_path, char *resolved,
      */
     if (normalize_path(joined, resolved, resolved_sz) != 0)
       return -ENAMETOOLONG;
-    return 0;
+    return ir0_path_walk_search(resolved);
   }
 
   return ir0_resolve_user_path_at(dirfd, user_path, resolved, resolved_sz,

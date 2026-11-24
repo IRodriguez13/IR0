@@ -7,6 +7,7 @@
 #include <ir0/copy_user.h>
 #include <ir0/path.h>
 #include <ir0/errno.h>
+#include <ir0/path_routed.h>
 #include <ir0/utimens.h>
 
 long copy_path_from_user(char *dst, const char *user_path, size_t size)
@@ -61,6 +62,7 @@ int ir0_resolve_user_path_at(int dirfd, const char *user_path, char *resolved,
 {
     char path_copy[256];
     long len;
+    int rc;
 
     if (!user_path || !resolved || resolved_sz == 0)
         return -EFAULT;
@@ -69,8 +71,11 @@ int ir0_resolve_user_path_at(int dirfd, const char *user_path, char *resolved,
     if (len < 0)
         return (int)len;
 
-    return ir0_resolve_kpath_at(dirfd, path_copy, resolved, resolved_sz, cwd,
-                                root);
+    rc = ir0_resolve_kpath_at(dirfd, path_copy, resolved, resolved_sz, cwd,
+                              root);
+    if (rc != 0)
+        return rc;
+    return ir0_path_walk_search(resolved);
 }
 
 int ir0_resolve_user_path(const char *user_path, char *resolved,

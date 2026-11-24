@@ -188,3 +188,48 @@ int ir0_getdents_path_routed(const char *path, struct vfs_dirent *entries,
 
     return vfs_readdir(path, entries, max_entries);
 }
+
+/*
+ * Linux link_path_walk()/may_lookup(): the caller needs search permission
+ * on every directory before the last component, checked before anything
+ * about the last name, so a denied walk is EACCES and never leaks EEXIST
+ * or ENOENT. A missing component is ENOENT and a non-directory ENOTDIR.
+ * Uses the routed stat so /dev and the in-memory nodes are walked too.
+ */
+int ir0_path_walk_search(const char *path)
+{
+    const struct ir0_task_cred *cred = ir0_current_cred();
+    char dir[256];
+    const char *p;
+
+    if (!path || path[0] != '/' || !cred || ir0_cred_is_root())
+        return 0;
+    for (p = strchr(path + 1, '/'); p; p = strchr(p + 1, '/'))
+    {
+        size_t len = (size_t)(p - path);
+        stat_t st;
+        int rc;
+
+        if (len >= sizeof(dir))
+            return -ENAMETOOLONG;
+        memcpy(dir, path, len);
+        dir[len] = '\0';
+        if (p[1] == '\0')
+            break;
+        rc = ir0_stat_path_routed(dir, &st);
+        if (rc != 0)
+            return rc;
+        /*
+         * An intermediate symlink (/proc/self) is resolved by the
+         * filesystem that holds it, not here; its target is not known to
+         * this walk, so it is not checked.
+         */
+        if (S_ISLNK(st.st_mode))
+            continue;
+        if (!S_ISDIR(st.st_mode))
+            return -ENOTDIR;
+        if (generic_permission(cred, &st, ACCESS_EXEC) != 0)
+            return -EACCES;
+    }
+    return 0;
+}

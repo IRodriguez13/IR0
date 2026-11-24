@@ -14,6 +14,12 @@ struct vfs_dirent;
 
 int ir0_is_dev_path(const char *path);
 int ir0_stat_path_routed(const char *path, stat_t *st);
+/*
+ * Search permission on every directory before the last component of the
+ * resolved @path (Linux may_lookup()). The user path resolvers call it,
+ * so every path syscall walks the same way.
+ */
+int ir0_path_walk_search(const char *path);
 int ir0_stat_path_routed_follow(const char *path, stat_t *st);
 int ir0_chown_path_routed(const char *path, uid_t owner, gid_t group);
 /* access(2) mode bits (R_OK/W_OK/X_OK) on @resolved_path for @cred. */
