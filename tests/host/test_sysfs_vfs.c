@@ -101,11 +101,11 @@ void test_sysfs_vfs(void)
 	ASSERT_EQ(ops->stat("/sys/kernel/panic", &st), 0);
 	ASSERT_EQ(st.st_mode, (mode_t)(S_IFREG | 0644));
 	ASSERT_EQ(ops->stat("/sys/devices/system", &st), 0);
-	ASSERT(S_ISREG(st.st_mode));
+	ASSERT(S_ISDIR(st.st_mode));
 	ASSERT_EQ(ops->stat("/sys/devices/system/cpu/cpu0/online", &st), 0);
 	ASSERT_EQ(st.st_mode, (mode_t)(S_IFREG | 0664));
 	ASSERT_EQ(ops->stat("/sys/devices/system/cpu/cpu1", &st), 0);
-	ASSERT(S_ISREG(st.st_mode));
+	ASSERT(S_ISDIR(st.st_mode));
 	ASSERT_EQ(ops->stat("/sys/devices/system/cpu/cpu2", &st), -ENOENT);
 	ASSERT_EQ(ops->stat("/sys/nope", &st), -ENOENT);
 	ASSERT_EQ(ops->stat("/sys/kernel/hostname/extra", &st), -ENOENT);
@@ -132,13 +132,23 @@ void test_sysfs_vfs(void)
 	n = ops->readdir("/sys/devices", ents, 16);
 	ASSERT_EQ(n, 2);
 	ASSERT_STR_EQ(ents[0].name, "system");
-	ASSERT_EQ(ents[0].type, DT_REG);
+	ASSERT_EQ(ents[0].type, DT_DIR);
 	ASSERT_STR_EQ(ents[1].name, "block");
-	/* Exact file nodes stay files, so getdents is ENOTDIR even with children. */
-	ASSERT_EQ(ops->readdir("/sys/devices/system", ents, 16), -ENOTDIR);
+	/* A node with children is a directory, as on Linux. */
+	n = ops->readdir("/sys/devices/system", ents, 16);
+	ASSERT_EQ(n, 1);
+	ASSERT_STR_EQ(ents[0].name, "cpu");
 	ASSERT_EQ(ops->stat("/sys/devices/system/cpu", &st), 0);
-	ASSERT(S_ISREG(st.st_mode));
-	ASSERT_EQ(ops->readdir("/sys/devices/system/cpu", ents, 16), -ENOTDIR);
+	ASSERT(S_ISDIR(st.st_mode));
+	n = ops->readdir("/sys/devices/system/cpu", ents, 16);
+	{
+		int seen = 0;
+
+		for (i = 0; i < n; i++)
+			seen += strcmp(ents[i].name, "online") == 0 ||
+				strcmp(ents[i].name, "cpu1") == 0;
+		ASSERT_EQ(seen, 2);
+	}
 	ASSERT_EQ(ops->readdir("/sys/kernel/version", ents, 16), -ENOTDIR);
 	ASSERT_EQ(ops->readdir("/sys", ents, 2), 2);
 
@@ -176,7 +186,7 @@ void test_sysfs_vfs(void)
 	ASSERT_EQ(ops->open("/sys/kernel/version", 0), 0);
 	ASSERT_EQ(ops->open("/sys/kernel/version", IR0_O_DIRECTORY), -ENOTDIR);
 	ASSERT_EQ(ops->open("/sys/devices/system", 0), -EISDIR);
-	ASSERT_EQ(ops->open("/sys/devices/system", IR0_O_DIRECTORY), -ENOTDIR);
+	ASSERT_EQ(ops->open("/sys/devices/system", IR0_O_DIRECTORY), 0);
 	ASSERT_EQ(ops->open("/sys/devices/system/cpu/cpu0/online", 0), 0);
 	ASSERT_EQ(ops->open("/sys/nope", 0), -ENOENT);
 	ASSERT_EQ(ops->truncate("/sys/kernel/hostname", 0), 0);

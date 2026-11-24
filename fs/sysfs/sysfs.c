@@ -437,15 +437,13 @@ static int sysfs_stat(const char *path, stat_t *st)
     if (ret != 0)
         return ret;
     sysfs_ensure_nodes();
-    ret = sysfs_exact_stat(path, st);
-    if (ret == 0)
-        return 0;
+    /* A node with children is a directory, as every sysfs kobject is. */
     if (rel[0] == '\0' || sysfs_has_children(rel))
     {
         sysfs_fill_dir(st);
         return 0;
     }
-    return ret;
+    return sysfs_exact_stat(path, st);
 }
 
 static int sysfs_add_dirent(struct vfs_dirent *entries, int max, int n,
@@ -490,6 +488,20 @@ static int sysfs_add_below(struct vfs_dirent *entries, int max, int n,
         return n;
     slash = strchr(name, '/');
     nlen = slash ? (size_t)(slash - name) : strlen(name);
+    if (!slash)
+    {
+        char child[256];
+        size_t clen = (size_t)(name - rel) + nlen;
+
+        /* A listed node that has children of its own is a directory. */
+        if (clen < sizeof(child))
+        {
+            memcpy(child, rel, clen);
+            child[clen] = '\0';
+            if (sysfs_has_children(child))
+                slash = name + nlen;
+        }
+    }
     return sysfs_add_dirent(entries, max, n, name, nlen,
                             slash ? DT_DIR : DT_REG);
 }
