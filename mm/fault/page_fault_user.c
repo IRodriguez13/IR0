@@ -170,8 +170,9 @@ int pf_identity_to_anon_zero(process_t *current, uint64_t vaddr_aligned,
 }
 
 /*
- * Linux filemap_fault for a MAP_SHARED file VMA: map the cached file page,
- * or SIGBUS when the page lies past the end of the file.
+ * Linux filemap_fault for a file VMA: map the cached file page, or SIGBUS
+ * when the page lies past the end of the file. A MAP_PRIVATE page is
+ * mapped copy-on-write: a store faults again and takes a private copy.
  */
 static void pf_file_page(process_t *current, struct mmap_region *mr,
 			 const struct page_fault_info *info, uint64_t *stack,
@@ -187,8 +188,10 @@ static void pf_file_page(process_t *current, struct mmap_region *mr,
 		pf_user_segv(current, stack, fault_addr, info);
 		return;
 	}
-	if (mr->prot & 0x2) /* PROT_WRITE */
+	if ((mr->prot & 0x2) && (mr->flags & IR0_MAP_SHARED)) /* PROT_WRITE */
 		map_flags |= PAGE_RW;
+	else if (mr->prot & 0x2)
+		map_flags |= PAGE_COW;
 	if (mr->prot & 0x4) /* PROT_EXEC */
 		map_flags |= PAGE_EXEC;
 	if (filemap_get_page(mr->file_id,
@@ -202,7 +205,10 @@ static void pf_file_page(process_t *current, struct mmap_region *mr,
 	{
 		pmm_frame_put(phys);
 		pf_user_segv(current, stack, fault_addr, info);
+		return;
 	}
+	if (map_flags & PAGE_EXEC)
+		paging_sync_icache_user(process_pgd(current), va, PAGE_SIZE_4KB);
 }
 
 /* User access to a page with no valid descriptor (demand paging, swap-in). */

@@ -432,3 +432,198 @@ int mm_shared_file_past_eof_sigbus(void)
 	EXPECT(RT_TERMSIG(status), SIGBUS);
 	return CONF_PASS;
 }
+
+/* File "f" holding "filedata" at offset 0 and @len bytes in all. */
+static long private_file(long len)
+{
+	long fd = shared_file(len);
+
+	if (fd < 0)
+		return fd;
+	if (S4(SYS_pwrite64, fd, "filedata", 8, 0) != 8)
+		return -EIO;
+	return fd;
+}
+
+static long map_private(long fd, long len, int prot)
+{
+	return S6(SYS_mmap, 0, len, prot, MAP_PRIVATE, fd, 0);
+}
+
+/*
+ * mm/memory.c do_cow_fault(): a store to a MAP_PRIVATE file page takes a
+ * private copy. Neither the file nor a MAP_SHARED mapping of it sees the
+ * store. A read-only fd still allows a writable private mapping; a
+ * write-only fd is EACCES.
+ */
+int mm_private_file_write_stays_private(void)
+{
+	char buf[8];
+	long fd;
+	long ro;
+	long p;
+	long s;
+
+	OK(fd, private_file(PG));
+	OK(p, map_private(fd, PG, PROT_READ | PROT_WRITE));
+	OK(s, map_file(fd, PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)p = 'X';
+	EXPECT(*(volatile char *)p, 'X');
+	EXPECT(*(volatile char *)s, 'f');
+	EXPECT(S4(SYS_pread64, fd, buf, 8, 0), 8);
+	CHECK(rt_memeq(buf, "filedata", 8));
+	OK(ro, S4(SYS_openat, AT_FDCWD, "f", O_RDONLY, 0));
+	OK(p, map_private(ro, PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)(p + 1) = 'Y';
+	EXPECT(S4(SYS_pread64, ro, buf, 8, 0), 8);
+	CHECK(rt_memeq(buf, "filedata", 8));
+	EXPECT(S1(SYS_close, ro), 0);
+	OK(ro, S4(SYS_openat, AT_FDCWD, "f", O_WRONLY, 0));
+	EXPECT_ERR(map_private(ro, PG, PROT_READ), EACCES);
+	return CONF_PASS;
+}
+
+/*
+ * mm/filemap.c: a MAP_PRIVATE mapping reads the file, at the page offset
+ * asked for. An offset that is not page aligned is EINVAL.
+ */
+int mm_private_file_reads_file(void)
+{
+	long fd;
+	long a;
+
+	OK(fd, private_file(2 * PG));
+	EXPECT(S4(SYS_pwrite64, fd, "page1", 5, PG), 5);
+	OK(a, map_private(fd, 2 * PG, PROT_READ));
+	CHECK(rt_memeq((const void *)a, "filedata", 8));
+	CHECK(rt_memeq((const void *)(a + PG), "page1", 5));
+	OK(a, S6(SYS_mmap, 0, PG, PROT_READ | PROT_EXEC, MAP_PRIVATE, fd, PG));
+	CHECK(rt_memeq((const void *)a, "page1", 5));
+	EXPECT_ERR(S6(SYS_mmap, 0, PG, PROT_READ, MAP_PRIVATE, fd, 1), EINVAL);
+	EXPECT_ERR(S6(SYS_mmap, 0, 0, PROT_READ, MAP_PRIVATE, fd, 0), EINVAL);
+	return CONF_PASS;
+}
+
+/*
+ * A copied page no longer follows the file: a later write(2) does not
+ * reach it. A page not yet copied still shows the file (Linux maps the
+ * page cache page until the first store).
+ */
+int mm_private_file_cow_ignores_later_writes(void)
+{
+	long fd;
+	long a;
+
+	OK(fd, private_file(2 * PG));
+	OK(a, map_private(fd, 2 * PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)(a + 1) = 'C';
+	EXPECT(S4(SYS_pwrite64, fd, "W", 1, 0), 1);
+	EXPECT(S4(SYS_pwrite64, fd, "W", 1, PG), 1);
+	EXPECT(*(volatile char *)a, 'f');
+	EXPECT(*(volatile char *)(a + 1), 'C');
+	EXPECT(*(volatile char *)(a + PG), 'W');
+	return CONF_PASS;
+}
+
+/*
+ * fork(2) gives the child the parent's private pages copy-on-write: each
+ * side's later stores stay its own, and none reaches the file.
+ */
+int mm_private_file_fork(void)
+{
+	int status = 0;
+	char buf[8];
+	long fd;
+	long a;
+	long pid;
+
+	OK(fd, private_file(2 * PG));
+	OK(a, map_private(fd, 2 * PG, PROT_READ | PROT_WRITE));
+	*(volatile char *)a = 'P';
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+	{
+		if (*(volatile char *)a != 'P' || *(volatile char *)(a + 1) != 'i')
+			rt_exit(60);
+		*(volatile char *)a = 'C';
+		*(volatile char *)(a + PG) = 'C';
+		rt_exit(*(volatile char *)a == 'C' ? 0 : 61);
+	}
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	EXPECT(RT_EXITED(status) ? RT_EXITCODE(status) : -1, 0);
+	EXPECT(*(volatile char *)a, 'P');
+	EXPECT(*(volatile char *)(a + PG), 0);
+	EXPECT(S4(SYS_pread64, fd, buf, 8, 0), 8);
+	CHECK(rt_memeq(buf, "filedata", 8));
+	return CONF_PASS;
+}
+
+/*
+ * The last page reads as zeros past the end of the file and takes stores
+ * without growing the file; a whole page past the end raises SIGBUS.
+ */
+int mm_private_file_past_eof(void)
+{
+	int status = 0;
+	char buf[8];
+	long fd;
+	long a;
+	long pid;
+
+	OK(fd, private_file(100));
+	OK(a, map_private(fd, 2 * PG, PROT_READ | PROT_WRITE));
+	EXPECT(*(volatile char *)(a + 200), 0);
+	*(volatile char *)(a + 200) = 'Z';
+	EXPECT(S4(SYS_pread64, fd, buf, 1, 200), 0);
+	g_bus_page = a + PG;
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+		touch_past_eof();
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	CHECK(RT_SIGNALED(status));
+	EXPECT(RT_TERMSIG(status), SIGBUS);
+	return CONF_PASS;
+}
+
+static long g_ro_page;
+
+static void store_ro_page(void)
+{
+	*(volatile char *)g_ro_page = 'S';
+	rt_exit(0);
+}
+
+/*
+ * mm/mprotect.c: a read-only private file mapping made writable copies on
+ * the first store (the file keeps its data); made read-only again, a store
+ * is SIGSEGV and the copy keeps what was stored.
+ */
+int mm_private_file_mprotect(void)
+{
+	int status = 0;
+	char buf[8];
+	long fd;
+	long a;
+	long pid;
+
+	OK(fd, private_file(PG));
+	OK(a, map_private(fd, PG, PROT_READ));
+	EXPECT(S3(SYS_mprotect, a, PG, PROT_READ | PROT_WRITE), 0);
+	*(volatile char *)a = 'M';
+	EXPECT(S4(SYS_pread64, fd, buf, 8, 0), 8);
+	CHECK(rt_memeq(buf, "filedata", 8));
+	EXPECT(S3(SYS_mprotect, a, PG, PROT_READ), 0);
+	EXPECT(*(volatile char *)a, 'M');
+	g_ro_page = a;
+	pid = rt_fork();
+	CHECK(pid >= 0);
+	if (pid == 0)
+		store_ro_page();
+	EXPECT(conf_child_status(pid, &status, 5000), pid);
+	CHECK(RT_SIGNALED(status));
+	EXPECT(RT_TERMSIG(status), SIGSEGV);
+	EXPECT(*(volatile char *)a, 'M');
+	return CONF_PASS;
+}

@@ -17,12 +17,7 @@
 #include <stddef.h>
 #include <ir0/types.h>
 
-struct process;
-typedef struct process process_t;
-
 void *mm_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset);
 int mm_munmap(void *addr, size_t length);
 int mm_mprotect(void *addr, size_t len, int prot);
 int mm_msync(void *addr, size_t len, int flags);
-void *mm_mmap_file_private(process_t *proc, void *addr, size_t length, int prot,
-                           int flags, int fd, off_t offset);

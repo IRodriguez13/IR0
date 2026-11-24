@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define IR0_MAP_SHARED     0x01
 #define IR0_MAP_PRIVATE    0x02
 #define IR0_MAP_ANONYMOUS  0x20
 #define IR0_MAP_FIXED      0x10
