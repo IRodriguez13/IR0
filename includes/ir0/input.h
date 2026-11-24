@@ -19,26 +19,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <ir0/time.h>
-#include <linux/input-event-codes.h>
-
-/* Linux input_event (uapi/linux/input.h, 64-bit timeval). */
-struct input_event {
-    struct timeval time;
-    uint16_t type;
-    uint16_t code;
-    int32_t value;
-};
-
-/* Linux uapi/linux/input.h — device id and i8042 bus. */
-struct input_id {
-    uint16_t bustype;
-    uint16_t vendor;
-    uint16_t product;
-    uint16_t version;
-};
-
-#define BUS_I8042 0x11
+#include <linux/input.h>
 
 /*
  * /dev/events0 test hook ioctl (gated by CONFIG_TEST_INPUT_INJECT).
@@ -46,19 +27,6 @@ struct input_id {
  */
 #define IR0_INPUT_IOCTL_INJECT 0x49520001u
 #define IR0_INPUT_IOCTL_GET_CAPS 0x49520002u
-
-/* Linux uapi/linux/input.h — the evdev subset IR0 implements */
-#define EV_VERSION 0x010001
-#define EVIOCGVERSION 0x80044501u /* _IOR('E', 0x01, int) */
-#define EVIOCGBIT_BASE 0x20u
-#define EVIOC_NR_MASK 0xffu
-#define EVIOC_SIZE_SHIFT 16
-#define EVIOC_SIZE_MASK 0x3fffu
-#define EVIOC_DIR_SHIFT 30
-#define EVIOC_READ 2u
-#define EVIOC_TYPE_SHIFT 8
-#define EVIOCGID_NR 0x02u
-#define EVIOCGNAME_NR 0x06u
 
 struct input_dev;
 
@@ -80,17 +48,15 @@ void *input_client_open(void);
 void input_client_get(void *client);
 void input_client_put(void *client);
 /*
- * EVIOCGRAB: _IOW('E', 0x90, int). The third ioctl argument is the
- * value itself (1 grabs, 0 releases), not a user pointer.
+ * EVIOCGRAB: the third ioctl argument is the value itself (1 grabs,
+ * 0 releases), not a user pointer.
  */
-#define INPUT_EVIOCGRAB 0x40044590u
 /* 0 on success. A second grabber gets -EBUSY. */
 int input_client_grab(void *client, int grab);
 /*
- * EVIOCSCLOCKID: _IOW('E', 0xa0, int). The third argument is a pointer
- * to the clock id (CLOCK_REALTIME 0 or CLOCK_MONOTONIC 1).
+ * EVIOCSCLOCKID: the third argument is a pointer to the clock id
+ * (CLOCK_REALTIME 0 or CLOCK_MONOTONIC 1).
  */
-#define INPUT_EVIOCSCLOCKID 0x400445a0u
 /* 0 on success. Any other clock id is -EINVAL. */
 int input_client_set_clock(void *client, int clockid);
 void input_set_read_context(void *client, int nonblock);

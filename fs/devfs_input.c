@@ -287,12 +287,12 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
 #endif
     }
 
-    dir = (unsigned)((request >> EVIOC_DIR_SHIFT) & 0x3u);
-    type = (unsigned)((request >> EVIOC_TYPE_SHIFT) & 0xffu);
-    nr = (unsigned)(request & EVIOC_NR_MASK);
-    size = (unsigned)((request >> EVIOC_SIZE_SHIFT) & EVIOC_SIZE_MASK);
+    dir = (unsigned)_IOC_DIR(request);
+    type = (unsigned)_IOC_TYPE(request);
+    nr = (unsigned)_IOC_NR(request);
+    size = (unsigned)_IOC_SIZE(request);
 
-    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x01u)
+    if (type == (unsigned)'E' && dir == _IOC_READ && nr == _IOC_NR(EVIOCGVERSION))
     {
         int version = EV_VERSION;
 
@@ -303,11 +303,11 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    if (type == (unsigned)'E' && dir == EVIOC_READ && nr >= EVIOCGBIT_BASE &&
-        nr < EVIOCGBIT_BASE + EV_CNT)
+    if (type == (unsigned)'E' && dir == _IOC_READ && nr >= _IOC_NR(EVIOCGBIT(0, 0)) &&
+        nr < _IOC_NR(EVIOCGBIT(0, 0)) + EV_CNT)
     {
         unsigned long bits[8];
-        unsigned ev = nr - EVIOCGBIT_BASE;
+        unsigned ev = nr - _IOC_NR(EVIOCGBIT(0, 0));
         size_t nlongs;
         size_t copy_n;
 
@@ -355,7 +355,7 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == EVIOCGID_NR)
+    if (type == (unsigned)'E' && dir == _IOC_READ && nr == _IOC_NR(EVIOCGID))
     {
         struct input_id id;
 
@@ -368,7 +368,7 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return 0;
     }
 
-    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == EVIOCGNAME_NR)
+    if (type == (unsigned)'E' && dir == _IOC_READ && nr == _IOC_NR(EVIOCGNAME(0)))
     {
         const char *name;
         char tmp[64];
@@ -390,7 +390,7 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
         return (int64_t)ncopy;
     }
 
-    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x09u)
+    if (type == (unsigned)'E' && dir == _IOC_READ && nr == _IOC_NR(EVIOCGPROP(0)))
     {
         unsigned long bits;
         size_t ncopy;
@@ -406,7 +406,7 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
     }
 
     /* EVIOCGKEY: _IOC(READ, 'E', 0x18, len) — current key bitmap. */
-    if (type == (unsigned)'E' && dir == EVIOC_READ && nr == 0x18u)
+    if (type == (unsigned)'E' && dir == _IOC_READ && nr == _IOC_NR(EVIOCGKEY(0)))
     {
         unsigned char bitmap[(KEY_CNT + 7u) / 8u];
         size_t stored;
@@ -429,7 +429,7 @@ static int64_t dev_events0_ioctl(devfs_entry_t *entry, uint64_t request, void *a
      * EVIOCGABS(0) .. EVIOCGABS(ABS_MAX) are nr 0x40 .. 0x7f.
      * This node is a relative pointer and has no absolute axes.
      */
-    if (type == (unsigned)'E' && dir == EVIOC_READ &&
+    if (type == (unsigned)'E' && dir == _IOC_READ &&
         nr >= 0x40u && nr <= 0x7fu)
     {
         return -EINVAL;
