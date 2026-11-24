@@ -794,6 +794,8 @@ process_t *get_process_list(void);
 void process_itimer_tick(uint64_t now_ms);
 pid_t process_get_next_pid(void);
 pid_t process_last_assigned_pid(void);
+/* Tasks created since boot, threads included (/proc/stat processes). */
+unsigned long process_total_forks(void);
 void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 process_t *process_find_child_of(pid_t ppid);

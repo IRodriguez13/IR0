@@ -154,7 +154,6 @@ int proc_stat_read(char *buf, size_t count)
 	uint64_t softirq = 0;
 	uint64_t steal = 0;
 	unsigned runnable = 0;
-	unsigned nprocs = 0;
 	uint64_t irq_total;
 	uint64_t ctxt_total;
 	time_t btime;
@@ -171,7 +170,6 @@ int proc_stat_read(char *buf, size_t count)
 	idle = jiffies_to_clock_t(idle);
 
 	runnable = nr_running();
-	nprocs = nr_threads();
 	irq_total = clock_get_irq_count();
 	ctxt_total = clock_get_context_switch_count();
 	btime = (time_t)clock_get_boot_time();
@@ -188,7 +186,7 @@ int proc_stat_read(char *buf, size_t count)
 		       "intr %llu\n"
 		       "ctxt %llu\n"
 		       "btime %lld\n"
-		       "processes %u\n"
+		       "processes %lu\n"
 		       "procs_running %u\n"
 		       "procs_blocked 0\n",
 		       (unsigned long long)user,
@@ -210,7 +208,7 @@ int proc_stat_read(char *buf, size_t count)
 		       (unsigned long long)irq_total,
 		       (unsigned long long)ctxt_total,
 		       (long long)btime,
-		       nprocs,
+		       process_total_forks(),
 		       runnable);
 	if (len < 0)
 		return -1;
