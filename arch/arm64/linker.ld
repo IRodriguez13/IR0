@@ -9,11 +9,21 @@ PHDRS
     data PT_LOAD FLAGS(6);   /* PF_R | PF_W */
 }
 
+/*
+ * Linked in the TTBR1 half at KIMAGE_VADDR + KIMAGE_TEXT_OFFSET (see
+ * arch/arm64/include/asm/boot.h); entry.S maps it there over whatever
+ * 2 MiB aligned base the loader used. The load addresses describe the
+ * QEMU virt placement for ELF consumers.
+ */
+KIMAGE_VADDR = 0xffff800000000000;
+KIMAGE_LOAD = 0x40000000;
+KIMAGE_HEAP_OFFSET = 0x800000;
+
 SECTIONS
 {
-    . = 0x40080000;
+    . = KIMAGE_VADDR + 0x80000;
 
-    .text : ALIGN(4K)
+    .text : AT(ADDR(.text) - KIMAGE_VADDR + KIMAGE_LOAD) ALIGN(4K)
     {
         KEEP(*(.text.boot))
         *(.text)
@@ -59,6 +69,8 @@ SECTIONS
 
     _end = .;
     arm64_image_size = _end - _start;
+    ASSERT(_end <= KIMAGE_VADDR + KIMAGE_HEAP_OFFSET,
+           "arm64: kernel image overlaps the early heap")
 
     /DISCARD/ :
     {

@@ -14,8 +14,8 @@
  *              through the mm_ops descriptor encoders.
  *
  * Reference: Linux arch/arm64/kernel/head.S (idmap), arch/arm64/mm/proc.S
- * (TCR/MAIR). IR0 keeps the kernel identity-mapped in TTBR0 on both ISAs until
- * the higher-half split lands; TTBR1 walks are disabled (EPD1).
+ * (TCR/MAIR). entry.S turns the MMU on with the image in TTBR1 at
+ * KIMAGE_VADDR; this file owns the TTBR0 boot identity and the linear map.
  */
 
 /* SPDX-License-Identifier: GPL-3.0-only */
@@ -50,23 +50,7 @@
 #define ATTR_DEVICE      0
 #define ATTR_NORMAL      1
 #define ATTR_NORMAL_NC   2
-#define MAIR_ATTR_DEVICE 0x00UL /* Device-nGnRnE */
-#define MAIR_ATTR_NORMAL 0xffUL /* Normal, inner/outer write-back */
-#define MAIR_ATTR_NORMAL_NC 0x44UL /* Normal, inner/outer non-cacheable */
-
-/* TCR_EL1: T0SZ=16 (48-bit VA, walk starts at L0), 4 KiB granule. */
-#define TCR_T0SZ_48      16UL
-#define TCR_IRGN0_WBWA   (1UL << 8)
-#define TCR_ORGN0_WBWA   (1UL << 10)
-#define TCR_SH0_INNER    (3UL << 12)
-#define TCR_EPD1         (1UL << 23)
-/* TTBR1 (kernel half): T1SZ=16, write-back walks, 4 KiB granule (TG1=0b10). */
-#define TCR_T1SZ_48      (16UL << 16)
-#define TCR_IRGN1_WBWA   (1UL << 24)
-#define TCR_ORGN1_WBWA   (1UL << 26)
-#define TCR_SH1_INNER    (3UL << 28)
-#define TCR_TG1_4K       (2UL << 30)
-#define TCR_IPS_40BIT    (2UL << 32)
+/* MAIR_EL1 itself is programmed by entry.S (MAIR_INIT). */
 
 #define VIRT_UART_BASE   0x09000000UL
 #define VIRT_DRAM_FALLBACK_BASE 0x40000000UL
@@ -92,8 +76,13 @@ static uint64_t g_l2_mmio[MMIO_L2_POOL_MAX][PTE_ENTRIES]
 static int g_l2_mmio_l1[MMIO_L2_POOL_MAX];
 static uint64_t g_l3_fb[FB_L3_POOL_MAX][PTE_ENTRIES]
 	__attribute__((aligned(PAGE_SIZE)));
-/* TTBR1 root: the kernel half, holding the linear map of all RAM. */
-static uint64_t g_ttbr1_l0[PTE_ENTRIES] __attribute__((aligned(PAGE_SIZE)));
+/*
+ * TTBR1 root (entry.S): the kernel image at KIMAGE_VADDR from the first
+ * instruction with the MMU on, then the linear map of all RAM.
+ */
+extern uint64_t swapper_pg_dir[PTE_ENTRIES];
+
+uint64_t kimage_voffset;
 
 /* Every Device block installed so far, replayed into each user root. */
 static uint64_t g_device_blocks[DEVICE_BLOCK_MAX];
@@ -309,35 +298,16 @@ static void build_idmap(void)
 	map_framebuffer(boot);
 }
 
-static void mmu_configure_and_enable(uint64_t ttbr0)
+/*
+ * entry.S already enabled the MMU (MAIR, TCR, both TTBRs, SCTLR). Replace
+ * its Device-only boot identity with the DRAM + Device identity map.
+ */
+static void mmu_install_idmap(uint64_t ttbr0)
 {
-	uint64_t mair;
-	uint64_t tcr;
-	uint64_t sctlr;
-
-	mair = (MAIR_ATTR_DEVICE << (8 * ATTR_DEVICE)) |
-	       (MAIR_ATTR_NORMAL << (8 * ATTR_NORMAL)) |
-	       (MAIR_ATTR_NORMAL_NC << (8 * ATTR_NORMAL_NC));
-	__asm__ volatile("msr mair_el1, %0" :: "r"(mair) : "memory");
-
-	tcr = TCR_T0SZ_48 | TCR_IRGN0_WBWA | TCR_ORGN0_WBWA | TCR_SH0_INNER |
-	      TCR_EPD1 | TCR_IPS_40BIT;
-	__asm__ volatile("msr tcr_el1, %0" :: "r"(tcr) : "memory");
-
+	__asm__ volatile("dsb ishst" ::: "memory");
 	__asm__ volatile("msr ttbr0_el1, %0" :: "r"(ttbr0) : "memory");
 	__asm__ volatile("isb" ::: "memory");
-
 	tlb_flush_all();
-
-	/* M (MMU), C (data cache), I (instruction cache); clear WXN and EE. */
-	__asm__ volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
-	sctlr |= (1UL << 0);
-	sctlr |= (1UL << 2);
-	sctlr |= (1UL << 12);
-	sctlr &= ~(1UL << 25);
-	sctlr &= ~(1UL << 19);
-	__asm__ volatile("msr sctlr_el1, %0" :: "r"(sctlr) : "memory");
-	__asm__ volatile("isb" ::: "memory");
 }
 
 int arm64_mmu_enable(void)
@@ -349,7 +319,7 @@ int arm64_mmu_enable(void)
 		return -EINVAL;
 
 	build_idmap();
-	mmu_configure_and_enable(virt_to_phys(g_l0));
+	mmu_install_idmap(virt_to_phys(g_l0));
 	g_mmu_on = 1;
 	return 0;
 }
@@ -372,26 +342,16 @@ int arm64_mmu_verify(void)
 
 uint64_t *mm_kernel_map_root(void)
 {
-	return g_mmu_on ? g_ttbr1_l0 : NULL;
+	return g_mmu_on ? swapper_pg_dir : NULL;
 }
 
 /*
- * Turn on TTBR1 walks for the kernel half (Linux arm64 swapper_pg_dir).
- * EL0 never reaches it: its descriptors carry no AP[1] user permission.
+ * TTBR1 walks are on since entry.S; publish the linear map just added to
+ * swapper_pg_dir (Linux arm64 swapper_pg_dir). EL0 never reaches it: its
+ * descriptors carry no AP[1] user permission.
  */
 void mm_kernel_map_enable(void)
 {
-	uint64_t tcr;
-
-	__asm__ volatile("dsb ishst" ::: "memory");
-	__asm__ volatile("msr ttbr1_el1, %0" :: "r"(virt_to_phys(g_ttbr1_l0))
-			 : "memory");
-	__asm__ volatile("mrs %0, tcr_el1" : "=r"(tcr));
-	tcr &= ~(TCR_EPD1 | (0x3FUL << 16) | (0xFFUL << 24));
-	tcr |= TCR_T1SZ_48 | TCR_IRGN1_WBWA | TCR_ORGN1_WBWA | TCR_SH1_INNER |
-	       TCR_TG1_4K;
-	__asm__ volatile("msr tcr_el1, %0" :: "r"(tcr) : "memory");
-	__asm__ volatile("isb" ::: "memory");
 	tlb_flush_all();
 }
 
@@ -459,7 +419,8 @@ static uint64_t supervisor_ram_end(void)
 {
 	uint64_t end;
 
-	end = (uint64_t)mm_kernel_heap_start() + mm_kernel_heap_size();
+	end = (uint64_t)virt_to_phys((void *)mm_kernel_heap_start()) +
+	      mm_kernel_heap_size();
 	if (end < g_dram_base)
 		end = g_dram_base;
 	if (end > g_dram_end)

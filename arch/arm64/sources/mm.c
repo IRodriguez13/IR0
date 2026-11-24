@@ -18,6 +18,7 @@
 
 /* SPDX-License-Identifier: GPL-3.0-only */
 
+#include <asm/boot.h>
 #include <asm/pgtable.h>
 #include <ir0/errno.h>
 #include <ir0/mm_range.h>
@@ -34,13 +35,13 @@ static int mm_map_platform_supervisor(address_space_root_t root);
 
 uintptr_t mm_kernel_heap_start(void)
 {
-	/* QEMU virt DRAM starts at 0x40000000; leave 8 MiB for the image. */
-	return 0x40800000UL;
+	/* Inside the KIMAGE_VADDR mapping, after the image (asm/boot.h). */
+	return (uintptr_t)KIMAGE_VADDR + KERNEL_HEAP_OFFSET;
 }
 
 size_t mm_kernel_heap_size(void)
 {
-	return 0x01800000UL;
+	return KIMAGE_MAP_SIZE - KERNEL_HEAP_OFFSET;
 }
 
 uintptr_t mm_user_va_start(void)
