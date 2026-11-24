@@ -248,128 +248,52 @@ int proc_boot_cmdline_read(char *buf, size_t count)
 }
 
 /*
- * Build "flags" line from CPUID.1 EDX/ECX (silicon feature bits).
- * Each (bit, name) is appended when the bit is set.
+ * IR0's hypervisor_kind line (the "hypervisor" flag says only that there
+ * is one); ir0-selftest hypervisor_kind reads it.
  */
-static void proc_cpuinfo_flags_from_cpuid(uint32_t edx, uint32_t ecx, char *out, size_t out_size)
+static int proc_cpuinfo_hypervisor(char *buf, size_t count)
 {
-    static const struct { uint32_t bit; const char *name; } edx_flags[] = {
-        { 0, "fpu" }, { 1, "vme" }, { 2, "de" }, { 3, "pse" }, { 4, "tsc" },
-        { 5, "msr" }, { 6, "pae" }, { 7, "mce" }, { 8, "cx8" }, { 9, "apic" },
-        { 10, "sep" }, { 11, "mtrr" }, { 12, "pge" }, { 13, "mca" }, { 15, "cmov" },
-        { 16, "pat" }, { 17, "pse36" }, { 19, "clflush" }, { 23, "mmx" },
-        { 24, "fxsr" }, { 25, "sse" }, { 26, "sse2" }, { 28, "htt" }, { 29, "tm" },
-        { 31, "pbe" }
-    };
-    static const struct { uint32_t bit; const char *name; } ecx_flags[] = {
-        { 0, "sse3" }, { 1, "pclmulqdq" }, { 9, "ssse3" }, { 12, "fma" },
-        { 13, "cx16" }, { 19, "sse4_1" }, { 20, "sse4_2" }, { 21, "x2apic" },
-        { 22, "movbe" }, { 23, "popcnt" }, { 25, "aes" }, { 26, "xsave" },
-        { 28, "avx" }, { 29, "f16c" }, { 30, "rdrand" }, { 31, "hypervisor" }
-    };
-    size_t len = 0;
-    out[0] = '\0';
-    for (size_t i = 0; i < sizeof(edx_flags)/sizeof(edx_flags[0]) && len < out_size - 8; i++)
-    {
-        if (edx & (1U << edx_flags[i].bit))
-        {
-            if (len > 0) { out[len++] = ' '; out[len] = '\0'; }
-            len += (size_t)snprintf(out + len, out_size - len, "%s", edx_flags[i].name);
-        }
-    }
-    for (size_t i = 0; i < sizeof(ecx_flags)/sizeof(ecx_flags[0]) && len < out_size - 8; i++)
-    {
-        if (ecx & (1U << ecx_flags[i].bit))
-        {
-            if (len > 0) { out[len++] = ' '; out[len] = '\0'; }
-            len += (size_t)snprintf(out + len, out_size - len, "%s", ecx_flags[i].name);
-        }
-    }
+	enum ir0_hv_kind kind;
+	static const char *const names[] = { "none", "kvm", "xen", "other" };
+	int n;
+
+	if (hypervisor_kind(&kind) != 0 || (unsigned)kind > IR0_HV_OTHER)
+		return 0;
+	n = snprintf(buf, count, "hypervisor_kind\t: %s\n", names[kind]);
+	return (n < 0 || (size_t)n >= count) ? 0 : n;
 }
 
-/* Generate /proc/cpuinfo content - all fields from silicon (CPUID) where available */
+/*
+ * /proc/cpuinfo: one block per online CPU, each ended by a blank line;
+ * the architecture prints the "key\t: value" lines (Linux show_cpuinfo).
+ */
 int proc_cpuinfo_read(char *buf, size_t count)
 {
-    if (!buf || count == 0)
-        return -1;
+	uint64_t online = cpu_online_mask();
+	size_t off = 0;
+	unsigned cpu;
 
-    memset(buf, 0, count);
-
-    uint32_t cpu_id = get_cpu_id();
-    uint32_t cpu_count = get_cpu_count();
-
-    char vendor_str[13] = {0};
-    if (get_cpu_vendor(vendor_str) < 0)
-        strncpy(vendor_str, "Unknown", sizeof(vendor_str) - 1);
-
-    uint32_t family = 0, model = 0, stepping = 0;
-    get_cpu_signature(&family, &model, &stepping);
-
-    char model_name[49] = {0};
-    if (get_cpu_brand_string(model_name, sizeof(model_name)) < 0)
-        strncpy(model_name, get_arch_name() ? get_arch_name() : "Unknown", sizeof(model_name) - 1);
-
-    uint32_t max_leaf = 0;
-    get_cpuid_max_leaf(&max_leaf);
-
-    uint32_t feat_edx = 0, feat_ecx = 0;
-    get_cpu_feature_bits(&feat_edx, &feat_ecx);
-
-    char flags_buf[512];
-    proc_cpuinfo_flags_from_cpuid(feat_edx, feat_ecx, flags_buf, sizeof(flags_buf));
-
-    uint32_t clflush_sz = get_cpu_clflush_size();
-    if (clflush_sz == 0)
-        clflush_sz = 64;
-
-    uint32_t arch_bits = (uint32_t)(sizeof(uintptr_t) * 8U);
-
-    /* Raw: one line per field, key\tvalue */
-    size_t off = 0;
-    char t[64];
-    int n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "processor\t%u\n", cpu_id); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "vendor_id\t%s\n", vendor_str); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "cpu family\t%u\nmodel\t%u\n", family, model); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "model name\t%s\nstepping\t%u\n", model_name, stepping); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "siblings\t%u\napicid\t%u\ncpuid level\t%u\n", cpu_count, cpu_id, max_leaf); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "flags\t%s\nclflush size\t%u\n", flags_buf, clflush_sz); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    {
-	char hv_vendor[16];
-
-	if (hypervisor_present() &&
-	    hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
+	if (!buf || count == 0)
+		return -1;
+	memset(buf, 0, count);
+	for (cpu = 0; cpu < 64; cpu++)
 	{
-	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-			 "hypervisor_vendor\t%s\n", hv_vendor);
-	    if (n > 0 && (size_t)n < count - off)
-		off += (size_t)n;
-	}
-    }
-    {
-	enum ir0_hv_kind kind;
-	const char *hv_name;
+		int n;
 
-	if (hypervisor_kind(&kind) == 0)
-	{
-	    if (kind == IR0_HV_KVM)
-		hv_name = "kvm";
-	    else if (kind == IR0_HV_XEN)
-		hv_name = "xen";
-	    else if (kind == IR0_HV_OTHER)
-		hv_name = "other";
-	    else
-		hv_name = "none";
-	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-			 "hypervisor_kind\t%s\n", hv_name);
-	    if (n > 0 && (size_t)n < count - off)
+		if (!(online & ((uint64_t)1 << cpu)))
+			continue;
+		n = show_cpuinfo(cpu, buf + off, count - off);
+		if (n < 0)
+			return n;
 		off += (size_t)n;
+		n = proc_cpuinfo_hypervisor(buf + off, count - off);
+		off += (size_t)(n > 0 ? n : 0);
+		if (off + 1 < count)
+			buf[off++] = '\n';
 	}
-    }
-    snprintf(t, sizeof(t), "%ubits physical, %ubits virtual", arch_bits, arch_bits);
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "address sizes\t%s\n", t); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    if (off < count) buf[off] = '\0';
-    return (int)off;
+	if (off < count)
+		buf[off] = '\0';
+	return (int)off;
 }
 
 /*

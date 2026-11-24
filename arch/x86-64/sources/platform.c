@@ -17,6 +17,7 @@
 #include <ir0/acpi_pm.h>
 #include <ir0/platform_ops.h>
 #include <ir0/cpu_info.h>
+#include <ir0/errno.h>
 #include <ir0/ktm/klog.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -396,3 +397,113 @@ void ir0_platform_ops_set(const struct ir0_platform_ops *ops)
 		g_platform_ops = ops;
 }
 
+
+/* CPUID.1 EDX/ECX feature names, in Linux /proc/cpuinfo spelling. */
+static const struct
+{
+	uint8_t bit;
+	const char *name;
+} cpuinfo_edx_flags[] = {
+	{ 0, "fpu" }, { 1, "vme" }, { 2, "de" }, { 3, "pse" }, { 4, "tsc" },
+	{ 5, "msr" }, { 6, "pae" }, { 7, "mce" }, { 8, "cx8" }, { 9, "apic" },
+	{ 11, "sep" }, { 12, "mtrr" }, { 13, "pge" }, { 14, "mca" },
+	{ 15, "cmov" }, { 16, "pat" }, { 17, "pse36" }, { 19, "clflush" },
+	{ 23, "mmx" }, { 24, "fxsr" }, { 25, "sse" }, { 26, "sse2" },
+	{ 28, "ht" },
+}, cpuinfo_ecx_flags[] = {
+	{ 0, "pni" }, { 1, "pclmulqdq" }, { 9, "ssse3" }, { 12, "fma" },
+	{ 13, "cx16" }, { 19, "sse4_1" }, { 20, "sse4_2" }, { 21, "x2apic" },
+	{ 22, "movbe" }, { 23, "popcnt" }, { 25, "aes" }, { 26, "xsave" },
+	{ 28, "avx" }, { 29, "f16c" }, { 30, "rdrand" }, { 31, "hypervisor" },
+};
+
+struct cpuinfo_out
+{
+	char *buf;
+	size_t count;
+	size_t off;
+};
+
+static void cpuinfo_puts(struct cpuinfo_out *o, const char *s)
+{
+	while (*s && o->off + 1 < o->count)
+		o->buf[o->off++] = *s++;
+	o->buf[o->off] = '\0';
+}
+
+static void cpuinfo_line(struct cpuinfo_out *o, const char *key,
+			 const char *value)
+{
+	cpuinfo_puts(o, key);
+	cpuinfo_puts(o, "\t: ");
+	cpuinfo_puts(o, value);
+	cpuinfo_puts(o, "\n");
+}
+
+static void cpuinfo_uint(struct cpuinfo_out *o, const char *key, uint32_t v)
+{
+	char t[16];
+
+	snprintf(t, sizeof(t), "%u", v);
+	cpuinfo_line(o, key, t);
+}
+
+/* x86 show_cpuinfo(): identification and features from CPUID. */
+int show_cpuinfo(unsigned int cpu, char *buf, size_t count)
+{
+	struct cpuinfo_out o = { buf, count, 0 };
+	char vendor[13] = { 0 };
+	char model_name[49] = { 0 };
+	char t[64];
+	uint32_t family = 0, model = 0, stepping = 0, max_leaf = 0;
+	uint32_t edx = 0, ecx = 0, eax, ebx, ecx2, edx2;
+	size_t i;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+	buf[0] = '\0';
+	if (get_cpu_vendor(vendor) < 0)
+		strncpy(vendor, "unknown", sizeof(vendor) - 1);
+	get_cpu_signature(&family, &model, &stepping);
+	if (get_cpu_brand_string(model_name, sizeof(model_name)) < 0)
+		strncpy(model_name, "unknown", sizeof(model_name) - 1);
+	get_cpuid_max_leaf(&max_leaf);
+	get_cpu_feature_bits(&edx, &ecx);
+
+	cpuinfo_uint(&o, "processor", cpu);
+	cpuinfo_line(&o, "vendor_id", vendor);
+	cpuinfo_uint(&o, "cpu family", family);
+	cpuinfo_uint(&o, "model", model);
+	cpuinfo_line(&o, "model name", model_name);
+	cpuinfo_uint(&o, "stepping", stepping);
+	cpuinfo_uint(&o, "cpuid level", max_leaf);
+	cpuinfo_puts(&o, "flags\t:");
+	for (i = 0; i < sizeof(cpuinfo_edx_flags) / sizeof(cpuinfo_edx_flags[0]); i++)
+	{
+		if (edx & (1U << cpuinfo_edx_flags[i].bit))
+		{
+			cpuinfo_puts(&o, " ");
+			cpuinfo_puts(&o, cpuinfo_edx_flags[i].name);
+		}
+	}
+	for (i = 0; i < sizeof(cpuinfo_ecx_flags) / sizeof(cpuinfo_ecx_flags[0]); i++)
+	{
+		if (ecx & (1U << cpuinfo_ecx_flags[i].bit))
+		{
+			cpuinfo_puts(&o, " ");
+			cpuinfo_puts(&o, cpuinfo_ecx_flags[i].name);
+		}
+	}
+	cpuinfo_puts(&o, "\n");
+	cpuinfo_uint(&o, "clflush size", get_cpu_clflush_size() ? get_cpu_clflush_size() : 64);
+	/* CPUID 0x80000008: physical and linear address widths. */
+	cpuid_count(0x80000000u, 0, &eax, &ebx, &ecx2, &edx2);
+	if (eax >= 0x80000008u)
+	{
+		cpuid_count(0x80000008u, 0, &eax, &ebx, &ecx2, &edx2);
+		snprintf(t, sizeof(t), "%u bits physical, %u bits virtual",
+			 eax & 0xffu, (eax >> 8) & 0xffu);
+		cpuinfo_line(&o, "address sizes", t);
+	}
+	return (int)o.off;
+}
