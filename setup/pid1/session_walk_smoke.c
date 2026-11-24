@@ -63,14 +63,14 @@ static int fail(const char *t, int err)
 	return 1;
 }
 
-static long meminfo_field(const char *key)
+static long file_field(const char *path, const char *key)
 {
 	char buf[2048];
 	int fd;
 	ssize_t n;
 	char *p;
 
-	fd = open("/proc/meminfo", O_RDONLY);
+	fd = open(path, O_RDONLY);
 	if (fd < 0)
 		return -1;
 	n = read(fd, buf, sizeof(buf) - 1);
@@ -86,6 +86,11 @@ static long meminfo_field(const char *key)
 	while (*p == ' ' || *p == '\t')
 		p++;
 	return strtol(p, NULL, 10);
+}
+
+static long meminfo_field(const char *key)
+{
+	return file_field("/proc/meminfo", key);
 }
 
 static void walk(char *path, size_t len, unsigned depth)
@@ -608,9 +613,10 @@ int main(void)
 	if (test_proc_stat_fields() != 0)
 		return fail("SESSION_WALK_STAT_FAIL", errno);
 
-	kstack_free = meminfo_field("KStackMinFree:");
-	irq_nest = meminfo_field("IrqNestMax:");
-	kstack_peak = meminfo_field("KStackPeak:");
+	/* IR0-only counters live in /sys/kernel/mm, not in /proc/meminfo. */
+	kstack_free = file_field("/sys/kernel/mm", "KStackMinFree:");
+	irq_nest = file_field("/sys/kernel/mm", "IrqNestMax:");
+	kstack_peak = file_field("/sys/kernel/mm", "KStackPeak:");
 	printf("SESSION_WALK_KSTACK free=%ld irq_nest_max=%ld peak=%ld\n",
 	       kstack_free, irq_nest, kstack_peak);
 	fflush(stdout);

@@ -109,7 +109,7 @@ void ktest_pmm_skips_reserved_ranges(void)
 }
 
 /*
- * /proc/meminfo and /sys/kernel/mm print the third heap statistic as
+ * /sys/kernel/mm prints the third heap statistic as
  * SlabAllocs: the number of live heap allocations, not a byte count.
  */
 void ktest_allocator_stats(void)

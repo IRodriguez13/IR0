@@ -6,7 +6,6 @@
 fs_unlink_open_file FAIL  # an unlinked file cannot be read through an fd still open on it (path-based VFS)
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
-procfs_swap_consistent FAIL  # SwapTotal/SwapFree missing from /proc/meminfo
 sysfs_cpu_lists FAIL  # /sys/devices/system/cpu/{online,possible,present} missing
 procfs_pid_stat_fields FAIL  # /proc/<pid>/stat has 36 of 52 fields; nice fixed at 0
 procfs_pid_status_keys FAIL  # status lacks Tgid, Rss* and ctxt_switches

@@ -17,8 +17,9 @@ int proc_drivers_read(char *buf, size_t count)
 }
 
 /*
- * /proc/meminfo — labelled kB from PMM frames (PAGE_SIZE = 4 KiB).
- * MemUsed + MemFree == MemTotal (PMM-managed region only).
+ * /proc/meminfo — the Linux keys, in kB, from the PMM frames (sysinfo(2)
+ * reads the same figures) and the swap areas (/proc/swaps). IR0-only
+ * counters (heap, kernel stack headroom) are in /sys/kernel/mm.
  */
 int proc_meminfo_read(char *buf, size_t count)
 {
@@ -28,9 +29,8 @@ int proc_meminfo_read(char *buf, size_t count)
 	size_t heap_total = 0;
 	size_t heap_used = 0;
 	size_t heap_allocs = 0;
-	uint64_t total_kb;
-	uint64_t used_kb;
-	uint64_t free_kb;
+	struct ir0_swap_stats swap;
+	uint64_t page_kb = (uint64_t)IR0_MM_PAGE_SIZE / BYTES_PER_KB;
 	int len;
 
 	if (!buf || count == 0)
@@ -38,53 +38,31 @@ int proc_meminfo_read(char *buf, size_t count)
 	memset(buf, 0, count);
 
 	ir0_mm_pmm_stats(&total_frames, &used_frames, &free_frames);
-	total_kb = ((uint64_t)total_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
-	used_kb = ((uint64_t)used_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
-	free_kb = ((uint64_t)free_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
+	ir0_mm_alloc_stats(&heap_total, &heap_used, &heap_allocs);
+	ir0_swap_get_stats(&swap);
 
 	/*
-	 * Report the kernel heap too. The PMM figures barely move because the
-	 * heap is carved out of a region reserved at boot, so an exec failing
-	 * with -ENOMEM from a fragmented heap looked like a machine with tens
-	 * of MiB free. Slab is the Linux field for kernel data structures.
+	 * Linux field order (proc(5)). IR0 has no reclaimable page cache, so
+	 * everything free is available and Buffers and Cached are genuinely
+	 * zero. Slab is the kernel heap, Linux's field for kernel data.
 	 */
-	ir0_mm_alloc_stats(&heap_total, &heap_used, &heap_allocs);
-
 	len = snprintf(buf, count,
 		       "MemTotal:       %llu kB\n"
 		       "MemFree:        %llu kB\n"
-		       /*
-			* Linux field order (proc(5)); MemAvailable is the
-			* estimate of memory available for new work and must
-			* be present. IR0 has no reclaimable page
-			* cache, so everything free is available and Buffers
-			* and Cached are genuinely zero rather than unknown.
-			*/
 		       "MemAvailable:   %llu kB\n"
 		       "Buffers:        0 kB\n"
 		       "Cached:         0 kB\n"
+		       "SwapCached:     0 kB\n"
+		       "SwapTotal:      %llu kB\n"
+		       "SwapFree:       %llu kB\n"
 		       "Shmem:          0 kB\n"
-		       "MemUsed:        %llu kB\n"
-		       "PageSize:       %u kB\n"
-		       "Slab:           %llu kB\n"
-		       "SlabTotal:      %llu kB\n"
-		       "SlabAllocs:     %llu\n"
-		       "KStackMinFree:  %llu\n"
-		       "IrqNestMax:     %u\n"
-		       "KStackPeak:     %llu\n",
-		       (unsigned long long)total_kb,
-		       (unsigned long long)free_kb,
-		       (unsigned long long)free_kb,
-		       (unsigned long long)used_kb,
-		       (unsigned)(IR0_MM_PAGE_SIZE / BYTES_PER_KB),
-		       (unsigned long long)((uint64_t)heap_used / BYTES_PER_KB),
-		       (unsigned long long)((uint64_t)heap_total / BYTES_PER_KB),
-		       (unsigned long long)(uint64_t)heap_allocs,
-		       /* Worst kernel stack headroom seen since boot; a #DF on
-			* a deep path walk showed 32 KiB is not comfortable. */
-		       (unsigned long long)ktm_stack_min_headroom_get(),
-		       ktm_irq_nest_max_get(),
-		       (unsigned long long)ktm_stack_peak_used());
+		       "Slab:           %llu kB\n",
+		       (unsigned long long)(total_frames * page_kb),
+		       (unsigned long long)(free_frames * page_kb),
+		       (unsigned long long)(free_frames * page_kb),
+		       (unsigned long long)(swap.totalswap_pages * page_kb),
+		       (unsigned long long)(swap.freeswap_pages * page_kb),
+		       (unsigned long long)((uint64_t)heap_used / BYTES_PER_KB));
 	if (len < 0)
 		return -1;
 	if (len >= (int)count)
