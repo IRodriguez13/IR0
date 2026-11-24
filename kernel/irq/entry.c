@@ -45,7 +45,7 @@ void irqentry_exit_to_user_mode(void *frame)
 	signal_fill_syscall_frame_from_sigcontext(&p->syscall_frame, &interrupted);
 	do_signal(p, &interrupted);
 	process_apply_syscall_frame_to_task(&p->task, &p->syscall_frame,
-					    signal_sigcontext_return_value(&interrupted));
+					    syscall_frame_return(&p->syscall_frame));
 	process_restore_user_task_segments(p);
 	tls_restore_current();
 	switch_to_user_task(&p->task);

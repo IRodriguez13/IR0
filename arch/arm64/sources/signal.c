@@ -111,11 +111,6 @@ void signal_fill_syscall_frame_from_sigcontext(struct arch_syscall_frame *sf,
 	sf->spsr = ctx->pstate;
 }
 
-uint64_t signal_sigcontext_return_value(const struct sigcontext *ctx)
-{
-	return ctx ? ctx->regs[0] : 0;
-}
-
 void signal_fill_sigcontext_from_irq_frame(struct sigcontext *ctx,
 						const uint64_t *frame)
 {
