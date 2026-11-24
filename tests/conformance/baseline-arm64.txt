@@ -6,5 +6,4 @@
 fs_unlink_open_file FAIL  # an unlinked file cannot be read through an fd still open on it (path-based VFS)
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
-procfs_sys_kernel_vmstat FAIL  # /proc/sys/kernel/{pid_max,osrelease} and /proc/vmstat missing
 procfs_cpuinfo_format FAIL  # cpuinfo uses "key\tvalue", not "key\t: value"

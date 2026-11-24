@@ -322,6 +322,20 @@ int ir0_swap_slot_busy(unsigned type)
 	return g_areas[type].inuse != 0;
 }
 
+static uint64_t swap_pswpin;
+static uint64_t swap_pswpout;
+
+void ir0_swap_count_page(int in)
+{
+	unsigned long irq_flags = ir0_spin_lock_irqsave(&swap_area_lock);
+
+	if (in)
+		swap_pswpin++;
+	else
+		swap_pswpout++;
+	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
+}
+
 void ir0_swap_get_stats(struct ir0_swap_stats *out)
 {
 	unsigned long irq_flags;
@@ -339,6 +353,8 @@ void ir0_swap_get_stats(struct ir0_swap_stats *out)
 		out->totalswap_pages += g_areas[i].last_page;
 		out->freeswap_pages += g_areas[i].last_page - g_areas[i].inuse;
 	}
+	out->pswpin = swap_pswpin;
+	out->pswpout = swap_pswpout;
 	ir0_spin_unlock_irqrestore(&swap_area_lock, irq_flags);
 }
 

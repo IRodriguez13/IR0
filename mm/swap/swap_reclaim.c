@@ -122,6 +122,7 @@ static int ir0_swap_out_page(process_t *proc, uintptr_t va)
 	*pte = mm_make_swap_pte(type, offset);
 	mm_tlb_sync_page(process_pgd(proc), va);
 	pmm_frame_put(phys);
+	ir0_swap_count_page(0);
 	return 0;
 }
 
@@ -160,6 +161,7 @@ int ir0_swap_in_page(process_t *proc, uintptr_t va, uint64_t map_flags)
 	}
 	(void)ir0_swap_slot_put(type, offset);
 	mm_tlb_sync_page(process_pgd(proc), va);
+	ir0_swap_count_page(1);
 	return 0;
 }
 

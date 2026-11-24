@@ -821,6 +821,55 @@ int proc_kmsg_read(char *buf, size_t count)
 }
 
 /* /proc/swaps: Linux-style header; empty table when no swap devices. */
+/* /proc/sys/kernel/osrelease: the release uname(2) reports. */
+int proc_sys_kernel_osrelease_read(char *buf, size_t count)
+{
+	int len = snprintf(buf, count, "%s\n", IR0_VERSION_STRING);
+
+	if (len < 0)
+		return -EIO;
+	return len >= (int)count ? (int)count - 1 : len;
+}
+
+/*
+ * /proc/sys/kernel/pid_max: one more than the largest pid. IR0 hands out
+ * pids in increasing order without reuse, so the limit is that of pid_t.
+ */
+int proc_sys_kernel_pid_max_read(char *buf, size_t count)
+{
+	int len = snprintf(buf, count, "%d\n", INT32_MAX);
+
+	if (len < 0)
+		return -EIO;
+	return len >= (int)count ? (int)count - 1 : len;
+}
+
+/*
+ * /proc/vmstat: the Linux counters IR0 keeps. Free pages are the PMM's,
+ * pswpin/pswpout the pages moved through swap since boot.
+ */
+int proc_vmstat_read(char *buf, size_t count)
+{
+	size_t total_frames = 0;
+	size_t used_frames = 0;
+	size_t free_frames = 0;
+	struct ir0_swap_stats swap;
+	int len;
+
+	ir0_mm_pmm_stats(&total_frames, &used_frames, &free_frames);
+	ir0_swap_get_stats(&swap);
+	len = snprintf(buf, count,
+		       "nr_free_pages %llu\n"
+		       "pswpin %llu\n"
+		       "pswpout %llu\n",
+		       (unsigned long long)free_frames,
+		       (unsigned long long)swap.pswpin,
+		       (unsigned long long)swap.pswpout);
+	if (len < 0)
+		return -EIO;
+	return len >= (int)count ? (int)count - 1 : len;
+}
+
 int proc_swaps_read(char *buf, size_t count)
 {
     return ir0_swap_format_proc(buf, count);
