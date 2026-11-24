@@ -44,9 +44,30 @@ static int proc_readdir_fill_pid_subdir(struct vfs_dirent *entries, int max_entr
 	n = proc_readdir_add(entries, max_entries, n, "oom_score_adj", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "oom_score", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "fd", DT_DIR);
+	n = proc_readdir_add(entries, max_entries, n, "task", DT_DIR);
 	n = proc_readdir_add(entries, max_entries, n, "environ", DT_REG);
 	n = proc_readdir_add(entries, max_entries, n, "exe", DT_LNK);
 	return n;
+}
+
+/* /proc/<pid>/task: one directory per live thread of the group. */
+static int proc_readdir_fill_tasks(struct vfs_dirent *entries, int max_entries,
+                                   pid_t tgid)
+{
+    process_t *p;
+    int n = 0;
+
+    for (p = process_list; p && n < max_entries; p = p->next)
+    {
+        char tid[16];
+
+        if (p->tgid != tgid || !process_is_alive(p))
+            continue;
+        if (snprintf(tid, sizeof(tid), "%d", (int)p->task.pid) <= 0)
+            continue;
+        n = proc_readdir_add(entries, max_entries, n, tid, DT_DIR);
+    }
+    return n;
 }
 
 /*
@@ -74,6 +95,9 @@ static int proc_readdir_fill_live_pids(struct vfs_dirent *entries, int max_entri
     {
         if (skip_zombies && p->state == PROCESS_ZOMBIE)
             continue;
+        /* Threads are under their leader's task/, as on Linux. */
+        if (p->task.pid != p->tgid)
+            continue;
         snap[snap_count++] = p->task.pid;
     }
     irq_restore(irqf);
@@ -94,7 +118,7 @@ static int proc_readdir_fill_live_pids(struct vfs_dirent *entries, int max_entri
 
 /*
  * Path-based readdir for /proc mounts (no virtual fds).
- * /proc          — digit PIDs first, then "pid", then registry children
+ * /proc          — thread-group PIDs first, then self, then registry children
  * /proc/pid      — one dirent per live PID
  * /proc/pid/N    — status, cmdline, stat
  *
@@ -117,7 +141,6 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
         n = 0;
         n = proc_readdir_fill_live_pids(entries, max_entries, n, 1);
         n = proc_readdir_add(entries, max_entries, n, "self", DT_LNK);
-        n = proc_readdir_add(entries, max_entries, n, "pid", DT_DIR);
         if (n < max_entries)
         {
             int reg;
@@ -146,11 +169,11 @@ int proc_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
     if (!filename)
         return -ENOENT;
 
-    if (strcmp(filename, "pid_dir") == 0)
+    if (strcmp(filename, "task_dir") == 0)
     {
-        n = 0;
-        n = proc_readdir_fill_live_pids(entries, max_entries, n, 0);
-        return n;
+        if (!process_find_by_pid(pid))
+            return -ENOENT;
+        return proc_readdir_fill_tasks(entries, max_entries, pid);
     }
 
     if (strcmp(filename, "pid_subdir") == 0)
@@ -213,7 +236,7 @@ int proc_stat(const char *path, stat_t *st)
     filename = proc_parse_path(path, &pid);
     if (filename)
     {
-        if (strcmp(filename, "pid_dir") == 0 ||
+        if (strcmp(filename, "task_dir") == 0 ||
             strcmp(filename, "pid_subdir") == 0 ||
             strcmp(filename, "fd_dir") == 0 ||
             strcmp(filename, "self_link") == 0)

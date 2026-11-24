@@ -303,183 +303,146 @@ int proc_ps_read(char *buf, size_t count)
 }
 
 /*
- * Parse /proc path - returns entry name after /proc/, extracts PID if present.
- * Supports OSDev-style /proc/pid/N/status, legacy /proc/N/status, and
- * /proc/self/... mapped to the current process PID (Linux-style).
+ * The entries of /proc/<pid> and of /proc/<pid>/task/<tid> (Linux
+ * tid_base_stuff), and the kind proc_parse_path() returns for each.
+ */
+static const struct
+{
+	const char *name;
+	const char *kind;
+} proc_pid_entries[] = {
+	{ "status", "status" },
+	{ "comm", "comm" },
+	{ "cmdline", "cmdline" },
+	{ "stat", "stat" },
+	{ "maps", "maps" },
+	{ "statm", "statm" },
+	{ "oom_score_adj", "oom_score_adj" },
+	{ "oom_score", "oom_score" },
+	{ "fd", "fd_dir" },
+	{ "environ", "environ" },
+	{ "exe", "exe_link" },
+};
+
+#define PROC_PID_ENTRIES (sizeof(proc_pid_entries) / sizeof(proc_pid_entries[0]))
+
+/* The @len bytes at @s are a decimal number (an fd or a pid). */
+static int proc_is_number(const char *s, size_t len)
+{
+	size_t i;
+
+	if (len == 0 || len > 9)
+		return 0;
+	for (i = 0; i < len; i++)
+	{
+		if (s[i] < '0' || s[i] > '9')
+			return 0;
+	}
+	return 1;
+}
+
+/* Decimal pid of @len bytes at @s; 0 when it is not one. */
+static pid_t proc_parse_pid(const char *s, size_t len)
+{
+	pid_t pid = 0;
+	size_t i;
+
+	if (!proc_is_number(s, len))
+		return 0;
+	for (i = 0; i < len; i++)
+		pid = pid * 10 + (pid_t)(s[i] - '0');
+	return pid;
+}
+
+/* @tid is a live thread of the group led by @pid. */
+static int proc_tid_in_group(pid_t pid, pid_t tid)
+{
+	process_t *p = process_find_by_pid(tid);
+
+	return p && p->tgid == pid;
+}
+
+/*
+ * What follows /proc/<pid>/ in @rest. In a task directory (@in_task)
+ * there is no nested task/.
+ */
+static const char *proc_parse_pid_rest(const char *rest, pid_t *pid_out,
+				       int in_task)
+{
+	const char *slash;
+	pid_t tid;
+	size_t i;
+
+	if (rest[0] == '\0')
+		return "pid_subdir";
+	for (i = 0; i < PROC_PID_ENTRIES; i++)
+	{
+		if (strcmp(rest, proc_pid_entries[i].name) == 0)
+			return proc_pid_entries[i].kind;
+	}
+	if (strncmp(rest, "fd/", 3) == 0 && proc_is_number(rest + 3, strlen(rest + 3)))
+		return "fd_link";
+	if (in_task || strncmp(rest, "task", 4) != 0)
+		return NULL;
+	if (rest[4] == '\0')
+		return "task_dir";
+	if (rest[4] != '/')
+		return NULL;
+	rest += 5;
+	slash = strchr(rest, '/');
+	tid = proc_parse_pid(rest, slash ? (size_t)(slash - rest) : strlen(rest));
+	if (tid <= 0 || !proc_tid_in_group(*pid_out, tid))
+		return NULL;
+	*pid_out = tid;
+	return proc_parse_pid_rest(slash ? slash + 1 : "", pid_out, 1);
+}
+
+/*
+ * Parse a /proc path: the kind of node it names ("pid_subdir", "stat",
+ * "fd_link", ...) with the pid it belongs to in @pid_out, or the name below
+ * /proc for a kernel node (@pid_out -1). /proc/self and /proc/<pid>/task/
+ * <tid> resolve to the pid they name. NULL when no such node can exist.
  */
 const char *proc_parse_path(const char *path, pid_t *pid_out)
 {
-    if (!is_proc_path(path))
-        return NULL;
+	const char *after_proc;
+	const char *slash;
+	pid_t pid;
 
-    /* Resolve /proc/self without manufacturing a temporary path. */
-    if (strncmp(path, "/proc/self/", 11) == 0)
-    {
-        const char *rest = path + 11;
+	if (!is_proc_path(path))
+		return NULL;
+	after_proc = path + 6;
+	slash = strchr(after_proc, '/');
 
-        if (!current_process)
-            return NULL;
-        *pid_out = current_process->task.pid;
-        if (strcmp(rest, "status") == 0) return "status";
-        if (strcmp(rest, "comm") == 0) return "comm";
-        if (strcmp(rest, "cmdline") == 0) return "cmdline";
-        if (strcmp(rest, "maps") == 0) return "maps";
-        if (strcmp(rest, "statm") == 0) return "statm";
-        if (strcmp(rest, "oom_score_adj") == 0) return "oom_score_adj";
-        if (strcmp(rest, "oom_score") == 0) return "oom_score";
-        if (strcmp(rest, "environ") == 0) return "environ";
-        if (strcmp(rest, "exe") == 0) return "exe_link";
-        if (strcmp(rest, "stat") == 0) return "stat";
-        if (strcmp(rest, "fd") == 0) return "fd_dir";
-        if (strncmp(rest, "fd/", 3) == 0 &&
-            rest[3] >= '0' && rest[3] <= '9')
-            return "fd_link";
-        return NULL;
-    }
+	if (strncmp(after_proc, "self", 4) == 0 &&
+	    (after_proc[4] == '\0' || after_proc[4] == '/'))
+	{
+		if (!current_process)
+			return NULL;
+		*pid_out = current_process->task.pid;
+		if (after_proc[4] == '\0')
+			return "self_link";
+		return proc_parse_pid_rest(after_proc + 5, pid_out, 0);
+	}
 
-    /* Skip "/proc/" prefix */
-    const char *after_proc = path + 6;
+	/* IR0 shorthands for the current task. */
+	if (strcmp(after_proc, "status") == 0 || strcmp(after_proc, "comm") == 0)
+	{
+		*pid_out = -1;
+		return after_proc;
+	}
 
-    /* /proc/self — Linux symlink to /proc/<current-pid> (bare path). */
-    if (strcmp(after_proc, "self") == 0)
-    {
-        if (!current_process)
-            return NULL;
-        *pid_out = current_process->task.pid;
-        return "self_link";
-    }
+	pid = proc_parse_pid(after_proc, slash ? (size_t)(slash - after_proc)
+					       : strlen(after_proc));
+	if (pid > 0)
+	{
+		*pid_out = pid;
+		return proc_parse_pid_rest(slash ? slash + 1 : "", pid_out, 0);
+	}
 
-    /* Check if it's /proc/status (current process) */
-    if (strncmp(after_proc, "status", 6) == 0)
-    {
-        *pid_out = -1;
-        return "status";
-    }
-
-    if (strcmp(after_proc, "comm") == 0)
-    {
-        *pid_out = -1;
-        return "comm";
-    }
-
-    /* OSDev-style: /proc/pid or /proc/pid/N or /proc/pid/N/status */
-    if (strncmp(after_proc, "pid", 3) == 0 && (after_proc[3] == '\0' || after_proc[3] == '/'))
-    {
-        if (after_proc[3] == '\0')
-        {
-            *pid_out = -1;
-            return "pid_dir";
-        }
-        /* pid/123 or pid/123/status or pid/123/cmdline */
-        const char *rest = after_proc + 4;
-        char *slash = strchr(rest, '/');
-        if (!slash)
-        {
-            *pid_out = atoi(rest);
-            return "pid_subdir";
-        }
-        char pid_str[16];
-        size_t pid_len = (size_t)(slash - rest);
-        if (pid_len >= sizeof(pid_str))
-            return NULL;
-        strncpy(pid_str, rest, pid_len);
-        pid_str[pid_len] = '\0';
-        *pid_out = atoi(pid_str);
-        if (strncmp(slash + 1, "status", 6) == 0)
-            return "status";
-        if (strcmp(slash + 1, "comm") == 0)
-            return "comm";
-        if (strncmp(slash + 1, "cmdline", 7) == 0)
-            return "cmdline";
-        if (strncmp(slash + 1, "maps", 4) == 0)
-            return "maps";
-        if (strncmp(slash + 1, "statm", 5) == 0)
-            return "statm";
-        if (strncmp(slash + 1, "oom_score_adj", 13) == 0)
-            return "oom_score_adj";
-        if (strncmp(slash + 1, "oom_score", 9) == 0)
-            return "oom_score";
-        if (strncmp(slash + 1, "fd", 2) == 0 &&
-            (slash[3] == '\0' || slash[3] == '/'))
-        {
-            if (slash[3] == '\0')
-                return "fd_dir";
-            if (slash[4] >= '0' && slash[4] <= '9')
-                return "fd_link";
-        }
-        if (strncmp(slash + 1, "environ", 7) == 0)
-            return "environ";
-        if (strncmp(slash + 1, "exe", 3) == 0 && slash[4] == '\0')
-            return "exe_link";
-        if (strncmp(slash + 1, "stat", 4) == 0)
-            return "stat";
-        return NULL;
-    }
-
-    /* Legacy: /proc/[pid]/status or /proc/[pid]/cmdline */
-    char *slash = strchr(after_proc, '/');
-    if (slash)
-    {
-        char pid_str[16];
-        size_t pid_len = (size_t)(slash - after_proc);
-        if (pid_len < sizeof(pid_str) - 1)
-        {
-            strncpy(pid_str, after_proc, pid_len);
-            pid_str[pid_len] = '\0';
-            *pid_out = atoi(pid_str);
-
-            if (strncmp(slash + 1, "status", 6) == 0)
-                return "status";
-            if (strcmp(slash + 1, "comm") == 0)
-                return "comm";
-            if (strncmp(slash + 1, "cmdline", 7) == 0)
-                return "cmdline";
-            if (strncmp(slash + 1, "maps", 4) == 0)
-                return "maps";
-            if (strncmp(slash + 1, "statm", 5) == 0)
-                return "statm";
-            if (strncmp(slash + 1, "oom_score_adj", 13) == 0)
-                return "oom_score_adj";
-            if (strncmp(slash + 1, "oom_score", 9) == 0)
-                return "oom_score";
-            if (strncmp(slash + 1, "fd", 2) == 0 &&
-                (slash[3] == '\0' || slash[3] == '/'))
-            {
-                if (slash[3] == '\0')
-                    return "fd_dir";
-                if (slash[4] >= '0' && slash[4] <= '9')
-                    return "fd_link";
-            }
-            if (strncmp(slash + 1, "environ", 7) == 0)
-                return "environ";
-            if (strncmp(slash + 1, "exe", 3) == 0 && slash[4] == '\0')
-                return "exe_link";
-            if (strncmp(slash + 1, "stat", 4) == 0)
-                return "stat";
-        }
-    }
-    else
-    {
-        /* Bare /proc/N directory (digit-only name). */
-        const char *p = after_proc;
-        int digits = 0;
-
-        while (*p >= '0' && *p <= '9')
-        {
-            digits++;
-            p++;
-        }
-        if (digits > 0 && *p == '\0')
-        {
-            *pid_out = atoi(after_proc);
-            return "pid_subdir";
-        }
-    }
-
-    /* Regular /proc files */
-    *pid_out = -1;
-
-    return after_proc;
+	/* Kernel nodes: /proc/meminfo, /proc/net/dev, ... */
+	*pid_out = -1;
+	return after_proc;
 }
 
 const char *proc_resolve_path(const char *path, pid_t *pid_out)
@@ -564,9 +527,9 @@ int proc_is_virtual_subdir(const char *path)
     if (!filename)
         return 0;
 
-    return strcmp(filename, "pid_dir") == 0 ||
-           strcmp(filename, "pid_subdir") == 0 ||
+    return strcmp(filename, "pid_subdir") == 0 ||
            strcmp(filename, "fd_dir") == 0 ||
+           strcmp(filename, "task_dir") == 0 ||
            strcmp(filename, "self_link") == 0;
 }
 
