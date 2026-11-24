@@ -427,24 +427,6 @@ $(HV_KIND_BIN): $(HV_KIND_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 clean:
 	@rm -rf $(BUILD_DIR)
 
-# EVDEV-SELFTEST
-EVDEV_SRC := syscall/evdev.c
-EVDEV_BIN := $(BUILD_DIR)/evdev
-
-.PHONY: evdev
-
-evdev: $(EVDEV_BIN)
-
-$(EVDEV_BIN): $(EVDEV_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
-	@if [ -z "$(CC)" ]; then \
-		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
-		exit 1; \
-	fi
-	@echo "  CC      $(ARCH) selftest evdev"
-	@$(CC) $(CFLAGS) -I$(KERNEL_ROOT)/includes/uapi -o $@ $(EVDEV_SRC) $(LDLIBS)
-	@file $@ | grep -qi 'statically linked'
-	@test -x $@
-
 # SIGHAND-SELFTEST
 SIGHAND_SRC := syscall/sighand.c
 SIGHAND_BIN := $(BUILD_DIR)/sighand
@@ -625,24 +607,6 @@ $(SHM_CPID_BIN): $(SHM_CPID_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
-# EVDEV-GRAB-SELFTEST
-EVDEV_GRAB_SRC := syscall/evdev_grab.c
-EVDEV_GRAB_BIN := $(BUILD_DIR)/evdev_grab
-
-.PHONY: evdev_grab
-
-evdev_grab: $(EVDEV_GRAB_BIN)
-
-$(EVDEV_GRAB_BIN): $(EVDEV_GRAB_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
-	@if [ -z "$(CC)" ]; then \
-		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
-		exit 1; \
-	fi
-	@echo "  CC      $(ARCH) selftest evdev_grab"
-	@$(CC) $(CFLAGS) -o $@ $(EVDEV_GRAB_SRC) $(LDLIBS)
-	@file $@ | grep -qi 'statically linked'
-	@test -x $@
-
 # PRCTL-DUMPABLE-SELFTEST
 PRCTL_DUMPABLE_SRC := syscall/prctl_dumpable.c
 PRCTL_DUMPABLE_BIN := $(BUILD_DIR)/prctl_dumpable
@@ -770,24 +734,6 @@ $(SHM_MODE_BIN): $(SHM_MODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
-# EVDEV-PROP-SELFTEST
-EVDEV_PROP_SRC := syscall/evdev_prop.c
-EVDEV_PROP_BIN := $(BUILD_DIR)/evdev_prop
-
-.PHONY: evdev_prop
-
-evdev_prop: $(EVDEV_PROP_BIN)
-
-$(EVDEV_PROP_BIN): $(EVDEV_PROP_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
-	@if [ -z "$(CC)" ]; then \
-		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
-		exit 1; \
-	fi
-	@echo "  CC      $(ARCH) selftest evdev_prop"
-	@$(CC) $(CFLAGS) -o $@ $(EVDEV_PROP_SRC) $(LDLIBS)
-	@file $@ | grep -qi 'statically linked'
-	@test -x $@
-
 # PROC-SIGSET-SELFTEST
 PROC_SIGSET_SRC := syscall/proc_sigset.c
 PROC_SIGSET_BIN := $(BUILD_DIR)/proc_sigset
@@ -824,24 +770,6 @@ $(ILL_CODE_BIN): $(ILL_CODE_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
-# EVDEV-CLOCK-SELFTEST
-EVDEV_CLOCK_SRC := syscall/evdev_clock.c
-EVDEV_CLOCK_BIN := $(BUILD_DIR)/evdev_clock
-
-.PHONY: evdev_clock
-
-evdev_clock: $(EVDEV_CLOCK_BIN)
-
-$(EVDEV_CLOCK_BIN): $(EVDEV_CLOCK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
-	@if [ -z "$(CC)" ]; then \
-		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
-		exit 1; \
-	fi
-	@echo "  CC      $(ARCH) selftest evdev_clock"
-	@$(CC) $(CFLAGS) -o $@ $(EVDEV_CLOCK_SRC) $(LDLIBS)
-	@file $@ | grep -qi 'statically linked'
-	@test -x $@
-
 # PROC-SIGACT-SELFTEST
 PROC_SIGACT_SRC := syscall/proc_sigact.c
 PROC_SIGACT_BIN := $(BUILD_DIR)/proc_sigact
@@ -857,24 +785,6 @@ $(PROC_SIGACT_BIN): $(PROC_SIGACT_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest proc_sigact"
 	@$(CC) $(CFLAGS) -o $@ $(PROC_SIGACT_SRC) $(LDLIBS)
-	@file $@ | grep -qi 'statically linked'
-	@test -x $@
-
-# EVDEV-ABS-SELFTEST
-EVDEV_ABS_SRC := syscall/evdev_abs.c
-EVDEV_ABS_BIN := $(BUILD_DIR)/evdev_abs
-
-.PHONY: evdev_abs
-
-evdev_abs: $(EVDEV_ABS_BIN)
-
-$(EVDEV_ABS_BIN): $(EVDEV_ABS_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
-	@if [ -z "$(CC)" ]; then \
-		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
-		exit 1; \
-	fi
-	@echo "  CC      $(ARCH) selftest evdev_abs"
-	@$(CC) $(CFLAGS) -o $@ $(EVDEV_ABS_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
@@ -911,24 +821,6 @@ $(PIPE_SZ_BIN): $(PIPE_SZ_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	fi
 	@echo "  CC      $(ARCH) selftest pipe_sz"
 	@$(CC) $(CFLAGS) -o $@ $(PIPE_SZ_SRC) $(LDLIBS)
-	@file $@ | grep -qi 'statically linked'
-	@test -x $@
-
-# EVDEV-KEY-SELFTEST
-EVDEV_KEY_SRC := syscall/evdev_key.c
-EVDEV_KEY_BIN := $(BUILD_DIR)/evdev_key
-
-.PHONY: evdev_key
-
-evdev_key: $(EVDEV_KEY_BIN)
-
-$(EVDEV_KEY_BIN): $(EVDEV_KEY_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
-	@if [ -z "$(CC)" ]; then \
-		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
-		exit 1; \
-	fi
-	@echo "  CC      $(ARCH) selftest evdev_key"
-	@$(CC) $(CFLAGS) -o $@ $(EVDEV_KEY_SRC) $(LDLIBS)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 

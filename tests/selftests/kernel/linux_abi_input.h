@@ -1,0 +1,17 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* Case list for linux_abi_input.c. */
+CONF_CASE(input_i8042_keyboard_and_mouse_apart)
+CONF_CASE(input_short_read_einval)
+CONF_CASE(input_unknown_ioctl_einval)
+CONF_CASE(input_gbit_returns_length)
+CONF_CASE(input_name_and_phys)
+CONF_CASE(input_each_open_has_a_ring)
+CONF_CASE(input_whole_packets_only)
+CONF_CASE(input_overflow_syn_dropped)
+CONF_CASE(input_grab_is_exclusive)
+CONF_CASE(input_clock_ids)
+CONF_CASE(input_event_time_follows_clock)
+CONF_CASE(input_clock_change_flushes)
+CONF_CASE(input_gkey_state_flushes_keys)
+CONF_CASE(input_revoke)
+CONF_CASE(input_uinput_device_lifecycle)

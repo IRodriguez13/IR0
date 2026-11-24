@@ -8,97 +8,181 @@
  * See the LICENSE file in the project root for full license information.
  *
  * File: input.h
- * Description: IR0 kernel source/header file
+ * Description: Input device class, Linux include/linux/input.h model.
+ *
+ * A driver allocates a struct input_dev, sets its identity and capability
+ * bits (__set_bit into evbit/keybit/relbit/...), registers it and reports
+ * events with input_event() or the input_report_*() helpers, ending each
+ * packet with input_sync(). Handlers (evdev, the console keyboard, the
+ * PS/2 mouse multiplexer) attach a struct input_handle to every device
+ * they want and receive its events. Drivers never call a handler and
+ * handlers never name a driver.
  */
 
-/**
- * IR0 Kernel - Linux evdev-compatible input events
- * 
- */
 #pragma once
 
 #include <stddef.h>
 #include <stdint.h>
 #include <linux/input.h>
+#include <ir0/bitops.h>
+
+struct input_handle;
+
+struct input_dev
+{
+	const char *name;
+	const char *phys;
+	const char *uniq;
+	struct input_id id;
+
+	unsigned long propbit[BITS_TO_LONGS(INPUT_PROP_CNT)];
+	unsigned long evbit[BITS_TO_LONGS(EV_CNT)];
+	unsigned long keybit[BITS_TO_LONGS(KEY_CNT)];
+	unsigned long relbit[BITS_TO_LONGS(REL_CNT)];
+	unsigned long absbit[BITS_TO_LONGS(ABS_CNT)];
+	unsigned long mscbit[BITS_TO_LONGS(MSC_CNT)];
+	unsigned long ledbit[BITS_TO_LONGS(LED_CNT)];
+	unsigned long sndbit[BITS_TO_LONGS(SND_CNT)];
+	unsigned long swbit[BITS_TO_LONGS(SW_CNT)];
+
+	/* ABS_CNT entries when the device has absolute axes, else NULL. */
+	struct input_absinfo *absinfo;
+
+	/* Current state, kept by the input core. */
+	unsigned long key[BITS_TO_LONGS(KEY_CNT)];
+	unsigned long led[BITS_TO_LONGS(LED_CNT)];
+	unsigned long snd[BITS_TO_LONGS(SND_CNT)];
+	unsigned long sw[BITS_TO_LONGS(SW_CNT)];
+
+	/* Driver data. */
+	void *private;
+
+	/* Owned by the input core. */
+	struct input_dev *next;
+	struct input_handle *h_list;
+	struct input_handle *grab;
+	unsigned int pending;
+	int registered;
+};
+
+struct input_handler;
+
+/* One handler attached to one device. */
+struct input_handle
+{
+	void *private;
+	const char *name;
+	struct input_dev *dev;
+	struct input_handler *handler;
+	struct input_handle *d_next;
+};
+
+struct input_handler
+{
+	const char *name;
+	/* Called with interrupts masked; must not sleep or allocate. */
+	void (*event)(struct input_handle *handle, unsigned int type,
+		      unsigned int code, int value);
+	/*
+	 * Offered every registered device. 0 when it attached a handle
+	 * (input_register_handle), -ENODEV when it does not want the device.
+	 */
+	int (*connect)(struct input_handler *handler, struct input_dev *dev);
+	/* The device is going away: unregister and drop the handle. */
+	void (*disconnect)(struct input_handle *handle);
+	struct input_handler *next;
+};
+
+struct input_dev *input_allocate_device(void);
+/* Only for a device that was never registered. */
+void input_free_device(struct input_dev *dev);
+int input_register_device(struct input_dev *dev);
+/* Disconnects every handler and frees the device. */
+void input_unregister_device(struct input_dev *dev);
+
+void input_event(struct input_dev *dev, unsigned int type,
+		 unsigned int code, int value);
+/* An event from a handler (evdev write): honours the device grab. */
+void input_inject_event(struct input_handle *handle, unsigned int type,
+			unsigned int code, int value);
+
+static inline void input_report_key(struct input_dev *dev, unsigned int code,
+				    int value)
+{
+	input_event(dev, EV_KEY, code, value);
+}
+
+static inline void input_report_rel(struct input_dev *dev, unsigned int code,
+				    int value)
+{
+	input_event(dev, EV_REL, code, value);
+}
+
+static inline void input_report_abs(struct input_dev *dev, unsigned int code,
+				    int value)
+{
+	input_event(dev, EV_ABS, code, value);
+}
+
+static inline void input_sync(struct input_dev *dev)
+{
+	input_event(dev, EV_SYN, SYN_REPORT, 0);
+}
+
+int input_register_handler(struct input_handler *handler);
+int input_register_handle(struct input_handle *handle);
+void input_unregister_handle(struct input_handle *handle);
+/* Route every event of the device to @handle only; -EBUSY if taken. */
+int input_grab_device(struct input_handle *handle);
+void input_release_device(struct input_handle *handle);
 
 /*
- * /dev/events0 test hook ioctl (gated by CONFIG_TEST_INPUT_INJECT).
- * Only used by deterministic smoke/harness code.
+ * Run @fn on the handle's device under the input lock, so a handler can
+ * copy device state (names, bitmaps, key state) without racing an event
+ * or an unregister. -ENODEV once the device is gone.
+ */
+int input_handle_locked(struct input_handle *handle,
+			void (*fn)(struct input_dev *dev, void *arg), void *arg);
+
+/* Handler registration, from the generic boot table (drivers/init_drv.c). */
+int evdev_init(void);
+int uinput_init(void);
+
+/*
+ * Legacy IR0 interfaces of /dev/events0, the multiplexed node that
+ * predates /dev/input/eventN. IR0_INPUT_IOCTL_INJECT is gated by
+ * CONFIG_TEST_INPUT_INJECT and only used by deterministic smoke code.
  */
 #define IR0_INPUT_IOCTL_INJECT 0x49520001u
 #define IR0_INPUT_IOCTL_GET_CAPS 0x49520002u
 
-struct input_dev;
+struct ir0_input_event
+{
+	uint16_t type;
+	uint16_t code;
+	int32_t value;
+	int64_t timestamp_ms;
+};
 
-/* One registered device. Events are reported only through input_event. */
-int input_register_device(struct input_dev *dev);
-struct input_dev *input_i8042_dev(void);
-void input_event(struct input_dev *dev, unsigned int type,
-		 unsigned int code, int value);
-void input_sync(struct input_dev *dev);
-/* EVIOCGKEY: current key bitmap. Fills min(len, bitmap) from dev. */
-size_t input_key_state(struct input_dev *dev, void *buf, size_t len);
-
-const char *input_device_name(void);
-int input_device_id(struct input_id *id);
-
-/* One ring per open of the event node. */
-int input_is_event_device(uint32_t device_id);
-void *input_client_open(void);
-void input_client_get(void *client);
-void input_client_put(void *client);
-/*
- * EVIOCGRAB: the third ioctl argument is the value itself (1 grabs,
- * 0 releases), not a user pointer.
- */
-/* 0 on success. A second grabber gets -EBUSY. */
-int input_client_grab(void *client, int grab);
-/*
- * EVIOCSCLOCKID: the third argument is a pointer to the clock id
- * (CLOCK_REALTIME 0 or CLOCK_MONOTONIC 1).
- */
-/* 0 on success. Any other clock id is -EINVAL. */
-int input_client_set_clock(void *client, int clockid);
-/* Pop up to @count queued events of @client; the number popped. */
-size_t input_client_read(void *client, struct input_event *buf, size_t count);
-int input_client_has_data(void *client);
-size_t input_client_queue_depth(void *client);
+struct ir0_input_caps
+{
+	int keyboard;
+	int mouse;
+	int touch;
+	int gamepad;
+	int has_events0;
+	int keyboard_ps2;
+	int mouse_ps2;
+	int event_queue_depth;
+	int supports_key_up_down;
+	int supports_mouse_motion;
+};
 
 /*
- * /dev/events0 open-reader count. While >0, PS/2 still feeds EV_KEY but
- * must not also inject cooked TTY bytes (each key would reach the evdev reader and the TTY reader).
+ * Open /dev/events0 readers. While >0 the console keyboard still feeds
+ * EV_KEY but does not also type into the tty (legacy events0 contract).
  */
-void input_events_reader_open(void);
-void input_events_reader_close(void);
 int input_events_readers_active(void);
-
-
-/*
- * IR0 input facade (device/provider neutral).
- * Current provider: keyboard -> /dev/events0 queue.
- */
-struct ir0_input_event {
-    uint16_t type;
-    uint16_t code;
-    int32_t value;
-    int64_t timestamp_ms;
-};
-
-struct ir0_input_caps {
-    int keyboard;
-    int mouse;
-    int touch;
-    int gamepad;
-    int has_events0;
-    int keyboard_ps2;
-    int mouse_ps2;
-    int event_queue_depth;
-    int supports_key_up_down;
-    int supports_mouse_motion;
-};
-
-void ir0_input_get_caps(struct ir0_input_caps *caps);
-int ir0_input_inject_event(uint16_t type, uint16_t code, int32_t value);
 
 /* IRQ-safe notification after a complete device event/report is queued. */
 typedef void (*input_ready_notifier_t)(void);

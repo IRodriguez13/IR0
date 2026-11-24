@@ -127,6 +127,31 @@ int devfs_register_node(devfs_node_t *node)
     return 0;
 }
 
+/*
+ * devfs_unregister_node - Remove a node registered with devfs_register_node.
+ * Lookups stop finding it; descriptors already open keep their node pointer.
+ */
+void devfs_unregister_node(devfs_node_t *node)
+{
+    unsigned long irq_flags;
+    int i;
+
+    if (!node)
+        return;
+    irq_flags = irq_save();
+    for (i = 0; i < num_dev_nodes; i++)
+    {
+        if (dev_nodes[i] == node)
+        {
+            dev_nodes[i] = dev_nodes[num_dev_nodes - 1];
+            dev_nodes[num_dev_nodes - 1] = NULL;
+            num_dev_nodes--;
+            break;
+        }
+    }
+    irq_restore(irq_flags);
+}
+
 static int devfs_register_node_checked(devfs_node_t *node)
 {
     int rc = devfs_register_node(node);
@@ -175,10 +200,6 @@ int devfs_init(void)
     if (devfs_register_node_checked(&dev_full) != 0)
         return -1;
     if (devfs_register_node_checked(&dev_fb0) != 0)
-        return -1;
-    if (devfs_register_node_checked(&dev_events0) != 0)
-        return -1;
-    if (devfs_register_node_checked(&dev_input_event0) != 0)
         return -1;
     if (devfs_register_node_checked(&dev_serial) != 0)
         return -1;

@@ -98,8 +98,6 @@ extern devfs_node_t dev_random;
 extern devfs_node_t dev_urandom;
 extern devfs_node_t dev_full;
 extern devfs_node_t dev_fb0;
-extern devfs_node_t dev_events0;
-extern devfs_node_t dev_input_event0;
 extern devfs_node_t dev_serial;
 extern devfs_node_t dev_ipc;
 #if CONFIG_ENABLE_BLUETOOTH

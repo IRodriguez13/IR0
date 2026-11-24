@@ -31,6 +31,7 @@
 #include <config.h>
 #include <drivers/multilang_drivers.h>
 #include <ir0/boot_arch.h>
+#include <ir0/input.h>
 
 #if CONFIG_ENABLE_NETWORKING
 #include <ir0/net.h>
@@ -48,7 +49,18 @@ static int boot_init_network(void)
 #endif
 }
 
+/* The input handlers attach to every input device registered after them. */
+static int boot_init_input(void)
+{
+    int ret = evdev_init();
+
+    if (ret == 0)
+        ret = uinput_init();
+    return ret;
+}
+
 static const struct driver_boot_entry generic_boot_drivers[] = {
+    { "input_handlers", boot_init_input, DRIVER_BOOT_STAGE_INPUT, 1 },
     { "network_stack", boot_init_network, DRIVER_BOOT_STAGE_NETWORK,
       CONFIG_ENABLE_NETWORKING && CONFIG_INIT_NETWORK_STACK },
 };

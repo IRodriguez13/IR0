@@ -54,6 +54,8 @@ volatile int *shared_keyboard_buffer_pos =
 static int system_in_idle_mode = 0;
 
 static struct ps2_set1_state kbd_state;
+/* The AT keyboard behind i8042 port 1 (Linux atkbd). */
+static struct input_dev *kbd_dev;
 static int console_keyboard_mode = IR0_INPUT_KBD_XLATE;
 
 /* PS/2 scancode set 1 -> Linux KEY_* (for /dev/events0, input(4)) */
@@ -375,10 +377,14 @@ static void keyboard_feed_scancode(uint8_t scancode)
 	code = (uint8_t)(scancode & 0x7F);
 
 	kc = extended ? ext_scancode_to_keycode[code] : scancode_to_keycode[code];
-	if (kc)
+	if (kc && kbd_dev)
 	{
-		input_event(input_i8042_dev(), EV_KEY, kc, down);
-		input_sync(input_i8042_dev());
+		/* atkbd: the scancode, then the key; a held key repeats as 2. */
+		input_event(kbd_dev, EV_MSC, MSC_SCAN,
+			    extended ? (0xE000 | code) : code);
+		input_report_key(kbd_dev, kc,
+				 down ? (test_bit(kc, kbd_dev->key) ? 2 : 1) : 0);
+		input_sync(kbd_dev);
 	}
 
 	/* Linux K_MEDIUMRAW: one byte, KEY_* code with bit 7 on release. */
@@ -461,9 +467,44 @@ static const struct input_keyboard_ops i8042_keyboard_ops = {
 	.receive = keyboard_receive,
 };
 
+/* Linux atkbd identity for a translated set-2 keyboard. */
+static int keyboard_register_input(void)
+{
+	struct input_dev *dev = input_allocate_device();
+	unsigned int i;
+	int ret;
+
+	if (!dev)
+		return -ENOMEM;
+	dev->name = "AT Translated Set 2 keyboard";
+	dev->phys = "isa0060/serio0/input0";
+	dev->id.bustype = BUS_I8042;
+	dev->id.vendor = 0x0001;
+	dev->id.product = 0x0001;
+	dev->id.version = 0xab41;
+	__set_bit(EV_KEY, dev->evbit);
+	__set_bit(EV_MSC, dev->evbit);
+	__set_bit(MSC_SCAN, dev->mscbit);
+	for (i = 0; i < 256; i++)
+	{
+		if (scancode_to_keycode[i])
+			__set_bit(scancode_to_keycode[i], dev->keybit);
+		if (ext_scancode_to_keycode[i])
+			__set_bit(ext_scancode_to_keycode[i], dev->keybit);
+	}
+	ret = input_register_device(dev);
+	if (ret)
+	{
+		input_free_device(dev);
+		return ret;
+	}
+	kbd_dev = dev;
+	return 0;
+}
+
 void keyboard_init(void)
 {
-	(void)input_register_device(input_i8042_dev());
+	(void)keyboard_register_input();
 	input_register_keyboard(&i8042_keyboard_ops);
 	keyboard_buffer_head = 0;
 	keyboard_buffer_tail = 0;

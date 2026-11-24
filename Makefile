@@ -494,7 +494,8 @@ KERNEL_OBJS = \
     fs/eventfd.o \
     fs/timerfd.o \
     ipc/posix_shm.o \
-    drivers/input/input_events.o \
+    drivers/input/evdev.o \
+    drivers/input/uinput.o \
     fs/binfmt_elf.o \
     drivers/core/driver_registry.o \
     drivers/core/resource_registry.o \

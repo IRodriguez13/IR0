@@ -45,6 +45,8 @@ static bool ps2_mouse_enable_5buttons(void);
 
 /* Global mouse state */
 static ps2_mouse_state_t mouse_state = {0};
+/* The PS/2 mouse behind i8042 port 2 (Linux psmouse). */
+static struct input_dev *mouse_dev;
 static struct ps2_mouse_pkt_state pkt_state;
 static uint8_t expected_packet_size = 3;
 
@@ -85,6 +87,55 @@ bool ps2_mouse_packet_available(void)
 }
 
 /* Internal hardware initialization function */
+/* Linux psmouse names and ids for the protocol the mouse answered. */
+static int32_t ps2_mouse_register_input(void)
+{
+    struct input_dev *dev;
+
+    if (mouse_dev)
+        return 0;
+    dev = input_allocate_device();
+    if (!dev)
+        return -1;
+    dev->phys = "isa0060/serio1/input0";
+    dev->id.bustype = BUS_I8042;
+    dev->id.vendor = 0x0002;
+    __set_bit(EV_KEY, dev->evbit);
+    __set_bit(EV_REL, dev->evbit);
+    __set_bit(BTN_LEFT, dev->keybit);
+    __set_bit(BTN_RIGHT, dev->keybit);
+    __set_bit(BTN_MIDDLE, dev->keybit);
+    __set_bit(REL_X, dev->relbit);
+    __set_bit(REL_Y, dev->relbit);
+    __set_bit(INPUT_PROP_POINTER, dev->propbit);
+    if (mouse_state.has_5buttons)
+    {
+        dev->name = "ImExPS/2 Generic Explorer Mouse";
+        dev->id.product = 0x0004;
+        __set_bit(BTN_SIDE, dev->keybit);
+        __set_bit(BTN_EXTRA, dev->keybit);
+        __set_bit(REL_WHEEL, dev->relbit);
+    }
+    else if (mouse_state.has_wheel)
+    {
+        dev->name = "ImPS/2 Generic Wheel Mouse";
+        dev->id.product = 0x0003;
+        __set_bit(REL_WHEEL, dev->relbit);
+    }
+    else
+    {
+        dev->name = "PS/2 Generic Mouse";
+        dev->id.product = 0x0001;
+    }
+    if (input_register_device(dev) != 0)
+    {
+        input_free_device(dev);
+        return -1;
+    }
+    mouse_dev = dev;
+    return 0;
+}
+
 static int32_t ps2_mouse_hw_init(void)
 {
     /* Initialize mouse state */
@@ -173,7 +224,7 @@ static int32_t ps2_mouse_hw_init(void)
 
     mouse_state.initialized = true;
     ps2_mouse_pkt_reset(&pkt_state, expected_packet_size);
-    return 0;
+    return ps2_mouse_register_input();
 }
 
 /* Driver registration structures */
@@ -197,7 +248,6 @@ static const struct input_mouse_ops ps2_mouse_input_ops;
 
 bool ps2_mouse_init(void)
 {
-    (void)input_register_device(input_i8042_dev());
     klog_info("PS2_MOUSE", "Registering PS/2 Mouse driver...");
     input_register_mouse(&ps2_mouse_input_ops);
     ir0_driver_t* drv = ir0_register_driver(&mouse_info, &mouse_ops);
@@ -385,22 +435,10 @@ bool ps2_mouse_read_packet(ps2_mouse_packet_t *packet)
 
 static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
 {
-    bool prev_left;
-    bool prev_right;
-    bool prev_middle;
-    bool prev_button4;
-    bool prev_button5;
-
     if (!packet)
     {
         return;
     }
-
-    prev_left = mouse_state.left_button;
-    prev_right = mouse_state.right_button;
-    prev_middle = mouse_state.middle_button;
-    prev_button4 = mouse_state.button4;
-    prev_button5 = mouse_state.button5;
 
     /* Update button states */
     mouse_state.left_button = (packet->flags & PS2_MOUSE_LEFT_BUTTON) != 0;
@@ -442,47 +480,20 @@ static void ps2_mouse_process_packet(const ps2_mouse_packet_t *packet)
         mouse_state.button5 = (packet->extra_buttons & 0x02) != 0;
     }
 
-    if (packet->delta_x != 0)
+    if (!mouse_dev)
     {
-        input_event(input_i8042_dev(), EV_REL, REL_X, packet->delta_x);
+        return;
     }
-    if (packet->delta_y != 0)
-    {
-        input_event(input_i8042_dev(), EV_REL, REL_Y, -(int32_t)packet->delta_y);
-    }
-    if (packet->delta_wheel != 0)
-    {
-        input_event(input_i8042_dev(), EV_REL, REL_WHEEL, packet->delta_wheel);
-    }
-
-    if (prev_left != mouse_state.left_button)
-    {
-        input_event(input_i8042_dev(), EV_KEY, BTN_LEFT, mouse_state.left_button ? 1 : 0);
-    }
-    if (prev_right != mouse_state.right_button)
-    {
-        input_event(input_i8042_dev(), EV_KEY, BTN_RIGHT, mouse_state.right_button ? 1 : 0);
-    }
-    if (prev_middle != mouse_state.middle_button)
-    {
-        input_event(input_i8042_dev(), EV_KEY, BTN_MIDDLE, mouse_state.middle_button ? 1 : 0);
-    }
-    if (prev_button4 != mouse_state.button4)
-    {
-        input_event(input_i8042_dev(), EV_KEY, BTN_SIDE, mouse_state.button4 ? 1 : 0);
-    }
-    if (prev_button5 != mouse_state.button5)
-    {
-        input_event(input_i8042_dev(), EV_KEY, BTN_EXTRA, mouse_state.button5 ? 1 : 0);
-    }
-
-    if (packet->delta_x != 0 || packet->delta_y != 0 || packet->delta_wheel != 0 ||
-        prev_left != mouse_state.left_button || prev_right != mouse_state.right_button ||
-        prev_middle != mouse_state.middle_button || prev_button4 != mouse_state.button4 ||
-        prev_button5 != mouse_state.button5)
-    {
-        input_sync(input_i8042_dev());
-    }
+    /* The core drops zero motion and unchanged buttons. */
+    input_report_rel(mouse_dev, REL_X, packet->delta_x);
+    input_report_rel(mouse_dev, REL_Y, -(int32_t)packet->delta_y);
+    input_report_rel(mouse_dev, REL_WHEEL, packet->delta_wheel);
+    input_report_key(mouse_dev, BTN_LEFT, mouse_state.left_button);
+    input_report_key(mouse_dev, BTN_RIGHT, mouse_state.right_button);
+    input_report_key(mouse_dev, BTN_MIDDLE, mouse_state.middle_button);
+    input_report_key(mouse_dev, BTN_SIDE, mouse_state.button4);
+    input_report_key(mouse_dev, BTN_EXTRA, mouse_state.button5);
+    input_sync(mouse_dev);
 }
 
 static bool ps2_mouse_send_command(uint8_t command)
