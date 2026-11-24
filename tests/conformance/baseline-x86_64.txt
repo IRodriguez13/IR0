@@ -8,7 +8,6 @@ mm_madvise_dontneed TCONF  # madvise is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
 procfs_stat_processes_forks FAIL  # "processes" counts live tasks, not forks since boot
 procfs_swap_consistent FAIL  # SwapTotal/SwapFree missing from /proc/meminfo
-procfs_loadavg_runqueue FAIL  # procs_running and loadavg count only the task on the CPU; integer EMA stalls
 sysfs_cpu_lists FAIL  # /sys/devices/system/cpu/{online,possible,present} missing
 procfs_pid_stat_fields FAIL  # /proc/<pid>/stat has 36 of 52 fields; nice fixed at 0
 procfs_pid_status_keys FAIL  # status lacks Tgid, Rss* and ctxt_switches

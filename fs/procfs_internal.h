@@ -32,6 +32,7 @@
 #include <ir0/version.h>
 #include <ir0/utsname.h>
 #include <ir0/clock.h>
+#include <ir0/loadavg.h>
 #include <asm/setup.h>
 #include <ir0/cpu.h>
 #include <ir0/cpu_info.h>

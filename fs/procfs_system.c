@@ -170,7 +170,8 @@ int proc_stat_read(char *buf, size_t count)
 	system = jiffies_to_clock_t(system);
 	idle = jiffies_to_clock_t(idle);
 
-	clock_get_loadavg(NULL, NULL, NULL, &runnable, &nprocs, NULL);
+	runnable = nr_running();
+	nprocs = nr_threads();
 	irq_total = clock_get_irq_count();
 	ctxt_total = clock_get_context_switch_count();
 	btime = (time_t)clock_get_boot_time();
@@ -396,24 +397,25 @@ int proc_cpuinfo_read(char *buf, size_t count)
 }
 
 /*
- * /proc/loadavg — "0.03 0.01 0.00 1/7 123\n"
- * EMA from scheduler samples (see clock_get_loadavg); not raw tick noise.
+ * /proc/loadavg — "0.03 0.01 0.00 1/7 123\n": the averages rounded to
+ * hundredths as Linux prints them, runnable/total tasks and the last pid.
  */
 int proc_loadavg_read(char *buf, size_t count)
 {
-	uint32_t l1 = 0, l5 = 0, l15 = 0;
-	unsigned runnable = 0, nprocs = 0;
-	int last_pid = 0;
+	unsigned long avnrun[3];
 	int len;
 
 	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
-	clock_get_loadavg(&l1, &l5, &l15, &runnable, &nprocs, &last_pid);
-	len = snprintf(buf, count, "%u.%02u %u.%02u %u.%02u %u/%u %d\n",
-		       l1 / 100, l1 % 100, l5 / 100, l5 % 100, l15 / 100,
-		       l15 % 100, runnable, nprocs, last_pid);
+	get_avenrun(avnrun, FIXED_1 / 200, 0);
+	len = snprintf(buf, count, "%lu.%02lu %lu.%02lu %lu.%02lu %u/%u %d\n",
+		       LOAD_INT(avnrun[0]), LOAD_FRAC(avnrun[0]),
+		       LOAD_INT(avnrun[1]), LOAD_FRAC(avnrun[1]),
+		       LOAD_INT(avnrun[2]), LOAD_FRAC(avnrun[2]),
+		       nr_running(), nr_threads(),
+		       (int)process_last_assigned_pid());
 	if (len < 0)
 		return -1;
 	if (len >= (int)count)

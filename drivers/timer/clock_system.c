@@ -25,6 +25,7 @@
 #include <ir0/rtc.h>
 #include <ir0/process.h>
 #include <ir0/clock.h>
+#include <ir0/loadavg.h>
 
 /* Clock state; private to the clock core. */
 typedef struct
@@ -60,12 +61,6 @@ static uint64_t clock_cpu_user;
 static uint64_t clock_cpu_system;
 static uint64_t clock_cpu_idle;
 
-/* Loadavg EMA (×100). Updated once per second from runnable non-idle count. */
-static uint32_t clock_load1_x100;
-static uint32_t clock_load5_x100;
-static uint32_t clock_load15_x100;
-static unsigned clock_load_runnable;
-static unsigned clock_load_nprocs;
 static int clock_realtime_ok;
 
 static int clock_comm_is_idle(const char *comm)
@@ -74,36 +69,6 @@ static int clock_comm_is_idle(const char *comm)
 		return 0;
 	return (comm[0] == 'i' && comm[1] == 'd' && comm[2] == 'l' &&
 		comm[3] == 'e' && comm[4] == '\0');
-}
-
-static void clock_sample_loadavg(void)
-{
-	process_t *p;
-	unsigned runnable = 0;
-	unsigned total = 0;
-
-	p = process_list;
-	while (p)
-	{
-		total++;
-		if (p->state == PROCESS_RUNNING &&
-		    !clock_comm_is_idle(p->comm))
-			runnable++;
-		p = p->next;
-	}
-
-	/*
-	 * Discrete EMA with dt=1s:
-	 *   τ1≈60s, τ5≈300s, τ15≈900s  →  load = load*(τ-1)/τ + active*100/τ
-	 */
-	clock_load1_x100 =
-	    (clock_load1_x100 * 59u + runnable * 100u) / 60u;
-	clock_load5_x100 =
-	    (clock_load5_x100 * 299u + runnable * 100u) / 300u;
-	clock_load15_x100 =
-	    (clock_load15_x100 * 899u + runnable * 100u) / 900u;
-	clock_load_runnable = runnable;
-	clock_load_nprocs = total;
 }
 
 static void clock_try_set_realtime_from_rtc(void)
@@ -221,41 +186,6 @@ void clock_get_cpu_accounting(uint64_t *user, uint64_t *system, uint64_t *idle)
 		*idle = clock_cpu_idle;
 }
 
-void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
-		       uint32_t *load15_x100, unsigned *runnable,
-		       unsigned *nprocs, int *last_pid)
-{
-	process_t *p;
-	unsigned live_runnable = 0;
-	unsigned live_total = 0;
-
-	/* Instant runnable/total; EMA fields update once per second. */
-	p = process_list;
-	while (p)
-	{
-		live_total++;
-		if (p->state == PROCESS_RUNNING &&
-		    !clock_comm_is_idle(p->comm))
-			live_runnable++;
-		p = p->next;
-	}
-	clock_load_runnable = live_runnable;
-	clock_load_nprocs = live_total;
-
-	if (load1_x100)
-		*load1_x100 = clock_load1_x100;
-	if (load5_x100)
-		*load5_x100 = clock_load5_x100;
-	if (load15_x100)
-		*load15_x100 = clock_load15_x100;
-	if (runnable)
-		*runnable = clock_load_runnable;
-	if (nprocs)
-		*nprocs = clock_load_nprocs;
-	if (last_pid)
-		*last_pid = (int)process_last_assigned_pid();
-}
-
 uint32_t clock_get_timer_frequency(void)
 {
     return clock_state.timer_frequency;
@@ -346,8 +276,8 @@ void clock_tick(void)
         /* Wall clock tracks monotonic once RTC epoch was established. */
 	if (clock_realtime_ok)
 		clock_state.current_time++;
-	clock_sample_loadavg();
     }
+    calc_global_load_tick();
 
     /* POSIX ITIMER_REAL → SIGALRM (setitimer(2), alarm(2)). */
     process_itimer_tick(clock_get_uptime_milliseconds());
