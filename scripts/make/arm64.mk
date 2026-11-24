@@ -244,7 +244,10 @@ smoke-arm64-simplefb: kernel-arm64-product.bin
 
 # Handoff + first EL0 syscall via syscall_dispatch: MINIX root on virtio-blk
 # vda, mounted by vfs_init_root() (root=/dev/vda), /sbin/init exec'd by the
-# common handoff.
+# common handoff. ARM64_USERMODE_DRIVE_OPTS appends QEMU -drive options.
+ARM64_USERMODE_DRIVE_OPTS ?=
+ARM64_USERMODE_TIMEOUT ?= 60
+ARM64_USERMODE_STALE ?= 20
 .PHONY: smoke-arm64-product-usermode-log
 smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO) scripts/inject_init_minix.py
 	@if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then \
@@ -259,14 +262,16 @@ smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO)
 		echo "  SMOKE   ARM64 product handoff + EL0 syscall (MINIX root on vda)..."; \
 		rm -f $(HOST_TMP)/arm64-product-usermode-smoke.log; \
 		$(SMOKE_QEMU_RUN) --log $(HOST_TMP)/arm64-product-usermode-smoke.log \
-			--timeout 60 --stale-sec 20 --mem 256M --expected-panic --success-mode all \
+			--timeout $(ARM64_USERMODE_TIMEOUT) --stale-sec $(ARM64_USERMODE_STALE) --mem 256M \
+			--expected-panic --success-mode all \
+			--fail-regex 'FAILED to load /sbin/init' \
 			--done ARM64_PRODUCT_BOOT_HANDOFF --done INIT_EXEC_LOADED_OK \
 			--done ARM64_PRODUCT_EL0_SYSCALL_OK -- \
 			qemu-system-aarch64 -M $(ARM64_QEMU_MACHINE) -cpu cortex-a57 \
 			-global virtio-mmio.force-legacy=false \
 			-kernel kernel-arm64-product.img -append root=/dev/vda \
 			-nographic -serial mon:stdio \
-			-drive file="$$disk",format=raw,if=none,id=usermode \
+			-drive file="$$disk",format=raw,if=none,id=usermode$(ARM64_USERMODE_DRIVE_OPTS) \
 			-device virtio-blk-device,drive=usermode \
 			-display none -no-reboot 2>/dev/null && \
 		grep -q 'vfs_mount OK (configured root)' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
@@ -275,6 +280,15 @@ smoke-arm64-product-usermode-log: kernel-arm64-product.bin $(MUSL_AARCH64_HELLO)
 		grep -q 'ARM64_PRODUCT_EL0_SYSCALL_OK' $(HOST_TMP)/arm64-product-usermode-smoke.log && \
 		echo "✓ smoke-arm64-product-usermode-log (MINIX root on vda, EL0 via syscall_dispatch)"; \
 	fi
+
+# A slow disk must not fail the boot: virtio-blk completions arrive whenever
+# the device finishes, so a host under load (or this throttled drive, about
+# 100 ms per request) still mounts the root and execs /sbin/init.
+.PHONY: smoke-arm64-blk-slow-device
+smoke-arm64-blk-slow-device:
+	@$(MAKE) --no-print-directory smoke-arm64-product-usermode-log \
+		ARM64_USERMODE_DRIVE_OPTS=,throttling.iops-total=10 \
+		ARM64_USERMODE_TIMEOUT=300 ARM64_USERMODE_STALE=280
 
 .PHONY: arm64-common-core-compile arm64-provider-audit
 
