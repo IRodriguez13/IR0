@@ -236,6 +236,7 @@ typedef struct process
 
 	/* Resource limits (Linux rlimit indices 0..15). */
 #define IR0_RLIM_NLIMITS 16
+#define IR0_RLIMIT_RSS 5
 #define IR0_RLIMIT_NOFILE 7
 	struct
 	{

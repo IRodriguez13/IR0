@@ -9,6 +9,7 @@
 
 #include "procfs_internal.h"
 #include <ir0/signals.h>
+#include <ir0/console.h>
 
 
 /*
@@ -20,10 +21,14 @@ typedef struct proc_fs_snap
 {
 	char comm[16];
 	pid_t pid;
+	pid_t tgid;
 	pid_t ppid;
 	pid_t pgid;
 	pid_t sid;
 	int sched_prio;
+	int nice;
+	int kernel_thread;
+	uint64_t rsslim;
 	int threads;
 	int no_new_privs;
 	int fd_size;
@@ -82,10 +87,14 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	strncpy(snap->comm, proc->comm, sizeof(snap->comm) - 1);
 	snap->comm[sizeof(snap->comm) - 1] = '\0';
 	snap->pid = proc->task.pid;
+	snap->tgid = proc->tgid;
 	snap->ppid = proc->ppid;
 	snap->pgid = proc->pgid;
 	snap->sid = proc->sid;
 	snap->sched_prio = proc->sched_prio;
+	snap->nice = proc->sched_nice;
+	snap->kernel_thread = proc->mode == KERNEL_MODE;
+	snap->rsslim = proc->rlimits[IR0_RLIMIT_RSS].rlim_cur;
 	snap->start_ticks = proc->start_ticks;
 	snap->utime = proc->utime;
 	snap->stime = proc->stime;
@@ -723,14 +732,16 @@ int proc_comm_read(char *buf, size_t count, pid_t pid)
 	return (int)out;
 }
 
+/* Linux PF_KTHREAD: ps brackets the names of kernel threads. */
+#define IR0_PF_KTHREAD 0x00200000
+
 /*
- * /proc/[pid]/stat — Linux proc(5) field order.
- *
- * Fields 1..22 carry real process state; times are clock_t (USER_HZ).
- * Fields 9-13 are flags, minflt, cminflt, majflt and cmajflt, so utime is 14,
- * stime 15, cutime 16, cstime 17 and priority 18.
- * Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
- * so every process on it shares that terminal.
+ * /proc/[pid]/stat — the 52 fields of proc(5), in order. Times are clock_t
+ * (USER_HZ). Counters IR0 does not keep (page faults, guest time, the code
+ * and argument bounds) are 0, as Linux prints them for a task it may not
+ * inspect. Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a
+ * single console today, so every process on it shares that terminal, and
+ * tpgid (8) is its foreground process group.
  */
 int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 {
@@ -770,9 +781,13 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		rss = mm_count_resident_user_pages(snap.mm);
 
 	len = snprintf(buf, count,
-		       "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
-		       "0 0 0 0 0 %llu %llu %llu %llu %d "    /*  9-18 */
-		       "0 1 0 %llu %llu %llu 0 0 0 0 0 0 0 0 0 0 0 0\n",
+		       "%d (%s) %s %d %d %d %d %d "            /*  1-8  */
+		       "%u 0 0 0 0 %llu %llu %llu %llu %d %d %d " /*  9-20 */
+		       "0 %llu %llu %llu %llu "                 /* 21-25 */
+		       "0 0 0 0 0 "                             /* 26-30 */
+		       "%llu %llu %llu %llu "                   /* 31-34 */
+		       "0 0 0 %d %u 0 0 0 0 0 "                 /* 35-44 */
+		       "0 0 %llu 0 0 0 0 0\n",                  /* 45-52 */
 		       (int)snap.pid,
 		       snap.comm[0] ? snap.comm : "none",
 		       state_str,
@@ -780,16 +795,27 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.pgid,
 		       (int)snap.sid,
 		       tty_nr,
-		       (int)snap.pgid,               /* tpgid: fg group on tty */
-		       /* 14-17 and 22 are clock_t: USER_HZ, not scheduler ticks. */
+		       (int)ir0_console_get_fg_pgid(),
+		       snap.kernel_thread ? IR0_PF_KTHREAD : 0u,
 		       (unsigned long long)jiffies_to_clock_t(snap.utime),
 		       (unsigned long long)jiffies_to_clock_t(snap.stime),
 		       (unsigned long long)jiffies_to_clock_t(snap.cutime),
 		       (unsigned long long)jiffies_to_clock_t(snap.cstime),
-		       snap.sched_prio,               /* 18: priority */
+		       20 + snap.nice,                 /* 18: priority */
+		       snap.nice,                      /* 19: nice */
+		       snap.threads,                   /* 20: num_threads */
 		       (unsigned long long)jiffies_to_clock_t(snap.start_ticks),
-		       (unsigned long long)vsize,               /* 23: vsize */
-		       (unsigned long long)rss);                /* 24: rss pages */
+		       (unsigned long long)vsize,      /* 23: vsize (bytes) */
+		       (unsigned long long)rss,        /* 24: rss (pages) */
+		       (unsigned long long)snap.rsslim,
+		       (unsigned long long)snap.sig_pending,
+		       (unsigned long long)snap.sig_blocked,
+		       (unsigned long long)snap.sig_ignored,
+		       (unsigned long long)snap.sig_caught,
+		       /* 38: exit_signal; a thread signals no one. */
+		       snap.pid == snap.tgid ? SIGCHLD : -1,
+		       cpu_id(),                       /* 39: processor */
+		       (unsigned long long)snap.heap_start); /* 47: start_brk */
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;
