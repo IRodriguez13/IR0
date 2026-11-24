@@ -7,7 +7,6 @@ fs_unlink_open_file FAIL  # an unlinked file cannot be read through an fd still 
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
 sysfs_cpu_lists FAIL  # /sys/devices/system/cpu/{online,possible,present} missing
-procfs_pid_status_keys FAIL  # status lacks Tgid, Rss* and ctxt_switches
 procfs_task_dir FAIL  # /proc/<pid>/task missing
 procfs_sys_kernel_vmstat FAIL  # /proc/sys/kernel/{pid_max,osrelease} and /proc/vmstat missing
 procfs_cpuinfo_format FAIL  # cpuinfo uses "key\tvalue", not "key\t: value"

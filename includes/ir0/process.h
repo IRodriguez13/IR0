@@ -834,6 +834,10 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm);
 void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
                          uint64_t *page_table_pages);
 
+/* Resident user pages in [start, start + len); same lifetime rule. */
+uint64_t mm_count_resident_range(const mm_struct_t *mm, uint64_t start,
+				 uint64_t len);
+
 int64_t process_close_fd(process_t *proc, int fd);
 void process_exec_close_cloexec(process_t *p);
 bool process_user_va_range_overlaps(process_t *proc, uintptr_t addr, size_t length);

@@ -42,6 +42,8 @@ typedef struct proc_fs_snap
 	uint64_t stime;
 	uint64_t cutime;
 	uint64_t cstime;
+	uint64_t nvcsw;
+	uint64_t nivcsw;
 	int state;
 	uid_t uid;
 	gid_t gid;
@@ -100,6 +102,8 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	snap->stime = proc->stime;
 	snap->cutime = proc->cutime;
 	snap->cstime = proc->cstime;
+	snap->nvcsw = proc->nvcsw;
+	snap->nivcsw = proc->nivcsw;
 	snap->state = (int)proc->state;
 	snap->no_new_privs = (int)proc->no_new_privs;
 	snap->umask = proc->umask;
@@ -566,15 +570,73 @@ int proc_is_virtual_subdir(const char *path)
            strcmp(filename, "self_link") == 0;
 }
 
+/*
+ * The Vm and Rss figures of status, in kB. A MAP_SHARED file mapping is
+ * file memory, a MAP_SHARED anonymous one shmem and the rest anonymous;
+ * a private file page counts as anonymous (IR0 does not tell a clean
+ * private file page from a copied one). VmData is the heap plus the
+ * private writable mappings, as Linux's data_vm.
+ */
+struct proc_mem_kb
+{
+	uint64_t size;
+	uint64_t rss;
+	uint64_t rss_file;
+	uint64_t rss_shmem;
+	uint64_t data;
+	uint64_t stk;
+	uint64_t pte;
+};
+
+static void proc_mem_kb(const proc_fs_snap_t *snap, struct proc_mem_kb *m)
+{
+	const uint64_t kb = (uint64_t)IR0_MM_PAGE_SIZE / 1024ULL;
+	const struct mmap_region *r;
+	uint64_t heap = 0;
+	uint64_t resident = 0;
+	uint64_t tables = 0;
+
+	memset(m, 0, sizeof(*m));
+	if (snap->heap_end > snap->heap_start)
+		heap = snap->heap_end - snap->heap_start;
+	m->size = heap + snap->stack_size;
+	m->data = heap;
+	for (r = snap->mmap_list; r; r = r->next)
+	{
+		uint64_t pages = 0;
+
+		m->size += (uint64_t)r->length;
+		if (!(r->flags & MAP_SHARED) && (r->prot & PROT_WRITE))
+			m->data += (uint64_t)r->length;
+		if ((r->flags & MAP_SHARED) && snap->mm)
+			pages = mm_count_resident_range(snap->mm,
+							(uint64_t)(uintptr_t)r->addr,
+							(uint64_t)r->length);
+		if (r->flags & MAP_SHARED)
+		{
+			if (r->file_id)
+				m->rss_file += pages * kb;
+			else
+				m->rss_shmem += pages * kb;
+		}
+	}
+	if (snap->mm)
+		mm_count_user_pages(snap->mm, &resident, &tables);
+	m->size /= 1024ULL;
+	m->data /= 1024ULL;
+	m->stk = snap->stack_size / 1024ULL;
+	m->rss = resident * kb;
+	m->pte = tables * kb;
+}
+
 /* /proc/[pid]/status — Linux proc(5) lines (Name:, Uid:, ...). */
 int proc_status_read(char *buf, size_t count, pid_t pid)
 {
 	proc_fs_snap_t snap;
 	const char *state_str = "?";
 	const char *state_paren = "unknown";
-	const struct mmap_region *region;
-	uint64_t vsize = 0;
-	uint64_t rss_kb = 0;
+	struct proc_mem_kb mem;
+	uint64_t anon_kb;
 	char groups_line[sizeof("Groups:\t") + IR0_NGROUPS_MAX * 11 + 1];
 	int groups_len;
 	int gi;
@@ -604,15 +666,10 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 			break;
 	}
 
-	if (snap.heap_end > snap.heap_start)
-		vsize = snap.heap_end - snap.heap_start;
-	vsize += snap.stack_size;
-	for (region = snap.mmap_list; region; region = region->next)
-		vsize += (uint64_t)region->length;
-	vsize /= 1024ULL;
-	if (snap.mm)
-		rss_kb = mm_count_resident_user_pages(snap.mm) *
-			 ((uint64_t)IR0_MM_PAGE_SIZE / 1024ULL);
+	proc_mem_kb(&snap, &mem);
+	anon_kb = mem.rss - mem.rss_file - mem.rss_shmem;
+	if (mem.rss < mem.rss_file + mem.rss_shmem)
+		anon_kb = 0;
 
 	groups_len = snprintf(groups_line, sizeof(groups_line), "Groups:\t");
 	if (groups_len < 0 || (size_t)groups_len >= sizeof(groups_line))
@@ -648,42 +705,62 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		}
 	}
 
-	/* TracerPid stays 0: there is no ptrace attach. */
+	/* Linux proc(5) order. TracerPid stays 0: there is no ptrace attach. */
 	len = snprintf(buf, count,
 		       "Name:\t%s\n"
+		       "Umask:\t%04o\n"
 		       "State:\t%s (%s)\n"
+		       "Tgid:\t%d\n"
 		       "Pid:\t%d\n"
 		       "PPid:\t%d\n"
 		       "TracerPid:\t0\n"
 		       "Uid:\t%d\t%d\t%d\t%d\n"
 		       "Gid:\t%d\t%d\t%d\t%d\n"
-		       "%s"
 		       "FDSize:\t%d\n"
+		       "%s"
+		       "VmSize:\t%8llu kB\n"
+		       "VmRSS:\t%8llu kB\n"
+		       "RssAnon:\t%8llu kB\n"
+		       "RssFile:\t%8llu kB\n"
+		       "RssShmem:\t%8llu kB\n"
+		       "VmData:\t%8llu kB\n"
+		       "VmStk:\t%8llu kB\n"
+		       "VmPTE:\t%8llu kB\n"
 		       "Threads:\t%d\n"
-		       "NoNewPrivs:\t%d\n"
-		       "Umask:\t%04o\n"
 		       "SigPnd:\t%016llx\n"
 		       "SigBlk:\t%016llx\n"
 		       "SigIgn:\t%016llx\n"
 		       "SigCgt:\t%016llx\n"
-		       "VmSize:\t%llu kB\n"
-		       "VmRSS:\t%llu kB\n",
+		       "NoNewPrivs:\t%d\n"
+		       "voluntary_ctxt_switches:\t%llu\n"
+		       "nonvoluntary_ctxt_switches:\t%llu\n",
 		       snap.comm[0] ? snap.comm : "(none)",
+		       snap.umask,
 		       state_str, state_paren,
+		       (int)snap.tgid,
 		       (int)snap.pid, (int)snap.ppid,
 		       (int)snap.uid, (int)snap.euid, (int)snap.suid,
 		       (int)snap.uid,
 		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
 		       (int)snap.gid,
+		       snap.fd_size,
 		       groups_line,
-		       snap.fd_size, snap.threads, snap.no_new_privs,
-		       snap.umask,
+		       (unsigned long long)mem.size,
+		       (unsigned long long)mem.rss,
+		       (unsigned long long)anon_kb,
+		       (unsigned long long)mem.rss_file,
+		       (unsigned long long)mem.rss_shmem,
+		       (unsigned long long)mem.data,
+		       (unsigned long long)mem.stk,
+		       (unsigned long long)mem.pte,
+		       snap.threads,
 		       (unsigned long long)snap.sig_pending,
 		       (unsigned long long)snap.sig_blocked,
 		       (unsigned long long)snap.sig_ignored,
 		       (unsigned long long)snap.sig_caught,
-		       (unsigned long long)vsize,
-		       (unsigned long long)rss_kb);
+		       snap.no_new_privs,
+		       (unsigned long long)snap.nvcsw,
+		       (unsigned long long)snap.nivcsw);
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;
