@@ -23,6 +23,7 @@
 #include <asm/boot.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
+#include <ir0/page.h>
 #include <ir0/percpu.h>
 #include <ir0/virtio_mmio.h>
 #include <config.h>
@@ -108,7 +109,7 @@ static void arm64_board_capture_and_heap(uintptr_t firmware_handle)
 	extern char _end[];
 
 	(void)arm64_board_capture_boot_info(firmware_handle);
-	(void)arm64_board_prepare_memory((uintptr_t)_start,
+	(void)arm64_board_prepare_memory(virt_to_phys(_start),
 					 (size_t)(_end - _start));
 	arm64_board_apply_platform();
 }

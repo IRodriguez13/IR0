@@ -121,17 +121,17 @@ static int blk_setup_queue(struct virtio_mmio_dev *d)
 	zero_bytes(&g_used, sizeof(g_used));
 
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DESC_LOW,
-			  (uint32_t)(uintptr_t)g_desc);
+			  (uint32_t)virt_to_phys(g_desc));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DESC_HIGH,
-			  (uint32_t)((uint64_t)(uintptr_t)g_desc >> 32));
+			  (uint32_t)((uint64_t)virt_to_phys(g_desc) >> 32));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DRIVER_LOW,
-			  (uint32_t)(uintptr_t)&g_avail);
+			  (uint32_t)virt_to_phys(&g_avail));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DRIVER_HIGH,
-			  (uint32_t)((uint64_t)(uintptr_t)&g_avail >> 32));
+			  (uint32_t)((uint64_t)virt_to_phys(&g_avail) >> 32));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DEVICE_LOW,
-			  (uint32_t)(uintptr_t)&g_used);
+			  (uint32_t)virt_to_phys(&g_used));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DEVICE_HIGH,
-			  (uint32_t)((uint64_t)(uintptr_t)&g_used >> 32));
+			  (uint32_t)((uint64_t)virt_to_phys(&g_used) >> 32));
 
 	mb();
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_READY, 1);
