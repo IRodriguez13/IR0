@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <fs/vfs.h>
+#include <ir0/inode.h>
 #include <config.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
@@ -57,6 +58,7 @@ typedef struct simplefs_mount
     int in_use;
     char mount_path[256];
     simplefs_store_t *store;
+    struct super_block *sb; /* the VFS mount (fill_super) */
 } simplefs_mount_t;
 
 static simplefs_store_t g_stores[SIMPLEFS_MAX_STORES];
@@ -313,6 +315,20 @@ static simplefs_mount_t *simplefs_context_mount(const char *path, char *name, in
     return mnt;
 }
 
+static int simplefs_stat_entry(simplefs_entry_t *e, stat_t *buf)
+{
+    memset(buf, 0, sizeof(*buf));
+
+    buf->st_mode = e->mode;
+    buf->st_uid = e->uid;
+    buf->st_gid = e->gid;
+    buf->st_size = (off_t)e->size;
+    buf->st_ino = e->ino;
+    buf->st_nlink = e->name[0] ? 1 : 0;
+    buf->st_mtime = e->mtime;
+    return 0;
+}
+
 static int simplefs_stat(const char *path, stat_t *buf)
 {
     char name[SIMPLEFS_MAX_NAME_LEN + 1];
@@ -338,15 +354,7 @@ static int simplefs_stat(const char *path, stat_t *buf)
     e = simplefs_find_entry(mnt->store, name);
     if (!e)
         return -ENOENT;
-
-    buf->st_mode = e->mode;
-    buf->st_uid = e->uid;
-    buf->st_gid = e->gid;
-    buf->st_size = (off_t)e->size;
-    buf->st_ino = e->ino;
-    buf->st_nlink = 1;
-    buf->st_mtime = e->mtime;
-    return 0;
+    return simplefs_stat_entry(e, buf);
 }
 
 static int simplefs_mkdir(const char *path, mode_t mode)
@@ -419,6 +427,13 @@ static int simplefs_create(const char *path, mode_t mode)
     return 0;
 }
 
+static void simplefs_entry_free(simplefs_entry_t *e)
+{
+    if (e->data)
+        kfree(e->data);
+    memset(e, 0, sizeof(*e));
+}
+
 static int simplefs_unlink(const char *path)
 {
     char name[SIMPLEFS_MAX_NAME_LEN + 1];
@@ -438,9 +453,13 @@ static int simplefs_unlink(const char *path)
         return -ENOENT;
     if (e->is_dir)
         return -EISDIR;
-    if (e->data)
-        kfree(e->data);
-    memset(e, 0, sizeof(*e));
+    /* A file still open keeps its data, nameless, until simplefs_ievict(). */
+    if (inode_orphan(mnt->sb, e->ino))
+    {
+        e->name[0] = '\0';
+        return 0;
+    }
+    simplefs_entry_free(e);
     return 0;
 }
 
@@ -467,29 +486,11 @@ static int simplefs_rmdir(const char *path)
     return 0;
 }
 
-static int simplefs_read(const char *path, void *buf, size_t count, size_t *bytes_read, off_t offset)
+static int simplefs_read_entry(simplefs_entry_t *e, void *buf, size_t count, size_t *bytes_read, off_t offset)
 {
-    char name[SIMPLEFS_MAX_NAME_LEN + 1];
-    int at_root = 0;
-    int rc = 0;
     size_t avail;
     size_t to_read;
-    simplefs_mount_t *mnt;
-    simplefs_entry_t *e;
 
-    if (!buf)
-        return -EFAULT;
-    if (bytes_read)
-        *bytes_read = 0;
-    mnt = simplefs_context_mount(path, name, &at_root, &rc);
-    if (!mnt)
-        return rc;
-    if (at_root)
-        return -EISDIR;
-
-    e = simplefs_find_entry(mnt->store, name);
-    if (!e)
-        return -ENOENT;
     if (e->is_dir)
         return -EISDIR;
     if (offset < 0)
@@ -506,20 +507,18 @@ static int simplefs_read(const char *path, void *buf, size_t count, size_t *byte
     return 0;
 }
 
-static int simplefs_write(const char *path, const void *buf, size_t count, size_t *bytes_written, off_t offset)
+static int simplefs_read(const char *path, void *buf, size_t count, size_t *bytes_read, off_t offset)
 {
     char name[SIMPLEFS_MAX_NAME_LEN + 1];
     int at_root = 0;
     int rc = 0;
-    size_t new_size;
-    uint8_t *new_data;
     simplefs_mount_t *mnt;
     simplefs_entry_t *e;
 
     if (!buf)
         return -EFAULT;
-    if (bytes_written)
-        *bytes_written = 0;
+    if (bytes_read)
+        *bytes_read = 0;
     mnt = simplefs_context_mount(path, name, &at_root, &rc);
     if (!mnt)
         return rc;
@@ -529,6 +528,14 @@ static int simplefs_write(const char *path, const void *buf, size_t count, size_
     e = simplefs_find_entry(mnt->store, name);
     if (!e)
         return -ENOENT;
+    return simplefs_read_entry(e, buf, count, bytes_read, offset);
+}
+
+static int simplefs_write_entry(simplefs_entry_t *e, const void *buf, size_t count, size_t *bytes_written, off_t offset)
+{
+    size_t new_size;
+    uint8_t *new_data;
+
     if (e->is_dir)
         return -EISDIR;
     if (offset < 0)
@@ -562,6 +569,30 @@ static int simplefs_write(const char *path, const void *buf, size_t count, size_
     if (bytes_written)
         *bytes_written = count;
     return 0;
+}
+
+static int simplefs_write(const char *path, const void *buf, size_t count, size_t *bytes_written, off_t offset)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    if (!buf)
+        return -EFAULT;
+    if (bytes_written)
+        *bytes_written = 0;
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EISDIR;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    return simplefs_write_entry(e, buf, count, bytes_written, offset);
 }
 
 static int simplefs_chown(const char *path, uid_t owner, gid_t group)
@@ -607,24 +638,10 @@ static int simplefs_chmod(const char *path, mode_t mode)
     return 0;
 }
 
-static int simplefs_truncate(const char *path, size_t length)
+static int simplefs_truncate_entry(simplefs_entry_t *e, size_t length)
 {
-    char name[SIMPLEFS_MAX_NAME_LEN + 1];
-    int at_root = 0;
-    int rc = 0;
     uint8_t *new_data = NULL;
-    simplefs_mount_t *mnt;
-    simplefs_entry_t *e;
 
-    mnt = simplefs_context_mount(path, name, &at_root, &rc);
-    if (!mnt)
-        return rc;
-    if (at_root)
-        return -EISDIR;
-
-    e = simplefs_find_entry(mnt->store, name);
-    if (!e)
-        return -ENOENT;
     if (e->is_dir)
         return -EISDIR;
     if (length > SIMPLEFS_MAX_FILE_SIZE)
@@ -657,6 +674,26 @@ static int simplefs_truncate(const char *path, size_t length)
     e->data = new_data;
     e->size = length;
     return 0;
+}
+
+static int simplefs_truncate(const char *path, size_t length)
+{
+    char name[SIMPLEFS_MAX_NAME_LEN + 1];
+    int at_root = 0;
+    int rc = 0;
+    simplefs_mount_t *mnt;
+    simplefs_entry_t *e;
+
+    mnt = simplefs_context_mount(path, name, &at_root, &rc);
+    if (!mnt)
+        return rc;
+    if (at_root)
+        return -EISDIR;
+
+    e = simplefs_find_entry(mnt->store, name);
+    if (!e)
+        return -ENOENT;
+    return simplefs_truncate_entry(e, length);
 }
 
 static int simplefs_readdir(const char *path, struct vfs_dirent *entries, int max_entries)
@@ -709,7 +746,9 @@ static int simplefs_readdir(const char *path, struct vfs_dirent *entries, int ma
         const char *ename;
         const char *child;
 
-        if (!mnt->store->entries[i].in_use)
+        /* An orphan (unlinked, still open) has no name to list. */
+        if (!mnt->store->entries[i].in_use ||
+            !mnt->store->entries[i].name[0])
             continue;
 
         ename = mnt->store->entries[i].name;
@@ -738,6 +777,86 @@ static int simplefs_readdir(const char *path, struct vfs_dirent *entries, int ma
     return out;
 }
 
+/* vfs_inode_ops: a file of the mount @sb by number, named or orphaned. */
+static simplefs_entry_t *simplefs_entry_by_ino(struct super_block *sb,
+                                               ino_t ino)
+{
+    simplefs_mount_t *mnt = sb ? sb->s_fs_info : NULL;
+
+    if (!mnt || !mnt->store || ino == 0)
+        return NULL;
+    for (int i = 0; i < SIMPLEFS_MAX_ENTRIES; i++)
+    {
+        if (mnt->store->entries[i].in_use && mnt->store->entries[i].ino == ino)
+            return &mnt->store->entries[i];
+    }
+    return NULL;
+}
+
+static int simplefs_istat(struct super_block *sb, ino_t ino, stat_t *buf)
+{
+    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+
+    return e ? simplefs_stat_entry(e, buf) : -ENOENT;
+}
+
+static int simplefs_iread(struct super_block *sb, ino_t ino, void *buf,
+                          size_t count, size_t *done, off_t offset)
+{
+    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+
+    return e ? simplefs_read_entry(e, buf, count, done, offset) : -ENOENT;
+}
+
+static int simplefs_iwrite(struct super_block *sb, ino_t ino, const void *buf,
+                           size_t count, size_t *done, off_t offset)
+{
+    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+
+    return e ? simplefs_write_entry(e, buf, count, done, offset) : -ENOENT;
+}
+
+static int simplefs_itruncate(struct super_block *sb, ino_t ino,
+                              size_t length)
+{
+    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+
+    return e ? simplefs_truncate_entry(e, length) : -ENOENT;
+}
+
+static void simplefs_ievict(struct super_block *sb, ino_t ino)
+{
+    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+
+    if (e && !e->name[0])
+        simplefs_entry_free(e);
+}
+
+static const struct vfs_inode_ops simplefs_inode_ops = {
+    .stat = simplefs_istat,
+    .read = simplefs_iread,
+    .write = simplefs_iwrite,
+    .truncate = simplefs_itruncate,
+    .evict = simplefs_ievict,
+};
+
+static int simplefs_fill_super(struct super_block *sb, const char *dir)
+{
+    char norm[256];
+
+    simplefs_normalize_mount(dir, norm, sizeof(norm));
+    for (int i = 0; i < SIMPLEFS_MAX_MOUNTS; i++)
+    {
+        if (g_mounts[i].in_use && strcmp(g_mounts[i].mount_path, norm) == 0)
+        {
+            g_mounts[i].sb = sb;
+            sb->s_fs_info = &g_mounts[i];
+            return 0;
+        }
+    }
+    return -ENODEV;
+}
+
 static struct vfs_ops simplefs_ops = {
     .stat = simplefs_stat,
     .mkdir = simplefs_mkdir,
@@ -750,6 +869,7 @@ static struct vfs_ops simplefs_ops = {
     .read = simplefs_read,
     .write = simplefs_write,
     .truncate = simplefs_truncate,
+    .iops = &simplefs_inode_ops,
 };
 
 struct vfs_fstype simplefs_fs_type = {
@@ -757,5 +877,6 @@ struct vfs_fstype simplefs_fs_type = {
     .ops = &simplefs_ops,
     .mount = simplefs_mount,
     .umount = simplefs_umount,
+    .fill_super = simplefs_fill_super,
     .next = NULL,
 };

@@ -410,6 +410,34 @@ int fs_ext2_inode_lifetime(void)
 	return CONF_PASS;
 }
 
+/*
+ * IR0 simplefs (no Linux counterpart: TCONF there) keeps an unlinked open
+ * file like tmpfs does.
+ */
+int fs_simplefs_unlink_open_file(void)
+{
+	struct stat st;
+	char buf[16];
+	long fd;
+	long r;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "t", 0755), 0);
+	r = S5(SYS_mount, "conf-simplefs", "t", "simplefs", 0, 0);
+	if (r == -ENODEV)
+		return CONF_TCONF;
+	EXPECT(r, 0);
+	OK(fd, conf_creat("t/f", hello));
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), 0);
+	EXPECT_ERR(S4(SYS_newfstatat, AT_FDCWD, "t/f", &st, 0), ENOENT);
+	EXPECT(S4(SYS_pread64, fd, buf, HELLO_LEN, 0), HELLO_LEN);
+	CHECK(rt_memeq(buf, hello, HELLO_LEN));
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_nlink, 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S2(SYS_umount2, "t", 0), 0);
+	return CONF_PASS;
+}
+
 int fs_rename(void)
 {
 	struct stat st;

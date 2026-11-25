@@ -319,10 +319,10 @@ fs/pseudo_fs_registry.c	g_proc_count	22
 fs/pseudo_fs_registry.c	g_dyn_regs	40
 fs/pseudo_fs_registry.c	g_dyn_reg_count	41
 fs/pseudo_fs_registry.c	g_dyn_opens	42
-fs/simplefs/simplefs.c	g_stores	62
-fs/simplefs/simplefs.c	g_mounts	63
-fs/simplefs/simplefs.c	simplefs_ops	741
-fs/simplefs/simplefs.c	simplefs_fs_type	755
+fs/simplefs/simplefs.c	g_stores	64
+fs/simplefs/simplefs.c	g_mounts	65
+fs/simplefs/simplefs.c	simplefs_ops	860
+fs/simplefs/simplefs.c	simplefs_fs_type	875
 fs/sysfs.c	sys_kernel_hostname	63
 fs/sysfs.c	sys_devices_cpu_online	333
 fs/sysfs/sysfs.c	g_cpu_nodes	129
