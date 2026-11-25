@@ -18,6 +18,8 @@
 #include <ir0/cred.h>
 #include <ir0/blockdev.h>
 #include <ir0/cmdline.h>
+#include <ir0/filemap.h>
+#include <ir0/inode.h>
 #include <ir0/partition.h>
 #include <ir0/path_routed.h>
 #include <ir0/klog.h>
@@ -55,6 +57,13 @@ struct vfs_mount *vfs_find_mount(const char *path)
         }
     }
     return best;
+}
+
+struct super_block *vfs_sb_for_path(const char *path)
+{
+    struct vfs_mount *m = path ? vfs_find_mount(path) : NULL;
+
+    return m ? m->sb : NULL;
 }
 
 int vfs_mount_is_readonly(const char *path)
@@ -274,6 +283,14 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     struct vfs_mount *m = kmalloc(sizeof(*m));
     if (!m)
         return -ENOMEM;
+    m->sb = kcalloc(1, sizeof(*m->sb));
+    if (!m->sb)
+    {
+        kfree(m);
+        return -ENOMEM;
+    }
+    m->sb->s_op = ft->ops;
+    m->sb->s_count = 1;
 
     strncpy(m->path, mount_path, sizeof(m->path) - 1);
     m->path[sizeof(m->path) - 1] = '\0';
@@ -290,8 +307,15 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
     m->next = mounts;
 
     ret = ft->mount(dev, mount_path);
+    if (ret == 0 && ft->fill_super)
+    {
+        ret = ft->fill_super(m->sb, mount_path);
+        if (ret != 0 && ft->umount)
+            (void)ft->umount(mount_path);
+    }
     if (ret != 0)
     {
+        kfree(m->sb);
         kfree(m);
         return ret;
     }
@@ -340,6 +364,9 @@ int vfs_bind_mount(const char *source, const char *target)
     b->path[sizeof(b->path) - 1] = '\0';
     memcpy(b->dev, src->dev, sizeof(b->dev));
     b->fs = src->fs;
+    b->sb = src->sb;
+    if (b->sb)
+        b->sb->s_count++;
     b->flags = src->flags | IR0_MS_BIND;
     b->next = mounts;
     mounts = b;
@@ -417,12 +444,22 @@ int vfs_umount(const char *path)
             return -EBUSY;
     }
 
+    /* Linux do_umount(): a filesystem with files in use is busy. */
+    if (victim->sb && victim->sb->s_count == 1)
+    {
+        filemap_reclaim();
+        if (victim->sb->s_inodes > 0)
+            return -EBUSY;
+    }
+
     if (!(victim->flags & IR0_MS_BIND) && victim->fs && victim->fs->umount)
     {
         int ret = victim->fs->umount(victim->path);
         if (ret != 0)
             return ret;
     }
+    if (victim->sb && --victim->sb->s_count == 0)
+        kfree(victim->sb);
 
     if (prev)
         prev->next = victim->next;

@@ -18,6 +18,19 @@
 
 struct filemap;
 
+/*
+ * One mounted filesystem (Linux super_block). Bind mounts of it share it.
+ * Backend state hangs off s_fs_info (vfs_fstype.fill_super sets it).
+ * icache_lock guards s_inodes; the mount table lock guards s_count.
+ */
+struct super_block
+{
+	struct vfs_ops *s_op;
+	void *s_fs_info;
+	int s_count;  /* mount entries using it */
+	int s_inodes; /* cached inodes: umount is EBUSY while any is held */
+};
+
 /* i_state: the last name is gone; the last iput() evicts the file. */
 #define I_ORPHAN 1u
 
@@ -33,7 +46,7 @@ struct filemap;
  */
 struct inode
 {
-	struct vfs_ops *i_fs;
+	struct super_block *i_sb;
 	ino_t i_ino;
 	mode_t i_mode; /* file type, fixed for the inode's life */
 	int i_count;
@@ -48,26 +61,27 @@ struct inode
  * of a backend without iops), with one more reference; NULL on ENOMEM.
  * Called under the fs-op lock that resolved @st.
  */
-struct inode *iget(struct vfs_ops *fs, const char *path, const stat_t *st);
+struct inode *iget(struct super_block *sb, const char *path, const stat_t *st);
 /* The cached inode of @path with one more reference, or NULL. */
-struct inode *ilookup(struct vfs_ops *fs, const char *path);
+struct inode *ilookup(struct super_block *sb, const char *path);
 void ihold(struct inode *inode);
 void iput(struct inode *inode);
 
 /*
- * Backend unlink: the link count of file @ino of the backend whose inode
- * operations are @iops reached 0. Returns 1 when the VFS still holds the
- * inode: the backend keeps the file and its blocks until @iops->evict(@ino).
- * Returns 0 when the backend frees it now. Called under the fs-op lock.
+ * Backend unlink: the link count of file @ino of @sb reached 0. Returns 1
+ * when the VFS still holds the inode: the backend keeps the file and its
+ * blocks until iops->evict(@sb, @ino). Returns 0 when the backend frees it
+ * now. Called under the fs-op lock.
  */
-int inode_orphan(const struct vfs_inode_ops *iops, ino_t ino);
+int inode_orphan(struct super_block *sb, ino_t ino);
 
 /*
  * A name of a backend without iops moved to @newpath, or went away
  * (@newpath NULL). Inodes of backends with iops do not follow names.
  * Called under the fs-op lock.
  */
-void inode_moved(struct vfs_ops *fs, const char *oldpath, const char *newpath);
+void inode_moved(struct super_block *sb, const char *oldpath,
+		 const char *newpath);
 
 /*
  * File I/O through an inode (fs-op lock taken inside). They keep the

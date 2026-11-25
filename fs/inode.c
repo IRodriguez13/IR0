@@ -34,35 +34,36 @@ static unsigned int icache_hash_path(const char *path)
 	return h;
 }
 
-static unsigned int icache_bucket(const struct vfs_ops *fs, ino_t ino,
+static unsigned int icache_bucket(const struct super_block *sb, ino_t ino,
 				  const char *path)
 {
-	uintptr_t h = (uintptr_t)fs >> 4;
+	uintptr_t h = (uintptr_t)sb >> 4;
 
-	h ^= fs->iops ? (uintptr_t)ino : icache_hash_path(path);
+	h ^= sb->s_op->iops ? (uintptr_t)ino : icache_hash_path(path);
 	return (unsigned int)(h % ICACHE_BUCKETS);
 }
 
-static int inode_matches(const struct inode *inode, const struct vfs_ops *fs,
-			 ino_t ino, const char *path)
+static int inode_matches(const struct inode *inode,
+			 const struct super_block *sb, ino_t ino,
+			 const char *path)
 {
-	if (inode->i_fs != fs)
+	if (inode->i_sb != sb)
 		return 0;
-	if (fs->iops)
+	if (sb->s_op->iops)
 		return inode->i_ino == ino;
 	return inode->i_path[0] && strcmp(inode->i_path, path) == 0;
 }
 
 /* icache_lock held. */
-static struct inode *icache_find(struct vfs_ops *fs, ino_t ino,
+static struct inode *icache_find(struct super_block *sb, ino_t ino,
 				 const char *path)
 {
 	struct inode *inode;
 
-	for (inode = icache[icache_bucket(fs, ino, path)]; inode;
+	for (inode = icache[icache_bucket(sb, ino, path)]; inode;
 	     inode = inode->i_next)
 	{
-		if (inode_matches(inode, fs, ino, path))
+		if (inode_matches(inode, sb, ino, path))
 			return inode;
 	}
 	return NULL;
@@ -73,7 +74,7 @@ static void icache_unhash(struct inode *inode)
 {
 	struct inode **link;
 
-	link = &icache[icache_bucket(inode->i_fs, inode->i_ino, inode->i_path)];
+	link = &icache[icache_bucket(inode->i_sb, inode->i_ino, inode->i_path)];
 	for (; *link; link = &(*link)->i_next)
 	{
 		if (*link == inode)
@@ -85,14 +86,14 @@ static void icache_unhash(struct inode *inode)
 	}
 }
 
-struct inode *iget(struct vfs_ops *fs, const char *path, const stat_t *st)
+struct inode *iget(struct super_block *sb, const char *path, const stat_t *st)
 {
 	struct inode *inode;
 	struct inode *fresh;
 	unsigned long flags;
 	size_t len;
 
-	if (!fs || !path || !st)
+	if (!sb || !path || !st)
 		return NULL;
 	len = strlen(path);
 	if (len >= sizeof(fresh->i_path))
@@ -100,25 +101,26 @@ struct inode *iget(struct vfs_ops *fs, const char *path, const stat_t *st)
 	fresh = kcalloc(1, sizeof(*fresh));
 	if (!fresh)
 		return NULL;
-	fresh->i_fs = fs;
+	fresh->i_sb = sb;
 	fresh->i_ino = st->st_ino;
 	fresh->i_mode = st->st_mode & S_IFMT;
 	fresh->i_count = 1;
-	if (!fs->iops)
+	if (!sb->s_op->iops)
 		memcpy(fresh->i_path, path, len + 1);
 
 	flags = ir0_spin_lock_irqsave(&icache_lock);
-	inode = icache_find(fs, st->st_ino, path);
+	inode = icache_find(sb, st->st_ino, path);
 	if (inode)
 	{
 		inode->i_count++;
 	}
 	else
 	{
-		unsigned int b = icache_bucket(fs, fresh->i_ino, fresh->i_path);
+		unsigned int b = icache_bucket(sb, fresh->i_ino, fresh->i_path);
 
 		fresh->i_next = icache[b];
 		icache[b] = fresh;
+		sb->s_inodes++;
 		inode = fresh;
 		fresh = NULL;
 	}
@@ -127,19 +129,19 @@ struct inode *iget(struct vfs_ops *fs, const char *path, const stat_t *st)
 	return inode;
 }
 
-struct inode *ilookup(struct vfs_ops *fs, const char *path)
+struct inode *ilookup(struct super_block *sb, const char *path)
 {
 	struct inode *inode;
 	unsigned long flags;
 	stat_t st;
 
-	if (!fs || !path)
+	if (!sb || !path)
 		return NULL;
 	memset(&st, 0, sizeof(st));
-	if (fs->iops && (!fs->stat || fs->stat(path, &st) != 0))
+	if (sb->s_op->iops && (!sb->s_op->stat || sb->s_op->stat(path, &st) != 0))
 		return NULL;
 	flags = ir0_spin_lock_irqsave(&icache_lock);
-	inode = icache_find(fs, st.st_ino, path);
+	inode = icache_find(sb, st.st_ino, path);
 	if (inode)
 		inode->i_count++;
 	ir0_spin_unlock_irqrestore(&icache_lock, flags);
@@ -167,66 +169,60 @@ void iput(struct inode *inode)
 	flags = ir0_spin_lock_irqsave(&icache_lock);
 	last = --inode->i_count == 0;
 	if (last)
+	{
 		icache_unhash(inode);
+		inode->i_sb->s_inodes--;
+	}
 	ir0_spin_unlock_irqrestore(&icache_lock, flags);
 	if (!last)
 		return;
 	/* Linux evict(): an unlinked file goes with its last reference. */
-	if ((inode->i_state & I_ORPHAN) && inode->i_fs->iops &&
-	    inode->i_fs->iops->evict)
+	if ((inode->i_state & I_ORPHAN) && inode->i_sb->s_op->iops &&
+	    inode->i_sb->s_op->iops->evict)
 	{
 		vfs_fs_op_acquire();
-		inode->i_fs->iops->evict(inode->i_ino);
+		inode->i_sb->s_op->iops->evict(inode->i_sb, inode->i_ino);
 		vfs_fs_op_release();
 	}
 	kfree(inode);
 }
 
-int inode_orphan(const struct vfs_inode_ops *iops, ino_t ino)
+int inode_orphan(struct super_block *sb, ino_t ino)
 {
 	struct inode *inode;
 	unsigned long flags;
-	unsigned int b;
 
-	if (!iops)
+	if (!sb || !sb->s_op->iops)
 		return 0;
 	flags = ir0_spin_lock_irqsave(&icache_lock);
-	for (b = 0; b < ICACHE_BUCKETS; b++)
-	{
-		for (inode = icache[b]; inode; inode = inode->i_next)
-		{
-			if (inode->i_fs->iops == iops && inode->i_ino == ino)
-			{
-				inode->i_state |= I_ORPHAN;
-				ir0_spin_unlock_irqrestore(&icache_lock, flags);
-				return 1;
-			}
-		}
-	}
+	inode = icache_find(sb, ino, "");
+	if (inode)
+		inode->i_state |= I_ORPHAN;
 	ir0_spin_unlock_irqrestore(&icache_lock, flags);
-	return 0;
+	return inode != NULL;
 }
 
-void inode_moved(struct vfs_ops *fs, const char *oldpath, const char *newpath)
+void inode_moved(struct super_block *sb, const char *oldpath,
+		 const char *newpath)
 {
 	struct inode *gone;
 	struct inode *inode;
 	unsigned long flags;
 
-	if (!fs || fs->iops || !oldpath)
+	if (!sb || sb->s_op->iops || !oldpath)
 		return;
 	if (newpath && (strcmp(oldpath, newpath) == 0 ||
 			strlen(newpath) >= sizeof(inode->i_path)))
 		return;
 	flags = ir0_spin_lock_irqsave(&icache_lock);
 	/* A rename over a name takes that name from the file it named. */
-	gone = newpath ? icache_find(fs, 0, newpath) : NULL;
+	gone = newpath ? icache_find(sb, 0, newpath) : NULL;
 	if (gone)
 	{
 		icache_unhash(gone);
 		gone->i_path[0] = '\0';
 	}
-	inode = icache_find(fs, 0, oldpath);
+	inode = icache_find(sb, 0, oldpath);
 	if (inode)
 	{
 		icache_unhash(inode);
@@ -235,7 +231,7 @@ void inode_moved(struct vfs_ops *fs, const char *oldpath, const char *newpath)
 			unsigned int b;
 
 			memcpy(inode->i_path, newpath, strlen(newpath) + 1);
-			b = icache_bucket(fs, 0, inode->i_path);
+			b = icache_bucket(sb, 0, inode->i_path);
 			inode->i_next = icache[b];
 			icache[b] = inode;
 		}
@@ -251,10 +247,11 @@ void inode_moved(struct vfs_ops *fs, const char *oldpath, const char *newpath)
 static int inode_raw_read(struct inode *inode, void *buf, size_t count,
 			  size_t *done, off_t offset)
 {
-	struct vfs_ops *fs = inode->i_fs;
+	struct vfs_ops *fs = inode->i_sb->s_op;
 
 	if (fs->iops && fs->iops->read)
-		return fs->iops->read(inode->i_ino, buf, count, done, offset);
+		return fs->iops->read(inode->i_sb, inode->i_ino, buf, count, done,
+				      offset);
 	if (!fs->read)
 		return -ENOSYS;
 	if (!inode->i_path[0])
@@ -265,10 +262,11 @@ static int inode_raw_read(struct inode *inode, void *buf, size_t count,
 static int inode_raw_write(struct inode *inode, const void *buf, size_t count,
 			   size_t *done, off_t offset)
 {
-	struct vfs_ops *fs = inode->i_fs;
+	struct vfs_ops *fs = inode->i_sb->s_op;
 
 	if (fs->iops && fs->iops->write)
-		return fs->iops->write(inode->i_ino, buf, count, done, offset);
+		return fs->iops->write(inode->i_sb, inode->i_ino, buf, count, done,
+				       offset);
 	if (!fs->write)
 		return -ENOSYS;
 	if (!inode->i_path[0])
@@ -278,10 +276,10 @@ static int inode_raw_write(struct inode *inode, const void *buf, size_t count,
 
 static int inode_raw_stat(struct inode *inode, stat_t *st)
 {
-	struct vfs_ops *fs = inode->i_fs;
+	struct vfs_ops *fs = inode->i_sb->s_op;
 
 	if (fs->iops && fs->iops->stat)
-		return fs->iops->stat(inode->i_ino, st);
+		return fs->iops->stat(inode->i_sb, inode->i_ino, st);
 	if (!fs->stat)
 		return -ENOSYS;
 	if (!inode->i_path[0])
@@ -338,10 +336,10 @@ int inode_truncate(struct inode *inode, size_t length)
 
 	if (!inode)
 		return -EINVAL;
-	fs = inode->i_fs;
+	fs = inode->i_sb->s_op;
 	vfs_fs_op_acquire();
 	if (fs->iops && fs->iops->truncate)
-		ret = fs->iops->truncate(inode->i_ino, length);
+		ret = fs->iops->truncate(inode->i_sb, inode->i_ino, length);
 	else if (!fs->truncate)
 		ret = -ENOSYS;
 	else if (!inode->i_path[0])

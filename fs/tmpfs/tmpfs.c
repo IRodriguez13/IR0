@@ -40,6 +40,8 @@ static int tmpfs_rmdir(const char *path);
 static int tmpfs_chown(const char *path, uid_t owner, gid_t group);
 static int tmpfs_truncate(const char *path, size_t length);
 static int tmpfs_readdir(const char *path, struct vfs_dirent *entries, int max_entries);
+static int tmpfs_fill_super(struct super_block *vsb, const char *dir);
+static const struct vfs_inode_ops tmpfs_inode_ops;
 
 #define TMPFS_MAX_NAME_LEN 255
 #define TMPFS_MAX_DIRS 32
@@ -64,7 +66,7 @@ typedef struct tmpfs_file
     size_t nr_frames;  /* allocated frames, for st_blocks */
     time_t mtime;
     uint32_t nlink;
-    struct tmpfs_data *sb; /* charged mount; NULL once it is unmounted */
+    struct tmpfs_data *sb; /* the mount it is charged to */
     struct tmpfs_file *hnext;
 } tmpfs_file_t;
 
@@ -89,6 +91,7 @@ typedef struct tmpfs_inode
  */
 typedef struct tmpfs_data
 {
+    struct super_block *vsb; /* the VFS mount (fill_super) */
     tmpfs_inode_t *root;
     size_t nr_inodes;
     size_t max_inodes;
@@ -111,7 +114,6 @@ static int num_tmpfs_instances = 0;
 static uint32_t tmpfs_last_ino = 1; /* 1 is every mount's root */
 static tmpfs_file_t *tmpfs_files[TMPFS_FILE_BUCKETS];
 
-static const struct vfs_inode_ops tmpfs_inode_ops;
 
 static int tmpfs_copy_path(char *dest, size_t dest_size, const char *src)
 {
@@ -275,7 +277,7 @@ static void tmpfs_file_unlink(tmpfs_file_t *file)
 {
     if (file->nlink > 0)
         file->nlink--;
-    if (file->nlink == 0 && !inode_orphan(&tmpfs_inode_ops, file->ino))
+    if (file->nlink == 0 && !inode_orphan(file->sb->vsb, file->ino))
         tmpfs_file_free(file);
 }
 
@@ -480,15 +482,6 @@ static int tmpfs_umount(const char *dir_name)
 
     if (tmpfs->root)
         tmpfs_free_inode(tmpfs, tmpfs->root);
-    /* Files still open outlive the mount; nothing charges them now. */
-    for (int b = 0; b < TMPFS_FILE_BUCKETS; b++)
-    {
-        for (tmpfs_file_t *f = tmpfs_files[b]; f; f = f->hnext)
-        {
-            if (f->sb == tmpfs)
-                f->sb = NULL;
-        }
-    }
 
     kfree(tmpfs);
 
@@ -524,6 +517,7 @@ struct vfs_fstype tmpfs_fs_type = {
     .ops   = &tmpfs_fs_ops,
     .mount = tmpfs_mount,
     .umount = tmpfs_umount,
+    .fill_super = tmpfs_fill_super,
     .statfs = tmpfs_statfs,
     .next  = NULL,
 };
@@ -1137,7 +1131,8 @@ static int tmpfs_truncate(const char *path, size_t length)
 }
 
 /* vfs_inode_ops: a regular file by number, named or orphaned. */
-static int tmpfs_istat(ino_t ino, stat_t *buf)
+static int tmpfs_istat(struct super_block *vsb __attribute__((unused)),
+                       ino_t ino, stat_t *buf)
 {
     tmpfs_file_t *file = tmpfs_file_by_ino(ino);
 
@@ -1147,7 +1142,8 @@ static int tmpfs_istat(ino_t ino, stat_t *buf)
     return 0;
 }
 
-static int tmpfs_iread(ino_t ino, void *buf, size_t count, size_t *done,
+static int tmpfs_iread(struct super_block *vsb __attribute__((unused)),
+                       ino_t ino, void *buf, size_t count, size_t *done,
                        off_t offset)
 {
     tmpfs_file_t *file = tmpfs_file_by_ino(ino);
@@ -1157,7 +1153,8 @@ static int tmpfs_iread(ino_t ino, void *buf, size_t count, size_t *done,
     return tmpfs_file_read(file, buf, count, done, offset);
 }
 
-static int tmpfs_iwrite(ino_t ino, const void *buf, size_t count,
+static int tmpfs_iwrite(struct super_block *vsb __attribute__((unused)),
+                        ino_t ino, const void *buf, size_t count,
                         size_t *done, off_t offset)
 {
     tmpfs_file_t *file = tmpfs_file_by_ino(ino);
@@ -1167,7 +1164,8 @@ static int tmpfs_iwrite(ino_t ino, const void *buf, size_t count,
     return tmpfs_file_write(file, buf, count, done, offset);
 }
 
-static int tmpfs_itruncate(ino_t ino, size_t length)
+static int tmpfs_itruncate(struct super_block *vsb __attribute__((unused)),
+                           ino_t ino, size_t length)
 {
     tmpfs_file_t *file = tmpfs_file_by_ino(ino);
 
@@ -1177,12 +1175,24 @@ static int tmpfs_itruncate(ino_t ino, size_t length)
     return 0;
 }
 
-static void tmpfs_ievict(ino_t ino)
+static void tmpfs_ievict(struct super_block *vsb __attribute__((unused)),
+                         ino_t ino)
 {
     tmpfs_file_t *file = tmpfs_file_by_ino(ino);
 
     if (file && file->nlink == 0)
         tmpfs_file_free(file);
+}
+
+static int tmpfs_fill_super(struct super_block *vsb, const char *dir)
+{
+    tmpfs_data_t *tmpfs = tmpfs_get_instance(dir);
+
+    if (!tmpfs)
+        return -ENODEV;
+    tmpfs->vsb = vsb;
+    vsb->s_fs_info = tmpfs;
+    return 0;
 }
 
 static const struct vfs_inode_ops tmpfs_inode_ops = {

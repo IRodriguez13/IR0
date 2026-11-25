@@ -628,7 +628,17 @@ int minix_fs_format(void)
   return 0;
 }
 
-const struct vfs_inode_ops minix_inode_ops = {
+/* The mount of the one MINIX instance (fill_super). */
+struct super_block *minix_sb;
+
+static int minix_fill_super(struct super_block *sb,
+                            const char *dir __attribute__((unused)))
+{
+	minix_sb = sb;
+	return 0;
+}
+
+static const struct vfs_inode_ops minix_inode_ops = {
 	.stat     = minix_istat,
 	.read     = minix_iread,
 	.write    = minix_iwrite,
@@ -674,6 +684,7 @@ struct vfs_fstype minix_fs_type = {
 	.fs_flags = FS_REQUIRES_DEV,
 	.ops = &minix_fs_ops,
 	.mount = minix_mount,
+	.fill_super = minix_fill_super,
 	.statfs = minix_fs_statfs,
 	.next = NULL,
 };

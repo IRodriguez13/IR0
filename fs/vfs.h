@@ -46,7 +46,10 @@ struct vfs_dirent;
  * @alias:  second type name mount(2) accepts for the same driver, or NULL.
  * @statfs: statfs(2) for @path on a mount of this type; NULL reports an
  *          empty filesystem. Called under the fs-op lock.
+ * @fill_super: after @mount succeeded, attach the backend state of the
+ *          mount at @dir to @sb (s_fs_info); NULL when there is none.
  */
+struct super_block;
 struct vfs_fstype {
     const char *name;
     const char *alias;
@@ -55,6 +58,7 @@ struct vfs_fstype {
     int (*mount)(const char *dev, const char *dir);
     int (*umount)(const char *dir);
     int (*statfs)(const char *path, struct ir0_statfs *buf);
+    int (*fill_super)(struct super_block *sb, const char *dir);
     struct vfs_fstype *next;
 };
 
@@ -64,6 +68,7 @@ struct vfs_mount {
     char backend_path[VFS_PATH_MAX];
     char dev[64];
     struct vfs_fstype *fs;
+    struct super_block *sb; /* shared by the bind mounts of it */
     unsigned long flags; /* MS_RDONLY and friends */
     struct vfs_mount *next;
 };

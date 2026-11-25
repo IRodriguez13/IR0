@@ -101,7 +101,7 @@ static int vfs_file_bind_inode(struct vfs_ops *ops, const char *path,
     ret = ops->stat(backend, &st);
     if (ret == 0 && S_ISREG(st.st_mode))
     {
-        f->inode = iget(ops, backend, &st);
+        f->inode = iget(vfs_sb_for_path(path), backend, &st);
         if (!f->inode)
             ret = -ENOMEM;
     }

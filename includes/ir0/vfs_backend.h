@@ -17,23 +17,25 @@
 #include <ir0/types.h>
 
 struct vfs_dirent;
+struct super_block;
 
 /*
  * Operations on a file named by its inode number (Linux inode_operations
  * and file_operations of a regular file), for a backend that can address
  * its files that way. They are what an open file uses, so a file keeps
- * working after it lost its names. Same conventions as the path
+ * working after it lost its names. @sb is the mounted filesystem
+ * (s_fs_info is the backend's own state). Same conventions as the path
  * operations below. @evict frees a file whose link count is 0 when the VFS
  * drops its last reference (see inode_orphan() in <ir0/inode.h>).
  */
 struct vfs_inode_ops {
-	int (*stat)(ino_t ino, stat_t *buf);
-	int (*read)(ino_t ino, void *buf, size_t count, size_t *bytes_read,
-		    off_t offset);
-	int (*write)(ino_t ino, const void *buf, size_t count,
-		     size_t *bytes_written, off_t offset);
-	int (*truncate)(ino_t ino, size_t length);
-	void (*evict)(ino_t ino);
+	int (*stat)(struct super_block *sb, ino_t ino, stat_t *buf);
+	int (*read)(struct super_block *sb, ino_t ino, void *buf, size_t count,
+		    size_t *bytes_read, off_t offset);
+	int (*write)(struct super_block *sb, ino_t ino, const void *buf,
+		     size_t count, size_t *bytes_written, off_t offset);
+	int (*truncate)(struct super_block *sb, ino_t ino, size_t length);
+	void (*evict)(struct super_block *sb, ino_t ino);
 };
 
 /*

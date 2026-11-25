@@ -333,6 +333,20 @@ int fs_tmpfs_inode_lifetime(void)
 	return CONF_PASS;
 }
 
+/* A filesystem with an open file cannot be unmounted (Linux do_umount). */
+int fs_umount_busy(void)
+{
+	long fd;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "t", 0755), 0);
+	EXPECT(S5(SYS_mount, "none", "t", "tmpfs", 0, 0), 0);
+	OK(fd, conf_creat("t/f", hello));
+	EXPECT_ERR(S2(SYS_umount2, "t", 0), EBUSY);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S2(SYS_umount2, "t", 0), 0);
+	return CONF_PASS;
+}
+
 int fs_rename(void)
 {
 	struct stat st;

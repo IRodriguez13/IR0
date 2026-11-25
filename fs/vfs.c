@@ -102,9 +102,9 @@ void vfs_fs_op_release(void)
  * The inode whose page cache must follow I/O by name on @backend, with a
  * reference, or NULL when no cache exists. fs-op lock held.
  */
-static struct inode *vfs_cached_inode(struct vfs_ops *ops, const char *backend)
+static struct inode *vfs_cached_inode(const char *path, const char *backend)
 {
-	return filemap_active() ? ilookup(ops, backend) : NULL;
+	return filemap_active() ? ilookup(vfs_sb_for_path(path), backend) : NULL;
 }
 
 int vfs_ops_stat(struct vfs_ops *ops, const char *path, stat_t *st)
@@ -134,7 +134,7 @@ int vfs_ops_read(struct vfs_ops *ops, const char *path, void *buf,
 	ret = ops->read(backend, buf, count, done, offset);
 	if (ret == 0 && done)
 	{
-		struct inode *inode = vfs_cached_inode(ops, backend);
+		struct inode *inode = vfs_cached_inode(path, backend);
 
 		filemap_sync_read(inode, buf, *done, offset);
 		iput(inode);
@@ -156,7 +156,7 @@ int vfs_ops_write(struct vfs_ops *ops, const char *path, const void *buf,
 	ret = ops->write(backend, buf, count, done, offset);
 	if (ret == 0 && done)
 	{
-		struct inode *inode = vfs_cached_inode(ops, backend);
+		struct inode *inode = vfs_cached_inode(path, backend);
 
 		filemap_sync_write(inode, buf, *done, offset);
 		iput(inode);
@@ -204,7 +204,7 @@ int vfs_ops_unlink(struct vfs_ops *ops, const char *path)
 	vfs_fs_op_acquire();
 	ret = ops->unlink(backend);
 	if (ret == 0)
-		inode_moved(ops, backend, NULL);
+		inode_moved(vfs_sb_for_path(path), backend, NULL);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -317,7 +317,7 @@ int vfs_ops_rename(struct vfs_ops *ops, const char *oldpath,
 	vfs_fs_op_acquire();
 	ret = ops->rename(old_backend, new_backend);
 	if (ret == 0)
-		inode_moved(ops, old_backend, new_backend);
+		inode_moved(vfs_sb_for_path(oldpath), old_backend, new_backend);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -336,7 +336,7 @@ void vfs_ops_renamed(struct vfs_ops *ops, const char *oldpath,
 	    vfs_backend_path(ops, newpath, new_backend, sizeof(new_backend)) != 0)
 		return;
 	vfs_fs_op_acquire();
-	inode_moved(ops, old_backend, new_backend);
+	inode_moved(vfs_sb_for_path(oldpath), old_backend, new_backend);
 	vfs_fs_op_release();
 }
 
@@ -391,7 +391,7 @@ int vfs_ops_truncate(struct vfs_ops *ops, const char *path, size_t length)
 	ret = ops->truncate(backend, length);
 	if (ret == 0)
 	{
-		struct inode *inode = vfs_cached_inode(ops, backend);
+		struct inode *inode = vfs_cached_inode(path, backend);
 
 		filemap_sync_truncate(inode, length);
 		iput(inode);

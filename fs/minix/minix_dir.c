@@ -194,7 +194,7 @@ int minix_inode_release(uint16_t inode_num, minix_inode_t *inode)
 }
 
 /* vfs_inode_ops.evict: the last reference to an unlinked file went. */
-void minix_ievict(ino_t ino)
+void minix_ievict(struct super_block *sb __attribute__((unused)), ino_t ino)
 {
   minix_inode_t inode;
 
@@ -281,7 +281,7 @@ int minix_fs_rm(const char *path)
    * The last name is gone. A file the VFS still holds open stays, blocks
    * and all, until minix_ievict() at its last close (Linux evict()).
    */
-  if (file_inode.i_nlinks == 0 && !inode_orphan(&minix_inode_ops, file_inode_num))
+  if (file_inode.i_nlinks == 0 && !inode_orphan(minix_sb, file_inode_num))
   {
     int rc_release = minix_inode_release(file_inode_num, &file_inode);
 

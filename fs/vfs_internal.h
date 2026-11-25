@@ -74,4 +74,6 @@ extern struct vfs_fstype *const vfs_builtin_filesystems[];
 
 /* Mount table lookups (vfs_mount.c). */
 struct vfs_mount *vfs_find_mount(const char *path);
+/* The super_block of the mount that holds @path, or NULL. */
+struct super_block *vfs_sb_for_path(const char *path);
 int vfs_mount_is_readonly(const char *path);
