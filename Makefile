@@ -731,6 +731,7 @@ FS_OBJS = \
     fs/vfs.o \
     fs/vfs_mount.o \
     fs/vfs_file.o \
+    fs/inode.o \
     fs/vfs_namei.o \
     fs/vfs_dispatch.o \
     fs/path.o \

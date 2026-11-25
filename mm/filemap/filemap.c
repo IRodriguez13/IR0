@@ -13,6 +13,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/filemap.h>
+#include <ir0/inode.h>
 #include <ir0/errno.h>
 #include <ir0/kmem.h>
 #include <ir0/mm_alloc.h>
@@ -35,9 +36,7 @@
 struct filemap
 {
 	uint64_t id;
-	const void *fs;
-	char key[IR0_VFS_PATH_MAX];
-	int named;    /* key still names the file: 0 once unlinked */
+	struct inode *inode; /* the file; the cache holds one reference */
 	int writable; /* a mapping may store: write back */
 	size_t size;  /* file size as the cache sees it */
 	size_t npages;
@@ -46,8 +45,8 @@ struct filemap
 };
 
 /*
- * The caches. filemap_lock guards the list and every field above; it is
- * the only lock the page fault path takes here. Everything that changes a
+ * The caches. filemap_lock guards the list, every field above and the
+ * inodes' i_mapping; it is the only lock the page fault path takes here. Everything that changes a
  * cache's size, name or frame table, or frees it, also holds the fs-op lock
  * (vfs_pagecache_lock), so code holding that lock may use a cache across
  * backend I/O, which runs without filemap_lock.
@@ -66,17 +65,10 @@ static uint8_t *fm_page_va(uintptr_t phys)
 	return (uint8_t *)phys_to_virt(phys);
 }
 
-/* filemap_lock held. */
-static struct filemap *fm_by_key(const void *fs, const char *key)
+/* The cache of @inode, or NULL. filemap_lock held. */
+static struct filemap *fm_of(const struct inode *inode)
 {
-	struct filemap *fm;
-
-	for (fm = filemap_list; fm; fm = fm->next)
-	{
-		if (fm->named && fm->fs == fs && strcmp(fm->key, key) == 0)
-			return fm;
-	}
-	return NULL;
+	return inode ? inode->i_mapping : NULL;
 }
 
 /* filemap_lock held. */
@@ -153,8 +145,7 @@ static int fm_fill(struct filemap *fm, size_t first, size_t last)
 		want = fm->size - off;
 		if (want > FM_PAGE)
 			want = FM_PAGE;
-		if (fm->named &&
-		    vfs_pagecache_read(fm->fs, fm->key, fm_page_va(phys), want,
+		if (vfs_pagecache_read(fm->inode, fm_page_va(phys), want,
 				       (off_t)off, &done) != 0)
 		{
 			pmm_free_frame(phys);
@@ -167,33 +158,28 @@ static int fm_fill(struct filemap *fm, size_t first, size_t last)
 	return 0;
 }
 
-int filemap_map_file(const char *path, uint64_t pgoff, size_t npages,
+int filemap_map_file(struct inode *inode, uint64_t pgoff, size_t npages,
 		     int writable, uint64_t *id)
 {
-	char key[IR0_VFS_PATH_MAX];
-	const void *fs = NULL;
 	struct filemap *fm;
 	unsigned long flags;
 	size_t size = 0;
 	size_t end;
 	int ret;
 
-	if (!path || !id || npages == 0)
+	if (!inode || !id || npages == 0)
 		return -EINVAL;
 	if (pgoff > SIZE_MAX / FM_PAGE || npages > SIZE_MAX / FM_PAGE - pgoff)
 		return -EOVERFLOW;
 	end = (size_t)pgoff + npages;
-	ret = vfs_pagecache_key(path, &fs, key, sizeof(key));
-	if (ret != 0)
-		return ret;
 
 	vfs_pagecache_lock();
 	flags = ir0_spin_lock_irqsave(&filemap_lock);
-	fm = fm_by_key(fs, key);
+	fm = fm_of(inode);
 	ir0_spin_unlock_irqrestore(&filemap_lock, flags);
 	if (!fm)
 	{
-		ret = vfs_pagecache_size(fs, key, &size);
+		ret = vfs_pagecache_size(inode, &size);
 		if (ret != 0)
 			goto out;
 		fm = kcalloc(1, sizeof(*fm));
@@ -202,14 +188,14 @@ int filemap_map_file(const char *path, uint64_t pgoff, size_t npages,
 			ret = -ENOMEM;
 			goto out;
 		}
-		fm->fs = fs;
-		memcpy(fm->key, key, sizeof(fm->key));
-		fm->named = 1;
+		ihold(inode);
+		fm->inode = inode;
 		fm->size = size;
 		flags = ir0_spin_lock_irqsave(&filemap_lock);
 		fm->id = ++filemap_last_id;
 		fm->next = filemap_list;
 		filemap_list = fm;
+		inode->i_mapping = fm;
 		ir0_spin_unlock_irqrestore(&filemap_lock, flags);
 	}
 	/* A cache that ends up unused is dropped by the next reclaim. */
@@ -253,10 +239,10 @@ static void fm_write_back(struct filemap *fm)
 {
 	size_t size;
 
-	if (!fm->named || !fm->writable)
+	if (!fm->writable)
 		return;
 	/* Never past the end the backend has: the cache does not extend it. */
-	if (vfs_pagecache_size(fm->fs, fm->key, &size) != 0)
+	if (vfs_pagecache_size(fm->inode, &size) != 0)
 		return;
 	if (size > fm->size)
 		size = fm->size;
@@ -269,7 +255,7 @@ static void fm_write_back(struct filemap *fm)
 			continue;
 		if (n > FM_PAGE)
 			n = FM_PAGE;
-		(void)vfs_pagecache_write(fm->fs, fm->key, fm_page_va(fm->frames[i]),
+		(void)vfs_pagecache_write(fm->inode, fm_page_va(fm->frames[i]),
 					  n, (off_t)(i * FM_PAGE), &done);
 	}
 }
@@ -318,6 +304,7 @@ void filemap_reclaim(void)
 			{
 				fm = *link;
 				*link = fm->next;
+				fm->inode->i_mapping = NULL;
 				break;
 			}
 		}
@@ -331,12 +318,13 @@ void filemap_reclaim(void)
 				pmm_free_frame(fm->frames[i]);
 		}
 		kfree(fm->frames);
+		iput(fm->inode);
 		kfree(fm);
 	}
 	vfs_pagecache_unlock();
 }
 
-void filemap_sync_read(const void *fs, const char *key, void *buf,
+void filemap_sync_read(struct inode *inode, void *buf,
 		       size_t done, off_t offset)
 {
 	struct filemap *fm;
@@ -348,7 +336,7 @@ void filemap_sync_read(const void *fs, const char *key, void *buf,
 		return;
 	pos = (size_t)offset;
 	flags = ir0_spin_lock_irqsave(&filemap_lock);
-	fm = fm_by_key(fs, key);
+	fm = fm_of(inode);
 	while (fm && copied < done)
 	{
 		size_t idx = (pos + copied) / FM_PAGE;
@@ -365,7 +353,7 @@ void filemap_sync_read(const void *fs, const char *key, void *buf,
 	ir0_spin_unlock_irqrestore(&filemap_lock, flags);
 }
 
-void filemap_sync_write(const void *fs, const char *key, const void *buf,
+void filemap_sync_write(struct inode *inode, const void *buf,
 			size_t done, off_t offset)
 {
 	struct filemap *fm;
@@ -380,7 +368,7 @@ void filemap_sync_write(const void *fs, const char *key, const void *buf,
 	pos = (size_t)offset;
 	end = pos + done;
 	flags = ir0_spin_lock_irqsave(&filemap_lock);
-	fm = fm_by_key(fs, key);
+	fm = fm_of(inode);
 	if (!fm)
 	{
 		ir0_spin_unlock_irqrestore(&filemap_lock, flags);
@@ -411,7 +399,7 @@ void filemap_sync_write(const void *fs, const char *key, const void *buf,
 		(void)fm_fill(fm, old / FM_PAGE, fm_pages(end));
 }
 
-void filemap_sync_truncate(const void *fs, const char *key, size_t length)
+void filemap_sync_truncate(struct inode *inode, size_t length)
 {
 	struct filemap *fm;
 	unsigned long flags;
@@ -420,7 +408,7 @@ void filemap_sync_truncate(const void *fs, const char *key, size_t length)
 	if (!filemap_list)
 		return;
 	flags = ir0_spin_lock_irqsave(&filemap_lock);
-	fm = fm_by_key(fs, key);
+	fm = fm_of(inode);
 	if (!fm)
 	{
 		ir0_spin_unlock_irqrestore(&filemap_lock, flags);
@@ -435,34 +423,7 @@ void filemap_sync_truncate(const void *fs, const char *key, size_t length)
 		(void)fm_fill(fm, old / FM_PAGE, fm_pages(length));
 }
 
-void filemap_forget(const void *fs, const char *key)
+int filemap_active(void)
 {
-	struct filemap *fm;
-	unsigned long flags;
-
-	if (!filemap_list)
-		return;
-	flags = ir0_spin_lock_irqsave(&filemap_lock);
-	fm = fm_by_key(fs, key);
-	if (fm)
-		fm->named = 0;
-	ir0_spin_unlock_irqrestore(&filemap_lock, flags);
-}
-
-void filemap_rename(const void *fs, const char *oldkey, const char *newkey)
-{
-	struct filemap *fm;
-	unsigned long flags;
-
-	if (!filemap_list || strcmp(oldkey, newkey) == 0 ||
-	    strlen(newkey) >= sizeof(fm->key))
-		return;
-	flags = ir0_spin_lock_irqsave(&filemap_lock);
-	fm = fm_by_key(fs, newkey);
-	if (fm)
-		fm->named = 0;
-	fm = fm_by_key(fs, oldkey);
-	if (fm)
-		memcpy(fm->key, newkey, strlen(newkey) + 1);
-	ir0_spin_unlock_irqrestore(&filemap_lock, flags);
+	return filemap_list != NULL;
 }

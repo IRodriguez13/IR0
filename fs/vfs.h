@@ -138,22 +138,18 @@ const struct vfs_fstype *vfs_get_fstypes(void);
 struct vfs_mount *vfs_get_mounts(void);
 
 /*
- * Backing store of the page cache (mm/filemap). A file is named by its
- * filesystem (an opaque handle) and its path inside it: the pair every
- * vfs_ops_* call reaches the backend with, so the read/write/truncate/
- * unlink/rename hooks find the same cache. These calls skip permission
- * checks and the cache itself. vfs_pagecache_lock() is the fs-op lock:
- * held, no VFS operation runs, and the calls nest under it.
+ * Backing store of the page cache (mm/filemap): the inode's file, without
+ * permission checks and without the cache itself. vfs_pagecache_lock() is
+ * the fs-op lock: held, no VFS operation runs, and the calls nest under it.
  */
-int vfs_pagecache_key(const char *path, const void **fs, char *key,
-		      size_t cap);
+struct inode;
 void vfs_pagecache_lock(void);
 void vfs_pagecache_unlock(void);
-int vfs_pagecache_read(const void *fs, const char *key, void *buf,
-		       size_t count, off_t offset, size_t *done);
-int vfs_pagecache_write(const void *fs, const char *key, const void *buf,
-			size_t count, off_t offset, size_t *done);
-int vfs_pagecache_size(const void *fs, const char *key, size_t *size);
+int vfs_pagecache_read(struct inode *inode, void *buf, size_t count,
+		       off_t offset, size_t *done);
+int vfs_pagecache_write(struct inode *inode, const void *buf, size_t count,
+			off_t offset, size_t *done);
+int vfs_pagecache_size(struct inode *inode, size_t *size);
 
 /* Best-effort sync: flush all registered block devices (FS-level sync later). */
 int vfs_sync(void);
@@ -165,6 +161,9 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count);
 int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset);
 int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset);
 int vfs_close(struct vfs_file *f);
+/* fstat(2) / ftruncate(2) of an open file: its inode, not its name. */
+int vfs_fstat(struct vfs_file *f, stat_t *st);
+int vfs_ftruncate(struct vfs_file *f, size_t length);
 off_t vfs_lseek(struct vfs_file *f, off_t offset, int whence);
 
 /* Path operations */

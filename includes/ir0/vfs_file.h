@@ -16,11 +16,14 @@
 #define IR0_VFS_PATH_MAX 256
 
 struct fd_resource_ops;
+struct inode;
 
 /*
  * Linux fd_install() stores a struct file *, not a path string.
  * IR0's open-file description is this object: path, cursor, flags, ref.
- * Path I/O goes through vfs_dispatch / vfs_ops; this handle is generic-core.
+ * A regular file pins its inode (@inode, one reference, dropped with the
+ * last reference to the file); its I/O goes through the inode, so it keeps
+ * working after the file lost the name in @path.
  * https://www.kernel.org/doc/html/latest/filesystems/porting.html
  */
 struct vfs_file
@@ -29,6 +32,7 @@ struct vfs_file
 	off_t pos;
 	int flags;
 	int ref_count;
+	struct inode *inode;
 };
 
 struct vfs_file *vfs_file_alloc(const char *path, int flags);

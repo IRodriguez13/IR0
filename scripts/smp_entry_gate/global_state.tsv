@@ -285,6 +285,8 @@ fs/heartfs/heartfs.c	g_heart_build_buf	72
 fs/heartfs/heartfs.c	g_heart_features_buf	73
 fs/heartfs/heartfs.c	heartfs_ops	527
 fs/heartfs/heartfs.c	heartfs_fs_type	571
+fs/inode.c	icache	25
+fs/inode.c	icache_lock	26
 fs/minix/minix_dir.c	minix_backend_classified	517
 fs/minix/minix_file.c	minix_offset_read_classified	465
 fs/minix/minix_fs.c	minix_fs	13
@@ -537,9 +539,9 @@ mm/boot/boot_memory.c	g_boot_snapshot	24
 mm/boot/boot_memory.c	g_early_base	31
 mm/boot/boot_memory.c	g_early_next	32
 mm/boot/boot_memory.c	g_early_limit	33
-mm/filemap/filemap.c	filemap_list	55
-mm/filemap/filemap.c	filemap_last_id	56
-mm/filemap/filemap.c	filemap_lock	57
+mm/filemap/filemap.c	filemap_list	54
+mm/filemap/filemap.c	filemap_last_id	55
+mm/filemap/filemap.c	filemap_lock	56
 mm/mm_struct.c	mm_struct_lock	25
 mm/nommu/no_mmu.c	no_mmu_policy	14
 mm/nommu/no_mmu.c	no_mmu_ready	15

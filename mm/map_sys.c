@@ -290,7 +290,7 @@ static void *mm_mmap_file(void *addr, size_t length, int prot, int flags,
 	    tab[fd].is_timerfd || !tab[fd].vfs_file)
 		return SYSCALL_PTR_ERR(ENODEV);
 	vf = (struct vfs_file *)tab[fd].vfs_file;
-	if (vfs_stat(vf->path, &st) != 0 || !S_ISREG(st.st_mode))
+	if (!vf->inode || vfs_fstat(vf, &st) != 0 || !S_ISREG(st.st_mode))
 		return SYSCALL_PTR_ERR(ENODEV);
 	/*
 	 * Linux do_mmap(): read access always; a shared mapping needs write
@@ -321,7 +321,7 @@ static void *mm_mmap_file(void *addr, size_t length, int prot, int flags,
 
 	/* No reclaim may drop the cache between filling and mapping it. */
 	vfs_pagecache_lock();
-	ret = filemap_map_file(vf->path, (uint64_t)offset / PAGE_SIZE_4KB, npages,
+	ret = filemap_map_file(vf->inode, (uint64_t)offset / PAGE_SIZE_4KB, npages,
 			       shared && (prot & PROT_WRITE), &id);
 	if (ret == 0)
 		ret = mm_mmap_place(addr, len, flags, &va);

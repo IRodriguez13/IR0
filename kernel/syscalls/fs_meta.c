@@ -160,6 +160,16 @@ static int64_t fs_fstat_kernel(int fd, stat_t *kst_out)
     kst.st_size = 0;
     rc = 0;
   }
+  else if (fd_table[fd].vfs_file && !fd_table[fd].is_devfs &&
+           !fd_table[fd].is_socket && !fd_table[fd].is_epoll &&
+           !fd_table[fd].is_memfd && !fd_table[fd].is_eventfd &&
+           !fd_table[fd].is_timerfd)
+  {
+    /* An open file answers for its inode, named or not (Linux vfs_fstat). */
+    rc = vfs_fstat((struct vfs_file *)fd_table[fd].vfs_file, &kst);
+    if (rc != 0)
+      return rc;
+  }
   else
   {
     rc = ir0_stat_path_routed(fd_table[fd].path, &kst);

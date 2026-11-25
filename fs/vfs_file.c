@@ -21,7 +21,9 @@
 #include <ir0/cred.h>
 #include <ir0/klog.h>
 #include <ir0/overflow.h>
+#include <ir0/inode.h>
 #include <ir0/process.h>
+#include <ir0/swap.h>
 #include "vfs_internal.h"
 
 #define VFS_READ_FILE_MAX_BYTES (64U * 1024U * 1024U)
@@ -77,6 +79,35 @@ static void vfs_exec_audit_log(const char *stage, const char *path, int ret,
 /* ------------------------------------------------------------------ */
 /*  File operations                                                    */
 /* ------------------------------------------------------------------ */
+
+/*
+ * Pin the inode of the regular file @path opens (Linux do_dentry_open()
+ * takes the inode from the dentry). Stat and iget share one fs-op critical
+ * section, so no unlink frees the file in between.
+ */
+static int vfs_file_bind_inode(struct vfs_ops *ops, const char *path,
+                               struct vfs_file *f)
+{
+    char backend[VFS_PATH_MAX];
+    stat_t st;
+    int ret;
+
+    if (!ops->stat)
+        return 0;
+    ret = vfs_backend_path(ops, path, backend, sizeof(backend));
+    if (ret != 0)
+        return ret;
+    vfs_fs_op_acquire();
+    ret = ops->stat(backend, &st);
+    if (ret == 0 && S_ISREG(st.st_mode))
+    {
+        f->inode = iget(ops, backend, &st);
+        if (!f->inode)
+            ret = -ENOMEM;
+    }
+    vfs_fs_op_release();
+    return ret;
+}
 
 int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
 {
@@ -192,9 +223,70 @@ int vfs_open(const char *path, int flags, mode_t mode, struct vfs_file **out)
     struct vfs_file *f = vfs_file_alloc(path, flags);
     if (!f)
         return -ENOMEM;
+    ret = vfs_file_bind_inode(ops, path, f);
+    if (ret != 0)
+    {
+        vfs_file_put(f);
+        return ret;
+    }
 
     *out = f;
     return 0;
+}
+
+/*
+ * Backend I/O of an open file: through its inode when it has one, else
+ * through its name.
+ */
+static int vfs_file_io_read(struct vfs_file *f, void *buf, size_t count,
+                            size_t *done, off_t offset)
+{
+    struct vfs_ops *ops;
+
+    if (f->inode)
+        return inode_read(f->inode, buf, count, done, offset);
+    ops = vfs_ops_for_path(f->path);
+    if (!ops || !ops->read)
+        return -ENOSYS;
+    return vfs_ops_read(ops, f->path, buf, count, done, offset);
+}
+
+static int vfs_file_io_write(struct vfs_file *f, const void *buf, size_t count,
+                             size_t *done, off_t offset)
+{
+    struct vfs_ops *ops;
+
+    if (f->inode)
+    {
+        /* Linux IS_SWAPFILE(): an active swap file is not written. */
+        if (ir0_swap_path_busy(f->path))
+            return -ETXTBSY;
+        return inode_write(f->inode, buf, count, done, offset);
+    }
+    ops = vfs_ops_for_path(f->path);
+    if (!ops || !ops->write)
+        return -ENOSYS;
+    return vfs_ops_write(ops, f->path, buf, count, done, offset);
+}
+
+int vfs_fstat(struct vfs_file *f, stat_t *st)
+{
+    if (!f || !st)
+        return -EINVAL;
+    if (f->inode)
+        return inode_stat(f->inode, st);
+    return vfs_stat(f->path, st);
+}
+
+int vfs_ftruncate(struct vfs_file *f, size_t length)
+{
+    if (!f)
+        return -EBADF;
+    if (!f->inode)
+        return vfs_truncate(f->path, length);
+    if (ir0_swap_path_busy(f->path))
+        return -ETXTBSY;
+    return inode_truncate(f->inode, length);
 }
 
 int vfs_read(struct vfs_file *f, char *buf, size_t count)
@@ -206,12 +298,8 @@ int vfs_read(struct vfs_file *f, char *buf, size_t count)
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
         return -EBADF;
 
-    struct vfs_ops *ops = vfs_ops_for_path(f->path);
-    if (!ops || !ops->read)
-        return -ENOSYS;
-
     size_t done = 0;
-    int ret = vfs_ops_read(ops, f->path, buf, count, &done, f->pos);
+    int ret = vfs_file_io_read(f, buf, count, &done, f->pos);
     if (vfs_exec_audit_active)
     {
         vfs_exec_audit_log("vfs_read", f->path, ret, f->pos, count, done, 0, -1);
@@ -237,22 +325,18 @@ int vfs_write(struct vfs_file *f, const char *buf, size_t count)
     if (vfs_mount_is_readonly(f->path))
         return -EROFS;
 
-    struct vfs_ops *ops = vfs_ops_for_path(f->path);
-    if (!ops || !ops->write)
-        return -ENOSYS;
-
     /*
      * O_APPEND: move to end before every write.
      * We grab the current size via stat.
      */
     if (f->flags & IR0_O_APPEND) {
         stat_t st;
-        if (ops->stat && vfs_ops_stat(ops, f->path, &st) == 0)
+        if (vfs_fstat(f, &st) == 0)
             f->pos = st.st_size;
     }
 
     size_t done = 0;
-    int ret = vfs_ops_write(ops, f->path, buf, count, &done, f->pos);
+    int ret = vfs_file_io_write(f, buf, count, &done, f->pos);
     if (ret != 0)
         return ret;
     if (done > count)
@@ -276,12 +360,8 @@ int vfs_pread(struct vfs_file *f, char *buf, size_t count, off_t offset)
     if ((f->flags & IR0_O_ACCMODE) == IR0_O_WRONLY)
         return -EBADF;
 
-    struct vfs_ops *ops = vfs_ops_for_path(f->path);
-    if (!ops || !ops->read)
-        return -ENOSYS;
-
     size_t done = 0;
-    int ret = vfs_ops_read(ops, f->path, buf, count, &done, offset);
+    int ret = vfs_file_io_read(f, buf, count, &done, offset);
 
     if (ret != 0)
         return ret;
@@ -303,12 +383,8 @@ int vfs_pwrite(struct vfs_file *f, const char *buf, size_t count, off_t offset)
     if (vfs_mount_is_readonly(f->path))
         return -EROFS;
 
-    struct vfs_ops *ops = vfs_ops_for_path(f->path);
-    if (!ops || !ops->write)
-        return -ENOSYS;
-
     size_t done = 0;
-    int ret = vfs_ops_write(ops, f->path, buf, count, &done, offset);
+    int ret = vfs_file_io_write(f, buf, count, &done, offset);
 
     if (ret != 0)
         return ret;

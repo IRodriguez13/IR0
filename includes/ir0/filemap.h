@@ -25,17 +25,20 @@
  * the same bytes. Pages inside the file size are always resident; access
  * past the end raises SIGBUS. The cache is written back to the filesystem
  * by msync() and when its last page is unmapped (munmap, exit, exec), and
- * then dropped. A file is named as the VFS names it to its backend
- * (filesystem handle, path), see vfs_pagecache_key().
+ * then dropped. The cache belongs to the file's inode (inode->i_mapping)
+ * and holds a reference on it, so every name of a file shares one cache
+ * and a mapped file outlives its names.
  */
 
+struct inode;
+
 /*
- * Set up (or extend) the cache of @path for file pages
+ * Set up (or extend) the cache of @inode for file pages
  * [pgoff, pgoff + npages) and return its id in @id. @writable: a mapping
  * may store into the pages, so they are written back. The caller holds
  * vfs_pagecache_lock() until the pages are mapped.
  */
-int filemap_map_file(const char *path, uint64_t pgoff, size_t npages,
+int filemap_map_file(struct inode *inode, uint64_t pgoff, size_t npages,
 		     int writable, uint64_t *id);
 
 /*
@@ -55,13 +58,13 @@ int filemap_writeback(uint64_t id);
 void filemap_reclaim(void);
 
 /*
- * VFS hooks, called under the fs-op lock after the backend op succeeded,
- * with the (filesystem, path) pair that op used.
+ * VFS hooks, called under the fs-op lock after a backend read, write or
+ * truncate of @inode's file succeeded; a NULL @inode has no cache.
  */
-void filemap_sync_read(const void *fs, const char *key, void *buf,
-		       size_t done, off_t offset);
-void filemap_sync_write(const void *fs, const char *key, const void *buf,
-			size_t done, off_t offset);
-void filemap_sync_truncate(const void *fs, const char *key, size_t length);
-void filemap_forget(const void *fs, const char *key);
-void filemap_rename(const void *fs, const char *oldkey, const char *newkey);
+void filemap_sync_read(struct inode *inode, void *buf, size_t done,
+		       off_t offset);
+void filemap_sync_write(struct inode *inode, const void *buf, size_t done,
+			off_t offset);
+void filemap_sync_truncate(struct inode *inode, size_t length);
+/* Any cache exists: I/O by name must look for the file's inode. */
+int filemap_active(void);

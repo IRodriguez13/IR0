@@ -11,6 +11,7 @@
 #include <ir0/cpu.h>
 #include <ir0/errno.h>
 #include <ir0/fd_resource.h>
+#include <ir0/inode.h>
 #include <ir0/kmem.h>
 #include <ir0/vfs_file.h>
 #include <stdint.h>
@@ -77,6 +78,7 @@ int vfs_file_put_last(struct vfs_file *f, void (*on_last)(struct vfs_file *f))
 		return 0;
 	if (on_last)
 		on_last(f);
+	iput(f->inode);
 	kfree(f);
 	return 0;
 }

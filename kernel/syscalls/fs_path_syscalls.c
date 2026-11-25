@@ -836,16 +836,17 @@ int64_t sys_ftruncate(int fd, off_t length)
     return -EINVAL;
 
   path = fd_table[fd].path;
-  if (!path || path[0] != '/')
+  if (!fd_table[fd].vfs_file || !path || path[0] != '/')
     return -EBADF;
 
-  if (vfs_stat(path, &st) != 0)
+  if (vfs_fstat((struct vfs_file *)fd_table[fd].vfs_file, &st) != 0)
     return -EBADF;
 
   if (!S_ISREG(st.st_mode))
     return -EINVAL;
 
-  return vfs_truncate(path, (size_t)length);
+  return vfs_ftruncate((struct vfs_file *)fd_table[fd].vfs_file,
+                       (size_t)length);
 }
 
 int64_t sys_statfs(const char *pathname, void *buf)
