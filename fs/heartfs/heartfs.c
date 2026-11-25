@@ -17,9 +17,7 @@
 #include <ir0/cred.h>
 #include <ir0/errno.h>
 #include <ir0/open_flags.h>
-#include <ir0/procfs.h>
 #include <ir0/pseudo_fs.h>
-#include <ir0/sysfs.h>
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
 #include <ir0/version.h>
@@ -255,24 +253,13 @@ static void heart_fill_dir_stat(stat_t *st)
     pseudo_fs_stat_now(st);
 }
 
-static int heart_alias_is_sys(const char *canon)
-{
-    return strncmp(canon, "/sys", 4) == 0 &&
-           (canon[4] == '\0' || canon[4] == '/');
-}
-
+/*
+ * An alias reaches the /proc or /sys node through the VFS, as any other
+ * path: heartfs does not know which filesystem serves it.
+ */
 static int heart_alias_stat(const char *canon, stat_t *st)
 {
-    const pseudo_fs_entry_t *pf;
-
-    if (heart_alias_is_sys(canon))
-        return sysfs_alias_stat(canon, st);
-
-    pseudo_fs_nodes_register_all();
-    pf = pseudo_fs_lookup(canon);
-    if (pf && pf->ops && pf->ops->stat)
-        return pf->ops->stat(pf->ctx, st);
-    return pseudo_fs_stat_path(canon, st);
+    return vfs_stat(canon, st);
 }
 
 static int heart_stat(const char *path, stat_t *st)
@@ -343,12 +330,9 @@ static int heart_readdir(const char *path, struct vfs_dirent *entries, int max)
         return n;
     }
     if (strcmp(rel, "proc") == 0)
-    {
-        pseudo_fs_nodes_register_all();
-        return pseudo_fs_collect_registry_children("/proc", entries, max, 0);
-    }
+        return vfs_readdir("/proc", entries, max);
     if (strcmp(rel, "sys") == 0)
-        return sysfs_alias_readdir("/sys", entries, max);
+        return vfs_readdir("/sys", entries, max);
     if (strcmp(rel, "dennis") == 0)
         return 0;
     if (!heart_has_children(rel))
@@ -370,26 +354,11 @@ static int heart_readdir(const char *path, struct vfs_dirent *entries, int max)
     return n;
 }
 
-/*
- * The /proc node behind an alias path, acquired for one operation;
- * release it with pseudo_fs_release_ops(). /sys aliases go through sysfs.
- */
-static int heart_alias_acquire(const char *canon, int flags,
-                               const pseudo_fs_ops_t **ops, void **ctx,
-                               int *dynamic)
-{
-    pseudo_fs_nodes_register_all();
-    return (int)pseudo_fs_acquire_path(canon, flags, ops, ctx, dynamic);
-}
-
 static int heart_open(const char *path, int flags)
 {
     char rel[VFS_PATH_MAX];
     char canon[VFS_PATH_MAX];
-    const struct ir0_task_cred *cred;
-    const pseudo_fs_ops_t *ops;
-    void *ctx;
-    int dynamic;
+    struct vfs_file *f;
     int ret;
 
     ret = heart_rel_path(path, rel, sizeof(rel));
@@ -397,20 +366,10 @@ static int heart_open(const char *path, int flags)
         return ret;
     if (!heart_alias_canonical(rel, canon, sizeof(canon)))
         return 0;
-    if (heart_alias_is_sys(canon))
-        return sysfs_alias_open(canon, flags);
-
-    cred = ir0_current_cred();
-    if (cred && is_proc_path(canon))
-    {
-        ret = proc_access_path(canon, cred->euid);
-        if (ret != 0)
-            return ret;
-    }
-    ret = heart_alias_acquire(canon, flags, &ops, &ctx, &dynamic);
+    ret = vfs_open(canon, flags & ~IR0_O_CREAT, 0, &f);
     if (ret != 0)
         return ret;
-    return (int)pseudo_fs_release_ops(ops, ctx, dynamic);
+    return vfs_close(f);
 }
 
 static int heart_read(const char *path, void *buf, size_t count,
@@ -433,21 +392,16 @@ static int heart_read(const char *path, void *buf, size_t count,
 
     if (heart_alias_canonical(rel, canon, sizeof(canon)))
     {
-        const pseudo_fs_ops_t *ops;
-        void *ctx;
-        int dynamic;
-        int64_t n;
+        struct vfs_file *f;
+        int n;
 
-        if (heart_alias_is_sys(canon))
-            return sysfs_alias_read(canon, buf, count, bytes_read, offset);
-
-        ret = heart_alias_acquire(canon, IR0_O_RDONLY, &ops, &ctx, &dynamic);
+        ret = vfs_open(canon, IR0_O_RDONLY, 0, &f);
         if (ret != 0)
             return ret;
-        n = pseudo_fs_ops_read(ops, ctx, buf, count, &offset);
-        (void)pseudo_fs_release_ops(ops, ctx, dynamic);
+        n = vfs_pread(f, (char *)buf, count, offset);
+        (void)vfs_close(f);
         if (n < 0)
-            return (int)n;
+            return n;
         *bytes_read = (size_t)n;
         return 0;
     }
@@ -473,29 +427,23 @@ static int heart_write(const char *path, const void *buf, size_t count,
 {
     char rel[VFS_PATH_MAX];
     char canon[VFS_PATH_MAX];
-    const pseudo_fs_ops_t *ops;
-    void *ctx;
-    int dynamic;
-    int64_t n;
+    struct vfs_file *f;
+    int n;
     int ret;
 
-    (void)offset;
     *bytes_written = 0;
     ret = heart_rel_path(path, rel, sizeof(rel));
     if (ret != 0)
         return ret;
     if (!heart_alias_canonical(rel, canon, sizeof(canon)))
         return -EINVAL;
-    if (heart_alias_is_sys(canon))
-        return sysfs_alias_write(canon, buf, count, bytes_written, offset);
-
-    ret = heart_alias_acquire(canon, IR0_O_WRONLY, &ops, &ctx, &dynamic);
+    ret = vfs_open(canon, IR0_O_WRONLY, 0, &f);
     if (ret != 0)
         return ret;
-    n = pseudo_fs_ops_write(ops, ctx, (const char *)buf, count);
-    (void)pseudo_fs_release_ops(ops, ctx, dynamic);
+    n = vfs_pwrite(f, (const char *)buf, count, offset);
+    (void)vfs_close(f);
     if (n < 0)
-        return (int)n;
+        return n;
     *bytes_written = (size_t)n;
     return 0;
 }
@@ -570,7 +518,7 @@ static int heartfs_statfs(const char *path, struct ir0_statfs *buf)
 
 struct vfs_fstype heartfs_fs_type = {
     .name = "heartfs",
-    .fs_flags = FS_NOSUID_DEFAULT,
+    .fs_flags = FS_NOSUID_DEFAULT | FS_SINGLE_INSTANCE,
     .ops = &heartfs_ops,
     .mount = heartfs_mount,
     .umount = heartfs_umount,

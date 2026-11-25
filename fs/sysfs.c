@@ -48,6 +48,7 @@
 #include <ir0/video_backend.h>
 #include <ir0/oops.h>
 #include <ir0/cpu_info.h>
+#include <ir0/cpu.h>
 #include <ir0/mm_port.h>
 #include <ir0/ktm/stack_watch.h>
 #if CONFIG_ENABLE_NETWORKING
@@ -332,15 +333,80 @@ int sys_console_mode_read_reg(char *buf, size_t count)
 
 static int sys_devices_cpu_online[SYS_MAX_CPUS] = { 1 };
 
-static uint32_t sys_sysfs_cpu_count(void)
+/* Possible CPUs (Linux nr_cpu_ids), from the logical topology, not CPUID. */
+uint32_t sys_devices_cpu_count(void)
 {
-    uint32_t n = get_cpu_count();
+    uint64_t mask = cpu_possible_mask();
+    uint32_t n = 0;
 
+    while (mask)
+    {
+        n += (uint32_t)(mask & 1u);
+        mask >>= 1;
+    }
     if (n == 0)
         n = 1;
     if (n > SYS_MAX_CPUS)
         n = SYS_MAX_CPUS;
     return n;
+}
+
+static uint32_t sys_sysfs_cpu_count(void)
+{
+    return sys_devices_cpu_count();
+}
+
+/* Linux cpulist format: "0-3,6\n". */
+static int sys_cpu_list_read(char *buf, size_t count, uint64_t mask)
+{
+    size_t off = 0;
+    unsigned cpu = 0;
+    int n;
+
+    if (!buf || count == 0)
+        return -EINVAL;
+    memset(buf, 0, count);
+    while (cpu < 64)
+    {
+        unsigned last;
+
+        if (!(mask & (UINT64_C(1) << cpu)))
+        {
+            cpu++;
+            continue;
+        }
+        last = cpu;
+        while (last + 1 < 64 && (mask & (UINT64_C(1) << (last + 1))))
+            last++;
+        if (last == cpu)
+            n = snprintf(buf + off, count - off, "%s%u", off ? "," : "", cpu);
+        else
+            n = snprintf(buf + off, count - off, "%s%u-%u", off ? "," : "",
+                         cpu, last);
+        if (n < 0 || (size_t)n >= count - off)
+            return -EIO;
+        off += (size_t)n;
+        cpu = last + 1;
+    }
+    n = snprintf(buf + off, count - off, "\n");
+    if (n < 0 || (size_t)n >= count - off)
+        return -EIO;
+    return (int)(off + (size_t)n);
+}
+
+int sys_devices_cpu_online_list_read_reg(char *buf, size_t count)
+{
+    return sys_cpu_list_read(buf, count, cpu_online_mask());
+}
+
+int sys_devices_cpu_possible_list_read_reg(char *buf, size_t count)
+{
+    return sys_cpu_list_read(buf, count, cpu_possible_mask());
+}
+
+int sys_devices_cpu_present_list_read_reg(char *buf, size_t count)
+{
+    return sys_cpu_list_read(buf, count, cpu_present_mask());
 }
 
 int sys_devices_cpu_online_count(void)

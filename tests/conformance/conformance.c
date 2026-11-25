@@ -24,7 +24,8 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#define CASE_TIMEOUT_MS 10000L
+/* Ceiling only; procfs_loadavg_runqueue needs four LOAD_FREQ periods. */
+#define CASE_TIMEOUT_MS 30000L
 #define LTP_TIMEOUT_MS 60000L
 #define LTP_MAX 128
 #define LTP_NAME_MAX 48

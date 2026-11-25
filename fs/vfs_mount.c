@@ -108,35 +108,6 @@ static void normalize_mount_path(const char *in, char *out, size_t out_sz)
 }
 
 /* ------------------------------------------------------------------ */
-/*  proc — Linux nodev mount succeeds; paths stay on pseudo /proc     */
-/* ------------------------------------------------------------------ */
-
-static int proc_fs_mount(const char *dev, const char *dir)
-{
-    (void)dev;
-
-    if (!dir || (strcmp(dir, "/proc") != 0 && strcmp(dir, "/proc/") != 0))
-        return -EINVAL;
-    return 0;
-}
-
-static int proc_fs_umount(const char *dir)
-{
-    if (!dir || (strcmp(dir, "/proc") != 0 && strcmp(dir, "/proc/") != 0))
-        return -EINVAL;
-    return -EBUSY;
-}
-
-static struct vfs_fstype proc_fs_type = {
-    .name   = "proc",
-    .fs_flags = FS_NOSUID_DEFAULT,
-    .ops    = NULL,
-    .mount  = proc_fs_mount,
-    .umount = proc_fs_umount,
-    .next   = NULL,
-};
-
-/* ------------------------------------------------------------------ */
 /*  Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -161,7 +132,6 @@ static int vfs_init(void)
 {
     fs_types = NULL;
     mounts   = NULL;
-    (void)vfs_register_fs(&proc_fs_type);
     for (size_t i = 0; vfs_builtin_filesystems[i]; i++)
         (void)vfs_register_fs(vfs_builtin_filesystems[i]);
     if (DEBUG_VFS)
@@ -294,8 +264,11 @@ int vfs_mount(const char *dev, const char *path, const char *fstype)
 
     for (struct vfs_mount *existing = mounts; existing; existing = existing->next)
     {
-        if (strcmp(existing->path, mount_path) == 0)
-            return -EBUSY;
+        if (strcmp(existing->path, mount_path) != 0)
+            continue;
+        if (existing->fs == ft && (ft->fs_flags & FS_SINGLE_INSTANCE))
+            return 0;
+        return -EBUSY;
     }
 
     struct vfs_mount *m = kmalloc(sizeof(*m));
@@ -649,8 +622,8 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 		return ret;
 
 	/*
-	 * Pseudo-filesystems are not VFS mounts, so vfs_find_mount() below would
-	 * attribute them to the root mount and make df report /proc with the
+	 * /dev is not a VFS mount yet, so vfs_find_mount() below would
+	 * attribute it to the root mount and make df report it with the
 	 * size of the disk. They hold no blocks; report the Linux magic and
 	 * zeros, which is also what df needs to skip them without -a.
 	 */
@@ -660,7 +633,6 @@ int vfs_statfs(const char *path, struct ir0_statfs *buf)
 			const char *prefix;
 			uint32_t magic;
 		} pseudo[] = {
-			{ "/proc", IR0_PROC_SUPER_MAGIC },
 			{ "/dev", IR0_TMPFS_MAGIC },
 		};
 		size_t i;

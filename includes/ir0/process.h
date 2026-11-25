@@ -236,6 +236,7 @@ typedef struct process
 
 	/* Resource limits (Linux rlimit indices 0..15). */
 #define IR0_RLIM_NLIMITS 16
+#define IR0_RLIMIT_RSS 5
 #define IR0_RLIMIT_NOFILE 7
 	struct
 	{
@@ -359,6 +360,15 @@ typedef struct process
 	struct sigqueue *sigqueue;
 	struct signal_struct *signal;
 
+	/*
+	 * Ticks of the reaped children (Linux signal->cutime/cstime): a
+	 * successful wait adds the child's own time and its children's.
+	 */
+	uint64_t cutime;
+	uint64_t cstime;
+	/* Switches away while blocked / while still runnable (Linux nvcsw). */
+	uint64_t nvcsw;
+	uint64_t nivcsw;
 } process_t;
 
 /* 1 when @sp lies inside the task's alternate signal stack. */
@@ -785,6 +795,8 @@ process_t *get_process_list(void);
 void process_itimer_tick(uint64_t now_ms);
 pid_t process_get_next_pid(void);
 pid_t process_last_assigned_pid(void);
+/* Tasks created since boot, threads included (/proc/stat processes). */
+unsigned long process_total_forks(void);
 void process_prepare_pid1_for_init(void);
 process_t *process_find_by_pid(pid_t pid);  /* Find process by PID */
 process_t *process_find_child_of(pid_t ppid);
@@ -821,6 +833,10 @@ uint64_t mm_count_resident_user_pages(const mm_struct_t *mm);
  */
 void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
                          uint64_t *page_table_pages);
+
+/* Resident user pages in [start, start + len); same lifetime rule. */
+uint64_t mm_count_resident_range(const mm_struct_t *mm, uint64_t start,
+				 uint64_t len);
 
 int64_t process_close_fd(process_t *proc, int fd);
 void process_exec_close_cloexec(process_t *p);

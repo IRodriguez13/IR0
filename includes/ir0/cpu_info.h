@@ -51,4 +51,11 @@ static inline int hypervisor_present(void)
 }
 uint32_t get_cpu_clflush_size(void);
 
+/*
+ * Linux show_cpuinfo(), implemented by each architecture: the /proc/cpuinfo lines of logical CPU @cpu in
+ * "key\t: value" form, without the closing blank line. Bytes written or
+ * a negative errno.
+ */
+int show_cpuinfo(unsigned int cpu, char *buf, size_t count);
+
 void timer_init(void);

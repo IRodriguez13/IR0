@@ -553,6 +553,24 @@ $(PRCTL_TASK_BIN): $(PRCTL_TASK_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
 	@file $@ | grep -qi 'statically linked'
 	@test -x $@
 
+# USER-VA-LOW-HALF-SELFTEST
+USER_VA_LOW_HALF_SRC := syscall/user_va_low_half.c
+USER_VA_LOW_HALF_BIN := $(BUILD_DIR)/user_va_low_half
+
+.PHONY: user_va_low_half
+
+user_va_low_half: $(USER_VA_LOW_HALF_BIN)
+
+$(USER_VA_LOW_HALF_BIN): $(USER_VA_LOW_HALF_SRC) ir0/ksft.h ir0/nolibc.h | $(BUILD_DIR)
+	@if [ -z "$(CC)" ]; then \
+		echo "tests/selftests: missing compiler for ARCH=$(ARCH)" >&2; \
+		exit 1; \
+	fi
+	@echo "  CC      $(ARCH) selftest user_va_low_half"
+	@$(CC) $(CFLAGS) -o $@ $(USER_VA_LOW_HALF_SRC) $(LDLIBS)
+	@file $@ | grep -qi 'statically linked'
+	@test -x $@
+
 # SEGV-ACCERR-SELFTEST
 SEGV_ACCERR_SRC := syscall/segv_accerr.c
 SEGV_ACCERR_BIN := $(BUILD_DIR)/segv_accerr

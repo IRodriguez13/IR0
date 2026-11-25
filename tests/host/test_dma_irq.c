@@ -41,7 +41,6 @@ void test_dma_irq_contract(void)
 	ASSERT(phys != 0);
 	dma_sync_for_device(va, 64);
 	dma_sync_for_cpu(va, 64);
-	ASSERT(dma_map_mmio(0x1000, 0x1000) == 0);
 	dma_free(va, 64);
 	TEST_END();
 

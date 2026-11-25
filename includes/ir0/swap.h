@@ -56,6 +56,9 @@ struct ir0_swap_stats
 	uint64_t totalswap_pages;
 	uint64_t freeswap_pages;
 	uint32_t areas;
+	/* Pages read from and written to swap since boot (Linux pswpin/out). */
+	uint64_t pswpin;
+	uint64_t pswpout;
 };
 
 void ir0_swap_init(void);

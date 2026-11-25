@@ -23,6 +23,14 @@ void process_registry_reset(void)
 	process_registry_unlock(irq_flags);
 }
 
+/* Tasks created since boot, threads included (Linux total_forks). */
+static unsigned long total_forks;
+
+unsigned long process_total_forks(void)
+{
+	return total_forks;
+}
+
 void process_registry_insert(process_t *process)
 {
 	uint64_t irq_flags;
@@ -32,6 +40,7 @@ void process_registry_insert(process_t *process)
 	irq_flags = process_registry_lock();
 	process->next = process_list;
 	process_list = process;
+	total_forks++;
 	if (process->task.pid >= next_pid)
 		next_pid = (pid_t)(process->task.pid + 1);
 	process_registry_unlock(irq_flags);

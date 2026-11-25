@@ -17,8 +17,9 @@ int proc_drivers_read(char *buf, size_t count)
 }
 
 /*
- * /proc/meminfo — labelled kB from PMM frames (PAGE_SIZE = 4 KiB).
- * MemUsed + MemFree == MemTotal (PMM-managed region only).
+ * /proc/meminfo — the Linux keys, in kB, from the PMM frames (sysinfo(2)
+ * reads the same figures) and the swap areas (/proc/swaps). IR0-only
+ * counters (heap, kernel stack headroom) are in /sys/kernel/mm.
  */
 int proc_meminfo_read(char *buf, size_t count)
 {
@@ -28,9 +29,8 @@ int proc_meminfo_read(char *buf, size_t count)
 	size_t heap_total = 0;
 	size_t heap_used = 0;
 	size_t heap_allocs = 0;
-	uint64_t total_kb;
-	uint64_t used_kb;
-	uint64_t free_kb;
+	struct ir0_swap_stats swap;
+	uint64_t page_kb = (uint64_t)IR0_MM_PAGE_SIZE / BYTES_PER_KB;
 	int len;
 
 	if (!buf || count == 0)
@@ -38,53 +38,31 @@ int proc_meminfo_read(char *buf, size_t count)
 	memset(buf, 0, count);
 
 	ir0_mm_pmm_stats(&total_frames, &used_frames, &free_frames);
-	total_kb = ((uint64_t)total_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
-	used_kb = ((uint64_t)used_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
-	free_kb = ((uint64_t)free_frames * (uint64_t)IR0_MM_PAGE_SIZE) / BYTES_PER_KB;
+	ir0_mm_alloc_stats(&heap_total, &heap_used, &heap_allocs);
+	ir0_swap_get_stats(&swap);
 
 	/*
-	 * Report the kernel heap too. The PMM figures barely move because the
-	 * heap is carved out of a region reserved at boot, so an exec failing
-	 * with -ENOMEM from a fragmented heap looked like a machine with tens
-	 * of MiB free. Slab is the Linux field for kernel data structures.
+	 * Linux field order (proc(5)). IR0 has no reclaimable page cache, so
+	 * everything free is available and Buffers and Cached are genuinely
+	 * zero. Slab is the kernel heap, Linux's field for kernel data.
 	 */
-	ir0_mm_alloc_stats(&heap_total, &heap_used, &heap_allocs);
-
 	len = snprintf(buf, count,
 		       "MemTotal:       %llu kB\n"
 		       "MemFree:        %llu kB\n"
-		       /*
-			* Linux field order (proc(5)); MemAvailable is the
-			* estimate of memory available for new work and must
-			* be present. IR0 has no reclaimable page
-			* cache, so everything free is available and Buffers
-			* and Cached are genuinely zero rather than unknown.
-			*/
 		       "MemAvailable:   %llu kB\n"
 		       "Buffers:        0 kB\n"
 		       "Cached:         0 kB\n"
+		       "SwapCached:     0 kB\n"
+		       "SwapTotal:      %llu kB\n"
+		       "SwapFree:       %llu kB\n"
 		       "Shmem:          0 kB\n"
-		       "MemUsed:        %llu kB\n"
-		       "PageSize:       %u kB\n"
-		       "Slab:           %llu kB\n"
-		       "SlabTotal:      %llu kB\n"
-		       "SlabAllocs:     %llu\n"
-		       "KStackMinFree:  %llu\n"
-		       "IrqNestMax:     %u\n"
-		       "KStackPeak:     %llu\n",
-		       (unsigned long long)total_kb,
-		       (unsigned long long)free_kb,
-		       (unsigned long long)free_kb,
-		       (unsigned long long)used_kb,
-		       (unsigned)(IR0_MM_PAGE_SIZE / BYTES_PER_KB),
-		       (unsigned long long)((uint64_t)heap_used / BYTES_PER_KB),
-		       (unsigned long long)((uint64_t)heap_total / BYTES_PER_KB),
-		       (unsigned long long)(uint64_t)heap_allocs,
-		       /* Worst kernel stack headroom seen since boot; a #DF on
-			* a deep path walk showed 32 KiB is not comfortable. */
-		       (unsigned long long)ktm_stack_min_headroom_get(),
-		       ktm_irq_nest_max_get(),
-		       (unsigned long long)ktm_stack_peak_used());
+		       "Slab:           %llu kB\n",
+		       (unsigned long long)(total_frames * page_kb),
+		       (unsigned long long)(free_frames * page_kb),
+		       (unsigned long long)(free_frames * page_kb),
+		       (unsigned long long)(swap.totalswap_pages * page_kb),
+		       (unsigned long long)(swap.freeswap_pages * page_kb),
+		       (unsigned long long)((uint64_t)heap_used / BYTES_PER_KB));
 	if (len < 0)
 		return -1;
 	if (len >= (int)count)
@@ -138,14 +116,13 @@ int proc_uptime_read(char *buf, size_t count)
 /*
  * /proc/stat — Linux proc(5) contract.
  *
- * Aggregate "cpu" + single "cpu0" jiffy lines (USER_HZ ≈ CONFIG_TICK_RATE_HZ).
+ * Aggregate "cpu" + single "cpu0" lines in USER_HZ, as times(2) counts.
  * Jiffies from clock_get_cpu_accounting(); nice/iowait/irq/softirq/steal are 0
  * until IR0 tracks those buckets (honest zeros, not invented).
  * Source: man7.org/linux/man-pages/man5/proc_stat.5.html
  */
 int proc_stat_read(char *buf, size_t count)
 {
-	uint64_t total;
 	uint64_t user;
 	uint64_t system;
 	uint64_t idle;
@@ -155,7 +132,6 @@ int proc_stat_read(char *buf, size_t count)
 	uint64_t softirq = 0;
 	uint64_t steal = 0;
 	unsigned runnable = 0;
-	unsigned nprocs = 0;
 	uint64_t irq_total;
 	uint64_t ctxt_total;
 	time_t btime;
@@ -165,12 +141,13 @@ int proc_stat_read(char *buf, size_t count)
 		return -1;
 	memset(buf, 0, count);
 
-	total = clock_get_tick_count();
 	clock_get_cpu_accounting(&user, &system, &idle);
-	if (user + system + idle > total)
-		total = user + system + idle;
+	/* Scheduler ticks to USER_HZ, the unit of every clock_t in /proc. */
+	user = jiffies_to_clock_t(user);
+	system = jiffies_to_clock_t(system);
+	idle = jiffies_to_clock_t(idle);
 
-	clock_get_loadavg(NULL, NULL, NULL, &runnable, &nprocs, NULL);
+	runnable = nr_running();
 	irq_total = clock_get_irq_count();
 	ctxt_total = clock_get_context_switch_count();
 	btime = (time_t)clock_get_boot_time();
@@ -187,7 +164,7 @@ int proc_stat_read(char *buf, size_t count)
 		       "intr %llu\n"
 		       "ctxt %llu\n"
 		       "btime %lld\n"
-		       "processes %u\n"
+		       "processes %lu\n"
 		       "procs_running %u\n"
 		       "procs_blocked 0\n",
 		       (unsigned long long)user,
@@ -209,7 +186,7 @@ int proc_stat_read(char *buf, size_t count)
 		       (unsigned long long)irq_total,
 		       (unsigned long long)ctxt_total,
 		       (long long)btime,
-		       nprocs,
+		       process_total_forks(),
 		       runnable);
 	if (len < 0)
 		return -1;
@@ -271,149 +248,74 @@ int proc_boot_cmdline_read(char *buf, size_t count)
 }
 
 /*
- * Build "flags" line from CPUID.1 EDX/ECX (silicon feature bits).
- * Each (bit, name) is appended when the bit is set.
+ * IR0's hypervisor_kind line (the "hypervisor" flag says only that there
+ * is one); ir0-selftest hypervisor_kind reads it.
  */
-static void proc_cpuinfo_flags_from_cpuid(uint32_t edx, uint32_t ecx, char *out, size_t out_size)
+static int proc_cpuinfo_hypervisor(char *buf, size_t count)
 {
-    static const struct { uint32_t bit; const char *name; } edx_flags[] = {
-        { 0, "fpu" }, { 1, "vme" }, { 2, "de" }, { 3, "pse" }, { 4, "tsc" },
-        { 5, "msr" }, { 6, "pae" }, { 7, "mce" }, { 8, "cx8" }, { 9, "apic" },
-        { 10, "sep" }, { 11, "mtrr" }, { 12, "pge" }, { 13, "mca" }, { 15, "cmov" },
-        { 16, "pat" }, { 17, "pse36" }, { 19, "clflush" }, { 23, "mmx" },
-        { 24, "fxsr" }, { 25, "sse" }, { 26, "sse2" }, { 28, "htt" }, { 29, "tm" },
-        { 31, "pbe" }
-    };
-    static const struct { uint32_t bit; const char *name; } ecx_flags[] = {
-        { 0, "sse3" }, { 1, "pclmulqdq" }, { 9, "ssse3" }, { 12, "fma" },
-        { 13, "cx16" }, { 19, "sse4_1" }, { 20, "sse4_2" }, { 21, "x2apic" },
-        { 22, "movbe" }, { 23, "popcnt" }, { 25, "aes" }, { 26, "xsave" },
-        { 28, "avx" }, { 29, "f16c" }, { 30, "rdrand" }, { 31, "hypervisor" }
-    };
-    size_t len = 0;
-    out[0] = '\0';
-    for (size_t i = 0; i < sizeof(edx_flags)/sizeof(edx_flags[0]) && len < out_size - 8; i++)
-    {
-        if (edx & (1U << edx_flags[i].bit))
-        {
-            if (len > 0) { out[len++] = ' '; out[len] = '\0'; }
-            len += (size_t)snprintf(out + len, out_size - len, "%s", edx_flags[i].name);
-        }
-    }
-    for (size_t i = 0; i < sizeof(ecx_flags)/sizeof(ecx_flags[0]) && len < out_size - 8; i++)
-    {
-        if (ecx & (1U << ecx_flags[i].bit))
-        {
-            if (len > 0) { out[len++] = ' '; out[len] = '\0'; }
-            len += (size_t)snprintf(out + len, out_size - len, "%s", ecx_flags[i].name);
-        }
-    }
-}
-
-/* Generate /proc/cpuinfo content - all fields from silicon (CPUID) where available */
-int proc_cpuinfo_read(char *buf, size_t count)
-{
-    if (!buf || count == 0)
-        return -1;
-
-    memset(buf, 0, count);
-
-    uint32_t cpu_id = get_cpu_id();
-    uint32_t cpu_count = get_cpu_count();
-
-    char vendor_str[13] = {0};
-    if (get_cpu_vendor(vendor_str) < 0)
-        strncpy(vendor_str, "Unknown", sizeof(vendor_str) - 1);
-
-    uint32_t family = 0, model = 0, stepping = 0;
-    get_cpu_signature(&family, &model, &stepping);
-
-    char model_name[49] = {0};
-    if (get_cpu_brand_string(model_name, sizeof(model_name)) < 0)
-        strncpy(model_name, get_arch_name() ? get_arch_name() : "Unknown", sizeof(model_name) - 1);
-
-    uint32_t max_leaf = 0;
-    get_cpuid_max_leaf(&max_leaf);
-
-    uint32_t feat_edx = 0, feat_ecx = 0;
-    get_cpu_feature_bits(&feat_edx, &feat_ecx);
-
-    char flags_buf[512];
-    proc_cpuinfo_flags_from_cpuid(feat_edx, feat_ecx, flags_buf, sizeof(flags_buf));
-
-    uint32_t clflush_sz = get_cpu_clflush_size();
-    if (clflush_sz == 0)
-        clflush_sz = 64;
-
-    uint32_t arch_bits = (uint32_t)(sizeof(uintptr_t) * 8U);
-
-    /* Raw: one line per field, key\tvalue */
-    size_t off = 0;
-    char t[64];
-    int n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "processor\t%u\n", cpu_id); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "vendor_id\t%s\n", vendor_str); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "cpu family\t%u\nmodel\t%u\n", family, model); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "model name\t%s\nstepping\t%u\n", model_name, stepping); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "siblings\t%u\napicid\t%u\ncpuid level\t%u\n", cpu_count, cpu_id, max_leaf); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "flags\t%s\nclflush size\t%u\n", flags_buf, clflush_sz); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    {
-	char hv_vendor[16];
-
-	if (hypervisor_present() &&
-	    hypervisor_vendor(hv_vendor, sizeof(hv_vendor)) == 0)
-	{
-	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-			 "hypervisor_vendor\t%s\n", hv_vendor);
-	    if (n > 0 && (size_t)n < count - off)
-		off += (size_t)n;
-	}
-    }
-    {
 	enum ir0_hv_kind kind;
-	const char *hv_name;
+	static const char *const names[] = { "none", "kvm", "xen", "other" };
+	int n;
 
-	if (hypervisor_kind(&kind) == 0)
-	{
-	    if (kind == IR0_HV_KVM)
-		hv_name = "kvm";
-	    else if (kind == IR0_HV_XEN)
-		hv_name = "xen";
-	    else if (kind == IR0_HV_OTHER)
-		hv_name = "other";
-	    else
-		hv_name = "none";
-	    n = snprintf(buf + off, (off < count) ? (count - off) : 0,
-			 "hypervisor_kind\t%s\n", hv_name);
-	    if (n > 0 && (size_t)n < count - off)
-		off += (size_t)n;
-	}
-    }
-    snprintf(t, sizeof(t), "%ubits physical, %ubits virtual", arch_bits, arch_bits);
-    n = snprintf(buf + off, (off < count) ? (count - off) : 0, "address sizes\t%s\n", t); if (n > 0 && (size_t)n < count - off) off += (size_t)n;
-    if (off < count) buf[off] = '\0';
-    return (int)off;
+	if (hypervisor_kind(&kind) != 0 || (unsigned)kind > IR0_HV_OTHER)
+		return 0;
+	n = snprintf(buf, count, "hypervisor_kind\t: %s\n", names[kind]);
+	return (n < 0 || (size_t)n >= count) ? 0 : n;
 }
 
 /*
- * /proc/loadavg — "0.03 0.01 0.00 1/7 123\n"
- * EMA from scheduler samples (see clock_get_loadavg); not raw tick noise.
+ * /proc/cpuinfo: one block per online CPU, each ended by a blank line;
+ * the architecture prints the "key\t: value" lines (Linux show_cpuinfo).
+ */
+int proc_cpuinfo_read(char *buf, size_t count)
+{
+	uint64_t online = cpu_online_mask();
+	size_t off = 0;
+	unsigned cpu;
+
+	if (!buf || count == 0)
+		return -1;
+	memset(buf, 0, count);
+	for (cpu = 0; cpu < 64; cpu++)
+	{
+		int n;
+
+		if (!(online & ((uint64_t)1 << cpu)))
+			continue;
+		n = show_cpuinfo(cpu, buf + off, count - off);
+		if (n < 0)
+			return n;
+		off += (size_t)n;
+		n = proc_cpuinfo_hypervisor(buf + off, count - off);
+		off += (size_t)(n > 0 ? n : 0);
+		if (off + 1 < count)
+			buf[off++] = '\n';
+	}
+	if (off < count)
+		buf[off] = '\0';
+	return (int)off;
+}
+
+/*
+ * /proc/loadavg — "0.03 0.01 0.00 1/7 123\n": the averages rounded to
+ * hundredths as Linux prints them, runnable/total tasks and the last pid.
  */
 int proc_loadavg_read(char *buf, size_t count)
 {
-	uint32_t l1 = 0, l5 = 0, l15 = 0;
-	unsigned runnable = 0, nprocs = 0;
-	int last_pid = 0;
+	unsigned long avnrun[3];
 	int len;
 
 	if (!buf || count == 0)
 		return -1;
 	memset(buf, 0, count);
 
-	clock_get_loadavg(&l1, &l5, &l15, &runnable, &nprocs, &last_pid);
-	len = snprintf(buf, count, "%u.%02u %u.%02u %u.%02u %u/%u %d\n",
-		       l1 / 100, l1 % 100, l5 / 100, l5 % 100, l15 / 100,
-		       l15 % 100, runnable, nprocs, last_pid);
+	get_avenrun(avnrun, FIXED_1 / 200, 0);
+	len = snprintf(buf, count, "%lu.%02lu %lu.%02lu %lu.%02lu %u/%u %d\n",
+		       LOAD_INT(avnrun[0]), LOAD_FRAC(avnrun[0]),
+		       LOAD_INT(avnrun[1]), LOAD_FRAC(avnrun[1]),
+		       LOAD_INT(avnrun[2]), LOAD_FRAC(avnrun[2]),
+		       nr_running(), nr_threads(),
+		       (int)process_last_assigned_pid());
 	if (len < 0)
 		return -1;
 	if (len >= (int)count)
@@ -843,6 +745,55 @@ int proc_kmsg_read(char *buf, size_t count)
 }
 
 /* /proc/swaps: Linux-style header; empty table when no swap devices. */
+/* /proc/sys/kernel/osrelease: the release uname(2) reports. */
+int proc_sys_kernel_osrelease_read(char *buf, size_t count)
+{
+	int len = snprintf(buf, count, "%s\n", IR0_VERSION_STRING);
+
+	if (len < 0)
+		return -EIO;
+	return len >= (int)count ? (int)count - 1 : len;
+}
+
+/*
+ * /proc/sys/kernel/pid_max: one more than the largest pid. IR0 hands out
+ * pids in increasing order without reuse, so the limit is that of pid_t.
+ */
+int proc_sys_kernel_pid_max_read(char *buf, size_t count)
+{
+	int len = snprintf(buf, count, "%d\n", INT32_MAX);
+
+	if (len < 0)
+		return -EIO;
+	return len >= (int)count ? (int)count - 1 : len;
+}
+
+/*
+ * /proc/vmstat: the Linux counters IR0 keeps. Free pages are the PMM's,
+ * pswpin/pswpout the pages moved through swap since boot.
+ */
+int proc_vmstat_read(char *buf, size_t count)
+{
+	size_t total_frames = 0;
+	size_t used_frames = 0;
+	size_t free_frames = 0;
+	struct ir0_swap_stats swap;
+	int len;
+
+	ir0_mm_pmm_stats(&total_frames, &used_frames, &free_frames);
+	ir0_swap_get_stats(&swap);
+	len = snprintf(buf, count,
+		       "nr_free_pages %llu\n"
+		       "pswpin %llu\n"
+		       "pswpout %llu\n",
+		       (unsigned long long)free_frames,
+		       (unsigned long long)swap.pswpin,
+		       (unsigned long long)swap.pswpout);
+	if (len < 0)
+		return -EIO;
+	return len >= (int)count ? (int)count - 1 : len;
+}
+
 int proc_swaps_read(char *buf, size_t count)
 {
     return ir0_swap_format_proc(buf, count);

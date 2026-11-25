@@ -63,21 +63,20 @@ int clock_realtime_available(void);
 uint64_t clock_get_idle_milliseconds(void);
 
 /*
- * Aggregate CPU jiffies (USER_HZ) since boot for /proc/stat.
+ * Aggregate CPU time since boot in scheduler ticks (jiffies_to_clock_t()
+ * gives the USER_HZ figure /proc/stat prints).
  * user + system + idle <= clock_get_tick_count() (UP).
  */
 void clock_get_cpu_accounting(uint64_t *user, uint64_t *system, uint64_t *idle);
 
-/*
- * Load averages as fixed-point ×100 (e.g. 3 → "0.03").
- * runnable/total exclude the kernel idle task from the numerator.
- */
-void clock_get_loadavg(uint32_t *load1_x100, uint32_t *load5_x100,
-		       uint32_t *load15_x100, unsigned *runnable,
-		       unsigned *nprocs, int *last_pid);
-
-
 uint32_t clock_get_timer_frequency(void);
+
+/* Linux USER_HZ: the unit of every clock_t in the ABI (/proc, times(2)). */
+#define USER_HZ 100
+
+/* Scheduler ticks (CONFIG_TICK_RATE_HZ) to clock_t and to microseconds. */
+uint64_t jiffies_to_clock_t(uint64_t ticks);
+uint64_t jiffies_to_usecs(uint64_t ticks);
 
 /*
  * Sleep at least @milliseconds; 0, or -EINTR when a signal ended it.

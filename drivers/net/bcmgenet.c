@@ -18,6 +18,7 @@
 #include <arm64_board.h>
 #include <ir0/dma.h>
 #include <ir0/errno.h>
+#include <ir0/io.h>
 #include <ir0/irq.h>
 #include <ir0/ktm/klog.h>
 #include <ir0/netdevice.h>
@@ -283,13 +284,12 @@ static int genet_hw_init(struct net_device *dev)
 	int rc;
 	unsigned i;
 
-	rc = dma_map_mmio(g_genet->mmio_pa, g_genet->mmio_size);
-	if (rc < 0)
+	g_genet->base = ioremap(g_genet->mmio_pa, g_genet->mmio_size);
+	if (!g_genet->base)
 	{
 		klog_info("GENET", "GENET_MMIO_MAP_FAIL");
-		return rc;
+		return -ENOMEM;
 	}
-	g_genet->base = (volatile uint32_t *)g_genet->mmio_pa;
 	g_genet->rx_buf = dma_alloc(GENET_MAX_FRAME, &g_genet->rx_phys);
 	g_genet->tx_buf = dma_alloc(GENET_MAX_FRAME, &g_genet->tx_phys);
 	if (!g_genet->rx_buf || !g_genet->tx_buf)

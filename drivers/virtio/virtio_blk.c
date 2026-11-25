@@ -10,6 +10,7 @@
 #include <ir0/virtio_blk.h>
 #include <ir0/blockdev.h>
 #include <ir0/cpu.h>
+#include <ir0/delay.h>
 #include <ir0/errno.h>
 #include <ir0/page.h>
 #include <ir0/virtio_mmio.h>
@@ -28,6 +29,13 @@
 #define VIRTIO_F_VERSION_1 32U
 
 #define BLK_QUEUE_SIZE 16U
+/*
+ * The queue is polled, so the wait for a completion is bounded by time, not
+ * by loop iterations: QEMU completes requests on its I/O thread whenever the
+ * host lets it run. 30 s matches the Linux block layer request timeout.
+ */
+#define BLK_POLL_US      10U
+#define BLK_TIMEOUT_US   30000000U
 #define BLK_SECTOR     512U
 
 struct virtq_desc
@@ -113,17 +121,17 @@ static int blk_setup_queue(struct virtio_mmio_dev *d)
 	zero_bytes(&g_used, sizeof(g_used));
 
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DESC_LOW,
-			  (uint32_t)(uintptr_t)g_desc);
+			  (uint32_t)virt_to_phys(g_desc));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DESC_HIGH,
-			  (uint32_t)((uint64_t)(uintptr_t)g_desc >> 32));
+			  (uint32_t)((uint64_t)virt_to_phys(g_desc) >> 32));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DRIVER_LOW,
-			  (uint32_t)(uintptr_t)&g_avail);
+			  (uint32_t)virt_to_phys(&g_avail));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DRIVER_HIGH,
-			  (uint32_t)((uint64_t)(uintptr_t)&g_avail >> 32));
+			  (uint32_t)((uint64_t)virt_to_phys(&g_avail) >> 32));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DEVICE_LOW,
-			  (uint32_t)(uintptr_t)&g_used);
+			  (uint32_t)virt_to_phys(&g_used));
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_DEVICE_HIGH,
-			  (uint32_t)((uint64_t)(uintptr_t)&g_used >> 32));
+			  (uint32_t)((uint64_t)virt_to_phys(&g_used) >> 32));
 
 	mb();
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_READY, 1);
@@ -137,7 +145,7 @@ static int blk_xfer_buf(struct virtio_mmio_dev *d, uint32_t type, uint64_t secto
 			void *data)
 {
 	uint16_t last_used;
-	unsigned spins;
+	unsigned waited_us;
 	uint16_t aidx;
 
 	if (!d || !data)
@@ -177,12 +185,14 @@ static int blk_xfer_buf(struct virtio_mmio_dev *d, uint32_t type, uint64_t secto
 
 	virtio_mmio_write(d, VIRTIO_MMIO_REG_QUEUE_NOTIFY, 0);
 
-	for (spins = 0; spins < 2000000U; spins++)
+	for (waited_us = 0; waited_us < BLK_TIMEOUT_US; waited_us += BLK_POLL_US)
 	{
 		smp_mb();
 		if (g_used.idx != last_used)
 			break;
+		udelay(BLK_POLL_US);
 	}
+	smp_mb();
 	if (g_used.idx == last_used)
 		return -EIO;
 	if (g_status != 0)

@@ -13,6 +13,7 @@
 #include <arm64_board.h>
 #include <ir0/platform_ops.h>
 #include <ir0/cpu_info.h>
+#include <ir0/errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -288,3 +289,73 @@ void ir0_platform_ops_set(const struct ir0_platform_ops *ops)
 		g_platform_ops = ops;
 }
 
+
+/* A 4-bit ID register field. */
+static unsigned int cpuinfo_field(uint64_t reg, unsigned int shift)
+{
+	return (unsigned int)((reg >> shift) & 0xfu);
+}
+
+static size_t cpuinfo_cat(char *buf, size_t count, size_t off, const char *s)
+{
+	while (*s && off + 1 < count)
+		buf[off++] = *s++;
+	buf[off] = '\0';
+	return off;
+}
+
+/*
+ * arm64 show_cpuinfo() (Linux arch/arm64/kernel/cpuinfo.c): Features from
+ * ID_AA64PFR0/ISAR0, then the MIDR_EL1 identification. BogoMIPS is left
+ * out: IR0 does not calibrate a delay loop.
+ */
+int show_cpuinfo(unsigned int cpu, char *buf, size_t count)
+{
+	uint64_t midr, pfr0, isar0;
+	char line[160];
+	size_t off = 0;
+	int n;
+
+	if (!buf || count == 0)
+		return -EINVAL;
+	buf[0] = '\0';
+	__asm__ volatile("mrs %0, midr_el1" : "=r"(midr));
+	__asm__ volatile("mrs %0, id_aa64pfr0_el1" : "=r"(pfr0));
+	__asm__ volatile("mrs %0, id_aa64isar0_el1" : "=r"(isar0));
+
+	n = snprintf(line, sizeof(line), "processor\t: %u\nFeatures\t:", cpu);
+	if (n < 0)
+		return -EIO;
+	off = cpuinfo_cat(buf, count, off, line);
+	/* PFR0.FP/AdvSIMD: 0xf is "not implemented". */
+	if (cpuinfo_field(pfr0, 16) != 0xf)
+		off = cpuinfo_cat(buf, count, off, " fp");
+	if (cpuinfo_field(pfr0, 20) != 0xf)
+		off = cpuinfo_cat(buf, count, off, " asimd");
+	if (cpuinfo_field(isar0, 4) >= 1)
+		off = cpuinfo_cat(buf, count, off, " aes");
+	if (cpuinfo_field(isar0, 4) >= 2)
+		off = cpuinfo_cat(buf, count, off, " pmull");
+	if (cpuinfo_field(isar0, 8) >= 1)
+		off = cpuinfo_cat(buf, count, off, " sha1");
+	if (cpuinfo_field(isar0, 12) >= 1)
+		off = cpuinfo_cat(buf, count, off, " sha2");
+	if (cpuinfo_field(isar0, 16) >= 1)
+		off = cpuinfo_cat(buf, count, off, " crc32");
+	if (cpuinfo_field(isar0, 20) >= 2)
+		off = cpuinfo_cat(buf, count, off, " atomics");
+	n = snprintf(line, sizeof(line),
+		     "\nCPU implementer\t: 0x%02x\n"
+		     "CPU architecture: 8\n"
+		     "CPU variant\t: 0x%x\n"
+		     "CPU part\t: 0x%03x\n"
+		     "CPU revision\t: %u\n",
+		     (unsigned int)((midr >> 24) & 0xffu),
+		     cpuinfo_field(midr, 20),
+		     (unsigned int)((midr >> 4) & 0xfffu),
+		     cpuinfo_field(midr, 0));
+	if (n < 0)
+		return -EIO;
+	off = cpuinfo_cat(buf, count, off, line);
+	return (int)off;
+}

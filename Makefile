@@ -507,6 +507,7 @@ KERNEL_OBJS = \
     kernel/printk/console.o \
 	sched/core.o \
     sched/idle.o \
+    sched/loadavg.o \
     sched/switch/context_switch.o \
     $(CONSOLE_BACKEND_OBJ)
 

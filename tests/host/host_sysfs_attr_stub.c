@@ -17,9 +17,24 @@
 static char host_hostname[64] = "unix";
 static uint32_t host_sys_max_processes = 1024;
 
-uint32_t get_cpu_count(void)
+uint32_t sys_devices_cpu_count(void)
 {
 	return 2;
+}
+
+int sys_devices_cpu_online_list_read_reg(char *buf, size_t count)
+{
+	return snprintf(buf, count, "0-1\n");
+}
+
+int sys_devices_cpu_possible_list_read_reg(char *buf, size_t count)
+{
+	return snprintf(buf, count, "0-1\n");
+}
+
+int sys_devices_cpu_present_list_read_reg(char *buf, size_t count)
+{
+	return snprintf(buf, count, "0-1\n");
 }
 
 uint32_t sys_kernel_max_processes_limit(void)

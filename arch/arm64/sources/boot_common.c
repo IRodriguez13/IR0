@@ -23,6 +23,8 @@
 #include <asm/boot.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_log.h>
+#include <ir0/io.h>
+#include <ir0/page.h>
 #include <ir0/percpu.h>
 #include <ir0/virtio_mmio.h>
 #include <config.h>
@@ -86,17 +88,10 @@ static void arm64_irq_oneshot_demo(void)
 
 static int arm64_irq_select_and_map(const struct arm64_board_boot_info *boot_info)
 {
-	uint32_t i;
-
+	/* The controller backends ioremap() their own registers. */
 	if (!boot_info || boot_info->irq_controller == ARM64_IRQ_CONTROLLER_UNKNOWN ||
 	    boot_info->irq_range_count == 0U)
 		return -1;
-	for (i = 0; i < boot_info->irq_range_count; i++)
-	{
-		if (arm64_mmu_map_device_range(boot_info->irq_mmio[i].base,
-					       boot_info->irq_mmio[i].size) != 0)
-			return -1;
-	}
 	return arm64_irq_backend_select(boot_info->irq_controller,
 					boot_info->irq_mmio,
 					boot_info->irq_range_count);
@@ -108,7 +103,7 @@ static void arm64_board_capture_and_heap(uintptr_t firmware_handle)
 	extern char _end[];
 
 	(void)arm64_board_capture_boot_info(firmware_handle);
-	(void)arm64_board_prepare_memory((uintptr_t)_start,
+	(void)arm64_board_prepare_memory(virt_to_phys(_start),
 					 (size_t)(_end - _start));
 	arm64_board_apply_platform();
 }
@@ -150,7 +145,7 @@ void arm64_platform_setup_for_portable_boot(const struct ir0_boot_params *params
 		ir0_boot_smoke("ARM64_PAGING_OK");
 	else
 		ir0_boot_smoke("ARM64_PAGING_FAIL");
-	if (arm64_mmu_map_device_range(0x1001ff000UL, 0x3000UL) == 0)
+	if (ioremap(0x1001ff000UL, 0x3000UL))
 		ir0_boot_smoke("ARM64_MMIO_HIGH_OK");
 	else
 		ir0_boot_smoke("ARM64_MMIO_HIGH_FAIL");
@@ -160,9 +155,7 @@ void arm64_platform_setup_for_portable_boot(const struct ir0_boot_params *params
 	if ((!boot_info->fdt_valid &&
 	     arm64_irq_backend_select(ARM64_IRQ_CONTROLLER_GIC_V2,
 		(struct ir0_phys_range[2]){{VIRT_GIC_DIST, VIRT_GIC_SIZE},
-					      {VIRT_GIC_CPU, VIRT_GIC_SIZE}}, 2U) == 0 &&
-	     arm64_mmu_map_device_range(VIRT_GIC_DIST, VIRT_GIC_SIZE) == 0 &&
-	     arm64_mmu_map_device_range(VIRT_GIC_CPU, VIRT_GIC_SIZE) == 0) ||
+					      {VIRT_GIC_CPU, VIRT_GIC_SIZE}}, 2U) == 0) ||
 	    (boot_info->fdt_valid && arm64_irq_select_and_map(boot_info) == 0))
 	{
 #if DEBUG_BOOT

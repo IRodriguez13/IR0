@@ -404,6 +404,12 @@ void pseudo_fs_nodes_register_all(void)
                        (void *)(uintptr_t)proc_kmsg_read);
     pseudo_fs_register("/proc", "swaps", &proc_static_read_ops,
                        (void *)(uintptr_t)proc_swaps_read);
+    pseudo_fs_register("/proc", "vmstat", &proc_static_read_ops,
+                       (void *)(uintptr_t)proc_vmstat_read);
+    pseudo_fs_register("/proc", "sys/kernel/osrelease", &proc_static_read_ops,
+                       (void *)(uintptr_t)proc_sys_kernel_osrelease_read);
+    pseudo_fs_register("/proc", "sys/kernel/pid_max", &proc_static_read_ops,
+                       (void *)(uintptr_t)proc_sys_kernel_pid_max_read);
     pseudo_fs_register("/proc", "net/dev", &proc_static_read_ops,
                        (void *)(uintptr_t)proc_net_dev_read);
     pseudo_fs_register("/proc", "net/route", &proc_static_read_ops,

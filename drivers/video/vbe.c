@@ -27,7 +27,7 @@
 #include <ir0/kmem.h>
 #include <ir0/resource_registry.h>
 #include <ir0/errno.h>
-#include <ir0/tlb.h>
+#include <ir0/io.h>
 
 /*
  * Largest framebuffer accepted from firmware. 8K at 32 bpp is ~127 MiB; a
@@ -88,6 +88,7 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     uint8_t bpp = bfb->bpp;
     uint64_t fb_size;
     uint64_t fb_end;
+    uint8_t *fb;
 
     if (w == 0 || h == 0 || bpp == 0)
     {
@@ -115,22 +116,11 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
         return -1;
     }
 
-    /*
-     * Pages the boot page tables do not already identity-map need map_page
-     * (which may allocate page tables); the ISA knows its boot layout.
-     */
-    if (!mm_boot_identity_covers(fb_phys, fb_size))
+    fb = ioremap_wc((uintptr_t)fb_phys, (size_t)fb_size);
+    if (!fb)
     {
-        for (uint64_t off = 0; off < fb_size; off += 4096)
-        {
-            if (map_page(fb_phys + off, fb_phys + off, VBE_FB_MAP_FLAGS) != 0)
-            {
-                vbe_fail_reason = 4;  /* map_page failed */
-                return -1;
-            }
-        }
-        /* The range may have been covered by a cacheable RAM block. */
-        tlb_invalidate_all();
+        vbe_fail_reason = 4;  /* the framebuffer could not be mapped */
+        return -1;
     }
 
     vbe_state.framebuffer_addr = fb_phys;
@@ -146,7 +136,7 @@ int vbe_init_from_boot(const struct ir0_boot_framebuffer *bfb)
     vbe_state.color_info[3] = bfb->green_size;
     vbe_state.color_info[4] = bfb->blue_pos;
     vbe_state.color_info[5] = bfb->blue_size;
-    vbe_state.fb = (uint8_t *)(uintptr_t)fb_phys;
+    vbe_state.fb = fb;
     vbe_state.initialized = true;
 
     resource_register_mmio(fb_phys, fb_end - 1U, "vbe_fb");

@@ -187,6 +187,8 @@ void boot_rootfs_init(void)
 	vfs_init_root();
 	klog_info("FILESYSTEM", "Registered and Initialized OK");
 
+	if (vfs_mount("proc", "/proc", "proc") != 0)
+		klog_warn("BOOT", "proc mount at /proc failed");
 	if (vfs_mount("heartfs", "/heart", "heartfs") != 0)
 		klog_warn("BOOT", "heartfs mount at /heart failed");
 	if (vfs_mount("sysfs", "/sys", "sysfs") != 0)

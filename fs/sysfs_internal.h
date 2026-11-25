@@ -41,6 +41,11 @@ int sys_kernel_panic_write_reg(const char *buf, size_t count);
 int sys_console_mode_read_reg(char *buf, size_t count);
 int sys_devices_system_read_reg(char *buf, size_t count);
 int sys_devices_cpus_read_reg(char *buf, size_t count);
+/* Possible CPUs; /sys/devices/system/cpu/{online,possible,present} lists. */
+uint32_t sys_devices_cpu_count(void);
+int sys_devices_cpu_online_list_read_reg(char *buf, size_t count);
+int sys_devices_cpu_possible_list_read_reg(char *buf, size_t count);
+int sys_devices_cpu_present_list_read_reg(char *buf, size_t count);
 int sys_devices_cpu_read_reg(char *buf, size_t count, unsigned cpu);
 int sys_devices_cpu_online_read_reg(char *buf, size_t count, unsigned cpu);
 int sys_devices_cpu_online_write_reg(unsigned cpu, const char *buf, size_t count);

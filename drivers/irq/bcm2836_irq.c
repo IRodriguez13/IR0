@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/cpu.h>
+#include <ir0/io.h>
 #include "bcm2836_irq.h"
 
 #include <stdint.h>
@@ -29,11 +30,14 @@ static volatile uint32_t *local_reg(uint64_t offset)
 
 int arm64_bcm2836_irq_configure(uint64_t base, uint64_t size)
 {
+	uint64_t va;
+
 	if (base == 0U || size < BCM2836_LOCAL_MIN_SIZE || base + size < base)
 		return -1;
-	if (g_local_base != 0U && g_local_base != base)
+	va = (uint64_t)(uintptr_t)ioremap(base, size);
+	if (va == 0U || (g_local_base != 0U && g_local_base != va))
 		return -1;
-	g_local_base = base;
+	g_local_base = va;
 	return 0;
 }
 

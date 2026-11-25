@@ -181,6 +181,24 @@ void mm_count_user_pages(const mm_struct_t *mm, uint64_t *resident_pages,
 		*page_table_pages = tables;
 }
 
+uint64_t mm_count_resident_range(const mm_struct_t *mm, uint64_t start,
+				 uint64_t len)
+{
+	uint64_t page = PAGE_SIZE_4KB;
+	uint64_t end = start + len;
+	uint64_t count = 0;
+	uint64_t va;
+
+	if (!mm || !mm->page_directory || end < start)
+		return 0;
+	for (va = start & ~(page - 1); va < end; va += page)
+	{
+		if (is_page_mapped_in_directory(mm->page_directory, va, NULL) == 1)
+			count++;
+	}
+	return count;
+}
+
 uint64_t mm_count_resident_user_pages(const mm_struct_t *mm)
 {
 	uint64_t resident = 0;

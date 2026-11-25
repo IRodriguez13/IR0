@@ -20,3 +20,17 @@
  * (boot_x64.asm). Must stay a multiple of 4 KiB for the entry.S add.
  */
 #define ARM64_BOOT_STACK_SIZE 0x4000
+
+/*
+ * The kernel runs from TTBR1, as Linux arm64 does: the image is linked at
+ * KIMAGE_VADDR + KIMAGE_TEXT_OFFSET and mapped there, whatever 2 MiB
+ * aligned physical base the loader chose. The mapping is KIMAGE_MAP_SIZE
+ * long and holds the image and, KERNEL_HEAP_OFFSET into it, the early
+ * kernel heap. arch/arm64/linker.ld repeats the link address.
+ * Plain constants: entry.S includes this file too.
+ */
+#define KIMAGE_VADDR         0xffff800000000000
+#define KIMAGE_TEXT_OFFSET   0x80000
+#define KIMAGE_MAP_SIZE      0x2000000
+#define KIMAGE_BLOCK_SIZE    0x200000
+#define KERNEL_HEAP_OFFSET   0x800000

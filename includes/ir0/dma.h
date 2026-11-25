@@ -18,4 +18,3 @@ void *dma_alloc(size_t size, uintptr_t *phys);
 void dma_free(void *va, size_t size);
 void dma_sync_for_device(void *va, size_t size);
 void dma_sync_for_cpu(void *va, size_t size);
-int dma_map_mmio(uintptr_t pa, size_t size);

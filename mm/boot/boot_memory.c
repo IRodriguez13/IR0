@@ -9,6 +9,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <asm/pgtable.h>
+#include <ir0/page.h>
 #include <ir0/boot_memory.h>
 #include <ir0/boot_port.h>
 #include <ir0/errno.h>
@@ -281,7 +282,8 @@ static size_t boot_memory_protected_ranges(struct ir0_phys_range *ranges)
 		      g_boot_snapshot.dtb.size);
 	protected_add(ranges, &count, g_boot_snapshot.initrd.base,
 		      g_boot_snapshot.initrd.size);
-	protected_add(ranges, &count, (uint64_t)mm_kernel_heap_start(),
+	protected_add(ranges, &count,
+		      (uint64_t)virt_to_phys((void *)mm_kernel_heap_start()),
 		      (uint64_t)mm_kernel_heap_size());
 	protected_add(ranges, &count, g_early_base, g_early_next - g_early_base);
 	return count;

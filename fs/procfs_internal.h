@@ -32,6 +32,7 @@
 #include <ir0/version.h>
 #include <ir0/utsname.h>
 #include <ir0/clock.h>
+#include <ir0/loadavg.h>
 #include <asm/setup.h>
 #include <ir0/cpu.h>
 #include <ir0/cpu_info.h>
@@ -92,6 +93,9 @@ int proc_blockdevices_read(char *buf, size_t count);
 int proc_netinfo_read(char *buf, size_t count);
 int proc_drivers_read(char *buf, size_t count);
 int proc_loadavg_read(char *buf, size_t count);
+int proc_sys_kernel_osrelease_read(char *buf, size_t count);
+int proc_sys_kernel_pid_max_read(char *buf, size_t count);
+int proc_vmstat_read(char *buf, size_t count);
 int proc_filesystems_read(char *buf, size_t count);
 int proc_partitions_read(char *buf, size_t count);
 int proc_interrupts_read(char *buf, size_t count);

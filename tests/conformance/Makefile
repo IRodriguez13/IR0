@@ -18,7 +18,7 @@ FUZZ_MAX_SEC ?= 120
 
 RT_SRCS := rt.c
 RT_HDRS := rt.h
-CONF_SRCS := conformance.c cases_fs.c cases_proc.c cases_mm.c cases_sock.c
+CONF_SRCS := conformance.c cases_fs.c cases_proc.c cases_mm.c cases_sock.c cases_procfs.c
 CONF_HDRS := conf.h cases.h $(RT_HDRS)
 CONF_BIN := $(BUILD_DIR)/conformance
 FUZZ_BIN := $(BUILD_DIR)/fuzz-s$(SEED)-n$(COUNT)-b$(BATCH)-t$(TRACE)

@@ -9,6 +9,7 @@
 
 #include "procfs_internal.h"
 #include <ir0/signals.h>
+#include <ir0/console.h>
 
 
 /*
@@ -20,10 +21,14 @@ typedef struct proc_fs_snap
 {
 	char comm[16];
 	pid_t pid;
+	pid_t tgid;
 	pid_t ppid;
 	pid_t pgid;
 	pid_t sid;
 	int sched_prio;
+	int nice;
+	int kernel_thread;
+	uint64_t rsslim;
 	int threads;
 	int no_new_privs;
 	int fd_size;
@@ -35,6 +40,10 @@ typedef struct proc_fs_snap
 	uint64_t start_ticks;
 	uint64_t utime;
 	uint64_t stime;
+	uint64_t cutime;
+	uint64_t cstime;
+	uint64_t nvcsw;
+	uint64_t nivcsw;
 	int state;
 	uid_t uid;
 	gid_t gid;
@@ -80,13 +89,21 @@ static int proc_fs_snap_acquire(pid_t pid, proc_fs_snap_t *snap)
 	strncpy(snap->comm, proc->comm, sizeof(snap->comm) - 1);
 	snap->comm[sizeof(snap->comm) - 1] = '\0';
 	snap->pid = proc->task.pid;
+	snap->tgid = proc->tgid;
 	snap->ppid = proc->ppid;
 	snap->pgid = proc->pgid;
 	snap->sid = proc->sid;
 	snap->sched_prio = proc->sched_prio;
+	snap->nice = proc->sched_nice;
+	snap->kernel_thread = proc->mode == KERNEL_MODE;
+	snap->rsslim = proc->rlimits[IR0_RLIMIT_RSS].rlim_cur;
 	snap->start_ticks = proc->start_ticks;
 	snap->utime = proc->utime;
 	snap->stime = proc->stime;
+	snap->cutime = proc->cutime;
+	snap->cstime = proc->cstime;
+	snap->nvcsw = proc->nvcsw;
+	snap->nivcsw = proc->nivcsw;
 	snap->state = (int)proc->state;
 	snap->no_new_privs = (int)proc->no_new_privs;
 	snap->umask = proc->umask;
@@ -286,183 +303,146 @@ int proc_ps_read(char *buf, size_t count)
 }
 
 /*
- * Parse /proc path - returns entry name after /proc/, extracts PID if present.
- * Supports OSDev-style /proc/pid/N/status, legacy /proc/N/status, and
- * /proc/self/... mapped to the current process PID (Linux-style).
+ * The entries of /proc/<pid> and of /proc/<pid>/task/<tid> (Linux
+ * tid_base_stuff), and the kind proc_parse_path() returns for each.
+ */
+static const struct
+{
+	const char *name;
+	const char *kind;
+} proc_pid_entries[] = {
+	{ "status", "status" },
+	{ "comm", "comm" },
+	{ "cmdline", "cmdline" },
+	{ "stat", "stat" },
+	{ "maps", "maps" },
+	{ "statm", "statm" },
+	{ "oom_score_adj", "oom_score_adj" },
+	{ "oom_score", "oom_score" },
+	{ "fd", "fd_dir" },
+	{ "environ", "environ" },
+	{ "exe", "exe_link" },
+};
+
+#define PROC_PID_ENTRIES (sizeof(proc_pid_entries) / sizeof(proc_pid_entries[0]))
+
+/* The @len bytes at @s are a decimal number (an fd or a pid). */
+static int proc_is_number(const char *s, size_t len)
+{
+	size_t i;
+
+	if (len == 0 || len > 9)
+		return 0;
+	for (i = 0; i < len; i++)
+	{
+		if (s[i] < '0' || s[i] > '9')
+			return 0;
+	}
+	return 1;
+}
+
+/* Decimal pid of @len bytes at @s; 0 when it is not one. */
+static pid_t proc_parse_pid(const char *s, size_t len)
+{
+	pid_t pid = 0;
+	size_t i;
+
+	if (!proc_is_number(s, len))
+		return 0;
+	for (i = 0; i < len; i++)
+		pid = pid * 10 + (pid_t)(s[i] - '0');
+	return pid;
+}
+
+/* @tid is a live thread of the group led by @pid. */
+static int proc_tid_in_group(pid_t pid, pid_t tid)
+{
+	process_t *p = process_find_by_pid(tid);
+
+	return p && p->tgid == pid;
+}
+
+/*
+ * What follows /proc/<pid>/ in @rest. In a task directory (@in_task)
+ * there is no nested task/.
+ */
+static const char *proc_parse_pid_rest(const char *rest, pid_t *pid_out,
+				       int in_task)
+{
+	const char *slash;
+	pid_t tid;
+	size_t i;
+
+	if (rest[0] == '\0')
+		return "pid_subdir";
+	for (i = 0; i < PROC_PID_ENTRIES; i++)
+	{
+		if (strcmp(rest, proc_pid_entries[i].name) == 0)
+			return proc_pid_entries[i].kind;
+	}
+	if (strncmp(rest, "fd/", 3) == 0 && proc_is_number(rest + 3, strlen(rest + 3)))
+		return "fd_link";
+	if (in_task || strncmp(rest, "task", 4) != 0)
+		return NULL;
+	if (rest[4] == '\0')
+		return "task_dir";
+	if (rest[4] != '/')
+		return NULL;
+	rest += 5;
+	slash = strchr(rest, '/');
+	tid = proc_parse_pid(rest, slash ? (size_t)(slash - rest) : strlen(rest));
+	if (tid <= 0 || !proc_tid_in_group(*pid_out, tid))
+		return NULL;
+	*pid_out = tid;
+	return proc_parse_pid_rest(slash ? slash + 1 : "", pid_out, 1);
+}
+
+/*
+ * Parse a /proc path: the kind of node it names ("pid_subdir", "stat",
+ * "fd_link", ...) with the pid it belongs to in @pid_out, or the name below
+ * /proc for a kernel node (@pid_out -1). /proc/self and /proc/<pid>/task/
+ * <tid> resolve to the pid they name. NULL when no such node can exist.
  */
 const char *proc_parse_path(const char *path, pid_t *pid_out)
 {
-    if (!is_proc_path(path))
-        return NULL;
+	const char *after_proc;
+	const char *slash;
+	pid_t pid;
 
-    /* Resolve /proc/self without manufacturing a temporary path. */
-    if (strncmp(path, "/proc/self/", 11) == 0)
-    {
-        const char *rest = path + 11;
+	if (!is_proc_path(path))
+		return NULL;
+	after_proc = path + 6;
+	slash = strchr(after_proc, '/');
 
-        if (!current_process)
-            return NULL;
-        *pid_out = current_process->task.pid;
-        if (strcmp(rest, "status") == 0) return "status";
-        if (strcmp(rest, "comm") == 0) return "comm";
-        if (strcmp(rest, "cmdline") == 0) return "cmdline";
-        if (strcmp(rest, "maps") == 0) return "maps";
-        if (strcmp(rest, "statm") == 0) return "statm";
-        if (strcmp(rest, "oom_score_adj") == 0) return "oom_score_adj";
-        if (strcmp(rest, "oom_score") == 0) return "oom_score";
-        if (strcmp(rest, "environ") == 0) return "environ";
-        if (strcmp(rest, "exe") == 0) return "exe_link";
-        if (strcmp(rest, "stat") == 0) return "stat";
-        if (strcmp(rest, "fd") == 0) return "fd_dir";
-        if (strncmp(rest, "fd/", 3) == 0 &&
-            rest[3] >= '0' && rest[3] <= '9')
-            return "fd_link";
-        return NULL;
-    }
+	if (strncmp(after_proc, "self", 4) == 0 &&
+	    (after_proc[4] == '\0' || after_proc[4] == '/'))
+	{
+		if (!current_process)
+			return NULL;
+		*pid_out = current_process->task.pid;
+		if (after_proc[4] == '\0')
+			return "self_link";
+		return proc_parse_pid_rest(after_proc + 5, pid_out, 0);
+	}
 
-    /* Skip "/proc/" prefix */
-    const char *after_proc = path + 6;
+	/* IR0 shorthands for the current task. */
+	if (strcmp(after_proc, "status") == 0 || strcmp(after_proc, "comm") == 0)
+	{
+		*pid_out = -1;
+		return after_proc;
+	}
 
-    /* /proc/self — Linux symlink to /proc/<current-pid> (bare path). */
-    if (strcmp(after_proc, "self") == 0)
-    {
-        if (!current_process)
-            return NULL;
-        *pid_out = current_process->task.pid;
-        return "self_link";
-    }
+	pid = proc_parse_pid(after_proc, slash ? (size_t)(slash - after_proc)
+					       : strlen(after_proc));
+	if (pid > 0)
+	{
+		*pid_out = pid;
+		return proc_parse_pid_rest(slash ? slash + 1 : "", pid_out, 0);
+	}
 
-    /* Check if it's /proc/status (current process) */
-    if (strncmp(after_proc, "status", 6) == 0)
-    {
-        *pid_out = -1;
-        return "status";
-    }
-
-    if (strcmp(after_proc, "comm") == 0)
-    {
-        *pid_out = -1;
-        return "comm";
-    }
-
-    /* OSDev-style: /proc/pid or /proc/pid/N or /proc/pid/N/status */
-    if (strncmp(after_proc, "pid", 3) == 0 && (after_proc[3] == '\0' || after_proc[3] == '/'))
-    {
-        if (after_proc[3] == '\0')
-        {
-            *pid_out = -1;
-            return "pid_dir";
-        }
-        /* pid/123 or pid/123/status or pid/123/cmdline */
-        const char *rest = after_proc + 4;
-        char *slash = strchr(rest, '/');
-        if (!slash)
-        {
-            *pid_out = atoi(rest);
-            return "pid_subdir";
-        }
-        char pid_str[16];
-        size_t pid_len = (size_t)(slash - rest);
-        if (pid_len >= sizeof(pid_str))
-            return NULL;
-        strncpy(pid_str, rest, pid_len);
-        pid_str[pid_len] = '\0';
-        *pid_out = atoi(pid_str);
-        if (strncmp(slash + 1, "status", 6) == 0)
-            return "status";
-        if (strcmp(slash + 1, "comm") == 0)
-            return "comm";
-        if (strncmp(slash + 1, "cmdline", 7) == 0)
-            return "cmdline";
-        if (strncmp(slash + 1, "maps", 4) == 0)
-            return "maps";
-        if (strncmp(slash + 1, "statm", 5) == 0)
-            return "statm";
-        if (strncmp(slash + 1, "oom_score_adj", 13) == 0)
-            return "oom_score_adj";
-        if (strncmp(slash + 1, "oom_score", 9) == 0)
-            return "oom_score";
-        if (strncmp(slash + 1, "fd", 2) == 0 &&
-            (slash[3] == '\0' || slash[3] == '/'))
-        {
-            if (slash[3] == '\0')
-                return "fd_dir";
-            if (slash[4] >= '0' && slash[4] <= '9')
-                return "fd_link";
-        }
-        if (strncmp(slash + 1, "environ", 7) == 0)
-            return "environ";
-        if (strncmp(slash + 1, "exe", 3) == 0 && slash[4] == '\0')
-            return "exe_link";
-        if (strncmp(slash + 1, "stat", 4) == 0)
-            return "stat";
-        return NULL;
-    }
-
-    /* Legacy: /proc/[pid]/status or /proc/[pid]/cmdline */
-    char *slash = strchr(after_proc, '/');
-    if (slash)
-    {
-        char pid_str[16];
-        size_t pid_len = (size_t)(slash - after_proc);
-        if (pid_len < sizeof(pid_str) - 1)
-        {
-            strncpy(pid_str, after_proc, pid_len);
-            pid_str[pid_len] = '\0';
-            *pid_out = atoi(pid_str);
-
-            if (strncmp(slash + 1, "status", 6) == 0)
-                return "status";
-            if (strcmp(slash + 1, "comm") == 0)
-                return "comm";
-            if (strncmp(slash + 1, "cmdline", 7) == 0)
-                return "cmdline";
-            if (strncmp(slash + 1, "maps", 4) == 0)
-                return "maps";
-            if (strncmp(slash + 1, "statm", 5) == 0)
-                return "statm";
-            if (strncmp(slash + 1, "oom_score_adj", 13) == 0)
-                return "oom_score_adj";
-            if (strncmp(slash + 1, "oom_score", 9) == 0)
-                return "oom_score";
-            if (strncmp(slash + 1, "fd", 2) == 0 &&
-                (slash[3] == '\0' || slash[3] == '/'))
-            {
-                if (slash[3] == '\0')
-                    return "fd_dir";
-                if (slash[4] >= '0' && slash[4] <= '9')
-                    return "fd_link";
-            }
-            if (strncmp(slash + 1, "environ", 7) == 0)
-                return "environ";
-            if (strncmp(slash + 1, "exe", 3) == 0 && slash[4] == '\0')
-                return "exe_link";
-            if (strncmp(slash + 1, "stat", 4) == 0)
-                return "stat";
-        }
-    }
-    else
-    {
-        /* Bare /proc/N directory (digit-only name). */
-        const char *p = after_proc;
-        int digits = 0;
-
-        while (*p >= '0' && *p <= '9')
-        {
-            digits++;
-            p++;
-        }
-        if (digits > 0 && *p == '\0')
-        {
-            *pid_out = atoi(after_proc);
-            return "pid_subdir";
-        }
-    }
-
-    /* Regular /proc files */
-    *pid_out = -1;
-
-    return after_proc;
+	/* Kernel nodes: /proc/meminfo, /proc/net/dev, ... */
+	*pid_out = -1;
+	return after_proc;
 }
 
 const char *proc_resolve_path(const char *path, pid_t *pid_out)
@@ -547,10 +527,69 @@ int proc_is_virtual_subdir(const char *path)
     if (!filename)
         return 0;
 
-    return strcmp(filename, "pid_dir") == 0 ||
-           strcmp(filename, "pid_subdir") == 0 ||
+    return strcmp(filename, "pid_subdir") == 0 ||
            strcmp(filename, "fd_dir") == 0 ||
+           strcmp(filename, "task_dir") == 0 ||
            strcmp(filename, "self_link") == 0;
+}
+
+/*
+ * The Vm and Rss figures of status, in kB. A MAP_SHARED file mapping is
+ * file memory, a MAP_SHARED anonymous one shmem and the rest anonymous;
+ * a private file page counts as anonymous (IR0 does not tell a clean
+ * private file page from a copied one). VmData is the heap plus the
+ * private writable mappings, as Linux's data_vm.
+ */
+struct proc_mem_kb
+{
+	uint64_t size;
+	uint64_t rss;
+	uint64_t rss_file;
+	uint64_t rss_shmem;
+	uint64_t data;
+	uint64_t stk;
+	uint64_t pte;
+};
+
+static void proc_mem_kb(const proc_fs_snap_t *snap, struct proc_mem_kb *m)
+{
+	const uint64_t kb = (uint64_t)IR0_MM_PAGE_SIZE / 1024ULL;
+	const struct mmap_region *r;
+	uint64_t heap = 0;
+	uint64_t resident = 0;
+	uint64_t tables = 0;
+
+	memset(m, 0, sizeof(*m));
+	if (snap->heap_end > snap->heap_start)
+		heap = snap->heap_end - snap->heap_start;
+	m->size = heap + snap->stack_size;
+	m->data = heap;
+	for (r = snap->mmap_list; r; r = r->next)
+	{
+		uint64_t pages = 0;
+
+		m->size += (uint64_t)r->length;
+		if (!(r->flags & MAP_SHARED) && (r->prot & PROT_WRITE))
+			m->data += (uint64_t)r->length;
+		if ((r->flags & MAP_SHARED) && snap->mm)
+			pages = mm_count_resident_range(snap->mm,
+							(uint64_t)(uintptr_t)r->addr,
+							(uint64_t)r->length);
+		if (r->flags & MAP_SHARED)
+		{
+			if (r->file_id)
+				m->rss_file += pages * kb;
+			else
+				m->rss_shmem += pages * kb;
+		}
+	}
+	if (snap->mm)
+		mm_count_user_pages(snap->mm, &resident, &tables);
+	m->size /= 1024ULL;
+	m->data /= 1024ULL;
+	m->stk = snap->stack_size / 1024ULL;
+	m->rss = resident * kb;
+	m->pte = tables * kb;
 }
 
 /* /proc/[pid]/status — Linux proc(5) lines (Name:, Uid:, ...). */
@@ -559,9 +598,8 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 	proc_fs_snap_t snap;
 	const char *state_str = "?";
 	const char *state_paren = "unknown";
-	const struct mmap_region *region;
-	uint64_t vsize = 0;
-	uint64_t rss_kb = 0;
+	struct proc_mem_kb mem;
+	uint64_t anon_kb;
 	char groups_line[sizeof("Groups:\t") + IR0_NGROUPS_MAX * 11 + 1];
 	int groups_len;
 	int gi;
@@ -591,15 +629,10 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 			break;
 	}
 
-	if (snap.heap_end > snap.heap_start)
-		vsize = snap.heap_end - snap.heap_start;
-	vsize += snap.stack_size;
-	for (region = snap.mmap_list; region; region = region->next)
-		vsize += (uint64_t)region->length;
-	vsize /= 1024ULL;
-	if (snap.mm)
-		rss_kb = mm_count_resident_user_pages(snap.mm) *
-			 ((uint64_t)IR0_MM_PAGE_SIZE / 1024ULL);
+	proc_mem_kb(&snap, &mem);
+	anon_kb = mem.rss - mem.rss_file - mem.rss_shmem;
+	if (mem.rss < mem.rss_file + mem.rss_shmem)
+		anon_kb = 0;
 
 	groups_len = snprintf(groups_line, sizeof(groups_line), "Groups:\t");
 	if (groups_len < 0 || (size_t)groups_len >= sizeof(groups_line))
@@ -635,42 +668,62 @@ int proc_status_read(char *buf, size_t count, pid_t pid)
 		}
 	}
 
-	/* TracerPid stays 0: there is no ptrace attach. */
+	/* Linux proc(5) order. TracerPid stays 0: there is no ptrace attach. */
 	len = snprintf(buf, count,
 		       "Name:\t%s\n"
+		       "Umask:\t%04o\n"
 		       "State:\t%s (%s)\n"
+		       "Tgid:\t%d\n"
 		       "Pid:\t%d\n"
 		       "PPid:\t%d\n"
 		       "TracerPid:\t0\n"
 		       "Uid:\t%d\t%d\t%d\t%d\n"
 		       "Gid:\t%d\t%d\t%d\t%d\n"
-		       "%s"
 		       "FDSize:\t%d\n"
+		       "%s"
+		       "VmSize:\t%8llu kB\n"
+		       "VmRSS:\t%8llu kB\n"
+		       "RssAnon:\t%8llu kB\n"
+		       "RssFile:\t%8llu kB\n"
+		       "RssShmem:\t%8llu kB\n"
+		       "VmData:\t%8llu kB\n"
+		       "VmStk:\t%8llu kB\n"
+		       "VmPTE:\t%8llu kB\n"
 		       "Threads:\t%d\n"
-		       "NoNewPrivs:\t%d\n"
-		       "Umask:\t%04o\n"
 		       "SigPnd:\t%016llx\n"
 		       "SigBlk:\t%016llx\n"
 		       "SigIgn:\t%016llx\n"
 		       "SigCgt:\t%016llx\n"
-		       "VmSize:\t%llu kB\n"
-		       "VmRSS:\t%llu kB\n",
+		       "NoNewPrivs:\t%d\n"
+		       "voluntary_ctxt_switches:\t%llu\n"
+		       "nonvoluntary_ctxt_switches:\t%llu\n",
 		       snap.comm[0] ? snap.comm : "(none)",
+		       snap.umask,
 		       state_str, state_paren,
+		       (int)snap.tgid,
 		       (int)snap.pid, (int)snap.ppid,
 		       (int)snap.uid, (int)snap.euid, (int)snap.suid,
 		       (int)snap.uid,
 		       (int)snap.gid, (int)snap.egid, (int)snap.sgid,
 		       (int)snap.gid,
+		       snap.fd_size,
 		       groups_line,
-		       snap.fd_size, snap.threads, snap.no_new_privs,
-		       snap.umask,
+		       (unsigned long long)mem.size,
+		       (unsigned long long)mem.rss,
+		       (unsigned long long)anon_kb,
+		       (unsigned long long)mem.rss_file,
+		       (unsigned long long)mem.rss_shmem,
+		       (unsigned long long)mem.data,
+		       (unsigned long long)mem.stk,
+		       (unsigned long long)mem.pte,
+		       snap.threads,
 		       (unsigned long long)snap.sig_pending,
 		       (unsigned long long)snap.sig_blocked,
 		       (unsigned long long)snap.sig_ignored,
 		       (unsigned long long)snap.sig_caught,
-		       (unsigned long long)vsize,
-		       (unsigned long long)rss_kb);
+		       snap.no_new_privs,
+		       (unsigned long long)snap.nvcsw,
+		       (unsigned long long)snap.nivcsw);
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;
@@ -719,14 +772,16 @@ int proc_comm_read(char *buf, size_t count, pid_t pid)
 	return (int)out;
 }
 
+/* Linux PF_KTHREAD: ps brackets the names of kernel threads. */
+#define IR0_PF_KTHREAD 0x00200000
+
 /*
- * /proc/[pid]/stat — Linux proc(5) field order.
- *
- * Fields 1..22 carry real process state; utime/stime are scheduler jiffies.
- * Fields 9-13 are flags, minflt, cminflt, majflt and cmajflt, so utime is 14,
- * stime 15, cutime 16, cstime 17 and priority 18.
- * Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a single console today,
- * so every process on it shares that terminal.
+ * /proc/[pid]/stat — the 52 fields of proc(5), in order. Times are clock_t
+ * (USER_HZ). Counters IR0 does not keep (page faults, guest time, the code
+ * and argument bounds) are 0, as Linux prints them for a task it may not
+ * inspect. Field 7 (tty_nr) is the /dev/console device id: IR0 exposes a
+ * single console today, so every process on it shares that terminal, and
+ * tpgid (8) is its foreground process group.
  */
 int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 {
@@ -766,9 +821,13 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		rss = mm_count_resident_user_pages(snap.mm);
 
 	len = snprintf(buf, count,
-		       "%d (%s) %s %d %d %d %d %d "     /*  1-8  */
-		       "0 0 0 0 0 %llu %llu 0 0 %d "    /*  9-18 */
-		       "0 1 0 %llu %llu %llu 0 0 0 0 0 0 0 0 0 0 0 0\n",
+		       "%d (%s) %s %d %d %d %d %d "            /*  1-8  */
+		       "%u 0 0 0 0 %llu %llu %llu %llu %d %d %d " /*  9-20 */
+		       "0 %llu %llu %llu %llu "                 /* 21-25 */
+		       "0 0 0 0 0 "                             /* 26-30 */
+		       "%llu %llu %llu %llu "                   /* 31-34 */
+		       "0 0 0 %d %u 0 0 0 0 0 "                 /* 35-44 */
+		       "0 0 %llu 0 0 0 0 0\n",                  /* 45-52 */
 		       (int)snap.pid,
 		       snap.comm[0] ? snap.comm : "none",
 		       state_str,
@@ -776,13 +835,27 @@ int proc_pid_stat_read(char *buf, size_t count, pid_t pid)
 		       (int)snap.pgid,
 		       (int)snap.sid,
 		       tty_nr,
-		       (int)snap.pgid,               /* tpgid: fg group on tty */
-		       (unsigned long long)snap.utime,
-		       (unsigned long long)snap.stime,
-		       snap.sched_prio,               /* 18: priority */
-		       (unsigned long long)snap.start_ticks, /* 22: starttime */
-		       (unsigned long long)vsize,               /* 23: vsize */
-		       (unsigned long long)rss);                /* 24: rss pages */
+		       (int)ir0_console_get_fg_pgid(),
+		       snap.kernel_thread ? IR0_PF_KTHREAD : 0u,
+		       (unsigned long long)jiffies_to_clock_t(snap.utime),
+		       (unsigned long long)jiffies_to_clock_t(snap.stime),
+		       (unsigned long long)jiffies_to_clock_t(snap.cutime),
+		       (unsigned long long)jiffies_to_clock_t(snap.cstime),
+		       20 + snap.nice,                 /* 18: priority */
+		       snap.nice,                      /* 19: nice */
+		       snap.threads,                   /* 20: num_threads */
+		       (unsigned long long)jiffies_to_clock_t(snap.start_ticks),
+		       (unsigned long long)vsize,      /* 23: vsize (bytes) */
+		       (unsigned long long)rss,        /* 24: rss (pages) */
+		       (unsigned long long)snap.rsslim,
+		       (unsigned long long)snap.sig_pending,
+		       (unsigned long long)snap.sig_blocked,
+		       (unsigned long long)snap.sig_ignored,
+		       (unsigned long long)snap.sig_caught,
+		       /* 38: exit_signal; a thread signals no one. */
+		       snap.pid == snap.tgid ? SIGCHLD : -1,
+		       cpu_id(),                       /* 39: processor */
+		       (unsigned long long)snap.heap_start); /* 47: start_brk */
 	proc_fs_snap_release(&snap);
 	if (len < 0)
 		return -1;

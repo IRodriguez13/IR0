@@ -30,5 +30,7 @@ struct ir0_swap_area
 
 struct ir0_swap_area *ir0_swap_area_at(unsigned type);
 unsigned ir0_swap_area_count(void);
+/* Count one page moved in (1) or out (0) of swap, for /proc/vmstat. */
+void ir0_swap_count_page(int in);
 int ir0_swap_map_lba(const struct ir0_swap_area *area, uint64_t page,
 		     uint64_t *lba_out);

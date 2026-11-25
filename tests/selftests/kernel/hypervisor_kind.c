@@ -67,9 +67,9 @@ int main(void)
 	p = buf;
 	while (*p != '\0')
 	{
-		if (starts_with(p, "hypervisor_kind\t"))
+		if (starts_with(p, "hypervisor_kind\t: "))
 		{
-			const char *value = p + 16;
+			const char *value = p + 18;
 
 			pass = kind_token(value, "kvm") ||
 			       kind_token(value, "xen") ||

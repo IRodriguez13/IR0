@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <asm/memory.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -24,7 +25,7 @@
 
 #define IR0_MMAP_FAILED       ((uintptr_t)-1)
 #define IR0_USER_MMAP_START   0x20000000UL
-#define IR0_USER_STACK_TOP    0x7FFFF000UL
+#define IR0_USER_STACK_TOP    IR0_ARCH_USER_STACK_TOP
 #define IR0_USER_STACK_SIZE   0x100000UL
 #define IR0_USER_STACK_BASE   (IR0_USER_STACK_TOP - IR0_USER_STACK_SIZE)
 #define IR0_USER_STACK_GUARD  (IR0_USER_STACK_BASE - IR0_PAGE_SIZE)

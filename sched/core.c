@@ -38,6 +38,14 @@ void sched_switch_to(process_t *next)
 		return;
 	}
 
+	if (prev && prev != next)
+	{
+		/* Linux nivcsw: switched away while still runnable. */
+		if (prev->state == PROCESS_RUNNING)
+			prev->nivcsw++;
+		else
+			prev->nvcsw++;
+	}
 	if (prev && prev->state == PROCESS_RUNNING)
 		process_set_sched_state(prev, PROCESS_READY);
 

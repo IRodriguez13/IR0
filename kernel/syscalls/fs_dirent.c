@@ -77,11 +77,6 @@ static int getdents_trust_readdir_type(const char *dir_path)
   if (!dir_path)
     return 0;
 
-  if (strcmp(dir_path, "/proc") == 0 || strcmp(dir_path, "/proc/") == 0)
-    return 1;
-  if (is_proc_path(dir_path) && proc_is_virtual_subdir(dir_path))
-    return 1;
-
   if (strcmp(dir_path, "/dev") == 0 || strcmp(dir_path, "/dev/") == 0)
     return 1;
   if (ir0_is_dev_path(dir_path) && devfs_is_virtual_subdir(dir_path))

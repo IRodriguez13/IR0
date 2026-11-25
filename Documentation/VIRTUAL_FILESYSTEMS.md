@@ -22,7 +22,8 @@ See [`PSEUDO_FS_HEART.md`](PSEUDO_FS_HEART.md) for layout, gates, and ARCH-3 not
 
 ### Common Endpoints
 
-- `/proc/meminfo` — includes `MemAvailable`, `Buffers` and `Cached`
+- `/proc/meminfo` — Linux keys only (`MemAvailable`, `Buffers`, `Cached`,
+  `SwapTotal`, `SwapFree`, ...); IR0-only counters are in `/sys/kernel/mm`
 - `/proc/uptime`
 - `/proc/stat` — aggregate + `cpu0` jiffy lines for BusyBox `top` (see below)
 - `/proc/loadavg`
@@ -101,7 +102,8 @@ Runnable proof: `procfs_self_symlink` and `procfs_pid_exe` ktests in
 
 ### `/sys/kernel/mm`
 
-Read-only kernel MM snapshot (same PMM + heap sources as `/proc/meminfo`):
+Read-only kernel MM snapshot (same PMM + heap sources as `/proc/meminfo`),
+and the home of the IR0-only counters that `/proc/meminfo` does not carry:
 `MemTotal`, `MemFree`, `MemAvailable`, `MemUsed`, raw frame counters
 (`PmmTotalFrames`, `PmmUsedFrames`, `PmmFreeFrames`), `Slab`, `SlabTotal`,
 `SlabAllocs`, `PageSize`, `KStackMinFree`, `IrqNestMax`, `KStackPeak`.

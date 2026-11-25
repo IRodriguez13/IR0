@@ -369,12 +369,11 @@ void panicex(const char *message, panic_level_t level, const char *file, int lin
 
     /*
      * Test only: take a kernel page fault while panicking so the nested
-     * path is exercised (Linux lkdtm style). The address is in the
-     * unmapped upper half on x86-64 and in the disabled TTBR1 range on
-     * ARM64, so both ISAs see a kernel-mode fault on a kernel address.
+     * path is exercised (Linux lkdtm style). Each ISA names a kernel-half
+     * address it never maps, so both see a kernel-mode fault there.
      */
     if (level == PANIC_TEST_NESTED_FAULT)
-        *(volatile uint64_t *)(uintptr_t)0xFFFF800000000000ULL = 0;
+        *(volatile uint64_t *)(uintptr_t)IR0_ARCH_UNMAPPED_KERNEL_VA = 0;
 
     /* Disable interrupts immediately - we can't handle any more events safely.
      * The system is in an inconsistent state and any interrupt could cause

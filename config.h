@@ -30,6 +30,9 @@
 #endif
 #endif
 
+/* Per-ISA user layout (IR0_ARCH_USER_STACK_TOP). */
+#include <asm/memory.h>
+
 #ifndef CONFIG_ARM64_SYNTHETIC_RAM_FALLBACK
 #define CONFIG_ARM64_SYNTHETIC_RAM_FALLBACK 1
 #endif
@@ -222,7 +225,7 @@
 #define IR0_KSTACK_POISON     0xAAU
 
 /* MEMORY LAYOUT — virtual addresses and segment selectors */
-#define USER_STACK_TOP      0x7FFFF000UL
+#define USER_STACK_TOP      IR0_ARCH_USER_STACK_TOP
 /* 1 MiB of main-thread stack below the guard (Linux grows to RLIMIT_STACK). */
 #define USER_STACK_SIZE     0x100000
 #define USER_STACK_BASE     (USER_STACK_TOP - USER_STACK_SIZE)

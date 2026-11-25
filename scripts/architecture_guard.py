@@ -2178,6 +2178,7 @@ def check_portable_code_has_no_private_asm_headers():
         "includes/ir0/stat_user.h": "#include <asm/stat.h>",
         "includes/ir0/open_flags.h": "#include <asm/fcntl.h>",
         "includes/ir0/kexec.h": "#include <asm/kexec.h>",
+        "includes/ir0/abi/mmap_contract.h": "#include <asm/memory.h>",
     }
     roots = (ROOT / "includes" / "ir0", ROOT / "kernel", ROOT / "lib",
              ROOT / "mm", ROOT / "net", ROOT / "sched", ROOT / "smp",

@@ -15,6 +15,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 
 #include <ir0/cpu.h>
+#include <ir0/io.h>
 #include "gic_v2.h"
 
 #include <stdint.h>
@@ -37,16 +38,23 @@ static uint64_t g_gicc_base;
 int arm64_gic_v2_configure(uint64_t distributor_base, uint64_t distributor_size,
 			   uint64_t cpu_base, uint64_t cpu_size)
 {
+	uint64_t gicd;
+	uint64_t gicc;
+
 	if (distributor_base == 0U || cpu_base == 0U ||
 	    distributor_size < GICD_MIN_SIZE || cpu_size < GICC_MIN_SIZE ||
 	    distributor_base + distributor_size < distributor_base ||
 	    cpu_base + cpu_size < cpu_base)
 		return -1;
-	if (g_gic_inited &&
-	    (g_gicd_base != distributor_base || g_gicc_base != cpu_base))
+	/* ioremap() gives one address per physical range, so repeats match. */
+	gicd = (uint64_t)(uintptr_t)ioremap(distributor_base, distributor_size);
+	gicc = (uint64_t)(uintptr_t)ioremap(cpu_base, cpu_size);
+	if (gicd == 0U || gicc == 0U)
 		return -1;
-	g_gicd_base = distributor_base;
-	g_gicc_base = cpu_base;
+	if (g_gic_inited && (g_gicd_base != gicd || g_gicc_base != gicc))
+		return -1;
+	g_gicd_base = gicd;
+	g_gicc_base = gicc;
 	return 0;
 }
 

@@ -25,3 +25,7 @@ int64_t sys_getitimer(int which, struct itimerval *curr_value);
 int64_t sys_setitimer(int which, const struct itimerval *new_value,
 		      struct itimerval *old_value);
 int64_t sys_alarm(unsigned int seconds);
+struct tms;
+struct rusage;
+int64_t sys_times(struct tms *buf);
+int64_t sys_getrusage(int who, struct rusage *ru);

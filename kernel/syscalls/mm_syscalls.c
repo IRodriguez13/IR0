@@ -15,6 +15,7 @@
 #include "mm_syscalls.h"
 #include <mm/map_sys.h>
 #include <ir0/clock.h>
+#include <ir0/loadavg.h>
 #include <ir0/copy_user.h>
 #include <ir0/mm_port.h>
 #include <ir0/swap.h>
@@ -86,9 +87,7 @@ int64_t sys_sysinfo(void *user_info)
   size_t total_frames = 0;
   size_t used_frames = 0;
   size_t free_frames = 0;
-  uint32_t l1 = 0, l5 = 0, l15 = 0;
-  unsigned runnable = 0, nprocs = 0;
-  int last_pid = 0;
+  unsigned long loads[3];
 
   if (!user_info)
     return -EFAULT;
@@ -97,12 +96,12 @@ int64_t sys_sysinfo(void *user_info)
 
   info.uptime = (int64_t)(clock_get_uptime_milliseconds() / 1000ULL);
 
-  clock_get_loadavg(&l1, &l5, &l15, &runnable, &nprocs, &last_pid);
-  /* Hundredths of a load unit into the 1/65536 fixed point Linux uses. */
-  info.loads[0] = ((uint64_t)l1 << SYSINFO_LOAD_SHIFT) / 100ULL;
-  info.loads[1] = ((uint64_t)l5 << SYSINFO_LOAD_SHIFT) / 100ULL;
-  info.loads[2] = ((uint64_t)l15 << SYSINFO_LOAD_SHIFT) / 100ULL;
-  info.procs = (uint16_t)nprocs;
+  /* FSHIFT fixed point into the 1/65536 one of struct sysinfo. */
+  get_avenrun(loads, 0, SYSINFO_LOAD_SHIFT - FSHIFT);
+  info.loads[0] = loads[0];
+  info.loads[1] = loads[1];
+  info.loads[2] = loads[2];
+  info.procs = (uint16_t)nr_threads();
 
   /* Same PMM figures /proc/meminfo reports, so the two cannot disagree. */
   ir0_mm_pmm_stats(&total_frames, &used_frames, &free_frames);
