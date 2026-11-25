@@ -1,7 +1,7 @@
 # VFS inodes and dentries
 
-> **Status:** stage A done; stage B in part (super_block; ext2 and
-> simplefs by inode); dentries, FAT16, 9p and stages C-D open
+> **Status:** stage A done; stage B part 1 done (super_block, every
+> file-storing filesystem by inode); dentries and stages C-D open
 > **Linux model:** `fs/inode.c` (`iget_locked`, `iput`, `evict`),
 > `fs/dcache.c`, `fs/namei.c`, `mm/filemap.c` (`address_space`)
 
@@ -76,10 +76,11 @@ globals are rows of `scripts/smp_entry_gate/global_state.tsv` (SMP-0).
   path-named inode (it follows renames) until they gain inode operations.
 - **B (dentries):** `struct super_block` per mount (done; umount of a
   busy filesystem is `EBUSY`); ext2 and simplefs get `iops` (done).
-  FAT16 and 9p have no stable inode number to address a file by (FAT:
-  the directory entry moves on rename; 9P needs a fid), so they need a
-  per-inode backend handle (`i_private`) before the path-named inode
-  goes. Then the dentry cache, namei
+  FAT16 and 9p keep per-file backend state in `i_private`
+  (`iops->open_inode`/`release`): FAT16 its directory slot (st_ino is
+  the slot, Linux i_pos), 9p a fid (st_ino is the folded qid.path). The
+  path-named inode is gone (done): a pseudo-filesystem file has no inode
+  until stage D. Then the dentry cache, namei
   walks dentries (the Q3 search-permission walk stays per component), path
   operations take (dentry, name) instead of strings.
 - **C (special files):** FIFOs, sockets and device nodes are inodes made by

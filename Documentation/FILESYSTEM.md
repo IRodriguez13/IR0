@@ -52,13 +52,14 @@ Design and migration stages: [`ai_driven_dev/vfs-inodes.md`](ai_driven_dev/vfs-i
   (super_block, inode number). `vfs_open()` pins the inode of a regular file;
   read, write, `fstat`, `ftruncate` and `mmap` of an open file go through it.
 - A backend that fills `vfs_ops.iops` (`struct vfs_inode_ops`) is addressed
-  by inode number: MINIX, tmpfs, ext2 and simplefs. Its unlink calls
+  by inode number: MINIX, tmpfs, ext2, simplefs, FAT16 (number = the
+  directory slot) and 9p (number = folded qid; the inode holds a fid in
+  `i_private`, filled by `iops->open_inode`). Its unlink calls
   `inode_orphan()`; a file still held keeps its blocks until `iops->evict`
   at the last `iput()`, so an unlinked or renamed-over open file stays
   readable and writable. Every name of a hard link reaches one inode.
-- Backends without `iops` (FAT16, 9p, the pseudo filesystems) are still
-  named by path: their inode follows renames and loses its name at
-  unlink, as before.
+- The pseudo filesystems have no `iops` yet: their files have no inode,
+  do I/O by name, and `mmap` of them fails with `ENODEV`.
 - Every mount has a `struct super_block` (bind mounts share it); the
   inode cache is keyed by (super_block, inode number). umount of a
   filesystem with an open, mapped or orphaned file fails with `EBUSY`.
