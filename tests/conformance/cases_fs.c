@@ -347,6 +347,69 @@ int fs_umount_busy(void)
 	return CONF_PASS;
 }
 
+/*
+ * Mount the ext2 scratch disk on "t": IR0 names it hdb, Linux sdb (with
+ * devtmpfs on /dev when nothing mounted it). 0, or CONF_TCONF without it.
+ */
+static int conf_mount_ext2(void)
+{
+	static const char *const devs[] = {"/dev/hdb", "/dev/sdb", "/dev/sda"};
+	unsigned int i;
+
+	(void)S3(SYS_mkdirat, AT_FDCWD, "/dev", 0755);
+	(void)S5(SYS_mount, "devtmpfs", "/dev", "devtmpfs", 0, 0);
+	if (S3(SYS_mkdirat, AT_FDCWD, "t", 0755) != 0)
+		return CONF_FAIL;
+	for (i = 0; i < sizeof(devs) / sizeof(devs[0]); i++)
+	{
+		if (S5(SYS_mount, devs[i], "t", "ext2", 0, 0) == 0)
+			return 0;
+	}
+	return CONF_TCONF;
+}
+
+/* ext2 keeps an unlinked open file and shares one cache per inode. */
+int fs_ext2_inode_lifetime(void)
+{
+	struct stat st;
+	volatile char *pa;
+	volatile char *pb;
+	char buf[16];
+	long fd;
+	long fb;
+	long va;
+	int r;
+
+	r = conf_mount_ext2();
+	if (r != 0)
+		return r;
+	OK(fd, conf_creat("t/f", hello));
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), 0);
+	EXPECT(S4(SYS_pread64, fd, buf, HELLO_LEN, 0), HELLO_LEN);
+	CHECK(rt_memeq(buf, hello, HELLO_LEN));
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_nlink, 0);
+	EXPECT(S1(SYS_close, fd), 0);
+
+	OK(fd, conf_creat("t/a", hello));
+	EXPECT(S5(SYS_linkat, AT_FDCWD, "t/a", AT_FDCWD, "t/b", 0), 0);
+	OK(fb, S4(SYS_openat, AT_FDCWD, "t/b", O_RDWR, 0));
+	OK(va, S6(SYS_mmap, 0, RT_PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+		  0));
+	pa = (volatile char *)va;
+	OK(va, S6(SYS_mmap, 0, RT_PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, fb,
+		  0));
+	pb = (volatile char *)va;
+	pa[0] = 'J';
+	CHECK(pb[0] == 'J');
+	EXPECT(S2(SYS_munmap, (long)pa, RT_PAGE), 0);
+	EXPECT(S2(SYS_munmap, (long)pb, RT_PAGE), 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S1(SYS_close, fb), 0);
+	EXPECT(S2(SYS_umount2, "t", 0), 0);
+	return CONF_PASS;
+}
+
 int fs_rename(void)
 {
 	struct stat st;

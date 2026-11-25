@@ -17,6 +17,7 @@
 #include <ir0/clock.h>
 #include <ir0/cred.h>
 #include <ir0/errno.h>
+#include <ir0/inode.h>
 #include <ir0/kmem.h>
 #include <ir0/klog.h>
 #include <ir0/mount_prefix.h>
@@ -134,6 +135,7 @@ struct ext2_vol
 	uint32_t gd_block;
 	struct ext2_super super;
 	struct ext2_bgd bgd;
+	struct super_block *sb; /* the VFS mount (fill_super) */
 };
 
 static struct ext2_vol g_vols[EXT2_MAX_MOUNTS];
@@ -508,21 +510,11 @@ static int ext2_resolve_parent(struct ext2_vol *v, const char *rel,
 	return 0;
 }
 
-static int ext2_stat_path(const char *path, stat_t *st)
+static int ext2_stat_ino(struct ext2_vol *v, uint32_t inum, stat_t *st)
 {
-	char rel[EXT2_MAX_PATH];
-	int at_root = 0;
-	struct ext2_vol *v;
 	struct ext2_inode ino;
-	uint32_t inum;
 	int ret;
 
-	v = ext2_find(path, rel, sizeof(rel), &at_root);
-	if (!v)
-		return -ENOENT;
-	ret = ext2_resolve(v, at_root ? "" : rel, &inum);
-	if (ret != 0)
-		return ret;
 	ret = ext2_read_inode(v, inum, &ino);
 	if (ret != 0)
 		return ret;
@@ -539,16 +531,29 @@ static int ext2_stat_path(const char *path, stat_t *st)
 	st->st_mtime = ino.i_mtime;
 	st->st_ctime = ino.i_ctime;
 	return 0;
+
 }
 
-static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nread,
-			  off_t offset)
+static int ext2_stat_path(const char *path, stat_t *st)
 {
 	char rel[EXT2_MAX_PATH];
 	int at_root = 0;
-	struct ext2_vol *v;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
+	uint32_t ino;
+	int ret;
+
+	if (!v)
+		return -ENOENT;
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
+	if (ret != 0)
+		return ret;
+	return ext2_stat_ino(v, ino, st);
+}
+
+static int ext2_read_ino(struct ext2_vol *v, uint32_t inum, void *buf, size_t count, size_t *nread,
+			  off_t offset)
+{
 	struct ext2_inode ino;
-	uint32_t inum;
 	uint8_t *block_buf;
 	size_t done = 0;
 	int ret;
@@ -558,12 +563,6 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 	*nread = 0;
 	if (offset < 0)
 		return -EINVAL;
-	v = ext2_find(path, rel, sizeof(rel), &at_root);
-	if (!v)
-		return -ENOENT;
-	ret = ext2_resolve(v, at_root ? "" : rel, &inum);
-	if (ret != 0)
-		return ret;
 	ret = ext2_read_inode(v, inum, &ino);
 	if (ret != 0)
 		return ret;
@@ -613,6 +612,24 @@ static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nre
 		return ret;
 	*nread = done;
 	return 0;
+
+}
+
+static int ext2_read_path(const char *path, void *buf, size_t count, size_t *nread,
+			  off_t offset)
+{
+	char rel[EXT2_MAX_PATH];
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
+	uint32_t ino;
+	int ret;
+
+	if (!v)
+		return -ENOENT;
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
+	if (ret != 0)
+		return ret;
+	return ext2_read_ino(v, ino, buf, count, nread, offset);
 }
 
 static int ext2_readdir_path(const char *path, struct vfs_dirent *entries, int max)
@@ -1075,6 +1092,19 @@ static int ext2_change_links(struct ext2_vol *v, uint32_t ino, int delta)
 	return ext2_write_inode(v, ino, &inode);
 }
 
+/* Free inode @ino (on-disk copy @inode) and every block it owns. */
+static void ext2_release_inode(struct ext2_vol *v, uint32_t ino,
+			       struct ext2_inode *inode)
+{
+	ext2_free_all_inode_blocks(v, inode);
+	memset(inode, 0, sizeof(*inode));
+	(void)ext2_write_inode(v, ino, inode);
+	(void)ext2_bitmap_free(v, v->inode_bitmap_block, ino);
+	v->super.s_free_inodes_count++;
+	v->bgd.bg_free_inodes_count++;
+	(void)ext2_write_metadata(v);
+}
+
 static int ext2_unlink_path(const char *path)
 {
 	char rel[EXT2_MAX_PATH];
@@ -1105,16 +1135,9 @@ static int ext2_unlink_path(const char *path)
 	ret = ext2_change_links(v, ino, -1);
 	if (ret != 0)
 		return ret;
-	if (inode.i_links_count == 1)
-	{
-		ext2_free_all_inode_blocks(v, &inode);
-		memset(&inode, 0, sizeof(inode));
-		(void)ext2_write_inode(v, ino, &inode);
-		(void)ext2_bitmap_free(v, v->inode_bitmap_block, ino);
-		v->super.s_free_inodes_count++;
-		v->bgd.bg_free_inodes_count++;
-		(void)ext2_write_metadata(v);
-	}
+	/* A file still open stays until ext2_ievict() (Linux evict()). */
+	if (inode.i_links_count == 1 && !inode_orphan(v->sb, ino))
+		ext2_release_inode(v, ino, &inode);
 	return 0;
 }
 
@@ -1297,15 +1320,11 @@ static int ext2_chmod_path(const char *path, mode_t mode)
 	return ret;
 }
 
-static int ext2_write_path(const char *path, const void *buf, size_t count,
+static int ext2_write_ino(struct ext2_vol *v, uint32_t ino, const void *buf, size_t count,
 			   size_t *bytes_written, off_t offset)
 {
-	char rel[EXT2_MAX_PATH];
-	int at_root = 0;
-	struct ext2_vol *v;
 	struct ext2_inode inode;
 	uint8_t *block_buf;
-	uint32_t ino;
 	uint64_t max_size;
 	size_t done = 0;
 	int ret;
@@ -1313,12 +1332,6 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 	if (offset < 0 || !bytes_written || (count > 0 && !buf))
 		return -EINVAL;
 	*bytes_written = 0;
-	v = ext2_find(path, rel, sizeof(rel), &at_root);
-	if (!v)
-		return -ENOENT;
-	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
-	if (ret != 0)
-		return ret;
 	ret = ext2_read_inode(v, ino, &inode);
 	if (ret != 0)
 		return ret;
@@ -1377,26 +1390,35 @@ static int ext2_write_path(const char *path, const void *buf, size_t count,
 	kfree(block_buf);
 	*bytes_written = done;
 	return done ? 0 : ret;
+
 }
 
-static int ext2_truncate_path(const char *path, size_t length)
+static int ext2_write_path(const char *path, const void *buf, size_t count,
+			   size_t *bytes_written, off_t offset)
 {
 	char rel[EXT2_MAX_PATH];
 	int at_root = 0;
 	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
-	struct ext2_inode inode;
 	uint32_t ino;
-	uint32_t keep;
-	uint32_t i;
 	int ret;
 
 	if (!v)
 		return -ENOENT;
-	if (length > ext2_max_file_blocks(v) * v->block_size)
-		return -EFBIG;
 	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
 	if (ret != 0)
 		return ret;
+	return ext2_write_ino(v, ino, buf, count, bytes_written, offset);
+}
+
+static int ext2_truncate_ino(struct ext2_vol *v, uint32_t ino, size_t length)
+{
+	struct ext2_inode inode;
+	uint32_t keep;
+	uint32_t i;
+	int ret;
+
+	if (length > ext2_max_file_blocks(v) * v->block_size)
+		return -EFBIG;
 	ret = ext2_read_inode(v, ino, &inode);
 	if (ret != 0)
 		return ret;
@@ -1462,7 +1484,26 @@ static int ext2_truncate_path(const char *path, size_t length)
 	}
 	inode.i_size = length;
 	return ext2_write_inode(v, ino, &inode);
+
 }
+
+static int ext2_truncate_path(const char *path, size_t length)
+{
+	char rel[EXT2_MAX_PATH];
+	int at_root = 0;
+	struct ext2_vol *v = ext2_find(path, rel, sizeof(rel), &at_root);
+	uint32_t ino;
+	int ret;
+
+	if (!v)
+		return -ENOENT;
+	ret = ext2_resolve(v, at_root ? "" : rel, &ino);
+	if (ret != 0)
+		return ret;
+	return ext2_truncate_ino(v, ino, length);
+}
+
+static const struct vfs_inode_ops ext2_inode_ops;
 
 static struct vfs_ops ext2_ops = {
 	.stat = ext2_stat_path,
@@ -1477,6 +1518,7 @@ static struct vfs_ops ext2_ops = {
 	.read = ext2_read_path,
 	.write = ext2_write_path,
 	.truncate = ext2_truncate_path,
+	.iops = &ext2_inode_ops,
 };
 
 static int ext2_parse_dev(const char *dev, char *blk, size_t blk_sz)
@@ -1603,11 +1645,87 @@ static int ext2_umount_cb(const char *dir)
 	return -EINVAL;
 }
 
+/* vfs_inode_ops: a file of the mount @sb by number, named or not. */
+static struct ext2_vol *ext2_vol_of(struct super_block *sb, ino_t ino)
+{
+	struct ext2_vol *v = sb ? sb->s_fs_info : NULL;
+
+	if (!v || !v->in_use || ino == 0 || ino > v->inodes_count)
+		return NULL;
+	return v;
+}
+
+static int ext2_istat(struct super_block *sb, ino_t ino, stat_t *st)
+{
+	struct ext2_vol *v = ext2_vol_of(sb, ino);
+
+	return v ? ext2_stat_ino(v, (uint32_t)ino, st) : -ENOENT;
+}
+
+static int ext2_iread(struct super_block *sb, ino_t ino, void *buf,
+		      size_t count, size_t *nread, off_t offset)
+{
+	struct ext2_vol *v = ext2_vol_of(sb, ino);
+
+	return v ? ext2_read_ino(v, (uint32_t)ino, buf, count, nread, offset)
+		 : -ENOENT;
+}
+
+static int ext2_iwrite(struct super_block *sb, ino_t ino, const void *buf,
+		       size_t count, size_t *written, off_t offset)
+{
+	struct ext2_vol *v = ext2_vol_of(sb, ino);
+
+	return v ? ext2_write_ino(v, (uint32_t)ino, buf, count, written, offset)
+		 : -ENOENT;
+}
+
+static int ext2_itruncate(struct super_block *sb, ino_t ino, size_t length)
+{
+	struct ext2_vol *v = ext2_vol_of(sb, ino);
+
+	return v ? ext2_truncate_ino(v, (uint32_t)ino, length) : -ENOENT;
+}
+
+static void ext2_ievict(struct super_block *sb, ino_t ino)
+{
+	struct ext2_vol *v = ext2_vol_of(sb, ino);
+	struct ext2_inode inode;
+
+	if (!v || ext2_read_inode(v, (uint32_t)ino, &inode) != 0 ||
+	    inode.i_links_count != 0)
+		return;
+	ext2_release_inode(v, (uint32_t)ino, &inode);
+}
+
+static const struct vfs_inode_ops ext2_inode_ops = {
+	.stat = ext2_istat,
+	.read = ext2_iread,
+	.write = ext2_iwrite,
+	.truncate = ext2_itruncate,
+	.evict = ext2_ievict,
+};
+
+static int ext2_fill_super(struct super_block *sb, const char *dir)
+{
+	for (int i = 0; i < EXT2_MAX_MOUNTS; i++)
+	{
+		if (g_vols[i].in_use && strcmp(g_vols[i].mount_path, dir) == 0)
+		{
+			g_vols[i].sb = sb;
+			sb->s_fs_info = &g_vols[i];
+			return 0;
+		}
+	}
+	return -ENODEV;
+}
+
 struct vfs_fstype ext2_fs_type = {
 	.name = "ext2",
 	.fs_flags = FS_REQUIRES_DEV,
 	.ops = &ext2_ops,
 	.mount = ext2_mount_cb,
 	.umount = ext2_umount_cb,
+	.fill_super = ext2_fill_super,
 	.next = NULL,
 };

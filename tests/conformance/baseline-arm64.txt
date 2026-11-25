@@ -5,3 +5,4 @@
 
 mm_madvise_dontneed TCONF  # madvise is ENOSYS
 time_clock_getres TCONF  # clock_getres is ENOSYS
+fs_ext2_inode_lifetime TCONF  # the arm64 guest has no second (ext2 scratch) disk

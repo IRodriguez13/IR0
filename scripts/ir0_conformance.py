@@ -49,6 +49,20 @@ def run_cmd(argv: list[str], timeout: int) -> int:
 # --- guest images ----------------------------------------------------------
 
 
+def ext2_disk(out: Path) -> bool:
+    """An empty 4 MiB ext2 scratch disk for the ext2 cases, if mke2fs exists."""
+    mke2fs = shutil.which("mke2fs") or shutil.which("/sbin/mke2fs") or \
+        shutil.which("/usr/sbin/mke2fs")
+    if not mke2fs:
+        return False
+    with out.open("wb") as fp:
+        fp.truncate(4 * 1024 * 1024)
+    res = subprocess.run([mke2fs, "-q", "-F", "-t", "ext2", "-b", "1024",
+                          str(out)], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, timeout=60, check=False)
+    return res.returncode == 0
+
+
 def minix_disk(init: Path, out: Path, ltp_dir: Path | None) -> int:
     # The large layout (2048 inodes, 64 MiB of zones) leaves room for cases
     # that fill a directory; the default one has 64 inodes in all.
@@ -105,6 +119,7 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
         fd, name = tempfile.mkstemp(prefix="ir0-conf-x86.", suffix=".img", dir=tmpdir)
         os.close(fd)
         disk = Path(name)
+        scratch = disk.with_suffix(".ext2")
         try:
             ltp = Path(args.ltp_dir) if args.ltp_dir else None
             if minix_disk(binary, disk, ltp) != 0:
@@ -114,9 +129,13 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
                     "-drive", f"file={disk},format=raw,if=ide,index=0",
                     "-serial", "stdio", "-display", "none", "-no-reboot",
                     "-net", "none"]
+            # Second IDE disk (hdb): ext2 scratch for the ext2 cases.
+            if ext2_disk(scratch):
+                argv += ["-drive", f"file={scratch},format=raw,if=ide,index=1"]
             return run_cmd(argv, args.timeout + 30)
         finally:
             disk.unlink(missing_ok=True)
+            scratch.unlink(missing_ok=True)
     product = ROOT / "kernel-arm64-product.img"
     if not product.is_file():
         product = ROOT / "kernel-arm64-product.bin"
