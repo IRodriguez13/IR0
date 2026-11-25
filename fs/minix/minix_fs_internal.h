@@ -21,6 +21,7 @@
 #include <ir0/kmem.h>
 #include <ir0/cred.h>
 #include <ir0/exec_read_trace.h>
+#include <ir0/inode.h>
 #include <string.h>
 
 #define MINIX_SUPER_MAGIC 0x137F
@@ -71,4 +72,15 @@ int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count,
 int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count,
                                 size_t *written_count, off_t offset);
 int minix_fs_chmod(const char *path, mode_t mode);
+
+/* Inode-addressed operations (vfs_inode_ops), minix_fs.c owns the table. */
+extern const struct vfs_inode_ops minix_inode_ops;
+int minix_istat(ino_t ino, stat_t *buf);
+int minix_iread(ino_t ino, void *buf, size_t count, size_t *read_count,
+                off_t offset);
+int minix_iwrite(ino_t ino, const void *buf, size_t count,
+                 size_t *written_count, off_t offset);
+int minix_itruncate(ino_t ino, size_t length);
+void minix_ievict(ino_t ino);
+int minix_inode_release(uint16_t inode_num, minix_inode_t *inode);
 int minix_fs_utimens(const char *path, const struct timespec times[2]);

@@ -182,19 +182,29 @@ void iput(struct inode *inode)
 	kfree(inode);
 }
 
-int inode_orphan(const struct vfs_ops *fs, ino_t ino)
+int inode_orphan(const struct vfs_inode_ops *iops, ino_t ino)
 {
 	struct inode *inode;
 	unsigned long flags;
+	unsigned int b;
 
-	if (!fs || !fs->iops)
+	if (!iops)
 		return 0;
 	flags = ir0_spin_lock_irqsave(&icache_lock);
-	inode = icache_find((struct vfs_ops *)fs, ino, "");
-	if (inode)
-		inode->i_state |= I_ORPHAN;
+	for (b = 0; b < ICACHE_BUCKETS; b++)
+	{
+		for (inode = icache[b]; inode; inode = inode->i_next)
+		{
+			if (inode->i_fs->iops == iops && inode->i_ino == ino)
+			{
+				inode->i_state |= I_ORPHAN;
+				ir0_spin_unlock_irqrestore(&icache_lock, flags);
+				return 1;
+			}
+		}
+	}
 	ir0_spin_unlock_irqrestore(&icache_lock, flags);
-	return inode != NULL;
+	return 0;
 }
 
 void inode_moved(struct vfs_ops *fs, const char *oldpath, const char *newpath)

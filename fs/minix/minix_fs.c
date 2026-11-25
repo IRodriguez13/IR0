@@ -628,6 +628,14 @@ int minix_fs_format(void)
   return 0;
 }
 
+const struct vfs_inode_ops minix_inode_ops = {
+	.stat     = minix_istat,
+	.read     = minix_iread,
+	.write    = minix_iwrite,
+	.truncate = minix_itruncate,
+	.evict    = minix_ievict,
+};
+
 static struct vfs_ops minix_fs_ops = {
 	.stat    = minix_fs_stat,
 	.mkdir   = minix_fs_mkdir,
@@ -643,6 +651,7 @@ static struct vfs_ops minix_fs_ops = {
 	.chmod   = minix_fs_chmod,
 	.utimens = minix_fs_utimens,
 	.map_swap_extents = minix_map_swap_extents,
+	.iops    = &minix_inode_ops,
 };
 
 static int minix_mount(const char *dev_name __attribute__((unused)), const char *dir_name)

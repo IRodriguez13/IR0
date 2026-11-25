@@ -62,6 +62,44 @@ int minix_fs_statfs(const char *path, struct ir0_statfs *buf)
 	return 0;
 }
 
+/* Fill @buf for inode @inode_num, whose on-disk copy is @inode. */
+static int minix_fill_stat(uint16_t inode_num, const minix_inode_t *inode,
+                           stat_t *buf)
+{
+  /* A zero mode is a free (stale) slot, not a file. */
+  if ((inode->i_mode & MINIX_IFMT) == 0)
+    return -ENOENT;
+
+  memset(buf, 0, sizeof(*buf));
+  buf->st_dev = 0;
+  buf->st_ino = inode_num;
+  buf->st_nlink = inode->i_nlinks;
+  buf->st_uid = inode->i_uid;
+  buf->st_gid = inode->i_gid;
+  buf->st_size = inode->i_size;
+  buf->st_blksize = MINIX_BLOCK_SIZE;
+  buf->st_blocks = (blkcnt_t)(((uint64_t)inode->i_size + 511ULL) / 512ULL);
+  buf->st_atime = inode->i_time;
+  buf->st_mtime = inode->i_time;
+  buf->st_ctime = inode->i_time;
+  buf->st_mode = inode->i_mode;
+  return 0;
+}
+
+/* vfs_inode_ops.stat: a file by number, named or not. */
+int minix_istat(ino_t ino, stat_t *buf)
+{
+  minix_inode_t inode;
+
+  if (!minix_fs.initialized)
+    return -ENODEV;
+  if (!buf || ino == 0 || ino > UINT16_MAX)
+    return -EINVAL;
+  if (minix_read_inode((uint32_t)ino, &inode) != 0)
+    return -EIO;
+  return minix_fill_stat((uint16_t)ino, &inode, buf);
+}
+
 int minix_fs_stat(const char *pathname, stat_t *buf)
 {
   minix_inode_t inode;
@@ -85,25 +123,13 @@ int minix_fs_stat(const char *pathname, stat_t *buf)
     return rc;
   }
 
-  if ((inode.i_mode & MINIX_IFMT) == 0)
+  rc = minix_fill_stat(inode_num, &inode, buf);
+  if (rc != 0)
   {
     klog_debug_fmt("MINIX", "stat('%s') invalid mode 0x%x (stale)", pathname,
                    inode.i_mode);
-    return -ENOENT;
+    return rc;
   }
-
-  buf->st_dev = 0;
-  buf->st_ino = inode_num;
-  buf->st_nlink = inode.i_nlinks;
-  buf->st_uid = inode.i_uid;
-  buf->st_gid = inode.i_gid;
-  buf->st_size = inode.i_size;
-  buf->st_blksize = MINIX_BLOCK_SIZE;
-  buf->st_blocks = (blkcnt_t)(((uint64_t)inode.i_size + 511ULL) / 512ULL);
-  buf->st_atime = inode.i_time;
-  buf->st_mtime = inode.i_time;
-  buf->st_ctime = inode.i_time;
-  buf->st_mode = inode.i_mode;
 
   if (strcmp(pathname, "/") == 0 && klog_trace_enabled(KLOG_TRACE_VFS_STAT))
     klog_trace_fmt("MINIX", "stat('%s') OK ino=%u mode=0x%x", pathname, inode_num, buf->st_mode);

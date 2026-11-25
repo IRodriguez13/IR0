@@ -14,6 +14,7 @@
 #include "conf.h"
 
 #include <dirent.h>
+#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 
@@ -238,6 +239,57 @@ int fs_unlink_open_file(void)
 	EXPECT(S2(SYS_fstat, fd, &st), 0);
 	EXPECT(st.st_nlink, 0);
 	EXPECT_ERR(S3(SYS_unlinkat, AT_FDCWD, "f", 0), ENOENT);
+	return CONF_PASS;
+}
+
+/* A rename over an open file takes its name, not its data (Linux iput). */
+int fs_rename_over_open_file(void)
+{
+	struct stat st;
+	char buf[16];
+	long fd;
+	long fd2;
+
+	OK(fd, conf_creat("a", hello));
+	EXPECT(S1(SYS_close, fd), 0);
+	OK(fd, conf_creat("b", "old"));
+	EXPECT(S4(SYS_renameat, AT_FDCWD, "a", AT_FDCWD, "b"), 0);
+	EXPECT(S4(SYS_pread64, fd, buf, sizeof(buf), 0), 3);
+	CHECK(rt_memeq(buf, "old", 3));
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_nlink, 0);
+	EXPECT(S4(SYS_pwrite64, fd, "new", 3, 0), 3);
+	OK(fd2, S4(SYS_openat, AT_FDCWD, "b", O_RDONLY, 0));
+	EXPECT(S3(SYS_read, fd2, buf, sizeof(buf)), HELLO_LEN);
+	CHECK(rt_memeq(buf, hello, HELLO_LEN));
+	return CONF_PASS;
+}
+
+/* Two names of one file share its page cache (Linux address_space). */
+int fs_link_shared_mapping(void)
+{
+	volatile char *pa;
+	volatile char *pb;
+	long fa;
+	long fb;
+	long va;
+
+	OK(fa, conf_creat("a", hello));
+	EXPECT(S5(SYS_linkat, AT_FDCWD, "a", AT_FDCWD, "b", 0), 0);
+	OK(fb, S4(SYS_openat, AT_FDCWD, "b", O_RDWR, 0));
+	OK(va, S6(SYS_mmap, 0, RT_PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, fa,
+		  0));
+	pa = (volatile char *)va;
+	OK(va, S6(SYS_mmap, 0, RT_PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, fb,
+		  0));
+	pb = (volatile char *)va;
+	CHECK(pa != pb);
+	pa[0] = 'J';
+	CHECK(pb[0] == 'J');
+	pb[1] = 'E';
+	CHECK(pa[1] == 'E');
+	EXPECT(S2(SYS_munmap, (long)pa, RT_PAGE), 0);
+	EXPECT(S2(SYS_munmap, (long)pb, RT_PAGE), 0);
 	return CONF_PASS;
 }
 

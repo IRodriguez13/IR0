@@ -178,6 +178,33 @@ int minix_fs_mkdir(const char *path, mode_t mode)
   return 0;
 }
 
+/* Free inode @inode_num (on-disk copy @inode) and every zone it owns. */
+int minix_inode_release(uint16_t inode_num, minix_inode_t *inode)
+{
+  minix_inode_truncate_zones(inode, inode_num, inode->i_size, 0);
+  inode->i_size = 0;
+  if (minix_fs_write_inode(inode_num, inode) != 0)
+    return -EIO;
+  if (minix_fs_free_inode(inode_num) != 0)
+  {
+    klog_error("MINIX", "Could not free inode");
+    return -EIO;
+  }
+  return 0;
+}
+
+/* vfs_inode_ops.evict: the last reference to an unlinked file went. */
+void minix_ievict(ino_t ino)
+{
+  minix_inode_t inode;
+
+  if (!minix_fs.initialized || ino == 0 || ino > UINT16_MAX)
+    return;
+  if (minix_read_inode((uint32_t)ino, &inode) != 0 || inode.i_nlinks != 0)
+    return;
+  (void)minix_inode_release((uint16_t)ino, &inode);
+}
+
 int minix_fs_rm(const char *path)
 {
   if (!minix_fs.initialized)
@@ -250,18 +277,16 @@ int minix_fs_rm(const char *path)
   if (file_inode.i_nlinks > 0)
     file_inode.i_nlinks--;
 
-  if (file_inode.i_nlinks == 0)
+  /*
+   * The last name is gone. A file the VFS still holds open stays, blocks
+   * and all, until minix_ievict() at its last close (Linux evict()).
+   */
+  if (file_inode.i_nlinks == 0 && !inode_orphan(&minix_inode_ops, file_inode_num))
   {
-    minix_inode_truncate_zones(&file_inode, file_inode_num,
-			       file_inode.i_size, 0);
-    file_inode.i_size = 0;
-    if (minix_fs_write_inode(file_inode_num, &file_inode) != 0)
-      return -EIO;
-    if (minix_fs_free_inode(file_inode_num) != 0)
-    {
-      klog_error("MINIX", "Could not free inode");
-      return -EIO;
-    }
+    int rc_release = minix_inode_release(file_inode_num, &file_inode);
+
+    if (rc_release != 0)
+      return rc_release;
   }
   else if (minix_fs_write_inode(file_inode_num, &file_inode) != 0)
   {

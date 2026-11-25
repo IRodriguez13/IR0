@@ -464,8 +464,23 @@ static int minix_inode_zero_range(minix_inode_t *inode, uint16_t inode_num,
 
 static int minix_offset_read_classified;
 
-static int minix_fs_pread_at(const char *path, void *buf, size_t count,
-                             off_t offset, size_t *read_count)
+/* The inode number @path names: 0, or -ENOENT. */
+static int minix_ino_of(const char *path, ino_t *ino)
+{
+	uint16_t num;
+
+	if (!path)
+		return -EINVAL;
+	num = minix_fs_get_inode_number(path);
+	if (num == 0)
+		return -ENOENT;
+	*ino = num;
+	return 0;
+}
+
+/* vfs_inode_ops.read: file @ino, named or not (pread semantics). */
+int minix_iread(ino_t ino, void *buf, size_t count, size_t *read_count,
+                off_t offset)
 {
   uint16_t inode_num;
   minix_inode_t file_inode;
@@ -476,7 +491,7 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
   size_t remaining;
   int ret;
 
-  if (!minix_fs.initialized || !path)
+  if (!minix_fs.initialized || ino == 0 || ino > UINT16_MAX)
     return -EINVAL;
   if (count > 0 && !buf)
     return -EINVAL;
@@ -491,9 +506,7 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
   if (!minix_root_block_present())
     return -EIO;
 
-  inode_num = minix_fs_get_inode_number(path);
-  if (inode_num == 0)
-    return -ENOENT;
+  inode_num = (uint16_t)ino;
 
   if (minix_read_inode(inode_num, &file_inode) != 0)
     return -EIO;
@@ -570,8 +583,9 @@ static int minix_fs_pread_at(const char *path, void *buf, size_t count,
   return 0;
 }
 
-static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
-                              off_t offset, size_t *written_count)
+/* vfs_inode_ops.write: file @ino, named or not (pwrite semantics). */
+int minix_iwrite(ino_t ino, const void *buf, size_t count,
+                 size_t *written_count, off_t offset)
 {
   uint16_t inode_num;
   minix_inode_t file_inode;
@@ -581,7 +595,7 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   size_t new_size;
   int ret;
 
-  if (!minix_fs.initialized || !path)
+  if (!minix_fs.initialized || ino == 0 || ino > UINT16_MAX)
     return -EINVAL;
   if (count > 0 && !buf)
     return -EINVAL;
@@ -596,9 +610,7 @@ static int minix_fs_pwrite_at(const char *path, const void *buf, size_t count,
   if (!minix_root_block_present())
     return -EIO;
 
-  inode_num = minix_fs_get_inode_number(path);
-  if (inode_num == 0)
-    return -ENOENT;
+  inode_num = (uint16_t)ino;
 
   if (minix_read_inode(inode_num, &file_inode) != 0)
     return -EIO;
@@ -796,12 +808,15 @@ int minix_fs_touch(const char *path, mode_t mode)
 int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
 {
 	size_t got = 0;
+	ino_t ino = 0;
 	int ret;
 
 	if (offset < 0)
 		return -EINVAL;
 
-	ret = minix_fs_pread_at(path, buf, count, offset, &got);
+	ret = minix_ino_of(path, &ino);
+	if (ret == 0)
+		ret = minix_iread(ino, buf, count, &got, offset);
 	exec_read_trace_vfs_read_file(path, 0, (int64_t)got, offset, count, ret);
 	if (ret != 0)
 		return ret;
@@ -812,9 +827,15 @@ int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t
 
 int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
 {
+	ino_t ino;
+	int ret;
+
 	if (ir0_swap_path_busy(path))
 		return -ETXTBSY;
-	return minix_fs_pwrite_at(path, buf, count, offset, written_count);
+	ret = minix_ino_of(path, &ino);
+	if (ret != 0)
+		return ret;
+	return minix_iwrite(ino, buf, count, written_count, offset);
 }
 
 /*
@@ -822,21 +843,34 @@ int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count,
  */
 int minix_truncate(const char *path, size_t length)
 {
-  minix_inode_t inode;
-  uint16_t inode_num;
-  size_t old_size;
-  int changed;
+  ino_t ino;
 
   if (!path || !minix_fs.initialized)
     return -EIO;
   if (ir0_swap_path_busy(path))
     return -ETXTBSY;
+  if (minix_ino_of(path, &ino) != 0)
+    return -ENOENT;
+  return minix_itruncate(ino, length);
+}
+
+/* vfs_inode_ops.truncate: file @ino, named or not. */
+int minix_itruncate(ino_t ino, size_t length)
+{
+  minix_inode_t inode;
+  uint16_t inode_num;
+  size_t old_size;
+  int changed;
+
+  if (!minix_fs.initialized || ino == 0 || ino > UINT16_MAX)
+    return -EIO;
 
   if (length > minix_fs.superblock.s_max_size)
     return -EFBIG;
 
-  if (minix_lookup(path, &inode, &inode_num) != 0)
-    return -ENOENT;
+  inode_num = (uint16_t)ino;
+  if (minix_read_inode(inode_num, &inode) != 0)
+    return -EIO;
 
   if (inode.i_mode & MINIX_IFDIR)
     return -EISDIR;
