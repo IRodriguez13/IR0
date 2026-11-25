@@ -331,10 +331,12 @@ fs/sysfs/sysfs.c	g_bounce	132
 fs/sysfs/sysfs.c	sysfs_ops	814
 fs/sysfs/sysfs.c	sysfs_fs_type	848
 fs/timerfd.c	g_tfd	37
-fs/tmpfs/tmpfs.c	tmpfs_instances	99
-fs/tmpfs/tmpfs.c	num_tmpfs_instances	100
-fs/tmpfs/tmpfs.c	tmpfs_fs_ops	444
-fs/tmpfs/tmpfs.c	tmpfs_fs_type	460
+fs/tmpfs/tmpfs.c	tmpfs_instances	101
+fs/tmpfs/tmpfs.c	num_tmpfs_instances	102
+fs/tmpfs/tmpfs.c	tmpfs_last_ino	111
+fs/tmpfs/tmpfs.c	tmpfs_files	112
+fs/tmpfs/tmpfs.c	tmpfs_fs_ops	503
+fs/tmpfs/tmpfs.c	tmpfs_fs_type	520
 fs/vfs.c	vfs_fs_op_busy	40
 fs/vfs.c	vfs_fs_op_depth	41
 fs/vfs.c	vfs_fs_op_owner	42

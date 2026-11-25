@@ -293,6 +293,46 @@ int fs_link_shared_mapping(void)
 	return CONF_PASS;
 }
 
+/* tmpfs keeps an unlinked open file and shares one cache per inode. */
+int fs_tmpfs_inode_lifetime(void)
+{
+	struct stat st;
+	volatile char *pa;
+	volatile char *pb;
+	char buf[16];
+	long fd;
+	long fb;
+	long va;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "t", 0755), 0);
+	EXPECT(S5(SYS_mount, "none", "t", "tmpfs", 0, 0), 0);
+	OK(fd, conf_creat("t/f", hello));
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), 0);
+	EXPECT(S4(SYS_pread64, fd, buf, HELLO_LEN, 0), HELLO_LEN);
+	CHECK(rt_memeq(buf, hello, HELLO_LEN));
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_nlink, 0);
+	EXPECT(S1(SYS_close, fd), 0);
+
+	OK(fd, conf_creat("t/a", hello));
+	EXPECT(S5(SYS_linkat, AT_FDCWD, "t/a", AT_FDCWD, "t/b", 0), 0);
+	OK(fb, S4(SYS_openat, AT_FDCWD, "t/b", O_RDWR, 0));
+	OK(va, S6(SYS_mmap, 0, RT_PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, fd,
+		  0));
+	pa = (volatile char *)va;
+	OK(va, S6(SYS_mmap, 0, RT_PAGE, PROT_READ | PROT_WRITE, MAP_SHARED, fb,
+		  0));
+	pb = (volatile char *)va;
+	pa[0] = 'J';
+	CHECK(pb[0] == 'J');
+	EXPECT(S2(SYS_munmap, (long)pa, RT_PAGE), 0);
+	EXPECT(S2(SYS_munmap, (long)pb, RT_PAGE), 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S1(SYS_close, fb), 0);
+	EXPECT(S2(SYS_umount2, "t", 0), 0);
+	return CONF_PASS;
+}
+
 int fs_rename(void)
 {
 	struct stat st;

@@ -23,6 +23,7 @@
 #include <ir0/stat.h>
 #include <ir0/statfs.h>
 #include <ir0/errno.h>
+#include <ir0/inode.h>
 #include <ir0/clock.h>
 #include <ir0/cred.h>
 #include <ir0/mm_alloc.h>
@@ -63,6 +64,8 @@ typedef struct tmpfs_file
     size_t nr_frames;  /* allocated frames, for st_blocks */
     time_t mtime;
     uint32_t nlink;
+    struct tmpfs_data *sb; /* charged mount; NULL once it is unmounted */
+    struct tmpfs_file *hnext;
 } tmpfs_file_t;
 
 typedef struct tmpfs_inode
@@ -87,7 +90,6 @@ typedef struct tmpfs_inode
 typedef struct tmpfs_data
 {
     tmpfs_inode_t *root;
-    uint32_t next_ino;
     size_t nr_inodes;
     size_t max_inodes;
     size_t nr_pages;
@@ -98,6 +100,18 @@ typedef struct tmpfs_data
 /* Multiple TMPFS instances supported (one per mount point) */
 static tmpfs_data_t *tmpfs_instances[TMPFS_MAX_DIRS] = {NULL};
 static int num_tmpfs_instances = 0;
+
+/*
+ * Inode numbers are unique across mounts, so a regular file is found by
+ * number alone (vfs_inode_ops) until mounts carry a super_block. Every
+ * regular file, named or orphaned, is in tmpfs_files. The fs-op lock
+ * guards both, like every other tmpfs structure.
+ */
+#define TMPFS_FILE_BUCKETS 64
+static uint32_t tmpfs_last_ino = 1; /* 1 is every mount's root */
+static tmpfs_file_t *tmpfs_files[TMPFS_FILE_BUCKETS];
+
+static const struct vfs_inode_ops tmpfs_inode_ops;
 
 static int tmpfs_copy_path(char *dest, size_t dest_size, const char *src)
 {
@@ -188,7 +202,7 @@ static tmpfs_inode_t *tmpfs_alloc_inode(tmpfs_data_t *tmpfs)
     if (!inode)
         return NULL;
     memset(inode, 0, sizeof(*inode));
-    inode->ino = ++tmpfs->next_ino;
+    inode->ino = ++tmpfs_last_ino;
     inode->mtime = clock_get_current_time();
     tmpfs->nr_inodes++;
     return inode;
@@ -203,9 +217,10 @@ static void tmpfs_drop_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
 }
 
 /* Free the frames of pages [first, npages) and uncharge them. */
-static void tmpfs_free_pages_from(tmpfs_data_t *tmpfs, tmpfs_file_t *file,
-                                  size_t first)
+static void tmpfs_free_pages_from(tmpfs_file_t *file, size_t first)
 {
+    tmpfs_data_t *tmpfs = file->sb;
+
     for (size_t i = first; i < file->npages; i++)
     {
         if (!file->pages[i])
@@ -213,9 +228,55 @@ static void tmpfs_free_pages_from(tmpfs_data_t *tmpfs, tmpfs_file_t *file,
         pmm_free_frame(file->pages[i]);
         file->pages[i] = 0;
         file->nr_frames--;
-        if (tmpfs->nr_pages > 0)
+        if (tmpfs && tmpfs->nr_pages > 0)
             tmpfs->nr_pages--;
     }
+}
+
+static tmpfs_file_t **tmpfs_file_slot(uint32_t ino)
+{
+    return &tmpfs_files[ino % TMPFS_FILE_BUCKETS];
+}
+
+static tmpfs_file_t *tmpfs_file_by_ino(ino_t ino)
+{
+    tmpfs_file_t *file;
+
+    for (file = *tmpfs_file_slot((uint32_t)ino); file; file = file->hnext)
+    {
+        if (file->ino == ino)
+            return file;
+    }
+    return NULL;
+}
+
+static void tmpfs_file_free(tmpfs_file_t *file)
+{
+    tmpfs_file_t **link;
+
+    for (link = tmpfs_file_slot(file->ino); *link; link = &(*link)->hnext)
+    {
+        if (*link == file)
+        {
+            *link = file->hnext;
+            break;
+        }
+    }
+    tmpfs_free_pages_from(file, 0);
+    kfree(file->pages);
+    kfree(file);
+}
+
+/*
+ * A name of @file went. The last one frees it, unless the VFS still holds
+ * it: then tmpfs_ievict() does at the last close (Linux evict()).
+ */
+static void tmpfs_file_unlink(tmpfs_file_t *file)
+{
+    if (file->nlink > 0)
+        file->nlink--;
+    if (file->nlink == 0 && !inode_orphan(&tmpfs_inode_ops, file->ino))
+        tmpfs_file_free(file);
 }
 
 static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
@@ -225,18 +286,7 @@ static void tmpfs_free_inode(tmpfs_data_t *tmpfs, tmpfs_inode_t *inode)
     
     /* Regular-file contents and metadata are shared by hardlinks. */
     if (inode->file)
-    {
-        tmpfs_file_t *file = inode->file;
-
-        if (file->nlink > 0)
-            file->nlink--;
-        if (file->nlink == 0)
-        {
-            tmpfs_free_pages_from(tmpfs, file, 0);
-            kfree(file->pages);
-            kfree(file);
-        }
-    }
+        tmpfs_file_unlink(inode->file);
     
     /* Remove from parent's children list */
     if (inode->parent)
@@ -399,8 +449,8 @@ static int tmpfs_mount(const char *dev_name __attribute__((unused)),
     strncpy(root_inode->name, "/", TMPFS_MAX_NAME_LEN);
     root_inode->name[TMPFS_MAX_NAME_LEN] = '\0';
     root_inode->parent = NULL;
+    root_inode->ino = 1;
     tmpfs->root = root_inode;
-    tmpfs->next_ino = 1;
 
     tmpfs_instances[num_tmpfs_instances++] = tmpfs;
     return 0;
@@ -430,6 +480,15 @@ static int tmpfs_umount(const char *dir_name)
 
     if (tmpfs->root)
         tmpfs_free_inode(tmpfs, tmpfs->root);
+    /* Files still open outlive the mount; nothing charges them now. */
+    for (int b = 0; b < TMPFS_FILE_BUCKETS; b++)
+    {
+        for (tmpfs_file_t *f = tmpfs_files[b]; f; f = f->hnext)
+        {
+            if (f->sb == tmpfs)
+                f->sb = NULL;
+        }
+    }
 
     kfree(tmpfs);
 
@@ -454,6 +513,7 @@ static struct vfs_ops tmpfs_fs_ops = {
     .chown   = tmpfs_chown,
     .chmod   = tmpfs_chmod,
     .truncate = tmpfs_truncate,
+    .iops    = &tmpfs_inode_ops,
 };
 
 /* ramfs is an alias of tmpfs: the same in-memory driver under both names. */
@@ -479,6 +539,19 @@ tmpfs_inode_t *tmpfs_find_inode(const char *path)
     const char *rel_path = tmpfs_get_relative_path(path, tmpfs->mount_point);
     return tmpfs_lookup_inode(tmpfs, rel_path);
 }
+static void tmpfs_file_stat(const tmpfs_file_t *file, stat_t *buf)
+{
+    memset(buf, 0, sizeof(stat_t));
+    buf->st_ino = file->ino;
+    buf->st_mode = file->mode;
+    buf->st_size = file->size;
+    buf->st_nlink = file->nlink;
+    buf->st_uid = file->uid;
+    buf->st_gid = file->gid;
+    buf->st_mtime = file->mtime;
+    buf->st_blocks = file->nr_frames * (TMPFS_PAGE / 512);
+}
+
 static int tmpfs_stat(const char *path, stat_t *buf)
 {
     if (!path || !buf)
@@ -491,14 +564,7 @@ static int tmpfs_stat(const char *path, stat_t *buf)
     memset(buf, 0, sizeof(stat_t));
     if (inode->file)
     {
-        buf->st_ino = inode->file->ino;
-        buf->st_mode = inode->file->mode;
-        buf->st_size = inode->file->size;
-        buf->st_nlink = inode->file->nlink;
-        buf->st_uid = inode->file->uid;
-        buf->st_gid = inode->file->gid;
-        buf->st_mtime = inode->file->mtime;
-        buf->st_blocks = inode->file->nr_frames * (TMPFS_PAGE / 512);
+        tmpfs_file_stat(inode->file, buf);
     }
     else
     {
@@ -653,6 +719,9 @@ int tmpfs_create_file(const char *path, mode_t mode)
         file->gid = cr ? cr->egid : ROOT_GID;
         file->mtime = clock_get_current_time();
         file->nlink = 1;
+        file->sb = tmpfs;
+        file->hnext = *tmpfs_file_slot(file->ino);
+        *tmpfs_file_slot(file->ino) = file;
         new_inode->file = file;
     }
     new_inode->is_dir = false;
@@ -663,31 +732,30 @@ int tmpfs_create_file(const char *path, mode_t mode)
     return 0;
 }
 
-int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
+/* The regular file @path names, or NULL with *err set. */
+static tmpfs_file_t *tmpfs_file_at(const char *path, int *err)
 {
-    tmpfs_file_t *file;
+    tmpfs_inode_t *inode = tmpfs_find_inode(path);
+
+    *err = -ENOENT;
+    if (!inode)
+        return NULL;
+    *err = inode->is_dir ? -EISDIR : -EIO;
+    return inode->file;
+}
+
+static int tmpfs_file_read(tmpfs_file_t *file, void *buf, size_t count,
+                           size_t *read_count, off_t offset)
+{
     size_t pos;
     size_t to_read;
     size_t done = 0;
 
     if (read_count)
         *read_count = 0;
-    if (!path || !buf)
+    if (!buf || offset < 0)
         return -EINVAL;
-    if (offset < 0)
-        return -EINVAL;
-    
-    tmpfs_inode_t *inode = tmpfs_find_inode(path);
-    if (!inode)
-        return -ENOENT;
-    
-    if (inode->is_dir)
-        return -EISDIR;
 
-    file = inode->file;
-    if (!file)
-        return -EIO;
-    
     pos = (size_t)offset;
     if (pos >= file->size)
         return 0;  /* EOF */
@@ -716,6 +784,21 @@ int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_coun
         *read_count = done;
     
     return 0;
+}
+
+int tmpfs_read_file(const char *path, void *buf, size_t count, size_t *read_count, off_t offset)
+{
+    tmpfs_file_t *file;
+    int err;
+
+    if (read_count)
+        *read_count = 0;
+    if (!path)
+        return -EINVAL;
+    file = tmpfs_file_at(path, &err);
+    if (!file)
+        return err;
+    return tmpfs_file_read(file, buf, count, read_count, offset);
 }
 
 /* Make pages[] hold at least @need slots (geometric growth). */
@@ -747,14 +830,14 @@ static int tmpfs_reserve_slots(tmpfs_file_t *file, size_t need)
 }
 
 /* The frame for page @idx, allocated (zeroed and charged) on first use. */
-static uint8_t *tmpfs_page_for_write(tmpfs_data_t *tmpfs, tmpfs_file_t *file,
-                                     size_t idx, int *err)
+static uint8_t *tmpfs_page_for_write(tmpfs_file_t *file, size_t idx, int *err)
 {
+    tmpfs_data_t *tmpfs = file->sb;
     uintptr_t phys;
 
     if (file->pages[idx])
         return (uint8_t *)phys_to_virt(file->pages[idx]);
-    if (tmpfs->nr_pages >= tmpfs->max_pages)
+    if (tmpfs && tmpfs->nr_pages >= tmpfs->max_pages)
     {
         *err = -ENOSPC;
         return NULL;
@@ -768,40 +851,22 @@ static uint8_t *tmpfs_page_for_write(tmpfs_data_t *tmpfs, tmpfs_file_t *file,
     paging_zero_phys_page(phys);
     file->pages[idx] = phys;
     file->nr_frames++;
-    tmpfs->nr_pages++;
+    if (tmpfs)
+        tmpfs->nr_pages++;
     return (uint8_t *)phys_to_virt(phys);
 }
 
-int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
+static int tmpfs_file_write(tmpfs_file_t *file, const void *buf, size_t count,
+                            size_t *written_count, off_t offset)
 {
-    tmpfs_data_t *tmpfs;
-    tmpfs_inode_t *inode;
-    tmpfs_file_t *file;
     size_t pos;
     size_t done = 0;
     int ret;
 
     if (written_count)
         *written_count = 0;
-    if (!path || !buf)
+    if (!buf || offset < 0)
         return -EINVAL;
-    if (offset < 0)
-        return -EINVAL;
-
-    tmpfs = tmpfs_get_instance_for_path(path);
-    if (!tmpfs)
-        return -ENODEV;
-    inode = tmpfs_lookup_inode(
-        tmpfs, tmpfs_get_relative_path(path, tmpfs->mount_point));
-    if (!inode)
-        return -ENOENT;
-    
-    if (inode->is_dir)
-        return -EISDIR;
-
-    file = inode->file;
-    if (!file)
-        return -EIO;
 
     if (count == 0)
         return 0;
@@ -825,7 +890,7 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
 
         if (chunk > count - done)
             chunk = count - done;
-        page = tmpfs_page_for_write(tmpfs, file, idx, &err);
+        page = tmpfs_page_for_write(file, idx, &err);
         if (!page)
         {
             if (done == 0)
@@ -843,6 +908,21 @@ int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *wr
         *written_count = done;
     
     return 0;
+}
+
+int tmpfs_write_file(const char *path, const void *buf, size_t count, size_t *written_count, off_t offset)
+{
+    tmpfs_file_t *file;
+    int err;
+
+    if (written_count)
+        *written_count = 0;
+    if (!path)
+        return -EINVAL;
+    file = tmpfs_file_at(path, &err);
+    if (!file)
+        return err;
+    return tmpfs_file_write(file, buf, count, written_count, offset);
 }
 
 static int tmpfs_link(const char *oldpath, const char *newpath)
@@ -1026,42 +1106,92 @@ static int tmpfs_chown(const char *path, uid_t owner, gid_t group)
  * one frees whole pages past the new end and zeroes the rest of the last
  * page, so growing it again shows zeros.
  */
-static int tmpfs_truncate(const char *path, size_t length)
+static void tmpfs_file_truncate(tmpfs_file_t *file, size_t length)
 {
-    tmpfs_data_t *tmpfs;
-    tmpfs_inode_t *inode;
-    tmpfs_file_t *file;
-
-    if (!path)
-        return -EINVAL;
-
-    tmpfs = tmpfs_get_instance_for_path(path);
-    if (!tmpfs)
-        return -ENODEV;
-    inode = tmpfs_lookup_inode(
-        tmpfs, tmpfs_get_relative_path(path, tmpfs->mount_point));
-    if (!inode)
-        return -ENOENT;
-    if (inode->is_dir)
-        return -EISDIR;
-    file = inode->file;
-    if (!file)
-        return -EIO;
-
     if (length < file->size)
     {
         size_t keep = (length + TMPFS_PAGE - 1) / TMPFS_PAGE;
         size_t tail = length % TMPFS_PAGE;
 
-        tmpfs_free_pages_from(tmpfs, file, keep);
+        tmpfs_free_pages_from(file, keep);
         if (tail != 0 && keep - 1 < file->npages && file->pages[keep - 1])
             memset((uint8_t *)phys_to_virt(file->pages[keep - 1]) + tail, 0,
                    TMPFS_PAGE - tail);
     }
     file->size = length;
     file->mtime = clock_get_current_time();
+}
+
+static int tmpfs_truncate(const char *path, size_t length)
+{
+    tmpfs_file_t *file;
+    int err;
+
+    if (!path)
+        return -EINVAL;
+    file = tmpfs_file_at(path, &err);
+    if (!file)
+        return err;
+    tmpfs_file_truncate(file, length);
     return 0;
 }
+
+/* vfs_inode_ops: a regular file by number, named or orphaned. */
+static int tmpfs_istat(ino_t ino, stat_t *buf)
+{
+    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+
+    if (!file || !buf)
+        return -ENOENT;
+    tmpfs_file_stat(file, buf);
+    return 0;
+}
+
+static int tmpfs_iread(ino_t ino, void *buf, size_t count, size_t *done,
+                       off_t offset)
+{
+    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+
+    if (!file)
+        return -ENOENT;
+    return tmpfs_file_read(file, buf, count, done, offset);
+}
+
+static int tmpfs_iwrite(ino_t ino, const void *buf, size_t count,
+                        size_t *done, off_t offset)
+{
+    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+
+    if (!file)
+        return -ENOENT;
+    return tmpfs_file_write(file, buf, count, done, offset);
+}
+
+static int tmpfs_itruncate(ino_t ino, size_t length)
+{
+    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+
+    if (!file)
+        return -ENOENT;
+    tmpfs_file_truncate(file, length);
+    return 0;
+}
+
+static void tmpfs_ievict(ino_t ino)
+{
+    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+
+    if (file && file->nlink == 0)
+        tmpfs_file_free(file);
+}
+
+static const struct vfs_inode_ops tmpfs_inode_ops = {
+    .stat     = tmpfs_istat,
+    .read     = tmpfs_iread,
+    .write    = tmpfs_iwrite,
+    .truncate = tmpfs_itruncate,
+    .evict    = tmpfs_ievict,
+};
 
 int tmpfs_statfs(const char *path, struct ir0_statfs *buf)
 {
