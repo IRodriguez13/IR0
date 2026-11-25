@@ -44,7 +44,8 @@ struct virtio_9p_statfs
 
 int virtio_9p_statfs(struct virtio_9p_statfs *out);
 int virtio_9p_ready(void);
-int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out);
+int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out,
+			uint64_t *qid_out);
 int virtio_9p_write_file(const char *relpath, const void *buf, size_t len);
 int virtio_9p_write_at(const char *relpath, const void *buf, size_t len, uint64_t offset);
 int virtio_9p_truncate(const char *relpath, uint64_t length);
@@ -57,3 +58,18 @@ int virtio_9p_link(const char *oldpath, const char *newpath);
 int virtio_9p_symlink(const char *linkpath, const char *target);
 int virtio_9p_readlink(const char *relpath, char *buf, size_t buflen);
 int virtio_9p_readdir(const char *relpath, virtio_9p_dirent_t *entries, int max);
+
+/*
+ * An open file by fid (Linux v9fs fid per inode): it keeps reaching the
+ * file after its name goes. virtio_9p_open() walks and opens @relpath
+ * (read-write, else read-only); virtio_9p_close() clunks the fid.
+ */
+int virtio_9p_open(const char *relpath, uint32_t *fid_out);
+int virtio_9p_close(uint32_t fid);
+int virtio_9p_fid_getattr(uint32_t fid, uint64_t *size_out, uint32_t *mode_out,
+			  uint64_t *qid_out, uint64_t *nlink_out);
+int virtio_9p_fid_read(uint32_t fid, void *buf, size_t count, uint64_t offset,
+		       size_t *got_out);
+int virtio_9p_fid_write(uint32_t fid, const void *buf, size_t len,
+			uint64_t offset);
+int virtio_9p_fid_truncate(uint32_t fid, uint64_t length);

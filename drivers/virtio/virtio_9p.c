@@ -551,7 +551,7 @@ static int v9p_read(uint32_t fid, uint64_t offset, void *data, uint32_t count, u
 }
 
 static int v9p_getattr(uint32_t fid, uint64_t request_mask, uint32_t *mode_out,
-		       uint64_t *size_out)
+		       uint64_t *size_out, uint64_t *qid_out, uint64_t *nlink_out)
 {
 	uint8_t body[16];
 	uint8_t *p = body;
@@ -560,6 +560,8 @@ static int v9p_getattr(uint32_t fid, uint64_t request_mask, uint32_t *mode_out,
 	uint64_t valid;
 	uint32_t mode;
 	uint64_t size;
+	uint64_t qid;
+	uint64_t nlink;
 	int rc;
 
 	/* Tgetattr: fid[4] request_mask[8] */
@@ -572,16 +574,22 @@ static int v9p_getattr(uint32_t fid, uint64_t request_mask, uint32_t *mode_out,
 	if (rblen < 8 + 13 + 4 + 4 + 4 + 8 + 8 + 8)
 		return -EIO;
 	valid = p9_get64(&rb);
-	rb += 13; /* skip qid */
+	rb += 1 + 4; /* qid type, version */
+	qid = p9_get64(&rb);
 	mode = p9_get32(&rb);
 	rb += 4 + 4; /* uid gid */
-	rb += 8 + 8; /* nlink rdev */
+	nlink = p9_get64(&rb);
+	rb += 8; /* rdev */
 	size = p9_get64(&rb);
 	(void)valid;
 	if (mode_out)
 		*mode_out = mode;
 	if (size_out)
 		*size_out = size;
+	if (qid_out)
+		*qid_out = qid;
+	if (nlink_out)
+		*nlink_out = nlink;
 	return 0;
 }
 
@@ -742,7 +750,8 @@ static int v9p_setattr_size(uint32_t fid, uint64_t size)
 	return v9p_rpc(P9_TSETATTR, body, (uint32_t)(p - body), P9_RSETATTR, &rb, &rblen);
 }
 
-int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out)
+int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_out,
+			uint64_t *qid_out)
 {
 	uint32_t fid = 4;
 	uint32_t mode = 0;
@@ -755,7 +764,7 @@ int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_
 	rc = v9p_walk_path(fid, relpath);
 	if (rc < 0)
 		return rc;
-	rc = v9p_getattr(fid, P9_STATS_BASIC, &mode, &size);
+	rc = v9p_getattr(fid, P9_STATS_BASIC, &mode, &size, qid_out, NULL);
 	(void)v9p_clunk(fid);
 	if (rc < 0)
 		return rc;
@@ -766,14 +775,37 @@ int virtio_9p_stat_file(const char *relpath, uint64_t *size_out, uint32_t *mode_
 	return 0;
 }
 
+/* Write all @len bytes at @offset to opened @fid. */
+static int v9p_write_fid(uint32_t fid, const void *buf, size_t len,
+			 uint64_t offset)
+{
+	size_t done = 0;
+	int rc;
+
+	while (done < len)
+	{
+		uint32_t chunk = (uint32_t)(len - done);
+		uint32_t written = 0;
+
+		if (chunk > V9P_READ_CHUNK)
+			chunk = V9P_READ_CHUNK;
+		rc = v9p_write(fid, offset + done, (const uint8_t *)buf + done, chunk,
+			       &written);
+		if (rc < 0)
+			return rc;
+		if (written == 0)
+			return -EIO;
+		done += written;
+	}
+	return 0;
+}
+
 int virtio_9p_write_at(const char *relpath, const void *buf, size_t len, uint64_t offset)
 {
 	uint32_t fid = 2;
-	uint32_t written = 0;
 	int rc;
 	char parent[240];
 	char base[64];
-	size_t done = 0;
 
 	if (!g_ready || !relpath || (!buf && len > 0))
 		return -EINVAL;
@@ -805,30 +837,9 @@ int virtio_9p_write_at(const char *relpath, const void *buf, size_t len, uint64_
 		}
 	}
 
-	while (done < len)
-	{
-		uint32_t chunk = (uint32_t)(len - done);
-
-		if (chunk > V9P_READ_CHUNK)
-			chunk = V9P_READ_CHUNK;
-		written = 0;
-		rc = v9p_write(fid, offset + done, (const uint8_t *)buf + done, chunk,
-			       &written);
-		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
-			return rc;
-		}
-		if (written == 0)
-		{
-			(void)v9p_clunk(fid);
-			return -EIO;
-		}
-		done += written;
-	}
-
+	rc = v9p_write_fid(fid, buf, len, offset);
 	(void)v9p_clunk(fid);
-	return 0;
+	return rc;
 }
 
 int virtio_9p_write_file(const char *relpath, const void *buf, size_t len)
@@ -1187,26 +1198,13 @@ int virtio_9p_readdir(const char *relpath, virtio_9p_dirent_t *entries, int max)
 	return n;
 }
 
-int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
-		      size_t *got_out)
+/* Read up to @count bytes at @offset from opened @fid. */
+static int v9p_read_fid(uint32_t fid, void *buf, size_t count, uint64_t offset,
+			size_t *got_out)
 {
-	uint32_t fid = 5;
 	uint64_t off = offset;
 	size_t total = 0;
 	int rc;
-
-	if (!g_ready || !relpath || !buf)
-		return -EINVAL;
-
-	rc = v9p_walk_path(fid, relpath);
-	if (rc < 0)
-		return rc;
-	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
-	if (rc < 0)
-	{
-		(void)v9p_clunk(fid);
-		return rc;
-	}
 
 	while (total < count)
 	{
@@ -1218,10 +1216,7 @@ int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t off
 			want = V9P_READ_CHUNK;
 		rc = v9p_read(fid, off, (uint8_t *)buf + total, want, &got);
 		if (rc < 0)
-		{
-			(void)v9p_clunk(fid);
 			return rc;
-		}
 		if (got == 0)
 			break;
 		total += got;
@@ -1229,11 +1224,28 @@ int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t off
 		if (got < want)
 			break;
 	}
-
-	(void)v9p_clunk(fid);
 	if (got_out)
 		*got_out = total;
 	return 0;
+}
+
+int virtio_9p_read_at(const char *relpath, void *buf, size_t count, uint64_t offset,
+		      size_t *got_out)
+{
+	uint32_t fid = 5;
+	int rc;
+
+	if (!g_ready || !relpath || !buf)
+		return -EINVAL;
+
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_lopen(fid, P9_DOTL_RDONLY);
+	if (rc == 0)
+		rc = v9p_read_fid(fid, buf, count, offset, got_out);
+	(void)v9p_clunk(fid);
+	return rc;
 }
 
 int virtio_9p_setup_queue(uint16_t qsz, uintptr_t *pfn)
@@ -1309,4 +1321,88 @@ int virtio_9p_start(const struct virtio_9p_transport *transport)
 int virtio_9p_ready(void)
 {
 	return g_ready;
+}
+
+/*
+ * Open files (Linux v9fs keeps a fid per inode): a fid walked to the file
+ * and opened read-write, or read-only when the server refuses write. It
+ * keeps reaching the file after the name goes, until virtio_9p_close().
+ */
+#define V9P_OPEN_FID_BASE 64U
+#define V9P_OPEN_FIDS 64U
+static uint8_t g_open_fid_used[V9P_OPEN_FIDS];
+
+int virtio_9p_open(const char *relpath, uint32_t *fid_out)
+{
+	uint32_t slot;
+	uint32_t fid;
+	int rc;
+
+	if (!g_ready || !relpath || !fid_out)
+		return -EINVAL;
+	for (slot = 0; slot < V9P_OPEN_FIDS && g_open_fid_used[slot]; slot++)
+		;
+	if (slot == V9P_OPEN_FIDS)
+		return -ENFILE;
+	fid = V9P_OPEN_FID_BASE + slot;
+	rc = v9p_walk_path(fid, relpath);
+	if (rc < 0)
+		return rc;
+	rc = v9p_lopen(fid, P9_DOTL_RDWR);
+	if (rc < 0)
+	{
+		(void)v9p_clunk(fid);
+		rc = v9p_walk_path(fid, relpath);
+		if (rc < 0)
+			return rc;
+		rc = v9p_lopen(fid, P9_DOTL_RDONLY);
+	}
+	if (rc < 0)
+	{
+		(void)v9p_clunk(fid);
+		return rc;
+	}
+	g_open_fid_used[slot] = 1;
+	*fid_out = fid;
+	return 0;
+}
+
+int virtio_9p_close(uint32_t fid)
+{
+	if (fid < V9P_OPEN_FID_BASE || fid >= V9P_OPEN_FID_BASE + V9P_OPEN_FIDS)
+		return -EBADF;
+	g_open_fid_used[fid - V9P_OPEN_FID_BASE] = 0;
+	return v9p_clunk(fid);
+}
+
+int virtio_9p_fid_getattr(uint32_t fid, uint64_t *size_out, uint32_t *mode_out,
+			  uint64_t *qid_out, uint64_t *nlink_out)
+{
+	if (!g_ready)
+		return -EINVAL;
+	return v9p_getattr(fid, P9_STATS_BASIC, mode_out, size_out, qid_out,
+			   nlink_out);
+}
+
+int virtio_9p_fid_read(uint32_t fid, void *buf, size_t count, uint64_t offset,
+		       size_t *got_out)
+{
+	if (!g_ready || !buf)
+		return -EINVAL;
+	return v9p_read_fid(fid, buf, count, offset, got_out);
+}
+
+int virtio_9p_fid_write(uint32_t fid, const void *buf, size_t len,
+			uint64_t offset)
+{
+	if (!g_ready || (!buf && len > 0))
+		return -EINVAL;
+	return v9p_write_fid(fid, buf, len, offset);
+}
+
+int virtio_9p_fid_truncate(uint32_t fid, uint64_t length)
+{
+	if (!g_ready)
+		return -EINVAL;
+	return v9p_setattr_size(fid, length);
 }

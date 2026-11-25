@@ -10,6 +10,7 @@
 #include <ir0/kmem.h>
 #include <fs/vfs.h>
 #include <ir0/errno.h>
+#include <ir0/inode.h>
 #include <ir0/virtio_9p.h>
 #include <string.h>
 #include <stddef.h>
@@ -33,27 +34,23 @@ static const char *rel_of(const char *path)
 	return path + mlen + 1;
 }
 
-static int hs_stat(const char *path, stat_t *buf)
+/*
+ * The server's qid.path names the file; folded to ino_t like Linux v9fs
+ * does where ino_t is 32 bits (QEMU derives it from the host inode).
+ */
+static ino_t hs_qid_ino(uint64_t qid)
 {
-	uint64_t size = 0;
-	uint32_t mode = 0;
-	int rc;
-	const char *rel = rel_of(path);
+	uint32_t ino = (uint32_t)(qid ^ (qid >> 32));
 
-	if (!buf)
-		return -EFAULT;
-	if (!rel)
-		return -ENOENT;
-	if (rel[0] == '\0')
-	{
-		memset(buf, 0, sizeof(*buf));
-		buf->st_mode = S_IFDIR | 0777;
-		return 0;
-	}
-	rc = virtio_9p_stat_file(rel, &size, &mode);
-	if (rc < 0)
-		return rc;
+	return (ino_t)(ino ? ino : 1);
+}
+
+static void hs_fill_stat(stat_t *buf, uint64_t size, uint32_t mode,
+			 uint64_t qid, uint64_t nlink)
+{
 	memset(buf, 0, sizeof(*buf));
+	buf->st_ino = hs_qid_ino(qid);
+	buf->st_nlink = (nlink_t)nlink;
 	if (mode != 0)
 		buf->st_mode = (mode_t)mode;
 	else
@@ -70,6 +67,30 @@ static int hs_stat(const char *path, stat_t *buf)
 	buf->st_uid = 0;
 	buf->st_gid = 0;
 	buf->st_size = (off_t)size;
+}
+
+static int hs_stat(const char *path, stat_t *buf)
+{
+	uint64_t size = 0;
+	uint64_t qid = 0;
+	uint32_t mode = 0;
+	int rc;
+	const char *rel = rel_of(path);
+
+	if (!buf)
+		return -EFAULT;
+	if (!rel)
+		return -ENOENT;
+	if (rel[0] == '\0')
+	{
+		memset(buf, 0, sizeof(*buf));
+		buf->st_mode = S_IFDIR | 0777;
+		return 0;
+	}
+	rc = virtio_9p_stat_file(rel, &size, &mode, &qid);
+	if (rc < 0)
+		return rc;
+	hs_fill_stat(buf, size, mode, qid, 1);
 	return 0;
 }
 
@@ -81,7 +102,7 @@ static int hs_mkdir_one(const char *rel, mode_t mode)
 
 	if (!rel || !rel[0])
 		return -EINVAL;
-	rc = virtio_9p_stat_file(rel, &size, &stmode);
+	rc = virtio_9p_stat_file(rel, &size, &stmode, NULL);
 	if (rc == 0)
 	{
 		if (S_ISDIR(stmode))
@@ -277,6 +298,91 @@ static int hs_readlink(const char *path, char *buf, size_t buflen)
 	return virtio_9p_readlink(rel, buf, buflen);
 }
 
+/* vfs_inode_ops: a file through the fid its inode holds (Linux v9fs). */
+static int hs_iopen(struct inode *inode, const char *path)
+{
+	const char *rel = rel_of(path);
+	uint32_t fid;
+	int rc;
+
+	if (!rel || !rel[0])
+		return -EISDIR;
+	rc = virtio_9p_open(rel, &fid);
+	if (rc < 0)
+		return rc;
+	inode->i_private = (void *)(uintptr_t)fid;
+	return 0;
+}
+
+static uint32_t hs_fid(const struct inode *inode)
+{
+	return (uint32_t)(uintptr_t)inode->i_private;
+}
+
+static int hs_istat(struct inode *inode, stat_t *buf)
+{
+	uint64_t size = 0;
+	uint64_t qid = 0;
+	uint64_t nlink = 0;
+	uint32_t mode = 0;
+	int rc = virtio_9p_fid_getattr(hs_fid(inode), &size, &mode, &qid, &nlink);
+
+	if (rc < 0)
+		return rc;
+	hs_fill_stat(buf, size, mode, qid, nlink);
+	return 0;
+}
+
+static int hs_iread(struct inode *inode, void *buf, size_t count,
+		    size_t *done, off_t offset)
+{
+	size_t got = 0;
+	int rc;
+
+	if (offset < 0)
+		return -EINVAL;
+	rc = virtio_9p_fid_read(hs_fid(inode), buf, count, (uint64_t)offset, &got);
+	if (rc < 0)
+		return rc;
+	if (done)
+		*done = got;
+	return 0;
+}
+
+static int hs_iwrite(struct inode *inode, const void *buf, size_t count,
+		     size_t *done, off_t offset)
+{
+	int rc;
+
+	if (offset < 0)
+		return -EINVAL;
+	rc = virtio_9p_fid_write(hs_fid(inode), buf, count, (uint64_t)offset);
+	if (rc < 0)
+		return rc;
+	if (done)
+		*done = count;
+	return 0;
+}
+
+static int hs_itruncate(struct inode *inode, size_t length)
+{
+	return virtio_9p_fid_truncate(hs_fid(inode), (uint64_t)length);
+}
+
+static void hs_irelease(struct inode *inode)
+{
+	(void)virtio_9p_close(hs_fid(inode));
+}
+
+static const struct vfs_inode_ops hs_inode_ops = {
+	.open_inode = hs_iopen,
+	.stat = hs_istat,
+	.read = hs_iread,
+	.write = hs_iwrite,
+	.truncate = hs_itruncate,
+	.release = hs_irelease,
+};
+
 static struct vfs_ops hs_ops = {
 	.stat = hs_stat,
 	.mkdir = hs_mkdir,
@@ -291,6 +397,7 @@ static struct vfs_ops hs_ops = {
 	.write = hs_write,
 	.truncate = hs_truncate,
 	.readdir = hs_readdir,
+	.iops = &hs_inode_ops,
 };
 
 static int hs_mount(const char *dev, const char *dir)

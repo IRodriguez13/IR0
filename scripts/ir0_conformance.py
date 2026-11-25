@@ -134,6 +134,7 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
         disk = Path(name)
         scratch = disk.with_suffix(".ext2")
         fat = disk.with_suffix(".fat16")
+        share = Path(tempfile.mkdtemp(prefix="ir0-conf-9p.", dir=tmpdir))
         try:
             ltp = Path(args.ltp_dir) if args.ltp_dir else None
             if minix_disk(binary, disk, ltp) != 0:
@@ -149,11 +150,16 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
             # IDE slot 3 (2 is the CD-ROM): FAT16 scratch for the FAT cases.
             if fat16_disk(fat):
                 argv += ["-drive", f"file={fat},format=raw,if=ide,index=3"]
+            # An empty host directory over virtio-9p for the 9p cases.
+            argv += ["-fsdev", f"local,id=conf9p,path={share},security_model=none",
+                     "-device", "virtio-9p-pci,fsdev=conf9p,mount_tag=conf9p,"
+                     "disable-modern=on"]
             return run_cmd(argv, args.timeout + 30)
         finally:
             disk.unlink(missing_ok=True)
             scratch.unlink(missing_ok=True)
             fat.unlink(missing_ok=True)
+            shutil.rmtree(share, ignore_errors=True)
     product = ROOT / "kernel-arm64-product.img"
     if not product.is_file():
         product = ROOT / "kernel-arm64-product.bin"

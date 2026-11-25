@@ -462,6 +462,31 @@ int fs_fat_unlink_open_file(void)
 	return CONF_PASS;
 }
 
+/* 9p keeps reading an unlinked open file through its inode's fid. */
+int fs_9p_unlink_open_file(void)
+{
+	struct stat st;
+	char buf[16];
+	long fd;
+	long r;
+
+	EXPECT(S3(SYS_mkdirat, AT_FDCWD, "t", 0755), 0);
+	r = S5(SYS_mount, "conf9p", "t", "9p", 0,
+	       "trans=virtio,version=9p2000.L");
+	if (r == -ENODEV || r == -ENOENT)
+		return CONF_TCONF;
+	EXPECT(r, 0);
+	OK(fd, conf_creat("t/f", hello));
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), 0);
+	EXPECT_ERR(S4(SYS_newfstatat, AT_FDCWD, "t/f", &st, 0), ENOENT);
+	EXPECT(S4(SYS_pread64, fd, buf, HELLO_LEN, 0), HELLO_LEN);
+	CHECK(rt_memeq(buf, hello, HELLO_LEN));
+	/* fstat is the server's: QEMU's local backend answers ENOENT. */
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S2(SYS_umount2, "t", 0), 0);
+	return CONF_PASS;
+}
+
 int fs_rename(void)
 {
 	struct stat st;

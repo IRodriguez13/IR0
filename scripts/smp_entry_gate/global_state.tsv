@@ -217,6 +217,7 @@ drivers/virtio/virtio_9p.c	g_used_ring	122
 drivers/virtio/virtio_9p.c	g_req	123
 drivers/virtio/virtio_9p.c	g_resp	124
 drivers/virtio/virtio_9p.c	g_vring_mem	125
+drivers/virtio/virtio_9p.c	g_open_fid_used	1333
 drivers/virtio/virtio_9p_pci.c	g_iobase	40
 drivers/virtio/virtio_blk.c	g_desc	70
 drivers/virtio/virtio_blk.c	g_avail	71
@@ -228,10 +229,10 @@ drivers/virtio/virtio_blk.c	g_capacity	76
 drivers/virtio/virtio_blk.c	g_ready	77
 drivers/virtio/virtio_mmio.c	g_devs	19
 drivers/virtio/virtio_mmio.c	g_ndevs	20
-fs/9p/hostshare_9p.c	g_mount_point	17
-fs/9p/hostshare_9p.c	g_mounted	18
-fs/9p/hostshare_9p.c	hs_ops	280
-fs/9p/hostshare_9p.c	v9fs_fs_type	347
+fs/9p/hostshare_9p.c	g_mount_point	18
+fs/9p/hostshare_9p.c	g_mounted	19
+fs/9p/hostshare_9p.c	hs_ops	386
+fs/9p/hostshare_9p.c	v9fs_fs_type	454
 fs/binfmt_elf.c	exec_commit_ctx	1588
 fs/devfs.c	dev_nodes	55
 fs/devfs.c	num_dev_nodes	56
