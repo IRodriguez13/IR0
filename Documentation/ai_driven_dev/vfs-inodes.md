@@ -1,6 +1,6 @@
 # VFS inodes and dentries
 
-> **Status:** design note, migration in progress (branch `feat/vfs-inodes`)
+> **Status:** stage A done (MINIX, tmpfs); stages B-D open
 > **Linux model:** `fs/inode.c` (`iget_locked`, `iput`, `evict`),
 > `fs/dcache.c`, `fs/namei.c`, `mm/filemap.c` (`address_space`)
 
@@ -65,12 +65,16 @@ globals are rows of `scripts/smp_entry_gate/global_state.tsv` (SMP-0).
 
 ## Migration
 
-- **A (inodes):** `struct inode` and the inode cache; an open file pins
-  its inode; MINIX and tmpfs address files by inode and keep orphans until
-  the last close; the page cache belongs to the inode, so hard links share
-  it. Proof: `fs_unlink_open_file` passes, rename over an open file keeps
-  the old data, hard links share `MAP_SHARED` pages.
-- **B (dentries):** `struct super_block` per mount, the dentry cache, namei
+- **A (inodes, done):** `struct inode` and the inode cache; an open file
+  pins its inode; MINIX and tmpfs address files by inode and keep orphans
+  until the last close; the page cache belongs to the inode, so hard links
+  share it. Proof: `fs_unlink_open_file`, `fs_rename_over_open_file`,
+  `fs_link_shared_mapping`, `fs_tmpfs_inode_lifetime`. tmpfs numbers its
+  inodes uniquely across mounts; backends without `iops` keep a
+  path-named inode (it follows renames) until they gain inode operations.
+- **B (dentries):** `struct super_block` per mount (then ext2, whose
+  volumes share one `vfs_ops`, gets `iops`; FAT16, simplefs and 9p
+  follow and the path-named inode goes), the dentry cache, namei
   walks dentries (the Q3 search-permission walk stays per component), path
   operations take (dentry, name) instead of strings.
 - **C (special files):** FIFOs, sockets and device nodes are inodes made by

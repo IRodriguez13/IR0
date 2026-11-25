@@ -321,7 +321,13 @@ QEMU with the runner as init. `may_create()` and `may_delete()` live in
 `fs/vfs_namei.c`; the in-memory nodes (named FIFOs, sockets, device nodes
 and symlinks) use them too. MINIX, ext2 and tmpfs keep the sticky bit.
 
-Conformance after them: 91 PASS, 1 FAIL, 7 TCONF on both ISAs. The FAIL is
-`fs_unlink_open_file`: the VFS is path-based, so an fd whose file was
-unlinked can no longer read it. The x86_64 guest disk uses the large MINIX
+Conformance after them: 91 PASS, 1 FAIL, 7 TCONF on both ISAs. The FAIL was
+`fs_unlink_open_file`: the VFS was path-based, so an fd whose file was
+unlinked could no longer read it. The x86_64 guest disk uses the large MINIX
 layout (2048 inodes) so a case can fill a directory.
+
+The inode layer (`Documentation/ai_driven_dev/vfs-inodes.md`, stage A)
+fixed it for MINIX and tmpfs and added `fs_rename_over_open_file`,
+`fs_link_shared_mapping` and `fs_tmpfs_inode_lifetime` (the last mounts
+tmpfs, unlinks an open file and maps two hard links shared), each checked
+on Linux 7.3 with the runner as init. No FAIL remains in either baseline.

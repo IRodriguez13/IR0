@@ -44,6 +44,26 @@ provide concrete operations.
 - Adding a filesystem: `fs/<name>/`, `scripts/make/fs/<name>.mk`, a Kconfig
   symbol and an entry in `FILESYSTEMS`.
 
+## Inodes and open files
+
+Design and migration stages: [`ai_driven_dev/vfs-inodes.md`](ai_driven_dev/vfs-inodes.md).
+
+- `fs/inode.c` keeps `struct inode` (`<ir0/inode.h>`) in a cache keyed by
+  (filesystem, inode number). `vfs_open()` pins the inode of a regular file;
+  read, write, `fstat`, `ftruncate` and `mmap` of an open file go through it.
+- A backend that fills `vfs_ops.iops` (`struct vfs_inode_ops`) is addressed
+  by inode number: MINIX and tmpfs today. Its unlink calls
+  `inode_orphan()`; a file still held keeps its blocks until `iops->evict`
+  at the last `iput()`, so an unlinked or renamed-over open file stays
+  readable and writable. Every name of a hard link reaches one inode.
+- Backends without `iops` (ext2, FAT16, simplefs, 9p, the pseudo
+  filesystems) are still named by path: their inode follows renames and
+  loses its name at unlink, as before. ext2 needs a per-mount
+  `super_block` first (several volumes share one `vfs_ops`).
+- The page cache (`mm/filemap`) belongs to the inode and holds a reference
+  on it, so hard links share mapped pages and a mapped file outlives its
+  names.
+
 ## Current Filesystem Set
 
 - Root filesystem: selected by config through `vfs_init_root()` (typically MINIX).
