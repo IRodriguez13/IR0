@@ -275,7 +275,7 @@ fs/eventfd.c	g_efd	34
 fs/ext2/ext2_disk.c	g_vols	141
 fs/ext2/ext2_disk.c	ext2_ops	1508
 fs/ext2/ext2_disk.c	ext2_fs_type	1723
-fs/fat16/fat16_disk.c	g_vols	50
+fs/fat16/fat16_disk.c	g_vols	52
 fs/fat16/fat16_fs.c	fat16_ops	17
 fs/fat16/fat16_fs.c	fat16_fs_type	32
 fs/files_lifecycle.c	files_struct_lock	20

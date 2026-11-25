@@ -348,23 +348,19 @@ int fs_umount_busy(void)
 }
 
 /*
- * Mount the ext2 scratch disk on "t": IR0 names it hdb, Linux sdb (with
- * devtmpfs on /dev when nothing mounted it). 0, or CONF_TCONF without it.
+ * Mount a scratch disk of the runner on "t": IR0 names it @ir0_dev with
+ * type @ir0_type, Linux @linux_dev with @linux_type (devtmpfs on /dev when
+ * nothing mounted it). 0, or CONF_TCONF without the disk.
  */
-static int conf_mount_ext2(void)
+static int conf_mount_scratch(const char *ir0_dev, const char *ir0_type,
+			      const char *linux_dev, const char *linux_type)
 {
-	static const char *const devs[] = {"/dev/hdb", "/dev/sdb", "/dev/sda"};
-	unsigned int i;
-
 	(void)S3(SYS_mkdirat, AT_FDCWD, "/dev", 0755);
 	(void)S5(SYS_mount, "devtmpfs", "/dev", "devtmpfs", 0, 0);
-	if (S3(SYS_mkdirat, AT_FDCWD, "t", 0755) != 0)
-		return CONF_FAIL;
-	for (i = 0; i < sizeof(devs) / sizeof(devs[0]); i++)
-	{
-		if (S5(SYS_mount, devs[i], "t", "ext2", 0, 0) == 0)
-			return 0;
-	}
+	(void)S3(SYS_mkdirat, AT_FDCWD, "t", 0755);
+	if (S5(SYS_mount, ir0_dev, "t", ir0_type, 0, 0) == 0 ||
+	    S5(SYS_mount, linux_dev, "t", linux_type, 0, 0) == 0)
+		return 0;
 	return CONF_TCONF;
 }
 
@@ -380,7 +376,7 @@ int fs_ext2_inode_lifetime(void)
 	long va;
 	int r;
 
-	r = conf_mount_ext2();
+	r = conf_mount_scratch("/dev/hdb", "ext2", "/dev/sda", "ext2");
 	if (r != 0)
 		return r;
 	OK(fd, conf_creat("t/f", hello));
@@ -434,6 +430,34 @@ int fs_simplefs_unlink_open_file(void)
 	EXPECT(S2(SYS_fstat, fd, &st), 0);
 	EXPECT(st.st_nlink, 0);
 	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S2(SYS_umount2, "t", 0), 0);
+	return CONF_PASS;
+}
+
+/* FAT16 keeps an unlinked open file (its chain) until the last close. */
+int fs_fat_unlink_open_file(void)
+{
+	struct stat st;
+	char buf[16];
+	long fd;
+	int r;
+
+	/* hdc is the CD-ROM on the x86 guest, so the disk may be hdd. */
+	r = conf_mount_scratch("/dev/hdd", "fat16", "/dev/sdb", "vfat");
+	if (r == CONF_TCONF)
+		r = conf_mount_scratch("/dev/hdc", "fat16", "/dev/sdb", "vfat");
+	if (r != 0)
+		return r;
+	OK(fd, conf_creat("t/f", hello));
+	EXPECT(S3(SYS_unlinkat, AT_FDCWD, "t/f", 0), 0);
+	EXPECT_ERR(S4(SYS_newfstatat, AT_FDCWD, "t/f", &st, 0), ENOENT);
+	OK(r, conf_creat("t/g", "other"));
+	EXPECT(S4(SYS_pread64, fd, buf, HELLO_LEN, 0), HELLO_LEN);
+	CHECK(rt_memeq(buf, hello, HELLO_LEN));
+	EXPECT(S2(SYS_fstat, fd, &st), 0);
+	EXPECT(st.st_nlink, 0);
+	EXPECT(S1(SYS_close, fd), 0);
+	EXPECT(S1(SYS_close, r), 0);
 	EXPECT(S2(SYS_umount2, "t", 0), 0);
 	return CONF_PASS;
 }

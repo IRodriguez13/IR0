@@ -27,6 +27,7 @@ static struct vfs_ops fat16_ops = {
 	.read = fat16_disk_read,
 	.write = fat16_disk_write,
 	.truncate = fat16_disk_truncate,
+	.iops = &fat16_inode_ops,
 };
 
 struct vfs_fstype fat16_fs_type = {
@@ -35,5 +36,6 @@ struct vfs_fstype fat16_fs_type = {
 	.ops = &fat16_ops,
 	.mount = fat16_disk_mount,
 	.umount = fat16_disk_umount,
+	.fill_super = fat16_disk_fill_super,
 	.next = NULL,
 };

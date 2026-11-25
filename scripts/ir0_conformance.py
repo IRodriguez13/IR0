@@ -63,6 +63,19 @@ def ext2_disk(out: Path) -> bool:
     return res.returncode == 0
 
 
+def fat16_disk(out: Path) -> bool:
+    """An empty 16 MiB FAT16 scratch disk for the FAT cases, if mkfs.fat exists."""
+    mkfs = shutil.which("mkfs.fat") or shutil.which("/sbin/mkfs.fat") or \
+        shutil.which("/usr/sbin/mkfs.fat")
+    if not mkfs:
+        return False
+    with out.open("wb") as fp:
+        fp.truncate(16 * 1024 * 1024)
+    res = subprocess.run([mkfs, "-F", "16", str(out)], stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, timeout=60, check=False)
+    return res.returncode == 0
+
+
 def minix_disk(init: Path, out: Path, ltp_dir: Path | None) -> int:
     # The large layout (2048 inodes, 64 MiB of zones) leaves room for cases
     # that fill a directory; the default one has 64 inodes in all.
@@ -120,6 +133,7 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
         os.close(fd)
         disk = Path(name)
         scratch = disk.with_suffix(".ext2")
+        fat = disk.with_suffix(".fat16")
         try:
             ltp = Path(args.ltp_dir) if args.ltp_dir else None
             if minix_disk(binary, disk, ltp) != 0:
@@ -132,10 +146,14 @@ def boot(args: argparse.Namespace, done: str, fail_tags: list[str]) -> int:
             # Second IDE disk (hdb): ext2 scratch for the ext2 cases.
             if ext2_disk(scratch):
                 argv += ["-drive", f"file={scratch},format=raw,if=ide,index=1"]
+            # IDE slot 3 (2 is the CD-ROM): FAT16 scratch for the FAT cases.
+            if fat16_disk(fat):
+                argv += ["-drive", f"file={fat},format=raw,if=ide,index=3"]
             return run_cmd(argv, args.timeout + 30)
         finally:
             disk.unlink(missing_ok=True)
             scratch.unlink(missing_ok=True)
+            fat.unlink(missing_ok=True)
     product = ROOT / "kernel-arm64-product.img"
     if not product.is_file():
         product = ROOT / "kernel-arm64-product.bin"

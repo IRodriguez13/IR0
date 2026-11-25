@@ -211,19 +211,23 @@ void iput(struct inode *inode)
 	kfree(inode);
 }
 
-int inode_orphan(struct super_block *sb, ino_t ino)
+struct inode *inode_orphan(struct super_block *sb, ino_t ino)
 {
 	struct inode *inode;
 	unsigned long flags;
 
 	if (!sb || !sb->s_op->iops)
-		return 0;
+		return NULL;
 	flags = ir0_spin_lock_irqsave(&icache_lock);
 	inode = icache_find(sb, ino, "");
 	if (inode)
+	{
+		/* Nameless now: a new file reusing the number is another inode. */
 		inode->i_state |= I_ORPHAN;
+		icache_unhash(inode);
+	}
 	ir0_spin_unlock_irqrestore(&icache_lock, flags);
-	return inode != NULL;
+	return inode;
 }
 
 void inode_moved(struct super_block *sb, const char *oldpath,

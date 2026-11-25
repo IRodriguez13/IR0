@@ -69,12 +69,13 @@ void ihold(struct inode *inode);
 void iput(struct inode *inode);
 
 /*
- * Backend unlink: the link count of file @ino of @sb reached 0. Returns 1
- * when the VFS still holds the inode: the backend keeps the file and its
- * blocks until iops->evict(@sb, @ino). Returns 0 when the backend frees it
- * now. Called under the fs-op lock.
+ * Backend unlink: the link count of file @ino of @sb reached 0. Returns the
+ * inode when the VFS still holds it: it leaves the cache, and the backend
+ * keeps the file and its blocks until iops->evict(inode). Returns NULL when
+ * the backend frees it now. Called under the fs-op lock, which keeps the
+ * returned inode alive until it is released.
  */
-int inode_orphan(struct super_block *sb, ino_t ino);
+struct inode *inode_orphan(struct super_block *sb, ino_t ino);
 
 /*
  * A name of a backend without iops moved to @newpath, or went away

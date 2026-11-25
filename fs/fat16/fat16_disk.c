@@ -17,6 +17,7 @@
 #include <ir0/blockdev.h>
 #include <ir0/kmem.h>
 #include <ir0/errno.h>
+#include <ir0/inode.h>
 #include <ir0/mount_prefix.h>
 #include <ir0/stat.h>
 #include <string.h>
@@ -45,6 +46,7 @@ struct fat16_vol
 	uint32_t first_data_sector;
 	uint32_t total_sectors;
 	uint32_t data_clusters;
+	struct super_block *sb; /* the VFS mount (fill_super) */
 };
 
 static struct fat16_vol g_vols[FAT16_MAX_MOUNTS];
@@ -76,7 +78,18 @@ struct fat16_ent_ref
 	int at_root;
 	uint16_t dir_cluster; /* start cluster of containing dir if !at_root */
 	uint32_t index;       /* entry index within that directory */
+	int detached;         /* the slot is gone (unlinked, still open) */
 	struct fat16_dirent de;
+};
+
+/*
+ * i_private of a FAT16 inode (Linux msdos_inode_info): where its directory
+ * entry is, and, once it is unlinked, the last copy of that entry.
+ */
+struct fat16_inode
+{
+	struct fat16_vol *v;
+	struct fat16_ent_ref ref;
 };
 
 static struct fat16_vol *fat16_find_mount(const char *vfs_path, char *rel, size_t rel_sz,
@@ -622,6 +635,10 @@ static int fat16_write_dirent_at(struct fat16_vol *v, const struct fat16_ent_ref
 	uint32_t bytes = 0;
 	int ret;
 
+	/* An unlinked open file keeps its chain; its old slot is not its own. */
+	if (ref->detached)
+		return 0;
+
 	ret = fat16_load_dir_buf(v, ref->at_root, ref->dir_cluster, &buf, &bytes);
 	if (ret != 0)
 		return ret;
@@ -660,6 +677,7 @@ static int fat16_find_in_dir(struct fat16_vol *v, int at_root, uint16_t dir_clus
 			out->at_root = at_root;
 			out->dir_cluster = dir_cluster;
 			out->index = i;
+			out->detached = 0;
 			out->de = *de;
 			kfree(buf);
 			return 0;
@@ -691,6 +709,7 @@ static int fat16_find_free_slot(struct fat16_vol *v, int at_root, uint16_t dir_c
 			out->at_root = at_root;
 			out->dir_cluster = dir_cluster;
 			out->index = i;
+			out->detached = 0;
 			memset(&out->de, 0, sizeof(out->de));
 			kfree(buf);
 			return 0;
@@ -1153,6 +1172,27 @@ int fat16_disk_umount(const char *mount_dir)
 	return -ENOENT;
 }
 
+/*
+ * The inode number of a file is its directory slot (Linux i_pos): the
+ * containing directory's first cluster (0 for the root) and the index.
+ */
+static ino_t fat16_ref_ino(const struct fat16_ent_ref *ref)
+{
+	uint32_t dir = ref->at_root ? 0U : ref->dir_cluster;
+
+	return (ino_t)(((dir << 16) | (ref->index & 0xFFFFU)) + 1U);
+}
+
+static void fat16_fill_stat(const struct fat16_ent_ref *ref, stat_t *buf)
+{
+	memset(buf, 0, sizeof(*buf));
+	buf->st_mode = (ref->de.attr & FAT_ATTR_DIR) ? (S_IFDIR | 0777)
+						     : (S_IFREG | 0666);
+	buf->st_size = ref->de.size;
+	buf->st_nlink = ref->detached ? 0 : 1;
+	buf->st_ino = fat16_ref_ino(ref);
+}
+
 int fat16_disk_stat(const char *path, stat_t *buf)
 {
 	char rel[FAT16_MAX_PATH];
@@ -1176,10 +1216,7 @@ int fat16_disk_stat(const char *path, stat_t *buf)
 	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &ref, NULL, NULL);
 	if (ret != 0)
 		return ret;
-	buf->st_mode = (ref.de.attr & FAT_ATTR_DIR) ? (S_IFDIR | 0777)
-						    : (S_IFREG | 0666);
-	buf->st_size = ref.de.size;
-	buf->st_nlink = 1;
+	fat16_fill_stat(&ref, buf);
 	return 0;
 }
 
@@ -1359,6 +1396,7 @@ int fat16_disk_unlink(const char *path)
 	int at_root = 0;
 	struct fat16_vol *v;
 	struct fat16_ent_ref ref;
+	struct inode *held;
 	int ret;
 
 	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
@@ -1371,7 +1409,16 @@ int fat16_disk_unlink(const char *path)
 		return ret;
 	if (ref.de.attr & FAT_ATTR_DIR)
 		return -EISDIR;
-	if (ref.de.cluster_lo >= 2)
+	held = inode_orphan(v->sb, fat16_ref_ino(&ref));
+	if (held)
+	{
+		/* Open: the inode keeps the chain until fat16_ievict(). */
+		struct fat16_inode *fi = held->i_private;
+
+		fi->ref = ref;
+		fi->ref.detached = 1;
+	}
+	else if (ref.de.cluster_lo >= 2)
 	{
 		ret = fat16_free_chain(v, ref.de.cluster_lo);
 		if (ret != 0)
@@ -1552,4 +1599,138 @@ int fat16_disk_truncate(const char *path, size_t length)
 	if (ref.de.attr & FAT_ATTR_DIR)
 		return -EISDIR;
 	return fat16_ensure_size(v, &ref, length);
+}
+
+/* Bring a named inode's copy of its directory entry up to date. */
+static int fat16_inode_ref(struct fat16_inode *fi)
+{
+	uint8_t *buf = NULL;
+	uint32_t bytes = 0;
+	int ret;
+
+	if (fi->ref.detached)
+		return 0;
+	ret = fat16_load_dir_buf(fi->v, fi->ref.at_root, fi->ref.dir_cluster, &buf,
+				 &bytes);
+	if (ret != 0)
+		return ret;
+	if ((fi->ref.index + 1U) * 32U > bytes)
+		ret = -ENOENT;
+	else
+		memcpy(&fi->ref.de, buf + fi->ref.index * 32U, sizeof(fi->ref.de));
+	kfree(buf);
+	if (ret == 0 && (fi->ref.de.name[0] == 0 || fi->ref.de.name[0] == 0xE5))
+		ret = -ENOENT;
+	return ret;
+}
+
+static int fat16_iopen(struct inode *inode, const char *path)
+{
+	char rel[FAT16_MAX_PATH];
+	int at_root = 0;
+	struct fat16_vol *v;
+	struct fat16_inode *fi;
+	int ret;
+
+	v = fat16_find_mount(path, rel, sizeof(rel), &at_root);
+	if (!v || at_root)
+		return -ENOENT;
+	fi = kcalloc(1, sizeof(*fi));
+	if (!fi)
+		return -ENOMEM;
+	fi->v = v;
+	ret = fat16_resolve_path(v, rel, 0, NULL, 0, &fi->ref, NULL, NULL);
+	if (ret != 0)
+	{
+		kfree(fi);
+		return ret;
+	}
+	inode->i_private = fi;
+	return 0;
+}
+
+static int fat16_istat(struct inode *inode, stat_t *buf)
+{
+	struct fat16_inode *fi = inode->i_private;
+	int ret = fat16_inode_ref(fi);
+
+	if (ret == 0)
+		fat16_fill_stat(&fi->ref, buf);
+	return ret;
+}
+
+static int fat16_iread(struct inode *inode, void *buf, size_t count,
+		       size_t *done, off_t offset)
+{
+	struct fat16_inode *fi = inode->i_private;
+	int ret = fat16_inode_ref(fi);
+
+	if (ret != 0)
+		return ret;
+	if (fi->ref.de.attr & FAT_ATTR_DIR)
+		return -EISDIR;
+	return fat16_read_file(fi->v, &fi->ref.de, buf, count, done, offset);
+}
+
+static int fat16_iwrite(struct inode *inode, const void *buf, size_t count,
+			size_t *done, off_t offset)
+{
+	struct fat16_inode *fi = inode->i_private;
+	int ret = fat16_inode_ref(fi);
+
+	if (ret != 0)
+		return ret;
+	if (fi->ref.de.attr & FAT_ATTR_DIR)
+		return -EISDIR;
+	return fat16_write_file(fi->v, &fi->ref, buf, count, done, offset);
+}
+
+static int fat16_itruncate(struct inode *inode, size_t length)
+{
+	struct fat16_inode *fi = inode->i_private;
+	int ret = fat16_inode_ref(fi);
+
+	if (ret != 0)
+		return ret;
+	if (fi->ref.de.attr & FAT_ATTR_DIR)
+		return -EISDIR;
+	return fat16_ensure_size(fi->v, &fi->ref, length);
+}
+
+static void fat16_ievict(struct inode *inode)
+{
+	struct fat16_inode *fi = inode->i_private;
+
+	if (fi && fi->ref.detached && fi->ref.de.cluster_lo >= 2)
+		(void)fat16_free_chain(fi->v, fi->ref.de.cluster_lo);
+}
+
+static void fat16_irelease(struct inode *inode)
+{
+	kfree(inode->i_private);
+	inode->i_private = NULL;
+}
+
+const struct vfs_inode_ops fat16_inode_ops = {
+	.open_inode = fat16_iopen,
+	.stat = fat16_istat,
+	.read = fat16_iread,
+	.write = fat16_iwrite,
+	.truncate = fat16_itruncate,
+	.evict = fat16_ievict,
+	.release = fat16_irelease,
+};
+
+int fat16_disk_fill_super(struct super_block *sb, const char *dir)
+{
+	for (int i = 0; i < FAT16_MAX_MOUNTS; i++)
+	{
+		if (g_vols[i].in_use && strcmp(g_vols[i].mount_path, dir) == 0)
+		{
+			g_vols[i].sb = sb;
+			sb->s_fs_info = &g_vols[i];
+			return 0;
+		}
+	}
+	return -ENODEV;
 }

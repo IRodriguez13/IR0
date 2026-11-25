@@ -38,3 +38,9 @@ int fat16_disk_chmod(const char *path, mode_t mode);
 int fat16_disk_write(const char *path, const void *buf, size_t count,
 		     size_t *bytes_written, off_t offset);
 int fat16_disk_truncate(const char *path, size_t length);
+
+struct super_block;
+struct vfs_inode_ops;
+/* Inode operations (a file by its directory slot) and the mount hook. */
+extern const struct vfs_inode_ops fat16_inode_ops;
+int fat16_disk_fill_super(struct super_block *sb, const char *dir);
