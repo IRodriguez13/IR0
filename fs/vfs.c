@@ -203,8 +203,6 @@ int vfs_ops_unlink(struct vfs_ops *ops, const char *path)
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->unlink(backend);
-	if (ret == 0)
-		inode_moved(vfs_sb_for_path(path), backend, NULL);
 	vfs_fs_op_release();
 	return ret;
 }
@@ -316,28 +314,8 @@ int vfs_ops_rename(struct vfs_ops *ops, const char *oldpath,
 		return ret;
 	vfs_fs_op_acquire();
 	ret = ops->rename(old_backend, new_backend);
-	if (ret == 0)
-		inode_moved(vfs_sb_for_path(oldpath), old_backend, new_backend);
 	vfs_fs_op_release();
 	return ret;
-}
-
-/*
- * A rename done as link + unlink (backends without a rename op): the file
- * an open inode names follows the name to @newpath before the old name goes.
- */
-void vfs_ops_renamed(struct vfs_ops *ops, const char *oldpath,
-		     const char *newpath)
-{
-	char old_backend[VFS_PATH_MAX];
-	char new_backend[VFS_PATH_MAX];
-
-	if (vfs_backend_path(ops, oldpath, old_backend, sizeof(old_backend)) != 0 ||
-	    vfs_backend_path(ops, newpath, new_backend, sizeof(new_backend)) != 0)
-		return;
-	vfs_fs_op_acquire();
-	inode_moved(vfs_sb_for_path(oldpath), old_backend, new_backend);
-	vfs_fs_op_release();
 }
 
 void vfs_pagecache_lock(void)

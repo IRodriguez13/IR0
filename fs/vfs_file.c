@@ -92,7 +92,8 @@ static int vfs_file_bind_inode(struct vfs_ops *ops, const char *path,
     stat_t st;
     int ret;
 
-    if (!ops->stat)
+    /* Only a filesystem with inode operations has inodes. */
+    if (!ops->iops || !ops->stat)
         return 0;
     ret = vfs_backend_path(ops, path, backend, sizeof(backend));
     if (ret != 0)

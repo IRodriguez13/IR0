@@ -50,8 +50,6 @@ int vfs_ops_readlink(struct vfs_ops *ops, const char *path, char *buf,
 		     size_t buflen);
 int vfs_ops_rename(struct vfs_ops *ops, const char *oldpath,
 		   const char *newpath);
-void vfs_ops_renamed(struct vfs_ops *ops, const char *oldpath,
-		     const char *newpath);
 int vfs_ops_chown(struct vfs_ops *ops, const char *path, uid_t owner,
 		  gid_t group);
 int vfs_ops_chmod(struct vfs_ops *ops, const char *path, mode_t mode);

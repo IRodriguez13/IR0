@@ -353,7 +353,6 @@ int vfs_rename(const char *oldpath, const char *newpath)
     ret = vfs_ops_link(ops, oldpath, newpath);
     if (ret != 0)
         return ret;
-    vfs_ops_renamed(ops, oldpath, newpath);
     return vfs_unlink(oldpath);
 }
 

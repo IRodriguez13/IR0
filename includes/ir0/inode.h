@@ -35,13 +35,11 @@ struct super_block
 #define I_ORPHAN 1u
 
 /*
- * One file of one filesystem. A backend with vfs_ops.iops names it by
- * i_ino; a backend without names it by i_path (its backend path), which
- * follows renames and is cleared when the name goes, until that backend
- * gains inode operations. The backend stays the owner of the metadata.
+ * One file of one filesystem with inode operations (vfs_ops.iops), named
+ * by (i_sb, i_ino). The backend stays the owner of the metadata.
  *
  * icache_lock (fs/inode.c) guards i_count, i_state and the hash; the fs-op
- * lock guards the backend data and i_path; i_mapping belongs to
+ * lock guards the backend data and i_private; i_mapping belongs to
  * mm/filemap, which holds one reference while it is set.
  */
 struct inode
@@ -53,14 +51,14 @@ struct inode
 	unsigned int i_state;
 	struct filemap *i_mapping;
 	void *i_private; /* backend per-file state (iops->open_inode) */
-	char i_path[IR0_VFS_PATH_MAX];
 	struct inode *i_next;
 };
 
 /*
- * The inode of the file @st describes, found by @path (the backend path
- * of a backend without iops), with one more reference; NULL on ENOMEM.
- * Called under the fs-op lock that resolved @st.
+ * The inode of the file @st describes on @sb, which has inode operations,
+ * with one more reference, or NULL. A new inode gets its backend state
+ * from iops->open_inode for backend @path. Called under the fs-op lock
+ * that resolved @st.
  */
 struct inode *iget(struct super_block *sb, const char *path, const stat_t *st);
 /* The cached inode of @path with one more reference, or NULL. */
@@ -76,14 +74,6 @@ void iput(struct inode *inode);
  * returned inode alive until it is released.
  */
 struct inode *inode_orphan(struct super_block *sb, ino_t ino);
-
-/*
- * A name of a backend without iops moved to @newpath, or went away
- * (@newpath NULL). Inodes of backends with iops do not follow names.
- * Called under the fs-op lock.
- */
-void inode_moved(struct super_block *sb, const char *oldpath,
-		 const char *newpath);
 
 /*
  * File I/O through an inode (fs-op lock taken inside). They keep the
