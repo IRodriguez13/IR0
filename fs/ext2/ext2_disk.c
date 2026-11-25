@@ -1646,56 +1646,61 @@ static int ext2_umount_cb(const char *dir)
 }
 
 /* vfs_inode_ops: a file of the mount @sb by number, named or not. */
-static struct ext2_vol *ext2_vol_of(struct super_block *sb, ino_t ino)
+static struct ext2_vol *ext2_vol_of(struct inode *inode)
 {
-	struct ext2_vol *v = sb ? sb->s_fs_info : NULL;
+	struct ext2_vol *v = inode->i_sb->s_fs_info;
+	ino_t ino = inode->i_ino;
 
 	if (!v || !v->in_use || ino == 0 || ino > v->inodes_count)
 		return NULL;
 	return v;
 }
 
-static int ext2_istat(struct super_block *sb, ino_t ino, stat_t *st)
+static int ext2_istat(struct inode *inode, stat_t *st)
 {
-	struct ext2_vol *v = ext2_vol_of(sb, ino);
+	struct ext2_vol *v = ext2_vol_of(inode);
+	uint32_t ino = (uint32_t)inode->i_ino;
 
 	return v ? ext2_stat_ino(v, (uint32_t)ino, st) : -ENOENT;
 }
 
-static int ext2_iread(struct super_block *sb, ino_t ino, void *buf,
+static int ext2_iread(struct inode *inode, void *buf,
 		      size_t count, size_t *nread, off_t offset)
 {
-	struct ext2_vol *v = ext2_vol_of(sb, ino);
+	struct ext2_vol *v = ext2_vol_of(inode);
+	uint32_t ino = (uint32_t)inode->i_ino;
 
 	return v ? ext2_read_ino(v, (uint32_t)ino, buf, count, nread, offset)
 		 : -ENOENT;
 }
 
-static int ext2_iwrite(struct super_block *sb, ino_t ino, const void *buf,
+static int ext2_iwrite(struct inode *inode, const void *buf,
 		       size_t count, size_t *written, off_t offset)
 {
-	struct ext2_vol *v = ext2_vol_of(sb, ino);
+	struct ext2_vol *v = ext2_vol_of(inode);
+	uint32_t ino = (uint32_t)inode->i_ino;
 
 	return v ? ext2_write_ino(v, (uint32_t)ino, buf, count, written, offset)
 		 : -ENOENT;
 }
 
-static int ext2_itruncate(struct super_block *sb, ino_t ino, size_t length)
+static int ext2_itruncate(struct inode *inode, size_t length)
 {
-	struct ext2_vol *v = ext2_vol_of(sb, ino);
+	struct ext2_vol *v = ext2_vol_of(inode);
+	uint32_t ino = (uint32_t)inode->i_ino;
 
 	return v ? ext2_truncate_ino(v, (uint32_t)ino, length) : -ENOENT;
 }
 
-static void ext2_ievict(struct super_block *sb, ino_t ino)
+static void ext2_ievict(struct inode *inode)
 {
-	struct ext2_vol *v = ext2_vol_of(sb, ino);
-	struct ext2_inode inode;
+	struct ext2_vol *v = ext2_vol_of(inode);
+	uint32_t ino = (uint32_t)inode->i_ino;
+	struct ext2_inode disk;
 
-	if (!v || ext2_read_inode(v, (uint32_t)ino, &inode) != 0 ||
-	    inode.i_links_count != 0)
+	if (!v || ext2_read_inode(v, ino, &disk) != 0 || disk.i_links_count != 0)
 		return;
-	ext2_release_inode(v, (uint32_t)ino, &inode);
+	ext2_release_inode(v, ino, &disk);
 }
 
 static const struct vfs_inode_ops ext2_inode_ops = {

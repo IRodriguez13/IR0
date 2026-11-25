@@ -778,10 +778,10 @@ static int simplefs_readdir(const char *path, struct vfs_dirent *entries, int ma
 }
 
 /* vfs_inode_ops: a file of the mount @sb by number, named or orphaned. */
-static simplefs_entry_t *simplefs_entry_by_ino(struct super_block *sb,
-                                               ino_t ino)
+static simplefs_entry_t *simplefs_entry_by_ino(struct inode *inode)
 {
-    simplefs_mount_t *mnt = sb ? sb->s_fs_info : NULL;
+    simplefs_mount_t *mnt = inode->i_sb->s_fs_info;
+    ino_t ino = inode->i_ino;
 
     if (!mnt || !mnt->store || ino == 0)
         return NULL;
@@ -793,40 +793,40 @@ static simplefs_entry_t *simplefs_entry_by_ino(struct super_block *sb,
     return NULL;
 }
 
-static int simplefs_istat(struct super_block *sb, ino_t ino, stat_t *buf)
+static int simplefs_istat(struct inode *inode, stat_t *buf)
 {
-    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+    simplefs_entry_t *e = simplefs_entry_by_ino(inode);
 
     return e ? simplefs_stat_entry(e, buf) : -ENOENT;
 }
 
-static int simplefs_iread(struct super_block *sb, ino_t ino, void *buf,
+static int simplefs_iread(struct inode *inode, void *buf,
                           size_t count, size_t *done, off_t offset)
 {
-    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+    simplefs_entry_t *e = simplefs_entry_by_ino(inode);
 
     return e ? simplefs_read_entry(e, buf, count, done, offset) : -ENOENT;
 }
 
-static int simplefs_iwrite(struct super_block *sb, ino_t ino, const void *buf,
+static int simplefs_iwrite(struct inode *inode, const void *buf,
                            size_t count, size_t *done, off_t offset)
 {
-    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+    simplefs_entry_t *e = simplefs_entry_by_ino(inode);
 
     return e ? simplefs_write_entry(e, buf, count, done, offset) : -ENOENT;
 }
 
-static int simplefs_itruncate(struct super_block *sb, ino_t ino,
+static int simplefs_itruncate(struct inode *inode,
                               size_t length)
 {
-    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+    simplefs_entry_t *e = simplefs_entry_by_ino(inode);
 
     return e ? simplefs_truncate_entry(e, length) : -ENOENT;
 }
 
-static void simplefs_ievict(struct super_block *sb, ino_t ino)
+static void simplefs_ievict(struct inode *inode)
 {
-    simplefs_entry_t *e = simplefs_entry_by_ino(sb, ino);
+    simplefs_entry_t *e = simplefs_entry_by_ino(inode);
 
     if (e && !e->name[0])
         simplefs_entry_free(e);

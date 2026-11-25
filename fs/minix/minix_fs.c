@@ -638,6 +638,33 @@ static int minix_fill_super(struct super_block *sb,
 	return 0;
 }
 
+static int minix_istat(struct inode *inode, stat_t *buf)
+{
+	return minix_stat_ino(inode->i_ino, buf);
+}
+
+static int minix_iread(struct inode *inode, void *buf, size_t count,
+		       size_t *done, off_t offset)
+{
+	return minix_read_ino(inode->i_ino, buf, count, done, offset);
+}
+
+static int minix_iwrite(struct inode *inode, const void *buf, size_t count,
+			size_t *done, off_t offset)
+{
+	return minix_write_ino(inode->i_ino, buf, count, done, offset);
+}
+
+static int minix_itruncate(struct inode *inode, size_t length)
+{
+	return minix_truncate_ino(inode->i_ino, length);
+}
+
+static void minix_ievict(struct inode *inode)
+{
+	minix_evict_ino(inode->i_ino);
+}
+
 static const struct vfs_inode_ops minix_inode_ops = {
 	.stat     = minix_istat,
 	.read     = minix_iread,

@@ -1131,10 +1131,9 @@ static int tmpfs_truncate(const char *path, size_t length)
 }
 
 /* vfs_inode_ops: a regular file by number, named or orphaned. */
-static int tmpfs_istat(struct super_block *vsb __attribute__((unused)),
-                       ino_t ino, stat_t *buf)
+static int tmpfs_istat(struct inode *inode, stat_t *buf)
 {
-    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+    tmpfs_file_t *file = tmpfs_file_by_ino(inode->i_ino);
 
     if (!file || !buf)
         return -ENOENT;
@@ -1142,32 +1141,29 @@ static int tmpfs_istat(struct super_block *vsb __attribute__((unused)),
     return 0;
 }
 
-static int tmpfs_iread(struct super_block *vsb __attribute__((unused)),
-                       ino_t ino, void *buf, size_t count, size_t *done,
+static int tmpfs_iread(struct inode *inode, void *buf, size_t count, size_t *done,
                        off_t offset)
 {
-    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+    tmpfs_file_t *file = tmpfs_file_by_ino(inode->i_ino);
 
     if (!file)
         return -ENOENT;
     return tmpfs_file_read(file, buf, count, done, offset);
 }
 
-static int tmpfs_iwrite(struct super_block *vsb __attribute__((unused)),
-                        ino_t ino, const void *buf, size_t count,
+static int tmpfs_iwrite(struct inode *inode, const void *buf, size_t count,
                         size_t *done, off_t offset)
 {
-    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+    tmpfs_file_t *file = tmpfs_file_by_ino(inode->i_ino);
 
     if (!file)
         return -ENOENT;
     return tmpfs_file_write(file, buf, count, done, offset);
 }
 
-static int tmpfs_itruncate(struct super_block *vsb __attribute__((unused)),
-                           ino_t ino, size_t length)
+static int tmpfs_itruncate(struct inode *inode, size_t length)
 {
-    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+    tmpfs_file_t *file = tmpfs_file_by_ino(inode->i_ino);
 
     if (!file)
         return -ENOENT;
@@ -1175,10 +1171,9 @@ static int tmpfs_itruncate(struct super_block *vsb __attribute__((unused)),
     return 0;
 }
 
-static void tmpfs_ievict(struct super_block *vsb __attribute__((unused)),
-                         ino_t ino)
+static void tmpfs_ievict(struct inode *inode)
 {
-    tmpfs_file_t *file = tmpfs_file_by_ino(ino);
+    tmpfs_file_t *file = tmpfs_file_by_ino(inode->i_ino);
 
     if (file && file->nlink == 0)
         tmpfs_file_free(file);

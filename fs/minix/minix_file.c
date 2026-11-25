@@ -479,8 +479,8 @@ static int minix_ino_of(const char *path, ino_t *ino)
 }
 
 /* vfs_inode_ops.read: file @ino, named or not (pread semantics). */
-int minix_iread(struct super_block *sb __attribute__((unused)), ino_t ino,
-                void *buf, size_t count, size_t *read_count, off_t offset)
+int minix_read_ino(ino_t ino, void *buf, size_t count, size_t *read_count,
+                   off_t offset)
 {
   uint16_t inode_num;
   minix_inode_t file_inode;
@@ -584,9 +584,8 @@ int minix_iread(struct super_block *sb __attribute__((unused)), ino_t ino,
 }
 
 /* vfs_inode_ops.write: file @ino, named or not (pwrite semantics). */
-int minix_iwrite(struct super_block *sb __attribute__((unused)), ino_t ino,
-                 const void *buf, size_t count, size_t *written_count,
-                 off_t offset)
+int minix_write_ino(ino_t ino, const void *buf, size_t count,
+                    size_t *written_count, off_t offset)
 {
   uint16_t inode_num;
   minix_inode_t file_inode;
@@ -817,7 +816,7 @@ int minix_fs_read_file_wrapper(const char *path, void *buf, size_t count, size_t
 
 	ret = minix_ino_of(path, &ino);
 	if (ret == 0)
-		ret = minix_iread(minix_sb, ino, buf, count, &got, offset);
+		ret = minix_read_ino(ino, buf, count, &got, offset);
 	exec_read_trace_vfs_read_file(path, 0, (int64_t)got, offset, count, ret);
 	if (ret != 0)
 		return ret;
@@ -836,7 +835,7 @@ int minix_fs_write_file_wrapper(const char *path, const void *buf, size_t count,
 	ret = minix_ino_of(path, &ino);
 	if (ret != 0)
 		return ret;
-	return minix_iwrite(minix_sb, ino, buf, count, written_count, offset);
+	return minix_write_ino(ino, buf, count, written_count, offset);
 }
 
 /*
@@ -852,12 +851,11 @@ int minix_truncate(const char *path, size_t length)
     return -ETXTBSY;
   if (minix_ino_of(path, &ino) != 0)
     return -ENOENT;
-  return minix_itruncate(minix_sb, ino, length);
+  return minix_truncate_ino(ino, length);
 }
 
 /* vfs_inode_ops.truncate: file @ino, named or not. */
-int minix_itruncate(struct super_block *sb __attribute__((unused)), ino_t ino,
-                    size_t length)
+int minix_truncate_ino(ino_t ino, size_t length)
 {
   minix_inode_t inode;
   uint16_t inode_num;

@@ -87,8 +87,7 @@ static int minix_fill_stat(uint16_t inode_num, const minix_inode_t *inode,
 }
 
 /* vfs_inode_ops.stat: a file by number, named or not. */
-int minix_istat(struct super_block *sb __attribute__((unused)), ino_t ino,
-                stat_t *buf)
+int minix_stat_ino(ino_t ino, stat_t *buf)
 {
   minix_inode_t inode;
 

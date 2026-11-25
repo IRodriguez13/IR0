@@ -111,6 +111,24 @@ struct inode *iget(struct super_block *sb, const char *path, const stat_t *st)
 	flags = ir0_spin_lock_irqsave(&icache_lock);
 	inode = icache_find(sb, st->st_ino, path);
 	if (inode)
+		inode->i_count++;
+	ir0_spin_unlock_irqrestore(&icache_lock, flags);
+	if (inode)
+	{
+		kfree(fresh);
+		return inode;
+	}
+	/* Backend per-file state; the fs-op lock keeps the key unclaimed. */
+	if (sb->s_op->iops && sb->s_op->iops->open_inode &&
+	    sb->s_op->iops->open_inode(fresh, path) != 0)
+	{
+		kfree(fresh);
+		return NULL;
+	}
+
+	flags = ir0_spin_lock_irqsave(&icache_lock);
+	inode = icache_find(sb, st->st_ino, path);
+	if (inode)
 	{
 		inode->i_count++;
 	}
@@ -125,6 +143,8 @@ struct inode *iget(struct super_block *sb, const char *path, const stat_t *st)
 		fresh = NULL;
 	}
 	ir0_spin_unlock_irqrestore(&icache_lock, flags);
+	if (fresh && sb->s_op->iops && sb->s_op->iops->release)
+		sb->s_op->iops->release(fresh);
 	kfree(fresh);
 	return inode;
 }
@@ -177,11 +197,15 @@ void iput(struct inode *inode)
 	if (!last)
 		return;
 	/* Linux evict(): an unlinked file goes with its last reference. */
-	if ((inode->i_state & I_ORPHAN) && inode->i_sb->s_op->iops &&
-	    inode->i_sb->s_op->iops->evict)
+	if (inode->i_sb->s_op->iops)
 	{
+		const struct vfs_inode_ops *iops = inode->i_sb->s_op->iops;
+
 		vfs_fs_op_acquire();
-		inode->i_sb->s_op->iops->evict(inode->i_sb, inode->i_ino);
+		if ((inode->i_state & I_ORPHAN) && iops->evict)
+			iops->evict(inode);
+		if (iops->release)
+			iops->release(inode);
 		vfs_fs_op_release();
 	}
 	kfree(inode);
@@ -250,8 +274,7 @@ static int inode_raw_read(struct inode *inode, void *buf, size_t count,
 	struct vfs_ops *fs = inode->i_sb->s_op;
 
 	if (fs->iops && fs->iops->read)
-		return fs->iops->read(inode->i_sb, inode->i_ino, buf, count, done,
-				      offset);
+		return fs->iops->read(inode, buf, count, done, offset);
 	if (!fs->read)
 		return -ENOSYS;
 	if (!inode->i_path[0])
@@ -265,8 +288,7 @@ static int inode_raw_write(struct inode *inode, const void *buf, size_t count,
 	struct vfs_ops *fs = inode->i_sb->s_op;
 
 	if (fs->iops && fs->iops->write)
-		return fs->iops->write(inode->i_sb, inode->i_ino, buf, count, done,
-				       offset);
+		return fs->iops->write(inode, buf, count, done, offset);
 	if (!fs->write)
 		return -ENOSYS;
 	if (!inode->i_path[0])
@@ -279,7 +301,7 @@ static int inode_raw_stat(struct inode *inode, stat_t *st)
 	struct vfs_ops *fs = inode->i_sb->s_op;
 
 	if (fs->iops && fs->iops->stat)
-		return fs->iops->stat(inode->i_sb, inode->i_ino, st);
+		return fs->iops->stat(inode, st);
 	if (!fs->stat)
 		return -ENOSYS;
 	if (!inode->i_path[0])
@@ -339,7 +361,7 @@ int inode_truncate(struct inode *inode, size_t length)
 	fs = inode->i_sb->s_op;
 	vfs_fs_op_acquire();
 	if (fs->iops && fs->iops->truncate)
-		ret = fs->iops->truncate(inode->i_sb, inode->i_ino, length);
+		ret = fs->iops->truncate(inode, length);
 	else if (!fs->truncate)
 		ret = -ENOSYS;
 	else if (!inode->i_path[0])

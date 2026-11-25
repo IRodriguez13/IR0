@@ -52,6 +52,7 @@ struct inode
 	int i_count;
 	unsigned int i_state;
 	struct filemap *i_mapping;
+	void *i_private; /* backend per-file state (iops->open_inode) */
 	char i_path[IR0_VFS_PATH_MAX];
 	struct inode *i_next;
 };

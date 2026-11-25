@@ -194,7 +194,7 @@ int minix_inode_release(uint16_t inode_num, minix_inode_t *inode)
 }
 
 /* vfs_inode_ops.evict: the last reference to an unlinked file went. */
-void minix_ievict(struct super_block *sb __attribute__((unused)), ino_t ino)
+void minix_evict_ino(ino_t ino)
 {
   minix_inode_t inode;
 

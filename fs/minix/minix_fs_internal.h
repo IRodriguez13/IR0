@@ -75,12 +75,12 @@ int minix_fs_chmod(const char *path, mode_t mode);
 
 /* Inode-addressed operations (vfs_inode_ops), minix_fs.c owns the table. */
 extern struct super_block *minix_sb;
-int minix_istat(struct super_block *sb, ino_t ino, stat_t *buf);
-int minix_iread(struct super_block *sb, ino_t ino, void *buf, size_t count,
-                size_t *read_count, off_t offset);
-int minix_iwrite(struct super_block *sb, ino_t ino, const void *buf,
-                 size_t count, size_t *written_count, off_t offset);
-int minix_itruncate(struct super_block *sb, ino_t ino, size_t length);
-void minix_ievict(struct super_block *sb, ino_t ino);
+int minix_stat_ino(ino_t ino, stat_t *buf);
+int minix_read_ino(ino_t ino, void *buf, size_t count, size_t *read_count,
+                   off_t offset);
+int minix_write_ino(ino_t ino, const void *buf, size_t count,
+                    size_t *written_count, off_t offset);
+int minix_truncate_ino(ino_t ino, size_t length);
+void minix_evict_ino(ino_t ino);
 int minix_inode_release(uint16_t inode_num, minix_inode_t *inode);
 int minix_fs_utimens(const char *path, const struct timespec times[2]);
