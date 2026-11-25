@@ -1,6 +1,7 @@
 # VFS inodes and dentries
 
-> **Status:** stage A done (MINIX, tmpfs); stages B-D open
+> **Status:** stage A done; stage B in part (super_block; ext2 and
+> simplefs by inode); dentries, FAT16, 9p and stages C-D open
 > **Linux model:** `fs/inode.c` (`iget_locked`, `iput`, `evict`),
 > `fs/dcache.c`, `fs/namei.c`, `mm/filemap.c` (`address_space`)
 
@@ -20,9 +21,10 @@ VFS moves to it.
 | `struct vfs_file` | one open-file description | pointer | `ref_count`; holds one inode reference |
 | page cache (`struct filemap`) | the pages of one inode | the inode | holds one inode reference while it exists |
 
-- `i_fs` is the filesystem's `struct vfs_ops` until mounts carry a
-  `struct super_block` (stage B). Every backend in the tree is a single
-  instance per type today, so the pair names a file uniquely.
+- `i_sb` is the mount's `struct super_block` (bind mounts share it);
+  `s_fs_info` is the backend's state for that mount, set by
+  `vfs_fstype.fill_super`. A super_block with any cached inode is busy:
+  umount fails with `EBUSY`, as in Linux.
 - The backend stays authoritative for metadata (`mode`, `nlink`, `uid`,
   `gid`, `size`, times): `struct inode` caches only what cannot change
   (`i_ino`, the file type). Caching the rest is a later optimization, not a
@@ -72,9 +74,12 @@ globals are rows of `scripts/smp_entry_gate/global_state.tsv` (SMP-0).
   `fs_link_shared_mapping`, `fs_tmpfs_inode_lifetime`. tmpfs numbers its
   inodes uniquely across mounts; backends without `iops` keep a
   path-named inode (it follows renames) until they gain inode operations.
-- **B (dentries):** `struct super_block` per mount (then ext2, whose
-  volumes share one `vfs_ops`, gets `iops`; FAT16, simplefs and 9p
-  follow and the path-named inode goes), the dentry cache, namei
+- **B (dentries):** `struct super_block` per mount (done; umount of a
+  busy filesystem is `EBUSY`); ext2 and simplefs get `iops` (done).
+  FAT16 and 9p have no stable inode number to address a file by (FAT:
+  the directory entry moves on rename; 9P needs a fid), so they need a
+  per-inode backend handle (`i_private`) before the path-named inode
+  goes. Then the dentry cache, namei
   walks dentries (the Q3 search-permission walk stays per component), path
   operations take (dentry, name) instead of strings.
 - **C (special files):** FIFOs, sockets and device nodes are inodes made by
